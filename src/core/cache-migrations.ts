@@ -8,7 +8,7 @@
 import type { StoreDef } from './cache-schema.ts';
 
 /** 当前本机库版本。改了 store 结构就加 1，并在 cacheMigrations 末尾加一项 {to: 新版本} */
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 /** 迁移函数拿到的东西 */
 export interface MigrationCtx {
@@ -46,6 +46,9 @@ export const cacheMigrations: readonly CacheMigration[] = [
   // 2（B2，0.29 续第 107 条①）：SW 开始往 pending_actions 写通知按键（src/sw/pending.ts）。这个仓 v1 就建好了，结构没变，
   // 这一步不改数据；版本号照第 107 条跟着加，让新版第一次打开时走一遍升级（别的标签页开着旧版会收到 versionchange、关库让路）
   { to: 2, up: () => undefined },
+  // 3（R-350 待办子任务，方案第 3 节）：清单多了同步表 todo_items，syncStores() 多生成一个 todo_items 仓。结构核对会自动补建缺的仓，
+  // 这一步不改数据；新仓没有游标，启动后照“没有游标就整表拉”拉一次。别的标签页开着旧版会收到 versionchange、关库让路
+  { to: 3, up: () => undefined },
 ];
 
 /** 一次打开库时升级的结果（cache.ts 返回给 boot，boot 决定要不要整表重拉） */

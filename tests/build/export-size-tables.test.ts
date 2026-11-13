@@ -1,15 +1,19 @@
 // 导出大小预检（迁移 20261031100000 的 private.export_size_over）的表清单和数据清单一致（架构 0.47 第 19 条 Q3：清单写死在函数里，
 // 和 account 的 exportTablesOf 同源比对），以及各片 gzip 首尾相接后用 Node zlib 能整份解开（0.47 续 ①“客户端”，⑤ 验收的工具之一）。
 // 放在 tests/build（Node 环境）：要读迁移文件、用 node:zlib；account 函数自己的单测在 tests/functions/account-export*.test.ts（Workers 类型）。
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { allManifests } from '../../shared/manifests/index.ts';
 import { exportTablesOf } from '../../supabase/functions/account/export.ts';
 
 const TABLES = exportTablesOf(allManifests);
-const sql = readFileSync(new URL('../../supabase/migrations/20261031100000_core_export_jobs.sql', import.meta.url), 'utf8');
-const body = sql.slice(sql.indexOf('create function private.export_size_over'));
+// 读最后一个定义 export_size_over 的迁移（20261031100000 建，R-350 的 20261113170000 加 todo_items 后 create or replace）
+const DIR = new URL('../../supabase/migrations/', import.meta.url);
+const DEF = /create (or replace )?function private\.export_size_over\(/;
+const MIG = readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort().filter((f) => DEF.test(readFileSync(new URL(f, DIR), 'utf8'))).at(-1) ?? '';
+const sql = readFileSync(new URL(MIG, DIR), 'utf8');
+const body = sql.slice(sql.search(DEF));
 
 describe('export_size_over 的表清单（Q3）', () => {
   it('表名和顺序和 exportTablesOf(allManifests) 一样', () => {

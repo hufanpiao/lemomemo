@@ -60,9 +60,15 @@ describe('rows 严格版', () => {
     expect(p.safeParse({ user_id: ID }).success).toBe(false);
   });
 
-  it('rowsWrite 登记了四张表', () => {
-    expect(Object.keys(rowsWrite).sort()).toEqual(['devices', 'events', 'profiles', 'todos']);
+  it('rowsWrite 登记了五张表（R-350 加 todo_items）', () => {
+    expect(Object.keys(rowsWrite).sort()).toEqual(['devices', 'events', 'profiles', 'todo_items', 'todos']);
     expect(todosWrite.safeParse({}).success).toBe(false);
+  });
+
+  it('todo_items 的标题（R-350 评审第 6 条，同服务器 check）：全是半角空格、空串、超过 100 都拒；前后带空格、刚好 100 收', () => {
+    const t = (title: string): boolean => patchSchema('todo_items').safeParse({ title }).success;
+    expect([t(''), t('   '), t('a'.repeat(101))]).toEqual([false, false, false]);
+    expect([t(' 买菜 '), t('a'.repeat(100))]).toEqual([true, true]);
   });
 
   it('insert 不能带只能 update 的列（deleted_at、undone）；时刻配时区照样查', () => {

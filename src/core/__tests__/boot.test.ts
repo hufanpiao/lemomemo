@@ -116,7 +116,7 @@ describe('离线冷启动', () => {
     const b = await coldStart(opts(factory, { userId: 'u2', clearCacheStorage: clearCaches }));
     expect(b.switchedUser).toBe(true);
     expect(clearCaches).toHaveBeenCalledTimes(1);
-    expect(b.fullResync.length).toBe(9);
+    expect(b.fullResync.length).toBe(10);   // 十张同步表（R-350 加了 todo_items）
     expect(await b.cache?.allRows('todos')).toEqual([]);
     expect(await b.outbox?.list()).toEqual([]);
     expect(b.cache ? await cacheOwner(b.cache) : null).toBe('u2');
@@ -187,7 +187,7 @@ describe('离线冷启动', () => {
     });
     const b = await coldStart(opts(factory, { schemaV: 2 }));
     expect([...b.fullResync].sort()).toEqual([...(b.cache?.syncTables ?? [])].sort());
-    expect(b.fullResync.length).toBe(9);
+    expect(b.fullResync.length).toBe(10);   // 十张同步表（R-350 加了 todo_items）
     expect(b.refetch).toEqual({ todos: ['t9'] });
   });
 
@@ -198,7 +198,7 @@ describe('离线冷启动', () => {
       opts(factory, { cacheOptions: { factory, ...nextDbVersion(() => { throw new Error('x'); }) } }),
     );
     expect(b.upgradeReport?.failed).not.toBeNull();
-    expect(b.fullResync.length).toBe(9);
+    expect(b.fullResync.length).toBe(10);   // 十张同步表（R-350 加了 todo_items）
   });
 
   it('上次 426 暂停、同一版本重启：仍挡同步（source = queue）；横幅不用联网就能出', async () => {
@@ -275,7 +275,7 @@ describe('启动时清 pending_actions（0.29 续第 107 条②，B2）', () => 
 });
 
 describe('v1 升 v2 的真实路径（cacheMigrations，代码审查 S4）', () => {
-  it('v1 的库按当前 DB_VERSION 打开：数据、outbox、pending_actions、owner 都在，只跑了 to: 2，不整表重拉', async () => {
+  it('v1 的库按当前 DB_VERSION 打开：数据、outbox、pending_actions、owner 都在，跑了 to: 2、3（R-350 加 todo_items 仓），不整表重拉', async () => {
     const { factory } = fakeIndexedDB();
     const v1 = await openCache({ factory, version: 1, migrations: [] });
     if (!v1.ok) throw new Error('open v1');
@@ -292,7 +292,7 @@ describe('v1 升 v2 的真实路径（cacheMigrations，代码审查 S4）', () 
 
     const b = await coldStart(opts(factory));
     expect(b.status).toBe('ready');
-    expect(b.upgradeReport).toMatchObject({ from: 1, ran: [2], failed: null, rebuilt: [] });
+    expect(b.upgradeReport).toMatchObject({ from: 1, ran: [2, 3], failed: null, rebuilt: [] });
     expect(b.fullResync).toEqual([]);
     expect(b.switchedUser).toBe(false);
     const c = b.cache!;

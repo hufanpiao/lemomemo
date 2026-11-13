@@ -153,8 +153,8 @@ Pages Functions（functions/）和 App、shared：
       private 函数的 grant / revoke execute、private 表给客户端和 service_role 的 grant、public 表给 service_role 的 grant）都要在 3.3 C 里、
       写在行尾标的文件；3.3 C 标 0001～0007 的每一行在那个文件里恰好一次；标 B1 等的只准进带时间戳的新迁移；附录 A 末尾的语句行和 3.3 C 一字不差。
       给 fn_vault、fn_ai 的表授权归 D1 和 6.2 比（附录 A 末尾注明），对具体 private 表的 revoke 只收不放，不在汇总里
-  M5  0001 的先后：全局默认权限 → table_meta、table_meta_of()、touch() → 各表；9 张同步表建表后的下一句是它的 table_meta 行。TC-B0-73 ③、0.29 续第 39 条
-  M6  9 张同步表的 (user_id, synced_at) 索引写在建表的文件里。TC-B0-73 ⑤
+  M5  0001 的先后：全局默认权限 → table_meta、table_meta_of()、touch() → 各表；10 张同步表建表后的下一句是它的 table_meta 行。TC-B0-73 ③、0.29 续第 39 条
+  M6  10 张同步表的 (user_id, synced_at) 索引写在建表的文件里。TC-B0-73 ⑤
   M3  0001～0007 七个建表文件里不准打开功能开关：app_config.features 的列默认值里只有 event、todo 能是 on: true，
       不准 update app_config、不准 insert 时写 features、不准 alter column features set default 打开（只准写 JSON 字面量，QA 第二轮 D-15）；
       打开 note、anniv 用带时间戳的数据迁移。架构 0.29 第 1 条（P-02）、TC-B0-68
@@ -1737,8 +1737,17 @@ def exec_targets(t):
     return {fn_key(fm.group(1)) for fm in re.finditer(NAME + r"\s*\(", g.group(2))}
 
 
-# 9 张同步表（架构 0.29 第 29 条、4.1；数据字典 4.3b）：建表后下一句是 table_meta 行（0.29 续第 39 条），(user_id, synced_at) 索引写在建表的文件里
-SYNC_TABLES = ("settings", "devices", "events", "todos", "categories", "notes", "note_images", "note_files", "anniversaries")
+# 同步表（架构 0.29 第 29 条、4.1；数据字典 4.3b）：建表后下一句是 table_meta 行（0.29 续第 39 条），(user_id, synced_at) 索引写在建表的文件里。
+# 名单从清单快照 src/core/manifest-sync.gen.ts 读（public、sync: true），不再手抄（R-350 评审第 1 条）；快照和清单一致由 check:manifests 守着
+def _sync_tables():
+    src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "core" / "manifest-sync.gen.ts").read_text(encoding="utf-8")
+    m = re.search(r"syncTableSnapshot\s*:[^=]*=\s*(\[.*?\]);", src, re.DOTALL)
+    if not m:
+        raise SystemExit("check_backend：读不到 src/core/manifest-sync.gen.ts 里的 syncTableSnapshot")
+    return tuple(t["name"] for t in json.loads(m.group(1)) if t.get("sync") is True and t.get("schema") == "public")
+
+
+SYNC_TABLES = _sync_tables()
 CREATE_TABLE = re.compile(r"^create\s+table\s+(?:if\s+not\s+exists\s+)?" + NAME, re.IGNORECASE)
 META_INSERT = re.compile(r"^insert\s+into\s+private\.table_meta\b[^;]*?\bvalues\s*\(\s*'([^']+)'", re.IGNORECASE)
 SYNC_INDEX = re.compile(r"^create\s+(?:unique\s+)?index\s+(?:if\s+not\s+exists\s+)?(?:\w+\s+)?on\s+(?:only\s+)?" + NAME + r"\s*(?:using\s+\w+\s*)?\(\s*user_id\s*,\s*synced_at\s*\)", re.IGNORECASE)
@@ -1746,7 +1755,7 @@ SYNC_INDEX = re.compile(r"^create\s+(?:unique\s+)?index\s+(?:if\s+not\s+exists\s
 
 def check_order(parsed, errors):
     """M5（TC-B0-73 ③）：0001 的先后——全局默认权限 → table_meta、table_meta_of()、touch() → 各表；同步表建表后下一句是它的 table_meta 行。
-    M6（TC-B0-73 ⑤）：9 张同步表的 (user_id, synced_at) 索引写在建表的文件里"""
+    M6（TC-B0-73 ⑤）：10 张同步表的 (user_id, synced_at) 索引写在建表的文件里"""
     table_file = {}
     index_files = {}
     for name, rel, raw, stmts in parsed:

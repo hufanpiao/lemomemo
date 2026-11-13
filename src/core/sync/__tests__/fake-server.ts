@@ -15,6 +15,7 @@ import type { Cache } from '../../cache.ts';
 import type { Outbox } from '../../outbox-types.ts';
 import { createUpgradeCenter } from '../../upgrade.ts';
 import { FORK_SUFFIX } from '../../../../shared/sync/fork-suffix-data.ts';
+import { manifestSnapshot } from '../../manifests.gen.ts';
 import type { Lifecycle } from '../../../platform/net.ts';
 import type { ParseServerRows, PatchArgs, PatchResponse, PullQuery, RealtimeHandlers, SessionCheck, SyncTransport, TombstoneRow } from '../types.ts';
 
@@ -30,10 +31,11 @@ export interface FakeRow {
 const iso = (n: number): string => new Date(Date.UTC(2026, 9, 29, 0, 0, 0) + n * 1000).toISOString();
 
 /** 4.4.1 的表白名单 */
-export const PATCH_TABLES = ['events', 'todos', 'anniversaries', 'notes', 'note_images', 'note_files', 'categories', 'settings', 'devices'];
+export const PATCH_TABLES = ['events', 'todos', 'todo_items', 'anniversaries', 'notes', 'note_images', 'note_files', 'categories', 'settings', 'devices'];
 
 /** 清单里 noConflict 的列（shared/manifests：anniversaries 的 notified_for、snooze_at，notes 的 updated_at，categories 的 sort） */
-export const NO_CONFLICT_COLS = ['notified_for', 'snooze_at', 'updated_at', 'sort'];
+/** 各表的“不判冲突”列：照清单的 noConflict（服务器 apply_patch 读 table_meta.no_conflict，D1 保证两边一致；R-350 评审第 5 条，不再手抄一份） */
+const noConflictOf = (table: string): readonly string[] => manifestSnapshot.flatMap((m) => m.tables).find((t) => t.name === table)?.noConflict ?? [];
 
 export class FakeServer {
   /** 新写的行都用同一个 synced_at */
@@ -116,7 +118,7 @@ export class FakeServer {
     else {
       const base = a.p_base_rev ?? 0;
       const own = a.p_own_revs.length > 20 ? [] : a.p_own_revs;
-      const conflicts = Object.keys(a.p_patch).filter((k) => !NO_CONFLICT_COLS.includes(k) && (row.fv[k] ?? 0) > base && !own.includes(row.fv[k] ?? 0));
+      const conflicts = Object.keys(a.p_patch).filter((k) => !noConflictOf(a.p_table).includes(k) && (row.fv[k] ?? 0) > base && !own.includes(row.fv[k] ?? 0));
       const old = Object.fromEntries(conflicts.map((k) => [k, row[k]]));
       const fork = a.p_table === 'notes' && conflicts.some((k) => k === 'title' || k === 'body');
       const patch = fork ? Object.fromEntries(Object.entries(a.p_patch).filter(([k]) => k !== 'title' && k !== 'body')) : a.p_patch;

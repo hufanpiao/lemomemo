@@ -45,7 +45,7 @@ describe('watchAccount：登录、刷新令牌、别的标签页', () => {
     expect(boot.cache?.isClosed()).toBe(true);
     expect(deps.clearCacheStorage).toHaveBeenCalledTimes(1);
     expect(boot).toMatchObject({ switchedUser: true, flags: null });
-    expect(boot.fullResync.length).toBe(9);
+    expect(boot.fullResync.length).toBe(10);   // 十张同步表（R-350 加了 todo_items）
     const reopened = await freshCache(factory);
     expect(await count(reopened)).toBe(0);
     expect(await cacheOwner(reopened)).toBe('B');
