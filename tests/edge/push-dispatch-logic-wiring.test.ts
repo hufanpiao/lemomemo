@@ -30,7 +30,7 @@ function importsOf(src: string): Map<string, string> {
 
 describe('push-dispatch 的 logic 接线：index.ts 和测试替身是同一份', () => {
   it('两边的名单一样，并且正好是 SharedFns 的全部键（不多不少）', () => {
-    const keys = [...(/export interface SharedFns \{([\s\S]*?)\n\}/.exec(LOGIC_SRC)?.[1] ?? '').matchAll(/^\s+(\w+)\(/gm)].map((m) => m[1]);
+    const keys = [...(/export interface SharedFns \{([\s\S]*?)\n\}/.exec(LOGIC_SRC)?.[1] ?? '').matchAll(/^\s+(\w+)[(:]/gm)].map((m) => m[1]);   // 函数写成 name(…)，常量 REMIND_RULES_VER 写成 name: 类型
     expect(keys.length).toBeGreaterThan(5);
     expect(wired(INDEX)).toEqual(wired(MEM));
     expect([...wired(INDEX)].sort()).toEqual([...keys].sort());

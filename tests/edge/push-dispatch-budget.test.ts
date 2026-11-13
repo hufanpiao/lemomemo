@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { handle } from '../../supabase/functions/push-dispatch/core.ts';
 import { createFakePush, newPushSubscriber, type FakePushService, type PushSubscriber } from '../fakes/push-service.ts';
 import { cronReq, depsFor, fakeVapid } from './push-dispatch-harness.ts';
-import { MemDb, todoRow, uuid } from './push-dispatch-mem.ts';
+import { MemDb, QUIET_BEAT, todoRow, uuid } from './push-dispatch-mem.ts';
 
 let fake: FakePushService | null = null;
 afterEach(async () => {
@@ -40,7 +40,7 @@ describe('D3 第 6 点：时间预算（原数）', () => {
     expect(r1.claimed).toBeGreaterThan(0);
     expect(r1.sent).toBe(r1.claimed);
     expect(r1.left).toBe(300 - r1.claimed);
-    expect(db.beats.at(-1)).toEqual({ claimed: r1.claimed, sent: r1.sent, failed: 0, budget_hit: true, queue_ok: 1, queue_poison: 0, left: r1.left });
+    expect(db.beats.at(-1)).toEqual({ claimed: r1.claimed, sent: r1.sent, failed: 0, budget_hit: true, queue_ok: 1, queue_poison: 0, ...QUIET_BEAT, left: r1.left });
 
     fake.setDelay(0);
     let total = r1.claimed;

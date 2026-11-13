@@ -1,23 +1,23 @@
-// push-dispatch 测试用的内存数据库（按 store.ts 那几条查询的语义实现，含 private.remind_queue_pop 的出队规则、remind_queue_finish 的收尾规则，
-// 迁移 20261104130000 的租约式出队）和共享 logic 接线。
+// push-dispatch 测试用的内存数据库（按 store.ts 那几条查询的语义实现：入队 remind_enqueue、出队 remind_queue_pop、收尾 remind_queue_finish、
+// 积压 remind_queue_stats 照迁移 20261113100000，其余照各自的迁移）和共享 logic 接线。
 // LOGIC 和 supabase/functions/push-dispatch/index.ts 的 LOGIC 同一写法（那边从 _shared/gen 引，这里直接引 shared/）。
 // 推送服务用测试开发的替身 tests/fakes/push-service.ts（进程内 fake.fetch）；造数据按“少量设备、每台多条”（替身复核 N1）。
 import { msAt, parseHm } from '../../shared/core/date.ts';
 import { isValidTz } from '../../shared/core/tz.ts';
 import { t } from '../../shared/i18n/i18n.ts';
 import { notifyText } from '../../shared/logic/notify-text.ts';
-import { allDayTimeOf, dndDeferUntil, eventRemindAt, sameRemindDay, todoRemindAt } from '../../shared/logic/remind.ts';
+import { allDayTimeOf, dndDeferUntil, REMIND_RULES_VER, remindAtOf, sameRemindDay } from '../../shared/logic/remind.ts';
 import { startAtOf } from '../../shared/logic/remind-actions.ts';
 import { occurrenceKey, reminderTag } from '../../shared/logic/remind-route.ts';
-import type { DispatchStore, HeartbeatDetail } from '../../supabase/functions/push-dispatch/core.ts';
-import { seoulDay } from '../../supabase/functions/push-dispatch/core.ts';
+import type { DispatchStore, HeartbeatDetail, QueueStats } from '../../supabase/functions/push-dispatch/core.ts';
+import { QUEUE_PER_USER, QUEUE_POISON, seoulDay } from '../../supabase/functions/push-dispatch/core.ts';
 import type { DeviceOutcome, DeviceRow, ItemRow, LogRow, Profile, QueueItem, QueueRef, RoundLogic, Table } from '../../supabase/functions/push-dispatch/round.ts';
-import { SETTING_KEYS, TABLES } from '../../supabase/functions/push-dispatch/round.ts';
+import { DB_TIMEOUT, SETTING_KEYS, TABLES } from '../../supabase/functions/push-dispatch/round.ts';
 import { makeLogic } from '../../supabase/functions/push-dispatch/logic.ts';
 
 /** 和 index.ts 同一份接线（logic.ts 的 makeLogic），名字一一对应，只是从 shared/ 引（tests/edge/push-dispatch-logic-wiring.test.ts 核对） */
 export const LOGIC: RoundLogic = makeLogic({
-  todoRemindAt, eventRemindAt, allDayTimeOf, startAtOf, msAt, parseHm, sameRemindDay, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey,
+  REMIND_RULES_VER, remindAtOf, allDayTimeOf, startAtOf, msAt, parseHm, sameRemindDay, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey,
 });
 
 export const UA = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -41,12 +41,21 @@ export const eventRow = (user: string, over: Partial<ItemRow> = {}): ItemRow => 
   ...base(user), title: 'NEOX 会议', date: '2026-11-03', time: null, tz: null, remind_min: null, remind_days: null, ...over,
 });
 
-/** remind_queue_pop 每人每轮最多出队几条（和迁移 20261103130000 一致） */
-export const POP_PER_USER = 50;
-/** 取过几次还没处理完就当有毒项丢掉（迁移 20261104130000：attempts ≥ 5 的不再交出去） */
-export const POISON_AT = 5;
-/** 队列的一项：claim 为空（或没写）= 没人在处理；attempts 没写按 0（测试里直接 queue.set 的） */
-export type QEntry = QueueRef & { claim?: string | null; claimed_at?: number | null; attempts?: number };
+/** 新项按批出队每人最多几条、取过几次就当有毒项（push-dispatch 的 LIMITS 传给出队函数，这里取同一个常量） */
+export const POP_PER_USER = QUEUE_PER_USER;
+export const POISON_AT = QUEUE_POISON;
+/**
+ * 队列的一项（private.remind_queue 的列）。测试里直接 queue.set 的可以少写：claim 为空 = 没人在处理，attempts、prio、min_ver 按 0，
+ * fresh 按 false，enqueued_at 按 0；user_id 没写按行上的 user_id 补（只是造数方便：真库 user_id 非空，行被硬删了也还在）
+ */
+export type QEntry = QueueRef & {
+  user_id?: string; prio?: number; fresh?: boolean; min_ver?: number; enqueued_at?: number;
+  claim?: string | null; claimed_at?: number | null; attempts?: number;
+};
+/** 第 0 步没有要重算的、队列为空时，心跳里 R-411 加的六项（方案 3.7） */
+export const QUIET_BEAT = { recalc_written: 0, recalc_r336: 0, recalc_failed: 0, queue_wait0: 0, queue_wait_batch: 0, queue_oldest_s: 0 } as const;
+/** remind_enqueue 的批量范围（row 一支是 enqueue） */
+export type EnqueueScope = 'floating' | 'allday' | 'anniv' | 'all';
 
 type Ranked = { table: Table; row: ItemRow; k: number };
 const cmpRanked = (a: Ranked, b: Ranked): number =>
@@ -90,25 +99,73 @@ export class MemDb implements DispatchStore {
   locked = new Set<string>();
   /** 调用记录（核对“传了什么”） */
   calls: string[] = [];
-  /** 注入故障：方法名 → 抛错 */
+  /** 注入故障：方法名 → 抛错（store 的 'db'） */
   failOn = new Set<string>();
+  /** 注入超时：方法名 → 抛 DB_TIMEOUT（store 在 timedFetch 到点中止时抛的） */
+  timeoutOn = new Set<string>();
 
   user(id: string, p: Partial<Profile> = {}, usable = true): this {
     this.usable.set(id, usable);
     this.profs.set(id, { current_tz: 'Asia/Seoul', ui_locale: 'zh-CN', ...p });
     return this;
   }
+  /** 插一行；enqueue 为真时照 after insert 触发器入队（prio 0，待办 fresh） */
   put(table: Table, row: ItemRow, enqueue = false): ItemRow {
     this.tables[table].set(row.id, row);
-    if (enqueue) this.enqueue(table, row.id);
+    if (enqueue) this.enqueue(table, row.id, { fresh: table === 'todos' });
     return row;
   }
-  /** 4 个入队入口的语义（迁移 20261104130000）：已在队列里且正被租着或取过的，清租约、attempts 清零（11-04 审查返工 L2）；其余什么都不写；不在的新插 */
-  enqueue(table: Table, id: string): void {
+  /**
+   * 照 private.remind_enqueue 的 on conflict（迁移 20261113100000）：不在的新插（enqueued_at = 现在）；在的，有要改的才写——
+   * user_id 换成这一次的、清租约、attempts 清零、prio 取小、fresh 取或、min_ver 取大（enqueued_at 不改）。默认 prio 0（row 一支）
+   */
+  enqueue(table: Table, id: string, o: { prio?: number; fresh?: boolean; minVer?: number; user?: string } = {}): void {
     const k = `${table}:${id}`;
     const q = this.queue.get(k);
-    if (!q) this.queue.set(k, { table_name: table, id });
-    else if (q.claim || (q.attempts ?? 0) > 0) this.queue.set(k, { ...q, claim: null, claimed_at: null, attempts: 0 });
+    const user = o.user ?? this.tables[table].get(id)?.user_id;
+    if (!user) throw new Error(`入队要有 user_id：${k}`);
+    const prio = o.prio ?? 0;
+    const fresh = o.fresh ?? false;
+    const minVer = o.minVer ?? 0;
+    if (!q) {
+      this.queue.set(k, { table_name: table, id, user_id: user, prio, fresh, min_ver: minVer, enqueued_at: this.clock(), claim: null, claimed_at: null, attempts: 0 });
+      return;
+    }
+    const qu = q.user_id ?? this.tables[table].get(id)?.user_id;
+    const qp = q.prio ?? 0;
+    const qf = q.fresh ?? false;
+    const qv = q.min_ver ?? 0;
+    if (qu === user && !q.claim && (q.attempts ?? 0) === 0 && prio >= qp && !(fresh && !qf) && minVer <= qv) return;
+    this.queue.set(k, { ...q, user_id: user, claim: null, claimed_at: null, attempts: 0, prio: Math.min(qp, prio), fresh: qf || fresh, min_ver: Math.max(qv, minVer) });
+  }
+  /**
+   * 照 remind_enqueue 的批量几支：只收没到点（remind_at > 现在）或还没算（remind_at 为空且设了提醒）的；
+   * prio 1 = remind_at 为空或 24 小时内，否则 2。user 为空只给 all 用
+   */
+  enqueueScope(scope: EnqueueScope, user: string | null, minVer = 0): void {
+    const now = this.clock();
+    const soon = now + 86_400_000;
+    const prioOf = (r: ItemRow) => (r.remind_at === null || r.remind_at <= soon ? 1 : 2);
+    const live = (r: ItemRow) => r.deleted_at === null && (scope === 'all' || r.user_id === user);
+    const ahead = (r: ItemRow, set: boolean) => (r.remind_at !== null && r.remind_at > now) || (r.remind_at === null && set);
+    const add = (t: Table, r: ItemRow) => this.enqueue(t, r.id, { prio: prioOf(r), minVer, user: r.user_id });
+    for (const r of this.tables.events.values()) {
+      if (!live(r) || !(scope === 'all' || ((scope === 'floating' || scope === 'allday') && r.time == null))) continue;
+      const allDay = r.time == null;
+      if (ahead(r, allDay ? r.remind_days != null : r.remind_min != null)) add('events', r);
+    }
+    if (scope === 'all' || scope === 'floating') {
+      for (const r of this.tables.todos.values()) {
+        if (!live(r) || r.done) continue;
+        if (ahead(r, r.due != null && (r.due_time == null ? r.remind_days != null : r.remind_before_min != null))) add('todos', r);
+      }
+    }
+    if (scope !== 'allday') {
+      for (const r of this.tables.anniversaries.values()) {
+        if (!live(r) || (scope === 'anniv' && r['remind_offsets'] != null && r.remind_time != null)) continue;
+        if (ahead(r, true)) add('anniversaries', r);
+      }
+    }
   }
   /**
    * 客户端编辑一行（对应真库 UPDATE 时的三个触发器，真库语义在 rls/32 ⑧ 和 0001 的 touch()）：
@@ -144,7 +201,9 @@ export class MemDb implements DispatchStore {
       row.defer_until = null;
     }
     this.tables[table].set(id, row);
-    if ([...remindCols, 'snooze_at'].some(changed)) this.enqueue(table, id);
+    // enqueue_remind：待办改了截止日期、截止时刻、提前量是 fresh（第 0 步回落用，R-411 Q2）
+    const fresh = table === 'todos' && ['due', 'due_time', 'remind_before_min'].some(changed);
+    if ([...remindCols, 'snooze_at'].some(changed)) this.enqueue(table, id, { fresh });
     // events_allday_ack_enqueue（迁移 20261105120000，REMIND-shown-persist S1）：全天日程的 notified_for 改成了不等于 remind_at 的值，入队
     if (table === 'events' && row['time'] == null && row.deleted_at == null && row.notified_for != null && changed('notified_for')
       && row.notified_for !== row.remind_at) this.enqueue(table, id);
@@ -157,6 +216,7 @@ export class MemDb implements DispatchStore {
   }
   private check(name: string) {
     this.calls.push(name);
+    if (this.timeoutOn.has(name)) throw new Error(DB_TIMEOUT);
     if (this.failOn.has(name)) throw new Error('db');
   }
 
@@ -178,44 +238,62 @@ export class MemDb implements DispatchStore {
     this.lastBeat = { at, detail };
     return total;
   }
-  async popQueue(limit: number, leaseS: number | null = 180, retry = false): Promise<QueueItem[]> {
+  /**
+   * 照 remind_queue_pop（迁移 20261113100000）：只取没被租的或租约过期的、min_ver ≤ ver 的；retry 只取取过的（attempts ≥ 1）、一次 1 项，
+   * 否则只取新项（attempts = 0）、≤ 500。人从队列项取（孤儿照常出队），只要可用账号的；每人按 (prio, 表, id) 编号、留前 perUser 条；
+   * 排序：重试按 attempts、claimed_at（空的最先），新项按 (prio, 编号, 表, id)。取满 poison 次的删掉、以 claim 为空返回
+   */
+  async popQueue(limit: number, leaseS: number | null = 180, retry = false, perUser = POP_PER_USER, poison = POISON_AT, ver = 0): Promise<QueueItem[]> {
     this.check('popQueue');
-    for (const [k, q] of this.queue) if (!this.tables[q.table_name].has(q.id)) this.queue.delete(k);   // 孤儿
-    // 照 remind_queue_pop：只取没被租的或租约过期的，retry 只取取过的（attempts ≥ 1）、否则只取新项（attempts = 0）；
-    // 可用账号的按人编号（按 table_name:id），先比编号再比键，每人最多 POP_PER_USER 条
     const now = this.clock();
     const leaseMs = Math.max(30, Math.min(leaseS ?? 180, 3600)) * 1000;
-    const rank = new Map<string, number>();
-    const all: { k: string; q: QEntry; u: string; rn: number }[] = [];
-    for (const k of [...this.queue.keys()].sort()) {
-      const q = this.queue.get(k) as QEntry;
+    const per = Math.max(1, perUser);
+    const cmpS = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+    type C = { k: string; q: QEntry; u: string; pr: number; rn: number };
+    const all: C[] = [];
+    for (const [k, q] of this.queue) {
       if (q.claim && (q.claimed_at ?? now) >= now - leaseMs) continue;   // 租着、没过期
       if (((q.attempts ?? 0) >= 1) !== retry) continue;                   // 两种出队互不取对方的项（11-05 安全复审 N1）
-      const u = (this.tables[q.table_name].get(q.id) as ItemRow).user_id;
-      if (!this.usable.get(u)) continue;
-      const rn = (rank.get(u) ?? 0) + 1;
-      rank.set(u, rn);
-      all.push({ k, q, u, rn });
+      if ((q.min_ver ?? 0) > ver) continue;
+      const u = q.user_id ?? this.tables[q.table_name].get(q.id)?.user_id;
+      if (!u || !this.usable.get(u)) continue;
+      all.push({ k, q, u, pr: q.prio ?? 0, rn: 0 });
     }
-    const cmpK = (a: { k: string }, b: { k: string }) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0);
-    // 重试（11-04 审查返工 H1）：一次只交出 1 项，attempts 最少的先，同样次数的 claimed_at 早的先（空的最先），再按 table_name、id
-    const cat = (x: { q: QEntry }) => (x.q.claimed_at ?? -Infinity);
-    const cand = all.filter((x) => x.rn <= POP_PER_USER)
-      .sort((a, b) => (retry ? (a.q.attempts ?? 0) - (b.q.attempts ?? 0) || cat(a) - cat(b) : 0) || a.rn - b.rn || cmpK(a, b))
+    const rank = new Map<string, number>();
+    for (const x of [...all].sort((a, b) => a.pr - b.pr || cmpS(a.q.table_name, b.q.table_name) || cmpS(a.q.id, b.q.id))) {
+      x.rn = (rank.get(x.u) ?? 0) + 1;
+      rank.set(x.u, x.rn);
+    }
+    const cat = (x: C) => (x.q.claimed_at ?? -Infinity);
+    const cand = all.filter((x) => x.rn <= per)
+      .sort((a, b) => (retry ? (a.q.attempts ?? 0) - (b.q.attempts ?? 0) || cat(a) - cat(b) : 0)
+        || a.pr - b.pr || a.rn - b.rn || cmpS(a.q.table_name, b.q.table_name) || cmpS(a.q.id, b.q.id))
       .slice(0, Math.max(0, Math.min(limit, retry ? 1 : 500)));
     const out: QueueItem[] = [];
     const claim = `cccccccc-0000-4000-8000-${(++this.claimSeq).toString(16).padStart(12, '0')}`;
     for (const x of cand) {
       const att = x.q.attempts ?? 0;
-      if (att >= POISON_AT) {
-        this.queue.delete(x.k);   // 有毒项：删掉，以 claim 为空返回
-        out.push({ table_name: x.q.table_name, id: x.q.id, user_id: x.u, claim: null });
+      if (att >= Math.max(1, poison)) {
+        this.queue.delete(x.k);
+        out.push({ table_name: x.q.table_name, id: x.q.id, user_id: x.u, claim: null, fresh: false, prio: x.pr });
         continue;
       }
       this.queue.set(x.k, { ...x.q, claim, claimed_at: now, attempts: att + 1 });
-      out.push({ table_name: x.q.table_name, id: x.q.id, user_id: x.u, claim });
+      out.push({ table_name: x.q.table_name, id: x.q.id, user_id: x.u, claim, fresh: x.q.fresh ?? false, prio: x.pr });
     }
     return out;
+  }
+  /** 照 remind_queue_stats：可用账号的 prio 0 项数、批量项数、prio 0 里最老一项从 enqueued_at 起等了几秒 */
+  async queueStats(): Promise<QueueStats> {
+    this.check('queueStats');
+    const now = this.clock();
+    const qs = [...this.queue.values()].filter((q) => {
+      const u = q.user_id ?? this.tables[q.table_name].get(q.id)?.user_id;
+      return !!u && this.usable.get(u) === true;
+    });
+    const p0 = qs.filter((q) => (q.prio ?? 0) === 0);
+    const oldest = p0.length ? Math.min(...p0.map((q) => q.enqueued_at ?? 0)) : now;
+    return { queue_wait0: p0.length, queue_wait_batch: qs.length - p0.length, queue_oldest_s: Math.max(0, Math.floor((now - oldest) / 1000)) };
   }
   /** remind_queue_finish：release 里还是这个租约的放回（清租约、attempts − 1），这个租约的其余项删掉；锁着的（locked）都跳过、租约留着 */
   async finishQueue(claim: string, release: readonly QueueRef[]) {

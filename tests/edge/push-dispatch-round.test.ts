@@ -7,7 +7,7 @@ import { actionsFor, hhmm, NOTIFY_ACTIONS, SNOOZE_MIN as SNOOZE_MIN_LOGIC } from
 import { isDue, parseDnd, SNOOZE_MIN } from '../../supabase/functions/push-dispatch/round.ts';
 import { reply } from '../fakes/push-service.ts';
 import { apple, closeFakes, fcm, round, world } from './push-dispatch-world.ts';
-import { eventRow, todoRow, UA, UB } from './push-dispatch-mem.ts';
+import { eventRow, QUIET_BEAT, todoRow, UA, UB } from './push-dispatch-mem.ts';
 
 const SEOUL = 'Asia/Seoul';
 afterEach(closeFakes);
@@ -50,8 +50,8 @@ describe('第 3～5、7、8 步：认领、文案、发给所有设备、日志�
     const t = w.db.put('todos', todoRow(UA, { title: '买柠檬', remind_at: now - 1000 }));
     const d = w.deps({ now: () => now });
     const body = await round(d);
-    expect(body).toEqual({ ok: true, claimed: 1, sent: 1, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0, left: 0 });
-    expect(w.db.beats).toEqual([{ claimed: 1, sent: 1, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0 }]);
+    expect(body).toEqual({ ok: true, claimed: 1, sent: 1, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0, ...QUIET_BEAT, left: 0 });
+    expect(w.db.beats).toEqual([{ claimed: 1, sent: 1, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0, ...QUIET_BEAT }]);
     const ps = w.pushes();
     expect(ps).toHaveLength(2);
     expect(new Set(ps.map((x) => x.dev)).size).toBe(2);
@@ -221,7 +221,7 @@ describe('Edge 的 resolve：主机属于 *.push.apple.com 的一律不发（不
     expect(w.db.tables.todos.get(t.id)?.pushed_for).toBeNull();
     await round(w.deps({ now: () => now + 60_000 }));
     expect(w.pushes()).toHaveLength(1);
-    expect(w.db.beats.at(0)).toEqual({ claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0 });   // resolve 不计进提醒的四项
+    expect(w.db.beats.at(0)).toEqual({ claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0, ...QUIET_BEAT });   // resolve 不计进提醒的四项
   });
   it('推过之后按了“稍后”：发 resolve 换掉旧通知，到了稍后的时刻照常再推', async () => {
     const w = await world({ [UA]: [fcm()] });

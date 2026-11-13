@@ -29,6 +29,13 @@
 import { addDays, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
 
+/**
+ * 提醒规则版本号（R-411，方案-提醒队列重写 3.3④）：本文件的算法结果一变就加 1，同时更新 tests/build/remind-rules-ver.snap.json，
+ * 并写一行迁移 `select private.remind_enqueue('all', null, null, null, false, <新版本>::smallint)`（全量重算，旧版 push-dispatch 拿不到这些项）。
+ * 三处由 tests/build/remind-rules-ver.test.ts 核对
+ */
+export const REMIND_RULES_VER = 1;
+
 /** 编辑页“提前提醒”的选项（分钟）：准时 / 10 分钟 / 30 分钟 / 1 小时 / 2 小时 / 1 天；和 todos.remind_before_min 的 check 约束一致 */
 export const REMIND_BEFORE_CHOICES: readonly number[] = [0, 10, 30, 60, 120, 1440];
 /** 新建或第一次设 due_time 时的提前量 */

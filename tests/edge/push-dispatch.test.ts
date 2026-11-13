@@ -7,7 +7,7 @@ import { filterUsable, handle, type Deps, type HeartbeatDetail } from '../../sup
 import { isLocalStubEnv, resolveOverride } from '../../supabase/functions/_shared/push/stub.ts';
 import { loadVapid, type VapidKeys } from '../../supabase/functions/_shared/push/vapid.ts';
 import { b64u, unb64u } from '../fakes/push-service-vapid.ts';
-import { LOGIC, MemDb } from './push-dispatch-mem.ts';
+import { LOGIC, MemDb, QUIET_BEAT } from './push-dispatch-mem.ts';
 import { DETAIL_FIELDS_BY_NAME } from '../../supabase/functions/usage-report/core.ts';
 
 const PUSH_ALLOW = DETAIL_FIELDS_BY_NAME['push-dispatch'] ?? { num: [], bool: [] };
@@ -129,12 +129,19 @@ describe('handle：500 misconfigured，一条都不发（日志只记原因码�
 });
 
 describe('handle：心跳', () => {
-  it('写 push-dispatch 心跳，detail 只有 claimed、sent、failed、budget_hit、queue_ok、queue_poison（空库一轮：0 / false，第 0 步成功 queue_ok = 1；回包另带 left）', async () => {
+  it('写 push-dispatch 心跳，detail 是 claimed、sent、failed、budget_hit、queue_ok、queue_poison 加 R-411 的 recalc 三项和积压三项（空库一轮全是 0 / false，第 0 步成功 queue_ok = 1；回包另带 left）', async () => {
     const d = deps();
     const r = await handle(cronReq(CRON), d);
     expect(r.status).toBe(200);
-    expect(d.beats).toEqual([{ claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0 }]);
-    expect(await r.json()).toEqual({ ok: true, claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0, left: 0 });
+    expect(d.beats).toEqual([{ claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0, ...QUIET_BEAT }]);
+    expect(await r.json()).toEqual({ ok: true, claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0, ...QUIET_BEAT, left: 0 });
+  });
+  it('读积压失败（超时）：记 queue_stats_failed:timeout，心跳照写、只是不带积压三项', async () => {
+    const d = deps();
+    (d.store as MemDb).timeoutOn.add('queueStats');
+    expect((await handle(cronReq(CRON), d)).status).toBe(200);
+    expect(d.logs).toEqual(['queue_stats_failed:timeout']);
+    expect(d.beats).toEqual([{ claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0, recalc_written: 0, recalc_r336: 0, recalc_failed: 0 }]);
   });
   it('写心跳失败回 503，日志只记 heartbeat_failed', async () => {
     const d = deps({ store: Object.assign(new MemDb(), { writeHeartbeat: async () => { throw new Error('db down: secret stuff'); } }) });
@@ -187,12 +194,13 @@ describe('D1-8：本机替身怎么认（TC-B2-80 环境变量组，安全审查
 });
 
 describe('心跳 detail 和 lemo-ops 对得上（rules.ts PUSH_DETAIL_FIELDS 11-03 核对）', () => {
-  it('handle 真写出的心跳字段名 = claimed、sent、failed、budget_hit、queue_ok、queue_poison；usage-report 白名单全收；转发后 evaluatePush 认得（换个名就判不了）', async () => {
+  it('handle 真写出的心跳字段名 = claimed、sent、failed、budget_hit、queue_*、recalc_*；usage-report 白名单全收；转发后 evaluatePush 认得（换个名就判不了）', async () => {
     const d = deps();
     expect((await handle(cronReq(CRON), d)).status).toBe(200);
     const beat = d.beats[0] as HeartbeatDetail;
-    expect(Object.keys(beat).sort()).toEqual(['budget_hit', 'claimed', 'failed', 'queue_ok', 'queue_poison', 'sent']);
-    for (const k of ['queue_ok', 'queue_poison']) expect(PUSH_ALLOW.num, k).toContain(k);
+    const R411 = Object.keys(QUIET_BEAT);
+    expect(Object.keys(beat).sort()).toEqual(['budget_hit', 'claimed', 'failed', 'queue_ok', 'queue_poison', 'sent', ...R411].sort());
+    for (const k of ['queue_ok', 'queue_poison', 'left', ...R411]) expect(PUSH_ALLOW.num, k).toContain(k);
     for (const k of PUSH_DETAIL_FIELDS) expect(PUSH_ALLOW.num, k).toContain(k);
     expect(PUSH_ALLOW.bool).toContain('budget_hit');
     // 照 usage-report 的 pickDetail 口径转发（按心跳名分开的白名单 DETAIL_FIELDS_BY_NAME['push-dispatch']：数字只收非负整数、布尔只收 true/false）

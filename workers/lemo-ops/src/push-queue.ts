@@ -1,5 +1,5 @@
-// lemo-ops 里 push-dispatch 第 0 步（提醒时刻重算队列）的两条提示（租约出队审查返工，安全审查必改 3、代码审查 L3；11-04 主持人定口径）。
-// usage-report 按 DETAIL_FIELDS_BY_NAME['push-dispatch'] 白名单转发 push-dispatch 心跳里的 queue_ok、queue_poison（只是个数，没有任何条目、账号标识）。
+// lemo-ops 里 push-dispatch 第 0 步（提醒时刻重算队列）的三条提示（租约出队审查返工，安全审查必改 3、代码审查 L3；11-04 主持人定口径；积压那条 R-411 方案 3.7）。
+// usage-report 按 DETAIL_FIELDS_BY_NAME['push-dispatch'] 白名单转发 push-dispatch 心跳里的 queue_ok、queue_poison、queue_*（只是个数，没有任何条目、账号标识）。
 // 只做纯计算；rules.ts 的 evaluateHeartbeat 调这里，去重、宽限期和发信在 alerts.ts。
 //
 // 口径（push-dispatch/core.ts 的 HeartbeatDetail 注释）：
@@ -13,16 +13,21 @@
 //   • queue_poison：首尔当天累计丢掉的有毒项个数（同一项取过 5 次都没处理完，每次都把函数弄死）。> 0 当天提示：
 //     这些项的提醒时刻没重算，要等用户再改一次才会重新入队；要人看函数日志里的 queue_poison、round_failed，找出一算就崩的原因。
 //     首尔 0 点后 push-dispatch 从 0 重新算，这件事随后报“已恢复”。
+//   • queue_oldest_s：用户自己改的项（prio 0）里最老一项等了几秒（只算可用账号）。> 900（15 分钟）这一轮就提示：正常下一分钟就算到，
+//     等这么久说明第 0 步跟不上（每轮预算被占满、出队一直失败，或积压太多）；正文带 queue_wait0、queue_wait_batch。没有这个字段（旧版）不判。
 // 标题不带个数（个数变了不算“情况有变”反复发信，同 purge-detail.ts）；正文只写个数。
 import type { Issue } from './rules.ts';
 import { isCount, isObj } from './guards.ts';
 
 export const PUSH_QUEUE_STALLED = 'push-queue:stalled';
 export const PUSH_QUEUE_POISON = 'push-queue:poison';
+export const PUSH_QUEUE_BACKLOG = 'push-queue:backlog';
+/** 用户改的项等了超过这么多秒就提示（R-411 方案 3.7） */
+export const PUSH_QUEUE_BACKLOG_S = 900;
 /** queue_ok = 0 连续几次抽查才提示（lemo-ops 15 分钟一轮，3 轮约 45 分钟） */
 export const PUSH_QUEUE_STALLED_ROUNDS = 3;
 
-/** push-dispatch 心跳 detail 的两条提示；detail 不是对象、字段缺或不是非负整数的，那一条就不判 */
+/** push-dispatch 心跳 detail 的三条提示；detail 不是对象、字段缺或不是非负整数的，那一条就不判 */
 export function evaluatePushQueue(detail: unknown): Issue[] {
   if (!isObj(detail)) return [];
   const out: Issue[] = [];
@@ -37,8 +42,8 @@ export function evaluatePushQueue(detail: unknown): Issue[] {
         legacy
           ? 'push-dispatch 的心跳里连续 3 次抽查（约 45 分钟）都没有 queue_ok：在跑的是租约版之前的 push-dispatch，第 0 步（按队列重算提醒时刻）每轮都跳过。到点推送照常，但用户编辑过的提醒一直不重算，可能按旧时刻响或不响。'
           : 'push-dispatch 的第 0 步（按队列重算提醒时刻）连续 3 次抽查（约 45 分钟）都失败了。到点推送照常，但用户编辑过的提醒一直不重算，可能按旧时刻响或不响。',
-        '常见原因：push-dispatch 回滚到了租约版之前（调不到 remind_queue_pop(int, int, boolean)），或出队、收尾函数持续出错。',
-        '请看函数日志里的 queue_pop_failed、queue_finish_failed、recalc_read_failed；回滚的话尽快重新部署租约版，积压的项之后每轮最多 500 项（每人 50 项）逐轮消化（见上线与回滚手册第 2 层）。',
+        '常见原因：push-dispatch 回滚到了租约版之前（调不到 remind_queue_pop），或出队、收尾函数持续出错（数据库慢时原因码带 :timeout）。',
+        '请看函数日志里的 queue_pop_failed、queue_finish_failed、recalc_read_failed（含 :timeout）；回滚的话尽快重新部署租约版，积压的项之后每轮最多 500 项（每人 50 项）逐轮消化（见上线与回滚手册第 2 层）。',
       ],
       minRounds: PUSH_QUEUE_STALLED_ROUNDS,
     });
@@ -51,6 +56,20 @@ export function evaluatePushQueue(detail: unknown): Issue[] {
         `push-dispatch 今天（首尔时间）丢掉了 ${poison} 项：同一项取过 5 次都没处理完（每次都把函数弄死，例如 CPU 超限、数据坏了）。`,
         '这些项的提醒时刻没有重算，要等用户再改一次这一行才会重新入队；同批别的项不受影响（一项一项单独重试）。',
         '请看函数日志里的 queue_poison、round_failed 和同一时间的 CPU 超限记录，找出一算就崩的原因。首尔 0 点后从 0 重新计数。',
+      ],
+    });
+  }
+  const oldest = detail['queue_oldest_s'];
+  if (isCount(oldest) && oldest > PUSH_QUEUE_BACKLOG_S) {
+    const w0 = detail['queue_wait0'];
+    const wb = detail['queue_wait_batch'];
+    out.push({
+      key: PUSH_QUEUE_BACKLOG,
+      title: '用户改的提醒排队重算等太久了',
+      lines: [
+        `用户自己改过、还没重算的提醒里，最老的一项已经等了 ${Math.floor(oldest / 60)} 分钟（正常下一分钟就算到）；`
+          + `现在排队的有用户改的 ${isCount(w0) ? w0 : '?'} 项、批量重算的 ${isCount(wb) ? wb : '?'} 项。这期间这些提醒可能按旧时刻响或不响。`,
+        '请看心跳的 budget_hit、queue_ok 和函数日志里的 queue_pop_failed、recalc:released（预算到了放回）；排查步骤见上线与回滚手册“这条提醒为什么没响”。',
       ],
     });
   }

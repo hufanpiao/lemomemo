@@ -120,14 +120,14 @@ describe('R-317：resolve 也收回完成、删除、撤销、关掉提醒的', 
 });
 
 describe('第 0 步', () => {
-  it('安全审查建议 ③：profiles 里没有这个人：丢弃、不插回队列，记 recalc_no_profile', async () => {
+  it('安全审查建议 ③：profiles 里没有这个人：丢弃、不插回队列，记 recalc:no_profile:<表>:<id 前 8 位>（方案 3.7）', async () => {
     const db = new MemDb().user(UA);
     db.profs.delete(UA);
     const w = await world(db);
-    db.put('todos', todoRow(UA, { remind_at: 5 }), true);
+    const t = db.put('todos', todoRow(UA, { remind_at: 5 }), true);
     await w.round(Date.now());
     expect(db.queue.size).toBe(0);
-    expect(w.codes()).toContain('recalc_no_profile');
+    expect(w.codes()).toContain(`recalc:no_profile:todos:${t.id.slice(0, 8)}`);
   });
 
   it('代码审查建议 ④：读完以后 remind_at 又被改了（乐观条件没对上）：不覆盖，插回队列', async () => {

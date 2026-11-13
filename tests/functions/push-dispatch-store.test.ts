@@ -34,11 +34,30 @@ function fakeAdmin(result: { data: unknown; error: unknown } = { data: [], error
 }
 
 describe('push-dispatch store.ts', () => {
-  it('出队：private.remind_queue_pop(p_limit, p_lease_s, p_retry)（租约式，迁移 20261104130000；p_retry 11-05 加）', async () => {
+  it('出队：private.remind_queue_pop 六个参数都显式传（每人上限、有毒次数、规则版本不靠 SQL 默认值；迁移 20261113100000）', async () => {
     const { admin, chains } = fakeAdmin();
-    await makeStore(admin).popQueue?.(500, 180, false);
-    expect(chains[0]).toEqual([['rpc', 'private.remind_queue_pop', { p_limit: 500, p_lease_s: 180, p_retry: false }]]);
-    expect(Object.keys(chains[0]?.[0]?.[2] as object).sort()).toEqual(['p_lease_s', 'p_limit', 'p_retry']);
+    await makeStore(admin).popQueue?.(500, 180, false, 50, 5, 1);
+    expect(chains[0]).toEqual([['rpc', 'private.remind_queue_pop', { p_limit: 500, p_lease_s: 180, p_retry: false, p_per_user: 50, p_poison: 5, p_ver: 1 }]]);
+    expect(Object.keys(chains[0]?.[0]?.[2] as object).sort()).toEqual(['p_lease_s', 'p_limit', 'p_per_user', 'p_poison', 'p_retry', 'p_ver']);
+  });
+  it('超时分开：supabase-js 转来的 error.message 以 TimeoutError: / AbortError: 开头抛 db:timeout，其余（含文字里带 timeout 的）抛 db（方案 3.6）', async () => {
+    const cases: [string, RegExp][] = [
+      ['TimeoutError: signal timed out', /^db:timeout$/], ['AbortError: The user aborted a request.', /^db:timeout$/],
+      ['canceling statement due to statement timeout', /^db$/], ['FetchError: TimeoutError', /^db$/], ['secret detail', /^db$/],
+    ];
+    for (const [message, want] of cases) {
+      await expect(makeStore(fakeAdmin({ data: null, error: { message } }).admin).popQueue?.(1, 180, true, 50, 5, 1), message).rejects.toThrow(want);
+      await expect(makeStore(fakeAdmin({ data: null, error: { message } }).admin).finishQueue?.('k', []), message).rejects.toThrow(want);
+    }
+  });
+  it('积压：private.remind_queue_stats() 一行换成心跳的三个字段；缺行、不是非负整数按 0；出错抛 db', async () => {
+    const one = (data: unknown) => makeStore(fakeAdmin({ data, error: null }).admin).queueStats?.();
+    const { admin, chains } = fakeAdmin({ data: [{ user_items: 2, batch_items: 700, oldest_user_wait_s: 35 }], error: null });
+    expect(await makeStore(admin).queueStats?.()).toEqual({ queue_wait0: 2, queue_wait_batch: 700, queue_oldest_s: 35 });
+    expect(chains).toEqual([[['rpc', 'private.remind_queue_stats', undefined]]]);
+    expect(await one([])).toEqual({ queue_wait0: 0, queue_wait_batch: 0, queue_oldest_s: 0 });
+    expect(await one([{ user_items: -1, batch_items: '3', oldest_user_wait_s: 1.5 }])).toEqual({ queue_wait0: 0, queue_wait_batch: 0, queue_oldest_s: 0 });
+    await expect(makeStore(fakeAdmin({ data: null, error: { message: 'x' } }).admin).queueStats?.()).rejects.toThrow(/^db$/);
   });
   it('收尾：private.remind_queue_finish(p_claim, p_release)，release 只带 table_name、id；出错抛 db', async () => {
     const { admin, chains } = fakeAdmin();
@@ -49,7 +68,7 @@ describe('push-dispatch store.ts', () => {
     await expect(makeStore(bad.admin).finishQueue?.('k', [])).rejects.toThrow(/^db$/);
   });
   it('写心跳：private.push_heartbeat_write(p_detail, p_poison)，回累计；出错、回的不是非负整数都抛 db（REMIND-poison-atomic）', async () => {
-    const base = { claimed: 1, sent: 1, failed: 0, budget_hit: false, queue_ok: 1 };
+    const base = { claimed: 1, sent: 1, failed: 0, budget_hit: false, queue_ok: 1, recalc_written: 0, recalc_r336: 0, recalc_failed: 0 };
     const { admin, chains } = fakeAdmin({ data: 7, error: null });
     expect(await makeStore(admin).writeHeartbeat?.(base, 2)).toBe(7);
     expect(chains).toEqual([[['rpc', 'private.push_heartbeat_write', { p_detail: base, p_poison: 2 }]]]);   // 不再先读心跳、不再 upsert

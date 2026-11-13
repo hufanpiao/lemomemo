@@ -256,8 +256,8 @@ Deno.test({ name: 'TC-DEL-remind_queue（函数一侧、真库）：冷静期的
 } });
 
 // ===== R-411 T00 真库版（方案 docs/10-架构/方案-提醒队列重写.md 5.2；内存版 tests/edge/push-dispatch-t00-pinned.test.ts） =====
-// 迁移 20261113100000 之后、push-dispatch 改动（第三阶段）之前的实际行为：P13、P14、P12 照现状钉住（Q2 回落第三阶段做，改完把 P13 期望改成“截止时刻响”）；
-// P2 的排队一半 M1 已经修了：批量入队（改默认时刻）是 prio 1，用户新建的是 prio 0，下一轮就算到。
+// 第二阶段钉了 M1 之后、push-dispatch 改动之前的行为；第三阶段（11-13）push-dispatch 接上 fresh 以后，P13 按 Q2 改成“截止时刻响”（T00a 两条），
+// P14 照 Q3 保留（T00b），P2 下一轮就算到（T00c）。T00a 另核第 0 步的重算记录（T23 真库部分：logs 的 recalc 行、心跳的 recalc 和积压字段）。
 // 库里的触发器按真实 now() 判“没到点”，所以日期放在 20 天后（首尔时区，profiles.current_tz 默认 Asia/Seoul），一轮的时刻由 deps.now 注入。
 const T00_DAY = addDays(new Date().toISOString().slice(0, 10) as DateStr, 20);
 const tAt = (hm: string, day: DateStr = T00_DAY): number => msAt(day, parseHm(hm), 'Asia/Seoul' as Tz);
@@ -277,27 +277,33 @@ async function p13(tag: string, day: DateStr, hm: string) {
   return [p, t] as const;
 }
 
-Deno.test({ name: 'R-411 T00a P13（真库、钉现状）：15:00 建、明天 10:00 截止、提前 1 天：入队带 fresh；remind_at 写成今天 10:00（已过），明天 10:00 也不响', ...opts, async fn() {
+Deno.test({ name: 'R-411 T00a P13（真库，Q2 已修）：15:00 建、明天 10:00 截止、提前 1 天：remind_at 回落到明天 10:00，到时响一次；重算记录进 logs 和心跳', ...opts, async fn() {
   const day = T00_DAY;
   const [p, t] = await p13('t00a', day, '15:00');
   try {
-    assertEquals(Number((await row('todos', t))?.['remind_at']), tAt('10:00', day), 'remind_at 写成今天 10:00（已过 5 小时）');
+    assertEquals(Number((await row('todos', t))?.['remind_at']), tAt('10:00', addDays(day, 1)), 'remind_at 回落到截止时刻（明天 10:00）');
+    assertEquals(kinds(p, 'remind').length, 0, '当天不推');
+    const rec = await sql`select code, coll, src from public.logs where item_id = ${t} and act = 'recalc'`;
+    assertEquals(rec.map((x) => [x['code'], x['coll'], x['src']]), [['written', 'todos', 'push-dispatch']], 'prio 0 的写回记一行 recalc');
+    const beat = await lastBeat();
+    assertEquals(typeof beat?.['recalc_written'], 'number', '心跳带 recalc_written');
+    for (const k of ['queue_wait0', 'queue_wait_batch', 'queue_oldest_s']) assertEquals(typeof beat?.[k], 'number', `心跳带 ${k}（remind_queue_stats）`);
     await at0(p, tAt('10:00', addDays(day, 1)));
-    assertEquals(kinds(p, 'remind').length, 0, '一条都不推（现状）');
-    console.log('[R411-T00a] 新建待办入队 prio 0、fresh=true；15:00 建的 remind_at=今天 10:00，当天不推，明天截止时刻也不响');
+    assertEquals(kinds(p, 'remind').length, 1, '明天 10:00 截止时刻响一次');
+    console.log('[R411-T00a] 新建待办 fresh：15:00 建的 remind_at 回落到明天 10:00，到时推 1 条；logs 有 recalc/written，心跳有 recalc 和积压字段');
   } finally {
     await p.fake.close();
   }
 } });
 
-Deno.test({ name: 'R-411 T00a P13（真库、钉现状）：10:30 建（提前量刚过 30 分钟）：当场补推一条，明天 10:00 截止时刻不响', ...opts, async fn() {
+Deno.test({ name: 'R-411 T00a P13（真库，Q2 已修）：10:30 建（提前量刚过 30 分钟）：当场不补推，明天 10:00 截止时刻响', ...opts, async fn() {
   const day = addDays(T00_DAY, 2);
   const [p] = await p13('t00a2', day, '10:30');
   try {
-    assertEquals(kinds(p, 'remind').length, 1, '当场补推一条');
+    assertEquals(kinds(p, 'remind').length, 0, '当场不补推');
     await at0(p, tAt('10:00', addDays(day, 1)));
-    assertEquals(kinds(p, 'remind').length, 1, '明天 10:00 不再响（现状）');
-    console.log('[R411-T00a2] 10:30 建：当场补推 1 条，明天截止时刻不响');
+    assertEquals(kinds(p, 'remind').length, 1, '明天 10:00 截止时刻响');
+    console.log('[R411-T00a2] 10:30 建：当场不推，明天截止时刻推 1 条');
   } finally {
     await p.fake.close();
   }
@@ -349,7 +355,9 @@ Deno.test({ name: 'R-411 T00c P2（真库、M1 已修排队一半）：700 条�
   }
 } });
 
-Deno.test({ name: 'R-411 T00d P12（真库、钉现状，Q3 保留）：全天日程推过 → 稍后 → 收回 → 当天改晚默认时刻：“稍后”那次被挪到新默认时刻才响', ...opts, async fn() {
+// 真库的 now() 比模拟的“这一天”早 20 多天，所以改默认时刻时这条在库看来还没到点，走的是“批量重算没到点的”那一支（prio 2，挪到 11:00）。
+// 真实时间里 09:05 时 remind_at 09:00 已过、M1 起不再批量入队，“稍后”那次照常 09:12 响——那一种由内存版 T00d 钉着（tests/edge/push-dispatch-t00-pinned.test.ts）。
+Deno.test({ name: 'R-411 T00d P12（真库，没到点的分支）：全天日程推过 → 稍后 → 收回 → 改晚默认时刻：库看来没到点的按新默认时刻重算（prio 2），11:00 响', ...opts, async fn() {
   const p = await people('t00d', 1, 0);
   const day = addDays(T00_DAY, 9);
   try {
@@ -369,10 +377,10 @@ Deno.test({ name: 'R-411 T00d P12（真库、钉现状，Q3 保留）：全天�
     await at0(p, tAt('09:06', day));
     assertEquals(Number((await row('events', a))?.['remind_at']), tAt('11:00', day), 'remind_at 挪到 11:00');
     await at0(p, tAt('09:12', day));
-    assertEquals(kinds(p, 'remind').length, 1, '09:12（稍后那次）不响（现状）');
+    assertEquals(kinds(p, 'remind').length, 1, '09:12（稍后那次）不响：remind_at 已挪到 11:00');
     await at0(p, tAt('11:00', day));
     assertEquals(kinds(p, 'remind').length, 2, '11:00 才响');
-    console.log('[R411-T00d] 09:00 推过、09:02 稍后到 09:12、09:05 改默认 11:00：09:12 不响，11:00 才响（现状）');
+    console.log('[R411-T00d] 没到点的分支：改默认 11:00 后 prio 2 入队、挪到 11:00；09:12 不响，11:00 才响');
   } finally {
     await p.fake.close();
   }

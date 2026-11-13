@@ -1,8 +1,12 @@
-// push-dispatch 一轮的小工具、tz_invalid 记录和 filterUsable（b13882b^ 的 round.ts 第 208～282、320～336、704～720 行）。
-// 11-03 从 round.ts 原样搬来（REMIND-round-split：只搬家、不改行为）；流程总说明在 round.ts 文件头。
-import { AHEAD_MS, BEHIND_MS, LOG_SRC, type Dnd, type ItemRow, type LogRow, type NotifyMsgLike, type NotifyTextLike, type RoundCtx, type RoundLogic, type Table, type UserSettings } from './round-types.ts';
+// push-dispatch 一轮的小工具、tz_invalid 记录和 filterUsable；流程总说明在 round.ts 文件头。
+import { AHEAD_MS, BEHIND_MS, DB_TIMEOUT, LOG_SRC, type Dnd, type ItemRow, type LogRow, type NotifyMsgLike, type NotifyTextLike, type RoundCtx, type RoundLogic, type Table, type UserSettings } from './round-types.ts';
 
 // ---------------- 小工具 ----------------
+
+/** 出错时记的原因码：数据库请求超时（store 抛 DB_TIMEOUT）记 `<码>:timeout`，其余记 `<码>`（方案 3.6：收尾不变，只是日志分得开） */
+export function failCode(code: string, e: unknown): string {
+  return e instanceof Error && e.message === DB_TIMEOUT ? `${code}:timeout` : code;
+}
 
 /** due_at = greatest(remind_at, snooze_at, defer_until)（PG 的 greatest 不看 null；三个都空回 null） */
 export function dueAtOf(r: Pick<ItemRow, 'remind_at' | 'snooze_at' | 'defer_until'>): number | null {
@@ -87,8 +91,8 @@ export async function logTzInvalid(c: RoundCtx, logs: LogRow[], notes: ReadonlyM
   let seen: Set<string>;
   try {
     seen = await c.store.tzLoggedSince([...notes.keys()], now - 3_600_000);
-  } catch {
-    c.log('tz_log_check_failed');
+  } catch (e) {
+    c.log(failCode('tz_log_check_failed', e));
     return;
   }
   for (const [u, code] of notes) {

@@ -1,19 +1,18 @@
-// push-dispatch 的数据库读写（supabase-js，service role；round.ts 的 RoundStore 加心跳）。只在 index.ts 里用（Deno）；
-// 逻辑测试用 tests/edge/push-dispatch-mem.ts 的内存替身，这里的查询写法由 tests/functions/push-dispatch-store.test.ts 按记录的调用核对。
-// 系统写入（remind_at、next_date、pushed_for、defer_until、push_fail_count、last_push_ok_at）都在 table_meta 的 system_cols 里，
-//   touch() 不加 rev（4.5、5.3 第 3 步）；清订阅三列不是系统列，会加 rev、同步给那台设备（它据此知道要重新订阅）。
-// 每条写都带 user_id 条件；不读也不写标题以外的正文列（标题只在内存里组文案，不进日志）。
+// push-dispatch 的数据库读写（supabase-js，service role）：只在 index.ts 里用；查询写法由 tests/functions/push-dispatch-store.test.ts 核对，逻辑测试用内存替身。
+// 系统写入（remind_at、next_date、pushed_for、defer_until、push_fail_count、last_push_ok_at）在 table_meta.system_cols 里，touch() 不加 rev、不入队；
+//   清订阅三列不是系统列，会加 rev、同步给那台设备。每条写都带 user_id 条件；标题只在内存里组文案，不进日志。
+// 出错一律抛 Error：请求超时（_shared/net.ts 到点中止）抛 DB_TIMEOUT，其余抛 'db'（调用方按 failCode 记 `<码>` 或 `<码>:timeout`）。
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import type { DispatchStore } from './core.ts';
-import { LOG_SRC, SETTING_KEYS, TABLES, type DeviceRow, type ItemRow, type Profile, type QueueItem, type Table, type UserSettings } from './round.ts';
+import { DB_TIMEOUT, LOG_SRC, SETTING_KEYS, TABLES, type DeviceRow, type ItemRow, type Profile, type QueueItem, type Table, type UserSettings } from './round.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Admin = SupabaseClient<any, any, any>;
 
 // anniversaries 没有 source 列（0005_anniv.sql；代码审查 M1）：source 只在 events、todos 两支里读；纪念日的 source 按 'page' 补
 const COMMON = 'id, user_id, deleted_at, undone, push_show_title, remind_at, notified_for, snooze_at, pushed_for, defer_until';
-/** 每张表读哪些列（switch：check_backend F7 不许用变量做方括号键；tests/functions/push-dispatch-store.test.ts 核对每列都在 db.types.ts 里） */
+/** 每张表读哪些列（switch：check_backend F7 不许用变量做方括号键；tests/build/push-dispatch-cols.test.ts 核对每列都在 db.types.ts 里） */
 export function colsOf(table: Table): string {
   switch (table) {
     case 'events': return `${COMMON}, source, title, date, time, tz, remind_min, remind_days`;
@@ -23,8 +22,16 @@ export function colsOf(table: Table): string {
 }
 const DEVICE_COLS = 'id, user_id, push_endpoint, p256dh, auth, push_fail_count';
 
+/**
+ * supabase-js 把 fetch 抛的异常转成 error 返回，message 是“异常名: 文字”（@supabase/postgrest-js 2.118 的 executeWithRetry 之后那段）；
+ * timedFetch 中止时异常名是 TimeoutError，手动中止是 AbortError。只看开头的异常名，不看文字
+ */
+export function dbError(error: unknown): Error {
+  const m = (error as { message?: unknown } | null)?.message;
+  return new Error(typeof m === 'string' && /^(TimeoutError|AbortError):/.test(m) ? DB_TIMEOUT : 'db');
+}
 function must<T>(r: { data: T | null; error: unknown }): T {
-  if (r.error) throw new Error('db');
+  if (r.error) throw dbError(r.error);
   return r.data as T;
 }
 
@@ -65,17 +72,26 @@ export function makeStore(admin: Admin): DispatchStore {
     async writeHeartbeat(detail, poison) {
       // 心跳名 push-dispatch（core.ts 的 HEARTBEAT）由函数写死；queue_poison 在 SQL 里按首尔当天原子累加（迁移 20261105140000，REMIND-poison-atomic）
       const total = must(await priv.rpc('push_heartbeat_write', { p_detail: detail, p_poison: poison }));
-      if (typeof total !== 'number' || !Number.isInteger(total) || total < 0) throw new Error('db');
+      if (typeof total !== 'number' || !Number.isInteger(total) || total < 0) throw new Error('db');   // 返回值不对不是超时
       return total;
     },
-    async popQueue(limit, leaseS, retry) {
+    async popQueue(limit, leaseS, retry, perUser, poison, ver) {
       // 强转（代码审查 L4）：生成类型按函数返回列一律给非空（claim: string），但有毒项返回的 claim 是 null。
       //   QueueItem 写的是 string | null，round-step0.ts 靠它判有毒项，不要照生成类型去掉 null 判断
-      return must(await priv.rpc('remind_queue_pop', { p_limit: limit, p_lease_s: leaseS, p_retry: retry })) as QueueItem[];
+      return must(await priv.rpc('remind_queue_pop', {
+        p_limit: limit, p_lease_s: leaseS, p_retry: retry, p_per_user: perUser, p_poison: poison, p_ver: ver,
+      })) as QueueItem[];
     },
     async finishQueue(claim, release) {
       const { error } = await priv.rpc('remind_queue_finish', { p_claim: claim, p_release: release.map((x) => ({ table_name: x.table_name, id: x.id })) });
-      if (error) throw new Error('db');
+      if (error) throw dbError(error);
+    },
+    async queueStats() {
+      // private.remind_queue_stats（迁移 20261113100000）：一行，只算可用账号的项
+      const rows = must(await priv.rpc('remind_queue_stats')) as { user_items: number; batch_items: number; oldest_user_wait_s: number }[];
+      const r = rows[0];
+      const n = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : 0);
+      return { queue_wait0: n(r?.user_items), queue_wait_batch: n(r?.batch_items), queue_oldest_s: n(r?.oldest_user_wait_s) };
     },
     async rows(table, ids) {
       return readRows(table, ids);

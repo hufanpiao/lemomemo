@@ -5,7 +5,7 @@
 import { checkEndpoint } from '../_shared/push/endpoint.ts';
 import type { PushOptions } from '../_shared/push/send.ts';
 import { BEHIND_MS, LOG_SRC, SNOOZE_MIN, kindOf, type Cand, type DeviceOutcome, type DeviceRow, type Item, type LogRow, type Profile, type RoundCtx, type RoundResult, type UserData, type UserSettings } from './round-types.ts';
-import { renderText, showTitleOf } from './round-util.ts';
+import { failCode, renderText, showTitleOf } from './round-util.ts';
 
 export type Sender = ReturnType<typeof makeSender>;
 
@@ -107,8 +107,8 @@ async function writeAnnivNext(c: RoundCtx, x: Cand, prof: Profile, st: UserSetti
     const nx = c.logic.annivNext(x.row, { tz: prof.current_tz, now: x.due + 1, settings: st ?? {} });
     // 乐观条件：推完以后用户又改了这条纪念日（触发器已入队，第 0 步会按新值重算），就不覆盖
     if (nx && !(await c.store.writeRemind(x.table, x.row.id, x.row.user_id, { remind_at: nx.remind_at, next_date: nx.next_date }, x.row.remind_at))) c.log('anniv_next_stale');
-  } catch {
-    c.log('anniv_next_failed');
+  } catch (e) {
+    c.log(failCode('anniv_next_failed', e));
   }
 }
 
@@ -125,9 +125,13 @@ export async function remindOne(c: RoundCtx, S: Sender, d: UserData, x: Cand): P
   let mine: boolean;
   try {
     mine = await c.store.claim(x.table, x.row.id, u, x.due);
-  } catch {
+  } catch (e) {
     mine = false;
-    c.log('claim_failed');
+    const code = failCode('claim_failed', e);
+    c.log(code);
+    // R-411 Q4（负责人定 A）：认领请求超时，库里可能已经认领了（pushed_for = due_at，以后不再回它）。照旧不发，宁可漏一条
+    //   （App 的“错过的提醒”兜底）也不重复；另记一条 logs，看实际多不多再说
+    if (code !== 'claim_failed') logs.push({ user_id: u, t: c.now(), device: null, kind: 'run', act: 'claim_timeout', src: LOG_SRC, coll: x.table, item_id: x.row.id, code: 'claim_timeout' });
   }
   if (!mine) {
     S.unreserve(targets.length);
@@ -169,9 +173,9 @@ export async function resolveOne(c: RoundCtx, S: Sender, x: Item): Promise<void>
   let mine: boolean;
   try {
     mine = await c.store.releasePushed(x.table, x.row.id, u, pushedFor);
-  } catch {
+  } catch (e) {
     mine = false;
-    c.log('release_failed');
+    c.log(failCode('release_failed', e));
   }
   if (!mine || targets.length === 0) {
     S.unreserve(targets.length);
@@ -196,8 +200,8 @@ export async function writeDeviceOutcomes(c: RoundCtx, stats: Sender['stats']): 
   for (const { dev, out } of stats.values()) {
     try {
       await c.store.deviceOutcome(dev, out, nowIso);
-    } catch {
-      c.log('device_write_failed');
+    } catch (e) {
+      c.log(failCode('device_write_failed', e));
     }
   }
 }

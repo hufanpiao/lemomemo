@@ -106,14 +106,14 @@ describe('全天日程：第 0 步按 current_tz 重算、到点推送，文案�
 
 describe('全天日程：current_tz 不认识（R-316）', () => {
   const BAD = 'Mars/Olympus_Mons';
-  it('第 0 步：跳过、不写 remind_at、不插回，记 tz_invalid 原因码 profiles（不是 recalc_failed:events）', async () => {
+  it('第 0 步：跳过、不写 remind_at、不插回，记 tz_invalid 原因码 profiles（不是 recalc:failed:events）', async () => {
     const db = new MemDb().user(UA, { current_tz: BAD });
     const w = await world(db);
     const row = allDay(db, 0);
     await w.round(at('06:00'));
     expect(db.tables.events.get(row.id)?.remind_at).toBeNull();
     expect(db.queue.size).toBe(0);
-    expect(w.codes().filter((c) => c.startsWith('recalc_failed'))).toEqual([]);
+    expect(w.codes().filter((c) => c.startsWith('recalc:failed:'))).toEqual([]);
     expect(db.logs.filter((l) => l.act === 'tz_invalid').map((l) => l.code)).toEqual(['profiles']);
     expect(JSON.stringify(db.logs)).not.toContain(BAD);
   });
@@ -229,7 +229,7 @@ describe('全天日程：端到端补充（审查 L6）', () => {
     const row = allDay(db, 1);
     await w.round(at('12:00', EVE));
     expect(db.tables.events.get(row.id)?.remind_at).toBeNull();
-    expect(w.codes().filter((c) => c.startsWith('recalc_failed'))).toEqual([]);
+    expect(w.codes().filter((c) => c.startsWith('recalc:failed:'))).toEqual([]);
     expect(db.logs.filter((l) => l.act === 'tz_invalid').map((l) => l.code)).toEqual(['profiles']);
   });
 });

@@ -94,8 +94,8 @@ describe('重试项挡不住新项（11-05 安全复审 N1、代码审查 M1）'
     let now = start;
     db.clock = () => now;
     const pop = db.popQueue.bind(db);
-    db.popQueue = async (n, l, retry) => {
-      const r = await pop(n, l, retry);
+    db.popQueue = async (...a) => {
+      const r = await pop(...a);
       now += stepMs;
       return r;
     };
@@ -245,7 +245,7 @@ describe('心跳的 queue_ok、queue_poison（安全审查必改 3）', () => {
     const db = new MemDb();
     const now = at('12:00');
     db.clock = () => now;
-    const base = { claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1 };
+    const base = { claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1, recalc_written: 0, recalc_r336: 0, recalc_failed: 0 };
     for (const detail of [null, [], 'x', { queue_poison: -1 }, { queue_poison: 1.5 }, { queue_poison: '3' }, { queue_poison: 1_000_000_000 }, {}]) {
       db.lastBeat = { at: at('08:00'), detail };
       expect(await db.writeHeartbeat(base, 2), JSON.stringify(detail)).toBe(2);

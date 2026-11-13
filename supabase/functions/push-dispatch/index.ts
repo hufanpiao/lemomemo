@@ -1,11 +1,7 @@
-// push-dispatch 入口（架构 5.3、第 6 节）：cron 函数，鉴权是 x-cron-secret（config.toml 关了网关的 verify_jwt，F9）。
-// 每分钟由 pg_cron 经 pg_net 调一次（迁移 20261103120000_core_push_dispatch_cron.sql，timeout 25000 ms、带 x-region）。
-// 逻辑和测试见 core.ts、tests/functions/push-dispatch.test.ts；推送的加密、签名、发送在 _shared/push/（push-test 共用）。
-// 数据库只经 supabase-js（service role，store.ts）：private.heartbeat、private.remind_queue（经 private.remind_queue_pop，迁移 20261103130000）、
-//   private.account_usable（经 _shared/auth.ts）、events / todos / anniversaries、devices、profiles、settings、logs。不用 fn_vault、不直连数据库（不 import _shared/db.ts）。
-// 共享 logic 从 _shared/gen（build/copy_shared.mjs 生成）接进 core.ts：remindAtOf、dndDeferUntil、notify-text、t、isValidTz、msAt。
-// 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY（平台自带）；CRON_SECRET；VAPID_PRIVATE_KEY（JWK）、VAPID_PUBLIC_KEY、VAPID_SUBJECT（O-1 脚本写）；
-//   PUSH_SERVICE_OVERRIDE_URL、LEMO_LOCAL_PUSH_STUB（只给本机推送替身，D1-8；线上设了替身就回 500 misconfigured）。
+// push-dispatch 入口（架构 5.3、第 6 节）：cron 函数，鉴权 x-cron-secret（config.toml 关了网关的 verify_jwt，F9）；pg_cron 每分钟经 pg_net 调一次（迁移 20261103120000）。
+// 处理逻辑在 core.ts；数据库只经 supabase-js（service role，store.ts），每个请求套 timedFetch 超时；不用 fn_vault、不直连数据库。
+// 共享 logic 从 _shared/gen（build/copy_shared.mjs 生成）经 logic.ts 的 makeLogic 接进来。推送的加密、签名、发送在 _shared/push/。
+// 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY；CRON_SECRET；VAPID_PRIVATE_KEY、VAPID_PUBLIC_KEY、VAPID_SUBJECT；PUSH_SERVICE_OVERRIDE_URL、LEMO_LOCAL_PUSH_STUB（只给本机替身）。
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { isUsable } from '../_shared/auth.ts';
@@ -15,7 +11,7 @@ import { msAt, parseHm } from '../_shared/gen/core/date.ts';
 import { isValidTz } from '../_shared/gen/core/tz.ts';
 import { t } from '../_shared/gen/i18n/i18n.ts';
 import { notifyText } from '../_shared/gen/logic/notify-text.ts';
-import { allDayTimeOf, dndDeferUntil, eventRemindAt, sameRemindDay, todoRemindAt } from '../_shared/gen/logic/remind.ts';
+import { allDayTimeOf, dndDeferUntil, REMIND_RULES_VER, remindAtOf, sameRemindDay } from '../_shared/gen/logic/remind.ts';
 import { startAtOf } from '../_shared/gen/logic/remind-actions.ts';
 import { occurrenceKey, reminderTag } from '../_shared/gen/logic/remind-route.ts';
 import { resolveOverride } from '../_shared/push/stub.ts';
@@ -27,7 +23,7 @@ import { makeStore } from './store.ts';
 
 /** 共享 logic 的接线（分支在 logic.ts 里只写一遍；这里只列 _shared/gen 下的函数，名字和测试替身一致，见 tests/edge/push-dispatch-logic-wiring.test.ts） */
 export const LOGIC: RoundLogic = makeLogic({
-  todoRemindAt, eventRemindAt, allDayTimeOf, startAtOf, msAt, parseHm, sameRemindDay, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey,
+  REMIND_RULES_VER, remindAtOf, allDayTimeOf, startAtOf, msAt, parseHm, sameRemindDay, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey,
 });
 
 // 每个实例只自检一次（C-9）；三个变量的值变了（换钥匙后重新部署会起新实例，这里只是兜底）就重做

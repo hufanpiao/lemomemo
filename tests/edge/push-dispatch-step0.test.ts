@@ -1,16 +1,23 @@
 // push-dispatch 第 0 步（原 tz-recalc；B2 任务单 BE-2 第 0 步、TZ-invalid-b2、K3-remind-orphan；架构 5.3 第 0 步、4.5、4.6、0.42 第 1 条、0.54 第 2 条；
-// 代码审查 BE-1 R1）。出队函数本身（孤儿删、停用和冷静期不出队、上限）在 supabase/tests/rls/30_remind_queue_pop.test.sql；这里测函数一侧：
+// 代码审查 BE-1 R1）。出队函数本身（孤儿照常出队、停用和冷静期不出队、上限、prio 排序）在 supabase/tests/rls/30_remind_queue_pop.test.sql；这里测函数一侧：
 // 重算时传这一行原来的 remind_at、漏传就失败、时区不认识的跳过记 tz_invalid、写回失败放回、预算到了放回。
 // 11-04 起出队是租约式（迁移 20261104130000）：“放回”= finish 时清租约，崩溃、有毒项、处理期间被改在 push-dispatch-lease.test.ts。
 import { describe, expect, it, vi } from 'vitest';
 import { msAt, parseHm } from '../../shared/core/date.ts';
 import { handle } from '../../supabase/functions/push-dispatch/core.ts';
-import type { RoundLogic } from '../../supabase/functions/push-dispatch/round.ts';
+import type { ItemRow, RoundLogic } from '../../supabase/functions/push-dispatch/round.ts';
 import { cronReq, depsFor, fakeVapid } from './push-dispatch-harness.ts';
 import { eventRow, LOGIC, MemDb, todoRow, UA, UB, uuid } from './push-dispatch-mem.ts';
 
 const SEOUL = 'Asia/Seoul';
 const at = (hm: string, day = '2026-11-03') => msAt(day, parseHm(hm), SEOUL);
+
+/** 已有的行被改了、照 update 触发器入队（不是 fresh；insert 入队的待办是 fresh，见 R-411 Q2） */
+function edited(db: MemDb, table: 'todos' | 'events', row: ItemRow): ItemRow {
+  db.put(table, row);
+  db.enqueue(table, row.id);
+  return row;
+}
 
 async function run(db: MemDb, now: number, logic: RoundLogic = LOGIC) {
   const { keys } = await fakeVapid();
@@ -21,16 +28,17 @@ async function run(db: MemDb, now: number, logic: RoundLogic = LOGIC) {
 }
 
 describe('第 0 步：重算 remind_at 时一律传这一行原来的 remind_at（代码审查 BE-1 R1）', () => {
-  it('待办、日程都传第 5 个参数，值就是行里现在的 remind_at（null 也照传，不是 undefined）', async () => {
+  it('待办、日程都传第 5 个参数，值就是行里现在的 remind_at（null 也照传，不是 undefined）；只有 fresh 的待办传 undefined（R-411 Q2）', async () => {
     const db = new MemDb().user(UA);
-    const t1 = db.put('todos', todoRow(UA, { due: '2026-11-04', due_time: '17:00', remind_before_min: 60, remind_at: at('16:00', '2026-11-04') }), true);
-    const t2 = db.put('todos', todoRow(UA, { due: '2026-11-04', remind_days: 0, remind_at: null }), true);
+    const t1 = edited(db, 'todos', todoRow(UA, { due: '2026-11-04', due_time: '17:00', remind_before_min: 60, remind_at: at('16:00', '2026-11-04') }));
+    const t2 = edited(db, 'todos', todoRow(UA, { due: '2026-11-04', remind_days: 0, remind_at: null }));
     const e1 = db.put('events', eventRow(UA, { date: '2026-11-04', time: '15:00', tz: SEOUL, remind_min: 15, remind_at: 123 }), true);
+    const t3 = db.put('todos', todoRow(UA, { due: '2026-11-04', due_time: '17:00', remind_before_min: 60, remind_at: 456 }), true);   // 新建：fresh
     const spy = vi.fn(LOGIC.remindAtOf);
     await run(db, at('10:00'), { ...LOGIC, remindAtOf: spy });
-    expect(spy).toHaveBeenCalledTimes(3);
+    expect(spy).toHaveBeenCalledTimes(4);
     const byRow = new Map(spy.mock.calls.map((c) => [c[1].id, c]));
-    for (const [row, prev] of [[t1, t1.remind_at], [t2, null], [e1, 123]] as const) {
+    for (const [row, prev] of [[t1, t1.remind_at], [t2, null], [e1, 123], [t3, undefined]] as const) {
       const call = byRow.get(row.id);
       expect(call, row.id).toBeDefined();
       // 11-04 全天日程：日程分支多传第 6 个参数 remind.default_time（这个人没设，是 undefined）；待办仍是 5 个
@@ -44,7 +52,7 @@ describe('第 0 步：重算 remind_at 时一律传这一行原来的 remind_at�
   // 漏传就回落到截止时刻 17:00，稍后这次被吞掉
   const scenario = () => {
     const db = new MemDb().user(UA);
-    const row = db.put('todos', todoRow(UA, { due: '2026-11-03', due_time: '17:00', remind_before_min: 60, remind_at: at('16:00'), pushed_for: at('16:00'), snooze_at: at('16:12') }), true);
+    const row = edited(db, 'todos', todoRow(UA, { due: '2026-11-03', due_time: '17:00', remind_before_min: 60, remind_at: at('16:00'), pushed_for: at('16:00'), snooze_at: at('16:12') }));
     return { db, row };
   };
   it('传了：remind_at 保持 16:00，不写回', async () => {
@@ -73,10 +81,10 @@ describe('第 0 步：出队、写回、按租约收尾', () => {
     expect(db.tables.events.get(e.id)?.remind_at).toBe(msAt('2026-11-05', 885, SEOUL));
     expect(db.queue.size).toBe(0);
   });
-  it('账号不可用的不出队（恢复后下一轮照常重算）；目标行已不在的删掉', async () => {
+  it('账号不可用的不出队（恢复后下一轮照常重算）；目标行已不在的（孤儿）照常出队、读不到行，收尾时删掉', async () => {
     const db = new MemDb().user(UA).user(UB, {}, false);
     const tb = db.put('todos', todoRow(UB, { due: '2026-11-05', remind_days: 0 }), true);
-    db.queue.set('todos:orphan', { table_name: 'todos', id: '99999999-0000-4000-8000-000000000000' });
+    db.queue.set('todos:orphan', { table_name: 'todos', id: '99999999-0000-4000-8000-000000000000', user_id: UA });
     await run(db, at('10:00'));
     expect([...db.queue.keys()]).toEqual([`todos:${tb.id}`]);
     expect(db.tables.todos.get(tb.id)?.remind_at).toBeNull();
@@ -101,14 +109,17 @@ describe('第 0 步：出队、写回、按租约收尾', () => {
     db.put('todos', todoRow(UA, { due: '2026-11-06', remind_days: 0 }), true);
     let now = at('10:00');
     const pop = db.popQueue.bind(db);
-    db.popQueue = async (n, l, retry) => {
-      const r = await pop(n, l, retry);
-      now += 25_000;   // 出队以后时钟跳过 20 秒预算
+    db.popQueue = async (...a) => {
+      const r = await pop(...a);
+      // 新项按批出队以后时钟跳过 20 秒预算。R-411 复核时发现原来每次出队都跳：先做的单项重试出队（取空）就把预算跳完了，
+      // 按批那次根本没出队，这条一直空过；改成只在按批那次跳，并核对两项确实出过队
+      if (!a[2]) now += 25_000;
       return r;
     };
     const { keys } = await fakeVapid();
     await handle(cronReq(), depsFor(db, keys, { now: () => now }));
-    expect(db.queue.size).toBe(2);
+    expect(db.calls.filter((c) => c === 'popQueue')).toHaveLength(2);
+    expect([...db.queue.values()].map((q) => [q.claim, q.attempts])).toEqual([[null, 0], [null, 0]]);   // 放回：清租约、attempts 减回 0
     expect(db.calls).not.toContain('writeRemind');
   });
 });
@@ -149,7 +160,7 @@ describe('第 0 步：有时刻但 tz 为空的日程（PUSH-tz-null-event，11-
       const d = await run(db, at('14:45'));
       expect(db.tables.events.get(row.id)?.remind_at).toBeNull();
       expect(db.logs.filter((l) => l.act === 'tz_invalid')).toEqual([]);
-      expect(d.codes.filter((c) => c.startsWith('recalc_failed'))).toEqual([]);
+      expect(d.codes.filter((c) => c.startsWith('recalc:failed:'))).toEqual([]);
       expect(db.logs.filter((l) => l.act === 'push_ok')).toEqual([]);
     });
   }

@@ -3,7 +3,7 @@
 // 11-04 steps1to8 再拆成几段（REMIND-steps1to8-split：只搬家、不改行为）：这里留第 1、2 步和总调用，第 3～8 步在 round-send.ts。
 // 11-05 REMIND-split-low L4：第 2 步 step2 改名 screenDnd；Cand、Item、UserData 从 round-types.ts 取。
 import { AHEAD_MS, BEHIND_MS, type Cand, type Item, type LogRow, type RoundCtx, type RoundResult, type UserData } from './round-types.ts';
-import { filterUsable, groupBy, isDue, isHandledAfterPush, logTzInvalid, parseDnd, pool, uniq } from './round-util.ts';
+import { failCode, filterUsable, groupBy, isDue, isHandledAfterPush, logTzInvalid, parseDnd, pool, uniq } from './round-util.ts';
 import { makeSender, remindOne, resolveOne, writeDeviceOutcomes } from './round-send.ts';
 
 // ---------------- 第 1～8 步 ----------------
@@ -18,15 +18,15 @@ async function collect(c: RoundCtx, now: number): Promise<{ cands: Cand[]; handl
       const due = isDue(table, row, now);
       if (due !== null) cands.push({ table, row, due });
     }
-  } catch {
-    c.log('due_query_failed');
+  } catch (e) {
+    c.log(failCode('due_query_failed', e));
   }
   // resolve 的候选（排在提醒之后）
   let handled: Item[] = [];
   try {
     for (const x of await c.store.pushedRows(lo, now, c.limits.perUser, c.limits.due)) if (isHandledAfterPush(x.table, x.row)) handled.push(x);
-  } catch {
-    c.log('resolve_query_failed');
+  } catch (e) {
+    c.log(failCode('resolve_query_failed', e));
   }
   cands.sort((a, b) => a.due - b.due || a.table.localeCompare(b.table) || a.row.id.localeCompare(b.row.id));
   cands = cands.slice(0, c.limits.due);
@@ -49,8 +49,8 @@ async function readUsers(c: RoundCtx, users: string[]): Promise<UserData | null>
   try {
     const [p, s, d] = await Promise.all([c.store.profiles(users), c.store.settings(users), c.store.devices(users)]);
     return { profiles: p, settings: s, devs: groupBy(d, (x) => x.user_id) };
-  } catch {
-    c.log('dispatch_read_failed');
+  } catch (e) {
+    c.log(failCode('dispatch_read_failed', e));
     return null;
   }
 }
@@ -94,8 +94,8 @@ async function screenDnd(c: RoundCtx, logs: LogRow[], res: RoundResult, cands: C
     if (until !== null && until > x.due) {
       try {
         await c.store.setDeferUntil(x.table, x.row.id, u, until);
-      } catch {
-        c.log('defer_failed');
+      } catch (e) {
+        c.log(failCode('defer_failed', e));
       }
       continue;
     }
