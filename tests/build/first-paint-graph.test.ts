@@ -93,6 +93,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/core/outbox-new-item.ts': '建新 outbox 项（K8 R2 ①）：和 rows.ts 一起在 loadRowSchemas 里按需加载，不进首屏',
   'src/core/manifest-source.ts': '完整清单快照：和 rows.ts 一起在 loadRowSchemas 里按需加载（首屏瘦身 11-05，首屏建本机仓只读 manifest-sync.gen.ts）',
   'src/platform/desktop.ts': '只在 exe（Tauri）里加载，网页版不下载',
+  'src/platform/look.ts': '皮肤、深浅色（ADR-008，B6 皮肤 11-13）：其实首屏期间就下载（main.tsx 入口第一行懒加载，按本机缓存套到 <html> 上）；它和登录页、设置页共用一块，manifest 键带哈希（_look-<哈希>.js），进不了 FIRST_PAINT_DYNAMIC。这一块只有它自己（不引 shared 以外的东西，没有 zod、农历、动画库），下载量由 e2e b2-first-screen-budget.spec.ts 按页面时钟算进 150 KB',
   'src/platform/diag-boot.ts': '非正式版诊断启动件（11-11 启动链路整改收成这一个入口）：只在非正式版冷启动时下载，正式构建整块摇掉（check_no_probe 兜底）；只起运行日志（启动画面颜色诊断、冷启动时间线 11-12 视口清理删掉）',
   'src/platform/vh-gapfix.ts': 'R-371 冷启动高度校正的后两次触发（等底栏挂上、键盘真收了）：只在 iOS 主屏幕版冷启动时下载（判断和早试在首屏的 vh-gapfix-gate.ts）；电脑、安卓、浏览器里打开都不下载',
   'src/app/CacheTooNewScreen.tsx': '只在本机库比 App 新（version_too_new）时整屏提示用',

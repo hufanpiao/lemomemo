@@ -247,10 +247,8 @@ describe('GlassBar', () => {
     // 着色：子元素叠一半 --bg（不用 color-mix，A11）
     expect(fxCss).toMatch(/\.edgeTint \{\s*position: absolute;\s*inset: 0;\s*background: var\(--bg\);\s*opacity: 0\.5;/);
     expect(edge).toMatch(/backdrop-filter: blur\(3px\);/);
-    // 减少透明效果（系统设置、data-rt）：和实色带的渐隐一样不要；减少动态效果：不淡入；宽屏侧栏、键盘弹着、启动等安全区
-    expect(fxCss).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{[^@]*\.edge \{\s*display: none;/);
+    // 减少透明效果（data-rt，含系统设置）：和实色带的渐隐一样不要；减少动态效果：不淡入；宽屏侧栏、键盘弹着、启动等安全区
     expect(fxCss).toMatch(/:global\(:root\[data-rt='1'\]\) \.edge \{\s*display: none;/);
-    expect(fxCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^@]*\.band,\s*\.edge \{\s*transition: none;/);
     expect(fxCss).toMatch(/:global\(:root\[data-rm='1'\]\) \.band,\s*:global\(:root\[data-rm='1'\]\) \.edge \{\s*transition: none;/);
     expect(fxCss).toMatch(/@media \(width >= 900px\) \{[^@]*\.edge \{\s*display: none;/);
     expect(fxCss).toMatch(/:global\(:root\[data-kbhide\]\) \.band,\s*:global\(:root\[data-kbhide\]\) \.edge \{\s*visibility: hidden;/);
@@ -266,21 +264,20 @@ describe('GlassBar', () => {
     expect(screen.getByTestId('tabbar-edge').getAttribute('data-add')).toBe('0');
   });
 
-  it('样式：液滴只动 translate、scale（时长、曲线用令牌），两种减少动态效果都关掉；减少透明效果两种都换实色；切页名字登记过', async () => {
+  it('样式：液滴只动 translate、scale（时长、曲线用令牌），减少动态效果（data-rm）关掉；减少透明效果（data-rt）换实色；切页名字登记过', async () => {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     const css = readFileSync(join(import.meta.dirname, '../GlassBar.module.css'), 'utf8');
     const fxCss = readFileSync(join(import.meta.dirname, '../GlassBarFx.module.css'), 'utf8'); // 首屏后部分：模糊带、果冻后备
     expect(css).toContain('transition: translate var(--dur-drop) var(--ease-drop), scale var(--dur-drop-press) var(--ease-press);');
     expect(fxCss).toContain('animation: gel var(--dur-drop) var(--ease-gel);');
-    expect(fxCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.jelly \{\s*animation: none;/);
     // 减少透明效果：带子照样在，而且是硬边实色（渐隐那段也不要）
-    for (const re of [/@media \(prefers-reduced-transparency: reduce\) \{\s*\.band \{\s*background: linear-gradient\(to bottom, transparent var\(--band-fade\), var\(--bg\) var\(--band-fade\)\);/, /:global\(:root\[data-rt='1'\]\) \.band \{\s*background: linear-gradient\(to bottom, transparent var\(--band-fade\), var\(--bg\) var\(--band-fade\)\);/]) expect(fxCss).toMatch(re);
+    expect(fxCss).toMatch(/:global\(:root\[data-rt='1'\]\) \.band \{\s*background: linear-gradient\(to bottom, transparent var\(--band-fade\), var\(--bg\) var\(--band-fade\)\);/);
+    // 系统设置由 platform/look.ts 并进 data-rt / data-rm（皮肤整块评审 11-14 第 1、6 条），这里不另写媒体查询
+    for (const f of [css, fxCss]) expect(f).not.toContain('prefers-reduced');
         expect(fxCss).toMatch(/@media \(width >= 900px\) \{\s*\.band \{\s*display: none;/);
     expect(css).not.toMatch(/\.band|\.jelly \{|@keyframes gel/); // 外壳的样式里没有首屏后部分的类
-    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.drop \{\s*transition: none;/);
     expect(fxCss).toMatch(/:global\(:root\[data-rm='1'\]\) \.jelly \{\s*animation: none;/);
-    expect(css).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{\s*\.barTint \{\s*background: var\(--glass-solid\);/);
     expect(css).toMatch(/:global\(:root\[data-rt='1'\]\) \.barTint \{\s*background: var\(--glass-solid\);/);
     expect(css).toMatch(/\.drop\[data-state='press'\] \{\s*scale: 1\.12;/);
     // 11-06 真机 9d40848：过渡中不再换实色（负责人不接受“先不透明再变透明”），没有 ::after 遮罩；快照组裁圆角见 view-transition-css.test.ts
@@ -311,8 +308,8 @@ describe('GlassBar', () => {
     // “＋”聚焦只加焦点环，不覆盖底色圈、细灰边和阴影（R3）：写 box-shadow 的聚焦规则只有页签那条
     expect(css).toMatch(/\.tab:focus-visible,\s*\.fab:focus-visible \{\s*outline: 2px solid var\(--focus\);\s*\}/);
     expect(css).not.toMatch(/\.fab:focus-visible[^{]*\{[^}]*box-shadow/);
-    // 减少透明效果：选中液滴换 --g-pill-solid 加描边（D2），两种都要
-    expect(css.match(/background: var\(--g-pill-solid\);\s*box-shadow: inset 0 0 0 1\.5px var\(--g-pill-edge\);/g)?.length).toBe(2);
+    // 减少透明效果（data-rt）：选中液滴换 --g-pill-solid 加描边（D2），只一条
+    expect(css.match(/background: var\(--g-pill-solid\);\s*box-shadow: inset 0 0 0 1\.5px var\(--g-pill-edge\);/g)?.length).toBe(1);
     const { VT_FIXED } = await import('../../../../motion/vt.ts');
     expect(Object.values(VT_FIXED)).toEqual(expect.arrayContaining(['tabbar', 'tabbar-add']));
   });

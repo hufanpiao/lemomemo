@@ -685,11 +685,9 @@
   text-decoration: underline;
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .error {
-    background: var(--float-solid);
-    backdrop-filter: none;
-  }
+:global(:root[data-rt='1']) .error {
+  background: var(--float-solid);
+  backdrop-filter: none;
 }
 
 /* 电脑：外框在输入行正上方、跟内容栏同宽对齐（不按整个窗口居中，不叠在输入行下面） */

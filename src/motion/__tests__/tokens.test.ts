@@ -53,8 +53,8 @@ describe('动效令牌：TS 和 CSS 一致', () => {
     expect(inCss.filter((k) => !mapped.has(k))).toEqual([]);
   });
 
-  it('减少动态效果时按下回弹时长为 0（系统设置和设置里的开关两条）', () => {
-    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\{:root\{--dur-press:0ms\}\}/);
+  it('减少动态效果时按下回弹时长为 0（只认 data-rm：系统设置由 look.ts 并进来，不另写媒体查询）', () => {
+    expect(css).not.toContain('prefers-reduced');
     expect(css).toMatch(/:root\[data-rm="1"\]\{--dur-press:0ms\}/);
   });
 

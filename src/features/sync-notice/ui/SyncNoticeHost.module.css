@@ -51,14 +51,6 @@
   backdrop-filter: blur(6px) saturate(var(--float-sat));
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .card,
-  .flash {
-    background: var(--float-solid);
-    backdrop-filter: none;
-  }
-}
-
 .card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -169,4 +161,11 @@
 .dialogBtn:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+/* 减少透明效果（data-rt：开关打开或系统设置了 reduce，platform/look.ts 写）：实色、不模糊；排在各自的基础规则之后（no-descending-specificity） */
+:global(:root[data-rt='1']) .card,
+:global(:root[data-rt='1']) .flash {
+  background: var(--float-solid);
+  backdrop-filter: none;
 }

@@ -41,17 +41,6 @@
   pointer-events: auto;
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .scrim,
-  .sheet {
-    backdrop-filter: none;
-  }
-
-  .sheet {
-    background: var(--glass-solid);
-  }
-}
-
 :global(:root[data-rt='1']) .scrim,
 :global(:root[data-rt='1']) .sheet {
   backdrop-filter: none;
@@ -203,12 +192,6 @@
   min-height: 52px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .zone {
-    transition: none;
-  }
-}
-
 :global(:root[data-rm='1']) .zone {
   transition: none;
 }
@@ -229,13 +212,6 @@
   box-shadow: var(--shadow-2);
   backdrop-filter: blur(6px) saturate(var(--float-sat));
   font-size: var(--fs-14);
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .note {
-    background: var(--float-solid);
-    backdrop-filter: none;
-  }
 }
 
 :global(:root[data-rt='1']) .note {

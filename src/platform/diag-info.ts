@@ -3,6 +3,7 @@
 // • 第一行是最关键的：构建提交号、版本、构建时刻；第二行起是 SW（控制本页的脚本、各状态、缓存名）——主屏幕版可能还在用旧 SW 预缓存的旧版本
 // • navigator.serviceWorker 只准出现在 platform（A13），所以放在这里
 import { buildInfo } from './env.ts';
+import { fontState } from './fonts.ts';
 import { insetTimeline, type InsetTimeline } from './inset-watch.ts';
 import { BAR_SELECTOR } from './run-log-api.ts';
 
@@ -22,6 +23,12 @@ const safe = <T>(f: () => T, fb: T): T => {
   } catch {
     return fb;
   }
+};
+
+/** 字体状态（架构 5.9c）：想用哪种、ok / loading / fail、进度 */
+const fontLine = (): string => {
+  const f = fontState.get();
+  return `${f.id} ${f.status} ${String(f.pct)}%`;
 };
 
 function styleLine(name: string, el: Element | null, pseudo: string | null, keys: readonly string[], win: Window): string {
@@ -91,7 +98,8 @@ export async function collectDiag(win: Window = window): Promise<string[]> {
     // 启动时间线（G10）：底部安全区、innerHeight 每次变化的时刻，和什么时候淡入底栏
     safe(() => insetTimelineLine(), 'launch: ?'),
     `media: reduced-transparency=${mm('(prefers-reduced-transparency: reduce)')} reduced-motion=${mm('(prefers-reduced-motion: reduce)')}`,
-    `html: data-rt=${root.dataset['rt'] ?? '-'} data-skin=${root.dataset['skin'] ?? '-'} data-theme=${root.dataset['theme'] ?? '-'} data-glass=${root.dataset['glass'] ?? '-'}`,
+    `html: data-rt=${root.dataset['rt'] ?? '-'} data-rm=${root.dataset['rm'] ?? '-'} data-font=${root.dataset['font'] ?? '-'} data-skin=${root.dataset['skin'] ?? '-'} data-theme=${root.dataset['theme'] ?? '-'} data-glass=${root.dataset['glass'] ?? '-'}`,
+    `font: ${safe(fontLine, 'font: ?')}`,
     `bar.data-glass=${bar?.getAttribute('data-glass') ?? '-'}`,
     styleLine('.bar', bar, null, GLASS_KEYS, win),
     styleLine('.fab', fab, null, GLASS_KEYS, win),

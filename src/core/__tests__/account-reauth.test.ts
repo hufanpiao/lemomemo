@@ -175,4 +175,11 @@ describe('记号的 reason（R-382 复核建议 ①）', () => {
     await wipeLocal(r.boot, { clearCacheStorage: () => Promise.resolve(), wipeMs: 200, cachesMs: 50 });
     expect(readReauth()).toBeNull();
   });
+
+  it('清本机数据连外观缓存 pv-look 一起删（皮肤整块评审 11-14 第 13 条：下一个账号从默认外观开始）', async () => {
+    const r = await rig();
+    localStorage.setItem('pv-look', JSON.stringify({ skin: 'glass', theme: 'dark' }));
+    await wipeLocal(r.boot, { clearCacheStorage: () => Promise.resolve(), wipeMs: 200, cachesMs: 50 });
+    expect(localStorage.getItem('pv-look')).toBeNull();
+  });
 });

@@ -95,6 +95,33 @@ export const ko = {
   'settings.export.wifi': '데이터가 많으면 파일이 수십 MB가 될 수 있어요. Wi-Fi에 연결하는 걸 추천해요.', // 11-06 句末补句号（设计评审 L-3）；R-106 B1 第一遍已审（10-31）；K-39 可不改，按主持人定不改；10-31 导出分片新加（0.47 续 ④ 第 4 点）
 
   'settings.delete.back': '계정', // 合卡以后注销页退回账号二级页（SETTINGS-merge-cards），照 settings.account.title（R-106 B1 第一遍已审）
+  'settings.skin.title': '테마', // 皮肤视觉稿韩文设置首页
+  'settings.skin.simple': '심플',
+  'settings.skin.glass': '유리',
+  'settings.skin.value': '{skin} · {theme}', // TODO(ko) 只有占位和分隔点，不用翻
+  'settings.skin.themeTitle': '다크 모드', // REVIEW(ko)
+  'settings.skin.themeSystemValue.mobile': '다크 모드는 시스템 따르기',
+  'settings.skin.themeSystemValue.desktop': '다크 모드는 시스템 따르기',
+  'settings.skin.theme.system.mobile': '시스템 따르기', // REVIEW(ko)
+  'settings.skin.theme.system.desktop': '시스템 따르기', // REVIEW(ko)
+  'settings.skin.theme.light': '라이트', // REVIEW(ko)
+  'settings.skin.theme.dark': '다크', // REVIEW(ko)
+  'settings.skin.rt': '투명 효과 줄이기',
+  'settings.skin.rtNote.mobile': 'iPhone은 시스템 설정을 못 읽어서 여기서 켜요',
+  'settings.skin.rtNote.desktop': 'Windows에서 투명 효과를 끄면 자동으로 적용돼요. 여기서 직접 켤 수도 있어요', // REVIEW(ko)
+  'settings.skin.rm': '움직임 효과 줄이기',
+  'settings.skin.rmNote.mobile': '페이드만 남겨요 · iPhone 설정도 따라가요',
+  'settings.skin.rmNote.desktop': '페이드만 남겨요 · Windows 애니메이션 효과 설정도 따라가요', // REVIEW(ko)
+  'settings.skin.err': '저장하지 못했어요. 잠시 후 다시 골라 주세요', // REVIEW(ko)
+  'settings.font.title': '글꼴', // REVIEW(ko)
+  'settings.font.system': '시스템 글꼴', // 架构 5.9c 表里的韩文名
+  'settings.font.systemValue': '시스템 글꼴(기본)', // REVIEW(ko)
+  'settings.font.note': '선택하면 그때 내려받아요. 다 받기 전에는 시스템 글꼴을 써요. 기기마다 따로 받아요.', // REVIEW(ko)
+  'settings.font.loading': '내려받는 중 {pct}%', // REVIEW(ko)
+  'settings.font.fail': '내려받지 못해서 시스템 글꼴을 쓰고 있어요', // REVIEW(ko)
+  'settings.font.failShort': '내려받지 못함 · 시스템 글꼴 사용 중', // REVIEW(ko)
+  'settings.font.retry': '다시 시도', // REVIEW(ko)
+  'settings.font.err': '저장하지 못했어요. 잠시 후 다시 선택해 주세요', // REVIEW(ko)
   'settings.notesView.title': '메모 보기 방식', // REVIEW(ko)
   'settings.notesView.masonry': '카드', // REVIEW(ko)
   'settings.notesView.list': '목록', // REVIEW(ko)

@@ -31,6 +31,19 @@ describe('sign-out.ts 转出的就是 exit-basics.ts 的同一份（原有 impor
   });
 });
 
+describe('forgetLook：退出、换账号时删掉本机外观缓存（皮肤整块评审 11-14 第 13 条）', () => {
+  it('删掉 pv-look；本机存储用不了也不抛', () => {
+    localStorage.setItem(basics.LOOK_CACHE_KEY, '{"skin":"glass"}');
+    basics.forgetLook();
+    expect(localStorage.getItem('pv-look')).toBeNull();
+    const spy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    expect(() => basics.forgetLook()).not.toThrow();
+    spy.mockRestore();
+  });
+});
+
 describe('① 离线退出照样能退', () => {
   it('删行、signOut 都是断网错误：照样清库、清缓存，最后兜底删本机会话，localDone = true', async () => {
     const log: string[] = [];
