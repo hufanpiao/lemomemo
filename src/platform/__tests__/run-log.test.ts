@@ -60,6 +60,30 @@ describe('全局运行日志', () => {
     expect(log).not.toContain('秘密内容');
   });
 
+  it('点按被后挂的捕获监听 preventDefault（例如换页后吞点按的窗口）：派发完补记 prevented-later；没被拦的不补（推进计划 7b）', async () => {
+    vi.useFakeTimers();
+    const { btn } = mkField();
+    const stop = startRunLog(window, { version: 't' });
+    let eat = true;
+    const guard = (e: Event): void => {
+      if (eat) e.preventDefault();
+    };
+    document.addEventListener('pointerdown', guard, true);
+    document.addEventListener('click', guard, true);
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }));
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    eat = false;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await vi.advanceTimersByTimeAsync(500);
+    document.removeEventListener('pointerdown', guard, true);
+    document.removeEventListener('click', guard, true);
+    stop();
+    const log = readRunLog();
+    expect(log).toMatch(/down button#记下 prevented-later/);
+    expect(log.match(/click button#记下 prevented-later/g)).toHaveLength(1);
+    expect(log.match(/click button#记下$/gm)).toHaveLength(2);
+  });
+
   it('业务代码 rlog：下载前排队的补进来，之后直接写', () => {
     rlog('typebar submit len=3');
     const stop = startRunLog(window, { version: 't' });
