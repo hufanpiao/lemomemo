@@ -208,13 +208,21 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   };
   const pickTarget = (t: EventTarget | null): Element | null =>
     t instanceof Element ? (t.closest('button,a,[role="button"],input,textarea,select,label,[data-testid]') ?? t) : null;
+  /** 这里的捕获监听最先挂、最先跑，记的时候后面的处理函数还没轮到：派发完再看一眼，被后面的谁 preventDefault 了（例如换页后吞点按的窗口）补记一行 */
+  const preventedLater = (e: Event, line: string): void => {
+    if (!e.defaultPrevented) setTimeout(() => e.defaultPrevented && add(`${line} prevented-later`), 0);
+  };
   const onDown = (e: PointerEvent): void => {
     lastDown = now();
     add(`down ${describeEl(pickTarget(e.target))} ${e.pointerType} x=${Math.round(e.clientX)} y=${Math.round(e.clientY)}`);
+    preventedLater(e, `down ${describeEl(pickTarget(e.target))}`);
   };
   const onUp = (e: PointerEvent): void => add(`up ${describeEl(pickTarget(e.target))} x=${Math.round(e.clientX)} y=${Math.round(e.clientY)}`);
   const onCancel = (e: PointerEvent): void => add(`pointercancel ${describeEl(pickTarget(e.target))}`);
-  const onClick = (e: MouseEvent): void => add(`click ${describeEl(pickTarget(e.target))}${e.defaultPrevented ? ' prevented' : ''}`);
+  const onClick = (e: MouseEvent): void => {
+    add(`click ${describeEl(pickTarget(e.target))}${e.defaultPrevented ? ' prevented' : ''}`);
+    preventedLater(e, `click ${describeEl(pickTarget(e.target))}`);
+  };
   const onKey = (e: KeyboardEvent): void => {
     const name = e.key.length === 1 ? 'char' : e.key;
     let extra = '';

@@ -7,6 +7,7 @@
 // 系统“减少动态效果”同样并进 data-rm（Playwright 的 reducedMotion 两种浏览器都能模拟）。
 // 截图只在 Chromium 截（WebKit 不画模糊），存在 test-results 里
 import type { Page, TestInfo } from '@playwright/test';
+import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -55,26 +56,16 @@ async function seed(page: Page): Promise<void> {
   await page.getByTestId('todos-row-n1').waitFor({ timeout: 30000 });
 }
 
-/** 等切到 hash 这一页落定：运行日志（localStorage lemo-run-log，写入有延迟）里最后一条 route 是它，且后面有 settled(…)
- *  （连着切两页时只记一条落定，原因可能写成 focusout 等，不一定是 route） */
-async function settled(page: Page, hash: string): Promise<void> {
-  await page.waitForFunction((h) => {
-    const log = localStorage.getItem('lemo-run-log') ?? '';
-    const route = [...log.matchAll(/ route (#\/\S+)/g)].at(-1);
-    return route?.[1] === h && log.indexOf('settled(', route.index) > route.index;
-  }, hash);
-}
-
 /** 把六样浮层都调出来：随手记页走一趟（加载它的样式），回待办页删 n1 出撤销条、点“＋”出打字条 */
 async function showAll(page: Page): Promise<void> {
   await go(page, '#/notes');
   await page.getByTestId('notes').waitFor({ timeout: 30000 });
-  await settled(page, '#/notes');
   await go(page, '#/todos');
   await page.getByTestId('todos-row-n1').waitFor({ timeout: 30000 });
   await expect(page.getByTestId('sync-notice-card')).toBeVisible({ timeout: 15000 });
-  // 11-14 运行日志实测：Chromium 切页没落定（route 1.63 → click 1.70 → settled 2.04）时点的删除不生效，所以等落定再点
-  await settled(page, '#/todos');
+  // 页签互切后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/index.ts 的 guardTaps；11-14 运行日志 route 1.63 → click 1.70，
+  // 推进计划 7b 查明，见 b6-tab-switch-tap.spec.ts）：新页已经出来，从这时起过一整段窗口再点
+  await page.waitForTimeout(FADE_GUARD_MS);
   await page.getByTestId('todos-del-n1').click();
   await expect(page.locator('[data-undo-toast]')).toBeVisible();
   await page.getByTestId('tabbar-add').click();
