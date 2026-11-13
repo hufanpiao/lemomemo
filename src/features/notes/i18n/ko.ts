@@ -23,6 +23,7 @@ export const ko = {
   'notes.input': '이어서 한 줄 적기…', // REVIEW(ko)
   'notes.inputLabel': '메모 한 줄 적기', // REVIEW(ko)
   'notes.add': '적기', // REVIEW(ko)
+  'notes.files': '첨부파일 {n}', // REVIEW(ko)
   'notes.img': '사진', // REVIEW(ko)
   'notes.camera': '촬영', // REVIEW(ko)
   'notes.img.alt': '메모에 넣은 사진', // REVIEW(ko)

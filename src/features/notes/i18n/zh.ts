@@ -21,6 +21,7 @@ export const zh = {
   'notes.input': '接着记一句…',
   'notes.inputLabel': '记一句随手记',
   'notes.add': '记下',
+  'notes.files': '附件 {n}',
   'notes.img': '图片',
   'notes.camera': '拍照',
   'notes.img.alt': '随手记里的图片',

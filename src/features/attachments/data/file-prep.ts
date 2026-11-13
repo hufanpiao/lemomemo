@@ -9,6 +9,7 @@ import { sanitizeFileName } from '../../../../shared/logic/files/file-name.ts';
 import { sniffFile, zipBombCheck } from '../../../../shared/logic/files/file-sniff.ts';
 import { inflateRaw } from '../../../../shared/logic/files/inflate.ts';
 import type { RejectReason } from '../../../../shared/schema/attachments.ts';
+import { sha256Hex } from '../../../platform/sha256.ts';
 
 export const MAX_BYTES = 10_485_760;
 
@@ -23,10 +24,6 @@ export interface Prepared {
 /** detail 只进运行日志（哪条规则拒的），reason 给界面 */
 export type PrepFail = { ok: false; reason: RejectReason | 'empty'; detail: string };
 
-export async function sha256Hex(b: Uint8Array): Promise<string> {
-  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', b as BufferSource));
-  return [...d].map((x) => x.toString(16).padStart(2, '0')).join('');
-}
 
 /** 文件的字节（File.arrayBuffer；测试里的 jsdom 没有时退回 FileReader 一类的 Response 读法） */
 async function bytesOf(f: Blob): Promise<Uint8Array> {

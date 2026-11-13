@@ -10,8 +10,9 @@
 //   空间满了的带“最近删除”入口。电脑抽屉里上传失败的提示由随手记页出（不出两遍）；只读行（off）时“图片”“拍照”和图上的按钮一起禁用
 // • 只读行（S12，R-148，TC-B4-09；照待办编辑页）：core 的只读 id 里有这一条（或写入被拒 readonly）时，标题、正文、分类全部禁用，“⋯”（删除）灰掉，
 //   出“这条要新版本才能修改 · 更新”；电脑抽屉复用这个编辑器，列表页已在点开时拦下，这里兜住直接打开地址、打开后才变只读的情况
+// • 附件（B4b-1）：插图区下面挂 attachments 功能懒加载的附件区（加附件只在电脑布局，预览浮层再单独懒加载）
 // • 动效：只有抽屉最基本的滑入（R-376），按钮用 Pressable 的按下反馈
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { DeletedNotice, ReadonlyNotice, useEditStatus, useEditT } from '../../../kit/components/EditNotices.tsx';
 import { enterCommits } from '../../../kit/components/Form.tsx';
@@ -20,7 +21,9 @@ import { useHoldBusy } from '../../../kit/hooks/useHoldBusy.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { Pressable } from '../../../motion/components.ts';
+import { NoteAttachments } from '../../attachments/index.ts';
 import { BODY_MAX, TITLE_MAX, useNoteEdit, type CategoryOption } from '../hooks/useNoteEdit.ts';
+import { insertImage } from '../hooks/useNoteImages.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
 import styles from './NoteEditPage.module.css';
 import { EditorImageBlock } from './NoteImages.tsx';
@@ -49,6 +52,7 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
   const st = useEditStatus(ed.status, { empty: t('note.edit.st.empty', {}), rejected: t('note.edit.st.rejected', {}) });
   const [menu, setMenu] = useState(false);
   const locale = useUi((s) => s.locale);
+  const noteId = ed.row ? String(ed.row['id']) : null;
 
   // 电脑抽屉顶行“随手记 · 分类 · 时间”（视觉稿 NOTE_ED：“随手记 · 韩国生活 · 今天 11:40”）
   const w = drawer ? ed.when : null;
@@ -132,7 +136,11 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
         onCommit={(v) => change({ body: v })}
         testId="note-edit-body"
       />
-      <EditorImageBlock noteId={ed.row ? String(ed.row['id']) : null} drawer={drawer} disabled={off} msgClass={styles.notice} />
+      <EditorImageBlock noteId={noteId} drawer={drawer} disabled={off} msgClass={styles.notice} />
+      {/* 附件（B4b-1，线框 sAtt）：懒加载，插图区下面；拖进来、粘贴进来的图片照插图插进这一条 */}
+      <Suspense fallback={null}>
+        <NoteAttachments noteId={noteId} disabled={off || ed.deleted} onImages={(fs) => noteId !== null && fs.forEach((f) => void insertImage(() => Promise.resolve(noteId), f))} />
+      </Suspense>
     </>
   );
   return drawer ? (

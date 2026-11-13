@@ -552,3 +552,15 @@
   display: flex;
   margin-top: 4px;
 }
+
+/* “附件 N”（B4b-1，线框 sAtt .atb：描边小胶囊，列表行尾、卡片底部） */
+.atb {
+  flex: none;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  line-height: 18px;
+  white-space: nowrap;
+}

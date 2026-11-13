@@ -10,7 +10,7 @@ import { sanitizeFileName } from '../../../../shared/logic/files/file-name.ts';
 import { fetchBlob, sign, type FileError } from '../../../platform/files.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { saveFile, type SaveOutcome } from '../../../platform/save-file.ts';
-import { sha256Hex } from './file-prep.ts';
+import { sha256Hex } from '../../../platform/sha256.ts';
 
 export interface FileRef {
   id: string;
@@ -52,7 +52,7 @@ async function fetchSigned(f: FileRef, purpose: 'view' | 'download', d?: string)
   const [link] = await sign([{ bucket: 'files', path: f.path, purpose, ...(d !== undefined ? { d } : {}) }]);
   if (!link || !link.ok || !link.sig) {
     const why = link && !link.ok ? failOf(link) : 'denied';
-    rlog(`att ${purpose} sign ${why}`);
+    rlog(`att ${purpose} sign ${why} code=${link && !link.ok ? link.code : 'no_sig'}`);
     return { ok: false, why };
   }
   const b = await fetchBlob({ url: link.url, sig: link.sig });
