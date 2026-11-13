@@ -145,7 +145,7 @@ function Read-Key([string]$name) {
     for ($try = 1; $try -le 3; $try++) {
         $sec = Read-Host -AsSecureString '  粘贴到这里'
         Clear-Clip
-        $v = (To-Plain $sec) -replace '[\s ​-‍⁠﻿]', ''
+        $v = (To-Plain $sec) -replace '[\s\u00A0\u200B-\u200D\u2060\uFEFF]', ''
         $sec.Dispose()
         if ($v -cmatch '\A[A-Za-z0-9+/]{43}=\z') { Ok "$name 已收到（剪贴板已清空）"; return $v }
         Warn "格式不对（应是 44 个字符、以 = 结尾）：收到 $($v.Length) 个字符"

@@ -175,7 +175,7 @@ function Read-Secret([string]$prompt) {
     Clear-Clip
     $plain = To-Plain $sec
     $sec.Dispose()
-    return ($plain -replace '[\s ​-‍⁠﻿]', '')
+    return ($plain -replace '[\s\u00A0\u200B-\u200D\u2060\uFEFF]', '')
 }
 
 # Supabase 令牌（sbp_ 开头），格式不对重贴，最多 3 次
