@@ -61,7 +61,7 @@ describe('一批里有纪念日', () => {
   it('全部撤销：撤掉别的，纪念日留在提示条上、单独一句，不算没撤成；再点一次也一样', async () => {
     const { writer, b, notice, keys, flow } = setup();
     await b.undo();
-    expect(flow.go, '没有真正失败的：回到 idle').toHaveBeenCalledWith({ type: 'reset' });
+    expect(flow.go, '没有真正失败的：停在结局的回到 idle').toHaveBeenCalledWith({ type: 'cleared' });
     expect(writer.patch).toHaveBeenCalledTimes(2);
     expect(notice()?.entries.map((e) => e.ref.id)).toEqual(['a1']);
     expect(keys()).toContain('plus.notice.annivKept');
@@ -166,7 +166,21 @@ describe('会写库的操作共用一把锁、换代号后不写回（整块评�
     await m;
     expect(box.getState().batch).toBeNull();
     expect(writer.patch, '原来的三条照样撤').toHaveBeenCalledTimes(3);
-    expect(flow.go.mock.calls).toEqual([[{ type: 'reset' }]]);
+    expect(flow.go.mock.calls).toEqual([[{ type: 'cleared' }]]);
+  });
+
+  it('旧批的撤销还没回来时记了新的一句：新提示条上的操作照常能做，不被旧的锁挡住（复查 N2）', async () => {
+    const { writer, b, box } = setup([t1, t2]);
+    const gate = hangNext(writer.patch);
+    const u = b.undo();
+    await vi.waitFor(() => expect(writer.patch).toHaveBeenCalledTimes(1));
+    expect(await b.save({ ...PLAN, items: [todo('倒垃圾'), todo('浇花')] } as TypePlan, '倒垃圾，浇花')).toBe('ok');
+    const fresh = box.getState().batch?.entries[0]?.ref.id ?? '';
+    await b.undoOne(fresh);
+    expect(box.getState().batch?.entries.map((e) => e.ref.title)).toEqual(['浇花']);
+    gate.open();
+    await u;
+    expect(box.getState().batch?.entries.map((e) => e.ref.title), '旧批回来不写回').toEqual(['浇花']);
   });
 
   it('合并没完成时又按了一次“＋”（fresh）：合并完成后不写回', async () => {
@@ -217,6 +231,28 @@ describe('合并（整块评审第 4 条，主持人代定）', () => {
     expect(notice()?.merge).toBe(false);
     await b.merge();
     expect(writer.insert).not.toHaveBeenCalled();
+  });
+
+  it('确认行有一条没选就关掉：不再给“合并”（合并会把没存的那条原话带进去，复查 N4）', async () => {
+    const { writer, b, box, notice } = setup([t1, t2]);
+    const past = { ...todo('交房租'), due: '2026-10-30', date_basis: 'md', confirm: { past: '2026-10-30', next: '2027-10-30' } } as AiItem;
+    box.setState({ ask: [past] });
+    expect(notice()?.merge).toBe(true);
+    b.dismiss();
+    expect(notice()?.merge).toBe(false);
+    await b.merge();
+    expect(writer.insert).not.toHaveBeenCalled();
+  });
+
+  it('合并成了、有撤不掉的：之后再撤合并条失败，“请到列表里删除”那句还在（复查 N3）', async () => {
+    const { b, keys, patchFail, ids } = setup([t1, t2]);
+    patchFail.add('t1');
+    await b.merge();
+    expect(keys()).toContain('plus.notice.mergeLeft');
+    patchFail.add(ids()[0] ?? '');
+    await b.undo();
+    expect(keys()).toContain('plus.notice.mergeLeft');
+    expect(keys()).toContain('plus.notice.undoFailed');
   });
 
   it('合并后的新提示条用新的 plan：不带原来的重复、安排、没有的日子、额度提示', async () => {

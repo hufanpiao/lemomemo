@@ -2,7 +2,7 @@
 // preparing → recording（或兜底的 listening）→ uploading → organizing
 //   → saved / saved_rule / quota_out / offline_saved / no_speech / ai_failed
 // • 录音中丢掉、取消直接 reset 回 idle（没有“已取消”这个结果；11-13 删掉走不到的 cancelled，FA-3 复查第 5 条）
-// • 打字没有录音那几步：idle → organizing → 结果（或先 confirming 等用户选过去的日子）
+// • 打字没有录音那几步：idle → organizing → 结果（或先 confirming 等用户选过去的日子）；上一句的结局还没收（提示条开着）时提交新的一句也直接 organizing
 // • ai_failed 时录音留在内存里（最多 2 分钟，record-logic 的 keptExpired），可以“重试”回到 uploading
 // • 不合法的转移原样返回旧状态（界面连点、晚到的回调不会把状态弄乱），单测逐条测
 // • ui 只按状态渲染提示条；状态里不放录音 Blob（Blob 放 hooks 的 ref 里）
@@ -47,6 +47,8 @@ export type CaptureEvent =
   | { type: 'retry' }
   /** 确认行没选就关掉 */
   | { type: 'cancel' }
+  /** 提示条关掉、撤光了：只有停在结局时回 idle；正在整理、等确认时原样（打字条等 AI 时旧提示条 8 秒到了，不能把这次提交打回去，复查 N1） */
+  | { type: 'cleared' }
   | { type: 'reset' };
 
 const FINALS: readonly CaptureStatus[] = ['saved', 'saved_rule', 'quota_out', 'offline_saved', 'no_speech', 'ai_failed'];
@@ -56,6 +58,7 @@ export const isFinal = (s: CaptureStatus): s is FinalStatus => FINALS.includes(s
 /** 状态机的一步（纯函数；不合法的转移原样返回） */
 export function captureStep(s: CaptureStatus, e: CaptureEvent): CaptureStatus {
   if (e.type === 'reset') return 'idle';
+  if (e.type === 'cleared') return isFinal(s) ? 'idle' : s;
   // 确认行没选就关掉：回到 idle，原话由界面填回输入条（不悄悄按某一种保存，也不算“取消了一条记录”）
   if (e.type === 'cancel') return s === 'confirming' ? 'idle' : s;
   switch (s) {
@@ -86,14 +89,18 @@ export function captureStep(s: CaptureStatus, e: CaptureEvent): CaptureStatus {
     case 'confirming':
       if (e.type === 'confirmed') return 'organizing';
       return s;
+    // 结局（提示条可能还开着）时打字条又提交了新的一句：直接开始整理（复查 N1 续，11-13 运行日志 “typebar submit … status=saved_rule”
+    //   后状态没进 organizing，AI 回来的 need_confirm 被吞、确认行丢了）
     case 'ai_failed':
       if (e.type === 'retry') return 'uploading';
+      if (e.type === 'organize') return 'organizing';
       return s;
     case 'saved':
     case 'saved_rule':
     case 'quota_out':
     case 'offline_saved':
     case 'no_speech':
+      if (e.type === 'organize') return 'organizing';
       return s;
     default: {
       const never: never = s;

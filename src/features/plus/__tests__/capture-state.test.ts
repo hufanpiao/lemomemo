@@ -37,6 +37,21 @@ describe('captureStep', () => {
   it('reset 一律回 idle', () => {
     expect(captureStep('ai_failed', { type: 'reset' })).toBe('idle');
   });
+  it('结局时（上一句的提示条还开着）打字提交新的一句：直接 organizing（复查 N1 续）', () => {
+    expect(captureStep('saved', { type: 'organize' })).toBe('organizing');
+    expect(captureStep('saved_rule', { type: 'organize' })).toBe('organizing');
+    expect(captureStep('quota_out', { type: 'organize' })).toBe('organizing');
+    expect(captureStep('offline_saved', { type: 'organize' })).toBe('organizing');
+    expect(captureStep('ai_failed', { type: 'organize' })).toBe('organizing');
+  });
+  it('cleared（提示条关掉、撤光）只让结局回 idle；正在整理、等确认、录着时原样（复查 N1）', () => {
+    expect(captureStep('saved', { type: 'cleared' })).toBe('idle');
+    expect(captureStep('ai_failed', { type: 'cleared' })).toBe('idle');
+    expect(captureStep('organizing', { type: 'cleared' })).toBe('organizing');
+    expect(captureStep('confirming', { type: 'cleared' })).toBe('confirming');
+    expect(captureStep('recording', { type: 'cleared' })).toBe('recording');
+    expect(captureStep('idle', { type: 'cleared' })).toBe('idle');
+  });
 });
 
 describe('辅助判断', () => {

@@ -474,4 +474,38 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
       delete slots[RL_SLOT];
     }
   });
+
+  // 复查 N1（11-13）：等 AI 期间点了上一句提示条的“撤销”（8 秒到时自动关也一样），不能把这次提交打回 idle，AI 回来后确认行照样出来
+  it('等 AI 期间撤掉上一句的提示条：还在“正在识别…”，AI 回来后有过去的日子照样出确认行', async () => {
+    collection('settings').upsert([AI_ON]);
+    let answer!: () => void;
+    const none = { intent: 'record', confidence: 1, items: [], quota_left: 3 };
+    const callAi = vi.fn()
+      .mockImplementationOnce(async () => none)
+      .mockImplementationOnce(() => new Promise<unknown>((ok) => (answer = () => ok(none))));
+    const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
+    const bar = (opened: number) => <TypeBar day={null} writer={writer} callAi={callAi} online={() => true} onExpand={vi.fn()} onClose={vi.fn()} opened={opened} />;
+    const { rerender } = render(bar(1));
+    fireEvent.change(screen.getByTestId('type-input'), { target: { value: '买牛奶' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+    });
+    await waitFor(() => expect(screen.getByTestId('type-notice-undo')).toBeTruthy());
+    // 记下后自动收起；提示条还在时再点“＋”重新打开（opened 变了）
+    rerender(bar(2));
+    fireEvent.change(screen.getByTestId('type-input'), { target: { value: '10月30号交报告' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+    });
+    await waitFor(() => expect(callAi).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('type-notice-undo'));
+    });
+    await waitFor(() => expect(writer.patch, '上一句撤掉了').toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('type-preview').textContent, '这次提交还在等 AI').toBe('正在识别…');
+    await act(async () => {
+      answer();
+    });
+    await waitFor(() => expect(screen.getByRole('button', { name: '明年（2027/10/30）' })).toBeTruthy());
+  });
 });

@@ -50,22 +50,24 @@ export interface Batch {
   source?: 'page' | 'voice';
   /** 这一批一共存下了几条（确认行选完加进来的也算）：entries 比它少就是撤成过，不再给合并 */
   stored: number;
+  /** 确认行有一条没选就关掉了（没存）：这一批不全，合并会把没存的那条的原话也带进去，所以不给合并（复查 N4） */
+  partial?: true;
   last: BatchLast;
 }
 
 const NO_HINTS: ParseHints = { recur: false, arrange: false, bad_day: null };
 const isAnniv = (r: SavedRef): boolean => r.table === 'anniversaries';
 
-/** 能不能“拆错了，合并成一条”：多条，并且一条都没撤成过 */
-const canMerge = (b: Batch): boolean => b.entries.length > 1 && b.entries.length === b.stored;
+/** 能不能“拆错了，合并成一条”：多条，一条都没撤成过，确认行也没有没选就关掉的 */
+const canMerge = (b: Batch): boolean => !b.partial && b.entries.length > 1 && b.entries.length === b.stored;
 
-/** 撤过这几条以后（基于最新的这一批）：撤成的拿掉，没撤成的标上 undoTried，last 换成 null；一条不剩为 null */
+/** 撤过这几条以后（基于最新的这一批）：撤成的拿掉，没撤成的标上 undoTried；“合并没存上”换掉，合并成了留下的指路句保留（复查 N3）；一条不剩为 null */
 function afterTry(b: Batch | null, tried: readonly SavedRef[], left: readonly SavedRef[]): Batch | null {
   if (!b) return null;
   const hit = new Set(tried.map((r) => r.id));
   const kept = new Set(left.map((r) => r.id));
   const entries = b.entries.flatMap((e): BatchEntry[] => (!hit.has(e.ref.id) ? [e] : kept.has(e.ref.id) ? [{ ...e, undoTried: true }] : []));
-  return entries.length > 0 ? { ...b, entries, last: null } : null;
+  return entries.length > 0 ? { ...b, entries, last: b.last === 'merge_failed' ? null : b.last } : null;
 }
 
 /** 这一批里撤过没撤成的（纪念日不算） */
@@ -133,21 +135,22 @@ export type SavedBatch = ReturnType<typeof createSavedBatch>;
 export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedBatchOpts) {
   const get = box.getState;
   const put = (s: Partial<BatchState>): void => box.setState(s);
-  /** 写库的操作进行中（choose、undo、undoOne、merge 共用）：再点不理 */
-  let busy = false;
   /** 代号：新的一句、新的一次按住、关掉提示条时加 1；await 回来变了就不写回 */
   let gen = 0;
+  /** 写库的操作进行中的那一代（choose、undo、undoOne、merge 共用）：同一代再点不理；换了代的新提示条照常能点（复查 N2） */
+  let busyGen = -1;
 
   const once = async (op: string, run: (g: number) => Promise<void>): Promise<void> => {
-    if (busy) {
+    const g = gen;
+    if (busyGen === g) {
       rlog(`${tag} busy skip op=${op}`);
       return;
     }
-    busy = true;
+    busyGen = g;
     try {
-      await run(gen);
+      await run(g);
     } finally {
-      busy = false;
+      if (busyGen === g) busyGen = -1;
     }
   };
   /** await 回来：代号变了（之后又按了“＋”、关了提示条、记了新的一句）就不写回 */
@@ -228,7 +231,7 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     /** 确认行没选就关掉：不再问，回到 idle；返回关掉之前的这一批（调用方决定原话怎么办） */
     dismiss(): BatchState {
       const was = get();
-      put({ ask: [] });
+      put(was.batch ? { ask: [], batch: { ...was.batch, partial: true } } : { ask: [] });
       flow.go({ type: 'cancel' });
       return was;
     },
@@ -254,7 +257,7 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
           put({ batch: next });
           if (next && failedOf(next) > 0) return;
         }
-        flow.go({ type: 'reset' });
+        flow.go({ type: 'cleared' });
       }),
     /** 拆错了，合并成一条：没存上原来的几条不动，提示条自己加一句（不把原话填回输入条，免得再记一遍） */
     merge: (): Promise<void> =>
@@ -283,7 +286,7 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     closeNotice(): void {
       gen += 1;
       put({ batch: null });
-      flow.go({ type: 'reset' });
+      flow.go({ type: 'cleared' });
     },
     /** 新的一次按住：上一批的提示条、确认行收起 */
     fresh(): void {
