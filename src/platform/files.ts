@@ -331,7 +331,8 @@ export function filesBaseFrom(supabaseUrl: string, fallbackOrigin: string): stri
   return new URL('/files/v1/', supabaseUrl || fallbackOrigin).toString();
 }
 
-async function sessionToken(): Promise<string | null> {
+/** 当前会话的 access token（没登录回 null）；附件的 file-check 调用也用这一份 */
+export async function sessionToken(): Promise<string | null> {
   const { getSupabase } = await import('./supabase/client.ts');
   const sb = await getSupabase();
   const { data } = await sb.auth.getSession();

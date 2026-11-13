@@ -13,6 +13,8 @@ const root = import.meta.dirname;
  * 只匹配整个说明符 'zod'；垫片自己引 'zod/v4'，不会绕回来。tests/build/zod-alias.test.ts 守着
  */
 export const ZOD_JITLESS_ALIAS = { find: /^zod$/, replacement: resolve(root, 'src/platform/zod-jitless.ts') };
+/** docx-preview 里的 import 'jszip' 改指只读替身（B4b-1）：jszip 的 UMD 包会往 App 和沙箱共用的运行时里加 require 兜底，首屏多约 0.6 KB；理由见 zip-lite.ts 文件头 */
+export const ZIP_LITE_ALIAS = { find: /^jszip$/, replacement: resolve(root, 'src/preview-frame/zip-lite.ts') };
 /**
  * 只有 export … from 的出口文件按无副作用打包（11-12 首屏瘦身）：底栏从 motion/components.ts 只拿 Pressable，可出口是静态转出，
  * Rolldown 把 Appear、AppearList、useHoldView、swap-guard 这些只有懒加载页用的组件也算进首屏块（约 1 KB gzip）。标成无副作用以后，
@@ -108,7 +110,7 @@ export default defineConfig(({ mode }) => {
     publicDir: resolve(root, 'src/public'),
     envPrefix: 'VITE_PUBLIC_',
     plugins: [react(), graph.plugin],
-    resolve: { alias: [ZOD_JITLESS_ALIAS] },
+    resolve: { alias: [ZOD_JITLESS_ALIAS, ZIP_LITE_ALIAS] },
     define: {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
       __BUILD_TIME__: JSON.stringify(new Date().toISOString()),

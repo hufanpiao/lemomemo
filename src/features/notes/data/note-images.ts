@@ -9,24 +9,13 @@
 //   网络、5xx、限流按 2 s、5 s、15 s 退避重试三次，还不行按“没传上”；account 类（停用、会话被吊销）走 accountExitOf → 离开本机（S13）
 // • 删除：发送失败区里还有这一行的新建 → 放弃（resolveFailedCreate drop）；否则软删（deleted_at），进“最近删除”
 // 纯 TS：不准 import React（A1）
+import { rowSyncOf as coreRowSyncOf, type QueueItem, type RowSync } from '../../../core/row-sync.ts';
 import type { FileError, UploadResult } from '../../../platform/files.ts';
 
 /** 插图失败的几种提示（i18n 键 notes.img.fail.<键>） */
 export type ImgFailKey = 'quota' | 'length' | 'too_big' | 'bad_type' | 'upgrade' | 'denied' | 'retry' | 'write';
 
-/** 时间有序的 UUID v7（note_images 没有 created_at，同一条随手记里的图按 id 排就是插入的先后） */
-export function uuidv7(now: number, rnd: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n))): string {
-  const b = rnd(16);
-  let t = Math.max(0, Math.floor(now));
-  for (let i = 5; i >= 0; i--) {
-    b[i] = t % 256;
-    t = Math.floor(t / 256);
-  }
-  b[6] = 0x70 | ((b[6] ?? 0) & 0x0f);
-  b[8] = 0x80 | ((b[8] ?? 0) & 0x3f);
-  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-}
+export { uuidv7, type QueueItem, type RowSync } from '../../../core/row-sync.ts';
 
 /** 原图路径（库里 check 钉死的拼法） */
 export const imagePath = (userId: string, noteId: string, id: string): string => `${userId}/${noteId}/${id}.webp`;
@@ -81,22 +70,8 @@ export function uploadFailKey(e: FileError): ImgFailKey | null {
 /** 行写进 outbox 后被服务器拒的码 → 提示 */
 export const writeFailKey = (code: string | null): ImgFailKey => (code === 'quota_exceeded' ? 'quota' : 'write');
 
-/** 这一行在 outbox 里的情况：pending 还在排、failed 进了发送失败区（带码）、confirmed 上了服务器、gone 行没了 */
-export type RowSync = { s: 'pending' } | { s: 'failed'; code: string | null } | { s: 'confirmed' } | { s: 'gone' };
-
-export interface QueueItem {
-  rec: string;
-  state: 'pending' | 'inflight' | 'failed';
-  error: string | null;
-}
-
-export function rowSyncOf(items: readonly QueueItem[], id: string, rowExists: boolean): RowSync {
-  const mine = items.filter((x) => x.rec === `note_images:${id}`);
-  const failed = mine.find((x) => x.state === 'failed');
-  if (failed) return { s: 'failed', code: failed.error };
-  if (mine.length) return { s: 'pending' };
-  return rowExists ? { s: 'confirmed' } : { s: 'gone' };
-}
+/** 这张图（note_images 的一行）在 outbox 里的情况 */
+export const rowSyncOf = (items: readonly QueueItem[], id: string, rowExists: boolean): RowSync => coreRowSyncOf(items, 'note_images', id, rowExists);
 
 /** 上传原图和缩略图；退避重试 retry 类的错误；返回 'ok'、提示键，或 account 类错误（交给调用方离开本机） */
 export async function uploadPair(

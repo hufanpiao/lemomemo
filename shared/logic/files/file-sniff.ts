@@ -36,7 +36,8 @@ type UnknownDetail =
 type BadArchiveDetail =
   | 'eocd_missing' | 'eocd_not_at_end' | 'eocd_multi_disk' | 'eocd_count_mismatch' | 'zip64' | 'cd_out_of_range'
   | 'cd_bad_entry' | 'ct_duplicate' | 'ct_encrypted' | 'ct_bad_method' | 'ct_too_big' | 'ct_bad_local'
-  | 'ct_data_overrun' | 'ct_size_mismatch' | 'inflate_failed' | 'inflate_size' | 'zip_range';
+  | 'ct_data_overrun' | 'ct_size_mismatch' | 'inflate_failed' | 'inflate_size' | 'zip_range'
+  | 'bomb_entries' | 'bomb_entry' | 'bomb_total';
 /** reason 给界面（类型不认 / 压缩包异常 / 带密码），detail 给运行日志定是哪条规则拒的 */
 export type SniffResult =
   | { ok: true; kind: DocKind }
@@ -107,7 +108,19 @@ function lowerAscii(b: Uint8Array): string {
   return s;
 }
 
-async function sniffZip(bytes: Uint8Array, v: DataView, inflateRaw: InflateRaw): Promise<SniffResult> {
+/** 中央目录里的一条：at 是目录项偏移，name 是 ASCII 小写的名字，raw 是原样的名字字节 */
+interface CenEntry {
+  at: number;
+  name: string;
+  raw: Uint8Array;
+}
+interface ZipDir {
+  cd: number;
+  entries: CenEntry[];
+}
+
+/** 从末尾找结束记录、读整个中央目录（sniffZip 和 zipBombCheck 共用这一份） */
+function readZipDir(bytes: Uint8Array, v: DataView): ZipDir | SniffResult {
   // 从末尾往前找第一个结束记录签名，必须连同注释严丝合缝到文件尾
   let eocd = -1;
   const last = v.byteLength - EOCD_LEN;
@@ -126,54 +139,151 @@ async function sniffZip(bytes: Uint8Array, v: DataView, inflateRaw: InflateRaw):
   if (count === 0xffff || cdSize === 0xffffffff || cd === 0xffffffff) return bad('zip64');
   if (v.getUint16(eocd + 8, true) !== count) return bad('eocd_count_mismatch');
   if (cd + cdSize > eocd) return bad('cd_out_of_range');
-
-  let ctAt = -1;
-  let ctCount = 0;
-  let vba = false;
+  const entries: CenEntry[] = [];
   let p = cd;
   for (let i = 0; i < count; i += 1) {
     if (p + CEN_LEN > cd + cdSize || v.getUint32(p, true) !== CEN_SIG) return bad('cd_bad_entry');
     const nameLen = v.getUint16(p + 28, true);
     const next = p + CEN_LEN + nameLen + v.getUint16(p + 30, true) + v.getUint16(p + 32, true);
     if (next > cd + cdSize) return bad('cd_bad_entry');
-    const name = lowerAscii(bytes.subarray(p + CEN_LEN, p + CEN_LEN + nameLen));
+    const raw = bytes.subarray(p + CEN_LEN, p + CEN_LEN + nameLen);
+    entries.push({ at: p, name: lowerAscii(raw), raw });
+    p = next;
+  }
+  return { cd, entries };
+}
+
+async function sniffZip(bytes: Uint8Array, v: DataView, inflateRaw: InflateRaw): Promise<SniffResult> {
+  const dir = readZipDir(bytes, v);
+  if (!('entries' in dir)) return dir;
+  let ctAt = -1;
+  let ctCount = 0;
+  let vba = false;
+  for (const { at, name } of dir.entries) {
     if (name === CT_NAME) {
-      ctAt = p;
+      ctAt = at;
       ctCount += 1;
     } else if (name === VBA_NAME || name.endsWith(`/${VBA_NAME}`) || name.endsWith(`\\${VBA_NAME}`)) {
       vba = true;
     }
-    p = next;
   }
   if (ctCount === 0) return unknown('ct_missing');
   if (ctCount > 1) return bad('ct_duplicate');
-  const xml = await readEntry(bytes, v, ctAt, cd, inflateRaw);
+  const xml = await readEntry(bytes, v, ctAt, dir.cd, inflateRaw);
   return xml instanceof Uint8Array ? classifyXml(xml, vba) : xml;
 }
 
-/** 读中央目录 at 处那个条目的内容；大小只信目录里的，声明大小只当上限 */
-async function readEntry(bytes: Uint8Array, v: DataView, at: number, cd: number, inflateRaw: InflateRaw): Promise<Uint8Array | SniffResult> {
+/** 目录项 at 处那个条目在文件里的数据段（本地头核对过）；大小只信目录里的 */
+function entryData(bytes: Uint8Array, v: DataView, at: number, cd: number): { method: number; size: number; data: Uint8Array } | SniffResult {
   const method = v.getUint16(at + 10, true);
   const comp = v.getUint32(at + 20, true);
-  const size = v.getUint32(at + 24, true);
   const loc = v.getUint32(at + 42, true);
   if (v.getUint16(at + 8, true) & 1) return bad('ct_encrypted');
   if (method !== 0 && method !== 8) return bad('ct_bad_method');
-  if (size > CONTENT_TYPES_MAX_BYTES) return bad('ct_too_big');
   if (loc + LOC_LEN > cd) return bad('ct_data_overrun');
   if (v.getUint32(loc, true) !== LOC_SIG) return bad('ct_bad_local');
   const start = loc + LOC_LEN + v.getUint16(loc + 26, true) + v.getUint16(loc + 28, true);
   if (start + comp > cd) return bad('ct_data_overrun');
-  const data = bytes.subarray(start, start + comp);
-  if (method === 0) return comp === size ? data : bad('ct_size_mismatch');
+  return { method, size: v.getUint32(at + 24, true), data: bytes.subarray(start, start + comp) };
+}
+
+/** 读中央目录 at 处那个条目的内容；大小只信目录里的，声明大小只当上限 */
+async function readEntry(bytes: Uint8Array, v: DataView, at: number, cd: number, inflateRaw: InflateRaw): Promise<Uint8Array | SniffResult> {
+  if (v.getUint32(at + 24, true) > CONTENT_TYPES_MAX_BYTES) return bad('ct_too_big');
+  const e = entryData(bytes, v, at, cd);
+  if (!('data' in e)) return e;
+  if (e.method === 0) return e.data.length === e.size ? e.data : bad('ct_size_mismatch');
   let out: Uint8Array | null;
   try {
-    out = await inflateRaw(data, size);
+    out = await inflateRaw(e.data, e.size);
   } catch {
     return bad('inflate_failed');
   }
   if (!(out instanceof Uint8Array)) return bad('inflate_failed');
-  return out.length === size ? out : bad('inflate_size');
+  return out.length === e.size ? out : bad('inflate_size');
+}
+
+// ───────── 列出 ZIP 里的条目（预览沙箱里给 docx-preview、PPT 退路读包用，src/preview-frame/zip-lite.ts） ─────────
+
+/** 一个条目：名字按 UTF-8 解（Office 写的都是 ASCII 或 UTF-8）、压缩方式、目录里的解压后大小（只当上限）、文件里的数据段 */
+export interface ZipItem {
+  name: string;
+  method: number;
+  size: number;
+  data: Uint8Array;
+}
+
+/** 读中央目录列出全部条目；结构不对、加密、不认的压缩方式回 null（同 sniffZip、zipBombCheck 一套读法） */
+export function zipItems(bytes: Uint8Array): ZipItem[] | null {
+  try {
+    const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (!startsWith(v, ZIP_MAGIC)) return null;
+    const dir = readZipDir(bytes, v);
+    if (!('entries' in dir)) return null;
+    const dec = new TextDecoder();
+    const out: ZipItem[] = [];
+    for (const { at, raw } of dir.entries) {
+      const e = entryData(bytes, v, at, dir.cd);
+      if (!('data' in e)) return null;
+      out.push({ name: dec.decode(raw), method: e.method, size: e.size, data: e.data });
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+// ───────── ZIP 炸弹：按真实解压出来的字节数（架构 5.13 第 2 点 ②、架构约定 9.7） ─────────
+
+/** 实际解压量合计、单个条目、条目数的上限（中央目录里声明的大小可以造假，一律不作依据） */
+export const ZIP_LIMITS = { totalBytes: 104_857_600, entryBytes: 52_428_800, entries: 2000 } as const;
+
+export type BombResult = { ok: true; total: number } | { ok: false; reason: 'bad_archive'; detail: BadArchiveDetail };
+
+/** SniffResult 里的拒因 → 压缩包异常的 detail（读目录、读数据段只会回 bad_archive 一类） */
+const detailOf = (r: SniffResult): BadArchiveDetail => (!r.ok && r.reason === 'bad_archive' ? r.detail : 'zip_range');
+
+/**
+ * 把每个条目真的解压一遍、只计数不保存：合计 ≤ 100 MB、单个 ≤ 50 MB、条目 ≤ 2000，超了就拒（上传前、预览前在本机跑）。
+ * 只对 ZIP 家族（docx、xlsx、pptx 和带宏的三种）有意义；不是 ZIP 的回 ok（PDF、OLE2 不经这里）
+ */
+export async function zipBombCheck(
+  bytes: Uint8Array,
+  inflateRaw: InflateRaw,
+  limits: { totalBytes: number; entryBytes: number; entries: number } = ZIP_LIMITS,
+): Promise<BombResult> {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (!startsWith(v, ZIP_MAGIC)) return { ok: true, total: 0 };
+  const fail = (detail: BadArchiveDetail): BombResult => ({ ok: false, reason: 'bad_archive', detail });
+  try {
+    const dir = readZipDir(bytes, v);
+    if (!('entries' in dir)) return fail(detailOf(dir));
+    if (dir.entries.length > limits.entries) return fail('bomb_entries');
+    let total = 0;
+    for (const { at } of dir.entries) {
+      const e = entryData(bytes, v, at, dir.cd);
+      if (!('data' in e)) return fail(detailOf(e));
+      const cap = Math.min(limits.entryBytes, limits.totalBytes - total);
+      let n = e.data.length;
+      if (e.method === 8) {
+        let out: Uint8Array | null;
+        try {
+          out = await inflateRaw(e.data, cap);
+        } catch {
+          return fail('inflate_failed');
+        }
+        // 超过上限时解压函数回 null（InflateRaw 的约定：超了立刻停）
+        if (!(out instanceof Uint8Array)) return fail(cap < limits.entryBytes ? 'bomb_total' : 'bomb_entry');
+        n = out.length;
+      }
+      if (n > limits.entryBytes) return fail('bomb_entry');
+      total += n;
+      if (total > limits.totalBytes) return fail('bomb_total');
+    }
+    return { ok: true, total };
+  } catch {
+    return fail('zip_range');
+  }
 }
 
 /** 收集所有 ContentType 值，恰好一个家族的主部件才认 */
