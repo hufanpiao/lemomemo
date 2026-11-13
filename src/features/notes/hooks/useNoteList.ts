@@ -17,7 +17,8 @@ import { fixCategoryCycles } from '../data/category-merge-store.ts';
 import { ruleCategory } from '../data/classify.ts';
 import { convertNote, type ConvertResult } from '../data/note-convert.ts';
 import { BODY_MAX, newNoteRow } from '../data/note-edit.ts';
-import { aliveCount, categoryCounts, categoryNames, groupByDay, imagesByNote, noteItems, type Row } from '../data/note-list.ts';
+import { categoryNames } from '../../../core/categories.ts';
+import { aliveCount, categoryCounts, groupByDay, imagesByNote, noteItems, type Row } from '../data/note-list.ts';
 
 export type { NoteGroup, NoteItem } from '../data/note-list.ts';
 export type { ActionResult, ConvertKind, ConvertResult };

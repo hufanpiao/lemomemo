@@ -9,7 +9,7 @@
 // 纯 TS：不准 import React（A1）
 import { str } from '../../../../shared/logic/notes/note-headline.ts';
 import { collection } from '../../../core/store.ts';
-import { categoryResolver, type Row } from './note-list.ts';
+import { categoryResolver, type Row } from '../../../core/categories.ts';
 
 export interface NoteForm {
   title: string;

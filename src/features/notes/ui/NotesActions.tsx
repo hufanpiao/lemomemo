@@ -14,6 +14,7 @@ import type { MergeUndo } from '../hooks/useNotesToast.ts';
 import { actionResult, type ActionResult, type ConvertKind, type NoteItem, type useNoteList } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
 import type { ImgMsgKey } from './NoteImages.tsx';
+import row from '../../../kit/components/NoteRow.module.css';
 import styles from './NotesPage.module.css';
 
 /** 随手记页自己另加的提示条：插图提示、转换结果、合并的撤销条（删除的撤销条、出错条在 kit 的 useListActions 里） */
@@ -33,7 +34,7 @@ export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert
   const t = useNotesT();
   const conv = (kind: ConvertKind) => (
     <Pressable
-      className={`${styles.menuItem} ${styles.menuPlain}`}
+      className={`${row.menuItem} ${row.menuPlain}`}
       aria-disabled={ro || long || undefined}
       onClick={() => (long ? undefined : onConvert(kind))}
       data-testid={`notes-to-${kind}-${id}`}
@@ -48,9 +49,9 @@ export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert
       onOpenChange={onOpenChange}
       label={t('notes.menu', {})}
       align="end"
-      className={styles.menu}
+      className={row.menu}
       trigger={
-        <button type="button" className={styles.more} aria-label={t('notes.more', {})} data-testid={`notes-more-${id}`}>
+        <button type="button" className={row.more} aria-label={t('notes.more', {})} data-testid={`notes-more-${id}`}>
           ⋯
         </button>
       }
@@ -58,15 +59,15 @@ export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert
       {conv('todo')}
       {conv('event')}
       {long ? (
-        <p className={styles.menuNote} data-testid={`notes-conv-long-${id}`}>
+        <p className={row.menuNote} data-testid={`notes-conv-long-${id}`}>
           {t('notes.conv.long', {})}
         </p>
       ) : null}
-      <Pressable className={`${styles.menuItem} ${styles.menuPlain}`} aria-disabled={ro || undefined} onClick={onMove} data-testid={`notes-to-vault-${id}`} data-no-proxy="">
+      <Pressable className={`${row.menuItem} ${row.menuPlain}`} aria-disabled={ro || undefined} onClick={onMove} data-testid={`notes-to-vault-${id}`} data-no-proxy="">
         {t('notes.toVault', {})}
       </Pressable>
       {/* 只读行的“删除”变淡、aria-disabled，点了照样由 del 拦下出提示条（同待办页的 ×） */}
-      <Pressable className={styles.menuItem} aria-disabled={ro || undefined} onClick={onDelete} data-testid={`notes-del-${id}`} data-no-proxy="">
+      <Pressable className={row.menuItem} aria-disabled={ro || undefined} onClick={onDelete} data-testid={`notes-del-${id}`} data-no-proxy="">
         {t('notes.delete', {})}
       </Pressable>
     </Popover>

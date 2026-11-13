@@ -22,7 +22,7 @@ import { collection, readonlyIds } from '../../../core/store.ts';
 import { write } from '../../../core/write.ts';
 import { errName } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { categoryRow, cycleKeepers, type Row } from './note-list.ts';
+import { categoryRow, cycleKeepers, type Row } from '../../../core/categories.ts';
 
 export type { MergePair };
 

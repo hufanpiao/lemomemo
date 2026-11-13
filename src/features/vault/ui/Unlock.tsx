@@ -1,16 +1,19 @@
-// 解锁卡（线框 s9 UNLOCKOV / PWERR；视觉稿 PH.unlock）：磨砂遮罩 + 卡片
+// 解锁（线框 s9 UNLOCKOV / PWERR；视觉稿 PH.unlock）：绑定过 Face ID 时磨砂遮罩 + 解锁卡；输密码是盖满屏幕的整页（同设密码页）
 // • 卡片：“隐私记已上锁 / 里面有 N 条 / 用 Face ID 解锁 / 输入密码 / 取消 / 离开 App 1 分钟后自动重新上锁”
 //   Face ID 按钮只在这台设备能用（exe、不支持的环境不显示）、绑定过、没有“别处改过密码”（relock）时出现（S4、TC-B5-47 ②）
+// • 用不了 Face ID（没绑定、设备不支持、relock）时卡片只有“输入密码”“取消”（线框 s9 说明：“就只显示‘输入密码’”），点了再进密码页
 // • 点“输入密码”换成密码键盘；Face ID 连续两次没认出来自动换成密码键盘（D18），标题下写“Face ID 没认出来，请输入密码”
-// • 输错写“密码不对，还能再试 N 次”；锁定中写倒计时，键盘不能按
+// • 密码页是整页：顶栏“‹ 随手记 … 取消”；输错写“密码不对，还能再试 N 次”、锁定中写倒计时，都在圆点下面、键盘上面（PWERR），键盘不能按
+// • “Ctrl + L 立即上锁 · Esc 取消”只在电脑版（侧栏宽度）显示
 // • 解锁成功：遮罩淡出 --dur-ui 后卸掉（S21，唯一的动效）；锁上时直接盖上、不做动效
 import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { useKeys } from '../../../kit/hooks/useKeys.ts';
+import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useAutolockMin, useErrText, useVault, useVaultCount } from '../hooks/useVault.ts';
 import { useWebauthn } from '../hooks/useVaultAuth.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
-import { LockIcon, PinPad, useDuration } from './Pin.tsx';
+import { LockIcon, PinPad, PinTop, useDuration } from './Pin.tsx';
 import styles from './Vault.module.css';
 
 /** 锁定倒计时：每秒刷新一次，到点回 0 */
@@ -26,7 +29,7 @@ function useLeft(until: number | null): number {
   return until === null ? 0 : Math.max(0, Math.ceil((until - now) / 1000));
 }
 
-export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock' }: { onCancel(): void; onForgot(): void; testId?: string }) {
+export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backLabel }: { onCancel(): void; onForgot(): void; testId?: string; backLabel?: string }) {
   const t = useVaultT();
   const dur = useDuration();
   const errText = useErrText();
@@ -41,6 +44,7 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock' }: { o
   const canFace = wa.usable && (state.status?.webauthn ?? 0) > 0 && !state.relocked;
   const left = useLeft(state.lockedUntil);
   const locked = left > 0;
+  const desk = useMedia(MQ_SIDEBAR);
   useKeys({ Escape: () => (onCancel(), true) });
 
   const face = async (): Promise<void> => {
@@ -66,7 +70,7 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock' }: { o
 
   // 密码锁定期间照样给 Face ID（服务器锁定期也放行 WebAuthn：生物识别本身就是更强的验证，vault/webauthn.ts 的 unlockWebauthn）；
   // 连续两次没认出照旧换成密码键盘（D18），那时键盘显示倒计时
-  if (mode === 'card' && canFace) {
+  if (mode === 'card') {
     return (
       <div className={styles.card} data-testid={`${testId}-card`}>
         {relock}
@@ -74,10 +78,12 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock' }: { o
         <h2 className={styles.cardTitle}>{t('vault.locked.title', {})}</h2>
         <p className={styles.cardSub}>{faceFails > 0 ? t('vault.unlock.notRecognized', { method }) : t('vault.locked.count', { n: count })}</p>
         <div className={styles.cardBtns}>
-          <FormButton variant="primary" block disabled={busy} onClick={() => void face()} data-testid={`${testId}-face`}>
-            {t('vault.unlock.with', { method })}
-          </FormButton>
-          <FormButton block onClick={() => setMode('pin')} data-testid={`${testId}-pin`}>
+          {canFace ? (
+            <FormButton variant="primary" block disabled={busy} onClick={() => void face()} data-testid={`${testId}-face`}>
+              {t('vault.unlock.with', { method })}
+            </FormButton>
+          ) : null}
+          <FormButton {...(canFace ? {} : { variant: 'primary' as const })} block onClick={() => setMode('pin')} data-testid={`${testId}-pin`}>
             {t('vault.unlock.pin', {})}
           </FormButton>
           <FormButton variant="ghost" block onClick={onCancel} data-testid={`${testId}-cancel`}>
@@ -97,24 +103,23 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock' }: { o
       : state.lastError && state.lastError !== 'vault_locked' && state.lastError !== 'vault_relock'
         ? errText(state.lastError)
         : '';
+  // 输密码是整页（线框 s9 PWERR：整页浅灰底、白色圆形数字键），和设密码页（SetupPin 的 NewPinSteps）同一套 .pin 排版和 PinPad；
+  // 输错、锁定倒计时写在同一行 .pinErr（04、05）。不再放在白卡片里（卡片底是 --panel，白色圆键在上面看不出是按键）
   return (
-    <div className={`${styles.card} ${styles.pin}`} data-testid={`${testId}-pinview`}>
-      {relock}
-      <LockIcon big />
-      <h2 className={styles.cardTitle}>{t('vault.unlock.enter', {})}</h2>
-      <p className={styles.cardSub}>{sub}</p>
-      <p className={styles.pinErr} role="status" data-testid={`${testId}-err`}>
-        {err}
-      </p>
-      <PinPad onSubmit={(p) => void pin(p)} disabled={busy || locked} testId={`${testId}-pad`} />
-      <div className={styles.pinFoot}>
-        <button type="button" className={styles.link} onClick={onForgot} data-testid={`${testId}-forgot`}>
-          {t('vault.unlock.forgot', {})}
-        </button>
-        <FormButton variant="ghost" onClick={onCancel} data-testid={`${testId}-cancel`}>
-          {t('vault.cancel', {})}
-        </FormButton>
-        <p className={styles.muted}>{t('vault.keys', {})}</p>
+    <div className={styles.pinPage} data-testid={`${testId}-pinview`}>
+      <PinTop backLabel={backLabel} onCancel={onCancel} testId={testId} />
+      <div className={styles.pin}>
+        {relock}
+        <LockIcon big />
+        <h2 className={styles.pinTitle}>{t('vault.unlock.enter', {})}</h2>
+        <p className={styles.pinSub}>{sub}</p>
+        <PinPad onSubmit={(p) => void pin(p)} disabled={busy || locked} testId={`${testId}-pad`} msg={err} msgTestId={`${testId}-err`} />
+        <div className={styles.pinFoot}>
+          <button type="button" className={styles.link} onClick={onForgot} data-testid={`${testId}-forgot`}>
+            {t('vault.unlock.forgot', {})}
+          </button>
+          {desk ? <p className={styles.muted}>{t('vault.keys', {})}</p> : null}
+        </div>
       </div>
     </div>
   );

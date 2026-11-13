@@ -44,6 +44,10 @@ export const ko = {
 
   'vault.list.untitled': '제목 없음', // REVIEW(ko)
   'vault.list.images': '사진 {n}장', // REVIEW(ko)
+  'vault.list.yesterday': '어제', // REVIEW(ko)
+  'vault.list.md': '{m}/{d}', // REVIEW(ko)
+  'vault.more': '더 보기', // REVIEW(ko)
+  'vault.menu': '이 비밀 메모', // REVIEW(ko)
   'vault.trash': '최근 삭제', // REVIEW(ko)
   'vault.trash.empty': '최근 삭제가 비어 있어요', // REVIEW(ko)
   'vault.trash.hint': '비밀 메모의 것만 있어요. 영구 삭제하면 되돌릴 수 없어요', // REVIEW(ko)

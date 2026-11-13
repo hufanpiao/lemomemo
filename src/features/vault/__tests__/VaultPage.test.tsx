@@ -67,7 +67,7 @@ async function openUnlocked() {
   s = session();
   installVaultSession(s);
   render(<VaultPage />);
-  await screen.findByTestId('vault-unlock-pinview');
+  await screen.findByTestId('vault-unlock-card');
   await act(async () => {
     await s.unlock('1234');
   });
@@ -75,14 +75,47 @@ async function openUnlocked() {
 }
 
 describe('解锁、上锁', () => {
+  it('线框 s9：用不了 Face ID 时解锁卡只有“输入密码”“取消”；点了进整页密码页，顶栏“‹ 随手记 … 取消”，提示在圆点下、键盘上；手机宽度不出快捷键提示', async () => {
+    s = session();
+    installVaultSession(s);
+    render(<VaultPage />);
+    const card = await screen.findByTestId('vault-unlock-card');
+    expect(screen.queryByTestId('vault-unlock-face')).toBeNull();
+    expect([...card.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['输入密码', '取消']);
+    expect(screen.queryByTestId('vault-unlock-pinview')).toBeNull();
+    fireEvent.click(screen.getByTestId('vault-unlock-pin'));
+    const view = await screen.findByTestId('vault-unlock-pinview');
+    expect(screen.getByTestId('vault-unlock-back').textContent).toContain('随手记');
+    expect(screen.getByTestId('vault-unlock-cancel').textContent).toBe('取消');
+    const pad = screen.getByTestId('vault-unlock-pad');
+    const order = [...pad.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid'));
+    expect(order.indexOf('vault-unlock-pad-dots')).toBeLessThan(order.indexOf('vault-unlock-err'));
+    expect(order.indexOf('vault-unlock-err')).toBeLessThan(order.indexOf('vault-unlock-pad-key-0'));
+    expect(view.textContent).not.toContain('Ctrl + L');
+  });
+
   it('锁着：只有解锁卡，没有内容；解锁后列出；TC-B5-11 上锁后 DOM 里不留明文', async () => {
     await openUnlocked();
-    expect(document.body.textContent).toContain(SECRET);
+    // 线框 s9 PRIVLIST：行里只有日期、标题、分类，不出正文摘要
+    expect(screen.getByTestId(`vault-row-${NID}`).textContent).toContain('体检报告');
+    expect(document.body.textContent).not.toContain(SECRET);
     act(() => s.lock());
-    await screen.findByTestId('vault-unlock-pinview');
+    await screen.findByTestId('vault-unlock-card');
     expect(document.body.textContent).not.toContain(SECRET);
     expect(document.body.textContent).not.toContain('体检报告');
     expect(screen.queryByTestId('vault-list')).toBeNull();
+  });
+
+  it('列表行的“⋯”：移出隐私记、删除，和编辑页底部两个按钮同一套动作', async () => {
+    await openUnlocked();
+    const out = vi.spyOn(s, 'exportNote').mockResolvedValue({ ok: true, value: { ok: true, vault_token: 't', expires_at: 0 } });
+    const del = vi.spyOn(s, 'remove').mockResolvedValue({ ok: true, value: { ok: true, vault_token: 't', expires_at: 0 } });
+    fireEvent.click(screen.getByTestId(`vault-more-${NID}`));
+    fireEvent.click(await screen.findByTestId(`vault-out-${NID}`));
+    expect(out).toHaveBeenCalledWith(NID);
+    fireEvent.click(screen.getByTestId(`vault-more-${NID}`));
+    fireEvent.click(await screen.findByTestId(`vault-del-${NID}`));
+    expect(del).toHaveBeenCalledWith(NID);
   });
 
   it('Ctrl+L 立即上锁', async () => {
@@ -171,7 +204,7 @@ describe('TC-B5-44：离开时同步盖多任务遮罩', () => {
     });
     expect(document.documentElement.hasAttribute(SHIELD_ATTR)).toBe(false);
     expect(s.get().phase).toBe('locked');
-    await screen.findByTestId('vault-unlock-pinview');
+    await screen.findByTestId('vault-unlock-card');
     expect(document.body.textContent).not.toContain(SECRET);
     stop();
   });
@@ -183,7 +216,7 @@ describe('TC-B5-33：断网', () => {
     installVaultSession(s);
     render(<VaultPage />);
     await screen.findByTestId('vault-offline');
-    expect(screen.queryByTestId('vault-unlock-pinview')).toBeNull();
+    expect(screen.queryByTestId('vault-unlock-card')).toBeNull();
     expect(screen.getByTestId('vault-retry')).toBeTruthy();
   });
 });
@@ -195,7 +228,7 @@ describe('TC-B5-48 ②：隐私记自己的“最近删除”', () => {
     installVaultSession(s);
     window.location.hash = '#/vault/trash';
     render(<VaultPage />);
-    await screen.findByTestId('vault-unlock-pinview');
+    await screen.findByTestId('vault-unlock-card');
     await act(async () => {
       await s.unlock('1234');
     });
@@ -217,7 +250,7 @@ describe('11-14 整块评审第 22 条：令牌续不上（超过 12 小时、�
     installVaultSession(m.s);
     window.location.hash = '#/vault/new';
     render(<VaultPage />);
-    await screen.findByTestId('vault-unlock-pinview');
+    await screen.findByTestId('vault-unlock-card');
     await act(async () => {
       await m.s.refreshStatus();
       await m.s.unlock('1234');
@@ -229,7 +262,7 @@ describe('11-14 整块评审第 22 条：令牌续不上（超过 12 小时、�
       fireEvent.change(screen.getByTestId('vault-edit-body'), { target: { value: '还没存的正文' } });
       await new Promise((r) => setTimeout(r, 0));
     });
-    await screen.findByTestId('vault-unlock-pinview');
+    await screen.findByTestId('vault-unlock-card');
     expect(document.body.textContent).not.toContain('还没存的正文');
     expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(0);
     await act(async () => {

@@ -15,7 +15,8 @@ import { todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { ruleCategory } from '../data/classify.ts';
 import { aiMarkKept, contentOf, emptyForm, formOf, newNoteRow, patchOf, type NoteForm } from '../data/note-edit.ts';
-import { categoryColor, categoryNames, dayKind, showsAi, type Row } from '../data/note-list.ts';
+import { categoryNames } from '../../../core/categories.ts';
+import { categoryColor, dayKind, showsAi, type Row } from '../data/note-list.ts';
 
 export type { NoteForm } from '../data/note-edit.ts';
 export { BODY_MAX, TITLE_MAX } from '../data/note-edit.ts';
