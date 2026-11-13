@@ -23,6 +23,9 @@
 // 固定时钟、关光标；只截按钮、行所在的那几块（各往外留 3px；“重试”上沿紧贴报错字，上沿不留），不截时间文字。
 // 基准图放法、生成命令同 tabbar-lock.spec.ts 文件头（把 --project 换成 chromium-b2uib-lock）：win32 本机生成、不进仓库；
 // linux 进仓库、CI 用，必须在 ci.yml 同一个镜像里生成。要改基准图，先要负责人新定的需求编号。
+// 基准更新记录：
+//   • 11-14 设置-退出登录-dark.png（linux）：出处 B6 皮肤 78b80fb6，首页加皮肤、字体几行，按钮整体下移 256pt（y 602→858），
+//     下两个圆角边缘 6 个抗锯齿像素差 1～2 级（Chromium 光栅化随绝对位置变）；按钮计算样式逐项不变，旧代码把按钮下挪 256pt 截出来和新代码 0 像素差
 import type { Page } from '@playwright/test';
 import { FIXED_NOW, SAFE_TOP, expect, frames, still, test } from './visual-helpers.ts';
 
