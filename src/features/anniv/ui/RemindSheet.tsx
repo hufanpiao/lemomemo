@@ -1,4 +1,5 @@
 // 纪念日提醒的弹层（B5 S15、S16；R-94；皮肤视觉稿 annedit“这一条的提醒”弹层；TC-B5-22）：一条纪念日、设置里的默认值共用这一份
+// • 版式对视觉稿 annedit：标题“这一条的提醒”同一行右边“恢复默认”，下面一行默认说明；胶囊折行，30 天接在 14 天后面，自定义天数在胶囊下面一行（主持人 11-14 代定保留，任务单 S15）
 // • 提前几天多选：当天、前一天、提前 3 / 7 / 14 / 30 天，或自定义 0～60 天，最多 4 个、至少留一个；几点提醒用 kit 的横向滚轮（时、分两列，分钟 5 分一格）
 // • 一条纪念日（mode = item）：两列为 null 时亮的是设置里的默认（anniv.default_offsets、anniv.default_time，没设按 {7,1}、09:00）；
 //   点了任何一项就存成这一条自己的；“恢复默认”两列写回 null，以后跟着设置里的默认走；下面一行“下一次提醒：…”按改后的设置现算（和服务器同一份 next-date）
@@ -92,12 +93,12 @@ export function RemindSheet({
       onOpenChange={onOpenChange}
       title={t(isDef ? 'anniv.rm.defTitle' : 'anniv.rm.title', {})}
       description={isDef ? t('anniv.rm.defDesc', {}) : t('anniv.rm.desc', { def })}
-    >
-      <div className={styles.rmHead}>
+      aside={
         <button type="button" className={styles.rmReset} onClick={() => onChange({ offsets: null, time: null })} disabled={value.offsets === null && value.time === null} data-testid="anniv-rm-reset">
           {t('anniv.rm.reset', {})}
         </button>
-      </div>
+      }
+    >
       <p className={styles.rmLabel}>{t('anniv.rm.daysLabel', {})}</p>
       <div className={styles.chips} role="group" aria-label={t('anniv.rm.daysLabel', {})}>
         {choices.map((n) => (

@@ -4,7 +4,9 @@
 // • 从上到下：类型（生日 / 纪念日 / 倒数日）→ 头像一行（R-117：点头像从相册选，裁成圆形；“去掉”；新建时先写名字才能加）→ 名字 →
 //   日期（阳历 / 阴历；年、月、日三列，iPhone 上是系统滚轮；阴历的闰月和平月在月份同一列，只在有闰月的年份出现；“不知道年份”开关）→
 //   选了闰月只显示一行“没有闰月的年份按同号平月过”（D15，不给选项）→ 倒数日“到期后：移到已过去 / 每年重复”→
-//   “下一次……”实时算（下面再给两次）→ 提醒一行（点开弹层，RemindSheet）→ 备注
+//   提醒一行（点开弹层，RemindSheet）→ 备注；卡片下面一行灰字“下一次……”实时算
+// • 编辑页（视觉稿 annface，主持人 11-14 定照稿）：名字、日期、提醒、备注同一张卡四行，左标签右值；名字、备注是右对齐的文字样式（.inlineIn，可直接改，
+//   聚焦时出底色看得出在改，字号 16px 防 iOS 放大）；备注收起一行，聚焦后左对齐、撑高多行。“再往后”两次稿里没有，去掉
 // • 只读行（D1：韩国阴历、认不出的值）：EditShell 顶部出“要新版本”，输入全禁用
 import { useEffect, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
@@ -20,7 +22,7 @@ import { leapOf, maxDay, NAME_MAX, NOTE_MAX, offsetsKey, offsetsList, recOf, yea
 import { annivLib } from '../hooks/anniv-view.ts';
 import { useAnnivDefaults, useAnnivEdit, useToday } from '../hooks/useAnniv.ts';
 import { useAnnivT, type AnnivT } from '../hooks/useAnnivT.ts';
-import { dateRowText, laterText, lunarDayName, nextText, remindLine } from './anniv-text.ts';
+import { dateRowText, lunarDayName, nextText, remindLine } from './anniv-text.ts';
 import { AvatarRow, NameWithAvatar } from './AnnivAvatarRow.tsx';
 import styles from './AnnivPage.module.css';
 import { RemindSheet } from './RemindSheet.tsx';
@@ -114,7 +116,7 @@ function DateFields({ form, off, t, change, locale, today, label }: PartProps & 
 export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: string): void }) {
   useScrollLock(true);
   // 纪念日页加载好 anniv-lib 才挂编辑层（AnnivPage）
-  const { annivState, calcRecOf, createdDayOf, upcoming } = annivLib();
+  const { annivState, calcRecOf, createdDayOf } = annivLib();
   const t = useAnnivT();
   const locale = useUi((s) => s.locale);
   const ed = useAnnivEdit(id, onCreated);
@@ -153,7 +155,6 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
   } catch {
     st = null;
   }
-  const later = st && !st.past ? upcoming(r, today, 3, ed.row ? createdDayOf(ed.row, tz, today) : today).slice(1) : [];
   return (
     <div className={styles.layer} data-testid="anniv-edit-layer">
       <div className={styles.scrim} onClick={close} aria-hidden="true" />
@@ -186,7 +187,7 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
             ) : (
               <>
                 <Field label={t('anniv.edit.name', {})} htmlFor="anniv-name">
-                  <TextInput id="anniv-name" value={form.name} maxLength={NAME_MAX} disabled={off} placeholder={t('anniv.edit.namePh', {})} onCommit={(v) => change({ name: v.trim() })} data-testid="anniv-edit-name" />
+                  <TextInput id="anniv-name" className={styles.inlineIn} value={form.name} maxLength={NAME_MAX} disabled={off} placeholder={t('anniv.edit.namePh', {})} onCommit={(v) => change({ name: v.trim() })} data-testid="anniv-edit-name" />
                 </Field>
                 <Field label={t('anniv.edit.date', {})}>
                   <Pressable type="button" className={styles.rowBtn} disabled={off} aria-expanded={dateOpen} onClick={() => setDateOpen((v) => !v)} data-testid="anniv-edit-date">
@@ -214,16 +215,6 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
                 />
               </Field>
             ) : null}
-          </FormGroup>
-
-          {st ? (
-            <div className={styles.nextBox} data-testid="anniv-edit-next">
-              <p>{st.past ? t('anniv.edit.pastLine', { n: -st.days, date: fmtDay(st.next.date, locale, 'monthDayWeek') }) : t('anniv.edit.next', { text: nextText(r, st, today, locale, t) })}</p>
-              {later.length ? <p className={styles.hint}>{t('anniv.edit.later', { dates: laterText(later, today, locale, t) })}</p> : null}
-            </div>
-          ) : null}
-
-          <FormGroup>
             <Field label={t('anniv.edit.remind', {})}>
               <Pressable type="button" className={styles.rowBtn} disabled={off} onClick={() => setSheet(true)} data-testid="anniv-edit-remind">
                 <span>{remindLine(r, defaults, t)}</span>
@@ -231,9 +222,15 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
               </Pressable>
             </Field>
             <Field label={t('anniv.edit.note', {})} htmlFor="anniv-note">
-              <TextArea id="anniv-note" value={form.note} maxLength={NOTE_MAX} disabled={off} placeholder={t('anniv.edit.notePh', {})} onCommit={(v) => change({ note: v })} data-testid="anniv-edit-note" />
+              <TextArea id="anniv-note" className={`${styles.inlineIn} ${styles.inlineArea}`} rows={1} value={form.note} maxLength={NOTE_MAX} disabled={off} placeholder={t('anniv.edit.notePh', {})} onCommit={(v) => change({ note: v })} data-testid="anniv-edit-note" />
             </Field>
           </FormGroup>
+
+          {st ? (
+            <p className={styles.nextLine} data-testid="anniv-edit-next">
+              {st.past ? t('anniv.edit.pastLine', { n: -st.days, date: fmtDay(st.next.date, locale, 'monthDayWeek') }) : t('anniv.edit.next', { text: nextText(r, st, today, locale, t) })}
+            </p>
+          ) : null}
         </EditShell>
       </div>
       <RemindSheet

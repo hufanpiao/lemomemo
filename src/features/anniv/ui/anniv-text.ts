@@ -70,14 +70,6 @@ export function offsText(offs: readonly number[], t: AnnivT, and = false): strin
   return last === undefined ? head : head ? `${head}${t('anniv.rm.and', {})}${last}` : last;
 }
 
-/** 编辑页“再往后：…”：不在今年的带年份（“2027年 11月14日”） */
-export function laterText(dates: readonly DateStr[], today: DateStr, locale: UiLocale, t: AnnivT): string {
-  const y0 = parseDate(today).y;
-  return dates
-    .map((d) => (parseDate(d).y === y0 ? fmtDay(d, locale, 'monthDay') : t('anniv.inYear', { y: parseDate(d).y, date: fmtDay(d, locale, 'monthDay') })))
-    .join(t('anniv.rm.sep', {}));
-}
-
 /** 提醒摘要（编辑页提醒一行）：“提前 7 天、前一天 · 9:00（默认）” */
 export function remindLine(r: Pick<AnnivRec, 'remind_offsets' | 'remind_time'>, settings: Readonly<Record<string, unknown>>, t: AnnivT): string {
   const L = annivLib();

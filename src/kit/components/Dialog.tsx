@@ -53,6 +53,8 @@ export interface DialogProps {
   lead?: ReactNode;
   /** 标题、说明、内容都居中。B3 S23：负责人 11-10 定，麦克风说明卡按线框 s10 居中；目前只有 MicCard 传。不传时类名和渲染结果都和原来一样 */
   center?: boolean;
+  /** 标题同一行右边放的东西（纪念日提醒弹层的“恢复默认”，视觉稿 annedit）。不传时渲染结果和原来一样 */
+  aside?: ReactNode;
 }
 
 /** 能不能把焦点还给它：还在文档里，没被禁用 */
@@ -61,7 +63,7 @@ function canRefocus(el: Element | null): el is HTMLElement {
   return !(el as HTMLElement & { disabled?: boolean }).disabled;
 }
 
-export function Dialog({ open, onOpenChange, title, description, children, returnFocus, lead, center }: DialogProps) {
+export function Dialog({ open, onOpenChange, title, description, children, returnFocus, lead, center, aside }: DialogProps) {
   useScrollLock(open);
   const returnTo = useRef<Element | null>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -119,7 +121,14 @@ export function Dialog({ open, onOpenChange, title, description, children, retur
             {...(description === undefined ? { 'aria-describedby': undefined } : {})}
           >
             {lead == null ? null : <div className={styles.lead}>{lead}</div>}
-            <RD.Title className={styles.title}>{title}</RD.Title>
+            {aside == null ? (
+              <RD.Title className={styles.title}>{title}</RD.Title>
+            ) : (
+              <div className={styles.head}>
+                <RD.Title className={styles.title}>{title}</RD.Title>
+                {aside}
+              </div>
+            )}
             {description === undefined ? null : (
               <RD.Description className={styles.desc}>{description}</RD.Description>
             )}

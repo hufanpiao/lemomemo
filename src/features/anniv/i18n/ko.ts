@@ -106,7 +106,6 @@ export const ko = {
   'anniv.edit.next': '다음: {text}', // REVIEW(ko)
   'anniv.edit.nextLunar': '{lunar} → 양력 {date}', // REVIEW(ko)
   'anniv.edit.pastLine': '{n}일 지남 ({date})', // REVIEW(ko)
-  'anniv.edit.later': '그다음: {dates}', // REVIEW(ko)
   'anniv.edit.nameAv': '이름 (동그라미를 누르면 사진을 넣을 수 있어요)', // REVIEW(ko)
   'anniv.edit.dateRow': '{cal} {md}', // REVIEW(ko)
   'anniv.edit.dateRowYear': '{cal} {md} · {y}년', // REVIEW(ko)

@@ -6,7 +6,8 @@
 //   ③ “＋ 新建”盖上编辑层，写名字后 Esc 关掉，列表里多了这一条；
 //   ④ 设置 › 提醒与通知 的“纪念日提醒”写着出厂默认“提前 7 天、前一天 · 9:00”，点开加上“提前 3 天”，回来那一行跟着变；时刻滚轮点“08”“05”变成 8:05；
 //   ⑤ 列表左滑露出“编辑 / 删除”（kit 的 SwipeRow）：删了出撤销条、撤销回来；一次只露一行；竖着拖、滚轮滚动列表都不误触发；
-//   ⑥ 新建页头像在名字左边、年月日三列滚轮（视觉稿 annnew）；编辑页日期一行“阳历 …月…日 · 年 ›”，点开出滚轮，滚月份那一列换月（annface）
+//   ⑥ 新建页头像在名字左边、年月日三列滚轮（视觉稿 annnew）；编辑页日期一行“阳历 …月…日 · 年 ›”，点开出滚轮，滚月份那一列换月（annface）；
+//     编辑页名字、日期、提醒、备注同一张卡，“下一次”在卡下面一行、没有“再往后”，没照片不出“去掉”（主持人 11-14 定照稿）
 // 纪念日在界面上只能一条条建，先让 App 开好本机库，再往 anniversaries 仓写服务器形状的行、刷新（同 b4-notes-s7s8.spec.ts 的分类）
 // 截图：设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截（WebKit 截图会往页面插 <style>、被 CSP 记成违规）；断言两种浏览器都跑
 import type { Page } from '@playwright/test';
@@ -237,6 +238,13 @@ test.describe('B5 纪念日', () => {
     const date = page.getByTestId('anniv-edit-date');
     await expect(date).toHaveText(new RegExp(`阳历 ${BDAY.m}月${BDAY.d}日 · 1997 年`));
     await expect(page.getByTestId('anniv-edit-month')).toHaveCount(0);
+    // 编辑页照视觉稿 annface（主持人 11-14 定）：名字、日期、提醒、备注同一张卡四行；“下一次”是卡下面一行字，不在卡里，没有“再往后”；没照片不出“去掉”
+    const card = page.getByTestId('anniv-edit-remind').locator('xpath=ancestor::*[.//*[@data-testid="anniv-edit-name"]][1]');
+    for (const id of ['anniv-edit-name', 'anniv-edit-date', 'anniv-edit-note']) await expect(card.getByTestId(id)).toHaveCount(1);
+    await expect(card.getByTestId('anniv-edit-next')).toHaveCount(0);
+    await expect(page.getByTestId('anniv-edit-next')).not.toContainText('再往后');
+    await expect(page.getByTestId('anniv-edit-name')).toHaveCSS('text-align', 'right');
+    await expect(page.getByTestId('anniv-avatar-remove')).toHaveCount(0);
     await shot(page, browserName, 'annface-编辑页日期一行');
     await date.click();
     await expect(date).toHaveAttribute('aria-expanded', 'true');

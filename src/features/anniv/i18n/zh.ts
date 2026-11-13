@@ -102,7 +102,6 @@ export const zh = {
   'anniv.edit.next': '下一次：{text}',
   'anniv.edit.nextLunar': '{lunar} → 公历 {date}',
   'anniv.edit.pastLine': '已过去 {n} 天（{date}）',
-  'anniv.edit.later': '再往后：{dates}',
   'anniv.edit.nameAv': '名字（点圆圈加头像，不加显示第一个字）',
   'anniv.edit.dateRow': '{cal} {md}',
   'anniv.edit.dateRowYear': '{cal} {md} · {y} 年',

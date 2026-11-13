@@ -382,17 +382,62 @@
   font-size: var(--fs-12-5);
 }
 
-.nextBox {
-  margin: 12px 0;
-  padding: 10px 14px;
-  border-left: 3px solid var(--accent);
-  border-radius: var(--r-sm);
-  background: var(--panel);
-  font-size: var(--fs-14);
+/* 编辑页卡片下面一行灰字“下一次：…”（视觉稿 annface，不做带色条的卡） */
+.nextLine {
+  margin: -4px 4px 12px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
 }
 
-.nextBox p {
-  margin: 0;
+/* 编辑页名字、备注（视觉稿 annface）：看起来就是右对齐的文字，没有灰底框；聚焦时出浅底，看得出在改。字号 16px 防 iOS 聚焦放大 */
+.inlineIn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--r-inp);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+  text-align: right;
+}
+
+.inlineIn::placeholder {
+  color: var(--text-2);
+}
+
+.inlineIn:focus {
+  background: var(--inp-bg);
+}
+
+/* 键盘聚焦的框和 kit 输入框同一套（Form.module.css） */
+.inlineIn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.inlineIn:disabled {
+  color: var(--text-2);
+}
+
+/* 备注：收起一行（多出来的不显示），点进去左对齐、撑高写多行 */
+.inlineArea {
+  height: 36px;
+  overflow: hidden;
+  resize: none;
+  line-height: 28px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.inlineArea:focus {
+  height: 96px;
+  overflow: auto;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre-wrap;
 }
 
 .rowBtn {
@@ -447,14 +492,7 @@
   font-size: var(--fs-15);
 }
 
-/* 提醒弹层 */
-.rmHead {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: -8px;
-}
-
-/* “恢复默认”：右上角一行小字（视觉稿 annedit 弹层），不做成大按钮 */
+/* 提醒弹层。“恢复默认”：标题同一行右边的小字（视觉稿 annedit 弹层，经 kit Dialog 的 aside），不做成大按钮 */
 .rmReset {
   position: relative;
   min-height: 32px;
