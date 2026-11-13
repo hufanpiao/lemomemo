@@ -4,13 +4,18 @@
 //   “on conflict (table_name, id) do update set user_id = excluded.user_id, claim = null, claimed_at = null, attempts = 0”。
 //   为什么要查：第 0 步处理完按租约删（remind_queue_finish）。正被租着的时候用户又改了这一行，不清租约的话 finish 就把新改动删了
 //   （架构 0.49 第 3 条“先读后删”的老问题，REMIND-queue-crash-loss）；不换 user_id 的话行被硬删后同一个 id 被别人重用，队列项还挂在原主人名下。
+// 扫的范围：所有非系统 schema 的函数（ENQUEUE_SCAN_SQL；11-13 整块评审建议 10，原来只扫 private，public 等里的函数写队列查不到）。
 // 局限：只认静态 SQL；execute 拼出来的动态 SQL 查不到。
 // 纯函数：入参是 checks.ts 查出的 private 函数（名字、prosrc），单测 tests/build/d1-remind-lease.test.ts，
 // 反例 supabase/tests/d1-fixtures/38_enqueue_no_lease_reset.psql（别的函数写队列）、48_enqueue_reset_missing.psql（唯一入口不清租约）。
 
 export interface FnSrcRow { f: string; src: string }
-/** checks.ts 用：private 里所有函数的名字和源码 */
+/** checks.ts 用：private 里所有函数的名字和源码（删会话、校验会话两项检查也用这一份，session-revoke.ts） */
 export const LEASE_FNS_SQL = `select p.proname as f, p.prosrc as src from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'private'`;
+/** checks.ts 用：唯一入口检查扫所有非系统 schema；private 里的只回函数名，别的 schema 回“schema.函数名” */
+export const ENQUEUE_SCAN_SQL = `select case when n.nspname = 'private' then p.proname else n.nspname || '.' || p.proname end as f, p.prosrc as src
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname not in ('pg_catalog', 'information_schema') and left(n.nspname, 3) <> 'pg_'`;
 
 /** 写队列的唯一入口 */
 export const ENQUEUE_FN = 'remind_enqueue';
@@ -22,7 +27,7 @@ export function leaseResetProblems(fns: readonly FnSrcRow[]): string[] {
   const out: string[] = [];
   for (const r of fns) {
     const ins = (r.src.match(INSERT_RE) ?? []).length;
-    if (ins > 0 && r.f !== ENQUEUE_FN) out.push(`private.${r.f} 直接往 remind_queue 插入（一律改调 private.${ENQUEUE_FN}；R-411 迁移 20261113100000）`);
+    if (ins > 0 && r.f !== ENQUEUE_FN) out.push(`${r.f.includes('.') ? r.f : `private.${r.f}`} 直接往 remind_queue 插入（一律改调 private.${ENQUEUE_FN}；R-411 迁移 20261113100000）`);
   }
   const e = fns.filter((r) => r.f === ENQUEUE_FN);
   if (e.length === 0) out.push(`private.${ENQUEUE_FN} 不在（写提醒队列的唯一入口，R-411 迁移 20261113100000）`);

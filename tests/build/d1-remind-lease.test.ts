@@ -20,6 +20,9 @@ describe('leaseResetProblems（唯一入口）', () => {
   it('别的函数写队列（哪怕也清租约）、唯一入口不在、写了两句、冲突时不清 attempts 或不换主人：各报一条', () => {
     expect(leaseResetProblems([OK, { f: 'x', src: `insert into private.remind_queue as q values (1) ${RESET};` }]))
       .toEqual(['private.x 直接往 remind_queue 插入（一律改调 private.remind_enqueue；R-411 迁移 20261113100000）']);
+    // 别的 schema 的函数（ENQUEUE_SCAN_SQL 回“schema.函数名”）：同名的 public.remind_enqueue 也不算唯一入口（建议 10）
+    expect(leaseResetProblems([OK, { f: 'public.remind_enqueue', src: `insert into private.remind_queue as q values (1) ${RESET};` }]))
+      .toEqual(['public.remind_enqueue 直接往 remind_queue 插入（一律改调 private.remind_enqueue；R-411 迁移 20261113100000）']);
     expect(leaseResetProblems([])).toEqual(['private.remind_enqueue 不在（写提醒队列的唯一入口，R-411 迁移 20261113100000）']);
     expect(leaseResetProblems([{ f: 'remind_enqueue', src: `${OK.src} ${OK.src}` }]))
       .toEqual(['private.remind_enqueue 里往 remind_queue 插入 2 句（只准一句，各 scope 写在同一句的 select 里）']);
