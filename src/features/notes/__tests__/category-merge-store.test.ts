@@ -19,6 +19,8 @@ const TZ = 'Asia/Seoul';
 const A = uid(101);
 const B = uid(102);
 const C = uid(103);
+/** 合并测试用的一对（why 只进日志） */
+const AB = { keep: A, merge: B, why: 'contains' } as const;
 const cat = (id: string, name: string, over: Record<string, unknown> = {}): Row => ({ id, name, sort: 0, deleted_at: null, undone: false, merged_into: null, ...over });
 const set = (value: unknown, over: Record<string, unknown> = {}): SettingRow => ({ id: 's1', key: MERGE_DISMISSED_KEY, value, deleted_at: null, undone: false, ...over });
 const note = (id: string, category: string | null, over: Record<string, unknown> = {}): Row => ({
@@ -136,7 +138,7 @@ describe('mergeCategories（TC-B4-07 合并后条目归到新分类）', () => {
 
   it('只写分类 B 一笔 {merged_into: A}；B 下活着的 3 条读出来归到 A，分类胶囊里没有 B、A 是 4 条', async () => {
     const s = stub();
-    expect(await mergeCategories({ keep: A, merge: B }, cats, s.deps)).toEqual({ ok: true });
+    expect(await mergeCategories(AB, { ...s.deps, categories: () => cats })).toEqual({ ok: true });
     expect(s.calls).toEqual([{ table: 'categories', id: B, data: { merged_into: A } }]);
     const after = applied(cats, s.calls);
     const items = noteItems(notes, after, TZ);
@@ -147,14 +149,14 @@ describe('mergeCategories（TC-B4-07 合并后条目归到新分类）', () => {
 
   it('合并完再算提示：这一对不再出', async () => {
     const s = stub();
-    await mergeCategories({ keep: A, merge: B }, cats, s.deps);
+    await mergeCategories(AB, { ...s.deps, categories: () => cats });
     expect(openMergePairs(cats, [])).toHaveLength(1);
     expect(openMergePairs(applied(cats, s.calls), [])).toEqual([]);
   });
 
   it('编辑页读的分类（formOf）也归到 A，和列表一致；不动分类时保存不写分类列', async () => {
     const s = stub();
-    await mergeCategories({ keep: A, merge: B }, cats, s.deps);
+    await mergeCategories(AB, { ...s.deps, categories: () => cats });
     const after = applied(cats, s.calls);
     const row = note('b1', B);
     const f = formOf(row, after);
@@ -165,7 +167,7 @@ describe('mergeCategories（TC-B4-07 合并后条目归到新分类）', () => {
 
   it('编辑页分类旁的“AI”（aiMarkKept）按归并后的分类比：AI 分到 B、B 合并进 A 后照样标，和列表一致；改了分类、不是 AI 分的、归不到活着的分类都不标', async () => {
     const s = stub();
-    await mergeCategories({ keep: A, merge: B }, cats, s.deps);
+    await mergeCategories(AB, { ...s.deps, categories: () => cats });
     const after = applied(cats, s.calls);
     const row = note('b1', B, { category_source: 'ai', category_seen: false });
     const f = formOf(row, after);
@@ -179,7 +181,7 @@ describe('mergeCategories（TC-B4-07 合并后条目归到新分类）', () => {
 
   it('删除 → 合并 → 恢复：恢复的那条归到 A；合并后才写进来指向 B 的（别的设备、AI）也归到 A', async () => {
     const s = stub();
-    await mergeCategories({ keep: A, merge: B }, cats, s.deps);
+    await mergeCategories(AB, { ...s.deps, categories: () => cats });
     const after = applied(cats, s.calls);
     const restored = notes.map((n) => (n.id === 'bd' ? { ...n, deleted_at: null } : n));
     expect(noteItems([...restored, note('late', B)], after, TZ).filter((i) => ['bd', 'late'].includes(i.id)).map((i) => i.categoryId)).toEqual([A, A]);
@@ -216,23 +218,23 @@ describe('mergeCategories（TC-B4-07 合并后条目归到新分类）', () => {
     ];
     for (const [c, pair] of bad) {
       const s = stub();
-      expect(await mergeCategories(pair, c, s.deps)).toEqual({ ok: false, reason: 'gone' });
+      expect(await mergeCategories({ ...pair, why: 'same' }, { ...s.deps, categories: () => c })).toEqual({ ok: false, reason: 'gone' });
       expect(s.calls).toHaveLength(0);
     }
   });
 
   it('B 这个分类行只读 → readonly，一笔不写', async () => {
     const s = stub(undefined, [B]);
-    expect(await mergeCategories({ keep: A, merge: B }, cats, s.deps)).toEqual({ ok: false, reason: 'readonly' });
+    expect(await mergeCategories(AB, { ...s.deps, categories: () => cats })).toEqual({ ok: false, reason: 'readonly' });
     expect(s.calls).toHaveLength(0);
   });
 
   it('没写进去 → 原因原样返回；抛 OutboxRejectError → rejected', async () => {
-    expect(await mergeCategories({ keep: A, merge: B }, cats, stub(() => ({ ok: false, reason: 'closing' })).deps)).toEqual({ ok: false, reason: 'closing' });
+    expect(await mergeCategories(AB, { ...stub(() => ({ ok: false, reason: 'closing' })).deps, categories: () => cats })).toEqual({ ok: false, reason: 'closing' });
     const s = stub(() => {
       throw new OutboxRejectError('invalid_row');
     });
-    expect(await mergeCategories({ keep: A, merge: B }, cats, s.deps)).toEqual({ ok: false, reason: 'rejected' });
+    expect(await mergeCategories(AB, { ...s.deps, categories: () => cats })).toEqual({ ok: false, reason: 'rejected' });
   });
 });
 
@@ -284,6 +286,40 @@ describe('fixCategoryCycles（合并绕成圈的写回）', () => {
   });
 });
 
+describe('fixCategoryCycles：圈解开以后又绕成圈', () => {
+  it('写成了的 id 在圈解开（不再是 cycleKeepers）后拿掉，之后同一个分类又绕成圈还会再写回一次', async () => {
+    const P = uid(331);
+    const Q = uid(332);
+    const loop = [cat(P, '甲', { sort: 2, merged_into: Q }), cat(Q, '乙', { sort: 1, merged_into: P })];
+    const s = stub();
+    await fixCategoryCycles(loop, s.deps);
+    await fixCategoryCycles(loop, s.deps);
+    expect(s.calls.map((c) => c.id)).toEqual([Q]);
+    await fixCategoryCycles(applied(loop, s.calls), s.deps);
+    await fixCategoryCycles(loop, s.deps);
+    expect(s.calls.map((c) => c.id)).toEqual([Q, Q]);
+  });
+});
+
+describe('mergeCategories：日志和异常', () => {
+  const cats = [cat(A, '购物'), cat(B, '购物清单', { sort: 1 })];
+  it('日志带 merge= keep= why=（ai 或 rule），不记分类名；写入口抛异常接住回 threw、只记错误名', async () => {
+    const lines: string[] = [];
+    (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    await mergeCategories(AB, { ...stub().deps, categories: () => cats });
+    await mergeCategories({ ...AB, why: 'ai' }, { ...stub(undefined, [B]).deps, categories: () => cats });
+    const boom = { ...stub().deps, w: { patch: () => Promise.reject(new RangeError('x')) }, categories: () => cats } as MergeDeps;
+    expect(await mergeCategories(AB, boom)).toEqual({ ok: false, reason: 'threw' });
+    delete (globalThis as Record<string, unknown>)[RL_SLOT];
+    expect(lines).toEqual([
+      `notes merge category ok merge=${B} keep=${A} why=rule`,
+      `notes merge category readonly merge=${B} keep=${A} why=ai`,
+      `notes merge category threw RangeError merge=${B} keep=${A} why=rule`,
+    ]);
+    expect(lines.join(' ')).not.toMatch(/购物/);
+  });
+});
+
 describe('mergeCategories：真 outbox（假 IndexedDB 冷启动）', () => {
   setupImageTests();
   const serverCat = (id: string, name: string, sort: number): ServerRow =>
@@ -295,8 +331,8 @@ describe('mergeCategories：真 outbox（假 IndexedDB 冷启动）', () => {
       await b.outbox?.applyServer('categories', [{ row: serverCat(A, '购物', 0) }, { row: serverCat(B, '购物清单', 1) }]);
       await b.outbox?.applyServer('notes', [{ row: { ...serverNote(1), category_id: B } as ServerRow }, { row: { ...serverNote(2), category_id: A } as ServerRow }]);
     });
-    const cats = collection<Row>('categories').getSnapshot();
-    expect(await mergeCategories({ keep: A, merge: B }, cats)).toEqual({ ok: true });
+    // 不传分类：调用时现读本机集合
+    expect(await mergeCategories(AB)).toEqual({ ok: true });
     const q = (await b.outbox?.list()) ?? [];
     expect(q.map((i) => [i.op, i.table, i.id, i.data, i.deps])).toEqual([['patch', 'categories', B, { merged_into: A }, []]]);
     const items = noteItems(collection<Row>('notes').getSnapshot(), collection<Row>('categories').getSnapshot(), TZ);

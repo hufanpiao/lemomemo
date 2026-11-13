@@ -4,6 +4,7 @@
 // • 分组（列表方式）：今天 / 昨天 / 日期（按 current_tz 算哪一天）
 // • 没有标题时取正文前两行当标题（线框 s7 注）：第一行当标题，第二行起当摘要
 // • “AI”小标：AI 分过类、用户还没看过（category_source = 'ai' 且 category_seen = false）
+// • “已转过”（R-415 ③）：converted_to 至少一项（转成过待办 / 日程，带图保留的原条、恢复回来的原条都会有）
 // • 分类胶囊：全部 + 有条目的分类和条数（按条数多的在前，一样的按分类的 sort、名字）；条目的分类顺着 merged_into 归到留下的那个
 // • 分类色点（视觉稿第 1322、1341 行，6px）：颜色取 categories.color（架构：小写 #rrggbb，或皮肤令牌名）；
 //   令牌名只认皮肤里有的项目色 p1～p6（画深色那一档 --pNs），别的认不出、没设颜色的不画点
@@ -11,7 +12,7 @@
 // 纯 TS：不准 import React（A1）
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { isLiveCategory, isLiveRow } from '../../../../shared/logic/live-row.ts';
+import { isLiveCategory, isLiveRow, type CategoryRow } from '../../../../shared/logic/live-row.ts';
 import { keepFirst } from '../../../../shared/logic/notes/category-merge.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
 
@@ -27,6 +28,8 @@ export interface NoteItem {
   categoryColor: string | null;
   /** 显示“AI”小标 */
   ai: boolean;
+  /** 转成过待办 / 日程（converted_to 至少一项；R-415 ③ 负责人定方案丙：标题前“已转过”描边小标） */
+  converted: boolean;
   createdAt: number;
   date: DateStr;
   /** 第一张插图（没有为 null） */
@@ -59,6 +62,9 @@ export interface CategoryCount {
 }
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+/** 本机集合里的分类行 → shared 的 CategoryRow（名字、sort 取不到当空串、0；其余列原样带着，isLiveCategory 照看）：合并提示、成环取舍共用这一份 */
+export const categoryRow = (c: Row): CategoryRow & Row => ({ ...c, name: str(c['name']), sort: num(c['sort']) });
 const alive = (r: Row): boolean => isLiveRow(r) && r['is_private'] !== true;
 
 /** 标题和摘要：有标题就用标题、摘要是正文；没有标题取正文第一行当标题，后面的（第二行起）当摘要 */
@@ -106,8 +112,7 @@ export function categoryNames(categories: readonly Row[]): Map<string, string> {
  */
 export function categoryResolver(categories: readonly Row[]): (id: unknown) => string | null {
   const byId = new Map(categories.map((c) => [c.id, c]));
-  const row = (c: Row) => ({ id: c.id, name: str(c['name']), sort: num(c['sort']) });
-  const first = (a: Row, b: Row): Row => (keepFirst(row(a), row(b)) <= 0 ? a : b);
+  const first = (a: Row, b: Row): Row => (keepFirst(categoryRow(a), categoryRow(b)) <= 0 ? a : b);
   return (id) => {
     const path: Row[] = [];
     for (let cur = id; typeof cur === 'string'; ) {
@@ -164,6 +169,7 @@ export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: 
       categoryName: cid === null ? null : (names.get(cid) ?? null),
       categoryColor: cid === null ? null : (colors.get(cid) ?? null),
       ai: cid !== null && showsAi(r),
+      converted: Array.isArray(r['converted_to']) && r['converted_to'].length > 0,
       createdAt,
       date: todayOf(createdAt, tz),
       cover: pics.get(r.id)?.[0] ?? null,

@@ -189,6 +189,21 @@
   vertical-align: middle;
 }
 
+/* “已转过”（R-415 ③ 方案丙）：标题前的描边小标，比“AI”轻（不填底）；列表行标题单行省略时它不缩 */
+.conv {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  margin-right: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font-size: var(--fs-10-5);
+  font-weight: 400;
+  vertical-align: 2px;
+}
+
 .cardFoot .ai {
   margin-left: 0;
 }

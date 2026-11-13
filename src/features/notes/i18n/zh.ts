@@ -57,6 +57,7 @@ export const zh = {
   'notes.merge.no': '不用',
   // R-415 ③ 合并后的撤销条“已合并 · 撤销”（8 秒，和删除同一个撤销条）
   'notes.merge.done': '已合并',
+  'notes.converted': '已转过',
   'notes.conv.todo': '转成待办',
   'notes.conv.event': '转成日程',
   'notes.conv.long': '超过 2000 字，转不了',

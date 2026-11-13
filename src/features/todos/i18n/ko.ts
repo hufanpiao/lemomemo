@@ -36,7 +36,6 @@ export const ko = {
   'todo.edit.raw': '원래 한 말', // REVIEW(ko)
   'todo.edit.source': '출처', // REVIEW(ko) R-415
   'todo.edit.sourceNote': '메모', // REVIEW(ko) R-415：随手记的韩文名同 notes.title
-  'todo.edit.sourceGone': '원래 메모는 “최근 삭제”에 있어요', // REVIEW(ko) R-415
   'todo.edit.st.empty': '제목을 써야 저장돼요', // REVIEW(ko)
   'todo.edit.st.rejected': '형식이 맞지 않아 저장하지 못했어요 (제목이 너무 길거나 날짜가 맞지 않아요)', // REVIEW(ko)
 } as const satisfies Record<keyof typeof zh, string>;

@@ -13,7 +13,7 @@
 // 纯 TS：不准 import React（A1）
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { noteHeadline } from '../../../../shared/logic/notes/note-headline.ts';
+import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
 import { trimItemTitle } from '../../../../shared/schema/rows.ts';
 import { DEFAULT_TODO_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime, todoRemindAt } from '../../../../shared/logic/remind.ts';
 import { todoRemindFlag } from '../../../core/remind-flag.ts';
@@ -39,7 +39,6 @@ export const REMIND_BEFORE_OPTIONS: readonly (number | null)[] = [null, ...REMIN
 
 export { ITEM_TITLE_MAX, PROJECT_MAX, ITEM_NOTE_MAX as NOTE_MAX } from '../../../../shared/schema/rows.ts';
 
-const str = (v: unknown, d = ''): string => (typeof v === 'string' ? v : d);
 const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 const days = (v: unknown): 0 | 1 | null => (v === 0 || v === 1 ? v : null);
 const before = (v: unknown): number | null => (typeof v === 'number' && REMIND_BEFORE_CHOICES.includes(v) ? v : null);
@@ -54,7 +53,7 @@ export function formOf(row: Readonly<Record<string, unknown>>): TodoForm {
     due_time: strOrNull(row['due_time']),
     remind_before_min: before(row['remind_before_min']),
     remind_days: days(row['remind_days']),
-    remind_time: str(row['remind_time'], DEFAULT_TODO_REMIND_TIME) || DEFAULT_TODO_REMIND_TIME,
+    remind_time: str(row['remind_time']) || DEFAULT_TODO_REMIND_TIME,
     project: str(row['project']),
     note: str(row['note']),
   };
@@ -170,21 +169,22 @@ export function hasRemind(c: { row: RowLike; data: Readonly<Record<string, unkno
   });
 }
 
-/** “来源”行要的：那条随手记的 id、显示标题，gone = 删了（在“最近删除”里） */
-export interface TodoSource {
-  id: string;
-  title: string;
-  gone: boolean;
-}
+/** “来源”行的状态（R-415 ①）：只有 ok 出这一行；运行日志按这个码记 todo source <码> */
+export type TodoSource =
+  | { state: 'ok'; id: string; title: string }
+  | { state: 'none' | 'private' | 'undone' | 'gone' };
 
 /**
- * 待办编辑页的“来源”行（R-415 ①）：note 是 from_note_id 指的那条随手记（本机集合里的行，本机没有为 undefined）。
- * • 本机没有、撤销了的（undone）、隐私记（is_private，B5）→ null，不出这一行（隐私记的标题不露在待办页）；
- * • 删了的（在“最近删除”里；不带图的随手记转完原条就在这里）→ gone：这一行变灰、不能点，下面一行灰字说明；
- * • 其余能点，打开那条随手记。标题取法同随手记列表（shared 的 noteHeadline：没有标题取正文第一行）
+ * 待办编辑页的“来源”行（R-415 ①，负责人 11-13 定）：note 是 from_note_id 指的那条随手记（本机集合里的行，本机没有为 undefined）。
+ * 原条不在就整行不出（不变灰、不写原因）：本机没有（none）、隐私记（private，B5；标题不露在待办页）、撤销了（undone）、
+ * 在“最近删除”里（gone；不带图的随手记转完原条就在这里）。原条恢复了自动变回 ok、重新出现（页面订阅着这一条）。
+ * ok 能点，打开那条随手记；标题取法同随手记列表（shared 的 noteHeadline：没有标题取正文第一行）
  */
-export function sourceOf(note: RowLike): TodoSource | null {
+export function sourceOf(note: RowLike): TodoSource {
   const id = note?.['id'];
-  if (note === undefined || typeof id !== 'string' || note['undone'] === true || note['is_private'] === true) return null;
-  return { id, title: noteHeadline(note['title'], note['body']).title, gone: isDel(note['deleted_at']) };
+  if (note === undefined || typeof id !== 'string') return { state: 'none' };
+  if (note['is_private'] === true) return { state: 'private' };
+  if (note['undone'] === true) return { state: 'undone' };
+  if (isDel(note['deleted_at'])) return { state: 'gone' };
+  return { state: 'ok', id, title: noteHeadline(note['title'], note['body']).title };
 }

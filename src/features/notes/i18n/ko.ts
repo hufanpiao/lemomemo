@@ -57,6 +57,7 @@ export const ko = {
   'notes.merge.go': '합치기', // REVIEW(ko)
   'notes.merge.no': '괜찮아요', // REVIEW(ko)
   'notes.merge.done': '합쳤어요', // REVIEW(ko) R-415
+  'notes.converted': '변환함', // REVIEW(ko) R-415
   'notes.conv.todo': '할 일로 바꾸기', // REVIEW(ko)
   'notes.conv.event': '일정으로 바꾸기', // REVIEW(ko)
   'notes.conv.long': '2000자가 넘어서 바꿀 수 없어요', // REVIEW(ko)
