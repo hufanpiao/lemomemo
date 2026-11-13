@@ -12,7 +12,8 @@ import { dismissMerge, fixCategoryCycles, mergeCategories, openMergePairs, type 
 import { aiMarkKept, formOf, patchOf } from '../data/note-edit.ts';
 import { isLiveCategory } from '../../../../shared/logic/live-row.ts';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
-import { categoryCounts, cycleKeepers, noteItems, type Row } from '../data/note-list.ts';
+import { cycleKeepers } from '../../../core/categories.ts';
+import { categoryCounts, noteItems, type Row } from '../data/note-list.ts';
 import { boot, serverNote, setupImageTests, uid } from './note-images-kit.tsx';
 
 const TZ = 'Asia/Seoul';

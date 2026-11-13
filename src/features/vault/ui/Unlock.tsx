@@ -1,4 +1,4 @@
-// 解锁卡（线框 s9 UNLOCKOV / PWERR；视觉稿 PH.unlock）：磨砂遮罩 + 卡片
+// 解锁（线框 s9 UNLOCKOV / PWERR；视觉稿 PH.unlock）：绑定过 Face ID 时磨砂遮罩 + 解锁卡；输密码是盖满屏幕的整页（同设密码页）
 // • 卡片：“隐私记已上锁 / 里面有 N 条 / 用 Face ID 解锁 / 输入密码 / 取消 / 离开 App 1 分钟后自动重新上锁”
 //   Face ID 按钮只在这台设备能用（exe、不支持的环境不显示）、绑定过、没有“别处改过密码”（relock）时出现（S4、TC-B5-47 ②）
 // • 点“输入密码”换成密码键盘；Face ID 连续两次没认出来自动换成密码键盘（D18），标题下写“Face ID 没认出来，请输入密码”
@@ -97,24 +97,28 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock' }: { o
       : state.lastError && state.lastError !== 'vault_locked' && state.lastError !== 'vault_relock'
         ? errText(state.lastError)
         : '';
+  // 输密码是整页（线框 s9 PWERR：整页浅灰底、白色圆形数字键），和设密码页（SetupPin 的 NewPinSteps）同一套 .pin 排版和 PinPad；
+  // 输错、锁定倒计时写在同一行 .pinErr（04、05）。不再放在白卡片里（卡片底是 --panel，白色圆键在上面看不出是按键）
   return (
-    <div className={`${styles.card} ${styles.pin}`} data-testid={`${testId}-pinview`}>
-      {relock}
-      <LockIcon big />
-      <h2 className={styles.cardTitle}>{t('vault.unlock.enter', {})}</h2>
-      <p className={styles.cardSub}>{sub}</p>
-      <p className={styles.pinErr} role="status" data-testid={`${testId}-err`}>
-        {err}
-      </p>
-      <PinPad onSubmit={(p) => void pin(p)} disabled={busy || locked} testId={`${testId}-pad`} />
-      <div className={styles.pinFoot}>
-        <button type="button" className={styles.link} onClick={onForgot} data-testid={`${testId}-forgot`}>
-          {t('vault.unlock.forgot', {})}
-        </button>
-        <FormButton variant="ghost" onClick={onCancel} data-testid={`${testId}-cancel`}>
-          {t('vault.cancel', {})}
-        </FormButton>
-        <p className={styles.muted}>{t('vault.keys', {})}</p>
+    <div className={styles.pinPage} data-testid={`${testId}-pinview`}>
+      <div className={styles.pin}>
+        {relock}
+        <LockIcon big />
+        <h2 className={styles.pinTitle}>{t('vault.unlock.enter', {})}</h2>
+        <p className={styles.pinSub}>{sub}</p>
+        <p className={styles.pinErr} role="status" data-testid={`${testId}-err`}>
+          {err}
+        </p>
+        <PinPad onSubmit={(p) => void pin(p)} disabled={busy || locked} testId={`${testId}-pad`} />
+        <div className={styles.pinFoot}>
+          <button type="button" className={styles.link} onClick={onForgot} data-testid={`${testId}-forgot`}>
+            {t('vault.unlock.forgot', {})}
+          </button>
+          <FormButton variant="ghost" onClick={onCancel} data-testid={`${testId}-cancel`}>
+            {t('vault.cancel', {})}
+          </FormButton>
+          <p className={styles.muted}>{t('vault.keys', {})}</p>
+        </div>
       </div>
     </div>
   );

@@ -13,7 +13,7 @@ import type { ActionResult } from '../../../core/action-result.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
 import { dismissMerge, mergeAction, mergeCategories, openMergePairs, undoMerge, type MergePair } from '../data/category-merge-store.ts';
-import { categoryRow, type Row } from '../data/note-list.ts';
+import { categoryRow, type Row } from '../../../core/categories.ts';
 
 export interface MergeHint {
   /** 这一对的标识（两个分类 id 排好序，不分方向）：撤销条记着它，撤销条在时这一对不出 */

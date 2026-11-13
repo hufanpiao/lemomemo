@@ -12,8 +12,12 @@ test.skip(!process.env['VITE_PUBLIC_SUPABASE_URL'], '要 /sb 地址，只在快�
 test.setTimeout(90_000);
 
 const PIN = '2580';
+const OLD = '0e2e0000-0000-4000-8000-0000000000a1';
 const SHOTS = process.env['B5_SHOTS'] ?? '';
 const V = '2026-10-29';
+const UID = '0e2e0000-0000-4000-8000-000000000001';
+/** 列表行的分类（线框 s9 PRIVLIST 第二行灰字）：假 REST 的 categories 表放一条活着的分类，首次同步拉进本机库 */
+const CAT = '0e2e0000-0000-4000-8000-0000000000c1';
 
 interface FakeVault {
   calls: { action: string; body: Record<string, unknown> }[];
@@ -24,7 +28,7 @@ interface FakeVault {
 async function fakeServer(page: Page, baseURL: string | undefined): Promise<FakeVault> {
   if (!baseURL) throw new Error('没有 baseURL');
   await seedFakeSession(page.context(), baseURL, { jwt: true });
-  const saved = new Map<string, Map<string, Record<string, unknown>>>([['notes', new Map()], ['settings', new Map()]]);
+  const saved = new Map<string, Map<string, Record<string, unknown>>>([['notes', new Map()], ['settings', new Map()], ['categories', new Map([[CAT, { id: CAT, user_id: UID, name: '健康', color: null, sort: 1, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, created_at: 1, updated_at: 1, rev: 1, synced_at: '2026-10-29T00:00:00.000Z' }]])]]);
   await page.route(/\/sb\/rest\/v1\//, (route) => {
     const req = route.request();
     const u = new URL(req.url());
@@ -39,7 +43,7 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
     }
     if (req.method() !== 'GET') return route.fallback();
     if (table) return route.fulfill({ json: [...table.values()] });
-    if (u.pathname.endsWith('/profiles')) return route.fulfill({ json: [{ user_id: '0e2e0000-0000-4000-8000-000000000001', consent_policy_ver: V }] });
+    if (u.pathname.endsWith('/profiles')) return route.fulfill({ json: [{ user_id: UID, consent_policy_ver: V }] });
     if (u.pathname.endsWith('/app_config') && u.searchParams.get('select') === 'notice') return route.fulfill({ json: [{ notice: { policy_ver: V, min_consent_ver: V } }] });
     return route.fulfill({ json: [] });
   });
@@ -136,10 +140,17 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   await page.getByTestId('vault-edit-title').fill('体检报告');
   await page.getByTestId('vault-edit-body').fill('血压 120/80');
   await shot(page, '07-编辑页', browserName);
+  // 再放一条昨天的、带分类的（线框 s9 PRIVLIST 的行：日期“昨天” | 图标 | 标题和灰字分类 | “⋯”）
+  const day = 86_400_000;
+  fv.notes.set(OLD, { id: OLD, title: '妈妈生日惊喜', body: '订那家蛋糕', category_id: CAT, created_at: Date.now() - day, updated_at: Date.now() - day, deleted_at: null, images: [] });
   await page.getByTestId('vault-edit-save').click();
   await expect.poll(() => fv.calls.filter((c) => c.action === 'save').length).toBe(1);
   await page.getByTestId('vault-edit-back').click();
   await expect(page.getByTestId('vault-list')).toContainText('体检报告');
+  const old = page.getByTestId(`vault-row-${OLD}`);
+  await expect(old).toContainText('昨天');
+  await expect(old).toContainText('健康');
+  await expect(page.getByTestId('vault-list')).not.toContainText('血压 120/80');   // 行里不出正文摘要
   await shot(page, '06-解锁后的列表', browserName);
 
   await page.getByTestId('vault-lock-now').click();

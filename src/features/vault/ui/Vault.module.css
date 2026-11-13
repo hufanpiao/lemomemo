@@ -64,15 +64,7 @@
   text-align: center;
 }
 
-.lst {
-  margin: 0;
-  padding: 2px 14px;
-  border-radius: 22px;
-  background: var(--panel);
-  box-shadow: var(--shadow-1);
-  list-style: none;
-}
-
+/* 列表外框（.lst）、解锁后列表的行和“⋯”菜单用 kit 的 NoteRow.module.css（同随手记列表方式，线框 s9 PRIVLIST）；下面的 .row 只给“最近删除” */
 .row {
   display: flex;
   gap: 10px;
@@ -105,14 +97,6 @@
   overflow: hidden;
   font-size: var(--fs-15);
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rowSub {
-  overflow: hidden;
-  color: var(--text-2);
-  font-size: var(--fs-12-5);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -150,6 +134,21 @@
   align-items: center;
   padding-top: 20px;
   text-align: center;
+}
+
+/* 输密码整页（线框 s9 PWERR，nav:false）：盖满屏幕、页面底色，白色圆形数字键看得出是按键；排版和设密码页同一套 .pin */
+.pinPage {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  padding: max(var(--safe-top), 16px) 16px calc(var(--inset-bottom) + 24px);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.pinPage > .pin {
+  max-width: 560px;
+  margin: 0 auto;
 }
 
 .pinTitle {

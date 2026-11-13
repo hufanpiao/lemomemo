@@ -10,9 +10,12 @@ import { backTo, navigate, useRoute } from '../../../app/router.ts';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
+import row from '../../../kit/components/NoteRow.module.css';
+import { Popover } from '../../../kit/components/Popover.tsx';
 import { useKeys } from '../../../kit/hooks/useKeys.ts';
 import { notesInput } from '../../../kit/state/new-item.ts';
-import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultStatus } from '../hooks/useVault.ts';
+import { Pressable } from '../../../motion/components.ts';
+import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultRowMeta, useVaultStatus } from '../hooks/useVault.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import { LockIcon } from './Pin.tsx';
 import { SetupPin } from './SetupPin.tsx';
@@ -97,32 +100,80 @@ export default function VaultPage() {
   );
 }
 
+/**
+ * 解锁后的列表（线框 s9 PRIVLIST）：和随手记列表方式同一种行（kit 的 NoteRow.module.css）——日期 | 随手记小图标 | 标题（单行省略）和灰字分类 | “⋯”。
+ * 不显示正文摘要；没有标题时取正文第一行当标题（同随手记）。“⋯”（右键同）：移出隐私记 / 删除，和编辑页底部两个按钮同一套动作
+ */
 function VaultList() {
   const t = useVaultT();
-  const { state } = useVault();
+  const { state, s } = useVault();
+  const errText = useErrText();
   const min = useAutolockMin();
+  const { dayOf, catOf } = useVaultRowMeta();
+  const [menu, setMenu] = useState<string | null>(null);
+  const [err, setErr] = useState('');
   const notes = (state.notes ?? []).filter((n) => n.deleted_at === null).sort((a, b) => b.updated_at - a.updated_at);
   const trash = (state.notes ?? []).filter((n) => n.deleted_at !== null).length;
+  const act = (go: () => Promise<{ ok: true } | { ok: false; code: Parameters<typeof errText>[0] }>) => {
+    setMenu(null);
+    setErr('');
+    void go().then((r) => (r.ok ? undefined : setErr(errText(r.code))));
+  };
   return (
     <>
       <p className={styles.hint} data-testid="vault-hint">
         {t('vault.unlockedHint', { n: min })}
       </p>
+      {err ? (
+        <p className={styles.notice} role="alert" data-testid="vault-list-err">
+          {err}
+        </p>
+      ) : null}
       {notes.length === 0 ? (
         <p className={styles.empty} data-testid="vault-empty">
           {t('vault.empty', {})}
         </p>
       ) : (
-        <ul className={styles.lst} data-testid="vault-list">
+        <ul className={row.lst} data-testid="vault-list">
           {notes.map((n) => (
-            <li key={n.id} className={styles.row} data-testid={`vault-row-${n.id}`}>
-              <button type="button" className={styles.rowMain} onClick={() => void navigate('vault', n.id)}>
-                <span className={styles.rowTitle}>{n.title || n.body.split('\n')[0] || t('vault.list.untitled', {})}</span>
-                <span className={styles.rowSub}>
-                  {n.title ? n.body.split('\n')[0] : ''}
-                  {n.images.filter((i) => i.deleted_at === null).length ? ` · ${t('vault.list.images', { n: n.images.filter((i) => i.deleted_at === null).length })}` : ''}
+            <li key={n.id} className={row.lrow} data-testid={`vault-row-${n.id}`}>
+              <button
+                type="button"
+                className={row.lmain}
+                onClick={() => void navigate('vault', n.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu(n.id);
+                }}
+              >
+                <span className={row.rowTime}>{dayOf(n.updated_at)}</span>
+                <span className={row.mn} aria-hidden="true" />
+                <span className={row.ltext}>
+                  <span className={row.t1}>{n.title || n.body.split('\n')[0] || t('vault.list.untitled', {})}</span>
+                  <span className={row.t2}>
+                    <span className={row.t2txt}>{catOf(n.category_id) ?? ''}</span>
+                  </span>
                 </span>
               </button>
+              <Popover
+                open={menu === n.id}
+                onOpenChange={(o) => setMenu(o ? n.id : null)}
+                label={t('vault.menu', {})}
+                align="end"
+                className={row.menu}
+                trigger={
+                  <button type="button" className={row.more} aria-label={t('vault.more', {})} data-testid={`vault-more-${n.id}`}>
+                    ⋯
+                  </button>
+                }
+              >
+                <Pressable className={`${row.menuItem} ${row.menuPlain}`} onClick={() => act(() => s.exportNote(n.id))} data-testid={`vault-out-${n.id}`} data-no-proxy="">
+                  {t('vault.moveOut', {})}
+                </Pressable>
+                <Pressable className={row.menuItem} onClick={() => act(() => s.remove(n.id))} data-testid={`vault-del-${n.id}`} data-no-proxy="">
+                  {t('vault.delete', {})}
+                </Pressable>
+              </Popover>
             </li>
           ))}
         </ul>
@@ -170,7 +221,7 @@ function VaultTrash() {
       {gone.length === 0 ? (
         <p className={styles.empty}>{t('vault.trash.empty', {})}</p>
       ) : (
-        <ul className={styles.lst}>
+        <ul className={row.lst}>
           {gone.map((n) => (
             <li key={n.id} className={styles.row} data-testid={`vault-trash-row-${n.id}`}>
               <span className={styles.rowMain}>

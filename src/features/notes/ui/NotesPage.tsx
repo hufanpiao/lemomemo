@@ -58,6 +58,7 @@ import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
 import { ConvertAsk, MergeBar, MoreMenu, useConvertFlow, type PageTip } from './NotesActions.tsx';
 import { InputRow } from './NotesInputRow.tsx';
 import { SwipeRow } from './NoteSwipe.tsx';
+import row from '../../../kit/components/NoteRow.module.css';
 import styles from './NotesPage.module.css';
 
 /** 分类色点（只在有颜色时画） */
@@ -222,9 +223,9 @@ function NotesList() {
           {l.groups.filter((g) => g.items.some(shown)).map((g) => (
             <AppearItem as="section" key={g.date} className={styles.group} data-testid={`notes-g-${g.date}`}>
               <h2 className={styles.h2}>{g.key === 'today' ? t('notes.g.today', {}) : g.key === 'yesterday' ? t('notes.g.yesterday', {}) : fmtDay(g.date, locale, 'monthDay')}</h2>
-              <AppearList as="ul" className={styles.lst}>
+              <AppearList as="ul" className={row.lst}>
                 {g.items.filter(shown).map((it) => (
-                  <AppearItem key={it.id} className={drawer === it.id ? `${styles.lrow} ${styles.sel}` : styles.lrow} data-testid={`notes-row-${it.id}`}>
+                  <AppearItem key={it.id} className={drawer === it.id ? `${row.lrow} ${styles.sel}` : row.lrow} data-testid={`notes-row-${it.id}`}>
                     {/* 左滑（B5 S7，线框 s7 NOTEROW_SW）：转成待办 / 移到隐私记 / 删除，和“⋯”菜单同一套动作 */}
                     <SwipeRow
                       open={swiped === it.id}
@@ -236,9 +237,9 @@ function NotesList() {
                         { label: t('notes.delete', {}), onClick: () => del(it.id), danger: true, testId: `notes-sw-del-${it.id}` },
                       ]}
                     >
-                      <button type="button" className={styles.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} aria-current={drawer === it.id ? 'true' : undefined}>
-                        <span className={styles.rowTime}>{timeOf(it, false)}</span>
-                        <span className={styles.mn} aria-hidden="true" />
+                      <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} aria-current={drawer === it.id ? 'true' : undefined}>
+                        <span className={row.rowTime}>{timeOf(it, false)}</span>
+                        <span className={row.mn} aria-hidden="true" />
                         <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} />
                         {it.cover ? <ListThumb img={it.cover} /> : null}
                       </button>
@@ -283,13 +284,13 @@ function NotesList() {
 /** 列表行中间的字：标题；摘要 · 分类（+ AI 小标）；只读行再在下面单独一行标“要新版本” */
 function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: ReactNode }) {
   return (
-    <span className={styles.ltext}>
-      <span className={styles.t1}>
+    <span className={row.ltext}>
+      <span className={row.t1}>
         {it.converted ? <ConvMark id={it.id} /> : null}
         {it.title}
       </span>
-      <span className={styles.t2}>
-        <span className={styles.t2txt}>{[it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
+      <span className={row.t2}>
+        <span className={row.t2txt}>{[it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
         {ai}
       </span>
       {ro}

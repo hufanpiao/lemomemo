@@ -42,6 +42,10 @@ export const zh = {
 
   'vault.list.untitled': '没有标题',
   'vault.list.images': '{n} 张图',
+  'vault.list.yesterday': '昨天',
+  'vault.list.md': '{m}/{d}',
+  'vault.more': '更多操作',
+  'vault.menu': '这条隐私记',
   'vault.trash': '最近删除',
   'vault.trash.empty': '最近删除是空的',
   'vault.trash.hint': '只有隐私记自己的内容。永久删除以后不能恢复',

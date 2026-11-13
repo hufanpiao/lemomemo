@@ -77,12 +77,26 @@ async function openUnlocked() {
 describe('解锁、上锁', () => {
   it('锁着：只有解锁卡，没有内容；解锁后列出；TC-B5-11 上锁后 DOM 里不留明文', async () => {
     await openUnlocked();
-    expect(document.body.textContent).toContain(SECRET);
+    // 线框 s9 PRIVLIST：行里只有日期、标题、分类，不出正文摘要
+    expect(screen.getByTestId(`vault-row-${NID}`).textContent).toContain('体检报告');
+    expect(document.body.textContent).not.toContain(SECRET);
     act(() => s.lock());
     await screen.findByTestId('vault-unlock-pinview');
     expect(document.body.textContent).not.toContain(SECRET);
     expect(document.body.textContent).not.toContain('体检报告');
     expect(screen.queryByTestId('vault-list')).toBeNull();
+  });
+
+  it('列表行的“⋯”：移出隐私记、删除，和编辑页底部两个按钮同一套动作', async () => {
+    await openUnlocked();
+    const out = vi.spyOn(s, 'exportNote').mockResolvedValue({ ok: true, value: { ok: true, vault_token: 't', expires_at: 0 } });
+    const del = vi.spyOn(s, 'remove').mockResolvedValue({ ok: true, value: { ok: true, vault_token: 't', expires_at: 0 } });
+    fireEvent.click(screen.getByTestId(`vault-more-${NID}`));
+    fireEvent.click(await screen.findByTestId(`vault-out-${NID}`));
+    expect(out).toHaveBeenCalledWith(NID);
+    fireEvent.click(screen.getByTestId(`vault-more-${NID}`));
+    fireEvent.click(await screen.findByTestId(`vault-del-${NID}`));
+    expect(del).toHaveBeenCalledWith(NID);
   });
 
   it('Ctrl+L 立即上锁', async () => {
