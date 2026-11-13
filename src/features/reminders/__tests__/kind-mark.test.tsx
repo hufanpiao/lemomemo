@@ -10,9 +10,9 @@ const rem = (kind: Reminder['kind'], row: Record<string, unknown>, title = '妈�
 afterEach(cleanup);
 
 describe('KindMark', () => {
-  it('纪念日：圆形头像，没头像时是名字第一个字、生日的颜色', () => {
+  it('纪念日：圆形头像（懒加载 AnnivFace），没头像时是名字第一个字、生日的颜色', async () => {
     render(<KindMark r={rem('anniv', { kind: 'birthday', avatar_id: null })} />);
-    const av = screen.getByTestId('anniv-avatar');
+    const av = await screen.findByTestId('anniv-avatar');
     expect(av.textContent).toBe('妈');
     expect(av.className).toMatch(/p1/);
   });

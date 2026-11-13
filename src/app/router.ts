@@ -125,15 +125,17 @@ export function setSamePage(fn: (a: Route, b: Route) => boolean): void {
 }
 
 /**
- * 从当前地址去 href：同一页（samePageAs，例如纪念日列表 → 盖在上面的编辑层）不起过渡；页签互切淡入；别的整页过渡。
+ * 从 from 换到 to 起哪种过渡：同一页（samePageAs，例如纪念日列表 → 盖在上面的编辑层）不起过渡；页签互切淡入；别的整页过渡。
  * 同一页不起过渡（整块评审第 20 条，原来另有一份 pushInPage）：编辑层自己从底部滑上来，再叠整页淡入淡出是两层动画；
  * 而且编辑层挂上时锁滚动，过渡途中文档从能滚变成不能滚，WebKit 会整页崩（B5 e2e 实测）
  */
-export function animTo(href: string): Anim {
-  const a = parseHash(window.location.hash);
-  const b = parseHash(href);
+function animOf(from: string, to: string): Anim {
+  const a = parseHash(from);
+  const b = parseHash(to);
   return samePage(a, b) ? 'none' : tabSwitch(a, b) ? 'fade' : 'vt';
 }
+/** 从当前地址去 href（navigate、replaceRoute、navigateSub 用；浏览器前进后退的 hashchange 走同一个 animOf） */
+export const animTo = (href: string): Anim => animOf(window.location.hash, href);
 
 // UI-4 第二轮 N-1：iPhone Safari 左边缘侧滑返回时系统自己已经播了返回动画（popstate.hasUAVisualTransition 为 true），
 // 再起 View Transition 会叠一次交叉淡入淡出。浏览器先派 popstate、紧接着派 hashchange：
@@ -161,9 +163,7 @@ function onHashChange(e: Event): void {
   const skip = uaVisualHash !== null && uaVisualHash === now;
   uaVisualHash = null;
   const old = oldHashOf(e);
-  const inPage = old !== null && samePage(parseHash(old), parseHash(now));
-  const tab = old !== null && tabSwitch(parseHash(old), parseHash(now));
-  void commit(undefined, skip || inPage ? 'none' : tab ? 'fade' : 'vt');
+  void commit(undefined, skip ? 'none' : old === null ? 'vt' : animOf(old, now));
 }
 
 function subscribe(cb: () => void): () => void {
