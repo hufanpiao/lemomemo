@@ -197,13 +197,6 @@
   transition: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .settling {
-    transform: none;
-    transition: none;
-  }
-}
-
 .card {
   border-radius: var(--r-md);
   background: var(--panel);

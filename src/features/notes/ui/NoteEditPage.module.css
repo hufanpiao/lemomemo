@@ -42,12 +42,6 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .drawer {
-    animation-name: note-drawer-fade;
-  }
-}
-
 /* 设置里“减少动态效果”（data-rm）：同样只淡入 */
 :global(:root[data-rm="1"]) .drawer {
   animation-name: note-drawer-fade;

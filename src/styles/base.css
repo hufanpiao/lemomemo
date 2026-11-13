@@ -19,10 +19,10 @@ html[data-app] {
   touch-action: pan-x pan-y;
 }
 
-/* 原生控件（日期、时刻、下拉的弹出面板、滚动条）跟 App 主题，不跟手机系统（负责人 11-06 真机截图 6）；跟随系统时两种都给 */
+/* 原生控件（日期、时刻、下拉的弹出面板、滚动条）跟 App 主题，不跟手机系统（负责人 11-06 真机截图 6）。
+   data-theme 只会是 light / dark（跟随系统时 platform/look.ts 按系统算好再写），color-scheme 只在这里定 */
 :root[data-theme='light'] { color-scheme: light; }
 :root[data-theme='dark'] { color-scheme: dark; }
-:root[data-theme='system'] { color-scheme: light dark; }
 
 /* 页面顶部要留的安全区（架构师 10-30 第 7 点）：顶部有版本横幅时（UpdateBanner 在根节点设 data-top-banner）由横幅占安全区，
    页面不再留。页面顶部的 padding 写 var(--safe-top)，不直接写 env(safe-area-inset-top)；要安全区本身（不管有没有横幅）用 var(--inset-top） */
@@ -205,12 +205,6 @@ body::before {
 }
 
 /* 减少透明效果：不模糊，只留底色渐变（实色渐变）；电脑版侧栏（≥ 900px）不加模糊带 */
-@media (prefers-reduced-transparency: reduce) {
-  .lemo-top-8,
-  .lemo-top-2 {
-    display: none;
-  }
-}
 
 :root[data-rt='1'] .lemo-top-8,
 :root[data-rt='1'] .lemo-top-2 {

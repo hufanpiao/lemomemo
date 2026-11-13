@@ -59,14 +59,6 @@
   white-space: nowrap;
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .saved,
-  .bar {
-    background: var(--float-solid);
-    backdrop-filter: none;
-  }
-}
-
 /* 下滑收起的把手：整条宽、够高好按（44px 点击区由按钮行保证，这条只是拖动起点） */
 .grip {
   align-self: center;
@@ -212,11 +204,11 @@
   max-height: calc(60vh - var(--type-lift, 0px));
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .noticeSlot > [data-undo-toast],
-  .noticeSlot > .saved {
-    transition: none;
-  }
+/* 减少透明效果（data-rt：开关打开或系统设置了 reduce，platform/look.ts 写）：实色、不模糊；排在各自的基础规则之后（no-descending-specificity） */
+:global(:root[data-rt='1']) .saved,
+:global(:root[data-rt='1']) .bar {
+  background: var(--float-solid);
+  backdrop-filter: none;
 }
 
 :global(:root[data-rm="1"]) .noticeSlot > [data-undo-toast],

@@ -117,19 +117,14 @@ describe('transition()：减少动态效果时不起 View Transition', () => {
     expect(start).not.toHaveBeenCalled();
   });
 
-  it('系统设置 prefers-reduced-motion: reduce（matchMedia 返回 matches）：直接切换', async () => {
+  it('系统设置了 reduce 但 data-rm 没写：不自己查 matchMedia，照常走 View Transition（系统设置由 look.ts 并进 data-rm）', async () => {
     const start = stubVt();
-    vi.stubGlobal('matchMedia', (q: string) => ({
-      matches: q.includes('prefers-reduced-motion: reduce'),
-      media: q,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }));
+    const mm = vi.fn(() => ({ matches: true, addEventListener: () => undefined, removeEventListener: () => undefined }));
+    vi.stubGlobal('matchMedia', mm);
     try {
-      const update = vi.fn();
-      await transition(update);
-      expect(update).toHaveBeenCalledOnce();
-      expect(start).not.toHaveBeenCalled();
+      await transition(vi.fn());
+      expect(start).toHaveBeenCalledOnce();
+      expect(mm).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
     }

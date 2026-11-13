@@ -181,7 +181,6 @@ describe('横幅手势与引擎（代码审查补漏测）', () => {
     const css = readFileSync('src/features/reminders/ui/Remind.module.css', 'utf8');
     expect(css).toMatch(/\.settling \{\s*transition: transform var\(--dur-ui\) var\(--ease-standard\);/);
     expect(css).toMatch(/:global\(:root\[data-rm="1"\]\) \.settling \{\s*transition: none;/);
-    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.settling \{\s*transition: none;/);
   });
 
   it('横幅右边有“详情 ›”，读屏用 aria-live 播报（设计 M2、代码审查低 3）', async () => {

@@ -114,15 +114,6 @@
 }
 
 /* 减少透明效果：渐隐那一段不要，从“＋”底边起直接是 --bg；上沿外渐隐（.edge）也不要 */
-@media (prefers-reduced-transparency: reduce) {
-  .band {
-    background: linear-gradient(to bottom, transparent var(--band-fade), var(--bg) var(--band-fade));
-  }
-
-  .edge {
-    display: none;
-  }
-}
 
 :global(:root[data-rt='1']) .edge {
   display: none;
@@ -133,16 +124,6 @@
 }
 
 /* 减少动态效果：不放果冻；实色带不淡入 */
-@media (prefers-reduced-motion: reduce) {
-  .jelly {
-    animation: none;
-  }
-
-  .band,
-  .edge {
-    transition: none;
-  }
-}
 
 :global(:root[data-rm='1']) .jelly {
   animation: none;

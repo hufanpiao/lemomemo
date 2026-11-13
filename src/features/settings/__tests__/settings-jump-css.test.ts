@@ -53,14 +53,11 @@ describe('设置 ↔ 注销账号切换时“注销账号”不跳（负责人 1
     expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toContain('.rowBtn');
   });
 
-  it('变淡带过渡（--dur-press、--ease-out）；减少动态效果的两种开关都关掉（权重比 Pressable 的 .pressable 高，得自己关）', () => {
+  it('变淡带过渡（--dur-press、--ease-out）；减少动态效果（data-rm，系统设置由 look.ts 并进来）时关掉（权重比 Pressable 的 .pressable 高，得自己关）', () => {
     expect(block(kit, '.row .rowBtn')).toMatch(/transition: opacity var\(--dur-press\) var\(--ease-out\);/);
-    const media = kit.slice(kit.indexOf('@media (prefers-reduced-motion: reduce) {\n  .row .rowBtn {'));
-    expect(media.startsWith('@media'), '有 prefers-reduced-motion 分支').toBe(true);
-    expect(media.slice(0, media.indexOf('}'))).toMatch(/transition: none;/);
     expect(block(kit, ':global(:root[data-rm="1"]) .row .rowBtn')).toMatch(/transition: none;/);
-    // 两个关掉的分支权重不低于开着的那条（:root[data-rm] 多一个属性和伪类；媒体查询里同权重、写在后面）
-    expect(kit.indexOf('@media (prefers-reduced-motion: reduce) {\n  .row .rowBtn {')).toBeGreaterThan(kit.indexOf('\n.row .rowBtn {'));
+    expect(kit).not.toContain('prefers-reduced');
+    // 关掉的那条权重高于开着的那条（:root[data-rm] 多一个属性和伪类），不靠先后
   });
 
   it('权重盖得过 Pressable 自己的按下规则（不靠 CSS 打包的先后顺序）', () => {

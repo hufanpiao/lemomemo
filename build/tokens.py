@@ -111,8 +111,7 @@ def app_styles(d, toks):
     first = d["themes"][0]
     css = [head, "/* 和皮肤无关的令牌（架构 17.2）：时长、曲线、按下反馈、圆角、字体、字号、点按区域 */",
            ":root{" + ";".join(f'{t["name"]}:{t["values"][first]}' for t in skinless) + "}",
-           '/* 减少动态效果：按下回弹的时长设 0（17.2 第 5 点）；系统设置或设置里的开关（data-rm="1"） */',
-           "@media (prefers-reduced-motion: reduce){:root{--dur-press:0ms}}",
+           '/* 减少动态效果：按下回弹的时长设 0（17.2 第 5 点）；data-rm="1" 由 platform/look.ts 写（设置里的开关或系统设置） */',
            ':root[data-rm="1"]{--dur-press:0ms}']
     out = {APP_STYLES / "tokens.css": "\n".join(css) + "\n"}
     names = {t["name"] for t in skinless}

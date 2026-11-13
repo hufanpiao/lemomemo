@@ -14,6 +14,9 @@ import { defaultExitDeps, exitOnSessionLoss, REAUTH_GRACE_MS, type ExitDeps } fr
 import { hasAuthLoss, readReauth } from '../platform/auth-loss-store.ts';
 import { coldStart, type BootResult } from '../core/boot.ts';
 import { deleteCacheDb } from '../core/cache.ts';
+import { collection } from '../core/store.ts';
+import { waitLook } from './look-wait.ts';
+import type { LookRow } from '../platform/look.ts';
 import { createLogQueue, guardOwner } from '../core/log/queue.ts';
 import { logEvent, setLogSink } from '../../shared/core/log-bus.ts';
 import { devicePlatform, readInstallId, withLock } from '../platform/device-info.ts';
@@ -61,6 +64,10 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
 if (import.meta.env.MODE !== 'production') void import('../platform/diag-boot.ts').then((m) => m.startDiagBoot()).catch(() => undefined);
 // 启动画面最晚 5 秒收起：从入口模块开始执行算起（关口、冷启动、分包加载哪一步卡住都不再盖着）
 hideSplashAfter(hideSplash);
+// 皮肤、深浅色（ADR-008）：入口一开始就懒加载 platform/look.ts（不进首屏），它一加载就按本机缓存套到 <html> 上，再盯住 settings 集合（coldStart 灌好、同步回来都重新套）；
+// 渲染之前最多等它 600 毫秒（下面 createRoot 前，app/look-wait.ts），首屏不先闪一下默认皮肤；超时、加载失败按入口页写的默认皮肤照样渲染。
+// 皮肤、深浅色变化记 look_apply，字体记 font_load（日志总线接上以前的先在内存留着）
+const look = import('../platform/look.ts').then((m) => m.watchLook(collection<LookRow & { id: string }>('settings'), logEvent), () => undefined);
 // 底部安全区（G10）：iOS 主屏幕版冷启动时先 0 后 34，稳定前底栏、“＋”、实色带不显示，稳定了淡入；首屏画完后最多藏 1.5 秒（platform/inset-watch.ts）
 watchInsetBottom();
 // R-371 Gap fix（底栏偏高修复，11-11 起默认开、正式版也做）：只在 iOS 主屏幕版冷启动时下载 platform/vh-gapfix.ts 做一次（判断见 vh-gapfix-gate.ts，
@@ -212,6 +219,7 @@ async function start(): Promise<void> {
   });
   // 最外层兜底（K6-sugg3 ⑥）：App 顶层出错不白屏，显示静态的“出错了 · 刷新”
   const guarded = withCrashFallback(root, reloadPage);
+  await waitLook(look);
   createRoot(el).render(import.meta.env.DEV ? <StrictMode>{guarded}</StrictMode> : guarded);
   // 首屏时限从 render 起算（FA-6 推迟启动审查 L1）：告知页关口最多空白 GATE_LIMIT_MS（5 秒）后一定会画出页面，
   // 时限取它再加 1 秒，关口慢时同步也不会在关口还空白时先起、和告知页分包抢下载；一直不画功能页的整屏提示、
