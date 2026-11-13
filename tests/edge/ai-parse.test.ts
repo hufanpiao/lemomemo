@@ -167,7 +167,9 @@ describe('ai-voice：失败分支写 logs 表（架构审第九节第 2 条）',
     expect(JSON.stringify(fails)).not.toContain('secret');
   });
   it('额度用完：Gemini 429 写 ai_quota；个人额度用完写 quota_out；全站额度标记还没过期写 quota_exhausted；每分钟限流写 rate_limited', async () => {
-    expect((await run({ reply: () => ({ ok: false, reason: 'quota', status: 429 }) })).fails.map((f) => [f.code, f.fields])).toEqual([['ai_quota', ['status=429', 'bytes=<16k']]]);
+    // 额度类型（11-13）：服务商没带类型的按 unknown 记；带了照写
+    expect((await run({ reply: () => ({ ok: false, reason: 'quota', status: 429 }) })).fails.map((f) => [f.code, f.fields])).toEqual([['ai_quota', ['status=429', 'kind=unknown', 'bytes=<16k']]]);
+    expect((await run({ reply: () => ({ ok: false, reason: 'quota', status: 429, quotaKind: 'day', retryMs: 1000 }) })).fails.map((f) => f.fields)).toEqual([['status=429', 'kind=day', 'bytes=<16k']]);
     const out = await run({ config: { per_user_daily: 0 } });
     expect(out.r.body).toEqual({ quota_out: true, quota_left: 0 });
     expect(out.fails.map((f) => f.code)).toEqual(['quota_out']);

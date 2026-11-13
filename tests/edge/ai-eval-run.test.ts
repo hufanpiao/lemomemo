@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { checkDefaultDay, checkParseOutput, checkVoiceOutput, type AiItem } from '../../shared/schema/ai.ts';
-import { makeParseWithAI, type ParseInput } from '../../supabase/functions/_shared/ai/parse-core.ts';
+import { makeParseWithAI, type ParseFail, type ParseInput, type ParseOk } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { PROMPT_VERSION } from '../../supabase/functions/_shared/ai/params.ts';
 import { GeminiProvider } from '../../supabase/functions/_shared/ai/gemini.ts';
 import { loadCassette, type Cassette } from '../ai/replay/cassette.ts';
@@ -147,7 +147,91 @@ describe('评测骨架：逐句调 parseWithAI（回放桩）', () => {
     const provider = new GeminiProvider(REPLAY_MODEL, REPLAY_KEY, rp.fetch);
     const out = await runSet(rows(1), (input) => parseWithAI(input, provider), { rpm: 60, rpd: 100, ...fakeClock() });
     expect(JSON.stringify(out)).not.toContain(REPLAY_KEY);
-    expect(Object.keys(out.results[0] ?? {}).sort()).toEqual(['checked', 'errName', 'group', 'id', 'invalid_reasons', 'issues', 'ms', 'ok', 'raw', 'reason', 'scored', 'set_version', 'status']);
+    expect(Object.keys(out.results[0] ?? {}).sort()).toEqual(['checked', 'errName', 'group', 'id', 'invalid_reasons', 'issues', 'ms', 'ok', 'quotaKind', 'raw', 'reason', 'retryMs', 'scored', 'set_version', 'status']);
+  });
+});
+
+// 11-13 ai-eval #2：第 36 句回 429（每分钟限额），整遍停下、跳过 142 句。分出每分钟 / 每天以后：每分钟的等一会儿重试同一句
+describe('评测骨架：额度用完按类型处理（每分钟等了重试，每天停）', () => {
+  const rows = (n: number) => Array.from({ length: n }, (_, i) => parseSet('zh.jsonl', row({ id: `Z0${i + 1}` }))[0] as EvalRow);
+  const minute = (retryMs: number | null): ParseFail => ({ ok: false, reason: 'quota', status: 429, quotaKind: 'minute', retryMs });
+  const okRes: ParseOk<unknown> = { ok: true, value: { items: [] }, raw: { items: [] }, prompt: 'p' };
+  /** 按顺序回一串结果（用完了一直回最后一个），记下调了几次 */
+  const seq = (...rs: (ParseOk<unknown> | ParseFail)[]) => {
+    let i = 0;
+    const fn = async () => rs[Math.min(i++, rs.length - 1)] as ParseOk<unknown> | ParseFail;
+    return { fn, calls: () => i };
+  };
+
+  it('每分钟限额（真 GeminiProvider + 回放 quota-minute，retryDelay 12s）：等 12 秒重试同一句，成功了接着跑；重试那次算进 calls，diag 每次调用一行', async () => {
+    const rp = replay(cassettes('parse-ok', 'quota-minute', 'parse-ok', 'parse-ok'));
+    const provider = new GeminiProvider(REPLAY_MODEL, REPLAY_KEY, rp.fetch);
+    const c = fakeClock();
+    const out = await runSet(rows(3), (input) => parseWithAI(input, provider), { rpm: 60, rpd: 100, ...c });
+    expect(out.results.map((r) => [r.id, r.reason])).toEqual([['Z01', null], ['Z02', null], ['Z03', null]]);
+    expect([out.stopped, out.skipped, out.calls, rp.calls]).toEqual([null, [], 4, 4]);
+    expect(c.slept).toEqual([1250, 12_000, 1250]);   // 每分钟 48 句即 1.25 秒一句；重试前等 retryDelay
+    expect(out.diag).toEqual([
+      'diag Z01 ok status=- err=- ms=0 kind=- retry=-',
+      'diag Z02 quota status=429 err=- ms=0 kind=minute retry=12000ms',
+      'diag Z02 ok status=- err=- ms=0 kind=- retry=-',
+      'diag Z03 ok status=- err=- ms=0 kind=- retry=-',
+    ]);
+  });
+  it('没给 retryDelay 等 60 秒；给得太长最多等 90 秒', async () => {
+    const a = seq(minute(null), okRes);
+    const ca = fakeClock();
+    await runSet(rows(1), a.fn, { rpm: 60, rpd: 100, ...ca });
+    const b = seq(minute(600_000), okRes);
+    const cb = fakeClock();
+    await runSet(rows(1), b.fn, { rpm: 60, rpd: 100, ...cb });
+    expect([ca.slept, cb.slept, a.calls(), b.calls()]).toEqual([[60_000], [90_000], 2, 2]);
+  });
+  it('同一句最多重试 2 次：3 次都是每分钟限额就整遍停（stopped = quota），剩下的列进 skipped', async () => {
+    const s = seq(minute(5000));
+    const c = fakeClock();
+    const out = await runSet(rows(3), s.fn, { rpm: 60, rpd: 100, ...c });
+    expect([out.results.map((r) => [r.id, r.reason, r.quotaKind, r.retryMs]), out.stopped, out.skipped, out.calls, s.calls()])
+      .toEqual([[['Z01', 'quota', 'minute', 5000]], 'quota', ['Z02', 'Z03'], 3, 3]);
+    expect(c.slept).toEqual([5000, 5000]);
+    expect(out.diag).toHaveLength(3);
+  });
+  it('每天限额（回放 quota-day，谷歌也给了 retryDelay 1s）：不等不重试，整遍停；认不出的（quota）同样停', async () => {
+    for (const name of ['quota-day', 'quota']) {
+      const kind = name === 'quota' ? 'unknown' : 'day';
+      const rp = replay(cassettes('parse-ok', name, 'parse-ok'));
+      const provider = new GeminiProvider(REPLAY_MODEL, REPLAY_KEY, rp.fetch);
+      const c = fakeClock();
+      const out = await runSet(rows(3), (input) => parseWithAI(input, provider), { rpm: 60, rpd: 100, ...c });
+      expect([out.results.map((r) => [r.id, r.reason, r.quotaKind]), out.stopped, out.skipped, out.calls, rp.calls], name)
+        .toEqual([[['Z01', null, null], ['Z02', 'quota', kind]], 'quota', ['Z03'], 2, 2]);
+      expect(c.slept, name).toEqual([1250]);
+      expect(out.diag[1], name).toBe(`diag Z02 quota status=429 err=- ms=0 kind=${kind} retry=${name === 'quota' ? '-' : '1000ms'}`);
+    }
+  });
+  it('重试算进每天 80% 上限：上限 4 句时一句重试过，第 4 句就不调了；重试途中到了上限就停（daily_cap），不再重试', async () => {
+    const a = seq(okRes, minute(1000), okRes, okRes, okRes);
+    const outA = await runSet(rows(4), a.fn, { rpm: 60, rpd: 5, ...fakeClock() });
+    expect([outA.results.map((r) => r.id), outA.skipped, outA.stopped, outA.calls]).toEqual([['Z01', 'Z02', 'Z03'], ['Z04'], 'daily_cap', 4]);
+    const b = seq(minute(1000));
+    const outB = await runSet(rows(2), b.fn, { rpm: 60, rpd: 3, ...fakeClock() });   // 每天 2 句
+    expect([outB.results.map((r) => [r.id, r.reason]), outB.skipped, outB.stopped, outB.calls]).toEqual([[['Z01', 'quota']], ['Z02'], 'daily_cap', 2]);
+  });
+  it('runEval：meta.called 和返回的 called 是实际调用次数（含重试，工作流按它扣每天上限），diag 每次调用一行', async () => {
+    const written: string[] = [];
+    const c = fakeClock();
+    const s = seq(minute(2000), okRes, okRes);
+    const deps: EvalDeps = {
+      getKey: () => 'k-not-real', copyShared: async () => {}, readRows: async () => parseSet('zh.jsonl', [row(), row({ id: 'Z02' })].join('\n')),
+      loadParse: async () => s.fn, liveProvider: (m) => new GeminiProvider(m, 'k', async () => new Response('{}')),
+      replayProvider: () => { throw new Error('不该用回放'); },
+      write: async (_w, name, json) => { written.push(json); return `/x/${name}.json`; },
+      clock: c.clock, sleep: c.sleep, nowIso: () => '2026-11-20T00:00:00.000Z',
+    };
+    const r = await runEval(['--model', 'gemini-3.5-flash-lite', '--rpm', '60', '--rpd', '100', '--date', '2026-11-20'], deps);
+    const rep = JSON.parse(written[0] ?? '{}') as { meta: { called: number; total: number }; results: unknown[] };
+    expect([r.called, rep.meta.called, rep.meta.total, rep.results.length, r.diag.length]).toEqual([3, 3, 2, 2, 3]);
+    expect(Object.keys(rep).sort()).toEqual(['meta', 'results', 'skipped', 'stopped']);
   });
 });
 
@@ -184,16 +268,22 @@ describe('评测骨架：主流程 runEval 的顺序（代码审 M1、S1、S6）
     const f = fakeDeps({ key: 'k-not-real' });
     const r = await runEval(LIVE, f.deps);
     expect(r.diag).toHaveLength(r.called);
-    for (const line of r.diag) expect(line).toMatch(/^diag [A-Z]\d+ (ok|quota|timeout|invalid|error) status=(\d+|-) err=\S+ ms=\d+$/);
+    for (const line of r.diag) expect(line).toMatch(/^diag [A-Z]\d+ (ok|quota|timeout|invalid|error) status=(\d+|-) err=\S+ ms=\d+ kind=(-|day|minute|unknown) retry=(-|\d+ms)$/);
     expect(r.diag.join(' ')).not.toContain('k-not-real');
   });
   it('diagLines：失败句带上状态码和错误名', () => {
-    const base = { set_version: 'v', group: 'zh', scored: 'main' as const, raw: null, checked: null, invalid_reasons: null, issues: null };
+    const base = { set_version: 'v', group: 'zh', scored: 'main' as const, raw: null, checked: null, invalid_reasons: null, issues: null, quotaKind: null, retryMs: null };
     expect(diagLines([
       { ...base, id: 'Z01', ok: true, reason: null, status: null, errName: null, ms: 812 },
       { ...base, id: 'K02', ok: false, reason: 'timeout', status: null, errName: 'TimeoutError', ms: 5003 },
       { ...base, id: 'M03', ok: false, reason: 'error', status: 503, errName: null, ms: 640 },
-    ])).toEqual(['diag Z01 ok status=- err=- ms=812', 'diag K02 timeout status=- err=TimeoutError ms=5003', 'diag M03 error status=503 err=- ms=640']);
+      { ...base, id: 'K36', ok: false, reason: 'quota', status: 429, errName: null, ms: 135, quotaKind: 'minute', retryMs: 12_000 },
+      { ...base, id: 'K37', ok: false, reason: 'quota', status: 429, errName: null, ms: 140, quotaKind: 'unknown' },
+    ])).toEqual([
+      'diag Z01 ok status=- err=- ms=812 kind=- retry=-', 'diag K02 timeout status=- err=TimeoutError ms=5003 kind=- retry=-',
+      'diag M03 error status=503 err=- ms=640 kind=- retry=-', 'diag K36 quota status=429 err=- ms=135 kind=minute retry=12000ms',
+      'diag K37 quota status=429 err=- ms=140 kind=unknown retry=-',
+    ]);
   });
 
   it('模型名不合法、参数写重：什么都不做，一次都不调（M1）', async () => {

@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { AI_PROJECT_LEN, AI_PROJECTS_MAX, AI_TEXT_MAX, checkDefaultDay, checkParseOutput, checkVoiceOutput, INVALID_REASONS, type AiItem, type InvalidReason } from '../../shared/schema/ai.ts';
 import { AI_KINDS, type AiKind } from '../../shared/schema/kinds.ts';
-import { GEMINI_BASE, GeminiProvider, geminiBody, toBase64 } from '../../supabase/functions/_shared/ai/gemini.ts';
+import { GEMINI_BASE, GeminiProvider, geminiBody, quotaInfo, retryDelayMs, toBase64 } from '../../supabase/functions/_shared/ai/gemini.ts';
 import { GEN_PARAMS, PARSE_TIMEOUT_MS, PROMPT_VERSION, TASK_PARAMS, VOICE_PROBE_PARAMS, VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
 import { cleanProjects, fillPrompt, makeParseWithAI, PROJECT_LEN, PROJECTS_MAX, responseSchema, sanitize, TEXT_MAX, wallOf, type AiKindLike, type InvalidReasonLike, type ParseInput } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { PARSE_V3 } from '../../supabase/functions/_shared/ai/prompts/parse.v3.ts';
@@ -136,11 +136,67 @@ describe('Gemini 适配（TC-B3-24）', () => {
   });
   it('429 RESOURCE_EXHAUSTED 当 quota；别的 429、500、不是 JSON、没有候选都当 error；只带状态码', async () => {
     const at = (res: Response) => new GeminiProvider('m', 'k', async () => res).generate(req);
-    expect(await at(new Response(JSON.stringify({ error: { status: 'RESOURCE_EXHAUSTED' } }), { status: 429 }))).toEqual({ ok: false, reason: 'quota', status: 429 });
+    expect(await at(new Response(JSON.stringify({ error: { status: 'RESOURCE_EXHAUSTED' } }), { status: 429 }))).toEqual({ ok: false, reason: 'quota', status: 429, quotaKind: 'unknown', retryMs: null });
     expect(await at(new Response('{}', { status: 429 }))).toEqual({ ok: false, reason: 'error', status: 429 });
     expect(await at(new Response('boom', { status: 500 }))).toEqual({ ok: false, reason: 'error', status: 500 });
     expect(await at(geminiOk('not json'))).toEqual({ ok: false, reason: 'error', status: 200 });
     expect(await at(new Response(JSON.stringify({ candidates: [] }), { status: 200 }))).toEqual({ ok: false, reason: 'error', status: 200 });
+  });
+  // 11-13 ai-eval #2：429 分不出每分钟、每天，一次短时撞限就停一整天。结构照 google.rpc 标准错误详情（googleapis error_details.proto）
+  describe('429 回复体分出额度类型（QuotaFailure.violations[].quotaId、RetryInfo.retryDelay）', () => {
+    const QF = 'type.googleapis.com/google.rpc.QuotaFailure';
+    const RI = 'type.googleapis.com/google.rpc.RetryInfo';
+    const body = (ids: unknown[], delay?: unknown, extra: unknown[] = []) => ({
+      error: {
+        code: 429, status: 'RESOURCE_EXHAUSTED', message: 'You exceeded your current quota 秘密原文',
+        details: [{ '@type': QF, violations: ids.map((quotaId) => ({ quotaMetric: 'generativelanguage.googleapis.com/x', quotaId })) },
+          ...(delay === undefined ? [] : [{ '@type': RI, retryDelay: delay }]), ...extra],
+      },
+    });
+    it('quotaId 带 PerDay 是 day（每天用完时 retryDelay 照样读出来，但调用方不看）；全部带 PerMinute 是 minute', () => {
+      expect(quotaInfo(body(['GenerateRequestsPerDayPerProjectPerModel-FreeTier'], '1s'))).toEqual({ quotaKind: 'day', retryMs: 1000 });
+      expect(quotaInfo(body(['GenerateRequestsPerMinutePerProjectPerModel-FreeTier'], '12s'))).toEqual({ quotaKind: 'minute', retryMs: 12_000 });
+      expect(quotaInfo(body(['GenerateContentInputTokensPerModelPerMinute-FreeTier', 'GenerateRequestsPerMinutePerProjectPerModel']))).toEqual({ quotaKind: 'minute', retryMs: null });
+      // 每分钟和每天一起撞了：按 day
+      expect(quotaInfo(body(['GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'GenerateRequestsPerDayPerProjectPerModel-FreeTier'], '30s'))?.quotaKind).toBe('day');
+    });
+    it('认不出一律 unknown：没有 details、没有 QuotaFailure、quotaId 不是字符串、混着别的限额名、PerDays 这类不是整词', () => {
+      for (const b of [
+        { error: { status: 'RESOURCE_EXHAUSTED' } },
+        { error: { status: 'RESOURCE_EXHAUSTED', details: [{ '@type': RI, retryDelay: '5s' }] } },
+        { error: { status: 'RESOURCE_EXHAUSTED', details: 'x' } },
+        body([]), body([123]), body([null]),
+        body(['GenerateRequestsPerMinutePerProjectPerModel', 'SomethingPerHour']),
+        body(['GenerateRequestsPerMinutePerProjectPerModel', 42]),
+        body(['perminute', 'PERDAY', 'RequestsPerDays']),
+      ]) expect(quotaInfo(b)?.quotaKind, JSON.stringify(b)).toBe('unknown');
+      expect(quotaInfo({ error: { status: 'RESOURCE_EXHAUSTED', details: [{ '@type': RI, retryDelay: '5s' }] } })).toEqual({ quotaKind: 'unknown', retryMs: 5000 });
+    });
+    it('不是 RESOURCE_EXHAUSTED、不是对象：null（当 error）', () => {
+      for (const b of [null, 'x', [], {}, { error: null }, { error: { status: 'UNAVAILABLE' } }, { error: [] }]) expect(quotaInfo(b)).toBeNull();
+    });
+    it('retryDelay：google.protobuf.Duration 的 JSON 写法（秒 + 最多 9 位小数 + s），小数向上取整到毫秒；别的写法 null', () => {
+      expect([retryDelayMs('12s'), retryDelayMs('0s'), retryDelayMs('0.5s'), retryDelayMs('1.000340012s'), retryDelayMs('34.9s'), retryDelayMs('0.0001s')])
+        .toEqual([12_000, 0, 500, 1001, 34_900, 1]);
+      for (const v of ['12', '-1s', '1.5ms', ' 12s', '12s ', '1.s', '.5s', '1e3s', '1.0000000001s', '1234567890s', 12, null, undefined, { seconds: 12 }, '']) expect(retryDelayMs(v), String(v)).toBeNull();
+    });
+    it('经 GeminiProvider：429 只带出 quotaKind、retryMs 和状态码，不带回复原文；回复体不是 JSON 当 error', async () => {
+      const at = (res: Response) => new GeminiProvider('m', 'k', async () => res).generate(req);
+      const r = await at(new Response(JSON.stringify(body(['GenerateRequestsPerMinutePerProjectPerModel-FreeTier'], '12s')), { status: 429 }));
+      expect(r).toEqual({ ok: false, reason: 'quota', status: 429, quotaKind: 'minute', retryMs: 12_000 });
+      expect(JSON.stringify(r)).not.toContain('秘密原文');
+      expect(JSON.stringify(r)).not.toContain('FreeTier');
+      expect(await at(new Response(JSON.stringify(body(['GenerateRequestsPerDayPerProjectPerModel-FreeTier'], '1s')), { status: 429 })))
+        .toEqual({ ok: false, reason: 'quota', status: 429, quotaKind: 'day', retryMs: 1000 });
+      expect(await at(new Response('<html>Too Many Requests</html>', { status: 429 }))).toEqual({ ok: false, reason: 'error', status: 429 });
+      // 别的状态码带着 RESOURCE_EXHAUSTED 也不当 quota（只认 429）
+      expect(await at(new Response(JSON.stringify(body(['GenerateRequestsPerMinutePerProjectPerModel'], '1s')), { status: 503 }))).toEqual({ ok: false, reason: 'error', status: 503 });
+    });
+    it('parseWithAI、voiceWithAI 把 quotaKind、retryMs 原样传给调用方', async () => {
+      const q = { ok: false as const, reason: 'quota' as const, status: 429, quotaKind: 'minute' as const, retryMs: 7000 };
+      expect(await parseWithAI(input(), new StubProvider(() => q))).toEqual(q);
+      expect(await voiceWithAI({ ...input(), audio: new Uint8Array([1]), mime: 'audio/webm' }, new StubProvider(() => q))).toEqual(q);
+    });
   });
   it('到点中止当 timeout，不重试；网络错当 error', async () => {
     let calls = 0;

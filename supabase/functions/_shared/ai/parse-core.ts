@@ -6,7 +6,7 @@
 import { PROMPT_VERSION, TASK_PARAMS, PARSE_TIMEOUT_MS, VOICE_TIMEOUT_MS } from './params.ts';
 import { DEFAULT_DAY_RULE, PARSE_V3 } from './prompts/parse.v3.ts';
 import { VOICE_V3 } from './prompts/voice.v3.ts';
-import type { AIProvider } from './provider.ts';
+import type { AIProvider, AiResult, QuotaKind } from './provider.ts';
 import { generateRetry503 } from './retry.ts';
 
 export type AiKindLike = 'event' | 'todo' | 'note' | 'anniv';
@@ -47,7 +47,11 @@ export interface VoiceInput extends Omit<ParseInput, 'text'> {
 export type FailReason = 'quota' | 'timeout' | 'invalid' | 'error';
 /** status：服务商的 HTTP 状态码；errName：异常类型名（只给日志用，ai-voice 写 logs，架构审第九节第 2 条） */
 /** badDefaultDay：传进来的默认日子没过校验，已按没传处理（R10 兜底；调用方记错误码 bad_default_day） */
-export type ParseFail = { ok: false; reason: FailReason; raw?: unknown; invalid_reasons?: InvalidReasonLike[]; issues?: unknown[]; status?: number; errName?: string; badDefaultDay?: true; retried?: true };
+/** quotaKind、retryMs：额度用完时撞的是哪种、服务商建议等多久（provider.ts；调用方据此写 exhausted_until、评测决定等还是停） */
+export type ParseFail = {
+  ok: false; reason: FailReason; raw?: unknown; invalid_reasons?: InvalidReasonLike[]; issues?: unknown[]; status?: number; errName?: string;
+  badDefaultDay?: true; retried?: true; quotaKind?: QuotaKind; retryMs?: number | null;
+};
 /** retried：录音第一次回 503、服务器端重试过（只有 voiceWithAI 会带；ai-voice 记日志和计数用） */
 export type ParseOk<T> = { ok: true; value: T; raw: unknown; prompt: string; badDefaultDay?: true; retried?: true };
 
@@ -151,8 +155,11 @@ function dataParts(text: string, projects: readonly string[]): string {
   return `<projects>${JSON.stringify(cleanProjects(projects))}</projects>\n<data>${sanitize(text)}</data>`;
 }
 
-function failOf(r: { ok: false; reason: 'quota' | 'timeout' | 'error'; status?: number; errName?: string }): ParseFail {
-  return { ok: false, reason: r.reason, ...(r.status !== undefined ? { status: r.status } : {}), ...(r.errName !== undefined ? { errName: r.errName } : {}) };
+function failOf(r: Extract<AiResult, { ok: false }>): ParseFail {
+  return {
+    ok: false, reason: r.reason, ...(r.status !== undefined ? { status: r.status } : {}), ...(r.errName !== undefined ? { errName: r.errName } : {}),
+    ...(r.quotaKind !== undefined ? { quotaKind: r.quotaKind } : {}), ...(r.retryMs !== undefined ? { retryMs: r.retryMs } : {}),
+  };
 }
 
 export function makeParseWithAI<Item>(checkers: Checkers<Item>) {

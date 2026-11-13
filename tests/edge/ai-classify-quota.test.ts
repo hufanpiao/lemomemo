@@ -1,7 +1,7 @@
 // ai-classify 的额度、重试和公平取数（TC-B4-06；代码审查 11-10 必改 1、2）。替身见 ai-classify-fakes.ts。
 import { describe, expect, it } from 'vitest';
 import { BATCH_PER_USER, handle, SCAN_USERS } from '../../supabase/functions/ai-classify/core.ts';
-import { globalQuotaKey, userQuotaKey } from '../../supabase/functions/_shared/ai/gate.ts';
+import { globalQuotaKey, nextPacificMidnight, userQuotaKey } from '../../supabase/functions/_shared/ai/gate.ts';
 import { MAX_TRIES } from '../../supabase/functions/ai-classify/write.ts';
 import { SECRET, NOW, A, B, note, cat, setup } from './ai-classify-fakes.ts';
 
@@ -16,6 +16,20 @@ describe('ai-classify：额度（TC-B4-06）', () => {
     expect([notes[0]?.ai_status, notes[0]?.category_id, notes[0]?.ai_meta]).toEqual(['rule', 'c', { prompt: 'classify.v2', tries: 0, retry: 'quota' }]);   // 额度用完不计次数
     expect(notes[1]?.ai_status).toBe('pending');
     expect((await r.json()).quota_hit).toBe(true);
+  });
+  // 11-13 ai-eval #2：每分钟限额撞一下就停一整天。回放 quota-minute（retryDelay 12s）、quota-day
+  it('每分钟限额：exhausted_until 只写到 12 秒后（不是太平洋午夜），这一轮后面的人照样不送；日志带 kind=minute', async () => {
+    const notes = [note('a1', A, '超市'), note('b1', B, '机票')];
+    const s = setup({ notes, cats: [cat('c', A, '购物')], cassettes: ['quota-minute'] });
+    const r = await s.call();
+    expect([s.rp.calls, s.quota.refunds.length, s.exhausted, s.logs]).toEqual([1, 2, NOW + 12_000, ['ai_quota kind=minute']]);
+    expect([notes[0]?.ai_meta, notes[1]?.ai_status]).toEqual([{ prompt: 'classify.v2', tries: 0, retry: 'quota' }, 'pending']);
+    expect((await r.json()).quota_hit).toBe(true);
+  });
+  it('每天限额（谷歌也给了 retryDelay 1s）：照旧写太平洋下一个午夜，日志带 kind=day', async () => {
+    const s = setup({ notes: [note('a1', A, '超市')], cassettes: ['quota-day'] });
+    await s.call();
+    expect([s.exhausted, s.logs]).toEqual([nextPacificMidnight(NOW), ['ai_quota kind=day']]);
   });
   it('额度没恢复：不重排、不送；恢复以后的第一轮把 retry 的重新排队再送', async () => {
     const notes = [note('a1', A, '超市', { ai_status: 'rule', ai_meta: { tries: 1, retry: 'quota' } })];

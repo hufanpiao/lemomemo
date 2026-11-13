@@ -7,11 +7,11 @@
 // X-Projects：UTF-8 JSON 再 base64url，≤ 4 KB；超了截到 4 KB、按项截断（留下完整的几项），本来就解不开的当没给（不拒收）。
 // 音频只在内存里：不写 Storage、不写日志、不 console.*（5.11 第 3 点、A23）。转交 Gemini 时 mimeType 用去掉参数以后的类型。
 // 失败分支写 logs 表（架构审第九节第 2 条）：Gemini 拒收、超时、额度用完、计数出错各写一行 kind 'ai'、act 'voice_fail'、src 'ai-voice'，
-//   code 是固定错误码，fields 只有 status=HTTP 状态、type=异常类型名、retried=1（503 重试过）、bytes=音频字节数区间；不写转写、正文、请求头。写失败不影响回答。
+//   code 是固定错误码，fields 只有 status=HTTP 状态、type=异常类型名、kind=额度类型（day|minute|unknown，只在 ai_quota）、retried=1（503 重试过）、bytes=音频字节数区间；不写转写、正文、请求头。写失败不影响回答。
 // 503 重试后成功的，counters 记 voice-retry:global:<太平洋日期> 加一（经 take_rate，上限给得很大、只当计数用；写失败不影响回答）。
 // scope = vault：隐私记页面经“＋”记下在 B4b-3 才有（届时换成 verifyVaultToken + ai.vault），B3 回 {fallback, vault_ai_off}、不调 Gemini、不扣次数。
 import { aiGate, pacificDate, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
-import { errNameOf, type AIProvider } from '../_shared/ai/provider.ts';
+import { aiFailCode, errNameOf, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, ParseFail, ParseOk, VoiceInput } from '../_shared/ai/parse-core.ts';
 import { b64uDecode } from '../_shared/b64url.ts';
 import { readCapped } from '../_shared/body.ts';
@@ -156,10 +156,11 @@ export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Resp
   }
   if (r.badDefaultDay) d.log('bad_default_day');   // R10 兜底：入口已 400，到这里说明入口漏校验
   if (!r.ok) {
-    d.log(`ai_${r.reason}`);
+    d.log(aiFailCode(r));
     await logFail(`ai_${r.reason}`, [
       ...(r.status !== undefined ? [`status=${r.status}`] : []),
       ...(r.errName !== undefined ? [`type=${r.errName}`] : []),
+      ...(r.reason === 'quota' ? [`kind=${r.quotaKind ?? 'unknown'}`] : []),
       ...(r.retried ? ['retried=1'] : []),
     ]);
     const before = codes.length;

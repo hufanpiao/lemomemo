@@ -4,10 +4,11 @@
 // • 文字和 inlineData 音频（base64）两种内容；生成参数、responseMimeType、responseSchema 由调用方给（params.ts 一处）；
 // • 超时经 _shared/net.ts 的 timedFetch（读正文也算在内），到点中止、不重试；
 // • 429 且 status 是 RESOURCE_EXHAUSTED 当 quota（调用方写 ai_state.exhausted_until）；其他错误、返回不是 JSON、被拦下当 error；
+//   quota 时另读回复体 error.details[]（google.rpc 标准错误详情，见 quotaInfo）分出每天 / 每分钟，只带出固定词和毫秒数；
 // • 不打印请求体、返回正文和密钥（15.3 第 6 条、A23）；出错只回 HTTP 状态码。
 // fetch 注入：单测和回放桩（BE-6）传假的，函数传全局 fetch。
 import { timedFetch } from '../net.ts';
-import { errNameOf, type AiPart, type AiRequest, type AiResult, type AIProvider } from './provider.ts';
+import { errNameOf, type AiPart, type AiRequest, type AiResult, type AIProvider, type QuotaKind } from './provider.ts';
 
 export const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 /** 模型名只许字母数字和 . _ -（防拼进路径） */
@@ -52,12 +53,56 @@ function textOf(body: unknown): string | null {
   return t === '' ? null : t;
 }
 
-async function isExhausted(res: Response): Promise<boolean> {
+// 429 回复体（google.rpc.Status 的 JSON；googleapis 的 google/rpc/error_details.proto）：
+//   { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message, details: [
+//       { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaMetric, quotaId, quotaDimensions, quotaValue }] },
+//       { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '12s' } ] } }
+// quotaId 是谷歌固定的限额名，如 GenerateRequestsPerDayPerProjectPerModel-FreeTier、GenerateRequestsPerMinutePerProjectPerModel-FreeTier、
+// GenerateContentInputTokensPerModelPerMinute-FreeTier。只认里面的 PerDay / PerMinute 两个词，原文不带出去。
+// 每天限额用完时 RetryInfo 也可能给一个很短的数（论坛实例：PerDay 配 retryDelay "1s"），所以 day 不看 retryDelay。
+const QUOTA_FAILURE = 'type.googleapis.com/google.rpc.QuotaFailure';
+const RETRY_INFO = 'type.googleapis.com/google.rpc.RetryInfo';
+const PER_DAY = /PerDay(?![a-z])/;
+const PER_MINUTE = /PerMinute(?![a-z])/;
+/** google.protobuf.Duration 的 JSON 写法：秒数 + 可选小数（最多 9 位）+ s，如 "12s"、"0.5s"、"1.000340012s"；不认负数和别的写法 */
+const DURATION = /^(\d{1,9})(?:\.(\d{1,9}))?s$/;
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** retryDelay → 毫秒（小数部分向上取整：文档说“至少等这么久”）；不合法 null */
+export function retryDelayMs(v: unknown): number | null {
+  if (typeof v !== 'string') return null;
+  const m = DURATION.exec(v);
+  if (!m) return null;
+  const nanos = Number((m[2] ?? '').padEnd(9, '0'));
+  return Number(m[1]) * 1000 + Math.ceil(nanos / 1_000_000);
+}
+
+/**
+ * 429 回复体 → 额度类型和建议等待；不是 RESOURCE_EXHAUSTED 回 null（当 error）。
+ * 有一条 quotaId 带 PerDay 就是 day；全部带 PerMinute 才是 minute；没有 QuotaFailure、认不出、混着别的一律 unknown（调用方按 day）。
+ */
+export function quotaInfo(body: unknown): { quotaKind: QuotaKind; retryMs: number | null } | null {
+  const err = isObj(body) ? body['error'] : null;
+  if (!isObj(err) || err['status'] !== 'RESOURCE_EXHAUSTED') return null;
+  const details = Array.isArray(err['details']) ? err['details'].filter(isObj) : [];
+  const ids = details
+    .filter((d) => d['@type'] === QUOTA_FAILURE)
+    .flatMap((d) => (Array.isArray(d['violations']) ? d['violations'] : []))
+    .map((v) => (isObj(v) ? v['quotaId'] : null));
+  const strs = ids.filter((x): x is string => typeof x === 'string');
+  const quotaKind: QuotaKind = strs.some((x) => PER_DAY.test(x))
+    ? 'day'
+    : ids.length > 0 && strs.length === ids.length && strs.every((x) => PER_MINUTE.test(x)) ? 'minute' : 'unknown';
+  const retry = details.find((d) => d['@type'] === RETRY_INFO);
+  return { quotaKind, retryMs: retry ? retryDelayMs(retry['retryDelay']) : null };
+}
+
+async function quotaOf(res: Response): Promise<{ quotaKind: QuotaKind; retryMs: number | null } | null> {
   try {
-    const b = (await res.json()) as { error?: { status?: unknown } } | null;
-    return b?.error?.status === 'RESOURCE_EXHAUSTED';
+    return quotaInfo(await res.json());
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -82,9 +127,9 @@ export class GeminiProvider implements AIProvider {
         body: JSON.stringify(geminiBody(req)),
       });
       if (!res.ok) {
-        const quota = res.status === 429 && (await isExhausted(res));
+        const quota = res.status === 429 ? await quotaOf(res) : null;
         if (!quota) await res.body?.cancel().catch(() => {});
-        return { ok: false, reason: quota ? 'quota' : 'error', status: res.status };
+        return quota ? { ok: false, reason: 'quota', status: res.status, ...quota } : { ok: false, reason: 'error', status: res.status };
       }
       const text = textOf(await res.json());
       if (text === null) return { ok: false, reason: 'error', status: res.status };

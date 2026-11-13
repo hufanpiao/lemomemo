@@ -18,14 +18,25 @@ export interface AiRequest {
 }
 
 /**
+ * 撞的是哪种额度（11-13 ai-eval #2：每 5 秒一句撞了每分钟限额，被当成“当天用完”整遍停下）：
+ * day：每天的（太平洋午夜重置）；minute：每分钟的（等 retryDelay 就好）；unknown：回复体里认不出，调用方按 day 保守处理。
+ */
+export type QuotaKind = 'day' | 'minute' | 'unknown';
+
+/**
  * ok：拿到了 JSON（json 是解析后的值，raw 是模型原样返回的文字，评测两份都存）；
  * quota：服务商说额度用完（Gemini 429 RESOURCE_EXHAUSTED），调用方写 ai_state.exhausted_until；
+ *   quotaKind、retryMs（服务商建议的重试等待，毫秒，没有或不合法为 null）只在 quota 时带，只是固定词和数字；
  * timeout：到点中止；error：其他一切（HTTP 错、返回不是 JSON、被安全过滤拦下等）。
  * 失败时只带 HTTP 状态码（不带服务商返回的正文，15.3 第 6 条）。
  */
 export type AiResult =
   | { ok: true; json: unknown; raw: string }
-  | { ok: false; reason: 'quota' | 'timeout' | 'error'; status?: number; errName?: string };
+  | { ok: false; reason: 'quota' | 'timeout' | 'error'; status?: number; errName?: string; quotaKind?: QuotaKind; retryMs?: number | null };
+
+/** 失败的日志码：ai_<原因>；额度用完另带 kind=day|minute|unknown（固定词，不带服务商原文）。ai-parse、ai-voice、ai-classify、claude-intake 共用 */
+export const aiFailCode = (r: { reason: string; quotaKind?: QuotaKind | undefined }): string =>
+  r.reason === 'quota' ? `ai_quota kind=${r.quotaKind ?? 'unknown'}` : `ai_${r.reason}`;
 
 /** 异常的类型名（TypeError、AbortError…）：只认 1～40 个英文字母，别的一律 'unknown'（不带 message，免得把正文带进日志） */
 export const errNameOf = (e: unknown): string => {

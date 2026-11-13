@@ -128,7 +128,8 @@ jobs:
             echo "第一遍没有答错的句子，不补跑"
             exit 0
           fi
-          echo "第一遍答错 $(printf '%s' "$wrong" | tr ',' '\n' | wc -l) 句，补跑 3 次"
+          # 数句数：printf 末尾补一个换行，wc -l 才不会少数最后一句（11-13 ai-eval #2 日志里少报了 1 句）
+          echo "第一遍答错 $(printf '%s\n' "$wrong" | tr ',' '\n' | wc -l) 句，补跑 3 次"
           # 每天上限 80% 里扣掉已经调过的句数：剩下 left 句，传给 run.ts 的 rpd 取 ceil(left / 0.8)，它再乘 0.8 正好不超过 left
           cap=$(( EVAL_RPD * 8 / 10 ))
           # 两次 run.ts 之间隔一个调用间隔：run.ts 只在一次运行内部限速，新一次的第一句会紧跟上一次的最后一句。

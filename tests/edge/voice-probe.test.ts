@@ -270,6 +270,23 @@ describe('voice-probe：调 Gemini 和返回（Q1 ⑤⑥）', () => {
     }
   });
 
+  it('额度用完的日志码带类型（11-13）：gemini_quota_minute / _day / _unknown，不带谷歌原文', async () => {
+    const qf = (quotaId: string) => ({ error: { status: 'RESOURCE_EXHAUSTED', message: 'exceeded 原文', details: [
+      { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId }] },
+      { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '12s' }] } });
+    const cases: [Fetch, string][] = [
+      [async () => gem(qf('GenerateRequestsPerMinutePerProjectPerModel-FreeTier'), 429), 'gemini_quota_minute'],
+      [async () => gem(qf('GenerateRequestsPerDayPerProjectPerModel-FreeTier'), 429), 'gemini_quota_day'],
+      [async () => gem({ error: { status: 'RESOURCE_EXHAUSTED' } }, 429), 'gemini_quota_unknown'],
+    ];
+    for (const [reply, code] of cases) {
+      const s = setup({ reply });
+      const r = await call(await handle(req(), s.deps));
+      expect([r.body['result'], s.logs.map((e) => e.code)]).toEqual(['quota', [code]]);
+      expect(JSON.stringify([r.body, s.logs])).not.toMatch(/FreeTier|原文/);
+    }
+  });
+
   it('超时：15 秒中止，result = timeout', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const hang: Fetch = (_u, init) => new Promise((_, rej) => init.signal?.addEventListener('abort', () => rej(Object.assign(new Error('x'), { name: 'AbortError' }))));

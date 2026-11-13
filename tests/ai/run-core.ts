@@ -4,12 +4,13 @@
 // • 读句库：一行一句，只校验调用要用的字段，报错带文件名和行号；id 跨文件不许重复。
 // • 固定入参照句库 1.2 / 2.5 写成常量：PROJECTS、FEATURES；now、tz、locale 原样传给 parseWithAI。
 // • 速度：按 AI Studio 额度截图上每分钟、每天上限的 80% 放慢；超过每天 80% 的句子不调，列进 skipped。
+//   撞了每分钟限额（429 的 quotaId 带 PerMinute）等一会儿重试同一句，撞了每天的（或认不出）整遍停（runSet）。
 // • 每句落盘两份结果：raw（模型原始输出）和 checked（校验后结果），加失败原因。只做骨架：不评分（评分归 score.ts）。
 // • --only <id,id,...>：只跑指定的句子（S19“不比上一次差”的补跑）。id 句库里没有就报错退出，不静默跳过；
 //   结果另起名字 only-<报告名>-<时刻>，不覆盖第一遍、也不被工作流的 set1-*.json 当成第一遍。
 import type { AiKindLike, ParseFail, ParseInput, ParseOk } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { PROMPT_VERSION, TASK_PARAMS } from '../../supabase/functions/_shared/ai/params.ts';
-import type { AIProvider } from '../../supabase/functions/_shared/ai/provider.ts';
+import type { AIProvider, QuotaKind } from '../../supabase/functions/_shared/ai/provider.ts';
 
 /** 句库 2.5：所有句子相同的固定入参（1.2） */
 export const PROJECTS: readonly string[] = Object.freeze(['SignPlex', 'NEOX', '官网改版', '이사 준비']);
@@ -163,6 +164,9 @@ export interface EvalResult {
   issues: unknown[] | null;
   status: number | null;
   errName: string | null;
+  /** 额度用完时撞的是哪种（day / minute / unknown）、谷歌建议等多久（毫秒）；不是 quota 为 null */
+  quotaKind: QuotaKind | null;
+  retryMs: number | null;
   ms: number;
 }
 
@@ -171,57 +175,86 @@ export type ParseFn = (input: ParseInput) => Promise<ParseOk<unknown> | ParseFai
 /** 这一轮为什么提前停：每天上限（本次运行的 80%）、额度用完（代码审 S4）；没停为 null */
 export type StopReason = 'daily_cap' | 'quota' | null;
 
+/** 撞了每分钟限额（quotaKind = minute）：同一句最多再试几次 */
+export const MINUTE_RETRIES = 2;
+/** 每分钟限额重试前等多久：谷歌给了 retryDelay 就等它，没给 60 秒，最多 90 秒 */
+export const MINUTE_WAIT_DEFAULT_MS = 60_000;
+export const MINUTE_WAIT_MAX_MS = 90_000;
+
 /**
  * 逐句调（不并发）；一句抛异常只记这一句，不中断整轮。
  * • 每天上限只按本次运行计（代码审 S2）：同一天同一模型跑第二次，要自己把 --rpd 扣掉上一次已调的句数，否则合计会超过 80%。
- * • 拿到 quota（额度用完）就停下这一轮，剩下的句子列进 skipped（代码审 S4：再调只会接着 429、白耗请求）。
+ *   calls 是实际调用次数（含每分钟限额的重试），工作流按它（meta.called）扣每天上限。
+ * • 拿到 quota：
+ *   - minute（每分钟限额，11-13 ai-eval #2 第 36 句就是这种）：等 retryDelay（没有 60 秒、最多 90 秒）再调同一句，最多重试 MINUTE_RETRIES 次；
+ *     重试也算一次调用、受每天上限管；重试次数用完还是 quota 就照 day 停；
+ *   - day、unknown：停下这一轮，剩下的句子列进 skipped（代码审 S4：再调只会接着 429、白耗请求）。
+ * • results 每句只留最后一次的结果（判分按 id 取）；diag 每次调用一行（重试前那次 429 也在，工作流日志能看出等过几次）。
  */
-export async function runSet(rows: readonly EvalRow[], parse: ParseFn, o: RunOpts): Promise<{ results: EvalResult[]; skipped: string[]; stopped: StopReason }> {
+export async function runSet(
+  rows: readonly EvalRow[], parse: ParseFn, o: RunOpts,
+): Promise<{ results: EvalResult[]; skipped: string[]; stopped: StopReason; calls: number; diag: string[] }> {
   const { intervalMs, dailyCap } = paceOf(o.rpm, o.rpd);
   const results: EvalResult[] = [];
   const skipped: string[] = [];
+  const diag: string[] = [];
   let stopped: StopReason = null;
   let last: number | null = null;
-  for (const r of rows) {
-    if (stopped === null && results.length >= dailyCap) stopped = 'daily_cap';
-    if (stopped !== null) {
-      skipped.push(r.id);
-      continue;
-    }
+  let calls = 0;
+  const once = async (r: EvalRow): Promise<EvalResult> => {
     if (last !== null) {
       const wait = last + intervalMs - o.clock();
       if (wait > 0) await o.sleep(wait);
     }
     const t0 = o.clock();
     last = t0;
-    const base = { id: r.id, set_version: r.set_version, group: r.group, scored: r.scored };
+    calls++;
+    const base = { id: r.id, set_version: r.set_version, group: r.group, scored: r.scored, quotaKind: null, retryMs: null };
     let res: ParseOk<unknown> | ParseFail;
     try {
       res = await parse({ text: r.text, now: r.now, tz: r.tz, locale: r.locale, projects: PROJECTS, features: FEATURES });
     } catch (e) {
-      results.push({ ...base, ok: false, reason: 'error', raw: null, checked: null, invalid_reasons: null, issues: null, status: null, errName: e instanceof Error ? e.name : 'unknown', ms: o.clock() - t0 });
-      continue;
+      return { ...base, ok: false, reason: 'error', raw: null, checked: null, invalid_reasons: null, issues: null, status: null, errName: e instanceof Error ? e.name : 'unknown', ms: o.clock() - t0 };
     }
     const ms = o.clock() - t0;
-    if (res.ok) {
-      results.push({ ...base, ok: true, reason: null, raw: res.raw, checked: res.value, invalid_reasons: null, issues: null, status: null, errName: null, ms });
-    } else {
-      results.push({
-        ...base, ok: false, reason: res.reason, raw: res.raw ?? null, checked: null, invalid_reasons: res.invalid_reasons ?? null,
-        issues: res.issues ?? null, status: res.status ?? null, errName: res.errName ?? null, ms,
-      });
-      if (res.reason === 'quota') stopped = 'quota';
+    if (res.ok) return { ...base, ok: true, reason: null, raw: res.raw, checked: res.value, invalid_reasons: null, issues: null, status: null, errName: null, ms };
+    return {
+      ...base, ok: false, reason: res.reason, raw: res.raw ?? null, checked: null, invalid_reasons: res.invalid_reasons ?? null,
+      issues: res.issues ?? null, status: res.status ?? null, errName: res.errName ?? null,
+      ...(res.reason === 'quota' ? { quotaKind: res.quotaKind ?? 'unknown', retryMs: res.retryMs ?? null } : {}), ms,
+    };
+  };
+  for (const r of rows) {
+    if (stopped === null && calls >= dailyCap) stopped = 'daily_cap';
+    if (stopped !== null) {
+      skipped.push(r.id);
+      continue;
     }
+    let res = await once(r);
+    diag.push(diagLine(res));
+    for (let n = 0; res.quotaKind === 'minute' && n < MINUTE_RETRIES && calls < dailyCap; n++) {
+      await o.sleep(Math.min(res.retryMs ?? MINUTE_WAIT_DEFAULT_MS, MINUTE_WAIT_MAX_MS));
+      res = await once(r);
+      diag.push(diagLine(res));
+    }
+    results.push(res);
+    if (res.reason === 'quota') stopped = res.quotaKind === 'minute' && calls >= dailyCap ? 'daily_cap' : 'quota';
   }
-  return { results, skipped, stopped };
+  return { results, skipped, stopped, calls, diag };
 }
 
 /**
- * 每句一行诊断，run.ts 打到工作流日志（日志公开）：只有编号、结果、HTTP 状态码、错误名、耗时，不带句子原文和模型输出。
- * 起因：11-13 第一次正式评测 112 句超时、25 句报错，原因只在产物 JSON 里，看工作流日志定不了根因（先看日志）。
+ * 一次调用一行诊断，run.ts 打到工作流日志（日志公开）：只有编号、结果、HTTP 状态码、错误名、耗时、额度类型和建议等待，不带句子原文和模型输出。
+ * 起因：11-13 第一次正式评测 112 句超时、25 句报错，原因只在产物 JSON 里，看工作流日志定不了根因（先看日志）；
+ * 11-13 ai-eval #2 第 36 句 429 分不出是每分钟还是每天，补上 kind、retry。
  */
+export function diagLine(r: EvalResult): string {
+  const retry = r.retryMs === null ? '-' : `${r.retryMs}ms`;
+  return `diag ${r.id} ${r.ok ? 'ok' : (r.reason ?? 'error')} status=${r.status ?? '-'} err=${r.errName ?? '-'} ms=${r.ms} kind=${r.quotaKind ?? '-'} retry=${retry}`;
+}
+
 export function diagLines(results: readonly EvalResult[]): string[] {
-  return results.map((r) => `diag ${r.id} ${r.ok ? 'ok' : (r.reason ?? 'error')} status=${r.status ?? '-'} err=${r.errName ?? '-'} ms=${r.ms}`);
+  return results.map(diagLine);
 }
 
 /** run.ts 的外部动作，全部注入（Deno 入口接真的，单测接替身） */
@@ -269,11 +302,11 @@ export async function runEval(argv: readonly string[], d: EvalDeps): Promise<{ f
     meta: {
       name, mode: args.replay !== null ? `replay:${args.replay}` : 'live', model, prompt: PROMPT_VERSION.parse, params: TASK_PARAMS.parse,
       set_versions: [...new Set(rows.map((r) => r.set_version))], projects: PROJECTS, features: FEATURES,
-      rpm: args.rpm, rpd: args.rpd, started, finished: d.nowIso(), total: rows.length, called: out.results.length, stopped: out.stopped,
+      rpm: args.rpm, rpd: args.rpd, started, finished: d.nowIso(), total: rows.length, called: out.calls, stopped: out.stopped,
       only: args.only,
     },
-    ...out,
+    results: out.results, skipped: out.skipped, stopped: out.stopped,
   };
   const file = await d.write(args.replay !== null ? 'temp' : 'reports', name, `${JSON.stringify(report, null, 2)}\n`);
-  return { file, called: out.results.length, skipped: out.skipped.length, stopped: out.stopped, diag: diagLines(out.results) };
+  return { file, called: out.calls, skipped: out.skipped.length, stopped: out.stopped, diag: out.diag };
 }

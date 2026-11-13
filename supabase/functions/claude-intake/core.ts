@@ -19,7 +19,7 @@
 // 只能新增：这里只 insert，不读、不改、不删已有条目（TC-B3-20）。日志只记错误码：不打印请求头（连接码）、请求体（A23）。
 // 纯逻辑：依赖全部注入，不 import _shared/gen/、npm 包。
 import { aiGate, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
-import { errNameOf, type AIProvider } from '../_shared/ai/provider.ts';
+import { aiFailCode, errNameOf, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, CheckCtx, CheckResult, ParseFail, ParseInput, ParseOk } from '../_shared/ai/parse-core.ts';
 import { readJsonCapped } from '../_shared/body.ts';
 import { TOKEN_RE, tokenHash, tokenLive } from '../_shared/intake-token.ts';
@@ -147,7 +147,7 @@ async function fromText<Item extends ItemLike>(
     r = { ok: false, reason: 'error' };
   }
   if (!r.ok) {
-    deps.gate.log(`ai_${r.reason}`);
+    deps.gate.log(aiFailCode(r));
     await settleFailure(deps.gate, gate, userId, 'claude-intake', r);
     return rule;
   }

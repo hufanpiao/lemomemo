@@ -1,7 +1,9 @@
 // ai-parse、ai-voice、claude-intake 共用的门（supabase/functions/_shared/ai/gate.ts）和计数（store.ts 的 quotaStore）。
 // B3 任务单 BE-4、S12；TC-B3-25（未同意 Gemini 调用 0 次、不扣次数）、TC-B3-58（太平洋时间换日）、TC-B3-06（额度用完写 exhausted_until）。
 import { describe, expect, it } from 'vitest';
-import { aiGate, globalQuotaKey, minuteKey, nextPacificMidnight, pacificDate, PER_MINUTE_LIMIT, settleFailure, userQuotaKey, type GateGo } from '../../supabase/functions/_shared/ai/gate.ts';
+import {
+  aiGate, exhaustedUntilFor, globalQuotaKey, MINUTE_HOLD_DEFAULT_MS, MINUTE_HOLD_MAX_MS, minuteKey, nextPacificMidnight, pacificDate, PER_MINUTE_LIMIT, settleFailure, userQuotaKey, type GateGo,
+} from '../../supabase/functions/_shared/ai/gate.ts';
 import { quotaStore, type StoreAdmin } from '../../supabase/functions/_shared/ai/store.ts';
 import { COUNTER_KEY, fakeGate, UA, used } from './ai-fakes.ts';
 
@@ -96,6 +98,31 @@ describe('settleFailure：AI 没成功', () => {
     expect(g.invalid).toEqual([{ userId: UA, src: 'ai-parse', reasons: ['missing_date_basis'] }]);
     await settleFailure({ ...g, markExhausted: async () => { throw new Error('db'); } }, go2, UA, 'x', { reason: 'quota' });
     expect(g.logs).toContain('settle_failed');
+  });
+});
+
+describe('额度用完按类型写 exhausted_until（11-13 ai-eval #2：每分钟限额撞一下就停一整天）', () => {
+  it('exhaustedUntilFor：minute 写 now + retryDelay（没给 60 秒、最多 5 分钟）；day、unknown、没带类型写太平洋下一个午夜', () => {
+    expect([MINUTE_HOLD_DEFAULT_MS, MINUTE_HOLD_MAX_MS]).toEqual([60_000, 300_000]);
+    expect(exhaustedUntilFor(NOW, { quotaKind: 'minute', retryMs: 12_000 })).toBe(NOW + 12_000);
+    expect(exhaustedUntilFor(NOW, { quotaKind: 'minute', retryMs: null })).toBe(NOW + 60_000);
+    expect(exhaustedUntilFor(NOW, { quotaKind: 'minute' })).toBe(NOW + 60_000);
+    expect(exhaustedUntilFor(NOW, { quotaKind: 'minute', retryMs: 3_600_000 })).toBe(NOW + 300_000);
+    expect(exhaustedUntilFor(NOW, { quotaKind: 'day', retryMs: 1000 })).toBe(nextPacificMidnight(NOW));   // 每天用完时谷歌也给 1s，不看
+    expect(exhaustedUntilFor(NOW, { quotaKind: 'unknown', retryMs: 5000 })).toBe(nextPacificMidnight(NOW));
+    expect(exhaustedUntilFor(NOW, {})).toBe(nextPacificMidnight(NOW));
+  });
+  it('settleFailure：minute 只停到 retryDelay 以后，过了门照常放行；day、unknown 照旧停到太平洋午夜', async () => {
+    const g = fakeGate();
+    await settleFailure(g, (await aiGate(g, UA, '')) as GateGo, UA, 'ai-parse', { reason: 'quota', quotaKind: 'minute', retryMs: 12_000 });
+    await settleFailure(g, (await aiGate(g, UA, '')) as GateGo, UA, 'ai-parse', { reason: 'quota', quotaKind: 'minute', retryMs: null });
+    await settleFailure(g, (await aiGate(g, UA, '')) as GateGo, UA, 'ai-parse', { reason: 'quota', quotaKind: 'day', retryMs: 1000 });
+    await settleFailure(g, (await aiGate(g, UA, '')) as GateGo, UA, 'ai-parse', { reason: 'quota', quotaKind: 'unknown', retryMs: null });
+    expect(g.exhaustedAt).toEqual([NOW + 12_000, NOW + 60_000, nextPacificMidnight(NOW), nextPacificMidnight(NOW)]);
+    const m = fakeGate({ exhaustedUntil: NOW + 12_000 });
+    expect(await aiGate(m, UA, '')).toEqual({ stop: true, status: 200, body: { fallback: true, reason: 'quota' } });
+    m.setNow(NOW + 12_001);
+    expect((await aiGate(m, UA, '')).stop).toBe(false);
   });
 });
 

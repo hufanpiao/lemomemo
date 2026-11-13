@@ -15,6 +15,7 @@
 //      （_shared/ai/retry.ts，两次合计不超过 15 秒；iPhone 实测 40 次里 4 次 503），重试过的返回体带 retried: true。
 // 返回 {mime, raw_type, bytes, gemini_http, gemini_ms, total_ms, result, transcript, model, retried}；Gemini 失败也回 200，result 写原因。
 // 日志（Q1 ⑥）：只记事件码、mime、字节数、HTTP 状态、耗时；不记转写、音频、请求头、Gemini 出错时的返回正文，不打印请求体。
+//   额度用完的事件码带类型 gemini_quota_day / _minute / _unknown（gemini.ts 从回复体认出的固定词）。
 // 录音只在内存里（5.11 第 3 点、A23）：不写 Storage、不写库、不写日志。响应一律 Cache-Control: no-store。
 import { readCapped } from '../../_shared/body.ts';
 import { json } from '../../_shared/http.ts';
@@ -253,7 +254,9 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   }
   const gemini_ms = Math.round(deps.clock() - g0);
   const o = outcome(r, seen);
-  deps.log({ code: `gemini_${o.result}${retried ? '_retried' : ''}`, mime, bytes, ...(o.http === null ? {} : { http: o.http }), ms: gemini_ms });
+  // 额度用完另带类型（gemini_quota_day / _minute / _unknown，11-13）：只是固定词，不带谷歌回复原文
+  const kind = !r.ok && r.reason === 'quota' ? `_${r.quotaKind ?? 'unknown'}` : '';
+  deps.log({ code: `gemini_${o.result}${kind}${retried ? '_retried' : ''}`, mime, bytes, ...(o.http === null ? {} : { http: o.http }), ms: gemini_ms });
   return reply(200, {
     model, mime, raw_type, bytes,
     gemini_http: o.http, gemini_ms, total_ms: Math.round(deps.clock() - t0),

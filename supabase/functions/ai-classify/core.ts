@@ -19,7 +19,7 @@
 //         AI 没给这一条、给的分类名不合格、新建分类失败：这一条改用本机规则，记 rule；
 //      ⑥′ 相似分类（R-413）：AI 同时给出这个人已有分类里意思差不多的几对（similar），加进 settings notes.merge_suggest（write.ts 的 writeSimilar），
 //         客户端据此提示“合成一个吗？”；读写失败只记日志，不影响分类；
-//      ⑦ AI 失败：退回预扣的两次；额度用完写 exhausted_until（太平洋时间下一个午夜）、这一轮后面的人都不再送；
+//      ⑦ AI 失败：退回预扣的两次；额度用完写 exhausted_until（每天的写太平洋时间下一个午夜，每分钟的只写到几十秒后，gate.ts 的 exhaustedUntilFor）、这一轮后面的人都不再送；
 //         这批记成 rule，并在 ai_meta 里记 retry 和第几次，等额度恢复（或下一轮）重新排队；
 //         出错一共试 MAX_TRIES 次（含第一次），额度用完不计次数（write.ts）。
 // 文件：request.ts 组请求、读回；write.ts 写库；这里只留一轮的流程。
@@ -29,8 +29,8 @@
 // 日志只记原因码（A23）：不记标题、正文、分类名、密钥、模型原文。
 
 import { cronGate, json } from '../_shared/http.ts';
-import { nextPacificMidnight, globalQuotaKey, userQuotaKey, type QuotaStore } from '../_shared/ai/gate.ts';
-import type { AIProvider } from '../_shared/ai/provider.ts';
+import { exhaustedUntilFor, globalQuotaKey, userQuotaKey, type QuotaStore } from '../_shared/ai/gate.ts';
+import { aiFailCode, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiConfig } from '../_shared/ai/router.ts';
 import { classifyRequest, nameIndex, readItems, readSimilar, type PendingNote } from './request.ts';
 import { MAX_CATEGORIES, writeAi, writeManual, writeRules, writeSimilar, type Category, type NotePatch, type Tally } from './write.ts';
@@ -267,11 +267,12 @@ export async function runRound(deps: Deps, store: ClassifyStore): Promise<Heartb
     }
     const items = res.ok ? readItems(res.json, toAi.length) : new Map<number, { name: string; isNew: boolean }>();
     if (!res.ok || items.size === 0) {
-      const reason = res.ok ? 'invalid' : res.reason;
-      deps.log(`ai_${reason}`);
+      const fail = res.ok ? { reason: 'invalid' as const } : res;
+      const reason = fail.reason;
+      deps.log(aiFailCode(fail));
       const settle = await Promise.allSettled([
         deps.quota.refund(userKey), deps.quota.refund(globalKey),
-        ...(reason === 'quota' ? [deps.markExhausted(nextPacificMidnight(deps.now()))] : []),
+        ...(reason === 'quota' ? [deps.markExhausted(exhaustedUntilFor(deps.now(), fail))] : []),
       ]);
       if (settle.some((x) => x.status === 'rejected')) deps.log('settle_failed');
       if (reason === 'quota') {

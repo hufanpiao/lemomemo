@@ -161,6 +161,28 @@ describe('TC-B3-06：回放 Gemini 额度用完', () => {
     expect((await call(await voiceHandle(voiceReq(), v.deps))).body).toEqual({ ai_failed: true, reason: 'quota' });
     expect([g.exhaustedAt.length, used(g, 'ai:')]).toEqual([1, 0]);
   });
+  // 11-13 ai-eval #2：每分钟限额撞一下就停一整天。回放文件 quota-minute / quota-day 的回复体带 QuotaFailure、RetryInfo
+  it('每分钟限额（quota-minute，retryDelay 12s）：ai-parse、ai-voice、claude-intake 都只停到 12 秒后；日志带 kind=minute，不带谷歌原文', async () => {
+    const p = gateWith('quota-minute');
+    expect((await call(await parseHandle(parseReq(), parseDeps(p.g)))).body).toEqual({ fallback: true, reason: 'quota' });
+    expect([p.g.exhaustedAt, used(p.g, 'ai:'), p.g.logs]).toEqual([[NOW + 12_000], 0, ['ai_quota kind=minute']]);
+    const v = gateWith('quota-minute');
+    const vd = voiceDeps(v.g);
+    expect((await call(await voiceHandle(voiceReq(), vd.deps))).body).toEqual({ ai_failed: true, reason: 'quota' });
+    expect([v.g.exhaustedAt, vd.fails]).toEqual([[NOW + 12_000], [{ code: 'ai_quota', fields: ['status=429', 'kind=minute', 'bytes=<16k'] }]]);
+    const i = gateWith('quota-minute');
+    expect((await (await intake(i.g)).send(VAGUE)).status).toBe(200);
+    expect([i.g.exhaustedAt, i.g.logs]).toEqual([[NOW + 12_000], ['ai_quota kind=minute']]);
+    for (const x of [p.g.logs, vd.fails, i.g.logs]) expect(JSON.stringify(x)).not.toMatch(/FreeTier|exceeded/);
+  });
+  it('每天限额（quota-day，谷歌也给了 retryDelay 1s）：照旧停到太平洋下一个午夜，日志带 kind=day；认不出的（quota）记 kind=unknown、也停到午夜', async () => {
+    const d = gateWith('quota-day');
+    expect((await call(await parseHandle(parseReq(), parseDeps(d.g)))).body).toEqual({ fallback: true, reason: 'quota' });
+    expect([d.g.exhaustedAt, d.g.logs]).toEqual([[nextPacificMidnight(NOW)], ['ai_quota kind=day']]);
+    const u = gateWith('quota');
+    await parseHandle(parseReq(), parseDeps(u.g));
+    expect([u.g.exhaustedAt, u.g.logs]).toEqual([[nextPacificMidnight(NOW)], ['ai_quota kind=unknown']]);
+  });
 });
 
 describe('TC-B3-07：回放坏输出、超时', () => {

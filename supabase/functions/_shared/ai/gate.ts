@@ -4,13 +4,13 @@
 //   ② featureOn 算出这个人能用的类型：一种都没有 → {fallback, feature_off}（读 profiles 失败按 beta 为空算，由 index.ts 注入的 features 负责，TC-B3-26）；
 //   ③ app_config.ai 读出模型、每人每天、全项目每天；模型没配、密钥没配 → {fallback, error}，不扣次数；
 //   ④ 每人每分钟 6 次（ai-rate:<user_id>:<UTC 分钟>，private.take_rate，窗口 60 秒）→ 超了 429 rate_limited；
-//   ⑤ ai_state.exhausted_until 还没过（谷歌额度用完，太平洋午夜重置）→ {fallback, quota}，不扣次数；
+//   ⑤ ai_state.exhausted_until 还没过（谷歌额度用完：每天的到太平洋午夜，每分钟的只到几十秒后，见 exhaustedUntilFor）→ {fallback, quota}，不扣次数；
 //   ⑥ 预扣：每人每天 per_user_daily 次（ai:<user_id>:<太平洋日期>），用完 → {quota_out, quota_left: 0}；
 //      全项目每天 global_daily 次（ai:global:<太平洋日期>，没配按 0），用完 → 退回刚扣的个人那一次、{fallback, quota}；
-//   放行后由调用方调 Gemini；失败时 settle 退回两边各 1 次、quota 写 exhausted_until、invalid 只把 invalid_reasons 写 logs。
+//   放行后由调用方调 Gemini；失败时 settle 退回两边各 1 次、quota 按每天 / 每分钟写 exhausted_until、invalid 只把 invalid_reasons 写 logs。
 // “每天 50 次”的日期按太平洋时间（和谷歌重置时刻一致，R-187）。纯逻辑：依赖全部注入，不 import _shared/gen/、npm 包。
 import type { AiConfig } from './router.ts';
-import type { AIProvider } from './provider.ts';
+import type { AIProvider, QuotaKind } from './provider.ts';
 import type { AiKindLike, InvalidReasonLike } from './parse-core.ts';
 
 export const PER_MINUTE_LIMIT = 6;
@@ -73,6 +73,21 @@ export function nextPacificMidnight(ms: number): number {
   return t;
 }
 
+/** 撞了每分钟限额、谷歌没给 retryDelay 时停多久 */
+export const MINUTE_HOLD_DEFAULT_MS = 60_000;
+/** 撞了每分钟限额最多停多久（retryDelay 给得再长也不超过） */
+export const MINUTE_HOLD_MAX_MS = 5 * 60_000;
+
+/**
+ * 额度用完后 exhausted_until 写到哪（11-13 ai-eval #2：每分钟限额撞一下就停一整天的根因）：
+ * minute → now + retryDelay（没给按 60 秒，最多 5 分钟）；day、unknown、没带类型 → 太平洋时间下一个午夜（和原来一样，保守）。
+ * ai-parse、ai-voice、claude-intake（经 settleFailure）和 ai-classify 共用这一处。
+ */
+export function exhaustedUntilFor(now: number, q: { quotaKind?: QuotaKind | undefined; retryMs?: number | null | undefined }): number {
+  if (q.quotaKind !== 'minute') return nextPacificMidnight(now);
+  return now + Math.min(q.retryMs ?? MINUTE_HOLD_DEFAULT_MS, MINUTE_HOLD_MAX_MS);
+}
+
 /** 计数键（附录 A 三段写法；第三段不准有冒号） */
 export const userQuotaKey = (userId: string, ms: number) => `ai:${userId}:${pacificDate(ms)}`;
 export const globalQuotaKey = (ms: number) => `ai:global:${pacificDate(ms)}`;
@@ -132,13 +147,13 @@ export async function aiGate(deps: GateDeps, userId: string, appVersion: string)
 }
 
 // 失败退回额度是负责人 R-356 的决定；已知风险是可被刷，见安全审 M1
-/** AI 调完没成功：退回预扣的两次；quota 写 exhausted_until；invalid 只把原因写 logs。出错只记错误码，不影响给客户端的回答 */
+/** AI 调完没成功：退回预扣的两次；quota 按类型写 exhausted_until（exhaustedUntilFor）；invalid 只把原因写 logs。出错只记错误码，不影响给客户端的回答 */
 export async function settleFailure(
   deps: GateDeps, go: GateGo, userId: string, src: string,
-  fail: { reason: 'quota' | 'timeout' | 'invalid' | 'error'; invalid_reasons?: InvalidReasonLike[] },
+  fail: { reason: 'quota' | 'timeout' | 'invalid' | 'error'; invalid_reasons?: InvalidReasonLike[]; quotaKind?: QuotaKind; retryMs?: number | null },
 ): Promise<void> {
   const jobs: Promise<unknown>[] = [deps.quota.refund(go.userKey), deps.quota.refund(go.globalKey)];
-  if (fail.reason === 'quota') jobs.push(deps.markExhausted(nextPacificMidnight(deps.now())));
+  if (fail.reason === 'quota') jobs.push(deps.markExhausted(exhaustedUntilFor(deps.now(), fail)));
   if (fail.reason === 'invalid' && fail.invalid_reasons?.length) jobs.push(deps.logInvalid(userId, src, fail.invalid_reasons));
   const r = await Promise.allSettled(jobs);
   if (r.some((x) => x.status === 'rejected')) deps.log('settle_failed');

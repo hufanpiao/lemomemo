@@ -9,7 +9,7 @@
 //   真调用（只在手动触发的评测工作流里跑；密钥由工作流从 GitHub secret 放进环境变量 GEMINI_EVAL_KEY，本机不放、不经过 AI，句库 5.2）：
 //     deno run --allow-read --allow-write=tests/ai/reports,supabase/functions/_shared/gen --allow-run=node --allow-env=GEMINI_EVAL_KEY,PATH,SYSTEMROOT
 //       --allow-net=generativelanguage.googleapis.com tests/ai/run.ts --model <Q6 选定的模型> --rpm <截图上限> --rpd <截图上限> --date <YYYY-MM-DD>
-//   **每天上限只按本次运行计**：同一天同一模型跑第二次，--rpd 要自己扣掉上一次已调的句数（结果 JSON 的 meta.called），否则合计会超过 80%（代码审 S2）。
+//   **每天上限只按本次运行计**：同一天同一模型跑第二次，--rpd 要自己扣掉上一次已调的次数（结果 JSON 的 meta.called，含每分钟限额的重试），否则合计会超过 80%（代码审 S2）。
 //   只跑指定的句子（S19“不比上一次差”的补跑；回放、真调用都能用）：上面任一条命令后面加 --only Z10,K10,M10
 //     id 句库里没有就报错退出、一句都不调；结果名是 only-set1-<日期>-<提示词版本>-<模型名>-t<UTC 时分秒毫秒>.json，
 //     不覆盖第一遍，也不匹配 set1-*.json；补跑也算进每天上限（--rpd 照上一条扣）。
