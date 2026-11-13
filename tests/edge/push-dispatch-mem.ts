@@ -9,6 +9,7 @@ import { notifyText } from '../../shared/logic/notify-text.ts';
 import { allDayTimeOf, dndDeferUntil, REMIND_RULES_VER, remindAtOf, sameRemindDay } from '../../shared/logic/remind.ts';
 import { startAtOf } from '../../shared/logic/remind-actions.ts';
 import { occurrenceKey, reminderTag } from '../../shared/logic/remind-route.ts';
+import { annivNextOf } from '../../shared/logic/anniv/next-date.ts';
 import type { DispatchStore, HeartbeatDetail, QueueStats } from '../../supabase/functions/push-dispatch/core.ts';
 import { QUEUE_PER_USER, QUEUE_POISON, seoulDay } from '../../supabase/functions/push-dispatch/core.ts';
 import type { DeviceOutcome, DeviceRow, ItemRow, LogRow, Profile, QueueItem, QueueRef, RoundLogic, Table } from '../../supabase/functions/push-dispatch/round.ts';
@@ -17,7 +18,7 @@ import { makeLogic } from '../../supabase/functions/push-dispatch/logic.ts';
 
 /** 和 index.ts 同一份接线（logic.ts 的 makeLogic），名字一一对应，只是从 shared/ 引（tests/edge/push-dispatch-logic-wiring.test.ts 核对） */
 export const LOGIC: RoundLogic = makeLogic({
-  REMIND_RULES_VER, remindAtOf, allDayTimeOf, startAtOf, msAt, parseHm, sameRemindDay, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey,
+  REMIND_RULES_VER, remindAtOf, allDayTimeOf, startAtOf, msAt, parseHm, sameRemindDay, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey, annivNextOf,
 });
 
 export const UA = 'aaaaaaaa-0000-4000-8000-000000000001';

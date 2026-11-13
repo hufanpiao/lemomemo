@@ -18,7 +18,7 @@ export function colsOf(table: Table): string {
   switch (table) {
     case 'events': return `${COMMON}, source, title, date, time, tz, remind_min, remind_days`;
     case 'todos': return `${COMMON}, source, title, done, due, due_time, remind_before_min, remind_days, remind_time`;
-    default: return `${COMMON}, name, kind, calendar, lunar_variant, month, day, is_leap, year, remind_offsets, remind_time, after_due, next_date`;
+    default: return `${COMMON}, name, kind, calendar, lunar_variant, month, day, is_leap, year, remind_offsets, remind_time, after_due, next_date, created_at`;
   }
 }
 const DEVICE_COLS = 'id, user_id, push_endpoint, p256dh, auth, push_fail_count';
