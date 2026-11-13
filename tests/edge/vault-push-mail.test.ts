@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { tzLabel } from '../../shared/i18n/tz-label.ts';
 import { NO_LINK_NOTE, vaultResetMail } from '../../supabase/functions/_shared/account-mail.ts';
 import { buildPayload, PushPayloadError, VAULT_PUSH_EVENTS } from '../../supabase/functions/_shared/push/payload.ts';
-import { A } from './vault-fakes.ts';
+import { A } from '../functions/vault-fakes.ts';
 
 const LINKISH = /https?:|www\.|\.com\b|lemomemo|<a\s|href|mailto:/i;
 

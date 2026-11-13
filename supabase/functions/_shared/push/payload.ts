@@ -64,8 +64,8 @@ export interface TestPayloadInput {
   user_id: string;
 }
 /** 隐私记的安全通知（B5）：event 之外什么都不带；和 SW 的 src/sw/push-vault-data.ts 各一份，tests/shared/vault-parity.test.ts 核对 */
-export const VAULT_PUSH_EVENTS = ['locked', 'pin_changed', 'reset', 'webauthn_added'] as const;
-export type VaultPushEvent = (typeof VAULT_PUSH_EVENTS)[number];
+import { VAULT_PUSH_EVENTS, type VaultPushEvent } from './vault-events.ts';
+export { VAULT_PUSH_EVENTS, type VaultPushEvent };
 export interface VaultPayloadInput {
   type: 'vault';
   user_id: string;

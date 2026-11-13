@@ -14,7 +14,7 @@ export class CborError extends Error {
 
 const MAX_DEPTH = 8;
 const MAX_ITEMS = 64;
-const td = new TextDecoder('utf-8', { fatal: true });
+const td = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false });
 
 class Reader {
   pos: number;

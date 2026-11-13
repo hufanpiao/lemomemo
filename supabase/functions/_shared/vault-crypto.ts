@@ -100,7 +100,7 @@ export async function openNote(key: CryptoKey, userId: string, noteId: string, e
   const pt = await open(key, noteAad(userId, noteId, encKeyId), sealed);
   if (!pt) return null;
   try {
-    const v = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(pt)) as Partial<NotePlain>;
+    const v = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(pt)) as Partial<NotePlain>;
     if (v.v !== 1 || typeof v.title !== 'string' || typeof v.body !== 'string') return null;
     return { v: 1, title: v.title, body: v.body };
   } catch {

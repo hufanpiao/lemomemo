@@ -60,7 +60,7 @@ async function checkSig(secret: Bytes, jwtUserId: string, token: string | null |
   try {
     const raw = b64uDecode(mid);
     if (!raw) return null;
-    p = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw)) as Partial<Parsed>;
+    p = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(raw)) as Partial<Parsed>;
   } catch {
     return null;
   }

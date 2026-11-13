@@ -73,7 +73,7 @@ export interface ClientData { type: unknown; challenge: string; origin: string; 
 export function readClientData(raw: Uint8Array): ClientData {
   let v: { type?: unknown; challenge?: unknown; origin?: unknown; crossOrigin?: unknown };
   try {
-    v = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw)) as typeof v;
+    v = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(raw)) as typeof v;
   } catch {
     return fail();
   }

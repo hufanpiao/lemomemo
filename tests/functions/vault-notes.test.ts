@@ -54,7 +54,7 @@ describe('save、list（加密存、解密读）', () => {
     expect([r.status, r.body.error]).toEqual([400, 'bad_request']);
     expect(w.db.s.notes.has(N2)).toBe(false);
     const l = await call(w, { action: 'list' }, { token: tok });
-    expect(l.body.notes.map((n: { title: string }) => n.title)).toEqual(['标题']);
+    expect((l.body.notes as { title: string }[]).map((n) => n.title)).toEqual(['标题']);
   });
 
   it('remove_images 软删，事务提交后删掉 R2 里的原图和缩略图（整块评审第 2 条）；删失败只记 image_drop_failed', async () => {

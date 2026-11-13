@@ -4,7 +4,7 @@
 // • 钥匙都是测试专用的假值，用 btoa('TEST-ONLY-…') 现算（不写成像真钥匙的 base64 字面量）。
 import { vaultImageKey, vaultRequest, lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL,
   VAULT_RESET_OTP_MAX_AGE_S, WEBAUTHN_CHALLENGE_TTL_S, WEBAUTHN_RP_ID } from '../../shared/schema/vault.ts';
-import type { VaultPushEvent } from '../../supabase/functions/_shared/push/payload.ts';
+import type { VaultPushEvent } from '../../supabase/functions/_shared/push/vault-events.ts';
 import { decodeKey32 } from '../../supabase/functions/_shared/vault-crypto.ts';
 import {
   type CredRow, type Deps, type ImageRow, type NoteRow, type Obj, StoreDataError, type VaultReq, type VaultRow, type VaultTx,

@@ -7,7 +7,7 @@ import type { Bytes } from '../_shared/b64url.ts';
 import type { EnvKind } from '../_shared/env-kind.ts';
 import { errorResponder } from '../_shared/http.ts';
 import { aesKeyFor } from '../_shared/vault-crypto.ts';
-import type { VaultPushEvent } from '../_shared/push/payload.ts';
+import type { VaultPushEvent } from '../_shared/push/vault-events.ts';
 import type { VaultObj } from '../_shared/vault-images.ts';
 
 // ---------------- 请求（和 shared/schema/vault.ts 的 vaultRequest 推出的类型一致，tests/functions/vault-core.test.ts 双向核对） ----------------

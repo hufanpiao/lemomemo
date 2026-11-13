@@ -38,7 +38,7 @@ export async function readJsonCapped(req: Request, max: number): Promise<unknown
   if (b === 'too_large') return 'too_large';
   if (b === 'empty') return undefined;
   try {
-    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(b));
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(b));
   } catch {
     return undefined;
   }
