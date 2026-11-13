@@ -223,7 +223,8 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
         if (stale(g, 'choose')) return;
         if (r.out !== 'ok' || !r.batch) return flow.error(r.out === 'switching' ? 'switching' : 'not_saved');
         const rest = get().ask.slice(1);
-        put({ batch: r.batch, ask: rest, ...(batch.entries.length === 0 ? { quotaDue: quotaOnce(batch.plan) } : {}) });
+        // 存的时候确认行被关掉了（dismiss 在最新那一批上标了 partial）：写回时带上，不让“合并”又出来（复查续第 2 条）
+        put({ batch: get().batch?.partial ? { ...r.batch, partial: true } : r.batch, ask: rest, ...(batch.entries.length === 0 ? { quotaDue: quotaOnce(batch.plan) } : {}) });
         if (rest.length > 0) return;
         flow.go({ type: 'confirmed' });
         land('ok', batch.plan);

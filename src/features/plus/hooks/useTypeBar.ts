@@ -108,6 +108,8 @@ export function useTypeBar(o: TypeBarOpts) {
     const ms = (): number => Math.round(performance.now() - t0);
     try {
       const c = ctx();
+      // 上一句停在结局（提示条还开着）：先收掉结局再开始整理，不然 organize 被吞、AI 回来的确认行丢（复查 N1 续，运行日志 typebar submit … status=saved_rule）
+      go({ type: 'cleared' });
       go({ type: 'organize' });
       // “正在识别…”出现（Q-27 乙，R-406）；消失在 finally 里记 off 和一共多久
       rlog('typebar recog on');

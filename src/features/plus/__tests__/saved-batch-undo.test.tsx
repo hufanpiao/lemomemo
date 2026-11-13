@@ -244,6 +244,21 @@ describe('合并（整块评审第 4 条，主持人代定）', () => {
     expect(writer.insert).not.toHaveBeenCalled();
   });
 
+  it('“补记”还在存时关掉确认行：存完写回也带着标记，不再给“合并”（复查续第 2 条）', async () => {
+    const { writer, b, box, notice } = setup([t1, t2]);
+    const past = { ...todo('交房租'), due: '2026-10-30', date_basis: 'md', confirm: { past: '2026-10-30', next: '2027-10-30' } } as AiItem;
+    const later = { ...past, title: '交水费' } as AiItem;
+    box.setState({ ask: [past, later] });
+    const gate = hangNext(writer.insert);
+    const c = b.choose('past');
+    await vi.waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    b.dismiss();
+    gate.open();
+    await c;
+    expect(notice()?.entries).toHaveLength(3);
+    expect(notice()?.merge).toBe(false);
+  });
+
   it('合并成了、有撤不掉的：之后再撤合并条失败，“请到列表里删除”那句还在（复查 N3）', async () => {
     const { b, keys, patchFail, ids } = setup([t1, t2]);
     patchFail.add('t1');
