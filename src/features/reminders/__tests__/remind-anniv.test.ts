@@ -109,5 +109,11 @@ describe('纪念日的按钮和生成待办', () => {
     expect(annivTodoDue('2026-11-20', '2026-11-21')).toBe('2026-11-21');
     const r = annivTodoRow('00000000-0000-4000-8000-000000000002', '准备：김지민', '2026-11-19', row().id, 5);
     expect(r).toMatchObject({ title: '准备：김지민', due: '2026-11-19', from_anniv_id: row().id, done: false, remind_days: 0, remind_time: '09:00', source: 'page', created_at: 5 });
+    // 整行钉住（todos 加列只改 shared/logic/todo-row.ts 一处）
+    expect(r).toStrictEqual({
+      id: '00000000-0000-4000-8000-000000000002', title: '准备：김지민', done: false, important: false, due: '2026-11-19', due_time: null, remind_before_min: null,
+      remind_days: 0, remind_time: '09:00', project: '', note: '', source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: row().id,
+      short: null, short_by: null, done_at: 0, push_show_title: null, notified_for: null, snooze_at: null, created_at: 5, updated_at: 5,
+    });
   });
 });
