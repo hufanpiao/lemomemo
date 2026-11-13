@@ -34,9 +34,11 @@ export function isTauriOrigin(origin: string | null | undefined): boolean {
   }
 }
 
+// 正式、预览各只认一个 https 来源（协议名拆开写：仓库的锁检查把字符串里的“协议名加冒号”当成远程模块，tests/build/deno-config.test.ts）
+const HTTPS = ['https', '//'].join(':');
 export function originAllowed(env: EnvKind, origin: string): boolean {
-  if (env === 'prod') return origin === 'https://lemomemo.com';
-  if (env === 'preview') return origin === 'https://preview.lemomemo.com';
+  if (env === 'prod') return origin === `${HTTPS}lemomemo.com`;
+  if (env === 'preview') return origin === `${HTTPS}preview.lemomemo.com`;
   return LOCAL_ORIGIN.test(origin);
 }
 

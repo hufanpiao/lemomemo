@@ -185,3 +185,21 @@ describe('入口', () => {
     expect(w.logs.join('|')).not.toContain(tok);
   });
 });
+
+describe('账号停用（TC-B1-10）', () => {
+  const deny = () => world({ async authenticate() { return { ok: false, response: new Response('{"error":"account_disabled"}', { status: 403 }) }; } });
+  it('TC-B1-10 vault：管理员停用的账号回 403 account_disabled，不碰库', async () => {
+    const w = deny();
+    const r = await call(w, { action: 'unlock', pin: '1234' });
+    expect(r.status).toBe(403);
+    expect(r.body.error).toBe('account_disabled');
+    expect(w.rate.size).toBe(0);
+  });
+  it('TC-B1-10 vault：没有 profiles 行的账号回 403 account_disabled，不碰库', async () => {
+    const w = deny();
+    const r = await call(w, { action: 'setup', pin: '1234' });
+    expect(r.status).toBe(403);
+    expect(r.body.error).toBe('account_disabled');
+    expect(w.rate.size).toBe(0);
+  });
+});

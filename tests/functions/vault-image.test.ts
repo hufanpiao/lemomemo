@@ -60,3 +60,24 @@ describe('get', () => {
     expect(w.logs).toContain('misconfigured:r2');
   });
 });
+
+describe('账号停用（TC-B1-10）', () => {
+  const denied = () => {
+    const w = imageWorld();
+    w.deps.authenticate = async () => ({ ok: false, response: new Response('{"error":"account_disabled"}', { status: 403 }) });
+    return w;
+  };
+  it('TC-B1-10 vault-image：管理员停用的账号回 403 account_disabled，不取图', async () => {
+    const w = denied();
+    const r = await w.get({ action: 'get', image_id: I });
+    expect(r.status).toBe(403);
+    expect(((await r.json()) as { error: string }).error).toBe('account_disabled');
+  });
+  it('TC-B1-10 vault-image：没有 profiles 行的账号回 403 account_disabled，不写对象', async () => {
+    const w = denied();
+    const r = await w.upload(webp());
+    expect(r.status).toBe(403);
+    expect(((await r.json()) as { error: string }).error).toBe('account_disabled');
+    expect(w.r2.puts).toHaveLength(0);
+  });
+});

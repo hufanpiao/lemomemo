@@ -69,6 +69,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/store-it-guard.test.ts', // node supabase/tests/store-it/run.mjs、guard.mjs 本机环境（被护栏拒绝，退出码 2，不起 supabase）
   'tests/build/set-cron-secret.test.ts', // PowerShell（有 docker 时还起容器）
   'tests/build/set-signup-secrets.test.ts', // PowerShell
+  'tests/build/gen-vault-keys.test.ts', // PowerShell（本机假服务，B5 S19：gen-vault-keys、check-vault-keys-leak）
   'tests/build/set-vapid-keys.test.ts', // PowerShell（本机假服务，B2 O-1）
   'tests/build/gen-tauri-key.test.ts', // PowerShell（编假签名工具、跑脚本，B6-exe F10）
   'tests/build/desktop-scan.test.ts', // 另起 node 跑 build/ci/desktop_scan.mjs（B6-exe F8、F9）
