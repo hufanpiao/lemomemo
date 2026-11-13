@@ -4,6 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { msAt, parseHm } from '../../shared/core/date.ts';
 import { handle } from '../../supabase/functions/push-dispatch/core.ts';
+import { isDue, isHandledAfterPush } from '../../supabase/functions/push-dispatch/round.ts';
+import { newPushSubscriber } from '../fakes/push-service.ts';
 import { cronReq, depsFor, fakeVapid } from './push-dispatch-harness.ts';
 import { annivRow, LOGIC, MemDb, UA } from './push-dispatch-mem.ts';
 
@@ -59,5 +61,62 @@ describe('第 6 步：推过以后写回下一次', () => {
     const row2 = db2.put('anniversaries', annivRow(UA, { month: 11, day: 20, remind_at: due2, next_date: '2026-11-20' }));
     await run(db2, due2 + 30_000);
     expect(db2.tables.anniversaries.get(row2.id)).toMatchObject({ remind_at: at('2027-11-13'), next_date: '2026-11-20' });
+  });
+});
+
+describe('推过以后 remind_at 已挪到下一次：稍后、resolve 照这一次算（整块评审第 1 条）', () => {
+  /** 一台钥匙真能加密的设备（'BPx' 那种假钥匙推一次就被判 bad_keys 清掉，后面几轮没设备不认领） */
+  const realDevice = async (db: MemDb) => {
+    const ep = 'https://fcm.googleapis.com/fcm/send/anniv-snooze';
+    const s = await newPushSubscriber(ep);
+    db.device(UA, { endpoint: ep, p256dh: s.p256dh, auth: s.auth });
+  };
+  it('isDue：推过 D-7、remind_at 已挪到 D-1、snooze_at = D-6：D-6 到点；稍后过了窗口、或稍后那一次推过了，回到 remind_at', () => {
+    const d7 = at('2026-11-13'), d6 = at('2026-11-14'), d1 = at('2026-11-19');
+    const r = annivRow(UA, { remind_at: d1, pushed_for: d7, snooze_at: d6, next_date: '2026-11-20' });
+    expect(isDue('anniversaries', r, d6 + 30_000)).toBe(d6);
+    expect(isDue('anniversaries', r, d6 - 120_000)).toBe(null);            // 还没到
+    expect(isDue('anniversaries', r, d6 + 2 * 3_600_000)).toBe(null);      // 过了窗口（BEHIND 60 分钟），等 D-1
+    expect(isDue('anniversaries', r, d1 + 30_000)).toBe(d1);
+    expect(isDue('anniversaries', { ...r, pushed_for: d6 }, d1 + 30_000)).toBe(d1);
+    expect(isDue('anniversaries', { ...r, defer_until: d6 + 600_000 }, d6 + 630_000)).toBe(d6 + 600_000);   // 免打扰顺延
+    // 待办、日程不变：greatest
+    expect(isDue('todos', { ...r, title: 't', done: false } as never, d6 + 30_000)).toBe(null);
+    expect(isHandledAfterPush('anniversaries', { ...r, snooze_at: null })).toBe(false);
+  });
+  it('{7,1}：推完 D-7、“明天再提醒”到 D-6，D-6 照推；推完 D-7 下一轮不 resolve 收回；D-1 照推', async () => {
+    const db = new MemDb().user(UA, { current_tz: SEOUL });
+    await realDevice(db);
+    const d7 = at('2026-11-13');
+    const row = db.put('anniversaries', annivRow(UA, { month: 11, day: 20, remind_at: d7, next_date: '2026-11-20' }));
+    const get = () => db.tables.anniversaries.get(row.id);
+    await run(db, d7 + 30_000);
+    expect(get()).toMatchObject({ pushed_for: d7, remind_at: at('2026-11-19') });
+    // 下一分钟：remind_at 挪了不算“别处处理过”，不 resolve（releasePushed 会把 pushed_for 清空）
+    await run(db, d7 + 90_000);
+    expect(get()?.pushed_for).toBe(d7);
+    // 用户按“明天再提醒”：snooze_at = D-6 09:00；D-6 到点照推
+    const d6 = at('2026-11-14');
+    Object.assign(get() as object, { snooze_at: d6 });
+    await run(db, d6 + 30_000);
+    expect(get()?.pushed_for).toBe(d6);
+    await run(db, d6 + 90_000);
+    expect(get()?.pushed_for).toBe(d6);
+    // D-1 照推
+    const d1 = at('2026-11-19');
+    await run(db, d1 + 30_000);
+    expect(get()?.pushed_for).toBe(d1);
+  });
+  it('推过以后在别处“知道了”、按了稍后、删了：照样 resolve', async () => {
+    const d7 = at('2026-11-13');
+    for (const patch of [{ notified_for: d7 }, { snooze_at: d7 + 3_600_000 }, { deleted_at: d7 + 1 }]) {
+      const db = new MemDb().user(UA, { current_tz: SEOUL });
+      await realDevice(db);
+      const row = db.put('anniversaries', annivRow(UA, { month: 11, day: 20, remind_at: d7, next_date: '2026-11-20' }));
+      await run(db, d7 + 30_000);
+      Object.assign(db.tables.anniversaries.get(row.id) as object, patch);
+      await run(db, d7 + 90_000);
+      expect(db.tables.anniversaries.get(row.id)?.pushed_for).toBe(null);
+    }
   });
 });

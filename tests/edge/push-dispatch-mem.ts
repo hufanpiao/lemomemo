@@ -359,9 +359,16 @@ export class MemDb implements DispatchStore {
     const c: Ranked[] = [];
     for (const table of TABLES) {
       for (const r of this.tables[table].values()) {
-        if (r.deleted_at !== null || r.undone || (table === 'todos' && r.done) || r.remind_at === null || r.remind_at > hi) continue;
+        const anniv = table === 'anniversaries';
+        if (r.deleted_at !== null || r.undone || (table === 'todos' && r.done) || r.remind_at === null) continue;
+        if (r.remind_at > hi && !(anniv && r.snooze_at !== null && r.snooze_at <= hi)) continue;
         if ((r.notified_for ?? 0) === r.remind_at) continue;
-        const d = Math.max(...[r.remind_at, r.snooze_at, r.defer_until].filter((v): v is number => v !== null));
+        let d = Math.max(...[r.remind_at, r.snooze_at, r.defer_until].filter((v): v is number => v !== null));
+        // 纪念日（迁移 20261114191000）：推过以后的稍后（snooze_at > pushed_for）连同免打扰顺延落在窗口里，按它
+        if (anniv && r.snooze_at !== null && r.snooze_at > (r.pushed_for ?? 0)) {
+          const s = r.defer_until !== null && r.defer_until > r.snooze_at ? r.defer_until : r.snooze_at;
+          if (s > lo && s <= hi) d = s;
+        }
         if (!(d > lo && d <= hi) || (r.pushed_for ?? 0) === d || !this.usable.get(r.user_id)) continue;
         if (!this.devs.some((x) => x.user_id === r.user_id && x.deleted_at === null && x.push_endpoint !== null)) continue;
         c.push({ table, row: r, k: d });
@@ -379,7 +386,10 @@ export class MemDb implements DispatchStore {
         const vs = [r.remind_at, r.snooze_at, r.defer_until].filter((v): v is number => v !== null);
         const d = vs.length ? Math.max(...vs) : null;
         const gone = r.deleted_at !== null || r.undone || (table === 'todos' && r.done);   // R-317
-        if (gone || (r.remind_at !== null && r.notified_for === r.remind_at) || d === null || d !== r.pushed_for) c.push({ table, row: r, k: r.pushed_for });
+        const h = table === 'anniversaries'   // 迁移 20261114191000：纪念日推完 remind_at 已挪到下一次，不拿 d ≠ pushed_for 判
+          ? r.remind_at === null || (r.notified_for ?? 0) >= r.pushed_for || (r.snooze_at ?? 0) > r.pushed_for
+          : (r.remind_at !== null && r.notified_for === r.remind_at) || d === null || d !== r.pushed_for;
+        if (gone || h) c.push({ table, row: r, k: r.pushed_for });
       }
     }
     return perUserCap(c, perUser, limit);
