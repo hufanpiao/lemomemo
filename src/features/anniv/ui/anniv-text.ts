@@ -50,9 +50,23 @@ export function metaText(r: AnnivRec, st: AnnivState, today: DateStr, locale: Ui
   return parts.join(' · ');
 }
 
-/** 提前天数 → “提前 7 天、前一天” */
-export function offsText(offs: readonly number[], t: AnnivT): string {
-  return offs.map((n) => (n === 0 ? t('anniv.rm.off.0', {}) : n === 1 ? t('anniv.rm.off.1', {}) : t('anniv.rm.off.n', { n }))).join(t('anniv.rm.sep', {}));
+/**
+ * 提前天数 → 短行“提前 7 天、前一天”（设置那一行、编辑页提醒一行、选项）；句子里（and = true：大卡最后一行、弹层说明）
+ * 最后两项用“和”：“提前 7 天和前一天”（视觉稿 anniv、annedit 弹层）
+ */
+export function offsText(offs: readonly number[], t: AnnivT, and = false): string {
+  const xs = offs.map((n) => (n === 0 ? t('anniv.rm.off.0', {}) : n === 1 ? t('anniv.rm.off.1', {}) : t('anniv.rm.off.n', { n })));
+  const last = and ? xs.pop() : undefined;
+  const head = xs.join(t('anniv.rm.sep', {}));
+  return last === undefined ? head : head ? `${head}${t('anniv.rm.and', {})}${last}` : last;
+}
+
+/** 编辑页“再往后：…”：不在今年的带年份（“2027年 11月14日”） */
+export function laterText(dates: readonly DateStr[], today: DateStr, locale: UiLocale, t: AnnivT): string {
+  const y0 = parseDate(today).y;
+  return dates
+    .map((d) => (parseDate(d).y === y0 ? fmtDay(d, locale, 'monthDay') : t('anniv.inYear', { y: parseDate(d).y, date: fmtDay(d, locale, 'monthDay') })))
+    .join(t('anniv.rm.sep', {}));
 }
 
 /** 提醒摘要（编辑页提醒一行）：“提前 7 天、前一天 · 9:00（默认）” */
@@ -65,7 +79,7 @@ export function remindLine(r: Pick<AnnivRec, 'remind_offsets' | 'remind_time'>, 
 /** 大卡最后一行：“10月27日 周二 · 提前 7 天、前一天 9:00 提醒” */
 export function cardRemindLine(r: AnnivRec, st: AnnivState, settings: Readonly<Record<string, unknown>>, locale: UiLocale, t: AnnivT): string {
   const L = annivLib();
-  return t('anniv.rm.cardLine', { date: fmtDay(st.next.date, locale, 'monthDayWeek'), offs: offsText(L.offsetsOf(r, settings), t), time: hm(L.remindTimeOf(r, settings)) });
+  return t('anniv.rm.cardLine', { date: fmtDay(st.next.date, locale, 'monthDayWeek'), offs: offsText(L.offsetsOf(r, settings), t, true), time: hm(L.remindTimeOf(r, settings)) });
 }
 
 /** 编辑页“下一次：…”：阳历“10月27日 周二 · 满 29 周岁”；阴历“2027年 三月初十 → 公历 4月15日 周四 · 满 72 周岁” */

@@ -5,11 +5,12 @@
 // • 列表：生日、纪念日、倒数日合在一起按还有几天排（data/anniv-model.ts）；每行头像 36px（没头像是名字第一个字加类型颜色，R-121）、名字、副行、右侧大号天数，
 //   倒数日名字后面带小标签；已过去的倒数日折在最下面
 // • 只读行（0.27 第 1 点、代定 D1）：副行写“要新版本才能显示”，点了出提示条，不进编辑
-// • 编辑（ui/AnnivEditor.tsx）：盖在列表上面的一层（手机从底部整屏弹上来、电脑右侧抽屉，线框 s5），这时列表 inert
+// • 编辑（ui/AnnivEditor.tsx）：盖在列表上面的一层（手机从底部整屏弹上来、电脑右侧抽屉，线框 s5），这时列表 inert；
+//   列表 ↔ 编辑层算同一页（pushInPage 打开、退一步关，index.ts 的 samePageAs），不起整页过渡（WebKit 过渡途中锁滚动会崩）
 // • 推算和农历（data/anniv-lib.ts）按需加载（2.6）：加载好之前只出空页面，加载失败写一句“没加载出来”（不白屏）
 import { useState } from 'react';
-import { navigate, replaceRoute, useRoute } from '../../../app/router.ts';
-import { useEditRoute } from '../../../app/router-levels.ts';
+import { replaceRoute, useRoute } from '../../../app/router.ts';
+import { pushInPage, useEditRoute } from '../../../app/router-levels.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
@@ -78,14 +79,14 @@ function AnnivList({ inert }: { inert: boolean }) {
   const data = useAnnivList(filter);
   const defaults = useAnnivDefaults();
   const g = useReadonlyGuard();
-  const open = (x: AnnivItem): void => (x.ro ? g.block() : void navigate('anniv', x.id));
+  const open = (x: AnnivItem): void => (x.ro ? g.block() : void pushInPage('anniv', x.id));
   const near = data.nearest;
 
   const row = (x: AnnivItem) => {
     const st = x.state;
     const meta = x.ro ? t('anniv.roMeta', {}) : x.rec && st ? metaText(x.rec, st, data.today, locale, t) : t('anniv.noCalc', {});
     return (
-      <li key={x.id} className={list.row} data-testid="anniv-row" data-ro={x.ro || undefined}>
+      <li key={x.id} className={`${list.row} ${styles.row}`} data-testid="anniv-row" data-ro={x.ro || undefined}>
         <Pressable type="button" className={list.main} onClick={() => open(x)}>
           <AnnivFace id={x.id} avatarId={x.row['avatar_id']} name={x.name} kind={x.row['kind']} size="sm" />
           <span className={list.text}>
@@ -110,7 +111,7 @@ function AnnivList({ inert }: { inert: boolean }) {
       <div className={styles.top}>
         <h1 className={styles.h1}>{t('anniv.h1', {})}</h1>
         <div className={styles.topEnd}>
-          <Pressable type="button" className={styles.newBtn} onClick={() => void navigate('anniv', 'new')} aria-label={t('anniv.newLabel', {})} data-testid="anniv-new">
+          <Pressable type="button" className={styles.newBtn} onClick={() => void pushInPage('anniv', 'new')} aria-label={t('anniv.newLabel', {})} data-testid="anniv-new">
             <span aria-hidden="true">＋</span> {t('anniv.new', {})}
           </Pressable>
           <MeLink testId="anniv-settings" />
@@ -133,7 +134,9 @@ function AnnivList({ inert }: { inert: boolean }) {
               <span className={styles.dot} aria-hidden="true" />
               {t('anniv.near.tag', { kind: t(KIND_KEY[near.rec.kind], {}) })}
             </span>
-            <AnnivFace id={near.id} avatarId={near.row['avatar_id']} name={near.name} kind={near.rec.kind} size="md" />
+            <span className={styles.nearAv}>
+              <AnnivFace id={near.id} avatarId={near.row['avatar_id']} name={near.name} kind={near.rec.kind} size="md" />
+            </span>
           </span>
           {near.state.days === 0 ? (
             <span className={styles.nearToday}>{t('anniv.near.today', {})}</span>
@@ -148,7 +151,7 @@ function AnnivList({ inert }: { inert: boolean }) {
       ) : null}
 
       {data.items.length ? (
-        <ul className={list.list} data-testid="anniv-list">
+        <ul className={`${list.list} ${styles.rows}`} data-testid="anniv-list">
           {data.items.map(row)}
         </ul>
       ) : data.past.length === 0 ? (
@@ -161,7 +164,7 @@ function AnnivList({ inert }: { inert: boolean }) {
       {data.past.length ? (
         <details className={styles.past} data-testid="anniv-past">
           <summary className={styles.pastSum}>{t('anniv.past', { n: data.past.length })}</summary>
-          <ul className={list.list}>{data.past.map(row)}</ul>
+          <ul className={`${list.list} ${styles.rows}`}>{data.past.map(row)}</ul>
         </details>
       ) : null}
     </main>

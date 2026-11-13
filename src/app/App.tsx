@@ -258,7 +258,7 @@ export const remindMaxWait = {
 const allRoutes: readonly FeatureRoute[] = [...featureRoutes, ...devRoutes];
 /** 页面归属：samePageAs 指向的那条，没写就是自己 */
 const pageOf = (name: RouteName): RouteName => allRoutes.find((r) => r.name === name)?.samePageAs ?? name;
-// 登记了 samePageAs 的页面组（目前只有月历：calendar + cal）；只有这些页在页内前进 / 后退时不起整页动画。
+// 登记了 samePageAs 的页面组（月历：calendar + cal；纪念日写自己：列表 ↔ 编辑层，B5）；只有这些页在页内前进 / 后退时不起整页动画。
 // 别的同名路由（#/event/1 → #/event/2）照旧是换页，不算（router.ts setSamePage，代码复审 R2）
 const grouped = new Set(allRoutes.flatMap((r) => (r.samePageAs === undefined ? [] : [r.samePageAs])));
 setSamePage((a, b) => grouped.has(pageOf(a.name)) && pageOf(a.name) === pageOf(b.name));

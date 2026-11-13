@@ -47,6 +47,7 @@ export const ko = {
   'anniv.rm.off.1': '하루 전', // REVIEW(ko)
   'anniv.rm.off.n': '{n}일 전', // REVIEW(ko)
   'anniv.rm.sep': ', ', // REVIEW(ko)
+  'anniv.rm.and': ', ', // REVIEW(ko) 마지막 두 항목 사이（중국어는 “和”）
   'anniv.rm.line': '{offs} · {time}', // REVIEW(ko)
   'anniv.rm.cardLine': '{date} · {offs} {time} 알림', // REVIEW(ko)
   'anniv.rm.default': '(기본)', // REVIEW(ko)

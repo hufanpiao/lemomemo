@@ -120,6 +120,7 @@
 
 /* “最近的一个”大卡（R-132 方案 C） */
 .near {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -141,6 +142,13 @@
   align-items: flex-start;
   justify-content: space-between;
   width: 100%;
+}
+
+/* 头像钉在右上角，跨标签和大号天数两行（视觉稿 anniv），不把天数往下挤 */
+.nearAv {
+  position: absolute;
+  top: 14px;
+  right: 16px;
 }
 
 .nearTag {
@@ -171,7 +179,7 @@
   background: linear-gradient(transparent 58%, var(--now-hl) 58%);
   font-family: var(--f-num);
   font-size: var(--fs-44);
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1.1;
 }
 
@@ -187,6 +195,12 @@
 .nearMeta {
   color: var(--text-2);
   font-size: var(--fs-13);
+}
+
+/* 列表一行 64px（视觉稿 anniv：36px 头像、名字和副行两行）。kit 的 List.module.css 也给 .row 写了 min-height，
+   两份 CSS 谁后插进页面不一定，所以带上列表的类、优先级高一级 */
+.rows .row {
+  min-height: 64px;
 }
 
 .name {
@@ -218,7 +232,7 @@
   margin-left: auto;
   font-family: var(--f-num);
   font-size: var(--fs-22);
-  font-weight: 300;
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -254,22 +268,45 @@
   background: var(--scrim);
 }
 
+/* 手机：从底部滑上来的一层，顶上留一条缝、圆角，下面的列表隔着遮罩看得见（视觉稿 annnew、annedit）；电脑见下面的右侧抽屉 */
 .sheet {
   position: absolute;
-  inset: 0;
+  inset: calc(var(--inset-top, 0px) + 12px) 0 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding-bottom: calc(var(--inset-bottom, 0px) + 24px);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
   background: var(--bg);
+  animation: anniv-sheet-in var(--dur-sheet) var(--ease-drawer) both;
 }
 
-.sheet > main {
-  min-height: 100%;
-  padding-bottom: calc(var(--inset-bottom, 0px) + 24px);
+@keyframes anniv-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes anniv-sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation-name: anniv-sheet-fade;
+  }
+}
+
+/* 设置里“减少动态效果”（data-rm）：同样只淡入 */
+:global(:root[data-rm="1"]) .sheet {
+  animation-name: anniv-sheet-fade;
 }
 
 @media (width >= 900px) {
   .sheet {
-    left: auto;
+    inset: 0 0 0 auto;
+    border-radius: 0;
     width: 440px;
     background: var(--b-drawer);
     box-shadow: var(--b-drawer-shadow);
@@ -369,6 +406,40 @@
   display: flex;
   justify-content: flex-end;
   margin-top: -8px;
+}
+
+/* “恢复默认”：右上角一行小字（视觉稿 annedit 弹层），不做成大按钮 */
+.rmReset {
+  position: relative;
+  min-height: 32px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+.rmReset::after {
+  content: '';
+  position: absolute;
+  inset: -6px -8px;
+}
+
+.rmReset:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* 弹层里提前几天的选项（视觉稿 annedit）：没选的只写字、不描边，选上的深色底带“✓” */
+.rmChip {
+  border-color: transparent;
+}
+
+.rmChip[aria-pressed='true']::before {
+  content: '✓';
+  margin-right: 4px;
 }
 
 .rmLabel {

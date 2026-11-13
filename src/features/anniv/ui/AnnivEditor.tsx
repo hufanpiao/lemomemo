@@ -19,7 +19,7 @@ import { leapOf, maxDay, NAME_MAX, NOTE_MAX, offsetsKey, offsetsList, recOf, yea
 import { annivLib, clearAvatar, setAvatar, type AvatarResult } from '../hooks/anniv-view.ts';
 import { useAnnivDefaults, useAnnivEdit, useToday } from '../hooks/useAnniv.ts';
 import { useAnnivT, type AnnivT } from '../hooks/useAnnivT.ts';
-import { lunarDayName, nextText, remindLine } from './anniv-text.ts';
+import { laterText, lunarDayName, nextText, remindLine } from './anniv-text.ts';
 import { AnnivFace } from './AnnivFace.tsx';
 import styles from './AnnivPage.module.css';
 import { RemindSheet } from './RemindSheet.tsx';
@@ -237,7 +237,7 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
           {st ? (
             <div className={styles.nextBox} data-testid="anniv-edit-next">
               <p>{st.past ? t('anniv.edit.pastLine', { n: -st.days, date: fmtDay(st.next.date, locale, 'monthDayWeek') }) : t('anniv.edit.next', { text: nextText(r, st, today, locale, t) })}</p>
-              {later.length ? <p className={styles.hint}>{t('anniv.edit.later', { dates: later.map((d) => fmtDay(d, locale, 'monthDay')).join(t('anniv.rm.sep', {})) })}</p> : null}
+              {later.length ? <p className={styles.hint}>{t('anniv.edit.later', { dates: laterText(later, today, locale, t) })}</p> : null}
             </div>
           ) : null}
 

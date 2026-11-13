@@ -44,7 +44,7 @@ export function RemindSheet({
   const [warn, setWarn] = useState<'anniv.rm.max' | 'anniv.rm.keepOne' | 'anniv.rm.badCustom' | null>(null);
   const offs = offsetsOf({ remind_offsets: value.offsets }, defaults);
   const time = remindTimeOf({ remind_time: value.time }, defaults);
-  const def = t('anniv.rm.line', { offs: offsText(offsetsOf({ remind_offsets: null }, defaults), t), time: hm(remindTimeOf({ remind_time: null }, defaults)) });
+  const def = t('anniv.rm.line', { offs: offsText(offsetsOf({ remind_offsets: null }, defaults), t, true), time: hm(remindTimeOf({ remind_time: null }, defaults)) });
   const choices = [...new Set([...OFFSET_CHOICES, ...offs])].sort((a, b) => a - b);
 
   const setOffs = (next: readonly number[]): void => {
@@ -81,14 +81,14 @@ export function RemindSheet({
       description={isDef ? t('anniv.rm.defDesc', {}) : t('anniv.rm.desc', { def })}
     >
       <div className={styles.rmHead}>
-        <FormButton variant="ghost" onClick={() => onChange({ offsets: null, time: null })} disabled={value.offsets === null && value.time === null} data-testid="anniv-rm-reset">
+        <button type="button" className={styles.rmReset} onClick={() => onChange({ offsets: null, time: null })} disabled={value.offsets === null && value.time === null} data-testid="anniv-rm-reset">
           {t('anniv.rm.reset', {})}
-        </FormButton>
+        </button>
       </div>
       <p className={styles.rmLabel}>{t('anniv.rm.daysLabel', {})}</p>
       <div className={styles.chips} role="group" aria-label={t('anniv.rm.daysLabel', {})}>
         {choices.map((n) => (
-          <button key={n} type="button" className={styles.chip} aria-pressed={offs.includes(n)} onClick={() => toggle(n)} data-testid={`anniv-rm-off-${n}`}>
+          <button key={n} type="button" className={`${styles.chip} ${styles.rmChip}`} aria-pressed={offs.includes(n)} onClick={() => toggle(n)} data-testid={`anniv-rm-off-${n}`}>
             {offsText([n], t)}
           </button>
         ))}

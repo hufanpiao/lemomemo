@@ -19,6 +19,20 @@ export function replaceInPage(name: RouteName, ...params: string[]): Promise<voi
   }, 'none');
 }
 
+/**
+ * 同一页面里新压一条、不起 View Transition（纪念日列表 → 盖在上面的编辑层，B5）：编辑层自己从底部滑上来，再叠整页淡入淡出是两层动画；
+ * 而且编辑层挂上时锁滚动（useScrollLock），过渡途中文档从能滚变成不能滚，WebKit 会整页崩（CI-webkit-crash 同一类，B5 e2e 实测关编辑层时崩）。
+ * 关的时候退一步（backOr），App 按 samePageAs 认出同一页、也不起过渡。深度 + 1，canGoBack 为真
+ */
+export function pushInPage(name: RouteName, ...params: string[]): Promise<void> {
+  const href = hrefOf(name, ...params);
+  if (window.location.hash === href) return Promise.resolve();
+  return commit(() => {
+    window.history.pushState(stateFor(1), '', href);
+    noteEntry();
+  }, 'none');
+}
+
 /** 只改地址、不重画（新建保存后把 #/todo/new 换成这一条的 id，代码审查 S7）；深度不变 */
 export function replaceAddress(name: RouteName, ...params: string[]): void {
   window.history.replaceState(stateFor(0), '', hrefOf(name, ...params));

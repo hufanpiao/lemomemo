@@ -43,6 +43,7 @@ export const zh = {
   'anniv.rm.off.1': '前一天',
   'anniv.rm.off.n': '提前 {n} 天',
   'anniv.rm.sep': '、',
+  'anniv.rm.and': '和',
   'anniv.rm.line': '{offs} · {time}',
   'anniv.rm.cardLine': '{date} · {offs} {time} 提醒',
   'anniv.rm.default': '（默认）',
