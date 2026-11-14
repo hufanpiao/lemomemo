@@ -26,6 +26,9 @@ function base(): Manifest {
     // 今天页顶部的纪念日一行和它的头像（B5 S14：有 7 天内的纪念日才下载）
     'features/today/ui/AnnivLine.tsx': { file: 'assets/AnnivLine-a.js', src: 'features/today/ui/AnnivLine.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
     'features/anniv/ui/AnnivFace.tsx': { file: 'assets/AnnivFace-a.js', src: 'features/anniv/ui/AnnivFace.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
+    // “现在”卡浅色卡的暖心句（今天页挂上按当前语言下载一份，不引别的块）
+    'features/today/i18n/cheer-zh.ts': { file: 'assets/cheer-zh-a.js', src: 'features/today/i18n/cheer-zh.ts', isDynamicEntry: true },
+    'features/today/i18n/cheer-ko.ts': { file: 'assets/cheer-ko-a.js', src: 'features/today/i18n/cheer-ko.ts', isDynamicEntry: true },
     '_rows-a.js': { file: 'assets/rows-a.js', name: 'rows', isDynamicEntry: true, imports: ['_zod-jitless-a.js'] },
     '_zod-jitless-a.js': { file: 'assets/zod-jitless-a.js', name: 'zod-jitless' },
     'style.css': { file: 'assets/style-a.css', src: 'style.css' },
