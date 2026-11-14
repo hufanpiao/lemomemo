@@ -44,6 +44,8 @@ export const FUNCTION_VERSION_EXEMPTIONS: readonly FunctionExemption[] = [
   { name: 'note-search', methods: ['POST'], caller: 'client', why: 'read-only-search' },
   // B4b-2：ai-embed 每 2 分钟由 pg_cron 调、带 x-cron-secret（架构第 6 节 ai-embed 行）
   { name: 'ai-embed', methods: ['POST'], caller: 'server', why: 'cron-x-cron-secret' },
+  // B4b-2 识图：ai-media 每 5 分钟由 pg_cron 调、带 x-cron-secret（架构第 6 节 ai-media 行）
+  { name: 'ai-media', methods: ['POST'], caller: 'server', why: 'cron-x-cron-secret' },
 ];
 
 /** fn 的 method 请求免不免查（OPTIONS 不在这里判断，由调用方先放行） */

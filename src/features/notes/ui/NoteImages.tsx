@@ -1,13 +1,15 @@
 // 随手记插图的界面（B4 S3；皮肤视觉稿 PH.mason 卡片顶部的图、NOTE_ED 抽屉里的图；主持人定的 4 件事）
 // • 卡片顶部（CardCover）：16:10，铺满卡片宽，右上角“+N”（另外还有几张）；用缩略图
-// • 编辑器、电脑抽屉里（EditorImages）：每张 16:10、圆角 18、上边距 14；还在传的盖一层“上传中…”；没传上的出“图片没传上”和“删除”“重新插入”
+// • 编辑器、电脑抽屉里（EditorImages）：每张 16:10、圆角 18、上边距 14；还在传的盖一层“上传中…”；没传上的出“图片没传上”和“删除”“重新插入”；
+//   传好了的下面挂识别状态（attachments 的 ImageAiStatus，懒加载；B4b-2 识图，线框 sAIst）
 //   （重新插入：图还在内存里就再传一次；不在了——页面关过——就重新选一张，插进来后删掉旧的这张）
 // • 选图（PickButtons）：“图片”（文件选择框，只收 image/*）和“拍照”（同上加 capture="environment"，手机直接开后摄像头）并排；
 //   编辑器里两个都放；输入行只放“图片”一个（视觉稿第 1491 行、线框 COMPOSER“输入行插图按钮不变”，视觉验收必改 4）。input 藏起来、由按钮点开，点按区照 44
 // • 提示文案（imgMessage）：插入失败（HEIC 先转 JPG、打不开、存不上……）、上传失败、写行被拒，都写进 i18n
 // • 输入行选图（useAddImage；R-416：选了先挂成待记下的小图 PendingPics，点“记下”才存）、编辑器插图区连同提示（EditorImageBlock）也在这里，随手记页、编辑页不超行数上限
 // • 动效：只用 Pressable 的按下反馈（R-376）
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { ImageAiStatus } from '../../attachments/index.ts';
 import { useBlobSrc } from '../../../kit/hooks/useBlobSrc.ts';
 import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
@@ -134,9 +136,7 @@ export function CardCover({ img, count }: { img: NoteImage; count: number }) {
 }
 
 /** “没传上”（本页传失败）/“还没传上”（服务器上暂时没有，可能另一台设备还在传）；正常的回 null */
-function failKey(src: ImageSrc): 'notes.img.failed' | 'notes.img.notYet' | null {
-  return src.failed ? 'notes.img.failed' : src.missing ? 'notes.img.notYet' : null;
-}
+const failKey = (src: ImageSrc): 'notes.img.failed' | 'notes.img.notYet' | null => (src.failed ? 'notes.img.failed' : src.missing ? 'notes.img.notYet' : null);
 
 /** 列表行“⋯”前的缩略图（视觉验收必改 1；视觉稿 PH.notes .thumb）：取不到时标“!”，读屏念出原因 */
 export function ListThumb({ img }: { img: NoteImage }) {
@@ -348,6 +348,8 @@ function OneImage(p: { img: NoteImage; pending: PendingImage | null; disabled: b
           </span>
         ) : null}
       </span>
+      {/* 识别状态（B4b-2 识图，线框 sAIst）：传好了才挂，懒加载 */}
+      {failed || uploading ? null : <Suspense fallback={null}><ImageAiStatus id={p.img.id} /></Suspense>}
       {replaceInput}
     </li>
   );

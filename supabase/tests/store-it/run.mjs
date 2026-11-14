@@ -10,7 +10,7 @@
 //      再另起一个进程跑 remind-enqueue-parity.it.ts（11-13 R-411 后续：批量入队范围 SQL 和替身比对），
 //      再另起一个进程跑 todo-items-cap.it.ts（11-13 R-350：子任务上限两连接并发），
 //      再各起一个进程跑 vault-store.it.ts、vault-move.it.ts（11-14 B5：隐私记的 SQL 以 fn_vault、fn_ai 打真库），
-//      再起一个进程跑 search-embed-store.it.ts（11-14 B4b-2：查找、算向量的 SQL 以 fn_ai 打真库）：
+//      再起一个进程跑 search-embed-store.it.ts（11-14 B4b-2：查找、算向量的 SQL 以 fn_ai 打真库），再起一个跑 ai-media-store.it.ts（B4b-2 识图）：
 //      网络只许 127.0.0.1，写只许 supabase/.temp/（残留清单）。
 // 不用 shell：supabase 先按 PATH 找（CI），找不到就用 node 直接跑 node_modules/supabase/dist/supabase.js（本机 npx 装的）。
 // 结果用 process.exitCode 交出。
@@ -98,6 +98,8 @@ if (refused) {
     denoTest(['vault-file.it.ts'], 120_000),
     // B4b-2（11-14）：智能查找 ai-embed、note-search 的 store.ts 以 fn_ai 打真库（含 writeVector 和改源头的事务并发）；几秒
     denoTest(['search-embed-store.it.ts'], 120_000),
+    // B4b-2 识图（11-14）：ai-media 的 store.ts、file-check 的 retryAi 以 fn_ai 打真库；几秒
+    denoTest(['ai-media-store.it.ts'], 120_000),
   ];
   process.exitCode = status.find((x) => x !== 0) ?? 0;
 }

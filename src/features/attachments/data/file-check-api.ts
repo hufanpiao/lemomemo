@@ -1,13 +1,17 @@
-// 调 file-check {action: check, id}（架构 5.13 第 2 点 ⑦）：带 JWT、apikey、X-App-Version（appFetch），20 秒超时。
-// 回 FileCheckRes（ok / rejected / incomplete）或失败类：retry（网络、超时、5xx、限流）、gone（404：行不是本人的、已删）、
+// 调 file-check（架构 5.13 第 2 点 ⑦）：带 JWT、apikey、X-App-Version（appFetch），20 秒超时。两种客户端调用共用 call()：
+// • fileCheck：{action: check, id}，回 FileCheckRes
+// • retryAiCall：{action: retry_ai, kind: image, id}（B4b-2 识图“重新识别”，线框 sAIst），回改完以后的 ai_status
+// 失败的分类两种一样：（ok / rejected / incomplete）或失败类：retry（网络、超时、5xx、限流）、gone（404：行不是本人的、已删）、
 //   account（会话被吊销、账号停用）、upgrade（426）。纯 TS：不准 import React（A1）
-import { FILE_CHECK_FN, fileCheckRes, type FileCheckRes } from '../../../../shared/schema/attachments.ts';
+import type { z } from 'zod';
+import { FILE_CHECK_FN, fileCheckRes, retryAiRes, type FileCheckRes, type RetryAiRes } from '../../../../shared/schema/attachments.ts';
 import { buildInfo } from '../../../platform/env.ts';
 import { sessionToken } from '../../../platform/files.ts';
 import { appFetch } from '../../../platform/http.ts';
 
 export type CheckFail = { ok: false; kind: 'retry' | 'gone' | 'account' | 'upgrade'; code: string };
 export type CheckResult = ({ ok: true } & FileCheckRes) | CheckFail;
+export type RetryAiResult = ({ ok: true } & RetryAiRes) | CheckFail;
 
 export const CHECK_TIMEOUT_MS = 20_000;
 
@@ -27,7 +31,11 @@ export const defaultCheckDeps = (): CheckDeps => ({
 
 const ACCOUNT = new Set(['session_revoked', 'account_disabled', 'account_pending_deletion', 'unauthorized']);
 
-export async function fileCheck(id: string, d: CheckDeps = defaultCheckDeps()): Promise<CheckResult> {
+export const fileCheck = (id: string, d: CheckDeps = defaultCheckDeps()): Promise<CheckResult> => call({ action: 'check', id }, fileCheckRes, d);
+export const retryAiCall = (id: string, d: CheckDeps = defaultCheckDeps()): Promise<RetryAiResult> =>
+  call({ action: 'retry_ai', kind: 'image', id }, retryAiRes, d);
+
+async function call<T extends object>(req: object, schema: z.ZodType<T>, d: CheckDeps): Promise<({ ok: true } & T) | CheckFail> {
   const at = await d.accessToken();
   if (!at) return { ok: false, kind: 'account', code: 'no_session' };
   const ac = new AbortController();
@@ -36,7 +44,7 @@ export async function fileCheck(id: string, d: CheckDeps = defaultCheckDeps()): 
     const res = await d.fetch(`${d.base}/${FILE_CHECK_FN}`, {
       method: 'POST',
       headers: { authorization: `Bearer ${at}`, apikey: d.anonKey, 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'check', id }),
+      body: JSON.stringify(req),
       signal: ac.signal,
       cache: 'no-store',
     });
@@ -47,7 +55,7 @@ export async function fileCheck(id: string, d: CheckDeps = defaultCheckDeps()): 
       body = null;
     }
     if (res.ok) {
-      const p = fileCheckRes.safeParse(body);
+      const p = schema.safeParse(body);
       return p.success ? { ok: true, ...p.data } : { ok: false, kind: 'retry', code: 'bad_response' };
     }
     const code = String((body as { error?: unknown } | null)?.error ?? res.status);

@@ -86,7 +86,7 @@ describe('免查名单：同一份来源', () => {
       .toEqual(client.map((f) => ({ name: f.name, methods: [...f.methods] })));
   });
 
-  it('0.38 第 47 条：account 只免 POST；account-purge、push-dispatch、ai-classify、usage-report、anniv-roll 只免 POST（服务器调用）；vault-image 只免 POST（B5）；note-search 只免 POST、ai-embed 只免 POST（B4b-2）；vault、invite-signup 不免', () => {
+  it('0.38 第 47 条：account 只免 POST；account-purge、push-dispatch、ai-classify、usage-report、anniv-roll 只免 POST（服务器调用）；vault-image 只免 POST（B5）；note-search 只免 POST、ai-embed、ai-media 只免 POST（B4b-2）；vault、invite-signup 不免', () => {
     const plan = FUNCTION_VERSION_EXEMPTIONS.map((f) => [f.name, [...f.methods], f.caller]);
     expect(plan).toEqual([
       ['account', ['POST'], 'client'],
@@ -99,6 +99,7 @@ describe('免查名单：同一份来源', () => {
       ['vault-image', ['POST'], 'client'],     // B5（任务单 S18、0.29 续第 77 条）：旧版也能看隐私记的图
       ['note-search', ['POST'], 'client'],     // B4b-2：只读，只回 id 和分数（架构第 6 节免查名单）
       ['ai-embed', ['POST'], 'server'],        // B4b-2：pg_cron 每 2 分钟带 x-cron-secret
+      ['ai-media', ['POST'], 'server'],        // B4b-2 识图：pg_cron 每 5 分钟带 x-cron-secret
     ]);
     expect(isFunctionExempt(FUNCTION_VERSION_EXEMPTIONS, 'invite-signup', 'POST')).toBe(false);
     expect(isFunctionExempt(FUNCTION_VERSION_EXEMPTIONS, 'vault', 'POST')).toBe(false);   // 0.29 续第 75 条

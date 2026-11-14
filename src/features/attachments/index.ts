@@ -16,4 +16,10 @@ export const NoteAttachments = lazy(() => import('./ui/NoteAttachments.tsx'));
  */
 export const VaultAttachments = lazy(() => import('./ui/VaultAttachments.tsx'));
 
+/**
+ * 随手记编辑器里一张图下面的识别状态（B4b-2 识图，线框 sAIst）：识图中 / 没识别 +“重新识别” / 没交给 AI +“去打开” / AI 看到的。
+ * props: { id: note_images 的 id }；上传中、没传上的图不挂。行是同步下来的，隐私记的图、删了的、没有可显示状态的不出东西
+ */
+export const ImageAiStatus = lazy(() => import('./ui/ImageAiStatus.tsx'));
+
 export type { VaultFileApi, VaultFileFail } from './data/vault-att.ts';

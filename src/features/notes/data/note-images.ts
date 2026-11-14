@@ -11,14 +11,15 @@
 // 纯 TS：不准 import React（A1）
 import { PUT_BACKOFF, putFailOf, putParts } from '../../../core/row-sync.ts';
 import type { FileError, UploadResult } from '../../../platform/files.ts';
+import { noteImagePath } from '../../../../shared/logic/files/media-path.ts';
 
 /** 插图失败的几种提示（i18n 键 notes.img.fail.<键>） */
 export type ImgFailKey = 'quota' | 'length' | 'too_big' | 'bad_type' | 'upgrade' | 'denied' | 'retry' | 'write';
 
 export { uuidv7, type QueueItem, type RowSync } from '../../../core/row-sync.ts';
 
-/** 原图路径（库里 check 钉死的拼法） */
-export const imagePath = (userId: string, noteId: string, id: string): string => `${userId}/${noteId}/${id}.webp`;
+/** 原图路径（库里 check 钉死的拼法；和 ai-media 读图共用 shared 的一份） */
+export const imagePath = noteImagePath;
 /** 缩略图路径：同名 .t.webp */
 export const thumbPath = (path: string): string => path.replace(/\.webp$/, '.t.webp');
 
