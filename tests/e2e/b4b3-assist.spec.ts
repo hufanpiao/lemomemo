@@ -23,7 +23,7 @@ const NT = id(43);
 const V = '2026-10-29';
 const SUMMARY = '这周记了一家拉面店，汤头很浓。';
 
-type Fake = { parses: unknown[]; sums: unknown[]; writes: { table: string; body: unknown }[] };
+type Fake = { parses: unknown[]; sums: unknown[]; writes: { table: string; body: unknown }[]; pulled: Set<string> };
 
 async function fakeServer(page: Page, baseURL: string | undefined, parse: Record<string, unknown> | null = null): Promise<Fake> {
   await seedFakeSession(page.context(), baseURL, { jwt: true });
@@ -38,7 +38,7 @@ async function fakeServer(page: Page, baseURL: string | undefined, parse: Record
     notes: [{ id: NT, ...c, title: '拉面店', body: '弘大那家拉面店，汤头很浓。', is_private: false, category_id: null, category_source: 'none', category_seen: true, tags: [], converted_to: null, source: 'page', raw_text: '', batch_id: null }],
     settings: [{ id: id(50), ...c, key: 'ai.enabled', value: true }],
   };
-  const fake: Fake = { parses: [], sums: [], writes: [] };
+  const fake: Fake = { parses: [], sums: [], writes: [], pulled: new Set() };
   await page.route(/\/sb\/rest\/v1\//, (route) => {
     const req = route.request();
     const u = new URL(req.url());
@@ -47,6 +47,7 @@ async function fakeServer(page: Page, baseURL: string | undefined, parse: Record
       fake.writes.push({ table: name, body: req.postDataJSON() });
       return route.fulfill({ status: 201, json: [{ rev: 2 }] });
     }
+    fake.pulled.add(name);
     if (tables[name]) return route.fulfill({ json: tables[name] });
     if (name === 'profiles') return route.fulfill({ json: [{ user_id: USER, consent_policy_ver: V, consent_ai_at: at }] });
     if (name === 'app_config' && u.searchParams.get('select') === 'notice') return route.fulfill({ json: [{ notice: { policy_ver: V, min_consent_ver: V } }] });
@@ -66,6 +67,14 @@ async function fakeServer(page: Page, baseURL: string | undefined, parse: Record
 
 const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
 
+// 失败时把运行日志最后 40 行带进报告（运行日志本身不记用户原话），看不出根因再补日志
+test.afterEach(async ({ page }, info) => {
+  if (info.status === info.expectedStatus) return;
+  const log = await runLog(page).catch(() => '(读不到运行日志)');
+  await info.attach('run-log-tail', { body: log.split('\n').slice(-40).join('\n'), contentType: 'text/plain' });
+  console.log(`[b4b3-assist 运行日志最后 40 行] ${info.title}\n${log.split('\n').slice(-40).join('\n')}`);
+});
+
 async function shot(page: Page, browserName: string, name: string): Promise<void> {
   if (browserName !== 'chromium' || !SHOT_DIR) return;
   await page.waitForTimeout(600);
@@ -80,10 +89,16 @@ async function shots(page: Page, browserName: string, name: string): Promise<voi
   await page.emulateMedia({ colorScheme: 'light' });
 }
 
-async function openToday(page: Page): Promise<void> {
+/** 首次同步要用到的表：settings 的 ai.enabled、profiles 的同意版本没落地前，“＋”按 AI 没开走本机规则（11-14 运行日志 assist list … n=0、③ 记成了“已记下”） */
+const FIRST_PULL = ['events', 'todos', 'notes', 'settings', 'profiles'];
+
+async function openToday(page: Page, fake: Fake): Promise<void> {
   await page.goto('/app/#/today');
   await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 });
-  await page.waitForTimeout(FADE_GUARD_MS);
+  // 等首次同步拉完、日程出现在今天页，再留一点时间让本机库写完；不然打字时数据还没到，结果层查不到、AI 也当没开
+  await expect.poll(() => FIRST_PULL.filter((t) => !fake.pulled.has(t)), { timeout: 20_000 }).toEqual([]);
+  await expect(page.getByText('看牙医').first()).toBeVisible({ timeout: 20_000 });
+  await page.waitForTimeout(Math.max(FADE_GUARD_MS, 300));
 }
 
 async function typeAndSend(page: Page, text: string): Promise<void> {
@@ -111,7 +126,7 @@ test.describe('B4b-3 结果层：手机', () => {
 
   test('① 总结这周的随手记：不调 ai-parse，结果层列出依据、总结卡；日志不带原话', async ({ page, baseURL, browserName }) => {
     const fake = await fakeServer(page, baseURL);
-    await openToday(page);
+    await openToday(page, fake);
     await summarizeFlow(page, fake);
     await shots(page, browserName, '手机-结果层-总结');
     await page.getByTestId('assist-close').click();
@@ -125,7 +140,7 @@ test.describe('B4b-3 结果层：手机', () => {
 
   test('② 查找面板：待办那行“⋯”→ 完成 → 撤销写回；页脚有“改成记下”', async ({ page, baseURL, browserName }) => {
     const fake = await fakeServer(page, baseURL);
-    await openToday(page);
+    await openToday(page, fake);
     await typeAndSend(page, '查一下 洗牙');
     await expect(page.getByTestId('find-panel')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('find-record')).toBeVisible();
@@ -147,7 +162,7 @@ test.describe('B4b-3 结果层：手机', () => {
   test('③ AI 判成取消：确认卡列出那条日程，不新建、不直接改', async ({ page, baseURL, browserName }) => {
     const day = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
     const fake = await fakeServer(page, baseURL, { intent: 'cancel', confidence: 0.9, target: { text: '牙医', date: day, time: null, kinds: ['event'] }, to: null, quota_left: 30 });
-    await openToday(page);
+    await openToday(page, fake);
     await typeAndSend(page, '今天看牙医不去了');
     await expect(page.getByTestId('assist-panel')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('assist-target')).toBeVisible();
@@ -163,7 +178,7 @@ test.describe('B4b-3 结果层：电脑', () => {
 
   test('④ 总结这周的随手记：结果层居中', async ({ page, baseURL, browserName }) => {
     const fake = await fakeServer(page, baseURL);
-    await openToday(page);
+    await openToday(page, fake);
     await summarizeFlow(page, fake);
     await shots(page, browserName, '电脑-结果层-总结');
     await page.keyboard.press('Escape');
