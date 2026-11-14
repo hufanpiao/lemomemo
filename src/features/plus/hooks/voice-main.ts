@@ -4,7 +4,6 @@
 // • quick-add：exe 的全局快速记录框交来的一句；控制器正忙（正在录、正在整理）接不了时把原话留作草稿，下次点开“＋”填回，不丢
 // • 运行日志：quick submit len=（只记字数）、quick record out=
 import { clock } from '../../../platform/clock.ts';
-import { onQuickAddText } from '../../../platform/desktop.ts';
 import { isTauri } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { writeAssistDraft } from '../data/type-draft.ts';
@@ -25,13 +24,14 @@ export function listenQuickAdd(): () => void {
   if (!isTauri()) return () => undefined;
   let off: (() => void) | null = null;
   let dead = false;
-  void onQuickAddText((text) => {
+  // desktop.ts 只有 exe 用得上：按需 import，不进录音这一块的静态依赖（首屏主包的预加载表少一项）
+  void import('../../../platform/desktop.ts').then((m) => m.onQuickAddText((text) => {
     rlog(`quick submit len=${[...text].length}`);
     void mainVoice.record(text, 'quick', 'plan').then((out) => {
       rlog(`quick record out=${out}`);
       if (out !== 'saved') void writeAssistDraft({ text, day: null }, clock.now(), false);
     });
-  }).then(
+  })).then(
     (f) => {
       if (dead) f();
       else off = f;
