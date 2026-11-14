@@ -8,7 +8,7 @@
 // • 进出：<Appear kind="scrim" / "sheet">（--dur-sheet + --ease-drawer；减少动态效果只淡入淡出，17.4）
 import { useEffect, useRef } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
-import { useKeys } from '../../../kit/hooks/useKeys.ts';
+import { useLayer } from '../../../kit/hooks/useLayer.ts';
 import { Appear, eachFrame } from '../../../motion/components.ts';
 import { fmtClock, recCountdown, type VoiceState } from '../hooks/useVoice.ts';
 import { useLangNames, usePlusT } from '../hooks/usePlusT.ts';
@@ -35,13 +35,8 @@ export function RecordPanel({ v }: { v: VoiceState }) {
   const live = useRef(v);
   live.current = v;
 
-  useKeys({
-    Escape: () => {
-      if (!show || !v.locked) return false;
-      v.discard();
-      return true;
-    },
-  });
+  // 锁定录音时是层栈里的一层（kit/hooks/layers.ts）：Esc 只在它是栈顶时丢掉这段录音
+  useLayer(show && v.locked, { name: 'rec-lock', onEsc: () => v.discard(), back: () => [] });
 
   // 每帧：计时、倒数、声波（只写 DOM）
   useEffect(() => {

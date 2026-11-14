@@ -24,10 +24,10 @@ import { monthOf, weekDates } from '../../../../shared/logic/calendar/cal-nav.ts
 import { navigate, replaceRoute, useRoute } from '../../../app/router.ts';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { annivOn } from '../../../kit/hooks/anniv-on.ts';
+import { useKeys } from '../../../kit/hooks/layers.ts';
 import { ReadonlyToast, RepeatBanner } from '../../../kit/components/ReadonlyRow.tsx';
 import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import { Appear } from '../../../motion/components.ts';
-import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { UnsyncedRemindHint } from '../../reminders/index.ts';
 import { useSwipePager } from '../../../motion/gestures.ts';
@@ -67,27 +67,7 @@ function holShortKey(v: 'cn' | 'kr' | 'both'): 'cal.set.holShort.cn' | 'cal.set.
   }
 }
 
-/** 键盘翻页不该生效的时候：焦点在能打字的地方、页面上有浮层或弹窗、按着修饰键 */
-function keyBlocked(e: KeyboardEvent): boolean {
-  if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return true;
-  if (opensKeyboard(e.target)) return true;
-  return document.querySelector('[role="dialog"]') !== null;
-}
-
 const GRID_ID = 'cal-month-grid';
-
-/** 挂一个 keydown 监听（只挂一次），处理函数每次渲染换成最新的 */
-function useKeydown(fn: (e: KeyboardEvent) => void): void {
-  const ref = useRef(fn);
-  useEffect(() => {
-    ref.current = fn;
-  });
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => ref.current(e);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-}
 
 /** 手机上年月选择器后面的遮罩（挂在 body 上，比浮层低一层；设计复审 N1） */
 function PickScrim() {
@@ -180,18 +160,15 @@ export default function CalendarPage() {
     if (!model.isCurrent) cal.goToday();
   };
 
-  // 键盘：← → 翻页、T 回今天（5.12 第 3 点；线框 s3 电脑版说明）；直接切换，不横滑
-  useKeydown((e) => {
-    if (picking || keyBlocked(e)) return;
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      e.preventDefault();
-      const n = e.key === 'ArrowLeft' ? -1 : 1;
-      if (fold.byWeek) fold.step(n);
-      else cal.keyShift(n);
-    } else if (e.key === 't' || e.key === 'T') {
-      goToday();
-    }
-  });
+  // 键盘：← → 翻页、T 回今天（5.12 第 3 点；线框 s3 电脑版说明）；直接切换，不横滑。
+  // 走 kit 层栈的快捷键入口（页面的键）：焦点在能打字的地方、按着修饰键、有弹层（模态层）开着时都收不到；年月选择器开着时不翻
+  const key = (act: () => void) => (e: KeyboardEvent): boolean => {
+    if (picking || e.shiftKey) return false;
+    act();
+    return true;
+  };
+  const shift = (n: 1 | -1) => key(() => (fold.byWeek ? fold.step(n) : cal.keyShift(n)));
+  useKeys({ ArrowLeft: shift(-1), ArrowRight: shift(1), t: key(goToday) });
 
   const lunarShort = model.lunar ? (d: DateStr) => model.lunar?.dayInfo(d).solarTerm ?? model.lunar?.dayInfo(d).lunar : undefined;
   const sel = selected;

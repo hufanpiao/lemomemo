@@ -13,7 +13,7 @@ import { BackLink } from '../../../kit/components/BackLink.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import { Popover } from '../../../kit/components/Popover.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
-import { useKeys } from '../../../kit/hooks/useKeys.ts';
+import { useKeys } from '../../../kit/hooks/layers.ts';
 import { notesInput } from '../../../kit/state/new-item.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultRowMeta, useVaultStatus } from '../hooks/useVault.ts';

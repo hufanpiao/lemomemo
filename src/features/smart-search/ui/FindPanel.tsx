@@ -5,7 +5,7 @@
 // • 分组：最相关（关键词和意思都对上）→ 关键词找到 → 意思相近；每组先给 GROUP_SHOW 条，多的点“还有 N 条”展开（代定：线框画了每组 2～3 条和“全部 ›”）
 // • 顶上一行“现在只按关键词找 · 原因”（没网、没同意、次数用完、超时 + 再试一次），四种分开写（架构 5.13 第 6 点末条）
 // • 打开一条：日程、待办、纪念日进各自的编辑页；随手记、图片、文档进所在随手记；同时记进“最近找过”。不保存、不改任何数据
-// • 焦点锁定、Esc 关闭、读屏标注用 Radix Dialog（不用 Overlay：CSP 拦它的内联 style，见 kit Dialog.tsx 文件头），滚动锁用 kit 的 useScrollLock
+// • 焦点锁定、读屏标注用 Radix Dialog（不用 Overlay：CSP 拦它的内联 style，见 kit Dialog.tsx 文件头）；Esc、滚动锁、后面 inert、还焦点用 kit 的层栈（useLayer）
 // • B4b-3：每行右边“⋯”（ui/RowMenu.tsx，完成 / 推迟 / 删除后出“撤销”）；“最相关”里的图片横排缩略图（随手记的 TodayNotes part="thumb"）；
 //   有结果时底部也给“最近找过”；隐私记设过密码时出一行“隐私记锁着，里面的不在结果里”（vault 的 findrow）；
 //   “＋”判成内容类查找打开的（assist）：排除刚保存的这一批，页脚多“改成记下”“总结一下”（总结换成结果层 AssistPanel）
@@ -13,11 +13,11 @@
 import * as RD from '@radix-ui/react-dialog';
 import { Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { navigateSub } from '../../../app/router-sub.ts';
-import { useScrollLock } from '../../../kit/components/Dialog.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { TodayNotes } from '../../notes/index.ts';
 import { VaultParts } from '../../vault/index.ts';
 import { openAssist, type AssistReq, type FindFrom } from '../hooks/find-open.ts';
+import { useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -66,8 +66,9 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
   const [more, setMore] = useState<Record<string, boolean>>({});
   const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
-  // 关掉 = onClose（FindHost 的 closeFind 直接卸掉这一块），所以这里一直是开着的
-  useScrollLock(true);
+  // 关掉 = onClose（FindHost 的 closeFind 直接卸掉这一块），所以这里一直是开着的：挂着就是层栈里的一层（模态，kit/hooks/layers.ts：Esc、锁滚动、后面 inert、关了还焦点）
+  const panel = useRef<HTMLDivElement>(null);
+  useLayer(true, { name: 'find', modal: true, el: () => panel.current?.closest('body > *') ?? null, onEsc: onClose });
   useEffect(() => {
     const t0 = clock.now();
     rlog(`find open from=${from} len=${[...query.trim()].length}`);
@@ -312,12 +313,15 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
       <RD.Portal>
         {desk ? <div className={styles.scrim} onClick={close} aria-hidden="true" data-testid="find-scrim" /> : null}
         <RD.Content
+          ref={panel}
           className={desk ? styles.desk : styles.phone}
           aria-describedby={undefined}
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             input.current?.focus();
           }}
+          // 关了焦点由层栈还（Radix 不另找）
+          onCloseAutoFocus={(e) => e.preventDefault()}
           data-testid="find-panel"
         >
           <RD.Title className={styles.sr}>{t('find.results', {})}</RD.Title>

@@ -20,7 +20,7 @@ import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } fro
 import { getBoot, type BootResult } from '../core/boot.ts';
 import { RemindHost } from '../features/reminders/index.ts';
 import { GlassBar } from '../kit/components/GlassBar/GlassBar.tsx';
-import { useKeys } from '../kit/hooks/useKeys.ts';
+import { useKeys } from '../kit/hooks/layers.ts';
 import { useT } from '../kit/hooks/useT.ts';
 import { useUi } from '../kit/state/ui-store.ts';
 import { remindQueue, setRemindDown } from '../kit/state/remind-queue.ts';

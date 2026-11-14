@@ -1,5 +1,5 @@
 // 看图页（B4b-2 识图退回整改；线框 sAIst 第一屏、d 屏“看图浮层底部显示描述和标签”）：点随手记里的插图才懒加载这一块
-// • 手机整屏、电脑全窗口浮层：外壳和文档预览 PreviewLayer 共用 layer.module.css（scrim / full / box，看图页加 solid 不透明）和 layer.ts 的 useLayer（焦点、Esc、滚动锁、后面 inert）
+// • 手机整屏、电脑全窗口浮层：外壳和文档预览 PreviewLayer 共用 layer.module.css（scrim / full / box，看图页加 solid 不透明）和 layer.ts 的 useShellLayer（kit 层栈：焦点、Esc、滚动锁、后面 inert）
 // • 顶上：“✕ 关闭”、“第几张 / 共几张”；“⋯”不画——随手记里传好了的图现在没有别的动作（删除只在没传上时出）
 // • 中间：大图（由随手记传进来的 render 画，图从哪取是随手记的事）；左右滑、左右键、两边的“‹ ›”换张，到头不绕回；记的是看着的那张 id，图增删时不跳；一张都没了就关
 // • 底部：这张识别好了才出“AI 看到的”卡片（描述、中韩标签、“只写是什么东西，不抄号码”）；没识别好不出东西
@@ -8,11 +8,12 @@
 // • 运行日志：打开和换张（att view i=第几张/共几张）、关上（att view close）；不记图和描述
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useKeys } from '../../../kit/hooks/layers.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { useImageAi } from '../hooks/useImageAi.ts';
 import { useAttT } from '../hooks/useNoteFiles.ts';
-import { useLayer } from './layer.ts';
+import { useShellLayer } from './layer.ts';
 import shell from './layer.module.css';
 import styles from './ImageViewer.module.css';
 
@@ -48,7 +49,7 @@ export default function ImageViewer({ ids, start, render, back, onClose }: Image
     rlog('att view close');
     onClose();
   }, [onClose]);
-  const closeBtn = useLayer(close, back);
+  const { closeBtn, layer } = useShellLayer('att-view', close, back);
   const down = useRef<{ x: number; y: number } | null>(null);
   const now = useRef({ ids, i });
   useLayoutEffect(() => {
@@ -72,16 +73,13 @@ export default function ImageViewer({ ids, start, render, back, onClose }: Image
     if (n > 0) rlog(`att view i=${i + 1}/${n}`);
   }, [i, n]);
 
-  // 左右键：和 Esc 一样在 layout 阶段挂上（layer.ts）；带修饰键（Alt+← 是后退）、输入法组字、别人处理过的不算
-  useLayoutEffect(() => {
-    const key = (e: KeyboardEvent): void => {
-      if (e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-      if (e.key === 'ArrowLeft') step(-1);
-      else if (e.key === 'ArrowRight') step(1);
-    };
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, [step]);
+  // 左右键：登记在看图这一层上（层栈的快捷键入口），只在它是栈顶时生效；带修饰键（Alt+← 是后退、Shift）、输入法组字、别人处理过的不算
+  const arrow = (d: number) => (e: KeyboardEvent): boolean => {
+    if (e.shiftKey) return false;
+    step(d);
+    return true;
+  };
+  useKeys({ ArrowLeft: arrow(-1), ArrowRight: arrow(1) }, layer);
 
   // 横滑：只认主指针（双指缩放的第二根手指不算）、鼠标只认左键
   const onDown = (e: PointerEvent): void => {

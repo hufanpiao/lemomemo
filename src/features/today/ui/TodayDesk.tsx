@@ -21,7 +21,7 @@ import { DetailDrawer } from '../../../kit/components/DetailDrawer.tsx';
 import { AnnivAvatarSlot } from '../../../kit/components/AnnivAvatar.tsx';
 import list from '../../../kit/components/List.module.css';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
-import { useKeys } from '../../../kit/hooks/useKeys.ts';
+import { useKeys } from '../../../kit/hooks/layers.ts';
 import { makeUseT } from '../../../kit/hooks/useT.ts';
 import { isTauri } from '../../../platform/env.ts';
 import { AnnivFace } from '../../anniv/index.ts';

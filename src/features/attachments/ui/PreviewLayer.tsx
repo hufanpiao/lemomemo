@@ -8,7 +8,7 @@
 //   设置 › 数据 里能改）；交给微软时嵌 view.officeapps.live.com（不给 allow-popups、不带 referrer）；
 //   20 秒没加载出来，改成本机沙箱里的“首页缩略图 + 每页文字”，顶部写“微软这次没打开”，带“再试一次 / 下载”
 // • 隐私记的 PPT：服务器放的临时明文副本在关浮层、退回本机、页面隐藏时立即删（src.msEnd → ms_preview_end）
-// • Esc、✕ 关；打开时焦点放到关闭按钮，关了还给原来的元素；锁住后面页面的滚动（这几样和看图页共用 layer.ts 的 useLayer）。盖在整个窗口上（portal 到 body，不受抽屉的 transform 影响）
+// • Esc、✕ 关；打开时焦点放到关闭按钮，关了还给原来的元素；锁住后面页面的滚动（这几样和看图页共用 layer.ts 的 useShellLayer，背后是 kit 的层栈）。盖在整个窗口上（portal 到 body，不受抽屉的 transform 影响）
 // • 运行日志：打开（way、结果码）、微软问答和超时；不记文件名
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -19,7 +19,7 @@ import { parseFromFrame, ZOOM_MAX, ZOOM_MIN, type FrameWay, type FromFrame, type
 import { DOC_TYPES } from '../../../../shared/manifests/attachments.ts';
 import { canShareFiles, markOf, previewOf, readMsPref, sizeText, useAttT, writeMsPref, type AttMsgKey, type AttSource, type NoteFile } from '../hooks/useNoteFiles.ts';
 import { safeHref } from '../../../../shared/logic/link.ts';
-import { useLayer } from './layer.ts';
+import { useShellLayer } from './layer.ts';
 import shell from './layer.module.css';
 import styles from './PreviewLayer.module.css';
 
@@ -47,7 +47,7 @@ export default function PreviewLayer({ src, file, desk, onClose, onDownload, onS
   const [phase, setPhase] = useState<Phase>({ k: 'loading' });
   const [st, setSt] = useState<State | null>(null);
   const live = useRef(true);
-  const closeBtn = useLayer(onClose);
+  const { closeBtn } = useShellLayer('att-preview', onClose);
   const way = previewOf(file.kind);
 
   const fail = useCallback((key: AttMsgKey, code: string) => {

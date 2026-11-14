@@ -6,7 +6,7 @@
 // • 露着的时候（照 iOS，R-420 审查第 5、7 条主持人定）：
 //   – 行面可以直接拖回去；点一下行面是收起，那一下 click 吞掉
 //   – 按在另一行上：第一下只收起露着的这一行，点到的那一行不打开（click 吞掉）；接着横滑照常滑那一行
-//   – 点行外别处、按 Esc 收起；点操作按钮照常（做完收起）
+//   – 点行外别处、按 Esc 收起（露着时是层栈里的一层，Esc 只在它是栈顶时收它）；点操作按钮照常（做完收起）
 //   一次只露一行：模块里记着“现在露着的那一条”。落在任何一行行面上的按下都由那一行自己的按下处理，document 上的捕获监听只管落在行外的
 // • 收起时焦点在操作按钮上（Tab 过去、再 Esc）：交还给行面的主按钮，不让它跟着按钮变 inert 掉回 body（R-420 审查第 6 条）
 // • 收回、停住的过渡写在 CSS（.face[data-snap]），减少动态效果（data-rm）时没有过渡、直接到位，不回弹
@@ -18,6 +18,7 @@
 // • 只渲染和手势，不碰数据：操作做什么由调用方给 onClick
 import { useEffect, useRef, useState, type ElementType, type ReactNode } from 'react';
 import { useHDrag } from '../../motion/gestures.ts';
+import { useLayer } from '../hooks/useLayer.ts';
 import styles from './SwipeRow.module.css';
 
 export interface SwipeAction {
@@ -125,17 +126,14 @@ export function SwipeRow({ actions, children, as: Tag = 'div', className, disabl
       if (acts.current?.contains(t) || t.closest(FACE_SEL)) return;
       me();
     };
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') me();
-    };
     document.addEventListener('pointerdown', onDown, true);
-    document.addEventListener('keydown', onKey);
     return () => {
       if (openRow === me) openRow = null;
       document.removeEventListener('pointerdown', onDown, true);
-      document.removeEventListener('keydown', onKey);
     };
   }, [open, me]);
+  // 露着算一层（kit/hooks/layers.ts）：Esc 是栈顶时才收起；焦点由 closeNow 交还行面，层栈不另还
+  useLayer(open, { name: 'swipe', onEsc: me, back: () => [] });
 
   return (
     <Tag className={[styles.wrap, className].filter(Boolean).join(' ')} data-swipe={open ? 'open' : undefined} {...rest}>

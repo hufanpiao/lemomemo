@@ -6,7 +6,7 @@
 // • B4b-3：openAssist 打开的，内容类查找照样是查找面板（页脚多“改成记下”“总结一下”），时间类、总结、取消改期完成是结果层（AssistPanel，再一块）
 import { lazy, Suspense, useSyncExternalStore } from 'react';
 import { useRoute } from '../../../app/router.ts';
-import { useKeys } from '../../../kit/hooks/useKeys.ts';
+import { useKeys } from '../../../kit/hooks/layers.ts';
 import { closeFind, findOpenSnapshot, openFind, subscribeFindOpen, usesFindPanel } from '../hooks/find-open.ts';
 
 const FindPanel = lazy(() => import('./FindPanel.tsx'));

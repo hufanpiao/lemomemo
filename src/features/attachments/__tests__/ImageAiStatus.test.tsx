@@ -185,7 +185,7 @@ describe('ImageViewer 看图页', () => {
     fireEvent.click(screen.getByRole('button', { name: '上一张' }));
     expect(count().textContent).toBe('1 / 3');
     expect(screen.getByText('AI 看到的')).toBeTruthy();
-    expect(lines).toEqual(['att view i=1/3', 'att view i=2/3', 'att view i=3/3', 'att view i=2/3', 'att view i=1/3']);
+    expect(lines.filter((l) => l.startsWith('att ')), '层栈另记 layer push|pop，这里只看看图页自己的').toEqual(['att view i=1/3', 'att view i=2/3', 'att view i=3/3', 'att view i=2/3', 'att view i=1/3']);
   });
 
   it('Esc 和 ✕ 都关；关上后焦点回到打开它的元素', () => {

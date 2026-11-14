@@ -5,7 +5,7 @@
 // • 列表：生日、纪念日、倒数日合在一起按还有几天排（data/anniv-model.ts）；每行头像 36px（没头像是名字第一个字加类型颜色，R-121）、名字、副行、右侧大号天数，
 //   倒数日名字后面带小标签；已过去的倒数日折在最下面
 // • 只读行（0.27 第 1 点、代定 D1）：副行写“要新版本才能显示”，点了出提示条，不进编辑
-// • 编辑（ui/AnnivEditor.tsx）：盖在列表上面的一层（手机从底部整屏弹上来、电脑右侧抽屉，线框 s5），这时列表 inert；
+// • 编辑（ui/AnnivEditor.tsx）：盖在列表上面的一层（手机从底部整屏弹上来、电脑右侧抽屉，线框 s5），这时列表 inert（编辑层是层栈里的模态层，kit/hooks/layers.ts 设）；
 //   列表 ↔ 编辑层算同一页（navigate 打开、退一步关，index.ts 的 samePageAs；路由器认出同一页不起整页过渡，WebKit 过渡途中锁滚动会崩）
 // • 推算和农历（data/anniv-lib.ts）按需加载（2.6）：加载好之前只出空页面，加载失败写一句“没加载出来”（不白屏）
 import { useState } from 'react';
@@ -47,7 +47,7 @@ export default function AnnivPage() {
     );
   return (
     <>
-      <AnnivList inert={editing} />
+      <AnnivList />
       {editing ? <EditLayer /> : null}
     </>
   );
@@ -77,7 +77,7 @@ function ModeRow({ t, today }: { t: AnnivT; today: string }) {
   );
 }
 
-function AnnivList({ inert }: { inert: boolean }) {
+function AnnivList() {
   const t = useAnnivT();
   const locale = useUi((s) => s.locale);
   const [filter, setFilter] = useState<AnnivFilter>('all');
@@ -130,7 +130,7 @@ function AnnivList({ inert }: { inert: boolean }) {
   };
 
   return (
-    <main className={styles.page} data-feature="anniv" data-testid="anniv-page" inert={inert || undefined} aria-hidden={inert || undefined}>
+    <main className={styles.page} data-feature="anniv" data-testid="anniv-page">
       <div className={styles.top}>
         <h1 className={styles.h1}>{t('anniv.h1', {})}</h1>
         <MeLink testId="anniv-settings" />

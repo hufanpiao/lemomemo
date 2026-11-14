@@ -5,7 +5,7 @@
 //   之后晚到的删除成功了（状态回到 ok）也自动重新载入
 // • unavailable（代码审查建议 4）：installDesktopSession 没装上（分包加载失败、Rust 不在）——“读不到登录信息，请重新打开”，按钮重新载入
 // 另挂一个根（同 root.tsx 的 watchCacheBlocked），不用动效；样式沿用 CacheTooNewScreen 的整屏样式。
-// 挂出时给 #root 加 inert（底下的账号界面点不到、Tab 也进不去、读屏不读），焦点移到按钮上；卸掉时把 inert 还原（安全复审建议 ②）
+// 挂出时 exit-screen.tsx 把它放进 kit 层栈（模态层：#root inert，底下的账号界面点不到、Tab 也进不去、读屏不读），这里焦点移到按钮上；卸掉时出栈还原 inert（安全复审建议 ②）
 // 挂载、订阅（mountExitScreen、watchExitIncomplete）在 exit-screen.tsx，本文件只有组件、按需下载（11-05 首屏瘦身，主持人定第 4 项）
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../kit/hooks/useT.ts';

@@ -8,10 +8,11 @@
 // • 解锁成功：遮罩淡出 --dur-ui 后卸掉（S21，唯一的动效）；锁上时直接盖上、不做动效
 // • 读屏和焦点（审查第 6 条）：遮罩是 Radix Dialog 的模态 Content（同 kit Dialog、smart-search 的 FindPanel；不用 Overlay，CSP 拦它的内联 style），
 //   名字是隐藏标题“隐私记已上锁”（aria-labelledby 由 Radix 接），挂上时焦点移到卡里第一个按钮、Tab 圈在遮罩里，遮罩外的内容对读屏隐藏。
-//   Esc 由 Radix 接住，经 EscCtx 交给卡片的“取消”（和按钮同一个 cancel）；点遮罩空白处不关
+//   Esc 由 kit 层栈接住（锁屏是栈顶时），经 EscCtx 交给卡片的“取消”（和按钮同一个 cancel）；点遮罩空白处不关
 import * as RD from '@radix-ui/react-dialog';
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
+import { useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useAutolockMin, useErrText, useVault, useVaultCount } from '../hooks/useVault.ts';
 import { useWebauthn } from '../hooks/useVaultAuth.ts';
@@ -158,6 +159,8 @@ export function UnlockOverlay({ open, children, testId = 'vault-scrim' }: { open
     const id = setTimeout(() => setShown(false), 400);
     return () => clearTimeout(id);
   }, [open]);
+  // 锁屏开着是层栈里的一层（kit/hooks/layers.ts）：Esc 只在它是栈顶时交给里面的退路（esc）；不做模态层（Radix 已经圈住焦点），焦点不由层栈还
+  useLayer(open, { name: 'unlock', onEsc: () => esc.current?.(), back: () => [] });
   if (!open && !shown) return null;
   const leaving = !open;
   const stay = (e: Event): void => e.preventDefault();

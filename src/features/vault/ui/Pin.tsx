@@ -7,8 +7,9 @@
 //   （按出现顺序：1～9 是 key-0～key-8，0 是 key-9），不带数字本身
 // • 提示行（输错、锁定倒计时、两次不一样）在圆点下面、键盘上面（线框 s9 PWERR）
 // • PinTop：设密码、输密码整页的顶栏“‹ 随手记 … 取消”（线框 s9 FIRSTPW、PWERR：“右上角‘取消’随时退出”）
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
+import { useKeys } from '../../../kit/hooks/layers.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import styles from './Vault.module.css';
 
@@ -60,20 +61,12 @@ export function PinPad({ onSubmit, disabled = false, testId, msg = '', msgTestId
     setPin('');
     onSubmit(next);
   };
-  // 电脑上的实体键盘：数字、Backspace、Enter
-  useEffect(() => {
-    const on = (e: KeyboardEvent): void => {
-      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if (/^\d$/.test(e.key)) press(e.key as (typeof KEYS)[number]);
-      else if (e.key === 'Backspace') press('del');
-      else return;
-      e.preventDefault();
-    };
-    window.addEventListener('keydown', on);
-    return () => window.removeEventListener('keydown', on);
-  });
+  // 电脑上的实体键盘：数字、Backspace（kit 层栈的快捷键入口：焦点在输入框里、按着修饰键、有弹层盖着时收不到）
+  const hit = (k: (typeof KEYS)[number]) => (): boolean => {
+    press(k);
+    return true;
+  };
+  useKeys({ Backspace: hit('del'), ...Object.fromEntries(KEYS.filter((k) => k !== 'gap' && k !== 'del').map((k) => [k, hit(k)])) });
   return (
     <div data-testid={testId} data-rl-mask="">
       <div className={styles.dots} role="img" aria-label={t('vault.pad.filled', { n: pin.length })} data-testid={`${testId}-dots`} data-n={pin.length}>
