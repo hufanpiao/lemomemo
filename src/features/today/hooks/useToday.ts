@@ -12,9 +12,6 @@ import { clock } from '../../../platform/clock.ts';
 import { setDeleted, setTodoDone, type TrashTable } from '../data/today-actions.ts';
 import { eventsOn, lateTodos, nowCard, todayTodos, tomorrowOf, type Row } from '../data/today-model.ts';
 
-/** 已过去折成一行用（界面按留住的那一份列表算，所以不放进下面的 model） */
-export { splitPast } from '../data/today-model.ts';
-
 export function useToday() {
   const events = useCollection<Row>('events');
   const todos = useCollection<Row>('todos');

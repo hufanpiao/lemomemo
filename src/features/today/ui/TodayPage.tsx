@@ -43,7 +43,8 @@ import { opensKeyboard } from '../../../platform/env.ts';
 import { afterAppPainted, isAppPainted } from '../../../platform/root-paint.ts';
 import { AppearItem, AppearList, Pressable, useHoldView, useSwapWhenSafe } from '../../../motion/components.ts';
 import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
-import { splitPast, useToday } from '../hooks/useToday.ts';
+import { useToday } from '../hooks/useToday.ts';
+import { useTodayPast } from '../hooks/useTodayPast.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
 import { loadTodayDesk, TodayRo } from '../index.ts';
 import { useAnnivAny } from '../hooks/useAnnivAny.ts';
@@ -239,7 +240,7 @@ export default function TodayPage() {
   );
   // 已过去（线框 s1“已过去的折叠成一行”，时间河“▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓”）：结束了的日程、做完的待办收成一行，
   // 点一下展开、再点收起（这次打开记着，不存）；展开时过去的那几行排在最前面，照原来的行画
-  const past = splitPast(v.events, v.todos, d.now);
+  const past = useTodayPast(v.events, v.todos, d.now);
   const pastN = past.pastEvents.length + past.pastTodos.length;
   const pastText = [...past.pastEvents.map((o) => `${o.time ?? ''} ${o.title}`), ...past.pastTodos.map((x) => `${x.title} ✓`)].join(' · ');
   const listItem = (titled: boolean) => (

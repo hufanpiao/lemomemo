@@ -107,20 +107,22 @@ test.describe('B6 对齐线框：已过去、今天记的、删开着的那条',
     await page.waitForTimeout(FADE_GUARD_MS);
   });
 
-  test('⑫ 已过去折成一行：结束了的日程收进去，点了展开、再点收起', async ({ page }) => {
+  test('⑫ 已过去折成一行：结束了的日程收进去，点了展开、再点收起', async ({ page, browserName }) => {
     const fold = page.getByTestId('desk-panel-river').getByTestId('today-past');
     await expect(fold).toContainText('已过去 1 件：');
     await expect(fold).toContainText('SignPlex 字幕校对');
     await expect(fold).toHaveAttribute('aria-expanded', 'false');
     await expect(page.locator(`[data-open="${PAST_ID}"]`)).toHaveCount(0);
+    await shot(page, browserName, '对齐-今天已过去收起-1280');
     await fold.click();
     await expect(fold).toHaveAttribute('aria-expanded', 'true');
     await expect(page.locator(`[data-open="${PAST_ID}"]`)).toBeVisible();
+    await shot(page, browserName, '对齐-今天已过去展开-1280');
     await fold.click();
     await expect(page.locator(`[data-open="${PAST_ID}"]`)).toHaveCount(0);
   });
 
-  test('⑬ “今天记的”点一条：今天页的详情抽屉里打开随手记，不换页；Esc 关上焦点回到那一行', async ({ page }) => {
+  test('⑬ “今天记的”点一条：今天页的详情抽屉里打开随手记，不换页；Esc 关上焦点回到那一行', async ({ page, browserName }) => {
     await seedNotes(page);
     const row = page.getByTestId('today-notes').locator('[data-open]').first();
     await expect(row).toBeVisible({ timeout: 20_000 });
@@ -131,6 +133,7 @@ test.describe('B6 对齐线框：已过去、今天记的、删开着的那条',
     await expect(drawer.getByTestId('note-edit-body')).toBeFocused();
     await expect(page).toHaveURL(/#\/today$/);
     await expect(row).toHaveAttribute('aria-current', 'true');
+    await shot(page, browserName, '对齐-今天记的抽屉-1280');
     await page.keyboard.press('Escape');
     await expect(drawer).toHaveCount(0);
     await expect(row).toBeFocused();
@@ -149,7 +152,7 @@ test.describe('B6 对齐线框：已过去、今天记的、删开着的那条',
 test.describe('B6 对齐线框：手机宽度的已过去', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('⑫ 手机宽度：已过去同样折成一行，点了展开', async ({ page }) => {
+  test('⑫ 手机宽度：已过去同样折成一行，点了展开', async ({ page, browserName }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible({ timeout: 20_000 });
     await seedToday(page);
@@ -157,9 +160,12 @@ test.describe('B6 对齐线框：手机宽度的已过去', () => {
     await expect(fold).toContainText('已过去 1 件：', { timeout: 20_000 });
     await expect(page.getByTestId('desk')).toHaveCount(0);
     await expect(page.locator(`[data-open="${PAST_ID}"]`)).toHaveCount(0);
+    await expect(page.getByTestId('today-anniv')).toContainText('김지민 生日');
+    await shot(page, browserName, '对齐-今天手机已过去收起-390');
     await page.waitForTimeout(FADE_GUARD_MS);
     await fold.click();
     await expect(page.locator(`[data-open="${PAST_ID}"]`)).toBeVisible();
+    await shot(page, browserName, '对齐-今天手机已过去展开-390');
   });
 });
 
