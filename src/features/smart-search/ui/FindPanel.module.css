@@ -1,0 +1,437 @@
+/* 查找面板（B4b-2；定稿线框 s12、sFind）。只用令牌（A11）。
+   • 手机（窄于 900px）：整屏一层（--z-dialog），页面底色；顶上输入条 + 关闭，下面胶囊两排、只按关键词一行、结果分组，整块在中间滚动
+     （线框 s12 第二张：输入条在顶部，结果区在键盘上方滚动，不会被挡）
+   • 电脑（≥ 900px，同 MQ_SIDEBAR）：后面一层磨砂遮罩（--scrim、--scrim-blur），居中一块面板，左边结果、右边预览选中的一条（线框 s12、sFind 电脑版）
+   • 胶囊照随手记分类胶囊的写法（features/notes 的 .chip / .chipOn），高 44 的触控区 */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  background: var(--scrim);
+  backdrop-filter: blur(var(--scrim-blur));
+}
+
+.phone {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--inset-top) + 8px) 16px 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.desk {
+  position: fixed;
+  top: 12vh;
+  left: 50%;
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  width: min(880px, calc(100vw - 64px));
+  height: min(640px, 80vh);
+  overflow: hidden;
+  border-radius: var(--r-xl);
+  background: var(--panel);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  transform: translateX(-50%);
+}
+
+.head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 电脑：输入一行、类型胶囊在下面一行（线框 s12 电脑版） */
+.desk .head {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* 电脑：只按关键词那一行在输入区下面、两栏上面 */
+.deskFb {
+  flex: none;
+  padding: 0 20px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.field {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-inp);
+  background: var(--inp-bg);
+}
+
+.desk .field {
+  border: 0;
+  background: none;
+  padding: 0;
+}
+
+/* 输入条左边的“＋”记号（线框 s12：黑底白字小圆） */
+.plus {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: var(--fs-14);
+  line-height: 1;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  border: 0;
+  background: none;
+  color: inherit;
+
+  /* 16px：iOS 聚焦不放大 */
+  font-size: var(--fs-16);
+  outline: none;
+}
+
+.desk .input {
+  font-size: var(--fs-20);
+}
+
+.close {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-15);
+}
+
+.chips {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  margin: 8px -16px 0;
+  padding: 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.desk .chips {
+  margin: 0;
+  padding: 0;
+}
+
+.chip,
+.chipOn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-13-5);
+  white-space: nowrap;
+}
+
+.chipOn {
+  border-color: transparent;
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+}
+
+/* 只按关键词（线框 sFind 第二张：左边一道竖线 + 小字） */
+.fb {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 10px 0 0;
+  padding-left: 8px;
+  border-left: 3px solid var(--text-2);
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.link {
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: inherit;
+  text-decoration: underline;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  margin: 0 -16px;
+  padding: 4px 16px calc(var(--inset-bottom) + 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cols {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.cols .body {
+  flex: 1 1 50%;
+  margin: 0;
+  padding: 8px 20px 20px;
+  border-right: 1px solid var(--line);
+}
+
+.side {
+  flex: 1 1 50%;
+  min-width: 0;
+  padding: 16px 24px;
+  overflow-y: auto;
+}
+
+.gh {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 14px 0 2px;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.gh b {
+  color: var(--text);
+  font-weight: 400;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 0;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.row[aria-current='true'] {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .row {
+    cursor: pointer;
+  }
+}
+
+/* 行首记号：日程一道竖条、待办圆圈、随手记和文档一个小框、纪念日菱形、图片方块 */
+.lead {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  color: var(--text-2);
+  font-size: var(--fs-10);
+}
+
+.bar {
+  width: 3px;
+  height: 22px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+
+.ring {
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--text);
+  border-radius: 50%;
+}
+
+.doc {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 22px;
+  padding: 0 2px;
+  border: 1.5px solid var(--text);
+  border-radius: 4px;
+  font-size: var(--fs-9-5);
+}
+
+.dia {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--text);
+  transform: rotate(45deg);
+}
+
+.pic {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--panel-2);
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  font-size: var(--fs-15);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 命中的词：黑底白字（线框 s12 的 .hl） */
+.hl {
+  padding: 0 2px;
+  border-radius: 2px;
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.more {
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 意思相近还在找：两条灰条占位（线框 sFind 第一张） */
+.skel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 12px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.skel i {
+  display: block;
+  width: 70%;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--line);
+}
+
+.skel i + i {
+  width: 45%;
+}
+
+.empty {
+  padding: 26px 10px 10px;
+  text-align: center;
+}
+
+.emptyT {
+  font-size: var(--fs-18);
+}
+
+.emptyS {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.7;
+}
+
+.start {
+  margin: 18px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 电脑右栏预览 */
+.pk {
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.ptitle {
+  margin: 6px 0 14px;
+  font-size: var(--fs-20);
+  overflow-wrap: anywhere;
+}
+
+.pl {
+  margin: 10px 0 4px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.pv {
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  font-size: var(--fs-14);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.keys {
+  margin-top: 14px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

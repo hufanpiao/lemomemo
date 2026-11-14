@@ -10,13 +10,13 @@ import * as onboarding from '../features/onboarding/index.ts';
 import * as plus from '../features/plus/index.ts';
 import * as reminders from '../features/reminders/index.ts';
 import * as settings from '../features/settings/index.ts';
-import * as smartSearch from '../features/smart-search/index.ts';
 import * as today from '../features/today/index.ts';
 import * as todos from '../features/todos/index.ts';
 import * as vault from '../features/vault/index.ts';
 import type { RouteName } from './router.ts';
 
 // 功能 attachments 也不在这里登记（B4b-1）：没有页面（routes 空），只挂在随手记编辑器里；登记了会把它的懒加载表拉进首屏
+// 功能 smart-search 同理（B4b-2）：没有页面，查找面板和 Ctrl+K 挂在 plus 首屏画完才下载的那一块（TypeBarPreload）里
 // 功能 auth 不在这里登记（K4 安全审查 7）：登录页是单独的入口 /app/auth/（src/auth/main.tsx），
 // 主 App 的依赖图里不能出现它的任何运行时代码（AuthPage 块、Turnstile、supabase 的登录调用）
 
@@ -38,7 +38,6 @@ const all: readonly FeatureEntry[] = [
   { routes: calendar.routes, flag: 'event' },
   { routes: todos.routes, flag: 'todo' },
   { routes: notes.routes, flag: 'note' },
-  smartSearch,
   plus,
   // 只取路由：VaultParts（给随手记、设置用的懒加载块）不经这里进首屏的登记表
   { routes: vault.routes },

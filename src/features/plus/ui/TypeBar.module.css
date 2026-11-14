@@ -95,6 +95,41 @@
   font-weight: 600;
 }
 
+/* 看起来是要查找（B4b-2，线框 sPlus“找：…”那张卡）：整张是按钮，点了这一句改成记下；左边一个文档小框 */
+.find {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.findIcon {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 20px;
+  border: 1.5px solid currentcolor;
+  border-radius: 3px;
+}
+
+.findText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.findSub {
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
 /* “＋”上方的小气泡（B3 S23，PlusHint.tsx 用；放在这个文件里是为了不多一个样式块（首屏主块的依赖表少一项，主持人 11-09 定）；线框 .hint：深底白字、圆角 14、下沿小三角指着“＋”的中线） */
 .hint {
   position: fixed;

@@ -14,6 +14,11 @@ export const ko = {
   'plus.type.more': '{n}개 더', // REVIEW(ko)
   'plus.type.partSaved': '같은 문장의 다른 항목은 이미 기록했어요', // REVIEW(ko)
   'plus.type.recognizing': '인식하는 중…', // REVIEW(ko) Q-27（R-406）초안
+  'plus.type.findHead': '찾으려는 것 같아요 · Enter로 찾기', // REVIEW(ko) B4b-2 초안
+  'plus.type.findQ': '찾기: {q}', // REVIEW(ko)
+  'plus.type.findWhere': '일정, 할 일, 메모에서 찾아요', // REVIEW(ko)
+  'plus.type.find': '찾기', // REVIEW(ko)
+  'plus.type.findAsRecord': '기록하려던 거라면? ‘찾기’ 왼쪽 미리보기를 눌러 ‘기록’으로 바꿔요', // REVIEW(ko)
   'plus.kind.event': '일정', // REVIEW(ko)
   'plus.kind.todo': '할 일', // REVIEW(ko)
   'plus.kind.anniv': '기념일', // REVIEW(ko)

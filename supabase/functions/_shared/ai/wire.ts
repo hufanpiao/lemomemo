@@ -1,4 +1,4 @@
-// ai-parse、ai-voice、claude-intake 的 index.ts 共用的接线（B3 任务单 BE-4、BE-5）：把 gate.ts 要的依赖接到 service role 的 supabase-js 上。
+// ai-parse、ai-voice、claude-intake 的 index.ts 共用的接线（B4b-2 起 note-search、ai-embed 经 embedderFor 拿嵌入函数）（B3 任务单 BE-4、BE-5）：把 gate.ts 要的依赖接到 service role 的 supabase-js 上。
 // 只给 index.ts 用（core.ts 要在 Vitest 里跑，不准 import _shared/gen/）。
 // 环境变量：GEMINI_API_KEY（预览、正式各一把，8.4；只放 x-goog-api-key 请求头）。读 app_config.ai、features，profiles.beta_features，
 // private.counters、ai_state、take_rate，public.logs。
@@ -8,6 +8,7 @@ import { featureOn, type FeaturesConfig } from '../gen/logic/flags.ts';
 import { AI_KINDS, KIND_FLAG, type AiKind } from '../gen/schema/kinds.ts';
 import { isObj } from '../obj.ts';
 import type { GateDeps } from './gate.ts';
+import { geminiEmbed } from './embed.ts';
 import { pickProvider, readAiConfig, type AiConfig } from './router.ts';
 import { exhaustedUntil, logInvalid, markExhausted, quotaStore, takeRate, type StoreAdmin } from './store.ts';
 
@@ -75,3 +76,6 @@ export function gateDeps(admin: SupabaseClient, log: (code: string) => void, con
 }
 
 export { isValidTz };
+
+/** 带密钥的嵌入函数（note-search、ai-embed；_shared/ai/embed.ts）：模型名不合法、密钥没配回 null */
+export const embedderFor = (model: string | null) => geminiEmbed(model, Deno.env.get('GEMINI_API_KEY'), (u, init) => fetch(u, init));

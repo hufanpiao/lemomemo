@@ -7,10 +7,14 @@
 // • “展开编辑”：把已打的字和日历页选中的那天交给调用方，打开完整新建页（R-353）
 // • callAi 默认是真的 ai-parse（data/ai-parse-api.ts，B3 接线）；设置里 ai.enabled 没开时不调，没把握的也直接用本机规则，不出“AI 没回应”
 // • 提示条：一条 → “已记下：…”；多条 → “已记下 N 条”，展开逐条改、撤，“拆错了，合并成一条”“全部撤销”
+// • 看起来是要查找（B4b-2，线框 sPlus“看起来是要查找 · Enter 查找”、架构 5.14 第 1 点）：本机规则 localIntent 判成查找、有把握、
+//   没带时间范围、查询词不空 → find 给出查询词，界面换成“找：…”，回车打开查找面板（features/smart-search）；“改成记下”把这一句当记下。
+//   没把握的、带时间范围的（“上周的会”“这个月的待办”）、总结、改期、完成都归 B4b-3（AI 判意图），这里照旧当记下
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { getBoot } from '../../../core/boot.ts';
 import { currentTz } from '../../../core/current-tz.ts';
+import { localIntent } from '../../../../shared/logic/parse/intent.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { callAiParse } from '../data/ai-parse-api.ts';
@@ -47,6 +51,7 @@ export function useTypeBar(o: TypeBarOpts) {
   const [status, setStatus] = useState<CaptureStatus>('idle');
   const [error, setError] = useState<TypeBarError>(null);
   const [partSaved, setPartSaved] = useState(false);
+  const [asRecord, setAsRecord] = useState(false);
   const busy = useRef(false);
   const typed = useRef(false);
   // 没传 callAi 时用真的 ai-parse（data/ai-parse-api.ts）；测试传桩
@@ -85,6 +90,7 @@ export function useTypeBar(o: TypeBarOpts) {
     setTextRaw(v);
     setError(null);
     setPartSaved(false);
+    setAsRecord(false);
   }, []);
 
   // 打开时把草稿填回来（用户已经开始打字就不覆盖）
@@ -99,6 +105,14 @@ export function useTypeBar(o: TypeBarOpts) {
   }, []);
 
   const preview = useMemo(() => (text.trim() === '' ? [] : planLocal(text, ctx()).result.items), [text, ctx]);
+  /** 看起来是要查找时的查询词（见文件头）；不是查找、或点了“改成记下”为 null */
+  const find = useMemo(() => {
+    if (asRecord || text.trim() === '') return null;
+    const r = localIntent(text, clock.now(), currentTz(), { scope: 'main' });
+    const q = r.query?.text.trim() ?? '';
+    return r.intent === 'search' && r.sure && r.query?.range === null && q !== '' ? q : null;
+  }, [text, asRecord]);
+  const keepRecord = useCallback(() => setAsRecord(true), []);
 
   const submit = useCallback(async () => {
     rlog(`typebar submit len=${text.length} trim=${text.trim().length} busy=${busy.current} status=${status}`);
@@ -147,5 +161,5 @@ export function useTypeBar(o: TypeBarOpts) {
 
   const dropDraft = useCallback(() => void clearTypeDraft(), []);
   const { choose, undo, undoOne, merge, closeNotice } = saved;
-  return { text, setText, status, preview, asking, notice, error, submit, choose, dismissConfirm, partSaved, undo, undoOne, merge, closeNotice, stash, dropDraft };
+  return { text, setText, status, preview, find, keepRecord, asking, notice, error, submit, choose, dismissConfirm, partSaved, undo, undoOne, merge, closeNotice, stash, dropDraft };
 }

@@ -9,8 +9,8 @@ import { run, sample, where } from './check-backend-harness.ts';
 const PY = readFileSync(join(ROOT, 'build', 'check_backend.py'), 'utf8');
 
 describe('F1：GEMINI_API_KEY 只准 wire.ts 和 voice-probe 读，import wire.ts 的函数名单写死', () => {
-  it('名单写死、完整内容钉住：正好是 ai-classify、ai-parse、ai-voice、claude-intake（往名单加函数要改这条单测，过代码审查和安全审查）', () => {
-    expect(PY.match(/^GEMINI_WIRE_FUNCS = .*$/gm)).toEqual(['GEMINI_WIRE_FUNCS = frozenset({"ai-parse", "ai-voice", "ai-classify", "claude-intake"})']);
+  it('名单写死、完整内容钉住：正好是 ai-classify、ai-parse、ai-voice、claude-intake，B4b-2 加 note-search、ai-embed（往名单加函数要改这条单测，过代码审查和安全审查）', () => {
+    expect(PY.match(/^GEMINI_WIRE_FUNCS = .*$/gm)).toEqual(['GEMINI_WIRE_FUNCS = frozenset({"ai-parse", "ai-voice", "ai-classify", "claude-intake", "note-search", "ai-embed"})']);
     expect(PY.match(/^GEMINI_KEY_FILE = .*$/gm)).toEqual(['GEMINI_KEY_FILE = "_shared/ai/wire.ts"']);
     expect(PY.match(/^GEMINI_KEY_PREVIEW_DIR = .*$/gm)).toEqual(['GEMINI_KEY_PREVIEW_DIR = "_preview/voice-probe/"']);
     // 别处不准再往名单里加、也不准改写这三个名字
@@ -28,7 +28,7 @@ describe('F1：GEMINI_API_KEY 只准 wire.ts 和 voice-probe 读，import wire.t
       'F1 supabase/functions/push-dispatch/index.ts:2',
       'F1 supabase/functions/push-dispatch/index.ts:3',
     ]);
-    expect(errors.find((e) => e.file.endsWith('push-dispatch/index.ts') && e.line === 2)?.message).toContain('ai-classify、ai-parse、ai-voice、claude-intake');
+    expect(errors.find((e) => e.file.endsWith('push-dispatch/index.ts') && e.line === 2)?.message).toContain('ai-classify、ai-embed、ai-parse、ai-voice、claude-intake、note-search');
     expect(errors.find((e) => e.file.endsWith('helper.ts') && e.line === 2)?.message).toContain('共用模块 不准读');
   });
 });
