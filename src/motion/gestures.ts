@@ -1,8 +1,10 @@
 // 动效模块的第三个出口（0.31 第 6 条，11-05 主持人定，原因是首屏体积）：跟手手势，只依赖 react、不带 motion/react。
 // 原来从 motion/index.ts 再导出；index.ts 被 main.tsx、router 引着，rollup 就把这两个手势放进了入口块 main（约 1.6 KB gzip），
 // 而用它们的只有月历（懒加载）。单独一个出口，它们就跟着月历的块走
-// 左右滑动翻页（B2 FA-3 月历、周视图）
-export { useSwipePager, type SwipePagerHandlers } from './swipe-pager.ts';
+// 横向拖动的底层（锁方向、左边缘避让、跟手、滑完吞点按；R-420 审查第 4 条合成一套）：kit 左滑行 SwipeRow 用
+export { useHDrag, type HDrag, type HDragEnd } from './hdrag.ts';
+// 左右滑动翻页（B2 FA-3 月历、周视图；底下是同一个 useHDrag）
+export { useSwipePager, type SwipePager } from './swipe-pager.ts';
 // 上下拖动收起 / 展开（B2 FA-3 月历上拖收起）
 export { useDragCollapse, type DragCollapse } from './drag-collapse.ts';
 // 电脑版布局拖面板的位移过渡（B6，5.9b；只给 kit/components/DeskLayout 用，跟着电脑版布局的块走）

@@ -220,7 +220,7 @@ describe('TC-B4-14：正文连续打字（第一个 patch 在途）不生成冲�
 });
 
 describe('标题框回车和输入法组字（Q-21）', () => {
-  // 标题框（DraftArea single）回车 = 失焦并存；中文、韩文输入法组字时的回车是选字，这时失焦会丢掉还没上屏的字。
+  // 标题框（kit TextArea 的 single）回车 = 失焦并存；中文、韩文输入法组字时的回车是选字，这时失焦会丢掉还没上屏的字。
   // 只断言“马上”的结果：0.8 秒的停笔计时还没到，这时能存上的只有失焦
   const typed = async (b: Awaited<ReturnType<typeof boot>>) => {
     await seed(b);

@@ -32,6 +32,9 @@ export const FIRST_PAINT_DYNAMIC = [
   'features/today/ui/AnnivLine.tsx',
   // 纪念日一行的头像（取图那一份 data/avatar-view.ts 另外按需下载，见 first-paint-graph 的非首屏名单）：那一条有头像才下载
   'features/anniv/ui/AnnivFace.tsx',
+  // “现在”卡浅色卡的暖心句（R-421 前后，11-14 d42e3781）：今天没日程或下一件还远时，今天页挂上就按当前语言下载一份，照样不许带 zod、农历
+  'features/today/i18n/cheer-zh.ts',
+  'features/today/i18n/cheer-ko.ts',
 ];
 
 /** manifest 键、src、name、file 里出现这些就是禁区的块：zod、zod-jitless、shared/schema、shared/manifests；
