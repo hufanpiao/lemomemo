@@ -3,12 +3,16 @@
 // B0 是骨架：接口定下来，具体手感在 B1（按下回弹、页面切换）、B2（弹层、列表）、B3（提示条、录音面板）里调
 import { presets, PRESS_SCALE, type AppearKind } from './presets.ts';
 import { prefersReducedMotion } from './reduced.ts';
-import { bezierCss, dur, ease } from './tokens.ts';
+import { swallowNextClick } from './swallow-click.ts';
+import { bezierCss, dur, ease, TAP_SWALLOW_MS } from './tokens.ts';
 import { reportDuplicateVtNames } from './vt.ts';
 
 // React 组件（Appear、Pressable、SharedLayout、Celebrate）在 ./components.ts：
 // 分开导出，免得只用函数的地方（例如 router 的 transition）把 motion/react 带进首屏（2.6）
 export { vtName } from './vt.ts';
+// 吞掉手势后补来的那一下 click（换页守卫、翻页、kit 左滑行、按住“＋”共用这一个；时限在 tokens.ts 的 TAP_SWALLOW_MS）
+export { swallowNextClick, type SwallowClickOptions } from './swallow-click.ts';
+export { TAP_SWALLOW_MS } from './tokens.ts';
 // 减少动态效果只有一套判断（系统设置或 <html data-rm="1">，UI-4 M-1）；React 组件经 useReducedMotionPref 读同一个
 export { prefersReducedMotion, subscribeReducedMotion } from './reduced.ts';
 export type { AppearKind } from './presets.ts';
@@ -126,59 +130,53 @@ export const FADE_SKIP_MS = 1000 / 60;
  * 原来 R6 的 EARLY_MS 是 50 ms；这里取 100 ms（新页第一帧约 17 ms 才画出来，再加人眼看清的最短时间），底栏不在 main 里，连点页签不受影响
  */
 export const FADE_GUARD_MS = 100;
-/** 窗口里吞掉了 pointerdown 时，跟着的那次 click 晚到也吞（按下在窗口里、松开在窗口外），最多等这么久 */
-const GUARD_CLICK_MS = 1000;
 let fadeAnim: Animation | null = null;
 let fadeStop: (() => void) | null = null;
 let guardStop: (() => void) | null = null;
 
-/** 在 document 上用 capture 吞掉 ms 以内落在 main 里的 pointerdown、click；返回摘掉监听的函数 */
+/**
+ * 在 document 上用 capture 吞掉 ms 以内落在 main 里的 pointerdown、click；返回摘掉监听的函数。
+ * 窗口里吞掉了 pointerdown 时，跟着的那次 click 晚到窗口外（按下在窗口里、松开在窗口外）也吞：交给 swallowNextClick，
+ * 最多等 TAP_SWALLOW_MS.guardLate（从按下算）；新的一次按下、被吞的按下变成滚动（pointercancel）就不再等（代码审查 S12，在 swallowNextClick 里）
+ */
 function guardTaps(doc: Document, ms: number): () => void {
   const t0 = performance.now();
-  let eatClickUntil = 0;
-  const inMain = (e: Event): boolean => e.target instanceof Element && e.target.closest('main') !== null;
+  let late: (() => void) | null = null;
+  const mainOf = (e: Event): Element | null => (e.target instanceof Element ? e.target.closest('main') : null);
   const eat = (e: Event): void => {
     e.preventDefault();
     e.stopPropagation();
   };
   const down = (e: Event): void => {
-    if (performance.now() - t0 >= ms || !inMain(e)) {
-      // 新的一次按下（代码审查 S12）：上一次被吞的按下变成了滚动、没有 click，不能把这一次正常点按的 click 当成晚到的那一下吞掉
-      eatClickUntil = 0;
-      return;
-    }
-    eatClickUntil = performance.now() + GUARD_CLICK_MS;
+    if (performance.now() - t0 >= ms) return void stop();
+    const main = mainOf(e);
+    if (!main) return;
     eat(e);
-  };
-  // 被吞的按下变成滚动（手指往上划）时浏览器发 pointercancel、不会再有 click：清掉等 click 的标记（S12）
-  const cancel = (): void => {
-    eatClickUntil = 0;
+    late?.();
+    late = swallowNextClick({ within: main, ms: TAP_SWALLOW_MS.guardLate });
   };
   const click = (e: Event): void => {
-    const now = performance.now();
-    const late = now < eatClickUntil;
-    eatClickUntil = 0;
-    if ((now - t0 < ms || late) && inMain(e)) eat(e);
-    else if (now - t0 >= ms) off();
+    if (performance.now() - t0 >= ms) return void stop();
+    if (mainOf(e)) eat(e);
   };
-  const timer = setTimeout(() => {
-    if (eatClickUntil === 0) off();
-  }, ms);
-  const late = setTimeout(() => off(), ms + GUARD_CLICK_MS);
+  const timer = setTimeout(() => stop(), ms);
   let dead = false;
-  const off = (): void => {
+  /** 窗口到了：只摘窗口本身的监听，晚到的那一下还由 late 等着 */
+  const stop = (): void => {
     if (dead) return;
     dead = true;
     clearTimeout(timer);
-    clearTimeout(late);
     doc.removeEventListener('pointerdown', down, true);
     doc.removeEventListener('click', click, true);
-    doc.removeEventListener('pointercancel', cancel, true);
+  };
+  /** 下一次换页、cancelFade：连晚到的那一下也不再等 */
+  const off = (): void => {
+    stop();
+    late?.();
     if (guardStop === off) guardStop = null;
   };
   doc.addEventListener('pointerdown', down, true);
   doc.addEventListener('click', click, true);
-  doc.addEventListener('pointercancel', cancel, true);
   return off;
 }
 

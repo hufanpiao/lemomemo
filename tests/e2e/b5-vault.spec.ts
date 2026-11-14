@@ -290,19 +290,27 @@ test('列表方式左滑：出“转成待办 / 移到隐私记 / 删除”，�
   const id = (await row.getAttribute('data-testid'))?.replace('notes-row-', '') ?? '';
   // 输入行还聚焦着时整页盖着模糊层（R-401）：先让它失焦
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  // 新行进场中带 pointer-events:none（src/motion/list-impl.tsx ENTERING_STYLE），按下会穿到列表上：
-  // 377ab1e3 CI webkit 运行日志“起点最上层 div#notes-list”“down div#notes-list”、左滑日志为空，固定等 600 ms 在 CI 上不够。改成等进场结束
-  await expect(row).not.toHaveAttribute('data-state', 'entering', { timeout: 10_000 });
+  // 进场中的那一层带 pointer-events:none（src/motion/list-impl.tsx ENTERING_STYLE），按下会穿到列表上（运行日志“down div#notes-list”、左滑日志为空）。
+  // 今天第一条记下时进场的是新的分组 section（notes-g-<日期>），行在新分组里是第一次画、自己不进场：5500ced3 只等行不是 entering，等错了层，
+  // CI webkit 照样红；11-14 本机快读组 webkit 单 worker 复现 5/6 红，诊断“往上：… section[notes-g-2026-11-14] state=entering pe=none”。
+  // 改成等列表里没有任何一层还在进场（等状态，不加时间）
+  await expect(page.locator('[data-testid="notes-list"] [data-state="entering"]')).toHaveCount(0, { timeout: 10_000 });
   // 入口行晚到会让位置变一下：再等它停稳再量
   await page.waitForTimeout(300);
   const box = await page.getByTestId(`notes-swipe-${id}`).boundingBox();
   if (!box) throw new Error('没有行');
   const y = box.y + box.height / 2;
   // 11-14 d4db0138 CI webkit 又红、左滑运行日志为空（按下没落到左滑上）：按下前记起点最上层是谁，失败时一起报
-  const topAt = await page.evaluate(([px, py]) => {
-    const el = document.elementFromPoint(px ?? 0, py ?? 0);
-    return el ? `${el.tagName.toLowerCase()}#${el.closest('[data-testid]')?.getAttribute('data-testid') ?? '-'}` : 'none';
-  }, [box.x + box.width - 40, y]);
+  // 11-14 CI webkit 起点最上层是 div#notes-list：再记这一行往上每一层的 data-state 和 pointer-events（哪一层挡住了点按）
+  const topAt = await page.evaluate(([px, py, rid]) => {
+    const el = document.elementFromPoint(Number(px), Number(py));
+    const top = el ? `${el.tagName.toLowerCase()}#${el.closest('[data-testid]')?.getAttribute('data-testid') ?? '-'}` : 'none';
+    const chain: string[] = [];
+    for (let n = document.querySelector(`[data-testid="notes-swipe-${String(rid)}"]`); n && n.getAttribute('data-testid') !== 'notes-list'; n = n.parentElement) {
+      chain.push(`${n.tagName.toLowerCase()}[${n.getAttribute('data-testid') ?? '-'}] state=${n.getAttribute('data-state') ?? '-'} pe=${getComputedStyle(n).pointerEvents}`);
+    }
+    return `${top}；往上：${chain.join(' < ')}`;
+  }, [box.x + box.width - 40, y, id] as const);
   await page.mouse.move(box.x + box.width - 40, y);
   await page.mouse.down();
   for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + box.width - 40 - i * 22, y);
@@ -311,11 +319,12 @@ test('列表方式左滑：出“转成待办 / 移到隐私记 / 删除”，�
   // 运行日志 300 ms 防抖才落到 localStorage，读之前要等
   const swipeLog = async (): Promise<string> => (await readRunLog(page)).filter((l) => l.includes('swipe ')).slice(-12).join(' | ');
   try {
-    await expect(page.getByTestId(`notes-swipe-${id}`)).toHaveAttribute('data-open', 'true');
+    await expect(page.getByTestId(`notes-swipe-${id}`)).toHaveAttribute('data-swipe', 'open');
   } catch (e) {
     await page.waitForTimeout(500);
     const tail = (await readRunLog(page)).slice(-30).join(' | ');
-    throw new Error(`${e instanceof Error ? e.message : String(e)} | 起点最上层：${topAt} | 左滑运行日志：${await swipeLog()} | 运行日志最后 30 行：${tail}`);
+    const later = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="notes-g-"]')].map((g) => `${g.getAttribute('data-testid')}=${g.getAttribute('data-state') ?? '-'} op=${getComputedStyle(g).opacity}`).join(','));
+    throw new Error(`${e instanceof Error ? e.message : String(e)} | 起点最上层：${topAt} | 超时后分组：${later} | 左滑运行日志：${await swipeLog()} | 运行日志最后 30 行：${tail}`);
   }
   await expect.poll(swipeLog, { message: '左滑运行日志要记下松手结果' }).toMatch(/swipe up started=1 axis=h last=-\d+ w=192 open=1/);
   await expect(page.getByTestId(`notes-sw-vault-${id}`)).toBeVisible();

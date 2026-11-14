@@ -57,39 +57,58 @@ interface CommitProps {
   rows?: number;
 }
 
+/** useCommitDraft 的可选项 */
+export interface CommitDraftOptions {
+  /** 这份草稿能不能交（日期框要年份够了才交）；不给都能交 */
+  accept?: ((v: string) => boolean) | undefined;
+  /** 停笔多久自动交一次（毫秒；随手记正文、标题 800）；不给就只在失焦、离开时交 */
+  idleMs?: number | undefined;
+  /** true：有没交的草稿时，外面的值变了也不覆盖（随手记编辑器：停笔存之前别的设备的改动不冲掉正在写的字）；
+   *  默认 false：不在编辑时外面的值一变就覆盖草稿、丢掉没交的 */
+  keepDirty?: boolean | undefined;
+}
+
 /**
  * 文本草稿（代码审查 M1）：本地值跟着外面的值走（别的设备改了、保存后规整了），编辑中不被打断；
- * 没提交的草稿在这几种时候补交一次：失焦 / 回车（平常的路径）、组件卸载（浏览器后退、点通知跳走、换记录）、
+ * 没提交的草稿在这几种时候补交一次：失焦 / 回车（平常的路径）、停笔 idleMs（给了才有）、组件卸载（浏览器后退、点通知跳走、换记录）、
  * pagehide、visibilitychange 变成 hidden（关标签页、iOS 把 PWA 切到后台后被回收，不一定有卸载）。
- * 同一份草稿只交一次；和外面的值一样就不交
+ * 同一份草稿只交一次；和外面的值一样就不交。kit 的 TextInput、TextArea 和随手记编辑器（NoteEditPage 的 DraftArea）共用这一个
  */
-function useCommitDraft(value: string, onCommit: (v: string) => void, accept: (v: string) => boolean = () => true) {
+export function useCommitDraft(value: string, onCommit: (v: string) => void, { accept = () => true, idleMs, keepDirty = false }: CommitDraftOptions = {}) {
   const [draft, setDraftState] = useState(value);
   const [editing, setEditing] = useState(false);
-  const latest = useRef({ draft: value, value, onCommit, accept, dirty: false });
+  const latest = useRef({ draft: value, value, onCommit, accept, dirty: false, timer: undefined as ReturnType<typeof setTimeout> | undefined });
   latest.current.value = value;
   latest.current.onCommit = onCommit;
   latest.current.accept = accept;
   useEffect(() => {
-    if (!editing) {
-      setDraftState(value);
-      latest.current.draft = value;
-      latest.current.dirty = false;
-    }
-  }, [value, editing]);
+    if (editing || (keepDirty && latest.current.dirty)) return;
+    setDraftState(value);
+    latest.current.draft = value;
+    latest.current.dirty = false;
+  }, [value, editing, keepDirty]);
 
   const flush = useCallback((): void => {
     const l = latest.current;
+    clearTimeout(l.timer);
+    l.timer = undefined;
     if (!l.dirty) return;
     l.dirty = false;
     if (l.draft !== l.value && l.accept(l.draft)) l.onCommit(l.draft);
   }, []);
 
-  const setDraft = useCallback((v: string): void => {
-    setDraftState(v);
-    latest.current.draft = v;
-    latest.current.dirty = true;
-  }, []);
+  const setDraft = useCallback(
+    (v: string): void => {
+      setDraftState(v);
+      const l = latest.current;
+      l.draft = v;
+      l.dirty = true;
+      if (idleMs === undefined) return;
+      clearTimeout(l.timer);
+      l.timer = setTimeout(flush, idleMs);
+    },
+    [flush, idleMs],
+  );
 
   useEffect(() => {
     const onHide = (): void => {
@@ -119,7 +138,7 @@ export function dateReady(v: string): boolean {
 
 export function TextInput({ value, onCommit, type = 'text', title = false, ...p }: CommitProps & { type?: 'text' | 'date' | 'time'; title?: boolean }) {
   const accept = type === 'date' ? dateReady : undefined;
-  const d = useCommitDraft(value, onCommit, accept);
+  const d = useCommitDraft(value, onCommit, { accept });
   return (
     <input
       id={p.id}

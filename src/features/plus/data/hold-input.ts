@@ -4,7 +4,9 @@
 //   不触发系统手势）和 contextmenu（一律 preventDefault，不出长按菜单）；<html data-plus-hold> 打标记，
 //   plus 自己按需加载的 CSS（ui/RecordPanel.module.css，跟录音那一块走）据此关掉长按菜单、选字、放大镜，按着时整页 touch-action: none
 // • 判定用 record-logic 的 holdStep（纯函数）：350 ms 到了没松开、没挪远 → start；之前松开 → 点一下（交给 GlassBar 原来的 onClick，这里不管）
-// • 进了录音（接收方 start() 返回 true）以后，这一次松手浏览器补在“＋”上的那一下 click 吞掉（不然又打开打字条）；落在别处的 click 照常
+// • 进了录音（接收方 start() 返回 true）以后，这一次松手浏览器补在“＋”上的那一下 click 吞掉（不然又打开打字条）；落在别处的 click 照常。
+//   怎么吞由调用方注入 swallowClick（hooks/voice-sink.ts 传 motion 的 swallowNextClick、时限 TAP_SWALLOW_MS.hold）：
+//   这一层（功能的 data）按分层规则不能引 motion，吞点按全站只有 motion 里那一套（审查“吞点按五套”合成一套）
 // • 状态全是闭包里的普通变量，按住、移动期间 GlassBar 不重新渲染（Q3 守门第 6 条）
 // 纯 TS：不准 import React（A1）
 import { HOLD_IDLE, HOLD_MS, holdStep, type HoldEvent, type HoldState, type HoldZone } from './record-logic.ts';
@@ -53,19 +55,20 @@ export interface HoldInput extends HoldHandlers {
 
 /** <html> 上的标记：data-plus-hold */
 export const HOLD_ATTR = 'plusHold';
-/** 进了录音以后松手，多久以内的那一下 click 吞掉 */
-export const SWALLOW_MS = 800;
 
-export function createHoldInput(sink: () => HoldSink | null, now: () => number = () => performance.now()): HoldInput {
+/** 吞掉随后落在 el 里的那一下 click；返回作废函数（motion 的 swallowNextClick 套上时限） */
+export type SwallowClick = (el: Node) => () => void;
+
+export function createHoldInput(sink: () => HoldSink | null, swallowClick: SwallowClick, now: () => number = () => performance.now()): HoldInput {
   let s: HoldState = HOLD_IDLE;
   let timer: ReturnType<typeof setTimeout> | undefined;
   /** 这一次按下进了录音：松手时要吞掉随后的 click */
   let armed = false;
-  let swallowUntil = 0;
+  /** 上一次松手挂着的吞点按（再按一次就作废） */
+  let unswallow: (() => void) | null = null;
   /** 按下的那个“＋”：只吞落在它上面的那一下 click（松手后马上点提示条上的按钮照常） */
   let pressed: Node | null = null;
   const hooked = new WeakSet<EventTarget>();
-  let clickHooked = false;
 
   const live = (): boolean => s.phase === 'pressing' || s.phase === 'holding';
   const mark = (on: boolean): void => {
@@ -83,24 +86,12 @@ export function createHoldInput(sink: () => HoldSink | null, now: () => number =
     if (live()) e.preventDefault();
   };
   const onMenu = (e: Event): void => e.preventDefault();
-  const onClick = (e: Event): void => {
-    if (now() >= swallowUntil || !(e.target instanceof Node) || !pressed?.contains(e.target)) return;
-    swallowUntil = 0;
-    e.preventDefault();
-    e.stopPropagation();
-  };
   /** “＋”上的原生监听只挂一次（非被动 touchmove React 给不了；contextmenu 一并挂） */
   const hook = (el: EventTarget): void => {
-    if (!hooked.has(el)) {
-      hooked.add(el);
-      el.addEventListener('touchmove', onTouchMove, { passive: false });
-      el.addEventListener('contextmenu', onMenu);
-    }
-    if (!clickHooked) {
-      clickHooked = true;
-      // 捕获阶段挂在 window 上：比 React 挂在根节点上的 click 先到，吞掉就到不了 GlassBar 的 onClick
-      window.addEventListener('click', onClick, true);
-    }
+    if (hooked.has(el)) return;
+    hooked.add(el);
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('contextmenu', onMenu);
   };
 
   const apply = (e: HoldEvent): void => {
@@ -163,6 +154,8 @@ export function createHoldInput(sink: () => HoldSink | null, now: () => number =
         // 指针已经没了（极少见）：照样判定
       }
       armed = false;
+      unswallow?.();
+      unswallow = null;
       pressed = el;
       apply({ type: 'down', t: now(), x: e.clientX, y: e.clientY });
       mark(true);
@@ -174,9 +167,9 @@ export function createHoldInput(sink: () => HoldSink | null, now: () => number =
       apply({ type: 'move', t: now(), x: e.clientX, y: e.clientY, zone: zoneOf(e) });
     },
     onEnd(e) {
-      if (armed) {
+      if (armed && pressed) {
         armed = false;
-        swallowUntil = now() + SWALLOW_MS;
+        unswallow = swallowClick(pressed);
       }
       if (s.phase === 'idle') return;
       apply({ type: 'up', t: now(), zone: zoneOf(e) });
@@ -193,13 +186,4 @@ export function createHoldInput(sink: () => HoldSink | null, now: () => number =
   };
 }
 
-// ---------- 模块级的那一份（转给 GlassBar 的就是它） ----------
-let sinkNow: HoldSink | null = null;
-
-/** 转给 GlassBar 的四个口子：ui/TypeBar.tsx 转出去，app/plus-slot.tsx 接到转发桥上。
- *  录音那一套（ui/RecordHost.tsx，按需加载）挂上以后用 setHoldSink 接手；没接手之前按住只当点一下 */
-export const hold = createHoldInput(() => sinkNow);
-
-export function setHoldSink(s: HoldSink | null): void {
-  sinkNow = s;
-}
+// 模块级的那一份（转给 GlassBar 的 hold）在 hooks/voice-sink.ts：要注入 motion 的吞点按

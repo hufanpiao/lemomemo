@@ -5,10 +5,12 @@
 // • 跟手（5.12 动效）：锁成横滑后内容跟着手指移动（offset）；松手翻页时新的一页从被拖出的那一侧接着滑进来，
 //   不翻就滑回原位，都用 --dur-ui、--ease-standard（由页面 CSS 按 settling 加 transition）；减少动态效果时不跟手、直接切换
 // • 按钮翻页（slideIn）：页面换好新的一页后调，新的一页同样从那一侧滑进来；键盘、“今天”、年月选择不调（直接切换）
-// • 滑过之后紧跟的那次 click 吞掉（onClickCapture），免得翻页的同时点中格子
+// • 滑过之后紧跟的那次 click 吞掉（swallow-click.ts 的 swallowNextClick，只吞落在这块上的、TAP_SWALLOW_MS.swipe 以内的），免得翻页的同时点中格子
 // • 只处理触摸和笔（pointerType 为 mouse 不算，电脑上用按钮和键盘翻页）；元素要配 CSS touch-action: pan-y，竖向滚动仍是原生的
 // rAF 只在这里用（A25：页面里不直接用 rAF）
 import { useCallback, useRef, useState } from 'react';
+import { swallowNextClick } from './swallow-click.ts';
+import { TAP_SWALLOW_MS } from './tokens.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
 
 export const EDGE_PX = 20;
@@ -55,7 +57,6 @@ export interface SwipePagerHandlers {
   onPointerMove(e: React.PointerEvent<HTMLElement>): void;
   onPointerUp(e: React.PointerEvent<HTMLElement>): void;
   onPointerCancel(): void;
-  onClickCapture(e: React.MouseEvent<HTMLElement>): void;
   /** 按钮翻页：已经换到新的一页后调，新的一页从那一侧滑进来（5.12：按钮翻页用同样的滑动）；减少动态效果时什么都不做 */
   slideIn(dir: -1 | 1, width: number): void;
   /** 现在内容该横移多少 px（跟手、或滑到位途中）；0 是原位 */
@@ -65,7 +66,7 @@ export interface SwipePagerHandlers {
 }
 
 type PtrLike = Pick<React.PointerEvent<HTMLElement>, 'pointerType' | 'isPrimary' | 'pointerId' | 'clientX' | 'clientY'> & {
-  currentTarget: { getBoundingClientRect(): { width: number } };
+  currentTarget: Node & { getBoundingClientRect(): { width: number } };
 };
 
 /** onPage(-1) 上一页、onPage(1) 下一页 */
@@ -78,10 +79,8 @@ export function useSwipePager(onPage: (dir: -1 | 1) => void): SwipePagerHandlers
   reducedRef.current = reduced;
   const [offset, setOffset] = useState(0);
   const [settling, setSettling] = useState(false);
-  const swallowClick = useRef(false);
 
   const onPointerDown = useCallback((e: PtrLike) => {
-    swallowClick.current = false;
     if (e.pointerType === 'mouse' || !e.isPrimary) return;
     if (inEdge(e.clientX)) {
       track.current = null;
@@ -109,7 +108,7 @@ export function useSwipePager(onPage: (dir: -1 | 1) => void): SwipePagerHandlers
       setOffset(0);
       return;
     }
-    swallowClick.current = Math.abs(dx) >= LOCK_PX;
+    if (Math.abs(dx) >= LOCK_PX) swallowNextClick({ within: e.currentTarget, ms: TAP_SWALLOW_MS.swipe });
     const r = swipeResult(dx);
     if (reducedRef.current) {
       setOffset(0);
@@ -138,13 +137,6 @@ export function useSwipePager(onPage: (dir: -1 | 1) => void): SwipePagerHandlers
     setOffset(0);
   }, []);
 
-  const onClickCapture = useCallback((e: React.MouseEvent<HTMLElement>) => {
-    if (!swallowClick.current) return;
-    swallowClick.current = false;
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
   const slideIn = useCallback((dir: -1 | 1, width: number) => {
     if (reducedRef.current || !(width > 0)) return;
     setSettling(false);
@@ -155,5 +147,5 @@ export function useSwipePager(onPage: (dir: -1 | 1) => void): SwipePagerHandlers
     });
   }, []);
 
-  return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onClickCapture, slideIn, offset, settling };
+  return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, slideIn, offset, settling };
 }

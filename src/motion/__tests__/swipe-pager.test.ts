@@ -39,8 +39,14 @@ describe('swipe-pager 判断', () => {
 });
 
 type Ev = Parameters<ReturnType<typeof useSwipePager>['onPointerDown']>[0];
+/** 挂着手势的那一块：真元素（滑过之后吞 click 只吞落在它里面的），宽 390 */
+const pager = document.createElement('div');
+pager.getBoundingClientRect = () => ({ width: 390 }) as DOMRect;
+const cell = document.createElement('button');
+pager.append(cell);
+document.body.append(pager);
 const ev = (o: Partial<{ pointerType: string; isPrimary: boolean; pointerId: number; clientX: number; clientY: number }>): Ev =>
-  ({ pointerType: 'touch', isPrimary: true, pointerId: 1, clientX: 0, clientY: 0, currentTarget: { getBoundingClientRect: () => ({ width: 390 }) }, ...o }) as unknown as Ev;
+  ({ pointerType: 'touch', isPrimary: true, pointerId: 1, clientX: 0, clientY: 0, currentTarget: pager, ...o }) as unknown as Ev;
 
 describe('useSwipePager 状态机', () => {
   afterEach(() => {
@@ -106,12 +112,23 @@ describe('useSwipePager 状态机', () => {
     act(() => h.result.current.onPointerDown(ev({ clientX: 200 })));
     act(() => h.result.current.onPointerMove(ev({ clientX: 120 })));
     act(() => h.result.current.onPointerUp(ev({ clientX: 120 })));
-    const click = { preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as React.MouseEvent<HTMLElement>;
-    h.result.current.onClickCapture(click);
-    expect(click.stopPropagation).toHaveBeenCalled();
-    const click2 = { preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as React.MouseEvent<HTMLElement>;
-    h.result.current.onClickCapture(click2);
-    expect(click2.stopPropagation).not.toHaveBeenCalled();
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    cell.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    const click2 = new MouseEvent('click', { bubbles: true, cancelable: true });
+    cell.dispatchEvent(click2);
+    expect(click2.defaultPrevented).toBe(false);
+  });
+
+  it('滑过以后没等到 click、又按下了：这一次的 click 是真点（不再吞）', () => {
+    const { h } = setup();
+    act(() => h.result.current.onPointerDown(ev({ clientX: 200 })));
+    act(() => h.result.current.onPointerMove(ev({ clientX: 120 })));
+    act(() => h.result.current.onPointerUp(ev({ clientX: 120 })));
+    cell.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    cell.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
   });
 
   it('减少动态效果：不跟手，松手直接翻', () => {

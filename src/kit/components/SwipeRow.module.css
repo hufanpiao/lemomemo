@@ -1,7 +1,9 @@
 /* 左滑露出操作的列表行（kit，SwipeRow.tsx）：只用令牌（A11）。
    • .wrap：外框（列表里是 li，和 List.module.css 的 .row 一起用），裁掉滑出去的部分
-   • .acts：右侧操作按钮，压在行面下面；.face：行面（底色同列表面板，盖住按钮），跟手只动 transform
-   • .face[data-snap]：松手后收回或停住的过渡；减少动态效果时没有过渡、直接到位 */
+   • .acts：右侧操作按钮，压在行面下面；.face：行面（底色同列表面板，z-index 盖住排在它后面的按钮），跟手只动 transform
+   • .face[data-snap]：松手后收回或停住的过渡；减少动态效果时没有过渡、直接到位
+   • .compact（look="compact"，随手记列表行，视觉稿 .swp .acts span；R-171、R-172；原随手记 NoteSwipe.module.css 的数值）：
+     按钮每个 64 宽、12 号字、文案照换行断；旁边的按钮深色主题 --text-2 底、--panel 字，浅色主题浅底，“删除”警示色、半粗 */
 
 .wrap {
   position: relative;
@@ -34,6 +36,7 @@
 
 .face {
   position: relative;
+  z-index: 1;
   display: flex;
   flex: 1;
   align-self: stretch;
@@ -49,4 +52,41 @@
 
 :global(:root[data-rm="1"]) .face[data-snap] {
   transition: none;
+}
+
+.compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  min-width: 0;
+  padding: 0 4px;
+  background: var(--text-2);
+  color: var(--panel);
+  font-size: var(--fs-12);
+  font-weight: 400;
+  line-height: 1.3;
+  text-align: center;
+
+  /* 文案里的换行照线框断（notes.sw.*） */
+  white-space: pre-line;
+}
+
+/* 浅色主题：旁边按钮改浅（R-172，视觉稿第 517 行），让“删除”最重 */
+:global(:root[data-theme='light']) .compact:not(.danger) {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+@media (prefers-color-scheme: light) {
+  :global(:root[data-theme='system']) .compact:not(.danger) {
+    background: var(--panel-2);
+    color: var(--text);
+  }
+}
+
+.compact.danger {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-weight: 600;
 }

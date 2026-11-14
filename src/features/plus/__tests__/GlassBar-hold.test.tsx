@@ -8,7 +8,11 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GlassBar } from '../../../kit/components/GlassBar/GlassBar.tsx';
 import type * as UseT from '../../../kit/hooks/useT.ts';
+import { swallowNextClick, TAP_SWALLOW_MS } from '../../../motion/index.ts';
 import { createHoldInput, type HoldSink } from '../data/hold-input.ts';
+
+/** 同 hooks/voice-sink.ts 注入的那一个 */
+const swallow = (el: Node) => swallowNextClick({ within: el, ms: TAP_SWALLOW_MS.hold });
 import { HOLD_MS } from '../data/record-logic.ts';
 
 const renders = vi.hoisted(() => ({ n: 0 }));
@@ -57,7 +61,7 @@ describe('“＋”按住转发（Q3 守门第 5 条）', () => {
     const a = render(<GlassBar active="today" later={never} add={{ label: '新建', onClick: never }} />);
     const plain = html(a.container);
     cleanup();
-    const h = createHoldInput(() => null);
+    const h = createHoldInput(() => null, swallow);
     const b = render(<GlassBar active="today" later={never} add={{ label: '新建', onClick: never, hold: h }} />);
     expect(plain).toContain('tabbar-add');
     expect(html(b.container)).toBe(plain);
@@ -65,7 +69,7 @@ describe('“＋”按住转发（Q3 守门第 5 条）', () => {
 
   it('按下时：传不传 hold，按下态（data-state）一样', () => {
     const states: string[] = [];
-    for (const hold of [undefined, createHoldInput(() => null)]) {
+    for (const hold of [undefined, createHoldInput(() => null, swallow)]) {
       render(<GlassBar active="today" later={never} add={{ label: '新建', onClick: never, ...(hold ? { hold } : {}) }} />);
       const fab = screen.getByTestId('tabbar-add');
       fireEvent.pointerDown(fab, ptr);
@@ -82,7 +86,7 @@ describe('按住期间 GlassBar 不重新渲染（Q3 守门第 6 条）', () => 
   it('按下、按满 350 ms、挪动、松开：GlassBar 渲染次数不变；补的 click 不打开打字条', async () => {
     const s = sink();
     const onClick = vi.fn();
-    render(<GlassBar active="today" later={never} add={{ label: '新建', onClick, hold: createHoldInput(() => s) }} />);
+    render(<GlassBar active="today" later={never} add={{ label: '新建', onClick, hold: createHoldInput(() => s, swallow) }} />);
     const fab = screen.getByTestId('tabbar-add');
     const before = renders.n;
     fireEvent.pointerDown(fab, ptr);
@@ -99,7 +103,7 @@ describe('按住期间 GlassBar 不重新渲染（Q3 守门第 6 条）', () => 
   it('点一下（不满 350 ms）：照常走 onClick 打开打字条，GlassBar 也不重新渲染', async () => {
     const s = sink();
     const onClick = vi.fn();
-    render(<GlassBar active="today" later={never} add={{ label: '新建', onClick, hold: createHoldInput(() => s) }} />);
+    render(<GlassBar active="today" later={never} add={{ label: '新建', onClick, hold: createHoldInput(() => s, swallow) }} />);
     const fab = screen.getByTestId('tabbar-add');
     const before = renders.n;
     fireEvent.pointerDown(fab, ptr);

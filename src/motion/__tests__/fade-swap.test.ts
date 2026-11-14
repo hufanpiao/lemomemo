@@ -230,9 +230,9 @@ describe('换页后吞点按（代码审查方案 B M8）', () => {
     const rm = vi.spyOn(document, 'removeEventListener');
     const live = (): number => add.mock.calls.filter((c) => c[2] === true).length - rm.mock.calls.filter((c) => c[2] === true).length;
     void fadeSwap(() => setPage('a'), pickMain);
-    expect(live()).toBe(3); // pointerdown、click、pointercancel（S12）
+    expect(live()).toBe(2); // pointerdown、click（晚到那一下和 S12 的 pointercancel 在 swallowNextClick 里、挂在 window 上，见 swallow-click.test.ts）
     void fadeSwap(() => setPage('b'), pickMain);
-    expect(live()).toBe(3); // 上一次的摘了，这一次的挂上
+    expect(live()).toBe(2); // 上一次的摘了，这一次的挂上
     vi.advanceTimersByTime(FADE_GUARD_MS + 1);
     expect(live()).toBe(0);
     void fadeSwap(() => setPage('c'), pickMain);
