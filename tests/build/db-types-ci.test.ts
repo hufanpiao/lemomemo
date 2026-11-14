@@ -72,7 +72,7 @@ describe('db 任务在 supabase start 之前生成 _shared/gen/', () => {
   const copy = idx((s) => runs(s, /^(npm run copy:shared|node build\/copy_shared\.mjs)$/), '生成 _shared/gen/（npm run copy:shared）');
   const start = idx((s) => runs(s, /^supabase start\b/), '启动本地 Supabase');
   const check = idx((s) => runs(s, /^deno task check$/), 'deno task check');
-  const lock = idx((s) => runs(s, /^deno install --frozen --no-check --entrypoint\b/), '服务器函数的依赖锁');
+  const lock = idx((s) => runs(s, /^bash build\/ci\/deno-frozen-lock\.sh$/), '服务器函数的依赖锁（build/ci/deno-frozen-lock.sh）');
 
   it('顺序：npm ci → copy:shared → supabase start → deno task check → 依赖锁', () => {
     expect(npmCi).toBeLessThan(copy);

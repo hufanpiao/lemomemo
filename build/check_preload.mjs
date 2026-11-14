@@ -7,16 +7,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { posix, resolve } from 'node:path';
 import { parseSync } from 'vite';
-
-/**
- * 构建时在 app/.vite/，构建完挪到 dist/vite-manifest/（和 check_size.mjs 的 measure 同一个找法）。
- * 后备的 dist/vite-manifest 只有默认输出 dist/web 才更新，对 dist/web-xxx 单独跑会拿到别的构建的 manifest：checkPreload 先核对 manifest 里的文件都在产物里（复审建议 3）
- */
-export function readManifest(appDir) {
-  const p = [resolve(appDir, '.vite/manifest.json'), resolve(appDir, '../../vite-manifest/manifest.json')].find((f) => existsSync(f));
-  if (!p) throw new Error('找不到 Vite 的 manifest.json，先运行 npm run build');
-  return JSON.parse(readFileSync(p, 'utf8'));
-}
+import { readManifest } from './vite_manifest.mjs';
 
 /** manifest 的键换成产物文件名：file → { imports、dynamic（动态 import 的目标）、css，都是文件名 } */
 function graphOf(manifest) {
@@ -140,7 +131,8 @@ function missingFiles(manifest, appDir) {
   return [...files].filter((f) => !existsSync(resolve(appDir, f)));
 }
 
-/** 整个产物：返回 { calls: 核对了几处懒加载, errors }。没有 assets 目录（check_size 测试造的假产物）时 calls 为 0、不算错 */
+/** 整个产物：返回 { calls: 核对了几处懒加载, errors }。没有 assets 目录（check_size 测试造的假产物）时 calls 为 0、不算错。
+ *  manifest 可能是 dist/vite-manifest 的后备（见 vite_manifest.mjs），所以先核对 manifest 里的文件都在产物里（复审建议 3） */
 export function checkPreload(appDir, manifest = readManifest(appDir)) {
   const assets = resolve(appDir, 'assets');
   if (!existsSync(assets)) return { calls: 0, errors: [] };

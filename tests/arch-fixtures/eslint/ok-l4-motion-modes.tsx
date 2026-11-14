@@ -1,4 +1,4 @@
-// arch-fixture: path=src/motion/Good.tsx expect=none
+// arch-fixture: path=src/motion/good-impl.tsx expect=none
 // 对照组（UI-4 L-4）：AnimatePresence 的 mode="wait"、默认 sync 都可以
 import { AnimatePresence } from 'motion/react';
 import type { ReactNode } from 'react';

@@ -227,16 +227,7 @@ jobs:
 
       - name: 要上传的 tests/ai/reports 里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉）
         if: always() && steps.keyscan.outcome == 'success'
-        run: |
-          # -L：跟进符号链接查（upload-artifact 会跟进链接上传）；链接成环等 find 出错时，bash -e 让这一步失败
-          hidden="$(find -L tests/ai/reports -name '.*' -print)"
-          if [ -n "$hidden" ]; then
-            echo '点开头的文件或目录（每行一个，以 tests/ai/reports/ 开头）：'
-            printf '%s\n' "$hidden"
-            count="$(find -L tests/ai/reports -name '.*' -print0 | tr -cd '\0' | wc -c)"
-            echo "::error::tests/ai/reports 里有 $count 个点开头的文件或目录，upload-artifact 默认不传（include-hidden-files 默认 false），上传后会少文件；列表见上面的日志"
-            exit 1
-          fi
+        run: bash build/ci/no-hidden-files.sh tests/ai/reports
 
       - name: 上传结果和判分（评测员下载后存档；公开仓库，登录 GitHub 的人都能下载；保留 30 天）
         if: always() && steps.keyscan.outcome == 'success'

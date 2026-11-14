@@ -1,4 +1,4 @@
-// ESLint 配置（架构 2.3：A1/A8/A27 分层、A2、A11、A12、A13、A18、A19、A22、A23、A24、A25、A26、T2、T3、W1）
+// ESLint 配置（架构 2.3：A1/A8/A27 分层、R2、LUNAR、MOTION-IMPL、A2、A11、A12、A13、A18、A19、A22、A23、A24、A25、A26、T2、T3、W1）
 // 每条规则在 tests/arch-fixtures/ 有违规样例，tests/arch/eslint.test.ts 逐个证明拦得住
 // 写法：按目录分“作用域”，越往后越具体；no-restricted-* 每个作用域给全量选项（后面的块会整个覆盖前面的）
 import js from '@eslint/js';
@@ -603,6 +603,13 @@ export default tseslint.config(
     ignores: ['src/platform/session.ts', '**/__tests__/**'],
     plugins: { lemo },
     rules: { 'lemo/auth-events-in-session': 'error' },
+  },
+  // 架构 2.3 R2、LUNAR、MOTION-IMPL（11-14 CI-11 从 check_arch.py 挪来，源码层只在这里查）：对象存储、农历、动画库的引入限制，
+  // import、export … from、import()、require 都认，LUNAR 还沿 shared/ 的静态引入往下跟（细节见 build/eslint-rules/import-bounds.js）
+  {
+    files: ['src/**/*.{ts,tsx,js,mjs}', 'shared/**/*.{ts,tsx,js,mjs}'],
+    plugins: { lemo },
+    rules: { 'lemo/import-bounds': 'error' },
   },
   // A31（接手清单 CONSENT-sugg ⑤）：功能代码不对 settings 写 deleted_at / undone，ai.enabled、ai.vault 只经 writeAiSwitch；
   // 例外只有唯一写法 core/ai-settings.ts 和守门 core/write.ts

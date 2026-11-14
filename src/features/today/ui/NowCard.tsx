@@ -7,12 +7,13 @@
 // 时间轴：窗口 [A, B]（分钟，相对今天 0 点）、整点刻度、正在进行的色块（已过去的部分另涂）、下一件色块、此刻竖线；
 //    ① 进行中而下一件在窗口外时，时间轴下面写“下一件 15:30 … · 3 小时 10 分后”（② 的下一件在窗口外时已经走浅色卡，黄卡底下不会再重复写一遍）
 // ③ 今天的日程都结束了（有明天的第一件就写“明天 11:00 …”）；④ 今天没有日程：浅色卡，写暖心句（负责人 11-14，替掉“今天没有日程”）。③ ④ 不画时间轴
-// 暖心句按用户时区的当天日期固定选一句（hooks 的 cheerText），同一天每次打开同一句；读屏照常读这一行
+// 暖心句按用户时区的当天日期固定选一句（hooks 的 useCheerText，按语言懒加载），同一天每次打开同一句；读屏照常读这一行；
+// 句子下载好之前这一行是空的，CSS 给它留一行高（.quiet:empty），卡片不跳
 // 时间轴只是示意（aria-hidden），读屏靠上面的文字
 import { msAt, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import type { EventOcc, NowCard as Card } from '../hooks/today-types.ts';
-import { cheerText, durText, useLocale, useTodayT } from '../hooks/useTodayT.ts';
+import { durText, useCheerText, useLocale, useTodayT } from '../hooks/useTodayT.ts';
 import styles from './NowCard.module.css';
 
 const MIN = 60_000;
@@ -21,6 +22,7 @@ const hm = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0'
 export function NowCard({ card, now, tz, today, tomorrowFirst }: { card: Card; now: number; tz: Tz; today: DateStr; tomorrowFirst: EventOcc | null }) {
   const t = useTodayT();
   const locale = useLocale();
+  const cheer = useCheerText(today, locale);
   const zero = msAt(today, 0, tz);
   const m = (ms: number) => (ms - zero) / MIN;
   const nowM = m(now);
@@ -38,7 +40,7 @@ export function NowCard({ card, now, tz, today, tomorrowFirst }: { card: Card; n
     return (
       <section className={`${styles.card} ${styles.calm}`} data-testid="now-card" data-state={next ? 'calm' : 'empty'}>
         <p className={styles.quiet} data-testid="now-cheer">
-          {cheerText(today, locale)}
+          {cheer}
         </p>
         {next ? (
           <p className={styles.sub} data-testid="now-hint">

@@ -27,16 +27,15 @@ export const DENO_NPM_ALIASES: { find: RegExp; replacement: string }[] = Object.
 export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/arch/check-arch.test.ts', // python build/check_arch.py
   'tests/arch/eslint.test.ts', // ESLint API（整套规则、类型信息）
+  'tests/arch/import-bounds.test.ts', // ESLint API（lemo/import-bounds：R2、LUNAR、MOTION-IMPL）
   'tests/arch/stylelint.test.ts', // stylelint API
   'tests/arch/tsc.test.ts', // TypeScript 编译器
   'tests/build/check-arch-bidi.test.ts', // python build/check_arch.py、git init（LINT-bidi）
   'tests/build/check-arch-email.test.ts', // python build/check_arch.py（EMAIL：公开仓库不进真实邮箱）
   'tests/build/check-fn-redefs.test.ts', // python build/check_fn_redefs.py（M7：整段重写的函数不丢上一版的 delete 和表名）
-  'tests/build/check-arch-binimport.test.ts', // python build/check_arch.py（LINT-binimport）
-  'tests/build/check-arch-binimport-entry.test.ts', // python build/check_arch.py（LINT-binimport：读文件再执行、非 JS 入口）
-  'tests/build/check-arch-binimport-perf.test.ts', // python build/check_arch.py（LINT-binimport：耗时上限和健壮性）
-  'tests/build/check-arch-binimport-scanner.test.ts', // python build/check_arch.py（LINT-binimport：骨架扫描器、createRequire）
-  'tests/build/check-arch-binimport-source.test.ts', // python build/check_arch.py（LINT-binimport：点号 source、反斜杠续行）
+  'tests/build/check-arch-binimport.test.ts', // python build/check_arch.py → node build/check_binimport.mjs（LINT-binimport）
+  'tests/build/check-arch-binimport-entry.test.ts', // 同上（LINT-binimport：非 JS 入口）
+  'tests/build/check-arch-binimport-robust.test.ts', // 同上（LINT-binimport：createRequire 间接传递、耗时上限和健壮性）
   'tests/build/check-backend.test.ts', // python build/check_backend.py（建 TypeScript 类型检查器）
   'tests/build/check-backend-f11-cors.test.ts', // python build/check_backend.py（F11 样例）
   'tests/build/check-backend-f12-json.test.ts', // python build/check_backend.py（F12 json 响应只在 _shared/http.ts）
@@ -75,7 +74,8 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/gen-tauri-key.test.ts', // PowerShell（编假签名工具、跑脚本，B6-exe F10）
   'tests/build/desktop-scan.test.ts', // 另起 node 跑 build/ci/desktop_scan.mjs（B6-exe F8、F9）
   'tests/build/workflow-permissions.test.ts', // bash 跑合成的工作流检查脚本（B6-exe S-8）
-  'tests/build/vapid-public-key-check.test.ts', // bash 跑 release-build、deploy-preview 的 VAPID 公钥核对（VAPID-prod-format、B2 O-2）
+  'tests/build/vapid-public-key-check.test.ts', // bash 跑 build/ci/vapid-public-key.sh（VAPID-prod-format、B2 O-2）
+  'tests/build/ci-guard-scripts.test.ts', // bash、git 跑 build/ci 的 no-hidden-files、no-source-map、tag-on-main（CI-8）
   'tests/build/set-fn-role-passwords.test.ts', // PowerShell、python
   'tests/build/set-fn-role-passwords-run.test.ts', // PowerShell
   'tests/edge/ai-replay-recorder.test.ts', // 起 gitleaks 子进程（BE-6 录制器存盘的回放文件带假密钥必须被拦）

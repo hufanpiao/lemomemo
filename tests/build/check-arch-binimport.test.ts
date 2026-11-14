@@ -1,11 +1,10 @@
-// B1 接手清单 LINT-binimport：build/check_arch.py 的 BINIMPORT 规则——require、import、import()、export … from 的目标
-// 不准以二进制扩展名结尾（Node 的 CJS 把不认识的扩展名当 JS 执行，二进制里藏的代码评审在 diff 里看不到）。
-// 本文件：JS/TS 里的各种引入写法、createRequire 绑定、扩展名与例外、对照组、真仓库。10-30 按主题拆开（W1 超行），同一 describe：
-// • check-arch-binimport-perf.test.ts：耗时上限与健壮性
-// • check-arch-binimport-entry.test.ts：①读文件再执行、②非 JS 入口（脚本、CI、PowerShell、网页）
-// • check-arch-binimport-source.test.ts：②点号 source 与反斜杠续行
-// • check-arch-binimport-scanner.test.ts：③骨架扫描器的正则判断、④createRequire 的间接传递
-// 共用的拼仓库、跑 check_arch、计时在 check-arch-binimport-harness.ts；每条用例在临时目录现拼一棵迷你仓库（不是 git 仓库，check_arch 整棵树扫）
+// B1 接手清单 LINT-binimport：build/check_arch.py 的 BINIMPORT 规则（实现在 build/check_binimport.mjs，TypeScript 编译器 API）——
+// require、import、import()、export … from 等的目标不准以二进制扩展名结尾（Node 的 CJS 把不认识的扩展名当 JS 执行，二进制里藏的代码评审在 diff 里看不到）。
+// 本文件：JS/TS 里的各种引入写法、createRequire 绑定、①读文件再执行、扩展名与例外、对照组、真仓库。同一 describe 的另外两份：
+// • check-arch-binimport-robust.test.ts：正则与除号、④createRequire 的间接传递、深嵌套和大文件
+// • check-arch-binimport-entry.test.ts：②非 JS 入口（package.json scripts、CI 的 run:、.sh、.ps1、网页）
+// 11-14 CI-10 手写词法器换成 AST 时，原 6 份测试的用例都并进这三份（拦截情形一条没少；非 JS 入口按新范围收窄，见 entry 文件头）
+// 共用的拼仓库、跑 check_arch 在 check-arch-binimport-harness.ts；每条用例在临时目录现拼一棵迷你仓库（不是 git 仓库，check_arch 整棵树扫）
 import { afterEach, describe, expect, it } from 'vitest';
 import { binimport, cleanupDirs, lines, repo, ROOT, where } from './check-arch-binimport-harness.ts';
 
@@ -227,7 +226,40 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
     expect(code).toBe(0);
   });
 
-  // ---- LINT-binimport-gaps 第 ①～④ 条（10-29 第二轮） ----
+  it('①读文件再执行：eval / new Function / vm.runInThisContext / vm.Script / vm.compileFunction / process.dlopen 的参数里有二进制扩展名 → 报', () => {
+    const body = lines(
+      "import { readFileSync } from 'node:fs';", // 1
+      "eval(readFileSync('./a.png', 'utf8'));", // 2
+      "new Function(readFileSync('./b.bin', 'utf8'))();", // 3
+      "vm.runInThisContext(readFileSync('./c.png', 'utf8'));", // 4
+      "vm.runInNewContext(readFileSync('./d.bin', 'utf8'), {});", // 5
+      "vm.runInContext(readFileSync('./e.png', 'utf8'), ctx);", // 6
+      "new vm.Script(readFileSync('./f.png', 'utf8'));", // 7
+      "vm.compileFunction(readFileSync('./g.wasm', 'utf8'));", // 8
+      "process.dlopen(module, './h.node');", // 9
+      "globalThis.eval?.(readFileSync('./i.png', 'utf8'));", // 10
+      '',
+    );
+    const { errors } = binimport(repo({ 'lib/exec.mjs': body }));
+    expect(where(errors)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `lib/exec.mjs:${n}`));
+    expect(errors[0]?.message).toContain('eval()');
+  });
+
+  it('①对照：只读不执行的 readFileSync / fetch / new URL、eval 的参数里没有二进制扩展名 → 不报', () => {
+    const body = lines(
+      "const a = readFileSync('./a.png');",
+      "const b = await fetch('/icon.png');",
+      "const c = new URL('./c.wasm', import.meta.url);",
+      "eval('1 + 1');",
+      "const d = new Function('x', 'return x');",
+      "const evaluate = (s) => s; evaluate('./e.png');",
+      "await page.$eval('img[src=\"logo.png\"]', (el) => el.src);",
+      "const s = new Script({ name: 'x', icon: 'logo.png' });", // 自定义的 Script，不是 vm.Script
+      "function Script(o) { return o } Script('a.png');",
+      '',
+    );
+    expect(binimport(repo({ 'lib/read.mjs': body })).errors).toEqual([]);
+  });
 
   it('真仓库：BINIMPORT 0 个错误', { timeout: 60_000 }, () => {
     expect(binimport(ROOT).errors).toEqual([]);

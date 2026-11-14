@@ -8,11 +8,12 @@
 // 用法：node build/check_size.mjs [--json] [--app-dir <目录>] [--mode <模式>] [--baseline <文件>]
 //（--app-dir 默认 dist/web/app；违规样例测试用它指到临时目录，QA D-06；--baseline 默认 build/first-screen-baseline.json，测试用它换成临时文件）
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { checkPreload } from './check_preload.mjs';
+import { readManifest } from './vite_manifest.mjs';
 
 /**
  * firstScreenFiles（B4b-1 第二轮，主持人定）：首屏 JS 文件数上限 = 当时 main 的 8 个 + 1。冷启动每多一个文件就多一个请求；
@@ -39,13 +40,7 @@ export function firstScreenFiles(manifest, entryKey) {
   return files;
 }
 
-export function measure(appDir) {
-  // 构建时在 app/.vite/，构建完挪到 dist/vite-manifest/（不发布）
-  const manifestPath = [resolve(appDir, '.vite/manifest.json'), resolve(appDir, '../../vite-manifest/manifest.json')].find((p) =>
-    existsSync(p),
-  );
-  if (!manifestPath) throw new Error('找不到 Vite 的 manifest.json，先运行 npm run build');
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+export function measure(appDir, manifest = readManifest(appDir)) {
   const gz = (f) => gzipSync(readFileSync(resolve(appDir, f)), { level: 9 }).length;
   const first = firstScreenFiles(manifest, 'index.html').filter((f) => f.endsWith('.js'));
   const all = [...new Set(Object.values(manifest).map((c) => c.file))].filter((f) => f.endsWith('.js'));
@@ -143,18 +138,19 @@ export function netGrowthCheck(firstScreenStable, data, mode) {
   return { batch, base, limit, net, error };
 }
 
-function argValue(name) {
-  const i = process.argv.indexOf(name);
-  return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : undefined;
-}
-
-function main() {
+/** 命令行入口（build_web.mjs 构建完直接调它，不另起进程）：argv 是 process.argv.slice(2) 那样的参数，返回退出码 */
+export function cli(argv) {
+  const argValue = (name) => {
+    const i = argv.indexOf(name);
+    return i >= 0 && argv[i + 1] ? argv[i + 1] : undefined;
+  };
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const appDir = resolve(argValue('--app-dir') ?? resolve(root, 'dist/web/app'));
   const baselinePath = resolve(argValue('--baseline') ?? resolve(root, 'build/first-screen-baseline.json'));
-  const r = measure(appDir);
+  const manifest = readManifest(appDir);
+  const r = measure(appDir, manifest);
   const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
-  if (process.argv.includes('--json')) console.log(JSON.stringify(r));
+  if (argv.includes('--json')) console.log(JSON.stringify(r));
   else {
     console.log(`首屏 JS（gzip）：${kb(r.firstScreenJs)} / 预算 ${kb(BUDGET.firstScreenJs)}（${r.firstFiles.length} 个文件）`);
     console.log(`全部 JS（gzip）：${kb(r.totalJs)} / 参考 ${kb(BUDGET.totalJs)}`);
@@ -178,12 +174,12 @@ function main() {
     failed = true;
   } else console.log(`${g.batch} 首屏净增：${g.net} B / 额度 ${g.limit} B（基线 ${g.base} B）`);
   // 预加载表去重的产物核对（vite.config.ts 的 dropHostLoaded，见 check_preload.mjs）。manifest 里该有表的动态 import 在产物里找不到也算失败
-  const p = checkPreload(appDir);
+  const p = checkPreload(appDir, manifest);
   if (p.errors.length) {
     for (const e of p.errors) console.error(`预加载表去重：${e}`);
     failed = true;
   } else if (p.calls > 0) console.log(`预加载表去重：${p.calls} 处懒加载都核对过（宿主已加载的 JS 不列、其余 JS 一个不少、CSS 和不去重时一样）`);
-  if (failed) process.exit(1);
+  return failed ? 1 : 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(cli(process.argv.slice(2)));

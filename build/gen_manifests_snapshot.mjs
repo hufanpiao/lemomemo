@@ -85,17 +85,21 @@ export function staleFiles(outs, read = (file) => readFileSync(file, 'utf8')) {
     .map(([file]) => file);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+/** 命令行入口（build_web.mjs 在 vite build 之前直接调 --check）：返回退出码 */
+export async function cli(argv) {
   const outs = outputs(await loadManifests());
-  if (process.argv.includes('--check')) {
+  if (argv.includes('--check')) {
     const stale = staleFiles(outs);
     for (const file of stale) console.error(`${file} 和 shared/manifests 不一致：跑 node build/gen_manifests_snapshot.mjs 重新生成`);
-    if (stale.length) process.exit(1);
+    if (stale.length) return 1;
     console.log('manifests.gen.ts、manifest-sync.gen.ts 一致');
-  } else {
-    for (const [file, text] of outs) {
-      writeFileSync(file, text, 'utf8');
-      console.log(`已写 ${file}`);
-    }
+    return 0;
   }
+  for (const [file, text] of outs) {
+    writeFileSync(file, text, 'utf8');
+    console.log(`已写 ${file}`);
+  }
+  return 0;
 }
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(await cli(process.argv.slice(2)));

@@ -130,12 +130,7 @@ jobs:
           echo "环境：$env，版本：$version，页面产物：$artifact" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: tag 对应的提交必须在 main 上（安全审查 S-2：没合并、没审过的提交打 tag 不出包）
-        run: |
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::提交 $GITHUB_SHA 不在 main 上：只许在 main 已有的提交上打 tag"
-            exit 1
-          fi
-          echo "提交 $GITHUB_SHA 在 main 上"
+        run: bash build/ci/tag-on-main.sh
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.which.outputs.env == 'preview'
@@ -173,24 +168,11 @@ jobs:
 
       - name: 页面里不能有 source map（和 release-build 同一条）
         if: steps.which.outputs.env == 'preview'
-        run: |
-          if find dist/web -name '*.map' | grep -q . || grep -rl 'sourceMappingURL' dist/web --include='*.js' | grep -q .; then
-            echo "::error::dist/web 里有 source map"
-            exit 1
-          fi
+        run: bash build/ci/no-source-map.sh dist/web
 
       - name: 要上传的 dist/web 里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉）
         if: steps.which.outputs.env == 'preview'
-        run: |
-          # -L：跟进符号链接查（upload-artifact 会跟进链接上传）；链接成环等 find 出错时，bash -e 让这一步失败
-          hidden="$(find -L dist/web -name '.*' -print)"
-          if [ -n "$hidden" ]; then
-            echo '点开头的文件或目录（每行一个，以 dist/web/ 开头）：'
-            printf '%s\n' "$hidden"
-            count="$(find -L dist/web -name '.*' -print0 | tr -cd '\0' | wc -c)"
-            echo "::error::dist/web 里有 $count 个点开头的文件或目录，upload-artifact 默认不传（include-hidden-files 默认 false），上传后会少文件；列表见上面的日志"
-            exit 1
-          fi
+        run: bash build/ci/no-hidden-files.sh dist/web
 
       - name: 上传页面给编译任务
         if: steps.which.outputs.env == 'preview'
@@ -423,16 +405,7 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 要上传的 out 里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉）
-        run: |
-          # -L：跟进符号链接查（upload-artifact 会跟进链接上传）；链接成环等 find 出错时，bash -e 让这一步失败
-          hidden="$(find -L out -name '.*' -print)"
-          if [ -n "$hidden" ]; then
-            echo '点开头的文件或目录（每行一个，以 out/ 开头）：'
-            printf '%s\n' "$hidden"
-            count="$(find -L out -name '.*' -print0 | tr -cd '\0' | wc -c)"
-            echo "::error::out 里有 $count 个点开头的文件或目录，upload-artifact 默认不传（include-hidden-files 默认 false），上传后会少文件；列表见上面的日志"
-            exit 1
-          fi
+        run: bash build/ci/no-hidden-files.sh out
 
       - name: 上传未签名产物（publish.ps1 下载、核对、签名的就是这一份；保留 90 天）
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

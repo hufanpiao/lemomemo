@@ -9,7 +9,7 @@ import { dndOf } from '../data/remind-settings.ts';
 import { actionsOf } from '../hooks/useReminders.ts';
 import { allReminders, MISSED_WINDOW_MS, missed, modeOf, upcoming, type AnnivAt } from '../data/reminder-model.ts';
 
-// next-date 带农历表，src 里只准按需加载（check_arch LUNAR）
+// next-date 带农历表，src 里只准按需加载（ESLint lemo/import-bounds 的 LUNAR）
 const { annivRemindFrom } = await import('../../../../shared/logic/anniv/next-date.ts');
 const TZ = 'Asia/Seoul';
 const at = (d: string, hm: string): number => msAt(d as never, Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3)), TZ);

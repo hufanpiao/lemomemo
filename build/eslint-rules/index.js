@@ -2,6 +2,7 @@
 // 每条规则在 tests/arch-fixtures/ 有违规样例，tests/arch/eslint.test.ts 证明拦得住
 import authEventsInSession from './auth-events-in-session.js';
 import featureIndexExports from './feature-index-exports.js';
+import importBounds from './import-bounds.js';
 import motionTokens from './motion-tokens.js';
 import noInlineColor from './no-inline-color.js';
 import safeHref from './safe-href.js';
@@ -12,6 +13,7 @@ export default {
   meta: { name: 'eslint-plugin-lemo', version: '4.0.0' },
   rules: {
     'feature-index-exports': featureIndexExports,
+    'import-bounds': importBounds,
     'motion-tokens': motionTokens,
     'no-inline-color': noInlineColor,
     'safe-href': safeHref,

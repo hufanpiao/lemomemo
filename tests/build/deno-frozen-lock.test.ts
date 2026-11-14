@@ -1,45 +1,36 @@
-// 服务器函数依赖锁的 CI 步骤真的拦得住锁外依赖（接手清单 REVIEW-1030-be-sugg ③；架构 0.33 第 7 条、B0 安全审查低 10）：
-// 把 supabase/functions 复制到系统临时目录（不带本机的 _shared/gen/，按 CI 的顺序用 build/copy_shared.mjs 重新生成），
-// 照 .github/workflows/ci.yml“服务器函数的依赖锁”那一步原样跑两行：
-//   deno install --frozen
-//   deno install --frozen --no-check --entrypoint <全部源码>
-// 这两行和 find 的扩展名清单是从 ci.yml 抄的：第一组测试直接读 ci.yml 逐字核对（不需要 deno），ci.yml 改了这里就报，
-//   再把读到的内容去掉一行，证明核对真的会失败。runCi()、entries() 用的就是这里核对过的命令和扩展名。
+// 服务器函数依赖锁的脚本 build/ci/deno-frozen-lock.sh 真的拦得住锁外依赖（接手清单 REVIEW-1030-be-sugg ③；架构 0.33 第 7 条、B0 安全审查低 10）：
+// 把 supabase/functions 复制到系统临时目录（不带本机的 _shared/gen/，按 CI 的顺序用 build/copy_shared.mjs 重新生成），对副本直接跑脚本。
+// 第一组（不需要 deno）钉住 ci.yml、deploy-preview.yml 都调这一份脚本（第三方审查 CI-8：原来两份 shell 副本，这里只逐字核 ci.yml 那份）。
 // 正例：往源码里塞一个锁里没有的 zod 版本——从 Deno 缓存的 zod registry.json（路径由 deno info --json 的 npmCache 给），
 //   缓存里没有就联网取 registry.npmjs.org/zod 的版本列表（10-31：已有 tarball 时预热不落 registry.json，CI 第二十九批踩到），从中挑一个
 //   已发布的正式版，不等于锁定版本、锁里也没有：优先同一大版本里比锁定版本小的最大那个（现在锁 4.6.7 → 挑 4.6.6），没有就取其余最大的
-//   → 第二行退出码不是 0、输出里有 “lockfile is out of date”；只跑第一行查不出来（它只核 deno.json 和 deno.lock），所以第二行不能省。
-// 反例：换成锁里有的版本（deno.json 里 zod 那一项）→ 两行都通过。两种情况跑完 deno.json、deno.lock 一个字节都不变。
+//   → 脚本退出码不是 0、输出里有 “lockfile is out of date”；只跑 deno install --frozen 一行查不出来（它只核 deno.json 和 deno.lock），所以脚本里第二行不能省。
+// 反例：换成锁里有的版本（deno.json 里 zod 那一项）→ 脚本通过。两种情况跑完 deno.json、deno.lock 一个字节都不变。
 // 没有 deno 时跳过第二组——除非设了 LEMO_REQUIRE_DENO=1（unit.yml 的单元测试那一步设了，并用 setup-deno 装好和 ci.yml 同一版）：
-//   开关打开却没有 deno 就失败，不再悄悄跳过（接手清单 DENO-lock-ci）。第一组另外核对 unit.yml 的这两处没被删、版本和 ci.yml 一致。
-// 会起子进程（node、deno），在 vitest.config.ts 的 SLOW_NODE_TESTS 里登记。
+//   开关打开却没有 deno 就失败，不再悄悄跳过（接手清单 DENO-lock-ci）。另一组核对 unit.yml 的这两处没被删、版本和 ci.yml 一致。
+// 会起子进程（node、bash、deno），在 vitest.config.ts 的 SLOW_NODE_TESTS 里登记。
 // 联网：用 Deno 默认的全局缓存（不另设 DENO_DIR）。判“锁过期”不用联网的前提是缓存里已有 zod 的注册表元数据——beforeAll 先在临时目录
-//   跑一遍第一行（空缓存时联网取锁里的包，通常顺带存下 zod 的 registry.json；不一定存，所以挑版本时缓存没有就联网取）。正例特意选同一个包的锁外版本：
+//   跑一遍 deno install --frozen（空缓存时联网取锁里的包，通常顺带存下 zod 的 registry.json；不一定存，所以挑版本时缓存没有就联网取）。正例特意选同一个包的锁外版本：
 //   换成 left-pad 这类缓存里没有的包，Deno 要先去 npm 注册表取元数据，断网时报的是网络错误，到不了“锁过期”那一步。
 //   审查员在断网加隔离缓存（只预热过 zod）的条件下实测过 zod@4.6.6，报 “The lockfile is out of date”。用完删掉临时目录。
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
-import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative, resolve, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 const FN = join(ROOT, 'supabase', 'functions');
+const SCRIPT = join(ROOT, 'build', 'ci', 'deno-frozen-lock.sh');
+const BASH = process.platform === 'win32' ? ['C:\\Program Files\\Git\\bin\\bash.exe'].find((p) => existsSync(p)) : 'bash';
 const HAS_DENO = spawnSync('deno', ['--version'], { encoding: 'utf8' }).status === 0;
 /** 设成 1 时没有 deno 就失败（unit.yml 单元测试那一步设）；本机不设，没有 deno 照旧跳过 */
 const REQUIRE_VAR = 'LEMO_REQUIRE_DENO';
 const REQUIRE_DENO = process.env[REQUIRE_VAR] === '1';
 const PROBE = join('_shared', 'lemo-frozen-probe.ts');
 const ENV = { ...process.env, NO_COLOR: '1' };
-
-/** ci.yml 里 find 的扩展名清单（顺序也照抄）；entries() 的过滤由它生成 */
-const CI_EXTS = ['ts', 'tsx', 'mts', 'cts', 'js', 'jsx', 'mjs', 'cjs'] as const;
-const SOURCE_EXT = new RegExp(`\\.(${CI_EXTS.join('|')})$`);
 const CI_STEP = '服务器函数的依赖锁';
-/** 那一步 run 块里必须逐字出现的行（去掉首尾空白后整行相等） */
-const CI_FIRST = 'deno install --frozen';
-const CI_SECOND = 'deno install --frozen --no-check --entrypoint "${entries[@]}"';
-const CI_FIND = `find . -type f \\( ${CI_EXTS.map((e) => `-name '*.${e}'`).join(' -o ')} \\) -not -path '*/node_modules/*' | sort`;
+const RUN_LINE = 'run: bash build/ci/deno-frozen-lock.sh';
 
 const indent = (l: string) => l.length - l.trimStart().length;
 
@@ -57,27 +48,15 @@ function findStep(yml: string, name: string) {
   return { count: named.length, start, step, keys };
 }
 
-/** 纯函数：在 ci.yml 文本里找“服务器函数的依赖锁”那一步，返回缺了什么（空数组 = 全对） */
-function ciLockStepProblems(yml: string): string[] {
-  const { count, step, keys } = findStep(yml, CI_STEP);
-  if (count === 0) return [`ci.yml 里找不到名字含“${CI_STEP}”的步骤`];
-  if (count > 1) return [`ci.yml 里名字含“${CI_STEP}”的步骤有 ${count} 个，应该正好 1 个`];
+/** 纯函数：工作流里“服务器函数的依赖锁”那一步正好一个、只调脚本、不带 if 和 continue-on-error（空数组 = 全对） */
+function lockStepProblems(yml: string): string[] {
+  const { count, keys } = findStep(yml, CI_STEP);
+  if (count !== 1) return [`名字含“${CI_STEP}”的步骤有 ${count} 个，应该正好 1 个`];
   const out: string[] = [];
   for (const k of ['continue-on-error', 'if']) {
     if (keys.some((l) => l.startsWith(`${k}:`))) out.push(`这一步带了 ${k}:，失败可能被放过或整步被跳过`);
   }
-  if (!keys.includes('working-directory: supabase/functions')) out.push('这一步不在 supabase/functions 下跑（working-directory）');
-  const r = step.findIndex((l) => /^\s*run:\s*\|\s*$/.test(l));
-  if (r < 0) return [...out, '这一步没有 run: | 块'];
-  const runIndent = indent(step[r] ?? '');
-  const run: string[] = [];
-  for (const l of step.slice(r + 1)) {
-    if (l.trim() && indent(l) <= runIndent) break;
-    run.push(l.trim());
-  }
-  if (!run.includes(CI_FIRST)) out.push(`run 块里没有整行 ${CI_FIRST}`);
-  if (!run.includes(CI_SECOND)) out.push(`run 块里没有整行 ${CI_SECOND}`);
-  if (!run.some((l) => l.includes(CI_FIND))) out.push(`run 块里的 find 和这里的扩展名清单对不上：${CI_FIND}`);
+  if (!keys.includes(RUN_LINE)) out.push(`这一步不是 ${RUN_LINE}`);
   return out;
 }
 
@@ -85,6 +64,26 @@ const CI_YML = readFileSync(join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8'
 const UNIT_YML = readFileSync(join(ROOT, '.github', 'workflows', 'unit.yml'), 'utf8');
 const UNIT_STEP = '单元和组件测试';
 const REQUIRE_LINE = `${REQUIRE_VAR}: '1'`;
+
+describe('ci.yml、deploy-preview.yml 的“服务器函数的依赖锁”都调 build/ci/deno-frozen-lock.sh（不需要 deno）', () => {
+  for (const f of ['ci.yml', 'deploy-preview.yml']) {
+    it(`真实的 ${f}：正好一步、只调脚本、不带 if 和 continue-on-error`, () => {
+      expect(lockStepProblems(readFileSync(join(ROOT, '.github', 'workflows', f), 'utf8'))).toEqual([]);
+    });
+  }
+
+  it('反向验证：删掉整步、改成别的命令、加了 continue-on-error 或 if（写在 name 前后都算）、同名步骤出现两个 → 核对报出来', () => {
+    const run = `        ${RUN_LINE}`;
+    expect(CI_YML.split(/\r?\n/).filter((l) => l === run), '前提：调脚本的那一行缩进 8 格且只有一处').toHaveLength(1);
+    expect(lockStepProblems(CI_YML.replace(CI_STEP, '别的步骤'))).toEqual([expect.stringContaining('有 0 个')]);
+    expect(lockStepProblems(CI_YML.replace(run, '        run: deno install --frozen'))).toEqual([expect.stringContaining(RUN_LINE)]);
+    expect(lockStepProblems(CI_YML.replace(run, `${run}\n        continue-on-error: true`))).toEqual([expect.stringContaining('continue-on-error:')]);
+    expect(lockStepProblems(CI_YML.replace(run, `${run}\n        if: github.event_name == 'push'`))).toEqual([expect.stringContaining('if:')]);
+    const nameLine = CI_YML.split(/\r?\n/).find((l) => l.includes(CI_STEP)) ?? '';
+    expect(lockStepProblems(CI_YML.replace(nameLine, `      - if: false\n${nameLine.replace('- name:', '  name:')}`))).toEqual([expect.stringContaining('if:')]);
+    expect(lockStepProblems(CI_YML.replace('- name: 找旧版契约测试的基线', `- name: ${CI_STEP}（第二个）`))).toEqual([expect.stringContaining('有 2 个')]);
+  });
+});
 
 /** 纯函数：unit.yml 装了和 ci.yml 同一个 setup-deno（同一 SHA、同一 deno-version），装在单元测试那一步之前，且那一步设了 LEMO_REQUIRE_DENO=1 */
 function unitDenoProblems(unit: string, ci: string): string[] {
@@ -114,38 +113,6 @@ function unitDenoProblems(unit: string, ci: string): string[] {
   if (tzLine !== 'tz: [UTC, Asia/Seoul, America/Los_Angeles]') out.push(`“${UNIT_STEP}”所在作业的矩阵应正好是 tz: [UTC, Asia/Seoul, America/Los_Angeles]，现在：${tzLine || '没有'}`);
   return out;
 }
-
-describe('ci.yml“服务器函数的依赖锁”那一步和本测试跑的命令一致（不需要 deno）', () => {
-  it('真实的 ci.yml：两行命令、find 的扩展名清单、working-directory 一条不缺', () => {
-    expect(ciLockStepProblems(CI_YML)).toEqual([]);
-  });
-
-  it('反向验证：读到的 ci.yml 去掉任意一行必需内容（或改掉一个扩展名、删掉整步）→ 核对报出来', () => {
-    const lines = CI_YML.split(/\r?\n/);
-    const from = lines.findIndex((l) => l.includes(CI_STEP));
-    const drop = (pred: (l: string) => boolean) => {
-      const i = lines.findIndex((l, k) => k > from && pred(l));   // 只删那一步里的行，别的步骤有同样的行也不碰
-      expect(i, '前提：真实 ci.yml 里有这一行').toBeGreaterThanOrEqual(0);
-      return [...lines.slice(0, i), ...lines.slice(i + 1)].join('\n');
-    };
-    expect(ciLockStepProblems(drop((l) => l.trim() === CI_FIRST))).toEqual([expect.stringContaining(`整行 ${CI_FIRST}`)]);
-    expect(ciLockStepProblems(drop((l) => l.trim() === CI_SECOND))).toEqual([expect.stringContaining('--entrypoint')]);
-    expect(ciLockStepProblems(drop((l) => l.includes(CI_FIND)))).toEqual([expect.stringContaining('扩展名清单')]);
-    expect(ciLockStepProblems(drop((l) => l.trim() === 'working-directory: supabase/functions'))).toEqual([expect.stringContaining('working-directory')]);
-    expect(ciLockStepProblems(CI_YML.replace(" -o -name '*.cjs'", ''))).toEqual([expect.stringContaining('扩展名清单')]);
-    expect(ciLockStepProblems(CI_YML.replace(CI_STEP, '别的步骤'))).toEqual([expect.stringContaining('找不到')]);
-  });
-
-  it('反向验证：那一步加了 continue-on-error 或 if（写在 name 前后都算）、同名步骤出现两个 → 核对报出来', () => {
-    const wd = '        working-directory: supabase/functions';
-    expect(CI_YML.split(/\r?\n/).filter((l) => l === wd), '前提：working-directory 行的缩进是 8 格且只有一处').toHaveLength(1);
-    expect(ciLockStepProblems(CI_YML.replace(wd, `${wd}\n        continue-on-error: true`))).toEqual([expect.stringContaining('continue-on-error:')]);
-    expect(ciLockStepProblems(CI_YML.replace(wd, `${wd}\n        if: github.event_name == 'push'`))).toEqual([expect.stringContaining('if:')]);
-    const nameLine = CI_YML.split(/\r?\n/).find((l) => l.includes(CI_STEP)) ?? '';
-    expect(ciLockStepProblems(CI_YML.replace(nameLine, `      - if: false\n${nameLine.replace('- name:', '  name:')}`))).toEqual([expect.stringContaining('if:')]);
-    expect(ciLockStepProblems(CI_YML.replace('- name: 找旧版契约测试的基线', `- name: ${CI_STEP}（第二个）`))).toEqual([expect.stringContaining('有 2 个')]);
-  });
-});
 
 describe('unit.yml 真的跑第二组：装了 deno、开关打开时没有 deno 就失败（DENO-lock-ci，不需要 deno）', () => {
   it(`${REQUIRE_VAR}=1 时必须有 deno（否则第二组会被 skipIf 悄悄跳过）`, () => {
@@ -191,26 +158,11 @@ describe('unit.yml 真的跑第二组：装了 deno、开关打开时没有 deno
 let dir = '';
 let fn = '';
 
-/** ci.yml 的 find：全部源码，排除 node_modules，相对路径、排好序 */
-function entries(base: string): string[] {
-  return readdirSync(base, { recursive: true, withFileTypes: true })
-    .filter((d) => d.isFile() && SOURCE_EXT.test(d.name))
-    .map((d) => relative(base, join(d.parentPath, d.name)).split(sep).join('/'))
-    .filter((p) => !p.split('/').includes('node_modules'))
-    .map((p) => `./${p}`)
-    .sort();
-}
-
 const deno = (args: string[]): SpawnSyncReturns<string> => spawnSync('deno', args, { cwd: fn, encoding: 'utf8', env: ENV, timeout: 120_000 });
 const text = (r: SpawnSyncReturns<string>) => `${r.stdout ?? ''}\n${r.stderr ?? ''}`;
-
-/** 照 CI 原样跑两行（命令和上面核对过的 CI_FIRST、CI_SECOND 一致） */
-function runCi() {
-  const first = deno(CI_FIRST.split(' ').slice(1));
-  const list = entries(fn);
-  const second = deno([...CI_SECOND.split(' ').slice(1, -1), ...list]);
-  return { first, second, list };
-}
+/** 对临时副本跑 CI 用的同一份脚本 */
+const runScript = (): SpawnSyncReturns<string> =>
+  spawnSync(BASH ?? 'bash', ['--noprofile', '--norc', SCRIPT, fn], { cwd: ROOT, encoding: 'utf8', env: ENV, timeout: 240_000 });
 
 const lockFiles = () => [readFileSync(join(fn, 'deno.json'), 'utf8'), readFileSync(join(fn, 'deno.lock'), 'utf8')];
 /** 锁里有没有这个 zod 版本（npm:zod@x.y.z 的映射或 zod@x.y.z 的包条目；4.6.1 不会误中 4.6.10） */
@@ -283,22 +235,22 @@ describe('锁外 zod 版本怎么挑（chooseOutside，不需要 deno）', () =>
 
 const zodSpec = () => (JSON.parse(readFileSync(join(fn, 'deno.json'), 'utf8')) as { imports: Record<string, string> }).imports['zod'] ?? '';
 
-/** 正例/反例共用：写探针、跑两行、核对锁文件不变，最后删探针 */
-function withProbe(src: string, check: (r: ReturnType<typeof runCi>) => void) {
+/** 正例/反例共用：写探针、跑脚本、核对锁文件不变，最后删探针 */
+function withProbe(src: string, check: (r: SpawnSyncReturns<string>) => void) {
   const before = lockFiles();
   writeFileSync(join(fn, PROBE), src);
   try {
-    const r = runCi();
-    expect(r.list).toContain(`./${PROBE.split(sep).join('/')}`);
-    expect(r.first.status, text(r.first)).toBe(0);
-    check(r);
+    // 只跑第一行查不出锁外依赖（它只核 deno.json 和 deno.lock）：所以脚本里还有第二行
+    const first = deno(['install', '--frozen']);
+    expect(first.status, text(first)).toBe(0);
+    check(runScript());
     expect(lockFiles()).toEqual(before);
   } finally {
     rmSync(join(fn, PROBE), { force: true });
   }
 }
 
-describe.skipIf(!HAS_DENO)('服务器函数的依赖锁：deno install --frozen 拦得住锁外依赖（REVIEW-1030-be-sugg ③）', () => {
+describe.skipIf(!HAS_DENO || !BASH)('build/ci/deno-frozen-lock.sh 拦得住锁外依赖（REVIEW-1030-be-sugg ③）', () => {
   beforeAll(() => {
     dir = mkdtempSync(join(tmpdir(), 'lemo-deno-frozen-'));
     fn = join(dir, 'functions');
@@ -308,14 +260,14 @@ describe.skipIf(!HAS_DENO)('服务器函数的依赖锁：deno install --frozen 
     expect(cp.status, text(cp)).toBe(0);
     // 预热缓存：空缓存（CI 的新机器）时联网取锁里的包和 zod 的 registry.json，后面挑锁外版本要读它；已有缓存时不联网
     //   单独给 240 秒（deno() 只给 120 秒）；超时被杀时 status 是 null，所以报错带上 error、signal
-    const warm = spawnSync('deno', CI_FIRST.split(' ').slice(1), { cwd: fn, encoding: 'utf8', env: ENV, timeout: 240_000 });
+    const warm = spawnSync('deno', ['install', '--frozen'], { cwd: fn, encoding: 'utf8', env: ENV, timeout: 240_000 });
     expect(warm.status, `预热（联网取锁里的包）失败：status=${warm.status} signal=${warm.signal} error=${String(warm.error)}\n${text(warm)}`).toBe(0);
   }, 260_000);
   afterAll(() => {
     if (dir) rmSync(dir, { recursive: true, force: true });
   });
 
-  it('锁外的 zod（从缓存的 registry.json、没有就联网取的版本列表里挑一个已发布的别的版本）：第二行（--entrypoint）退出码不是 0，报 lockfile is out of date；第一行查不出；锁文件不变', async () => {
+  it('锁外的 zod（从缓存的 registry.json、没有就联网取的版本列表里挑一个已发布的别的版本）：脚本退出码不是 0，报 lockfile is out of date；只跑第一行查不出；锁文件不变', async () => {
     const locked = /^npm:zod@(\d+\.\d+\.\d+)$/.exec(zodSpec())?.[1];
     expect(locked, `deno.json 的 zod 不是 npm:zod@x.y.z：${zodSpec()}`).toBeTruthy();
     const outside = await pickOutsideZod(locked ?? '', lockFiles()[1] ?? '');
@@ -323,16 +275,16 @@ describe.skipIf(!HAS_DENO)('服务器函数的依赖锁：deno install --frozen 
     // 前提：锁里确实没有这个版本（npm:zod@x.y.z 的映射、zod@x.y.z 的包条目都没有）
     expect(lockHasZod(lockFiles()[1] ?? '', outside), `锁里不该有 zod@${outside}`).toBe(false);
     expect(lockHasZod(lockFiles()[1] ?? '', locked ?? ''), '对照：锁定版本在锁里查得到（证明上一条的查法有效）').toBe(true);
-    withProbe(`import { z } from 'npm:zod@${outside}';\nexport const name = z.string();\n`, ({ second }) => {
-      expect(second.status, text(second)).not.toBe(0);
-      expect(text(second).toLowerCase()).toContain('lockfile is out of date');
+    withProbe(`import { z } from 'npm:zod@${outside}';\nexport const name = z.string();\n`, (r) => {
+      expect(r.status, text(r)).not.toBe(0);
+      expect(text(r).toLowerCase()).toContain('lockfile is out of date');
     });
   }, 240_000);
 
-  it('反例：换成锁里有的版本（deno.json 的 zod）→ 两行都通过；锁文件不变', () => {
+  it('反例：换成锁里有的版本（deno.json 的 zod）→ 脚本通过；锁文件不变', () => {
     expect(zodSpec()).toMatch(/^npm:zod@\d+\.\d+\.\d+$/);
-    withProbe(`import { z } from '${zodSpec()}';\nexport const name = z.string();\n`, ({ second }) => {
-      expect(second.status, text(second)).toBe(0);
+    withProbe(`import { z } from '${zodSpec()}';\nexport const name = z.string();\n`, (r) => {
+      expect(r.status, text(r)).toBe(0);
     });
   }, 240_000);
 });
