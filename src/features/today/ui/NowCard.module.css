@@ -78,6 +78,11 @@
   font-size: var(--fs-16);
 }
 
+/* 暖心句懒加载、还没到时：空行也占一行高，句子到了卡片不跳 */
+.calm .quiet:empty::before {
+  content: '\00a0';
+}
+
 .calm .sub {
   color: var(--text-2);
 }
