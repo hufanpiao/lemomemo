@@ -106,6 +106,8 @@ export interface Deps {
   sendMail(to: string, mail: { subject: string; text: string }): Promise<boolean>;
   /** 邮箱、IP、验证码哈希的 HMAC 密钥 */
   hashSecret: string | undefined;
+  /** 日志里认人的 HMAC 密钥（index.ts 传 SUPABASE_SERVICE_ROLE_KEY；_shared/log-tag.ts，安全审查第 11 条） */
+  logSecret?: string | undefined;
   /** 正式环境没配就拒绝（misconfigured）；预览、本机只记 proxy_secret_missing（K2 安全审查低 3） */
   proxySecret: string | undefined;
   /** TURNSTILE_SECRET、RESEND_API_KEY 有没有配（值不进 core） */

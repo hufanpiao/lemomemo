@@ -177,6 +177,7 @@ Deno.serve((req) => {
     sendMail: skipTestRecipients((to, mail) => (resendKey ? sendMail(resendKey, to, mail) : Promise.resolve(false)), log),   // @lemomemo.test 不真发（安全审查 D1）
     tzLabel,   // 邮件里时区的通俗说法，和 App 恢复页同一份（shared/i18n/tz-label.ts，KO-mail-nolink-tz）
     hashSecret: Deno.env.get('SIGNUP_HASH_SECRET'),
+    logSecret: key,   // 日志里认人的 HMAC 密钥（_shared/log-tag.ts，安全审查第 11 条）
     now: Date.now,
     log,
   });

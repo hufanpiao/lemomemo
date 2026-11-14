@@ -159,6 +159,7 @@ Deno.serve((req) => {
     verifyTurnstile: (token, ip) => verifyTurnstile(siteverifyUrl, turnstileSecret, token, ip),
     sendMail: (to, mail) => sendMail(resendKey, to, mail, emailsUrl),
     hashSecret: Deno.env.get('SIGNUP_HASH_SECRET'),
+    logSecret: key,   // 日志里认人的 HMAC 密钥（_shared/log-tag.ts，安全审查第 11 条）
     proxySecret: Deno.env.get('PROXY_SECRET'),
     configured: siteverify.ok && emails.ok,
     now: Date.now,

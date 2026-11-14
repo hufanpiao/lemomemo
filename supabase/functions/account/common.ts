@@ -166,7 +166,7 @@ export interface Deps {
   exportLimits?: Partial<ExportLimits>;
   /** 新 export_id（默认 crypto.randomUUID；测试注入固定值） */
   newId?: () => string;
-  /** 函数日志里认人的 user_id 哈希（sha256 前 16 位，Q4）；index.ts 注入，测试可不给（记成 '-'） */
+  /** 函数日志里认人的 user_id 标签（带服务器密钥的 HMAC 截断，_shared/log-tag.ts，安全审查第 11 条）；index.ts 注入，测试可不给（记成 '-'） */
   userHash?: (userId: string) => Promise<string>;
   /** 导出内存探针（只在本机 EXPORT_MEM_PROBE=1 时由 index.ts 给，0.47 第 21 条、安全审查 K1）：读这个 isolate 的 heapUsed 和 heapUsed + external；w 是模块加载时生成的随机 worker 标识 */
   memProbe?: { read: () => { heap: number; total: number }; w: string } | undefined;

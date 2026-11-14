@@ -19,6 +19,7 @@
 
 import { readJsonObjectCapped } from '../_shared/body.ts';
 import { emailHash, ipHash } from '../_shared/email-hash.ts';
+import { logUserTag } from '../_shared/log-tag.ts';
 import { inviteCodeHash, isInviteCode, normalizeInviteCode } from '../_shared/invite-code.ts';
 import { rateIp, readProxyHeaders, safeEqual } from '../_shared/proxy-headers.ts';
 import { StoreTimeout } from '../_shared/store-timeout.ts';
@@ -257,7 +258,7 @@ async function verify(req: Request, b: VerifyBody, deps: Deps, secret: string): 
     //   ① Supabase 控制台 → Edge Functions → invite-signup → Logs，搜 orphan_（记下时刻）；
     //   ② SQL Editor 跑：select u.id, u.email, u.created_at from auth.users u left join public.profiles p on p.user_id = u.id
     //        where p.user_id is null and u.created_at < now() - interval '10 minutes' order by u.created_at desc;
-    //      创建时刻和日志时刻对得上的那一行就是（orphan_user 再对 id 前 8 位）；
+    //      创建时刻和日志时刻对得上的那一行就是（orphan_user 记的是 user_id 的 HMAC 标签，对不上 id；按时刻对，同一时刻几个就都核一遍）；
     //   ③ 控制台 Authentication → Users 删掉这个用户（没有 profile，没有任何业务数据），用 invite-admin 给这个邮箱的人重发一个新邀请码；
     //      旧码不必退（一次性码，已占的那一次作废）。
     //   ②查不到这个邮箱的行：是“注册成功但删 pending 失败、又换码再验”那种（迁移 20261031150000 文件头），撞上的是一个正常账号——
@@ -298,8 +299,8 @@ async function verify(req: Request, b: VerifyBody, deps: Deps, secret: string): 
     } else {
       // K2 安全审查 P5：删不掉（含超时；超时的 deleteUser 也可能晚到删成，删的只会是这个半成品）就不退码。
       // 重试 verify 时沿用占码、按同一个 id 认领这个用户再补 profile；
-      // 用户一直不重试才成孤儿：记 orphan_user（只记 user_id 前 8 位，0.38），负责人按上面 orphan_suspect 那段的办法核对、删掉、重发邀请码
-      log?.(`orphan_user:${created.id.slice(0, 8)}`);
+      // 用户一直不重试才成孤儿：记 orphan_user（只记 user_id 的 HMAC 标签，_shared/log-tag.ts，安全审查第 11 条），负责人按上面 orphan_suspect 那段的办法核对、删掉、重发邀请码
+      log?.(`orphan_user:${await logUserTag(deps.logSecret, created.id)}`);
     }
     throw new Fail(503, 'try_later');
   }

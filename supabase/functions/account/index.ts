@@ -19,6 +19,7 @@ import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
 import { skipTestRecipients } from '../_shared/account-mail.ts';
 import { ACCOUNT_ERRS, DbError, exportTablesOf, handle, memProbeFor, withStoreTimeouts, type AccountStore } from './core.ts';
 import { json } from '../_shared/http.ts';
+import { logUserTag } from '../_shared/log-tag.ts';
 import { sendMail } from '../_shared/mail-send.ts';
 import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { timedFetch } from '../_shared/net.ts';
@@ -173,11 +174,6 @@ const memProbe = memProbeFor(Deno.env.get('EXPORT_MEM_PROBE'), Deno.env.get('SUP
   return { heap: m.heapUsed, total: m.heapUsed + m.external };
 }, log);
 
-/** 函数日志里认人用的 user_id 哈希（sha256 前 16 位十六进制，0.47 第 19 条 Q4）：日志里不出现 user_id 原文 */
-async function userHash(userId: string): Promise<string> {
-  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(userId)));
-  return [...d.slice(0, 8)].map((x) => x.toString(16).padStart(2, '0')).join('');
-}
 const EXPORT_TABLES = exportTablesOf(allManifests);
 // 本人的 pin_epoch 经 fn_vault 读（SQL 在 _shared/vault-epoch.ts，和 vault-image 共用）
 const checkVaultToken = vaultTokenChecker(decodeKey32(Deno.env.get('VAULT_TOKEN_SECRET')), Date.now, (uid) => withVaultUser(uid, (tx) => pinEpoch(tx, uid)), log);
@@ -213,7 +209,8 @@ Deno.serve((req) => {
       return versionBlock(r, () => cachedMinClientVersion(appConfigMinLoader(admin)));
     },
     exportTables: EXPORT_TABLES,
-    userHash,
+    // 函数日志里认人：带服务器密钥的 HMAC 截断（_shared/log-tag.ts，安全审查第 11 条；原来不加盐 sha256，拿 user_id 一算就对上）
+    userHash: (uid) => logUserTag(key, uid),
     memProbe,
     proxySecret: Deno.env.get('PROXY_SECRET'),
     background,

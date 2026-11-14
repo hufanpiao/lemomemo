@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { withAuthTimeouts, withStoreTimeouts } from '../../supabase/functions/invite-signup/store-timeout.ts';
 import { type AuthAdmin, type Store } from '../../supabase/functions/invite-signup/core.ts';
 import { inviteCodeHash } from '../../supabase/functions/_shared/invite-code.ts';
+import { logUserTag } from '../../supabase/functions/_shared/log-tag.ts';
+import { LOG_SECRET } from './account-fakes.ts';
 import {
   AUTH_METHODS, call, CODE, CODE2, handleStart, only, setup, startBody, STORE_METHODS, TRY_LATER, used, verifyBody, world,
 } from './invite-signup-harness.ts';
@@ -158,7 +160,7 @@ describe('INVITE-auth-timeout：Auth 管理接口超时', () => {
     w.store.failProfile = true;
     setHang(only('deleteUser', 'before'));
     expect(await call(w, verifyBody('a@example.com'))).toEqual(TRY_LATER);
-    expect(w.logs).toEqual(expect.arrayContaining(['profile_failed', 'auth_timeout:deleteUser', `orphan_user:${w.auth.ids[0]?.slice(0, 8)}`]));
+    expect(w.logs).toEqual(expect.arrayContaining(['profile_failed', 'auth_timeout:deleteUser', `orphan_user:${await logUserTag(LOG_SECRET, w.auth.ids[0] ?? '')}`]));
     expect(await used(w)).toBe(1);
     w.store.failProfile = false;
     setHang(() => false);

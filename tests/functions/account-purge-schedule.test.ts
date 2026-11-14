@@ -11,6 +11,8 @@ import { purgeCases, runPurgeCases, type PurgeActs } from '../data-manifest/purg
 import { A, accountDeps, accountReq, B, DAY, H, T0 } from './account-fakes.ts';
 import { world, requestDeletion, runPurge, seedOutside, markNoticed, toFirstRun } from './account-purge-harness.ts';
 import { tzLabel } from '../../shared/i18n/tz-label.ts';
+import { logTag } from './account-fakes.ts';
+const tA = await logTag(A);   // 日志里认人的 HMAC 标签（安全审查第 11 条）
 
 describe('时间预算、backups 子目录（K3 安全审查低 9、10）', () => {
   it('处理完一个账号时间就用完：不再认领下一个（deferred），下一次运行再做', async () => {
@@ -44,7 +46,7 @@ describe('时间预算、backups 子目录（K3 安全审查低 9、10）', () =
     });
     expect(r.body).toMatchObject({ purged: 0, deferred: 1, failed: 0 });
     expect(buckets).toEqual([R2_BUCKETS[0]]);   // 第一个桶删了对象就停
-    expect(r.logs).toContain('time_budget:aaaaaaaa');
+    expect(r.logs).toContain(`time_budget:${tA}`);
     expect(w.backups.count(A)).toBe(4);           // 备份段没开始
     expect(w.db.users.has(A)).toBe(true);
     expect(w.db.deleted.has(A)).toBe(false);
@@ -61,7 +63,7 @@ describe('时间预算、backups 子目录（K3 安全审查低 9、10）', () =
       store: { ...store, deleteUserCounters: async (u) => { await store.deleteUserCounters(u); w.clock.advance(PURGE_TIME_BUDGET_MS); } },
     });
     expect(r.body).toMatchObject({ purged: 0, deferred: 1, failed: 0 });
-    expect(r.logs).toContain('time_budget:aaaaaaaa');
+    expect(r.logs).toContain(`time_budget:${tA}`);
     expect(w.r2.count('images', `${A}/`)).toBe(0);   // 第 2～5 步都做完了
     expect(w.backups.count(A)).toBe(0);
     expect(w.db.deleted.has(A)).toBe(false);
@@ -81,7 +83,7 @@ describe('时间预算、backups 子目录（K3 安全审查低 9、10）', () =
     toFirstRun(w);
     const r = await runPurge(w);
     expect(r.body).toMatchObject({ purged: 0, failed: 1 });
-    expect(r.logs).toContain('backups_subdir:aaaaaaaa');
+    expect(r.logs).toContain(`backups_subdir:${tA}`);
     expect(w.db.users.has(A)).toBe(true);
     expect(w.db.deleted.has(A)).toBe(false);
     expect(w.db.pending.get(A)?.purge_started_at).toBeNull();
@@ -124,7 +126,7 @@ describe('TC-B1-108：和 restore 不撞车', () => {
     toFirstRun(w);
     w.db.beforeStillClaimed = () => { w.db.pending.delete(A); };
     const r = await runPurge(w);
-    expect(r.logs).toContain('skip_claim_gone:aaaaaaaa');
+    expect(r.logs).toContain(`skip_claim_gone:${tA}`);
     expect(w.db.deleted.has(A)).toBe(false);
     expect(w.db.users.has(A)).toBe(true);
   });
@@ -189,7 +191,7 @@ describe('TC-B1-107：到期前提醒', () => {
     w.db.fail.add('casNotice');
     const r = await runPurge(w);
     expect(r.body).toMatchObject({ sent: 1 });
-    expect(r.logs).toContain('remind_failed:aaaaaaaa');
+    expect(r.logs).toContain(`remind_failed:${tA}`);
     w.db.fail.delete('casNotice');
     w.clock.ms = RUN(5) + 6 * H;
     await runPurge(w);
