@@ -5,7 +5,7 @@
 //   闭包里每一块都不许是 zod、zod-jitless、shared/schema/**、shared/manifests/** 的块（按 manifest 的键、src、name 认），
 //   内容里也不许出现 zod 的特征字符串（ZOD_MARKS；rolldown 把 zod 并进别的块时按名字认不出）
 // 11-05 加农历（接手清单 LUNAR-indirect-import 剩下的兜底）：闭包里也不许有农历数据的块（shared/logic/anniv/lunar*，按 LUNAR_ID 认），
-//   内容里不许有农历表的特征数字串（LUNAR_MARKS：压缩后变量名 LUNAR_CN 没了，数据原样在）。check_arch 的 LUNAR 按源码拦，这里按产物兜底
+//   内容里不许有农历表的特征数字串（LUNAR_MARKS：压缩后变量名 LUNAR_CN 没了，数据原样在）。ESLint lemo/import-bounds 的 LUNAR 按源码拦，这里按产物兜底
 // 用法：node build/check_first_paint_chunks.mjs [--app-dir <目录>]（--app-dir 默认 dist/web/app；build_web.mjs 在体积检查之后跑）
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';

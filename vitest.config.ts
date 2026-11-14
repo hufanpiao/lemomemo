@@ -27,16 +27,15 @@ export const DENO_NPM_ALIASES: { find: RegExp; replacement: string }[] = Object.
 export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/arch/check-arch.test.ts', // python build/check_arch.py
   'tests/arch/eslint.test.ts', // ESLint API（整套规则、类型信息）
+  'tests/arch/import-bounds.test.ts', // ESLint API（lemo/import-bounds：R2、LUNAR、MOTION-IMPL）
   'tests/arch/stylelint.test.ts', // stylelint API
   'tests/arch/tsc.test.ts', // TypeScript 编译器
   'tests/build/check-arch-bidi.test.ts', // python build/check_arch.py、git init（LINT-bidi）
   'tests/build/check-arch-email.test.ts', // python build/check_arch.py（EMAIL：公开仓库不进真实邮箱）
   'tests/build/check-fn-redefs.test.ts', // python build/check_fn_redefs.py（M7：整段重写的函数不丢上一版的 delete 和表名）
-  'tests/build/check-arch-binimport.test.ts', // python build/check_arch.py（LINT-binimport）
-  'tests/build/check-arch-binimport-entry.test.ts', // python build/check_arch.py（LINT-binimport：读文件再执行、非 JS 入口）
-  'tests/build/check-arch-binimport-perf.test.ts', // python build/check_arch.py（LINT-binimport：耗时上限和健壮性）
-  'tests/build/check-arch-binimport-scanner.test.ts', // python build/check_arch.py（LINT-binimport：骨架扫描器、createRequire）
-  'tests/build/check-arch-binimport-source.test.ts', // python build/check_arch.py（LINT-binimport：点号 source、反斜杠续行）
+  'tests/build/check-arch-binimport.test.ts', // python build/check_arch.py → node build/check_binimport.mjs（LINT-binimport）
+  'tests/build/check-arch-binimport-entry.test.ts', // 同上（LINT-binimport：非 JS 入口）
+  'tests/build/check-arch-binimport-robust.test.ts', // 同上（LINT-binimport：createRequire 间接传递、耗时上限和健壮性）
   'tests/build/check-backend.test.ts', // python build/check_backend.py（建 TypeScript 类型检查器）
   'tests/build/check-backend-f11-cors.test.ts', // python build/check_backend.py（F11 样例）
   'tests/build/check-backend-f12-json.test.ts', // python build/check_backend.py（F12 json 响应只在 _shared/http.ts）

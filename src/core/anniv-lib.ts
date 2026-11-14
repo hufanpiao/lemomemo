@@ -1,4 +1,4 @@
-// 纪念日的推算和农历（shared/logic/anniv/next-date.ts、lunar.ts）按需加载的唯一一处（架构 2.6；check_arch 的 LUNAR：src 里一律不准静态引它们）。
+// 纪念日的推算和农历（shared/logic/anniv/next-date.ts、lunar.ts）按需加载的唯一一处（架构 2.6；ESLint lemo/import-bounds 的 LUNAR：src 里一律不准静态引它们）。
 // 11-14 整块评审第 19 条：原来纪念日页（features/anniv/data/anniv-lib.ts）、提醒列表（reminders/hooks/remind-list.ts）、
 //   月历菱形（calendar/hooks/useAnnivDates.ts）各写一份 import() 和缓存，合成这一份放 core（各功能的 data 层也能用），
 //   React 一侧的状态钩子是 kit/hooks/useAnnivLib.ts。
