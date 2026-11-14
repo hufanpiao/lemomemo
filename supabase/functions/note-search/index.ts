@@ -13,7 +13,7 @@ import { json } from '../_shared/http.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
-import { embedderFor } from '../_shared/ai/wire.ts';
+import { appAiConfig, embedderFor } from '../_shared/ai/wire.ts';
 import { noteSearchReq } from '../_shared/gen/schema/search.ts';
 import { handle, readSearchConfig } from './core.ts';
 import { nearest } from './store.ts';
@@ -36,11 +36,7 @@ Deno.serve(async (req) => {
     },
     consent: (userId) => aiAllowed(admin, userId),
     takeRate: rpcTakeRate(admin),
-    async config() {
-      const { data, error } = await admin.from('app_config').select('ai').eq('id', 1).maybeSingle();
-      if (error || !data) throw new Error('db:app_config');
-      return readSearchConfig((data as { ai: unknown }).ai);
-    },
+    config: async () => readSearchConfig(await appAiConfig(admin, Date.now())),
     async searchDaily(userId) {
       const { data, error } = await admin.schema('private').from('user_limits').select('search_daily').eq('user_id', userId).maybeSingle();
       if (error) throw new Error('db:user_limits');

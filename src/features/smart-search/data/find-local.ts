@@ -219,10 +219,12 @@ export function mergeFind(kw: readonly FindHit[], sem: readonly SemHit[] | null,
   const top = kw.filter((h) => semKeys.has(keyOf(h.item.kind, h.item.id)));
   const rest = kw.filter((h) => !semKeys.has(keyOf(h.item.kind, h.item.id)));
   const only: FindHit[] = [];
+  const seen = new Set(kwKeys);
   for (const h of [...sem].sort((a, b) => b.score - a.score)) {
     const k = keyOf(h.kind, h.id);
     const it = byKey.get(k);
-    if (!it || kwKeys.has(k) || only.some((x) => keyOf(x.item.kind, x.item.id) === k)) continue;
+    if (!it || seen.has(k)) continue;
+    seen.add(k);
     only.push({ item: it, score: 0, snippet: snippetFor(it, q) });
   }
   return { top, kw: rest, sem: only };

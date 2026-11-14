@@ -15,7 +15,7 @@ import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { FIND_KINDS, useFind, type FindHit, type FindKind, type TimeFilter } from '../hooks/useFind.ts';
+import { FIND_KINDS, SEARCH_Q_MAX, useFind, type FindHit, type FindKind, type TimeFilter } from '../hooks/useFind.ts';
 import styles from './FindPanel.module.css';
 import { Lead, Marked, metaOf, Preview, useFindT } from './find-parts.tsx';
 
@@ -49,11 +49,11 @@ export default function FindPanel({ query, from, onClose }: FindPanelProps) {
   const locale = useUi((s) => s.locale);
   const f = useFind(query);
   const desk = useMedia(MQ_SIDEBAR);
-  const [open1, setOpen1] = useState(true);
   const [more, setMore] = useState<Record<string, boolean>>({});
   const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
-  useScrollLock(open1);
+  // 关掉 = onClose（FindHost 的 closeFind 直接卸掉这一块），所以这里一直是开着的
+  useScrollLock(true);
   useEffect(() => {
     const t0 = clock.now();
     rlog(`find open from=${from} len=${[...query.trim()].length}`);
@@ -79,10 +79,7 @@ export default function FindPanel({ query, from, onClose }: FindPanelProps) {
   const picked = visible[Math.min(sel, visible.length - 1)] ?? null;
   const total = f.counts.all;
 
-  const close = (): void => {
-    setOpen1(false);
-    onClose();
-  };
+  const close = onClose;
   const go = (h: FindHit): void => {
     f.remember();
     rlog(`find pick kind=${h.item.kind}`);
@@ -222,14 +219,14 @@ export default function FindPanel({ query, from, onClose }: FindPanelProps) {
         placeholder={t('find.ph', {})}
         aria-label={t('find.label', {})}
         enterKeyHint="search"
-        maxLength={100}
+        maxLength={SEARCH_Q_MAX}
         data-testid="find-input"
       />
     </div>
   );
 
   return (
-    <RD.Root open={open1} onOpenChange={(o) => (o ? undefined : close())}>
+    <RD.Root open onOpenChange={(o) => (o ? undefined : close())}>
       <RD.Portal>
         {desk ? <div className={styles.scrim} onClick={close} aria-hidden="true" data-testid="find-scrim" /> : null}
         <RD.Content

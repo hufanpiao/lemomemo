@@ -2,9 +2,10 @@
 import { describe, expect, it } from 'vitest';
 import { noteSearchReq } from '../../shared/schema/search.ts';
 import { pacificDate } from '../../supabase/functions/_shared/ai/gate.ts';
+import { QUOTA_WINDOW_S } from '../../supabase/functions/_shared/ai/store.ts';
 import type { EmbedResult } from '../../supabase/functions/_shared/ai/embed.ts';
 import {
-  type Deps, DAY_WINDOW_S, EMBED_TIMEOUT_MS, handle, HITS_MAX, MIN_SCORE, RATE_PER_MIN, readSearchConfig, UNLIMITED,
+  type Deps, EMBED_TIMEOUT_MS, handle, HITS_MAX, MIN_SCORE, RATE_PER_MIN, readSearchConfig, UNLIMITED,
 } from '../../supabase/functions/note-search/core.ts';
 import { A, jwtFor, T0, uuid } from '../functions/vault-fakes.ts';
 
@@ -90,17 +91,17 @@ describe('note-search', () => {
     expect((await handle(req({ q: '牙医', scope: 'main' }), w2.deps)).status).toBe(503);
   });
 
-  it('每分钟 20 次：第 21 次 fallback quota；键是 search-min:<uid>:<UTC 分钟>', async () => {
+  it('每分钟 20 次：第 21 次 fallback timeout（不说今天用完）；键是 search-min:<uid>:<UTC 分钟>', async () => {
     const w = world();
     for (let i = 0; i < RATE_PER_MIN; i++) expect((await (await handle(req({ q: '牙医', scope: 'main' }), w.deps)).json()).hits).toBeDefined();
-    expect(await (await handle(req({ q: '牙医', scope: 'main' }), w.deps)).json()).toEqual({ fallback: 'quota' });
+    expect(await (await handle(req({ q: '牙医', scope: 'main' }), w.deps)).json()).toEqual({ fallback: 'timeout' });
     expect(w.limits[0]).toMatchObject({ key: expect.stringMatching(new RegExp(`^search-min:${A}:\\d{12}$`)), limit: RATE_PER_MIN, windowS: 60 });
   });
 
   it('每天：没有 user_limits 行用默认 200；写着 null 的不设上限但照样计数；键 search:<uid>:<太平洋日期>', async () => {
     const w = world();
     await handle(req({ q: '牙医', scope: 'main' }), w.deps);
-    expect(w.limits[1]).toEqual({ key: `search:${A}:${pacificDate(T0)}`, limit: 200, windowS: DAY_WINDOW_S });
+    expect(w.limits[1]).toEqual({ key: `search:${A}:${pacificDate(T0)}`, limit: 200, windowS: QUOTA_WINDOW_S });
     const w2 = world({ searchDaily: async () => null });
     await handle(req({ q: '牙医', scope: 'main' }), w2.deps);
     expect(w2.limits[1]?.limit).toBe(UNLIMITED);
@@ -109,13 +110,15 @@ describe('note-search', () => {
     expect(w3.calls).toHaveLength(0);
   });
 
-  it('嵌入失败：429 → quota；超时、出错 → timeout；没配模型 → timeout', async () => {
+  it('嵌入失败：每天额度的 429 → quota；每分钟的 429、超时、出错 → timeout；没配模型 → timeout 且不扣每天次数', async () => {
     const q = { q: '牙医', scope: 'main' };
-    expect(await (await handle(req(q), world({}, { ok: false, reason: 'quota', status: 429 }).deps)).json()).toEqual({ fallback: 'quota' });
+    expect(await (await handle(req(q), world({}, { ok: false, reason: 'quota', status: 429, quotaKind: 'day' }).deps)).json()).toEqual({ fallback: 'quota' });
+    expect(await (await handle(req(q), world({}, { ok: false, reason: 'quota', status: 429, quotaKind: 'minute' }).deps)).json()).toEqual({ fallback: 'timeout' });
     expect(await (await handle(req(q), world({}, { ok: false, reason: 'timeout' }).deps)).json()).toEqual({ fallback: 'timeout' });
     expect(await (await handle(req(q), world({}, { ok: false, reason: 'error', status: 500 }).deps)).json()).toEqual({ fallback: 'timeout' });
     const w = world({ config: async () => ({ embedModel: null, searchDailyDefault: 200 }), embedder: () => null });
     expect(await (await handle(req(q), w.deps)).json()).toEqual({ fallback: 'timeout' });
+    expect(w.limits).toHaveLength(1);
   });
 
   it('查库出错：503 try_later；日志只有码，不带查询文字', async () => {

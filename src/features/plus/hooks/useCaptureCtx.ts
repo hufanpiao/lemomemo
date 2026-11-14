@@ -4,9 +4,9 @@
 import { useCallback, useMemo } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { currentTz } from '../../../core/current-tz.ts';
-import { settingValue, type SettingRow } from '../../../core/setting-read.ts';
+import type { SettingRow } from '../../../core/setting-read.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
-import { consentStale } from '../../../kit/state/consent-fresh.ts';
+import { aiOnFor } from '../../../kit/hooks/ai-on.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { readSessionId } from '../../../platform/session.ts';
@@ -27,7 +27,7 @@ export function useCaptureCtx(day: DateStr | null) {
   const events = useCollection<{ id: string; project?: unknown }>('events');
   const projects = useMemo(() => projectsOf([todos, events]), [todos, events]);
   const locale: TypeCtx['locale'] = lang === 'ko-KR' ? 'ko' : 'zh';
-  const aiOn = useCallback(() => settingValue(settings, 'ai.enabled') === true && !consentStale(readSessionId()), [settings]);
+  const aiOn = useCallback(() => aiOnFor(settings, readSessionId()), [settings]);
   const ctx = useCallback((): TypeCtx => ({ now: clock.now(), tz: currentTz(), locale, projects, day }), [locale, projects, day]);
   return { lang, locale, aiOn, ctx };
 }

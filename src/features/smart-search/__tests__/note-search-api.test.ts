@@ -26,11 +26,10 @@ describe('noteSearch', () => {
     expect(JSON.parse(String(d.seen[0]?.body))).toEqual({ q: '牙医', scope: 'main' });
   });
 
-  it('服务器的 fallback 原样；403 consent_required → consent；429 → quota；500、读不懂、没登录 → timeout', async () => {
+  it('服务器的 fallback 原样；非 2xx（含 429）、读不懂、没登录 → timeout（“今天用完”只认服务器回的 quota）', async () => {
     const s = new AbortController().signal;
     expect(await noteSearch('a', s, deps(ok({ fallback: 'quota' })))).toMatchObject({ ok: false, reason: 'quota' });
-    expect(await noteSearch('a', s, deps(ok({ error: 'consent_required' }, 403)))).toMatchObject({ ok: false, reason: 'consent' });
-    expect(await noteSearch('a', s, deps(ok({ error: 'rate_limited' }, 429)))).toMatchObject({ ok: false, reason: 'quota' });
+    expect(await noteSearch('a', s, deps(ok({ error: 'rate_limited' }, 429)))).toMatchObject({ ok: false, reason: 'timeout', code: 'rate_limited' });
     expect(await noteSearch('a', s, deps(ok({ error: 'x' }, 500)))).toMatchObject({ ok: false, reason: 'timeout' });
     expect(await noteSearch('a', s, deps(ok({ hits: [{ kind: 'x', id: 1 }] })))).toMatchObject({ ok: false, reason: 'timeout', code: 'bad_response' });
     expect(await noteSearch('a', s, deps(ok({}), null))).toMatchObject({ ok: false, reason: 'timeout', code: 'no_session' });
@@ -44,5 +43,15 @@ describe('noteSearch', () => {
     ac.abort();
     expect(await p).toMatchObject({ ok: false, reason: 'timeout', code: 'timeout' });
     expect(SEM_TIMEOUT_MS).toBe(3500);
+  });
+
+  it('取令牌卡住（supabase-js 等锁）：取消时立刻回，不发请求', async () => {
+    const seen: unknown[] = [];
+    const d: SemDeps = { accessToken: () => new Promise(() => {}), fetch: (async (...a: unknown[]) => { seen.push(a); return new Response('{}'); }) as never, base: 'b', anonKey: 'a' };
+    const ac = new AbortController();
+    const p = noteSearch('a', ac.signal, d);
+    ac.abort();
+    expect(await p).toMatchObject({ ok: false, reason: 'timeout', code: 'timeout' });
+    expect(seen).toHaveLength(0);
   });
 });

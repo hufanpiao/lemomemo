@@ -2,8 +2,10 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { EmbedResult } from '../../supabase/functions/_shared/ai/embed.ts';
+import { exhaustedUntilFor } from '../../supabase/functions/_shared/ai/gate.ts';
 import {
-  BACKOFF_MS, backoffAt, type Deps, embedInput, handle, keyOf, LATER_MS, type QItem, QUOTA_WAIT_MS, readEmbedConfig, type Src, srcText,
+  BACKOFF_MS, backoffAt, type Deps, embedInput, handle, keyOf, LATER_MS, MAX_TRIES, type QItem, readEmbedConfig, ROUND_BUDGET_MS, type Src, srcText,
+  VAULT_LATER_MS,
 } from '../../supabase/functions/ai-embed/core.ts';
 import { A, B, T0, uuid } from '../functions/vault-fakes.ts';
 
@@ -77,7 +79,7 @@ describe('ai-embed', () => {
     expect(w.beats[0]).toMatchObject({ same: 1, embedded: 0 });
   });
 
-  it('源头没了、没有可算的字：只删队列行；隐私记：推后 1 天、留在队列里、不送内容', async () => {
+  it('源头没了、没有可算的字：只删队列行；隐私记：推后 30 天、留在队列里、不送内容', async () => {
     const q = [item(1), item(2), item(3, 'image')];
     const w = world({
       queue: new Map([[A, q]]),
@@ -86,7 +88,7 @@ describe('ai-embed', () => {
     await handle(cron(), w.deps);
     expect(w.calls).toHaveLength(0);
     expect(w.settled).toEqual([item(1), item(3, 'image')]);
-    expect(w.later).toEqual([{ items: [item(2)], at: T0 + LATER_MS, bump: false }]);
+    expect(w.later).toEqual([{ items: [item(2)], at: T0 + VAULT_LATER_MS, bump: false }]);
   });
 
   it('不同意的人：整批推后 1 天、不读源头不送；别人照常', async () => {
@@ -99,12 +101,18 @@ describe('ai-embed', () => {
     expect(w.written.map((x) => x.uid)).toEqual([A]);
   });
 
-  it('谷歌 429：这批推后 1 小时、本轮停（后面的人不再调）', async () => {
-    const w = world({ queue: new Map([[A, [item(1)]], [B, [item(2)]]]), embed: { ok: false, reason: 'quota', status: 429 },
+  it('谷歌 429：这批推到 exhaustedUntilFor（每天的到太平洋午夜、每分钟的按 retryDelay）、本轮停（后面的人不再调）', async () => {
+    const minute: EmbedResult = { ok: false, reason: 'quota', status: 429, quotaKind: 'minute', retryMs: 30_000 };
+    const wm = world({ embed: minute });
+    await handle(cron(), wm.deps);
+    expect(wm.later).toEqual([{ items: [item(1)], at: exhaustedUntilFor(T0, minute), bump: false }]);
+    expect(exhaustedUntilFor(T0, minute)).toBe(T0 + 30_000);
+    const w = world({ queue: new Map([[A, [item(1)]], [B, [item(2)]]]), embed: { ok: false, reason: 'quota', status: 429, quotaKind: 'day' },
       src: new Map<string, Src>([[keyOf(item(1)), { state: 'ok', title: 'a', text: 'b' }], [keyOf(item(2)), { state: 'ok', title: 'c', text: 'd' }]]) });
     await handle(cron(), w.deps);
     expect(w.calls).toHaveLength(1);
-    expect(w.later).toEqual([{ items: [item(1)], at: T0 + QUOTA_WAIT_MS, bump: false }]);
+    expect(w.later).toEqual([{ items: [item(1)], at: exhaustedUntilFor(T0, { quotaKind: 'day' }), bump: false }]);
+    expect(exhaustedUntilFor(T0, { quotaKind: 'day' }) - T0).toBeGreaterThan(3600_000 - 1);
   });
 
   it('全项目每天用完：不调模型、本轮停', async () => {
@@ -120,6 +128,26 @@ describe('ai-embed', () => {
     expect(w.later).toEqual([{ items: [item(1)], at: T0 + BACKOFF_MS[0], bump: true }]);
     expect(backoffAt(0, 1)).toBe(BACKOFF_MS[1]);
     expect(backoffAt(0, 9)).toBe(BACKOFF_MS[2]);
+  });
+
+  it('出错试满 MAX_TRIES 次：删队列行、计 gave_up，不再退避', async () => {
+    const last = item(1, 'note', { tries: MAX_TRIES - 1 });
+    const w = world({ queue: new Map([[A, [last]]]), embed: { ok: false, reason: 'error', status: 400 } });
+    await handle(cron(), w.deps);
+    expect(w.settled).toEqual([last]);
+    expect(w.later).toEqual([]);
+    expect(w.beats[0]).toMatchObject({ gave_up: 1, failed: 0 });
+  });
+
+  it('一轮墙钟预算：到了不再开始下一个人', async () => {
+    const w = world({ queue: new Map([[A, [item(1)]], [B, [item(2)]]]),
+      src: new Map<string, Src>([[keyOf(item(1)), { state: 'ok', title: 'a', text: 'b' }], [keyOf(item(2)), { state: 'ok', title: 'c', text: 'd' }]]) });
+    let t = T0;
+    w.deps.now = () => t;
+    w.deps.embedder = () => async (texts) => { t += ROUND_BUDGET_MS; return { ok: true, vectors: texts.map(() => V) }; };
+    await handle(cron(), w.deps);
+    expect(w.written.map((x) => x.uid)).toEqual([A]);
+    expect(w.logs).toContain('round_budget');
   });
 
   it('写向量没成（队列行被撤回同意删掉）：不删队列行、不算 embedded', async () => {

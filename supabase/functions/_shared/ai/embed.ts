@@ -15,6 +15,9 @@ export const EMBED_DIM = 768;
 export const EMBED_BATCH_MAX = 100;
 const MODEL_RE = /^[A-Za-z0-9._-]{1,64}$/;
 
+/** 算向量的五种源头（private.embed_queue.kind、note_vectors.kind；note-search 回的 kind 同这五种） */
+export type EmbedKind = 'note' | 'image' | 'file' | 'event' | 'todo';
+
 export type EmbedResult =
   | { ok: true; vectors: number[][] }
   | { ok: false; reason: 'quota' | 'timeout' | 'error'; status?: number; errName?: string; quotaKind?: QuotaKind; retryMs?: number | null };

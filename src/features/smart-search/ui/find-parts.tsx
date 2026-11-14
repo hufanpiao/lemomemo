@@ -34,13 +34,16 @@ export function Lead({ kind }: { kind: FindKind }) {
   );
 }
 
+/** 日子（带星期）和时刻，没有的部分不写；第二行和右栏预览共用 */
+const dayTime = (day: string, time: string | null | undefined): string => [day, time ?? ''].filter(Boolean).join(' ');
+
 /** 第二行：日程“日子 时刻 · 地点”、待办“日子截止 · 项目”、纪念日“下一次 日子”、随手记和文档有片段给片段、图片和文档写在哪条随手记里 */
 export function metaOf(h: FindHit, t: T, locale: 'zh-CN' | 'ko-KR'): string {
   const it = h.item;
   const day = it.date ? fmtDay(it.date, locale, 'monthDayWeek') : '';
   const join = (...xs: string[]) => xs.filter((x) => x !== '').join(' · ');
   switch (it.kind) {
-    case 'event': return join([day, it.time ?? ''].filter(Boolean).join(' '), it.extra);
+    case 'event': return join(dayTime(day, it.time), it.extra);
     case 'todo': return join(it.done ? t('find.todo.done', {}) : it.date ? t('find.todo.due', { d: day }) : t('find.todo.noDue', {}), it.extra);
     case 'anniv': return it.date ? t('find.anniv.next', { d: day }) : '';
     case 'note': return h.snippet ? `“${h.snippet}”` : day;
@@ -65,7 +68,7 @@ export function Preview({ h, q, t, locale }: { h: FindHit; q: string; t: T; loca
     <div data-testid="find-preview-item">
       <div className={styles.pk}>{t('find.desk.preview', { k: t(`find.k.${it.kind}`, {}) })}</div>
       <div className={styles.ptitle}><Marked text={it.title || t('find.noTitle', {})} q={q} /></div>
-      {kv(t('find.desk.time', {}), [day, it.time ?? ''].filter(Boolean).join(' '))}
+      {kv(t('find.desk.time', {}), dayTime(day, it.time))}
       {it.kind === 'event' ? kv(t('find.desk.place', {}), it.extra) : null}
       {kv(t('find.desk.note', {}), note)}
       {body !== '' ? <div className={styles.pv}><Marked text={body} q={q} /></div> : null}

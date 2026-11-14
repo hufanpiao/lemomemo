@@ -1,4 +1,4 @@
-// ai-embed 的数据库查询（fn_ai，跑在 _shared/db.ts 的 withAiUser / withAiScan 事务里；store-it 拿同一份 SQL 打真库）。
+// ai-embed 的数据库查询（fn_ai，跑在 _shared/db.ts 的 withAiUser / withAiScan 事务里）。真库用例：见报告（这一批只在内存假库上测过 core）。
 // 只用 fn_ai 已有的授权（0007、0001～0004 的列级授权，不新加）：
 //   private.scan_embed_queue（跨用户只有 kind、source_id、model、user_id、next_at）；private.embed_queue（全部）；private.note_vectors（select、insert、update）；
 //   public.notes (id, user_id, title, body, is_private, deleted_at)、events (title, note, location, deleted_at)、todos (title, note, deleted_at)、
@@ -85,15 +85,21 @@ export async function hashes(tx: Tx, uid: string, items: readonly QItem[], model
   return out;
 }
 
-/** 取锁（和撤回同意、vault_ai_off 删向量互斥，0.27）→ 队列行还在才写 → on conflict 覆盖 */
+/**
+ * 取锁（和撤回同意、vault_ai_off 删向量互斥，0.27）→ 锁住 queued_at 没变的那条队列行（for update），锁不到就不写 → on conflict 覆盖。
+ * 比 queued_at：读完内容以后又入队过（改了内容、移进隐私记，入队触发器会更新 queued_at）就不写旧内容的向量；
+ * for update：移进隐私记的事务（vault toVault，不取 embed: 锁）还没提交时等它提交再判；先锁住的，它的触发器等这里写完，随后的 dropVectors 删掉这条。
+ */
 export async function writeVector(tx: Tx, uid: string, it: QItem, model: string, hash: string, vec: readonly number[]): Promise<boolean> {
   await tx`select pg_advisory_xact_lock(hashtext('embed:' || ${uid}::text))`;
+  const held = await tx`select 1 as x from private.embed_queue where user_id = ${uid} and kind = ${it.kind} and source_id = ${it.source_id}
+    and model = ${it.model} and queued_at::text = ${it.queued_at} for update`;
+  if (held.length !== 1) return false;
   const fk = (k: EmbedKind): string | null => (it.kind === k ? it.source_id : null);
   const rows = await tx`insert into private.note_vectors
       (user_id, kind, source_id, is_vault, note_id, image_id, file_id, event_id, todo_id, model, content_hash, embedding, updated_at)
     select ${uid}, ${it.kind}, ${it.source_id}, false, ${fk('note')}, ${fk('image')}, ${fk('file')}, ${fk('event')}, ${fk('todo')},
            ${model}, ${hash}, ${vecLiteral(vec)}::extensions.halfvec, now()
-     where exists (select 1 from private.embed_queue q where q.user_id = ${uid} and q.kind = ${it.kind} and q.source_id = ${it.source_id} and q.model = ${it.model})
     on conflict (kind, source_id, model) do update set content_hash = excluded.content_hash, embedding = excluded.embedding, updated_at = now()
     returning source_id`;
   return rows.length === 1;

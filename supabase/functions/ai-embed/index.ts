@@ -13,7 +13,7 @@ import { sha256Hex } from '../_shared/body.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
-import { embedderFor } from '../_shared/ai/wire.ts';
+import { appAiConfig, embedderFor } from '../_shared/ai/wire.ts';
 import { handle, readEmbedConfig } from './core.ts';
 import { dueItems, dueUsers, hashes, laterItems, settleItems, sources, writeHeartbeat, writeVector } from './store.ts';
 
@@ -41,12 +41,7 @@ Deno.serve((req) => {
       : null,
     isUsable: async (userId) => (admin ? (await isUsable(admin, userId)).ok : no()),
     consent: (userId) => (admin ? aiAllowed(admin, userId) : no()),
-    async config() {
-      if (!admin) return no();
-      const { data, error } = await admin.from('app_config').select('ai').eq('id', 1).maybeSingle();
-      if (error || !data) throw new Error('db:app_config');
-      return readEmbedConfig((data as { ai: unknown }).ai);
-    },
+    config: async () => (admin ? readEmbedConfig(await appAiConfig(admin, Date.now())) : no()),
     takeRate: admin ? rpcTakeRate(admin) : no,
     embedder: embedderFor,
     sha256Hex: (text) => sha256Hex(enc.encode(text)),

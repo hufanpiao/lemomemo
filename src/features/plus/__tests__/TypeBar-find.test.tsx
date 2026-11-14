@@ -5,9 +5,12 @@ import { msAt } from '../../../../shared/core/date.ts';
 import type { WriteResult } from '../../../core/write.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
-import { findOpenSnapshot } from '../../smart-search/hooks/find-open.ts';
 import type { Writer } from '../data/capture-save.ts';
 import TypeBar from '../ui/TypeBar.tsx';
+
+// 查找那一块是别的功能，测试不引它（ESLint boundaries）：替身只记 openFind 被怎么调
+const fx = vi.hoisted(() => ({ open: vi.fn() }));
+vi.mock('../../smart-search/index.ts', () => ({ loadFindOpen: async () => ({ openFind: fx.open }) }));
 
 const NOW = msAt('2026-11-02', 12 * 60, 'UTC');
 const OK: WriteResult = { ok: true, item: null };
@@ -39,7 +42,7 @@ describe('打字条：看起来是要查找', () => {
       fireEvent.submit(screen.getByTestId('type-bar'));
       await Promise.resolve();
     });
-    await vi.waitFor(() => expect(findOpenSnapshot()).toMatchObject({ q: '牙医的记录', from: 'plus' }));
+    await vi.waitFor(() => expect(fx.open).toHaveBeenCalledWith('牙医的记录', 'plus'));
     expect(writer.insert).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
   });

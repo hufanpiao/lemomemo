@@ -2,26 +2,30 @@
 // 纯逻辑，依赖由 index.ts 注入，Vitest 直接测（tests/edge/ai-embed.test.ts）。
 // 每 2 分钟由 pg_cron 带 x-cron-secret 调一次（迁移 20261115020000_search_embed_cron.sql）：
 //   ① 从扫描视图 private.scan_embed_queue 随机挑最多 USERS_MAX 个有到期队列项的人（随机：卡住的人不占着名额，同 file-check 补扫）；
-//   ② 逐人：isUsable、aiAllowed（不过 → 这个人到期的队列项推后 1 天，不送任何内容；撤回同意时队列已被 record_consent_impl 删光）；
+//   ② 逐人（一轮墙钟预算 ROUND_BUDGET_MS，同 ai-classify：到了就不再开始下一个人，免得和下一轮 cron 叠着跑）：isUsable、aiAllowed（不过 → 这个人到期的队列项推后 1 天，不送任何内容；撤回同意时队列已被 record_consent_impl 删光）；
 //   ③ 读这个人最早的 ITEMS_PER_USER 个到期队列项和源头内容（fn_ai，app.uid = 本人）：
 //      源头没了、删了（deleted_at）、没有可算的字（图片还没有描述）→ 只删队列行；
-//      隐私记（notes.is_private、vault-images 的图片、is_vault 的文档）→ 推后 1 天、留在队列里：服务器解密算向量（VAULT_KEY）这一批不做，见报告；
+//      隐私记（notes.is_private、vault-images 的图片、is_vault 的文档）→ 推后 VAULT_LATER_MS（30 天）、留在队列里：服务器解密算向量（VAULT_KEY）
+//      这一批不做（见报告）；不每天空扫一遍，做的时候由那一批把这些行的 next_at 清掉；
 //   ④ 拼文字（5.13 第 6 点）：随手记 = 标题 + 正文；图片 = 描述 + 标签 + 所在随手记的标题；文档 = 文件名 + 抽出文字（前 FILE_TEXT_MAX 字）+ 描述；
 //      日程 = 标题 + 地点 + 备注；待办 = 标题 + 备注（5.14 第 3 点）。分类名不进：fn_ai 没有 categories 的授权（不为它加授权，见报告）；
 //      sha256 和已有向量的 content_hash 一样 → 不调模型，只删队列行（0.27：按模型分开比）；
 //   ⑤ 剩下的一次 batchEmbedContents（gemini-embedding-2、768 维）；先过全项目每天 embed:global:<太平洋日期>（ai.embed_daily_global，
 //      没配按 DEFAULT_DAILY_GLOBAL，代定），一次批量调用算 1 次；用完本轮停；
 //   ⑥ 写向量：同一事务里先取 pg_advisory_xact_lock(hashtext('embed:' || user_id))（和撤回同意、vault_ai_off 删向量互斥，0.27），
-//      只在队列行还在时写（撤回同意、关掉 ai.vault 会删队列行，删完不会再写回来），on conflict (kind, source_id, model) 覆盖；
+//      只在队列行还在、queued_at 没变时写，并锁住这一行（for update）：撤回同意、关掉 ai.vault 删了队列行，或处理中移进隐私记、改了内容
+//      （入队触发器更新 queued_at）都不写——移进隐私记的事务没提交时等它提交再判，先写完的会被它随后的 dropVectors 删掉；on conflict 覆盖；
 //      再删队列行，只删 queued_at 没变的（处理中又改过的留着下一轮重算）；
-//   ⑦ 失败：谷歌 429 → 这批推后 1 小时、本轮停；超时、出错 → tries + 1，按 BACKOFF_MS 退避（10 分钟、1 小时、6 小时，之后都是 6 小时）；
+//   ⑦ 失败：谷歌 429 → 这批推到 exhaustedUntilFor（每分钟的按 retryDelay，每天的到太平洋午夜，同 gate.ts）、本轮停；
+//      超时、出错 → tries + 1，按 BACKOFF_MS 退避（10 分钟、1 小时、6 小时）；试满 MAX_TRIES 次的删队列行、计 gave_up（源头再改会重新入队）；
 //   ⑧ 写心跳 ai-embed（只有计数）。日志只记码和数，不记内容。
 import { errorResponder, json, NO_STORE, cronGate } from '../_shared/http.ts';
-import { pacificDate } from '../_shared/ai/gate.ts';
-import { docText, type EmbedResult } from '../_shared/ai/embed.ts';
+import { exhaustedUntilFor, pacificDate } from '../_shared/ai/gate.ts';
+import { docText, type EmbedKind, type EmbedResult } from '../_shared/ai/embed.ts';
+import { QUOTA_WINDOW_S } from '../_shared/ai/store.ts';
 import { isObj } from '../_shared/obj.ts';
 
-export type EmbedKind = 'note' | 'image' | 'file' | 'event' | 'todo';
+export type { EmbedKind };
 
 export const USERS_MAX = 20;
 export const ITEMS_PER_USER = 20;
@@ -32,10 +36,13 @@ export const FILE_TEXT_MAX = 2_000;
 export const TEXT_MAX = 4_000;
 /** ai.embed_daily_global 没配时的全项目每天上限（代定：免费层每天的请求数量级，负责人在 app_config 里改） */
 export const DEFAULT_DAILY_GLOBAL = 1_000;
-export const DAY_WINDOW_S = 2_678_400;
 export const LATER_MS = 24 * 3600_000;
-export const QUOTA_WAIT_MS = 3600_000;
+export const VAULT_LATER_MS = 30 * LATER_MS;
 export const BACKOFF_MS = [10 * 60_000, 3600_000, 6 * 3600_000] as const;
+/** 出错最多试几次（含第一次）；满了删队列行 */
+export const MAX_TRIES = 6;
+/** 一轮墙钟预算（同 ai-classify 的 ROUND_BUDGET_MS）：到了不再开始下一个人 */
+export const ROUND_BUDGET_MS = 40_000;
 
 export interface QItem {
   kind: EmbedKind;
@@ -115,7 +122,7 @@ export const srcText = {
 
 export const backoffAt = (now: number, tries: number): number => now + (tries <= 0 ? BACKOFF_MS[0] : tries === 1 ? BACKOFF_MS[1] : BACKOFF_MS[2]);
 
-type Detail = { users: number; items: number; embedded: number; same: number; dropped: number; vault: number; skipped_users: number; failed: number; quota: number };
+type Detail = { users: number; items: number; embedded: number; same: number; dropped: number; vault: number; skipped_users: number; failed: number; gave_up: number; quota: number };
 
 /** 一个人的一轮；回 'stop' 表示谷歌或全项目额度用完、本轮不再往下做 */
 async function oneUser(uid: string, deps: Deps, store: Store, cfg: EmbedConfig & { embedModel: string }, d: Detail): Promise<'ok' | 'stop'> {
@@ -140,7 +147,7 @@ async function oneUser(uid: string, deps: Deps, store: Store, cfg: EmbedConfig &
     else if (s.state !== 'ok' || (s.title.trim() === '' && s.text.trim() === '')) drop.push(it);
     else todo.push({ item: it, input: embedInput(s), model: it.model === '' ? cfg.embedModel : it.model });
   }
-  if (vault.length > 0) await store.later(uid, vault, now + LATER_MS, false);
+  if (vault.length > 0) await store.later(uid, vault, now + VAULT_LATER_MS, false);
   d.vault += vault.length;
   // 同一批里模型都一样才合一次调用；补算（model 不是空串）这一批不排，按模型分开逐组算
   const byModel = new Map<string, typeof todo>();
@@ -160,22 +167,25 @@ async function oneUser(uid: string, deps: Deps, store: Store, cfg: EmbedConfig &
       deps.log('misconfigured:embed');
       return 'stop';
     }
-    if (!(await deps.takeRate(`embed:global:${pacificDate(now)}`, cfg.dailyGlobal ?? DEFAULT_DAILY_GLOBAL, DAY_WINDOW_S))) {
+    if (!(await deps.takeRate(`embed:global:${pacificDate(now)}`, cfg.dailyGlobal ?? DEFAULT_DAILY_GLOBAL, QUOTA_WINDOW_S))) {
       deps.log('daily_global_out');
       result = 'stop';
       break;
     }
     const e = await embed(fresh.map((f) => f.input), EMBED_TIMEOUT_MS);
     if (!e.ok) {
-      deps.log(`embed_${e.reason}${e.status ? ` status=${e.status}` : ''}`);
+      deps.log(`embed_${e.reason}${e.quotaKind ? ` kind=${e.quotaKind}` : ''}${e.status ? ` status=${e.status}` : ''}`);
       if (e.reason === 'quota') {
         d.quota += fresh.length;
-        await store.later(uid, fresh.map((f) => f.item), now + QUOTA_WAIT_MS, false);
+        await store.later(uid, fresh.map((f) => f.item), exhaustedUntilFor(now, e), false);
         result = 'stop';
         break;
       }
-      d.failed += fresh.length;
-      for (const f of fresh) await store.later(uid, [f.item], backoffAt(now, f.item.tries), true);
+      const spent = fresh.filter((f) => f.item.tries + 1 >= MAX_TRIES).map((f) => f.item);
+      d.failed += fresh.length - spent.length;
+      d.gave_up += spent.length;
+      await store.settle(uid, spent);
+      for (const f of fresh) if (f.item.tries + 1 < MAX_TRIES) await store.later(uid, [f.item], backoffAt(now, f.item.tries), true);
       continue;
     }
     const done: QItem[] = [];
@@ -208,7 +218,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     deps.log('misconfigured');
     return err(500, 'misconfigured');
   }
-  const d: Detail = { users: 0, items: 0, embedded: 0, same: 0, dropped: 0, vault: 0, skipped_users: 0, failed: 0, quota: 0 };
+  const d: Detail = { users: 0, items: 0, embedded: 0, same: 0, dropped: 0, vault: 0, skipped_users: 0, failed: 0, gave_up: 0, quota: 0 };
   let cfg: EmbedConfig;
   try {
     cfg = await deps.config();
@@ -219,7 +229,12 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   const model = cfg.embedModel;
   try {
     if (model) {
+      const t0 = deps.now();
       for (const uid of await store.users(USERS_MAX)) {
+        if (deps.now() - t0 >= ROUND_BUDGET_MS) {
+          deps.log('round_budget');
+          break;
+        }
         try {
           if ((await oneUser(uid, deps, store, { ...cfg, embedModel: model }, d)) === 'stop') break;
         } catch {

@@ -7,15 +7,16 @@
 // • AI 开着 = ai.enabled 为 true 且同意版本没明确过期（和“＋”打字、录音同一判断，plus/hooks/useCaptureCtx.ts）
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { currentTz } from '../../../core/current-tz.ts';
-import { settingValue, type SettingRow } from '../../../core/setting-read.ts';
+import type { SettingRow } from '../../../core/setting-read.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useOnline } from '../../../kit/hooks/useOnline.ts';
-import { consentStale } from '../../../kit/state/consent-fresh.ts';
+import { aiOnFor } from '../../../kit/hooks/ai-on.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { readSessionId } from '../../../platform/session.ts';
 import type { FallbackReason } from '../../../../shared/schema/search.ts';
+export { SEARCH_Q_MAX } from '../../../../shared/schema/search.ts';
 import {
   buildIndex, countKinds, findLocal, inRange, mergeFind, onlyKind, rangeOf, semReady,
   type FindGroups, type FindKind, type Row, type SemHit, type TimeFilter,
@@ -28,7 +29,8 @@ export { FIND_KINDS, markRanges, type FindHit, type FindKind, type TimeFilter } 
 
 export const SEM_DEBOUNCE_MS = 400;
 
-export type SemState = { s: 'idle' } | { s: 'wait' } | { s: 'done'; hits: SemHit[] } | { s: 'fallback'; reason: FallbackReason };
+/** done 带上是哪一句查出来的：刚改字那一次渲染里旧结果不和新关键词拼在一起 */
+export type SemState = { s: 'idle' } | { s: 'wait' } | { s: 'done'; q: string; hits: SemHit[] } | { s: 'fallback'; reason: FallbackReason };
 
 export interface FindDeps {
   search?: (q: string, signal: AbortSignal) => Promise<SemResult>;
@@ -50,7 +52,7 @@ export function useFind(initial: string, deps: FindDeps = {}) {
   const online = useOnline();
   const now = useMinuteNow();
   const tz = currentTz();
-  const aiOn = settingValue(settings, 'ai.enabled') === true && !consentStale(readSessionId());
+  const aiOn = aiOnFor(settings, readSessionId());
   const recent = useSyncExternalStore(subscribeRecent, recentSnapshot, recentSnapshot);
   useEffect(() => void loadRecent(), []);
 
@@ -97,7 +99,7 @@ export function useFind(initial: string, deps: FindDeps = {}) {
         const ms = clock.now() - t0;
         if (r.ok) {
           rlog(`find sem n=${r.hits.length} ms=${ms}`);
-          setSem({ s: 'done', hits: r.hits });
+          setSem({ s: 'done', q: text, hits: r.hits });
         } else {
           rlog(`find fallback reason=${r.reason} code=${r.code} ms=${ms}`);
           setSem({ s: 'fallback', reason: r.reason });
@@ -118,10 +120,14 @@ export function useFind(initial: string, deps: FindDeps = {}) {
     lastFb.current = r;
   }, [sem]);
 
-  const groups: FindGroups = useMemo(() => mergeFind(kw.hits, sem.s === 'done' ? sem.hits : null, scoped, q), [kw, sem, scoped, q]);
-  // 补上来几条（日志）
+  const semHits = sem.s === 'done' && sem.q === q.trim() ? sem.hits : null;
+  const groups: FindGroups = useMemo(() => mergeFind(kw.hits, semHits, scoped, q), [kw, semHits, scoped, q]);
+  // 补上来几条（日志）：每次服务器回来只记一次，之后同步来了新数据、groups 变了不再记
+  const loggedSem = useRef<SemState | null>(null);
   useEffect(() => {
-    if (sem.s === 'done') rlog(`find sem add=${groups.sem.length} top=${groups.top.length}`);
+    if (sem.s !== 'done' || loggedSem.current === sem) return;
+    loggedSem.current = sem;
+    rlog(`find sem add=${groups.sem.length} top=${groups.top.length}`);
   }, [sem, groups]);
   const counts = useMemo(() => countKinds(groups), [groups]);
   const shown = useMemo(() => onlyKind(groups, kind), [groups, kind]);

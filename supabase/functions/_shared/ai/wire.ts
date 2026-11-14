@@ -23,6 +23,9 @@ async function appConfig(admin: SupabaseClient, now: number): Promise<{ ai: unkn
   return cfgMemo;
 }
 
+/** app_config.ai（note-search、ai-embed 读 embed_model 等；同一份 60 秒缓存，读失败抛错） */
+export const appAiConfig = async (admin: SupabaseClient, now: number): Promise<unknown> => (await appConfig(admin, now)).ai;
+
 /**
  * 这个人能用的 AI 类型（0.27 第 4 点 featureOn）：app_config.features 读不出 → 一种都没有；
  * profiles.beta_features 读不出 → 按空算（TC-B3-26：读 profiles 失败当作关闭，只剩全局打开的）。
