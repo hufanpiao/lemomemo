@@ -11,6 +11,7 @@
 // 不依赖 @tauri-apps/api（不改 package.json）：直接用 Tauri 2 一定注入的 window.__TAURI_INTERNALS__.invoke（R13）。
 import type { SwUpdateResult } from './sw-register.ts';
 import { buildInfo } from './env.ts';
+import { withTimeout } from './exit-basics.ts';
 import { reminderHash, setNativeBridge, type LocalReminder, type NativeBridge, type ReminderKind } from './native-bridge.ts';
 
 /** Rust 端 updater::UpdateOutcome（desktop/src-tauri/src/updater.rs） */
@@ -231,13 +232,6 @@ export interface DesktopSessionStorage {
 /** 读的三种结果：读到了（含 Rust 回的 null）、没读到（出错、超时） */
 type ReadResult = { ok: true; value: string | null } | { ok: false };
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const t = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('session_timeout')), ms);
-  });
-  return Promise.race([p, t]).finally(() => clearTimeout(timer));
-}
 
 export function desktopSessionStorage(
   invoke: Invoke,
@@ -246,7 +240,16 @@ export function desktopSessionStorage(
 ): DesktopSessionStorage {
   const allowed = new Set(allowedKeys);
   const timeoutMs = opts.timeoutMs ?? SESSION_INVOKE_TIMEOUT_MS;
-  const call = (cmd: string, args: Record<string, unknown>) => withTimeout(invoke(cmd, args), timeoutMs);
+  // 超时抛 session_timeout，invoke 自己的错原样抛（超时工具只有 exit-basics.ts 的 withTimeout 一份：它给退路值不抛，这里包一层再拆）
+  const call = async (cmd: string, args: Record<string, unknown>): Promise<unknown> => {
+    const r = await withTimeout(
+      () => invoke(cmd, args).then((value) => ({ value }), (error: unknown) => ({ error })),
+      timeoutMs,
+      (): { error: unknown } => ({ error: new Error('session_timeout') }),
+    );
+    if ('error' in r) throw r.error;
+    return r.value;
+  };
   const mirror = new Map<string, string | null>();
   const tails = new Map<string, Promise<unknown>>();
   const loaded = new Set<string>();

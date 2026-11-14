@@ -81,6 +81,22 @@ describe('queue 事件', () => {
     expect(n()).toBe(0);
   });
 
+  it('dropServer（墓碑、整表重拉）删掉本机还没发出去、发送失败的项：每条记录发一次 rejected（purged），界面出“已彻底删除”；没有项的不发', async () => {
+    const { cache, outbox } = await setup();
+    const ID2 = uid(2);
+    await seed(cache, 'todos', ID, todo(1), 3);
+    await seed(cache, 'todos', ID2, todo(2), 3);
+    await outbox.enqueue({ table: 'todos', id: ID, op: 'patch', data: { title: '一' } });
+    await outbox.enqueue({ table: 'todos', id: ID, op: 'patch', data: { done: true }, deps: [{ table: 'todos', id: ID2 }] });
+    const seen: string[] = [];
+    outbox.onEvent((e) => {
+      if (e.type === 'rejected') seen.push(`${e.item.id}:${e.code}`);
+    });
+    await outbox.dropServer('todos', [ID, ID2]);
+    expect(seen).toEqual([`${ID}:purged`]);
+    expect(await outbox.list()).toEqual([]);
+  });
+
   it('resolveGone 收尾也发', async () => {
     const { cache, outbox } = await setup();
     await seed(cache, 'todos', ID, todo(1), 7);

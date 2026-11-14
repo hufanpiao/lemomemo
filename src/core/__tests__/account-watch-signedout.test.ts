@@ -41,7 +41,7 @@ describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signe
     expect(boot.switching).toBe(true);
     expect(boot.outbox?.isSuspended()).toBe(true);
     await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
-    // 日志队列在回登录页之前清（清库前一次、清完兜底再一次，core/device-exit.ts）
+    // 日志上传器在回登录页之前停（清库前，core/device-exit.ts）；队列本身由 wipeLocal 清
     const clearLogs = deps.clearLogs;
     expect(clearLogs).toBeDefined();
     if (clearLogs) expect(vi.mocked(clearLogs).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(deps.onSignedOut).mock.invocationCallOrder[0] ?? 0);

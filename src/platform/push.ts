@@ -8,6 +8,7 @@
 // • 浏览器权限：pushManager.subscribe({ userVisibleOnly: true }) 自己会弹权限框，要在用户点按里调；已拒绝的直接返回 denied
 import { b64uDecode, b64uEncode } from '../../shared/core/b64url.ts';
 import { buildInfo, isTauri } from './env.ts';
+import { withTimeout } from './exit-basics.ts';
 import { closeAllLocalReminders } from './native-bridge.ts';
 import { CLAIM_STORAGE_KEY, DISCONNECT_PUSH_MS, forgetPushClaim, skipUnsubscribe, strictPermission } from './push-claim-key.ts';
 
@@ -205,19 +206,5 @@ export function disconnectBrowserPush(
 
 // strictPermission、skipUnsubscribe 挪到 push-claim-key.ts（11-05：push-disconnect.ts 的兜底和这里用同一套判断）
 
-/** 跑 fn，最多等 ms；出错、超时都 resolve（退出流程不能被卡住） */
-function withinMs(fn: () => Promise<void>, ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const t = setTimeout(resolve, ms);
-    let p: Promise<void>;
-    try {
-      p = fn();
-    } catch {
-      p = Promise.resolve();
-    }
-    p.then(
-      () => (clearTimeout(t), resolve()),
-      () => (clearTimeout(t), resolve()),
-    );
-  });
-}
+/** 跑 fn，最多等 ms；出错、超时都 resolve（退出流程不能被卡住；超时工具只有 exit-basics.ts 的 withTimeout 一份） */
+const withinMs = (fn: () => Promise<void>, ms: number): Promise<void> => withTimeout(fn, ms, () => undefined);

@@ -1,6 +1,6 @@
 // 同步网络一侧的错误码映射和超时（从 sync-transport.ts 拆出来，那份文件回到 300 行以内；sync-transport 原样转出这些名字，引用方不用改）
 // • toFailure：supabase-js 的 { error, status } → SendFailure（只认码，服务器原文不带出来）；toSessionCheck：刷新令牌的错误 → SessionCheck
-// • timeoutSignal、withTimeout：每个请求 20 秒超时（同步是串行的，挂住的请求不能把后面的都卡住）
+// • timeoutSignal：每个请求 20 秒超时（同步是串行的，挂住的请求不能把后面的都卡住）；整段超时用 platform/exit-basics.ts 的 withTimeout（全仓只有那一份）
 import type { SendFailure, SessionCheck } from '../../../shared/schema/sync.ts';
 
 export const REQUEST_TIMEOUT_MS = 20_000;
@@ -76,29 +76,4 @@ export function timeoutSignal(ms: number = REQUEST_TIMEOUT_MS): { signal: AbortS
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), ms);
   return { signal: c.signal, clear: () => clearTimeout(t) };
-}
-
-/** 整段最多等 ms，超时或抛错都给 fallback（串行链上不能有永不返回的等待，K8 审查必改 1） */
-export function withTimeout<T>(p: PromiseLike<T> | (() => PromiseLike<T>), fallback: T, ms: number = REQUEST_TIMEOUT_MS): Promise<T> {
-  return new Promise<T>((resolve) => {
-    const t = setTimeout(() => resolve(fallback), ms);
-    let q: PromiseLike<T>;
-    try {
-      q = typeof p === 'function' ? p() : p;
-    } catch {
-      clearTimeout(t);
-      resolve(fallback);
-      return;
-    }
-    q.then(
-      (v) => {
-        clearTimeout(t);
-        resolve(v);
-      },
-      () => {
-        clearTimeout(t);
-        resolve(fallback);
-      },
-    );
-  });
 }

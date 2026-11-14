@@ -67,6 +67,8 @@ function cacheRest(name: string, code: string): { rest: string; errors: string[]
   return { rest, errors };
 }
 const ALLOWED_IMPORTS = [
+  // “只打开、不新建”的开库（pending.ts 用，和登录页共用；只开库、不开事务，第三方审查第 11 条）
+  '../../shared/idb-open-existing.ts',
   '../../shared/i18n/i18n.ts',
   '../../shared/i18n/pick-locale.ts',
   // 按钮常量（不 import 任何东西，下面有一条钉住）；notify-text.ts 不准引（会带进时区、日期代码）
@@ -227,16 +229,19 @@ describe('SW 不存用户数据（K-sw-seal）', () => {
     const f = swSources().find((x) => x.name === IDB_FILE);
     expect(f).toBeDefined();
     const code = f?.code ?? '';
-    // ⑴ 开库只传库名（不带版本号就不会把别人的库升级，也不会以新版本号建库）
-    const opens = [...code.matchAll(/\.open\s*\(([^)]*)\)/g)].map((m) => (m[1] ?? '').trim());
-    expect(opens).toEqual(['DB_NAME']);
+    // ⑴ 开库只经 shared/idb-open-existing.ts、只传库名（不带版本号就不会把别人的库升级，也不会以新版本号建库）；第三方审查第 11 条起和登录页共用
+    expect(code).not.toMatch(/\.open\s*\(/);
+    expect([...code.matchAll(/openExistingDb<IDBDatabase>\(([^)]*)\)/g)].map((m) => m[1])).toEqual(['factory, DB_NAME']);
+    const opener = readFileSync(join(import.meta.dirname, '../../shared/idb-open-existing.ts'), 'utf8');
+    expect([...opener.matchAll(/\.open\s*\(([^)]*)\)/g)].map((m) => (m[1] ?? '').trim())).toEqual(['name']);
+    expect(opener).not.toMatch(/deleteDatabase|createObjectStore|deleteObjectStore|createIndex|\.transaction\(|\.put\(/);
+    expect(opener).toMatch(/oldVersion\s*!==\s*0\) return;\s*missing = true/);
+    expect(opener).toMatch(/transaction\?\.abort\(\)/);
     expect(code).not.toMatch(/deleteDatabase|createObjectStore|deleteObjectStore|createIndex/);
     // 只准 put 一处（下面核对），不准 add、delete、clear（代码审查 M2 ③）
     expect(code).not.toMatch(/\.(add|delete|clear)\s*\(/);
-    expect(code).toMatch(/oldVersion\s*===\s*0/);
-    expect(code).toMatch(/transaction\?\.abort\(\)/);
-    // ⑵
-    expect(code).toMatch(/onversionchange\s*=\s*\(\)\s*=>\s*db\.close\(\)/);
+    // ⑵ 开好就挂 versionchange（在共用的开库里）；用完关库（这里）
+    expect(opener).toMatch(/onversionchange\s*=\s*\(\)\s*=>\s*db\.close\(\)/);
     expect(code).toMatch(/finally\s*\{\s*db\.close\(\);?\s*\}/);
     // ⑴ 推送的 user_id 和 owner 比对；不拿 owner 的值去填
     expect(code).toMatch(/owner\.value\s*!==\s*rec\.user_id/);

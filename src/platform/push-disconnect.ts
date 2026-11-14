@@ -15,6 +15,7 @@
 //   复制进 frontendDist（只跳过 sw.js、sw.js.map、preview.html，JS 分块全在），Tauri 从安装包里按 'self' 读，import() 不走网络，
 //   不会因为断网、网络挂住而失败或卡住；万一分块缺了，上面的兜底照样关本机通知
 import { isTauri } from './env.ts';
+import { withTimeout } from './exit-basics.ts';
 import { closeAllLocalReminders } from './native-bridge.ts';
 import { DISCONNECT_PUSH_MS, forgetPushClaim, skipUnsubscribe, strictPermission } from './push-claim-key.ts';
 import type { disconnectBrowserPush } from './push.ts';
@@ -55,21 +56,14 @@ function report(code: PushDisconnectFail, error: unknown): void {
 
 type Outcome<T> = { kind: 'ok'; value: T } | { kind: 'fail'; error: unknown } | { kind: 'timeout' };
 
-/** 跑 start，最多等 ms；成功、失败、超时都 resolve（同步抛错算失败：传进来的 load、兜底都可能在返回 promise 之前就抛，复审 S5 有单测） */
+/**
+ * 跑 start，最多等 ms；成功、失败、超时都 resolve（同步抛错算失败：传进来的 load、兜底都可能在返回 promise 之前就抛，复审 S5 有单测）。
+ * 超时工具只有 exit-basics.ts 的 withTimeout 一份：成功、失败先在里面变成结果，到点才给 timeout
+ */
 function within<T>(start: () => Promise<T>, ms: number): Promise<Outcome<T>> {
-  return new Promise((resolve) => {
-    const t = setTimeout(() => resolve({ kind: 'timeout' }), Math.max(0, ms));
-    let p: Promise<T>;
-    try {
-      p = start();
-    } catch (e) {
-      p = Promise.reject(e);
-    }
-    p.then(
-      (value) => (clearTimeout(t), resolve({ kind: 'ok', value })),
-      (error: unknown) => (clearTimeout(t), resolve({ kind: 'fail', error })),
-    );
-  });
+  const run = (): Promise<Outcome<T>> =>
+    Promise.resolve().then(start).then((value) => ({ kind: 'ok', value }), (error: unknown) => ({ kind: 'fail', error }));
+  return withTimeout(run, Math.max(0, ms), () => ({ kind: 'timeout' }));
 }
 
 // 复审 S4：用 getRegistration('/app/')（和 push.ts 的 defaultRegistration 同一个 scope），没注册就立刻得到 undefined、兜底直接结束；

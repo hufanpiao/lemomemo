@@ -5,6 +5,8 @@ import { deleteCacheDb, openCache } from '../cache.ts';
 import { applyFreshConfig, coldStart, enabledFlags, getBoot, LOCAL_PURGE_AFTER_MS, resetBootForTest, type BootOptions } from '../boot.ts';
 import { clearAllCollections, collection, readonlyIds } from '../store.ts';
 import { fakeIndexedDB, nextDbVersion } from './idb-fake.ts';
+import { clock } from '../../platform/clock.ts';
+import { todo, uid } from './outbox-fixtures.ts';
 
 const NOW = 1_800_000_000_000;
 const DAY = 86_400_000;
@@ -179,6 +181,36 @@ describe('离线冷启动', () => {
     expect(b.cache?.isClosed()).toBe(true);
     expect(b.upgrade.getState().cache).toBe('ok');
     expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('outbox 用校正过偏差的时钟（和同步引擎同一个，退避时间才对得上）：没给 now 时 next_at、client_ts 按 clock.now()', async () => {
+    const { factory } = fakeIndexedDB();
+    clock.record(new Date(Date.now() + 3_600_000).toUTCString());   // 服务器比本机快 1 小时
+    try {
+      const b = await coldStart({ ...opts(factory), now: undefined } as unknown as BootOptions);
+      await b.outbox?.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
+      const ts = (await b.outbox?.list())?.[0]?.client_ts ?? 0;
+      expect(Math.abs(ts - clock.now())).toBeLessThan(5_000);
+      expect(ts - Date.now()).toBeGreaterThan(3_000_000);
+    } finally {
+      clock.reset();
+    }
+  });
+
+  it('连接被浏览器断开（lost）：照版本变更那套，没有录音、编辑就重新载入；不走 onCacheDeleted', async () => {
+    const { factory, fake } = fakeIndexedDB();
+    const onCacheDeleted = vi.fn();
+    const reload = vi.fn();
+    const b = await coldStart({
+      ...opts(factory),
+      onCacheDeleted,
+      upgradeDeps: { reload, swUpdate: () => Promise.resolve('no_update' as const), attempt: { get: () => null, set: () => undefined } },
+    });
+    [...(fake.dbs.get('planner-v4')?.connections ?? [])][0]?.lose();
+    expect(b.cache?.isClosed()).toBe(true);
+    expect(b.upgrade.getState().cache).toBe('closed_for_upgrade');
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(onCacheDeleted).not.toHaveBeenCalled();
   });
 
   it('没登录、删库请求排在别的卡住的删库后面（永远不触发任何事件）：3 秒后按 blocked 返回，照样走到 signed_out，不会永远等着白屏', async () => {

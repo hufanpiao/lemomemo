@@ -198,3 +198,25 @@ describe('不挡页面删库、升级（K-sw-seal ⑵）', () => {
     if (u.ok) u.cache.close();
   });
 });
+
+describe('“只打开、不新建”的开库只有一份（第三方审查第 11 条）', () => {
+  it('SW 的 pending.ts 和登录页的 local-outbox.ts 都用 shared/idb-open-existing.ts，自己不再写升级中止', () => {
+    for (const f of ['src/sw/pending.ts', 'src/platform/local-outbox.ts']) {
+      const src = readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8');
+      expect(src, f).toContain("shared/idb-open-existing.ts';");
+      expect(src, f).not.toContain('onupgradeneeded');
+    }
+  });
+
+  it('开库 2 秒没回音（浏览器卡住）：SW 按没有库处理，不一直等', async () => {
+    vi.useFakeTimers();
+    try {
+      const never = { open: () => ({}) } as unknown as IDBFactory;
+      const p = writePendingAction(never, { id: 'x', user_id: 'u', row_table: 'todos', row_id: 'r', action: { type: 'done', due_at: 1 }, created_at: 1 });
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(await p).toBe('no_db');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

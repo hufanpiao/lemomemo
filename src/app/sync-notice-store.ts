@@ -8,6 +8,7 @@
 //   记 outbox rejected coll=表 code=码（子任务超 30 项 items_quota、主待办已不在 not_found 都在这里）。只记表名、列名、错误码，不记内容
 // • 刚恢复的那一项按 resolveGone 返回的 opId 认，连续两次读队列都不在才不再认（4.4，复审四 L1）：
 //   回 conflict 去掉 deleted_at、undone，剩下为空不出卡；回 forked 不出卡（P1）；rejected / not_found 出轻提示（P2）
+// • rejected / purged（墓碑、整表重拉删掉了本机没发出去的修改）同样出“已彻底删除”轻提示，不管是不是刚恢复的
 // • 按钮结果照 4.2：restored / dropped / nothing 收起；local_unavailable、closing 卡留着换“没能恢复”；switching 不提示；
 //   rejected（restore）只剩“不用了”、记 sync_gone_restore_fail（coll、code）
 import { FORK_SUFFIX } from '../../shared/sync/fork-suffix-data.ts';
@@ -297,8 +298,9 @@ export function createNoticeStore(deps: NoticeStoreDeps): NoticeStore {
     },
     onOutbox: (e) => {
       if (!closed && e.type === 'rejected') rlog(`outbox rejected coll=${e.item.table} code=${e.code}`);
-      if (closed || e.type !== 'rejected' || e.code !== 'not_found' || !restored.has(e.item.op_id)) return;
-      restored.delete(e.item.op_id);
+      if (closed || e.type !== 'rejected') return;
+      // purged：墓碑、整表重拉把本机没发出去的修改随行删了（core/outbox.ts 的 dropServer）；not_found 只认刚恢复的那一项
+      if (e.code !== 'purged' && (e.code !== 'not_found' || !restored.delete(e.item.op_id))) return;
       hardDeleted += 1;
       emit();
     },

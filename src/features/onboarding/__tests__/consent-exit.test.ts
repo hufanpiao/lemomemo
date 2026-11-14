@@ -27,9 +27,7 @@ function deps(boot: Partial<BootResult> | null) {
     }),
     // 账号 U1 不是 UUID：写不了记号，按被移除清库（真实账号先查 session_fate，见 consent-exit-q19.test.ts）
     resolveAuthLoss: vi.fn(async () => 'removed' as const),
-    clearLogs: vi.fn((userId: string | null) => {
-      order.push(`logs:${userId ?? '*'}`);
-    }),
+    clearLogs: vi.fn(() => void order.push('logs')),
     // account_disabled 先探测（consent-exit-probe.test.ts 测各种结果）；这里固定答“已停用”
     broadcastReset: vi.fn(),
     resolveDisabled: vi.fn(async () => 'disabled' as const),
@@ -43,7 +41,7 @@ describe('leaveThisDevice', () => {
   it('会话不认：删会话 → 清本机（wipe）→ 再删会话 → 记 removed、回登录页', async () => {
     const { d, order } = deps({ switching: false, userId: 'U1' });
     await leaveThisDevice('session_revoked', 's1', d);
-    expect(order).toEqual(['session:s1', 'logs:U1', 'wipe', 'logs:U1', 'session:s1', 'notice:removed', 'auth']);
+    expect(order).toEqual(['session:s1', 'logs', 'wipe', 'session:s1', 'notice:removed', 'auth']);
   });
 
   it('R-382（负责人 11-11 定）账号停用只退出、不清本机：keep 写记号、只关库 → 删会话 → 记 disabled → 回登录页；不清库、不清日志', async () => {
@@ -69,13 +67,13 @@ describe('leaveThisDevice', () => {
   it('账号停用但写不了记号：退回原来那一套（清库），退出原因记 disabled', async () => {
     const { d, order } = deps({ switching: false, userId: 'U1' });
     await leaveThisDevice('account_disabled', 's1', { ...d, keep: () => false });
-    expect(order).toEqual(['session:s1', 'logs:U1', 'wipe', 'logs:U1', 'session:s1', 'notice:disabled', 'auth']);
+    expect(order).toEqual(['session:s1', 'logs', 'wipe', 'session:s1', 'notice:disabled', 'auth']);
   });
 
   it('没启动过（没有 boot）：不清库，直接记原因、删会话、回登录页', async () => {
     const { d, order } = deps(null);
     await leaveThisDevice('account_disabled', 's1', d);
-    expect(order).toEqual(['session:s1', 'logs:*', 'logs:*', 'session:s1', 'notice:disabled', 'auth']);
+    expect(order).toEqual(['session:s1', 'logs', 'session:s1', 'notice:disabled', 'auth']);
     expect(d.wipe).not.toHaveBeenCalled();
   });
 
@@ -93,14 +91,13 @@ describe('leaveThisDevice', () => {
     expect(d.goToAuth).toHaveBeenCalledWith('removed', 's1');
   });
 
-  it('默认的 clearLogs 真的删掉 localStorage 里的队列：有账号只删这个账号的，null 删全部 lemo.logq.*', () => {
+  it('没启动过（没有 boot）：不知道是谁，localStorage 里的日志队列全删（platform/exit-basics.ts 的 forgetAccountLocal）；别的键不动', async () => {
     localStorage.setItem(logQueueKey('U1'), '[]');
     localStorage.setItem(logQueueKey('U2'), '[]');
     localStorage.setItem('other', 'x');
-    defaultLeaveDeps.clearLogs('U1');
+    const { d } = deps(null);
+    await leaveThisDevice('account_disabled', 's1', d);
     expect(localStorage.getItem(logQueueKey('U1'))).toBeNull();
-    expect(localStorage.getItem(logQueueKey('U2'))).toBe('[]');
-    defaultLeaveDeps.clearLogs(null);
     expect(localStorage.getItem(logQueueKey('U2'))).toBeNull();
     expect(localStorage.getItem('other')).toBe('x');
     localStorage.removeItem('other');
