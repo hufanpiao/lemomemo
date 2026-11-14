@@ -73,6 +73,16 @@ describe('查找面板', () => {
     expect(log).not.toContain('牙医');
   });
 
+  it('打字后不到 400 ms 就关面板：关键词那一行照样补记（不记查询文字）', () => {
+    seed(false);
+    const { unmount } = render(<FindPanel query="" from="ctrlk" onClose={vi.fn()} />);
+    typeQ('牙医');
+    unmount();
+    const log = fx.logs.join('\n');
+    expect(log).toMatch(/find kw len=2 n=1 ms=\d+/);
+    expect(log).not.toContain('牙医');
+  });
+
   it('AI 关着：只按关键词，顶上写原因、给“去打开”；不调服务器', () => {
     seed(false);
     render(<FindPanel query="牙医" from="plus" onClose={vi.fn()} />);
@@ -113,7 +123,9 @@ describe('查找面板', () => {
     });
     expect(screen.getByTestId('find-empty').textContent).toContain('不存在的词');
     typeQ('牙医');
-    fireEvent.click(screen.getAllByTestId('find-row')[0]!);
+    const [first] = screen.getAllByTestId('find-row');
+    if (!first) throw new Error('没有结果行');
+    fireEvent.click(first);
     expect(fx.nav).toHaveBeenCalledWith('event', id(1));
     expect(onClose).toHaveBeenCalled();
     expect(fx.logs.join('\n')).toContain('find pick kind=event');

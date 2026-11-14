@@ -42,7 +42,10 @@ describe('find-local', () => {
 
   it('删了、撤销的不进；父随手记删了，图片和文档也不进', () => {
     const s = src();
-    const idx = buildIndex({ ...s, notes: [{ ...s.notes[0]!, deleted_at: NOW }], events: [{ ...s.events[0]!, undone: true }] }, TZ);
+    const [n0] = s.notes;
+    const [e0] = s.events;
+    if (!n0 || !e0) throw new Error('样例缺行');
+    const idx = buildIndex({ ...s, notes: [{ ...n0, deleted_at: NOW }], events: [{ ...e0, undone: true }] }, TZ);
     expect(idx.map((x) => x.kind).sort()).toEqual(['anniv', 'todo']);
   });
 

@@ -68,12 +68,29 @@ export function useFind(initial: string, deps: FindDeps = {}) {
     const hits = findLocal(scoped, q);
     return { hits, ms: Math.round(performance.now() - t0) };
   }, [scoped, q]);
+  // 只按查询词去抖（同步来了新数据 kw 重算不重新计时），记的是那一刻最新的 kw；还没到点就关了面板（选中、Esc）也补记这一行
+  //（11-14 e2e 日志：打开 5.42、选中 6.42，kw 随数据重算把计时一直往后推，关面板时被清掉，这一行丢了）
+  const kwNow = useRef(kw);
+  const kwPending = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    kwNow.current = kw;
+  }, [kw]);
+  // 先声明：卸载时清理按声明顺序跑，要在下面那个 effect 清掉待写之前补记
+  useEffect(() => () => kwPending.current?.(), []);
   useEffect(() => {
     const len = [...q.trim()].length;
     if (len === 0) return undefined;
-    const id = setTimeout(() => rlog(`find kw len=${len} n=${kw.hits.length} ms=${kw.ms}`), SEM_DEBOUNCE_MS);
-    return () => clearTimeout(id);
-  }, [kw, q]);
+    const fire = (): void => {
+      kwPending.current = null;
+      rlog(`find kw len=${len} n=${kwNow.current.hits.length} ms=${kwNow.current.ms}`);
+    };
+    kwPending.current = fire;
+    const id = setTimeout(fire, SEM_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(id);
+      if (kwPending.current === fire) kwPending.current = null;
+    };
+  }, [q]);
 
   const search = deps.search ?? noteSearch;
   useEffect(() => {
