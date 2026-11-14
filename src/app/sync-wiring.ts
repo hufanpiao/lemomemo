@@ -18,6 +18,7 @@ import { createInsertDeniedCheck, type InsertDeniedCheck } from './insert-denied
 import { canProbe, currentSid, noLocalSession, noteExitFromOtherTab, probeThenLeave, type SyncDisabledDeps } from './sync-disabled.ts';
 import { markReauthDisabled } from '../platform/auth-loss-store.ts';
 import { createTabLeader, type SyncMessage, type TabLeader, type TabLeaderOptions } from '../platform/tab-leader.ts';
+import { askPersistStorage } from '../platform/storage-persist.ts';
 
 export { ACTIVE_RELOAD_KEY, ACTIVE_RELOAD_WINDOW_MS } from './sync-disabled.ts';
 
@@ -138,6 +139,7 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
 function wireWith(boot: BootResult, deps: WireSyncDeps, denied: InsertDeniedCheck | null): Sync | null {
   const { cache, outbox } = boot;
   if (boot.status !== 'ready' || boot.switching || !cache || !outbox) return null;
+  void askPersistStorage();   // 本机库里有没上传的写入：申请持久存储（不弹东西，结果记运行日志）
   const life = deps.lifecycle ?? browserLifecycle;
   /** 这类事件已经在处理（退出、探测中、限次暂停） */
   let removedHandled = false;

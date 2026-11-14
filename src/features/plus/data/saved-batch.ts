@@ -178,7 +178,7 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
       writer,
     );
     // 没写进去：已经存了的那几条不动（照样能撤），只报这一次没保存上
-    if (!res.ok) return { batch: base.entries.length > 0 ? base : null, out: res.reason === 'local_unavailable' || res.reason === 'closing' ? 'not_saved' : res.reason };
+    if (!res.ok) return { batch: base.entries.length > 0 ? base : null, out: res.reason === 'switching' || res.reason === 'nothing' ? res.reason : 'not_saved' };
     const entries: BatchEntry[] = [];
     for (const [k, ref] of res.saved.entries()) {
       const item = items[res.at[k] ?? -1];

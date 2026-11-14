@@ -20,11 +20,12 @@ const ST: Record<Exclude<EditStatus, 'empty_title' | 'rejected'>, EditMsgKey | n
   missing: 'edit.st.missing',
   local_unavailable: 'edit.st.unavailable',
   closing: 'edit.st.failed',
+  quota: 'edit.st.failed',
   switching: null,
   readonly: 'edit.st.readonly',
 };
 // “写上标题才会保存”（empty_title）是提示不是报错，用中性灰（负责人 11-06 真机截图 6：只选了日期就出红字，看着像报错）
-const BAD: ReadonlySet<EditStatus> = new Set(['missing', 'local_unavailable', 'closing', 'readonly', 'rejected']);
+const BAD: ReadonlySet<EditStatus> = new Set(['missing', 'local_unavailable', 'closing', 'quota', 'readonly', 'rejected']);
 
 /** 各页自己的两句：没写标题（empty_title）、格式不对（rejected） */
 export interface OwnStatus {

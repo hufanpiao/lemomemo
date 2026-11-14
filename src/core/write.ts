@@ -7,6 +7,8 @@
 //   - closing：本机库正在关（别的标签页在升级库，onversionchange；途中抛 CacheClosedError）
 //   - switching：换账号、被移除、被停用或注销冷静期、退出登录途中（已封存或队列设了闸；途中抛 CacheClosedError / outbox_suspended）。
 //     这几种情况页面都会马上清本机、跳走（app/sync-wiring.ts、core/account.ts），不会停在原页静默丢写入
+//   - quota：本机存储写满（QuotaExceededError；iOS Safari 写满时常报 UnknownError），界面照“没保存上”提示
+// • 三处写本机（这里、write-gone.ts、write-failed-create.ts）抛的错都经 writeFailOf 换成原因，不在各处各写一份
 // • 调用方义务：ok 为 false 时界面提示“没保存上”，并保留用户的输入（输入框不清空、弹窗不关）；
 //   switching 例外——页面马上要重新载入或回登录页，不提示、不保留
 // • unavailable 模式下“联网直写”归谁（K8 还是 write.*）待定，见接手清单 K6-write-online；在定之前 write.* 只报 local_unavailable
@@ -20,6 +22,7 @@ import { getBoot } from './boot.ts';
 import { CacheClosedError } from './cache.ts';
 import { OutboxCodeUnavailableError, OutboxRejectError, type EnqueueInput, type OutboxItem, type RecRef } from './outbox.ts';
 import { collection, type Row } from './store.ts';
+import { rlog } from '../platform/run-log-api.ts';
 
 export interface WriteOptions {
   /** 带提醒（调用方用 shared 的 remindAtOf 本机现算） */
@@ -29,7 +32,7 @@ export interface WriteOptions {
 }
 
 /** 没写进去的原因（见文件头） */
-export type WriteFailReason = 'local_unavailable' | 'closing' | 'switching';
+export type WriteFailReason = 'local_unavailable' | 'closing' | 'switching' | 'quota';
 
 export type WriteResult = { ok: true; item: OutboxItem | null } | { ok: false; reason: WriteFailReason };
 
@@ -49,6 +52,18 @@ export function canWriteLocal(): boolean {
   return localWriteBlocker() === null;
 }
 
+/** 写本机时抛的错 → 没写进去的原因；不认识的（含真正的拒收 OutboxRejectError）回 null，调用方自己处理 */
+export function writeFailOf(e: unknown): WriteFailReason | null {
+  if (e instanceof CacheClosedError) return localWriteBlocker() === 'switching' ? 'switching' : 'closing';
+  if (e instanceof OutboxRejectError && e.code === 'outbox_suspended') return 'switching';
+  // 严格校验的代码下载不下来（首屏后那批没到、离线又没有 SW 缓存）：没写进去，照“本机写不进去”提示、保留输入（③ 审查 M2）
+  if (e instanceof OutboxCodeUnavailableError) return 'local_unavailable';
+  const name = (e as Error | null)?.name;
+  if (name !== 'QuotaExceededError' && name !== 'UnknownError') return null;
+  rlog(`write quota ${name}`);
+  return 'quota';
+}
+
 async function enqueue(input: EnqueueInput): Promise<WriteResult> {
   const blocker = localWriteBlocker();
   const outbox = getBoot()?.outbox;
@@ -56,10 +71,8 @@ async function enqueue(input: EnqueueInput): Promise<WriteResult> {
   try {
     return { ok: true, item: await outbox.enqueue(input) };
   } catch (e) {
-    if (e instanceof CacheClosedError) return { ok: false, reason: localWriteBlocker() === 'switching' ? 'switching' : 'closing' };
-    if (e instanceof OutboxRejectError && e.code === 'outbox_suspended') return { ok: false, reason: 'switching' };
-    // 严格校验的代码下载不下来（首屏后那批没到、离线又没有 SW 缓存）：没写进去，照“本机写不进去”提示、保留输入（③ 审查 M2）
-    if (e instanceof OutboxCodeUnavailableError) return { ok: false, reason: 'local_unavailable' };
+    const reason = writeFailOf(e);
+    if (reason) return { ok: false, reason };
     throw e;
   }
 }
