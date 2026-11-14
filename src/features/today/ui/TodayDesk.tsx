@@ -6,8 +6,8 @@
 // • 本周、快到了、今天记的三块标题右边有跳转（日历 ›、纪念日 ›、随手记 ›）；“今天记的”标题后带条数（线框 ANNB、NOTESTODAY）
 // • 页顶日期行固定不动（对比稿“固定不动”）：日期后面的农历（Lunar，中文界面才有，同月历）由 TodayPage 挂在 h1 里，纪念日胶囊复用手机今天页的 AnnivLine
 // • 选中一条：详情抽屉从右边盖上来（线框 s1 第二张；× / Esc 关，能换到左边）。外壳是 kit 的 DetailDrawer（和随手记同一个），
-//   里面是待办、日程编辑器（todos、calendar 的 index.ts 懒加载），“今天记的”里的随手记用 notes 给的 TodayNotes part="edit"（B6 对齐线框：原来进编辑页）；
-//   选中的是哪一条由 TodayPage 管
+//   里面是待办、日程编辑器（todos、calendar 的 index.ts 懒加载）；“今天记的”里的随手记用 notes 给的 TodayNotes part="drawer"，就是随手记页那个 NoteDrawer
+//   （外壳、读屏名字、testid 两页同一份，B6 整合）；选中的是哪一条由 TodayPage 管（kit useDrawerSel）
 // • 排法、拖动、收起、保存都在 kit 的 DeskLayout；这里只给块的标题和内容
 // • 键盘（线框 s1“J / K 上下 · E 完成 · Enter 编辑”）：J / K 在今天页各行之间移焦点，E 勾选焦点所在的待办，Enter 是按钮自带的打开
 //   （焦点在输入框里时单字母键不生效，kit 的 useKeys）
@@ -109,24 +109,21 @@ export function Lunar({ today }: { today: DateStr }) {
   return d ? <small className={styles.lunar}>{t('desk.lunar', { d })}</small> : null;
 }
 
-/** 抽屉里的待办、日程编辑器（kit 的 DetailDrawer：Esc、×、焦点还回去）；关上时原来的焦点不在了，就找这一条在今天页上的行按钮，
- *  那一行也没了（删了、日子过了）退到页顶日期标题（它 tabIndex=-1），焦点不掉到 body（独立评审第 10 条） */
-const refocus = (key: string): HTMLElement | null =>
-  document.querySelector<HTMLElement>(`main[data-feature="today"] [data-open="${key.slice(key.indexOf(':') + 1)}"]`) ?? document.querySelector<HTMLElement>('main[data-feature="today"] h1');
-
+/** 详情抽屉（kit 的 DetailDrawer：Esc、×、焦点还回去，关上时按行按钮的 data-open 找回这一行）：待办、日程编辑器的外壳在这里；
+ *  随手记用 notes 给的同一个 NoteDrawer（TodayNotes part="drawer"，外壳只有那一份），按需下载时挂起在这一层 */
 function TodayDrawer({ sel, side, handle, onClose }: { sel: TodaySel; side: 'left' | 'right'; handle: ReactNode; onClose(): void }) {
   const t = useTodayDeskT();
-  const key = `${sel.kind}:${sel.id}`;
   const Editor = sel.kind === 'todo' ? TodoDrawerEditor : EventDrawerEditor;
-  // 随手记打开时焦点落在正文框（同随手记页的 NoteDrawer）
-  const initial = sel.kind === 'note' ? '[data-testid="note-edit-body"]' : undefined;
-  return (
-    <DetailDrawer id={key} label={t('desk.drawer', {})} onClose={onClose} side={side} handle={handle} initial={initial} refocus={refocus} data-testid="today-drawer">
-      <QuietBoundary name="today-drawer">
-        <Suspense fallback={null}>
-          {sel.kind === 'note' ? <TodayNotes key={key} part="edit" id={sel.id} /> : <Editor key={key} id={sel.id} onCreated={noop} />}
-        </Suspense>
-      </QuietBoundary>
+  const body = (x: ReactNode) => (
+    <QuietBoundary name="today-drawer">
+      <Suspense fallback={null}>{x}</Suspense>
+    </QuietBoundary>
+  );
+  return sel.kind === 'note' ? (
+    body(<TodayNotes part="drawer" id={sel.id} side={side} handle={handle} onClose={onClose} />)
+  ) : (
+    <DetailDrawer id={sel.id} label={t('desk.drawer', {})} onClose={onClose} side={side} handle={handle} data-testid="today-drawer">
+      {body(<Editor key={sel.id} id={sel.id} onCreated={noop} />)}
     </DetailDrawer>
   );
 }

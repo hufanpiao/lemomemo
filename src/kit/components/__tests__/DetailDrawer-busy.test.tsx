@@ -31,7 +31,7 @@ function drawer() {
       <button type="button" data-testid="outside">
         列表里的一行
       </button>
-      <DetailDrawer id="todo:a" label="详情" onClose={() => undefined} refocus={() => null} data-testid="drawer">
+      <DetailDrawer id="todo:a" label="详情" onClose={() => undefined} data-testid="drawer">
         <EditShell kind="待办" backLabel="返回" onBack={() => undefined} rec={rec} own={own} prefix="todo-edit">
           <input data-testid="field" />
         </EditShell>
@@ -86,7 +86,7 @@ describe('DetailDrawer 的初始焦点', () => {
         <button type="button" data-testid="outside">
           外面
         </button>
-        <DetailDrawer id="note:a" label="详情" onClose={() => undefined} refocus={() => null} initial='[data-testid="body"]' data-testid="drawer">
+        <DetailDrawer id="note:a" label="详情" onClose={() => undefined} initial='[data-testid="body"]' data-testid="drawer">
           {show ? <textarea data-testid="body" /> : null}
         </DetailDrawer>
       </>

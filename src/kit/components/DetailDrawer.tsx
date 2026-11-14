@@ -1,7 +1,9 @@
 // 电脑版详情抽屉的外壳（B4 视觉验收 A1 的随手记抽屉；B6 返工抽成 kit，随手记页、今天页共用一套。皮肤视觉稿 DK.mason / NOTE_ED：边上浮起的圆角面板）
 // • Esc 关（浮层 radix 开着时、输入法组字时不关）；“×”由里面的编辑器放（DrawerClose），点了调 onClose
 // • 焦点：打开时记下原来的焦点，移到 initial 选出的元素（没有、或禁用了就移到抽屉本身）；关上（Esc、“×”、窗口变窄卸载）时还回去——
-//   一直是同一条就还给原来的元素（不在了再用 refocus 找这一条在列表里的按钮）；中途换过一条，先用 refocus 找当前这一条，找不到再退回原来的元素
+//   一直是同一条就还给原来的元素（不在了再找这一条在列表里的按钮）；中途换过一条，先找当前这一条的按钮，找不到再退回原来的元素。
+//   列表里这一条的按钮统一认 data-open="<id>"（今天页、随手记页的行和卡片都带）；那一行也没了（删了、日子过了）退到页顶能接焦点的 h1（今天页的日期，tabIndex=-1），
+//   焦点不掉到 body（独立评审第 10 条）
 // • 读屏：aside 带名字；不加 aria-modal（侧栏和列表照样能用）
 // • side：在哪边（默认右边，左边时贴着侧栏右沿）；handle：kit DeskLayout 给的换边把手，放在抽屉最上面
 // • 升级中心的 busy（不出版本横幅、不自动重新载入）：焦点在抽屉里（含抽屉里弹出的 radix 浮层）时才占，点回列表、侧栏就放开。
@@ -16,8 +18,12 @@ const InDrawer = createContext<(() => void) | null>(null);
 /** 在详情抽屉里时是关抽屉的函数（“×”用），不在抽屉里是 null */
 export const useInDrawer = (): (() => void) | null => useContext(InDrawer);
 
+/** 这一条在列表里的按钮（data-open）；没有就页顶能接焦点的 h1 */
+const rowOf = (id: string): HTMLElement | null =>
+  document.querySelector<HTMLElement>(`main [data-open="${id}"]`) ?? document.querySelector<HTMLElement>('main h1[tabindex]');
+
 export interface DetailDrawerProps {
-  /** 当前打开的是哪一条（换一条时重新移焦点） */
+  /** 当前打开的是哪一条（换一条时重新移焦点；关上时找 data-open 是它的按钮） */
   id: string;
   label: string;
   onClose(): void;
@@ -25,13 +31,11 @@ export interface DetailDrawerProps {
   handle?: ReactNode;
   /** 打开时焦点落在哪（抽屉里的选择器）；不给就落在抽屉本身 */
   initial?: string | undefined;
-  /** 关上时找这一条在列表里的按钮（原来的焦点不在了、或中途换过一条时用） */
-  refocus(id: string): HTMLElement | null;
   'data-testid': string;
   children: ReactNode;
 }
 
-export function DetailDrawer({ id, label, onClose, side, handle, initial, refocus, 'data-testid': testId, children }: DetailDrawerProps) {
+export function DetailDrawer({ id, label, onClose, side, handle, initial, 'data-testid': testId, children }: DetailDrawerProps) {
   const box = useRef<HTMLElement>(null);
   const opener = useRef<Element | null | undefined>(undefined);
   if (opener.current === undefined) opener.current = document.activeElement;
@@ -43,9 +47,9 @@ export function DetailDrawer({ id, label, onClose, side, handle, initial, refocu
     if (!(to instanceof Element && (e.currentTarget.contains(to) || to.closest('[data-radix-popper-content-wrapper]')))) setInside(false);
   };
   const firstId = useRef(id);
-  const cur = useRef({ id, refocus });
-  cur.current = { id, refocus };
-  // 里面的编辑器是按需下载的（今天页抽屉里的随手记）：initial 选出的元素还没画出来时焦点先落在抽屉本身，等它出来再挪过去（这期间焦点被挪走了就不抢）
+  const cur = useRef(id);
+  cur.current = id;
+  // initial 选出的元素还没画出来、或还禁用着（编辑器在读这一行）时焦点先落在抽屉本身，等它出来再挪过去（这期间焦点被挪走了就不抢）
   useEffect(() => {
     const root = box.current;
     if (!root) return;
@@ -67,9 +71,9 @@ export function DetailDrawer({ id, label, onClose, side, handle, initial, refocu
   }, [id, initial]);
   // prettier-ignore
   useEffect(() => () => {
-    const el = opener.current, { id: now, refocus: find } = cur.current;
+    const el = opener.current, now = cur.current;
     const orig = el instanceof HTMLElement && el.isConnected && el !== document.body ? el : null;
-    const mine = find(now);
+    const mine = rowOf(now);
     (now === firstId.current ? orig ?? mine : mine ?? orig)?.focus();
   }, []);
   useEffect(() => {

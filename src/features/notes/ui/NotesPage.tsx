@@ -196,7 +196,7 @@ function NotesList() {
           {l.items.filter(shown).map((it) => (
             <AppearItem key={it.id} className={styles.card} data-testid={`notes-card-${it.id}`}>
               <div onContextMenu={onMenuKey(it.id)}>
-                <button type="button" className={styles.cardMain} onClick={() => open(it.id)} aria-current={selId === it.id ? 'true' : undefined}>
+                <button type="button" className={styles.cardMain} onClick={() => open(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
                   {it.cover ? (
                     <span className={styles.cardCover}>
                       <CardCover img={it.cover} count={it.images} />
@@ -244,7 +244,7 @@ function NotesList() {
                         { label: t('notes.delete', {}), onClick: () => del(it.id), danger: true, testId: `notes-sw-del-${it.id}` },
                       ]}
                     >
-                      <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} aria-current={selId === it.id ? 'true' : undefined}>
+                      <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
                         <span className={row.rowTime}>{timeOf(it, false)}</span>
                         <span className={row.mn} aria-hidden="true" />
                         <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} />
