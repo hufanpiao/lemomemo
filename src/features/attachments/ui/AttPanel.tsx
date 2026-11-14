@@ -280,6 +280,7 @@ function AttRow(p: {
             open={menu}
             onOpenChange={setMenu}
             label={t('att.more', { name })}
+            data-testid={`note-file-menu-${it.id}`}
             align="end"
             className={styles.menu}
             trigger={

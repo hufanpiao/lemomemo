@@ -149,6 +149,7 @@ export function ConvertAsk({ ask, onOk, onCancel }: { ask: ConvAsk; onOk(): void
       cancelLabel={t('notes.conv.dlg.cancel', {})}
       onOk={onOk}
       onCancel={onCancel}
+      testId="notes-conv-ask"
     />
   );
 }
