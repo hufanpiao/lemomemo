@@ -32,9 +32,14 @@ describe('startDiagBoot', () => {
 
   it('启动失败那一行（logBootFailed）：只有错误名和固定说明；离开页面（pagehide）当场存进运行日志（第三方审查前端第 3 条）', () => {
     startDiagBoot(localStorage, () => undefined);
-    logBootFailed('TypeError');
+    const e = new TypeError('含用户内容的说明');
+    logBootFailed(e);
+    logBootFailed('不是 Error');
     window.dispatchEvent(new Event('pagehide'));
-    expect(localStorage.getItem(RUN_LOG_KEY)).toMatch(/app boot start_failed TypeError -> auth$/m);
+    const log = localStorage.getItem(RUN_LOG_KEY) ?? '';
+    expect(log).toMatch(/app boot start_failed TypeError -> auth$/m);
+    expect(log).toMatch(/app boot start_failed string -> auth$/m);
+    expect(log).not.toContain('含用户内容');
   });
 
   it('R-409：存储抛错（隐私模式）也不往外抛', () => {

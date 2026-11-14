@@ -327,11 +327,9 @@ async function start(): Promise<void> {
 const BOOT_FAIL_LOG_WAIT_MS = 1000;
 
 // start 自己不该抛（coldStart 不抛）；万一抛了（例如没有 #root）不留白屏：回登录页，登录页会显示“已登录 · 继续”。
-// 先记一行运行日志（只记错误名，固定说明在 diag-boot.ts 的 logBootFailed；不记 message；第三方审查前端第 3 条，11-14）：
+// 先记一行运行日志（错误名在 diag-boot.ts 的 logBootFailed 里取，首屏这里只把错误原样交过去；不记 message；第三方审查前端第 3 条，11-14）：
 // 运行日志懒加载（入口不静态引 run-log，diag-boot.test.ts），等它接上（最多 BOOT_FAIL_LOG_WAIT_MS）记好再跳，跳走时 run-log.ts 在 pagehide 当场存盘。
 // 正式版 diag 是 undefined，不等
 start().catch((e: unknown) => {
-  const name = (e instanceof Error ? e.name : typeof e).slice(0, 40);
-  const logged = diag?.then((m) => m?.logBootFailed(name));
-  void Promise.race([logged, new Promise<void>((r) => setTimeout(r, BOOT_FAIL_LOG_WAIT_MS))]).then(() => goToAuth());
+  void Promise.race([diag?.then((m) => m?.logBootFailed(e)), new Promise((r) => setTimeout(r, BOOT_FAIL_LOG_WAIT_MS))]).then(() => goToAuth());
 });

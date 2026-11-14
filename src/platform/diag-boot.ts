@@ -22,9 +22,10 @@ export function dropStaleKeys(store: Storage): void {
   }
 }
 
-/** main.tsx 的 start() 抛了、要跳登录页之前记的那一行（第三方审查前端第 3 条）：只记错误名，不记 message（可能带用户内容） */
-export function logBootFailed(name: string): void {
-  rlog(`boot start_failed ${name} -> auth`);
+/** main.tsx 的 start() 抛了、要跳登录页之前记的那一行（第三方审查前端第 3 条）：只记错误名（截 40 字），不记 message（可能带用户内容）；
+ *  取名放这里不放 main.tsx：这个文件懒加载，不占首屏额度 */
+export function logBootFailed(e: unknown): void {
+  rlog(`boot start_failed ${(e instanceof Error ? e.name : typeof e).slice(0, 40)} -> auth`);
 }
 
 export function startDiagBoot(store: Storage = localStorage, idle: (fn: () => void) => void = whenIdle): void {
