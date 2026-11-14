@@ -5,7 +5,7 @@ import { NOTIFY_ACTIONS, SNOOZE_MIN } from '../../shared/logic/notify-text.ts';
 import { buildPayload, type PayloadInput } from '../../supabase/functions/_shared/push/payload.ts';
 import { claimCache } from '../../src/core/account.ts';
 import { openCache } from '../../src/core/cache.ts';
-import { PENDING_ACTIONS } from '../../src/core/cache-schema.ts';
+import { PENDING_STORE } from '../../shared/local-db.ts';
 import { isValidPendingAction } from '../../src/core/pending-actions.ts';
 import { fakeIndexedDB } from '../../src/core/__tests__/idb-fake.ts';
 import type { SwPendingAction } from '../../shared/local-db.ts';
@@ -102,7 +102,7 @@ describe('点按钮的处理', () => {
     expect(close).toHaveBeenCalled();
     expect(r).toEqual({ opened: reminderUrl('todo', ID, DUE), snooze: null, done: 'ok' });
     expect(opened).toHaveLength(1);
-    const rows = await db.cache.tx([PENDING_ACTIONS], 'readonly', (tx) => tx.getAll<SwPendingAction>(PENDING_ACTIONS));
+    const rows = await db.cache.tx([PENDING_STORE], 'readonly', (tx) => tx.getAll<SwPendingAction>(PENDING_STORE));
     expect(rows).toEqual([{ id: 'pending-1', user_id: UID, row_table: 'todos', row_id: ID, action: { type: 'done', due_at: DUE }, created_at: DUE + 500 }]);
     expect(rows.every((a) => isValidPendingAction(a))).toBe(true);
     db.cache.close();
@@ -118,7 +118,7 @@ describe('点按钮的处理', () => {
       expect(r).toEqual({ opened: null, snooze: null, done: null });
       expect(opened).toEqual([]);
     }
-    const rows = await db.cache.tx([PENDING_ACTIONS], 'readonly', (tx) => tx.getAll(PENDING_ACTIONS));
+    const rows = await db.cache.tx([PENDING_STORE], 'readonly', (tx) => tx.getAll(PENDING_STORE));
     expect(rows).toEqual([]);
     db.cache.close();
   });
@@ -130,7 +130,7 @@ describe('点按钮的处理', () => {
     const b = fakeSw(db.factory);
     expect(await handleNotificationClick(b.sw, { data: dataFor(remind('todo', { done: null })), close: vi.fn() }, 'done')).toMatchObject({ snooze: null, done: null });
     expect(b.opened).toHaveLength(1);
-    const rows = await db.cache.tx([PENDING_ACTIONS], 'readonly', (tx) => tx.getAll<SwPendingAction>(PENDING_ACTIONS));
+    const rows = await db.cache.tx([PENDING_STORE], 'readonly', (tx) => tx.getAll<SwPendingAction>(PENDING_STORE));
     expect(rows.map((x) => x.action)).toEqual([{ type: 'snooze', minutes: SNOOZE_MIN, due_at: DUE }]);
     db.cache.close();
   });

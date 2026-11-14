@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { claimCache } from '../../core/account.ts';
 import { coldStart, resetBootForTest } from '../../core/boot.ts';
-import { deleteCacheDb } from '../../core/cache.ts';
+import { deleteLocalDb } from '../../platform/exit-basics.ts';
 import { clearAllCollections } from '../../core/store.ts';
 import { fakeIndexedDB } from '../../core/__tests__/idb-fake.ts';
 import { readAuthLoss } from '../../platform/auth-loss-log.ts';
@@ -65,8 +65,8 @@ describe('真实 auth-js：刷新被判复用（refresh_token_already_used）→
     await claimCache(cache, A);
     await cache.putDraft({ id: 'd', kind: 'capture', data: 'A 还没上传的草稿', updated_at: 1 });
     watchWithExit(boot, {
-      clearCacheStorage, onAuthUser, onStorageUser: () => () => undefined, currentUserId: () => readSessionUserId(), dropSession: () => takeLocalSession(),
-      onSignedOut: goToAuth, deleteDb: () => deleteCacheDb({ factory, waitMs: 50 }), onSwitched: vi.fn(),
+      clearCacheStorage, onAuthUser, onStorageUser: () => () => undefined, currentUserId: () => readSessionUserId(), takeSession: () => takeLocalSession(),
+      onSignedOut: goToAuth, deleteDb: () => deleteLocalDb(factory, undefined, 50), onSwitched: vi.fn(),
     });
     void createSupabaseTransport().ensureSession().catch(() => undefined);
 

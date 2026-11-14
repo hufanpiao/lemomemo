@@ -25,7 +25,7 @@ import { RemindSettings } from '../../reminders/index.ts';
 import backLink from '../../../kit/components/BackLink.module.css';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
-import { useSettingsPage, type ExitNotice, type SettingsDeps } from '../hooks/useSettingsPage.ts';
+import { useSettingsPage, type SignOutNotice, type SettingsDeps } from '../hooks/useSettingsPage.ts';
 import { useExport } from '../hooks/useExport.ts';
 import { useRecentExport } from '../hooks/useRecentExport.ts';
 import { useQuickAddHotkey } from '../hooks/useQuickAddHotkey.ts';
@@ -59,7 +59,7 @@ function SignOutRow({ busy, signingOut, onSignOut }: { busy: boolean; signingOut
       >
         {t('settings.account.signOut', {})}
       </FormButton>
-      {/* 点了退出到跳走最长约 19 秒（删行、signOut 共 8 秒，清本机库、缓存、最后再删一次库另有上限）：一直写着“正在退出…”；状态区常驻，读屏才会播报 */}
+      {/* 点了退出到跳走最长约 21 秒（删行、signOut 共 8 秒，清本机约 10 秒，最后再删一次库 3 秒）：一直写着“正在退出…”；状态区常驻，读屏才会播报 */}
       <p className={styles.status} role="status" data-testid="settings-signing-out">
         {signingOut ? t('settings.signingOut', {}) : ''}
       </p>
@@ -99,7 +99,7 @@ function SignOutConfirm({ ask, onOk, onCancel }: { ask: Ask; onOk(): void; onCan
  * 本人退出、服务器上的这次登录没能吊销时的提示：不能关，只能去登录（几秒后也会自动去）；本机还没清完时按钮禁用。
  * 会话不认、本机没有会话不在这里提示：交给 core/device-exit.ts 回登录页，由登录页提示（第三方审查前端-4）
  */
-function ExitDialog({ notice, cleaning, onGo }: { notice: ExitNotice | null; cleaning: boolean; onGo(): void }) {
+function ExitDialog({ notice, onGo }: { notice: SignOutNotice | null; onGo(): void }) {
   const t = useSettingsT();
   return (
     <Dialog
@@ -109,8 +109,8 @@ function ExitDialog({ notice, cleaning, onGo }: { notice: ExitNotice | null; cle
       description={t('settings.offlineOut.body', {})}
     >
       <div className={styles.actions}>
-        <FormButton size="compact" variant="primary" onClick={onGo} disabled={cleaning} aria-busy={cleaning} data-testid="settings-revoked-go">
-          {cleaning ? t('settings.busy', {}) : t('settings.revoked.go', {})}
+        <FormButton size="compact" variant="primary" onClick={onGo} data-testid="settings-revoked-go">
+          {t('settings.revoked.go', {})}
         </FormButton>
       </div>
     </Dialog>
@@ -250,7 +250,7 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
         }}
         onCancel={() => setAsk(null)}
       />
-      <ExitDialog notice={exit.notice} cleaning={exit.cleaning} onGo={exit.goToAuth} />
+      <ExitDialog notice={exit.notice} onGo={exit.goToAuth} />
     </main>
   );
 }

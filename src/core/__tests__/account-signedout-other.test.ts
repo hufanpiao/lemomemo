@@ -45,7 +45,7 @@ describe('本机已是别的账号的 S2 时收到转来的 SIGNED_OUT', () => {
       },
       onStorageUser: () => () => undefined,
       currentUserId: () => current,
-      dropSession: vi.fn((): string | null => 's2'),
+      takeSession: vi.fn((): string | null => 's2'),
       onSignedOut: vi.fn(),
       clearLogs: vi.fn(),
       onSwitched: vi.fn(),
@@ -55,7 +55,7 @@ describe('本机已是别的账号的 S2 时收到转来的 SIGNED_OUT', () => {
     current = 'B';
     signedOut('s1');
     await vi.waitFor(() => expect(deps.onSwitched).toHaveBeenCalledTimes(1));
-    expect(deps.dropSession).not.toHaveBeenCalled();
+    expect(deps.takeSession).not.toHaveBeenCalled();
     expect(deps.onSignedOut).not.toHaveBeenCalled();
     expect(boot.switchedUser).toBe(true);
     await flush(5);

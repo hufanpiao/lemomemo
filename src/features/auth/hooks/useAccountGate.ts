@@ -11,7 +11,7 @@
 //     后端审查 10-30：status 回 200 {ok:true, status:'disabled'} 绝不当成登录成功；停用 + 会话已吊销时也回 disabled，不另分
 // 恢复页两个按钮：
 //   “恢复账号”→ restore：成功（或 not_pending）先按库名删本机库（0.29 续第 131 条④ 整表重拉；登录页不能引 core，
-//     用 platform/sign-out.ts 的 deleteLocalDb，core/cache.ts 的 deleteCacheDb 也是它）再 onRestored（进 /app/）；
+//     用 platform/exit-basics.ts 的 deleteLocalDb，主 App 删库也是它）再 onRestored（进 /app/）；
 //     reauth_required → 退出本会话、回填邮箱那一步提示重新收码；account_disabled → 停用页；其余按错误码表提示
 //   “保持注销并退出”→ 退出本会话：platform/sign-out.ts 的 signOutThisDevice，服务器一半只 signOut({scope:'local'})，不删 devices 行；
 //     做完再 clearLocalSessionIf(探测时记下的 sid)。本机库和运行时缓存一并清掉
@@ -23,20 +23,13 @@
 // 记下的 snap 用完就清（复审建议 3）：check 放行、恢复成功跳转前、退出后
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { readSessionAccessToken, readSessionUserId } from '../../../platform/session.ts';
-import {
-  defaultExitSteps,
-  dropSession,
-  logoutWithToken,
-  SIGN_OUT_TIMEOUT_MS,
-  sessionIdOf,
-  signOutThisDevice,
-  wipeThisDevice,
-} from '../../../platform/sign-out.ts';
+import { defaultExitSteps, dropSession, logoutWithToken, SIGN_OUT_TIMEOUT_MS, sessionIdOf, signOutThisDevice } from '../../../platform/sign-out.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { createAccountGateApi, purgeWhen, type PurgeWhen, type RestoreErr } from '../data/account-gate.ts';
 import type { AuthFlowDeps } from './useAuthFlow.ts';
 import { onlineNow } from '../../../platform/online.ts';
+import { wipeThisDevice } from '../../../platform/exit-basics.ts';
 
 /** none：没有要挡的；checking：探测中；pending：恢复页；disabled：停用页；unsure：验证码刚通过、探测不出；exited：本会话已退出、回登录表单 */
 export type GateView = 'none' | 'checking' | 'pending' | 'disabled' | 'unsure' | 'exited';

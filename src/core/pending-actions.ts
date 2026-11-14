@@ -1,9 +1,8 @@
 // SW 记下的通知按键（架构 4.1、0.29 续第 102 条③、第 107 条）：页面启动时丢掉别的账号的和超过 24 小时的（prunePendingActions）；
 // 形状校验、留不留的判断也在这里。转进 outbox 在 pending-drain.ts（不进首屏：只有提醒功能引）
 // 纯 TS：不准 import React 和任何功能（A1）
-import { isSnoozeMin, type DoneAction, type SnoozeAction } from '../../shared/local-db.ts';
+import { type DoneAction, isSnoozeMin, PENDING_STORE, type SnoozeAction } from '../../shared/local-db.ts';
 import type { Cache } from './cache.ts';
-import { PENDING_ACTIONS } from './cache-schema.ts';
 import type { PendingAction } from './outbox-types.ts';
 
 /** 超过 24 小时的通知按键丢掉 */
@@ -55,15 +54,15 @@ export function keepPendingAction(a: unknown, userId: string, now: number): a is
  * 剩下的由提醒功能经 pending-drain.ts 的 drainPendingActions 转进 outbox（features/reminders/hooks/usePendingDrain.ts）
  */
 export async function prunePendingActions(cache: Cache, args: { userId: string; now: number }): Promise<number> {
-  const all = await cache.tx([PENDING_ACTIONS], 'readonly', (t) => t.getAll<unknown>(PENDING_ACTIONS));
+  const all = await cache.tx([PENDING_STORE], 'readonly', (t) => t.getAll<unknown>(PENDING_STORE));
   const drop = all.flatMap((a) => {
     if (keepPendingAction(a, args.userId, args.now)) return [];
     const id = typeof a === 'object' && a !== null ? (a as { id?: unknown }).id : undefined;
     return typeof id === 'string' ? [id] : [];
   });
   if (drop.length) {
-    await cache.tx([PENDING_ACTIONS], 'readwrite', async (t) => {
-      for (const id of drop) await t.delete(PENDING_ACTIONS, id);
+    await cache.tx([PENDING_STORE], 'readwrite', async (t) => {
+      for (const id of drop) await t.delete(PENDING_STORE, id);
     });
   }
   return drop.length;

@@ -43,6 +43,15 @@ describe('core 的出口都清本机痕迹', () => {
     expect(left()).toEqual([]);
   });
 
+  it('冷启动没有会话（不是登录过期）也走清本机的唯一入口 wipeThisDevice：清运行时缓存、断开推送（退出整块评审第 2 条）', async () => {
+    const { factory } = fakeIndexedDB();
+    const clearCacheStorage = vi.fn(async () => undefined);
+    const disconnectPush = vi.fn(async () => undefined);
+    await coldStart({ userId: null, cacheOptions: { factory }, readReauth: () => null, clearCacheStorage, disconnectPush });
+    expect(clearCacheStorage).toHaveBeenCalledOnce();
+    expect(disconnectPush).toHaveBeenCalledOnce();
+  });
+
   it('冷启动没有会话但是登录过期（有 lemo.reauth）：都留着，同一账号重新登录后照用', async () => {
     const { factory } = fakeIndexedDB();
     await coldStart({ userId: null, cacheOptions: { factory }, readReauth: () => ({}) as never });

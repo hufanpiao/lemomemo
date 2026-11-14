@@ -45,7 +45,8 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const BUNDLE = buildSync({
   stdin: {
     contents: [
-      "export { openCache, CacheClosedError, DB_NAME } from './src/core/cache.ts';",
+      "export { openCache, CacheClosedError } from './src/core/cache.ts';",
+        "export { LOCAL_DB_NAME as DB_NAME } from './shared/local-db.ts';",
       "export { DB_VERSION } from './src/core/cache-migrations.ts';",
       "export { cacheStores } from './src/core/cache-schema.ts';",
     ].join('\n'),
@@ -161,7 +162,7 @@ function buildBootBundle(): string {
         "export { createSync } from './src/core/sync/engine.ts';",
         "export { openCache } from './src/core/cache.ts';",
         "export { DB_VERSION } from './src/core/cache-migrations.ts';",
-        "export { OWNER } from './src/core/cache-schema.ts';",
+        "export { OWNER_STORE as OWNER } from './shared/local-db.ts';",
         "export { SCHEMA_V } from './shared/schema/rows.ts';",
       ].join('\n'),
       resolveDir: ROOT,

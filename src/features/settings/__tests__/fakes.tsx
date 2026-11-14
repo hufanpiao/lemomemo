@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { expect, vi } from 'vitest';
 import type { DeviceRow } from '../data/devices.ts';
 import { failWith, type Failure, type LocalSignOut, type SettingsApi, type SettingsErr } from '../data/settings-api.ts';
-import type { ExitDeps } from '../hooks/useSessionExit.ts';
+import type { SignOutHereDeps } from '../hooks/useSessionExit.ts';
 import { zh } from '../i18n/zh.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';
 
@@ -60,7 +60,8 @@ export function fakeExit(pending: number | null = 0) {
     pendingCount: vi.fn(async () => pending),
     goToAuth: vi.fn(() => void order.push('auth')),
     releaseHold: vi.fn(),
-  } satisfies ExitDeps;
+    beginExit: vi.fn(),
+  } satisfies SignOutHereDeps;
   return { exit, order };
 }
 
@@ -74,7 +75,7 @@ export function deferred<T = void>() {
 }
 
 /** 从设置首页开始（上一条用例留下的地址不带过来），等首页“账号”一行写出设备数（设备列表读完） */
-export async function renderPage(api: SettingsApi = fakeApi(), exit: ExitDeps = fakeExit().exit, redirectMs = 5000) {
+export async function renderPage(api: SettingsApi = fakeApi(), exit: SignOutHereDeps = fakeExit().exit, redirectMs = 5000) {
   window.history.replaceState(null, '', '#/settings');
   render(<SettingsPage deps={{ api, exit, now, redirectMs }} />);
   // 全量并发时假接口读完设备列表会超过 waitFor 默认的 1 秒（vitest34 全量红过一次、单跑 5/5 过），放宽到 5 秒

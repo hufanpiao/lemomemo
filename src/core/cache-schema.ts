@@ -36,9 +36,7 @@ export const OUTBOX = 'outbox';
 export const DRAFTS = 'drafts';
 /** 隐私记“＋”原话的密文草稿（R-123）。功能没做之前禁止写入：只准定义、关库前放行、退出前只读计数，core/__tests__/vault-drafts-guard.test.ts 守着（审查第 12 条） */
 export const VAULT_DRAFTS = 'vault_drafts';
-/** SW 也写这两个仓：名字在 shared/local-db.ts（后端-5） */
-export const PENDING_ACTIONS = PENDING_STORE;
-export const OWNER = OWNER_STORE;
+// SW 也写的 pending_actions、owner 两个仓：名字只在 shared/local-db.ts（后端-5），调用方直接引那里
 
 /** 本机专用的仓（不在数据清单里） */
 export const LOCAL_STORES: readonly StoreDef[] = [
@@ -52,11 +50,11 @@ export const LOCAL_STORES: readonly StoreDef[] = [
   // 隐私记的草稿：只存密文（隐私记的明文不进 IndexedDB，4.1），B5 才用
   { name: VAULT_DRAFTS, keyPath: 'id', indexes: [], rebuildable: false, kind: 'local' },
   // SW 记下的通知按键（0.29 续第 107 条），启动时转进 outbox
-  { name: PENDING_ACTIONS, keyPath: 'id', indexes: [], rebuildable: false, kind: 'local' },
+  { name: PENDING_STORE, keyPath: 'id', indexes: [], rebuildable: false, kind: 'local' },
   // 10-29 加 owner 仓时 K6 的本机库还没提交、没上线，没有旧库，故未升 DB_VERSION（只重新生成了锁文件）
   // 这个库归谁（{key: 'user_id', value}，core/account.ts 读写；K6 审查 M4）：
   // 不放 meta，因为 meta 迁移失败会重建，user_id 丢了以后 outbox、草稿还在，可能用别人的令牌发出去
-  { name: OWNER, keyPath: 'key', indexes: [], rebuildable: false, kind: 'local' },
+  { name: OWNER_STORE, keyPath: 'key', indexes: [], rebuildable: false, kind: 'local' },
 ];
 
 /** 按清单生成的同步仓：sync: true 的每张表一个，主键 id，行存 {id, server, view, ro?} */

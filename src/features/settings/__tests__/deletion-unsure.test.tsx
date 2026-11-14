@@ -9,7 +9,7 @@ import { clearExitNotice, goToAuth, readExitNotice, setExitNotice } from '../../
 import type { Db } from '../../../platform/supabase/client.ts';
 import { createAccountApi } from '../data/account-api.ts';
 import { checkDeletion } from '../data/deletion-check.ts';
-import { createLeaveAccount, type AccountLeaveDeps } from '../data/account-exit.ts';
+import { type AccountLeaveDeps, createLeaveAccount } from '../../../core/account-leave.ts';
 import { useDeleteAccount } from '../hooks/useAccountActions.ts';
 
 const b64 = (o: unknown): string => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');

@@ -1,7 +1,8 @@
 // 设置页退出、被移除、登录页“退出并换账号”共用的 wipeThisDevice：设闸清库之后、按库名删库之前断开浏览器推送
 // （B2 安全审查六之三 FE-2：关掉本 App 已显示的通知、退订推送；失败不挡退出）
 import { describe, expect, it, vi } from 'vitest';
-import { defaultExitSteps, wipeThisDevice, type ExitSteps } from '../sign-out.ts';
+import { defaultExitSteps, type ExitSteps } from '../sign-out.ts';
+import { wipeThisDevice } from '../exit-basics.ts';
 
 function steps(order: string[], over: Partial<ExitSteps> = {}): ExitSteps {
   return {

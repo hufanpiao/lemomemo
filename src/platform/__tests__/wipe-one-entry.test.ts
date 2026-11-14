@@ -1,9 +1,8 @@
-// 清本机只有一个入口（第三方审查前端-4、后端-3）：platform/exit-basics.ts 的 wipeThisDevice（sign-out.ts 原样转出）。
+// 清本机只有一个入口（第三方审查前端-4、后端-3）：platform/exit-basics.ts 的 wipeThisDevice（没会话的冷启动也走它）。
 // 主 App 的 core/account.ts wipeLocal 只给它配上本页的库（设闸清库、关连接再按库名删），不再自己排一遍步骤、自己定超时。
 // 原来两份各管各的：wipeLocal 给按库名删库套了上限、清记号失败记日志、清完不删库（dropDb 才删）；wipeThisDevice 删库不设上限、不记日志
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CACHES_TIMEOUT_MS, DELETE_WAIT_MS, WIPE_TIMEOUT_MS } from '../exit-basics.ts';
-import { wipeThisDevice } from '../sign-out.ts';
+import { CACHES_TIMEOUT_MS, DELETE_WAIT_MS, WIPE_TIMEOUT_MS, wipeThisDevice } from '../exit-basics.ts';
 
 afterEach(() => {
   vi.useRealTimers();

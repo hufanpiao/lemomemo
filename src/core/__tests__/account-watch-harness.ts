@@ -5,7 +5,7 @@ import type { AuthLossSignal } from '../auth-loss.ts';
 import { watchAccount, wipeLocal, type SessionLoss, type WatchAccountDeps } from '../account.ts';
 import { defaultExitDeps, exitOnSessionLoss } from '../device-exit.ts';
 import { coldStart, type BootResult } from '../boot.ts';
-import { deleteCacheDb } from '../cache.ts';
+import { deleteLocalDb } from '../../platform/exit-basics.ts';
 import { seedA } from './account-fixtures.ts';
 import { fakeIndexedDB, type FakeIDBFactory } from './idb-fake.ts';
 
@@ -91,12 +91,12 @@ export async function setup(opts: { sessionAfterBoot?: string | null; openFails?
       return () => undefined;
     },
     currentUserId: () => session.id,
-    dropSession: vi.fn((): string | null => null),
+    takeSession: vi.fn((): string | null => null),
     onSignedOut: vi.fn(),
     clearLogs: vi.fn(),
     onSwitched: vi.fn(),
     onFailed: vi.fn(),
-    deleteDb: () => deleteCacheDb({ factory, waitMs: 50 }),
+    deleteDb: () => deleteLocalDb(factory, undefined, 50),
   };
   watchWithExit(boot, deps);
   return {

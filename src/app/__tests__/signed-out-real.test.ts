@@ -9,7 +9,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { claimCache } from '../../core/account.ts';
 import { coldStart, resetBootForTest } from '../../core/boot.ts';
-import { deleteCacheDb } from '../../core/cache.ts';
+import { deleteLocalDb } from '../../platform/exit-basics.ts';
 import { clearAllCollections } from '../../core/store.ts';
 import { fakeIndexedDB } from '../../core/__tests__/idb-fake.ts';
 import { buildInfo } from '../../platform/env.ts';
@@ -102,8 +102,8 @@ describe('真实 auth-js：冷启动时刷新被拒 → 清库 → 回登录页�
     watchWithExit(boot, {
       clearCacheStorage,
       onAuthUser: (fn, out) => onAuthUser(fn, out && ((sid, f) => (trigger.push(events.at(-1) ?? 'none'), out(sid, f)))),
-      onStorageUser: () => () => undefined, currentUserId: () => readSessionUserId(), dropSession: () => takeLocalSession(),
-      onSignedOut: goToAuth, deleteDb: () => deleteCacheDb({ factory, waitMs: 50 }), onSwitched: vi.fn(),
+      onStorageUser: () => () => undefined, currentUserId: () => readSessionUserId(), takeSession: () => takeLocalSession(),
+      onSignedOut: goToAuth, deleteDb: () => deleteLocalDb(factory, undefined, 50), onSwitched: vi.fn(),
     });
     // 主页拿到锁后同步的 ensureSession 先调 getSupabase()，比 whenIdle 早（真实的那条路）
     void createSupabaseTransport().ensureSession().catch(() => undefined);

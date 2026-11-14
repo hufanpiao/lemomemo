@@ -7,8 +7,9 @@ import { coldStart, getBoot, resetBootForTest, type BootResult } from '../../../
 import { clearAllCollections } from '../../../core/store.ts';
 import { fakeIndexedDB } from '../../../core/__tests__/idb-fake.ts';
 import { seed, todo, uid } from '../../../core/__tests__/outbox-fixtures.ts';
-import { DELETE_WAIT_MS, signOutThisDevice } from '../../../platform/sign-out.ts';
-import { defaultExitDeps } from '../data/local.ts';
+import { signOutThisDevice } from '../../../platform/sign-out.ts';
+import { defaultSignOutHereDeps } from '../data/local.ts';
+import { DELETE_WAIT_MS } from '../../../platform/exit-basics.ts';
 
 async function boot(factory: IDBFactory = fakeIndexedDB().factory, reload = vi.fn()): Promise<BootResult> {
   return coldStart({
@@ -65,7 +66,7 @@ afterEach(() => {
 });
 
 describe('退出时清空本机（真 core）', () => {
-  it('先数（封存前能数出来），清理开始就设闸：之后 ack、fail 不再写库，清完库里什么也不剩', async () => {
+  it('先数（封存前能数出来），退出开始（beginExit）就设闸：之后 ack、fail 不再写库，清完库里什么也不剩', async () => {
     const { factory, fake } = fakeIndexedDB();
     const rows = (store: string): number | undefined => fake.dbs.get('planner-v4')?.stores.get(store)?.records.size;
     const b = await boot(factory);
@@ -78,12 +79,13 @@ describe('退出时清空本机（真 core）', () => {
     if (!sending) throw new Error('next');
 
     // 计数在封存之前：数得出来
-    expect(await defaultExitDeps.pendingCount()).toBe(2);
+    expect(await defaultSignOutHereDeps.pendingCount()).toBe(2);
     expect(rows('outbox')).toBe(2);
     expect(rows('todos')).toBe(2);
 
-    // 清理开始：wipe 一调用就同步设闸（不用等它做完）
-    const wiping = defaultExitDeps.wipe?.();
+    // 退出开始：beginExit 同步设闸（设置页 signOutHere 发任何请求之前调；退出整块评审第 1、6 条），再清
+    defaultSignOutHereDeps.beginExit();
+    const wiping = defaultSignOutHereDeps.wipe?.();
     expect(b.switching).toBe(true);
     expect(outbox.isSuspended()).toBe(true);
     expect(cache.isSealed()).toBe(true);
@@ -99,7 +101,7 @@ describe('退出时清空本机（真 core）', () => {
     expect(rows('outbox')).toBe(0);
     expect(rows('todos')).toBe(0);
     // 封存以后数不出来：所以界面一定先数再退出
-    expect(await defaultExitDeps.pendingCount()).toBeNull();
+    expect(await defaultSignOutHereDeps.pendingCount()).toBeNull();
   });
 
   it('清库出错不吞掉（改前语义）：wipe 拒绝，platform 当“库不能用”按库名删库', async () => {
@@ -109,10 +111,10 @@ describe('退出时清空本机（真 core）', () => {
     const { cache } = b;
     if (!cache) throw new Error('boot');
     vi.spyOn(cache, 'clearAll').mockRejectedValue(new Error('写不进'));
-    await expect(defaultExitDeps.wipe?.()).rejects.toThrow('写不进');
+    await expect(defaultSignOutHereDeps.wipe?.()).rejects.toThrow('写不进');
     await signOutThisDevice({
       server: { signOut: async () => ({ serverDone: true }) },
-      steps: { ...defaultExitDeps, clearCacheStorage: async () => undefined, clearLocalSessionIf: async () => true },
+      steps: { ...defaultSignOutHereDeps, clearCacheStorage: async () => undefined, clearLocalSessionIf: async () => true },
       readUserId: () => 'A',
       inTauri: () => false,
     });
@@ -130,7 +132,7 @@ describe('退出时清空本机（真 core）', () => {
     const log: string[] = [];
     const r = await signOutThisDevice({
       server: { signOut: async () => (log.push('signout'), { serverDone: false }) },
-      steps: { ...defaultExitDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSessionIf: async () => { log.push('session'); return true; } },
+      steps: { ...defaultSignOutHereDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSessionIf: async () => { log.push('session'); return true; } },
       readUserId: () => 'A',
       wipeMs: 50,
     });
@@ -159,7 +161,7 @@ describe('退出时清空本机（真 core）', () => {
     let r: { serverDone: boolean } | undefined;
     const running = signOutThisDevice({
       server: { signOut: async () => (log.push('signout'), { serverDone: true }) },
-      steps: { ...defaultExitDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSessionIf: async () => { log.push('session'); return true; } },
+      steps: { ...defaultSignOutHereDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSessionIf: async () => { log.push('session'); return true; } },
       readUserId: () => 'A',
       wipeMs: 50,
     }).then((v) => (r = v));

@@ -151,7 +151,6 @@ export const ko = {
   'settings.delete.busy': '탈퇴 처리 중… 이 기기의 데이터를 지우고 있어요', // R-106 B1 第一遍已审（10-31）
   'settings.delete.confirmRequired': '“{word}”라고 정확히 입력해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见改过
   'settings.delete.admin': '관리자 계정은 콘솔에서 처리해 주세요', // R-106 B1 第一遍已审（10-31）
-  'settings.busy': '잠시만요…', // R-106 B1 第一遍已审（10-30）；照 onboarding consent.busy
   'settings.signingOut': '로그아웃하는 중… 이 기기의 데이터를 지우고 있어요. 인터넷이 느리면 10초 넘게 걸릴 수도 있어요.', // R-106 B1 第一遍已审（10-30）
   'settings.cancel': '취소', // R-106 B1 第一遍已审（10-30）；照 shared common.cancel
   'settings.err.offline': '지금 인터넷에 연결되어 있지 않아요. 연결한 뒤 다시 시도해 주세요', // R-106 B1 第一遍已审（10-30）；前半照 shared error.offline

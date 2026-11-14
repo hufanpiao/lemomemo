@@ -2,7 +2,8 @@
 // 删库、清理顺序、各步上限、①④ 总超时、晚到只挂在 signOut 上（原在 auth/__tests__/local-exit.test.ts、settings 的 local.test.ts、settings-api.test.ts）
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as session from '../session.ts';
-import { defaultExitSteps, deleteLocalDb, signOutThisDevice, withTimeout, wipeThisDevice, type ExitSteps } from '../sign-out.ts';
+import { defaultExitSteps, signOutThisDevice, type ExitSteps } from '../sign-out.ts';
+import { deleteLocalDb, wipeThisDevice, withTimeout } from '../exit-basics.ts';
 
 afterEach(() => {
   vi.useRealTimers();

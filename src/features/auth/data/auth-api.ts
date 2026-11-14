@@ -8,7 +8,6 @@ import type { ApiError } from '../../../../shared/schema/api.ts';
 import { isEntryErrorCode, type EntryErrorCode } from '../../../../shared/schema/entry-codes.ts';
 import { budgetLeft, logoutReplaced, sessionReplaced, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
-import { readStoredAccessToken } from './local-exit.ts';
 
 export type AuthLocale = 'zh-CN' | 'ko-KR';
 
@@ -157,7 +156,7 @@ export interface AuthApi {
    * ① 删本会话那一行 devices（del 策略只许删本会话那一行；断网、已被删都不挡退出）；
    * ② signOut({scope: 'local'})，只吊销本会话，不动别的设备。
    * 不先 getSession 预检；不是 ok 的一律回错（含断网、令牌过期、客户端拿不到），调用方据此兜底清本机会话。
-   * 本机库和缓存由调用方接着清（local-exit.ts）。
+   * 本机库和缓存由调用方接着清（platform/sign-out.ts 的 signOutThisDevice）。
    * prior（K6-signout-lib，useSessionGate 经 signOutThisDevice 传入）：删行用 prior.sid（退出一开头记下的，不在这时现读）；
    * 拿到客户端、删完行以后、紧贴 signOut 之前再读一次本机会话，已换成别的标签页的新会话就不调 signOut（它会吊销那个新会话），
    * 改用 prior.token 直接 logout（logoutReplaced）。不传 prior 时按原来的：删行的 sid 从本机令牌现读，不做这一判断
@@ -166,7 +165,7 @@ export interface AuthApi {
 }
 
 /** 从 access token 的 payload 里读 session_id（找本会话那一行 devices 用）：只在 platform/session.ts 留一份（K4 复核建议 2） */
-import { sessionIdOfToken } from '../../../platform/session.ts';
+import { readSessionAccessToken, sessionIdOfToken } from '../../../platform/session.ts';
 export { sessionIdOfToken };
 
 /** devices 表的类型还没进生成的 Database（K1 在补），删行只用到这一小段 */
@@ -179,7 +178,7 @@ interface DevicesDeleteDb {
 
 export const INVITE_FN = 'invite-signup';
 
-export function createAuthApi(getDb: () => Promise<Db>, readToken: () => string | null = readStoredAccessToken): AuthApi {
+export function createAuthApi(getDb: () => Promise<Db>, readToken: () => string | null = () => readSessionAccessToken()): AuthApi {
   async function run(fn: (db: Db) => Promise<Result>): Promise<Result> {
     try {
       return await fn(await getDb());

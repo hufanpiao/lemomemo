@@ -23,8 +23,9 @@ import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import { canonicalTz, tzLabel } from '../../../../shared/i18n/tz-label.ts';
 import { isEntryErrorCode, type EntryErrorCode } from '../../../../shared/schema/entry-codes.ts';
 import { readSessionAccessToken, readSessionId } from '../../../platform/session.ts';
-import { budgetLeft, logoutReplaced, sessionReplaced, withTimeout, type PriorSession } from '../../../platform/sign-out.ts';
+import { budgetLeft, logoutReplaced, sessionReplaced, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
+import { withTimeout } from '../../../platform/exit-basics.ts';
 
 // status 的判断（parseStatus、statusError）和调用（probeAccountStatus）在 platform/account-status.ts，主 App 收到 account_disabled 时也用它
 export { ACCOUNT_FN, parseStatus, STATUS_TIMEOUT_MS, statusError, type AccountStatus };

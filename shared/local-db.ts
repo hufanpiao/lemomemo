@@ -3,7 +3,7 @@
 // （原来 src/sw/pending.ts、platform/exit-basics.ts、core/pending-actions.ts、sw/push-actions.ts 各一份，靠测试逐项核对）
 // 不 import 任何东西：SW 包和首屏都引它（tests/build/local-db-shared.test.ts 钉住）
 
-/** 本机库名（core/cache.ts 的 DB_NAME、platform/exit-basics.ts 的删库、SW 写 pending_actions 都用它） */
+/** 本机库名（core/cache.ts 开库、platform/exit-basics.ts 的删库、SW 写 pending_actions 都用它） */
 export const LOCAL_DB_NAME = 'planner-v4';
 /** 记“这个库归哪个账号”的仓；唯一一条记录的键是 OWNER_KEY，值是 user_id */
 export const OWNER_STORE = 'owner';

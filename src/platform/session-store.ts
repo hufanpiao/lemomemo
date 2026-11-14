@@ -296,7 +296,8 @@ export function desktopSessionError(): DesktopSessionError | null {
   return installError;
 }
 
-const OLD_SESSION_KEY = /^sb-.+-auth-token(-.*)?$/;
+/** supabase 会话键和它的附属键（`sb-*-auth-token`、`…-code-verifier`、`…-user`）：只在这里定义，platform/session.ts 也用它 */
+export const SESSION_KEY_FAMILY_RE = /^sb-.+-auth-token(-.*)?$/;
 
 /** 装上以后删掉 localStorage 里以前（会话还存在 WebView2 的 localStorage 时）留下的 supabase 会话键（安全审查建议 ②）。不抛错 */
 function dropOldLocalSessionKeys(): void {
@@ -305,7 +306,7 @@ function dropOldLocalSessionKeys(): void {
     const old: string[] = [];
     for (let i = 0; i < ls.length; i++) {
       const k = ls.key(i);
-      if (k !== null && OLD_SESSION_KEY.test(k)) old.push(k);
+      if (k !== null && SESSION_KEY_FAMILY_RE.test(k)) old.push(k);
     }
     for (const k of old) ls.removeItem(k);
   } catch {

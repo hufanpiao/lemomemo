@@ -2,7 +2,7 @@
 import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import type { AccountApi, AccountResult, ExportFile, ExportPart } from '../data/account-api.ts';
-import type { AccountLeaveNotice } from '../data/account-exit.ts';
+import { type AccountLeaveNotice } from '../../../core/account-leave.ts';
 import type { RecentExportResult } from '../data/recent-exports.ts';
 import type { SettingsDeps } from '../hooks/useSettingsPage.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';

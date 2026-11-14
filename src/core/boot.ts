@@ -8,20 +8,22 @@ import { buildInfo } from '../platform/env.ts';
 import { onUpgradeRequired } from '../platform/http.ts';
 import { clearCacheStorage } from '../platform/session.ts';
 import { clearReauth, readReauth } from '../platform/auth-loss-store.ts';
+import { disconnectPushLazy } from '../platform/push-disconnect.ts';
 import { requestAppUpdate } from '../platform/native-bridge.ts';
 import { reloadPage, updateAttemptStore } from '../platform/sw-register.ts';
 import { rlog } from '../platform/run-log-api.ts';
 import { clock } from '../platform/clock.ts';
-import { forgetAccountLocal } from '../platform/exit-basics.ts';
+import { deleteLocalDb, wipeThisDevice } from '../platform/exit-basics.ts';
 import { ensureAccount } from './account.ts';
-import { deleteCacheDb, openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
+import { openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
 import { cacheErrKind, type UpgradeReport } from './cache-migrations.ts';
-import { DRAFTS, OUTBOX, PENDING_ACTIONS, VAULT_DRAFTS } from './cache-schema.ts';
+import { DRAFTS, OUTBOX, VAULT_DRAFTS } from './cache-schema.ts';
 import { PARENT_OF } from './outbox-logic.ts';
 import { createOutbox, prunePendingActions, type Outbox, type OutboxBootReport, type OutboxItem, type OutboxOptions } from './outbox.ts';
 import { rewriteRow } from './outbox-rows.ts';
 import { clearAllCollections, collection, readonlyIds } from './store.ts';
 import { createUpgradeCenter, type UpgradeCenter, type UpgradeDeps } from './upgrade.ts';
+import { PENDING_STORE } from '../../shared/local-db.ts';
 
 /** 软删除的行在本机最多留 30 天（和服务器的 30 天清理同一规则） */
 export const LOCAL_PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
@@ -36,8 +38,10 @@ export const BLOCKED_PROMPT_DELAY_MS = VERSION_CLOSE_WAIT_MS + 500;
 export interface BootOptions {
   /** 当前登录的账号（platform/session.ts 的 readSessionUserId，离线也能读）；没登录为 null：不建本机库，直接返回 signed_out */
   userId: string | null;
-  /** 换账号时清 Cache Storage；默认 platform/session.ts 的 clearCacheStorage */
+  /** 换账号、没有会话清本机时清 Cache Storage；默认 platform/session.ts 的 clearCacheStorage */
   clearCacheStorage?: () => Promise<void>;
+  /** 测试用：换账号、没有会话清本机时断开浏览器推送（默认 platform/push-disconnect.ts 的 disconnectPushLazy） */
+  disconnectPush?: () => Promise<void>;
   appVersion?: string;
   now?: () => number;
   /** 测试用：换库名、换 IDBFactory、换迁移表 */
@@ -85,7 +89,7 @@ export interface BootResult {
   /**
    * 设闸是因为本机会话没了：本页的 SIGNED_OUT、别的标签页退出（watchAccount 设闸时同步标上），以及被移除、停用、冷静期、注销后离开
    * （core/device-exit.ts 退出时标上）。只有换账号不标。
-   * 设置页申请注销后确认不了办没办成时，只有闸是这一路设的才另记 deletion_unsure（features/settings/data/account-exit.ts），
+   * 设置页申请注销后确认不了办没办成时，只有闸是这一路设的才另记 deletion_unsure（core/account-leave.ts），
    * 免得换账号时这条原因在 sessionStorage 留着、后来正常退出时冒出来（代码审查建议 1）
    */
   sessionGone?: boolean;
@@ -142,7 +146,7 @@ export async function localUnsentCount(boot: BootResult | null = current): Promi
   if (!cache || !outbox || cache.isClosed() || cache.isSealed()) return null;
   try {
     await outbox.refresh();
-    const stores = [OUTBOX, DRAFTS, VAULT_DRAFTS, PENDING_ACTIONS];
+    const stores = [OUTBOX, DRAFTS, VAULT_DRAFTS, PENDING_STORE];
     return await cache.tx(stores, 'readonly', async (t) => {
       let n = 0;
       for (const s of stores) n += (await t.getAll(s)).length;
@@ -213,10 +217,13 @@ export async function coldStart(opts: BootOptions): Promise<BootResult> {
     // 没有记号或已失效：照旧删库，记号一起删
     result.status = 'signed_out';
     if ((opts.readReauth ?? readReauth)(now()) !== null) return result;
-    clearReauth();
-    // 外观、隐私记同意、日志上传队列一起清（架构 0.38 第 68 条 ⑤）：没有会话时哪个账号的都不该留
-    forgetAccountLocal(null);
-    await deleteCacheDb({ factory: opts.cacheOptions?.factory, name: opts.cacheOptions?.name });
+    // 走清本机的唯一入口（退出整块评审第 2 条）：记号、按库名删库、断开推送、运行时缓存、外观、隐私记同意、日志上传队列一起清
+    // （架构 0.38 第 68 条 ⑤）：没有会话时哪个账号的都不该留。没有开着的库，不传 wipe
+    await wipeThisDevice({
+      deleteDb: () => deleteLocalDb(opts.cacheOptions?.factory, opts.cacheOptions?.name),
+      clearCacheStorage: opts.clearCacheStorage ?? clearCacheStorage,
+      disconnectPush: opts.disconnectPush ?? (() => disconnectPushLazy()),
+    });
     return result;
   }
   const userId = opts.userId;
@@ -311,7 +318,10 @@ async function loadCache(
   });
 
   // 换账号（4.1、0.38 第 17 条）：在读写任何东西之前比对 owner，不同就清空整库和运行时缓存，旧账号的 outbox 不发
-  result.switchedUser = await ensureAccount(cache, userId, { clearCacheStorage: opts.clearCacheStorage ?? clearCacheStorage });
+  result.switchedUser = await ensureAccount(cache, userId, {
+    clearCacheStorage: opts.clearCacheStorage ?? clearCacheStorage,
+    ...(opts.disconnectPush ? { disconnectPush: opts.disconnectPush } : {}),
+  });
   // 登录过期后重新登录（R-382 4.1a 第 2 点）：同一账号库原样用（same），换了账号上面已在同一个事务里清空（switched）；两种都删掉 lemo.reauth。
   // lemo.authloss 里别的账号的记录由 main.tsx 上传那一步丢掉（按 uid_h 匹配）
   clearReauth();

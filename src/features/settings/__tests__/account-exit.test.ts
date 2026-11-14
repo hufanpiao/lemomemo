@@ -1,11 +1,11 @@
-// 注销成功、导出时发现停用或冷静期后离开本机（data/account-exit.ts；R-256 ⑤；架构 0.29 续第 131 条②；TC-B1-98 的客户端部分）
+// 注销成功、导出时发现停用或冷静期后离开本机（core/account-leave.ts；R-256 ⑤；架构 0.29 续第 131 条②；TC-B1-98 的客户端部分）
 // 和被移除同一套（core/device-exit.ts）：清本机库（wipeLocal）→ 清日志队列 → 广播 reset → 只删发请求用的那个会话 → 回登录页带原因
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { wipeLocal } from '../../../core/account.ts';
 import type { BootResult } from '../../../core/boot.ts';
 import { resetExitForTest } from '../../../core/device-exit.ts';
 import { clearLocalSessionIf, readSessionUserId } from '../../../platform/session.ts';
-import { createLeaveAccount, type AccountLeaveDeps } from '../data/account-exit.ts';
+import { type AccountLeaveDeps, createLeaveAccount } from '../../../core/account-leave.ts';
 
 function deps(boot: Partial<BootResult> | null = { switching: false, userId: 'u1' }) {
   const order: string[] = [];

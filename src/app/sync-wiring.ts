@@ -25,8 +25,8 @@ export { ACTIVE_RELOAD_KEY, ACTIVE_RELOAD_WINDOW_MS } from './sync-disabled.ts';
 /** 探测、限次、退出原因那几项（setExitNotice、probeAccount、readSession、reload、reloadMarks、now、onSyncPaused、log）在 SyncDisabledDeps */
 export interface WireSyncDeps extends SyncDisabledDeps {
   transport: SyncTransport;
-  /** platform/session.ts 的 clearCacheStorage（只删运行时缓存） */
-  clearCacheStorage(): Promise<void>;
+  /** 测试用：换掉清运行时缓存（默认 platform/session.ts 的 clearCacheStorage，看退出时清没清本机） */
+  clearCacheStorage?: () => Promise<void>;
   /** platform/session.ts 的 clearLocalSessionIf：本机会话还是被拒那次请求用的会话才删（收到事件时、回登录页前各一次） */
   // 返回删没删成（A-1）。这里不看返回值：之后的 goToAuth 按 session-store 的删除状态决定重新载入还是显示“退出没完成，点重试”
   clearLocalSessionIf(sessionId: string | null): Promise<boolean>;
@@ -74,10 +74,11 @@ function exitDepsOf(boot: BootResult, deps: WireSyncDeps, post: (m: SyncMessage)
     if (notice === 'removed' && now !== null && now !== sid) return;
     deps.setExitNotice(notice, sid);
   };
+  const caches = deps.clearCacheStorage;
   return {
+    ...defaultExitDeps,
     getBoot: () => boot,
-    wipe: (b) => wipeLocal(b, { clearCacheStorage: deps.clearCacheStorage, ...(deps.log ? { log: deps.log } : {}) }),
-    keep: defaultExitDeps.keep,
+    ...(caches ? { wipe: (b: BootResult, log?: (act: string) => void) => wipeLocal(b, { clearCacheStorage: caches, ...(log ? { log } : {}) }) } : {}),
     clearLocalSessionIf: (sid) => deps.clearLocalSessionIf(sid),
     clearLogs: () => deps.clearLogs?.(),
     broadcastReset: (_userId, exit) => post({ type: 'reset', ...exit }),

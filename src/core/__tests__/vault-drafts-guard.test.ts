@@ -45,8 +45,8 @@ describe('vault_drafts 禁止写入（审查第 12 条）', () => {
 
   it('白名单里各文件只按现在的用法用：cache.ts 只放进草稿仓集合，boot.ts 只在 readonly 事务里计数，其余只在注释里', () => {
     expect(uses('src/core/cache.ts')).toEqual(['  const draftStores = new Set([DRAFTS, VAULT_DRAFTS]);']);
-    expect(uses('src/core/boot.ts')).toEqual(['    const stores = [OUTBOX, DRAFTS, VAULT_DRAFTS, PENDING_ACTIONS];']);
-    expect(read('src/core/boot.ts')).toMatch(/const stores = \[OUTBOX, DRAFTS, VAULT_DRAFTS, PENDING_ACTIONS\];\r?\n\s*return await cache\.tx\(stores, 'readonly'/);
+    expect(uses('src/core/boot.ts')).toEqual(['    const stores = [OUTBOX, DRAFTS, VAULT_DRAFTS, PENDING_STORE];']);
+    expect(read('src/core/boot.ts')).toMatch(/const stores = \[OUTBOX, DRAFTS, VAULT_DRAFTS, PENDING_STORE\];\r?\n\s*return await cache\.tx\(stores, 'readonly'/);
     for (const f of ['src/core/cache-migrations.ts', 'src/features/settings/data/local.ts']) expect(uses(f)).toEqual([]);
     // 字符串字面量 'vault_drafts' 只在 cache-schema.ts 定义处出现（别处不许绕开常量直接写仓名）
     for (const f of Object.keys(ALLOWED)) {

@@ -6,32 +6,30 @@ import { saveFile } from '../../../platform/save-file.ts';
 import { readSessionEmail } from '../../../platform/session.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { createAccountApi, EXPORT_MIME, type AccountApi, type ExportFile } from '../data/account-api.ts';
-import {
-  createFollowSignOut, createLeaveAccount, defaultAccountLeaveDeps, leaveForDisabled, type DisabledLeaveDeps, type LeaveAccount,
-} from '../data/account-exit.ts';
+import { createFollowSignOut, createLeaveAccount, defaultAccountLeaveDeps, type DisabledLeaveDeps, type LeaveAccount, leaveForDisabled } from '../../../core/account-leave.ts';
 import { createRecentExportsApi, type RecentExportsApi } from '../data/recent-exports.ts';
-import { defaultExitDeps, readLocalDeviceId } from '../data/local.ts';
+import { defaultSignOutHereDeps, readLocalDeviceId } from '../data/local.ts';
 import { createSettingsApi, type SettingsApi } from '../data/settings-api.ts';
 import type { AccountActionDeps } from './useAccountActions.ts';
 import type { HotkeyApi } from './useQuickAddHotkey.ts';
 import { useDevices } from './useDevices.ts';
 import { useLocaleSwitch } from './useLocaleSwitch.ts';
-import { useSessionExit, type ExitDeps } from './useSessionExit.ts';
+import { useSessionExit, type SignOutHereDeps } from './useSessionExit.ts';
 
 export type { SettingsApi } from '../data/settings-api.ts';
 export { cardsOf, orderSections, type SettingsCardId, type SettingsSectionId } from '../data/sections.ts';
-export type { ExitDeps, ExitNotice } from './useSessionExit.ts';
+export type { SignOutHereDeps, SignOutNotice } from './useSessionExit.ts';
 
 export interface SettingsDeps {
   /** R-297 快速记录热键（默认 platform/desktop-hotkey.ts；要传稳定的对象） */
   hotkey?: HotkeyApi;
   api?: SettingsApi;
-  exit?: ExitDeps;
+  exit?: SignOutHereDeps;
   /** account 函数（导出、注销） */
   account?: AccountApi;
-  /** 注销成功、账号停用或冷静期、会话不认（removed）时离开本机（默认 data/account-exit.ts，即 core/device-exit.ts 的 exitDevice） */
+  /** 注销成功、账号停用或冷静期、会话不认（removed）时离开本机（默认 core/account-leave.ts，即 core/device-exit.ts 的 exitDevice） */
   leaveAccount?: LeaveAccount;
-  /** 请求发现本机已经没有会话时离开本机（默认 data/account-exit.ts 的 createFollowSignOut，同别的标签页退出） */
+  /** 请求发现本机已经没有会话时离开本机（默认 core/account-leave.ts 的 createFollowSignOut，同别的标签页退出） */
   followSignOut?: () => void;
   /** 本机 meta 里的设备行 id（默认 data/local.ts 的 readLocalDeviceId） */
   readDeviceId?: () => Promise<string | null>;
@@ -45,8 +43,6 @@ export interface SettingsDeps {
   redirectMs?: number;
   /** “退出这台设备”服务器部分的总超时 */
   exitTimeoutMs?: number;
-  /** 跳登录页前最多等清理多久 */
-  leaveWaitMs?: number;
   /** 设置 › 账号标题下的当前登录邮箱（R-275；默认 platform/session.ts 的 readSessionEmail，只读本机会话、不联网；读不到为 null，这一行不显示） */
   readEmail?: () => string | null;
   /** 测试用：换掉 account_disabled 的探测（默认 platform/account-status.ts 的 exitForDisabled） */
@@ -54,12 +50,11 @@ export interface SettingsDeps {
 }
 
 export function useSettingsPage(deps: SettingsDeps = {}) {
-  const exitDeps = deps.exit ?? defaultExitDeps;
+  const exitDeps = deps.exit ?? defaultSignOutHereDeps;
   const api = useMemo(() => deps.api ?? createSettingsApi(getSupabase, (sid) => exitDeps.clearLocalSessionIf(sid)), [deps.api, exitDeps]);
   const exit = useSessionExit(api, exitDeps, {
     ...(deps.redirectMs === undefined ? {} : { redirectMs: deps.redirectMs }),
     ...(deps.exitTimeoutMs === undefined ? {} : { exitTimeoutMs: deps.exitTimeoutMs }),
-    ...(deps.leaveWaitMs === undefined ? {} : { leaveWaitMs: deps.leaveWaitMs }),
   });
   // R-382：设置页的“被移除”记录成 settings 一路（lemo.authloss 的 path）
   const leave = useMemo(() => deps.leaveAccount ?? createLeaveAccount({ ...defaultAccountLeaveDeps, authPath: 'settings' }), [deps.leaveAccount]);

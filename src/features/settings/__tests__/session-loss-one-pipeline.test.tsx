@@ -6,11 +6,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import type { BootResult } from '../../../core/boot.ts';
-import { defaultExitDeps, exitDevice, resetExitForTest, type ExitDeps } from '../../../core/device-exit.ts';
-import { createLeaveAccount } from '../data/account-exit.ts';
+import { beginExit, CONFIRM_REMOVED_TIMEOUT_MS, defaultExitDeps, exitDevice, exitOnSessionLoss, exitStarted, resetExitForTest, type ExitDeps } from '../../../core/device-exit.ts';
+import { createFollowSignOut, createLeaveAccount } from '../../../core/account-leave.ts';
 import { zh } from '../i18n/zh.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';
-import { confirmWith, fail, fakeApi, fakeExit, now, openAccount, rowAt } from './fakes.tsx';
+import { clickSignOut, confirmWith, deferred, fail, fakeApi, fakeExit, now, openAccount, renderPage, rowAt } from './fakes.tsx';
 
 beforeEach(() => {
   uiStore.getState().setLocale('zh-CN');
@@ -77,5 +77,62 @@ describe('设置页的会话丢失交给 exitDevice', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(wipe).toHaveBeenCalledOnce();
     expect(exit.wipe).not.toHaveBeenCalled();
+  });
+});
+
+describe('本人退出也算“这一页已经在退出”（退出整块评审第 1 条）', () => {
+  it('beginExit 之后：同步层的 removed、本页 SIGNED_OUT、别的标签页退出、设置页的 signed_out 都不再查服务器、清库、跳转', async () => {
+    const boot = { userId: 'u1', switching: false, cache: null, outbox: null } as unknown as BootResult;
+    const wipe = vi.fn(async () => undefined);
+    const goToAuth = vi.fn();
+    const resolveAuthLoss = vi.fn(async () => 'removed' as const);
+    const deps: ExitDeps = { ...defaultExitDeps, getBoot: () => boot, wipe, goToAuth, resolveAuthLoss, broadcastReset: () => undefined, clearLocalSessionIf: async () => true, keep: () => true };
+    beginExit(boot);
+    expect(boot.switching).toBe(true);
+    expect(exitStarted(boot)).toBe(true);
+    await exitDevice({ reason: 'removed', sid: 's-me', path: 'outbox' }, deps);
+    exitOnSessionLoss({ here: true, sid: 's-me', failure: null }, deps);
+    exitOnSessionLoss({ here: false }, deps);
+    createFollowSignOut(deps)();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(resolveAuthLoss).not.toHaveBeenCalled();
+    expect(wipe).not.toHaveBeenCalled();
+    expect(goToAuth).not.toHaveBeenCalled();
+  });
+
+  it('设置页点退出：任何请求之前先 beginExit（删本机行还没回来时同步层再报被移除也不会另清一遍）', async () => {
+    const { exit } = fakeExit();
+    const row = deferred();
+    const api = fakeApi({ deleteOwnDevice: vi.fn(() => row.promise) });
+    await renderPage(api, exit);
+    await clickSignOut();
+    await waitFor(() => expect(api.deleteOwnDevice).toHaveBeenCalled());
+    expect(exit.beginExit).toHaveBeenCalledOnce();
+    expect(exit.beginExit.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.deleteOwnDevice).mock.invocationCallOrder[0] ?? 0);
+    row.resolve();
+    await waitFor(() => expect(exit.goToAuth).toHaveBeenCalled());
+  });
+});
+
+describe('被移除查服务器有总上限（退出整块评审第 4 条）', () => {
+  it('resolveAuthLoss 一直不回（分包、哈希、请求卡住）：到 CONFIRM_REMOVED_TIMEOUT_MS 按 expired 只退出、不清库', async () => {
+    vi.useFakeTimers();
+    try {
+      const U = '11111111-1111-4111-8111-111111111111';
+      const S = '22222222-2222-4222-8222-222222222222';
+      const boot = { userId: U, switching: false, cache: null, outbox: null } as unknown as BootResult;
+      const wipe = vi.fn(async () => undefined);
+      const goToAuth = vi.fn();
+      const deps: ExitDeps = {
+        ...defaultExitDeps, getBoot: () => boot, wipe, goToAuth, broadcastReset: () => undefined, clearLocalSessionIf: async () => true,
+        resolveAuthLoss: () => new Promise(() => undefined),
+      };
+      void exitDevice({ reason: 'removed', sid: S, path: 'outbox' }, deps);
+      await vi.advanceTimersByTimeAsync(CONFIRM_REMOVED_TIMEOUT_MS);
+      expect(goToAuth).toHaveBeenCalledWith('expired', S);
+      expect(wipe).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

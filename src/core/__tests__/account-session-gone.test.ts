@@ -1,5 +1,5 @@
 // BootResult.sessionGone（代码审查建议 1）：watchAccount 只在“会话没了”设闸时标上——本页的 SIGNED_OUT、别的标签页退出；
-// 换账号不标。设置页申请注销后确认不了时，只有这一路设的闸才另记 deletion_unsure（features/settings/data/account-exit.ts）
+// 换账号不标。设置页申请注销后确认不了时，只有这一路设的闸才另记 deletion_unsure（core/account-leave.ts）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getBoot, resetBootForTest } from '../boot.ts';
 import { clearAllCollections } from '../store.ts';

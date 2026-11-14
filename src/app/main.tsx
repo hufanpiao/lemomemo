@@ -9,7 +9,7 @@ import '../styles/skins/simple.css';
 import '../styles/skins/glass.css';
 import '../styles/base.css';
 import { fromUiLocale, LOCALE_STORAGE_KEY, pickLocale, toUiLocale } from '../../shared/i18n/pick-locale.ts';
-import { watchAccount, wipeLocal } from '../core/account.ts';
+import { watchAccount } from '../core/account.ts';
 import { defaultExitDeps, exitOnSessionLoss, REAUTH_GRACE_MS, type ExitDeps } from '../core/device-exit.ts';
 import { hasAuthLoss, readReauth } from '../platform/auth-loss-store.ts';
 import { coldStart, type BootResult } from '../core/boot.ts';
@@ -188,7 +188,6 @@ async function start(): Promise<void> {
   const lossExit: ExitDeps = {
     ...defaultExitDeps,
     getBoot: () => boot,
-    wipe: (b) => wipeLocal(b, { log: logEvent }),
     clearLogs,
     broadcastReset: () => undefined,
     log: logEvent,
@@ -199,7 +198,7 @@ async function start(): Promise<void> {
     onStorageUser: (fn) => onSessionStorageChange(fn),
     currentUserId: () => readSessionUserId(),
     // 本页收到 SIGNED_OUT：判断会话归谁的同一刻就删本机会话，回登录页前只在会话还是那一个时再删（K6-signedout-sugg2 ①）
-    dropSession: () => takeLocalSession(),
+    takeSession: () => takeLocalSession(),
     // R-382：别的标签页删了会话，等它写好 lemo.reauth 再判断是登录过期还是退出了
     onSessionLost: (loss) => exitOnSessionLoss(loss, lossExit, REAUTH_GRACE_MS),
     // 清库失败（onFailed 不填）同样重新载入：冷启动会在读写任何东西之前再清一次，再失败就降级成 unavailable、不渲染缓存
@@ -267,7 +266,7 @@ async function start(): Promise<void> {
         })
       : null;
     wireSync(boot, {
-      transport, clearCacheStorage, goToAuth, platform, log: logEvent,
+      transport, goToAuth, platform, log: logEvent,
       // 第二个参数是 sid（被拒那次请求的会话），不是 session 的 setExitNotice 的 storage，要包一层
       setExitNotice: (n, sid) => setExitNotice(n, undefined, { sid: sid ?? null }),
       // 被移除、停用：一收到就删被拒那次请求的会话，回登录页前只在会话还是那一个时再删（K6-sugg3 ①；sid 必填，K6-sugg5 ②）
