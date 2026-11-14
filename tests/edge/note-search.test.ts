@@ -46,7 +46,7 @@ function world(over: Partial<Deps> = {}, embedRes: EmbedResult = { ok: true, vec
 }
 
 const req = (body: unknown, uid = A) => new Request('http://x/note-search', {
-  method: 'POST', headers: { authorization: `Bearer ${jwtFor(uid)}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
+  method: 'POST', headers: { authorization: `Bearer ${jwtFor(uid, null, T0)}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
 });
 
 describe('note-search', () => {
@@ -119,6 +119,21 @@ describe('note-search', () => {
     const w = world({ config: async () => ({ embedModel: null, searchDailyDefault: 200 }), embedder: () => null });
     expect(await (await handle(req(q), w.deps)).json()).toEqual({ fallback: 'timeout' });
     expect(w.limits).toHaveLength(1);
+  });
+
+  const disabled = () => world({ authenticate: async () => ({ ok: false, response: new Response('{"error":"account_disabled"}', { status: 403 }) }) });
+  it('TC-B1-10 note-search：管理员停用的账号回 403 account_disabled，不扣次数、不调模型', async () => {
+    const w = disabled();
+    const r = await handle(req({ q: '牙医', scope: 'main' }), w.deps);
+    expect(r.status).toBe(403);
+    expect(await r.json()).toEqual({ error: 'account_disabled' });
+    expect([w.limits.length, w.calls.length]).toEqual([0, 0]);
+  });
+  it('TC-B1-10 note-search：没有 profiles 行的账号回 403 account_disabled，不查向量', async () => {
+    const w = disabled();
+    const r = await handle(req({ q: '牙医', scope: 'main' }), w.deps);
+    expect(await r.json()).toMatchObject({ error: 'account_disabled' });
+    expect(w.near).toEqual([]);
   });
 
   it('查库出错：503 try_later；日志只有码，不带查询文字', async () => {

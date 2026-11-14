@@ -91,6 +91,22 @@ describe('ai-embed', () => {
     expect(w.later).toEqual([{ items: [item(2)], at: T0 + VAULT_LATER_MS, bump: false }]);
   });
 
+  it('TC-B1-109 ai-embed：管理员停用（disabled_at 有值）的账号跳过', async () => {
+    const w = world({ queue: new Map([[A, [item(1)]], [B, [item(2)]]]),
+      src: new Map<string, Src>([[keyOf(item(1)), { state: 'ok', title: 'a', text: 'b' }], [keyOf(item(2)), { state: 'ok', title: 'c', text: 'd' }]]) });
+    w.deps.isUsable = async (u) => u !== A;
+    await handle(cron(), w.deps);
+    expect(w.written.map((x) => x.uid)).toEqual([B]);
+    expect(w.later).toEqual([{ items: [item(1)], at: T0 + LATER_MS, bump: false }]);
+  });
+  it('TC-B1-109 ai-embed：注销冷静期（disabled_reason = deletion）的账号跳过', async () => {
+    const w = world();
+    w.deps.isUsable = async () => false;
+    const r = await handle(cron(), w.deps);
+    expect([w.calls.length, w.written.length]).toEqual([0, 0]);
+    expect(((await r.json()) as { skipped_users: number }).skipped_users).toBe(1);
+  });
+
   it('不同意的人：整批推后 1 天、不读源头不送；别人照常', async () => {
     const w = world({
       queue: new Map([[B, [item(5)]], [A, [item(1)]]]),

@@ -22,12 +22,14 @@ vi.mock('../../../platform/run-log-api.ts', async (orig) => ({ ...(await orig<ob
 const NOW = Date.UTC(2026, 10, 14, 3);
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const live = { deleted_at: null, undone: false, updated_at: NOW };
+type R = { id: string } & Record<string, unknown>;
+const put = (name: string, rows: R[]) => collection<R>(name).upsert(rows);
 
 function seed(ai = true) {
-  collection('events').upsert([{ id: id(1), ...live, title: '看牙医', location: '江南站', note: '', date: '2026-11-10', time: '15:00' }]);
-  collection('todos').upsert([{ id: id(2), ...live, title: '预约洗牙', note: '', project: '', due: null, done: false }]);
-  collection('notes').upsert([{ id: id(3), ...live, title: '牙医', body: '隐私', is_private: true, created_at: NOW }]);
-  collection('settings').upsert([{ id: 'set-ai', key: 'ai.enabled', value: ai, deleted_at: null, updated_at: NOW }]);
+  put('events', [{ id: id(1), ...live, title: '看牙医', location: '江南站', note: '', date: '2026-11-10', time: '15:00' }]);
+  put('todos', [{ id: id(2), ...live, title: '预约洗牙', note: '', project: '', due: null, done: false }]);
+  put('notes', [{ id: id(3), ...live, title: '牙医', body: '隐私', is_private: true, created_at: NOW }]);
+  put('settings', [{ id: 'set-ai', key: 'ai.enabled', value: ai, deleted_at: null, updated_at: NOW }]);
 }
 
 beforeEach(() => {
