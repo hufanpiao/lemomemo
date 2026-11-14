@@ -77,9 +77,10 @@ describe('机型信息页（启动图核对）', () => {
     expect(mod.indexUrl('https://preview.lemomemo.com/diag/startup?utm_source=x#a')).toBe(want);
   });
 
-  it('?diag=1 确实不会命中 SW 预缓存：precacheAndRoute 没配 ignoreURLParametersMatching，参数名也不在 Workbox 默认忽略名单里', () => {
+  it('?diag=1 确实不会命中 SW 预缓存：PrecacheRoute 没配 ignoreURLParametersMatching，参数名也不在 Workbox 默认忽略名单里', () => {
     const sw = readFileSync(join(ROOT, 'src', 'sw', 'sw.ts'), 'utf8');
-    expect(sw).toMatch(/precacheAndRoute\(self\.__WB_MANIFEST\)/);
+    // 11-14 SW 方案 A 起用 PrecacheController + PrecacheRoute（不带第二个参数），不再是 precacheAndRoute
+    expect(sw).toMatch(/registerRoute\(new PrecacheRoute\(precache\)\)/);
     expect(sw).not.toMatch(/ignoreURLParametersMatching|urlManipulation/);
     // workbox-precaching 的默认忽略名单（utils/generateURLVariations.js）：/^utm_/、/^fbclid$/
     const params = [...new URL(mod.indexUrl('https://x.test/diag/startup.html')).searchParams.keys()];

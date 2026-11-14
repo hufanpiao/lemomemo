@@ -3,7 +3,7 @@
 // 版本门：查（不在 shared/version-gate-list.ts 的免查名单里：扣每天 50 次、写 private.counters，和 ai-parse 一样）。
 // 用到的库对象：service role：private.account_usable、session_alive（经 _shared/auth.ts）、profiles、settings、app_config（同意、开关、配置、版本门）、
 //   private.counters、private.take_rate、private.ai_state、logs（经 _shared/ai/store.ts）；fn_ai 直连（_shared/db.ts 的 withAiUser）：
-//   public.events、todos、notes 的列级 select（store.ts；迁移 20261115070000）。
+//   public.events、todos、notes 的列级 select（store.ts；迁移 20261115073000）。
 // 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY；FN_AI_DB_URL（经 _shared/db.ts）；GEMINI_API_KEY（经 _shared/ai/wire.ts 只放请求头，8.4）。
 // 不加 CORS（0.48 第 4 条）：浏览器经 /sb 同源调用。日志只记码和条数（core.ts），不记请求体和记录内容。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
