@@ -22,7 +22,9 @@ const EV = id(41);
 const TD = id(42);
 const NT = id(43);
 const V = '2026-10-29';
-const SUMMARY = '这周记了一家拉面店，汤头很浓。';
+/** ai-summarize 回的正文：[1] 是服务器改写好的角标（relinkCites），页面上画成小号数字 */
+const SUMMARY = '这周记了一家拉面店[1]，汤头很浓。';
+const SUMMARY_SHOWN = '这周记了一家拉面店1，汤头很浓。';
 
 type Fake = { parses: unknown[]; sums: unknown[]; writes: { table: string; body: unknown }[]; pulled: Set<string> };
 
@@ -44,6 +46,8 @@ async function fakeServer(page: Page, baseURL: string | undefined, parse: Record
     const req = route.request();
     const u = new URL(req.url());
     const name = u.pathname.split('/').pop() ?? '';
+    // 结果层页脚的“今天 已用 / 上限”（platform/ai-usage.ts）
+    if (name === 'my_ai_usage') return route.fulfill({ json: { ai_used: 19, ai_limit: 50, pacific_date: '2026-11-14' } });
     if (req.method() !== 'GET') {
       fake.writes.push({ table: name, body: req.postDataJSON() });
       return route.fulfill({ status: 201, json: [{ rev: 2 }] });
@@ -107,9 +111,17 @@ async function typeAndSend(page: Page, text: string): Promise<void> {
 async function summarizeFlow(page: Page, fake: Fake): Promise<void> {
   await typeAndSend(page, '总结一下这周的随手记');
   await expect(page.getByTestId('assist-panel')).toBeVisible({ timeout: 10_000 });
+  // 线框 22：顶部“✕ 关闭”、引号原话；焦点在面板本身，不在“关闭”上
+  await expect(page.getByTestId('assist-panel')).toBeFocused();
+  await expect(page.getByTestId('assist-close')).not.toBeFocused();
+  await expect(page.getByTestId('assist-said')).toHaveText('“总结一下这周的随手记”');
   await expect(page.getByTestId('assist-understand')).toBeVisible();
+  await expect(page.getByTestId('assist-edit')).toBeVisible();
   await expect(page.getByTestId('assist-row')).toHaveCount(1);
-  await expect(page.getByTestId('assist-summary-text')).toHaveText(SUMMARY, { timeout: 10_000 });
+  await expect(page.getByTestId('assist-summary-text')).toHaveText(SUMMARY_SHOWN, { timeout: 10_000 });
+  await expect(page.getByTestId('assist-cite')).toHaveText('1');
+  await expect(page.getByTestId('assist-num')).toHaveText('1');
+  await expect(page.getByTestId('assist-usage')).toHaveText('这次用了 1 次 AI · 今天 19 / 50');
   // 本机有把握：不调 ai-parse；总结只送 id，不送正文
   expect(fake.parses).toEqual([]);
   expect(fake.sums).toHaveLength(1);
@@ -134,6 +146,16 @@ test.describe('B4b-3 结果层：手机', () => {
     expect(log).not.toContain('随手记');
   });
 
+  test('⑤ “理解成”那一行的“改”：回到打字条，原话带回去可以改', async ({ page, baseURL }) => {
+    const fake = await fakeServer(page, baseURL);
+    await openToday(page, fake);
+    await summarizeFlow(page, fake);
+    await page.getByTestId('assist-edit').click();
+    await expect(page.getByTestId('assist-panel')).toHaveCount(0);
+    await expect(page.getByTestId('type-input')).toHaveValue('总结一下这周的随手记', { timeout: 10_000 });
+    expect(await runLog(page)).toMatch(/assist edit from=plus opener=1/);
+  });
+
   test('② 查找面板：待办那行“⋯”→ 完成 → 撤销写回；页脚有“改成记下”', async ({ page, baseURL, browserName }) => {
     const fake = await fakeServer(page, baseURL);
     await openToday(page, fake);
@@ -147,6 +169,8 @@ test.describe('B4b-3 结果层：手机', () => {
     await shots(page, browserName, '手机-查找面板-每行菜单');
     await page.getByTestId('find-m-done').click();
     await expect(page.getByTestId('find-undo')).toContainText('已完成');
+    // 标完成以后这一行左边画成打勾圆、标题删除线（同待办列表）
+    await expect(page.getByTestId('find-row').first()).toHaveAttribute('data-done', 'true');
     await shots(page, browserName, '手机-查找面板-撤销条');
     await page.getByTestId('find-undo-undo').click();
     await expect(page.getByTestId('find-undo')).toHaveCount(0);

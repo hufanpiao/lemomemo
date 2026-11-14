@@ -176,7 +176,9 @@ export function relinkCites(summary: string, modelCited: readonly string[], orde
   const text = summary.replace(CITE, (_m, list: string) =>
     list
       .split(/[,，、]/)
-      .map((s) => order[Number(s.trim()) - 1])
+      .map((s) => Number(s.trim()))
+      .filter((k) => k >= 1 && k <= order.length)
+      .map((k) => order.at(k - 1))
       .filter((id): id is string => id !== undefined)
       .map((id) => `[${pos(id)}]`)
       .join(''),
