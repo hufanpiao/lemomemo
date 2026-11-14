@@ -10,11 +10,13 @@
 //   焦点移到“继续”（从别的状态变成中断时才移；回到设置页时任务已经是中断的不抢焦点）；仍显示已取回多少。1 小时到了自动换成“已过期”
 // • 成功：“已导出，通知邮件已发到你的邮箱”；B1 一律没带隐私记令牌，再加一句“隐私记没有导出（没解锁）”；
 //   没存下来（分享面板取消等）写“还没存下来”；两种情况都给“再存一次”（不再调服务器；存的过程中按钮禁用，防连点）
+// • PPT 预览（B4b-1，线框 sPrev 第二张“可以在 设置 › 数据 里改”）：普通随手记、隐私记两行，先问 / 预览 / 只下载；只记在这台设备，排在导出前面
 import { useEffect, useRef } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
-import { SettingsEntryRow, SettingsList } from '../../../kit/components/Settings/Settings.tsx';
+import { SettingsCard, SettingsEntryRow, SettingsList, SettingsSegRow } from '../../../kit/components/Settings/Settings.tsx';
 import { fmtMb, type ExportErr, type ExportTask } from '../hooks/useExport.ts';
 import { useOnline } from '../../../kit/hooks/useOnline.ts';
+import { useMsPrefSetting, type MsChoice } from '../hooks/useMsPrefSetting.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
 import type { DevicesState } from '../hooks/useDevices.ts';
 import type { RecentExportState } from '../hooks/useRecentExport.ts';
@@ -49,6 +51,7 @@ export function DataSection({ task, recent, devices }: { task: ExportTask; recen
 
   return (
     <div data-section="data">
+      <MsPrefCard />
       {/* B2-UI-b W4：整行换成 kit 的入口行（stacked：行名在上、说明在下），右边多了和别的整行按钮一样的 › */}
       <SettingsList>
         <SettingsEntryRow
@@ -105,5 +108,20 @@ export function DataSection({ task, recent, devices }: { task: ExportTask; recen
       ) : null}
       <RecentExport state={recent} devices={devices} />
     </div>
+  );
+}
+
+/** PPT 预览交不交给微软：两行（普通、隐私记），只记在这台设备 */
+function MsPrefCard() {
+  const t = useSettingsT();
+  const note = useMsPrefSetting('note');
+  const vault = useMsPrefSetting('vault');
+  const opts = (scope: string) =>
+    (['ask', 'yes', 'no'] as const).map((v) => ({ value: v as MsChoice, label: t(`settings.ms.${v}`, {}), testId: `settings-ms-${scope}-${v}` }));
+  return (
+    <SettingsCard title={t('settings.ms.title', {})} showTitle note={t('settings.ms.note', {})} testId="settings-ms">
+      <SettingsSegRow label={t('settings.ms.note_row', {})} options={opts('note')} value={note.value} onChange={note.set} />
+      <SettingsSegRow label={t('settings.ms.vault_row', {})} meta={t('settings.ms.vault_meta', {})} options={opts('vault')} value={vault.value} onChange={vault.set} />
+    </SettingsCard>
   );
 }

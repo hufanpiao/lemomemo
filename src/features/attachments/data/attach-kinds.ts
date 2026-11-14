@@ -20,6 +20,13 @@ export function markOf(k: DocKind): 'PDF' | 'W' | 'X' | 'P' {
   return 'P';
 }
 
+/** 大小后面跟什么数：PDF、PPT 写页数，Excel 写表数（线框 sAtt），别的不写 */
+export function countOf(k: DocKind): 'pages' | 'sheets' | null {
+  if (k === 'pdf' || k === 'pptx') return 'pages';
+  if (k === 'xlsx') return 'sheets';
+  return null;
+}
+
 /** 字节数 → “1.2 MB”“86 KB”（线框写法；< 1 KB 也写 1 KB） */
 export function sizeText(bytes: number): string {
   if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;

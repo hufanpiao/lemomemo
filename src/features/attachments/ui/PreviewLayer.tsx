@@ -1,10 +1,13 @@
 // 附件预览浮层（B4b-1；线框 sPrev；架构 5.13 第 3 点）：点了“预览”才懒加载这一块
 // • 电脑：全窗口浮层（四边留白、圆角），顶行“类型 · 文件名 · 大小 ｜ ‹ 第 p / n 页 › ｜ － 100% ＋ ｜ 下载 ｜ ✕ Esc”；Excel 底部切换工作表、超过 2000 行 × 50 列出提示
-//   手机：整屏，顶行“✕ · 文件名”，底部“下载”（iPhone 主屏幕版的“下载”就是交给系统分享菜单，即“用其他 App 打开”，见交回报告）
-// • 本机预览（PDF、Word、Excel、PPT 退路）：取字节（data/attach-open.ts 核 sha256）→ 嵌没有来源的预览沙箱（sandbox="allow-scripts"，/app/preview）→
+//   手机：整屏，顶行“✕ · 文件名”，底部“下载 / 用其他 App 打开”（线框 sPrev 第一张；浏览器分享不了文件时只有“下载”）
+// • 动作由附件区传进来的 src 给（普通随手记、隐私记各一份，data/att-source.ts）
+// • 本机预览（PDF、Word、Excel、PPT 退路）：取字节（普通的核 sha256，隐私记的服务器解密时核 HMAC）→ 嵌没有来源的预览沙箱（sandbox="allow-scripts"，/app/preview）→
 //   等 ready 再把字节转移进去；只认 event.source 是这个 iframe、过了 parseFromFrame 的消息
-// • PPT：每台设备第一次先问“预览（交给微软）/ 只下载”（data/ms-pref.ts）；交给微软时嵌 view.officeapps.live.com（不给 allow-popups、不带 referrer）；
-//   20 秒没加载出来，改成本机沙箱里的“首页缩略图 + 每页文字”，顶部写“微软这次没打开”，带“再试一次”
+// • PPT：每台设备第一次先问“预览（交给微软）/ 只下载”（core/ms-pref.ts，普通、隐私记各问一次；隐私记的卡多一句“会先解密再交给微软”，
+//   设置 › 数据 里能改）；交给微软时嵌 view.officeapps.live.com（不给 allow-popups、不带 referrer）；
+//   20 秒没加载出来，改成本机沙箱里的“首页缩略图 + 每页文字”，顶部写“微软这次没打开”，带“再试一次 / 下载”
+// • 隐私记的 PPT：服务器放的临时明文副本在关浮层、退回本机、页面隐藏时立即删（src.msEnd → ms_preview_end）
 // • Esc、✕ 关；打开时焦点放到关闭按钮，关了还给原来的元素；锁住后面页面的滚动。盖在整个窗口上（portal 到 body，不受抽屉的 transform 影响）
 // • 运行日志：打开（way、结果码）、微软问答和超时；不记文件名
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -14,7 +17,8 @@ import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { parseFromFrame, ZOOM_MAX, ZOOM_MIN, type FrameWay, type FromFrame, type ToFrame } from '../../../../shared/logic/files/preview-protocol.ts';
-import { markOf, msViewerUrl, openBytes, previewOf, readMsPref, sizeText, useAttT, writeMsPref, type AttMsgKey, type NoteFile } from '../hooks/useNoteFiles.ts';
+import { DOC_TYPES } from '../../../../shared/manifests/attachments.ts';
+import { canShareFiles, markOf, previewOf, readMsPref, sizeText, useAttT, writeMsPref, type AttMsgKey, type AttSource, type NoteFile } from '../hooks/useNoteFiles.ts';
 import { safeHref } from '../../../../shared/logic/link.ts';
 import styles from './PreviewLayer.module.css';
 
@@ -26,15 +30,18 @@ type State = Extract<FromFrame, { t: 'state' }>;
 type Phase = { k: 'ask' } | { k: 'ms'; url: string } | { k: 'local'; way: FrameWay; bytes: ArrayBuffer; fallback: boolean } | { k: 'loading' };
 
 export interface PreviewLayerProps {
+  src: AttSource;
   file: NoteFile;
   desk: boolean;
   onClose(): void;
   onDownload(): void;
+  /** 用其他 App 打开（手机底部） */
+  onShare(): void;
   /** 打不开：交回附件区出提示，浮层随即关掉 */
   onFail(key: AttMsgKey): void;
 }
 
-export default function PreviewLayer({ file, desk, onClose, onDownload, onFail }: PreviewLayerProps) {
+export default function PreviewLayer({ src, file, desk, onClose, onDownload, onShare, onFail }: PreviewLayerProps) {
   const t = useAttT();
   const [phase, setPhase] = useState<Phase>({ k: 'loading' });
   const [st, setSt] = useState<State | null>(null);
@@ -53,20 +60,21 @@ export default function PreviewLayer({ file, desk, onClose, onDownload, onFail }
   const local = useCallback(async (w: FrameWay, fallback: boolean) => {
     setPhase({ k: 'loading' });
     setSt(null);   // 上一次沙箱报的页数、工作表、截断提示不沿用（整块评审第 13 条）
-    const r = await openBytes(file);
+    if (fallback) src.msEnd();
+    const r = await src.open(file);
     if (!live.current) return;
     if (!r.ok) return fail(`att.open.${r.why}`, r.why);
     setPhase({ k: 'local', way: w, bytes: r.bytes, fallback });
-  }, [file, fail]);
+  }, [file, fail, src]);
 
   const ms = useCallback(async () => {
     setPhase({ k: 'loading' });
     setSt(null);
-    const url = await msViewerUrl(file);
-    if (!live.current) return;
+    const url = await src.msUrl(file);
+    if (!live.current) return void src.msEnd();
     if (url === null) return void local('pptx', true);
     setPhase({ k: 'ms', url });
-  }, [file, local]);
+  }, [file, local, src]);
 
   useLayoutEffect(() => {
     live.current = true;   // 开发版 StrictMode 会挂、卸、再挂一遍：再挂时改回 true（整块评审第 3 条）
@@ -82,7 +90,7 @@ export default function PreviewLayer({ file, desk, onClose, onDownload, onFail }
   useEffect(() => {
     if (way === null) return;
     if (way !== 'ms') return void local(way, false);
-    const pref = readMsPref();
+    const pref = readMsPref(src.scope);
     if (pref === 'yes') void ms();
     else if (pref === 'no') {
       onDownload();
@@ -91,6 +99,18 @@ export default function PreviewLayer({ file, desk, onClose, onDownload, onFail }
     // 只在打开时决定一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 关浮层：隐私记的临时明文副本立即删
+  useEffect(() => () => src.msEnd(), [src]);
+
+  // 页面隐藏（切走、锁屏）：隐私记的临时明文副本立即删（微软那边已经取走的照常显示，再试一次会重新放一份）
+  useEffect(() => {
+    const vis = (): void => {
+      if (document.visibilityState === 'hidden') src.msEnd();
+    };
+    document.addEventListener('visibilitychange', vis);
+    return () => document.removeEventListener('visibilitychange', vis);
+  }, [src]);
 
   useEffect(() => {
     const key = (e: KeyboardEvent): void => {
@@ -104,7 +124,7 @@ export default function PreviewLayer({ file, desk, onClose, onDownload, onFail }
   }, [onClose]);
 
   const answer = (yes: boolean): void => {
-    writeMsPref(yes ? 'yes' : 'no');
+    writeMsPref(src.scope, yes ? 'yes' : 'no');
     rlog(`att ms ask ${yes ? 'yes' : 'no'}`);
     if (yes) void ms();
     else {
@@ -171,12 +191,15 @@ export default function PreviewLayer({ file, desk, onClose, onDownload, onFail }
             <Pressable className={styles.btnText} onClick={() => void ms()} data-testid="att-pv-again">
               {t('att.ms.again', {})}
             </Pressable>
+            <Pressable className={styles.btnText} onClick={onDownload} data-testid="att-pv-fallback-download">
+              {t('att.download', {})}
+            </Pressable>
           </p>
         ) : null}
         {st?.clipped ? <p className={styles.banner}>{t('att.pv.clipped', {})}</p> : null}
         <div className={styles.body}>
           {phase.k === 'loading' ? <p className={styles.wait}>{t('att.pv.loading', {})}</p> : null}
-          {phase.k === 'ask' ? <MsAsk onAnswer={answer} /> : null}
+          {phase.k === 'ask' ? <MsAsk vault={src.scope === 'vault'} onAnswer={answer} /> : null}
           {phase.k === 'ms' ? <MsFrame url={phase.url} onTimeout={() => void local('pptx', true)} /> : null}
           {phase.k === 'local' ? <SandboxFrame key={`${phase.way}-${phase.fallback ? 1 : 0}`} frame={frame} way={phase.way} bytes={phase.bytes} onState={setSt} onError={(why) => fail(`att.open.${why}`, why)} /> : null}
         </div>
@@ -194,6 +217,11 @@ export default function PreviewLayer({ file, desk, onClose, onDownload, onFail }
             <Pressable className={styles.footBtn} onClick={onDownload} data-testid="att-pv-download">
               {t('att.download', {})}
             </Pressable>
+            {canShareFiles(undefined, DOC_TYPES[file.kind]) ? (
+              <Pressable className={styles.footBtn} onClick={onShare} data-testid="att-pv-share">
+                {t('att.openWith', {})}
+              </Pressable>
+            ) : null}
           </div>
         )}
       </div>
@@ -202,13 +230,22 @@ export default function PreviewLayer({ file, desk, onClose, onDownload, onFail }
   );
 }
 
-/** 第一次预览 PPT：先问（线框 sPrev 第二张） */
-function MsAsk({ onAnswer }: { onAnswer(yes: boolean): void }) {
+/** 第一次预览 PPT：先问（线框 sPrev 第二张）；隐私记多一句“会先解密再交给微软”（R-118 D-12） */
+function MsAsk({ vault, onAnswer }: { vault: boolean; onAnswer(yes: boolean): void }) {
   const t = useAttT();
   return (
     <div className={styles.ask} data-testid="att-ms-ask">
       <b className={styles.askTitle}>{t('att.ms.title', {})}</b>
-      <p className={styles.askBody}>{t('att.ms.body', {})}</p>
+      <p className={styles.askBody}>
+        {vault ? (
+          <>
+            <b data-testid="att-ms-vault">{t('att.ms.vault', {})}</b>
+            {t('att.ms.vaultBody', {})}
+          </>
+        ) : (
+          t('att.ms.body', {})
+        )}
+      </p>
       <Pressable className={styles.askYes} onClick={() => onAnswer(true)} data-testid="att-ms-yes">
         {t('att.ms.yes', {})}
       </Pressable>

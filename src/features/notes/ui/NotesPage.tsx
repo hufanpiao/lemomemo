@@ -55,7 +55,7 @@ import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
-import { ConvertAsk, MergeBar, MoreMenu, useConvertFlow, type PageTip } from './NotesActions.tsx';
+import { ConvertAsk, MoveAsk, MergeBar, MoreMenu, useConvertFlow, type PageTip } from './NotesActions.tsx';
 import { InputRow } from './NotesInputRow.tsx';
 import { SwipeRow } from './NoteSwipe.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
@@ -92,6 +92,8 @@ function NotesList() {
   const [drawer, setDrawer] = useState<string | null>(null);
   // 移到隐私记（B5 S7）：正在移的那一条（vault 的 VaultParts move 管解锁和出错提示）；移好的先在本页藏起来，等同步把它改成隐私记行
   const [moving, setMoving] = useState<string | null>(null);
+  /** 带附件、插图的先问一次再移（B4b-1，线框 sAtt 最后一张“这条随手记和它的 N 个附件、M 张图会一起加密放进隐私记”） */
+  const [askMove, setAskMove] = useState<NoteItem | null>(null);
   const [moved, setMoved] = useState<ReadonlySet<string>>(() => new Set());
   const [swiped, setSwiped] = useState<string | null>(null);
 
@@ -111,7 +113,9 @@ function NotesList() {
   };
   const toVault = (id: string) => {
     setMenu(null);
+    const it = l.items.find((x) => x.id === id);
     if (isRo(id)) guard.block();
+    else if (it && (it.files > 0 || it.images > 0)) setAskMove(it);
     else setMoving(id);
   };
   const shown = (it: NoteItem) => !moved.has(it.id);
@@ -275,6 +279,17 @@ function NotesList() {
         </QuietBoundary>
       ) : null}
       {conv.ask ? <ConvertAsk ask={conv.ask} onOk={conv.confirm} onCancel={conv.cancel} /> : null}
+      {askMove ? (
+        <MoveAsk
+          files={askMove.files}
+          images={askMove.images}
+          onOk={() => {
+            setMoving(askMove.id);
+            setAskMove(null);
+          }}
+          onCancel={() => setAskMove(null)}
+        />
+      ) : null}
 
       {bar ? <UndoBar key={bar.tip.key} tip={bar.tip} onClose={bar.close} /> : null}
       <ReadonlyToast guard={guard} message={tEdit('edit.st.readonly', {})} testId="notes-ro-toast" />

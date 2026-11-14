@@ -7,6 +7,8 @@
 //   - 抛别的错 → 'needs_tap'，同上
 //   canShare 不认这个文件、没有 share 时才 download（存不进“文件”App 也只能这样，至少浏览器会打开预览）
 // • 电脑浏览器、别的情况：blob URL + a[download]，点一下就存；URL 稍后回收
+// • 用其他 App 打开（附件“⋯”菜单、手机预览底部，线框 sAtt、sPrev）：shareFile 一律走 navigator.share({files})，不管是不是主屏幕版；
+//   canShareFiles 说这台设备的浏览器能不能分享文件（不能就不出这一项）
 // 只管存，不联网
 import { errName, isAppleMobile, isStandalone } from './env.ts';
 
@@ -80,4 +82,41 @@ export async function saveFile(blob: Blob, name: string, type: string, env: Save
   }
   env.download(blob, name);
   return 'downloaded';
+}
+
+const fileOf = (blob: Blob, name: string, type: string): File | null => {
+  try {
+    return new File([blob], name, { type });
+  } catch {
+    return null;
+  }
+};
+
+/** 这台设备能不能把文件交给别的 App（系统分享面板）；拿一个空文件问 canShare */
+export function canShareFiles(env: SaveEnv = browserSaveEnv(), type = 'application/pdf'): boolean {
+  if (!env.share || !env.canShare) return false;
+  const f = fileOf(new Blob([], { type }), 'x', type);
+  try {
+    return f !== null && env.canShare({ files: [f] });
+  } catch {
+    return false;
+  }
+}
+
+/** 用其他 App 打开：交给系统分享面板。'unsupported' = 这个文件分享不了（界面改提示下载） */
+export async function shareFile(blob: Blob, name: string, type: string, env: SaveEnv = browserSaveEnv()): Promise<SaveOutcome | 'unsupported'> {
+  const file = fileOf(blob, name, type);
+  let ok = false;
+  try {
+    ok = file !== null && !!env.share && !!env.canShare && env.canShare({ files: [file] });
+  } catch {
+    ok = false;
+  }
+  if (!file || !ok || !env.share) return 'unsupported';
+  try {
+    await env.share({ files: [file] });
+    return 'shared';
+  } catch (e) {
+    return errName(e) === 'AbortError' ? 'cancelled' : 'needs_tap';
+  }
 }

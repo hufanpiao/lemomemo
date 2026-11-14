@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { VAULT_ERROR_CODES } from '../../../../shared/schema/vault.ts';
 import { ENTRY_ERROR_CODES } from '../../../../shared/schema/entry-codes.ts';
-import { failOf } from '../data/vault-api.ts';
+import { failOf, fileFailOf } from '../data/vault-api.ts';
 import { vaultErrorAction, type VaultClientCode } from '../data/vault-errors.ts';
 import { zh as vaultZh } from '../i18n/zh.ts';
 import { ko as vaultKo } from '../i18n/ko.ts';
@@ -47,5 +47,16 @@ describe('failOf：失败响应 → 码', () => {
     expect(failOf(401, null).code).toBe('session_revoked');
     expect(failOf(503, 'x').code).toBe('try_later');
     expect(failOf(404, { error: 'toString' }).code).toBe('unknown');
+  });
+});
+
+describe('fileFailOf：vault-file 的失败响应（B4b-1）', () => {
+  it('附件自己的码放 fileCode（rejected 带 reason），隐私记共有的照 failOf', () => {
+    expect(fileFailOf(422, { error: 'rejected', reason: 'bad_archive' })).toEqual({ ok: false, code: 'unknown', fileCode: 'rejected', reason: 'bad_archive' });
+    expect(fileFailOf(409, { error: 'exists' })).toEqual({ ok: false, code: 'unknown', fileCode: 'exists' });
+    expect(fileFailOf(403, { error: 'quota_exceeded' }).fileCode).toBe('quota_exceeded');
+    expect(fileFailOf(401, { error: 'vault_locked' })).toEqual({ ok: false, code: 'vault_locked' });
+    expect(fileFailOf(413, { error: 'too_large' })).toEqual({ ok: false, code: 'too_large' });
+    expect(fileFailOf(503, null).code).toBe('try_later');
   });
 });

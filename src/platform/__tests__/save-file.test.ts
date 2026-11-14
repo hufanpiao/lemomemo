@@ -1,7 +1,7 @@
 // 存导出文件（platform/save-file.ts；R-256 ②）：电脑 download；iPhone 主屏幕版能分享就分享（canShare 判断），失败退回 download。
 // 真机上的分享面板（存到“文件”App）待真机验证，这里只测分支
 import { describe, expect, it, vi } from 'vitest';
-import { saveFile, type SaveEnv } from '../save-file.ts';
+import { canShareFiles, saveFile, shareFile, type SaveEnv } from '../save-file.ts';
 
 const blob = new Blob(['gz'], { type: 'application/gzip' });
 const NAME = 'lemomemo-export-2026-10-30.json.gz';
@@ -66,5 +66,29 @@ describe('saveFile', () => {
     const e = env({ share: vi.fn(async () => Promise.reject(err('AbortError'))) });
     expect(await saveFile(blob, NAME, 'application/gzip', e)).toBe('cancelled');
     expect(e.download).not.toHaveBeenCalled();
+  });
+});
+
+describe('用其他 App 打开（shareFile、canShareFiles）', () => {
+  it('不管是不是主屏幕版都走分享；取消回 cancelled、被拒回 needs_tap', async () => {
+    const e = env({ isIosStandalone: vi.fn(() => false) });
+    expect(await shareFile(blob, NAME, 'application/gzip', e)).toBe('shared');
+    expect(e.download).not.toHaveBeenCalled();
+    expect(await shareFile(blob, NAME, 'application/gzip', env({ share: vi.fn(async () => Promise.reject(err('AbortError'))) }))).toBe('cancelled');
+    expect(await shareFile(blob, NAME, 'application/gzip', env({ share: vi.fn(async () => Promise.reject(err('NotAllowedError'))) }))).toBe('needs_tap');
+  });
+  it('没有 share、canShare 不认或抛错：unsupported，不退回下载', async () => {
+    const { share: _s, ...noShare } = env();
+    expect(await shareFile(blob, NAME, 'application/gzip', noShare)).toBe('unsupported');
+    const no = env({ canShare: vi.fn(() => false) });
+    expect(await shareFile(blob, NAME, 'application/gzip', no)).toBe('unsupported');
+    expect(no.download).not.toHaveBeenCalled();
+    expect(await shareFile(blob, NAME, 'application/gzip', env({ canShare: vi.fn(() => { throw new Error('x'); }) }))).toBe('unsupported');
+  });
+  it('canShareFiles：有 share 且 canShare 认文件才是 true', () => {
+    expect(canShareFiles(env())).toBe(true);
+    expect(canShareFiles(env({ canShare: vi.fn(() => false) }))).toBe(false);
+    const { canShare: _c, ...noCan } = env();
+    expect(canShareFiles(noCan)).toBe(false);
   });
 });

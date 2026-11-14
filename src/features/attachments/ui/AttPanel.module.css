@@ -52,6 +52,18 @@
   font-weight: 700;
 }
 
+/* 电脑上的首页缩略图：和类型标记同一个位置、同样大小（线框 sAtt 说明“有首页缩略图的在电脑上显示缩略图”） */
+.thumb {
+  flex: none;
+  width: 34px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  object-fit: cover;
+  object-position: top;
+}
+
 .tx {
   display: flex;
   flex: 1;
