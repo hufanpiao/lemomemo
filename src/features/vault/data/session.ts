@@ -373,6 +373,7 @@ export function createVaultSession(d: VaultSessionDeps) {
     },
     /** 取消等待中的解锁：原请求回失败 */
     cancelWait(): void {
+      rlog(`vault wait cancel n=${waiters.length}`);
       release(false);
       set({ waiting: false });
     },

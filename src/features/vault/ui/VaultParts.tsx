@@ -86,7 +86,7 @@ function MoveToVault({ noteId, onDone }: { noteId: string; onDone(moved: boolean
   return (
     <>
       <UnlockOverlay open={state.waiting} testId="vault-move-scrim">
-        <UnlockPanel onCancel={() => s.cancelWait()} onForgot={() => void navigate('settings', 'vault', 'reset')} testId="vault-move-unlock" />
+        <UnlockPanel onForgot={() => void navigate('settings', 'vault', 'reset')} testId="vault-move-unlock" />
       </UnlockOverlay>
       <ConfirmDialog
         open={err !== null}

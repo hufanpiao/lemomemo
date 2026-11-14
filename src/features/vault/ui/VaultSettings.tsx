@@ -25,7 +25,6 @@ type View = 'main' | 'autolock' | 'change' | 'reset' | 'bind' | 'devices';
 export function VaultSettings() {
   const t = useVaultT();
   const state = useVaultStatus();
-  const { s } = useVault();
   const wa = useWebauthn();
   const min = useAutolockMin();
   const fmtAt = useFmtAt();
@@ -35,7 +34,7 @@ export function VaultSettings() {
 
   const waiting = (
     <UnlockOverlay open={state.waiting} testId="vault-set-scrim">
-      <UnlockPanel onCancel={() => s.cancelWait()} onForgot={() => setView('reset')} testId="vault-set-unlock" backLabel={t('vault.title', {})} />
+      <UnlockPanel onForgot={() => setView('reset')} testId="vault-set-unlock" backLabel={t('vault.title', {})} />
     </UnlockOverlay>
   );
 

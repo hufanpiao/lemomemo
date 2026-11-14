@@ -30,6 +30,8 @@ interface FakeVault {
   notes: Map<string, Record<string, unknown>>;
   /** vault-file 收到的动作和上传的 meta（B4b-1） */
   files: { action: string; meta?: Record<string, unknown>; thumb?: boolean }[];
+  /** 设成 true：下一次 save 回 401 vault_locked（令牌过期），回完自动落回 false（审查第 1 条） */
+  expireNextSave: boolean;
 }
 
 const ZH_PDF = readFileSync(join(import.meta.dirname, 'fixtures', 'b4b1-zh-2p.pdf'));
@@ -72,7 +74,7 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
     return route.fulfill({ json: [] });
   });
 
-  const fv: FakeVault = { calls: [], notes: new Map(), files: [] };
+  const fv: FakeVault = { calls: [], notes: new Map(), files: [], expireNextSave: false };
   const PPTX = await pptx();
   const stored = new Map<string, Record<string, unknown>>();
   await page.route(/\/sb\/functions\/v1\/vault-file/, (route) => {
@@ -131,6 +133,10 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
       case 'list':
         return ok(route, { notes: [...fv.notes.values()] });
       case 'save': {
+        if (fv.expireNextSave) {
+          fv.expireNextSave = false;
+          return fail(route, 401, { error: 'vault_locked' });
+        }
         const id = String(body['id']);
         fv.notes.set(id, { id, title: body['title'], body: body['body'], category_id: null, created_at: body['created_at'], updated_at: body['updated_at'], deleted_at: null, images: [] });
         return ok(route);
@@ -390,4 +396,25 @@ test('隐私记里的文档附件（B4b-1）：电脑上加（加密）、写页
   const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
   expect(log).toMatch(/vatt upload ok/);
   expect(log).not.toContain('体检报告');
+});
+
+test('审查第 1 条：保存时令牌过期 → 解锁卡点取消 → 再解锁时那次保存不补发', async ({ page, baseURL, browserName }) => {
+  const fv = await fakeServer(page, baseURL);
+  await setupAndUnlock(page, browserName);
+  await page.goto('/app/#/vault/new');
+  await page.getByTestId('vault-edit-title').fill('取消以后不该存的');
+  fv.expireNextSave = true;
+  await page.getByTestId('vault-edit-save').click();
+  await expect(page.getByTestId('vault-unlock-card')).toBeVisible();
+  expect(fv.calls.filter((c) => c.action === 'save')).toHaveLength(1);
+  await page.getByTestId('vault-unlock-cancel').click();
+  await expect(page.getByTestId('notes')).toBeVisible();
+  await page.goto('/app/#/vault');
+  await page.getByTestId('vault-unlock-pin').click();
+  await typePin(page, 'vault-unlock-pad', PIN);
+  await expect(page.getByTestId('vault-empty')).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(500);
+  expect(fv.calls.filter((c) => c.action === 'save')).toHaveLength(1);
+  expect(fv.notes.size).toBe(0);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault wait cancel n=\d/);
 });

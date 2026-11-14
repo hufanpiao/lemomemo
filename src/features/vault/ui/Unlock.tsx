@@ -29,7 +29,11 @@ function useLeft(until: number | null): number {
   return until === null ? 0 : Math.max(0, Math.ceil((until - now) / 1000));
 }
 
-export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backLabel }: { onCancel(): void; onForgot(): void; testId?: string; backLabel?: string }) {
+/**
+ * onCancel：取消以后还要做的事（隐私记页回随手记）；可以不给。
+ * 有请求等着解锁（waiting）时，取消一律先作废它们（会话的 cancelWait：原请求回失败、卸载时交出的草稿丢掉），三处用法不再各自调（审查第 1 条）
+ */
+export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backLabel }: { onCancel?(): void; onForgot(): void; testId?: string; backLabel?: string }) {
   const t = useVaultT();
   const dur = useDuration();
   const errText = useErrText();
@@ -45,7 +49,11 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
   const left = useLeft(state.lockedUntil);
   const locked = left > 0;
   const desk = useMedia(MQ_SIDEBAR);
-  useKeys({ Escape: () => (onCancel(), true) });
+  const cancel = (): void => {
+    if (s.get().waiting) s.cancelWait();
+    onCancel?.();
+  };
+  useKeys({ Escape: () => (cancel(), true) });
 
   const face = async (): Promise<void> => {
     setBusy(true);
@@ -86,7 +94,7 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
           <FormButton {...(canFace ? {} : { variant: 'primary' as const })} block onClick={() => setMode('pin')} data-testid={`${testId}-pin`}>
             {t('vault.unlock.pin', {})}
           </FormButton>
-          <FormButton variant="ghost" block onClick={onCancel} data-testid={`${testId}-cancel`}>
+          <FormButton variant="ghost" block onClick={cancel} data-testid={`${testId}-cancel`}>
             {t('vault.cancel', {})}
           </FormButton>
         </div>
@@ -107,7 +115,7 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
   // 输错、锁定倒计时写在同一行 .pinErr（04、05）。不再放在白卡片里（卡片底是 --panel，白色圆键在上面看不出是按键）
   return (
     <div className={styles.pinPage} data-testid={`${testId}-pinview`}>
-      <PinTop backLabel={backLabel} onCancel={onCancel} testId={testId} />
+      <PinTop backLabel={backLabel} onCancel={cancel} testId={testId} />
       <div className={styles.pin}>
         {relock}
         <LockIcon big />
