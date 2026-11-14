@@ -6,7 +6,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "wrangler": "4.150.0"
+    "wrangler": "4.156.0"
   },
   "overrides": {
     "miniflare": {
