@@ -6,3 +6,8 @@ import type { DocKind } from '../../manifests/attachments.ts';
 export const noteFilePath = (userId: string, noteId: string, id: string, kind: DocKind): string => `${userId}/${noteId}/${id}.${kind}`;
 
 export const noteFileThumbPath = (userId: string, noteId: string, id: string): string => `${userId}/${noteId}/${id}.t.webp`;
+
+/** 随手记插图（note_images，images 桶）：原图 <user_id>/<note_id>/<id>.webp，缩略图同名 .t.webp（同 noteFileThumbPath）；库里 check 钉死同一个拼法，ai-media 读图用这一份 */
+export const noteImagePath = (userId: string, noteId: string, id: string): string => `${userId}/${noteId}/${id}.webp`;
+/** 插图缩略图 <user_id>/<note_id>/<id>.t.webp（和文档缩略图同一个拼法） */
+export const noteImageThumbPath = noteFileThumbPath;

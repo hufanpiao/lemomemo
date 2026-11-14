@@ -100,6 +100,11 @@ const PLAN: Plan = new Map<string, Entry>([
     'pending-deletion': { file: 'tests/edge/anniv-roll.test.ts', title: 'TC-B1-109 anniv-roll：注销冷静期（disabled_reason = deletion）的账号跳过' },
   } }],
   // B4b-2：pg_cron 带 x-cron-secret，按人处理前过 isUsable（index.ts 接 _shared 的 isUsable）
+  // B4b-2 识图：pg_cron 带 x-cron-secret，按人处理前过 isUsable（index.ts 接 _shared 的 isUsable）
+  ['ai-media', { kind: 'usable', covers: {
+    'admin-disabled': { file: 'tests/edge/ai-media.test.ts', title: 'TC-B1-109 ai-media：管理员停用（disabled_at 有值）的账号跳过' },
+    'pending-deletion': { file: 'tests/edge/ai-media.test.ts', title: 'TC-B1-109 ai-media：注销冷静期（disabled_reason = deletion）的账号跳过' },
+  } }],
   ['ai-embed', { kind: 'usable', covers: {
     'admin-disabled': { file: 'tests/edge/ai-embed.test.ts', title: 'TC-B1-109 ai-embed：管理员停用（disabled_at 有值）的账号跳过' },
     'pending-deletion': { file: 'tests/edge/ai-embed.test.ts', title: 'TC-B1-109 ai-embed：注销冷静期（disabled_reason = deletion）的账号跳过' },
