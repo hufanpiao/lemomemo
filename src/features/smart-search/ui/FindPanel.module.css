@@ -47,10 +47,8 @@
   gap: 10px;
 }
 
-/* 电脑：输入一行、类型胶囊在下面一行（线框 s12 电脑版） */
+/* 电脑：输入框和类型胶囊同一行，胶囊靠右（线框 s12、sFind 电脑版）；类型多时胶囊自己横向滚，输入框至少留 240px */
 .desk .head {
-  flex-direction: column;
-  align-items: stretch;
   padding: 16px 20px 12px;
   border-bottom: 1px solid var(--line);
 }
@@ -76,6 +74,7 @@
 }
 
 .desk .field {
+  min-width: 240px;
   border: 0;
   background: none;
   padding: 0;
@@ -134,6 +133,8 @@
 }
 
 .desk .chips {
+  flex: 0 1 auto;
+  min-width: 0;
   margin: 0;
   padding: 0;
 }
@@ -145,7 +146,9 @@
   align-items: center;
   min-height: 36px;
   padding: 0 14px;
-  border: 1px solid var(--line);
+
+  /* --line 在手机灰底（--bg）上几乎看不见，线框里没选中的胶囊有清楚的细边框，用输入框那条线 */
+  border: 1px solid var(--inp-line);
   border-radius: var(--r-pill);
   background: none;
   color: var(--text);
