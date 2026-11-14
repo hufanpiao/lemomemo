@@ -1,7 +1,8 @@
 // 今天页的 hook（B2 FA-2）：读日程、待办两个集合，按 clock.now() 和 current_tz 算出“现在”卡、没赶上、今天的安排
 // • 每分钟刷新一次（“还剩”、此刻竖线；视觉稿“刷新”一条），对齐到整分钟；时间窗随行变化、跨分钟重算
 // • 写入（打勾、删除、撤销）经 data/today-actions.ts；没写进去的原因回给界面（提示条），switching 不提示（页面马上跳走）
-import { useCallback, useMemo, useState } from 'react';
+// • 打勾、删除的写入代码第一次点时才下载（首屏预算 150 KB，b2-first-screen-budget：今天页出现之前用不到它们）
+import { useCallback, useMemo, useRef } from 'react';
 import { todayOf } from '../../../../shared/core/date.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { actionResult, type ActionResult } from '../../../core/action-result.ts';
@@ -9,8 +10,8 @@ import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
-import { setDeleted, type TrashTable } from '../data/today-actions.ts';
-import { doneToggler } from '../../../core/todo-done.ts';
+import type { TrashTable } from '../data/today-actions.ts';
+import type { doneToggler } from '../../../core/todo-done.ts';
 import { eventsOn, lateTodos, nowCard, nowEvents, todayTodos, tomorrowOf, type Row } from '../data/today-model.ts';
 
 export function useToday() {
@@ -40,20 +41,22 @@ export function useToday() {
   const rowOf = useCallback((id: string) => todos.find((r) => r.id === id), [todos]);
 
   // 打勾：刚点过的再点回去按撤销写回原来的 done_at（core/todo-done.ts，评审第 15 条）；这一页挂着期间记着
-  const [toggle] = useState(() => doneToggler());
+  const toggler = useRef<ReturnType<typeof doneToggler> | null>(null);
   const toggleDone = useCallback(
     async (id: string, done: boolean): Promise<ActionResult> => {
       const r = rowOf(id);
       if (!r) return 'failed';
-      return actionResult(await toggle(r, done, clock.now(), currentTz()));
+      toggler.current ??= (await import('../../../core/todo-done.ts')).doneToggler();
+      return actionResult(await toggler.current(r, done, clock.now(), currentTz()));
     },
-    [rowOf, toggle],
+    [rowOf],
   );
 
   const remove = useCallback(
     async (table: TrashTable, id: string, deleted: boolean): Promise<ActionResult> => {
       const r = (table === 'todos' ? todos : events).find((x) => x.id === id);
       if (!r) return 'failed';
+      const { setDeleted } = await import('../data/today-actions.ts');
       return actionResult(await setDeleted(table, r, deleted, clock.now(), currentTz()));
     },
     [events, todos],
