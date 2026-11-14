@@ -7,8 +7,9 @@ import { describe, expect, it } from 'vitest';
 import { FORK_SUFFIX } from '../../shared/sync/fork-suffix-data.ts';
 
 const DIR = join(import.meta.dirname, '..', '..', 'supabase', 'migrations');
-// R-350 迁移 20261113170000 照 20261105100000 逐字重建了 apply_patch（白名单多了 todo_items），之后读它
-const MIG = '20261113170000_todos_items_create.sql';
+// R-350 迁移 20261113170000 照 20261105100000 逐字重建了 apply_patch（白名单多了 todo_items）；
+// 第 7i 条迁移 20261115072000 又照 20261113170000 逐字重建（锁行后多查一次 applied_ops），之后读它
+const MIG = '20261115072000_core_apply_patch_replay_recheck.sql';
 /** 去掉 -- 注释（这份迁移的字符串里没有 --） */
 const code = (f: string) => readFileSync(join(DIR, f), 'utf8').split('\n').map((l) => l.replace(/--.*$/u, '')).join('\n');
 
