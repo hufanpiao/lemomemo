@@ -1,0 +1,39 @@
+/* 日历页、纪念日页页顶的“周 / 月 / 纪念日”分段（ModeSeg.tsx）：紧凑一行，宽度随文字，不铺满（从 CalendarPage.module.css 挪来，两页共用这一份） */
+
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+}
+
+.segBtn {
+  position: relative;
+  min-width: var(--hit);
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+/* 看得见 40 高，点击区以按钮中心外扩到至少 44 × 44（B2-UI-a V5；写法同 Settings.module.css 的 .segBtn::after）；按钮本来比 44 宽的方向不扩，相邻按钮不互相盖住 */
+.segBtn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.segBtn[aria-pressed='true'] {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
