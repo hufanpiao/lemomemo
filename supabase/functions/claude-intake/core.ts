@@ -21,7 +21,7 @@
 import { aiGate, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
 import { aiFailCode, errNameOf, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, CheckCtx, CheckResult, ParseFail, ParseInput, ParseOk } from '../_shared/ai/parse-core.ts';
-import { readJsonCapped } from '../_shared/body.ts';
+import { readJsonObjectCapped } from '../_shared/body.ts';
 import { TOKEN_RE, tokenHash, tokenLive } from '../_shared/intake-token.ts';
 
 export const HOURLY_LIMIT = 60;
@@ -123,13 +123,6 @@ export const hourKey = (tokenId: string, ms: number) => `claude-intake:${tokenId
 export const itemsKey = (tokenId: string, ms: number) => `claude-intake-items:${tokenId}:${utcDay(ms)}`;
 export const userItemsKey = (userId: string, ms: number) => `claude-intake-user:${userId}:${utcDay(ms)}`;
 
-/** 边读边计数（按字节，超了中断；安全审建议 1：这个函数网关不验 JWT） */
-async function readBody(req: Request): Promise<Record<string, unknown> | 'too_large' | null> {
-  const v = await readJsonCapped(req, MAX_BODY);
-  if (v === 'too_large') return v;
-  return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-}
-
 /** 有 text：本机规则优先，没把握才走 AI（门不过、AI 失败都用本机结果） */
 async function fromText<Item extends ItemLike>(
   deps: Deps<Item>, userId: string, text: string, now: number, tz: string, locale: 'zh' | 'ko', projects: string[], appVersion: string,
@@ -190,7 +183,7 @@ export async function handle<Item extends ItemLike>(req: Request, deps: Deps<Ite
   }
 
   // ---- 请求体 ----
-  const read = await readBody(req);
+  const read = await readJsonObjectCapped(req, MAX_BODY);   // 边读边计字节（安全审建议 1：这个函数网关不验 JWT）
   if (read === 'too_large') return err(413, 'too_large');
   const body = read;
   const hasText = typeof body?.['text'] === 'string';

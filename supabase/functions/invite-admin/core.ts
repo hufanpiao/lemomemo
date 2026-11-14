@@ -11,6 +11,7 @@
 // 日志只记错误码（A23）：不打印请求头、请求体、邀请码、备注。
 
 import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
+import { readJsonObjectCapped } from '../_shared/body.ts';
 import { inviteCodeHash, randomInviteCode } from '../_shared/invite-code.ts';
 import { json } from '../_shared/http.ts';
 import { StoreTimeout } from '../_shared/store-timeout.ts';
@@ -115,17 +116,6 @@ export function parseNote(v: unknown): string | null | 'bad' | 'too_long' {
   return [...s].length > NOTE_MAX ? 'too_long' : s;
 }
 
-async function readBody(req: Request): Promise<Record<string, unknown> | null> {
-  const text = await req.text().catch(() => null);
-  if (text === null || text.length > MAX_BODY) return null;
-  try {
-    const v: unknown = JSON.parse(text);
-    return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
 // ---------------- 版本门（第 6 节：函数里的第二道；口径同 functions/sb/version-gate.ts，比较用 _shared/version-gate-core.ts） ----------------
 async function versionBlock(req: Request, store: InviteStore): Promise<Response | null> {
   let min: string | null;
@@ -188,8 +178,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     const blocked = await versionBlock(req, deps.store);
     if (blocked) return blocked;
 
-    const body = await readBody(req);
-    if (!body) return err(400, 'bad_request');
+    const body = await readJsonObjectCapped(req, MAX_BODY);   // 边读边计字节，超了中断（安全审查第 2 条）
+    if (body === null || body === 'too_large') return err(400, 'bad_request');
     if (body.action === 'create') return await create(body, userId, deps);
     if (body.action === 'list') return await list(userId, deps);
     return err(400, 'bad_request');

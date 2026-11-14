@@ -17,6 +17,7 @@
 // 日志只记错误码（A23）：不打印请求头、请求体、邮箱、验证码、邀请码、IP。
 // 从来不返回邀请人信息（R-83、TC-B1-05）：invites 只读 max_uses、used_count、expires_at 三列。
 
+import { readJsonObjectCapped } from '../_shared/body.ts';
 import { emailHash, ipHash } from '../_shared/email-hash.ts';
 import { inviteCodeHash, isInviteCode, normalizeInviteCode } from '../_shared/invite-code.ts';
 import { rateIp, readProxyHeaders, safeEqual } from '../_shared/proxy-headers.ts';
@@ -24,7 +25,7 @@ import { StoreTimeout } from '../_shared/store-timeout.ts';
 import { blockedMin, upgradeRequiredResponse } from '../_shared/version-gate-core.ts';
 import type { CreateUserResult, Deps, Env, InviteRow, PendingRow, Store, TurnstileResult } from './types.ts';
 import {
-  email, err, Fail, json, keys, locale, otpHash, readBody, secureOtp, signupMail, signupUserId, str, type StartBody, type VerifyBody,
+  email, err, Fail, json, keys, locale, MAX_BODY, otpHash, secureOtp, signupMail, signupUserId, str, type StartBody, type VerifyBody,
 } from './wire.ts';
 
 export type {
@@ -355,8 +356,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     deps.log?.('proxy_secret_missing');
   }
 
-  const body = await readBody(req);
-  if (!body) return err(400, 'bad_request');
+  const body = await readJsonObjectCapped(req, MAX_BODY);   // 边读边计字节，超了中断（安全审查第 2 条）
+  if (body === null || body === 'too_large') return err(400, 'bad_request');
   const em = email(body.email);
   const code = str(body.code, 64);
   if (!em || code === null) return err(400, 'bad_request');

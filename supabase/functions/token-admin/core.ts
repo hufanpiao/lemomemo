@@ -7,6 +7,7 @@
 // 列表、最后使用时间：客户端经 RLS 直接读 api_tokens（tok_sel）；断开连接：客户端 PATCH revoked_at（guard_token_revoke），都不经这里。
 // 版本门在 index.ts 入口处查（标“查”）。日志只记错误码，不打印码、哈希、label。纯逻辑：依赖全部注入。
 import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
+import { readJsonObjectCapped } from '../_shared/body.ts';
 import { randomToken, tokenHash, TOKEN_TTL_MS } from '../_shared/intake-token.ts';
 
 export const DAILY_LIMIT = 10;
@@ -61,16 +62,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (!auth.ok) return auth.response;
   const userId = auth.user.userId;
 
-  let body: unknown;
-  try {
-    const text = await req.text();
-    if (text.length > MAX_BODY) return err(400, 'bad_request');
-    body = JSON.parse(text);
-  } catch {
-    return err(400, 'bad_request');
-  }
-  const b = typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
-  if (!b || b['action'] !== 'create') return err(400, 'bad_request');
+  const b = await readJsonObjectCapped(req, MAX_BODY);   // 边读边计字节，超了中断（安全审查第 2 条）
+  if (b === null || b === 'too_large' || b['action'] !== 'create') return err(400, 'bad_request');
   const label = cleanLabel(b['label']);
   if (label === 'bad') return err(400, 'bad_request');
   if (label === 'too_long') return err(400, 'label_too_long');

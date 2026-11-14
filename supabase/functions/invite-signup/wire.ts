@@ -6,7 +6,8 @@
 import { hmacHex, normalizeEmail } from '../_shared/email-hash.ts';
 import type { InviteErr, Locale } from './types.ts';
 
-const MAX_BODY = 4096;
+/** 请求体上限（字节；core.ts 用 _shared/body.ts 的 readJsonObjectCapped 边读边计） */
+export const MAX_BODY = 4096;
 
 // ---------------- 小工具 ----------------
 import { json } from '../_shared/http.ts';
@@ -92,17 +93,6 @@ export function email(v: unknown): string | null {
   if (s === null) return null;
   const e = normalizeEmail(s);
   return EMAIL.test(e) ? e : null;
-}
-
-export async function readBody(req: Request): Promise<Record<string, unknown> | null> {
-  const text = await req.text().catch(() => null);
-  if (text === null || text.length > MAX_BODY) return null;
-  try {
-    const v: unknown = JSON.parse(text);
-    return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
 }
 
 // ---------------- 邮件（不写邀请人；统一称“柠檬记的负责人”，R-83、R-105） ----------------
