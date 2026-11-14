@@ -153,10 +153,9 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
   return fv;
 }
 
-/** 在密码键盘上按一串数字再按“确定” */
+/** 在密码键盘上按 4 位数字（满 4 位自动交出，负责人 11-14“隐私记密只做4位数”，没有“确定”键） */
 async function typePin(page: Page, pad: string, digits: string): Promise<void> {
   for (const d of digits) await page.getByTestId(`${pad}-key-${d === '0' ? 9 : Number(d) - 1}`).click(); // 位置序号：1～9 是 key-0～key-8，0 是 key-9
-  await page.getByTestId(`${pad}-ok`).click();
 }
 
 async function shot(page: Page, name: string, browserName: string): Promise<void> {

@@ -14,7 +14,7 @@ export const VAULT_ERROR_CODES = [
   'vault_relock',          // 401  令牌里的 pin_epoch 不是当前值（别处改过或重设过密码，⑤）
   'not_set',               // 409  还没设过密码（unlock、change_pin、webauthn 等）
   'already_set',           // 409  setup 第二次（安全审查中 2）
-  'bad_pin',               // 400  不是 4～12 位数字
+  'bad_pin',               // 400  不是 4 位数字
   'pin_wrong',             // 403  密码不对、还没锁；带 left（还能试几次，1～4）
   'pin_locked',            // 423  逐级锁定中，或这一次输错正好锁上（11-14 整块评审第 6 条：锁上的那一次也回它）；带 retry_after_s
   'reauth_required',       // 401  reset 要 10 分钟内刚用邮箱验证码登录过（看 amr 的 otp timestamp，不看 iat）
@@ -39,7 +39,7 @@ export const vaultErrorBody = z.object({
 export type VaultErrorBody = z.infer<typeof vaultErrorBody>;
 
 // ---------------- 常量（出处见行尾） ----------------
-export const PIN_RE = /^\d{4,12}$/;                                  // 5.5：4 到 12 位数字
+export const PIN_RE = /^\d{4}$/;                                     // 5.5：4 位数字（负责人 11-14“隐私记密只做4位数”）
 export const VAULT_TOKEN_TTL_S = 600;                                // 5.5：10 分钟，每次调用续期
 export const VAULT_UNLOCK_MAX_AGE_S = 43200;                         // 11-14 主持人代定（整块评审第 22 条）：从输密码 / Face ID 解锁起最多续到 12 小时，之后要重新解锁
 export const VAULT_FAILS_PER_LEVEL = 5;                              // 5.5：连续错 5 次锁一次

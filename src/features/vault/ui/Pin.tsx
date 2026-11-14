@@ -1,6 +1,7 @@
 // 密码圆点 + 数字键盘（线框 s9 FIRSTPW / PWERR；视觉稿 .pdots、.kpad）和锁图标
-// • 圆点随输入增加，后面只多画一个空位，不暗示上限；“确定”在左下角，输够 4 位才能按；输到 12 位后不再接收（线框 s9 说明）
-// • 电脑上也能直接按数字键、Backspace、Enter（焦点在页面上时）
+// • 只做 4 位（负责人 11-14 原话“隐私记密只做4位数”，取代线框 s9 的“4 到 12 位、左下角‘确定’”）：固定 4 个圆点，
+//   输满 4 位自动交出，没有“确定”键（左下角留空位，键盘还是 3 × 4）
+// • 电脑上也能直接按数字键、Backspace（焦点在页面上时）
 // • 输入的数字只在这个组件的 state 里，交出去后立刻清空
 // • 不进运行日志（11-14 隐私记评审第 1 条）：外层带 data-rl-mask，run-log 只记 masked、不记坐标；数字键的 testid 用位置序号 key-0～key-9
 //   （按出现顺序：1～9 是 key-0～key-8，0 是 key-9），不带数字本身
@@ -11,8 +12,8 @@ import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import styles from './Vault.module.css';
 
-export const PIN_MIN = 4;
-export const PIN_MAX = 12;
+/** 密码位数：和服务器的 PIN_RE（shared/schema/vault.ts）一致 */
+export const PIN_LEN = 4;
 
 export function LockIcon({ big = false }: { big?: boolean }) {
   return (
@@ -22,7 +23,7 @@ export function LockIcon({ big = false }: { big?: boolean }) {
   );
 }
 
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'ok', '0', 'del'] as const;
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'gap', '0', 'del'] as const;
 /** 数字键的位置序号（testid 用）：按出现顺序 0～9 */
 const DIGIT_SLOT = new Map(KEYS.filter((k) => /^\d$/.test(k)).map((k, i) => [k, i]));
 
@@ -45,18 +46,13 @@ export function PinPad({ onSubmit, disabled = false, testId, msg = '', msgTestId
 }) {
   const t = useVaultT();
   const [pin, setPin] = useState('');
-  const ready = pin.length >= PIN_MIN && !disabled;
-  const submit = (): void => {
-    if (!ready) return;
-    const p = pin;
-    setPin('');
-    onSubmit(p);
-  };
   const press = (k: (typeof KEYS)[number]): void => {
-    if (disabled) return;
-    if (k === 'ok') submit();
-    else if (k === 'del') setPin((p) => p.slice(0, -1));
-    else setPin((p) => (p.length >= PIN_MAX ? p : p + k));
+    if (disabled || k === 'gap') return;
+    if (k === 'del') return setPin((p) => p.slice(0, -1));
+    const next = pin + k;
+    if (next.length < PIN_LEN) return setPin(next);
+    setPin('');
+    onSubmit(next);
   };
   // 电脑上的实体键盘：数字、Backspace、Enter
   useEffect(() => {
@@ -66,19 +62,17 @@ export function PinPad({ onSubmit, disabled = false, testId, msg = '', msgTestId
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (/^\d$/.test(e.key)) press(e.key as (typeof KEYS)[number]);
       else if (e.key === 'Backspace') press('del');
-      else if (e.key === 'Enter') press('ok');
       else return;
       e.preventDefault();
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
   });
-  const shown = Math.max(pin.length + 1, PIN_MIN);
   return (
     <div data-testid={testId} data-rl-mask="">
       <div className={styles.dots} role="img" aria-label={t('vault.pad.filled', { n: pin.length })} data-testid={`${testId}-dots`} data-n={pin.length}>
-        {Array.from({ length: Math.min(shown, PIN_MAX) }, (_, i) => (
-          <i key={i} className={`${styles.dot}${i < pin.length ? ` ${styles.dotOn}` : i >= PIN_MIN ? ` ${styles.dotMore}` : ''}`} />
+        {Array.from({ length: PIN_LEN }, (_, i) => (
+          <i key={i} className={i < pin.length ? `${styles.dot} ${styles.dotOn}` : styles.dot} />
         ))}
       </div>
       <p className={styles.pinErr} role="status" data-testid={msgTestId}>
@@ -86,10 +80,8 @@ export function PinPad({ onSubmit, disabled = false, testId, msg = '', msgTestId
       </p>
       <div className={styles.pad}>
         {KEYS.map((k) =>
-          k === 'ok' ? (
-            <button key={k} type="button" className={`${styles.key} ${styles.keyText}`} aria-disabled={!ready || undefined} onClick={submit} data-testid={`${testId}-ok`}>
-              {t('vault.pad.ok', {})}
-            </button>
+          k === 'gap' ? (
+            <span key={k} aria-hidden="true" />
           ) : k === 'del' ? (
             <button key={k} type="button" className={`${styles.key} ${styles.keyText}`} aria-label={t('vault.pad.del', {})} onClick={() => press('del')} data-testid={`${testId}-del`}>
               ⌫

@@ -211,11 +211,6 @@
   background: var(--text);
 }
 
-.dotMore {
-  box-shadow: inset 0 0 0 2px var(--text-2);
-  opacity: 0.6;
-}
-
 .pad {
   display: grid;
   grid-template-columns: repeat(3, 76px);

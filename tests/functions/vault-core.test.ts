@@ -23,15 +23,15 @@ describe('类型和 schema 一致', () => {
 });
 
 describe('setup（TC-B5-01）', () => {
-  it('3 位、13 位、带字母的拒；4 位、12 位成功；第二次 already_set', async () => {
+  it('只收 4 位（负责人 11-14）：3 位、5 位、12 位、带字母的拒；4 位成功；第二次 already_set', async () => {
     const w = world();
-    for (const pin of ['123', '1234567890123', '12a4']) expect((await call(w, { action: 'setup', pin })).body.error).toBe('bad_pin');
+    for (const pin of ['123', '12345', '123456789012', '12a4']) expect((await call(w, { action: 'setup', pin })).body.error).toBe('bad_pin');
     const ok = await call(w, { action: 'setup', pin: '1234' });
     expect(ok.status).toBe(200);
     expect(typeof ok.body.vault_token).toBe('string');
     expect(ok.headers.get('cache-control')).toBe('no-store');
     expect((await call(w, { action: 'setup', pin: '5678' })).body.error).toBe('already_set');
-    expect((await call(w, { action: 'setup', pin: '123456789012' }, { user: B })).status).toBe(200);
+    expect((await call(w, { action: 'setup', pin: '0000' }, { user: B })).status).toBe(200);
   });
 });
 
@@ -236,9 +236,9 @@ describe('入口', () => {
 
   it('日志里没有密码和令牌', async () => {
     const w = world();
-    const tok = await unlocked(w, A, '987654');
-    for (let i = 0; i < 5; i++) await call(w, { action: 'unlock', pin: '111111' });
-    expect(w.logs.join('|')).not.toMatch(/987654|111111/);
+    const tok = await unlocked(w, A, '9876');
+    for (let i = 0; i < 5; i++) await call(w, { action: 'unlock', pin: '1111' });
+    expect(w.logs.join('|')).not.toMatch(/9876|1111/);
     expect(w.logs.join('|')).not.toContain(tok);
   });
 });
