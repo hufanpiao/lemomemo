@@ -187,90 +187,90 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
           // 关掉以后焦点不交给 Radix 找（没有 RD.Trigger），和原来一样由页面接手
           onCloseAutoFocus={(e) => e.preventDefault()}
         >
-        <EditShell
-          prefix="anniv-edit"
-          kind={kind}
-          backLabel={t('anniv.edit.back', {})}
-          onBack={close}
-          rec={rec}
-          own={{ empty: t('anniv.edit.st.empty', {}), rejected: t('anniv.edit.st.rejected', {}) }}
-        >
-          <div className={styles.seg} role="group" aria-label={t('anniv.edit.typeLabel', {})}>
-            {KINDS.map((k) => (
-              <button key={k} type="button" className={styles.segBtn} aria-pressed={form.kind === k} disabled={off} onClick={() => change({ kind: k })} data-testid={`anniv-kind-${k}`}>
-                {t(KIND_KEY[k], {})}
-              </button>
-            ))}
-          </div>
+          <EditShell
+            prefix="anniv-edit"
+            kind={kind}
+            backLabel={t('anniv.edit.back', {})}
+            onBack={close}
+            rec={rec}
+            own={{ empty: t('anniv.edit.st.empty', {}), rejected: t('anniv.edit.st.rejected', {}) }}
+          >
+            <div className={styles.seg} role="group" aria-label={t('anniv.edit.typeLabel', {})}>
+              {KINDS.map((k) => (
+                <button key={k} type="button" className={styles.segBtn} aria-pressed={form.kind === k} disabled={off} onClick={() => change({ kind: k })} data-testid={`anniv-kind-${k}`}>
+                  {t(KIND_KEY[k], {})}
+                </button>
+              ))}
+            </div>
 
-          {fresh ? null : (
-            <FormGroup>
-              <AvatarRow id={ed.savedId} form={form} saved={ed.row} off={off} t={t} />
-            </FormGroup>
-          )}
-
-          <FormGroup>
-            {fresh ? (
-              <NameWithAvatar id={ed.savedId} saved={ed.row} form={form} off={off} t={t} change={change} />
-            ) : (
-              <>
-                <Field label={t('anniv.edit.name', {})} htmlFor="anniv-name">
-                  <TextInput id="anniv-name" className={styles.inlineIn} value={form.name} maxLength={NAME_MAX} disabled={off} placeholder={t('anniv.edit.namePh', {})} onCommit={(v) => change({ name: v.trim() })} data-testid="anniv-edit-name" />
-                </Field>
-                <Field label={t('anniv.edit.date', {})}>
-                  <Pressable type="button" className={styles.rowBtn} disabled={off} aria-expanded={dateOpen} onClick={() => setDateOpen((v) => !v)} data-testid="anniv-edit-date">
-                    <span>{dateRowText(form, locale, t)}</span>
-                    <span className={styles.chev} data-open={dateOpen || undefined} aria-hidden="true">
-                      ›
-                    </span>
-                  </Pressable>
-                </Field>
-              </>
+            {fresh ? null : (
+              <FormGroup>
+                <AvatarRow id={ed.savedId} form={form} saved={ed.row} off={off} t={t} />
+              </FormGroup>
             )}
-            {fresh || dateOpen ? <DateFields form={form} off={off} t={t} change={change} locale={locale} today={today} label={fresh} /> : null}
-            {form.kind === 'countdown' ? (
-              <Field label={t('anniv.edit.afterDue', {})} htmlFor="anniv-after">
-                <Select
-                  id="anniv-after"
-                  value={form.after_due}
-                  disabled={off}
-                  options={[
-                    { value: 'archive', label: t('anniv.edit.afterDue.archive', {}) },
-                    { value: 'yearly', label: t('anniv.edit.afterDue.yearly', {}) },
-                  ]}
-                  onChange={(v) => change({ after_due: v === 'yearly' ? 'yearly' : 'archive' })}
-                  data-testid="anniv-edit-after"
-                />
-              </Field>
-            ) : null}
-            <Field label={t('anniv.edit.remind', {})}>
-              <Pressable type="button" className={styles.rowBtn} disabled={off} onClick={() => setSheet(true)} data-testid="anniv-edit-remind">
-                <span>{remindLine(r, defaults, t)}</span>
-                <span className={styles.chev} aria-hidden="true">›</span>
-              </Pressable>
-            </Field>
-            <Field label={t('anniv.edit.note', {})} htmlFor="anniv-note">
-              <TextArea id="anniv-note" className={`${styles.inlineIn} ${styles.inlineArea}`} rows={1} value={form.note} maxLength={NOTE_MAX} disabled={off} placeholder={t('anniv.edit.notePh', {})} onCommit={(v) => change({ note: v })} data-testid="anniv-edit-note" />
-            </Field>
-          </FormGroup>
 
-          {st ? (
-            <p className={styles.nextLine} data-testid="anniv-edit-next">
-              {st.past ? t('anniv.edit.pastLine', { n: -st.days, date: fmtDay(st.next.date, locale, 'monthDayWeek') }) : t('anniv.edit.next', { text: nextText(r, st, today, locale, t) })}
-            </p>
-          ) : null}
-        </EditShell>
+            <FormGroup>
+              {fresh ? (
+                <NameWithAvatar id={ed.savedId} saved={ed.row} form={form} off={off} t={t} change={change} />
+              ) : (
+                <>
+                  <Field label={t('anniv.edit.name', {})} htmlFor="anniv-name">
+                    <TextInput id="anniv-name" className={styles.inlineIn} value={form.name} maxLength={NAME_MAX} disabled={off} placeholder={t('anniv.edit.namePh', {})} onCommit={(v) => change({ name: v.trim() })} data-testid="anniv-edit-name" />
+                  </Field>
+                  <Field label={t('anniv.edit.date', {})}>
+                    <Pressable type="button" className={styles.rowBtn} disabled={off} aria-expanded={dateOpen} onClick={() => setDateOpen((v) => !v)} data-testid="anniv-edit-date">
+                      <span>{dateRowText(form, locale, t)}</span>
+                      <span className={styles.chev} data-open={dateOpen || undefined} aria-hidden="true">
+                        ›
+                      </span>
+                    </Pressable>
+                  </Field>
+                </>
+              )}
+              {fresh || dateOpen ? <DateFields form={form} off={off} t={t} change={change} locale={locale} today={today} label={fresh} /> : null}
+              {form.kind === 'countdown' ? (
+                <Field label={t('anniv.edit.afterDue', {})} htmlFor="anniv-after">
+                  <Select
+                    id="anniv-after"
+                    value={form.after_due}
+                    disabled={off}
+                    options={[
+                      { value: 'archive', label: t('anniv.edit.afterDue.archive', {}) },
+                      { value: 'yearly', label: t('anniv.edit.afterDue.yearly', {}) },
+                    ]}
+                    onChange={(v) => change({ after_due: v === 'yearly' ? 'yearly' : 'archive' })}
+                    data-testid="anniv-edit-after"
+                  />
+                </Field>
+              ) : null}
+              <Field label={t('anniv.edit.remind', {})}>
+                <Pressable type="button" className={styles.rowBtn} disabled={off} onClick={() => setSheet(true)} data-testid="anniv-edit-remind">
+                  <span>{remindLine(r, defaults, t)}</span>
+                  <span className={styles.chev} aria-hidden="true">›</span>
+                </Pressable>
+              </Field>
+              <Field label={t('anniv.edit.note', {})} htmlFor="anniv-note">
+                <TextArea id="anniv-note" className={`${styles.inlineIn} ${styles.inlineArea}`} rows={1} value={form.note} maxLength={NOTE_MAX} disabled={off} placeholder={t('anniv.edit.notePh', {})} onCommit={(v) => change({ note: v })} data-testid="anniv-edit-note" />
+              </Field>
+            </FormGroup>
+
+            {st ? (
+              <p className={styles.nextLine} data-testid="anniv-edit-next">
+                {st.past ? t('anniv.edit.pastLine', { n: -st.days, date: fmtDay(st.next.date, locale, 'monthDayWeek') }) : t('anniv.edit.next', { text: nextText(r, st, today, locale, t) })}
+              </p>
+            ) : null}
+          </EditShell>
         </RD.Content>
-      <RemindSheet
-        open={sheet}
-        onOpenChange={setSheet}
-        value={{ offsets: offsetsList(form.offsets), time: form.time }}
-        onChange={(v) => change({ offsets: offsetsKey(v.offsets), time: v.time })}
-        defaults={defaults}
-        rec={recOf(form, created)}
-        tz={tz}
-        mode="item"
-      />
+        <RemindSheet
+          open={sheet}
+          onOpenChange={setSheet}
+          value={{ offsets: offsetsList(form.offsets), time: form.time }}
+          onChange={(v) => change({ offsets: offsetsKey(v.offsets), time: v.time })}
+          defaults={defaults}
+          rec={recOf(form, created)}
+          tz={tz}
+          mode="item"
+        />
       </div>
     </RD.Root>
   );
