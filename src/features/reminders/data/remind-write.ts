@@ -56,8 +56,14 @@ export function ackReminder(r: Reminder, now: number): Promise<SaveOutcome> {
   return savePatch(tableOf(r), r.id, ackPatch(r, now), true);
 }
 
+/** “稍后”写哪张表、哪一行、什么、带不带提醒标记（页面内按“稍后”和通知上的“推迟”转 outbox 都用这一份，data/remind-pending.ts） */
+export function snoozeWrite(r: Pick<Reminder, 'kind' | 'id'>, at: number, now: number) {
+  return { table: tableOf(r), id: r.id, data: snoozePatch(at, now), remind: true } as const;
+}
+
 export function snoozeReminder(r: Reminder, at: number, now: number): Promise<SaveOutcome> {
-  return savePatch(tableOf(r), r.id, snoozePatch(at, now), true);
+  const w = snoozeWrite(r, at, now);
+  return savePatch(w.table, w.id, w.data, w.remind);
 }
 
 /**

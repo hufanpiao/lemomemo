@@ -1,6 +1,7 @@
 // 离线队列带版本（TC-B1-41）和 pending_actions（0.29 续第 107 条）
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createOutbox, drainPendingActions, isValidPendingAction, keepPendingAction, prunePendingActions } from '../outbox.ts';
+import { createOutbox, isValidPendingAction, keepPendingAction, prunePendingActions } from '../outbox.ts';
+import { drainPendingActions } from '../pending-drain.ts';
 import { migrateOutboxItem } from '../outbox-migrations.ts';
 import { clearAllCollections } from '../store.ts';
 import { clock, mk, seed, setup, todo, uid } from './outbox-fixtures.ts';
@@ -72,6 +73,14 @@ describe('pending_actions（0.29 续第 107 条）', () => {
   const left = async (cache: Awaited<ReturnType<typeof setup>>['cache']) =>
     (await cache.tx(['pending_actions'], 'readonly', (t) => t.getAll<{ id: string }>('pending_actions'))).map((a) => a.id).sort();
 
+  /** 运行日志接到数组里（platform/run-log-api.ts 的 sink） */
+  const logLines = (): string[] => {
+    const lines: string[] = [];
+    (globalThis as Record<string, unknown>)['__lemoRunLog'] = { q: [], sink: (l: string) => lines.push(l) };
+    return lines;
+  };
+  const patchOf = (a: { row_id: string }) => ({ table: 'todos', id: a.row_id, op: 'patch' as const, data: { done: true } });
+
   it('别的账号的、超过 24 小时的丢掉，其余（已校验过形状）转进 outbox', async () => {
     const { cache, outbox } = await setup();
     await seed(cache, 'todos', uid(1), todo(1));
@@ -82,7 +91,7 @@ describe('pending_actions（0.29 续第 107 条）', () => {
       now: clock.t,
       toEnqueue: (a) => {
         seen.push(a);
-        return { table: 'todos', id: a.row_id, op: 'patch', data: { done: true } };
+        return patchOf(a);
       },
     });
     expect(n).toBe(1);
@@ -100,11 +109,102 @@ describe('pending_actions（0.29 续第 107 条）', () => {
       now: clock.t,
       toEnqueue: () => {
         calls++;
-        return null;
+        return { drop: 'gone' };
       },
     });
     expect([n, calls]).toEqual([0, 0]);
     expect(await left(cache)).toEqual([]);
+  });
+
+  it('丢弃（提醒已换过一次、行已删）：删掉这一项，记一行运行日志，只有表名、动作、原因码', async () => {
+    const { cache, outbox } = await setup();
+    await put(cache, [pa('a', { action: { type: 'done', due_at: 5 } }), pa('b', { row_id: uid(2) })]);
+    const lines = logLines();
+    const n = await drainPendingActions(cache, outbox, {
+      userId: 'me',
+      now: clock.t,
+      toEnqueue: (a) => ({ drop: a.id === 'a' ? 'stale' : 'gone' }),
+    });
+    expect(n).toBe(0);
+    expect(await left(cache)).toEqual([]);
+    expect(await outbox.list()).toEqual([]);
+    expect(lines).toEqual(['pending drop table=todos action=done reason=stale', 'pending drop table=todos action=snooze reason=gone']);
+  });
+
+  it('later：这一次判断不了（纪念日推算还没加载）就留着，下次再转', async () => {
+    const { cache, outbox } = await setup();
+    await put(cache, [pa('p1')]);
+    expect(await drainPendingActions(cache, outbox, { userId: 'me', now: clock.t, toEnqueue: () => 'later' })).toBe(0);
+    expect(await left(cache)).toEqual(['p1']);
+  });
+
+  it('队列设了闸（outbox_suspended）：按键不丢，留着下次再试', async () => {
+    const { cache, outbox } = await setup();
+    await seed(cache, 'todos', uid(1), todo(1));
+    await put(cache, [pa('p1')]);
+    outbox.suspend();
+    expect(await drainPendingActions(cache, outbox, { userId: 'me', now: clock.t, toEnqueue: patchOf })).toBe(0);
+    expect(await left(cache)).toEqual(['p1']);
+    outbox.suspend(false);
+    expect(await drainPendingActions(cache, outbox, { userId: 'me', now: clock.t, toEnqueue: patchOf })).toBe(1);
+    expect(await left(cache)).toEqual([]);
+  });
+
+  it('入队和删除在同一个事务里：删除那一步崩了，入队也不算（不会下次再入队一遍）', async () => {
+    const { cache, outbox } = await setup();
+    await seed(cache, 'todos', uid(1), todo(1));
+    await put(cache, [pa('p1')]);
+    // 模拟“入队以后、删掉之前崩了”：凡是删 pending_actions 的那一步都抛错
+    const realTx = cache.tx.bind(cache);
+    (cache as { tx: typeof cache.tx }).tx = (stores, mode, fn, opts) =>
+      realTx(stores, mode, (t) => fn({ ...t, delete: (s, k) => (s === 'pending_actions' ? Promise.reject(new Error('crash')) : t.delete(s, k)) }), opts);
+    await expect(drainPendingActions(cache, outbox, { userId: 'me', now: clock.t, toEnqueue: patchOf })).rejects.toThrow('crash');
+    (cache as { tx: typeof cache.tx }).tx = realTx;
+    // 要么都成了、要么都没成：按键还在，队列里就不能已经有它
+    expect(await left(cache)).toEqual(['p1']);
+    expect(await outbox.list()).toEqual([]);
+    expect(await drainPendingActions(cache, outbox, { userId: 'me', now: clock.t, toEnqueue: patchOf })).toBe(1);
+    expect(await outbox.list()).toHaveLength(1);
+  });
+
+  it('两处同时转（回到前台和打开整页提醒一起触发）：同一个按键只入队一次', async () => {
+    const { cache, outbox } = await setup();
+    await seed(cache, 'todos', uid(1), todo(1));
+    await put(cache, [pa('p1')]);
+    const go = () => drainPendingActions(cache, outbox, { userId: 'me', now: clock.t, toEnqueue: (a) => ({ ...patchOf(a), data: { snooze_at: 7 } }) });
+    const [x, y] = await Promise.all([go(), go()]);
+    expect(x + y).toBe(1);
+    expect(await outbox.list()).toHaveLength(1);
+  });
+
+  it('同一行的第二个按键这一轮不转（判断用的是转之前的行），留到下一轮', async () => {
+    const { cache, outbox } = await setup();
+    await seed(cache, 'todos', uid(1), todo(1));
+    await put(cache, [pa('later-one', { created_at: clock.t - 60_000 }), pa('first', { created_at: clock.t - 2 * 60_000 })]);
+    const seen: string[] = [];
+    const go = () =>
+      drainPendingActions(cache, outbox, {
+        userId: 'me',
+        now: clock.t,
+        toEnqueue: (a) => {
+          seen.push(a.id);
+          return patchOf(a);
+        },
+      });
+    expect(await go()).toBe(1);
+    expect(seen).toEqual(['first']);
+    expect(await left(cache)).toEqual(['later-one']);
+    expect(await go()).toBe(1);
+    expect(await left(cache)).toEqual([]);
+  });
+
+  it('入队被拒（这一行本机已经没有了 row_missing 等）：删掉，日志记拒绝码', async () => {
+    const { cache, outbox } = await setup();
+    await put(cache, [pa('p1')]);
+    const lines = logLines();
+    expect(await drainPendingActions(cache, outbox, { userId: 'me', now: clock.t, toEnqueue: patchOf })).toBe(0);
+    expect(await left(cache)).toEqual([]);
+    expect(lines).toEqual(['pending drop table=todos action=snooze reason=row_missing']);
   });
 
   it('prunePendingActions（启动时先清）：别的账号的、超过 24 小时的、时间在将来的、形状不对的删掉', async () => {

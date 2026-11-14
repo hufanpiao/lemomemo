@@ -1,7 +1,7 @@
 // 离线写入队列的类型和接口（架构 4.2、0.27 第 1 点）：K7、K8 和 data 层的 write.* 按这里的类型接
 // 实现在 outbox.ts（createOutbox），纯函数在 outbox-logic.ts
 // 纯 TS：不准 import React 和任何功能（A1）
-import type { OutboxPause, ServerRow } from './cache.ts';
+import type { CacheTx, OutboxPause, ServerRow } from './cache.ts';
 import type { Manifest } from './manifest.ts';
 import type { OutboxMigration } from './outbox-migrations.ts';
 import type { SentFailure } from '../../shared/schema/sync.ts';
@@ -66,6 +66,12 @@ export interface EnqueueInput {
   /** 带提醒（调用方用 shared 的 remindAtOf 本机现算） */
   remind?: boolean;
   deps?: readonly RecRef[];
+}
+
+/** 和入队同一个事务里顺带做的一步（Outbox.enqueue 的 also）：stores 是它要碰的仓 */
+export interface EnqueueAlso {
+  readonly stores: readonly string[];
+  run(t: CacheTx): Promise<void>;
 }
 
 /** apply_patch / insert 的确认（K8 从响应里取） */
@@ -178,8 +184,9 @@ export interface Outbox {
   /**
    * 写入（data 层的 write.* 都走这里）：校验 → 同一个事务里改 view、入队 → 通知集合。
    * 返回队列项；和前面没发的 insert 抵消时返回 null。被拒时抛 OutboxRejectError（readonly_row、row_missing、invalid_row……）
+   * also：和入队同一个事务里顺带做的一步（现在只有 core/pending-drain.ts 删掉转完的通知按键）；它抛错整个事务回滚、错照抛
    */
-  enqueue(input: EnqueueInput): Promise<OutboxItem | null>;
+  enqueue(input: EnqueueInput, also?: EnqueueAlso): Promise<OutboxItem | null>;
   /**
    * 取下一项来发并标成 inflight；暂停中、设了闸、已有一项在发、没有可发的时返回 null。
    * K8 注意：每发一项之前、每处理一个响应之前，先看闸（isSuspended() 或 boot.switching），设了就停，不发、不写回。
