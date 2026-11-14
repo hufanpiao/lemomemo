@@ -49,7 +49,9 @@ const PREVIEW_BUCKET = 'vault-preview';
 const SIGN_PREFIX = `/storage/v1/object/sign/${PREVIEW_BUCKET}/`;
 const PREVIEW_NAME = /^[0-9a-f]{32}\.pptx$/;
 const asKind = (k: string) => k as DocKind;
-const DOC_MIME = new Map<string, string>(Object.entries(DOC_TYPES));   // kind 已经过 vaultFileMeta / 库里的 check，这里只换类型
+// 先落到显式类型再 Object.entries：发布脚本第 1 步就跑 check_backend，那时 _shared/gen 还没生成，导入的类型看不出来会报 F7（11-14 publish-run 测试红）
+const DOC_TYPE_MAP: Readonly<Record<string, string>> = DOC_TYPES;
+const DOC_MIME = new Map<string, string>(Object.entries(DOC_TYPE_MAP));   // kind 已经过 vaultFileMeta / 库里的 check，这里只换类型
 
 const RULES: Rules = {
   parse(v) {
