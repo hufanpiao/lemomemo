@@ -99,6 +99,31 @@ export interface TypeBarProps {
   onClose(): void;
 }
 
+/**
+ * 把手往下滑 SWIPE_CLOSE_PX 以上松开就收起。抓住指针（第三方审查前端-18）：手指滑出把手再松开也收得到 up；
+ * 被系统打断（pointercancel）就清掉起点，免得下次点一下按旧起点误收起
+ */
+function useGripClose(close: () => void) {
+  const startY = useRef<number | null>(null);
+  return {
+    down(e: PointerEvent) {
+      startY.current = e.clientY;
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // 指针已经没了：照旧，收不到 up 时由 cancel 或下次按下重置
+      }
+    },
+    up(e: PointerEvent) {
+      if (startY.current !== null && e.clientY - startY.current >= SWIPE_CLOSE_PX) close();
+      startY.current = null;
+    },
+    cancel() {
+      startY.current = null;
+    },
+  };
+}
+
 const dayOf = (it: AiItem): string => {
   const d = it.kind === 'event' ? it.date : it.due;
   return [d ? d.slice(5) : '', it.time ?? ''].filter(Boolean).join(' ');
@@ -115,7 +140,6 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
   const t = usePlusT();
   const s = useTypeBar({ day, callAi, writer, online, onAsked: () => asked() });
   const input = useRef<HTMLInputElement>(null);
-  const startY = useRef<number | null>(null);
 
   // 收起了打字条、只留提示条（Q-10）：再点“＋”展开；提示条没了就真正关掉
   // 收起时记下当时的 opened；渲染时直接算（不用 effect 重置）：再点“＋”opened 一变，同一次渲染就展开，
@@ -190,13 +214,7 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     e.preventDefault();
     close();
   };
-  const down = (e: PointerEvent) => {
-    startY.current = e.clientY;
-  };
-  const up = (e: PointerEvent) => {
-    if (startY.current !== null && e.clientY - startY.current >= SWIPE_CLOSE_PX) close();
-    startY.current = null;
-  };
+  const grip = useGripClose(close);
 
   const first = s.preview[0];
   const kind = (it: AiItem): string => t(`plus.kind.${it.kind}`, {});
@@ -211,7 +229,7 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
           <Mist onTap={tapMist} tag="typebar" log={rlog} testId="type-mist" />
           {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- mousedown 只拦失焦（台账 Q-25，platform/viewport.ts 的 keepFieldFocus），不是交互，键盘操作不受影响 */}
           <form ref={bar} className={styles.bar} onSubmit={onSubmit} onMouseDown={keepFieldFocus} aria-label={t('plus.type.label', {})} data-testid="type-bar">
-            <div className={styles.grip} onPointerDown={down} onPointerUp={up} aria-hidden="true" />
+            <div className={styles.grip} onPointerDown={grip.down} onPointerUp={grip.up} onPointerCancel={grip.cancel} aria-hidden="true" />
             {s.asking ? (
               <ConfirmRow item={s.asking} onChoose={(c) => void s.choose(c)} onDismiss={s.dismissConfirm} />
             ) : (
