@@ -394,6 +394,9 @@ isOneToOne: false
 "ai_quota_take":
 { Args: { "p_key": string,"p_limit": number }; Returns: number
                            },
+"api_token_create":
+{ Args: { "p_hash": string,"p_label": string,"p_max": number,"p_rate_key": string,"p_rate_limit": number,"p_rate_window_s": number,"p_since": string,"p_user": string }; Returns: Json
+                           },
 "auth_mail_counts":
 { Args: Record<PropertyKey, never>; Returns: {
               "auth_1h": number,"auth_24h": number
