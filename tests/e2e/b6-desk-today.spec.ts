@@ -43,6 +43,12 @@ test.describe('B6 电脑版今天页', () => {
     await expect(page).toHaveURL(/#\/today$/);
     // 抽屉从右边盖上来：右沿离窗口右边 16
     await expect.poll(() => drawer.evaluate((el) => Math.round(window.innerWidth - el.getBoundingClientRect().right))).toBe(16);
+    // 抽屉开着时 Ctrl+N 打开打字条、在里面按 Esc：只关打字条，抽屉还在（独立评审第 1 条）
+    await page.keyboard.press('ControlOrMeta+n');
+    await expect(page.getByTestId('type-input')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('type-bar')).toHaveCount(0);
+    await expect(drawer).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(drawer).toHaveCount(0);
     await expect(live).toBeFocused();

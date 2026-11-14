@@ -29,11 +29,11 @@ import { TodayNotes } from '../../notes/index.ts';
 import { TodoDrawerEditor } from '../../todos/index.ts';
 import { annivName, useAnnivUpcoming, useLunarToday, useWeekBusy } from '../hooks/useTodayDesk.ts';
 import { useLocale, useTodayT } from '../hooks/useTodayT.ts';
-import { deskKo } from '../i18n/desk-ko.ts';
-import { deskZh } from '../i18n/desk-zh.ts';
+import { todayDeskKo } from '../i18n/desk-ko.ts';
+import { todayDeskZh } from '../i18n/desk-zh.ts';
 import styles from './TodayDesk.module.css';
 
-const useTodayDeskT = makeUseT({ zh: deskZh, ko: deskKo });
+const useTodayDeskT = makeUseT({ zh: todayDeskZh, ko: todayDeskKo });
 
 /** 默认布局（写在代码里；没存过布局时用它，“恢复默认布局”把它写回 settings） */
 export const TODAY_DEFAULT: DeskLayoutValue = {
@@ -106,8 +106,10 @@ export function Lunar({ today }: { today: DateStr }) {
   return d ? <small className={styles.lunar}>{t('desk.lunar', { d })}</small> : null;
 }
 
-/** 抽屉里的待办、日程编辑器（kit 的 DetailDrawer：Esc、×、焦点还回去）；关上时原来的焦点不在了，就找这一条在今天页上的行按钮 */
-const refocus = (key: string): HTMLElement | null => document.querySelector<HTMLElement>(`main[data-feature="today"] [data-open="${key.slice(key.indexOf(':') + 1)}"]`);
+/** 抽屉里的待办、日程编辑器（kit 的 DetailDrawer：Esc、×、焦点还回去）；关上时原来的焦点不在了，就找这一条在今天页上的行按钮，
+ *  那一行也没了（删了、日子过了）退到页顶日期标题（它 tabIndex=-1），焦点不掉到 body（独立评审第 10 条） */
+const refocus = (key: string): HTMLElement | null =>
+  document.querySelector<HTMLElement>(`main[data-feature="today"] [data-open="${key.slice(key.indexOf(':') + 1)}"]`) ?? document.querySelector<HTMLElement>('main[data-feature="today"] h1');
 
 function TodayDrawer({ sel, side, handle, onClose }: { sel: TodaySel; side: 'left' | 'right'; handle: ReactNode; onClose(): void }) {
   const t = useTodayDeskT();

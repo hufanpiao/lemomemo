@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { LAYOUT_V, type DeskLayoutValue } from '../../../../../shared/schema/layout.ts';
 import { migrateLayout } from '../layout-migrate.ts';
-import { COL_MAX, dropEmpty, fitWidths, flatPanels, minFracOf, moveBy, moveTo, readLayout, resizeAt, resizeRange, sameLayout, setCollapsed, toStored, whereIs } from '../layout-model.ts';
+import { COL_MAX, dropEmpty, fitWidths, minFracOf, moveBy, moveTo, readLayout, resizeAt, resizeRange, sameLayout, setCollapsed, toStored, whereIs } from '../layout-model.ts';
 
 const DEF: DeskLayoutValue = {
   v: LAYOUT_V,
@@ -60,11 +60,12 @@ describe('readLayout：读出来的值', () => {
     expect(layout.collapsed).toEqual(['soon']);
   });
 
-  it('栏宽越界夹到 [最窄, 0.6] 再归一化', () => {
+  it('栏宽越界：归一化以后每栏仍在 [最窄, 0.6]，加起来是 1', () => {
     const { layout } = readLayout({ v: 1, cols: [{ w: 0.95, panels: ['now', 'river'] }, { w: 0.01, panels: ['week', 'soon', 'notes'] }] }, DEF, MIN);
     const ws = layout.cols.map((c) => c.w);
     expect(sum(ws)).toBeCloseTo(1);
-    expect(ws[0]).toBeCloseTo(COL_MAX / (COL_MAX + MIN));
+    expect(ws[0]).toBe(COL_MAX);
+    expect(ws[1]).toBeCloseTo(1 - COL_MAX);
   });
 });
 
@@ -101,11 +102,10 @@ describe('拖动、键盘移动、收起', () => {
     expect(panelsOf(moveBy(folded, 'notes', 'up', MIN))).toEqual([['now', 'river'], ['notes', 'week', 'soon']]);
   });
 
-  it('whereIs 按看得见的块数；收起再放回回原位；flatPanels 首尾相接、不含收起的', () => {
+  it('whereIs 按看得见的块数；收起再放回回原位', () => {
     const folded = setCollapsed(DEF, 'week', true);
     expect(whereIs(folded, 'soon')).toEqual({ col: 1, at: 0 });
     expect(whereIs(folded, 'week')).toBeNull();
-    expect(flatPanels(folded)).toEqual(['now', 'river', 'soon', 'notes']);
     expect(setCollapsed(folded, 'week', false)).toEqual(DEF);
     expect(setCollapsed(DEF, 'week', false)).toBe(DEF);
   });
@@ -126,6 +126,23 @@ describe('栏宽', () => {
     expect(fitWidths([0.3], MIN)).toEqual([1]);
     expect(fitWidths([0.1, 0.9, 0.5], 0.4)).toEqual([1 / 3, 1 / 3, 1 / 3]);
     expect(sum(fitWidths([Number.NaN, 0.5], MIN))).toBeCloseTo(1);
+  });
+
+  it('fitWidths：归一化以后也不越界（夹一次再除会把 [0.6, 0.2] 撑到 0.75）；在范围里的按原比例分剩下的', () => {
+    for (const ws of [[0.9, 0.05], [0.9, 0.05, 0.05], [0.01, 0.01, 0.98], [0.7, 0.7], [0.3, 0.3, 0.3]]) {
+      const f = fitWidths(ws, MIN);
+      expect(sum(f)).toBeCloseTo(1);
+      for (const w of f) {
+        expect(w).toBeLessThanOrEqual(COL_MAX + 1e-9);
+        expect(w).toBeGreaterThanOrEqual(MIN - 1e-9);
+      }
+    }
+    const two = fitWidths([0.9, 0.05], MIN);
+    expect(two[0]).toBe(COL_MAX);
+    expect(two[1]).toBeCloseTo(1 - COL_MAX);
+    const f = fitWidths([0.98, 0.01, 0.01], MIN);
+    expect(f[0]).toBeCloseTo(COL_MAX);
+    expect(f[1]).toBeCloseTo((1 - COL_MAX) / 2);
   });
 
   it('toStored 留 3 位小数；sameLayout 按存的值比；dropEmpty 没空栏原样返回', () => {

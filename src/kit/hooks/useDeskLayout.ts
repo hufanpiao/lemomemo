@@ -13,9 +13,22 @@ import type { DeskLayoutValue } from '../../../shared/schema/layout.ts';
 import { logEvent } from '../../../shared/core/log-bus.ts';
 import { settingValue } from '../../core/setting-read.ts';
 import { readInstallId } from '../../platform/device-info.ts';
+import { opensKeyboard } from '../../platform/env.ts';
+import { useKeys } from './useKeys.ts';
 import { rlog } from '../../platform/run-log-api.ts';
 import { useSettingWriter } from './useSettingWriter.ts';
 import { readLayout, sameLayout, toStored } from '../components/DeskLayout/layout-model.ts';
+
+/** 布局撤销的 Ctrl+Z：on（提示条在）时才算；焦点在能打字的地方时让给浏览器撤销打字（useKeys 的约定） */
+export function useDeskUndoKey(on: boolean, undo: () => void): void {
+  useKeys({
+    'mod+z': (e) => {
+      if (!on || opensKeyboard(e.target)) return false;
+      undo();
+      return true;
+    },
+  });
+}
 
 /** 布局切换的运行日志：挂上记 desk on、卸下记 desk off，分栏和一列换了记 desk mode */
 export function useDeskModeLog(page: string, wide: boolean): void {

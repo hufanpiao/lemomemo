@@ -30,7 +30,7 @@ export function ListToasts<X = never>({ g, onUndo, text, prefix }: ListToastsPro
           undoLabel={text.undo}
           onUndo={() => onUndo(toast.id)}
           onClose={() => g.dismiss(toast)}
-          solo
+          solo="keep"
           data-testid={`${prefix}-toast`}
         />
       ) : toast?.kind === 'error' ? (

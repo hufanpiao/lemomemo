@@ -14,6 +14,7 @@ import {
   useSensor,
   useSensors,
   type CollisionDetection,
+  type DragCancelEvent,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -50,7 +51,7 @@ export interface DndShellProps {
   onStart(id: string): void;
   onOver(id: string, overId: string): void;
   onEnd(id: string, overId: string | null): void;
-  onCancel(): void;
+  onCancel(id: string): void;
   /** 手上那张小卡（拖着的块的标题），null 不画 */
   overlay: ReactNode;
   overlayClass: string | undefined;
@@ -59,7 +60,8 @@ export interface DndShellProps {
 
 export function DndShell({ disabled, onStart, onOver, onEnd, onCancel, overlay, overlayClass, children }: DndShellProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
-  const quiet = { announcements: { onDragStart: () => undefined, onDragOver: () => undefined, onDragEnd: () => undefined, onDragCancel: () => undefined } };
+  // 播报和键盘说明都由 DeskLayout 自己的读屏区出（中韩文），dnd-kit 自带的英文说明也关掉（独立评审第 13 条）
+  const quiet = { screenReaderInstructions: { draggable: '' }, announcements: { onDragStart: () => undefined, onDragOver: () => undefined, onDragEnd: () => undefined, onDragCancel: () => undefined } };
   return (
     <DndContext
       sensors={disabled ? [] : sensors}
@@ -68,7 +70,7 @@ export function DndShell({ disabled, onStart, onOver, onEnd, onCancel, overlay, 
       onDragStart={(e: DragStartEvent) => onStart(String(e.active.id))}
       onDragOver={(e: DragOverEvent) => e.over && onOver(String(e.active.id), String(e.over.id))}
       onDragEnd={(e: DragEndEvent) => onEnd(String(e.active.id), e.over ? String(e.over.id) : null)}
-      onDragCancel={onCancel}
+      onDragCancel={(e: DragCancelEvent) => onCancel(String(e.active.id))}
     >
       {children}
       <DragOverlay dropAnimation={null} {...(overlayClass ? { className: overlayClass } : {})}>

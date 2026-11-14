@@ -67,44 +67,17 @@ export async function shot(page: Page, browserName: string, name: string): Promi
   await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, animations: 'disabled' });
 }
 
-/** 本机库写几个分类和几条随手记（形状同 b4-notes-s7s8.spec.ts 的 seedCategories），“＋”气泡记成按住过（不挡侧栏旁边的“随手记”标题），写完刷新 */
-export async function seedNotes(page: Page): Promise<void> {
+/** 往本机库 planner-v4 原样写几行（[仓名, 一行]），写完刷新：seedNotes、seedToday 共用 */
+async function idbPut(page: Page, rows: [string, unknown][]): Promise<void> {
   await page.evaluate(
-    (hint) =>
+    (all) =>
       new Promise<void>((resolve, reject) => {
         const req = indexedDB.open('planner-v4');
         req.onerror = () => reject(new Error(String(req.error)));
         req.onsuccess = () => {
           const db = req.result;
-          const tx = db.transaction(['categories', 'notes', 'drafts'], 'readwrite');
-          tx.objectStore('drafts').put(hint);
-          const cats = [
-            { id: '0e2e0000-0000-4000-8000-0000000006a1', name: '工作灵感', color: '#e0a100' },
-            { id: '0e2e0000-0000-4000-8000-0000000006a2', name: '韩国生活', color: '#3f8f6b' },
-            { id: '0e2e0000-0000-4000-8000-0000000006a3', name: '读书', color: '#4a6fd1' },
-          ];
-          cats.forEach((c, i) => {
-            const row = { ...c, sort: i + 1, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, rev: 1 };
-            tx.objectStore('categories').put({ id: c.id, server: row, view: row });
-          });
-          const texts: [string, number][] = [
-            ['外国人登录证更新要带的：护照、照片 1 张、手续费 3 万韩元', 1],
-            ['NEOX 片尾 logo 停留可以再短 0.5 秒，配合鼓点收尾', 0],
-            ['牛奶、鸡蛋、猫砂', 1],
-            ['想读：《어린 왕자》韩文版，朋友推荐的版本', 2],
-            ['SignPlex 落地页标题：一次签完，不用打印', 0],
-            ['延南洞那家面包店周一休息，下次周二去', 1],
-          ];
-          const now = Date.now();
-          texts.forEach(([body, ci], i) => {
-            const id = `0e2e0000-0000-4000-8000-0000000006b${i}`;
-            const t = now - i * 3_600_000;
-            const note = {
-              id, title: null, body, is_private: false, category_id: cats[ci]?.id, category_source: 'ai', category_seen: true, tags: [],
-              converted_to: null, source: 'page', raw_text: '', batch_id: null, created_at: t, updated_at: t,
-            };
-            tx.objectStore('notes').put({ id, server: null, view: note });
-          });
+          const tx = db.transaction([...new Set(all.map(([s]) => s))], 'readwrite');
+          for (const [store, row] of all) tx.objectStore(store).put(row);
           tx.oncomplete = () => {
             db.close();
             resolve();
@@ -112,9 +85,42 @@ export async function seedNotes(page: Page): Promise<void> {
           tx.onerror = () => reject(new Error(String(tx.error)));
         };
       }),
-    HINT_HELD,
+    rows,
   );
   await page.reload();
+}
+
+/** 本机库写几个分类和几条随手记（形状同 b4-notes-s7s8.spec.ts 的 seedCategories），“＋”气泡记成按住过（不挡侧栏旁边的“随手记”标题），写完刷新 */
+export async function seedNotes(page: Page): Promise<void> {
+  const cats = [
+    { id: '0e2e0000-0000-4000-8000-0000000006a1', name: '工作灵感', color: '#e0a100' },
+    { id: '0e2e0000-0000-4000-8000-0000000006a2', name: '韩国生活', color: '#3f8f6b' },
+    { id: '0e2e0000-0000-4000-8000-0000000006a3', name: '读书', color: '#4a6fd1' },
+  ];
+  const texts: [string, number][] = [
+    ['外国人登录证更新要带的：护照、照片 1 张、手续费 3 万韩元', 1],
+    ['NEOX 片尾 logo 停留可以再短 0.5 秒，配合鼓点收尾', 0],
+    ['牛奶、鸡蛋、猫砂', 1],
+    ['想读：《어린 왕자》韩文版，朋友推荐的版本', 2],
+    ['SignPlex 落地页标题：一次签完，不用打印', 0],
+    ['延南洞那家面包店周一休息，下次周二去', 1],
+  ];
+  const now = Date.now();
+  const rows: [string, unknown][] = [['drafts', HINT_HELD]];
+  cats.forEach((c, i) => {
+    const row = { ...c, sort: i + 1, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, rev: 1 };
+    rows.push(['categories', { id: c.id, server: row, view: row }]);
+  });
+  texts.forEach(([body, ci], i) => {
+    const id = `0e2e0000-0000-4000-8000-0000000006b${i}`;
+    const at = now - i * 3_600_000;
+    const note = {
+      id, title: null, body, is_private: false, category_id: cats[ci]?.id, category_source: 'ai', category_seen: true, tags: [],
+      converted_to: null, source: 'page', raw_text: '', batch_id: null, created_at: at, updated_at: at,
+    };
+    rows.push(['notes', { id, server: null, view: note }]);
+  });
+  await idbPut(page, rows);
 }
 
 const TZ = 'Asia/Seoul';
@@ -155,23 +161,6 @@ export async function seedToday(page: Page): Promise<void> {
     { ...ab, id: '0e2e0000-0000-4000-8000-0000000b6a01', kind: 'birthday', name: '김지민', month: bm, day: bd, year: 1997, next_date: dayAfter(3) },
     { ...ab, id: '0e2e0000-0000-4000-8000-0000000b6a02', kind: 'anniversary', name: '结婚纪念日', month: wm, day: wd, year: 2020, next_date: dayAfter(9) },
   ];
-  await page.evaluate(
-    (all) =>
-      new Promise<void>((resolve, reject) => {
-        const req = indexedDB.open('planner-v4');
-        req.onerror = () => reject(new Error(String(req.error)));
-        req.onsuccess = () => {
-          const db = req.result;
-          const tx = db.transaction(['events', 'todos', 'anniversaries'], 'readwrite');
-          for (const [store, rows] of all) for (const r of rows) tx.objectStore(store).put({ id: r['id'], server: r, view: r });
-          tx.oncomplete = () => {
-            db.close();
-            resolve();
-          };
-          tx.onerror = () => reject(new Error(String(tx.error)));
-        };
-      }),
-    [['events', events], ['todos', todos], ['anniversaries', anniv]] as [string, Record<string, unknown>[]][],
-  );
-  await page.reload();
+  const all: [string, Record<string, unknown>[]][] = [['events', events], ['todos', todos], ['anniversaries', anniv]];
+  await idbPut(page, all.flatMap(([store, rs]) => rs.map((r): [string, unknown] => [store, { id: r['id'], server: r, view: r }])));
 }

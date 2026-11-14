@@ -2,7 +2,7 @@
 //   ① 今天页两栏：鼠标按住把手把“本周”拖到左栏，出“布局已保存”，刷新后还在；点“撤销”回原位；再拖一次，“⋯ › 恢复默认布局”回默认
 //   ② 栏宽（竖条 → 键）、收起再从“⋯”放回、锁定后把手和竖条都不画
 //   ③ 键盘拖动：把手上空格拿起、← 挪到左栏、空格放下，每一步 aria-live 有播报；axe（WCAG 2.1 A/AA）无 serious、critical
-//   ④ 1099px 宽排成一列、不能拖；回到 1280 恢复分栏
+//   ④ 1099px 宽排成一列（同一棵树，各栏竖着叠、块不重挂）、不能拖；回到 1280 恢复分栏
 //   ⑤ 随手记页：分类一栏（点了筛选）+ 列表一栏；点卡片开抽屉，点抽屉顶上的把手换到左边，关了再开还在左边
 // 点按前等 FADE_GUARD_MS（页面分包挂上后这段时间里落在 main 里的点按按设计吞掉，见 b5-anniv.spec.ts）
 // 共用的打开、拖动、读本机库、种数据在 b6-desk-helpers.ts；今天页抽屉、标题跳转、撤销条、“＋”气泡和评审截图在 b6-desk-today.spec.ts
@@ -117,15 +117,23 @@ test.describe('B6 电脑版布局：今天页', () => {
     expect(bad, bad.join('\n')).toEqual([]);
   });
 
-  test('④ 1099px 排成一列、不能拖；回到 1280 恢复分栏', async ({ page }) => {
+  test('④ 1099px 排成一列（各栏竖着叠）、不能拖；回到 1280 恢复分栏；两种排法是同一棵树，块不重挂', async ({ page }) => {
+    // 给块的元素打个记号：跨过 1100px 以后还是同一个元素（重挂了记号就没了）
+    await page.getByTestId('desk-panel-week').evaluate((el) => Object.assign(el, { __b6mark: 1 }));
     await page.setViewportSize({ width: 1099, height: 820 });
     await expect(page.getByTestId('desk')).toHaveAttribute('data-desk', 'one');
-    await expect(page.getByTestId('desk-col-1')).toHaveCount(0);
     await expect(page.locator('[data-testid^="desk-handle-"]')).toHaveCount(0);
-    await expect(page.getByTestId('desk-col-0').getByTestId('desk-panel-week')).toBeVisible();
+    await expect(page.locator('[data-testid^="desk-sep-"]')).toHaveCount(0);
+    const a = await page.getByTestId('desk-col-0').boundingBox();
+    const b = await page.getByTestId('desk-col-1').boundingBox();
+    // 第二栏排在第一栏下面、左边对齐
+    expect(b && a && b.y >= a.y + a.height - 1 && Math.abs(b.x - a.x) < 1).toBe(true);
+    await expect(inCol(page, 1, 'week')).toBeVisible();
+    expect(await page.getByTestId('desk-panel-week').evaluate((el) => (el as unknown as { __b6mark?: number }).__b6mark)).toBe(1);
     await page.setViewportSize({ width: 1280, height: 820 });
     await expect(page.getByTestId('desk')).toHaveAttribute('data-desk', 'cols');
     await expect(inCol(page, 1, 'week')).toBeVisible();
+    expect(await page.getByTestId('desk-panel-week').evaluate((el) => (el as unknown as { __b6mark?: number }).__b6mark)).toBe(1);
   });
 });
 

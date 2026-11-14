@@ -7,9 +7,6 @@
 import { useEffect, useRef } from 'react';
 import { opensKeyboard } from '../../platform/env.ts';
 
-/** 焦点在不在能打字的地方（kit 的组件碰不到 platform，经这里用；电脑版布局的 Ctrl+Z 用它让给输入框） */
-export { opensKeyboard };
-
 export type KeyHandler = (e: KeyboardEvent) => boolean;
 export type KeyMap = Partial<Record<string, KeyHandler>>;
 

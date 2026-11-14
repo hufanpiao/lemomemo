@@ -2,23 +2,23 @@
 // 只在有侧栏的宽度（MQ_SIDEBAR，≥ 900px）由页面懒加载，手机宽度不加载、不改手机布局。
 // • ≥ 1100px（MQ_DESK_WIDE）：分栏。块标题栏右上角有把手（按住才拖，dnd-kit，DeskDnd.tsx）和“–”收起；两栏之间的竖条拖宽拖窄（自己用 Pointer Events，DeskParts.tsx 的 Sep），
 //   每栏最窄 240 px、最宽 0.6；一栏的块全收起了这一栏不画（不留空栏）
-// • 900～1099px：排成一列，顺序是各栏从左到右首尾相接；不能拖、不能调栏宽，“–”照样能收起；存下的布局不改
+// • 900～1099px：排成一列，顺序是各栏从左到右首尾相接；不能拖、不能调栏宽，“–”照样能收起；存下的布局不改。
+//   两种排法是同一棵树（各栏照画，一列时 CSS 把栏竖着叠），跨过 1100px 时块不重挂、焦点和输入不丢（独立评审第 6 条）
 // • 侧栏底部“⋯”（固定定位在侧栏设置入口上面，GlassBar 一行不改：R-352 ④）：锁定布局 / 收起的块（点一下放回原栏原位置）/ 恢复默认布局
 // • 放下即保存（kit/hooks/useDeskLayout.ts）：每次放下、调完栏宽、收起展开、换抽屉边、锁定，提示条“布局已保存 · 撤销 · 恢复默认布局”停 6 秒；
 //   提示条在时 Ctrl+Z 也撤销（只留一步）
 // • 键盘（5.9b 第 5 点）：把手是按钮，空格拿起，↑↓ 本栏挪、← → 相邻栏同一高度附近，空格放下、Esc 回原位；拿起、每次移动、放下都经 aria-live 读出；
 //   锁定时把手不画、竖条不画（换成不可聚焦的间距）
 // • 运行日志在 kit/hooks/useDeskLayout.ts（kit 的组件不碰 platform）
-import { useCallback, useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent as RKeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as RKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { DeskLayoutValue } from '../../../../shared/schema/layout.ts';
-import { useDeskLayout, useDeskModeLog, type LayoutChange } from '../../hooks/useDeskLayout.ts';
-import { opensKeyboard, useKeys } from '../../hooks/useKeys.ts';
+import { useDeskLayout, useDeskModeLog, useDeskUndoKey, type LayoutChange } from '../../hooks/useDeskLayout.ts';
 import { MQ_DESK_WIDE, useMedia } from '../../hooks/useMedia.ts';
 import { UndoToast } from '../UndoToast.tsx';
 import { colId, DndShell, dropTarget } from './DeskDnd.tsx';
 import { ColWithSep, DrawerHandle, MoreMenu, Panel, Sep, type DeskPanel } from './DeskParts.tsx';
 import { useDeskT } from '../../hooks/useDeskT.ts';
-import { dropEmpty, fitWidths, flatPanels, minFracOf, moveBy, moveTo, setCollapsed, visible, whereIs } from './layout-model.ts';
+import { dropEmpty, fitWidths, minFracOf, moveBy, moveTo, setCollapsed, visible, whereIs } from './layout-model.ts';
 import styles from './DeskLayout.module.css';
 
 export type { DeskPanel };
@@ -64,15 +64,8 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
   };
   const keyDrag = useKeyDrag({ layout, shown, minFrac, canvas, canDrag, setDraft, say, save });
 
-  // 撤销：提示条在的时候 Ctrl+Z 也算（5.9b 第 1 点）
-  useKeys({
-    // 焦点在输入框里时让给浏览器撤销打字（useKeys 的约定）
-    'mod+z': (e) => {
-      if (saved === null || opensKeyboard(e.target)) return false;
-      d.undo();
-      return true;
-    },
-  });
+  // 撤销：提示条在的时候 Ctrl+Z 也算（5.9b 第 1 点；焦点在输入框里时让给浏览器撤销打字）
+  useDeskUndoKey(saved !== null, d.undo);
 
   // 鼠标拖面板（dnd-kit）：换栏时改草稿；同一栏里的换位交给 sortable 的位移，放下时再算
   const dnd = {
@@ -102,19 +95,20 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
       say('desk.dropped', next, id);
       save(next, 'move');
     },
-    onCancel: (): void => {
+    onCancel: (id: string): void => {
       setDragging(null);
       setDraft(null);
+      say('desk.cancelled', layout, id);
     },
   };
 
   // 栏宽只按这一份画、竖条也拿这一份（按实际画布宽夹过；存下的比例按 1280 宽夹，窄窗口上会再收一点）
   const widths = fitWidths(shown.cols.map((c) => c.w), minFrac);
   const fitted: DeskLayoutValue = { ...shown, cols: shown.cols.map((c, k) => ({ ...c, w: widths[k] ?? c.w })) };
-  // 一栏的块全收起了：这一栏不画（不留空栏，主持人返工 11-14），剩下的栏按比例分宽度；拖动途中照画（空栏要当落点）。
-  // 不画的栏两边的竖条也不画（换成间距）：竖条只调相邻两栏
-  const moving = dragging !== null || keyDrag.held !== null;
-  const cols = shown.cols.map((_, i) => i).filter((i) => moving || visible(shown, i).length > 0);
+  // 一栏里的块全收起了：这一栏不画（不留空栏，主持人返工 11-14），剩下的栏按比例分宽度；拖动途中被拖空的栏（一块都没有）照画，当落点。
+  // 有栏没画时竖条都换成间距：竖条按整张画布换算栏宽，只在各栏都画出来时和鼠标对得上（独立评审第 2 条）；要调栏宽先从“⋯”放回
+  const cols = shown.cols.map((_, i) => i).filter((i) => shown.cols[i]?.panels.length === 0 || visible(shown, i).length > 0);
+  const allShown = cols.length === shown.cols.length;
   const growSum = cols.reduce((s, i) => s + (widths[i] ?? 1), 0) || 1;
   const panelView = (id: string) => (
     <Panel
@@ -156,30 +150,24 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
       </p>
       <div ref={canvas} className={styles.canvas}>
         <DndShell disabled={!canDrag} {...dnd} overlayClass={styles.overlay} overlay={dragging ? <div className={styles.ghost}>{nameOf(dragging)}</div> : null}>
-          {wide ? (
-            cols.map((i, k) => (
-              <ColWithSep
-                key={colId(i)}
-                i={i}
-                ids={visible(shown, i)}
-                // 按画出来的几栏归一化：flex-grow 加起来不到 1 时浏览器只分掉那一部分空余（一栏收空以后剩下的栏会撑不满）
-                style={{ flexGrow: (widths[i] ?? 1) / growSum }}
-                sep={
-                  k === cols.length - 1 ? null : canDrag && cols[k + 1] === i + 1 ? (
-                    <Sep i={i} layout={fitted} minFrac={minFrac} canvasPx={canvasPx} onDraft={setDraft} onSave={(l) => save(l, 'width')} />
-                  ) : (
-                    <div className={styles.gap} aria-hidden="true" />
-                  )
-                }
-              >
-                {visible(shown, i).map(panelView)}
-              </ColWithSep>
-            ))
-          ) : (
-            <div className={styles.one} data-testid="desk-col-0">
-              {flatPanels(shown).map(panelView)}
-            </div>
-          )}
+          {cols.map((i, k) => (
+            <ColWithSep
+              key={colId(i)}
+              i={i}
+              ids={visible(shown, i)}
+              // 按画出来的几栏归一化：flex-grow 加起来不到 1 时浏览器只分掉那一部分空余（一栏收空以后剩下的栏会撑不满）；一列时不给
+              style={wide ? { flexGrow: (widths[i] ?? 1) / growSum } : {}}
+              sep={
+                !wide || k === cols.length - 1 ? null : canDrag && allShown ? (
+                  <Sep i={i} layout={fitted} minFrac={minFrac} canvasPx={canvasPx} onDraft={setDraft} onSave={(l) => save(l, 'width')} />
+                ) : (
+                  <div className={styles.gap} aria-hidden="true" />
+                )
+              }
+            >
+              {visible(shown, i).map(panelView)}
+            </ColWithSep>
+          ))}
         </DndShell>
       </div>
       {drawer ? drawer(layout.drawer, <DrawerHandle side={layout.drawer} onSide={(s) => save({ ...layout, drawer: s }, 'drawer')} />) : null}
@@ -192,7 +180,7 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
           onClose={() => d.closeSaved(saved)}
           ms={SAVED_MS}
           more={{ label: t('desk.reset', {}), onClick: d.reset }}
-          solo
+          solo="yield"
           data-testid="desk-saved"
         />
       ) : null}
@@ -268,9 +256,15 @@ function useKeyDrag({ layout, shown, minFrac, canvas, canDrag, setDraft, say, sa
     setDraft(next);
     say('desk.at', next, id);
   };
-  // 焦点明确移到别的元素上（Tab 走开、点了别的按钮）：放弃；拿着的块换栏重新挂载时没有 relatedTarget，不算
-  const onBlur = (e: FocusEvent<HTMLButtonElement>): void => {
-    if (held && e.relatedTarget instanceof HTMLElement && e.relatedTarget.dataset['handle'] !== held.id) drop();
+  // 焦点离开拿着的把手：等一帧再看焦点是不是回到了这个块的把手上（拿着的块换栏会重新挂载、焦点跟回去），没回来就放弃
+  // （Tab 走开、点了别处、点页面空白、切走窗口都算）
+  const onBlur = (): void => {
+    if (!held) return;
+    const id = held.id;
+    // 用 setTimeout 不用下一帧：引 motion/index.ts 会让构建把 motion 拆成共用块、首屏多两个文件（首屏 +363 B）；换栏重挂在同一次提交里就把焦点还回去了，0 毫秒够
+    setTimeout(() => {
+      if ((document.activeElement as HTMLElement | null)?.dataset['handle'] !== id) drop();
+    });
   };
   return { held: held?.id ?? null, onKey, onBlur, drop: held ? drop : () => undefined };
 }

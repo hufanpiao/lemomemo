@@ -1,5 +1,5 @@
 // 电脑版可拖动布局（5.9b）的小零件：块（标题栏 + 把手 + “–”）、栏间竖条、侧栏底部“⋯”菜单、抽屉换边把手。排法和状态在 DeskLayout.tsx
-import { useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent as RKeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useRef, useState, type CSSProperties, type KeyboardEvent as RKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { DeskLayoutValue } from '../../../../shared/schema/layout.ts';
 import { Popover } from '../Popover.tsx';
 import { DndCol, useDeskSortable } from './DeskDnd.tsx';
@@ -28,7 +28,7 @@ export const Dots = () => (
 );
 
 /** 一块：标题栏（标题、把手、“–”）+ 内容。把手只在能拖时画（锁定、一列时不画） */
-export function Panel({ id, p, canDrag, held, hintId, onKey, onBlur, onCollapse }: { id: string; p: DeskPanel | undefined; canDrag: boolean; held: boolean; hintId: string; onKey(e: RKeyboardEvent<HTMLButtonElement>): void; onBlur(e: FocusEvent<HTMLButtonElement>): void; onCollapse(): void }) {
+export function Panel({ id, p, canDrag, held, hintId, onKey, onBlur, onCollapse }: { id: string; p: DeskPanel | undefined; canDrag: boolean; held: boolean; hintId: string; onKey(e: RKeyboardEvent<HTMLButtonElement>): void; onBlur(): void; onCollapse(): void }) {
   const t = useDeskT();
   const s = useDeskSortable(id, !canDrag);
   const titleId = `desk-${id}-t`;
@@ -105,6 +105,8 @@ export function Sep({ i, layout, minFrac, canvasPx, onDraft, onSave }: { i: numb
     last.current = null;
     onDraft(null);
   };
+  // 只有调栏宽的键松开才保存（Tab、Shift 等别的键松开不算，免得按住方向键时别的键一松就提前存了）
+  const SIZE_KEYS = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
   const onKey = (e: RKeyboardEvent<HTMLDivElement>): void => {
     const base = last.current ?? layout;
     const cur = base.cols[i]?.w ?? 0;
@@ -140,7 +142,7 @@ export function Sep({ i, layout, minFrac, canvasPx, onDraft, onSave }: { i: numb
       onPointerUp={end}
       onPointerCancel={end}
       onKeyDown={onKey}
-      onKeyUp={() => !start.current && end()}
+      onKeyUp={(e) => !start.current && SIZE_KEYS.includes(e.key) && end()}
       onBlur={() => !start.current && end()}
       data-testid={`desk-sep-${i}`}
     />

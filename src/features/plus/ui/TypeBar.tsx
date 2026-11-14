@@ -170,8 +170,11 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     e.preventDefault();
     void s.submit();
   };
+  // Esc 只关打字条：标成已处理，外面的详情抽屉（DetailDrawer 在 window 上听 Esc、跳过 defaultPrevented）就不跟着关（独立评审第 1 条）
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') close();
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    close();
   };
   const down = (e: PointerEvent) => {
     startY.current = e.clientY;

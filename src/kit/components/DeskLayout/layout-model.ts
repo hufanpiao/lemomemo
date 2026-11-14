@@ -20,14 +20,32 @@ export const allPanels = (l: Pick<DeskLayoutValue, 'cols'>): string[] => l.cols.
 /** 最窄一栏的比例（画布宽不知道时按 1280 宽的画布算） */
 export const minFracOf = (canvasPx: number): number => COL_MIN_PX / (canvasPx > 0 ? canvasPx : 1280);
 
-/** 栏宽夹到范围内再归一化；一栏时就是 1；画布窄到放不下几个最窄栏时平分 */
+/** 栏宽归一化到加起来是 1，每栏都在 [minFrac, COL_MAX] 里；一栏时就是 1；画布窄到放不下几个最窄栏时平分。
+ *  做法：没钉住的栏按原比例分剩下的宽度；有超过 COL_MAX 的先把它们钉在 COL_MAX，没有再把不到 minFrac 的钉在 minFrac，再分一遍，直到没有越界的。
+ *  一轮只钉一个方向：钉上限只会让别的栏变宽、钉下限只会让别的栏变窄，不会来回打架；两头一起钉会钉满了还凑不够 1。
+ *  原来“夹一次再归一化”会在归一化以后又越界（[0.95, 0.01] 夹成 [0.6, 0.2] 再除以 0.8 得 0.75，独立评审第 3 条） */
 export function fitWidths(ws: readonly number[], minFrac: number): number[] {
   const n = ws.length;
   if (n <= 1) return n ? [1] : [];
   if (minFrac * n >= 1) return ws.map(() => 1 / n);
-  const c = ws.map((w) => (Number.isFinite(w) && w > 0 ? Math.min(COL_MAX, Math.max(minFrac, w)) : 1 / n));
-  const sum = c.reduce((a, b) => a + b, 0);
-  return c.map((w) => w / sum);
+  const w = ws.map((x) => (Number.isFinite(x) && x > 0 ? x : 1 / n));
+  const pinned: (number | null)[] = w.map(() => null);
+  const share = (): number[] => {
+    const room = 1 - pinned.reduce<number>((s, p) => s + (p ?? 0), 0);
+    const free = w.reduce((s, x, k) => s + (pinned[k] === null ? x : 0), 0);
+    return w.map((x, k) => pinned[k] ?? (free > 0 ? (x * room) / free : room));
+  };
+  for (let round = 0; round < 2 * n; round++) {
+    const v = share();
+    const over = v.map((x, k) => pinned[k] === null && x > COL_MAX);
+    const under = v.map((x, k) => pinned[k] === null && x < minFrac);
+    const pin = over.some(Boolean) ? over : under;
+    if (!pin.some(Boolean)) return v;
+    pin.forEach((p, k) => {
+      if (p) pinned[k] = pin === over ? COL_MAX : minFrac;
+    });
+  }
+  return share();
 }
 
 const withWidths = (cols: readonly { w: number; panels: readonly string[] }[], minFrac: number): DeskCol[] => {
@@ -174,9 +192,6 @@ export function setCollapsed(l: DeskLayoutValue, id: string, on: boolean): DeskL
   if (has === on) return l;
   return { ...l, collapsed: on ? [...l.collapsed, id] : l.collapsed.filter((p) => p !== id) };
 }
-
-/** 窄于 1100 px 排成一列：各栏从左到右首尾相接（收起的照样不画） */
-export const flatPanels = (l: DeskLayoutValue): string[] => allPanels(l).filter((p) => !l.collapsed.includes(p));
 
 /** 两份布局一样（存不存、要不要出“已保存”看它） */
 export const sameLayout = (a: DeskLayoutValue, b: DeskLayoutValue): boolean => JSON.stringify(toStored(a)) === JSON.stringify(toStored(b));

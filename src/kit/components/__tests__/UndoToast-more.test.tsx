@@ -1,5 +1,5 @@
 // 撤销条的第二个按钮（B6 电脑版布局“布局已保存 · 撤销 · 恢复默认布局”，5.9b 第 1 点）：点了做它的事、收起，只回调一次；不给就不画
-// solo（B6 返工“两个撤销条不能叠在一起”）：带 solo 的条新出来一条，旧的收起（onClose 一次、不撤销）；不带 solo 的不受影响
+// solo（B6 返工“两个撤销条不能叠在一起”）：keep 新出来收起别的 solo 条（onClose 一次、不撤销）；yield 只顶掉 yield，遇到开着的 keep 自己让路；不带 solo 的不受影响
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UndoToast } from '../UndoToast.tsx';
@@ -26,21 +26,21 @@ describe('UndoToast 的 more', () => {
 });
 
 describe('UndoToast 的 solo', () => {
-  it('新的 solo 条出来：旧的 solo 条收起（onClose 一次、不撤销），不带 solo 的不动', () => {
+  it('新的 keep 条出来：旧的 solo 条收起（onClose 一次、不撤销），不带 solo 的不动', () => {
     const old = { undo: vi.fn(), close: vi.fn() };
     const other = vi.fn();
     const { rerender } = render(
       <>
-        <UndoToast message="已删除" undoLabel="撤销" onUndo={old.undo} onClose={old.close} solo data-testid="a" />
+        <UndoToast message="已删除" undoLabel="撤销" onUndo={old.undo} onClose={old.close} solo="yield" data-testid="a" />
         <UndoToast message="冲突" undoLabel="撤销" onUndo={() => undefined} onClose={other} data-testid="c" />
       </>,
     );
     expect(old.close).not.toHaveBeenCalled();
     rerender(
       <>
-        <UndoToast message="已删除" undoLabel="撤销" onUndo={old.undo} onClose={old.close} solo data-testid="a" />
+        <UndoToast message="已删除" undoLabel="撤销" onUndo={old.undo} onClose={old.close} solo="yield" data-testid="a" />
         <UndoToast message="冲突" undoLabel="撤销" onUndo={() => undefined} onClose={other} data-testid="c" />
-        <UndoToast message="布局已保存" undoLabel="撤销" onUndo={() => undefined} onClose={() => undefined} solo data-testid="b" />
+        <UndoToast message="布局已保存" undoLabel="撤销" onUndo={() => undefined} onClose={() => undefined} solo="keep" data-testid="b" />
       </>,
     );
     expect(old.close).toHaveBeenCalledTimes(1);
@@ -49,5 +49,33 @@ describe('UndoToast 的 solo', () => {
     // 被顶掉以后再点它的撤销：不再回调
     fireEvent.click(screen.getByTestId('a-undo'));
     expect(old.undo).not.toHaveBeenCalled();
+  });
+
+  it('yield 条：顶掉旧的 yield；已经有 keep 开着时自己让路收起，keep 不动', () => {
+    const keep = vi.fn();
+    const y1 = vi.fn();
+    const y2 = vi.fn();
+    const { rerender } = render(<UndoToast message="布局已保存" undoLabel="撤销" onUndo={() => undefined} onClose={y1} solo="yield" data-testid="y1" />);
+    rerender(
+      <>
+        <UndoToast message="布局已保存" undoLabel="撤销" onUndo={() => undefined} onClose={y1} solo="yield" data-testid="y1" />
+        <UndoToast message="布局已保存" undoLabel="撤销" onUndo={() => undefined} onClose={y2} solo="yield" data-testid="y2" />
+      </>,
+    );
+    expect(y1).toHaveBeenCalledTimes(1);
+    rerender(
+      <>
+        <UndoToast message="已删除" undoLabel="撤销" onUndo={() => undefined} onClose={keep} solo="keep" data-testid="k" />
+      </>,
+    );
+    const y3 = vi.fn();
+    rerender(
+      <>
+        <UndoToast message="已删除" undoLabel="撤销" onUndo={() => undefined} onClose={keep} solo="keep" data-testid="k" />
+        <UndoToast message="布局已保存" undoLabel="撤销" onUndo={() => undefined} onClose={y3} solo="yield" data-testid="y3" />
+      </>,
+    );
+    expect(y3).toHaveBeenCalledTimes(1);
+    expect(keep).not.toHaveBeenCalled();
   });
 });

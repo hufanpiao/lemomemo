@@ -136,7 +136,11 @@ export default function TodayPage() {
   // 有侧栏的宽度（电脑版）：面板布局（5.9b）。面板那一块（DeskLayout、dnd-kit、zod 约 49 KB）首屏画完才下载（首屏预算 150 KB 按 1280 宽也量），
   // 下好了、这一页里没有焦点和按住的指针时才换上（motion 的 useSwapWhenSafe）；在那之前照原来的一列画
   const page = useRef<HTMLElement>(null);
-  const Desk = useSwapWhenSafe(useMedia(MQ_SIDEBAR), page, loadTodayDesk, afterAppPainted, opensKeyboard);
+  const loaded = useSwapWhenSafe(useMedia(MQ_SIDEBAR), page, loadTodayDesk, afterAppPainted, opensKeyboard);
+  // 电脑版那一块画出错（QuietBoundary 退回手机排法）以后这一页按没换上算：点行进编辑页、不画农历（抽屉也在出错的那一块里，独立评审第 5 条）
+  const [deskFailed, setDeskFailed] = useState(false);
+  const failDesk = useCallback(() => setDeskFailed(true), []);
+  const Desk = deskFailed ? null : loaded;
   /** 电脑版详情抽屉里开着的那一条 */
   const [sel, setSel] = useState<TodaySel | null>(null);
   const closeSel = useCallback(() => setSel(null), []);
@@ -262,7 +266,11 @@ export default function TodayPage() {
         {/* tabIndex=-1：弹层关上、打开按钮没了时焦点的退路（错过的提醒“全部知道了”以后，Dialog L-2），不进 Tab 顺序 */}
         <h1 className={styles.date} tabIndex={-1}>
           {fmtDay(d.today, locale, 'monthDayWeek')}
-          {Desk ? <Desk.Lunar today={d.today} /> : null}
+          {Desk ? (
+            <QuietBoundary name="today-lunar">
+              <Desk.Lunar today={d.today} />
+            </QuietBoundary>
+          ) : null}
         </h1>
         {/* 设置入口（负责人 11-05 ①；接手清单 NAV-today-no-settings）：右上角头像，名字第一个字；没有名字时是一个人形。
             点了交给路由压一条带本次编号的历史（R-372）：设置里“‹ 今天”和左滑都退回这一条，不再叠一条今天；新标签页打开照常 */}
@@ -270,7 +278,7 @@ export default function TodayPage() {
       </div>
       {/* 电脑版面板没换上、画出错时照手机的排法画（一列） */}
       {Desk ? (
-        <QuietBoundary name="today-desk" fallback={phone}>
+        <QuietBoundary name="today-desk" fallback={phone} onFail={failDesk}>
           {annivLine}
           <Desk.default
             today={d.today}

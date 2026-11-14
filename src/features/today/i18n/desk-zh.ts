@@ -1,5 +1,5 @@
 // 功能 today 的词典·中文：电脑版今天页的面板（B6，5.9b；线框 s1 电脑画面）。跟着 ui/TodayDesk.tsx 按需下载，不进首屏
-export const deskZh = {
+export const todayDeskZh = {
   'desk.river': '今天的安排',
   'desk.week': '本周',
   'desk.soon': '快到了',
