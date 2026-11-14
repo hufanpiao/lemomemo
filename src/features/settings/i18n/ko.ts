@@ -106,12 +106,6 @@ export const ko = {
   'settings.skin.theme.system.desktop': '시스템 따르기', // REVIEW(ko)
   'settings.skin.theme.light': '라이트', // REVIEW(ko)
   'settings.skin.theme.dark': '다크', // REVIEW(ko)
-  'settings.skin.rt': '투명 효과 줄이기',
-  'settings.skin.rtNote.mobile': 'iPhone은 시스템 설정을 못 읽어서 여기서 켜요',
-  'settings.skin.rtNote.desktop': 'Windows에서 투명 효과를 끄면 자동으로 적용돼요. 여기서 직접 켤 수도 있어요', // REVIEW(ko)
-  'settings.skin.rm': '움직임 효과 줄이기',
-  'settings.skin.rmNote.mobile': '페이드만 남겨요 · iPhone 설정도 따라가요',
-  'settings.skin.rmNote.desktop': '페이드만 남겨요 · Windows 애니메이션 효과 설정도 따라가요', // REVIEW(ko)
   'settings.skin.err': '저장하지 못했어요. 잠시 후 다시 골라 주세요', // REVIEW(ko)
   'settings.font.title': '글꼴', // REVIEW(ko)
   'settings.font.system': '시스템 글꼴', // 架构 5.9c 表里的韩文名

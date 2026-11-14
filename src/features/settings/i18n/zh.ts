@@ -119,12 +119,6 @@ export const zh = {
   'settings.skin.theme.system.desktop': '跟着电脑',
   'settings.skin.theme.light': '白天',
   'settings.skin.theme.dark': '夜间',
-  'settings.skin.rt': '减少透明效果', // R-84
-  'settings.skin.rtNote.mobile': 'iPhone 读不到系统设置，在这里手动开',
-  'settings.skin.rtNote.desktop': 'Windows 关掉“透明效果”时自动生效；也可以在这里手动开',
-  'settings.skin.rm': '减少动态效果', // R-93
-  'settings.skin.rmNote.mobile': '只留淡入淡出；也跟随 iPhone 的“减少动态效果”',
-  'settings.skin.rmNote.desktop': '只留淡入淡出；也跟随 Windows 的“动画效果”',
   'settings.skin.err': '没保存上，稍后再选一次',
   'settings.font.title': '字体', // 定稿线框 s13；架构 5.9c
   'settings.font.system': '系统字体',

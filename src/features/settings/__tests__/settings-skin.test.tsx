@@ -75,24 +75,13 @@ describe('首页', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('皮肤');
   });
 
-  it('两个开关：减少透明效果写 ui.reduce_transparency，减少动态效果写 ui.reduce_motion；说明按电脑写', async () => {
+  it('设置首页不再有“减少透明效果”“减少动态效果”两个开关（11-14 负责人要求去掉，只跟系统设置）', async () => {
     await boot();
     await renderPage();
-    const rt = screen.getByTestId('settings-rt') as HTMLInputElement;
-    const rm = screen.getByTestId('settings-rm') as HTMLInputElement;
-    expect(rt.checked).toBe(false);
-    expect(rm.checked).toBe(false);
-    expect(rt.closest('li')?.textContent).toContain('Windows 关掉“透明效果”时自动生效');
-    expect(rm.closest('li')?.textContent).toContain('也跟随 Windows 的“动画效果”');
-    await act(async () => {
-      fireEvent.click(rt);
-    });
-    await waitFor(() => expect(pairs()).toContainEqual(['ui.reduce_transparency', true]));
-    await act(async () => {
-      fireEvent.click(rm);
-    });
-    await waitFor(() => expect(pairs()).toContainEqual(['ui.reduce_motion', true]));
-    expect((screen.getByTestId('settings-rt') as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByTestId('settings-rt')).toBeNull();
+    expect(screen.queryByTestId('settings-rm')).toBeNull();
+    expect(document.body.textContent).not.toContain('减少透明效果');
+    expect(document.body.textContent).not.toContain('减少动态效果');
   });
 
   it('选过“磨砂玻璃”“夜间”：首页写“磨砂玻璃 · 夜间”', async () => {

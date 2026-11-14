@@ -33,14 +33,11 @@ test.describe('皮肤与深浅色', () => {
     await expect.poll(() => attr(page, 'data-theme')).toBe('light');
     await page.getByTestId('settings-skin-back').click();
     await expect(page.getByTestId('settings-skin-summary')).toHaveText('磨砂玻璃 · 白天');
-    await page.getByTestId('settings-rt').click();
-    await expect.poll(() => attr(page, 'data-rt')).toBe('1');
 
     await page.reload();
     await page.getByTestId('settings-skin-summary').waitFor({ timeout: 30000 });
     expect(await attr(page, 'data-skin')).toBe('glass');
     expect(await attr(page, 'data-theme')).toBe('light');
-    expect(await attr(page, 'data-rt')).toBe('1');
 
     await page.goto('/app/auth/');
     await expect.poll(() => attr(page, 'data-skin')).toBe('glass');
