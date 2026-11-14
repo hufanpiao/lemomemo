@@ -30,6 +30,8 @@ export const zh = {
   'list.done': '完成',
   'list.undoDone': '标成没完成',
   'list.delete': '删除',
+  // 已过去折成一行（线框 s1 时间河“▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓”）：items 是“时刻 标题”“标题 ✓”用“ · ”连起来
+  'list.past': '已过去 {n} 件：{items}',
   'toast.deleted': '已删除',
   'toast.undo': '撤销',
   'err.save': '没保存上，稍后再试一次',
@@ -42,4 +44,6 @@ export const zh = {
   'today.anniv.today': '今天',
   'today.anniv.tomorrow': '明天',
   'today.anniv.in': '{n} 天后',
+  // 生日那一种在名字后面写“生日”（线框 s1 ANNLINE“3 天后 김지민 生日”）；名字里已经有就不再加
+  'today.anniv.bday': '生日',
 } as const;

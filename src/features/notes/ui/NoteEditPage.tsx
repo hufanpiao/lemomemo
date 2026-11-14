@@ -43,8 +43,8 @@ export default function NoteEditPage() {
 }
 
 export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onCreated?(id: string): void; onClose(): void; drawer: boolean }) {
-  // 编辑器挂着期间占住升级中心的 busy：不出版本横幅、不自动重新载入（同 kit EditShell）
-  useHoldBusy('editing');
+  // 编辑器挂着期间占住升级中心的 busy：不出版本横幅、不自动重新载入（同 kit EditShell）；抽屉里由 DetailDrawer 按焦点占（B6 独立评审第 12 条）
+  useHoldBusy('editing', !drawer);
   const t = useNotesT();
   const ed = useNoteEdit(id, onCreated);
   const tEdit = useEditT();

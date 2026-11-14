@@ -135,6 +135,8 @@ function hmAfter(min: number): string {
 
 /** 今天页的示例数据（主持人返工第 6 条）：今天的日程三条（一条已过去、一条进行中、一条稍后）、今天截止的待办两条、没赶上的一条、30 天内的纪念日两个 */
 export const TODAY_IDS = { live: '0e2e0000-0000-4000-8000-0000000b6e02', todo: '0e2e0000-0000-4000-8000-0000000b6d02', late: '0e2e0000-0000-4000-8000-0000000b6d01' } as const;
+/** 三小时前就结束了的那一条日程（今天页折进“已过去”一行） */
+export const PAST_ID = '0e2e0000-0000-4000-8000-0000000b6e01';
 
 /** 往本机库写今天页的示例数据（server、view 同一份服务器行），写完刷新 */
 export async function seedToday(page: Page): Promise<void> {
@@ -142,7 +144,7 @@ export async function seedToday(page: Page): Promise<void> {
   const base = { user_id: FAKE_USER_ID, created_at: now - 86_400_000, updated_at: now - 86_400_000, deleted_at: null, undone: false, short: null };
   const ev = (id: string, title: string, project: string, time: string, duration_min: number) => ({ ...base, id, title, project, date: dayAfter(0), time, tz: TZ, duration_min });
   const events = [
-    ev('0e2e0000-0000-4000-8000-0000000b6e01', 'SignPlex 字幕校对', 'SignPlex', hmAfter(-180), 30),
+    ev(PAST_ID, 'SignPlex 字幕校对', 'SignPlex', hmAfter(-180), 30),
     ev(TODAY_IDS.live, 'NEOX 横版对片', 'NEOX', hmAfter(-40), 90),
     ev('0e2e0000-0000-4000-8000-0000000b6e03', 'SignPlex 客户反馈会', 'SignPlex', hmAfter(80), 60),
   ];

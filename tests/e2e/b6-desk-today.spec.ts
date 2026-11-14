@@ -4,10 +4,13 @@
 //   ⑨ 本周、快到了、今天记的标题右边有跳转，“今天记的 N”带条数；点“日历 ›”进日历页
 //   ⑩ 右栏的块全收起：右栏不画（不留空栏），左栏占满；同一时间只有一个撤销条（“布局已保存”和删除的“已删除 · 撤销”不叠在一起）
 //   ⑪ “＋”气泡（前 3 次打开出）在侧栏“＋”右边、整块在视口里，三角朝左
+//   ⑫ 已过去折成一行（线框 s1“已过去的折叠成一行”）：结束了的日程不在列表里，点这一行展开、再点收起；手机宽度同样折
+//   ⑬ “今天记的”里点一条：在今天页的详情抽屉里打开（不换页），Esc 关上焦点回到那一行
+//   ⑭ 列表里删掉抽屉开着的那一条：抽屉一起关（独立评审第 11 条）
 // 评审截图（设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截）：今天页（含抽屉打开）、随手记页（含抽屉），1280×800、1440×900，浅色、深色
 // 点按前等 FADE_GUARD_MS（页面分包挂上后这段时间里落在 main 里的点按按设计吞掉）
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
-import { DESK_USE, inCol, openToday, seedNotes, seedToday, shot, SHOT_DIR, TODAY_IDS } from './b6-desk-helpers.ts';
+import { DESK_USE, inCol, openToday, PAST_ID, seedNotes, seedToday, shot, SHOT_DIR, TODAY_IDS } from './b6-desk-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use(DESK_USE);
@@ -93,6 +96,70 @@ test.describe('B6 电脑版今天页', () => {
     const plus = await page.getByTestId('tabbar-add').boundingBox();
     expect(b && b.x >= 0 && b.y >= 0 && b.x + b.width <= 1280 && b.y + b.height <= 820, JSON.stringify(b)).toBe(true);
     expect(b && plus && b.x - (plus.x + plus.width)).toBeGreaterThanOrEqual(8);
+  });
+});
+
+test.describe('B6 对齐线框：已过去、今天记的、删开着的那条', () => {
+  test.beforeEach(async ({ page }) => {
+    await openToday(page);
+    await seedToday(page);
+    await expect(page.getByTestId('desk-panel-river').locator(`[data-open="${TODAY_IDS.live}"]`)).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(FADE_GUARD_MS);
+  });
+
+  test('⑫ 已过去折成一行：结束了的日程收进去，点了展开、再点收起', async ({ page }) => {
+    const fold = page.getByTestId('desk-panel-river').getByTestId('today-past');
+    await expect(fold).toContainText('已过去 1 件：');
+    await expect(fold).toContainText('SignPlex 字幕校对');
+    await expect(fold).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator(`[data-open="${PAST_ID}"]`)).toHaveCount(0);
+    await fold.click();
+    await expect(fold).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator(`[data-open="${PAST_ID}"]`)).toBeVisible();
+    await fold.click();
+    await expect(page.locator(`[data-open="${PAST_ID}"]`)).toHaveCount(0);
+  });
+
+  test('⑬ “今天记的”点一条：今天页的详情抽屉里打开随手记，不换页；Esc 关上焦点回到那一行', async ({ page }) => {
+    await seedNotes(page);
+    const row = page.getByTestId('today-notes').locator('[data-open]').first();
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(FADE_GUARD_MS);
+    await row.click();
+    const drawer = page.getByTestId('today-drawer');
+    await expect(drawer.getByTestId('note-edit-body')).toBeVisible({ timeout: 20_000 });
+    await expect(drawer.getByTestId('note-edit-body')).toBeFocused();
+    await expect(page).toHaveURL(/#\/today$/);
+    await expect(row).toHaveAttribute('aria-current', 'true');
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveCount(0);
+    await expect(row).toBeFocused();
+  });
+
+  test('⑭ 列表里删掉抽屉开着的那一条：抽屉一起关，只剩页底一个撤销', async ({ page }) => {
+    await page.locator(`[data-open="${TODAY_IDS.todo}"]`).click();
+    const drawer = page.getByTestId('today-drawer');
+    await expect(drawer.getByTestId('todo-edit-title')).toHaveValue('NEOX 竖版 4K 导出');
+    await page.getByTestId(`today-del-${TODAY_IDS.todo}`).click();
+    await expect(drawer).toHaveCount(0);
+    await expect(page.getByTestId('today-toast')).toBeVisible();
+  });
+});
+
+test.describe('B6 对齐线框：手机宽度的已过去', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('⑫ 手机宽度：已过去同样折成一行，点了展开', async ({ page }) => {
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible({ timeout: 20_000 });
+    await seedToday(page);
+    const fold = page.getByTestId('today-past');
+    await expect(fold).toContainText('已过去 1 件：', { timeout: 20_000 });
+    await expect(page.getByTestId('desk')).toHaveCount(0);
+    await expect(page.locator(`[data-open="${PAST_ID}"]`)).toHaveCount(0);
+    await page.waitForTimeout(FADE_GUARD_MS);
+    await fold.click();
+    await expect(page.locator(`[data-open="${PAST_ID}"]`)).toBeVisible();
   });
 });
 

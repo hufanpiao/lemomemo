@@ -113,8 +113,10 @@ function NotesList() {
     else if (wide) setDrawer(id);
     else void navigate('note', id);
   };
+  // 列表里删掉的正好是抽屉开着的那一条：抽屉一起关（B6 独立评审第 11 条，同今天页：不然抽屉里“已删除 · 撤销”和页底撤销条两个撤销入口同时在）
   const del = (id: string) => {
     setMenu(null);
+    if (drawer === id) setDrawer(null);
     void a.del(id);
   };
   const toVault = (id: string) => {

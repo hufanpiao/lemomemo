@@ -31,6 +31,7 @@ export const ko: Readonly<Record<keyof typeof zh, string>> = {
   'list.done': '완료', // REVIEW(ko)
   'list.undoDone': '완료 취소', // REVIEW(ko)
   'list.delete': '삭제', // REVIEW(ko)
+  'list.past': '지난 일 {n}건: {items}', // REVIEW(ko) B6 线框 s1“已过去”
   'toast.deleted': '삭제했어요', // REVIEW(ko)
   'toast.undo': '실행 취소', // REVIEW(ko)
   'err.save': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
@@ -40,4 +41,5 @@ export const ko: Readonly<Record<keyof typeof zh, string>> = {
   'today.anniv.today': '오늘', // REVIEW(ko) B5
   'today.anniv.tomorrow': '내일', // REVIEW(ko) B5
   'today.anniv.in': '{n}일 후', // REVIEW(ko) B5
+  'today.anniv.bday': '생일', // REVIEW(ko) B6 线框 s1 ANNLINE
 };
