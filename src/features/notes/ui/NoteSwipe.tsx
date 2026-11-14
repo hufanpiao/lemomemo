@@ -4,6 +4,7 @@
 // • 按钮：旁边两个浅色（浅色主题 --panel-2 底、--text 字；深色主题 --text-2 底、--panel 字；常规字重），“删除”警示色、半粗（R-171、R-172）
 // • 收起时按钮不可聚焦（读屏、键盘走“⋯”菜单，同一套动作）；按钮排在行内容后面（Tab 顺序、行里第一个按钮仍是正文）
 import { useRef, useState, type ReactNode } from 'react';
+import { rlog } from '../../../platform/run-log-api.ts';
 import styles from './NoteSwipe.module.css';
 
 export interface SwipeAction {
@@ -36,6 +37,8 @@ export function SwipeRow({ actions, open, onOpenChange, children, testId }: {
           start.current = { x: e.clientX, y: e.clientY, base: open ? -width : 0, horiz: null };
           moved.current = false;
           last.current = null;
+          // 运行日志（11-14 CI webkit 左滑偶发没打开、本机复现不了：按下、定方向、松手各记一行，不记内容）
+          rlog(`swipe down type=${e.pointerType} open=${open ? 1 : 0}`);
         }}
         onPointerMove={(e) => {
           const s = start.current;
@@ -46,6 +49,7 @@ export function SwipeRow({ actions, open, onOpenChange, children, testId }: {
             if (Math.abs(mx) < SLOP && Math.abs(my) < SLOP) return;
             s.horiz = Math.abs(mx) > Math.abs(my);
             if (s.horiz) e.currentTarget.setPointerCapture?.(e.pointerId);
+            rlog(`swipe axis=${s.horiz ? 'h' : 'v'} mx=${Math.round(mx)} my=${Math.round(my)}`);
           }
           if (!s.horiz) return;
           moved.current = true;
@@ -56,11 +60,14 @@ export function SwipeRow({ actions, open, onOpenChange, children, testId }: {
           const s = start.current;
           start.current = null;
           // 松手读 ref 不读 drag：pointermove 是连续事件，React 可能还没重画，闭包里的 drag 会是旧值（e2e 负载高时偶发“滑开了又收回”）
-          if (s?.horiz && last.current !== null) onOpenChange(last.current < -width / 2);
+          const to = s?.horiz && last.current !== null ? last.current < -width / 2 : null;
+          rlog(`swipe up started=${s ? 1 : 0} axis=${s?.horiz == null ? 'none' : s.horiz ? 'h' : 'v'} last=${last.current === null ? 'none' : Math.round(last.current)} w=${width} open=${to === null ? 'keep' : to ? 1 : 0}`);
+          if (to !== null) onOpenChange(to);
           last.current = null;
           setDrag(null);
         }}
         onPointerCancel={() => {
+          rlog(`swipe cancel started=${start.current ? 1 : 0} last=${last.current === null ? 'none' : Math.round(last.current)}`);
           start.current = null;
           last.current = null;
           setDrag(null);
