@@ -317,7 +317,7 @@ async function loadCache(
   clearReauth();
 
   // SW 记下的通知按键（0.29 续第 107 条②，B2）：转 outbox 之前先丢掉别的账号的、超过 24 小时的；
-  // 转 outbox 由提醒功能做（FA-4）。清理失败不影响启动，下次启动再清
+  // 转 outbox 由提醒功能做（要按这一行现在的提醒核对 due_at：features/reminders/hooks/usePendingDrain.ts）。清理失败不影响启动，下次启动再清
   await prunePendingActions(cache, { userId, now: now() }).catch(() => 0);
 
   // 日志：仓库里还没有日志层（core/log），outbox 的 log（R-229 outbox_vault_shell_drop）暂不接；接上以后经 opts.outboxOptions.log 传进来（接手清单 K6-log）

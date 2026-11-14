@@ -19,14 +19,13 @@ import type { Cache, CachedRow, CacheTx, ServerRow } from './cache.ts';
 import { OUTBOX } from './cache-schema.ts';
 import { bySeq, canRetryUnsynced, loadRowSchemas, OutboxCodeUnavailableError, OutboxRejectError, recKey, sendOrder, validateWrite } from './outbox-logic.ts';
 import { migrateOutboxItem, OUTBOX_V, outboxMigrations } from './outbox-migrations.ts';
-import type { EnqueueInput, Outbox, OutboxBootReport, OutboxEvent, OutboxItem, OutboxStatus, OutboxOptions } from './outbox-types.ts';
+import type { EnqueueAlso, EnqueueInput, Outbox, OutboxBootReport, OutboxEvent, OutboxItem, OutboxStatus, OutboxOptions } from './outbox-types.ts';
 import { applyServerRows, cancelDependents, notify, rewriteRow } from './outbox-rows.ts';
 import { ackImpl, failImpl, type Ctx } from './outbox-send.ts';
 
 export * from './outbox-logic.ts';
 export * from './outbox-types.ts';
 export {
-  drainPendingActions,
   isValidPendingAction,
   keepPendingAction,
   PENDING_ACTION_FUTURE_MS,
@@ -75,7 +74,7 @@ async function bootImpl(ctx: Ctx): Promise<OutboxBootReport> {
   return report;
 }
 
-async function enqueueImpl(ctx: Ctx, input: EnqueueInput): Promise<OutboxItem | null> {
+async function enqueueImpl(ctx: Ctx, input: EnqueueInput, also?: EnqueueAlso): Promise<OutboxItem | null> {
   if (ctx.isSuspended()) throw new OutboxRejectError('outbox_suspended');
   // 严格校验第一次用时才加载（FA-6 ③）；等加载的这段时间里可能设了闸，回来再查一次
   // 加载失败：不写本机、不入队，抛 OutboxCodeUnavailableError（write.* 返回 ok:false，③ 审查 M2）；下次入队再试着加载
@@ -97,7 +96,7 @@ async function enqueueImpl(ctx: Ctx, input: EnqueueInput): Promise<OutboxItem | 
   // 撤销可能抵消掉 insert，依赖它的项（别的表）也要一起抵消：事务范围放宽到所有同步仓
   const undo = op === 'patch' && input.data['undone'] === true;
   const scope = undo ? [...new Set([table, ...ctx.cache.syncTables])] : [table];
-  await ctx.cache.tx([...scope, OUTBOX], 'readwrite', async (t) => {
+  await ctx.cache.tx([...new Set([...scope, OUTBOX, ...(also?.stores ?? [])])], 'readwrite', async (t) => {
     const row = await t.get<CachedRow>(table, id);
     if (row?.ro) throw new OutboxRejectError('readonly_row');
     if (op === 'insert' && row?.view) throw new OutboxRejectError('row_exists');
@@ -110,6 +109,7 @@ async function enqueueImpl(ctx: Ctx, input: EnqueueInput): Promise<OutboxItem | 
       for (const i of mine) await t.delete(OUTBOX, i.op_id);
       view = await rewriteRow(t, table, id, row);
       cancelled = await cancelDependents(t, rec, scope);   // L10：依赖它的项一起抵消
+      await also?.run(t);
       return;
     }
 
@@ -122,6 +122,7 @@ async function enqueueImpl(ctx: Ctx, input: EnqueueInput): Promise<OutboxItem | 
     }
     await t.put(OUTBOX, result);
     view = await rewriteRow(t, table, id, row);
+    await also?.run(t);
   });
   notify(table, [{ id, view }]);
   for (const c of cancelled) notify(c.table, [c]);
@@ -215,7 +216,7 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
 
   const api: Outbox = {
     boot: () => bootImpl(ctx),
-    enqueue: (input) => enqueueImpl(ctx, input),
+    enqueue: (input, also) => enqueueImpl(ctx, input, also),
     async next() {
       if (suspended || status.paused || (await cache.getMeta('outbox_pause'))) return null;
       return cache.tx([OUTBOX], 'readwrite', async (t) => {

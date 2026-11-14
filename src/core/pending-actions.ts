@@ -1,9 +1,9 @@
-// SW 记下的通知按键（架构 4.1、0.29 续第 107 条）：页面启动时丢掉别的账号的和超过 24 小时的，其余转进 outbox
+// SW 记下的通知按键（架构 4.1、0.29 续第 102 条③、第 107 条）：页面启动时丢掉别的账号的和超过 24 小时的（prunePendingActions）；
+// 形状校验、留不留的判断也在这里。转进 outbox 在 pending-drain.ts（不进首屏：只有提醒功能引）
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { Cache } from './cache.ts';
 import { PENDING_ACTIONS } from './cache-schema.ts';
-import { OutboxRejectError } from './outbox-logic.ts';
-import type { EnqueueInput, Outbox, PendingAction } from './outbox-types.ts';
+import type { PendingAction } from './outbox-types.ts';
 
 /** 超过 24 小时的通知按键丢掉 */
 export const PENDING_ACTION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -11,7 +11,7 @@ export const PENDING_ACTION_TTL_MS = 24 * 60 * 60 * 1000;
 export const PENDING_ACTION_FUTURE_MS = 5 * 60 * 1000;
 /** 推迟分钟数的范围（和 SW 的 src/sw/push.ts 一致：1 分钟～1 天） */
 const SNOOZE_MAX_MIN = 24 * 60;
-const PENDING_TABLES: ReadonlySet<string> = new Set(['events', 'todos', 'anniversaries']);
+export const PENDING_TABLES: ReadonlySet<string> = new Set(['events', 'todos', 'anniversaries']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** SW 写的那一种按键（src/sw/pending.ts 的 SnoozeAction）：推迟多少分钟、按的是哪一次到点 */
@@ -22,8 +22,9 @@ export interface PendingSnooze {
 }
 
 /**
- * SW 写的“完成”（src/sw/pending.ts 的 DoneAction；R-294、R-307）：只待办，和推迟同一条路径，转 outbox 后整页提醒里能撤销。
- * TODO(FA-4) 接 toEnqueue 时：due_at 必须对上这一行**当前这一次**到点的时刻，对不上（已经推迟过、改了时间、已完成）就丢弃，并钉测试（安全复审）
+ * SW 写的“完成”（src/sw/pending.ts 的 DoneAction；R-294、R-307）：只待办，和推迟同一条路径。
+ * 转的时候 due_at 必须对上这一行**当前这一次**到点的时刻，对不上（已经推迟过、改了时间、已完成）就丢弃（安全复审；
+ * features/reminders/data/remind-pending.ts 的 pendingVerdict；转在 pending-drain.ts，测试 remind-pending.test.ts）
  */
 export interface PendingDone {
   readonly type: 'done';
@@ -65,7 +66,7 @@ export function keepPendingAction(a: unknown, userId: string, now: number): a is
 /**
  * 页面启动时先清一遍（0.29 续第 107 条②，B2）：user_id 和当前账号不一致的、超过 24 小时的、时间在将来的、形状不对的删掉，返回删了几条。
  * 账号不同的库在这之前已经被 ensureAccount 整库清空，这里兜的是 SW 写进来的别人的项（K-sw-seal ⑴ 之外的万一）和放久了的项。
- * 剩下的由提醒功能经 drainPendingActions 转进 outbox（FA-4 接）
+ * 剩下的由提醒功能经 pending-drain.ts 的 drainPendingActions 转进 outbox（features/reminders/hooks/usePendingDrain.ts）
  */
 export async function prunePendingActions(cache: Cache, args: { userId: string; now: number }): Promise<number> {
   const all = await cache.tx([PENDING_ACTIONS], 'readonly', (t) => t.getAll<unknown>(PENDING_ACTIONS));
@@ -80,31 +81,4 @@ export async function prunePendingActions(cache: Cache, args: { userId: string; 
     });
   }
   return drop.length;
-}
-
-/**
- * 把 pending_actions 转进 outbox：别的账号的、超过 24 小时的、时间在将来的、形状不对的丢掉，其余（已按 isValidPendingAction 校验过）
- * 经 toEnqueue 转成写入进 outbox。
- * toEnqueue 返回 null 表示这个按键不用写（例如那一条已经没了）。转完（或丢掉）就删。返回转进队列的条数
- */
-export async function drainPendingActions(
-  cache: Cache,
-  outbox: Outbox,
-  args: { userId: string; now: number; toEnqueue: (a: ValidPendingAction) => EnqueueInput | null },
-): Promise<number> {
-  const all = await cache.tx([PENDING_ACTIONS], 'readonly', (t) => t.getAll<PendingAction>(PENDING_ACTIONS));
-  let n = 0;
-  for (const a of all) {
-    const input = keepPendingAction(a, args.userId, args.now) ? args.toEnqueue(a) : null;
-    if (input) {
-      try {
-        await outbox.enqueue(input);
-        n++;
-      } catch (e) {
-        if (!(e instanceof OutboxRejectError)) throw e;
-      }
-    }
-    await cache.tx([PENDING_ACTIONS], 'readwrite', (t) => t.delete(PENDING_ACTIONS, a.id));
-  }
-  return n;
 }

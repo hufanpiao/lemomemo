@@ -5,7 +5,8 @@
 //   挂上时先读本机库里“这一次响过没有”的记录（REMIND-shown-persist，data/remind-seen.ts），再算出第一份“响过”快照（本机记录 + 服务器 pushed_for 推导），
 //   两步做完才 armed（kit 的 armedSince；今天页等它才挂“错过的提醒”，修订 1 P2）；新记下的每分钟最多写回一次，本机弹过系统通知的马上写，
 //   页面藏起、关掉（pagehide、visibilitychange 变成 hidden）时补写一次；
-//   exe 每分钟检查交 showLocalReminder 弹、别处处理了 closeLocalReminder 撤回（不写 pushed_for）；打开 App、回到前台时用 getNotifications() 关掉已处理的通知
+//   exe 每分钟检查交 showLocalReminder 弹、别处处理了 closeLocalReminder 撤回（不写 pushed_for）；打开 App、回到前台时用 getNotifications() 关掉已处理的通知；
+//   通知上按的“推迟 / 完成”转进 outbox（usePendingDrain.ts）
 // • useRemindActions：知道了、稍后（写 notified_for / snooze_at，经 data/remind-write）、完成待办；处理完从队列拿掉，稍后弹 2 秒“15:25 再提醒你”；
 //   纪念日“生成待办”（B5 S15）新建一条截止在纪念日前一天的待办（from_anniv_id 记来源），建成了按“知道了”处理
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -29,6 +30,7 @@ import { MISSED_WINDOW_MS, occurrenceKey, ringing, type Reminder } from '../data
 import { ackAll as ackAllWrite, ackReminder, annivTodoDue, annivTodoRow, genTodoFromAnniv, snoozeReminder, timingPending, type OutboxLikeItem } from '../data/remind-write.ts';
 import type { dndOf } from '../data/remind-settings.ts';
 import { rangView, readSeen, writeSeen } from '../data/remind-seen.ts';
+import { usePendingDrain } from './usePendingDrain.ts';
 import { useRemindT } from './useRemindT.ts';
 import {
   ackLocally,
@@ -110,6 +112,8 @@ export function actionsOf(
 export function useRemindEngine(sinceAt?: number): void {
   const now = useMinuteNow();
   const { list, tz, prefs, known } = useReminderList(now);
+  // 通知上按的“推迟 / 完成”（SW 记在 pending_actions）：本机行灌好、行变了、回到前台、打开整页提醒时转进 outbox（usePendingDrain.ts）
+  usePendingDrain(list, known, tz);
   const locale = useUi((s) => s.locale);
   const since = useRef(sinceAt ?? clock.now());
   const collapsed = useRemindQueue((s) => s.collapsed);
