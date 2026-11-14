@@ -67,10 +67,6 @@ describe('清单快照 manifests.gen.ts', () => {
     const scripts = (JSON.parse(read('package.json')) as { scripts: Record<string, string> }).scripts;
     expect(scripts['check:manifests']).toBe('node build/gen_manifests_snapshot.mjs --check');
     expect(read('.github/workflows/unit.yml')).toContain('run: npm run build -- --mode preview');
-    const web = read('build/build_web.mjs');
-    const check = web.indexOf("resolve(ROOT, 'build/gen_manifests_snapshot.mjs'), '--check']");
-    expect(check).toBeGreaterThan(0);
-    expect(web.slice(check, check + 300)).toMatch(/if \(manifests\.status !== 0\) process\.exit/);
-    expect(check).toBeLessThan(web.indexOf('await build('));
+    // 构建在 vite build 之前先查、过期就不构建：tests/build/build-web.test.ts 换成假步骤按行为核
   });
 });

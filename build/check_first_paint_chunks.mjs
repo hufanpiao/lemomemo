@@ -7,9 +7,10 @@
 // 11-05 加农历（接手清单 LUNAR-indirect-import 剩下的兜底）：闭包里也不许有农历数据的块（shared/logic/anniv/lunar*，按 LUNAR_ID 认），
 //   内容里不许有农历表的特征数字串（LUNAR_MARKS：压缩后变量名 LUNAR_CN 没了，数据原样在）。check_arch 的 LUNAR 按源码拦，这里按产物兜底
 // 用法：node build/check_first_paint_chunks.mjs [--app-dir <目录>]（--app-dir 默认 dist/web/app；build_web.mjs 在体积检查之后跑）
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readManifest } from './vite_manifest.mjs';
 
 /**
  * 首屏期间会下载的动态入口（manifest 的键相对 vite 的 root，即 src/）：今天页、告知页关口和它懒加载的告知页（新用户的第一屏），
@@ -84,23 +85,19 @@ export function checkFirstPaint(manifest, read, dynamic = FIRST_PAINT_DYNAMIC) {
   return bad;
 }
 
-function main() {
+/** 命令行入口（build_web.mjs 构建完直接调它）：返回退出码 */
+export function cli(argv) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const i = process.argv.indexOf('--app-dir');
-  const appDir = i > 0 && process.argv[i + 1] ? resolve(process.argv[i + 1]) : resolve(root, 'dist/web/app');
-  const manifestPath = [resolve(appDir, '.vite/manifest.json'), resolve(appDir, '../../vite-manifest/manifest.json')].find((p) => existsSync(p));
-  if (!manifestPath) {
-    console.error('找不到 Vite 的 manifest.json，先运行 npm run build');
-    process.exit(1);
-  }
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  const bad = checkFirstPaint(manifest, (f) => readFileSync(resolve(appDir, f), 'utf8'));
+  const i = argv.indexOf('--app-dir');
+  const appDir = i >= 0 && argv[i + 1] ? resolve(argv[i + 1]) : resolve(root, 'dist/web/app');
+  const bad = checkFirstPaint(readManifest(appDir), (f) => readFileSync(resolve(appDir, f), 'utf8'));
   if (bad.length) {
     console.error('首屏块里有 zod、农历数据或动画库（FA-6 ③ M3、LUNAR-indirect-import、R-354）：');
     for (const b of bad) console.error(`  ${b}`);
-    process.exit(1);
+    return 1;
   }
   console.log(`首屏块里没有 zod、农历数据、动画库：入口 + ${FIRST_PAINT_DYNAMIC.length} 个动态入口的静态闭包都查过`);
+  return 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(cli(process.argv.slice(2)));
