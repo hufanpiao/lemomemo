@@ -12,7 +12,8 @@ import type { Tz } from '../../../../shared/core/tz.ts';
 import type { Cache, RemindSeenMeta } from '../../../core/cache.ts';
 import { META } from '../../../core/cache-schema.ts';
 import { MISSED_WINDOW_MS, occurrenceKey, type Reminder } from './reminder-model.ts';
-import { hasTimingChange, type OutboxLikeItem } from './remind-write.ts';
+import { occurrenceChanged } from '../../../../shared/logic/remind-occurrence.ts';
+import type { OutboxLikeItem } from './remind-write.ts';
 
 export const SEEN_KEY = 'remind_seen';
 export const SEEN_MAX = 500;
@@ -95,7 +96,7 @@ export async function writeSeen(cache: SeenCache | null | undefined, add: SeenIt
 export function occurrencePending(r: Pick<Reminder, 'kind' | 'id'>, items: readonly OutboxLikeItem[]): boolean {
   if (r.kind !== 'event') return false;
   const rec = `events:${r.id}`;
-  return items.some((it) => it.rec === rec && hasTimingChange(it.data)); // 换“哪一次”的认法和 timingPending 同一个（date、remind_days、time 空与非空）
+  return items.some((it) => it.rec === rec && occurrenceChanged(it.data)); // 换“哪一次”的认法和 timingPending、mergePatch 同一个（shared/logic/remind-occurrence.ts）
 }
 
 /**

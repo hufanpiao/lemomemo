@@ -165,7 +165,9 @@ const DATE_KEYS: readonly (keyof AnnivForm)[] = ['calendar', 'month', 'day', 'is
 /**
  * 改了的列；没改回 null。月日合不合格由 hooks 先查（dateValid）。
  * 改了日期（审查第 7 条）：同一次写入里清掉 notified_for、snooze_at，口径同日程 calendar/data/event-edit.ts 的 patchOf——
- * 服务器 private.remind_reset 只对 events 清这两列（anniversaries 只清 pushed_for、defer_until），所以纪念日要客户端自己带
+ * 服务器 private.remind_reset 只对 events 清这两列（anniversaries 只清 pushed_for、defer_until），所以纪念日要客户端自己带。
+ * 离线时这次 patch 还没发、又按了“知道了”（7h）：outbox 的 mergePatch 和提醒的 timingPending 靠这里写的 notified_for: null
+ * 认出“换了一次”（shared/logic/remind-occurrence.ts），旧那次的 notified_for 不并进来；改这里的写法要一起改那边
  */
 export function patchOf(_row: RowLike, prev: AnnivForm, next: AnnivForm, now: number): Record<string, unknown> | null {
   const out: Record<string, unknown> = {};
