@@ -162,7 +162,7 @@ function checkUploads(text: string): string[] {
     const args = (m?.[1] ?? '').trim().split(' ').filter(Boolean);
     const allowMissing = args[0] === '--allow-missing';
     const checked = (allowMissing ? args.slice(1) : args).map((p) => p.replace(/\/$/, ''));
-    if (!m || [...checked].sort().join(' ') !== [...paths].sort().join(' ')) {
+    if (!g || !m || [...checked].sort().join(' ') !== [...paths].sort().join(' ')) {
       return void problems.push(`${st.name}：上一步（同一任务内）不是对 ${paths.join(' ')} 调 build/ci/no-hidden-files.sh`);
     }
     if (allowMissing && !/^ {10}if-no-files-found: ignore$/m.test(st.text)) problems.push(`${st.name}：检查带 --allow-missing，上传就要 if-no-files-found: ignore`);
@@ -368,5 +368,26 @@ describe('ai-eval.yml：只手动触发、只用一把评测密钥', () => {
     expect(r.out).toContain('tests/ai/reports/linked.json');
     expect(r.out).toContain('::error::tests/ai/reports 里有 1 个文件含评测密钥原值');
     expect(r.out).not.toContain(KEY);
+  });
+});
+
+// 11-14 整块评审：lemo/import-bounds 的 LUNAR 间接那条要读别的文件，ESLint 的 --cache 只看本文件改没改，shared/ 改了会沿用旧结果漏报。
+// package.json 的 lint 和各工作流里调 eslint、npm run lint 的命令都不许带 --cache（规则文件头、eslint.config.js 写明）
+describe('lint 不许加 --cache', () => {
+  const ALL = readdirSync(join(ROOT, '.github', 'workflows')).filter((f) => /\.ya?ml$/.test(f));
+  it('package.json 的 lint 调 eslint、不带 --cache；别的 script 里调 eslint 的也不带', () => {
+    const scripts = (JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { scripts: Record<string, string> }).scripts;
+    expect(scripts['lint']).toMatch(/\beslint\b/);
+    expect(Object.entries(scripts).filter(([, v]) => /\beslint\b/.test(v) && /--cache\b/.test(v)).map(([k]) => k)).toEqual([]);
+  });
+  it('工作流里跑 eslint、npm run lint 的步骤都不带 --cache（至少 unit.yml 那一处在）', () => {
+    const cmds = ALL.flatMap((f) => steps(readFileSync(join(ROOT, '.github', 'workflows', f), 'utf8')).map((s) => ({ f, run: runOf(s) }))).flatMap(({ f, run }) =>
+      run
+        .split('\n')
+        .filter((l) => /\beslint\b|npm run lint\b/.test(l) && !/^\s*#/.test(l))
+        .map((l) => `${f}: ${l.trim()}`),
+    );
+    expect(cmds.some((c) => c.startsWith('unit.yml: npm run lint'))).toBe(true);
+    expect(cmds.filter((c) => /--cache\b/.test(c))).toEqual([]);
   });
 });

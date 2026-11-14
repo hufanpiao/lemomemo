@@ -61,6 +61,38 @@ export function litText(n) {
   return undefined;
 }
 
+/**
+ * 一个文件里引入的模块（tests/arch/coverage.test.ts 用；11-14 整块评审：原来用正则拆 import 子句）：
+ * [{ spec, names, star, typeOnly }]。names 是按名字导入的原名（a as b 记 a，单个 type 导入不算）；star：默认导入、* as、export *、import()、require()、
+ * import x = require() 这种整体拿到模块的；typeOnly：整条 import type / export type（不会执行）。只认写死的字符串地址
+ */
+export function importsOf(text, fileName) {
+  const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, false, kindOf(fileName));
+  const out = [];
+  const named = (els) => els.filter((e) => !e.isTypeOnly).map((e) => (e.propertyName ?? e.name).text);
+  for (const n of walk(sf)) {
+    if (ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier)) {
+      const c = n.importClause;
+      const nb = c?.namedBindings;
+      out.push({
+        spec: n.moduleSpecifier.text,
+        names: nb && ts.isNamedImports(nb) ? named(nb.elements) : [],
+        star: Boolean(c?.name || (nb && ts.isNamespaceImport(nb))),
+        typeOnly: Boolean(c?.isTypeOnly),
+      });
+    } else if (ts.isExportDeclaration(n) && n.moduleSpecifier && ts.isStringLiteral(n.moduleSpecifier)) {
+      const ec = n.exportClause;
+      out.push({ spec: n.moduleSpecifier.text, names: ec && ts.isNamedExports(ec) ? named(ec.elements) : [], star: !ec || ts.isNamespaceExport(ec), typeOnly: n.isTypeOnly });
+    } else if (ts.isImportEqualsDeclaration(n) && ts.isExternalModuleReference(n.moduleReference) && ts.isStringLiteral(n.moduleReference.expression)) {
+      out.push({ spec: n.moduleReference.expression.text, names: [], star: true, typeOnly: n.isTypeOnly });
+    } else if (ts.isCallExpression(n) && n.arguments.length >= 1 && (n.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(n.expression) && n.expression.text === 'require'))) {
+      const s = litText(n.arguments[0]);
+      if (s !== undefined) out.push({ spec: s, names: [], star: true, typeOnly: false });
+    }
+  }
+  return out;
+}
+
 /** 去注释：解析器认出的注释区间换成空格，和原文等长、换行不变（正则、模板字符串、JSX 文本都不会被误当成注释） */
 export function stripComments(sf) {
   const text = sf.text;

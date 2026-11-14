@@ -25,7 +25,8 @@ async function lintSample(name: string): Promise<Hit[]> {
       files: ['**/*.{ts,tsx,js,mjs}'],
       languageOptions: { parser: tseslint.parser, parserOptions: { ecmaFeatures: { jsx: true } } },
       plugins: { lemo: lemo as unknown as ESLint.Plugin }, // 自写规则是 JS，meta.type 推成 string，和 ESLint 的类型对不上
-      rules: { 'lemo/import-bounds': 'error' },
+      // 规则默认按自己文件的位置推仓库根（不看 cwd），样例是迷你仓库，用选项指过去
+      rules: { 'lemo/import-bounds': ['error', { root: cwd }] },
     },
   });
   const results = await eslint.lintFiles(['.']);
@@ -136,5 +137,19 @@ describe('lemo/import-bounds 接在真仓库的 ESLint 配置上', { timeout: 12
     expect(await errorsOf('src/core/anniv-lib.ts', mutated)).toEqual(['LUNAR']);
     expect(await errorsOf('src/features/notes/data/mut.ts', "export const a = () => import('aws4fetch');\n")).toEqual(['R2']);
     expect(await errorsOf('shared/logic/mut.ts', "export { animate } from 'motion';\n")).toEqual(['MOTION-IMPL']);
+  });
+
+  it('./x.js 按 TS 的写法对上 x.tsx（11-14 整块评审：原来只试 x.ts，写 .js 的引入绕得过 MOTION-IMPL）', async () => {
+    expect(await errorsOf('src/motion/mut.ts', "export * from './list-impl.js';\n")).toEqual(['MOTION-IMPL']);
+    expect(await errorsOf('src/motion/mut.ts', "export * from './list-impl';\n")).toEqual(['MOTION-IMPL']);
+  });
+
+  it('ESLint 的 cwd 不是仓库根（在 src/ 里跑）：仓库根照样按规则文件的位置推，该报的照报（原来用 context.cwd，src/ 判断全错、悄悄不报）', async () => {
+    // 不指定配置文件：ESLint 从文件位置往上找到仓库根的 eslint.config.js（和在 src/ 里直接敲 npx eslint 一样），context.cwd 是 src/
+    const sub = new ESLint({ cwd: join(ROOT, 'src') });
+    const lib = real('src/core/anniv-lib.ts');
+    const mutated = `import * as __nd from '../../shared/logic/anniv/next-date.ts';\nexport const __mut = __nd;\n${lib}`;
+    const [res] = await sub.lintText(mutated, { filePath: join(ROOT, 'src/core/anniv-lib.ts') });
+    expect((res?.messages ?? []).filter((m) => m.ruleId === 'lemo/import-bounds').map((m) => m.message.split('：')[0])).toEqual(['LUNAR']);
   });
 });

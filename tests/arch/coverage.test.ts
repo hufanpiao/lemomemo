@@ -4,7 +4,10 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { importsOf } from '../../build/ts_ast.mjs';
 import { FIXTURES, loadFixtures, ROOT } from './fixture-header.ts';
+
+type ImportRef = { spec: string; names: string[]; star: boolean; typeOnly: boolean };
 
 /** 架构 2.3 的规则号：表格每行第一格（“A1 / A8”算 A1 一条，A8 在同一格里一起管）；
  *  规则号后可带括号说明，如 `| **A28**（0.33） |`、`| **A29**（0.33，UI-4 L-4，B1） |`（代码审查第二轮低 7） */
@@ -95,8 +98,14 @@ describe('架构 2.3：每条规则都有违规样例（按规则号核）', () 
 
 // Vitest 的 node / node-slow 分组（vitest.config.ts）：起子进程、真跑 ESLint / stylelint / TypeScript / PGlite 的测试文件
 // 必须登记在 SLOW_NODE_TESTS（30 秒超时、限并发）；漏登记就留在 node 里按 5 秒算，机器一忙就偶发超时
-// 只认 import 语句（静态 from、动态 import()）里的模块名，注释和普通字符串里提到不算
-const HEAVY = /(?:from\s*|import\(\s*)['"](?:node:child_process|eslint|stylelint|typescript|@electric-sql\/pglite[^'"]*)['"]/;
+// 只认 import 语句（静态 from、export … from、动态 import()、require()）里的模块名，按 TypeScript 语法树取（build/ts_ast.mjs 的 importsOf；
+// 11-14 整块评审：原来用正则拆 import 子句，多行、带注释的写法会漏），注释和普通字符串里提到不算；import type 不会执行，不算
+const HEAVY_MODULES = ['node:child_process', 'child_process', 'eslint', 'stylelint', 'typescript'];
+export const isHeavyModule = (spec: string): boolean => HEAVY_MODULES.includes(spec) || spec === '@electric-sql/pglite' || spec.startsWith('@electric-sql/pglite/');
+/** 文件里引入的模块（语法树） */
+const importsIn = (file: string): ImportRef[] => importsOf(readFileSync(file, 'utf8'), file);
+/** 相对路径、写了 .ts / .mjs 扩展名的引入（跟进辅助模块用） */
+const RELATIVE = /^\.{1,2}\/.+\.(?:ts|mjs)$/;
 const NODE_TEST_DIRS = ['shared', 'arch', 'build', 'functions', 'edge', 'data-manifest'];
 /** 扫出来是重型、其实不起进程的：只用到辅助模块里的纯函数（写明理由；不再被扫出时要删掉） */
 const NOT_HEAVY: Readonly<Record<string, string>> = {
@@ -107,6 +116,8 @@ const NOT_HEAVY: Readonly<Record<string, string>> = {
   'tests/build/e2e-real-backend-env.test.ts': '只用 tools/e2e/real-backend.mjs 的 pickEnv、functionsEnvText 等纯函数，不起子进程',
   // export-load-preview.mjs 只在 --rehearse-local 且没注入 target 时才动态 import real-backend.mjs（statusEnv 起 supabase CLI）
   'tests/build/export-load-preview-run.test.ts': '只调 export-load-preview.mjs 的 run()：一律注入 target（或走预览模式没设密钥的分支），不调 statusEnv、不起子进程',
+  // 11-14 跟进 supabase/tests/ 以后扫出：fresh-db.ts 只在 freshDb() 里动态 import PGlite
+  'tests/data-manifest/fresh-db.test.ts': '只用 supabase/tests/offline/fresh-db.ts 的 migrationFiles（读目录排序），不调 freshDb、不加载 PGlite',
 };
 
 /** 会起子进程的导出（模块路径相对仓库根）：NOT_HEAVY 里的文件和它引的 tests/ 辅助模块都不许导入，也不许整体导入这些模块 */
@@ -119,38 +130,36 @@ export function spawningImports(file: string, seen = new Set<string>()): string[
   if (seen.has(file)) return [];
   seen.add(file);
   const out: string[] = [];
-  const src = readFileSync(file, 'utf8');
-  const found = [
-    ...[...src.matchAll(/\bimport\s+([^'";]*?)\s*from\s*'(\.{1,2}\/[^']+\.(?:ts|mjs))'/g)].map((m) => [m[1] ?? '', m[2] ?? ''] as const),
-    ...[...src.matchAll(/\bimport\(\s*'(\.{1,2}\/[^']+\.(?:ts|mjs))'/g)].map((m) => ['*', m[1] ?? ''] as const),
-  ];
-  for (const [clause, spec] of found) {
-    const dep = join(file, '..', spec);
+  for (const imp of importsIn(file)) {
+    if (!RELATIVE.test(imp.spec)) continue;
+    const dep = join(file, '..', imp.spec);
     const rel = dep.slice(ROOT.length + 1).replaceAll('\\', '/');
     const banned = SPAWNING_EXPORTS[rel];
     if (!banned) {
       if (dep.startsWith(join(ROOT, 'tests') + sep) && !dep.endsWith('.test.ts') && existsSync(dep)) out.push(...spawningImports(dep, seen));
       continue;
     }
-    if (/^type\b/.test(clause)) continue; // 只导入类型，不会执行
-    if (clause.replace(/\{[^}]*\}/, '').replace(/,/g, '').trim() !== '') out.push(`${rel}:*`);
-    const names = (/\{([^}]*)\}/.exec(clause)?.[1] ?? '').split(',').map((n) => n.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0] ?? '');
-    out.push(...names.filter((n) => banned.includes(n)).map((n) => `${rel}:${n}`));
+    if (imp.typeOnly) continue; // 只导入类型，不会执行
+    if (imp.star) out.push(`${rel}:*`);
+    out.push(...imp.names.filter((n) => banned.includes(n)).map((n) => `${rel}:${n}`));
   }
   return out;
 }
 
-/** 顺着相对引用跟进的范围：tests/ 下的辅助模块、tools/ 下的脚本（.ts、.mjs；测试文件本身不跟） */
-const FOLLOW_DIRS = [join(ROOT, 'tests') + sep, join(ROOT, 'tools') + sep];
+/** 顺着相对引用跟进的范围：tests/ 下的辅助模块、tools/ 下的脚本、supabase/tests/ 下的离线库辅助（.ts、.mjs；测试文件本身不跟）。
+ *  supabase/tests/ 是 11-14 加的：grant-matrix 经 pglite-migrated.ts → supabase/tests/offline/fresh-db.ts 才真加载 PGlite，
+ *  原来的正则只是碰巧把 pglite-migrated.ts 里的 import type 也算成重型才认出来 */
+const FOLLOW_DIRS = [join(ROOT, 'tests') + sep, join(ROOT, 'tools') + sep, join(ROOT, 'supabase', 'tests') + sep];
 
 /** 文件本身或它经相对路径引到的 tests/、tools/ 下模块（递归）里有没有重型标记（E2E-watchdog-sugg ②：跟进 tools/**\/*.mjs） */
 export function isHeavy(file: string, seen = new Set<string>()): boolean {
   if (seen.has(file)) return false;
   seen.add(file);
-  const src = readFileSync(file, 'utf8');
-  if (HEAVY.test(src)) return true;
-  for (const m of src.matchAll(/(?:from|import\()\s*'(\.{1,2}\/[^']+\.(?:ts|mjs))'/g)) {
-    const dep = join(file, '..', m[1] ?? '');
+  const imports = importsIn(file).filter((i) => !i.typeOnly);
+  if (imports.some((i) => isHeavyModule(i.spec))) return true;
+  for (const { spec } of imports) {
+    if (!RELATIVE.test(spec)) continue;
+    const dep = join(file, '..', spec);
     if (FOLLOW_DIRS.some((d) => dep.startsWith(d)) && !dep.endsWith('.test.ts') && existsSync(dep) && isHeavy(dep, seen)) return true;
   }
   return false;
@@ -192,9 +201,35 @@ describe('Vitest 分组：重型测试都在 node-slow（vitest.config.ts 的 SL
     expect(spawningImports(join(ROOT, 'playwright.real.config.ts'))).toEqual(['tools/e2e/real-backend.mjs:statusEnv']);
   });
 
+  it('自证：import 按语法树取（11-14 整块评审换掉正则）：多行带注释、as 改名、单个 type、export … from、require、import() 都认得对；字符串、注释里的不算', () => {
+    const src = [
+      "import {",
+      "  pickEnv, // 纯函数",
+      "  statusEnv as s,",
+      "  type Env,",
+      "} from './real-backend.mjs';",
+      "import type { X } from 'typescript';",
+      "import * as cp from 'node:child_process';",
+      "export { statusEnv } from './b.mjs';",
+      "const r = require('eslint');",
+      "await import(`./c.mjs`);",
+      "const note = \"from 'stylelint'\"; // import('typescript')",
+    ].join('\n');
+    expect(importsOf(src, 'x.ts')).toEqual([
+      { spec: './real-backend.mjs', names: ['pickEnv', 'statusEnv'], star: false, typeOnly: false },
+      { spec: 'typescript', names: ['X'], star: false, typeOnly: true },
+      { spec: 'node:child_process', names: [], star: true, typeOnly: false },
+      { spec: './b.mjs', names: ['statusEnv'], star: false, typeOnly: false },
+      { spec: 'eslint', names: [], star: true, typeOnly: false },
+      { spec: './c.mjs', names: [], star: true, typeOnly: false },
+    ]);
+    expect(['typescript', 'eslint', '@electric-sql/pglite/vector', 'child_process'].every(isHeavyModule)).toBe(true);
+    expect(['typescript-eslint', 'eslint-plugin-x', 'node:fs'].some(isHeavyModule)).toBe(false);
+  });
+
   it('自证：只经 tools/ 下 .mjs 起子进程的文件（e2e-watchdog 经 tools/e2e/run-watchdog.mjs）也认得出，它本身没有重型标记', () => {
     const f = join(ROOT, 'tests/build/e2e-watchdog.test.ts');
-    expect(HEAVY.test(readFileSync(f, 'utf8'))).toBe(false);
+    expect(importsIn(f).some((i) => isHeavyModule(i.spec))).toBe(false);
     expect(isHeavy(f)).toBe(true);
     expect(isHeavy(join(ROOT, 'tools/e2e/run-watchdog.mjs'))).toBe(true);
     // 引了 tools/ 但那边不起子进程的不算

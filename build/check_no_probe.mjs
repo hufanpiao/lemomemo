@@ -4,10 +4,9 @@
 // 调用：build/build_web.mjs 在 mode=production 时自动跑（release-build.yml 的正式构建就走这里，11-14 起不再另跑一遍）。和 voice-probe 同一个 PR 删
 // 用法：node build/check_no_probe.mjs [--dir dist/web]
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+import { argPath, withUsage } from './cli_args.mjs';
 /**
  * 探测页、探测函数的标记（函数路径、页面根节点的 testid、组件名、页面标题），
  * 以及 CSP 试验页（探测页挂在它下面；App.tsx 用构建期常量挡，正式构建整块删掉）的块名、根节点 testid、标题，防止以后又混进正式产物。
@@ -34,9 +33,8 @@ export function findProbe(dir) {
 }
 
 /** 命令行入口（build_web.mjs 在 production 构建完直接调它）：返回退出码 */
-export function cli(argv) {
-  const i = argv.indexOf('--dir');
-  const dir = resolve(ROOT, i >= 0 && argv[i + 1] ? argv[i + 1] : 'dist/web');
+export const cli = withUsage((argv) => {
+  const dir = argPath(argv, '--dir', 'dist/web');
   const hits = findProbe(dir);
   if (hits.length) {
     for (const h of hits) console.error(`正式产物里有探测页、voice-probe 或 CSP 试验页：${h.file}（${h.marker}）`);
@@ -44,6 +42,6 @@ export function cli(argv) {
   }
   console.log(`正式产物里没有探测页、voice-probe 和 CSP 试验页：${dir}`);
   return 0;
-}
+});
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(cli(process.argv.slice(2)));

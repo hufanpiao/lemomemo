@@ -7,7 +7,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { posix, resolve } from 'node:path';
 import { parseSync } from 'vite';
-import { readManifest } from './vite_manifest.mjs';
+import { readManifest, staticClosure } from './vite_manifest.mjs';
 
 /** manifest 的键换成产物文件名：file → { imports、dynamic（动态 import 的目标）、css，都是文件名 } */
 function graphOf(manifest) {
@@ -15,17 +15,6 @@ function graphOf(manifest) {
   const files = (ks) => (ks ?? []).map((k) => manifest[k]?.file).filter(Boolean);
   for (const c of Object.values(manifest)) g.set(c.file, { imports: files(c.imports), dynamic: files(c.dynamicImports), css: c.css ?? [] });
   return g;
-}
-
-function staticClosure(g, file) {
-  const seen = new Set();
-  const visit = (f) => {
-    if (seen.has(f)) return;
-    seen.add(f);
-    for (const i of g.get(f)?.imports ?? []) visit(i);
-  };
-  visit(file);
-  return seen;
 }
 
 /** 不去重时 Vite 会写的表（JS 和 CSS 混排，顺序同 Vite） */
@@ -99,7 +88,7 @@ const isCss = (f) => f.endsWith('.css');
 
 /** 去重以后该留的：目标闭包里宿主没加载的 JS（含目标自己），和全部 CSS（顺序同 Vite） */
 function wanted(g, target, host) {
-  const loaded = staticClosure(g, host);
+  const loaded = new Set(staticClosure(g, [host]));
   const full = fullDeps(g, target, host);
   return { loaded, full, js: full.filter((f) => !isCss(f) && !loaded.has(f)), css: full.filter(isCss) };
 }

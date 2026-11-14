@@ -4,8 +4,9 @@
 // 这里查产物：GlassBarFx 的 CSS 里必须有 -webkit-mask-composite:source-out，也要有标准写法 mask-composite:subtract。
 // 用法：node build/check_glass_css.mjs [--app-dir <目录>]（默认 dist/web/app）；build/build_web.mjs 构建完调用，不过就让构建失败
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { argPath, withUsage } from './cli_args.mjs';
 
 /** 一段 CSS 的问题（空数组 = 没问题） */
 export function glassMaskProblems(css) {
@@ -26,10 +27,8 @@ export function glassCssFiles(appDir) {
 }
 
 /** 命令行入口（build_web.mjs 构建完直接调它）：返回退出码 */
-export function cli(argv) {
-  const i = argv.indexOf('--app-dir');
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const appDir = i >= 0 && argv[i + 1] ? resolve(argv[i + 1]) : resolve(root, 'dist/web/app');
+export const cli = withUsage((argv) => {
+  const appDir = argPath(argv, '--app-dir', 'dist/web/app');
   const files = glassCssFiles(appDir);
   if (files.length === 0) {
     console.error(`check_glass_css：${appDir}/assets 里找不到 GlassBarFx 的样式`);
@@ -45,6 +44,6 @@ export function cli(argv) {
   if (bad > 0) return 1;
   console.log(`底栏渐隐层遮罩：${files.length} 个文件，带前缀和标准写法都在`);
   return 0;
-}
+});
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(cli(process.argv.slice(2)));

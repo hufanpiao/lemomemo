@@ -4,7 +4,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkFirstPaint, FIRST_PAINT_DYNAMIC, LUNAR_MARKS, MOTION_MARKS, staticClosure, ZOD_MARKS } from '../../build/check_first_paint_chunks.mjs';
+import { checkFirstPaint, FIRST_PAINT_DYNAMIC, LUNAR_MARKS, MOTION_MARKS, ZOD_MARKS } from '../../build/check_first_paint_chunks.mjs';
+import { firstScreenFiles } from '../../build/check_size.mjs';
+import { staticClosure } from '../../build/vite_manifest.mjs';
 
 type Chunk = { file: string; src?: string; name?: string; isEntry?: boolean; isDynamicEntry?: boolean; imports?: string[]; dynamicImports?: string[] };
 type Manifest = Record<string, Chunk>;
@@ -32,6 +34,25 @@ function base(): Manifest {
   };
 }
 const text = (overrides: Record<string, string> = {}) => (f: string): string => overrides[f] ?? `/* ${f} */ export const x = 1;`;
+
+// 11-14 整块评审：check_size、check_first_paint_chunks、check_preload 共用 vite_manifest.mjs 的这一份
+describe('vite_manifest.mjs 的 staticClosure', () => {
+  it('manifest 对象：先序、去重、不跟 dynamicImports；check_size 的 firstScreenFiles 是同一份闭包换成文件名', () => {
+    const m = base();
+    expect(staticClosure(m, ['features/today/ui/TodayPage.tsx', 'index.html'])).toEqual(['features/today/ui/TodayPage.tsx', '_jsx-runtime-a.js', '_components-a.js', 'index.html']);
+    expect(firstScreenFiles(m, 'index.html')).toEqual(['assets/main-a.js', 'assets/jsx-runtime-a.js']);
+  });
+  it('Map（check_preload 的文件名图）也认；起点或 imports 里的键不在图里就抛错，不悄悄少算；原型上的名字不当成键', () => {
+    const g = new Map([
+      ['a.js', { imports: ['b.js'] }],
+      ['b.js', { imports: ['a.js'] }],
+    ]);
+    expect(staticClosure(g, ['a.js'])).toEqual(['a.js', 'b.js']);
+    expect(() => staticClosure(g, ['x.js'])).toThrow('manifest 里没有 x.js');
+    expect(() => staticClosure(new Map([['a.js', { imports: ['gone.js'] }]]), ['a.js'])).toThrow('manifest 里没有 gone.js');
+    expect(() => staticClosure({}, ['toString'])).toThrow('manifest 里没有 toString');
+  });
+});
 
 describe('首屏块里不许有 zod（按构建产物，FA-6 ③ M3）', () => {
   it('现在的形状：通过；rows、zod-jitless 只被动态 import，不进闭包', () => {

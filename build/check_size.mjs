@@ -6,14 +6,16 @@
 // R-379（2026-11-10 负责人选项原文：“B4 新开一份 1 KB 额度（推荐）”）：首屏净增额度按批次重设：以 R-378 合入后的 main 为 B4 新基线，
 // B4 这一批首屏净增 ≤ 1 KB，标准同 B3
 // 用法：node build/check_size.mjs [--json] [--app-dir <目录>] [--mode <模式>] [--baseline <文件>]
-//（--app-dir 默认 dist/web/app；违规样例测试用它指到临时目录，QA D-06；--baseline 默认 build/first-screen-baseline.json，测试用它换成临时文件）
+//（--app-dir 默认 dist/web/app；违规样例测试用它指到临时目录，QA D-06；--baseline 默认 build/first-screen-baseline.json，测试用它换成临时文件；
+// 参数解析见 cli_args.mjs：相对路径按仓库根，写了参数没给值退出 2）
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { checkPreload } from './check_preload.mjs';
-import { readManifest } from './vite_manifest.mjs';
+import { argPath, argValue, withUsage } from './cli_args.mjs';
+import { readManifest, staticClosure } from './vite_manifest.mjs';
 
 /**
  * firstScreenFiles（B4b-1 第二轮，主持人定）：首屏 JS 文件数上限 = 当时 main 的 8 个 + 1。冷启动每多一个文件就多一个请求；
@@ -26,18 +28,7 @@ export const firstFilesError = (n) => (n > BUDGET.firstScreenFiles ? `首屏 JS 
 
 /** manifest：Vite 的 .vite/manifest.json 内容；entryKey：入口在 manifest 里的键 */
 export function firstScreenFiles(manifest, entryKey) {
-  const seen = new Set();
-  const files = [];
-  const visit = (key) => {
-    if (seen.has(key)) return;
-    seen.add(key);
-    const chunk = manifest[key];
-    if (!chunk) throw new Error(`manifest 里没有 ${key}`);
-    files.push(chunk.file);
-    for (const k of chunk.imports ?? []) visit(k);
-  };
-  visit(entryKey);
-  return files;
+  return staticClosure(manifest, [entryKey]).map((k) => manifest[k].file);
 }
 
 export function measure(appDir, manifest = readManifest(appDir)) {
@@ -139,14 +130,10 @@ export function netGrowthCheck(firstScreenStable, data, mode) {
 }
 
 /** 命令行入口（build_web.mjs 构建完直接调它，不另起进程）：argv 是 process.argv.slice(2) 那样的参数，返回退出码 */
-export function cli(argv) {
-  const argValue = (name) => {
-    const i = argv.indexOf(name);
-    return i >= 0 && argv[i + 1] ? argv[i + 1] : undefined;
-  };
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const appDir = resolve(argValue('--app-dir') ?? resolve(root, 'dist/web/app'));
-  const baselinePath = resolve(argValue('--baseline') ?? resolve(root, 'build/first-screen-baseline.json'));
+export const cli = withUsage((argv) => {
+  const appDir = argPath(argv, '--app-dir', 'dist/web/app');
+  const baselinePath = argPath(argv, '--baseline', 'build/first-screen-baseline.json');
+  const mode = argValue(argv, '--mode');
   const manifest = readManifest(appDir);
   const r = measure(appDir, manifest);
   const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
@@ -167,7 +154,7 @@ export function cli(argv) {
     failed = true;
   }
   // 净增关卡比的是 firstScreenStable（去掉构建时刻、提交号、文件名哈希后的 gzip 字节），基线也按这个口径量
-  const g = netGrowthCheck(r.firstScreenStable, JSON.parse(readFileSync(baselinePath, 'utf8')), argValue('--mode'));
+  const g = netGrowthCheck(r.firstScreenStable, JSON.parse(readFileSync(baselinePath, 'utf8')), mode);
   if (g.skip) console.log(g.skip);
   else if (g.error) {
     console.error(g.error);
@@ -180,6 +167,6 @@ export function cli(argv) {
     failed = true;
   } else if (p.calls > 0) console.log(`预加载表去重：${p.calls} 处懒加载都核对过（宿主已加载的 JS 不列、其余 JS 一个不少、CSS 和不去重时一样）`);
   return failed ? 1 : 0;
-}
+});
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(cli(process.argv.slice(2)));

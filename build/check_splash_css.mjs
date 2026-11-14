@@ -4,8 +4,9 @@
 // 整屏高度那张机型表（11-11，启动画面底部灰条）至少还在一段里给 --lemo-screen-h，而且每段都限定 (display-mode:standalone)（浏览器里不改版式）。
 // 用法：node build/check_splash_css.mjs [--app-dir <目录>]（默认 dist/web/app）；build/build_web.mjs 构建完调用，不过就让构建失败
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { argPath, withUsage } from './cli_args.mjs';
 
 /** 一段 CSS 里每个 @media 的条件和块内文字（按花括号配对，不处理字符串里的花括号：产物里没有） */
 export function mediaBlocks(css) {
@@ -53,10 +54,8 @@ export function splashCssFiles(appDir) {
 }
 
 /** 命令行入口（build_web.mjs 构建完直接调它）：返回退出码 */
-export function cli(argv) {
-  const i = argv.indexOf('--app-dir');
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const appDir = i >= 0 && argv[i + 1] ? resolve(argv[i + 1]) : resolve(root, 'dist/web/app');
+export const cli = withUsage((argv) => {
+  const appDir = argPath(argv, '--app-dir', 'dist/web/app');
   const files = splashCssFiles(appDir);
   if (files.length === 0) {
     console.error(`check_splash_css：${appDir}/assets 里找不到启动画面的样式`);
@@ -72,6 +71,6 @@ export function cli(argv) {
   if (bad) return 1;
   console.log(`check_splash_css：启动画面样式 ${files.length} 个文件，媒体查询写法都对`);
   return 0;
-}
+});
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(cli(process.argv.slice(2)));

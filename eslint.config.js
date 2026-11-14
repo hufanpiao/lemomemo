@@ -605,7 +605,8 @@ export default tseslint.config(
     rules: { 'lemo/auth-events-in-session': 'error' },
   },
   // 架构 2.3 R2、LUNAR、MOTION-IMPL（11-14 CI-11 从 check_arch.py 挪来，源码层只在这里查）：对象存储、农历、动画库的引入限制，
-  // import、export … from、import()、require 都认，LUNAR 还沿 shared/ 的静态引入往下跟（细节见 build/eslint-rules/import-bounds.js）
+  // import、export … from、import()、require 都认，LUNAR 还沿 shared/ 的静态引入往下跟（细节见 build/eslint-rules/import-bounds.js）。
+  // 因为要读别的文件，lint 不许加 --cache（缓存只看本文件有没有改，shared/ 改了会漏报；tests/build/workflow-permissions.test.ts 断言 package.json 和工作流都没加）
   {
     files: ['src/**/*.{ts,tsx,js,mjs}', 'shared/**/*.{ts,tsx,js,mjs}'],
     plugins: { lemo },

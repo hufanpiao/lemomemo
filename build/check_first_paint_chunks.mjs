@@ -8,9 +8,10 @@
 //   内容里不许有农历表的特征数字串（LUNAR_MARKS：压缩后变量名 LUNAR_CN 没了，数据原样在）。ESLint lemo/import-bounds 的 LUNAR 按源码拦，这里按产物兜底
 // 用法：node build/check_first_paint_chunks.mjs [--app-dir <目录>]（--app-dir 默认 dist/web/app；build_web.mjs 在体积检查之后跑）
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readManifest } from './vite_manifest.mjs';
+import { argPath, withUsage } from './cli_args.mjs';
+import { readManifest, staticClosure } from './vite_manifest.mjs';
 
 /**
  * 首屏期间会下载的动态入口（manifest 的键相对 vite 的 root，即 src/）：今天页、告知页关口和它懒加载的告知页（新用户的第一屏），
@@ -51,19 +52,6 @@ const LUNAR_ID = /shared\/logic\/anniv\/lunar|(^|\/)_lunar(-data)?-/;
  */
 export const LUNAR_MARKS = ['[-25153,1874],[-24799,3749],[-24444,46666]'];
 
-/** 从 keys 出发只沿 imports（静态）走，返回经过的 manifest 键 */
-export function staticClosure(manifest, keys) {
-  const seen = new Set();
-  const visit = (key) => {
-    if (seen.has(key)) return;
-    if (!manifest[key]) throw new Error(`manifest 里没有 ${key}`);
-    seen.add(key);
-    for (const k of manifest[key].imports ?? []) visit(k);
-  };
-  for (const k of keys) visit(k);
-  return [...seen];
-}
-
 /** 查一份 manifest：返回违规（空数组就是通过）。read(file) 读块的内容 */
 export function checkFirstPaint(manifest, read, dynamic = FIRST_PAINT_DYNAMIC) {
   const missing = dynamic.filter((k) => !manifest[k]);
@@ -86,10 +74,8 @@ export function checkFirstPaint(manifest, read, dynamic = FIRST_PAINT_DYNAMIC) {
 }
 
 /** 命令行入口（build_web.mjs 构建完直接调它）：返回退出码 */
-export function cli(argv) {
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const i = argv.indexOf('--app-dir');
-  const appDir = i >= 0 && argv[i + 1] ? resolve(argv[i + 1]) : resolve(root, 'dist/web/app');
+export const cli = withUsage((argv) => {
+  const appDir = argPath(argv, '--app-dir', 'dist/web/app');
   const bad = checkFirstPaint(readManifest(appDir), (f) => readFileSync(resolve(appDir, f), 'utf8'));
   if (bad.length) {
     console.error('首屏块里有 zod、农历数据或动画库（FA-6 ③ M3、LUNAR-indirect-import、R-354）：');
@@ -98,6 +84,6 @@ export function cli(argv) {
   }
   console.log(`首屏块里没有 zod、农历数据、动画库：入口 + ${FIRST_PAINT_DYNAMIC.length} 个动态入口的静态闭包都查过`);
   return 0;
-}
+});
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(cli(process.argv.slice(2)));

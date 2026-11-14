@@ -10,12 +10,20 @@
 //   MOTION-IMPL：motion、framer-motion、motion-dom、motion-utils（含子路径）只能在 src/motion/*-impl.tsx 里引入（src/motion/ 下的纯类型放行）；
 //       指向 src/motion/*-impl.tsx 的引入：静态的只准别的 *-impl.tsx 写，import() 只准 src/motion/features.ts 写。
 //       src/motion/__tests__/ 和 src/motion/ 下的 *.test.ts(x) 不管（架构 2.3 MOTION-IMPL、2.6，R-354）
-// 路径按 ESLint 的 cwd（仓库根）算；相对路径解析到 cwd 外或解析不到的跳过
+// 路径按仓库根算：默认从本文件位置推（build/eslint-rules/ 往上两层），不用 ESLint 的 cwd（11-14 整块评审：在子目录里跑 eslint 时 cwd 不是仓库根，
+// src/ 判断全错、规则悄悄不报）；样例测试用选项 ['error', { root }] 指到迷你仓库。相对路径解析到 root 外或解析不到的跳过。
+// 相对路径按 TS 的写法解析：./x.js 也找 x.ts、x.tsx，./x.mjs 找 x.mts，./x.cjs 找 x.cts；不带扩展名的依次试 RESOLVE_EXT 和 index.*
+// 不许给 lint 加 --cache（eslint.config.js 和 package.json 的 lint 同样写明，tests/build/workflow-permissions.test.ts 断言）：LUNAR 间接那条
+// 要读别的文件（shared/ 里一层层往下跟），ESLint 的缓存只按本文件内容判断要不要重查，shared/ 改了、src 没改时会沿用旧结果漏报
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import tseslint from 'typescript-eslint';
 
-const RESOLVE_EXT = ['.ts', '.tsx', '.mts', '.js', '.mjs'];
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const RESOLVE_EXT = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs'];
+/** 写的是 JS 扩展名时，TS 源码可能的扩展名 */
+const TS_FOR_JS = { '.js': ['.ts', '.tsx'], '.mjs': ['.mts'], '.cjs': ['.cts'] };
 const LUNAR_RE = /(^|\/)logic\/anniv\/lunar[^/]*$/;
 const MOTION_PKG_RE = /^(motion|framer-motion|motion-dom|motion-utils)(\/.*)?$/;
 const MOTION_IMPL_FILE_RE = /^src\/motion\/[^/]+-impl\.tsx$/;
@@ -57,8 +65,7 @@ function resolveRel(root, fromFile, spec) {
   if (!s.startsWith('.')) return undefined;
   const base = resolve(dirname(fromFile), s);
   const cands = [base];
-  if (base.endsWith('.js')) cands.push(`${base.slice(0, -3)}.ts`);
-  if (base.endsWith('.mjs')) cands.push(`${base.slice(0, -4)}.mts`);
+  for (const [js, tsExts] of Object.entries(TS_FOR_JS)) if (base.endsWith(js)) cands.push(...tsExts.map((e) => base.slice(0, -js.length) + e));
   cands.push(...RESOLVE_EXT.map((e) => base + e), ...RESOLVE_EXT.map((e) => resolve(base, `index${e}`)));
   for (const c of cands) {
     if (!existsSync(c) || !statSync(c).isFile()) continue;
@@ -109,10 +116,10 @@ export default {
   meta: {
     type: 'problem',
     docs: { description: '架构 2.3 R2、LUNAR、MOTION-IMPL：对象存储、农历、动画库的引入限制' },
-    schema: [],
+    schema: [{ type: 'object', properties: { root: { type: 'string' } }, additionalProperties: false }],
   },
   create(context) {
-    const root = context.cwd;
+    const root = resolve(context.options[0]?.root ?? REPO_ROOT);
     const file = context.filename;
     const rel = posix(relative(root, file));
     const inSrc = rel.startsWith('src/');

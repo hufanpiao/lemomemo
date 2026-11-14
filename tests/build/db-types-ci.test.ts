@@ -59,8 +59,10 @@ describe('K-dbtypes：CI 生成并比对 shared/db.types.ts', () => {
     expect(s).toMatch(/uses: actions\/upload-artifact@[0-9a-f]{40}\b/);
     expect(s).toMatch(/^\s+path: \$\{\{ runner\.temp \}\}\/db-types\/db\.types\.ts$/m);
     expect(s).toMatch(/if-no-files-found: ignore/);
-    // 上传紧跟在比对之后，中间不插别的步骤（别的步骤失败时不会误传旧文件，也一眼能看出对应关系）
-    expect(upload).toBe(gen + 1);
+    // 上传紧跟在比对之后，中间只隔查点开头文件的那一步（11-14 整块评审：每个上传前都要它，workflow-permissions.test 核），
+    // 不插别的步骤（别的步骤失败时不会误传旧文件，也一眼能看出对应关系）
+    expect(upload).toBe(gen + 2);
+    expect(steps[gen + 1] ?? '').toMatch(/^\s+run: bash build\/ci\/no-hidden-files\.sh --allow-missing \$\{\{ runner\.temp \}\}\/db-types\/db\.types\.ts$/m);
   });
 });
 
