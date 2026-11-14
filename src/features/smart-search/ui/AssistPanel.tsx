@@ -15,7 +15,7 @@ import * as RD from '@radix-ui/react-dialog';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
-import { useLayer } from '../../../kit/hooks/useLayer.ts';
+import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -92,7 +92,7 @@ export default function AssistPanel({ req, onClose }: { req: AssistReq; onClose(
   };
   const [basisOpen, setBasisOpen] = useState(true);
   const content = useRef<HTMLDivElement>(null);
-  useLayer(true, { name: 'assist', modal: true, el: () => content.current?.closest('body > *') ?? null, onEsc: onClose });
+  useLayer(true, { name: 'assist', modal: true, el: () => content.current, onEsc: onClose });
 
   // 用了几次 AI：判断（plus 交来的 aiUsed）+ 总结（成功才算，失败服务器退回次数）；今天的用量读到了才接后半句
   const judgeN = req.aiUsed;
@@ -213,7 +213,7 @@ export default function AssistPanel({ req, onClose }: { req: AssistReq; onClose(
             e.preventDefault();
             content.current?.focus({ preventScroll: true });
           }}
-          onCloseAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={prevent}
           data-testid="assist-panel"
           data-intent={req.ask.intent}
         >

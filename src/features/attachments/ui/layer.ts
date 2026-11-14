@@ -7,18 +7,21 @@ import { useLayoutEffect, useRef, type RefObject } from 'react';
 import type { LayerHandle } from '../../../kit/hooks/layers.ts';
 import { useLayer } from '../../../kit/hooks/useLayer.ts';
 
-export function useShellLayer(name: string, onClose: () => void, back?: HTMLElement | null): { closeBtn: RefObject<HTMLButtonElement | null>; layer: LayerHandle } {
+export function useShellLayer(name: string, onClose: () => void, back?: HTMLElement | null): {
+  root: RefObject<HTMLDivElement | null>; closeBtn: RefObject<HTMLButtonElement | null>; layer: LayerHandle;
+} {
+  const root = useRef<HTMLDivElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
   const layer = useLayer(true, {
     name,
     modal: true,
-    // 浮层 createPortal 到 body 下，层的根是挂在 body 下的那一块（遮罩）
-    el: () => closeBtn.current?.closest('body > *') ?? null,
+    // 层的根是遮罩（root 挂在遮罩上；浮层 createPortal 到 body 下）
+    el: () => root.current,
     onEsc: onClose,
     back: (opener) => [back ?? opener],
   });
   useLayoutEffect(() => {
     closeBtn.current?.focus();
   }, []);
-  return { closeBtn, layer };
+  return { root, closeBtn, layer };
 }

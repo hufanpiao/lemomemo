@@ -3,13 +3,15 @@
 // • 栈顶是模态层时，它下面的内容（页面、下面那一层）inert；关掉以后撤掉
 // • 关掉以后焦点回到打开它的按钮（上层关了回到下层里的按钮）
 // • 不同写法的层混着叠（左滑露出的行 + 弹层）也一样：Esc 只收上面那个
+// • 11-14 层栈整块评审：非模态层在栈顶而焦点在别处时 Esc 先给焦点所在的元素；焦点在非模态层里时页面的键不生效；Shift 编进键名；组字判断一处
+//   （跳页、下层先关、StrictMode、inert 被改、热替换几种情形在 layers-review.test.tsx）
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useRef, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Dialog } from '../../components/Dialog.tsx';
 import { SwipeRow } from '../../components/SwipeRow.tsx';
-import { useKeys, type LayerHandle } from '../layers.ts';
+import { keyName, resetLayers, useKeys, type LayerHandle } from '../layers.ts';
 import { useLayer } from '../useLayer.ts';
 
 const lines: string[] = [];
@@ -18,6 +20,7 @@ vi.mock('../../../platform/run-log-api.ts', () => ({ rlog: (l: string) => lines.
 afterEach(() => {
   lines.length = 0;
   cleanup();
+  resetLayers();
   document.body.replaceChildren();
 });
 
@@ -179,12 +182,13 @@ describe('层栈：快捷键只有一个入口，层开着时让给栈顶', () =
     expect(own).toHaveBeenCalledTimes(1);
   });
 
-  it('Esc 只给栈顶、拦下不再往下传；输入法组字中只拦不关；入栈、出栈、Esc 各记一行（不记内容）', () => {
+  it('Esc 只给栈顶、拦下不再往下传；输入法组字中（含 keyCode 229）只拦不关；入栈、出栈、Esc 各记一行（不记内容）', () => {
     const esc = vi.fn();
     const below = vi.fn();
     document.addEventListener('keydown', below);
-    const { unmount } = render(<Page layer="plain" page={() => undefined} onEsc={esc} />);
+    const { unmount } = render(<Page layer="modal" page={() => undefined} onEsc={esc} />);
     press({ key: 'Escape', isComposing: true });
+    press({ key: 'Escape', keyCode: 229 });
     expect(esc).not.toHaveBeenCalled();
     press({ key: 'Escape' });
     expect(esc).toHaveBeenCalledTimes(1);
@@ -193,7 +197,77 @@ describe('层栈：快捷键只有一个入口，层开着时让给栈顶', () =
     press({ key: 'Escape' });
     expect(below, '栈空了照常往下传').toHaveBeenCalledTimes(1);
     document.removeEventListener('keydown', below);
-    expect(lines).toEqual(['layer push n n=1', 'layer esc n n=1', 'layer pop n n=0']);
+    expect(lines).toEqual(['layer push m n=1', 'layer esc m n=1', 'layer pop m n=0']);
+  });
+
+  it('非模态层在栈顶、焦点在它外面：Esc 先给焦点所在的元素（接住了就不关层），没人接才关栈顶；下面的 Radix 看到 defaultPrevented 不自己关', () => {
+    const esc = vi.fn();
+    const own = vi.fn();
+    const radix = vi.fn((e: KeyboardEvent) => e.defaultPrevented);
+    document.addEventListener('keydown', radix, true);
+    function Recorder() {
+      return (
+        <button
+          type="button"
+          data-testid="rec"
+          onKeyDown={(e) => {
+            if (e.key !== 'Escape') return;
+            own();
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        />
+      );
+    }
+    render(
+      <>
+        <Recorder />
+        <Page layer="plain" page={() => undefined} onEsc={esc} />
+      </>,
+    );
+    screen.getByTestId('rec').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(own, '录快捷键的框收到了 Esc').toHaveBeenCalledTimes(1);
+    expect(esc, '框接住了，不关层').not.toHaveBeenCalled();
+    expect(radix.mock.results[0]?.value, '下面 Radix 的监听看到的是 defaultPrevented').toBe(true);
+    press({ key: 'Escape' });
+    expect(esc, '焦点在别处没人接：冒泡回窗口交给栈顶').toHaveBeenCalledTimes(1);
+    screen.getByTestId('plain').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(esc, '焦点在层里：捕获阶段直接交给它').toHaveBeenCalledTimes(2);
+    expect(radix, '焦点在层里时 document 上的监听收不到').toHaveBeenCalledTimes(2);
+    document.removeEventListener('keydown', radix, true);
+  });
+
+  it('焦点在非模态层的根里（电脑详情抽屉）：不带 mod 的页面键不生效、Ctrl+N 这类照常；焦点回到页面上照常；组字中（keyCode 229）页面的键也不生效', () => {
+    const page = vi.fn();
+    const ctrlN = vi.fn();
+    function Arrow() {
+      useKeys({ ArrowLeft: () => (page(), true), 'mod+n': () => (ctrlN(), true) });
+      return null;
+    }
+    render(
+      <>
+        <Arrow />
+        <Page layer="plain" page={() => undefined} />
+      </>,
+    );
+    screen.getByTestId('plain').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }));
+    expect(page).not.toHaveBeenCalled();
+    screen.getByTestId('plain').dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true, cancelable: true }));
+    expect(ctrlN).toHaveBeenCalledTimes(1);
+    press({ key: 'ArrowLeft', keyCode: 229 });
+    expect(page).not.toHaveBeenCalled();
+    press({ key: 'ArrowLeft' });
+    expect(page).toHaveBeenCalledTimes(1);
+  });
+
+  it('键名：不带 mod 的方向键和字母按着 Shift 前面加 shift+；Shift 换了字的符号键不加', () => {
+    const k = (i: KeyboardEventInit) => keyName(new KeyboardEvent('keydown', i));
+    expect(k({ key: 'ArrowLeft' })).toBe('ArrowLeft');
+    expect(k({ key: 'ArrowLeft', shiftKey: true })).toBe('shift+ArrowLeft');
+    expect(k({ key: 'T', shiftKey: true })).toBe('shift+t');
+    expect(k({ key: 'T' }), '大写锁定不算 Shift').toBe('t');
+    expect(k({ key: '?', shiftKey: true })).toBe('?');
+    expect(k({ key: 'n', ctrlKey: true, shiftKey: true })).toBeNull();
   });
 
   it('模态层下面晚挂到 body 上的浮层（例如弹层里打开的 Popover）：它在栈顶时不 inert，弹层在它下面也不 inert', async () => {

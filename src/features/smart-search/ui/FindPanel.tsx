@@ -17,7 +17,7 @@ import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { TodayNotes } from '../../notes/index.ts';
 import { VaultParts } from '../../vault/index.ts';
 import { openAssist, type AssistReq, type FindFrom } from '../hooks/find-open.ts';
-import { useLayer } from '../../../kit/hooks/useLayer.ts';
+import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -68,7 +68,7 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
   const input = useRef<HTMLInputElement>(null);
   // 关掉 = onClose（FindHost 的 closeFind 直接卸掉这一块），所以这里一直是开着的：挂着就是层栈里的一层（模态，kit/hooks/layers.ts：Esc、锁滚动、后面 inert、关了还焦点）
   const panel = useRef<HTMLDivElement>(null);
-  useLayer(true, { name: 'find', modal: true, el: () => panel.current?.closest('body > *') ?? null, onEsc: onClose });
+  useLayer(true, { name: 'find', modal: true, el: () => panel.current, onEsc: onClose });
   useEffect(() => {
     const t0 = clock.now();
     rlog(`find open from=${from} len=${[...query.trim()].length}`);
@@ -321,7 +321,7 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
             input.current?.focus();
           }}
           // 关了焦点由层栈还（Radix 不另找）
-          onCloseAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={prevent}
           data-testid="find-panel"
         >
           <RD.Title className={styles.sr}>{t('find.results', {})}</RD.Title>

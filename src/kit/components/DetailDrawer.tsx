@@ -38,9 +38,6 @@ export interface DetailDrawerProps {
 
 export function DetailDrawer({ id, label, onClose, side, handle, initial, 'data-testid': testId, children }: DetailDrawerProps) {
   const box = useRef<HTMLElement>(null);
-  // 原来的焦点在第一次渲染时记（早于里面编辑器在 layout 阶段可能挪焦点）
-  const opener = useRef<Element | null | undefined>(undefined);
-  if (opener.current === undefined) opener.current = document.activeElement;
   const [inside, setInside] = useState(false);
   useHoldBusy('editing', inside);
   /** 焦点去了抽屉外面（radix 浮层挂在 body 下，算抽屉里） */
@@ -76,10 +73,10 @@ export function DetailDrawer({ id, label, onClose, side, handle, initial, 'data-
     name: 'drawer',
     el: () => box.current,
     onEsc: () => onClose(),
-    back: () => {
+    // opener：打开它的元素（useLayer 在第一次渲染时记，早于里面编辑器在 layout 阶段挪焦点）
+    back: (opener) => {
       const now = cur.current;
-      const el = opener.current;
-      const orig = el instanceof HTMLElement && el !== document.body ? el : null;
+      const orig = opener instanceof HTMLElement && opener !== document.body ? opener : null;
       const mine = rowOf(now);
       return now === firstId.current ? [orig, mine] : [mine, orig];
     },

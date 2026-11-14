@@ -12,12 +12,12 @@
 import * as RD from '@radix-ui/react-dialog';
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
-import { useLayer } from '../../../kit/hooks/useLayer.ts';
+import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useAutolockMin, useErrText, useVault, useVaultCount } from '../hooks/useVault.ts';
 import { useWebauthn } from '../hooks/useVaultAuth.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
-import { LockIcon, PinPad, PinTop, useDuration } from './Pin.tsx';
+import { LockIcon, PadLayer, PinPad, PinTop, useDuration } from './Pin.tsx';
 import styles from './Vault.module.css';
 
 /** 遮罩把 Esc 交给里面的解锁卡（卡片挂上时登记自己的 cancel） */
@@ -159,15 +159,17 @@ export function UnlockOverlay({ open, children, testId = 'vault-scrim' }: { open
     const id = setTimeout(() => setShown(false), 400);
     return () => clearTimeout(id);
   }, [open]);
-  // 锁屏开着是层栈里的一层（kit/hooks/layers.ts）：Esc 只在它是栈顶时交给里面的退路（esc）；不做模态层（Radix 已经圈住焦点），焦点不由层栈还
-  useLayer(open, { name: 'unlock', onEsc: () => esc.current?.(), back: () => [] });
+  // 锁屏开着是层栈里的模态层（kit/hooks/layers.ts）：Esc 只在它是栈顶时交给里面的退路（esc）；页面的快捷键（Ctrl+K、Ctrl+N、页面上别的密码键盘）收不到，
+  // 里面密码键盘的数字键登记在这一层上（PadLayer）；不锁滚动（keepScroll：取消时直接换页，见 layers.ts）；焦点 Radix 圈住，不由层栈还
+  const scrim = useRef<HTMLDivElement>(null);
+  const layer = useLayer(open, { name: 'unlock', modal: true, keepScroll: true, el: () => scrim.current, onEsc: () => esc.current?.(), back: () => [] });
   if (!open && !shown) return null;
   const leaving = !open;
-  const stay = (e: Event): void => e.preventDefault();
   return (
     <RD.Root open={open} onOpenChange={(o) => (o || !open ? undefined : esc.current?.())}>
-      <RD.Content asChild forceMount aria-describedby={undefined} onPointerDownOutside={stay} onFocusOutside={stay} onInteractOutside={stay} onCloseAutoFocus={stay}>
+      <RD.Content asChild forceMount aria-describedby={undefined} onPointerDownOutside={prevent} onFocusOutside={prevent} onInteractOutside={prevent} onCloseAutoFocus={prevent}>
         <div
+          ref={scrim}
           className={leaving ? `${styles.scrim} ${styles.scrimOut}` : styles.scrim}
           data-testid={testId}
           data-leaving={leaving || undefined}
@@ -175,7 +177,9 @@ export function UnlockOverlay({ open, children, testId = 'vault-scrim' }: { open
           aria-modal="true"
         >
           <RD.Title className={styles.sr}>{t('vault.locked.title', {})}</RD.Title>
-          <EscCtx.Provider value={esc}>{children}</EscCtx.Provider>
+          <EscCtx.Provider value={esc}>
+            <PadLayer.Provider value={layer}>{children}</PadLayer.Provider>
+          </EscCtx.Provider>
         </div>
       </RD.Content>
     </RD.Root>

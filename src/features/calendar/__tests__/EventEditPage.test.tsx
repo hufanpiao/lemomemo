@@ -11,7 +11,8 @@ import { clearAllCollections, collection } from '../../../core/store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { navigate, resetLoadForTest } from '../../../app/router.ts';
-import { pendingNewDate, watchAddClick } from '../hooks/new-date.ts';
+import { pendingNewDate } from '../hooks/new-date.ts';
+import { setNewItemDay } from '../../../kit/state/new-item.ts';
 import EventEditPage from '../ui/EventEditPage.tsx';
 
 const ID = '00000000-0000-4000-8000-0000000000b1';
@@ -166,15 +167,9 @@ describe('全天切换', () => {
 });
 
 describe('从日历页点“＋”新建（FA-7 第 5 项）', () => {
-  it('默认是日历上选中的那天；表单挂上以后清掉，下次新建回到今天', async () => {
+  it('默认是带过来的那天（打字条“展开编辑”时 App 放进来）；表单挂上以后清掉，下次新建回到今天', async () => {
     await boot();
-    const stop = watchAddClick(() => '2026-11-09');
-    const add = document.createElement('button');
-    add.dataset['testid'] = 'tabbar-add';
-    document.body.append(add);
-    add.click();
-    stop();
-    add.remove();
+    setNewItemDay('2026-11-09');
     const view = open('#/event/new');
     expect((screen.getByTestId('event-edit-date') as HTMLInputElement).value).toBe('2026-11-09');
     expect(pendingNewDate()).toBeNull();

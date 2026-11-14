@@ -13,6 +13,8 @@ interface ImportMetaEnv {
 
 interface ImportMeta {
   readonly env: ImportMetaEnv;
+  /** 开发服务器的热替换（构建产物里是 undefined，整段被摇掉）；只声明用到的 dispose */
+  readonly hot?: { dispose(cb: () => void): void } | undefined;
 }
 
 /** CSS Modules：类名是字符串 */

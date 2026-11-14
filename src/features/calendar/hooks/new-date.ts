@@ -1,13 +1,11 @@
-// 日历页点“＋”时带上选中的那天（B2 FA-7 第 5 项；B3 R-353 起交给打字条）。
-// “＋”在 App 外壳的底栏里，外壳不知道日历选中了哪天，所以由日历页自己记，值放在 kit/state/new-item.ts（App、打字条、新建页都读得到）：
-// • 日历页挂着时在 document 上按捕获阶段听“＋”（底栏的 data-testid="tabbar-add"）的点击，点下那一刻记下选中的日期（watchAddClick）；
-//   捕获阶段先于“＋”自己的 onClick，App 在 onClick 里取走交给打字条（打字条里没说日子的记到这天，R-353）；
-//   Ctrl+N（打字记一条，S24）同理：日历页挂上时才登记进 kit 层栈的快捷键入口，比 App 的 useKeys 后登记、先被问到，先记下再交给 App 取走
-// • 打字条“展开编辑”时 App 把这一天放回去：新建日程的表单初始化时读它当默认日期（pendingNewDate），表单挂上以后清掉（clearNewDate）
-// • 从今天页点“＋”时日历页不在，不会记，App 也会清掉旧的；新建日程照旧是今天
+// 日历页点“＋”、按 Ctrl+N 时带上选中的那天（B2 FA-7 第 5 项；B3 R-353 起交给打字条）。
+// “＋”和 Ctrl+N 在 App 外壳里，外壳不知道日历选中了哪天：日历页挂着时把“选中的是哪天”登记进 kit/state/new-item.ts 的 calendarSel（useNewDateSource），
+// App 打开打字条时主动读一次（11-14 层栈整块评审第 11 条：原来靠 document 捕获阶段的点击监听、快捷键“后登记先问”的顺序抢先记下，删掉）
+// • 打字条“展开编辑”时 App 把这一天放进 new-item：新建日程的表单初始化时读它当默认日期（pendingNewDate），表单挂上以后清掉（clearNewDate）
+// • 从别的页点“＋”时 App 不读，新建日程照旧是今天
+import { useEffect, useRef } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
-import { addKeys } from '../../../kit/hooks/layers.ts';
-import { newItemDay, setNewItemDay } from '../../../kit/state/new-item.ts';
+import { calendarSel, newItemDay, setNewItemDay } from '../../../kit/state/new-item.ts';
 
 export const pendingNewDate = (): DateStr | null => newItemDay();
 
@@ -15,21 +13,15 @@ export function clearNewDate(): void {
   setNewItemDay(null);
 }
 
-/** 日历页挂着时调：点“＋”或按 Ctrl+N 那一刻记下 selected()；返回取消函数 */
-export function watchAddClick(selected: () => DateStr | null, doc: Document = document): () => void {
-  const onClick = (e: Event): void => {
-    if (e.target instanceof Element && e.target.closest('[data-testid="tabbar-add"]')) setNewItemDay(selected());
-  };
-  // Ctrl+N：登记在 kit 层栈的快捷键入口（页面的键，后登记的先问）：先记下，返回 false 交给 App 的 Ctrl+N 打开打字条
-  const offKey = addKeys({
-    'mod+n': () => {
-      setNewItemDay(selected());
-      return false;
-    },
-  });
-  doc.addEventListener('click', onClick, true);
-  return () => {
-    doc.removeEventListener('click', onClick, true);
-    offKey();
-  };
+/** 日历页挂着时调：登记选中的那天，卸掉时撤 */
+export function useNewDateSource(selected: DateStr | null): void {
+  const sel = useRef(selected);
+  sel.current = selected;
+  useEffect(() => {
+    const day = (): DateStr | null => sel.current;
+    calendarSel.day = day;
+    return () => {
+      if (calendarSel.day === day) calendarSel.day = undefined;
+    };
+  }, []);
 }

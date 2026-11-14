@@ -1,17 +1,20 @@
 // 密码圆点 + 数字键盘（线框 s9 FIRSTPW / PWERR；视觉稿 .pdots、.kpad）和锁图标
 // • 只做 4 位（负责人 11-14 原话“隐私记密只做4位数”，取代线框 s9 的“4 到 12 位、左下角‘确定’”）：固定 4 个圆点，
 //   输满 4 位自动交出，没有“确定”键（左下角留空位，键盘还是 3 × 4）
-// • 电脑上也能直接按数字键、Backspace（焦点在页面上时）
+// • 电脑上也能直接按数字键、Backspace（焦点在页面上时）；在锁屏里时键登记在锁屏那一层上（PadLayer，Unlock.tsx 的遮罩给），锁屏下面的页面收不到
 // • 输入的数字只在这个组件的 state 里，交出去后立刻清空
 // • 不进运行日志（11-14 隐私记评审第 1 条）：外层带 data-rl-mask，run-log 只记 masked、不记坐标；数字键的 testid 用位置序号 key-0～key-9
 //   （按出现顺序：1～9 是 key-0～key-8，0 是 key-9），不带数字本身
 // • 提示行（输错、锁定倒计时、两次不一样）在圆点下面、键盘上面（线框 s9 PWERR）
 // • PinTop：设密码、输密码整页的顶栏“‹ 随手记 … 取消”（线框 s9 FIRSTPW、PWERR：“右上角‘取消’随时退出”）
-import { useRef, useState } from 'react';
+import { createContext, useContext, useRef, useState } from 'react';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
-import { useKeys } from '../../../kit/hooks/layers.ts';
+import { useKeys, type LayerHandle } from '../../../kit/hooks/layers.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import styles from './Vault.module.css';
+
+/** 键盘在哪一层里（锁屏遮罩给）；不在层里是 null（页面的键） */
+export const PadLayer = createContext<LayerHandle | null>(null);
 
 /** 密码位数：和服务器的 PIN_RE（shared/schema/vault.ts）一致 */
 export const PIN_LEN = 4;
@@ -61,12 +64,12 @@ export function PinPad({ onSubmit, disabled = false, testId, msg = '', msgTestId
     setPin('');
     onSubmit(next);
   };
-  // 电脑上的实体键盘：数字、Backspace（kit 层栈的快捷键入口：焦点在输入框里、按着修饰键、有弹层盖着时收不到）
+  // 电脑上的实体键盘：数字、Backspace（kit 层栈的快捷键入口：焦点在输入框里、按着修饰键、上面另有弹层盖着时收不到）
   const hit = (k: (typeof KEYS)[number]) => (): boolean => {
     press(k);
     return true;
   };
-  useKeys({ Backspace: hit('del'), ...Object.fromEntries(KEYS.filter((k) => k !== 'gap' && k !== 'del').map((k) => [k, hit(k)])) });
+  useKeys({ Backspace: hit('del'), ...Object.fromEntries(KEYS.filter((k) => k !== 'gap' && k !== 'del').map((k) => [k, hit(k)])) }, useContext(PadLayer));
   return (
     <div data-testid={testId} data-rl-mask="">
       <div className={styles.dots} role="img" aria-label={t('vault.pad.filled', { n: pin.length })} data-testid={`${testId}-dots`} data-n={pin.length}>

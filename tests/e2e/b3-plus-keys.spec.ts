@@ -168,8 +168,11 @@ test.describe('窗口内快捷键（S24）', () => {
   test('Ctrl+N 打开打字条；记下一条后打字条自动收起（R-392），按 Ctrl+Z 撤销这一批', async ({ page }) => {
     await page.goto('/app/#/todos');
     await expect(page.getByTestId('todos')).toBeVisible();
-    await page.keyboard.press('Control+n');
-    await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 10_000 });
+    // Ctrl+N 登记在打字条预先下载的那一块里（首屏画完以后才下载，和 Ctrl+K 同一个取舍）：没好之前按了不响应，按到打字条出来为止
+    await expect(async () => {
+      await page.keyboard.press('Control+n');
+      await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
     await expect(page.getByTestId('type-input')).toBeFocused();
     await expect(page).toHaveURL(/#\/todos$/);
     await page.getByTestId('type-input').fill('买牛奶');

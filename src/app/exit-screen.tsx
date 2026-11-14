@@ -5,13 +5,15 @@
 //   不留一层空白挡住页面。按钮文案和“退出没完成，点重试”不同，只在“整屏提示本该出现 + 它的分包又取不到”同时发生时出现；
 // • 下载期间就卸掉（晚到的删除成功等）：下载好也不再画。
 import { createRoot, type Root } from 'react-dom/client';
-import { pushLayer } from '../kit/hooks/layers.ts';
 import { exitIncompleteShown, sessionDropState, subscribeSessionDrop } from '../platform/session-store.ts';
 import { reloadPage } from '../platform/sw-register.ts';
 import { AppCrashFallback } from './AppCrashFallback.tsx';
 import type { ExitIncompleteScreen } from './ExitIncompleteScreen.tsx';
 
 export type ExitScreenKind = 'incomplete' | 'unavailable';
+
+/** 层栈不在首屏，按需下载 */
+const loadLayers = () => import('../kit/hooks/layers.ts');
 
 type ScreenModule = { ExitIncompleteScreen: typeof ExitIncompleteScreen };
 const loadScreen = (): Promise<ScreenModule> => import('./ExitIncompleteScreen.tsx');
@@ -24,10 +26,18 @@ export function mountExitScreen(kind: ExitScreenKind, doc: Document = document, 
   host.setAttribute('data-exit-screen-host', kind);
   doc.body.appendChild(host);
   // 整屏提示是层栈（kit/hooks/layers.ts）里的模态层：底下的账号界面和别的浮层都 inert（本来就 inert 的不动、卸掉时也不去掉），
-  // Esc 只拦下不关，焦点由组件自己放到按钮上
-  const pop = pushLayer(() => ({ name: 'exit-screen', modal: true, el: () => host, back: () => [] }));
+  // Esc 只拦下不关，焦点由组件自己放到按钮上。层栈不在首屏（11-14 首屏 150 KB 预算），下载到了才入栈：
+  // 启动时挂的两处（main.tsx：读不到凭据、退出没完成）#root 还没画任何东西，后面没有能点的；画出界面以后才挂的那一处（watchExitIncomplete）开始盯时就先下载好。
+  // 层栈下载失败不管：整屏提示照样盖满窗口
   let root: Root | null = null;
   let gone = false;
+  let pop: (() => void) | null = null;
+  loadLayers().then(
+    (m) => {
+      if (!gone) pop = m.pushLayer(() => ({ name: 'exit-screen', modal: true, el: () => host, back: () => [] })).pop;
+    },
+    () => undefined,
+  );
   void load().then(
     ({ ExitIncompleteScreen: Screen }) => {
       if (gone) return;
@@ -43,7 +53,7 @@ export function mountExitScreen(kind: ExitScreenKind, doc: Document = document, 
   return () => {
     gone = true;
     root?.unmount();
-    pop();
+    pop?.();
     host.remove();
   };
 }
@@ -53,6 +63,7 @@ export function mountExitScreen(kind: ExitScreenKind, doc: Document = document, 
  * 挂着时删除状态回到 ok（晚到的删除成功）就整页重新载入。返回退订
  */
 export function watchExitIncomplete(doc: Document = document, reload: () => void = reloadPage): () => void {
+  loadLayers().catch(() => undefined);
   let unmount: (() => void) | null = null;
   const check = (): void => {
     if (!exitIncompleteShown()) return;

@@ -93,7 +93,8 @@ test.describe('B5 纪念日', () => {
   test('“＋ 新建”盖上编辑层，写名字后 Esc 关掉，列表里多了这一条', async ({ page, browserName }) => {
     await page.getByTestId('anniv-new').click();
     await expect(page.getByTestId('anniv-edit-layer')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId('anniv-page')).toHaveAttribute('inert', '');
+    // 编辑层挂在 body 下，后面的列表在 inert 的 #root 里（kit 层栈只给 body 的直接子节点设 inert）
+    await expect(page.locator('[inert]:has([data-testid="anniv-page"])')).toHaveCount(1);
     const name = page.getByTestId('anniv-edit-name');
     await name.click();
     await name.fill('妈妈');

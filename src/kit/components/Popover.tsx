@@ -32,7 +32,7 @@ export function Popover({ trigger, children, label, open, onOpenChange, classNam
     onOpenChange?.(o);
   };
   const box = useRef<HTMLDivElement>(null);
-  useLayer(shown, { name: 'popover', el: () => box.current?.closest('body > *') ?? null, onEsc: () => set(false), back: () => [] });
+  useLayer(shown, { name: 'popover', el: () => box.current, onEsc: () => set(false), back: () => [] });
   return (
     <RP.Root open={shown} onOpenChange={set}>
       <RP.Trigger asChild>{trigger}</RP.Trigger>

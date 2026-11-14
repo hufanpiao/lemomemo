@@ -49,7 +49,7 @@ export default function ImageViewer({ ids, start, render, back, onClose }: Image
     rlog('att view close');
     onClose();
   }, [onClose]);
-  const { closeBtn, layer } = useShellLayer('att-view', close, back);
+  const { root, closeBtn, layer } = useShellLayer('att-view', close, back);
   const down = useRef<{ x: number; y: number } | null>(null);
   const now = useRef({ ids, i });
   useLayoutEffect(() => {
@@ -74,8 +74,7 @@ export default function ImageViewer({ ids, start, render, back, onClose }: Image
   }, [i, n]);
 
   // 左右键：登记在看图这一层上（层栈的快捷键入口），只在它是栈顶时生效；带修饰键（Alt+← 是后退、Shift）、输入法组字、别人处理过的不算
-  const arrow = (d: number) => (e: KeyboardEvent): boolean => {
-    if (e.shiftKey) return false;
+  const arrow = (d: number) => (): boolean => {
     step(d);
     return true;
   };
@@ -96,7 +95,7 @@ export default function ImageViewer({ ids, start, render, back, onClose }: Image
   const closeName = t('att.pv.close', {});
   const count = t('att.iv.count', { i: i + 1, n });
   return createPortal(
-    <div className={shell.scrim} data-testid="img-view">
+    <div ref={root} className={shell.scrim} data-testid="img-view">
       <div className={`${desk ? shell.box : shell.full} ${shell.solid}`} role="dialog" aria-modal="true" aria-label={t('att.iv.frame', {})} data-shell={desk ? 'box' : 'full'}>
         <div className={styles.top}>
           <button ref={closeBtn} type="button" className={styles.close} onClick={close} aria-label={closeName} data-testid="img-view-close">

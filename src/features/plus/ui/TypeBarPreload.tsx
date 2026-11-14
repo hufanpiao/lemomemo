@@ -8,8 +8,12 @@
 //   录音那一块下载不到时（离线冷启动又没缓存）气泡也不出，是一样的提示，不影响记东西
 // • 查找面板的挂载点和电脑 Ctrl+K（B4b-2，features/smart-search 的 FindHost）：单独一个 Suspense，不等录音那一块；
 //   挂在这里是为了 Ctrl+K 不往首屏加字节（首屏额度只剩十几字节）
+// • Ctrl+N 打字记一条（S24）：同理挂在这里（11-14 层栈整块评审：首屏 150 KB 预算差 0.2 KB，层栈的快捷键入口整个挪出首屏）。
+//   这一块只在有“＋”的页挂（App 只在那些页画 PlusSlot），所以有“＋”的页才接；调 App 的 open：开着时再按只让 opened 加 1
+//   （收起、只剩提示条时靠它重新展开、聚焦，独立验证 11-11）。首屏刚画完、这一块还没下载好时按 Ctrl+N 不响应（和 Ctrl+K 同一个取舍）
 // 打字条本身的预先下载不在这里，见 index.ts 的 loadTypeBar 和 app/plus-slot.tsx（Q-24）
 import { lazy, Suspense, useEffect } from 'react';
+import { useKeys } from '../../../kit/hooks/layers.ts';
 import { FindHost } from '../../smart-search/index.ts';
 import { setTypeOpener } from '../hooks/assist-open.ts';
 import PlusHint from './PlusHint.tsx';
@@ -22,6 +26,13 @@ export default function TypeBarPreload({ onType }: { onType?: (() => void) | und
     setTypeOpener(onType ?? null);
     return () => setTypeOpener(null);
   }, [onType]);
+  useKeys({
+    'mod+n': () => {
+      if (!onType) return false;
+      onType();
+      return true;
+    },
+  });
   return (
     <>
       <Suspense fallback={null}>

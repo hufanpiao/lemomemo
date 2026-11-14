@@ -47,7 +47,7 @@ export default function PreviewLayer({ src, file, desk, onClose, onDownload, onS
   const [phase, setPhase] = useState<Phase>({ k: 'loading' });
   const [st, setSt] = useState<State | null>(null);
   const live = useRef(true);
-  const { closeBtn } = useShellLayer('att-preview', onClose);
+  const { root, closeBtn } = useShellLayer('att-preview', onClose);
   const way = previewOf(file.kind);
 
   const fail = useCallback((key: AttMsgKey, code: string) => {
@@ -127,7 +127,7 @@ export default function PreviewLayer({ src, file, desk, onClose, onDownload, onS
   const zoomable = phase.k === 'local' && phase.way !== 'pptx';
 
   return createPortal(
-    <div className={shell.scrim} data-testid="att-preview">
+    <div ref={root} className={shell.scrim} data-testid="att-preview">
       <div className={desk ? shell.box : shell.full} role="dialog" aria-modal="true" aria-label={t('att.pv.frame', {})}>
         <div className={styles.top}>
           <span className={styles.mark} aria-hidden="true">
