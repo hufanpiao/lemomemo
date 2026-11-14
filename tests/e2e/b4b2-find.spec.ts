@@ -7,6 +7,8 @@
 //   ③ 只按关键词：AI 关着（consent，带“去打开”）、离线（offline）、服务器 quota；④ 没有结果：“没找到”；
 //   ⑤ 设了 LEMO_SHOT_DIR 时在 Chromium 上存评审截图（手机 390×844、电脑 1280×800，浅色、深色），断言两种浏览器都跑。
 // 跑在快读组（playwright.fastread.config.ts）：note-search 要会话令牌，默认组的构建没配 supabase 地址。
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
@@ -101,6 +103,36 @@ async function typeBarFind(page: Page, text: string): Promise<void> {
   await page.getByTestId('type-input').fill(text);
 }
 
+const AXE_SRC = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
+type AxeRes = { violations: { id: string; nodes: { target: string[]; failureSummary?: string }[] }[] };
+
+/**
+ * 第三方审查前端第 2 条（11-14）：Tab 交还浏览器（焦点离开输入框、类型不变）；Ctrl + ←→ 切类型；
+ * 读屏：输入框 combobox 的 aria-activedescendant 指向选中的 option；面板上 axe 的 ARIA 规则（除 aria-required-children，见下）不报
+ */
+async function deskKeysAndAria(page: Page): Promise<void> {
+  const input = page.getByTestId('find-input');
+  await expect(input).toHaveAttribute('role', 'combobox');
+  await expect(input).toHaveAttribute('aria-activedescendant', (await rows(page).first().getAttribute('id')) ?? 'none');
+  await input.press('Tab');
+  await expect(input).not.toBeFocused();
+  await expect(page.getByTestId('find-kind-all')).toHaveAttribute('aria-pressed', 'true');
+  await input.focus();
+  await input.press('Control+ArrowRight');
+  await expect(page.getByTestId('find-kind-all')).toHaveAttribute('aria-pressed', 'false');
+  await input.press('Control+ArrowLeft');
+  await expect(page.getByTestId('find-kind-all')).toHaveAttribute('aria-pressed', 'true');
+  await page.evaluate(AXE_SRC);
+  const res = await page.evaluate(async () => {
+    const w = window as unknown as { axe: { run: (ctx: unknown, o: unknown) => Promise<AxeRes> } };
+    // 不查 aria-required-children：每行的“⋯”按钮在 listbox 里，axe 报“listbox 里有不许的孩子 button”。
+    // 要消掉得把结果改成 grid（行 + 格子）或把“⋯”挪出列表，和这次指定的 listbox / option 冲突，交主持人定（11-14）
+    const rules = ['aria-required-parent', 'aria-valid-attr-value', 'aria-allowed-role', 'aria-allowed-attr', 'nested-interactive', 'aria-input-field-name'];
+    return w.axe.run({ include: [['[data-testid="find-panel"]']] }, { runOnly: { type: 'rule', values: rules }, resultTypes: ['violations'] });
+  });
+  expect(res.violations.map((v) => `${v.id}: ${v.nodes.map((n) => `${n.target.join(' ')} ${n.failureSummary ?? ''}`).join(', ')}`)).toEqual([]);
+}
+
 test.describe('B4b-2 查找：电脑', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
@@ -121,6 +153,7 @@ test.describe('B4b-2 查找：电脑', () => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await shot(page, browserName, '电脑-深色-sFind-结果');
     await page.emulateMedia({ colorScheme: 'light' });
+    await deskKeysAndAria(page);
     await page.getByTestId('find-input').press('Enter');
     await expect(page.getByTestId('find-panel')).toHaveCount(0);
     await expect(page).toHaveURL(new RegExp(`#/event/${EV}`));

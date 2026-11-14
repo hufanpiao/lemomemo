@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PROBE_MARKERS } from '../../../build/check_no_probe.mjs';
-import { dropStaleKeys, STALE_KEYS, startDiagBoot } from '../diag-boot.ts';
+import { dropStaleKeys, logBootFailed, STALE_KEYS, startDiagBoot } from '../diag-boot.ts';
 import { OUT_KEY as RUN_LOG_KEY } from '../run-log.ts';
 
 beforeEach(() => localStorage.clear());
@@ -30,6 +30,13 @@ describe('startDiagBoot', () => {
     expect(localStorage.getItem(RUN_LOG_KEY) ?? '').not.toBe('');
   });
 
+  it('启动失败那一行（logBootFailed）：只有错误名和固定说明；离开页面（pagehide）当场存进运行日志（第三方审查前端第 3 条）', () => {
+    startDiagBoot(localStorage, () => undefined);
+    logBootFailed('TypeError');
+    window.dispatchEvent(new Event('pagehide'));
+    expect(localStorage.getItem(RUN_LOG_KEY)).toMatch(/app boot start_failed TypeError -> auth$/m);
+  });
+
   it('R-409：存储抛错（隐私模式）也不往外抛', () => {
     const bad = { removeItem: () => { throw new DOMException('x', 'SecurityError'); } } as unknown as Storage;
     expect(() => dropStaleKeys(bad)).not.toThrow();
@@ -37,7 +44,8 @@ describe('startDiagBoot', () => {
 });
 
 /** main.tsx 里这一行原样（下面“接线”核对 main.tsx 里确实是这样写的） */
-const DIAG = "if (import.meta.env.MODE !== 'production') void import('../platform/diag-boot.ts').then((m) => m.startDiagBoot()).catch(() => undefined);";
+// 第三方审查前端第 3 条（11-14）起留下这个 Promise（diag），启动失败时经它的 logBootFailed 记一行再跳登录页
+const DIAG = "const diag = import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot(), m)).catch(() => undefined) : undefined;";
 
 describe('接线', () => {
   const main = readFileSync(resolve(import.meta.dirname, '../../app/main.tsx'), 'utf8');

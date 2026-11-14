@@ -122,6 +122,18 @@ test.describe('B5 纪念日', () => {
     await name.press('Tab');
     await expect(page.getByTestId('anniv-edit-next')).toBeVisible();
     await shot(page, browserName, 'e2e-新建纪念日');
+    // 第三方审查前端第 1 条（11-14）：编辑层是 role=dialog + aria-modal；输入法组字时的 Esc 不关；Tab 走一圈焦点都在层里
+    const dlg = page.getByRole('dialog');
+    await expect(dlg).toHaveAttribute('aria-modal', 'true');
+    // 层名同顶上的标题：写了名字存下以后从“新建纪念日”变成“纪念日”
+    await expect(dlg).toHaveAttribute('aria-label', '纪念日');
+    await name.evaluate((el) => el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true, cancelable: true })));
+    await page.waitForTimeout(300);
+    await expect(page.getByTestId('anniv-edit-layer')).toBeVisible();
+    for (let i = 0; i < 20; i += 1) {
+      await page.keyboard.press('Tab');
+      expect(await page.evaluate(() => document.activeElement?.closest('[role="dialog"]') !== null && document.activeElement !== document.body), `第 ${i + 1} 下 Tab 焦点出了编辑层`).toBe(true);
+    }
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('anniv-edit-layer')).toHaveCount(0);
     await expect(page.getByTestId('anniv-row').filter({ hasText: '妈妈' })).toHaveCount(1);

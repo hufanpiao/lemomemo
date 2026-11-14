@@ -4,6 +4,7 @@
 // R-409（11-13 负责人定）：11-12 视口清理以后再没人写的两个旧本机存储键，启动后浏览器空闲时顺手清掉。
 // 放这里不放首屏：写它们的 Gap fix 日志、启动画面颜色诊断只在 4.0 预览版跑过（4.0 没上过正式环境），正式包不用清；
 // 键名也是 build/check_no_probe.mjs 的防回来标记，正式产物里不能出现
+import { rlog } from './run-log-api.ts';
 import { startRunLog } from './run-log.ts';
 import { whenIdle } from './session.ts';
 
@@ -19,6 +20,11 @@ export function dropStaleKeys(store: Storage): void {
       // 删不掉不影响任何功能
     }
   }
+}
+
+/** main.tsx 的 start() 抛了、要跳登录页之前记的那一行（第三方审查前端第 3 条）：只记错误名，不记 message（可能带用户内容） */
+export function logBootFailed(name: string): void {
+  rlog(`boot start_failed ${name} -> auth`);
 }
 
 export function startDiagBoot(store: Storage = localStorage, idle: (fn: () => void) => void = whenIdle): void {

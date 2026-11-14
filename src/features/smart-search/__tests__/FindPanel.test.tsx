@@ -141,3 +141,62 @@ describe('查找面板', () => {
     expect(screen.getAllByTestId('find-row').map((r) => r.getAttribute('data-kind'))).toEqual(['todo']);
   });
 });
+
+// 第三方审查前端第 2 条（11-14）：电脑上 Tab 交还浏览器（键盘能走到结果行、“⋯”、类型胶囊、底部按钮），切类型改成 Ctrl / ⌘ + ←→；
+// 读屏：输入框 combobox，aria-controls 指向结果 listbox，aria-activedescendant 指向当前选中的 option
+describe('查找面板：电脑键盘和读屏', () => {
+  /** 电脑宽度（MQ_SIDEBAR 成立） */
+  const stubDesk = () =>
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('width >= 900px'),
+      media: q,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+    }));
+  afterEach(() => vi.unstubAllGlobals());
+  const kindOn = () => screen.getAllByRole('button', { pressed: true }).map((b) => b.getAttribute('data-testid'));
+
+  it('Tab 不拦（不切类型）；Ctrl + → / ⌘ + → 切到下一类，Ctrl + ← 切回上一类；不按修饰键的 ←→ 不切', () => {
+    stubDesk();
+    seed(false);
+    render(<FindPanel query="牙" from="ctrlk" onClose={vi.fn()} />);
+    const input = screen.getByTestId('find-input');
+    expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(true);
+    expect(kindOn()).toEqual(['find-kind-all']);
+    fireEvent.keyDown(input, { key: 'ArrowRight' });
+    expect(kindOn()).toEqual(['find-kind-all']);
+    expect(fireEvent.keyDown(input, { key: 'ArrowRight', ctrlKey: true })).toBe(false);
+    expect(kindOn()).toEqual(['find-kind-event']);
+    fireEvent.keyDown(input, { key: 'ArrowRight', metaKey: true });
+    expect(kindOn()).toEqual(['find-kind-todo']);
+    fireEvent.keyDown(input, { key: 'ArrowLeft', ctrlKey: true });
+    expect(kindOn()).toEqual(['find-kind-event']);
+    fireEvent.keyDown(input, { key: 'ArrowLeft', ctrlKey: true });
+    fireEvent.keyDown(input, { key: 'ArrowLeft', ctrlKey: true });
+    expect(kindOn()).toEqual(['find-kind-todo']);
+    // 键位提示跟着改
+    expect(screen.getByText('↑↓ 选择 · Enter 打开 · Ctrl / ⌘ + ←→ 切换类型 · Esc 关闭')).toBeTruthy();
+  });
+
+  it('输入框 role=combobox、aria-controls 指向 listbox；每条结果 role=option；aria-activedescendant 跟着 ↑↓ 走', () => {
+    stubDesk();
+    seed(false);
+    render(<FindPanel query="牙" from="ctrlk" onClose={vi.fn()} />);
+    const input = screen.getByRole('combobox');
+    expect(input).toBe(screen.getByTestId('find-input'));
+    const boxes = (input.getAttribute('aria-controls') ?? '').split(' ').filter(Boolean).map((id) => document.getElementById(id));
+    expect(boxes.length).toBeGreaterThan(0);
+    for (const b of boxes) expect(b?.getAttribute('role')).toBe('listbox');
+    const opts = screen.getAllByRole('option');
+    expect(opts).toHaveLength(screen.getAllByTestId('find-row').length);
+    for (const o of opts) expect(boxes.some((b) => b?.contains(o))).toBe(true);
+    expect(input.getAttribute('aria-activedescendant')).toBe(opts[0]?.id);
+    expect(opts[0]?.getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input.getAttribute('aria-activedescendant')).toBe(opts[1]?.id);
+    expect(opts[1]?.getAttribute('aria-selected')).toBe('true');
+    expect(opts[0]?.getAttribute('aria-selected')).toBe('false');
+  });
+});

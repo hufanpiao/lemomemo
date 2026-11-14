@@ -47,7 +47,7 @@ export const ko = {
   'find.desk.time': '시간', // REVIEW(ko)
   'find.desk.place': '장소', // REVIEW(ko)
   'find.desk.note': '메모', // REVIEW(ko)
-  'find.desk.keys': '↑↓ 선택 · Enter 열기 · Tab 종류 바꾸기 · Esc 닫기', // REVIEW(ko)
+  'find.desk.keys': '↑↓ 선택 · Enter 열기 · Ctrl / ⌘ + ←→ 종류 바꾸기 · Esc 닫기', // REVIEW(ko)
   'find.desk.none': '하나를 고르면 미리보기가 나와요', // REVIEW(ko)
   'find.results': '찾은 결과', // REVIEW(ko)
   // B4b-3：结果层（时间类查找、总结、取消改期完成）、每行“⋯”菜单、提示条上的“改成搜索”

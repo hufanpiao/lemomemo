@@ -263,6 +263,12 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   };
   const onVis = (): void => snap(`visibility=${doc.visibilityState}`);
   const onPageShow = (e: PageTransitionEvent): void => snap(`pageshow persisted=${e.persisted}`);
+  // 离开页面（location.replace 去登录页、刷新、关标签页）：攒着没存的当场存，不等 300ms（启动失败那一行，第三方审查前端第 3 条）
+  const onPageHide = (): void => {
+    if (saveTimer === undefined) return;
+    clearTimeout(saveTimer);
+    save();
+  };
   const onErr = (e: ErrorEvent): void => add(`error ${String(e.message).slice(0, 300)} @${String(e.filename).split('/').pop()}:${e.lineno}:${e.colno}`);
   const onRej = (e: PromiseRejectionEvent): void => {
     const r = e.reason as { name?: string; message?: string; stack?: string } | undefined;
@@ -310,6 +316,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     [win, 'hashchange', onHash, undefined],
     [doc, 'visibilitychange', onVis, undefined],
     [win, 'pageshow', onPageShow, undefined],
+    [win, 'pagehide', onPageHide, undefined],
     [win, 'error', onErr, undefined],
     [win, 'unhandledrejection', onRej, undefined],
   ];
