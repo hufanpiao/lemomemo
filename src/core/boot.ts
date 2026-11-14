@@ -304,10 +304,10 @@ async function loadCache(
   result.upgradeReport = report;
   cache.onClosed((reason) => {
     rlog(`cache closed ${reason}`);
-    // 连接被浏览器断开（lost，iOS 后台常见）同版本变更：没有录音、编辑就重新载入，有就出“重新打开”横幅、结束时载入
-    if (reason === 'versionchange' || reason === 'lost') upgrade.onCacheVersionChange();
     // 别处在删库（别的标签页退出登录）：不走升级的重新载入、不出“有新版本”提示，交给入口看会话（K6 复审 C）
     if (reason === 'deleted') opts.onCacheDeleted?.();
+    // 版本变更、连接被浏览器断开（lost，iOS 后台常见）：没有录音、编辑就重新载入，有就出“重新打开”横幅、结束时载入；本页自己关（closed）不管
+    else if (reason !== 'closed') upgrade.onCacheVersionChange();
   });
 
   // 换账号（4.1、0.38 第 17 条）：在读写任何东西之前比对 owner，不同就清空整库和运行时缓存，旧账号的 outbox 不发

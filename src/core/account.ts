@@ -18,7 +18,7 @@ export type ClaimResult = 'same' | 'first' | 'switched';
 
 /**
  * 一个覆盖库里实际存在的全部仓（含 stores 以外的旧仓，K6 复审 N5）的 readwrite 事务：读 owner，不同就清空所有仓并写入新 user_id。
- * 封存以后照样能开（bypassSeal）。出错时整个事务回滚、抛出。换了账号时事务提交后清 localStorage 里上一个账号的痕迹（日志队列除外）
+ * 封存以后照样能开（bypassSeal）。出错时整个事务回滚、抛出。换了账号时顺手清 localStorage 里上一个账号的痕迹（日志队列除外）
  */
 export function claimCache(cache: Cache, userId: string): Promise<ClaimResult> {
   const names = cache.storeNames();
@@ -31,13 +31,12 @@ export function claimCache(cache: Cache, userId: string): Promise<ClaimResult> {
       if (owner === userId) return 'same';
       for (const n of names) await t.clear(n);
       await t.put(OWNER, { key: OWNER_KEY, value: userId });
-      return owner === undefined ? 'first' : 'switched';
+      if (owner === undefined) return 'first';
+      forgetAccountLocal(false);   // 事务随后失败回滚时也已清掉：只是外观回默认、预览同意下次再问，无害
+      return 'switched';
     },
     { bypassSeal: true },
-  ).then((r) => {
-    if (r === 'switched') forgetAccountLocal(false);
-    return r;
-  });
+  );
 }
 
 /** 本机库现在归谁；没有记录为 undefined */

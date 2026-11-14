@@ -178,7 +178,7 @@ export async function exitDevice(
   if (rescued) {
     if (await rescued) {
       boot?.outbox?.suspend(false);
-      rlog('exit skip: rebound, reload');
+      rlog('exit skip: rebound');
       return (deps.reload ?? reloadPage)();
     }
     if (exited.has(key)) return;
