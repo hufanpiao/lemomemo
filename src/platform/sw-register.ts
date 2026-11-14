@@ -2,6 +2,7 @@
 // 不变量：sw-lifecycle.ts 只经 loadSwLifecycle 一个加载器下载；注册不设超时、等真实结果（Q-23），结果和耗时记一行运行日志。
 // navigator.serviceWorker 只准出现在 platform（A13）；exe（Tauri）里不注册，判断在 sw-lifecycle.ts 读 env.ts 的 isTauri
 import { errName } from './env.ts';
+import { withTimeout } from './exit-basics.ts';
 import type { Lifecycle } from './net.ts';
 import { rlog } from './run-log-api.ts';
 import type * as SwLifecycle from './sw-lifecycle.ts';
@@ -26,15 +27,9 @@ export type SwLifecycleModule = typeof SwLifecycle;
 
 const importLifecycle = (): Promise<SwLifecycleModule> => import('./sw-lifecycle.ts');
 
-/** 跑一次下载：失败回 null；给了 waitMs 就最多等这么久（到点回 null） */
+/** 跑一次下载：失败回 null；给了 waitMs 就最多等这么久（到点回 null；超时工具只有 exit-basics.ts 的 withTimeout 一份） */
 function attempt(load: () => Promise<SwLifecycleModule>, waitMs: number | undefined): Promise<SwLifecycleModule | null> {
-  const got = Promise.resolve().then(load).catch(() => null);
-  if (waitMs === undefined) return got;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), waitMs);
-  });
-  return Promise.race([got, timeout]).finally(() => clearTimeout(timer));
+  return waitMs === undefined ? Promise.resolve().then(load).catch(() => null) : withTimeout<SwLifecycleModule | null>(load, waitMs, () => null);
 }
 
 export interface SwLoadOptions {

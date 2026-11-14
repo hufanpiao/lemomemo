@@ -112,7 +112,10 @@ export interface OutboxStatus {
 export type OutboxEvent =
   /** 永久失败：已回滚 view，这一项进“发送失败”区 */
   | { type: 'error'; item: OutboxItem; code: string }
-  /** 被服务器拒收并丢掉（vault_required 等）：调用方整表重拉这张表、写 logs outbox_rejected */
+  /**
+   * 被服务器拒收并丢掉（vault_required 等）：调用方整表重拉这张表、写 logs outbox_rejected。
+   * code 为 purged：墓碑、整表重拉删了这一行，本机没发出去的修改随行丢掉（dropServer，每条记录一次；不重拉，界面出“已彻底删除”）
+   */
   | { type: 'rejected'; item: OutboxItem; code: string }
   /** 426：整个队列已暂停 */
   | { type: 'upgrade_required'; min: string | null }
@@ -222,9 +225,10 @@ export interface Outbox {
   refresh(): Promise<void>;
   /**
    * 设闸（换账号、被移除；core/account.ts 的 watchAccount 同步调）：之后 enqueue 抛 OutboxRejectError('outbox_suspended')，
-   * next 返回 null，ack、fail、discard、retryFailed、clearBackoff、resume、applyServer、dropServer 什么也不做。不能解除（随后关库、重新载入）
+   * next 返回 null，ack、fail、discard、retryFailed、clearBackoff、resume、applyServer、dropServer 什么也不做。
+   * 只有一处解除（on = false）：交接救回、马上重新载入之前（core/device-exit.ts），让 pagehide 补存的草稿写得进去；别处设上就不解
    */
-  suspend(): void;
+  suspend(on?: boolean): void;
   isSuspended(): boolean;
 }
 

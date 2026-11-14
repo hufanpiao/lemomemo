@@ -25,12 +25,37 @@ export const ZIP_LITE_ALIAS = { find: /^jszip$/, replacement: resolve(root, 'src
  * 懒加载页共用的小工具合成一块（B4b-1 第二轮，主持人选“乙”；架构 8.1“构建与分包”）：
  * 这几份各自很小（合起来约 3 KB），本来跟着某一页走；附件的懒加载块也用上以后，Rolldown 按“被哪些入口用到”把每份拆成单独一块，
  * App 入口块里的预加载表（每个懒加载页列出整个静态闭包）就多出一串文件名，首屏净增多了约 58 B，打开那几页时也多几个请求。
- * 只收名单里的模块，而且它们自己的依赖都已经在首屏块里（不会把别的块拖进来）；不是通吃规则，别的懒加载块照原样分。
- * 往名单里加模块前先确认它只依赖首屏块；tests/build/lazy-common-chunk.test.ts 守着名单和首屏文件数
+ * 只收名单里的模块，而且它们自己的依赖都已经在首屏块里或同一组里（不会把别的块拖进来）；不是通吃规则，别的懒加载块照原样分。
+ * 往名单里加模块前先确认它只依赖首屏块或同组模块；tests/build/lazy-common-chunk.test.ts 守着名单和首屏文件数
+ *
+ * lazy-data（11-14 首屏腾空间）：数据读写那一层（日期和时区、live-row、useCollection、读写设置、write、edit-save），每份几百字节，
+ * 却被二三十个懒加载页各自静态引到，Rolldown 拆成十几个小块，入口块的预加载表每个都列文件名、每个懒加载页再各列一遍下标，
+ * 合成一块后首屏（稳定口径，preview）1010 → 818 B，省 192 B。代价：只用到其中一部分的页打开时多下载这一块里没用到的部分
+ *（最多约 1.9 KB gzip：创建失败操作条、同意页），用得多的页（随手记、提醒设置、纪念日）反而少十个文件、少一两 KB；没用到的页不加载这一块。
+ * 单独成组、不并进 lazy-common：同步接线这类只用 lazy-common 的块不跟着变大（并进去时它要多下 4 KB）。
+ * CSS module 不收（组里带 CSS 会改样式表的拆分和先后）
  */
-export const LAZY_COMMON_MODULES = ['shared/logic/link.ts', 'src/kit/hooks/useOnline.ts', 'src/platform/save-file.ts', 'src/core/ms-pref.ts', 'src/platform/device-kind.ts'] as const;
-const LAZY_COMMON_RE = new RegExp(`[\\\\/](${LAZY_COMMON_MODULES.map((m) => m.replace(/[.]/g, '\\.').replace(/\//g, '[\\\\/]')).join('|')})$`);
-export const isLazyCommon = (id: string): boolean => LAZY_COMMON_RE.test(id);
+export const LAZY_GROUPS = {
+  'lazy-common': ['shared/logic/link.ts', 'src/kit/hooks/useOnline.ts', 'src/platform/save-file.ts', 'src/core/ms-pref.ts', 'src/platform/device-kind.ts'],
+  'lazy-data': [
+    'shared/core/date.ts',
+    'shared/core/tz.ts',
+    'shared/logic/live-row.ts',
+    'src/core/current-tz.ts',
+    'src/kit/hooks/useCollection.ts',
+    'src/core/write.ts',
+    'src/core/edit-save.ts',
+    'src/core/action-result.ts',
+    'src/core/setting-read.ts',
+    'src/core/setting-patch.ts',
+    'src/core/setting-write.ts',
+    'src/kit/hooks/useSettingWriter.ts',
+  ],
+} as const satisfies Record<string, readonly string[]>;
+const pathRe = (mods: readonly string[]): RegExp => new RegExp(`[\\\\/](${mods.map((m) => m.replace(/[.]/g, '\\.').replace(/\//g, '[\\\\/]')).join('|')})$`);
+const LAZY_GROUP_RES = Object.entries(LAZY_GROUPS).map(([name, mods]) => ({ name, re: pathRe(mods) }));
+/** 模块属于哪个懒加载共用组（名单里的才有），不属于回 undefined */
+export const lazyGroupOf = (id: string): string | undefined => LAZY_GROUP_RES.find((g) => g.re.test(id))?.name;
 
 export const PURE_REEXPORT_RULES =[{ test: /[\\/]src[\\/]motion[\\/]components\.ts$/, sideEffects: false }];
 // LEMO_BUILD_VERSION（deploy-preview 给的 X.Y.Z-preview.N）优先，否则 VERSION 文件；和 app/version.json 同一个来源
@@ -141,7 +166,7 @@ export default defineConfig(({ mode }) => {
       assetsInlineLimit: 0,
       rollupOptions: {
         treeshake: { moduleSideEffects: PURE_REEXPORT_RULES },
-        output: { codeSplitting: { groups: [{ name: 'lazy-common', test: isLazyCommon, includeDependenciesRecursively: false }] } },
+        output: { codeSplitting: { groups: LAZY_GROUP_RES.map(({ name, re }) => ({ name, test: re, includeDependenciesRecursively: false })) } },
         input: {
           main: resolve(root, 'src/index.html'),
           auth: resolve(root, 'src/auth/index.html'),

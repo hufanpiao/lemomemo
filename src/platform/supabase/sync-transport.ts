@@ -25,9 +25,10 @@ import { readSessionId } from '../session.ts';
 import { pinAuth, pinSession } from './pin-session.ts';
 import { getSupabase } from './client.ts';
 import { claimParams } from './claim-params.ts';
-import { REFRESH_MARGIN_MS, REQUEST_TIMEOUT_MS, timeoutSignal, toFailure, toSessionCheck, withTimeout } from './sync-errors.ts';
+import { REFRESH_MARGIN_MS, REQUEST_TIMEOUT_MS, timeoutSignal, toFailure, toSessionCheck } from './sync-errors.ts';
+import { withTimeout } from '../exit-basics.ts';
 
-export { REFRESH_MARGIN_MS, REQUEST_TIMEOUT_MS, timeoutSignal, toFailure, toSessionCheck, withTimeout } from './sync-errors.ts';
+export { REFRESH_MARGIN_MS, REQUEST_TIMEOUT_MS, timeoutSignal, toFailure, toSessionCheck } from './sync-errors.ts';
 
 /** 这个实现提供的方法（和 core/sync/types.ts 的 SyncTransport 形状一致；TS 结构类型，app 层直接交给 createSync） */
 export interface SupabaseSyncTransport {
@@ -187,7 +188,7 @@ export function createSupabaseTransport(opts: SupabaseTransportOptions = {}): Su
       } finally {
         ts.clear();
       }
-    }, NET, ms);
+    }, ms, () => NET);
   }
 
   /** 刷新令牌：拿客户端 + refreshSession 整段包超时，超时按断网 */
@@ -196,7 +197,7 @@ export function createSupabaseTransport(opts: SupabaseTransportOptions = {}): Su
       const db = await client();
       const r = await db.auth.refreshSession();
       return toSessionCheck(r.error);
-    }, 'network', ms);
+    }, ms, () => 'network');
   }
 
   return {
@@ -206,7 +207,7 @@ export function createSupabaseTransport(opts: SupabaseTransportOptions = {}): Su
         const db = await client();
         const { data } = await db.auth.getSession();
         return data.session ?? null;
-      }, undefined, ms);
+      }, ms, () => undefined);
       if (s === undefined) return 'network';
       if (!s) return 'failed';   // 本机没有会话：退出登录由 watchAccount 管，这里不当“被移除”
       const exp = typeof s.expires_at === 'number' ? s.expires_at * 1000 : null;

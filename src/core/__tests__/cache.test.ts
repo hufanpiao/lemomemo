@@ -1,10 +1,10 @@
 // 本机库（架构 4.1、0.27 第 1 点）：建库、读写、版本迁移、迁移出错、onversionchange、不支持降级
 // 用 __tests__/idb-fake.ts 的替身（仓库没有 fake-indexeddb）
 import { describe, expect, it, vi } from 'vitest';
-import { openCache, type Cache, type CachedRow, type OpenCacheResult } from '../cache.ts';
+import { CacheClosedError, openCache, type Cache, type CachedRow, type OpenCacheResult } from '../cache.ts';
 import { DB_VERSION, type CacheMigration } from '../cache-migrations.ts';
 import { cacheStores, type StoreDef } from '../cache-schema.ts';
-import { fakeIndexedDB, flush, nextDbVersion } from './idb-fake.ts';
+import { fakeIndexedDB, flush, nextDbVersion, type FakeDB } from './idb-fake.ts';
 
 function mustOpen(r: OpenCacheResult): Cache {
   if (!r.ok) throw new Error(`open_failed:${r.reason}:${r.error}`);
@@ -235,5 +235,31 @@ describe('onversionchange（TC-B1-48 的本机库部分）', () => {
     expect((during as Error).message).toBe('cache_closed');
     expect(await b.getDraft('ok')).toBeDefined();
     b.close();
+  });
+});
+
+describe('连接被浏览器断开（iOS 后台“Connection to Indexed Database server lost”）', () => {
+  const conn = (fake: ReturnType<typeof fakeIndexedDB>['fake']): FakeDB => [...(fake.dbs.get('planner-v4')?.connections ?? [])][0] as FakeDB;
+
+  it('收到 close 事件：按 lost 关库，之后读写都抛 CacheClosedError', async () => {
+    const { factory, fake } = fakeIndexedDB();
+    const cache = mustOpen(await openCache({ factory }));
+    const closed = vi.fn();
+    cache.onClosed(closed);
+    conn(fake).lose();
+    expect(closed).toHaveBeenCalledWith('lost');
+    expect(cache.isClosed()).toBe(true);
+    await expect(cache.getMeta('schema_v')).rejects.toBeInstanceOf(CacheClosedError);
+  });
+
+  it('没收到 close 事件、开事务时抛 InvalidStateError：按 CacheClosedError 抛，库按 lost 关', async () => {
+    const { factory, fake } = fakeIndexedDB();
+    const cache = mustOpen(await openCache({ factory }));
+    const closed = vi.fn();
+    cache.onClosed(closed);
+    conn(fake).lose(false);
+    await expect(cache.setMeta('schema_v', 1)).rejects.toBeInstanceOf(CacheClosedError);
+    expect(closed).toHaveBeenCalledWith('lost');
+    expect(cache.isClosed()).toBe(true);
   });
 });

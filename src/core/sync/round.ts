@@ -1,4 +1,5 @@
 // 一轮完整拉取（engine.ts 用）：config → 各同步表 → 墓碑 → 待补拉 → schema_v；另有退避等待的计算
+// 一张表、墓碑、补拉失败：401（auth）、闸（stopped）照旧整轮停；别的（net）只跳过这一项、记 sync_pull_skip，接着拉后面的，整轮回 net
 // 纯 TS：不准 import React 和任何功能（A1）
 import { parseVersion, versionAtLeast } from '../../../shared/core/version.ts';
 import { buildInfo } from '../../platform/env.ts';
@@ -6,6 +7,7 @@ import { applyFreshConfig, type BootResult } from '../boot.ts';
 import type { Cache, CachedConfig, CachedProfile } from '../cache.ts';
 import type { Outbox } from '../outbox-types.ts';
 import { pullTable, pullTombstones, refetchTable, type PullDeps, type PullOutcome } from './pull.ts';
+import { rlog } from '../../platform/run-log-api.ts';
 import type { ConfigRows, SyncTransport } from './types.ts';
 
 export interface RoundCtx {
@@ -71,22 +73,35 @@ export async function pullRound(c: RoundCtx, transport: SyncTransport): Promise<
       c.withConfig = false;
     }
   }
+  let out: PullOutcome = 'ok';
+  /** 这一项的结果：ok 回 true；net 记日志、整轮记成 net、回 true（接着拉后面的）；auth、stopped 回 false（整轮停） */
+  const go = (r: PullOutcome, coll: string): boolean => {
+    if (r === 'ok') return true;
+    if (r !== 'net') return false;
+    out = 'net';
+    c.d.log?.('sync_pull_skip', { coll, code: r });
+    rlog(`sync pull_skip coll=${coll}`);
+    return true;
+  };
   for (const table of c.cache.syncTables) {
     const r = await pullTable(c.d, table, c.pendingFull.has(table));
-    if (r !== 'ok') return r;
-    c.pendingFull.delete(table);
+    if (!go(r, table)) return r;
+    if (r === 'ok') c.pendingFull.delete(table);
   }
   const tomb = await pullTombstones(c.d);
-  if (tomb !== 'ok') return tomb;
+  if (!go(tomb, 'tombstones')) return tomb;
   if (!c.refetch.done) {
+    let all = true;
     for (const [table, ids] of Object.entries(c.boot.refetch)) {
       if (!c.cache.syncTables.includes(table)) continue;
       const r = await refetchTable(c.d, table, ids);
-      if (r !== 'ok') return r;
+      if (!go(r, table)) return r;
+      all &&= r === 'ok';
     }
-    c.refetch.done = true;
+    c.refetch.done = all;   // 有一张没补拉成的，下一轮整份再补一次（已补到的再拉一次无害）
   }
   if (c.d.gated()) return 'stopped';
+  if (out !== 'ok') return out;   // 有跳过的：不记 schema_v、不算这一轮拉完
   // 整表重拉全部完成：记下当前的 rows.ts 版本（boot.ts 的 fullResync 说明）
   if (c.pendingFull.size === 0 && (await c.cache.getMeta('schema_v')) !== c.schemaV) await c.cache.setMeta('schema_v', c.schemaV);
   return 'ok';

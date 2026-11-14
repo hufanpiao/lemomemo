@@ -9,13 +9,12 @@
 import { ALL_DAY_LIVE_UNTIL, remindAtOf } from '../../shared/logic/remind.ts';
 import type { Tz } from '../../shared/core/tz.ts';
 import { getBoot } from './boot.ts';
-import { CacheClosedError } from './cache.ts';
 import { currentTz } from './current-tz.ts';
 import { resolveGoneImpl } from './outbox-gone.ts';
-import { OutboxCodeUnavailableError, OutboxRejectError } from './outbox-logic.ts';
+import { OutboxRejectError } from './outbox-logic.ts';
 import { outboxCtx } from './outbox.ts';
 import { remindLive, rowRemindPending, todoRemindAfter, todoRemindFields } from './remind-flag.ts';
-import { localWriteBlocker, type WriteFailReason } from './write.ts';
+import { localWriteBlocker, writeFailOf, type WriteFailReason } from './write.ts';
 
 export type ResolveGoneResult =
   /** opId：恢复项的 op_id（只有 restored 有；冲突提示按它认“刚恢复”的那一项） */
@@ -68,9 +67,9 @@ export async function resolveGone(table: string, id: string, mode: 'restore' | '
     });
     return { ok: true, done: r.done, opId: r.opId };
   } catch (e) {
-    if (e instanceof CacheClosedError) return { ok: false, reason: localWriteBlocker() === 'switching' ? 'switching' : 'closing' };
-    if (e instanceof OutboxRejectError) return e.code === 'outbox_suspended' ? { ok: false, reason: 'switching' } : { ok: false, reason: 'rejected', code: e.code };
-    if (e instanceof OutboxCodeUnavailableError) return { ok: false, reason: 'local_unavailable' };
+    const reason = writeFailOf(e);
+    if (reason) return { ok: false, reason };
+    if (e instanceof OutboxRejectError) return { ok: false, reason: 'rejected', code: e.code };
     throw e;
   }
 }

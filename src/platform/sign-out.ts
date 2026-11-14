@@ -6,7 +6,6 @@
 import { buildInfo, isTauri } from './env.ts';
 import { clearAuthLoss, clearReauth } from './auth-loss-store.ts';
 import { appFetch } from './http.ts';
-import { clearLogQueue } from './log-store.ts';
 import { disconnectPushLazy } from './push-disconnect.ts';
 import {
   clearCacheStorage,
@@ -19,7 +18,7 @@ import {
   SELF_SIGN_OUT_TTL_MS,
 } from './session.ts';
 import { guardSessionRemoval } from './supabase/auth-storage.ts';
-import { CACHES_TIMEOUT_MS, deleteLocalDb, WIPE_TIMEOUT_MS, withTimeout } from './exit-basics.ts';
+import { CACHES_TIMEOUT_MS, deleteLocalDb, forgetAccountLocal, WIPE_TIMEOUT_MS, withTimeout } from './exit-basics.ts';
 
 // 本机库名、删库、超时、withTimeout 在 platform/exit-basics.ts（首屏只引那里）；这里原样转出
 export { CACHES_TIMEOUT_MS, DELETE_WAIT_MS, deleteLocalDb, LOCAL_DB_NAME, WIPE_TIMEOUT_MS, withTimeout, type DeleteDbResult } from './exit-basics.ts';
@@ -60,8 +59,13 @@ export const defaultExitSteps: ExitSteps = {
   disconnectPush: () => disconnectPushLazy(),
 };
 
-/** 清本机库和 Cache Storage（②③）；某一步失败或超时不挡后面，永远 resolve */
-export async function wipeThisDevice(steps: ExitSteps, wipeMs = WIPE_TIMEOUT_MS, cachesMs = CACHES_TIMEOUT_MS): Promise<void> {
+/**
+ * 清本机库和 Cache Storage（②③），最后清本机痕迹（外观、隐私记同意、日志上传队列：logsOf 给 user_id 只清这个账号的，null 清全部）；
+ * 某一步失败或超时不挡后面，永远 resolve
+ */
+export async function wipeThisDevice(
+  steps: ExitSteps, logsOf: string | null = null, wipeMs = WIPE_TIMEOUT_MS, cachesMs = CACHES_TIMEOUT_MS,
+): Promise<void> {
   const { wipe } = steps;
   clearReauth();
   const cleared = wipe ? await withTimeout(wipe, wipeMs, () => false) : false;
@@ -86,6 +90,7 @@ export async function wipeThisDevice(steps: ExitSteps, wipeMs = WIPE_TIMEOUT_MS,
     cachesMs,
     () => false,
   );
+  forgetAccountLocal(logsOf);
 }
 
 /**
@@ -274,8 +279,7 @@ export async function signOutThisDevice(o: SignOutOptions): Promise<{ serverDone
     if (deleteOwnDevice) await withTimeout(deleteOwnDevice, Math.floor(timeoutMs / 2), () => undefined);
     // 删行用掉多少，signOut 就少等多少（清本机的时间另算，它自己有上限）
     const rest = Math.max(timeoutMs - (Date.now() - t0), 0);
-    await wipeThisDevice(steps, o.wipeMs, o.cachesMs);
-    clearLogQueue(before);   // 这个账号没传完的日志不再传（退出、换账号）
+    await wipeThisDevice(steps, before, o.wipeMs, o.cachesMs);   // 这个账号没传完的日志也在这里清（不再传）
     const signOut = (): Promise<{ serverDone: boolean }> => {
       // ④ 前再读一次 sid（中间不再有 await）：读到别的会话（非 null 且不是 sid），就不调 supabase-js
       // （它会读到新会话的令牌去吊销），也不碰存储。读到 null 照常调：auth-js 读到没有会话本来就不发 /logout。

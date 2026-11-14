@@ -10,6 +10,9 @@ import { clearCacheStorage } from '../platform/session.ts';
 import { clearReauth, readReauth } from '../platform/auth-loss-store.ts';
 import { requestAppUpdate } from '../platform/native-bridge.ts';
 import { reloadPage, updateAttemptStore } from '../platform/sw-register.ts';
+import { rlog } from '../platform/run-log-api.ts';
+import { clock } from '../platform/clock.ts';
+import { forgetAccountLocal } from '../platform/exit-basics.ts';
 import { ensureAccount } from './account.ts';
 import { deleteCacheDb, openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
 import { cacheErrKind, type UpgradeReport } from './cache-migrations.ts';
@@ -211,6 +214,8 @@ export async function coldStart(opts: BootOptions): Promise<BootResult> {
     result.status = 'signed_out';
     if ((opts.readReauth ?? readReauth)(now()) !== null) return result;
     clearReauth();
+    // 外观、隐私记同意、日志上传队列一起清（架构 0.38 第 68 条 ⑤）：没有会话时哪个账号的都不该留
+    forgetAccountLocal(null);
     await deleteCacheDb({ factory: opts.cacheOptions?.factory, name: opts.cacheOptions?.name });
     return result;
   }
@@ -298,9 +303,11 @@ async function loadCache(
   result.cache = cache;
   result.upgradeReport = report;
   cache.onClosed((reason) => {
-    if (reason === 'versionchange') upgrade.onCacheVersionChange();
+    rlog(`cache closed ${reason}`);
     // 别处在删库（别的标签页退出登录）：不走升级的重新载入、不出“有新版本”提示，交给入口看会话（K6 复审 C）
     if (reason === 'deleted') opts.onCacheDeleted?.();
+    // 版本变更、连接被浏览器断开（lost，iOS 后台常见）：没有录音、编辑就重新载入，有就出“重新打开”横幅、结束时载入；本页自己关（closed）不管
+    else if (reason !== 'closed') upgrade.onCacheVersionChange();
   });
 
   // 换账号（4.1、0.38 第 17 条）：在读写任何东西之前比对 owner，不同就清空整库和运行时缓存，旧账号的 outbox 不发
@@ -314,7 +321,8 @@ async function loadCache(
   await prunePendingActions(cache, { userId, now: now() }).catch(() => 0);
 
   // 日志：仓库里还没有日志层（core/log），outbox 的 log（R-229 outbox_vault_shell_drop）暂不接；接上以后经 opts.outboxOptions.log 传进来（接手清单 K6-log）
-  const outbox = createOutbox(cache, { ...opts.outboxOptions, appVersion, now });
+  // outbox 用校正过偏差的时钟（platform/clock.ts，同步引擎同一个）：next_at 退避和引擎算重试等多久对得上
+  const outbox = createOutbox(cache, { ...opts.outboxOptions, appVersion, now: opts.now ?? clock.now });
   result.outbox = outbox;
   result.outboxReport = await outbox.boot();
   outbox.onEvent((e) => {

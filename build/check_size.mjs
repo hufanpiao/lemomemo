@@ -16,7 +16,7 @@ import { checkPreload } from './check_preload.mjs';
 
 /**
  * firstScreenFiles（B4b-1 第二轮，主持人定）：首屏 JS 文件数上限 = 当时 main 的 8 个 + 1。冷启动每多一个文件就多一个请求；
- * 懒加载页共用的小模块被拆出、又被首屏静态引到时，文件数会先涨（vite.config.ts 的 LAZY_COMMON_MODULES 就是为这个合成一块）
+ * 懒加载页共用的小模块被拆出、又被首屏静态引到时，文件数会先涨（vite.config.ts 的 LAZY_GROUPS 就是为这个合成一块）
  */
 export const BUDGET = { firstScreenJs: 150 * 1024, totalJs: 250 * 1024, firstScreenFiles: 9 };
 

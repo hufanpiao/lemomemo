@@ -22,7 +22,6 @@
 //   照常显示退出后的提示（kept、reauth）；只有 sid 换成了别的值才走“不删库、重走 SessionCheck”
 // 记下的 snap 用完就清（复审建议 3）：check 放行、恢复成功跳转前、退出后
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { clearLogQueue } from '../../../platform/log-store.ts';
 import { readSessionAccessToken, readSessionUserId } from '../../../platform/session.ts';
 import {
   defaultExitSteps,
@@ -149,8 +148,7 @@ export function useAccountGate(deps: AuthFlowDeps = {}, onReplaced?: () => void)
       const token = snap.current?.token ?? null;
       const userId = snap.current?.userId ?? null;
       snap.current = null;
-      await wipeThisDevice(steps);
-      clearLogQueue(userId);
+      await wipeThisDevice(steps, userId);
       if (token) await logout(token, timeoutMs);
       return true;
     }

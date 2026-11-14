@@ -58,6 +58,20 @@ describe('交接结果不确定期间的退出闸', () => {
     expect(rebindPending()).toBe(false);
   });
 
+  it('换上 S2 以后：先解开 outbox 的闸（草稿在 pagehide 时还能落盘），再整页重新载入（引擎、sync-wiring 已停，不会自己恢复）', async () => {
+    const { r } = rebindWith([net, net, net, () => new Response('{"ok":true}', { status: 200 })]);
+    await r.verifyAndRebind('a@b.c', '123456', 'dev-1');
+    const deps = exitDeps();
+    let gate = true;
+    const order: string[] = [];
+    const outbox = { suspend: vi.fn((on?: boolean) => ((gate = on !== false), order.push(`gate=${gate}`))), isSuspended: () => gate };
+    Object.assign(deps.getBoot() as object, { outbox });
+    deps.reload = vi.fn(() => void order.push('reload'));
+    await exitDevice({ reason: 'removed', sid: 's1', path: 'outbox' }, deps);
+    expect(order).toEqual(['gate=false', 'reload']);
+    expect(deps.goToAuth).not.toHaveBeenCalled();
+  });
+
   it('退出时交接被明确拒了：丢掉 S2，照常走被移除的退出', async () => {
     const { r, eph } = rebindWith([net, net, net, () => new Response('{"error":"rebind_failed"}', { status: 409 })]);
     await r.verifyAndRebind('a@b.c', '123456', 'dev-1');

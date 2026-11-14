@@ -15,6 +15,7 @@
 import { Suspense, useCallback, useEffect, useState, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { BootResult } from '../core/boot.ts';
+import { withTimeout } from '../platform/exit-basics.ts';
 import type { UpgradeCenter } from '../core/upgrade.ts';
 import { CacheBlockedScreen } from './CacheBlockedScreen.tsx';
 import { ConsentGate } from '../features/onboarding/index.ts';
@@ -84,7 +85,7 @@ export interface RootDeps {
 /** 按 boot 的状态选要渲染的根；不抛错 */
 export async function startRoot(boot: Pick<BootResult, 'status' | 'upgrade'>, d: RootDeps): Promise<ReactElement> {
   if (boot.status !== 'version_too_new') return d.online ? <GatedApp /> : <App />;
-  if (d.registerSw) await Promise.race([d.registerSw().catch(() => undefined), new Promise((ok) => setTimeout(ok, SW_REGISTER_WAIT_MS))]);
+  if (d.registerSw) await withTimeout<unknown>(d.registerSw, SW_REGISTER_WAIT_MS, () => undefined);
   const fallback = <CacheTooNewFallback onRefresh={d.onRefresh} />;
   try {
     const { CacheTooNewScreen } = await (d.loadTooNew ?? (() => import('./CacheTooNewScreen.tsx')))();

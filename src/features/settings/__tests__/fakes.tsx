@@ -77,7 +77,8 @@ export function deferred<T = void>() {
 export async function renderPage(api: SettingsApi = fakeApi(), exit: ExitDeps = fakeExit().exit, redirectMs = 5000) {
   window.history.replaceState(null, '', '#/settings');
   render(<SettingsPage deps={{ api, exit, now, redirectMs }} />);
-  await waitFor(() => expect(screen.getByTestId('settings-account-summary').textContent).toMatch(/\d/));
+  // 全量并发时假接口读完设备列表会超过 waitFor 默认的 1 秒（vitest34 全量红过一次、单跑 5/5 过），放宽到 5 秒
+  await waitFor(() => expect(screen.getByTestId('settings-account-summary').textContent).toMatch(/\d/), { timeout: 5000 });
 }
 
 /** 合卡以后（SETTINGS-merge-cards）设备列表、退出这台设备、注销入口都在账号二级页：从首页点“账号”一行进去 */

@@ -5,11 +5,10 @@
 //   换账号、被移除、设了闸 → switching；真正的拒收（has_dependents、严格校验的码）→ rejected，带 code
 // 纯 TS：不准 import React 和任何功能（A1）
 import { getBoot } from './boot.ts';
-import { CacheClosedError } from './cache.ts';
 import { resolveFailedCreateImpl, type FailedCreateReport } from './outbox-failed-create.ts';
-import { OutboxCodeUnavailableError, OutboxRejectError } from './outbox-logic.ts';
+import { OutboxRejectError } from './outbox-logic.ts';
 import { outboxCtx } from './outbox.ts';
-import { localWriteBlocker, type WriteFailReason } from './write.ts';
+import { localWriteBlocker, writeFailOf, type WriteFailReason } from './write.ts';
 
 export type ResolveFailedCreateResult =
   | ({ ok: true } & FailedCreateReport)
@@ -25,9 +24,9 @@ export async function resolveFailedCreate(table: string, id: string, mode: 'copy
     const r = await resolveFailedCreateImpl(ctx, table, id, mode, crypto.randomUUID());
     return { ok: true, ...r };
   } catch (e) {
-    if (e instanceof CacheClosedError) return { ok: false, reason: localWriteBlocker() === 'switching' ? 'switching' : 'closing' };
-    if (e instanceof OutboxRejectError) return e.code === 'outbox_suspended' ? { ok: false, reason: 'switching' } : { ok: false, reason: 'rejected', code: e.code };
-    if (e instanceof OutboxCodeUnavailableError) return { ok: false, reason: 'local_unavailable' };
+    const reason = writeFailOf(e);
+    if (reason) return { ok: false, reason };
+    if (e instanceof OutboxRejectError) return { ok: false, reason: 'rejected', code: e.code };
     throw e;
   }
 }

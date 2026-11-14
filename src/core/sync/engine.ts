@@ -261,6 +261,7 @@ export function createSync(boot: BootResult, opts: SyncOptions): Sync {
         else if (e.type === 'rejected') {
           // 0.38 第 67 条①：拒收码进 code；patch_bad_args 已由 send.ts 记 sync_patch_bad_args（带 sqlstate），这里不重复记
           if (e.code !== 'patch_bad_args') opts.log?.('outbox_rejected', { coll: e.item.table, code: e.code });
+          if (e.code === 'purged') return;   // 墓碑、整表重拉删掉的（dropServer）：服务器上这一行已经没了，不用再拉
           round.pendingFull.add(e.item.table);   // vault_required、settings_key_immutable、not_found：整表重拉这张表
           pulls.pullTableSoon(e.item.table);
         }

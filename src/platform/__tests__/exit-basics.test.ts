@@ -10,6 +10,21 @@ import { signOutThisDevice, type ExitSteps } from '../sign-out.ts';
 
 const SRC = join(import.meta.dirname, '..', '..');
 
+/** src 下全部源码文件（不含 __tests__） */
+function srcFiles(): string[] {
+  const files: string[] = [];
+  const walk = (d: string): void => {
+    for (const n of readdirSync(d)) {
+      const p = join(d, n);
+      if (statSync(p).isDirectory()) {
+        if (n !== '__tests__') walk(p);
+      } else if (/\.(ts|tsx)$/.test(n)) files.push(p);
+    }
+  };
+  walk(SRC);
+  return files;
+}
+
 function steps(log: string[]): ExitSteps {
   return {
     deleteDb: vi.fn(async () => void log.push('deleteDb')),
@@ -31,16 +46,44 @@ describe('sign-out.ts 转出的就是 exit-basics.ts 的同一份（原有 impor
   });
 });
 
-describe('forgetLook：退出、换账号时删掉本机外观缓存（皮肤整块评审 11-14 第 13 条）', () => {
+describe('退出、换账号时删掉本机外观缓存（皮肤整块评审 11-14 第 13 条）', () => {
   it('删掉 pv-look；本机存储用不了也不抛', () => {
     localStorage.setItem(basics.LOOK_CACHE_KEY, '{"skin":"glass"}');
-    basics.forgetLook();
+    basics.forgetAccountLocal(false);
     expect(localStorage.getItem('pv-look')).toBeNull();
     const spy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
       throw new Error('blocked');
     });
-    expect(() => basics.forgetLook()).not.toThrow();
+    expect(() => basics.forgetAccountLocal(null)).not.toThrow();
     spy.mockRestore();
+  });
+});
+
+describe('forgetAccountLocal：退出、换账号清本机痕迹只有这一个入口（第三方审查第 10、13 条）', () => {
+  const keys = ['pv-look', 'att.ms_preview_vault', 'lemo.logq.u1', 'lemo.logq.u2'];
+  const left = (): string[] => keys.filter((k) => localStorage.getItem(k) !== null);
+  const seedKeys = (): void => {
+    for (const k of keys) localStorage.setItem(k, '1');
+    localStorage.setItem('att.ms_preview', 'yes');
+  };
+  it('给 userId：清外观、隐私记同意、这个账号的日志队列；null 清全部队列；false 不动队列；普通附件的同意都不动', () => {
+    seedKeys();
+    basics.forgetAccountLocal('u1');
+    expect(left()).toEqual(['lemo.logq.u2']);
+    seedKeys();
+    basics.forgetAccountLocal(null);
+    expect(left()).toEqual([]);
+    seedKeys();
+    basics.forgetAccountLocal(false);
+    expect(left()).toEqual(['lemo.logq.u1', 'lemo.logq.u2']);
+    expect(localStorage.getItem('att.ms_preview')).toBe('yes');
+    localStorage.clear();
+  });
+  it('wipeThisDevice（本人退出、登录过期清库、设置页被移除）也走到它', async () => {
+    seedKeys();
+    await signOut.wipeThisDevice(steps([]), null, 50, 50);
+    expect(left()).toEqual([]);
+    localStorage.clear();
   });
 });
 
@@ -56,16 +99,7 @@ describe('① 离线退出照样能退', () => {
 
 describe('③ sign-out.ts 没有改成按需下载', () => {
   it('src 里没有一处 import(…sign-out.ts)；首屏三处（cache.ts、account-status.ts、consent-api.ts）改从 exit-basics.ts 引', () => {
-    const files: string[] = [];
-    const walk = (d: string): void => {
-      for (const n of readdirSync(d)) {
-        const p = join(d, n);
-        if (statSync(p).isDirectory()) {
-          if (n !== '__tests__') walk(p);
-        } else if (/\.(ts|tsx)$/.test(n)) files.push(p);
-      }
-    };
-    walk(SRC);
+    const files = srcFiles();
     const dyn = files.filter((f) => /import\(\s*['"][^'"]*sign-out\.ts['"]\s*\)/.test(readFileSync(f, 'utf8'))).map((f) => relative(SRC, f));
     expect(dyn).toEqual([]);
     for (const f of ['core/cache.ts', 'platform/account-status.ts', 'features/onboarding/data/consent-api.ts']) {
@@ -73,5 +107,14 @@ describe('③ sign-out.ts 没有改成按需下载', () => {
       expect(src, f).toContain("exit-basics.ts';");
       expect(src.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, ''), f).not.toMatch(/from '[^']*sign-out\.ts'/);
     }
+  });
+});
+
+describe('超时工具只有一份（第三方审查第 14 条）', () => {
+  it('“到点给退路值”的超时只在 platform/exit-basics.ts 定义（withTimeout）；别处不再各写一份 withTimeout、capped', () => {
+    const own = srcFiles()
+      .filter((f) => /function (withTimeout|capped)\b|const (withTimeout|capped) = (async )?\(/.test(readFileSync(f, 'utf8')))
+      .map((f) => relative(SRC, f).replace(/\\/g, '/'));
+    expect(own).toEqual(['platform/exit-basics.ts']);
   });
 });

@@ -20,7 +20,7 @@ export interface Ctx {
   emit: (e: OutboxEvent) => void;
   /** 闸（换账号、被移除）：设上以后 outbox 一律拒绝 */
   isSuspended: () => boolean;
-  suspend: () => void;
+  suspend: (on?: boolean) => void;
 }
 
 /**

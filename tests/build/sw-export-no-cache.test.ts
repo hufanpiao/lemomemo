@@ -47,8 +47,21 @@ const reg = vi.hoisted(() => ({
 
 vi.mock('workbox-precaching', () => ({
   cleanupOutdatedCaches: () => undefined,
-  precacheAndRoute: () => undefined,
-  createHandlerBoundToURL: () => () => Promise.resolve(new Response('')),
+  PrecacheController: class {
+    readonly strategy = { cacheName: 'workbox-precache-v2' };
+    readonly install = (): void => undefined;
+    addToCacheList(): void {}
+    getURLsToCacheKeys(): Map<string, string> {
+      return new Map();
+    }
+    activate(): Promise<void> {
+      return Promise.resolve();
+    }
+    createHandlerBoundToURL() {
+      return () => Promise.resolve(new Response(''));
+    }
+  },
+  PrecacheRoute: class {},
 }));
 vi.mock('workbox-routing', () => ({
   NavigationRoute: class {
@@ -107,9 +120,9 @@ describe('sw.ts：导出请求不进任何缓存', () => {
     return ev;
   }
 
-  it('运行时缓存只有三个公共的，装好后有导航（只走网络、不缓存）、节假日、字体、字体清单四条路由（字体清单 11-14 起不进预缓存）', () => {
-    expect([...reg.strategies].sort()).toEqual(['(不缓存)', 'lemo-font-index', 'lemo-fonts', 'lemo-holidays']);
-    expect(reg.matchers).toHaveLength(3);
+  it('运行时缓存只有四个公共的，装好后有导航（只走网络、不缓存）、节假日、字体、字体清单、上一版分包五条路由（字体清单 11-14 起不进预缓存）', () => {
+    expect([...reg.strategies].sort()).toEqual(['(不缓存)', 'lemo-font-index', 'lemo-fonts', 'lemo-holidays', 'lemo-prev-assets']);
+    expect(reg.matchers).toHaveLength(4);
     expect(reg.navs).toHaveLength(1);
   });
 
@@ -124,7 +137,7 @@ describe('sw.ts：导出请求不进任何缓存', () => {
     expect(nav.respondWith).not.toHaveBeenCalled();
   });
 
-  it('就算放过失效，节假日、字体两条缓存路由也匹配不到导出地址', () => {
+  it('就算放过失效，节假日、字体、字体清单、上一版分包几条缓存路由也匹配不到导出地址', () => {
     const url = new URL(EXPORT_URL);
     for (const m of reg.matchers) {
       for (const [method, mode] of [['POST', 'cors'], ['GET', 'cors'], ['GET', 'navigate']] as const) {

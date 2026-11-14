@@ -10,7 +10,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { LogRow, LogUploadResult } from '../../../shared/core/log-row.ts';
 import { getSupabase } from './client.ts';
-import { REQUEST_TIMEOUT_MS, timeoutSignal, toFailure, withTimeout } from './sync-transport.ts';
+import { REQUEST_TIMEOUT_MS, timeoutSignal, toFailure } from './sync-transport.ts';
+import { withTimeout } from '../exit-basics.ts';
 
 export type { LogRow, LogUploadResult };
 
@@ -45,5 +46,5 @@ export function createLogUploader(opts: { client?: () => Promise<SupabaseClient>
       } finally {
         ts.clear();
       }
-    }, 'retry', ms);
+    }, ms, () => 'retry');
 }

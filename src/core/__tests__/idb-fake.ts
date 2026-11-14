@@ -19,6 +19,8 @@ import {
 
 export class FakeDB {
   onversionchange: ((e: { oldVersion: number; newVersion: number | null }) => void) | null = null;
+  /** 浏览器单方面断开连接（iOS 后台常见）时触发；测试用 lose() 模拟 */
+  onclose: (() => void) | null = null;
   closed = false;
   upgradeTx: FakeTransaction | null = null;
   readonly objectStoreNames: FakeStringList;
@@ -48,6 +50,11 @@ export class FakeDB {
     const list = Array.isArray(names) ? names : [names];
     for (const n of list) if (!this.data.stores.has(n)) throw new DOMException(n, 'NotFoundError');
     return new FakeTransaction(this, list, mode);
+  }
+  /** 模拟“Connection to Indexed Database server lost”：连接没了（之后 transaction 抛 InvalidStateError），再发 close 事件 */
+  lose(fire = true): void {
+    this.close();
+    if (fire) this.onclose?.();
   }
   close(): void {
     if (this.closed) return;

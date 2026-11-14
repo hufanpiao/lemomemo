@@ -12,7 +12,7 @@ import type { Cache, SyncCursor } from '../cache.ts';
 import { classifyFailure, recKey } from '../outbox-logic.ts';
 import type { Outbox, SendFailure } from '../outbox-types.ts';
 import { clearRefetch, updateRefetch } from '../read/ingest.ts';
-import type { ParsedRows, ParseServerRows, SyncTransport, TombstoneRow } from './types.ts';
+import type { ParsedRows, ParseServerRows, SyncLog, SyncTransport, TombstoneRow } from './types.ts';
 
 /** 增量拉取往回退 10 分钟（0.29 续第 135 条） */
 export const PULL_LOOKBACK_MS = 10 * 60 * 1000;
@@ -30,8 +30,8 @@ export interface PullDeps {
   parseRows: ParseServerRows;
   gated(): boolean;
   now(): number;
-  /** 记错误码（不记内容） */
-  log?(code: string): void;
+  /** 记错误码（不记内容；引擎给的是 SyncLog，可带表名） */
+  log?: SyncLog;
   /** 测试用：每页行数、最多页数 */
   pageSize?: number;
   maxPages?: number;

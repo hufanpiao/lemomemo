@@ -17,6 +17,7 @@
 //   transient（含 55P03 等不到行锁）→ 停下等退避；upgrade → 整个队列已暂停；removed → outbox 已设闸并发 removed 事件（main.tsx 接）；
 //   disabled（account_disabled）→ outbox 已设闸、发 disabled 事件，这里停发；清库、回登录页由 sync-wiring 接事件做（架构 4.3）；
 //   permanent、drop → 接着发下一项
+// • 拿到一项以后写回（ack、fail 等）抛错：这一项退回 pending、记 sync_writeback_failed，错误再抛给引擎（不留 inflight 卡住队列）
 // • 新建回 403、42501（Q-15）：RLS with check 的 is_active() 拦下停用账号时只回这个，带不出 account_disabled；42501 也可能是别的原因。
 //   给了 insertDenied 就先探测一次（app/insert-denied.ts）：账号不可用 → 这一项按 account_disabled 交给 outbox（发 disabled 事件）；
 //   否则照旧 permanent。一轮里多条 42501 只探测一次（第一次的结果后面几条照用）；改、软删走 apply_patch，本来就回 account_disabled，不探测
@@ -25,6 +26,7 @@
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { Outbox, OutboxItem, SendFailure, SentFailure } from '../outbox-types.ts';
 import type { NetResult, PatchResponse, SyncEvent, SyncLog, SyncTransport } from './types.ts';
+import { rlog } from '../../platform/run-log-api.ts';
 
 export interface SendDeps {
   outbox: Outbox;
@@ -139,6 +141,8 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
     return 'removed';
   }
   if (s === 'network') return 'retry';
+  // 本机没有会话（退出登录由 watchAccount 管）：不拿 anon 去发——新建会被 RLS 拒（403 时归成永久失败），改也白发；停下等会话回来
+  if (s === 'failed') return 'stopped';
   let authRetried = false;
   const now = d.now ?? (() => Date.now());
   const batch = d.batch ?? SEND_BATCH;
@@ -150,70 +154,80 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
     if (n >= batch.items || now() - t0 >= batch.ms) return 'more';
     const item = await d.outbox.next();
     if (!item) return 'done';
-    if (d.gated()) return stopWith(d, item.op_id);   // next 期间设了闸：不发
-    const sid = sessionIdNow(d.transport);   // 这一项带着哪个会话发出去（K6-sugg4 ①）
-    const res = await sendItem(d.transport, item);
-    // 封存、换账号：不写回结果（下次启动 boot 复位）；只是放手：回包已拿到，照常写回，循环开头再停
-    if (d.gated() && !d.released?.()) return 'stopped';
-    if (res.ok) {
-      authRetried = false;
-      const r = res.value;
-      if (r.status === 'gone') {
-        await d.outbox.fail(item.op_id, { status: 409, code: 'gone', sid });
-        d.emit({ type: 'gone', table: item.table, id: item.id, opId: item.op_id, data: item.data });
-        d.log?.('sync_gone', { coll: item.table, code: 'gone' });   // 0.38 第 67 条：不记 data、opId、记录 id
-        d.touched(item.table);   // 拿到服务器上已软删的那一行，界面据此显示“已被删除”
+    try {
+      if (d.gated()) return stopWith(d, item.op_id);   // next 期间设了闸：不发
+      const sid = sessionIdNow(d.transport);   // 这一项带着哪个会话发出去（K6-sugg4 ①）
+      const res = await sendItem(d.transport, item);
+      // 封存、换账号：不写回结果（下次启动 boot 复位）；只是放手：回包已拿到，照常写回，循环开头再停
+      if (d.gated() && !d.released?.()) return 'stopped';
+      if (res.ok) {
+        authRetried = false;
+        const r = res.value;
+        if (r.status === 'gone') {
+          await d.outbox.fail(item.op_id, { status: 409, code: 'gone', sid });
+          d.emit({ type: 'gone', table: item.table, id: item.id, opId: item.op_id, data: item.data });
+          d.log?.('sync_gone', { coll: item.table, code: 'gone' });   // 0.38 第 67 条：不记 data、opId、记录 id
+          d.touched(item.table);   // 拿到服务器上已软删的那一行，界面据此显示“已被删除”
+          continue;
+        }
+        if (r.status === 'not_found') {
+          await d.outbox.fail(item.op_id, { status: 404, code: 'not_found', sid });
+          continue;
+        }
+        await d.outbox.ack(item.op_id, { status: r.status, rev: r.rev, prev_rev: r.prev_rev });
+        if (r.status !== 'ok') {
+          d.emit({
+            type: 'conflict', status: r.status, table: item.table, id: item.id,
+            conflicts: r.conflicts ?? [], old: r.old ?? null, forkId: r.fork_id ?? null, opId: item.op_id,
+          });
+          d.log?.('sync_conflict', { coll: item.table, code: r.status });   // 0.38 第 67 条：code 是 conflict / forked；不记 old、conflicts、forkId、记录 id
+          d.touched(item.table);
+        }
         continue;
       }
-      if (r.status === 'not_found') {
-        await d.outbox.fail(item.op_id, { status: 404, code: 'not_found', sid });
-        continue;
+      // 传输层定死了令牌时带回的是真正发出去的那个会话（K6-sugg5 ④(b)），优先用它；没带时用发之前读的
+      let failure: SentFailure = { ...res.error, sid: res.error.sid !== undefined ? res.error.sid : sid };
+      if (d.insertDenied && isInsertDenied(item, res.error)) {
+        const probe = d.insertDenied;
+        denied ??= probe(failure.sid).catch(() => false);
+        if (await denied) failure = { ...failure, code: 'account_disabled' };
+        if (d.gated() && !d.released?.()) return 'stopped';   // 探测期间封存、换账号了：不写回
       }
-      await d.outbox.ack(item.op_id, { status: r.status, rev: r.rev, prev_rev: r.prev_rev });
-      if (r.status !== 'ok') {
-        d.emit({
-          type: 'conflict', status: r.status, table: item.table, id: item.id,
-          conflicts: r.conflicts ?? [], old: r.old ?? null, forkId: r.fork_id ?? null, opId: item.op_id,
-        });
-        d.log?.('sync_conflict', { coll: item.table, code: r.status });   // 0.38 第 67 条：code 是 conflict / forked；不记 old、conflicts、forkId、记录 id
-        d.touched(item.table);
+      const kind = await d.outbox.fail(item.op_id, failure);
+      if (kind === 'drop' && res.error.code === 'patch_bad_args') {
+        // 服务器把 22xxx、23514、23502 也转成 patch_bad_args：丢掉这一项，但记下表名和 sqlstate，免得掩盖服务器触发器的 bug
+        // （不记 sqlerrm：可能带用户填的值，0.38 第 62 条）
+        d.log?.('sync_patch_bad_args', { coll: item.table, ...(res.error.detail ? { code: res.error.detail } : {}) });
       }
-      continue;
+      if (kind === 'permanent' || kind === 'drop') continue;
+      if (kind === 'upgrade') return 'paused';
+      if (kind === 'removed') return 'removed';   // outbox 已设闸、发了 removed 事件
+      if (kind === 'disabled') return 'stopped';   // outbox 已设闸、发了 disabled 事件；清库、回登录页由 sync-wiring 接事件做（架构 4.3）
+      if (kind === 'transient') return 'retry';
+      // auth：刷新以后马上又 401：不无限重发，也不当被移除；这一项按临时故障退避，停发，记日志
+      if (authRetried) {
+        d.log?.('auth_retry_401');
+        await d.outbox.fail(item.op_id, { network: true, code: 'auth_retry_401', sid });
+        return 'retry';
+      }
+      authRetried = true;
+      if (d.gated()) return stopWith(d, item.op_id);
+      const r = await refreshFlow(d.transport, d.log);
+      if (d.gated()) return stopWith(d, item.op_id);
+      if (r.kind === 'ok') continue;
+      if (r.kind === 'lost') {
+        d.removed(r.code, r.sid);
+        return 'removed';
+      }
+      return 'retry';   // 断网、5xx、429 等刷新失败：留在 pending、不计 tries，稍后再刷新再发（TC-B1-82 ④、TC-B1-88 ①②③）
+    } catch (e) {
+      // 写回（ack、fail、探测、刷新）抛错：这一项退回 pending（带 sent），不留在 inflight——next() 见到 inflight 就不发，队列会卡到下次启动。
+      // 错误照样抛给引擎（CacheClosedError 当停下，别的记 sync_error）
+      await d.outbox.resetInflight(item.op_id).catch(() => undefined);
+      const code = e instanceof Error ? e.name : 'error';
+      d.log?.('sync_writeback_failed', { coll: item.table, code });
+      rlog(`sync writeback_failed coll=${item.table} code=${code}`);
+      throw e;
     }
-    // 传输层定死了令牌时带回的是真正发出去的那个会话（K6-sugg5 ④(b)），优先用它；没带时用发之前读的
-    let failure: SentFailure = { ...res.error, sid: res.error.sid !== undefined ? res.error.sid : sid };
-    if (d.insertDenied && isInsertDenied(item, res.error)) {
-      const probe = d.insertDenied;
-      denied ??= probe(failure.sid).catch(() => false);
-      if (await denied) failure = { ...failure, code: 'account_disabled' };
-      if (d.gated() && !d.released?.()) return 'stopped';   // 探测期间封存、换账号了：不写回
-    }
-    const kind = await d.outbox.fail(item.op_id, failure);
-    if (kind === 'drop' && res.error.code === 'patch_bad_args') {
-      // 服务器把 22xxx、23514、23502 也转成 patch_bad_args：丢掉这一项，但记下表名和 sqlstate，免得掩盖服务器触发器的 bug
-      // （不记 sqlerrm：可能带用户填的值，0.38 第 62 条）
-      d.log?.('sync_patch_bad_args', { coll: item.table, ...(res.error.detail ? { code: res.error.detail } : {}) });
-    }
-    if (kind === 'permanent' || kind === 'drop') continue;
-    if (kind === 'upgrade') return 'paused';
-    if (kind === 'removed') return 'removed';   // outbox 已设闸、发了 removed 事件
-    if (kind === 'disabled') return 'stopped';   // outbox 已设闸、发了 disabled 事件；清库、回登录页由 sync-wiring 接事件做（架构 4.3）
-    if (kind === 'transient') return 'retry';
-    // auth：刷新以后马上又 401：不无限重发，也不当被移除；这一项按临时故障退避，停发，记日志
-    if (authRetried) {
-      d.log?.('auth_retry_401');
-      await d.outbox.fail(item.op_id, { network: true, code: 'auth_retry_401', sid });
-      return 'retry';
-    }
-    authRetried = true;
-    if (d.gated()) return stopWith(d, item.op_id);
-    const r = await refreshFlow(d.transport, d.log);
-    if (d.gated()) return stopWith(d, item.op_id);
-    if (r.kind === 'ok') continue;
-    if (r.kind === 'lost') {
-      d.removed(r.code, r.sid);
-      return 'removed';
-    }
-    return 'retry';   // 断网、5xx、429 等刷新失败：留在 pending、不计 tries，稍后再刷新再发（TC-B1-82 ④、TC-B1-88 ①②③）
   }
 }

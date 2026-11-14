@@ -83,6 +83,17 @@ describe('write.*：本机库不可用时安全降级', () => {
     expect(await b.outbox?.list()).toEqual([]);
   });
 
+  it('存储写满（QuotaExceededError；iOS 写满报 UnknownError）：quota，不抛错（调用方照“没保存上”提示、保留输入）', async () => {
+    const { factory } = fakeIndexedDB();
+    const b = await coldStart(opts(factory));
+    const outbox = b.outbox;
+    if (!outbox) throw new Error('no outbox');
+    for (const name of ['QuotaExceededError', 'UnknownError']) {
+      vi.spyOn(outbox, 'enqueue').mockRejectedValueOnce(new DOMException('full', name));
+      expect(await write.insert('todos', { ...todo(1), id: uid(1) })).toEqual({ ok: false, reason: 'quota' });
+    }
+  });
+
   it('正常：写进本机、入队、集合马上更新；校验不过照样抛 OutboxRejectError', async () => {
     const { factory } = fakeIndexedDB();
     const b = await coldStart(opts(factory));

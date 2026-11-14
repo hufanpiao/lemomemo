@@ -2,8 +2,8 @@
 // SW 不拿存着的令牌调接口：点通知上的按键时只把“哪条提醒、按了哪个键”记进本机库 planner-v4 的 pending_actions 仓，
 // 页面启动后由 core/pending-actions.ts 丢掉别的账号的、超过 24 小时的，其余经正常的 data 层转进 outbox。
 // 退出时的封存（core/account.ts 的 sealForExit）管不到 SW，所以这里自己守三条（K-sw-seal 结论）：
-//   ⑴ 只往**已经存在**、owner 仓里**有 user_id** 的库写：open 不带版本号，遇到 upgradeneeded 且 oldVersion 为 0（库不存在）
-//      就中止升级事务，不建新库；库里没有 owner / pending_actions 仓、owner 没记录，一律不写；
+//   ⑴ 只往**已经存在**、owner 仓里**有 user_id** 的库写：经 shared/idb-open-existing.ts 打开（不带版本号，库不存在就中止升级、
+//      不建新库，2 秒没打开按没有库）；库里没有 owner / pending_actions 仓、owner 没记录，一律不写；
 //      推送里带的 user_id 必须和 owner 的 user_id **一致**才写，不一致就丢——不能拿 owner 的值去填（A 账号的通知会写进 B 的库，串号）；
 //   ⑵ 开库后立刻挂 onversionchange，收到就 close()：退出第 ⑤ 步删库、页面升级都不会被 SW 的连接挡住；每次写完也立刻关；
 //   ⑶ 退出、换账号以后旧账号的通知不再推到这台设备：服务器一侧做（退出删本会话的 devices 行 = 删订阅；新账号 claim_endpoint 换绑，
@@ -11,7 +11,10 @@
 // 库名、仓名、owner 的键和 core/cache.ts、cache-schema.ts、account.ts 是同一组值（SW 不准引 core，A19），
 // tests/build/sw-pending.test.ts 逐项核对两边一致
 // 不准存明文标题、正文：只存 id、表名、行 id、按键和时间
-// 显示通知前的账号核对（FE-1）也在这里只读开库（readSwOwner）：IndexedDB 只准在本文件里碰（tests/build/sw-no-user-data.test.ts）
+// 显示通知前的账号核对（FE-1）也在这里只读开库（readSwOwner）：IndexedDB 只准在本文件里碰（tests/build/sw-no-user-data.test.ts），
+// 开库那一步是和登录页共用的 shared/idb-open-existing.ts（只开库、不开事务）
+
+import { openExistingDb } from '../../shared/idb-open-existing.ts';
 
 export const DB_NAME = 'planner-v4';
 export const OWNER_STORE = 'owner';
@@ -51,42 +54,10 @@ export interface SwPendingAction {
  */
 export type PendingWriteResult = 'ok' | 'no_db' | 'no_owner' | 'owner_mismatch' | 'failed';
 
-/** 只开已经存在的库；不存在（oldVersion 为 0）返回 null，并且不会留下新建的库 */
-function openExisting(factory: IDBFactory): Promise<IDBDatabase | null> {
-  return new Promise((resolve) => {
-    let req: IDBOpenDBRequest;
-    try {
-      req = factory.open(DB_NAME);
-    } catch {
-      resolve(null);
-      return;
-    }
-    let creating = false;
-    req.onupgradeneeded = (e) => {
-      // 不带版本号打开只有“库不存在”这一种会走到升级：中止，不建库（⑴）
-      if (e.oldVersion === 0) {
-        creating = true;
-        try {
-          req.transaction?.abort();
-        } catch {
-          // 已经结束的事务再 abort 会抛：不影响，onerror / onsuccess 里照样按 creating 处理
-        }
-      }
-    };
-    req.onsuccess = () => {
-      const db = req.result;
-      if (creating) {
-        db.close();
-        resolve(null);
-        return;
-      }
-      // ⑵ 别处要删库、升级：立刻让开
-      db.onversionchange = () => db.close();
-      resolve(db);
-    };
-    req.onerror = () => resolve(null);
-    req.onblocked = () => undefined;
-  });
+/** 只开已经存在的库（shared/idb-open-existing.ts，⑴⑵ 都在那里：不建库、收到 versionchange 就关、2 秒没打开按没有库）；没有、打不开回 null */
+async function openExisting(factory: IDBFactory): Promise<IDBDatabase | null> {
+  const db = await openExistingDb<IDBDatabase>(factory, DB_NAME);
+  return db === 'missing' ? null : db;
 }
 
 function request<T>(r: IDBRequest<T>): Promise<T> {

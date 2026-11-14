@@ -295,6 +295,11 @@ test('列表方式左滑：出“转成待办 / 移到隐私记 / 删除”，�
   const box = await page.getByTestId(`notes-swipe-${id}`).boundingBox();
   if (!box) throw new Error('没有行');
   const y = box.y + box.height / 2;
+  // 11-14 d4db0138 CI webkit 又红、左滑运行日志为空（按下没落到左滑上）：按下前记起点最上层是谁，失败时一起报
+  const topAt = await page.evaluate(([px, py]) => {
+    const el = document.elementFromPoint(px ?? 0, py ?? 0);
+    return el ? `${el.tagName.toLowerCase()}#${el.closest('[data-testid]')?.getAttribute('data-testid') ?? '-'}` : 'none';
+  }, [box.x + box.width - 40, y]);
   await page.mouse.move(box.x + box.width - 40, y);
   await page.mouse.down();
   for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + box.width - 40 - i * 22, y);
@@ -306,7 +311,8 @@ test('列表方式左滑：出“转成待办 / 移到隐私记 / 删除”，�
     await expect(page.getByTestId(`notes-swipe-${id}`)).toHaveAttribute('data-open', 'true');
   } catch (e) {
     await page.waitForTimeout(500);
-    throw new Error(`${e instanceof Error ? e.message : String(e)} | 左滑运行日志：${await swipeLog()}`);
+    const tail = (await readRunLog(page)).slice(-30).join(' | ');
+    throw new Error(`${e instanceof Error ? e.message : String(e)} | 起点最上层：${topAt} | 左滑运行日志：${await swipeLog()} | 运行日志最后 30 行：${tail}`);
   }
   await expect.poll(swipeLog, { message: '左滑运行日志要记下松手结果' }).toMatch(/swipe up started=1 axis=h last=-\d+ w=192 open=1/);
   await expect(page.getByTestId(`notes-sw-vault-${id}`)).toBeVisible();

@@ -8,7 +8,6 @@
 // 登录页不跑 boot、不 import core（会带进 zod），这里只用 platform
 import { clearAuthLoss, readReauth, type Reauth } from '../../../platform/auth-loss-store.ts';
 import { localOutbox } from '../../../platform/local-outbox.ts';
-import { clearLogQueue } from '../../../platform/log-store.ts';
 import { browserLifecycle } from '../../../platform/net.ts';
 import { defaultExitSteps, wipeThisDevice } from '../../../platform/sign-out.ts';
 import { querySessionFateResult, type SessionFateResult } from '../../../platform/supabase/session-fate.ts';
@@ -33,9 +32,6 @@ export const defaultReauthDeps: ReauthDeps = {
   online: () => browserLifecycle.isOnline(),
   onOnline: (fn) => browserLifecycle.onOnline(fn),
   fate: (sid, uid) => querySessionFateResult(sid, uid, { fetch: appFetch }),
-  wipe: async () => {
-    await wipeThisDevice(defaultExitSteps);
-    clearLogQueue(null);   // 日志上传队列一起清（同 main.tsx 没有会话时的做法）
-  },
+  wipe: () => wipeThisDevice(defaultExitSteps),   // 日志上传队列也在里面清
   clearAuthLoss: () => clearAuthLoss(),
 };
