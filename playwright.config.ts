@@ -14,6 +14,9 @@ import { NO_BACKEND_GLOBAL_TIMEOUT_MS, globalTimeoutMs } from './tests/e2e/globa
 
 const PORT = 8788;
 /** 产物目录（相对仓库根，正斜杠）：和 build_web 同一条规则（build/assemble_web.mjs 的 webOutDir），默认 dist/web */
+// 默认组不接 supabase（第三方审查 CI-6）：shell 里留着这两个变量时清掉，免得构建编进地址、快读组的用例在这一组也跑
+delete process.env['VITE_PUBLIC_SUPABASE_URL'];
+delete process.env['VITE_PUBLIC_ANON_KEY'];
 const WEB_OUT = relative(import.meta.dirname, webOutDir(import.meta.dirname, process.env)).replaceAll('\\', '/');
 const FAKE = fakePorts(process.env, DEFAULT_FAKE_PORTS);
 /**

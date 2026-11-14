@@ -29,6 +29,9 @@ const INSPECTOR = portIn('LEMO_VISUAL_INSPECTOR', 9481, 9480, 9489);
 // 构建（webServer 里的 npm run build）和产物指纹（globalSetup）都从环境变量读，一律强制设置（和快读组一样，不沿用 shell 里的值）
 process.env['LEMO_WEB_OUT'] = 'dist/web-visual';
 process.env['LEMO_WS_PORT'] = String(PORT);
+// 视觉组同默认组，不接 supabase（第三方审查 CI-6）
+delete process.env['VITE_PUBLIC_SUPABASE_URL'];
+delete process.env['VITE_PUBLIC_ANON_KEY'];
 
 const WEB_OUT = relative(import.meta.dirname, webOutDir(import.meta.dirname, process.env)).replaceAll('\\', '/');
 const REUSE = reuseServers(process.env);

@@ -102,6 +102,19 @@ describe('buildEnvErrors', () => {
     for (const mode of ['e2e', 'preview', 'development', 'test']) expect(buildEnvErrors(mode, { VITE_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:8789/sb' })).toEqual([]);
   });
 
+  it('e2e、e2e-real：VITE_PUBLIC_SUPABASE_URL 不是本机就失败（第三方审查 CI-6：shell 里的真地址不许编进 e2e 构建）', () => {
+    for (const mode of ['e2e', 'e2e-real']) {
+      for (const url of ['https://preview.lemomemo.com/sb', 'https://lemomemo.com/sb', 'https://abc.supabase.co', 'not a url']) {
+        const errors = buildEnvErrors(mode, { VITE_PUBLIC_SUPABASE_URL: url, VITE_PUBLIC_ANON_KEY: 'k' });
+        expect(errors, `${mode} ${url}`).toHaveLength(1);
+        expect(errors[0], url).toContain('不是本机地址');
+      }
+      for (const url of ['http://127.0.0.1:8791/sb', 'http://localhost:8789/sb', 'http://[::1]:8789/sb']) {
+        expect(buildEnvErrors(mode, { VITE_PUBLIC_SUPABASE_URL: url, VITE_PUBLIC_ANON_KEY: 'k' }), `${mode} ${url}`).toEqual([]);
+      }
+    }
+  });
+
   it('production：VITE_PUBLIC_SUPABASE_URL 指向本机就失败（防 e2e-real 的变量漏进正式构建）', () => {
     for (const url of ['http://127.0.0.1:8789/sb', 'http://localhost:8789/sb', 'http://LOCALHOST/sb', 'http://[::1]:8789/sb', ' https://127.0.0.1/sb ']) {
       const errors = buildEnvErrors('production', { VITE_PUBLIC_SUPABASE_URL: url, VITE_PUBLIC_ANON_KEY: 'k' });

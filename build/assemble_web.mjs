@@ -96,6 +96,21 @@ export function buildEnvErrors(mode, env = process.env) {
     }
     return [];
   }
+  // e2e、e2e-real 只许接本机（第三方审查 CI-6）：shell 里留着真地址时，e2e 页面会直连真后端
+  if (mode === 'e2e' || mode === 'e2e-real') {
+    const raw = env.VITE_PUBLIC_SUPABASE_URL?.trim();
+    if (raw) {
+      let host = '';
+      try {
+        host = new URL(raw).hostname;
+      } catch {
+        // 不是网址：下面按不是本机报
+      }
+      if (!LOOPBACK_HOSTS.has(host)) {
+        return [`${mode} 构建的 VITE_PUBLIC_SUPABASE_URL 不是本机地址（${raw}）：e2e 只接本机的假后端或真后端；先清掉 shell 里的这个变量再跑`];
+      }
+    }
+  }
   if (mode !== 'e2e-real') return [];
   const missing = E2E_REAL_ENV.filter((k) => !env[k]?.trim());
   if (!missing.length) return [];
