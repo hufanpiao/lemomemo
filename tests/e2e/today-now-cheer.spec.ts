@@ -3,8 +3,9 @@
 //   ② 今天整天没有日程 → 同一张大卡，页头标签“今天没有日程”，标题行暖心句，照样画时间尺
 //   ③ 电脑 1280：时间河里同一张大卡
 //   ④ 晚上 22:15 今天的日程都过了（负责人 11-14 22:17“框也没有做”时的那一幕）→ 同一张大卡，页头标签“今天的日程都结束了”，标题行暖心句
+//   ⑤ 14:17 两件同时进行 → 页头“进行中 2 件”，“同时：…”一行，时间尺两条轨道（视觉稿 kRuler）
 //   刷新以后还是同一句（按当天日期固定选，不随机）；读屏读得到（不在 aria-hidden 里）
-// 评审截图（设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截）：手机 390 的 ① ②、电脑 1280 的 ①
+// 评审截图（设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截）：手机 390 的 ① ② ④ ⑤、电脑 1280 的 ①
 import type { Page } from '@playwright/test';
 import { DESK_USE } from './b6-desk-helpers.ts';
 import { cached, idbPut } from './idb.ts';
@@ -34,13 +35,15 @@ const SHOPPING = [
   { id: '0e2e0000-0000-4000-8000-0000000c0e02', title: '逛街', time: null, duration_min: null },
 ];
 
-async function expectCalm(page: Page): Promise<void> {
+async function expectFar(page: Page): Promise<void> {
   const card = page.getByTestId('now-card');
-  await expect(card).toHaveAttribute('data-state', 'idle');
+  await expect(card).toHaveAttribute('data-state', 'far');
   await expect(card.getByTestId('now-ruler')).toBeVisible();
   const cheer = card.getByTestId('now-cheer');
   await expect(cheer).toBeVisible();
   await expect(cheer).not.toHaveText('');
+  // 读屏读得到：暖心句不在 aria-hidden 的时间尺里
+  expect(await cheer.evaluate((el) => el.closest('[aria-hidden="true"]') === null)).toBe(true);
   await expect(card.getByTestId('now-hint')).toHaveText('下一件 17:00 逛街 · 4 小时 20 分后');
   // 同一天刷新还是同一句
   const first = await cheer.textContent();
@@ -53,7 +56,7 @@ test.describe('手机 390：“现在”卡的暖心句', () => {
 
   test('① 下一件在时间尺外：同一张大卡，标题行暖心句 + 下一件只写一次', async ({ page, browserName }) => {
     await open(page, SHOPPING);
-    await expectCalm(page);
+    await expectFar(page);
     await shot(page, browserName, 'phone-390-下一件在时间尺外');
   });
 
@@ -76,13 +79,39 @@ test.describe('手机 390：“现在”卡的暖心句', () => {
     await expect(card.getByTestId('now-ruler')).toBeVisible();
     await shot(page, browserName, 'phone-390-日程都过了');
   });
+
+  test('⑤ 两件同时进行：进行中 2 件、同时一行、时间尺两条轨道', async ({ page, browserName }) => {
+    await open(
+      page,
+      [
+        { id: '0e2e0000-0000-4000-8000-0000000c0e11', title: '短会', time: '14:00', duration_min: 30 },
+        { id: '0e2e0000-0000-4000-8000-0000000c0e12', title: '长会', time: '13:00', duration_min: 120 },
+        { id: '0e2e0000-0000-4000-8000-0000000c0e13', title: '逛街', time: '15:30', duration_min: 60 },
+      ],
+      new Date(`${DAY}T14:17:00+09:00`),
+    );
+    const card = page.getByTestId('now-card');
+    await expect(card).toHaveAttribute('data-state', 'live');
+    await expect(card).toContainText('进行中 2 件');
+    await expect(card.getByTestId('now-title')).toHaveText('短会');
+    await expect(card.getByTestId('now-also')).toHaveText('同时：长会 · 到 15:00 · 还剩 43 分钟');
+    const ruler = card.getByTestId('now-ruler');
+    await expect(ruler).toHaveAttribute('data-lanes', '2');
+    // 两条轨道上下不重叠、都在时间尺里
+    const boxes = await ruler.evaluate((r) =>
+      [...r.children].filter((el) => (el as HTMLElement).style.height).map((el) => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom }; }),
+    );
+    expect(boxes.length).toBe(3);
+    expect(boxes[1]?.top).toBeGreaterThanOrEqual(boxes[0]?.bottom ?? Infinity);
+    await shot(page, browserName, 'phone-390-两件同时进行');
+  });
 });
 
 test.describe('电脑 1280：“现在”卡的暖心句', () => {
   test('③ 时间河里同一张大卡', async ({ page, browserName }) => {
     await open(page, SHOPPING);
     await expect(page.getByTestId('desk-panel-river').getByTestId('now-card')).toBeVisible({ timeout: 20_000 });
-    await expectCalm(page);
+    await expectFar(page);
     await shot(page, browserName, 'desk-1280-下一件在时间尺外');
   });
 });

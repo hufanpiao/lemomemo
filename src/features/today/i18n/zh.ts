@@ -8,6 +8,8 @@ export const zh = {
   'now.idle': '下一件',
   'now.empty': '今天没有日程',
   'now.done': '今天的日程都结束了',
+  'now.allDay': '全天 · {title}',
+  'now.allDayN': '全天 {n} 件',
   'now.now': '现在 {t}',
   'now.left': '还剩 {d}',
   'now.in': '{d}后',

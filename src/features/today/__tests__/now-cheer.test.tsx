@@ -1,7 +1,7 @@
 // “现在”卡的暖心句（负责人 11-14：“没有日程的时候可以显示一些鼓励的句子或者暖心句子”；11-15：“跟有日程的时候一样的样式！不是一个小框加一句话”）：
 // • cheerIndex / pickCheer：按当天日期固定选一句，同一天同一句、第二天换下一句，到头绕回；中韩句数一样、每句不超过 20 个字、不重复
 // • 所有状态都是同一张大卡：页头标签 + “现在 HH:MM”、标题行、时间尺；没有浅色小卡
-// • ② 下一件在时间尺窗口外：标签“下一件”，标题行写暖心句，时间尺下面“下一件 17:00 逛街 · 4 小时 20 分后”只出一次
+// • ② 下一件在时间尺窗口外（far）：标签“下一件”，标题行写暖心句，时间尺下面“下一件 17:00 逛街 · 4 小时 20 分后”只出一次
 // • ② 下一件在窗口里：照旧黄卡加时间尺，没有暖心句、卡底不重复写“下一件……”
 // • ④ 今天没有日程：标签“今天没有日程”，标题行写暖心句，照样画此刻前后的时间尺
 // • ③ 都结束了（负责人 11-14 22:17“框也没有做”）：标签“今天的日程都结束了”，标题行暖心句，有明天第一件时时间尺下面写“明天 11:00 …”
@@ -25,7 +25,7 @@ const ev = (id: string, title: string, h: number, durMin = 60): EventOcc => ({
 const allDay = (id: string, title: string): EventOcc => ({ kind: 'event', id, title, project: '', date: DAY, allDay: true, start: null, end: null, time: null, origin: null });
 
 function show(events: EventOcc[], now: number, tomorrowFirst: EventOcc | null = null) {
-  render(<NowCard card={nowCard(events, now, TZ, DAY)} now={now} tz={TZ} today={DAY} tomorrowFirst={tomorrowFirst} />);
+  render(<NowCard card={nowCard(events, now, TZ, DAY, tomorrowFirst)} today={DAY} />);
   return screen.getByTestId('now-card');
 }
 
@@ -52,18 +52,19 @@ describe('暖心句', () => {
   });
 });
 
-/** 和有日程时同一张大卡：页头一行、时间尺都在，没有浅色卡 */
+/** 和有日程时同一张大卡：页头写标签和“现在 HH:MM”，标题行位置是暖心句，下面照样有时间尺 */
 function sameBigCard(card: HTMLElement, label: string, nowWord = '现在 '): void {
-  expect(card.querySelector('p')?.textContent).toContain(label);
-  expect(card.querySelector('p')?.textContent).toContain(nowWord);
+  const head = card.firstElementChild;
+  expect(head?.textContent).toContain(label);
+  expect(head?.textContent).toContain(nowWord);
+  expect(head?.nextElementSibling?.getAttribute('data-testid')).toBe('now-cheer');
   expect(card.querySelector('[data-testid="now-ruler"]')).toBeTruthy();
-  expect(card.className).not.toMatch(/calm/);
 }
 
 describe('“现在”卡：没有日程时也是同一张大卡', () => {
   it('② 下一件在时间尺窗口外（12:40，只有 17:00 逛街和一个全天的）：标签“下一件”，标题行暖心句，下一件只写一次', async () => {
     const card = show([ev('e1', '逛街', 17), allDay('e2', '逛街')], at(12, 40));
-    expect(card.getAttribute('data-state')).toBe('idle');
+    expect(card.getAttribute('data-state')).toBe('far');
     sameBigCard(card, '下一件');
     await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY)));
     expect(screen.getByTestId('now-hint').textContent).toBe('下一件 17:00 逛街 · 4 小时 20 分后');
@@ -113,13 +114,47 @@ describe('“现在”卡：没有日程时也是同一张大卡', () => {
   it('③ 没有明天第一件：页头一行 + 暖心句一行，不写明天', async () => {
     const card = show([ev('e1', '逛街', 9)], at(21, 40));
     await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY)));
-    expect(card.querySelectorAll('p')).toHaveLength(2);
+    expect(screen.queryByTestId('now-tomorrow')).toBeNull();
     expect(card.textContent).not.toContain('明天');
   });
 
-  it('只有全天日程：同一张大卡写暖心句', async () => {
+  it('只有全天日程：同一张大卡，页头“全天 · 休假”（两件以上“全天 N 件”），标题行写暖心句', async () => {
     const card = show([allDay('a1', '休假')], at(10));
-    sameBigCard(card, '今天的日程都结束了');
+    expect(card.getAttribute('data-state')).toBe('allday');
+    sameBigCard(card, '全天 · 休假');
     await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY)));
+    cleanup();
+    sameBigCard(show([allDay('a1', '休假'), allDay('a2', '搬家')], at(10)), '全天 2 件');
+    cleanup();
+    uiStore.getState().setLocale('ko-KR');
+    sameBigCard(show([allDay('a1', '휴가')], at(10)), '종일 · 휴가', '지금 ');
+  });
+});
+
+describe('“现在”卡：有日程时', () => {
+  it('两件同时进行：页头“进行中 2 件”，第二件写一行“同时：…”，时间尺画两条轨道、不画底线', () => {
+    const card = show([ev('e1', '短会', 14, 30), ev('e2', '长会', 13, 120)], at(14, 17));
+    expect(card.firstElementChild?.textContent).toContain('进行中 2 件');
+    expect(screen.getByTestId('now-title').textContent).toBe('短会');
+    expect(screen.getByTestId('now-left').textContent).toBe('还剩 13 分钟');
+    expect(screen.getByTestId('now-also').textContent).toBe('同时：长会 · 到 15:00 · 还剩 43 分钟');
+    const ruler = screen.getByTestId('now-ruler');
+    expect(ruler.getAttribute('data-lanes')).toBe('2');
+    expect(ruler.style.getPropertyValue('--lh')).toBe('30px');
+    const segs = [...ruler.children].filter((el) => (el as HTMLElement).style.height);
+    expect(segs.map((el) => [(el as HTMLElement).style.top, (el as HTMLElement).style.height])).toEqual([
+      ['4px', '13px'],
+      ['21px', '13px'],
+    ]);
+  });
+
+  it('一件进行中：一条轨道 20px，色块位置用百分比', () => {
+    show([ev('e1', '开会', 14, 30)], at(14, 17));
+    const ruler = screen.getByTestId('now-ruler');
+    expect(ruler.getAttribute('data-lanes')).toBe('1');
+    expect(ruler.style.getPropertyValue('--lh')).toBe('20px');
+    const seg = [...ruler.children].find((el) => (el as HTMLElement).style.height) as HTMLElement;
+    expect([seg.style.top, seg.style.height]).toEqual(['4px', '20px']);
+    expect(seg.style.left).toMatch(/%$/);
   });
 });

@@ -1,7 +1,7 @@
 // 今天页的纯逻辑（data/today-model.ts；架构 4.6；皮肤视觉稿“现在”卡 K 的时间窗规则）
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
-import { eventOcc, eventsOn, kWin, lateTodos, nowCard, splitDur, splitPast, todayTodos, type Row } from '../data/today-model.ts';
+import { eventOcc, eventsOn, kWin, lateTodos, nowCard, nowEvents, splitDur, splitPast, todayTodos, type Row } from '../data/today-model.ts';
 
 const SEOUL = 'Asia/Seoul';
 const SH = 'Asia/Shanghai';
@@ -70,41 +70,104 @@ describe('日程换算（架构 4.6）', () => {
   });
 });
 
-describe('“现在”卡四种状态', () => {
-  const day = (rows: Row[]) => eventsOn(rows, DAY, SEOUL);
+describe('“现在”卡六种状态（模型给数、界面查表）', () => {
+  const day = (rows: Row[], d = DAY, tz = SEOUL) => eventsOn(rows, d, tz);
+  const W = 210; // 13:00～16:30
 
-  it('① 进行中：还剩 13 分钟；两件同时进行时按结束先后', () => {
-    const rows = [ev({ time: '14:00', tz: SEOUL, duration_min: 30 }), ev({ time: '13:30', tz: SEOUL, duration_min: 90 }), ev({ time: '15:30', tz: SEOUL })];
+  it('① 两件同时进行：按结束先后，第二件在第二条轨道；还剩、此刻竖线、刻度都由模型给', () => {
+    const short = ev({ title: '短会', time: '14:00', tz: SEOUL, duration_min: 30 });
+    const long = ev({ title: '长会', time: '13:30', tz: SEOUL, duration_min: 90 });
+    const shop = ev({ title: '逛街', time: '15:30', tz: SEOUL });
+    const c = nowCard(day([short, long, shop]), at('14:17'), SEOUL);
+    expect(c).toMatchObject({ state: 'live', nowText: '14:17', liveN: 2, title: '短会', left: 13, also: { title: '长会', end: '15:00', left: 43 }, foot: null, allDay: null });
+    expect(c.ruler.lanes).toBe(2);
+    expect(c.ruler.mark).toBeCloseTo(77 / W);
+    expect(c.ruler.segs).toEqual([
+      { kind: 'cur', id: short.id, label: '短会', lane: 0, x0: 60 / W, x1: 90 / W, clipL: false, clipR: false, done: expect.closeTo(17 / 30) },
+      { kind: 'co', id: long.id, label: '长会', lane: 1, x0: 30 / W, x1: 120 / W, clipL: false, clipR: false, done: expect.closeTo(47 / 90) },
+      { kind: 'nxt', id: shop.id, label: '逛街', lane: 0, x0: 150 / W, x1: 1, clipL: false, clipR: false, done: 0 },
+    ]);
+    expect(c.ruler.ticks).toEqual([
+      { x: 0, text: '13:00', edge: 'l' },
+      { x: 60 / W, text: '14:00', edge: null },
+      { x: 120 / W, text: '15:00', edge: null },
+      { x: 180 / W, text: '16:00', edge: null },
+    ]);
+  });
+
+  it('① 三件同时进行：写“同时还有 2 件”，仍只画两条轨道', () => {
+    const rows = [14, 13, 12].map((h) => ev({ time: `${h}:00`, tz: SEOUL, duration_min: 180 }));
     const c = nowCard(day(rows), at('14:17'), SEOUL);
-    if (c.state !== 'live') throw new Error(c.state);
-    expect(c.cur.map((o) => o.time)).toEqual(['14:00', '13:30']);
-    expect(c.leftMin).toBe(13);
-    expect(c.next?.time).toBe('15:30');
-    expect(c.win).toEqual({ A: m('13:00'), B: m('16:30') });
-    expect(c.nextOutside).toBe(false);
+    expect(c).toMatchObject({ state: 'live', liveN: 3, also: { more: 2 } });
+    expect(c.ruler.lanes).toBe(2);
+    expect(c.ruler.segs.filter((s) => s.kind !== 'nxt')).toHaveLength(2);
   });
 
-  it('② 没有进行中、今天还有下一件：1 小时 13 分后', () => {
-    const c = nowCard(day([ev({ time: '15:30', tz: SEOUL })]), at('14:17'), SEOUL);
-    if (c.state !== 'idle') throw new Error(c.state);
-    expect(c.inMin).toBe(73);
-    expect(splitDur(c.inMin)).toEqual({ h: 1, m: 13 });
+  it('此刻带秒数：墙上时刻舍去秒，还剩按整分钟往上取（14:17:59 离 14:30 还剩 13 分钟）', () => {
+    const c = nowCard(day([ev({ time: '14:00', tz: SEOUL, duration_min: 30 })]), at('14:17') + 59_000, SEOUL);
+    expect(c).toMatchObject({ nowText: '14:17', left: 13 });
   });
 
-  it('② 下一件在时间窗外（3 小时以后）：时间轴下面另写一行', () => {
-    const c = nowCard(day([ev({ time: '18:00', tz: SEOUL })]), at('14:17'), SEOUL);
-    expect(c).toMatchObject({ state: 'idle', nextOutside: true, win: { A: m('13:30'), B: m('16:30') } });
+  it('② idle：下一件在时间尺里，标题“开始时刻 标题”、1 小时 13 分后；卡底不重复写', () => {
+    const c = nowCard(day([ev({ title: '逛街', time: '15:30', tz: SEOUL })]), at('14:17'), SEOUL);
+    expect(c).toMatchObject({ state: 'idle', title: '15:30 逛街', left: 73, also: null, foot: null });
+    expect(splitDur(73)).toEqual({ h: 1, m: 13 });
   });
 
-  it('③ 今天的都结束了；只有全天的也算 ③；④ 今天没有日程', () => {
-    expect(nowCard(day([ev({ time: '09:00', tz: SEOUL })]), at('21:40'), SEOUL)).toMatchObject({ state: 'done', win: { A: expect.any(Number), B: expect.any(Number) } });
-    expect(nowCard(day([ev({ time: null })]), at('09:05'), SEOUL)).toMatchObject({ state: 'done', win: { A: expect.any(Number), B: expect.any(Number) } });
-    expect(nowCard([], at('09:05'), SEOUL)).toEqual({ state: 'empty', win: { A: 510, B: 690 } });
+  it('② far：下一件在时间尺外（3 小时以后），标题行留给暖心句，“几分后”只在卡底写一次', () => {
+    const c = nowCard(day([ev({ title: '逛街', time: '18:00', tz: SEOUL })]), at('14:17'), SEOUL);
+    expect(c).toMatchObject({ state: 'far', title: null, left: null, foot: { kind: 'next', time: '18:00', title: '逛街', inMin: 223 } });
+    expect(c.ruler.segs).toEqual([]);
   });
 
-  it('全天事项不算进行中、不进时间轴', () => {
-    const c = nowCard(day([ev({ time: null }), ev({ time: '15:30', tz: SEOUL })]), at('14:17'), SEOUL);
-    expect(c.state).toBe('idle');
+  it('③ done：今天带时刻的都结束了；有明天第一件时写在卡底', () => {
+    const rows = [ev({ time: '09:00', tz: SEOUL })];
+    expect(nowCard(day(rows), at('21:40'), SEOUL)).toMatchObject({ state: 'done', title: null, left: null, foot: null });
+    const [first] = day([ev({ title: '开会', date: '2026-11-06', time: '11:00', tz: SEOUL })], '2026-11-06');
+    expect(nowCard(day(rows), at('21:40'), SEOUL, DAY, first)).toMatchObject({ foot: { kind: 'tomorrow', time: '11:00', title: '开会' } });
+  });
+
+  it('只有全天日程：allday，页头写第一件和件数；全天的不进时间尺', () => {
+    const c = nowCard(day([ev({ title: '休假', time: null })]), at('09:05'), SEOUL);
+    expect(c).toMatchObject({ state: 'allday', title: null, allDay: { title: '休假', n: 1 } });
+    expect(c.ruler.segs).toEqual([]);
+    expect(nowCard(day([ev({ time: null }), ev({ time: null })]), at('09:05'), SEOUL).allDay?.n).toBe(2);
+    expect(nowCard(day([ev({ time: null }), ev({ time: '15:30', tz: SEOUL })]), at('14:17'), SEOUL).state).toBe('idle');
+  });
+
+  it('④ empty：照样画此刻前后的时间尺（8:30～11:30），刻度小时不补零', () => {
+    const c = nowCard([], at('09:05'), SEOUL);
+    expect(c).toMatchObject({ state: 'empty', nowText: '09:05', liveN: 0, title: null, left: null, also: null, foot: null, allDay: null });
+    expect(c.ruler).toEqual({
+      lanes: 1,
+      mark: 35 / 180,
+      segs: [],
+      ticks: [
+        { x: 30 / 180, text: '9:00', edge: null },
+        { x: 90 / 180, text: '10:00', edge: null },
+        { x: 150 / 180, text: '11:00', edge: null },
+      ],
+    });
+  });
+
+  it('跨零点：昨天 23:30 开始、到 01:00 的日程，00:30 时仍是“进行中”；时间尺从昨天 23:00 起', () => {
+    const rows = [ev({ title: '夜班', date: '2026-11-04', time: '23:30', tz: SEOUL, duration_min: 90 })];
+    const c = nowCard(nowEvents(rows, at('00:30'), SEOUL), at('00:30'), SEOUL);
+    expect(c).toMatchObject({ state: 'live', title: '夜班', left: 30, nowText: '00:30' });
+    expect(c.ruler.segs[0]).toMatchObject({ kind: 'cur', x0: 30 / 150, x1: 120 / 150, clipL: false, clipR: false });
+    expect(c.ruler.ticks.map((k) => k.text)).toEqual(['23:00', '0:00', '1:00']);
+    // 已经结束的昨天日程不带进来
+    expect(nowEvents(rows, at('01:10'), SEOUL)).toEqual([]);
+  });
+
+  it('夏令时结束那天（纽约 11-01 凌晨 2 点拨回 1 点）：墙上时刻、刻度、此刻竖线都按当地时间', () => {
+    const NY = 'America/New_York';
+    const D = '2026-11-01';
+    const now = at('08:00', NY, D);
+    const c = nowCard(day([ev({ title: '早餐', date: D, time: '09:00', tz: NY })], D, NY), now, NY, D);
+    expect(c).toMatchObject({ state: 'idle', nowText: '08:00', title: '09:00 早餐', left: 60 });
+    const t8 = c.ruler.ticks.find((k) => k.text === '8:00');
+    expect(t8?.x).toBeCloseTo(c.ruler.mark);
   });
 });
 

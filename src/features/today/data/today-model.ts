@@ -2,8 +2,8 @@
 // 不碰本机库、不读时钟：行、now、current_tz 都由调用方给，单测直接喂
 // • 日程换算：固定时刻（有 time）按日程自己的 tz 换成时刻，再换成当前时区的日期和墙上时间，按换算后的日期放进“今天”；
 //   和记录时的时区不同时带上原时区的墙上时间（界面写“14:00（首尔 15:00）”）；全天日程（浮动）日期原样，不换算
-// • “现在”卡四种状态：live（有正在进行的）、idle（没有进行中、今天还有下一件）、done（今天的日程都结束了）、empty（今天没有日程）；
-//   全天事项不算“正在进行”、不进时间轴（仍在今天列表里）
+// • “现在”卡六种状态（NowState）：live、idle、far（下一件在时间尺外）、done、allday（只有全天的）、empty；nowCard 把时刻文字、
+//   时间尺位置、剩几分钟都算好，界面只查表拼字。全天事项不算“正在进行”、不进时间轴（仍在今天列表里）；昨天开始、还没结束的算进来（nowEvents）
 // • 时间窗 kWin：照视觉稿 kWin() 逐条移植（分钟，相对今天 0 点；跨到明天的事项可以 > 1440）
 // • 没赶上：没完成、截止日早于今天的待办（逾 N 天）；今天有截止时刻、已经过了的也算（逾 0 天，界面写“已过 17:00”）。
 //   “逾期”规则和读待办行只在 shared/logic/todo-row.ts（isLate、todoOf，和待办页共用）
@@ -115,43 +115,113 @@ export function kWin(cur: readonly Span[], next: Span | null, now: number): { A:
   return { A, B };
 }
 
-export type NowCard =
-  | {
-      state: 'live';
-      /** 正在进行的，按结束先后（标题、“还剩”用第一件） */
-      cur: EventOcc[];
-      next: EventOcc | null;
-      /** 第一件还剩几分钟（向上取整） */
-      leftMin: number;
-      win: { A: number; B: number };
-      /** 下一件在时间窗外：时间轴下面另写一行 */
-      nextOutside: boolean;
-    }
-  | { state: 'idle'; next: EventOcc; inMin: number; win: { A: number; B: number }; nextOutside: boolean }
-  /** done = 今天有日程、都结束了；empty = 今天没有日程。win 是此刻前后的时间尺（负责人 11-15：没有日程时也用同一张大卡） */
-  | { state: 'done'; win: { A: number; B: number } }
-  | { state: 'empty'; win: { A: number; B: number } };
+/** “现在”卡的状态：live 有正在进行的；idle 下一件在时间尺里；far 下一件在时间尺外（窗口里一件都没有）；
+ *  done 今天有带时刻的日程、都结束了；allday 今天只有全天日程；empty 今天没有日程 */
+export type NowState = 'live' | 'idle' | 'far' | 'done' | 'allday' | 'empty';
 
-/** 今天的日程 → “现在”卡；today 是当前时区的今天 */
-export function nowCard(todayEvents: readonly EventOcc[], now: number, current: Tz, today: DateStr = todayOf(now, current)): NowCard {
-  const timed = todayEvents.filter((o) => !o.allDay && o.start !== null && o.end !== null);
+/** 时间尺上的一块：cur 正在进行的第一件、co 同时进行的第二件（第二条轨道，视觉稿 kRuler 最多两条）、nxt 下一件；
+ *  x0、x1 是 0～1 的位置，clipL、clipR 被窗口截断的一端，done 已过去的比例（nxt 为 0） */
+export interface NowSeg {
+  kind: 'cur' | 'co' | 'nxt';
+  id: string;
+  label: string;
+  lane: 0 | 1;
+  x0: number;
+  x1: number;
+  clipL: boolean;
+  clipR: boolean;
+  done: number;
+}
+
+/** 整点刻度：x 是 0～1 的位置，text 照视觉稿写“9:00”（小时不补零），edge 是贴左边、右边的那一个 */
+export interface NowTick {
+  x: number;
+  text: string;
+  edge: 'l' | 'r' | null;
+}
+
+/** “现在”卡要画的全部数：界面只拼文案、查表，不再自己算时间（R-423 整块评审第 7、10、11 条） */
+export interface NowCard {
+  state: NowState;
+  /** 此刻的墙上时间 HH:MM（按时区换算，不靠“离 0 点几分钟”，夏令时那天也对；秒数直接舍去） */
+  nowText: string;
+  /** 正在进行几件（live；页头“进行中 N 件”） */
+  liveN: number;
+  /** 标题行：live 第一件的标题、idle“开始时刻 标题”；其余为 null，界面写暖心句 */
+  title: string | null;
+  /** 页头右边的分钟数：live 第一件还剩几分、idle 几分后开始；其余为 null（far 的“几分后”只在卡底写一次） */
+  left: number | null;
+  /** live 第二件：一件写“同时：标题 · 到 HH:MM · 还剩”，三件及以上写“同时还有 N 件” */
+  also: { title: string; end: string; left: number } | { more: number } | null;
+  /** 时间尺下面一行：下一件在窗口外写一次“下一件 …”；done 时写明天的第一件 */
+  foot: { kind: 'next'; time: string; title: string; inMin: number } | { kind: 'tomorrow'; time: string; title: string } | null;
+  /** allday：第一件全天日程的标题和件数（页头“全天 · 休假”） */
+  allDay: { title: string; n: number } | null;
+  /** 时间尺：轨道数、此刻竖线的位置、色块、刻度 */
+  ruler: { lanes: 1 | 2; mark: number; segs: NowSeg[]; ticks: NowTick[] };
+}
+
+/** 喂给“现在”卡的日程：今天的，加上昨天开始、此刻还没结束的（跨零点的日程 00:30 时仍是“进行中”，整块评审第 4 条） */
+export function nowEvents(rows: readonly Row[], now: number, current: Tz, locale: Locale = 'zh-CN'): EventOcc[] {
+  const today = todayOf(now, current);
+  const carry = eventsOn(rows, addDays(today, -1), current, locale).filter((o) => !o.allDay && (o.end ?? 0) > now);
+  return [...carry, ...eventsOn(rows, today, current, locale)];
+}
+
+/** 日程 → “现在”卡；today 是当前时区的今天；tomorrowFirst 是明天第一件带时刻的日程（done 时写在卡底） */
+export function nowCard(events: readonly EventOcc[], now: number, current: Tz, today: DateStr = todayOf(now, current), tomorrowFirst: EventOcc | null = null): NowCard {
   const zero = msAt(today, 0, current);
-  const m = (ms: number) => (ms - zero) / MIN;
-  if (timed.length === 0) return { state: todayEvents.length ? 'done' : 'empty', win: kWin([], null, m(now)) };
-  const span = (o: EventOcc): Span => ({ s: m(o.start ?? 0), e: m(o.end ?? 0) });
+  const off = (ms: number) => (ms - zero) / MIN;
+  const span = (o: EventOcc): Span => ({ s: off(o.start ?? 0), e: off(o.end ?? 0) });
+  const untilMin = (ms: number | null) => Math.ceil(((ms ?? now) - now) / MIN);
+  const hmOf = (ms: number | null) => fmtHm(minOfDay(ms ?? now, current));
+
+  const timed = events.filter((o) => !o.allDay && o.start !== null && o.end !== null);
+  const allDays = events.filter((o) => o.allDay);
   const cur = timed.filter((o) => (o.start ?? 0) <= now && now < (o.end ?? 0)).sort((a, b) => (a.end ?? 0) - (b.end ?? 0));
   const next = timed.filter((o) => (o.start ?? 0) > now).sort((a, b) => (a.start ?? 0) - (b.start ?? 0))[0] ?? null;
-  const nowM = m(now);
-  if (cur.length) {
-    const win = kWin(cur.map(span), next ? span(next) : null, nowM);
-    return {
-      state: 'live', cur, next, leftMin: Math.ceil(((cur[0]?.end ?? now) - now) / MIN), win,
-      nextOutside: next !== null && span(next).s >= win.B,
-    };
+  const nowM = off(now);
+  const win = kWin(cur.map(span), next ? span(next) : null, nowM);
+  const nextFar = next !== null && span(next).s >= win.B;
+  const [c0, c1] = cur;
+  const state: NowState = c0 ? 'live' : next ? (nextFar ? 'far' : 'idle') : timed.length ? 'done' : allDays.length ? 'allday' : 'empty';
+
+  const X = (min: number) => (Math.min(Math.max(min, win.A), win.B) - win.A) / (win.B - win.A);
+  const seg = (o: EventOcc | null | undefined, kind: NowSeg['kind'], lane: 0 | 1): NowSeg | null => {
+    if (!o) return null;
+    const { s, e } = span(o);
+    if (e <= win.A || s >= win.B) return null;
+    const p = Math.max(s, win.A);
+    const q = Math.min(e, win.B);
+    const done = kind === 'nxt' ? 0 : Math.max(0, Math.min(1, (nowM - p) / (q - p)));
+    return { kind, id: o.id, label: o.project || o.title, lane, x0: X(s), x1: X(e), clipL: s < win.A, clipR: e > win.B, done };
+  };
+  const ticks: NowTick[] = [];
+  for (let t = Math.ceil(win.A / 60) * 60; t <= win.B; t += 60) {
+    ticks.push({ x: X(t), text: `${Math.floor(minOfDay(zero + t * MIN, current) / 60)}:00`, edge: t === win.A ? 'l' : t === win.B ? 'r' : null });
   }
-  if (!next) return { state: 'done', win: kWin([], null, nowM) };
-  const win = kWin([], span(next), nowM);
-  return { state: 'idle', next, inMin: Math.ceil(((next.start ?? now) - now) / MIN), win, nextOutside: span(next).s >= win.B };
+
+  return {
+    state,
+    nowText: hmOf(now),
+    liveN: cur.length,
+    title: c0 ? c0.title : state === 'idle' && next ? `${next.time ?? ''} ${next.title}` : null,
+    left: c0 ? untilMin(c0.end) : state === 'idle' && next ? untilMin(next.start) : null,
+    also: cur.length > 2 ? { more: cur.length - 1 } : c1 ? { title: c1.title, end: hmOf(c1.end), left: untilMin(c1.end) } : null,
+    foot:
+      next && nextFar
+        ? { kind: 'next', time: next.time ?? '', title: next.title, inMin: untilMin(next.start) }
+        : state === 'done' && tomorrowFirst?.time
+          ? { kind: 'tomorrow', time: tomorrowFirst.time, title: tomorrowFirst.title }
+          : null,
+    allDay: state === 'allday' && allDays[0] ? { title: allDays[0].title, n: allDays.length } : null,
+    ruler: {
+      lanes: c1 ? 2 : 1,
+      mark: X(nowM),
+      segs: [seg(c0, 'cur', 0), seg(c1, 'co', 1), seg(next, 'nxt', 0)].filter((x): x is NowSeg => x !== null),
+      ticks,
+    },
+  };
 }
 
 // ---------- 待办：今天、没赶上 ----------
@@ -218,12 +288,12 @@ export function tomorrowOf(now: number, current: Tz): DateStr {
   return addDays(todayOf(now, current), 1);
 }
 
-/** 时长文字的拆分（界面按语言拼）：照视觉稿 kDur，h 为 0 时只写分 */
 /** 暖心句选第几句（负责人 11-14）：按用户时区的当天日期固定，同一天每次打开同一句，第二天换下一句（从 1970-01-01 起的天数取余） */
 export function cheerIndex(today: DateStr, n: number): number {
   return n > 0 ? ((diffDays('1970-01-01', today) % n) + n) % n : 0;
 }
 
+/** 时长文字的拆分（界面按语言拼）：照视觉稿 kDur，h 为 0 时只写分 */
 export function splitDur(min: number): { h: number; m: number } {
   const v = Math.max(0, Math.round(min));
   return { h: Math.floor(v / 60), m: v % 60 };

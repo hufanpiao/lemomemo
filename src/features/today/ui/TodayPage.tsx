@@ -266,7 +266,7 @@ export default function TodayPage() {
     <>
       <TopNotices missedOn={missedOn} repeat={g.any ? <Ro part="repeat" onUpdate={g.update} /> : null} />
       {desk ? null : annivLine}
-      <NowCard card={d.card} now={d.now} tz={d.tz} today={d.today} tomorrowFirst={d.tomorrowFirst} />
+      <NowCard card={d.card} today={d.today} />
       {/* 两块放在同一个 AppearList 里：没赶上最后一条离开时整组跟着淡出（不然 section 一卸载，那一行的退出动画就被截断），
           下面“今天的安排”用 layout 平移收上来，不跳 */}
       <AppearList as="div">

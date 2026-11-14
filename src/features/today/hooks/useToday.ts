@@ -11,7 +11,7 @@ import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { setDeleted, type TrashTable } from '../data/today-actions.ts';
 import { doneToggler } from '../../../core/todo-done.ts';
-import { eventsOn, lateTodos, nowCard, todayTodos, tomorrowOf, type Row } from '../data/today-model.ts';
+import { eventsOn, lateTodos, nowCard, nowEvents, todayTodos, tomorrowOf, type Row } from '../data/today-model.ts';
 
 export function useToday() {
   const events = useCollection<Row>('events');
@@ -30,8 +30,8 @@ export function useToday() {
       tz,
       now,
       events: evToday,
-      card: nowCard(evToday, now, tz, today),
-      tomorrowFirst: tomorrow[0] ?? null,
+      // “现在”卡另算一份：昨天没结束的带时刻日程（跨零点）也算进去，明天第一件写在“都结束了”的卡底
+      card: nowCard(nowEvents(events, now, tz, locale), now, tz, today, tomorrow[0] ?? null),
       late: lateTodos(todos, now, tz, locale),
       todos: todayTodos(todos, now, tz, locale),
     };
