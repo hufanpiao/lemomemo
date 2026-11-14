@@ -338,6 +338,21 @@ test.describe('B4b-1 附件：电脑', () => {
     await expect(card).toBeVisible({ timeout: 30_000 });
     await expect(card.getByTestId('notes-files-mark')).toHaveText('附件 5');
     await shot(page, browserName, 'notes-masonry');
+    // 电脑分栏：点卡片从右边滑出抽屉，附件区（“加附件”、附件列表）在抽屉里、整块在视口内
+    await card.locator('button').first().click();
+    const files = page.getByTestId('note-files');
+    await expect(files).toContainText('附件 5', { timeout: 15_000 });
+    await expect(page.getByTestId('note-files-add')).toBeVisible();
+    await expect(page.getByTestId(`note-file-${F_PDF}`)).toBeVisible();
+    const fb = await files.boundingBox();
+    expect(fb && fb.x > 640 && fb.x + fb.width <= 1280).toBe(true);
+    await page.waitForTimeout(400);   // 等抽屉滑入的动画停稳再截
+    await shot(page, browserName, 'notes-drawer');
+    await page.getByTestId('note-files-add').scrollIntoViewIfNeeded();
+    await expect(page.getByTestId('note-files-add')).toBeInViewport();
+    await shot(page, browserName, 'notes-drawer-add');
+    await page.keyboard.press('Escape');
+    await expect(files).toHaveCount(0);
     await page.getByTestId(`notes-more-${NOTE}`).click();
     await page.getByTestId(`notes-to-todo-${NOTE}`).click();
     await expect(page.getByTestId('notes-conv-ask-ok')).toBeVisible();
