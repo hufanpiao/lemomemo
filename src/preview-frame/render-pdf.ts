@@ -75,36 +75,39 @@ export async function render(root: HTMLElement, bytes: ArrayBuffer, post: Post):
     post({ t: 'state', page: current, pages, zoom, sheets: [], sheet: 0, clipped: false });
   };
 
+  // 某一页画坏了就空着那一页，不影响别的页；从“画过”里去掉，滚回来再试一次（评审 20；缩放换了一轮的不动新一轮的记录）
   async function draw(n: number): Promise<void> {
     if (drawn.has(n)) return;
     drawn.add(n);
     const g = gen;
     const slot = slots[n - 1];
     if (!slot) return;
-    const c = await paint(await doc.getPage(n), (BASE_W * zoom) / 100, dpr);
-    c.className = 'pv-page';
-    if (g !== gen) return;
-    slot.replaceChildren(c);
+    try {
+      const c = await paint(await doc.getPage(n), (BASE_W * zoom) / 100, dpr);
+      c.className = 'pv-page';
+      if (g !== gen) return;
+      slot.replaceChildren(c);
+    } catch {
+      if (g === gen) drawn.delete(n);
+    }
   }
   const thumbDrawn = new Set<number>();
   async function drawThumb(n: number): Promise<void> {
     if (thumbDrawn.has(n)) return;
     thumbDrawn.add(n);
-    const c = await paint(await doc.getPage(n), THUMB_W, dpr);
-    thumbs[n - 1]?.firstElementChild?.replaceChildren(c);
+    try {
+      const c = await paint(await doc.getPage(n), THUMB_W, dpr);
+      thumbs[n - 1]?.firstElementChild?.replaceChildren(c);
+    } catch {
+      thumbDrawn.delete(n);
+    }
   }
 
-  // 某一页画坏了就空着那一页，不影响别的页；从“画过”里去掉，滚回来再试一次（评审 20）
-  const tryDraw = (fn: (n: number) => Promise<void>, done: Set<number>, n: number): void => {
-    void fn(n).catch(() => {
-      done.delete(n);
-    });
-  };
   const near = new IntersectionObserver((es) => {
-    for (const e of es) if (e.isIntersecting) tryDraw(draw, drawn, Number((e.target as HTMLElement).dataset['n']));
+    for (const e of es) if (e.isIntersecting) void draw(Number((e.target as HTMLElement).dataset['n']));
   }, { rootMargin: '800px 0px' });
   const nearThumb = new IntersectionObserver((es) => {
-    for (const e of es) if (e.isIntersecting) tryDraw(drawThumb, thumbDrawn, Number((e.target as HTMLElement).dataset['n']));
+    for (const e of es) if (e.isIntersecting) void drawThumb(Number((e.target as HTMLElement).dataset['n']));
   }, { root: rail, rootMargin: '300px 0px' });
   const seen = new IntersectionObserver((es) => {
     const hit = es.find((e) => e.isIntersecting);

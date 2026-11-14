@@ -45,6 +45,11 @@ export async function readJsonCapped(req: Request, max: number): Promise<unknown
   }
 }
 
+/** 字节的 sha256 十六进制（file-check、vault-file、vault 搬家共用；_shared/vault-files.ts 原样转出） */
+export async function sha256Hex(b: Uint8Array): Promise<string> {
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', b as BufferSource)), (x) => x.toString(16).padStart(2, '0')).join('');
+}
+
 /** 读对象存储取回的正文（R2 的 body）整段成字节（file-check、vault-file、vault 搬家共用，评审 9）；不限长度：对象写入时已经限过 */
 export async function readAll(body: unknown): Promise<Uint8Array> {
   return new Uint8Array(await new Response(body as BodyInit).arrayBuffer());

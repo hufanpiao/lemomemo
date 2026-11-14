@@ -86,14 +86,16 @@ export function AttPanel({ src, items, noteId, disabled, onImages }: AttPanelPro
       setMsg(null);
       const pics = files.filter(isImage);
       if (pics.length && onImages) onImages(pics);
+      // 几个文件一起加（不一个等一个：隐私记的 add 要等传上才回）
+      const docs = files.filter((x) => !isImage(x));
+      const rs: AddResult[] = await Promise.all(docs.map((f) => src.add(noteId, f, prep.extract)));
       const added: string[] = [];
-      for (const f of files.filter((x) => !isImage(x))) {
-        const r: AddResult = await src.add(noteId, f, prep.extract);
+      rs.forEach((r, i) => {
         // 别的失败上传器自己发提示（useAttNotices 收）；隐私记、只读这两种它不发
-        if (!r.ok && (r.key === 'private' || r.key === 'readonly')) setMsg({ key: `att.fail.${r.key}`, name: f.name });
+        if (!r.ok && (r.key === 'private' || r.key === 'readonly')) setMsg({ key: `att.fail.${r.key}`, name: docs[i]?.name ?? '' });
         else if (r.ok && vault) added.push(r.id);
-      }
-      // 隐私记的 add 等传上才回 ok：提示只在真传上以后出
+      });
+      // 隐私记：提示只在真传上以后出，“撤销”把这一批传上的一起去掉
       if (added.length) setUndo({ ids: added, name: '', added: true });
     },
     [noteId, onImages, src, prep.extract, vault],

@@ -58,5 +58,8 @@ describe('fileFailOf：vault-file 的失败响应（B4b-1）', () => {
     expect(fileFailOf(401, { error: 'vault_locked' })).toEqual({ ok: false, code: 'vault_locked' });
     expect(fileFailOf(413, { error: 'too_large' })).toEqual({ ok: false, code: 'too_large' });
     expect(fileFailOf(503, null).code).toBe('try_later');
+    // 入口共用码不算附件自己的码，照 failOf 落（复审 3）
+    expect(fileFailOf(400, { error: 'bad_request' })).toEqual({ ok: false, code: 'bad_request' });
+    expect(fileFailOf(405, { error: 'method_not_allowed' })).toEqual({ ok: false, code: 'bad_request' });
   });
 });

@@ -56,8 +56,9 @@ export interface VaultApiOptions {
 /** vault-file 的失败响应 → 码：附件自己的码放 fileCode（导出给测试） */
 export function fileFailOf(status: number, body: unknown): VaultFail {
   const p = vaultFileErrorBody.safeParse(body);
-  // 附件自己的码 = vault-file 的码表（shared/schema/vault-file.ts）里、但不在隐私记共用码表里的那几个（exists、rejected、quota_exceeded、corrupt）
-  if (p.success && vaultFileErrorCode.safeParse(p.data.error).success && !vaultErrorCode.safeParse(p.data.error).success) {
+  // 附件自己的码 = vault-file 的码表（shared/schema/vault-file.ts）里、既不在隐私记码表、也不是入口共用码（bad_request 等照 failOf 落）的：
+  //   exists、rejected、quota_exceeded、corrupt
+  if (p.success && vaultFileErrorCode.safeParse(p.data.error).success && !vaultErrorCode.safeParse(p.data.error).success && !isEntryErrorCode(p.data.error)) {
     return { ok: false, code: 'unknown', fileCode: p.data.error, ...(p.data.reason ? { reason: p.data.reason } : {}) };
   }
   return failOf(status, body);

@@ -67,4 +67,18 @@ describe('createPrepClient', () => {
     c.onMessage(msg(b.win, { t: 'prep', id: 'n1', pages: 2, text: 'x', thumb: null }));
     expect((await p)?.pages).toBe(2);
   });
+
+  it('已经发给旧窗口的请求：新窗口 ready 时立刻当没有，不空等超时', async () => {
+    const a = frame();
+    const b = frame();
+    let cur: Window = a.win;
+    const c = createPrepClient(() => cur, { encode: async () => null, timeoutMs: 60_000, newId: () => 'o1' });
+    c.onMessage(msg(a.win, { t: 'ready' }));
+    const p = c.extract(new Uint8Array([1]), 'pdf');
+    expect(a.sent).toHaveLength(1);
+    cur = b.win;
+    c.onMessage(msg(b.win, { t: 'ready' }));
+    expect(await p).toBeNull();
+    expect(b.sent).toEqual([]);
+  });
 });

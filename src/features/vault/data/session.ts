@@ -506,7 +506,8 @@ export function createVaultSession(d: VaultSessionDeps) {
       async msPreview(id: string) {
         msLive = true;
         const r = await fileOp((tok) => d.api.fileCall({ action: 'ms_preview', id }, tok, vaultFilePreviewResponse), true);
-        msLive = true;
+        // 上锁作废的（vault_locked）不再记：上锁时已经发过 end、令牌也没了
+        if (r.ok || r.code !== 'vault_locked') msLive = true;
         return r;
       },
       msPreviewEnd(): void {

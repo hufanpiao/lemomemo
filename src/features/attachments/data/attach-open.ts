@@ -1,7 +1,8 @@
 // 取附件的字节、下载、交给微软的链接（架构 5.13 第 3、4 点；架构约定 9.7）
 // • 预览：POST /files/v1/sign（purpose view，60 秒）→ fetchBlob（签名在请求头 X-Files-Sig）→ 核对 sha256 和行里一致，不一致不预览；
 //   取到的字节只放在本页内存（最多 MEM_MAX 个、合计 ≤ MEM_BYTES，先进先出），离线时这次打开 App 后看过的还能接着看；不进 IndexedDB、Cache Storage
-// • 下载：purpose download 带清理过的文件名 d → fetchBlob → blob 的 type 只取 DOC_TYPES 里这一类的白名单类型（绝不沿用响应的 Content-Type）
+// • 下载：本页内存里有就直接存；没有就 purpose download 带清理过的文件名 d → fetchBlob → 同预览核 sha256、进本页内存 →
+//   blob 的 type 只取 DOC_TYPES 里这一类的白名单类型（绝不沿用响应的 Content-Type）
 //   → platform/save-file.ts（iPhone 主屏幕版走 Web Share“存到文件”，别的 a[download]）。exe 的 save_attachment 属 B6-exe 线，这里不接
 // • 微软：purpose ms（只给 .pptx），签名留在查询串，拼成 view.officeapps.live.com 的 embed 地址
 // • 用其他 App 打开：先照预览取字节（核 sha256、进本页内存），再交给系统分享面板（platform/save-file.ts 的 shareFile）
@@ -12,7 +13,7 @@ import { sanitizeFileName } from '../../../../shared/logic/files/file-name.ts';
 import { noteFileThumbPath } from '../../../../shared/logic/files/media-path.ts';
 import { fetchBlob, sign, type FileError } from '../../../platform/files.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { saveFile, shareFile, type SaveOutcome } from '../../../platform/save-file.ts';
+import { saveFile, shareFile, type SaveOptions, type SaveOutcome } from '../../../platform/save-file.ts';
 import { sha256Hex } from '../../../platform/sha256.ts';
 
 export interface FileRef {
@@ -103,17 +104,17 @@ export async function openBytes(f: FileRef): Promise<OpenResult> {
 export type DownloadResult = { ok: true; outcome: SaveOutcome } | { ok: false; why: OpenFail };
 
 export async function download(f: FileRef): Promise<DownloadResult> {
-  const b = mem.get(f.id) ?? (await fetchVerified(f, 'download', sanitizeFileName(f.name, f.kind)));
-  if (b instanceof ArrayBuffer) return saveBytes(b, f);
-  return b.ok ? saveBytes(b.bytes, f) : b;
+  const hit = mem.get(f.id);
+  const r = hit ? ({ ok: true, bytes: hit } as const) : await fetchVerified(f, 'download', sanitizeFileName(f.name, f.kind));
+  return r.ok ? saveBytes(r.bytes, f) : r;
 }
 
 /** 已经拿到明文字节：存到本机（普通、隐私记共用）。类型只取 DOC_TYPES 里这一类的，不沿用响应的 Content-Type（架构 5.13 第 4 点 (a)） */
-export async function saveBytes(bytes: ArrayBuffer, f: Pick<FileRef, 'kind' | 'name'>, revokeMs?: number): Promise<DownloadResult> {
+export async function saveBytes(bytes: ArrayBuffer, f: Pick<FileRef, 'kind' | 'name'>, o: SaveOptions = {}): Promise<DownloadResult> {
   const name = sanitizeFileName(f.name, f.kind);
   const type = DOC_TYPES[f.kind];
   try {
-    const outcome = await saveFile(new Blob([bytes], { type }), name, type, undefined, revokeMs);
+    const outcome = await saveFile(new Blob([bytes], { type }), name, type, o);
     rlog(`att download ${outcome} kind=${f.kind}`);
     return { ok: true, outcome };
   } catch {

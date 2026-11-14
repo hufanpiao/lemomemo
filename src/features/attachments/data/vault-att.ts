@@ -2,8 +2,9 @@
 // • 经隐私记会话调 vault-file 函数（传输由隐私记功能给，这里只认 VaultFileApi 接口：令牌、上锁、续期都在那边）
 // • 上传：本机先判、预览沙箱抽页数、文字、缩略图（file-prep.ts 的 prepWithExtras，同普通附件）→ multipart 一次传明文给函数，服务器重做检查、加密写进 vault-files；
 //   不写本机库、不进 outbox（明文不落本机，A18）。传上就算检查过了（服务器当场检查），列表直接出；add 等传完才回（界面“已加到隐私记”只在真传上以后出）
-// • 传的途中去掉（“去掉”或提示条上“撤销”）：记进 cancelled，传回来不进列表；服务器上已经收下了就再删掉（评审 1）
-// • 列表、取字节：list 回解密后的文件名；list 没取到记 failed（界面给“重试”，不当成没有附件）；get 回解密后的字节，只放本附件区的内存（memCache），附件区卸下（上锁、离开编辑页）就丢
+// • 传的途中去掉（“去掉”或提示条上“撤销”）：记进 cancelled，传回来不进列表；服务器上已经收下了就再删掉（评审 1；同“删除”走软删，
+//   加密对象由服务器的清理按删除时间回收，和普通删除一样）
+// • 列表、取字节：list 回解密后的文件名；还没读到过列表时没取到记 failed（界面给“重试”，不当成没有附件；读到过以后再失败保留旧列表，不把附件区整块换掉）；get 回解密后的字节，只放本附件区的内存（memCache），附件区卸下（上锁、离开编辑页）就丢
 // • 删除：remove 写 deleted_at，提示条“撤销”调 restore
 // • PPT：ms_preview 让服务器放一份临时明文副本（5 分钟），交给微软；结束（关预览、卸下附件区）调 msPreviewEnd，会话自己记有没有副本在（msLive），不重复发
 // • 运行日志只记动作和结果码，不记文件名、内容
@@ -12,7 +13,6 @@ import type { RejectReason } from '../../../../shared/schema/attachments.ts';
 import type { VaultFileItem, VaultFileMeta } from '../../../../shared/schema/vault-file.ts';
 import { uuidv7 } from '../../../core/uuidv7.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { VAULT_REVOKE_MS } from '../../../platform/save-file.ts';
 import type { AttSource } from './att-source.ts';
 import { byId, type NoteFile } from './attach-list.ts';
 import { memCache, msEmbedOf, saveBytes, shareBytes, type OpenResult } from './attach-open.ts';
@@ -43,6 +43,9 @@ export interface VaultAttDeps {
 }
 
 const defaults: VaultAttDeps = { prepare: prepareFile, now: () => Date.now(), origin: () => location.origin };
+
+/** 下载的明文：blob URL 只留 10 秒（评审 14；字节在本页内存里，浏览器开始读用不了这么久） */
+export const VAULT_REVOKE_MS = 10_000;
 
 export interface VaultAttSnapshot {
   loaded: boolean;
@@ -122,7 +125,8 @@ export function createVaultAtt(api: VaultFileApi, noteId: string, deps: VaultAtt
   async function load(): Promise<void> {
     const r = await api.list(noteId);
     rlog(`vatt list ${r.ok ? `ok n=${r.files.length}` : r.code}`);
-    put(r.ok ? { loaded: true, failed: false, files: r.files.map(toFile) } : { loaded: true, failed: true });
+    if (r.ok) put({ loaded: true, failed: false, files: r.files.map(toFile) });
+    else if (!snap.loaded || snap.failed) put({ loaded: true, failed: true });
   }
 
   /** 传一次；传上了（含 exists：上次其实传成了）回 true */
@@ -219,7 +223,7 @@ export function createVaultAtt(api: VaultFileApi, noteId: string, deps: VaultAtt
     },
     async download(f) {
       const r = await source.open(f);
-      return r.ok ? saveBytes(r.bytes, f, VAULT_REVOKE_MS) : r;
+      return r.ok ? saveBytes(r.bytes, f, { revokeMs: VAULT_REVOKE_MS }) : r;
     },
     async share(f) {
       const r = await source.open(f);
@@ -248,11 +252,8 @@ export function createVaultAtt(api: VaultFileApi, noteId: string, deps: VaultAtt
 
   return {
     source,
-    /** 读列表；失败后“重试”也调它（先回到没读完，界面不闪旧的失败提示） */
-    async load(): Promise<void> {
-      if (snap.failed) put({ loaded: false, failed: false });
-      await load();
-    },
+    /** 读列表；失败后“重试”也调它 */
+    load,
     get: (): VaultAttSnapshot => snap,
     subscribe(fn: () => void): () => void {
       subs.add(fn);

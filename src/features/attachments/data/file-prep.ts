@@ -4,7 +4,6 @@
 //   DecompressionStream（异步、不占主线程），第三方解析库（pdf.js、docx-preview、SheetJS）仍只在预览沙箱里。
 //   首页缩略图、页数和抽文字（第 2 点 ④）由隐藏的预览沙箱给（prep-client.ts），这里的 prepWithExtras 只负责先判、再调它。
 // 纯 TS：不准 import React（A1）
-import type { Extract, Extras } from './attach-uploader.ts';
 import { DOC_TYPES, type DocKind } from '../../../../shared/manifests/attachments.ts';
 import { sanitizeFileName } from '../../../../shared/logic/files/file-name.ts';
 import { FILE_MAX_BYTES } from '../../../../shared/logic/files/limits.ts';
@@ -22,6 +21,14 @@ export interface Prepared {
   bytes: Uint8Array;
   sha256: string;
 }
+/** 预览材料：页数（PDF、PPT 页数，Excel 表数）、纯文本、首页缩略图（webp）；extract 给不出就 null */
+export interface Extras {
+  pages: number | null;
+  text: string | null;
+  thumb: Blob | null;
+}
+export type Extract = (bytes: Uint8Array, kind: DocKind) => Promise<Extras | null>;
+
 /** detail 只进运行日志（哪条规则拒的），reason 给界面 */
 export type PrepFail = { ok: false; reason: RejectReason | 'empty'; detail: string };
 

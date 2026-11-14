@@ -21,7 +21,7 @@ import { noteFilePath, noteFileThumbPath } from '../../../../shared/logic/files/
 import type { DocKind } from '../../../../shared/manifests/attachments.ts';
 import type { RejectReason } from '../../../../shared/schema/attachments.ts';
 import { fileCheck, type CheckResult } from './file-check-api.ts';
-import { prepareFile, prepWithExtras, type Prepared, type PrepFail } from './file-prep.ts';
+import { prepareFile, prepWithExtras, type Extract, type Prepared, type PrepFail } from './file-prep.ts';
 
 export const TABLE = 'note_files';
 
@@ -46,13 +46,7 @@ export interface AttNotice {
 }
 
 export type AddResult = { ok: true; id: string } | { ok: false; key: AttFailKey | 'silent' | 'private' | 'readonly' };
-/** 预览材料：页数（PDF、PPT 页数，Excel 表数）、纯文本、首页缩略图（webp）；extract 给不出就 null */
-export interface Extras {
-  pages: number | null;
-  text: string | null;
-  thumb: Blob | null;
-}
-export type Extract = (bytes: Uint8Array, kind: DocKind) => Promise<Extras | null>;
+export type { Extract, Extras } from './file-prep.ts';
 
 /** 删除的结果：soft = 软删了（可以撤销）；dropped = 行没写成、放弃了或本来就没了（没什么可撤销）；false = 没删成 */
 export type RemoveResult = 'soft' | 'dropped' | false;

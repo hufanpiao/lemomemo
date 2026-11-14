@@ -119,13 +119,16 @@ describe('createVaultAtt', () => {
     expect(va.get().files.map((f) => f.id)).not.toContain(id);
   });
 
-  it('list 没取到（评审 10）：记 failed，不当成没有附件；重试成功后清掉', async () => {
+  it('list 没取到（评审 10）：记 failed，不当成没有附件；重试成功后清掉；读到过以后再失败保留旧列表、不记 failed', async () => {
     let n = 0;
     const { va } = setup({
-      list: vi.fn(async () => (++n === 1 ? { ok: false as const, code: 'offline' } : { ok: true as const, files: [item('0190a000-0000-7000-8000-00000000000b')] })),
+      list: vi.fn(async () => (++n === 2 ? { ok: true as const, files: [item('0190a000-0000-7000-8000-00000000000b')] } : { ok: false as const, code: 'offline' })),
     });
     await va.load();
     expect(va.get()).toMatchObject({ loaded: true, failed: true, files: [] });
+    await va.load();
+    expect(va.get()).toMatchObject({ loaded: true, failed: false });
+    expect(va.get().files).toHaveLength(1);
     await va.load();
     expect(va.get()).toMatchObject({ loaded: true, failed: false });
     expect(va.get().files).toHaveLength(1);

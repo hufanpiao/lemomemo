@@ -24,9 +24,7 @@ export function hex(b: Uint8Array): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
-export async function sha256Hex(b: Uint8Array): Promise<string> {
-  return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', b as BufferSource)));
-}
+export { sha256Hex } from './body.ts';
 
 /** 隐私记行里存的 sha256：HMAC(file-sha 子密钥, 明文 sha256 十六进制) */
 export async function shaMac(master: Bytes, userId: string, plainShaHex: string): Promise<string> {

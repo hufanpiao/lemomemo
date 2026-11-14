@@ -16,7 +16,7 @@ import { r2FromEnv } from '../_shared/objstore-env.ts';
 import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { versionGate } from '../_shared/version-gate.ts';
-import { sha256Hex } from '../_shared/vault-files.ts';
+import { sha256Hex } from '../_shared/body.ts';
 import { sniffFile } from '../_shared/gen/logic/files/file-sniff.ts';
 import { inflateRaw } from '../_shared/gen/logic/files/inflate.ts';
 import { noteFilePath, noteFileThumbPath } from '../_shared/gen/logic/files/media-path.ts';
