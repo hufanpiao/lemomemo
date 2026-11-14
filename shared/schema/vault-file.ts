@@ -22,6 +22,7 @@
 //   （同源相对地址 /sb/storage/v1/object/sign/vault-preview/…?token=…，客户端拼上 location.origin 交给微软）→ vaultFilePreviewResponse。
 //   每人每小时 VAULT_PREVIEW_RATE_PER_HOUR 次（另外也算进每分钟的次数）。
 // • ms_preview_end {}：立即删这个人的预览对象和登记（关预览、上锁、页面隐藏时调；页面隐藏和上锁用 fetch keepalive）→ vaultFileOkResponse。
+//   只验 JWT、不要 x-vault-token（11-14 审查第 4 条：令牌过期上锁那一刻发的 end 原来会被拒，副本留到有效期满）。
 // • sweep {}（x-cron-secret）：删过期登记和对象、删桶里没登记的旧对象、写心跳 vault-file-sweep。
 // 文件名由服务器按 sanitizeFileName 清理后再加密（结果一定满足 note_files.name 的 check 约束，移出隐私记时直接写回明文列）。
 import { z } from 'zod';

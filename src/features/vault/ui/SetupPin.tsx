@@ -1,7 +1,9 @@
 // 第一次设密码（线框 s9 FIRSTPW；视觉稿第 1700 行）：输入 → 再输一次；两次一样才调 vault {setup}
-// • 下面一行开关“以后用 Face ID 解锁（支持的设备）”：只在这台设备能用时出现；打开时设好密码后马上绑定（绑定要当场的密码，S4）
+// • 下面一行开关“以后用 Face ID 解锁（支持的设备）”：只在这台设备能用时出现；打开时设好密码后马上绑定（绑定要当场的密码，S4）。
+//   密码设好了、绑定没成（系统弹窗取消、服务器拒）：交给页面出提示（onBindFail，审查第 3 条）——设好密码这一页马上就卸掉了，提示挂在隐私记页上
 // • 改密码（设置 › 隐私记）复用同一个两步：先输现在的密码，再输两次新密码
 import { useState } from 'react';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { useAutolockMin, useErrText, useVault } from '../hooks/useVault.ts';
 import { useWebauthn } from '../hooks/useVaultAuth.ts';
 import { useVaultT, type VaultKey } from '../hooks/useVaultT.ts';
@@ -45,18 +47,24 @@ export function NewPinSteps({ title, sub, onDone, busy, error, testId }: {
   );
 }
 
-export function SetupPin({ onCancel, testId = 'vault-setup' }: { onCancel(): void; testId?: string }) {
+export function SetupPin({ onCancel, onBindFail, testId = 'vault-setup' }: { onCancel(): void; onBindFail?(method: string): void; testId?: string }) {
   const t = useVaultT();
   const { state, s } = useVault();
   const wa = useWebauthn();
   const min = useAutolockMin();
   const [face, setFace] = useState(false);
   const [busy, setBusy] = useState(false);
-  const method = t(wa.method === 'faceid' ? 'vault.method.faceid' : 'vault.method.hello', {});
+  const method = wa.label;
   const done = async (pin: string): Promise<void> => {
     setBusy(true);
     const r = await s.setup(pin);
-    if (r.ok && face && wa.usable) await wa.register(pin, method);
+    if (r.ok && face && wa.usable) {
+      const b = await wa.register(pin, method);
+      if (!b?.ok) {
+        rlog(`vault bind fail ${b ? b.code : 'cancel'}`);
+        onBindFail?.(method);
+      }
+    }
     setBusy(false);
   };
   const errText = useErrText();

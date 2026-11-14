@@ -159,11 +159,22 @@ const COLS: readonly [keyof AnnivForm, string, (f: AnnivForm) => unknown][] = [
   ['note', 'note', (f) => f.note],
 ];
 
-/** 改了的列；没改回 null。月日合不合格由 hooks 先查（dateValid） */
+/** 这几项变了就是换了“哪一次”（日期变了）：旧的“知道了”“稍后”不再算数 */
+const DATE_KEYS: readonly (keyof AnnivForm)[] = ['calendar', 'month', 'day', 'is_leap', 'year'];
+
+/**
+ * 改了的列；没改回 null。月日合不合格由 hooks 先查（dateValid）。
+ * 改了日期（审查第 7 条）：同一次写入里清掉 notified_for、snooze_at，口径同日程 calendar/data/event-edit.ts 的 patchOf——
+ * 服务器 private.remind_reset 只对 events 清这两列（anniversaries 只清 pushed_for、defer_until），所以纪念日要客户端自己带
+ */
 export function patchOf(_row: RowLike, prev: AnnivForm, next: AnnivForm, now: number): Record<string, unknown> | null {
   const out: Record<string, unknown> = {};
   for (const [k, col, val] of COLS) if (!Object.is(prev[k], next[k])) out[col] = val(next);
   if (Object.keys(out).length === 0) return null;
+  if (DATE_KEYS.some((k) => !Object.is(prev[k], next[k]))) {
+    out['notified_for'] = null;
+    out['snooze_at'] = null;
+  }
   out['updated_at'] = now;
   return out;
 }

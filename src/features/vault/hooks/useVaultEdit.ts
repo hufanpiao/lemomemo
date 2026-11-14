@@ -8,10 +8,11 @@
 // • 改标题、正文时调会话的 touch()：一直在写的人令牌按 5 分钟续一次，写超过 10 分钟再保存也不会被锁、草稿不丢（M2）。
 //   放着不动超过 10 分钟、或连续解锁超过 12 小时（第 22 条，令牌不再续），再打字或保存会要求解锁：页面换成解锁卡、DOM 里不留明文（TC-B5-11）；
 //   这种“令牌过期、等解锁”的上锁时还没存的草稿交给会话的 saveWhenUnlocked，只在内存闭包里，解锁后保存一次（不丢草稿）；
-//   用户主动上锁、离开超时、在别处改密码、设备被移除时照旧丢掉
+//   用户主动上锁、离开超时、在别处改密码、设备被移除时照旧丢掉；点了保存、请求还在路上时不交（会话自己等解锁重发那一次，审查第 9 条）
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { VaultNote } from '../../../../shared/schema/vault.ts';
 import { encodeImage } from '../../../platform/image-encode.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import type { VaultFileApi, VaultFileFail } from '../../attachments/index.ts';
 import type { VaultFail } from '../data/vault-api.ts';
 import type { VaultSession } from '../data/session.ts';
@@ -109,12 +110,18 @@ export function useVaultEdit(id: string | null) {
   // 卸载时的草稿（第 22 条）：每次渲染记下最新的一份；卸载时正在“令牌过期、等解锁”，又有没存的改动，就交给会话解锁后保存
   const latest = useRef({ title, body, adds, removes });
   latest.current = { title, body, adds, removes };
+  /** 保存请求在路上（审查第 9 条）：碰上令牌过期时会话自己等解锁、重发这一次，卸载时不再另交一份草稿，免得存两次 */
+  const saving = useRef(false);
   const baseRef = useRef(note);
   baseRef.current = note ?? baseRef.current;
   useEffect(
     () => () => {
       const st = s.get();
       if (!st.waiting || st.phase === 'unlocked') return;
+      if (saving.current) {
+        rlog('vault draft skip saving');
+        return;
+      }
       const d = latest.current;
       const base = baseRef.current;
       const dirty = d.title.trim() !== (base?.title ?? '') || d.body !== (base?.body ?? '') || d.adds.length > 0 || d.removes.length > 0;
@@ -200,12 +207,15 @@ export function useVaultEdit(id: string | null) {
     async save(): Promise<boolean> {
       setBusy(true);
       setError(null);
+      saving.current = true;
       const r = await s.save({
         id: id ?? draftId,
         title: title.trim(),
         body,
         addImages: adds.map((a) => ({ id: a.key, full: a.full, thumb: a.thumb, width: a.width, height: a.height })),
         removeImages: removes,
+      }).finally(() => {
+        saving.current = false;
       });
       setBusy(false);
       if (!r.ok) {

@@ -25,17 +25,16 @@ type View = 'main' | 'autolock' | 'change' | 'reset' | 'bind' | 'devices';
 export function VaultSettings() {
   const t = useVaultT();
   const state = useVaultStatus();
-  const { s } = useVault();
   const wa = useWebauthn();
   const min = useAutolockMin();
   const fmtAt = useFmtAt();
   const [view, setView] = useState<View>(useRoute().params[1] === 'reset' ? 'reset' : 'main');
-  const method = t(wa.method === 'faceid' ? 'vault.method.faceid' : 'vault.method.hello', {});
+  const method = wa.label;
   const back = () => setView('main');
 
   const waiting = (
     <UnlockOverlay open={state.waiting} testId="vault-set-scrim">
-      <UnlockPanel onCancel={() => s.cancelWait()} onForgot={() => setView('reset')} testId="vault-set-unlock" backLabel={t('vault.title', {})} />
+      <UnlockPanel onForgot={() => setView('reset')} testId="vault-set-unlock" backLabel={t('vault.title', {})} />
     </UnlockOverlay>
   );
 
@@ -153,8 +152,11 @@ function ChangePin({ onDone }: { onDone(): void }) {
         setBusy(true);
         void s.changePin(old, p).then((r) => {
           setBusy(false);
-          if (r.ok) setOk(true);
-          else {
+          if (r.ok) {
+            // 旧密码用完就清（审查第 14 条）：不在“已修改”那一屏挂着的组件 state 里留着
+            setOld(null);
+            setOk(true);
+          } else {
             // 读这次响应里的 left（不读 state.left：回调里的 state 是点下去那次渲染的快照）
             setErr(r.code === 'pin_wrong' && r.left !== undefined ? t('vault.unlock.left', { n: r.left }) : errText(r.code));
             setOld(null);
@@ -207,7 +209,7 @@ function Devices({ method, onDone }: { method: string; onDone(): void }) {
   }, [s]);
   return (
     <SettingsCard title={t('vault.set.devices', {})} showTitle testId="vault-devices">
-      {err ? <SettingsInfoRow label={err} value="" /> : null}
+      {err ? <SettingsInfoRow label={err} value="" alert testId="vault-devices-err" /> : null}
       <ul className={styles.devices}>
         {(items ?? []).map((c) => (
           <li key={c.id} className={styles.device} data-testid={`vault-device-${c.id}`}>

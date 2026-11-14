@@ -33,6 +33,7 @@ export interface StoreDef {
 export const META = 'meta';
 export const OUTBOX = 'outbox';
 export const DRAFTS = 'drafts';
+/** 隐私记“＋”原话的密文草稿（R-123）。功能没做之前禁止写入：只准定义、关库前放行、退出前只读计数，core/__tests__/vault-drafts-guard.test.ts 守着（审查第 12 条） */
 export const VAULT_DRAFTS = 'vault_drafts';
 export const PENDING_ACTIONS = 'pending_actions';
 export const OWNER = 'owner';

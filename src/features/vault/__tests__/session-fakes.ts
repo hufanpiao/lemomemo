@@ -43,12 +43,12 @@ function fakeApi(replies: Partial<Record<VaultRequest['action'], Reply>>) {
     }) as VaultApi['fileCall'],
     fileGet: vi.fn(async () => ({ ok: true as const, value: new Blob(['f']) }) as VaultResult<Blob>),
     fileUpload: vi.fn(async () => ({ ok: true as const, value: null }) as VaultResult<unknown>),
-    fileEnd: vi.fn(),
+    fileEnd: vi.fn(async () => true),
   };
   return { api, calls };
 }
 
-export const statusSet = { ok: true, set: true, locked_until: null, last_reset_at: null, webauthn: 0 };
+export const statusSet = { ok: true, set: true, locked_until: null, retry_after_s: null, last_reset_at: null, webauthn: 0 };
 export const tokenOk = { ok: true, vault_token: TOK, expires_at: 9e12 };
 export const listOk = (notes: VaultNote[] = [note()]) => ({ ok: true, notes, vault_token: TOK, expires_at: 9e12 });
 
