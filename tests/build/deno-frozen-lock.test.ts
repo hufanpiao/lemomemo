@@ -18,6 +18,7 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } 
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { workflowSteps } from './workflow-steps.ts';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 const FN = join(ROOT, 'supabase', 'functions');
@@ -32,20 +33,11 @@ const ENV = { ...process.env, NO_COLOR: '1' };
 const CI_STEP = '服务器函数的依赖锁';
 const RUN_LINE = 'run: bash build/ci/deno-frozen-lock.sh';
 
-const indent = (l: string) => l.length - l.trimStart().length;
-
-/** 纯函数：工作流文本里名字含 name 的步骤有几个；第一个的起始行号、各行（开头的 “- ” 换成两个空格）和这一步的顶层键 */
+/** 纯函数：工作流文本里名字含 name 的步骤有几个；第一个的起始行号、各行、顶层键、所在任务（切步骤用共用的 workflow-steps.ts） */
 function findStep(yml: string, name: string) {
-  const lines = yml.split(/\r?\n/);
-  const named = lines.flatMap((l, i) => (/^\s*(?:-\s*)?name:/.test(l) && l.includes(name) ? [i] : []));
-  let start = named[0] ?? 0;
-  while (start > 0 && !/^\s*-\s/.test(lines[start] ?? '')) start--;   // name 不是第一个键时，往回找到这一步的 “- ”
-  const stepIndent = indent(lines[start] ?? '');
-  let end = start + 1;
-  while (end < lines.length && !(lines[end]?.trim() && indent(lines[end] ?? '') <= stepIndent)) end++;
-  const step = [(lines[start] ?? '').replace(/^(\s*)-\s/, '$1  '), ...lines.slice(start + 1, end)];
-  const keys = step.filter((l) => l.trim() && indent(l) === stepIndent + 2).map((l) => l.trim());
-  return { count: named.length, start, step, keys };
+  const named = workflowSteps(yml).filter((s) => s.name.includes(name));
+  const first = named[0];
+  return { count: named.length, start: first?.start ?? 0, step: first?.lines ?? [], keys: first?.keys ?? [], job: first?.job ?? '' };
 }
 
 /** 纯函数：工作流里“服务器函数的依赖锁”那一步正好一个、只调脚本、不带 if 和 continue-on-error（空数组 = 全对） */
@@ -95,18 +87,15 @@ function unitDenoProblems(unit: string, ci: string): string[] {
   const out: string[] = [];
   if (uu.length !== 1 || uu[0]?.t !== cu[0]?.t) out.push(`unit.yml 的 setup-deno 应正好 1 处且和 ci.yml 逐字相同：${cu[0]?.t}`);
   if (uv.length !== 1 || uv[0]?.t !== cv[0]?.t) out.push(`unit.yml 的 deno-version 应正好 1 处且和 ci.yml 相同：${cv[0]?.t}`);
-  const { count, start, step, keys } = findStep(unit, UNIT_STEP);
+  const { count, start, step, keys, job } = findStep(unit, UNIT_STEP);
   if (count !== 1) return [...out, `unit.yml 里名字含“${UNIT_STEP}”的步骤应正好 1 个，现在 ${count} 个`];
   if (uu[0] && uu[0].i > start) out.push(`unit.yml 的 setup-deno 要装在“${UNIT_STEP}”那一步之前`);
   if (!keys.includes('env:') || !step.some((l) => l.trim() === REQUIRE_LINE)) out.push(`“${UNIT_STEP}”那一步的 env 里没有 ${REQUIRE_LINE}`);
   // 11-10 单元测试拆成三时区矩阵作业：setup-deno 必须和单元测试在同一个作业里（装在别的作业，这个作业里照样没有 deno）
   const lines = unit.split(/\r?\n/);
-  const jobAt = (i: number) => {
-    for (let k = i; k >= 0; k--) if (/^ {2}[\w-]+:\s*$/.test(lines[k] ?? '')) return k;
-    return -1;
-  };
-  const jobStart = jobAt(start);
-  if (uu[0] && jobAt(uu[0].i) !== jobStart) out.push(`unit.yml 的 setup-deno 要和“${UNIT_STEP}”在同一个作业里`);
+  const denoStep = workflowSteps(unit).find((s) => s.lines.some((l) => USES.test(l.trim().replace(/^-\s+/, ''))));
+  if (uu[0] && denoStep?.job !== job) out.push(`unit.yml 的 setup-deno 要和“${UNIT_STEP}”在同一个作业里`);
+  const jobStart = lines.findIndex((l) => l.trimEnd() === `  ${job}:`);
   // 三个时区一个不少（架构第 9 节 H2）：那一步的 env 写 TZ: ${{ matrix.tz }}，所在作业的矩阵正好是这三个
   if (!step.some((l) => l.trim() === 'TZ: ${{ matrix.tz }}')) out.push(`“${UNIT_STEP}”那一步的 env 里没有 TZ: \${{ matrix.tz }}`);
   const tzLine = lines.slice(Math.max(jobStart, 0), start).find((l) => /^\s*tz:\s*\[/.test(l))?.trim() ?? '';

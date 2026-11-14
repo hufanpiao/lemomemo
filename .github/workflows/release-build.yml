@@ -95,13 +95,10 @@ jobs:
           for v in VITE_PUBLIC_ANON_KEY VITE_PUBLIC_VAPID_KEY VITE_PUBLIC_TURNSTILE_SITE_KEY; do
             if [ -z "${!v}" ]; then echo "::error::$v 是空的：去仓库 Variables 填 PROD_ 开头的那几项"; exit 1; fi
           done
+          # 构建脚本 build_web.mjs 在 production 模式自己跑体积预算（check_size --mode production）和探测页检查（check_no_probe），这里不再各跑一遍
           npm run build -- --mode production
-          node build/check_size.mjs
-          # 构建以后 A14 连 dist/web 一起扫
-          python3 -I build/check_arch.py
-
-      - name: 正式产物里不能有 R-68 探测页和 voice-probe（B3 Q1 ⑧；和 voice-probe 同一个 PR 删）
-        run: node build/check_no_probe.mjs --dir dist/web
+          # 构建以后 A14 连 dist/web 一起扫；别的规则上面“类型检查、规范、单元测试”那一步已经跑过
+          python3 -I build/check_arch.py --only A14
 
       - name: 发布包里不能有 source map（上线与回滚手册 第二节）
         run: bash build/ci/no-source-map.sh dist/web

@@ -1,4 +1,4 @@
-// 正式产物里不能有 R-68 探测页和 voice-probe（B3 Q1 ⑧）：check_no_probe.mjs 搜得到、搜不到；构建脚本和发布流水线都接上了；
+// 正式产物里不能有 R-68 探测页和 voice-probe（B3 Q1 ⑧）：check_no_probe.mjs 搜得到、搜不到（构建脚本接上了由 build-web.test.ts 核）；
 // 探测页只从试验页懒加载、平台层文件只被探测页引用（正式版没有试验页，整块摇掉）
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -36,9 +36,7 @@ describe('findProbe', () => {
 });
 
 describe('接线', () => {
-  it('release-build.yml 构建后另跑（build_web.mjs 只在 production 时跑它，由 build-web.test.ts 按行为核）', () => {
-    expect(readFileSync(join(root, '.github/workflows/release-build.yml'), 'utf8')).toContain('node build/check_no_probe.mjs --dir dist/web');
-  });
+  // 正式构建（release-build.yml 的 npm run build -- --mode production）里由 build_web.mjs 调它：build-web.test.ts 按行为核（production 才查、查整个输出目录）
 
   it('探测页只经试验页懒加载，平台层探测文件只被探测页引用', () => {
     const src = join(root, 'src');

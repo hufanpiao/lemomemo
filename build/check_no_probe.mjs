@@ -1,7 +1,7 @@
 // 正式产物里不能有 R-68 探测页和 voice-probe 路径（B3 任务单 Q1 第 ⑧ 条、FA-0；验收“正式产物里搜不到二者”），也不能有 CSP 试验页
 // 探测页只在非正式版的试验页 #/dev-csp/voice 下懒加载（src/app/dev/VoiceProbe.tsx、src/platform/voice-probe.ts）；
 // 正式版的试验页整块被摇掉，这里再按文本兜底：扫 --dir（默认 dist/web）下所有文件，搜到下面任一标记就失败
-// 调用：build/build_web.mjs 在 mode=production 时自动跑；release-build.yml 构建后另跑一遍。和 voice-probe 同一个 PR 删
+// 调用：build/build_web.mjs 在 mode=production 时自动跑（release-build.yml 的正式构建就走这里，11-14 起不再另跑一遍）。和 voice-probe 同一个 PR 删
 // 用法：node build/check_no_probe.mjs [--dir dist/web]
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';

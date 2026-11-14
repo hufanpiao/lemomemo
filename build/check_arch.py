@@ -1,8 +1,9 @@
 """架构检查里 ESLint、Stylelint、tsc 管不到的几条（架构 2.3）。
 
-用法：python -I build/check_arch.py [--root 目录] [--json]
+用法：python -I build/check_arch.py [--root 目录] [--json] [--only 规则,规则…]
+  --only：只跑列出的规则（构建后那次只要 A14：--only A14，别的规则构建前已经跑过；规则名写错退出 2）
   A14  src、shared、dist/web 里不能有密钥特征（sb_secret_、sb_publishable_、sbp_ 要前缀后紧跟至少 20 个密钥字符才算；sb_publishable_ 是公开值，dist/web 里不报）；import.meta.env 只能读 VITE_PUBLIC_* 和 Vite 自带的 MODE/DEV/PROD/BASE_URL/SSR
-  A20  TS/TSX 的字符串和 JSX 文本里不能有汉字、谚文（注释不算）；例外见 A20_EXEMPT
+  A20  TS/TSX 的字符串和 JSX 文本里不能有汉字、谚文（注释不算，注释区间由 build/check_backend_ast.mjs 的 TypeScript AST 给出）；例外见 a20_exempt
   A19  SW 只走网络的路径（15.3 第 1 条）：src/sw/routes.ts 的 NETWORK_ONLY_PREFIXES 必须有 '/sb'、'/files'；
        sw 的其他文件里不准再写 /sb、/files 的路径（不能给它们另挂 Workbox 路由或缓存）
   （R2、LUNAR、MOTION-IMPL 三条引入限制 11-14 起挪进 ESLint：build/eslint-rules/import-bounds.js，CI-11）
@@ -19,8 +20,9 @@
        要“像一个邮箱”的地方用 example.com、lemomemo.test 这类保留域名。只放行 EMAIL_FAKE_OK 白名单里明显是假的夹具地址
        （整个地址完全相同才算）；报错里 @ 前面只露第一个字符。EMAIL_PENDING 是别人正在清的文件，清完删掉那一行（真仓库会报警告提醒）
   BINIMPORT 会被当代码执行的目标不准是二进制扩展名（BIDI_BINARY_EXT 加 .node、.so、.dylib；B1 接手清单 LINT-binimport，扫的文件同 BIDI）：
-       JS/TS 的 import、require、import()、createRequire、importScripts、Worker、eval / vm.* / dlopen，非 JS 入口（package.json scripts、
-       yml 的 run:、.sh、.ps1、.html 的 script src）里解释器执行的文件。实现和细节在 build/check_binimport.mjs（TypeScript 编译器 API，CI-10）
+       JS/TS 的 import、require、import()、createRequire、importScripts、Worker、eval / vm.* / dlopen（含别名、字符串拼接），非 JS 入口
+       （package.json scripts、根目录 deno.json(c) 的 tasks、yml 的 run:、.sh、.ps1、JS/TS 里的 command 字符串、.html 的 script src）里解释器
+       执行的文件。实现、细节和剩余风险在 build/check_binimport.mjs（TypeScript 编译器 API，CI-10）
 有错误时退出码 1，只有警告时 0。--root 给自测用（tests/arch-fixtures/check_arch/ 下的样例目录）。
 """
 import argparse
@@ -32,6 +34,10 @@ import subprocess
 import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "build"))
+from check_backend import parse_sources  # noqa: E402  A20、A19 的去注释源码（TypeScript AST，和 check_backend 同一份 check_backend_ast.mjs）
+
+RULES = ("A14", "A20", "A19", "W2", "P142", "A24", "BIDI", "EMAIL", "BINIMPORT")
 
 # Supabase 各种密钥的前缀：只在前缀后面紧跟至少 20 个密钥字符时才算（B1 K4）。
 # supabase-js 自己带着 'sb_secret_' 这类前缀字面量做判断，打进产物后后面不跟任何密钥，只认前缀会误报
@@ -79,7 +85,8 @@ EXEMPT_HEADER_DIRS = ("shared/logic/parse/", "shared/logic/notes/classify-rules.
 SOURCE_EXT = (".ts", ".tsx", ".mts", ".js", ".mjs")
 
 
-def a20_exempt(rel, text):
+def a20_exempt(rel, head):
+    """head()：读文件开头（只有可能用文件头豁免的目录才读）"""
     # 公共词典；tz-zh、tz-ko 是 11-05 从公共词典拆出的时区词典（只给登录页恢复页、邮件用，不进主 App 首屏），逐个登记
     # ro-zh、ro-ko 是 11-06 拆出的只读行词典（FA-2，只给按需下载的只读行部件用，不进首屏）；edit-zh、edit-ko 是三个编辑页共用的词典（11-11）；desk-zh、desk-ko 是电脑版布局词典（B6，只给按需下载的 DeskLayout 用）
     if rel in ("shared/i18n/zh.ts", "shared/i18n/ko.ts", "shared/i18n/tz-zh.ts", "shared/i18n/tz-ko.ts", "shared/i18n/ro-zh.ts", "shared/i18n/ro-ko.ts",
@@ -91,47 +98,16 @@ def a20_exempt(rel, text):
         return True
     if rel.startswith("tests/") or "/__tests__/" in rel:
         return True
-    if text.startswith(EXEMPT_HEADER) and rel.startswith(EXEMPT_HEADER_DIRS):
+    if rel.startswith(EXEMPT_HEADER_DIRS) and head().startswith(EXEMPT_HEADER):
         return True
     return False
 
 
-def strip_comments(src):
-    """去掉 // 和 /* */ 注释，保留字符串、模板字符串、JSX 文本；换行保留，行号不变。
-    简化：不识别正则字面量（项目里正则不写中文）。"""
-    out = []
-    i, n = 0, len(src)
-    quote = None
-    while i < n:
-        c = src[i]
-        if quote:
-            out.append(c)
-            if c == "\\" and i + 1 < n:
-                out.append(src[i + 1])
-                i += 2
-                continue
-            if c == quote:
-                quote = None
-            i += 1
-            continue
-        if c in "'\"`":
-            quote = c
-            out.append(c)
-            i += 1
-            continue
-        if src.startswith("//", i):
-            j = src.find("\n", i)
-            i = n if j < 0 else j
-            continue
-        if src.startswith("/*", i):
-            j = src.find("*/", i + 2)
-            j = n if j < 0 else j + 2
-            out.append("\n" * src.count("\n", i, j))
-            i = j
-            continue
-        out.append(c)
-        i += 1
-    return "".join(out)
+def stripped_code(root, rels):
+    """rel → 去掉注释的源码（check_backend_ast.mjs 按 TypeScript AST 把注释区间换成空格，和原文等长、换行不变；
+    正则、模板字符串、JSX 文本不会被误当成注释）。解析器出错的文件是 None"""
+    res = parse_sources([(rel, root / rel, False, None) for rel in rels])
+    return {rel: (None if v["parseError"] and not v["code"] else v["code"]) for rel, v in res.items()}
 
 
 def iter_files(root, top, exts):
@@ -172,24 +148,42 @@ def check_a14(root, errors):
                 errors.append(("A14", rel, line, "import.meta.env 不准用 [] 动态取值"))
 
 
-def check_a20(root, errors):
+def a20_files(root):
+    """A20 要查的文件（相对路径）：src、shared 下的 .ts / .tsx，去掉 .d.ts 和豁免的"""
+    out = []
     for top in ("src", "shared"):
         for p in iter_files(root, top, (".ts", ".tsx")):
             rel = p.relative_to(root).as_posix()
-            if rel.endswith(".d.ts"):
-                continue
-            text = p.read_text(encoding="utf-8")
-            if a20_exempt(rel, text):
-                continue
-            code = strip_comments(text)
-            for ln, line in enumerate(code.splitlines(), 1):
-                m = CJK.search(line)
-                if m:
-                    errors.append(("A20", rel, ln, f"字符串或 JSX 文本里有汉字或谚文：{line.strip()[:40]}"))
+            if not rel.endswith(".d.ts") and not a20_exempt(rel, lambda p=p: p.read_text(encoding="utf-8")[:len(EXEMPT_HEADER)]):
+                out.append(rel)
+    return out
+
+
+def a19_files(root):
+    """A19 要扫路径字面量的文件：src/sw 下除 routes.ts、__tests__ 以外的 .ts"""
+    return [rel for rel in (p.relative_to(root).as_posix() for p in iter_files(root, "src/sw", (".ts",)))
+            if rel != SW_ROUTES and "/__tests__/" not in rel]
+
+
+def unparsable(rule, rel, errors):
+    errors.append((rule, rel, 1, "TypeScript 解析器处理不了这个文件，去不了注释、没法核对：按可疑报"))
+
+
+def check_a20(root, errors, codes):
+    for rel in a20_files(root):
+        code = codes[rel]
+        if code is None:
+            unparsable("A20", rel, errors)
+            continue
+        for ln, line in enumerate(code.splitlines(), 1):
+            m = CJK.search(line)
+            if m:
+                errors.append(("A20", rel, ln, f"字符串或 JSX 文本里有汉字或谚文：{line.strip()[:40]}"))
 
 
 SW_PREFIXES_RE = re.compile(r"NETWORK_ONLY_PREFIXES\s*=\s*\[([^\]]*)\]")
 SW_REQUIRED = ("/sb", "/files")
+SW_ROUTES = "src/sw/routes.ts"
 # 字符串、模板字符串或正则字面量里以 /sb、/files 这一段开头（/sbx、/filesystem 不算）
 SW_PATH_LITERAL = re.compile(r"""['"`]/(sb|files)(?![A-Za-z0-9_-])|/\^?\\/(sb|files)(?![A-Za-z0-9_-])""")
 
@@ -198,26 +192,26 @@ def line_of(text, pos):
     return text.count("\n", 0, pos) + 1
 
 
-def check_a19(root, errors):
-    sw = root / "src" / "sw"
-    if not sw.exists():
+def check_a19(root, errors, codes):
+    if not (root / "src" / "sw").exists():
         return
-    routes = sw / "routes.ts"
-    if not routes.exists():
-        errors.append(("A19", "src/sw/routes.ts", 0, "缺 SW 的路由表 routes.ts（NETWORK_ONLY_PREFIXES）"))
+    if not (root / SW_ROUTES).exists():
+        errors.append(("A19", SW_ROUTES, 0, "缺 SW 的路由表 routes.ts（NETWORK_ONLY_PREFIXES）"))
+    elif codes[SW_ROUTES] is None:
+        unparsable("A19", SW_ROUTES, errors)
     else:
-        code = strip_comments(routes.read_text(encoding="utf-8"))
+        code = codes[SW_ROUTES]
         m = SW_PREFIXES_RE.search(code)
         listed = set(re.findall(r"""['"]([^'"]+)['"]""", m.group(1))) if m else set()
         for need in SW_REQUIRED:
             if need not in listed:
-                errors.append(("A19", "src/sw/routes.ts", line_of(code, m.start()) if m else 0,
+                errors.append(("A19", SW_ROUTES, line_of(code, m.start()) if m else 0,
                                f"NETWORK_ONLY_PREFIXES 里没有 '{need}'：{need}/* 必须只走网络、不进 Cache Storage"))
-    for p in iter_files(root, "src/sw", (".ts",)):
-        rel = p.relative_to(root).as_posix()
-        if rel == "src/sw/routes.ts" or "/__tests__/" in rel:
+    for rel in a19_files(root):
+        code = codes[rel]
+        if code is None:
+            unparsable("A19", rel, errors)
             continue
-        code = strip_comments(p.read_text(encoding="utf-8"))
         for m in SW_PATH_LITERAL.finditer(code):
             seg = m.group(1) or m.group(2)
             errors.append(("A19", rel, line_of(code, m.start()),
@@ -332,9 +326,9 @@ BIDI_BINARY_EXT = (
 
 
 def bidi_files(root):
-    """要扫的文件：git ls-files（已跟踪 + 未忽略的新文件）的全部文件，强制提交进 git 的 node_modules 也扫；
-    --root 指的目录不在 git 里、或 git 出错（自测的临时目录）就整棵树走一遍，这时才排除 node_modules 和 .git。
-    二进制不在这里排除，由 check_bidi 按“扩展名 + 含 NUL”判定"""
+    """要扫的文件 [(rel, 路径)]（BIDI、EMAIL、BINIMPORT 共用，main 只取一次）：git ls-files（已跟踪 + 未忽略的新文件）的全部文件，
+    强制提交进 git 的 node_modules 也扫；--root 指的目录不在 git 里、或 git 出错（自测的临时目录）就整棵树走一遍，
+    这时才排除 node_modules 和 .git。二进制不在这里排除，由 scan_texts 按“扩展名 + 含 NUL”判定"""
     try:
         out = subprocess.run(
             ["git", "-c", "core.quotepath=off", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
@@ -346,10 +340,7 @@ def bidi_files(root):
             rel for rel in (p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
             if not {"node_modules", ".git"} & set(rel.split("/"))
         )
-    for rel in rels:
-        p = root / rel
-        if p.is_file():
-            yield rel, p
+    return [(rel, root / rel) for rel in rels if (root / rel).is_file()]
 
 
 # 认得的文本扩展名（不在 BIDI_CODE_EXT 里但肯定是文本）：和代码文件一样无条件扫
@@ -410,18 +401,22 @@ def scan_texts(rel, p):
     return bidi_decode(data), code_file
 
 
-def check_bidi(root, errors):
+def scan_all(files):
+    """每个文件读一次、判一次二进制：[(rel, scan_texts 的结果)]，BIDI、EMAIL 共用"""
+    return [(rel, scan_texts(rel, p)) for rel, p in files]
+
+
+def check_bidi(scanned, errors):
     bs = chr(92)
-    for rel, p in bidi_files(root):
+    for rel, texts_or_none in scanned:
         # 文件名（相对路径）本身也扫：git diff、编辑器里显示的路径同样会被双向字符翻转
         for m in BIDI_RE.finditer(rel):
             if m.group(0) in BIDI_CHARS:
                 cp = ord(m.group(0))
                 errors.append(("BIDI", rel, 0, f"文件名里原样出现看不见的控制字符 U+{cp:04X}（Trojan Source 一类），要改名"))
-        scanned = scan_texts(rel, p)
-        if scanned is None:
+        if texts_or_none is None:
             continue
-        texts, code_file = scanned
+        texts, code_file = texts_or_none
         exempt = BIDI_EXEMPT.get(rel, {})
         # 多种解码的命中合并：同一（行号, 码位）取各解码里出现次数的最大值，同一处不重复报
         merged = {}
@@ -482,13 +477,13 @@ def email_hits(text):
     return hits
 
 
-def check_email(root, errors, warnings):
+def check_email(root, errors, warnings, scanned=None):
+    """scanned：scan_all 的结果（main 和 BIDI 共用一份）；单独调（测试）时自己扫"""
     still_pending = set()
-    for rel, p in bidi_files(root):
-        scanned = scan_texts(rel, p)
-        if scanned is None:
+    for rel, texts_or_none in scan_all(bidi_files(root)) if scanned is None else scanned:
+        if texts_or_none is None:
             continue
-        hits = set().union(*(email_hits(text) for text in scanned[0]))
+        hits = set().union(*(email_hits(text) for text in texts_or_none[0]))
         if rel in EMAIL_PENDING:
             if hits:
                 still_pending.add(rel)
@@ -509,8 +504,9 @@ BINIMPORT_EXT = BIDI_BINARY_EXT + (".node", ".so", ".dylib")
 BINIMPORT_SCRIPT = pathlib.Path(__file__).resolve().parent / "check_binimport.mjs"
 
 
-def check_binimport(root, errors):
-    files = [rel for rel, _ in bidi_files(root)]
+def check_binimport(root, errors, files=None):
+    """files：bidi_files 的结果（main 只取一次）；单独调（测试计时）时自己取。check_binimport.mjs 先按扩展名挑再读内容"""
+    files = [rel for rel, _ in (bidi_files(root) if files is None else files)]
     payload = json.dumps({"root": str(root), "binExt": list(BINIMPORT_EXT), "files": files}, ensure_ascii=False)
     r = subprocess.run(["node", str(BINIMPORT_SCRIPT)], input=payload.encode("utf-8"), capture_output=True, cwd=str(REPO_ROOT))
     if r.returncode != 0:
@@ -521,24 +517,40 @@ def check_binimport(root, errors):
 
 def main(argv=None):
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=str(REPO_ROOT))
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--today", help="自测用：YYYY-MM-DD，决定 W2 的“明年”")
+    ap.add_argument("--only", help=f"逗号分隔的规则名，只跑这几条：{','.join(RULES)}")
     args = ap.parse_args(argv)
+    only = set(RULES) if args.only is None else {r.strip() for r in args.only.split(",") if r.strip()}
+    if not only or only - set(RULES):
+        ap.error(f"--only 里有不认识的规则名：{','.join(sorted(only - set(RULES))) or '（空）'}；可选 {','.join(RULES)}")
     root = pathlib.Path(args.root).resolve()
     today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
 
     errors, warnings = [], []
-    check_a14(root, errors)
-    check_a20(root, errors)
-    check_a19(root, errors)
-    check_w2(root, warnings, today)
-    check_p142(root, errors)
-    check_a24_disable(root, errors)
-    check_bidi(root, errors)
-    check_email(root, errors, warnings)
-    check_binimport(root, errors)
+    # 文件清单（git ls-files）和文件内容各只取一次：A20、A19 的去注释源码一次送进 node；BIDI、EMAIL 共用一份读好的文本
+    codes = stripped_code(root, sorted(set(
+        (a20_files(root) if "A20" in only else [])
+        + ([SW_ROUTES, *a19_files(root)] if "A19" in only and (root / SW_ROUTES).exists() else []))))
+    files = bidi_files(root) if only & {"BIDI", "EMAIL", "BINIMPORT"} else []
+    scanned = scan_all(files) if only & {"BIDI", "EMAIL"} else []
+    steps = [
+        ("A14", lambda: check_a14(root, errors)),
+        ("A20", lambda: check_a20(root, errors, codes)),
+        ("A19", lambda: check_a19(root, errors, codes)),
+        ("W2", lambda: check_w2(root, warnings, today)),
+        ("P142", lambda: check_p142(root, errors)),
+        ("A24", lambda: check_a24_disable(root, errors)),
+        ("BIDI", lambda: check_bidi(scanned, errors)),
+        ("EMAIL", lambda: check_email(root, errors, warnings, scanned)),
+        ("BINIMPORT", lambda: check_binimport(root, errors, files)),
+    ]
+    for rule, run in steps:
+        if rule in only:
+            run()
 
     if args.json:
         as_dict = lambda r: {"rule": r[0], "file": r[1], "line": r[2], "message": r[3]}  # noqa: E731

@@ -2,21 +2,15 @@
 // 先核格式、不合格才判断像不像私钥 JWK（B2 代码审查复核 M1：真公钥里也可能恰好含 kty）。
 // 第一组按文本钉住两个工作流怎么调它（第三方审查 CI-8：原来是两份 shell 副本，这里逐字取出来跑）；其余直接用 bash 跑脚本的正反例，输出里不回显值。
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { stepNamed, workflowSteps } from './workflow-steps.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const SCRIPT = join(ROOT, 'build', 'ci', 'vapid-public-key.sh');
 const BASH = process.platform === 'win32' ? ['C:\\Program Files\\Git\\bin\\bash.exe'].find((p) => existsSync(p)) : 'bash';
-
-/** 工作流里名字以 prefix 开头的步骤，和它后面紧跟的一步（按 “      - ” 切；两个工作流里这两步都在同一个任务中间） */
-function stepPair(text: string, prefix: string): [string, string] {
-  const all = text.split(/\n(?= {6}- )/);
-  const i = all.findIndex((s) => s.startsWith(`      - name: ${prefix}`));
-  return [all[i] ?? '', all[i + 1] ?? ''];
-}
 
 const CASES = [
   { file: '.github/workflows/release-build.yml', vname: 'PROD_VAPID_PUBLIC_KEY', build: '构建（production 模式）', switchable: false },
@@ -24,15 +18,18 @@ const CASES = [
 ] as const;
 
 describe.each(CASES)('$file 调 build/ci/vapid-public-key.sh', ({ file, vname, build, switchable }) => {
-  const [st, next] = stepPair(readFileSync(join(ROOT, file), 'utf8'), 'VAPID 公钥核对');
+  const all = workflowSteps(readFileSync(join(ROOT, file), 'utf8'));
+  const { step, index } = stepNamed(all, 'VAPID 公钥核对');
+  const st = step?.text ?? '';
+  const next = all[index + 1];
   it(`排在“${build}”紧前面，不带 if、continue-on-error，变量取自 ${vname}，构建注入的是同一个变量`, () => {
     expect(st).not.toBe('');
-    expect(next.startsWith(`      - name: ${build}\n`)).toBe(true);
-    expect(st).not.toMatch(/^ {8}(if|continue-on-error):/m);
-    expect(st, '两步之间不许隔着别的任务').not.toMatch(/^ {2}\S/m);
+    expect(next?.name).toBe(build);
+    expect(step?.keys.filter((k) => /^(if|continue-on-error):/.test(k))).toEqual([]);
+    expect(next?.job, '两步要在同一个任务里').toBe(step?.job);
     expect(st).toContain(`VAPID_PUBLIC_KEY: \${{ vars.${vname} }}`);
     expect(st).toMatch(new RegExp(`^ {8}run: bash build/ci/vapid-public-key\\.sh ${vname}$`, 'm'));
-    expect(next).toContain(`VITE_PUBLIC_VAPID_KEY: \${{ vars.${vname} }}`);
+    expect(next?.text).toContain(`VITE_PUBLIC_VAPID_KEY: \${{ vars.${vname} }}`);
   });
   it(switchable ? '开关 VAPID_KEY_REQUIRED 是 true：变量为空就构建失败（11-03 起，改回 false 这条就报）' : '没有开关（不写 VAPID_KEY_REQUIRED，脚本默认为空就失败）', () => {
     if (switchable) expect(st).toMatch(/^ {10}VAPID_KEY_REQUIRED: 'true'$/m);
@@ -40,20 +37,17 @@ describe.each(CASES)('$file 调 build/ci/vapid-public-key.sh', ({ file, vname, b
   });
 });
 
-it('脚本开头 set -euo pipefail、export LC_ALL=C（字符区间按字节比较）', () => {
-  const code = readFileSync(SCRIPT, 'utf8').split('\n').filter((l) => l.trim() !== '' && !l.trim().startsWith('#'));
-  expect(code.slice(0, 2)).toEqual(['set -euo pipefail', 'export LC_ALL=C']);
-});
-
 // 假值：低熵的 x，不对应任何真钥匙
 const GOOD = 'BA' + 'x'.repeat(84) + 'A';
 
 describe.skipIf(!BASH).each(CASES)('$vname：脚本的正反例', ({ vname, switchable }) => {
   /** required 不给时不设 VAPID_KEY_REQUIRED（脚本默认 true，release-build 就是这样调的） */
-  const run = (value: string | undefined, required?: string) => {
+  const run = (value: string | undefined, required?: string, extra: NodeJS.ProcessEnv = {}) => {
     const d = mkdtempSync(join(tmpdir(), 'lemo-vapid-'));
     try {
-      const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, GITHUB_STEP_SUMMARY: join(d, 'summary.md') };
+      mkdirSync(join(d, 'summary-dir'));
+      const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, GITHUB_STEP_SUMMARY: join(d, 'summary.md'), ...extra };
+      if (env.GITHUB_STEP_SUMMARY === 'DIR') env.GITHUB_STEP_SUMMARY = join(d, 'summary-dir');
       if (required !== undefined) env.VAPID_KEY_REQUIRED = required;
       if (value !== undefined) env.VAPID_PUBLIC_KEY = value;
       const r = spawnSync(BASH ?? 'bash', ['--noprofile', '--norc', SCRIPT, vname], { cwd: d, encoding: 'utf8', env });
@@ -83,6 +77,29 @@ describe.skipIf(!BASH).each(CASES)('$vname：脚本的正反例', ({ vname, swit
         expect(w.out).toContain('::warning::');
       }
     }
+  });
+  it('开关写成 False、0、拼错、空串：都按必填，为空就失败（只有正好 false 才放宽，11-14 整块评审）', () => {
+    for (const sw of ['False', '0', 'flase', '', 'true']) {
+      const r = run('', sw);
+      expect(r.code, JSON.stringify(sw)).toBe(1);
+      expect(r.out).toContain(`${vname} 是空的`);
+    }
+  });
+  // 原来读脚本源码钉 set -euo pipefail、export LC_ALL=C 两行，换成看行为
+  it('出错就停（set -e）：摘要文件写不进去（GITHUB_STEP_SUMMARY 指到目录）时合格的值也失败，不当成通过', () => {
+    const r = run(GOOD, undefined, { GITHUB_STEP_SUMMARY: 'DIR' });
+    expect(r.code, r.out).not.toBe(0);
+  });
+  it('没写仓库变量名（-u、:? 守着）：失败退出、不往下跑', () => {
+    const r = spawnSync(BASH ?? 'bash', ['--noprofile', '--norc', SCRIPT], { encoding: 'utf8', env: { PATH: process.env.PATH, VAPID_PUBLIC_KEY: GOOD } });
+    expect(r.status).not.toBe(0);
+    expect(r.stdout + r.stderr).toContain('请写仓库变量名');
+  });
+  it('调用方的语言设置是 UTF-8 时（LC_ALL=C.UTF-8、LANG=en_US.UTF-8）长度照样按字节算、非 ASCII 字符照样不合格（脚本自己 export LC_ALL=C）', () => {
+    const v = 'BA' + 'x'.repeat(83) + 'éA';
+    const r = run(v, undefined, { LC_ALL: 'C.UTF-8', LANG: 'en_US.UTF-8' });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain(`现在 ${Buffer.byteLength(v)} 个字符`);
   });
   it('误填私钥 JWK（整串 JWK、只带引号、只带花括号、格式不合格又带 kty）：失败，提示私钥已暴露，不回显值', () => {
     const jwk = '{"kty":"EC","crv":"P-256","x":"' + 'x'.repeat(43) + '","y":"' + 'y'.repeat(43) + '","d":"' + 'z'.repeat(43) + '"}';

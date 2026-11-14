@@ -16,5 +16,6 @@ cd "${1:-$root/supabase/functions}"
 deno install --frozen
 mapfile -t entries < <(find . -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.mts' -o -name '*.cts' -o -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' \) -not -path '*/node_modules/*' | sort)
 if [ "${#entries[@]}" -eq 0 ]; then echo "::error::supabase/functions 下一个源码文件都没有（copy:shared 没跑？）"; exit 1; fi
-if ! find _shared/gen -name '*.ts' 2>/dev/null | grep -q .; then echo "::error::_shared/gen/ 是空的：先跑 npm run copy:shared"; exit 1; fi
+# 不用 find … | grep -q .：pipefail 下 grep 先退出、find 挨 SIGPIPE，文件一多就误报“是空的”（11-14 整块评审）；目录不存在时 find 出错、输出为空，照样报
+if [ -z "$(find _shared/gen -name '*.ts' -print -quit 2>/dev/null)" ]; then echo "::error::_shared/gen/ 是空的：先跑 npm run copy:shared"; exit 1; fi
 deno install --frozen --no-check --entrypoint "${entries[@]}"

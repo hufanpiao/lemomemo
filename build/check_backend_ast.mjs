@@ -22,6 +22,7 @@
 import ts from 'typescript';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { kindOf, stripComments, unwrapUp, walk } from './ts_ast.mjs';
 
 /** globalThis 的别名白名单：[supabase/functions 下的文件, 变量名]。只准 const 名 = globalThis as …，之后这个名字也只准跟 .标识符。
  *  10-29 核对现有源码只有这一处：objstore-net.ts 的计时器（由 build/copy_shared.mjs 从 shared/ 复制） */
@@ -45,15 +46,8 @@ const badEscape = (raw) => {
   }
   return null;
 };
-const kindOf = (p) => (/\.tsx$/.test(p) ? ts.ScriptKind.TSX : /\.jsx$/.test(p) ? ts.ScriptKind.JSX : /\.(c|m)?js$/.test(p) ? ts.ScriptKind.JS : ts.ScriptKind.TS);
 const isLit = (n) => !!n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n));
 const isName = (n, name) => !!n && ts.isIdentifier(n) && n.text === name;
-/** 跳过括号和类型断言（(x)、x as T、<T>x、x!、x satisfies T） */
-const unwrapUp = (n) => {
-  let p = n.parent;
-  while (p && (ts.isParenthesizedExpression(p) || ts.isAsExpression(p) || ts.isTypeAssertionExpression(p) || ts.isNonNullExpression(p) || ts.isSatisfiesExpression(p))) { n = p; p = n.parent; }
-  return n;
-};
 /** a.b（不带 ?.）里 node 是 a 时返回这个属性访问 */
 const dotAfter = (node) => {
   const p = node.parent;
@@ -168,11 +162,9 @@ function locateAccess(node) {
   const { chain, inner } = fnChain(node);
   const text = norm(node.getText(sf));
   let count = 0, idx = 0;
-  const walk = (n) => {
+  for (const n of walk(inner ?? sf)) {
     if (n.kind === node.kind && fnChain(n).inner === inner && norm(n.getText(sf)) === text) { count += 1; if (n === node) idx = count; }
-    ts.forEachChild(n, walk);
-  };
-  walk(inner ?? sf);
+  }
   return `${fileOf(node)}:${chain || '<顶层>'}#${idx}`;
 }
 
@@ -337,16 +329,8 @@ function analyse(path, rel, f7, fnRel, rules, program) {
   const sf = (program && program.getSourceFile(path)) || ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kindOf(path));
   const lineOf = (pos) => sf.getLineAndCharacterOfPosition(pos).line + 1;
 
-  // ---- 去注释：每个记号前面的 trivia 里，解析器认出的注释区间换成空格 ----
-  const out = text.split('');
-  const blank = (a, b) => { for (let k = a; k < b; k++) if (out[k] !== '\n' && out[k] !== '\r') out[k] = ' '; };
-  const strip = (node) => {
-    const start = node.getStart(sf, false);
-    for (const r of ts.getLeadingCommentRanges(text, node.pos) ?? []) if (r.end <= start) blank(r.pos, r.end);
-    for (const c of node.getChildren(sf)) strip(c);
-  };
-  strip(sf);
-  const code = out.join('');
+  // ---- 去注释：每个记号前面的 trivia 里，解析器认出的注释区间换成空格（build/ts_ast.mjs；check_arch.py 的 A20、A19 也用这份 code） ----
+  const code = stripComments(sf);
 
   const diags = sf.parseDiagnostics ?? [];
   const parseError = diags.length ? ts.flattenDiagnosticMessageText(diags[0].messageText, ' ') + `（第 ${lineOf(diags[0].start ?? 0)} 行）` : null;

@@ -3,10 +3,11 @@
 // 不引用 secrets、不 secrets: inherit、不要 id-token、不写仓库、不用 environment，action 一律钉 SHA。
 // 按文本逐行检查，不依赖 YAML 解析库（js-yaml 只是间接依赖）；下面另有合成样例证明拦得住。
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { runOf, workflowSteps as steps, type Step } from './workflow-steps.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const FILES = ['.github/workflows/desktop.yml', '.github/workflows/release-build.yml'];
@@ -135,34 +136,36 @@ jobs:
 });
 
 // upload-artifact 默认不传点开头的文件（include-hidden-files 默认 false），漏了也不报错：
-// 每个上传步骤的**上一步（同一任务内）**必须就是对同一个目录调 build/ci/no-hidden-files.sh（脚本的正反例在 ci-guard-scripts.test.ts）、
-// 不许 continue-on-error，条件（if）和上传步骤相同；也不许打开 include-hidden-files（工作流隐藏文件审查 M1、建议 1）
-type Step = { job: string; text: string; name: string; cond: string };
-/** 按任务切开再切步骤：任务是 jobs: 下面缩进 2 格的键，步骤是缩进 6 格的“- ” */
-function steps(text: string): Step[] {
-  const at = text.search(/^jobs:\s*$/m);
-  const body = at >= 0 ? text.slice(at) : text;
-  const out: Step[] = [];
-  for (const part of body.split(/\n(?= {2}[^\s#][^\n]*:[ \t]*\n)/)) {
-    const job = /^ {2}([^\s#][^:\n]*):/.exec(part)?.[1] ?? '';
-    for (const s of part.split(/\n(?= {6}- )/).filter((x) => x.startsWith('      - '))) {
-      out.push({ job, text: s, name: /- name: (.*)/.exec(s)?.[1] ?? '', cond: /^ {8}if: (.*)$/m.exec(s)?.[1] ?? '' });
-    }
-  }
-  return out;
+// 每个上传步骤的**上一步（同一任务内）**必须就是对同样的路径调 build/ci/no-hidden-files.sh（脚本的正反例在 ci-guard-scripts.test.ts）、
+// 不许 continue-on-error，条件（if）和上传步骤相同；也不许打开 include-hidden-files（工作流隐藏文件审查 M1、建议 1）。
+// path 可以是一行，也可以是 path: | 的多行（每一行都要在检查的参数里，顺序不管）；检查带 --allow-missing 的，上传必须是 if-no-files-found: ignore
+// （11-14 整块评审：原来只核 desktop、release-build、ai-eval 三份，ci.yml 两处、deploy-preview.yml 一处上传前没查）
+const WORKFLOWS = readdirSync(join(ROOT, '.github/workflows')).filter((f) => /\.ya?ml$/.test(f)).map((f) => `.github/workflows/${f}`);
+/** 上传步骤 with: 里 path 的各项（去掉末尾的 /） */
+function uploadPaths(st: Step): string[] {
+  const at = st.lines.findIndex((l) => /^ {10}path:/.test(l));
+  if (at < 0) return [];
+  const head = (st.lines[at] ?? '').replace(/^ {10}path:\s*/, '');
+  const items = /^[|>][-+]?$/.test(head) ? st.lines.slice(at + 1).filter((l) => /^ {12}\S/.test(l)).map((l) => l.trim()) : [head];
+  return items.map((p) => p.replace(/\/$/, ''));
 }
 function checkUploads(text: string): string[] {
   const problems: string[] = [];
   const all = steps(text);
   all.forEach((st, i) => {
     if (!/uses: actions\/upload-artifact@/.test(st.text)) return;
-    if (/include-hidden-files/.test(st.text)) problems.push(`${st.name}：不要打开 include-hidden-files`);
-    const path = /^ {10}path: (\S+?)\/?$/m.exec(st.text)?.[1];
-    if (!path) return void problems.push(`${st.name}：没有 path`);
+    if (/include-hidden-files:\s*true/.test(st.text)) problems.push(`${st.name}：不要打开 include-hidden-files`);
+    const paths = uploadPaths(st);
+    if (!paths.length) return void problems.push(`${st.name}：没有 path`);
     const g = all[i - 1];
-    if (!g || g.job !== st.job || !g.text.split('\n').includes(`        run: bash build/ci/no-hidden-files.sh ${path}`)) {
-      return void problems.push(`${st.name}：上一步（同一任务内）不是对 ${path} 调 build/ci/no-hidden-files.sh`);
+    const m = g && g.job === st.job ? /^bash build\/ci\/no-hidden-files\.sh((?: \S+)+)$/.exec(runOf(g)) : null;
+    const args = (m?.[1] ?? '').trim().split(' ').filter(Boolean);
+    const allowMissing = args[0] === '--allow-missing';
+    const checked = (allowMissing ? args.slice(1) : args).map((p) => p.replace(/\/$/, ''));
+    if (!m || [...checked].sort().join(' ') !== [...paths].sort().join(' ')) {
+      return void problems.push(`${st.name}：上一步（同一任务内）不是对 ${paths.join(' ')} 调 build/ci/no-hidden-files.sh`);
     }
+    if (allowMissing && !/^ {10}if-no-files-found: ignore$/m.test(st.text)) problems.push(`${st.name}：检查带 --allow-missing，上传就要 if-no-files-found: ignore`);
     if (/continue-on-error/.test(g.text)) problems.push(`${st.name}：查点开头文件那一步不许 continue-on-error`);
     if (g.cond !== st.cond) problems.push(`${st.name}：查点开头文件那一步的条件（${g.cond || '无'}）和上传的（${st.cond || '无'}）不一样`);
   });
@@ -170,7 +173,10 @@ function checkUploads(text: string): string[] {
 }
 
 describe('上传产物前查点开头的文件（upload-artifact 默认不传它们）', () => {
-  for (const f of FILES) {
+  it('所有工作流都核（原来漏的 ci.yml、deploy-preview.yml 都在里面）', () => {
+    expect(WORKFLOWS).toEqual(expect.arrayContaining(['.github/workflows/ci.yml', '.github/workflows/deploy-preview.yml', '.github/workflows/ai-eval.yml']));
+  });
+  for (const f of WORKFLOWS.filter((w) => readFileSync(join(ROOT, w), 'utf8').includes('upload-artifact@'))) {
     it(`${f}：每个上传步骤的上一步都是对应的检查`, () => {
       const t = readFileSync(join(ROOT, f), 'utf8');
       expect(steps(t).filter((s) => s.text.includes('upload-artifact@')).length).toBeGreaterThan(0);
@@ -191,6 +197,21 @@ describe('上传产物前查点开头的文件（upload-artifact 默认不传它
     expect(checkUploads(wf(job('a', up()))).join()).toMatch(/不是对 out 调/);
     expect(checkUploads(wf(job('a', guard("a == 'b'") + up()))).join()).toMatch(/条件/);
     expect(checkUploads(wf(job('a', `${guard()}${up()}          include-hidden-files: true\n`))).join()).toMatch(/include-hidden-files/);
+  });
+  const multi = (guardArgs: string, ignore = false) =>
+    wf(
+      job(
+        'a',
+        guard('', '', guardArgs) +
+          '      - name: 上传\n        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2\n' +
+          `        with:\n          name: x\n          path: |\n            a/\n            b/c\n${ignore ? '          if-no-files-found: ignore\n' : ''}`,
+      ),
+    );
+  it('合成样例：多行 path: | 每一项都查到（顺序不管）的通过；漏一项、--allow-missing 却没写 if-no-files-found: ignore 的拦下', () => {
+    expect(checkUploads(multi('b/c a'))).toEqual([]);
+    expect(checkUploads(multi('--allow-missing a/ b/c', true))).toEqual([]);
+    expect(checkUploads(multi('a')).join()).toMatch(/不是对 a b\/c 调/);
+    expect(checkUploads(multi('--allow-missing a b/c')).join()).toMatch(/if-no-files-found: ignore/);
   });
   it('合成样例：检查和上传中间夹一步、检查在别的任务里、查的是别的目录、带 continue-on-error、自己写一份 find 不调脚本的拦下（M1、CI-8）', () => {
     expect(checkUploads(wf(job('a', guard() + other + up()))).join()).toMatch(/上一步（同一任务内）不是/);

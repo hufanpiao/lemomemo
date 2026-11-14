@@ -169,6 +169,12 @@ jobs:
         shell: bash
         run: python3 -I build/ci/dist_hash.py dist/web | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: 产物里去掉 supabase/functions/.env.example（本机填环境变量的示例；upload-artifact 本来就不传点开头的文件，部署内容不变）
+        run: rm -f supabase/functions/.env.example
+
+      - name: 要上传的 dist/web、supabase 里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉）
+        run: bash build/ci/no-hidden-files.sh dist/web/ supabase/
+
       - name: 上传产物
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

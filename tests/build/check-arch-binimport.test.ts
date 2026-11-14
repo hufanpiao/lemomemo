@@ -261,6 +261,41 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
     expect(binimport(repo({ 'lib/read.mjs': body })).errors).toEqual([]);
   });
 
+  it('11-14 整块评审：字符串拼接、模板里的字面量插值、加载函数的别名、方括号属性名、Reflect.apply / construct → 都报（原来都是 0 报错）', () => {
+    const body = lines(
+      "require('./p.pn' + 'g');", // 1 两边都是字符串：折叠成 ./p.png
+      "require(`./t.bi${'n'}`);", // 2 模板里的字面量代回去
+      "const r = require; r('./q.bin');", // 3 require 的别名
+      "let e2; e2 = eval; e2(readFileSync('./s.wasm', 'utf8'));", // 4 赋值得到的 eval 别名
+      "const { require: rq } = module; rq('./u.bin');", // 5 解构改名
+      "const r2 = r; r2('./v.png');", // 6 别名的别名
+      "globalThis['require']('./w.bin');", // 7 方括号键是字面量
+      "Reflect.apply(require, null, ['./x.png']);", // 8
+      "Reflect.construct(Worker, ['./y.bin']);", // 9
+      "require['call'](null, './z.png');", // 10
+      "require('./a' + ('.p' + 'ng'));", // 11 嵌套拼接
+      '',
+    );
+    const { errors } = binimport(repo({ 'lib/bypass.cjs': body }));
+    expect(where(errors)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((n) => `lib/bypass.cjs:${n}`));
+    expect(errors[0]?.message).toContain('./p.png');
+    expect(errors[2]?.message).toContain('require 的别名');
+    expect(errors[7]?.message).toContain('Reflect.apply(require()');
+  });
+
+  it('11-14 对照：拼出来不是二进制扩展名的、普通函数拿 require 当参数、Reflect.apply 别的函数、变量间接传路径（剩余风险，静态堵不住）→ 不报', () => {
+    const body = lines(
+      "require('./x.png' + '.js');", // 折叠后是 ./x.png.js
+      "require(`./a${'.png'}.js`);",
+      "const log = (f) => f; log(require); log('./b.png');",
+      "Reflect.apply(fmt, null, ['./c.png']);",
+      "const p = './d.bin'; require(p);", // 剩余风险：变量间接（文件头写明）
+      "const o = { r: 1 }; o['r']('./e.png');",
+      '',
+    );
+    expect(binimport(repo({ 'lib/ok.cjs': body })).errors).toEqual([]);
+  });
+
   it('真仓库：BINIMPORT 0 个错误', { timeout: 60_000 }, () => {
     expect(binimport(ROOT).errors).toEqual([]);
   });

@@ -1,5 +1,6 @@
 // LINT-binimport（build/check_arch.py BINIMPORT，实现在 build/check_binimport.mjs）：②非 JS 入口里“命令 + 二进制扩展名路径”
-// 扫的入口（11-14 CI-10 按本仓库实际调 node、python、pwsh 的几处收窄）：package.json 根对象的 scripts、.yml / .yaml 的 run:、
+// 扫的入口（11-14 CI-10 按本仓库实际调 node、python、pwsh 的几处收窄；同日整块评审补上根目录 deno.json / deno.jsonc 的 tasks、
+// JS/TS 里属性名是 command 的字符串）：package.json 根对象的 scripts、.yml / .yaml 的 run:、
 // .sh / .bash、.ps1 / .psm1、.html 的 <script src>。不再扫（仓库里没有，或不是从这几处调解释器）：Makefile、.py 的 os.system、
 // .bat / .cmd、无扩展名的 shebang 脚本和 .husky、.vue / .svelte、GitLab 式 script: / before_script: / command: 列表——以后加了这类入口要在 mjs 里补。
 // 原 check-arch-binimport-source.test.ts（点号 source、反斜杠续行）11-14 并进本文件
@@ -228,5 +229,33 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
     const { errors } = binimport(repo({ 'build/a.sh': sh, 'package.json': pkg, '.github/workflows/a.yml': yml }));
     expect(where(errors).sort()).toEqual(['build/a.sh:11', 'build/a.sh:6', 'build/a.sh:8', 'package.json:3', 'package.json:5'].sort());
     expect(errors.find((e) => e.file === 'build/a.sh' && e.line === 8)?.message).toContain('a b.png');
+  });
+});
+
+describe('11-14 整块评审：根目录 deno.json / deno.jsonc 的 tasks、JS/TS 里属性名是 command 的字符串（原来不扫）', () => {
+  it('deno.json 的 tasks（字符串、{ command }）、deno.jsonc（注释、尾逗号）→ 报；子目录的 deno.json、执行 .ts 的不报', () => {
+    // { command } 对象用 fromEntries 拼：直接写 command: '…' 本文件自己就会被真仓库那条用例报出来
+    const task = Object.fromEntries([['command', 'node tools/y.bin'], ['description', 'x']]);
+    const deno = JSON.stringify({ tasks: { a: 'deno run ./x.png', b: task, c: 'deno run tools/ok.ts' } }, null, 2);
+    const jsonc = lines('{', '  // 注释', '  "tasks": {', '    "d": "python3 tools/z.bin",', '  },', '}', '');
+    const { errors } = binimport(repo({ 'deno.json': deno, 'sub/deno.json': deno }));
+    expect(where(errors).sort()).toEqual(['deno.json:3', 'deno.json:4']);
+    expect(errors[0]?.message).toContain('命令 deno');
+    expect(where(binimport(repo({ 'deno.jsonc': jsonc })).errors)).toEqual(['deno.jsonc:4']);
+  });
+
+  it('playwright 式的 webServer.command（普通字符串、模板、引号键）→ 报；不是 command 键、执行 .ts 的不报', () => {
+    const cfg = lines(
+      'export default {',
+      "  webServer: [{ command: 'node tests/e2e/fake.png' },", // 2
+      '    { command: `npm run build && node ${dir}/serve.bin --port ${PORT}` },', // 3
+      "    { 'command': 'python3 x.bin' },", // 4
+      "    { command: 'node tests/e2e/fake-backends.ts', name: 'node a.png' }],", // 5 不报
+      '};',
+      '',
+    );
+    const { errors } = binimport(repo({ 'playwright.config.ts': cfg }));
+    expect(where(errors)).toEqual(['playwright.config.ts:2', 'playwright.config.ts:3', 'playwright.config.ts:4']);
+    expect(errors[1]?.message).toContain('serve.bin');
   });
 });

@@ -231,6 +231,10 @@ jobs:
             exit 1
           fi
 
+      - name: 要上传的 db.types.ts 不是点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉；没生成就跳过）
+        if: failure()
+        run: bash build/ci/no-hidden-files.sh --allow-missing ${{ runner.temp }}/db-types/db.types.ts
+
       - name: 类型对不上时上传生成的 db.types.ts（只是由迁移生成的类型，不含任何密钥）
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -426,6 +430,10 @@ jobs:
         # 前一组红了也照跑（第三方审查 CI-2）：一次推送看全几组的失败，不用来回推；默认组那一步没跑到（前面装环境就失败）时才跳过
         if: ${{ !cancelled() && steps.e2e.conclusion != 'skipped' }}
         run: npm run e2e:visual -- --project=chromium-tabbar-lock --project=chromium-b2uib-lock
+
+      - name: 要上传的报告目录里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉；没跑到的组没有目录，跳过）
+        if: failure()
+        run: bash build/ci/no-hidden-files.sh --allow-missing playwright-report/ playwright-report-fastread/ playwright-report-visual/ test-results-visual/
 
       - name: 失败时上传报告（只有本地测试数据，不含任何密钥）
         if: failure()

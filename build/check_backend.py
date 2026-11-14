@@ -180,7 +180,15 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import check_fn_redefs  # noqa: E402  M7：迁移里整段重写的函数不丢上一版的 delete 和表名（安全审查第 9 条）
-from check_arch import strip_comments  # noqa: E402  去掉 // 和 /* */，行号不变；只给 import map 的 JSON 用，源码一律走 check_backend_ast.mjs（AST）
+
+
+# 只给 import map 的 JSON（deno.jsonc 这类）去 // 和 /* */ 注释，行号不变；JSON 里只有双引号字符串，没有正则和模板，一条正则就够。
+# 源码一律走 check_backend_ast.mjs（AST）；11-14 起 check_arch.py 的手写词法器 strip_comments 删了，A20、A19 也改用 AST 的去注释输出
+JSON_COMMENT_RE = re.compile(r'"(?:\\.|[^"\\])*"|//[^\n]*|/\*.*?\*/', re.S)
+
+
+def strip_json_comments(text):
+    return JSON_COMMENT_RE.sub(lambda m: m.group(0) if m.group(0)[0] == '"' else "\n" * m.group(0).count("\n"), text)
 
 # 架构 6.2 末尾越界检查白名单（唯一出处）；6.2 表格、8.4 FN_VAULT_DB_URL 一行：fn_vault 的连接串只给这三个函数
 VAULT_FUNCS = frozenset({"vault", "vault-file", "account"})
@@ -321,7 +329,7 @@ def load_import_maps(root, errors):
             errors.append(("F7", rel, 1, "import map 文件不存在（config.toml 或 deno.json 指过去的），没法确认别名指到哪儿"))
             continue
         try:
-            data = json.loads(strip_comments(p.read_text(encoding="utf-8")))
+            data = json.loads(strip_json_comments(p.read_text(encoding="utf-8")))
             if not isinstance(data, dict):
                 raise ValueError("顶层不是对象")
         except ValueError as e:
