@@ -1,4 +1,5 @@
 // vault 的隐私记读写、永久删除、移进移出（B5 任务单 S5、S7；TC-B5-08、48 ④⑤、TC-B0-75 vault 移出写回 images 的契约）。
+// 带文档附件的移进移出（B4b-1）在 vault-move-files.test.ts。
 import { describe, expect, it } from 'vitest';
 import { aesKeyFor, openNote } from '../../supabase/functions/_shared/vault-crypto.ts';
 import { signVaultToken } from '../../supabase/functions/_shared/vault-token.ts';
@@ -171,10 +172,8 @@ describe('移进、移出（TC-B5-08、TC-B0-75）', () => {
     expect(w.r2.keys('images')).toEqual([]);
   });
 
-  it('带附件回 has_files；不是本人的回 not_found；不带令牌拒', async () => {
+  it('不是本人的回 not_found；不带令牌拒', async () => {
     const { w, tok } = await setupPlain();
-    w.db.s.files.set(uuid(9), { user_id: A, note_id: N1 });
-    expect((await call(w, { action: 'import', note_id: N1 }, { token: tok })).body.error).toBe('has_files');
     expect((await call(w, { action: 'import', note_id: uuid(8) }, { token: tok })).body.error).toBe('not_found');
     expect((await call(w, { action: 'import', note_id: N1 })).body.error).toBe('vault_locked');
     expect(w.r2.puts).toEqual([]);

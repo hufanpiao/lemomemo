@@ -8,10 +8,12 @@
 // • 分类胶囊：全部 + 有条目的分类和条数（按条数多的在前，一样的按分类的 sort、名字）；条目的分类顺着 merged_into 归到留下的那个
 // • 分类色点（视觉稿第 1322、1341 行，6px）：颜色取 categories.color（架构：小写 #rrggbb，或皮肤令牌名）；
 //   令牌名只认皮肤里有的项目色 p1～p6（画深色那一档 --pNs），别的认不出、没设颜色的不画点
+// • 附件（B4b-1）：只数个数，列表行尾、卡片底部标“附件 N”（线框 sAtt 第三张）
 // • 插图（S3，视觉稿 PH.mason）：卡片顶部放第一张（按 id 排，id 是 UUID v7、按插入先后），右上角“+N”是另外还有几张
 // 纯 TS：不准 import React（A1）
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
+import { isShownFile } from '../../../../shared/logic/files/shown-file.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
 import { categoryNames, categoryResolver, type Row } from '../../../core/categories.ts';
@@ -36,6 +38,8 @@ export interface NoteItem {
   cover: NoteImage | null;
   /** 一共几张插图 */
   images: number;
+  /** 一共几个附件（B4b-1，线框 sAtt“附件 N”；图片不算） */
+  files: number;
 }
 
 /** 一张插图（note_images 一行里界面要的） */
@@ -110,11 +114,23 @@ export function imagesByNote(images: readonly Row[]): Map<string, NoteImage[]> {
   return out;
 }
 
+/** 每条随手记的附件个数（note_files；口径同附件区列表：isShownFile；只数个数，不看内容） */
+export function fileCounts(files: readonly Row[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const r of files) {
+    if (!isShownFile(r)) continue;
+    const noteId = str(r['note_id']);
+    if (noteId !== '') out.set(noteId, (out.get(noteId) ?? 0) + 1);
+  }
+  return out;
+}
+
 /** 列表要的条目（已筛掉删了的、隐私记），最近记的在前；category 不为 null 时只留这个分类的 */
-export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: Tz, category: string | null = null, images: readonly Row[] = []): NoteItem[] {
+export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: Tz, category: string | null = null, images: readonly Row[] = [], files: readonly Row[] = []): NoteItem[] {
   const names = categoryNames(categories);
   const target = categoryResolver(categories);
   const pics = imagesByNote(images);
+  const nFiles = fileCounts(files);
   const colors = categoryColors(categories);
   const out: NoteItem[] = [];
   for (const r of rows) {
@@ -134,6 +150,7 @@ export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: 
       date: todayOf(createdAt, tz),
       cover: pics.get(r.id)?.[0] ?? null,
       images: pics.get(r.id)?.length ?? 0,
+      files: nFiles.get(r.id) ?? 0,
     });
   }
   return out.sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

@@ -21,7 +21,7 @@ export const VAULT_ERROR_CODES = [
   'webauthn_failed',       // 403  WebAuthn 校验没过（origin、RP ID、签名、sign_count、挑战过期或用过、不认识的凭据）
   'webauthn_unavailable',  // 400  这个来源不能用 WebAuthn（exe 的 tauri.localhost 等，R-105）
   'not_found',             // 404  隐私记、图片、凭据不存在或不是本人的
-  'has_files',             // 409  带文档附件的随手记暂时不能移进、移出隐私记（代定 D13，B4b-1 放开）
+  'has_files',             // 409  历史码：B5 时带文档附件的随手记不能移进、移出（代定 D13）；B4b-1 起附件跟着加密搬家，服务器不再返回，留着让旧客户端的分支编译得过
   'too_large',             // 413  图片超过 2 MB、正文超长
   'bad_image',             // 415  不是 webp（文件头不是 RIFF????WEBP）
   'rate_limited',          // 429  每人每分钟 60 次（vault-image 30 次）；交接设备行另见 account

@@ -155,6 +155,8 @@ export function checkPreload(appDir, manifest = readManifest(appDir)) {
   for (const name of readdirSync(assets)) {
     if (!name.endsWith('.js')) continue;
     const host = `assets/${name}`;
+    // 不在这份 manifest 里的块是别的构建写进同一目录的（附件预览沙箱 vite.preview.config.ts 单独打包，它的预加载表不归 App 的去重管）
+    if (!g.has(host)) continue;
     const code = readFileSync(resolve(assets, name), 'utf8');
     if (!code.includes('__vite__mapDeps(')) continue;
     for (const { target, deps } of mapDepsCalls(code, host)) {

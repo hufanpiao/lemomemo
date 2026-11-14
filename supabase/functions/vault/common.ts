@@ -46,6 +46,11 @@ export interface VaultRules {
   challengeTtlS: number;
   rpId: string;
   imageKey(userId: string, noteId: string, imageId: string, part: 'full' | 'thumb'): string;
+  /** 附件的对象键（shared/logic/files/media-path.ts，files、vault-files 两个桶同一个拼法；B4b-1 移进移出带附件） */
+  fileKey(userId: string, noteId: string, fileId: string, kind: string): string;
+  fileThumbKey(userId: string, noteId: string, fileId: string): string;
+  /** kind → MIME（清单 attachments.ts 的 DOC_TYPES；移出时写回 files 桶要显式带 contentType） */
+  docMime(kind: string): string;
 }
 
 /** 三把钥匙（index.ts 用 decodeKey32 解；解不出就是 null） */
@@ -71,6 +76,16 @@ export interface ImageRow {
   id: Uuid; note_id: Uuid; bucket: 'images' | 'vault-images'; has_thumb: boolean; width: number | null; height: number | null;
   bytes: number; deleted_at: number | null;
 }
+/** 一条随手记的一个文档附件（移进移出用到的列；B4b-1）。普通的 name、text_excerpt 是明文、sha256 是明文哈希；隐私记的只有密文列、sha256 是 HMAC */
+export interface FileRow {
+  id: Uuid; note_id: Uuid; kind: string; has_thumb: boolean; is_vault: boolean; check_status: string; deleted_at: number | null;
+  sha256: string; name: string | null; text_excerpt: string | null;
+  name_enc: Uint8Array | null; text_enc: Uint8Array | null; dek_enc: Uint8Array | null; enc_key_id: number | null;
+}
+/** 移进：一行附件改成隐私记的样子（明文列清空、AI 描述清空、密文列写入、sha256 换成 HMAC） */
+export interface FileToVault { sha256: string; name_enc: Uint8Array; text_enc: Uint8Array | null; dek_enc: Uint8Array; enc_key_id: number }
+/** 移出：写回明文列、sha256 换回明文哈希，密文列清空 */
+export interface FileToPlain { sha256: string; name: string; text_excerpt: string | null }
 
 /** 一个按用户开的事务（app.uid = 本人；RLS 只放本人的行）。出错就抛，整个事务回滚 */
 export interface VaultTx {
@@ -108,14 +123,19 @@ export interface VaultTx {
   removeVaultImages(noteId: Uuid, ids: readonly Uuid[], at: number): Promise<ImageRow[]>;
   /** private.purge_vault_impl：只删本人已软删的隐私记 */
   purge(ids: readonly Uuid[]): Promise<number>;
-  hasFiles(noteId: Uuid): Promise<boolean>;
+  /** 这条随手记的全部附件行（含已删），按 id 排（B4b-1：移进移出带附件，取代原来的 hasFiles） */
+  filesOf(noteId: Uuid): Promise<FileRow[]>;
+  /** 只改本人、普通的那一行；0 行回 false */
+  fileToVault(id: Uuid, p: FileToVault, updatedAt: number): Promise<boolean>;
+  /** 只改本人、隐私记的那一行（check_status 保持原样）；0 行回 false */
+  fileToPlain(id: Uuid, p: FileToPlain, updatedAt: number): Promise<boolean>;
   /** 移进：同一条 update 写密文、清明文残留，is_private = true；只改没删的普通随手记，0 行回 false */
   toVault(id: Uuid, bodyEnc: Uint8Array, encKeyId: number, updatedAt: number): Promise<boolean>;
   /** 移出：写回明文，is_private = false、body_enc 清空；只改没删的隐私记，0 行回 false */
   toPlain(id: Uuid, title: string | null, body: string, updatedAt: number): Promise<boolean>;
   /** 这条的图片行换桶（vault-images 清 taken_at、ai_desc、ai_tags） */
   moveImages(noteId: Uuid, to: 'images' | 'vault-images'): Promise<void>;
-  /** 删这条和它图片的旧向量、vault_ai（触发器按新身份重新入队） */
+  /** 删这条和它图片、附件的旧向量、vault_ai（触发器按新身份重新入队） */
   dropVectors(noteId: Uuid): Promise<void>;
 }
 
@@ -185,7 +205,7 @@ export const out = (body: Record<string, unknown>, epoch: number | null): Out =>
 
 export type VaultErrCode =
   | 'vault_locked' | 'vault_relock' | 'not_set' | 'already_set' | 'bad_pin' | 'pin_wrong' | 'pin_locked' | 'reauth_required'
-  | 'webauthn_failed' | 'webauthn_unavailable' | 'not_found' | 'has_files' | 'too_large' | 'bad_image' | 'rate_limited' | 'try_later'
+  | 'webauthn_failed' | 'webauthn_unavailable' | 'not_found' | 'too_large' | 'bad_image' | 'rate_limited' | 'try_later'
   | 'bad_request' | 'method_not_allowed';
 export const err = errorResponder<VaultErrCode>();
 

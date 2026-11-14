@@ -13,7 +13,8 @@ type Same<X, Y> = [X] extends [Y] ? ([Y] extends [X] ? true : false) : false;
 const sameReq: Same<VaultReq, VaultRequest> = true;
 // 函数回的 vault 自己的码都在 schema 的表里（另有各函数共用的 bad_request、method_not_allowed）
 type Own = Exclude<VaultErrCode, 'bad_request' | 'method_not_allowed'>;
-const ownInSchema: Same<Own, (typeof VAULT_ERROR_CODES)[number]> = true;
+// has_files 是历史码（B4b-1 起附件跟着搬家，服务器不再返回；schema 留着让旧客户端分支编译得过）
+const ownInSchema: Same<Own, Exclude<(typeof VAULT_ERROR_CODES)[number], 'has_files'>> = true;
 
 describe('类型和 schema 一致', () => {
   it('VaultReq ⇔ vaultRequest、错误码 ⇔ VAULT_ERROR_CODES', () => {

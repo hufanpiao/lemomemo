@@ -1,4 +1,4 @@
-// Playwright 快读组（B2 FA-6 ①，安全审查 L5）：带 supabase 地址的 e2e 构建，跑 tests/e2e/b2-first-screen-supabase.spec.ts、r402-webp-wasm.spec.ts 和 b5-vault.spec.ts（B5 隐私记，同样要 /sb 地址）
+// Playwright 快读组（B2 FA-6 ①，安全审查 L5）：带 supabase 地址的 e2e 构建，跑 tests/e2e/b2-first-screen-supabase.spec.ts、r402-webp-wasm.spec.ts 、b5-vault.spec.ts（B5 隐私记，同样要 /sb 地址）和 b4b1-attachments.spec.ts（B4b-1 附件，签名要会话令牌）
 // 默认的假后端组（playwright.config.ts）构建时没配 VITE_PUBLIC_SUPABASE_URL，启动关口的快读分支跑不到；这一组把地址配成同源 /sb、
 // anon key 用假值 FAKE_ANON_KEY（tests/e2e/fake-values.ts，一看就是假的，不是密钥），验证：
 // • 关口走快读（两张表各一次、带 apikey 和 Bearer、只发往同源 /sb）；• supabase-js 那一块在今天页画出来以后才下载
@@ -31,7 +31,7 @@ const BINDINGS = Object.entries(e2eBindings(FAKE))
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  testMatch: ['**/b2-first-screen-supabase.spec.ts', '**/r402-webp-wasm.spec.ts', '**/b5-vault.spec.ts'],
+  testMatch: ['**/b2-first-screen-supabase.spec.ts', '**/r402-webp-wasm.spec.ts', '**/b5-vault.spec.ts', '**/b4b1-attachments.spec.ts'],
   fullyParallel: true,
   globalTimeout: globalTimeoutMs(process.env, NO_BACKEND_GLOBAL_TIMEOUT_MS),
   globalSetup: './tests/e2e/dist-fingerprint.ts',

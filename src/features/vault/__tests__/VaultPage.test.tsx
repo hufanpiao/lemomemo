@@ -47,6 +47,11 @@ function session(o: { offline?: boolean; purge?: () => void } = {}): VaultSessio
     },
     imageGet: async () => ({ ok: true, value: new Blob(['x']) }),
     imageUpload: async () => ({ ok: true, value: true }),
+    // 附件（vault-file）这里用不到
+    fileCall: async () => ({ ok: false, code: 'unknown' }),
+    fileGet: async () => ({ ok: false, code: 'unknown' }),
+    fileUpload: async () => ({ ok: false, code: 'unknown' }),
+    fileEnd: () => undefined,
   };
   return createVaultSession({ api, onToken: () => undefined, createUrl: () => 'blob:x', revokeUrl: () => undefined });
 }

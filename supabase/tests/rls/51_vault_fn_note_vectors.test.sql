@@ -1,6 +1,7 @@
--- 迁移 20261114230000_vault_fn_grants.sql：fn_vault 对 private.note_vectors 的列级 select (user_id, note_id, image_id)（B5 隐私记 store-it 真库实测）
+-- 迁移 20261114230000_vault_fn_grants.sql：fn_vault 对 private.note_vectors 的列级 select (user_id, note_id, image_id)（B5 隐私记 store-it 真库实测）；
+--   20261115010000 再加 file_id（B4b-1 移进移出带附件，详见 56_vault_file.test.sql）
 -- 覆盖：
---   ① 授权形状：fn_vault 在 note_vectors 上的列级 select 正好是这三列，没有表级 select，embedding、content_hash 读不到；
+--   ① 授权形状：fn_vault 在 note_vectors 上的列级 select 正好是这四列，没有表级 select，embedding、content_hash 读不到；
 --   ② vault 函数移进移出时 dropVectors 那句 delete（where 引用 user_id、note_id、image_id）以 fn_vault 跑得通，删掉本人这条的向量；
 --   ③ RLS 照旧：同一句 where 指着 B 的随手记，A 的事务里删 0 行，B 的向量还在；app.uid 没设时一行都删不到。
 -- 用户：A、B（tests.seed）
@@ -26,7 +27,7 @@ insert into private.note_vectors (user_id, kind, source_id, note_id, image_id, m
 -- ===== ① 授权形状 =====
 select is((select string_agg(column_name, ',' order by column_name) from information_schema.column_privileges
   where grantee = 'fn_vault' and table_schema = 'private' and table_name = 'note_vectors' and privilege_type = 'SELECT'),
-  'image_id,note_id,user_id', 'fn_vault 在 note_vectors 上的列级 select 正好是 user_id、note_id、image_id');
+  'file_id,image_id,note_id,user_id', 'fn_vault 在 note_vectors 上的列级 select 正好是 user_id、note_id、image_id、file_id');
 select ok(not has_table_privilege('fn_vault', 'private.note_vectors', 'SELECT'), 'fn_vault 没有 note_vectors 的表级 select');
 select ok(tests.try_as('fn_vault', null, 'select embedding from private.note_vectors', 'aaaaaaaa-0000-4000-8000-000000000001') like '42501 %',
   'fn_vault 读 embedding 被拒（42501）');

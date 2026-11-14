@@ -2,14 +2,15 @@
 // • 点“保存”才写（不自动保存：明文不进本机 outbox）；新建保存后留在这一页，地址换成这一条的 id
 // • 插图：选照片 → 本机重新编码 → 上传；已有的图经 vault-image 取字节做成 blob: 地址（只经 kit 的 useBlobSrc 写进 <img>，A26）
 // • 底部：删除（进隐私记的“最近删除”）、移出隐私记（回到普通随手记）
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { navigate, replaceRoute } from '../../../app/router.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { useBlobSrc } from '../../../kit/hooks/useBlobSrc.ts';
 import { VAULT_BODY_MAX, VAULT_TITLE_MAX } from '../../../../shared/schema/vault.ts';
 import { useErrText, useVault } from '../hooks/useVault.ts';
-import { useVaultEdit, useVaultImage } from '../hooks/useVaultEdit.ts';
+import { VaultAttachments } from '../../attachments/index.ts';
+import { useVaultEdit, useVaultFileApi, useVaultImage } from '../hooks/useVaultEdit.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import styles from './Vault.module.css';
 
@@ -36,6 +37,7 @@ export function VaultEditor({ id }: { id: string | null }) {
   const errText = useErrText();
   const { s } = useVault();
   const e = useVaultEdit(id);
+  const fileApi = useVaultFileApi();
   const file = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState('');
   const missing = id !== null && e.note === null;
@@ -97,6 +99,12 @@ export function VaultEditor({ id }: { id: string | null }) {
                 </div>
               ))}
             </div>
+          ) : null}
+          {/* 文档附件（B4b-1，线框 sAtt“隐私记也能加（加密）”）：保存过、有 id 才挂；电脑上能加，手机上能看、预览、下载 */}
+          {savedId ? (
+            <Suspense fallback={null}>
+              <VaultAttachments noteId={savedId} api={fileApi} disabled={false} />
+            </Suspense>
           ) : null}
           {err ? (
             <p className={styles.notice} role="alert" data-testid="vault-edit-err">

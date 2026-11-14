@@ -93,6 +93,14 @@ export const zh = {
   'settings.export.partsUsedUp': '今天导出的次数用完了，明天再试',
   'settings.export.quota': '导出和注销每天合计最多 3 次，每点一次“导出全部数据”算一次。', // 句末补句号（设计评审 L-3，11-06，只改标点，待 R-106 看）
   'settings.export.wifi': '数据多时文件可能有几十 MB，建议连 Wi-Fi。', // 句末补句号（设计评审 L-3，11-06）
+  'settings.ms.title': 'PPT 预览', // B4b-1：线框 sPrev 第二张“可以在 设置 › 数据 里改”
+  'settings.ms.note': 'PPT 用微软的在线预览打开时，整个文件会通过一个几分钟内有效的链接交给微软。只记在这台设备上。',
+  'settings.ms.note_row': '随手记里的 PPT',
+  'settings.ms.vault_row': '隐私记里的 PPT',
+  'settings.ms.vault_meta': '隐私记的文件会先解密再交给微软',
+  'settings.ms.ask': '先问',
+  'settings.ms.yes': '预览',
+  'settings.ms.no': '只下载',
 
   // 设置 › 账号 › 最近的导出（R-256 ②；架构 0.29 续第 96 条③）
   'settings.recentExport.title': '最近的导出',

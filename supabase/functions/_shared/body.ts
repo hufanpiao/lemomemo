@@ -1,5 +1,6 @@
 // 请求体边读边计数（5.11 第 2 点；安全审建议 1）：按字节数，超过上限立刻中断，不只看 Content-Length，也不整段读进内存再比长度。
 // ai-voice（音频 600 KB）、ai-parse（16 KB）、claude-intake（32 KB，网关不验 JWT）共用。纯函数，只用 Web 标准接口。
+// readAll：对象存储取回的正文整段读成字节（不限长，对象写入时已限过；file-check、vault-file、vault 搬家共用）。
 
 /** 读请求体：超过 max 字节回 'too_large'（已中断读取），没有内容回 'empty' */
 export async function readCapped(req: Request, max: number): Promise<Uint8Array | 'too_large' | 'empty'> {
@@ -42,4 +43,14 @@ export async function readJsonCapped(req: Request, max: number): Promise<unknown
   } catch {
     return undefined;
   }
+}
+
+/** 字节的 sha256 十六进制（file-check、vault-file、vault 搬家共用；_shared/vault-files.ts 原样转出） */
+export async function sha256Hex(b: Uint8Array): Promise<string> {
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', b as BufferSource)), (x) => x.toString(16).padStart(2, '0')).join('');
+}
+
+/** 读对象存储取回的正文（R2 的 body）整段成字节（file-check、vault-file、vault 搬家共用，评审 9）；不限长度：对象写入时已经限过 */
+export async function readAll(body: unknown): Promise<Uint8Array> {
+  return new Uint8Array(await new Response(body as BodyInit).arrayBuffer());
 }

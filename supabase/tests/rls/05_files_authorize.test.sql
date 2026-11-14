@@ -22,6 +22,8 @@ declare r jsonb := tests.fa('aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-55
     || case when p_op = 'put' then jsonb_build_object('content_length',
          case when p_path like '%.t.webp' then 1
               else coalesce((select ni.bytes from public.note_images ni where ni.path = p_path),
+                            -- 附件原文件：这一行的 bytes（20261115000000 起 put 要求 content_length 等于它，B4b-1）
+                            (select nf.bytes from public.note_files nf where nf.path = p_path),
                             -- 头像：这一行的 avatar_bytes（20261114192000 起 put 要求 content_length 等于它）
                             (select a.avatar_bytes from public.anniversaries a where p_path like '%/anniv/' || a.id::text || '/%'), 0) end)
        else '{}'::jsonb end));

@@ -1,13 +1,16 @@
 // vault、vault-image 测试共用的内存假库、假 R2 和依赖（照 account-fakes.ts 的写法）。
-// • 假库按 0003、0006 的 check 约束和 RLS 写：隐私记不准留明文残留，vault-images 的图不准有 taken_at、ai_desc；只看得到本人的行；
+// • 假库按 0003、0004、0006 的 check 约束和 RLS 写：隐私记不准留明文残留，vault-images 的图不准有 taken_at、ai_desc；
+//   附件行照 note_files 的 check（普通的名字明文、没有密文；隐私记的明文列和 AI 描述全空、密文和数据密钥齐全）；只看得到本人的行；
 //   tx 出错整个回滚（开头存一份快照，抛错就换回去）。
 // • 钥匙都是测试专用的假值，用 btoa('TEST-ONLY-…') 现算（不写成像真钥匙的 base64 字面量）。
 import { vaultImageKey, vaultRequest, lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL,
   VAULT_RESET_OTP_MAX_AGE_S, WEBAUTHN_CHALLENGE_TTL_S, WEBAUTHN_RP_ID } from '../../shared/schema/vault.ts';
 import type { VaultPushEvent } from '../../supabase/functions/_shared/push/vault-events.ts';
 import { decodeKey32 } from '../../supabase/functions/_shared/vault-crypto.ts';
+import { noteFilePath, noteFileThumbPath } from '../../shared/logic/files/media-path.ts';
+import { DOC_TYPES, type DocKind } from '../../shared/manifests/attachments.ts';
 import {
-  type CredRow, type Deps, type ImageRow, type NoteRow, type Obj, StoreDataError, type VaultReq, type VaultRow, type VaultTx,
+  type CredRow, type Deps, type FileRow, type ImageRow, type NoteRow, type Obj, StoreDataError, type VaultReq, type VaultRow, type VaultTx,
 } from '../../supabase/functions/vault/common.ts';
 import { handle } from '../../supabase/functions/vault/core.ts';
 
@@ -29,6 +32,7 @@ export function jwtFor(sub: string, otpAgoS: number | null, nowMs: number): stri
 type Owned<T> = T & { user_id: string };
 interface NoteFull extends Owned<NoteRow> { raw_text: string; tags: string[]; ai_meta: unknown; converted_to: unknown }
 interface ImageFull extends Owned<ImageRow> { taken_at: number | null; ai_desc: string | null; ai_status: string; skip_reason: string | null }
+export interface FileFull extends Owned<FileRow> { ai_desc: string | null; ai_tags: string[]; ai_status: string; skip_reason: string | null; ai_tries: number; updated_at: number }
 interface State {
   vault: Map<string, VaultRow>;
   creds: Map<string, Owned<CredRow>>;
@@ -36,9 +40,9 @@ interface State {
   challenges: Map<string, { user_id: string; exp: number }>;
   notes: Map<string, NoteFull>;
   images: Map<string, ImageFull>;
-  files: Map<string, { user_id: string; note_id: string }>;
-  vectors: Set<string>;           // `${user_id}|${kind}|${id}`
-  vaultAi: Set<string>;           // `${user_id}|${image_id}`
+  files: Map<string, FileFull>;
+  vectors: Set<string>;           // `${user_id}|${kind}|${id}`（kind = note / image / file）
+  vaultAi: Set<string>;           // `${user_id}|${image_id 或 file_id}`
 }
 
 export class FakeVault {
@@ -64,6 +68,22 @@ export class FakeVault {
     }
   }
 
+  /** 普通随手记上挂一个附件（明文行，check_status 默认 ok） */
+  plainFile(uid: string, noteId: string, id: string, o: { kind?: string; name?: string; text?: string | null; sha256?: string; has_thumb?: boolean; check_status?: string; deleted_at?: number | null } = {}) {
+    this.s.files.set(id, {
+      id, user_id: uid, note_id: noteId, kind: o.kind ?? 'pdf', has_thumb: o.has_thumb ?? false, is_vault: false, check_status: o.check_status ?? 'ok',
+      deleted_at: o.deleted_at ?? null, sha256: o.sha256 ?? 'f'.repeat(64), name: o.name ?? 'a.pdf', text_excerpt: o.text === undefined ? 'hello' : o.text,
+      name_enc: null, text_enc: null, dek_enc: null, enc_key_id: null, ai_desc: 'desc', ai_tags: ['x'], ai_status: 'done', skip_reason: null, ai_tries: 1, updated_at: this.ms,
+    });
+  }
+
+  private checkFile(f: FileFull) {
+    const ok = f.is_vault
+      ? f.name === null && f.text_excerpt === null && f.ai_desc === null && f.ai_tags.length === 0 && f.name_enc !== null && f.dek_enc !== null && f.enc_key_id !== null
+      : f.name !== null && f.name_enc === null && f.text_enc === null && f.dek_enc === null;
+    if (!ok) throw new StoreDataError('data');
+  }
+
   private check(n: NoteFull) {
     const ok = n.is_private
       ? n.title === null && n.body === null && n.body_enc !== null && n.raw_text === '' && n.tags.length === 0 && n.ai_meta === null && n.converted_to === null
@@ -80,6 +100,7 @@ export class FakeVault {
     const mine = <T extends { user_id: string }>(v: T | undefined) => (v && v.user_id === uid ? v : undefined);
     const check = this.check.bind(this);
     const checkImg = this.checkImg.bind(this);
+    const checkFile = this.checkFile.bind(this);
     return {
       async vault() { return s.vault.get(uid) ?? null; },
       async insertVault(h) {
@@ -140,11 +161,28 @@ export class FakeVault {
           if (r && r.is_private && r.deleted_at !== null) {
             s.notes.delete(id); n++;
             for (const [k, i] of [...s.images]) if (i.note_id === id) s.images.delete(k);
+            for (const [k, f] of [...s.files]) if (f.note_id === id) s.files.delete(k);
           }
         }
         return n;
       },
-      async hasFiles(nid) { return [...s.files.values()].some((f) => f.user_id === uid && f.note_id === nid); },
+      async filesOf(nid) {
+        return [...s.files.values()].filter((f) => f.user_id === uid && f.note_id === nid).sort((a, b) => (a.id < b.id ? -1 : 1)).map((f) => ({ ...f }));
+      },
+      async fileToVault(id, p, at) {
+        const f = mine(s.files.get(id));
+        if (!f || f.is_vault) return false;
+        Object.assign(f, { is_vault: true, name: null, text_excerpt: null, ai_desc: null, ai_tags: [], ai_status: 'skip', skip_reason: 'vault_off', ...p, updated_at: at });
+        checkFile(f);
+        return true;
+      },
+      async fileToPlain(id, p, at) {
+        const f = mine(s.files.get(id));
+        if (!f || !f.is_vault) return false;
+        Object.assign(f, { is_vault: false, name_enc: null, text_enc: null, dek_enc: null, enc_key_id: null, ai_status: 'pending', skip_reason: null, ai_tries: 0, ...p, updated_at: at });
+        checkFile(f);
+        return true;
+      },
       async toVault(id, enc, kid, at) {
         const n = mine(s.notes.get(id));
         if (!n || n.is_private || n.deleted_at !== null) return false;
@@ -170,6 +208,7 @@ export class FakeVault {
       async dropVectors(nid) {
         s.vectors.delete(`${uid}|note|${nid}`);
         for (const i of s.images.values()) if (i.note_id === nid) { s.vectors.delete(`${uid}|image|${i.id}`); s.vaultAi.delete(`${uid}|${i.id}`); }
+        for (const f of s.files.values()) if (f.note_id === nid) { s.vectors.delete(`${uid}|file|${f.id}`); s.vaultAi.delete(`${uid}|${f.id}`); }
       },
     };
   }
@@ -209,6 +248,9 @@ export class FakeR2 implements Obj {
 export const RULES = {
   pinRe: PIN_RE, failsPerLevel: VAULT_FAILS_PER_LEVEL, lockSeconds, resetOtpMaxAgeS: VAULT_RESET_OTP_MAX_AGE_S, challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S,
   rpId: WEBAUTHN_RP_ID, imageKey: vaultImageKey,
+  fileKey: (uid: string, noteId: string, id: string, kind: string) => noteFilePath(uid, noteId, id, kind as DocKind),
+  fileThumbKey: noteFileThumbPath,
+  docMime: (kind: string) => DOC_TYPES[kind as DocKind],
 };
 
 export interface World { db: FakeVault; r2: FakeR2; deps: Deps; pushes: { user: string; event: VaultPushEvent }[]; mails: number[]; logs: string[]; rows: { act: string }[]; bg: Promise<unknown>[]; rate: Map<string, number> }

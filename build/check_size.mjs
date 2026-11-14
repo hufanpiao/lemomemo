@@ -14,7 +14,14 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { checkPreload } from './check_preload.mjs';
 
-export const BUDGET = { firstScreenJs: 150 * 1024, totalJs: 250 * 1024 };
+/**
+ * firstScreenFiles（B4b-1 第二轮，主持人定）：首屏 JS 文件数上限 = 当时 main 的 8 个 + 1。冷启动每多一个文件就多一个请求；
+ * 懒加载页共用的小模块被拆出、又被首屏静态引到时，文件数会先涨（vite.config.ts 的 LAZY_COMMON_MODULES 就是为这个合成一块）
+ */
+export const BUDGET = { firstScreenJs: 150 * 1024, totalJs: 250 * 1024, firstScreenFiles: 9 };
+
+/** 首屏文件数超了的说明；没超回 null */
+export const firstFilesError = (n) => (n > BUDGET.firstScreenFiles ? `首屏 JS 文件 ${n} 个，超过上限 ${BUDGET.firstScreenFiles} 个（冷启动多请求；先查是不是共用的小模块被拆成了单独一块）` : null);
 
 /** manifest：Vite 的 .vite/manifest.json 内容；entryKey：入口在 manifest 里的键 */
 export function firstScreenFiles(manifest, entryKey) {
@@ -156,6 +163,11 @@ function main() {
   let failed = false;
   if (r.firstScreenJs > BUDGET.firstScreenJs) {
     console.error('W3：首屏 JS 超出预算');
+    failed = true;
+  }
+  const fe = firstFilesError(r.firstFiles.length);
+  if (fe) {
+    console.error(fe);
     failed = true;
   }
   // 净增关卡比的是 firstScreenStable（去掉构建时刻、提交号、文件名哈希后的 gzip 字节），基线也按这个口径量

@@ -6,3 +6,8 @@
 export function utcMinuteKey(prefix: string, userId: string, ms: number): string {
   return `${prefix}:${userId}:${new Date(ms).toISOString().slice(0, 16).replace(/[-T:]/g, '')}`;
 }
+
+/** 每小时限流的键：第三段 yyyymmddhh（10 位数字；B4b-1 vault-file 的 ms_preview 每人每小时 20 次用） */
+export function utcHourKey(prefix: string, userId: string, ms: number): string {
+  return `${prefix}:${userId}:${new Date(ms).toISOString().slice(0, 13).replace(/[-T:]/g, '')}`;
+}

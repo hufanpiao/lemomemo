@@ -35,6 +35,15 @@ function fakeApi(replies: Partial<Record<VaultRequest['action'], Reply>>) {
     imageGet: vi.fn(async () => ({ ok: true as const, value: new Blob(['x']) }) as VaultResult<Blob>),
     imageUpload: vi.fn(async (q: { note_id: string; image_id: string }) =>
       registered.has(`${q.note_id}/${q.image_id}`) ? ({ ok: true, value: true } as const) : ({ ok: false, code: 'not_found' } as VaultFail)),
+    // vault-file（B4b-1）：ms_preview 回一个签名地址，别的回 ok；fileEnd 只记次数
+    fileCall: vi.fn(async (req: { action: string }, _t: string, schema: z.ZodType) => {
+      const v = req.action === 'ms_preview' ? { ok: true, url: '/sb/storage/v1/object/sign/vault-preview/' + 'a'.repeat(32) + '.pptx?token=t', expires_at: 1 } : req.action === 'list' ? { ok: true, files: [] } : { ok: true };
+      const p = schema.safeParse(v);
+      return p.success ? { ok: true as const, value: p.data } : ({ ok: false, code: 'unknown' } as VaultFail);
+    }) as VaultApi['fileCall'],
+    fileGet: vi.fn(async () => ({ ok: true as const, value: new Blob(['f']) }) as VaultResult<Blob>),
+    fileUpload: vi.fn(async () => ({ ok: true as const, value: null }) as VaultResult<unknown>),
+    fileEnd: vi.fn(),
   };
   return { api, calls };
 }

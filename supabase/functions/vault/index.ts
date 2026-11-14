@@ -28,6 +28,8 @@ import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { decodeKey32 } from '../_shared/vault-crypto.ts';
 import { versionGate } from '../_shared/version-gate.ts';
 import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
+import { noteFilePath, noteFileThumbPath } from '../_shared/gen/logic/files/media-path.ts';
+import { DOC_TYPES, type DocKind } from '../_shared/gen/manifests/attachments.ts';
 import {
   lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL, VAULT_RESET_OTP_MAX_AGE_S, vaultImageKey, vaultRequest,
   WEBAUTHN_CHALLENGE_TTL_S, WEBAUTHN_RP_ID,
@@ -40,9 +42,16 @@ const log = codeLogger('vault');
 /** 安全通知：1 小时内送达有意义，高优先级（锁定、改密码要马上知道） */
 const VAULT_PUSH_OPTIONS = { ttl: 3600, urgency: 'high' } as const;
 
+/** kind → MIME（Map 取值，不用方括号取属性：check_backend F7） */
+const DOC_MIME = new Map<string, string>(Object.entries(DOC_TYPES));
+
 const RULES: VaultRules = {
   pinRe: PIN_RE, failsPerLevel: VAULT_FAILS_PER_LEVEL, lockSeconds, resetOtpMaxAgeS: VAULT_RESET_OTP_MAX_AGE_S,
   challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S, rpId: WEBAUTHN_RP_ID, imageKey: vaultImageKey,
+  // B4b-1 移进移出带附件；kind 已经过库里的 check，这里只换类型
+  fileKey: (uid, noteId, id, kind) => noteFilePath(uid, noteId, id, kind as DocKind),
+  fileThumbKey: noteFileThumbPath,
+  docMime: (kind) => DOC_MIME.get(kind) ?? 'application/octet-stream',
 };
 
 const KEYS = {

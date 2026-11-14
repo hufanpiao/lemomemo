@@ -20,6 +20,8 @@ import type { VaultPushEvent } from '../../functions/_shared/push/payload.ts';
 import { createObjStore } from '../../functions/_shared/gen/objstore.ts';
 import { tzLabel } from '../../functions/_shared/gen/i18n/tz-label.ts';
 import { allManifests } from '../../functions/_shared/gen/manifests/index.ts';
+import { noteFilePath, noteFileThumbPath } from '../../functions/_shared/gen/logic/files/media-path.ts';
+import { DOC_TYPES, type DocKind } from '../../functions/_shared/gen/manifests/attachments.ts';
 import {
   lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL, VAULT_IMAGE_MAX_BYTES, VAULT_RESET_OTP_MAX_AGE_S, vaultImageGet, vaultImageKey,
   vaultImageUploadQuery, vaultRequest, WEBAUTHN_CHALLENGE_TTL_S, WEBAUTHN_RP_ID,
@@ -108,6 +110,9 @@ export const vaultDeps: VaultDeps = {
     pinRe: PIN_RE, failsPerLevel: VAULT_FAILS_PER_LEVEL, lockSeconds, resetOtpMaxAgeS: VAULT_RESET_OTP_MAX_AGE_S,
     challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S, rpId: WEBAUTHN_RP_ID,
     imageKey: vaultImageKey,
+    fileKey: (uid, noteId, id, kind) => noteFilePath(uid, noteId, id, kind as DocKind),
+    fileThumbKey: noteFileThumbPath,
+    docMime: (kind) => DOC_TYPES[kind as DocKind],
   },
   takeRate,
   tx: (uid, fn) => asRole('fn_vault', uid, (sql) => fn(vaultStore(sql as never, uid))),

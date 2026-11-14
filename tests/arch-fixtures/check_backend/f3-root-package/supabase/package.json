@@ -1,0 +1,4 @@
+{
+  "name": "fn",
+  "dependencies": { "sheet": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz" }
+}

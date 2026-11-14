@@ -2,11 +2,11 @@
 // • SQL 一律 tx`…${参数}`，不拼字符串；数组参数一律转成 jsonb 传（prepare: false 下最稳）；
 // • 时刻：timestamptz 列取出时换成毫秒（float8），写入时传 Date；notes、note_images 的 bigint 列本来就是毫秒，取出时 ::float8 免得变成字符串；
 // • 出错原样抛，由 core.ts 经 common.ts 的 classifyDbError 归类（22、23 类 → 数据不合格，row_quota 的 'quota' → 超行数）。
-// 线上只有 index.ts 用；Vitest 用内存假库，真库由 supabase/tests/store-it/vault-store.it.ts、vault-move.it.ts 以 fn_vault 跑本文件（11-14 起）。
+// 线上只有 index.ts 用；Vitest 用内存假库，真库由 supabase/tests/store-it/vault-store.it.ts、vault-move.it.ts 以 fn_vault 跑本文件（11-14 起；B4b-1 加附件的移进移出）。
 import type { Tx } from '../_shared/db.ts';
 import { VAULT_IMAGE_BUCKET as VB } from '../_shared/vault-images.ts';
 import { vaultImageKey } from '../_shared/gen/schema/vault.ts';
-import { type CredRow, type ImageAdd, type ImageRow, type NoteRow, type VaultPatch, type VaultRow, type VaultTx } from './common.ts';
+import { type CredRow, type FileRow, type ImageAdd, type ImageRow, type NoteRow, type VaultPatch, type VaultRow, type VaultTx } from './common.ts';
 
 const msOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 const dateOrNull = (ms: number | null | undefined) => (ms === null || ms === undefined ? null : new Date(ms));
@@ -25,6 +25,16 @@ function image(r: Record<string, unknown>): ImageRow {
   return {
     id: String(r.id), note_id: String(r.note_id), bucket: r.bucket === VB ? VB : 'images', has_thumb: r.has_thumb === true,
     width: msOrNull(r.width), height: msOrNull(r.height), bytes: Number(r.bytes), deleted_at: msOrNull(r.deleted_at),
+  };
+}
+
+function file(r: Record<string, unknown>): FileRow {
+  const b = (v: unknown) => (v ? bytes(v) : null);
+  return {
+    id: String(r.id), note_id: String(r.note_id), kind: String(r.kind), has_thumb: r.has_thumb === true, is_vault: r.is_vault === true,
+    check_status: String(r.check_status), deleted_at: msOrNull(r.deleted_at), sha256: String(r.sha256),
+    name: (r.name ?? null) as string | null, text_excerpt: (r.text_excerpt ?? null) as string | null,
+    name_enc: b(r.name_enc), text_enc: b(r.text_enc), dek_enc: b(r.dek_enc), enc_key_id: msOrNull(r.enc_key_id),
   };
 }
 
@@ -145,9 +155,26 @@ export function vaultStore(tx: Tx, uid: string): VaultTx {
       const rows = await tx`select private.purge_vault_impl(${uid}::uuid, ${tx.json(ids.map((id) => ({ id })))}::jsonb) as n`;
       return Number(rows[0]?.n ?? 0);
     },
-    async hasFiles(noteId) {
-      const rows = await tx`select exists (select 1 from public.note_files where user_id = ${uid} and note_id = ${noteId}) as x`;
-      return rows[0]?.x === true;
+    async filesOf(noteId) {
+      const rows = await tx`select id, note_id, kind, has_thumb, is_vault, check_status, deleted_at::float8 as deleted_at, sha256, name, text_excerpt,
+          name_enc, text_enc, dek_enc, enc_key_id
+        from public.note_files where user_id = ${uid} and note_id = ${noteId} order by id`;
+      return rows.map(file);
+    },
+    async fileToVault(id, p, updatedAt) {
+      const rows = await tx`update public.note_files set is_vault = true, name = null, text_excerpt = null, ai_desc = null, ai_tags = '{}',
+          ai_status = 'skip', skip_reason = 'vault_off', ai_next_at = null,
+          name_enc = ${p.name_enc}, text_enc = ${p.text_enc}, dek_enc = ${p.dek_enc}, enc_key_id = ${p.enc_key_id}, sha256 = ${p.sha256},
+          updated_at = ${updatedAt}
+        where user_id = ${uid} and id = ${id} and not is_vault returning 1 as x`;
+      return rows.length === 1;
+    },
+    async fileToPlain(id, p, updatedAt) {
+      const rows = await tx`update public.note_files set is_vault = false, name = ${p.name}, text_excerpt = ${p.text_excerpt},
+          name_enc = null, text_enc = null, dek_enc = null, enc_key_id = null, sha256 = ${p.sha256},
+          ai_status = 'pending', skip_reason = null, ai_tries = 0, ai_next_at = null, updated_at = ${updatedAt}
+        where user_id = ${uid} and id = ${id} and is_vault returning 1 as x`;
+      return rows.length === 1;
     },
     async toVault(id, bodyEnc, encKeyId, updatedAt) {
       const rows = await tx`update public.notes set is_private = true, body_enc = ${bodyEnc}, enc_key_id = ${encKeyId}, title = null, body = null,
@@ -171,10 +198,13 @@ export function vaultStore(tx: Tx, uid: string): VaultTx {
       }
     },
     async dropVectors(noteId) {
+      // file_id 要 fn_vault 的列级 select（迁移 20261115010000，B4b-1）
       await tx`delete from private.note_vectors where user_id = ${uid}
-        and (note_id = ${noteId} or image_id in (select id from public.note_images where user_id = ${uid} and note_id = ${noteId}))`;
+        and (note_id = ${noteId} or image_id in (select id from public.note_images where user_id = ${uid} and note_id = ${noteId})
+          or file_id in (select id from public.note_files where user_id = ${uid} and note_id = ${noteId}))`;
       await tx`delete from private.vault_ai where user_id = ${uid}
-        and image_id in (select id from public.note_images where user_id = ${uid} and note_id = ${noteId})`;
+        and (image_id in (select id from public.note_images where user_id = ${uid} and note_id = ${noteId})
+          or file_id in (select id from public.note_files where user_id = ${uid} and note_id = ${noteId}))`;
     },
   };
   return s;

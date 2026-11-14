@@ -2,15 +2,19 @@
 // • 保存：点“保存”才发 vault {save}（隐私记不进本机 outbox、不自动保存：明文不能落本机，A18）
 // • 插图：选的照片在本机重新编码成 webp（和随手记共用 platform/image-encode.ts，tz 传 null 不读拍摄时间，S8）→ save 的 add_images 预登记 → 经 vault-image 上传（整块评审第 3 条）
 // • 显示图片：useVaultImage 经会话拿 blob URL（只在内存、上锁时撤销，D3）
+// • 文档附件（B4b-1）：useVaultFileApi 把会话的 vault-file 方法包成附件功能要的 VaultFileApi，交给附件区（attachments 的 VaultAttachments）
 // • id 一开始就定：新建的这一条用 draftId，每张待传的图用 PendingImage.key 当图片 id——保存失败重试时复用，服务器“已有就改”、
 //   同一个键再传算成功，不会多建一条、不会在 R2 留多份对象（11-14 独立评审 M1 及低项）
 // • 改标题、正文时调会话的 touch()：一直在写的人令牌按 5 分钟续一次，写超过 10 分钟再保存也不会被锁、草稿不丢（M2）。
 //   放着不动超过 10 分钟、或连续解锁超过 12 小时（第 22 条，令牌不再续），再打字或保存会要求解锁：页面换成解锁卡、DOM 里不留明文（TC-B5-11）；
 //   这种“令牌过期、等解锁”的上锁时还没存的草稿交给会话的 saveWhenUnlocked，只在内存闭包里，解锁后保存一次（不丢草稿）；
 //   用户主动上锁、离开超时、在别处改密码、设备被移除时照旧丢掉
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { VaultNote } from '../../../../shared/schema/vault.ts';
 import { encodeImage } from '../../../platform/image-encode.ts';
+import type { VaultFileApi, VaultFileFail } from '../../attachments/index.ts';
+import type { VaultFail } from '../data/vault-api.ts';
+import type { VaultSession } from '../data/session.ts';
 import type { VaultCode } from '../data/vault-errors.ts';
 import { useVault } from './useVault.ts';
 
@@ -22,6 +26,44 @@ export interface PendingImage {
   width: number;
   height: number;
   preview: string;
+}
+
+const fileFail = (r: VaultFail): VaultFileFail => ({ ok: false, code: r.fileCode ?? r.code, ...(r.reason ? { reason: r.reason } : {}) });
+
+/** 会话的 vault-file 方法 → 附件区要的形状（导出给测试） */
+export function fileApiOf(s: VaultSession): VaultFileApi {
+  return {
+    list: async (noteId) => {
+      const r = await s.file.list(noteId);
+      return r.ok ? { ok: true, files: r.value.files } : fileFail(r);
+    },
+    upload: async (meta, file, thumb) => {
+      const r = await s.file.upload(meta, file, thumb);
+      return r.ok ? { ok: true, file: r.value.file } : fileFail(r);
+    },
+    get: async (id, part) => {
+      const r = await s.file.get(id, part);
+      return r.ok ? { ok: true, blob: r.value } : fileFail(r);
+    },
+    remove: async (id) => {
+      const r = await s.file.remove(id);
+      return r.ok ? { ok: true } : fileFail(r);
+    },
+    restore: async (id) => {
+      const r = await s.file.restore(id);
+      return r.ok ? { ok: true } : fileFail(r);
+    },
+    msPreview: async (id) => {
+      const r = await s.file.msPreview(id);
+      return r.ok ? { ok: true, url: r.value.url } : fileFail(r);
+    },
+    msPreviewEnd: () => s.file.msPreviewEnd(),
+  };
+}
+
+export function useVaultFileApi(): VaultFileApi {
+  const { s } = useVault();
+  return useMemo(() => fileApiOf(s), [s]);
 }
 
 export function useVaultImage(imageId: string, part: 'full' | 'thumb'): string | null {

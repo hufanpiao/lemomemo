@@ -3,9 +3,14 @@
 // • 隐私记页挂着时 <html data-rt="1">（底栏、“＋”实色，TC-B5-12），离开回随手记页去掉
 // • 离开（blur）同步盖多任务遮罩（TC-B5-44），回来（focus，不到 1 分钟）去掉
 // • 随手记“⋯”菜单、列表方式左滑两种方式“移到隐私记”：发 vault {action: import, note_id}，这一条在随手记页藏起来
+// • 文档附件（B4b-1，vault-file）：电脑上在隐私记里加（multipart 交给函数加密）、列表写页数、预览中文 PDF、PPT 的卡多一句“会先解密再交给微软”、
+//   只下载后提示“下载后的文件不再加密”、上锁后附件区不见
 // • Face ID：WebAuthn 不认 IP 当 RP ID（本组服务开在 127.0.0.1），e2e 跑不了；能不能用、取消回 null、两次没认出换密码键盘在 vitest 里测，真机另看
 // 跑在快读组（playwright.fastread.config.ts，要带 supabase 地址的构建）；B5_SHOTS 设了目录时，chromium 顺手存浅色、深色两套截图（评审看，不进仓库）
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Page, Route } from '@playwright/test';
+import JSZip from 'jszip';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
 test.skip(!process.env['VITE_PUBLIC_SUPABASE_URL'], '要 /sb 地址，只在快读组跑（npm run e2e:fastread）');
@@ -22,7 +27,25 @@ const CAT = '0e2e0000-0000-4000-8000-0000000000c1';
 interface FakeVault {
   calls: { action: string; body: Record<string, unknown> }[];
   notes: Map<string, Record<string, unknown>>;
+  /** vault-file 收到的动作和上传的 meta（B4b-1） */
+  files: { action: string; meta?: Record<string, unknown>; thumb?: boolean }[];
 }
+
+const ZH_PDF = readFileSync(join(import.meta.dirname, 'fixtures', 'b4b1-zh-2p.pdf'));
+async function pptx(): Promise<Buffer> {
+  const z = new JSZip();
+  const a = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+  // 本机判型要 [Content_Types].xml 里有 PPT 的主部件类型（shared/logic/files/file-sniff.ts）
+  z.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/></Types>');
+  z.file('ppt/presentation.xml', '<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>');
+  ['复查安排', '用药记录'].forEach((t, i) => z.file(`ppt/slides/slide${i + 1}.xml`, `<p:sld xmlns:p="x" ${a}><a:t>${t}</a:t></p:sld>`));
+  return z.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+}
+/** WebKit 的 Playwright 拿不到 multipart 包体：按用例里上传的先后顺序补 meta */
+const UPLOAD_ORDER = [
+  { kind: 'pdf', name: '体检报告.pdf', pages: 2 },
+  { kind: 'pptx', name: '复查安排.pptx', pages: 2 },
+];
 
 /** 假会话 + 浏览器这一层的假服务器 */
 async function fakeServer(page: Page, baseURL: string | undefined): Promise<FakeVault> {
@@ -48,7 +71,36 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
     return route.fulfill({ json: [] });
   });
 
-  const fv: FakeVault = { calls: [], notes: new Map() };
+  const fv: FakeVault = { calls: [], notes: new Map(), files: [] };
+  const PPTX = await pptx();
+  const stored = new Map<string, Record<string, unknown>>();
+  await page.route(/\/sb\/functions\/v1\/vault-file/, (route) => {
+    const req = route.request();
+    if ((req.headers()['content-type'] ?? '').startsWith('multipart/form-data')) {
+      const raw = req.postDataBuffer()?.toString('utf8') ?? '';
+      const m = /name="meta"\r\n\r\n([^\r]*)\r\n/.exec(raw);
+      const n = fv.files.filter((f) => f.action === 'upload').length;
+      const meta = m?.[1] ? (JSON.parse(m[1]) as Record<string, unknown>) : { ...UPLOAD_ORDER[n], id: `0e2e0000-0000-7000-8000-00000000f0${n}0`, note_id: [...fv.notes.keys()][0] };
+      fv.files.push({ action: 'upload', meta, thumb: raw.includes('name="thumb"') });
+      const item = { id: meta['id'], note_id: meta['note_id'], kind: meta['kind'], name: meta['name'], bytes: 100, pages: meta['pages'] ?? null, has_thumb: false, created_at: Date.now() };
+      stored.set(String(meta['id']), item);
+      return route.fulfill({ json: { ok: true, file: item } });
+    }
+    const body = (req.postDataJSON() ?? {}) as Record<string, unknown>;
+    const action = String(body['action']);
+    fv.files.push({ action });
+    switch (action) {
+      case 'list':
+        return route.fulfill({ json: { ok: true, files: [...stored.values()].filter((f) => f['note_id'] === body['note_id']) } });
+      case 'get': {
+        const f = stored.get(String(body['id']));
+        if (!f) return route.fulfill({ status: 404, json: { error: 'not_found' } });
+        return route.fulfill({ status: 200, contentType: 'application/octet-stream', body: f['kind'] === 'pptx' ? PPTX : ZH_PDF });
+      }
+      default:
+        return route.fulfill({ json: { ok: true } });
+    }
+  });
   let pin: string | null = null;
   let left = 5;
   const tok = () => ({ vault_token: `e2e-vault-token-${'x'.repeat(16)}`, expires_at: Date.now() + 600_000 });
@@ -267,4 +319,65 @@ test('连续输错 5 次：锁定倒计时，键盘不能按', async ({ page, ba
   // 服务器说 60 秒：倒计时不能比 60 秒多（原来按卡片挂上时的时间算，显示过“1 分 2 秒”）
   await expect(page.getByText(/输错次数太多，(1 分 0 秒|\d+ 秒) 后再试/)).toBeVisible();
   await shot(page, '05-锁定倒计时', browserName);
+});
+
+test('隐私记里的文档附件（B4b-1）：电脑上加（加密）、写页数、预览中文 PDF、PPT 的卡多一句“会先解密”、只下载提示不再加密、上锁后不见', async ({ page, baseURL, browserName }) => {
+  const fv = await fakeServer(page, baseURL);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await setupAndUnlock(page, browserName);
+  await page.goto('/app/#/vault/new');
+  await page.getByTestId('vault-edit-title').fill('体检');
+  await expect(page.getByTestId('note-files'), '没保存过的新隐私记不出附件区').toHaveCount(0);
+  await page.getByTestId('vault-edit-save').click();
+  await expect.poll(() => fv.calls.filter((c) => c.action === 'save').length).toBe(1);
+  await expect(page.getByTestId('note-files-add')).toBeVisible({ timeout: 15_000 });
+
+  await page.getByTestId('note-files-input').setInputFiles({ name: '体检报告.pdf', mimeType: 'application/pdf', buffer: ZH_PDF });
+  await expect(page.getByTestId('note-files-undo')).toContainText('已加到隐私记（加密存放）', { timeout: 30_000 });
+  const pdfRow = page.locator('[data-testid^="note-file-0"]').filter({ hasText: '体检报告.pdf' });
+  await expect(pdfRow).toContainText('· 2 页');
+  const up = fv.files.find((f) => f.action === 'upload');
+  expect(up?.meta).toMatchObject({ kind: 'pdf', name: '体检报告.pdf', pages: 2 });
+  // 包体只在 chromium 能看到：带了缩略图、抽出的文字
+  if (browserName === 'chromium') {
+    expect(up?.thumb).toBe(true);
+    expect(String(up?.meta?.['text'] ?? '')).toMatch(/[\u4e00-\u9fff]/);
+  }
+  await shot(page, '08-隐私记附件', browserName);
+
+  // 预览中文 PDF：字节从 vault-file get 来（服务器解密）
+  const pid = ((await pdfRow.getAttribute('data-testid')) ?? '').replace('note-file-', '');
+  await page.getByTestId(`note-file-more-${pid}`).click();
+  await page.getByTestId(`note-file-preview-${pid}`).click();
+  await expect(page.getByTestId('att-pv-page')).toHaveText('第 1 / 2 页', { timeout: 15_000 });
+  await expect(page.frameLocator('[data-testid="att-pv-frame"]').locator('canvas').first()).toBeVisible();
+  expect(fv.files.some((f) => f.action === 'get')).toBe(true);
+  await page.keyboard.press('Escape');
+
+  // PPT：二选一卡多一句“隐私记的文件会先解密再交给微软”；选“只下载”记在隐私记那一份，下载后提示不再加密
+  await page.getByTestId('note-files-input').setInputFiles({ name: '复查安排.pptx', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', buffer: await pptx() });
+  const pptRow = page.locator('[data-testid^="note-file-0"]').filter({ hasText: '复查安排.pptx' });
+  await expect(pptRow).toBeVisible({ timeout: 30_000 });
+  const tid = ((await pptRow.getAttribute('data-testid')) ?? '').replace('note-file-', '');
+  await page.getByTestId(`note-file-more-${tid}`).click();
+  await page.getByTestId(`note-file-preview-${tid}`).click();
+  await expect(page.getByTestId('att-ms-vault')).toHaveText('隐私记的文件会先解密再交给微软。');
+  await expect(page.getByTestId('att-ms-ask')).toContainText('下载后的文件不再加密');
+  await shot(page, '09-隐私记PPT二选一', browserName);
+  const dl = page.waitForEvent('download');
+  await page.getByTestId('att-ms-no').click();
+  expect((await dl).suggestedFilename()).toBe('复查安排.pptx');
+  await expect(page.getByTestId('note-files-msg')).toContainText('下载后的文件不再加密');
+  expect(await page.evaluate(() => [localStorage.getItem('att.ms_preview_vault'), localStorage.getItem('att.ms_preview')])).toEqual(['no', null]);
+  expect(fv.files.some((f) => f.action === 'ms_preview')).toBe(false);
+
+  // 上锁：附件区跟着编辑页一起没了，DOM 里不留文件名
+  await page.getByTestId('vault-edit-back').click();
+  await page.getByTestId('vault-lock-now').click();
+  await expect(page.getByTestId('vault-unlock-card')).toBeVisible();
+  await expect(page.getByTestId('note-files')).toHaveCount(0);
+  await expect(page.locator('body')).not.toContainText('体检报告.pdf');
+  const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  expect(log).toMatch(/vatt upload ok/);
+  expect(log).not.toContain('体检报告');
 });

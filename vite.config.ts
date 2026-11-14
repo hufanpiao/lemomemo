@@ -1,4 +1,4 @@
-// Vite：App 主体、登录页 /app/auth/（15.6 第 4b 条，K4）和预览沙箱三个页面入口（SW 单独打包，见 vite.sw.config.ts）（架构 8.1）
+// Vite：App 主体、登录页 /app/auth/（15.6 第 4b 条，K4）两个页面入口（SW、附件预览沙箱单独打包，见 vite.sw.config.ts、vite.preview.config.ts）（架构 8.1）
 // base '/app/'，输出到 dist/web/app/（LEMO_WEB_OUT 可改输出目录，见 build/assemble_web.mjs 的 webOutDir）；没有内联脚本和样式，modulepreload polyfill 关掉
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -13,13 +13,26 @@ const root = import.meta.dirname;
  * 只匹配整个说明符 'zod'；垫片自己引 'zod/v4'，不会绕回来。tests/build/zod-alias.test.ts 守着
  */
 export const ZOD_JITLESS_ALIAS = { find: /^zod$/, replacement: resolve(root, 'src/platform/zod-jitless.ts') };
+/** docx-preview 里的 import 'jszip' 改指只读替身（B4b-1）：沙箱（vite.preview.config.ts）用；理由见 zip-lite.ts 文件头 */
+export const ZIP_LITE_ALIAS = { find: /^jszip$/, replacement: resolve(root, 'src/preview-frame/zip-lite.ts') };
 /**
  * 只有 export … from 的出口文件按无副作用打包（11-12 首屏瘦身）：底栏从 motion/components.ts 只拿 Pressable，可出口是静态转出，
  * Rolldown 把 Appear、AppearList、useHoldView、swap-guard 这些只有懒加载页用的组件也算进首屏块（约 1 KB gzip）。标成无副作用以后，
  * 引入按名字直接连到真正的模块，没人在首屏用的跟着用它的页走。没匹配上的模块照默认（包的 package.json sideEffects 照认）。
  * 出口文件只许有 export … from（tests/build/pure-reexports.test.ts 守着），往里加顶层语句就不是无副作用了
  */
-export const PURE_REEXPORT_RULES = [{ test: /[\\/]src[\\/]motion[\\/]components\.ts$/, sideEffects: false }];
+/**
+ * 懒加载页共用的小工具合成一块（B4b-1 第二轮，主持人选“乙”；架构 8.1“构建与分包”）：
+ * 这几份各自很小（合起来约 3 KB），本来跟着某一页走；附件的懒加载块也用上以后，Rolldown 按“被哪些入口用到”把每份拆成单独一块，
+ * App 入口块里的预加载表（每个懒加载页列出整个静态闭包）就多出一串文件名，首屏净增多了约 58 B，打开那几页时也多几个请求。
+ * 只收名单里的模块，而且它们自己的依赖都已经在首屏块里（不会把别的块拖进来）；不是通吃规则，别的懒加载块照原样分。
+ * 往名单里加模块前先确认它只依赖首屏块；tests/build/lazy-common-chunk.test.ts 守着名单和首屏文件数
+ */
+export const LAZY_COMMON_MODULES = ['shared/logic/link.ts', 'src/kit/hooks/useOnline.ts', 'src/platform/save-file.ts', 'src/core/ms-pref.ts', 'src/platform/device-kind.ts'] as const;
+const LAZY_COMMON_RE = new RegExp(`[\\\\/](${LAZY_COMMON_MODULES.map((m) => m.replace(/[.]/g, '\\.').replace(/\//g, '[\\\\/]')).join('|')})$`);
+export const isLazyCommon = (id: string): boolean => LAZY_COMMON_RE.test(id);
+
+export const PURE_REEXPORT_RULES =[{ test: /[\\/]src[\\/]motion[\\/]components\.ts$/, sideEffects: false }];
 // LEMO_BUILD_VERSION（deploy-preview 给的 X.Y.Z-preview.N）优先，否则 VERSION 文件；和 app/version.json 同一个来源
 export const APP_VERSION: string = buildVersion(root);
 /**
@@ -108,7 +121,7 @@ export default defineConfig(({ mode }) => {
     publicDir: resolve(root, 'src/public'),
     envPrefix: 'VITE_PUBLIC_',
     plugins: [react(), graph.plugin],
-    resolve: { alias: [ZOD_JITLESS_ALIAS] },
+    resolve: { alias: [ZOD_JITLESS_ALIAS, ZIP_LITE_ALIAS] },
     define: {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
       __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
@@ -128,10 +141,10 @@ export default defineConfig(({ mode }) => {
       assetsInlineLimit: 0,
       rollupOptions: {
         treeshake: { moduleSideEffects: PURE_REEXPORT_RULES },
+        output: { codeSplitting: { groups: [{ name: 'lazy-common', test: isLazyCommon, includeDependenciesRecursively: false }] } },
         input: {
           main: resolve(root, 'src/index.html'),
           auth: resolve(root, 'src/auth/index.html'),
-          preview: resolve(root, 'src/preview.html'),
         },
       },
     },

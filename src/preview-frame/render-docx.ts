@@ -1,0 +1,64 @@
+// Word（.docx）预览（架构 5.13 第 3 点：docx-preview → DOMPurify）。
+// • docx-preview 先渲染进一个不挂在页面上的容器（图片转成 data: 地址，useBase64URL），再整段过 DOMPurify：去掉脚本、事件属性、
+//   外链（href 一律去掉，只留页内 #锚点）、iframe、object、form；docx-preview 生成的 <style> 留着（沙箱 CSP 只在这里放 'unsafe-inline'）
+// • 按页往下排（线框 dn：Word 按页往下排）；缩放用 CSS zoom
+// • prep：只读 word/document.xml 里每段 <w:p> 的 <w:t>（DOMParser 解析、不插进页面）；Word 没有固定页数，pages 给 null，没有缩略图
+import DOMPurify from 'dompurify';
+import { renderAsync } from 'docx-preview';
+import type { Post, View } from './main.ts';
+import { TextSink, type Prep } from './prep-kit.ts';
+import JSZip from './zip-lite.ts';
+
+const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  const href = node.getAttribute('href');
+  if (href !== null && !href.startsWith('#')) node.removeAttribute('href');
+  node.removeAttribute('target');
+});
+
+export async function render(root: HTMLElement, bytes: ArrayBuffer, post: Post): Promise<View> {
+  const scratch = document.createElement('div');
+  const styles = document.createElement('div');
+  await renderAsync(bytes, scratch, styles, {
+    inWrapper: true, ignoreLastRenderedPageBreak: true, useBase64URL: true, renderComments: false, renderChanges: false,
+    experimental: false, trimXmlDeclaration: true, debug: false,
+  });
+  const clean = DOMPurify.sanitize(styles.innerHTML + scratch.innerHTML, {
+    ADD_TAGS: ['style'], FORCE_BODY: true, FORBID_TAGS: ['form', 'input', 'button', 'iframe', 'object', 'embed', 'link', 'meta', 'base'],
+    ALLOWED_URI_REGEXP: /^(?:data:image\/(?:png|jpeg|gif|webp|bmp);|#)/i, RETURN_DOM_FRAGMENT: true,
+  });
+  const box = document.createElement('div');
+  box.className = 'pv-docx';
+  box.append(clean);
+  root.append(box);
+  const pages = Math.max(1, box.querySelectorAll('section.docx').length);
+  let zoom = 100;
+  const state = (): void => post({ t: 'state', page: 1, pages, zoom, sheets: [], sheet: 0, clipped: false });
+  state();
+  return {
+    page(n) {
+      box.querySelectorAll('section.docx')[n - 1]?.scrollIntoView({ block: 'start' });
+    },
+    zoom(z) {
+      zoom = z;
+      box.style.zoom = String(z / 100);
+      state();
+    },
+    sheet() {},
+  };
+}
+
+/** 预览材料：纯文本（每段一行），pages、thumb 都是 null */
+export async function prep(bytes: ArrayBuffer): Promise<Prep> {
+  const zip = await JSZip.loadAsync(bytes);
+  const body = zip.file('word/document.xml');
+  if (!body) throw new Error('docx_no_body');
+  const xml = new DOMParser().parseFromString(await body.async('string'), 'application/xml');
+  const sink = new TextSink();
+  for (const p of xml.getElementsByTagNameNS(W_NS, 'p')) {
+    const line = [...p.getElementsByTagNameNS(W_NS, 't')].map((t) => t.textContent ?? '').join('');
+    if (!sink.add(line)) break;
+  }
+  return { pages: null, text: sink.text, thumb: null };
+}

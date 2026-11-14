@@ -36,7 +36,9 @@ export const FUNCTION_VERSION_EXEMPTIONS: readonly FunctionExemption[] = [
   // lemo-ops 调，带 x-ops-secret，没有客户端版本；鉴权照旧由 x-ops-secret 管
   { name: 'usage-report', methods: ['POST'], caller: 'server', why: 'ops-x-ops-secret' },
   // B5（任务单 S18、0.29 续第 77 条）：vault-image 只读、写隐私记插图的字节，旧版也要能看隐私记的图；鉴权照旧由 JWT + x-vault-token 管。
-  // vault 本身不进（0.29 续第 75 条），旧版走不到解锁这一步，也就拿不到令牌
+  // vault 本身不进（0.29 续第 75 条），旧版走不到解锁这一步，也就拿不到令牌。
+  // B4b-1：vault-file 也不进——upload 写同步表 note_files（旧版不该写新形状的行），PPT 预览也不是“旧版必须能用”的功能；
+  //   pg_cron 带 x-cron-secret 调的 sweep 由函数入口按请求头跳过版本门（同 file-check），不用在这里免
   { name: 'vault-image', methods: ['POST'], caller: 'client', why: 'vault-images-on-old-clients' },
 ];
 

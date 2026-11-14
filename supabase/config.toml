@@ -229,6 +229,16 @@ verify_jwt = true
 [functions.vault-image]
 verify_jwt = true
 
+# B4b-1（架构 5.13 第 2 点）：file-check 两种调用——客户端带 JWT 的 check（函数里 requireActiveUser 自己验）、pg_cron 带 x-cron-secret 的 sweep
+# （没有用户 JWT），所以网关校验关掉（F9 ①：cron 函数）
+[functions.file-check]
+verify_jwt = false
+
+# B4b-1（架构 5.13 第 11 点）：vault-file 同 file-check——客户端带 JWT + x-vault-token 的 upload / list / get / remove / restore / ms_preview（函数里
+# requireActiveUser 自己验），pg_cron 带 x-cron-secret 的 sweep（迁移 20261115010000，没有用户 JWT），所以网关校验关掉（F9 ①：cron 函数）
+[functions.vault-file]
+verify_jwt = false
+
 [analytics]
 # 本地不需要日志分析，少起一个容器；【线上】照常有
 enabled = false

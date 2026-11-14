@@ -22,7 +22,16 @@ export type ImgTip = { kind: 'img'; key: ImgMsgKey; trash: boolean };
 export type ConvTip = { kind: 'conv'; key: Extract<NotesMsgKey, `notes.conv.${'moved' | 'kept'}.${string}` | 'notes.conv.empty' | 'notes.conv.left' | 'notes.conv.long'> };
 export type PageTip = ImgTip | ConvTip | MergeUndo;
 /** 带插图的转换要先问一下（R-414，线框 S8-2） */
-export type ConvAsk = { id: string; kind: ConvertKind; images: number };
+export type ConvAsk = { id: string; kind: ConvertKind; images: number; files: number };
+
+/** 带附件、插图的先问一次（转成待办 / 日程、移进隐私记两处共用，评审 18） */
+export const needsAsk = (it: { files: number; images: number }): boolean => it.files > 0 || it.images > 0;
+
+/** 问询卡里“N 个附件、M 张图”那一段；转换、移动两张卡的措辞各自一套键（移动卡的前面带空格，接在“和它的”后面） */
+function whatText(t: ReturnType<typeof useNotesT>, scope: 'conv' | 'move', files: number, images: number): string {
+  const parts = [files > 0 ? t(`notes.${scope}.what.file`, { n: files }) : '', images > 0 ? t(`notes.${scope}.what.img`, { n: images }) : ''];
+  return parts.filter(Boolean).join(t('notes.conv.what.sep', {}));
+}
 
 /**
  * “⋯”菜单：看得见 24px，点按区 ::after 扩到 44。转成待办 / 转成日程（R-414）、移到隐私记（B5 S7，线框 s7 菜单）在“删除”上面。
@@ -105,7 +114,7 @@ export function MergeBar({ hint, onResult, onMerged }: { hint: MergeHint; onResu
 }
 
 /**
- * 转成待办 / 日程的流程（R-414）：只读行拦下；带插图的先问（ask 不为空时页面画确认窗，问了就定下保留原条），其余直接转；结果出在输入行上面：
+ * 转成待办 / 日程的流程（R-414）：只读行拦下；带插图、带附件的先问（B4b-1 起算上附件，线框 sAtt 最后一张）（ask 不为空时页面画确认窗，问了就定下保留原条），其余直接转；结果出在输入行上面：
  * “已转成…”、“先别再转”（left）、没有字或太长“转不了”；正在转（busy）、已经没了、切换账号中不提示；其余（含抛异常）走出错条 / 只读提示
  */
 export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a: ReturnType<typeof useListActions<PageTip>>) {
@@ -123,7 +132,7 @@ export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a
     ask,
     start(it: NoteItem, kind: ConvertKind) {
       if (a.isRo(it.id)) a.g.block();
-      else if (it.images > 0) setAsk({ id: it.id, kind, images: it.images });
+      else if (needsAsk(it)) setAsk({ id: it.id, kind, images: it.images, files: it.files });
       else void go(it.id, kind, false);
     },
     confirm() {
@@ -134,19 +143,40 @@ export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a
   };
 }
 
-/** 带插图的转成待办 / 日程之前问一次（R-414，线框 S8-2；D-13：原条保留，图片还在原处） */
+/** 带插图、附件的转成待办 / 日程之前问一次（R-414，线框 S8-2、sAtt 最后一张；D-13：原条保留，图片、附件还在原处） */
 export function ConvertAsk({ ask, onOk, onCancel }: { ask: ConvAsk; onOk(): void; onCancel(): void }) {
   const t = useNotesT();
   const todo = ask.kind === 'todo';
+  const k = ask.files > 0 && ask.images > 0 ? 'both' : ask.files > 0 ? 'file' : 'img';
+  const what = whatText(t, 'conv', ask.files, ask.images);
   return (
     <ConfirmDialog
       open
       title={t(todo ? 'notes.conv.todo' : 'notes.conv.event', {})}
-      body={t(todo ? 'notes.conv.dlg.todo' : 'notes.conv.dlg.event', { n: ask.images })}
+      body={t(todo ? 'notes.conv.dlg.todo' : 'notes.conv.dlg.event', { k: t(`notes.conv.kind.${k}`, {}), w: what })}
       okLabel={t(todo ? 'notes.conv.dlg.okTodo' : 'notes.conv.dlg.okEvent', {})}
       cancelLabel={t('notes.conv.dlg.cancel', {})}
       onOk={onOk}
       onCancel={onCancel}
+      testId="notes-conv-ask"
+    />
+  );
+}
+
+/** 带附件、插图的移进隐私记之前问一次（B4b-1，线框 sAtt 最后一张）：附件、图会一起加密搬进隐私记 */
+export function MoveAsk({ files, images, onOk, onCancel }: { files: number; images: number; onOk(): void; onCancel(): void }) {
+  const t = useNotesT();
+  const what = whatText(t, 'move', files, images);
+  return (
+    <ConfirmDialog
+      open
+      title={t('notes.move.title', {})}
+      body={t('notes.move.body', { w: what })}
+      okLabel={t('notes.move.ok', {})}
+      cancelLabel={t('notes.conv.dlg.cancel', {})}
+      onOk={onOk}
+      onCancel={onCancel}
+      testId="notes-move-ask"
     />
   );
 }

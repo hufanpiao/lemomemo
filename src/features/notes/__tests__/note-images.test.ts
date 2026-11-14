@@ -8,7 +8,8 @@ import { encodeImage, fitEdge, isHeic, THUMB_EDGE, THUMB_MAX, type Decoded, type
 import { exifDateToMs, jpegTakenAt } from '../../../platform/image-exif.ts';
 import { createUploader, type UploaderDeps } from '../data/image-uploader.ts';
 import { createImageView, livePaths } from '../data/image-view.ts';
-import { imagePath, imageRow, rowSyncOf, thumbPath, uploadFailKey, uploadPair, uuidv7, type QueueItem } from '../data/note-images.ts';
+import { rowSyncOf as coreRowSyncOf } from '../../../core/row-sync.ts';
+import { imagePath, imageRow, thumbPath, uploadFailKey, uploadPair, uuidv7, type QueueItem } from '../data/note-images.ts';
 import { bareJpeg, exifApp1, withExif } from './exif-sample.ts';
 
 const TZ = 'Asia/Seoul';
@@ -134,6 +135,7 @@ describe('上传的拒绝 → 提示', () => {
     const acct = err('account', 'session_revoked', undefined, 401);
     expect(await uploadPair(() => Promise.resolve(acct), 'p.webp', new Blob(), new Blob(), sleep)).toBe(acct);
   });
+  const rowSyncOf = (items: readonly QueueItem[], id: string, ex: boolean) => coreRowSyncOf(items, 'note_images', id, ex);
   it('rowSyncOf：发送失败 > 排队中 > 确认 / 没了', () => {
     const q = (state: QueueItem['state'], error: string | null = null): QueueItem => ({ rec: 'note_images:i', state, error });
     expect(rowSyncOf([q('pending'), q('failed', 'quota_exceeded')], 'i', true)).toEqual({ s: 'failed', code: 'quota_exceeded' });
@@ -169,7 +171,7 @@ function harness(over: Partial<UploaderDeps> = {}) {
     exitOf: vi.fn(() => Promise.resolve('removed' as const)),
     leave: vi.fn(() => Promise.resolve()),
     dropFailed: vi.fn(() => Promise.resolve(true)),
-    softDelete: vi.fn(() => Promise.resolve(true)),
+    patch: vi.fn(() => Promise.resolve(true)),
     objectUrl: () => 'blob:local',
     revoke: vi.fn(),
     sleep: () => Promise.resolve(),
@@ -283,7 +285,7 @@ describe('上传器：先写行再传', () => {
     expect(h.deps.upload).not.toHaveBeenCalled();
     expect(await h.u.remove(r.id)).toBe(true);
     expect(h.deps.dropFailed).toHaveBeenCalledWith(r.id);
-    expect(h.deps.softDelete).not.toHaveBeenCalled();
+    expect(h.deps.patch).not.toHaveBeenCalled();
     expect(h.u.getSnapshot()).toEqual([]);
   });
   it('上传被拒 quota_exceeded：标“没传上”、发 quota 提示；“重新插入”（图还在内存）再传一次；删除已确认的走软删', async () => {
@@ -297,7 +299,7 @@ describe('上传器：先写行再传', () => {
     expect(h.u.retry(r.id)).toBe(true);
     await vi.waitFor(() => expect(h.u.getSnapshot()).toEqual([]));
     expect(await h.u.remove(r.id)).toBe(true);
-    expect(h.deps.softDelete).toHaveBeenCalledWith(r.id);
+    expect(h.deps.patch).toHaveBeenCalledWith(r.id, { deleted_at: expect.any(Number) });
   });
   it('account 类错误：经 accountExitOf 定原因（带发请求前的 sid），再离开本机；探测出账号正常（active）只提示、不离开', async () => {
     const acct = err('account', 'session_revoked', undefined, 401);
