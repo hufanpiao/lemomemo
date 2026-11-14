@@ -40,9 +40,19 @@
   border-bottom: 0;
 }
 
-/* 电脑版详情抽屉里开着的那一行（行按钮 aria-current，B6 返工）：左边一道柠檬黄 */
+/* 电脑版详情抽屉里开着的那一行（行按钮 aria-current，B6 返工）：左边一道柠檬黄。
+   画在行左沿外 6～9px（绝对定位的 ::before，不占位），和时间隔 6px；行高和别的行都不动（主持人 11-14：黄条压住了“08:35”） */
 .row:has(> .main[aria-current="true"]) {
-  box-shadow: inset 3px 0 0 var(--accent);
+  position: relative;
+}
+
+.row:has(> .main[aria-current="true"])::before {
+  content: '';
+  position: absolute;
+  inset: 5px auto 5px -9px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 
 /* 离开途中（AppearItem 打 data-state="leaving"）：淡出、卸载之前不接点按 */
