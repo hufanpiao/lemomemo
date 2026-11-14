@@ -28,7 +28,8 @@ import { AnnivFace } from '../../anniv/index.ts';
 import { EventDrawerEditor } from '../../calendar/index.ts';
 import { TodayNotes } from '../../notes/index.ts';
 import { TodoDrawerEditor } from '../../todos/index.ts';
-import { annivName, useAnnivUpcoming, useLunarToday, useWeekBusy } from '../hooks/useTodayDesk.ts';
+import { annivLabel, annivWhen, nameOf, useAnnivUpcoming } from '../hooks/useAnnivUpcoming.ts';
+import { useLunarToday, useWeekBusy } from '../hooks/useTodayDesk.ts';
 import { useLocale, useTodayT } from '../hooks/useTodayT.ts';
 import { todayDeskKo } from '../i18n/desk-ko.ts';
 import { todayDeskZh } from '../i18n/desk-zh.ts';
@@ -176,7 +177,7 @@ function Week({ today }: { today: DateStr }) {
   );
 }
 
-/** 快到了：30 天内的纪念日，最多 3 个；点了进纪念日页的这一条 */
+/** 快到了：30 天内的纪念日，最多 3 个；名字、“3 天后”和手机纪念日一行同一份（生日加“生日”）；点了进纪念日页的这一条 */
 function Soon({ today }: { today: DateStr }) {
   const t = useTodayDeskT();
   const tt = useTodayT();
@@ -184,20 +185,17 @@ function Soon({ today }: { today: DateStr }) {
   if (!soon.length) return <p className={list.empty}>{t('desk.soonNone', { n: SOON_DAYS })}</p>;
   return (
     <ul className={list.list} data-testid="today-soon">
-      {soon.map(({ row, days }) => {
-        const name = annivName(row);
-        return (
-          <li key={row.id} className={list.row}>
-            <button type="button" className={list.main} onClick={() => void navigate('anniv', row.id)}>
-              <AnnivAvatarSlot Face={AnnivFace} id={row.id} avatarId={row['avatar_id']} name={name} kind={row['kind']} size="xs" />
-              <span className={list.text}>
-                <span className={list.title}>{name}</span>
-                <span className={list.meta}>{days === 0 ? tt('today.anniv.today', {}) : days === 1 ? tt('today.anniv.tomorrow', {}) : tt('today.anniv.in', { n: days })}</span>
-              </span>
-            </button>
-          </li>
-        );
-      })}
+      {soon.map(({ row, days }) => (
+        <li key={row.id} className={list.row}>
+          <button type="button" className={list.main} onClick={() => void navigate('anniv', row.id)}>
+            <AnnivAvatarSlot Face={AnnivFace} id={row.id} avatarId={row['avatar_id']} name={nameOf(row)} kind={row['kind']} size="xs" />
+            <span className={list.text}>
+              <span className={list.title}>{annivLabel(row, tt)}</span>
+              <span className={list.meta}>{annivWhen(days, tt)}</span>
+            </span>
+          </button>
+        </li>
+      ))}
     </ul>
   );
 }
