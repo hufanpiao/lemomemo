@@ -1,5 +1,5 @@
 // 电脑版详情抽屉的外壳（B4 视觉验收 A1 的随手记抽屉；B6 返工抽成 kit，随手记页、今天页共用一套。皮肤视觉稿 DK.mason / NOTE_ED：边上浮起的圆角面板）
-// • Esc 关（浮层 radix 开着时、输入法组字时不关）；“×”由里面的编辑器放（DrawerClose），点了调 onClose
+// • Esc 关（浮层 radix 开着时、输入法组字时不关；浮层那一下 radix 已 preventDefault，不另查页面上有没有浮层）；“×”由里面的编辑器放（DrawerClose），点了调 onClose
 // • 焦点：打开时记下原来的焦点，移到 initial 选出的元素（没有、或禁用了就移到抽屉本身）；关上（Esc、“×”、窗口变窄卸载）时还回去——
 //   一直是同一条就还给原来的元素（不在了再找这一条在列表里的按钮）；中途换过一条，先找当前这一条的按钮，找不到再退回原来的元素。
 //   列表里这一条的按钮统一认 data-open="<id>"（今天页、随手记页的行和卡片都带）；那一行也没了（删了、日子过了）退到页顶能接焦点的 h1（今天页的日期，tabIndex=-1），
@@ -79,8 +79,8 @@ export function DetailDrawer({ id, label, onClose, side, handle, initial, 'data-
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.isComposing || e.keyCode === 229) return;
+      // 浮层开着时 radix 的 DismissableLayer（1.2.1）在 document 捕获阶段先收到 Esc，关浮层前 preventDefault，这里看 defaultPrevented 就够
       if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (document.querySelector('[data-radix-popper-content-wrapper]')) return;
       onClose();
     };
     window.addEventListener('keydown', onKey);
