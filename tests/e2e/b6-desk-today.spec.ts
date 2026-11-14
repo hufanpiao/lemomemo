@@ -9,7 +9,7 @@
 //   ⑭ 列表里删掉抽屉开着的那一条：抽屉一起关（独立评审第 11 条）
 // 评审截图（设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截）：今天页（含抽屉打开）、随手记页（含抽屉），1280×800、1440×900，浅色、深色
 // 点按前等换页淡入放完（page-helpers.ts 的 afterPageFade：分包挂上后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉）
-import { DESK_USE, inCol, openToday, PAST_ID, seedNotes, seedToday, TODAY_IDS } from './b6-desk-helpers.ts';
+import { B6_NOW, DESK_USE, inCol, openToday, PAST_ID, seedNotes, seedToday, TODAY_IDS } from './b6-desk-helpers.ts';
 import { afterPageFade, shot, SHOT_DIR } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
@@ -153,6 +153,7 @@ test.describe('B6 对齐线框：手机宽度的已过去', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test('⑫ 手机宽度：已过去同样折成一行，点了展开', async ({ page, browserName }) => {
+    await page.clock.setFixedTime(B6_NOW);
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible({ timeout: 20_000 });
     await seedToday(page);

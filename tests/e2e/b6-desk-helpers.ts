@@ -9,7 +9,12 @@ import { HINT_HELD } from './visual/visual-helpers.ts';
 /** 1280×820 电脑宽度、首尔时区、登录着 */
 export const DESK_USE = { trace: 'off', loggedIn: true, viewport: { width: 1280, height: 820 }, isMobile: false, hasTouch: false, timezoneId: 'Asia/Seoul' } as const;
 
+/** 这两份用例的“此刻”：钟定在首尔中午。原来按真钟算“三小时前”，夹在今天 00:00 以后，首尔 00:00～03:30 跑时已过去那条还没结束、⑫ 必红（0d093673 的 ci） */
+export const B6_NOW = new Date('2026-11-12T12:00:00+09:00');
+const NOW_MS = B6_NOW.getTime();
+
 export async function openToday(page: Page): Promise<void> {
+  await page.clock.setFixedTime(B6_NOW);
   await page.goto('/app/#/today');
   await expect(page.getByTestId('desk-panel-week')).toBeVisible({ timeout: 20_000 });
   await afterPageFade(page);
@@ -58,7 +63,7 @@ export async function seedNotes(page: Page): Promise<void> {
     ['SignPlex 落地页标题：一次签完，不用打印', 0],
     ['延南洞那家面包店周一休息，下次周二去', 1],
   ];
-  const now = Date.now();
+  const now = NOW_MS;
   const rows: [string, unknown][] = [['drafts', HINT_HELD]];
   cats.forEach((c, i) => {
     const row = { ...c, sort: i + 1, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, rev: 1 };
@@ -79,10 +84,10 @@ export async function seedNotes(page: Page): Promise<void> {
 
 const TZ = 'Asia/Seoul';
 /** 首尔的今天往后 n 天（YYYY-MM-DD） */
-export const dayAfter = (n: number): string => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(Date.now() + n * 86_400_000));
+export const dayAfter = (n: number): string => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(NOW_MS + n * 86_400_000));
 /** 首尔的此刻往后 min 分钟的时刻（HH:MM，按 5 分钟取整；夹在今天 00:00～23:55 里） */
 function hmAfter(min: number): string {
-  const [h, m] = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()).split(':').map(Number) as [number, number];
+  const [h, m] = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(B6_NOW).split(':').map(Number) as [number, number];
   const at = Math.min(23 * 60 + 55, Math.max(0, Math.round((h * 60 + m + min) / 5) * 5));
   return `${String(Math.floor(at / 60)).padStart(2, '0')}:${String(at % 60).padStart(2, '0')}`;
 }
@@ -94,7 +99,7 @@ export const PAST_ID = '0e2e0000-0000-4000-8000-0000000b6e01';
 
 /** 往本机库写今天页的示例数据（server、view 同一份服务器行），写完刷新 */
 export async function seedToday(page: Page): Promise<void> {
-  const now = Date.now();
+  const now = NOW_MS;
   const base = { user_id: FAKE_USER_ID, created_at: now - 86_400_000, updated_at: now - 86_400_000, deleted_at: null, undone: false, short: null };
   const ev = (id: string, title: string, project: string, time: string, duration_min: number) => ({ ...base, id, title, project, date: dayAfter(0), time, tz: TZ, duration_min });
   const events = [
