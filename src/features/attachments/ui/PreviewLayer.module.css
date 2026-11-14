@@ -1,32 +1,4 @@
-/* 附件预览浮层（线框 sPrev：电脑全窗口浮层 left/right 40、top 56、bottom 24、圆角 20；手机整屏，底部“下载”） */
-
-.scrim {
-  position: fixed;
-  z-index: var(--z-dialog);
-  inset: 0;
-  background: var(--scrim);
-}
-
-.box,
-.full {
-  position: absolute;
-  display: flex;
-  overflow: hidden;
-  flex-direction: column;
-  background: var(--sheet-bg);
-  color: var(--text);
-}
-
-.box {
-  inset: 56px 40px 24px;
-  border-radius: 20px;
-  box-shadow: var(--shadow-2);
-}
-
-.full {
-  inset: 0;
-  padding: var(--inset-top) 0 var(--inset-bottom);
-}
+/* 附件预览浮层（线框 sPrev）的内部：顶行、工具、沙箱、PPT 询问、底部“下载”。外壳（scrim / box / full）在 layer.module.css */
 
 .top {
   display: flex;

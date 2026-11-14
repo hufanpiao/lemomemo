@@ -25,6 +25,7 @@ export const zh = {
   'notes.img': '图片',
   'notes.camera': '拍照',
   'notes.img.alt': '随手记里的图片',
+  'notes.img.view': '看第 {n} 张大图',
   'notes.img.more': '还有 {n} 张',
   'notes.img.pend': '待记下的图片',
   'notes.img.pendRemove': '去掉第 {n} 张图片',

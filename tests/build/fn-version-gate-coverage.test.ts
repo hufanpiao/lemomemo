@@ -38,6 +38,7 @@ const PLAN = new Map<string, 'check' | readonly string[]>([
   ['note-search', ['POST']],        // B4b-2：只读（只回 id 和分数，不写任何表；架构第 6 节免查名单的只读函数）
   ['ai-summarize', 'check'],        // B4b-3：扣每天 50 次、写 private.counters（同 ai-parse），index.ts 入口处 versionGate
   ['ai-embed', ['POST']],           // B4b-2：pg_cron 每 2 分钟带 x-cron-secret（架构第 6 节 ai-embed 行）
+  ['ai-media', ['POST']],           // B4b-2 识图：pg_cron 每 5 分钟带 x-cron-secret（架构第 6 节 ai-media 行）
 ]);
 
 /** 接入代码等审查通过再加的目录；接上以后从这里删掉（K10 安全审查后：invite-signup 已接，account 只收 POST、不接） */

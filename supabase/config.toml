@@ -243,6 +243,10 @@ verify_jwt = false
 [functions.ai-embed]
 verify_jwt = false
 
+# B4b-2 识图（架构 5.13 第 5 点、第 6 节）：ai-media 每 5 分钟由 pg_cron 调（迁移 20261115040000），只带 x-cron-secret（F9 ①：cron 函数）
+[functions.ai-media]
+verify_jwt = false
+
 # B4b-2：note-search 是用户带 JWT 调的，网关校验照默认开着；显式写出来，免得照 cron 函数的样子误关（F9：不在名单里的一律不准关）
 [functions.note-search]
 verify_jwt = true

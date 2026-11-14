@@ -96,7 +96,7 @@ export function buildIndex(src: FindSources, tz: Tz): FindItem[] {
   for (const r of src.note_images) {
     const parent = notes.get(str(r['note_id']));
     const desc = str(r['ai_desc']);
-    // 没有描述的图片没有可查的字（识图 ai-media 还没做，见报告）；隐私记的图片（vault-images）不出
+    // 没有描述的图片没有可查的字（描述由服务器 ai-media 识图写，还没识别好的查不到）；隐私记的图片（vault-images）不出
     if (!parent || !isLiveRow(r) || r['bucket'] === 'vault-images' || desc === '') continue;
     out.push({ ...base, kind: 'image', id: r.id, title: desc, fields: [desc, tags(r['ai_tags']).join(' ')], date: parent.date,
       extra: parent.title, noteId: str(r['note_id']), hasThumb: r['has_thumb'] === true });
