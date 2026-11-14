@@ -1,10 +1,15 @@
-// 退出流程里首屏也要用的几样（本机库名、删库、超时、withTimeout、清本机痕迹）：首屏只引这里，platform/sign-out.ts 本体不进首屏
+// 退出流程里首屏也要用的几样（本机库名、删库、超时、withTimeout、清本机痕迹、清本机入口 wipeThisDevice）：首屏只引这里，platform/sign-out.ts 本体不进首屏
+// 不变量：清本机只有 wipeThisDevice 一个入口、一套超时（第三方审查前端-4、后端-3）：core/account.ts 的 wipeLocal 只给它配上本页的库，
+// platform/sign-out.ts 的本人退出、登录页、设置页都调它
 // 不变量：退出、换账号清 localStorage 里账号留下的痕迹只走 forgetAccountLocal（core/account.ts 的 wipeLocal、claimCache，
-// core/boot.ts 没会话的冷启动，platform/sign-out.ts 的 wipeThisDevice）；调用方不再各自补 clearLogQueue
+// core/boot.ts 没会话的冷启动，本文件的 wipeThisDevice）；调用方不再各自补 clearLogQueue
+import { LOCAL_DB_NAME } from '../../shared/local-db.ts';
+import { clearReauth } from './auth-loss-store.ts';
 import { clearLogQueue } from './log-store.ts';
+import { rlog } from './run-log-api.ts';
 // 不变量：WIPE_TIMEOUT_MS、CACHES_TIMEOUT_MS、DELETE_WAIT_MS 只在这里定义（core/account.ts、platform/sign-out.ts 都从这里引）
-/** 本机库名（= core/cache.ts 的 DB_NAME；platform 不引 core，测试守着两边一致） */
-export const LOCAL_DB_NAME = 'planner-v4';
+/** 本机库名：和 SW 共用 shared/local-db.ts 那一份（core/cache.ts 的 DB_NAME 也是它） */
+export { LOCAL_DB_NAME };
 /** 删库最多等多久（别的标签页开着库时浏览器会等它关） */
 export const DELETE_WAIT_MS = 3000;
 /** 清本机库最多等多久，超时改按库名删库 */
@@ -67,4 +72,52 @@ export function deleteLocalDb(
       }
     });
   return withTimeout(run, waitMs, () => 'blocked');
+}
+
+/** 清本机的几步（wipeThisDevice 用；测试换掉） */
+export interface WipeSteps {
+  /**
+   * 主 App：先设闸再清空本机库和内存集合（core/account.ts 的 bootWipeSteps）；出错、超时照样往下按库名删库。登录页不跑 boot，不传
+   */
+  wipe?(): Promise<unknown>;
+  /** 按库名删库（默认 deleteLocalDb；主 App 先关本页连接，免得本页自己收到 versionchange） */
+  deleteDb(): Promise<unknown>;
+  clearCacheStorage(): Promise<void>;
+  /**
+   * 断开浏览器推送（B2 安全审查 FE-2）：关掉本 App 已显示的通知、退订推送（默认 platform/push-disconnect.ts 的 disconnectPushLazy，按需下载 push.ts 的 disconnectBrowserPush，
+   * 自带上限、不抛）。在 ② 设闸清库之后、按库名删库之前调；不传就不做（测试、没有推送的环境）
+   */
+  disconnectPush?(): Promise<void>;
+  /** 记一条日志（只有 act：删不掉 lemo.reauth 时记 auth_loss_store_failed）；不填不记 */
+  log?(act: string): void;
+}
+
+/** 到点或出错都回 false，按时做完回 true；原来的操作不取消 */
+export const withinLimit = (run: () => Promise<unknown>, ms: number): Promise<boolean> => withTimeout(async () => (await run(), true), ms, () => false);
+
+/**
+ * 清本机的唯一入口（架构约定 10.1；第三方审查前端-4、后端-3）：删 lemo.reauth → 设闸清库（wipe，WIPE_TIMEOUT_MS）→ 断开推送
+ * → 按库名删库（一律删，DELETE_WAIT_MS）→ 清 Cache Storage（CACHES_TIMEOUT_MS）→ 清本机痕迹（外观、隐私记同意、日志上传队列：
+ * logsOf 给 user_id 只清这个账号的，null 清全部）。某一步失败或超时不挡后面，永远 resolve；最坏约 WIPE + DELETE + CACHES = 8 秒。
+ * 运行日志记一行各步结果（不记账号）
+ */
+export async function wipeThisDevice(
+  steps: WipeSteps, logsOf: string | null = null, wipeMs = WIPE_TIMEOUT_MS, cachesMs = CACHES_TIMEOUT_MS, deleteMs = DELETE_WAIT_MS,
+): Promise<void> {
+  // 删不掉时下次冷启动登录页会再查 session_fate
+  const reauth = clearReauth();
+  if (!reauth) steps.log?.('auth_loss_store_failed');
+  const { wipe } = steps;
+  const cleared = wipe ? await withinLimit(wipe, wipeMs) : null;
+  // FE-2：通知中心不留上一个账号的标题、旧账号的推送不再到达；自带上限，这里再兜一层异常
+  try {
+    await steps.disconnectPush?.();
+  } catch {
+    // 断不开不挡退出
+  }
+  // 清完也按库名删：本机不留库文件；清库卡住、出错时靠它清掉
+  const dropped = await withinLimit(() => steps.deleteDb(), deleteMs);
+  const caches = await withinLimit(() => steps.clearCacheStorage(), cachesMs);
+  forgetAccountLocal(logsOf);
+  rlog(`wipe app=${cleared ?? '-'} db=${dropped} caches=${caches} reauth=${reauth}`);
 }

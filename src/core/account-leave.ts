@@ -1,10 +1,11 @@
-// 设置页、随手记插图上传离开本机（被移除、停用、冷静期、注销后）：一律交给 core/device-exit.ts 的 exitDevice
+// 设置页、随手记插图上传离开本机（被移除、停用、冷静期、注销后、本机已没有会话）：一律交给 core/device-exit.ts 的 exitDevice
 // • 已经在走别的退出流程（boot.switching）时什么也不做；例外 deletion_unsure：闸是“会话没了”那一路设的（boot.sessionGone）时只记下原因，
 //   那一路最后的 goToAuth('removed') 见已有原因就不覆盖，登录页显示“没能确认注销”
 // • leaveForDisabled：account_disabled 先探测（platform/account-status.ts 的 exitForDisabled）再定；signed_out 交给 onRevoked，active 不离开
 import type { AuthLossPath } from './auth-loss.ts';
-import { defaultExitDeps, exitDevice, type ExitDeps } from './device-exit.ts';
+import { defaultExitDeps, exitDevice, exitOnSessionLoss, type ExitDeps } from './device-exit.ts';
 import { exitForDisabled, type ProbedExit } from '../platform/account-status.ts';
+import { rlog } from '../platform/run-log-api.ts';
 import { setExitNotice } from '../platform/session.ts';
 import { postReset } from '../platform/tab-leader.ts';
 
@@ -33,6 +34,7 @@ export function createLeaveAccount(deps: AccountLeaveDeps = defaultAccountLeaveD
   return (notice, sid, o) => {
     const boot = deps.getBoot();
     if (boot?.switching) {
+      rlog(`exit skip: switching notice=${notice}`);
       if (notice === 'deletion_unsure' && boot.sessionGone) deps.setNotice(notice, sid);
       return Promise.resolve();
     }
@@ -40,9 +42,17 @@ export function createLeaveAccount(deps: AccountLeaveDeps = defaultAccountLeaveD
   };
 }
 
+/**
+ * 设置页的请求发现本机已经没有会话（settings-api 的 signed_out）：和别的标签页删了会话同一条路（core/device-exit.ts 的 exitOnSessionLoss）——
+ * 是本账号的登录过期记号就跟着过期（只关库），否则跟着清库、不提示原因。不再像原来那样提示“已退出登录”后自己清库（第三方审查前端-4）
+ */
+export function createFollowSignOut(deps: ExitDeps = defaultAccountLeaveDeps): () => void {
+  return () => exitOnSessionLoss({ here: false }, deps);
+}
+
 export interface DisabledLeaveDeps {
   leave: LeaveAccount;
-  /** 探测说会话已失效（signed_out）：走“被移除”（useSessionExit.onRevoked） */
+  /** 探测说会话已失效（signed_out）：走“被移除”（设置页的 onRevoked = leave('removed', sid)） */
   onRevoked(sid: string | null): void;
   /** 测试用：换掉 exitForDisabled */
   resolve?: (sid: string | null, fallback?: ProbedExit) => Promise<ProbedExit | 'active'>;

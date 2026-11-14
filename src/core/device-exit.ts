@@ -1,12 +1,13 @@
-// 账号没了、会话没了怎么退出这台设备（架构约定 10.1）：decideExit 定结局，exitDevice 执行；主 App、告知页、插图上传、会话层都走这里
-// （设置页 useSessionExit 和本人退出走 platform/sign-out.ts 的清库步骤，不经这里）。清库走 account.ts 的 wipeLocal；
+// 账号没了、会话没了怎么退出这台设备（架构约定 10.1）：decideExit 定结局，exitDevice 执行；主 App、告知页、插图上传、会话层、设置页都走这里
+// （第三方审查前端-4：设置页发现会话不认、本机没有会话也交到这里，不再自己清库。本人退出的服务器一半在 platform/sign-out.ts，清库同一个入口）。
+// 清库走 account.ts 的 wipeLocal（= platform/exit-basics.ts 的 wipeThisDevice 配上本页的库）；
 // 日志上传队列、外观、隐私记同意在 wipeLocal 里清（platform/exit-basics.ts 的 forgetAccountLocal），没启动（没有 boot）时这里直接调它
 // 不变量：被移除必须服务器确认（session_fate 回 revoked）才清库，查不了、查出错都只退出；停用、过期只退出；冷静期不删会话
 // 不变量：记号写好以后只关库、不再写第二次；写不了记号才退回清库：登录过期、未确认的被移除退回清库时提示 removed，停用仍提示 disabled
 // 不变量：同一页只执行一次（exited）。顺序：被移除先设闸、写记号、删会话、查服务器 → 只关库或清库 → 广播带原因的 reset → 删会话 → 回登录页
 // 不变量：交接救回（换上了新会话）不退出，但发现被移除的那一路已停下（outbox 设闸、引擎 halt、sync-wiring 只处理一次），都不会自己恢复：
 // 先解开 outbox 的闸（pagehide 时补存的草稿还能写进本机），再整页重新载入，用新会话从头启动
-import { closeCache, expireThisTab, markExpired, wipeLocal, type SessionLoss } from './account.ts';
+import { closeCache, expireThisTab, markExpired, sealForExit, wipeLocal, type SessionLoss } from './account.ts';
 import type { AuthLossOutcome, AuthLossPath, AuthLossSignal } from './auth-loss.ts';
 import { resolveAuthLossLazy } from './auth-loss-lazy.ts';
 import { getBoot, type BootResult } from './boot.ts';
@@ -14,7 +15,7 @@ import { rescueByRebind } from './rebind-pending.ts';
 import { readReauth } from '../platform/auth-loss-store.ts';
 import { forgetAccountLocal } from '../platform/exit-basics.ts';
 import { rlog } from '../platform/run-log-api.ts';
-import { clearCacheStorage, clearLocalSessionIf, goToAuth, type ExitNotice } from '../platform/session.ts';
+import { clearLocalSessionIf, goToAuth, type ExitNotice } from '../platform/session.ts';
 import { reloadPage } from '../platform/sw-register.ts';
 
 /** 为什么退出：服务器码映射出的原因、探测结果；active = 账号正常；followed = 别的标签页已退出，跟着清库（不删会话、不记原因、不广播） */
@@ -43,7 +44,7 @@ export function decideExit(f: ExitFacts): ExitPlan {
 
 export interface ExitDeps {
   getBoot(): BootResult | null;
-  /** 清本机库（默认 wipeLocal，带运行时缓存） */
+  /** 清本机库（默认 wipeLocal：清库、按库名删库、运行时缓存） */
   wipe(boot: BootResult): Promise<void>;
   /** 只退出：设闸、写 lemo.reauth、关库（默认 expireThisTab；停用记 null sid）；false = 写不了记号，退回清库 */
   keep(boot: BootResult, notice: ExitNotice, sid: string | null): boolean;
@@ -68,7 +69,7 @@ export interface ExitDeps {
 /** 默认依赖；broadcastReset 由调用方给（platform/tab-leader.ts 的 postReset，或不广播的空函数），免得频道代码进首屏 */
 export const defaultExitDeps: Omit<ExitDeps, 'broadcastReset'> = {
   getBoot,
-  wipe: (boot) => wipeLocal(boot, { clearCacheStorage }),
+  wipe: (boot) => wipeLocal(boot),
   keep: (boot, notice, sid) => (notice === 'disabled' ? expireThisTab(boot, null, 'disabled') : expireThisTab(boot, sid)),
   clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
   goToAuth: (notice, sid) => {
@@ -130,7 +131,10 @@ function runExit(
   boot: BootResult | null, plan: Exclude<ExitPlan, { act: 'stay' }>, sid: string | null, deps: ExitDeps, o: { marked: boolean; dropped: boolean },
 ): Promise<void> {
   const userId = boot?.userId ?? null;
-  if (boot) boot.sessionGone = true;
+  if (boot) {
+    boot.sessionGone = true;
+    sealForExit(boot);   // 从哪个入口进来都先设闸（会话层的 watchAccount 已设过，设置页、告知页进来的没设）
+  }
   let kept = false;
   if (plan.act === 'logout' && boot !== null && plan.notice !== null) {
     if (o.marked) closeCache(boot);

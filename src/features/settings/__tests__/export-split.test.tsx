@@ -217,11 +217,11 @@ describe('导出分片（设置 › 数据）', () => {
     expect(recentExports.list).toHaveBeenCalledTimes(1);
   });
 
-  it('取片中会话没了：走“被移除”流程，不给“继续”', async () => {
+  it('取片中会话没了：交给 leave("removed")（core/device-exit.ts 的 exitDevice），不给“继续”', async () => {
     const a = setup({ account: fakeAccount({ takePart: vi.fn(async () => bad('revoked')) }) });
     await click(exportBtn());
-    await screen.findByRole('dialog');
-    await waitFor(() => expect(a.exit.wipe).toHaveBeenCalled());
+    await waitFor(() => expect(a.leave).toHaveBeenCalledWith('removed', expect.anything()));
+    expect(a.exit.wipe).not.toHaveBeenCalled();
     expect(screen.queryByTestId('settings-export-resume')).toBeNull();
   });
 });

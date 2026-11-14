@@ -31,8 +31,6 @@ export {
   PENDING_ACTION_FUTURE_MS,
   PENDING_ACTION_TTL_MS,
   prunePendingActions,
-  type PendingDone,
-  type PendingSnooze,
   type ValidPendingAction,
 } from './pending-actions.ts';
 

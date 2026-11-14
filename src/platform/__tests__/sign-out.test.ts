@@ -91,12 +91,9 @@ describe('wipeThisDevice（清本机库和 Cache Storage）', () => {
     expect(log).toEqual(['deleteDb', 'caches']);
   });
 
-  it('主 App：wipe 清掉了就不再删库；wipe 说库不能用、出错都改按库名删库；某一步失败不挡后面', async () => {
+  it('主 App：清完也按库名删库（一律删，第三方审查前端-4）；wipe 出错照样删；某一步失败不挡后面', async () => {
     const log: string[] = [];
-    await wipeThisDevice(steps(log, { wipe: async () => (log.push('wipe'), true) }));
-    expect(log).toEqual(['wipe', 'caches']);
-    log.length = 0;
-    await wipeThisDevice(steps(log, { wipe: async () => (log.push('wipe'), false) }));
+    await wipeThisDevice(steps(log, { wipe: async () => void log.push('wipe') }));
     expect(log).toEqual(['wipe', 'deleteDb', 'caches']);
     log.length = 0;
     const s = steps(log, {

@@ -52,6 +52,19 @@ describe('必改 1：串行链不会被永不返回的活卡死', () => {
     expect(logs).toEqual(['sync_task_timeout']);
   });
 
+  it('看门狗日志带上是哪件活、实际等了多久（后端-2 补日志：分清真卡住和 iPhone 挂起后补触发）', async () => {
+    const seen: { act: string; f?: { coll?: string; code?: string } }[] = [];
+    const r = createRunner(() => false, () => undefined, (act, f) => seen.push(f ? { act, f } : { act }), 20);
+    void r.run(() => never(), 'pull:todos');
+    void r.run(() => never());
+    await r.idle();
+    expect(seen.map((e) => [e.act, e.f?.coll])).toEqual([['sync_task_timeout', 'pull:todos'], ['sync_task_timeout', 'task']]);
+    for (const e of seen) {
+      const ms = Number(/^ms=(\d+)$/.exec(e.f?.code ?? '')?.[1]);
+      expect(ms).toBeGreaterThanOrEqual(19);   // 计时器可能早 1 毫秒
+    }
+  });
+
   it('ensureSession 永不返回（审查探针 P1）：看门狗放行后 Realtime 来的行照样写进本机', async () => {
     const d = await device(new FakeServer(), { taskTimeoutMs: 30 });
     d.t.ensureSession = () => never<SessionCheck>();

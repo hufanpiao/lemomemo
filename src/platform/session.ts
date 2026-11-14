@@ -247,7 +247,7 @@ export function authEventHandler(
 }
 
 // ───────── 自己退出的标记（K6-signedout）─────────
-// 退出流程（platform/sign-out.ts 的 signOutThisDevice、设置页被移除时的 onSessionLost）一开头调 markSelfSignOut()，
+// 退出流程（platform/sign-out.ts 的 signOutThisDevice）一开头调 markSelfSignOut()，
 // 之后它自己调 signOut 引起的 SIGNED_OUT 不再按“被移除”处理。
 // • 存 localStorage（各标签页共用）：supabase-js 会把本页的 SIGNED_OUT 转给别的标签页，别的标签页见到标记也不按“被移除”提示，
 //   那边由 storage 事件（会话变 null）走普通的“别的标签页退出了”
@@ -305,14 +305,6 @@ export function markSelfSignOut(storage?: Storage, now: number = Date.now(), ses
   } catch {
     // 写不进：本页内存里那份照样管用
   }
-}
-
-/**
- * 只在本页内存里打标记，不写 localStorage（审查建议 4）：设置页自己处理“被移除”时用——那是真的被移除，
- * 别的标签页收到转来的 SIGNED_OUT 仍要提示“被移除”
- */
-export function markSelfSignOutThisTab(now: number = Date.now(), sessionId: string | null = readSessionId()): void {
-  selfMark = { at: now, sid: sessionId };
 }
 
 /**

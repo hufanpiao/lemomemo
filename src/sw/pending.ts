@@ -8,45 +8,13 @@
 //   ⑵ 开库后立刻挂 onversionchange，收到就 close()：退出第 ⑤ 步删库、页面升级都不会被 SW 的连接挡住；每次写完也立刻关；
 //   ⑶ 退出、换账号以后旧账号的通知不再推到这台设备：服务器一侧做（退出删本会话的 devices 行 = 删订阅；新账号 claim_endpoint 换绑，
 //      架构 4.1、0.38 第 35、37 条），SW 这边由 ⑴ 兜底。
-// 库名、仓名、owner 的键和 core/cache.ts、cache-schema.ts、account.ts 是同一组值（SW 不准引 core，A19），
-// tests/build/sw-pending.test.ts 逐项核对两边一致
+// 库名、仓名、owner 的键、记录形状和页面共用 shared/local-db.ts 那一份（SW 不准引 core，A19；第三方审查后端-5）
 // 不准存明文标题、正文：只存 id、表名、行 id、按键和时间
 // 显示通知前的账号核对（FE-1）也在这里只读开库（readSwOwner）：IndexedDB 只准在本文件里碰（tests/build/sw-no-user-data.test.ts），
 // 开库那一步是和登录页共用的 shared/idb-open-existing.ts（只开库、不开事务）
 
 import { openExistingDb } from '../../shared/idb-open-existing.ts';
-
-export const DB_NAME = 'planner-v4';
-export const OWNER_STORE = 'owner';
-export const OWNER_KEY = 'user_id';
-export const PENDING_STORE = 'pending_actions';
-
-/** 通知上的“推迟”按键（“完成”见 DoneAction；iPhone 的网页推送不显示按钮、exe 的通知不带按钮，只影响 Edge 安装版） */
-export interface SnoozeAction {
-  readonly type: 'snooze';
-  /** 推迟多少分钟 */
-  readonly minutes: number;
-  /** 按的是哪一次到点（推送里的 due_at，epoch ms）：页面转成 outbox 时据此判断这一次是不是已经处理过 */
-  readonly due_at: number;
-}
-
-/** “完成”（只待办，R-294、R-307）：和推迟同一条 pending 路径，页面转成 outbox，整页提醒里能撤销 */
-export interface DoneAction {
-  readonly type: 'done';
-  /** 按的是哪一次到点（同 SnoozeAction.due_at） */
-  readonly due_at: number;
-}
-
-/** pending_actions 里的一项（0.29 续第 107 条②：{id, user_id, row_table, row_id, action, created_at}） */
-export interface SwPendingAction {
-  readonly id: string;
-  readonly user_id: string;
-  readonly row_table: 'events' | 'todos' | 'anniversaries';
-  readonly row_id: string;
-  readonly action: SnoozeAction | DoneAction;
-  /** epoch ms */
-  readonly created_at: number;
-}
+import { LOCAL_DB_NAME, OWNER_KEY, OWNER_STORE, PENDING_STORE, type SwPendingAction } from '../../shared/local-db.ts';
 
 /**
  * 写的结果：ok 写进去了；no_db 本机没有库（从没登录过，或退出时刚删掉）；no_owner 库里没有 owner 仓、没记录或没有 pending_actions 仓；
@@ -56,7 +24,7 @@ export type PendingWriteResult = 'ok' | 'no_db' | 'no_owner' | 'owner_mismatch' 
 
 /** 只开已经存在的库（shared/idb-open-existing.ts，⑴⑵ 都在那里：不建库、收到 versionchange 就关、2 秒没打开按没有库）；没有、打不开回 null */
 async function openExisting(factory: IDBFactory): Promise<IDBDatabase | null> {
-  const db = await openExistingDb<IDBDatabase>(factory, DB_NAME);
+  const db = await openExistingDb<IDBDatabase>(factory, LOCAL_DB_NAME);
   return db === 'missing' ? null : db;
 }
 

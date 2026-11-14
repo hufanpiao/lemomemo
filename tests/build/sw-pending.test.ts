@@ -2,14 +2,15 @@
 // 用 core 的假 IndexedDB（src/core/__tests__/idb-fake.ts）跑真实的开库、升级、删库流程：
 //   ⑴ 库不存在不建库；owner 没记录、不一致一律不写；一致才写
 //   ⑵ SW 开着连接时页面删库、升级不被挡住（onversionchange 立刻 close）；写完立刻关
-//   常量和 core 一侧（cache.ts、cache-schema.ts、account.ts）是同一组值
+//   库名、仓名、owner 的键两边共用 shared/local-db.ts（后端-5），不再逐项核对（tests/build/local-db-shared.test.ts 钉住只定义一处）
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { claimCache } from '../../src/core/account.ts';
-import { DB_NAME as CORE_DB_NAME, deleteCacheDb, openCache, type Cache } from '../../src/core/cache.ts';
-import { OWNER, PENDING_ACTIONS } from '../../src/core/cache-schema.ts';
+import { deleteCacheDb, openCache, type Cache } from '../../src/core/cache.ts';
+import { PENDING_ACTIONS } from '../../src/core/cache-schema.ts';
 import { fakeIndexedDB, flush, nextDbVersion } from '../../src/core/__tests__/idb-fake.ts';
-import { DB_NAME, OWNER_KEY, OWNER_STORE, PENDING_STORE, writePendingAction, type SwPendingAction } from '../../src/sw/pending.ts';
+import { LOCAL_DB_NAME as DB_NAME, type SwPendingAction } from '../../shared/local-db.ts';
+import { writePendingAction } from '../../src/sw/pending.ts';
 
 const UID_A = '11111111-1111-4111-8111-111111111111';
 const UID_B = '22222222-2222-4222-8222-222222222222';
@@ -32,22 +33,6 @@ async function cacheWithOwner(factory: IDBFactory, uid: string | null): Promise<
 }
 
 const pendingOf = (cache: Cache) => cache.tx([PENDING_ACTIONS], 'readonly', (t) => t.getAll<SwPendingAction>(PENDING_ACTIONS));
-
-describe('常量和 core 一致（SW 不准引 core，A19，只能靠这里核对）', () => {
-  it('库名、仓名、owner 的键', () => {
-    expect(DB_NAME).toBe(CORE_DB_NAME);
-    expect(PENDING_STORE).toBe(PENDING_ACTIONS);
-    expect(OWNER_STORE).toBe(OWNER);
-    // account.ts 的 OWNER_KEY 没导出：读源码核对
-    expect(readFileSync('src/core/account.ts', 'utf8')).toContain(`const OWNER_KEY = '${OWNER_KEY}';`);
-  });
-
-  it('SwPendingAction 的字段和 core 的 PendingAction 对得上（0.29 续第 107 条②）', () => {
-    const core = readFileSync('src/core/outbox-types.ts', 'utf8');
-    for (const f of ['id', 'user_id', 'row_table', 'row_id', 'action', 'created_at']) expect(Object.keys(rec())).toContain(f);
-    for (const f of ['user_id: string', 'row_table: string', 'row_id: string', 'created_at: number']) expect(core).toContain(f);
-  });
-});
 
 describe('writePendingAction（K-sw-seal ⑴）', () => {
   it('本机没有库：返回 no_db，不留下新建的库', async () => {

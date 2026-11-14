@@ -14,11 +14,11 @@ const up = () => ({ holdBusy: vi.fn((_reason: string) => () => undefined) });
 const boot = vi.hoisted(() => ({
   current: null as null | FakeBoot,
   applyFreshConfig: vi.fn(async () => null),
-  clearLocalData: vi.fn(async (_cache: unknown) => undefined),
   localUnsentCount: vi.fn(async (): Promise<number | null> => null),
-  seal: vi.fn(),
-  closeCache: vi.fn(),
-  expireThisTab: vi.fn(() => false),
+  /** core/account.ts 的 bootWipeSteps 交回的两步 */
+  wipe: vi.fn(async () => undefined),
+  deleteDb: vi.fn(async (): Promise<unknown> => 'deleted'),
+  stepsOf: [] as unknown[],
 }));
 
 vi.mock('../../../core/boot.ts', () => ({
@@ -27,11 +27,10 @@ vi.mock('../../../core/boot.ts', () => ({
   localUnsentCount: boot.localUnsentCount,
 }));
 vi.mock('../../../core/account.ts', () => ({
-  sealForExit: boot.seal, clearLocalData: boot.clearLocalData, closeCache: boot.closeCache, expireThisTab: boot.expireThisTab,
+  bootWipeSteps: (b: unknown) => (boot.stepsOf.push(b), { wipe: boot.wipe, deleteDb: boot.deleteDb }),
 }));
 
 const { defaultExitDeps, readLocalLocale, updateCachedLocale, writeLocalLocale } = await import('../data/local.ts');
-const { wipeThisDevice } = await import('../../../platform/sign-out.ts');
 
 /** 假 IndexedDB：只记 deleteDatabase 删了哪个库，马上成功 */
 function fakeIdb() {
@@ -52,9 +51,10 @@ beforeEach(() => {
   localStorage.clear();
   boot.current = null;
   boot.applyFreshConfig.mockClear();
-  boot.clearLocalData.mockClear();
   boot.localUnsentCount.mockClear();
-  boot.seal.mockReset();
+  boot.wipe.mockReset();
+  boot.deleteDb.mockClear();
+  boot.stepsOf = [];
   vi.unstubAllGlobals();
 });
 
@@ -98,54 +98,26 @@ describe('updateCachedLocale', () => {
   });
 });
 
-describe('defaultExitDeps', () => {
-  it('库能用：走 core/account 的 clearLocalData（只清库和内存集合），经 platform 清理时不再按库名删库', async () => {
-    const deleted = fakeIdb();
-    const cache = { isClosed: () => false };
-    const b = { status: 'ready', profile: null, cache, upgrade: up() };
+describe('defaultExitDeps（本人退出给 platform/exit-basics.ts 的 wipeThisDevice 的两步，和别的出口同一份 bootWipeSteps）', () => {
+  it('wipe 先占住“忙”（holdBusy，不释放），再走本页 boot 的 bootWipeSteps().wipe；没启动什么也不做', async () => {
+    const seq: string[] = [];
+    const release = vi.fn();
+    const b = { status: 'ready', profile: null, cache: {}, upgrade: { holdBusy: vi.fn((reason: string) => (seq.push(`busy:${reason}`), release)) } };
     boot.current = b;
-    expect(await defaultExitDeps.wipe?.()).toBe(true);
-    expect(boot.clearLocalData).toHaveBeenCalledWith(cache);
-    await wipeThisDevice({ ...defaultExitDeps, clearCacheStorage: async () => undefined });
-    expect(deleted).toEqual([]);
+    boot.wipe.mockImplementationOnce(async () => void seq.push('wipe'));
+    await defaultExitDeps.wipe?.();
+    expect(seq).toEqual(['busy:sign_out', 'wipe']);
+    expect(boot.stepsOf).toEqual([b]);
+    expect(release).not.toHaveBeenCalled();
+    boot.current = null;
+    await defaultExitDeps.wipe?.();
+    expect(boot.wipe).toHaveBeenCalledTimes(1);
   });
 
-  it('库已关闭、打不开、来自更新的版本（version_too_new）、没启动：wipe 说不能用，经 platform 按库名删 planner-v4', async () => {
-    const all = [
-      { status: 'ready', profile: null, cache: { isClosed: () => true }, upgrade: up() },
-      { status: 'unavailable', profile: null, cache: null, upgrade: up() },
-      { status: 'version_too_new', profile: null, cache: null, upgrade: up() },
-      null,
-    ];
-    for (const b of all) {
-      const deleted = fakeIdb();
-      boot.current = b;
-      boot.clearLocalData.mockClear();
-      expect(await defaultExitDeps.wipe?.()).toBe(false);
-      await wipeThisDevice({ ...defaultExitDeps, clearCacheStorage: async () => undefined });
-      expect(boot.clearLocalData).not.toHaveBeenCalled();
-      expect(deleted).toEqual(['planner-v4']);
-    }
-  });
-
-  it('清库出错不吞掉：wipe 照样拒绝（改前语义），platform 当“库不能用”按库名删 planner-v4', async () => {
-    const deleted = fakeIdb();
-    boot.current = { status: 'ready', profile: null, cache: { isClosed: () => false, close: () => undefined }, upgrade: up() };
-    boot.clearLocalData.mockRejectedValueOnce(new Error('quota'));
+  it('清库出错不吞掉：wipe 照样拒绝，由 wipeThisDevice 往下按库名删', async () => {
+    boot.current = { status: 'ready', profile: null, cache: {}, upgrade: up() };
+    boot.wipe.mockRejectedValueOnce(new Error('quota'));
     await expect(defaultExitDeps.wipe?.()).rejects.toThrow('quota');
-    boot.clearLocalData.mockRejectedValueOnce(new Error('quota'));
-    await wipeThisDevice({ ...defaultExitDeps, clearCacheStorage: async () => undefined });
-    expect(deleted).toEqual(['planner-v4']);
-  });
-
-  it('expireHere：记号已由 markHere 写好（marked）只关库、不写第二次；没写过才走 expireThisTab', () => {
-    const b = { status: 'ready', profile: null, cache: null, upgrade: up() };
-    boot.current = b;
-    expect(defaultExitDeps.expireHere?.('s1', true)).toBe(true);
-    expect(boot.closeCache).toHaveBeenCalledWith(b);
-    expect(boot.expireThisTab).not.toHaveBeenCalled();
-    expect(defaultExitDeps.expireHere?.('s1', false)).toBe(false);
-    expect(boot.expireThisTab).toHaveBeenCalledWith(b, 's1');
   });
 
   it('pendingCount 交给 core/boot 的 localUnsentCount（当前的 boot）', async () => {
@@ -154,26 +126,6 @@ describe('defaultExitDeps', () => {
     boot.localUnsentCount.mockResolvedValueOnce(7);
     expect(await defaultExitDeps.pendingCount()).toBe(7);
     expect(boot.localUnsentCount).toHaveBeenCalledWith(b);
-  });
-
-  it('wipe 先占住“忙”（holdBusy，不释放）、同步设闸（sealForExit），再清库；库不能用时也先设闸再删库', async () => {
-    const seq: string[] = [];
-    fakeIdb();
-    const cache = { isClosed: () => false };
-    const release = vi.fn();
-    const upgrade = { holdBusy: vi.fn((reason: string) => (seq.push(`busy:${reason}`), release)) };
-    const b = { status: 'ready', profile: null, cache, upgrade };
-    boot.current = b;
-    boot.seal.mockImplementation(() => void seq.push('seal'));
-    boot.clearLocalData.mockImplementationOnce(async () => void seq.push('clear'));
-    await defaultExitDeps.wipe?.();
-    expect(boot.seal).toHaveBeenCalledWith(b);
-    expect(seq).toEqual(['busy:sign_out', 'seal', 'clear']);
-    expect(release).not.toHaveBeenCalled();
-    boot.seal.mockClear();
-    boot.current = { status: 'version_too_new', profile: null, cache: null, upgrade: up() };
-    await defaultExitDeps.wipe?.();
-    expect(boot.seal).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -194,16 +146,16 @@ describe('defaultExitDeps.clearLocalSessionIf（本机会话兜底，用 platfor
 });
 
 describe('defaultExitDeps.deleteDb（按库名删库）', () => {
-  it('先关本页的库连接（原因 closed，不触发升级中心 reload），再删 planner-v4', async () => {
-    const seq: string[] = [];
+  it('启动过：走 bootWipeSteps().deleteDb（先关本页连接再删）；没启动：直接按库名删 planner-v4', async () => {
     const deleted = fakeIdb();
-    boot.current = { status: 'ready', profile: null, cache: { isClosed: () => false, close: () => void seq.push('close') }, upgrade: up() };
+    const b = { status: 'ready', profile: null, cache: {}, upgrade: up() };
+    boot.current = b;
     await defaultExitDeps.deleteDb();
-    expect(seq).toEqual(['close']);
+    expect(boot.deleteDb).toHaveBeenCalledTimes(1);
+    expect(deleted).toEqual([]);
+    boot.current = null;
+    await defaultExitDeps.deleteDb();
     expect(deleted).toEqual(['planner-v4']);
-    boot.current = { status: 'ready', profile: null, cache: { close: () => { throw new Error('closed'); } }, upgrade: up() };
-    await defaultExitDeps.deleteDb();
-    expect(deleted).toEqual(['planner-v4', 'planner-v4']);
   });
 });
 

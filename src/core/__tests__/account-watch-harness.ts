@@ -32,7 +32,7 @@ export function watchWithExit(boot: BootResult, d: WatchSpies): () => void {
     wipe: (b: BootResult) => wipeLocal(b, {
       clearCacheStorage: () => d.clearCacheStorage(),
       ...(d.disconnectPush ? { disconnectPush: d.disconnectPush } : {}),
-      ...(d.deleteDb ? { deleteDb: d.deleteDb, dropDb: true } : {}),
+      ...(d.deleteDb ? { deleteDb: d.deleteDb } : {}),
       ...(d.log ? { log: d.log } : {}),
     }),
     clearLogs: () => d.clearLogs?.(),

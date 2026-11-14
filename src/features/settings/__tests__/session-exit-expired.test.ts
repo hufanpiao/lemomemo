@@ -1,89 +1,9 @@
 // R-382（架构 4.1a 第 1 点 ②）：设置页和插图上传收到 session_revoked 先定结局——expired 只关库、不清，删那一个会话、回登录页“登录已过期”；
-// removed 照旧清库。path 记 settings / files
-import { act, renderHook } from '@testing-library/react';
+// removed 照旧清库。path 记 settings / files。设置页 11-14 起也走这里（createLeaveAccount('removed')，第三方审查前端-4），不再有自己那一份
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BootResult } from '../../../core/boot.ts';
 import { resetExitForTest } from '../../../core/device-exit.ts';
 import { createLeaveAccount, defaultAccountLeaveDeps } from '../data/account-exit.ts';
-import { useSessionExit } from '../hooks/useSessionExit.ts';
-import { fakeApi, fakeExit } from './fakes.tsx';
-
-describe('设置页 onRevoked', () => {
-  it('判 expired：expireHere(sid) → 删那个会话 → goToAuthExpired(sid)；不清库；记 path settings、码 session_revoked', async () => {
-    const { exit } = fakeExit();
-    const resolveAuthLoss = vi.fn(async () => 'expired' as const);
-    const expireHere = vi.fn(() => true);
-    const goToAuthExpired = vi.fn();
-    const { result } = renderHook(() => useSessionExit(fakeApi(), { ...exit, resolveAuthLoss, expireHere, goToAuthExpired, lostUserId: () => 'u1' }));
-    await act(async () => {
-      result.current.onRevoked('s-me');
-    });
-    await vi.waitFor(() => expect(goToAuthExpired).toHaveBeenCalledWith('s-me'));
-    expect(resolveAuthLoss).toHaveBeenCalledWith({ path: 'settings', code: 'session_revoked', sessionId: 's-me', userId: 'u1' });
-    expect(expireHere).toHaveBeenCalledWith('s-me', false);
-    expect(exit.clearLocalSessionIf).toHaveBeenCalledWith('s-me');
-    expect(exit.wipe).not.toHaveBeenCalled();
-  });
-
-  it('判 removed：不调 expireHere，照旧按被移除（提示 revoked）', async () => {
-    const { exit } = fakeExit();
-    const expireHere = vi.fn(() => true);
-    const goToAuthExpired = vi.fn();
-    const { result } = renderHook(() =>
-      useSessionExit(fakeApi(), { ...exit, resolveAuthLoss: async () => 'removed', expireHere, goToAuthExpired, lostUserId: () => 'u1' }));
-    await act(async () => {
-      result.current.onRevoked('s-me');
-    });
-    await vi.waitFor(() => expect(result.current.notice).toBe('revoked'));
-    expect(expireHere).not.toHaveBeenCalled();
-    expect(goToAuthExpired).not.toHaveBeenCalled();
-  });
-
-  it('查 session_fate 之前先 markHere（设闸、写记号，独立验证建议 3）：先于 resolveAuthLoss 调', async () => {
-    const { exit } = fakeExit();
-    const order: string[] = [];
-    const markHere = vi.fn(() => (order.push('mark'), true));
-    const resolveAuthLoss = vi.fn(async () => (order.push('resolve'), 'expired' as const));
-    const goToAuthExpired = vi.fn();
-    const { result } = renderHook(() =>
-      useSessionExit(fakeApi(), { ...exit, markHere, resolveAuthLoss, expireHere: () => true, goToAuthExpired, lostUserId: () => 'u1' }));
-    await act(async () => {
-      result.current.onRevoked('s-me');
-    });
-    await vi.waitFor(() => expect(goToAuthExpired).toHaveBeenCalledWith('s-me'));
-    expect(markHere).toHaveBeenCalledWith('s-me');
-    expect(order).toEqual(['mark', 'resolve']);
-  });
-
-  it('markHere 已写成记号、判 expired：expireHere 带 marked=true（只关库、不写第二次）；第二次写会失败也不清库', async () => {
-    const { exit } = fakeExit();
-    const expireHere = vi.fn((_sid: string | null, marked?: boolean) => marked === true);
-    const goToAuthExpired = vi.fn();
-    const { result } = renderHook(() =>
-      useSessionExit(fakeApi(), { ...exit, markHere: () => true, resolveAuthLoss: async () => 'expired', expireHere, goToAuthExpired, lostUserId: () => 'u1' }));
-    await act(async () => {
-      result.current.onRevoked('s-me');
-    });
-    await vi.waitFor(() => expect(goToAuthExpired).toHaveBeenCalledWith('s-me'));
-    expect(expireHere).toHaveBeenCalledWith('s-me', true);
-    expect(exit.wipe).not.toHaveBeenCalled();
-    expect(result.current.notice).not.toBe('revoked');
-  });
-
-  it('markHere 写不了记号：不查 session_fate，直接按被移除（提示 revoked）', async () => {
-    const { exit } = fakeExit();
-    const resolveAuthLoss = vi.fn(async () => 'expired' as const);
-    const goToAuthExpired = vi.fn();
-    const { result } = renderHook(() =>
-      useSessionExit(fakeApi(), { ...exit, markHere: () => false, resolveAuthLoss, expireHere: () => true, goToAuthExpired, lostUserId: () => 'u1' }));
-    await act(async () => {
-      result.current.onRevoked('s-me');
-    });
-    await vi.waitFor(() => expect(result.current.notice).toBe('revoked'));
-    expect(resolveAuthLoss).not.toHaveBeenCalled();
-    expect(goToAuthExpired).not.toHaveBeenCalled();
-  });
-});
 
 describe('createLeaveAccount(removed) 的 R-382 路径（插图上传 path files）', () => {
   const U = '00000000-0000-4000-8000-0000000000a1';
