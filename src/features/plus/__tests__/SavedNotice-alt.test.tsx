@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistAsk } from '../../../../shared/logic/parse/assist.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
+import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import type { BatchActs, BatchNotice } from '../hooks/useSavedBatch.ts';
 import { SavedNotice } from '../ui/SavedNotice.tsx';
@@ -49,6 +50,19 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+});
+
+describe('SavedNotice：两条撤销条不叠（评审第 19 条）', () => {
+  it('已有一条撤销条开着时出“已记下”：把前一条收起（不撤销）；之后再出别的撤销条，“已记下”也被收起', () => {
+    const before = vi.fn();
+    const { rerender } = render(<UndoToast message="已删除" undoLabel="撤销" onUndo={vi.fn()} onClose={before} solo="keep" />);
+    const a = acts();
+    rerender(<><UndoToast message="已删除" undoLabel="撤销" onUndo={vi.fn()} onClose={before} solo="keep" /><SavedNotice notice={notice(null)} acts={a} /></>);
+    expect(before).toHaveBeenCalledTimes(1);
+    render(<UndoToast message="已完成" undoLabel="撤销" onUndo={vi.fn()} onClose={vi.fn()} solo="keep" />);
+    expect(a.closeNotice).toHaveBeenCalledTimes(1);
+    expect(a.undo).not.toHaveBeenCalled();
+  });
 });
 
 describe('SavedNotice：模糊先按记下保存的', () => {

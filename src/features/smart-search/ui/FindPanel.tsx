@@ -341,6 +341,8 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
                 void undoTarget(a, clock.now()).then((n) => rlog(`find act undo n=${n}`));
               } : undefined}
               onClose={() => setDone(null)}
+              // 和“已记下”、列表的删除撤销条同一时间只留一条，后出的顶掉前一条（B4b-3 评审第 19 条）
+              solo="keep"
               data-testid="find-undo"
             />
           ) : null}

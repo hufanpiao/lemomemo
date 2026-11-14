@@ -49,7 +49,7 @@ export function SavedNotice({ notice, acts, onEdit }: SavedNoticeProps) {
     </div>
   );
   if (notice.entries.length <= 1 && altRows === null) {
-    return <UndoToast message={text} undoLabel={t('plus.notice.undo', {})} onUndo={undoAll} onClose={acts.closeNotice} data-testid="type-notice" />;
+    return <UndoToast message={text} undoLabel={t('plus.notice.undo', {})} onUndo={undoAll} onClose={acts.closeNotice} solo="keep" data-testid="type-notice" />;
   }
   return (
     <div className={styles.saved} role="status" data-testid="type-notice">

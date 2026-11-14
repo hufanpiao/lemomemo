@@ -10,6 +10,7 @@ import { clock } from '../../../platform/clock.ts';
 import type * as Session from '../../../platform/session.ts';
 import { addRecent } from '../data/find-recent.ts';
 import { closeFind, findOpenSnapshot, type AssistReq } from '../hooks/find-open.ts';
+import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import FindPanel from '../ui/FindPanel.tsx';
 
 const SID = 'sid-fm';
@@ -96,6 +97,18 @@ describe('查找面板：每行“⋯”菜单', () => {
     expect(fx.save).toHaveBeenLastCalledWith('todos', id(2), { deleted_at: null, updated_at: NOW }, true);
     expect(fx.logs.join('\n')).toMatch(/find act delete kind=todo ok=1/);
     expect(fx.logs.join('\n')).toMatch(/find act undo n=1/);
+  });
+
+  it('两条撤销条不叠（评审第 19 条）：外面已有一条撤销条时，面板里出“已删除”就把它收起（不撤销）', async () => {
+    const before = vi.fn();
+    const undo = vi.fn();
+    render(<><UndoToast message="已记下" undoLabel="撤销" onUndo={undo} onClose={before} solo="keep" /><FindPanel query="发票" from="ctrlk" onClose={vi.fn()} /></>);
+    openMenu('todo');
+    fireEvent.click(screen.getByTestId('find-m-delete'));
+    await flush();
+    expect(screen.getByTestId('find-undo')).toBeTruthy();
+    expect(before).toHaveBeenCalledTimes(1);
+    expect(undo).not.toHaveBeenCalled();
   });
 
   it('写失败：只出“没改成”的提示（alert），没有撤销按钮', async () => {
