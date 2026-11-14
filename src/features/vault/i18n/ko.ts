@@ -24,6 +24,8 @@ export const ko = {
   'vault.setup.step2': '2단계 중 2단계: 한 번 더 입력', // REVIEW(ko)
   'vault.setup.mismatch': '두 번 입력한 게 달라요. 다시 입력해 주세요', // REVIEW(ko)
   'vault.setup.faceid': '다음부터 {method}로 잠금 해제(지원하는 기기)', // REVIEW(ko)
+  'vault.setup.bindFail': '비밀번호는 정했지만 {method}는 연결하지 못했어요. ‘설정 › 비밀 메모’에서 다시 연결할 수 있어요', // REVIEW(ko)
+  'vault.setup.bindGo': '설정으로', // REVIEW(ko)
   'vault.autolock': '앱을 떠나고 {n}분 뒤 다시 잠겨요. 설정에서 바꿀 수 있어요', // REVIEW(ko)
 
   'vault.locked.title': '비밀 메모가 잠겨 있어요', // REVIEW(ko)

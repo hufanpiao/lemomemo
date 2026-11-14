@@ -22,6 +22,8 @@ export const zh = {
   'vault.setup.step2': '第 2 步，共 2 步：再输一次',
   'vault.setup.mismatch': '两次输的不一样，请重新输入',
   'vault.setup.faceid': '以后用 {method} 解锁（支持的设备）',
+  'vault.setup.bindFail': '密码设好了，{method} 没绑上。可以到“设置 › 隐私记”再绑一次',
+  'vault.setup.bindGo': '去设置',
   'vault.autolock': '离开 App {n} 分钟后自动重新上锁，设置里可改',
 
   'vault.locked.title': '隐私记已上锁',
