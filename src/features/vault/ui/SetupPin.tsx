@@ -52,7 +52,7 @@ export function SetupPin({ onCancel, testId = 'vault-setup' }: { onCancel(): voi
   const min = useAutolockMin();
   const [face, setFace] = useState(false);
   const [busy, setBusy] = useState(false);
-  const method = t(wa.method === 'faceid' ? 'vault.method.faceid' : 'vault.method.hello', {});
+  const method = wa.label;
   const done = async (pin: string): Promise<void> => {
     setBusy(true);
     const r = await s.setup(pin);

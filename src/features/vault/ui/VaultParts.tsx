@@ -30,7 +30,6 @@ function LockRow() {
   useEffect(() => {
     if (state.status === null && state.phase === 'loading') void s.refreshStatus();
   }, [s, state.status, state.phase]);
-  const method = t(wa.method === 'faceid' ? 'vault.method.faceid' : 'vault.method.hello', {});
   const unset = state.status?.set === false;
   const unlocked = state.phase === 'unlocked';
   const sub = unset ? '' : unlocked ? t('vault.lockrow.unlocked', { n: count }) : count ? t('vault.lockrow.locked', { n: count }) : t('vault.lockrow.lockedNone', {});
@@ -38,8 +37,8 @@ function LockRow() {
     ? t('vault.lockrow.setup', {})
     : unlocked
       ? t('vault.lockrow.open', {})
-      : wa.usable && (state.status?.webauthn ?? 0) > 0 && !state.relocked
-        ? t('vault.lockrow.with', { method })
+      : wa.canUnlock(state)
+        ? t('vault.lockrow.with', { method: wa.label })
         : t('vault.lockrow.pin', {});
   return (
     <button type="button" className={styles.lockrow} onClick={() => void navigate('vault')} data-testid="vault-lockrow">

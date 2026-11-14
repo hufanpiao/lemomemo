@@ -44,8 +44,8 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
   const [mode, setMode] = useState<'card' | 'pin'>('card');
   const [faceFails, setFaceFails] = useState(0);
   const [busy, setBusy] = useState(false);
-  const method = t(wa.method === 'faceid' ? 'vault.method.faceid' : 'vault.method.hello', {});
-  const canFace = wa.usable && (state.status?.webauthn ?? 0) > 0 && !state.relocked;
+  const method = wa.label;
+  const canFace = wa.canUnlock(state);
   const left = useLeft(state.lockedUntil);
   const locked = left > 0;
   const desk = useMedia(MQ_SIDEBAR);

@@ -29,7 +29,7 @@ export function VaultSettings() {
   const min = useAutolockMin();
   const fmtAt = useFmtAt();
   const [view, setView] = useState<View>(useRoute().params[1] === 'reset' ? 'reset' : 'main');
-  const method = t(wa.method === 'faceid' ? 'vault.method.faceid' : 'vault.method.hello', {});
+  const method = wa.label;
   const back = () => setView('main');
 
   const waiting = (

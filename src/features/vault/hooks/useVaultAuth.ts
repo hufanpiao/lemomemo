@@ -1,5 +1,7 @@
 // Face ID / Windows Hello 和“忘记密码”重设（B5 S3、S4；代定 D5、D18）
-// • useWebauthn：这台设备能不能用（exe、不支持的环境不显示，platform/webauthn.ts）、按钮上的叫法、解锁、绑定（绑定要当场输密码）
+// • useWebauthn：这台设备能不能用（exe、不支持的环境不显示，platform/webauthn.ts）、按钮上的叫法（label）、
+//   解锁卡和入口行给不给 Face ID（canUnlock：能用、绑定过、没有“别处改过密码”）、解锁、绑定（绑定要当场输密码）；
+//   叫法和 canUnlock 原来在四个界面各写一份（审查第 11 条），只留这里
 // • useVaultReset：发验证码 → 验证码 + 交接设备行（core/session-rebind.ts）→ 设新密码（vault {reset, new_pin}）
 import { useCallback, useEffect, useState } from 'react';
 import { getBoot } from '../../../core/boot.ts';
@@ -10,8 +12,10 @@ import { readSessionEmail } from '../../../platform/session.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { createEphemeralDb } from '../../../platform/supabase/ephemeral.ts';
 import { createPasskey, getAssertion, webauthnUsable } from '../../../platform/webauthn.ts';
+import type { VaultState } from '../data/session.ts';
 import type { VaultResult } from '../data/vault-api.ts';
 import { useVault } from './useVault.ts';
+import { useVaultT } from './useVaultT.ts';
 
 export type Method = 'faceid' | 'hello';
 
@@ -19,6 +23,7 @@ let usableMemo: Promise<boolean> | null = null;
 
 export function useWebauthn() {
   const { s } = useVault();
+  const t = useVaultT();
   const [usable, setUsable] = useState(false);
   useEffect(() => {
     let live = true;
@@ -30,6 +35,8 @@ export function useWebauthn() {
     };
   }, []);
   const method: Method = isAppleMobile() ? 'faceid' : 'hello';
+  const label = t(method === 'faceid' ? 'vault.method.faceid' : 'vault.method.hello', {});
+  const canUnlock = (st: VaultState): boolean => usable && (st.status?.webauthn ?? 0) > 0 && !st.relocked;
 
   const unlock = useCallback(async (): Promise<VaultResult<true> | null> => {
     const o = await s.webauthnOptions('unlock');
@@ -51,7 +58,7 @@ export function useWebauthn() {
     return r.ok ? { ok: true, value: true } : r;
   }, [s]);
 
-  return { usable, method, unlock, register };
+  return { usable, method, label, canUnlock, unlock, register };
 }
 
 export type ResetStep = 'intro' | 'code' | 'pin' | 'done';
