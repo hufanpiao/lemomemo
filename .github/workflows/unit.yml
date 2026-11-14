@@ -248,7 +248,7 @@ jobs:
 
   workflow-lint:
     name: 工作流检查（actionlint ＋ shellcheck）
-    # B0 QA D-05：四个工作流都要过 actionlint；run: 里的脚本由 actionlint 调 runner 自带的 shellcheck 一起查
+    # B0 QA D-05：.github/workflows 下全部工作流（现在 6 个，新加的自动算进来；第三方审查 CI-18 改正原来的“四个”）都要过 actionlint；run: 里的脚本由 actionlint 调 runner 自带的 shellcheck 一起查
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
