@@ -50,7 +50,9 @@ describe('审查第 3 条：设密码时 Face ID 绑定失败要提示', () => {
     expect(m.calls.map((c) => c.action)).toContain('setup');
     const tip = await screen.findByTestId('vault-bind-fail');
     expect(tip.getAttribute('role')).toBe('alert');
-    expect(tip.textContent).toContain('设置 › 隐私记');
+    // 提示条只排一行（kit UndoToast）：文案只说“没绑上”，去哪儿再绑由“去设置”按钮表达
+    expect(tip.textContent).toContain('没绑上');
+    expect(tip.textContent).toContain('去设置');
     fireEvent.click(screen.getByTestId('vault-bind-fail-undo'));
     expect(window.location.hash).toBe('#/settings/vault');
   });
