@@ -6,7 +6,7 @@
 //   最后才设 <html data-font>，样式里 :root[data-font] 换掉 --f-zh、--f-ko（和 --f-num）。没确认之前一直是系统字体。
 //   确认过的字体和样式地址记在本机（pv-font-ok）。
 // • 冷启动：上次确认过的同一种字体直接加 link、设 data-font（不等下载、不闪），后台再静默走一遍上面的核对；核对不过才回系统字体、报失败。
-// • 失败（离线、20 秒超时、哈希不对、样式加载不了、确认不到）：拿掉 link 和 data-font 回到系统字体，设置值不改，状态 fail（设置页“重试”）；
+// • 失败（离线、20 秒没有进展（每下完一个分片重新计，11-14 真机日志 font_timeout pct=57 后改）、哈希不对、样式加载不了、确认不到）：拿掉 link 和 data-font 回到系统字体，设置值不改，状态 fail（设置页“重试”）；
 //   下次打开 App 时 look.ts 会再套一次。哈希不对的那个分片先从缓存删掉再报失败。每次加载一个 AbortController：超时或被下一次顶掉就中止下载。
 // • 缓存清理（5.9c）：换字体（含换回系统字体）一天以后，删掉 lemo-fonts 里不属于当前字体的文件（pv-font-gc 记换的时刻）
 // • 运行日志 font_load（look.ts 传进来的 log）：开始、完成、失败各一行，itemId 是字体 id，code 写阶段、错误码、耗时、进度
@@ -165,12 +165,26 @@ export async function applyFont(id: string, l?: FontLog): Promise<void> {
   if (!fast) set({ id, status: 'loading', pct: 0 });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pct = 0;
+  let stalled: (e: FontError) => void = () => undefined;
+  /** 停滞计时（11-14 真机日志：整段 20 秒总时限在 57% 处掐断，网速慢但一直在下的也算失败）：每下完一个分片重新计 */
+  const arm = (): void => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      my.abort();
+      stalled(new FontError('font_timeout'));
+    }, FONT_TIMEOUT_MS);
+  };
   try {
+    const timeout = new Promise<never>((_, no) => {
+      stalled = no;
+    });
+    arm();
     const work = (async () => {
       for (const [i, p] of entry.prefetch.entries()) {
         await fetchChecked(p, my.signal);
         // 超时、被下一次顶掉都会 abort：后面的分片不再下，也不再改状态（不然会把已报的 fail 改回 loading）
         if (my.signal.aborted) return;
+        arm();
         pct = Math.min(99, Math.round(((i + 1) * 100) / entry.prefetch.length));
         if (!fast) set({ id, status: 'loading', pct });
       }
@@ -179,12 +193,6 @@ export async function applyFont(id: string, l?: FontLog): Promise<void> {
       const faces = await Promise.all([document.fonts.load(`400 16px "${entry.family}"`, entry.sample), document.fonts.load(`400 16px "${entry.familyKo}"`, entry.sampleKo)]);
       if (faces.some((f) => f.length === 0)) throw new FontError('font_face_none');
     })();
-    const timeout = new Promise<never>((_, no) => {
-      timer = setTimeout(() => {
-        my.abort();
-        no(new FontError('font_timeout'));
-      }, FONT_TIMEOUT_MS);
-    });
     await Promise.race([work, timeout]);
     if (!live()) return;
     document.documentElement.dataset['font'] = id;
