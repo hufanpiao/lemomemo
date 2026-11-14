@@ -8,7 +8,8 @@ import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
-import { setTodoDeleted, setTodoDone } from '../data/todo-actions.ts';
+import { setTodoDeleted } from '../data/todo-actions.ts';
+import { doneToggler } from '../../../core/todo-done.ts';
 import { autoTodo, tickSubtask, undoAutoDone } from '../data/todo-items.ts';
 import { groupTodos, projectCounts, type Row } from '../data/todo-list.ts';
 import { listKo } from '../i18n/list-ko.ts';
@@ -34,13 +35,15 @@ export function useTodoList() {
   const active = project !== null && projects.some((p) => p.project === project) ? project : null;
   const groups = useMemo(() => groupTodos(rows, now, tz, active, locale), [rows, now, tz, active, locale]);
 
+  // 打勾：刚点过的再点回去按撤销写回原来的 done_at（core/todo-done.ts，评审第 15 条）；这一页挂着期间记着
+  const [toggle] = useState(() => doneToggler());
   const toggleDone = useCallback(
     async (id: string, done: boolean): Promise<ActionResult> => {
       const r = rows.find((x) => x.id === id);
       if (!r) return 'failed';
-      return actionResult(await setTodoDone(r, done, clock.now(), currentTz()));
+      return actionResult(await toggle(r, done, clock.now(), currentTz()));
     },
-    [rows],
+    [rows, toggle],
   );
   const remove = useCallback(
     async (id: string, deleted: boolean): Promise<ActionResult> => {

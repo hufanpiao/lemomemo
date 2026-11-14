@@ -1,7 +1,11 @@
 // 待办列表上打勾、删除的 remind 标记（data/todo-actions.ts；代码审查 S2、补审改法 ④）
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
-import { remindAfterDelete, remindAfterDone } from '../data/todo-actions.ts';
+import { remindAfterDelete } from '../data/todo-actions.ts';
+import { todoDonePatch } from '../../../core/todo-done.ts';
+
+/** 打勾的标记规则在 core/todo-done.ts（评审第 15 条：所有入口共用），这里照旧钉住 */
+const remindAfterDone = (...a: Parameters<typeof todoDonePatch>): boolean => todoDonePatch(...a).remind;
 
 const TZ = 'Asia/Seoul';
 const at = (h: number, m = 0) => msAt('2026-11-05', h * 60 + m, TZ);

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getBoot } from '../../../core/boot.ts';
 import { actionResult, type ActionResult as ActResult } from '../../../core/action-result.ts';
-import { savePatch } from '../../../core/edit-save.ts';
+import { setTodoDone } from '../../../core/todo-done.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -375,11 +375,10 @@ export function useRemindActions() {
     return res;
   }, []);
 
-  /** 待办横幅、整页提醒标题前的完成圆圈（UI-2 第三轮中 1） */
+  /** 待办横幅、整页提醒标题前的完成圆圈（UI-2 第三轮中 1）；写法、提醒标记和列表同一份（core/todo-done.ts，评审第 15 条） */
   const complete = useCallback(async (r: Reminder): Promise<ActResult> => {
     if (r.kind !== 'todo') return 'failed';
-    const now = clock.now();
-    const res = actionResult(await savePatch('todos', r.id, { done: true, done_at: now, updated_at: now }, true));
+    const res = actionResult(await setTodoDone(r.row, true, clock.now(), currentTz()));
     if (res === 'ok') removeRinging(r.tag);
     return res;
   }, []);

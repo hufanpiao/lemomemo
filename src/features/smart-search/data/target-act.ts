@@ -1,13 +1,13 @@
 // 取消、改期、完成：在本机缓存里找候选、用户点了才写、撤销写回原值（架构 5.14 第 7 点；B4b-3）
 // • 候选：shared/logic/parse/match-target.ts（target 已过 resolveTarget；不调 AI、不联网、不含隐私记）
 // • 取消 = 软删（deleted_at，进“最近删除”，不标完成）；撤销写回 deleted_at = null
-// • 完成：done = true、done_at = now（和列表里打勾同一写法）；撤销写回 done = false 和原来的 done_at（原来没有的写 0，同 today-actions）
+// • 完成：经 core/todo-done.ts（和列表、今天页、提醒页同一份，评审第 15 条）：done_at 记 now、已经完成的不覆盖；撤销写回原来的 done 和 done_at
 // • 改期：日程改 date、time，tz 写成设备当前时区（4.6，和手动编辑一样；候选的 date、time 已经换算到设备时区），
 //   换了时间以后旧的“知道了”“稍后”不算数：同一次写入清 notified_for、snooze_at（同 calendar/data/event-edit.ts 的 patchOf）；
 //   待办改 due、due_time：说了新时刻的写 due_time（原来没有时刻的提前量按 remindBeforeOnSetDueTime 给默认），没说新时刻的保留原来的，
 //   只说时刻的只改 due_time（原来没有 due 的记今天）。撤销把改之前这几列写回
 // • 批量（all）：同一个 batch 一起写、一起撤；写不进去的那条不算（结果里 failed 计数）
-// • remind 标记：这几种写入都可能改提醒（删了要撤、改期要重算），一律带 true 让它尽快上服务器（只是早发，不改结果）
+// • remind 标记：完成按 todoRemindFlag 算（core/todo-done.ts）；取消、改期都可能改提醒（删了要撤、改期要重算），带 true 让它尽快上服务器（只是早发，不改结果）
 // 纯 TS：不准 import React（A1）
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
@@ -17,6 +17,7 @@ import { remindBeforeOnSetDueTime } from '../../../../shared/logic/remind.ts';
 import type { PlusTo } from '../../../../shared/schema/intent.ts';
 import { savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
 import { collection } from '../../../core/store.ts';
+import { donePrev, todoDonePatch, todoUndoPatch } from '../../../core/todo-done.ts';
 
 export type Row = Readonly<Record<string, unknown>> & { readonly id: string };
 export type { TargetHit, TargetMatch };
@@ -38,8 +39,8 @@ export function moveTo(h: TargetHit, to: PlusTo, today: DateStr): { date: DateSt
 export function patchFor(intent: TargetIntent, h: TargetHit, row: Row, to: PlusTo | null, now: number, tz: Tz): [Record<string, unknown>, Record<string, unknown>] {
   if (intent === 'cancel') return [{ deleted_at: now, updated_at: now }, { deleted_at: row['deleted_at'] ?? null, updated_at: now }];
   if (intent === 'complete') {
-    const prevAt = typeof row['done_at'] === 'number' ? row['done_at'] : 0;
-    return [{ done: true, done_at: now, updated_at: now }, { done: row['done'] === true, done_at: prevAt, updated_at: now }];
+    const after = todoDonePatch(row, true, now, tz).data;
+    return [after, todoUndoPatch({ ...row, ...after }, donePrev(row), now, tz).data];
   }
   const m = moveTo(h, to ?? { date: null, time: null }, todayOf(now, tz));
   if (h.kind === 'event') {
@@ -56,9 +57,15 @@ export function patchFor(intent: TargetIntent, h: TargetHit, row: Row, to: PlusT
   return [after, before];
 }
 
-/** 写好的一批：撤销用的原值 */
+/** 写入和撤销各带不带 remind 标记：完成按 todoRemindFlag 算，别的一律 true（见文件头） */
+function remindOf(intent: TargetIntent, row: Row, after: Record<string, unknown>, now: number, tz: Tz): [boolean, boolean] {
+  if (intent !== 'complete') return [true, true];
+  return [todoDonePatch(row, true, now, tz).remind, todoUndoPatch({ ...row, ...after }, donePrev(row), now, tz).remind];
+}
+
+/** 写好的一批：撤销用的原值和撤销时带不带 remind 标记 */
 export interface Applied {
-  undo: { table: string; id: string; data: Record<string, unknown> }[];
+  undo: { table: string; id: string; data: Record<string, unknown>; remind: boolean }[];
   ok: number;
   failed: number;
 }
@@ -75,9 +82,10 @@ export async function applyTarget(intent: TargetIntent, hits: readonly TargetHit
       continue;
     }
     const [after, before] = patchFor(intent, h, row, to, now, tz);
-    if ((await save(tableOf(h), h.id, after, true)) === 'saved') {
+    const [remind, undoRemind] = remindOf(intent, row, after, now, tz);
+    if ((await save(tableOf(h), h.id, after, remind)) === 'saved') {
       out.ok += 1;
-      out.undo.push({ table: tableOf(h), id: h.id, data: before });
+      out.undo.push({ table: tableOf(h), id: h.id, data: before, remind: undoRemind });
     } else out.failed += 1;
   }
   return out;
@@ -86,7 +94,7 @@ export async function applyTarget(intent: TargetIntent, hits: readonly TargetHit
 /** 撤销：把改之前的值写回；返回写回成功几条 */
 export async function undoTarget(a: Applied, now: number, save: Save = savePatch): Promise<number> {
   let n = 0;
-  for (const u of a.undo) if ((await save(u.table, u.id, { ...u.data, updated_at: now }, true)) === 'saved') n += 1;
+  for (const u of a.undo) if ((await save(u.table, u.id, { ...u.data, updated_at: now }, u.remind)) === 'saved') n += 1;
   return n;
 }
 
@@ -99,10 +107,9 @@ export async function rowAct(act: RowAct, kind: 'event' | 'todo' | 'anniv' | 'no
   const row = get(TABLE[kind], id);
   if (!row) return { undo: [], ok: 0, failed: 1 };
   const h: TargetHit = { kind: kind === 'event' ? 'event' : 'todo', id: row.id, date: at.date, time: kind === 'todo' ? strOr(row['due_time']) : at.time };
-  const [after, before] =
-    act === 'delete' ? patchFor('cancel', h, row, null, now, tz)
-    : act === 'done' ? patchFor('complete', h, row, null, now, tz)
-    : patchFor('reschedule', h, row, { date: addDays(todayOf(now, tz), 1), time: null }, now, tz);
-  const ok = (await save(TABLE[kind], row.id, after, kind !== 'note')) === 'saved';
-  return ok ? { undo: [{ table: TABLE[kind], id: row.id, data: before }], ok: 1, failed: 0 } : { undo: [], ok: 0, failed: 1 };
+  const intent: TargetIntent = act === 'delete' ? 'cancel' : act === 'done' ? 'complete' : 'reschedule';
+  const [after, before] = patchFor(intent, h, row, act === 'tomorrow' ? { date: addDays(todayOf(now, tz), 1), time: null } : null, now, tz);
+  const [remind, undoRemind] = kind === 'note' ? [false, false] : remindOf(intent, row, after, now, tz);
+  const ok = (await save(TABLE[kind], row.id, after, remind)) === 'saved';
+  return ok ? { undo: [{ table: TABLE[kind], id: row.id, data: before, remind: undoRemind }], ok: 1, failed: 0 } : { undo: [], ok: 0, failed: 1 };
 }

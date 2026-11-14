@@ -222,6 +222,17 @@ describe('TC-B2-22：横幅排队', () => {
     expect(screen.getByTestId('remind-act-hour1')).toBeTruthy();
   });
 
+  it('第 15 条：完成的提醒标记按 todoRemindFlag 算（core/todo-done.ts）：提醒过了 2 分钟宽限再点完成不带标记', async () => {
+    data.events = [];
+    data.todos = [{ id: T1, title: '交报告', due: DAY, due_time: '17:00', remind_before_min: 60, remind_at: at('16:00'), remind_days: null, remind_time: null, done: false, done_at: 0, deleted_at: null, undone: false, notified_for: null, snooze_at: null, defer_until: null }];
+    render(<RemindHost route="calendar" />);
+    tick('16:05');
+    await act(async () => {
+      fireEvent.click(await screen.findByTestId('remind-banner-done'));
+    });
+    expect(savePatch).toHaveBeenCalledWith('todos', T1, { done: true, done_at: at('16:05'), updated_at: at('16:05') }, false);
+  });
+
   it('韩文界面按钮', async () => {
     uiStore.getState().setLocale('ko-KR');
     render(<RemindHost route="todos" />);

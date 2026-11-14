@@ -128,7 +128,8 @@ describe('查找面板：每行“⋯”菜单', () => {
     openMenu('todo');
     fireEvent.click(screen.getByTestId('find-m-done'));
     await flush();
-    expect(fx.save).toHaveBeenCalledWith('todos', id(2), { done: true, done_at: NOW, updated_at: NOW }, true);
+    // 这条待办没有还会响的提醒：标记按 todoRemindFlag 算为 false（评审第 15 条）
+    expect(fx.save).toHaveBeenCalledWith('todos', id(2), { done: true, done_at: NOW, updated_at: NOW }, false);
     expect(screen.getByTestId('find-undo').textContent).toContain('已完成');
     openMenu('todo');
     fireEvent.click(screen.getByTestId('find-m-retime'));

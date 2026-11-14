@@ -13,8 +13,8 @@ import { cutGraphemes } from '../../../../shared/logic/short.ts';
 import { TODO_ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
 import { saveDeleted, saveInsert, savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
 import { collection } from '../../../core/store.ts';
+import { setTodoDone } from '../../../core/todo-done.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { setTodoDone } from './todo-actions.ts';
 import type { Row } from './todo-list.ts';
 
 export { TODO_ITEM_TITLE_MAX };
