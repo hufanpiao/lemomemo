@@ -206,7 +206,7 @@ function Devices({ method, onDone }: { method: string; onDone(): void }) {
   }, [s]);
   return (
     <SettingsCard title={t('vault.set.devices', {})} showTitle testId="vault-devices">
-      {err ? <SettingsInfoRow label={err} value="" /> : null}
+      {err ? <SettingsInfoRow label={err} value="" alert testId="vault-devices-err" /> : null}
       <ul className={styles.devices}>
         {(items ?? []).map((c) => (
           <li key={c.id} className={styles.device} data-testid={`vault-device-${c.id}`}>

@@ -74,10 +74,11 @@ export function SettingsRow({ children, testId, rowId }: { children: ReactNode; 
 }
 
 /** 只显示、不能点的一行：行名 + 值（例如关于页的“版本 4.0.0”，设计评审 M-1） */
-export function SettingsInfoRow({ label, value, testId, valueTestId }: { label: string; value: ReactNode; testId?: string; valueTestId?: string }) {
+/** alert：这一行是出错提示（行名就是错误文案），读屏马上念（role="alert" 放在行名上，li 照旧是列表项） */
+export function SettingsInfoRow({ label, value, testId, valueTestId, alert }: { label: string; value: ReactNode; testId?: string; valueTestId?: string; alert?: boolean }) {
   return (
     <li className={styles.row} data-testid={testId}>
-      <span className={styles.tx}>{label}</span>
+      <span className={styles.tx} role={alert ? 'alert' : undefined}>{label}</span>
       <span className={`${styles.v} ${styles.num}`} data-testid={valueTestId}>
         {value}
       </span>
