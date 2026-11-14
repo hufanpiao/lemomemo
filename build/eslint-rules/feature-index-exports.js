@@ -3,11 +3,12 @@
 // • 不准 export … from（类型和 ./data.manifest.ts 除外），不准 export *
 // • 导出的值只能是字面量、数组、对象、lazy(() => import('./…'))；函数、类、变量引用都不行
 // • 受控例外（只能是 () => import('./…')，只有指定的功能能导出）：
-//   vault 的 plusAdapter（0.23 M1）；plus 的 loadTypeBar（Q-24：打字条下载好以后要当场渲染，lazy 第一次渲染总要挂起，iOS 不弹键盘）
+//   vault 的 plusAdapter（0.23 M1）；plus 的 loadTypeBar（Q-24：打字条下载好以后要当场渲染，lazy 第一次渲染总要挂起，iOS 不弹键盘）；
+//   today 的 loadTodayDesk（B6：电脑版面板下好、页里没焦点时才换上，lazy 第一次渲染挂起会先闪回原来的排法、多重挂一次）
 const INNER = /^\.\/(ui|hooks|data|i18n)(\/|$)/;
 const MANIFEST = /^\.\/data\.manifest(\.ts)?$/;
 /** 受控例外：导出名 → 唯一能导出它的功能 */
-const LOADERS = { plusAdapter: 'vault', loadTypeBar: 'plus' };
+const LOADERS = { plusAdapter: 'vault', loadTypeBar: 'plus', loadTodayDesk: 'today' };
 
 function featureOf(filename) {
   const m = /[\\/]src[\\/]features[\\/]([^\\/]+)[\\/]index\.ts$/.exec(filename);

@@ -1,0 +1,61 @@
+/* 电脑版详情抽屉的外壳（kit DetailDrawer.tsx；随手记页、今天页共用。皮肤视觉稿 DK.mason / NOTE_ED：边上浮起的圆角面板，--b-drawer）。只用令牌（A11）。
+   右边（或左边）浮起，侧栏和列表留着；进场只有最基本的滑入（R-376），减少动态效果时只淡入 */
+.drawer {
+  position: fixed;
+  inset: calc(16px + var(--inset-top, 0px)) var(--drawer-right, 16px) calc(16px + var(--inset-bottom, 0px)) var(--drawer-left, auto);
+  z-index: var(--z-drawer);
+  width: min(400px, calc(100vw - 160px));
+  padding: 14px 20px 24px;
+  overflow-y: auto;
+  border-radius: 22px;
+  background: var(--b-drawer);
+  box-shadow: var(--b-drawer-shadow);
+  animation: drawer-in var(--dur-ui) var(--ease-out) both;
+}
+
+/* 电脑版换到左边（B6，5.9b）：贴在侧栏右边（#root 留给侧栏 110px），从左边滑进来 */
+.drawer[data-side="left"] {
+  --drawer-from: -24px;
+  --drawer-left: 110px;
+  --drawer-right: auto;
+}
+
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--drawer-from, 24px));
+  }
+}
+
+@keyframes drawer-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 设置里“减少动态效果”（data-rm）：同样只淡入 */
+:global(:root[data-rm="1"]) .drawer {
+  animation-name: drawer-fade;
+}
+
+/* 抽屉右上角的“×”（DrawerClose） */
+.close {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-18);
+  line-height: 1;
+}
+
+/* 点按区扩到 44 */
+.close::after {
+  position: absolute;
+  inset: -6px;
+  content: '';
+}

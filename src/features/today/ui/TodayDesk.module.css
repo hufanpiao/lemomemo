@@ -1,0 +1,77 @@
+/* 电脑版今天页的块内容（B6，5.9b；ui/TodayDesk.tsx，跟着它按需下载，不进首屏）。只用令牌（A11） */
+
+/* 日期一行右边的键盘提示（线框 s1“J / K 上下 · E 完成 · Enter 编辑”）：和日期同一行、靠右 */
+.keys {
+  position: absolute;
+  top: max(var(--safe-top), 16px);
+  right: 16px;
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+/* 日期后面的农历（线框 .top.a .d1 small：12.5px 常规字重、灰字、左边空 8px），挂在 TodayPage 的 h1 里 */
+.lunar {
+  margin-left: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+  font-weight: 400;
+}
+
+/* 快捷键提示块（线框 s1 右栏最后一张卡：12px 灰字） */
+.tip {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  line-height: 1.6;
+}
+
+/* 本周：7 根柱子（线框 s1 电脑画面“本周”） */
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin: 0;
+  padding: 4px 0 6px;
+  list-style: none;
+}
+
+.wd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.wbarBox {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 56px;
+}
+
+.wbar {
+  width: 100%;
+  min-height: 4px;
+  height: calc(var(--h, 0) * 100%);
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+
+.wd[data-today] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.wd[data-today] .wbar {
+  background: var(--accent);
+}
+
+.wnum {
+  font-family: var(--f-num);
+}

@@ -5,6 +5,8 @@ import { useCallback, useSyncExternalStore } from 'react';
 
 /** 电脑版侧栏 */
 export const MQ_SIDEBAR = '(width >= 900px)';
+/** 电脑版布局能拖、分栏（5.9b：窄于 1100 px 排成一列、不能拖；只在 JS 里判，CSS 不用这个数） */
+export const MQ_DESK_WIDE = '(width >= 1100px)';
 /** 月历每格放 4 个标签的电脑档 */
 export const MQ_CAL_WIDE = '(min-width: 768px)';
 

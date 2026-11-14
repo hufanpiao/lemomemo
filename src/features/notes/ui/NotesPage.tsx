@@ -31,8 +31,9 @@
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
 // • 隐私记（B5 S5、S7）：分类胶囊下面一行入口（vault 的 VaultParts lockrow）；“⋯”菜单、左滑（列表方式，NoteSwipe.tsx）加“移到隐私记”，
 //   移的流程（解锁、重试一次、带附件不能移）在 vault 的 VaultParts move；移好的先在本页藏起来，等同步把它改成隐私记行
+import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
@@ -45,7 +46,7 @@ import { ReadonlyMark, ReadonlyToast } from '../../../kit/components/ReadonlyRow
 import { useEditT } from '../../../kit/components/EditNotices.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { AppearItem, AppearList, Pressable } from '../../../motion/components.ts';
+import { AppearItem, AppearList, Pressable, useSwapWhenSafe } from '../../../motion/components.ts';
 import { VaultParts } from '../../vault/index.ts';
 import { useMergeHint } from '../hooks/useMergeHint.ts';
 import { useNoteList, type NoteItem } from '../hooks/useNoteList.ts';
@@ -56,14 +57,15 @@ import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
 import { ConvertAsk, MergeBar, MoreMenu, useConvertFlow, type PageTip } from './NotesActions.tsx';
-import { InputRow } from './NotesInputRow.tsx';
+import { Dot } from './CatDot.tsx';
+import { InputRow, useInputDraft } from './NotesInputRow.tsx';
 import { SwipeRow } from './NoteSwipe.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import styles from './NotesPage.module.css';
 
-/** 分类色点（只在有颜色时画） */
-const Dot = ({ color, big }: { color: string | null; big?: boolean }) =>
-  color === null ? null : <i className={big ? styles.dotBig : styles.dot} style={{ '--dot': color } as CSSProperties} aria-hidden="true" />;
+/** 电脑版（B6）：有侧栏的宽度才下载；下好了、页里没有焦点和按住的指针时才换上（motion 的 useSwapWhenSafe）。随手记页不在首屏，马上就下 */
+const loadNotesDesk = () => import('./NotesDesk.tsx');
+const now = (fn: () => void) => fn();
 
 /** #/notes 是列表，#/note/<id> 是编辑器：两条路由同一个分包（index.ts，B4 首屏额度），这里按路由名分 */
 export default function NotesPage() {
@@ -76,7 +78,9 @@ function NotesList() {
   const locale = useUi((s) => s.locale);
   const view = useNotesViewValue();
   // 有侧栏的宽窗口（和 GlassBar 侧栏同一个断点）：点开随手记用右边抽屉，不换页
+  const page = useRef<HTMLElement>(null);
   const wide = useMedia(MQ_SIDEBAR);
+  const Desk = useSwapWhenSafe(wide, page, loadNotesDesk, now, opensKeyboard);
   const l = useNoteList();
   const a = useListActions<PageTip>('notes', { remove: l.remove });
   const { g: guard, g: { toast }, isRo, report } = a;
@@ -86,6 +90,8 @@ function NotesList() {
   const bar = isUndo(toast) ? { tip: undoTipOf(toast, a.undo), close: () => guard.dismiss(toast) } : null;
   // 输入框有焦点时画模糊层（R-401）；点模糊层让输入框失焦
   const field = useRef<HTMLInputElement>(null);
+  // 输入行的字和小图放在页面这一层：电脑版、手机排法互换时输入行会重挂（B6）
+  const draft = useInputDraft();
   const [typing, setTyping] = useState(false);
   const [menu, setMenu] = useState<string | null>(null);
   const [just, setJust] = useState<string | null>(null);
@@ -154,13 +160,8 @@ function NotesList() {
     setMenu(id);
   };
 
-  return (
-    <main className={styles.page} data-feature="notes" data-testid="notes" data-view={view}>
-      <header className={styles.top}>
-        <h1 className={styles.h1}>{t('notes.title', {})}</h1>
-        <MeLink testId="notes-settings" />
-      </header>
-
+  const filterChips = (
+    <>
       {l.counts.length ? (
         <div className={styles.filter} role="group" aria-label={t('notes.filter', {})} data-testid="notes-filter">
           <Chip on={l.category === null} onClick={() => l.setCategory(null)} label={t('notes.all', { n: l.total })} color={null} testId="notes-filter-all" />
@@ -170,6 +171,11 @@ function NotesList() {
         </div>
       ) : null}
 
+    </>
+  );
+  // 隐私记入口行、合并提示、空态、瀑布流或列表：手机直接画在页上，电脑放进 list 块
+  const body = (
+    <>
       {/* 隐私记入口行（B5 S5，线框 s7 LOCKROW：分类胶囊下面、合并提示上面；两种显示方式都有） */}
       <QuietBoundary name="vault-lockrow">
         <Suspense fallback={null}>
@@ -253,12 +259,50 @@ function NotesList() {
         </AppearList>
       )}
 
-      {typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null}
+    </>
+  );
+  const dock = (
       <div className={up ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
-        <InputRow field={field} onTyping={setTyping} onAdd={add} onImages={addImage} tip={toast !== null && !isUndo(toast) ? <DockTip toast={toast} /> : null} />
+        <InputRow field={field} state={draft} onTyping={setTyping} onAdd={add} onImages={addImage} tip={toast !== null && !isUndo(toast) ? <DockTip toast={toast} /> : null} />
       </div>
+  );
+  const drawerEl = (side?: 'left' | 'right', handle?: ReactNode) =>
+    drawer !== null ? <NoteDrawer id={drawer} side={side} handle={handle} onClose={() => setDrawer(null)} /> : null;
+  const mist = typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null;
+  const phone = (
+    <>
+      <header className={styles.top}>
+        <h1 className={styles.h1}>{t('notes.title', {})}</h1>
+        <MeLink testId="notes-settings" />
+      </header>
+      {filterChips}
+      {body}
+      {mist}
+      {dock}
+      {drawerEl()}
+    </>
+  );
 
-      {drawer !== null ? <NoteDrawer id={drawer} onClose={() => setDrawer(null)} /> : null}
+  return (
+    <main ref={page} className={styles.page} data-feature="notes" data-testid="notes" data-view={view}>
+      {/* 电脑版（B6，ui/NotesDesk.tsx）：分类一栏 + 列表一栏；电脑版没换上或画出错时照手机的排法画 */}
+      {Desk ? (
+        <QuietBoundary name="notes-desk" fallback={phone}>
+          {mist}
+          <Desk.default
+            cats={{ total: l.total, counts: l.counts, category: l.category, set: l.setCategory }}
+            list={
+              <>
+                {body}
+                {dock}
+              </>
+            }
+            drawer={drawer !== null ? drawerEl : undefined}
+          />
+        </QuietBoundary>
+      ) : (
+        phone
+      )}
       {moving !== null ? (
         <QuietBoundary name="vault-move">
           <Suspense fallback={null}>
@@ -301,7 +345,7 @@ function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: ReactNode })
 /** 页底的撤销条：删除的“已删除”、合并分类的“已合并”（R-415 ③），同一个 kit UndoToast、8 秒；画什么、点了做什么都在 tip 里（换一条就换一个 key，重新计时） */
 function UndoBar({ tip, onClose }: { tip: UndoTip; onClose(): void }) {
   const t = useNotesT();
-  return <UndoToast message={t(tip.msgKey, {})} undoLabel={t('notes.undo', {})} onUndo={tip.undo} onClose={onClose} data-testid={tip.testId} />;
+  return <UndoToast message={t(tip.msgKey, {})} undoLabel={t('notes.undo', {})} onUndo={tip.undo} onClose={onClose} solo="keep" data-testid={tip.testId} />;
 }
 
 /** 输入行上面的提示条：没保存上、插图提示（空间满了的带“最近删除”入口）、转换结果 */

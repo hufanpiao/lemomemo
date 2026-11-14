@@ -329,6 +329,8 @@ const ROUTER_INTERNAL_IMPORTS = {
   ],
 };
 const TAURI_IMPORTS = { paths: [], patterns: [{ regex: '^@tauri-apps/', message: 'A13：@tauri-apps/* 只能在 src/platform/ 里 import' }] };
+// B6（5.9b 第 6 点）：拖动库 dnd-kit 只在电脑版布局组件里用（跟着它的懒加载块走，不进首屏）
+const DND_IMPORTS = { paths: [], patterns: [{ regex: '^@dnd-kit/', message: 'B6：@dnd-kit/* 只能在 src/kit/components/DeskLayout/ 里 import' }] };
 
 function restrictedImports(...parts) {
   return [
@@ -458,8 +460,13 @@ export default tseslint.config(
       'lemo/no-inline-color': 'error',
       'lemo/motion-tokens': 'error',
       'lemo/safe-href': 'error',
-      ...scope({ imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
+      ...scope({ imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS, DND_IMPORTS] }),
     },
+  },
+  // B6：电脑版布局组件是 dnd-kit 唯一准用的地方
+  {
+    files: ['src/kit/components/DeskLayout/**/*.{ts,tsx}'],
+    rules: scope({ imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
   },
   // platform：网络和设备能力都在这里；不准 React
   {

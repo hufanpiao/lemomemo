@@ -44,6 +44,11 @@ describe('QuietBoundary', () => {
     expect(screen.getByText('照常')).toBeTruthy();
   });
 
+  it('给了 fallback：出错时画它（电脑版布局分包下不来时退回手机排法，B6）', () => {
+    render(<QuietBoundary name="today-desk" fallback={<p>一列</p>}><Boom /></QuietBoundary>);
+    expect(screen.getByText('一列')).toBeTruthy();
+  });
+
   it('没出错：原样画', () => {
     render(<QuietBoundary name="c"><p>内容</p></QuietBoundary>);
     expect(screen.getByText('内容')).toBeTruthy();

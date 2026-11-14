@@ -59,6 +59,8 @@ describe('电脑详情抽屉', () => {
       await b.outbox?.applyServer('notes', [{ row: serverNote(1) }]);
     });
     open();
+    // 电脑版布局（B6，NotesDesk 懒加载）到了才点：先按手机排法画的卡片会被整块换掉，提前拿到的按钮会被卸下
+    await screen.findByTestId('desk');
     // 和真浏览器一样：点之前焦点先落到卡片按钮上
     const card = screen.getByTestId(`notes-card-${uid(1)}`).querySelector('button') as HTMLButtonElement;
     card.focus();

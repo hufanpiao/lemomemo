@@ -11,6 +11,7 @@ export const editZh = {
   'edit.delete': '删除',
   'edit.deleted': '已删除。30 天内可以在“最近删除”里找回。',
   'edit.undo': '撤销',
+  'edit.close': '关闭',
 } as const;
 
 export type EditMsgKey = keyof typeof editZh;

@@ -92,4 +92,8 @@ export const zh = {
   'note.edit.drawer': '随手记详情',
   'note.edit.st.empty': '写点内容才会保存',
   'note.edit.st.rejected': '格式不对，没保存上（标题或正文太长）',
+  'notes.todayNone': '今天还没记',
+  'notes.allName': '全部',
+  // 电脑版分类栏底下的小字（线框 SIDENOTES；拖动排序、右键改名合并还没做，先只写这半句）
+  'notes.aiHint': '分类由 AI 建立',
 } as const;

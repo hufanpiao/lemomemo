@@ -13,6 +13,7 @@
 // • 动效：只有抽屉最基本的滑入（R-376），按钮用 Pressable 的按下反馈
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
+import { DrawerClose } from '../../../kit/components/DetailDrawer.tsx';
 import { DeletedNotice, ReadonlyNotice, useEditStatus, useEditT } from '../../../kit/components/EditNotices.tsx';
 import { enterCommits } from '../../../kit/components/Form.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
@@ -97,9 +98,7 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
           </Pressable>
         </Popover>
         {drawer ? (
-          <button type="button" className={styles.close} onClick={onClose} aria-label={t('note.edit.close', {})} data-testid="note-edit-close">
-            ×
-          </button>
+          <DrawerClose label={t('note.edit.close', {})} onClick={onClose} testId="note-edit-close" />
         ) : null}
       </div>
       {meta ? <p className={styles.meta} data-testid="note-edit-meta">{meta}</p> : null}
