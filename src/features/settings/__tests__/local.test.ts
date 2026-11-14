@@ -30,7 +30,7 @@ vi.mock('../../../core/account.ts', () => ({
   bootWipeSteps: (b: unknown) => (boot.stepsOf.push(b), { wipe: boot.wipe, deleteDb: boot.deleteDb }),
 }));
 
-const { defaultExitDeps, readLocalLocale, updateCachedLocale, writeLocalLocale } = await import('../data/local.ts');
+const { defaultSignOutHereDeps, readLocalLocale, updateCachedLocale, writeLocalLocale } = await import('../data/local.ts');
 
 /** 假 IndexedDB：只记 deleteDatabase 删了哪个库，马上成功 */
 function fakeIdb() {
@@ -98,45 +98,45 @@ describe('updateCachedLocale', () => {
   });
 });
 
-describe('defaultExitDeps（本人退出给 platform/exit-basics.ts 的 wipeThisDevice 的两步，和别的出口同一份 bootWipeSteps）', () => {
+describe('defaultSignOutHereDeps（本人退出给 platform/exit-basics.ts 的 wipeThisDevice 的两步，和别的出口同一份 bootWipeSteps）', () => {
   it('wipe 先占住“忙”（holdBusy，不释放），再走本页 boot 的 bootWipeSteps().wipe；没启动什么也不做', async () => {
     const seq: string[] = [];
     const release = vi.fn();
     const b = { status: 'ready', profile: null, cache: {}, upgrade: { holdBusy: vi.fn((reason: string) => (seq.push(`busy:${reason}`), release)) } };
     boot.current = b;
     boot.wipe.mockImplementationOnce(async () => void seq.push('wipe'));
-    await defaultExitDeps.wipe?.();
+    await defaultSignOutHereDeps.wipe?.();
     expect(seq).toEqual(['busy:sign_out', 'wipe']);
     expect(boot.stepsOf).toEqual([b]);
     expect(release).not.toHaveBeenCalled();
     boot.current = null;
-    await defaultExitDeps.wipe?.();
+    await defaultSignOutHereDeps.wipe?.();
     expect(boot.wipe).toHaveBeenCalledTimes(1);
   });
 
   it('清库出错不吞掉：wipe 照样拒绝，由 wipeThisDevice 往下按库名删', async () => {
     boot.current = { status: 'ready', profile: null, cache: {}, upgrade: up() };
     boot.wipe.mockRejectedValueOnce(new Error('quota'));
-    await expect(defaultExitDeps.wipe?.()).rejects.toThrow('quota');
+    await expect(defaultSignOutHereDeps.wipe?.()).rejects.toThrow('quota');
   });
 
   it('pendingCount 交给 core/boot 的 localUnsentCount（当前的 boot）', async () => {
     const b = { status: 'ready', profile: null, cache: null, upgrade: up() };
     boot.current = b;
     boot.localUnsentCount.mockResolvedValueOnce(7);
-    expect(await defaultExitDeps.pendingCount()).toBe(7);
+    expect(await defaultSignOutHereDeps.pendingCount()).toBe(7);
     expect(boot.localUnsentCount).toHaveBeenCalledWith(b);
   });
 });
 
-describe('defaultExitDeps.clearLocalSessionIf（本机会话兜底，用 platform 的 clearLocalSessionIf）', () => {
+describe('defaultSignOutHereDeps.clearLocalSessionIf（本机会话兜底，用 platform 的 clearLocalSessionIf）', () => {
   it('只删 sb-*-auth-token 和它的 code-verifier、-user 两个附属键；pv-locale、install_id 不动', () => {
     localStorage.setItem('sb-127-auth-token', '{"user":{"id":"x"}}');
     localStorage.setItem('sb-127-auth-token-code-verifier', 'v');
     localStorage.setItem('sb-127-auth-token-user', '{"user":{"id":"x"}}');
     localStorage.setItem('pv-locale', 'ko');
     localStorage.setItem('install_id', 'i');
-    defaultExitDeps.clearLocalSessionIf(null);   // 令牌里没有 session_id：按 null 比，对得上
+    defaultSignOutHereDeps.clearLocalSessionIf(null);   // 令牌里没有 session_id：按 null 比，对得上
     expect(localStorage.getItem('sb-127-auth-token-user')).toBeNull();
     expect(localStorage.getItem('sb-127-auth-token')).toBeNull();
     expect(localStorage.getItem('sb-127-auth-token-code-verifier')).toBeNull();
@@ -145,29 +145,29 @@ describe('defaultExitDeps.clearLocalSessionIf（本机会话兜底，用 platfor
   });
 });
 
-describe('defaultExitDeps.deleteDb（按库名删库）', () => {
+describe('defaultSignOutHereDeps.deleteDb（按库名删库）', () => {
   it('启动过：走 bootWipeSteps().deleteDb（先关本页连接再删）；没启动：直接按库名删 planner-v4', async () => {
     const deleted = fakeIdb();
     const b = { status: 'ready', profile: null, cache: {}, upgrade: up() };
     boot.current = b;
-    await defaultExitDeps.deleteDb();
+    await defaultSignOutHereDeps.deleteDb();
     expect(boot.deleteDb).toHaveBeenCalledTimes(1);
     expect(deleted).toEqual([]);
     boot.current = null;
-    await defaultExitDeps.deleteDb();
+    await defaultSignOutHereDeps.deleteDb();
     expect(deleted).toEqual(['planner-v4']);
   });
 });
 
-describe('defaultExitDeps.releaseHold', () => {
+describe('defaultSignOutHereDeps.releaseHold', () => {
   it('放的是 wipe 里 holdBusy 返回的那个函数，只放一次；没占过时什么也不做', async () => {
     const release = vi.fn();
     fakeIdb();
     boot.current = { status: 'ready', profile: null, cache: null, upgrade: { holdBusy: () => release } };
-    await defaultExitDeps.wipe?.();
+    await defaultSignOutHereDeps.wipe?.();
     expect(release).not.toHaveBeenCalled();
-    defaultExitDeps.releaseHold?.();
-    defaultExitDeps.releaseHold?.();
+    defaultSignOutHereDeps.releaseHold?.();
+    defaultSignOutHereDeps.releaseHold?.();
     expect(release).toHaveBeenCalledTimes(1);
   });
 });

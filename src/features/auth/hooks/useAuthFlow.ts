@@ -59,7 +59,7 @@ export interface AuthFlowDeps {
   watchSession?: (onChange: () => void) => () => void;
   /** 测试用：退出后清本机的几步（默认 platform/sign-out.ts 的 defaultExitSteps） */
   localExit?: ExitSteps;
-  /** 测试用：“退出并换账号”服务器那一半的总超时（默认 useSessionGate 的 SIGN_OUT_TIMEOUT_MS） */
+  /** 测试用：“退出并换账号”服务器那一半的总超时（默认 platform/sign-out.ts 的 SIGN_OUT_TIMEOUT_MS） */
   signOutTimeoutMs?: number;
   /** 测试用：account 的 status、restore 和恢复页退出用的 signOut local（默认 data/account-gate.ts 的 createAccountGateApi） */
   account?: AccountGateApi;

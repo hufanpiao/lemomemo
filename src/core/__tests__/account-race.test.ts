@@ -38,7 +38,7 @@ describe('N1：失败处理、重试进行到一半时换了账号', () => {
       } else {
         p = outbox.fail(sent.op_id, kind === 'transient' ? { network: true, sid: null } : { status: 400, sid: null });
       }
-      // watchAccount 的 closeGate：同步设闸、封存，随后清库记成 B
+      // watchAccount 的 sealForExit：同步设闸、封存，随后清库记成 B
       outbox.suspend();
       cache.seal();
       const c = claimCache(cache, 'B');

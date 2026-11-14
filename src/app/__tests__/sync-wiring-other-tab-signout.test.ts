@@ -51,7 +51,7 @@ async function start() {
     onAuthUser: () => () => undefined,
     onStorageUser: (fn: (id: string | null) => void) => ((storageFn = fn), () => undefined),
     currentUserId: () => sessionUser,
-    dropSession: () => null,
+    takeSession: () => null,
     onSignedOut: vi.fn(),
     onSwitched: vi.fn(),
     clearCacheStorage: vi.fn(() => Promise.resolve()),

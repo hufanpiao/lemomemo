@@ -1,16 +1,15 @@
 // 本机库归谁、换账号就清空（claimCache、ensureAccount、watchAccount 换账号那一半），以及退出用的几块：设闸、写记号只关库、清本机数据
 // 不变量：比对 owner 和清空在同一个覆盖全部仓的事务里；换账号先同步设闸再清；会话没了只设闸、交给 onSessionLost（core/device-exit.ts）
 // 不变量：清本机数据只在 wipeLocal / bootWipeSteps 做，步骤和超时在 platform/exit-basics.ts 的 wipeThisDevice；纯 TS，不准 import React 和任何功能（A1）。详细说明见架构 4.1、4.1a
-import { OWNER_KEY } from '../../shared/local-db.ts';
 import type { BootResult } from './boot.ts';
 import { writeReauth, type ReauthReason } from '../platform/auth-loss-store.ts';
-import { forgetAccountLocal, wipeThisDevice } from '../platform/exit-basics.ts';
+import { CACHES_TIMEOUT_MS, deleteLocalDb, forgetAccountLocal, withinLimit, wipeThisDevice } from '../platform/exit-basics.ts';
 import type { RefreshFailure } from '../platform/supabase/refresh-failure.ts';
 import { disconnectPushLazy } from '../platform/push-disconnect.ts';
 import { setPushClaimContext } from '../platform/push-claim-run.ts';
 import { clearCacheStorage } from '../platform/session.ts';
-import { deleteCacheDb, type Cache } from './cache.ts';
-import { OWNER } from './cache-schema.ts';
+import { OWNER_KEY, OWNER_STORE } from '../../shared/local-db.ts';
+import type { Cache } from './cache.ts';
 import { clearAllCollections } from './store.ts';
 
 /** claimCache 的结果：same 本来就是这个账号；first 第一次记下（库是新的）；switched 换了账号，已清空 */
@@ -26,11 +25,11 @@ export function claimCache(cache: Cache, userId: string): Promise<ClaimResult> {
     names,
     'readwrite',
     async (t) => {
-      const rec = await t.get<{ key: string; value: string }>(OWNER, OWNER_KEY);
+      const rec = await t.get<{ key: string; value: string }>(OWNER_STORE, OWNER_KEY);
       const owner = rec?.value;
       if (owner === userId) return 'same';
       for (const n of names) await t.clear(n);
-      await t.put(OWNER, { key: OWNER_KEY, value: userId });
+      await t.put(OWNER_STORE, { key: OWNER_KEY, value: userId });
       if (owner === undefined) return 'first';
       forgetAccountLocal(false);   // 事务随后失败回滚时也已清掉：只是外观回默认、预览同意下次再问，无害
       return 'switched';
@@ -39,9 +38,9 @@ export function claimCache(cache: Cache, userId: string): Promise<ClaimResult> {
   );
 }
 
-/** 本机库现在归谁；没有记录为 undefined */
+/** 本机库现在归谁；没有记录为 undefined。只给测试用（生产代码不调：比对归属在 claimCache 的事务里） */
 export async function cacheOwner(cache: Cache): Promise<string | undefined> {
-  const rec = await cache.tx([OWNER], 'readonly', (t) => t.get<{ key: string; value: string }>(OWNER, OWNER_KEY));
+  const rec = await cache.tx([OWNER_STORE], 'readonly', (t) => t.get<{ key: string; value: string }>(OWNER_STORE, OWNER_KEY));
   return rec?.value;
 }
 
@@ -64,14 +63,22 @@ async function disconnectPush(deps: Pick<EnsureAccountDeps, 'disconnectPush'>): 
   }
 }
 
+/**
+ * 换了账号、库已清：断开上一个账号的推送，清运行时缓存（ensureAccount、watchAccount 共用这一份，退出整块评审第 3 条）。
+ * 两步都有上限（推送自带 DISCONNECT_PUSH_MS，缓存 CACHES_TIMEOUT_MS，同 wipeThisDevice），卡住也照样往下
+ */
+async function forgetOldAccount(deps: EnsureAccountDeps): Promise<void> {
+  await disconnectPush(deps);
+  await withinLimit(() => deps.clearCacheStorage(), CACHES_TIMEOUT_MS);
+}
+
 /** 比对并在需要时清空（库、内存集合、Cache Storage 的运行时缓存）；返回是否换了账号。出错就抛（调用方按“失败即关”处理） */
 export async function ensureAccount(cache: Cache, userId: string, deps: EnsureAccountDeps): Promise<boolean> {
   const r = await claimCache(cache, userId);
   if (r === 'same') return false;
   clearAllCollections();
   if (r === 'first') return false;
-  await disconnectPush(deps);
-  await deps.clearCacheStorage();
+  await forgetOldAccount(deps);
   return true;
 }
 
@@ -92,7 +99,7 @@ export interface WatchAccountDeps extends EnsureAccountDeps {
    * 本页收到 SIGNED_OUT 时同步删掉本机会话，返回删之前的 session_id（platform/session.ts 的 takeLocalSession；K6-signedout-sugg2 ①）。
    * 和判断“会话里现在是谁”在同一个同步段里调，返回值交给 onSessionLost，回登录页前只在会话还是这一个时再删
    */
-  dropSession(): string | null;
+  takeSession(): string | null;
   /** 会话没了（闸已设好）：怎么退出交给 core/device-exit.ts 的 exitOnSessionLoss（main.tsx 接上）；watchAccount 自己不清库、不跳转 */
   onSessionLost(loss: SessionLoss): void;
   /** 换了账号、已清空并关库：默认重新载入，让冷启动、功能开关、同步都按新账号从头来 */
@@ -113,8 +120,6 @@ export function sealForExit(boot: BootResult): void {
   // 推送认领的上下文一起作废（FA6-r3-low N4 / L9）：之后设置 › 提醒 的点按认领、等着上下文的认领都回 claim_failed，清掉上一账号的认领结果
   setPushClaimContext(null);
 }
-
-const closeGate = sealForExit;
 
 /** 关本页的库连接（原因 'closed'，不触发 versionchange → 重新载入）；已经关了不管 */
 export function closeCache(boot: BootResult): void {
@@ -139,12 +144,11 @@ export function expireThisTab(boot: BootResult, sessionId: string | null, reason
 }
 
 /**
- * 结局还没定（要查 session_fate）时先做的一半：设闸、写 lemo.reauth，不关库。
+ * 结局还没定（要查 session_fate）时先做的一半：写 lemo.reauth，不关库（闸已由 core/device-exit.ts 的 beginExit 设好）。
  * 不关库是因为判成 removed 时还要清库（wipeLocal 见库已关会当成“没有要清的”）。写不了记号返回 false
  */
 export function markExpired(boot: BootResult, sessionId: string | null, reason: ReauthReason = 'expired', now: number = Date.now()): boolean {
   boot.sessionGone = true;
-  closeGate(boot);
   return boot.userId !== null && writeReauth(boot.userId, sessionId, now, undefined, reason);
 }
 
@@ -159,21 +163,20 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
     if (handled || userId === boot.userId) return;   // 同一个账号（刷新令牌）：什么也不做
     handled = true;
     if (userId === null) boot.sessionGone = true;   // 会话没了（别的标签页退出），见 BootResult.sessionGone
-    closeGate(boot);   // 同步设闸：从这一刻起不再发送、不再写回
+    sealForExit(boot);   // 同步设闸：从这一刻起不再发送、不再写回
     if (userId === null) return deps.onSessionLost({ here: false });
     const run = async (): Promise<void> => {
       const cache = boot.cache;
       // 本机库打不开（unavailable、version_too_new）或已关：没有要清的库，照样按新账号重来（L3）
-      let clearCaches = true;
+      let forget = true;
       if (cache && !cache.isClosed()) {
-        // 清完立刻关库，不等 Cache Storage（N2）；别的标签页已经清过（owner 已是新账号）就不再清 Cache Storage
+        // 清完立刻关库，不等 Cache Storage（N2）；别的标签页已经清过（owner 已是新账号）就不再断推送、清 Cache Storage
         const r = await claimCache(cache, userId);
         closeCache(boot);
         clearAllCollections();
-        clearCaches = r === 'switched';
-        if (r === 'switched') await disconnectPush(deps);
+        forget = r === 'switched';
       }
-      if (clearCaches) await deps.clearCacheStorage();
+      if (forget) await forgetOldAccount(deps);
       boot.switchedUser = true;
       boot.fullResync = cache ? [...cache.syncTables] : [];
       boot.config = null;
@@ -203,7 +206,7 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
     // 同一个同步段里删本机会话（这时会话里要么没人、要么还是本账号那个已作废的会话）
     let dead: string | null;
     try {
-      dead = deps.dropSession();
+      dead = deps.takeSession();
     } catch {
       dead = null;   // 删不掉（存储不可用）：本来也存不下会话
     }
@@ -224,7 +227,7 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
 export interface WipeDeps extends Pick<EnsureAccountDeps, 'disconnectPush'> {
   /** 只删运行时缓存（默认 platform/session.ts 的 clearCacheStorage） */
   clearCacheStorage?(): Promise<void>;
-  /** 按库名删库（默认 bootWipeSteps 的：先关本页连接，再删本页的库） */
+  /** 只给测试用：换掉按库名删库（默认 bootWipeSteps 的：先关本页连接，再删本页的库） */
   deleteDb?(): Promise<unknown>;
   /** 记一条日志（只有 act，例如 auth_loss_store_failed）；不填不记 */
   log?(act: string): void;
@@ -243,12 +246,12 @@ export async function clearLocalData(cache: Cache): Promise<void> {
 
 /**
  * 主 App 清本机库的两步，交给 platform/exit-basics.ts 的 wipeThisDevice（wipeLocal 和设置页本人退出共用这一份）：
- * wipe = 设闸 → 清空整库和内存集合（库没开、已关就只清内存）；deleteDb = 关本页连接（原因 'closed'，不触发 versionchange → 重新载入）→ 按库名删本页的库
+ * wipe = 清空整库和内存集合（库没开、已关就只清内存；闸已由 core/device-exit.ts 的 beginExit 设好）；
+ * deleteDb = 关本页连接（原因 'closed'，不触发 versionchange → 重新载入）→ 按库名删本页的库
  */
 export function bootWipeSteps(boot: BootResult): { wipe(): Promise<void>; deleteDb(): Promise<unknown> } {
   return {
     wipe: async () => {
-      closeGate(boot);
       const cache = boot.cache;
       try {
         if (cache && !cache.isClosed()) await clearLocalData(cache);
@@ -259,17 +262,17 @@ export function bootWipeSteps(boot: BootResult): { wipe(): Promise<void>; delete
     deleteDb: () => {
       const name = boot.cache?.name;
       closeCache(boot);
-      return deleteCacheDb({ name });
+      return deleteLocalDb(undefined, name);
     },
   };
 }
 
 /**
- * 清本机数据（架构约定 10.1）：同步设闸，再交给 platform/exit-basics.ts 的 wipeThisDevice（清本机只有那一个入口、一套超时，第三方审查前端-4、后端-3）：
- * 删 lemo.reauth → 清库 → 断开推送 → 关库、按库名删库 → 清运行时缓存 → 清本机痕迹（forgetAccountLocal，这个账号的日志队列一起清）。永远 resolve
+ * 清本机数据（架构约定 10.1）：交给 platform/exit-basics.ts 的 wipeThisDevice（清本机只有那一个入口、一套超时，第三方审查前端-4、后端-3）：
+ * 删 lemo.reauth → 清库 → 断开推送 → 关库、按库名删库 → 清运行时缓存 → 清本机痕迹（forgetAccountLocal，这个账号的日志队列一起清）。永远 resolve。
+ * 调用方先设好闸（core/device-exit.ts 的 beginExit；exitDevice 自己会调）
  */
 export async function wipeLocal(boot: BootResult, deps: WipeDeps = {}): Promise<void> {
-  closeGate(boot);
   const own = bootWipeSteps(boot);
   const del = deps.deleteDb;
   try {

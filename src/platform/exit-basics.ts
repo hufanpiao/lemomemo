@@ -2,14 +2,12 @@
 // 不变量：清本机只有 wipeThisDevice 一个入口、一套超时（第三方审查前端-4、后端-3）：core/account.ts 的 wipeLocal 只给它配上本页的库，
 // platform/sign-out.ts 的本人退出、登录页、设置页都调它
 // 不变量：退出、换账号清 localStorage 里账号留下的痕迹只走 forgetAccountLocal（core/account.ts 的 wipeLocal、claimCache，
-// core/boot.ts 没会话的冷启动，本文件的 wipeThisDevice）；调用方不再各自补 clearLogQueue
+// core/boot.ts 没会话的冷启动也经本文件的 wipeThisDevice）；调用方不再各自补 clearLogQueue
 import { LOCAL_DB_NAME } from '../../shared/local-db.ts';
 import { clearReauth } from './auth-loss-store.ts';
 import { clearLogQueue } from './log-store.ts';
 import { rlog } from './run-log-api.ts';
-// 不变量：WIPE_TIMEOUT_MS、CACHES_TIMEOUT_MS、DELETE_WAIT_MS 只在这里定义（core/account.ts、platform/sign-out.ts 都从这里引）
-/** 本机库名：和 SW 共用 shared/local-db.ts 那一份（core/cache.ts 的 DB_NAME 也是它） */
-export { LOCAL_DB_NAME };
+// 不变量：WIPE_TIMEOUT_MS、CACHES_TIMEOUT_MS、DELETE_WAIT_MS 只在这里定义；本机库名只在 shared/local-db.ts（调用方直接引那里）
 /** 删库最多等多久（别的标签页开着库时浏览器会等它关） */
 export const DELETE_WAIT_MS = 3000;
 /** 清本机库最多等多久，超时改按库名删库 */
@@ -98,7 +96,8 @@ export const withinLimit = (run: () => Promise<unknown>, ms: number): Promise<bo
 /**
  * 清本机的唯一入口（架构约定 10.1；第三方审查前端-4、后端-3）：删 lemo.reauth → 设闸清库（wipe，WIPE_TIMEOUT_MS）→ 断开推送
  * → 按库名删库（一律删，DELETE_WAIT_MS）→ 清 Cache Storage（CACHES_TIMEOUT_MS）→ 清本机痕迹（外观、隐私记同意、日志上传队列：
- * logsOf 给 user_id 只清这个账号的，null 清全部）。某一步失败或超时不挡后面，永远 resolve；最坏约 WIPE + DELETE + CACHES = 8 秒。
+ * logsOf 给 user_id 只清这个账号的，null 清全部）。某一步失败或超时不挡后面，永远 resolve；
+ * 最坏 WIPE 3 + 断推送 2（platform/push-claim-key.ts 的 DISCONNECT_PUSH_MS）+ DELETE 3 + CACHES 2 = 约 10 秒。
  * 运行日志记一行各步结果（不记账号）
  */
 export async function wipeThisDevice(

@@ -11,7 +11,8 @@ vi.mock('../push.ts', () => {
 const { disconnectPushLazy, fallbackDisconnect, LOAD_PUSH_MS, setPushDisconnectLog } = await import('../push-disconnect.ts');
 const { DISCONNECT_PUSH_MS } = await import('../push-claim-key.ts');
 const { CLAIM_STORAGE_KEY } = await import('../push-claim-key.ts');
-const { defaultExitSteps, wipeThisDevice } = await import('../sign-out.ts');
+const { defaultExitSteps } = await import('../sign-out.ts');
+const { wipeThisDevice } = await import('../exit-basics.ts');
 
 const logs: string[] = [];
 afterEach(() => {

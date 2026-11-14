@@ -168,7 +168,6 @@ export const zh = {
   'settings.delete.confirmRequired': '请照着输入“{word}”',
   'settings.delete.admin': '管理员账号请在控制台处理',
 
-  'settings.busy': '请稍候…',
   // 负责人 10-30 定（明早清单第 27 条）：“最多要”改“可能要”，韩文原本就是“걸릴 수도 있어요”
   'settings.signingOut': '正在退出…正在清空这台设备上的数据，网络不好时可能要十几秒。',
   'settings.cancel': '取消',

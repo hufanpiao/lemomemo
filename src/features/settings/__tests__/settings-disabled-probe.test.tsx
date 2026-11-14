@@ -1,11 +1,11 @@
-// 设置页收到 account_disabled 先探测再定（R-256 ③、PROBE-sugg ②；data/account-exit.ts 的 leaveForDisabled）：
+// 设置页收到 account_disabled 先探测再定（R-256 ③、PROBE-sugg ②；core/account-leave.ts 的 leaveForDisabled）：
 // • settings-api（RLS 一路，分不清停用和冷静期）：探测不出按 disabled_unsure；冷静期 → pending_deletion；signed_out → 被移除；active → 只提示
 // • account-api（经 requireActiveUser，码精确）：探测不出仍按 disabled；active → 不离开，照常显示这次的错误
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import type { ProbedExit } from '../../../platform/account-status.ts';
-import { leaveForDisabled } from '../data/account-exit.ts';
+import { leaveForDisabled } from '../../../core/account-leave.ts';
 import { handleAccountLoss } from '../hooks/useAccountActions.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';

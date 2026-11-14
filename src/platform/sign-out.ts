@@ -1,7 +1,8 @@
 // 退出这台设备的清理步骤（架构 4.1）：登录页“退出并换账号”和设置页“退出登录 / 被移除”共用；不经 core/device-exit.ts
 // 顺序：① 删本会话的 devices 行 ② 清本机库（主 App 传 wipe）并一律按库名删 ③ 清运行时缓存（②③ 即 exit-basics.ts 的 wipeThisDevice） ④ signOut local ⑤ 会话删掉后再按库名删一次库
 // 不变量：会话放在 ④（被打断最坏“有会话、没库”）；兜底删会话只删退出前那一个 sid；①④ 合计最多 SIGN_OUT_TIMEOUT_MS，②③⑤ 各有上限，超时照样清本机
-// 不变量：一开头 markSelfSignOut，本页 SIGNED_OUT 不再按被移除处理；② 同一步删 lemo.reauth，lemo.authloss 只在本人主动退出时删
+// 不变量：一开头 markSelfSignOut，本页 SIGNED_OUT 不再按被移除处理（主 App 设置页另在调用前 beginExit，同步层、设置页请求发现会话没了也不再退一遍）；
+// 发请求之前先删 lemo.reauth（② 的 wipeThisDevice 里还会删一次：它是各出口共用的入口，登录过期判成被移除时要靠它删），lemo.authloss 只在本人主动退出时删
 // 不变量：清本机只有 wipeThisDevice 一个入口、一套超时（第三方审查前端-4、后端-3）：主 App 的 core/account.ts wipeLocal 只给它配上本页的库，
 // 本人退出、会话没了、被移除、注销、登录页都走这里
 // 为什么这样排（⑤ 的原因、SW 写库、supabase-js 删键保护、④ 前再读 sid）见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
@@ -22,11 +23,6 @@ import {
 import { guardSessionRemoval } from './supabase/auth-storage.ts';
 import { DELETE_WAIT_MS, deleteLocalDb, withinLimit, wipeThisDevice, withTimeout, type WipeSteps } from './exit-basics.ts';
 import { rlog } from './run-log-api.ts';
-
-// 本机库名、删库、超时、withTimeout、清本机入口 wipeThisDevice 在 platform/exit-basics.ts（首屏只引那里）；这里原样转出
-export {
-  CACHES_TIMEOUT_MS, DELETE_WAIT_MS, deleteLocalDb, LOCAL_DB_NAME, WIPE_TIMEOUT_MS, wipeThisDevice, withTimeout, type DeleteDbResult, type WipeSteps,
-} from './exit-basics.ts';
 
 /** ①④ 服务器部分的总超时 */
 export const SIGN_OUT_TIMEOUT_MS = 8000;
@@ -53,13 +49,13 @@ export const defaultExitSteps: ExitSteps = {
 
 /**
  * 删本机会话（删除同步生效），不抛错；只在本机会话还是 sessionId 时才删（必填，K6-sugg4 ②）。
- * 返回删没删成（A-1）：exe 里凭据管理器删失败为 false；存储不可用（本来也存不下会话）算 true
+ * 返回删没删成（A-1）：同步抛错、异步失败一律 false（退出整块评审第 13 条：原来同步抛错回 true）
  */
 export function dropSession(steps: Pick<ExitSteps, 'clearLocalSessionIf'>, sessionId: string | null): Promise<boolean> {
   try {
-    return Promise.resolve(steps.clearLocalSessionIf(sessionId)).catch(() => false);
+    return Promise.resolve(steps.clearLocalSessionIf(sessionId)).catch(() => false);   // 同步调：删除当场生效
   } catch {
-    return Promise.resolve(true);
+    return Promise.resolve(false);
   }
 }
 

@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BootResult } from '../../../core/boot.ts';
 import { resetExitForTest } from '../../../core/device-exit.ts';
-import { createLeaveAccount, defaultAccountLeaveDeps } from '../data/account-exit.ts';
+import { createLeaveAccount, defaultAccountLeaveDeps } from '../../../core/account-leave.ts';
 
 describe('createLeaveAccount(removed) 的 R-382 路径（插图上传 path files）', () => {
   const U = '00000000-0000-4000-8000-0000000000a1';

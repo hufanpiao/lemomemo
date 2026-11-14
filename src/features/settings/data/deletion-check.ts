@@ -15,7 +15,7 @@
 // • unknown（断网、超时、本机会话已换人、刷新因断网失败而会话还在）→ 判断不了，照旧提示稍后再试（不猜）
 import { probeAccountForExit, type AccountProbe } from '../../../platform/account-status.ts';
 import { readSessionId, sessionIdOfToken } from '../../../platform/session.ts';
-import { withTimeout } from '../../../platform/sign-out.ts';
+import { withTimeout } from '../../../platform/exit-basics.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 
 export type DeletionCheck =

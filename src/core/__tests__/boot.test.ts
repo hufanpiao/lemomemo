@@ -1,12 +1,13 @@
 // 离线冷启动（架构 4.1、0.27 第 1、4 点）：TC-B1-50（按缓存挂入口）、换账号清库、过期软删除、整表重拉、426 暂停延续、VersionError
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cacheOwner, claimCache } from '../account.ts';
-import { deleteCacheDb, openCache } from '../cache.ts';
+import { openCache } from '../cache.ts';
 import { applyFreshConfig, coldStart, enabledFlags, getBoot, LOCAL_PURGE_AFTER_MS, resetBootForTest, type BootOptions } from '../boot.ts';
 import { clearAllCollections, collection, readonlyIds } from '../store.ts';
 import { fakeIndexedDB, nextDbVersion } from './idb-fake.ts';
 import { clock } from '../../platform/clock.ts';
 import { todo, uid } from './outbox-fixtures.ts';
+import { deleteLocalDb } from '../../platform/exit-basics.ts';
 
 const NOW = 1_800_000_000_000;
 const DAY = 86_400_000;
@@ -217,7 +218,7 @@ describe('离线冷启动', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       const stuck = { deleteDatabase: () => ({}) } as unknown as IDBFactory;
-      expect(await Promise.race([deleteCacheDb({ factory: stuck, waitMs: 10 }), vi.advanceTimersByTimeAsync(10).then(() => 'late')])).toBe('blocked');
+      expect(await Promise.race([deleteLocalDb(stuck, undefined, 10), vi.advanceTimersByTimeAsync(10).then(() => 'late')])).toBe('blocked');
       let done = false;
       const p = coldStart(opts(stuck, { userId: null })).then((b) => {
         done = true;

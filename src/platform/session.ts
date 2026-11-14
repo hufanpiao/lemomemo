@@ -16,7 +16,7 @@ import { buildInfo, isTauri } from './env.ts';
 import { readExitNotice, setExitNotice, type ExitNotice } from './exit-notice.ts';
 import { afterAppPainted } from './root-paint.ts';
 import { openAuth } from './native-bridge.ts';
-import { collectRemovals, sessionDropState, sessionRemovalsSettled, sessionStore, showExitIncomplete } from './session-store.ts';
+import { collectRemovals, SESSION_KEY_FAMILY_RE, sessionDropState, sessionRemovalsSettled, sessionStore, showExitIncomplete } from './session-store.ts';
 import { reloadPage } from './sw-register.ts';
 import { getSupabase, onClientReady } from './supabase/client.ts';
 import { recentRefreshFailure, setRefreshSessionReader, type RefreshFailure } from './supabase/refresh-failure.ts';
@@ -447,7 +447,7 @@ export function clearLocalSessionIf(sessionId: string | null, storage?: Storage,
 export function mayRemoveSessionKey(key: string, sessionId: string | null, storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): boolean {
   try {
     const main = sessionStorageKey(supabaseUrl);
-    const related = main ? key === main || key.startsWith(`${main}-`) : /^sb-.+-auth-token(-.*)?$/.test(key);
+    const related = main ? key === main || key.startsWith(`${main}-`) : SESSION_KEY_FAMILY_RE.test(key);
     if (!related) return true;
     const s = storage ?? sessionStore();
     return findKey(s, supabaseUrl) === null || readSessionId(s, supabaseUrl) === sessionId;

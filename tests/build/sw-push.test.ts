@@ -10,7 +10,7 @@ import { buildPayload, VAULT_PUSH_EVENTS as SERVER_VAULT_EVENTS, type PayloadInp
 import { VAULT_PUSH_EVENTS, vaultPushT } from '../../src/sw/push-vault-data.ts';
 import { claimCache } from '../../src/core/account.ts';
 import { openCache } from '../../src/core/cache.ts';
-import { PENDING_ACTIONS } from '../../src/core/cache-schema.ts';
+import { PENDING_STORE } from '../../shared/local-db.ts';
 import { fakeIndexedDB } from '../../src/core/__tests__/idb-fake.ts';
 import type { SwPendingAction } from '../../shared/local-db.ts';
 import {
@@ -363,7 +363,7 @@ describe('handleNotificationClick', () => {
     const r = await handleNotificationClick(sw, { data: dataFrom(payload({ kind: 'todo' })), close: vi.fn() }, 'snooze');
     expect(r).toEqual({ opened: reminderUrl('todo', ID, DUE), snooze: 'ok', done: null });
     expect(opened).toHaveLength(1);
-    const rows = await db.cache?.tx([PENDING_ACTIONS], 'readonly', (tx) => tx.getAll<SwPendingAction>(PENDING_ACTIONS));
+    const rows = await db.cache?.tx([PENDING_STORE], 'readonly', (tx) => tx.getAll<SwPendingAction>(PENDING_STORE));
     expect(rows).toEqual([
       { id: 'pending-1', user_id: UID, row_table: 'todos', row_id: ID, action: { type: 'snooze', minutes: 10, due_at: DUE }, created_at: DUE + 500 },
     ]);
@@ -377,7 +377,7 @@ describe('handleNotificationClick', () => {
     const r = await handleNotificationClick(sw, { data: dataFrom(payload()), close: vi.fn() }, 'snooze');
     expect(r.snooze).toBe('owner_mismatch');
     expect(opened).toHaveLength(1);
-    expect(await db.cache?.tx([PENDING_ACTIONS], 'readonly', (tx) => tx.getAll(PENDING_ACTIONS))).toEqual([]);
+    expect(await db.cache?.tx([PENDING_STORE], 'readonly', (tx) => tx.getAll(PENDING_STORE))).toEqual([]);
     db.close();
   });
 

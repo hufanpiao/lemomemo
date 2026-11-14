@@ -4,7 +4,7 @@
 // 登录部分在 AuthPage.test.tsx，邀请注册在 AuthPage.invite.test.tsx；共用的假接口在 auth-page-harness.tsx，假 Turnstile 在 turnstile-fake.ts
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SIGN_OUT_TIMEOUT_MS } from '../hooks/useSessionGate.ts';
+import { SIGN_OUT_TIMEOUT_MS } from '../../../platform/sign-out.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';

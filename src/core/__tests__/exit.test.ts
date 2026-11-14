@@ -1,4 +1,4 @@
-// 本页退出登录给 K9 用的两个导出：sealForExit（同步设闸，和换账号的 closeGate 同一份代码）、localUnsentCount（还没上传的条数）
+// 本页退出登录给 K9 用的两个导出：sealForExit（同步设闸，换账号、beginExit 都用这一份）、localUnsentCount（还没上传的条数）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sealForExit } from '../account.ts';
 import { coldStart, getBoot, localUnsentCount, resetBootForTest, type BootResult } from '../boot.ts';

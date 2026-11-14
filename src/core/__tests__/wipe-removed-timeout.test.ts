@@ -21,24 +21,24 @@ function fakeBoot(clearAll: () => Promise<void>) {
 }
 
 describe('wipeLocal 的时间上限', () => {
-  it('清库、清运行时缓存都按时完成：同步设闸；清完关库、再按库名删一次（不再分 dropDb）', async () => {
+  it('清库、清运行时缓存都按时完成：清完关库、再按库名删一次（不再分 dropDb）；不再自己设闸', async () => {
     const b = fakeBoot(async () => undefined);
     const order: string[] = [];
     b.cache.close.mockImplementation(() => void order.push('close'));
     const deleteDb = vi.fn(async () => void order.push('deleteDb'));
     const p = wipeLocal(b.boot, { clearCacheStorage: async () => undefined, deleteDb, wipeMs: 50, cachesMs: 50 });
-    expect(b.boot.switching).toBe(true);   // 调用一返回就设好闸
-    expect(b.outbox.suspend).toHaveBeenCalled();
+    expect(b.boot.switching).toBe(false);   // 设闸只在 core/device-exit.ts 的 beginExit 一处（退出整块评审第 6 条），调用方先设
+    expect(b.outbox.suspend).not.toHaveBeenCalled();
     await p;
     expect(b.cache.clearAll).toHaveBeenCalledOnce();
     expect(order.slice(0, 2)).toEqual(['close', 'deleteDb']);
   });
 
-  it('bootWipeSteps：wipe 设闸后清库（库已关只清内存集合）；deleteDb 先关本页连接再按库名删', async () => {
+  it('bootWipeSteps：wipe 只清库、不设闸（库已关只清内存集合）；deleteDb 先关本页连接再按库名删', async () => {
     const b = fakeBoot(async () => undefined);
     const s = bootWipeSteps(b.boot);
     await s.wipe();
-    expect(b.cache.seal).toHaveBeenCalled();
+    expect(b.cache.seal).not.toHaveBeenCalled();
     expect(b.cache.clearAll).toHaveBeenCalledOnce();
     vi.stubGlobal('indexedDB', undefined);   // 没有 IndexedDB：deleteDb 回 unavailable，只看它先关了连接
     expect(await s.deleteDb()).toBe('unavailable');

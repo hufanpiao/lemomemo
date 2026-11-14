@@ -9,7 +9,7 @@
 // 纯 TS：不准 import React 和任何功能（A1）
 import { rlog } from '../platform/run-log-api.ts';
 import type { Cache } from './cache.ts';
-import { PENDING_ACTIONS } from './cache-schema.ts';
+import { PENDING_STORE } from '../../shared/local-db.ts';
 import { OutboxRejectError } from './outbox-logic.ts';
 import type { EnqueueInput, Outbox } from './outbox-types.ts';
 import { keepPendingAction, PENDING_TABLES, type ValidPendingAction } from './pending-actions.ts';
@@ -44,14 +44,14 @@ export async function drainPendingActions(
   outbox: Outbox,
   args: { userId: string; now: number; toEnqueue: (a: ValidPendingAction) => PendingVerdict },
 ): Promise<number> {
-  const all = await cache.tx([PENDING_ACTIONS], 'readonly', (t) => t.getAll<unknown>(PENDING_ACTIONS));
+  const all = await cache.tx([PENDING_STORE], 'readonly', (t) => t.getAll<unknown>(PENDING_STORE));
   const valid: ValidPendingAction[] = [];
   const drop: unknown[] = [];
   for (const a of all) (keepPendingAction(a, args.userId, args.now) ? valid : drop).push(a);
   for (const a of drop) {
     const id = (a as { id?: unknown } | null)?.id;
     if (typeof id !== 'string') continue;
-    await cache.tx([PENDING_ACTIONS], 'readwrite', (t) => t.delete(PENDING_ACTIONS, id));
+    await cache.tx([PENDING_STORE], 'readwrite', (t) => t.delete(PENDING_STORE, id));
     logDrop(a, 'invalid');
   }
   valid.sort((x, y) => x.created_at - y.created_at);
@@ -63,16 +63,16 @@ export async function drainPendingActions(
     const v = args.toEnqueue(a);
     if (v === 'later') continue;
     if ('drop' in v) {
-      await cache.tx([PENDING_ACTIONS], 'readwrite', (t) => t.delete(PENDING_ACTIONS, a.id));
+      await cache.tx([PENDING_STORE], 'readwrite', (t) => t.delete(PENDING_STORE, a.id));
       logDrop(a, v.drop);
       continue;
     }
     try {
       await outbox.enqueue(v, {
-        stores: [PENDING_ACTIONS],
+        stores: [PENDING_STORE],
         run: async (t) => {
-          if ((await t.get(PENDING_ACTIONS, a.id)) === undefined) throw new AlreadyTaken();
-          await t.delete(PENDING_ACTIONS, a.id);
+          if ((await t.get(PENDING_STORE, a.id)) === undefined) throw new AlreadyTaken();
+          await t.delete(PENDING_STORE, a.id);
         },
       });
       rows.add(rec);
@@ -81,7 +81,7 @@ export async function drainPendingActions(
       if (e instanceof AlreadyTaken) continue;
       if (!(e instanceof OutboxRejectError)) throw e;
       if (e.code === 'outbox_suspended') return n;   // 换账号、被移除途中：留着，这一轮停下
-      await cache.tx([PENDING_ACTIONS], 'readwrite', (t) => t.delete(PENDING_ACTIONS, a.id));
+      await cache.tx([PENDING_STORE], 'readwrite', (t) => t.delete(PENDING_STORE, a.id));
       logDrop(a, e.code);
     }
   }

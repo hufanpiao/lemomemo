@@ -16,10 +16,11 @@
 //   离开本机时只删这个 sid 的会话（clearLocalSessionIf），不在回包那一刻读本机会话、删“现在那个”
 import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { readSessionId } from '../../../platform/session.ts';
-import { budgetLeft, logoutReplaced, sessionReplaced, withTimeout, type PriorSession } from '../../../platform/sign-out.ts';
+import { budgetLeft, logoutReplaced, sessionReplaced, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import type { DeviceRow } from './devices.ts';
 import { sessionIdOfToken } from './devices.ts';
+import { withTimeout } from '../../../platform/exit-basics.ts';
 
 export type SettingsErr =
   /** 会话已被吊销或不在了：清空本机、提示“被移除”、回登录页 */
@@ -27,7 +28,7 @@ export type SettingsErr =
   /** 本机没有会话（别的标签页退出了）：清空本机、提示“已退出登录”、回登录页 */
   | 'signed_out'
   /**
-   * 账号停用或在注销冷静期（account_disabled，RLS 一路分不清）：带上 sid，由 hooks 先探测再定（R-256 ③，data/account-exit.ts 的
+   * 账号停用或在注销冷静期（account_disabled，RLS 一路分不清）：带上 sid，由 hooks 先探测再定（R-256 ③，core/account-leave.ts 的
    * leaveForDisabled）——冷静期、已停用、不确定都清本机回登录页按原因提示；探测说账号正常就只提示
    */
   | 'account_disabled'
@@ -166,7 +167,7 @@ export const API_TIMEOUT_MS = 8000;
 const OFFLINE: Failure = { ok: false, error: 'offline' };
 
 /**
- * clearLocalSessionIf：兜底删本机会话（设置页传 ExitDeps.clearLocalSessionIf）。dropLocalSession(sid) 把 session_id 原样转给它，
+ * clearLocalSessionIf：兜底删本机会话（设置页传 SignOutHereDeps.clearLocalSessionIf）。dropLocalSession(sid) 把 session_id 原样转给它，
  * 只在本机会话还是那一个时才删（K6-sugg3 ①；参数必填，K6-sugg4 ②）。
  * readSid：同步读本机会话的 session_id（默认 platform/session.ts 的 readSessionId；只在 getSession 本身出错时用）
  */

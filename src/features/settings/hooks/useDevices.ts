@@ -2,7 +2,7 @@
 // 读设备列表、“另有 N 个登录”和已退出的设备；移除别的设备、退出其他所有设备；移除本机 = 退出登录（先确认，由界面做）
 // revoked 交给 onRevoked（清空本机、提示“被移除”后回登录页）；本机没有会话交给 onSignedOut（提示“已退出登录”）；
 // 两者都带上那次请求用的会话的 session_id（接手清单 K6-sugg4 ①：离开本机时只删它）
-// account_disabled（RLS 一路，分不清停用和冷静期）交给 onDisabled 先探测再定（R-256 ③，useSettingsPage 接 data/account-exit.ts 的
+// account_disabled（RLS 一路，分不清停用和冷静期）交给 onDisabled 先探测再定（R-256 ③，useSettingsPage 接 core/account-leave.ts 的
 // leaveForDisabled）。探测期间不显示“已停用”（还不知道是不是）：离开时页面跳走；探测说账号正常（active）就显示通用的
 // “出了点问题，请稍后再试”（unknown），不说停用或冷静期（PROBE / DISABLED-probe-later 遗留，10-30）
 import { useCallback, useEffect, useRef, useState } from 'react';

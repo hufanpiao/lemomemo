@@ -3,7 +3,7 @@
 // • 打开时数没上传的（和退出登录确认框同一个 pendingCount）：有就提示“还有 N 条改动没上传，注销后会丢弃”，数不出来写“可能有”
 // • 手打确认词：中文界面“注销”、韩文界面“탈퇴”（词典 settings.delete.word，和界面语言一致）；去掉首尾空白后完全相同才可提交。
 //   输入法组字期间（compositionstart 到 compositionend）一律不可提交，组完字再判断；没有验证码框
-// • 提交 account delete，成功后离开本机（data/account-exit.ts），不调 signOut、不删 devices 行
+// • 提交 account delete，成功后离开本机（core/account-leave.ts），不调 signOut、不删 devices 行
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';

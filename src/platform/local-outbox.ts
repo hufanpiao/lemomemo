@@ -2,9 +2,9 @@
 // • 只有一个 count()：按库名打开 planner-v4（不带版本号：不升级、不迁移），只对 outbox 仓调 IDBObjectStore.count()，
 //   不读 server、view 两份，不读 outbox 条目的内容；读完马上关连接
 // • 开库经 shared/idb-open-existing.ts（和 SW 共用）：库不存在时不建库，回 0；没有 outbox 仓、打不开、被挡住、超时都回 null（界面不提示条数）
-// • 登录页不跑 boot、不 import core（会带进 zod，见 features/auth/data/local-exit.ts），所以这里直接用 IndexedDB
+// • 登录页不跑 boot、不 import core（会带进 zod），所以这里直接用 IndexedDB
 import { openExistingDb } from '../../shared/idb-open-existing.ts';
-import { LOCAL_DB_NAME } from './exit-basics.ts';
+import { LOCAL_DB_NAME } from '../../shared/local-db.ts';
 
 const OUTBOX_STORE = 'outbox';
 

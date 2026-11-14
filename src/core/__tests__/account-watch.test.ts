@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cacheOwner, claimCache, wipeLocal } from '../account.ts';
 import { getBoot, resetBootForTest } from '../boot.ts';
-import { deleteCacheDb } from '../cache.ts';
+import { deleteLocalDb } from '../../platform/exit-basics.ts';
 import { OutboxRejectError } from '../outbox.ts';
 import { clearAllCollections } from '../store.ts';
 import { count, freshCache } from './account-fixtures.ts';
@@ -109,7 +109,7 @@ describe('watchAccount：登录、刷新令牌、别的标签页', () => {
   it('别的标签页退出、按库名删库的请求永远不触发事件：按时放弃（blocked），照样调到 onSignedOut', async () => {
     const { boot, deps, storage } = await setup();
     const stuck = { deleteDatabase: () => ({}) } as unknown as IDBFactory;
-    deps.deleteDb = () => deleteCacheDb({ factory: stuck, waitMs: 30 });
+    deps.deleteDb = () => deleteLocalDb(stuck, undefined, 30);
     storage(null);
     await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
     expect(boot.cache?.isClosed()).toBe(true);

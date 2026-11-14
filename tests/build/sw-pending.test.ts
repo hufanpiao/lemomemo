@@ -6,11 +6,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { claimCache } from '../../src/core/account.ts';
-import { deleteCacheDb, openCache, type Cache } from '../../src/core/cache.ts';
-import { PENDING_ACTIONS } from '../../src/core/cache-schema.ts';
+import { openCache, type Cache } from '../../src/core/cache.ts';
 import { fakeIndexedDB, flush, nextDbVersion } from '../../src/core/__tests__/idb-fake.ts';
-import { LOCAL_DB_NAME as DB_NAME, type SwPendingAction } from '../../shared/local-db.ts';
+import { LOCAL_DB_NAME as DB_NAME, PENDING_STORE, type SwPendingAction } from '../../shared/local-db.ts';
 import { writePendingAction } from '../../src/sw/pending.ts';
+import { deleteLocalDb } from '../../src/platform/exit-basics.ts';
 
 const UID_A = '11111111-1111-4111-8111-111111111111';
 const UID_B = '22222222-2222-4222-8222-222222222222';
@@ -32,7 +32,7 @@ async function cacheWithOwner(factory: IDBFactory, uid: string | null): Promise<
   return r.cache;
 }
 
-const pendingOf = (cache: Cache) => cache.tx([PENDING_ACTIONS], 'readonly', (t) => t.getAll<SwPendingAction>(PENDING_ACTIONS));
+const pendingOf = (cache: Cache) => cache.tx([PENDING_STORE], 'readonly', (t) => t.getAll<SwPendingAction>(PENDING_STORE));
 
 describe('writePendingAction（K-sw-seal ⑴）', () => {
   it('本机没有库：返回 no_db，不留下新建的库', async () => {
@@ -97,7 +97,7 @@ describe('不挡页面删库、升级（K-sw-seal ⑵）', () => {
     cache.close();
     const data = fake.dbs.get(DB_NAME)!;
     expect([...data.connections].filter((c) => !c.closed)).toEqual([]);
-    const r = await deleteCacheDb({ factory });
+    const r = await deleteLocalDb(factory);
     expect(r).toBe('deleted');
     expect(fake.dbs.has(DB_NAME)).toBe(false);
   });
@@ -118,7 +118,7 @@ describe('不挡页面删库、升级（K-sw-seal ⑵）', () => {
         const orig = req.onsuccess;
         req.onsuccess = (e) => {
           swDb = req.result as unknown as Conn;
-          del = deleteCacheDb({ factory });
+          del = deleteLocalDb(factory);
           orig?.(e);
           // 开库成功的同一拍里就要挂上（⑵），不能等到事务开始以后
           handler = swDb.onversionchange;

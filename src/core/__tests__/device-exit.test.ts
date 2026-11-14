@@ -12,16 +12,16 @@ afterEach(() => {
 describe('decideExit', () => {
   it('结局表：没确认的被移除只退出；停用、过期只退出；冷静期清库不删会话（注销成功例外）；active 不动', () => {
     expect(decideExit({ reason: 'active' })).toEqual({ act: 'stay' });
-    expect(decideExit({ reason: 'removed' })).toMatchObject({ act: 'logout', notice: 'expired', dropSession: true });
+    expect(decideExit({ reason: 'removed' })).toMatchObject({ act: 'logout', notice: 'expired', clearSession: true });
     expect(decideExit({ reason: 'removed', fate: 'expired' })).toMatchObject({ act: 'logout', notice: 'expired' });
-    expect(decideExit({ reason: 'removed', fate: 'removed' })).toMatchObject({ act: 'logout_wipe', notice: 'removed', dropSession: true });
+    expect(decideExit({ reason: 'removed', fate: 'removed' })).toMatchObject({ act: 'logout_wipe', notice: 'removed', clearSession: true });
     expect(decideExit({ reason: 'disabled' })).toMatchObject({ act: 'logout', notice: 'disabled' });
     expect(decideExit({ reason: 'expired' })).toMatchObject({ act: 'logout', notice: 'expired' });
-    expect(decideExit({ reason: 'disabled_unsure' })).toMatchObject({ act: 'logout_wipe', dropSession: true });
-    expect(decideExit({ reason: 'deletion_unsure' })).toMatchObject({ act: 'logout_wipe', dropSession: true });
-    expect(decideExit({ reason: 'pending_deletion' })).toMatchObject({ act: 'logout_wipe', dropSession: false });
-    expect(decideExit({ reason: 'pending_deletion', revoked: true })).toMatchObject({ act: 'logout_wipe', dropSession: true });
-    expect(decideExit({ reason: 'followed' })).toEqual({ act: 'logout_wipe', notice: null, dropSession: false, broadcast: false });
+    expect(decideExit({ reason: 'disabled_unsure' })).toMatchObject({ act: 'logout_wipe', clearSession: true });
+    expect(decideExit({ reason: 'deletion_unsure' })).toMatchObject({ act: 'logout_wipe', clearSession: true });
+    expect(decideExit({ reason: 'pending_deletion' })).toMatchObject({ act: 'logout_wipe', clearSession: false });
+    expect(decideExit({ reason: 'pending_deletion', revoked: true })).toMatchObject({ act: 'logout_wipe', clearSession: true });
+    expect(decideExit({ reason: 'followed' })).toEqual({ act: 'logout_wipe', notice: null, clearSession: false, broadcast: false });
   });
 });
 

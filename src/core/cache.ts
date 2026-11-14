@@ -13,9 +13,8 @@
 import type { FeaturesConfig } from '../../shared/logic/flags.ts';
 import { cacheMigrations, DB_VERSION, cacheErrKind, runUpgrade, type CacheMigration, type UpgradeReport } from './cache-migrations.ts';
 import { cacheStores, DRAFTS, META, VAULT_DRAFTS, type StoreDef } from './cache-schema.ts';
-import { deleteLocalDb, LOCAL_DB_NAME, withTimeout, type DeleteDbResult } from '../platform/exit-basics.ts';
-
-export const DB_NAME = LOCAL_DB_NAME;
+import { withTimeout } from '../platform/exit-basics.ts';
+import { LOCAL_DB_NAME } from '../../shared/local-db.ts';
 
 /** 同步表的一行（服务器形状；K7 宽容读取负责把网络数据变成它） */
 export type ServerRow = Readonly<Record<string, unknown>> & { readonly id: string };
@@ -383,21 +382,9 @@ function wrap(db: IDBDatabase, name: string, version: number, stores: readonly S
   };
 }
 
-export type DeleteCacheResult = DeleteDbResult;
-
-/**
- * 按库名删掉整个本机库（会话没了时用：别的标签页退出、冷启动没有会话但库还在；登录页审查）。
- * 实现只有一份：platform/exit-basics.ts 的 deleteLocalDb（从 sign-out.ts 搬来，11-07）（套 withTimeout，waitMs 到了返回 'blocked'；
- * 排在另一个卡住的删库请求后面、什么事件都收不到时也会按时返回，不会让启动永远等着白屏）。删库请求本身留在浏览器里，挡着的关了就删。
- * 调用方先关本页自己的连接（cache.close()，原因 'closed'），否则本页会收到 versionchange → 自动重新载入，形成循环。永远 resolve
- */
-export function deleteCacheDb(opts: { factory?: IDBFactory | undefined; name?: string | undefined; waitMs?: number } = {}): Promise<DeleteCacheResult> {
-  return deleteLocalDb(opts.factory, opts.name, opts.waitMs);   // 没给的由 deleteLocalDb 的默认参数补（全局 indexedDB、LOCAL_DB_NAME 即 DB_NAME）
-}
-
 /** 打开本机库：按需建库、升级、跑迁移。永远 resolve，不 reject */
 export function openCache(opts: OpenCacheOptions = {}): Promise<OpenCacheResult> {
-  const name = opts.name ?? DB_NAME;
+  const name = opts.name ?? LOCAL_DB_NAME;
   const version = opts.version ?? DB_VERSION;
   const stores = opts.stores ?? cacheStores();
   const migrations = opts.migrations ?? cacheMigrations;

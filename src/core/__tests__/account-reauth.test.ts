@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { claimCache, expireThisTab, markExpired, wipeLocal } from '../account.ts';
 import { coldStart, resetBootForTest, type BootResult } from '../boot.ts';
-import { deleteCacheDb } from '../cache.ts';
+import { deleteLocalDb } from '../../platform/exit-basics.ts';
 import { clearAllCollections } from '../store.ts';
 import { fakeIndexedDB, flush, type FakeIDBFactory } from './idb-fake.ts';
 import { FUTURE_SKEW_MS, REAUTH_TTL_MS, readReauth, writeReauth } from '../../platform/auth-loss-store.ts';
@@ -44,11 +44,11 @@ async function rig(resolve: 'expired' | 'removed' = 'expired'): Promise<Rig> {
       return () => undefined;
     },
     currentUserId: () => A,   // 挂上时再比一次读到的还是本账号
-    dropSession: vi.fn(() => S),
+    takeSession: vi.fn(() => S),
     onSignedOut: vi.fn(),
     clearLogs: vi.fn(),
     onSwitched: vi.fn(),
-    deleteDb: () => deleteCacheDb({ factory, waitMs: 50 }),
+    deleteDb: () => deleteLocalDb(factory, undefined, 50),
     resolve: vi.fn(async () => resolve),
   };
   watchWithExit(boot, deps);

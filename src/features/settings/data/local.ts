@@ -1,12 +1,14 @@
 // 设置页在本机做的事（B1 K9）：记住界面语言（pv-locale + cookie lemo_lang），本人退出时给 platform/sign-out.ts 主 App 才有的几步
-// 不变量：wipe 先占住“忙”（退出期间不 reload），再走 core/account.ts 的 bootWipeSteps（设闸、清库；deleteDb 先关本页连接再按库名删），
+// 不变量：wipe 先占住“忙”（退出期间不 reload），再走 core/account.ts 的 bootWipeSteps（清库，闸在 beginExit 设；deleteDb 先关本页连接再按库名删），
 // 和会话没了、被移除那几条出口是同一份（第三方审查前端-4、后端-3）；pendingCount 必须在 wipe 之前调
 // 会话不认、本机没有会话不经这里：useSettingsPage 交给 core/device-exit.ts 的 exitDevice
 import { LANG_COOKIE, LOCALE_STORAGE_KEY, asLocale, type Locale, type UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { bootWipeSteps } from '../../../core/account.ts';
+import { beginExit } from '../../../core/device-exit.ts';
 import { applyFreshConfig, getBoot, localUnsentCount } from '../../../core/boot.ts';
 import { goToAuth, readSessionUserId } from '../../../platform/session.ts';
-import { defaultExitSteps, deleteLocalDb, type ExitSteps } from '../../../platform/sign-out.ts';
+import { defaultExitSteps, type ExitSteps } from '../../../platform/sign-out.ts';
+import { deleteLocalDb } from '../../../platform/exit-basics.ts';
 
 /** 本机记的语言；没记过、读不到（隐私模式）为 null */
 export function readLocalLocale(storage?: Storage): Locale | null {
@@ -46,7 +48,7 @@ export async function updateCachedLocale(ui: UiLocale): Promise<void> {
   }
 }
 
-export interface ExitDeps extends ExitSteps {
+export interface SignOutHereDeps extends ExitSteps {
   /** 本机会话里的 user_id（超时以后请求才回来时，判断旧会话有没有被写回） */
   readUserId(): string | null;
   /**
@@ -58,17 +60,19 @@ export interface ExitDeps extends ExitSteps {
   goToAuth(): void;
   /** 跳登录页失败时放开 wipe 占住的“忙”：库已因升级关掉的话，升级中心会自己重新载入页面 */
   releaseHold?(): void;
+  /** 发任何请求之前登记“这一页开始退出”并设闸（默认 core/device-exit.ts 的 beginExit；退出整块评审第 1 条） */
+  beginExit(): void;
 }
 
 /** wipe 里 holdBusy('sign_out') 的释放函数；退出期间不放，只在跳登录页失败时放 */
 let releaseBusy: (() => void) | null = null;
 
-export const defaultExitDeps: ExitDeps = {
+export const defaultSignOutHereDeps: SignOutHereDeps = {
   ...defaultExitSteps,
   wipe: async () => {
     const boot = getBoot();
     if (!boot) return;
-    // 先占住“忙”，再设闸、清（上限、推送、运行时缓存、按库名删都在 wipeThisDevice）；holdBusy 不释放
+    // 先占住“忙”，再清（闸已由 beginExit 设好；上限、推送、运行时缓存、按库名删都在 wipeThisDevice）；holdBusy 不释放
     releaseBusy = boot.upgrade.holdBusy('sign_out');
     await bootWipeSteps(boot).wipe();
   },
@@ -80,6 +84,7 @@ export const defaultExitDeps: ExitDeps = {
   // 必须在 wipe（封存）之前调：封存以后 localUnsentCount 返回 null
   pendingCount: () => localUnsentCount(getBoot()),
   goToAuth,
+  beginExit: () => beginExit(getBoot()),
   releaseHold: () => {
     const r = releaseBusy;
     releaseBusy = null;

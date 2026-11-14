@@ -1,14 +1,14 @@
 // 设置 › 数据 › 导出全部、设置 › 账号 › 注销账号（R-256 ②⑤；架构第 6 节 account、0.29 续第 93、96、129、131 条）
 // • 导出：在 useExport.ts（0.47 起分片取回、中断后继续）；这里留共用的依赖和 handleAccountLoss
-// • 注销：打开注销页先数没上传的（和退出登录确认框同一个 pendingCount）；提交 account delete，成功后离开本机（data/account-exit.ts）
+// • 注销：打开注销页先数没上传的（和退出登录确认框同一个 pendingCount）；提交 account delete，成功后离开本机（core/account-leave.ts）
 // • 会话没了（session_revoked、unauthorized、401）走“被移除”（onRevoked → core/device-exit.ts 的 exitDevice）；本机没有会话走 onSignedOut（同别的标签页退出）；
 //   账号停用、冷静期（account_disabled、account_pending_deletion）清本机、回登录页按原因提示（同 sync-wiring 的 disabled 事件）；
-//   account_disabled 先探测再定（R-256 ③，data/account-exit.ts 的 leaveForDisabled；这一路经 requireActiveUser、码是精确的，
+//   account_disabled 先探测再定（R-256 ③，core/account-leave.ts 的 leaveForDisabled；这一路经 requireActiveUser、码是精确的，
 //   探测不出时仍按“已停用”）；探测说账号正常（active）就不离开，照常显示这次的错误
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SaveOutcome } from '../../../platform/save-file.ts';
 import type { AccountApi, AccountErr, AccountFailure, ExportFile } from '../data/account-api.ts';
-import { leaveForDisabled, type DisabledLeaveDeps, type LeaveAccount } from '../data/account-exit.ts';
+import { type DisabledLeaveDeps, type LeaveAccount, leaveForDisabled } from '../../../core/account-leave.ts';
 
 export type { AccountErr } from '../data/account-api.ts';
 

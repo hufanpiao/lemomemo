@@ -4,7 +4,7 @@
 // - “退出并换账号”按 4.1 完整退出，走 platform/sign-out.ts 的 signOutThisDevice（和设置页同一份，K-signout-merge；编号同那边）：
 //   ②③ 清本机库（登录页不跑 boot：按库名删 planner-v4）和运行时缓存 → ④ api.signOutHere()：先删本会话那一行 devices（即 ①，合在这一步里，
 //   和 signOut 共用 SIGN_OUT_TIMEOUT_MS）再 signOut({scope: 'local'})，只吊销本会话；不是 ok（断网、令牌过期、客户端拿不到）或超时就兜底
-//   清本机会话（只删退出前那一个，K6-sugg3 ①）→ ⑤ 会话删掉以后再删一次库。做完才显示登录表单；最坏约 16 秒。
+//   清本机会话（只删退出前那一个，K6-sugg3 ①）→ ⑤ 会话删掉以后再删一次库。做完才显示登录表单；最坏约 21 秒（服务器 8 + 清本机约 10 + 再删一次库 3）。
 //   会话放在 ④：中途被打断最坏是“有会话、没库”，下次打开能自愈
 //   ④ 拿到 signOutThisDevice 一开头记下的旧会话（prior）：删 devices 行用它的 sid；auth-api 在 signOut 之前再读一次本机会话，
 //   已换成别的标签页的新会话就改用旧令牌直接 logout，不让 supabase-js 把新会话退掉（K6-signout-lib）
@@ -22,8 +22,6 @@ import { defaultExitSteps, SIGN_OUT_TIMEOUT_MS, signOutThisDevice } from '../../
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { createAuthApi } from '../data/auth-api.ts';
 import type { AuthFlowDeps } from './useAuthFlow.ts';
-
-export { SIGN_OUT_TIMEOUT_MS } from '../../../platform/sign-out.ts';
 
 export type SessionState = 'signed-in' | 'exiting' | 'none';
 

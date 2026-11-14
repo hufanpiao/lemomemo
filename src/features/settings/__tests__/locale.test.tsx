@@ -13,7 +13,7 @@ import { uiStore } from '../../../kit/state/ui-store.ts';
 import { readLocalLocale } from '../data/local.ts';
 import type { SettingsApi } from '../data/settings-api.ts';
 import { applyLocale } from '../hooks/useLocaleSwitch.ts';
-import type { ExitDeps } from '../hooks/useSessionExit.ts';
+import type { SignOutHereDeps } from '../hooks/useSessionExit.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';
@@ -38,7 +38,7 @@ function fakeApi(over: Partial<SettingsApi> = {}) {
   };
 }
 
-const exit: ExitDeps = {
+const exit: SignOutHereDeps = {
   wipe: vi.fn(async () => true),
   deleteDb: vi.fn(async () => undefined),
   clearCacheStorage: vi.fn(async () => undefined),
@@ -46,6 +46,7 @@ const exit: ExitDeps = {
   readSessionId: () => null,
   readUserId: () => null,
   pendingCount: async () => 0,
+  beginExit: vi.fn(),
   goToAuth: vi.fn(),
 };
 

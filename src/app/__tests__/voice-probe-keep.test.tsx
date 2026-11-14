@@ -148,7 +148,7 @@ describe('登出清库碰不到留底的键', () => {
   it('会话键的两条匹配规则（session.ts、session-store.ts）都不匹配它', () => {
     const root = resolve(__dirname, '../..');
     const sessionRe = readFileSync(join(root, 'platform/session.ts'), 'utf8').match(/const KEY_RE = (\/.+\/);/)![1]!;
-    const oldRe = readFileSync(join(root, 'platform/session-store.ts'), 'utf8').match(/const OLD_SESSION_KEY = (\/.+\/);/)![1]!;
+    const oldRe = readFileSync(join(root, 'platform/session-store.ts'), 'utf8').match(/export const SESSION_KEY_FAMILY_RE = (\/.+\/);/)![1]!;
     for (const re of [sessionRe, oldRe]) {
       const r = new RegExp(re.slice(1, -1));
       expect(r.test('sb-x-auth-token')).toBe(true);   // 规则本身还认得会话键（防止正则没抓对）

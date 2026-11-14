@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { claimCache } from '../../core/account.ts';
 import { coldStart, getBoot, resetBootForTest, type BootResult } from '../../core/boot.ts';
-import { deleteCacheDb } from '../../core/cache.ts';
+import { deleteLocalDb } from '../../platform/exit-basics.ts';
 import { fakeIndexedDB, type FakeIDBFactory } from '../../core/__tests__/idb-fake.ts';
 import { todo, uid } from '../../core/__tests__/outbox-fixtures.ts';
 import { clearAllCollections } from '../../core/store.ts';
@@ -64,9 +64,9 @@ async function tabB(over: Partial<WatchSpies> = {}): Promise<Tab> {
       return () => undefined;
     },
     currentUserId: () => readSessionUserId(),
-    dropSession: () => takeLocalSession(),
+    takeSession: () => takeLocalSession(),
     onSignedOut: goToAuth,
-    deleteDb: () => deleteCacheDb({ factory, waitMs: 50 }),
+    deleteDb: () => deleteLocalDb(factory, undefined, 50),
     onSwitched: vi.fn(),
     ...over,
   };
@@ -177,7 +177,7 @@ describe('被移除时删本机会话的时机（复查建议 ①）', () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));
     const b = await tabB({ deleteDb: () => gate });
-    b.deps.dropSession = () => null;   // 修之前：开头不删
+    b.deps.takeSession = () => null;   // 修之前：开头不删
     b.deps.onSignedOut = () => {
       clearAnyLocalSession();   // 修之前：回登录页时不管是谁的会话都删
       goToAuth();
