@@ -6,8 +6,11 @@
 // 写成字符串常量随代码一起打包，改动照样走代码审查。改了内容就升版本（params.ts 的 PROMPT_VERSION），评测员全量重跑测试集 ①。
 // 占位符由 parse-core.ts 的 fillPrompt 填：{{TODAY}} {{WEEKDAY}} {{NOW_TIME}} {{TZ}} {{LOCALE}} {{KINDS}} {{DEFAULT_DAY_RULE}}。用户内容只放在 <data> 里（防提示注入）。
 
+/** 【输出】那一行的开头（只做记下）；parse.v4、voice.v4 经 rulesWithOutput 换成带意图的那一行（B4b-3 评审第 22 条：这句只写这一份） */
+export const RECORD_OUTPUT = '只输出 JSON：{"items":[...]}，最多 10 条。';
+
 export const PARSE_RULES = `
-【输出】只输出 JSON：{"items":[...]}，最多 10 条。每条的键：kind, title, date, time, duration_min, due, important, project, body, short, date_basis, anniv。不认识的键不要写。
+【输出】${RECORD_OUTPUT}每条的键：kind, title, date, time, duration_min, due, important, project, body, short, date_basis, anniv。不认识的键不要写。
 kind 只能是这些之一：{{KINDS}}。不能用的类型不要输出（例如没有 anniv 时，生日记成 todo）。
 
 【基本】

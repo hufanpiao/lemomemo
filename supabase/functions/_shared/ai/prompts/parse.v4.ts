@@ -3,9 +3,13 @@
 // 记下的拆分规则和 parse.v3 同一份（PARSE_RULES），只改【输出】那一行；改记下规则时两边一起变，升版本、重跑测试集。
 // 只给 ai-parse（经 parse-core.ts 的 parseWithAI）。claude-intake 和评测测试集 ① 只做记下，照旧用 parse.v3（recordWithAI）。
 // 占位符同 parse.v3（parse-core.ts 的 fillPrompt 填）。用户内容只放在 <data> 里（防提示注入）。
-import { PARSE_RULES } from './parse.v3.ts';
+import { PARSE_RULES, RECORD_OUTPUT } from './parse.v3.ts';
 
-const V3_OUTPUT = '只输出 JSON：{"items":[...]}，最多 10 条。';
+/** 拆分规则换掉【输出】一行（parse.v4、voice.v4 共用）；规则里找不到那一行就抛，不悄悄留下只记下的旧输出 */
+export function rulesWithOutput(out: string, rules: string = PARSE_RULES): string {
+  if (!rules.includes(RECORD_OUTPUT)) throw new Error('parse rules: output line not found');
+  return rules.replace(RECORD_OUTPUT, out);
+}
 
 /** v4 的【输出】一行：顶层多 intent、confidence、query、target、to（Gemini responseSchema 见 parse-core.ts 的 plusSchema） */
 export const PLUS_OUTPUT =
@@ -51,4 +55,4 @@ export const PARSE_V4 = `你是“柠檬记”的“＋”助手：先判断用�
 
 ${INTENT_RULES}
 
-${PARSE_RULES.replace(V3_OUTPUT, PLUS_OUTPUT)}`;
+${rulesWithOutput(PLUS_OUTPUT)}`;

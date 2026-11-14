@@ -14,8 +14,8 @@ import {
   fillPrompt, makeParseWithAI, plusBody, plusSchema, PLUS_INTENTS_LIKE, QUERY_DONE_LIKE, QUERY_KINDS_LIKE, recordOnly, responseSchema, TARGET_KINDS_LIKE,
   type ParseInput,
 } from '../../supabase/functions/_shared/ai/parse-core.ts';
-import { PARSE_V3 } from '../../supabase/functions/_shared/ai/prompts/parse.v3.ts';
-import { INTENT_RULES, PARSE_V4, PLUS_OUTPUT } from '../../supabase/functions/_shared/ai/prompts/parse.v4.ts';
+import { PARSE_RULES, PARSE_V3, RECORD_OUTPUT } from '../../supabase/functions/_shared/ai/prompts/parse.v3.ts';
+import { INTENT_RULES, PARSE_V4, PLUS_OUTPUT, rulesWithOutput } from '../../supabase/functions/_shared/ai/prompts/parse.v4.ts';
 import { VOICE_V4 } from '../../supabase/functions/_shared/ai/prompts/voice.v4.ts';
 import { handle as parseHandle, type Deps as ParseDeps } from '../../supabase/functions/ai-parse/core.ts';
 import { handle as voiceHandle, type Deps as VoiceDeps } from '../../supabase/functions/ai-voice/core.ts';
@@ -186,5 +186,16 @@ describe('ai-voice：按意图回，带 transcript', () => {
     const bad = voiceDeps({ reply: () => okJson({ transcript: '牙医改期', ...RESCHED, to: { date: null, time: null } }) });
     expect((await call(await voiceHandle(voiceReq(), bad.deps))).body).toEqual({ ai_failed: true, reason: 'invalid' });
     expect([used(bad.g, 'ai:'), bad.fails]).toEqual([0, ['ai_invalid']]);
+  });
+});
+
+describe('提示词的【输出】一行只写一份（B4b-3 评审第 22 条）', () => {
+  it('parse.v3 的输出行是 RECORD_OUTPUT；v4、voice.v4 经 rulesWithOutput 换掉它，换不到就抛（不悄悄留下旧行）', () => {
+    expect(PARSE_RULES).toContain(RECORD_OUTPUT);
+    expect(PARSE_V3).toContain(RECORD_OUTPUT);
+    for (const p of [PARSE_V4, VOICE_V4]) expect(p).not.toContain(RECORD_OUTPUT);
+    expect(PARSE_V4).toContain(PLUS_OUTPUT);
+    expect(rulesWithOutput('X')).toBe(PARSE_RULES.replace(RECORD_OUTPUT, 'X'));
+    expect(() => rulesWithOutput('X', 'no such rules')).toThrow();
   });
 });
