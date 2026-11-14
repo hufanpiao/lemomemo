@@ -140,6 +140,28 @@ export interface NowTick {
   edge: 'l' | 'r' | null;
 }
 
+/** 细底线的一段（只在一条轨道时画）：x0、x1 是 0～1 的位置，gapL、gapR 这一端挨着色块、要让出 3px（视觉稿 kRuler，R-131 追问“细轨只画在色块之间，碰到色块就断开”） */
+export interface NowTrk {
+  x0: number;
+  x1: number;
+  gapL: boolean;
+  gapR: boolean;
+}
+
+/** 照视觉稿 kRuler：色块按左端排好，色块之间、两头空着的地方各画一段底线 */
+function trkPieces(segs: readonly NowSeg[]): NowTrk[] {
+  const out: NowTrk[] = [];
+  let x = 0;
+  let first = true;
+  for (const s of [...segs].sort((a, b) => a.x0 - b.x0)) {
+    if (s.x0 > x + 0.005) out.push({ x0: x, x1: s.x0, gapL: !first, gapR: true });
+    x = Math.max(x, s.x1);
+    first = false;
+  }
+  if (x < 0.995) out.push({ x0: x, x1: 1, gapL: !first, gapR: false });
+  return out;
+}
+
 /** “现在”卡要画的全部数：界面只拼文案、查表，不再自己算时间（R-423 整块评审第 7、10、11 条） */
 export interface NowCard {
   state: NowState;
@@ -158,7 +180,7 @@ export interface NowCard {
   /** allday：第一件全天日程的标题和件数（页头“全天 · 休假”） */
   allDay: { title: string; n: number } | null;
   /** 时间尺：轨道数、此刻竖线的位置、色块、刻度 */
-  ruler: { lanes: 1 | 2; mark: number; segs: NowSeg[]; ticks: NowTick[] };
+  ruler: { lanes: 1 | 2; mark: number; segs: NowSeg[]; trk: NowTrk[]; ticks: NowTick[] };
 }
 
 /** 喂给“现在”卡的日程：今天的，加上昨天开始、此刻还没结束的（跨零点的日程 00:30 时仍是“进行中”，整块评审第 4 条） */
@@ -196,6 +218,7 @@ export function nowCard(events: readonly EventOcc[], now: number, current: Tz, t
     const done = kind === 'nxt' ? 0 : Math.max(0, Math.min(1, (nowM - p) / (q - p)));
     return { kind, id: o.id, label: o.project || o.title, lane, x0: X(s), x1: X(e), clipL: s < win.A, clipR: e > win.B, done };
   };
+  const segs = [seg(c0, 'cur', 0), seg(c1, 'co', 1), seg(next, 'nxt', 0)].filter((x): x is NowSeg => x !== null);
   const ticks: NowTick[] = [];
   for (let t = Math.ceil(win.A / 60) * 60; t <= win.B; t += 60) {
     ticks.push({ x: X(t), text: `${Math.floor(minOfDay(zero + t * MIN, current) / 60)}:00`, edge: t === win.A ? 'l' : t === win.B ? 'r' : null });
@@ -215,12 +238,7 @@ export function nowCard(events: readonly EventOcc[], now: number, current: Tz, t
           ? { kind: 'tomorrow', time: tomorrowFirst.time, title: tomorrowFirst.title }
           : null,
     allDay: state === 'allday' && allDays[0] ? { title: allDays[0].title, n: allDays.length } : null,
-    ruler: {
-      lanes: c1 ? 2 : 1,
-      mark: X(nowM),
-      segs: [seg(c0, 'cur', 0), seg(c1, 'co', 1), seg(next, 'nxt', 0)].filter((x): x is NowSeg => x !== null),
-      ticks,
-    },
+    ruler: { lanes: c1 ? 2 : 1, mark: X(nowM), segs, trk: c1 ? [] : trkPieces(segs), ticks },
   };
 }
 

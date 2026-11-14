@@ -81,7 +81,13 @@ export function NowCard({ card, today }: { card: Card; today: DateStr }) {
         </p>
       ) : null}
       <div className={styles.ruler} aria-hidden="true" data-testid="now-ruler" data-lanes={card.ruler.lanes} style={{ '--lh': `${lh}px` } as CSSProperties}>
-        {card.ruler.lanes === 1 ? <span className={styles.trk} /> : null}
+        {card.ruler.trk.map((k) => (
+          <span
+            key={k.x0}
+            className={styles.trk}
+            style={{ left: k.gapL ? `calc(${pct(k.x0)} + 3px)` : pct(k.x0), right: k.gapR ? `calc(${pct(1 - k.x1)} + 3px)` : pct(1 - k.x1) }}
+          />
+        ))}
         {card.ruler.segs.map(seg)}
         <span className={styles.mark} style={{ left: pct(card.ruler.mark) }} />
         {card.ruler.ticks.map((k) => (

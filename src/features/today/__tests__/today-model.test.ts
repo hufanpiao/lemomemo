@@ -82,6 +82,7 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
     expect(c).toMatchObject({ state: 'live', nowText: '14:17', liveN: 2, title: '短会', left: 13, also: { title: '长会', end: '15:00', left: 43 }, foot: null, allDay: null });
     expect(c.ruler.lanes).toBe(2);
     expect(c.ruler.mark).toBeCloseTo(77 / W);
+    expect(c.ruler.trk).toEqual([]);
     expect(c.ruler.segs).toEqual([
       { kind: 'cur', id: short.id, label: '短会', lane: 0, x0: 60 / W, x1: 90 / W, clipL: false, clipR: false, done: expect.closeTo(17 / 30) },
       { kind: 'co', id: long.id, label: '长会', lane: 1, x0: 30 / W, x1: 120 / W, clipL: false, clipR: false, done: expect.closeTo(47 / 90) },
@@ -112,6 +113,8 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
     const c = nowCard(day([ev({ title: '逛街', time: '15:30', tz: SEOUL })]), at('14:17'), SEOUL);
     expect(c).toMatchObject({ state: 'idle', title: '15:30 逛街', left: 73, also: null, foot: null });
     expect(splitDur(73)).toEqual({ h: 1, m: 13 });
+    // 底线只画在色块左边，挨着色块那头让出 3px（视觉稿 kRuler）
+    expect(nowCard(day([ev({ time: '15:30', tz: SEOUL })]), at('14:17'), SEOUL).ruler.trk).toEqual([{ x0: 0, x1: 2 / 3, gapL: false, gapR: true }]);
   });
 
   it('② far：下一件在时间尺外（3 小时以后），标题行留给暖心句，“几分后”只在卡底写一次', () => {
@@ -142,6 +145,7 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
       lanes: 1,
       mark: 35 / 180,
       segs: [],
+      trk: [{ x0: 0, x1: 1, gapL: false, gapR: false }],
       ticks: [
         { x: 30 / 180, text: '9:00', edge: null },
         { x: 90 / 180, text: '10:00', edge: null },

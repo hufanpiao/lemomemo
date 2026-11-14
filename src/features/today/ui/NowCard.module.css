@@ -80,12 +80,10 @@
   margin: 10px 0 0;
 }
 
-/* 底线只在一条轨道时画（两条轨道时色块本身已经是两条带） */
+/* 底线只在一条轨道时画，只画在色块之间、碰到色块断开（模型给的分段；两条轨道时色块本身已经是两条带） */
 .trk {
   position: absolute;
   top: calc(4px + var(--lh) / 2 - 1px);
-  left: 0;
-  right: 0;
   height: 2px;
   background: var(--k-trk);
 }
