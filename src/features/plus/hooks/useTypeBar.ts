@@ -124,7 +124,8 @@ export function useTypeBar(o: TypeBarOpts) {
   /** 回车或点“查找”：和判意图的那一路同一个出口（原话进草稿，查找面板页脚有“改成记下”“总结一下”）；清掉这句字 */
   const openFind = useCallback((): void => {
     if (!findAsk) return;
-    rlog(`typebar find len=${[...text].length}`);
+    // 只记查询词的字数（和 B4b-2 同一口径）
+    rlog(`typebar find len=${[...findAsk.query.text.trim()].length}`);
     toAssist({ ask: findAsk, raw: text, aiUsed: 0, from: 'plus', day: ctx().day });
     setTextRaw('');
     typed.current = false;
