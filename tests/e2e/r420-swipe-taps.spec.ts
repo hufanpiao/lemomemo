@@ -24,7 +24,9 @@ test.afterAll(({ browserName }) => {
 
 type Act = { kind: 'next' } | { kind: 'swipe'; dx: number };
 
-type Frames = { x: number[]; ms: number[]; transitionMs: number | null };
+/** diag：第一帧时的诊断（CI webkit 偶发“16 帧全是 0、过渡无”，分诊表遗留⑤，先记证据再改）：
+ *  采帧的元素还在不在文档里、是不是页面上现在那个 cal-pager、data-snap、内联 transform、计算出的过渡、减少动态、没加载完的样式表数 */
+type Frames = { x: number[]; ms: number[]; transitionMs: number | null; diag: string };
 
 /** 做一次翻页（按钮或手指横滑），接着用 rAF 连读 16 帧 cal-pager 的计算 transform 的横移（px，取整）、每帧离第一帧的毫秒数，
  *  以及第一帧时 cal-pager 上 transform 的 CSS 过渡时长（没有就是 null） */
@@ -53,6 +55,7 @@ async function framesAfter(page: Page, act: Act): Promise<Frames> {
     const x: number[] = [];
     const ms: number[] = [];
     let transitionMs: number | null = null;
+    let diag = '';
     let t0: number | undefined;
     await new Promise<void>((res) => {
       const tick = (now: number): void => {
@@ -60,6 +63,19 @@ async function framesAfter(page: Page, act: Act): Promise<Frames> {
           const tr = el.getAnimations().find((an) => an instanceof CSSTransition && an.transitionProperty === 'transform');
           const d = tr?.effect?.getTiming().duration;
           transitionMs = typeof d === 'number' ? d : null;
+          const cs = getComputedStyle(el);
+          const pendingCss = [...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')].filter((l) => !l.sheet).length;
+          diag = [
+            `connected=${el.isConnected}`,
+            `same=${el === document.querySelector('[data-testid="cal-pager"]')}`,
+            `snap=${'snap' in el.dataset}`,
+            `inline=${el.style.transform || '-'}`,
+            `trans=${cs.transitionProperty}/${cs.transitionDuration}`,
+            `rm=${document.documentElement.dataset['rm'] ?? '-'}`,
+            `reduce=${matchMedia('(prefers-reduced-motion: reduce)').matches}`,
+            `pendingCss=${pendingCss}`,
+            `anims=${el.getAnimations().length}`,
+          ].join(' ');
         }
         x.push(tx());
         t0 ??= now;
@@ -69,7 +85,7 @@ async function framesAfter(page: Page, act: Act): Promise<Frames> {
       };
       requestAnimationFrame(tick);
     });
-    return { x, ms, transitionMs };
+    return { x, ms, transitionMs, diag };
   }, act);
 }
 
@@ -83,7 +99,7 @@ async function openMonth(page: Page, ym: string): Promise<void> {
 /** 新的一页从右边（下一页）滑进来：起点在 (0, 整宽]，第一帧挂着 transform 的过渡，一路不变大，最后到 0，至少 1 帧停在半路 */
 function expectSlideFromRight(fr: Frames, width: number, what: string): void {
   const f = fr.x;
-  const seen = `（每帧 x=${f.join(',')}，ms=${fr.ms.join(',')}，过渡 ${fr.transitionMs ?? '无'} ms）`;
+  const seen = `（每帧 x=${f.join(',')}，ms=${fr.ms.join(',')}，过渡 ${fr.transitionMs ?? '无'} ms；第一帧 ${fr.diag}）`;
   expect(fr.transitionMs ?? 0, `${what} 第一帧挂着 transform 的过渡${seen}`).toBeGreaterThan(0);
   expect(f[0], `${what} 第一帧在右边${seen}`).toBeGreaterThan(0);
   expect(f[0], `${what} 第一帧不超过整宽`).toBeLessThanOrEqual(width);
