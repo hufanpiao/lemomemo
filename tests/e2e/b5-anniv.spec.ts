@@ -47,7 +47,7 @@ async function seedAnniv(page: Page): Promise<void> {
 test.describe('B5 纪念日', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/app/#/anniv');
-    await expect(page.getByTestId('anniv-new')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('anniv-mode-anniv')).toBeVisible({ timeout: 30_000 });
     await seedAnniv(page);
     await page.reload();
     await expect(page.getByTestId('anniv-list')).toBeVisible({ timeout: 30_000 });
@@ -90,8 +90,9 @@ test.describe('B5 纪念日', () => {
     await expect(page.getByTestId('today-anniv')).toBeVisible({ timeout: 30_000 });
   });
 
-  test('“＋ 新建”盖上编辑层，写名字后 Esc 关掉，列表里多了这一条', async ({ page, browserName }) => {
-    await page.getByTestId('anniv-new').click();
+  test('纪念日页点底栏“＋”盖上新建层（页里没有“新建”按钮，负责人 11-14），写名字后 Esc 关掉，列表里多了这一条', async ({ page, browserName }) => {
+    await expect(page.getByTestId('anniv-new')).toHaveCount(0);
+    await page.getByTestId('tabbar-add').click();
     await expect(page.getByTestId('anniv-edit-layer')).toBeVisible({ timeout: 30_000 });
     // 编辑层挂在 body 下，后面的列表在 inert 的 #root 里（kit 层栈只给 body 的直接子节点设 inert）
     await expect(page.locator('[inert]:has([data-testid="anniv-page"])')).toHaveCount(1);
@@ -202,7 +203,7 @@ test.describe('B5 纪念日', () => {
   });
 
   test('新建页：头像在名字左边、年月日三列滚轮；编辑页日期一行点开出滚轮', async ({ page, browserName }) => {
-    await page.getByTestId('anniv-new').click();
+    await page.getByTestId('tabbar-add').click();
     await expect(page.getByTestId('anniv-edit-layer')).toBeVisible({ timeout: 30_000 });
     const pick = page.getByTestId('anniv-avatar-pick');
     const name = page.getByTestId('anniv-edit-name');
@@ -285,3 +286,20 @@ async function swipeLeft(page: Page, row: ReturnType<Page['getByTestId']>): Prom
   await page.mouse.move(box.x + box.width - 160, y + 2, { steps: 5 });
   await page.mouse.up();
 }
+
+test.describe('纪念日页的“＋”（负责人 11-14：“在纪念日页面按+默认新建纪念日”）', () => {
+  test('今天页有“按住说话 · 点一下打字”气泡；切到纪念日页不出（这页按住不说话），回今天页再出', async ({ page }) => {
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('plus-hint')).toBeVisible({ timeout: 30_000 });
+    await page.evaluate(() => {
+      location.hash = '#/anniv';
+    });
+    await expect(page.getByTestId('anniv-mode-anniv')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('anniv-new')).toHaveCount(0);
+    await expect(page.getByTestId('plus-hint')).toHaveCount(0);
+    await page.evaluate(() => {
+      location.hash = '#/today';
+    });
+    await expect(page.getByTestId('plus-hint')).toBeVisible({ timeout: 30_000 });
+  });
+});

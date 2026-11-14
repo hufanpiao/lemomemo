@@ -79,9 +79,11 @@ export function PlusSlot(
     open: boolean;
     /** 打开打字条（录音那一套的“改用打字”，FA-3 整块评审第 12 条） */
     onOpen?: () => void;
+    /** 这一页能不能按住“＋”说话（tab-of.ts 的 hold）；不能时“＋”上方的气泡不出 */
+    hold?: boolean;
   },
 ) {
-  const { open, onOpen, ...rest } = props;
+  const { open, onOpen, hold = true, ...rest } = props;
   const m = useSyncExternalStore(subscribe, loaded, loaded);
   useEffect(() => {
     if (open) load();
@@ -92,7 +94,7 @@ export function PlusSlot(
     <>
       {Pre && (
         <ErrorBoundary fallback={null}>
-          <Pre onType={onOpen} />
+          <Pre onType={onOpen} hold={hold} />
         </ErrorBoundary>
       )}
       {open &&

@@ -1,8 +1,6 @@
 // 功能 anniv 的词典·中文（架构 2.4；B5 S22）：纪念日列表（线框 s4、视觉稿 anniv）、新建和编辑（线框 s5、视觉稿 annnew / annedit / annface）、头像选取
 export const zh = {
   'anniv.h1': '纪念日',
-  'anniv.new': '新建',
-  'anniv.newLabel': '新建纪念日',
   'anniv.modeLabel': '日历视图',
   'anniv.mode.week': '周',
   'anniv.mode.month': '月',
@@ -33,7 +31,7 @@ export const zh = {
   'anniv.ago': '{n} 天前',
   'anniv.past': '已过去的倒数日 {n}',
   'anniv.empty': '还没有纪念日',
-  'anniv.emptyNext': '点上面的“新建”，记下生日、纪念日或倒数日',
+  'anniv.emptyNext': '点“＋”，记下生日、纪念日或倒数日',
   'anniv.emptyFilter': '这一类还没有',
   'anniv.ro': '这一条要新版本才能显示',
   'anniv.swipe.edit': '编辑',

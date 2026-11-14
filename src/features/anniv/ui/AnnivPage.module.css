@@ -26,37 +26,13 @@
   font-weight: 700;
 }
 
-/* 页顶第二行：左边分段、右边“＋ 新建”（同日历页 .calnav 的排法） */
+/* 页顶第二行：分段（新建走底栏“＋”，负责人 11-14） */
 .modeRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 10px;
-}
-
-/* “＋ 新建”在日历页“今天”的位置（负责人 11-14），大小同 CalendarPage.module.css 的 .tdy：视觉 32 px，点按区以中心外扩到 44 × 44 */
-.newBtn {
-  position: relative;
-  min-height: 32px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: var(--fs-14);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.newBtn::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: max(100%, var(--hit));
-  height: max(100%, var(--hit));
-  transform: translate(-50%, -50%);
 }
 
 /* 编辑页的分段（类型、阳历阴历）：整行宽、各段平分；页顶“周 / 月 / 纪念日”用 kit 的 ModeSeg，和日历页同一份 */

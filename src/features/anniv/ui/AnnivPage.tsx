@@ -58,7 +58,8 @@ function EditLayer() {
   return <AnnivEditor key={key} id={id} onCreated={onCreated} />;
 }
 
-/** 页顶第二行：左边“周 / 月 / 纪念日”分段（kit 的 ModeSeg，和日历页同一份，周、月原地换回日历页），右边“＋ 新建”（日历页“‹ 今天 ›”的位置；负责人 11-14） */
+/** 页顶第二行：“周 / 月 / 纪念日”分段（kit 的 ModeSeg，和日历页同一份，周、月原地换回日历页）；
+ *  新建纪念日用底栏“＋”（负责人 11-14 22:17：“纪念日页面的新建按钮去掉，在纪念日页面按+默认新建纪念日”，app/tab-of.ts） */
 function ModeRow({ t, today }: { t: AnnivT; today: string }) {
   return (
     <div className={styles.modeRow}>
@@ -70,9 +71,6 @@ function ModeRow({ t, today }: { t: AnnivT; today: string }) {
           { key: 'anniv', label: t('anniv.mode.anniv', {}), pressed: true, testId: 'anniv-mode-anniv' },
         ]}
       />
-      <Pressable type="button" className={styles.newBtn} onClick={() => void navigate('anniv', 'new')} aria-label={t('anniv.newLabel', {})} data-testid="anniv-new">
-        <span aria-hidden="true">＋</span> {t('anniv.new', {})}
-      </Pressable>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 // 电脑宽度（侧栏）不出（B4b-3，按定稿线框 R-126 方案 B，见 ../hooks/usePlusHint.ts）
 // 由 TypeBarPreload 挂（首屏画完以后），不碰 App.tsx 和底栏；不挡点按（pointer-events: none）；
 // role="note" 只标明这是一段旁注：出现时读屏不会自动播报，读屏用户逐项浏览到它时才会读出来（S23 代码审建议 4）
-// 开关、次数、位置见 ../hooks/usePlusHint.ts
+// 开关、次数、位置见 ../hooks/usePlusHint.ts；这一页不能按住说话（隐私记页、纪念日页）时 TypeBarPreload 不挂它
 import { usePlusHint } from '../hooks/usePlusHint.ts';
 import { usePlusT } from '../hooks/usePlusT.ts';
 import styles from './TypeBar.module.css';

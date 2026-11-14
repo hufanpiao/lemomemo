@@ -20,8 +20,9 @@ import PlusHint from './PlusHint.tsx';
 
 const RecordHost = lazy(() => import('./RecordHost.tsx').then((m) => ({ default: m.RecordHost })));
 
-/** onType：“改用打字”打开打字条（App 的 open，经 app/plus-slot.tsx 传进来）；也登记给结果层的“改”（hooks/assist-open.ts） */
-export default function TypeBarPreload({ onType }: { onType?: (() => void) | undefined }) {
+/** onType：“改用打字”打开打字条（App 的 open，经 app/plus-slot.tsx 传进来）；也登记给结果层的“改”（hooks/assist-open.ts）
+ *  hold：这一页能不能按住“＋”说话（app/tab-of.ts，隐私记页、纪念日页不能），不能时小气泡不出 */
+export default function TypeBarPreload({ onType, hold = true }: { onType?: (() => void) | undefined; hold?: boolean }) {
   useEffect(() => {
     setTypeOpener(onType ?? null);
     return () => setTypeOpener(null);
@@ -37,7 +38,7 @@ export default function TypeBarPreload({ onType }: { onType?: (() => void) | und
     <>
       <Suspense fallback={null}>
         <RecordHost onType={onType} />
-        <PlusHint />
+        {hold ? <PlusHint /> : null}
       </Suspense>
       <Suspense fallback={null}>
         <FindHost />

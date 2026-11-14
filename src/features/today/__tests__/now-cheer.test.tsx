@@ -2,7 +2,8 @@
 // • cheerIndex / pickCheer：按当天日期固定选一句，同一天同一句、第二天换下一句，到头绕回；中韩句数一样、每句不超过 20 个字、不重复
 // • ② 下一件在时间尺窗口外：浅色卡（data-state="calm"），第一行暖心句，第二行“下一件 17:00 逛街 · 4 小时 20 分后”只出一次，不画时间尺
 // • ② 下一件在窗口里：照旧黄卡加时间尺，没有暖心句、卡底不重复写“下一件……”
-// • ④ 今天没有日程：浅色卡，写暖心句（不再写“今天没有日程”）；③ 都结束了照旧一行
+// • ④ 今天没有日程：浅色卡，写暖心句（不再写“今天没有日程”）
+// • ③ 都结束了（负责人 11-14 22:17“框也没有做”）：也是浅色卡写暖心句，有明天第一件时第二行写“明天 11:00 …”
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
@@ -22,8 +23,8 @@ const ev = (id: string, title: string, h: number, durMin = 60): EventOcc => ({
 });
 const allDay = (id: string, title: string): EventOcc => ({ kind: 'event', id, title, project: '', date: DAY, allDay: true, start: null, end: null, time: null, origin: null });
 
-function show(events: EventOcc[], now: number) {
-  render(<NowCard card={nowCard(events, now, TZ, DAY)} now={now} tz={TZ} today={DAY} tomorrowFirst={null} />);
+function show(events: EventOcc[], now: number, tomorrowFirst: EventOcc | null = null) {
+  render(<NowCard card={nowCard(events, now, TZ, DAY)} now={now} tz={TZ} today={DAY} tomorrowFirst={tomorrowFirst} />);
   return screen.getByTestId('now-card');
 }
 
@@ -88,9 +89,24 @@ describe('“现在”卡的浅色卡', () => {
     await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerKo, DAY)));
   });
 
-  it('③ 今天的日程都结束了：照旧一行，没有暖心句', () => {
-    const card = show([ev('e1', '逛街', 9)], at(21, 40));
+  it('③ 今天的日程都结束了：浅色卡写暖心句，有明天第一件时第二行写明天', async () => {
+    const card = show([ev('e1', '逛街', 9)], at(21, 40), { ...ev('t1', '开会', 11), date: '2026-11-15' });
     expect(card.getAttribute('data-state')).toBe('done');
-    expect(card.textContent).toBe('今天的日程都结束了');
+    expect(card.className).toMatch(/calm/);
+    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY)));
+    expect(card.textContent).toContain('明天 11:00 开会');
+    expect(card.textContent).not.toContain('今天的日程都结束了');
+    expect(card.querySelector('[data-testid="now-ruler"]')).toBeNull();
+  });
+
+  it('③ 没有明天第一件：只有暖心句一行', async () => {
+    const card = show([ev('e1', '逛街', 9)], at(21, 40));
+    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY)));
+    expect(card.querySelectorAll('p')).toHaveLength(1);
+  });
+
+  it('只有全天日程：浅色卡写暖心句', async () => {
+    show([allDay('a1', '休假')], at(10));
+    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY)));
   });
 });

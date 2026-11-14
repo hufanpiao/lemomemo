@@ -191,7 +191,9 @@ test.describe('中文相对时刻（R-374）', () => {
     await page.clock.install({ time: new Date('2026-11-02T10:00:00+09:00') });
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
-    await page.keyboard.press('Control+n');
+    // 点“＋”打开打字条：Ctrl+N 挂在首屏画完以后才下载的那一块（TypeBarPreload，11-14 层栈整块评审为首屏预算挪出去），
+    // 装了假时钟时那一块要等计时器、不会自己挂上；这条只验相对时刻，用手机的真入口
+    await page.getByTestId('tabbar-add').click();
     await expect(page.getByTestId('type-input')).toBeFocused({ timeout: 10_000 });
     await page.getByTestId('type-input').fill('半小时后开会');
     await page.keyboard.press('Enter');

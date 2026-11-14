@@ -12,7 +12,6 @@ export const zh = {
   'now.also': '同时：{title} · 到 {end} · 还剩 {d}',
   'now.alsoMore': '同时还有 {n} 件',
   'now.hint': '下一件 {t} {title} · {d}后',
-  'now.done': '今天的日程都结束了',
   'now.doneNext': '明天 {t} {title}',
   'dur.hm': '{h} 小时 {m} 分',
   'dur.h': '{h} 小时',

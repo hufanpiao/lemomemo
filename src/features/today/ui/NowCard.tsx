@@ -6,10 +6,13 @@
 //    第一行暖心句，第二行“下一件 17:00 逛街 · 4 小时 21 分后”只写这一次
 // 时间轴：窗口 [A, B]（分钟，相对今天 0 点）、整点刻度、正在进行的色块（已过去的部分另涂）、下一件色块、此刻竖线；
 //    ① 进行中而下一件在窗口外时，时间轴下面写“下一件 15:30 … · 3 小时 10 分后”（② 的下一件在窗口外时已经走浅色卡，黄卡底下不会再重复写一遍）
-// ③ 今天的日程都结束了（有明天的第一件就写“明天 11:00 …”）；④ 今天没有日程：浅色卡，写暖心句（负责人 11-14，替掉“今天没有日程”）。③ ④ 不画时间轴
+// ③ 今天的日程都结束了、④ 今天没有日程：都是浅色卡，第一行暖心句（负责人 11-14：“没有日程的时候可以显示一些鼓励的句子或者暖心句子”，
+//    11-14 22:17 又说“框也没有做”——晚上日程都过完时原来只写“今天的日程都结束了”，不算没日程，所以并进来）；③ 有明天的第一件，第二行写“明天 11:00 …”。③ ④ 不画时间轴
 // 暖心句按用户时区的当天日期固定选一句（hooks 的 useCheerText，按语言懒加载），同一天每次打开同一句；读屏照常读这一行；
 // 句子下载好之前这一行是空的，CSS 给它留一行高（.quiet:empty），卡片不跳
 // 时间轴只是示意（aria-hidden），读屏靠上面的文字
+import { useEffect } from 'react';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { msAt, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import type { EventOcc, NowCard as Card } from '../hooks/today-types.ts';
@@ -26,19 +29,17 @@ export function NowCard({ card, now, tz, today, tomorrowFirst }: { card: Card; n
   const zero = msAt(today, 0, tz);
   const m = (ms: number) => (ms - zero) / MIN;
   const nowM = m(now);
+  const shown = card.state === 'idle' && card.nextOutside ? 'calm' : card.state;
+  // 运行日志：卡片换状态时记一行（负责人 11-14 说“框没做”，日志里看不出当时是哪种卡）
+  useEffect(() => {
+    rlog(`today now state=${shown} cheer=${cheer ? 1 : 0}`);
+  }, [shown, cheer]);
 
-  if (card.state === 'done') {
-    return (
-      <section className={styles.card} data-testid="now-card" data-state="done">
-        <p className={styles.quiet}>{t('now.done', {})}</p>
-        {tomorrowFirst?.time ? <p className={styles.sub}>{t('now.doneNext', { t: tomorrowFirst.time, title: tomorrowFirst.title })}</p> : null}
-      </section>
-    );
-  }
-  if (card.state === 'empty' || (card.state === 'idle' && card.nextOutside)) {
+  if (card.state === 'done' || card.state === 'empty' || (card.state === 'idle' && card.nextOutside)) {
     const next = card.state === 'idle' ? card.next : null;
+    const tomorrow = card.state === 'done' && tomorrowFirst?.time ? tomorrowFirst : null;
     return (
-      <section className={`${styles.card} ${styles.calm}`} data-testid="now-card" data-state={next ? 'calm' : 'empty'}>
+      <section className={`${styles.card} ${styles.calm}`} data-testid="now-card" data-state={next ? 'calm' : card.state}>
         <p className={styles.quiet} data-testid="now-cheer">
           {cheer}
         </p>
@@ -47,6 +48,7 @@ export function NowCard({ card, now, tz, today, tomorrowFirst }: { card: Card; n
             {t('now.hint', { t: next.time ?? '', title: next.title, d: durText(Math.ceil(((next.start ?? now) - now) / MIN), locale) })}
           </p>
         ) : null}
+        {tomorrow ? <p className={styles.sub}>{t('now.doneNext', { t: tomorrow.time ?? '', title: tomorrow.title })}</p> : null}
       </section>
     );
   }

@@ -13,7 +13,6 @@ export const ko: Readonly<Record<keyof typeof zh, string>> = {
   'now.also': '동시에: {title} · {end}까지 · {d} 남음', // 视觉稿 KT.ko
   'now.alsoMore': '동시에 {n}개 더', // REVIEW(ko)
   'now.hint': '다음 {t} {title} · {d} 후', // 视觉稿 KT.ko
-  'now.done': '오늘 일정이 모두 끝났어요', // REVIEW(ko)
   'now.doneNext': '내일 {t} {title}', // REVIEW(ko)
   'dur.hm': '{h}시간 {m}분', // 视觉稿 kDur
   'dur.h': '{h}시간', // 视觉稿 kDur

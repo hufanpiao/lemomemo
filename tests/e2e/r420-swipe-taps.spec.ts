@@ -184,7 +184,7 @@ async function touchSwipe(row: Locator, dx: number): Promise<void> {
 test.describe('左滑行（R-420 审查第 6、7、12 条）', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/app/#/anniv');
-    await expect(page.getByTestId('anniv-new')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('anniv-mode-anniv')).toBeVisible({ timeout: 30_000 });
     await seedTwo(page);
     await page.reload();
     await expect(page.getByTestId('anniv-list').getByTestId('anniv-row')).toHaveCount(2, { timeout: 30_000 });

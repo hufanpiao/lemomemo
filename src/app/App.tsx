@@ -102,11 +102,16 @@ function TabBar({ route }: { route: RouteName }) {
       notesInput.focus?.();
       return;
     }
+    // 纪念日页：“＋”直接进纪念日新建页（tab-of.ts；页里不再有“＋ 新建”按钮）
+    if (bar?.add === 'anniv') {
+      void navigate('anniv', 'new');
+      return;
+    }
     opens.current += 1;
     setPlus({ day: bar?.tab === 'calendar' ? (calendarSel.day?.() ?? null) : null, n: opens.current });
   };
   if (!bar || !paged) return null;
-  const { tab, add } = bar;
+  const { tab, add, hold } = bar;
   if (add === null) return <GlassBar active={tab} later={afterAppPainted} />;
   // 展开成完整新建页：打的字和那天带过去（kit/state/new-item.ts，新建页挂上以后取走）
   const expand = (text: string, day: DateStr | null): void => {
@@ -121,9 +126,9 @@ function TabBar({ route }: { route: RouteName }) {
   };
   return (
     <>
-      {/* 隐私记页（B5 D14）：按住“＋”不录音（录下的会进普通随手记），点一下只打开隐私记的新建页 */}
-      <GlassBar active={tab} later={afterAppPainted} add={{ label: t('nav.add', {}), onClick: open, ...(route === 'vault' ? {} : { hold: plusHold }) }} />
-      <PlusSlot open={plus !== null} day={plus?.day ?? null} opened={plus?.n} onExpand={expand} onEdit={edit} onOpen={open} onClose={() => setPlus(null)} />
+      {/* 隐私记页（B5 D14）、纪念日页：按住“＋”不录音（录下的会进普通随手记、日程），点一下只打开各自的新建页 */}
+      <GlassBar active={tab} later={afterAppPainted} add={{ label: t('nav.add', {}), onClick: open, ...(hold ? { hold: plusHold } : {}) }} />
+      <PlusSlot hold={hold} open={plus !== null} day={plus?.day ?? null} opened={plus?.n} onExpand={expand} onEdit={edit} onOpen={open} onClose={() => setPlus(null)} />
     </>
   );
 }

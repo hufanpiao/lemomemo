@@ -2,6 +2,7 @@
 //   ① 真机截图那一幕：12:40，今天只有 17:00 逛街和一个全天的逛街 → 浅色卡，第一行暖心句，第二行“下一件 17:00 逛街 · 4 小时 20 分后”只写一次，不画时间尺
 //   ② 今天整天没有日程 → 浅色卡写暖心句，不写“今天没有日程”
 //   ③ 电脑 1280：时间河里同一张浅色卡
+//   ④ 晚上 22:15 今天的日程都过了（负责人 11-14 22:17“框也没有做”时的那一幕）→ 浅色卡写暖心句，不再只写“今天的日程都结束了”
 //   刷新以后还是同一句（按当天日期固定选，不随机）；读屏读得到（不在 aria-hidden 里）
 // 评审截图（设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截）：手机 390 的 ① ②、电脑 1280 的 ①
 import type { Page } from '@playwright/test';
@@ -17,11 +18,11 @@ const NOW = new Date(`${DAY}T12:40:00+09:00`);
 // 电脑宽度、首尔时区、登录着（trace、isMobile 只能在文件顶层设）；手机那组只把视口改成 390 宽
 test.use(DESK_USE);
 
-async function open(page: Page, events: Record<string, unknown>[]): Promise<void> {
-  await page.clock.setFixedTime(NOW);
+async function open(page: Page, events: Record<string, unknown>[], now: Date = NOW): Promise<void> {
+  await page.clock.setFixedTime(now);
   await page.goto('/app/#/today');
   await expect(page.getByTestId('now-card')).toBeVisible({ timeout: 20_000 });
-  const base = { user_id: FAKE_USER_ID, created_at: NOW.getTime() - 86_400_000, updated_at: NOW.getTime() - 86_400_000, deleted_at: null, undone: false, short: null, project: '', tz: TZ, date: DAY };
+  const base = { user_id: FAKE_USER_ID, created_at: now.getTime() - 86_400_000, updated_at: now.getTime() - 86_400_000, deleted_at: null, undone: false, short: null, project: '', tz: TZ, date: DAY };
   if (events.length) {
     await idbPut(page, events.map((e) => ['events', cached({ ...base, ...e })] as const));
     await page.reload();
@@ -64,6 +65,16 @@ test.describe('手机 390：“现在”卡的暖心句', () => {
     await expect(card.getByTestId('now-cheer')).not.toHaveText('');
     await expect(card).not.toContainText('今天没有日程');
     await shot(page, browserName, 'phone-390-今天没有日程');
+  });
+
+  test('④ 晚上日程都过了：浅色卡写暖心句', async ({ page, browserName }) => {
+    await open(page, SHOPPING, new Date(`${DAY}T22:15:00+09:00`));
+    const card = page.getByTestId('now-card');
+    await expect(card).toHaveAttribute('data-state', 'done');
+    await expect(card.getByTestId('now-cheer')).not.toHaveText('');
+    await expect(card).not.toContainText('今天的日程都结束了');
+    await expect(card.getByTestId('now-ruler')).toHaveCount(0);
+    await shot(page, browserName, 'phone-390-日程都过了');
   });
 });
 
