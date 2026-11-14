@@ -16,6 +16,7 @@
 // 只跑 playwright.visual.config.ts 的 chromium-plus-hold 项目（Chromium 才画 backdrop-filter，和底栏锁定同一种截法）。
 import type { Page } from '@playwright/test';
 import { fakeMedia } from '../fake-media.ts';
+import { cached, idbPut } from '../idb.ts';
 import { applyTheme, expect, frames, freeze, seedTodos, settle, still, test } from './visual-helpers.ts';
 
 type Rect = { x: number; y: number; width: number; height: number };
@@ -70,21 +71,7 @@ const TESTID: Record<string, string> = { today: 'today', calendar: 'cal', todos:
 /** ⑤ 按住那两条：AI 开着才走录音（不开走手机自带识别，Chromium 无头里不能用）。往本机库 settings 写 ai.enabled = true，重新打开。
  *  小气泡记成按住过在 seedTodos 里（visual-helpers 的 HINT_HELD） */
 async function aiOn(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const row = { id: 'vis-set-ai', key: 'ai.enabled', value: true, deleted_at: null, updated_at: Date.now() };
-    const tx = db.transaction(['settings'], 'readwrite');
-    tx.objectStore('settings').put({ id: row.id, server: row, view: row });
-    await new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-    db.close();
-  });
+  await idbPut(page, [['settings', cached({ id: 'vis-set-ai', key: 'ai.enabled', value: true, deleted_at: null, updated_at: Date.now() })]]);
   await page.reload();
 }
 

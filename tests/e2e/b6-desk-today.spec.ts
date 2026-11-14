@@ -8,9 +8,9 @@
 //   ⑬ “今天记的”里点一条：在今天页打开随手记页同一个抽屉 note-drawer（不换页），Esc 关上焦点回到那一行
 //   ⑭ 列表里删掉抽屉开着的那一条：抽屉一起关（独立评审第 11 条）
 // 评审截图（设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截）：今天页（含抽屉打开）、随手记页（含抽屉），1280×800、1440×900，浅色、深色
-// 点按前等 FADE_GUARD_MS（页面分包挂上后这段时间里落在 main 里的点按按设计吞掉）
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
-import { DESK_USE, inCol, openToday, PAST_ID, seedNotes, seedToday, shot, SHOT_DIR, TODAY_IDS } from './b6-desk-helpers.ts';
+// 点按前等换页淡入放完（page-helpers.ts 的 afterPageFade：分包挂上后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉）
+import { DESK_USE, inCol, openToday, PAST_ID, seedNotes, seedToday, TODAY_IDS } from './b6-desk-helpers.ts';
+import { afterPageFade, shot, SHOT_DIR } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
 
@@ -24,7 +24,7 @@ test.describe('B6 电脑版今天页', () => {
     await openToday(page);
     await seedToday(page);
     await expect(page.getByTestId('desk-panel-river').locator(`[data-open="${TODAY_IDS.live}"]`)).toBeVisible({ timeout: 20_000 });
-    await page.waitForTimeout(FADE_GUARD_MS);
+    await afterPageFade(page);
   });
 
   test('⑦ 时间河一整块；日期行带农历和纪念日胶囊，不在可拖的块里', async ({ page }) => {
@@ -104,7 +104,7 @@ test.describe('B6 对齐线框：已过去、今天记的、删开着的那条',
     await openToday(page);
     await seedToday(page);
     await expect(page.getByTestId('desk-panel-river').locator(`[data-open="${TODAY_IDS.live}"]`)).toBeVisible({ timeout: 20_000 });
-    await page.waitForTimeout(FADE_GUARD_MS);
+    await afterPageFade(page);
   });
 
   test('⑫ 已过去折成一行：结束了的日程收进去，点了展开、再点收起', async ({ page, browserName }) => {
@@ -126,7 +126,7 @@ test.describe('B6 对齐线框：已过去、今天记的、删开着的那条',
     await seedNotes(page);
     const row = page.getByTestId('today-notes').locator('[data-open]').first();
     await expect(row).toBeVisible({ timeout: 20_000 });
-    await page.waitForTimeout(FADE_GUARD_MS);
+    await afterPageFade(page);
     await row.click();
     const drawer = page.getByTestId('note-drawer');
     await expect(drawer.getByTestId('note-edit-body')).toBeVisible({ timeout: 20_000 });
@@ -162,7 +162,7 @@ test.describe('B6 对齐线框：手机宽度的已过去', () => {
     await expect(page.locator(`[data-open="${PAST_ID}"]`)).toHaveCount(0);
     await expect(page.getByTestId('today-anniv')).toContainText('김지민 生日');
     await shot(page, browserName, '对齐-今天手机已过去收起-390');
-    await page.waitForTimeout(FADE_GUARD_MS);
+    await afterPageFade(page);
     await fold.click();
     await expect(page.locator(`[data-open="${PAST_ID}"]`)).toBeVisible();
     await shot(page, browserName, '对齐-今天手机已过去展开-390');
@@ -195,7 +195,7 @@ test.describe('B6 评审截图', () => {
         await expect(page.locator('[data-testid^="notes-card-"]')).toHaveCount(6, { timeout: 20_000 });
         await expect(page.getByTestId('plus-hint')).toHaveCount(0);
         await shot(page, browserName, `随手记-${tag}`);
-        await page.waitForTimeout(FADE_GUARD_MS);
+        await afterPageFade(page);
         await page.locator('[data-testid^="notes-card-"]', { hasText: '牛奶' }).locator('button').first().click();
         await expect(page.getByTestId('note-drawer')).toBeVisible();
         await shot(page, browserName, `随手记抽屉-${tag}`);
@@ -205,7 +205,7 @@ test.describe('B6 评审截图', () => {
         await expect(page.locator(`[data-open="${TODAY_IDS.live}"]`)).toBeVisible({ timeout: 20_000 });
         await expect(page.locator('h1')).toContainText('农历');
         await shot(page, browserName, `今天-${tag}`);
-        await page.waitForTimeout(FADE_GUARD_MS);
+        await afterPageFade(page);
         await page.locator(`[data-open="${TODAY_IDS.live}"]`).click();
         await expect(page.getByTestId('today-drawer')).toBeVisible();
         await shot(page, browserName, `今天抽屉-${tag}`);

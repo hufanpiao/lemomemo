@@ -13,6 +13,7 @@
 // 手机自带识别（Web Speech）在 Chromium 无头里不能用，那一路只有单测；系统长按菜单、真麦克风、音量波形只能真机看
 import type { Page } from '@playwright/test';
 import { center, count, expectMicClosed, fakeMedia, holdUntilRecording, runLog, waitVoiceHost } from './fake-media.ts';
+import { cached, idbPut } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
 
@@ -25,21 +26,7 @@ const UPLOAD = 'voice upload start bytes=3000 mime=audio/mp4';
 async function openWithAi(page: Page): Promise<void> {
   await page.goto('/app/#/today');
   await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 });
-  await page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const row = { id: 'e2e-set-ai', key: 'ai.enabled', value: true, deleted_at: null, updated_at: Date.now() };
-    const tx = db.transaction(['settings'], 'readwrite');
-    tx.objectStore('settings').put({ id: row.id, server: row, view: row });
-    await new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-    db.close();
-  });
+  await idbPut(page, [['settings', cached({ id: 'e2e-set-ai', key: 'ai.enabled', value: true, deleted_at: null, updated_at: Date.now() })]]);
   // 运行日志跨冷启动保留：记下重新打开之前已有几行，等新的一行
   const before = count(await runLog(page), 'voice host ready');
   await page.reload();

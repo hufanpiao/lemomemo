@@ -7,14 +7,14 @@
 //     csp-fixture 收不到任何违规）；运行日志压图那一行记了 path=wasm native=image/png 和耗时；
 //   · 离线（SW 装好、断网）也能编：wasm 在预缓存里，运行日志照样 path=wasm、没有 why=，图插进了编辑器
 // 跑在快读组（playwright.fastread.config.ts）：上传器“等行确认了才传”，确认要同步引擎把新建发出去，只有带 supabase 地址的构建才起同步；
-// 默认的无后端组没配地址，整份跳过。/sb 接的是假后端：这里在浏览器这一层答——profiles、app_config 回告知已同意，别的表 GET 回空，
+// 默认的无后端组没配地址，按 e2e-config.ts 的 FASTREAD_ONLY_SPECS 不跑这份。/sb 接的是假后端：这里在浏览器这一层答——profiles、app_config 回告知已同意，别的表 GET 回空，
 // 随手记、插图两张表的新建回 201 带 rev、GET 时回新建过的行，上传记下包体回 200。会话是 JWT 形状的假令牌（session-fixture.ts 的 seedFakeSession({ jwt: true })，和 b2-first-screen-supabase.spec.ts 共用）
 import { writeFileSync } from 'node:fs';
 import type { Page, Request } from '@playwright/test';
 import { exifApp1, hasAscii, isWebpFile, riffChunks, WEBP_IMAGE_CHUNKS, withExif } from '../../src/features/notes/__tests__/exif-sample.ts';
+import { fakeRest } from './fake-rest.ts';
 import { expect, FAKE_USER_ID, seedFakeSession, test } from './session-fixture.ts';
 
-test.skip(!process.env['VITE_PUBLIC_SUPABASE_URL'], '要同步引擎把新建发出去，只在带 supabase 地址的快读组跑（npm run e2e:fastread）');
 test.skip(({ browserName }) => browserName !== 'chromium', '改的是 Chromium 的 canvas 导出（WebKit 原生行为只能真机看）；SW、断网在 chromium 跑一次');
 test.setTimeout(90_000);
 
@@ -27,7 +27,6 @@ const FAKE_IPHONE_CANVAS = `(() => {
     OffscreenCanvas.prototype.convertToBlob = function (o) { return cb.call(this, o && o.type === 'image/webp' ? { ...o, type: 'image/png' } : o); };
   }
 })();`;
-const V = '2026-10-29';
 /** 运行日志里压图成功、走 wasm 的那一行（image-uploader.ts：结果 + 编码诊断；失败是 encode_… 并带 why=） */
 const WASM_OK = /notes img encode ok .* path=wasm native=image\/png ms=\d+ loadMs=\d+ encMs=\d+$/m;
 
@@ -58,26 +57,8 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Requ
   await page.addInitScript({ content: FAKE_IPHONE_CANVAS });
   // 随手记、插图两张表新建过的行：GET 时原样回出来。首次同步是整表重拉，拉完服务器没回的、本机已确认的行会被当成
   // “服务器上已删”丢掉（core/sync/pull.ts 的 snapshot / dropServer）；新建确认得比重拉早时，回空就会把刚建的随手记删掉
-  const saved = new Map<string, Map<string, Record<string, unknown>>>([['notes', new Map()], ['note_images', new Map()]]);
-  await page.route(/\/sb\/rest\/v1\//, (route) => {
-    const req = route.request();
-    const u = new URL(req.url());
-    const table = saved.get(u.pathname.split('/').pop() ?? '');
-    if (req.method() === 'POST' && table) {
-      // 新建回 201 带 rev（sync-transport 的 insertRow 要 select('rev')；回包里没有 rev 就当成“服务器上已有”，去核对、判成冲突）
-      const body: unknown = req.postDataJSON();
-      for (const r of Array.isArray(body) ? body : [body]) {
-        const row = r as Record<string, unknown>;
-        if (typeof row['id'] === 'string') table.set(row['id'], { ...row, rev: 1, synced_at: new Date().toISOString() });
-      }
-      return route.fulfill({ status: 201, json: [{ rev: 1 }] });
-    }
-    if (req.method() !== 'GET') return route.fallback();
-    if (table) return route.fulfill({ json: [...table.values()] });
-    if (u.pathname.endsWith('/profiles')) return route.fulfill({ json: [{ user_id: FAKE_USER_ID, consent_policy_ver: V }] });
-    if (u.pathname.endsWith('/app_config') && u.searchParams.get('select') === 'notice') return route.fulfill({ json: [{ notice: { policy_ver: V, min_consent_ver: V } }] });
-    return route.fulfill({ json: [] });
-  });
+  // 新建回 201 带 rev（sync-transport 的 insertRow 要 select('rev')；回包里没有 rev 就当成“服务器上已有”，去核对、判成冲突）
+  await fakeRest(page, { user: FAKE_USER_ID, tables: { notes: [], note_images: [] }, store: {} });
   const uploads: Request[] = [];
   await page.route(/\/files\/v1\/o\/images\//, (route) => {
     if (route.request().method() !== 'PUT') return route.fallback();

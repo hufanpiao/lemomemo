@@ -21,6 +21,7 @@
 //     生成后先拿 200pt 附件和参照图右列并排看过、确认一致，才能提交。
 // 要改基准图：和改数值一样，先要负责人新定的需求编号（R-xxx），提交说明里写上。
 import { writeFileSync } from 'node:fs';
+import { cached, idbPut } from '../idb.ts';
 import { FAKE_USER_ID } from '../session-fixture.ts';
 import { FIXED_NOW, HINT_HELD, TZ, expect, frames, settle, still, test } from './visual-helpers.ts';
 
@@ -86,21 +87,7 @@ test.describe('底栏视觉锁定（R-360、R-361，Chromium）', () => {
       await page.goto('/app/#/todos');
       await page.getByTestId('todos').waitFor({ timeout: 30_000 });
       // 小气泡（B3 FA-3 起打开）记成按住过：它在“＋”上方、落进裁剪区，参照图里没有它（见 HINT_HELD 的注释）
-      await page.evaluate(async ({ list, hint }) => {
-        const db = await new Promise<IDBDatabase>((res, rej) => {
-          const r = indexedDB.open('planner-v4');
-          r.onsuccess = () => res(r.result);
-          r.onerror = () => rej(r.error);
-        });
-        const tx = db.transaction(['todos', 'drafts'], 'readwrite');
-        for (const r of list) tx.objectStore('todos').put({ id: r['id'], server: r, view: r });
-        tx.objectStore('drafts').put(hint);
-        await new Promise((res, rej) => {
-          tx.oncomplete = res;
-          tx.onerror = () => rej(tx.error);
-        });
-        db.close();
-      }, { list: rows(), hint: HINT_HELD });
+      await idbPut(page, [...rows().map((r) => ['todos', cached(r)] as const), ['drafts', HINT_HELD]]);
       await page.goto('/app/#/today');
       await page.reload();
       await settle(page, 'today');

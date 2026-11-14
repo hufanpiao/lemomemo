@@ -8,25 +8,17 @@
 import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { fakeRest } from './fake-rest.ts';
+import { shot } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
-test.skip(!process.env['VITE_PUBLIC_SUPABASE_URL'], '要会话令牌和 /sb 地址，只在快读组跑（npm run e2e:fastread）');
 test.setTimeout(90_000);
 test.use({ trace: 'off', timezoneId: 'Asia/Seoul', locale: 'zh-CN', viewport: { width: 390, height: 844 }, hasTouch: true });
 
-const SHOT_DIR = process.env['LEMO_SHOT_DIR'];
 const USER = '0e2e0000-0000-4000-8000-000000000001';
 const NOTE = '0e2e0000-0000-4000-8000-0000000b4c01';
 const img = (n: number) => `019a0000-0000-7000-8000-0000000b4c1${n}`;
 const [PEND, FAIL, OFF, DONE] = [img(1), img(2), img(3), img(4)];
-const V = '2026-10-29';
-
-/** full：整页长图；浮层开着时用 false（固定定位的浮层在整页长图里会画在滚动位置上） */
-async function shot(page: Page, browserName: string, name: string, full = true): Promise<void> {
-  if (browserName !== 'chromium' || !SHOT_DIR) return;
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, animations: 'disabled', fullPage: full });
-}
 
 /** 一张 JPEG（页面里画，内容随便；默认 320×200 横图） */
 async function jpeg(page: Page, hue: number, w = 320, h = 200): Promise<Buffer> {
@@ -68,16 +60,7 @@ async function fakeServer(page: Page, baseURL: string | undefined, ai: boolean):
     ],
     settings: [{ id: '0e2e0000-0000-4000-8000-0000000b4c30', ...c, key: 'ai.enabled', value: ai }],
   };
-  await page.route(/\/sb\/rest\/v1\//, (route) => {
-    const req = route.request();
-    const u = new URL(req.url());
-    const name = u.pathname.split('/').pop() ?? '';
-    if (req.method() !== 'GET') return route.fulfill({ status: 201, json: [{ rev: 1 }] });
-    if (tables[name]) return route.fulfill({ json: tables[name] });
-    if (name === 'profiles') return route.fulfill({ json: [{ user_id: USER, consent_policy_ver: V, consent_ai_at: at }] });
-    if (name === 'app_config' && u.searchParams.get('select') === 'notice') return route.fulfill({ json: [{ notice: { policy_ver: V, min_consent_ver: V } }] });
-    return route.fulfill({ json: [] });
-  });
+  await fakeRest(page, { user: USER, tables, profile: { consent_ai_at: at } });
   const fake: Fake = { retries: [] };
   await page.route(/\/sb\/functions\/v1\/file-check/, (route) => {
     fake.retries.push(route.request().postDataJSON());
@@ -123,9 +106,9 @@ test('AI 开着：三种状态行，识别好了的不出东西；“重新识�
   await expect(page.getByTestId(`img-ai-${DONE}`)).toHaveCount(0);
   await expect(page.getByText('AI 看到的')).toHaveCount(0);
   await page.getByTestId(`img-ai-${OFF}`).scrollIntoViewIfNeeded();
-  await shot(page, browserName, '手机-浅色-三种状态');
+  await shot(page, browserName, '手机-浅色-三种状态', { fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
-  await shot(page, browserName, '手机-深色-三种状态');
+  await shot(page, browserName, '手机-深色-三种状态', { fullPage: true });
   await page.emulateMedia({ colorScheme: 'light' });
 
   await page.getByTestId(`img-ai-retry-${FAIL}`).click();
@@ -146,7 +129,7 @@ test('AI 关着：还是 pending 的那张也显示“没交给 AI”', async ({
   await expect(page.getByTestId(`img-ai-${PEND}`)).toHaveAttribute('data-ai', 'off');
   await expect(page.getByTestId(`img-ai-open-${PEND}`)).toHaveText('去打开');
   await page.getByTestId(`img-ai-${PEND}`).scrollIntoViewIfNeeded();
-  await shot(page, browserName, '手机-浅色-AI关着');
+  await shot(page, browserName, '手机-浅色-AI关着', { fullPage: true });
 });
 
 /** 打开看图页、核“AI 看到的”（手机、电脑共用） */
@@ -177,7 +160,7 @@ test('看图页（手机）：点图打开，AI 看到的在底部；左右键�
   await openNote(page);
   await viewer(page);
   await expect(page.getByRole('dialog')).toHaveAttribute('data-shell', 'full');
-  await shot(page, browserName, '手机-看图页', false);
+  await shot(page, browserName, '手机-看图页');
   // 左键换到第 3 张（没交给 AI 的那张）：计数跟着变，底部没有卡片
   await page.keyboard.press('ArrowLeft');
   await expect(page.getByTestId('img-view-count')).toHaveText('3 / 4');
@@ -212,7 +195,7 @@ test('看图浮层（电脑）：同一个组件，底部描述和标签；Esc �
   await viewer(page);
   await expect(page.getByTestId('img-view-close')).toContainText('Esc');
   await expect(page.getByRole('dialog')).toHaveAttribute('data-shell', 'box');
-  await shot(page, browserName, '电脑-看图浮层', false);
+  await shot(page, browserName, '电脑-看图浮层');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('img-view')).toHaveCount(0);
   // Esc 只关看图浮层，编辑器（抽屉）还在

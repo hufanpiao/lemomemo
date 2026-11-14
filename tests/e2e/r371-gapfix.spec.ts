@@ -11,9 +11,21 @@ import { expect, test } from './session-fixture.ts';
 
 const SHOTS = process.env['R371_SHOTS'] ?? 'test-results/r371-gapfix';
 
-/** 打开前注入：开关（on: false = 诊断页关掉，存 lemo-gapfix-off）、清掉运行日志、iPhone、主屏幕版、屏幕高、顶部安全区 */
-async function launch(page: Page, o: { on: boolean; screenH: number; top: number }): Promise<void> {
+/**
+ * 打开前注入：开关（on: false = 诊断页关掉，存 lemo-gapfix-off）、清掉运行日志、iPhone、主屏幕版、屏幕高、顶部安全区。
+ * 另记两样给“关着什么都不做”当证据：垫块出没出现过（window.__padSeen），vh-gapfix 那一块有没有被请求（返回的数组）
+ */
+async function launch(page: Page, o: { on: boolean; screenH: number; top: number }): Promise<string[]> {
+  const gapReqs: string[] = [];
+  page.on('request', (r) => {
+    if (/vh-gapfix/.test(r.url())) gapReqs.push(r.url());
+  });
   await page.addInitScript((a) => {
+    const w = window as unknown as { __padSeen: boolean };
+    w.__padSeen = false;
+    new MutationObserver(() => {
+      if (document.getElementById('lemo-gapfix-pad')) w.__padSeen = true;
+    }).observe(document, { childList: true, subtree: true });
     try {
       if (a.on) localStorage.removeItem('lemo-gapfix-off');
       else localStorage.setItem('lemo-gapfix-off', '1');
@@ -42,6 +54,19 @@ async function launch(page: Page, o: { on: boolean; screenH: number; top: number
   }, o);
   await page.goto('/app/#/today');
   await expect(page.getByTestId('today')).toBeVisible();
+  return gapReqs;
+}
+
+/**
+ * 关着就什么都不做的证据（不靠睡过 1.5 秒）：开不开是 main.tsx 同步判的（gapFixWanted），判成开时早试同步放垫块、vh-gapfix 那一块同时开始下载，
+ * 都在今天页画出来之前。所以今天页出来时垫块没出现过、那一块没被请求，后面就不会再有；再等这次启动的运行日志落盘（=== start 那行，隔 300ms 存），里面没有 gapfix 的行
+ */
+async function expectOffInert(page: Page, gapReqs: readonly string[]): Promise<void> {
+  expect(await page.evaluate(() => (window as unknown as { __padSeen: boolean }).__padSeen), '垫块没出现过').toBe(false);
+  expect(gapReqs, '没下载 vh-gapfix').toEqual([]);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? ''), { timeout: 5000 }).toContain('=== start');
+  await expect(page.locator('#lemo-gapfix-pad')).toHaveCount(0);
+  expect(await log(page)).toBe('');
 }
 
 /** 启动的淡入都放完：启动画面撤了、安全区放行、实色带不透明 */
@@ -135,20 +160,15 @@ test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () =>
 
     // 同一个页面按“诊断页关掉”重新冷启动一次（后加的注入脚本存上 lemo-gapfix-off；会话夹具挂在这个 context 上）
     await page.goto('about:blank');
-    await launch(page, { on: false, screenH: 956, top: 61 });
+    const offReqs = await launch(page, { on: false, screenH: 956, top: 61 });
     await settle(page);
-    await page.waitForTimeout(1600);
-    await expect(page.locator('#lemo-gapfix-pad')).toHaveCount(0);
-    expect(await log(page)).toBe('');
+    await expectOffInert(page, offReqs);
     const off = await shot(page, '895-off');
     expect(on.equals(off), '开着（撤完垫块）和关着逐像素一样').toBe(true);
   });
 
   test('诊断页关掉：不放垫块、不记日志', async ({ page }) => {
-    await launch(page, { on: false, screenH: 956, top: 61 });
-    await page.waitForTimeout(2000);
-    await expect(page.locator('#lemo-gapfix-pad')).toHaveCount(0);
-    expect(await log(page)).toBe('');
+    await expectOffInert(page, await launch(page, { on: false, screenH: 956, top: 61 }));
   });
 });
 

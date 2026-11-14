@@ -167,7 +167,8 @@ test('非主页往已排队的 patch 再合并一次（待发数不变）：主�
   await start(page, name);
   await expect.poll(async () => (await state(page)).leader, { timeout: 5000 }).toBe(true);
   await start(other, name);
-  await page.waitForTimeout(300);
+  // 另一页已经在排队等主页锁（tab-leader 用 navigator.locks 选主页）：它不会再抢成主页
+  await expect.poll(() => page.evaluate(async () => ((await navigator.locks.query()).pending ?? []).length), { timeout: 5000 }).toBeGreaterThan(0);
   // 谁是主页以 onLeader 为准（两页都在前台，正常是先开的那页）
   const [lead, follow] = (await state(page)).leader ? [page, other] : [other, page];
   expect((await state(follow)).leader).toBe(false);
@@ -177,9 +178,9 @@ test('非主页往已排队的 patch 再合并一次（待发数不变）：主�
   const before = (await state(lead)).ensures;
   await enqueue(follow, { table: 'todos', id: ID, op: 'insert', data: TODO });
   await enqueue(follow, { table: 'todos', id: ID, op: 'patch', data: { title: '一' } });
-  // 等主页收到提醒、试过发送（发不出去）
+  // 等主页收到提醒、试过发送（发不出去）：发送一轮先查会话，查到断网就整轮返回 retry（core/sync/send.ts 的 sendAll），
+  // 所以 ensures 加一就是这一轮已经处理完、没有发出任何东西
   await expect.poll(async () => (await state(lead)).ensures, { timeout: 5000 }).toBeGreaterThan(before);
-  await lead.waitForTimeout(500);
   expect((await state(lead)).sent).toEqual([]);
 
   // 主页恢复（不触发任何发送），非主页再改一次：并进上一个 patch，待发数不变
@@ -190,7 +191,8 @@ test('非主页往已排队的 patch 再合并一次（待发数不变）：主�
 
   // 主页 3 秒内发出（定时发送是 30 秒）：insert 一次、合并后的 patch 一次
   await expect.poll(async () => (await state(lead)).sent.length, { timeout: 3000 }).toBe(2);
-  await lead.waitForTimeout(500);
+  // 主页的待发队列清空了（两项都确认、移出 outbox）：之后不会再发，这时数到的就是全部
+  await expect.poll(() => lead.evaluate(() => window.__s?.outbox?.getStatus().pending), { timeout: 3000 }).toBe(0);
   const { sent } = await state(lead);
   expect(sent.map((x) => x.kind)).toEqual(['insert', 'patch']);
   expect(sent[1]?.data['title']).toBe('二');

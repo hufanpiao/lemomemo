@@ -9,6 +9,7 @@
 // 截图只在 Chromium 截（WebKit 不画模糊），存在 test-results 里
 import type { Page, TestInfo } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { putGoneTodo } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -27,32 +28,7 @@ const go = (page: Page, hash: string) =>
 async function seed(page: Page): Promise<void> {
   await page.goto('/app/#/todos');
   await page.getByTestId('todos').waitFor({ timeout: 30000 });
-  const due = today();
-  await page.evaluate(
-    async ({ due, base }) => {
-      const db = await new Promise<IDBDatabase>((res, rej) => {
-        const r = indexedDB.open('planner-v4');
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      });
-      const tx = db.transaction(['todos', 'outbox'], 'readwrite');
-      const g1 = { ...base, id: 'g1', title: '交周报', due, rev: 3, deleted_at: Date.now() - 60000 };
-      const n1 = { ...base, id: 'n1', title: '买牛奶', due, rev: 1, deleted_at: null };
-      tx.objectStore('todos').put({ id: 'g1', server: g1, view: g1 });
-      tx.objectStore('todos').put({ id: 'n1', server: n1, view: n1 });
-      tx.objectStore('outbox').put({
-        op_id: '0e2e0000-0000-4000-8000-0000000000b6', table: 'todos', id: 'g1', rec: 'todos:g1', op: 'patch', data: { title: '交周报（改）' },
-        base_rev: 2, own_revs: [], client_ts: Date.now() - 120000, tries: 0, next_at: 0, state: 'failed', v: 1, app: '4.0.0', seq: 1,
-        remind: false, deps: [], error: 'gone', sent: true,
-      });
-      await new Promise((res, rej) => {
-        tx.oncomplete = res;
-        tx.onerror = () => rej(tx.error);
-      });
-      db.close();
-    },
-    { due, base },
-  );
+  await putGoneTodo(page, base, today(), '0e2e0000-0000-4000-8000-0000000000b6');
   await page.reload();
   await page.getByTestId('todos-row-n1').waitFor({ timeout: 30000 });
 }

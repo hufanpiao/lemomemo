@@ -8,6 +8,7 @@
 // • 页面：今天、待办、最近删除、日历（月视图 + 当天列表）、设置首页和各级子页、随手记、待办编辑、日程编辑；灌一份固定数据，让列表行、
 //   行尾 ×、打勾圆圈、“没赶上”都出来。宽屏（≥ 900）侧栏另开一个用例。
 import type { Page } from '@playwright/test';
+import { cached, idbPut } from './idb.ts';
 import { expect, FAKE_USER_ID, test } from './session-fixture.ts';
 
 const TZ = 'Asia/Seoul';
@@ -33,24 +34,7 @@ async function seed(page: Page): Promise<void> {
   await page.clock.setFixedTime(NOW);
   await page.goto('/app/#/todos');
   await page.getByTestId('todos').waitFor({ timeout: 30_000 });
-  await page.evaluate(
-    async ([ts, es]) => {
-      const db = await new Promise<IDBDatabase>((res, rej) => {
-        const r = indexedDB.open('planner-v4');
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      });
-      const tx = db.transaction(['todos', 'events'], 'readwrite');
-      for (const r of ts) tx.objectStore('todos').put({ id: r['id'], server: r, view: r });
-      for (const r of es) tx.objectStore('events').put({ id: r['id'], server: r, view: r });
-      await new Promise((res, rej) => {
-        tx.oncomplete = res;
-        tx.onerror = () => rej(tx.error);
-      });
-      db.close();
-    },
-    [TODOS, EVENTS] as [Record<string, unknown>[], Record<string, unknown>[]],
-  );
+  await idbPut(page, [...TODOS.map((r) => ['todos', cached(r)] as const), ...EVENTS.map((r) => ['events', cached(r)] as const)]);
 }
 
 /** 页面上点击区小于 44 的可点元素：“标签 文字/读屏名 宽×高” */

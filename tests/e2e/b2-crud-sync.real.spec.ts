@@ -9,22 +9,13 @@
 // 冲突、离线、永久删除墓碑那几条（TC-B1-23、24、27、59）不在这里，仍在 b1-sync.spec.ts 里 fixme。
 import type { Browser, Page } from '@playwright/test';
 import { expect, test } from './csp-fixture.ts';
-import { createAccount, loginViaOtp, restInPage } from './real-backend.ts';
+import { idbRead } from './idb.ts';
+import { createAccount, loginViaOtp, openApp, restInPage } from './real-backend.ts';
 
 const TZ = 'Asia/Seoul';
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
 const SYNC_MS = 75_000;
 test.setTimeout(240_000);
-
-/** 打开 /app/；首次登录先过告知页（点“先不同意，直接用”），等到主界面出来（5 条并发、10 个上下文冷启动，给 30 秒） */
-async function openApp(page: Page, hash = '#/today'): Promise<void> {
-  await page.goto(`/app/${hash}`);
-  const consent = page.locator('main[data-feature="onboarding"][data-step="consent"]');
-  const app = page.locator('main[data-feature]:not([data-feature="onboarding"])').first();
-  await expect(consent.or(app)).toBeVisible({ timeout: 30_000 });
-  if (await consent.isVisible()) await consent.getByRole('button', { name: '先不同意，直接用' }).click();
-  await expect(app).toBeVisible({ timeout: 30_000 });
-}
 
 /** 同一账号的两台设备 X、Y */
 async function twoDevices(browser: Browser): Promise<{ x: Page; y: Page; close: () => Promise<void> }> {
@@ -35,35 +26,14 @@ async function twoDevices(browser: Browser): Promise<{ x: Page; y: Page; close: 
   const y = await cy.newPage();
   await loginViaOtp(x, acc.email);
   await loginViaOtp(y, acc.email);
-  await openApp(x);
-  await openApp(y);
+  await openApp(x, '/app/#/today');
+  await openApp(y, '/app/#/today');
   return { x, y, close: async () => void (await Promise.all([cx.close(), cy.close()])) };
 }
 
-/** 本机库 planner-v4 某个仓里一行的 view（界面上看到的那份；没有就 null） */
-async function idbRow(page: Page, store: 'todos' | 'events', id: string): Promise<Record<string, unknown> | null> {
-  return page.evaluate(
-    async ({ store, id }) => {
-      const db = await new Promise<IDBDatabase>((res, rej) => {
-        const r = indexedDB.open('planner-v4');
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      });
-      try {
-        if (!db.objectStoreNames.contains(store)) return null;
-        return await new Promise<Record<string, unknown> | null>((res, rej) => {
-          const q = db.transaction(store, 'readonly').objectStore(store).get(id);
-          // 本机行存成 {id, server, view}（core/cache-schema.ts）：看界面上用的 view
-          q.onsuccess = () => res((q.result as { view?: Record<string, unknown> } | undefined)?.view ?? null);
-          q.onerror = () => rej(q.error);
-        });
-      } finally {
-        db.close();
-      }
-    },
-    { store, id },
-  );
-}
+/** 本机库某个仓里一行的 view（本机行存成 {id, server, view}，core/cache-schema.ts：看界面上用的 view；没有就 null） */
+const idbView = async (page: Page, store: 'todos' | 'events', id: string): Promise<Record<string, unknown> | null> =>
+  (await idbRead<{ view?: Record<string, unknown> }>(page, store, 'get', id))?.view ?? null;
 
 /** 服务器上的一行（X 的会话、RLS 下） */
 async function serverRow(page: Page, table: 'todos' | 'events', id: string, cols: string): Promise<Record<string, unknown> | null> {
@@ -79,7 +49,7 @@ const pick = (row: Record<string, unknown> | null, keys: string[]): Record<strin
 async function expectBoth(x: Page, y: Page, table: 'todos' | 'events', id: string, want: Record<string, unknown>): Promise<void> {
   const keys = Object.keys(want);
   await expect.poll(async () => pick(await serverRow(x, table, id, keys.join(',')), keys), { timeout: 15_000, message: `服务器上的 ${table} 行` }).toEqual(want);
-  await expect.poll(async () => pick(await idbRow(y, table, id), keys), { timeout: SYNC_MS, message: `另一台设备本机库里的 ${table} 行` }).toEqual(want);
+  await expect.poll(async () => pick(await idbView(y, table, id), keys), { timeout: SYNC_MS, message: `另一台设备本机库里的 ${table} 行` }).toEqual(want);
 }
 
 async function commit(page: Page, testId: string, value: string): Promise<void> {
@@ -130,7 +100,7 @@ for (const s of TODOS) {
       await x.getByTestId('todo-edit-delete').click();
       await expect(x.getByTestId('todo-edit-undo')).toBeVisible();
       await expect.poll(async () => (await serverRow(x, 'todos', id, 'deleted_at'))?.['deleted_at'] ?? null, { timeout: 15_000 }).not.toBeNull();
-      await expect.poll(async () => (await idbRow(y, 'todos', id))?.['deleted_at'] ?? null, { timeout: SYNC_MS }).not.toBeNull();
+      await expect.poll(async () => (await idbView(y, 'todos', id))?.['deleted_at'] ?? null, { timeout: SYNC_MS }).not.toBeNull();
     } finally {
       await close();
     }
@@ -180,7 +150,7 @@ for (const s of EVENTS) {
       await x.getByTestId('event-edit-delete').click();
       await expect(x.getByTestId('event-edit-undo')).toBeVisible();
       await expect.poll(async () => (await serverRow(x, 'events', id, 'deleted_at'))?.['deleted_at'] ?? null, { timeout: 15_000 }).not.toBeNull();
-      await expect.poll(async () => (await idbRow(y, 'events', id))?.['deleted_at'] ?? null, { timeout: SYNC_MS }).not.toBeNull();
+      await expect.poll(async () => (await idbView(y, 'events', id))?.['deleted_at'] ?? null, { timeout: SYNC_MS }).not.toBeNull();
     } finally {
       await close();
     }

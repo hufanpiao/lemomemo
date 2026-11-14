@@ -5,7 +5,9 @@
 //   刷新以后还是同一句（按当天日期固定选，不随机）；读屏读得到（不在 aria-hidden 里）
 // 评审截图（设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截）：手机 390 的 ① ②、电脑 1280 的 ①
 import type { Page } from '@playwright/test';
-import { DESK_USE, idbPut, shot } from './b6-desk-helpers.ts';
+import { DESK_USE } from './b6-desk-helpers.ts';
+import { cached, idbPut } from './idb.ts';
+import { shot } from './page-helpers.ts';
 import { expect, FAKE_USER_ID, test } from './session-fixture.ts';
 
 const TZ = 'Asia/Seoul';
@@ -20,7 +22,10 @@ async function open(page: Page, events: Record<string, unknown>[]): Promise<void
   await page.goto('/app/#/today');
   await expect(page.getByTestId('now-card')).toBeVisible({ timeout: 20_000 });
   const base = { user_id: FAKE_USER_ID, created_at: NOW.getTime() - 86_400_000, updated_at: NOW.getTime() - 86_400_000, deleted_at: null, undone: false, short: null, project: '', tz: TZ, date: DAY };
-  if (events.length) await idbPut(page, events.map((e): [string, unknown] => { const r: Record<string, unknown> = { ...base, ...e }; return ['events', { id: r['id'], server: r, view: r }]; }));
+  if (events.length) {
+    await idbPut(page, events.map((e) => ['events', cached({ ...base, ...e })] as const));
+    await page.reload();
+  }
 }
 
 const SHOPPING = [

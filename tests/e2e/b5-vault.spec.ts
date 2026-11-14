@@ -11,16 +11,16 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page, Route } from '@playwright/test';
 import JSZip from 'jszip';
+import { fakeRest } from './fake-rest.ts';
+import { stableBox, swipeDiag, touchSwipe } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { runLog as readRunLog } from './fake-media.ts';
 
-test.skip(!process.env['VITE_PUBLIC_SUPABASE_URL'], '要 /sb 地址，只在快读组跑（npm run e2e:fastread）');
 test.setTimeout(90_000);
 
 const PIN = '2580';
 const OLD = '0e2e0000-0000-4000-8000-0000000000a1';
 const SHOTS = process.env['B5_SHOTS'] ?? '';
-const V = '2026-10-29';
 const UID = '0e2e0000-0000-4000-8000-000000000001';
 /** 列表行的分类（线框 s9 PRIVLIST 第二行灰字）：假 REST 的 categories 表放一条活着的分类，首次同步拉进本机库 */
 const CAT = '0e2e0000-0000-4000-8000-0000000000c1';
@@ -54,25 +54,8 @@ const UPLOAD_ORDER = [
 async function fakeServer(page: Page, baseURL: string | undefined): Promise<FakeVault> {
   if (!baseURL) throw new Error('没有 baseURL');
   await seedFakeSession(page.context(), baseURL, { jwt: true });
-  const saved = new Map<string, Map<string, Record<string, unknown>>>([['notes', new Map()], ['settings', new Map()], ['categories', new Map([[CAT, { id: CAT, user_id: UID, name: '健康', color: null, sort: 1, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, created_at: 1, updated_at: 1, rev: 1, synced_at: '2026-10-29T00:00:00.000Z' }]])]]);
-  await page.route(/\/sb\/rest\/v1\//, (route) => {
-    const req = route.request();
-    const u = new URL(req.url());
-    const table = saved.get(u.pathname.split('/').pop() ?? '');
-    if (req.method() === 'POST' && table) {
-      const body: unknown = req.postDataJSON();
-      for (const r of Array.isArray(body) ? body : [body]) {
-        const row = r as Record<string, unknown>;
-        if (typeof row['id'] === 'string') table.set(row['id'], { ...row, rev: 1, synced_at: new Date().toISOString() });
-      }
-      return route.fulfill({ status: 201, json: [{ rev: 1 }] });
-    }
-    if (req.method() !== 'GET') return route.fallback();
-    if (table) return route.fulfill({ json: [...table.values()] });
-    if (u.pathname.endsWith('/profiles')) return route.fulfill({ json: [{ user_id: UID, consent_policy_ver: V }] });
-    if (u.pathname.endsWith('/app_config') && u.searchParams.get('select') === 'notice') return route.fulfill({ json: [{ notice: { policy_ver: V, min_consent_ver: V } }] });
-    return route.fulfill({ json: [] });
-  });
+  const category = { id: CAT, user_id: UID, name: '健康', color: null, sort: 1, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, created_at: 1, updated_at: 1, rev: 1, synced_at: '2026-10-29T00:00:00.000Z' };
+  await fakeRest(page, { user: UID, tables: { notes: [], settings: [], categories: [category] }, store: {} });
 
   const fv: FakeVault = { calls: [], notes: new Map(), files: [], expireNextSave: false };
   const PPTX = await pptx();
@@ -275,63 +258,60 @@ test('随手记“⋯”菜单移到隐私记：发 import，这一条从随手�
   await expect(card).toHaveCount(0);
 });
 
-test('列表方式左滑：出“转成待办 / 移到隐私记 / 删除”，点“移到隐私记”发 import', async ({ page, baseURL, browserName }) => {
-  const fv = await fakeServer(page, baseURL);
+/** 隐私记已设好、随手记换成列表方式、记下一条：返回这一行的 id，和停稳后左滑的起点（行右边往里 40px） */
+async function listRow(page: Page, browserName: string, title: string): Promise<{ id: string; from: { x: number; y: number } }> {
   await setupAndUnlock(page, browserName);
   await page.goto('/app/#/settings/notes-view');
   // 单选框藏在文字下面（文字那层接点按）：点文字
   await page.getByText('列表', { exact: true }).click();
   await expect(page.getByTestId('settings-notes-view-list')).toBeChecked();
   await page.goto('/app/#/notes');
-  await page.getByTestId('notes-input').fill('左滑的一条');
+  await page.getByTestId('notes-input').fill(title);
   await page.getByTestId('notes-add').click();
-  const row = page.locator('[data-testid^="notes-row-"]').filter({ hasText: '左滑的一条' });
+  const row = page.locator('[data-testid^="notes-row-"]').filter({ hasText: title });
   await expect(row).toBeVisible({ timeout: 15_000 });
   const id = (await row.getAttribute('data-testid'))?.replace('notes-row-', '') ?? '';
   // 输入行还聚焦着时整页盖着模糊层（R-401）：先让它失焦
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  // 进场中的那一层带 pointer-events:none（src/motion/list-impl.tsx ENTERING_STYLE），按下会穿到列表上（运行日志“down div#notes-list”、左滑日志为空）。
-  // 今天第一条记下时进场的是新的分组 section（notes-g-<日期>），行在新分组里是第一次画、自己不进场：5500ced3 只等行不是 entering，等错了层，
-  // CI webkit 照样红；11-14 本机快读组 webkit 单 worker 复现 5/6 红，诊断“往上：… section[notes-g-2026-11-14] state=entering pe=none”。
-  // 改成等列表里没有任何一层还在进场（等状态，不加时间）
+  // 进场期间不接点按是有意的（src/motion/list-impl.tsx 的 ENTERING_STYLE，第二轮 L3 定的）。今天第一条记下时进场的是新的分组 section
+  // （notes-g-<日期>），不是这一行：等列表里没有任何一层还在进场，再等这一行停稳（入口行晚到会把它挤一下）
   await expect(page.locator('[data-testid="notes-list"] [data-state="entering"]')).toHaveCount(0, { timeout: 10_000 });
-  // 入口行晚到会让位置变一下：再等它停稳再量
-  await page.waitForTimeout(300);
-  const box = await page.getByTestId(`notes-swipe-${id}`).boundingBox();
-  if (!box) throw new Error('没有行');
-  const y = box.y + box.height / 2;
-  // 11-14 d4db0138 CI webkit 又红、左滑运行日志为空（按下没落到左滑上）：按下前记起点最上层是谁，失败时一起报
-  // 11-14 CI webkit 起点最上层是 div#notes-list：再记这一行往上每一层的 data-state 和 pointer-events（哪一层挡住了点按）
-  const topAt = await page.evaluate(([px, py, rid]) => {
-    const el = document.elementFromPoint(Number(px), Number(py));
-    const top = el ? `${el.tagName.toLowerCase()}#${el.closest('[data-testid]')?.getAttribute('data-testid') ?? '-'}` : 'none';
-    const chain: string[] = [];
-    for (let n = document.querySelector(`[data-testid="notes-swipe-${String(rid)}"]`); n && n.getAttribute('data-testid') !== 'notes-list'; n = n.parentElement) {
-      chain.push(`${n.tagName.toLowerCase()}[${n.getAttribute('data-testid') ?? '-'}] state=${n.getAttribute('data-state') ?? '-'} pe=${getComputedStyle(n).pointerEvents}`);
-    }
-    return `${top}；往上：${chain.join(' < ')}`;
-  }, [box.x + box.width - 40, y, id] as const);
-  await page.mouse.move(box.x + box.width - 40, y);
-  await page.mouse.down();
-  for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + box.width - 40 - i * 22, y);
-  await page.mouse.up();
-  // 11-14 d41a1987 的 CI webkit 左滑没打开（重试一次也没开），本机复现不了：失败时把左滑运行日志带进报错（按下、定方向、松手各一行）。
-  // 运行日志 300 ms 防抖才落到 localStorage，读之前要等
-  const swipeLog = async (): Promise<string> => (await readRunLog(page)).filter((l) => l.includes('swipe ')).slice(-12).join(' | ');
+  const box = await stableBox(page.getByTestId(`notes-swipe-${id}`));
+  return { id, from: { x: box.x + box.width - 40, y: box.y + box.height / 2 } };
+}
+
+/** 左滑打开了（data-swipe=open），松手那一行运行日志记的是打开；没打开时把诊断带进报错（只在失败时读） */
+async function expectSwipeOpen(page: Page, id: string, from: { x: number; y: number }, type: 'mouse' | 'touch'): Promise<void> {
   try {
     await expect(page.getByTestId(`notes-swipe-${id}`)).toHaveAttribute('data-swipe', 'open');
   } catch (e) {
-    await page.waitForTimeout(500);
-    const tail = (await readRunLog(page)).slice(-30).join(' | ');
-    const later = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="notes-g-"]')].map((g) => `${g.getAttribute('data-testid')}=${g.getAttribute('data-state') ?? '-'} op=${getComputedStyle(g).opacity}`).join(','));
-    throw new Error(`${e instanceof Error ? e.message : String(e)} | 起点最上层：${topAt} | 超时后分组：${later} | 左滑运行日志：${await swipeLog()} | 运行日志最后 30 行：${tail}`);
+    throw new Error(`${e instanceof Error ? e.message : String(e)} | ${await swipeDiag(page, from, `notes-swipe-${id}`, 'notes-list')}`);
   }
-  await expect.poll(swipeLog, { message: '左滑运行日志要记下松手结果' }).toMatch(/swipe up started=1 axis=h last=-\d+ w=192 open=1/);
+  // 运行日志 300 ms 防抖才落到 localStorage：轮询等它
+  const swipeLog = async (): Promise<string> => (await readRunLog(page)).filter((l) => l.includes('swipe ')).slice(-12).join(' | ');
+  await expect.poll(swipeLog, { message: '左滑运行日志要记下按下和松手' }).toMatch(new RegExp(`swipe down type=${type} open=0.*swipe up started=1 axis=h last=-\\d+ w=192 open=1`));
   await expect(page.getByTestId(`notes-sw-vault-${id}`)).toBeVisible();
+}
+
+test('列表方式左滑：出“转成待办 / 移到隐私记 / 删除”，点“移到隐私记”发 import', async ({ page, baseURL, browserName }) => {
+  const fv = await fakeServer(page, baseURL);
+  const { id, from } = await listRow(page, browserName, '左滑的一条');
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(from.x - i * 22, from.y);
+  await page.mouse.up();
+  await expectSwipeOpen(page, id, from, 'mouse');
   await shot(page, '10-左滑按钮', browserName);
   await page.getByTestId(`notes-sw-vault-${id}`).click();
   await expect.poll(() => fv.calls.find((c) => c.action === 'import')?.body['note_id']).toBe(id);
-  await expect(row).toHaveCount(0);
+  await expect(page.getByTestId(`notes-row-${id}`)).toHaveCount(0);
+});
+
+test('列表方式左滑（触摸）：pointerType=touch 的按下、移动、松手同样打开', async ({ page, baseURL, browserName }) => {
+  await fakeServer(page, baseURL);
+  const { id, from } = await listRow(page, browserName, '手指左滑的一条');
+  await touchSwipe(page, from, 220);
+  await expectSwipeOpen(page, id, from, 'touch');
 });
 
 test('设置 › 隐私记：已设密码时有自动上锁、改密码、忘记密码', async ({ page, baseURL, browserName }) => {
@@ -434,10 +414,10 @@ test('审查第 1 条：保存时令牌过期 → 解锁卡点取消 → 再解�
   await page.getByTestId('vault-unlock-pin').click();
   await typePin(page, 'vault-unlock-pad', PIN);
   await expect(page.getByTestId('vault-empty')).toBeVisible({ timeout: 15_000 });
-  await page.waitForTimeout(500);
+  // 先等运行日志记下“等解锁的那次保存已取消”（取消了就不会再补发），再数保存次数
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault wait cancel n=\d/);
   expect(fv.calls.filter((c) => c.action === 'save')).toHaveLength(1);
   expect(fv.notes.size).toBe(0);
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault wait cancel n=\d/);
 });
 
 test('审查第 3 条：设密码时开了 Face ID、绑定没成：密码照样设好，隐私记页出提示（role=alert）；审查第 6 条：解锁卡是有名字的对话框、键盘焦点圈', async ({ page, baseURL, browserName }) => {

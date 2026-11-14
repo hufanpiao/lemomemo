@@ -7,70 +7,10 @@
 import { type Page, type BrowserContext } from '@playwright/test';
 import { expect, test } from './csp-fixture.ts';
 import { zh } from '../../src/features/auth/i18n/zh.ts';
-import { createAccount, loginViaOtp, realBackend, sessionKeyFor, type StoredSession } from './real-backend.ts';
+import { injectTodoInsert, localState } from './idb.ts';
+import { createAccount, loginViaOtp, openApp, realBackend, sessionKeyFor, type StoredSession } from './real-backend.ts';
 
 test.setTimeout(240_000);
-
-async function openApp(page: Page): Promise<void> {
-  await page.goto('/app/');
-  const consent = page.locator('main[data-feature="onboarding"][data-step="consent"]');
-  const app = page.locator('main[data-feature]:not([data-feature="onboarding"])').first();
-  await expect(consent.or(app)).toBeVisible({ timeout: 30_000 });
-  if (await consent.isVisible()) await consent.getByRole('button', { name: '先不同意，直接用' }).click();
-  await expect(app).toBeVisible({ timeout: 30_000 });
-}
-
-interface IdbView { exists: boolean; owner: string | null; outbox: number; todoIds: string[] }
-
-async function readIdb(page: Page): Promise<IdbView> {
-  return page.evaluate(async () => {
-    const dbs = await indexedDB.databases();
-    if (!dbs.some((d) => d.name === 'planner-v4')) return { exists: false, owner: null, outbox: 0, todoIds: [] };
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const all = <T,>(store: string, op: (s: IDBObjectStore) => IDBRequest<T>): Promise<T | null> =>
-      db.objectStoreNames.contains(store)
-        ? new Promise((res, rej) => {
-            const q = op(db.transaction(store, 'readonly').objectStore(store));
-            q.onsuccess = () => res(q.result);
-            q.onerror = () => rej(q.error);
-          })
-        : Promise.resolve(null);
-    const owner = (await all<{ value?: string } | undefined>('owner', (s) => s.get('user_id')))?.value ?? null;
-    const outbox = (await all<number>('outbox', (s) => s.count())) ?? 0;
-    const todoIds = ((await all<IDBValidKey[]>('todos', (s) => s.getAllKeys())) ?? []).map(String);
-    db.close();
-    return { exists: true, owner, outbox, todoIds };
-  });
-}
-
-async function injectTodoInsert(page: Page, title: string): Promise<string> {
-  await page.goto('/robots.txt');
-  return page.evaluate(async (title) => {
-    const id = crypto.randomUUID();
-    const now = Date.now();
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    await new Promise<void>((res, rej) => {
-      const t = db.transaction('outbox', 'readwrite');
-      t.objectStore('outbox').put({
-        op_id: crypto.randomUUID(), table: 'todos', id, rec: `todos:${id}`, op: 'insert',
-        data: { id, title, created_at: now, updated_at: now }, base_rev: null, own_revs: [], client_ts: now,
-        tries: 0, next_at: 0, state: 'pending', v: 1, app: '4.0.0', seq: 1, remind: false, deps: [], error: null,
-      });
-      t.oncomplete = () => res();
-      t.onerror = () => rej(t.error);
-    });
-    db.close();
-    return id;
-  }, title);
-}
 
 async function serverTodo(id: string): Promise<{ id: string; user_id: string }[]> {
   const b = realBackend();
@@ -128,7 +68,7 @@ async function expiredWithPending(page: Page): Promise<{ a: Awaited<ReturnType<t
   const a = await createAccount();
   await loginViaOtp(page, a.email);
   await openApp(page);
-  await expect.poll(async () => (await readIdb(page)).owner).toBe(a.userId);
+  await expect.poll(async () => (await localState(page)).owner).toBe(a.userId);
   const todoId = await injectTodoInsert(page, 'IV 没发出去的待办');
   const s = await readSession(page);
   await loseRefreshResponse(s.refresh_token);
@@ -142,18 +82,18 @@ async function expiredWithPending(page: Page): Promise<{ a: Awaited<ReturnType<t
 test('IV-1 刷新被判复用：只请重新登录、本机库和没发的修改留着；同账号重新登录后发出去', async ({ page }) => {
   const { a, todoId } = await expiredWithPending(page);
   expect(await noticeReason(page)).toBe('expired');
-  const idb = await readIdb(page);
+  const idb = await localState(page);
   expect(idb.exists).toBe(true);
   expect(idb.owner).toBe(a.userId);
-  expect(idb.outbox).toBe(1);
+  expect(idb.outbox).toHaveLength(1);
   await expect(page.getByTestId('auth-reauth-kept')).toBeVisible();
   // 同账号重新登录 → 接着同步
   await loginViaOtp(page, a.email);
   await openApp(page);
   await expect.poll(async () => (await serverTodo(todoId)).map((r) => r.user_id), { timeout: 30_000 }).toEqual([a.userId]);
-  const after = await readIdb(page);
+  const after = await localState(page);
   expect(after.owner).toBe(a.userId);
-  expect(after.outbox).toBe(0);
+  expect(after.outbox).toHaveLength(0);
   const reauth = await page.evaluate(() => localStorage.getItem('lemo.reauth'));
   expect(reauth).toBeNull();
 });
@@ -166,9 +106,9 @@ test('IV-2 登录过期后换另一个账号登录：清掉 A 的本机库，A �
   const b = await createAccount();
   await loginViaOtp(page, b.email);
   await openApp(page);
-  await expect.poll(async () => (await readIdb(page)).owner).toBe(b.userId);
-  const idb = await readIdb(page);
-  expect(idb.outbox).toBe(0);
+  await expect.poll(async () => (await localState(page)).owner).toBe(b.userId);
+  const idb = await localState(page);
+  expect(idb.outbox).toHaveLength(0);
   expect(idb.todoIds).not.toContain(todoId);
   await page.waitForTimeout(3000);
   expect(await serverTodo(todoId)).toEqual([]);
@@ -207,7 +147,7 @@ test('IV-3 真被吊销（别的设备“退出其他所有设备”）：照旧
   const a = await createAccount();
   await loginViaOtp(page, a.email);
   await openApp(page);
-  await expect.poll(async () => (await readIdb(page)).owner).toBe(a.userId);
+  await expect.poll(async () => (await localState(page)).owner).toBe(a.userId);
   const todoId = await injectTodoInsert(page, 'IV 被吊销前没发的');
   const other = await browser.newContext();
   await revokeOthersFrom(other, a.email);
@@ -215,7 +155,7 @@ test('IV-3 真被吊销（别的设备“退出其他所有设备”）：照旧
   await forceRefreshOnNextLoad(page);
   await page.goto('/app/');
   expect(await noticeReason(page)).toBe('removed');
-  await expect.poll(async () => (await readIdb(page)).exists, { timeout: 15_000 }).toBe(false);
+  await expect.poll(async () => (await localState(page)).exists, { timeout: 15_000 }).toBe(false);
   expect(await page.evaluate(() => localStorage.getItem('lemo.reauth'))).toBeNull();
   void todoId;
 });
@@ -224,12 +164,12 @@ test('IV-4 两个标签页：一页刷新被判复用 SIGNED_OUT，另一页按�
   const a = await createAccount();
   await loginViaOtp(page, a.email);
   await openApp(page);
-  await expect.poll(async () => (await readIdb(page)).owner).toBe(a.userId);
+  await expect.poll(async () => (await localState(page)).owner).toBe(a.userId);
   const todoId = await injectTodoInsert(page, 'IV 两页');
   // 第二页先开着 App（会把这条发出去，本机 todos 仓里留着这一行）
   const tab2 = await context.newPage();
   await openApp(tab2);
-  await expect.poll(async () => (await readIdb(page)).todoIds.includes(todoId), { timeout: 30_000 }).toBe(true);
+  await expect.poll(async () => (await localState(page)).todoIds.includes(todoId), { timeout: 30_000 }).toBe(true);
   const cur = await readSession(page);
   await loseRefreshResponse(cur.refresh_token);
   await page.waitForTimeout(62_000);
@@ -237,7 +177,7 @@ test('IV-4 两个标签页：一页刷新被判复用 SIGNED_OUT，另一页按�
   await page.goto('/app/');
   expect(await noticeReason(page)).toBe('expired');
   await expect(tab2).toHaveURL(/\/app\/(auth|login)|\/auth/, { timeout: 30_000 }).catch(() => undefined);
-  const idb = await readIdb(page);
+  const idb = await localState(page);
   expect(idb.exists).toBe(true);
   expect(idb.todoIds).toContain(todoId);
 });

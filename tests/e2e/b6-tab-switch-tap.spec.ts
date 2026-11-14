@@ -5,6 +5,7 @@
 // ② e2e 等的是这个窗口本身：新页出来以后过 FADE_GUARD_MS 再点就是真点（不用等 400 ms 的 settled 快照）
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { cached, idbPut } from './idb.ts';
 import { FAKE_USER_ID, expect, test } from './session-fixture.ts';
 
 test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', locale: 'zh-CN', viewport: { width: 390, height: 844 } });
@@ -24,20 +25,7 @@ async function seed(page: Page): Promise<void> {
     user_id: FAKE_USER_ID, tz: TZ, created_at: 1, updated_at: 1, undone: false, short: null, project: '', due_time: null, done: false,
     id: 'n1', title: '买牛奶', due: today(), rev: 1, deleted_at: null,
   };
-  await page.evaluate(async (n1) => {
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const tx = db.transaction(['todos'], 'readwrite');
-    tx.objectStore('todos').put({ id: 'n1', server: n1, view: n1 });
-    await new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-    db.close();
-  }, n1);
+  await idbPut(page, [['todos', cached(n1)]]);
   await page.reload();
   await page.getByTestId('todos-row-n1').waitFor({ timeout: 30000 });
 }

@@ -5,6 +5,7 @@
 // 办法：点页签时在页面里记下时刻（capture 监听），把 main 的淡入动画暂停在指定时刻，等挂钟过了窗口再用 page.mouse 按真实坐标点；
 // 窗口以内的那一下在页面里用定时器按坐标发 pointerdown、click（page.mouse 的往返本身就要几十毫秒，赶不上 10 ms）
 import type { Page } from '@playwright/test';
+import { cached, idbPut } from './idb.ts';
 import { FAKE_USER_ID, expect, test } from './session-fixture.ts';
 
 const bar = (page: Page) => page.getByTestId('tabbar');
@@ -92,20 +93,7 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
     const row = { user_id: FAKE_USER_ID, tz: TZ, created_at: 1, updated_at: 1, deleted_at: null, undone: false, short: null, id: 't3', title: '买牛奶', project: '', due: day, due_time: null, done: false };
     await page.goto('/app/#/todos');
     await expect(page.getByTestId('todos')).toBeVisible();
-    await page.evaluate(async (r) => {
-      const db = await new Promise<IDBDatabase>((res, rej) => {
-        const o = indexedDB.open('planner-v4');
-        o.onsuccess = () => res(o.result);
-        o.onerror = () => rej(o.error);
-      });
-      const tx = db.transaction(['todos'], 'readwrite');
-      tx.objectStore('todos').put({ id: r.id, server: r, view: r });
-      await new Promise((res, rej) => {
-        tx.oncomplete = res;
-        tx.onerror = () => rej(tx.error);
-      });
-      db.close();
-    }, row);
+    await idbPut(page, [['todos', cached(row)]]);
     await page.goto('/app/#/today');
     await page.reload();
     await expect(page.getByTestId('today-todo-t3')).toBeVisible({ timeout: 30_000 });

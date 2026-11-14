@@ -5,6 +5,7 @@
 //   模拟 standalone（navigator.standalone = true）能登录；iPadOS（Mac UA + maxTouchPoints=5）同 iPhone
 import type { Page } from '@playwright/test';
 import { expect, test } from './csp-fixture.ts';
+import { idbCreateAt } from './idb.ts';
 import { seedFakeSession, test as sessionTest } from './session-fixture.ts';
 
 const FAKE_TURNSTILE = `
@@ -190,16 +191,8 @@ sessionTest.describe('已登录时打开登录页（0.38 第 35 条）', () => {
     expect(hits).toEqual([]);
 
     // 造一份本机库、一份运行时缓存和一份 SW 预缓存（库要先关掉，不然删库会被自己挡住）
+    await idbCreateAt(page, 1);
     await page.evaluate(async () => {
-      await new Promise<void>((resolve, reject) => {
-        const r = indexedDB.open('planner-v4', 1);
-        r.onupgradeneeded = () => r.result.createObjectStore('meta');
-        r.onsuccess = () => {
-          r.result.close();
-          resolve();
-        };
-        r.onerror = () => reject(r.error);
-      });
       await (await caches.open('lemo-e2e')).put('/app/e2e-probe', new Response('x'));
       await (await caches.open('workbox-precache-v2-e2e')).put('/app/e2e-shell', new Response('x'));
     });

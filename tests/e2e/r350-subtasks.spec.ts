@@ -5,6 +5,7 @@
 // • 启动清孤儿（5.6 第 1 条）：主待办在本机已经没有的子任务，重新载入后本机库里删掉
 // • 环境变量 R350_SHOTS 指一个本机文件夹时（只在 Chromium），顺手截列表页、今天页、编辑页三张图给人看，不进仓库
 import type { Page } from '@playwright/test';
+import { cached, idbPut, idbRead } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -16,51 +17,21 @@ const SHOTS = process.env['R350_SHOTS'];
 /** 主待办“买菜”（编辑页路由只认 UUID 形状的 id） */
 const T1 = '11111111-1111-4111-8111-111111111111';
 
-/** 本机库里一张表的全部行（页面有 CSP，不能在页面里 new Function，每种读法各写一个） */
-function readAll<T>(page: Page, store: string): Promise<T[]> {
-  return page.evaluate(async (store) => {
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const out = await new Promise<unknown[]>((res, rej) => {
-      const q = db.transaction(store).objectStore(store).getAll();
-      q.onsuccess = () => res(q.result);
-      q.onerror = () => rej(q.error);
-    });
-    db.close();
-    return out as T[];
-  }, store);
-}
+/** 本机库里一张表的全部行 */
+const readAll = async <T,>(page: Page, store: string): Promise<T[]> => (await idbRead<T[]>(page, store, 'getAll')) ?? [];
 
 /** 待办 T1“买菜”（3 项，勾了 1 项）、t2“回邮件”（没有子任务）、孤儿子任务 x1（本机新建、没同步过，主待办 t-gone 本机没有） */
 async function seed(page: Page): Promise<void> {
   await page.goto('/app/#/today');
   await page.getByTestId('today').waitFor({ timeout: 30000 });
-  await page.evaluate(
-    async ({ base, d, T1 }) => {
-      const db = await new Promise<IDBDatabase>((res, rej) => {
-        const r = indexedDB.open('planner-v4');
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      });
-      const tx = db.transaction(['todos', 'todo_items'], 'readwrite');
-      const td = (id: string, title: string) => ({ ...base, id, title, due: d, due_time: null, done: false, important: false, project: '', short: null, undone: false });
-      const it = (id: string, todo_id: string, title: string, sort: number, done: boolean) => ({ ...base, id, todo_id, title, sort, done });
-      for (const r of [td(T1, '买菜'), td('t2', '回邮件')]) tx.objectStore('todos').put({ id: r.id, server: r, view: r });
-      for (const r of [it('a', T1, '牛奶', 1, true), it('b', T1, '鸡蛋', 2, false), it('c', T1, '猫砂', 3, false)]) {
-        tx.objectStore('todo_items').put({ id: r.id, server: r, view: r });
-      }
-      tx.objectStore('todo_items').put({ id: 'x1', server: null, view: it('x1', 't-gone', '孤儿', 1, false) });
-      await new Promise((res, rej) => {
-        tx.oncomplete = res;
-        tx.onerror = () => rej(tx.error);
-      });
-      db.close();
-    },
-    { base, d: today(), T1 },
-  );
+  const d = today();
+  const td = (id: string, title: string) => ({ ...base, id, title, due: d, due_time: null, done: false, important: false, project: '', short: null, undone: false });
+  const it = (id: string, todo_id: string, title: string, sort: number, done: boolean) => ({ ...base, id, todo_id, title, sort, done });
+  await idbPut(page, [
+    ...[td(T1, '买菜'), td('t2', '回邮件')].map((r) => ['todos', cached(r)] as const),
+    ...[it('a', T1, '牛奶', 1, true), it('b', T1, '鸡蛋', 2, false), it('c', T1, '猫砂', 3, false)].map((r) => ['todo_items', cached(r)] as const),
+    ['todo_items', { id: 'x1', server: null, view: it('x1', 't-gone', '孤儿', 1, false) }],
+  ]);
   await page.reload();
   await page.getByTestId(`today-todo-${T1}`).waitFor({ timeout: 30000 });
 }

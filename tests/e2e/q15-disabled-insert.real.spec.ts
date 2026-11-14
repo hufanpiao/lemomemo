@@ -9,7 +9,8 @@ import { spawnSync } from 'node:child_process';
 import { type Page } from '@playwright/test';
 import { expect, test } from './csp-fixture.ts';
 import { zh } from '../../src/features/auth/i18n/zh.ts';
-import { createAccount, loginViaOtp, realBackend } from './real-backend.ts';
+import { localState } from './idb.ts';
+import { createAccount, loginViaOtp, openApp, realBackend } from './real-backend.ts';
 
 test.setTimeout(180_000);
 
@@ -27,44 +28,6 @@ function adminDisable(userId: string): void {
   });
   if (r.status !== 0) throw new Error(`停用失败：${(r.stderr || '').slice(0, 300)}`);
   expect(r.stdout.trim().split(/\r?\n/).pop()).toBe('admin');
-}
-
-async function openApp(page: Page): Promise<void> {
-  await page.goto('/app/#/today');
-  const consent = page.locator('main[data-feature="onboarding"][data-step="consent"]');
-  const app = page.locator('main[data-feature]:not([data-feature="onboarding"])').first();
-  await expect(consent.or(app)).toBeVisible({ timeout: 30_000 });
-  if (await consent.isVisible()) await consent.getByRole('button', { name: '先不同意，直接用' }).click();
-  await expect(app).toBeVisible({ timeout: 30_000 });
-}
-
-interface OutboxView { op_id: string; id: string; op: string; state: string; error: unknown }
-interface IdbView { exists: boolean; owner: string | null; outbox: OutboxView[]; todoIds: string[] }
-
-async function readIdb(page: Page): Promise<IdbView> {
-  return page.evaluate(async () => {
-    const dbs = await indexedDB.databases();
-    if (!dbs.some((d) => d.name === 'planner-v4')) return { exists: false, owner: null, outbox: [], todoIds: [] };
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const all = <T,>(store: string, op: (s: IDBObjectStore) => IDBRequest<T>): Promise<T | null> =>
-      db.objectStoreNames.contains(store)
-        ? new Promise((res, rej) => {
-            const q = op(db.transaction(store, 'readonly').objectStore(store));
-            q.onsuccess = () => res(q.result);
-            q.onerror = () => rej(q.error);
-          })
-        : Promise.resolve(null);
-    const owner = (await all<{ value?: string } | undefined>('owner', (s) => s.get('user_id')))?.value ?? null;
-    const items = (await all<Record<string, unknown>[]>('outbox', (s) => s.getAll())) ?? [];
-    const outbox = items.map((x) => ({ op_id: String(x['op_id']), id: String(x['id']), op: String(x['op']), state: String(x['state']), error: x['error'] ?? null }));
-    const todoIds = ((await all<IDBValidKey[]>('todos', (s) => s.getAllKeys())) ?? []).map(String);
-    db.close();
-    return { exists: true, owner, outbox, todoIds };
-  });
 }
 
 /** 服务器上的这一行（service role，不受 RLS） */
@@ -94,8 +57,8 @@ async function newTodo(page: Page, title: string, statuses: number[]): Promise<s
 test('Q15-1 停用后本机新建：回登录页提示已停用，本机库和 outbox 留着、不进失败区', async ({ page }) => {
   const a = await createAccount();
   await loginViaOtp(page, a.email);
-  await openApp(page);
-  await expect.poll(async () => (await readIdb(page)).owner).toBe(a.userId);
+  await openApp(page, '/app/#/today');
+  await expect.poll(async () => (await localState(page)).owner).toBe(a.userId);
 
   adminDisable(a.userId);
   const statuses: number[] = [];
@@ -110,7 +73,7 @@ test('Q15-1 停用后本机新建：回登录页提示已停用，本机库和 o
   expect(statuses, '新建被 RLS 拒（403）').toContain(403);
 
   // ② 本机库和 outbox 留着（R-382：停用只退出、不清库）；这一项不在失败区
-  const idb = await readIdb(page);
+  const idb = await localState(page);
   expect(idb.exists).toBe(true);
   expect(idb.owner).toBe(a.userId);
   expect(idb.todoIds).toContain(id);
@@ -128,13 +91,13 @@ test('Q15-1 停用后本机新建：回登录页提示已停用，本机库和 o
 test('Q15-2 对照：没停用的账号同样新建，照常同步上服务器', async ({ page }) => {
   const a = await createAccount();
   await loginViaOtp(page, a.email);
-  await openApp(page);
-  await expect.poll(async () => (await readIdb(page)).owner).toBe(a.userId);
+  await openApp(page, '/app/#/today');
+  await expect.poll(async () => (await localState(page)).owner).toBe(a.userId);
 
   const statuses: number[] = [];
   const id = await newTodo(page, 'Q15 对照新建', statuses);
   await expect.poll(async () => (await serverTodo(id)).map((r) => r.user_id), { timeout: 30_000 }).toEqual([a.userId]);
-  await expect.poll(async () => (await readIdb(page)).outbox.length, { timeout: 15_000 }).toBe(0);
+  await expect.poll(async () => (await localState(page)).outbox.length, { timeout: 15_000 }).toBe(0);
   await expect(page.getByTestId('auth-exit-notice')).toHaveCount(0);
   await expect(page.getByTestId('todo-edit')).toBeVisible();
   console.log(`Q15-2 证据：POST todos 状态 ${JSON.stringify(statuses)}；服务器有此行；outbox=0`);

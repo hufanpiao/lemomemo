@@ -196,14 +196,17 @@ describe('输出目录（webOutDir、LEMO_WEB_OUT）', () => {
     }
     const asm = read('build/assemble_web.mjs').replace(/^\s*\/\/.*$/gm, '');
     expect(asm).not.toMatch(/resolve\(root, 'dist\/web'\)/);
+    // 四份 Playwright 配置共用 tests/e2e/e2e-config.ts：wrangler 从 out 起，不传 out 时按 webOut()（LEMO_WEB_OUT，默认 dist/web）
+    const shared = read('tests/e2e/e2e-config.ts');
+    expect(shared).toContain('const out = g.out ?? webOut();');
+    expect(shared).toContain('wrangler pages dev ${out} ');
     const real = read('playwright.real.config.ts');
     expect(real).toContain("const WEB_OUT = 'dist/web-real';");
-    expect(real).toContain('wrangler pages dev ${WEB_OUT} ');
-    expect(real).toMatch(/LEMO_WEB_OUT: WEB_OUT,/);
-    expect(real).toMatch(/LEMO_WS_PORT: String\(PORT\),/);
-    expect(real).not.toMatch(/pages dev dist\/web /);
-    // 无后端组照旧
-    expect(read('playwright.config.ts')).toMatch(/pages dev dist\/web /);
+    expect(real).toMatch(/out: WEB_OUT,/);
+    expect(real).toMatch(/LEMO_WEB_OUT: WEB_OUT\b/);
+    expect(real).toMatch(/LEMO_WS_PORT: String\(PORT\)/);
+    // 无后端组不传 out（照旧 dist/web）
+    expect(read('playwright.config.ts')).not.toMatch(/\bout:/);
     const ignore = read('.gitignore').split(/\r?\n/);
     expect(ignore).toEqual(expect.arrayContaining(['dist/web/', 'dist/web-*/']));
   });

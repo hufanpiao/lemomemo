@@ -8,20 +8,19 @@
 // 跑在快读组（playwright.fastread.config.ts）：ai-parse、ai-summarize 要会话令牌，默认组的构建没配 supabase 地址。
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { fakeRest } from './fake-rest.ts';
+import { shot } from './page-helpers.ts';
 import { logOnFail } from './fail-log.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
-test.skip(!process.env['VITE_PUBLIC_SUPABASE_URL'], '要会话令牌和 /sb 地址，只在快读组跑（npm run e2e:fastread）');
 test.setTimeout(120_000);
 test.use({ trace: 'off', timezoneId: 'Asia/Seoul', locale: 'zh-CN' });
 
-const SHOT_DIR = process.env['LEMO_SHOT_DIR'];
 const USER = '0e2e0000-0000-4000-8000-000000000001';
 const id = (n: number) => `0e2e0000-0000-4000-8000-0000000b4b${String(n).padStart(2, '0')}`;
 const EV = id(41);
 const TD = id(42);
 const NT = id(43);
-const V = '2026-10-29';
 /** ai-summarize 回的正文：[1] 是服务器改写好的角标（relinkCites），页面上画成小号数字 */
 const SUMMARY = '这周记了一家拉面店[1]，汤头很浓。';
 const SUMMARY_SHOWN = '这周记了一家拉面店1，汤头很浓。';
@@ -41,23 +40,15 @@ async function fakeServer(page: Page, baseURL: string | undefined, parse: Record
     notes: [{ id: NT, ...c, title: '拉面店', body: '弘大那家拉面店，汤头很浓。', is_private: false, category_id: null, category_source: 'none', category_seen: true, tags: [], converted_to: null, source: 'page', raw_text: '', batch_id: null }],
     settings: [{ id: id(50), ...c, key: 'ai.enabled', value: true }],
   };
-  const fake: Fake = { parses: [], sums: [], writes: [], pulled: new Set() };
-  await page.route(/\/sb\/rest\/v1\//, (route) => {
-    const req = route.request();
-    const u = new URL(req.url());
-    const name = u.pathname.split('/').pop() ?? '';
+  const rest = await fakeRest(page, {
+    user: USER,
+    tables,
+    profile: { consent_ai_at: at },
+    writeRev: 2,
     // 结果层页脚的“今天 已用 / 上限”（platform/ai-usage.ts）
-    if (name === 'my_ai_usage') return route.fulfill({ json: { ai_used: 19, ai_limit: 50, pacific_date: '2026-11-14' } });
-    if (req.method() !== 'GET') {
-      fake.writes.push({ table: name, body: req.postDataJSON() });
-      return route.fulfill({ status: 201, json: [{ rev: 2 }] });
-    }
-    fake.pulled.add(name);
-    if (tables[name]) return route.fulfill({ json: tables[name] });
-    if (name === 'profiles') return route.fulfill({ json: [{ user_id: USER, consent_policy_ver: V, consent_ai_at: at }] });
-    if (name === 'app_config' && u.searchParams.get('select') === 'notice') return route.fulfill({ json: [{ notice: { policy_ver: V, min_consent_ver: V } }] });
-    return route.fulfill({ json: [] });
+    fixed: { my_ai_usage: { ai_used: 19, ai_limit: 50, pacific_date: '2026-11-14' } },
   });
+  const fake: Fake = { parses: [], sums: [], writes: rest.writes, pulled: rest.pulled };
   await page.route(/\/sb\/functions\/v1\/ai-parse/, (route) => {
     fake.parses.push(route.request().postDataJSON());
     return route.fulfill({ json: parse ?? { fallback: true, reason: 'error' } });
@@ -74,12 +65,6 @@ const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-ru
 
 // 失败时带运行日志、控制台错误（tests/e2e/fail-log.ts）
 logOnFail(test);
-
-async function shot(page: Page, browserName: string, name: string): Promise<void> {
-  if (browserName !== 'chromium' || !SHOT_DIR) return;
-  await page.waitForTimeout(600);
-  await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, animations: 'disabled' });
-}
 
 /** 浅色、深色各截一张，截完回到浅色 */
 async function shots(page: Page, browserName: string, name: string): Promise<void> {

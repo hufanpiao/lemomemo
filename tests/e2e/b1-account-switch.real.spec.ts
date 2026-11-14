@@ -11,92 +11,8 @@
 // 每条用例自己建账号，互不依赖。
 import { type Page } from '@playwright/test';
 import { expect, test } from './csp-fixture.ts';
-import { createAccount, loginViaOtp, realBackend } from './real-backend.ts';
-
-/** 打开 /app/；首次登录先过告知页（点“先不同意，直接用”），等到主界面出来 */
-async function openApp(page: Page): Promise<void> {
-  await page.goto('/app/');
-  const consent = page.locator('main[data-feature="onboarding"][data-step="consent"]');
-  const app = page.locator('main[data-feature]:not([data-feature="onboarding"])').first();
-  await expect(consent.or(app)).toBeVisible();
-  if (await consent.isVisible()) {
-    await consent.getByRole('button', { name: '先不同意，直接用' }).click();
-  }
-  await expect(app).toBeVisible();
-}
-
-interface IdbView {
-  owner: string | null;
-  outbox: number;
-  todoIds: string[];
-}
-
-/** 读本机库 planner-v4：owner、outbox 条数、todos 仓里的 id（库不存在就全空） */
-async function readIdb(page: Page): Promise<IdbView> {
-  return page.evaluate(async () => {
-    const dbs = await indexedDB.databases();
-    if (!dbs.some((d) => d.name === 'planner-v4')) return { owner: null, outbox: 0, todoIds: [] };
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const all = <T,>(store: string, op: (s: IDBObjectStore) => IDBRequest<T>): Promise<T | null> =>
-      db.objectStoreNames.contains(store)
-        ? new Promise((res, rej) => {
-            const q = op(db.transaction(store, 'readonly').objectStore(store));
-            q.onsuccess = () => res(q.result);
-            q.onerror = () => rej(q.error);
-          })
-        : Promise.resolve(null);
-    const owner = (await all<{ value?: string } | undefined>('owner', (s) => s.get('user_id')))?.value ?? null;
-    const outbox = (await all<number>('outbox', (s) => s.count())) ?? 0;
-    const todoIds = ((await all<IDBValidKey[]>('todos', (s) => s.getAllKeys())) ?? []).map(String);
-    db.close();
-    return { owner, outbox, todoIds };
-  });
-}
-
-/** 不在 App 上时（同源 /robots.txt）往 outbox 仓注入一条 todos 的 insert；返回记录 id */
-async function injectTodoInsert(page: Page, title: string): Promise<string> {
-  await page.goto('/robots.txt');
-  return page.evaluate(async (title) => {
-    const id = crypto.randomUUID();
-    const now = Date.now();
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    await new Promise<void>((res, rej) => {
-      const t = db.transaction('outbox', 'readwrite');
-      t.objectStore('outbox').put({
-        op_id: crypto.randomUUID(),
-        table: 'todos',
-        id,
-        rec: `todos:${id}`,
-        op: 'insert',
-        data: { id, title, created_at: now, updated_at: now },
-        base_rev: null,
-        own_revs: [],
-        client_ts: now,
-        tries: 0,
-        next_at: 0,
-        state: 'pending',
-        v: 1,
-        app: '4.0.0',
-        seq: 1,
-        remind: false,
-        deps: [],
-        error: null,
-      });
-      t.oncomplete = () => res();
-      t.onerror = () => rej(t.error);
-    });
-    db.close();
-    return id;
-  }, title);
-}
+import { injectTodoInsert, localState } from './idb.ts';
+import { createAccount, loginViaOtp, openApp, realBackend } from './real-backend.ts';
 
 /** 用 service role 查服务器上这个 id 的 todos 行（不分账号） */
 async function serverTodo(id: string): Promise<{ id: string; user_id: string; title: string }[]> {
@@ -116,7 +32,7 @@ async function aWithPendingOutbox(page: Page): Promise<{ a: string; todoId: stri
   const a = await createAccount();
   await loginViaOtp(page, a.email);
   await openApp(page);
-  await expect.poll(async () => (await readIdb(page)).owner).toBe(a.userId);
+  await expect.poll(async () => (await localState(page)).owner).toBe(a.userId);
   const todoId = await injectTodoInsert(page, 'A 没发出去的待办');
   return { a: a.userId, todoId };
 }
@@ -126,22 +42,22 @@ test.describe('换账号清本机（架构 4.1、0.38 第 17 条）', () => {
     const { a, todoId } = await aWithPendingOutbox(page);
     await openApp(page);
     await expect.poll(() => serverTodo(todoId), { timeout: 20_000 }).toEqual([{ id: todoId, user_id: a, title: 'A 没发出去的待办' }]);
-    await expect.poll(async () => (await readIdb(page)).outbox, { timeout: 20_000 }).toBe(0);
+    await expect.poll(async () => (await localState(page)).outbox.length, { timeout: 20_000 }).toBe(0);
   });
 
   test('同一个标签页：A 有没发的 outbox → 换成 B 的会话、打开 /app/ → 本机库归 B、outbox 空、没有 A 的行，服务器上没有那一条', async ({ page }) => {
     const { a, todoId } = await aWithPendingOutbox(page);
-    const before = await readIdb(page);
+    const before = await localState(page);
     expect(before.owner).toBe(a);
-    expect(before.outbox).toBe(1);
+    expect(before.outbox).toHaveLength(1);
 
     const b = await createAccount();
     await loginViaOtp(page, b.email);
     await openApp(page);
 
-    await expect.poll(async () => (await readIdb(page)).owner).toBe(b.userId);
-    const after = await readIdb(page);
-    expect(after.outbox).toBe(0);
+    await expect.poll(async () => (await localState(page)).owner).toBe(b.userId);
+    const after = await localState(page);
+    expect(after.outbox).toHaveLength(0);
     expect(after.todoIds).not.toContain(todoId);
     // 给同步留时间：真发出去的话几秒内就到服务器（对照用例里是这样）
     await page.waitForTimeout(3_000);
@@ -152,7 +68,7 @@ test.describe('换账号清本机（架构 4.1、0.38 第 17 条）', () => {
     const a = await createAccount();
     await loginViaOtp(page, a.email);
     await openApp(page);
-    await expect.poll(async () => (await readIdb(page)).owner).toBe(a.userId);
+    await expect.poll(async () => (await localState(page)).owner).toBe(a.userId);
 
     // 载入前在 window 上做个标记：真的重新载入过，新页面里就没有它（审查建议 2：不再主动 openApp，免得把“自己打开”当成“重新载入”）
     await page.evaluate(() => {
@@ -168,7 +84,7 @@ test.describe('换账号清本机（架构 4.1、0.38 第 17 条）', () => {
     await expect.poll(() => page.evaluate(() => '__e2eBeforeSwitch' in window)).toBe(false);
     expect(new URL(page.url()).pathname).toBe('/app/');
     await expect(page.locator('main[data-feature]').first()).toBeVisible();
-    await expect.poll(async () => (await readIdb(page)).owner).toBe(b.userId);
+    await expect.poll(async () => (await localState(page)).owner).toBe(b.userId);
     const uid = await page.evaluate(() => {
       const k = Object.keys(localStorage).find((x) => /^sb-.+-auth-token$/.test(x)) ?? '';
       return (JSON.parse(localStorage.getItem(k) ?? '{}') as { user?: { id?: string } }).user?.id ?? null;
