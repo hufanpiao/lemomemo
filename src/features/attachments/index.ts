@@ -17,9 +17,15 @@ export const NoteAttachments = lazy(() => import('./ui/NoteAttachments.tsx'));
 export const VaultAttachments = lazy(() => import('./ui/VaultAttachments.tsx'));
 
 /**
- * 随手记编辑器里一张图下面的识别状态（B4b-2 识图，线框 sAIst）：识图中 / 没识别 +“重新识别” / 没交给 AI +“去打开” / AI 看到的。
+ * 随手记编辑器里一张图下面的识别状态（B4b-2 识图，线框 sAIst 第二屏）：识图中 / 没识别 +“重新识别” / 没交给 AI +“去打开”；识别好了不出东西。
  * props: { id: note_images 的 id }；上传中、没传上的图不挂。行是同步下来的，隐私记的图、删了的、没有可显示状态的不出东西
  */
 export const ImageAiStatus = lazy(() => import('./ui/ImageAiStatus.tsx'));
+
+/**
+ * 看图页（线框 sAIst 第一屏；电脑是 d 屏的看图浮层）：点随手记里的插图打开。顶上“✕ 关闭 · 第几张 / 共几张”，中间大图（左右滑、左右键换张），
+ * 底部这张识别好了才出“AI 看到的”。props: { ids: 图的 id 按顺序; start: 先看第几张; render(i): 画第 i 张大图; back: 打开它的元素; onClose }
+ */
+export const ImageViewer = lazy(() => import('./ui/ImageViewer.tsx'));
 
 export type { VaultFileApi, VaultFileFail } from './data/vault-att.ts';

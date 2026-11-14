@@ -1,8 +1,9 @@
-// B4b-2 识图：随手记编辑器里每张图下面的识别状态（线框 sAIst；架构 5.13 第 5 点）。/sb 在浏览器这一层答（一条带 4 张图的随手记），签名、取图也在这一层假装
+// B4b-2 识图：随手记编辑器里每张图下面的识别状态 + 看图页（线框 sAIst；架构 5.13 第 5 点）。/sb 在浏览器这一层答（一条带 4 张图的随手记），签名、取图也在这一层假装
 //   ① AI 开着：识别中（一行小字、没按钮）、没识别（“重新识别”→ file-check {action: retry_ai, kind: image, id}，回 pending 后改显示识别中）、
-//      没交给 AI（skip / consent，“去打开”进 设置 › 语音与 AI）、识别好了（“AI 看到的”+ 描述 + 中韩标签）；运行日志只记状态码，不记描述
+//      没交给 AI（skip / consent，“去打开”进 设置 › 语音与 AI）；识别好了的那张在编辑器里什么都不出；运行日志只记状态码，不记描述
 //   ② AI 关着：还是 pending 的那张也显示“没交给 AI”
-//   ③ 设了 LEMO_SHOT_DIR 时在 Chromium 上存评审截图（手机 390×844，浅色、深色）；断言两种浏览器都跑
+//   ③ 看图页（手机整屏、电脑浮层）：点图打开，“第几张 / 共几张”、识别好了的底部有“AI 看到的”，左右键、横滑换张，Esc、✕ 关上后焦点回到原图
+//   ④ 设了 LEMO_SHOT_DIR 时在 Chromium 上存评审截图（手机 390×844 浅色、深色；电脑 1280×800）；断言两种浏览器都跑
 // 跑在快读组（playwright.fastread.config.ts）：签名、file-check 要会话令牌，默认组的构建没配 supabase 地址
 import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
@@ -20,10 +21,11 @@ const img = (n: number) => `019a0000-0000-7000-8000-0000000b4c1${n}`;
 const [PEND, FAIL, OFF, DONE] = [img(1), img(2), img(3), img(4)];
 const V = '2026-10-29';
 
-async function shot(page: Page, browserName: string, name: string): Promise<void> {
+/** full：整页长图；浮层开着时用 false（固定定位的浮层在整页长图里会画在滚动位置上） */
+async function shot(page: Page, browserName: string, name: string, full = true): Promise<void> {
   if (browserName !== 'chromium' || !SHOT_DIR) return;
   await page.waitForTimeout(800);
-  await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, animations: 'disabled', fullPage: true });
+  await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, animations: 'disabled', fullPage: full });
 }
 
 /** 一张小 JPEG（页面里画，内容随便） */
@@ -96,7 +98,7 @@ async function fakeServer(page: Page, baseURL: string | undefined, ai: boolean):
 async function openNote(page: Page): Promise<void> {
   await page.goto(`/app/#/note/${NOTE}`);
   await expect(page.getByTestId(`note-image-${DONE}`)).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId(`img-ai-${DONE}`)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId(`img-ai-${PEND}`)).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(FADE_GUARD_MS);
 }
 
@@ -110,21 +112,20 @@ test.afterEach(async ({ page }, info) => {
   await info.attach('运行日志', { path, contentType: 'text/plain' });
 });
 
-test('AI 开着：四种状态；“重新识别”调 file-check 后改显示识别中；“去打开”进设置 › 语音与 AI', async ({ page, baseURL, browserName }) => {
+test('AI 开着：三种状态行，识别好了的不出东西；“重新识别”调 file-check 后改显示识别中；“去打开”进设置 › 语音与 AI', async ({ page, baseURL, browserName }) => {
   const fake = await fakeServer(page, baseURL, true);
   await openNote(page);
   await expect(page.getByTestId(`img-ai-${PEND}`)).toHaveAttribute('data-ai', 'pending');
   await expect(page.getByTestId(`img-ai-${PEND}`)).toHaveText('识别中 · 几分钟内好，好了就能按意思找到');
   await expect(page.getByTestId(`img-ai-${FAIL}`)).toContainText('没识别 · 试了 3 次没成功');
   await expect(page.getByTestId(`img-ai-${OFF}`)).toContainText('没交给 AI · AI 没打开或你没同意，这张图不能按意思找');
-  const seen = page.getByTestId(`img-ai-${DONE}`);
-  await expect(seen).toContainText('AI 看到的');
-  await expect(seen).toContainText('一本护照的首页，蓝色封面，有照片和姓名栏');
-  await expect(seen.getByRole('listitem')).toHaveText(['证件', '신분증', '护照', '여권']);
+  // 识别好了：编辑器里这张图下面什么都不出（线框“好了就消失”），整页也没有“AI 看到的”
+  await expect(page.getByTestId(`img-ai-${DONE}`)).toHaveCount(0);
+  await expect(page.getByText('AI 看到的')).toHaveCount(0);
   await page.getByTestId(`img-ai-${OFF}`).scrollIntoViewIfNeeded();
-  await shot(page, browserName, '手机-浅色-三种状态和AI看到的');
+  await shot(page, browserName, '手机-浅色-三种状态');
   await page.emulateMedia({ colorScheme: 'dark' });
-  await shot(page, browserName, '手机-深色-三种状态和AI看到的');
+  await shot(page, browserName, '手机-深色-三种状态');
   await page.emulateMedia({ colorScheme: 'light' });
 
   await page.getByTestId(`img-ai-retry-${FAIL}`).click();
@@ -146,4 +147,64 @@ test('AI 关着：还是 pending 的那张也显示“没交给 AI”', async ({
   await expect(page.getByTestId(`img-ai-open-${PEND}`)).toHaveText('去打开');
   await page.getByTestId(`img-ai-${PEND}`).scrollIntoViewIfNeeded();
   await shot(page, browserName, '手机-浅色-AI关着');
+});
+
+/** 打开看图页、核“AI 看到的”（手机、电脑共用） */
+async function viewer(page: Page): Promise<void> {
+  const open = page.getByTestId(`note-image-open-${DONE}`);
+  await open.scrollIntoViewIfNeeded();
+  await open.click();
+  await expect(page.getByTestId('img-view')).toBeVisible();
+  await expect(page.getByTestId('img-view-close')).toBeFocused();
+  await expect(page.getByTestId('img-view-count')).toHaveText('4 / 4');
+  await expect(page.getByTestId(`img-view-pic-${DONE}`)).toBeVisible();
+  const card = page.getByTestId(`img-view-ai-${DONE}`);
+  await expect(card).toContainText('AI 看到的');
+  await expect(card).toContainText('一本护照的首页，蓝色封面，有照片和姓名栏');
+  await expect(card.getByRole('listitem')).toHaveText(['证件', '신분증', '护照', '여권']);
+  await expect(card).toContainText('只写是什么东西，不抄号码');
+}
+
+test('看图页（手机）：点图打开，AI 看到的在底部；左右键、横滑换张；✕、Esc 关上后焦点回原图', async ({ page, baseURL, browserName }) => {
+  await fakeServer(page, baseURL, true);
+  await openNote(page);
+  await viewer(page);
+  await shot(page, browserName, '手机-看图页', false);
+  // 左键换到第 3 张（没交给 AI 的那张）：计数跟着变，底部没有卡片
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.getByTestId('img-view-count')).toHaveText('3 / 4');
+  await expect(page.getByText('AI 看到的')).toHaveCount(0);
+  // 横滑（往左滑）回到第 4 张
+  const box = await page.getByTestId('img-view-stage').boundingBox();
+  if (!box) throw new Error('看图页没有图区');
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.8, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.2, y, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByTestId('img-view-count')).toHaveText('4 / 4');
+  await page.getByTestId('img-view-close').click();
+  await expect(page.getByTestId('img-view')).toHaveCount(0);
+  await expect(page.getByTestId(`note-image-open-${DONE}`)).toBeFocused();
+  await page.getByTestId(`note-image-open-${DONE}`).click();
+  await expect(page.getByTestId('img-view')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('img-view')).toHaveCount(0);
+  await expect(page.getByTestId(`note-image-open-${DONE}`)).toBeFocused();
+  await expect.poll(() => runLog(page)).toContain('att view close');
+  expect(await runLog(page)).toContain('att view i=3/4');
+  expect(await runLog(page)).not.toContain('护照');
+});
+
+test('看图浮层（电脑）：同一个组件，底部描述和标签；Esc 关上后焦点回原图', async ({ page, baseURL, browserName }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await fakeServer(page, baseURL, true);
+  await openNote(page);
+  await expect(page.getByTestId(`img-ai-${DONE}`)).toHaveCount(0);
+  await viewer(page);
+  await expect(page.getByTestId('img-view-close')).toContainText('Esc');
+  await shot(page, browserName, '电脑-看图浮层', false);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('img-view')).toHaveCount(0);
+  await expect(page.getByTestId(`note-image-open-${DONE}`)).toBeFocused();
 });

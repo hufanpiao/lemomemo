@@ -91,4 +91,8 @@ export const ko = {
   'att.ai.seen': 'AI가 본 내용', // REVIEW(ko)
   'att.ai.tags': '태그', // REVIEW(ko)
   'att.ai.hint': '무엇인지만 적고 번호는 옮기지 않아요. 뜻으로 찾을 때 써요', // REVIEW(ko)
+  'att.iv.frame': '사진 보기', // REVIEW(ko)
+  'att.iv.count': '{n}장 중 {i}번째', // REVIEW(ko)
+  'att.iv.prev': '이전 사진', // REVIEW(ko)
+  'att.iv.next': '다음 사진', // REVIEW(ko)
 } satisfies Record<keyof typeof zh, string>;

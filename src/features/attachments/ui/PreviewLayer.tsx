@@ -8,11 +8,10 @@
 //   设置 › 数据 里能改）；交给微软时嵌 view.officeapps.live.com（不给 allow-popups、不带 referrer）；
 //   20 秒没加载出来，改成本机沙箱里的“首页缩略图 + 每页文字”，顶部写“微软这次没打开”，带“再试一次 / 下载”
 // • 隐私记的 PPT：服务器放的临时明文副本在关浮层、退回本机、页面隐藏时立即删（src.msEnd → ms_preview_end）
-// • Esc、✕ 关；打开时焦点放到关闭按钮，关了还给原来的元素；锁住后面页面的滚动。盖在整个窗口上（portal 到 body，不受抽屉的 transform 影响）
+// • Esc、✕ 关；打开时焦点放到关闭按钮，关了还给原来的元素；锁住后面页面的滚动（这几样和看图页共用 layer.ts 的 useLayer）。盖在整个窗口上（portal 到 body，不受抽屉的 transform 影响）
 // • 运行日志：打开（way、结果码）、微软问答和超时；不记文件名
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useScrollLock } from '../../../kit/components/Dialog.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -20,6 +19,7 @@ import { parseFromFrame, ZOOM_MAX, ZOOM_MIN, type FrameWay, type FromFrame, type
 import { DOC_TYPES } from '../../../../shared/manifests/attachments.ts';
 import { canShareFiles, markOf, previewOf, readMsPref, sizeText, useAttT, writeMsPref, type AttMsgKey, type AttSource, type NoteFile } from '../hooks/useNoteFiles.ts';
 import { safeHref } from '../../../../shared/logic/link.ts';
+import { useLayer } from './layer.ts';
 import styles from './PreviewLayer.module.css';
 
 /** 微软多久没加载出来就退回本机 */
@@ -46,10 +46,8 @@ export default function PreviewLayer({ src, file, desk, onClose, onDownload, onS
   const [phase, setPhase] = useState<Phase>({ k: 'loading' });
   const [st, setSt] = useState<State | null>(null);
   const live = useRef(true);
-  const closeBtn = useRef<HTMLButtonElement>(null);
-  const back = useRef<Element | null>(null);
+  const closeBtn = useLayer(onClose);
   const way = previewOf(file.kind);
-  useScrollLock(true);
 
   const fail = useCallback((key: AttMsgKey, code: string) => {
     rlog(`att preview fail way=${way ?? 'none'} code=${code}`);
@@ -78,12 +76,8 @@ export default function PreviewLayer({ src, file, desk, onClose, onDownload, onS
 
   useLayoutEffect(() => {
     live.current = true;   // 开发版 StrictMode 会挂、卸、再挂一遍：再挂时改回 true（整块评审第 3 条）
-    back.current = document.activeElement;
-    closeBtn.current?.focus();
     return () => {
       live.current = false;
-      const el = back.current;
-      if (el instanceof HTMLElement && el.isConnected) el.focus();
     };
   }, []);
 
@@ -111,17 +105,6 @@ export default function PreviewLayer({ src, file, desk, onClose, onDownload, onS
     document.addEventListener('visibilitychange', vis);
     return () => document.removeEventListener('visibilitychange', vis);
   }, [src]);
-
-  useEffect(() => {
-    const key = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', key, true);
-    return () => window.removeEventListener('keydown', key, true);
-  }, [onClose]);
 
   const answer = (yes: boolean): void => {
     writeMsPref(src.scope, yes ? 'yes' : 'no');

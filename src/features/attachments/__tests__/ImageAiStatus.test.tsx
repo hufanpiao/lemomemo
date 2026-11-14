@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// B4b-2 识图：随手记图片下面的识别状态（线框 sAIst）。data/image-ai.ts 的状态判定 + ui/ImageAiStatus.tsx 的显示和两个按钮
+// B4b-2 识图：随手记图片下面的识别状态（线框 sAIst）。data/image-ai.ts 的状态判定 + ui/ImageAiStatus.tsx 的显示和两个按钮 + ui/ImageViewer.tsx 看图页
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { imageAiView, type Row } from '../data/image-ai.ts';
@@ -18,6 +18,7 @@ const lines: string[] = [];
 vi.mock('../../../platform/run-log-api.ts', () => ({ rlog: (l: string) => lines.push(l) }));
 
 const { default: ImageAiStatus } = await import('../ui/ImageAiStatus.tsx');
+const { default: ImageViewer } = await import('../ui/ImageViewer.tsx');
 
 const ID = '0199a000-0000-7000-8000-000000000001';
 const img = (o: Record<string, unknown>): Row => ({ id: ID, bucket: 'images', deleted_at: null, ai_status: 'pending', skip_reason: null, ai_desc: null, ai_tags: [], ...o });
@@ -112,17 +113,88 @@ describe('ImageAiStatus', () => {
     expect(lines).toEqual(['att ai retry ok=0 kind=retry code=network']);
   });
 
-  it('识别好了：AI 看到的 + 描述 + 标签', () => {
+  it('识别好了：编辑器里什么都不出（线框“好了就消失”；描述和标签在看图页）', () => {
     collections['note_images'] = [img({ ai_status: 'done', ai_desc: '一本护照的首页', ai_tags: ['证件', '신분증'] })];
-    render(<ImageAiStatus id={ID} />);
-    expect(screen.getByText('AI 看到的')).toBeTruthy();
-    expect(screen.getByText('一本护照的首页')).toBeTruthy();
-    expect(screen.getAllByRole('listitem').map((x) => x.textContent)).toEqual(['证件', '신분증']);
+    const { container } = render(<ImageAiStatus id={ID} />);
+    expect(container.childElementCount).toBe(0);
   });
 
   it('隐私记的图、找不到的行：什么都不出', () => {
     collections['note_images'] = [img({ bucket: 'vault-images', ai_status: 'failed' })];
     const { container } = render(<ImageAiStatus id={ID} />);
     expect(container.childElementCount).toBe(0);
+  });
+});
+
+describe('ImageViewer 看图页', () => {
+  const ID2 = '0199a000-0000-7000-8000-000000000002';
+  const ID3 = '0199a000-0000-7000-8000-000000000003';
+  const ids = [ID, ID2, ID3];
+  beforeEach(() => {
+    lines.length = 0;
+    aiOn(true);
+    collections['note_images'] = [img({ ai_status: 'done', ai_desc: '一本护照的首页', ai_tags: ['证件', '신분증'] }), img({ id: ID2 }), img({ id: ID3, ai_status: 'failed' })];
+  });
+  afterEach(cleanup);
+  const open = (start: number, onClose = vi.fn()) => {
+    const from = document.createElement('button');
+    document.body.append(from);
+    render(<ImageViewer ids={ids} start={start} back={from} onClose={onClose} render={(i) => <i data-testid="pic">{String(i)}</i>} />);
+    return { from, onClose };
+  };
+  const count = () => screen.getByTestId('img-view-count');
+
+  it('打开：焦点在关闭按钮，计数“1 / 3”，识别好的这张底部有 AI 看到的（描述、中韩标签、说明）', () => {
+    open(0);
+    expect(document.activeElement).toBe(screen.getByTestId('img-view-close'));
+    expect(count().textContent).toBe('1 / 3');
+    expect(count().getAttribute('aria-label')).toBe('第 1 张，共 3 张');
+    const card = screen.getByTestId(`img-view-ai-${ID}`);
+    expect(card.textContent).toContain('AI 看到的');
+    expect(card.textContent).toContain('一本护照的首页');
+    expect(screen.getAllByRole('listitem').map((x) => x.textContent)).toEqual(['证件', '신분증']);
+    expect(card.textContent).toContain('只写是什么东西，不抄号码');
+    expect(screen.queryByRole('button', { name: '⋯' })).toBeNull();
+    expect(lines).toContain('att view i=1/3');
+  });
+
+  it('左右键、两边按钮、横滑换张，计数跟着变；没识别好的那张不出卡片；到头不绕回', () => {
+    open(0);
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(count().textContent).toBe('2 / 3');
+    expect(screen.getByTestId('pic').textContent).toBe('1');
+    expect(screen.queryByText('AI 看到的')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '下一张' }));
+    expect(count().textContent).toBe('3 / 3');
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(count().textContent).toBe('3 / 3');
+    const stage = screen.getByTestId('img-view-stage');
+    fireEvent.pointerDown(stage, { clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(stage, { clientX: 220, clientY: 110 });
+    expect(count().textContent).toBe('2 / 3');
+    fireEvent.pointerDown(stage, { clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(stage, { clientX: 120, clientY: 300 });
+    expect(count().textContent).toBe('2 / 3');
+    fireEvent.click(screen.getByRole('button', { name: '上一张' }));
+    expect(count().textContent).toBe('1 / 3');
+    expect(screen.getByText('AI 看到的')).toBeTruthy();
+    expect(lines).toEqual(['att view i=1/3', 'att view i=2/3', 'att view i=3/3', 'att view i=2/3', 'att view i=1/3']);
+  });
+
+  it('Esc 和 ✕ 都关；关上后焦点回到打开它的元素', () => {
+    const { from, onClose } = open(1);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('img-view-close'));
+    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(lines.filter((l) => l === 'att view close')).toHaveLength(2);
+    cleanup();
+    expect(document.activeElement).toBe(from);
+  });
+
+  it('只有一张：不画换张按钮', () => {
+    render(<ImageViewer ids={[ID]} start={0} back={null} onClose={vi.fn()} render={() => null} />);
+    expect(count().textContent).toBe('1 / 1');
+    expect(screen.queryByRole('button', { name: '下一张' })).toBeNull();
   });
 });

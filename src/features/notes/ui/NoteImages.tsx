@@ -1,7 +1,7 @@
 // 随手记插图的界面（B4 S3；皮肤视觉稿 PH.mason 卡片顶部的图、NOTE_ED 抽屉里的图；主持人定的 4 件事）
 // • 卡片顶部（CardCover）：16:10，铺满卡片宽，右上角“+N”（另外还有几张）；用缩略图
 // • 编辑器、电脑抽屉里（EditorImages）：每张 16:10、圆角 18、上边距 14；还在传的盖一层“上传中…”；没传上的出“图片没传上”和“删除”“重新插入”；
-//   传好了的下面挂识别状态（attachments 的 ImageAiStatus，懒加载；B4b-2 识图，线框 sAIst）
+//   传好了的下面挂识别状态（attachments 的 ImageAiStatus，懒加载；B4b-2 识图，线框 sAIst）；点传好了的图打开看图页（NoteImageView）
 //   （重新插入：图还在内存里就再传一次；不在了——页面关过——就重新选一张，插进来后删掉旧的这张）
 // • 选图（PickButtons）：“图片”（文件选择框，只收 image/*）和“拍照”（同上加 capture="environment"，手机直接开后摄像头）并排；
 //   编辑器里两个都放；输入行只放“图片”一个（视觉稿第 1491 行、线框 COMPOSER“输入行插图按钮不变”，视觉验收必改 4）。input 藏起来、由按钮点开，点按区照 44
@@ -10,6 +10,8 @@
 // • 动效：只用 Pressable 的按下反馈（R-376）
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { ImageAiStatus } from '../../attachments/index.ts';
+import { NoteImageView, type ViewOpen } from './NoteImageView.tsx';
+import { CameraIcon, ImgIcon } from './ImgIcons.tsx';
 import { useBlobSrc } from '../../../kit/hooks/useBlobSrc.ts';
 import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
@@ -40,27 +42,6 @@ export function ImgMsgLine({ msg, className }: { msg: { key: ImgMsgKey; trash: b
         </a>
       ) : null}
     </p>
-  );
-}
-
-/** 插图按钮的图标（同视觉稿 ic('img')：相框、太阳、山） */
-export function ImgIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className ?? styles.ic} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
-      <circle cx="9" cy="10" r="1.6" />
-      <path d="M4.5 17.5l5-5 3.5 3.5 2.5-2.5 4 4" />
-    </svg>
-  );
-}
-
-/** 拍照的图标（机身 + 镜头） */
-export function CameraIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className ?? styles.ic} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.8l1.4-2h4.6l1.4 2h1.8A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z" />
-      <circle cx="12" cy="12.5" r="3.4" />
-    </svg>
   );
 }
 
@@ -279,6 +260,7 @@ export function EditorImageBlock({ noteId, drawer, disabled, msgClass, dropRef }
 export function EditorImages({ noteId, disabled, onMessage }: { noteId: string | null; disabled: boolean; onMessage(k: ImgMsgKey): void }) {
   const t = useNotesT();
   const im = useNoteImages(noteId);
+  const [view, setView] = useState<ViewOpen | null>(null);
   const insert = async (f: File): Promise<boolean> => {
     const r = await im.insert(f);
     const k = insertMessage(r);
@@ -289,19 +271,20 @@ export function EditorImages({ noteId, disabled, onMessage }: { noteId: string |
     <div className={styles.box} data-testid="note-images" data-images={im.items.length ? '1' : '0'}>
       {im.items.length ? (
         <ul className={styles.list} aria-label={t('notes.img.list', {})}>
-          {im.items.map(({ img, pending }) => (
-            <OneImage key={img.id} img={img} pending={pending} disabled={disabled} onRemove={() => void im.remove(img.id)} onRetry={() => im.retry(img.id)} onReplace={insert} />
+          {im.items.map(({ img, pending }, i) => (
+            <OneImage key={img.id} img={img} pending={pending} disabled={disabled} onRemove={() => void im.remove(img.id)} onRetry={() => im.retry(img.id)} onReplace={insert} onOpen={(from) => setView({ i, from })} />
           ))}
         </ul>
       ) : null}
       <div className={styles.picks}>
         <PickButtons onFile={(f) => void insert(f)} disabled={disabled || noteId === null} idPrefix="note-edit" />
       </div>
+      {view ? <NoteImageView imgs={im.items.map((x) => x.img)} open={view} onClose={() => setView(null)} /> : null}
     </div>
   );
 }
 
-function OneImage(p: { img: NoteImage; pending: PendingImage | null; disabled: boolean; onRemove(): void; onRetry(): boolean; onReplace(f: File): Promise<boolean> }) {
+function OneImage(p: { img: NoteImage; pending: PendingImage | null; disabled: boolean; onRemove(): void; onRetry(): boolean; onReplace(f: File): Promise<boolean>; onOpen(from: HTMLElement): void }) {
   const t = useNotesT();
   const src = useImageSrc(p.img, false);
   const [busy, setBusy] = useState(false);
@@ -319,6 +302,7 @@ function OneImage(p: { img: NoteImage; pending: PendingImage | null; disabled: b
     <li className={styles.item} data-testid={`note-image-${p.img.id}`} data-state={failed ? 'failed' : uploading ? 'uploading' : 'done'}>
       <span className={styles.frame}>
         {src.url ? <BlobImg url={src.url} alt={t('notes.img.alt', {})} /> : null}
+        {failed || uploading ? null : <button type="button" className={styles.open} onClick={(e) => p.onOpen(e.currentTarget)} aria-label={t('notes.img.view', {})} data-testid={`note-image-open-${p.img.id}`} />}
         {uploading ? (
           <span className={styles.veil}>
             <span className={styles.badge} role="status">

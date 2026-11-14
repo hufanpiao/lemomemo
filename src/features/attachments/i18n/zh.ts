@@ -88,4 +88,9 @@ export const zh = {
   'att.ai.seen': 'AI 看到的',
   'att.ai.tags': '标签',
   'att.ai.hint': '只写是什么东西，不抄号码；用来按意思找',
+  // 看图页（点随手记里的插图打开；线框 sAIst 第一屏、d 屏看图浮层）
+  'att.iv.frame': '看图',
+  'att.iv.count': '第 {i} 张，共 {n} 张',
+  'att.iv.prev': '上一张',
+  'att.iv.next': '下一张',
 } as const;
