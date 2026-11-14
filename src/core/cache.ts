@@ -6,6 +6,8 @@
 // • drafts、vault_drafts、pending_actions：本机专用，迁移失败也不动
 // • 4.0.0 起监听 onversionchange：别的标签页要升级时，先跑登记的“关库前”回调（把编辑中的内容写进 drafts），再关库、挡住写入
 // • 不支持降级：库版本比 App 高时 open 报 VersionError，返回 version_too_new，不删库
+// • 连接被浏览器单方面断开（iOS 后台常见“Connection to Indexed Database server lost”）：onclose 或开事务抛 InvalidStateError，
+//   都按 'lost' 关库、抛 CacheClosedError（写入、同步按“库已关”停下），boot 照版本变更那套重新载入
 // 隐私记的明文不进这里（A18：features/vault/data 不准 import 本文件）
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { FeaturesConfig } from '../../shared/logic/flags.ts';
@@ -143,8 +145,11 @@ export interface CacheTx {
   clear(store: string): Promise<void>;
 }
 
-/** versionchange：别的标签页要升级库；deleted：别处在按库名删库（versionchange 的 newVersion 为 null，退出登录）；closed：自己调了 close */
-export type CacheCloseReason = 'versionchange' | 'deleted' | 'closed';
+/**
+ * versionchange：别的标签页要升级库；deleted：别处在按库名删库（versionchange 的 newVersion 为 null，退出登录）；closed：自己调了 close；
+ * lost：连接被浏览器断开（onclose，或开事务抛 InvalidStateError）
+ */
+export type CacheCloseReason = 'versionchange' | 'deleted' | 'closed' | 'lost';
 
 /** tx 的选项 */
 export interface CacheTxOptions {
@@ -199,7 +204,7 @@ export interface Cache {
    * 每个回调最多等 2 秒；这时只有 drafts、vault_drafts 还能写。返回取消函数
    */
   onBeforeVersionClose(fn: () => Promise<void> | void): () => void;
-  /** 库关了（versionchange：别的标签页要升级；deleted：别处在删库；closed：自己调了 close） */
+  /** 库关了（versionchange：别的标签页要升级；deleted：别处在删库；closed：自己调了 close；lost：连接被浏览器断开） */
   onClosed(fn: (reason: CacheCloseReason) => void): () => void;
   close(): void;
 }
@@ -258,6 +263,7 @@ function wrap(db: IDBDatabase, name: string, version: number, stores: readonly S
     for (const l of [...closedListeners]) l(reason);
   };
 
+  db.onclose = () => finishClose('lost');
   db.onversionchange = (ev: { newVersion?: number | null }) => {
     if (state !== 'open') return;
     state = 'closing';
@@ -273,7 +279,14 @@ function wrap(db: IDBDatabase, name: string, version: number, stores: readonly S
     if (state === 'closed') throw new CacheClosedError();
     if (sealed && mode !== 'readonly' && opts?.bypassSeal !== true) throw new CacheClosedError();
     if (state === 'closing' && mode !== 'readonly' && names.some((n) => !draftStores.has(n))) throw new CacheClosedError();
-    const t = db.transaction([...names], mode);
+    let t: IDBTransaction;
+    try {
+      t = db.transaction([...names], mode);
+    } catch (e) {
+      if ((e as Error | null)?.name !== 'InvalidStateError') throw e;
+      finishClose('lost');   // 连接已经没了、没收到 close 事件
+      throw new CacheClosedError();
+    }
     const done = new Promise<void>((resolve, reject) => {
       t.oncomplete = () => resolve();
       t.onabort = () => reject(t.error ?? new Error('idb_tx_aborted'));

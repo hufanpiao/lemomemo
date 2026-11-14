@@ -181,6 +181,22 @@ describe('离线冷启动', () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
+  it('连接被浏览器断开（lost）：照版本变更那套，没有录音、编辑就重新载入；不走 onCacheDeleted', async () => {
+    const { factory, fake } = fakeIndexedDB();
+    const onCacheDeleted = vi.fn();
+    const reload = vi.fn();
+    const b = await coldStart({
+      ...opts(factory),
+      onCacheDeleted,
+      upgradeDeps: { reload, swUpdate: () => Promise.resolve('no_update' as const), attempt: { get: () => null, set: () => undefined } },
+    });
+    [...(fake.dbs.get('planner-v4')?.connections ?? [])][0]?.lose();
+    expect(b.cache?.isClosed()).toBe(true);
+    expect(b.upgrade.getState().cache).toBe('closed_for_upgrade');
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(onCacheDeleted).not.toHaveBeenCalled();
+  });
+
   it('没登录、删库请求排在别的卡住的删库后面（永远不触发任何事件）：3 秒后按 blocked 返回，照样走到 signed_out，不会永远等着白屏', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {

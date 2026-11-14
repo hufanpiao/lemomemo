@@ -10,6 +10,7 @@ import { clearCacheStorage } from '../platform/session.ts';
 import { clearReauth, readReauth } from '../platform/auth-loss-store.ts';
 import { requestAppUpdate } from '../platform/native-bridge.ts';
 import { reloadPage, updateAttemptStore } from '../platform/sw-register.ts';
+import { rlog } from '../platform/run-log-api.ts';
 import { ensureAccount } from './account.ts';
 import { deleteCacheDb, openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
 import { cacheErrKind, type UpgradeReport } from './cache-migrations.ts';
@@ -298,7 +299,9 @@ async function loadCache(
   result.cache = cache;
   result.upgradeReport = report;
   cache.onClosed((reason) => {
-    if (reason === 'versionchange') upgrade.onCacheVersionChange();
+    rlog(`cache closed ${reason}`);
+    // 连接被浏览器断开（lost，iOS 后台常见）同版本变更：没有录音、编辑就重新载入，有就出“重新打开”横幅、结束时载入
+    if (reason === 'versionchange' || reason === 'lost') upgrade.onCacheVersionChange();
     // 别处在删库（别的标签页退出登录）：不走升级的重新载入、不出“有新版本”提示，交给入口看会话（K6 复审 C）
     if (reason === 'deleted') opts.onCacheDeleted?.();
   });
