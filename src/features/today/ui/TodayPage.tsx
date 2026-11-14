@@ -28,15 +28,17 @@
 // • 液态玻璃底栏、“＋”、时间河、提醒按钮条不在这一段（FA-4、FA-7）
 // • 电脑版（B6，5.9b；有侧栏的宽度）：交给按需下载的 TodayDesk 排成可拖动的块；提示、“现在”卡、没赶上、今天的安排合成一块时间河
 //   （块标题“今天的安排”，里面不再画这个小标题；B6 返工 11-14）。页顶日期行固定不动：日期后面加农历（TodayDesk 的 Lunar），下面是纪念日胶囊（同手机的 AnnivLine）。
-//   点一行不换页，在详情抽屉里编辑（选中哪一条记在这里的 sel；窗口变窄、电脑版卸下时清掉；“今天记的”里的随手记也开在这个抽屉里）。电脑版分包没到、下不来时照手机的排法画
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+//   点一行不换页，在详情抽屉里编辑（选中哪一条由 kit 的 useDrawerSel 管，同随手记页；窗口变窄、电脑版卸下或画出错时清掉；“今天记的”里的随手记也开在这个抽屉里，同样先判只读）。电脑版分包没到、下不来时照手机的排法画
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
+import { useDrawerSel } from '../../../kit/hooks/useDrawerSel.ts';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
+import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
@@ -139,22 +141,17 @@ export default function TodayPage() {
   // 下好了、这一页里没有焦点和按住的指针时才换上（motion 的 useSwapWhenSafe）；在那之前照原来的一列画
   const page = useRef<HTMLElement>(null);
   const loaded = useSwapWhenSafe(useMedia(MQ_SIDEBAR), page, loadTodayDesk, afterAppPainted, opensKeyboard);
-  // 电脑版那一块画出错（QuietBoundary 退回手机排法）以后这一页按没换上算：点行进编辑页、不画农历（抽屉也在出错的那一块里，独立评审第 5 条）
-  const [deskFailed, setDeskFailed] = useState(false);
-  const failDesk = useCallback(() => setDeskFailed(true), []);
-  const Desk = deskFailed ? null : loaded;
-  /** 电脑版详情抽屉里开着的那一条 */
-  const [sel, setSel] = useState<TodaySel | null>(null);
-  const closeSel = useCallback(() => setSel(null), []);
-  useEffect(() => {
-    if (!Desk) setSel(null);
-  }, [Desk]);
-  const open = (kind: 'event' | 'todo', id: string) => (g.isRo(kind, id) ? g.block() : Desk ? setSel({ kind, id }) : void navigate(kind, id));
+  // 电脑版详情抽屉开着的那一条（kit useDrawerSel，同随手记页）：电脑版那一块画出错（QuietBoundary 退回手机排法）以后按没换上算，
+  // 点行进编辑页、不画农历（抽屉也在出错的那一块里，独立评审第 5 条）
+  const ds = useDrawerSel<TodaySel>(!!loaded);
+  const Desk = ds.on ? loaded : null;
+  const roNotes = useReadonlyIds('notes');
+  /** 点一行（含“今天记的”里的随手记）：只读的先拦下，电脑版开抽屉，不然进编辑页 */
+  const open = (s: TodaySel) => ((s.kind === 'note' ? roNotes.has(s.id) : g.isRo(s.kind, s.id)) ? g.block() : ds.open(s, () => void navigate(s.kind, s.id)));
   /** 抽屉里开着的那一条：行按钮 aria-current（行按钮上的 data-open 给抽屉关上时找回焦点用） */
-  const cur = (id: string) => (sel?.id === id ? ('true' as const) : undefined);
-  /** 列表里删掉的正好是抽屉开着的那一条：抽屉一起关（B6 独立评审第 11 条：不然抽屉里“已删除 · 撤销”和页底撤销条两个撤销入口同时在） */
+  const cur = (id: string) => (ds.sel?.id === id ? ('true' as const) : undefined);
   const remove = (id: string) => {
-    if (sel?.id === id) setSel(null);
+    ds.forget(id);
     return del(id);
   };
   const [pastOpen, setPastOpen] = useState(false);
@@ -172,7 +169,7 @@ export default function TodayPage() {
               testId={`today-done-${todo.id}`}
               readOnly={g.isRo('todo', todo.id)}
             />
-            <button type="button" className={list.main} onClick={() => open('todo', todo.id)} data-open={todo.id} aria-current={cur(todo.id)}>
+            <button type="button" className={list.main} onClick={() => open({ kind: 'todo', id: todo.id })} data-open={todo.id} aria-current={cur(todo.id)}>
               <span className={list.text}>
                 <span className={list.title}>{todo.title}</span>
                 <span className={`${list.meta} ${styles.lateTag}`}>{days > 0 ? t('late.days', { n: days }) : t('late.passed', { t: todo.dueTime ?? '' })}</span>
@@ -190,7 +187,7 @@ export default function TodayPage() {
   const evRow = (o: (typeof v.events)[number]) => (
     <AppearItem key={`e:${o.id}`} className={list.row} data-readonly={g.isRo('event', o.id) ? '' : undefined} data-testid={`today-event-${o.id}`}>
       <span className={list.lead}>{o.time ?? t('list.allDay', {})}</span>
-      <button type="button" className={list.main} onClick={() => open('event', o.id)} data-open={o.id} aria-current={cur(o.id)}>
+      <button type="button" className={list.main} onClick={() => open({ kind: 'event', id: o.id })} data-open={o.id} aria-current={cur(o.id)}>
         <span className={list.text}>
           <span className={list.title}>{o.title}</span>
           {o.origin ? <span className={list.meta}>{t('list.origin', { zone: zoneName(o.origin.tz, locale), t: o.origin.time })}</span> : null}
@@ -218,7 +215,7 @@ export default function TodayPage() {
         onChange={(v) => tick(td.id, v)}
         testId={`today-done-${td.id}`}
       />
-      <button type="button" className={list.main} onClick={() => open('todo', td.id)} data-open={td.id} aria-current={cur(td.id)}>
+      <button type="button" className={list.main} onClick={() => open({ kind: 'todo', id: td.id })} data-open={td.id} aria-current={cur(td.id)}>
         <span className={list.text}>
           <span className={list.title}>{td.title}</span>
           <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
@@ -304,7 +301,7 @@ export default function TodayPage() {
       </div>
       {/* 电脑版面板没换上、画出错时照手机的排法画（一列） */}
       {Desk ? (
-        <QuietBoundary name="today-desk" fallback={phone} onFail={failDesk}>
+        <QuietBoundary name="today-desk" fallback={phone} onFail={ds.fail}>
           {annivLine}
           <Desk.default
             today={d.today}
@@ -318,9 +315,9 @@ export default function TodayPage() {
                 </AppearList>
               </>
             }
-            sel={sel}
-            onOpen={setSel}
-            onClose={closeSel}
+            sel={ds.sel}
+            onOpen={open}
+            onClose={ds.close}
           />
         </QuietBoundary>
       ) : (

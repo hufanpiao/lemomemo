@@ -63,7 +63,7 @@ export interface TodayDeskProps {
   /** 时间河块：提示、“现在”卡、没赶上、今天的安排（TodayPage 画好的） */
   river: ReactNode;
   sel: TodaySel | null;
-  /** “今天记的”里点了一条随手记（日程、待办的行在 river 里，由 TodayPage 自己开） */
+  /** “今天记的”里点了一条随手记（日程、待办的行在 river 里）：TodayPage 的 open，先判只读再开抽屉 */
   onOpen(sel: TodaySel): void;
   onClose(): void;
 }
