@@ -54,18 +54,32 @@ export async function recordRaw(raw: string, day: DateStr | null): Promise<boole
   return true;
 }
 
+/** 打开打字条（App 的 open，经 TypeBarPreload 的 onType 登记进来）：结果层“理解成”那一行的“改”用 */
+let typeOpener: (() => void) | null = null;
+export function setTypeOpener(fn: (() => void) | null): void {
+  typeOpener = fn;
+}
+
 export function toAssist(o: ToAssist): void {
   rlog(`assist send intent=${o.ask.intent} from=${o.from} ai=${o.aiUsed} len=${[...o.raw].length}`);
   const hasRaw = o.raw.trim() !== '';
   // 打字条交来的：输入条里的字就是这一句，照写；别的来路不盖掉用户收起的草稿
   if (hasRaw) void writeAssistDraft({ text: o.raw, day: o.day }, clock.now(), o.from === 'plus');
   let recording: Promise<boolean> | null = null;
+  let kept = false;
   void loadFindOpen().then((m) =>
     m.openAssist({
       ask: o.ask, raw: o.raw, aiUsed: o.aiUsed, from: o.from, exclude: [], undoSaved: null,
       record: hasRaw ? () => (recording = recordRaw(o.raw, o.day)) : null,
-      // 没点“改成记下”就关：原话不要了，清草稿；点了的由 recordRaw 存好再清
-      onClose: hasRaw ? () => void (recording === null ? clearAssistDraft() : undefined) : null,
+      // “改”（线框 22 UNDERSTOOD）：原话写回草稿（录音、quick-add 交来的也盖上，这一句就是用户要改的），再打开打字条，打字条打开时填回来；
+      // 结果层随后关掉，kept 让 onClose 不清这份草稿。打字条还没登记（录音那块没挂上）就只关，草稿留着下次点“＋”填回
+      edit: hasRaw ? () => {
+        kept = true;
+        rlog(`assist edit from=${o.from} opener=${typeOpener ? 1 : 0}`);
+        void writeAssistDraft({ text: o.raw, day: o.day }, clock.now(), true).then(() => typeOpener?.());
+      } : null,
+      // 没点“改成记下”、没点“改”就关：原话不要了，清草稿；点了“改成记下”的由 recordRaw 存好再清
+      onClose: hasRaw ? () => void (recording === null && !kept ? clearAssistDraft() : undefined) : null,
     }),
   );
 }

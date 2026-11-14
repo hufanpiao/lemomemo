@@ -3,10 +3,13 @@
 // • 总结：意图是总结时打开就调一次 ai-summarize；查找时点“总结一下”才调。离线、AI 没开不调，直接给原因。
 //   送之前等这几条发出去（最多 3 秒），送哪些见 refsOf（最多 50 条）
 // • 取消、改期、完成：候选在第一次算出来时定住（写了以后行变了，卡片不跟着变）；批量默认全勾；点了才写，写完能撤
-// • 运行日志（只记数量、原因、耗时，不记原话和标题，A23）：assist list / assist sum / assist target / assist act / assist undo
+// • 今天的 AI 用量（页脚“今天 已用 / 上限”，B4b-3 返工）：打开时读一次、总结成功后再读一次（platform/ai-usage.ts，rpc my_ai_usage）；
+//   离线、AI 没开不读；读不到就是 null，页脚只写前半句
+// • 运行日志（只记数量、原因、耗时，不记原话和标题，A23）：assist list / assist sum / assist usage / assist target / assist act / assist undo
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { todayOf } from '../../../../shared/core/date.ts';
 import type { AssistAsk } from '../../../../shared/logic/parse/assist.ts';
+import { readAiUsage, type AiUsage, type UsageResult } from '../../../platform/ai-usage.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -21,7 +24,8 @@ export type { FindItem } from '../data/find-local.ts';
 export type SumState =
   | { s: 'idle' }
   | { s: 'wait' }
-  | { s: 'done'; summary: string; cited: ReadonlySet<string>; missing: number; quotaLeft: number }
+  /** cited 按服务器给的顺序：第 1 个就是正文里的角标 [1]（ai-summarize 的 relinkCites） */
+  | { s: 'done'; summary: string; cited: readonly string[]; missing: number; quotaLeft: number }
   | { s: 'fail'; reason: SumFail | 'offline' | 'off' };
 
 export type ActState = { s: 'idle' } | { s: 'busy' } | { s: 'done'; a: Applied } | { s: 'undone'; n: number };
@@ -29,6 +33,7 @@ export type ActState = { s: 'idle' } | { s: 'busy' } | { s: 'done'; a: Applied }
 export interface AssistDeps {
   sum?: (req: SumReq, signal: AbortSignal) => Promise<SumResult>;
   wait?: typeof waitSent;
+  usage?: () => Promise<UsageResult>;
 }
 
 export function useAssist(ask: AssistAsk, exclude: readonly string[], deps: AssistDeps = {}) {
@@ -44,6 +49,29 @@ export function useAssist(ask: AssistAsk, exclude: readonly string[], deps: Assi
     // 只在打开时记一次（之后同步来了新数据不再记）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // —— 今天的 AI 用量 ——
+  const [usage, setUsage] = useState<AiUsage | null>(null);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  const readUsage = useCallback(() => {
+    if (!src.online || !src.aiOn) return;
+    void (deps.usage ?? readAiUsage)().then((r) => {
+      rlog(`assist usage ${r.ok ? `used=${r.value.used} limit=${r.value.limit}` : `err=${r.err}`}`);
+      if (alive.current && r.ok) setUsage(r.value);
+    });
+  }, [src.online, src.aiOn, deps.usage]);
+  const usageOnce = useRef(false);
+  useEffect(() => {
+    if (usageOnce.current) return;
+    usageOnce.current = true;
+    readUsage();
+  }, [readUsage]);
 
   // —— 总结 ——
   const [sum, setSum] = useState<SumState>({ s: 'idle' });
@@ -68,13 +96,14 @@ export function useAssist(ask: AssistAsk, exclude: readonly string[], deps: Assi
       const ms = clock.now() - t0;
       if (r.ok) {
         rlog(`assist sum ok n=${refs.length} more=${more} cited=${r.cited.length} missing=${r.missing.length} unsent=${left ? 1 : 0} ms=${ms}`);
-        setSum({ s: 'done', summary: r.summary, cited: new Set(r.cited), missing: r.missing.length, quotaLeft: r.quotaLeft });
+        setSum({ s: 'done', summary: r.summary, cited: r.cited, missing: r.missing.length, quotaLeft: r.quotaLeft });
+        readUsage();
       } else {
         rlog(`assist sum fail reason=${r.reason} code=${r.code} n=${refs.length} ms=${ms}`);
         setSum({ s: 'fail', reason: r.reason });
       }
     })();
-  }, [ask, items, src.online, src.aiOn, src.tz, locale, deps.sum, deps.wait]);
+  }, [ask, items, src.online, src.aiOn, src.tz, locale, deps.sum, deps.wait, readUsage]);
   const auto = useRef(false);
   useEffect(() => {
     if (auto.current || ask.intent !== 'summarize') return;
@@ -118,7 +147,7 @@ export function useAssist(ask: AssistAsk, exclude: readonly string[], deps: Assi
     return typeof v === 'string' ? v : '';
   }, [rows]);
 
-  return { titleOf, items, overdue, today, sum, summarize: run, match, off, toggle, act, confirm, undo, online: src.online, aiOn: src.aiOn };
+  return { titleOf, items, overdue, today, sum, usage, summarize: run, match, off, toggle, act, confirm, undo, online: src.online, aiOn: src.aiOn };
 }
 
 /** 提示条下面“也帮你找了一下：N 条”的 N（本机缓存里数，同 useAssist；取消、改期、完成数候选，泛指词的取消、标完成不数） */

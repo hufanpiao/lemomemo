@@ -28,7 +28,7 @@ export default function AssistPeek({ ask, exclude, undoSaved }: AssistPeekProps)
       className={styles.link}
       onClick={() => {
         rlog(`assist peek open intent=${ask.intent} n=${n} panel=${usesFindPanel(ask) ? 'find' : 'assist'}`);
-        openAssist({ ask, raw: '', aiUsed: 0, from: 'notice', record: null, exclude, undoSaved: 'target' in ask ? undoSaved : null, onClose: null });
+        openAssist({ ask, raw: '', aiUsed: 0, from: 'notice', record: null, exclude, undoSaved: 'target' in ask ? undoSaved : null, edit: null, onClose: null });
       }}
       data-testid="assist-peek"
     >

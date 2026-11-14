@@ -2,6 +2,7 @@
 import type { ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
+import check from '../../../kit/components/CheckCircle.module.css';
 import { makeUseT } from '../../../kit/hooks/useT.ts';
 import { markRanges, type FindHit, type FindItem, type FindKind } from '../hooks/useFind.ts';
 import { ko } from '../i18n/ko.ts';
@@ -32,7 +33,18 @@ export function Marked({ text, q }: { text: string; q: string }): ReactNode {
   return out;
 }
 
-export function Lead({ kind }: { kind: FindKind }) {
+/** 左边的类型记号；done：已完成的待办画成实心打勾圆（和待办列表同一套 kit/CheckCircle 的圆盘、勾号，只是画，不接点按） */
+export function Lead({ kind, done = false }: { kind: FindKind; done?: boolean }) {
+  if (kind === 'todo' && done) {
+    return (
+      <span className={styles.lead} aria-hidden="true" data-testid="lead-done">
+        <span className={styles.ringDone}>
+          <span className={check.fill} data-state="on" />
+          <span className={check.tick} data-state="on" />
+        </span>
+      </span>
+    );
+  }
   const mark = { event: styles.bar, todo: styles.ring, anniv: styles.dia, image: styles.pic, note: styles.doc, file: styles.doc }[kind];
   return (
     <span className={styles.lead} aria-hidden="true">

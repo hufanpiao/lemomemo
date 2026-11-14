@@ -287,6 +287,14 @@
   border-radius: 50%;
 }
 
+/* 已完成的待办：同待办列表的打勾圆（kit/CheckCircle.module.css 的 .fill、.tick，data-state="on"），小一号 18px */
+.ringDone {
+  --check-size: 18px;
+
+  display: grid;
+  place-items: center;
+}
+
 .doc {
   display: inline-flex;
   align-items: center;
@@ -326,6 +334,12 @@
   font-size: var(--fs-15);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 已完成的待办：标题灰色加删除线（同 kit/List.module.css 的 .row[data-done] .title） */
+.row[data-done] .title {
+  color: var(--text-2);
+  text-decoration: line-through;
 }
 
 .meta {

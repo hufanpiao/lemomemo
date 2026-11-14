@@ -37,7 +37,7 @@ function seed() {
   put('settings', [{ id: 'set-ai', key: 'ai.enabled', value: false, deleted_at: null, updated_at: NOW }]);
 }
 const ASK: AssistAsk = { intent: 'search', query: { text: '发票', range: null, kinds: ['event', 'todo', 'note'], done: 'any' } };
-const assist = (over: Partial<AssistReq> = {}): AssistReq => ({ ask: ASK, raw: '帮我找发票', aiUsed: 0, from: 'plus', record: null, exclude: [], undoSaved: null, onClose: null, ...over });
+const assist = (over: Partial<AssistReq> = {}): AssistReq => ({ ask: ASK, raw: '帮我找发票', aiUsed: 0, from: 'plus', record: null, exclude: [], undoSaved: null, edit: null, onClose: null, ...over });
 const rowOf = (kind: string) => {
   const r = screen.getAllByTestId('find-row').find((b) => b.getAttribute('data-kind') === kind);
   if (!r) throw new Error(`没有 ${kind} 行`);
@@ -135,6 +135,20 @@ describe('查找面板：每行“⋯”菜单', () => {
     fireEvent.click(screen.getByTestId('find-m-retime'));
     expect(fx.nav).toHaveBeenCalledWith('todo', id(2));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('标完成以后（本机库里 done 变 true）：这一行左边画成打勾圆、带 data-done（同待办列表的已完成样式）', async () => {
+    render(<FindPanel query="发票" from="ctrlk" onClose={vi.fn()} />);
+    expect(rowOf('todo').hasAttribute('data-done')).toBe(false);
+    openMenu('todo');
+    fireEvent.click(screen.getByTestId('find-m-done'));
+    // 写库用的是替身：照真的 savePatch 那样把本机这一行改成已完成
+    await act(async () => {
+      await put('todos', [{ id: id(2), ...live, title: '交发票', note: '', project: '', due: '2026-11-20', due_time: null, done: true, done_at: NOW }]);
+    });
+    await flush();
+    expect(rowOf('todo').hasAttribute('data-done')).toBe(true);
+    expect(rowOf('todo').querySelector('[data-testid="lead-done"]')).not.toBeNull();
   });
 });
 

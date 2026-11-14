@@ -9,14 +9,19 @@
 // • 查找面板的挂载点和电脑 Ctrl+K（B4b-2，features/smart-search 的 FindHost）：单独一个 Suspense，不等录音那一块；
 //   挂在这里是为了 Ctrl+K 不往首屏加字节（首屏额度只剩十几字节）
 // 打字条本身的预先下载不在这里，见 index.ts 的 loadTypeBar 和 app/plus-slot.tsx（Q-24）
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { FindHost } from '../../smart-search/index.ts';
+import { setTypeOpener } from '../hooks/assist-open.ts';
 import PlusHint from './PlusHint.tsx';
 
 const RecordHost = lazy(() => import('./RecordHost.tsx').then((m) => ({ default: m.RecordHost })));
 
-/** onType：“改用打字”打开打字条（App 的 open，经 app/plus-slot.tsx 传进来） */
+/** onType：“改用打字”打开打字条（App 的 open，经 app/plus-slot.tsx 传进来）；也登记给结果层的“改”（hooks/assist-open.ts） */
 export default function TypeBarPreload({ onType }: { onType?: (() => void) | undefined }) {
+  useEffect(() => {
+    setTypeOpener(onType ?? null);
+    return () => setTypeOpener(null);
+  }, [onType]);
   return (
     <>
       <Suspense fallback={null}>

@@ -16,8 +16,9 @@ import { whenText } from '../ui/find-parts.tsx';
 
 const SID = 'sid-a';
 vi.mock('../../../platform/session.ts', async (orig) => ({ ...(await orig<typeof Session>()), readSessionId: () => SID }));
-const fx = vi.hoisted(() => ({ sum: vi.fn(), wait: vi.fn(), save: vi.fn(), nav: vi.fn(), logs: [] as string[] }));
+const fx = vi.hoisted(() => ({ sum: vi.fn(), wait: vi.fn(), save: vi.fn(), nav: vi.fn(), usage: vi.fn(), logs: [] as string[] }));
 vi.mock('../data/summarize-api.ts', () => ({ summarize: (...a: unknown[]) => fx.sum(...a), waitSent: (...a: unknown[]) => fx.wait(...a) }));
+vi.mock('../../../platform/ai-usage.ts', () => ({ readAiUsage: () => fx.usage() }));
 vi.mock('../../../core/edit-save.ts', () => ({ savePatch: (...a: unknown[]) => fx.save(...a) }));
 vi.mock('../../../app/router.ts', async (orig) => ({ ...(await orig<object>()), navigate: (...a: unknown[]) => fx.nav(...a) }));
 vi.mock('../../../platform/run-log-api.ts', async (orig) => ({ ...(await orig<object>()), rlog: (l: string) => fx.logs.push(l) }));
@@ -41,7 +42,7 @@ function seed() {
 const WEEK = { from: '2026-11-16', to: '2026-11-22' };
 const query = (intent: 'search' | 'summarize', over: Partial<PlusQuery> = {}): AssistAsk => ({ intent, query: { text: '', range: WEEK, kinds: ['event', 'todo'], done: 'any', ...over } });
 function req(ask: AssistAsk, over: Partial<AssistReq> = {}): AssistReq {
-  return { ask, raw: '下周的安排', aiUsed: 0, from: 'plus', record: null, exclude: [], undoSaved: null, onClose: null, ...over };
+  return { ask, raw: '下周的安排', aiUsed: 0, from: 'plus', record: null, exclude: [], undoSaved: null, edit: null, onClose: null, ...over };
 }
 const show = (r: AssistReq, onClose = vi.fn()) => render(<AssistPanel req={r} onClose={onClose} />);
 const flush = () => act(async () => {
@@ -56,6 +57,7 @@ beforeEach(() => {
   fx.wait.mockReset().mockResolvedValue(false);
   fx.save.mockReset().mockResolvedValue('saved');
   fx.nav.mockReset();
+  fx.usage.mockReset().mockResolvedValue({ ok: false, err: 'failed' });
   fx.logs.length = 0;
   Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => true });
   seed();
@@ -105,7 +107,7 @@ describe('结果层：时间类查找', () => {
 });
 
 describe('结果层：总结', () => {
-  it('意图是总结：打开就调总结；成功显示总结文字、cited 的行标出来、“这次用了 N 次 AI”', async () => {
+  it('意图是总结：打开就调总结；成功显示总结文字、cited 的行标出来、“这次用了 N 次 AI（判断、总结）”', async () => {
     fx.sum.mockResolvedValue({ ok: true, summary: '下周主要是看牙医', cited: [id(1)], missing: [], quotaLeft: 8 });
     show(req(query('summarize'), { aiUsed: 1 }));
     expect(screen.getByTestId('assist-summary').getAttribute('data-state')).toBe('wait');
@@ -116,8 +118,50 @@ describe('结果层：总结', () => {
     expect(screen.getByTestId('assist-summary-text').textContent).toBe('下周主要是看牙医');
     const cited = screen.getAllByTestId('assist-row').filter((b) => b.getAttribute('data-cited') === '1');
     expect(cited.map((b) => b.textContent)).toEqual([expect.stringContaining('看牙医')]);
-    expect(screen.getByText('这次用了 2 次 AI')).toBeTruthy();
+    expect(screen.getByTestId('assist-usage').textContent).toBe('这次用了 2 次 AI（判断 1 次、总结 1 次）');
     expect(fx.logs.join('\n')).not.toContain('看牙医');
+  });
+
+  it('总结卡（线框 22）：小字标题；[m] 画成角标；依据列表按 cited 编号，没引用的不编号写“（没引用）”；收起、展开；点一条打开', async () => {
+    fx.sum.mockResolvedValue({ ok: true, summary: '周一交发票[1]，同一天看牙医[2]。[9]', cited: [id(4), id(1)], missing: [], quotaLeft: 8 });
+    show(req(query('summarize'), { aiUsed: 1 }));
+    await flush();
+    expect(screen.getByTestId('assist-summary').textContent).toContain('AI 总结 · 只显示，不保存');
+    expect(screen.getAllByTestId('assist-cite').map((x) => x.textContent)).toEqual(['1', '2']);
+    expect(screen.getByTestId('assist-summary-text').textContent).toBe('周一交发票1，同一天看牙医2。[9]');
+    expect(screen.queryAllByTestId('assist-day')).toHaveLength(0);
+    const rows = screen.getAllByTestId('assist-row');
+    expect(rows.map((r) => r.querySelector('[data-testid="assist-num"]')?.textContent)).toEqual(['1', '2', '', '']);
+    expect(rows[0]?.textContent).toContain('交发票');
+    expect(rows[1]?.textContent).toContain('看牙医');
+    expect(rows[3]?.textContent).toContain('（没引用）');
+    expect(screen.getByText('依据：4 条记录')).toBeTruthy();
+    const tog = screen.getByTestId('assist-basis-toggle');
+    expect(tog.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(tog);
+    expect(screen.queryByTestId('assist-basis')).toBeNull();
+    expect(tog.textContent).toContain('展开');
+    fireEvent.click(tog);
+    fireEvent.click(screen.getAllByTestId('assist-row')[1] as HTMLElement);
+    expect(fx.nav).toHaveBeenCalled();
+  });
+
+  it('页脚：今天的用量读到了接“· 今天 已用 / 上限”；只判断了一次写“这次用了 1 次 AI”', async () => {
+    fx.usage.mockResolvedValue({ ok: true, value: { used: 19, limit: 50 } });
+    show(req(query('search'), { aiUsed: 1 }));
+    await flush();
+    expect(screen.getByTestId('assist-usage').textContent).toBe('这次用了 1 次 AI · 今天 19 / 50');
+  });
+
+  it('页脚：今天的用量读不到只写前半句；没用 AI 不出这一行', async () => {
+    show(req(query('search'), { aiUsed: 1 }));
+    await flush();
+    expect(fx.usage).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('assist-usage').textContent).toBe('这次用了 1 次 AI');
+    cleanup();
+    show(req(query('search')));
+    await flush();
+    expect(screen.queryByTestId('assist-usage')).toBeNull();
   });
 
   it.each([
@@ -224,6 +268,38 @@ describe('结果层：取消、改期、完成卡片', () => {
     await flush();
     expect(fx.save).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId('assist-target-done').textContent).toContain('2 条');
+  });
+});
+
+describe('结果层：顶部和“理解成”（线框 22）', () => {
+  it('左上“✕ 关闭”、标题“查找结果”、下一行引号写原话；打开时焦点在面板本身，不在“关闭”上', () => {
+    show(req(query('search')));
+    const panel = screen.getByTestId('assist-panel');
+    expect(screen.getByRole('dialog', { name: '查找结果' })).toBe(panel);
+    expect(screen.getByTestId('assist-close').textContent).toBe('✕ 关闭');
+    expect(screen.getByTestId('assist-said').textContent).toBe('“下周的安排”');
+    expect(document.activeElement).toBe(panel);
+    expect(panel.getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('“理解成：”后面那段加粗；有 edit 时右边出“改”，点了先调 edit 再关；没有不出', () => {
+    const edit = vi.fn();
+    const onClose = vi.fn(() => expect(edit).toHaveBeenCalledTimes(1));
+    show(req(query('search'), { edit }), onClose);
+    expect(screen.getByTestId('assist-understand').querySelector('b')?.textContent).toContain('日程和待办');
+    fireEvent.click(screen.getByTestId('assist-edit'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    cleanup();
+    show(req(query('search')));
+    expect(screen.queryByTestId('assist-edit')).toBeNull();
+  });
+
+  it('已完成的待办：左边画成打勾圆、行带 data-done（标题灰色删除线）', () => {
+    put('todos', [td(8, '已交的报告', '2026-11-17', true)]);
+    show(req(query('search')));
+    const row = screen.getAllByTestId('assist-row').find((r) => r.textContent?.includes('已交的报告'));
+    expect(row?.hasAttribute('data-done')).toBe(true);
+    expect(row?.querySelector('[data-testid="lead-done"]')).not.toBeNull();
   });
 });
 

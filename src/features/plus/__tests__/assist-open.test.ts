@@ -6,10 +6,10 @@ import type { AssistAsk } from '../../../../shared/logic/parse/assist.ts';
 const fx = vi.hoisted(() => ({ open: vi.fn(), record: vi.fn(), write: vi.fn(), clear: vi.fn() }));
 vi.mock('../../smart-search/index.ts', () => ({ loadFindOpen: async () => ({ openAssist: fx.open }) }));
 vi.mock('../data/type-draft.ts', () => ({ writeAssistDraft: (...a: unknown[]) => fx.write(...a), clearAssistDraft: async () => fx.clear() }));
-const { RECORDER_WAIT_MS, resetAssistRecorder, setAssistRecorder, toAssist } = await import('../hooks/assist-open.ts');
+const { RECORDER_WAIT_MS, resetAssistRecorder, setAssistRecorder, setTypeOpener, toAssist } = await import('../hooks/assist-open.ts');
 
 const ASK: AssistAsk = { intent: 'search', query: { text: '发票', range: null, kinds: ['event', 'todo', 'note'], done: 'any' } };
-type Req = { record: (() => Promise<boolean>) | null; onClose: (() => void) | null };
+type Req = { record: (() => Promise<boolean>) | null; edit: (() => void) | null; onClose: (() => void) | null };
 const flush = async (): Promise<void> => {
   for (let i = 0; i < 6; i += 1) await Promise.resolve();
 };
@@ -21,6 +21,7 @@ async function open(from: 'plus' | 'voice' = 'plus'): Promise<Req> {
 
 beforeEach(() => {
   for (const f of Object.values(fx)) f.mockReset();
+  fx.write.mockResolvedValue(undefined);
   resetAssistRecorder();
   setAssistRecorder((...a) => fx.record(...a));
 });
@@ -41,6 +42,30 @@ describe('toAssist', () => {
     r.onClose?.();
     await flush();
     expect(fx.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('“改”：原话写回草稿（录音来的也盖上）、写好再打开打字条；随后关结果层不清草稿', async () => {
+    const opener = vi.fn();
+    setTypeOpener(opener);
+    const r = await open('voice');
+    fx.write.mockClear();
+    r.edit?.();
+    r.onClose?.();
+    expect(opener).not.toHaveBeenCalled();
+    await flush();
+    expect(fx.write).toHaveBeenCalledWith({ text: '帮我找发票', day: '2026-11-20' }, expect.any(Number), true);
+    expect(opener).toHaveBeenCalledTimes(1);
+    expect(fx.clear).not.toHaveBeenCalled();
+    setTypeOpener(null);
+  });
+
+  it('打字条还没登记：“改”只写草稿，不报错；没有原话的不给“改”', async () => {
+    setTypeOpener(null);
+    const r = await open();
+    expect(() => r.edit?.()).not.toThrow();
+    toAssist({ ask: ASK, raw: '  ', aiUsed: 0, from: 'plus', day: null });
+    await flush();
+    expect((fx.open.mock.calls.at(-1)?.[0] as Req).edit).toBeNull();
   });
 
   it('“改成记下”存好了：记到选中那天、清草稿；关结果层不再清第二次', async () => {

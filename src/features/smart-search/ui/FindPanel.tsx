@@ -166,8 +166,9 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
           onMouseEnter={desk ? () => setSel(i) : undefined}
           data-testid="find-row"
           data-kind={h.item.kind}
+          data-done={(h.item.kind === 'todo' && h.item.done) || undefined}
         >
-          <Lead kind={h.item.kind} />
+          <Lead kind={h.item.kind} done={h.item.done} />
           <span className={styles.text}>
             <span className={styles.title}><Marked text={h.item.title || t('find.noTitle', {})} q={q} /></span>
             <span className={styles.meta}><Marked text={metaOf(h, t, locale)} q={q} /></span>

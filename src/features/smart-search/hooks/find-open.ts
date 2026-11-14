@@ -19,6 +19,8 @@ export interface AssistReq {
   /** 模糊时先存了的这一批：查找排除它们（0.23 L3）；在卡片里确认取消、改期、完成以后撤销它们（undoSaved） */
   exclude: readonly string[];
   undoSaved: (() => Promise<unknown>) | null;
+  /** “理解成”那一行的“改”：回到打字条，原话带回去可以改（plus 给；没有原话的为 null，不出这个按钮）。面板先调它再关 */
+  edit: (() => void) | null;
   /** 关掉结果层（plus 清草稿） */
   onClose: (() => void) | null;
 }
