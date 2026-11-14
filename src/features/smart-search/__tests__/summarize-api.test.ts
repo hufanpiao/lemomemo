@@ -40,6 +40,22 @@ describe('summarize：请求', () => {
   });
 });
 
+describe('summarize：令牌过期（评审第 7 条，同 platform/fn-send.ts 的 sendFn）', () => {
+  it('第一次 401：换一次令牌再发，用新令牌；第二次成功按成功算', async () => {
+    let n = 0;
+    const d = deps(async () => (n++ === 0 ? new Response('{}', { status: 401 }) : new Response(JSON.stringify({ summary: '好', cited: [], missing: [], quota_left: 3 }), { status: 200 })));
+    const r = await summarize(REQ, sig(), { ...d, refresh: async () => 'jwt2' });
+    expect(d.seen.map((x) => (x.init.headers as Record<string, string>)['authorization'])).toEqual(['Bearer jwt', 'Bearer jwt2']);
+    expect(r).toMatchObject({ ok: true, summary: '好' });
+  });
+
+  it('换来的令牌和原来一样（或换不到）：不再发第二次', async () => {
+    const d = deps(async () => new Response('{}', { status: 401 }));
+    await summarize(REQ, sig(), { ...d, refresh: async () => 'jwt' });
+    expect(d.seen).toHaveLength(1);
+  });
+});
+
 describe('summarize：返回归类', () => {
   it('成功：summary、cited、missing、quotaLeft', async () => {
     const d = deps(reply({ summary: '这周两件事', cited: [ID], missing: [ID2], quota_left: 9 }));
