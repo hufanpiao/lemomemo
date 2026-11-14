@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { sniffFile } from '../../shared/logic/files/file-sniff.ts';
 import { inflateRaw } from '../../shared/logic/files/inflate.ts';
+import { FILE_MAX_BYTES } from '../../shared/logic/files/limits.ts';
 import { noteFilePath, noteFileThumbPath } from '../../shared/logic/files/media-path.ts';
 import { fileCheckReq } from '../../shared/schema/attachments.ts';
 import { type Deps, type FileRow, handle, MISSING_GIVE_UP_MS, RATE_PER_MIN, SWEEP_AFTER_MS } from '../../supabase/functions/file-check/core.ts';
@@ -37,6 +38,7 @@ function world(rowOver: Partial<FileRow> = {}) {
     },
     async takeRate(k, limit) { const n = (rate.get(k) ?? 0) + 1; rate.set(k, n); return n <= limit; },
     cronSecret: 'c'.repeat(40),
+    maxBytes: FILE_MAX_BYTES,
     parse(v) { const p = fileCheckReq.safeParse(v); return p.success ? p.data : null; },
     store: {
       async row(u, id) { const r = rows.get(id); return r && r.user_id === u ? { ...r } : null; },
