@@ -3,7 +3,7 @@
 // 不变量：清本机数据只在 wipeLocal / clearLocalData 做；纯 TS，不准 import React 和任何功能（A1）。详细说明见架构 4.1、4.1a
 import type { BootResult } from './boot.ts';
 import { clearReauth, writeReauth, type ReauthReason } from '../platform/auth-loss-store.ts';
-import { CACHES_TIMEOUT_MS, forgetLook, WIPE_TIMEOUT_MS } from '../platform/exit-basics.ts';
+import { CACHES_TIMEOUT_MS, forgetLook, WIPE_TIMEOUT_MS, withTimeout } from '../platform/exit-basics.ts';
 import type { RefreshFailure } from '../platform/supabase/refresh-failure.ts';
 import { disconnectPushLazy } from '../platform/push-disconnect.ts';
 import { setPushClaimContext } from '../platform/push-claim-run.ts';
@@ -231,18 +231,8 @@ export interface WipeDeps extends Pick<EnsureAccountDeps, 'clearCacheStorage' | 
   cachesMs?: number;
 }
 
-/** 到点或出错都返回 false，按时完成返回 true；原来的操作不取消 */
-function capped(run: () => Promise<unknown>, ms: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const t = setTimeout(() => resolve(false), ms);
-    Promise.resolve()
-      .then(run)
-      .then(
-        () => (clearTimeout(t), resolve(true)),
-        () => (clearTimeout(t), resolve(false)),
-      );
-  });
-}
+/** 到点或出错都返回 false，按时完成返回 true；原来的操作不取消（超时工具只有 exit-basics.ts 的 withTimeout 一份） */
+const done = (run: () => Promise<unknown>, ms: number): Promise<boolean> => withTimeout(async () => (await run(), true), ms, () => false);
 
 /**
  * 清空整库（含 outbox，没上传的丢弃）和内存集合：不设上限、失败就抛。
@@ -267,12 +257,12 @@ export async function wipeLocal(boot: BootResult, deps: WipeDeps): Promise<void>
   const cache = boot.cache;
   try {
     // 超时后清库不取消，关库后它以“库已关”结束，没人等它；本机库靠按库名删清掉
-    const cleared = !cache || cache.isClosed() || (await capped(() => clearLocalData(cache), wipeMs));
+    const cleared = !cache || cache.isClosed() || (await done(() => clearLocalData(cache), wipeMs));
     clearAllCollections();
     await disconnectPush(deps);
     closeCache(boot);   // 原因 'closed'：不触发 versionchange → 重新载入
-    if (!cleared || deps.dropDb) await capped(deps.deleteDb ?? (() => deleteCacheDb({ name: cache?.name, waitMs: wipeMs })), wipeMs);
-    await capped(() => deps.clearCacheStorage(), deps.cachesMs ?? CACHES_TIMEOUT_MS);
+    if (!cleared || deps.dropDb) await done(deps.deleteDb ?? (() => deleteCacheDb({ name: cache?.name, waitMs: wipeMs })), wipeMs);
+    await done(() => deps.clearCacheStorage(), deps.cachesMs ?? CACHES_TIMEOUT_MS);
   } catch {
     clearAllCollections();
   } finally {
