@@ -218,9 +218,9 @@ test('SVG：两份审查探针列出的写法逐条都拦（M4 7 种、F5-3 13 �
   assert.equal(cases.length, 37);
 });
 
-test('不进安装包的：sw.js、preview.html 按名字，.wasm（R-402 的 webp 编码器，exe 用不到）按后缀；开源许可清单（R-410）和别的照常打包', () => {
-  for (const r of ['sw.js', 'sw.js.map', 'preview.html', 'assets/webp_enc_simd-CFvKQ_80.wasm', 'assets/X.WASM']) assert.equal(skipped(r), true, r);
-  for (const r of ['index.html', 'licenses.txt', 'assets/webp_enc_simd-A7QIN4Cf.js', 'assets/sw.js', 'wasm', 'assets/a.wasm.js']) assert.equal(skipped(r), false, r);
+test('不进安装包的：sw.js、preview.html、字体清单按名字，.wasm（R-402 的 webp 编码器，exe 用不到）按后缀，可选字体 fonts/ 按目录（架构 5.9c 不内置）；开源许可清单（R-410）和别的照常打包', () => {
+  for (const r of ['sw.js', 'sw.js.map', 'preview.html', 'assets/webp_enc_simd-CFvKQ_80.wasm', 'assets/X.WASM', 'fonts-index.json', 'fonts', 'fonts/thin/zh-1-0.0123456789.woff2', 'fonts/thin/fonts.0123456789.css']) assert.equal(skipped(r), true, r);
+  for (const r of ['index.html', 'licenses.txt', 'assets/webp_enc_simd-A7QIN4Cf.js', 'assets/sw.js', 'wasm', 'assets/a.wasm.js', 'fontsx/a.css', 'assets/manrope-a1b2.woff2']) assert.equal(skipped(r), false, r);
 });
 
 test('SVG：原因写得出是哪一种（便于定位）', () => {

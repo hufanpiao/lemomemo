@@ -2,8 +2,9 @@
 // document.fonts 用中文、韩文样例各确认一次后 <html data-font> 才换、正文字体栈换成这一种（韩文面也套上）；没有 CSP 报错（csp-fixture 判）；
 // 重新打开按本机缓存直接套上（上次确认过的不再报“下载中”、不闪，后台静默核对；皮肤字体整块评审 11-14 第 5 条）；
 // 分片下不来 → 回系统字体、提示“没下载成功，先用系统字体”，重试成功。
-// 仓库里还没有可选字体的源文件（要负责人同意下载），清单是空的；这里用皮肤视觉稿的霞鹜文楷子集（912 字）在测试目录里现跑 build/fonts.py，
-// 把 /app/fonts-index.json 和 /app/fonts/kai/* 换成它的产物（不用 SW，请求才走得到 page.route）。没装 fontTools 的机器跳过
+// 前两条测加载流程（失败、重试要能断网）：用皮肤视觉稿的霞鹜文楷子集（912 字）在测试目录里现跑 build/fonts.py，
+// 把 /app/fonts-index.json 和 /app/fonts/kai/* 换成它的产物（不用 SW，请求才走得到 page.route）。没装 fontTools 的机器跳过。
+// 后面几条测仓库里真登记的细线黑、悠哉体、文楷（11-14 放进来），不换路由
 import { execFileSync, spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -27,7 +28,7 @@ function buildFixture(dir: string): string {
   const reg = {
     id: 'kai', label: { zh: '文楷', ko: '손글씨' }, num: 'zh',
     faces: { zh: [{ file: REG, weight: '100 900' }], ko: [{ file: REG, weight: '100 900' }] },
-    license: { spdx: 'OFL-1.1', file: 'LXGWWenKai-OFL.txt', sourceUrl: 'https://github.com/lxgw/LxgwWenKai', version: 'design-subset', sha256: { [REG]: sha } },
+    licenses: [{ name: '霞鹜文楷', spdx: 'OFL-1.1', file: 'LXGWWenKai-OFL.txt', sourceUrl: 'https://github.com/lxgw/LxgwWenKai', version: 'design-subset', sha256: { [REG]: sha } }],
   };
   execFileSync('python', ['-I', '-c', `import json,sys;json.dump(json.loads(sys.argv[1]),open(sys.argv[2],'w',encoding='utf-8'),ensure_ascii=False)`, JSON.stringify(reg), join(d, 'font.json')]);
   execFileSync('python', ['-I', join(ROOT, 'build', 'fonts.py'), '--root', dir]);
@@ -91,4 +92,54 @@ test.describe('字体', () => {
     await page.getByRole('button', { name: '重试' }).click();
     await expect.poll(() => html(page, 'data-font'), { timeout: 20000 }).toBe('kai');
   });
+});
+
+// 仓库里登记的真字体（B6 字体 11-14：细线黑 = 未来荧黑 SC + Pretendard，build/fonts.py 切好提交在 src/public/fonts/thin/），不换路由、直接走 wrangler 发的产物：
+// 选中后中文面、韩文面都确认加载；预取只下 Light、Medium（ExtraLight 登记了 prefetch: false，只有日期大标题用）；
+// 今天页日期大标题落到 200（视觉稿 .fthin .date）；中文界面里的谚文也用这一套的韩文面（--f-zh 第二个是 lemo-thin-ko）；
+// 选字体之前（系统字体）一个字体文件都没下
+test.describe('仓库里的真字体（细线黑、悠哉体、文楷）', () => {
+  test.use({ loggedIn: true, serviceWorkers: 'block', viewport: { width: 390, height: 844 }, locale: 'zh-CN', timezoneId: 'Asia/Seoul' });
+
+  test('选细线黑：中韩两面确认后换上，预取不含 ExtraLight，日期大标题 200，中文界面的谚文走 Pretendard', async ({ page }) => {
+    const fontReq: string[] = [];
+    page.on('request', (r) => {
+      const p = new URL(r.url()).pathname;
+      if (p.startsWith('/app/fonts/')) fontReq.push(p);
+    });
+    await page.goto('/app/#/settings/font');
+    await expect(page.getByTestId('settings-font-thin')).toBeAttached({ timeout: 30000 });
+    expect(fontReq).toEqual([]);
+    await page.locator('label', { has: page.getByTestId('settings-font-thin') }).click();
+    await expect.poll(() => html(page, 'data-font'), { timeout: 30000 }).toBe('thin');
+    expect(await page.evaluate(() => document.fonts.check('300 16px "lemo-thin-zh"', '永'))).toBe(true);
+    expect(await page.evaluate(() => document.fonts.check('300 16px "lemo-thin-ko"', '한글'))).toBe(true);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--f-zh').trim())).toMatch(/^"lemo-thin-zh", ?"lemo-thin-ko"/);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--f-num').trim())).toMatch(/^"lemo-thin-ko"/);
+    const idx = (await (await page.request.get('/app/fonts-index.json')).json()) as { fonts: Array<{ id: string; prefetch: Array<{ url: string }> }> };
+    const pre = idx.fonts.find((f) => f.id === 'thin')?.prefetch.map((p) => p.url.split('/').pop() ?? '') ?? [];
+    expect(pre.length).toBeGreaterThan(0);
+    // 文件名是 面-字重序号-片号：字重序号 0 是 ExtraLight，不预取
+    expect(pre.filter((n) => /^(zh|ko)-0-/.test(n))).toEqual([]);
+    await page.goto('/app/#/');
+    await expect.poll(() => html(page, 'data-font'), { timeout: 20000 }).toBe('thin');
+    const date = page.locator('h1', { hasText: /\d+月\d+日/ });
+    await expect(date).toBeVisible({ timeout: 20000 });
+    expect(await date.evaluate((el) => getComputedStyle(el).fontWeight)).toBe('200');
+  });
+
+  // 悠哉体（悠哉字体 + Hi Melody）、文楷（霞鹜文楷 + Gowun Batang）：11-14 接进来，同一条流程
+  for (const [id, label] of [['hand', '悠哉体'], ['kai', '文楷']] as const) {
+    test(`选${label}：中韩两面确认后换上，字体栈前两个是这一套的中文、韩文面`, async ({ page }) => {
+      await page.goto('/app/#/settings/font');
+      await expect(page.getByTestId(`settings-font-${id}`)).toBeAttached({ timeout: 30000 });
+      await page.locator('label', { has: page.getByTestId(`settings-font-${id}`) }).click();
+      await expect.poll(() => html(page, 'data-font'), { timeout: 30000 }).toBe(id);
+      expect(await page.evaluate((f) => document.fonts.check(`400 16px "lemo-${f}-zh"`, '永'), id)).toBe(true);
+      expect(await page.evaluate((f) => document.fonts.check(`400 16px "lemo-${f}-ko"`, '한글'), id)).toBe(true);
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--f-zh').trim())).toMatch(new RegExp(`^"lemo-${id}-zh", ?"lemo-${id}-ko"`));
+      await page.getByTestId('settings-font-back').click();
+      await expect(page.getByTestId('settings-font-summary')).toHaveText(label);
+    });
+  }
 });

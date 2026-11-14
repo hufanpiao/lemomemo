@@ -46,6 +46,9 @@ describe('routeOf', () => {
     expect(r('/app/', 'GET', 'navigate')).toBe('navigation');
     expect(r('/app/holidays/kr/2026.json')).toBe('holidays');
     expect(r('/app/fonts/a.woff2')).toBe('fonts');
+    // 可选字体清单：运行时先联网（不进预缓存，系统字体的人不下载）
+    expect(r('/app/fonts-index.json')).toBe('font-index');
+    expect(r('/app/fonts-index.json.bak')).toBe('precache-or-network');
     expect(r('/app/assets/index-abc.js')).toBe('precache-or-network');
   });
 });
@@ -69,8 +72,8 @@ describe('技术页（机型信息页；倾斜授权试验页 R-373 已删除）
 });
 
 describe('excludedFromPrecache', () => {
-  it('sw.js、节假日、字体、iOS 启动图、source map、version.json、开源许可清单（R-410）不进预缓存', () => {
-    for (const p of ['sw.js', 'holidays/cn/2026.json', 'fonts/a.woff2', 'icons/startup/startup-1170x2532.png', 'assets/a.js.map', 'version.json', 'licenses.txt', '.vite/manifest.json']) {
+  it('sw.js、节假日、字体和字体清单、iOS 启动图、source map、version.json、开源许可清单（R-410）不进预缓存', () => {
+    for (const p of ['sw.js', 'holidays/cn/2026.json', 'fonts/a.woff2', 'fonts-index.json', 'icons/startup/startup-1170x2532.png', 'assets/a.js.map', 'version.json', 'licenses.txt', '.vite/manifest.json']) {
       expect(excludedFromPrecache(p), p).toBe(true);
     }
     for (const p of ['index.html', 'licenses/licenses.txt', 'assets/index-abc.js', 'assets/index-abc.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png']) {

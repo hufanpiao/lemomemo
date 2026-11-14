@@ -107,9 +107,9 @@ describe('sw.ts：导出请求不进任何缓存', () => {
     return ev;
   }
 
-  it('运行时缓存只有三个公共的，装好后有导航、节假日、字体三条路由', () => {
-    expect([...reg.strategies].sort()).toEqual(['lemo-fonts', 'lemo-holidays', 'lemo-nav']);
-    expect(reg.matchers).toHaveLength(2);
+  it('运行时缓存只有四个公共的，装好后有导航、节假日、字体、字体清单四条路由（字体清单 11-14 起不进预缓存）', () => {
+    expect([...reg.strategies].sort()).toEqual(['lemo-font-index', 'lemo-fonts', 'lemo-holidays', 'lemo-nav']);
+    expect(reg.matchers).toHaveLength(3);
     expect(reg.navs).toHaveLength(1);
   });
 

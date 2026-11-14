@@ -1,0 +1,67 @@
+{
+ "id": "hand",
+ "label": {
+  "zh": "悠哉体",
+  "ko": "유자이체"
+ },
+ "num": "zh",
+ "order": 2,
+ "faces": {
+  "zh": [
+   {
+    "file": "Yozai-Regular.ttf",
+    "weight": "100 499"
+   },
+   {
+    "file": "Yozai-Medium.ttf",
+    "weight": "500 900"
+   }
+  ],
+  "ko": [
+   {
+    "file": "Himelody.ttf",
+    "weight": "100 900"
+   }
+  ]
+ },
+ "licenses": [
+  {
+   "name": "悠哉字体（Yozai）",
+   "spdx": "OFL-1.1",
+   "file": "Yozai-OFL.txt",
+   "sourceUrl": "https://github.com/lxgw/yozai-font/releases/tag/v0.868",
+   "version": "v0.868",
+   "urls": {
+    "Yozai-Regular.ttf": "https://github.com/lxgw/yozai-font/releases/download/v0.868/Yozai-Regular.ttf",
+    "Yozai-Medium.ttf": "https://github.com/lxgw/yozai-font/releases/download/v0.868/Yozai-Medium.ttf",
+    "Yozai-OFL.txt": "https://raw.githubusercontent.com/lxgw/yozai-font/v0.868/OFL.txt"
+   },
+   "sha256": {
+    "Yozai-Regular.ttf": "25071998a0fe6a72f54c235e714986d259633e5ff670b1a2b5e264387f3316ac",
+    "Yozai-Medium.ttf": "05f50f252b45197d0d6148a4abc3e37c7cd4cfdf03c955b57c25d53d924f835f"
+   },
+   "reservedNames": [
+    "Y.Oz",
+    "YOz"
+   ]
+  },
+  {
+   "name": "Hi Melody（하이멜로디）",
+   "spdx": "OFL-1.1",
+   "file": "HiMelody-OFL.txt",
+   "sourceUrl": "https://raw.githubusercontent.com/yoondesign/Yoonfont-HiMelody/4feb2315457c615527775b455d119e9f3b8c8863/Himelody.ttf",
+   "version": "commit 4feb2315457c615527775b455d119e9f3b8c8863（官方仓库没有 Releases，主持人 11-14 准取原作者仓库主分支、固定到这个 commit）",
+   "urls": {
+    "Himelody.ttf": "https://raw.githubusercontent.com/yoondesign/Yoonfont-HiMelody/4feb2315457c615527775b455d119e9f3b8c8863/Himelody.ttf",
+    "HiMelody-OFL.txt": "https://raw.githubusercontent.com/yoondesign/Yoonfont-HiMelody/4feb2315457c615527775b455d119e9f3b8c8863/OFL_Yoondesign%20HiMelody.txt"
+   },
+   "sha256": {
+    "Himelody.ttf": "1f87466b076ab3dd1a6f970db5f405647a47d923480b029e9f44a0033a362ac0"
+   },
+   "reservedNames": [
+    "HiMelody",
+    "Hi Melody"
+   ]
+  }
+ ]
+}

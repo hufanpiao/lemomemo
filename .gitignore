@@ -90,3 +90,10 @@ docs/**/真机录屏-*/
 docs/**/*视觉稿真机*.png
 # 评测结果（tests/ai/run.ts）：每句有模型原文和句库原文，仓库公开，不提交；以工作流产物存档（BE-1 安全审建议 6，11-10）
 tests/ai/reports/
+# 可选字体的源文件（架构 5.9c，B6 字体 11-14 主持人定）：太大不进仓库，放本机 柠檬记APP-本机资料\字体源\<id>\，
+# build/fonts.py --src 指过去切片；仓库里只留 font.json（地址、版本、sha256）和许可证原文，切好的分片 src/public/fonts/ 照旧提交
+assets-src/fonts/**/*.ttf
+assets-src/fonts/**/*.otf
+assets-src/fonts/**/*.woff2
+assets-src/fonts/**/*.woff
+assets-src/fonts/**/*.zip

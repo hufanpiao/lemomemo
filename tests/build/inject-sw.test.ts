@@ -18,6 +18,7 @@ const SAMPLES = [
   'assets/index-AbC12_9x.css',
   'holidays/kr/2026.json',
   'fonts/lemo-sub.woff2',
+  'fonts-index.json',
   'icons/startup/startup-1170x2532.png',
   'icons/icon-192.png',
   '.vite/manifest.json',

@@ -58,8 +58,14 @@ export const ENVS = {
   },
 };
 
-/** 不进安装包的文件（相对 app/）。开源许可清单 licenses.txt（R-410）照常进包：exe 里也带着那些 JS 依赖 */
-export const SKIP = new Set(['sw.js', 'sw.js.map', 'preview.html']);
+/**
+ * 不进安装包的文件（相对 app/）。开源许可清单 licenses.txt（R-410）照常进包：exe 里也带着那些 JS 依赖。
+ * 可选字体的清单 fonts-index.json 和 fonts/ 整个目录不进包（架构 5.9c“exe 同样按需下载，不内置”：细线黑一种就有几十 MB 分片，
+ * 内置等于每个人每次更新都多下载）。exe 自己的字体加载（fetch 线上分片 + FontFace）还没做，exe 里读不到清单就只有系统字体（platform/fonts.ts）
+ */
+export const SKIP = new Set(['sw.js', 'sw.js.map', 'preview.html', 'fonts-index.json']);
+/** 不进安装包的目录（相对 app/，连同里面的全部文件） */
+export const SKIP_DIR = ['fonts'];
 
 /**
  * 不进安装包的后缀：.wasm 是 R-402 给 iPhone Safari 补的 webp 编码器（canvas 导出不了 webp 时才按需加载）。
@@ -70,7 +76,7 @@ export const SKIP_EXT = new Set(['.wasm']);
 
 /** 这个文件（相对 app/，分隔符用 /）不进安装包 */
 export function skipped(r) {
-  return SKIP.has(r) || SKIP_EXT.has(extOf(r));
+  return SKIP.has(r) || SKIP_EXT.has(extOf(r)) || SKIP_DIR.some((d) => r === d || r.startsWith(`${d}/`));
 }
 
 /**

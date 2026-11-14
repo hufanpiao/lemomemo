@@ -1,7 +1,8 @@
 // SW 不存用户数据（接手清单 K-sw-seal；架构 4.1、8.1“SW 缓存策略”）
 // 退出时的封存（core/account.ts 的 sealForExit）只管得到本页的库连接，管不到 SW；靠下面几条钉住：
-// ① SW 只有三个运行时缓存：lemo-nav（/app/ 的页面导航，Pages 的静态 HTML，_routes.json 只把 /、/sb/*、/files/* 交给 Functions）、
-//    lemo-holidays（公共节假日 JSON）、lemo-fonts（公共字体分片）；三个都不以预缓存前缀开头，退出、换账号、被移除时 clearCacheStorage 照样删
+// ① SW 只有四个运行时缓存：lemo-nav（/app/ 的页面导航，Pages 的静态 HTML，_routes.json 只把 /、/sb/*、/files/* 交给 Functions）、
+//    lemo-holidays（公共节假日 JSON）、lemo-fonts（公共字体分片）、lemo-font-index（公共的可选字体清单，11-14 起不进预缓存）；
+//    都不以预缓存前缀开头，退出、换账号、被移除时 clearCacheStorage 照样删
 // ② /sb/*、/files/*、非 GET、别的源一律直连，进不了这三个缓存（routes.ts）
 // ③ SW 不自己发请求、不往缓存里手写、不拿令牌（不读 localStorage、不带 Authorization）；不引会用 IndexedDB 的 Workbox 模块
 //    （workbox-expiration、workbox-background-sync 会把请求体存进 IndexedDB）
@@ -26,7 +27,7 @@ import { PRECACHE_PREFIX } from '../../src/platform/session.ts';
 import { routeOf } from '../../src/sw/routes.ts';
 
 const SW_DIR = join(import.meta.dirname, '../../src/sw');
-const RUNTIME_CACHES = ['lemo-fonts', 'lemo-holidays', 'lemo-nav'];
+const RUNTIME_CACHES = ['lemo-font-index', 'lemo-fonts', 'lemo-holidays', 'lemo-nav'];
 const ALLOWED_IMPORTS = [
   '../../shared/i18n/i18n.ts',
   '../../shared/i18n/pick-locale.ts',
@@ -102,7 +103,7 @@ function swSources(): Array<{ name: string; code: string }> {
 }
 
 describe('SW 不存用户数据（K-sw-seal）', () => {
-  it('运行时缓存只有 lemo-nav、lemo-holidays、lemo-fonts，且都不是预缓存（退出时会被 clearCacheStorage 删掉）', () => {
+  it('运行时缓存只有 lemo-nav、lemo-holidays、lemo-fonts、lemo-font-index，且都不是预缓存（退出时会被 clearCacheStorage 删掉）', () => {
     const names = swSources()
       .flatMap((f) => [...f.code.matchAll(/cacheName\s*:\s*['"`]([^'"`]+)['"`]/g)].map((m) => m[1] ?? ''))
       .sort();
