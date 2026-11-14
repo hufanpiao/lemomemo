@@ -29,6 +29,7 @@
 //   也不退回 localStorage（F5-2：exe 的会话不落 WebView2 的 localStorage）
 import type * as Desktop from './desktop.ts';
 import { isTauri } from './env.ts';
+import { withTimeout } from './exit-basics.ts';
 import { removalAllowed } from './supabase/auth-storage.ts';
 
 /** desktop.ts 的 DesktopSessionStorage 里本文件用到的部分（不 import desktop.ts 的类型，免得网页版的依赖图里出现它） */
@@ -283,12 +284,7 @@ export function authBackendStorage(inTauri: () => boolean = () => isTauri()): Se
 /** 等已经发出的删除都回来（最多 ms）：exe 里重新载入页面之前用，免得删除还没到 Rust 页面就没了。不抛错 */
 export async function sessionRemovalsSettled(ms = 3000): Promise<void> {
   if (pending.size === 0) return;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const t = new Promise<void>((resolve) => {
-    timer = setTimeout(resolve, ms);
-  });
-  await Promise.race([Promise.allSettled([...pending]).then(() => undefined), t]);
-  clearTimeout(timer);
+  await withTimeout<unknown>(() => Promise.allSettled([...pending]), ms, () => undefined);
 }
 
 /** installDesktopSession 在 exe 里没装上的原因（只是错误码，不含令牌；代码审查建议 4）：main 入口据此提示“重新打开” */

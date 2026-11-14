@@ -37,20 +37,14 @@ export function forgetAccountLocal(logsOf: string | null | false): void {
  * 原来的请求不取消：它在超时以后才回来时调一次 onLate
  */
 export function withTimeout<T>(run: () => Promise<T>, ms: number, fallback: () => T, onLate?: () => void): Promise<T> {
-  let timedOut = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const req = Promise.resolve().then(run);
-  const late = (): void => {
-    if (timedOut) onLate?.();
-  };
-  req.then(late, late);
-  const timeout = new Promise<T>((resolve) => {
-    timer = setTimeout(() => {
-      timedOut = true;
+  return new Promise<T>((resolve) => {
+    const req = Promise.resolve().then(run);
+    const timer = setTimeout(() => {
+      if (onLate) req.then(onLate, onLate);
       resolve(fallback());
     }, ms);
+    req.then(resolve, () => resolve(fallback())).finally(() => clearTimeout(timer));
   });
-  return Promise.race([req.catch(() => fallback()), timeout]).finally(() => clearTimeout(timer));
 }
 
 export type DeleteDbResult = 'deleted' | 'blocked' | 'error' | 'unavailable';
@@ -62,21 +56,15 @@ export function deleteLocalDb(
   waitMs: number = DELETE_WAIT_MS,
 ): Promise<DeleteDbResult> {
   if (!factory) return Promise.resolve('unavailable');
-  return new Promise((resolve) => {
-    let done = false;
-    const finish = (r: DeleteDbResult): void => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      resolve(r);
-    };
-    const timer = setTimeout(() => finish('blocked'), waitMs);
-    try {
-      const req = factory.deleteDatabase(name);
-      req.onsuccess = () => finish('deleted');
-      req.onerror = () => finish('error');
-    } catch {
-      finish('error');
-    }
-  });
+  const run = (): Promise<DeleteDbResult> =>
+    new Promise((resolve) => {
+      try {
+        const req = factory.deleteDatabase(name);
+        req.onsuccess = () => resolve('deleted');
+        req.onerror = () => resolve('error');
+      } catch {
+        resolve('error');
+      }
+    });
+  return withTimeout(run, waitMs, () => 'blocked');
 }
