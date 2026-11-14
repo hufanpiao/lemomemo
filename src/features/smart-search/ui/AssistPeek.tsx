@@ -14,7 +14,7 @@ export interface AssistPeekProps {
   /** 刚保存的这一批的 id */
   exclude: readonly string[];
   /** 撤销刚保存的这一批（取消、改期、完成确认以后调） */
-  undoSaved(): Promise<void>;
+  undoSaved(): Promise<unknown>;
 }
 
 export default function AssistPeek({ ask, exclude, undoSaved }: AssistPeekProps) {

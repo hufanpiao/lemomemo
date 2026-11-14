@@ -5,25 +5,23 @@
 // • 顶上一行“现在只按关键词找 · 原因”（没网、没同意、次数用完、超时 + 再试一次），四种分开写（架构 5.13 第 6 点末条）
 // • 打开一条：日程、待办、纪念日进各自的编辑页；随手记、图片、文档进所在随手记；同时记进“最近找过”。不保存、不改任何数据
 // • 焦点锁定、Esc 关闭、读屏标注用 Radix Dialog（不用 Overlay：CSP 拦它的内联 style，见 kit Dialog.tsx 文件头），滚动锁用 kit 的 useScrollLock
-// • B4b-3：每行右边“⋯”（ui/RowMenu.tsx，完成 / 推迟 / 删除后出“撤销”）；“最相关”里的图片横排缩略图（随手记的 NoteThumb）；
+// • B4b-3：每行右边“⋯”（ui/RowMenu.tsx，完成 / 推迟 / 删除后出“撤销”）；“最相关”里的图片横排缩略图（随手记的 TodayNotes part="thumb"）；
 //   有结果时底部也给“最近找过”；隐私记设过密码时出一行“隐私记锁着，里面的不在结果里”（vault 的 findrow）；
 //   “＋”判成内容类查找打开的（assist）：排除刚保存的这一批，页脚多“改成记下”“总结一下”（总结换成结果层 AssistPanel）
 // • 运行日志：find open / close（只记从哪打开、开了多久），find act（菜单写了什么、成没成），查询中的日志在 useFind
 import * as RD from '@radix-ui/react-dialog';
 import { Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { navigate } from '../../../app/router.ts';
 import { navigateSub } from '../../../app/router-sub.ts';
-import { currentTz } from '../../../core/current-tz.ts';
 import { useScrollLock } from '../../../kit/components/Dialog.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
-import { NoteThumb } from '../../notes/index.ts';
+import { TodayNotes } from '../../notes/index.ts';
 import { VaultParts } from '../../vault/index.ts';
 import { openAssist, type AssistReq, type FindFrom } from '../hooks/find-open.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { FIND_KINDS, rowAct, SEARCH_Q_MAX, undoTarget, useFind, type Applied, type FindHit, type FindKind, type RowAct, type TimeFilter } from '../hooks/useFind.ts';
+import { actRow, FIND_KINDS, SEARCH_Q_MAX, undoTarget, useFind, type Applied, type FindHit, type FindKind, type RowAct, type TimeFilter } from '../hooks/useFind.ts';
 import { RowMenu } from './RowMenu.tsx';
 import styles from './FindPanel.module.css';
 import { Lead, Marked, metaOf, openItem, Preview, useFindT } from './find-parts.tsx';
@@ -58,7 +56,7 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
   const act = (h: FindHit, a: RowAct): void => {
     const it = h.item;
     if (it.kind === 'image' || it.kind === 'file') return;
-    void rowAct(a, it.kind, it.id, { date: it.date, time: it.time }, clock.now(), currentTz()).then((r) => {
+    void actRow(a, it.kind, it.id, { date: it.date, time: it.time }).then((r) => {
       rlog(`find act ${a} kind=${it.kind} ok=${r.ok}`);
       setDone((d) => ({ act: a, a: r, n: (d?.n ?? 0) + 1 }));
     });
@@ -190,7 +188,7 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
         {pics.map((h) => (
           <button key={h.item.id} type="button" className={styles.thumb} onClick={() => go(h)} data-testid="find-thumb">
             <span className={styles.thumbBox}>
-              <Suspense fallback={null}><NoteThumb noteId={h.item.noteId ?? ''} imageId={h.item.id} /></Suspense>
+              <Suspense fallback={null}><TodayNotes part="thumb" noteId={h.item.noteId ?? ''} imageId={h.item.id} /></Suspense>
             </span>
             <span className={styles.thumbT}>{h.item.extra || h.item.title}</span>
           </button>
@@ -230,7 +228,7 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
       </div>
     </>
   ) : null;
-  const vaultRow = <Suspense fallback={null}><VaultParts part="findrow" /></Suspense>;
+  const vaultRow = <Suspense fallback={null}><VaultParts part="findrow" onGo={close} /></Suspense>;
   const results = q === '' ? (
     <>
       <p className={styles.start}>{t('find.start', {})}</p>

@@ -16,7 +16,7 @@ import { cutAiText, isObj, outcomeOf } from './ai-outcome.ts';
 import type { CallVoice } from './ai-voice-api.ts';
 import { uploadTimeoutMs } from './record-logic.ts';
 import { withTimeoutRetry, type SendFail } from './send-error.ts';
-import { aiAskWins, localHint, navOnline, planLocal, recordAlt, type AiReqCtx, type TypeCtx, type TypePlan } from './type-flow.ts';
+import { intentAsk, localHint, navOnline, planLocal, recordAlt, type AiReqCtx, type TypeCtx, type TypePlan } from './type-flow.ts';
 
 /** 要上传的一段录音：mime 不带参数（audio/mp4），直接当 Content-Type */
 export interface VoiceClip {
@@ -133,10 +133,10 @@ export function voiceFinal(res: VoiceResult, ctx: TypeCtx, online: boolean): Voi
     case 'record':
     case 'intent': {
       const { hint, sure } = localHint(res.transcript, ctx);
+      const won = intentAsk(hint, sure, res.kind === 'intent' ? res : null);
+      if (won) return { do: 'ask', ask: won.ask, raw: res.transcript, quotaLeft: res.quotaLeft };
       const l = planLocal(res.transcript, ctx).result;
-      if (sure && hint) return { do: 'ask', ask: hint, raw: res.transcript, quotaLeft: res.quotaLeft };
       if (res.kind === 'intent') {
-        if (aiAskWins(hint, res.confidence)) return { do: 'ask', ask: res.ask, raw: res.transcript, quotaLeft: res.quotaLeft };
         // 本机看不出迹象或 AI 没把握：先按记下存（D-15，原话不丢），提示条给“改成搜索”和 AI 找到的
         const plan: TypePlan = { status: 'saved', origin: 'rule', items: l.items, hints: l.hints, quotaLeft: res.quotaLeft, aiReason: `intent_${res.ask.intent}`, ask: null, alt: { ask: res.ask, found: true } };
         return { do: 'save', raw: res.transcript, plan };
@@ -147,7 +147,8 @@ export function voiceFinal(res: VoiceResult, ctx: TypeCtx, online: boolean): Voi
     case 'rule': {
       // 和上面同一条规矩：本机就有把握的查找、总结直接交结果层（AI 返回读不懂不影响本机的判断）
       const { hint, sure } = localHint(res.transcript, ctx);
-      if (sure && hint) return { do: 'ask', ask: hint, raw: res.transcript, quotaLeft: null };
+      const won = intentAsk(hint, sure, null);
+      if (won) return { do: 'ask', ask: won.ask, raw: res.transcript, quotaLeft: null };
       const l = planLocal(res.transcript, ctx).result;
       const alt = hint ? { ask: hint, found: true } : null;
       return { do: 'save', raw: res.transcript, plan: { status: 'saved_rule', origin: 'rule', items: l.items, hints: l.hints, quotaLeft: null, aiReason: res.reason, ask: null, alt } };

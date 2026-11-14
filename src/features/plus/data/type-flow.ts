@@ -154,6 +154,16 @@ export function localHint(text: string, ctx: Pick<TypeCtx, 'now' | 'tz'>): { hin
 /** AI 判成别的意图时算不算数：本机也看出了迹象（hint）且 AI 有把握（≥ 0.6）；本机一点迹象都没有就照记下存（D-15） */
 export const aiAskWins = (hint: AssistAsk | null, confidence: number): boolean => hint !== null && confidence >= INTENT_SURE_MIN;
 
+/**
+ * 打字、录音共用的意图判定（D-15，一处定规则）：本机有把握 → 交结果层（不花 AI）；AI 判成别的意图且 aiAskWins → 交结果层（花了 1 次）；
+ * 其余返回 null：按记下存，alt 交给调用方（AI 判成别的意图但不算数时是 AI 的判断 found，否则 recordAlt）
+ */
+export function intentAsk(hint: AssistAsk | null, sure: boolean, ai: { ask: AssistAsk; confidence: number } | null): { ask: AssistAsk; aiUsed: 0 | 1 } | null {
+  if (sure && hint) return { ask: hint, aiUsed: 0 };
+  if (ai && aiAskWins(hint, ai.confidence)) return { ask: ai.ask, aiUsed: 1 };
+  return null;
+}
+
 /** AI 判成记下时提示条的“改成搜索”：本机有迹象才给；AI 也没把握时下面再给查找结果 */
 export const recordAlt = (hint: AssistAsk | null, confidence: number): TypePlan['alt'] => (hint ? { ask: hint, found: confidence < INTENT_SURE_MIN } : null);
 
@@ -171,7 +181,8 @@ export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: 
   const local = (status: TypeStatus, aiReason: string | null = null, quotaLeft: number | null = null, alt = hintAlt): TypePlan => ({
     status, origin: 'rule', items: result.items, hints: result.hints, quotaLeft, aiReason, ask: null, alt,
   });
-  if (hintSure && hint) return { ...local('saved'), items: [], alt: null, ask: { ask: hint, aiUsed: 0 } };
+  const pre = intentAsk(hint, hintSure, null);
+  if (pre) return { ...local('saved'), items: [], alt: null, ask: pre };
   if (sure && !hint) return local('saved');
   if (!env.online) return local('offline_saved');
   if (env.quotaOut) return local('quota_out');
@@ -188,9 +199,11 @@ export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: 
       const hints: ParseHints = { recur: recurHint(text), arrange: arrangeHint(text), bad_day: null };
       return { status: 'saved', origin: 'ai', items: fillDay(out.items, ctx.day), hints, quotaLeft: out.quotaLeft, aiReason: null, ask: null, alt: recordAlt(hint, out.confidence) };
     }
-    case 'intent':
-      if (aiAskWins(hint, out.confidence)) return { ...local('saved', null, out.quotaLeft), items: [], alt: null, ask: { ask: out.ask, aiUsed: 1 } };
+    case 'intent': {
+      const won = intentAsk(hint, false, out);
+      if (won) return { ...local('saved', null, out.quotaLeft), items: [], alt: null, ask: won };
       return local('saved', `intent_${out.ask.intent}`, out.quotaLeft, { ask: out.ask, found: true });
+    }
     case 'quota_out':
       return local('quota_out', null, 0);
     case 'consent_required':

@@ -16,16 +16,17 @@ import { UnlockOverlay, UnlockPanel } from './Unlock.tsx';
 import { VaultSettings } from './VaultSettings.tsx';
 import styles from './Vault.module.css';
 
-export type VaultPartsProps = { part: 'lockrow' } | { part: 'findrow' } | { part: 'move'; noteId: string; onDone(moved: boolean): void } | { part: 'settings' };
+export type VaultPartsProps = { part: 'lockrow' } | { part: 'findrow'; onGo?(): void } | { part: 'move'; noteId: string; onDone(moved: boolean): void } | { part: 'settings' };
 
 export default function VaultParts(p: VaultPartsProps) {
   if (p.part === 'lockrow') return <LockRow />;
-  if (p.part === 'findrow') return <FindRow />;
+  if (p.part === 'findrow') return <FindRow onGo={p.onGo} />;
   if (p.part === 'move') return <MoveToVault noteId={p.noteId} onDone={p.onDone} />;
   return <VaultSettings />;
 }
 
-function FindRow() {
+/** onGo：跳去隐私记前先关掉查找面板（面板是模态框，不关会盖在隐私记页上） */
+function FindRow({ onGo }: { onGo?: (() => void) | undefined }) {
   const t = useVaultT();
   const { state, s } = useVault();
   useEffect(() => {
@@ -33,7 +34,10 @@ function FindRow() {
   }, [s, state.status, state.phase]);
   if (state.status?.set !== true) return null;
   return (
-    <button type="button" className={`${styles.lockrow} ${styles.findrow}`} onClick={() => void navigate('vault')} data-testid="vault-findrow">
+    <button type="button" className={`${styles.lockrow} ${styles.findrow}`} onClick={() => {
+      onGo?.();
+      void navigate('vault');
+    }} data-testid="vault-findrow">
       <LockIcon />
       <span className={styles.lockrowSub}>{t(state.phase === 'unlocked' ? 'vault.findrow.open' : 'vault.findrow.locked', {})}</span>
       <span className={styles.lockrowGo}>{`${t('vault.findrow.go', {})} ›`}</span>

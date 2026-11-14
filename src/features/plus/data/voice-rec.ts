@@ -35,7 +35,7 @@ export function createRecRoute(c: VoiceCore) {
       void rememberQuotaLeft(0, now);
     }
     const f = voiceFinal(res, c.d().ctx(), c.d().online());
-    if (f.do === 'save') return c.savePlan(a, f.plan, f.raw);
+    if (f.do === 'save') return void (await c.savePlan(a, f.plan, f.raw));
     if (f.do === 'ask') return c.askOut(a, f.ask, f.raw, 1);
     c.end(a);
     if (f.do === 'idle') return c.toIdle();

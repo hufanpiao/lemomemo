@@ -25,7 +25,8 @@ import { rlog } from '../../../platform/run-log-api.ts';
 import { speechSupported } from '../../../platform/speech.ts';
 import { callAiParse } from './ai-parse-api.ts';
 import { callAiVoice, type CallVoice } from './ai-voice-api.ts';
-import type { Writer } from './capture-save.ts';
+import type { SaveOutcome, Writer } from './capture-save.ts';
+import type { DateStr } from '../../../../shared/core/date.ts';
 import { isFinal, viewStep, type CaptureView, type ViewEvent } from './capture-state.ts';
 import { markPlusHeld } from './plus-hint.ts';
 import { quotaOutToday } from './quota.ts';
@@ -61,7 +62,8 @@ export interface VoiceIo {
   online?: (() => boolean) | undefined;
   writer?: Writer | undefined;
   /** 判成查找、总结、取消、改期、完成（B4b-3）：不保存，交给结果层（hooks/useVoice 给，打开 smart-search 的结果层）；raw 是转写 */
-  onAsk?: ((ask: AssistAsk, raw: string, aiUsed: 0 | 1) => void) | undefined;
+  /** from：这一次从哪来（'voice' 按住说话，'quick' exe 快速记录框，见 record） */
+  onAsk?: ((ask: AssistAsk, raw: string, aiUsed: 0 | 1, from: string) => void) | undefined;
 }
 
 /** 界面每次渲染给最新的一份（useCaptureCtx 给的：这一刻的上下文、能不能用 AI、界面语言，手机自带识别按它听）；卸载后留着最后一份 */
@@ -83,6 +85,8 @@ export interface Attempt {
   committed: boolean;
   /** 为什么作废的（drop 的 by）：没作废是 null。录音器晚到时看它（R-417：等 iOS 系统框时松手 too_early） */
   droppedBy: string | null;
+  /** 从哪来：按住说话是 'voice'；record 交来的是它的 from（判成别的意图时交给 onAsk） */
+  from: string;
 }
 
 /** 两条路共用的内核（createCore 给）；控制器本身（createVoiceSession 给） */
@@ -163,7 +167,7 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
     end(a);
     toIdle();
     rlog(`voice ask intent=${ask.intent} ai=${aiUsed} len=${[...raw].length}`);
-    d().onAsk?.(ask, raw, aiUsed);
+    d().onAsk?.(ask, raw, aiUsed, a.from);
   };
   // 记下的这一批：存完出结果；新的一句没存上（nothing：一条都没拆出来）；确认行选了没存上
   const batch = createSavedBatch({
@@ -196,7 +200,7 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
     closeNote,
     begin() {
       drop('restart');
-      cur = { id: ++seq, ac: new AbortController(), rec: null, committed: false, droppedBy: null };
+      cur = { id: ++seq, ac: new AbortController(), rec: null, committed: false, droppedBy: null, from: 'voice' };
       return cur;
     },
     drop,
@@ -205,15 +209,20 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
     current: () => cur,
     /** 存这一次：开始写库以后一定落地（负责人定：已开始写库的照常存完），写完不再看这一次还是不是当前的 */
     askOut,
-    async savePlan(a: Attempt, p: TypePlan, raw: string) {
+    /** 返回存的结果：'asked' 交给了结果层，'stale' 这一次已作废没存 */
+    async savePlan(a: Attempt, p: TypePlan, raw: string): Promise<SaveOutcome | 'ask' | 'asked' | 'stale'> {
       // 手机自带识别走 planText：判成别的意图的在这里分流（录音那一路在 voice-rec 的 voiceFinal 里分）
-      if (p.ask) return askOut(a, p.ask.ask, raw, p.ask.aiUsed);
+      if (p.ask) {
+        askOut(a, p.ask.ask, raw, p.ask.aiUsed);
+        return 'asked';
+      }
       if (v().status !== 'organizing') go({ type: 'organize' });
-      if (!alive(a, 'store')) return;
+      if (!alive(a, 'store')) return 'stale';
       a.committed = true;
       const out = await batch.save(p, raw);
       end(a);
       batch.land(out, p);
+      return out;
     },
     finish,
     quotaOut: () => quotaOut,
@@ -342,21 +351,25 @@ export function createVoiceSession(io: VoiceIo = {}) {
     },
     closeCard: () => card(null),
     /** 结果层的“改成记下”“都不是 · 按原话记下”、quick-add 交来判成记下的（B4b-3）：原话只按本机规则记下（不花 AI 次数），
-     *  走这一批（提示条、撤销和录音同一套）。正在录、正在整理时不接（返回 false，原话还在草稿里） */
-    async record(raw: string, from: string, mode: 'local' | 'plan' = 'local'): Promise<boolean> {
+     *  走这一批（提示条、撤销和录音同一套）。正在录、正在整理时不接（busy，调用方把原话留作草稿）；没存上是 failed。
+     *  day：日历页选中的那天（结果层从日历页打开时），不给按控制器的上下文。进来就切到“整理中”：等 AI 时按住“＋”不会把这一句顶掉 */
+    async record(raw: string, from: string, mode: 'local' | 'plan' = 'local', day: DateStr | null = null): Promise<'saved' | 'busy' | 'failed'> {
       if (!idleOrFinal() || raw.trim() === '') {
         rlog(`voice record_raw skip from=${from} busy=${idleOrFinal() ? 0 : 1}`);
-        return false;
+        return 'busy';
       }
       batch.fresh();
       c.closeNote();
       rlog(`voice record_raw from=${from} mode=${mode} len=${[...raw].length}`);
       const a = c.begin();
+      a.from = from;
+      go({ type: 'organize' });
+      const ctx = day === null ? d().ctx() : { ...d().ctx(), day };
       // plan：quick-add 交来的一句和打字条一样走 planText（本机规则、AI 判意图），判成别的意图的 savePlan 里交给结果层
-      const p = mode === 'local' ? recordLocal(raw, d().ctx()) : (await planText(raw, d().ctx(), { online: d().online, aiOn: d().aiOn(), call: d().callAi, signal: a.ac.signal })).plan;
-      if (!c.alive(a, 'record_plan')) return false;
-      await c.savePlan(a, p, raw);
-      return true;
+      const p = mode === 'local' ? recordLocal(raw, ctx) : (await planText(raw, ctx, { online: d().online, aiOn: d().aiOn(), call: d().callAi, signal: a.ac.signal })).plan;
+      if (!c.alive(a, 'record_plan')) return 'failed';
+      const out = await c.savePlan(a, p, raw);
+      return out === 'ok' || out === 'ask' || out === 'asked' ? 'saved' : 'failed';
     },
     /** 确认行没选就关掉：同一句里已经存了的几条照常在提示条上（能撤）；没存的这条丢掉（录音路没有输入条可以填回）。
      *  额度提示在存成那一刻已经定了，这里不再 land（第 12 条：原来 land 只为更新 quotaDue，还会发一个 idle 下不合法的 done） */

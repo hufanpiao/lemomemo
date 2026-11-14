@@ -10,7 +10,7 @@ import { SavedNotice } from '../ui/SavedNotice.tsx';
 
 // 结果层、查找那一块是别的功能（ESLint boundaries）：替身只记怎么被调
 const fx = vi.hoisted(() => ({ toAssist: vi.fn(), peek: vi.fn() }));
-vi.mock('../hooks/voice-main.ts', () => ({ toAssist: (...a: unknown[]) => fx.toAssist(...a) }));
+vi.mock('../hooks/assist-open.ts', () => ({ toAssist: (...a: unknown[]) => fx.toAssist(...a) }));
 vi.mock('../../smart-search/index.ts', () => ({
   AssistPeek: (p: { exclude: readonly string[]; undoSaved(): Promise<void> }) => {
     fx.peek(p);
@@ -28,12 +28,13 @@ function notice(alt: BatchNotice['alt'], n = 1): BatchNotice {
   const entries = Array.from({ length: n }, (_v, i) => ({ ref: { table: 'todos' as const, id: `id-${i}`, title: `找所有发票${i}` }, item: ITEM }));
   return { lines: [{ key: 'plus.notice.saved', params: { title: '找所有发票' } }], entries, merge: false, alt, raw: '帮我找所有发票' };
 }
-function acts(): BatchActs & { order: string[] } {
+function acts(undone = true): BatchActs & { order: string[] } {
   const order: string[] = [];
   return {
     order,
     undo: vi.fn(async () => {
       order.push('undo');
+      return undone;
     }),
     undoOne: vi.fn(async () => {}),
     merge: vi.fn(async () => {}),
@@ -70,7 +71,18 @@ describe('SavedNotice：模糊先按记下保存的', () => {
       await Promise.resolve();
     });
     expect(a.order).toEqual(['undo', 'toAssist']);
-    expect(fx.toAssist).toHaveBeenCalledWith({ ask: ASK, raw: '帮我找所有发票', aiUsed: 0, from: 'notice' });
+    expect(fx.toAssist).toHaveBeenCalledWith({ ask: ASK, raw: '帮我找所有发票', aiUsed: 0, from: 'notice', day: null });
+  });
+
+  it('“改成搜索”时撤销没撤干净（撤了一半、没撤成）：不换成查找，留在提示条上', async () => {
+    const a = acts(false);
+    render(<SavedNotice notice={notice({ ask: ASK, found: false })} acts={a} />);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('notice-to-search'));
+      await Promise.resolve();
+    });
+    expect(a.undo).toHaveBeenCalledTimes(1);
+    expect(fx.toAssist).not.toHaveBeenCalled();
   });
 
   it('alt.found：挂 AssistPeek，排除这一批的 id；它的 undoSaved 就是撤销这一批', async () => {

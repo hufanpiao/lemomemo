@@ -156,7 +156,8 @@ export function normTarget(intent: TargetIntent, raw: TargetRaw | null | undefin
 }
 
 /** AI 的 confidence 规整到 0～1（没给按 1：B3 起 record 的老口径） */
-export const normConfidence = (c: number | undefined): number => (c === undefined || !Number.isFinite(c) ? 1 : Math.min(1, Math.max(0, c)));
+/** 没给或不是数：按 dflt（记下按 1；别的意图按 0.5，B4b-3 评审：漏写不该当成很有把握） */
+export const normConfidence = (c: number | undefined, dflt = 1): number => (c === undefined || !Number.isFinite(c) ? dflt : Math.min(1, Math.max(0, c)));
 
 /** 校验以后、非 record 意图的结果（ai.ts 的 checkParseOutput / checkVoiceOutput 交出） */
 export type IntentChecked =
@@ -171,7 +172,7 @@ export function normIntent(
   tz: Tz,
 ): { ok: true; value: IntentChecked } | { ok: false; reason: IntentInvalid } {
   const today = todayOf(now, tz);
-  const confidence = normConfidence(raw.confidence);
+  const confidence = normConfidence(raw.confidence, 0.5);
   if (intent === 'search' || intent === 'summarize') {
     const q = normQuery(raw.query, today);
     return q.ok ? { ok: true, value: { intent, confidence, query: q.value, fixed: q.fixed } } : q;

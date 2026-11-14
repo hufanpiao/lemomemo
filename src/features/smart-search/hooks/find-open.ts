@@ -15,10 +15,10 @@ export interface AssistReq {
   aiUsed: 0 | 1;
   from: FindFrom;
   /** “改成记下”“都不是 · 按原话记下”：按记下保存原话（plus 给；已经存过了的为 null，不出这个按钮） */
-  record: (() => Promise<void>) | null;
+  record: (() => Promise<unknown>) | null;
   /** 模糊时先存了的这一批：查找排除它们（0.23 L3）；在卡片里确认取消、改期、完成以后撤销它们（undoSaved） */
   exclude: readonly string[];
-  undoSaved: (() => Promise<void>) | null;
+  undoSaved: (() => Promise<unknown>) | null;
   /** 关掉结果层（plus 清草稿） */
   onClose: (() => void) | null;
 }

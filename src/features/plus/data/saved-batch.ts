@@ -144,15 +144,15 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
   /** 写库的操作进行中的那一代（choose、undo、undoOne、merge 共用）：同一代再点不理；换了代的新提示条照常能点（复查 N2） */
   let busyGen = -1;
 
-  const once = async (op: string, run: (g: number) => Promise<void>): Promise<void> => {
+  const once = async <T = void>(op: string, run: (g: number) => Promise<T>): Promise<T | undefined> => {
     const g = gen;
     if (busyGen === g) {
       rlog(`${tag} busy skip op=${op}`);
-      return;
+      return undefined;
     }
     busyGen = g;
     try {
-      await run(g);
+      return await run(g);
     } finally {
       if (busyGen === g) busyGen = -1;
     }
@@ -250,19 +250,21 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
         put({ batch: afterTry(get().batch, [hit.ref], left) });
       }),
     /** 全部撤销：撤成的拿掉；没撤成的留在提示条上（能再点一次）；只剩纪念日不算失败。没有真正没撤成的回到 idle */
-    undo: (): Promise<void> =>
+    /** 撤整批；返回 true = 全撤掉了（提示条“改成搜索”只在这时换成查找）；连点被锁挡下是 undefined */
+    undo: (): Promise<boolean | undefined> =>
       once('undo_all', async (g) => {
         const batch = get().batch;
         if (batch) {
           const refs = batch.entries.map((e) => e.ref);
           const left = await undoRefs(refs, clock.now(), writer);
           rlog(`${tag} undo_all n=${refs.length} left=${left.length}`);
-          if (stale(g, 'undo_all')) return;
+          if (stale(g, 'undo_all')) return false;
           const next = afterTry(get().batch, refs, left);
           put({ batch: next });
-          if (next && failedOf(next) > 0) return;
+          if (next && failedOf(next) > 0) return false;
         }
         flow.go({ type: 'cleared' });
+        return true;
       }),
     /** 拆错了，合并成一条：没存上原来的几条不动，提示条自己加一句（不把原话填回输入条，免得再记一遍） */
     merge: (): Promise<void> =>

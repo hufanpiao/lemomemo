@@ -21,7 +21,7 @@ vi.mock('../../../app/router.ts', async (orig) => ({ ...(await orig<object>()), 
 vi.mock('../../../platform/run-log-api.ts', async (orig) => ({ ...(await orig<object>()), rlog: (l: string) => fx.logs.push(l) }));
 // 别的功能的懒加载组件（ESLint boundaries）：替身什么都不画
 vi.mock('../../vault/index.ts', () => ({ VaultParts: () => null }));
-vi.mock('../../notes/index.ts', () => ({ NoteThumb: () => null }));
+vi.mock('../../notes/index.ts', () => ({ TodayNotes: () => null }));
 
 const NOW = Date.UTC(2026, 10, 14, 3);
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;

@@ -22,11 +22,17 @@ import {
   type FindGroups, type FindKind, type Row, type SemHit, type TimeFilter,
 } from '../data/find-local.ts';
 import { addRecent, loadRecent, recentSnapshot, subscribeRecent } from '../data/find-recent.ts';
+import { rowAct, type Applied, type RowAct } from '../data/target-act.ts';
 import { noteSearch, type SemResult } from '../data/note-search-api.ts';
 
 // ui 不能直接引自己的 data（ESLint boundaries，架构 2.1），面板要的常量、高亮函数和类型从这里转出去
 export { FIND_KINDS, markRanges, type FindHit, type FindItem, type FindKind, type TimeFilter } from '../data/find-local.ts';
 export { rowAct, undoTarget, type Applied, type RowAct } from '../data/target-act.ts';
+
+/** 每行“⋯”菜单写一条：带上现在和设备时区（界面层不能直接引 core，ESLint boundaries） */
+export function actRow(act: RowAct, kind: 'event' | 'todo' | 'anniv' | 'note', id: string, at: Parameters<typeof rowAct>[3]): Promise<Applied> {
+  return rowAct(act, kind, id, at, clock.now(), currentTz());
+}
 
 export const SEM_DEBOUNCE_MS = 400;
 

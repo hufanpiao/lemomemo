@@ -13,7 +13,10 @@ import { FormButton } from '../../../kit/components/Form.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import type { BatchActs, BatchNotice } from '../hooks/useSavedBatch.ts';
 import { usePlusLine, usePlusT } from '../hooks/usePlusT.ts';
-import { toAssist } from '../hooks/voice-main.ts';
+import type { ToAssist } from '../hooks/assist-open.ts';
+
+/** 结果层出口按需下载（assist-open.ts 不进打字条、录音那几块的静态依赖：首屏主包的预加载表少一项，B5 首屏净增额度） */
+const toAssist = (o: ToAssist): void => void import('../hooks/assist-open.ts').then((m) => m.toAssist(o));
 import styles from './TypeBar.module.css';
 
 export interface SavedNoticeProps {
@@ -32,7 +35,10 @@ export function SavedNotice({ notice, acts, onEdit }: SavedNoticeProps) {
   const toSearch = alt === null ? null : (): void => {
     rlog(`notice to_search intent=${alt.ask.intent} n=${notice.entries.length}`);
     const raw = notice.raw;
-    void acts.undo().then(() => toAssist({ ask: alt.ask, raw, aiUsed: 0, from: 'notice' }));
+    // 撤干净了才换成查找（撤了一半、没撤成的留在提示条上，不跳）
+    void acts.undo().then((ok) => {
+      if (ok === true) toAssist({ ask: alt.ask, raw, aiUsed: 0, from: 'notice', day: null });
+    });
   };
   const altRows = alt === null || toSearch === null ? null : (
     <div className={styles.row} data-testid="type-notice-alt">

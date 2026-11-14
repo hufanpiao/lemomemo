@@ -85,7 +85,7 @@ export function useAssist(ask: AssistAsk, exclude: readonly string[], deps: Assi
   // —— 取消、改期、完成 ——
   const fixed = useRef<ReturnType<typeof candidates> | null>(null);
   if ('target' in ask && fixed.current === null && !ask.bulkRefused) {
-    fixed.current = candidates(ask.target, src.events, src.todos, src.now, src.tz);
+    fixed.current = targetHits(ask.target, src, ex);
     rlog(`assist target intent=${ask.intent} hits=${fixed.current.hits.length} more=${fixed.current.more} all=${ask.target.all === true ? 1 : 0}`);
   }
   const match = fixed.current ?? { hits: [], more: 0 };
@@ -122,12 +122,18 @@ export function useAssist(ask: AssistAsk, exclude: readonly string[], deps: Assi
 }
 
 /** 提示条下面“也帮你找了一下：N 条”的 N（本机缓存里数，同 useAssist；取消、改期、完成数候选，泛指词的取消、标完成不数） */
+/** 取消、改期、完成的候选（结果层和提示条的条数同一份）：刚保存的这一批（exclude）不算 */
+type Src = Pick<ReturnType<typeof useFindSource>, 'events' | 'todos' | 'now' | 'tz'>;
+function targetHits(target: Extract<AssistAsk, { target: unknown }>['target'], { events, todos, now, tz }: Src, ex: ReadonlySet<string>) {
+  return candidates(target, events.filter((r) => !ex.has(r.id)), todos.filter((r) => !ex.has(r.id)), now, tz);
+}
+
 export function useAssistCount(ask: AssistAsk, exclude: readonly string[]): number {
   const src = useFindSource();
   return useMemo(() => {
     const ex = new Set(exclude);
     if ('query' in ask) return listQuery(src.index, ask.query, ex).length;
     if (ask.bulkRefused) return 0;
-    return candidates(ask.target, src.events.filter((r) => !ex.has(r.id)), src.todos.filter((r) => !ex.has(r.id)), src.now, src.tz).hits.length;
+    return targetHits(ask.target, { events: src.events, todos: src.todos, now: src.now, tz: src.tz }, ex).hits.length;
   }, [ask, exclude, src.index, src.events, src.todos, src.now, src.tz]);
 }

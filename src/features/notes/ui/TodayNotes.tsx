@@ -3,7 +3,7 @@
 // • 经 notes/index.ts 懒加载，只在电脑版今天页下载（手机今天页没有这一块）
 // • onCount：今天一共几条，交给今天页写进块标题“今天记的 2”（线框 NOTESTODAY；标题在 kit DeskLayout 里画，不在这个块里）
 // • 同一个懒加载入口按 part 画两样（同 today 的 TodayToasts）：'list' 是这一块，'edit' 是抽屉里的随手记编辑器（NoteEditPage 的 NoteEditor，
-//   再按需下载）；不在 notes/index.ts 另开一个入口，那个文件在主包里，多一个 lazy 首屏就多几十字节（首屏净增额度，build/first-screen-baseline.json）
+//   再按需下载）；B4b-3 加 'thumb'：查找面板“最相关”里一张插图的缩略图（ui/note-thumb.tsx，再按需下载）；不在 notes/index.ts 另开一个入口，那个文件在主包里，多一个 lazy 首屏就多几十字节（首屏净增额度，build/first-screen-baseline.json）
 // • 抽屉的外壳（Esc、焦点、哪一边）是今天页的 TodayDrawer（kit DetailDrawer），选中哪一条由今天页管；行按钮带 data-open，抽屉关上时焦点找回这一行
 import { lazy, Suspense, useEffect } from 'react';
 import { fmtTime } from '../../../../shared/i18n/fmt.ts';
@@ -15,12 +15,21 @@ import { useTodayNotes } from '../hooks/useTodayNotes.ts';
 const MAX = 5;
 
 const NoteEditor = lazy(() => import('./NoteEditPage.tsx').then((m) => ({ default: m.NoteEditor })));
+const NoteThumb = lazy(() => import('./note-thumb.tsx'));
 
 export type TodayNotesProps =
   | { part: 'list'; onCount?(n: number): void; onOpen(id: string): void; selected: string | null }
-  | { part: 'edit'; id: string; onClose(): void };
+  | { part: 'edit'; id: string; onClose(): void }
+  | { part: 'thumb'; noteId: string; imageId: string };
 
 export default function TodayNotes(p: TodayNotesProps) {
+  if (p.part === 'thumb') {
+    return (
+      <Suspense fallback={null}>
+        <NoteThumb noteId={p.noteId} imageId={p.imageId} />
+      </Suspense>
+    );
+  }
   return p.part === 'edit' ? (
     <Suspense fallback={null}>
       <NoteEditor key={p.id} id={p.id} onClose={p.onClose} drawer />

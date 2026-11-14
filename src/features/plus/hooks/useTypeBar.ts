@@ -10,11 +10,12 @@
 // • 看起来是要查找（B4b-2，线框 sPlus“看起来是要查找 · Enter 查找”、架构 5.14 第 1 点）：本机规则 localIntent 判成查找、有把握、
 //   没带时间范围、查询词不空 → find 给出查询词，界面换成“找：…”，回车打开查找面板（features/smart-search）；“改成记下”把这一句当记下。
 //   没把握的、带时间范围的（“上周的会”“这个月的待办”）、总结、改期、完成：回车走 planText（B4b-3，本机或 AI 判意图），
-//   判成别的意图的不保存：清掉输入条、交给结果层（hooks/voice-main 的 toAssist，同时把原话写进草稿），调用方 onAsked 收起打字条
+//   判成别的意图的不保存：清掉输入条、交给结果层（hooks/assist-open 的 toAssist，同时把原话写进草稿），调用方 onAsked 收起打字条
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { getBoot } from '../../../core/boot.ts';
 import { currentTz } from '../../../core/current-tz.ts';
+import { askOfLocal } from '../../../../shared/logic/parse/assist.ts';
 import { localIntent } from '../../../../shared/logic/parse/intent.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -25,7 +26,10 @@ import { clearTypeDraft, readTypeDraft, writeTypeDraft } from '../data/type-draf
 import { createBatchBox, createSavedBatch } from '../data/saved-batch.ts';
 import { keepAsked, navOnline, planLocal, planText, type CallAi } from '../data/type-flow.ts';
 import { useCaptureCtx } from './useCaptureCtx.ts';
-import { toAssist } from './voice-main.ts';
+import type { ToAssist } from './assist-open.ts';
+
+/** 结果层出口按需下载（assist-open.ts 不进打字条、录音那几块的静态依赖：首屏主包的预加载表少一项，B5 首屏净增额度） */
+const toAssist = (o: ToAssist): void => void import('./assist-open.ts').then((m) => m.toAssist(o));
 import { useSavedBatch } from './useSavedBatch.ts';
 
 // ui 不能直接 import data（A1），界面要用的类型经这里转出去
@@ -110,12 +114,21 @@ export function useTypeBar(o: TypeBarOpts) {
 
   const preview = useMemo(() => (text.trim() === '' ? [] : planLocal(text, ctx()).result.items), [text, ctx]);
   /** 看起来是要查找时的查询词（见文件头）；不是查找、或点了“改成记下”为 null */
-  const find = useMemo(() => {
+  const findAsk = useMemo(() => {
     if (asRecord || text.trim() === '') return null;
     const r = localIntent(text, clock.now(), currentTz(), { scope: 'main' });
-    const q = r.query?.text.trim() ?? '';
-    return r.intent === 'search' && r.sure && r.query?.range === null && q !== '' ? q : null;
+    const a = r.intent === 'search' && r.sure ? askOfLocal(r) : null;
+    return a && 'query' in a && a.query.range === null && a.query.text.trim() !== '' ? a : null;
   }, [text, asRecord]);
+  const find = findAsk && 'query' in findAsk ? findAsk.query.text.trim() : null;
+  /** 回车或点“查找”：和判意图的那一路同一个出口（原话进草稿，查找面板页脚有“改成记下”“总结一下”）；清掉这句字 */
+  const openFind = useCallback((): void => {
+    if (!findAsk) return;
+    rlog(`typebar find len=${[...text].length}`);
+    toAssist({ ask: findAsk, raw: text, aiUsed: 0, from: 'plus', day: ctx().day });
+    setTextRaw('');
+    typed.current = false;
+  }, [findAsk, text, ctx]);
   const keepRecord = useCallback(() => setAsRecord(true), []);
 
   const submit = useCallback(async () => {
@@ -142,7 +155,7 @@ export function useTypeBar(o: TypeBarOpts) {
       rlog(`typebar planned items=${p.items.length} ai=${aiOn} quotaOut=${quotaOut} origin=${p.origin} status=${p.status} reason=${p.aiReason ?? '-'} ms=${ms()}`);
       if (p.ask) {
         go({ type: 'reset' });
-        toAssist({ ask: p.ask.ask, raw: text, aiUsed: p.ask.aiUsed, from: 'plus' });
+        toAssist({ ask: p.ask.ask, raw: text, aiUsed: p.ask.aiUsed, from: 'plus', day: c.day });
         setTextRaw('');
         typed.current = false;
         o.onAsked?.();
@@ -150,7 +163,8 @@ export function useTypeBar(o: TypeBarOpts) {
       }
       saved.land(await saved.save(p, text), p);
     } catch (err) {
-      rlog(`typebar submit threw ${(err as Error | undefined)?.name ?? ''} ${String((err as Error | undefined)?.message ?? err).slice(0, 200)}`);
+      // 只记错误名：message 里可能带着标题、原话片段（不记用户输入的文字）
+      rlog(`typebar submit threw ${(err as Error | undefined)?.name ?? typeof err}`);
       throw err;
     } finally {
       busy.current = false;
@@ -173,5 +187,5 @@ export function useTypeBar(o: TypeBarOpts) {
 
   const dropDraft = useCallback(() => void clearTypeDraft(), []);
   const { choose, undo, undoOne, merge, closeNotice } = saved;
-  return { text, setText, status, preview, find, keepRecord, asking, notice, error, submit, choose, dismissConfirm, partSaved, undo, undoOne, merge, closeNotice, stash, dropDraft };
+  return { text, setText, status, preview, find, openFind, keepRecord, asking, notice, error, submit, choose, dismissConfirm, partSaved, undo, undoOne, merge, closeNotice, stash, dropDraft };
 }

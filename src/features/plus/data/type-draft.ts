@@ -4,7 +4,8 @@
 // • 只留一份：id 固定 'capture:type'；空串就删掉
 // • 读写失败（库没开、正在关）一律当没有草稿，不抛错
 // • B4b-3（架构 5.14 第 2 点）：判成查找、总结、取消改期完成的那一刻原话也写进这一份（assist: true）：iPhone 主屏幕版切后台被杀掉，
-//   再点开“＋”照常填回输入条；这种草稿满 ASSIST_DRAFT_MS（24 小时）就不再填回、删掉。“改成记下”存好、关掉结果层时清掉
+//   再点开“＋”照常填回输入条；这种草稿满 ASSIST_DRAFT_MS（24 小时）就不再填回、删掉。“改成记下”存好、关掉结果层时清掉。
+//   writeAssistDraft、clearAssistDraft 只动 assist 草稿：录音、quick-add 交来的不盖掉用户在打字条里收起的字，清的时候也不清它
 // 纯 TS：不准 import React（A1）
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Cache, Draft } from '../../../core/cache.ts';
@@ -59,6 +60,33 @@ export async function writeTypeDraft(draft: TypeDraft, now: number, c?: DraftSto
     await cache.putDraft(d);
   } catch {
     // 库没开、正在关：这次不留草稿
+  }
+}
+
+/** 结果层那一刻写原话（见文件头）；overwrite 为 false 时已有打字条自己收起的草稿就不写 */
+export async function writeAssistDraft(draft: Omit<TypeDraft, 'assist'>, now: number, overwrite: boolean, c?: DraftStore | null): Promise<void> {
+  const cache = cacheOf(c);
+  if (!cache) return;
+  try {
+    if (!overwrite) {
+      const old = await cache.getDraft(TYPE_DRAFT_ID);
+      if (old && isDraft(old.data) && old.data.assist !== true && old.data.text !== '') return;
+    }
+  } catch {
+    return;
+  }
+  await writeTypeDraft({ ...draft, assist: true }, now, cache);
+}
+
+/** 清掉 assist 草稿；这一份已经是打字条自己收起的字（用户后来又打了）就不动 */
+export async function clearAssistDraft(c?: DraftStore | null): Promise<void> {
+  const cache = cacheOf(c);
+  if (!cache) return;
+  try {
+    const old = await cache.getDraft(TYPE_DRAFT_ID);
+    if (old && isDraft(old.data) && old.data.assist === true) await cache.deleteDraft(TYPE_DRAFT_ID);
+  } catch {
+    // 同上
   }
 }
 
