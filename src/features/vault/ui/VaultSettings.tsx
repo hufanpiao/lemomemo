@@ -152,8 +152,11 @@ function ChangePin({ onDone }: { onDone(): void }) {
         setBusy(true);
         void s.changePin(old, p).then((r) => {
           setBusy(false);
-          if (r.ok) setOk(true);
-          else {
+          if (r.ok) {
+            // 旧密码用完就清（审查第 14 条）：不在“已修改”那一屏挂着的组件 state 里留着
+            setOld(null);
+            setOk(true);
+          } else {
             // 读这次响应里的 left（不读 state.left：回调里的 state 是点下去那次渲染的快照）
             setErr(r.code === 'pin_wrong' && r.left !== undefined ? t('vault.unlock.left', { n: r.left }) : errText(r.code));
             setOld(null);
