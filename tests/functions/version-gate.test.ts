@@ -74,7 +74,9 @@ describe('needsVersionCheck：哪些请求要查', () => {
   it('B1 K10：转发层只放行 account 的 POST（0.38 第 47 条）；account-purge、usage-report 直连、不经 /sb，照查（0.31 第 13 条）', () => {
     // B3：claude-intake 由 add.ps1 带连接码经 /sb 调（没有 App 版本），只收 POST，转发层放行它的 POST
     // B5：vault-image 也是浏览器经 /sb 调的，转发层放行它的 POST（旧版也能看隐私记的图）；vault 照查
-    expect(EXEMPT_FUNCTIONS.map((f) => [f.name, [...f.methods]])).toEqual([['account', ['POST']], ['claude-intake', ['POST']], ['vault-image', ['POST']]]);
+    // B4b-2：note-search 只读，转发层放行它的 POST
+    expect(EXEMPT_FUNCTIONS.map((f) => [f.name, [...f.methods]])).toEqual([['account', ['POST']], ['claude-intake', ['POST']], ['vault-image', ['POST']], ['note-search', ['POST']]]);
+    expect(needsVersionCheck('POST', '/functions/v1/note-search')).toBe(false);   // B4b-2：只读查找，旧版也能按意思找
     expect(needsVersionCheck('POST', '/functions/v1/vault-image')).toBe(false);
     expect(needsVersionCheck('POST', '/functions/v1/vault')).toBe(true);
     expect(needsVersionCheck('POST', '/functions/v1/claude-intake')).toBe(false);

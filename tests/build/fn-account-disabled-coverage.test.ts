@@ -76,6 +76,11 @@ const PLAN: Plan = new Map<string, Entry>([
     'admin-disabled': { file: 'tests/edge/vault-file.test.ts', title: 'TC-B1-10 vault-file：管理员停用的账号回 403 account_disabled，不验令牌、不碰库' },
     'no-profile': { file: 'tests/edge/vault-file.test.ts', title: 'TC-B1-10 vault-file：没有 profiles 行的账号回 403 account_disabled，不写对象' },
   } }],
+  // B4b-2：index.ts 接 requireActiveUser；core 单测用假鉴权核对原样回 account_disabled（写法同 file-check）
+  ['note-search', { kind: 'jwt', covers: {
+    'admin-disabled': { file: 'tests/edge/note-search.test.ts', title: 'TC-B1-10 note-search：管理员停用的账号回 403 account_disabled，不扣次数、不调模型' },
+    'no-profile': { file: 'tests/edge/note-search.test.ts', title: 'TC-B1-10 note-search：没有 profiles 行的账号回 403 account_disabled，不查向量' },
+  } }],
   ['account-purge', { kind: 'all-users', why: 'TC-B1-109：照常处理到期的冷静期账号，故意不用 account_usable；pg_cron 带 x-cron-secret' }],
   ['invite-signup', { kind: 'no-user', why: '架构第 6 节：匿名 + Turnstile，还没有账号' }],
   ['usage-report', { kind: 'no-user', why: '架构第 6 节：x-ops-secret，只出全站统计' }],
@@ -93,6 +98,11 @@ const PLAN: Plan = new Map<string, Entry>([
   ['anniv-roll', { kind: 'usable', covers: {
     'admin-disabled': { file: 'tests/edge/anniv-roll.test.ts', title: 'TC-B1-109 anniv-roll：管理员停用（disabled_at 有值）的账号跳过' },
     'pending-deletion': { file: 'tests/edge/anniv-roll.test.ts', title: 'TC-B1-109 anniv-roll：注销冷静期（disabled_reason = deletion）的账号跳过' },
+  } }],
+  // B4b-2：pg_cron 带 x-cron-secret，按人处理前过 isUsable（index.ts 接 _shared 的 isUsable）
+  ['ai-embed', { kind: 'usable', covers: {
+    'admin-disabled': { file: 'tests/edge/ai-embed.test.ts', title: 'TC-B1-109 ai-embed：管理员停用（disabled_at 有值）的账号跳过' },
+    'pending-deletion': { file: 'tests/edge/ai-embed.test.ts', title: 'TC-B1-109 ai-embed：注销冷静期（disabled_reason = deletion）的账号跳过' },
   } }],
   // B3 BE-4、BE-5：index.ts 接 requireActiveUser；core 单测用假鉴权核对原样回 account_disabled（写法同 push-test）
   ['ai-parse', { kind: 'jwt', covers: {

@@ -115,6 +115,8 @@ export interface MetaMap {
    * 未完成展开、已完成收起）。每台设备各记各的、不同步；features/todos/hooks/useSubtasks.ts 读写，最多 500 个、写时剔掉已不在的待办；随整库清掉
    */
   'ui.todo_collapsed': Readonly<Record<string, boolean>>;
+  /** 查找面板的“最近找过”（B4b-2，线框 s12）：最近的在前、最多 6 条；features/smart-search/data/find-recent.ts 读写；随整库清掉 */
+  'ui.find_recent': readonly string[];
   /** 各表的同步游标（K8） */
   [k: `cursor:${string}`]: SyncCursor;
   /** 各表“待补拉”的 id（K7：一行解析不了时记下，下次启动单独补拉） */
