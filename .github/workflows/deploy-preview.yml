@@ -5,8 +5,9 @@
 #   deploy：只下载产物、不装项目依赖、不跑项目脚本；用 tools/ci-tools.lock 锁定的 Supabase CLI
 #           和 tools/deploy/package-lock.json 锁定的 wrangler → 预览项目暂停就恢复 → db push → functions deploy → pages deploy → 核对线上版本
 #
-# GitHub 免费版私有仓库没有 Environments（环境密钥、审批人、分支限制都用不了，已查官方文档），
-# 所以预览的令牌放在 repository secrets（R-206）。它们对本仓库所有分支的工作流都可见：
+# 当初按“免费版私有仓库没有 Environments”定的方案（R-206），预览的令牌放在 repository secrets，对本仓库所有分支的工作流都可见。
+# 仓库现在是公开仓库，免费版也能用 Environments；挪进只许 main 用的 Environment 要负责人重新粘贴令牌，记在明早清单（11-14 第三方审查 CI-3）。
+# 挪之前照旧靠下面两条把令牌的权限收窄：
 #   - Supabase 令牌必须是“只管预览项目”的项目级令牌（2026-10-06 起 Supabase 可以发，环境清单第四节）；
 #   - Cloudflare 令牌只给 “Cloudflare Pages: Edit”（能发到正式 Pages 项目，R-110 已接受）。
 # 正式环境的令牌不放 GitHub：正式发布由负责人本机运行 tools/release/publish.ps1（R-206）。
