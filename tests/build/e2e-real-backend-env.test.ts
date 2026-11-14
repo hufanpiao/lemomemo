@@ -214,8 +214,8 @@ describe('invite-signup/index.ts 的出站地址接法（源码核对；INVITE-m
       /if \(!overriddenLogged && \(\(siteverify\.ok && siteverify\.overridden\) \|\| \(emails\.ok && emails\.overridden\)\)\) \{\r?\n\s*overriddenLogged = true;\r?\n\s*log\('outbound_url_overridden'\);\r?\n\s*\}/,
     );
     expect(src.indexOf("log('outbound_url_overridden')")).toBeGreaterThan(src.indexOf('Deno.serve('));
-    // 日志只带码：log 就是一个参数的 code，没有把地址拼进日志
-    expect(src).toContain('const log = (code: string) => console.error(`invite-signup: ${code}`);');
+    // 日志只带码：log 经 _shared/fn-log.ts 的 codeLogger（只收一个 code，第三方审查后端-4 起全部函数同一个出口），没有把地址拼进日志
+    expect(src).toContain("const log = codeLogger('invite-signup');");
     expect(src).not.toMatch(/log\([^)]*(?:siteverifyUrl|emailsUrl|\.url)/);
   });
 });
