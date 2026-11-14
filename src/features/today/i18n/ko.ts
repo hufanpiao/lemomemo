@@ -7,6 +7,8 @@ export const ko: Readonly<Record<keyof typeof zh, string>> = {
   'now.live': '진행 중', // 视觉稿 KT.ko
   'now.live2': '진행 중 {n}개', // 视觉稿 KT.ko
   'now.idle': '다음 일정', // 视觉稿 KT.ko
+  'now.empty': '오늘 일정 없음', // REVIEW(ko)
+  'now.done': '오늘 일정 끝', // REVIEW(ko)
   'now.now': '지금 {t}', // 视觉稿 KT.ko
   'now.left': '{d} 남음', // 视觉稿 KT.ko
   'now.in': '{d} 후', // 视觉稿 KT.ko

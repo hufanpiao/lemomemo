@@ -97,9 +97,9 @@ describe('“现在”卡四种状态', () => {
   });
 
   it('③ 今天的都结束了；只有全天的也算 ③；④ 今天没有日程', () => {
-    expect(nowCard(day([ev({ time: '09:00', tz: SEOUL })]), at('21:40'), SEOUL)).toEqual({ state: 'done' });
-    expect(nowCard(day([ev({ time: null })]), at('09:05'), SEOUL)).toEqual({ state: 'done' });
-    expect(nowCard([], at('09:05'), SEOUL)).toEqual({ state: 'empty' });
+    expect(nowCard(day([ev({ time: '09:00', tz: SEOUL })]), at('21:40'), SEOUL)).toMatchObject({ state: 'done', win: { A: expect.any(Number), B: expect.any(Number) } });
+    expect(nowCard(day([ev({ time: null })]), at('09:05'), SEOUL)).toMatchObject({ state: 'done', win: { A: expect.any(Number), B: expect.any(Number) } });
+    expect(nowCard([], at('09:05'), SEOUL)).toEqual({ state: 'empty', win: { A: 510, B: 690 } });
   });
 
   it('全天事项不算进行中、不进时间轴', () => {

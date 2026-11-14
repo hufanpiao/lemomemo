@@ -128,15 +128,16 @@ export type NowCard =
       nextOutside: boolean;
     }
   | { state: 'idle'; next: EventOcc; inMin: number; win: { A: number; B: number }; nextOutside: boolean }
-  | { state: 'done' }
-  | { state: 'empty' };
+  /** done = 今天有日程、都结束了；empty = 今天没有日程。win 是此刻前后的时间尺（负责人 11-15：没有日程时也用同一张大卡） */
+  | { state: 'done'; win: { A: number; B: number } }
+  | { state: 'empty'; win: { A: number; B: number } };
 
 /** 今天的日程 → “现在”卡；today 是当前时区的今天 */
 export function nowCard(todayEvents: readonly EventOcc[], now: number, current: Tz, today: DateStr = todayOf(now, current)): NowCard {
   const timed = todayEvents.filter((o) => !o.allDay && o.start !== null && o.end !== null);
-  if (timed.length === 0) return { state: todayEvents.length ? 'done' : 'empty' };
   const zero = msAt(today, 0, current);
   const m = (ms: number) => (ms - zero) / MIN;
+  if (timed.length === 0) return { state: todayEvents.length ? 'done' : 'empty', win: kWin([], null, m(now)) };
   const span = (o: EventOcc): Span => ({ s: m(o.start ?? 0), e: m(o.end ?? 0) });
   const cur = timed.filter((o) => (o.start ?? 0) <= now && now < (o.end ?? 0)).sort((a, b) => (a.end ?? 0) - (b.end ?? 0));
   const next = timed.filter((o) => (o.start ?? 0) > now).sort((a, b) => (a.start ?? 0) - (b.start ?? 0))[0] ?? null;
@@ -148,7 +149,7 @@ export function nowCard(todayEvents: readonly EventOcc[], now: number, current: 
       nextOutside: next !== null && span(next).s >= win.B,
     };
   }
-  if (!next) return { state: 'done' };
+  if (!next) return { state: 'done', win: kWin([], null, nowM) };
   const win = kWin([], span(next), nowM);
   return { state: 'idle', next, inMin: Math.ceil(((next.start ?? now) - now) / MIN), win, nextOutside: span(next).s >= win.B };
 }

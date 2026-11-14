@@ -6,6 +6,8 @@ export const zh = {
   'now.live': '进行中',
   'now.live2': '进行中 {n} 件',
   'now.idle': '下一件',
+  'now.empty': '今天没有日程',
+  'now.done': '今天的日程都结束了',
   'now.now': '现在 {t}',
   'now.left': '还剩 {d}',
   'now.in': '{d}后',
