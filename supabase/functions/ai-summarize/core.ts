@@ -6,10 +6,10 @@
 //   ④ 按 id 读本人的日程、待办、随手记（fn_ai，没删、没撤销；store.ts）：读出隐私记（is_private）的整次 400 mixed_scope，不过门、不扣次数（0.23 N1）；
 //      查不到的放进 missing（多半还没同步，0.23 L2）；一条都读不到的 400 all_missing（不过门、不扣次数；代定）；
 //   ⑤ 共用的门（_shared/ai/gate.ts，同 ai-parse：同意、类型开关、模型配置、每分钟 6 次、谷歌额度、每人每天 50 次和全项目预扣），算 1 次；
-//   ⑥ 拼 <data>：{ask, records:[{id, kind, title, when, where?, done?, text?}]}，每条正文前 BODY_MAX 字，标题、时间、地点、正文合计 ≤ TOTAL_MAX 字
+//   ⑥ 拼 <data>：{ask, records:[{n, id, kind, title, when, where?, done?, text?}]}，每条正文前 BODY_MAX 字，标题、时间、地点、正文合计 ≤ TOTAL_MAX 字
 //      （超了的那一条截短、后面的不送，不送的不能被 cited）；每个字段先过 parse-core.ts 的 sanitize（去控制字符、转义 <data>、</data>）；
 //   ⑦ 提示词 summarize.v1（按 locale 用中文或韩文写，≤ 800 字，纯文本，不编造）、TASK_PARAMS.summarize、超时 SUMMARIZE_TIMEOUT_MS，不重试；
-//   ⑧ 校验 summarizeRaw：summary 去控制字符（留换行）、截到 800 字（按 UTF-16 长度，和 zod 的 max 同一口径，不切开代理对），为空算 invalid；
+//   ⑧ 校验 summarizeRaw：summary 去控制字符（留换行），正文里的 [n] 改写成 cited 里的位置（relinkCites），截到 800 字（截在标记中间的去掉半截）（按 UTF-16 长度，和 zod 的 max 同一口径，不切开代理对），为空算 invalid；
 //      cited 只留送进去的 id（去重）；回 {summary, cited, missing, quota_left}。
 //   失败（服务商出错、超时、额度、输出不合格）：settleFailure 退回预扣的两次、quota 写 exhausted_until、invalid 只把原因写 logs，回 {fallback, reason}。
 // 模型：用门给的 provider（app_config.ai.model，和 ai-parse 同一个；app_config 里没有单独给总结的模型，代定）。
@@ -125,7 +125,7 @@ function whenOf(r: SummaryRow, tz: string): string {
   return [r.date ?? '', r.time ?? ''].filter((x) => x !== '').join(' ');
 }
 
-type Record_ = { id: string; kind: SummaryKind; title: string; when: string; where?: string; done?: boolean; text?: string };
+type Record_ = { n: number; id: string; kind: SummaryKind; title: string; when: string; where?: string; done?: boolean; text?: string };
 
 /**
  * 拼 <data> 里的 JSON（按请求的顺序）。每个字段先 sanitize（第 7 节防提示注入：去控制字符、转义 <data>、</data>）再量长度；
@@ -148,13 +148,42 @@ export function buildData(rows: readonly SummaryRow[], ask: string, tz: string):
     }
     total += head + cp(text);
     records.push({
-      id: r.id, kind: r.kind, title, when,
+      n: records.length + 1, id: r.id, kind: r.kind, title, when,
       ...(where !== '' ? { where } : {}), ...(r.kind === 'todo' ? { done: r.done === true } : {}), ...(text !== '' ? { text } : {}),
     });
     sent.add(r.id);
     if (total >= TOTAL_MAX) break;
   }
   return { data: JSON.stringify({ ask: sanitize(ask, ASK_MAX), records }), sent };
+}
+
+/** 正文里的引用标记：[3]、[1][2]，也认 [1,2]、[1，2]、[1、2]（模型偶尔这样写） */
+const CITE = /\[(\d{1,3}(?:\s*[,，、]\s*\d{1,3})*)\]/g;
+
+/**
+ * 正文里的 [n]（n 是送出去的第几条，buildData 的 n）改写成 [m]，m 是这条在 cited 里的位置（从 1 起）：
+ * cited 按正文里第一次被引的顺序排，模型另给的 cited（只留送出去的）排在后面——客户端依据列表的序号就和角标对上（返工，线框 22）。
+ * n 超出送出的条数、0 的标记删掉；连写、逗号写法拆成一个个 [m]
+ */
+export function relinkCites(summary: string, modelCited: readonly string[], order: readonly string[]): { summary: string; cited: string[] } {
+  const cited: string[] = [];
+  const pos = (id: string): number => {
+    const i = cited.indexOf(id);
+    if (i >= 0) return i + 1;
+    cited.push(id);
+    return cited.length;
+  };
+  const text = summary.replace(CITE, (_m, list: string) =>
+    list
+      .split(/[,，、]/)
+      .map((s) => order[Number(s.trim()) - 1])
+      .filter((id): id is string => id !== undefined)
+      .map((id) => `[${pos(id)}]`)
+      .join(''),
+  );
+  const sent = new Set(order);
+  for (const id of modelCited) if (sent.has(id) && !cited.includes(id)) cited.push(id);
+  return { summary: text, cited };
 }
 
 /** 填 summarize.v1 的占位符（这里只放今天、时区、语言，不放任何用户内容）；now 是服务器时钟（handle 传 deps.now()，不用客户端传的） */
@@ -234,14 +263,17 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     return json(200, { fallback: true, reason: clientReason(r) });   // 每分钟限额回 error，客户端不记“今天用完”
   }
   const out = deps.checkRaw(r.json);
-  const summary = out ? cutUnits(deps.stripCtl(out.summary).trim(), TEXT_MAX).trim() : '';
-  if (!out || summary === '') {
+  // 先把 [n] 改写成 cited 里的位置，再截到 800 字；截断落在标记中间的，把那半截去掉
+  const linked = out ? relinkCites(deps.stripCtl(out.summary).trim(), out.cited, [...sent]) : null;
+  const summary = linked ? cutUnits(linked.summary, TEXT_MAX).replace(/\[\d*$/, '').trim() : '';
+  if (!out || !linked || summary === '') {
     const reason = out ? 'empty' : 'schema';
     deps.log(`ai_invalid ${reason}`);
     await settleFailure(deps, gate, uid, SRC, { reason: 'invalid', invalid_reasons: [reason] });
     return json(200, { fallback: true, reason: 'invalid' });
   }
-  const cited = [...new Set(out.cited.filter((id) => sent.has(id)))].slice(0, ITEMS_MAX);
-  if (cited.length < out.cited.length) deps.log(`cited_dropped n=${out.cited.length - cited.length}`);
+  const cited = linked.cited.slice(0, ITEMS_MAX);
+  const dropped = out.cited.filter((id) => !sent.has(id)).length;
+  if (dropped > 0) deps.log(`cited_dropped n=${dropped}`);
   return json(200, { summary, cited, missing, quota_left: gate.quotaLeft });
 }
