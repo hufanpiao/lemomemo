@@ -57,13 +57,13 @@ describe('设备列表（settings-api）收到 account_disabled', () => {
     });
   }
 
-  it('探测说会话已失效（removed）：走“被移除”，不走 leaveAccount', async () => {
+  it('探测说会话已失效（removed）：走“被移除”= leaveAccount("removed", sid)（和别的出口同一条 exitDevice），设置页自己不清库', async () => {
     const api = fakeApi({ loadDevices: vi.fn(async () => fail('account_disabled')) });
     const { exit } = fakeExit();
     const leaveAccount = vi.fn(async () => undefined);
     render(<SettingsPage deps={{ api, exit, now, leaveAccount, resolveDisabled: async () => 'removed' }} />);
-    await waitFor(() => expect(exit.clearLocalSessionIf).toHaveBeenCalledWith('s-me'));
-    expect(leaveAccount).not.toHaveBeenCalled();
+    await waitFor(() => expect(leaveAccount).toHaveBeenCalledWith('removed', 's-me'));
+    expect(exit.wipe).not.toHaveBeenCalled();
   });
 });
 

@@ -15,15 +15,9 @@ function steps(order: string[], over: Partial<ExitSteps> = {}): ExitSteps {
 }
 
 describe('wipeThisDevice 断开浏览器推送（FE-2）', () => {
-  it('清库成功：wipe → 断开 → 清运行时缓存', async () => {
+  it('清库 → 断开 → 按库名删库 → 清运行时缓存：断开在删库之前', async () => {
     const order: string[] = [];
-    await wipeThisDevice(steps(order, { wipe: async () => (order.push('wipe'), true) }));
-    expect(order).toEqual(['wipe', 'disconnect', 'clearCacheStorage']);
-  });
-
-  it('库不能用（改按库名删）：断开在删库之前', async () => {
-    const order: string[] = [];
-    await wipeThisDevice(steps(order, { wipe: async () => (order.push('wipe'), false) }));
+    await wipeThisDevice(steps(order, { wipe: async () => void order.push('wipe') }));
     expect(order).toEqual(['wipe', 'disconnect', 'deleteDb', 'clearCacheStorage']);
   });
 
@@ -46,7 +40,8 @@ describe('wipeThisDevice 断开浏览器推送（FE-2）', () => {
     const s = steps(order);
     delete s.disconnectPush;
     const spy = vi.fn();
-    await wipeThisDevice({ ...s, wipe: async () => (spy(), true) });
-    expect(order).toEqual(['clearCacheStorage']);
+    await wipeThisDevice({ ...s, wipe: async () => void spy() });
+    expect(spy).toHaveBeenCalledOnce();
+    expect(order).toEqual(['deleteDb', 'clearCacheStorage']);
   });
 });

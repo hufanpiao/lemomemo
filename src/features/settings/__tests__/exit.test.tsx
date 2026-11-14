@@ -1,13 +1,12 @@
-// 离开这台设备（架构 4.1、0.29 续第 98 条、0.38 第 7 条；K9 第二轮审查 N1、N2、L1～L3）
-// 被移除 / 已退出：清理做完才跳登录页；自己退出：删本机行 → 清库和缓存 → signOut，8 秒总超时、晚到再清
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+// 本人退出这台设备（架构 4.1、0.38 第 7 条；K9 第二轮审查 N1、N2、L1～L3）：删本机行 → 清库和缓存 → signOut，8 秒总超时、晚到再清
+// 会话不认、本机没有会话交给 exitDevice（session-loss-one-pipeline.test.tsx，第三方审查前端-4）
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { isSelfSignOut, resetSelfSignOutForTest } from '../../../platform/session.ts';
 import type { LocalSignOut } from '../data/settings-api.ts';
 import { zh } from '../i18n/zh.ts';
-import SettingsPage from '../ui/SettingsPage.tsx';
-import { clickSignOut, confirmWith, deferred, fail, fakeApi, fakeExit, now, openAccount, renderPage, rowAt, text } from './fakes.tsx';
+import { clickSignOut, deferred, fakeApi, fakeExit, renderPage, text } from './fakes.tsx';
 
 vi.mock('../i18n/ko.ts', async () => {
   const { zh: z } = await vi.importActual<{ zh: Record<string, string> }>('../i18n/zh.ts');
@@ -29,109 +28,6 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('会话没了：提示后回登录页（0.29 续第 98 条、0.38 第 7 条）', () => {
-  it('读列表回 revoked：一发现就同步删本机会话、signOut 紧接着放后台，再清本机库和缓存，清完只删同一个会话；弹“需要重新登录”，点“去登录”回登录页', async () => {
-    const { exit, order } = fakeExit();
-    const api = fakeApi({ loadDevices: vi.fn(async () => fail('revoked')) }, order);
-    render(<SettingsPage deps={{ api, exit, now }} />);
-    const dlg = await screen.findByRole('dialog');
-    expect(text(dlg)).toContain(zh['settings.revoked.body']);
-    await waitFor(() => expect(order).toEqual(['session', 'signout', 'wipe', 'caches', 'session', 'deleteDb']));
-    expect(exit.clearLocalSessionIf.mock.calls).toEqual([['s-me'], ['s-me']]);   // K6-sugg4 ①：开头、清完都只删被拒那次请求用的会话
-    const go = await within(dlg).findByRole('button', { name: zh['settings.revoked.go'] });
-    await act(async () => {
-      fireEvent.click(go);
-    });
-    await waitFor(() => expect(exit.goToAuth).toHaveBeenCalledTimes(1));
-  });
-
-  it('被移除后 signOut 一直不返回：不等它，清完库就删本机会话，“去登录”可点', async () => {
-    const { exit } = fakeExit();
-    const api = fakeApi({ loadDevices: vi.fn(async () => fail('revoked')), dropLocalSession: vi.fn(() => new Promise<LocalSignOut>(() => undefined)) });
-    render(<SettingsPage deps={{ api, exit, now }} />);
-    const dlg = await screen.findByRole('dialog');
-    await waitFor(() => expect(exit.clearLocalSessionIf).toHaveBeenCalled());
-    const go = await within(dlg).findByRole('button', { name: zh['settings.revoked.go'] });
-    expect((go as HTMLButtonElement).disabled).toBe(false);
-    await act(async () => {
-      fireEvent.click(go);
-    });
-    await waitFor(() => expect(exit.goToAuth).toHaveBeenCalledTimes(1));
-  });
-
-  it('弹框一出来就点、或自动跳转先到：都等清空本机和删本机会话做完再跳（清理中按钮禁用）', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const { exit, order } = fakeExit();
-    const gate = deferred();
-    exit.wipe.mockImplementation(async () => {
-      await gate.promise;
-      order.push('wipe');
-      return true;
-    });
-    const api = fakeApi({ loadDevices: vi.fn(async () => fail('revoked')) }, order);
-    render(<SettingsPage deps={{ api, exit, now, redirectMs: 1000 }} />);
-    const dlg = await screen.findByRole('dialog');
-    const go = within(dlg).getByTestId('settings-revoked-go') as HTMLButtonElement;
-    expect(go.disabled).toBe(true);
-    expect(text(go)).toBe(zh['settings.busy']);
-    fireEvent.click(go);
-    // 自动跳转的时间到了，清理还没完：不跳
-    await act(async () => {
-      vi.advanceTimersByTime(1500);
-    });
-    expect(exit.goToAuth).not.toHaveBeenCalled();
-    expect(exit.clearLocalSessionIf).toHaveBeenCalledTimes(1);   // 只有一开头那次（K6-sugg3 ①）
-    await act(async () => {
-      gate.resolve();
-    });
-    await waitFor(() => expect(exit.goToAuth).toHaveBeenCalledTimes(1));
-    expect(order.indexOf('wipe')).toBeLessThan(order.indexOf('auth'));
-    expect(order.indexOf('caches')).toBeLessThan(order.indexOf('auth'));
-    expect(order.indexOf('session')).toBeLessThan(order.indexOf('auth'));
-  });
-
-  it('本机已经没有会话（别的标签页退出了）：提示“已退出登录”，不说“被移除”', async () => {
-    const api = fakeApi({ loadDevices: vi.fn(async () => fail('signed_out')) });
-    const { exit } = fakeExit();
-    render(<SettingsPage deps={{ api, exit, now }} />);
-    const dlg = await screen.findByRole('dialog');
-    expect(text(dlg)).toContain(zh['settings.signedOut.body']);
-    expect(text(dlg)).not.toContain(zh['settings.revoked.body']);
-    await waitFor(() => expect(exit.clearLocalSessionIf).toHaveBeenCalled());
-  });
-
-  it('移除设备时回 revoked：同样处理；按钮复位；不点按钮几秒后自动回登录页', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const api = fakeApi({ removeDevice: vi.fn(async () => fail('revoked')) });
-    const { exit } = fakeExit();
-    await renderPage(api, exit, 3000);
-    await openAccount();
-    fireEvent.click(within(rowAt(1)).getByRole('button'));
-    await confirmWith(zh['settings.confirm.remove.ok']);
-    expect(await screen.findByText(zh['settings.revoked.body'])).toBeTruthy();
-    expect(within(rowAt(1)).getByRole('button', { hidden: true }).hasAttribute('disabled')).toBe(false);
-    expect(exit.goToAuth).not.toHaveBeenCalled();
-    await act(async () => {
-      vi.advanceTimersByTime(3000);
-    });
-    await waitFor(() => expect(exit.goToAuth).toHaveBeenCalledTimes(1));
-    expect(exit.wipe).toHaveBeenCalledTimes(1);
-    expect(api.dropLocalSession).toHaveBeenCalledTimes(1);
-  });
-
-  it('改语言时写账号回 revoked：同样处理', async () => {
-    const api = fakeApi({ saveLocale: vi.fn(async () => fail('revoked')) });
-    const { exit } = fakeExit();
-    await renderPage(api, exit);
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: zh['settings.lang.ko'] }));
-    });
-    expect(await screen.findByText(`[ko]${zh['settings.revoked.body']}`)).toBeTruthy();
-    expect(exit.wipe).toHaveBeenCalled();
-    await waitFor(() => expect(exit.clearLocalSessionIf).toHaveBeenCalled());
-  });
-});
-
 describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
   it('退出登录（没有待发改动和草稿）：不弹确认，删本机行 → 清空本机 → signOut，回登录页', async () => {
     const { exit, order } = fakeExit();
@@ -139,7 +35,7 @@ describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
     await renderPage(api, exit);
     await clickSignOut();
     await waitFor(() => expect(exit.goToAuth).toHaveBeenCalled());
-    expect(order).toEqual(['row', 'wipe', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
+    expect(order).toEqual(['row', 'wipe', 'deleteDb', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
     expect(api.deleteOwnDevice).toHaveBeenCalledWith('y');
   });
 
@@ -244,7 +140,7 @@ describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
       vi.advanceTimersByTime(4000);
     });
     await waitFor(() => expect(exit.goToAuth).toHaveBeenCalled());
-    expect(order).toEqual(['wipe', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
+    expect(order).toEqual(['wipe', 'deleteDb', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
   });
 
   it('删本机行晚到（超时以后才回来）：不删本机会话，signOut 照常做；服务器没退成照样提示', async () => {
@@ -313,16 +209,4 @@ describe('自己调 signOut 之前先打“自己退出”的标记（K6-signedo
     expect(marked).toEqual([true]);
   });
 
-  it('读列表回 revoked（本页自己处理被移除，后台调 signOut）：signOut 之前已打标记，只打本页的', async () => {
-    const { exit } = fakeExit();
-    const marked: boolean[] = [];
-    const api = fakeApi({
-      loadDevices: vi.fn(async () => fail('revoked')),
-      dropLocalSession: vi.fn(async () => (marked.push(isSelfSignOut()), { serverDone: true } satisfies LocalSignOut)),
-    });
-    render(<SettingsPage deps={{ api, exit, now }} />);
-    await screen.findByRole('dialog');
-    await waitFor(() => expect(marked).toEqual([true]));
-    expect(localStorage.getItem('lemo.self_signout')).toBeNull();   // 只打本页的（审查建议 4）
-  });
 });

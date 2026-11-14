@@ -95,18 +95,19 @@ function SignOutConfirm({ ask, onOk, onCancel }: { ask: Ask; onOk(): void; onCan
   );
 }
 
-const EXIT_TEXT = {
-  revoked: { title: 'settings.revoked.title', body: 'settings.revoked.body' },
-  signed_out: { title: 'settings.signedOut.title', body: 'settings.signedOut.body' },
-  offline_signout: { title: 'settings.offlineOut.title', body: 'settings.offlineOut.body' },
-} as const satisfies Record<ExitNotice, { title: string; body: string }>;
-
-/** 离开本机前的提示（被移除、别处已退出、服务器没退成）：不能关，只能去登录（几秒后也会自动去）；本机还没清完时按钮禁用 */
+/**
+ * 本人退出、服务器上的这次登录没能吊销时的提示：不能关，只能去登录（几秒后也会自动去）；本机还没清完时按钮禁用。
+ * 会话不认、本机没有会话不在这里提示：交给 core/device-exit.ts 回登录页，由登录页提示（第三方审查前端-4）
+ */
 function ExitDialog({ notice, cleaning, onGo }: { notice: ExitNotice | null; cleaning: boolean; onGo(): void }) {
   const t = useSettingsT();
-  const text = EXIT_TEXT[notice ?? 'revoked'];
   return (
-    <Dialog open={notice !== null} onOpenChange={() => undefined} title={t(text.title, {})} description={t(text.body, {})}>
+    <Dialog
+      open={notice !== null}
+      onOpenChange={() => undefined}
+      title={t('settings.offlineOut.title', {})}
+      description={t('settings.offlineOut.body', {})}
+    >
       <div className={styles.actions}>
         <FormButton size="compact" variant="primary" onClick={onGo} disabled={cleaning} aria-busy={cleaning} data-testid="settings-revoked-go">
           {cleaning ? t('settings.busy', {}) : t('settings.revoked.go', {})}

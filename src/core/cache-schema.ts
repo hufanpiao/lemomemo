@@ -3,6 +3,7 @@
 //   schemaHash() 的结果写在 core/cache-schema.lock，core/__tests__/cache-schema.test.ts 在 CI 里核对（漏改就失败）
 // 纯 TS：不准 import React 和任何功能（A1）
 // 11-05 首屏瘦身：不传 list 时读 manifest-sync.gen.ts（每张表只有 name、schema、sync、rebuildable），完整清单快照不进首屏
+import { OWNER_STORE, PENDING_STORE } from '../../shared/local-db.ts';
 import type { Manifest } from '../../shared/schema/manifest.ts';
 import { isSyncTable, syncTables } from './manifest-tables.ts';
 import { syncTableSnapshot } from './manifest-sync.gen.ts';
@@ -35,8 +36,9 @@ export const OUTBOX = 'outbox';
 export const DRAFTS = 'drafts';
 /** 隐私记“＋”原话的密文草稿（R-123）。功能没做之前禁止写入：只准定义、关库前放行、退出前只读计数，core/__tests__/vault-drafts-guard.test.ts 守着（审查第 12 条） */
 export const VAULT_DRAFTS = 'vault_drafts';
-export const PENDING_ACTIONS = 'pending_actions';
-export const OWNER = 'owner';
+/** SW 也写这两个仓：名字在 shared/local-db.ts（后端-5） */
+export const PENDING_ACTIONS = PENDING_STORE;
+export const OWNER = OWNER_STORE;
 
 /** 本机专用的仓（不在数据清单里） */
 export const LOCAL_STORES: readonly StoreDef[] = [

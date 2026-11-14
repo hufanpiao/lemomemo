@@ -3,7 +3,7 @@
 // • count：本机 outbox 还有几条没发（platform/local-outbox.ts 的 localOutbox.count()）——登录页对本机库只有这一次计数调用，
 //   不读 server、view，不读 outbox 条目的内容（0.59 安全审建议，单测钉住）
 // • fate：登录页再查（联网时每打开一次查一次）：用记号里的 session_id、user_id 在本机算 pair_hash，调 session_fate；回 revoked 照 removed 清库
-// • wipe：清库（platform/sign-out.ts 的 wipeThisDevice：按库名删 planner-v4、清运行时缓存、断开推送，同一步删 lemo.reauth），再清日志上传队列
+// • wipe：清库（platform/exit-basics.ts 的 wipeThisDevice（sign-out.ts 原样转出）：按库名删 planner-v4、清运行时缓存、断开推送，同一步删 lemo.reauth），再清日志上传队列
 // • clearAuthLoss：登录页“清除这台设备上的内容”是本人主动清除，lemo.authloss 一起删（0.59 M4）；再查回 revoked 是被动清库，不删
 // 登录页不跑 boot、不 import core（会带进 zod），这里只用 platform
 import { clearAuthLoss, readReauth, type Reauth } from '../../../platform/auth-loss-store.ts';

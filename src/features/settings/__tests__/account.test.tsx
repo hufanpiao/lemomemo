@@ -259,16 +259,14 @@ describe('导出全部（设置 › 数据）', () => {
     }
   });
 
-  it('session_revoked：走现有的“被移除”流程（清本机、提示、去登录）；停用、冷静期：清本机回登录页带原因', async () => {
+  it('session_revoked：和停用、冷静期一样交给 leave（core/device-exit.ts 的 exitDevice）——removed 带被拒那次的 sid，设置页自己不清库', async () => {
     const revoked = fakeAccount({ startExport: vi.fn(async () => ({ ok: false as const, error: 'revoked' as const, sid: 's-me' })) });
     const a = setup({ account: revoked });
     await act(async () => {
       fireEvent.click(exportBtn());
     });
-    const dlg = await screen.findByRole('dialog');
-    expect(text(dlg)).toContain(zh['settings.revoked.title']);
-    await waitFor(() => expect(a.exit.wipe).toHaveBeenCalled());
-    expect(a.exit.clearLocalSessionIf).toHaveBeenCalledWith('s-me');
+    await waitFor(() => expect(a.leave).toHaveBeenCalledWith('removed', 's-me'));
+    expect(a.exit.wipe).not.toHaveBeenCalled();
     cleanup();
 
     for (const [error, notice] of [['pending_deletion', 'pending_deletion'], ['account_disabled', 'disabled']] as const) {

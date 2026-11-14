@@ -1,17 +1,17 @@
 // 本机库归谁、换账号就清空（claimCache、ensureAccount、watchAccount 换账号那一半），以及退出用的几块：设闸、写记号只关库、清本机数据
 // 不变量：比对 owner 和清空在同一个覆盖全部仓的事务里；换账号先同步设闸再清；会话没了只设闸、交给 onSessionLost（core/device-exit.ts）
-// 不变量：清本机数据只在 wipeLocal / clearLocalData 做；纯 TS，不准 import React 和任何功能（A1）。详细说明见架构 4.1、4.1a
+// 不变量：清本机数据只在 wipeLocal / bootWipeSteps 做，步骤和超时在 platform/exit-basics.ts 的 wipeThisDevice；纯 TS，不准 import React 和任何功能（A1）。详细说明见架构 4.1、4.1a
+import { OWNER_KEY } from '../../shared/local-db.ts';
 import type { BootResult } from './boot.ts';
-import { clearReauth, writeReauth, type ReauthReason } from '../platform/auth-loss-store.ts';
-import { CACHES_TIMEOUT_MS, forgetAccountLocal, WIPE_TIMEOUT_MS, withTimeout } from '../platform/exit-basics.ts';
+import { writeReauth, type ReauthReason } from '../platform/auth-loss-store.ts';
+import { forgetAccountLocal, wipeThisDevice } from '../platform/exit-basics.ts';
 import type { RefreshFailure } from '../platform/supabase/refresh-failure.ts';
 import { disconnectPushLazy } from '../platform/push-disconnect.ts';
 import { setPushClaimContext } from '../platform/push-claim-run.ts';
+import { clearCacheStorage } from '../platform/session.ts';
 import { deleteCacheDb, type Cache } from './cache.ts';
 import { OWNER } from './cache-schema.ts';
 import { clearAllCollections } from './store.ts';
-
-const OWNER_KEY = 'user_id';
 
 /** claimCache 的结果：same 本来就是这个账号；first 第一次记下（库是新的）；switched 换了账号，已清空 */
 export type ClaimResult = 'same' | 'first' | 'switched';
@@ -221,24 +221,20 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
   };
 }
 
-export interface WipeDeps extends Pick<EnsureAccountDeps, 'clearCacheStorage' | 'disconnectPush'> {
-  /** 按库名删库（默认 core/cache.ts 的 deleteCacheDb，库名取本页的库） */
+export interface WipeDeps extends Pick<EnsureAccountDeps, 'disconnectPush'> {
+  /** 只删运行时缓存（默认 platform/session.ts 的 clearCacheStorage） */
+  clearCacheStorage?(): Promise<void>;
+  /** 按库名删库（默认 bootWipeSteps 的：先关本页连接，再删本页的库） */
   deleteDb?(): Promise<unknown>;
-  /** true：清完也按库名删整个库（会话没了，不留库文件）；默认只在清库卡住或失败时删 */
-  dropDb?: boolean;
   /** 记一条日志（只有 act，例如 auth_loss_store_failed）；不填不记 */
   log?(act: string): void;
-  /** 测试用：清库（含按库名删）、清运行时缓存各自的上限（默认 platform/exit-basics.ts 的 WIPE_TIMEOUT_MS、CACHES_TIMEOUT_MS） */
+  /** 测试用：清库、清运行时缓存各自的上限（默认 platform/exit-basics.ts 的 WIPE_TIMEOUT_MS、CACHES_TIMEOUT_MS） */
   wipeMs?: number;
   cachesMs?: number;
 }
 
-/** 到点或出错都返回 false，按时完成返回 true；原来的操作不取消（超时工具只有 exit-basics.ts 的 withTimeout 一份） */
-const done = (run: () => Promise<unknown>, ms: number): Promise<boolean> => withTimeout(async () => (await run(), true), ms, () => false);
-
 /**
- * 清空整库（含 outbox，没上传的丢弃）和内存集合：不设上限、失败就抛。
- * 设置页本人退出只调这一步（上限、推送、缓存、按库名删由 platform/sign-out.ts 的 wipeThisDevice 做）；其余出口走 wipeLocal
+ * 清空整库（含 outbox，没上传的丢弃）和内存集合：不设上限、失败就抛（上限在 platform/exit-basics.ts 的 wipeThisDevice）
  */
 export async function clearLocalData(cache: Cache): Promise<void> {
   await cache.clearAll();
@@ -246,27 +242,50 @@ export async function clearLocalData(cache: Cache): Promise<void> {
 }
 
 /**
- * 清本机数据（架构约定 10.1）：设闸 → 删 lemo.reauth → clearLocalData → 断开推送 → 关库
- * →（清不掉或 dropDb）按库名删库 → 清运行时缓存 → 清本机痕迹（forgetAccountLocal，清库那几秒里又记下的日志也清掉）。每一步有上限、失败照样往下走，永远 resolve；最坏约 WIPE_TIMEOUT_MS × 2 + CACHES_TIMEOUT_MS
+ * 主 App 清本机库的两步，交给 platform/exit-basics.ts 的 wipeThisDevice（wipeLocal 和设置页本人退出共用这一份）：
+ * wipe = 设闸 → 清空整库和内存集合（库没开、已关就只清内存）；deleteDb = 关本页连接（原因 'closed'，不触发 versionchange → 重新载入）→ 按库名删本页的库
  */
-export async function wipeLocal(boot: BootResult, deps: WipeDeps): Promise<void> {
+export function bootWipeSteps(boot: BootResult): { wipe(): Promise<void>; deleteDb(): Promise<unknown> } {
+  return {
+    wipe: async () => {
+      closeGate(boot);
+      const cache = boot.cache;
+      try {
+        if (cache && !cache.isClosed()) await clearLocalData(cache);
+      } finally {
+        clearAllCollections();
+      }
+    },
+    deleteDb: () => {
+      const name = boot.cache?.name;
+      closeCache(boot);
+      return deleteCacheDb({ name });
+    },
+  };
+}
+
+/**
+ * 清本机数据（架构约定 10.1）：同步设闸，再交给 platform/exit-basics.ts 的 wipeThisDevice（清本机只有那一个入口、一套超时，第三方审查前端-4、后端-3）：
+ * 删 lemo.reauth → 清库 → 断开推送 → 关库、按库名删库 → 清运行时缓存 → 清本机痕迹（forgetAccountLocal，这个账号的日志队列一起清）。永远 resolve
+ */
+export async function wipeLocal(boot: BootResult, deps: WipeDeps = {}): Promise<void> {
   closeGate(boot);
-  // 删不掉时下次冷启动登录页会再查 session_fate
-  if (!clearReauth()) deps.log?.('auth_loss_store_failed');
-  const wipeMs = deps.wipeMs ?? WIPE_TIMEOUT_MS;
-  const cache = boot.cache;
+  const own = bootWipeSteps(boot);
+  const del = deps.deleteDb;
   try {
-    // 超时后清库不取消，关库后它以“库已关”结束，没人等它；本机库靠按库名删清掉
-    const cleared = !cache || cache.isClosed() || (await done(() => clearLocalData(cache), wipeMs));
-    clearAllCollections();
-    await disconnectPush(deps);
-    closeCache(boot);   // 原因 'closed'：不触发 versionchange → 重新载入
-    if (!cleared || deps.dropDb) await done(deps.deleteDb ?? (() => deleteCacheDb({ name: cache?.name, waitMs: wipeMs })), wipeMs);
-    await done(() => deps.clearCacheStorage(), deps.cachesMs ?? CACHES_TIMEOUT_MS);
-  } catch {
-    clearAllCollections();
+    await wipeThisDevice(
+      {
+        wipe: own.wipe,
+        deleteDb: del ? () => (closeCache(boot), del()) : own.deleteDb,
+        clearCacheStorage: deps.clearCacheStorage ?? clearCacheStorage,
+        disconnectPush: () => disconnectPush(deps),
+        ...(deps.log ? { log: deps.log } : {}),
+      },
+      boot.userId,
+      deps.wipeMs,
+      deps.cachesMs,
+    );
   } finally {
     closeCache(boot);
-    forgetAccountLocal(boot.userId);
   }
 }

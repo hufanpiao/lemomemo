@@ -13,7 +13,6 @@ import { watchAccount, wipeLocal } from '../core/account.ts';
 import { defaultExitDeps, exitOnSessionLoss, REAUTH_GRACE_MS, type ExitDeps } from '../core/device-exit.ts';
 import { hasAuthLoss, readReauth } from '../platform/auth-loss-store.ts';
 import { coldStart, type BootResult } from '../core/boot.ts';
-import { deleteCacheDb } from '../core/cache.ts';
 import { collection } from '../core/store.ts';
 import { waitLook } from './look-wait.ts';
 import type { LookRow } from '../platform/look.ts';
@@ -184,12 +183,12 @@ async function start(): Promise<void> {
   mountFeatures(boot.flags);
 
   // 换账号监听在 render 之前挂（K6 复审 N4）：挂上时同步再比一次会话，coldStart 期间已经换了账号或退出就不渲染，直接走换账号流程
-  // 会话没了（本页 SIGNED_OUT、别的标签页退出）走退出出口 core/device-exit.ts：清库时关掉连接后按库名删库（不留库文件，登录页审查）；
+  // 会话没了（本页 SIGNED_OUT、别的标签页退出）走退出出口 core/device-exit.ts：清库时关掉连接后按库名删库（不留库文件，各出口都这样）；
   // 这两路原来就不广播 reset（别的标签页各自收得到 storage 事件）
   const lossExit: ExitDeps = {
     ...defaultExitDeps,
     getBoot: () => boot,
-    wipe: (b) => wipeLocal(b, { clearCacheStorage, deleteDb: () => deleteCacheDb(), dropDb: true, log: logEvent }),
+    wipe: (b) => wipeLocal(b, { log: logEvent }),
     clearLogs,
     broadcastReset: () => undefined,
     log: logEvent,

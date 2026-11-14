@@ -12,7 +12,7 @@ import { claimCache } from '../../src/core/account.ts';
 import { openCache } from '../../src/core/cache.ts';
 import { PENDING_ACTIONS } from '../../src/core/cache-schema.ts';
 import { fakeIndexedDB } from '../../src/core/__tests__/idb-fake.ts';
-import type { SwPendingAction } from '../../src/sw/pending.ts';
+import type { SwPendingAction } from '../../shared/local-db.ts';
 import {
   clipText,
   dataOf,

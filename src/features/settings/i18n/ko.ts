@@ -160,11 +160,7 @@ export const ko = {
   'settings.err.unknown': '문제가 생겼어요. 잠시 후 다시 시도해 주세요', // R-106 B1 第一遍已审（10-30）；照 shared error.unknown
   'settings.err.accountDisabled': '이 계정은 사용 중지됐어요. 탈퇴를 신청한 뒤 7일 안에 다시 로그인하면 복구할 수 있어요.', // R-106 B1 第一遍已审（10-30）
 
-  'settings.revoked.title': '다시 로그인해 주세요', // R-106 B1 第一遍已审（10-30）
-  'settings.revoked.body': '다른 기기에서 이 기기를 제거했어요. 다시 로그인해 주세요. 아직 동기화되지 않은 변경 사항은 삭제됐어요.', // R-106 B1 第一遍已审（10-30）；中文和 auth.exit.removed 一字不差，照抄那条已审韩文
   'settings.revoked.go': '로그인하기', // R-106 B1 第一遍已审（10-30）
-  'settings.signedOut.title': '로그아웃됐어요', // R-106 B1 第一遍已审（10-30）
-  'settings.signedOut.body': '다른 창에서 이 계정을 로그아웃했어요. 다시 로그인해 주세요.', // R-106 B1 第一遍已审（10-30）
   'settings.offlineOut.title': '이 기기에서 로그아웃했어요', // R-106 B1 第一遍已审（10-30）
   'settings.offlineOut.body': '서버에 남은 이번 로그인은 아직 끊지 못했지만, 이 기기의 데이터는 모두 지웠어요. 나중에 다른 기기에서 “다른 모든 기기에서 로그아웃”으로 정리할 수 있어요.', // R-106 B1 第一遍已审（10-30）；措辞照 auth.session.serverPending（已审）
 
