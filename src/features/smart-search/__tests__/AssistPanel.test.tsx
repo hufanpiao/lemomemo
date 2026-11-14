@@ -12,6 +12,7 @@ import { clock } from '../../../platform/clock.ts';
 import type * as Session from '../../../platform/session.ts';
 import type { AssistReq } from '../hooks/find-open.ts';
 import AssistPanel from '../ui/AssistPanel.tsx';
+import { whenText } from '../ui/find-parts.tsx';
 
 const SID = 'sid-a';
 vi.mock('../../../platform/session.ts', async (orig) => ({ ...(await orig<typeof Session>()), readSessionId: () => SID }));
@@ -63,6 +64,15 @@ afterEach(() => {
   cleanup();
   for (const c of ['events', 'todos', 'notes', 'settings']) collection(c).clear();
   vi.restoreAllMocks();
+});
+
+describe('日子加时刻只拼一处（评审第 23 条，find-parts 的 whenText）', () => {
+  it('日子带星期、时刻，缺哪部分就不写哪部分', () => {
+    expect(whenText('2026-11-10', '15:00', 'zh-CN')).toMatch(/^11月10日.*周二 15:00$/);
+    expect(whenText('2026-11-10', null, 'zh-CN')).toMatch(/周二$/);
+    expect(whenText(null, '15:00', 'zh-CN')).toBe('15:00');
+    expect(whenText(null, null, 'zh-CN')).toBe('');
+  });
 });
 
 describe('结果层：时间类查找', () => {

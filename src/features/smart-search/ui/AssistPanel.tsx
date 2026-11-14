@@ -21,7 +21,7 @@ import type { AssistReq } from '../hooks/find-open.ts';
 import { byDay, moveTo, useAssist, type FindItem, type TargetHit } from '../hooks/useAssist.ts';
 import a from './AssistPanel.module.css';
 import styles from './FindPanel.module.css';
-import { Lead, metaOf, openItem, useFindT, type T } from './find-parts.tsx';
+import { Lead, metaOf, openItem, useFindT, whenText, type T } from './find-parts.tsx';
 
 type Locale = 'zh-CN' | 'ko-KR';
 
@@ -40,7 +40,7 @@ function understandQuery(req: AssistReq, t: T, locale: Locale, overdue: number):
 /** 改期按钮上的“11/10 周二 15:00” */
 const toText = (h: TargetHit, to: { date: string | null; time: string | null } | null, today: string, locale: Locale): string => {
   const m = moveTo(h, to ?? { date: null, time: null }, today);
-  return [fmtDay(m.date, locale, 'monthDayWeek'), m.time ?? ''].filter(Boolean).join(' ');
+  return whenText(m.date, m.time, locale);
 };
 
 export default function AssistPanel({ req, onClose }: { req: AssistReq; onClose(): void }) {
@@ -177,14 +177,14 @@ type S = ReturnType<typeof useAssist>;
 function targetUnderstand(req: AssistReq, s: S, t: T, locale: Locale): string {
   if (!('target' in req.ask)) return '';
   const g = req.ask.target;
-  const when = g.date ? [fmtDay(g.date, locale, 'monthDayWeek'), g.time ?? ''].filter(Boolean).join(' ') : '';
+  const when = g.date ? whenText(g.date, g.time, locale) : '';
   const text = g.text || t('as.t.any', {});
   const what = when ? t('as.t.what', { when, text }) : text;
   if (req.ask.intent === 'cancel') return t('as.t.cancel', { what });
   if (req.ask.intent === 'complete') return t('as.t.complete', { what });
   const first = s.match.hits[0];
   const to = req.ask.to;
-  const toLabel = first ? toText(first, to, s.today, locale) : [to?.date ? fmtDay(to.date, locale, 'monthDayWeek') : '', to?.time ?? ''].filter(Boolean).join(' ');
+  const toLabel = first ? toText(first, to, s.today, locale) : whenText(to?.date, to?.time, locale);
   return t('as.t.reschedule', { what, to: toLabel });
 }
 
@@ -192,7 +192,7 @@ function TargetCard({ req, s, t, locale, onRecord, onClose }: { req: AssistReq; 
   if (!('target' in req.ask)) return null;
   const ask = req.ask;
   const titleOf = (h: TargetHit): string => s.titleOf(h.id) || t('find.noTitle', {});
-  const meta = (h: TargetHit): string => [h.date ? fmtDay(h.date, locale, 'monthDayWeek') : '', h.time ?? ''].filter(Boolean).join(' ');
+  const meta = (h: TargetHit): string => whenText(h.date, h.time, locale);
   const batch = ask.intent === 'reschedule' && ask.target.all === true;
   const chosen = s.match.hits.filter((h) => !s.off.has(h.id));
   const go = async (hs: TargetHit[]): Promise<void> => {

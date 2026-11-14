@@ -43,6 +43,9 @@ export function Lead({ kind }: { kind: FindKind }) {
 
 /** 日子（带星期）和时刻，没有的部分不写；第二行和右栏预览共用 */
 const dayTime = (day: string, time: string | null | undefined): string => [day, time ?? ''].filter(Boolean).join(' ');
+/** 同上，日子还没格式化：“11月10日 周二 15:00”（查找面板、结果层的候选、改期按钮都用这一份，评审第 23 条） */
+export const whenText = (date: string | null | undefined, time: string | null | undefined, locale: 'zh-CN' | 'ko-KR'): string =>
+  dayTime(date ? fmtDay(date, locale, 'monthDayWeek') : '', time);
 
 /** 第二行：日程“日子 时刻 · 地点”、待办“日子截止 · 项目”、纪念日“下一次 日子”、随手记和文档有片段给片段、图片和文档写在哪条随手记里 */
 export function metaOf(h: FindHit, t: T, locale: 'zh-CN' | 'ko-KR'): string {
