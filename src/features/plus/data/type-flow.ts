@@ -24,6 +24,7 @@ import { INTENT_SURE_MIN } from '../../../../shared/schema/intent.ts';
 import { quotaOutToday, rememberQuotaLeft } from './quota.ts';
 import { AI_PARSE_TIMEOUT_MS } from './record-logic.ts';
 import { SendError, withTimeoutRetry } from './send-error.ts';
+import { onlineNow } from '../../../platform/online.ts';
 
 /** SendError 定义在 send-error.ts，这里转出给老调用方 */
 export { SendError };
@@ -125,15 +126,13 @@ export function planLocal(text: string, ctx: TypeCtx): { result: ParseResult; su
   return { result, sure: confidence(result) === 'sure' };
 }
 
-/** 浏览器明确说离线（navigator.onLine === false）才算离线；读不到当在线 */
-export const navOnline = (): boolean => typeof navigator === 'undefined' || navigator.onLine !== false;
 
 /**
  * 调一次 ai-parse（6 秒超时，网络错误自动重试 1 次）→ 结果。
  * 重试前浏览器已经明确说离线：不再重试（B3 前端A代码审 C4：不然断网时要等两个 6 秒才退回本机）。
  * signal：调用方取消（手机识别那一路切页作废），请求当场中止、不再重试（结果 ai_failed cancelled）
  */
-export async function askAi(req: AiParseReq, call: CallAi, timeoutMs = AI_PARSE_TIMEOUT_MS, online: () => boolean = navOnline, signal?: AbortSignal): Promise<AiOutcome> {
+export async function askAi(req: AiParseReq, call: CallAi, timeoutMs = AI_PARSE_TIMEOUT_MS, online: () => boolean = onlineNow, signal?: AbortSignal): Promise<AiOutcome> {
   const r = await withTimeoutRetry((s) => call(req, s), timeoutMs, online, signal);
   return r.ok ? outcomeOf(r.value) : { kind: 'ai_failed', reason: r.fail };
 }
@@ -191,7 +190,7 @@ export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: 
   const base = aiReqCtx(ctx);
   if (base === 'bad_default_day') return local('saved', base);
   const req: AiParseReq = { ...base, text: cutAiText(text) };
-  const isOnline = env.isOnline ?? navOnline;
+  const isOnline = env.isOnline ?? onlineNow;
   const out = await askAi(req, call, AI_PARSE_TIMEOUT_MS, isOnline, signal);
   switch (out.kind) {
     case 'record': {

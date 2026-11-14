@@ -17,6 +17,7 @@
 //   全部清空等完了再按本机缓存核（服务器、本机两份都还是已删除才发），单条永久删除发请求前等完了再核本机这一份；核对期间 busy
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { localDeleted, purgeMany, purgeOne, serverDeleted, type PurgeErr, type PurgeKey, type PurgeManyResult, type PurgeResult, type PurgeTable } from '../data/trash-purge-api.ts';
+import { onlineNow } from '../../../platform/online.ts';
 
 export type PurgeConfirm = { kind: 'one'; table: PurgeTable; id: string } | { kind: 'all'; n: number; skip: number; ro: number; keys: PurgeKey[] };
 export type PurgeMsg = 'purged' | 'cleared' | 'partial' | 'syncing' | 'readonly' | 'kept' | PurgeErr;
@@ -40,7 +41,6 @@ function subscribe(fn: () => void): () => void {
     window.removeEventListener('offline', fn);
   };
 }
-const readOnline = (): boolean => typeof navigator === 'undefined' || navigator.onLine !== false;
 
 const key = (table: string, id: string): string => `${table}:${id}`;
 
@@ -58,7 +58,7 @@ export function useTrashPurge<T extends { table: string; id: string; deletedAt: 
   settle: () => Promise<unknown> = settled,
   readonly: (table: string, id: string) => boolean = () => false,
 ) {
-  const online = useSyncExternalStore(subscribe, readOnline, () => true);
+  const online = useSyncExternalStore(subscribe, onlineNow, () => true);
   const [confirm, setConfirm] = useState<PurgeConfirm | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<PurgeMsg | null>(null);
@@ -81,13 +81,13 @@ export function useTrashPurge<T extends { table: string; id: string; deletedAt: 
   );
 
   const askOne = useCallback((table: PurgeTable, id: string) => {
-    if (!readOnline() || busyRef.current) return;
+    if (!onlineNow() || busyRef.current) return;
     setMsg(null);
     setRoN(0);
     setConfirm({ kind: 'one', table, id });
   }, []);
   const askAll = useCallback(() => {
-    if (!readOnline() || busyRef.current || items.length === 0) return;
+    if (!onlineNow() || busyRef.current || items.length === 0) return;
     setMsg(null);
     const keys = items.filter((i) => !readonly(i.table, i.id)).map((i) => ({ tbl: i.table as PurgeTable, id: i.id }));
     const ro = items.length - keys.length;

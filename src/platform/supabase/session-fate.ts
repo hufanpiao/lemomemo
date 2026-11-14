@@ -5,6 +5,7 @@
 // • 不 import http.ts：本文件随 core/auth-loss.ts 懒加载，引了首屏模块会让首屏多拆一块（见 auth-loss-log.ts 开头）
 import { buildInfo } from '../env.ts';
 import { pairHash } from '../auth-loss-log.ts';
+import { onlineNow } from '../online.ts';
 
 export type SessionFate = 'revoked' | 'unknown';
 export const SESSION_FATE_TIMEOUT_MS = 5000;
@@ -31,7 +32,7 @@ export async function querySessionFateResult(sessionId: string, userId: string, 
   const base = d.url ?? buildInfo.supabaseUrl;
   const key = d.anonKey ?? buildInfo.anonKey;
   if (!base || !key) return null;
-  const online = d.online ?? (() => typeof navigator === 'undefined' || navigator.onLine !== false);
+  const online = d.online ?? onlineNow;
   if (!online()) return null;
   const pair = await pairHash(sessionId, userId);
   if (!pair) return null;

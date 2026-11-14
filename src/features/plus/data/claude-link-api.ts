@@ -9,6 +9,7 @@
 // 纯 TS：不准 import React（A1）
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { sendFn, type FnPostOptions } from './fn-post.ts';
+import { onlineNow } from '../../../platform/online.ts';
 
 export const LINK_TIMEOUT_MS = 8000;
 /** 连接码多久过期（天），同 _shared/intake-token.ts 的 TOKEN_TTL_MS */
@@ -97,7 +98,7 @@ const isRow = (v: unknown): v is LinkRow => {
 };
 
 async function timed<T>(d: LinkDeps, run: (signal: AbortSignal) => Promise<LinkResult<T>>): Promise<LinkResult<T>> {
-  if (d.online ? !d.online() : typeof navigator !== 'undefined' && navigator.onLine === false) return { ok: false, err: 'offline' };
+  if (!(d.online ?? onlineNow)()) return { ok: false, err: 'offline' };
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), LINK_TIMEOUT_MS);
   try {

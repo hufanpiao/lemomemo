@@ -15,6 +15,7 @@ import { fetchBlob, sign, type FileError } from '../../../platform/files.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { saveFile, shareFile, type SaveOptions, type SaveOutcome } from '../../../platform/save-file.ts';
 import { sha256Hex } from '../../../platform/sha256.ts';
+import { onlineNow } from '../../../platform/online.ts';
 
 export interface FileRef {
   id: string;
@@ -53,7 +54,7 @@ const mem = memCache();
 
 const failOf = (e: FileError): OpenFail => {
   if (e.reason === 'not_checked') return 'not_ready';
-  if (e.kind === 'retry') return typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'retry';
+  if (e.kind === 'retry') return onlineNow() ? 'retry' : 'offline';
   return 'denied';
 };
 

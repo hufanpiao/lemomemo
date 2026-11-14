@@ -26,11 +26,12 @@ import { captureStep, type CaptureEvent, type CaptureStatus } from '../data/capt
 import type { Writer } from '../data/capture-save.ts';
 import { clearTypeDraft, readTypeDraft, writeTypeDraft } from '../data/type-draft.ts';
 import { createBatchBox, createSavedBatch } from '../data/saved-batch.ts';
-import { keepAsked, navOnline, planLocal, planText, type CallAi } from '../data/type-flow.ts';
+import { keepAsked, planLocal, planText, type CallAi } from '../data/type-flow.ts';
 import { useCaptureCtx } from './useCaptureCtx.ts';
 import { toAssist } from './assist-open.ts';
 
 import { useSavedBatch } from './useSavedBatch.ts';
+import { onlineNow } from '../../../platform/online.ts';
 
 // ui 不能直接 import data（A1），界面要用的类型经这里转出去
 export type { CallAi } from '../data/type-flow.ts';
@@ -66,7 +67,7 @@ export function useTypeBar(o: TypeBarOpts) {
   const inflight = useRef<AbortController | null>(null);
   useEffect(() => () => inflight.current?.abort(), []);
   // 没传 callAi 时用真的 ai-parse（data/ai-parse-api.ts）；测试传桩
-  const { day, callAi = callAiParse, writer, online = navOnline } = o;
+  const { day, callAi = callAiParse, writer, online = onlineNow } = o;
   const { ctx, aiOn: aiOnNow } = useCaptureCtx(day);
   const go = useCallback((e: CaptureEvent) => setStatus((s) => captureStep(s, e)), []);
   // 存、确认行、撤销、合并都在 data/saved-batch（和录音同一份）；这里只给自己的收尾和失败提示。这一批每次挂载一份，换了日子接着用

@@ -6,6 +6,7 @@
 // • 8 秒超时；只在懒加载块里用（设置 › 语音与 AI、结果层），不进首屏
 // 纯 TS：不准 import React（A1）
 import { getSupabase } from './supabase/client.ts';
+import { onlineNow } from './online.ts';
 
 export interface AiUsage {
   used: number;
@@ -41,7 +42,7 @@ export const usageRpc: UsageDeps['rpc'] = async (signal) => {
 
 const defaultDeps: UsageDeps = { rpc: usageRpc };
 
-const offlineNow = (d: UsageDeps): boolean => (d.online ? !d.online() : typeof navigator !== 'undefined' && navigator.onLine === false);
+const offlineNow = (d: UsageDeps): boolean => !(d.online ?? onlineNow)();
 
 export async function readAiUsage(d: UsageDeps = defaultDeps, timeoutMs = USAGE_TIMEOUT_MS): Promise<UsageResult> {
   if (offlineNow(d)) return { ok: false, err: 'offline' };

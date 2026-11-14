@@ -33,10 +33,11 @@ import { quotaOutToday } from './quota.ts';
 import { BLOB_KEEP_MS, speechByNet, type HoldZone } from './record-logic.ts';
 import { createBatchBox, createSavedBatch } from './saved-batch.ts';
 import type { AssistAsk } from '../../../../shared/logic/parse/assist.ts';
-import { navOnline, planText, recordLocal, type CallAi, type TypeCtx, type TypePlan } from './type-flow.ts';
+import { planText, recordLocal, type CallAi, type TypeCtx, type TypePlan } from './type-flow.ts';
 import type { VoiceNote } from './voice-flow.ts';
 import { createRecRoute } from './voice-rec.ts';
 import { createSpeechPath } from './voice-speech.ts';
+import { onlineNow } from '../../../platform/online.ts';
 
 /** 手机自带识别为什么顶上来：quota 额度用完；net 网络慢；off 没开 AI / 没同意；again 用户点了“再说一次” */
 export type SpeechWhy = 'quota' | 'net' | 'off' | 'again';
@@ -73,7 +74,7 @@ export interface VoiceBind {
   lang: Locale;
 }
 
-const ioOf = (io: VoiceIo) => ({ callVoice: io.callVoice ?? callAiVoice, callAi: io.callAi ?? callAiParse, online: io.online ?? navOnline, onAsk: io.onAsk ?? null });
+const ioOf = (io: VoiceIo) => ({ callVoice: io.callVoice ?? callAiVoice, callAi: io.callAi ?? callAiParse, online: io.online ?? onlineNow, onAsk: io.onAsk ?? null });
 export type VoiceDeps = ReturnType<typeof ioOf> & VoiceBind;
 
 /** 一次录音（或一次手机识别、一次重试）：代号、取消（录音器和上传共用）、录音器、开始写库了没有 */

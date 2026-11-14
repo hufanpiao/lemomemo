@@ -36,6 +36,7 @@ import { getSupabase } from '../../../platform/supabase/client.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { createAccountGateApi, purgeWhen, type PurgeWhen, type RestoreErr } from '../data/account-gate.ts';
 import type { AuthFlowDeps } from './useAuthFlow.ts';
+import { onlineNow } from '../../../platform/online.ts';
 
 /** none：没有要挡的；checking：探测中；pending：恢复页；disabled：停用页；unsure：验证码刚通过、探测不出；exited：本会话已退出、回登录表单 */
 export type GateView = 'none' | 'checking' | 'pending' | 'disabled' | 'unsure' | 'exited';
@@ -285,7 +286,5 @@ export function useAccountGate(deps: AuthFlowDeps = {}, onReplaced?: () => void)
 
 export type AccountGate = ReturnType<typeof useAccountGate>;
 
-/** 当下 navigator.onLine 是不是没有明说断网（断网提示选“没有网络”还是“暂时连不上服务器”，协调者必改第 7 条） */
-export function onlineNow(): boolean {
-  return typeof navigator === 'undefined' || navigator.onLine !== false;
-}
+/** 当下是不是没有明说断网（断网提示选“没有网络”还是“暂时连不上服务器”，协调者必改第 7 条）：platform/online.ts 那一份 */
+export { onlineNow };

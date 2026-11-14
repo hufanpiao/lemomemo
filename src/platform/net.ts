@@ -1,5 +1,6 @@
 // 联网和前后台（架构 4.2“发送的触发时机”、4.3）：上线、切到前台、切到后台。core/sync 经这里听，不自己碰 window、document
 // 浏览器环境以外（测试、SSR）一律当作“在前台、在线”，监听什么也不做
+import { onlineNow } from './online.ts';
 export interface Lifecycle {
   /** 恢复网络（window 的 online 事件）；返回取消函数 */
   onOnline(fn: () => void): () => void;
@@ -25,7 +26,7 @@ export const browserLifecycle: Lifecycle = {
     return () => document.removeEventListener('visibilitychange', h);
   },
   isVisible: () => !hasWindow() || document.visibilityState === 'visible',
-  isOnline: () => typeof navigator === 'undefined' || navigator.onLine !== false,
+  isOnline: onlineNow,
 };
 
 /**

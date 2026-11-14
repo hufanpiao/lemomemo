@@ -12,6 +12,7 @@
 // 纯 TS：不准 import React（A1）
 import { getBoot } from '../../../core/boot.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
+import { onlineNow } from '../../../platform/online.ts';
 
 export type PurgeTable = 'events' | 'todos' | 'notes';
 export type PurgeErr = 'offline' | 'failed' | 'not_synced';
@@ -42,7 +43,7 @@ const defaultDeps: PurgeDeps = {
   },
 };
 
-const offlineNow = (d: PurgeDeps): boolean => (d.online ? !d.online() : typeof navigator !== 'undefined' && navigator.onLine === false);
+const offlineNow = (d: PurgeDeps): boolean => !(d.online ?? onlineNow)();
 const count = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
 
 async function call(items: readonly PurgeKey[], d: PurgeDeps, timeoutMs: number): Promise<PurgeResult> {

@@ -2,6 +2,7 @@
 // 各功能共用这一份（B4b-1 整块评审第 6 条：原来设置、附件各写一份）
 // 只作界面提示：onLine 为 true 不代表真能连上，真连不上由请求本身报 offline
 import { useSyncExternalStore } from 'react';
+import { onlineNow } from '../../platform/online.ts';
 
 function subscribe(fn: () => void): () => void {
   if (typeof window === 'undefined') return () => undefined;
@@ -13,11 +14,9 @@ function subscribe(fn: () => void): () => void {
   };
 }
 
-const read = (): boolean => typeof navigator === 'undefined' || navigator.onLine !== false;
-
-/** 当下有没有网（不订阅；出错提示选“没有网络”还是“连不上服务器”用） */
-export const onlineNow = read;
+/** 当下有没有网（不订阅；出错提示选“没有网络”还是“连不上服务器”用）：platform/online.ts 那一份 */
+export { onlineNow };
 
 export function useOnline(): boolean {
-  return useSyncExternalStore(subscribe, read, () => true);
+  return useSyncExternalStore(subscribe, onlineNow, () => true);
 }

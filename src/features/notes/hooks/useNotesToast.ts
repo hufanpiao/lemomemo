@@ -4,6 +4,7 @@
 //   画成什么、点了做什么统一成一份 UndoTip（undoTipOf），页面的 UndoBar 只管画
 // • 返回值 up：撤销条或只读提示条出着，底部输入行往上让一格
 import { useEffect } from 'react';
+import { UNDO_TOAST_MS } from '../../../kit/components/UndoToast.tsx';
 import type { ListToast } from '../../../kit/hooks/useListActions.ts';
 import type { ReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import type { NotesMsgKey } from './useNotesT.ts';
@@ -35,7 +36,7 @@ export function useNotesToast<X extends { kind: string; trash?: boolean }>(g: Re
   const { toast } = g;
   useEffect(() => {
     if (toast === null || isUndo(toast)) return undefined;
-    const id = setTimeout(() => g.dismiss(toast), 'trash' in toast && toast.trash === true ? 8000 : 4000);
+    const id = setTimeout(() => g.dismiss(toast), 'trash' in toast && toast.trash === true ? UNDO_TOAST_MS : 4000);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- g 每次重画都是新对象（useReadonlyGuard 不包 useCallback），放进去会让计时每画一次就重来；dismiss 只按 toast 收，用哪一次的都一样
   }, [toast]);

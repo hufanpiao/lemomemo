@@ -16,7 +16,8 @@ import { cutAiText, isObj, outcomeOf } from './ai-outcome.ts';
 import type { CallVoice } from './ai-voice-api.ts';
 import { uploadTimeoutMs } from './record-logic.ts';
 import { withTimeoutRetry, type SendFail } from './send-error.ts';
-import { intentAsk, localHint, navOnline, planLocal, recordAlt, type AiReqCtx, type TypeCtx, type TypePlan } from './type-flow.ts';
+import { intentAsk, localHint, planLocal, recordAlt, type AiReqCtx, type TypeCtx, type TypePlan } from './type-flow.ts';
+import { onlineNow } from '../../../platform/online.ts';
 
 /** 要上传的一段录音：mime 不带参数（audio/mp4），直接当 Content-Type */
 export interface VoiceClip {
@@ -85,7 +86,7 @@ export interface SendVoiceOpts {
 
 /** 送一次 ai-voice（超时按体积；网络错误自动重试 1 次）→ 结果 */
 export async function sendVoice(clip: VoiceClip, ctx: AiReqCtx, call: CallVoice, o: SendVoiceOpts = {}): Promise<VoiceResult> {
-  const online = o.online ?? navOnline;
+  const online = o.online ?? onlineNow;
   const now = o.now ?? (() => performance.now());
   const t0 = now();
   const timeoutMs = uploadTimeoutMs(clip.blob.size);
