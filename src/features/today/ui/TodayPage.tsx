@@ -252,8 +252,6 @@ export default function TodayPage() {
       </AppearList>
     </AppearItem>
   );
-  const top = <TopNotices missedOn={missedOn} repeat={g.any ? <Ro part="repeat" onUpdate={g.update} /> : null} />;
-  const nowCard = <NowCard card={d.card} now={d.now} tz={d.tz} today={d.today} tomorrowFirst={d.tomorrowFirst} />;
   const annivLine = anniv ? (
     <QuietBoundary name="anniv-line">
       <Suspense fallback={null}>
@@ -261,19 +259,22 @@ export default function TodayPage() {
       </Suspense>
     </QuietBoundary>
   ) : null;
-  const phone = (
+  /** 手机的一列和电脑的时间河块是同一份：提示、“现在”卡、没赶上、今天的安排；手机在提示下面多一行纪念日（电脑放在日期行下面），
+   *  电脑的“今天的安排”标题由块标题画（这里不画小标题） */
+  const column = (desk: boolean) => (
     <>
-      {top}
-      {annivLine}
-      {nowCard}
+      <TopNotices missedOn={missedOn} repeat={g.any ? <Ro part="repeat" onUpdate={g.update} /> : null} />
+      {desk ? null : annivLine}
+      <NowCard card={d.card} now={d.now} tz={d.tz} today={d.today} tomorrowFirst={d.tomorrowFirst} />
       {/* 两块放在同一个 AppearList 里：没赶上最后一条离开时整组跟着淡出（不然 section 一卸载，那一行的退出动画就被截断），
           下面“今天的安排”用 layout 平移收上来，不跳 */}
       <AppearList as="div">
         {lateItem}
-        {listItem(true)}
+        {listItem(!desk)}
       </AppearList>
     </>
   );
+  const phone = column(false);
 
   return (
     <main ref={page} className={styles.page} data-feature="today" data-testid="today">
@@ -297,16 +298,7 @@ export default function TodayPage() {
           {annivLine}
           <Desk.default
             today={d.today}
-            river={
-              <>
-                {top}
-                {nowCard}
-                <AppearList as="div">
-                  {lateItem}
-                  {listItem(false)}
-                </AppearList>
-              </>
-            }
+            river={column(true)}
             sel={ds.sel}
             onOpen={open}
             onClose={ds.close}
