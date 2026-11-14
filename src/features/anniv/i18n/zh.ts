@@ -33,7 +33,7 @@ export const zh = {
   'anniv.ago': '{n} 天前',
   'anniv.past': '已过去的倒数日 {n}',
   'anniv.empty': '还没有纪念日',
-  'anniv.emptyNext': '点右上角“新建”，记下生日、纪念日或倒数日',
+  'anniv.emptyNext': '点上面的“新建”，记下生日、纪念日或倒数日',
   'anniv.emptyFilter': '这一类还没有',
   'anniv.ro': '这一条要新版本才能显示',
   'anniv.swipe.edit': '编辑',

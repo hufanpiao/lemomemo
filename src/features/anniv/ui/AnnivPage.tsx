@@ -1,5 +1,5 @@
 // 纪念日页面（B5 S14；架构 5.4；定稿线框 s4、s5；皮肤视觉稿 anniv、annko；R-121、R-132、R-141、R-144）：#/anniv 列表，#/anniv/new、#/anniv/<id> 新建和编辑
-// • 页顶：大标题“纪念日”、右边“＋ 新建”和设置入口头像（kit 的 MeLink）；下面“周 / 月 / 纪念日”分段（和日历页同一排，周、月原地换回日历页，
+// • 页顶：大标题“纪念日”、右边设置入口头像（kit 的 MeLink）；下面一行左边“周 / 月 / 纪念日”分段、右边“＋ 新建”（负责人 11-14 从右上角挪到日历页“今天”的位置；分段和日历页同一排，周、月原地换回日历页，
 //   日历和纪念日算同一层，R-372 ②）；再下面筛选胶囊 全部 / 生日 / 纪念日 / 倒数日（带条数）
 // • “最近的一个”大卡（R-132 方案 C）：类型小标签、大号天数（数字下面一笔浅色荧光笔底）、名字和周岁、日期和提醒；右上角头像。不用液态玻璃（R-144），电脑不加边框（R-141）
 // • 列表：生日、纪念日、倒数日合在一起按还有几天排（data/anniv-model.ts）；每行头像 36px（没头像是名字第一个字加类型颜色，R-121）、名字、副行、右侧大号天数，
@@ -13,6 +13,7 @@ import { navigate, replaceRoute, useRoute } from '../../../app/router.ts';
 import { useEditRoute } from '../../../app/router-levels.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
+import { ModeSeg } from '../../../kit/components/ModeSeg.tsx';
 import { ListToasts } from '../../../kit/components/ListToasts.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
@@ -57,19 +58,21 @@ function EditLayer() {
   return <AnnivEditor key={key} id={id} onCreated={onCreated} />;
 }
 
-/** “周 / 月 / 纪念日”：周、月换回日历页（原地换，同一层） */
-function ModeSeg({ t, today }: { t: AnnivT; today: string }) {
+/** 页顶第二行：左边“周 / 月 / 纪念日”分段（kit 的 ModeSeg，和日历页同一份，周、月原地换回日历页），右边“＋ 新建”（日历页“‹ 今天 ›”的位置；负责人 11-14） */
+function ModeRow({ t, today }: { t: AnnivT; today: string }) {
   return (
-    <div className={styles.seg} role="group" aria-label={t('anniv.modeLabel', {})}>
-      <button type="button" className={styles.segBtn} aria-pressed="false" onClick={() => void replaceRoute('cal', 'week', today)} data-testid="anniv-mode-week">
-        {t('anniv.mode.week', {})}
-      </button>
-      <button type="button" className={styles.segBtn} aria-pressed="false" onClick={() => void replaceRoute('calendar')} data-testid="anniv-mode-month">
-        {t('anniv.mode.month', {})}
-      </button>
-      <button type="button" className={styles.segBtn} aria-pressed="true" data-testid="anniv-mode-anniv">
-        {t('anniv.mode.anniv', {})}
-      </button>
+    <div className={styles.modeRow}>
+      <ModeSeg
+        label={t('anniv.modeLabel', {})}
+        items={[
+          { key: 'week', label: t('anniv.mode.week', {}), pressed: false, onClick: () => void replaceRoute('cal', 'week', today), testId: 'anniv-mode-week' },
+          { key: 'month', label: t('anniv.mode.month', {}), pressed: false, onClick: () => void replaceRoute('calendar'), testId: 'anniv-mode-month' },
+          { key: 'anniv', label: t('anniv.mode.anniv', {}), pressed: true, testId: 'anniv-mode-anniv' },
+        ]}
+      />
+      <Pressable type="button" className={styles.newBtn} onClick={() => void navigate('anniv', 'new')} aria-label={t('anniv.newLabel', {})} data-testid="anniv-new">
+        <span aria-hidden="true">＋</span> {t('anniv.new', {})}
+      </Pressable>
     </div>
   );
 }
@@ -129,14 +132,9 @@ function AnnivList({ inert }: { inert: boolean }) {
     <main className={styles.page} data-feature="anniv" data-testid="anniv-page" inert={inert || undefined} aria-hidden={inert || undefined}>
       <div className={styles.top}>
         <h1 className={styles.h1}>{t('anniv.h1', {})}</h1>
-        <div className={styles.topEnd}>
-          <Pressable type="button" className={styles.newBtn} onClick={() => void navigate('anniv', 'new')} aria-label={t('anniv.newLabel', {})} data-testid="anniv-new">
-            <span aria-hidden="true">＋</span> {t('anniv.new', {})}
-          </Pressable>
-          <MeLink testId="anniv-settings" />
-        </div>
+        <MeLink testId="anniv-settings" />
       </div>
-      <ModeSeg t={t} today={data.today} />
+      <ModeRow t={t} today={data.today} />
       <div className={styles.chips} role="group" aria-label={t('anniv.filterLabel', {})}>
         {FILTERS.map((f) => (
           <button key={f} type="button" className={styles.chip} aria-pressed={filter === f} onClick={() => setFilter(f)} data-testid={`anniv-filter-${f}`}>

@@ -5,6 +5,7 @@
 //   byWeek 时 ‹ › 的名字是“上一周 / 下一周”（周视图，或月视图收起成一周时）
 // • FoldHandle：月视图日清单顶上的拖动柄（上拖收起，线框 s3、R-326）。本身是按钮：aria-expanded 说明月历展没展开，
 //   键盘、读屏、点一下切换；按住上下拖跟手（手势在 motion 的 useDragCollapse），拖过以后的那一下点击被吞掉
+import { ModeSeg } from '../../../kit/components/ModeSeg.tsx';
 import type { DragCollapse } from '../../../motion/gestures.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
@@ -38,19 +39,14 @@ export function CalNav({
 }) {
   return (
     <div className={styles.calnav}>
-      <div className={styles.seg} role="group" aria-label={t('cal.modeLabel', {})}>
-        <button type="button" className={styles.segBtn} aria-pressed={!month} onClick={() => onMode('week')} data-testid="cal-mode-week">
-          {t('cal.week', {})}
-        </button>
-        <button type="button" className={styles.segBtn} aria-pressed={month} onClick={() => onMode('month')} data-testid="cal-mode-month">
-          {t('cal.month', {})}
-        </button>
-        {onAnniv ? (
-          <button type="button" className={styles.segBtn} aria-pressed="false" onClick={onAnniv} data-testid="cal-mode-anniv">
-            {t('cal.anniv', {})}
-          </button>
-        ) : null}
-      </div>
+      <ModeSeg
+        label={t('cal.modeLabel', {})}
+        items={[
+          { key: 'week', label: t('cal.week', {}), pressed: !month, onClick: () => onMode('week'), testId: 'cal-mode-week' },
+          { key: 'month', label: t('cal.month', {}), pressed: month, onClick: () => onMode('month'), testId: 'cal-mode-month' },
+          ...(onAnniv ? [{ key: 'anniv', label: t('cal.anniv', {}), pressed: false, onClick: onAnniv, testId: 'cal-mode-anniv' }] : []),
+        ]}
+      />
       <div className={styles.navBtns}>
         <button
           type="button"
