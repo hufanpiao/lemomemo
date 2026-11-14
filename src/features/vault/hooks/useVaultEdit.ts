@@ -11,7 +11,7 @@
 //   用户主动上锁、离开超时、在别处改密码、设备被移除时照旧丢掉；点了保存、请求还在路上时不交（会话自己等解锁重发那一次，审查第 9 条）
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { VaultNote } from '../../../../shared/schema/vault.ts';
-import { encodeImage } from '../../../platform/image-encode.ts';
+import { encodeDiagText, encodeImage } from '../../../platform/image-encode.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { VaultFileApi, VaultFileFail } from '../../attachments/index.ts';
 import type { VaultFail } from '../data/vault-api.ts';
@@ -185,6 +185,9 @@ export function useVaultEdit(id: string | null) {
       const next: PendingImage[] = [];
       for (const f of files) {
         const r = await encodeImage(f, null);
+        // 压图结果记一行运行日志（同随手记 image-uploader 的 R-402 那一行：结果码和编码诊断，不记内容），失败时才有据可查
+        const diag = r.diag ? ` ${encodeDiagText(r.diag)}` : '';
+        rlog(r.ok ? `vault img encode ok kb=${Math.round(r.full.size / 1024)} ${r.width}x${r.height}${diag}` : `vault img encode ${r.code}${diag}`);
         if (!r.ok) {
           setError('image');
           continue;
