@@ -1,12 +1,13 @@
 // SW 不存用户数据（接手清单 K-sw-seal；架构 4.1、8.1“SW 缓存策略”）
 // 退出时的封存（core/account.ts 的 sealForExit）只管得到本页的库连接，管不到 SW；靠下面几条钉住：
-// ① SW 只有四个运行时缓存：lemo-nav（/app/ 的页面导航，Pages 的静态 HTML，_routes.json 只把 /、/sb/*、/files/* 交给 Functions）、
-//    lemo-holidays（公共节假日 JSON）、lemo-fonts（公共字体分片）、lemo-font-index（公共的可选字体清单，11-14 起不进预缓存）；
-//    都不以预缓存前缀开头，退出、换账号、被移除时 clearCacheStorage 照样删
+// ① SW 只有三个运行时缓存：lemo-holidays（公共节假日 JSON）、lemo-fonts（公共字体分片）、lemo-font-index（公共的可选字体清单，11-14 起不进预缓存）；
+//    都不以预缓存前缀开头，退出、换账号、被移除时 clearCacheStorage 照样删。
+//    页面导航 11-14 起只走网络、失败回预缓存的 index.html，不再缓存（同步层审查第 6 条）；原来的 lemo-nav 在 activate 时删掉——
+//    这是 SW 里唯一一处碰 Cache Storage（RETIRED_CACHE_DELETE，按次数核对），行为见 tests/build/sw-nav-shell.test.ts
 // ② /sb/*、/files/*、非 GET、别的源一律直连，进不了这三个缓存（routes.ts）
-// ③ SW 不自己发请求、不往缓存里手写、不拿令牌（不读 localStorage、不带 Authorization）；不引会用 IndexedDB 的 Workbox 模块
+// ③ SW 不自己发请求、不往缓存里手写（只准删退役的 lemo-nav）、不拿令牌（不读 localStorage、不带 Authorization）；不引会用 IndexedDB 的 Workbox 模块
 //    （workbox-expiration、workbox-background-sync 会把请求体存进 IndexedDB）
-// ④ B2 起（0.29 续第 102 条③、第 107 条）放宽：SW 听 push、notificationclick、notificationclose，
+// ④ B2 起（0.29 续第 102 条③、第 107 条）放宽：SW 听 push、notificationclick、notificationclose（11-14 起另听 activate，只为删 lemo-nav），
 //    通知上的“推迟”按键写本机库的 pending_actions，显示通知前只读核对 owner（B2 安全审查 FE-1）——
 //    **IndexedDB 只准在 src/sw/pending.ts 里碰**；别的文件里 indexedDB 只准出现在固定的几处（sw.ts 把 self.indexedDB 交给 push.ts，
 //    push.ts 原样交给 pending.ts 的 readSwOwner、writePendingAction），按次数核对；open、transaction、deleteDatabase 和增删改查一律不准
@@ -27,7 +28,10 @@ import { PRECACHE_PREFIX } from '../../src/platform/session.ts';
 import { routeOf } from '../../src/sw/routes.ts';
 
 const SW_DIR = join(import.meta.dirname, '../../src/sw');
-const RUNTIME_CACHES = ['lemo-font-index', 'lemo-fonts', 'lemo-holidays', 'lemo-nav'];
+const RUNTIME_CACHES = ['lemo-font-index', 'lemo-fonts', 'lemo-holidays'];
+/** SW 里唯一准碰 Cache Storage 的一处：activate 时删掉 11-14 以前导航用的 lemo-nav（sw.ts 里正好一次） */
+const RETIRED_CACHE_DELETE = 'event.waitUntil(caches.delete(RETIRED_NAV_CACHE));';
+const RETIRED_CACHE_DECL = "const RETIRED_NAV_CACHE = 'lemo-nav';";
 const ALLOWED_IMPORTS = [
   '../../shared/i18n/i18n.ts',
   '../../shared/i18n/pick-locale.ts',
@@ -103,7 +107,7 @@ function swSources(): Array<{ name: string; code: string }> {
 }
 
 describe('SW 不存用户数据（K-sw-seal）', () => {
-  it('运行时缓存只有 lemo-nav、lemo-holidays、lemo-fonts、lemo-font-index，且都不是预缓存（退出时会被 clearCacheStorage 删掉）', () => {
+  it('运行时缓存只有 lemo-holidays、lemo-fonts、lemo-font-index，且都不是预缓存（退出时会被 clearCacheStorage 删掉）；导航不缓存', () => {
     const names = swSources()
       .flatMap((f) => [...f.code.matchAll(/cacheName\s*:\s*['"`]([^'"`]+)['"`]/g)].map((m) => m[1] ?? ''))
       .sort();
@@ -111,6 +115,12 @@ describe('SW 不存用户数据（K-sw-seal）', () => {
     for (const n of names) expect(n.startsWith(PRECACHE_PREFIX), n).toBe(false);
     // 没有另改 Workbox 的缓存名（改了以后 PRECACHE_PREFIX 认不出预缓存，或运行时缓存名对不上）
     for (const f of swSources()) expect(f.code, f.name).not.toMatch(/\bcacheNames\b|setCacheNameDetails/);
+    // lemo-nav 退役：只准出现在 sw.ts 删它的那一处常量里
+    for (const f of swSources()) {
+      const n = f.code.split("'lemo-nav'").length - 1;
+      expect(n, f.name).toBe(f.name === 'sw.ts' ? 1 : 0);
+    }
+    expect(swSources().find((f) => f.name === 'sw.ts')?.code).toContain(RETIRED_CACHE_DECL);
   });
 
   it('SW 不手写缓存、不自己发请求、不拿令牌；IndexedDB 只在 pending.ts 里碰', () => {
@@ -120,9 +130,15 @@ describe('SW 不存用户数据（K-sw-seal）', () => {
       ['拿令牌、读会话', /localStorage|sessionStorage|Authorization|\/sb\//],
     ];
     for (const f of swSources()) {
-      for (const [what, re] of forbidden) expect(f.code, `${f.name}：${what}`).not.toMatch(re);
+      // sw.ts 删 lemo-nav 的那一处正好一次，去掉以后再查（别处、多写一次都拦）
+      let code = f.code;
+      if (f.name === 'sw.ts') {
+        expect(code.split(RETIRED_CACHE_DELETE).length - 1, 'sw.ts 删 lemo-nav').toBe(1);
+        code = code.split(RETIRED_CACHE_DELETE).join('');
+      }
+      for (const [what, re] of forbidden) expect(code, `${f.name}：${what}`).not.toMatch(re);
       if (f.name === IDB_FILE) continue;
-      expect(idbViolations(f.name, f.code)).toEqual([]);
+      expect(idbViolations(f.name, code)).toEqual([]);
     }
   });
 
@@ -220,11 +236,11 @@ describe('SW 不存用户数据（K-sw-seal）', () => {
     expect(actions).not.toMatch(/\bimport\b|\bfrom\s*['"]|\brequire\s*\(/);
   });
 
-  it('只听 fetch、message，和 B2 起的 push、notificationclick、notificationclose（没有 sync、periodicsync）', () => {
+  it('只听 fetch、message、activate（删 lemo-nav），和 B2 起的 push、notificationclick、notificationclose（没有 sync、periodicsync）', () => {
     const events = swSources()
       .flatMap((f) => [...f.code.matchAll(/addEventListener\s*\(\s*['"`]([^'"`]+)['"`]/g)].map((m) => m[1] ?? ''))
       .sort();
-    expect(events).toEqual(['fetch', 'message', 'notificationclick', 'notificationclose', 'push']);
+    expect(events).toEqual(['activate', 'fetch', 'message', 'notificationclick', 'notificationclose', 'push']);
     for (const f of swSources()) expect(f.code, f.name).not.toMatch(/\bon(push|notificationclick|notificationclose|sync|periodicsync)\s*=/);
   });
 

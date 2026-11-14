@@ -2,7 +2,7 @@
 // 导出请求是 POST <supabaseUrl>/functions/v1/account（正式版 supabaseUrl = https://lemomemo.com/sb，预览是 <预览源>/sb）；
 // 拼好的文件只在页面里做成 blob: 链接下载（platform/save-file.ts），不发网络请求、不经 SW 的 fetch 事件。
 // 下面两层核对：① routes.ts 的路由判断对导出的各种写法都是 bypass；② 真把 sw.ts 装进替身环境，
-// 导出请求在第一个 fetch 监听器就被放过（不 respondWith），注册的每条缓存路由（导航、节假日、字体）都匹配不到它
+// 导出请求在第一个 fetch 监听器就被放过（不 respondWith），注册的每条路由（导航、节假日、字体）都匹配不到它（导航 11-14 起只走网络、不缓存）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACCOUNT_FN } from '../../src/features/settings/data/account-api.ts';
 import { routeOf } from '../../src/sw/routes.ts';
@@ -62,11 +62,11 @@ vi.mock('workbox-routing', () => ({
 }));
 vi.mock('workbox-strategies', () => {
   class S {
-    constructor(o: { cacheName: string }) {
-      reg.strategies.push(o.cacheName);
+    constructor(o: { cacheName?: string }) {
+      reg.strategies.push(o.cacheName ?? '(不缓存)');
     }
   }
-  return { CacheFirst: S, NetworkFirst: S };
+  return { CacheFirst: S, NetworkFirst: S, NetworkOnly: S };
 });
 
 type Listener = (e: unknown) => void;
@@ -107,8 +107,8 @@ describe('sw.ts：导出请求不进任何缓存', () => {
     return ev;
   }
 
-  it('运行时缓存只有四个公共的，装好后有导航、节假日、字体、字体清单四条路由（字体清单 11-14 起不进预缓存）', () => {
-    expect([...reg.strategies].sort()).toEqual(['lemo-font-index', 'lemo-fonts', 'lemo-holidays', 'lemo-nav']);
+  it('运行时缓存只有三个公共的，装好后有导航（只走网络、不缓存）、节假日、字体、字体清单四条路由（字体清单 11-14 起不进预缓存）', () => {
+    expect([...reg.strategies].sort()).toEqual(['(不缓存)', 'lemo-font-index', 'lemo-fonts', 'lemo-holidays']);
     expect(reg.matchers).toHaveLength(3);
     expect(reg.navs).toHaveLength(1);
   });
@@ -133,7 +133,7 @@ describe('sw.ts：导出请求不进任何缓存', () => {
     }
   });
 
-  it('导航缓存（lemo-nav）只收 /app/ 下的页面，导出地址不在 allowlist 里', () => {
+  it('导航路由只收 /app/ 下的页面，导出地址不在 allowlist 里', () => {
     const [nav] = reg.navs;
     const path = new URL(EXPORT_URL).pathname;
     expect(nav?.allowlist.some((re) => re.test(path))).toBe(false);
