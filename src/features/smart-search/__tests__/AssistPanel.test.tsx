@@ -177,6 +177,11 @@ describe('结果层：取消、改期、完成卡片', () => {
     expect(screen.getByTestId('assist-target-done').textContent).toContain('已撤销');
   });
 
+  it('“这次用了 N 次 AI”只出一行（面板页脚出；卡片自己的按钮行不再重复，11-14 评审截图里出了两遍）', () => {
+    show(req(target('cancel', '牙医'), { aiUsed: 1 }));
+    expect(screen.getAllByText('这次用了 1 次 AI')).toHaveLength(1);
+  });
+
   it('写不进去：不撤销刚保存的这一批，写“1 条没改上”', async () => {
     fx.save.mockResolvedValue('rejected');
     const undoSaved = vi.fn(async () => {});

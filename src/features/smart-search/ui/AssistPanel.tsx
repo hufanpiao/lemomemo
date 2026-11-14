@@ -203,7 +203,6 @@ function TargetCard({ req, s, t, locale, onRecord, onClose }: { req: AssistReq; 
     <div className={a.foot}>
       {onRecord ? <button type="button" className={styles.chip} onClick={onRecord} data-testid="assist-record">{t('as.recordRaw', {})}</button> : null}
       <button type="button" className={styles.chip} onClick={onClose} data-testid="assist-dismiss">{t('as.close', {})}</button>
-      {req.aiUsed > 0 ? <span className={a.note}>{t('as.ai', { n: req.aiUsed })}</span> : null}
     </div>
   );
 
