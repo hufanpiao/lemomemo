@@ -290,8 +290,11 @@ test('列表方式左滑：出“转成待办 / 移到隐私记 / 删除”，�
   const id = (await row.getAttribute('data-testid'))?.replace('notes-row-', '') ?? '';
   // 输入行还聚焦着时整页盖着模糊层（R-401）：先让它失焦
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  // 新行淡入、入口行晚到会让位置变一下：等它停稳再量
-  await page.waitForTimeout(600);
+  // 新行进场中带 pointer-events:none（src/motion/list-impl.tsx ENTERING_STYLE），按下会穿到列表上：
+  // 377ab1e3 CI webkit 运行日志“起点最上层 div#notes-list”“down div#notes-list”、左滑日志为空，固定等 600 ms 在 CI 上不够。改成等进场结束
+  await expect(row).not.toHaveAttribute('data-state', 'entering', { timeout: 10_000 });
+  // 入口行晚到会让位置变一下：再等它停稳再量
+  await page.waitForTimeout(300);
   const box = await page.getByTestId(`notes-swipe-${id}`).boundingBox();
   if (!box) throw new Error('没有行');
   const y = box.y + box.height / 2;
