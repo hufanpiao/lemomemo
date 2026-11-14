@@ -36,7 +36,6 @@ export type VaultPhase = 'loading' | 'offline' | 'unset' | 'locked' | 'unlocked'
 
 export interface VaultStatus {
   set: boolean;
-  lockedUntil: number | null;
   lastResetAt: number | null;
   webauthn: number;
 }
@@ -298,9 +297,12 @@ export function createVaultSession(d: VaultSessionDeps) {
       }
       return r;
     }
-    const status: VaultStatus = { set: r.value.set, lockedUntil: r.value.locked_until, lastResetAt: r.value.last_reset_at, webauthn: r.value.webauthn };
+    const status: VaultStatus = { set: r.value.set, lastResetAt: r.value.last_reset_at, webauthn: r.value.webauthn };
     const phase: VaultPhase = !status.set ? 'unset' : state.phase === 'unlocked' && token ? 'unlocked' : 'locked';
-    set({ status, phase, lockedUntil: status.lockedUntil && status.lockedUntil > now() ? status.lockedUntil : null });
+    // 倒计时按服务器给的还剩几秒、从本机现在算（审查第 5 条：原来拿服务器的绝对时刻比本机时钟，两边差几分钟倒计时就错）
+    const retry = r.value.retry_after_s;
+    if (retry) rlog(`vault status locked retry=${retry}`);
+    set({ status, phase, lockedUntil: retry ? now() + retry * 1000 : null });
     return { ok: true, value: status };
   }
 
@@ -313,7 +315,7 @@ export function createVaultSession(d: VaultSessionDeps) {
       return r;
     }
     takeToken(r.value);
-    const st = state.status ? { ...state.status, set: true } : { set: true, lockedUntil: null, lastResetAt: null, webauthn: 0 };
+    const st = state.status ? { ...state.status, set: true } : { set: true, lastResetAt: null, webauthn: 0 };
     set({ phase: 'unlocked', status: st, relocked: false, waiting: false, left: null, lockedUntil: null, lastError: null });
     if (endOwed) endPreview('resend');
     const listed = await list();

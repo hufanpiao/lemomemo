@@ -40,15 +40,16 @@ export async function checkPin(c: Ctx, t: VaultTx, row: VaultRow, pin: string): 
   return err(403, 'pin_wrong', { left: rules.failsPerLevel - fails });
 }
 
-/** {status}：设没设过、锁到几时、上次重设、绑了几个凭据（不要令牌、不签令牌） */
+/** {status}：设没设过、锁到几时（绝对时刻 + 还剩几秒 retry_after_s，客户端按秒数算倒计时，审查第 5 条）、上次重设、绑了几个凭据（不要令牌、不签令牌） */
 export function status(c: Base): Promise<Out> {
   return c.deps.tx(c.userId, async (t) => {
     const row = await t.vault(false);
-    if (!row) return out({ set: false, locked_until: null, last_reset_at: null, webauthn: 0 }, null);
+    if (!row) return out({ set: false, locked_until: null, retry_after_s: null, last_reset_at: null, webauthn: 0 }, null);
     const at = c.deps.now();
     const creds = await t.credentials();
+    const until = row.locked_until !== null && row.locked_until > at ? row.locked_until : null;
     return out({
-      set: true, locked_until: row.locked_until !== null && row.locked_until > at ? row.locked_until : null,
+      set: true, locked_until: until, retry_after_s: until === null ? null : secs(until - at),
       last_reset_at: row.last_reset_at, webauthn: creds.length,
     }, null);
   });

@@ -48,7 +48,7 @@ function fakeApi(replies: Partial<Record<VaultRequest['action'], Reply>>) {
   return { api, calls };
 }
 
-export const statusSet = { ok: true, set: true, locked_until: null, last_reset_at: null, webauthn: 0 };
+export const statusSet = { ok: true, set: true, locked_until: null, retry_after_s: null, last_reset_at: null, webauthn: 0 };
 export const tokenOk = { ok: true, vault_token: TOK, expires_at: 9e12 };
 export const listOk = (notes: VaultNote[] = [note()]) => ({ ok: true, notes, vault_token: TOK, expires_at: 9e12 });
 

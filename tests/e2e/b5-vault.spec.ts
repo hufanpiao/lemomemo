@@ -117,7 +117,7 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
     const now = Date.now();
     switch (action) {
       case 'status':
-        return route.fulfill({ json: { ok: true, set: pin !== null, locked_until: null, last_reset_at: null, webauthn: 0 } });
+        return route.fulfill({ json: { ok: true, set: pin !== null, locked_until: null, retry_after_s: null, last_reset_at: null, webauthn: 0 } });
       case 'setup':
         pin = String(body['pin']);
         return ok(route);

@@ -113,7 +113,8 @@ const tok = { vault_token: z.string().min(16).max(512), expires_at: ms };
 
 export const vaultStatusResponse = z.object({
   ok: z.literal(true), set: z.boolean(),
-  locked_until: ms.nullable(),          // 正在锁定时是解锁时刻（毫秒），否则 null
+  locked_until: ms.nullable(),          // 正在锁定时是解锁时刻（毫秒，服务器时钟），否则 null
+  retry_after_s: z.number().int().min(0).nullable(),   // 正在锁定时还剩几秒（同 pin_locked 的 retry_after_s），否则 null；客户端按它算倒计时，不拿 locked_until 比本机时钟（审查第 5 条）
   last_reset_at: ms.nullable(),
   webauthn: z.number().int().nonnegative(),   // 已绑定凭据数（设置页和解锁卡决定显不显示 Face ID 按钮）
 });

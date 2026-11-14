@@ -49,6 +49,18 @@ describe('解锁、上锁', () => {
     await m2.s.unlock('0000');
     expect(m2.s.get()).toMatchObject({ lockedUntil: 1_000_000 + 30_000, left: 0, lastError: 'pin_locked' });
   });
+
+  it('审查第 5 条：status 的锁定倒计时按服务器给的相对秒数算，不拿服务器绝对时刻比本机时钟（本机慢了一小时也对）', async () => {
+    const m = make({ status: () => ({ ...statusSet, locked_until: 1_000_000 + 3_600_000 + 45_000, retry_after_s: 45 }) });
+    await m.s.refreshStatus();
+    expect(m.s.get().lockedUntil).toBe(1_000_000 + 45_000);
+    const m2 = make({ status: () => ({ ...statusSet, locked_until: 500_000, retry_after_s: 45 }) });
+    await m2.s.refreshStatus();
+    expect(m2.s.get().lockedUntil).toBe(1_000_000 + 45_000);
+    const m3 = make({ status: () => ({ ...statusSet, retry_after_s: null }) });
+    await m3.s.refreshStatus();
+    expect(m3.s.get().lockedUntil).toBeNull();
+  });
 });
 
 describe('TC-B5-10：离开满时长才上锁（注入时间）', () => {

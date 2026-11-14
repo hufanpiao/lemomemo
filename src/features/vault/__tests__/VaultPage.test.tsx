@@ -28,7 +28,7 @@ function session(o: { offline?: boolean; purge?: () => void } = {}): VaultSessio
   const reply = (req: VaultRequest): unknown => {
     switch (req.action) {
       case 'status':
-        return o.offline ? { ok: false, code: 'offline' } : { ok: true, set: true, locked_until: null, last_reset_at: null, webauthn: 0 };
+        return o.offline ? { ok: false, code: 'offline' } : { ok: true, set: true, locked_until: null, retry_after_s: null, last_reset_at: null, webauthn: 0 };
       case 'list':
         return { ok: true, notes: [note(), note({ id: GONE, title: '旧的', body: '删掉的', deleted_at: 5 })], vault_token: TOK, expires_at: 9e12 };
       case 'purge':
