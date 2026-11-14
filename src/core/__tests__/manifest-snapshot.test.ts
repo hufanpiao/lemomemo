@@ -62,11 +62,11 @@ describe('清单快照 manifests.gen.ts', () => {
     expect(() => renderManifests([{ a: () => 1 }])).toThrow('manifests_not_json');
   });
 
-  it('③ 审查 L5：--check 接进了 check:manifests、unit.yml，构建在 vite build 之前先查（过期快照进不了预览）', () => {
+  it('③ 审查 L5：--check 接进了 check:manifests 和构建（unit.yml 跑 preview 构建就查到，第三方审查 CI-9 起不再单跑一步），构建在 vite build 之前先查（过期快照进不了预览）', () => {
     const read = (f: string) => readFileSync(join(import.meta.dirname, '..', '..', '..', f), 'utf8');
     const scripts = (JSON.parse(read('package.json')) as { scripts: Record<string, string> }).scripts;
     expect(scripts['check:manifests']).toBe('node build/gen_manifests_snapshot.mjs --check');
-    expect(read('.github/workflows/unit.yml')).toContain('run: npm run check:manifests');
+    expect(read('.github/workflows/unit.yml')).toContain('run: npm run build -- --mode preview');
     const web = read('build/build_web.mjs');
     const check = web.indexOf("resolve(ROOT, 'build/gen_manifests_snapshot.mjs'), '--check']");
     expect(check).toBeGreaterThan(0);
