@@ -17,6 +17,9 @@
 // • 失败一律带上这次请求用的会话的 session_id（sid；同 settings-api，接手清单 K6-sugg4 ①）：会话没了、账号停用、冷静期离开本机时只删它
 import { accountErrorCode } from '../../../../shared/schema/account.ts';
 import { isEntryErrorCode, type EntryErrorCode } from '../../../../shared/schema/entry-codes.ts';
+import { todayOf } from '../../../../shared/core/date.ts';
+import type { Tz } from '../../../../shared/core/tz.ts';
+import { currentTz } from '../../../core/current-tz.ts';
 import { buildInfo } from '../../../platform/env.ts';
 import { appFetch } from '../../../platform/http.ts';
 import { readSessionId, sessionIdOfToken } from '../../../platform/session.ts';
@@ -163,16 +166,18 @@ export function mapAccountCode(code: unknown, status: number): AccountErr {
   return byStatus(status);
 }
 
-const UTC_DATE = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 const QUOTE = String.fromCharCode(34);
 const NAME_OK = /^lemomemo-export-\d{4}-\d{2}-\d{2}\.json\.gz$/;
 
-/** 文件名取 content-disposition 的 filename；读不到（跨域没暴露这个头）或不像样时按 UTC 日期自己拼 */
-export function exportFileName(disposition: string | null, now: number): string {
+/**
+ * 文件名取 content-disposition 的 filename；读不到（跨域没暴露这个头、服务器没发）或不像样时按用户时区（current-tz）的日期自己拼。
+ * 原来按 UTC，首尔早上 9 点前导出会写成前一天（审查第 17 条）
+ */
+export function exportFileName(disposition: string | null, now: number, tz: Tz = currentTz()): string {
   // 去掉引号用 split / join（正则里写引号会让 check_arch 的 A20 把后面几行当成字符串）
   const m = disposition ? /filename=([^;]+)/i.exec(disposition) : null;
   const name = (m?.[1] ?? '').trim().split(QUOTE).join('');
-  return NAME_OK.test(name) ? name : `lemomemo-export-${UTC_DATE(now)}.json.gz`;
+  return NAME_OK.test(name) ? name : `lemomemo-export-${todayOf(now, tz)}.json.gz`;
 }
 
 export interface AccountApiOptions {

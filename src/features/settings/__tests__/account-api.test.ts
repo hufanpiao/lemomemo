@@ -294,9 +294,13 @@ describe('辅助', () => {
     expect(mapAccountCode('not_pending', 409)).toBe('unknown');
   });
 
-  it('exportFileName：只认 lemomemo-export-<日期>.json.gz 这一种，别的（含路径、引号注入）一律按 UTC 日期拼', () => {
-    expect(exportFileName('attachment; filename="lemomemo-export-2026-10-29.json.gz"', NOW)).toBe('lemomemo-export-2026-10-29.json.gz');
-    expect(exportFileName('attachment; filename="../evil.exe"', NOW)).toBe('lemomemo-export-2026-10-30.json.gz');
-    expect(exportFileName(null, Date.parse('2026-10-30T23:59:59+09:00'))).toBe('lemomemo-export-2026-10-30.json.gz');
+  it('exportFileName：只认 lemomemo-export-<日期>.json.gz 这一种，别的（含路径、引号注入）一律按用户时区的日期拼（审查第 17 条）', () => {
+    expect(exportFileName('attachment; filename="lemomemo-export-2026-10-29.json.gz"', NOW, 'Asia/Seoul')).toBe('lemomemo-export-2026-10-29.json.gz');
+    // NOW 是首尔 10-31 00:30（UTC 还是 10-30）：按用户时区写 10-31
+    expect(exportFileName('attachment; filename="../evil.exe"', NOW, 'Asia/Seoul')).toBe('lemomemo-export-2026-10-31.json.gz');
+    expect(exportFileName(null, NOW, 'UTC')).toBe('lemomemo-export-2026-10-30.json.gz');
+    // 首尔早上 08:00（UTC 前一天 23:00）：原来按 UTC 会写成前一天
+    expect(exportFileName(null, Date.parse('2026-11-14T08:00:00+09:00'), 'Asia/Seoul')).toBe('lemomemo-export-2026-11-14.json.gz');
+    expect(exportFileName(null, Date.parse('2026-10-30T23:59:59+09:00'), 'Asia/Seoul')).toBe('lemomemo-export-2026-10-30.json.gz');
   });
 });
