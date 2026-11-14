@@ -273,6 +273,34 @@ describe('11-14 整块评审第 22 条：令牌续不上（超过 12 小时、�
   });
 });
 
+describe('审查第 9 条：保存进行中碰上令牌过期，不再另交一份草稿', () => {
+  it('点保存 → vault_locked 换成解锁卡（编辑页卸载）→ 解锁：只重发那一次保存，不多存一次', async () => {
+    let n = 0;
+    const m = make({ save: () => (++n === 1 ? { ok: false, code: 'vault_locked' } : { ok: true, vault_token: 't'.repeat(32), expires_at: 9e12 }) });
+    installVaultSession(m.s);
+    window.location.hash = '#/vault/new';
+    render(<VaultPage />);
+    await screen.findByTestId('vault-unlock-card');
+    await act(async () => {
+      await m.s.refreshStatus();
+      await m.s.unlock('1234');
+    });
+    fireEvent.change(await screen.findByTestId('vault-edit-title'), { target: { value: '只存一次' } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('vault-edit-save'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await screen.findByTestId('vault-unlock-card');
+    await act(async () => {
+      await m.s.unlock('1234');
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    await waitFor(() => expect(m.calls.filter((c) => c.action === 'save').length).toBeGreaterThanOrEqual(2));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(2);
+  });
+});
+
 describe('审查第 1 条：令牌过期时解锁卡点“取消”，等着的请求、草稿一并作废', () => {
   it('保存碰上令牌过期 → 出解锁卡 → 点取消：waiting 落回；之后再解锁不补发那次保存，也不保存卸载时交出的草稿', async () => {
     let n = 0;
