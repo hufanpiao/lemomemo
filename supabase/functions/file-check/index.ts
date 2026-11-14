@@ -1,5 +1,5 @@
 // file-check 入口（架构 5.13 第 2 点、第 6 节 file-check 行；B4b-1）：组装依赖，逻辑在 core.ts。
-// 两种调用：客户端带 JWT 的 {action: check, id}（网关照默认校验 JWT）；pg_cron 每 10 分钟带 x-cron-secret 的 {action: sweep}
+// 两种调用：客户端带 JWT 的 {action: check, id}（网关不校验，函数里 requireActiveUser 自己验）；pg_cron 每 10 分钟带 x-cron-secret 的 {action: sweep}
 //   （迁移 20261115000000；cron 请求没有用户 JWT，所以 config.toml 的 [functions.file-check] verify_jwt = false，check 一支在函数里自己 requireActiveUser）。
 // 用到的库对象：service role：private.account_usable、session_alive（经 _shared/auth.ts）、private.take_rate；
 //   fn_ai 直连（_shared/db.ts 的 withAiUser / withAiScan）：public.note_files、private.scan_note_files、private.heartbeat（SQL 在 store.ts）。
