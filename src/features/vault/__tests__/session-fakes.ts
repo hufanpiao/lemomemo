@@ -43,7 +43,7 @@ function fakeApi(replies: Partial<Record<VaultRequest['action'], Reply>>) {
     }) as VaultApi['fileCall'],
     fileGet: vi.fn(async () => ({ ok: true as const, value: new Blob(['f']) }) as VaultResult<Blob>),
     fileUpload: vi.fn(async () => ({ ok: true as const, value: null }) as VaultResult<unknown>),
-    fileEnd: vi.fn(),
+    fileEnd: vi.fn(async () => true),
   };
   return { api, calls };
 }

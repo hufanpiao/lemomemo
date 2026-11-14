@@ -8,7 +8,9 @@
 // • vault-image：get 回图片字节（不夹 JSON、不续期令牌）；upload 是原始 webp 字节，参数在查询串
 // • vault-file（shared/schema/vault-file.ts）：只验令牌、不续期（同 vault-image）；upload 是 multipart（不自己写 Content-Type，交给浏览器带 boundary）；
 //   get 回解密后的字节；错误码里隐私记共有的（vault_locked、not_found 等）照 vaultErrorCode 落，附件自己的（exists、rejected、quota_exceeded、corrupt）
-//   放在 fileCode（rejected 带 reason）、code 记 unknown；ms_preview_end 在上锁、页面隐藏时用 keepalive 发、不等结果
+//   放在 fileCode（rejected 带 reason）、code 记 unknown；ms_preview_end 在上锁、页面隐藏时用 keepalive 发（审查第 4 条）：
+//   access token 同步读本机会话（platform/session.ts 的 readSessionAccessToken），当场发出，不先 await getSession（页面马上没了就来不及）；
+//   读不到才退回 getSession。服务器这一支只验 JWT，隐私记令牌有才带；回成没成，没成由会话记下、解锁后补发
 // • 不碰 core/cache、outbox、log（A18）：明文不落本机库、不进日志
 import type { z } from 'zod';
 import { isEntryErrorCode } from '../../../../shared/schema/entry-codes.ts';
@@ -18,6 +20,7 @@ import type { RejectReason } from '../../../../shared/schema/attachments.ts';
 import { VAULT_TOKEN_HEADER } from '../../../core/vault-token.ts';
 import { buildInfo } from '../../../platform/env.ts';
 import { appFetch } from '../../../platform/http.ts';
+import { readSessionAccessToken } from '../../../platform/session.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import type { VaultCode } from './vault-errors.ts';
 
@@ -40,8 +43,8 @@ export interface VaultApi {
   fileCall<S extends z.ZodType>(req: Exclude<VaultFileRequest, { action: 'get' | 'sweep' }>, token: string, schema: S): Promise<VaultResult<z.infer<S>>>;
   fileGet(id: string, part: 'full' | 'thumb', token: string): Promise<VaultResult<Blob>>;
   fileUpload(form: FormData, token: string): Promise<VaultResult<unknown>>;
-  /** ms_preview_end：keepalive 发出去就不管（上锁、页面隐藏时页面可能马上没了） */
-  fileEnd(token: string): void;
+  /** ms_preview_end：同步发出 keepalive（上锁、页面隐藏时页面可能马上没了）；token 是隐私记令牌，没有传 null（服务器只验 JWT）；回成没成 */
+  fileEnd(token: string | null): Promise<boolean>;
 }
 
 export interface VaultApiOptions {
@@ -51,6 +54,8 @@ export interface VaultApiOptions {
   timeoutMs?: number;
   imageTimeoutMs?: number;
   fileTimeoutMs?: number;
+  /** 同步读 access token（测试注入）；默认读本机会话 */
+  readAccessToken?: () => string | null;
 }
 
 /** vault-file 的失败响应 → 码：附件自己的码放 fileCode（导出给测试） */
@@ -120,7 +125,7 @@ export function createVaultApi(getDb: () => Promise<Db>, o: VaultApiOptions = {}
 
   async function send<T>(
     path: string,
-    init: { body: BodyInit; type: string | null; token: string | null; keepalive?: boolean; fail?: typeof failOf },
+    init: { body: BodyInit; type: string | null; token: string | null; fail?: typeof failOf },
     timeoutMs: number,
     read: (res: Response) => Promise<T>,
   ): Promise<VaultResult<T>> {
@@ -132,7 +137,7 @@ export function createVaultApi(getDb: () => Promise<Db>, o: VaultApiOptions = {}
       const headers: Record<string, string> = { authorization: `Bearer ${at}`, apikey: anonKey };
       if (init.type !== null) headers['content-type'] = init.type;
       if (init.token) headers[VAULT_TOKEN_HEADER] = init.token;
-      const res = await doFetch(`${base}/${path}`, { method: 'POST', headers, body: init.body, signal: ac.signal, cache: 'no-store', ...(init.keepalive ? { keepalive: true } : {}) });
+      const res = await doFetch(`${base}/${path}`, { method: 'POST', headers, body: init.body, signal: ac.signal, cache: 'no-store' });
       if (!res.ok) return (init.fail ?? failOf)(res.status, await readJson(res));
       return { ok: true, value: await read(res) };
     } catch (e) {
@@ -184,7 +189,14 @@ export function createVaultApi(getDb: () => Promise<Db>, o: VaultApiOptions = {}
     },
 
     fileEnd(token) {
-      void send(VAULT_FILE_FN, { body: JSON.stringify({ action: 'ms_preview_end' } satisfies VaultFileRequest), type: 'application/json', token, keepalive: true }, o.timeoutMs ?? VAULT_TIMEOUT_MS, async () => true);
+      const body = JSON.stringify({ action: 'ms_preview_end' } satisfies VaultFileRequest);
+      const post = (at: string): Promise<boolean> => {
+        const headers: Record<string, string> = { authorization: `Bearer ${at}`, apikey: anonKey, 'content-type': 'application/json' };
+        if (token) headers[VAULT_TOKEN_HEADER] = token;
+        return doFetch(`${base}/${VAULT_FILE_FN}`, { method: 'POST', headers, body, keepalive: true, cache: 'no-store' }).then((r) => r.ok, () => false);
+      };
+      const at = (o.readAccessToken ?? readSessionAccessToken)();
+      return at ? post(at) : accessToken().then((a) => (typeof a === 'string' ? post(a) : false));
     },
   };
 }

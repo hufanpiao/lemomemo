@@ -51,7 +51,7 @@ function session(o: { offline?: boolean; purge?: () => void } = {}): VaultSessio
     fileCall: async () => ({ ok: false, code: 'unknown' }),
     fileGet: async () => ({ ok: false, code: 'unknown' }),
     fileUpload: async () => ({ ok: false, code: 'unknown' }),
-    fileEnd: () => undefined,
+    fileEnd: async () => true,
   };
   return createVaultSession({ api, onToken: () => undefined, createUrl: () => 'blob:x', revokeUrl: () => undefined });
 }

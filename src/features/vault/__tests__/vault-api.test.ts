@@ -38,6 +38,28 @@ describe('call / fileCall 同一套 JSON 读法', () => {
     expect(await api(() => new Response('<html>', { status: 502 })).a.call({ action: 'status' }, null, okShape)).toEqual({ ok: false, code: 'try_later' });
   });
 
+  it('审查第 4 条：ms_preview_end 同步拿本机会话的 access token、当场发出 keepalive（不先 await getSession）；没令牌不带令牌头；回成没成', async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    let resolve!: (r: Response) => void;
+    const fetch = vi.fn((url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return new Promise<Response>((r) => (resolve = r));
+    });
+    const a = createVaultApi(async () => db, { fetch: fetch as never, base: 'https://x/functions/v1', anonKey: 'anon', readAccessToken: () => 'sync-jwt' });
+    const p = a.fileEnd(null);
+    expect(calls).toHaveLength(1);
+    const h = calls[0]?.init.headers as Record<string, string>;
+    expect(h['authorization']).toBe('Bearer sync-jwt');
+    expect(h['x-vault-token']).toBeUndefined();
+    expect(calls[0]?.init.keepalive).toBe(true);
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ action: 'ms_preview_end' });
+    resolve(json(401, { error: 'unauthorized' }));
+    expect(await p).toBe(false);
+    const b = api(() => json(200, { ok: true }));
+    expect(await b.a.fileEnd('tok')).toBe(true);
+    expect((b.calls[0]?.init.headers as Record<string, string>)['x-vault-token']).toBe('tok');
+  });
+
   it('上传回执读不出来当 null（不是失败）', async () => {
     expect(await api(() => new Response('', { status: 200 })).a.fileUpload(new FormData(), 'tok')).toEqual({ ok: true, value: null });
   });

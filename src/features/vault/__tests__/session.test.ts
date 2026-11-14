@@ -231,4 +231,30 @@ describe('文档附件（vault-file，B4b-1）', () => {
     s.file.msPreviewEnd();
     expect(api.fileEnd).toHaveBeenCalledTimes(2);
   });
+
+  it('审查第 4 条：上锁时发过 end，之后再关预览不重复发', async () => {
+    const { s, api } = await unlocked();
+    await s.file.msPreview(NID);
+    vi.mocked(api.fileEnd).mockResolvedValueOnce(false);
+    s.lock();
+    expect(api.fileEnd).toHaveBeenLastCalledWith(TOK);
+    s.file.msPreviewEnd();
+    expect(api.fileEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('审查第 4 条：end 没发成（令牌过期、断网）就记下，下次解锁后补发一次；发成了不补', async () => {
+    const { s, api } = await unlocked();
+    await s.file.msPreview(NID);
+    vi.mocked(api.fileEnd).mockResolvedValueOnce(false);
+    s.lock();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.fileEnd).toHaveBeenCalledTimes(1);
+    await s.unlock('1234');
+    expect(api.fileEnd).toHaveBeenCalledTimes(2);
+    expect(api.fileEnd).toHaveBeenLastCalledWith(TOK);
+    await new Promise((r) => setTimeout(r, 0));
+    s.lock();
+    await s.unlock('1234');
+    expect(api.fileEnd).toHaveBeenCalledTimes(2);
+  });
 });

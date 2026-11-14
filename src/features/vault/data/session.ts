@@ -18,7 +18,8 @@
 //   盖遮罩、去遮罩由 hooks/useVault.ts 的 watchLeave 同步做，这里只管锁不锁
 // • 续期（M2）：编辑页有输入时调 touch()，拿到令牌满 5 分钟就发一次 {renew}（按本机拿到令牌的时刻算，不受两边时钟差影响）；
 //   vault-image 只验不续，令牌过期（vault_locked）时先 {renew}（锁着就等解锁）再试一次；取图失败不缓存（M6）
-// • 文档附件（B4b-1，vault-file）：同 vault-image 只验不续（withImageToken）；成功放了微软预览的临时明文副本时记下，上锁时趁令牌还在先发 ms_preview_end（keepalive）
+// • 文档附件（B4b-1，vault-file）：同 vault-image 只验不续（withImageToken）；成功放了微软预览的临时明文副本时记下，上锁时先发 ms_preview_end（keepalive）。
+//   审查第 4 条：服务器的 ms_preview_end 只验 JWT（令牌过期也删得掉），令牌有才带；没发成（断网、JWT 过期）记下，下次解锁后补发一次（endOwed）
 // • 不碰 core/cache、outbox、log（A18）
 import { z } from 'zod';
 import {
@@ -115,6 +116,8 @@ export function createVaultSession(d: VaultSessionDeps) {
   let waiters: ((ok: boolean) => void)[] = [];
   /** 服务器上有没有这个人的微软预览临时明文副本（ms_preview 成功后 true，ms_preview_end 后 false） */
   let msLive = false;
+  /** 发过 ms_preview_end、还没确认成了：解锁后补发一次 */
+  let endOwed = false;
   const listeners = new Set<() => void>();
 
   const set = (patch: Partial<VaultState>): void => {
@@ -140,10 +143,20 @@ export function createVaultSession(d: VaultSessionDeps) {
     pendingImg.clear();
   }
 
+  /** 发 ms_preview_end（同步发出），没成就记 endOwed */
+  function endPreview(why: 'lock' | 'close' | 'resend'): void {
+    msLive = false;
+    endOwed = true;
+    rlog(`vatt ms_preview_end ${why} tok=${token ? 1 : 0}`);
+    void d.api.fileEnd(token).then((ok) => {
+      if (ok) endOwed = false;
+      rlog(`vatt ms_preview_end ${ok ? 'ok' : 'fail'}`);
+    });
+  }
+
   /** 上锁：清明文、令牌、blob URL；同步完成。hard：作废在飞请求（主动上锁、超时、relock、revoked）；令牌过期的上锁不作废写请求 */
   function lock(patch: Partial<VaultState>, hard: boolean): void {
-    if (msLive && token) d.api.fileEnd(token);
-    msLive = false;
+    if (msLive) endPreview('lock');
     token = null;
     epoch += 1;
     if (hard) hardEpoch += 1;
@@ -302,6 +315,7 @@ export function createVaultSession(d: VaultSessionDeps) {
     takeToken(r.value);
     const st = state.status ? { ...state.status, set: true } : { set: true, lockedUntil: null, lastResetAt: null, webauthn: 0 };
     set({ phase: 'unlocked', status: st, relocked: false, waiting: false, left: null, lockedUntil: null, lastError: null });
+    if (endOwed) endPreview('resend');
     const listed = await list();
     release(true);
     return listed.ok ? { ok: true, value: true } : listed;
@@ -515,10 +529,7 @@ export function createVaultSession(d: VaultSessionDeps) {
         return r;
       },
       msPreviewEnd(): void {
-        if (!msLive) return;
-        msLive = false;
-        rlog(`vatt ms_preview_end ${token ? 'sent' : 'no_token'}`);
-        if (token) d.api.fileEnd(token);
+        if (msLive) endPreview('close');
       },
     },
     blobCount: (): number => blobs.size,

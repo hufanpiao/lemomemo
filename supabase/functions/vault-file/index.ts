@@ -1,5 +1,5 @@
 // vault-file 入口（架构 5.13 第 11 点、第 6 节 vault-file 行；B4b-1）：组装依赖，逻辑在 core.ts，SQL 在 store.ts。
-// 两种调用：客户端带 JWT + x-vault-token 的 upload / list / get / remove / restore / ms_preview / ms_preview_end；
+// 两种调用：客户端带 JWT + x-vault-token 的 upload / list / get / remove / restore / ms_preview，只带 JWT 就行的 ms_preview_end（审查第 4 条，理由见 core.ts 的 enter）；
 //   pg_cron 带 x-cron-secret 的 {action: sweep}（迁移 20261115010000：每分钟有过期登记才调、每 10 分钟无条件调）。
 //   cron 请求没有用户 JWT，所以 config.toml 的 [functions.vault-file] verify_jwt = false，其余动作在 core 里自己 requireActiveUser。
 // 版本门：不进免查名单（upload 写同步表 note_files，旧版不该写；理由写在 shared/schema/vault-file.ts 文件头）；
