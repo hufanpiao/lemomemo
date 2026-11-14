@@ -28,6 +28,8 @@ async function keys(): Promise<{ keys: VapidKeys; pub: string }> {
 
 let fakes: FakePushService[] = [];
 afterEach(async () => {
+  // 用例超时时 vitest 不跑它的 finally：假计时器会留到下一条，下一条的真 5 秒等待永远不到（CI 4ab18b3d：两条连锁超时）
+  vi.useRealTimers();
   await Promise.all(fakes.map((f) => f.close()));
   fakes = [];
 });
@@ -154,7 +156,11 @@ describe('deliver：按状态归类（只给枚举，不回状态码、响应头
     try {
       let out: unknown = null;
       const p = deliver(dev, te.encode('x'), OPT, ctx).then((r) => { out = r; });
-      for (let i = 0; i < 1000 && seen.length === 0; i++) await new Promise((r) => setImmediate(r));
+      // 等请求真的发出（timedFetch 设好了计时器）再拨钟：先要做 Web Push 加密（crypto.subtle 在线程池里），
+      // 慢机器上空转 1000 次 setImmediate 可能还没发出，钟先拨过去、计时器后设就永远不到；按真实时间等，最多 10 秒（performance.now 没被假）
+      const t0 = performance.now();
+      while (seen.length === 0 && performance.now() - t0 < 10_000) await new Promise((r) => setImmediate(r));
+      expect(seen.length, '请求在 10 秒内发出').toBe(1);
       await vi.advanceTimersByTimeAsync(SEND_TIMEOUT_MS - 1);
       expect(out).toBeNull();
       await vi.advanceTimersByTimeAsync(1);
@@ -164,7 +170,7 @@ describe('deliver：按状态归类（只给枚举，不回状态码、响应头
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 15_000);
   it('替身挂住不回：5 秒后放弃，算 timeout', async () => {
     const { f, ctx, dev } = await setup();
     f.setDefault(reply.hang());
