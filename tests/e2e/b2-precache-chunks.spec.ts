@@ -5,6 +5,8 @@
 //   ② SW 装好后读 Cache Storage 的 workbox 预缓存：assets/ 下每个 .js、.css（不含 .map）都在里面，①收集到的引用也都在里面；
 //   ③ 断网（context.setOffline，SW 的 fetch 也一起断）后在页面里逐个 fetch 每个 chunk：全部 200（由预缓存回），没有一个失败；
 //      再断网重新打开 /app/ 切到日历、待办、随手记，不出现失败的请求（holidays/、fonts/ 按设计走运行时缓存，不算）和动态 import 报错。
+//   ④ 导航不缓存（同步层审查第 6 条，11-14）：在线打开预缓存外的地址（/app/?src=…）以后 Cache Storage 里没有 lemo-nav；
+//      断网再打开预缓存外的地址，由 SW 回预缓存里的 index.html，App 照样画出来（单测见 tests/build/sw-nav-shell.test.ts）。
 // “旧 chunk 不 404”：断网和“新版本上线后服务器删掉了旧 chunk”对页面是同一回事——旧 SW 还在管时，旧 chunk 只能从它的预缓存来。
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -64,6 +66,11 @@ test('懒加载 chunk 都在预缓存里；断网后逐个取都由 SW 回 200',
   expect(disk.filter((u) => !precached.includes(u)), '产物里有、预缓存里没有的 chunk').toEqual([]);
   expect(refs.filter((u) => !precached.includes(u)), '被懒加载引用、预缓存里没有的 chunk').toEqual([]);
 
+  // ④ 在线打开预缓存外的地址：走网络，不往 lemo-nav 里存（页面自己会建节假日、字体缓存，不比整张缓存表）
+  await page.goto('/app/?src=online');
+  await expect(page.locator('main[data-feature]').first()).toBeVisible();
+  expect(await page.evaluate(() => caches.has('lemo-nav')), '不该有 lemo-nav').toBe(false);
+
   await context.setOffline(true);
   try {
     const failed = await page.evaluate(async (urls) => {
@@ -99,6 +106,11 @@ test('懒加载 chunk 都在预缓存里；断网后逐个取都由 SW 回 200',
     }
     expect(reqFailed, '断网打开时失败的 /app/ 请求').toEqual([]);
     expect(pageErrors.filter((m) => /dynamically imported module|Failed to fetch|Importing a module script failed/i.test(m)), '动态 import 报错').toEqual([]);
+
+    // ④ 断网打开预缓存外的地址：SW 联网失败，回预缓存里的 index.html，App 照样画出来
+    await page.goto('/app/?src=offline');
+    await expect(page.locator('main[data-feature]').first()).toBeVisible();
+    expect(pageErrors.filter((m) => /dynamically imported module|Failed to fetch|Importing a module script failed/i.test(m)), '断网打开预缓存外地址时的动态 import 报错').toEqual([]);
   } finally {
     await context.setOffline(false);
   }
