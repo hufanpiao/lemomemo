@@ -13,7 +13,7 @@ export function NoteDrawer({ id, onClose, side, handle }: { id: string; onClose(
   const t = useNotesT();
   return (
     <DetailDrawer id={id} label={t('note.edit.drawer', {})} onClose={onClose} side={side} handle={handle} initial='[data-testid="note-edit-body"]' refocus={refocus} data-testid="note-drawer">
-      <NoteEditor key={id} id={id} onClose={onClose} drawer />
+      <NoteEditor key={id} id={id} />
     </DetailDrawer>
   );
 }

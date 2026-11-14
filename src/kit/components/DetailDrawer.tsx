@@ -6,9 +6,15 @@
 // • side：在哪边（默认右边，左边时贴着侧栏右沿）；handle：kit DeskLayout 给的换边把手，放在抽屉最上面
 // • 升级中心的 busy（不出版本横幅、不自动重新载入）：焦点在抽屉里（含抽屉里弹出的 radix 浮层）时才占，点回列表、侧栏就放开。
 //   抽屉在电脑上可能开一整天，一直占着新版本永远不出（B6 独立评审第 12 条）；里面的编辑器在抽屉模式下自己不占（EditShell、NoteEditor）
-import { useEffect, useRef, useState, type FocusEvent, type ReactNode } from 'react';
+// • 在不在抽屉里只有一种判断：useInDrawer()（抽屉往里传 onClose；不在抽屉里是 null）。编辑器靠它决定画“×”还是“‹ 返回”、占不占 busy
+import { createContext, useContext, useEffect, useRef, useState, type FocusEvent, type ReactNode } from 'react';
 import { useHoldBusy } from '../hooks/useHoldBusy.ts';
 import styles from './DetailDrawer.module.css';
+
+const InDrawer = createContext<(() => void) | null>(null);
+
+/** 在详情抽屉里时是关抽屉的函数（“×”用），不在抽屉里是 null */
+export const useInDrawer = (): (() => void) | null => useContext(InDrawer);
 
 export interface DetailDrawerProps {
   /** 当前打开的是哪一条（换一条时重新移焦点） */
@@ -88,7 +94,7 @@ export function DetailDrawer({ id, label, onClose, side, handle, initial, refocu
       onBlur={onBlur}
     >
       {handle}
-      {children}
+      <InDrawer.Provider value={onClose}>{children}</InDrawer.Provider>
     </aside>
   );
 }

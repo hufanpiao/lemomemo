@@ -124,7 +124,7 @@ function TodayDrawer({ sel, side, handle, onClose }: { sel: TodaySel; side: 'lef
     <DetailDrawer id={key} label={t('desk.drawer', {})} onClose={onClose} side={side} handle={handle} initial={initial} refocus={refocus} data-testid="today-drawer">
       <QuietBoundary name="today-drawer">
         <Suspense fallback={null}>
-          {sel.kind === 'note' ? <TodayNotes key={key} part="edit" id={sel.id} onClose={onClose} /> : <Editor key={key} id={sel.id} onCreated={noop} onClose={onClose} />}
+          {sel.kind === 'note' ? <TodayNotes key={key} part="edit" id={sel.id} /> : <Editor key={key} id={sel.id} onCreated={noop} />}
         </Suspense>
       </QuietBoundary>
     </DetailDrawer>

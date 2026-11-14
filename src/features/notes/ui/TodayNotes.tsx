@@ -18,12 +18,12 @@ const NoteEditor = lazy(() => import('./NoteEditPage.tsx').then((m) => ({ defaul
 
 export type TodayNotesProps =
   | { part: 'list'; onCount?(n: number): void; onOpen(id: string): void; selected: string | null }
-  | { part: 'edit'; id: string; onClose(): void };
+  | { part: 'edit'; id: string };
 
 export default function TodayNotes(p: TodayNotesProps) {
   return p.part === 'edit' ? (
     <Suspense fallback={null}>
-      <NoteEditor key={p.id} id={p.id} onClose={p.onClose} drawer />
+      <NoteEditor key={p.id} id={p.id} />
     </Suspense>
   ) : (
     <NotesToday {...p} />
