@@ -18,7 +18,8 @@ interface State {
   failed: boolean;
 }
 
-export class QuietBoundary extends Component<{ children: ReactNode; name: string }, State> {
+/** fallback：出错时画它（不给就什么都不画；电脑版布局分包下不来时今天页、随手记页退回一列的画法）；onFail：出错时告诉页面（今天页据它把点行改回进编辑页） */
+export class QuietBoundary extends Component<{ children: ReactNode; name: string; fallback?: ReactNode; onFail?: () => void }, State> {
   override state: State = { failed: false };
 
   static getDerivedStateFromError(): State {
@@ -26,6 +27,7 @@ export class QuietBoundary extends Component<{ children: ReactNode; name: string
   }
 
   override componentDidCatch(error: unknown, _info: ErrorInfo): void {
+    this.props.onFail?.();
     const name = QUIET_NAME.test(this.props.name) ? this.props.name : 'bad-name';
     if (logged.has(name)) return;
     logged.add(name);
@@ -33,6 +35,6 @@ export class QuietBoundary extends Component<{ children: ReactNode; name: string
   }
 
   override render(): ReactNode {
-    return this.state.failed ? null : this.props.children;
+    return this.state.failed ? (this.props.fallback ?? null) : this.props.children;
   }
 }

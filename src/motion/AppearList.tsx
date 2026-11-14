@@ -9,7 +9,7 @@
 //   不在 useHoldView 停一拍期间，三件都满足才换，否则隔一会儿再看（./swap-guard.ts）。换完以后删行、打勾、撤销的动画和原来一样
 // • 重挂会丢行内的临时状态：现在行内只有 Pressable 的按下态（按住时不换）；以后行里有别的状态要记得这一条
 import { createContext, createElement, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { canSwap, SWAP_RETRY_MS, useMotionImpl, watchPointers } from './swap-guard.ts';
+import { useMotionImpl, watchPointers, whenSafe } from './swap-guard.ts';
 
 type ListTag = 'ul' | 'ol' | 'div';
 type ItemTag = 'li' | 'section' | 'div';
@@ -47,13 +47,7 @@ export function AppearList(props: AppearListProps) {
   }, [live]);
   useEffect(() => {
     if (live || impl === null) return;
-    let t: ReturnType<typeof setTimeout> | undefined;
-    const attempt = () => {
-      if (canSwap(el.current)) setLive(true);
-      else t = setTimeout(attempt, SWAP_RETRY_MS);
-    };
-    attempt();
-    return () => clearTimeout(t);
+    return whenSafe(() => el.current, () => setLive(true));
   }, [live, impl]);
   if (live && impl) {
     return (

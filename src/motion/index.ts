@@ -3,7 +3,7 @@
 // B0 是骨架：接口定下来，具体手感在 B1（按下回弹、页面切换）、B2（弹层、列表）、B3（提示条、录音面板）里调
 import { presets, PRESS_SCALE, type AppearKind } from './presets.ts';
 import { prefersReducedMotion } from './reduced.ts';
-import { dur, ease, type Bezier } from './tokens.ts';
+import { bezierCss, dur, ease } from './tokens.ts';
 import { reportDuplicateVtNames } from './vt.ts';
 
 // React 组件（Appear、Pressable、SharedLayout、Celebrate）在 ./components.ts：
@@ -14,7 +14,6 @@ export { prefersReducedMotion, subscribeReducedMotion } from './reduced.ts';
 export type { AppearKind } from './presets.ts';
 // 跟手手势（useSwipePager、useDragCollapse）在 ./gestures.ts：不从这里再导出，免得被首屏的 main 块带上（11-05 主持人定，首屏体积）
 
-const bezierCss = (b: Bezier): string => `cubic-bezier(${b.join(',')})`;
 
 
 function run(el: Element, kind: AppearKind, dir: 'in' | 'out'): Promise<void> {

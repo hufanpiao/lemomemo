@@ -29,6 +29,9 @@ export const dur = {
 
 export type Bezier = readonly [number, number, number, number];
 
+/** 曲线令牌 → CSS / WAAPI 的 cubic-bezier() 字符串（motion/index.ts、desk-sort.ts 共用） */
+export const bezierCss = (b: Bezier): string => `cubic-bezier(${b.join(',')})`;
+
 /** 曲线 */
 export const ease = {
   /** --ease-standard：只留给页面切换 */

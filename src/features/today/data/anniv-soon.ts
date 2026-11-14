@@ -13,17 +13,24 @@ export interface AnnivSoon {
   readonly days: number;
 }
 
-export function annivSoon(rows: readonly (Readonly<Record<string, unknown>> & { readonly id: string })[], today: DateStr): AnnivSoon | null {
-  const last = addDays(today, ANNIV_SOON_DAYS);
-  let best: AnnivSoon | null = null;
+type AnnivRow = Readonly<Record<string, unknown>> & { readonly id: string };
+
+/** 纪念日的名字（不是字符串当空） */
+export const nameOf = (r: AnnivRow): string => (typeof r['name'] === 'string' ? r['name'] : '');
+
+/** within 天内（含今天）的纪念日，近的在前、同一天按名字；最多 max 个（电脑版“快到了”块列几个，B6；手机这一行只要最近的一个） */
+export function annivUpcoming(rows: readonly AnnivRow[], today: DateStr, within: number, max: number): AnnivSoon[] {
+  const last = addDays(today, within);
+  const out: AnnivSoon[] = [];
   for (const row of rows) {
     const d = row['next_date'];
     if (typeof d !== 'string' || d < today || d > last) continue;
     if ((row['deleted_at'] ?? null) !== null || row['undone'] === true || (row['archived_at'] ?? null) !== null) continue;
-    const days = diffDays(today, d);
-    const name = typeof row['name'] === 'string' ? row['name'] : '';
-    const bestName = typeof best?.row['name'] === 'string' ? best.row['name'] : '';
-    if (!best || days < best.days || (days === best.days && name.localeCompare(bestName) < 0)) best = { row, days };
+    out.push({ row, days: diffDays(today, d) });
   }
-  return best;
+  return out.sort((a, b) => a.days - b.days || nameOf(a.row).localeCompare(nameOf(b.row))).slice(0, max);
+}
+
+export function annivSoon(rows: readonly AnnivRow[], today: DateStr): AnnivSoon | null {
+  return annivUpcoming(rows, today, ANNIV_SOON_DAYS, 1)[0] ?? null;
 }

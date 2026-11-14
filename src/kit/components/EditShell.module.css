@@ -20,6 +20,16 @@
   margin-bottom: 8px;
 }
 
+/* 电脑详情抽屉里（DetailDrawer 管外框和内边距）：类型名在左、保存状态、“×”在右 */
+.inDrawer {
+  color: var(--text);
+}
+
+.topDrawer {
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+}
+
 .kind {
   margin: 0;
   font-size: var(--fs-17);

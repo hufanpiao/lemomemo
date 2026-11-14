@@ -51,7 +51,7 @@ afterEach(() => {
 describe('spotOf', () => {
   it('右边和“＋”对齐，底边在“＋”上方 10px', () => {
     const fab = addFab({ top: 740, right: 359, width: 56, height: 56 });
-    expect(spotOf(fab, 375, 812)).toEqual({ right: 16, bottom: 82 });
+    expect(spotOf(fab, 375, 812)).toEqual({ side: 'above', right: 16, bottom: 82 });
   });
   it('“＋”不在、键盘弹起藏起、尺寸为 0 → null', () => {
     expect(spotOf(null, 375, 812)).toBeNull();
@@ -61,7 +61,12 @@ describe('spotOf', () => {
   it('宽屏（没有藏“＋”的规则）键盘弹起、根节点有 data-kbhide：“＋”看得见，照常给位置（台账 Q-20）', () => {
     const fab = addFab({ top: 740, right: 359, width: 56, height: 56 });
     document.documentElement.setAttribute('data-kbhide', '1');
-    expect(spotOf(fab, 375, 812)).toEqual({ right: 16, bottom: 82 });
+    expect(spotOf(fab, 375, 812)).toEqual({ side: 'above', right: 16, bottom: 82 });
+  });
+  it('电脑侧栏（beside）：放在“＋”右边 10px，按“＋”的竖直中线居中（B6 返工：侧栏“＋”贴着顶边，放上方会出屏）', () => {
+    // 侧栏的“＋”：左 33、上 16、44×44（1280 宽）
+    const fab = addFab({ top: 16, right: 77, left: 33, width: 44, height: 44 });
+    expect(spotOf(fab, 1280, 800, true)).toEqual({ side: 'right', left: 87, top: 38 });
   });
 });
 
@@ -81,6 +86,19 @@ describe('PlusHint', () => {
     expect(el.getAttribute('role')).toBe('note');
     expect(el.style.right).toBe('16px');
     expect(el.style.bottom).toBe('82px');
+  });
+
+  it('电脑宽度（MQ_SIDEBAR 成立）：气泡在“＋”右边，data-side="right"，用 left / top 定位', async () => {
+    vi.stubGlobal('innerWidth', 1280);
+    vi.stubGlobal('innerHeight', 800);
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(width >= 900px)', media: q, addEventListener: () => undefined, removeEventListener: () => undefined }));
+    addFab({ top: 16, right: 77, left: 33, width: 44, height: 44 });
+    await mount({ enabled: true, exe: false });
+    const el = screen.getByTestId('plus-hint');
+    expect(el.dataset['side']).toBe('right');
+    expect(el.style.left).toBe('87px');
+    expect(el.style.top).toBe('38px');
+    expect(el.style.bottom).toBe('');
   });
 
   it('开关关着：不出，也不记次数', async () => {

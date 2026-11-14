@@ -103,7 +103,8 @@ test.describe('只读行（FA-2）', () => {
     expect(await stateOf(page)).toEqual({ done: false, outbox: 0 });
 
     await page.getByTestId('today-todo-t-ok').getByRole('button', { name: /买牛奶/ }).click();
-    await expect(page).toHaveURL(/#\/todo\/t-ok$/);
+    // 可写的照常打开：手机宽度进编辑页；电脑宽度（Desktop Chrome 1280）电脑版换上以后在详情抽屉里编辑（B6 返工），换上之前照手机进编辑页
+    await expect.poll(async () => /#\/todo\/t-ok$/.test(page.url()) || (await page.getByTestId('today-drawer').getByTestId('todo-edit').count()) > 0).toBe(true);
   });
 
   test('待办页：只读行打勾、删除不写（× 是 aria-disabled），点了不进编辑页', async ({ page }) => {

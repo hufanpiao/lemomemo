@@ -18,9 +18,11 @@ import styles from './NotesPage.module.css';
  * 输入行正上方一个外框（.above）按顺序放页面的提示条（tip）和小图：手机上 fixed 跟着输入行走，电脑上贴在 .dock 上沿；
  * 外框和 form 一样挂 keepFieldFocus（台账 Q-25）：键盘弹着时点“×”不让输入框失焦，第一下就点得中。
  * 有撤销条时整块往上让一格（外框 .dockUp，NotesPage.module.css）
+ * 打的字、待记下的小图由页面经 useInputDraft 拿着（B6）：电脑版和手机排法互换时（电脑版分包到了、窗口宽窄跨过 900px）输入行会重新挂上，字和图不能丢
  */
 export function InputRow({
   field: input,
+  state,
   onTyping,
   onAdd,
   onImages,
@@ -34,11 +36,11 @@ export function InputRow({
   onImages(text: string, files: readonly File[]): Promise<ImagesResult>;
   /** 页面的提示条、出错条（放在小图上面） */
   tip: ReactNode;
+  /** 打的字、待记下的小图（页面的 useInputDraft） */
+  state: InputDraft;
 }) {
   const t = useNotesT();
-  const [draft, setDraft] = useState('');
-  const [pics, setPics] = useState<readonly PendingPic[]>([]);
-  const seq = useRef(0);
+  const { draft, setDraft, pics, setPics, seq } = state;
   const has = draft.trim() !== '' || pics.length > 0;
   const count = useRef(0);
   useEffect(() => {
@@ -51,6 +53,8 @@ export function InputRow({
       notesInput.focus = undefined;
     };
   }, [input]);
+  // 输入框聚焦着被卸下（电脑版、手机排法互换）时 React 不补发 onBlur：这里补一次，页面不留模糊层
+  useEffect(() => () => onTyping(false), [onTyping]);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const text = draft;
@@ -112,3 +116,13 @@ export function InputRow({
     </>
   );
 }
+
+/** 输入行打的字和待记下的小图（seq 是小图的编号，跟着一起留，重挂以后不和已有的撞）：页面拿着，传给 InputRow 的 state */
+export function useInputDraft() {
+  const [draft, setDraft] = useState('');
+  const [pics, setPics] = useState<readonly PendingPic[]>([]);
+  const seq = useRef(0);
+  return { draft, setDraft, pics, setPics, seq };
+}
+
+export type InputDraft = ReturnType<typeof useInputDraft>;
