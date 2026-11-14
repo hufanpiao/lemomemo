@@ -407,7 +407,8 @@ test('审查第 1 条：保存时令牌过期 → 解锁卡点取消 → 再解�
   await expect(page.getByTestId('vault-unlock-card')).toBeVisible();
   expect(fv.calls.filter((c) => c.action === 'save')).toHaveLength(1);
   await page.getByTestId('vault-unlock-cancel').click();
-  await expect(page.getByTestId('notes')).toBeVisible();
+  // 桌面宽度下随手记页先挂分栏（desk，按需加载），几个 worker 并发时会超过默认 5 秒
+  await expect(page.getByTestId('notes')).toBeVisible({ timeout: 15_000 });
   await page.goto('/app/#/vault');
   await page.getByTestId('vault-unlock-pin').click();
   await typePin(page, 'vault-unlock-pad', PIN);
@@ -416,4 +417,33 @@ test('审查第 1 条：保存时令牌过期 → 解锁卡点取消 → 再解�
   expect(fv.calls.filter((c) => c.action === 'save')).toHaveLength(1);
   expect(fv.notes.size).toBe(0);
   await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault wait cancel n=\d/);
+});
+
+test('审查第 3 条：设密码时开了 Face ID、绑定没成：密码照样设好，隐私记页出提示（role=alert）；审查第 6 条：解锁卡是有名字的对话框、键盘焦点圈', async ({ page, baseURL, browserName }) => {
+  test.skip(browserName !== 'chromium', '虚拟验证器只有 chromium 的 CDP 有');
+  // 虚拟平台验证器：让“能用 Face ID”成立；RP ID 是 IP（127.0.0.1）不被认，绑定一定失败——正好是要测的那条路
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true } });
+  await fakeServer(page, baseURL);
+  await page.goto('/app/#/vault');
+  await expect(page.getByTestId('vault-setup')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('vault-setup-face').check({ force: true });
+  await typePin(page, 'vault-setup-pad', PIN);
+  await expect(page.getByTestId('vault-setup')).toHaveAttribute('data-step', '2');
+  await typePin(page, 'vault-setup-pad', PIN);
+  await expect(page.getByTestId('vault-empty')).toBeVisible({ timeout: 15_000 });
+  const toast = page.getByTestId('vault-bind-fail');
+  await expect(toast).toBeVisible();
+  await expect(toast).toHaveAttribute('role', 'alert');
+  await shot(page, '11-绑定失败提示', browserName);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault bind fail /);
+
+  await page.getByTestId('vault-lock-now').click();
+  const dlg = page.getByRole('dialog');
+  await expect(dlg).toBeVisible();
+  await expect(dlg).toHaveAccessibleName(/.+/);
+  await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="vault-unlock-card"]'))).toBe(true);
+  await page.keyboard.press('Tab');
+  await shot(page, '12-解锁卡键盘焦点', browserName);
 });
