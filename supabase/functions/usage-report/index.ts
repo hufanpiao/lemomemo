@@ -5,6 +5,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { authMailFromRpc, handle, orphansFromRpc, securityFromRpc, type UsageDb } from './core.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
 function makeDb(): UsageDb {
   const url = Deno.env.get('SUPABASE_URL');
@@ -52,5 +53,5 @@ Deno.serve((req) => {
   } catch {
     db = null; // 没配好：鉴权之后由 core.ts 回 misconfigured（没带对密钥的调用方看不出来）
   }
-  return handle(req, { opsSecret: Deno.env.get('OPS_SECRET'), db, now: Date.now, log: (code) => console.error(`usage-report: ${code}`) });
+  return handle(req, { opsSecret: Deno.env.get('OPS_SECRET'), db, now: Date.now, log: codeLogger('usage-report') });
 });

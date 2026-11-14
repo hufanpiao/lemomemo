@@ -13,8 +13,9 @@ import { versionGate } from '../_shared/version-gate.ts';
 import { handle, json } from './core.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
-const log = (code: string) => console.error(`ai-parse: ${code}`);
+const log = codeLogger('ai-parse');
 
 Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL');

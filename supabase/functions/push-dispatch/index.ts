@@ -21,6 +21,7 @@ import { handle } from './core.ts';
 import { makeLogic } from './logic.ts';
 import type { RoundLogic } from './round.ts';
 import { makeStore } from './store.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
 /** 共享 logic 的接线（分支在 logic.ts 里只写一遍；这里只列 _shared/gen 下的函数，名字和测试替身一致，见 tests/edge/push-dispatch-logic-wiring.test.ts） */
 export const LOGIC: RoundLogic = makeLogic({
@@ -42,7 +43,7 @@ function signerFor(keys: VapidKeys): VapidSigner {
   return signerMemo.signer;
 }
 
-const log = (code: string) => console.error(`push-dispatch: ${code}`);
+const log = codeLogger('push-dispatch');
 
 Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL');

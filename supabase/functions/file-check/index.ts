@@ -24,8 +24,9 @@ import { noteFilePath, noteFileThumbPath } from '../_shared/gen/logic/files/medi
 import { fileCheckReq } from '../_shared/gen/schema/attachments.ts';
 import { handle } from './core.ts';
 import { fileRow, retryAi, settleRow, staleIds, writeHeartbeat } from './store.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
-const log = (code: string) => console.error(`file-check: ${code}`);
+const log = codeLogger('file-check');
 const R2 = r2FromEnv();
 
 Deno.serve(async (req) => {

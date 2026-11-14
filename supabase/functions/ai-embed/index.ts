@@ -16,8 +16,9 @@ import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { appAiConfig, embedderFor } from '../_shared/ai/wire.ts';
 import { handle, readEmbedConfig } from './core.ts';
 import { dueItems, dueUsers, hashes, laterItems, settleItems, sources, writeHeartbeat, writeVector } from './store.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
-const log = (code: string) => console.error(`ai-embed: ${code}`);
+const log = codeLogger('ai-embed');
 const enc = new TextEncoder();
 
 Deno.serve((req) => {

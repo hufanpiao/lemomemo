@@ -17,6 +17,7 @@ import { appConfigMinLoader, cachedMinClientVersion } from '../_shared/version-g
 import { handle, type AuthAdmin, type Store, type TurnstileResult } from './core.ts';
 import { REQUEST_BUDGET_MS, withAuthTimeouts, withStoreTimeouts } from './store-timeout.ts';
 import { RESEND_EMAILS_URL, TURNSTILE_SITEVERIFY_URL, resolveOutboundUrl } from './outbound.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
 
 // 没有生成的库类型：按 _shared/auth.ts 的写法用不带泛型的 SupabaseClient（行一律当 any，返回值在下面逐个收窄）
@@ -125,7 +126,7 @@ async function verifyTurnstile(siteverifyUrl: string, secret: string, token: str
     action: typeof j.action === 'string' ? j.action : null,
   };
 }
-const log = (code: string) => console.error(`invite-signup: ${code}`);
+const log = codeLogger('invite-signup');
 
 // 出站地址换成了回环地址（outbound.ts 的 overridden）时记 outbound_url_overridden：每个函数实例只记一次，只记日志码、不记地址（INVITE-sugg，10-30）
 let overriddenLogged = false;

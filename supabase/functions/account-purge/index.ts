@@ -14,6 +14,7 @@ import { timedFetch } from '../_shared/net.ts';
 import { r2FromEnv } from '../_shared/objstore-env.ts';
 import { sendMail } from '../_shared/mail-send.ts';
 import { BACKUP_BUCKET, BACKUP_DAY, BackupsSubdirError, HEARTBEAT, handle, type Backups, type PurgeStore, type R2 } from './core.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
 /** supabase-js 每次请求最长等多久：deleteUser 级联删一个大账号可能要十几秒，取宽（整轮预算见 core.ts 的 PURGE_TIME_BUDGET_MS） */
 const DB_REQUEST_TIMEOUT_MS = 30_000;
@@ -137,7 +138,7 @@ function makeBackups(admin: Admin): Backups {
   };
 }
 
-const log = (code: string) => console.error(`account-purge: ${code}`);
+const log = codeLogger('account-purge');
 
 Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL');

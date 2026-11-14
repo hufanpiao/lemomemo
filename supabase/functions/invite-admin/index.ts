@@ -14,6 +14,7 @@ import { handle, INVITE_ADMIN_ERRS, type InviteStore } from './core.ts';
 import { withStoreTimeouts } from './store-timeout.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
 // 没有生成的库类型：按 _shared/auth.ts 的写法用不带泛型的 SupabaseClient（行一律当 any，返回值逐个收窄）
 // deno-lint-ignore no-explicit-any
@@ -56,7 +57,7 @@ export function makeStore(admin: Admin, signal: AbortSignal = new AbortControlle
   };
 }
 
-const log = (code: string) => console.error(`invite-admin: ${code}`);
+const log = codeLogger('invite-admin');
 // 错误码以 shared/schema/invite-admin.ts 为准；core.ts 自己那份对不上就记日志（单测已核对，这里防生成目录过期）。整串比较、不按下标取（同 account）
 if (INVITE_ADMIN_ERRS.join(',') !== INVITE_ADMIN_ERROR_CODES.join(',')) log('error_codes_drift');
 

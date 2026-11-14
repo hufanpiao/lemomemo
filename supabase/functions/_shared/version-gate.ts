@@ -12,10 +12,11 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { FUNCTION_VERSION_EXEMPTIONS } from './gen/version-gate-list.ts';
 import { createFnVersionGate, type LoadMin } from './version-gate-core.ts';
+import { codeLogger } from './fn-log.ts';
 
 const gate = createFnVersionGate({
   exemptions: FUNCTION_VERSION_EXEMPTIONS,
-  log: (code) => console.error(`version-gate: ${code}`),
+  log: codeLogger('version-gate'),
 });
 
 /** 太旧回 426 响应，放行返回 null；免查的函数和方法不读配置 */

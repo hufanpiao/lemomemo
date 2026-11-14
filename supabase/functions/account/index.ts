@@ -30,6 +30,7 @@ import { pinEpoch } from '../_shared/vault-epoch.ts';
 import { vaultTokenChecker } from '../_shared/vault-token.ts';
 import { appConfigMinLoader, cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { versionBlock } from '../_shared/version-gate-core.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
 /** rpc 抛出的业务错误（raise exception '<码>'），原样当错误码 */
 const RPC_CODES = new Set(['admin_cannot_delete', 'account_disabled', 'account_pending_deletion']);
@@ -167,7 +168,7 @@ export function makeStore(admin: Admin, signal: AbortSignal): AccountStore {
   };
 }
 
-const log = (code: string) => console.error(`account: ${code}`);
+const log = codeLogger('account');
 // 导出内存探针：EXPORT_MEM_PROBE=1 且本机才开；线上误设只在模块加载时记一次 mem_probe_ignored（安全审查 K1）
 const memProbe = memProbeFor(Deno.env.get('EXPORT_MEM_PROBE'), Deno.env.get('SUPABASE_URL'), () => {
   const m = Deno.memoryUsage();

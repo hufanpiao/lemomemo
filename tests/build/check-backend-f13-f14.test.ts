@@ -1,15 +1,16 @@
 // build/check_backend.py F13、F14（B5 任务单 S2、S8；TC-B0-75）：
-// • F13：隐私记的函数目录（vault*）里不准用 console；共用模块、别的函数不归它管。样例在 tests/arch-fixtures/check_backend/f13-vault-console
+// • F13：除 _shared/fn-log.ts 本身外，函数里一律不准用 console（第三方审查后端-4 起扩到全部函数）。样例在 tests/arch-fixtures/check_backend/f13-vault-console
 // • F14：objstore 的 put、storage 的 upload / update 实参里必须写出 contentType。样例在 tests/arch-fixtures/check_backend/f14-content-type
 //   （违规两处：Uint8Array 不带 contentType 往 vault-preview、backups 传）
 import { describe, expect, it } from 'vitest';
 import { run, sample, SLOW_TIMEOUT, where } from './check-backend-harness.ts';
 
-describe('F13：隐私记函数目录不准用 console', () => {
-  it('vault、vault-image 里的 console.log、console[...] 都报；hello 和 _shared 不报', () => {
+describe('F13：函数日志只经 codeLogger', () => {
+  it('vault、vault-image、hello 里的 console.log、console[...] 都报；_shared/fn-log.ts 不报', () => {
     const { code, errors } = run(sample('f13-vault-console'));
     expect(code).toBe(1);
     expect(where(errors)).toEqual([
+      'F13 supabase/functions/hello/index.ts:2',
       'F13 supabase/functions/vault-image/index.ts:2',
       'F13 supabase/functions/vault/core.ts:3',
     ]);

@@ -12,8 +12,9 @@ import { isValidTz } from '../_shared/gen/core/tz.ts';
 import { annivNextOf } from '../_shared/gen/logic/anniv/next-date.ts';
 import { handle } from './core.ts';
 import { makeStore } from './store.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
-const log = (code: string) => console.error(`anniv-roll: ${code}`);
+const log = codeLogger('anniv-roll');
 
 Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL');

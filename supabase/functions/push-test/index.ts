@@ -16,8 +16,9 @@ import { appConfigMinLoader, versionGate } from '../_shared/version-gate.ts';
 import { handle, type TestDevice } from './core.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
-const log = (code: string) => console.error(`push-test: ${code}`);
+const log = codeLogger('push-test');
 
 // VAPID 钥匙和签名器的进程缓存在 _shared/push/notify.ts（B5 起和 vault 的安全通知共用一份）
 

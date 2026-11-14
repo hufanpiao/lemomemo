@@ -19,8 +19,9 @@ import { timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { handle } from './core.ts';
 import { loadRows } from './store.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
-const log = (code: string) => console.error(`ai-summarize: ${code}`);
+const log = codeLogger('ai-summarize');
 
 Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL');

@@ -20,8 +20,9 @@ import { checkParseOutput, normLocale, AI_PROJECTS_MAX } from '../_shared/gen/sc
 import { handle, json, StoreError, type Row, type TokenRow } from './core.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
-const log = (code: string) => console.error(`claude-intake: ${code}`);
+const log = codeLogger('claude-intake');
 
 Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL');

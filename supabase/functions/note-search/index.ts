@@ -17,8 +17,9 @@ import { appAiConfig, embedderFor } from '../_shared/ai/wire.ts';
 import { noteSearchReq } from '../_shared/gen/schema/search.ts';
 import { handle, readSearchConfig } from './core.ts';
 import { nearest } from './store.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
-const log = (code: string) => console.error(`note-search: ${code}`);
+const log = codeLogger('note-search');
 
 Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL');

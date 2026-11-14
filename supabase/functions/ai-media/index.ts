@@ -20,8 +20,9 @@ import { appAiConfig, gateDeps } from '../_shared/ai/wire.ts';
 import { noteImagePath, noteImageThumbPath } from '../_shared/gen/logic/files/media-path.ts';
 import { handle, readMediaDefault } from './core.ts';
 import { doneItem, dueItems, dueUsers, failItem, laterItems, parkAll, skipConsent, skipOther, unskip, writeHeartbeat } from './store.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
-const log = (code: string) => console.error(`ai-media: ${code}`);
+const log = codeLogger('ai-media');
 const R2 = r2FromEnv();
 
 Deno.serve((req) => {

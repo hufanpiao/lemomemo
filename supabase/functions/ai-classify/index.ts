@@ -16,8 +16,9 @@ import { classifyByRules } from '../_shared/gen/logic/notes/classify-rules.ts';
 import { normalizeForSearch } from '../_shared/gen/logic/search.ts';
 import { handle } from './core.ts';
 import { makeStore } from './store.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
 
-const log = (code: string) => console.error(`ai-classify: ${code}`);
+const log = codeLogger('ai-classify');
 
 Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL');

@@ -143,8 +143,8 @@ Pages Functions（functions/）和 App、shared：
       只防无意写入，字符串拼接这类有意绕过靠审查
   F12 json 响应只在 _shared/http.ts 做（架构约定 10.1：一律 no-store、同一个 content-type）：别的文件（去注释）出现 new Response(JSON.stringify(
       或自己定义 function json( 就报；流式响应（new Response(<流>)）不管。_shared/gen/ 是 shared/ 的副本，不查
-  F13 隐私记的函数目录（vault、vault-image，以后的 vault-file：目录名以 vault 开头的正式函数）里不准出现 console.（B5 任务单 S2）：
-      这几处经手密码、令牌、明文，日志一律经 _shared/fn-log.ts 的 codeLogger 只记错误码；去注释后查，预览专用函数不管
+  F13 函数日志只有一个出口（B5 任务单 S2；第三方审查后端-4 起从隐私记目录扩到全部）：supabase/functions 下除 _shared/fn-log.ts 本身外
+      不准出现 console.，日志一律经 codeLogger 只记“<函数名>: <错误码>”、截到 120 字；去注释后查，预览专用函数不管
   F14 上传一律显式带 contentType（TC-B0-75、架构 0.35 第 1 条）：supabase/functions 下（去注释，_shared/gen/ 除外）
       每一处 .put( / .upload(（objstore 的 put、supabase-js storage 的 upload），以及直接接在 storage.from(…) 后面的 .update(，
       实参里都要写出 contentType（键值或简写都认，值不能是 undefined、null）；放在变量里传进去的选项认不出，也报——一律当场写明
@@ -1365,7 +1365,8 @@ def check_test_imports(fns, errors):
 
 JSON_HTTP_FILE = "_shared/http.ts"
 CONSOLE_USE = re.compile(r"\bconsole\s*(\.|\[)")
-F13_MSG = "隐私记的函数目录里不准用 console（B5 任务单 S2：经手密码、令牌、明文）；日志一律经 _shared/fn-log.ts 的 codeLogger 只记错误码"
+FN_LOG_FILE = "_shared/fn-log.ts"
+F13_MSG = "函数里不准直接用 console（B5 任务单 S2、第三方审查后端-4）；日志一律经 _shared/fn-log.ts 的 codeLogger 只记错误码、截到 120 字"
 UPLOAD_CALL = re.compile(r"\.\s*(put|upload)\s*\(|\bstorage\s*\.\s*from\s*\((?:[^()]|\([^()]*\))*\)\s*\.\s*update\s*\(")
 CONTENT_TYPE_ARG = re.compile(r"\bcontentType\b(?!\s*:\s*(undefined|null)\b)")
 F14_MSG = ("上传要显式带 contentType（TC-B0-75）：objstore 的 put、storage 的 upload / update 在实参里当场写出 contentType（如 { contentType: 'image/webp' }），"
@@ -1446,8 +1447,8 @@ def check_functions(root, errors):
             for m in JSON_RESPONSE.finditer(code):
                 errors.append(("F12", path, line_of(code, m.start()), F12_MSG))
 
-        # F13：隐私记的函数目录不准用 console
-        if fn is not None and fn.startswith("vault") and not is_preview(rel):
+        # F13：日志只经 _shared/fn-log.ts 一个出口
+        if rel != FN_LOG_FILE and not is_preview(rel):
             for m in CONSOLE_USE.finditer(code):
                 errors.append(("F13", path, line_of(code, m.start()), F13_MSG))
 
