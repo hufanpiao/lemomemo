@@ -28,6 +28,7 @@ import { ReadonlyToast, RepeatBanner } from '../../../kit/components/ReadonlyRow
 import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import { Appear } from '../../../motion/components.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { UnsyncedRemindHint } from '../../reminders/index.ts';
 import { useSwipePager } from '../../../motion/gestures.ts';
 import { useCalendar } from '../hooks/useCalendar.ts';
@@ -167,11 +168,11 @@ export default function CalendarPage() {
     else cal.next();
     return true;
   };
-  const swipe = useSwipePager((dir) => void turn(dir));
-  const pagerRef = useRef<HTMLDivElement>(null);
+  // 滑动翻页：翻不动（turn 返回 false）就按“不够”滑回原位（R-420 审查第 1 条）；跟手直接写 transform，不让这一页重画（第 3 条）
+  const swipe = useSwipePager(turn, rlog);
   /** ‹ › 按钮：翻页后新的一页从那一侧横滑进来（和滑动一样，5.12） */
   const button = (n: -1 | 1): void => {
-    if (turn(n)) swipe.slideIn(n, pagerRef.current?.getBoundingClientRect().width ?? 0);
+    if (turn(n)) swipe.slideIn(n);
   };
   /** “今天”、T：选回今天；不在本月 / 本周时换过去（直接切换） */
   const goToday = (): void => {
@@ -235,13 +236,12 @@ export default function CalendarPage() {
       <Notice offline={model.holidaysOffline} ro={ro} t={t} />
       {/* 正文挂着左右滑动（触摸、笔，跟手）；键盘、鼠标用上面的按钮和 ← → */}
       <div
-        ref={pagerRef}
-        className={[styles.pager, swipe.settling ? styles.settling : ''].filter(Boolean).join(' ')}
-        style={swipe.offset !== 0 ? { transform: `translateX(${swipe.offset}px)` } : undefined}
-        onPointerDown={swipe.onPointerDown}
-        onPointerMove={swipe.onPointerMove}
-        onPointerUp={swipe.onPointerUp}
-        onPointerCancel={swipe.onPointerCancel}
+        className={styles.pager}
+        ref={swipe.bind.ref}
+        onPointerDown={swipe.bind.onPointerDown}
+        onPointerMove={swipe.bind.onPointerMove}
+        onPointerUp={swipe.bind.onPointerUp}
+        onPointerCancel={swipe.bind.onPointerCancel}
         data-testid="cal-pager"
       >
         {model.view.mode === 'month' ? (

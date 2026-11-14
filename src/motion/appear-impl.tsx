@@ -1,7 +1,7 @@
 ﻿// 【动画实现，R-354】<Appear> 的 motion 实现：和功能包 domMax 一起由 ./motion-impl.tsx 合成一块，首屏画完以后才下载；首屏用 ./Appear.tsx 的门面
 // 进出场组件（架构 17.2 第 4 点）：<Appear kind="toast" show={…}>，退出动画由 AnimatePresence 管
 // 不用 AnimatePresence 的 mode="popLayout"（会插内联 <style>，被 CSP 拦，2.0；ESLint 也拦，UI-4 L-4）
-// 减少动态效果（17.2 第 5 点）：和 animateIn 等函数读同一个判断（系统设置或 data-rm="1"，UI-4 M-1）——
+// 减少动态效果（17.2 第 5 点）：和 transition、fadeSwap 这些函数读同一个判断（系统设置或 data-rm="1"，UI-4 M-1）——
 // 只淡入淡出、时长减半；MotionConfig 再兜一层，子树里别的 Motion 动画也不做位移和缩放
 // 进场播完把 transform 清成 none（FA5-CR，前端 B 接线发现）：停在 translateY(0) scale(1) 的外层会成为 position: fixed 子元素的
 // 定位参照（横幅、按钮条跑到页面中间）。停稳以后的退场用两段关键帧“原位 → 退场终点”，起点和清掉以前完全一样；

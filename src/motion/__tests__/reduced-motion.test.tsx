@@ -1,13 +1,14 @@
 // UI-4 M-1（架构 17.2 第 5 点）：“减少动态效果”只有一套判断——<html data-rm="1">。系统设置那一条由 platform/look.ts 并进 data-rm
 // （皮肤整块评审 11-14 第 1、6 条；look.test.ts 验），本模块不再自己查 matchMedia。
-// 函数（animateIn / press / transition）和 React 组件（Appear、SharedLayout）读的是同一个判断，data-rm 变了组件要重新渲染
+// 函数（transition、fadeSwap）和 React 组件（Appear、SharedLayout）读的是同一个判断，data-rm 变了组件要重新渲染
+// （原来测 animateIn、press 的一段随函数删掉：全站没人调，R-420 审查第 14 条）
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
 import { useReducedMotionConfig } from 'motion/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { appearMotion } from '../appear-impl.tsx';
 import { Appear, SharedLayout, useReducedMotionPref } from '../components.ts';
-import { animateIn, prefersReducedMotion, press } from '../index.ts';
-import { presets, PRESS_SCALE } from '../presets.ts';
+import { prefersReducedMotion } from '../index.ts';
+import { presets } from '../presets.ts';
 import { dur } from '../tokens.ts';
 import { loadMotionFeatures } from '../features.ts';
 
@@ -199,56 +200,6 @@ describe('TC-B1-52：只开系统设置时同样不做位移（look.ts 把系统
       </SharedLayout>,
     );
     expect(seen).toBe(true);
-  });
-});
-
-/** 给元素装一个假的 element.animate（jsdom 没有），记下调用参数 */
-function stubAnimate(el: Element) {
-  const fn = vi.fn((_frames: Keyframe[], _opts: KeyframeAnimationOptions) => ({ finished: Promise.resolve() }));
-  // 先转成 unknown 再看成普通对象：两套 tsconfig 的 DOM 类型不同，交叉类型在带完整 DOM 类型时会收窄成 Animation 签名
-  (el as unknown as { animate: unknown }).animate = fn;
-  return fn;
-}
-
-describe('17.4 B1（UI-4 M-1）：非 React 的 animateIn、press 和组件表现一致', () => {
-  for (const [name, setup] of [
-    ['data-rm="1"', () => { fakeSystem(false); html.dataset['rm'] = '1'; }],
-    ['系统设置（look.ts 写成 data-rm="1"）', () => { fakeSystem(true); html.dataset['rm'] = '1'; }],
-  ] as const) {
-    it(`animateIn：${name} 时只淡入（关键帧里没有 transform），时长减半`, async () => {
-      setup();
-      const el = document.createElement('div');
-      const fn = stubAnimate(el);
-      await animateIn(el, 'toast');
-      const [frames, opts] = fn.mock.calls[0] ?? [];
-      expect(frames?.every((f) => !('transform' in f))).toBe(true);
-      expect(opts?.duration).toBe((presets.toast.transition.duration * 1000) / 2);
-    });
-
-    it(`press：${name} 时不缩放（不调 element.animate）`, async () => {
-      setup();
-      const el = document.createElement('button');
-      const fn = stubAnimate(el);
-      await press(el);
-      expect(fn).not.toHaveBeenCalled();
-    });
-  }
-
-  it('都没开（对照）：animateIn 带位移、用预设时长；press 缩到 PRESS_SCALE、时长取 --dur-press', async () => {
-    fakeSystem(false);
-    const el = document.createElement('div');
-    const fn = stubAnimate(el);
-    await animateIn(el, 'toast');
-    const [frames, opts] = fn.mock.calls[0] ?? [];
-    expect(frames?.[0]?.transform).toBe(presets.toast.initial.transform);
-    expect(opts?.duration).toBe(presets.toast.transition.duration * 1000);
-
-    const btn = document.createElement('button');
-    const pf = stubAnimate(btn);
-    await press(btn);
-    const [pFrames, pOpts] = pf.mock.calls[0] ?? [];
-    expect(pFrames?.[1]?.transform).toBe(`scale(${PRESS_SCALE})`);
-    expect(pOpts?.duration).toBe(dur.press * 1000 * 2);
   });
 });
 

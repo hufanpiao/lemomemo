@@ -142,12 +142,12 @@
   touch-action: pan-y;
 }
 
-/* 松手后滑回 0（跟手时不加过渡）；减少动态效果时 useSwipePager 不跟手，这里也不动（17.2 第 5 点） */
-.settling {
+/* 松手后滑到位（motion 的 hdrag 打 data-snap；跟手时不打、不加过渡）；减少动态效果时 useSwipePager 不跟手，这里也不动（17.2 第 5 点） */
+.pager[data-snap] {
   transition: transform var(--dur-ui) var(--ease-standard);
 }
 
-:global(:root[data-rm="1"]) .settling {
+:global(:root[data-rm="1"]) .pager[data-snap] {
   transform: none;
   transition: none;
 }

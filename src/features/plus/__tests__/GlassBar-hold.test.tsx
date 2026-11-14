@@ -8,11 +8,11 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GlassBar } from '../../../kit/components/GlassBar/GlassBar.tsx';
 import type * as UseT from '../../../kit/hooks/useT.ts';
-import { swallowNextClick, TAP_SWALLOW_MS } from '../../../motion/index.ts';
+import { swallowNextClick } from '../../../motion/index.ts';
 import { createHoldInput, type HoldSink } from '../data/hold-input.ts';
 
 /** 同 hooks/voice-sink.ts 注入的那一个 */
-const swallow = (el: Node) => swallowNextClick({ within: el, ms: TAP_SWALLOW_MS.hold });
+const swallow = (el: Node): void => void swallowNextClick({ within: el });
 import { HOLD_MS } from '../data/record-logic.ts';
 
 const renders = vi.hoisted(() => ({ n: 0 }));
@@ -94,7 +94,7 @@ describe('按住期间 GlassBar 不重新渲染（Q3 守门第 6 条）', () => 
     fireEvent.pointerMove(fab, { ...ptr, clientY: 700 });
     fireEvent.pointerMove(fab, { ...ptr, clientY: 500 });
     fireEvent.pointerUp(fab, ptr);
-    fireEvent.click(fab);
+    fireEvent.click(fab, { detail: 1 });
     expect(s.calls).toEqual(['down', 'start', 'finish']);
     expect(renders.n - before, 'GlassBar 没有因为按住重新渲染').toBe(0);
     expect(onClick, '进了录音以后松手补的 click 吞掉').not.toHaveBeenCalled();
@@ -109,7 +109,7 @@ describe('按住期间 GlassBar 不重新渲染（Q3 守门第 6 条）', () => 
     fireEvent.pointerDown(fab, ptr);
     await sleep(50);
     fireEvent.pointerUp(fab, ptr);
-    fireEvent.click(fab);
+    fireEvent.click(fab, { detail: 1 });
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(s.calls).toEqual(['down', 'idle']);
     expect(renders.n - before).toBe(0);

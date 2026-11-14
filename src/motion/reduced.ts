@@ -1,6 +1,6 @@
 // “减少动态效果”的唯一判断（架构 17.2 第 5 点；UI-4 M-1）：只看 <html data-rm="1">。
 // data-rm 由 platform/look.ts 写：设置里的开关打开，或系统设置了 prefers-reduced-motion: reduce，任一条成立就写（系统切换时跟着改）。
-// 函数（animateIn / animateOut / press / transition）和 React 组件（Appear、SharedLayout 经 useReducedMotionPref）
+// 函数（transition、fadeSwap）和 React 组件（Appear、SharedLayout 经 useReducedMotionPref）
 // 都只读这里；CSS 那一侧同样只认 :root[data-rm="1"]（全仓库只有启动画面 splash.css 自己看媒体查询：它要在 look.ts 加载前生效）
 // 不引 React、不引 motion/react（index.ts 会被 router 带进首屏）
 

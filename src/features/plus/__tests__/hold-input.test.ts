@@ -7,8 +7,8 @@ import { HOLD_MS } from '../data/record-logic.ts';
 
 let t = 0;
 const now = (): number => t;
-/** 同 hooks/voice-sink.ts 注入的那一个，钟换成测试的假钟 */
-const swallow = (el: Node) => swallowNextClick({ within: el, ms: TAP_SWALLOW_MS.hold, now });
+/** 同 hooks/voice-sink.ts 注入的那一个（时限靠 setTimeout，跟着 advance 的假钟走） */
+const swallow = (el: Node): void => void swallowNextClick({ within: el });
 
 function makeSink(over: Partial<HoldSink> = {}) {
   const calls: string[] = [];
@@ -61,7 +61,7 @@ describe('按住“＋”的手势', () => {
     h.onEnd(ptr(300, 800));
     expect(calls).toEqual(['down', 'idle']);
     expect(marked()).toBe(false);
-    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
     fab.dispatchEvent(click);
     expect(click.defaultPrevented, '点一下的 click 不吞').toBe(false);
   });
@@ -79,7 +79,7 @@ describe('按住“＋”的手势', () => {
     expect(calls).toEqual(['down', 'start', 'finish']);
   });
 
-  it('满 350 ms 进录音；松开 = 记下；松手补在“＋”上的 click 吞掉（别处的不吞），过了 TAP_SWALLOW_MS.hold 不再吞', () => {
+  it('满 350 ms 进录音；松开 = 记下；松手补在“＋”上的 click 吞掉（别处的不吞），过了 TAP_SWALLOW_MS 不再吞', () => {
     const { sink, calls } = makeSink();
     const h = createHoldInput(() => sink, swallow, now);
     h.onStart(ptr(300, 800));
@@ -90,15 +90,15 @@ describe('按住“＋”的手势', () => {
     expect(marked()).toBe(false);
     const other = document.createElement('button');
     document.body.append(other);
-    const elsewhere = new MouseEvent('click', { bubbles: true, cancelable: true });
+    const elsewhere = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
     other.dispatchEvent(elsewhere);
     other.remove();
     expect(elsewhere.defaultPrevented, '落在别处（提示条上的按钮）的照常').toBe(false);
-    const swallowed = new MouseEvent('click', { bubbles: true, cancelable: true });
+    const swallowed = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
     fab.dispatchEvent(swallowed);
     expect(swallowed.defaultPrevented, '补在“＋”上的这一下不能再打开打字条').toBe(true);
-    advance(TAP_SWALLOW_MS.hold + 1);
-    const later = new MouseEvent('click', { bubbles: true, cancelable: true });
+    advance(TAP_SWALLOW_MS + 1);
+    const later = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
     fab.dispatchEvent(later);
     expect(later.defaultPrevented, '之后的点按照常').toBe(false);
   });
@@ -111,7 +111,7 @@ describe('按住“＋”的手势', () => {
     expect(marked()).toBe(false);
     h.onEnd(ptr(300, 800));
     expect(calls, '按下时先开的手机识别照样关掉').toEqual(['down', 'idle']);
-    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
     fab.dispatchEvent(click);
     expect(click.defaultPrevented).toBe(false);
   });

@@ -155,6 +155,8 @@ describe('换页后吞点按（代码审查方案 B M8）', () => {
     return { swap: () => document.body.replaceChildren(main, nav), del, tab, onDel, onTab };
   };
   const down = (el: Element): boolean => el.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }));
+  /** 手指、鼠标点出来的 click（detail 1）；键盘的 click 前面有 keydown，守卫不吞（R-420 审查第 13 条） */
+  const tapClick = (el: Element, detail = 1): boolean => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail }));
 
   it('窗口内：main 里的 pointerdown、click 都吞（不冒泡、preventDefault）；底栏照常能点', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
@@ -162,7 +164,7 @@ describe('换页后吞点按（代码审查方案 B M8）', () => {
     void fadeSwap(p.swap, pickMain);
     vi.advanceTimersByTime(10);
     expect(down(p.del)).toBe(false);
-    p.del.click();
+    tapClick(p.del);
     expect(p.onDel).not.toHaveBeenCalled();
     p.tab.click();
     expect(p.onTab).toHaveBeenCalledTimes(1);
@@ -175,9 +177,9 @@ describe('换页后吞点按（代码审查方案 B M8）', () => {
     vi.advanceTimersByTime(FADE_GUARD_MS - 20);
     down(p.del);
     vi.advanceTimersByTime(60);
-    p.del.click();
+    tapClick(p.del);
     expect(p.onDel).not.toHaveBeenCalled();
-    p.del.click(); // 下一次点按照常
+    tapClick(p.del); // 下一次点按照常
     expect(p.onDel).toHaveBeenCalledTimes(1);
   });
 
@@ -190,7 +192,7 @@ describe('换页后吞点按（代码审查方案 B M8）', () => {
     expect(down(p.del)).toBe(false); // 往上划的那一下：按下吞了，后面没有 click
     vi.advanceTimersByTime(300);
     expect(down(p.del)).toBe(true);
-    p.del.click();
+    tapClick(p.del);
     expect(p.onDel).toHaveBeenCalledTimes(2); // pointerdown、click 都到了
   });
 
@@ -202,7 +204,7 @@ describe('换页后吞点按（代码审查方案 B M8）', () => {
     down(p.del);
     p.del.dispatchEvent(new Event('pointercancel', { bubbles: true }));
     vi.advanceTimersByTime(300);
-    p.del.click();
+    tapClick(p.del);
     expect(p.onDel).toHaveBeenCalledTimes(1);
   });
 
@@ -212,15 +214,40 @@ describe('换页后吞点按（代码审查方案 B M8）', () => {
     void fadeSwap(p.swap, pickMain);
     vi.advanceTimersByTime(200);
     expect(down(p.del)).toBe(true);
-    p.del.click();
+    tapClick(p.del);
     expect(p.onDel).toHaveBeenCalledTimes(2);
+  });
+
+  it('窗口内键盘的 click（先 keydown：焦点在按钮上按回车）照常，不当成手指点在旧画面上', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    const p = pageWithButtons();
+    void fadeSwap(p.swap, pickMain);
+    vi.advanceTimersByTime(10);
+    p.del.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(tapClick(p.del, 0)).toBe(true);
+    expect(p.onDel).toHaveBeenCalledTimes(1);
+  });
+
+  it('吞掉的那一下用 stopImmediatePropagation：document 上后挂的捕获监听也收不到', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    const p = pageWithButtons();
+    void fadeSwap(p.swap, pickMain);
+    const late = vi.fn();
+    document.addEventListener('click', late, true);
+    document.addEventListener('pointerdown', late, true);
+    vi.advanceTimersByTime(10);
+    down(p.del);
+    tapClick(p.del);
+    document.removeEventListener('click', late, true);
+    document.removeEventListener('pointerdown', late, true);
+    expect(late).not.toHaveBeenCalled();
   });
 
   it('减少动态效果时也吞（旧页一样是瞬间没的）', () => {
     document.documentElement.setAttribute('data-rm', '1');
     const p = pageWithButtons();
     void fadeSwap(p.swap, pickMain);
-    p.del.click();
+    tapClick(p.del);
     expect(p.onDel).not.toHaveBeenCalled();
   });
 
@@ -230,9 +257,9 @@ describe('换页后吞点按（代码审查方案 B M8）', () => {
     const rm = vi.spyOn(document, 'removeEventListener');
     const live = (): number => add.mock.calls.filter((c) => c[2] === true).length - rm.mock.calls.filter((c) => c[2] === true).length;
     void fadeSwap(() => setPage('a'), pickMain);
-    expect(live()).toBe(2); // pointerdown、click（晚到那一下和 S12 的 pointercancel 在 swallowNextClick 里、挂在 window 上，见 swallow-click.test.ts）
+    expect(live()).toBe(3); // pointerdown、click、keydown（晚到那一下和 S12 的 pointercancel 在 swallowNextClick 里、挂在 window 上，见 swallow-click.test.ts）
     void fadeSwap(() => setPage('b'), pickMain);
-    expect(live()).toBe(2); // 上一次的摘了，这一次的挂上
+    expect(live()).toBe(3); // 上一次的摘了，这一次的挂上
     vi.advanceTimersByTime(FADE_GUARD_MS + 1);
     expect(live()).toBe(0);
     void fadeSwap(() => setPage('c'), pickMain);

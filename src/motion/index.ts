@@ -1,10 +1,9 @@
 // 动效模块的对外接口（架构 17.2 第 4 点）：只有这里能用 motion/react、element.animate、
 // document.startViewTransition、requestAnimationFrame（A25）
 // B0 是骨架：接口定下来，具体手感在 B1（按下回弹、页面切换）、B2（弹层、列表）、B3（提示条、录音面板）里调
-import { presets, PRESS_SCALE, type AppearKind } from './presets.ts';
 import { prefersReducedMotion } from './reduced.ts';
 import { swallowNextClick } from './swallow-click.ts';
-import { bezierCss, dur, ease, TAP_SWALLOW_MS } from './tokens.ts';
+import { bezierCss, dur, ease } from './tokens.ts';
 import { reportDuplicateVtNames } from './vt.ts';
 
 // React 组件（Appear、Pressable、SharedLayout、Celebrate）在 ./components.ts：
@@ -17,45 +16,6 @@ export { TAP_SWALLOW_MS } from './tokens.ts';
 export { prefersReducedMotion, subscribeReducedMotion } from './reduced.ts';
 export type { AppearKind } from './presets.ts';
 // 跟手手势（useSwipePager、useDragCollapse）在 ./gestures.ts：不从这里再导出，免得被首屏的 main 块带上（11-05 主持人定，首屏体积）
-
-
-
-function run(el: Element, kind: AppearKind, dir: 'in' | 'out'): Promise<void> {
-  const p = presets[kind];
-  const reduced = prefersReducedMotion();
-  const from = dir === 'in' ? p.initial : p.animate;
-  const to = dir === 'in' ? p.animate : p.exit;
-  const frames: Keyframe[] = reduced
-    ? [{ opacity: dir === 'in' ? 0 : 1 }, { opacity: dir === 'in' ? 1 : 0 }]
-    : [
-        { opacity: from.opacity, transform: from.transform },
-        { opacity: to.opacity, transform: to.transform },
-      ];
-  const ms = (p.transition.duration * 1000) / (reduced ? 2 : 1);
-  if (typeof el.animate !== 'function') return Promise.resolve();
-  const a = el.animate(frames, { duration: ms, easing: bezierCss(p.transition.ease), fill: 'both' });
-  return a.finished.then(() => undefined, () => undefined);
-}
-
-/** 非 React 场景的进场 */
-export function animateIn(el: Element, kind: AppearKind): Promise<void> {
-  return run(el, kind, 'in');
-}
-
-/** 非 React 场景的离场（返回的 Promise 在动画播完后完成，可以接着移除元素） */
-export function animateOut(el: Element, kind: AppearKind): Promise<void> {
-  return run(el, kind, 'out');
-}
-
-/** 按下回弹：scale(0.97)，松开用 --ease-spring 弹回 */
-export function press(el: Element): Promise<void> {
-  if (prefersReducedMotion() || typeof el.animate !== 'function') return Promise.resolve();
-  const a = el.animate(
-    [{ transform: 'scale(1)' }, { transform: `scale(${PRESS_SCALE})` }, { transform: 'scale(1)' }],
-    { duration: dur.press * 1000 * 2, easing: bezierCss(ease.spring) },
-  );
-  return a.finished.then(() => undefined, () => undefined);
-}
 
 interface VtDocument {
   startViewTransition?: (cb: () => void) => { finished: Promise<void> };
@@ -137,15 +97,19 @@ let guardStop: (() => void) | null = null;
 /**
  * 在 document 上用 capture 吞掉 ms 以内落在 main 里的 pointerdown、click；返回摘掉监听的函数。
  * 窗口里吞掉了 pointerdown 时，跟着的那次 click 晚到窗口外（按下在窗口里、松开在窗口外）也吞：交给 swallowNextClick，
- * 最多等 TAP_SWALLOW_MS.guardLate（从按下算）；新的一次按下、被吞的按下变成滚动（pointercancel）就不再等（代码审查 S12，在 swallowNextClick 里）
+ * 最多等 TAP_SWALLOW_MS（从按下算）；新的一次按下、被吞的按下变成滚动（pointercancel）就不再等（代码审查 S12，在 swallowNextClick 里）。
+ * 吞用 stopImmediatePropagation（document 上后挂的捕获监听也收不到）；键盘的 click（窗口里先有 keydown，焦点在按钮上按回车、空格）不是手指点在旧画面上，不吞
+ * （R-420 审查第 13 条；不按 detail === 0 认键盘，理由见 swallow-click.ts）
  */
 function guardTaps(doc: Document, ms: number): () => void {
   const t0 = performance.now();
   let late: (() => void) | null = null;
+  /** 窗口里按过键盘：随后的 click 是键盘点的 */
+  let keyed = false;
   const mainOf = (e: Event): Element | null => (e.target instanceof Element ? e.target.closest('main') : null);
   const eat = (e: Event): void => {
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
   };
   const down = (e: Event): void => {
     if (performance.now() - t0 >= ms) return void stop();
@@ -153,11 +117,15 @@ function guardTaps(doc: Document, ms: number): () => void {
     if (!main) return;
     eat(e);
     late?.();
-    late = swallowNextClick({ within: main, ms: TAP_SWALLOW_MS.guardLate });
+    late = swallowNextClick({ within: main });
   };
   const click = (e: Event): void => {
     if (performance.now() - t0 >= ms) return void stop();
-    if (mainOf(e)) eat(e);
+    if (keyed) keyed = false;
+    else if (mainOf(e)) eat(e);
+  };
+  const key = (): void => {
+    keyed = true;
   };
   const timer = setTimeout(() => stop(), ms);
   let dead = false;
@@ -168,6 +136,7 @@ function guardTaps(doc: Document, ms: number): () => void {
     clearTimeout(timer);
     doc.removeEventListener('pointerdown', down, true);
     doc.removeEventListener('click', click, true);
+    doc.removeEventListener('keydown', key, true);
   };
   /** 下一次换页、cancelFade：连晚到的那一下也不再等 */
   const off = (): void => {
@@ -177,6 +146,7 @@ function guardTaps(doc: Document, ms: number): () => void {
   };
   doc.addEventListener('pointerdown', down, true);
   doc.addEventListener('click', click, true);
+  doc.addEventListener('keydown', key, true);
   return off;
 }
 
@@ -247,11 +217,6 @@ export function fadeSwap(update: () => void, pick: () => Element | null): Promis
     fadeStop = stop;
     mo.observe(document.body, { childList: true, subtree: true });
   });
-}
-
-/** 以后的趣味动效从这里接入；4.0.0 什么都不做（17.2 第 4、7 点） */
-export function celebrate(kind: string): void {
-  void kind;
 }
 
 /** 下一帧执行（给以后的帧循环用，例如液态玻璃副本，0.27 第 5 点） */

@@ -7,7 +7,7 @@
 // • 减少动态效果：不跟手，松手按拖的方向和距离直接切换，没有补间
 // • 键盘、读屏：拖动柄本身是按钮，点一下（回车、空格）就切换，页面调 toggle（同样有补间、减少动态效果时直接切）
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { inEdge, LOCK_PX } from './swipe-pager.ts';
+import { inEdge, SLOP_PX } from './hdrag.ts';
 import { dur, ease, type Bezier } from './tokens.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
 
@@ -157,7 +157,7 @@ export function useDragCollapse(collapsed: boolean, onChange: (collapsed: boolea
       if (!t || t.id !== e.pointerId) return;
       const dx = e.clientX - t.x;
       const dy = e.clientY - t.y;
-      if (t.lock === 'none' && Math.max(Math.abs(dx), Math.abs(dy)) >= LOCK_PX) t.lock = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x';
+      if (t.lock === 'none' && Math.max(Math.abs(dx), Math.abs(dy)) >= SLOP_PX) t.lock = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x';
       if (t.lock !== 'y') return;
       const dt = e.timeStamp - t.lastT;
       if (dt > 0) t.vy = (e.clientY - t.lastY) / dt;

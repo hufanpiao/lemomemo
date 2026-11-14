@@ -1,7 +1,7 @@
 // 编辑页的表单零件（B2 FA-2）：字段行、文本框、多行文本、下拉、勾选。只管外观和读屏标注，不含任何业务；文案由调用方传
 // 文本框、多行文本：输入时只改本地值，失焦（或回车）时才 onCommit（定稿线框“失焦即保存”，不每敲一个字就入队）；
 // 没失焦就离开页面（后退、跳走、切后台）时补交一次（useCommitDraft）
-import { useCallback, useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ComponentProps, type ReactNode } from 'react';
 import { hrefOf, navigate, plainClick, type RouteName } from '../../app/router.ts';
 import { Pressable } from '../../motion/components.ts';
 import cc from './CheckCircle.module.css';
@@ -59,22 +59,27 @@ interface CommitProps {
 
 /** useCommitDraft 的可选项 */
 export interface CommitDraftOptions {
-  /** 这份草稿能不能交（日期框要年份够了才交）；不给都能交 */
+  /** 这份草稿能不能交（日期框要年份够了才交）；不给都能交。没交成就失焦时，框里退回外面的值（编辑结束、草稿跟着外面的值走） */
   accept?: ((v: string) => boolean) | undefined;
   /** 停笔多久自动交一次（毫秒；随手记正文、标题 800）；不给就只在失焦、离开时交 */
   idleMs?: number | undefined;
-  /** true：有没交的草稿时，外面的值变了也不覆盖（随手记编辑器：停笔存之前别的设备的改动不冲掉正在写的字）；
-   *  默认 false：不在编辑时外面的值一变就覆盖草稿、丢掉没交的 */
-  keepDirty?: boolean | undefined;
+  /** 敲进来的字先过一遍（单行标题：粘贴进来的换行变空格） */
+  clean?: ((v: string) => string) | undefined;
+  /** 这一下改完就交（日期、时刻选择器选完就算定了，iOS 的滚轮没有回车） */
+  commitOnChange?: ((v: string) => boolean) | undefined;
 }
+
+type DraftEl = HTMLInputElement | HTMLTextAreaElement;
 
 /**
  * 文本草稿（代码审查 M1）：本地值跟着外面的值走（别的设备改了、保存后规整了），编辑中不被打断；
  * 没提交的草稿在这几种时候补交一次：失焦 / 回车（平常的路径）、停笔 idleMs（给了才有）、组件卸载（浏览器后退、点通知跳走、换记录）、
  * pagehide、visibilitychange 变成 hidden（关标签页、iOS 把 PWA 切到后台后被回收，不一定有卸载）。
- * 同一份草稿只交一次；和外面的值一样就不交。kit 的 TextInput、TextArea 和随手记编辑器（NoteEditPage 的 DraftArea）共用这一个
+ * 同一份草稿只交一次；和外面的值一样就不交。编辑中（聚焦着）外面的值变了不打断；不在编辑时草稿跟着外面的值走（没交的在失焦时已经交过或丢掉）。
+ * 返回的 bind 是输入框要接的四样（value、onFocus、onChange、onBlur）：kit 的 TextInput、TextArea 照着接上，不各写一遍处理逻辑（R-420 审查第 9 条；
+ * 原生元素上不准展开属性（A26 lemo/safe-href），所以四样逐个写）
  */
-export function useCommitDraft(value: string, onCommit: (v: string) => void, { accept = () => true, idleMs, keepDirty = false }: CommitDraftOptions = {}) {
+export function useCommitDraft(value: string, onCommit: (v: string) => void, { accept = () => true, idleMs, clean, commitOnChange }: CommitDraftOptions = {}) {
   const [draft, setDraftState] = useState(value);
   const [editing, setEditing] = useState(false);
   const latest = useRef({ draft: value, value, onCommit, accept, dirty: false, timer: undefined as ReturnType<typeof setTimeout> | undefined });
@@ -82,11 +87,11 @@ export function useCommitDraft(value: string, onCommit: (v: string) => void, { a
   latest.current.onCommit = onCommit;
   latest.current.accept = accept;
   useEffect(() => {
-    if (editing || (keepDirty && latest.current.dirty)) return;
+    if (editing) return;
     setDraftState(value);
     latest.current.draft = value;
     latest.current.dirty = false;
-  }, [value, editing, keepDirty]);
+  }, [value, editing]);
 
   const flush = useCallback((): void => {
     const l = latest.current;
@@ -123,7 +128,21 @@ export function useCommitDraft(value: string, onCommit: (v: string) => void, { a
     };
   }, [flush]);
 
-  return { draft, setDraft, setEditing, flush };
+  const bind = {
+    value: draft,
+    onFocus: (): void => setEditing(true),
+    onChange: (e: ChangeEvent<DraftEl>): void => {
+      setEditing(true);
+      const v = clean ? clean(e.target.value) : e.target.value;
+      setDraft(v);
+      if (commitOnChange?.(v)) flush();
+    },
+    onBlur: (): void => {
+      setEditing(false);
+      flush();
+    },
+  };
+  return { draft, flush, bind };
 }
 
 /** 回车是不是“提交”：中文、韩文输入法组字时的回车是选字（Safari 那一下 isComposing 为假、keyCode 229），这时失焦会丢掉还没上屏的字（Q-21） */
@@ -136,9 +155,11 @@ export function dateReady(v: string): boolean {
   return v === '' || (/^\d{4}-\d{2}-\d{2}$/.test(v) && Number(v.slice(0, 4)) >= 1900);
 }
 
+/** 日期、时刻选择器选完就交（日期要年份够了才交） */
+const pickedDone = { date: dateReady, time: () => true } as const;
+
 export function TextInput({ value, onCommit, type = 'text', title = false, ...p }: CommitProps & { type?: 'text' | 'date' | 'time'; title?: boolean }) {
-  const accept = type === 'date' ? dateReady : undefined;
-  const d = useCommitDraft(value, onCommit, { accept });
+  const d = useCommitDraft(value, onCommit, { accept: type === 'date' ? dateReady : undefined, commitOnChange: type === 'text' ? undefined : pickedDone[type] });
   return (
     <input
       id={p.id}
@@ -149,18 +170,10 @@ export function TextInput({ value, onCommit, type = 'text', title = false, ...p 
       data-testid={p['data-testid']}
       type={type}
       className={p.className ?? (title ? styles.title : styles.input)}
-      value={d.draft}
-      onFocus={() => d.setEditing(true)}
-      onChange={(e) => {
-        d.setEditing(true);
-        d.setDraft(e.target.value);
-        // 日期、时刻选择器选完就算定了（iOS 的滚轮没有回车）；日期要年份够了才交
-        if (type === 'time' || (type === 'date' && dateReady(e.target.value))) d.flush();
-      }}
-      onBlur={() => {
-        d.setEditing(false);
-        d.flush();
-      }}
+      value={d.bind.value}
+      onFocus={d.bind.onFocus}
+      onChange={d.bind.onChange}
+      onBlur={d.bind.onBlur}
       onKeyDown={(e) => {
         if (type === 'text' && enterCommits(e)) e.currentTarget.blur();
       }}
@@ -168,24 +181,48 @@ export function TextInput({ value, onCommit, type = 'text', title = false, ...p 
   );
 }
 
-export function TextArea({ value, onCommit, ...p }: CommitProps) {
-  const d = useCommitDraft(value, onCommit);
+/** 单行标题：粘贴进来的换行变空格 */
+const oneLine = (v: string): string => v.replace(/[\r\n]+/g, ' ');
+
+/**
+ * 多行文本。随手记编辑器的标题、正文也用它（原 NoteEditPage 的 DraftArea，R-420 审查第 9 条并过来）：
+ * • autoGrow：跟着内容长高（量内容本身的高度写回 height，样式里的 min-height 托底）
+ * • single：单行标题，一行起、长了换行显示；回车不换行、当作写完（失焦就交），粘贴进来的换行变空格
+ * • idleMs：停笔多久交一次（同 useCommitDraft）
+ */
+export function TextArea({ value, onCommit, autoGrow = false, single = false, idleMs, ...p }: CommitProps & { autoGrow?: boolean; single?: boolean; idleMs?: number }) {
+  const d = useCommitDraft(value, onCommit, { idleMs, clean: single ? oneLine : undefined });
+  const el = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const ta = el.current;
+    if (!autoGrow || ta === null) return;
+    // 量内容本身的高度（先去掉样式里的最小高度）；写回去的 height 再被样式的 min-height 托底
+    ta.style.height = 'auto';
+    ta.style.minHeight = '0px';
+    const h = ta.scrollHeight;
+    ta.style.minHeight = '';
+    ta.style.height = `${h}px`;
+  }, [autoGrow, d.draft]);
   return (
     <textarea
+      ref={el}
       id={p.id}
       maxLength={p.maxLength}
       disabled={p.disabled}
       placeholder={p.disabled ? undefined : p.placeholder}
       aria-label={p['aria-label']}
       data-testid={p['data-testid']}
-      rows={p.rows}
+      rows={p.rows ?? (single ? 1 : undefined)}
       className={p.className ?? styles.area}
-      value={d.draft}
-      onFocus={() => d.setEditing(true)}
-      onChange={(e) => d.setDraft(e.target.value)}
-      onBlur={() => {
-        d.setEditing(false);
-        d.flush();
+      value={d.bind.value}
+      onFocus={d.bind.onFocus}
+      onChange={d.bind.onChange}
+      onBlur={d.bind.onBlur}
+      onKeyDown={(e) => {
+        if (single && enterCommits(e)) {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
       }}
     />
   );

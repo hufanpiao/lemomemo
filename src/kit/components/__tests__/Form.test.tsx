@@ -99,6 +99,17 @@ describe('日期框（S6）', () => {
     expect(onCommit).toHaveBeenCalledOnce();
   });
 
+  it('年份没敲够就失焦（没存上）：框里退回外面的值，不留着 0202', () => {
+    const onCommit = vi.fn();
+    render(<TextInput type="date" value="2026-11-05" onCommit={onCommit} data-testid="d" />);
+    const el = screen.getByTestId('d') as HTMLInputElement;
+    fireEvent.focus(el);
+    fireEvent.change(el, { target: { value: '0202-11-05' } });
+    fireEvent.blur(el);
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(el.value).toBe('2026-11-05');
+  });
+
   it('时刻框：选完就交', () => {
     const onCommit = vi.fn();
     render(<TextInput type="time" value="09:00" onCommit={onCommit} data-testid="tm" />);
@@ -109,6 +120,47 @@ describe('日期框（S6）', () => {
 });
 
 // B2-UI-b W5（D2 ①）：Check look="switch" 是开关：role="switch"、用 Form.module.css 里共用的 .switch；空格、点击切换，禁用不切
+describe('TextArea 的 single、idleMs、autoGrow（R-420 审查第 9 条：随手记编辑器的标题、正文框改用它）', () => {
+  it('single：粘贴进来的换行变空格；回车不换行、当作写完（失焦就交）', () => {
+    const onCommit = vi.fn();
+    render(<TextArea single value="" onCommit={onCommit} data-testid="t" />);
+    const el = screen.getByTestId('t') as HTMLTextAreaElement;
+    fireEvent.focus(el);
+    fireEvent.change(el, { target: { value: '第一行\n第二行\r\n三' } });
+    expect(el.value).toBe('第一行 第二行 三');
+    el.focus();
+    const enter = fireEvent.keyDown(el, { key: 'Enter', keyCode: 13 });
+    expect(enter, '回车不换行').toBe(false);
+    expect(onCommit).toHaveBeenCalledWith('第一行 第二行 三');
+  });
+
+  it('idleMs：停笔这么久交一次，接着敲字重新计时', () => {
+    vi.useFakeTimers();
+    try {
+      const onCommit = vi.fn();
+      render(<TextArea idleMs={800} value="" onCommit={onCommit} data-testid="t" />);
+      const el = screen.getByTestId('t');
+      fireEvent.focus(el);
+      fireEvent.change(el, { target: { value: 'a' } });
+      vi.advanceTimersByTime(700);
+      fireEvent.change(el, { target: { value: 'ab' } });
+      vi.advanceTimersByTime(700);
+      expect(onCommit).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(100);
+      expect(onCommit).toHaveBeenCalledExactlyOnceWith('ab');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('autoGrow：高度跟着内容（量 scrollHeight 写回 height）', () => {
+    vi.spyOn(HTMLTextAreaElement.prototype, 'scrollHeight', 'get').mockReturnValue(123);
+    render(<TextArea autoGrow value="x" onCommit={vi.fn()} data-testid="t" />);
+    expect((screen.getByTestId('t') as HTMLTextAreaElement).style.height).toBe('123px');
+    vi.restoreAllMocks();
+  });
+});
+
 describe('Check look="switch"', () => {
   it('读屏是开关，带共用开关的类；点一下交出新值', () => {
     const onChange = vi.fn();

@@ -216,21 +216,26 @@ describe('翻页动画（架构 5.12，代码复审 N1）', () => {
     expect(vt).toHaveBeenCalledTimes(1);
   });
 
-  it('‹ › 按钮：新的一页从那一侧横滑进来（先放在一侧，再带过渡回 0）；键盘直接切换、不横滑', async () => {
+  it('‹ › 按钮：新的一页从那一侧横滑进来（先放在一侧，再带过渡回 0，同一下里做完、不等下一帧）；键盘直接切换、不横滑', async () => {
     open('#/cal/month/2026-11');
     const pager = screen.getByTestId('cal-pager');
+    // 记下 style 每一次改之前的值：中间那一下是“放在一侧”（真浏览器里逐帧的位移见 tests/e2e/r420-swipe-taps.spec.ts）
+    const mo = new MutationObserver(() => undefined);
+    mo.observe(pager, { attributes: true, attributeFilter: ['style'], attributeOldValue: true });
+    const placed = (): (string | null)[] => mo.takeRecords().map((r) => r.oldValue);
     fireEvent.click(screen.getByTestId('cal-next'));
     expect(window.location.hash).toBe('#/cal/month/2026-12');
-    expect(pager.style.transform).toBe(`translateX(${W}px)`);
-    await waitFor(() => expect(pager.style.transform).toBe(''));
-    expect(pager.className).toContain(styles.settling);
+    expect(placed()).toContain(`transform: translateX(${W}px);`);
+    expect(pager.style.transform).toBe('');
+    expect(pager.dataset['snap']).toBe('');
     fireEvent.click(screen.getByTestId('cal-prev'));
-    expect(pager.style.transform).toBe(`translateX(${-W}px)`);
-    await waitFor(() => expect(pager.style.transform).toBe(''));
+    expect(placed()).toContain(`transform: translateX(${-W}px);`);
+    expect(pager.style.transform).toBe('');
     await act(async () => {
       key('ArrowRight');
     });
-    expect(pager.style.transform).toBe('');
+    expect(placed()).toEqual([]);
+    mo.disconnect();
   });
 
   it('减少动态效果：按钮翻页也不横滑', async () => {
