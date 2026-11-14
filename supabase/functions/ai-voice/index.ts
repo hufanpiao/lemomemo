@@ -7,7 +7,7 @@ import { voiceWithAI } from '../_shared/ai/parse-with-ai.ts';
 import { logVoiceFail, type StoreAdmin } from '../_shared/ai/store.ts';
 import { gateDeps, isValidTz } from '../_shared/ai/wire.ts';
 import { aiAllowed } from '../_shared/consent.ts';
-import { AI_AUDIO_MAX_BYTES, audioType, checkDefaultDay, normLocale, normProjects } from '../_shared/gen/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, audioType, checkDefaultDay, normLocale, normProjects, type AiItem, type IntentChecked } from '../_shared/gen/schema/ai.ts';
 import { versionGate } from '../_shared/version-gate.ts';
 import { handle, json } from './core.ts';
 import { timedFetch } from '../_shared/net.ts';
@@ -31,7 +31,8 @@ Deno.serve(async (req) => {
     return data?.min_client_version ?? null;
   });
   if (blocked) return blocked;
-  return handle(req, {
+  // 泛型写明：deno 会把 I 推成意图联合里的一支（tsc 不会），写死就不靠推断
+  return handle<AiItem, IntentChecked>(req, {
     ...gateDeps(admin, log, (userId) => aiAllowed(admin, userId)),
     authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
     logic: { maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, isValidTz, checkDefaultDay: (v, now, tz) => checkDefaultDay(v, now, tz), voiceWithAI },

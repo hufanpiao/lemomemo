@@ -10,7 +10,7 @@ import { captureRow } from '../../shared/logic/capture-map.ts';
 import { arrangeHint, confidence, parseSplit, recurHint } from '../../shared/logic/parse/index.ts';
 import { checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, type AiItem } from '../../shared/schema/ai.ts';
 import { insertSchema } from '../../shared/schema/rows.ts';
-import { makeParseWithAI } from '../../supabase/functions/_shared/ai/parse-core.ts';
+import { makeParseWithAI, recordOnly } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { logIntakeFail, type StoreAdmin } from '../../supabase/functions/_shared/ai/store.ts';
 import { randomToken, TOKEN_RE, TOKEN_TTL_MS, tokenHash, tokenLive } from '../../supabase/functions/_shared/intake-token.ts';
 import { ASK_BAD_DAY, ASK_MONTH, ASK_YEAR, DAILY_ITEMS, failFields, StoreError, NOTE_RESEND, TIP_ARRANGE, TIP_RECUR, handle as intakeHandle, HOURLY_LIMIT, hourKey, itemsKey, USER_DAILY_ITEMS, userItemsKey, type Deps as IntakeDeps, type Row, type TokenRow } from '../../supabase/functions/claude-intake/core.ts';
@@ -21,7 +21,7 @@ const ROOT = join(import.meta.dirname, '..', '..');
 const NOW = Date.UTC(2026, 9, 28, 3, 0);   // 首尔 10-28 12:00
 const TID = '7e57a0a0-0000-4000-8000-000000000001';
 const DAY = 86_400_000;
-const { parseWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
+const { recordWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
 
 describe('连接码（_shared/intake-token.ts）', () => {
   it('lmc_ + 43 位 base64url；库里存 SHA-256 十六进制；180 天内没吊销才有效', async () => {
@@ -171,7 +171,7 @@ async function world(o: { gate?: GateOpts; row?: Partial<TokenRow>; usable?: boo
     logic: {
       parseSplit: (text, now, tz, locale, projects, opts) => parseSplit(text, now, tz, locale, projects, { features: [...opts.features] }),
       confidence: (r) => confidence(r as Parameters<typeof confidence>[0]),
-      checkParseOutput, parseWithAI,
+      checkParseOutput: (raw, ctx) => recordOnly(checkParseOutput(raw, ctx)), recordWithAI,
       captureRow: (item, ctx) => captureRow(item, ctx) as Row | null,
       todayOf, recurHint, arrangeHint, normLocale, isValidTz,
     },

@@ -2,12 +2,19 @@
 // 本机规则和 AI 输出共用这一套：AI 的键白名单、按 kind 清字段、过去的月日几号要问（confirm 由服务器算）、行映射能原样过 insertSchema（新增口径，不带只能 update 的列）。
 // Vitest 和 Deno（deno task test）都跑。
 import { describe, expect, it } from 'vitest';
-import { aiResponse, checkParseOutput, checkVoiceOutput, normLocale, normProjects, VOICE_TIMEOUT_MS, type AiCheckCtx, type AiItem } from '../../shared/schema/ai.ts';
+import {
+  aiResponse, checkParseOutput, checkVoiceOutput, INTENTS, INVALID_REASONS, normLocale, normProjects, VOICE_TIMEOUT_MS,
+  type AiCheckCtx, type AiItem, type IntentChecked,
+} from '../../shared/schema/ai.ts';
+import { PLUS_INTENTS } from '../../shared/schema/intent.ts';
 import { captureRow, type CaptureCtx } from '../../shared/logic/capture-map.ts';
 import { inAiRange, pastDate, resolveBasis } from '../../shared/logic/parse/past-date.ts';
 import { insertSchema } from '../../shared/schema/rows.ts';
 import { VOICE_TIMEOUT_MS as FN_VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
 import { UPLOAD_MIN_MS } from '../../src/features/plus/data/record-logic.ts';
+
+// B4b-3 起校验结果是几种意图的联合：记下那一种才有 items，这里取出来（别的意图给空）
+const itemsOf = (v: object): AiItem[] => ('items' in v ? (v as { items: AiItem[] }).items : []);
 
 // 2026-10-28（周三）12:00 首尔 = 03:00 UTC
 const NOW = Date.UTC(2026, 9, 28, 3, 0);
@@ -19,7 +26,8 @@ const BATCH = '1f8fad5b-d9cb-469f-a165-70867728950e';
 const ev = (o: Record<string, unknown> = {}) => ({ kind: 'event', title: '开会', date: '2026-10-29', time: '15:00', date_basis: 'rel', ...o });
 const first = (r: ReturnType<typeof checkParseOutput>): AiItem => {
   if (!r.ok) throw new Error(`expected ok, got ${r.invalid_reasons.join(',')}`);
-  const it = r.value.items[0];
+  if (r.value.intent !== 'record') throw new Error(`expected record, got ${r.value.intent}`);
+  const it = itemsOf(r.value)[0];
   if (!it) throw new Error('no item');
   return it;
 };
@@ -44,7 +52,7 @@ describe('ai.ts：AI 输出校验（第 7 节）', () => {
     expect(reasons(checkParseOutput({ items: [ev({ title: '\u202E\u2069 \u0001' })] }, ALL))).toEqual(['out_of_range']);
     // 语音那一路同一套
     const v = checkVoiceOutput({ transcript: '开会', items: [ev({ title: '开会\u202E' })] }, ALL);
-    expect(v.ok && v.value.items[0]?.title).toBe('开会');
+    expect(v.ok && itemsOf(v.value)[0]?.title).toBe('开会');
   });
 
   it('TC-B3-05：简称最多 2 个字形簇；3 个算 out_of_range', () => {
@@ -76,11 +84,14 @@ describe('ai.ts：AI 输出校验（第 7 节）', () => {
     }, ALL);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const [, a, n] = r.value.items;
+    const [, a, n] = itemsOf(r.value);
     expect([a?.due, a?.time, a?.date_basis, a?.anniv?.is_leap, a?.anniv?.year]).toEqual([null, null, null, false, null]);
     expect([n?.short, n?.time]).toEqual([null, null]);
     expect(reasons(checkParseOutput({ items: [ev({ foo: 1 })] }, ALL))).toEqual(['not_whitelisted']);
-    expect(reasons(checkParseOutput({ items: [ev()], intent: 'record' }, ALL))).toEqual(['not_whitelisted']);   // Q2：模型不给 intent
+    // B4b-3：intent 等几个键进了白名单（intent.ts 的 intentRawShape），别的顶层键照样 not_whitelisted；不认识的意图算 schema
+    expect(reasons(checkParseOutput({ items: [ev()], intent: 'record' }, ALL))).toEqual([]);
+    expect(reasons(checkParseOutput({ items: [ev()], answer: 'x' }, ALL))).toEqual(['not_whitelisted']);
+    expect(reasons(checkParseOutput({ items: [ev()], intent: 'ask' }, ALL))).toEqual(['schema']);
     expect(reasons(checkParseOutput({ items: [ev({ duration_min: 2000 })] }, ALL))).toEqual(['out_of_range']);
     expect(reasons(checkParseOutput({ items: Array.from({ length: 11 }, () => ev()) }, ALL))).toEqual(['out_of_range']);
     expect(reasons(checkParseOutput({ items: [ev({ time: '25:00' })] }, ALL))).toEqual(['schema']);
@@ -110,11 +121,17 @@ describe('ai.ts：AI 输出校验（第 7 节）', () => {
   it('ai-voice 多一个 transcript；返回结构 aiResponse 认得服务器包的外层', () => {
     const v = checkVoiceOutput({ transcript: '明天下午三点开会', items: [ev()] }, ALL);
     expect(v.ok && v.value.transcript).toBe('明天下午三点开会');
+    expect(v.ok && v.value.intent).toBe('record');
     const it = first(checkParseOutput({ items: [ev()] }, ALL));
     expect(aiResponse.safeParse({ intent: 'record', confidence: 1, items: [it], quota_left: 49 }).success).toBe(true);
     expect(aiResponse.safeParse({ intent: 'ask', confidence: 1, items: [], quota_left: 49 }).success).toBe(false);
     expect(aiResponse.safeParse({ fallback: true, reason: 'vault_ai_off' }).success).toBe(true);
     expect(aiResponse.safeParse({ consent_required: true }).success).toBe(true);
+  });
+
+  it('ai.ts 的 INTENTS 就是 intent.ts 的 PLUS_INTENTS；意图规整不了的原因都在 INVALID_REASONS 里', () => {
+    expect(INTENTS).toBe(PLUS_INTENTS);
+    for (const r of ['bad_date', 'out_of_range', 'schema']) expect(INVALID_REASONS).toContain(r);
   });
 
   it('入参规整：locale 只认 ko 开头为韩文；项目名去空、截 40 字、最多 30 个', () => {
@@ -123,6 +140,105 @@ describe('ai.ts：AI 输出校验（第 7 节）', () => {
     expect(ps.length).toBe(30);
     expect(ps[0]).toBe('NEOX');
     expect(ps[1]?.length).toBe(40);
+  });
+});
+
+// B4b-3（架构 5.14 第 2、3、7 点；intent.ts 文件头的规整口径）：今天是 2026-10-28（周三，首尔）
+describe('ai.ts：意图（checkParseOutput / checkVoiceOutput 过 intent.ts 的 normIntent）', () => {
+  // 查找、总结那一种带 query，改期、取消、完成那一种带 target、to；测试里两种都按可选字段读
+  type LooseIntent = Partial<Extract<IntentChecked, { query: unknown }>> & Partial<Extract<IntentChecked, { target: unknown }>> & { fixed: boolean };
+  const okIntent = (r: ReturnType<typeof checkParseOutput>): LooseIntent => {
+    if (!r.ok) throw new Error(`expected ok, got ${r.invalid_reasons.join(',')}`);
+    if (r.value.intent === 'record') throw new Error('expected non-record');
+    return r.value as LooseIntent;
+  };
+  const q = (query: unknown, extra: Record<string, unknown> = {}) => checkParseOutput({ intent: 'search', confidence: 0.9, items: [], query, ...extra }, ALL);
+  const t = (intent: string, target: unknown, to: unknown = null) => checkParseOutput({ intent, confidence: 0.8, items: [], query: null, target, to }, ALL);
+  const T = { text: '会', date: '2026-10-29', time: null, kinds: ['event', 'todo'] };
+
+  it('record：confidence 用 AI 给的（夹到 0～1），没给按 1；items 为空照旧 empty', () => {
+    const r = checkParseOutput({ intent: 'record', confidence: 0.42, items: [ev()], query: null, target: null, to: null }, ALL);
+    expect(r.ok && r.value.intent === 'record' && r.value.confidence).toBe(0.42);
+    const hi = checkParseOutput({ intent: 'record', confidence: 7, items: [ev()] }, ALL);
+    expect(hi.ok && hi.value.confidence).toBe(1);
+    const none = checkParseOutput({ items: [ev()] }, ALL);
+    expect(none.ok && none.value.intent === 'record' && none.value.confidence).toBe(1);
+    expect(reasons(checkParseOutput({ intent: 'record', confidence: 0.9, items: [] }, ALL))).toEqual(['empty']);
+  });
+
+  it('非 record：items 一律丢掉（里面写什么都不看，连不合格的条目也不拒收）', () => {
+    const v = okIntent(q({ text: '牙医', range: null, kinds: ['note'], done: 'any' }, { items: [ev(), { junk: true }] }));
+    expect(v).toEqual({ intent: 'search', confidence: 0.9, query: { text: '牙医', range: null, kinds: ['note'], done: 'any' }, fixed: false });
+    expect('items' in v).toBe(false);
+  });
+
+  it('query：kinds 只认三种（别的丢掉、丢完为空就三种都查）；from 有值 to 为 null 当单日；from 晚于 to 对调', () => {
+    expect(okIntent(q({ text: '', range: null, kinds: ['anniv'], done: 'any' })).query?.kinds).toEqual(['event', 'todo', 'note']);
+    expect(okIntent(q({ text: '', range: { from: '2026-11-02', to: null }, kinds: ['event'], done: 'any' })).query?.range).toEqual({ from: '2026-11-02', to: '2026-11-02' });
+    const sw = okIntent(q({ text: '', range: { from: '2026-11-08', to: '2026-11-02' }, kinds: ['event'], done: 'any' }));
+    expect([sw.query?.range, sw.fixed]).toEqual([{ from: '2026-11-02', to: '2026-11-08' }, true]);
+  });
+
+  it('query：from 为 null（截止到今天没做完）规整成 kinds [todo]、done open，to 为 null 的规整为今天', () => {
+    const v = okIntent(q({ text: '', range: { from: null, to: null }, kinds: ['event', 'todo'], done: 'any' }));
+    expect(v.query).toEqual({ text: '', range: { from: null, to: '2026-10-28' }, kinds: ['todo'], done: 'open' });
+    expect(v.fixed).toBe(true);
+    const exact = okIntent(q({ text: '', range: { from: null, to: '2026-10-28' }, kinds: ['todo'], done: 'open' }));
+    expect(exact.fixed).toBe(false);
+  });
+
+  it('query：日子不存在 bad_date、超过前后 5 年 out_of_range，整份拒收；查冲突照原样（kinds 只取 event）', () => {
+    expect(reasons(q({ text: '', range: { from: '2026-02-30', to: '2026-03-01' }, kinds: ['event'], done: 'any' }))).toEqual(['bad_date']);
+    expect(reasons(q({ text: '', range: { from: '2026-11-01', to: '2032-01-01' }, kinds: ['event'], done: 'any' }))).toEqual(['out_of_range']);
+    expect(reasons(q({ text: '', range: { from: '2021-01-01', to: '2021-01-02' }, kinds: ['event'], done: 'any' }))).toEqual(['out_of_range']);
+    expect(okIntent(q({ text: '', range: { from: '2026-10-29', to: '2026-10-29' }, kinds: ['event'], done: 'any' })).query?.kinds).toEqual(['event']);
+  });
+
+  it('query：多出来的键算 not_whitelisted；text 去控制字符、截 100 字', () => {
+    expect(reasons(q({ text: '', range: null, kinds: [], done: 'any', results: [] }))).toEqual(['not_whitelisted']);
+    expect(okIntent(q({ text: `牙\u202E医${'x'.repeat(200)}`, range: null, kinds: [], done: 'any' })).query?.text).toBe(`牙医${'x'.repeat(98)}`);
+  });
+
+  it('complete：kinds 去掉 event 只留 todo；只给 event 的整份拒收；一样都没给按待办；带了 to 丢掉', () => {
+    const v = okIntent(t('complete', { ...T, kinds: ['event', 'todo'] }, { date: '2026-11-01', time: null }));
+    expect(v.target?.kinds).toEqual(['todo']);
+    expect([v.to, v.fixed]).toEqual([null, true]);
+    expect(reasons(t('complete', { ...T, kinds: ['event'] }))).toEqual(['schema']);
+    expect(okIntent(t('complete', { ...T, kinds: [] })).target?.kinds).toEqual(['todo']);
+  });
+
+  it('all 只给改期：取消、完成带了就去掉；改期留着', () => {
+    expect(okIntent(t('cancel', { ...T, all: true })).target).not.toHaveProperty('all');
+    expect(okIntent(t('complete', { ...T, kinds: ['todo'], all: true })).target).not.toHaveProperty('all');
+    expect(okIntent(t('reschedule', { ...T, all: true }, { date: '2026-11-03', time: null })).target?.all).toBe(true);
+  });
+
+  it('改期的 to：date、time 都为 null 整份拒收；只给时刻的 date 为 null；to 的日子超 5 年拒收；缺 target 拒收', () => {
+    expect(reasons(t('reschedule', T, { date: null, time: null }))).toEqual(['schema']);
+    expect(reasons(t('reschedule', T, null))).toEqual(['schema']);
+    expect(okIntent(t('reschedule', T, { date: null, time: '15:00' })).to).toEqual({ date: null, time: '15:00' });
+    expect(reasons(t('reschedule', T, { date: '2040-01-01', time: null }))).toEqual(['out_of_range']);
+    expect(reasons(t('cancel', null))).toEqual(['schema']);
+  });
+
+  it('with_overdue 为 true 而 date 为 null 的规整为今天；target 的日子超 5 年拒收', () => {
+    expect(okIntent(t('complete', { ...T, date: null, kinds: ['todo'], with_overdue: true })).target).toMatchObject({ date: '2026-10-28', with_overdue: true });
+    expect(reasons(t('cancel', { ...T, date: '2033-10-29' }))).toEqual(['out_of_range']);
+  });
+
+  it('ai-voice：非 record 带 transcript、丢 items；转写为空不管意图都回没听清的空结果', () => {
+    const v = checkVoiceOutput({ transcript: '明天的会取消了', intent: 'cancel', confidence: 0.7, items: [ev()], query: null, target: T, to: null }, ALL);
+    expect(v.ok && v.value).toMatchObject({ intent: 'cancel', transcript: '明天的会取消了', target: { text: '会', date: '2026-10-29', kinds: ['event', 'todo'] } });
+    expect(v.ok && 'items' in v.value).toBe(false);
+    const quiet = checkVoiceOutput({ transcript: ' ', intent: 'search', confidence: 0.5, items: [], query: null, target: null, to: null }, ALL);
+    expect(quiet).toEqual({ ok: true, value: { intent: 'record', confidence: 0.5, transcript: '', items: [] } });
+  });
+
+  it('aiResponse 认得查找、取消改期的返回结构；record 的 intent 只能是 record', () => {
+    expect(aiResponse.safeParse({ intent: 'search', confidence: 0.9, query: { text: '', range: null, kinds: ['event'], done: 'any' }, quota_left: 3 }).success).toBe(true);
+    expect(aiResponse.safeParse({ intent: 'reschedule', confidence: 0.9, target: { ...T, kinds: ['event'] }, to: { date: null, time: '15:00' }, quota_left: 3, transcript: 'x' }).success).toBe(true);
+    expect(aiResponse.safeParse({ intent: 'search', confidence: 0.9, items: [], quota_left: 3 }).success).toBe(false);
+    expect(aiResponse.safeParse({ intent: 'search', confidence: 0.9, query: { text: '', range: null, kinds: ['event'], done: 'any' }, quota_left: 3, fixed: true }).success).toBe(false);
   });
 });
 

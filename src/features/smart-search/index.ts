@@ -12,7 +12,14 @@ export const routes = [] as const;
 export const FindHost = lazy(() => import('./ui/FindHost.tsx'));
 
 /**
- * 打开查找面板的函数在 hooks/find-open.ts：openFind(q, from)，q 是输入框里先放的字（打字条交过来的查询），from 记进运行日志。
+ * 打开查找面板的函数在 hooks/find-open.ts：openFind(q, from)，q 是输入框里先放的字（打字条交过来的查询），from 记进运行日志；
+ * openAssist(req)（B4b-3）：“＋”判成查找、总结、取消、改期、完成时打开结果层（内容类查找仍是查找面板，带“总结一下 / 改成记下”页脚）。
  * 函数不能直接从这里导出（A27），用加载器拿（同 plus 的 loadTypeBar）；FindHost 那一块已经静态带着它，打字条那边调用时通常已在内存里
  */
 export const loadFindOpen = () => import('./hooks/find-open.ts');
+
+/**
+ * 提示条下面那一行“也帮你找了一下：N 条 ›”（B4b-3，ui/AssistPeek.tsx）：features/plus 的 SavedNotice 在模糊先保存了的时候挂。
+ * props: { ask（shared/logic/parse/assist.ts 的 AssistAsk）; exclude: 刚保存的这一批的 id; undoSaved(): 撤销这一批 }
+ */
+export const AssistPeek = lazy(() => import('./ui/AssistPeek.tsx'));

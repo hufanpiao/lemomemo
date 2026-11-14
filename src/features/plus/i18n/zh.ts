@@ -40,6 +40,7 @@ export const zh = {
   'plus.notice.notSaved': '没保存上，原话还在输入框里',
   'plus.notice.nothing': '没认出要记的内容，原话还在输入框里',
   'plus.notice.undo': '撤销',
+  'plus.notice.toSearch': '改成搜索',
   'plus.notice.undone': '已撤销',
   'plus.confirm.q': '{date}已经过了',
   'plus.confirm.pastYear': '补记今年（{date}）',

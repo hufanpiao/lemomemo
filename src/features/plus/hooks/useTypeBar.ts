@@ -9,11 +9,15 @@
 // • 提示条：一条 → “已记下：…”；多条 → “已记下 N 条”，展开逐条改、撤，“拆错了，合并成一条”“全部撤销”
 // • 看起来是要查找（B4b-2，线框 sPlus“看起来是要查找 · Enter 查找”、架构 5.14 第 1 点）：本机规则 localIntent 判成查找、有把握、
 //   没带时间范围、查询词不空 → find 给出查询词，界面换成“找：…”，回车打开查找面板（features/smart-search）；“改成记下”把这一句当记下。
-//   没把握的、带时间范围的（“上周的会”“这个月的待办”）、总结、改期、完成都归 B4b-3（AI 判意图），这里照旧当记下
+//   没把握的、带时间范围的（“上周的会”“这个月的待办”）、总结、改期、完成：回车走 planText（B4b-3，本机或 AI 判意图），
+//   判成别的意图的不保存：清掉输入条、交给结果层（hooks/assist-open 的 toAssist，同时把原话写进草稿），调用方 onAsked 收起打字条
+// • 等 AI 期间打字条被卸载（收起、切页；B4b-3 评审第 5 条）：这一次的请求当场中止，回来的结果丢掉——不写状态、不存、不打开结果层
+//   （收起时原话已经由 stash 写进草稿，下次打开填回）；日志 typebar submit dropped unmounted
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { getBoot } from '../../../core/boot.ts';
 import { currentTz } from '../../../core/current-tz.ts';
+import { askOfLocal } from '../../../../shared/logic/parse/assist.ts';
 import { localIntent } from '../../../../shared/logic/parse/intent.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -24,6 +28,8 @@ import { clearTypeDraft, readTypeDraft, writeTypeDraft } from '../data/type-draf
 import { createBatchBox, createSavedBatch } from '../data/saved-batch.ts';
 import { keepAsked, navOnline, planLocal, planText, type CallAi } from '../data/type-flow.ts';
 import { useCaptureCtx } from './useCaptureCtx.ts';
+import { toAssist } from './assist-open.ts';
+
 import { useSavedBatch } from './useSavedBatch.ts';
 
 // ui 不能直接 import data（A1），界面要用的类型经这里转出去
@@ -40,6 +46,8 @@ export interface TypeBarOpts {
   writer?: Writer | undefined;
   /** 测试用：在线与否 */
   online?: (() => boolean) | undefined;
+  /** 判成查找、总结、取消改期完成，已经交给结果层（B4b-3）：调用方收起打字条 */
+  onAsked?: (() => void) | undefined;
 }
 
 export type TypeBarError = 'not_saved' | 'nothing' | null;
@@ -54,6 +62,9 @@ export function useTypeBar(o: TypeBarOpts) {
   const [asRecord, setAsRecord] = useState(false);
   const busy = useRef(false);
   const typed = useRef(false);
+  /** 正在整理的那一次的取消（卸载时中止） */
+  const inflight = useRef<AbortController | null>(null);
+  useEffect(() => () => inflight.current?.abort(), []);
   // 没传 callAi 时用真的 ai-parse（data/ai-parse-api.ts）；测试传桩
   const { day, callAi = callAiParse, writer, online = navOnline } = o;
   const { ctx, aiOn: aiOnNow } = useCaptureCtx(day);
@@ -106,12 +117,22 @@ export function useTypeBar(o: TypeBarOpts) {
 
   const preview = useMemo(() => (text.trim() === '' ? [] : planLocal(text, ctx()).result.items), [text, ctx]);
   /** 看起来是要查找时的查询词（见文件头）；不是查找、或点了“改成记下”为 null */
-  const find = useMemo(() => {
+  const findAsk = useMemo(() => {
     if (asRecord || text.trim() === '') return null;
     const r = localIntent(text, clock.now(), currentTz(), { scope: 'main' });
-    const q = r.query?.text.trim() ?? '';
-    return r.intent === 'search' && r.sure && r.query?.range === null && q !== '' ? q : null;
+    const a = r.intent === 'search' && r.sure ? askOfLocal(r) : null;
+    return a && 'query' in a && a.query.range === null && a.query.text.trim() !== '' ? a : null;
   }, [text, asRecord]);
+  const find = findAsk && 'query' in findAsk ? findAsk.query.text.trim() : null;
+  /** 回车或点“查找”：和判意图的那一路同一个出口（原话进草稿，查找面板页脚有“改成记下”“总结一下”）；清掉这句字 */
+  const openFind = useCallback((): void => {
+    if (!findAsk) return;
+    // 只记查询词的字数（和 B4b-2 同一口径）
+    rlog(`typebar find len=${[...findAsk.query.text.trim()].length}`);
+    toAssist({ ask: findAsk, raw: text, aiUsed: 0, from: 'plus', day: ctx().day });
+    setTextRaw('');
+    typed.current = false;
+  }, [findAsk, text, ctx]);
   const keepRecord = useCallback(() => setAsRecord(true), []);
 
   const submit = useCallback(async () => {
@@ -122,6 +143,8 @@ export function useTypeBar(o: TypeBarOpts) {
     }
     busy.current = true;
     setError(null);
+    const ac = new AbortController();
+    inflight.current = ac;
     // 耗时进日志（负责人 11-13“今天、日历、待办按记下要等一会才存上”：分清是等 AI、超时、限流还是写库慢）
     const t0 = performance.now();
     const ms = (): number => Math.round(performance.now() - t0);
@@ -134,17 +157,31 @@ export function useTypeBar(o: TypeBarOpts) {
       rlog('typebar recog on');
       // 同意版本明确过期（告知页关口问到 first / updated、还没做完）：不发 ai-parse，用本机规则（S1，见 useCaptureCtx）
       const aiOn = aiOnNow();
-      const { plan: p, quotaOut } = await planText(text, c, { online, aiOn, call: callAi });
+      const { plan: p, quotaOut } = await planText(text, c, { online, aiOn, call: callAi, signal: ac.signal });
+      if (ac.signal.aborted) {
+        rlog('typebar submit dropped unmounted');
+        return;
+      }
       rlog(`typebar planned items=${p.items.length} ai=${aiOn} quotaOut=${quotaOut} origin=${p.origin} status=${p.status} reason=${p.aiReason ?? '-'} ms=${ms()}`);
+      if (p.ask) {
+        go({ type: 'reset' });
+        toAssist({ ask: p.ask.ask, raw: text, aiUsed: p.ask.aiUsed, from: 'plus', day: c.day });
+        setTextRaw('');
+        typed.current = false;
+        o.onAsked?.();
+        return;
+      }
       saved.land(await saved.save(p, text), p);
     } catch (err) {
-      rlog(`typebar submit threw ${(err as Error | undefined)?.name ?? ''} ${String((err as Error | undefined)?.message ?? err).slice(0, 200)}`);
+      // 只记错误名：message 里可能带着标题、原话片段（不记用户输入的文字）
+      rlog(`typebar submit threw ${(err as Error | undefined)?.name ?? typeof err}`);
       throw err;
     } finally {
       busy.current = false;
+      if (inflight.current === ac) inflight.current = null;
       rlog(`typebar recog off ms=${ms()}`);
     }
-  }, [text, status, ctx, callAi, aiOnNow, online, saved, go]);
+  }, [text, status, ctx, callAi, aiOnNow, online, saved, go, o]);
 
   // 确认行没选就关掉：原话去掉已经存了的几条、只留等确认那条的原文，填回输入条（去不干净时原话整句留着，partSaved 为 true：输入条上方提示，一改字就收起）
   const dismissConfirm = useCallback(() => {
@@ -161,5 +198,5 @@ export function useTypeBar(o: TypeBarOpts) {
 
   const dropDraft = useCallback(() => void clearTypeDraft(), []);
   const { choose, undo, undoOne, merge, closeNotice } = saved;
-  return { text, setText, status, preview, find, keepRecord, asking, notice, error, submit, choose, dismissConfirm, partSaved, undo, undoOne, merge, closeNotice, stash, dropDraft };
+  return { text, setText, status, preview, find, openFind, keepRecord, asking, notice, error, submit, choose, dismissConfirm, partSaved, undo, undoOne, merge, closeNotice, stash, dropDraft };
 }

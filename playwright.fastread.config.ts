@@ -31,7 +31,7 @@ const BINDINGS = Object.entries(e2eBindings(FAKE))
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  testMatch: ['**/b2-first-screen-supabase.spec.ts', '**/r402-webp-wasm.spec.ts', '**/b5-vault.spec.ts', '**/b4b1-attachments.spec.ts', '**/b4b2-find.spec.ts', '**/b4b2-image-ai.spec.ts'],
+  testMatch: ['**/b2-first-screen-supabase.spec.ts', '**/r402-webp-wasm.spec.ts', '**/b5-vault.spec.ts', '**/b4b1-attachments.spec.ts', '**/b4b2-find.spec.ts', '**/b4b2-image-ai.spec.ts', '**/b4b3-assist.spec.ts'],
   fullyParallel: true,
   globalTimeout: globalTimeoutMs(process.env, NO_BACKEND_GLOBAL_TIMEOUT_MS),
   globalSetup: './tests/e2e/dist-fingerprint.ts',

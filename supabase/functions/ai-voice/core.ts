@@ -1,7 +1,9 @@
 // ai-voice（架构第 6 节函数表 ai-voice 行、5.11、第 7 节“语音”；B3 任务单 S8、S12、BE-4，M3 X-Projects，Q2 服务器包 intent）。
 // 顺序：方法（只收 POST）→ JWT → Content-Type 白名单（先去参数再比，不在 4 种里回 415、不调 Gemini；S1、TC-B3-65 起新增用例）
 //   → 请求头 X-Now、X-TZ、X-Locale、X-Scope、X-Projects、X-Default-Day（日历页选中的那天，R6；不合格回 400）→ 边读边计数读请求体（≤ logic.maxAudio，超了中断回 413，不只看 Content-Length）
-//   → 共用的门（_shared/ai/gate.ts）→ voiceWithAI（Gemini 15 秒超时；回 503 时服务器端重试一次、两次合计仍不超过 15 秒，_shared/ai/retry.ts）→ 成功回 {intent: 'record', confidence, transcript, items, quota_left}；
+//   → 共用的门（_shared/ai/gate.ts）→ voiceWithAI（voice.v4，B4b-3 起一次完成转写和意图判断；Gemini 15 秒超时；回 503 时服务器端重试一次、两次合计仍不超过 15 秒，_shared/ai/retry.ts）
+//   → 成功按意图回 {intent: 'record', confidence, transcript, items, quota_left} / {intent: search|summarize, confidence, transcript, query, quota_left} /
+//   {intent: cancel|reschedule|complete, confidence, transcript, target, to, quota_left}（同 ai-parse，不多扣次数）；
 //   失败退回预扣、回 {ai_failed, reason}（客户端留着录音，可以重试或再说一次；每分钟限额的 reason 回 error，gate.ts 的 clientReason）。
 // 空列表（R7 ②）：转写为空回 {transcript: '', items: []}、照常算 1 次（客户端按 no_speech）；转写不空而条目为空由校验判 invalid（empty），退回次数。
 // X-Projects：UTF-8 JSON 再 base64url，≤ 4 KB；超了截到 4 KB、按项截断（留下完整的几项），本来就解不开的当没给（不拒收）。
@@ -9,16 +11,15 @@
 // 失败分支写 logs 表（架构审第九节第 2 条）：Gemini 拒收、超时、额度用完、计数出错各写一行 kind 'ai'、act 'voice_fail'、src 'ai-voice'，
 //   code 是固定错误码，fields 只有 status=HTTP 状态、type=异常类型名、kind=额度类型（ai_quota 带 day|minute|unknown，来自 aiFailCode；门拦下的 quota_exhausted 带 minute|day，来自 gate.ts 的 holdKind）、retried=1（503 重试过）、bytes=音频字节数区间；不写转写、正文、请求头。写失败不影响回答。
 // 503 重试后成功的，counters 记 voice-retry:global:<太平洋日期> 加一（经 take_rate，上限给得很大、只当计数用；写失败不影响回答）。
-// scope = vault：隐私记页面经“＋”记下在 B4b-3 才有（届时换成 verifyVaultToken + ai.vault），B3 回 {fallback, vault_ai_off}、不调 Gemini、不扣次数。
+// scope = vault：隐私记页面经“＋”的 AI 这一批（B4b-3）照旧不做（以后换成 verifyVaultToken + ai.vault），回 {fallback, vault_ai_off}、不调 Gemini、不扣次数。
 import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
 import { aiGate, clientReason, pacificDate, settleFailure, type GateDeps, type GateStop } from '../_shared/ai/gate.ts';
 import { aiFailCode, errNameOf, quotaKindField, type AIProvider } from '../_shared/ai/provider.ts';
-import type { AiKindLike, ParseFail, ParseOk, VoiceInput } from '../_shared/ai/parse-core.ts';
+import { plusBody, type AiKindLike, type Checked, type IntentLike, type ParseFail, type ParseOk, type VoiceInput } from '../_shared/ai/parse-core.ts';
 import { b64uDecode } from '../_shared/b64url.ts';
 import { readCapped } from '../_shared/body.ts';
 
 export const MAX_PROJECTS_HEADER = 4096;
-export const RECORD_CONFIDENCE = 1;
 /** 503 重试后成功的全项目计数键（附录 A；三段写法过得了 counters 的 check 约束） */
 export const voiceRetryKey = (ms: number): string => `voice-retry:global:${pacificDate(ms)}`;
 /** 只当计数用：上限给得远超全项目每日额度，take_rate 永远放行 */
@@ -27,7 +28,7 @@ export const VOICE_RETRY_COUNT_LIMIT = 1_000_000;
 export type AuthResult = SharedAuthResult;
 
 /** shared/schema/ai.ts 里的几样（index.ts 从 _shared/gen/ 注入，单测注入真的 shared；本文件不 import _shared/gen/） */
-export interface Logic<Item> {
+export interface Logic<Item, I extends IntentLike = IntentLike> {
   /** 一段录音最多多少字节：shared 的 AI_AUDIO_MAX_BYTES（前端录音器判同一份） */
   maxAudio: number;
   /** Content-Type 白名单：shared 的 audioType（去参数、转小写，不在白名单里为 null） */
@@ -37,12 +38,12 @@ export interface Logic<Item> {
   isValidTz(tz: string): boolean;
   /** 默认日子（R6）：不传 null；格式不对、不存在、不在前 1 年到后 5 年之内 'bad' */
   checkDefaultDay(v: unknown, now: number, tz: string): string | null | 'bad';
-  voiceWithAI(input: VoiceInput, provider: AIProvider): Promise<ParseOk<{ transcript: string; items: Item[] }> | ParseFail>;
+  voiceWithAI(input: VoiceInput, provider: AIProvider): Promise<ParseOk<Checked<Item, I> & { transcript: string }> | ParseFail>;
 }
 
-export interface Deps<Item> extends GateDeps {
+export interface Deps<Item, I extends IntentLike = IntentLike> extends GateDeps {
   authenticate(req: Request): Promise<AuthResult>;
-  logic: Logic<Item>;
+  logic: Logic<Item, I>;
   /** 失败写 logs 表一行（index.ts 接 service role 的 insert） */
   logFail(userId: string, code: string, fields: string[]): Promise<void>;
 }
@@ -107,7 +108,7 @@ export function decodeProjects(h: string | null): unknown[] {
 
 export { readCapped };
 
-export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Response> {
+export async function handle<Item, I extends IntentLike = IntentLike>(req: Request, deps: Deps<Item, I>): Promise<Response> {
   if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
   const auth = await deps.authenticate(req);
   if (!auth.ok) return auth.response;
@@ -132,7 +133,7 @@ export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Resp
   if (scope === 'vault') return json(200, { fallback: true, reason: 'vault_ai_off' });
 
   const codes: string[] = [];
-  const d: Deps<Item> = { ...deps, log: (c) => { codes.push(c); deps.log(c); } };
+  const d: Deps<Item, I> = { ...deps, log: (c) => { codes.push(c); deps.log(c); } };
   const bytes = `bytes=${bytesBucket(audio.length)}`;
   const logFail = async (code: string, fields: string[]) => {
     try {
@@ -154,7 +155,7 @@ export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Resp
     projects: deps.logic.normProjects(decodeProjects(req.headers.get('x-projects'))), features: gate.features as AiKindLike[],
     defaultDay: defaultDay ?? undefined,
   };
-  let r: ParseOk<{ transcript: string; items: Item[] }> | ParseFail;
+  let r: ParseOk<Checked<Item, I> & { transcript: string }> | ParseFail;
   try {
     r = await deps.logic.voiceWithAI(input, gate.provider);
   } catch (e) {
@@ -184,7 +185,5 @@ export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Resp
       d.log('voice_retry_count_failed');
     }
   }
-  return json(200, {
-    intent: 'record', confidence: RECORD_CONFIDENCE, transcript: r.value.transcript, items: r.value.items, quota_left: gate.quotaLeft,
-  });
+  return json(200, plusBody(r.value, gate.quotaLeft));
 }

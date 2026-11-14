@@ -38,5 +38,15 @@ export const CLASSIFY_TIMEOUT_MS = 10_000;
 /** ai-media：一批（最多 6 张缩略图）识别一次的超时（毫秒）。cron 调用，不重试，失败的按 10 分钟、1 小时退避，第 3 次还失败记 failed（架构 5.13 第 5 点） */
 export const MEDIA_TIMEOUT_MS = 20_000;
 
-/** 提示词版本（写进 ai_meta.prompt；改提示词就升版本并重跑测试集） */
-export const PROMPT_VERSION = Object.freeze({ parse: 'parse.v3', voice: 'voice.v3', classify: 'classify.v2', media: 'media.v1' });   // 11-07 由 v1 升到 v2（B3 任务单补充 R5、R6、R8）；11-10 升到 v3（R-374 中文相对时刻）；classify 11-13 升 v2（R-413 加相似分类对）；media 11-14 B4b-2 识图新加 v1
+/** ai-summarize：总结一次的超时（毫秒；架构第 6 节 ai-summarize 行“超时 10 秒”）。不重试，失败退回次数 */
+export const SUMMARIZE_TIMEOUT_MS = 10_000;
+
+/**
+ * 提示词版本（写进 ai_meta.prompt；改提示词就升版本并重跑测试集）。
+ * 11-07 由 v1 升到 v2（B3 任务单补充 R5、R6、R8）；11-10 升到 v3（R-374 中文相对时刻）；classify 11-13 升 v2（R-413 加相似分类对）；
+ * B4b-3：parse（ai-parse 的“＋”）、voice（ai-voice）升 v4，加意图判断；record 是只做记下的 parse.v3（claude-intake、评测测试集 ①，经 recordWithAI）；
+ * media 是 ai-media（B4b-2 识图）的 v1；summarize 是 ai-summarize 的 v1。
+ */
+export const PROMPT_VERSION = Object.freeze({
+  parse: 'parse.v4', voice: 'voice.v4', record: 'parse.v3', classify: 'classify.v2', media: 'media.v1', summarize: 'summarize.v1',
+});

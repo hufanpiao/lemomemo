@@ -214,7 +214,7 @@ describe('快读组（playwright.fastread.config.ts，B2 FA-6 ① 安全审查 L
     expect(env['VITE_PUBLIC_ANON_KEY']).toBe('fake-anon-key');
     expect(env['LEMO_WEB_OUT']).toBe('dist/web-fastread');
     expect(env['LEMO_WS_PORT']).toBe('8791');
-    expect(cfg.testMatch).toEqual(['**/b2-first-screen-supabase.spec.ts', '**/r402-webp-wasm.spec.ts', '**/b5-vault.spec.ts', '**/b4b1-attachments.spec.ts', '**/b4b2-find.spec.ts', '**/b4b2-image-ai.spec.ts']);
+    expect(cfg.testMatch).toEqual(['**/b2-first-screen-supabase.spec.ts', '**/r402-webp-wasm.spec.ts', '**/b5-vault.spec.ts', '**/b4b1-attachments.spec.ts', '**/b4b2-find.spec.ts', '**/b4b2-image-ai.spec.ts', '**/b4b3-assist.spec.ts']);
     const [fake, web] = servers(cfg);
     expect(fake?.url).toBe('http://127.0.0.1:9192/health');
     expect(fake?.env).toEqual({ [S3]: '9193', [SB]: '9192' });

@@ -11,22 +11,13 @@ import { cutGraphemes } from '../short.ts';
 import { KO_WEEK, takeDate, weekday, weekPrefix, ZH_WEEK_PREFIX } from './date-words.ts';
 import { cleanTitle, stripRequests, takeKindWords, takeNamedKind } from './marks.ts';
 import type { PlusTarget } from './resolve-target.ts';
-import { BULK_RE, RELATED_RE, saysOverdue, takeOverdue, takeTarget, targetIntentOf, type PlusTo } from './target-parse.ts';
+import { BULK_RE, RELATED_RE, saysOverdue, takeOverdue, takeTarget, targetIntentOf } from './target-parse.ts';
 import { LEFTOVER_RE, prepare, QUICK_MAX, take, type Rest } from './text.ts';
 import { takePeriodOnly } from './time-words.ts';
 
-export type { PlusTo } from './target-parse.ts';
-/** “＋”的意图（B4b-3 放开 shared/schema/ai.ts 的 INTENTS 时引用这一份） */
-export const PLUS_INTENTS = ['record', 'search', 'summarize', 'cancel', 'reschedule', 'complete'] as const;
-export type PlusIntent = (typeof PLUS_INTENTS)[number];
-export type QueryDone = 'open' | 'done' | 'any';
-export interface PlusQuery {
-  text: string;
-  /** from 为 null：截止到 to 为止（只配 kinds [todo]、done open） */
-  range: { from: DateStr | null; to: DateStr } | null;
-  kinds: IntentKind[];
-  done: QueryDone;
-}
+// 意图枚举、query、to 的类型定义在 shared/schema/intent.ts（AI 输出校验、函数返回和本机规则共用一份），这里转出给老调用方
+import { QUERY_TEXT_MAX, type PlusIntent, type PlusQuery, type PlusTo } from '../../schema/intent.ts';
+export { PLUS_INTENTS, type PlusIntent, type PlusQuery, type PlusTo, type QueryDone } from '../../schema/intent.ts';
 export interface LocalIntent {
   intent: PlusIntent;
   /** 有把握就不调 AI；没把握时在线交给 AI，离线先按记下保存 */
@@ -63,6 +54,9 @@ const PHRASES: Readonly<Record<QueryKind, readonly Phrase[]>> = {
     { word: '帮我找(?:一下)?', pos: 'head' }, { word: '搜一下', pos: 'head' }, { word: '查一下', pos: 'head' },
     { word: '看一下', pos: 'head', when: '.*有什么' }, { word: '有什么', pos: 'ask', hit: false },
     { word: '찾아\\s*줘', pos: 'tail' }, { word: '뭐\\s*있어', pos: 'tail' }, { word: '[?？]', pos: null, when: '\\s*$' },
+    // B4b-3 补：找一下 / 找找 / 查找 / 搜 X（“搜集 / 搜刮 / 搜身”不算）、X（放）在哪（里 / 儿）、X 어디 있어 / 어디야
+    { word: '找一下', pos: 'head' }, { word: '找找', pos: 'head' }, { word: '查找', pos: 'head' }, { word: '搜(?![集刮身])', pos: 'head' },
+    { word: '(?:放|搁)?在哪(?:里|儿)?', pos: 'tail' }, { word: '어디\\s*(?:에\\s*)?(?:있어|있지|야)', pos: 'tail' },
   ],
   summary: [{ word: '总结(?:一下)?', pos: 'head' }, { word: '汇总(?:一下)?', pos: 'head' }, { word: '정리해\\s*줘', pos: 'tail' }],
   list: ['列出', '列一下', '给我看看?', '显示', '有哪些', '보여\\s*줘', '목록', '있는지\\s*확인해\\s*줘', '뭐\\s*있는지\\s*알려\\s*줘'].map((word) => ({ word, pos: null })),
@@ -95,13 +89,12 @@ const IMPERATIVE = { search: imperativeRes(PHRASES.search, '[?？.。!！]'), su
 const QUERY_STRIP = new RegExp(Object.values(PHRASES).flatMap((ps) => ps.map((p) => p.word)).join('|'), 'g');
 /** 日期解析认不出的时间说法：还在句子里就没把握，免得拿“上周”当关键词查 */
 const TIME_LEFT_RE = /上周|上个?月|上礼拜|上星期|去年|今年|明年|最近|近期|这几天|月初|月中|月末|月底|周末|年初|年底|지난\s*주|지난\s*달|저번\s*주|요즘|최근|주말|월초|월말|달\s*초|작년|올해|내년/;
-/** 事由后面又跟了一个动作（“搜一下资料写报告”“汇总一下报销单交财务”）：像是要记的事 */
-const ACTION_AFTER = /\S\s*(?:写|交|发给|发到|发送|提交|上传|打印|准备|寄|送|转给)/;
+/** 事由后面又跟了一个动作（“搜一下资料写报告”“汇总一下报销单交财务”“找一下小王签字”）：像是要记的事 */
+const ACTION_AFTER = /\S\s*(?:写|交|发给|发到|发送|提交|上传|打印|准备|寄|送|转给|签字|签名|签合同|问问|聊聊|谈谈|商量|退押金|还钱|借钱)/;
 const ZH_WEEK = new RegExp(`(${ZH_WEEK_PREFIX})\\s*个?\\s*(?:周|星期|礼拜)(?![1-7])`);
 const KO_WEEK_RE = new RegExp(`(${KO_WEEK})`);
 const ZH_MONTH = /(下|这|本)\s*个?\s*月/;
 const KO_MONTH = /(다음|이번)\s*달/;
-const QUERY_TEXT_MAX = 100;
 /** 句式表外、像是取消 / 改期 / 完成的词：意图仍是记下，但没把握（交给 AI 或先保存再提示，不当成有把握的新条目） */
 const SUSPECT_RE = /取消|推迟|延期|延后|改期|变更|변경|연기|미뤄|미루|标完成|标为完成|완료/;
 

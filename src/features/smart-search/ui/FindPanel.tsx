@@ -5,19 +5,26 @@
 // • 顶上一行“现在只按关键词找 · 原因”（没网、没同意、次数用完、超时 + 再试一次），四种分开写（架构 5.13 第 6 点末条）
 // • 打开一条：日程、待办、纪念日进各自的编辑页；随手记、图片、文档进所在随手记；同时记进“最近找过”。不保存、不改任何数据
 // • 焦点锁定、Esc 关闭、读屏标注用 Radix Dialog（不用 Overlay：CSP 拦它的内联 style，见 kit Dialog.tsx 文件头），滚动锁用 kit 的 useScrollLock
-// • 运行日志：find open / close（只记从哪打开、开了多久），查询中的日志在 useFind
+// • B4b-3：每行右边“⋯”（ui/RowMenu.tsx，完成 / 推迟 / 删除后出“撤销”）；“最相关”里的图片横排缩略图（随手记的 TodayNotes part="thumb"）；
+//   有结果时底部也给“最近找过”；隐私记设过密码时出一行“隐私记锁着，里面的不在结果里”（vault 的 findrow）；
+//   “＋”判成内容类查找打开的（assist）：排除刚保存的这一批，页脚多“改成记下”“总结一下”（总结换成结果层 AssistPanel）
+// • 运行日志：find open / close（只记从哪打开、开了多久），find act（菜单写了什么、成没成），查询中的日志在 useFind
 import * as RD from '@radix-ui/react-dialog';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { navigate } from '../../../app/router.ts';
+import { Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { navigateSub } from '../../../app/router-sub.ts';
 import { useScrollLock } from '../../../kit/components/Dialog.tsx';
+import { UndoToast } from '../../../kit/components/UndoToast.tsx';
+import { TodayNotes } from '../../notes/index.ts';
+import { VaultParts } from '../../vault/index.ts';
+import { openAssist, type AssistReq, type FindFrom } from '../hooks/find-open.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { FIND_KINDS, SEARCH_Q_MAX, useFind, type FindHit, type FindKind, type TimeFilter } from '../hooks/useFind.ts';
+import { actRow, FIND_KINDS, SEARCH_Q_MAX, undoTarget, useFind, type Applied, type FindHit, type FindKind, type RowAct, type TimeFilter } from '../hooks/useFind.ts';
+import { RowMenu } from './RowMenu.tsx';
 import styles from './FindPanel.module.css';
-import { Lead, Marked, metaOf, Preview, useFindT } from './find-parts.tsx';
+import { Lead, Marked, metaOf, openItem, Preview, useFindT } from './find-parts.tsx';
 
 /** 每组先显示几条 */
 export const GROUP_SHOW = 5;
@@ -26,15 +33,11 @@ const TIMES: readonly TimeFilter[] = ['any', 'lastWeek', 'thisMonth'];
 export interface FindPanelProps {
   /** 打开时输入框里的字（打字条交过来的查询；Ctrl+K 为空） */
   query: string;
-  /** 从哪打开（运行日志）：plus 打字条、ctrlk 快捷键 */
-  from: 'plus' | 'ctrlk';
+  /** 从哪打开（运行日志）：plus 打字条、ctrlk 快捷键、voice 按住说话、quick 全局打字框、notice 提示条 */
+  from: FindFrom;
+  /** “＋”判成内容类查找打开的（B4b-3）；别的为 null */
+  assist?: AssistReq | null | undefined;
   onClose(): void;
-}
-
-function open(h: FindHit): void {
-  const it = h.item;
-  if (it.kind === 'event' || it.kind === 'todo' || it.kind === 'anniv') void navigate(it.kind, it.id);
-  else void navigate('note', it.noteId ?? it.id);
 }
 
 interface Group {
@@ -44,10 +47,20 @@ interface Group {
   hits: FindHit[];
 }
 
-export default function FindPanel({ query, from, onClose }: FindPanelProps) {
+export default function FindPanel({ query, from, assist = null, onClose }: FindPanelProps) {
   const t = useFindT();
   const locale = useUi((s) => s.locale);
-  const f = useFind(query);
+  const f = useFind(query, { exclude: assist?.exclude });
+  // 菜单写完的撤销条（同一时间一条）
+  const [done, setDone] = useState<{ act: RowAct; a: Applied; n: number } | null>(null);
+  const act = (h: FindHit, a: RowAct): void => {
+    const it = h.item;
+    if (it.kind === 'image' || it.kind === 'file') return;
+    void actRow(a, it.kind, it.id, { date: it.date, time: it.time }).then((r) => {
+      rlog(`find act ${a} kind=${it.kind} ok=${r.ok}`);
+      setDone((d) => ({ act: a, a: r, n: (d?.n ?? 0) + 1 }));
+    });
+  };
   const desk = useMedia(MQ_SIDEBAR);
   const [more, setMore] = useState<Record<string, boolean>>({});
   const [sel, setSel] = useState(0);
@@ -84,7 +97,7 @@ export default function FindPanel({ query, from, onClose }: FindPanelProps) {
     f.remember();
     rlog(`find pick kind=${h.item.kind}`);
     close();
-    open(h);
+    openItem(h.item);
   };
   const kinds = FIND_KINDS.filter((k) => f.counts[k] > 0 || f.kind === k);
   const onKey = (e: KeyboardEvent<HTMLInputElement>): void => {
@@ -144,7 +157,7 @@ export default function FindPanel({ query, from, onClose }: FindPanelProps) {
     idx += 1;
     const i = idx;
     return (
-      <li key={`${h.item.kind}:${h.item.id}`}>
+      <li key={`${h.item.kind}:${h.item.id}`} className={styles.item}>
         <button
           type="button"
           className={styles.row}
@@ -153,31 +166,74 @@ export default function FindPanel({ query, from, onClose }: FindPanelProps) {
           onMouseEnter={desk ? () => setSel(i) : undefined}
           data-testid="find-row"
           data-kind={h.item.kind}
+          data-done={(h.item.kind === 'todo' && h.item.done) || undefined}
         >
-          <Lead kind={h.item.kind} />
+          <Lead kind={h.item.kind} done={h.item.done} />
           <span className={styles.text}>
             <span className={styles.title}><Marked text={h.item.title || t('find.noTitle', {})} q={q} /></span>
             <span className={styles.meta}><Marked text={metaOf(h, t, locale)} q={q} /></span>
           </span>
         </button>
+        <RowMenu it={h.item} onOpen={() => go(h)} onAct={(a) => act(h, a)} />
       </li>
     );
   };
 
+  // “最相关”里的图片横排（线框 sFind THUMBS）：有缩略图的图片排成一行三列，点了同点那一行
+  const isThumb = (h: FindHit): boolean => h.item.kind === 'image' && h.item.hasThumb && h.item.noteId !== null;
+  const thumbs = (hits: FindHit[]): ReactNode => {
+    const pics = hits.filter(isThumb);
+    if (pics.length === 0) return null;
+    return (
+      <div className={styles.thumbs} data-testid="find-thumbs">
+        {pics.map((h) => (
+          <button key={h.item.id} type="button" className={styles.thumb} onClick={() => go(h)} data-testid="find-thumb">
+            <span className={styles.thumbBox}>
+              <Suspense fallback={null}><TodayNotes part="thumb" noteId={h.item.noteId ?? ''} imageId={h.item.id} /></Suspense>
+            </span>
+            <span className={styles.thumbT}>{h.item.extra || h.item.title}</span>
+          </button>
+        ))}
+      </div>
+    );
+  };
+
+  // “＋”判成查找打开的：页脚“总结一下”（换成结果层，总结这些；一条都没找到时不出）、“改成记下”（原话按记下保存，B4b-3）
+  const rec = assist?.record ?? null;
+  const foot = (withSum: boolean) => assist === null ? null : (
+    <div className={styles.foot}>
+      {withSum ? (
+        <button type="button" className={styles.chip} onClick={() => {
+          rlog('find to_summary');
+          if ('query' in assist.ask) openAssist({ ...assist, ask: { intent: 'summarize', query: { ...assist.ask.query, text: q } } });
+        }} data-testid="find-summarize">{t('as.sum.btn', {})}</button>
+      ) : null}
+      {rec ? (
+        <button type="button" className={styles.chip} onClick={() => {
+          rlog('find to_record');
+          void rec();
+          close();
+        }} data-testid="find-record">{t('as.record', {})}</button>
+      ) : null}
+      {assist.aiUsed > 0 ? <span className={styles.footN}>{t('as.ai', { n: assist.aiUsed })}</span> : null}
+    </div>
+  );
   const anyHit = groups.some((g) => g.hits.length > 0);
+  const recent = f.recent.length > 0 ? (
+    <>
+      <div className={styles.gh}><b>{t('find.recent', {})}</b></div>
+      <div className={styles.chips}>
+        {f.recent.map((r) => (
+          <button key={r} type="button" className={styles.chip} onClick={() => f.setQ(r)} data-testid="find-recent">{r}</button>
+        ))}
+      </div>
+    </>
+  ) : null;
+  const vaultRow = <Suspense fallback={null}><VaultParts part="findrow" onGo={close} /></Suspense>;
   const results = q === '' ? (
     <>
       <p className={styles.start}>{t('find.start', {})}</p>
-      {f.recent.length > 0 ? (
-        <>
-          <div className={styles.gh}><b>{t('find.recent', {})}</b></div>
-          <div className={styles.chips}>
-            {f.recent.map((r) => (
-              <button key={r} type="button" className={styles.chip} onClick={() => f.setQ(r)} data-testid="find-recent">{r}</button>
-            ))}
-          </div>
-        </>
-      ) : null}
+      {recent}
     </>
   ) : !anyHit && f.sem.s !== 'wait' ? (
     <div className={styles.empty} data-testid="find-empty">
@@ -186,9 +242,12 @@ export default function FindPanel({ query, from, onClose }: FindPanelProps) {
         {f.sem.s === 'done' ? <>{t('find.emptyAll', {})}<br /></> : null}
         {t('find.emptyHint', {})}
       </div>
+      {vaultRow}
+      {foot(false)}
     </div>
   ) : (
-    groups.map((g) => {
+    <>
+    {groups.map((g) => {
       if (g.hits.length === 0 && !(g.key === 'sem' && f.sem.s === 'wait')) return null;
       const hidden = more[g.key] ? 0 : g.hits.length - GROUP_SHOW;
       return (
@@ -197,14 +256,20 @@ export default function FindPanel({ query, from, onClose }: FindPanelProps) {
           {g.key === 'sem' && f.sem.s === 'wait' ? (
             <div className={styles.skel} aria-hidden="true"><i /><i /></div>
           ) : (
-            <ul className={styles.list}>{(more[g.key] ? g.hits : g.hits.slice(0, GROUP_SHOW)).map(row)}</ul>
+            <>
+              {g.key === 'top' ? thumbs(g.hits) : null}
+              <ul className={styles.list}>{(more[g.key] ? g.hits : g.hits.slice(0, GROUP_SHOW)).filter((h) => !(g.key === 'top' && isThumb(h))).map(row)}</ul>
+            </>
           )}
           {hidden > 0 ? (
             <button type="button" className={styles.more} onClick={() => setMore((m) => ({ ...m, [g.key]: true }))}>{t('find.more', { n: hidden })}</button>
           ) : null}
         </section>
       );
-    })
+    })}
+    {foot(anyHit)}
+    {recent}
+    </>
   );
 
   const field = (
@@ -243,6 +308,7 @@ export default function FindPanel({ query, from, onClose }: FindPanelProps) {
             <>
               <div className={styles.head}>{field}{chips}</div>
               {fbLine ? <div className={styles.deskFb}>{fbLine}</div> : null}
+              {q !== '' && anyHit ? <div className={styles.deskFb}>{vaultRow}</div> : null}
               <div className={styles.cols}>
                 <div className={styles.body}>{results}</div>
                 <aside className={styles.side} aria-label={t('find.desk.none', {})} data-testid="find-preview">
@@ -260,9 +326,27 @@ export default function FindPanel({ query, from, onClose }: FindPanelProps) {
               {chips}
               {times}
               {fbLine}
+              {q !== '' && anyHit ? vaultRow : null}
               <div className={styles.body}>{results}</div>
             </>
           )}
+          {done ? (
+            <UndoToast
+              key={done.n}
+              message={done.a.ok > 0 ? t(done.act === 'delete' ? 'find.m.ok.del' : done.act === 'done' ? 'find.m.ok.done' : 'find.m.ok.tomorrow', {}) : t('find.m.fail', {})}
+              // 一条都没写成：没有可撤销的，只出提示（alert，读屏马上读）
+              role={done.a.ok > 0 ? 'status' : 'alert'}
+              undoLabel={done.a.ok > 0 ? t('find.undo', {}) : undefined}
+              onUndo={done.a.ok > 0 ? () => {
+                const a = done.a;
+                void undoTarget(a, clock.now()).then((n) => rlog(`find act undo n=${n}`));
+              } : undefined}
+              onClose={() => setDone(null)}
+              // 和“已记下”、列表的删除撤销条同一时间只留一条，后出的顶掉前一条（B4b-3 评审第 19 条）
+              solo="keep"
+              data-testid="find-undo"
+            />
+          ) : null}
         </RD.Content>
       </RD.Portal>
     </RD.Root>

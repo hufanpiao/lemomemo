@@ -1,13 +1,21 @@
 // 查找面板的小零件（B4b-2；线框 s12、sFind）：命中词高亮、行首记号、每行第二行文字、电脑右栏预览、文案 hook。FindPanel.tsx 用
 import type { ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
+import { navigate } from '../../../app/router.ts';
+import check from '../../../kit/components/CheckCircle.module.css';
 import { makeUseT } from '../../../kit/hooks/useT.ts';
-import { markRanges, type FindHit, type FindKind } from '../hooks/useFind.ts';
+import { markRanges, type FindHit, type FindItem, type FindKind } from '../hooks/useFind.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
 import styles from './FindPanel.module.css';
 
 export const useFindT = makeUseT({ zh, ko });
+
+/** 打开一条：日程、待办、纪念日进各自的编辑页；随手记、图片、文档进所在随手记（查找面板、结果层共用） */
+export function openItem(it: FindItem): void {
+  if (it.kind === 'event' || it.kind === 'todo' || it.kind === 'anniv') void navigate(it.kind, it.id);
+  else void navigate('note', it.noteId ?? it.id);
+}
 export type T = ReturnType<typeof useFindT>;
 
 /** 文字里命中的词标成黑底白字 */
@@ -25,7 +33,18 @@ export function Marked({ text, q }: { text: string; q: string }): ReactNode {
   return out;
 }
 
-export function Lead({ kind }: { kind: FindKind }) {
+/** 左边的类型记号；done：已完成的待办画成实心打勾圆（和待办列表同一套 kit/CheckCircle 的圆盘、勾号，只是画，不接点按） */
+export function Lead({ kind, done = false }: { kind: FindKind; done?: boolean }) {
+  if (kind === 'todo' && done) {
+    return (
+      <span className={styles.lead} aria-hidden="true" data-testid="lead-done">
+        <span className={styles.ringDone}>
+          <span className={check.fill} data-state="on" />
+          <span className={check.tick} data-state="on" />
+        </span>
+      </span>
+    );
+  }
   const mark = { event: styles.bar, todo: styles.ring, anniv: styles.dia, image: styles.pic, note: styles.doc, file: styles.doc }[kind];
   return (
     <span className={styles.lead} aria-hidden="true">
@@ -36,6 +55,9 @@ export function Lead({ kind }: { kind: FindKind }) {
 
 /** 日子（带星期）和时刻，没有的部分不写；第二行和右栏预览共用 */
 const dayTime = (day: string, time: string | null | undefined): string => [day, time ?? ''].filter(Boolean).join(' ');
+/** 同上，日子还没格式化：“11月10日 周二 15:00”（查找面板、结果层的候选、改期按钮都用这一份，评审第 23 条） */
+export const whenText = (date: string | null | undefined, time: string | null | undefined, locale: 'zh-CN' | 'ko-KR'): string =>
+  dayTime(date ? fmtDay(date, locale, 'monthDayWeek') : '', time);
 
 /** 第二行：日程“日子 时刻 · 地点”、待办“日子截止 · 项目”、纪念日“下一次 日子”、随手记和文档有片段给片段、图片和文档写在哪条随手记里 */
 export function metaOf(h: FindHit, t: T, locale: 'zh-CN' | 'ko-KR'): string {

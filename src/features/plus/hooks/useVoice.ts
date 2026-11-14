@@ -9,7 +9,8 @@
 // • 录音期间压住提醒横幅（REMIND-wiring）：只看 capturing，卸载时控制器已经按取消停录、不再在录，跟着组件放开没有空档
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useHoldReminders } from '../../../kit/hooks/useHoldReminders.ts';
-import { createVoiceSession, type VoiceSession } from '../data/voice-session.ts';
+import type { VoiceSession } from '../data/voice-session.ts';
+import { listenQuickAdd, mainVoice } from './voice-main.ts';
 import { useCaptureCtx } from './useCaptureCtx.ts';
 import { useSavedBatch } from './useSavedBatch.ts';
 import { useVoiceSink } from './voice-sink.ts';
@@ -25,7 +26,7 @@ export interface VoiceOpts {
   onType?: (() => void) | undefined;
 }
 
-const main = createVoiceSession();
+const main = mainVoice;
 
 export type VoiceState = ReturnType<typeof useVoice>;
 
@@ -40,6 +41,8 @@ export function useVoice(o: VoiceOpts = {}) {
   // 控制器在异步回调里取最新的这一份；卸载后留着（切页时没走完的照常存）
   s.bind(cap);
   useEffect(() => s.attach(), [s]);
+  // exe 的快速记录框交来的一句走正式的这一份（B4b-3）；测试自己带控制器的不接
+  useEffect(() => (o.session ? undefined : listenQuickAdd()), [o.session]);
   useVoiceSink(s, cancelZone, lockZone);
   useHoldReminders(v.capturing, 'recording');
 

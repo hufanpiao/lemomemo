@@ -10,7 +10,7 @@ const ITEM = {
 describe('outcomeOf', () => {
   it('record：items、quota_left 原样带出', () => {
     const o = outcomeOf({ intent: 'record', confidence: 1, items: [ITEM], quota_left: 42 });
-    expect(o).toEqual({ kind: 'record', items: [ITEM], quotaLeft: 42, transcript: null });
+    expect(o).toEqual({ kind: 'record', items: [ITEM], quotaLeft: 42, transcript: null, confidence: 1 });
   });
 
   it('ai-voice 带 transcript', () => {
@@ -23,9 +23,21 @@ describe('outcomeOf', () => {
     expect(outcomeOf({ intent: 'record', confidence: 1, items: [], quota_left: 3, transcript: 'hi' })).toEqual({ kind: 'ai_failed', reason: 'empty_items' });
   });
 
-  it('Q2 ②：不认识的 intent（以后的 search、summarize）当 ai_failed，不报错', () => {
-    expect(outcomeOf({ intent: 'search', confidence: 1, items: [ITEM], quota_left: 9 })).toEqual({ kind: 'ai_failed', reason: 'unknown_intent' });
+  it('Q2 ②：不认识的 intent 当 ai_failed，不报错', () => {
+    expect(outcomeOf({ intent: 'spell', confidence: 1, items: [ITEM], quota_left: 9 })).toEqual({ kind: 'ai_failed', reason: 'unknown_intent' });
     expect(outcomeOf({ intent: 42, items: [] })).toEqual({ kind: 'ai_failed', reason: 'unknown_intent' });
+  });
+
+  it('B4b-3：查找、总结带 query；取消、改期、完成带 target（过 resolveTarget，相关待办按原话判）；items 一律不看', () => {
+    const query = { text: '牙医', range: null, kinds: ['event'], done: 'any' };
+    expect(outcomeOf({ intent: 'search', confidence: 0.9, query, quota_left: 9 })).toEqual({
+      kind: 'intent', ask: { intent: 'search', query }, confidence: 0.9, quotaLeft: 9, transcript: null,
+    });
+    const target = { text: '会', date: '2026-11-09', time: null, kinds: ['event'] };
+    const o = outcomeOf({ intent: 'cancel', confidence: 0.8, target, to: null, quota_left: 2 }, '明天的会取消了，相关待办也删掉');
+    expect(o).toMatchObject({ kind: 'intent', confidence: 0.8, ask: { intent: 'cancel', target: { text: '会' }, to: null, bulkRefused: false, relatedTodos: true } });
+    const r = outcomeOf({ intent: 'reschedule', confidence: 1, target, to: { date: '2026-11-10', time: null }, quota_left: 2 });
+    expect(r).toMatchObject({ kind: 'intent', ask: { intent: 'reschedule', to: { date: '2026-11-10', time: null }, relatedTodos: false } });
   });
 
   it('读不懂的（缺字段、多字段、不是对象）一律 ai_failed', () => {

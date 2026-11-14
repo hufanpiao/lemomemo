@@ -516,6 +516,16 @@
   text-align: left;
 }
 
+/* 查找里那一行（B4b-3）：浅底、不加阴影，和结果行分开 */
+.findrow {
+  height: auto;
+  min-height: 44px;
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  box-shadow: none;
+}
+
 .lockrowSub {
   color: var(--text-2);
   font-size: var(--fs-13);

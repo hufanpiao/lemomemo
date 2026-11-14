@@ -40,6 +40,7 @@ export const ko = {
   'plus.notice.notSaved': '저장하지 못했어요. 입력한 내용은 입력창에 그대로 있어요', // REVIEW(ko)
   'plus.notice.nothing': '기록할 내용을 찾지 못했어요. 입력한 내용은 입력창에 그대로 있어요', // REVIEW(ko)
   'plus.notice.undo': '되돌리기', // REVIEW(ko)
+  'plus.notice.toSearch': '검색으로 바꾸기', // REVIEW(ko)
   'plus.notice.undone': '되돌렸어요', // REVIEW(ko)
   'plus.confirm.q': '{date}은(는) 이미 지났어요', // REVIEW(ko)
   'plus.confirm.pastYear': '올해로 기록({date})', // REVIEW(ko)

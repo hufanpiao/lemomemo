@@ -82,6 +82,9 @@ export const ko = {
   'vault.lockrow.pin': '비밀번호로 잠금 해제', // REVIEW(ko)
   'vault.lockrow.setup': '비밀번호 정하기', // REVIEW(ko)
   'vault.lockrow.open': '열기', // REVIEW(ko)
+  'vault.findrow.locked': '비밀 메모가 잠겨 있어 결과에 없어요', // REVIEW(ko)
+  'vault.findrow.open': '비밀 메모는 결과에 없어요', // REVIEW(ko)
+  'vault.findrow.go': '비밀 메모 열기', // REVIEW(ko)
 
   'vault.move': '비밀 메모로 옮기기', // REVIEW(ko)
   'vault.moved': '비밀 메모로 옮겼어요', // REVIEW(ko)

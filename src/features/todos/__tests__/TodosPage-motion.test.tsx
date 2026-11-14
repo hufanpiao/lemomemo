@@ -41,14 +41,16 @@ vi.mock('../../../kit/hooks/useCollection.ts', () => ({
 // 保存由测试决定什么时候“回来”
 let finish: () => void = () => undefined;
 const patch = (id: string, p: Record<string, unknown>) => put(db.rows.map((r) => (r.id === id ? { ...r, ...p } : r)));
-vi.mock('../data/todo-actions.ts', () => ({
-  setTodoDone: (r: Row, done: boolean) =>
+vi.mock('../../../core/todo-done.ts', () => ({
+  doneToggler: () => (r: Row, done: boolean) =>
     new Promise((ok) => {
       finish = () => {
         patch(r.id, { done, done_at: done ? 1 : null });
         ok('saved');
       };
     }),
+}));
+vi.mock('../data/todo-actions.ts', () => ({
   setTodoDeleted: async (r: Row, deleted: boolean) => {
     patch(r.id, { deleted_at: deleted ? 1 : null });
     return 'saved';

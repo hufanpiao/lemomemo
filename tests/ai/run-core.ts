@@ -288,7 +288,7 @@ export async function runEval(argv: readonly string[], d: EvalDeps): Promise<{ f
   }
   const rp = args.replay !== null ? d.replayProvider(args.replay) : null;
   const model = rp ? rp.model : (args.model ?? '');
-  const base = reportName(args.date, PROMPT_VERSION.parse, model);
+  const base = reportName(args.date, PROMPT_VERSION.record, model);
   const name = args.only === null ? base : onlyName(base, d.nowIso());
   await d.copyShared();
   const rows = selectRows(await d.readRows(), args.only);
@@ -298,7 +298,7 @@ export async function runEval(argv: readonly string[], d: EvalDeps): Promise<{ f
   const out = await runSet(rows, (input) => parseWithAI(input, provider), { rpm: args.rpm, rpd: args.rpd, clock: d.clock, sleep: d.sleep });
   const report = {
     meta: {
-      name, mode: args.replay !== null ? `replay:${args.replay}` : 'live', model, prompt: PROMPT_VERSION.parse, params: TASK_PARAMS.parse,
+      name, mode: args.replay !== null ? `replay:${args.replay}` : 'live', model, prompt: PROMPT_VERSION.record, params: TASK_PARAMS.parse,
       set_versions: [...new Set(rows.map((r) => r.set_version))], projects: PROJECTS, features: FEATURES,
       rpm: args.rpm, rpd: args.rpd, started, finished: d.nowIso(), total: rows.length, called: out.calls, stopped: out.stopped,
       only: args.only,

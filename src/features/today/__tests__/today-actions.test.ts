@@ -1,7 +1,10 @@
 // 今天页、“最近删除”页写入的 remind 标记（data/today-actions.ts；代码审查 S2、补审改法 ④）
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
-import { remindAfterDone, remindOnDelete } from '../data/today-actions.ts';
+import { remindOnDelete } from '../data/today-actions.ts';
+import { todoDonePatch } from '../../../core/todo-done.ts';
+
+const remindAfterDone = (...a: Parameters<typeof todoDonePatch>): boolean => todoDonePatch(...a).remind;
 
 const TZ = 'Asia/Seoul';
 const at = (h: number, m = 0) => msAt('2026-11-05', h * 60 + m, TZ);

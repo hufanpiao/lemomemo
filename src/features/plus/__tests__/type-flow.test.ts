@@ -95,8 +95,15 @@ describe('没把握', () => {
   });
 
   it('Q2 ②：不认识的 intent → 退回本机规则，原话不丢', async () => {
-    const p = await planTyped('买牛奶', CTX, ON, stub({ intent: 'search', confidence: 1, items: [item()], quota_left: 3 }));
+    const p = await planTyped('买牛奶', CTX, ON, stub({ intent: 'spell', confidence: 1, items: [item()], quota_left: 3 }));
     expect(p).toMatchObject({ status: 'saved_rule', origin: 'rule', aiReason: 'unknown_intent' });
+    expect(p.items.map((i) => i.title)).toEqual(['买牛奶']);
+  });
+
+  it('B4b-3 D-15：本机看不出迹象、AI 却说是查找：照样按记下存（不丢），提示条带 AI 的判断（alt.found）', async () => {
+    const q = { text: '牛奶', range: null, kinds: ['event', 'todo', 'note'], done: 'any' };
+    const p = await planTyped('买牛奶', CTX, ON, stub({ intent: 'search', confidence: 0.95, query: q, quota_left: 3 }));
+    expect(p).toMatchObject({ status: 'saved', origin: 'rule', aiReason: 'intent_search', ask: null, alt: { ask: { intent: 'search', query: q }, found: true } });
     expect(p.items.map((i) => i.title)).toEqual(['买牛奶']);
   });
 

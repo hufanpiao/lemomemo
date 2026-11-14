@@ -30,7 +30,7 @@
 // • 按“记下”后等 AI 拆分（最多 PARSE_TIMEOUT_MS，超时照旧用本机规则）期间，预览行换成“正在识别…”（负责人 11-13 弹窗定 Q-27 选乙“照旧等 AI，加提示”，R-406）；
 //   “记下”照旧灰着、不能连点。开始、结束和耗时记在 useTypeBar 的 typebar recog on/off
 // • 看起来是要查找（B4b-2，线框 sPlus“点按＋打字：预览先显示查找”；判断在 useTypeBar 的 find）：输入框上方出“看起来是要查找 · Enter 查找”和“找：…”一张卡，
-//   按钮变“查找”，回车或按钮打开查找面板（features/smart-search 的 loadFindOpen → openFind）、清掉这句字、收起打字条（有提示条时只收打字条）；
+//   按钮变“查找”，回车或按钮打开查找面板（useTypeBar 的 openFind → hooks/assist-open 的 toAssist → smart-search 的 openAssist）、清掉这句字、收起打字条（有提示条时只收打字条）；
 //   点“找：…”那张卡 = 改成记下（这一句照旧记下，下面一行提示怎么改）。运行日志 typebar find len=（只记字数）
 // • 文字一律经 t()（A20）；按钮用 kit 的 FormButton，输入框用 kit Form 的 .input（G11 输入框令牌、触屏 16px）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type FormEvent, type KeyboardEvent, type PointerEvent } from 'react';
@@ -42,7 +42,6 @@ import { Mist } from '../../../kit/components/Mist.tsx';
 import { useKeys } from '../../../kit/hooks/useKeys.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { loadFindOpen } from '../../smart-search/index.ts';
 import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, keepFieldFocus } from '../../../platform/viewport.ts';
 import { usePlusT } from '../hooks/usePlusT.ts';
 import { useTypeBar, type CallAi, type TypeBarState, type Writer } from '../hooks/useTypeBar.ts';
@@ -114,7 +113,7 @@ function hasTyping(el: EventTarget | null): boolean {
 
 export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit, opened, onClose }: TypeBarProps) {
   const t = usePlusT();
-  const s = useTypeBar({ day, callAi, writer, online });
+  const s = useTypeBar({ day, callAi, writer, online, onAsked: () => asked() });
   const input = useRef<HTMLInputElement>(null);
   const startY = useRef<number | null>(null);
 
@@ -170,17 +169,17 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     if (keep) input.current?.blur();
     else close();
   };
+  /** 交给结果层以后（B4b-3）：收键盘；有提示条只收打字条，没有就关 */
+  function asked(): void {
+    input.current?.blur();
+    if (s.notice) setFolded();
+    else onClose();
+  }
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (s.find !== null) {
-      rlog(`typebar find len=${s.find.length}`);
-      const q = s.find;
-      void loadFindOpen().then((m) => m.openFind(q, 'plus'));
-      s.setText('');
-      s.dropDraft();
-      input.current?.blur();
-      if (s.notice) setFolded();
-      else onClose();
+      s.openFind();
+      asked();
       return;
     }
     void s.submit();

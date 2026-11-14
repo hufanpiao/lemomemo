@@ -81,6 +81,11 @@ const PLAN: Plan = new Map<string, Entry>([
     'admin-disabled': { file: 'tests/edge/note-search.test.ts', title: 'TC-B1-10 note-search：管理员停用的账号回 403 account_disabled，不扣次数、不调模型' },
     'no-profile': { file: 'tests/edge/note-search.test.ts', title: 'TC-B1-10 note-search：没有 profiles 行的账号回 403 account_disabled，不查向量' },
   } }],
+  // B4b-3：index.ts 接 requireActiveUser；core 单测用假鉴权核对原样回 account_disabled（写法同 note-search）
+  ['ai-summarize', { kind: 'jwt', covers: {
+    'admin-disabled': { file: 'tests/edge/ai-summarize.test.ts', title: 'TC-B1-10 ai-summarize：管理员停用的账号回 403 account_disabled，不读库、不扣次数、不调模型' },
+    'no-profile': { file: 'tests/edge/ai-summarize.test.ts', title: 'TC-B1-10 ai-summarize：没有 profiles 行的账号回 403 account_disabled，不读记录' },
+  } }],
   ['account-purge', { kind: 'all-users', why: 'TC-B1-109：照常处理到期的冷静期账号，故意不用 account_usable；pg_cron 带 x-cron-secret' }],
   ['invite-signup', { kind: 'no-user', why: '架构第 6 节：匿名 + Turnstile，还没有账号' }],
   ['usage-report', { kind: 'no-user', why: '架构第 6 节：x-ops-secret，只出全站统计' }],

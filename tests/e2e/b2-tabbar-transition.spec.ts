@@ -3,6 +3,10 @@
 // • 进出没有底栏的页（今天 → 编辑页）照旧 View Transition：圆角和阴影画在快照自己身上，组上没有阴影，只有一边有底栏时不剩空阴影壳（代码审查 M5）
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
+import { logOnFail } from './fail-log.ts';
+
+// 失败时带运行日志、控制台错误（B4b-3 返工第三条）
+logOnFail(test);
 
 
 /** 液滴抽查用的进度点（占过渡时长的比例） */

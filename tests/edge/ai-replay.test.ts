@@ -9,7 +9,7 @@ import { arrangeHint, confidence, parseSplit, recurHint } from '../../shared/log
 import { AI_AUDIO_MAX_BYTES, audioType, aiParseRequest, checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiItem } from '../../shared/schema/ai.ts';
 import { nextPacificMidnight } from '../../supabase/functions/_shared/ai/gate.ts';
 import { PARSE_TIMEOUT_MS, VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
-import { makeParseWithAI } from '../../supabase/functions/_shared/ai/parse-core.ts';
+import { makeParseWithAI, recordOnly } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { handle as parseHandle, type Deps as ParseDeps } from '../../supabase/functions/ai-parse/core.ts';
 import { handle as voiceHandle, type Deps as VoiceDeps } from '../../supabase/functions/ai-voice/core.ts';
 import { handle as intakeHandle, type Deps as IntakeDeps, type Row } from '../../supabase/functions/claude-intake/core.ts';
@@ -18,7 +18,7 @@ import { replayProvider, type Replay } from '../ai/replay/replay.ts';
 import { fakeGate, UA, used, type FakeGate, type GateOpts } from './ai-fakes.ts';
 
 const NOW = Date.UTC(2026, 9, 28, 3, 0);   // 首尔 10-28 12:00
-const { parseWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
+const { parseWithAI, recordWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
 
 /** 门用内存替身，服务商换成“真 GeminiProvider + 回放桩” */
 function gateWith(cassette: string, o: GateOpts = {}): { g: FakeGate; rp: Replay } {
@@ -73,7 +73,7 @@ async function intake(g: FakeGate) {
     logic: {
       parseSplit: (text, now, tz, locale, projects, opts) => parseSplit(text, now, tz, locale, projects, { features: [...opts.features] }),
       confidence: (r) => confidence(r as Parameters<typeof confidence>[0]),
-      checkParseOutput, parseWithAI,
+      checkParseOutput: (raw, ctx) => recordOnly(checkParseOutput(raw, ctx)), recordWithAI,
       captureRow: (item, ctx) => captureRow(item, ctx) as Row | null,
       todayOf, recurHint, arrangeHint, normLocale, isValidTz,
     },

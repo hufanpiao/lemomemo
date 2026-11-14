@@ -8,9 +8,9 @@ import { clock } from '../../../platform/clock.ts';
 import type { Writer } from '../data/capture-save.ts';
 import TypeBar from '../ui/TypeBar.tsx';
 
-// 查找那一块是别的功能，测试不引它（ESLint boundaries）：替身只记 openFind 被怎么调
-const fx = vi.hoisted(() => ({ open: vi.fn() }));
-vi.mock('../../smart-search/index.ts', () => ({ loadFindOpen: async () => ({ openFind: fx.open }) }));
+// 查找那一块是别的功能，测试不引它（ESLint boundaries）：替身只记 openAssist 被怎么调
+const fx = vi.hoisted(() => ({ assist: vi.fn() }));
+vi.mock('../../smart-search/index.ts', () => ({ loadFindOpen: async () => ({ openAssist: fx.assist }), AssistPeek: () => null }));
 
 const NOW = msAt('2026-11-02', 12 * 60, 'UTC');
 const OK: WriteResult = { ok: true, item: null };
@@ -42,7 +42,21 @@ describe('打字条：看起来是要查找', () => {
       fireEvent.submit(screen.getByTestId('type-bar'));
       await Promise.resolve();
     });
-    await vi.waitFor(() => expect(fx.open).toHaveBeenCalledWith('牙医的记录', 'plus'));
+    await vi.waitFor(() => expect(fx.assist).toHaveBeenCalledTimes(1));
+    expect(fx.assist.mock.calls[0]?.[0]).toMatchObject({ ask: { intent: 'search', query: { text: '牙医的记录', range: null } }, raw: '帮我找牙医的记录', from: 'plus', aiUsed: 0 });
+    expect(writer.insert).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('B4b-3：总结这周的随手记，本机就有把握：回车不调 AI、不写记录，交给结果层（range 是这一周）', async () => {
+    const { writer, onClose, input } = setup();
+    fireEvent.change(input, { target: { value: '总结一下这周的随手记' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(fx.assist).toHaveBeenCalledTimes(1));
+    expect(fx.assist.mock.calls[0]?.[0]).toMatchObject({ ask: { intent: 'summarize', query: { range: { from: '2026-11-02', to: '2026-11-08' }, kinds: ['note'] } }, aiUsed: 0, raw: '总结一下这周的随手记' });
     expect(writer.insert).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
   });

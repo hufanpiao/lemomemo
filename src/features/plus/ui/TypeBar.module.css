@@ -155,20 +155,6 @@
   border-top-color: var(--ink);
 }
 
-/* 电脑侧栏：在“＋”右边，按“＋”的中线竖直居中；三角在左沿中间、朝左指着“＋” */
-.hint[data-side="right"] {
-  max-width: calc(100vw - 140px);
-  transform: translateY(-50%);
-}
-
-.hint[data-side="right"]::after {
-  inset: 50% auto auto -7px;
-  margin-top: -7px;
-  border: 7px solid transparent;
-  border-left: 0;
-  border-right-color: var(--ink);
-}
-
 /* 设置 › 在 Claude 聊天里记事：新生成的连接码（B3 FA-4）。纯文字，可以长按全选复制，不是链接；放在这里不另开样式文件（另开一个，首屏依赖表多一项） */
 .code {
   font-family: ui-monospace, monospace;

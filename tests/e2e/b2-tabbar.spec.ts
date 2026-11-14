@@ -4,6 +4,10 @@
 // 今天页右上角头像进设置；切页动画期间点按不被吞（::view-transition 不接点按）；底栏切页时不跟着淡入淡出
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
+import { logOnFail } from './fail-log.ts';
+
+// 失败时带运行日志、控制台错误（B4b-3 返工第三条）
+logOnFail(test);
 
 const bar = (page: Page) => page.getByTestId('tabbar');
 const tab = (page: Page, name: string) => bar(page).locator(`a[data-tab="${name}"]`);

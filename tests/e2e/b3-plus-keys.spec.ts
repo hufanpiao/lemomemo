@@ -7,6 +7,10 @@
 import type { Page } from '@playwright/test';
 import { waitVoiceHost } from './fake-media.ts';
 import { expect, test } from './session-fixture.ts';
+import { logOnFail } from './fail-log.ts';
+
+// 失败时带运行日志、控制台错误（B4b-3 返工第三条）
+logOnFail(test);
 
 const TYPEBAR = /\/TypeBar-[^/]*\.js$/;
 
