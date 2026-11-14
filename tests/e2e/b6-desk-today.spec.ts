@@ -85,14 +85,10 @@ test.describe('B6 电脑版今天页', () => {
     await expect(page.locator('[data-undo-toast]')).toHaveCount(1);
   });
 
-  test('⑪ “＋”气泡在侧栏“＋”右边、整块在视口里', async ({ page }) => {
-    const hint = page.getByTestId('plus-hint');
-    await expect(hint).toBeVisible({ timeout: 10_000 });
-    await expect(hint).toHaveAttribute('data-side', 'right');
-    const b = await hint.boundingBox();
-    const plus = await page.getByTestId('tabbar-add').boundingBox();
-    expect(b && b.x >= 0 && b.y >= 0 && b.x + b.width <= 1280 && b.y + b.height <= 820, JSON.stringify(b)).toBe(true);
-    expect(b && plus && b.x - (plus.x + plus.width)).toBeGreaterThanOrEqual(8);
+  test('⑪ 电脑宽度不出“＋”气泡（B4b-3，定稿线框 R-126 方案 B 侧栏没有提示；原来放“＋”右边盖住纪念日胶囊）', async ({ page }) => {
+    await expect(page.getByTestId('tabbar-add')).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(500);
+    await expect(page.getByTestId('plus-hint')).toHaveCount(0);
   });
 });
 
@@ -109,12 +105,12 @@ test.describe('B6 评审截图', () => {
         await page.setViewportSize({ width: w, height: h });
         await page.emulateMedia({ colorScheme: scheme });
         const tag = `${w}x${h}-${scheme}`;
-        // 先截“＋”气泡（前 3 次打开才出；盖着日期行下面的纪念日胶囊），之后种随手记时记成按住过，其余几张不出气泡
+        // 前 3 次打开：电脑宽度不出“＋”气泡（B4b-3），纪念日胶囊不被盖住
         await openToday(page);
         await seedToday(page);
         await expect(page.locator(`[data-open="${TODAY_IDS.live}"]`)).toBeVisible({ timeout: 20_000 });
-        await expect(page.getByTestId('plus-hint')).toBeVisible();
-        await shot(page, browserName, `今天含气泡-${tag}`);
+        await expect(page.getByTestId('plus-hint')).toHaveCount(0);
+        await shot(page, browserName, `今天首次打开-${tag}`);
 
         await page.goto('/app/#/notes');
         await expect(page.getByTestId('desk-panel-list')).toBeVisible({ timeout: 20_000 });

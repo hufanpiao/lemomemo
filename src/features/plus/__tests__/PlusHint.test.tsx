@@ -63,11 +63,6 @@ describe('spotOf', () => {
     document.documentElement.setAttribute('data-kbhide', '1');
     expect(spotOf(fab, 375, 812)).toEqual({ side: 'above', right: 16, bottom: 82 });
   });
-  it('电脑侧栏（beside）：放在“＋”右边 10px，按“＋”的竖直中线居中（B6 返工：侧栏“＋”贴着顶边，放上方会出屏）', () => {
-    // 侧栏的“＋”：左 33、上 16、44×44（1280 宽）
-    const fab = addFab({ top: 16, right: 77, left: 33, width: 44, height: 44 });
-    expect(spotOf(fab, 1280, 800, true)).toEqual({ side: 'right', left: 87, top: 38 });
-  });
 });
 
 async function mount(props: { enabled?: boolean; exe?: boolean }): Promise<void> {
@@ -88,17 +83,14 @@ describe('PlusHint', () => {
     expect(el.style.bottom).toBe('82px');
   });
 
-  it('电脑宽度（MQ_SIDEBAR 成立）：气泡在“＋”右边，data-side="right"，用 left / top 定位', async () => {
+  it('电脑宽度（MQ_SIDEBAR 成立）：不出气泡、不记次数（B4b-3，定稿线框 R-126 方案 B 侧栏没有提示；放右边会盖住纪念日胶囊）', async () => {
     vi.stubGlobal('innerWidth', 1280);
     vi.stubGlobal('innerHeight', 800);
     vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(width >= 900px)', media: q, addEventListener: () => undefined, removeEventListener: () => undefined }));
     addFab({ top: 16, right: 77, left: 33, width: 44, height: 44 });
     await mount({ enabled: true, exe: false });
-    const el = screen.getByTestId('plus-hint');
-    expect(el.dataset['side']).toBe('right');
-    expect(el.style.left).toBe('87px');
-    expect(el.style.top).toBe('38px');
-    expect(el.style.bottom).toBe('');
+    expect(screen.queryByTestId('plus-hint')).toBeNull();
+    expect(launch).not.toHaveBeenCalled();
   });
 
   it('开关关着：不出，也不记次数', async () => {
