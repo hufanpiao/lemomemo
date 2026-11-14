@@ -501,10 +501,10 @@ export function createVaultSession(d: VaultSessionDeps) {
       get: (id: string, part: 'full' | 'thumb') => fileOp((tok) => d.api.fileGet(id, part, tok), false),
       remove: (id: string) => fileOp((tok) => d.api.fileCall({ action: 'remove', id }, tok, vaultFileOkResponse), true),
       restore: (id: string) => fileOp((tok) => d.api.fileCall({ action: 'restore', id }, tok, vaultFileOkResponse), true),
-      async msPreview(id: string) {
-        const r = await fileOp((tok) => d.api.fileCall({ action: 'ms_preview', id }, tok, vaultFilePreviewResponse), true);
-        if (r.ok) msLive = true;
-        return r;
+      // 发之前就记 msLive：请求在飞时上锁（回 STALE），服务器可能已经放了临时明文副本，上锁时也要发 end（多发一次无害）
+      msPreview(id: string) {
+        msLive = true;
+        return fileOp((tok) => d.api.fileCall({ action: 'ms_preview', id }, tok, vaultFilePreviewResponse), true);
       },
       msPreviewEnd(): void {
         if (!msLive) return;

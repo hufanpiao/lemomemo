@@ -21,7 +21,18 @@ export const ZIP_LITE_ALIAS = { find: /^jszip$/, replacement: resolve(root, 'src
  * 引入按名字直接连到真正的模块，没人在首屏用的跟着用它的页走。没匹配上的模块照默认（包的 package.json sideEffects 照认）。
  * 出口文件只许有 export … from（tests/build/pure-reexports.test.ts 守着），往里加顶层语句就不是无副作用了
  */
-export const PURE_REEXPORT_RULES = [{ test: /[\\/]src[\\/]motion[\\/]components\.ts$/, sideEffects: false }];
+/**
+ * 懒加载页共用的小工具合成一块（B4b-1 第二轮，主持人选“乙”；架构 8.1“构建与分包”）：
+ * 这几份各自很小（合起来约 3 KB），本来跟着某一页走；附件的懒加载块也用上以后，Rolldown 按“被哪些入口用到”把每份拆成单独一块，
+ * App 入口块里的预加载表（每个懒加载页列出整个静态闭包）就多出一串文件名，首屏净增多了约 58 B，打开那几页时也多几个请求。
+ * 只收名单里的模块，而且它们自己的依赖都已经在首屏块里（不会把别的块拖进来）；不是通吃规则，别的懒加载块照原样分。
+ * 往名单里加模块前先确认它只依赖首屏块；tests/build/lazy-common-chunk.test.ts 守着名单和首屏文件数
+ */
+export const LAZY_COMMON_MODULES = ['shared/logic/link.ts', 'src/kit/hooks/useOnline.ts', 'src/platform/save-file.ts', 'src/core/ms-pref.ts', 'src/platform/device-kind.ts'] as const;
+const LAZY_COMMON_RE = new RegExp(`[\\\\/](${LAZY_COMMON_MODULES.map((m) => m.replace(/[.]/g, '\\.').replace(/\//g, '[\\\\/]')).join('|')})$`);
+export const isLazyCommon = (id: string): boolean => LAZY_COMMON_RE.test(id);
+
+export const PURE_REEXPORT_RULES =[{ test: /[\\/]src[\\/]motion[\\/]components\.ts$/, sideEffects: false }];
 // LEMO_BUILD_VERSION（deploy-preview 给的 X.Y.Z-preview.N）优先，否则 VERSION 文件；和 app/version.json 同一个来源
 export const APP_VERSION: string = buildVersion(root);
 /**
@@ -130,6 +141,7 @@ export default defineConfig(({ mode }) => {
       assetsInlineLimit: 0,
       rollupOptions: {
         treeshake: { moduleSideEffects: PURE_REEXPORT_RULES },
+        output: { codeSplitting: { groups: [{ name: 'lazy-common', test: isLazyCommon, includeDependenciesRecursively: false }] } },
         input: {
           main: resolve(root, 'src/index.html'),
           auth: resolve(root, 'src/auth/index.html'),
