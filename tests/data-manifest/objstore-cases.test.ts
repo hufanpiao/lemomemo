@@ -14,6 +14,7 @@ import { LIVE_S3_KEY, LIVE_S3_SECRET, LIVE_TIMEOUT_MS, liveSupabase, type LivePu
 import { liveSkipReason, realS3Backend } from './live-s3.ts';
 import type { ObjStore } from '../../shared/objstore.ts';
 import type { Manifest } from './types.ts';
+import { logUserTag } from '../../supabase/functions/_shared/log-tag.ts';
 
 const R2 = ['images', 'files', 'vault-images', 'vault-files'];
 const A = 'aaaaaaaa-0000-4000-8000-00000000000a';
@@ -257,10 +258,12 @@ describe.skipIf(!LIVE_SB)(FAKE_TITLE, () => {
     try {
       await expect(live.acts.accountPurge(a)).rejects.toThrow(/失败 0 个/);
       expect(live.lastPurge).toMatchObject({ purged: 0, failed: 1 });
-      // 失败原因只能是“R2 删完再列不为 0”（index.ts 的日志 account-purge: <码>:<user_id 前 8 位>），不是别的步骤出错
+      // 失败原因只能是“R2 删完再列不为 0”（index.ts 的日志 account-purge: <码>:<认人标签>），不是别的步骤出错
+      // 认人标签 = HMAC(SUPABASE_SERVICE_ROLE_KEY, user_id) 截断（_shared/log-tag.ts，安全审查第 11 条），index.ts 用的就是这把服务密钥
+      const tag = await logUserTag(LIVE_SB?.serviceKey, a);
       const codes = logs.mock.calls.map((c) => String(c[0])).filter((m) => m.startsWith('account-purge: '));
-      expect(codes).toContain(`account-purge: r2_not_empty:${a.slice(0, 8)}`);
-      expect(codes.filter((m) => m.endsWith(`:${a.slice(0, 8)}`))).toEqual([`account-purge: r2_not_empty:${a.slice(0, 8)}`]);
+      expect(codes).toContain(`account-purge: r2_not_empty:${tag}`);
+      expect(codes.filter((m) => m.endsWith(`:${tag}`))).toEqual([`account-purge: r2_not_empty:${tag}`]);
       expect(await live.userExists(a)).toBe(true);
       expect(await live.store.listAll('files', `${a}/`)).toHaveLength(1);
     } finally {

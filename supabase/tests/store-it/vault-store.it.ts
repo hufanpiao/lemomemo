@@ -49,12 +49,14 @@ Deno.test({ name: '① 密码：setup、连错 5 次锁定、锁定中 423、到
   await settle();
   assert(pushes.some((p) => p.user === A && p.event === 'locked'), '锁定推送本人');
   expectStatus(await callVault(jwtA, { action: 'unlock', pin: '1234' }), 423, '锁定中输对');
+  const locked = await okVault(jwtA, { action: 'status' }, null, '锁定中 status');
+  assert(typeof locked.retry_after_s === 'number' && locked.retry_after_s > 50 && locked.retry_after_s <= 60, `status 的 retry_after_s 约 60 秒（审查第 5 条）：${locked.retry_after_s}`);
   await sql`update private.vault set locked_until = now() - interval '1 second' where user_id = ${A}`;
   tokA = String((await okVault(jwtA, { action: 'unlock', pin: '1234' }, null, '到期后输对')).vault_token);
   const w = await vaultRow(A);
   assertEquals([w.fail_count, w.lock_level, w.lu], [0, 0, null], '输对清零');
   const st = await okVault(jwtA, { action: 'status' }, null, 'status');
-  assertEquals([st.set, st.locked_until, st.webauthn], [true, null, 0]);
+  assertEquals([st.set, st.locked_until, st.retry_after_s, st.webauthn], [true, null, null, 0]);
 } });
 
 Deno.test({ name: '② WebAuthn：挑战存取删、凭据登记 / 列出 / 删除、解锁后 sign_count 写回', ...opts, async fn() {

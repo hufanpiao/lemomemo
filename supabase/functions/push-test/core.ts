@@ -18,6 +18,7 @@ import type { PayloadInput } from '../_shared/push/payload.ts';
 import type { DeliverResult, Device, PushOptions } from '../_shared/push/send.ts';
 import type { Override } from '../_shared/push/stub.ts';
 import type { VapidKeys, VapidLoad } from '../_shared/push/vapid.ts';
+import { utcHourKey } from '../_shared/rate-key.ts';
 
 export const HOURLY_LIMIT = 5;
 export const WINDOW_S = 3600;
@@ -61,7 +62,7 @@ const err = (status: number, code: string): Response => json(status, { error: co
 
 /** 计数键（附录 A 三段写法，第三段是 UTC 小时 yyyymmddhh，不含冒号；单测核对过得了 counters 的 check 约束） */
 export function rateKey(userId: string, ms: number): string {
-  return `push-test:${userId}:${new Date(ms).toISOString().slice(0, 13).replace(/[-T]/g, '')}`;
+  return utcHourKey('push-test', userId, ms);
 }
 
 /** deliver 的结果收成四种（D1-5） */

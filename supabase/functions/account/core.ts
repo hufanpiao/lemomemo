@@ -39,6 +39,7 @@
 //   index.ts、测试照旧只从 core.ts 引用。
 
 import { deletionRequestedMail, restoredMail } from '../_shared/account-mail.ts';
+import { readJsonObjectCapped } from '../_shared/body.ts';
 import { otpFresh } from '../_shared/otp-fresh.ts';
 import { ACCOUNT_DAILY_LIMIT, type ActiveUser, DAY_S, DbError, type Deps, err, json, keys, mailLater } from './common.ts';
 import { partExport } from './export-part.ts';
@@ -63,17 +64,6 @@ const MAX_BODY = 4096;
 /** 打出的确认词：去掉首尾空白后完全等于“注销”或“탈퇴”（中间的空格、全角空格不去） */
 export function confirmOk(v: unknown): boolean {
   return typeof v === 'string' && v.length <= 32 && (CONFIRM_WORDS as readonly string[]).includes(v.trim());
-}
-
-async function readBody(req: Request): Promise<Record<string, unknown> | null> {
-  const text = await req.text().catch(() => null);
-  if (text === null || text.length > MAX_BODY) return null;
-  try {
-    const v: unknown = JSON.parse(text);
-    return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
 }
 
 // ---------------- delete（申请注销） ----------------
@@ -121,8 +111,8 @@ async function restore(user: ActiveUser, deps: Deps): Promise<Response> {
 // ---------------- 入口 ----------------
 export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (req.method !== 'POST') return err(405, 'method_not_allowed');
-  const body = await readBody(req);
-  if (!body || typeof body.action !== 'string') return err(400, 'bad_request');
+  const body = await readJsonObjectCapped(req, MAX_BODY);   // 边读边计字节，超了中断（安全审查第 2 条）
+  if (body === null || body === 'too_large' || typeof body.action !== 'string') return err(400, 'bad_request');
   const action = body.action;
   if (action !== 'delete' && action !== 'restore' && action !== 'export' && action !== 'status' && action !== 'rebind_device') return err(400, 'bad_request');
 

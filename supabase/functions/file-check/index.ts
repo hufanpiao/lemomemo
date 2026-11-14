@@ -1,5 +1,5 @@
 // file-check 入口（架构 5.13 第 2 点、第 6 节 file-check 行；B4b-1）：组装依赖，逻辑在 core.ts。
-// 三种调用：客户端带 JWT 的 {action: check, id}、{action: retry_ai, kind: image, id}（B4b-2 识图“重新识别”，只改 note_images 的 ai_* 列）（网关照默认校验 JWT）；pg_cron 每 10 分钟带 x-cron-secret 的 {action: sweep}
+// 三种调用：客户端带 JWT 的 {action: check, id}、{action: retry_ai, kind: image, id}（B4b-2 识图“重新识别”，只改 note_images 的 ai_* 列）（网关不校验，函数里 requireActiveUser 自己验）；pg_cron 每 10 分钟带 x-cron-secret 的 {action: sweep}
 //   （迁移 20261115000000；cron 请求没有用户 JWT，所以 config.toml 的 [functions.file-check] verify_jwt = false，check 一支在函数里自己 requireActiveUser）。
 // 用到的库对象：service role：private.account_usable、session_alive（经 _shared/auth.ts）、private.take_rate；
 //   fn_ai 直连（_shared/db.ts 的 withAiUser / withAiScan）：public.note_files、private.scan_note_files、private.heartbeat（SQL 在 store.ts）。
@@ -15,7 +15,7 @@ import { timedFetch } from '../_shared/net.ts';
 import { r2FromEnv } from '../_shared/objstore-env.ts';
 import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
-import { versionGate } from '../_shared/version-gate.ts';
+import { appConfigMinLoader, versionGate } from '../_shared/version-gate.ts';
 import { sha256Hex } from '../_shared/body.ts';
 import { sniffFile } from '../_shared/gen/logic/files/file-sniff.ts';
 import { FILE_MAX_BYTES } from '../_shared/gen/logic/files/limits.ts';
@@ -39,11 +39,7 @@ Deno.serve(async (req) => {
   // cron 的 sweep 没有客户端版本；只有带用户 JWT 的那一支过版本门
   //   （带了 x-cron-secret 却不是 sweep 的，core 照样要 JWT；版本门不是鉴权边界）
   if (!req.headers.get('x-cron-secret')) {
-    const blocked = await versionGate('file-check', req, async (signal) => {
-      const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
-      if (error) throw new Error('db');
-      return data?.min_client_version ?? null;
-    });
+    const blocked = await versionGate('file-check', req, appConfigMinLoader(admin));
     if (blocked) return blocked;
   }
   return handle(req, {

@@ -23,8 +23,8 @@ export default function EventEditPage() {
   return <EventEditor key={key} id={id} onCreated={onCreated} />;
 }
 
-/** 编辑器本身：整页（#/event/<id>）和电脑今天页的详情抽屉（onClose，B6 返工；经 ./event-drawer.ts 懒加载）共用 */
-export function EventEditor({ id, onCreated, onClose }: { id: string; onCreated(id: string): void; onClose?: (() => void) | undefined }) {
+/** 编辑器本身：整页（#/event/<id>）和电脑今天页的详情抽屉（B6 返工；经 ./event-drawer.ts 懒加载）共用；在不在抽屉里由 EditShell 自己看（kit useInDrawer） */
+export function EventEditor({ id, onCreated }: { id: string; onCreated(id: string): void }) {
   const t = useCalendarT();
   const ed = useEventEdit(id, onCreated);
   // 只读行（0.27①“只读显示”，FA-2 视觉验收第 2 条）：一进来就判断（useEditRecord），顶部出提示、输入全禁用、不出“删除”和“改了就自动保存”
@@ -34,7 +34,6 @@ export function EventEditor({ id, onCreated, onClose }: { id: string; onCreated(
   return (
     <EditShell
       prefix="event-edit"
-      onClose={onClose}
       kind={t(ed.isNew ? 'event.edit.newKind' : 'event.edit.kind', {})}
       backLabel={t('event.edit.back', {})}
       onBack={back}

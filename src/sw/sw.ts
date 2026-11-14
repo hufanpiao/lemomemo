@@ -1,12 +1,12 @@
 // Service Worker（架构 8.1）：scope /app/；预缓存 App 的全部产物，装好以后离线也能打开
 // /sb/*、/files/*（0.32）一律直连、不缓存：第一个 fetch 监听器直接放过，后面的 Workbox 路由也不会匹配到（15.3 第 1 条，S-B0）
 // 新版本：只在后台下载，等页面提示“有新版本 · 重新打开”后由页面发 SKIP_WAITING（B1 接界面）
-// 不存用户数据（接手清单 K-sw-seal）：运行时缓存只有下面三个公共的；IndexedDB 只在 ./pending.ts 里按 K-sw-seal 写 pending_actions
+// 不存用户数据（接手清单 K-sw-seal）：运行时缓存只有下面三个公共的（节假日、字体分片、字体清单；页面导航不缓存）；IndexedDB 只在 ./pending.ts 里按 K-sw-seal 写 pending_actions
 //（只写已存在、owner 一致的库，开库监听 versionchange 立刻关），见 tests/build/sw-no-user-data.test.ts
 // 推送（架构 5.3，B2）：push、notificationclick、notificationclose 的处理在 ./push.ts
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
-import { CacheFirst, NetworkFirst } from 'workbox-strategies';
+import { CacheFirst, NetworkFirst, NetworkOnly } from 'workbox-strategies';
 import { handleNotificationClick, handlePush, type SwLike } from './push.ts';
 import { NAV_DENYLIST, routeOf } from './routes.ts';
 
@@ -65,9 +65,18 @@ self.addEventListener('notificationclose', () => undefined);
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
-// 页面导航：先联网（3 秒超时），失败用预缓存的 index.html
+// 11-14 以前的版本导航用过的运行时缓存，里面是旧版 index.html：不再用，激活时删掉（同步层审查第 6 条）
+const RETIRED_NAV_CACHE = 'lemo-nav';
+self.addEventListener('activate', (event) => {
+  event.waitUntil(caches.delete(RETIRED_NAV_CACHE));
+});
+
+// 页面导航（/app/、/app/auth/ 这类在预缓存里的地址上面 precacheAndRoute 已经接走，到这里的是带查询串、不在预缓存里的）：
+// 只走网络（3 秒超时），失败回预缓存的 index.html——它和当前 SW 的预缓存一定是同一版，引用的分包都在。
+// 不缓存导航响应（同步层审查第 6 条，11-14）：原来用 NetworkFirst 存进 lemo-nav，那份没有版本号，新 SW 接管、旧预缓存清掉以后，
+// 弱网、离线时会拿到旧版 index.html，它引用的旧分包预缓存里、线上都没有了 → 白屏。tests/build/sw-nav-shell.test.ts
 const shell = createHandlerBoundToURL('/app/index.html');
-const navNetwork = new NetworkFirst({ cacheName: 'lemo-nav', networkTimeoutSeconds: 3 });
+const navNetwork = new NetworkOnly({ networkTimeoutSeconds: 3 });
 registerRoute(
   new NavigationRoute(
     async (opts) => {

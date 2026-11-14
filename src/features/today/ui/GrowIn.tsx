@@ -1,7 +1,8 @@
 // 晚到的一块不把页面一下子往下推（设计复审 提醒接线今天页待办 第二轮 J1；用在今天页顶部“错过 N 条提醒”那一行）：
 // • 第一次画出来之前就有内容：直接画（首屏就有，不动）
 // • 画出来以后才有、或者内容没了：外层高度从现在的值过渡到新高度（--dur-ui、--ease-out）；减少动态效果时直接到位
-// • 手指正按在屏幕上，或者刚抬起不到约 600 ms：先不动，等手离开、静下来再变（手指正要落下的那一行不会突然挪开）
+// • 手指正按在屏幕上，或者刚抬起不到约 600 ms：先不动，等手离开、静下来再变（手指正要落下的那一行不会突然挪开）；
+//   窗口失焦（blur）、切到后台或切回来（visibilitychange）时“按着”的计数清零，抬起丢了也不会一直卡住
 // • 页面已经往下滚过（scrollY > 0）：直接到位，同时把滚动位置补上同样的高度，眼前的内容不动。补多少按变完后实际挪了多少量：
 //   Chromium 的滚动锚定自己会补（量出来是 0，不重复补；J1 验收第一次跑出来补了两次），Safari 等没有滚动锚定的由这里补
 // • 高度还没到位（在等、在变）时裁掉溢出（overflow: hidden），不盖到下面；到位以后放开（data-settled），里面按钮的焦点框不被裁
@@ -24,6 +25,10 @@ function listenPointer(): void {
   };
   window.addEventListener('pointerup', up, { capture: true, passive: true });
   window.addEventListener('pointercancel', up, { capture: true, passive: true });
+  // 按着时切走窗口、切到后台：抬起可能收不到，计数会一直卡在“按着”、这一块永远不动；切走时清零
+  const reset = (): void => void (pointer.down = 0);
+  window.addEventListener('blur', reset);
+  document.addEventListener('visibilitychange', reset);
 }
 /** 还要等多久才能动（0 = 现在就能动）；按着时每 100 ms 再看一次 */
 function waitLeft(): number {

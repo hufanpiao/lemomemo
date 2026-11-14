@@ -12,6 +12,7 @@ import { FormButton } from '../../../kit/components/Form.tsx';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import { Popover } from '../../../kit/components/Popover.tsx';
+import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useKeys } from '../../../kit/hooks/useKeys.ts';
 import { notesInput } from '../../../kit/state/new-item.ts';
 import { Pressable } from '../../../motion/components.ts';
@@ -38,6 +39,8 @@ export default function VaultPage() {
   const { s } = useVault();
   const errText = useErrText();
   const [sub = ''] = useRoute().params;
+  /** 设密码时 Face ID 没绑上（审查第 3 条）：绑定方式的叫法；null = 不提示 */
+  const [bindFail, setBindFail] = useState<string | null>(null);
   useSolidBars();
   useAutolockMin();
   useKeys({
@@ -69,7 +72,7 @@ export default function VaultPage() {
         </FormButton>
       </div>
     );
-  else if (state.phase === 'unset') body = <SetupPin onCancel={leave} />;
+  else if (state.phase === 'unset') body = <SetupPin onCancel={leave} onBindFail={setBindFail} />;
   else if (unlocked) body = sub === 'trash' ? <VaultTrash /> : sub ? <VaultEditor key={sub} id={sub === 'new' ? null : sub} /> : <VaultList />;
   else body = null;
 
@@ -95,6 +98,16 @@ export default function VaultPage() {
       <UnlockOverlay open={state.phase === 'locked' || state.waiting}>
         <UnlockPanel onCancel={leave} onForgot={forgot} />
       </UnlockOverlay>
+      {bindFail ? (
+        <UndoToast
+          message={t('vault.setup.bindFail', { method: bindFail })}
+          undoLabel={t('vault.setup.bindGo', {})}
+          onUndo={() => void navigate('settings', 'vault')}
+          onClose={() => setBindFail(null)}
+          role="alert"
+          data-testid="vault-bind-fail"
+        />
+      ) : null}
       <LockShield />
     </main>
   );

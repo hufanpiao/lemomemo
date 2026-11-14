@@ -1,4 +1,4 @@
--- 迁移 20261115050000_ai_summarize_fn_ai_reads.sql：fn_ai 补读 events (date, time, tz, undone)、todos (due, due_time, done, undone)、notes (created_at, undone)
+-- 迁移 20261115070000_ai_summarize_fn_ai_reads.sql：fn_ai 补读 events (date, time, tz, undone)、todos (due, due_time, done, undone)、notes (created_at, undone)
 -- 覆盖：
 --   ① 授权形状：这几列能读；三张表照旧没有表级 select；别的列（例如 events.raw_text、todos.raw_text、notes.raw_text）照旧读不到；
 --   ② ai-summarize 的三句查询（supabase/functions/ai-summarize/store.ts）以 fn_ai 跑得通：本人没删、没撤销的读得到，删了的、撤销的读不到；

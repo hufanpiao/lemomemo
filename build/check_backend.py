@@ -160,6 +160,8 @@ Pages Functions（functions/）和 App、shared：
       给 fn_vault、fn_ai 的表授权归 D1 和 6.2 比（附录 A 末尾注明），对具体 private 表的 revoke 只收不放，不在汇总里
   M5  0001 的先后：全局默认权限 → table_meta、table_meta_of()、touch() → 各表；10 张同步表建表后的下一句是它的 table_meta 行。TC-B0-73 ③、0.29 续第 39 条
   M6  10 张同步表的 (user_id, synced_at) 索引写在建表的文件里。TC-B0-73 ⑤
+  M7  cleanup_batch、files_authorize_impl、remind_queue_pop、apply_patch、record_consent_impl 整段重写时，最新一版要包含上一版全部 delete 的表
+      和带 schema 的表名（规则和有意删除的白名单在 build/check_fn_redefs.py；后端安全审查第 9 条）
   M3  0001～0007 七个建表文件里不准打开功能开关：app_config.features 的列默认值里只有 event、todo 能是 on: true，
       不准 update app_config、不准 insert 时写 features、不准 alter column features set default 打开（只准写 JSON 字面量，QA 第二轮 D-15）；
       打开 note、anniv 用带时间戳的数据迁移。架构 0.29 第 1 条（P-02）、TC-B0-68
@@ -177,6 +179,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import check_fn_redefs  # noqa: E402  M7：迁移里整段重写的函数不丢上一版的 delete 和表名（安全审查第 9 条）
 from check_arch import strip_comments  # noqa: E402  去掉 // 和 /* */，行号不变；只给 import map 的 JSON 用，源码一律走 check_backend_ast.mjs（AST）
 
 # 架构 6.2 末尾越界检查白名单（唯一出处）；6.2 表格、8.4 FN_VAULT_DB_URL 一行：fn_vault 的连接串只给这三个函数
@@ -2015,6 +2018,7 @@ def main(argv=None):
     check_pages(root, errors)
     check_admins_writes(root, errors)
     check_migrations(root, errors)
+    check_fn_redefs.check(root, errors)
     errors = sorted(set(errors), key=lambda e: (e[1], e[2], e[0], e[3]))
     # 同一处同一条规则只报一次
     seen, uniq = set(), []

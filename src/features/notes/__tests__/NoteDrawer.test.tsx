@@ -120,9 +120,10 @@ describe('电脑详情抽屉', () => {
     });
     await screen.findByTestId('note-drawer');
   };
+  // 照浏览器的样子从焦点所在的元素发出（经过 document 捕获阶段，radix 浮层在那里先收到 Esc、preventDefault），再冒泡到 window
   const esc = async () => {
     await act(async () => {
-      fireEvent.keyDown(window, { key: 'Escape' });
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     });
   };
 

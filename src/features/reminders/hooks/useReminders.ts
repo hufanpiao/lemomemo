@@ -295,27 +295,24 @@ export function useRemindEngine(sinceAt?: number): void {
     if (popped) flushSeen(); // 本机弹过的马上写（L2；次数很少）
   }, [armed, list, now, rang, prefs.showTitle, prefs.defaultTime, tz, locale, flushSeen]);
 
-  // 打开 App、回到前台：关掉已处理的系统通知（iPhone 不发 resolve，5.3）；本机还没拉到的行不动
+  // 打开 App、回到前台：关掉已处理的系统通知（iPhone 不发 resolve，5.3）；本机还没拉到行（known 为空）时不动。
+  // 一段 effect（审查第 16 条，原来挂监听和首次跑各写一份）：本机有行了先跑一次，再挂 visibilitychange；跑的时候读最新的 list、known、tz
   const latest = useRef({ list, known, tz });
   latest.current = { list, known, tz };
+  const ready = known.size > 0;
   useEffect(() => {
+    if (!ready) return;
     const run = (): void => {
       const { list: l, known: k, tz: z } = latest.current;
-      if (k.size === 0) return;
       void closeHandledNotifications((t) => shouldCloseShown(t, l, k.has(`${t.kind}:${t.id}`), z));
     };
     const onVis = (): void => {
       if (document.visibilityState === 'visible') run();
     };
+    run();
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, []);
-  const ranOnce = useRef(false);
-  useEffect(() => {
-    if (ranOnce.current || known.size === 0) return;
-    ranOnce.current = true;
-    void closeHandledNotifications((t) => shouldCloseShown(t, list, known.has(`${t.kind}:${t.id}`), tz));
-  }, [list, known, tz]);
+  }, [ready]);
 }
 
 export type { ActResult };

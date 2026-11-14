@@ -8,6 +8,7 @@ import { BackupsSubdirError } from '../../supabase/functions/account-purge/core.
 import type { Mail } from '../../supabase/functions/_shared/account-mail.ts';
 import { tzLabel } from '../../shared/i18n/tz-label.ts';
 import { fakePurgeStore } from './account-purge-fakes.ts';
+import { logUserTag } from '../../supabase/functions/_shared/log-tag.ts';
 
 export const A = 'aaaaaaaa-0000-4000-8000-000000000001';
 export const B = 'bbbbbbbb-0000-4000-8000-000000000002';
@@ -17,6 +18,9 @@ export const DAY = 86_400_000;
 export const H = 3_600_000;
 export const CRON = 'test-cron-secret-0123456789abcdef-xyz';   // ≥ 32 字节
 export const HASH_SECRET = 'test-signup-hash-secret';
+/** 日志认人的 HMAC 密钥（_shared/log-tag.ts，安全审查第 11 条）；断言里用 logTag(uid) 算出日志里那一段 */
+export const LOG_SECRET = 'test-log-secret';
+export const logTag = (uid: string): Promise<string> => logUserTag(LOG_SECRET, uid);
 
 export interface Profile { disabled_at: string | null; disabled_reason: string | null; ui_locale: string; current_tz: string }
 export interface Pending { purge_after: string; notice_sent: boolean; purge_started_at: string | null; /** PURGE-date-cursor（迁移 20261105130000） */ backups_done_through?: string | null }
@@ -302,6 +306,7 @@ export function purgeDeps(db: FakeDb, r2: R2, backups: FakeBackups, box: Outbox[
     sendMail: mailer(box),
     tzLabel,   // 和 index.ts 注入的是同一份（shared/i18n/tz-label.ts）
     hashSecret: HASH_SECRET,
+    logSecret: LOG_SECRET,
     now: db.clock.now,
     log: (c) => logs.push(c),
     logs,

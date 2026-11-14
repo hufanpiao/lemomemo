@@ -57,7 +57,7 @@ export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
   fn_ai: {
     'private.vault:SELECT': ['user_id', 'pin_epoch'],
     'private.heartbeat:SELECT': ['name', 'at', 'detail'],   // upsert 心跳要读（20261104140000，HEARTBEAT 选项 A）；策略 fn_ai_own 只放自己三个名字
-    // date、time、tz、undone / due、due_time、done、undone / created_at、undone：20261115050000，B4b-3 ai-summarize 送时间、排除撤销的
+    // date、time、tz、undone / due、due_time、done、undone / created_at、undone：20261115070000，B4b-3 ai-summarize 送时间、排除撤销的
     'public.events:SELECT': ['id', 'user_id', 'title', 'note', 'location', 'deleted_at', 'date', 'time', 'tz', 'undone'],
     'public.todos:SELECT': ['id', 'user_id', 'title', 'note', 'deleted_at', 'due', 'due_time', 'done', 'undone'],
     'public.notes:SELECT': ['id', 'user_id', 'title', 'body', 'body_enc', 'enc_key_id', 'is_private', 'category_id', 'deleted_at', 'created_at', 'undone'],
@@ -97,6 +97,7 @@ export const FUNCTION_EXEC: Record<'anon' | 'authenticated' | 'service_role' | '
     'remind_due', 'remind_pushed',   // B2 迁移 20261103140000（BE-2 安全审查必改 1）：push-dispatch 第 1 步到点、resolve 候选的精确判断
     'push_heartbeat_write',   // B2 迁移 20261105140000（REMIND-poison-atomic）：push-dispatch 写心跳，queue_poison 原子累加
     'ai_quota_take', 'ai_quota_refund', 'intake_insert',   // B3 迁移 20261107100000：AI 额度原子预扣、退回；claude-intake 三张表一个事务写完
+    'api_token_create',   // 安全审查第 12 条迁移 20261115061000：token-admin 建连接码，按人咨询锁里数个数、take_rate、插入一次做完
     'ai_classify_pending',   // B4 迁移 20261110121000（代码审查 11-10 必改 1）：ai-classify 按人取待分类的随手记
     'security_events'],   // R-382 迁移 20261111120000：usage-report 读最近 15 分钟 sfate-capped、pwrevoke-fail 两个计数
   fn_vault: ['purge_vault_impl', 'tags_ok'],

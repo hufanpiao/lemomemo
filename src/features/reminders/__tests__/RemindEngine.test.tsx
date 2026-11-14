@@ -200,6 +200,26 @@ describe('横幅手势与引擎（代码审查补漏测）', () => {
     expect(closeHandled).toHaveBeenCalledTimes(2);
   });
 
+  it('审查第 16 条（两段 effect 合成一段）：本机还没拉到行时不关、回前台也不关；拉到行先关一次，之后回前台再关', () => {
+    const rows = data.events ?? [];
+    data.events = [];
+    const { rerender } = render(<RemindHost route="today" />);
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(closeHandled).toHaveBeenCalledTimes(0);
+    data.events = [...rows];
+    rerender(<RemindHost route="today" />);
+    expect(closeHandled).toHaveBeenCalledTimes(1);
+    data.events = [...rows];
+    rerender(<RemindHost route="today" />);
+    expect(closeHandled).toHaveBeenCalledTimes(1);
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(closeHandled).toHaveBeenCalledTimes(2);
+  });
+
   it('跨分钟：不靠外部通知，整分钟计时器到了自己刷新', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     nowMs = at('15:14') + 30_000;

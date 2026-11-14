@@ -15,7 +15,6 @@ export const ko: Readonly<Record<keyof typeof zh, string>> = {
   'now.hint': '다음 {t} {title} · {d} 후', // 视觉稿 KT.ko
   'now.done': '오늘 일정이 모두 끝났어요', // REVIEW(ko)
   'now.doneNext': '내일 {t} {title}', // REVIEW(ko)
-  'now.empty': '오늘은 일정이 없어요', // REVIEW(ko)
   'dur.hm': '{h}시간 {m}분', // 视觉稿 kDur
   'dur.h': '{h}시간', // 视觉稿 kDur
   'dur.m': '{m}분', // 视觉稿 kDur

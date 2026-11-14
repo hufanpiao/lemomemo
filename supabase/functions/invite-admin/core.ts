@@ -11,10 +11,12 @@
 // 日志只记错误码（A23）：不打印请求头、请求体、邀请码、备注。
 
 import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
+import { readJsonObjectCapped } from '../_shared/body.ts';
 import { inviteCodeHash, randomInviteCode } from '../_shared/invite-code.ts';
 import { json } from '../_shared/http.ts';
+import { utcDayKey } from '../_shared/rate-key.ts';
 import { StoreTimeout } from '../_shared/store-timeout.ts';
-import { blockedMin, upgradeRequiredResponse } from '../_shared/version-gate-core.ts';
+import { versionBlock } from '../_shared/version-gate-core.ts';
 
 // ---------------- 常量（出处见行尾） ----------------
 export const INVITE_DAILY_LIMIT = 20;          // 每人每天 20 次（第 6 节函数表 invite-admin）
@@ -84,14 +86,9 @@ export interface Deps {
 // ---------------- 小工具 ----------------
 const err = (status: number, code: InviteAdminErr) => json(status, { error: code });
 
-/** UTC 日期 yyyymmdd（计数键第三段；和 invite-signup、account 同一写法） */
-export function utcDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');
-}
-
 /** 计数键（附录 A 的三段格式；得过 counters 的 check 约束，单测核对） */
 export const keys = {
-  create: (uid: string, ms: number) => `invite-admin:${uid}:${utcDate(ms)}`,
+  create: (uid: string, ms: number) => utcDayKey('invite-admin', uid, ms),
 };
 
 // eslint-disable-next-line no-control-regex -- 就是要拒绝控制字符（C0 含 U+0000、DEL、C1）
@@ -113,29 +110,6 @@ export function parseNote(v: unknown): string | null | 'bad' | 'too_long' {
   const s = v.trim();
   if (!s) return null;
   return [...s].length > NOTE_MAX ? 'too_long' : s;
-}
-
-async function readBody(req: Request): Promise<Record<string, unknown> | null> {
-  const text = await req.text().catch(() => null);
-  if (text === null || text.length > MAX_BODY) return null;
-  try {
-    const v: unknown = JSON.parse(text);
-    return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
-// ---------------- 版本门（第 6 节：函数里的第二道；口径同 functions/sb/version-gate.ts，比较用 _shared/version-gate-core.ts） ----------------
-async function versionBlock(req: Request, store: InviteStore): Promise<Response | null> {
-  let min: string | null;
-  try {
-    min = await store.minClientVersion();
-  } catch {
-    return null;   // 读配置失败就放行（同转发层、invite-signup）
-  }
-  const b = blockedMin(min, req.headers.get('x-app-version'));
-  return b === null ? null : upgradeRequiredResponse(b);
 }
 
 // ---------------- create ----------------
@@ -185,11 +159,11 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     // ② 只有管理员（R-83）。不是管理员的请求不读配置、不读请求体、不计次数
     if (!(await deps.store.isAdmin(userId))) return err(403, 'not_admin');
     // ③ 版本门（不在免查名单里，一律查）
-    const blocked = await versionBlock(req, deps.store);
+    const blocked = await versionBlock(req, () => deps.store.minClientVersion());   // 第 6 节：函数里的第二道，读配置失败放行
     if (blocked) return blocked;
 
-    const body = await readBody(req);
-    if (!body) return err(400, 'bad_request');
+    const body = await readJsonObjectCapped(req, MAX_BODY);   // 边读边计字节，超了中断（安全审查第 2 条）
+    if (body === null || body === 'too_large') return err(400, 'bad_request');
     if (body.action === 'create') return await create(body, userId, deps);
     if (body.action === 'list') return await list(userId, deps);
     return err(400, 'bad_request');

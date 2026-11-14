@@ -54,7 +54,7 @@ describe('routeOf', () => {
 });
 
 describe('技术页（机型信息页；倾斜授权试验页 R-373 已删除）在 /app/ 作用域外的 /diag/（SW-update ③）', () => {
-  it('/diag/ 下的导航和子资源一律直连，不进 lemo-nav 也不进任何缓存', () => {
+  it('/diag/ 下的导航和子资源一律直连，不进任何缓存', () => {
     for (const p of ['/diag/startup.html', '/diag/startup']) {
       expect(r(p, 'GET', 'navigate'), p).toBe('bypass');
     }

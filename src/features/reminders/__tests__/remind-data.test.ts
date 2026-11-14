@@ -148,7 +148,7 @@ describe('TC-B2-64：本机通知文案和推送同一份 notify-text（日程�
 describe('打开 App 时关掉已处理的系统通知', () => {
   const now = at(DAY, '16:05');
   const due = at(DAY, '16:00');
-  it('处理了、改了时间的关；还在响的不关；本机没有这一行的不动；纪念日不动', () => {
+  it('处理了、改了时间的关；还在响的不关；本机没有这一行的不动（纪念日同）', () => {
     const live = allReminders([], [todoRow()], now, SEOUL);
     expect(shouldCloseShown({ kind: 'todo', id: ID, dueAt: due }, live, true)).toBe(false);
     expect(shouldCloseShown({ kind: 'todo', id: ID, dueAt: due - 60_000 }, live, true)).toBe(true);
@@ -157,7 +157,8 @@ describe('打开 App 时关掉已处理的系统通知', () => {
     const done = allReminders([], [todoRow({ done: true })], now, SEOUL);
     expect(shouldCloseShown({ kind: 'todo', id: ID, dueAt: due }, done, true)).toBe(true);
     expect(shouldCloseShown({ kind: 'todo', id: ID, dueAt: due }, [], false)).toBe(false);
-    expect(shouldCloseShown({ kind: 'anniv', id: ID, dueAt: due }, [], true)).toBe(false);
+    // 纪念日和日程同一套（审查第 8 条，详见 close-occkey.test.ts）：本机没这一行不动
+    expect(shouldCloseShown({ kind: 'anniv', id: ID, dueAt: due }, [], false)).toBe(false);
   });
   it('tag 规则和推送一致', () => {
     expect(reminderOf('todo', todoRow(), now, SEOUL)?.tag).toBe(reminderTag('todo', ID, due));

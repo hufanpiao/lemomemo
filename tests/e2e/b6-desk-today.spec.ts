@@ -5,7 +5,7 @@
 //   ⑩ 右栏的块全收起：右栏不画（不留空栏），左栏占满；同一时间只有一个撤销条（“布局已保存”和删除的“已删除 · 撤销”不叠在一起）
 //   ⑪ “＋”气泡（前 3 次打开出）在侧栏“＋”右边、整块在视口里，三角朝左
 //   ⑫ 已过去折成一行（线框 s1“已过去的折叠成一行”）：结束了的日程不在列表里，点这一行展开、再点收起；手机宽度同样折
-//   ⑬ “今天记的”里点一条：在今天页的详情抽屉里打开（不换页），Esc 关上焦点回到那一行
+//   ⑬ “今天记的”里点一条：在今天页打开随手记页同一个抽屉 note-drawer（不换页），Esc 关上焦点回到那一行
 //   ⑭ 列表里删掉抽屉开着的那一条：抽屉一起关（独立评审第 11 条）
 // 评审截图（设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截）：今天页（含抽屉打开）、随手记页（含抽屉），1280×800、1440×900，浅色、深色
 // 点按前等 FADE_GUARD_MS（页面分包挂上后这段时间里落在 main 里的点按按设计吞掉）
@@ -118,13 +118,13 @@ test.describe('B6 对齐线框：已过去、今天记的、删开着的那条',
     await expect(page.locator(`[data-open="${PAST_ID}"]`)).toHaveCount(0);
   });
 
-  test('⑬ “今天记的”点一条：今天页的详情抽屉里打开随手记，不换页；Esc 关上焦点回到那一行', async ({ page, browserName }) => {
+  test('⑬ “今天记的”点一条：今天页里打开随手记页同一个抽屉（note-drawer），不换页；Esc 关上焦点回到那一行', async ({ page, browserName }) => {
     await seedNotes(page);
     const row = page.getByTestId('today-notes').locator('[data-open]').first();
     await expect(row).toBeVisible({ timeout: 20_000 });
     await page.waitForTimeout(FADE_GUARD_MS);
     await row.click();
-    const drawer = page.getByTestId('today-drawer');
+    const drawer = page.getByTestId('note-drawer');
     await expect(drawer.getByTestId('note-edit-body')).toBeVisible({ timeout: 20_000 });
     await expect(drawer.getByTestId('note-edit-body')).toBeFocused();
     await expect(page).toHaveURL(/#\/today$/);

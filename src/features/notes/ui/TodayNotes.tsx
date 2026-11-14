@@ -2,24 +2,26 @@
 // • 一行：随手记小图标 | 标题 | 时刻 · 分类；点了在今天页的详情抽屉里打开这一条（线框 s1“选中一条：详情抽屉从右边盖上来”，B6 对齐线框）；没有时写“今天还没记”
 // • 经 notes/index.ts 懒加载，只在电脑版今天页下载（手机今天页没有这一块）
 // • onCount：今天一共几条，交给今天页写进块标题“今天记的 2”（线框 NOTESTODAY；标题在 kit DeskLayout 里画，不在这个块里）
-// • 同一个懒加载入口按 part 画两样（同 today 的 TodayToasts）：'list' 是这一块，'edit' 是抽屉里的随手记编辑器（NoteEditPage 的 NoteEditor，
-//   再按需下载）；B4b-3 加 'thumb'：查找面板“最相关”里一张插图的缩略图（ui/note-thumb.tsx，再按需下载）；不在 notes/index.ts 另开一个入口，那个文件在主包里，多一个 lazy 首屏就多几十字节（首屏净增额度，build/first-screen-baseline.json）
-// • 抽屉的外壳（Esc、焦点、哪一边）是今天页的 TodayDrawer（kit DetailDrawer），选中哪一条由今天页管；行按钮带 data-open，抽屉关上时焦点找回这一行
+// • 同一个懒加载入口按 part 画三样（同 today 的 TodayToasts）：'list' 是这一块，'drawer' 是随手记页同一个 NoteDrawer（外壳和编辑器，再按需下载；
+//   挂起时落到今天页那一层 Suspense）；B4b-3 加 'thumb'：查找面板“最相关”里一张插图的缩略图（ui/note-thumb.tsx，再按需下载）；
+//   不在 notes/index.ts 另开一个入口，那个文件在主包里，多一个 lazy 首屏就多几十字节（首屏净增额度，build/first-screen-baseline.json）
+// • 选中哪一条由今天页管（kit useListActions.ts 的 useDrawerSel）；行按钮带 data-open，抽屉关上时焦点找回这一行
 import { lazy, Suspense, useEffect } from 'react';
 import { fmtTime } from '../../../../shared/i18n/fmt.ts';
 import list from '../../../kit/components/List.module.css';
 import row from '../../../kit/components/NoteRow.module.css';
 import { useNotesT } from '../hooks/useNotesT.ts';
 import { useTodayNotes } from '../hooks/useTodayNotes.ts';
+import type { NoteDrawerProps } from './NoteDrawer.tsx';
 
 const MAX = 5;
 
-const NoteEditor = lazy(() => import('./NoteEditPage.tsx').then((m) => ({ default: m.NoteEditor })));
+const NoteDrawer = lazy(() => import('./NoteDrawer.tsx').then((m) => ({ default: m.NoteDrawer })));
 const NoteThumb = lazy(() => import('./note-thumb.tsx'));
 
 export type TodayNotesProps =
   | { part: 'list'; onCount?(n: number): void; onOpen(id: string): void; selected: string | null }
-  | { part: 'edit'; id: string; onClose(): void }
+  | ({ part: 'drawer' } & NoteDrawerProps)
   | { part: 'thumb'; noteId: string; imageId: string };
 
 export default function TodayNotes(p: TodayNotesProps) {
@@ -30,13 +32,7 @@ export default function TodayNotes(p: TodayNotesProps) {
       </Suspense>
     );
   }
-  return p.part === 'edit' ? (
-    <Suspense fallback={null}>
-      <NoteEditor key={p.id} id={p.id} onClose={p.onClose} drawer />
-    </Suspense>
-  ) : (
-    <NotesToday {...p} />
-  );
+  return p.part === 'drawer' ? <NoteDrawer id={p.id} onClose={p.onClose} side={p.side} handle={p.handle} /> : <NotesToday {...p} />;
 }
 
 function NotesToday({ onCount, onOpen, selected }: Extract<TodayNotesProps, { part: 'list' }>) {

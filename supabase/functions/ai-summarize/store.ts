@@ -1,7 +1,7 @@
 // ai-summarize 的数据库查询（fn_ai，跑在 _shared/db.ts 的 withAiUser 事务里，app.uid 已设好，fn_own / fn_own_ai 策略只放本人的行）。
-// 用到的授权：0002、0003 的列级 select 加迁移 20261115050000（events.date、time、tz、undone，todos.due、due_time、done、undone，notes.created_at、undone）。
+// 用到的授权：0002、0003 的列级 select 加迁移 20261115070000（events.date、time、tz、undone，todos.due、due_time、done、undone，notes.created_at、undone）。
 // 只读没删（deleted_at is null）、没撤销（not undone）的；日子转成文字再出库（date 类型不经 JS 的 Date，免得按时区挪一天）。
-// 真库用例：supabase/tests/rls/59_ai_summarize_fn_ai_reads.test.sql 跑的就是这三句。
+// 真库用例：supabase/tests/rls/62_ai_summarize_fn_ai_reads.test.sql 跑的就是这三句。
 import type { Tx } from '../_shared/db.ts';
 import type { SummaryRow } from './core.ts';
 

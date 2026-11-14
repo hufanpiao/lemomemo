@@ -10,7 +10,7 @@
 //   按已提交那一行的数据密钥把对象重新加密写一遍（内容相同才写，见 repair），免得对象和行的密钥对不上。写行失败、行也不在就删掉刚写的对象。
 // • get：解密后直接回字节（no-store、nosniff）；full 时核对 HMAC(sha256)，对不上 500 corrupt。
 // • ms_preview：先删这个人之前的预览 → 生成随机路径 → 先登记 private.vault_preview → 再写 vault-preview（Supabase Storage）→ 签名链接；
-//   中途失败尽力删对象和登记。ms_preview_end：删对象和登记。
+//   中途失败尽力删对象和登记。ms_preview_end：删对象和登记；只验 JWT、不验 x-vault-token（审查第 4 条，见 enter 上面）。
 // • sweep：删过期登记的对象和登记；再删桶里早于“链接有效期 + 2 分钟”的对象（没登记的、或登记已过期的；没过期的登记一定比这年轻，
 //   因为先登记再写对象，所以不会误删正在用的预览）；写心跳 vault-file-sweep。
 // 日志只经 deps.log 记码，不记文件名、路径、签名链接、内容。
@@ -379,14 +379,21 @@ async function sweep(deps: Deps, store: Store, preview: Preview): Promise<Respon
 
 const isMultipart = (req: Request) => (req.headers.get('content-type') ?? '').toLowerCase().startsWith('multipart/form-data');
 
-/** JWT → 每分钟限流 → 令牌 → 配置齐了：过了回 Ctx，不过回响应 */
-async function enter(req: Request, deps: Deps): Promise<Ctx | Response> {
+/**
+ * JWT → 每分钟限流 → 令牌 → 配置齐了：过了回 Ctx，不过回响应。
+ * needToken = false 只给 ms_preview_end（审查第 4 条）：它只删这个人自己的临时明文副本，不读、不回任何内容，也造不出新副本，
+ * 拿着 JWT 的人本来就能注销账号删光数据，删自己的预览副本给不了他更多；要令牌反而让令牌过期（上锁）那一刻发的 end 被拒，
+ * 明文副本留到 300 秒有效期满、sweep 才删。所以只验 JWT（照旧过账号停用、会话吊销和限流），不降低安全性
+ */
+async function enter(req: Request, deps: Deps, needToken = true): Promise<Ctx | Response> {
   const auth = await deps.authenticate(req);
   if (!auth.ok) return auth.response;
   const uid = auth.user.userId;
   if (!(await deps.takeRate(utcMinuteKey('vault-file-min', uid, deps.now()), deps.rules.ratePerMin, 60))) return err(429, 'rate_limited');
-  const v = await deps.checkToken(uid, req.headers.get(VAULT_TOKEN_HEADER));
-  if (v.verdict !== 'ok') return err(401, v.verdict);
+  if (needToken) {
+    const v = await deps.checkToken(uid, req.headers.get(VAULT_TOKEN_HEADER));
+    if (v.verdict !== 'ok') return err(401, v.verdict);
+  }
   if (!deps.store || !deps.r2 || !deps.master) {
     deps.log('misconfigured');
     return err(503, 'try_later');
@@ -416,7 +423,7 @@ async function dispatch(req: Request, deps: Deps): Promise<Response> {
     }
     return await sweep(deps, deps.store, deps.preview);
   }
-  const c = await enter(req, deps);
+  const c = await enter(req, deps, r.action !== 'ms_preview_end');
   if (c instanceof Response) return c;
   switch (r.action) {
     case 'list': return await list(c, r.note_id);
