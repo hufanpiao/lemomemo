@@ -40,7 +40,7 @@ export const FUNCTION_VERSION_EXEMPTIONS: readonly FunctionExemption[] = [
   // B4b-1：vault-file 也不进——upload 写同步表 note_files（旧版不该写新形状的行），PPT 预览也不是“旧版必须能用”的功能；
   //   pg_cron 带 x-cron-secret 调的 sweep 由函数入口按请求头跳过版本门（同 file-check），不用在这里免
   { name: 'vault-image', methods: ['POST'], caller: 'client', why: 'vault-images-on-old-clients' },
-  // B4b-2：note-search 只读（只回 id 和分数，不写任何表；架构第 6 节免查名单“note-search、ai-summarize、vault-image 这类只读函数”）；鉴权照旧由 JWT 管
+  // B4b-2：note-search 只读（只回 id 和分数，不写任何表；架构第 6 节免查名单“note-search、vault-image 这类只读函数”；ai-summarize 调模型、扣次数，B4b-3 定为要查）；鉴权照旧由 JWT 管
   { name: 'note-search', methods: ['POST'], caller: 'client', why: 'read-only-search' },
   // B4b-2：ai-embed 每 2 分钟由 pg_cron 调、带 x-cron-secret（架构第 6 节 ai-embed 行）
   { name: 'ai-embed', methods: ['POST'], caller: 'server', why: 'cron-x-cron-secret' },
