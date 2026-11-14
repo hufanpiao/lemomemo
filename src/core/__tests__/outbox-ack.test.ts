@@ -160,3 +160,26 @@ describe('L10：insert 被撤销抵消时，依赖它的项一起抵消', () => 
     expect(outbox.getStatus().pending).toBe(1);
   });
 });
+
+describe('后端-10（第三方审查）：新建行回执丢了重发，回读到的 rev 已经被本机拉到', () => {
+  it('本机 server 副本 rev ≥ 回执 rev：原样留着拉到的那一版，不拿新建时的旧数据盖掉', async () => {
+    const { cache, outbox } = await setup();
+    await outbox.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: { ...todo(1), id: uid(1) } });
+    const a = await outbox.next();
+    // 第一次发出的回执丢了；这期间别的设备改了标题（rev 7），本机先拉到了这一版
+    await outbox.applyServer('todos', [{ row: { ...todo(1), id: uid(1), title: '别人改的', rev: 7 } }]);
+    // 重发：服务器上已经有这一行，按 id 回读到 rev 7
+    await outbox.ack(a?.op_id ?? '', { status: 'ok', rev: 7, prev_rev: null });
+    const r = await cache.getRow('todos', uid(1));
+    expect(r?.server).toMatchObject({ title: '别人改的', rev: 7 });
+    expect(r?.view).toMatchObject({ title: '别人改的' });
+  });
+
+  it('本机没拉到过（没有 server 副本）：照旧用新建的数据加回执 rev', async () => {
+    const { cache, outbox } = await setup();
+    await outbox.enqueue({ table: 'todos', id: uid(2), op: 'insert', data: { ...todo(2), id: uid(2) } });
+    const a = await outbox.next();
+    await outbox.ack(a?.op_id ?? '', { status: 'ok', rev: 1, prev_rev: null });
+    expect((await cache.getRow('todos', uid(2)))?.server).toMatchObject({ title: '待办2', rev: 1 });
+  });
+});

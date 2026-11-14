@@ -81,7 +81,10 @@ export async function ackImpl(ctx: Ctx, opId: string, ack: AckResult): Promise<v
     if (sent.op === 'insert') {
       // 新建时 old 传 null：真库 INSERT 不清这几列。本机若已有旧 server 副本（新建的回执丢了、重发，审查 L1），
       // 副本里旧的 pushed_for、notified_for 等会原样带进来、不清，等下一次拉取整行替换时纠正
-      nextServer = { ...mergeWithServerResets(table, null, { ...(server ?? {}), ...sent.data }), id, rev: ack.rev } as ServerRow;
+      // 回读到的 rev 本机已经拉到过（server.rev ≥ ack.rev，第三方审查后端-10）：拉到的那一版已经含这次新建，原样留着；
+      // 再叠 sent.data 会把别的设备在这期间的修改盖回新建时的样子，而 rev 一样、增量拉取不会再纠正
+      const pulled = server !== null && typeof server['rev'] === 'number' && server['rev'] >= ack.rev;
+      nextServer = pulled ? server : ({ ...mergeWithServerResets(table, null, { ...(server ?? {}), ...sent.data }), id, rev: ack.rev } as ServerRow);
       own = [];
     } else if (server && ack.prev_rev !== null && ack.prev_rev === sent.base_rev) {
       nextServer = { ...mergeWithServerResets(table, server, appliedColumns(sent, ack)), rev: ack.rev } as ServerRow;
