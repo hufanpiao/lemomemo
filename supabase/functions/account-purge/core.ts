@@ -192,30 +192,20 @@ export interface Ops { n: number }
 const PAGE = 1000;   // index.ts 列、删每次最多 1000 个
 type FullDeps = Deps & { store: PurgeStore; r2: R2; backups: Backups };
 
-/** 同一套依赖，每次调用给 ops 记数；两段各用一份，互不挤占 */
+/** 对象上的每个方法（含原型上的）调一次给 ops 记一次；属性原样透出，this 仍是原对象（安全审查第 10 条：PurgeStore 以后加方法不用再来这里补） */
+export function countCalls<T extends object>(obj: T, ops: Ops): T {
+  return new Proxy(obj, {
+    get(target, key) {
+      const v: unknown = Reflect.get(target, key, target);
+      if (typeof v !== 'function') return v;
+      return (...a: unknown[]) => { ops.n++; return (v as (...x: unknown[]) => unknown).apply(target, a); };
+    },
+  });
+}
+
+/** 同一套依赖，每次调用给 ops 记数；两段各用一份，互不挤占。store 每个方法一次（countCalls）；R2、backups 按分页折算 */
 function countedDeps(d: FullDeps, ops: Ops): FullDeps {
-  // 每个方法一次（逐个列出：PurgeStore 加了方法，这里不写 TypeScript 就报缺字段）
-  const c = <A extends unknown[], R>(f: (...a: A) => Promise<R>) => (...a: A): Promise<R> => { ops.n++; return f(...a); };
-  const s = d.store;
-  const store: PurgeStore = {
-    listRemind: c(s.listRemind.bind(s)),
-    casNotice: c(s.casNotice.bind(s)),
-    postponeNotice: c(s.postponeNotice.bind(s)),
-    listDue: c(s.listDue.bind(s)),
-    claim: c(s.claim.bind(s)),
-    release: c(s.release.bind(s)),
-    stillClaimed: c(s.stillClaimed.bind(s)),
-    backupsCursor: c(s.backupsCursor.bind(s)),
-    saveBackupsCursor: c(s.saveBackupsCursor.bind(s)),
-    isAdmin: c(s.isAdmin.bind(s)),
-    profile: c(s.profile.bind(s)),
-    deletePendingSignup: c(s.deletePendingSignup.bind(s)),
-    deleteCounterKey: c(s.deleteCounterKey.bind(s)),
-    deleteUserCounters: c(s.deleteUserCounters.bind(s)),
-    insertDeletedAccount: c(s.insertDeletedAccount.bind(s)),
-    remainingRows: c(s.remainingRows.bind(s)),
-    writeHeartbeat: c(s.writeHeartbeat.bind(s)),
-  };
+  const store = countCalls(d.store, ops);
   const pages = (n: number) => 1 + Math.floor(n / PAGE);
   return {
     ...d,
