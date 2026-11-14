@@ -1,6 +1,6 @@
 // K8 网络一侧（supabase-js）：错误归类、令牌检查、Realtime 只订阅 INSERT / UPDATE（TC-B1-29）、apply_patch 参数、insert 重发读回 rev、
 // report_tz 的 rate_limited 不当错误（K8-tz-rl）
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { classifyFailure } from '../../outbox-logic.ts';
 import { createTzReporter, TZ_MIN_INTERVAL_MS } from '../report-tz.ts';
@@ -224,5 +224,17 @@ describe('report_tz（4.6、K8-tz-rl）', () => {
     });
     expect(await bad.report(true)).toEqual({ kind: 'error', code: 'device_mismatch' });
     expect(logs).toEqual([['report_tz_failed', { code: 'device_mismatch' }]]);
+  });
+
+  it('默认时区用 core/current-tz.ts 的 deviceTz（同一份读法）：Intl 读不出、读出无效名都退回默认，不抛、不报坏名', async () => {
+    const sent: string[] = [];
+    const r = createTzReporter({ transport: { reportTz: (tz) => (sent.push(tz), Promise.resolve({ ok: true, value: 'unchanged' })) }, deviceId: () => 'dev', platform: 'web' });
+    const spy = vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => ({ resolvedOptions: () => ({ timeZone: 'Not/AZone' }) }) as unknown as Intl.DateTimeFormat);
+    try {
+      expect(await r.report(true)).toMatchObject({ kind: 'reported' });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(sent).toEqual(['Asia/Seoul']);
   });
 });
