@@ -1,6 +1,6 @@
 // exe 里本机会话出问题时的整屏提示的挂载和订阅（从 ExitIncompleteScreen.tsx 拆出，11-05 首屏瘦身，主持人定第 4 项）：
 // 组件本体（ExitIncompleteScreen.tsx，约 0.8 KB gzip）只在真要挂出时才下载，首屏只带这里的挂载、订阅。
-// • 挂出时马上建好宿主、给 #root 加 inert（底下的账号界面立刻点不到，不等下载；安全复审建议 ②），下载好再画组件；
+// • 挂出时马上建好宿主、入层栈（#root 等 inert：底下的账号界面立刻点不到，不等下载；安全复审建议 ②），下载好再画组件；
 // • 下载失败（分包坏了、取不到）：画已经在首屏里的静态兜底 AppCrashFallback（“哎呀，卡住了 · 刷新一下”，刷新即重新载入），
 //   不留一层空白挡住页面。按钮文案和“退出没完成，点重试”不同，只在“整屏提示本该出现 + 它的分包又取不到”同时发生时出现；
 // • 下载期间就卸掉（晚到的删除成功等）：下载好也不再画。
@@ -12,6 +12,9 @@ import type { ExitIncompleteScreen } from './ExitIncompleteScreen.tsx';
 
 export type ExitScreenKind = 'incomplete' | 'unavailable';
 
+/** 层栈不在首屏，按需下载 */
+const loadLayers = () => import('../kit/hooks/layers.ts');
+
 type ScreenModule = { ExitIncompleteScreen: typeof ExitIncompleteScreen };
 const loadScreen = (): Promise<ScreenModule> => import('./ExitIncompleteScreen.tsx');
 
@@ -22,12 +25,23 @@ export function mountExitScreen(kind: ExitScreenKind, doc: Document = document, 
   const host = doc.createElement('div');
   host.setAttribute('data-exit-screen-host', kind);
   doc.body.appendChild(host);
-  // 底下的账号界面不可交互（本来就 inert 的不动、卸掉时也不去掉）
+  // 整屏提示是层栈（kit/hooks/layers.ts）里的模态层：底下的账号界面和别的浮层都 inert（本来就 inert 的不动、卸掉时也不去掉），
+  // Esc 只拦下不关，焦点由组件自己放到按钮上。层栈不在首屏（11-14 首屏 150 KB 预算），下载到了才入栈：
+  // 启动时挂的两处（main.tsx：读不到凭据、退出没完成）#root 还没画任何东西，后面没有能点的；画出界面以后才挂的那一处（watchExitIncomplete）开始盯时就先下载好。
+  // 但 #root 仍在挂出时当场同步 inert（安全复审建议 ②“不等下载”）：层栈下载慢或失败（断网）时，底下的账号界面也点不到、Tab 走不到。
+  // 层栈不碰别处设的 inert，两者不打架；卸掉时只撤这里自己加的
   const app = doc.getElementById('root');
   const wasInert = app?.hasAttribute('inert') ?? true;
   if (app && !wasInert) app.setAttribute('inert', '');
   let root: Root | null = null;
   let gone = false;
+  let pop: (() => void) | null = null;
+  loadLayers().then(
+    (m) => {
+      if (!gone) pop = m.pushLayer(() => ({ name: 'exit-screen', modal: true, el: () => host, back: () => [] })).pop;
+    },
+    () => undefined,
+  );
   void load().then(
     ({ ExitIncompleteScreen: Screen }) => {
       if (gone) return;
@@ -43,8 +57,9 @@ export function mountExitScreen(kind: ExitScreenKind, doc: Document = document, 
   return () => {
     gone = true;
     root?.unmount();
-    host.remove();
+    pop?.();
     if (app && !wasInert) app.removeAttribute('inert');
+    host.remove();
   };
 }
 
@@ -53,6 +68,7 @@ export function mountExitScreen(kind: ExitScreenKind, doc: Document = document, 
  * 挂着时删除状态回到 ok（晚到的删除成功）就整页重新载入。返回退订
  */
 export function watchExitIncomplete(doc: Document = document, reload: () => void = reloadPage): () => void {
+  loadLayers().catch(() => undefined);
   let unmount: (() => void) | null = null;
   const check = (): void => {
     if (!exitIncompleteShown()) return;

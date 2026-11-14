@@ -12,6 +12,7 @@ import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { CheckCircle } from '../../../kit/components/CheckCircle.tsx';
 import { enterCommits, FormGroup, TextInput } from '../../../kit/components/Form.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
+import { useLayer } from '../../../kit/hooks/useLayer.ts';
 import { ITEMS_MAX, TODO_ITEM_TITLE_MAX, useSubtaskEditor } from '../hooks/useSubtaskEditor.ts';
 import type { Subtask } from '../hooks/useSubtasks.ts';
 import { useListT } from '../hooks/useTodoList.ts';
@@ -70,15 +71,15 @@ export default function SubtaskEditor({ todoId, todo, off }: SubtaskEditorProps)
     },
     onPointerCancel: () => setDrag(null),
     onKeyDown(e) {
-      if (e.key === 'Escape' && drag) {
-        e.preventDefault();
-        setDrag(null);
-      } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
         ed.move(i, e.key === 'ArrowUp' ? i - 1 : i + 1);
       }
     },
   });
+
+  // 拖动中是层栈里的一层（kit/hooks/layers.ts）：Esc 只在它是栈顶时放弃这次拖动，不连着关编辑页外面的抽屉
+  useLayer(drag !== null, { name: 'subtask-drag', onEsc: () => setDrag(null), back: () => [] });
 
   const done = items.filter(ed.shown).length;
   const total = items.length;

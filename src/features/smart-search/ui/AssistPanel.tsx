@@ -9,13 +9,13 @@
 // • 取消、改期、完成：候选每条一个按钮（批量改期默认全勾、一个按钮）；没候选写“没找到对应的条目”加“去日历里找”；
 //   泛指词的取消、标完成写“请在列表里操作”；写完出“已取消：…”和“撤销”；说了“相关待办”加一句“相关的待办请在列表里删”
 // • 底部永远有“改成记下”（取消改期完成叫“都不是 · 按原话记下”，req.record 为 null 时不出：从提示条打开的已经存过了）和“关掉”
-// • 焦点锁定、Esc、读屏标注用 Radix Dialog（同 FindPanel），滚动锁 useScrollLock
+// • 焦点锁定、读屏标注用 Radix Dialog（同 FindPanel）；Esc、滚动锁、后面 inert、还焦点用 kit 的层栈（useLayer）
 // • 运行日志：assist open / close（意图、从哪来、开了多久）、assist record；数据那边的见 hooks/useAssist.ts
 import * as RD from '@radix-ui/react-dialog';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
-import { useScrollLock } from '../../../kit/components/Dialog.tsx';
+import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -67,7 +67,6 @@ export default function AssistPanel({ req, onClose }: { req: AssistReq; onClose(
   const desk = useMedia(MQ_SIDEBAR);
   const s = useAssist(req.ask, req.exclude);
   const [sumAsked, setSumAsked] = useState(req.ask.intent === 'summarize');
-  useScrollLock(true);
   useEffect(() => {
     const t0 = clock.now();
     rlog(`assist open intent=${req.ask.intent} from=${req.from} ai=${req.aiUsed} raw=${req.raw === '' ? 0 : 1}`);
@@ -93,6 +92,7 @@ export default function AssistPanel({ req, onClose }: { req: AssistReq; onClose(
   };
   const [basisOpen, setBasisOpen] = useState(true);
   const content = useRef<HTMLDivElement>(null);
+  useLayer(true, { name: 'assist', modal: true, el: () => content.current, onEsc: onClose });
 
   // 用了几次 AI：判断（plus 交来的 aiUsed）+ 总结（成功才算，失败服务器退回次数）；今天的用量读到了才接后半句
   const judgeN = req.aiUsed;
@@ -213,6 +213,7 @@ export default function AssistPanel({ req, onClose }: { req: AssistReq; onClose(
             e.preventDefault();
             content.current?.focus({ preventScroll: true });
           }}
+          onCloseAutoFocus={prevent}
           data-testid="assist-panel"
           data-intent={req.ask.intent}
         >

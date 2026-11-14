@@ -33,13 +33,14 @@
 //   按钮变“查找”，回车或按钮打开查找面板（useTypeBar 的 openFind → hooks/assist-open 的 toAssist → smart-search 的 openAssist）、清掉这句字、收起打字条（有提示条时只收打字条）；
 //   点“找：…”那张卡 = 改成记下（这一句照旧记下，下面一行提示怎么改）。运行日志 typebar find len=（只记字数）
 // • 文字一律经 t()（A20）；按钮用 kit 的 FormButton，输入框用 kit Form 的 .input（G11 输入框令牌、触屏 16px）
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type FormEvent, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type FormEvent, type PointerEvent } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import form from '../../../kit/components/Form.module.css';
 import { Mist } from '../../../kit/components/Mist.tsx';
-import { useKeys } from '../../../kit/hooks/useKeys.ts';
+import { useKeys } from '../../../kit/hooks/layers.ts';
+import { useLayer } from '../../../kit/hooks/useLayer.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, keepFieldFocus } from '../../../platform/viewport.ts';
@@ -208,12 +209,9 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     }
     void s.submit();
   };
-  // Esc 只关打字条：标成已处理，外面的详情抽屉（DetailDrawer 在 window 上听 Esc、跳过 defaultPrevented）就不跟着关（独立评审第 1 条）
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key !== 'Escape') return;
-    e.preventDefault();
-    close();
-  };
+  // 打字条画着（没收起）就是层栈里的一层（kit/hooks/layers.ts，非模态）：Esc 只在它是栈顶时收起，外面的详情抽屉不跟着关（独立评审第 1 条）；
+  // 焦点不由层栈还（收起时 close 自己收键盘）
+  useLayer(!folded, { name: 'typebar', onEsc: () => live.current.close(), back: () => [] });
   const grip = useGripClose(close);
 
   const first = s.preview[0];
@@ -255,7 +253,6 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
                     className={form.input}
                     value={s.text}
                     onChange={(e) => s.setText(e.target.value)}
-                    onKeyDown={onKey}
                     onTouchStart={inPlaceTouchStart}
                     onTouchEnd={inPlaceTouchEnd}
                     placeholder={t('plus.type.ph', {})}

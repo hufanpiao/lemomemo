@@ -1,10 +1,10 @@
-// 窗口内快捷键（kit/hooks/useKeys.ts；架构 5.9；B3 S24）：
+// 窗口内快捷键（kit/hooks/layers.ts；架构 5.9；B3 S24）：
 // • mod = Ctrl 或 ⌘；带 Alt、Shift+mod 的不认
 // • 单字母键焦点在能打字的地方不生效（判断是 platform/env.ts 的 opensKeyboard，用例在 env-device.test.ts）；带 mod 的照常交给处理函数
 // • 处理函数返回 true 才阻止默认动作；别人已经接住的、输入法组字中的不管
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { keyName, useKeys, type KeyMap } from '../useKeys.ts';
+import { keyName, useKeys, type KeyMap } from '../layers.ts';
 
 afterEach(() => {
   cleanup();

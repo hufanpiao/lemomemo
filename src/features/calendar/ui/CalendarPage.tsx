@@ -17,17 +17,17 @@
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：日清单行尾“要新版本”标记；点日清单的行、电脑周视图的全天行和时间块都经 open() 拦下，
 //   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）；页顶（提示条上面）有带重复的只读行时出
 //   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner）
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { monthOf, weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
 import { navigate, replaceRoute, useRoute } from '../../../app/router.ts';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { annivOn } from '../../../kit/hooks/anniv-on.ts';
+import { useKeys } from '../../../kit/hooks/layers.ts';
 import { ReadonlyToast, RepeatBanner } from '../../../kit/components/ReadonlyRow.tsx';
 import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import { Appear } from '../../../motion/components.ts';
-import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { UnsyncedRemindHint } from '../../reminders/index.ts';
 import { useSwipePager } from '../../../motion/gestures.ts';
@@ -35,7 +35,7 @@ import { useCalendar } from '../hooks/useCalendar.ts';
 import { useCalHolidayChoice } from '../hooks/useCalSettings.ts';
 import { useCalViewT, type CalViewT } from '../hooks/useCalViewT.ts';
 import { useMonthFold } from '../hooks/useMonthFold.ts';
-import { watchAddClick } from '../hooks/new-date.ts';
+import { useNewDateSource } from '../hooks/new-date.ts';
 import { weekTitle } from './week-axis.ts';
 import styles from './CalendarPage.module.css';
 import { CalNav, FoldHandle } from './CalNav.tsx';
@@ -67,27 +67,7 @@ function holShortKey(v: 'cn' | 'kr' | 'both'): 'cal.set.holShort.cn' | 'cal.set.
   }
 }
 
-/** 键盘翻页不该生效的时候：焦点在能打字的地方、页面上有浮层或弹窗、按着修饰键 */
-function keyBlocked(e: KeyboardEvent): boolean {
-  if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return true;
-  if (opensKeyboard(e.target)) return true;
-  return document.querySelector('[role="dialog"]') !== null;
-}
-
 const GRID_ID = 'cal-month-grid';
-
-/** 挂一个 keydown 监听（只挂一次），处理函数每次渲染换成最新的 */
-function useKeydown(fn: (e: KeyboardEvent) => void): void {
-  const ref = useRef(fn);
-  useEffect(() => {
-    ref.current = fn;
-  });
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => ref.current(e);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-}
 
 /** 手机上年月选择器后面的遮罩（挂在 body 上，比浮层低一层；设计复审 N1） */
 function PickScrim() {
@@ -155,10 +135,8 @@ export default function CalendarPage() {
     model.view.mode === 'month' ? (model.cells?.some((c) => c.inMonth && c.date === d) ?? false) : weekDates(model.view.start).includes(d);
   const selected = picked !== null && inView(picked) ? picked : inView(model.today) ? model.today : null;
   const fold = useMonthFold(cal, selected, setPicked);
-  // 底栏“＋”新建日程带上选中的那天（FA-7 第 5 项，hooks/new-date.ts）
-  const sel0 = useRef(selected);
-  sel0.current = selected;
-  useEffect(() => watchAddClick(() => sel0.current), []);
+  // 底栏“＋”、Ctrl+N 新建日程带上选中的那天（FA-7 第 5 项，hooks/new-date.ts）
+  useNewDateSource(selected);
 
   /** 翻一页（收起时翻一周）；翻不动返回 false */
   const turn = (n: -1 | 1): boolean => {
@@ -180,18 +158,15 @@ export default function CalendarPage() {
     if (!model.isCurrent) cal.goToday();
   };
 
-  // 键盘：← → 翻页、T 回今天（5.12 第 3 点；线框 s3 电脑版说明）；直接切换，不横滑
-  useKeydown((e) => {
-    if (picking || keyBlocked(e)) return;
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      e.preventDefault();
-      const n = e.key === 'ArrowLeft' ? -1 : 1;
-      if (fold.byWeek) fold.step(n);
-      else cal.keyShift(n);
-    } else if (e.key === 't' || e.key === 'T') {
-      goToday();
-    }
-  });
+  // 键盘：← → 翻页、T 回今天（5.12 第 3 点；线框 s3 电脑版说明）；直接切换，不横滑。
+  // 走 kit 层栈的快捷键入口（页面的键）：焦点在能打字的地方、按着修饰键、有弹层（模态层）开着时都收不到；年月选择器开着时不翻
+  const key = (act: () => void) => (): boolean => {
+    if (picking) return false;
+    act();
+    return true;
+  };
+  const shift = (n: 1 | -1) => key(() => (fold.byWeek ? fold.step(n) : cal.keyShift(n)));
+  useKeys({ ArrowLeft: shift(-1), ArrowRight: shift(1), t: key(goToday) });
 
   const lunarShort = model.lunar ? (d: DateStr) => model.lunar?.dayInfo(d).solarTerm ?? model.lunar?.dayInfo(d).lunar : undefined;
   const sel = selected;

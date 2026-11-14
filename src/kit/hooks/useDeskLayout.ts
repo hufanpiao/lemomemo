@@ -14,7 +14,7 @@ import { logEvent } from '../../../shared/core/log-bus.ts';
 import { settingValue } from '../../core/setting-read.ts';
 import { readInstallId } from '../../platform/device-info.ts';
 import { opensKeyboard } from '../../platform/env.ts';
-import { useKeys } from './useKeys.ts';
+import { useKeys } from './layers.ts';
 import { rlog } from '../../platform/run-log-api.ts';
 import { useSettingWriter } from './useSettingWriter.ts';
 import { readLayout, sameLayout, toStored } from '../components/DeskLayout/layout-model.ts';

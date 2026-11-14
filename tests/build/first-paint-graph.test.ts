@@ -113,6 +113,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/features/plus/ui/PlusSettings.tsx': '设置页里用：设置 › 语音与 AI、在 Claude 聊天里记事的首页值和二级页（B3 FA-4）',
   'src/app/UpdateBanner.tsx': '顶部版本横幅本体：有横幅要出时才下载（App.tsx 的 BannerGate，首屏瘦身 11-05）',
   'src/app/ExitIncompleteScreen.tsx': 'exe 里会话出问题的整屏提示：真要挂出时才下载（exit-screen.tsx，首屏瘦身 11-05）',
+  'src/kit/hooks/layers.ts': 'kit 层栈（11-14 层栈整块评审挪出首屏，150 KB 预算）：exit-screen.tsx 只在整屏提示真要挂出时、和 exe 里开始盯“退出没完成”时下载；页面里用到的（今天页电脑版等）随页面分包下载，体积由 e2e b2-first-screen-budget.spec.ts 按页面时钟算进 150 KB',
   'src/platform/push.ts': '断开浏览器推送：只在退出、被移除、换账号时下载（push-disconnect.ts，首屏瘦身 11-05）',
   'src/platform/push-claim.ts': '推送认领本体：首屏画完设好上下文、真要认领时才下载（首屏瘦身 11-05）',
   'src/features/reminders/ui/FailedCreateActions.tsx': '“未同步”提示条里记录比能重试的多时才下载（新建失败的“另存为新的一条”“放弃”，R-378）',

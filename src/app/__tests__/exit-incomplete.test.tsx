@@ -74,7 +74,7 @@ describe('退出没完成（A-1）', () => {
 });
 
 describe('整屏提示按需下载（11-05 首屏瘦身）', () => {
-  it('挂出时先加 inert，不等下载；下载失败画静态兜底“刷新一下”，点了重新载入', async () => {
+  it('挂出时 inert 当场同步加上（不等整屏提示、也不等层栈下载，安全复审建议 ②）；下载失败画静态兜底“刷新一下”，点了重新载入', async () => {
     const app = document.createElement('div');
     app.id = 'root';
     document.body.appendChild(app);
@@ -82,7 +82,7 @@ describe('整屏提示按需下载（11-05 首屏瘦身）', () => {
     act(() => {
       unmount = mountExitScreen('unavailable', document, () => Promise.reject(new Error('chunk')));
     });
-    expect(app.hasAttribute('inert')).toBe(true);
+    expect(app.hasAttribute('inert')).toBe(true);   // 同步：还没有任何 Promise 落地
     const fb = await screen.findByTestId('app-crash-fallback');
     expect(fb.textContent).toContain(zh['app.crashed.refresh']);
     fireEvent.click(screen.getByRole('button'));

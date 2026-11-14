@@ -20,7 +20,6 @@ import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } fro
 import { getBoot, type BootResult } from '../core/boot.ts';
 import { RemindHost } from '../features/reminders/index.ts';
 import { GlassBar } from '../kit/components/GlassBar/GlassBar.tsx';
-import { useKeys } from '../kit/hooks/useKeys.ts';
 import { useT } from '../kit/hooks/useT.ts';
 import { useUi } from '../kit/state/ui-store.ts';
 import { remindQueue, setRemindDown } from '../kit/state/remind-queue.ts';
@@ -37,7 +36,7 @@ import { navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from '.
 import { tabBarFor } from './tab-of.ts';
 import { PlusSlot, plusHold, preloadPlus } from './plus-slot.tsx';
 import type { DateStr } from '../../shared/core/date.ts';
-import { notesInput, setNewItemDay, setNewItemTitle, takeNewItemDay } from '../kit/state/new-item.ts';
+import { calendarSel, notesInput, setNewItemDay, setNewItemTitle } from '../kit/state/new-item.ts';
 
 // CSP 试验页（B0 第一项验证）：只在非正式版里挂。用构建期常量 import.meta.env.MODE（构建时替换成字面量），
 // 正式构建时 rollup 把试验页整块删掉（运行时的 isProduction 删不掉，块会留在正式产物里）；build/check_no_probe.mjs 断言正式产物里没有它
@@ -96,25 +95,16 @@ function TabBar({ route }: { route: RouteName }) {
   // 换页就收起（去改某一条、展开编辑也是换页）
   useEffect(() => setPlus(null), [route]);
   const bar = tabBarFor(route);
-  // 日历页在捕获阶段记下了选中的那天（calendar/hooks/new-date.ts），这里取走；别的页也取走（清掉旧的）
+  // 日历页：带上日历上选中的那天（日历页登记的 calendarSel，kit/state/new-item.ts）
   const open = (): void => {
     // 随手记页（R-380，线框“低 1”）：“＋”直接把光标放进页面底部的输入行，不开打字条（随手记页登记的原地聚焦，台账 Q-8）
     if (bar?.add === 'note') {
       notesInput.focus?.();
       return;
     }
-    const day = takeNewItemDay();
     opens.current += 1;
-    setPlus({ day: bar?.tab === 'calendar' ? day : null, n: opens.current });
+    setPlus({ day: bar?.tab === 'calendar' ? (calendarSel.day?.() ?? null) : null, n: opens.current });
   };
-  // Ctrl+N 打字记一条（S24）：有“＋”的页才接；开着时再按只让 opened 加 1（收起的会重新展开、聚焦）
-  useKeys({
-    'mod+n': () => {
-      if (!bar || !paged || bar.add === null) return false;
-      open(); // 收起（只剩提示条）时 plus 不为 null，也要靠 opened 加 1 重新展开（独立验证 11-11）
-      return true;
-    },
-  });
   if (!bar || !paged) return null;
   const { tab, add } = bar;
   if (add === null) return <GlassBar active={tab} later={afterAppPainted} />;

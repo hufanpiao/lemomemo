@@ -1,6 +1,6 @@
 // 电脑版详情抽屉的外壳（B4 视觉验收 A1 的随手记抽屉；B6 返工抽成 kit，随手记页、今天页共用一套。皮肤视觉稿 DK.mason / NOTE_ED：边上浮起的圆角面板）
-// • Esc 关（浮层 radix 开着时、输入法组字时不关；浮层那一下 radix 已 preventDefault，不另查页面上有没有浮层）；“×”由里面的编辑器放（DrawerClose），点了调 onClose
-// • 焦点：打开时记下原来的焦点，移到 initial 选出的元素（没有、或禁用了就移到抽屉本身）；关上（Esc、“×”、窗口变窄卸载）时还回去——
+// • Esc 关：抽屉是层栈（kit/hooks/layers.ts）里的一层，只在它是栈顶时关（上面开着浮层、打字条、弹层时先关那些；输入法组字时不关）；“×”由里面的编辑器放（DrawerClose），点了调 onClose
+// • 焦点：打开时（层栈入栈时）记下原来的焦点，移到 initial 选出的元素（没有、或禁用了就移到抽屉本身）；关上（Esc、“×”、窗口变窄卸载）时焦点在抽屉里、或掉到 body 就还回去（用户已经点到别处不抢）——
 //   一直是同一条就还给原来的元素（不在了再找这一条在列表里的按钮）；中途换过一条，先找当前这一条的按钮，找不到再退回原来的元素。
 //   列表里这一条的按钮统一认 data-open="<id>"（今天页、随手记页的行和卡片都带）；那一行也没了（删了、日子过了）退到页顶能接焦点的 h1（今天页的日期，tabIndex=-1），
 //   焦点不掉到 body（独立评审第 10 条）
@@ -10,6 +10,7 @@
 //   抽屉在电脑上可能开一整天，一直占着新版本永远不出（B6 独立评审第 12 条）；里面的编辑器在抽屉模式下自己不占（EditShell、NoteEditor）
 // • 在不在抽屉里只有一种判断：useInDrawer()（抽屉往里传 onClose；不在抽屉里是 null）。编辑器靠它决定画“×”还是“‹ 返回”、占不占 busy
 import { createContext, useContext, useEffect, useRef, useState, type FocusEvent, type ReactNode } from 'react';
+import { useLayer } from '../hooks/useLayer.ts';
 import { useHoldBusy } from '../hooks/useHoldBusy.ts';
 import styles from './DetailDrawer.module.css';
 
@@ -37,8 +38,6 @@ export interface DetailDrawerProps {
 
 export function DetailDrawer({ id, label, onClose, side, handle, initial, 'data-testid': testId, children }: DetailDrawerProps) {
   const box = useRef<HTMLElement>(null);
-  const opener = useRef<Element | null | undefined>(undefined);
-  if (opener.current === undefined) opener.current = document.activeElement;
   const [inside, setInside] = useState(false);
   useHoldBusy('editing', inside);
   /** 焦点去了抽屉外面（radix 浮层挂在 body 下，算抽屉里） */
@@ -69,23 +68,19 @@ export function DetailDrawer({ id, label, onClose, side, handle, initial, 'data-
     mo.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
     return () => mo.disconnect();
   }, [id, initial]);
-  // prettier-ignore
-  useEffect(() => () => {
-    const el = opener.current, now = cur.current;
-    const orig = el instanceof HTMLElement && el.isConnected && el !== document.body ? el : null;
-    const mine = rowOf(now);
-    (now === firstId.current ? orig ?? mine : mine ?? orig)?.focus();
-  }, []);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.isComposing || e.keyCode === 229) return;
-      // 浮层开着时 radix 的 DismissableLayer（1.2.1）在 document 捕获阶段先收到 Esc，关浮层前 preventDefault，这里看 defaultPrevented 就够
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
-      onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  // 抽屉是层栈里的一层（非模态，kit/hooks/layers.ts）：Esc 是栈顶时才关（上面开着浮层、打字条时先关那些）；关上时层栈按这里给的顺序还焦点
+  useLayer(true, {
+    name: 'drawer',
+    el: () => box.current,
+    onEsc: () => onClose(),
+    // opener：打开它的元素（useLayer 在第一次渲染时记，早于里面编辑器在 layout 阶段挪焦点）
+    back: (opener) => {
+      const now = cur.current;
+      const orig = opener instanceof HTMLElement && opener !== document.body ? opener : null;
+      const mine = rowOf(now);
+      return now === firstId.current ? [orig, mine] : [mine, orig];
+    },
+  });
   return (
     <aside
       ref={box}

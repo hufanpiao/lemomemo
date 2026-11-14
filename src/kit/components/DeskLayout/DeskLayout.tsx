@@ -12,6 +12,7 @@
 // • 运行日志在 kit/hooks/useDeskLayout.ts（kit 的组件不碰 platform）
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as RKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { DeskLayoutValue } from '../../../../shared/schema/layout.ts';
+import { useLayer } from '../../hooks/useLayer.ts';
 import { useDeskLayout, useDeskModeLog, useDeskUndoKey, type LayoutChange } from '../../hooks/useDeskLayout.ts';
 import { MQ_DESK_WIDE, useMedia } from '../../hooks/useMedia.ts';
 import { UndoToast } from '../UndoToast.tsx';
@@ -226,6 +227,17 @@ function useKeyDrag({ layout, shown, minFrac, canvas, canDrag, setDraft, say, sa
   useEffect(() => {
     if (held) canvas.current?.querySelector<HTMLButtonElement>(`[data-handle="${held.id}"]`)?.focus();
   }, [held, shown, canvas]);
+  // 拿着块（键盘挪动中）是层栈里的一层（kit/hooks/layers.ts）：Esc 只在它是栈顶时放下、回到拿起前的位置，不连着关外面的抽屉
+  useLayer(held !== null, {
+    name: 'desk-hold',
+    back: () => [],
+    onEsc: () => {
+      if (!held) return;
+      setHeld(null);
+      setDraft(null);
+      say('desk.cancelled', held.orig, held.id);
+    },
+  });
   const onKey = (id: string) => (e: RKeyboardEvent<HTMLButtonElement>) => {
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
@@ -239,14 +251,6 @@ function useKeyDrag({ layout, shown, minFrac, canvas, canDrag, setDraft, say, sa
         say('desk.dropped', shown, id);
         save(shown, 'move');
       }
-      return;
-    }
-    if (e.key === 'Escape' && held) {
-      e.preventDefault();
-      e.stopPropagation();
-      setHeld(null);
-      setDraft(null);
-      say('desk.cancelled', held.orig, id);
       return;
     }
     const dir = ARROWS[e.key];

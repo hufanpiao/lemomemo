@@ -71,7 +71,8 @@ describe('纪念日列表', () => {
   it('#/anniv/new 盖上新建一层，下面的列表不能点（inert）', async () => {
     open('#/anniv/new');
     expect(await screen.findByTestId('anniv-edit-layer')).toBeTruthy();
-    expect(screen.getByTestId('anniv-page').hasAttribute('inert')).toBe(true);
+    // 编辑层经 Portal 挂在 body 下，列表在 inert 的那一块里（kit 层栈只给 body 的直接子节点设 inert）
+    await waitFor(() => expect(screen.getByTestId('anniv-page').closest('[inert]')).not.toBeNull());
     await act(async () => undefined);
   });
 });

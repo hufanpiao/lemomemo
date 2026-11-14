@@ -12,6 +12,7 @@ import type { VaultApi, VaultFail, VaultResult } from '../data/vault-api.ts';
 import { installVaultSession, SHIELD_ATTR, watchLeave } from '../hooks/useVault.ts';
 import VaultPage from '../ui/VaultPage.tsx';
 import { applyLook } from '../../../platform/look.ts';
+import { useKeys } from '../../../kit/hooks/layers.ts';
 import { make } from './session-fakes.ts';
 
 vi.mock('../../../kit/hooks/useCollection.ts', () => ({ useCollection: () => [] }));
@@ -346,5 +347,32 @@ describe('审查第 1 条：令牌过期时解锁卡点“取消”，等着的�
       await new Promise((r) => setTimeout(r, 0));
     });
     expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(1);
+  });
+});
+
+describe('层栈整块评审第 1 条：锁屏是模态层，页面快捷键收不到；数字键只给锁屏里的键盘', () => {
+  it('锁着、输密码页：Ctrl+K 等页面的键不响应；数字键进锁屏的键盘；页面上另一个键盘收不到', async () => {
+    const page = vi.fn();
+    const behind = vi.fn();
+    function PageKeys() {
+      useKeys({ 'mod+k': () => (page(), true), '5': () => (behind(), true) });
+      return null;
+    }
+    s = session();
+    installVaultSession(s);
+    render(
+      <>
+        <VaultPage />
+        <PageKeys />
+      </>,
+    );
+    fireEvent.click(await screen.findByTestId('vault-unlock-pin'));
+    const dots = await screen.findByTestId('vault-unlock-pad-dots');
+    fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true });
+    expect(page).not.toHaveBeenCalled();
+    fireEvent.keyDown(document.body, { key: '5' });
+    expect(behind).not.toHaveBeenCalled();
+    expect(dots.getAttribute('data-n')).toBe('1');
+    expect(document.documentElement.classList.contains('scroll-locked'), '锁屏不锁滚动（取消时直接换页，webkit View Transition 崩溃）').toBe(false);
   });
 });
