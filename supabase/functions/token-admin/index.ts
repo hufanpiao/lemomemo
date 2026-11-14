@@ -4,7 +4,7 @@
 //   表上没有 insert 策略，只能由这里建，0001 第 10 节）、app_config（版本门）。不直连数据库，不碰 R2，不碰 AI。不加 CORS（0.48 第 4 条）。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { authResult, requireActiveUser } from '../_shared/auth.ts';
-import { versionGate } from '../_shared/version-gate.ts';
+import { appConfigMinLoader, versionGate } from '../_shared/version-gate.ts';
 import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { handle, json } from './core.ts';
 import { timedFetch } from '../_shared/net.ts';
@@ -20,11 +20,7 @@ Deno.serve(async (req) => {
     return json(500, { error: 'misconfigured' });
   }
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
-  const blocked = await versionGate('token-admin', req, async (signal) => {
-    const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
-    if (error) throw new Error('db');
-    return data?.min_client_version ?? null;
-  });
+  const blocked = await versionGate('token-admin', req, appConfigMinLoader(admin));
   if (blocked) return blocked;
   return handle(req, {
     authenticate: (r) => authResult(() => requireActiveUser(r, admin)),

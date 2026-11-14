@@ -75,6 +75,22 @@ export function upgradeRequiredResponse(min: string): Response {
   });
 }
 
+/**
+ * 版本门在 core.ts 里查时用（invite-signup、invite-admin；安全审查第 8 条收成这一份）：
+ * loadMin 读 min_client_version（index.ts 经 cachedMinClientVersion 注入，自带超时和缓存）；读失败放行（同转发层，不因为配置出错把人挡在外面）。
+ * 太旧回 426 响应，放行回 null。
+ */
+export async function versionBlock(req: Request, loadMin: () => Promise<string | null>): Promise<Response | null> {
+  let min: string | null;
+  try {
+    min = await loadMin();
+  } catch {
+    return null;
+  }
+  const b = blockedMin(min, req.headers.get(VERSION_HEADER));
+  return b === null ? null : upgradeRequiredResponse(b);
+}
+
 export interface FnGateOptions {
   exemptions: readonly Exemption[];
   now?: () => number;

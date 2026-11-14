@@ -13,7 +13,7 @@ import { postOut, timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { sendMail } from '../_shared/mail-send.ts';
-import { cachedMinClientVersion } from '../_shared/version-gate.ts';
+import { appConfigMinLoader, cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { handle, type AuthAdmin, type Store, type TurnstileResult } from './core.ts';
 import { REQUEST_BUDGET_MS, withAuthTimeouts, withStoreTimeouts } from './store-timeout.ts';
 import { RESEND_EMAILS_URL, TURNSTILE_SITEVERIFY_URL, resolveOutboundUrl } from './outbound.ts';
@@ -73,10 +73,7 @@ function makeStore(admin: Admin, signal: AbortSignal): Store {
     },
     // 架构 0.38 第 52 条：经函数侧版本门的缓存读（超时 1.5 秒、成功缓存 60 秒、失败缓存 10 秒放行，只记 gate_config_*）
     minClientVersion() {
-      return cachedMinClientVersion(async (signal) => {
-        const row = must(await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle()) as { min_client_version: string | null } | null;
-        return row?.min_client_version ?? null;
-      });
+      return cachedMinClientVersion(appConfigMinLoader(admin));
     },
   };
 }

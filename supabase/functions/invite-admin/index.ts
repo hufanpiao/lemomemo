@@ -8,7 +8,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 import { authResult, requireActiveUser } from '../_shared/auth.ts';
 import { json } from '../_shared/http.ts';
 import { rpcTakeRate } from '../_shared/take-rate.ts';
-import { cachedMinClientVersion } from '../_shared/version-gate.ts';
+import { appConfigMinLoader, cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { INVITE_ADMIN_ERROR_CODES } from '../_shared/gen/schema/invite-admin.ts';
 import { handle, INVITE_ADMIN_ERRS, type InviteStore } from './core.ts';
 import { withStoreTimeouts } from './store-timeout.ts';
@@ -51,10 +51,7 @@ export function makeStore(admin: Admin, signal: AbortSignal = new AbortControlle
     },
     // 架构 0.38 第 52 条：经函数侧版本门的缓存读（超时 1.5 秒、成功缓存 60 秒、失败缓存 10 秒放行）
     minClientVersion() {
-      return cachedMinClientVersion(async (signal) => {
-        const row = must(await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle()) as { min_client_version: string | null } | null;
-        return row?.min_client_version ?? null;
-      });
+      return cachedMinClientVersion(appConfigMinLoader(admin));
     },
   };
 }

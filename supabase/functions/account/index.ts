@@ -27,8 +27,8 @@ import { withVaultUser } from '../_shared/db.ts';
 import { decodeKey32 } from '../_shared/vault-crypto.ts';
 import { pinEpoch } from '../_shared/vault-epoch.ts';
 import { vaultTokenChecker } from '../_shared/vault-token.ts';
-import { cachedMinClientVersion } from '../_shared/version-gate.ts';
-import { blockedMin, upgradeRequiredResponse, VERSION_HEADER } from '../_shared/version-gate-core.ts';
+import { appConfigMinLoader, cachedMinClientVersion } from '../_shared/version-gate.ts';
+import { versionBlock } from '../_shared/version-gate-core.ts';
 
 /** rpc 抛出的业务错误（raise exception '<码>'），原样当错误码 */
 const RPC_CODES = new Set(['admin_cannot_delete', 'account_disabled', 'account_pending_deletion']);
@@ -209,14 +209,8 @@ Deno.serve((req) => {
     // 隐私记的令牌（vault_token）由 vault 函数签发，这里经 _shared/vault-token.ts 验（6.2 A2；B5 任务单 S10）：pin_epoch 经 fn_vault 读；
     // 没配 VAULT_TOKEN_SECRET 时带了令牌一律 vault_locked，并记 misconfigured:vault_token_secret（不带令牌照常导出）
     verifyVaultToken: async (userId, token) => (await checkVaultToken(userId, token)).verdict,
-    async checkVersion(r) {
-      const min = await cachedMinClientVersion(async (signal) => {
-        const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
-        if (error) throw new Error('db');
-        return data?.min_client_version ?? null;
-      });
-      const b = blockedMin(min, r.headers.get(VERSION_HEADER));
-      return b === null ? null : upgradeRequiredResponse(b);
+    checkVersion(r) {
+      return versionBlock(r, () => cachedMinClientVersion(appConfigMinLoader(admin)));
     },
     exportTables: EXPORT_TABLES,
     userHash,

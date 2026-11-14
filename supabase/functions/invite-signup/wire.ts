@@ -4,6 +4,7 @@
 // 和 core.ts 一样：不 import npm 包、不碰运行时全局（只用 Web 标准的 crypto、Response）。
 
 import { hmacHex, normalizeEmail } from '../_shared/email-hash.ts';
+import { utcDate } from '../_shared/rate-key.ts';
 import type { InviteErr, Locale } from './types.ts';
 
 /** 请求体上限（字节；core.ts 用 _shared/body.ts 的 readJsonObjectCapped 边读边计） */
@@ -35,10 +36,8 @@ export function secureOtp(): number {
   }
 }
 
-/** UTC 日期 yyyymmdd（signup:global 键的第三段） */
-export function utcDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');
-}
+/** UTC 日期 yyyymmdd（signup:global 键的第三段；_shared/rate-key.ts 那一份，单测从 core.ts 引） */
+export { utcDate };
 
 /** 计数键（附录 A counters 键表；都得过 counters 的 check 约束，单测核对） */
 export const keys = {

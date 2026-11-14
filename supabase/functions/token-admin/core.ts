@@ -8,6 +8,7 @@
 // 版本门在 index.ts 入口处查（标“查”）。日志只记错误码，不打印码、哈希、label。纯逻辑：依赖全部注入。
 import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
 import { readJsonObjectCapped } from '../_shared/body.ts';
+import { utcDayKey } from '../_shared/rate-key.ts';
 import { randomToken, tokenHash, TOKEN_TTL_MS } from '../_shared/intake-token.ts';
 
 export const DAILY_LIMIT = 10;
@@ -44,7 +45,7 @@ const err = (status: number, code: string) => json(status, { error: code });
 const BAD_CHARS = /[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 export function rateKey(userId: string, ms: number): string {
-  return `token-admin:${userId}:${new Date(ms).toISOString().slice(0, 10).replace(/-/g, '')}`;
+  return utcDayKey('token-admin', userId, ms);
 }
 
 /** label：没给、空的当 null；坏字符回 'bad'；超长回 'too_long' */

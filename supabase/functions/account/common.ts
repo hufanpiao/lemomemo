@@ -5,6 +5,7 @@
 import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
 import { mailLocale, type Mail, type MailLocale, type TzLabeler } from '../_shared/account-mail.ts';
 import { json, NO_STORE } from '../_shared/http.ts';
+import { utcDayKey } from '../_shared/rate-key.ts';
 
 // ---------------- 常量（出处见行尾） ----------------
 export const ACCOUNT_DAILY_LIMIT = 3;          // export、delete 合计每人每天 3 次（第 6 节、附录 A account:<user_id>:<UTC 日期>）
@@ -176,22 +177,18 @@ export interface Deps {
 export { json, NO_STORE };
 export const err = (status: number, code: AccountErr, extra: Record<string, unknown> = {}) => json(status, { error: code, ...extra });
 
-/** UTC 日期 yyyymmdd（计数键第三段；和 invite-signup 同一写法） */
-export function utcDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');
-}
 
 /** 计数键（附录 A；都得过 counters 的 check 约束，单测核对） */
 export const keys = {
-  account: (uid: string, ms: number) => `account:${uid}:${utcDate(ms)}`,
-  restore: (uid: string, ms: number) => `restore:${uid}:${utcDate(ms)}`,
-  exportRefund: (uid: string, ms: number) => `export-refund:${uid}:${utcDate(ms)}`,
+  account: (uid: string, ms: number) => utcDayKey('account', uid, ms),
+  restore: (uid: string, ms: number) => utcDayKey('restore', uid, ms),
+  exportRefund: (uid: string, ms: number) => utcDayKey('export-refund', uid, ms),
   /** 大小预检每天次数（0.47 第 19 条 Q1） */
-  exportSize: (uid: string, ms: number) => `export-size:${uid}:${utcDate(ms)}`,
+  exportSize: (uid: string, ms: number) => utcDayKey('export-size', uid, ms),
   /** 每天 part 调用总数（0.47 第 14 条 M2） */
-  exportPart: (uid: string, ms: number) => `export-part:${uid}:${utcDate(ms)}`,
+  exportPart: (uid: string, ms: number) => utcDayKey('export-part', uid, ms),
   /** rebind_device 每人每天 10 次（0.29 续第 113 条①，附录 A rebind:<user_id>:<UTC 日期>） */
-  rebind: (uid: string, ms: number) => `rebind:${uid}:${utcDate(ms)}`,
+  rebind: (uid: string, ms: number) => utcDayKey('rebind', uid, ms),
   /** 导出任务（0.47 第 13 条 M1、M3）：第三段用点分隔、不含冒号；和迁移 export_job_start 拼的一字不差 */
   exportJob: (uid: string, exportId: string, mode: VaultMode, sessionId: string) => `export-job:${uid}:${exportId}.${mode}.${sessionId}`,
 };

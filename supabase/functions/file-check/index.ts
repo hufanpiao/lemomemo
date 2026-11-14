@@ -15,7 +15,7 @@ import { timedFetch } from '../_shared/net.ts';
 import { r2FromEnv } from '../_shared/objstore-env.ts';
 import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
-import { versionGate } from '../_shared/version-gate.ts';
+import { appConfigMinLoader, versionGate } from '../_shared/version-gate.ts';
 import { sha256Hex } from '../_shared/body.ts';
 import { sniffFile } from '../_shared/gen/logic/files/file-sniff.ts';
 import { FILE_MAX_BYTES } from '../_shared/gen/logic/files/limits.ts';
@@ -39,11 +39,7 @@ Deno.serve(async (req) => {
   // cron 的 sweep 没有客户端版本；只有带用户 JWT 的那一支过版本门
   //   （带了 x-cron-secret 却不是 sweep 的，core 照样要 JWT；版本门不是鉴权边界）
   if (!req.headers.get('x-cron-secret')) {
-    const blocked = await versionGate('file-check', req, async (signal) => {
-      const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
-      if (error) throw new Error('db');
-      return data?.min_client_version ?? null;
-    });
+    const blocked = await versionGate('file-check', req, appConfigMinLoader(admin));
     if (blocked) return blocked;
   }
   return handle(req, {

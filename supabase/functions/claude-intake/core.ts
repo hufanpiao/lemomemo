@@ -23,6 +23,7 @@ import { aiFailCode, errNameOf, type AIProvider } from '../_shared/ai/provider.t
 import type { AiKindLike, CheckCtx, CheckResult, ParseFail, ParseInput, ParseOk } from '../_shared/ai/parse-core.ts';
 import { readJsonObjectCapped } from '../_shared/body.ts';
 import { TOKEN_RE, tokenHash, tokenLive } from '../_shared/intake-token.ts';
+import { utcDayKey, utcHourKey } from '../_shared/rate-key.ts';
 
 export const HOURLY_LIMIT = 60;
 export const DAILY_ITEMS = 200;
@@ -117,11 +118,9 @@ import { json } from '../_shared/http.ts';
 export { json };
 const err = (status: number, code: string, extra: Record<string, unknown> = {}) => json(status, { error: code, ...extra });
 
-const utcHour = (ms: number) => new Date(ms).toISOString().slice(0, 13).replace(/[-T]/g, '');
-const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');
-export const hourKey = (tokenId: string, ms: number) => `claude-intake:${tokenId}:${utcHour(ms)}`;
-export const itemsKey = (tokenId: string, ms: number) => `claude-intake-items:${tokenId}:${utcDay(ms)}`;
-export const userItemsKey = (userId: string, ms: number) => `claude-intake-user:${userId}:${utcDay(ms)}`;
+export const hourKey = (tokenId: string, ms: number) => utcHourKey('claude-intake', tokenId, ms);
+export const itemsKey = (tokenId: string, ms: number) => utcDayKey('claude-intake-items', tokenId, ms);
+export const userItemsKey = (userId: string, ms: number) => utcDayKey('claude-intake-user', userId, ms);
 
 /** 有 text：本机规则优先，没把握才走 AI（门不过、AI 失败都用本机结果） */
 async function fromText<Item extends ItemLike>(
