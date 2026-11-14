@@ -114,7 +114,7 @@ describe('wipeThisDevice（清本机库和 Cache Storage）', () => {
     vi.useFakeTimers();
     const log: string[] = [];
     let done = false;
-    void wipeThisDevice(steps(log, { wipe: () => hang<boolean>(), clearCacheStorage: () => hang<void>() }), 3000, 2000).then(() => {
+    void wipeThisDevice(steps(log, { wipe: () => hang<boolean>(), clearCacheStorage: () => hang<void>() }), null, 3000, 2000).then(() => {
       done = true;
     });
     await vi.advanceTimersByTimeAsync(3000);

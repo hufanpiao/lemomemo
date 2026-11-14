@@ -12,6 +12,7 @@ import { requestAppUpdate } from '../platform/native-bridge.ts';
 import { reloadPage, updateAttemptStore } from '../platform/sw-register.ts';
 import { rlog } from '../platform/run-log-api.ts';
 import { clock } from '../platform/clock.ts';
+import { forgetAccountLocal } from '../platform/exit-basics.ts';
 import { ensureAccount } from './account.ts';
 import { deleteCacheDb, openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
 import { cacheErrKind, type UpgradeReport } from './cache-migrations.ts';
@@ -213,6 +214,8 @@ export async function coldStart(opts: BootOptions): Promise<BootResult> {
     result.status = 'signed_out';
     if ((opts.readReauth ?? readReauth)(now()) !== null) return result;
     clearReauth();
+    // 外观、隐私记同意、日志上传队列一起清（架构 0.38 第 68 条 ⑤）：没有会话时哪个账号的都不该留
+    forgetAccountLocal(null);
     await deleteCacheDb({ factory: opts.cacheOptions?.factory, name: opts.cacheOptions?.name });
     return result;
   }

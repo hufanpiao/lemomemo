@@ -1,5 +1,6 @@
 // 账号没了、会话没了怎么退出这台设备（架构约定 10.1）：decideExit 定结局，exitDevice 执行；主 App、告知页、插图上传、会话层都走这里
-// （设置页 useSessionExit 和本人退出走 platform/sign-out.ts 的清库步骤，不经这里）。清库走 account.ts 的 wipeLocal
+// （设置页 useSessionExit 和本人退出走 platform/sign-out.ts 的清库步骤，不经这里）。清库走 account.ts 的 wipeLocal；
+// 日志上传队列、外观、隐私记同意在 wipeLocal 里清（platform/exit-basics.ts 的 forgetAccountLocal），没启动（没有 boot）时这里直接调它
 // 不变量：被移除必须服务器确认（session_fate 回 revoked）才清库，查不了、查出错都只退出；停用、过期只退出；冷静期不删会话
 // 不变量：记号写好以后只关库、不再写第二次；写不了记号才退回清库：登录过期、未确认的被移除退回清库时提示 removed，停用仍提示 disabled
 // 不变量：同一页只执行一次（exited）。顺序：被移除先设闸、写记号、删会话、查服务器 → 只关库或清库 → 广播带原因的 reset → 删会话 → 回登录页
@@ -11,7 +12,7 @@ import { resolveAuthLossLazy } from './auth-loss-lazy.ts';
 import { getBoot, type BootResult } from './boot.ts';
 import { rescueByRebind } from './rebind-pending.ts';
 import { readReauth } from '../platform/auth-loss-store.ts';
-import { clearLogQueue } from '../platform/log-store.ts';
+import { forgetAccountLocal } from '../platform/exit-basics.ts';
 import { rlog } from '../platform/run-log-api.ts';
 import { clearCacheStorage, clearLocalSessionIf, goToAuth, type ExitNotice } from '../platform/session.ts';
 import { reloadPage } from '../platform/sw-register.ts';
@@ -48,8 +49,8 @@ export interface ExitDeps {
   keep(boot: BootResult, notice: ExitNotice, sid: string | null): boolean;
   /** 本机会话还是这个 session_id 才删 */
   clearLocalSessionIf(sid: string | null): Promise<boolean>;
-  /** 清日志上传队列：给 user_id 只清这个账号的，null 清全部 */
-  clearLogs(userId: string | null): void;
+  /** 停掉日志上传器（app/log-channel.ts 的 logQueueCleaner：之后不记、不传）；队列本身由清库那一步清，不给不停 */
+  clearLogs?(): void;
   /** 删会话之前告诉别的标签页退出原因（reset 带 notice、sid） */
   broadcastReset(userId: string, exit: { notice: ExitNotice; sid: string | null }): void;
   /** 清完库再发一条不带原因的 reset（别的标签页整份重读）；只有原来就发的调用方（设置页、插图上传）给，不给不发 */
@@ -70,7 +71,6 @@ export const defaultExitDeps: Omit<ExitDeps, 'broadcastReset'> = {
   wipe: (boot) => wipeLocal(boot, { clearCacheStorage }),
   keep: (boot, notice, sid) => (notice === 'disabled' ? expireThisTab(boot, null, 'disabled') : expireThisTab(boot, sid)),
   clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
-  clearLogs: (userId) => clearLogQueue(userId),
   goToAuth: (notice, sid) => {
     if (notice === null) goToAuth();
     else if (notice === 'removed' || notice === 'expired') goToAuth(notice, sid);
@@ -147,14 +147,14 @@ function runExit(
     deps.goToAuth(notice, sid);
     return Promise.resolve();
   }
-  safe(() => deps.clearLogs(userId));   // 日志队列清不掉不挡退出
+  safe(() => deps.clearLogs?.());   // 停不掉不挡退出
   const finish = (): void => {
-    safe(() => deps.clearLogs(userId));   // 兜底：清库那几秒里又记下的
     if (userId && plan.broadcast && deps.broadcastWiped) safe(() => deps.broadcastWiped?.(userId));
     drop();   // 旧会话被晚到的令牌刷新写回时再删；别的标签页刚登录的新会话不动
     deps.goToAuth(notice, sid);
   };
   if (!boot) {
+    forgetAccountLocal(null);   // 没有库要清：不知道是谁，日志队列全清
     finish();
     return Promise.resolve();
   }
@@ -211,7 +211,7 @@ export function exitOnSessionLoss(loss: SessionLoss, deps: ExitDeps, graceMs = 0
     void exitDevice({ reason: 'removed', sid: loss.sid, lossSid: f?.sid, path: 'sdk', code: f?.code ?? 'none', status: f?.status ?? 0 }, deps);
     return;
   }
-  // 跟着别的标签页退出不清日志队列：那边退出时已清过自己账号的（signOutThisDevice、exitDevice），改前也不清
+  // 跟着别的标签页退出不停上传器（改前也不停）；队列照样在 wipeLocal 里清，那边退出时已清过同一个账号的，再清一次无害
   const followDeps: ExitDeps = { ...deps, clearLogs: () => undefined };
   const follow = (): void => {
     const r = readReauth();

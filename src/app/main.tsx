@@ -20,7 +20,7 @@ import type { LookRow } from '../platform/look.ts';
 import { createLogQueue, guardOwner } from '../core/log/queue.ts';
 import { logEvent, setLogSink } from '../../shared/core/log-bus.ts';
 import { devicePlatform, readInstallId, withLock } from '../platform/device-info.ts';
-import { clearLogQueue, clearOtherLogQueues, logQueueStore } from '../platform/log-store.ts';
+import { clearOtherLogQueues, logQueueStore } from '../platform/log-store.ts';
 import { expectPushClaimContext, runPushClaim, setPushClaimContext } from '../platform/push-claim-run.ts';
 import { setPushDisconnectLog } from '../platform/push-disconnect.ts';
 import { browserLifecycle } from '../platform/net.ts';
@@ -130,9 +130,8 @@ async function start(): Promise<void> {
     // 例外（R-382 架构 4.1a 第 2 点）：有 lemo.reauth 且没过期是登录过期，coldStart 不删库，日志队列也留着（同一账号重新登录后照传），
     // 登录页提示“登录已过期，请重新登录”
     const kept = readReauth() !== null;
+    // 日志上传队列、外观、隐私记同意也由 coldStart 一起清（同一个同步段里，在第一个 await 之前）
     void coldStart({ userId: null }).catch(() => undefined);
-    // 日志上传队列一起清（架构 0.38 第 68 条 ⑤；K6-signedout 审查建议 1）：没有会话时哪个账号的都不该留
-    if (!kept) clearLogQueue(null);
     if (kept) goToAuth('expired', null);
     else goToAuth();
     return;

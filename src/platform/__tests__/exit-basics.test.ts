@@ -46,16 +46,44 @@ describe('sign-out.ts 转出的就是 exit-basics.ts 的同一份（原有 impor
   });
 });
 
-describe('forgetLook：退出、换账号时删掉本机外观缓存（皮肤整块评审 11-14 第 13 条）', () => {
+describe('退出、换账号时删掉本机外观缓存（皮肤整块评审 11-14 第 13 条）', () => {
   it('删掉 pv-look；本机存储用不了也不抛', () => {
     localStorage.setItem(basics.LOOK_CACHE_KEY, '{"skin":"glass"}');
-    basics.forgetLook();
+    basics.forgetAccountLocal(false);
     expect(localStorage.getItem('pv-look')).toBeNull();
     const spy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
       throw new Error('blocked');
     });
-    expect(() => basics.forgetLook()).not.toThrow();
+    expect(() => basics.forgetAccountLocal(null)).not.toThrow();
     spy.mockRestore();
+  });
+});
+
+describe('forgetAccountLocal：退出、换账号清本机痕迹只有这一个入口（第三方审查第 10、13 条）', () => {
+  const keys = ['pv-look', 'att.ms_preview_vault', 'lemo.logq.u1', 'lemo.logq.u2'];
+  const left = (): string[] => keys.filter((k) => localStorage.getItem(k) !== null);
+  const seedKeys = (): void => {
+    for (const k of keys) localStorage.setItem(k, '1');
+    localStorage.setItem('att.ms_preview', 'yes');
+  };
+  it('给 userId：清外观、隐私记同意、这个账号的日志队列；null 清全部队列；false 不动队列；普通附件的同意都不动', () => {
+    seedKeys();
+    basics.forgetAccountLocal('u1');
+    expect(left()).toEqual(['lemo.logq.u2']);
+    seedKeys();
+    basics.forgetAccountLocal(null);
+    expect(left()).toEqual([]);
+    seedKeys();
+    basics.forgetAccountLocal(false);
+    expect(left()).toEqual(['lemo.logq.u1', 'lemo.logq.u2']);
+    expect(localStorage.getItem('att.ms_preview')).toBe('yes');
+    localStorage.clear();
+  });
+  it('wipeThisDevice（本人退出、登录过期清库、设置页被移除）也走到它', async () => {
+    seedKeys();
+    await signOut.wipeThisDevice(steps([]), null, 50, 50);
+    expect(left()).toEqual([]);
+    localStorage.clear();
   });
 });
 

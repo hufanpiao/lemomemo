@@ -14,7 +14,7 @@ function deps(boot: Partial<BootResult> | null = { switching: false, userId: 'u1
     wipe: vi.fn(async (_b: BootResult) => void order.push('wipe')),
     // 默认 keep 是 expireThisTab：账号 u1 不是 UUID，写不了记号，停用退回清库
     keep: vi.fn((_b: BootResult, _n: string, _sid: string | null) => false),
-    clearLogs: vi.fn((u: string | null) => void order.push(`logs:${u}`)),
+    clearLogs: vi.fn(() => void order.push('logs')),
     broadcastReset: vi.fn((u: string, exit: { notice: string; sid: string | null }) => void order.push(`reset:${u}:${exit.notice}:${exit.sid ?? 'null'}`)),
     // 清完库那条不带原因的 reset（设置页原来就发）
     broadcastWiped: vi.fn((u: string) => void order.push(`reset:${u}`)),
@@ -38,18 +38,18 @@ describe('createLeaveAccount', () => {
     expect(d.wipe).not.toHaveBeenCalled();
   });
 
-  it('顺序（已停用但写不了记号，退回原来的清库）：先广播带退出原因的 reset（DISABLED-probe-later ②）→ 删那个会话、清日志 → wipe（清库、缓存）→ 再清日志 → 广播 reset → 再删一次那个会话 → 回登录页', async () => {
+  it('顺序（已停用但写不了记号，退回原来的清库）：先广播带退出原因的 reset（DISABLED-probe-later ②）→ 删那个会话、停日志上传 → wipe（清库、缓存、日志队列）→ 广播 reset → 再删一次那个会话 → 回登录页', async () => {
     const { d, order } = deps();
     await createLeaveAccount(d)('disabled', 's-me');
     expect(order).toEqual([
-      'reset:u1:disabled:s-me', 'session:s-me', 'logs:u1', 'wipe', 'logs:u1', 'reset:u1', 'session:s-me', 'auth:disabled',
+      'reset:u1:disabled:s-me', 'session:s-me', 'logs', 'wipe', 'reset:u1', 'session:s-me', 'auth:disabled',
     ]);
   });
 
   it('R-262：冷静期不删会话，其余顺序照旧；注销申请成功（revoked: true，服务器已吊销全部会话）照旧删', async () => {
     const a = deps();
     await createLeaveAccount(a.d)('pending_deletion', 's-me');
-    expect(a.order).toEqual(['reset:u1:pending_deletion:s-me', 'logs:u1', 'wipe', 'logs:u1', 'reset:u1', 'auth:pending_deletion']);
+    expect(a.order).toEqual(['reset:u1:pending_deletion:s-me', 'logs', 'wipe', 'reset:u1', 'auth:pending_deletion']);
     const b = deps();
     await createLeaveAccount(b.d)('pending_deletion', 's-me', { revoked: true });
     expect(b.order.filter((x) => x.startsWith('session:'))).toEqual(['session:s-me', 'session:s-me']);
@@ -75,7 +75,7 @@ describe('createLeaveAccount', () => {
   it('没启动过（没有 boot）：删会话、清全部日志队列、回登录页；不广播（不知道是哪个账号）', async () => {
     const { d, order } = deps(null);
     await createLeaveAccount(d)('disabled', 's-me');
-    expect(order).toEqual(['session:s-me', 'logs:null', 'logs:null', 'session:s-me', 'auth:disabled']);
+    expect(order).toEqual(['session:s-me', 'logs', 'session:s-me', 'auth:disabled']);
   });
 });
 

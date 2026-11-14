@@ -1,7 +1,7 @@
 // 日志上传队列的本机存放（架构 0.38 第 68 条；接手清单 K8-logs）：localStorage 的 lemo.logq.<user_id>，一个账号一个键
 // • 不进 IndexedDB（4.1“logs 不进缓存，只放在上传队列里”），不升 DB_VERSION；队列的规矩（上限、丢最旧、上传）在 core/log
 // • 读写一律包 try/catch：读失败返回 undefined、写失败返回 false，调用方退回只放内存
-// • 退出登录时清（platform/sign-out.ts 的 signOutThisDevice）；被移除、停用、注销冷静期时清（app/main.tsx 交给 wireSync 的 clearLogs）
+// • 退出、换账号、被移除、停用、注销冷静期、没会话的冷启动时清：一律经 platform/exit-basics.ts 的 forgetAccountLocal，调用方不各自调 clearLogQueue
 export const LOG_QUEUE_PREFIX = 'lemo.logq.';
 
 export const logQueueKey = (userId: string): string => `${LOG_QUEUE_PREFIX}${userId}`;

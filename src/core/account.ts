@@ -3,7 +3,7 @@
 // 不变量：清本机数据只在 wipeLocal / clearLocalData 做；纯 TS，不准 import React 和任何功能（A1）。详细说明见架构 4.1、4.1a
 import type { BootResult } from './boot.ts';
 import { clearReauth, writeReauth, type ReauthReason } from '../platform/auth-loss-store.ts';
-import { CACHES_TIMEOUT_MS, forgetLook, WIPE_TIMEOUT_MS, withTimeout } from '../platform/exit-basics.ts';
+import { CACHES_TIMEOUT_MS, forgetAccountLocal, WIPE_TIMEOUT_MS, withTimeout } from '../platform/exit-basics.ts';
 import type { RefreshFailure } from '../platform/supabase/refresh-failure.ts';
 import { disconnectPushLazy } from '../platform/push-disconnect.ts';
 import { setPushClaimContext } from '../platform/push-claim-run.ts';
@@ -18,7 +18,7 @@ export type ClaimResult = 'same' | 'first' | 'switched';
 
 /**
  * 一个覆盖库里实际存在的全部仓（含 stores 以外的旧仓，K6 复审 N5）的 readwrite 事务：读 owner，不同就清空所有仓并写入新 user_id。
- * 封存以后照样能开（bypassSeal）。出错时整个事务回滚、抛出
+ * 封存以后照样能开（bypassSeal）。出错时整个事务回滚、抛出。换了账号时事务提交后清 localStorage 里上一个账号的痕迹（日志队列除外）
  */
 export function claimCache(cache: Cache, userId: string): Promise<ClaimResult> {
   const names = cache.storeNames();
@@ -34,7 +34,10 @@ export function claimCache(cache: Cache, userId: string): Promise<ClaimResult> {
       return owner === undefined ? 'first' : 'switched';
     },
     { bypassSeal: true },
-  );
+  ).then((r) => {
+    if (r === 'switched') forgetAccountLocal(false);
+    return r;
+  });
 }
 
 /** 本机库现在归谁；没有记录为 undefined */
@@ -239,18 +242,16 @@ const done = (run: () => Promise<unknown>, ms: number): Promise<boolean> => with
  * 设置页本人退出只调这一步（上限、推送、缓存、按库名删由 platform/sign-out.ts 的 wipeThisDevice 做）；其余出口走 wipeLocal
  */
 export async function clearLocalData(cache: Cache): Promise<void> {
-  forgetLook();
   await cache.clearAll();
   clearAllCollections();
 }
 
 /**
  * 清本机数据（架构约定 10.1）：设闸 → 删 lemo.reauth → clearLocalData → 断开推送 → 关库
- * →（清不掉或 dropDb）按库名删库 → 清运行时缓存。每一步有上限、失败照样往下走，永远 resolve；最坏约 WIPE_TIMEOUT_MS × 2 + CACHES_TIMEOUT_MS
+ * →（清不掉或 dropDb）按库名删库 → 清运行时缓存 → 清本机痕迹（forgetAccountLocal，清库那几秒里又记下的日志也清掉）。每一步有上限、失败照样往下走，永远 resolve；最坏约 WIPE_TIMEOUT_MS × 2 + CACHES_TIMEOUT_MS
  */
 export async function wipeLocal(boot: BootResult, deps: WipeDeps): Promise<void> {
   closeGate(boot);
-  forgetLook();
   // 删不掉时下次冷启动登录页会再查 session_fate
   if (!clearReauth()) deps.log?.('auth_loss_store_failed');
   const wipeMs = deps.wipeMs ?? WIPE_TIMEOUT_MS;
@@ -267,5 +268,6 @@ export async function wipeLocal(boot: BootResult, deps: WipeDeps): Promise<void>
     clearAllCollections();
   } finally {
     closeCache(boot);
+    forgetAccountLocal(boot.userId);
   }
 }
