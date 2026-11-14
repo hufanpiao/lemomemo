@@ -10,6 +10,9 @@ updates:
       day: monday
       time: '07:00'
       timezone: Asia/Seoul
+    # 同 npm：发布满 14 天才提（第三方审查 CI-17：action 也会被投毒）
+    cooldown:
+      default-days: 14
     groups:
       actions:
         patterns: ['*']
@@ -41,4 +44,19 @@ updates:
       timezone: Asia/Seoul
     cooldown:
       default-days: 14
+    open-pull-requests-limit: 1
+
+  # 桌面版（Tauri）的 Rust 依赖（第三方审查 CI-17：原来没人盯）；turnstile-probe 是试验件、不进发布，不管
+  - package-ecosystem: cargo
+    directory: /desktop/src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Asia/Seoul
+    cooldown:
+      default-days: 14
+    groups:
+      desktop-crates:
+        patterns: ['*']
     open-pull-requests-limit: 1
