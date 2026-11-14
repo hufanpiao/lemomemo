@@ -35,5 +35,8 @@ export const VOICE_TIMEOUT_MS = 15_000;
 /** ai-classify：一批（每人最多 20 条）分一次的超时（毫秒）。cron 调用，不重试，失败的这批记 rule、下一轮重新排队（架构 5.2） */
 export const CLASSIFY_TIMEOUT_MS = 10_000;
 
+/** ai-media：一批（最多 6 张缩略图）识别一次的超时（毫秒）。cron 调用，不重试，失败的按 10 分钟、1 小时退避，第 3 次还失败记 failed（架构 5.13 第 5 点） */
+export const MEDIA_TIMEOUT_MS = 20_000;
+
 /** 提示词版本（写进 ai_meta.prompt；改提示词就升版本并重跑测试集） */
-export const PROMPT_VERSION = Object.freeze({ parse: 'parse.v3', voice: 'voice.v3', classify: 'classify.v2' });   // 11-07 由 v1 升到 v2（B3 任务单补充 R5、R6、R8）；11-10 升到 v3（R-374 中文相对时刻）；classify 11-13 升 v2（R-413 加相似分类对）
+export const PROMPT_VERSION = Object.freeze({ parse: 'parse.v3', voice: 'voice.v3', classify: 'classify.v2', media: 'media.v1' });   // 11-07 由 v1 升到 v2（B3 任务单补充 R5、R6、R8）；11-10 升到 v3（R-374 中文相对时刻）；classify 11-13 升 v2（R-413 加相似分类对）；media 11-14 B4b-2 识图新加 v1

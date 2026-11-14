@@ -1,5 +1,5 @@
 // file-check 入口（架构 5.13 第 2 点、第 6 节 file-check 行；B4b-1）：组装依赖，逻辑在 core.ts。
-// 两种调用：客户端带 JWT 的 {action: check, id}（网关照默认校验 JWT）；pg_cron 每 10 分钟带 x-cron-secret 的 {action: sweep}
+// 三种调用：客户端带 JWT 的 {action: check, id}、{action: retry_ai, kind: image, id}（B4b-2 识图“重新识别”，只改 note_images 的 ai_* 列）（网关照默认校验 JWT）；pg_cron 每 10 分钟带 x-cron-secret 的 {action: sweep}
 //   （迁移 20261115000000；cron 请求没有用户 JWT，所以 config.toml 的 [functions.file-check] verify_jwt = false，check 一支在函数里自己 requireActiveUser）。
 // 用到的库对象：service role：private.account_usable、session_alive（经 _shared/auth.ts）、private.take_rate；
 //   fn_ai 直连（_shared/db.ts 的 withAiUser / withAiScan）：public.note_files、private.scan_note_files、private.heartbeat（SQL 在 store.ts）。
@@ -23,7 +23,7 @@ import { inflateRaw } from '../_shared/gen/logic/files/inflate.ts';
 import { noteFilePath, noteFileThumbPath } from '../_shared/gen/logic/files/media-path.ts';
 import { fileCheckReq } from '../_shared/gen/schema/attachments.ts';
 import { handle } from './core.ts';
-import { fileRow, settleRow, staleIds, writeHeartbeat } from './store.ts';
+import { fileRow, retryAi, settleRow, staleIds, writeHeartbeat } from './store.ts';
 
 const log = (code: string) => console.error(`file-check: ${code}`);
 const R2 = r2FromEnv();
@@ -69,6 +69,7 @@ Deno.serve(async (req) => {
       },
       settle: (row, status, etag) => withAiUser(row.user_id, (tx) => settleRow(tx, row, status, etag)),
       heartbeat: (d) => withAiScan((tx) => writeHeartbeat(tx, d)),
+      retryAi: (uid, id) => withAiUser(uid, (tx) => retryAi(tx, uid, id)),
     },
     r2: R2,
     sniff: (b) => sniffFile(b, inflateRaw),

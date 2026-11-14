@@ -93,7 +93,7 @@ describe('R6 默认日子：ai.ts 兜一层、提示词只在传了时多一条'
       for (const s of [with_, without]) expect(s).not.toMatch(/\{\{[A-Z_]+\}\}/);
       expect(without.split('\n').length).toBe(with_.split('\n').length - 1);
     }
-    expect(PROMPT_VERSION).toEqual({ parse: 'parse.v3', voice: 'voice.v3', classify: 'classify.v2' });   // B4 加 classify
+    expect(PROMPT_VERSION).toEqual({ parse: 'parse.v3', voice: 'voice.v3', classify: 'classify.v2', media: 'media.v1' });   // B4 加 classify；B4b-2 识图加 media
   });
   it('提示词 v3（R-374）：中文相对时刻一条按填进去的现在时刻换算，文字和语音两份都有', () => {
     const base = { now: NOW, tz: SEOUL, locale: 'zh' as const, features: ['event', 'todo'] as const };
