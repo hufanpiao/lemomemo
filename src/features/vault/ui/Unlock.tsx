@@ -6,15 +6,21 @@
 // • 密码页是整页：顶栏“‹ 随手记 … 取消”；输错写“密码不对，还能再试 N 次”、锁定中写倒计时，都在圆点下面、键盘上面（PWERR），键盘不能按
 // • “Ctrl + L 立即上锁 · Esc 取消”只在电脑版（侧栏宽度）显示
 // • 解锁成功：遮罩淡出 --dur-ui 后卸掉（S21，唯一的动效）；锁上时直接盖上、不做动效
-import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
+// • 读屏和焦点（审查第 6 条）：遮罩是 Radix Dialog 的模态 Content（同 kit Dialog、smart-search 的 FindPanel；不用 Overlay，CSP 拦它的内联 style），
+//   名字是隐藏标题“隐私记已上锁”（aria-labelledby 由 Radix 接），挂上时焦点移到卡里第一个按钮、Tab 圈在遮罩里，遮罩外的内容对读屏隐藏。
+//   Esc 由 Radix 接住，经 EscCtx 交给卡片的“取消”（和按钮同一个 cancel）；点遮罩空白处不关
+import * as RD from '@radix-ui/react-dialog';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
-import { useKeys } from '../../../kit/hooks/useKeys.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useAutolockMin, useErrText, useVault, useVaultCount } from '../hooks/useVault.ts';
 import { useWebauthn } from '../hooks/useVaultAuth.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import { LockIcon, PinPad, PinTop, useDuration } from './Pin.tsx';
 import styles from './Vault.module.css';
+
+/** 遮罩把 Esc 交给里面的解锁卡（卡片挂上时登记自己的 cancel） */
+const EscCtx = createContext<{ current: (() => void) | null }>({ current: null });
 
 /** 锁定倒计时：每秒刷新一次，到点回 0 */
 function useLeft(until: number | null): number {
@@ -53,7 +59,10 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
     if (s.get().waiting) s.cancelWait();
     onCancel?.();
   };
-  useKeys({ Escape: () => (cancel(), true) });
+  const esc = useContext(EscCtx);
+  useLayoutEffect(() => {
+    esc.current = cancel;
+  });
 
   const face = async (): Promise<void> => {
     setBusy(true);
@@ -138,6 +147,8 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
  * 淡出用 transitionend 收尾，另设 400 ms 兜底（减少动态效果、没有 transition 时不会卡住）
  */
 export function UnlockOverlay({ open, children, testId = 'vault-scrim' }: { open: boolean; children: ReactNode; testId?: string }) {
+  const t = useVaultT();
+  const esc = useRef<(() => void) | null>(null);
   const [shown, setShown] = useState(open);
   useEffect(() => {
     if (open) {
@@ -149,16 +160,21 @@ export function UnlockOverlay({ open, children, testId = 'vault-scrim' }: { open
   }, [open]);
   if (!open && !shown) return null;
   const leaving = !open;
+  const stay = (e: Event): void => e.preventDefault();
   return (
-    <div
-      className={leaving ? `${styles.scrim} ${styles.scrimOut}` : styles.scrim}
-      data-testid={testId}
-      data-leaving={leaving || undefined}
-      onTransitionEnd={() => leaving && setShown(false)}
-      role="dialog"
-      aria-modal="true"
-    >
-      {children}
-    </div>
+    <RD.Root open={open} onOpenChange={(o) => (o || !open ? undefined : esc.current?.())}>
+      <RD.Content asChild forceMount aria-describedby={undefined} onPointerDownOutside={stay} onFocusOutside={stay} onInteractOutside={stay} onCloseAutoFocus={stay}>
+        <div
+          className={leaving ? `${styles.scrim} ${styles.scrimOut}` : styles.scrim}
+          data-testid={testId}
+          data-leaving={leaving || undefined}
+          onTransitionEnd={() => leaving && setShown(false)}
+          aria-modal="true"
+        >
+          <RD.Title className={styles.sr}>{t('vault.locked.title', {})}</RD.Title>
+          <EscCtx.Provider value={esc}>{children}</EscCtx.Provider>
+        </div>
+      </RD.Content>
+    </RD.Root>
   );
 }

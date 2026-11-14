@@ -311,6 +311,16 @@
   pointer-events: none;
 }
 
+/* 只给读屏的标题（解锁遮罩的对话框名字） */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* 减少透明效果（data-rt="1"，系统设置也合进这一个属性；隐私记页挂着时一直是 1）：不模糊，退成玻璃的后备着色（同 kit Mist.module.css） */
 :global(:root[data-rt='1']) .scrim {
   background: var(--g-tint-fb);

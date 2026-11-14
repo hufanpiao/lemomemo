@@ -273,6 +273,22 @@ describe('11-14 整块评审第 22 条：令牌续不上（超过 12 小时、�
   });
 });
 
+describe('审查第 6 条：解锁遮罩是有名字的模态对话框，焦点移进去、圈在里面', () => {
+  it('锁着：role=dialog 的名字是“隐私记已上锁”；焦点在遮罩里；遮罩外的内容对读屏隐藏', async () => {
+    s = session();
+    installVaultSession(s);
+    render(<VaultPage />);
+    await screen.findByTestId('vault-unlock-card');
+    const dlg = await screen.findByRole('dialog', { name: '隐私记已上锁' });
+    expect(dlg.getAttribute('aria-modal')).toBe('true');
+    await waitFor(() => expect(dlg.contains(document.activeElement)).toBe(true));
+    expect(screen.getByTestId('vault-back').closest('[aria-hidden="true"]')).not.toBeNull();
+    // Esc 照旧是“取消”（Radix 接住后交给卡片的 cancel）：回随手记
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(window.location.hash).toBe('#/notes'));
+  });
+});
+
 describe('审查第 9 条：保存进行中碰上令牌过期，不再另交一份草稿', () => {
   it('点保存 → vault_locked 换成解锁卡（编辑页卸载）→ 解锁：只重发那一次保存，不多存一次', async () => {
     let n = 0;
