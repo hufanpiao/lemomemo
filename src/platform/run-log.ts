@@ -12,7 +12,7 @@
 // 隐私：不记用户输入的任何文字、不记网址参数；按钮只记 data-testid / aria-label / id
 import { buildInfo, isStandalone } from './env.ts';
 import { RL_SLOT } from './run-log-api.ts';
-import { createLayoutProbe, describeEl, isMasked } from './run-log-layout.ts';
+import { createLayoutProbe, describeEl, isMasked, RL_MASK_ATTR } from './run-log-layout.ts';
 import { KBO_ATTR } from './viewport-geom.ts';
 
 export const OUT_KEY = 'lemo-run-log';
@@ -226,6 +226,8 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     preventedLater(e, `click ${describeEl(pickTarget(e.target))}`);
   };
   const onKey = (e: KeyboardEvent): void => {
+    // 页面上挂着带 data-rl-mask 的（密码键盘）：实体键的焦点常在 body 上，记键名、keyCode 就数得出输了几位，一律只记 masked（审查第 15 条）
+    if (doc.querySelector(`[${RL_MASK_ATTR}]`) !== null) return add('key masked');
     const name = e.key.length === 1 ? 'char' : e.key;
     let extra = '';
     if (e.key === 'Enter' || e.keyCode === 13) {

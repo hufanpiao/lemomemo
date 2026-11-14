@@ -1,5 +1,7 @@
 // 密码键盘（ui/Pin.tsx）
 // • 不进运行日志（11-14 隐私记评审第 1 条）：点一遍、按一遍实体键，日志里看不出按了哪个数；点按只记 masked，没有坐标、没有 testid
+// • 审查第 15 条：页面上有 data-rl-mask（密码键盘挂着）时，按键一律只记 `key masked`——实体键盘按键的焦点常在 body 上，
+//   原来会记成 `key char on=body`、`key Backspace code=8 on=body`，数得出输了几位、删了几次；页面上没有 mask 时照常记
 // • 只做 4 位（负责人 11-14 原话“隐私记密只做4位数”）：固定 4 个圆点，输满 4 位自动交出，没有“确定”键
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -36,7 +38,24 @@ describe('密码键盘和运行日志', () => {
     for (const l of taps) expect(l).toMatch(/ (down|up|click) masked( \w*)?$/);
     const all = app.join('\n');
     expect(all).not.toMatch(/pp-key|pp-ok|x=\d|y=\d|code=\d/);
-    expect(all).toMatch(/key (char on=)?masked/);
+    expect(all).toMatch(/key masked$/m);
+    expect(all).not.toMatch(/key char/);
+  });
+
+  it('密码键盘挂着、焦点在 body 上按实体键：只记 key masked；键盘卸掉后照常记', () => {
+    const { unmount } = render(<PinPad testId="pp" msgTestId="pp-err" onSubmit={vi.fn()} />);
+    const stop = startRunLog(window, { version: 'test' });
+    fireEvent.keyDown(document.body, { key: '5', keyCode: 53 });
+    fireEvent.keyDown(document.body, { key: 'Backspace', keyCode: 8 });
+    fireEvent.keyDown(document.body, { key: 'Enter', keyCode: 13 });
+    unmount();
+    fireEvent.keyDown(document.body, { key: 'Escape', keyCode: 27 });
+    stop();
+    const keys = readRunLog()
+      .split('\n')
+      .filter((l) => / key /.test(l))
+      .map((l) => l.slice(l.indexOf(' key ') + 1));
+    expect(keys).toEqual(['key masked', 'key masked', 'key masked', 'key Escape code=27 on=body']);
   });
 });
 
