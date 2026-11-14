@@ -511,6 +511,39 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
     }
   });
 
+  // B4b-3 评审第 5 条：等 AI 期间打字条被卸载（收起、切页）：请求当场中止，回来的结果不再写状态、不存、不交给结果层
+  it('等 AI 期间卸载：请求被中止（signal aborted），之后不存、不打开结果层；日志记 dropped', async () => {
+    const lines: string[] = [];
+    const slots = globalThis as unknown as Record<string, unknown>;
+    slots[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    try {
+      collection('settings').upsert([AI_ON]);
+      let seen!: AbortSignal;
+      let answer!: () => void;
+      const callAi = vi.fn((_req: unknown, signal: AbortSignal) => {
+        seen = signal;
+        return new Promise<unknown>((ok) => (answer = () => ok({ intent: 'record', confidence: 1, items: [], quota_left: 3 })));
+      });
+      const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
+      const { unmount } = render(<TypeBar day={null} writer={writer} callAi={callAi} online={() => true} onExpand={vi.fn()} onClose={vi.fn()} />);
+      fireEvent.change(screen.getByTestId('type-input'), { target: { value: '买牛奶' } });
+      await act(async () => {
+        fireEvent.submit(screen.getByTestId('type-bar'));
+      });
+      await waitFor(() => expect(callAi).toHaveBeenCalledTimes(1));
+      unmount();
+      expect(seen.aborted).toBe(true);
+      await act(async () => {
+        answer();
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(writer.insert).not.toHaveBeenCalled();
+      expect(lines).toContain('typebar submit dropped unmounted');
+    } finally {
+      delete slots[RL_SLOT];
+    }
+  });
+
   // 复查 N1（11-13）：等 AI 期间点了上一句提示条的“撤销”（8 秒到时自动关也一样），不能把这次提交打回 idle，AI 回来后确认行照样出来
   it('等 AI 期间撤掉上一句的提示条：还在“正在识别…”，AI 回来后有过去的日子照样出确认行', async () => {
     collection('settings').upsert([AI_ON]);

@@ -11,6 +11,8 @@
 //   没带时间范围、查询词不空 → find 给出查询词，界面换成“找：…”，回车打开查找面板（features/smart-search）；“改成记下”把这一句当记下。
 //   没把握的、带时间范围的（“上周的会”“这个月的待办”）、总结、改期、完成：回车走 planText（B4b-3，本机或 AI 判意图），
 //   判成别的意图的不保存：清掉输入条、交给结果层（hooks/assist-open 的 toAssist，同时把原话写进草稿），调用方 onAsked 收起打字条
+// • 等 AI 期间打字条被卸载（收起、切页；B4b-3 评审第 5 条）：这一次的请求当场中止，回来的结果丢掉——不写状态、不存、不打开结果层
+//   （收起时原话已经由 stash 写进草稿，下次打开填回）；日志 typebar submit dropped unmounted
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { getBoot } from '../../../core/boot.ts';
@@ -60,6 +62,9 @@ export function useTypeBar(o: TypeBarOpts) {
   const [asRecord, setAsRecord] = useState(false);
   const busy = useRef(false);
   const typed = useRef(false);
+  /** 正在整理的那一次的取消（卸载时中止） */
+  const inflight = useRef<AbortController | null>(null);
+  useEffect(() => () => inflight.current?.abort(), []);
   // 没传 callAi 时用真的 ai-parse（data/ai-parse-api.ts）；测试传桩
   const { day, callAi = callAiParse, writer, online = navOnline } = o;
   const { ctx, aiOn: aiOnNow } = useCaptureCtx(day);
@@ -138,6 +143,8 @@ export function useTypeBar(o: TypeBarOpts) {
     }
     busy.current = true;
     setError(null);
+    const ac = new AbortController();
+    inflight.current = ac;
     // 耗时进日志（负责人 11-13“今天、日历、待办按记下要等一会才存上”：分清是等 AI、超时、限流还是写库慢）
     const t0 = performance.now();
     const ms = (): number => Math.round(performance.now() - t0);
@@ -150,7 +157,11 @@ export function useTypeBar(o: TypeBarOpts) {
       rlog('typebar recog on');
       // 同意版本明确过期（告知页关口问到 first / updated、还没做完）：不发 ai-parse，用本机规则（S1，见 useCaptureCtx）
       const aiOn = aiOnNow();
-      const { plan: p, quotaOut } = await planText(text, c, { online, aiOn, call: callAi });
+      const { plan: p, quotaOut } = await planText(text, c, { online, aiOn, call: callAi, signal: ac.signal });
+      if (ac.signal.aborted) {
+        rlog('typebar submit dropped unmounted');
+        return;
+      }
       rlog(`typebar planned items=${p.items.length} ai=${aiOn} quotaOut=${quotaOut} origin=${p.origin} status=${p.status} reason=${p.aiReason ?? '-'} ms=${ms()}`);
       if (p.ask) {
         go({ type: 'reset' });
@@ -167,6 +178,7 @@ export function useTypeBar(o: TypeBarOpts) {
       throw err;
     } finally {
       busy.current = false;
+      if (inflight.current === ac) inflight.current = null;
       rlog(`typebar recog off ms=${ms()}`);
     }
   }, [text, status, ctx, callAi, aiOnNow, online, saved, go, o]);
