@@ -93,6 +93,15 @@ export function failOf(status: number, body: unknown): VaultFail {
   return { ok: false, code: 'unknown' };
 }
 
+/** 响应体按 JSON 读，读不出来当 null（错误体、成功体、上传回执同一个读法，审查第 13 条） */
+async function readJson(res: Response): Promise<unknown> {
+  try {
+    return (await res.json()) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 export function createVaultApi(getDb: () => Promise<Db>, o: VaultApiOptions = {}): VaultApi {
   const doFetch = o.fetch ?? appFetch;
   const base = o.base ?? `${buildInfo.supabaseUrl}/functions/v1`;
@@ -124,15 +133,7 @@ export function createVaultApi(getDb: () => Promise<Db>, o: VaultApiOptions = {}
       if (init.type !== null) headers['content-type'] = init.type;
       if (init.token) headers[VAULT_TOKEN_HEADER] = init.token;
       const res = await doFetch(`${base}/${path}`, { method: 'POST', headers, body: init.body, signal: ac.signal, cache: 'no-store', ...(init.keepalive ? { keepalive: true } : {}) });
-      if (!res.ok) {
-        let body: unknown = null;
-        try {
-          body = await res.json();
-        } catch {
-          body = null;
-        }
-        return (init.fail ?? failOf)(res.status, body);
-      }
+      if (!res.ok) return (init.fail ?? failOf)(res.status, await readJson(res));
       return { ok: true, value: await read(res) };
     } catch (e) {
       if (ac.signal.aborted) return { ok: false, code: 'try_later' };
@@ -142,19 +143,16 @@ export function createVaultApi(getDb: () => Promise<Db>, o: VaultApiOptions = {}
     }
   }
 
+  /** vault、vault-file 的 JSON 动作：发 JSON、成功按 schema 校验（读不懂当 unknown）；call、fileCall 共用（审查第 13 条） */
+  async function jsonCall<S extends z.ZodType>(fn: string, req: unknown, token: string | null, schema: S, fail?: typeof failOf): Promise<VaultResult<z.infer<S>>> {
+    const r = await send(fn, { body: JSON.stringify(req), type: 'application/json', token, ...(fail ? { fail } : {}) }, o.timeoutMs ?? VAULT_TIMEOUT_MS, readJson);
+    if (!r.ok) return r;
+    const p = schema.safeParse(r.value);
+    return p.success ? { ok: true, value: p.data } : { ok: false, code: 'unknown' };
+  }
+
   return {
-    async call(req, token, schema) {
-      const r = await send(VAULT_FN, { body: JSON.stringify(req), type: 'application/json', token }, o.timeoutMs ?? VAULT_TIMEOUT_MS, async (res) => {
-        try {
-          return (await res.json()) as unknown;
-        } catch {
-          return null;
-        }
-      });
-      if (!r.ok) return r;
-      const p = schema.safeParse(r.value);
-      return p.success ? { ok: true, value: p.data } : { ok: false, code: 'unknown' };
-    },
+    call: (req, token, schema) => jsonCall(VAULT_FN, req, token, schema),
 
     imageGet(imageId, part, token) {
       return send(
@@ -170,18 +168,7 @@ export function createVaultApi(getDb: () => Promise<Db>, o: VaultApiOptions = {}
       return send(`${VAULT_IMAGE_FN}?${qs.toString()}`, { body, type: 'image/webp', token }, o.imageTimeoutMs ?? VAULT_IMAGE_TIMEOUT_MS, async () => true as const);
     },
 
-    async fileCall(req, token, schema) {
-      const r = await send(VAULT_FILE_FN, { body: JSON.stringify(req), type: 'application/json', token, fail: fileFailOf }, o.timeoutMs ?? VAULT_TIMEOUT_MS, async (res) => {
-        try {
-          return (await res.json()) as unknown;
-        } catch {
-          return null;
-        }
-      });
-      if (!r.ok) return r;
-      const p = schema.safeParse(r.value);
-      return p.success ? { ok: true, value: p.data } : { ok: false, code: 'unknown' };
-    },
+    fileCall: (req, token, schema) => jsonCall(VAULT_FILE_FN, req, token, schema, fileFailOf),
 
     fileGet(id, part, token) {
       return send(
@@ -193,13 +180,7 @@ export function createVaultApi(getDb: () => Promise<Db>, o: VaultApiOptions = {}
     },
 
     fileUpload(form, token) {
-      return send(VAULT_FILE_FN, { body: form, type: null, token, fail: fileFailOf }, o.fileTimeoutMs ?? VAULT_FILE_TIMEOUT_MS, async (res) => {
-        try {
-          return (await res.json()) as unknown;
-        } catch {
-          return null;
-        }
-      });
+      return send(VAULT_FILE_FN, { body: form, type: null, token, fail: fileFailOf }, o.fileTimeoutMs ?? VAULT_FILE_TIMEOUT_MS, readJson);
     },
 
     fileEnd(token) {

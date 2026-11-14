@@ -66,6 +66,8 @@ const tokenShape = z.object({ vault_token: z.string(), expires_at: z.number() })
 const STALE: VaultFail = { ok: false, code: 'vault_locked' };
 /** 在飞时碰上令牌过期的上锁、等解锁时用户取消了：回失败（调用方照常提示“已锁上”），run 不再弹解锁 */
 const CANCELLED: VaultFail = { ok: false, code: 'vault_locked' };
+/** 半路丢掉（STALE）或取消（CANCELLED）的结果：调用方不再 onFail、不弹解锁（审查第 13 条：原来 7 处各写一遍） */
+const dropped = (r: VaultResult<unknown>): boolean => r === STALE || r === CANCELLED;
 /** 拿到令牌满这么久、编辑页又有输入就续一次（令牌 10 分钟） */
 export const RENEW_AFTER_MS = 5 * 60_000;
 
@@ -231,7 +233,7 @@ export function createVaultSession(d: VaultSessionDeps) {
   /** 要令牌的请求：vault_locked 时等解锁、自动重试一次 */
   async function run<S extends z.ZodType>(req: VaultRequest, schema: S): Promise<VaultResult<z.infer<S>>> {
     const first = await once(req, schema);
-    if (first === STALE || first === CANCELLED) return first;
+    if (dropped(first)) return first;
     if (first.ok || first.code !== 'vault_locked') {
       if (!first.ok) onFail(first);
       return first;
@@ -240,7 +242,7 @@ export function createVaultSession(d: VaultSessionDeps) {
     const unlocked = await waitUnlock();
     if (!unlocked) return first;
     const second = await once(req, schema);
-    if (!second.ok && second !== STALE && second !== CANCELLED) onFail(second);
+    if (!second.ok && !dropped(second)) onFail(second);
     return second;
   }
 
@@ -257,7 +259,7 @@ export function createVaultSession(d: VaultSessionDeps) {
   async function withImageToken<T>(send: (tok: string) => Promise<VaultResult<T>>, write: boolean): Promise<VaultResult<T>> {
     const go = (): Promise<VaultResult<T>> => (token ? send(token) : Promise.resolve({ ok: false, code: 'vault_locked' } as VaultFail));
     const { r } = await guarded(go, write);
-    if (r === STALE || r === CANCELLED || r.ok || r.code !== 'vault_locked') return r;
+    if (dropped(r) || r.ok || r.code !== 'vault_locked') return r;
     const k = await renew();
     if (!k.ok) return k;
     return token ? (await guarded(go, write)).r : STALE;
@@ -266,7 +268,7 @@ export function createVaultSession(d: VaultSessionDeps) {
   /** vault-file 的一次调用：只验不续（同 vault-image）；relock、revoked 一类要落 */
   async function fileOp<T>(send: (tok: string) => Promise<VaultResult<T>>, write: boolean): Promise<VaultResult<T>> {
     const r = await withImageToken(send, write);
-    if (!r.ok && r !== STALE && r !== CANCELLED) {
+    if (!r.ok && !dropped(r)) {
       const kind = vaultErrorAction(r.code).kind;
       if (kind === 'relock' || kind === 'revoked') onFail(r);
     }
@@ -292,7 +294,7 @@ export function createVaultSession(d: VaultSessionDeps) {
   /** 解锁类请求（setup、unlock、reset、Face ID）：半路上锁就丢掉签来的令牌，不进已解锁 */
   async function afterUnlock(send: () => Promise<VaultResult<z.infer<typeof vaultTokenResponse>>>): Promise<VaultResult<true>> {
     const { r } = await guarded(send, false);
-    if (r === STALE) return r;
+    if (dropped(r)) return r as VaultFail;
     if (!r.ok) {
       onFail(r);
       return r;
@@ -310,7 +312,7 @@ export function createVaultSession(d: VaultSessionDeps) {
     if (!token) return { ok: true, value: true };
     const r = await once({ action: 'list' }, vaultListResponse, false);
     if (!r.ok) {
-      if (r !== STALE) onFail(r);
+      if (!dropped(r)) onFail(r);
       return r;
     }
     set({ notes: r.value.notes });
@@ -323,7 +325,7 @@ export function createVaultSession(d: VaultSessionDeps) {
         if (!blob) continue;
         const r = await withImageToken((tok) => d.api.imageUpload({ note_id: noteId, image_id: img.id, part }, blob, tok), true);
         if (!r.ok) {
-          if (r !== STALE && r !== CANCELLED) onFail(r);
+          if (!dropped(r)) onFail(r);
           return r;
         }
       }
@@ -466,8 +468,8 @@ export function createVaultSession(d: VaultSessionDeps) {
         const r = await withImageToken((tok) => d.api.imageGet(imageId, part, tok), false);
         if (!r.ok) {
           // 只有“密码在别处改了”“设备被移除”要落（上锁）；没找到、服务忙只是这张图不显示，不改界面状态
-          const kind = r === STALE ? null : vaultErrorAction(r.code).kind;
-          if (r !== STALE) rlog(`vault image ${part} fail ${r.code}`);
+          const kind = dropped(r) ? null : vaultErrorAction(r.code).kind;
+          if (kind) rlog(`vault image ${part} fail ${r.code}`);
           if (kind === 'relock' || kind === 'revoked') onFail(r);
           return null;
         }
