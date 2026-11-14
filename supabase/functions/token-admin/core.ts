@@ -1,8 +1,10 @@
 // token-admin（架构 5.7、第 6 节函数表 token-admin 行；R-65；S-B3 中 6；B3 任务单 BE-5、TC-B3-19～21）。
 // 只有一个动作 create {action: 'create', label?}：
 //   方法（只收 POST）→ JWT（requireActiveUser，index.ts 注入）→ 请求体（label 去首尾空白、≤ 40 字、不准控制字符和双向覆盖字符）
-//   → 同时有效的连接码最多 5 个（安全审 M2，超了 409 too_many_tokens）→ 每人每天 10 次（键 token-admin:<user_id>:<UTC 日期>，private.take_rate，窗口 86400 秒）
-//   → 生成连接码（_shared/intake-token.ts），库里只存哈希，scopes 固定 {create}（只能新增）
+//   → 生成连接码（_shared/intake-token.ts），库里只存哈希 → private.api_token_create（迁移 20261115061000，安全审查第 12 条）一次做完：
+//     按人加锁 → 同时有效的连接码最多 5 个（安全审 M2，超了 409 too_many_tokens，不计次数）
+//     → 每人每天 10 次（键 token-admin:<user_id>:<UTC 日期>，private.take_rate，窗口 86400 秒）→ 插入，scopes 固定 {create}（只能新增）
+//     （原来先数、再计次数、再插入是三次请求，并发能冲破 5 个上限）
 //   → 回 {token, id, expires_at}：明文码只出现在这一次响应里（设置页只显示这一次、不做成可点链接）。
 // 列表、最后使用时间：客户端经 RLS 直接读 api_tokens（tok_sel）；断开连接：客户端 PATCH revoked_at（guard_token_revoke），都不经这里。
 // 版本门在 index.ts 入口处查（标“查”）。日志只记错误码，不打印码、哈希、label。纯逻辑：依赖全部注入。
@@ -20,12 +22,13 @@ const INSERT_ATTEMPTS = 3;
 
 export type AuthResult = SharedAuthResult;
 
+/** private.api_token_create 的结果（too_many 不计次数；duplicate = token_hash 撞了，什么都没插） */
+export type CreateResult = { result: 'ok'; id: string; created_at: string } | { result: 'too_many' } | { result: 'rate_limited' } | { result: 'duplicate' };
+
 export interface Store {
-  takeRate(key: string, limit: number, windowS: number): Promise<boolean>;
-  /** 插入一行：ok 回 {id, created_at}；token_hash 撞了回 'duplicate'；别的错抛错 */
-  /** 这个人现在有效的连接码个数（revoked_at 为空、created_at 晚于 sinceIso） */
-  activeCount(userId: string, sinceIso: string): Promise<number>;
-  insertToken(row: { user_id: string; label: string | null; token_hash: string; scopes: string[] }): Promise<{ id: string; created_at: string } | 'duplicate'>;
+  /** 一把按人的锁里：数有效码（revoked_at 为空、created_at 晚于 sinceIso）够 max 回 too_many → take_rate → 插入；出错抛错 */
+  createToken(row: { user_id: string; label: string | null; token_hash: string },
+    lim: { sinceIso: string; max: number; rateKey: string; rateLimit: number; rateWindowS: number }): Promise<CreateResult>;
 }
 
 export interface Deps {
@@ -69,25 +72,22 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (label === 'bad') return err(400, 'bad_request');
   if (label === 'too_long') return err(400, 'label_too_long');
 
-  try {
-    if ((await deps.store.activeCount(userId, new Date(deps.now() - TOKEN_TTL_MS).toISOString())) >= MAX_ACTIVE) return err(409, 'too_many_tokens');
-    if (!(await deps.store.takeRate(rateKey(userId, deps.now()), DAILY_LIMIT, 86400))) return err(429, 'rate_limited');
-  } catch {
-    deps.log('store:take_rate');
-    return err(503, 'try_later');
-  }
+  const now = deps.now();
+  const lim = { sinceIso: new Date(now - TOKEN_TTL_MS).toISOString(), max: MAX_ACTIVE, rateKey: rateKey(userId, now), rateLimit: DAILY_LIMIT, rateWindowS: 86400 };
   for (let i = 0; i < INSERT_ATTEMPTS; i++) {
     const token = (deps.newToken ?? randomToken)();
-    let r: { id: string; created_at: string } | 'duplicate';
+    let r: CreateResult;
     try {
-      r = await deps.store.insertToken({ user_id: userId, label, token_hash: await tokenHash(token), scopes: ['create'] });
+      r = await deps.store.createToken({ user_id: userId, label, token_hash: await tokenHash(token) }, lim);
     } catch {
-      deps.log('store:insert');
+      deps.log('store:create');
       return err(503, 'try_later');
     }
-    if (r === 'duplicate') continue;
+    if (r.result === 'too_many') return err(409, 'too_many_tokens');
+    if (r.result === 'rate_limited') return err(429, 'rate_limited');
+    if (r.result === 'duplicate') continue;   // 撞了换一个码（次数照算；256 位随机数实际撞不上）
     const created = Date.parse(r.created_at);
-    const expires = new Date((Number.isFinite(created) ? created : deps.now()) + TOKEN_TTL_MS).toISOString();
+    const expires = new Date((Number.isFinite(created) ? created : now) + TOKEN_TTL_MS).toISOString();
     return json(200, { token, id: r.id, expires_at: expires });
   }
   deps.log('token_collision');

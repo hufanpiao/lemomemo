@@ -39,6 +39,7 @@ describe('连接码（_shared/intake-token.ts）', () => {
 });
 
 describe('token-admin', () => {
+  // 假 store 照 private.api_token_create（迁移 20261115061000）的顺序：先数有效码（够了 too_many、不计次数）→ take_rate → 插入（撞了 duplicate）
   function admin(o: { dup?: number; failInsert?: boolean; active?: number } = {}) {
     const counts = new Map<string, number>();
     const inserted: { user_id: string; label: string | null; token_hash: string; scopes: string[] }[] = [];
@@ -46,22 +47,18 @@ describe('token-admin', () => {
     const deps: AdminDeps = {
       authenticate: async () => ({ ok: true, user: { userId: UA } }),
       store: {
-        async activeCount(userId, since) {
-          expect([userId, since]).toEqual([UA, new Date(NOW - TOKEN_TTL_MS).toISOString()]);
-          return (o.active ?? 0) + inserted.length;
-        },
-        async takeRate(k, limit, w) {
-          expect(COUNTER_KEY.test(k)).toBe(true);
-          expect([limit, w]).toEqual([DAILY_LIMIT, 86400]);
-          const c = (counts.get(k) ?? 0) + 1;
-          counts.set(k, c);
-          return c <= limit;
-        },
-        async insertToken(row) {
+        async createToken(row, lim) {
           if (o.failInsert) throw new Error('db');
-          if (dup-- > 0) return 'duplicate';
-          inserted.push(row);
-          return { id: TID, created_at: new Date(NOW).toISOString() };
+          expect([row.user_id, lim.sinceIso, lim.max]).toEqual([UA, new Date(NOW - TOKEN_TTL_MS).toISOString(), MAX_ACTIVE]);
+          if ((o.active ?? 0) + inserted.length >= lim.max) return { result: 'too_many' };
+          expect(COUNTER_KEY.test(lim.rateKey)).toBe(true);
+          expect([lim.rateLimit, lim.rateWindowS]).toEqual([DAILY_LIMIT, 86400]);
+          const c = (counts.get(lim.rateKey) ?? 0) + 1;
+          counts.set(lim.rateKey, c);
+          if (c > lim.rateLimit) return { result: 'rate_limited' };
+          if (dup-- > 0) return { result: 'duplicate' };
+          inserted.push({ ...row, scopes: ['create'] });
+          return { result: 'ok', id: TID, created_at: new Date(NOW).toISOString() };
         },
       },
       now: () => NOW,
@@ -78,7 +75,7 @@ describe('token-admin', () => {
     const body = (await res.json()) as { token: string; id: string; expires_at: string };
     expect(TOKEN_RE.test(body.token)).toBe(true);
     expect(body).toEqual({ token: body.token, id: TID, expires_at: new Date(NOW + TOKEN_TTL_MS).toISOString() });
-    expect(inserted).toEqual([{ user_id: UA, label: '我的电脑', token_hash: await tokenHash(body.token), scopes: ['create'] }]);
+    expect(inserted).toEqual([{ user_id: UA, label: '我的电脑', token_hash: await tokenHash(body.token), scopes: ['create'] }]);   // scopes 固定 {create}：写在 api_token_create 里
     expect(JSON.stringify(inserted)).not.toContain(body.token);
   });
   // 代码审 M4：鉴权失败原样转发（假鉴权）；没有 profiles 行由 supabase/tests/store-it/ai-fns-store.it.ts 真 requireActiveUser 覆盖
