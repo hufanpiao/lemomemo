@@ -7,7 +7,7 @@
 //   （按出现顺序：1～9 是 key-0～key-8，0 是 key-9），不带数字本身
 // • 提示行（输错、锁定倒计时、两次不一样）在圆点下面、键盘上面（线框 s9 PWERR）
 // • PinTop：设密码、输密码整页的顶栏“‹ 随手记 … 取消”（线框 s9 FIRSTPW、PWERR：“右上角‘取消’随时退出”）
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import styles from './Vault.module.css';
@@ -45,11 +45,17 @@ export function PinPad({ onSubmit, disabled = false, testId, msg = '', msgTestId
   onSubmit(pin: string): void; disabled?: boolean; testId: string; msg?: string; msgTestId: string;
 }) {
   const t = useVaultT();
-  const [pin, setPin] = useState('');
+  const [pin, setPinState] = useState('');
+  // 最新值另记一份：连按（实体键盘快打时监听还没随重画换新）读到的不是旧闭包里的 pin
+  const cur = useRef('');
+  const setPin = (v: string): void => {
+    cur.current = v;
+    setPinState(v);
+  };
   const press = (k: (typeof KEYS)[number]): void => {
     if (disabled || k === 'gap') return;
-    if (k === 'del') return setPin((p) => p.slice(0, -1));
-    const next = pin + k;
+    if (k === 'del') return setPin(cur.current.slice(0, -1));
+    const next = cur.current + k;
     if (next.length < PIN_LEN) return setPin(next);
     setPin('');
     onSubmit(next);
