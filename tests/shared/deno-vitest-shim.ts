@@ -81,6 +81,13 @@ function same(a: unknown, b: unknown): boolean {
   return ka.every((k) => same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
 }
 
+/** toMatchObject 的部分匹配：expected 里写了的键才比，数组要逐项一样长（同 vitest） */
+function subset(a: unknown, b: unknown): boolean {
+  if (typeof b !== 'object' || b === null || typeof a !== 'object' || a === null) return same(a, b);
+  if (Array.isArray(b)) return Array.isArray(a) && a.length === b.length && b.every((x, i) => subset(a[i], x));
+  return Object.keys(b).every((k) => subset((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
 const show = (v: unknown): string => {
   try {
     return JSON.stringify(v);
@@ -97,6 +104,8 @@ function matchers(actual: unknown, negate: boolean, label?: string) {
     toBe: (e: unknown) => check(Object.is(actual, e), `to be ${show(e)}`),
     toEqual: (e: unknown) => check(same(actual, e), `to equal ${show(e)}`),
     toStrictEqual: (e: unknown) => check(same(actual, e), `to equal ${show(e)}`),
+    toMatchObject: (e: unknown) => check(subset(actual, e), `to match object ${show(e)}`),
+    toHaveProperty: (k: string) => check(typeof actual === 'object' && actual !== null && k in actual, `to have property ${k}`),
     toBeNull: () => check(actual === null, 'to be null'),
     toBeGreaterThan: (e: number) => check((actual as number) > e, `to be > ${e}`),
     toBeLessThan: (e: number) => check((actual as number) < e, `to be < ${e}`),
