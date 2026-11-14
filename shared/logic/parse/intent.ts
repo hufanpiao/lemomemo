@@ -54,6 +54,9 @@ const PHRASES: Readonly<Record<QueryKind, readonly Phrase[]>> = {
     { word: '帮我找(?:一下)?', pos: 'head' }, { word: '搜一下', pos: 'head' }, { word: '查一下', pos: 'head' },
     { word: '看一下', pos: 'head', when: '.*有什么' }, { word: '有什么', pos: 'ask', hit: false },
     { word: '찾아\\s*줘', pos: 'tail' }, { word: '뭐\\s*있어', pos: 'tail' }, { word: '[?？]', pos: null, when: '\\s*$' },
+    // B4b-3 补：找一下 / 找找 / 查找 / 搜 X（“搜集 / 搜刮 / 搜身”不算）、X（放）在哪（里 / 儿）、X 어디 있어 / 어디야
+    { word: '找一下', pos: 'head' }, { word: '找找', pos: 'head' }, { word: '查找', pos: 'head' }, { word: '搜(?![集刮身])', pos: 'head' },
+    { word: '(?:放|搁)?在哪(?:里|儿)?', pos: 'tail' }, { word: '어디\\s*(?:에\\s*)?(?:있어|있지|야)', pos: 'tail' },
   ],
   summary: [{ word: '总结(?:一下)?', pos: 'head' }, { word: '汇总(?:一下)?', pos: 'head' }, { word: '정리해\\s*줘', pos: 'tail' }],
   list: ['列出', '列一下', '给我看看?', '显示', '有哪些', '보여\\s*줘', '목록', '있는지\\s*확인해\\s*줘', '뭐\\s*있는지\\s*알려\\s*줘'].map((word) => ({ word, pos: null })),
@@ -86,8 +89,8 @@ const IMPERATIVE = { search: imperativeRes(PHRASES.search, '[?？.。!！]'), su
 const QUERY_STRIP = new RegExp(Object.values(PHRASES).flatMap((ps) => ps.map((p) => p.word)).join('|'), 'g');
 /** 日期解析认不出的时间说法：还在句子里就没把握，免得拿“上周”当关键词查 */
 const TIME_LEFT_RE = /上周|上个?月|上礼拜|上星期|去年|今年|明年|最近|近期|这几天|月初|月中|月末|月底|周末|年初|年底|지난\s*주|지난\s*달|저번\s*주|요즘|최근|주말|월초|월말|달\s*초|작년|올해|내년/;
-/** 事由后面又跟了一个动作（“搜一下资料写报告”“汇总一下报销单交财务”）：像是要记的事 */
-const ACTION_AFTER = /\S\s*(?:写|交|发给|发到|发送|提交|上传|打印|准备|寄|送|转给)/;
+/** 事由后面又跟了一个动作（“搜一下资料写报告”“汇总一下报销单交财务”“找一下小王签字”）：像是要记的事 */
+const ACTION_AFTER = /\S\s*(?:写|交|发给|发到|发送|提交|上传|打印|准备|寄|送|转给|签字|签名|签合同|问问|聊聊|谈谈|商量|退押金|还钱|借钱)/;
 const ZH_WEEK = new RegExp(`(${ZH_WEEK_PREFIX})\\s*个?\\s*(?:周|星期|礼拜)(?![1-7])`);
 const KO_WEEK_RE = new RegExp(`(${KO_WEEK})`);
 const ZH_MONTH = /(下|这|本)\s*个?\s*月/;

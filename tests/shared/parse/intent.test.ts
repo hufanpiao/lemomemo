@@ -30,6 +30,19 @@ describe('基本查找、总结：祈使位置才有把握', () => {
     expect(li('明天有什么安排？').query).toEqual({ text: '安排', range: { from: TM, to: TM }, kinds: ALL3, done: 'any' });
     expect(li('帮我找一下证件').query?.text).toBe('证件');
   });
+  it('B4b-3 补的句式：找一下 / 找找 / 搜 / 查找 X、X 在哪（里 / 儿）、X 어디 있어 → search、有把握，查询词是 X', () => {
+    const cases: [string, string][] = [
+      ['找一下 牙医', '牙医'], ['找一下牙医', '牙医'], ['找找护照', '护照'], ['搜 发票', '发票'], ['查找快递单号', '快递单号'],
+      ['牙医在哪', '牙医'], ['护照在哪里？', '护照'], ['合同放在哪儿', '合同'], ['여권 어디 있어?', '여권'], ['계약서 어디야', '계약서'],
+    ];
+    for (const [s, q] of cases) like(li(s), { intent: 'search', sure: true, query: { text: q, range: null } }, s);
+  });
+  it('B4b-3 补的句式不误伤记下（D-15）：找人办事、在哪办的事由、“查看”', () => {
+    for (const s of ['找一下小王签字', '明天找找房东退押金', '下午去银行问问在哪办', '明天查看合同', '周五搜集资料写报告']) {
+      const r = li(s);
+      expect(r.intent === 'record' || !r.sure, s).toBe(true);
+    }
+  });
   it('“总结一下 / 정리해 줘”→ summarize、有把握；“下周”是下周一到下周日', () => {
     like(li('总结一下这周的随手记'), { intent: 'summarize', sure: true, query: { range: { from: T, to: '2026-11-08' }, kinds: ['note'], done: 'any' } });
     like(li('정리해 줘'), { intent: 'summarize', sure: true });

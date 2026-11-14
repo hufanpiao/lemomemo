@@ -45,7 +45,7 @@ export interface PlusTo {
 }
 
 // eslint-disable-next-line no-control-regex -- 去掉控制字符（C0、DEL、C1）和双向覆盖字符（同 ai.ts 的 stripCtlLine）
-const CTL = /[\u0000-\u001F\u007F-\u009F؜‎‏‪-‮⁦-⁩]/g;
+const CTL = /[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
 const cleanText = (s: string, max: number): string => [...s.replace(CTL, '').trim()].slice(0, max).join('').trim();
 const dateFmt = z.string().regex(DATE_FMT_RE);
 const hm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
