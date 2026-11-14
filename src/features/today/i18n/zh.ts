@@ -14,7 +14,6 @@ export const zh = {
   'now.hint': '下一件 {t} {title} · {d}后',
   'now.done': '今天的日程都结束了',
   'now.doneNext': '明天 {t} {title}',
-  'now.empty': '今天没有日程',
   'dur.hm': '{h} 小时 {m} 分',
   'dur.h': '{h} 小时',
   'dur.m': '{m} 分钟',

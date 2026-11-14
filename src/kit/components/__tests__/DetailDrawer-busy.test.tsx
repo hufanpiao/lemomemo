@@ -1,6 +1,6 @@
 // 电脑详情抽屉和升级中心的 busy（B6 独立评审第 12 条）：抽屉在电脑上可能开一整天，一直占着 busy 新版本横幅就永远不出、也不自动重新载入。
 // • 焦点在抽屉里（含抽屉里弹出的 radix 浮层）才占 busy；焦点去了抽屉外面就放开，回来再占
-// • 抽屉里的编辑器（EditShell 给了 onClose）自己不再占；整页编辑照旧占
+// • 抽屉里的编辑器（EditShell 经 useInDrawer 认出在抽屉里）自己不再占；整页编辑照旧占
 // • 顺带：initial 选的元素晚一步才画出来（编辑器按需下载）时，出来以后焦点挪过去；这期间焦点被挪走了就不抢
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
@@ -31,8 +31,8 @@ function drawer() {
       <button type="button" data-testid="outside">
         列表里的一行
       </button>
-      <DetailDrawer id="todo:a" label="详情" onClose={() => undefined} refocus={() => null} data-testid="drawer">
-        <EditShell kind="待办" backLabel="返回" onBack={() => undefined} onClose={() => undefined} rec={rec} own={own} prefix="todo-edit">
+      <DetailDrawer id="todo:a" label="详情" onClose={() => undefined} data-testid="drawer">
+        <EditShell kind="待办" backLabel="返回" onBack={() => undefined} rec={rec} own={own} prefix="todo-edit">
           <input data-testid="field" />
         </EditShell>
         <div data-radix-popper-content-wrapper="">
@@ -69,7 +69,7 @@ describe('DetailDrawer 的 busy', () => {
     expect(fx.busy).toEqual([]);
   });
 
-  it('整页编辑（没给 onClose）照旧一挂上就占', () => {
+  it('整页编辑（不在抽屉里）照旧一挂上就占', () => {
     render(
       <EditShell kind="待办" backLabel="返回" onBack={() => undefined} rec={rec} own={own} prefix="todo-edit">
         {null}
@@ -86,7 +86,7 @@ describe('DetailDrawer 的初始焦点', () => {
         <button type="button" data-testid="outside">
           外面
         </button>
-        <DetailDrawer id="note:a" label="详情" onClose={() => undefined} refocus={() => null} initial='[data-testid="body"]' data-testid="drawer">
+        <DetailDrawer id="note:a" label="详情" onClose={() => undefined} initial='[data-testid="body"]' data-testid="drawer">
           {show ? <textarea data-testid="body" /> : null}
         </DetailDrawer>
       </>

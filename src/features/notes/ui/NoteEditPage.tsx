@@ -14,7 +14,7 @@
 // • 动效：只有抽屉最基本的滑入（R-376），按钮用 Pressable 的按下反馈
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
-import { DrawerClose } from '../../../kit/components/DetailDrawer.tsx';
+import { DrawerClose, useInDrawer } from '../../../kit/components/DetailDrawer.tsx';
 import { DeletedNotice, ReadonlyNotice, useEditStatus, useEditT } from '../../../kit/components/EditNotices.tsx';
 import { enterCommits } from '../../../kit/components/Form.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
@@ -39,10 +39,13 @@ const back = (): void => backOr('notes');
 export default function NoteEditPage() {
   // 新建保存后地址换成这一条的 id，编辑器不重挂（同待办编辑页）
   const { id, key, onCreated } = useEditRoute('note');
-  return <NoteEditor key={key} id={id} onCreated={onCreated} onClose={back} drawer={false} />;
+  return <NoteEditor key={key} id={id} onCreated={onCreated} />;
 }
 
-export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onCreated?(id: string): void; onClose(): void; drawer: boolean }) {
+/** 整页和电脑详情抽屉共用；在不在抽屉里看 kit 的 useInDrawer（抽屉给的是关抽屉的函数，“×”用） */
+export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: string): void }) {
+  const close = useInDrawer();
+  const drawer = close !== null;
   // 编辑器挂着期间占住升级中心的 busy：不出版本横幅、不自动重新载入（同 kit EditShell）；抽屉里由 DetailDrawer 按焦点占（B6 独立评审第 12 条）
   useHoldBusy('editing', !drawer);
   const t = useNotesT();
@@ -67,7 +70,7 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
     <>
       <div className={styles.top}>
         {drawer ? null : (
-          <Pressable className={styles.back} onClick={onClose} data-testid="edit-back">
+          <Pressable className={styles.back} onClick={back} data-testid="edit-back">
             {`‹ ${t('note.edit.back', {})}`}
           </Pressable>
         )}
@@ -104,9 +107,7 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
             {tEdit('edit.delete', {})}
           </Pressable>
         </Popover>
-        {drawer ? (
-          <DrawerClose label={t('note.edit.close', {})} onClick={onClose} testId="note-edit-close" />
-        ) : null}
+        {close ? <DrawerClose label={t('note.edit.close', {})} onClick={close} testId="note-edit-close" /> : null}
       </div>
       {meta ? <p className={styles.meta} data-testid="note-edit-meta">{meta}</p> : null}
       <p className={st.bad ? styles.statusBad : styles.status} role="status" data-testid="edit-status">

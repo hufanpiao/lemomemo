@@ -1,15 +1,18 @@
 // “现在”卡（皮肤视觉稿方案 K 小时间尺，R-131、R-133；状态 ①～④ 照 R-118）
 // ① 进行中：“● 进行中”（两件以上“进行中 N 件”）+“现在 14:17”+“还剩 13 分钟”；标题是最先结束的那件（加粗，R-134 允许）；
 //    同时进行的第二件写一行“同时：… · 到 15:00 · 还剩 43 分钟”，三件及以上写“同时还有 N 件”
-// ② 没有进行中：“○ 下一件”+“1 小时 13 分后”；标题写“开始时间 + 标题”
+// ② 没有进行中：“○ 下一件”+“1 小时 13 分后”；标题写“开始时间 + 标题”。
+//    下一件在时间尺窗口外（窗口里一件都没有，负责人 11-14）：不画黄卡和空时间尺，换成浅色卡（线框 ④ emptyA 的样子，data-state="calm"）：
+//    第一行暖心句，第二行“下一件 17:00 逛街 · 4 小时 21 分后”只写这一次
 // 时间轴：窗口 [A, B]（分钟，相对今天 0 点）、整点刻度、正在进行的色块（已过去的部分另涂）、下一件色块、此刻竖线；
-//    下一件在窗口外时，时间轴下面写“下一件 15:30 … · 3 小时 10 分后”
-// ③ 今天的日程都结束了（有明天的第一件就写“明天 11:00 …”）；④ 今天没有日程。③ ④ 不画时间轴
+//    ① 进行中而下一件在窗口外时，时间轴下面写“下一件 15:30 … · 3 小时 10 分后”（② 的下一件在窗口外时已经走浅色卡，黄卡底下不会再重复写一遍）
+// ③ 今天的日程都结束了（有明天的第一件就写“明天 11:00 …”）；④ 今天没有日程：浅色卡，写暖心句（负责人 11-14，替掉“今天没有日程”）。③ ④ 不画时间轴
+// 暖心句按用户时区的当天日期固定选一句（hooks 的 cheerText），同一天每次打开同一句；读屏照常读这一行
 // 时间轴只是示意（aria-hidden），读屏靠上面的文字
 import { msAt, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import type { EventOcc, NowCard as Card } from '../hooks/today-types.ts';
-import { durText, useLocale, useTodayT } from '../hooks/useTodayT.ts';
+import { cheerText, durText, useLocale, useTodayT } from '../hooks/useTodayT.ts';
 import styles from './NowCard.module.css';
 
 const MIN = 60_000;
@@ -22,12 +25,25 @@ export function NowCard({ card, now, tz, today, tomorrowFirst }: { card: Card; n
   const m = (ms: number) => (ms - zero) / MIN;
   const nowM = m(now);
 
-  if (card.state === 'done' || card.state === 'empty') {
+  if (card.state === 'done') {
     return (
-      <section className={styles.card} data-testid="now-card" data-state={card.state}>
-        <p className={styles.quiet}>{t(card.state === 'done' ? 'now.done' : 'now.empty', {})}</p>
-        {card.state === 'done' && tomorrowFirst?.time ? (
-          <p className={styles.sub}>{t('now.doneNext', { t: tomorrowFirst.time, title: tomorrowFirst.title })}</p>
+      <section className={styles.card} data-testid="now-card" data-state="done">
+        <p className={styles.quiet}>{t('now.done', {})}</p>
+        {tomorrowFirst?.time ? <p className={styles.sub}>{t('now.doneNext', { t: tomorrowFirst.time, title: tomorrowFirst.title })}</p> : null}
+      </section>
+    );
+  }
+  if (card.state === 'empty' || (card.state === 'idle' && card.nextOutside)) {
+    const next = card.state === 'idle' ? card.next : null;
+    return (
+      <section className={`${styles.card} ${styles.calm}`} data-testid="now-card" data-state={next ? 'calm' : 'empty'}>
+        <p className={styles.quiet} data-testid="now-cheer">
+          {cheerText(today, locale)}
+        </p>
+        {next ? (
+          <p className={styles.sub} data-testid="now-hint">
+            {t('now.hint', { t: next.time ?? '', title: next.title, d: durText(Math.ceil(((next.start ?? now) - now) / MIN), locale) })}
+          </p>
         ) : null}
       </section>
     );
