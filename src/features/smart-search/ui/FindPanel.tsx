@@ -1,6 +1,7 @@
 // 查找面板（B4b-2；定稿线框 s12“查找（经＋）”、sFind“查找结果：关键词先出，意思相近随后补上”；R-112、R-118）
 // • 打开方式：“＋”打字条判成查找后回车（features/plus 的 TypeBar），电脑 Ctrl+K（features/plus 的 TypeBarPreload 挂的 FindHost）；整块懒加载，不进首屏
-// • 手机：整屏一层；电脑（≥ 900px）：磨砂遮罩上居中一块，左结果右预览，↑↓ 选、Enter 打开、Tab 切类型、Esc 关
+// • 手机：整屏一层；电脑（≥ 900px）：磨砂遮罩上居中一块，左结果右预览，↑↓ 选、Enter 打开、Ctrl / ⌘ + ←→ 切类型、Esc 关；
+//   Tab 照浏览器走（结果行、“⋯”、胶囊、页脚都走得到，第三方审查前端第 2 条 11-14）；读屏：输入框 combobox、各组结果 listbox、每行 option
 // • 分组：最相关（关键词和意思都对上）→ 关键词找到 → 意思相近；每组先给 GROUP_SHOW 条，多的点“还有 N 条”展开（代定：线框画了每组 2～3 条和“全部 ›”）
 // • 顶上一行“现在只按关键词找 · 原因”（没网、没同意、次数用完、超时 + 再试一次），四种分开写（架构 5.13 第 6 点末条）
 // • 打开一条：日程、待办、纪念日进各自的编辑页；随手记、图片、文档进所在随手记；同时记进“最近找过”。不保存、不改任何数据
@@ -109,13 +110,17 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (picked) go(picked);
-    } else if (e.key === 'Tab' && !e.shiftKey && desk && q !== '') {
-      // 线框 s12 电脑版“Tab 切换类型”：只在输入框里、有查询时接，Shift+Tab 照常
+    } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && (e.ctrlKey || e.metaKey) && desk && q !== '') {
+      // 电脑版切类型：Ctrl / ⌘ + ←→（线框 s12 原来画的是 Tab；第三方审查前端第 2 条 11-14 改：Tab 交还浏览器，键盘才走得到结果行、“⋯”、胶囊、页脚）
       e.preventDefault();
       const order: (FindKind | 'all')[] = ['all', ...kinds];
-      f.setKind(order[(order.indexOf(f.kind) + 1) % order.length] ?? 'all');
+      const n = order.length;
+      f.setKind(order[(order.indexOf(f.kind) + (e.key === 'ArrowRight' ? 1 : n - 1)) % n] ?? 'all');
     }
   };
+  /** 读屏：结果行是 option，id 按条目定（输入框 aria-activedescendant 指向它） */
+  const optId = (h: FindHit): string => `find-opt-${h.item.kind}-${h.item.id}`;
+  const lbId = (k: Group['key']): string => `find-lb-${k}`;
 
   const fb = f.sem.s === 'fallback' ? f.sem.reason : null;
   const fbLine = fb === null ? null : (
@@ -152,18 +157,20 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
     </div>
   );
 
-  let idx = -1;
+  // 每行：li 是 none，行按钮是 option；“⋯”跟在后面（axe 认为 listbox 里不该有 button，换 grid 才能消，交主持人定，见 b4b2-find.spec.ts）
+  // 选中按条目认（h === picked）：“最相关”里的图片排成缩略图、不进这一列，按渲染顺序数行号会和 visible 错位
   const row = (h: FindHit): ReactNode => {
-    idx += 1;
-    const i = idx;
     return (
-      <li key={`${h.item.kind}:${h.item.id}`} className={styles.item}>
+      <li key={`${h.item.kind}:${h.item.id}`} className={styles.item} role="none">
         <button
           type="button"
+          id={optId(h)}
+          role="option"
+          aria-selected={desk && h === picked}
           className={styles.row}
-          aria-current={desk && i === sel ? 'true' : undefined}
+          aria-current={desk && h === picked ? 'true' : undefined}
           onClick={() => go(h)}
-          onMouseEnter={desk ? () => setSel(i) : undefined}
+          onMouseEnter={desk ? () => setSel(visible.indexOf(h)) : undefined}
           data-testid="find-row"
           data-kind={h.item.kind}
           data-done={(h.item.kind === 'todo' && h.item.done) || undefined}
@@ -250,15 +257,17 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
     {groups.map((g) => {
       if (g.hits.length === 0 && !(g.key === 'sem' && f.sem.s === 'wait')) return null;
       const hidden = more[g.key] ? 0 : g.hits.length - GROUP_SHOW;
+      const shown = (more[g.key] ? g.hits : g.hits.slice(0, GROUP_SHOW)).filter((h) => !(g.key === 'top' && isThumb(h)));
+      const wait = g.key === 'sem' && f.sem.s === 'wait';
       return (
         <section key={g.key} aria-label={g.head} data-testid={`find-group-${g.key}`}>
           <div className={styles.gh}><b>{g.head}</b>{g.sub ? <span>{g.sub}</span> : null}</div>
-          {g.key === 'sem' && f.sem.s === 'wait' ? (
+          {wait ? (
             <div className={styles.skel} aria-hidden="true"><i /><i /></div>
           ) : (
             <>
               {g.key === 'top' ? thumbs(g.hits) : null}
-              <ul className={styles.list}>{(more[g.key] ? g.hits : g.hits.slice(0, GROUP_SHOW)).filter((h) => !(g.key === 'top' && isThumb(h))).map(row)}</ul>
+              <ul className={styles.list} role="listbox" id={lbId(g.key)} aria-label={g.head}>{shown.map(row)}</ul>
             </>
           )}
           {hidden > 0 ? (
@@ -272,11 +281,19 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
     </>
   );
 
+  // 读屏（第三方审查前端第 2 条）：输入框是 combobox，管着各组结果的 listbox（画出 ul 的组）；电脑上 ↑↓ 选中的那一条是 aria-activedescendant
+  const lists = q === '' || !anyHit ? [] : groups.filter((g) => g.hits.length > 0 && !(g.key === 'sem' && f.sem.s === 'wait')).map((g) => lbId(g.key));
+  const active = desk && picked && lists.length > 0 && !isThumb(picked) ? optId(picked) : undefined;
   const field = (
     <div className={styles.field}>
       <span className={styles.plus} aria-hidden="true">＋</span>
       <input
         ref={input}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={lists.length > 0}
+        aria-controls={lists.length > 0 ? lists.join(' ') : undefined}
+        aria-activedescendant={active}
         className={styles.input}
         value={f.q}
         onChange={(e) => f.setQ(e.target.value)}

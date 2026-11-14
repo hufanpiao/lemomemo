@@ -1,6 +1,6 @@
 // 纪念日页面（B5 S14；皮肤视觉稿 anniv 第 38 张）：列表按还有几天排、筛选胶囊带条数、“最近的一个”大卡、已过去的倒数日折叠、只读行点了提示；
 // #/anniv/new 盖上新建一层。集合用替身；“今天”固定在 2026-11-13 10:00（current_tz）；界面语言中文
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { currentTz } from '../../../core/current-tz.ts';
@@ -73,5 +73,57 @@ describe('纪念日列表', () => {
     expect(await screen.findByTestId('anniv-edit-layer')).toBeTruthy();
     expect(screen.getByTestId('anniv-page').hasAttribute('inert')).toBe(true);
     await act(async () => undefined);
+  });
+});
+
+// 第三方审查前端第 1 条（11-14）：编辑层输入法组字时按 Esc 不关；编辑层是 role=dialog、aria-modal，焦点圈在层里（同 smart-search FindPanel 用 Radix Dialog）；
+// 提醒弹层开着时 Esc 只关弹层；Ctrl+Enter 照常关
+describe('纪念日编辑层：键盘和读屏', () => {
+  const layerGone = () => waitFor(() => expect(screen.queryByTestId('anniv-edit-layer')).toBeNull());
+
+  it('输入法组字时按 Esc（isComposing、keyCode 229）不关；不组字时 Esc 关', async () => {
+    open('#/anniv/new');
+    const name = await screen.findByTestId('anniv-edit-name');
+    name.focus();
+    fireEvent.keyDown(name, { key: 'Escape', isComposing: true });
+    fireEvent.keyDown(name, { key: 'Escape', keyCode: 229 });
+    await act(async () => undefined);
+    expect(screen.getByTestId('anniv-edit-layer')).toBeTruthy();
+    fireEvent.keyDown(name, { key: 'Escape' });
+    await layerGone();
+  });
+
+  it('编辑层是 role=dialog、aria-modal=true，带名字；焦点出了层会被拉回层里', async () => {
+    const outside = document.createElement('button');
+    outside.textContent = '外面';
+    document.body.append(outside);
+    try {
+      open('#/anniv/new');
+      await screen.findByTestId('anniv-edit-name');
+      await act(async () => undefined);
+      const dlg = screen.getByRole('dialog');
+      expect(dlg.getAttribute('aria-modal')).toBe('true');
+      expect(dlg.getAttribute('aria-label')).toBe('新建纪念日');
+      expect(within(screen.getByTestId('anniv-edit-layer')).getByRole('dialog')).toBe(dlg);
+      screen.getByTestId('anniv-edit-name').focus();
+      outside.focus();
+      expect(dlg.contains(document.activeElement)).toBe(true);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it('提醒弹层开着时 Esc 只关弹层、编辑层还在；Ctrl+Enter 关编辑层', async () => {
+    open('#/anniv/new');
+    await screen.findByTestId('anniv-edit-name');
+    fireEvent.click(screen.getByTestId('anniv-edit-remind'));
+    // 提醒弹层开着时编辑层被 Radix 标成读屏不读（aria-hidden），按 DOM 数
+    const dialogs = () => document.querySelectorAll('[role="dialog"]').length;
+    await waitFor(() => expect(dialogs()).toBe(2));
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(dialogs()).toBe(1), { timeout: 3000 });
+    expect(screen.getByTestId('anniv-edit-layer')).toBeTruthy();
+    fireEvent.keyDown(screen.getByTestId('anniv-edit-name'), { key: 'Enter', ctrlKey: true });
+    await layerGone();
   });
 });

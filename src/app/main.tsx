@@ -37,8 +37,7 @@ import { hideSplash, hideSplashAfter } from '../platform/splash.ts';
 import { afterAppPainted, appPainted, startAppPaintLimit, watchRoot, whenContent } from '../platform/root-paint.ts';
 import { markInsetPainted, watchInsetBottom } from '../platform/inset-watch.ts';
 import { loadMotionFeatures, nextFrame } from '../motion/index.ts';
-import { registerSw, reloadPage, upgradeLogCountStore } from '../platform/sw-register.ts';
-import { mountExitScreen, watchExitIncomplete } from './exit-screen.tsx';
+import { registerSw, reloadPage, upgradeLogCountStore } from '../platform/sw-register.ts';import { mountExitScreen, watchExitIncomplete } from './exit-screen.tsx';
 import { mountFeatures } from './features.ts';
 import { goHref } from './router.ts';
 import { logQueueCleaner, outboxLog, toLogRecord } from './log-channel.ts';
@@ -61,7 +60,8 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
 }
 
 // 诊断启动件（运行日志，platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量整块摇掉；启动画面收起不等它
-if (import.meta.env.MODE !== 'production') void import('../platform/diag-boot.ts').then((m) => m.startDiagBoot()).catch(() => undefined);
+// diag：运行日志接上以后的诊断启动件（启动失败时经它记一行再跳登录页，见文件末尾）；正式版是 undefined
+const diag = import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot(), m)).catch(() => undefined) : undefined;
 // 启动画面最晚 5 秒收起：从入口模块开始执行算起（关口、冷启动、分包加载哪一步卡住都不再盖着）
 hideSplashAfter(hideSplash);
 // 皮肤、深浅色（ADR-008）：入口一开始就懒加载 platform/look.ts（不进首屏），它一加载就按本机缓存套到 <html> 上，再盯住 settings 集合（coldStart 灌好、同步回来都重新套）；
@@ -322,7 +322,15 @@ async function start(): Promise<void> {
   void loadMotionFeatures();
 }
 
-// start 自己不该抛（coldStart 不抛）；万一抛了（例如没有 #root）不留白屏：回登录页，登录页会显示“已登录 · 继续”
-start().catch(() => {
-  goToAuth();
+/** 启动失败时最多等运行日志接上多久再跳登录页（诊断启动件下载卡住也不多等） */
+const BOOT_FAIL_LOG_WAIT_MS = 1000;
+
+// start 自己不该抛（coldStart 不抛）；万一抛了（例如没有 #root）不留白屏：回登录页，登录页会显示“已登录 · 继续”。
+// 先记一行运行日志（只记错误名，固定说明在 diag-boot.ts 的 logBootFailed；不记 message；第三方审查前端第 3 条，11-14）：
+// 运行日志懒加载（入口不静态引 run-log，diag-boot.test.ts），等它接上（最多 BOOT_FAIL_LOG_WAIT_MS）记好再跳，跳走时 run-log.ts 在 pagehide 当场存盘。
+// 正式版 diag 是 undefined，不等
+start().catch((e: unknown) => {
+  const name = (e instanceof Error ? e.name : typeof e).slice(0, 40);
+  const logged = diag?.then((m) => m?.logBootFailed(name));
+  void Promise.race([logged, new Promise<void>((r) => setTimeout(r, BOOT_FAIL_LOG_WAIT_MS))]).then(() => goToAuth());
 });

@@ -44,7 +44,7 @@ export const zh = {
   'find.desk.time': '时间',
   'find.desk.place': '地点',
   'find.desk.note': '备注',
-  'find.desk.keys': '↑↓ 选择 · Enter 打开 · Tab 切换类型 · Esc 关闭',
+  'find.desk.keys': '↑↓ 选择 · Enter 打开 · Ctrl / ⌘ + ←→ 切换类型 · Esc 关闭',
   'find.desk.none': '选一条看预览',
   'find.results': '查找结果',
   // B4b-3：结果层（时间类查找、总结、取消改期完成）、每行“⋯”菜单、提示条上的“改成搜索”

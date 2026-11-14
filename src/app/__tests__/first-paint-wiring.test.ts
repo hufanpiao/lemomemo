@@ -172,3 +172,23 @@ describe('session.ts：onAuthUser 预加载 supabase-js 先等首屏画完', () 
     expect(body.match(/whenIdle\(/g)?.length).toBe(1);
   });
 });
+
+// 第三方审查前端第 3 条（11-14）：start() 万一抛了，先记一行运行日志再回登录页；只记错误名和固定说明，不记 message（可能带用户内容）。
+// 运行日志是懒加载的（diag-boot.ts，正式构建摇掉）：先等它接上（有上限）再跳，跳走时 run-log 在 pagehide 当场存盘（run-log.test.ts 测）
+describe('main.tsx：启动失败先记运行日志再回登录页', () => {
+  const tail = main.slice(main.indexOf('start().catch('));
+  it('catch 里取错误名（不碰 message），经诊断启动件 logBootFailed 记一行，等它记好（最多 BOOT_FAIL_LOG_WAIT_MS）再 goToAuth()', () => {
+    expect(tail.length).toBeLessThan(main.length);
+    const name = tail.indexOf('const name = (e instanceof Error ? e.name : typeof e)');
+    expect(name, '没取错误名').toBeGreaterThan(0);
+    expect(tail).not.toContain('.message');
+    const log = tail.indexOf('diag?.then((m) => m?.logBootFailed(name))');
+    expect(log, '没写运行日志').toBeGreaterThan(name);
+    const go = tail.indexOf('goToAuth()');
+    expect(go).toBeGreaterThan(log);
+    expect(tail.slice(log, go)).toContain('Promise.race([logged, new Promise<void>((r) => setTimeout(r, BOOT_FAIL_LOG_WAIT_MS))])');
+  });
+  it('diag 就是非正式版下载诊断启动件的那一个 Promise（正式版是 undefined，不下载、不等）', () => {
+    once(main, "const diag = import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot(), m))");
+  });
+});

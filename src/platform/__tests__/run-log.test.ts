@@ -94,6 +94,17 @@ describe('全局运行日志', () => {
     expect(log).toMatch(/app typebar stored out=ok/);
   });
 
+  it('离开页面（pagehide，例如启动失败跳登录页的 location.replace）当场存盘，不等 300ms（第三方审查前端第 3 条）', () => {
+    vi.useFakeTimers();
+    const stop = startRunLog(window, { version: 't' });
+    vi.advanceTimersByTime(1000);
+    rlog('boot start_failed TypeError -> auth');
+    expect(readRunLog()).not.toMatch(/boot start_failed/);
+    window.dispatchEvent(new Event('pagehide'));
+    expect(readRunLog()).toMatch(/app boot start_failed TypeError -> auth/);
+    stop();
+  });
+
   it('网络请求记方法、路径（不带参数）、状态；失败记 FAIL', async () => {
     const orig = window.fetch;
     let fail = false;

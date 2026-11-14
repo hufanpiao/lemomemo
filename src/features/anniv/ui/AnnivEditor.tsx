@@ -1,5 +1,7 @@
 // 纪念日新建和编辑（B5 S14、S15、S16；线框 s5；皮肤视觉稿 annnew、annedit、annface；R-94、R-117、R-121、R-403；代定 D1、D15、D16）
-// • 盖在列表上面的一层：手机整屏从底部上来，电脑右侧抽屉（≥ 900px）；Esc 关、Ctrl / ⌘ + Enter 关（改了就自动保存，关就是“完成”）；
+// • 盖在列表上面的一层：手机整屏从底部上来，电脑右侧抽屉（≥ 900px）；Esc 关、Ctrl / ⌘ + Enter 关（改了就自动保存，关就是“完成”；输入法组字时都不算）；
+//   焦点圈在层里、role=dialog + aria-modal、层外读屏不读、上面再叠的弹层（提醒、删除确认）先吃 Esc：用 Radix Dialog（不用 Overlay、不挂 Portal，
+//   同 smart-search FindPanel，见 kit Dialog.tsx 文件头；第三方审查前端第 1 条，11-14）
 //   外框、保存状态、只读、删除和撤销都用 kit 的 EditShell（和日程、待办编辑页同一套）
 // • 从上到下：类型（生日 / 纪念日 / 倒数日）→ 头像一行（R-117：点头像从相册选，裁成圆形；“去掉”；新建时先写名字才能加）→ 名字 →
 //   日期（阳历 / 阴历；年、月、日三列，iPhone 上是系统滚轮；阴历的闰月和平月在月份同一列，只在有闰月的年份出现；“不知道年份”开关）→
@@ -8,7 +10,8 @@
 // • 编辑页（视觉稿 annface，主持人 11-14 定照稿）：名字、日期、提醒、备注同一张卡四行，左标签右值；名字、备注是右对齐的文字样式（.inlineIn，可直接改，
 //   聚焦时出底色看得出在改，字号 16px 防 iOS 放大）；备注收起一行，聚焦后左对齐、撑高多行。“再往后”两次稿里没有，去掉
 // • 只读行（D1：韩国阴历、认不出的值）：EditShell 顶部出“要新版本”，输入全禁用
-import { useEffect, useState } from 'react';
+import * as RD from '@radix-ui/react-dialog';
+import { useEffect, useRef, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { AnnivKind } from '../../../../shared/logic/anniv/next-date.ts';
 import { backOr } from '../../../app/router-levels.ts';
@@ -33,6 +36,11 @@ const NOYEAR_KEY = { birthday: 'anniv.edit.noYear.birthday', anniversary: 'anniv
 const NOYEAR_HINT = { birthday: 'anniv.edit.noYearHint.birthday', anniversary: 'anniv.edit.noYearHint.anniversary', countdown: 'anniv.edit.noYearHint.countdown' } as const;
 
 const close = (): void => backOr('anniv');
+/** 键盘、遮罩关（改了就自动保存，关就是“完成”）：先让焦点离开输入框，输入框失焦时把字交上去，再关 */
+const done = (): void => {
+  (document.activeElement as HTMLElement | null)?.blur?.();
+  close();
+};
 const range = (a: number, b: number): number[] => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
 /** 月份那一列：阴历在闰月那一年多一项“闰X月”，排在同号平月后面；值写成 "3" / "3L" */
@@ -134,18 +142,19 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
   const off = ed.off || badRow;
   const rec = { ...ed, readonly };
 
+  const box = useRef<HTMLDivElement>(null);
+  // Ctrl / ⌘ + Enter 关：只在编辑层是最上面一层时（提醒弹层、删除确认等 kit Dialog 挂在 body 末尾，开着时排在它后面）；输入法组字时不算
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (sheet || document.querySelector('[role="dialog"]')) return;
-      if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) {
-        e.preventDefault();
-        (document.activeElement as HTMLElement | null)?.blur?.();
-        close();
-      }
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey)) return;
+      if ([...document.querySelectorAll('[role="dialog"]')].at(-1) !== box.current) return;
+      e.preventDefault();
+      done();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [sheet]);
+  }, []);
 
   const created = typeof ed.row?.['created_at'] === 'number' ? ed.row['created_at'] : null;
   const r = recOf(form, created);
@@ -155,13 +164,32 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
   } catch {
     st = null;
   }
+  const kind = t(ed.isNew ? 'anniv.edit.new' : 'anniv.edit.kind', {});
   return (
-    <div className={styles.layer} data-testid="anniv-edit-layer">
-      <div className={styles.scrim} onClick={close} aria-hidden="true" />
-      <div className={styles.sheet}>
+    <RD.Root open onOpenChange={(o) => (o ? undefined : done())}>
+      <div className={styles.layer} data-testid="anniv-edit-layer">
+        {/* 遮罩：Radix modal 开着时层外不接点按（body 的 pointer-events: none），点遮罩由 Radix 认成“点在层外”走 onOpenChange 关 */}
+        <div className={styles.scrim} aria-hidden="true" />
+        <RD.Content
+          ref={box}
+          className={styles.sheet}
+          aria-modal="true"
+          aria-label={kind}
+          aria-describedby={undefined}
+          onOpenAutoFocus={(e) => {
+            // 打开时焦点落在层本身（读屏报层名）；不落到第一个按钮或输入框上（手机上不弹键盘、不出焦点框）
+            e.preventDefault();
+            box.current?.focus({ preventScroll: true });
+          }}
+          onEscapeKeyDown={(e) => {
+            if (e.isComposing || e.keyCode === 229) e.preventDefault();
+          }}
+          // 关掉以后焦点不交给 Radix 找（没有 RD.Trigger），和原来一样由页面接手
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
         <EditShell
           prefix="anniv-edit"
-          kind={t(ed.isNew ? 'anniv.edit.new' : 'anniv.edit.kind', {})}
+          kind={kind}
           backLabel={t('anniv.edit.back', {})}
           onBack={close}
           rec={rec}
@@ -232,7 +260,7 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
             </p>
           ) : null}
         </EditShell>
-      </div>
+        </RD.Content>
       <RemindSheet
         open={sheet}
         onOpenChange={setSheet}
@@ -243,6 +271,7 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
         tz={tz}
         mode="item"
       />
-    </div>
+      </div>
+    </RD.Root>
   );
 }
