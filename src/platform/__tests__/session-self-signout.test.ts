@@ -17,7 +17,7 @@ vi.mock('../supabase/client.ts', () => ({
 }));
 
 import {
-  authEventHandler, forgetSelfSignOut, isSelfSignOut, markSelfSignOut, markSelfSignOutThisTab, resetSelfSignOutForTest, SELF_SIGN_OUT_TTL_MS,
+  authEventHandler, forgetSelfSignOut, isSelfSignOut, markSelfSignOut, resetSelfSignOutForTest, SELF_SIGN_OUT_TTL_MS,
 } from '../session.ts';
 
 const A = '00000000-0000-4000-8000-00000000000a';
@@ -85,11 +85,6 @@ describe('“自己退出”的标记：时间戳 + 退出前的 session_id（K6
     markSelfSignOut(localStorage, 100, null);   // 退出时也读不出 sid
     resetSelfSignOutForTest();
     expect(isSelfSignOut(localStorage, 200, null)).toBe(true);
-    // 本页内存里那份同一规则
-    markSelfSignOutThisTab(100, 's1');
-    localStorage.clear();
-    expect(isSelfSignOut(localStorage, 200, null)).toBe(false);
-    expect(isSelfSignOut(localStorage, 200, 's1')).toBe(true);
     // 会话层：挂监听时已没有会话（initialSessionId null），收到 SIGNED_OUT 时有一个带 sid 的标记 → 按被移除上报
     resetSelfSignOutForTest();
     markSelfSignOut(localStorage, Date.now(), 's1');
@@ -138,14 +133,5 @@ describe('“自己退出”的标记：时间戳 + 退出前的 session_id（K6
     expect(isSelfSignOut(bad, 20)).toBe(true);
     expect(isSelfSignOut(bad, 10 + SELF_SIGN_OUT_TTL_MS)).toBe(false);
     expect(() => forgetSelfSignOut('s', bad)).not.toThrow();
-  });
-
-  it('只打本页的标记（设置页自己处理被移除）：本页认，不写 localStorage，别的标签页仍按被移除提示', () => {
-    markSelfSignOutThisTab(100, 's1');
-    expect(localStorage.getItem('lemo.self_signout')).toBeNull();
-    expect(isSelfSignOut(localStorage, 200, 's1')).toBe(true);
-    expect(isSelfSignOut(localStorage, 200, 's2')).toBe(false);
-    resetSelfSignOutForTest();   // 别的标签页
-    expect(isSelfSignOut(localStorage, 200)).toBe(false);
   });
 });

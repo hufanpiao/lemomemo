@@ -1,6 +1,7 @@
 // SW 记下的通知按键（架构 4.1、0.29 续第 102 条③、第 107 条）：页面启动时丢掉别的账号的和超过 24 小时的（prunePendingActions）；
 // 形状校验、留不留的判断也在这里。转进 outbox 在 pending-drain.ts（不进首屏：只有提醒功能引）
 // 纯 TS：不准 import React 和任何功能（A1）
+import { isSnoozeMin, type DoneAction, type SnoozeAction } from '../../shared/local-db.ts';
 import type { Cache } from './cache.ts';
 import { PENDING_ACTIONS } from './cache-schema.ts';
 import type { PendingAction } from './outbox-types.ts';
@@ -9,30 +10,15 @@ import type { PendingAction } from './outbox-types.ts';
 export const PENDING_ACTION_TTL_MS = 24 * 60 * 60 * 1000;
 /** created_at 比“现在”晚这么多以上的也丢掉（时钟被拨回过；代码审查 S5、安全审查 FE-S2：不然 now - created_at 为负，永远不过期） */
 export const PENDING_ACTION_FUTURE_MS = 5 * 60 * 1000;
-/** 推迟分钟数的范围（和 SW 的 src/sw/push.ts 一致：1 分钟～1 天） */
-const SNOOZE_MAX_MIN = 24 * 60;
 export const PENDING_TABLES: ReadonlySet<string> = new Set(['events', 'todos', 'anniversaries']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** SW 写的那一种按键（src/sw/pending.ts 的 SnoozeAction）：推迟多少分钟、按的是哪一次到点 */
-export interface PendingSnooze {
-  readonly type: 'snooze';
-  readonly minutes: number;
-  readonly due_at: number;
-}
-
 /**
- * SW 写的“完成”（src/sw/pending.ts 的 DoneAction；R-294、R-307）：只待办，和推迟同一条路径。
- * 转的时候 due_at 必须对上这一行**当前这一次**到点的时刻，对不上（已经推迟过、改了时间、已完成）就丢弃（安全复审；
+ * 形状合格、能交给 toEnqueue 的一项。按键类型（推迟、完成）和 SW 共用 shared/local-db.ts（后端-5）；
+ * “完成”转的时候 due_at 必须对上这一行**当前这一次**到点的时刻，对不上（已经推迟过、改了时间、已完成）就丢弃（安全复审；
  * features/reminders/data/remind-pending.ts 的 pendingVerdict；转在 pending-drain.ts，测试 remind-pending.test.ts）
  */
-export interface PendingDone {
-  readonly type: 'done';
-  readonly due_at: number;
-}
-
-/** 形状合格、能交给 toEnqueue 的一项 */
-export type ValidPendingAction = PendingAction & { row_table: 'events' | 'todos' | 'anniversaries'; action: PendingSnooze | PendingDone };
+export type ValidPendingAction = PendingAction & { row_table: 'events' | 'todos' | 'anniversaries'; action: SnoozeAction | DoneAction };
 
 /**
  * 形状对不对（按 SW 写入的规则再校验一遍；代码审查 S5、安全审查 FE-S3）：id、user_id 是非空字符串，row_table 是三张表之一，
@@ -51,7 +37,7 @@ export function isValidPendingAction(a: unknown): a is ValidPendingAction {
     typeof o['row_table'] === 'string' && PENDING_TABLES.has(o['row_table']) &&
     typeof o['row_id'] === 'string' && UUID_RE.test(o['row_id']) &&
     typeof o['created_at'] === 'number' && Number.isFinite(o['created_at']) &&
-    ((type === 'snooze' && typeof minutes === 'number' && Number.isInteger(minutes) && minutes >= 1 && minutes <= SNOOZE_MAX_MIN) ||
+    ((type === 'snooze' && isSnoozeMin(minutes)) ||
       (type === 'done' && o['row_table'] === 'todos')) &&
     typeof dueAt === 'number' && Number.isSafeInteger(dueAt) && dueAt > 0
   );

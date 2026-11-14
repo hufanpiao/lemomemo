@@ -1,11 +1,14 @@
 // 设置页（B1 K9 骨架）的总 hook：把接口、离开本机、设备列表、中韩切换、导出和注销（R-256 ②⑤）接在一起
 // 测试经 deps 换掉接口、清本机和跳转、时钟
 import { useCallback, useMemo, useRef } from 'react';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { saveFile } from '../../../platform/save-file.ts';
 import { readSessionEmail } from '../../../platform/session.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { createAccountApi, EXPORT_MIME, type AccountApi, type ExportFile } from '../data/account-api.ts';
-import { createLeaveAccount, defaultAccountLeaveDeps, leaveForDisabled, type DisabledLeaveDeps, type LeaveAccount } from '../data/account-exit.ts';
+import {
+  createFollowSignOut, createLeaveAccount, defaultAccountLeaveDeps, leaveForDisabled, type DisabledLeaveDeps, type LeaveAccount,
+} from '../data/account-exit.ts';
 import { createRecentExportsApi, type RecentExportsApi } from '../data/recent-exports.ts';
 import { defaultExitDeps, readLocalDeviceId } from '../data/local.ts';
 import { createSettingsApi, type SettingsApi } from '../data/settings-api.ts';
@@ -26,8 +29,10 @@ export interface SettingsDeps {
   exit?: ExitDeps;
   /** account 函数（导出、注销） */
   account?: AccountApi;
-  /** 注销成功、账号停用或冷静期时离开本机（默认 data/account-exit.ts） */
+  /** 注销成功、账号停用或冷静期、会话不认（removed）时离开本机（默认 data/account-exit.ts，即 core/device-exit.ts 的 exitDevice） */
   leaveAccount?: LeaveAccount;
+  /** 请求发现本机已经没有会话时离开本机（默认 data/account-exit.ts 的 createFollowSignOut，同别的标签页退出） */
+  followSignOut?: () => void;
   /** 本机 meta 里的设备行 id（默认 data/local.ts 的 readLocalDeviceId） */
   readDeviceId?: () => Promise<string | null>;
   /** 设置 › 账号 › 最近的导出（默认经 RLS 读本人的 logs，data/recent-exports.ts） */
@@ -36,7 +41,7 @@ export interface SettingsDeps {
   saveExport?: AccountActionDeps['save'];
   /** 当前时间（毫秒）；要传稳定的函数 */
   now?: () => number;
-  /** 离开本机的提示后自动回登录页的等待时间 */
+  /** “服务器上的这次登录暂时没能吊销”提示后自动回登录页的等待时间 */
   redirectMs?: number;
   /** “退出这台设备”服务器部分的总超时 */
   exitTimeoutMs?: number;
@@ -58,7 +63,19 @@ export function useSettingsPage(deps: SettingsDeps = {}) {
   });
   // R-382：设置页的“被移除”记录成 settings 一路（lemo.authloss 的 path）
   const leave = useMemo(() => deps.leaveAccount ?? createLeaveAccount({ ...defaultAccountLeaveDeps, authPath: 'settings' }), [deps.leaveAccount]);
-  const { onRevoked, onSignedOut } = exit;
+  const follow = useMemo(() => deps.followSignOut ?? createFollowSignOut(), [deps.followSignOut]);
+  // 会话不认、本机没有会话：和主 App 同一条退出管线（core/device-exit.ts 的 exitDevice，同一页只退出一次；第三方审查前端-4、后端-3）
+  const onRevoked = useCallback(
+    (sid: string | null) => {
+      rlog('settings session_lost kind=revoked');
+      void leave('removed', sid);
+    },
+    [leave],
+  );
+  const onSignedOut = useCallback(() => {
+    rlog('settings session_lost kind=signed_out');
+    follow();
+  }, [follow]);
   // settings-api 的 account_disabled（RLS 一路，分不清停用和冷静期）：先探测再定（R-256 ③；探测不出按 disabled_unsure）
   // 设备列表和改语言共用这一个：探测中（probing）再来的不再探测（第六轮审查建议 ③，同一时刻只探测一次）；
   // 探测说账号正常（没离开）就放开，下次再遇到可以再探测；离开了就一直挡着。
@@ -83,13 +100,13 @@ export function useSettingsPage(deps: SettingsDeps = {}) {
   );
   const devices = useDevices({
     api,
-    onRevoked: exit.onRevoked,
-    onSignedOut: exit.onSignedOut,
+    onRevoked,
+    onSignedOut,
     onDisabled,
     signOutHere: exit.signOutHere,
     ...(deps.now ? { now: deps.now } : {}),
   });
-  const locale = useLocaleSwitch(api, exit.onRevoked, exit.onSignedOut, onDisabled);
+  const locale = useLocaleSwitch(api, onRevoked, onSignedOut, onDisabled);
   const accountApi = useMemo(() => deps.account ?? createAccountApi(getSupabase), [deps.account]);
   const account: AccountActionDeps = useMemo(
     () => ({

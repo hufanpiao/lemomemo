@@ -92,7 +92,7 @@ describe('已登录设备', () => {
     expect(api.deleteOwnDevice).toHaveBeenCalledWith('y');
     expect(api.removeDevice).not.toHaveBeenCalled();
     // 会话放最后：中途被打断最坏是“有会话、没库”（跳转前再同步删一次本机会话）
-    expect(order).toEqual(['row', 'wipe', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
+    expect(order).toEqual(['row', 'wipe', 'deleteDb', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
   });
 
   it('设备列表里点“退出这台设备”也先数没上传的：有 2 条时确认框写条数', async () => {
@@ -202,16 +202,20 @@ describe('退出登录（页面最底下单独一行）', () => {
     expect(order).toEqual(['count']);
     await confirmWith(zh['settings.confirm.signOut.ok']);
     await waitFor(() => expect(exit.goToAuth).toHaveBeenCalled());
-    expect(order).toEqual(['count', 'row', 'wipe', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
+    expect(order).toEqual(['count', 'row', 'wipe', 'deleteDb', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
   });
 
   it('跳登录页抛错：“去登录”恢复可点、放开退出时占住的“忙”（页面能自己重新载入）；再点再跳', async () => {
-    const api = fakeApi({ loadDevices: vi.fn(async () => fail('revoked')) });
+    // 服务器没退成时才停在设置页给“去登录”（会话不认那一路交给 exitDevice，不在设置页弹框）
+    const api = fakeApi({ dropLocalSession: vi.fn(async () => ({ serverDone: false })) });
     const { exit } = fakeExit();
     exit.goToAuth.mockImplementationOnce(() => {
       throw new Error('SecurityError');
     });
-    render(<SettingsPage deps={{ api, exit, now }} />);
+    await renderPage(api, exit);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: zh['settings.account.signOut'] }));
+    });
     const dlg = await screen.findByRole('dialog');
     const go = await within(dlg).findByRole('button', { name: zh['settings.revoked.go'] });
     await act(async () => {

@@ -179,11 +179,7 @@ export const zh = {
   'settings.err.unknown': '出了点问题，请稍后再试',
   'settings.err.accountDisabled': '这个账号已停用。申请注销后 7 天内重新登录可以恢复。',
 
-  'settings.revoked.title': '需要重新登录',
-  'settings.revoked.body': '这台设备已在别的设备上被移除，请重新登录；还没上传的改动已丢弃。',
   'settings.revoked.go': '去登录',
-  'settings.signedOut.title': '已退出登录',
-  'settings.signedOut.body': '这个账号已在别的窗口退出，请重新登录。',
   'settings.offlineOut.title': '已在这台设备上退出',
   'settings.offlineOut.body': '服务器上的这次登录暂时没能吊销，本机已清空。之后可以在别的设备上用“退出其他所有设备”清掉它。',
   // 设置 › 电脑 › 快速记录热键（R-297，只在电脑版 exe 显示）

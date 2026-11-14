@@ -8,7 +8,7 @@ import { openCache } from '../../src/core/cache.ts';
 import { PENDING_ACTIONS } from '../../src/core/cache-schema.ts';
 import { isValidPendingAction } from '../../src/core/pending-actions.ts';
 import { fakeIndexedDB } from '../../src/core/__tests__/idb-fake.ts';
-import type { SwPendingAction } from '../../src/sw/pending.ts';
+import type { SwPendingAction } from '../../shared/local-db.ts';
 import { clipText, dataOf, handleNotificationClick, notificationOf, parsePushPayload, reminderUrl, type SwLike } from '../../src/sw/push.ts';
 
 const UID = '11111111-1111-4111-8111-111111111111';

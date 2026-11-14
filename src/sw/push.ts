@@ -25,9 +25,10 @@
 // 整页提醒的地址（reminderUrl）、tag 只写在 shared/logic/remind-route.ts（架构 0.53），和 platform 的 openReminder 是同一份
 import { t } from '../../shared/i18n/i18n.ts';
 import { pickLocale } from '../../shared/i18n/pick-locale.ts';
+import { isSnoozeMin, type SwPendingAction } from '../../shared/local-db.ts';
 import { reminderTag, reminderUrl, type ReminderKind } from '../../shared/logic/remind-route.ts';
-import { actionsOf, buttonsOf, isSnoozeMin, type RemindButtons } from './push-actions.ts';
-import { readSwOwner, writePendingAction, type PendingWriteResult, type SwPendingAction } from './pending.ts';
+import { actionsOf, buttonsOf, type RemindButtons } from './push-actions.ts';
+import { readSwOwner, writePendingAction, type PendingWriteResult } from './pending.ts';
 import { VAULT_PUSH_EVENTS, vaultPushT, type VaultPushEvent } from './push-vault-data.ts';
 
 // 地址、tag 的拼法只留一份（shared/logic/remind-route.ts，架构 0.53）；这里原样转出，SW 一侧仍叫 reminderUrl、notificationTag

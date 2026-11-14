@@ -4,14 +4,11 @@
 // • snooze：{ label, minutes }，minutes 是 1～1440 的整数才认（后端一律发 SNOOZE_MIN = 10）
 // • done、ack：{ label }
 import { actionsFor, type NotifyAction } from '../../shared/logic/notify-actions.ts';
+import { isSnoozeMin } from '../../shared/local-db.ts';
 import type { ReminderKind } from '../../shared/logic/remind-route.ts';
 
 /** 按键文字的上限（码点；和后端 payload.ts 的 LABEL_MAX 一致） */
 export const LABEL_MAX = 40;
-/** 推迟分钟数的范围（1 分钟～1 天） */
-export const SNOOZE_MAX_MIN = 24 * 60;
-
-export const isSnoozeMin = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= SNOOZE_MAX_MIN;
 
 export interface RemindButtons {
   readonly snooze: { readonly label: string; readonly minutes: number } | null;
