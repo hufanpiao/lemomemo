@@ -91,3 +91,9 @@ registerRoute(
   ({ url, request }) => routeOf(url, request.method, request.mode, self.location.origin) === 'fonts',
   new CacheFirst({ cacheName: 'lemo-fonts' }),
 );
+
+// 可选字体清单：先联网、失败用缓存（不进预缓存，routes.ts）；单独一个缓存，platform/fonts.ts 清 lemo-fonts 时不会把它删掉
+registerRoute(
+  ({ url, request }) => routeOf(url, request.method, request.mode, self.location.origin) === 'font-index',
+  new NetworkFirst({ cacheName: 'lemo-font-index' }),
+);

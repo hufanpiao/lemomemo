@@ -51,6 +51,10 @@ def actual_paths():
         # docs/02-设计/线上存档/ 里是发布时自动存的稿子副本（钩子生成），只登记它的 README
         if rel.startswith("docs/02-设计/线上存档/") and rel != "docs/02-设计/线上存档/README.md":
             continue
+        # src/public/fonts/<id>/ 是 build/fonts.py 切出的字体分片（文件名带哈希、一种字体几百个，重切就全换名），登记册只登记目录一行；
+        # 和登记一一对应由 build/fonts.py --check 核对（清单 fonts-index.json 的 files 和文件夹逐个对上，架构 5.9c）
+        if rel.startswith("src/public/fonts/"):
+            continue
         # .claude/ 是本机 Claude Code 的设置和其他 agent 的 worktree 工作副本（.claude/worktrees/），不是项目文件
         if rel.startswith(".claude/"):
             continue

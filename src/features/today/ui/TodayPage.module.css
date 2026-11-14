@@ -23,6 +23,12 @@
   font-weight: 600;
 }
 
+/* 细线黑（架构 5.9c 第 1 点、R-135；皮肤视觉稿 .fthin .date）：日期大标题单独用特细 200，落到未来荧黑 / Pretendard 的 ExtraLight。
+   ExtraLight 只有这一处用，build/fonts.py 登记里不预取它（prefetch: false），按 unicode-range 只下标题里那几个字所在的分片 */
+:global(:root[data-font='thin']) .date {
+  font-weight: 200;
+}
+
 .h2 {
   margin: 16px 0 6px;
   color: var(--text-2);

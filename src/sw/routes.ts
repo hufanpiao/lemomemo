@@ -21,7 +21,7 @@ export function isNetworkOnly(pathname: string): boolean {
 /** 不走 App 外壳的导航（sw.ts 的 NavigationRoute denylist）：预览沙箱（Pages 会把 preview.html 308 到 /app/preview，两种写法都排除） */
 export const NAV_DENYLIST: readonly RegExp[] = [/^\/app\/preview(\.html)?$/];
 
-export type SwRoute = 'bypass' | 'navigation' | 'holidays' | 'fonts' | 'precache-or-network';
+export type SwRoute = 'bypass' | 'navigation' | 'holidays' | 'fonts' | 'font-index' | 'precache-or-network';
 
 /**
  * 一个请求归哪条路：
@@ -30,6 +30,8 @@ export type SwRoute = 'bypass' | 'navigation' | 'holidays' | 'fonts' | 'precache
  * - /app/ 下的页面导航：先联网、3 秒超时用缓存
  * - /app/holidays/*.json：先联网、失败用缓存（5.4）
  * - /fonts/*（R-128 选中的字体分片）：单独的运行时缓存（5.9c，B6 接）
+ * - /app/fonts-index.json（可选字体清单）：先联网、失败用缓存（同节假日）。不进预缓存：只有选了或打开字体页的人才读它，
+ *   系统字体的人一个字节都不多下（B6 字体 11-14：细线黑放进来以后清单有几十 KB）；读过一次离线也读得到
  */
 export function routeOf(url: URL, method: string, mode: string, selfOrigin: string): SwRoute {
   if (method !== 'GET') return 'bypass';
@@ -39,6 +41,7 @@ export function routeOf(url: URL, method: string, mode: string, selfOrigin: stri
   if (mode === 'navigate') return 'navigation';
   if (url.pathname.startsWith(`${APP_SCOPE}holidays/`)) return 'holidays';
   if (url.pathname.startsWith(`${APP_SCOPE}fonts/`)) return 'fonts';
+  if (url.pathname === `${APP_SCOPE}fonts-index.json`) return 'font-index';
   return 'precache-or-network';
 }
 
@@ -53,6 +56,8 @@ export function excludedFromPrecache(path: string): boolean {
     path === 'sw.js' ||
     path.startsWith('holidays/') ||
     path.startsWith('fonts/') ||
+    // 可选字体清单：运行时按需读（routeOf 的 font-index），系统字体的人不下载
+    path === 'fonts-index.json' ||
     path.startsWith('icons/startup/') ||
     path.startsWith('.vite/') ||
     path.endsWith('.map') ||
