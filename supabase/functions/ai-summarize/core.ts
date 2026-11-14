@@ -39,7 +39,10 @@ type Ref = { kind: SummaryKind; id: string };
 /** 请求体只写这里用到的形状，不引 _shared/gen 下的 schema（同 note-search/core.ts）；index.ts 接 summarizeReq 时 deno check 按这里核对 */
 export type Req = { ids: Ref[]; ask?: string | undefined; now: number; tz: string; locale?: string | undefined; scope: 'main' };
 
-/** store.ts 读出来的一行：event 的 date、time 是日子和时刻，todo 的是截止日子和时刻；note 带 createdAt（毫秒）、isPrivate */
+/**
+ * store.ts 读出来的一行：event 的 date、time 是它自己时区（tz）里的日子和时刻，todo 的是截止日子和时刻（浮动时间，不带时区）；
+ * note 带 createdAt（毫秒）、isPrivate
+ */
 export interface SummaryRow {
   kind: SummaryKind;
   id: string;
@@ -47,6 +50,8 @@ export interface SummaryRow {
   body: string | null;
   date?: string | null;
   time?: string | null;
+  /** 日程记的时区（events.tz；null 是全天或旧数据） */
+  tz?: string | null;
   where?: string | null;
   done?: boolean;
   createdAt?: number;
@@ -80,12 +85,42 @@ export function cutUnits(s: string, max: number): string {
   return out;
 }
 
-/** 一条记录的“时间”：日程是日子加时刻，待办是截止日子加时刻（没有截止的为空），随手记是写下的时间（按请求的时区） */
+const wallText = (ms: number, tz: string): string => {
+  const w = wallOf(ms, tz);
+  return `${w.today} ${w.time}`;
+};
+
+/** tz 里的墙上时间（YYYY-MM-DD、HH:MM）→ 毫秒；格式不对、时区认不得回 null。按 wallOf 量出的偏移修两次（夏令时切换那一小时取前一个偏移） */
+export function wallToMs(date: string, time: string, tz: string): number | null {
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const t = /^(\d{2}):(\d{2})/.exec(time);
+  if (!d || !t) return null;
+  const want = Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3]), Number(t[1]), Number(t[2]));
+  const asUtc = (ms: number): number => {
+    const w = wallOf(ms, tz);
+    return Date.UTC(Number(w.today.slice(0, 4)), Number(w.today.slice(5, 7)) - 1, Number(w.today.slice(8, 10)), Number(w.time.slice(0, 2)), Number(w.time.slice(3, 5)));
+  };
+  try {
+    let ms = want;
+    for (let i = 0; i < 2; i += 1) ms += want - asUtc(ms);
+    return Number.isFinite(ms) ? ms : null;
+  } catch {
+    return null;   // 时区认不得（Intl 抛 RangeError）
+  }
+}
+
+/**
+ * 一条记录的“时间”，都按请求的时区（用户设备的时区，评审第 16 条）：
+ * 日程带时刻、记了时区的换算过去（全天的、没带时区的、时区认不得的照原值）；待办是截止日子加时刻（浮动时间，没有截止的为空）；随手记是写下的时间
+ */
 function whenOf(r: SummaryRow, tz: string): string {
   if (r.kind === 'note') {
     if (r.createdAt === undefined || !Number.isFinite(r.createdAt)) return '';
-    const w = wallOf(r.createdAt, tz);
-    return `${w.today} ${w.time}`;
+    return wallText(r.createdAt, tz);
+  }
+  if (r.kind === 'event' && r.date && r.time && r.tz && r.tz !== tz) {
+    const ms = wallToMs(r.date, r.time, r.tz);
+    if (ms !== null) return wallText(ms, tz);
   }
   return [r.date ?? '', r.time ?? ''].filter((x) => x !== '').join(' ');
 }
@@ -122,7 +157,7 @@ export function buildData(rows: readonly SummaryRow[], ask: string, tz: string):
   return { data: JSON.stringify({ ask: sanitize(ask, ASK_MAX), records }), sent };
 }
 
-/** 填 summarize.v1 的占位符（这里只放今天、时区、语言，不放任何用户内容） */
+/** 填 summarize.v1 的占位符（这里只放今天、时区、语言，不放任何用户内容）；now 是服务器时钟（handle 传 deps.now()，不用客户端传的） */
 export function summarizePrompt(now: number, tz: string, locale: 'zh' | 'ko'): string {
   const w = wallOf(now, tz);
   const map: Record<string, string> = { TODAY: w.today, WEEKDAY: w.weekday, TZ: tz, LANG: locale === 'ko' ? '韩文' : '中文' };
@@ -183,7 +218,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   let r: AiResult;
   try {
     r = await gate.provider.generate({
-      system: summarizePrompt(body.now, body.tz, deps.normLocale(body.locale)),
+      // 今天按服务器时钟、用户时区算（评审第 16 条：客户端传的 now 可能不准，只当请求的一部分校验）
+      system: summarizePrompt(deps.now(), body.tz, deps.normLocale(body.locale)),
       parts: [{ text: `<data>${data}</data>` }],
       schema: { ...SUMMARY_SCHEMA },
       params: TASK_PARAMS.summarize,

@@ -1,4 +1,4 @@
--- 迁移 20261115050000_ai_summarize_fn_ai_reads.sql：fn_ai 补读 events (date, time, undone)、todos (due, due_time, done, undone)、notes (created_at, undone)
+-- 迁移 20261115050000_ai_summarize_fn_ai_reads.sql：fn_ai 补读 events (date, time, tz, undone)、todos (due, due_time, done, undone)、notes (created_at, undone)
 -- 覆盖：
 --   ① 授权形状：这几列能读；三张表照旧没有表级 select；别的列（例如 events.raw_text、todos.raw_text、notes.raw_text）照旧读不到；
 --   ② ai-summarize 的三句查询（supabase/functions/ai-summarize/store.ts）以 fn_ai 跑得通：本人没删、没撤销的读得到，删了的、撤销的读不到；
@@ -24,7 +24,7 @@ insert into public.notes (id, user_id, is_private, body_enc, enc_key_id, created
 
 -- ===== ① 授权形状 =====
 select ok(has_column_privilege('fn_ai', 'public.events', 'date', 'SELECT') and has_column_privilege('fn_ai', 'public.events', 'time', 'SELECT')
-          and has_column_privilege('fn_ai', 'public.events', 'undone', 'SELECT'), 'fn_ai 能读 events.date、time、undone');
+          and has_column_privilege('fn_ai', 'public.events', 'tz', 'SELECT') and has_column_privilege('fn_ai', 'public.events', 'undone', 'SELECT'), 'fn_ai 能读 events.date、time、tz、undone');
 select ok(has_column_privilege('fn_ai', 'public.todos', 'due', 'SELECT') and has_column_privilege('fn_ai', 'public.todos', 'due_time', 'SELECT')
           and has_column_privilege('fn_ai', 'public.todos', 'done', 'SELECT') and has_column_privilege('fn_ai', 'public.todos', 'undone', 'SELECT'),
   'fn_ai 能读 todos.due、due_time、done、undone');
@@ -36,11 +36,11 @@ select ok(not has_column_privilege('fn_ai', 'public.events', 'raw_text', 'SELECT
           and not has_column_privilege('fn_ai', 'public.notes', 'raw_text', 'SELECT'), '原话 raw_text 照旧读不到');
 
 -- ===== ② store.ts 的三句 =====
-select is(tests.rows_as('fn_ai', null, $$select id, title, date::text as date, time, location, note from public.events
+select is(tests.rows_as('fn_ai', null, $$select id, title, date::text as date, time, tz, location, note from public.events
     where user_id = 'aaaaaaaa-0000-4000-8000-000000000001' and id = any(array['58000000-0000-4000-8000-0000000000a1', '58000000-0000-4000-8000-0000000000a2',
       '58000000-0000-4000-8000-0000000000a3', '58000000-0000-4000-8000-0000000000b1']::uuid[]) and deleted_at is null and not undone$$,
   'aaaaaaaa-0000-4000-8000-000000000001'),
-  '[{"id": "58000000-0000-4000-8000-0000000000a1", "date": "2026-11-02", "note": "带电脑", "time": "15:00", "title": "开会", "location": "三楼"}]'::jsonb,
+  '[{"id": "58000000-0000-4000-8000-0000000000a1", "date": "2026-11-02", "note": "带电脑", "time": "15:00", "title": "开会", "tz": "Asia/Seoul", "location": "三楼"}]'::jsonb,
   '日程：只读到本人没删、没撤销的那一条（B 的、删了的、撤销的都没有）');
 select is(tests.rows_as('fn_ai', null, $$select id, title, due::text as due, due_time, done, note from public.todos
     where user_id = 'aaaaaaaa-0000-4000-8000-000000000001' and id = any(array['58000000-0000-4000-8000-0000000000a4']::uuid[]) and deleted_at is null and not undone$$,

@@ -123,6 +123,28 @@ describe('ai-summarize：成功', () => {
   });
 });
 
+describe('ai-summarize：按用户时区算（评审第 16 条）', () => {
+  const whenOf = (r: SummaryRow, tz: string) => (JSON.parse(buildData([r], '', tz).data) as { records: { when: string }[] }).records[0]?.when;
+
+  it('日程按它自己的时区记的：换到请求的时区（首尔 10-29 15:00 → 洛杉矶 10-28 23:00）；同一个时区不变', () => {
+    expect(whenOf({ ...EV, tz: 'Asia/Seoul' }, 'America/Los_Angeles')).toBe('2026-10-28 23:00');
+    expect(whenOf({ ...EV, tz: 'Asia/Seoul' }, 'Asia/Seoul')).toBe('2026-10-29 15:00');
+  });
+
+  it('全天的日程、没带时区的、时区认不得的、待办（浮动时间）：照原值', () => {
+    expect(whenOf({ ...EV, time: null, tz: 'Asia/Seoul' }, 'America/Los_Angeles')).toBe('2026-10-29');
+    expect(whenOf({ ...EV, tz: null }, 'America/Los_Angeles')).toBe('2026-10-29 15:00');
+    expect(whenOf({ ...EV, tz: 'Mars/Base' }, 'America/Los_Angeles')).toBe('2026-10-29 15:00');
+    expect(whenOf({ ...TD, time: '09:00' }, 'America/Los_Angeles')).toBe('2026-10-30 09:00');
+  });
+
+  it('提示词的“今天”按服务器时钟、请求的时区算：客户端传的 now 差了几天也不用它', async () => {
+    const { g, deps } = world();
+    await handle(req({ ...BODY, now: NOW + 5 * 86_400_000 }), deps);
+    expect(g.provider.stub.calls[0]?.system).toContain('今天是 2026-10-28（周三）');
+  });
+});
+
 describe('ai-summarize：不过门、不扣次数的几种', () => {
   it('mixed_scope：读出隐私记的整次 400，不调服务商、不扣次数、不查同意', async () => {
     let asked = 0;
