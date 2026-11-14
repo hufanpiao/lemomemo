@@ -1,6 +1,7 @@
 // 编辑页外框（B2 FA-2）：顶栏“‹ 返回 · 类型名 · 保存状态”、顶部提示（只读、已删除）、正文、底部“删除”。保存状态、只读、删除按 useEditRecord 画（EditNotices.tsx），表单内容由调用方传
 // 保存状态是常驻的 role="status"，读屏会播报“已自动保存”“没保存上”
-// 编辑页挂着期间占住升级中心的 busy（BUSY-wire）：不出版本横幅、不自动重新载入，离开编辑页就释放
+// 编辑页挂着期间占住升级中心的 busy（BUSY-wire）：不出版本横幅、不自动重新载入，离开编辑页就释放；放在详情抽屉里时不在这里占，
+// 由 DetailDrawer 按焦点在不在抽屉里占（抽屉在电脑上可能开一整天，B6 独立评审第 12 条）
 // 电脑版今天页的详情抽屉（B6 返工，线框 s1“选中一条：详情抽屉从右边盖上来”）也用它：给了 onClose 就不画“‹ 返回”，顶行是“类型名 · 保存状态 · ×”，外层是 section（页面的 main 在外面）
 import type { ReactNode } from 'react';
 import type { EditRecord } from '../hooks/useEditRecord.ts';
@@ -27,7 +28,7 @@ export interface EditShellProps {
 }
 
 export function EditShell({ kind, backLabel, onBack, rec, own, prefix, onClose, children }: EditShellProps) {
-  useHoldBusy('editing');
+  useHoldBusy('editing', !onClose);
   const t = useEditT();
   const st = useEditStatus(rec.status, own);
   const { readonly, deleted } = rec;

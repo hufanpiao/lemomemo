@@ -3,6 +3,7 @@
 // • 字重：只有页顶日期、“现在”卡进行中那一件的标题加粗；普通日程和待办标题 400（R-134、R-136，TC-B2-06）
 // • 固定时刻的日程换算成当前时区；和记录时的时区不同时加注“14:00（韩国时间 15:00）”（4.6）；全天不换算
 // • 点一行进编辑页；打勾就保存；删除后出撤销条（8 秒）；写不进去时出提示条，只读行提示“要新版本才能修改”
+// • 已过去（线框 s1“已过去的折叠成一行”，B6 对齐线框）：结束了的日程、做完的待办收成“▸ 已过去 N 件：10:30 字幕校对 · 买咖啡豆 ✓”一行，点了展开（data/today-model.ts 的 splitPast）
 // • 动效（17.1，B2 FA-5；设计审查 M1～M3 返工 11-04）：打勾时圆圈在原地填满（kit CheckCircle），列表先不动（useHoldView 留住
 //   按下之前的两张列表 --dur-ui）；然后这一行淡出、同时下面的行收上来，挪到的地方等让开了再淡入（motion 的 AppearList）；第一次画不播
 // • 提醒的几块（REMIND-wiring；reminders 的 index.ts 懒加载；外面包 kit 的 QuietBoundary，分包下不来时那一块不画、不把整页换成出错页）：
@@ -27,7 +28,7 @@
 // • 液态玻璃底栏、“＋”、时间河、提醒按钮条不在这一段（FA-4、FA-7）
 // • 电脑版（B6，5.9b；有侧栏的宽度）：交给按需下载的 TodayDesk 排成可拖动的块；提示、“现在”卡、没赶上、今天的安排合成一块时间河
 //   （块标题“今天的安排”，里面不再画这个小标题；B6 返工 11-14）。页顶日期行固定不动：日期后面加农历（TodayDesk 的 Lunar），下面是纪念日胶囊（同手机的 AnnivLine）。
-//   点一行不换页，在详情抽屉里编辑（选中哪一条记在这里的 sel；窗口变窄、电脑版卸下时清掉）。电脑版分包没到、下不来时照手机的排法画
+//   点一行不换页，在详情抽屉里编辑（选中哪一条记在这里的 sel；窗口变窄、电脑版卸下时清掉；“今天记的”里的随手记也开在这个抽屉里）。电脑版分包没到、下不来时照手机的排法画
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
@@ -43,6 +44,7 @@ import { afterAppPainted, isAppPainted } from '../../../platform/root-paint.ts';
 import { AppearItem, AppearList, Pressable, useHoldView, useSwapWhenSafe } from '../../../motion/components.ts';
 import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
+import { useTodayPast } from '../hooks/useTodayPast.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
 import { loadTodayDesk, TodayRo } from '../index.ts';
 import { useAnnivAny } from '../hooks/useAnnivAny.ts';
@@ -150,6 +152,12 @@ export default function TodayPage() {
   const open = (kind: 'event' | 'todo', id: string) => (g.isRo(kind, id) ? g.block() : Desk ? setSel({ kind, id }) : void navigate(kind, id));
   /** 抽屉里开着的那一条：行按钮 aria-current（行按钮上的 data-open 给抽屉关上时找回焦点用） */
   const cur = (id: string) => (sel?.id === id ? ('true' as const) : undefined);
+  /** 列表里删掉的正好是抽屉开着的那一条：抽屉一起关（B6 独立评审第 11 条：不然抽屉里“已删除 · 撤销”和页底撤销条两个撤销入口同时在） */
+  const remove = (id: string) => {
+    if (sel?.id === id) setSel(null);
+    return del(id);
+  };
+  const [pastOpen, setPastOpen] = useState(false);
 
   const lateItem = v.late.length ? (
     <AppearItem as="section" key="late" className={`${list.panel} ${styles.late}`} aria-labelledby="today-late" data-testid="today-late">
@@ -178,62 +186,80 @@ export default function TodayPage() {
       </AppearList>
     </AppearItem>
   ) : null;
+  // 日程行、待办行：“今天的安排”里照常画，展开“已过去”时过去的那几行也用它（key 不变，打勾挪进挪出“已过去”时行走 AppearList 的离开、进场）
+  const evRow = (o: (typeof v.events)[number]) => (
+    <AppearItem key={`e:${o.id}`} className={list.row} data-readonly={g.isRo('event', o.id) ? '' : undefined} data-testid={`today-event-${o.id}`}>
+      <span className={list.lead}>{o.time ?? t('list.allDay', {})}</span>
+      <button type="button" className={list.main} onClick={() => open('event', o.id)} data-open={o.id} aria-current={cur(o.id)}>
+        <span className={list.text}>
+          <span className={list.title}>{o.title}</span>
+          {o.origin ? <span className={list.meta}>{t('list.origin', { zone: zoneName(o.origin.tz, locale), t: o.origin.time })}</span> : null}
+        </span>
+        {g.isRo('event', o.id) ? <Ro part="mark" testId={`today-ro-${o.id}`} /> : null}
+        <RowMark table="events" id={o.id} />
+      </button>
+      {/* 日程行没有 ×：补一个和 × 一样宽的空格子，“未同步”标记和待办行落在同一列（设计复审 今天页待办 M2）。
+          只有这里日程、待办混排；不能点、不进 Tab、读屏不读 */}
+      <span className={styles.delGap} aria-hidden="true" data-testid={`today-del-gap-${o.id}`} />
+    </AppearItem>
+  );
+  const tdRow = (td: (typeof v.todos)[number]) => (
+    <AppearItem
+      key={`t:${td.id}`}
+      className={list.row}
+      data-testid={`today-todo-${td.id}`}
+      data-done={td.done ? '' : undefined}
+      data-readonly={g.isRo('todo', td.id) ? '' : undefined}
+    >
+      <Check
+        readOnly={g.isRo('todo', td.id)}
+        checked={shown(td.id, td.done)}
+        label={shown(td.id, td.done) ? t('list.undoDone', {}) : t('list.done', {})}
+        onChange={(v) => tick(td.id, v)}
+        testId={`today-done-${td.id}`}
+      />
+      <button type="button" className={list.main} onClick={() => open('todo', td.id)} data-open={td.id} aria-current={cur(td.id)}>
+        <span className={list.text}>
+          <span className={list.title}>{td.title}</span>
+          <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
+          <Subs id={td.id} />
+        </span>
+        {g.isRo('todo', td.id) ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
+        <RowMark table="todos" id={td.id} />
+      </button>
+      {/* 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条、代码复查二）：变淡、aria-disabled、读屏名字后接“要更新到新版本才能修改”；
+          点了照样由 del 里的 useReadonlyGuard 拦下出提示条、不写 */}
+      {g.isRo('todo', td.id) ? (
+        <Ro part="del" label={t('list.delete', {})} onClick={() => void remove(td.id)} testId={`today-del-${td.id}`} />
+      ) : (
+        <Pressable className={list.trail} aria-label={t('list.delete', {})} onClick={() => void remove(td.id)} data-testid={`today-del-${td.id}`} data-no-proxy="">
+          ×
+        </Pressable>
+      )}
+    </AppearItem>
+  );
+  // 已过去（线框 s1“已过去的折叠成一行”，时间河“▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓”）：结束了的日程、做完的待办收成一行，
+  // 点一下展开、再点收起（这次打开记着，不存）；展开时过去的那几行排在最前面，照原来的行画
+  const past = useTodayPast(v.events, v.todos, d.now);
+  const pastN = past.pastEvents.length + past.pastTodos.length;
+  const pastText = [...past.pastEvents.map((o) => `${o.time ?? ''} ${o.title}`), ...past.pastTodos.map((x) => `${x.title} ✓`)].join(' · ');
   const listItem = (titled: boolean) => (
     <AppearItem as="section" key="list" aria-labelledby={titled ? 'today-list' : undefined} data-testid="today-list">
       {titled ? <h2 id="today-list" className={styles.h2}>{t('list.title', {})}</h2> : null}
       {v.events.length === 0 && v.todos.length === 0 ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
+      {pastN ? (
+        <button type="button" className={styles.past} aria-expanded={pastOpen} onClick={() => setPastOpen((x) => !x)} data-testid="today-past">
+          <span className={styles.pastMark} aria-hidden="true">
+            {pastOpen ? '▾' : '▸'}
+          </span>
+          <span className={styles.pastText}>{t('list.past', { n: pastN, items: pastText })}</span>
+        </button>
+      ) : null}
       <AppearList as="ul" className={list.list}>
-        {v.events.map((o) => (
-          <AppearItem key={`e:${o.id}`} className={list.row} data-readonly={g.isRo('event', o.id) ? '' : undefined} data-testid={`today-event-${o.id}`}>
-            <span className={list.lead}>{o.time ?? t('list.allDay', {})}</span>
-            <button type="button" className={list.main} onClick={() => open('event', o.id)} data-open={o.id} aria-current={cur(o.id)}>
-              <span className={list.text}>
-                <span className={list.title}>{o.title}</span>
-                {o.origin ? <span className={list.meta}>{t('list.origin', { zone: zoneName(o.origin.tz, locale), t: o.origin.time })}</span> : null}
-              </span>
-              {g.isRo('event', o.id) ? <Ro part="mark" testId={`today-ro-${o.id}`} /> : null}
-              <RowMark table="events" id={o.id} />
-            </button>
-            {/* 日程行没有 ×：补一个和 × 一样宽的空格子，“未同步”标记和待办行落在同一列（设计复审 今天页待办 M2）。
-                只有这里日程、待办混排；不能点、不进 Tab、读屏不读 */}
-            <span className={styles.delGap} aria-hidden="true" data-testid={`today-del-gap-${o.id}`} />
-          </AppearItem>
-        ))}
-        {v.todos.map((td) => (
-          <AppearItem
-            key={`t:${td.id}`}
-            className={list.row}
-            data-testid={`today-todo-${td.id}`}
-            data-done={td.done ? '' : undefined}
-            data-readonly={g.isRo('todo', td.id) ? '' : undefined}
-          >
-            <Check
-              readOnly={g.isRo('todo', td.id)}
-              checked={shown(td.id, td.done)}
-              label={shown(td.id, td.done) ? t('list.undoDone', {}) : t('list.done', {})}
-              onChange={(v) => tick(td.id, v)}
-              testId={`today-done-${td.id}`}
-            />
-            <button type="button" className={list.main} onClick={() => open('todo', td.id)} data-open={td.id} aria-current={cur(td.id)}>
-              <span className={list.text}>
-                <span className={list.title}>{td.title}</span>
-                <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
-                <Subs id={td.id} />
-              </span>
-              {g.isRo('todo', td.id) ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
-              <RowMark table="todos" id={td.id} />
-            </button>
-            {/* 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条、代码复查二）：变淡、aria-disabled、读屏名字后接“要更新到新版本才能修改”；
-                点了照样由 del 里的 useReadonlyGuard 拦下出提示条、不写 */}
-            {g.isRo('todo', td.id) ? (
-              <Ro part="del" label={t('list.delete', {})} onClick={() => void del(td.id)} testId={`today-del-${td.id}`} />
-            ) : (
-              <Pressable className={list.trail} aria-label={t('list.delete', {})} onClick={() => void del(td.id)} data-testid={`today-del-${td.id}`} data-no-proxy="">
-                ×
-              </Pressable>
-            )}
-          </AppearItem>
-        ))}
+        {pastOpen ? past.pastEvents.map(evRow) : null}
+        {pastOpen ? past.pastTodos.map(tdRow) : null}
+        {past.events.map(evRow)}
+        {past.todos.map(tdRow)}
       </AppearList>
     </AppearItem>
   );
@@ -293,6 +319,7 @@ export default function TodayPage() {
               </>
             }
             sel={sel}
+            onOpen={setSel}
             onClose={closeSel}
           />
         </QuietBoundary>

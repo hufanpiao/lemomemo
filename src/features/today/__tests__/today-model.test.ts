@@ -1,7 +1,7 @@
 // 今天页的纯逻辑（data/today-model.ts；架构 4.6；皮肤视觉稿“现在”卡 K 的时间窗规则）
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
-import { eventOcc, eventsOn, kWin, lateTodos, nowCard, splitDur, todayTodos, type Row } from '../data/today-model.ts';
+import { eventOcc, eventsOn, kWin, lateTodos, nowCard, splitDur, splitPast, todayTodos, type Row } from '../data/today-model.ts';
 
 const SEOUL = 'Asia/Seoul';
 const SH = 'Asia/Shanghai';
@@ -153,5 +153,25 @@ describe('同一时刻按标题排：数字按数值（设计审查：长列表�
     // 时刻仍然先比：10:00 的“第 1 条”排在 09:00 的“第 20 条”后面
     const mixed = [td({ title: '第 1 条', due: DAY, due_time: '10:00' }), td({ title: '第 20 条', due: DAY, due_time: '09:00' })];
     expect(todayTodos(mixed, at('08:00'), SEOUL, 'zh-CN').map((t) => t.title)).toEqual(['第 20 条', '第 1 条']);
+  });
+});
+
+
+describe('已过去（线框 s1“已过去的折叠成一行”）：结束了的日程、做完的待办折起来，其余照原顺序', () => {
+  it('结束 ≤ 此刻的日程算已过去，正在进行的、全天的不算；做完的待办算已过去', () => {
+    const evs = eventsOn(
+      [ev({ id: 'a', time: '09:00', tz: SEOUL, duration_min: 60 }), ev({ id: 'b', time: '10:30', tz: SEOUL, duration_min: 60 }), ev({ id: 'c' }), ev({ id: 'd', time: '15:00', tz: SEOUL })],
+      DAY,
+      SEOUL,
+    );
+    const tds = todayTodos([td({ id: 'x', due: DAY, done: true }), td({ id: 'y', due: DAY })], at('08:00'), SEOUL);
+    // 此刻 11:00：a（9:00–10:00）结束了；b（10:30–11:30）进行中；c 全天；d 还没到。正好 10:00 结束的也算已过去
+    const s = splitPast(evs, tds, at('11:00'));
+    expect(s.pastEvents.map((o) => o.id)).toEqual(['a']);
+    expect(s.events.map((o) => o.id)).toEqual(['c', 'b', 'd']);
+    expect(s.pastTodos.map((t) => t.id)).toEqual(['x']);
+    expect(s.todos.map((t) => t.id)).toEqual(['y']);
+    expect(splitPast(evs, [], at('10:00')).pastEvents.map((o) => o.id)).toEqual(['a']);
+    expect(splitPast(evs, [], at('09:59')).pastEvents).toEqual([]);
   });
 });

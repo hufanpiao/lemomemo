@@ -4,7 +4,7 @@ import type { DeskLayoutValue } from '../../../../shared/schema/layout.ts';
 import { Popover } from '../Popover.tsx';
 import { DndCol, useDeskSortable } from './DeskDnd.tsx';
 import { useDeskT } from '../../hooks/useDeskT.ts';
-import { resizeAt, resizeRange } from './layout-model.ts';
+import { DRAG_PX, resizeAt, resizeRange } from './layout-model.ts';
 import styles from './DeskLayout.module.css';
 
 export interface DeskPanel {
@@ -215,7 +215,7 @@ export function DrawerHandle({ side, onSide }: { side: 'left' | 'right'; onSide(
         e.currentTarget.setPointerCapture(e.pointerId);
       }}
       onPointerMove={(e) => {
-        if (start.current !== null && Math.abs(e.clientX - start.current) > 4) moved.current = true;
+        if (start.current !== null && Math.abs(e.clientX - start.current) > DRAG_PX) moved.current = true;
       }}
       onPointerUp={(e) => {
         if (start.current === null) return;
