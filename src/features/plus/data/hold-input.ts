@@ -5,7 +5,7 @@
 //   plus 自己按需加载的 CSS（ui/RecordPanel.module.css，跟录音那一块走）据此关掉长按菜单、选字、放大镜，按着时整页 touch-action: none
 // • 判定用 record-logic 的 holdStep（纯函数）：350 ms 到了没松开、没挪远 → start；之前松开 → 点一下（交给 GlassBar 原来的 onClick，这里不管）
 // • 进了录音（接收方 start() 返回 true）以后，这一次松手浏览器补在“＋”上的那一下 click 吞掉（不然又打开打字条）；落在别处的 click 照常。
-//   怎么吞由调用方注入 swallowClick（hooks/voice-sink.ts 传 motion 的 swallowNextClick、时限 TAP_SWALLOW_MS.hold）：
+//   怎么吞由调用方注入 swallowClick（hooks/voice-sink.ts 传 motion 的 swallowNextClick；下一次按下、到时限由它自己作废）：
 //   这一层（功能的 data）按分层规则不能引 motion，吞点按全站只有 motion 里那一套（审查“吞点按五套”合成一套）
 // • 状态全是闭包里的普通变量，按住、移动期间 GlassBar 不重新渲染（Q3 守门第 6 条）
 // 纯 TS：不准 import React（A1）
@@ -56,16 +56,14 @@ export interface HoldInput extends HoldHandlers {
 /** <html> 上的标记：data-plus-hold */
 export const HOLD_ATTR = 'plusHold';
 
-/** 吞掉随后落在 el 里的那一下 click；返回作废函数（motion 的 swallowNextClick 套上时限） */
-export type SwallowClick = (el: Node) => () => void;
+/** 吞掉随后落在 el 里的那一下 click（motion 的 swallowNextClick：新的一次按下、到时限自己作废，这里不用管） */
+export type SwallowClick = (el: Node) => void;
 
 export function createHoldInput(sink: () => HoldSink | null, swallowClick: SwallowClick, now: () => number = () => performance.now()): HoldInput {
   let s: HoldState = HOLD_IDLE;
   let timer: ReturnType<typeof setTimeout> | undefined;
   /** 这一次按下进了录音：松手时要吞掉随后的 click */
   let armed = false;
-  /** 上一次松手挂着的吞点按（再按一次就作废） */
-  let unswallow: (() => void) | null = null;
   /** 按下的那个“＋”：只吞落在它上面的那一下 click（松手后马上点提示条上的按钮照常） */
   let pressed: Node | null = null;
   const hooked = new WeakSet<EventTarget>();
@@ -154,8 +152,6 @@ export function createHoldInput(sink: () => HoldSink | null, swallowClick: Swall
         // 指针已经没了（极少见）：照样判定
       }
       armed = false;
-      unswallow?.();
-      unswallow = null;
       pressed = el;
       apply({ type: 'down', t: now(), x: e.clientX, y: e.clientY });
       mark(true);
@@ -169,7 +165,7 @@ export function createHoldInput(sink: () => HoldSink | null, swallowClick: Swall
     onEnd(e) {
       if (armed && pressed) {
         armed = false;
-        unswallow = swallowClick(pressed);
+        swallowClick(pressed);
       }
       if (s.phase === 'idle') return;
       apply({ type: 'up', t: now(), zone: zoneOf(e) });

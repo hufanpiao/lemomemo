@@ -102,6 +102,7 @@ function AnnivList({ inert }: { inert: boolean }) {
         key={x.id}
         className={`${list.row} ${styles.row}`}
         disabled={x.ro}
+        log={rlog}
         actions={[
           { key: 'edit', label: t('anniv.swipe.edit', {}), onClick: () => open(x), testId: 'anniv-swipe-edit' },
           { key: 'del', label: t('anniv.swipe.delete', {}), danger: true, onClick: () => (x.ro ? roBlocked('del') : void a.del(x.id)), testId: 'anniv-swipe-del' },
