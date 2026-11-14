@@ -223,9 +223,41 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  # 等这个提交的 unit 通过再部署（第三方审查 CI-1）：迁移进了预览库就退不回来，单元测试、类型检查、迁移顺序、pgTAP 没过的提交不许 db push。
+  # 只等 unit、不等 ci：ci 的 e2e 偶发会红，红了不该卡住预览（主持人 11-14 代定，推进计划第三节“8 审查分诊”）。
+  # 不改成 on: workflow_run：那样 GITHUB_SHA 会变成 main 最新提交，vite 的 buildCommit、check_size、pages deploy 都要跟着改。
+  # 这个任务不碰任何密钥，只用自带的 GITHUB_TOKEN 读本仓库的工作流运行结果
+  unit-gate:
+    name: 等 unit 通过
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      actions: read
+    steps:
+      - name: 等同一提交的 unit 跑完、结论是 success
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          api="https://api.github.com/repos/$REPO/actions/workflows/unit.yml/runs?head_sha=$SHA&event=push&per_page=5"
+          for i in $(seq 1 70); do
+            body="$(curl --fail --silent --proto '=https' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$api" || true)"
+            st="$(printf '%s' "$body" | jq -r '.workflow_runs[0].status // "none"' 2>/dev/null || echo none)"
+            co="$(printf '%s' "$body" | jq -r '.workflow_runs[0].conclusion // ""' 2>/dev/null || true)"
+            echo "第 $i 次：unit status=$st conclusion=$co"
+            if [ "$st" = completed ]; then
+              [ "$co" = success ] && exit 0
+              echo "::error::这个提交的 unit 结论是 $co，不部署到预览（迁移不进预览库）"; exit 1
+            fi
+            sleep 30
+          done
+          echo "::error::等了 35 分钟还没等到这个提交的 unit 跑完"; exit 1
+
   deploy:
     name: 部署到预览环境
-    needs: build
+    needs: [build, unit-gate]
     # 只部署 main（B0 安全审查低 6）：workflow_dispatch 能选任意分支手动跑，选了别的分支时 build 照跑、这一步跳过，带密钥的任务不会在 main 以外运行
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04

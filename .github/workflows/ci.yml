@@ -408,6 +408,7 @@ jobs:
       # 不单独构建：playwright.config.ts 的 webServer 自己先 npm run build -- --mode e2e 再起 wrangler pages dev（CI 下不复用已有服务），
       # 这里再构建一次 preview 模式会被覆盖掉，白花时间
       - name: Playwright（e2e 模式构建 + wrangler pages dev dist/web，控制台出现 CSP 报错就算失败）
+        id: e2e
         # 显式写 shell: bash（-eo pipefail）：e2e 失败不会被 tee 的退出码吞掉，写法和 deno 测试那一步一致（p4 复审 L4）
         shell: bash
         run: |
@@ -426,16 +427,22 @@ jobs:
       # 快读组（B2 FA-6 ①，安全审查 L5）：带 supabase 地址（同源 /sb、假 anon key）的 e2e 构建，只跑 b2-first-screen-supabase.spec.ts，
       # 验证启动关口走快读、supabase-js 在今天页画出来以后才下载；默认组没配地址、跑不到快读分支。端口 8791、产物 dist/web-fastread，和上一步错开
       - name: Playwright 快读组（带 supabase 地址的 e2e 构建，只跑首屏 supabase 用例）
+        # 前一组红了也照跑（第三方审查 CI-2）：一次推送看全四组的失败，不用来回推；默认组那一步没跑到（前面装环境就失败）时才跳过
+        if: ${{ !cancelled() && steps.e2e.conclusion != 'skipped' }}
         run: npm run e2e:fastread
 
       # 底栏视觉锁定（R-360、R-361）：只跑 playwright.visual.config.ts 的 chromium-tabbar-lock 一组（Chromium 才画 backdrop-filter），
       # 和 tests/e2e/visual/__screenshots__/linux/ 的基准比、0 像素差；不一样就失败、CI 变红。基准用这同一个镜像生成，改底栏要负责人新需求编号
       - name: 底栏视觉锁定（Chromium，只跑 chromium-tabbar-lock）
+        # 前一组红了也照跑（第三方审查 CI-2）：一次推送看全四组的失败，不用来回推；默认组那一步没跑到（前面装环境就失败）时才跳过
+        if: ${{ !cancelled() && steps.e2e.conclusion != 'skipped' }}
         run: npm run e2e:visual -- --project=chromium-tabbar-lock
 
       # B2-UI-b 视觉锁定（任务单 W4、V4、W8）：设置页按钮区域（R-276、R-277）、随手记占位页 62pt 顶部安全区，0 像素差；
       # 基准同样用这个镜像生成、放 tests/e2e/visual/__screenshots__/linux/b2-ui-b-lock.spec.ts/，改要负责人新需求编号
       - name: B2-UI-b 视觉锁定（Chromium，只跑 chromium-b2uib-lock）
+        # 前一组红了也照跑（第三方审查 CI-2）：一次推送看全四组的失败，不用来回推；默认组那一步没跑到（前面装环境就失败）时才跳过
+        if: ${{ !cancelled() && steps.e2e.conclusion != 'skipped' }}
         run: npm run e2e:visual -- --project=chromium-b2uib-lock
 
       - name: 失败时上传报告（只有本地测试数据，不含任何密钥）
