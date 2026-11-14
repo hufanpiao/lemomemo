@@ -26,7 +26,7 @@ import { decodeKey32 } from '../_shared/vault-crypto.ts';
 import { CIPHER_TYPE } from '../_shared/vault-files.ts';
 import { pinEpoch } from '../_shared/vault-epoch.ts';
 import { vaultTokenChecker } from '../_shared/vault-token.ts';
-import { versionGate } from '../_shared/version-gate.ts';
+import { appConfigMinLoader, versionGate } from '../_shared/version-gate.ts';
 import { sanitizeFileName } from '../_shared/gen/logic/files/file-name.ts';
 import { sniffFile, zipBombCheck } from '../_shared/gen/logic/files/file-sniff.ts';
 import { inflateRaw } from '../_shared/gen/logic/files/inflate.ts';
@@ -131,11 +131,7 @@ Deno.serve(async (req) => {
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
   // cron 的 sweep 没有客户端版本；只有客户端那几支过版本门（带了 x-cron-secret 却不是 sweep 的，core 照样要 JWT；版本门不是鉴权边界）
   if (!req.headers.get('x-cron-secret')) {
-    const blocked = await versionGate('vault-file', req, async (signal) => {
-      const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
-      if (error) throw new Error('db');
-      return data?.min_client_version ?? null;
-    });
+    const blocked = await versionGate('vault-file', req, appConfigMinLoader(admin));
     if (blocked) return blocked;
   }
   return handle(req, {

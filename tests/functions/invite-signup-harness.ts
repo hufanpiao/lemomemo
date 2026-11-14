@@ -6,6 +6,7 @@ import {
 } from '../../supabase/functions/invite-signup/core.ts';
 import { inviteCodeHash } from '../../supabase/functions/_shared/invite-code.ts';
 import { withAuthTimeouts, withStoreTimeouts } from '../../supabase/functions/invite-signup/store-timeout.ts';
+import { LOG_SECRET } from './account-fakes.ts';
 
 export const NOW = Date.parse('2026-10-29T12:00:00Z');
 export const SECRET = 'test-hash-secret';
@@ -133,7 +134,7 @@ export async function world(over: Partial<Deps> = {}): Promise<World> {
     env: 'prod',
     verifyTurnstile: turnstile,
     sendMail: async (to, m) => { mails.push({ to, ...m }); return true; },
-    hashSecret: SECRET, proxySecret: PROXY, configured: true,
+    hashSecret: SECRET, logSecret: LOG_SECRET, proxySecret: PROXY, configured: true,
     now: () => NOW, randomOtp: () => OTP,
     log: (c) => logs.push(c),
     ...over,

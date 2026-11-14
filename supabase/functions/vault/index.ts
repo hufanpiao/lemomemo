@@ -26,7 +26,7 @@ import { resolveOverride } from '../_shared/push/stub.ts';
 import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { decodeKey32 } from '../_shared/vault-crypto.ts';
-import { versionGate } from '../_shared/version-gate.ts';
+import { appConfigMinLoader, versionGate } from '../_shared/version-gate.ts';
 import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
 import { noteFilePath, noteFileThumbPath } from '../_shared/gen/logic/files/media-path.ts';
 import { DOC_TYPES, type DocKind } from '../_shared/gen/manifests/attachments.ts';
@@ -71,11 +71,7 @@ Deno.serve(async (req) => {
     return json(500, { error: 'misconfigured' });
   }
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
-  const blocked = await versionGate('vault', req, async (signal) => {
-    const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
-    if (error) throw new Error('db');
-    return data?.min_client_version ?? null;
-  });
+  const blocked = await versionGate('vault', req, appConfigMinLoader(admin));
   if (blocked) return blocked;
   const resendKey = Deno.env.get('RESEND_API_KEY');
   const send = skipTestRecipients((to, mail) => (resendKey ? sendMail(resendKey, to, mail) : Promise.resolve(false)), log);

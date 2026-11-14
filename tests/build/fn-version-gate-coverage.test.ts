@@ -91,11 +91,13 @@ function wiredAtIndex(index: string, name: string): boolean {
   return gateAt >= 0 && (handleAt < 0 || gateAt < handleAt);
 }
 
-/** core 里查：core.ts import 并调用 blockedMin、不自己定义；index.ts import 并调用 cachedMinClientVersion */
+/** core 里查：core.ts 从 version-gate-core.ts import 并调用 blockedMin 或 versionBlock（安全审查第 8 条收成的那一份）、不自己定义；
+ *  index.ts import 并调用 cachedMinClientVersion */
 function wiredInCore(index: string, core: string): boolean {
   const c = parse(core);
   const i = parse(index);
-  return importsFrom(c, '_shared/version-gate-core.ts', 'blockedMin') && !declares(c, 'blockedMin') && calledNames(c).has('blockedMin')
+  const viaCore = (fn: string) => importsFrom(c, '_shared/version-gate-core.ts', fn) && !declares(c, fn) && calledNames(c).has(fn);
+  return (viaCore('blockedMin') || viaCore('versionBlock'))
     && importsFrom(i, '_shared/version-gate.ts', 'cachedMinClientVersion') && calledNames(i).has('cachedMinClientVersion');
 }
 

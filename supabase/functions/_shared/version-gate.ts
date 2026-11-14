@@ -8,12 +8,8 @@
 // ② 入口处统一查（index.ts 的 Deno.serve 里、调 handle 之前）：
 //   const blocked = await versionGate('<函数名>', req, loadMin);
 //   if (blocked) return blocked;
-// loadMin 用函数现成的 service role 客户端读 app_config：
-//   async (signal) => {
-//     const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
-//     if (error) throw new Error('db');
-//     return data?.min_client_version ?? null;
-//   }
+// loadMin 用 appConfigMinLoader(admin)（函数现成的 service role 客户端读 app_config；安全审查第 8 条起各 index.ts 不再各写一份）。
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { FUNCTION_VERSION_EXEMPTIONS } from './gen/version-gate-list.ts';
 import { createFnVersionGate, type LoadMin } from './version-gate-core.ts';
 
@@ -25,6 +21,15 @@ const gate = createFnVersionGate({
 /** 太旧回 426 响应，放行返回 null；免查的函数和方法不读配置 */
 export function versionGate(fn: string, req: Request, loadMin: LoadMin): Promise<Response | null> {
   return gate.check(fn, req, loadMin);
+}
+
+/** 读 app_config.min_client_version 的 loadMin：signal 挂到查询上（门的 1.5 秒超时）；出错抛（门按失败处理：放行、缓存 10 秒） */
+export function appConfigMinLoader(admin: SupabaseClient): LoadMin {
+  return async (signal) => {
+    const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
+    if (error) throw new Error('db');
+    return (data as { min_client_version: string | null } | null)?.min_client_version ?? null;
+  };
 }
 
 /** 只取 min_client_version（带缓存和超时；读失败返回 null = 放行，只记 gate_config_* 错误码）。loadMin 要把 signal 交给 .abortSignal(signal) */

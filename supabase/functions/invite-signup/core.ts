@@ -1,8 +1,8 @@
 // invite-signup 的处理逻辑（架构 5.6、第 6 节函数表、15.2 中 1 ④、15.3 第 8 条、附录 A counters 键表、0.38 第 19、20 条；
 // TC-B1-02～05、TC-B1-64）。数据库、Auth 管理接口、Turnstile、发信都由 index.ts 注入，Vitest 直接测这一份。
 // 类型在 types.ts，回包、请求体、邮件、哈希小工具在 wire.ts（B1 第九批 lint 超行拆分）；对外的名字一律还从这里引。
-// 以后再拆也不能挪走的：handle、start、verify，以及版本门 blockedMin 的 import 和调用，都必须留在本文件——
-// tests/build/fn-version-gate-coverage.test.ts 只扫 core.ts（看 handle 开头、blockedMin 的引入和调用），挪走就判成没接版本门。
+// 以后再拆也不能挪走的：handle、start、verify，以及版本门 versionBlock（_shared/version-gate-core.ts）的 import 和调用，都必须留在本文件——
+// tests/build/fn-version-gate-coverage.test.ts 只扫 core.ts（看 handle 开头、versionBlock / blockedMin 的引入和调用），挪走就判成没接版本门。
 // 拆出去的文件只放类型和不带流程的纯工具。
 // 不 import npm 包、不碰运行时全局（只用 Web 标准的 crypto、TextEncoder、Request、Response）。
 //
@@ -17,14 +17,16 @@
 // 日志只记错误码（A23）：不打印请求头、请求体、邮箱、验证码、邀请码、IP。
 // 从来不返回邀请人信息（R-83、TC-B1-05）：invites 只读 max_uses、used_count、expires_at 三列。
 
+import { readJsonObjectCapped } from '../_shared/body.ts';
 import { emailHash, ipHash } from '../_shared/email-hash.ts';
+import { logUserTag } from '../_shared/log-tag.ts';
 import { inviteCodeHash, isInviteCode, normalizeInviteCode } from '../_shared/invite-code.ts';
 import { rateIp, readProxyHeaders, safeEqual } from '../_shared/proxy-headers.ts';
 import { StoreTimeout } from '../_shared/store-timeout.ts';
-import { blockedMin, upgradeRequiredResponse } from '../_shared/version-gate-core.ts';
+import { versionBlock } from '../_shared/version-gate-core.ts';
 import type { CreateUserResult, Deps, Env, InviteRow, PendingRow, Store, TurnstileResult } from './types.ts';
 import {
-  email, err, Fail, json, keys, locale, otpHash, readBody, secureOtp, signupMail, signupUserId, str, type StartBody, type VerifyBody,
+  email, err, Fail, json, keys, locale, MAX_BODY, otpHash, secureOtp, signupMail, signupUserId, str, type StartBody, type VerifyBody,
 } from './wire.ts';
 
 export type {
@@ -61,18 +63,8 @@ async function ipPart(req: Request, deps: Deps, secret: string): Promise<{ part:
   return r ? { part: await ipHash(secret, r), trustedIp: proxy.ip } : { part: UNTRUSTED_IP_BUCKET, trustedIp: null };
 }
 
-// ---------------- 版本门（第 6 节：函数里的第二道；口径同 functions/sb/version-gate.ts，比较用 _shared/version-gate-core.ts） ----------------
-// store.minClientVersion 由 index.ts 经 cachedMinClientVersion 注入（0.38 第 52 条：超时 1.5 秒、缓存，读失败返回 null = 放行）
-async function versionBlock(req: Request, store: Store): Promise<Response | null> {
-  let min: string | null;
-  try {
-    min = await store.minClientVersion();
-  } catch {
-    return null;   // 读配置失败就放行，不因为配置出错把人挡在外面（同转发层）
-  }
-  const b = blockedMin(min, req.headers.get('x-app-version'));
-  return b === null ? null : upgradeRequiredResponse(b);
-}
+// 版本门（第 6 节：函数里的第二道）用 _shared/version-gate-core.ts 的 versionBlock；store.minClientVersion 由 index.ts 经 cachedMinClientVersion 注入
+// （0.38 第 52 条：超时 1.5 秒、缓存，读失败返回 null = 放行）
 
 // ---------------- start ----------------
 async function start(req: Request, b: StartBody, deps: Deps, secret: string): Promise<Response> {
@@ -94,7 +86,7 @@ async function start(req: Request, b: StartBody, deps: Deps, secret: string): Pr
   }
 
   // ② 版本门放在 Turnstile 之后（K2 安全审查低 6：没过人机校验的请求不读配置）
-  const blocked = await versionBlock(req, store);
+  const blocked = await versionBlock(req, () => store.minClientVersion());
   if (blocked) return blocked;
 
   const ok = json(200, { ok: true });
@@ -242,7 +234,7 @@ async function verify(req: Request, b: VerifyBody, deps: Deps, secret: string): 
   }
 
   // 版本门放在限流之后（第二轮复审：和 start 一样，先挡刷的，再读配置）
-  const blocked = await versionBlock(req, store);
+  const blocked = await versionBlock(req, () => store.minClientVersion());
   if (blocked) return blocked;
 
   const eh = await emailHash(secret, b.email);
@@ -266,7 +258,7 @@ async function verify(req: Request, b: VerifyBody, deps: Deps, secret: string): 
     //   ① Supabase 控制台 → Edge Functions → invite-signup → Logs，搜 orphan_（记下时刻）；
     //   ② SQL Editor 跑：select u.id, u.email, u.created_at from auth.users u left join public.profiles p on p.user_id = u.id
     //        where p.user_id is null and u.created_at < now() - interval '10 minutes' order by u.created_at desc;
-    //      创建时刻和日志时刻对得上的那一行就是（orphan_user 再对 id 前 8 位）；
+    //      创建时刻和日志时刻对得上的那一行就是（orphan_user 记的是 user_id 的 HMAC 标签，对不上 id；按时刻对，同一时刻几个就都核一遍）；
     //   ③ 控制台 Authentication → Users 删掉这个用户（没有 profile，没有任何业务数据），用 invite-admin 给这个邮箱的人重发一个新邀请码；
     //      旧码不必退（一次性码，已占的那一次作废）。
     //   ②查不到这个邮箱的行：是“注册成功但删 pending 失败、又换码再验”那种（迁移 20261031150000 文件头），撞上的是一个正常账号——
@@ -307,8 +299,8 @@ async function verify(req: Request, b: VerifyBody, deps: Deps, secret: string): 
     } else {
       // K2 安全审查 P5：删不掉（含超时；超时的 deleteUser 也可能晚到删成，删的只会是这个半成品）就不退码。
       // 重试 verify 时沿用占码、按同一个 id 认领这个用户再补 profile；
-      // 用户一直不重试才成孤儿：记 orphan_user（只记 user_id 前 8 位，0.38），负责人按上面 orphan_suspect 那段的办法核对、删掉、重发邀请码
-      log?.(`orphan_user:${created.id.slice(0, 8)}`);
+      // 用户一直不重试才成孤儿：记 orphan_user（只记 user_id 的 HMAC 标签，_shared/log-tag.ts，安全审查第 11 条），负责人按上面 orphan_suspect 那段的办法核对、删掉、重发邀请码
+      log?.(`orphan_user:${await logUserTag(deps.logSecret, created.id)}`);
     }
     throw new Fail(503, 'try_later');
   }
@@ -355,8 +347,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     deps.log?.('proxy_secret_missing');
   }
 
-  const body = await readBody(req);
-  if (!body) return err(400, 'bad_request');
+  const body = await readJsonObjectCapped(req, MAX_BODY);   // 边读边计字节，超了中断（安全审查第 2 条）
+  if (body === null || body === 'too_large') return err(400, 'bad_request');
   const em = email(body.email);
   const code = str(body.code, 64);
   if (!em || code === null) return err(400, 'bad_request');

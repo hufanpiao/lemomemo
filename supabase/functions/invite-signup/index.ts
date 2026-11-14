@@ -11,8 +11,9 @@ import { envKind } from '../_shared/env-kind.ts';
 import { json } from '../_shared/http.ts';
 import { postOut, timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
+import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { sendMail } from '../_shared/mail-send.ts';
-import { cachedMinClientVersion } from '../_shared/version-gate.ts';
+import { appConfigMinLoader, cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { handle, type AuthAdmin, type Store, type TurnstileResult } from './core.ts';
 import { REQUEST_BUDGET_MS, withAuthTimeouts, withStoreTimeouts } from './store-timeout.ts';
 import { RESEND_EMAILS_URL, TURNSTILE_SITEVERIFY_URL, resolveOutboundUrl } from './outbound.ts';
@@ -32,11 +33,7 @@ function must<T>(r: { data: T; error: unknown }): T {
 function makeStore(admin: Admin, signal: AbortSignal): Store {
   const priv = admin.schema('private');
   return {
-    async takeRate(key, limit, windowS) {
-      const data = must(await priv.rpc('take_rate', { p_key: key, p_limit: limit, p_window_s: windowS }).abortSignal(signal));
-      if (typeof data !== 'boolean') throw new Error('db');
-      return data;
-    },
+    takeRate: rpcTakeRate(admin, signal),
     async getInvite(codeHash) {
       return must(await priv.from('invites').select('max_uses, used_count, expires_at').eq('code_hash', codeHash).abortSignal(signal).maybeSingle());
     },
@@ -76,10 +73,7 @@ function makeStore(admin: Admin, signal: AbortSignal): Store {
     },
     // 架构 0.38 第 52 条：经函数侧版本门的缓存读（超时 1.5 秒、成功缓存 60 秒、失败缓存 10 秒放行，只记 gate_config_*）
     minClientVersion() {
-      return cachedMinClientVersion(async (signal) => {
-        const row = must(await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle()) as { min_client_version: string | null } | null;
-        return row?.min_client_version ?? null;
-      });
+      return cachedMinClientVersion(appConfigMinLoader(admin));
     },
   };
 }
@@ -165,6 +159,7 @@ Deno.serve((req) => {
     verifyTurnstile: (token, ip) => verifyTurnstile(siteverifyUrl, turnstileSecret, token, ip),
     sendMail: (to, mail) => sendMail(resendKey, to, mail, emailsUrl),
     hashSecret: Deno.env.get('SIGNUP_HASH_SECRET'),
+    logSecret: key,   // 日志里认人的 HMAC 密钥（_shared/log-tag.ts，安全审查第 11 条）
     proxySecret: Deno.env.get('PROXY_SECRET'),
     configured: siteverify.ok && emails.ok,
     now: Date.now,

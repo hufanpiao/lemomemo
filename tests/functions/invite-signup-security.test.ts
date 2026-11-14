@@ -9,6 +9,8 @@ import { emailHash } from '../../supabase/functions/_shared/email-hash.ts';
 import { inviteCodeHash } from '../../supabase/functions/_shared/invite-code.ts';
 import { rateIp } from '../../supabase/functions/_shared/proxy-headers.ts';
 import { NOW, SECRET, CODE, CODE2, OTP, COUNTER_KEY, world, viaProxy, startBody, verifyBody, call } from './invite-signup-harness.ts';
+import { logUserTag } from '../../supabase/functions/_shared/log-tag.ts';
+import { LOG_SECRET } from './account-fakes.ts';
 
 describe('TC-B1-64：限流（函数一半）', () => {
   it('① 同一 IP 一小时第 11 次：照样回 {ok}，不发信，计数里看得到', async () => {
@@ -167,8 +169,8 @@ describe('K2 安全审查回归（P1～P5、低 2～6）', () => {
     const r = await call(w, verifyBody('o@example.com'));
     expect(r).toEqual({ status: 503, text: '{"error":"try_later"}' });
     // 只记 user_id 的前 8 位（架构 0.38）
-    expect(w.logs).toContain(`orphan_user:${w.auth.ids[0]?.slice(0, 8)}`);
-    expect(w.logs.filter((l) => l.startsWith('orphan_user:')).every((l) => /^orphan_user:[0-9a-f]{8}$/.test(l))).toBe(true);
+    expect(w.logs).toContain(`orphan_user:${await logUserTag(LOG_SECRET, w.auth.ids[0] ?? '')}`);
+    expect(w.logs.filter((l) => l.startsWith('orphan_user:')).every((l) => /^orphan_user:[0-9a-f]{16}$/.test(l))).toBe(true);
     expect(w.logs.join('\n')).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
     expect(w.store.invites.get(await inviteCodeHash(CODE))?.used_count).toBe(1);
   });

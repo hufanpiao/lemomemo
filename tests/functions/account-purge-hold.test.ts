@@ -8,10 +8,11 @@ import { PURGE_HOLD_MAX_MS, PURGE_WORK_OPS, R2_BUCKETS, type R2 } from '../../su
 import { deletionDoneMail, skipTestRecipients } from '../../supabase/functions/_shared/account-mail.ts';
 import { A, H, mailer } from './account-fakes.ts';
 import { requestDeletion, runPurge, world, type World } from './account-purge-harness.ts';
+import { logTag } from './account-fakes.ts';
 
 const MIN = 60_000;
 const SEC = 1000;
-const a8 = A.slice(0, 8);
+const a8 = await logTag(A);   // 日志里认人的 HMAC 标签（安全审查第 11 条）
 
 /** A 申请注销；返回 purge_after（毫秒）。一次提醒都没发过 */
 async function pending(w: World, uid = A): Promise<number> {
@@ -179,7 +180,7 @@ describe('中 B：信一直发不出去的，扣满 3 天照删并告警', () =>
     w.clock.ms = pa + DAYS(3) + MIN;
     const r = await runPurge(w, over);
     expect(r.body).toMatchObject({ purged: 1, forced: 1 });
-    expect(r.logs).toContain(`purge_forced_no_notice:${T.slice(0, 8)}`);
+    expect(r.logs).toContain(`purge_forced_no_notice:${await logTag(T)}`);
     expect(logs).toContain('mail_skipped_test');
     expect(w.box).toHaveLength(0);   // 一封都没真发
     expect(w.db.users.has(T)).toBe(false);
