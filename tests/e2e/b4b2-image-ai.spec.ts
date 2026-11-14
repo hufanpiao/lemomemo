@@ -28,18 +28,18 @@ async function shot(page: Page, browserName: string, name: string, full = true):
   await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, animations: 'disabled', fullPage: full });
 }
 
-/** 一张小 JPEG（页面里画，内容随便） */
-async function jpeg(page: Page, hue: number): Promise<Buffer> {
-  const b64 = await page.evaluate((hue) => {
+/** 一张 JPEG（页面里画，内容随便；默认 320×200 横图） */
+async function jpeg(page: Page, hue: number, w = 320, h = 200): Promise<Buffer> {
+  const b64 = await page.evaluate(([hue, w, h]) => {
     const c = document.createElement('canvas');
-    c.width = 320;
-    c.height = 200;
+    c.width = w;
+    c.height = h;
     const g = c.getContext('2d');
     if (!g) return '';
     g.fillStyle = `hsl(${hue} 45% 70%)`;
-    g.fillRect(0, 0, 320, 200);
+    g.fillRect(0, 0, w, h);
     return c.toDataURL('image/jpeg', 0.8).split(',')[1] ?? '';
-  }, hue);
+  }, [hue, w, h] as const);
   return Buffer.from(b64, 'base64');
 }
 
@@ -52,9 +52,9 @@ async function fakeServer(page: Page, baseURL: string | undefined, ai: boolean):
   const now = Date.now();
   const at = new Date(now).toISOString();
   const c = { user_id: USER, created_at: now, updated_at: now, deleted_at: null, undone: false, rev: 1, synced_at: at };
-  const image = async (id: string, hue: number, o: Record<string, unknown>) => {
+  const image = async (id: string, hue: number, o: Record<string, unknown>, size: [number, number] = [320, 200]) => {
     const path = `${USER}/${NOTE}/${id}.webp`;
-    bytes.set(`/files/v1/o/images/${path}`, await jpeg(page, hue));
+    bytes.set(`/files/v1/o/images/${path}`, await jpeg(page, hue, ...size));
     return { id, ...c, note_id: NOTE, bucket: 'images', path, bytes: 1000, width: 320, height: 200, mime: 'image/webp', taken_at: null, has_thumb: false,
       ai_status: 'pending', skip_reason: null, ai_desc: null, ai_tags: [], ai_tries: 0, ...o };
   };
@@ -64,7 +64,7 @@ async function fakeServer(page: Page, baseURL: string | undefined, ai: boolean):
       await image(PEND, 40, {}),
       await image(FAIL, 200, { ai_status: 'failed', ai_tries: 3 }),
       await image(OFF, 120, { ai_status: 'skip', skip_reason: 'consent' }),
-      await image(DONE, 260, { ai_status: 'done', ai_desc: '一本护照的首页，蓝色封面，有照片和姓名栏', ai_tags: ['证件', '신분증', '护照', '여권'] }),
+      await image(DONE, 260, { ai_status: 'done', ai_desc: '一本护照的首页，蓝色封面，有照片和姓名栏', ai_tags: ['证件', '신분증', '护照', '여권'] }, [600, 1800]),
     ],
     settings: [{ id: '0e2e0000-0000-4000-8000-0000000b4c30', ...c, key: 'ai.enabled', value: ai }],
   };
@@ -158,6 +158,13 @@ async function viewer(page: Page): Promise<void> {
   await expect(page.getByTestId('img-view-close')).toBeFocused();
   await expect(page.getByTestId('img-view-count')).toHaveText('4 / 4');
   await expect(page.getByTestId(`img-view-pic-${DONE}`)).toBeVisible();
+  // 竖长大图（600×1800）整张缩进图区，不被裁
+  const stage = await page.getByTestId('img-view-stage').boundingBox();
+  const pic = await page.getByTestId(`img-view-pic-${DONE}`).boundingBox();
+  if (!stage || !pic) throw new Error('看图页没有图区或大图');
+  expect(pic.y).toBeGreaterThanOrEqual(stage.y - 1);
+  expect(pic.y + pic.height).toBeLessThanOrEqual(stage.y + stage.height + 1);
+  expect(pic.height).toBeGreaterThan(pic.width * 2.5);
   const card = page.getByTestId(`img-view-ai-${DONE}`);
   await expect(card).toContainText('AI 看到的');
   await expect(card).toContainText('一本护照的首页，蓝色封面，有照片和姓名栏');
@@ -169,6 +176,7 @@ test('看图页（手机）：点图打开，AI 看到的在底部；左右键�
   await fakeServer(page, baseURL, true);
   await openNote(page);
   await viewer(page);
+  await expect(page.getByRole('dialog')).toHaveAttribute('data-shell', 'full');
   await shot(page, browserName, '手机-看图页', false);
   // 左键换到第 3 张（没交给 AI 的那张）：计数跟着变，底部没有卡片
   await page.keyboard.press('ArrowLeft');
@@ -203,8 +211,11 @@ test('看图浮层（电脑）：同一个组件，底部描述和标签；Esc �
   await expect(page.getByTestId(`img-ai-${DONE}`)).toHaveCount(0);
   await viewer(page);
   await expect(page.getByTestId('img-view-close')).toContainText('Esc');
+  await expect(page.getByRole('dialog')).toHaveAttribute('data-shell', 'box');
   await shot(page, browserName, '电脑-看图浮层', false);
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('img-view')).toHaveCount(0);
+  // Esc 只关看图浮层，编辑器（抽屉）还在
+  await expect(page.getByTestId(`note-image-${DONE}`)).toBeVisible();
   await expect(page.getByTestId(`note-image-open-${DONE}`)).toBeFocused();
 });

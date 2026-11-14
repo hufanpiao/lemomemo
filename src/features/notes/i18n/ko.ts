@@ -27,7 +27,7 @@ export const ko = {
   'notes.img': '사진', // REVIEW(ko)
   'notes.camera': '촬영', // REVIEW(ko)
   'notes.img.alt': '메모에 넣은 사진', // REVIEW(ko)
-  'notes.img.view': '크게 보기', // REVIEW(ko)
+  'notes.img.view': '{n}번째 사진 크게 보기', // REVIEW(ko)
   'notes.img.more': '{n}장 더', // REVIEW(ko)
   'notes.img.pend': '기록할 사진', // REVIEW(ko)
   'notes.img.pendRemove': '{n}번째 사진 빼기', // REVIEW(ko)

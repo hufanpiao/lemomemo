@@ -20,6 +20,7 @@ import { DOC_TYPES } from '../../../../shared/manifests/attachments.ts';
 import { canShareFiles, markOf, previewOf, readMsPref, sizeText, useAttT, writeMsPref, type AttMsgKey, type AttSource, type NoteFile } from '../hooks/useNoteFiles.ts';
 import { safeHref } from '../../../../shared/logic/link.ts';
 import { useLayer } from './layer.ts';
+import shell from './layer.module.css';
 import styles from './PreviewLayer.module.css';
 
 /** 微软多久没加载出来就退回本机 */
@@ -126,8 +127,8 @@ export default function PreviewLayer({ src, file, desk, onClose, onDownload, onS
   const zoomable = phase.k === 'local' && phase.way !== 'pptx';
 
   return createPortal(
-    <div className={styles.scrim} data-testid="att-preview">
-      <div className={desk ? styles.box : styles.full} role="dialog" aria-modal="true" aria-label={t('att.pv.frame', {})}>
+    <div className={shell.scrim} data-testid="att-preview">
+      <div className={desk ? shell.box : shell.full} role="dialog" aria-modal="true" aria-label={t('att.pv.frame', {})}>
         <div className={styles.top}>
           <span className={styles.mark} aria-hidden="true">
             {markOf(file.kind)}

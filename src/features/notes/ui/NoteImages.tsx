@@ -11,12 +11,11 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { ImageAiStatus } from '../../attachments/index.ts';
 import { NoteImageView, type ViewOpen } from './NoteImageView.tsx';
-import { CameraIcon, ImgIcon } from './ImgIcons.tsx';
-import { useBlobSrc } from '../../../kit/hooks/useBlobSrc.ts';
+import { BlobImg, CameraIcon, failKey, ImgIcon } from './ImgParts.tsx';
 import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { insertImage, useImageNotices, useImageSrc, useNoteImages, type ImageSrc, type ImgFailKey, type ImgNotice, type InsertResult, type NoteImage, type PendingImage } from '../hooks/useNoteImages.ts';
+import { insertImage, useImageNotices, useImageSrc, useNoteImages, type ImgFailKey, type ImgNotice, type InsertResult, type NoteImage, type PendingImage } from '../hooks/useNoteImages.ts';
 import type { ActionResult } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
 import styles from './NoteImages.module.css';
@@ -43,12 +42,6 @@ export function ImgMsgLine({ msg, className }: { msg: { key: ImgMsgKey; trash: b
       ) : null}
     </p>
   );
-}
-
-/** 显示 blob: 地址的图（地址来自 data/image-view.ts、image-uploader.ts）：经 kit 的 useBlobSrc 设 src，只放行 blob:（A26 补） */
-function BlobImg({ url, alt, onError }: { url: string; alt: string; onError?: () => void }) {
-  const ref = useBlobSrc(url);
-  return <img ref={ref} className={styles.coverImg} alt={alt} onError={onError} />;
 }
 
 /** 藏起来的选图框：pick() 点开，选了一张就回调（同一张再选也触发：选完清空 value） */
@@ -115,9 +108,6 @@ export function CardCover({ img, count }: { img: NoteImage; count: number }) {
     </span>
   );
 }
-
-/** “没传上”（本页传失败）/“还没传上”（服务器上暂时没有，可能另一台设备还在传）；正常的回 null */
-const failKey = (src: ImageSrc): 'notes.img.failed' | 'notes.img.notYet' | null => (src.failed ? 'notes.img.failed' : src.missing ? 'notes.img.notYet' : null);
 
 /** 列表行“⋯”前的缩略图（视觉验收必改 1；视觉稿 PH.notes .thumb）：取不到时标“!”，读屏念出原因 */
 export function ListThumb({ img }: { img: NoteImage }) {
@@ -272,19 +262,19 @@ export function EditorImages({ noteId, disabled, onMessage }: { noteId: string |
       {im.items.length ? (
         <ul className={styles.list} aria-label={t('notes.img.list', {})}>
           {im.items.map(({ img, pending }, i) => (
-            <OneImage key={img.id} img={img} pending={pending} disabled={disabled} onRemove={() => void im.remove(img.id)} onRetry={() => im.retry(img.id)} onReplace={insert} onOpen={(from) => setView({ i, from })} />
+            <OneImage key={img.id} img={img} n={i + 1} pending={pending} disabled={disabled} onRemove={() => void im.remove(img.id)} onRetry={() => im.retry(img.id)} onReplace={insert} onOpen={(from) => setView({ id: img.id, from })} />
           ))}
         </ul>
       ) : null}
       <div className={styles.picks}>
         <PickButtons onFile={(f) => void insert(f)} disabled={disabled || noteId === null} idPrefix="note-edit" />
       </div>
-      {view ? <NoteImageView imgs={im.items.map((x) => x.img)} open={view} onClose={() => setView(null)} /> : null}
+      {view ? <NoteImageView items={im.items} open={view} onClose={() => setView(null)} /> : null}
     </div>
   );
 }
 
-function OneImage(p: { img: NoteImage; pending: PendingImage | null; disabled: boolean; onRemove(): void; onRetry(): boolean; onReplace(f: File): Promise<boolean>; onOpen(from: HTMLElement): void }) {
+function OneImage(p: { img: NoteImage; n: number; pending: PendingImage | null; disabled: boolean; onRemove(): void; onRetry(): boolean; onReplace(f: File): Promise<boolean>; onOpen(from: HTMLElement): void }) {
   const t = useNotesT();
   const src = useImageSrc(p.img, false);
   const [busy, setBusy] = useState(false);
@@ -302,7 +292,7 @@ function OneImage(p: { img: NoteImage; pending: PendingImage | null; disabled: b
     <li className={styles.item} data-testid={`note-image-${p.img.id}`} data-state={failed ? 'failed' : uploading ? 'uploading' : 'done'}>
       <span className={styles.frame}>
         {src.url ? <BlobImg url={src.url} alt={t('notes.img.alt', {})} /> : null}
-        {failed || uploading ? null : <button type="button" className={styles.open} onClick={(e) => p.onOpen(e.currentTarget)} aria-label={t('notes.img.view', {})} data-testid={`note-image-open-${p.img.id}`} />}
+        {failed || uploading ? null : <button type="button" className={styles.open} onClick={(e) => p.onOpen(e.currentTarget)} aria-label={t('notes.img.view', { n: p.n })} data-testid={`note-image-open-${p.img.id}`} />}
         {uploading ? (
           <span className={styles.veil}>
             <span className={styles.badge} role="status">

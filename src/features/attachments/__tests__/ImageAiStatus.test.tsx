@@ -133,14 +133,15 @@ describe('ImageViewer 看图页', () => {
   beforeEach(() => {
     lines.length = 0;
     aiOn(true);
+    if (!document.getElementById('root')) document.body.append(Object.assign(document.createElement('div'), { id: 'root' }));
     collections['note_images'] = [img({ ai_status: 'done', ai_desc: '一本护照的首页', ai_tags: ['证件', '신분증'] }), img({ id: ID2 }), img({ id: ID3, ai_status: 'failed' })];
   });
   afterEach(cleanup);
   const open = (start: number, onClose = vi.fn()) => {
     const from = document.createElement('button');
     document.body.append(from);
-    render(<ImageViewer ids={ids} start={start} back={from} onClose={onClose} render={(i) => <i data-testid="pic">{String(i)}</i>} />);
-    return { from, onClose };
+    const r = render(<ImageViewer ids={ids} start={start} back={from} onClose={onClose} render={(id) => <i data-testid="pic">{id}</i>} />);
+    return { from, onClose, r };
   };
   const count = () => screen.getByTestId('img-view-count');
 
@@ -148,7 +149,13 @@ describe('ImageViewer 看图页', () => {
     open(0);
     expect(document.activeElement).toBe(screen.getByTestId('img-view-close'));
     expect(count().textContent).toBe('1 / 3');
-    expect(count().getAttribute('aria-label')).toBe('第 1 张，共 3 张');
+    // 看得见的“1 / 3”读屏不念，念视觉隐藏 live 区里的“第 1 张，共 3 张”
+    expect(count().getAttribute('aria-hidden')).toBe('true');
+    expect(screen.getByTestId('img-view-count-sr').textContent).toBe('第 1 张，共 3 张');
+    expect(screen.getByTestId('img-view-count-sr').getAttribute('aria-live')).toBe('polite');
+    expect(screen.getByTestId('img-view-close').getAttribute('aria-label')).toBe('关闭');
+    // 后面的 #root 设了 inert，关了去掉
+    expect(document.getElementById('root')?.hasAttribute('inert')).toBe(true);
     const card = screen.getByTestId(`img-view-ai-${ID}`);
     expect(card.textContent).toContain('AI 看到的');
     expect(card.textContent).toContain('一本护照的首页');
@@ -162,18 +169,18 @@ describe('ImageViewer 看图页', () => {
     open(0);
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     expect(count().textContent).toBe('2 / 3');
-    expect(screen.getByTestId('pic').textContent).toBe('1');
+    expect(screen.getByTestId('pic').textContent).toBe(ID2);
     expect(screen.queryByText('AI 看到的')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '下一张' }));
     expect(count().textContent).toBe('3 / 3');
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     expect(count().textContent).toBe('3 / 3');
     const stage = screen.getByTestId('img-view-stage');
-    fireEvent.pointerDown(stage, { clientX: 100, clientY: 100 });
-    fireEvent.pointerUp(stage, { clientX: 220, clientY: 110 });
+    fireEvent.pointerDown(stage, { clientX: 100, clientY: 100, isPrimary: true });
+    fireEvent.pointerUp(stage, { clientX: 220, clientY: 110, isPrimary: true });
     expect(count().textContent).toBe('2 / 3');
-    fireEvent.pointerDown(stage, { clientX: 100, clientY: 100 });
-    fireEvent.pointerUp(stage, { clientX: 120, clientY: 300 });
+    fireEvent.pointerDown(stage, { clientX: 100, clientY: 100, isPrimary: true });
+    fireEvent.pointerUp(stage, { clientX: 120, clientY: 300, isPrimary: true });
     expect(count().textContent).toBe('2 / 3');
     fireEvent.click(screen.getByRole('button', { name: '上一张' }));
     expect(count().textContent).toBe('1 / 3');
@@ -190,6 +197,38 @@ describe('ImageViewer 看图页', () => {
     expect(lines.filter((l) => l === 'att view close')).toHaveLength(2);
     cleanup();
     expect(document.activeElement).toBe(from);
+    expect(document.getElementById('root')?.hasAttribute('inert')).toBe(false);
+  });
+
+  it('带修饰键（Alt+← 后退）、输入法组字的左右键不换张；右键拖、非主指针不算横滑', () => {
+    open(1);
+    fireEvent.keyDown(window, { key: 'ArrowLeft', altKey: true });
+    fireEvent.keyDown(window, { key: 'ArrowRight', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'ArrowRight', isComposing: true });
+    expect(count().textContent).toBe('2 / 3');
+    const stage = screen.getByTestId('img-view-stage');
+    fireEvent.pointerDown(stage, { clientX: 100, clientY: 100, button: 2, isPrimary: true });
+    fireEvent.pointerUp(stage, { clientX: 300, clientY: 100, isPrimary: true });
+    fireEvent.pointerDown(stage, { clientX: 100, clientY: 100, button: 0, isPrimary: false });
+    fireEvent.pointerUp(stage, { clientX: 300, clientY: 100, isPrimary: false });
+    expect(count().textContent).toBe('2 / 3');
+  });
+
+  it('图增删时看着的这张不跳：前面插一张、删掉这张夹到范围里、全删了就关', () => {
+    const { onClose, r } = open(1);
+    const rerender = (list: string[]) => r.rerender(<ImageViewer ids={list} start={1} back={null} onClose={onClose} render={(id) => <i data-testid="pic">{id}</i>} />);
+    const NEW = '0199a000-0000-7000-8000-000000000009';
+    rerender([NEW, ID, ID2, ID3]);
+    expect(count().textContent).toBe('3 / 4');
+    expect(screen.getByTestId('pic').textContent).toBe(ID2);
+    rerender([NEW, ID, ID3]);
+    expect(count().textContent).toBe('2 / 3');
+    rerender([ID3]);
+    expect(count().textContent).toBe('1 / 1');
+    expect(screen.getByTestId('pic').textContent).toBe(ID3);
+    expect(onClose).not.toHaveBeenCalled();
+    rerender([]);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('只有一张：不画换张按钮', () => {

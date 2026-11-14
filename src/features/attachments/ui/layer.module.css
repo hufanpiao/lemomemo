@@ -1,0 +1,35 @@
+/* 附件区整窗浮层的外壳（PreviewLayer、ImageViewer 共用，配 layer.ts 的 useLayer）：
+   电脑全窗口浮层 left/right 40、top 56、bottom 24、圆角 20（线框 sPrev）；手机整屏。
+   底色默认 --sheet-bg；要不透明的（看图页）在 .box / .full 上加 .solid */
+.scrim {
+  position: fixed;
+  z-index: var(--z-dialog);
+  inset: 0;
+  background: var(--scrim);
+}
+
+.box,
+.full {
+  position: absolute;
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  background: var(--sheet-bg);
+  color: var(--text);
+}
+
+.box {
+  inset: 56px 40px 24px;
+  border-radius: 20px;
+  box-shadow: var(--shadow-2);
+}
+
+.full {
+  inset: 0;
+  padding: var(--inset-top) 0 var(--inset-bottom);
+}
+
+/* 玻璃皮肤的 --sheet-bg 半透明，会透出后面；看图页用不透明底 */
+.solid {
+  background: var(--glass-solid);
+}

@@ -1,9 +1,4 @@
-/* 看图页（线框 sAIst 第一屏）：顶行“✕ 关闭 · 1 / 3”，中间大图（圆角、不裁），底部“AI 看到的”白底卡片、描边标签胶囊。外壳（scrim / full / box）用 PreviewLayer.module.css */
-
-/* 看图页不透明：玻璃皮肤的 --sheet-bg 是半透明的，会透出后面的随手记；两个类名叠写，保证压过 PreviewLayer 的 .full / .box（懒加载块的样式先后不定） */
-.sheet.sheet {
-  background: var(--glass-solid);
-}
+/* 看图页（线框 sAIst 第一屏）：顶行“✕ 关闭 · 1 / 3”，中间大图（圆角、不裁），底部“AI 看到的”白底卡片、描边标签胶囊。外壳（scrim / full / box / solid）用 layer.module.css */
 
 .top {
   position: relative;
@@ -25,6 +20,16 @@
   font-size: var(--fs-14);
 }
 
+/* 读屏念的“第 n 张，共 m 张”（看得见的“n / m”读屏不念） */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* 计数居中，不跟着左边按钮宽度走 */
 .count {
   position: absolute;
@@ -41,12 +46,13 @@
   flex: 1;
   min-height: 0;
   padding: 4px 16px 16px;
-  touch-action: pan-y pinch-zoom;
+  touch-action: pinch-zoom;
 }
 
 .pic {
   display: grid;
   flex: 1;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   overflow: hidden;
   min-width: 0;
   place-items: center;
