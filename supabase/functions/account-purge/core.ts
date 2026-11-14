@@ -196,15 +196,15 @@ export interface Ops { n: number }
 const PAGE = 1000;   // index.ts 列、删每次最多 1000 个
 type FullDeps = Deps & { store: PurgeStore; r2: R2; backups: Backups };
 
-/** 对象上的每个方法（含原型上的）调一次给 ops 记一次；属性原样透出，this 仍是原对象（安全审查第 10 条：PurgeStore 以后加方法不用再来这里补） */
+/**
+ * 对象上的每个自有方法调一次给 ops 记一次；别的属性原样拷过去，this 仍是原对象（安全审查第 10 条：PurgeStore 以后加方法不用再来这里补）。
+ * 只认自有可枚举属性（Object.entries）：PurgeStore 两份实现（index.ts 的 makeStore、测试的 fakePurgeStore）都是对象字面量。
+ * 不用 Proxy + Reflect.get：键是 string，过不了 check_backend 的 F7；Object.entries 不按键取值。
+ */
 export function countCalls<T extends object>(obj: T, ops: Ops): T {
-  return new Proxy(obj, {
-    get(target, key) {
-      const v: unknown = Reflect.get(target, key, target);
-      if (typeof v !== 'function') return v;
-      return (...a: unknown[]) => { ops.n++; return (v as (...x: unknown[]) => unknown).apply(target, a); };
-    },
-  });
+  return Object.fromEntries(Object.entries(obj).map(([k, v]: [string, unknown]) => [k, typeof v === 'function'
+    ? (...a: unknown[]) => { ops.n++; return (v as (...x: unknown[]) => unknown).apply(obj, a); }
+    : v])) as T;
 }
 
 /** 同一套依赖，每次调用给 ops 记数；两段各用一份，互不挤占。store 每个方法一次（countCalls）；R2、backups 按分页折算 */
