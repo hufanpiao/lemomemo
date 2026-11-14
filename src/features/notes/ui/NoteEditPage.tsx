@@ -12,11 +12,11 @@
 //   出“这条要新版本才能修改 · 更新”；电脑抽屉复用这个编辑器，列表页已在点开时拦下，这里兜住直接打开地址、打开后才变只读的情况
 // • 附件（B4b-1）：插图区下面挂 attachments 功能懒加载的附件区（加附件只在电脑布局，预览浮层再单独懒加载）
 // • 动效：只有抽屉最基本的滑入（R-376），按钮用 Pressable 的按下反馈
-import { Suspense, useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Suspense, useCallback, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { DrawerClose, useInDrawer } from '../../../kit/components/DetailDrawer.tsx';
 import { DeletedNotice, ReadonlyNotice, useEditStatus, useEditT } from '../../../kit/components/EditNotices.tsx';
-import { enterCommits, useCommitDraft } from '../../../kit/components/Form.tsx';
+import { TextArea } from '../../../kit/components/Form.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
 import { useHoldBusy } from '../../../kit/hooks/useHoldBusy.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -120,24 +120,32 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
           <DeletedNotice onUndo={() => void ed.setDeleted(false)} testId="note-edit-undo" />
         </p>
       ) : null}
-      <DraftArea
+      {/* 标题、正文：kit 的 TextArea（草稿、停笔 BODY_IDLE_MS 存一次、失焦和离开补存都在 useCommitDraft）；跟着内容长高，
+          标题单行（照线框 s8 长了换行显示，回车当作写完，粘贴的换行变空格）；正文的最小高度在样式里，有图时降到两行（NOTE_ED） */}
+      <TextArea
         single
+        autoGrow
+        idleMs={BODY_IDLE_MS}
+        className={styles.title}
         value={form.title}
         maxLength={TITLE_MAX}
         disabled={off}
-        label={t('note.edit.titleLabel', {})}
+        aria-label={t('note.edit.titleLabel', {})}
         placeholder={t('note.edit.titlePh', {})}
         onCommit={(v) => change({ title: v })}
-        testId="note-edit-title"
+        data-testid="note-edit-title"
       />
-      <DraftArea
+      <TextArea
+        autoGrow
+        idleMs={BODY_IDLE_MS}
+        className={styles.body}
         value={form.body}
         maxLength={BODY_MAX}
         disabled={off}
-        label={t('note.edit.bodyLabel', {})}
+        aria-label={t('note.edit.bodyLabel', {})}
         placeholder={t('note.edit.bodyPh', {})}
         onCommit={(v) => change({ body: v })}
-        testId="note-edit-body"
+        data-testid="note-edit-body"
       />
       <EditorImageBlock noteId={noteId} drawer={drawer} disabled={off} msgClass={styles.notice} dropRef={dropImg} />
       {/* 附件（B4b-1，线框 sAtt）：懒加载，插图区下面；拖进来、粘贴进来的图片照插图插进这一条 */}
@@ -189,63 +197,5 @@ function CatChip(p: { value: string | null; options: CategoryOption[]; ai: boole
         ))}
       </select>
     </span>
-  );
-}
-
-/**
- * 标题、正文框：草稿、补存都是 kit Form 的 useCommitDraft（停笔 BODY_IDLE_MS 存一次；失焦、卸载、pagehide、切到后台时把没存的补存一次；
- * keepDirty：编辑中、或还有没存的字时外面的值变了（别的设备改了）不打断；都存了、不在编辑时跟着外面的值走）。这里只管跟着内容长高和标题单行。
- * single（标题）：长标题照线框 s8 换行显示、跟着内容长高；回车不换行，当作写完（失焦就存），粘贴进来的换行变空格
- */
-interface DraftAreaProps {
-  value: string;
-  disabled: boolean;
-  label: string;
-  placeholder: string;
-  maxLength: number;
-  single?: boolean;
-  testId: string;
-  onCommit(v: string): void;
-}
-
-function DraftArea({ value, disabled, label, placeholder, maxLength, single = false, testId, onCommit }: DraftAreaProps) {
-  const d = useCommitDraft(value, onCommit, { idleMs: BODY_IDLE_MS, keepDirty: true });
-  const el = useRef<HTMLTextAreaElement>(null);
-  // 标题、正文都跟着内容长高（标题一行起；正文的最小高度在样式里，有图时降到两行，图紧跟在正文后面，NOTE_ED）
-  useLayoutEffect(() => {
-    const ta = el.current;
-    if (ta === null) return;
-    // 量内容本身的高度（先去掉样式里的最小高度）；写回去的 height 再被样式的 min-height 托底（没图 40vh、有图两行）
-    ta.style.height = 'auto';
-    ta.style.minHeight = '0px';
-    const h = ta.scrollHeight;
-    ta.style.minHeight = '';
-    ta.style.height = `${h}px`;
-  }, [d.draft]);
-
-  return (
-    <textarea
-      ref={el}
-      className={single ? styles.title : styles.body}
-      aria-label={label}
-      placeholder={disabled ? undefined : placeholder}
-      maxLength={maxLength}
-      disabled={disabled}
-      rows={single ? 1 : undefined}
-      value={d.draft}
-      data-testid={testId}
-      onFocus={() => d.setEditing(true)}
-      onKeyDown={(e) => {
-        if (single && enterCommits(e)) {
-          e.preventDefault();
-          e.currentTarget.blur();
-        }
-      }}
-      onChange={(e) => d.setDraft(single ? e.target.value.replace(/[\r\n]+/g, ' ') : e.target.value)}
-      onBlur={() => {
-        d.setEditing(false);
-        d.flush();
-      }}
-    />
   );
 }

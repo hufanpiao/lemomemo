@@ -64,6 +64,3 @@ export const presets: Record<AppearKind, Preset> = {
     reduced: { opacity: 0 },
   },
 };
-
-/** 按下回弹：scale(0.97)（17.1、17.3） */
-export const PRESS_SCALE = 0.97;
