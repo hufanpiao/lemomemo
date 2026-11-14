@@ -11,6 +11,7 @@ import { clearReauth, readReauth } from '../platform/auth-loss-store.ts';
 import { requestAppUpdate } from '../platform/native-bridge.ts';
 import { reloadPage, updateAttemptStore } from '../platform/sw-register.ts';
 import { rlog } from '../platform/run-log-api.ts';
+import { clock } from '../platform/clock.ts';
 import { ensureAccount } from './account.ts';
 import { deleteCacheDb, openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
 import { cacheErrKind, type UpgradeReport } from './cache-migrations.ts';
@@ -317,7 +318,8 @@ async function loadCache(
   await prunePendingActions(cache, { userId, now: now() }).catch(() => 0);
 
   // 日志：仓库里还没有日志层（core/log），outbox 的 log（R-229 outbox_vault_shell_drop）暂不接；接上以后经 opts.outboxOptions.log 传进来（接手清单 K6-log）
-  const outbox = createOutbox(cache, { ...opts.outboxOptions, appVersion, now });
+  // outbox 用校正过偏差的时钟（platform/clock.ts，同步引擎同一个）：next_at 退避和引擎算重试等多久对得上
+  const outbox = createOutbox(cache, { ...opts.outboxOptions, appVersion, now: opts.now ?? clock.now });
   result.outbox = outbox;
   result.outboxReport = await outbox.boot();
   outbox.onEvent((e) => {

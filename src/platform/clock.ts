@@ -2,7 +2,7 @@
 // • 每次收到 /sb/ 的响应读响应头 Date：一次样本 = 服务器时间 − 本机收到响应的时间
 // • clock_offset = 最近 5 次样本的中位数（一个离群值不影响）；绝对值小于 2 秒当 0（Date 头只精确到秒，不值得校）
 // • 显示“现在”、倒计时、本机提醒判断都用 now() = Date.now() + clock_offset，统一从这里取；
-//   outbox 的 client_ts 照常记本机时间（不经这里），不参与冲突判断
+//   outbox 也用这里（core/boot.ts 注入）：next_at 退避和同步引擎算重试等多久是同一个时钟；client_ts 跟着用校正后的时间，不参与冲突判断
 // • 偏差超过 5 分钟：isClockWrong() 为 true，设置 › 关于 显示“手机时间不准”
 // • 喂样本：platform/http.ts 的 appFetch 收到 /sb/ 的响应时调 observeResponse(url, res.headers.get('Date'))（接线见接手清单 K8-clock）；
 //   跨域时 Date 要在 Access-Control-Expose-Headers 里（架构 5.10），读不到就是 null，跳过
