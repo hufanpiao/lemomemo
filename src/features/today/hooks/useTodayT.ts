@@ -1,7 +1,11 @@
 // 功能 today 自己的 t()（架构 2.4）：词典在 ../i18n/，语言跟着 ui-store 的 locale；外加时长、时区名两个按语言拼的小工具
+// 顺带把“已过去”的拆分 splitPast（data 的纯函数）转给今天页：ui 不能直接碰 data；按界面留住的那份列表拆，不放进 useToday 的 model
+// （原来另有一个只包一层 useMemo 的 useTodayPast.ts，B6 整合删了，今天页自己 useMemo）
 import { createT, type Locale } from '../../../../shared/i18n/i18n.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { splitDur } from '../data/today-model.ts';
+
+export { splitPast } from '../data/today-model.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
 import { makeUseT } from '../../../kit/hooks/useT.ts';

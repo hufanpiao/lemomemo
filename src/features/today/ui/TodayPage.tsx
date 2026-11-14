@@ -29,7 +29,7 @@
 // • 电脑版（B6，5.9b；有侧栏的宽度）：交给按需下载的 TodayDesk 排成可拖动的块；提示、“现在”卡、没赶上、今天的安排合成一块时间河
 //   （块标题“今天的安排”，里面不再画这个小标题；B6 返工 11-14）。页顶日期行固定不动：日期后面加农历（TodayDesk 的 Lunar），下面是纪念日胶囊（同手机的 AnnivLine）。
 //   点一行不换页，在详情抽屉里编辑（选中哪一条由 kit 的 useDrawerSel 管，同随手记页；窗口变窄、电脑版卸下或画出错时清掉；“今天记的”里的随手记也开在这个抽屉里，同样先判只读）。电脑版分包没到、下不来时照手机的排法画
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
@@ -44,9 +44,8 @@ import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
 import { afterAppPainted, isAppPainted } from '../../../platform/root-paint.ts';
 import { AppearItem, AppearList, Pressable, useHoldView, useSwapWhenSafe } from '../../../motion/components.ts';
-import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
+import { splitPast, useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
-import { useTodayPast } from '../hooks/useTodayPast.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
 import { loadTodayDesk, TodayRo } from '../index.ts';
 import { useAnnivAny } from '../hooks/useAnnivAny.ts';
@@ -229,7 +228,7 @@ export default function TodayPage() {
   );
   // 已过去（线框 s1“已过去的折叠成一行”，时间河“▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓”）：结束了的日程、做完的待办收成一行，
   // 点一下展开、再点收起（这次打开记着，不存）；展开时过去的那几行排在最前面，照原来的行画
-  const past = useTodayPast(v.events, v.todos, d.now);
+  const past = useMemo(() => splitPast(v.events, v.todos, d.now), [v.events, v.todos, d.now]);
   const pastN = past.pastEvents.length + past.pastTodos.length;
   const pastText = [...past.pastEvents.map((o) => `${o.time ?? ''} ${o.title}`), ...past.pastTodos.map((x) => `${x.title} ✓`)].join(' · ');
   const listItem = (titled: boolean) => (
