@@ -14,7 +14,7 @@
 import { writeFileSync } from 'node:fs';
 import type { Page, TestInfo } from '@playwright/test';
 import { grab, meanVar, mix, pillCore, r2, type Rect, rectOf, sub } from './pixels.ts';
-import { applyTheme, expect, frames, freeze, hideContent, seedTodos, settle, test } from './visual-helpers.ts';
+import { applySimpleSkin, applyTheme, expect, frames, freeze, hideContent, seedTodos, settle, test } from './visual-helpers.ts';
 
 /**
  * 透过率下限：静止时 9d40848（底栏透明）底栏 D 12.5～29、上方内容 D 约 40，透过率 0.3～0.7；69659c1（底栏后面实色）是 0。
@@ -175,6 +175,7 @@ for (const [from, to, toTestid] of [
     test(`不叠字；底栏每一帧都是透明玻璃（0/20/40/60/100%）`, async ({ page }, ti) => {
       test.setTimeout(180_000); // 五帧，每帧整屏截图比对 + 4 张区域截图，3 倍屏 webkit 截一张就要一两秒
       await applyTheme(page, themeOf(ti));
+      await applySimpleSkin(page);
       await freeze(page);
       await seedTodos(page, from);
       await settle(page, from);

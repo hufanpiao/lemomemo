@@ -73,10 +73,10 @@ afterEach(() => {
 });
 
 describe('一加载就按本机缓存套上', () => {
-  it('没有缓存：简洁、跟随系统（系统深色 → data-theme=dark），两个开关关；meta color-scheme 不动（只留 base.css 一套，第 7 条）', async () => {
+  it('没有缓存：磨砂玻璃（负责人 11-14“默认皮肤要磨砂玻璃，设置里面简洁可选”）、跟随系统（系统深色 → data-theme=dark），两个开关关；meta color-scheme 不动（只留 base.css 一套，第 7 条）', async () => {
     stubSystem(true);
     await load();
-    expect(html().dataset['skin']).toBe('simple');
+    expect(html().dataset['skin']).toBe('glass');
     expect(html().dataset['theme']).toBe('dark');
     expect(html().dataset['rt']).toBeUndefined();
     expect(html().dataset['rm']).toBeUndefined();
@@ -93,12 +93,21 @@ describe('一加载就按本机缓存套上', () => {
     expect(html().dataset['rm']).toBeUndefined();
   });
 
+  it('11-14 以前的缓存（没有 v: 2）里的简洁当旧默认、按磨砂玻璃；v: 2 的简洁是自己选的、照旧', async () => {
+    localStorage.setItem('pv-look', JSON.stringify({ skin: 'simple', theme: 'dark' }));
+    const m = await load();
+    expect(html().dataset['skin']).toBe('glass');
+    expect(html().dataset['theme']).toBe('dark');
+    localStorage.setItem('pv-look', JSON.stringify({ skin: 'simple', theme: 'dark', v: 2 }));
+    expect(m.cachedLook().skin).toBe('simple');
+  });
+
   it('缓存坏了、值认不出：按默认', async () => {
     localStorage.setItem('pv-look', '{oops');
     const m = await load();
-    expect(m.cachedLook()).toEqual({ skin: 'simple', theme: 'system', font: 'system' });
+    expect(m.cachedLook()).toEqual({ skin: 'glass', theme: 'system', font: 'system' });
     localStorage.setItem('pv-look', JSON.stringify({ skin: 'neon', theme: 'auto', rt: 'yes', rm: 1 }));
-    expect(m.cachedLook()).toEqual({ skin: 'simple', theme: 'system', font: 'system' });
+    expect(m.cachedLook()).toEqual({ skin: 'glass', theme: 'system', font: 'system' });
   });
 });
 
@@ -176,30 +185,31 @@ describe('lookValue：写进 settings 的值', () => {
 
 describe('watchLook 盯住 settings', () => {
   it('集合是空的不覆盖缓存；灌进来、改了、删了都重新套，并写进缓存', async () => {
-    localStorage.setItem('pv-look', JSON.stringify({ skin: 'glass', theme: 'dark' }));
+    localStorage.setItem('pv-look', JSON.stringify({ skin: 'simple', theme: 'dark', v: 2 }));
     const m = await load();
     const c = fakeCollection();
     const stop = m.watchLook(c);
-    expect(html().dataset['skin']).toBe('glass');
+    expect(html().dataset['skin']).toBe('simple');
     expect(html().dataset['theme']).toBe('dark');
 
     c.upsert([{ id: '1', key: 'notes.view@mobile', value: 'list' }]);
-    // 有设置行、但没有皮肤的键：按默认（这个账号没选过）
-    expect(html().dataset['skin']).toBe('simple');
+    // 有设置行、但没有皮肤的键：按默认磨砂玻璃（这个账号没选过；负责人 11-14“默认皮肤要磨砂玻璃”）
+    expect(html().dataset['skin']).toBe('glass');
     expect(html().dataset['theme']).toBe('light');
 
-    c.upsert([{ id: '2', key: 'ui.skin', value: 'glass' }, { id: '3', key: 'ui.theme', value: 'dark' }]);
-    expect(html().dataset['skin']).toBe('glass');
+    c.upsert([{ id: '2', key: 'ui.skin', value: 'simple' }, { id: '3', key: 'ui.theme', value: 'dark' }]);
+    // 选过简洁的照旧用简洁
+    expect(html().dataset['skin']).toBe('simple');
     expect(html().dataset['theme']).toBe('dark');
-    expect(JSON.parse(localStorage.getItem('pv-look') ?? '{}')).toEqual({ skin: 'glass', theme: 'dark', font: 'system' });
+    expect(JSON.parse(localStorage.getItem('pv-look') ?? '{}')).toEqual({ skin: 'simple', theme: 'dark', font: 'system', v: 2 });
 
     // 删了、撤销了的行不算
-    c.upsert([{ id: '2', key: 'ui.skin', value: 'glass', deleted_at: 1 }, { id: '3', key: 'ui.theme', value: 'dark', undone: true }]);
-    expect(html().dataset['skin']).toBe('simple');
+    c.upsert([{ id: '2', key: 'ui.skin', value: 'simple', deleted_at: 1 }, { id: '3', key: 'ui.theme', value: 'dark', undone: true }]);
+    expect(html().dataset['skin']).toBe('glass');
     expect(html().dataset['theme']).toBe('light');
     stop();
-    c.upsert([{ id: '5', key: 'ui.skin', value: 'glass' }]);
-    expect(html().dataset['skin']).toBe('simple');
+    c.upsert([{ id: '5', key: 'ui.skin', value: 'simple' }]);
+    expect(html().dataset['skin']).toBe('glass');
   });
 });
 
@@ -257,8 +267,8 @@ describe('字体 ui.font', () => {
     await vi.dynamicImportSettled();
     expect(log).toHaveBeenCalledWith('font_load', { itemId: 'kai', code: 'fail font_chunk' });
     expect(applyFont).not.toHaveBeenCalled();
-    // 下一次套（这里是换了皮肤）：字体还是 kai，但上次没套成，再交给 fonts.ts
-    c.upsert([{ id: '2', key: 'ui.skin', value: 'glass' }]);
+    // 下一次套（这里是换了皮肤：默认磨砂玻璃换成简洁）：字体还是 kai，但上次没套成，再交给 fonts.ts
+    c.upsert([{ id: '2', key: 'ui.skin', value: 'simple' }]);
     await vi.dynamicImportSettled();
     expect(applyFont).toHaveBeenCalledWith('kai', expect.any(Function));
     vi.doUnmock('../fonts.ts');

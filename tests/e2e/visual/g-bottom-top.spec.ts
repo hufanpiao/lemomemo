@@ -4,7 +4,7 @@
 import { writeFileSync } from 'node:fs';
 import type { Page, TestInfo } from '@playwright/test';
 import { backdropBlurWorks, bgLuma, edge, grab, inset, meanAbs, meanVar, pillCore, r2, type Rect, rectOf, rows, sub } from './pixels.ts';
-import { applyTheme, expect, freeze, hideBar, hideContent, scrollTo, scrollToCover, seedTodos, settle, solidBackdrop, still, test } from './visual-helpers.ts';
+import { applySimpleSkin, applyTheme, expect, freeze, hideBar, hideContent, scrollTo, scrollToCover, seedTodos, settle, solidBackdrop, still, test } from './visual-helpers.ts';
 
 /**
  * G1 阈值：底栏（和“＋”）范围内 D = A − B 的标准差至少这么大，才算“后面的字透出来了”。
@@ -87,6 +87,7 @@ for (const [route, testid] of [
     test(`G1 底栏透明（后面的字透出来）＋ G2 底栏底边以下看不到字`, async ({ page }, ti) => {
       const theme = themeOf(ti);
       await applyTheme(page, theme);
+      await applySimpleSkin(page);
       await freeze(page);
       await seedTodos(page, route);
       await settle(page, testid);
@@ -177,6 +178,7 @@ for (const [route, testid] of [
     test(`G3 渐变从上沿外 ${G3_EDGE_PX}pt 起逐行单调、没有台阶、到红线成底色 ＋ G4 高度不超过 ${G4_MAX_PX}px`, async ({ page }, ti) => {
       const theme = themeOf(ti);
       await applyTheme(page, theme);
+      await applySimpleSkin(page);
       await freeze(page);
       await seedTodos(page, route);
       await settle(page, testid);
@@ -288,6 +290,7 @@ test.describe('顶部', () => {
     test.skip(!blurOk, '这个 WebKit 不画 backdrop-filter 的模糊（本机 Windows 实测），G5 只在 Linux（CI）判');
     const theme = themeOf(ti);
     await applyTheme(page, theme);
+    await applySimpleSkin(page);
     await freeze(page);
     await seedTodos(page, 'todos');
     await settle(page, 'todos');

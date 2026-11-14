@@ -93,6 +93,19 @@ export async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<v
   }, theme);
 }
 
+/** 皮肤固定简洁（webkit-simple-* 两个项目）：负责人 11-14 起默认皮肤是磨砂玻璃（入口页写 data-skin="glass"、platform/look.ts 没选过按玻璃），
+ *  这组的判据和量值都按简洁皮肤定，在页面脚本之前改成 simple 并守住（同 b2-ui-b-lock、tabbar-lock 的做法） */
+export async function applySimpleSkin(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const apply = (): void => {
+      const r = document.documentElement;
+      if (r && r.dataset['skin'] !== 'simple') r.dataset['skin'] = 'simple';
+    };
+    apply();
+    new MutationObserver(apply).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-skin'] });
+  });
+}
+
 /**
  * 负责人 iPhone（440×956）竖屏的顶部安全区 62pt。Playwright 的 webkit 没有安全区，env(safe-area-inset-top) 是 0，
  * 顶部模糊带就只剩 --top-fade 那 12px，G5 量的不是真机的样子。所以把 --inset-top（base.css 里 = env(safe-area-inset-top)）改成 62px。
