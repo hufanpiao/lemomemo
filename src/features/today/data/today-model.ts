@@ -10,6 +10,7 @@
 import { addDays, diffDays, fmtHm, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
+import { projectColorIndex, type ProjectColor } from '../../../../shared/logic/project-color.ts';
 import { isLate, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 // 同一时刻按标题排：按当前语言、数字按数值（和待办页共用，shared/i18n/title-compare.ts）
@@ -125,6 +126,8 @@ export interface NowSeg {
   kind: 'cur' | 'co' | 'nxt';
   id: string;
   label: string;
+  /** 项目色序号（nxt 左边竖条的颜色，和列表、日历同一个 projectColorIndex；0 = 没有项目） */
+  pc: ProjectColor;
   lane: 0 | 1;
   x0: number;
   x1: number;
@@ -169,12 +172,16 @@ export interface NowCard {
   nowText: string;
   /** 正在进行几件（live；页头“进行中 N 件”） */
   liveN: number;
-  /** 标题行：live 第一件的标题、idle“开始时刻 标题”；其余为 null，界面写暖心句 */
+  /** 标题行：live 第一件的标题、idle 下一件的标题；其余为 null，界面写暖心句 */
   title: string | null;
+  /** idle 时标题前的开始时刻（界面用数字字体，视觉稿 kcard 的 .num）；其余为 null */
+  time: string | null;
   /** 页头右边的分钟数：live 第一件还剩几分、idle 几分后开始；其余为 null（far 的“几分后”只在卡底写一次） */
   left: number | null;
   /** live 第二件：一件写“同时：标题 · 到 HH:MM · 还剩”，三件及以上写“同时还有 N 件” */
   also: { title: string; end: string; left: number } | { more: number } | null;
+  /** 下一件（有就给）：live 且下一件在时间尺里时，界面只给读屏写一句“下一件 …”（时间尺 aria-hidden，复审第 4 条） */
+  next: { time: string; title: string; inMin: number } | null;
   /** 时间尺下面一行：下一件在窗口外写一次“下一件 …”；done 时写明天的第一件 */
   foot: { kind: 'next'; time: string; title: string; inMin: number } | { kind: 'tomorrow'; time: string; title: string } | null;
   /** allday：第一件全天日程的标题和件数（页头“全天 · 休假”） */
@@ -183,25 +190,34 @@ export interface NowCard {
   ruler: { lanes: 1 | 2; mark: number; segs: NowSeg[]; trk: NowTrk[]; ticks: NowTick[] };
 }
 
-/** 喂给“现在”卡的日程：今天的，加上昨天开始、此刻还没结束的（跨零点的日程 00:30 时仍是“进行中”，整块评审第 4 条） */
+/** 有开始、结束时刻的日程（全天的没有）；类型上收窄，后面不用再写 ?? 兜底 */
+type TimedOcc = EventOcc & { start: number; end: number; time: string };
+const isTimed = (o: EventOcc): o is TimedOcc => !o.allDay && o.start !== null && o.end !== null && o.time !== null;
+
+/** 明天的日程离此刻多近才算“下一件”：和 kWin ② 同一个口径（3 小时以内的下一件画进时间尺） */
+const SOON_MIN = 180;
+
+/** 喂给“现在”卡的日程：今天的，加上跨零点两头的——
+ *  昨天开始、此刻还没结束的（00:30 时仍是“进行中”，整块评审第 4 条）；明天 3 小时以内开始的（23:45 时明天 00:15 那件是“下一件”，复审第 1 条） */
 export function nowEvents(rows: readonly Row[], now: number, current: Tz, locale: Locale = 'zh-CN'): EventOcc[] {
   const today = todayOf(now, current);
-  const carry = eventsOn(rows, addDays(today, -1), current, locale).filter((o) => !o.allDay && (o.end ?? 0) > now);
-  return [...carry, ...eventsOn(rows, today, current, locale)];
+  const carry = eventsOn(rows, addDays(today, -1), current, locale).filter((o) => isTimed(o) && o.end > now);
+  const soon = eventsOn(rows, addDays(today, 1), current, locale).filter((o) => isTimed(o) && o.start - now <= SOON_MIN * MIN);
+  return [...carry, ...eventsOn(rows, today, current, locale), ...soon];
 }
 
 /** 日程 → “现在”卡；today 是当前时区的今天；tomorrowFirst 是明天第一件带时刻的日程（done 时写在卡底） */
 export function nowCard(events: readonly EventOcc[], now: number, current: Tz, today: DateStr = todayOf(now, current), tomorrowFirst: EventOcc | null = null): NowCard {
   const zero = msAt(today, 0, current);
   const off = (ms: number) => (ms - zero) / MIN;
-  const span = (o: EventOcc): Span => ({ s: off(o.start ?? 0), e: off(o.end ?? 0) });
-  const untilMin = (ms: number | null) => Math.ceil(((ms ?? now) - now) / MIN);
-  const hmOf = (ms: number | null) => fmtHm(minOfDay(ms ?? now, current));
+  const span = (o: TimedOcc): Span => ({ s: off(o.start), e: off(o.end) });
+  const untilMin = (ms: number) => Math.ceil((ms - now) / MIN);
+  const hmOf = (ms: number) => fmtHm(minOfDay(ms, current));
 
-  const timed = events.filter((o) => !o.allDay && o.start !== null && o.end !== null);
+  const timed = events.filter(isTimed);
   const allDays = events.filter((o) => o.allDay);
-  const cur = timed.filter((o) => (o.start ?? 0) <= now && now < (o.end ?? 0)).sort((a, b) => (a.end ?? 0) - (b.end ?? 0));
-  const next = timed.filter((o) => (o.start ?? 0) > now).sort((a, b) => (a.start ?? 0) - (b.start ?? 0))[0] ?? null;
+  const cur = timed.filter((o) => o.start <= now && now < o.end).sort((a, b) => a.end - b.end);
+  const next = timed.filter((o) => o.start > now).sort((a, b) => a.start - b.start)[0] ?? null;
   const nowM = off(now);
   const win = kWin(cur.map(span), next ? span(next) : null, nowM);
   const nextFar = next !== null && span(next).s >= win.B;
@@ -209,14 +225,14 @@ export function nowCard(events: readonly EventOcc[], now: number, current: Tz, t
   const state: NowState = c0 ? 'live' : next ? (nextFar ? 'far' : 'idle') : timed.length ? 'done' : allDays.length ? 'allday' : 'empty';
 
   const X = (min: number) => (Math.min(Math.max(min, win.A), win.B) - win.A) / (win.B - win.A);
-  const seg = (o: EventOcc | null | undefined, kind: NowSeg['kind'], lane: 0 | 1): NowSeg | null => {
+  const seg = (o: TimedOcc | null | undefined, kind: NowSeg['kind'], lane: 0 | 1): NowSeg | null => {
     if (!o) return null;
     const { s, e } = span(o);
     if (e <= win.A || s >= win.B) return null;
     const p = Math.max(s, win.A);
     const q = Math.min(e, win.B);
     const done = kind === 'nxt' ? 0 : Math.max(0, Math.min(1, (nowM - p) / (q - p)));
-    return { kind, id: o.id, label: o.project || o.title, lane, x0: X(s), x1: X(e), clipL: s < win.A, clipR: e > win.B, done };
+    return { kind, id: o.id, label: o.project || o.title, pc: projectColorIndex(o.project), lane, x0: X(s), x1: X(e), clipL: s < win.A, clipR: e > win.B, done };
   };
   const segs = [seg(c0, 'cur', 0), seg(c1, 'co', 1), seg(next, 'nxt', 0)].filter((x): x is NowSeg => x !== null);
   const ticks: NowTick[] = [];
@@ -224,16 +240,20 @@ export function nowCard(events: readonly EventOcc[], now: number, current: Tz, t
     ticks.push({ x: X(t), text: `${Math.floor(minOfDay(zero + t * MIN, current) / 60)}:00`, edge: t === win.A ? 'l' : t === win.B ? 'r' : null });
   }
 
+  const nx = next ? { time: next.time, title: next.title, inMin: untilMin(next.start) } : null;
+
   return {
     state,
     nowText: hmOf(now),
     liveN: cur.length,
-    title: c0 ? c0.title : state === 'idle' && next ? `${next.time ?? ''} ${next.title}` : null,
+    title: c0 ? c0.title : state === 'idle' && next ? next.title : null,
+    time: !c0 && state === 'idle' && next ? next.time : null,
     left: c0 ? untilMin(c0.end) : state === 'idle' && next ? untilMin(next.start) : null,
+    next: nx,
     also: cur.length > 2 ? { more: cur.length - 1 } : c1 ? { title: c1.title, end: hmOf(c1.end), left: untilMin(c1.end) } : null,
     foot:
-      next && nextFar
-        ? { kind: 'next', time: next.time ?? '', title: next.title, inMin: untilMin(next.start) }
+      nx && nextFar
+        ? { kind: 'next', ...nx }
         : state === 'done' && tomorrowFirst?.time
           ? { kind: 'tomorrow', time: tomorrowFirst.time, title: tomorrowFirst.title }
           : null,

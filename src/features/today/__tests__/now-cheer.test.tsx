@@ -132,7 +132,7 @@ describe('“现在”卡：没有日程时也是同一张大卡', () => {
 });
 
 describe('“现在”卡：有日程时', () => {
-  it('两件同时进行：页头“进行中 2 件”，第二件写一行“同时：…”，时间尺画两条轨道、不画底线', () => {
+  it('两件同时进行：页头“进行中 2 件”，第二件写一行“同时：…”，时间尺画两条轨道、第二件用自己的颜色类', () => {
     const card = show([ev('e1', '短会', 14, 30), ev('e2', '长会', 13, 120)], at(14, 17));
     expect(card.firstElementChild?.textContent).toContain('进行中 2 件');
     expect(screen.getByTestId('now-title').textContent).toBe('短会');
@@ -141,11 +141,12 @@ describe('“现在”卡：有日程时', () => {
     const ruler = screen.getByTestId('now-ruler');
     expect(ruler.getAttribute('data-lanes')).toBe('2');
     expect(ruler.style.getPropertyValue('--lh')).toBe('30px');
-    const segs = [...ruler.children].filter((el) => (el as HTMLElement).style.height);
-    expect(segs.map((el) => [(el as HTMLElement).style.top, (el as HTMLElement).style.height])).toEqual([
-      ['4px', '13px'],
-      ['21px', '13px'],
+    const segs = [...ruler.querySelectorAll<HTMLElement>('[data-kind]')];
+    expect(segs.map((el) => [el.dataset.kind, el.style.getPropertyValue('--t'), el.style.getPropertyValue('--h')])).toEqual([
+      ['cur', '4px', '13px'],
+      ['co', '21px', '13px'],
     ]);
+    expect(segs[0]?.className).not.toBe(segs[1]?.className);
   });
 
   it('一件进行中：一条轨道 20px，色块位置用百分比', () => {
@@ -153,8 +154,34 @@ describe('“现在”卡：有日程时', () => {
     const ruler = screen.getByTestId('now-ruler');
     expect(ruler.getAttribute('data-lanes')).toBe('1');
     expect(ruler.style.getPropertyValue('--lh')).toBe('20px');
-    const seg = [...ruler.children].find((el) => (el as HTMLElement).style.height) as HTMLElement;
-    expect([seg.style.top, seg.style.height]).toEqual(['4px', '20px']);
-    expect(seg.style.left).toMatch(/%$/);
+    const seg = ruler.querySelector<HTMLElement>('[data-kind="cur"]');
+    expect([seg?.style.getPropertyValue('--t'), seg?.style.getPropertyValue('--h')]).toEqual(['4px', '20px']);
+    expect(seg?.style.left).toMatch(/%$/);
+  });
+
+  it('下一件：标题前的时刻用数字字体；竖条用项目色，没有项目用次要文字色', () => {
+    show([{ ...ev('e1', '逛街', 15), project: 'NEOX' }], at(14, 17));
+    expect(screen.getByTestId('now-title').textContent).toBe('15:00 逛街');
+    expect(screen.getByTestId('now-title').querySelector('span')?.textContent).toBe('15:00 ');
+    const nxt = screen.getByTestId('now-ruler').querySelector<HTMLElement>('[data-kind="nxt"]');
+    expect(nxt?.style.getPropertyValue('--pc')).toMatch(/^var\(--p[1-6]s\)$/);
+    cleanup();
+    show([ev('e1', '逛街', 15)], at(14, 17));
+    expect(screen.getByTestId('now-ruler').querySelector<HTMLElement>('[data-kind="nxt"]')?.style.getPropertyValue('--pc')).toBe('var(--k-fg2)');
+  });
+
+  it('进行中、下一件在时间尺里：读屏能听到“下一件 …”（时间尺 aria-hidden）；下一件在尺外时只写卡底那一行', () => {
+    const card = show([ev('e1', '开会', 14, 30), ev('e2', '逛街', 15)], at(14, 17));
+    const sr = [...card.querySelectorAll('span')].find((el) => el.textContent === '下一件 15:00 逛街 · 43 分钟后');
+    expect(sr).toBeTruthy();
+    expect(sr?.closest('[aria-hidden="true"]')).toBeNull();
+    cleanup();
+    const far = show([ev('e1', '开会', 12), ev('e2', '逛街', 17)], at(12, 40));
+    expect(far.textContent?.split('下一件 17:00 逛街').length).toBe(2);
+  });
+
+  it('全天日程标题很长：页头不换行，标签可以省略，“现在 HH:MM”还在', () => {
+    const card = show([allDay('a1', '去釜山参加大学同学的婚礼然后顺便看海住两晚')], at(10));
+    expect(card.firstElementChild?.textContent).toContain('现在 10:00');
   });
 });

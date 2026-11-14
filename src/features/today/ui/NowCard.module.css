@@ -18,9 +18,30 @@
 
 .labelLive,
 .labelIdle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
   padding: 2px 8px;
   border-radius: var(--r-pill);
   font-size: var(--fs-12);
+}
+
+/* 标签前的 6px 小圆点（视觉稿 .klv i）：进行中实心，其余空心 */
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+/* 页头一行不换行：标签（“全天 · 很长的标题”）放不下用省略号，“现在 HH:MM”和右边的分钟数不让 */
+.labelText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .labelLive {
@@ -32,12 +53,25 @@
   border: 1px solid currentcolor;
 }
 
+.labelIdle .dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px currentcolor;
+}
+
 .nowText {
+  flex: none;
   font-family: var(--f-num);
 }
 
+/* 右边的分钟数不让 */
 .left {
+  flex: none;
   margin-left: auto;
+}
+
+/* 下一件标题前的开始时刻用数字字体（视觉稿 kcard 的 .num） */
+.num {
+  font-family: var(--f-num);
 }
 
 /* 标题 17px 半粗，一行，放不下用省略号；只有“进行中”那一件加粗（R-134） */
@@ -72,8 +106,18 @@
   content: '\a0';
 }
 
-/* 时间尺高度跟着轨道数走（视觉稿 kRuler）：--lh 是色块区高度，一条轨道 20px，两条 13+4+13=30px；
-   此刻竖线比色块区多出 8px，刻度在竖线下 3px，整块再留 26px 放刻度 */
+/* 只给读屏的一句（进行中、下一件在时间尺里时的“下一件 …”） */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 时间尺照视觉稿 kRuler、.krul：--lh 是色块区高度，一条轨道 20px，两条 13+4+13=30px；
+   此刻竖线比色块区多出 8px，刻度在色块区下 11px，整块再留 26px 放刻度 */
 .ruler {
   position: relative;
   height: calc(var(--lh) + 26px);
@@ -85,12 +129,15 @@
   position: absolute;
   top: calc(4px + var(--lh) / 2 - 1px);
   height: 2px;
+  border-radius: 1px;
   background: var(--k-trk);
 }
 
-/* 色块的 left、width、top、height 由组件按模型给的位置写在行内 */
+/* 色块的 left、width 和 --t（上边）、--h（高）、--pc（项目色）由组件按模型给的位置写在行内 */
 .seg {
   position: absolute;
+  top: var(--t);
+  height: var(--h);
   display: flex;
   align-items: center;
   overflow: hidden;
@@ -110,6 +157,12 @@
 
 .cur {
   background: var(--k-cur);
+  box-shadow: inset 0 0 0 1.5px var(--k-cur-bd);
+}
+
+/* 同时进行的第二件（第二条轨道）用自己的颜色，和第一件分得开 */
+.co {
+  background: var(--k-co);
 }
 
 .fill {
@@ -118,19 +171,35 @@
   background: var(--k-done);
 }
 
+.co .fill {
+  background: var(--k-co-done);
+}
+
+/* 下一件：左边 3px 项目色竖条（和列表、日历同一个项目色） */
 .nxt {
-  border-left: 3px solid var(--p1);
+  padding: 0 6px 0 9px;
   background: var(--k-nxt-bg);
+  box-shadow: inset 3px 0 0 var(--pc);
+  color: var(--k-fg2);
+}
+
+/* 磨砂玻璃的竖条是单独一根（简洁皮肤用上面的 inset 阴影，不画它） */
+.bar {
+  display: none;
 }
 
 .lb {
   min-width: 0;
-  padding: 0 4px;
   overflow: hidden;
   font-size: var(--fs-11);
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 两条轨道时简洁皮肤的下一件块太矮，不写字 */
+.two .lb {
+  display: none;
 }
 
 .mark {
@@ -139,6 +208,7 @@
   width: 2px;
   height: calc(var(--lh) + 8px);
   margin-left: -1px;
+  border-radius: 1px;
   background: var(--k-mark);
 }
 
@@ -149,6 +219,7 @@
   font-family: var(--f-num);
   font-size: var(--fs-11);
   color: var(--k-fg2);
+  white-space: nowrap;
   transform: translateX(-50%);
 }
 
@@ -158,4 +229,55 @@
 
 .tr {
   transform: translateX(-100%);
+}
+
+/* 磨砂玻璃两套（视觉稿 R-131 追问，负责人选改法 3）：时间轴 = 进度条 + 圆头。
+   当前事项画成 8px 胶囊（已过去 --k-done 实心，还没到 --k-cur 实心）；此刻 = 14px 圆头 + 2.5px --k-ring 描圈；
+   下一件 = 项目色竖条 + 文字，不画底；两条轨道时下一件也写字 */
+:global(:root[data-skin="glass"]) .cur,
+:global(:root[data-skin="glass"]) .co {
+  top: calc(var(--t) + var(--h) / 2 - 4px);
+  height: 8px;
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+:global(:root[data-skin="glass"]) .cl {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+:global(:root[data-skin="glass"]) .cr {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+:global(:root[data-skin="glass"]) .mark {
+  top: calc(4px + var(--lh) / 2 - 7px);
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2.5px var(--k-ring);
+}
+
+:global(:root[data-skin="glass"]) .nxt {
+  padding: 0 0 0 9px;
+  background: none;
+  box-shadow: none;
+}
+
+:global(:root[data-skin="glass"]) .bar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--pc);
+}
+
+:global(:root[data-skin="glass"]) .two .lb {
+  display: inline;
 }

@@ -7,7 +7,8 @@
 //   （负责人 11-14：“没有日程的时候可以显示一些鼓励的句子或者暖心句子”；11-15：“跟有日程的时候一样的样式！不是一个小框加一句话”），
 //   照样画此刻前后的时间尺；far 在时间尺下面写一次“下一件 17:00 逛街 · 4 小时 21 分后”，done 有明天第一件时写“明天 11:00 …”
 // 暖心句按用户时区的当天日期固定选一句（useCheerText，按语言懒加载）；句子下载好之前这一行是空的，CSS 留一行高（.cheer:empty），卡片不跳
-// 时间尺只是示意（aria-hidden），读屏靠页头和标题行的文字
+// 时间尺只是示意（aria-hidden），读屏靠页头和标题行的文字；进行中、下一件又在时间尺里时，另给读屏一句“下一件 …”（看得见的只有尺上的色块）
+// 时间尺照视觉稿 kRuler：第二件（co）用自己的 --k-co 色；下一件左边竖条是项目色；磨砂玻璃皮肤的当前事项是 8px 胶囊、此刻是带圈圆头（样式里按皮肤分）
 import { useEffect, type CSSProperties } from 'react';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { DateStr } from '../../../../shared/core/date.ts';
@@ -46,17 +47,36 @@ export function NowCard({ card, today }: { card: Card; today: DateStr }) {
   const seg = (s: NowSeg) => (
     <span
       key={`${s.kind}-${s.id}`}
-      className={`${styles.seg} ${s.kind === 'nxt' ? styles.nxt : styles.cur} ${s.clipL ? styles.cl : ''} ${s.clipR ? styles.cr : ''}`}
-      style={{ left: pct(s.x0), width: pct(s.x1 - s.x0), top: 4 + s.lane * (lane.h + lane.gap), height: lane.h }}
+      data-kind={s.kind}
+      className={`${styles.seg} ${styles[s.kind]} ${s.clipL ? styles.cl : ''} ${s.clipR ? styles.cr : ''}`}
+      style={
+        {
+          left: pct(s.x0),
+          width: pct(s.x1 - s.x0),
+          '--t': `${4 + s.lane * (lane.h + lane.gap)}px`,
+          '--h': `${lane.h}px`,
+          '--pc': s.pc ? `var(--p${s.pc}s)` : 'var(--k-fg2)',
+        } as CSSProperties
+      }
     >
-      {s.kind === 'nxt' ? <span className={styles.lb}>{s.label}</span> : <i className={styles.fill} style={{ width: pct(s.done) }} />}
+      {s.kind === 'nxt' ? (
+        <>
+          <b className={styles.bar} />
+          <span className={styles.lb}>{s.label}</span>
+        </>
+      ) : (
+        <i className={styles.fill} style={{ width: pct(s.done) }} />
+      )}
     </span>
   );
 
   return (
     <section className={styles.card} data-testid="now-card" data-state={card.state}>
       <p className={styles.head}>
-        <span className={live ? styles.labelLive : styles.labelIdle}>{LABEL[card.state](card, t)}</span>
+        <span className={live ? styles.labelLive : styles.labelIdle}>
+          <i className={styles.dot} />
+          <span className={styles.labelText}>{LABEL[card.state](card, t)}</span>
+        </span>
         <span className={styles.nowText}>{t('now.now', { t: card.nowText })}</span>
         {card.left !== null ? (
           <span className={styles.left} data-testid="now-left">
@@ -66,6 +86,7 @@ export function NowCard({ card, today }: { card: Card; today: DateStr }) {
       </p>
       {card.title !== null ? (
         <p className={live ? styles.titleLive : styles.title} data-testid="now-title">
+          {card.time !== null ? <span className={styles.num}>{card.time} </span> : null}
           {card.title}
         </p>
       ) : (
@@ -80,7 +101,10 @@ export function NowCard({ card, today }: { card: Card; today: DateStr }) {
             : t('now.also', { title: card.also.title, end: card.also.end, d: durText(card.also.left, locale) })}
         </p>
       ) : null}
-      <div className={styles.ruler} aria-hidden="true" data-testid="now-ruler" data-lanes={card.ruler.lanes} style={{ '--lh': `${lh}px` } as CSSProperties}>
+      {live && card.next && card.foot === null ? (
+        <span className={styles.srOnly}>{t('now.hint', { t: card.next.time, title: card.next.title, d: durText(card.next.inMin, locale) })}</span>
+      ) : null}
+      <div className={`${styles.ruler} ${card.ruler.lanes === 2 ? styles.two : ''}`} aria-hidden="true" data-testid="now-ruler" data-lanes={card.ruler.lanes} style={{ '--lh': `${lh}px` } as CSSProperties}>
         {card.ruler.trk.map((k) => (
           <span
             key={k.x0}

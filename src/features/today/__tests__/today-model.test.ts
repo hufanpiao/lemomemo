@@ -1,6 +1,7 @@
 // 今天页的纯逻辑（data/today-model.ts；架构 4.6；皮肤视觉稿“现在”卡 K 的时间窗规则）
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
+import { projectColorIndex } from '../../../../shared/logic/project-color.ts';
 import { eventOcc, eventsOn, kWin, lateTodos, nowCard, nowEvents, splitDur, splitPast, todayTodos, type Row } from '../data/today-model.ts';
 
 const SEOUL = 'Asia/Seoul';
@@ -84,9 +85,9 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
     expect(c.ruler.mark).toBeCloseTo(77 / W);
     expect(c.ruler.trk).toEqual([]);
     expect(c.ruler.segs).toEqual([
-      { kind: 'cur', id: short.id, label: '短会', lane: 0, x0: 60 / W, x1: 90 / W, clipL: false, clipR: false, done: expect.closeTo(17 / 30) },
-      { kind: 'co', id: long.id, label: '长会', lane: 1, x0: 30 / W, x1: 120 / W, clipL: false, clipR: false, done: expect.closeTo(47 / 90) },
-      { kind: 'nxt', id: shop.id, label: '逛街', lane: 0, x0: 150 / W, x1: 1, clipL: false, clipR: false, done: 0 },
+      { kind: 'cur', id: short.id, label: '短会', pc: 0, lane: 0, x0: 60 / W, x1: 90 / W, clipL: false, clipR: false, done: expect.closeTo(17 / 30) },
+      { kind: 'co', id: long.id, label: '长会', pc: 0, lane: 1, x0: 30 / W, x1: 120 / W, clipL: false, clipR: false, done: expect.closeTo(47 / 90) },
+      { kind: 'nxt', id: shop.id, label: '逛街', pc: 0, lane: 0, x0: 150 / W, x1: 1, clipL: false, clipR: false, done: 0 },
     ]);
     expect(c.ruler.ticks).toEqual([
       { x: 0, text: '13:00', edge: 'l' },
@@ -111,7 +112,7 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
 
   it('② idle：下一件在时间尺里，标题“开始时刻 标题”、1 小时 13 分后；卡底不重复写', () => {
     const c = nowCard(day([ev({ title: '逛街', time: '15:30', tz: SEOUL })]), at('14:17'), SEOUL);
-    expect(c).toMatchObject({ state: 'idle', title: '15:30 逛街', left: 73, also: null, foot: null });
+    expect(c).toMatchObject({ state: 'idle', time: '15:30', title: '逛街', left: 73, also: null, foot: null, next: { time: '15:30', title: '逛街', inMin: 73 } });
     expect(splitDur(73)).toEqual({ h: 1, m: 13 });
     // 底线只画在色块左边，挨着色块那头让出 3px（视觉稿 kRuler）
     expect(nowCard(day([ev({ time: '15:30', tz: SEOUL })]), at('14:17'), SEOUL).ruler.trk).toEqual([{ x0: 0, x1: 2 / 3, gapL: false, gapR: true }]);
@@ -169,9 +170,64 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
     const D = '2026-11-01';
     const now = at('08:00', NY, D);
     const c = nowCard(day([ev({ title: '早餐', date: D, time: '09:00', tz: NY })], D, NY), now, NY, D);
-    expect(c).toMatchObject({ state: 'idle', nowText: '08:00', title: '09:00 早餐', left: 60 });
+    expect(c).toMatchObject({ state: 'idle', nowText: '08:00', time: '09:00', title: '早餐', left: 60 });
     const t8 = c.ruler.ticks.find((k) => k.text === '8:00');
     expect(t8?.x).toBeCloseTo(c.ruler.mark);
+  });
+  it('④ 一件长日程超过 4 小时：时间尺截成 13:00～17:00，色块两头都被截断，最后一个刻度贴右边', () => {
+    const c = nowCard(day([ev({ time: '09:00', tz: SEOUL, duration_min: 540 })]), at('14:17'), SEOUL);
+    expect(c.ruler.segs[0]).toMatchObject({ kind: 'cur', x0: 0, x1: 1, clipL: true, clipR: true });
+    expect(c.ruler.ticks[0]).toEqual({ x: 0, text: '13:00', edge: 'l' });
+    expect(c.ruler.ticks.at(-1)).toEqual({ x: 1, text: '17:00', edge: 'r' });
+    // 色块占满整条，底线一段都不画
+    expect(c.ruler.trk).toEqual([]);
+  });
+
+  it('底线分段：色块在中间时两头各一段、挨着色块那头让出；首尾相接的两块之间不画', () => {
+    const mid = nowCard(day([ev({ time: '14:00', tz: SEOUL, duration_min: 30 })]), at('14:17'), SEOUL);
+    expect(mid.ruler.trk.map((k) => [k.gapL, k.gapR])).toEqual([
+      [false, true],
+      [true, false],
+    ]);
+    const joined = nowCard(day([ev({ time: '14:00', tz: SEOUL, duration_min: 90 }), ev({ time: '15:30', tz: SEOUL, duration_min: 30 })]), at('14:17'), SEOUL);
+    const [cur, nxt] = joined.ruler.segs;
+    expect(cur?.x1).toBe(nxt?.x0);
+    expect(joined.ruler.trk.every((k) => k.x1 <= (cur?.x0 ?? 0) || k.x0 >= (nxt?.x1 ?? 1))).toBe(true);
+  });
+
+  it('far 和时间尺的分界：下一件正好在时间尺右端开始，算在尺外（卡底写一次，尺上不画）', () => {
+    const c = nowCard(day([ev({ time: '09:00', tz: SEOUL, duration_min: 540 }), ev({ title: '晚饭', time: '17:00', tz: SEOUL })]), at('14:17'), SEOUL);
+    expect(c).toMatchObject({ state: 'live', foot: { kind: 'next', time: '17:00', title: '晚饭' } });
+    expect(c.ruler.segs.map((s) => s.kind)).toEqual(['cur']);
+  });
+
+  it('下一件的项目色：和列表、日历同一个 projectColorIndex；没有项目是 0', () => {
+    const c = nowCard(day([ev({ title: '逛街', project: 'NEOX', time: '15:30', tz: SEOUL })]), at('14:17'), SEOUL);
+    expect(c.ruler.segs[0]).toMatchObject({ kind: 'nxt', label: 'NEOX', pc: projectColorIndex('NEOX') });
+    expect(projectColorIndex('NEOX')).toBeGreaterThan(0);
+  });
+
+  it('快到零点：明天 3 小时以内开始的是“下一件”、画进时间尺；再晚的不算', () => {
+    const tmr = '2026-11-06';
+    const rows = [ev({ time: '09:00', tz: SEOUL }), ev({ title: '夜宵', date: tmr, time: '00:15', tz: SEOUL })];
+    const now = at('23:45');
+    const c = nowCard(nowEvents(rows, now, SEOUL), now, SEOUL);
+    expect(c).toMatchObject({ state: 'idle', time: '00:15', title: '夜宵', left: 30, foot: null });
+    expect(c.ruler.segs.map((s) => s.kind)).toEqual(['nxt']);
+    expect(c.ruler.ticks.map((k) => k.text)).toContain('0:00');
+    // 今天没有日程也一样
+    expect(nowCard(nowEvents([rows[1] as Row], now, SEOUL), now, SEOUL).state).toBe('idle');
+    // 明天 03:30 开始（3 小时 45 分后）的不带进来，今天没有就是 empty
+    expect(nowEvents([ev({ date: tmr, time: '03:30', tz: SEOUL })], now, SEOUL)).toEqual([]);
+  });
+
+  it('夏令时开始那天（纽约 3-08 凌晨 2 点拨到 3 点）：刻度跳过 2:00，还剩按真实分钟算', () => {
+    const NY = 'America/New_York';
+    const D = '2026-03-08';
+    const now = at('01:30', NY, D);
+    const c = nowCard(day([ev({ title: '早班', date: D, time: '03:30', tz: NY })], D, NY), now, NY, D);
+    expect(c).toMatchObject({ state: 'idle', nowText: '01:30', time: '03:30', left: 60 });
+    expect(c.ruler.ticks.map((k) => k.text)).toEqual(['1:00', '3:00', '4:00']);
   });
 });
 
