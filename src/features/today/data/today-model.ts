@@ -215,6 +215,24 @@ export function todayTodos(rows: readonly Row[], now: number, current: Tz, local
   return out.sort((a, b) => Number(a.done) - Number(b.done) || (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99') || byTitle(a.title, b.title));
 }
 
+// ---------- 已过去 ----------
+
+/** 今天的安排里“已过去”的（定稿线框 s1“已过去的折叠成一行”，时间河 river()“▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓”）：
+ *  有时刻、结束不晚于此刻的日程，和做完的待办；全天日程不算（没有结束时刻）。其余的照原顺序留在列表里 */
+export function splitPast<E extends Pick<EventOcc, 'end'>, T extends Pick<TodoOcc, 'done'>>(
+  events: readonly E[],
+  todos: readonly T[],
+  now: number,
+): { pastEvents: E[]; pastTodos: T[]; events: E[]; todos: T[] } {
+  const ended = (o: E): boolean => o.end !== null && o.end <= now;
+  return {
+    pastEvents: events.filter(ended),
+    pastTodos: todos.filter((t) => t.done),
+    events: events.filter((o) => !ended(o)),
+    todos: todos.filter((t) => !t.done),
+  };
+}
+
 /** 明天（当前时区） */
 export function tomorrowOf(now: number, current: Tz): DateStr {
   return addDays(todayOf(now, current), 1);

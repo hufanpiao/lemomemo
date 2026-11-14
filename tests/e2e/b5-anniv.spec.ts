@@ -93,12 +93,13 @@ test.describe('B5 纪念日', () => {
     await expect(rows.nth(0)).toContainText('结婚纪念日');
   });
 
-  test('今天页顶部出“3 天后 김지민”，点了进纪念日页', async ({ page, browserName }) => {
+  test('今天页顶部出“3 天后 김지민 生日”，点了进纪念日页', async ({ page, browserName }) => {
     await page.goto('/app/#/today');
     const line = page.getByTestId('today-anniv');
     await expect(line).toBeVisible({ timeout: 30_000 });
     await expect(line).toContainText('3 天后');
-    await expect(line).toContainText('김지민');
+    // 生日那一种名字后面写“生日”（线框 s1 ANNLINE“3 天后 김지민 生日”，B6 对齐线框）
+    await expect(line).toContainText('김지민 生日');
     await shot(page, browserName, 'e2e-今天页纪念日一行');
     // 今天页分包挂上后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/index.ts 的 guardTaps）；这一行要等数据出来才画，晚于页面挂上，
     // 等它出现后再等一个窗口就够（11-14 CI 失败：运行日志 click 无 focusin，即 pointerdown 被拦）

@@ -11,6 +11,8 @@ import { migrateLayout } from './layout-migrate.ts';
 export const COL_MIN_PX = 240;
 export const COL_MAX = 0.6;
 export const MAX_COLS = 4;
+/** 按住挪过几 px 才算拖（拖块的 PointerSensor、抽屉换边把手共用；点一下不误拖） */
+export const DRAG_PX = 4;
 
 /** 读的结果：none 没存；ok 能用（可能逐项修正过）；invalid 坏值（用默认）；newer 新版本写的（用默认、不覆盖） */
 export type ReadStatus = 'none' | 'ok' | 'invalid' | 'newer';
