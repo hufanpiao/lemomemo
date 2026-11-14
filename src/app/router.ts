@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
 import { cancelFade, fadeSwap, transition } from '../motion/index.ts';
+import { rlog } from '../platform/run-log-api.ts';
 
 export const ROUTE_NAMES = [
   'today',
@@ -93,6 +94,8 @@ export type Anim = 'vt' | 'fade' | 'none';
 export function commit(change?: () => void, anim: Anim = 'vt'): Promise<void> {
   const update = (): void => {
     change?.();
+    // 运行日志：pushState、replaceState 换页不触发 hashchange，原来只记得到浏览器自己的前进后退（11-14 b5-vault 点返回后空白，日志里看不出去了哪页）。正式包整段摇掉
+    if (import.meta.env.MODE !== 'production') rlog(`route ${window.location.hash} anim=${anim}`);
     flushSync(notifyAll);
   };
   if (anim === 'none') {

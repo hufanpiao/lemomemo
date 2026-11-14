@@ -234,7 +234,10 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   for (const secret of ['体检报告', '血压']) expect(log).not.toContain(secret);   // 密码本身不比：日志里的耗时数字可能碰巧含这几位，键位由上一行管
 
   await page.getByTestId('vault-back').click();
-  await expect(page.getByTestId('notes')).toBeVisible();
+  // 第一次进随手记：外壳 NotesRoot → NotesPage 和二十几个依赖分两层串着下，这时 SW 还在第一次装、整包预缓存一起在拉。
+  // 11-14 快读组两次红（chromium、webkit 各一次），重复 24 遍复现 3 次：trace 里每个分包 0.6～0.8 秒，点返回 5 秒后还有 11 个没到，
+  // 运行日志 sw register ok 8767ms 正好在这批请求发出时。同第 228 行等解锁列表，给到 15 秒
+  await expect(page.getByTestId('notes')).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('html')).not.toHaveAttribute('data-rt', '1');
   await shot(page, '01-入口行', browserName);
 });
