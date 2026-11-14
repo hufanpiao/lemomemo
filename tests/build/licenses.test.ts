@@ -3,7 +3,7 @@
 // • libwebp 的 BSD-3（编在 @jsquash/webp 的 wasm 里，分发二进制必须带 Google 版权声明）和 jSquash 的 Apache-2.0 一字不差地在里面
 //   （原来手拷的 src/public/licenses/webp-wasm.txt 并进来了，升级 @jsquash/webp 后不用再手工重拷）
 // • 可选字体（assets-src/fonts 的登记）的许可证原文也在里面（架构 5.9c）
-// • 同样的依赖生成两次一字不差；build_web.mjs 在 vite build 之后写它
+// • 同样的依赖生成两次一字不差（build_web.mjs 在 vite build 之后、注入预缓存清单之前写它，由 build-web.test.ts 按行为核）
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -65,11 +65,5 @@ describe('开源许可清单', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  });
-  it('build_web.mjs 在 vite build 之后、注入预缓存清单之前写它', () => {
-    const src = readFileSync(join(root, 'build', 'build_web.mjs'), 'utf8');
-    const at = (s: string) => src.indexOf(s);
-    expect(at('writeLicenses(APP_DIR, ROOT)')).toBeGreaterThan(at("configFile: resolve(ROOT, 'vite.sw.config.ts')"));
-    expect(at('writeLicenses(APP_DIR, ROOT)')).toBeLessThan(at('await injectSwManifest(APP_DIR)'));
   });
 });

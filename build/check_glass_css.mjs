@@ -25,15 +25,15 @@ export function glassCssFiles(appDir) {
     .map((f) => join(dir, f));
 }
 
-function main() {
-  const argv = process.argv.slice(2);
+/** 命令行入口（build_web.mjs 构建完直接调它）：返回退出码 */
+export function cli(argv) {
   const i = argv.indexOf('--app-dir');
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const appDir = i >= 0 && argv[i + 1] ? resolve(argv[i + 1]) : resolve(root, 'dist/web/app');
   const files = glassCssFiles(appDir);
   if (files.length === 0) {
     console.error(`check_glass_css：${appDir}/assets 里找不到 GlassBarFx 的样式`);
-    process.exit(1);
+    return 1;
   }
   let bad = 0;
   for (const f of files) {
@@ -42,8 +42,9 @@ function main() {
       bad += 1;
     }
   }
-  if (bad > 0) process.exit(1);
+  if (bad > 0) return 1;
   console.log(`底栏渐隐层遮罩：${files.length} 个文件，带前缀和标准写法都在`);
+  return 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(cli(process.argv.slice(2)));

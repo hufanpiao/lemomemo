@@ -36,9 +36,7 @@ describe('findProbe', () => {
 });
 
 describe('接线', () => {
-  it('build_web.mjs 在 production 时跑；release-build.yml 构建后另跑', () => {
-    const web = readFileSync(join(root, 'build/build_web.mjs'), 'utf8');
-    expect(web).toMatch(/if \(mode === 'production'\) \{\s*const probe = spawnSync\(process\.execPath, \[resolve\(ROOT, 'build\/check_no_probe\.mjs'\)/);
+  it('release-build.yml 构建后另跑（build_web.mjs 只在 production 时跑它，由 build-web.test.ts 按行为核）', () => {
     expect(readFileSync(join(root, '.github/workflows/release-build.yml'), 'utf8')).toContain('node build/check_no_probe.mjs --dir dist/web');
   });
 

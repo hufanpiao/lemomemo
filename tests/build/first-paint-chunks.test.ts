@@ -1,6 +1,6 @@
 // build/check_first_paint_chunks.mjs（FA-6 ③ 审查 M3 第二轮）：按 Vite manifest 算“入口 + 今天页、告知页关口”的静态闭包，里面不许有 zod。
 // 用假 manifest 覆盖审查员的变异 R3（今天页引 rows.ts → 闭包里出现 _rows-、_zod-jitless-）、zod 被并进别的块、动态 import 不算；
-// 再核对 build_web.mjs 在删掉 .vite 之前跑它、失败时构建退出码非 0，FIRST_PAINT_DYNAMIC 和源码里的懒加载对得上
+// 再核对 FIRST_PAINT_DYNAMIC 和源码里的懒加载对得上（build_web.mjs 在删掉 .vite 之前跑它、失败时退出码非 0，由 build-web.test.ts 按行为核）
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -127,14 +127,6 @@ describe('首屏块里不许有农历数据（LUNAR-indirect-import 剩下的兜
 });
 
 describe('接线', () => {
-  it('build_web.mjs 在体积检查之后、删掉 .vite 之前跑它，它失败时构建退出码非 0', () => {
-    const src = readFileSync(join(ROOT, 'build', 'build_web.mjs'), 'utf8');
-    const run = src.indexOf("build/check_first_paint_chunks.mjs'), '--app-dir', APP_DIR]");
-    expect(run).toBeGreaterThan(src.indexOf("build/check_size.mjs'"));
-    expect(run).toBeLessThan(src.indexOf('rmSync(vm,'));
-    expect(src).toContain('process.exit((size.status ?? 1) || (zodFree.status ?? 1));');
-  });
-
   it('FIRST_PAINT_DYNAMIC 的文件都在，并且确实是首屏路径上的懒加载（今天页路由、告知页关口和它里面的告知页）', () => {
     for (const k of FIRST_PAINT_DYNAMIC as string[]) expect(existsSync(join(ROOT, 'src', k)), k).toBe(true);
     expect(readFileSync(join(ROOT, 'src/features/today/index.ts'), 'utf8')).toContain("name: 'today', Page: lazy(() => import('./ui/TodayPage.tsx'))");

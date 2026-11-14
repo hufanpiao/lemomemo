@@ -33,13 +33,17 @@ export function findProbe(dir) {
   return hits;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const i = process.argv.indexOf('--dir');
-  const dir = resolve(ROOT, i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : 'dist/web');
+/** 命令行入口（build_web.mjs 在 production 构建完直接调它）：返回退出码 */
+export function cli(argv) {
+  const i = argv.indexOf('--dir');
+  const dir = resolve(ROOT, i >= 0 && argv[i + 1] ? argv[i + 1] : 'dist/web');
   const hits = findProbe(dir);
   if (hits.length) {
     for (const h of hits) console.error(`正式产物里有探测页、voice-probe 或 CSP 试验页：${h.file}（${h.marker}）`);
-    process.exit(1);
+    return 1;
   }
   console.log(`正式产物里没有探测页、voice-probe 和 CSP 试验页：${dir}`);
+  return 0;
 }
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(cli(process.argv.slice(2)));

@@ -52,15 +52,15 @@ export function splashCssFiles(appDir) {
     .filter((f) => readFileSync(f, 'utf8').includes('.lemo-splash'));
 }
 
-function main() {
-  const argv = process.argv.slice(2);
+/** 命令行入口（build_web.mjs 构建完直接调它）：返回退出码 */
+export function cli(argv) {
   const i = argv.indexOf('--app-dir');
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const appDir = i >= 0 && argv[i + 1] ? resolve(argv[i + 1]) : resolve(root, 'dist/web/app');
   const files = splashCssFiles(appDir);
   if (files.length === 0) {
     console.error(`check_splash_css：${appDir}/assets 里找不到启动画面的样式`);
-    process.exit(1);
+    return 1;
   }
   let bad = 0;
   for (const f of files) {
@@ -69,8 +69,9 @@ function main() {
       console.error(`check_splash_css：${f}：${p}`);
     }
   }
-  if (bad) process.exit(1);
+  if (bad) return 1;
   console.log(`check_splash_css：启动画面样式 ${files.length} 个文件，媒体查询写法都对`);
+  return 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(cli(process.argv.slice(2)));
