@@ -1,28 +1,19 @@
 // 待办列表的分组和截止标签（B2 FA-2；定稿线框 s6；R-134、R-136 字重另由样式管）
 // 纯函数：行、now、current_tz 由调用方给。待办截止是浮动的（架构 4.6），一律按 current_tz 判断
 // • 分组顺序：过期 → 今天 → 明天 → 7 天内（按日期各一组）→ 以后 → 没日期 → 已完成（最近完成的在前）
-// • 过期：截止日早于今天，或今天的截止时刻已过（界面标红：“逾 N 天”“已过 17:00”）
+// • 过期：截止日早于今天，或今天的截止时刻已过（界面标红：“逾 N 天”“已过 17:00”）；规则和读一行都在 shared/logic/todo-row.ts（和今天页共用）
 // • 项目筛选只在待办页（架构 5.9“项目筛选”）：project 为 null 是“全部”
-import { addDays, diffDays, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { addDays, diffDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
+import { isLate, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 // 标题比较：按当前语言、数字按数值（“第 2 条”在“第 10 条”前；和今天页共用）
 import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
 
 export type Row = Readonly<{ id: string } & Record<string, unknown>>;
 
-const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-export interface TodoItem {
-  id: string;
-  title: string;
-  project: string;
-  done: boolean;
-  important: boolean;
-  due: DateStr | null;
-  dueTime: string | null;
+export interface TodoItem extends TodoFields {
   doneAt: number;
 }
 
@@ -44,23 +35,13 @@ export interface Group {
 }
 
 export function itemOf(r: Row): TodoItem {
-  const due = typeof r['due'] === 'string' && DATE.test(r['due']) ? r['due'] : null;
-  const dt = r['due_time'];
-  return {
-    id: r.id, title: typeof r['title'] === 'string' ? r['title'] : '', project: typeof r['project'] === 'string' ? r['project'] : '',
-    done: r['done'] === true, important: r['important'] === true, due, dueTime: due && typeof dt === 'string' && HM.test(dt) ? dt : null,
-    doneAt: typeof r['done_at'] === 'number' ? r['done_at'] : 0,
-  };
+  return { ...todoOf(r), doneAt: typeof r['done_at'] === 'number' ? r['done_at'] : 0 };
 }
 
 export function dueTagOf(t: TodoItem, now: number, tz: Tz): DueTag {
   if (!t.due) return { kind: 'none' };
-  const today = todayOf(now, tz);
-  const d = diffDays(t.due, today);
-  if (!t.done) {
-    if (d > 0) return { kind: 'late', days: d, dueTime: t.dueTime };
-    if (d === 0 && t.dueTime && msAt(t.due, parseHm(t.dueTime), tz) <= now) return { kind: 'late', days: 0, dueTime: t.dueTime };
-  }
+  const d = diffDays(t.due, todayOf(now, tz));
+  if (isLate(t, now, tz)) return { kind: 'late', days: d, dueTime: t.dueTime };
   if (d === 0) return { kind: 'today', dueTime: t.dueTime };
   if (d === -1) return { kind: 'tomorrow', dueTime: t.dueTime };
   return { kind: 'date', date: t.due, dueTime: t.dueTime };
