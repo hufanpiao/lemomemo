@@ -18,7 +18,7 @@ test.describe('皮肤与深浅色', () => {
     await expect.poll(() => attr(page, 'data-theme')).toBe('light');
   });
 
-  test('选简洁、白天，开减少透明效果：马上换；重新打开先按缓存套上；登录页同样', async ({ page }) => {
+  test('选简洁、白天：马上换；重新打开先按缓存套上；登录页同样', async ({ page }) => {
     await page.goto('/app/#/today');
     await page.getByTestId('today').waitFor({ timeout: 30000 });
     await page.evaluate(() => {
@@ -33,14 +33,11 @@ test.describe('皮肤与深浅色', () => {
     await expect.poll(() => attr(page, 'data-theme')).toBe('light');
     await page.getByTestId('settings-skin-back').click();
     await expect(page.getByTestId('settings-skin-summary')).toHaveText('简洁 · 白天');
-    await page.getByTestId('settings-rt').click();
-    await expect.poll(() => attr(page, 'data-rt')).toBe('1');
 
     await page.reload();
     await page.getByTestId('settings-skin-summary').waitFor({ timeout: 30000 });
     expect(await attr(page, 'data-skin')).toBe('simple');
     expect(await attr(page, 'data-theme')).toBe('light');
-    expect(await attr(page, 'data-rt')).toBe('1');
 
     await page.goto('/app/auth/');
     await expect.poll(() => attr(page, 'data-skin')).toBe('simple');

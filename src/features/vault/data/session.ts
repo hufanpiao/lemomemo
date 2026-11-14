@@ -17,12 +17,14 @@
 //   盖遮罩、去遮罩由 hooks/useVault.ts 的 watchLeave 同步做，这里只管锁不锁
 // • 续期（M2）：编辑页有输入时调 touch()，拿到令牌满 5 分钟就发一次 {renew}（按本机拿到令牌的时刻算，不受两边时钟差影响）；
 //   vault-image 只验不续，令牌过期（vault_locked）时先 {renew}（锁着就等解锁）再试一次；取图失败不缓存（M6）
+// • 文档附件（B4b-1，vault-file）：同 vault-image 只验不续（withImageToken）；成功放了微软预览的临时明文副本时记下，上锁时趁令牌还在先发 ms_preview_end（keepalive）
 // • 不碰 core/cache、outbox、log（A18）
 import { z } from 'zod';
 import {
   vaultCredentialsResponse, vaultListResponse, vaultOkResponse, vaultPurgeResponse, vaultStatusResponse, vaultTokenResponse,
   webauthnOptionsResponse, type VaultImageAdd, type VaultNote, type VaultRequest,
 } from '../../../../shared/schema/vault.ts';
+import { vaultFileListResponse, vaultFileOkResponse, vaultFilePreviewResponse, vaultFileUploadResponse, type VaultFileMeta } from '../../../../shared/schema/vault-file.ts';
 import { setVaultToken } from '../../../core/vault-token.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { VaultApi, VaultFail, VaultResult } from './vault-api.ts';
@@ -108,6 +110,8 @@ export function createVaultSession(d: VaultSessionDeps) {
   const blobs = new Map<string, string>();
   const pendingImg = new Map<string, Promise<string | null>>();
   let waiters: ((ok: boolean) => void)[] = [];
+  /** 服务器上有没有这个人的微软预览临时明文副本（ms_preview 成功后 true，ms_preview_end 后 false） */
+  let msLive = false;
   const listeners = new Set<() => void>();
 
   const set = (patch: Partial<VaultState>): void => {
@@ -135,6 +139,8 @@ export function createVaultSession(d: VaultSessionDeps) {
 
   /** 上锁：清明文、令牌、blob URL；同步完成。hard：作废在飞请求（主动上锁、超时、relock、revoked）；令牌过期的上锁不作废写请求 */
   function lock(patch: Partial<VaultState>, hard: boolean): void {
+    if (msLive && token) d.api.fileEnd(token);
+    msLive = false;
     token = null;
     epoch += 1;
     if (hard) hardEpoch += 1;
@@ -254,6 +260,16 @@ export function createVaultSession(d: VaultSessionDeps) {
     const k = await renew();
     if (!k.ok) return k;
     return token ? (await guarded(go, write)).r : STALE;
+  }
+
+  /** vault-file 的一次调用：只验不续（同 vault-image）；relock、revoked 一类要落 */
+  async function fileOp<T>(send: (tok: string) => Promise<VaultResult<T>>, write: boolean): Promise<VaultResult<T>> {
+    const r = await withImageToken(send, write);
+    if (!r.ok && r !== STALE && r !== CANCELLED) {
+      const kind = vaultErrorAction(r.code).kind;
+      if (kind === 'relock' || kind === 'revoked') onFail(r);
+    }
+    return r;
   }
 
   async function refreshStatus(): Promise<VaultResult<VaultStatus>> {
@@ -462,6 +478,44 @@ export function createVaultSession(d: VaultSessionDeps) {
         if (pendingImg.get(key) === p) pendingImg.delete(key);
       });
       return p;
+    },
+    /**
+     * 文档附件（vault-file）：令牌过期先 renew 再试一次；“密码在别处改了”“设备被移除”要落（上锁），别的失败原样交回附件区出提示。
+     * 明文字节不进这里的缓存：附件区自己放内存，卸下就丢
+     */
+    file: {
+      list: (noteId: string) => fileOp((tok) => d.api.fileCall({ action: 'list', note_id: noteId }, tok, vaultFileListResponse), false),
+      upload(meta: VaultFileMeta, file: Blob, thumb: Blob | null) {
+        return fileOp((tok): Promise<VaultResult<z.infer<typeof vaultFileUploadResponse>>> => {
+          const fd = new FormData();
+          fd.set('meta', JSON.stringify(meta));
+          fd.set('file', file, 'file');
+          if (thumb) fd.set('thumb', thumb, 'thumb.webp');
+          return d.api.fileUpload(fd, tok).then((r) => {
+            if (!r.ok) return r;
+            const p = vaultFileUploadResponse.safeParse(r.value);
+            return p.success ? { ok: true as const, value: p.data } : ({ ok: false, code: 'unknown' } as VaultFail);
+          });
+        }, true);
+      },
+      get: (id: string, part: 'full' | 'thumb') => fileOp((tok) => d.api.fileGet(id, part, tok), false),
+      remove: (id: string) => fileOp((tok) => d.api.fileCall({ action: 'remove', id }, tok, vaultFileOkResponse), true),
+      restore: (id: string) => fileOp((tok) => d.api.fileCall({ action: 'restore', id }, tok, vaultFileOkResponse), true),
+      // 发之前就记 msLive：请求在飞时上锁（回 STALE），服务器可能已经放了临时明文副本，上锁时也要发 end（多发一次无害）。
+      // 回来后再记一次：在飞时预览已经关了（end 先发了、msLive 落回 false），服务器随后才放的副本，调用方回来再 end 一次时要真发出去
+      async msPreview(id: string) {
+        msLive = true;
+        const r = await fileOp((tok) => d.api.fileCall({ action: 'ms_preview', id }, tok, vaultFilePreviewResponse), true);
+        // 上锁作废的（vault_locked）不再记：上锁时已经发过 end、令牌也没了
+        if (r.ok || r.code !== 'vault_locked') msLive = true;
+        return r;
+      },
+      msPreviewEnd(): void {
+        if (!msLive) return;
+        msLive = false;
+        rlog(`vatt ms_preview_end ${token ? 'sent' : 'no_token'}`);
+        if (token) d.api.fileEnd(token);
+      },
     },
     blobCount: (): number => blobs.size,
     hide(at: number = now()): void {

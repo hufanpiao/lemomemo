@@ -137,10 +137,11 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     ['patch', 'workspace', 'links'].forEach((f, i) => expect(errors[i]?.message).toContain(`不准写 ${f}`));
   });
 
-  it('F3、F7（B1 接手清单 S3 返工，审查建议 5）：仓库根 package.json 的 npm: 别名照样展开；file: 这类报 F7，报错注明它也作用于服务器函数；版本号写法不报', () => {
+  it('F3、F7（B1 接手清单 S3 返工，审查建议 5）：仓库根 package.json 的 npm: 别名照样展开；file: 这类报 F7，报错注明它也作用于服务器函数；版本号写法不报；SheetJS 官方 tarball（架构约定 9.7）只认 xlsx 这个包名加那一个地址，同一地址换个包名照样报', () => {
     const { code, errors } = run(sample('f3-root-package'));
     expect(code).toBe(1);
-    expect(where(errors)).toEqual(['F3 supabase/functions/push-dispatch/index.ts:2', 'F7 package.json:1']);
+    expect(where(errors)).toEqual(['F3 supabase/functions/push-dispatch/index.ts:2', 'F7 package.json:1', 'F7 supabase/package.json:1']);
+    expect(errors.filter((e) => e.rule === 'F7').map((e) => /dependencies\.([\w-]+)/.exec(e.message)?.[1])).toEqual(['vendored', 'sheet']);
     expect(errors.find((e) => e.rule === 'F7')?.message).toContain('Deno 往上找 package.json');
   });
 

@@ -93,6 +93,14 @@ export const zh = {
   'settings.export.partsUsedUp': '今天导出的次数用完了，明天再试',
   'settings.export.quota': '导出和注销每天合计最多 3 次，每点一次“导出全部数据”算一次。', // 句末补句号（设计评审 L-3，11-06，只改标点，待 R-106 看）
   'settings.export.wifi': '数据多时文件可能有几十 MB，建议连 Wi-Fi。', // 句末补句号（设计评审 L-3，11-06）
+  'settings.ms.title': 'PPT 预览', // B4b-1：线框 sPrev 第二张“可以在 设置 › 数据 里改”
+  'settings.ms.note': 'PPT 用微软的在线预览打开时，整个文件会通过一个几分钟内有效的链接交给微软。只记在这台设备上。',
+  'settings.ms.note_row': '随手记里的 PPT',
+  'settings.ms.vault_row': '隐私记里的 PPT',
+  'settings.ms.vault_meta': '隐私记的文件会先解密再交给微软',
+  'settings.ms.ask': '先问',
+  'settings.ms.yes': '预览',
+  'settings.ms.no': '只下载',
 
   // 设置 › 账号 › 最近的导出（R-256 ②；架构 0.29 续第 96 条③）
   'settings.recentExport.title': '最近的导出',
@@ -119,12 +127,6 @@ export const zh = {
   'settings.skin.theme.system.desktop': '跟着电脑',
   'settings.skin.theme.light': '白天',
   'settings.skin.theme.dark': '夜间',
-  'settings.skin.rt': '减少透明效果', // R-84
-  'settings.skin.rtNote.mobile': 'iPhone 读不到系统设置，在这里手动开',
-  'settings.skin.rtNote.desktop': 'Windows 关掉“透明效果”时自动生效；也可以在这里手动开',
-  'settings.skin.rm': '减少动态效果', // R-93
-  'settings.skin.rmNote.mobile': '只留淡入淡出；也跟随 iPhone 的“减少动态效果”',
-  'settings.skin.rmNote.desktop': '只留淡入淡出；也跟随 Windows 的“动画效果”',
   'settings.skin.err': '没保存上，稍后再选一次',
   'settings.font.title': '字体', // 定稿线框 s13；架构 5.9c
   'settings.font.system': '系统字体',

@@ -52,7 +52,7 @@ export const TABLE_GRANTS: Record<'service_role' | 'fn_vault' | 'fn_ai', TableGr
 export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
   fn_vault: {
     'public.devices:SELECT': ['id', 'user_id', 'deleted_at', 'session_id'],   // 核对草稿密钥的 device_id 和会话
-    'private.note_vectors:SELECT': ['user_id', 'note_id', 'image_id'],   // 移进移出删旧向量的 where 要读（20261114230000，B5 store-it 真库实测）
+    'private.note_vectors:SELECT': ['user_id', 'note_id', 'image_id', 'file_id'],   // 移进移出删旧向量的 where 要读（20261114230000，B5 store-it 真库实测；file_id 20261115010000，B4b-1 带附件）
   },
   fn_ai: {
     'private.vault:SELECT': ['user_id', 'pin_epoch'],
@@ -65,7 +65,8 @@ export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
       'bytes'],   // bytes：vault-image 上传按预登记的字节数核对（20261114231000，B5 整块评审第 3 条）
     'public.note_images:UPDATE': ['ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at'],
     'public.note_files:SELECT': ['id', 'user_id', 'note_id', 'kind', 'path', 'has_thumb', 'is_vault', 'name', 'mime', 'bytes',
-      'text_excerpt', 'text_enc', 'enc_key_id', 'deleted_at', 'etag', 'check_status', 'ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at'],
+      'text_excerpt', 'text_enc', 'enc_key_id', 'deleted_at', 'etag', 'check_status', 'ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at',
+      'sha256', 'created_at'],   // file-check 核哈希、补扫挑 30 分钟前的行（20261115000000，B4b-1）
     'public.note_files:UPDATE': ['check_status', 'etag', 'ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at'],
   },
 };
@@ -106,6 +107,7 @@ export const FUNCTION_EXEC: Record<'anon' | 'authenticated' | 'service_role' | '
 export const CRON_WITHOUT_USABLE: Record<string, string> = {
   'cleanup-batch': '30 天清理：冷静期里照常清理（0.29 续第 138 条④）',
   'diag-logs-expire': '诊断日志 7 天删：不分账号状态，过期就删，只删 public.diag_logs 自己的旧行（20261111200000）',
+  'vault-file-sweep': '隐私记预览清理（20261115010000）：命令里只读 private.vault_preview 有没有过期登记、空闲时写 private.heartbeat，不挑人；过期预览不分账号状态都要删（明文对象留着就是泄露），实际删除在 vault-file 函数里',
   'account-purge': '满 7 天执行注销：要处理的正是冷静期里的账号（account_usable 会把它们全排除）；命令只经 pg_net 调函数、不直接碰表，挑人在函数里（0.38 第 24、46 条）',
 };
 

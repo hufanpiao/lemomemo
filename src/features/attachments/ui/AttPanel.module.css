@@ -1,0 +1,265 @@
+/* 随手记里的附件区（线框 sAtt：.st 小标题“附件 4 · 共 8.1 MB”、.att 一行“类型标记 · 名字 / 大小 · ⋯”、.upb 上传条、DDRAG 拖进来的虚线框） */
+
+.box {
+  margin-top: 18px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.head b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.list {
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  list-style: none;
+}
+
+.row + .row {
+  border-top: 1px solid var(--line);
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+}
+
+/* 类型标记：线框 .fi（描边小方块里写 PDF / W / X / P） */
+.mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 40px;
+  border: 1.5px solid var(--ink);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: var(--fs-11);
+  font-weight: 700;
+}
+
+/* 电脑上的首页缩略图：和类型标记同一个位置、同样大小（线框 sAtt 说明“有首页缩略图的在电脑上显示缩略图”） */
+.thumb {
+  flex: none;
+  width: 34px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  object-fit: cover;
+  object-position: top;
+}
+
+.tx {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  font-size: var(--fs-14);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub,
+.subBad {
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.subBad {
+  color: var(--danger-text);
+}
+
+/* 上传、检查中的细条（线框 .upb）：没有真实进度 */
+.bar {
+  position: relative;
+  overflow: hidden;
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--panel-2);
+}
+
+/* 上传中：静止的一截（不做往返动画：单个动效 ≤ 400ms、减少动态只认 data-rm，状态由下面的文字说） */
+.bar::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: 2px;
+  background: var(--ink);
+  content: '';
+}
+
+.more {
+  flex: none;
+  width: var(--hit);
+  height: var(--hit);
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-18);
+}
+
+.more:disabled {
+  opacity: 0.4;
+}
+
+.menu {
+  min-width: 150px;
+  padding: 6px;
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-14);
+  text-align: left;
+}
+
+.failBtns {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.btnS {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-12);
+}
+
+.btnS:disabled {
+  opacity: 0.5;
+}
+
+/* 只存不预览的说明（线框 sPrev 第五张：灰底小框，右边“下载”） */
+.only {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -2px 0 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.only .btnS {
+  flex: none;
+  margin-left: auto;
+}
+
+.note,
+.msg {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  line-height: 1.6;
+}
+
+.msg {
+  margin: 0 0 8px;
+  color: var(--text);
+}
+
+.add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.pick {
+  min-height: var(--hit);
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.pick:disabled {
+  opacity: 0.5;
+}
+
+.addOff {
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+/* 拖进窗口：整窗变暗，中间虚线框（线框 DDRAG） */
+.veil {
+  position: fixed;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  inset: 0;
+  background: var(--scrim);
+  pointer-events: none;
+}
+
+.veilBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(620px, 90vw);
+  padding: 80px 24px;
+  border: 2.5px dashed var(--ink);
+  border-radius: 24px;
+  background: var(--sheet-bg);
+  text-align: center;
+}
+
+.veilPlus {
+  font-size: var(--fs-44);
+  line-height: 1;
+}
+
+.veilTitle {
+  font-size: var(--fs-22);
+}
+
+.veilSub {
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.veilHint {
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}

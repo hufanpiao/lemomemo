@@ -47,6 +47,11 @@ function session(o: { offline?: boolean; purge?: () => void } = {}): VaultSessio
     },
     imageGet: async () => ({ ok: true, value: new Blob(['x']) }),
     imageUpload: async () => ({ ok: true, value: true }),
+    // 附件（vault-file）这里用不到
+    fileCall: async () => ({ ok: false, code: 'unknown' }),
+    fileGet: async () => ({ ok: false, code: 'unknown' }),
+    fileUpload: async () => ({ ok: false, code: 'unknown' }),
+    fileEnd: () => undefined,
   };
   return createVaultSession({ api, onToken: () => undefined, createUrl: () => 'blob:x', revokeUrl: () => undefined });
 }
@@ -147,23 +152,18 @@ describe('解锁、上锁', () => {
 });
 
 describe('TC-B5-12：底栏实色、不建副本', () => {
-  it('页面挂着时 <html data-rt="1">，中途皮肤重画也不被冲掉；卸掉后按设置重算（设置开着就还是 1）', async () => {
+  it('页面挂着时 <html data-rt="1">，中途皮肤重画也不被冲掉；卸掉后按系统设置重算（系统没设置就拿掉）', async () => {
     s = session();
     installVaultSession(s);
-    const base = { skin: 'glass', theme: 'light', rm: false, font: 'system' } as const;
-    applyLook({ ...base, rt: false });
+    const base = { skin: 'glass', theme: 'light', font: 'system' } as const;
+    applyLook(base);
     expect(document.documentElement.hasAttribute('data-rt')).toBe(false);
     const r = render(<VaultPage />);
     expect(document.documentElement.getAttribute('data-rt')).toBe('1');
-    applyLook({ ...base, theme: 'dark', rt: false });
+    applyLook({ ...base, theme: 'dark' });
     expect(document.documentElement.getAttribute('data-rt')).toBe('1');
     r.unmount();
     expect(document.documentElement.hasAttribute('data-rt')).toBe(false);
-    applyLook({ ...base, rt: true });
-    const r2 = render(<VaultPage />);
-    r2.unmount();
-    expect(document.documentElement.getAttribute('data-rt')).toBe('1');
-    applyLook({ ...base, rt: false });
   });
 
   it('GlassBar 不 import 隐私记、不持有隐私记数据', () => {

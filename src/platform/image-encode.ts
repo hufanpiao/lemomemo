@@ -245,6 +245,25 @@ async function encodeDecoded(enc: WebpEncoder, src: Decoded, file: File, tz: Tz 
   return { ok: true, full: full.blob, thumb: thumb.blob, width: full.w, height: full.h, takenAt: await takenAtOf(file, tz) };
 }
 
+/** 附件的首页缩略图（B4b-1，架构 5.13 第 2 点 ④）：预览沙箱画好的 PNG → 长边 ≤ 384、≤ 128 KB 的 webp（同插图缩略图一套编码，WebKit 走 wasm）；不行回 null */
+export async function encodeThumb(png: Blob, deps: EncodeDeps = defaultDeps): Promise<Blob | null> {
+  let src: Decoded;
+  try {
+    src = await deps.decode(png);
+  } catch {
+    return null;
+  }
+  try {
+    if (!(src.width > 0 && src.height > 0)) return null;
+    const t = await shrink(webpEncoder(deps, src, startDiag(deps.native)), src, THUMB_EDGE, THUMB_MAX);
+    return t === 'too_big' ? null : t.blob;
+  } catch {
+    return null;
+  } finally {
+    src.close();
+  }
+}
+
 /** 选的或拍的一张照片 → 原图 + 缩略图（webp）+ 拍摄时间（tz 为 null 不读）；解码以后的结果都带诊断 */
 export async function encodeImage(file: File, tz: Tz | null, deps: EncodeDeps = defaultDeps): Promise<EncodeResult> {
   const d = startDiag(deps.native);

@@ -92,6 +92,14 @@ export const ko = {
   'settings.export.tooLargeStart': '데이터 양이 1회 내보내기 한도를 넘어서 지금은 내보낼 수 없어요. 레모 운영자에게 문의해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见 K-41 改过；10-31 start 大小预检新加（0.47 续 ①“超大账号”、④ 第 4 点）
   'settings.export.partsUsedUp': '오늘 내보낼 수 있는 횟수를 다 썼어요. 내일 다시 시도해 주세요', // R-106 B1 第一遍已审（10-31）；10-31 导出分片新加（0.47 续 ④ 第 4 点）
   'settings.export.quota': '내보내기와 회원 탈퇴는 합쳐서 하루 3번까지 할 수 있어요. “모든 데이터 내보내기”를 누를 때마다 1번씩 계산돼요.', // 11-06 句末补句号（设计评审 L-3，只改标点，待 R-106 看）；R-106 B1 第一遍已审（10-31），按审校意见 K-38 改过；10-31 导出分片新加（0.47 续 ④ 第 4 点）
+  'settings.ms.title': 'PPT 미리보기', // REVIEW(ko) B4b-1
+  'settings.ms.note': 'PPT를 마이크로소프트 온라인 미리보기로 열면 몇 분 동안만 유효한 링크로 파일 전체가 전달돼요. 이 기기에만 저장돼요.', // REVIEW(ko)
+  'settings.ms.note_row': '메모의 PPT', // REVIEW(ko)
+  'settings.ms.vault_row': '비밀 메모의 PPT', // REVIEW(ko)
+  'settings.ms.vault_meta': '비밀 메모의 파일은 복호화한 뒤 마이크로소프트에 전달돼요', // REVIEW(ko)
+  'settings.ms.ask': '먼저 묻기', // REVIEW(ko)
+  'settings.ms.yes': '미리보기', // REVIEW(ko)
+  'settings.ms.no': '다운로드만', // REVIEW(ko)
   'settings.export.wifi': '데이터가 많으면 파일이 수십 MB가 될 수 있어요. Wi-Fi에 연결하는 걸 추천해요.', // 11-06 句末补句号（设计评审 L-3）；R-106 B1 第一遍已审（10-31）；K-39 可不改，按主持人定不改；10-31 导出分片新加（0.47 续 ④ 第 4 点）
 
   'settings.delete.back': '계정', // 合卡以后注销页退回账号二级页（SETTINGS-merge-cards），照 settings.account.title（R-106 B1 第一遍已审）
@@ -106,12 +114,6 @@ export const ko = {
   'settings.skin.theme.system.desktop': '시스템 따르기', // REVIEW(ko)
   'settings.skin.theme.light': '라이트', // REVIEW(ko)
   'settings.skin.theme.dark': '다크', // REVIEW(ko)
-  'settings.skin.rt': '투명 효과 줄이기',
-  'settings.skin.rtNote.mobile': 'iPhone은 시스템 설정을 못 읽어서 여기서 켜요',
-  'settings.skin.rtNote.desktop': 'Windows에서 투명 효과를 끄면 자동으로 적용돼요. 여기서 직접 켤 수도 있어요', // REVIEW(ko)
-  'settings.skin.rm': '움직임 효과 줄이기',
-  'settings.skin.rmNote.mobile': '페이드만 남겨요 · iPhone 설정도 따라가요',
-  'settings.skin.rmNote.desktop': '페이드만 남겨요 · Windows 애니메이션 효과 설정도 따라가요', // REVIEW(ko)
   'settings.skin.err': '저장하지 못했어요. 잠시 후 다시 골라 주세요', // REVIEW(ko)
   'settings.font.title': '글꼴', // REVIEW(ko)
   'settings.font.system': '시스템 글꼴', // 架构 5.9c 表里的韩文名

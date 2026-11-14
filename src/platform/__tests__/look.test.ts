@@ -1,8 +1,9 @@
 // 皮肤、深浅色写到 <html> 上（ADR-008；R-06、R-20、R-84、R-93）：platform/look.ts。
 // 字体 ui.font（架构 5.9c）：不是系统字体才懒加载 platform/fonts.ts 去套，换回系统字体同样交给它；认不出的 id 按系统字体。
 // 本机缓存先套、跟随系统按 prefers-color-scheme 算并跟着系统切换、settings 集合是空的不覆盖缓存、认不出的值按默认。
-// 减少透明 / 减少动态（皮肤整块评审 11-14 第 1、6 条）：开关打开或系统设置了 reduce 都写 data-rt / data-rm，系统变了跟着改。
-// 运行日志：皮肤、深浅色、两个开关变了记 look_apply；字体分包加载不了记 font_load fail font_chunk（第 3、8 条）
+// 减少透明 / 减少动态（皮肤整块评审 11-14 第 1、6 条）：只看系统设置（设置里的两个开关 11-14 负责人要求去掉），系统变了跟着改；
+// 旧账号存过的 ui.reduce_transparency、ui.reduce_motion、旧缓存里的 rt、rm 一律不再生效。
+// 运行日志：皮肤、深浅色、两个减少效果变了记 look_apply；字体分包加载不了记 font_load fail font_chunk（第 3、8 条）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type MQ = { matches: boolean; media: string; addEventListener(t: string, f: () => void): void; removeEventListener(): void; fire(): void };
@@ -82,14 +83,14 @@ describe('一加载就按本机缓存套上', () => {
     expect(document.querySelector('meta[name="color-scheme"]')?.getAttribute('content')).toBe('light');
   });
 
-  it('缓存里是磨砂玻璃、强制浅色、两个开关开：系统深色也按浅色；写 data-rt、data-rm', async () => {
+  it('缓存里是磨砂玻璃、强制浅色：系统深色也按浅色；旧缓存里的两个开关（rt、rm）不再生效', async () => {
     stubSystem(true);
     localStorage.setItem('pv-look', JSON.stringify({ skin: 'glass', theme: 'light', rt: true, rm: true }));
     await load();
     expect(html().dataset['skin']).toBe('glass');
     expect(html().dataset['theme']).toBe('light');
-    expect(html().dataset['rt']).toBe('1');
-    expect(html().dataset['rm']).toBe('1');
+    expect(html().dataset['rt']).toBeUndefined();
+    expect(html().dataset['rm']).toBeUndefined();
   });
 
   it('11-14 以前的缓存（没有 v: 2）里的简洁当旧默认、按磨砂玻璃；v: 2 的简洁是自己选的、照旧', async () => {
@@ -104,9 +105,9 @@ describe('一加载就按本机缓存套上', () => {
   it('缓存坏了、值认不出：按默认', async () => {
     localStorage.setItem('pv-look', '{oops');
     const m = await load();
-    expect(m.cachedLook()).toEqual({ skin: 'glass', theme: 'system', rt: false, rm: false, font: 'system' });
+    expect(m.cachedLook()).toEqual({ skin: 'glass', theme: 'system', font: 'system' });
     localStorage.setItem('pv-look', JSON.stringify({ skin: 'neon', theme: 'auto', rt: 'yes', rm: 1 }));
-    expect(m.cachedLook()).toEqual({ skin: 'glass', theme: 'system', rt: false, rm: false, font: 'system' });
+    expect(m.cachedLook()).toEqual({ skin: 'glass', theme: 'system', font: 'system' });
   });
 });
 
@@ -117,15 +118,15 @@ describe('跟随系统', () => {
     darkMq.matches = true;
     onChange?.();
     expect(html().dataset['theme']).toBe('dark');
-    m.applyLook({ skin: 'simple', theme: 'dark', rt: false, rm: false, font: 'system' });
+    m.applyLook({ skin: 'simple', theme: 'dark', font: 'system' });
     darkMq.matches = false;
     onChange?.();
     expect(html().dataset['theme']).toBe('dark');
   });
 });
 
-describe('减少透明、减少动态：开关 或 系统设置（只有这一处判断）', () => {
-  it('开关关着、系统设置了 reduce：照样写 data-rt、data-rm；系统改回来就拿掉', async () => {
+describe('减少透明、减少动态：只看系统设置（只有这一处判断）', () => {
+  it('系统设置了 reduce：写 data-rt、data-rm；系统改回来就拿掉', async () => {
     stubSystem(false, true, true);
     await load();
     expect(html().dataset['rt']).toBe('1');
@@ -139,16 +140,13 @@ describe('减少透明、减少动态：开关 或 系统设置（只有这一�
     expect(html().dataset['rm']).toBeUndefined();
   });
 
-  it('开关打开时系统改来改去都还是 1；两者都没有时不写', async () => {
+  it('旧账号存过 ui.reduce_transparency / ui.reduce_motion = true：不再生效，系统没设置就不写', async () => {
     const m = await load();
+    const c = fakeCollection();
+    m.watchLook(c);
+    c.upsert([{ id: '1', key: 'ui.reduce_transparency', value: true }, { id: '2', key: 'ui.reduce_motion', value: true }, { id: '3', key: 'ui.skin', value: 'glass' }]);
+    expect(html().dataset['skin']).toBe('glass');
     expect(html().dataset['rt']).toBeUndefined();
-    m.applyLook({ skin: 'glass', theme: 'system', rt: true, rm: false, font: 'system' });
-    expect(html().dataset['rt']).toBe('1');
-    mqs.rt.matches = true;
-    mqs.rt.fire();
-    mqs.rt.matches = false;
-    mqs.rt.fire();
-    expect(html().dataset['rt']).toBe('1');
     expect(html().dataset['rm']).toBeUndefined();
   });
 });
@@ -179,8 +177,8 @@ describe('lookValue：写进 settings 的值', () => {
     const m = await load();
     expect(m.lookValue('font', 'kai')).toEqual({ v: 1, id: 'kai' });
     expect(m.lookValue('skin', 'glass')).toBe('glass');
-    expect(m.lookValue('rt', true)).toBe(true);
-    const look = { skin: 'glass', theme: 'dark', rt: true, rm: false, font: 'kai' } as const;
+    expect(m.lookValue('theme', 'dark')).toBe('dark');
+    const look = { skin: 'glass', theme: 'dark', font: 'kai' } as const;
     expect(m.lookOf((k) => m.lookValue(k, look[k]))).toEqual(look);
   });
 });
@@ -199,17 +197,16 @@ describe('watchLook 盯住 settings', () => {
     expect(html().dataset['skin']).toBe('glass');
     expect(html().dataset['theme']).toBe('light');
 
-    c.upsert([{ id: '2', key: 'ui.skin', value: 'simple' }, { id: '3', key: 'ui.theme', value: 'dark' }, { id: '4', key: 'ui.reduce_motion', value: true }]);
+    c.upsert([{ id: '2', key: 'ui.skin', value: 'simple' }, { id: '3', key: 'ui.theme', value: 'dark' }]);
     // 选过简洁的照旧用简洁
     expect(html().dataset['skin']).toBe('simple');
     expect(html().dataset['theme']).toBe('dark');
-    expect(html().dataset['rm']).toBe('1');
-    expect(JSON.parse(localStorage.getItem('pv-look') ?? '{}')).toEqual({ skin: 'simple', theme: 'dark', rt: false, rm: true, font: 'system', v: 2 });
+    expect(JSON.parse(localStorage.getItem('pv-look') ?? '{}')).toEqual({ skin: 'simple', theme: 'dark', font: 'system', v: 2 });
 
     // 删了、撤销了的行不算
-    c.upsert([{ id: '2', key: 'ui.skin', value: 'simple', deleted_at: 1 }, { id: '4', key: 'ui.reduce_motion', value: true, undone: true }]);
+    c.upsert([{ id: '2', key: 'ui.skin', value: 'simple', deleted_at: 1 }, { id: '3', key: 'ui.theme', value: 'dark', undone: true }]);
     expect(html().dataset['skin']).toBe('glass');
-    expect(html().dataset['rm']).toBeUndefined();
+    expect(html().dataset['theme']).toBe('light');
     stop();
     c.upsert([{ id: '5', key: 'ui.skin', value: 'simple' }]);
     expect(html().dataset['skin']).toBe('glass');

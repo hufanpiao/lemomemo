@@ -21,3 +21,10 @@ export const VAULT_THUMB_MAX_BYTES = 131072;
 
 /** objstore 的 put 带 If-None-Match、对象已经在时抛的错（code = 'exists'）：上次做到一半、客户端重试，都算成功 */
 export const isExists = (e: unknown): boolean => typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'exists';
+
+/** RIFF????WEBP：前 4 字节 'RIFF'，第 8～11 字节 'WEBP'（vault-image 收图、vault-file 收缩略图共用，B4b-1 起从 vault-image/core.ts 挪来） */
+export function isWebp(b: Uint8Array): boolean {
+  if (b.length < 12) return false;
+  const tag = (from: number) => String.fromCharCode(...b.slice(from, from + 4));
+  return tag(0) === 'RIFF' && tag(8) === 'WEBP';
+}

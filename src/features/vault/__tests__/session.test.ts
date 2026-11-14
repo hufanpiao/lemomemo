@@ -202,3 +202,33 @@ describe('保存、移进隐私记', () => {
     expect(m.calls.map((c) => c.action)).toEqual(['status', 'import']);
   });
 });
+
+describe('文档附件（vault-file，B4b-1）', () => {
+  it('放了微软预览的临时副本：上锁时趁令牌还在先发 ms_preview_end；没放过的不发', async () => {
+    const { s, api } = await unlocked();
+    s.lock();
+    expect(api.fileEnd).not.toHaveBeenCalled();
+    const b = await unlocked();
+    expect((await b.s.file.msPreview(NID)).ok).toBe(true);
+    b.s.lock();
+    expect(b.api.fileEnd).toHaveBeenCalledWith(TOK);
+  });
+
+  it('主动结束后不再重复发，上锁时也不再发', async () => {
+    const { s, api } = await unlocked();
+    await s.file.msPreview(NID);
+    s.file.msPreviewEnd();
+    s.file.msPreviewEnd();
+    s.lock();
+    expect(api.fileEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('请求在飞时预览就关了：先发一次 end；回来后调用方再 end，要真发出去（服务器可能是之后才放的副本）', async () => {
+    const { s, api } = await unlocked();
+    const p = s.file.msPreview(NID);
+    s.file.msPreviewEnd();
+    await p;
+    s.file.msPreviewEnd();
+    expect(api.fileEnd).toHaveBeenCalledTimes(2);
+  });
+});

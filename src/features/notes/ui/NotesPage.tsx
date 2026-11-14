@@ -56,7 +56,7 @@ import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
-import { ConvertAsk, MergeBar, MoreMenu, useConvertFlow, type PageTip } from './NotesActions.tsx';
+import { ConvertAsk, MoveAsk, MergeBar, MoreMenu, needsAsk, useConvertFlow, type PageTip } from './NotesActions.tsx';
 import { Dot } from './CatDot.tsx';
 import { InputRow, useInputDraft } from './NotesInputRow.tsx';
 import { SwipeRow } from './NoteSwipe.tsx';
@@ -98,6 +98,8 @@ function NotesList() {
   const [drawer, setDrawer] = useState<string | null>(null);
   // 移到隐私记（B5 S7）：正在移的那一条（vault 的 VaultParts move 管解锁和出错提示）；移好的先在本页藏起来，等同步把它改成隐私记行
   const [moving, setMoving] = useState<string | null>(null);
+  /** 带附件、插图的先问一次再移（B4b-1，线框 sAtt 最后一张“这条随手记和它的 N 个附件、M 张图会一起加密放进隐私记”） */
+  const [askMove, setAskMove] = useState<NoteItem | null>(null);
   const [moved, setMoved] = useState<ReadonlySet<string>>(() => new Set());
   const [swiped, setSwiped] = useState<string | null>(null);
 
@@ -117,7 +119,9 @@ function NotesList() {
   };
   const toVault = (id: string) => {
     setMenu(null);
+    const it = l.items.find((x) => x.id === id);
     if (isRo(id)) guard.block();
+    else if (it && needsAsk(it)) setAskMove(it);
     else setMoving(id);
   };
   const shown = (it: NoteItem) => !moved.has(it.id);
@@ -217,6 +221,7 @@ function NotesList() {
                   ) : (
                     aiMark(it)
                   )}
+                  <FilesMark n={it.files} />
                   <span className={styles.time}>{timeOf(it, true)}</span>
                   {more(it)}
                 </div>
@@ -318,11 +323,32 @@ function NotesList() {
         </QuietBoundary>
       ) : null}
       {conv.ask ? <ConvertAsk ask={conv.ask} onOk={conv.confirm} onCancel={conv.cancel} /> : null}
+      {askMove ? (
+        <MoveAsk
+          files={askMove.files}
+          images={askMove.images}
+          onOk={() => {
+            setMoving(askMove.id);
+            setAskMove(null);
+          }}
+          onCancel={() => setAskMove(null)}
+        />
+      ) : null}
 
       {bar ? <UndoBar key={bar.tip.key} tip={bar.tip} onClose={bar.close} /> : null}
       <ReadonlyToast guard={guard} message={tEdit('edit.st.readonly', {})} testId="notes-ro-toast" />
     </main>
   );
+}
+
+/** “附件 N”（B4b-1，线框 sAtt 第三张 ATB：列表行尾、瀑布流卡片底部）；没附件不画 */
+function FilesMark({ n }: { n: number }) {
+  const t = useNotesT();
+  return n > 0 ? (
+    <span className={styles.atb} data-testid="notes-files-mark">
+      {t('notes.files', { n })}
+    </span>
+  ) : null;
 }
 
 /** 列表行中间的字：标题；摘要 · 分类（+ AI 小标）；只读行再在下面单独一行标“要新版本” */
@@ -336,6 +362,7 @@ function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: ReactNode })
       <span className={row.t2}>
         <span className={row.t2txt}>{[it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
         {ai}
+        <FilesMark n={it.files} />
       </span>
       {ro}
     </span>

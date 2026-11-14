@@ -47,6 +47,8 @@ if (manifests.status !== 0) process.exit(manifests.status ?? 1);
 const viteMode = mode === 'e2e' || mode === 'e2e-real' ? 'preview' : mode;
 
 await build({ configFile: resolve(ROOT, 'vite.config.ts'), mode: viteMode, logLevel: 'warn' });
+// 附件预览沙箱单独打包（B4b-1：和 App 共用预加载助手会把它从 App 首屏块里拆出来，见 vite.preview.config.ts 文件头）
+await build({ configFile: resolve(ROOT, 'vite.preview.config.ts'), mode: viteMode, logLevel: 'warn' });
 await build({ configFile: resolve(ROOT, 'vite.sw.config.ts'), mode: viteMode, logLevel: 'warn' });
 // 开源许可清单 /app/licenses.txt（R-410）：按 lock 的生产依赖生成，不进预缓存
 const licBytes = writeLicenses(APP_DIR, ROOT);

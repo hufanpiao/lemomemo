@@ -7,7 +7,7 @@
 // • 提示文案（imgMessage）：插入失败（HEIC 先转 JPG、打不开、存不上……）、上传失败、写行被拒，都写进 i18n
 // • 输入行选图（useAddImage；R-416：选了先挂成待记下的小图 PendingPics，点“记下”才存）、编辑器插图区连同提示（EditorImageBlock）也在这里，随手记页、编辑页不超行数上限
 // • 动效：只用 Pressable 的按下反馈（R-376）
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useBlobSrc } from '../../../kit/hooks/useBlobSrc.ts';
 import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
@@ -245,9 +245,24 @@ function PendPic({ file, label, onRemove, testId }: { file: File; label: string;
   );
 }
 
-/** 编辑器里的插图区：提示（保存状态下面）+ 图 + “图片”“拍照”。上传器的提示全页共用，只认这一条随手记的图；电脑抽屉里的由随手记页出（不出两遍） */
-export function EditorImageBlock({ noteId, drawer, disabled, msgClass }: { noteId: string | null; drawer: boolean; disabled: boolean; msgClass: string | undefined }) {
+/**
+ * 编辑器里的插图区：提示（保存状态下面）+ 图 + “图片”“拍照”。上传器的提示全页共用，只认这一条随手记的图；电脑抽屉里的由随手记页出（不出两遍）。
+ * dropRef：附件区拖进来、粘贴进来的图片经它插入，插不进去时和点“图片”选的一样出提示（B4b-1 整改 D6：原来静默失败）
+ */
+export function EditorImageBlock({ noteId, drawer, disabled, msgClass, dropRef }: { noteId: string | null; drawer: boolean; disabled: boolean; msgClass: string | undefined; dropRef?: MutableRefObject<((f: File) => void) | null> }) {
   const [msg, setMsg] = useState<ImgMsg | null>(null);
+  const { insert } = useNoteImages(noteId);
+  useEffect(() => {
+    if (!dropRef) return undefined;
+    dropRef.current = (f: File) =>
+      void insert(f).then((r) => {
+        const k = insertMessage(r);
+        if (k) setMsg({ key: k, trash: false });
+      });
+    return () => {
+      dropRef.current = null;
+    };
+  }, [dropRef, insert]);
   const onNotice = useCallback((n: ImgNotice) => {
     if (!drawer && n.noteId === noteId) setMsg({ key: failMessage(n.key), trash: n.key === 'quota' });
   }, [drawer, noteId]);

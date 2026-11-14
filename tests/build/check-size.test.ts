@@ -7,7 +7,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { BUDGET, currentBatch, measure, netGrowthCheck, netGrowthMessage, publicValues, stableText } from '../../build/check_size.mjs';
+import { BUDGET, currentBatch, firstFilesError, measure, netGrowthCheck, netGrowthMessage, publicValues, stableText } from '../../build/check_size.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const SAMPLE = join(ROOT, 'tests', 'arch-fixtures', 'check_size', 'w3-over-budget');
@@ -145,5 +145,14 @@ describe('首屏净增额度（按批次，R-379）：超过 当前批次的基�
     // ENV 和 8 个字符以下的短值不换（怕误伤别处同样的字面量）；没注入时什么都不换
     expect(publicValues({ VITE_PUBLIC_ENV: 'preview', VITE_PUBLIC_ANON_KEY: 'x' }, ROOT)).toEqual([]);
     expect(publicValues({}, ROOT)).toEqual([]);
+  });
+});
+
+describe('首屏文件数上限（B4b-1 第二轮：main 当时 8 个 + 1）', () => {
+  it('9 个以内不报，10 个报', () => {
+    expect(BUDGET.firstScreenFiles).toBe(9);
+    expect(firstFilesError(8)).toBeNull();
+    expect(firstFilesError(9)).toBeNull();
+    expect(firstFilesError(10)).toContain('10 个');
   });
 });

@@ -1,9 +1,10 @@
 // 减少透明效果只有一处判断（皮肤字体整块评审 11-14 第 1、6 条；R-84、R-93；ADR-008 实现说明）在真浏览器里：
-// platform/look.ts 把“设置里的开关打开 或 系统设置了 prefers-reduced-transparency: reduce”写成 <html data-rt="1">，CSS 只认这个属性。
+// platform/look.ts 把“系统设置了 prefers-reduced-transparency: reduce”写成 <html data-rt="1">，CSS 只认这个属性
+// （设置里原来的开关 11-14 负责人要求去掉）。
 // 三种情况各看六样浮层是不是实色（自己和子孙、::before / ::after 都没有 backdrop-filter）：
 //   底栏、打字条、撤销提示条、同步提示卡（真页面里调出来）；提醒横幅、随手记错误条（造数据代价大：从已加载的构建样式里取这两个部件的
 //   真类名挂一个探针元素，测的是同一条规则）。
-// ① 开关打开 → 全部实色；② 开关关着、系统设置了 reduce → 全部实色（只有 Chromium 能模拟这条媒体查询，WebKit 跳过）；③ 两者都没有 → 磨砂。
+// ① 设置里没有开关；② 系统设置了 reduce → 全部实色（只有 Chromium 能模拟这条媒体查询，WebKit 跳过）；③ 系统没设置 → 磨砂。
 // 系统“减少动态效果”同样并进 data-rm（Playwright 的 reducedMotion 两种浏览器都能模拟）。
 // 截图只在 Chromium 截（WebKit 不画模糊），存在 test-results 里
 import type { Page, TestInfo } from '@playwright/test';
@@ -123,15 +124,13 @@ async function shot(page: Page, info: TestInfo, name: string): Promise<void> {
   if (info.project.name.includes('chromium')) await page.screenshot({ path: info.outputPath(`${name}.png`) });
 }
 
-test.describe('减少透明效果：开关 或 系统设置，六样浮层都变实色', () => {
-  test('① 开关打开：全部实色', async ({ page }, info) => {
+test.describe('减少透明效果：跟系统设置，六样浮层都变实色', () => {
+  test('① 设置里没有“减少透明效果”开关（11-14 去掉）', async ({ page }) => {
     await seed(page);
     await go(page, '#/settings');
-    await page.getByTestId('settings-rt').click({ timeout: 30000 });
-    await expect.poll(() => attr(page, 'data-rt')).toBe('1');
-    await showAll(page);
-    expect(await frosted(page)).toEqual(all(false));
-    await shot(page, info, 'rt-switch-on');
+    await page.getByTestId('settings-skin-entry').waitFor({ timeout: 30000 });
+    await expect(page.getByTestId('settings-rt')).toHaveCount(0);
+    await expect(page.getByTestId('settings-rm')).toHaveCount(0);
   });
 
   test('② 开关关着、系统设置了 reduce（Chromium 模拟媒体查询）：data-rt=1，全部实色', async ({ page, browserName }, info) => {

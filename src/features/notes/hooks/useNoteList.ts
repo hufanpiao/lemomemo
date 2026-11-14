@@ -18,7 +18,7 @@ import { ruleCategory } from '../data/classify.ts';
 import { convertNote, type ConvertResult } from '../data/note-convert.ts';
 import { BODY_MAX, newNoteRow } from '../data/note-edit.ts';
 import { categoryNames } from '../../../core/categories.ts';
-import { aliveCount, categoryCounts, groupByDay, imagesByNote, noteItems, type Row } from '../data/note-list.ts';
+import { aliveCount, categoryCounts, fileCounts, groupByDay, imagesByNote, noteItems, type Row } from '../data/note-list.ts';
 
 export type { NoteGroup, NoteItem } from '../data/note-list.ts';
 export type { ActionResult, ConvertKind, ConvertResult };
@@ -29,6 +29,7 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   const rows = useCollection<Row>('notes');
   const cats = useCollection<Row>('categories');
   const pics = useCollection<Row>('note_images');
+  const files = useCollection<Row>('note_files');
   const locale = useUi((s) => s.locale);
   const [category, setCategory] = useState<string | null>(null);
   // 每分钟重算一次（过了半夜“今天”变“昨天”）
@@ -41,7 +42,7 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   const counts = useMemo(() => categoryCounts(rows, cats, locale), [rows, cats, locale]);
   // 筛的分类没了（最后一条删掉、分类被合并）：回到“全部”
   const active = category !== null && counts.some((c) => c.id === category) ? category : null;
-  const items = useMemo(() => noteItems(rows, cats, tz, active, pics), [rows, cats, tz, active, pics]);
+  const items = useMemo(() => noteItems(rows, cats, tz, active, pics, files), [rows, cats, tz, active, pics, files]);
   const groups = useMemo(() => groupByDay(items, now, tz), [items, now, tz]);
 
   /** 底部输入行记下一句：正文就是这句话，标题空着（列表里取正文第一行当标题）；成功回新条目的 id */
@@ -73,11 +74,12 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   const convert = useCallback(
     async (id: string, kind: ConvertKind, keep: boolean): Promise<ConvertResult & { kept: boolean }> => {
       const n = rows.find((x) => x.id === id);
-      const kept = keep || imagesByNote(pics).has(id);
+      // 带图、带附件的都保留原条（D-13，R-118：新条目链回它，附件还在原处）
+      const kept = keep || imagesByNote(pics).has(id) || fileCounts(files).has(id);
       if (!n) return { ok: false, reason: 'gone', kept };
       return { ...(await convertNote(n, kind, { now: clock.now(), tz, keepNote: kept })), kept };
     },
-    [rows, pics, tz],
+    [rows, pics, files, tz],
   );
   /** 这条转不了：备注放不下 */
   const tooLong = useCallback((id: string): boolean => {

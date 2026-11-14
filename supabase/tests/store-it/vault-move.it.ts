@@ -4,7 +4,9 @@
 //   ⑤ import：普通随手记带明文、raw_text、tags、ai_meta 和一张有拍摄时间、AI 描述的图，另有旧向量 → 隐私记：明文列全清、body_enc 写入；
 //      图片行换 vault-images、taken_at / ai_desc / ai_tags 清空、ai_status skip；R2 对象从 images 搬到 vault-images；旧向量删掉；list 解得开；
 //      vault-image：往这条隐私记先 save 预登记、再传一张图（R2 里有、Content-Type image/webp），读回字节一样；别人的令牌、普通随手记都拒；
-//      export 反过来：明文写回、bucket images、ai_status pending、对象搬回、这张图的 vault_ai 删掉；带 note_files 的普通随手记 import 回 409 has_files；
+//      export 反过来：明文写回、bucket images、ai_status pending、对象搬回、这张图的 vault_ai 删掉；
+//      带 note_files 的普通随手记（B4b-1 起不再回 has_files）：import 后附件行 is_vault、明文名清空、sha256 换成 HMAC、对象从 files 搬进 vault-files，
+//      export 回来名字和明文 sha256 还原、对象字节一样搬回 files；
 //   ⑥ account export：带有效令牌时隐私记那条只有密文列和中性列（没有 title、body），隐私记图片行没有 taken_at；不带令牌整行不进、vault 是 omitted；
 //   ⑦ rebind_device（TC-B1-85 ⑩）：直连数据库调 rebind_device_impl 被拒（rebind_denied，role 不是 service_role）；
 //      经 account 处理函数（PostgREST rpc）成功一次，devices 行换成新会话、旧会话被吊销（旧 JWT 401）；同一天第 11 次 429 rate_limited。
@@ -78,7 +80,7 @@ Deno.test({ name: '⑤ vault-image：传图、读回字节一样；别人的令�
   expectStatus(await uploadImage(jwtC, tokC, plain, crypto.randomUUID()), 404, '传到普通随手记');
 } });
 
-Deno.test({ name: '⑤ export：明文写回、图片回 images、ai_status pending、对象搬回；带 note_files 的 import 回 has_files', ...opts, async fn() {
+Deno.test({ name: '⑤ export：明文写回、图片回 images、ai_status pending、对象搬回；带 note_files 的随手记移进移出（B4b-1）', ...opts, async fn() {
   await sql`insert into private.vault_ai (kind, source_id, user_id, image_id, desc_enc, tags_enc, enc_key_id)
     values ('image', ${IMG}, ${C}, ${IMG}, ${new Uint8Array([1])}, ${new Uint8Array([1])}, 1)`;
   tokC = String((await okVault(jwtC, { action: 'export', note_id: P1 }, tokC, 'export')).vault_token);
@@ -91,11 +93,26 @@ Deno.test({ name: '⑤ export：明文写回、图片回 images、ai_status pend
   }
   const t = Date.now();
   await sql`insert into public.notes (id, user_id, body, created_at, updated_at) values (${P2}, ${C}, '带附件', ${t}, ${t})`;
-  await sql`insert into public.note_files (id, user_id, note_id, kind, path, name, mime, bytes, sha256, created_at, updated_at)
-    values (${FILE}, ${C}, ${P2}, 'pdf', ${`${C}/${P2}/${FILE}.pdf`}, 'a.pdf', 'application/pdf', 10, ${'0'.repeat(64)}, ${t}, ${t})`;
-  const hf = await callVault(jwtC, { action: 'import', note_id: P2 }, tokC);
-  expectStatus(hf, 409, '带附件的 import');
-  assertEquals(hf.json?.error, 'has_files');
+  const PDF = new TextEncoder().encode('%PDF-1.7 store-it move');
+  const sha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', PDF))].map((x) => x.toString(16).padStart(2, '0')).join('');
+  const fkey = `${C}/${P2}/${FILE}.pdf`;
+  await sql`insert into public.note_files (id, user_id, note_id, kind, path, name, mime, bytes, sha256, text_excerpt, check_status, ai_status, created_at, updated_at)
+    values (${FILE}, ${C}, ${P2}, 'pdf', ${fkey}, 'a.pdf', 'application/pdf', ${PDF.length}, ${sha}, '文字', 'ok', 'done', ${t}, ${t})`;
+  s3PutBytes('files', fkey, PDF);
+  tokC = String((await okVault(jwtC, { action: 'import', note_id: P2 }, tokC, '带附件的 import')).vault_token);
+  const fileOf = async () => one(await sql<Row[]>`select is_vault, name, text_excerpt, sha256, ai_status, skip_reason, check_status,
+    octet_length(name_enc) as ne, octet_length(dek_enc) as de from public.note_files where id = ${FILE}`);
+  const fv = await fileOf();
+  assertEquals([fv.is_vault, fv.name, fv.text_excerpt, fv.ai_status, fv.skip_reason, fv.check_status], [true, null, null, 'skip', 'vault_off', 'ok'], '附件行移进');
+  assert(fv.sha256 !== sha && Number(fv.ne) > 16 && Number(fv.de) > 32, 'sha256 换成 HMAC、名字和数据密钥是密文');
+  assert(s3Has('vault-files', fkey) && !s3Has('files', fkey), '附件对象搬进 vault-files');
+  assertEquals(fakeS3.objects.get(`vault-files/${fkey}`)?.contentType, 'application/octet-stream');
+  tokC = String((await okVault(jwtC, { action: 'export', note_id: P2 }, tokC, '带附件的 export')).vault_token);
+  const fp = await fileOf();
+  assertEquals([fp.is_vault, fp.name, fp.text_excerpt, fp.sha256, fp.ai_status, fp.ne, fp.de], [false, 'a.pdf', '文字', sha, 'pending', null, null], '附件行移出');
+  assert(s3Has('files', fkey) && !s3Has('vault-files', fkey), '附件对象搬回 files');
+  const back = fakeS3.objects.get(`files/${fkey}`);
+  assertEquals([back?.contentType, back ? [...back.body] : null], ['application/pdf', [...PDF]], '字节一样、contentType 按 kind');
   assertEquals((await noteOf(P2)).is_private, false);
   expectStatus(await callVault(jwtD, { action: 'import', note_id: P1 }, tokD), 404, 'D import C 的随手记');
 } });
