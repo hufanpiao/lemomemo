@@ -11,14 +11,17 @@ import { FAKE_USER_ID } from './session-fixture.ts';
 const TZ = 'Asia/Seoul';
 // 浏览器时区和造数据用的时区要一致：不然本机时区和首尔跨零点的那几个小时里“今天”对不上，今天页找不到这几条
 test.use({ loggedIn: true, timezoneId: TZ });
-const today = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+// 钟定在首尔中午：日程写在 23:00、23:30，不定钟的话首尔 23:30 以后跑，今天页把它们收进“已过去”，只读标记找不到（3130e72f 的 ci 夜里红过）
+const NOW = new Date('2026-11-12T12:00:00+09:00');
+const DAY = '2026-11-12';
 const base = { user_id: FAKE_USER_ID, tz: TZ, created_at: 1, updated_at: 1, deleted_at: null, undone: false, short: null, project: '', rev: 1 };
 
 /** 本机库：日程 e-ro（重复、只读）、e-ok；待办 t-ro（重复、只读）、t-ok */
 async function seed(page: Page): Promise<void> {
+  await page.clock.setFixedTime(NOW);
   await page.goto('/app/#/today');
   await page.getByTestId('today').waitFor({ timeout: 30000 });
-  const d = today();
+  const d = DAY;
   const ev = (id: string, title: string, over: Record<string, unknown>) => ({
     ...base, id, title, date: d, time: '23:00', duration_min: 30, remind_min: null, remind_days: null, location: null, ...over,
   });
