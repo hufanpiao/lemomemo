@@ -1,6 +1,6 @@
 // 皮肤与深浅色（ADR-008：两个独立维度，data-skin、data-theme 写在 <html> 上；需求 R-06、R-20、R-36、R-84、R-93、R-148）：settings 的键、
 // 取值和默认值，写到 <html> 上，并在这台设备缓存一份（pv-look）。
-// • 皮肤 ui.skin：'simple'（简洁，默认）| 'glass'（磨砂玻璃）；深浅色 ui.theme：'system'（跟着手机 / 电脑，默认）| 'light' | 'dark'
+// • 皮肤 ui.skin：'glass'（磨砂玻璃，默认；负责人 11-14“默认皮肤要磨砂玻璃，设置里面简洁可选”）| 'simple'（简洁）；深浅色 ui.theme：'system'（跟着手机 / 电脑，默认）| 'light' | 'dark'
 // • 减少透明效果、减少动态效果只有这一处判断（皮肤整块评审第 1、6 条）：data-rt="1" = 设置里 ui.reduce_transparency 打开，或系统设置了
 //   prefers-reduced-transparency: reduce；data-rm 同理（ui.reduce_motion、prefers-reduced-motion）。系统设置变了跟着改。
 //   CSS 只认 :root[data-rt='1']、:root[data-rm='1']，motion/reduced.ts、glass-ghost.ts 只看属性；全仓库只有启动画面 splash.css 自己看媒体查询
@@ -17,7 +17,8 @@
 // • 运行日志（main.tsx 经 watchLook 注入 logEvent，同 push-disconnect.ts）：皮肤、深浅色、两个开关变了记 look_apply；字体记 font_load。不记用户输入的文字
 import { LOOK_CACHE_KEY } from './exit-basics.ts';
 
-export const SKINS = ['simple', 'glass'] as const;
+/** 设置 › 皮肤里的先后顺序：默认的磨砂玻璃放第一个（负责人 11-14；视觉稿没画皮肤子页的选项顺序） */
+export const SKINS = ['glass', 'simple'] as const;
 export type Skin = (typeof SKINS)[number];
 export const THEMES = ['system', 'light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
@@ -48,7 +49,8 @@ export function lookOf(get: (k: keyof Look) => unknown): Look {
   const f = get('font');
   const id = f !== null && typeof f === 'object' ? (f as { id?: unknown }).id : f;
   return {
-    skin: s === 'glass' ? 'glass' : 'simple',
+    // 只有明确选过简洁的才是简洁；没选过、认不出的都按默认磨砂玻璃（负责人 11-14）
+    skin: s === 'simple' ? 'simple' : 'glass',
     theme: t === 'light' || t === 'dark' ? t : 'system',
     rt: get('rt') === true,
     rm: get('rm') === true,
@@ -139,22 +141,25 @@ export function applyLook(look: Look): void {
   const same = current !== null && JSON.stringify(current) === JSON.stringify(look);
   current = look;
   try {
-    localStorage.setItem(LOOK_CACHE_KEY, JSON.stringify(look));
+    localStorage.setItem(LOOK_CACHE_KEY, JSON.stringify({ ...look, v: 2 }));
   } catch {
     // 写不进（隐私模式、配额满）：这次照样生效，只是下次启动先按默认
   }
   if (!same) paint();
 }
 
-/** 本机缓存的那一份（没有、坏了按默认：简洁、跟随系统、两个开关关、系统字体） */
+/** 本机缓存的那一份（没有、坏了按默认：磨砂玻璃、跟随系统、两个开关关、系统字体） */
 export function cachedLook(): Look {
-  let o: Partial<Record<keyof Look, unknown>> = {};
+  let o: Record<string, unknown> = {};
   try {
     const v: unknown = JSON.parse(localStorage.getItem(LOOK_CACHE_KEY) ?? '{}');
-    if (v && typeof v === 'object') o = v;
+    if (v && typeof v === 'object') o = v as Record<string, unknown>;
   } catch {
     // 读不到、不是 JSON：按默认
   }
+  // 11-14 默认改成磨砂玻璃以前的缓存（没有 v: 2）里的“简洁”多半只是旧默认、不是自己选的：不认，先按磨砂玻璃画，
+  // 免得升级后第一次打开先闪简洁再被账号设置换成玻璃；真选过简洁的账号，设置一灌进来（watchLook）就换回简洁
+  if (o['v'] !== 2 && o['skin'] === 'simple') delete o['skin'];
   return lookOf((k) => o[k]);
 }
 

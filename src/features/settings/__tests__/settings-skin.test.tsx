@@ -1,5 +1,5 @@
 // 设置 › 皮肤（ADR-008；R-06、R-20、R-84、R-93；定稿线框第 997 行、皮肤视觉稿第 1368 行）：
-// 首页一行“简洁 · 白天 / 夜间跟着手机 ›”和下面两个开关；二级页 #/settings/skin 两组单选（简洁 / 磨砂玻璃、跟着电脑 / 白天 / 夜间），点哪个写哪个键（按账号存）
+// 首页一行“磨砂玻璃 · 白天 / 夜间跟着手机 ›”和下面两个开关；二级页 #/settings/skin 两组单选（磨砂玻璃 / 简洁、跟着电脑 / 白天 / 夜间），点哪个写哪个键（按账号存）
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { coldStart, getBoot, resetBootForTest } from '../../../core/boot.ts';
@@ -34,21 +34,23 @@ afterEach(() => {
 });
 
 describe('二级页', () => {
-  it('默认亮“简洁”“跟着电脑”；点“磨砂玻璃”写 ui.skin = glass，点“夜间”写 ui.theme = dark', async () => {
+  // 默认磨砂玻璃、排第一个，简洁照样可选（负责人 11-14“默认皮肤要磨砂玻璃，设置里面简洁可选”）
+  it('默认亮“磨砂玻璃”（排第一个）“跟着电脑”；点“简洁”写 ui.skin = simple，点“夜间”写 ui.theme = dark', async () => {
     await boot();
     render(<SkinSection />);
-    expect((screen.getByTestId('settings-skin-simple') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId('settings-skin-glass') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getAllByRole('radio', { name: /磨砂玻璃|简洁/ }).map((r) => r.getAttribute('data-testid'))).toEqual(['settings-skin-glass', 'settings-skin-simple']);
     expect((screen.getByTestId('settings-theme-system') as HTMLInputElement).checked).toBe(true);
     expect(screen.getByTestId('settings-skin').textContent).toContain('跟着电脑');
     await act(async () => {
-      fireEvent.click(screen.getByTestId('settings-skin-glass'));
+      fireEvent.click(screen.getByTestId('settings-skin-simple'));
     });
-    await waitFor(() => expect(pairs()).toEqual([['ui.skin', 'glass']]));
+    await waitFor(() => expect(pairs()).toEqual([['ui.skin', 'simple']]));
     await act(async () => {
       fireEvent.click(screen.getByTestId('settings-theme-dark'));
     });
-    await waitFor(() => expect(pairs()).toEqual([['ui.skin', 'glass'], ['ui.theme', 'dark']]));
-    expect((screen.getByTestId('settings-skin-glass') as HTMLInputElement).checked).toBe(true);
+    await waitFor(() => expect(pairs()).toEqual([['ui.skin', 'simple'], ['ui.theme', 'dark']]));
+    expect((screen.getByTestId('settings-skin-simple') as HTMLInputElement).checked).toBe(true);
     expect((screen.getByTestId('settings-theme-dark') as HTMLInputElement).checked).toBe(true);
   });
 
@@ -64,9 +66,9 @@ describe('首页', () => {
   beforeEach(() => window.history.replaceState(null, '', '#/settings'));
   afterEach(() => window.history.replaceState(null, '', '#/settings'));
 
-  it('“皮肤 … 简洁 · 白天 / 夜间跟着电脑 ›”在界面语言之后、字体之前的卡 2；点进 #/settings/skin，标题“皮肤”', async () => {
+  it('“皮肤 … 磨砂玻璃 · 白天 / 夜间跟着电脑 ›”（默认磨砂玻璃，负责人 11-14）在界面语言之后、字体之前的卡 2；点进 #/settings/skin，标题“皮肤”', async () => {
     await renderPage();
-    expect(screen.getByTestId('settings-skin-summary').textContent).toBe('简洁 · 白天 / 夜间跟着电脑');
+    expect(screen.getByTestId('settings-skin-summary').textContent).toBe('磨砂玻璃 · 白天 / 夜间跟着电脑');
     await act(async () => {
       fireEvent.click(screen.getByTestId('settings-skin-entry'));
     });
@@ -95,9 +97,9 @@ describe('首页', () => {
     expect((screen.getByTestId('settings-rt') as HTMLInputElement).checked).toBe(true);
   });
 
-  it('选过“磨砂玻璃”“夜间”：首页写“磨砂玻璃 · 夜间”', async () => {
+  it('选过“简洁”“夜间”：首页写“简洁 · 夜间”（选过简洁的照旧）', async () => {
     await renderPage();
-    act(() => settings().upsert([{ id: 's1', key: 'ui.skin', value: 'glass' }, { id: 's2', key: 'ui.theme', value: 'dark' }]));
-    expect(screen.getByTestId('settings-skin-summary').textContent).toBe('磨砂玻璃 · 夜间');
+    act(() => settings().upsert([{ id: 's1', key: 'ui.skin', value: 'simple' }, { id: 's2', key: 'ui.theme', value: 'dark' }]));
+    expect(screen.getByTestId('settings-skin-summary').textContent).toBe('简洁 · 夜间');
   });
 });
