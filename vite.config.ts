@@ -1,4 +1,4 @@
-// Vite：App 主体、登录页 /app/auth/（15.6 第 4b 条，K4）和预览沙箱三个页面入口（SW 单独打包，见 vite.sw.config.ts）（架构 8.1）
+// Vite：App 主体、登录页 /app/auth/（15.6 第 4b 条，K4）两个页面入口（SW、附件预览沙箱单独打包，见 vite.sw.config.ts、vite.preview.config.ts）（架构 8.1）
 // base '/app/'，输出到 dist/web/app/（LEMO_WEB_OUT 可改输出目录，见 build/assemble_web.mjs 的 webOutDir）；没有内联脚本和样式，modulepreload polyfill 关掉
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -13,7 +13,7 @@ const root = import.meta.dirname;
  * 只匹配整个说明符 'zod'；垫片自己引 'zod/v4'，不会绕回来。tests/build/zod-alias.test.ts 守着
  */
 export const ZOD_JITLESS_ALIAS = { find: /^zod$/, replacement: resolve(root, 'src/platform/zod-jitless.ts') };
-/** docx-preview 里的 import 'jszip' 改指只读替身（B4b-1）：jszip 的 UMD 包会往 App 和沙箱共用的运行时里加 require 兜底，首屏多约 0.6 KB；理由见 zip-lite.ts 文件头 */
+/** docx-preview 里的 import 'jszip' 改指只读替身（B4b-1）：沙箱（vite.preview.config.ts）用；理由见 zip-lite.ts 文件头 */
 export const ZIP_LITE_ALIAS = { find: /^jszip$/, replacement: resolve(root, 'src/preview-frame/zip-lite.ts') };
 /**
  * 只有 export … from 的出口文件按无副作用打包（11-12 首屏瘦身）：底栏从 motion/components.ts 只拿 Pressable，可出口是静态转出，
@@ -133,7 +133,6 @@ export default defineConfig(({ mode }) => {
         input: {
           main: resolve(root, 'src/index.html'),
           auth: resolve(root, 'src/auth/index.html'),
-          preview: resolve(root, 'src/preview.html'),
         },
       },
     },
