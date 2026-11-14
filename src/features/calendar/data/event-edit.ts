@@ -139,7 +139,7 @@ export function patchOf(row: Readonly<Record<string, unknown>>, prev: EventForm,
   // 换了一次提醒：旧的“知道了”“稍后”不再算数，同一次写入里清掉（B2 前端增量审查 M1；R-336 只认同一次提醒）。
   // 口径和服务器触发器一致：date、remind_days 改了，或者 time 在空和非空之间切换（全天 ↔ 有时刻）；
   // pushed_for 是系统列，本机不写，由服务器触发器清。
-  // reminders 的 timingPending / hasTimingChange（data/remind-write.ts）依赖这个写法：time 在空和非空之间切换时同时带 notified_for: null，
+  // shared/logic/remind-occurrence.ts 的 occurrenceChanged（outbox 合并、提醒的 timingPending 共用）依赖这个写法：time 在空和非空之间切换时同时带 notified_for: null，
   // 它靠这一点在 outbox 里认出“全天 → 有时刻”（R4-L1 第三轮 L11）；改这里的写法要一起改那边
   if ('date' in data || 'remind_days' in data || (prev.time === null) !== (next.time === null)) {
     data['notified_for'] = null;

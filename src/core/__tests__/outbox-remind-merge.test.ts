@@ -95,4 +95,19 @@ describe('REMIND-offline-ack-merge（R4-L1 本机）：换了一次提醒以后�
     expect(items[0]?.data).toMatchObject({ remind_days: 1, notified_for: null });
     expect(items[0]?.remind).toBe(true);
   });
+
+  // 7h：纪念日改日期是 calendar / month / day / is_leap / year 这几列，不是 date；anniv-edit.ts 的 patchOf 在同一次写入里带 notified_for: null
+  // （服务器 remind_reset 不替纪念日清 notified_for）。下面的形状和 anniv/__tests__/anniv-data.test.ts“审查第 7 条”的期望一致
+  it('7h 纪念日：离线先改日期（patchOf 带 notified_for: null）再“知道了”→ 合并后 notified_for 仍是 null，旧那次的“知道了”不压新日期', async () => {
+    for (const moved of [{ month: 4 }, { day: 6 }, { calendar: 'lunar' }, { is_leap: true }, { year: 1990 }]) {
+      expect(mergePatch({ ...moved, notified_for: null, snooze_at: null, updated_at: 1 }, { notified_for: OLD, updated_at: 2 })['notified_for']).toBeNull();
+    }
+    const { cache, outbox } = await setup();
+    await seed(cache, 'anniversaries', uid(1), { name: '妈妈', kind: 'birthday', calendar: 'solar', month: 3, day: 5, is_leap: false, year: null, notified_for: null });
+    await outbox.enqueue({ table: 'anniversaries', id: uid(1), op: 'patch', data: { month: 4, notified_for: null, snooze_at: null, updated_at: 1 }, remind: true });
+    await outbox.enqueue({ table: 'anniversaries', id: uid(1), op: 'patch', data: { notified_for: OLD, updated_at: 2 }, remind: true });
+    const items = await outbox.list();
+    expect(items).toHaveLength(1);
+    expect(items[0]?.data).toEqual({ month: 4, notified_for: null, snooze_at: null, updated_at: 2 });
+  });
 });
