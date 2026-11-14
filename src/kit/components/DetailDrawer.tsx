@@ -4,7 +4,10 @@
 //   一直是同一条就还给原来的元素（不在了再用 refocus 找这一条在列表里的按钮）；中途换过一条，先用 refocus 找当前这一条，找不到再退回原来的元素
 // • 读屏：aside 带名字；不加 aria-modal（侧栏和列表照样能用）
 // • side：在哪边（默认右边，左边时贴着侧栏右沿）；handle：kit DeskLayout 给的换边把手，放在抽屉最上面
-import { useEffect, useRef, type ReactNode } from 'react';
+// • 升级中心的 busy（不出版本横幅、不自动重新载入）：焦点在抽屉里（含抽屉里弹出的 radix 浮层）时才占，点回列表、侧栏就放开。
+//   抽屉在电脑上可能开一整天，一直占着新版本永远不出（B6 独立评审第 12 条）；里面的编辑器在抽屉模式下自己不占（EditShell、NoteEditor）
+import { useEffect, useRef, useState, type FocusEvent, type ReactNode } from 'react';
+import { useHoldBusy } from '../hooks/useHoldBusy.ts';
 import styles from './DetailDrawer.module.css';
 
 export interface DetailDrawerProps {
@@ -26,12 +29,35 @@ export function DetailDrawer({ id, label, onClose, side, handle, initial, refocu
   const box = useRef<HTMLElement>(null);
   const opener = useRef<Element | null | undefined>(undefined);
   if (opener.current === undefined) opener.current = document.activeElement;
+  const [inside, setInside] = useState(false);
+  useHoldBusy('editing', inside);
+  /** 焦点去了抽屉外面（radix 浮层挂在 body 下，算抽屉里） */
+  const onBlur = (e: FocusEvent<HTMLElement>): void => {
+    const to = e.relatedTarget;
+    if (!(to instanceof Element && (e.currentTarget.contains(to) || to.closest('[data-radix-popper-content-wrapper]')))) setInside(false);
+  };
   const firstId = useRef(id);
   const cur = useRef({ id, refocus });
   cur.current = { id, refocus };
+  // 里面的编辑器是按需下载的（今天页抽屉里的随手记）：initial 选出的元素还没画出来时焦点先落在抽屉本身，等它出来再挪过去（这期间焦点被挪走了就不抢）
   useEffect(() => {
-    const el = initial ? box.current?.querySelector<HTMLElement>(initial) : null;
-    (el && !(el as HTMLInputElement).disabled ? el : box.current)?.focus();
+    const root = box.current;
+    if (!root) return;
+    const pick = (): HTMLElement | null => {
+      const el = initial ? root.querySelector<HTMLElement>(initial) : null;
+      return el && !(el as HTMLInputElement).disabled ? el : null;
+    };
+    const el = pick();
+    (el ?? root).focus();
+    if (el || !initial) return;
+    const mo = new MutationObserver(() => {
+      const later = pick();
+      if (!later) return;
+      mo.disconnect();
+      if (document.activeElement === root) later.focus();
+    });
+    mo.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
+    return () => mo.disconnect();
   }, [id, initial]);
   // prettier-ignore
   useEffect(() => () => {
@@ -51,7 +77,16 @@ export function DetailDrawer({ id, label, onClose, side, handle, initial, refocu
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
   return (
-    <aside ref={box} className={styles.drawer} data-side={side === 'left' ? 'left' : undefined} tabIndex={-1} aria-label={label} data-testid={testId}>
+    <aside
+      ref={box}
+      className={styles.drawer}
+      data-side={side === 'left' ? 'left' : undefined}
+      tabIndex={-1}
+      aria-label={label}
+      data-testid={testId}
+      onFocus={() => setInside(true)}
+      onBlur={onBlur}
+    >
       {handle}
       {children}
     </aside>

@@ -58,6 +58,33 @@
   pointer-events: none;
 }
 
+/* 已过去折成一行（线框 s1 .done：灰字 13px）：整行是按钮，放不下省略号；展开时“▸”换成“▾” */
+.past {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-13);
+  text-align: start;
+  cursor: pointer;
+}
+
+.pastMark {
+  flex: none;
+}
+
+.pastText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 日程行行尾和 × 一样宽的空格子（M2）：宽度直接用 × 的 --hit（kit 的 List.module.css .trail），改了 × 两边一起变；不接点按 */
 .delGap {
   flex: none;

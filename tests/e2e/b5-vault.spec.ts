@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import type { Page, Route } from '@playwright/test';
 import JSZip from 'jszip';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
+import { runLog as readRunLog } from './fake-media.ts';
 
 test.skip(!process.env['VITE_PUBLIC_SUPABASE_URL'], '要 /sb 地址，只在快读组跑（npm run e2e:fastread）');
 test.setTimeout(90_000);
@@ -290,7 +291,16 @@ test('列表方式左滑：出“转成待办 / 移到隐私记 / 删除”，�
   await page.mouse.down();
   for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + box.width - 40 - i * 22, y);
   await page.mouse.up();
-  await expect(page.getByTestId(`notes-swipe-${id}`)).toHaveAttribute('data-open', 'true');
+  // 11-14 d41a1987 的 CI webkit 左滑没打开（重试一次也没开），本机复现不了：失败时把左滑运行日志带进报错（按下、定方向、松手各一行）。
+  // 运行日志 300 ms 防抖才落到 localStorage，读之前要等
+  const swipeLog = async (): Promise<string> => (await readRunLog(page)).filter((l) => l.includes('swipe ')).slice(-12).join(' | ');
+  try {
+    await expect(page.getByTestId(`notes-swipe-${id}`)).toHaveAttribute('data-open', 'true');
+  } catch (e) {
+    await page.waitForTimeout(500);
+    throw new Error(`${e instanceof Error ? e.message : String(e)} | 左滑运行日志：${await swipeLog()}`);
+  }
+  await expect.poll(swipeLog, { message: '左滑运行日志要记下松手结果' }).toMatch(/swipe up started=1 axis=h last=-\d+ w=192 open=1/);
   await expect(page.getByTestId(`notes-sw-vault-${id}`)).toBeVisible();
   await shot(page, '10-左滑按钮', browserName);
   await page.getByTestId(`notes-sw-vault-${id}`).click();

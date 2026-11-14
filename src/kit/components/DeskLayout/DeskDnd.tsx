@@ -24,15 +24,24 @@ import { CSS } from '@dnd-kit/utilities';
 import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 import { deskSortTransition } from '../../../motion/gestures.ts';
 import { useReducedMotionPref } from '../../../motion/components.ts';
+import { DRAG_PX } from './layout-model.ts';
 
 const COL = 'col:';
 export const colId = (i: number): string => `${COL}${i}`;
 
-/** 落点：先看指针在哪个块或哪一栏里，没有再取最近的 */
-const collide: CollisionDetection = (args) => {
+/** 落点：先看指针在哪个块或哪一栏里，没有再取最近的。
+ *  指针在栏里、却落在两块之间的空隙（12px）上时，取这一栏里离得最近的块，不当成“栏本身”（那会放到栏尾，B6 独立评审第 9 条）；
+ *  只有指针在这一栏最后一块的下面（栏尾的空白），才算栏本身、放到栏尾 */
+export const collide: CollisionDetection = (args) => {
   const hits = pointerWithin(args);
   const panel = hits.find((h) => !String(h.id).startsWith(COL));
-  return panel ? [panel] : hits.length ? hits : closestCenter(args);
+  if (panel) return [panel];
+  const col = hits[0];
+  if (!col) return closestCenter(args);
+  const inCol = args.droppableContainers.filter((c) => (c.data.current as { sortable?: { containerId?: unknown } } | undefined)?.sortable?.containerId === col.id);
+  const bottom = Math.max(...inCol.map((c) => args.droppableRects.get(c.id)?.bottom ?? -Infinity));
+  const y = args.pointerCoordinates?.y ?? Infinity;
+  return inCol.length && y <= bottom ? closestCenter({ ...args, droppableContainers: inCol }) : hits;
 };
 
 /** over 换成“第几栏、整栏数组里第几个”；over 是栏本身时放到栏尾 */
@@ -59,7 +68,7 @@ export interface DndShellProps {
 }
 
 export function DndShell({ disabled, onStart, onOver, onEnd, onCancel, overlay, overlayClass, children }: DndShellProps) {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: DRAG_PX } }));
   // 播报和键盘说明都由 DeskLayout 自己的读屏区出（中韩文），dnd-kit 自带的英文说明也关掉（独立评审第 13 条）
   const quiet = { screenReaderInstructions: { draggable: '' }, announcements: { onDragStart: () => undefined, onDragOver: () => undefined, onDragEnd: () => undefined, onDragCancel: () => undefined } };
   return (

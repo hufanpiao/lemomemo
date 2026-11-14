@@ -6,7 +6,8 @@
 // • 本周、快到了、今天记的三块标题右边有跳转（日历 ›、纪念日 ›、随手记 ›）；“今天记的”标题后带条数（线框 ANNB、NOTESTODAY）
 // • 页顶日期行固定不动（对比稿“固定不动”）：日期后面的农历（Lunar，中文界面才有，同月历）由 TodayPage 挂在 h1 里，纪念日胶囊复用手机今天页的 AnnivLine
 // • 选中一条：详情抽屉从右边盖上来（线框 s1 第二张；× / Esc 关，能换到左边）。外壳是 kit 的 DetailDrawer（和随手记同一个），
-//   里面是待办、日程编辑器（todos、calendar 的 index.ts 懒加载）；选中的是哪一条由 TodayPage 管
+//   里面是待办、日程编辑器（todos、calendar 的 index.ts 懒加载），“今天记的”里的随手记用 notes 给的 TodayNotes part="edit"（B6 对齐线框：原来进编辑页）；
+//   选中的是哪一条由 TodayPage 管
 // • 排法、拖动、收起、保存都在 kit 的 DeskLayout；这里只给块的标题和内容
 // • 键盘（线框 s1“J / K 上下 · E 完成 · Enter 编辑”）：J / K 在今天页各行之间移焦点，E 勾选焦点所在的待办，Enter 是按钮自带的打开
 //   （焦点在输入框里时单字母键不生效，kit 的 useKeys）
@@ -53,7 +54,7 @@ const SOON_MAX = 3;
 
 /** 抽屉里开着的是哪一条 */
 export interface TodaySel {
-  kind: 'event' | 'todo';
+  kind: 'event' | 'todo' | 'note';
   id: string;
 }
 
@@ -62,12 +63,14 @@ export interface TodayDeskProps {
   /** 时间河块：提示、“现在”卡、没赶上、今天的安排（TodayPage 画好的） */
   river: ReactNode;
   sel: TodaySel | null;
+  /** “今天记的”里点了一条随手记（日程、待办的行在 river 里，由 TodayPage 自己开） */
+  onOpen(sel: TodaySel): void;
   onClose(): void;
 }
 
 const noop = (): void => undefined;
 
-export default function TodayDesk({ today, river, sel, onClose }: TodayDeskProps) {
+export default function TodayDesk({ today, river, sel, onOpen, onClose }: TodayDeskProps) {
   const t = useTodayDeskT();
   const [notesN, setNotesN] = useState(0);
   useJk();
@@ -81,7 +84,7 @@ export default function TodayDesk({ today, river, sel, onClose }: TodayDeskProps
       body: (
         <QuietBoundary name="today-notes">
           <Suspense fallback={null}>
-            <TodayNotes onCount={setNotesN} />
+            <TodayNotes part="list" onCount={setNotesN} onOpen={(id) => onOpen({ kind: 'note', id })} selected={sel?.kind === 'note' ? sel.id : null} />
           </Suspense>
         </QuietBoundary>
       ),
@@ -113,12 +116,15 @@ const refocus = (key: string): HTMLElement | null =>
 
 function TodayDrawer({ sel, side, handle, onClose }: { sel: TodaySel; side: 'left' | 'right'; handle: ReactNode; onClose(): void }) {
   const t = useTodayDeskT();
+  const key = `${sel.kind}:${sel.id}`;
   const Editor = sel.kind === 'todo' ? TodoDrawerEditor : EventDrawerEditor;
+  // 随手记打开时焦点落在正文框（同随手记页的 NoteDrawer）
+  const initial = sel.kind === 'note' ? '[data-testid="note-edit-body"]' : undefined;
   return (
-    <DetailDrawer id={`${sel.kind}:${sel.id}`} label={t('desk.drawer', {})} onClose={onClose} side={side} handle={handle} refocus={refocus} data-testid="today-drawer">
+    <DetailDrawer id={key} label={t('desk.drawer', {})} onClose={onClose} side={side} handle={handle} initial={initial} refocus={refocus} data-testid="today-drawer">
       <QuietBoundary name="today-drawer">
         <Suspense fallback={null}>
-          <Editor key={`${sel.kind}:${sel.id}`} id={sel.id} onCreated={noop} onClose={onClose} />
+          {sel.kind === 'note' ? <TodayNotes key={key} part="edit" id={sel.id} onClose={onClose} /> : <Editor key={key} id={sel.id} onCreated={noop} onClose={onClose} />}
         </Suspense>
       </QuietBoundary>
     </DetailDrawer>
