@@ -122,7 +122,7 @@ export type VoiceNote =
 export type VoiceFinal =
   | { do: 'save'; plan: TypePlan; raw: string }
   /** 判成查找等（有把握）：不保存，交给结果层（B4b-3；规则和打字同一套：本机有迹象且 AI ≥ 0.6，或本机就有把握） */
-  | { do: 'ask'; ask: AssistAsk; raw: string; quotaLeft: number }
+  | { do: 'ask'; ask: AssistAsk; raw: string; quotaLeft: number | null }
   | { do: 'note'; status: 'no_speech' | 'quota_out' | 'ai_failed'; note: VoiceNote }
   | { do: 'idle' };
 
@@ -145,8 +145,10 @@ export function voiceFinal(res: VoiceResult, ctx: TypeCtx, online: boolean): Voi
       return { do: 'save', raw: res.transcript, plan: { status: 'saved', origin: 'ai', items: res.items, hints, quotaLeft: res.quotaLeft, aiReason: null, ask: null, alt: recordAlt(hint, res.confidence) } };
     }
     case 'rule': {
+      // 和上面同一条规矩：本机就有把握的查找、总结直接交结果层（AI 返回读不懂不影响本机的判断）
+      const { hint, sure } = localHint(res.transcript, ctx);
+      if (sure && hint) return { do: 'ask', ask: hint, raw: res.transcript, quotaLeft: null };
       const l = planLocal(res.transcript, ctx).result;
-      const { hint } = localHint(res.transcript, ctx);
       const alt = hint ? { ask: hint, found: true } : null;
       return { do: 'save', raw: res.transcript, plan: { status: 'saved_rule', origin: 'rule', items: l.items, hints: l.hints, quotaLeft: null, aiReason: res.reason, ask: null, alt } };
     }

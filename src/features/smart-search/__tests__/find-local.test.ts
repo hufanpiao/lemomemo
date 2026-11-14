@@ -86,3 +86,20 @@ describe('find-local', () => {
     expect(pushRecent(['1', '2', '3', '4', '5', '6'], '7')).toHaveLength(RECENT_MAX);
   });
 });
+
+describe('buildIndex：日程按设备时区换算日子和时刻（B4b-3，4.6）', () => {
+  const ev = (over: Partial<Row>): Row => ({ id: id(20), ...live, title: '晨会', location: '', note: '', date: '2026-11-10', time: '01:00', tz: 'Asia/Seoul', duration_min: 30, ...over });
+  const evOf = (r: Row, tz: string) => buildIndex(src({ events: [r] }), tz as never).find((x) => x.kind === 'event');
+
+  it('首尔记的 11-10 01:00，设备在洛杉矶：日子变成 11-09、时刻 08:00；设备在首尔不变', () => {
+    expect(evOf(ev({}), 'America/Los_Angeles')).toMatchObject({ date: '2026-11-09', time: '08:00' });
+    expect(evOf(ev({}), 'Asia/Seoul')).toMatchObject({ date: '2026-11-10', time: '01:00' });
+  });
+  it('全天日程不换算、没有时刻；没写 tz 的按设备时区', () => {
+    expect(evOf(ev({ time: null }), 'America/Los_Angeles')).toMatchObject({ date: '2026-11-10', time: null });
+    expect(evOf(ev({ tz: null }), 'America/Los_Angeles')).toMatchObject({ date: '2026-11-10', time: '01:00' });
+  });
+  it('时刻格式坏了的照原值', () => {
+    expect(evOf(ev({ time: '25:99' }), 'America/Los_Angeles')).toMatchObject({ date: '2026-11-10', time: '25:99' });
+  });
+});

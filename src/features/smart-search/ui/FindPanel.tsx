@@ -199,14 +199,16 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
     );
   };
 
-  // “＋”判成查找打开的：页脚“总结一下”（换成结果层，总结这些）、“改成记下”（原话按记下保存，B4b-3）
+  // “＋”判成查找打开的：页脚“总结一下”（换成结果层，总结这些；一条都没找到时不出）、“改成记下”（原话按记下保存，B4b-3）
   const rec = assist?.record ?? null;
-  const foot = assist === null ? null : (
+  const foot = (withSum: boolean) => assist === null ? null : (
     <div className={styles.foot}>
-      <button type="button" className={styles.chip} onClick={() => {
-        rlog('find to_summary');
-        if ('query' in assist.ask) openAssist({ ...assist, ask: { intent: 'summarize', query: { ...assist.ask.query, text: q } } });
-      }} data-testid="find-summarize">{t('as.sum.btn', {})}</button>
+      {withSum ? (
+        <button type="button" className={styles.chip} onClick={() => {
+          rlog('find to_summary');
+          if ('query' in assist.ask) openAssist({ ...assist, ask: { intent: 'summarize', query: { ...assist.ask.query, text: q } } });
+        }} data-testid="find-summarize">{t('as.sum.btn', {})}</button>
+      ) : null}
       {rec ? (
         <button type="button" className={styles.chip} onClick={() => {
           rlog('find to_record');
@@ -242,7 +244,7 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
         {t('find.emptyHint', {})}
       </div>
       {vaultRow}
-      {foot}
+      {foot(false)}
     </div>
   ) : (
     <>
@@ -266,7 +268,7 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
         </section>
       );
     })}
-    {foot}
+    {foot(anyHit)}
     {recent}
     </>
   );
@@ -333,11 +335,13 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
             <UndoToast
               key={done.n}
               message={done.a.ok > 0 ? t(done.act === 'delete' ? 'find.m.ok.del' : done.act === 'done' ? 'find.m.ok.done' : 'find.m.ok.tomorrow', {}) : t('find.m.fail', {})}
-              undoLabel={t('find.undo', {})}
-              onUndo={() => {
+              // 一条都没写成：没有可撤销的，只出提示（alert，读屏马上读）
+              role={done.a.ok > 0 ? 'status' : 'alert'}
+              undoLabel={done.a.ok > 0 ? t('find.undo', {}) : undefined}
+              onUndo={done.a.ok > 0 ? () => {
                 const a = done.a;
                 void undoTarget(a, clock.now()).then((n) => rlog(`find act undo n=${n}`));
-              }}
+              } : undefined}
               onClose={() => setDone(null)}
               data-testid="find-undo"
             />

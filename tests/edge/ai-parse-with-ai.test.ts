@@ -12,6 +12,9 @@ import { VOICE_V4 } from '../../supabase/functions/_shared/ai/prompts/voice.v4.t
 import { pickProvider, readAiConfig } from '../../supabase/functions/_shared/ai/router.ts';
 import { okJson, StubProvider } from './ai-fakes.ts';
 
+// B4b-3 起校验结果是几种意图的联合：记下那一种才有 items，这里取出来（别的意图给空）
+const itemsOf = (v: object): AiItem[] => ('items' in v ? (v as { items: AiItem[] }).items : []);
+
 const { parseWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
 const NOW = Date.UTC(2026, 9, 28, 3, 0);
 const input = (o: Partial<ParseInput> = {}): ParseInput => ({
@@ -86,7 +89,7 @@ describe('parseWithAI：成功、校验没过、服务商失败', () => {
     const r = await parseWithAI(input(), new StubProvider(() => okJson({ items: [EV] })));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.items.map((i) => [i.kind, i.date, i.time, i.confirm])).toEqual([['event', '2026-10-29', '15:00', null]]);
+    expect(itemsOf(r.value).map((i) => [i.kind, i.date, i.time, i.confirm])).toEqual([['event', '2026-10-29', '15:00', null]]);
     expect(r.raw).toEqual({ items: [EV] });
     expect(r.prompt).toBe(PROMPT_VERSION.parse);
   });

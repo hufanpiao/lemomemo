@@ -2,7 +2,7 @@
 // 用法：删除、批量改动后出一条“已删除 · 撤销”；ms 后自动收起（默认 8 秒，线框低 4 同一个时长）；点了撤销或收起都只回调一次
 // • role="status"：读屏会读出文字，但不抢焦点（不打断正在做的事）
 // • 鼠标悬停、键盘焦点在条上时暂停计时，移开后重新计 ms（读屏用户来得及按到“撤销”）
-// • 只渲染，不碰数据：撤销做什么由调用方给 onUndo
+// • 只渲染，不碰数据：撤销做什么由调用方给 onUndo；不给 onUndo 就没有撤销按钮（没生效、没东西可撤的提示，配 role alert）
 // • 根元素带 data-undo-toast（K8 冲突提示 3.1，主持人已批）：冲突提示卡在撤销条开着时往上让一条
 // • solo（B6 返工 11-14“两个撤销条不能叠在一起”）：带 solo 的条同一时间只留一条，被收起的照常回调 onClose、不撤销。分两种（独立评审第 7 条）：
 //   'keep'：删除类（今天页、随手记、列表的删除撤销条），新出来就把别的 solo 条都收起——删掉的东西能撤销最要紧；
@@ -20,8 +20,9 @@ const solos = new Map<() => void, UndoSolo>();
 
 export interface UndoToastProps {
   message: string;
-  undoLabel: string;
-  onUndo(): void;
+  /** 和 onUndo 一起给；都不给就只出文字（B4b-3：查找面板里改动失败时没有可撤销的） */
+  undoLabel?: string | undefined;
+  onUndo?: (() => void) | undefined;
   /** 收起（到时、或点了撤销之后）；只调一次 */
   onClose(): void;
   ms?: number;
@@ -89,9 +90,11 @@ export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST
       onBlur={() => setPaused(false)}
     >
       <span className={styles.msg}>{message}</span>
-      <button type="button" className={styles.undo} onClick={act(onUndo)} data-testid={testId ? `${testId}-undo` : undefined}>
-        {undoLabel}
-      </button>
+      {onUndo && undoLabel ? (
+        <button type="button" className={styles.undo} onClick={act(onUndo)} data-testid={testId ? `${testId}-undo` : undefined}>
+          {undoLabel}
+        </button>
+      ) : null}
       {more ? (
         <button type="button" className={styles.undo} onClick={act(more.onClick)} data-testid={testId ? `${testId}-more` : undefined}>
           {more.label}

@@ -13,6 +13,9 @@ import { insertSchema } from '../../shared/schema/rows.ts';
 import { VOICE_TIMEOUT_MS as FN_VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
 import { UPLOAD_MIN_MS } from '../../src/features/plus/data/record-logic.ts';
 
+// B4b-3 起校验结果是几种意图的联合：记下那一种才有 items，这里取出来（别的意图给空）
+const itemsOf = (v: object): AiItem[] => ('items' in v ? (v as { items: AiItem[] }).items : []);
+
 // 2026-10-28（周三）12:00 首尔 = 03:00 UTC
 const NOW = Date.UTC(2026, 9, 28, 3, 0);
 const SEOUL = 'Asia/Seoul';
@@ -24,7 +27,7 @@ const ev = (o: Record<string, unknown> = {}) => ({ kind: 'event', title: '开会
 const first = (r: ReturnType<typeof checkParseOutput>): AiItem => {
   if (!r.ok) throw new Error(`expected ok, got ${r.invalid_reasons.join(',')}`);
   if (r.value.intent !== 'record') throw new Error(`expected record, got ${r.value.intent}`);
-  const it = r.value.items[0];
+  const it = itemsOf(r.value)[0];
   if (!it) throw new Error('no item');
   return it;
 };
@@ -49,7 +52,7 @@ describe('ai.ts：AI 输出校验（第 7 节）', () => {
     expect(reasons(checkParseOutput({ items: [ev({ title: '\u202E\u2069 \u0001' })] }, ALL))).toEqual(['out_of_range']);
     // 语音那一路同一套
     const v = checkVoiceOutput({ transcript: '开会', items: [ev({ title: '开会\u202E' })] }, ALL);
-    expect(v.ok && v.value.items[0]?.title).toBe('开会');
+    expect(v.ok && itemsOf(v.value)[0]?.title).toBe('开会');
   });
 
   it('TC-B3-05：简称最多 2 个字形簇；3 个算 out_of_range', () => {
@@ -81,7 +84,7 @@ describe('ai.ts：AI 输出校验（第 7 节）', () => {
     }, ALL);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const [, a, n] = r.value.items;
+    const [, a, n] = itemsOf(r.value);
     expect([a?.due, a?.time, a?.date_basis, a?.anniv?.is_leap, a?.anniv?.year]).toEqual([null, null, null, false, null]);
     expect([n?.short, n?.time]).toEqual([null, null]);
     expect(reasons(checkParseOutput({ items: [ev({ foo: 1 })] }, ALL))).toEqual(['not_whitelisted']);
@@ -142,10 +145,12 @@ describe('ai.ts：AI 输出校验（第 7 节）', () => {
 
 // B4b-3（架构 5.14 第 2、3、7 点；intent.ts 文件头的规整口径）：今天是 2026-10-28（周三，首尔）
 describe('ai.ts：意图（checkParseOutput / checkVoiceOutput 过 intent.ts 的 normIntent）', () => {
-  const okIntent = (r: ReturnType<typeof checkParseOutput>): IntentChecked => {
+  // 查找、总结那一种带 query，改期、取消、完成那一种带 target、to；测试里两种都按可选字段读
+  type LooseIntent = Partial<Extract<IntentChecked, { query: unknown }>> & Partial<Extract<IntentChecked, { target: unknown }>> & { fixed: boolean };
+  const okIntent = (r: ReturnType<typeof checkParseOutput>): LooseIntent => {
     if (!r.ok) throw new Error(`expected ok, got ${r.invalid_reasons.join(',')}`);
     if (r.value.intent === 'record') throw new Error('expected non-record');
-    return r.value;
+    return r.value as LooseIntent;
   };
   const q = (query: unknown, extra: Record<string, unknown> = {}) => checkParseOutput({ intent: 'search', confidence: 0.9, items: [], query, ...extra }, ALL);
   const t = (intent: string, target: unknown, to: unknown = null) => checkParseOutput({ intent, confidence: 0.8, items: [], query: null, target, to }, ALL);
