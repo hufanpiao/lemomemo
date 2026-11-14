@@ -1,8 +1,6 @@
 // 架构 2.3 A14、A20、W2 和 0.29 续第 142 条：build/check_arch.py 对样例目录要报出预期的问题
 // 每个样例是一棵迷你仓库（tests/arch-fixtures/check_arch/<名字>/），用 --root 指过去
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FIXTURES, ROOT } from './fixture-header.ts';
@@ -160,109 +158,7 @@ describe('build/check_arch.py（tests/arch-fixtures/check_arch）', () => {
     expect(report.errors.map((e) => `${e.rule} ${e.file}:${e.line}`)).toEqual(['A19 src/sw/sw.ts:4']);
   });
 
-  it('R2：src 里 import shared/objstore.ts、aws4fetch（含动态 import）、functions/ 的生成表 → 错误', () => {
-    const { code, report } = run(sample('r2-import'));
-    expect(code).toBe(1);
-    expect(report.errors.map((e) => `${e.rule} ${e.file}:${e.line}`)).toEqual([
-      'R2 src/app/bad.ts:2',
-      'R2 src/features/notes/data/bad.ts:2',
-      'R2 src/platform/bad.ts:2',
-      'R2 src/platform/bad.ts:4',
-    ]);
-  });
-
-  it('LUNAR：src 里静态 import / export from / 只写路径的 import / require 农历模块 → 错误；import()、import type、注释、别的 lunar 模块放行', () => {
-    const { code, report } = run(sample('lunar-static-import'));
-    expect(code).toBe(1);
-    expect(report.errors.map((e) => `${e.rule} ${e.file}:${e.line}`)).toEqual([
-      'LUNAR src/features/calendar/hooks/bad.ts:2',
-      'LUNAR src/features/calendar/hooks/bad.ts:3',
-      'LUNAR src/features/calendar/hooks/bad.ts:4',
-      'LUNAR src/features/calendar/hooks/bad.ts:5',
-      'LUNAR src/features/calendar/hooks/bad.ts:6',
-    ]);
-  });
-
-  it('LUNAR 间接（LUNAR-indirect-import）：src 静态引入 shared 的模块、它再静态引入农历（隔一层、两层、环里都算）→ 错误；动态 import()、import type、链上有 import() 或 import type 断开的放行', () => {
-    const { code, report } = run(sample('lunar-indirect-import'));
-    expect(code).toBe(1);
-    const lunar = report.errors.filter((e) => e.rule === 'LUNAR');
-    expect(lunar.map((e) => `${e.file}:${e.line}`)).toEqual([
-      'src/features/today/cyc1.ts:2',
-      'src/features/today/cyc2.ts:2',     // 从环的另一头进：中间层的“走不到”不能被记住
-      'src/features/today/direct.ts:2',   // 直接
-      'src/features/today/one.ts:2',      // 隔一层（同目录 './lunar.ts' 写法）
-      'src/features/today/two.ts:2',      // 隔两层：import
-      'src/features/today/two.ts:3',      //          export … from（不带扩展名）
-      'src/features/today/two.ts:4',      //          只写路径的 import
-    ]);
-    expect(report.errors).toHaveLength(lunar.length);
-    const msg = (f: string) => lunar.find((e) => e.file === f)?.message ?? '';
-    expect(msg('src/features/today/direct.ts')).toContain('农历数据只能按需加载');
-    expect(msg('src/features/today/one.ts')).toContain('shared/logic/anniv/next-date.ts → shared/logic/anniv/lunar.ts');
-    expect(msg('src/features/today/two.ts')).toContain('shared/logic/mid.ts → shared/logic/anniv/next-date.ts → shared/logic/anniv/lunar.ts');
-    expect(msg('src/features/today/cyc2.ts')).toContain('shared/logic/cyc-b.ts → shared/logic/cyc-a.ts → shared/logic/anniv/lunar.ts');
-    expect(lunar.some((e) => e.file === 'src/features/today/ok.ts')).toBe(false);
-  });
-
-  // 架构 2.3 MOTION-IMPL（R-354）：motion 系的包只能在 src/motion/*-impl.tsx 里引入；实现文件只能由 features.ts 用 import() 动态加载
-  it('MOTION-IMPL：该报的——功能 ui、门面、index.ts 的 import()、export from、require、只写路径、import { type X }、功能代码的 import type、shared/、子目录和 .ts 的 *-impl、静态或别处动态引实现文件', () => {
-    const { code, report } = run(sample('motion-impl-bad'));
-    expect(code).toBe(1);
-    expect(report.errors.every((e) => e.rule === 'MOTION-IMPL')).toBe(true);
-    expect(report.errors.map((e) => `${e.file}:${e.line}`).sort()).toEqual([
-      'shared/logic/anim.ts:2',               // shared/ 下引 motion-utils 子路径
-      'src/features/today/ui/Row.tsx:2',      // 功能 ui 里 import { m } from 'motion/react'
-      'src/features/today/ui/types.ts:2',     // import type 只在 src/motion/ 下放行
-      'src/motion/Appear.tsx:2',              // 门面静态引 motion/react
-      'src/motion/Appear.tsx:3',              // 门面静态引 ./list-impl.tsx
-      'src/motion/a-impl.ts:2',               // .ts 结尾的不算实现文件
-      'src/motion/deftype.ts:2',              // import type from 'motion'：默认导入起名叫 type，不算纯类型
-      'src/motion/index.ts:2',                // import('motion/react')
-      'src/motion/index.ts:3',                // import('./motion-impl.tsx') 只准 features.ts
-      'src/motion/reexport.ts:2',             // export { m } from 'framer-motion'
-      'src/motion/req.ts:3',                  // require('motion')
-      'src/motion/side.ts:2',                 // import 'motion-dom'
-      'src/motion/sub/a-impl.tsx:2',          // 子目录里的 *-impl.tsx 不算
-      'src/motion/typed.ts:2',                // import { type FeatureBundle } 不算纯类型
-    ].sort());
-    const msg = (f: string, line: number) => report.errors.find((e) => e.file === f && e.line === line)?.message ?? '';
-    expect(msg('src/motion/Appear.tsx', 2)).toContain('只有 src/motion/*-impl.tsx 能引入 motion/react');
-    expect(msg('src/motion/Appear.tsx', 3)).toContain('动画实现 ./list-impl.tsx 只能由 src/motion/features.ts 用 import() 动态加载');
-    expect(msg('src/motion/index.ts', 3)).toContain('动画实现 ./motion-impl.tsx');
-    expect(msg('src/motion/reexport.ts', 2)).toContain('能引入 framer-motion');
-  });
-
-  it('MOTION-IMPL：不报的——*-impl.tsx 和 motion-impl.tsx 引 motion、features.ts 的 import type 和 import(./motion-impl.tsx)、motion-impl.tsx 静态引别的实现、注释、__tests__ 和 *.test.ts、带 ${} 的反引号', () => {
-    const { code, report } = run(sample('motion-impl-ok'));
-    expect(report.errors).toEqual([]);
-    expect(code).toBe(0);
-  });
-
-  // 架构 2.3 MOTION-IMPL 最后一段的两条变异：把真仓库的 src、shared 复制到临时目录里改（共用工作区不动），各要报 1 条；临时目录用完删
-  it('MOTION-IMPL 变异（真仓库副本）：Appear.tsx 加 motion/react 引入 → 1 条；features.ts 的 import type 改成 import → 1 条', { timeout: 120_000 }, () => {
-    const tmp = mkdtempSync(join(tmpdir(), 'motion-impl-mut-'));
-    try {
-      for (const d of ['src', 'shared']) cpSync(join(ROOT, d), join(tmp, d), { recursive: true, filter: (s) => !s.includes('node_modules') });
-      const motionErrs = () => run(tmp).report.errors.filter((e) => e.rule === 'MOTION-IMPL').map((e) => e.file);
-      expect(motionErrs(), '副本原样').toEqual([]);
-
-      const appear = join(tmp, 'src', 'motion', 'Appear.tsx');
-      const appearSrc = readFileSync(appear, 'utf8');
-      writeFileSync(appear, `import { m } from 'motion/react';\nexport const __mut = m;\n${appearSrc}`);
-      expect(motionErrs(), '变异 ①').toEqual(['src/motion/Appear.tsx']);
-      writeFileSync(appear, appearSrc);
-
-      const features = join(tmp, 'src', 'motion', 'features.ts');
-      const featuresSrc = readFileSync(features, 'utf8');
-      const typeImport = /^import type (\{[^}]*\}) from 'motion\/react';(?=\r?$)/m;
-      expect(featuresSrc, 'features.ts 里要有 motion/react 的 import type（变异的前提）').toMatch(typeImport);
-      writeFileSync(features, featuresSrc.replace(typeImport, "import $1 from 'motion/react';"));
-      expect(motionErrs(), '变异 ②').toEqual(['src/motion/features.ts']);
-    } finally {
-      rmSync(tmp, { recursive: true, force: true });
-    }
-  });
+  // R2、LUNAR、MOTION-IMPL 11-14 起由 ESLint lemo/import-bounds 管，样例和用例在 tests/arch/import-bounds.test.ts（CI-11）
 
   it('真仓库：0 个错误', { timeout: 60_000 }, () => {
     const { code, report } = run(ROOT);

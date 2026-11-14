@@ -1,49 +1,16 @@
-// LINT-binimport（build/check_arch.py BINIMPORT）：①读文件再执行（eval、vm、dlopen…）、②非 JS 入口（package.json scripts、CI yml、
-// .sh、.py、Makefile、PowerShell、网页 <script src>）里“命令 + 二进制扩展名路径”
-// 从 check-arch-binimport.test.ts 按主题拆出（10-30，W1 超行），用例原样不变
-// 共用的拼仓库、跑 check_arch、计时在 check-arch-binimport-harness.ts；每条用例在临时目录现拼一棵迷你仓库（不是 git 仓库，check_arch 整棵树扫）
+// LINT-binimport（build/check_arch.py BINIMPORT，实现在 build/check_binimport.mjs）：②非 JS 入口里“命令 + 二进制扩展名路径”
+// 扫的入口（11-14 CI-10 按本仓库实际调 node、python、pwsh 的几处收窄）：package.json 根对象的 scripts、.yml / .yaml 的 run:、
+// .sh / .bash、.ps1 / .psm1、.html 的 <script src>。不再扫（仓库里没有，或不是从这几处调解释器）：Makefile、.py 的 os.system、
+// .bat / .cmd、无扩展名的 shebang 脚本和 .husky、.vue / .svelte、GitLab 式 script: / before_script: / command: 列表——以后加了这类入口要在 mjs 里补。
+// 原 check-arch-binimport-source.test.ts（点号 source、反斜杠续行）11-14 并进本文件
+// 共用的拼仓库、跑 check_arch 在 check-arch-binimport-harness.ts；每条用例在临时目录现拼一棵迷你仓库（不是 git 仓库，check_arch 整棵树扫）
 import { afterEach, describe, expect, it } from 'vitest';
 import { binimport, cleanupDirs, lines, repo, where } from './check-arch-binimport-harness.ts';
 
 afterEach(cleanupDirs);
 
 describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
-  it('①读文件再执行：eval / new Function / vm.runInThisContext / vm.Script / vm.compileFunction / process.dlopen 的参数里有二进制扩展名 → 报', () => {
-    const body = lines(
-      "import { readFileSync } from 'node:fs';", // 1
-      "eval(readFileSync('./a.png', 'utf8'));", // 2
-      "new Function(readFileSync('./b.bin', 'utf8'))();", // 3
-      "vm.runInThisContext(readFileSync('./c.png', 'utf8'));", // 4
-      "vm.runInNewContext(readFileSync('./d.bin', 'utf8'), {});", // 5
-      "vm.runInContext(readFileSync('./e.png', 'utf8'), ctx);", // 6
-      "new vm.Script(readFileSync('./f.png', 'utf8'));", // 7
-      "vm.compileFunction(readFileSync('./g.wasm', 'utf8'));", // 8
-      "process.dlopen(module, './h.node');", // 9
-      "globalThis.eval?.(readFileSync('./i.png', 'utf8'));", // 10
-      '',
-    );
-    const { errors } = binimport(repo({ 'lib/exec.mjs': body }));
-    expect(where(errors)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `lib/exec.mjs:${n}`));
-    expect(errors[0]?.message).toContain('eval()');
-  });
-
-  it('①对照：只读不执行的 readFileSync / fetch / new URL、eval 的参数里没有二进制扩展名 → 不报', () => {
-    const body = lines(
-      "const a = readFileSync('./a.png');",
-      "const b = await fetch('/icon.png');",
-      "const c = new URL('./c.wasm', import.meta.url);",
-      "eval('1 + 1');",
-      "const d = new Function('x', 'return x');",
-      "const evaluate = (s) => s; evaluate('./e.png');",
-      "await page.$eval('img[src=\"logo.png\"]', (el) => el.src);",
-      "const s = new Script({ name: 'x', icon: 'logo.png' });", // 自定义的 Script，不是 vm.Script
-      "function Script(o) { return o } Script('a.png');",
-      '',
-    );
-    expect(binimport(repo({ 'lib/read.mjs': body })).errors).toEqual([]);
-  });
-
-  it('②非 JS 入口：package.json scripts、CI yml、.sh、.py、Makefile、无扩展名的 shebang 脚本里“命令 + 二进制扩展名路径” → 报', () => {
+  it('②package.json scripts、CI 的 run:、.sh 里“命令 + 二进制扩展名路径” → 报；执行的是 .mjs、.sh 的不报', () => {
     const pkg = JSON.stringify(
       {
         scripts: {
@@ -62,7 +29,7 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
       'jobs:', // 1
       '  t:', // 2
       '    steps:', // 3
-      "      - uses: actions/setup-node@v4", // 4
+      '      - uses: actions/setup-node@v4', // 4
       '        with:', // 5
       '          node-version: 22', // 6
       '      - run: python tools/x.bin', // 7
@@ -80,25 +47,12 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
       'set -e; sh ./payload.gz', // 5
       '',
     );
-    const py = lines(
-      'import os, subprocess', // 1
-      'os.system("python payload.bin")', // 2
-      'subprocess.run("node ./a.mjs --icon a.png", shell=True)', // 3 不报
-      '',
-    );
-    const make = lines('all:', '\tnode ./build.png', ''); // 2
-    const hook = lines('#!/usr/bin/env sh', 'node .husky/x.bin', ''); // 2
-    const { errors } = binimport(
-      repo({ 'package.json': pkg, '.github/workflows/ci.yml': ci, 'build/a.sh': sh, 'build/b.py': py, Makefile: make, '.husky/pre-commit': hook }),
-    );
+    const { errors } = binimport(repo({ 'package.json': pkg, '.github/workflows/ci.yml': ci, 'build/a.sh': sh }));
     expect(where(errors).sort()).toEqual(
       [
         'package.json:3', 'package.json:5', 'package.json:6', 'package.json:7', 'package.json:8',
         '.github/workflows/ci.yml:7', '.github/workflows/ci.yml:10',
         'build/a.sh:2', 'build/a.sh:5',
-        'build/b.py:2',
-        'Makefile:2',
-        '.husky/pre-commit:2',
       ].sort(),
     );
     expect(errors.find((e) => e.file === 'package.json' && e.line === 3)?.message).toContain('node');
@@ -148,21 +102,21 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
     expect(where(binimport(repo({ 'build/a.ps1': ps1 })).errors)).toEqual(['build/a.ps1:1', 'build/a.ps1:2']);
   });
 
-  it('②网页入口：.html / .vue / .svelte 的 <script src> 是二进制扩展名 → 报；.js/.ts、<img src> → 不报', () => {
+  it('②网页入口：.html 的 <script src> 是二进制扩展名 → 报（跨行的报在 src 那一行）；.js/.ts、<img src> → 不报', () => {
     const html = lines(
       '<!doctype html>', // 1
       '<script src="./x.png"></script>', // 2
       '<script type="module" src="./main.ts"></script>', // 3 不报
       '<img src="./logo.png">', // 4 不报
       "<script\n  defer\n  src='/a.bin'></script>", // 5-7：报在 src 所在的第 7 行
+      '<script src=./d.bin></script>', // 8 不带引号
       '',
     );
-    const vue = lines('<template><div /></template>', '<script src="./c.wasm"></script>', ''); // 2
-    const { errors } = binimport(repo({ 'site/index.html': html, 'src/C.vue': vue, 'src/D.svelte': '<script src=./d.bin></script>\n' }));
-    expect(where(errors).sort()).toEqual(['site/index.html:2', 'site/index.html:7', 'src/C.vue:2', 'src/D.svelte:1'].sort());
+    const { errors } = binimport(repo({ 'site/index.html': html }));
+    expect(where(errors).sort()).toEqual(['site/index.html:2', 'site/index.html:7', 'site/index.html:8'].sort());
   });
 
-  it('②对照：yml 的 node-version / setup-node、shell 注释和普通文字里的 node、.md 文档 → 不报', () => {
+  it('②对照：yml 的 node-version / setup-node、run: 里只查版本、shell 注释和普通文字里的 node、.md 文档 → 不报', () => {
     const ci = lines(
       'jobs:',
       '  t:',
@@ -173,7 +127,106 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
       '        run: node --version && python -V',
       '',
     );
-    const { errors } = binimport(repo({ '.github/workflows/ok.yml': ci, 'docs/a.md': 'node assets/x.png\n', 'build/ok.sh': 'echo "node" > a.png\n' }));
+    const { errors } = binimport(repo({ '.github/workflows/ok.yml': ci, 'docs/a.md': 'node assets/x.png\n', 'build/ok.sh': 'echo "node" > a.png\n# node x.png\n' }));
     expect(errors).toEqual([]);
+  });
+
+  it('②点号 source 的命令开头位置：then / do / else / { / 反引号 / $( / && 之后 / sh -c、bash -c、zsh -c、dash -c 的引号里 → 报；普通文字里的点 → 不报', () => {
+    const sh = lines(
+      'if [ -f x ]; then . ./a.bin; fi', // 1
+      'if [ -f x ]; then', // 2
+      '  . ./b.bin', // 3
+      'fi', // 4
+      'true && . ./c.bin', // 5
+      'x=`. ./d.bin`', // 6
+      'y=$( . ./e.bin )', // 7
+      '{ . ./f.bin; }', // 8
+      'for i in 1; do . ./g.bin; done', // 9
+      "sh -c '. ./h.bin'", // 10
+      'bash -c ". ./i.bin"', // 11
+      'echo a: . b.png', // 12 不报
+      'if a; then x; else . ./j.bin; fi', // 13
+      'echo then . k.png', // 14 不报：then 只是 echo 的参数（前面不是命令开头）
+      "zsh -c '. ./z.bin'", // 15
+      'dash -c ". ./d.bin"', // 16
+      '',
+    );
+    const yml = lines('steps:', '  - run: . ./a.bin', '  - run: |', '      . ./b.bin', "  - name: 'note: . c.png'", '  - name: x', '    run: . ./d.bin', ''); // 2、4、7
+    const pkg = '{"scripts": {"a": ". ./a.bin", "b":". ./b.bin", "c": "x && . ./c.bin", "d": "echo a: . d.png"}}\n';
+    const { errors } = binimport(repo({ 'build/b.sh': sh, 'a.yml': yml, 'package.json': pkg }));
+    const got = where(errors);
+    expect(got.filter((w) => w.startsWith('build/b.sh')).sort()).toEqual(
+      [1, 3, 5, 6, 7, 8, 9, 10, 11, 13, 15, 16].map((n) => `build/b.sh:${n}`).sort(),
+    );
+    expect(got.filter((w) => w.startsWith('a.yml')).sort()).toEqual(['a.yml:2', 'a.yml:4', 'a.yml:7']);
+    // 同一行里的三条（a、b、c）各报一次；d 是 echo 的文字，不报
+    expect(errors.filter((e) => e.file === 'package.json').map((e) => /：(\S+?)（/.exec(e.message)?.[1])).toEqual(['./a.bin', './b.bin', './c.bin']);
+  });
+
+  it('②点号 source 的误判：-c 只认 sh 系、点号后面第一个词是 - 开头就停、( 只认 $(、YAML 只认 run:、JSON 只认根对象第一层 scripts 里的值 → 不报', () => {
+    const sh = lines(
+      'cp a.b c.d',
+      'cd ../x && ls',
+      './x.png',
+      'cp $(pwd)/. x.png',
+      "find . -name '*.png'",
+      'find . x.png',
+      'arr=( . a.png )',
+      "grep -c '. x.png' log.txt",
+      "git -c '. x.png'",
+      'tar -c . logo.png',
+      'echo {a,b} . x.png',
+      'rsync -a ./ dest; . ./ok.sh',
+      '. -x a.png',
+      '- . ./x.bin', // 只在 YAML 列表里才是命令开头，sh 里不是
+      '@. ./y.bin', // @ 前缀只在 Makefile 里有意义
+      '',
+    );
+    const yml = lines(
+      'args: . -o report.png',
+      'working-directory: .',
+      'paths:',
+      '  - . ',
+      '  - dist/logo.png',
+      'description: . logo.png 是图标',
+      'cache:',
+      '  - . ./no.bin',
+      '',
+    );
+    const pkg = '{"files": [". ", "logo.png"], "x": ". logo.png", "y": {"cwd": "."}, "config": {"scripts": {"b": ". ./b.bin"}}, "scripts2": {"d": ". ./d.bin"}, "scripts": {"ok": "node a.mjs"}}\n';
+    expect(binimport(repo({ 'build/c.sh': sh, 'a.yml': yml, 'package.json': pkg })).errors).toEqual([]);
+  });
+
+  it('②反斜杠：续行 \\ 接着读下一行、a\\ b 算一个词、JSON 里的 \\"…\\" 取到里面的路径', () => {
+    const B = '\\';
+    const sh = lines(
+      `node scripts/gen.mjs ${B}`, // 1 不报：续行后是 gen.mjs 的参数
+      '  --out logo.png', // 2
+      `node ${B}`, // 3
+      '  scripts/gen.mjs logo.png', // 4 不报
+      `node ${B}`, // 5
+      '  assets/x.png', // 6 报（续行后的真目标，报在路径所在的第 6 行）
+      `node my${B} script.mjs a.png`, // 7 不报：文件名是“my script.mjs”
+      `node assets/a${B} b.png`, // 8 报：文件名是“a b.png”
+      `convert in${B} 1.png out.png`, // 9 不报：不是命令词
+      `python C:${B}tools${B}x.py a.png`, // 10 不报
+      `python C:${B}tools${B}x.bin`, // 11 报
+      `node x.mjs ${B}`, // 12 不报
+      '  a.png', // 13
+      '',
+    );
+    const pkg = [
+      '{ "scripts": {',
+      `  "a": "node ${B}"scripts/gen.mjs${B}" logo.png",`, // 2 不报
+      `  "b": "node ${B}"assets/x.png${B}"",`, // 3 报
+      `  "c": "node scripts${B}${B}gen.mjs logo.png",`, // 4 不报
+      `  "d": "node assets${B}${B}x.png"`, // 5 报
+      '} }',
+      '',
+    ].join('\n');
+    const yml = lines('jobs:', '  t:', '    steps:', `      - run: node scripts/gen.mjs ${B}`, '          logo.png', ''); // 不报
+    const { errors } = binimport(repo({ 'build/a.sh': sh, 'package.json': pkg, '.github/workflows/a.yml': yml }));
+    expect(where(errors).sort()).toEqual(['build/a.sh:11', 'build/a.sh:6', 'build/a.sh:8', 'package.json:3', 'package.json:5'].sort());
+    expect(errors.find((e) => e.file === 'build/a.sh' && e.line === 8)?.message).toContain('a b.png');
   });
 });

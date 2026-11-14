@@ -28,10 +28,13 @@ export function violationSamples(): Map<string, string[]> {
     for (const f of loadFixtures(sub)) if (f.expect.length > 0 && f.rule) add(f.rule, `${sub}/${f.file}`);
   }
   // check_arch：每个样例是一棵迷你仓库，目录名以规则号开头（a14-env、w2-missing…）；以 -ok 结尾的是对照组
-  for (const d of readdirSync(join(FIXTURES, 'check_arch'))) {
-    if (d.endsWith('-ok')) continue;
-    const id = /^([a-z]\d+)-/.exec(d)?.[1];
-    if (id) add(id.toUpperCase(), `check_arch/${d}`);
+  // import-bounds（ESLint lemo/import-bounds，11-14 CI-11 从 check_arch 挪来）：样例目录同样以规则号开头（r2-import）
+  for (const sub of ['check_arch', 'import-bounds']) {
+    for (const d of readdirSync(join(FIXTURES, sub))) {
+      if (d.endsWith('-ok')) continue;
+      const id = /^([a-z]\d+)-/.exec(d)?.[1];
+      if (id) add(id.toUpperCase(), `${sub}/${d}`);
+    }
   }
   // check_backend：A28 是 F1～F3 三项（架构 2.3 A28 ①②③）；F4、F5、F6、M1～M6 同一脚本另查、不另编 A 号，不映射
   for (const d of readdirSync(join(FIXTURES, 'check_backend'))) if (/^f[1-3]-/.test(d)) add('A28', `check_backend/${d}`);

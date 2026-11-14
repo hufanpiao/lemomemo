@@ -7,7 +7,7 @@
 //   先核对地址的来源和路径前缀（不只比字符串前缀，14.2 第 3 点）。只有 ms（给微软查看器的 .pptx）的签名在查询串里
 // - 错误码映射成 data 层用的几类（FileErrorKind），界面文案由 data / ui 按类别取
 // 业务代码只经功能的 data 层用本文件（1.3b；ESLint 分层规则拦 ui、hooks、kit、app）；对象存储本身（shared/objstore.ts、aws4fetch）
-// App 一律引不到（check_arch 的 R2）
+// App 一律引不到（ESLint lemo/import-bounds 的 R2）
 import { z } from 'zod';
 import { exitForDisabled, type DisabledExitOptions } from './account-status.ts';
 import { buildInfo } from './env.ts';
