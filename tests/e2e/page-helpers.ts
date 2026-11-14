@@ -17,7 +17,8 @@ export async function shot(page: Page, browserName: string, name: string, o: { f
 /**
  * 换页（或分包晚到）后 FADE_GUARD_MS（100ms）以内落在 main 里的点按按设计吞掉（src/motion/index.ts 的 fadeSwap、guardTaps）。
  * 吞点按的窗口和 main 的淡入同一刻开始，淡入（--dur-ui 220ms 减去跳过的一帧）比窗口长：等到页面上没有还在跑的 main 淡入，窗口就一定过了。
- * 等状态，不按毫秒睡（第三方审查 CI-15）；减少动态效果时没有淡入，这里立刻返回（那时的用例要自己另等）
+ * 等状态，不按毫秒睡（第三方审查 CI-15）；减少动态效果时没有淡入，这里立刻返回（那时的用例要自己另等）。
+ * 前提：调之前先等到新页里的内容出来了（淡入和新 main 是同一刻挂上的）；刚点完切页就调，淡入可能还没起，会直接放行
  */
 export async function afterPageFade(page: Page): Promise<void> {
   await page.waitForFunction(() => {

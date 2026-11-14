@@ -33,7 +33,6 @@ delete process.env['VITE_PUBLIC_ANON_KEY'];
 
 /** 锁定组的用例：两个 webkit 手机项目不跑 */
 const LOCKS = ['**/tabbar-lock.spec.ts', '**/b2-ui-b-lock.spec.ts', '**/g-plus-hold.spec.ts'];
-const CI = process.env.CI === 'true';
 
 /** 手机视口：负责人的 iPhone 是 440×956 pt、3 倍屏；UA、触摸照 iPhone 15 的设定，只换尺寸 */
 const PHONE = {
@@ -99,9 +98,8 @@ export default defineConfig({
     },
   },
   projects: [
-    // 两个 webkit 手机项目也在 CI 跑（第三方审查 CI-7）：仓库里没有它们的 linux 基准图，CI 上不比截图（ignoreSnapshots），只看像素断言；本机照旧和 win32 基准比
-    { name: 'webkit-simple-light', testIgnore: LOCKS, ignoreSnapshots: CI, use: { ...PHONE, colorScheme: 'light' } },
-    { name: 'webkit-simple-dark', testIgnore: LOCKS, ignoreSnapshots: CI, use: { ...PHONE, colorScheme: 'dark' } },
+    { name: 'webkit-simple-light', testIgnore: LOCKS, use: { ...PHONE, colorScheme: 'light' } },
+    { name: 'webkit-simple-dark', testIgnore: LOCKS, use: { ...PHONE, colorScheme: 'dark' } },
     // 底栏视觉锁定（R-360、R-361；界面改动防返工规则第四条）：只用 Chromium——WebKit 不画 backdrop-filter，锁不住模糊。
     // 条件和参照图（docs/03-评审/B2/底栏透明度截图/底栏-11-07还原后-对照确认图.png 右列）一致：375×812、@2x、无安全区，四套皮肤在用例里切
     { name: 'chromium-tabbar-lock', testMatch: '**/tabbar-lock.spec.ts', use: { ...CHROMIUM_375 } },
