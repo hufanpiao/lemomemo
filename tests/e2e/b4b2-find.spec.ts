@@ -10,6 +10,10 @@
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
+import { logOnFail } from './fail-log.ts';
+
+// 失败时带运行日志、控制台错误（B4b-3 返工第三条）
+logOnFail(test);
 
 test.skip(!process.env['VITE_PUBLIC_SUPABASE_URL'], '要会话令牌和 /sb 地址，只在快读组跑（npm run e2e:fastread）');
 test.setTimeout(120_000);

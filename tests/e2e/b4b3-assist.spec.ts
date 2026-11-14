@@ -8,6 +8,7 @@
 // 跑在快读组（playwright.fastread.config.ts）：ai-parse、ai-summarize 要会话令牌，默认组的构建没配 supabase 地址。
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { logOnFail } from './fail-log.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
 test.skip(!process.env['VITE_PUBLIC_SUPABASE_URL'], '要会话令牌和 /sb 地址，只在快读组跑（npm run e2e:fastread）');
@@ -67,13 +68,8 @@ async function fakeServer(page: Page, baseURL: string | undefined, parse: Record
 
 const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
 
-// 失败时把运行日志最后 40 行带进报告（运行日志本身不记用户原话），看不出根因再补日志
-test.afterEach(async ({ page }, info) => {
-  if (info.status === info.expectedStatus) return;
-  const log = await runLog(page).catch(() => '(读不到运行日志)');
-  await info.attach('run-log-tail', { body: log.split('\n').slice(-40).join('\n'), contentType: 'text/plain' });
-  console.log(`[b4b3-assist 运行日志最后 40 行] ${info.title}\n${log.split('\n').slice(-40).join('\n')}`);
-});
+// 失败时带运行日志、控制台错误（tests/e2e/fail-log.ts）
+logOnFail(test);
 
 async function shot(page: Page, browserName: string, name: string): Promise<void> {
   if (browserName !== 'chromium' || !SHOT_DIR) return;

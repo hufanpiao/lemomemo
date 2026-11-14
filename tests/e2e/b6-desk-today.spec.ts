@@ -12,6 +12,10 @@
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { DESK_USE, inCol, openToday, PAST_ID, seedNotes, seedToday, shot, SHOT_DIR, TODAY_IDS } from './b6-desk-helpers.ts';
 import { expect, test } from './session-fixture.ts';
+import { logOnFail } from './fail-log.ts';
+
+// 失败时带运行日志、控制台错误（B4b-3 返工第三条）
+logOnFail(test);
 
 test.use(DESK_USE);
 

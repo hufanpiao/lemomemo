@@ -14,6 +14,10 @@
 import type { Page } from '@playwright/test';
 import { center, count, expectMicClosed, fakeMedia, holdUntilRecording, runLog, waitVoiceHost } from './fake-media.ts';
 import { expect, test } from './session-fixture.ts';
+import { logOnFail } from './fail-log.ts';
+
+// 失败时带运行日志、控制台错误（B4b-3 返工第三条）
+logOnFail(test);
 
 const UPLOAD = 'voice upload start bytes=3000 mime=audio/mp4';
 
@@ -54,12 +58,6 @@ test.describe('按住“＋”录音（B3 FA-3）', () => {
     await fakeMedia(page, { mime: 'audio/mp4' });
   });
   // 失败时把运行日志最后 80 行打出来：先看日志定根因
-  test.afterEach(async ({ page }, info) => {
-    if (info.status === info.expectedStatus) return;
-    const log = await runLog(page).catch(() => []);
-    console.log(['运行日志（最后 80 行）：', ...log.slice(-80)].join('\n'));
-  });
-
   test('按住 350 ms 出录音面板（录着）；松手交出录音上传：3000 字节、audio/mp4', async ({ page }) => {
     await openWithAi(page);
     await holdUntilRecording(page);
