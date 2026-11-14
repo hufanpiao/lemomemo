@@ -26,10 +26,8 @@ import { clearTypeDraft, readTypeDraft, writeTypeDraft } from '../data/type-draf
 import { createBatchBox, createSavedBatch } from '../data/saved-batch.ts';
 import { keepAsked, navOnline, planLocal, planText, type CallAi } from '../data/type-flow.ts';
 import { useCaptureCtx } from './useCaptureCtx.ts';
-import type { ToAssist } from './assist-open.ts';
+import { toAssist } from './assist-open.ts';
 
-/** 结果层出口按需下载（assist-open.ts 不进打字条、录音那几块的静态依赖：首屏主包的预加载表少一项，B5 首屏净增额度） */
-const toAssist = (o: ToAssist): void => void import('./assist-open.ts').then((m) => m.toAssist(o));
 import { useSavedBatch } from './useSavedBatch.ts';
 
 // ui 不能直接 import data（A1），界面要用的类型经这里转出去

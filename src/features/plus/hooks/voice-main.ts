@@ -8,12 +8,11 @@ import { isTauri } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { writeAssistDraft } from '../data/type-draft.ts';
 import { createVoiceSession } from '../data/voice-session.ts';
-import type { ToAssist } from './assist-open.ts';
-
-/** 结果层出口按需下载（assist-open.ts 不进打字条、录音那几块的静态依赖：首屏主包的预加载表少一项，B5 首屏净增额度） */
-const toAssist = (o: ToAssist): void => void import('./assist-open.ts').then((m) => m.toAssist(o));
+import { setAssistRecorder, toAssist } from './assist-open.ts';
 
 export const mainVoice = createVoiceSession({ onAsk: (ask, raw, aiUsed, from) => toAssist({ ask, raw, aiUsed, from: from === 'quick' ? 'quick' : 'voice', day: null }) });
+// 结果层的“改成记下”走这一份控制器（assist-open.ts 不 import 这里，见那边的说明）
+setAssistRecorder((raw, from, mode, day) => mainVoice.record(raw, from, mode, day));
 
 /**
  * exe 的全局快速记录框（quick-add 窗口）交上来的一句（架构 5.14 第 1 点；0.18 M2 那个窗口不连服务器，现在只有 Rust 转发、没有自己的判断）：

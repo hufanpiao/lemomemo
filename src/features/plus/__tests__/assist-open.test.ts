@@ -1,13 +1,12 @@
 // 判成别的意图交给结果层（hooks/assist-open.ts；B4b-3 独立评审第 1、3 条）：“改成记下”存好才清草稿，没存上、正在存时关掉结果层也不清；
-// 日历页选中的那天跟着“改成记下”走。结果层（smart-search）、录音控制器、草稿都用替身
+// 日历页选中的那天跟着“改成记下”走；控制器经 setAssistRecorder 交过来，没交过来等一会儿算没存上。结果层（smart-search）、控制器、草稿都用替身
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistAsk } from '../../../../shared/logic/parse/assist.ts';
 
 const fx = vi.hoisted(() => ({ open: vi.fn(), record: vi.fn(), write: vi.fn(), clear: vi.fn() }));
 vi.mock('../../smart-search/index.ts', () => ({ loadFindOpen: async () => ({ openAssist: fx.open }) }));
-vi.mock('../hooks/voice-main.ts', () => ({ mainVoice: { record: (...a: unknown[]) => fx.record(...a) } }));
 vi.mock('../data/type-draft.ts', () => ({ writeAssistDraft: (...a: unknown[]) => fx.write(...a), clearAssistDraft: async () => fx.clear() }));
-const { toAssist } = await import('../hooks/assist-open.ts');
+const { RECORDER_WAIT_MS, resetAssistRecorder, setAssistRecorder, toAssist } = await import('../hooks/assist-open.ts');
 
 const ASK: AssistAsk = { intent: 'search', query: { text: '发票', range: null, kinds: ['event', 'todo', 'note'], done: 'any' } };
 type Req = { record: (() => Promise<boolean>) | null; onClose: (() => void) | null };
@@ -22,6 +21,8 @@ async function open(from: 'plus' | 'voice' = 'plus'): Promise<Req> {
 
 beforeEach(() => {
   for (const f of Object.values(fx)) f.mockReset();
+  resetAssistRecorder();
+  setAssistRecorder((...a) => fx.record(...a));
 });
 afterEach(() => {
   vi.clearAllMocks();
@@ -60,5 +61,30 @@ describe('toAssist', () => {
     expect(await p).toBe(false);
     await flush();
     expect(fx.clear).not.toHaveBeenCalled();
+  });
+
+  it('录音那一块一直没挂上（控制器没交过来）：等 RECORDER_WAIT_MS 算没存上，草稿留着', async () => {
+    resetAssistRecorder();
+    vi.useFakeTimers();
+    try {
+      const r = await open();
+      const p = r.record?.();
+      await vi.advanceTimersByTimeAsync(RECORDER_WAIT_MS);
+      expect(await p).toBe(false);
+      expect(fx.record).not.toHaveBeenCalled();
+      expect(fx.clear).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('控制器晚一点才交过来（录音那一块正在加载）：交上来就记', async () => {
+    resetAssistRecorder();
+    fx.record.mockResolvedValue('saved');
+    const r = await open();
+    const p = r.record?.();
+    setAssistRecorder((...a) => fx.record(...a));
+    expect(await p).toBe(true);
+    expect(fx.record).toHaveBeenCalledWith('帮我找发票', 'assist', 'local', '2026-11-20');
   });
 });
