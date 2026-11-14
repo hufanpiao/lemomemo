@@ -136,6 +136,8 @@ test.describe('B4b-3 结果层：手机', () => {
     const fake = await fakeServer(page, baseURL);
     await openToday(page, fake);
     await summarizeFlow(page, fake);
+    // 手机是整屏：盖住底栏（11-14 截图里只占 80vh、下面露出底栏和“＋”气泡）
+    expect((await page.getByTestId('assist-panel').boundingBox())?.height).toBe(844);
     await shots(page, browserName, '手机-结果层-总结');
     await page.getByTestId('assist-close').click();
     await expect(page.getByTestId('assist-panel')).toHaveCount(0);
@@ -153,7 +155,7 @@ test.describe('B4b-3 结果层：手机', () => {
     await page.getByTestId('assist-edit').click();
     await expect(page.getByTestId('assist-panel')).toHaveCount(0);
     await expect(page.getByTestId('type-input')).toHaveValue('总结一下这周的随手记', { timeout: 10_000 });
-    expect(await runLog(page)).toMatch(/assist edit from=plus opener=1/);
+    await expect.poll(() => runLog(page), { timeout: 10_000 }).toMatch(/assist edit from=plus opener=1/);
   });
 
   test('② 查找面板：待办那行“⋯”→ 完成 → 撤销写回；页脚有“改成记下”', async ({ page, baseURL, browserName }) => {

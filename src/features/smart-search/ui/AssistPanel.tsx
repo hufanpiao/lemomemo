@@ -206,7 +206,7 @@ export default function AssistPanel({ req, onClose }: { req: AssistReq; onClose(
         {desk ? <div className={styles.scrim} onClick={onClose} aria-hidden="true" /> : null}
         <RD.Content
           ref={content}
-          className={`${desk ? styles.desk : styles.phone} ${a.panel}`}
+          className={desk ? `${styles.desk} ${a.panel}` : styles.phone}
           aria-describedby={undefined}
           // 打开时焦点给面板本身（Radix 默认给第一个按钮“关闭”，读屏和键盘照样从这里开始，但手机上会画出一圈黑框）
           onOpenAutoFocus={(e) => {
