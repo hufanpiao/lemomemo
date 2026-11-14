@@ -5,6 +5,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { authResult, requireActiveUser } from '../_shared/auth.ts';
 import { versionGate } from '../_shared/version-gate.ts';
+import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { handle, json } from './core.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
@@ -28,11 +29,7 @@ Deno.serve(async (req) => {
   return handle(req, {
     authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
     store: {
-      async takeRate(k, limit, windowS) {
-        const { data, error } = await admin.schema('private').rpc('take_rate', { p_key: k, p_limit: limit, p_window_s: windowS });
-        if (error) throw new Error('db');
-        return data === true;
-      },
+      takeRate: rpcTakeRate(admin),
       async activeCount(userId, sinceIso) {
         const { count, error } = await admin.from('api_tokens').select('id', { count: 'exact', head: true })
           .eq('user_id', userId).is('revoked_at', null).gt('created_at', sinceIso);

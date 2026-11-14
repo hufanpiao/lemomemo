@@ -20,6 +20,7 @@ import { skipTestRecipients } from '../_shared/account-mail.ts';
 import { ACCOUNT_ERRS, DbError, exportTablesOf, handle, memProbeFor, withStoreTimeouts, type AccountStore } from './core.ts';
 import { json } from '../_shared/http.ts';
 import { sendMail } from '../_shared/mail-send.ts';
+import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_SIZE_TIMEOUT_MS } from './store-timeout.ts';
 import { withVaultUser } from '../_shared/db.ts';
@@ -51,11 +52,7 @@ export function makeStore(admin: Admin, signal: AbortSignal): AccountStore {
       const row = must(await priv.from('admins').select('user_id').eq('user_id', userId).abortSignal(signal).maybeSingle());
       return row !== null;
     },
-    async takeRate(key, limit, windowS) {
-      const data = must(await priv.rpc('take_rate', { p_key: key, p_limit: limit, p_window_s: windowS }).abortSignal(signal));
-      if (typeof data !== 'boolean') throw new Error('db');
-      return data;
-    },
+    takeRate: rpcTakeRate(admin, signal),
     async refundRate(key) {
       // 键最新窗口的 count 减 1：先读再比较并交换（并发时重试 3 次）；service role 对 counters 有 select、update（0001 第 18 节）
       const counters = () => priv.from('counters');

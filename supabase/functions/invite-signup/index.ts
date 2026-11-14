@@ -11,6 +11,7 @@ import { envKind } from '../_shared/env-kind.ts';
 import { json } from '../_shared/http.ts';
 import { postOut, timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
+import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { sendMail } from '../_shared/mail-send.ts';
 import { cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { handle, type AuthAdmin, type Store, type TurnstileResult } from './core.ts';
@@ -32,11 +33,7 @@ function must<T>(r: { data: T; error: unknown }): T {
 function makeStore(admin: Admin, signal: AbortSignal): Store {
   const priv = admin.schema('private');
   return {
-    async takeRate(key, limit, windowS) {
-      const data = must(await priv.rpc('take_rate', { p_key: key, p_limit: limit, p_window_s: windowS }).abortSignal(signal));
-      if (typeof data !== 'boolean') throw new Error('db');
-      return data;
-    },
+    takeRate: rpcTakeRate(admin, signal),
     async getInvite(codeHash) {
       return must(await priv.from('invites').select('max_uses, used_count, expires_at').eq('code_hash', codeHash).abortSignal(signal).maybeSingle());
     },

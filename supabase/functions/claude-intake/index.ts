@@ -7,6 +7,7 @@
 //   private.counters、private.ai_state、logs（经 _shared/ai/store.ts）。不直连数据库，不碰 R2。不加 CORS（0.48 第 4 条）。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { isUsable } from '../_shared/auth.ts';
+import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { parseWithAI } from '../_shared/ai/parse-with-ai.ts';
 import { logIntakeFail, type StoreAdmin } from '../_shared/ai/store.ts';
 import { gateDeps, isValidTz } from '../_shared/ai/wire.ts';
@@ -51,11 +52,7 @@ Deno.serve(async (req) => {
       async usable(userId) {
         return (await isUsable(admin, userId)).ok;
       },
-      async takeRate(k, limit, windowS) {
-        const { data, error } = await admin.schema('private').rpc('take_rate', { p_key: k, p_limit: limit, p_window_s: windowS });
-        if (error) throw new Error('db');
-        return data === true;
-      },
+      takeRate: rpcTakeRate(admin),
       async profile(userId) {
         const { data, error } = await admin.from('profiles').select('current_tz, ui_locale').eq('user_id', userId).maybeSingle();
         if (error) throw new Error('db');
