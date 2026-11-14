@@ -242,9 +242,11 @@ export async function handle<Item extends ItemLike>(req: Request, deps: Deps<Ite
   }
   const allowed: Row[] = [];
   try {
+    // 先扣码、再扣人（安全审查第 13 条）：两道都是同一个 UTC 日的键，计数不退。先扣人的话，码那一道不过时人已多计一条，
+    // 这个人别的连接码当天少记一条；先扣码，人那一道不过时码多计一条——人当天已用完，换哪个码都写不进，多计不影响什么
     for (const r of rows) {
-      if (!(await deps.store.takeRate(userItemsKey(userId, now), USER_DAILY_ITEMS, 86400))) break;
       if (!(await deps.store.takeRate(itemsKey(row.id, now), DAILY_ITEMS, 86400))) break;
+      if (!(await deps.store.takeRate(userItemsKey(userId, now), USER_DAILY_ITEMS, 86400))) break;
       allowed.push(r);
     }
   } catch {

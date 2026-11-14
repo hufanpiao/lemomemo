@@ -367,8 +367,16 @@ describe('claude-intake：记事', () => {
     const r = await send(w, { items: [EV, { ...EV, title: '第二件' }] });
     expect([(r.body['created'] as unknown[]).length, r.body['over_limit']]).toEqual([1, 1]);
     expect(await send(w, { items: [EV] })).toEqual({ status: 429, body: { error: 'daily_limit' } });
-    expect(w.counts.get(itemsKey(TID, NOW))).toBe(1);
+    // 码那一道先扣（安全审查第 13 条）：人那一道不过时码已多计——人当天已用完，换哪个码都写不进，同一天的码键多计不影响什么
+    expect(w.counts.get(itemsKey(TID, NOW))).toBe(3);
     expect(userItemsKey(UA, NOW)).toBe(`claude-intake-user:${UA}:20261028`);
+  });
+  it('安全审查第 13 条：码那一道不过时，人那一道不多扣（这个人别的连接码当天照样能记）', async () => {
+    const w = await world();
+    w.counts.set(itemsKey(TID, NOW), DAILY_ITEMS);   // 这个码今天的 200 条用完
+    w.counts.set(userItemsKey(UA, NOW), 10);
+    expect(await send(w, { items: [EV, { ...EV, title: '第二件' }] })).toEqual({ status: 429, body: { error: 'daily_limit' } });
+    expect(w.counts.get(userItemsKey(UA, NOW))).toBe(10);
   });
   it('TC-B3-20：只能新增——store 只有 insertAll，index.ts 对条目表只经 private.intake_insert（迁移里只 insert），不 update / delete / upsert', () => {
     const src = readFileSync(join(ROOT, 'supabase', 'functions', 'claude-intake', 'index.ts'), 'utf8');
