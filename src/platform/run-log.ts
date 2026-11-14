@@ -149,7 +149,17 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
     if (saveTimer === undefined) saveTimer = setTimeout(save, 300);
   };
-  const add = (s: string): void => push(`${stamp(now())} ${s}`);
+  // 换页：路由用 pushState、replaceState 换地址不触发 hashchange（router.ts 按 0.31 第 3 条不能引日志），
+  // 所以每记一行前先看地址变没变，变了先补一行 route（11-14 b5-vault 点返回后空白，日志里看不出去了哪页）
+  let lastHash = win.location.hash;
+  const add = (s: string): void => {
+    const h = win.location.hash;
+    if (h !== lastHash) {
+      lastHash = h;
+      push(`${stamp(now())} route ${h || '/'}`);
+    }
+    push(`${stamp(now())} ${s}`);
+  };
   const doc = win.document;
   const root = doc.documentElement;
   const nav = win.navigator as Navigator & { standalone?: boolean };
@@ -246,7 +256,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const onCompEnd = (e: Event): void => add(`composition end on=${describeEl(e.target)}${fieldState(e.target)}`);
   const onSubmit = (e: Event): void => add(`submit ${describeEl(e.target)} by=${describeEl((e as SubmitEvent).submitter)}`);
   const onHash = (): void => {
-    add(`route ${win.location.hash || '/'}`);
+    // add 自己会补 route 行；这里只等画面稳下来再拍一次
     settleSnap('route');
   };
   const onVis = (): void => snap(`visibility=${doc.visibilityState}`);

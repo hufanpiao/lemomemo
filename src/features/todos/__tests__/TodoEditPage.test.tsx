@@ -77,7 +77,8 @@ describe('新建', () => {
     await waitFor(() => expect(todos().getSnapshot()).toHaveLength(1));
     const row = todos().getSnapshot()[0];
     expect(row).toMatchObject({ title: '买收纳盒', due: null, source: 'page', created_at: NOW });
-    expect(screen.getByTestId('edit-status').textContent).toBe('已自动保存');
+    // 行先进本地列表、发件箱写完状态才变“已自动保存”：等它变过来（11-14 全量满负载时这里读到“正在保存…”，见 vitest 原文）
+    await waitFor(() => expect(screen.getByTestId('edit-status').textContent).toBe('已自动保存'));
     await commitText('todo-edit-title', '买两个收纳盒');
     await waitFor(() => expect(todos().getSnapshot()[0]?.['title']).toBe('买两个收纳盒'));
     const items = (await b.outbox?.list()) ?? [];
