@@ -329,10 +329,10 @@ describe('两个配置真加载出来的超时设置', () => {
     expect(chromium?.workers).toBeUndefined();
   });
 
-  it('源码核对：两个配置都写了 globalTimeout，读的是 global-timeout.ts', () => {
-    expect(read('playwright.config.ts')).toContain('globalTimeout: globalTimeoutMs(process.env, NO_BACKEND_GLOBAL_TIMEOUT_MS),');
-    expect(read('playwright.real.config.ts')).toContain('globalTimeout: globalTimeoutMs(process.env, realGroupDefaultTimeoutMs(process.env)),');
+  it('源码核对：globalTimeout 由共用的 e2e-config.ts 读 global-timeout.ts，真后端组给自己的默认值', () => {
+    expect(read('tests/e2e/e2e-config.ts')).toContain('globalTimeout: globalTimeoutMs(process.env, g.timeoutMs ?? NO_BACKEND_GLOBAL_TIMEOUT_MS),');
     const real = read('playwright.real.config.ts');
+    expect(real).toContain('timeoutMs: realGroupDefaultTimeoutMs(process.env),');
     expect(real).toContain('actionTimeout: 15_000, navigationTimeout: 30_000');
     expect(real).toMatch(/workers: 1,/);
   });

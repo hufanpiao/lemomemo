@@ -10,6 +10,7 @@
 //     真页面上造不出“busy 中收到 versionchange”；等 B2 的编辑、录音界面接上 holdBusy 再测（单测：update-banner.test.tsx）。
 //   • 真页面上的 blocked 提示：只在本页升级库、被别的旧页挡住时出；真 App 的 DB_VERSION = 1，不会去升级别人的库（单测：cache-blocked.test.tsx、boot-blocked.test.ts）。
 // CSP 违规由 csp-fixture 自动检查
+import { idbVersion } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use({ loggedIn: true });
@@ -18,18 +19,7 @@ test('TC-B1-48 A 页自动重新载入：别的页升级本机库 → A 页（�
   // ① A 页：真 App 起来，今天页渲染
   await page.goto('/app/');
   await expect(page.locator('main[data-feature]')).toBeVisible();
-  const v0 = await page.evaluate(
-    () =>
-      new Promise<number>((resolve, reject) => {
-        const req = indexedDB.open('planner-v4');
-        req.onsuccess = () => {
-          const v = req.result.version;
-          req.result.close();
-          resolve(v);
-        };
-        req.onerror = () => reject(new Error(String(req.error)));
-      }),
-  );
+  const v0 = await idbVersion(page);
   expect(v0).toBeGreaterThan(0);
   // 打个标记：重新载入以后 window 换新，标记就没了
   await page.evaluate(() => {

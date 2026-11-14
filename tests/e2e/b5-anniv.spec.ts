@@ -12,16 +12,11 @@
 // 截图：设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截（WebKit 截图会往页面插 <style>、被 CSP 记成违规）；断言两种浏览器都跑
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { shot } from './page-helpers.ts';
+import { cached, idbPut } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use({ trace: 'off', loggedIn: true, viewport: { width: 390, height: 844 }, hasTouch: true, timezoneId: 'Asia/Seoul', locale: 'zh-CN' });
-
-const SHOT_DIR = process.env['LEMO_SHOT_DIR'];
-async function shot(page: Page, browserName: string, name: string): Promise<void> {
-  if (browserName !== 'chromium' || !SHOT_DIR) return;
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, animations: 'disabled' });
-}
 
 /** 首尔的今天往后 n 天 → { date, y, m, d } */
 function dayAfter(n: number): { date: string; y: number; m: number; d: number } {
@@ -46,24 +41,7 @@ async function seedAnniv(page: Page): Promise<void> {
     { ...base, id: '0e2e0000-0000-4000-8000-0000000b5a02', kind: 'anniversary', name: '结婚纪念日', month: WED.m, day: WED.d, year: 2020, next_date: WED.date },
     { ...base, id: '0e2e0000-0000-4000-8000-0000000b5a03', kind: 'countdown', name: '上线', month: LAUNCH.m, day: LAUNCH.d, year: LAUNCH.y, next_date: LAUNCH.date },
   ];
-  await page.evaluate(
-    (rs) =>
-      new Promise<void>((resolve, reject) => {
-        const req = indexedDB.open('planner-v4');
-        req.onerror = () => reject(new Error(String(req.error)));
-        req.onsuccess = () => {
-          const db = req.result;
-          const tx = db.transaction(['anniversaries'], 'readwrite');
-          for (const r of rs) tx.objectStore('anniversaries').put({ id: r.id, server: r, view: r });
-          tx.oncomplete = () => {
-            db.close();
-            resolve();
-          };
-          tx.onerror = () => reject(new Error(String(tx.error)));
-        };
-      }),
-    rows,
-  );
+  await idbPut(page, rows.map((r) => ['anniversaries', cached(r)] as const));
 }
 
 test.describe('B5 纪念日', () => {

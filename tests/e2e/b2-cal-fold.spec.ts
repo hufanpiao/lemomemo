@@ -4,6 +4,7 @@
 // 每一步断言：锚点那一行（选中那天）的下沿 = 日清单那一块（拖动柄 + 清单）的上沿；星期表头整条看得见、没被盖住
 // 示例日程让各行高度不一样（第 2 行有两个标签更高），收起状态下换锚点行时 shift 必须重量
 import type { Page } from '@playwright/test';
+import { cached, idbPut } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -21,20 +22,7 @@ const EV = [
 ].map(([id, title, project, date, time, dur]) => ({ ...base, id, title, project, date, time, duration_min: dur }));
 
 async function seed(page: Page): Promise<void> {
-  await page.evaluate(async (rows) => {
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const tx = db.transaction(['events'], 'readwrite');
-    for (const r of rows) tx.objectStore('events').put({ id: r.id, server: r, view: r });
-    await new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-    db.close();
-  }, EV);
+  await idbPut(page, EV.map((r) => ['events', cached(r)] as const));
 }
 
 /** 量一次：选中那天的格子、日清单那一块、星期表头 */

@@ -4,6 +4,7 @@
 // 这一周带国庆休息日（底色、农历位置换成节日名）和一条全天日程（多一行全天标签）：
 // 没有全天标签的各行等高（今天那行、休息日不比别的行高），全天那行最多高 16 px（审查建议一）
 import type { Page } from '@playwright/test';
+import { cached, idbPut } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -11,20 +12,7 @@ const TZ = 'Asia/Seoul';
 const ALL_DAY = { id: 'ad1', user_id: FAKE_USER_ID, title: '出差', project: '', date: '2026-09-29', time: null, tz: null, duration_min: null, created_at: 1, updated_at: 1, deleted_at: null, undone: false, short: null };
 
 async function seed(page: Page): Promise<void> {
-  await page.evaluate(async (row) => {
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const tx = db.transaction(['events'], 'readwrite');
-    tx.objectStore('events').put({ id: row.id, server: row, view: row });
-    await new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-    db.close();
-  }, ALL_DAY);
+  await idbPut(page, [['events', cached(ALL_DAY)]]);
 }
 
 test.describe('手机周视图：今天的日期圆圈不贴上下两行字（CAL-week-today-circle）', () => {

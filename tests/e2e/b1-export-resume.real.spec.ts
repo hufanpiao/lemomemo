@@ -15,7 +15,7 @@ import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { type Page } from '@playwright/test';
 import { expect, test } from './csp-fixture.ts';
-import { adminInsert, createAccount, loginViaOtp, realBackend, restInPage } from './real-backend.ts';
+import { adminInsert, createAccount, loginViaOtp, openApp, realBackend, restInPage } from './real-backend.ts';
 
 test.use({ serviceWorkers: 'block', acceptDownloads: true });
 
@@ -45,12 +45,7 @@ function counters(userId: string): Record<string, number> {
 
 /** 打开 /app/；首次登录先过告知页，再进设置 › 数据 */
 async function openSettings(page: Page): Promise<void> {
-  await page.goto('/app/');
-  const consent = page.locator('main[data-feature="onboarding"][data-step="consent"]');
-  const app = page.locator('main[data-feature]:not([data-feature="onboarding"])').first();
-  await expect(consent.or(app)).toBeVisible();
-  if (await consent.isVisible()) await consent.getByRole('button', { name: '先不同意，直接用' }).click();
-  await expect(app).toBeVisible();
+  await openApp(page);
   await page.evaluate(() => {
     // 合卡以后（SETTINGS-merge-cards）导出在数据二级页
     location.hash = '#/settings/data';

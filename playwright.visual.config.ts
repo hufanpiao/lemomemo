@@ -8,12 +8,10 @@
 //   （netsh int ipv4 show excludedportrange protocol=tcp 可查；Hyper-V / WSL 开机时占），本机 wrangler 起不来，11-14 挪到保留段以外。
 // 不起假后端：这一组的数据全写在 IndexedDB 里（visual-helpers.ts 的 seedTodos），/sb、/files 的 binding 指向 8858、8859 上没人听的端口，
 // 页面万一去连也是马上失败，不会连到别的组的假后端。
-import { relative } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
-import { webOutDir } from './build/assemble_web.mjs';
 import { reuseServers } from './tools/e2e/reuse-servers.mjs';
+import { e2eConfig } from './tests/e2e/e2e-config.ts';
 import { e2eBindings } from './tests/e2e/fake-values.ts';
-import { NO_BACKEND_GLOBAL_TIMEOUT_MS, globalTimeoutMs } from './tests/e2e/global-timeout.ts';
 
 function portIn(name: string, fallback: number, lo: number, hi: number): number {
   const raw = process.env[name];
@@ -33,11 +31,9 @@ process.env['LEMO_WS_PORT'] = String(PORT);
 delete process.env['VITE_PUBLIC_SUPABASE_URL'];
 delete process.env['VITE_PUBLIC_ANON_KEY'];
 
-const WEB_OUT = relative(import.meta.dirname, webOutDir(import.meta.dirname, process.env)).replaceAll('\\', '/');
-const REUSE = reuseServers(process.env);
-const BINDINGS = Object.entries(e2eBindings({ s3: 8858, supabase: 8859 }))
-  .map(([k, v]) => `--binding ${k}=${v}`)
-  .join(' ');
+/** 锁定组的用例：两个 webkit 手机项目不跑 */
+const LOCKS = ['**/tabbar-lock.spec.ts', '**/b2-ui-b-lock.spec.ts', '**/g-plus-hold.spec.ts'];
+const CI = process.env.CI === 'true';
 
 /** 手机视口：负责人的 iPhone 是 440×956 pt、3 倍屏；UA、触摸照 iPhone 15 的设定，只换尺寸 */
 const PHONE = {
@@ -72,17 +68,21 @@ const CHROMIUM_440 = {
 };
 
 export default defineConfig({
+  ...e2eConfig({
+    port: PORT,
+    state: '.wrangler/state-e2e-visual',
+    inspector: INSPECTOR,
+    fake: null,
+    bindings: e2eBindings({ s3: 8858, supabase: 8859 }),
+    reuse: reuseServers(process.env),
+    report: 'playwright-report-visual',
+  }),
   testDir: 'tests/e2e/visual',
   testMatch: '**/*.spec.ts',
-  fullyParallel: true,
   // 最多 4 个 worker（本机多组 e2e 同时跑时不抢太多 CPU；CI 上同样）
   workers: 4,
-  globalTimeout: globalTimeoutMs(process.env, NO_BACKEND_GLOBAL_TIMEOUT_MS),
-  globalSetup: './tests/e2e/dist-fingerprint.ts',
-  forbidOnly: process.env.CI === 'true',
   // 视觉组不重试：截图、像素断言挂了就是挂了，重试一次碰巧过会把真问题藏掉
   retries: 0,
-  reporter: process.env.CI === 'true' ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-report-visual' }]] : 'list',
   outputDir: 'test-results-visual',
   // 按平台分开存（{platform} = linux / win32 / darwin）
   snapshotPathTemplate: '{testDir}/__screenshots__/{platform}/{testFileName}/{projectName}/{arg}{ext}',
@@ -98,13 +98,10 @@ export default defineConfig({
       scale: 'device',
     },
   },
-  use: {
-    baseURL: `http://127.0.0.1:${PORT}`,
-    trace: 'retain-on-failure',
-  },
   projects: [
-    { name: 'webkit-simple-light', testIgnore: ['**/tabbar-lock.spec.ts', '**/b2-ui-b-lock.spec.ts', '**/g-plus-hold.spec.ts'], use: { ...PHONE, colorScheme: 'light' } },
-    { name: 'webkit-simple-dark', testIgnore: ['**/tabbar-lock.spec.ts', '**/b2-ui-b-lock.spec.ts', '**/g-plus-hold.spec.ts'], use: { ...PHONE, colorScheme: 'dark' } },
+    // 两个 webkit 手机项目也在 CI 跑（第三方审查 CI-7）：仓库里没有它们的 linux 基准图，CI 上不比截图（ignoreSnapshots），只看像素断言；本机照旧和 win32 基准比
+    { name: 'webkit-simple-light', testIgnore: LOCKS, ignoreSnapshots: CI, use: { ...PHONE, colorScheme: 'light' } },
+    { name: 'webkit-simple-dark', testIgnore: LOCKS, ignoreSnapshots: CI, use: { ...PHONE, colorScheme: 'dark' } },
     // 底栏视觉锁定（R-360、R-361；界面改动防返工规则第四条）：只用 Chromium——WebKit 不画 backdrop-filter，锁不住模糊。
     // 条件和参照图（docs/03-评审/B2/底栏透明度截图/底栏-11-07还原后-对照确认图.png 右列）一致：375×812、@2x、无安全区，四套皮肤在用例里切
     { name: 'chromium-tabbar-lock', testMatch: '**/tabbar-lock.spec.ts', use: { ...CHROMIUM_375 } },
@@ -114,14 +111,5 @@ export default defineConfig({
     // Q3 守门第 1 条（B3 FA-3，R-352 ④）：“＋”加按住事件后底栏、“＋”0 像素差。同 B2-UI-b 锁定用 Chromium、440×956、@2x；
     // 基准只在本机 win32 生成（取改之前的代码，用法见用例文件头），CI 不跑这一组
     { name: 'chromium-plus-hold', testMatch: '**/g-plus-hold.spec.ts', use: { ...CHROMIUM_440 } },
-  ],
-  webServer: [
-    {
-      command: `npm run build -- --mode e2e && npx wrangler pages dev ${WEB_OUT} --ip 127.0.0.1 --port ${PORT} --compatibility-date 2026-10-01 --persist-to .wrangler/state-e2e-visual --inspector-port ${INSPECTOR} ${BINDINGS}`,
-      url: `http://127.0.0.1:${PORT}/app/`,
-      reuseExistingServer: REUSE,
-      timeout: 180_000,
-      env: { WRANGLER_SEND_METRICS: 'false', CI: process.env.CI ?? '' },
-    },
   ],
 });

@@ -5,7 +5,7 @@
 //   webkit 下标 test.fail：哪天 WebKit 修好了，这条会变红，那时去掉 fixture 里的放过规则。
 // • 放过规则本身：建 select 的那条被标成 webkitSelect；别的内联样式违规（setAttribute('style')）不被标，照样判失败
 import type { Page } from '@playwright/test';
-import { CARRY_KEY, consoleRest } from './csp-fixture.ts';
+import { CARRY_KEY, consoleRest, type CspWatch } from './csp-fixture.ts';
 import { expect, test } from './session-fixture.ts';
 
 const violationsAfter = async (page: Page, act: string) =>
@@ -16,6 +16,15 @@ const violationsAfter = async (page: Page, act: string) =>
     await new Promise((r) => setTimeout(r, 200));
     return (window.__csp ?? []).slice(before);
   }, act);
+
+/**
+ * 等建 select 引出的违规事件都到齐：违规事件是异步派发的，fixture 按 select 个数把同样多条标成 webkitSelect，
+ * 标上的条数追上 select 个数就是到齐了（chromium 两边都是 0，立刻过）
+ */
+const selectReportsIn = (csp: CspWatch) =>
+  expect
+    .poll(async () => (await csp.selects()) - (await csp.allViolations()).filter((v) => v.webkitSelect).length, { timeout: 5000, message: '每个 select 的误报事件都到了' })
+    .toBe(0);
 
 test.describe('webkit 新建 select 的 CSP 误报', () => {
   test('最小复现：只 createElement(select) 不该有 CSP 违规（webkit 内核误报，标 test.fail）', async ({ page, browserName, csp }) => {
@@ -33,7 +42,7 @@ test.describe('webkit 新建 select 的 CSP 误报', () => {
       await page.goto('/app/#/todo/new');
       await expect(page.getByTestId('todo-edit-due')).toBeVisible();
       await expect(page.locator('select')).not.toHaveCount(0);
-      await page.waitForTimeout(300);
+      await selectReportsIn(csp);
       const all = await csp.allViolations();
       if (browserName === 'webkit') {
         expect(all.length, '编辑页的 select 在 webkit 下报了违规').toBeGreaterThan(0);
@@ -75,23 +84,23 @@ test.describe('webkit 新建 select 的 CSP 误报', () => {
         const w = window as unknown as { __zzCarried: number; __zzDoc: number; __zzPersisted: boolean };
         return { carried: w.__zzCarried, doc: w.__zzDoc, persisted: w.__zzPersisted };
       });
-    const pageA = async (page: Page): Promise<void> => {
+    const pageA = async (page: Page, csp: CspWatch): Promise<void> => {
       await page.goto('/app/#/todo/new');
       await expect(page.getByTestId('todo-edit-due')).toBeVisible();
       await expect(page.locator('select')).not.toHaveCount(0);
-      await page.waitForTimeout(300);
+      await selectReportsIn(csp);
     };
-    const pageB = async (page: Page): Promise<void> => {
+    const pageB = async (page: Page, csp: CspWatch): Promise<void> => {
       await page.goto(B_URL);
       await expect(page.getByTestId('event-edit-tz')).toBeVisible();
-      await page.waitForTimeout(300);
+      await selectReportsIn(csp);
     };
 
     test('一条用例连进两个带 select 的页面：不误报（select 个数、违规事件整条用例累计）', async ({ page, browserName, csp }) => {
       await docCounter(page);
-      await pageA(page);
+      await pageA(page, csp);
       const a = await docState(page);
-      await pageB(page);
+      await pageB(page, csp);
       const b = await docState(page);
       if (browserName === 'webkit') {
         expect(a.carried, '第一个文档前面没有别的文档').toBe(0);
@@ -112,12 +121,12 @@ test.describe('webkit 新建 select 的 CSP 误报', () => {
 
     test('后退缓存：A → B → 后退回 A，累计数不倒退、不误报（不管 A 是从后退缓存恢复还是重新载入）', async ({ page, browserName, csp }) => {
       await docCounter(page);
-      await pageA(page);
-      await pageB(page);
+      await pageA(page, csp);
+      await pageB(page, csp);
       const beforeBack = await csp.selects();
       await page.goBack();
       await expect(page.getByTestId('todo-edit-due')).toBeVisible();
-      await page.waitForTimeout(300);
+      await selectReportsIn(csp);
       const back = await docState(page);
       test.info().annotations.push({ type: '后退方式', description: back.persisted ? '后退缓存恢复（pageshow persisted）' : '重新载入' });
       if (browserName === 'webkit') {
@@ -133,7 +142,7 @@ test.describe('webkit 新建 select 的 CSP 误报', () => {
     // Playwright 里后退实际都是重新载入（上一条的“后退方式”注记两档都是“重新载入”），恢复那条分支真跑覆盖不到，这里直接派发
     // pageshow（persisted: true）：放好“离开 B 时存下的累计数”，看 A 是否原样读回、读完删掉存档
     test('后退缓存恢复那条分支：pageshow persisted 时读回累计数（模拟）', async ({ page, csp }) => {
-      await pageA(page);
+      await pageA(page, csp);
       const now = await csp.selects();
       const r = await page.evaluate(
         ([key, n]) => {
@@ -152,7 +161,7 @@ test.describe('webkit 新建 select 的 CSP 误报', () => {
       await page.goto('/app/#/todo/new');
       await expect(page.getByTestId('todo-edit-due')).toBeVisible();
       await violationsAfter(page, 'attr');
-      await pageB(page);
+      await pageB(page, csp);
       const bad = await csp.violations();
       expect(bad.length, '第一页那条真违规（事件）跨页面后仍在判失败的那份里').toBe(1);
       expect(bad[0]).toMatchObject({ directive: 'style-src-attr', blocked: 'inline' });

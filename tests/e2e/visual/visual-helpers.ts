@@ -6,6 +6,7 @@
 //   对照场景（B 和再拍一次的 B′）的 D 方差是噪声底，阈值从它定，至少高出噪声底一个数量级。
 // 截图解码、像素统计在 pixels.ts。
 import { test as base, expect, type Page } from '@playwright/test';
+import { cached, idbPut } from '../idb.ts';
 import { FAKE_USER_ID, seedFakeSession } from '../session-fixture.ts';
 
 /**
@@ -133,26 +134,13 @@ export async function freeze(page: Page): Promise<void> {
  *  不藏它，今天页“＋”附近的截图会差几千像素（11-13 tabbar-lock 差异图只有气泡那一块）。drafts 仓 capture:hint，格式见 data/plus-hint.ts */
 export const HINT_HELD = { id: 'capture:hint', kind: 'hint', data: { opens: 0, held: true }, updated_at: 0 };
 
-/** 写入 20 条待办（IndexedDB planner-v4，和 b2-motion-list 同一个写法）、小气泡记成按住过（HINT_HELD），再重新打开 route */
+/** 写入 20 条待办（IndexedDB planner-v4，idb.ts 的 idbPut）、小气泡记成按住过（HINT_HELD），再重新打开 route */
 export async function seedTodos(page: Page, route: string): Promise<void> {
   await page.goto('/app/#/todos');
   await page.getByTestId('todos').waitFor({ timeout: 30_000 });
-  await page.evaluate(async ({ rows, hint }) => {
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const tx = db.transaction(['todos', 'drafts'], 'readwrite');
-    for (const r of rows) tx.objectStore('todos').put({ id: r['id'], server: r, view: r });
-    tx.objectStore('drafts').put(hint);
-    await new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-    db.close();
-    // 月历页的日清单行字短，压不到“＋”后面（G1 的“＋”量不到东西）：月历场景把标题加长，一直排到行尾
-  }, { rows: route === 'calendar' ? todoRows().map((r): Record<string, unknown> => ({ ...r, title: `${String(r['title'])} 加长到行尾压在“＋”后面的标题文字` })) : todoRows(), hint: HINT_HELD });
+  // 月历页的日清单行字短，压不到“＋”后面（G1 的“＋”量不到东西）：月历场景把标题加长，一直排到行尾
+  const rows = route === 'calendar' ? todoRows().map((r): Record<string, unknown> => ({ ...r, title: `${String(r['title'])} 加长到行尾压在“＋”后面的标题文字` })) : todoRows();
+  await idbPut(page, [...rows.map((r) => ['todos', cached(r)] as const), ['drafts', HINT_HELD]]);
   await page.goto(`/app/#/${route}`);
   await page.reload();
 }

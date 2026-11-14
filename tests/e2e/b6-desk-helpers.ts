@@ -1,20 +1,18 @@
 // 电脑版布局 e2e（B6）共用的东西：视口和会话设置、打开今天页、鼠标拖块、读本机库里存下的布局、截图、往本机库种随手记和今天的日程 / 待办 / 纪念日。
-// b6-desk-layout.spec.ts、b6-desk-today.spec.ts 共用；today-now-cheer.spec.ts 借用 DESK_USE、idbPut、shot
+// b6-desk-layout.spec.ts、b6-desk-today.spec.ts 共用；today-now-cheer.spec.ts 借用 DESK_USE。截图、写本机库用 page-helpers.ts、idb.ts 的
 import type { Locator, Page } from '@playwright/test';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { cached, idbPut, idbRead } from './idb.ts';
+import { afterPageFade } from './page-helpers.ts';
 import { expect, FAKE_USER_ID } from './session-fixture.ts';
 import { HINT_HELD } from './visual/visual-helpers.ts';
 
 /** 1280×820 电脑宽度、首尔时区、登录着 */
 export const DESK_USE = { trace: 'off', loggedIn: true, viewport: { width: 1280, height: 820 }, isMobile: false, hasTouch: false, timezoneId: 'Asia/Seoul' } as const;
 
-/** 设了 LEMO_SHOT_DIR 才截评审图 */
-export const SHOT_DIR = process.env['LEMO_SHOT_DIR'];
-
 export async function openToday(page: Page): Promise<void> {
   await page.goto('/app/#/today');
   await expect(page.getByTestId('desk-panel-week')).toBeVisible({ timeout: 20_000 });
-  await page.waitForTimeout(FADE_GUARD_MS);
+  await afterPageFade(page);
 }
 
 /** 鼠标按住 from 的中心，分几步挪到 to 的中心偏下，再松手（dnd-kit 的 PointerSensor 要挪过 4px 才算拖） */
@@ -38,57 +36,12 @@ export async function drag(page: Page, from: Locator, to: Locator): Promise<void
 
 /** 本机库 settings 仓里这一页布局那一行的值（JSON）；还没写进去时空串。刷新前先等它写进本机库（写进 IndexedDB 是异步的） */
 export async function stored(page: Page, p: string): Promise<string> {
-  return page.evaluate(
-    (prefix) =>
-      new Promise<string>((resolve, reject) => {
-        const req = indexedDB.open('planner-v4');
-        req.onerror = () => reject(new Error(String(req.error)));
-        req.onsuccess = () => {
-          const db = req.result;
-          const all = db.transaction('settings', 'readonly').objectStore('settings').getAll();
-          all.onsuccess = () => {
-            db.close();
-            const rows = all.result as { view?: { key?: string; value?: unknown } }[];
-            const row = rows.find((r) => r.view?.key?.startsWith(prefix));
-            resolve(row ? JSON.stringify(row.view?.value) : '');
-          };
-          all.onerror = () => reject(new Error(String(all.error)));
-        };
-      }),
-    `layout.${p}@inst:`,
-  );
+  const rows = (await idbRead<{ view?: { key?: string; value?: unknown } }[]>(page, 'settings', 'getAll')) ?? [];
+  const row = rows.find((r) => r.view?.key?.startsWith(`layout.${p}@inst:`));
+  return row ? JSON.stringify(row.view?.value) : '';
 }
 
 export const inCol = (page: Page, col: number, id: string) => page.getByTestId(`desk-col-${col}`).getByTestId(`desk-panel-${id}`);
-
-export async function shot(page: Page, browserName: string, name: string): Promise<void> {
-  if (browserName !== 'chromium' || !SHOT_DIR) return;
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, animations: 'disabled' });
-}
-
-/** 往本机库 planner-v4 原样写几行（[仓名, 一行]），写完刷新：seedNotes、seedToday、today-now-cheer.spec.ts 共用 */
-export async function idbPut(page: Page, rows: [string, unknown][]): Promise<void> {
-  await page.evaluate(
-    (all) =>
-      new Promise<void>((resolve, reject) => {
-        const req = indexedDB.open('planner-v4');
-        req.onerror = () => reject(new Error(String(req.error)));
-        req.onsuccess = () => {
-          const db = req.result;
-          const tx = db.transaction([...new Set(all.map(([s]) => s))], 'readwrite');
-          for (const [store, row] of all) tx.objectStore(store).put(row);
-          tx.oncomplete = () => {
-            db.close();
-            resolve();
-          };
-          tx.onerror = () => reject(new Error(String(tx.error)));
-        };
-      }),
-    rows,
-  );
-  await page.reload();
-}
 
 /** 本机库写几个分类和几条随手记（形状同 b4-notes-s7s8.spec.ts 的 seedCategories），“＋”气泡记成按住过（不挡侧栏旁边的“随手记”标题），写完刷新 */
 export async function seedNotes(page: Page): Promise<void> {
@@ -121,6 +74,7 @@ export async function seedNotes(page: Page): Promise<void> {
     rows.push(['notes', { id, server: null, view: note }]);
   });
   await idbPut(page, rows);
+  await page.reload();
 }
 
 const TZ = 'Asia/Seoul';
@@ -164,5 +118,6 @@ export async function seedToday(page: Page): Promise<void> {
     { ...ab, id: '0e2e0000-0000-4000-8000-0000000b6a02', kind: 'anniversary', name: '结婚纪念日', month: wm, day: wd, year: 2020, next_date: dayAfter(9) },
   ];
   const all: [string, Record<string, unknown>[]][] = [['events', events], ['todos', todos], ['anniversaries', anniv]];
-  await idbPut(page, all.flatMap(([store, rs]) => rs.map((r): [string, unknown] => [store, { id: r['id'], server: r, view: r }])));
+  await idbPut(page, all.flatMap(([store, rs]) => rs.map((r) => [store, cached(r)] as const)));
+  await page.reload();
 }

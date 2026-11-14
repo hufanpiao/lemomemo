@@ -17,18 +17,12 @@ import type { Page } from '@playwright/test';
 import JSZip from 'jszip';
 import { utils, write } from 'xlsx';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { fakeRest } from './fake-rest.ts';
+import { shot, SHOT_DIR } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
-test.skip(!process.env['VITE_PUBLIC_SUPABASE_URL'], '要会话令牌和 /sb 地址，只在快读组跑（npm run e2e:fastread）');
 test.setTimeout(120_000);
 test.use({ trace: 'off', timezoneId: 'Asia/Seoul', locale: 'zh-CN' });
-
-const SHOT_DIR = process.env['LEMO_SHOT_DIR'];
-async function shot(page: Page, browserName: string, name: string): Promise<void> {
-  if (browserName !== 'chromium' || !SHOT_DIR) return;
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, animations: 'disabled' });
-}
 
 const USER = '0e2e0000-0000-4000-8000-000000000001';
 const NOTE = '0e2e0000-0000-4000-8000-0000000b4b01';
@@ -64,7 +58,6 @@ async function sha256(b: Buffer): Promise<string> {
   return createHash('sha256').update(b).digest('hex');
 }
 
-const V = '2026-10-29';
 
 /** 列表缩略图：在空白页的 canvas 上画一张“首页”（真实的缩略图由加附件那条用例经隐藏沙箱生成并核对） */
 async function thumbPng(page: Page, type: 'image/png' | 'image/jpeg' = 'image/png'): Promise<Buffer> {
@@ -89,7 +82,7 @@ async function thumbPng(page: Page, type: 'image/png' | 'image/jpeg' = 'image/pn
 type Bytes = Map<string, Buffer>;
 
 /** 服务器上的行：一条随手记、5 个附件（PDF 2 页带缩略图、xlsm 只能下载、docx 还在检查、xlsx 2 张表、pptx 3 页） */
-async function serverRows(bytes: Bytes, pptThumb: Buffer): Promise<Map<string, Map<string, Record<string, unknown>>>> {
+async function serverRows(bytes: Bytes, pptThumb: Buffer): Promise<Record<string, Record<string, unknown>[]>> {
   const now = Date.now();
   const at = new Date(now).toISOString();
   const common = { user_id: USER, created_at: now, updated_at: now, deleted_at: null, undone: false, rev: 1, synced_at: at };
@@ -109,8 +102,7 @@ async function serverRows(bytes: Bytes, pptThumb: Buffer): Promise<Map<string, M
     await file(F_XLSX, 'xlsx', '费用明细.xlsx', xlsxBytes(), 'ok', 2),
     await file(F_PPTX, 'pptx', '韩国生活分享.pptx', await pptxBytes(pptThumb), 'ok', 3),
   ];
-  type Rows = Map<string, Record<string, unknown>>;
-  return new Map<string, Rows>([['notes', new Map([[NOTE, note]])], ['note_files', new Map(files.map((f) => [f.id, f]))], ['settings', new Map()]]);
+  return { notes: [note], note_files: files, settings: [] };
 }
 
 type Fake = { asked: string[]; puts: { path: string; body: Buffer | null }[]; checks: unknown[]; rows: Map<string, Record<string, unknown>> };
@@ -122,39 +114,13 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
   const bytes: Bytes = new Map();
   const saved = await serverRows(bytes, await thumbPng(page, 'image/jpeg'));
   bytes.set(`/files/v1/o/files/${USER}/${NOTE}/${F_PDF}.t.webp`, await thumbPng(page));
-  const fileRows = saved.get('note_files') ?? new Map();
-  await page.route(/\/sb\/rest\/v1\//, (route) => {
-    const req = route.request();
-    const u = new URL(req.url());
-    const table = saved.get(u.pathname.split('/').pop() ?? '');
-    if (req.method() === 'POST' && table) {
-      const body: unknown = req.postDataJSON();
-      for (const r of Array.isArray(body) ? body : [body]) {
-        const row = r as Record<string, unknown>;
-        if (typeof row['id'] === 'string') table.set(row['id'], { check_status: 'pending', ...row, rev: 1, synced_at: new Date().toISOString() });
-      }
-      return route.fulfill({ status: 201, json: [{ rev: 1 }] });
-    }
-    if (req.method() === 'PATCH' && table) {
-      const id = (u.searchParams.get('id') ?? '').replace(/^eq\./, '');
-      const old = table.get(id);
-      if (!old) return route.fulfill({ json: [] });
-      const rev = Number(old['rev']) + 1;
-      table.set(id, { ...old, ...(req.postDataJSON() as Record<string, unknown>), rev });
-      return route.fulfill({ json: [{ rev }] });
-    }
-    if (req.method() !== 'GET') return route.fallback();
-    if (table) return route.fulfill({ json: [...table.values()] });
-    if (u.pathname.endsWith('/profiles')) return route.fulfill({ json: [{ user_id: USER, consent_policy_ver: V }] });
-    if (u.pathname.endsWith('/app_config') && u.searchParams.get('select') === 'notice') return route.fulfill({ json: [{ notice: { policy_ver: V, min_consent_ver: V } }] });
-    return route.fulfill({ json: [] });
-  });
-  const fake: Fake = { asked: [], puts: [], checks: [], rows: fileRows };
+  const rest = await fakeRest(page, { user: USER, tables: saved, store: { defaults: { check_status: 'pending' }, patch: true } });
+  const fake: Fake = { asked: [], puts: [], checks: [], rows: rest.tables.get('note_files') ?? new Map() };
   await page.route(/\/sb\/functions\/v1\/file-check/, (route) => {
     const body = route.request().postDataJSON() as { id: string };
     fake.checks.push(body);
-    const r = fileRows.get(body.id);
-    if (r) fileRows.set(body.id, { ...r, check_status: 'ok', rev: Number(r['rev']) + 1 });
+    const r = fake.rows.get(body.id);
+    if (r) fake.rows.set(body.id, { ...r, check_status: 'ok', rev: Number(r['rev']) + 1 });
     return route.fulfill({ json: { status: 'ok' } });
   });
   await page.route(/\/files\/v1\/sign$/, async (route) => {

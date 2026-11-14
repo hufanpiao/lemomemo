@@ -435,10 +435,12 @@ jobs:
       # 不一样就失败、CI 变红；基准用这同一个镜像生成，改要负责人新需求编号。只用 Chromium（才画 backdrop-filter）：
       # • chromium-tabbar-lock：底栏（R-360、R-361）
       # • chromium-b2uib-lock：B2-UI-b（任务单 W4、V4、W8）设置页按钮区域（R-276、R-277）、随手记占位页 62pt 顶部安全区
-      - name: 视觉锁定（Chromium，chromium-tabbar-lock、chromium-b2uib-lock 两组一次跑）
+      # 同一次构建顺带跑 webkit-simple-light、webkit-simple-dark（第三方审查 CI-7）：仓库里没有它们的 linux 基准图，CI 上不比截图
+      # （playwright.visual.config.ts 的 ignoreSnapshots: CI），只看用例里的像素断言和 CSP
+      - name: 视觉组（Chromium 两组锁定 + WebKit 简洁皮肤浅色、深色，一次构建）
         # 前一组红了也照跑（第三方审查 CI-2）：一次推送看全几组的失败，不用来回推；默认组那一步没跑到（前面装环境就失败）时才跳过
         if: ${{ !cancelled() && steps.e2e.conclusion != 'skipped' }}
-        run: npm run e2e:visual -- --project=chromium-tabbar-lock --project=chromium-b2uib-lock
+        run: npm run e2e:visual -- --project=chromium-tabbar-lock --project=chromium-b2uib-lock --project=webkit-simple-light --project=webkit-simple-dark
 
       - name: 失败时上传报告（只有本地测试数据，不含任何密钥）
         if: failure()

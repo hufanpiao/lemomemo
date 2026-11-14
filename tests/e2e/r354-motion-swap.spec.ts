@@ -6,6 +6,7 @@
 // • M1（负责人选“修掉”）：实现到达前就已显示的 Appear（提醒横幅、冲突卡这类），到了以后按“已停稳”换上，关掉时有退场淡出
 //   （用开发版试验页 #/dev-csp 的 Appear toast 模拟；关掉那一刻外层带 data-state="leaving"，透明度从 1 往下走，然后移除）
 import type { Page } from '@playwright/test';
+import { cached, idbPut } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -22,20 +23,7 @@ const TD = [
 async function seed(page: Page): Promise<void> {
   await page.goto('/app/#/todos');
   await page.getByTestId('todos').waitFor({ timeout: 30000 });
-  await page.evaluate(async (rows) => {
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const tx = db.transaction(['todos'], 'readwrite');
-    for (const r of rows) tx.objectStore('todos').put({ id: r.id, server: r, view: r });
-    await new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-    db.close();
-  }, TD);
+  await idbPut(page, TD.map((r) => ['todos', cached(r)] as const));
 }
 
 const ready = (page: Page) => page.waitForFunction(() => document.documentElement.getAttribute('data-motion') === 'ready', undefined, { timeout: 30000 });

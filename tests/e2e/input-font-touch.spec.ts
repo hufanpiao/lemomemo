@@ -3,6 +3,7 @@
 // any-pointer: coarse 生效）逐页读 getComputedStyle(el).fontSize，继承、覆盖、媒体查询都算进去。
 // 页面：今天、待办、日历（各自点“＋”打开打字条）、随手记（底部输入行）、随手记编辑、待办编辑、日程编辑、设置的注销、免打扰。
 import type { Page } from '@playwright/test';
+import { cached, idbPut } from './idb.ts';
 import { expect, FAKE_USER_ID, test } from './session-fixture.ts';
 
 const TZ = 'Asia/Seoul';
@@ -18,24 +19,7 @@ async function seed(page: Page): Promise<void> {
   await page.clock.setFixedTime(NOW);
   await page.goto('/app/#/todos');
   await page.getByTestId('todos').waitFor({ timeout: 30_000 });
-  await page.evaluate(
-    async ([t, e]) => {
-      const db = await new Promise<IDBDatabase>((res, rej) => {
-        const r = indexedDB.open('planner-v4');
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      });
-      const tx = db.transaction(['todos', 'events'], 'readwrite');
-      tx.objectStore('todos').put({ id: t['id'], server: t, view: t });
-      tx.objectStore('events').put({ id: e['id'], server: e, view: e });
-      await new Promise((res, rej) => {
-        tx.oncomplete = res;
-        tx.onerror = () => rej(tx.error);
-      });
-      db.close();
-    },
-    [TODO, EVENT] as [Record<string, unknown>, Record<string, unknown>],
-  );
+  await idbPut(page, [['todos', cached(TODO)], ['events', cached(EVENT)]]);
 }
 
 /** 页面上所有会弹键盘的控件：“标签[type] 读屏名或 testid 字号” */

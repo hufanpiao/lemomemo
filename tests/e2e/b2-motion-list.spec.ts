@@ -21,6 +21,7 @@
 //     功能包没装齐就开始测，M2 会把“组标题没走 FLIP、直接到位”的样子当成压字）
 // 示例待办和 FA-5 连续帧同一份（docs/02-设计/当前界面截图-1104/动效-*.png）
 import type { Page } from '@playwright/test';
+import { cached, idbPut } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -39,20 +40,7 @@ const TD = [
 async function seed(page: Page): Promise<void> {
   await page.goto('/app/#/todos');
   await page.getByTestId('todos').waitFor({ timeout: 30000 });
-  await page.evaluate(async (rows) => {
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const tx = db.transaction(['todos'], 'readwrite');
-    for (const r of rows) tx.objectStore('todos').put({ id: r.id, server: r, view: r });
-    await new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-    db.close();
-  }, TD);
+  await idbPut(page, TD.map((r) => ['todos', cached(r)] as const));
   await page.reload();
   await page.getByTestId('todos-row-t1').waitFor({ timeout: 30000 });
   await page.getByTestId('todos-g-done').waitFor();

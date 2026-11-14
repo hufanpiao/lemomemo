@@ -5,6 +5,7 @@
 // ② 只拦原地址：换地址那次拿到了模块（?r= 的请求 200、页面没有动态 import 报错）。这一页启动时没注册上 SW（启动那次下载被拦了），
 //   拿到模块后 updateServiceWorker 照实回“没查成”，所以最后的文字仍是失败提示；这里只验证退路 ① 真的把模块拿到了
 import type { Page } from '@playwright/test';
+import { idbCreateAt } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use({ loggedIn: true });
@@ -13,20 +14,7 @@ const LIFECYCLE = /\/app\/assets\/sw-lifecycle-[^/?]+\.js(\?.*)?$/;
 
 async function openTooNew(page: Page): Promise<void> {
   await page.goto('/app/auth/');
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        const req = indexedDB.open('planner-v4', 99);
-        req.onupgradeneeded = () => {
-          req.result.createObjectStore('meta');
-        };
-        req.onsuccess = () => {
-          req.result.close();
-          resolve();
-        };
-        req.onerror = () => reject(new Error(String(req.error)));
-      }),
-  );
+  await idbCreateAt(page, 99);
   await page.goto('/app/');
   await expect(page.getByTestId('cache-too-new')).toBeVisible();
 }

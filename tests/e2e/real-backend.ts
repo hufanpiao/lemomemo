@@ -234,6 +234,19 @@ export async function loginViaOtp(page: Page, email: string): Promise<StoredSess
 }
 
 /**
+ * 打开 App（默认 /app/，可带 hash）；首次登录先过告知页（点“先不同意，直接用”），等到主界面出来。
+ * 并发多、上下文冷启动时首屏慢，统一给 30 秒
+ */
+export async function openApp(page: Page, path = '/app/'): Promise<void> {
+  await page.goto(path);
+  const consent = page.locator('main[data-feature="onboarding"][data-step="consent"]');
+  const app = page.locator('main[data-feature]:not([data-feature="onboarding"])').first();
+  await expect(consent.or(app)).toBeVisible({ timeout: 30_000 });
+  if (await consent.isVisible()) await consent.getByRole('button', { name: '先不同意，直接用' }).click();
+  await expect(app).toBeVisible({ timeout: 30_000 });
+}
+
+/**
  * 本机 Mailpit 里取最新一封给 email 的 6 位验证码（只给 TC-B1-16、17 那两条真发信的用例；别的用例用 loginViaOtp，不发信）。
  * 地址过护栏；不打印验证码
  */

@@ -11,17 +11,17 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { fakeRest } from './fake-rest.ts';
+import { shot } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
 
 // 失败时带运行日志、控制台错误（B4b-3 返工第三条）
 logOnFail(test);
 
-test.skip(!process.env['VITE_PUBLIC_SUPABASE_URL'], '要会话令牌和 /sb 地址，只在快读组跑（npm run e2e:fastread）');
 test.setTimeout(120_000);
 test.use({ trace: 'off', timezoneId: 'Asia/Seoul', locale: 'zh-CN' });
 
-const SHOT_DIR = process.env['LEMO_SHOT_DIR'];
 const USER = '0e2e0000-0000-4000-8000-000000000001';
 const id = (n: number) => `0e2e0000-0000-4000-8000-0000000b4b${String(n).padStart(2, '0')}`;
 const EV = id(21);
@@ -29,7 +29,6 @@ const TD = id(22);
 const NT = id(23);
 const VN = id(24);
 const FL = id(25);
-const V = '2026-10-29';
 
 type Opts = { ai?: boolean; sem?: 'hits' | 'quota' | 'none' };
 type Fake = { searches: unknown[] };
@@ -52,16 +51,7 @@ async function fakeServer(page: Page, baseURL: string | undefined, o: Opts = {})
     note_files: [{ id: FL, ...c, note_id: NT, kind: 'pdf', path: `${USER}/${NT}/${FL}.pdf`, has_thumb: false, is_vault: false, name: '收据.pdf', mime: 'application/pdf', bytes: 1000, sha256: 'a'.repeat(64), pages: 1, text_excerpt: '牙科 治疗费 3 万韩元', check_status: 'ok', etag: null }],
     settings: [{ id: id(30), ...c, key: 'ai.enabled', value: o.ai ?? true }],
   };
-  await page.route(/\/sb\/rest\/v1\//, (route) => {
-    const req = route.request();
-    const u = new URL(req.url());
-    const name = u.pathname.split('/').pop() ?? '';
-    if (req.method() !== 'GET') return route.fulfill({ status: 201, json: [{ rev: 1 }] });
-    if (tables[name]) return route.fulfill({ json: tables[name] });
-    if (name === 'profiles') return route.fulfill({ json: [{ user_id: USER, consent_policy_ver: V, consent_ai_at: at }] });
-    if (name === 'app_config' && u.searchParams.get('select') === 'notice') return route.fulfill({ json: [{ notice: { policy_ver: V, min_consent_ver: V } }] });
-    return route.fulfill({ json: [] });
-  });
+  await fakeRest(page, { user: USER, tables, profile: { consent_ai_at: at } });
   const fake: Fake = { searches: [] };
   await page.route(/\/sb\/functions\/v1\/note-search/, (route) => {
     fake.searches.push(route.request().postDataJSON());
@@ -76,12 +66,6 @@ async function fakeServer(page: Page, baseURL: string | undefined, o: Opts = {})
 
 const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
 const rows = (page: Page) => page.getByTestId('find-row');
-
-async function shot(page: Page, browserName: string, name: string): Promise<void> {
-  if (browserName !== 'chromium' || !SHOT_DIR) return;
-  await page.waitForTimeout(600);
-  await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, animations: 'disabled' });
-}
 
 async function openToday(page: Page): Promise<void> {
   await page.goto('/app/#/today');

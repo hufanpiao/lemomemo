@@ -4,6 +4,7 @@
 //   重新载入后 gate 启动时读 outbox，出 gone 卡。按钮走的是真的 core/write-gone.ts → outbox-gone.ts
 // • 冲突卡（conflict、forked）要同步引擎发事件，这里造不出来；它的界面逻辑在 src/features/sync-notice/__tests__/SyncNoticeHost.test.tsx
 import type { Page } from '@playwright/test';
+import { idbRead, putGoneTodo } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -18,52 +19,15 @@ const base = { user_id: FAKE_USER_ID, tz: TZ, created_at: 1, updated_at: 1, undo
 async function seed(page: Page): Promise<void> {
   await page.goto('/app/#/todos');
   await page.getByTestId('todos').waitFor({ timeout: 30000 });
-  const due = today();
-  await page.evaluate(
-    async ({ due, base }) => {
-      const db = await new Promise<IDBDatabase>((res, rej) => {
-        const r = indexedDB.open('planner-v4');
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      });
-      const tx = db.transaction(['todos', 'outbox'], 'readwrite');
-      const g1 = { ...base, id: 'g1', title: '交周报', due, rev: 3, deleted_at: Date.now() - 60000 };
-      const n1 = { ...base, id: 'n1', title: '买牛奶', due, rev: 1, deleted_at: null };
-      tx.objectStore('todos').put({ id: 'g1', server: g1, view: g1 });
-      tx.objectStore('todos').put({ id: 'n1', server: n1, view: n1 });
-      tx.objectStore('outbox').put({
-        op_id: '0e2e0000-0000-4000-8000-0000000000a1', table: 'todos', id: 'g1', rec: 'todos:g1', op: 'patch', data: { title: '交周报（改）' },
-        base_rev: 2, own_revs: [], client_ts: Date.now() - 120000, tries: 0, next_at: 0, state: 'failed', v: 1, app: '4.0.0', seq: 1,
-        remind: false, deps: [], error: 'gone', sent: true,
-      });
-      await new Promise((res, rej) => {
-        tx.oncomplete = res;
-        tx.onerror = () => rej(tx.error);
-      });
-      db.close();
-    },
-    { due, base },
-  );
+  await putGoneTodo(page, base, today(), '0e2e0000-0000-4000-8000-0000000000a1');
   await page.reload();
   await page.getByTestId('todos-row-n1').waitFor({ timeout: 30000 });
 }
 
 /** outbox 里 todos:g1 还剩的项（state、error） */
 async function outboxOf(page: Page): Promise<{ state: string; error: string | null }[]> {
-  return page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const all = await new Promise<{ rec: string; state: string; error: string | null }[]>((res, rej) => {
-      const q = db.transaction('outbox').objectStore('outbox').getAll();
-      q.onsuccess = () => res(q.result as never);
-      q.onerror = () => rej(q.error);
-    });
-    db.close();
-    return all.filter((i) => i.rec === 'todos:g1').map((i) => ({ state: i.state, error: i.error }));
-  });
+  const all = (await idbRead<{ rec: string; state: string; error: string | null }[]>(page, 'outbox', 'getAll')) ?? [];
+  return all.filter((i) => i.rec === 'todos:g1').map((i) => ({ state: i.state, error: i.error }));
 }
 
 const card = (page: Page) => page.getByTestId('sync-notice-card');

@@ -4,6 +4,7 @@
 // • 拦下以后本机库和 outbox 都不变（真的没写）；可写的行照常进编辑页
 // • A2：日历“纪念日”置灰、不跳 #/anniv 占位页，点了出“纪念日即将推出”
 import type { Page } from '@playwright/test';
+import { cached, idbPut, idbRead } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -18,36 +19,18 @@ async function seed(page: Page): Promise<void> {
   await page.goto('/app/#/today');
   await page.getByTestId('today').waitFor({ timeout: 30000 });
   const d = today();
-  await page.evaluate(
-    async ({ d, base }) => {
-      const db = await new Promise<IDBDatabase>((res, rej) => {
-        const r = indexedDB.open('planner-v4');
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      });
-      const tx = db.transaction(['events', 'todos'], 'readwrite');
-      const ev = (id: string, title: string, over: Record<string, unknown>) => ({
-        ...base, id, title, date: d, time: '23:00', duration_min: 30, remind_min: null, remind_days: null, location: null, ...over,
-      });
-      const td = (id: string, title: string, over: Record<string, unknown>) => ({
-        ...base, id, title, due: d, due_time: null, done: false, important: false, ...over,
-      });
-      const eRo = ev('e-ro', '每周例会', { repeat: { freq: 'week' } });
-      const eOk = ev('e-ok', '看牙', { time: '23:30' });
-      const tRo = td('t-ro', '每天吃药', { repeat: { freq: 'day' } });
-      const tOk = td('t-ok', '买牛奶', {});
-      tx.objectStore('events').put({ id: 'e-ro', server: eRo, view: eRo, ro: true });
-      tx.objectStore('events').put({ id: 'e-ok', server: eOk, view: eOk });
-      tx.objectStore('todos').put({ id: 't-ro', server: tRo, view: tRo, ro: true });
-      tx.objectStore('todos').put({ id: 't-ok', server: tOk, view: tOk });
-      await new Promise((res, rej) => {
-        tx.oncomplete = res;
-        tx.onerror = () => rej(tx.error);
-      });
-      db.close();
-    },
-    { d, base },
-  );
+  const ev = (id: string, title: string, over: Record<string, unknown>) => ({
+    ...base, id, title, date: d, time: '23:00', duration_min: 30, remind_min: null, remind_days: null, location: null, ...over,
+  });
+  const td = (id: string, title: string, over: Record<string, unknown>) => ({
+    ...base, id, title, due: d, due_time: null, done: false, important: false, ...over,
+  });
+  await idbPut(page, [
+    ['events', { ...cached(ev('e-ro', '每周例会', { repeat: { freq: 'week' } })), ro: true }],
+    ['events', cached(ev('e-ok', '看牙', { time: '23:30' }))],
+    ['todos', { ...cached(td('t-ro', '每天吃药', { repeat: { freq: 'day' } })), ro: true }],
+    ['todos', cached(td('t-ok', '买牛奶', {}))],
+  ]);
   await page.reload();
   await page.getByTestId('today-todo-t-ok').waitFor({ timeout: 30000 });
 }
@@ -61,23 +44,8 @@ async function open(page: Page, hash: string, ready: string): Promise<void> {
 
 /** 本机库里 t-ro 的 view.done 和 outbox 的项数 */
 async function stateOf(page: Page): Promise<{ done: unknown; outbox: number }> {
-  return page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((res, rej) => {
-      const r = indexedDB.open('planner-v4');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-    const get = <T,>(store: string, f: (s: IDBObjectStore) => IDBRequest) =>
-      new Promise<T>((res, rej) => {
-        const q = f(db.transaction(store).objectStore(store));
-        q.onsuccess = () => res(q.result as T);
-        q.onerror = () => rej(q.error);
-      });
-    const row = await get<{ view: { done: unknown } } | undefined>('todos', (s) => s.get('t-ro'));
-    const n = await get<number>('outbox', (s) => s.count());
-    db.close();
-    return { done: row?.view.done, outbox: n };
-  });
+  const row = await idbRead<{ view: { done: unknown } }>(page, 'todos', 'get', 't-ro');
+  return { done: row?.view.done, outbox: (await idbRead<number>(page, 'outbox', 'count')) ?? 0 };
 }
 
 test.describe('只读行（FA-2）', () => {
