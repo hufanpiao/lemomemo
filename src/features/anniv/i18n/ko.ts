@@ -37,7 +37,7 @@ export const ko = {
   'anniv.ago': '{n}일 전', // REVIEW(ko)
   'anniv.past': '지난 디데이 {n}', // REVIEW(ko)
   'anniv.empty': '아직 기념일이 없어요', // REVIEW(ko)
-  'anniv.emptyNext': '오른쪽 위 “추가”로 생일, 기념일, 디데이를 적어 두세요', // REVIEW(ko)
+  'anniv.emptyNext': '위의 “추가”로 생일, 기념일, 디데이를 적어 두세요', // REVIEW(ko)
   'anniv.emptyFilter': '이 종류는 아직 없어요', // REVIEW(ko)
   'anniv.ro': '이 항목은 새 버전에서 볼 수 있어요', // REVIEW(ko)
   'anniv.swipe.edit': '편집', // REVIEW(ko)
