@@ -43,6 +43,31 @@ describe('S1：请求在路上时上锁，回来的结果整个丢掉', () => {
   });
 });
 
+describe('审查第 2 条：等解锁（waiting）时离开满时长也作废', () => {
+  it('令牌过期、草稿交给 saveWhenUnlocked 后离开 61 秒回来：草稿丢掉、waiting 落回；之后解锁不保存', async () => {
+    const { s, calls } = await unlocked({ delete: () => ({ ok: false, code: 'vault_locked' }) });
+    const r = s.remove(NID);
+    await vi.waitFor(() => expect(s.get().waiting).toBe(true));
+    const draft = s.saveWhenUnlocked({ id: NID, title: '草稿', body: '正文' });
+    s.hide(0);
+    expect(s.show(61_000, 1)).toBe(true);
+    expect((await draft).ok).toBe(false);
+    expect((await r).ok).toBe(false);
+    expect(s.get()).toMatchObject({ phase: 'locked', waiting: false });
+    await s.unlock('1234');
+    expect(calls.filter((c) => c.action === 'save')).toHaveLength(0);
+  });
+
+  it('等解锁时离开 59 秒回来：什么也不动，还在等', async () => {
+    const { s } = await unlocked({ delete: () => ({ ok: false, code: 'vault_locked' }) });
+    void s.remove(NID);
+    await vi.waitFor(() => expect(s.get().waiting).toBe(true));
+    s.hide(0);
+    expect(s.show(59_000, 1)).toBe(false);
+    expect(s.get().waiting).toBe(true);
+  });
+});
+
 describe('M6：取图失败不缓存；令牌过期先续期', () => {
   it('取图失败（服务忙）回 null，下次再取会重新请求、能拿到；界面状态不变', async () => {
     const { s, api } = await unlocked();

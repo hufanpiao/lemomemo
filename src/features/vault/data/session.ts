@@ -14,6 +14,7 @@
 //   - vault_relock → 上锁、relocked = true（提示“密码已在别的设备修改”、不显示 Face ID，TC-B5-47 ②）
 //   - session_revoked → 上锁，交给同步引擎退出（D20：和 B1 同一条路）
 // • 离开、回来（S6）：hide(now) 记下离开时刻；show(now, min) 离开满 min 分钟就上锁（59 秒不锁、61 秒锁，TC-B5-10），否则什么也不动。
+//   令牌过期、等解锁（waiting）时也算：满时长就作废等着的请求和草稿（审查第 2 条：原来只认已解锁，草稿明文一直留在内存）。
 //   盖遮罩、去遮罩由 hooks/useVault.ts 的 watchLeave 同步做，这里只管锁不锁
 // • 续期（M2）：编辑页有输入时调 touch()，拿到令牌满 5 分钟就发一次 {renew}（按本机拿到令牌的时刻算，不受两边时钟差影响）；
 //   vault-image 只验不续，令牌过期（vault_locked）时先 {renew}（锁着就等解锁）再试一次；取图失败不缓存（M6）
@@ -519,15 +520,17 @@ export function createVaultSession(d: VaultSessionDeps) {
       },
     },
     blobCount: (): number => blobs.size,
+    /** 已解锁、或令牌过期等解锁（waiting，草稿明文还在闭包里）时记下离开时刻 */
     hide(at: number = now()): void {
-      if (state.phase === 'unlocked' && hiddenAt === null) hiddenAt = at;
+      if ((state.phase === 'unlocked' || state.waiting) && hiddenAt === null) hiddenAt = at;
     },
-    /** 回来：离开满 min 分钟就上锁；回 true 表示锁上了 */
+    /** 回来：离开满 min 分钟就上锁，等解锁的请求和草稿一并作废（审查第 2 条）；回 true 表示锁上了 */
     show(at: number = now(), min = 1): boolean {
       const h = hiddenAt;
       hiddenAt = null;
-      if (h === null || state.phase !== 'unlocked') return false;
+      if (h === null || (state.phase !== 'unlocked' && !state.waiting)) return false;
       if (at - h >= Math.max(1, min) * 60_000) {
+        rlog(`vault autolock${state.waiting ? ` waiting n=${waiters.length}` : ''}`);
         release(false);
         lock({ waiting: false }, true);
         return true;
