@@ -3,7 +3,7 @@
 // • 只画到 canvas，不建文字层、注释层：PDF 里的链接、表单、脚本一律不出现，也就没有可点的外链
 // • 不起 Worker：沙箱没有来源，起不了同源 Worker；先 import pdf.worker.mjs（挂上 globalThis.pdfjsWorker），pdf.js 就在本页跑（代定，交回报告写明）
 // • 页按需画：先按每页尺寸占位，滚到附近（IntersectionObserver）才画；缩放时清掉重画
-// • 左边一列页缩略图（线框 sPrev 电脑浮层）：沙箱宽 ≥ 720 px 才显示（frame.css 的媒体查询；手机不显示，display:none 的缩略图不会进视野，也就不画）；
+// • 左边一列页缩略图（线框 sPrev 电脑浮层）：预览区宽 ≥ 720 px 才显示（frame.css 的容器查询；手机不显示，display:none 的缩略图不会进视野，也就不画）；
 //   缩略图同样进入视野才画；当前页加粗边框（aria-current），点了滚到那一页
 // • 当前页：视口正中那条线落在哪一页就是哪一页（页比视口高时，按“露出一半”判断会一直判不出来）
 // • connect-src 'none'：CMap、标准字体、wasm 都取不到，pdf.js 用内嵌字体和系统字体（没嵌字体的中日韩 PDF 可能缺字，交回报告写明）

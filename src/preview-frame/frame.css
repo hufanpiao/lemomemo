@@ -45,8 +45,10 @@ body {
   padding: 16px;
 }
 
-/* PDF：左边一列页缩略图（线框 sPrev 电脑浮层），右边按页往下排；沙箱窄于 720 px（手机）不显示缩略图 */
+/* PDF：左边一列页缩略图（线框 sPrev 电脑浮层），右边按页往下排；预览区窄于 720 px（手机）不显示缩略图
+   用容器查询：看的是预览区本身多宽，不是应用窗口的断点（应用的“至少多宽”断点只有侧栏一个，layers-media-css.test.ts） */
 .pv-pdf {
+  container-type: inline-size;
   display: flex;
   align-items: flex-start;
   gap: 16px;
@@ -76,7 +78,7 @@ body {
   display: none;
 }
 
-@media (width >= 720px) {
+@container (width >= 720px) {
   .pv-rail {
     display: flex;
     flex-direction: column;
