@@ -7,7 +7,7 @@
 // • 页顶日期行固定不动（对比稿“固定不动”）：日期后面的农历（Lunar，中文界面才有，同月历）由 TodayPage 挂在 h1 里，纪念日胶囊复用手机今天页的 AnnivLine
 // • 选中一条：详情抽屉从右边盖上来（线框 s1 第二张；× / Esc 关，能换到左边）。外壳是 kit 的 DetailDrawer（和随手记同一个），
 //   里面是待办、日程编辑器（todos、calendar 的 index.ts 懒加载）；“今天记的”里的随手记用 notes 给的 TodayNotes part="drawer"，就是随手记页那个 NoteDrawer
-//   （外壳、读屏名字、testid 两页同一份，B6 整合）；选中的是哪一条由 TodayPage 管（kit useDrawerSel）
+//   （外壳、读屏名字、testid 两页同一份，B6 整合）；选中的是哪一条由 TodayPage 管（kit useListActions.ts 的 useDrawerSel）
 // • 排法、拖动、收起、保存都在 kit 的 DeskLayout；这里只给块的标题和内容
 // • 键盘（线框 s1“J / K 上下 · E 完成 · Enter 编辑”）：J / K 在今天页各行之间移焦点，E 勾选焦点所在的待办，Enter 是按钮自带的打开
 //   （焦点在输入框里时单字母键不生效，kit 的 useKeys）

@@ -28,7 +28,7 @@
 // • 液态玻璃底栏、“＋”、时间河、提醒按钮条不在这一段（FA-4、FA-7）
 // • 电脑版（B6，5.9b；有侧栏的宽度）：交给按需下载的 TodayDesk 排成可拖动的块；提示、“现在”卡、没赶上、今天的安排合成一块时间河
 //   （块标题“今天的安排”，里面不再画这个小标题；B6 返工 11-14）。页顶日期行固定不动：日期后面加农历（TodayDesk 的 Lunar），下面是纪念日胶囊（同手机的 AnnivLine）。
-//   点一行不换页，在详情抽屉里编辑（选中哪一条由 kit 的 useDrawerSel 管，同随手记页；窗口变窄、电脑版卸下或画出错时清掉；“今天记的”里的随手记也开在这个抽屉里，同样先判只读）。电脑版分包没到、下不来时照手机的排法画
+//   点一行不换页，在详情抽屉里编辑（选中哪一条由 kit 的 useDrawerSel（在 useListActions.ts）管，同随手记页；窗口变窄、电脑版卸下或画出错时清掉；“今天记的”里的随手记也开在这个抽屉里，同样先判只读）。电脑版分包没到、下不来时照手机的排法画
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
@@ -36,8 +36,7 @@ import { CheckCircle, type CheckCircleProps } from '../../../kit/components/Chec
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
-import { useDrawerSel } from '../../../kit/hooks/useDrawerSel.ts';
-import { useListActions } from '../../../kit/hooks/useListActions.ts';
+import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
@@ -53,7 +52,6 @@ import { TodaySubtasks } from '../../todos/index.ts';
 import { GrowIn } from './GrowIn.tsx';
 import MicDeniedNote from './MicDeniedNote.tsx';
 import { NowCard } from './NowCard.tsx';
-import { RoDel } from './RoDel.tsx';
 import styles from './TodayPage.module.css';
 import type { TodaySel } from './TodayDesk.tsx';
 import type { TodayRoProps } from './TodayToasts.tsx';
@@ -65,7 +63,7 @@ import type { TodayRoProps } from './TodayToasts.tsx';
 function Ro(p: TodayRoProps) {
   return (
     <QuietBoundary name="today-ro">
-      <Suspense fallback={p.part === 'check' ? <CheckCircle {...p} /> : p.part === 'del' ? <RoDel {...p} /> : null}>
+      <Suspense fallback={p.part === 'check' ? <CheckCircle {...p} /> : p.part === 'del' ? p.render(p.label) : null}>
         <TodayRo {...p} />
       </Suspense>
     </QuietBoundary>
@@ -132,7 +130,7 @@ export default function TodayPage() {
   // 下好了、这一页里没有焦点和按住的指针时才换上（motion 的 useSwapWhenSafe）；在那之前照原来的一列画
   const page = useRef<HTMLElement>(null);
   const loaded = useSwapWhenSafe(useMedia(MQ_SIDEBAR), page, loadTodayDesk, afterAppPainted, opensKeyboard);
-  // 电脑版详情抽屉开着的那一条（kit useDrawerSel，同随手记页）：电脑版那一块画出错（QuietBoundary 退回手机排法）以后按没换上算，
+  // 电脑版详情抽屉开着的那一条（kit useListActions.ts 的 useDrawerSel，同随手记页）：电脑版那一块画出错（QuietBoundary 退回手机排法）以后按没换上算，
   // 点行进编辑页、不画农历（抽屉也在出错的那一块里，独立评审第 5 条）
   const ds = useDrawerSel<TodaySel>(!!loaded);
   const Desk = ds.on ? loaded : null;
@@ -191,41 +189,43 @@ export default function TodayPage() {
       <span className={styles.delGap} aria-hidden="true" data-testid={`today-del-gap-${o.id}`} />
     </AppearItem>
   );
-  const tdRow = (td: (typeof v.todos)[number]) => (
-    <AppearItem
-      key={`t:${td.id}`}
-      className={list.row}
-      data-testid={`today-todo-${td.id}`}
-      data-done={td.done ? '' : undefined}
-      data-readonly={g.isRo('todo', td.id) ? '' : undefined}
-    >
-      <Check
-        readOnly={g.isRo('todo', td.id)}
-        checked={shown(td.id, td.done)}
-        label={shown(td.id, td.done) ? t('list.undoDone', {}) : t('list.done', {})}
-        onChange={(v) => tick(td.id, v)}
-        testId={`today-done-${td.id}`}
-      />
-      <button type="button" className={list.main} onClick={() => open({ kind: 'todo', id: td.id })} data-open={td.id} aria-current={cur(td.id)}>
-        <span className={list.text}>
-          <span className={list.title}>{td.title}</span>
-          <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
-          <Subs id={td.id} />
-        </span>
-        {g.isRo('todo', td.id) ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
-        <RowMark table="todos" id={td.id} />
-      </button>
-      {/* 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条、代码复查二）：变淡、aria-disabled、读屏名字后接“要更新到新版本才能修改”；
-          点了照样由 del 里的 useReadonlyGuard 拦下出提示条、不写 */}
-      {g.isRo('todo', td.id) ? (
-        <Ro part="del" label={t('list.delete', {})} onClick={() => void remove(td.id)} testId={`today-del-${td.id}`} />
-      ) : (
-        <Pressable className={list.trail} aria-label={t('list.delete', {})} onClick={() => void remove(td.id)} data-testid={`today-del-${td.id}`} data-no-proxy="">
-          ×
-        </Pressable>
-      )}
-    </AppearItem>
-  );
+  const tdRow = (td: (typeof v.todos)[number]) => {
+    const ro = g.isRo('todo', td.id);
+    const del = (label: string) => (
+      <Pressable className={list.trail} aria-label={label} aria-disabled={ro || undefined} onClick={() => void remove(td.id)} data-testid={`today-del-${td.id}`} data-no-proxy="">
+        ×
+      </Pressable>
+    );
+    return (
+      <AppearItem
+        key={`t:${td.id}`}
+        className={list.row}
+        data-testid={`today-todo-${td.id}`}
+        data-done={td.done ? '' : undefined}
+        data-readonly={ro ? '' : undefined}
+      >
+        <Check
+          readOnly={ro}
+          checked={shown(td.id, td.done)}
+          label={shown(td.id, td.done) ? t('list.undoDone', {}) : t('list.done', {})}
+          onChange={(v) => tick(td.id, v)}
+          testId={`today-done-${td.id}`}
+        />
+        <button type="button" className={list.main} onClick={() => open({ kind: 'todo', id: td.id })} data-open={td.id} aria-current={cur(td.id)}>
+          <span className={list.text}>
+            <span className={list.title}>{td.title}</span>
+            <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
+            <Subs id={td.id} />
+          </span>
+          {ro ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
+          <RowMark table="todos" id={td.id} />
+        </button>
+        {/* 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条、代码复查二）：变淡、aria-disabled、读屏名字后接“要更新到新版本才能修改”；
+            点了照样由 del 里的 useReadonlyGuard 拦下出提示条、不写。只读和普通行是同一个按钮（del），只读时交给按需下载的那份接上读屏名字的后半句 */}
+        {ro ? <Ro part="del" label={t('list.delete', {})} render={del} /> : del(t('list.delete', {}))}
+      </AppearItem>
+    );
+  };
   // 已过去（线框 s1“已过去的折叠成一行”，时间河“▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓”）：结束了的日程、做完的待办收成一行，
   // 点一下展开、再点收起（这次打开记着，不存）；展开时过去的那几行排在最前面，照原来的行画。
   // 变成 0 件（撤销了打勾、删掉了）时展开状态一起收回，下次再有已过去的照收起画（画的时候就收，不多等一拍）

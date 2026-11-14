@@ -6,7 +6,7 @@
 //   瀑布流卡片底部：分类 · 时间 · “⋯”（看得见 24px，点按区用 ::after 透明扩到 44，不占排版宽度，视觉稿第 264～266 行）
 //   列表一行：时刻 | 随手记小图标 | 标题和摘要 | “⋯”（视觉稿 PH.notes：44px 18px 1fr … 24px）
 // • 点开：手机进编辑器 #/note/<id>；电脑（≥ 900px，有侧栏，电脑版换上以后）从右边滑出详情抽屉（DK.mason），侧栏和列表留着，Esc 或“×”关；
-//   开着哪一条由 kit 的 useDrawerSel 管（同今天页）：电脑版没换上、画出错退回手机排法时点开进编辑页
+//   开着哪一条由 kit 的 useDrawerSel（在 useListActions.ts）管（同今天页）：电脑版没换上、画出错退回手机排法时点开进编辑页
 // • “⋯”打开菜单；右键（安卓长按）也打开同一个菜单。菜单：转成待办 / 转成日程 / 删除（S8，R-414；线框里的“移到隐私记”等 B5 隐私记做了再加）；
 //   瀑布流里不能左滑（R-78），列表的左滑以后和别的页一起加
 // • 转成待办 / 日程（R-414）：规则见 shared/logic/notes/note-convert.ts 文件头；转完在输入行上面出一句提示（同插图提示的位置）
@@ -41,8 +41,7 @@ import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { Mist } from '../../../kit/components/Mist.tsx';
-import { useDrawerSel } from '../../../kit/hooks/useDrawerSel.ts';
-import { useListActions } from '../../../kit/hooks/useListActions.ts';
+import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { ReadonlyMark, ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
 import { useEditT } from '../../../kit/components/EditNotices.tsx';
@@ -79,7 +78,7 @@ function NotesList() {
   const tEdit = useEditT();
   const locale = useUi((s) => s.locale);
   const view = useNotesViewValue();
-  // 有侧栏的宽窗口（和 GlassBar 侧栏同一个断点）电脑版换上以后：点开随手记用右边抽屉，不换页（kit useDrawerSel，同今天页）；
+  // 有侧栏的宽窗口（和 GlassBar 侧栏同一个断点）电脑版换上以后：点开随手记用右边抽屉，不换页（kit useListActions.ts 的 useDrawerSel，同今天页）；
   // 电脑版那一块画出错退回手机排法以后按没换上算，点开进编辑页
   const page = useRef<HTMLElement>(null);
   const loaded = useSwapWhenSafe(useMedia(MQ_SIDEBAR), page, loadNotesDesk, now, opensKeyboard);

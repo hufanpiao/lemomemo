@@ -4,7 +4,7 @@
 // • onCount：今天一共几条，交给今天页写进块标题“今天记的 2”（线框 NOTESTODAY；标题在 kit DeskLayout 里画，不在这个块里）
 // • 同一个懒加载入口按 part 画两样（同 today 的 TodayToasts）：'list' 是这一块，'drawer' 是随手记页同一个 NoteDrawer（外壳和编辑器，再按需下载；
 //   挂起时落到今天页那一层 Suspense）；不在 notes/index.ts 另开一个入口，那个文件在主包里，多一个 lazy 首屏就多几十字节（首屏净增额度，build/first-screen-baseline.json）
-// • 选中哪一条由今天页管（kit useDrawerSel）；行按钮带 data-open，抽屉关上时焦点找回这一行
+// • 选中哪一条由今天页管（kit useListActions.ts 的 useDrawerSel）；行按钮带 data-open，抽屉关上时焦点找回这一行
 import { lazy, useEffect } from 'react';
 import { fmtTime } from '../../../../shared/i18n/fmt.ts';
 import list from '../../../kit/components/List.module.css';

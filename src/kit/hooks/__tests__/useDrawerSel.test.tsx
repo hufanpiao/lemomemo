@@ -1,8 +1,8 @@
-// 今天页、随手记页共用的详情抽屉选中状态（kit useDrawerSel，B6 整合）：电脑版换上才开抽屉、不然进编辑页；
+// 今天页、随手记页共用的详情抽屉选中状态（kit useListActions.ts 的 useDrawerSel，B6 整合）：电脑版换上才开抽屉、不然进编辑页；
 // 电脑版画出错（fail）以后按没换上算并清空；删掉开着的那一条时一起关
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { useDrawerSel } from '../useDrawerSel.ts';
+import { useDrawerSel } from '../useListActions.ts';
 
 describe('useDrawerSel', () => {
   it('电脑版没换上：open 调 go，不开抽屉', () => {
