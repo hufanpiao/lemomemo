@@ -105,6 +105,15 @@ export const SHEET_EXIT_RATIO = 0.65;
 export const LIST_LAYOUT_LAG_RATIO = 0.15;
 export const LIST_LAYOUT_LAG = dur.ui * LIST_LAYOUT_LAG_RATIO;
 
+/**
+ * 吞掉“补来的那一下 click”最多等多久（毫秒；swallow-click.ts 的 swallowNextClick 用，审查“吞点按五套”合成一套）。
+ * 几处等的东西不一样，时限照各自原来的值分开给，不硬统一（新的一次按下来了一律作废，这几个数只管“一直没等到 click”时挂多久）：
+ * • swipe：左滑行滑完松手、点行面收起，翻页滑过之后（原 kit SwipeRow 600 ms；翻页原来是标志位、没有时限，取同一个）
+ * • hold：按住“＋”进了录音以后松手补在“＋”上的那一下（原 hold-input SWALLOW_MS 800 ms）
+ * • guardLate：换页守卫吞掉按下以后、晚到窗口外的那一下，从按下算（原 motion/index.ts GUARD_CLICK_MS 1000 ms）
+ */
+export const TAP_SWALLOW_MS = { swipe: 600, hold: 800, guardLate: 1000 } as const;
+
 /** 现成的 Motion transition（组件里直接用这些，不自己拼） */
 export const tr = {
   // 同上：只给“按住液滴鼓起”留着，不要拿来做按下回弹（11-05）

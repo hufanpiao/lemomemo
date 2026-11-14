@@ -1,11 +1,14 @@
 // 按住“＋”的手势（data/hold-input.ts；B3 FA-3、Q3）：350 ms 判定、点一下不进录音、上拖取消、锁定、系统收走触摸、
 // 进了录音以后松手补的那一下 click 吞掉、按着时 <html data-plus-hold>、非被动 touchmove 和 contextmenu 拦截、setPointerCapture
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createHoldInput, HOLD_ATTR, SWALLOW_MS, type HoldPointer, type HoldSink } from '../data/hold-input.ts';
+import { swallowNextClick, TAP_SWALLOW_MS } from '../../../motion/index.ts';
+import { createHoldInput, HOLD_ATTR, type HoldPointer, type HoldSink } from '../data/hold-input.ts';
 import { HOLD_MS } from '../data/record-logic.ts';
 
 let t = 0;
 const now = (): number => t;
+/** 同 hooks/voice-sink.ts 注入的那一个，钟换成测试的假钟 */
+const swallow = (el: Node) => swallowNextClick({ within: el, ms: TAP_SWALLOW_MS.hold, now });
 
 function makeSink(over: Partial<HoldSink> = {}) {
   const calls: string[] = [];
@@ -50,7 +53,7 @@ afterEach(() => {
 describe('按住“＋”的手势', () => {
   it('不满 350 ms 松开 = 点一下：不进录音、按下时先开的手机识别关掉、click 照常到', () => {
     const { sink, calls } = makeSink();
-    const h = createHoldInput(() => sink, now);
+    const h = createHoldInput(() => sink, swallow, now);
     h.onStart(ptr(300, 800));
     expect(fab.setPointerCapture).toHaveBeenCalledWith(7);
     expect(marked(), '按着时 <html> 打标记').toBe(true);
@@ -65,7 +68,7 @@ describe('按住“＋”的手势', () => {
 
   it('计时器早到（到点时 now() 才走了 349 ms）：补上差的那一点再判，照样进录音，不丢这次按住', () => {
     const { sink, calls } = makeSink();
-    const h = createHoldInput(() => sink, now);
+    const h = createHoldInput(() => sink, swallow, now);
     h.onStart(ptr(300, 800));
     t += HOLD_MS - 1;
     vi.advanceTimersByTime(HOLD_MS);
@@ -76,9 +79,9 @@ describe('按住“＋”的手势', () => {
     expect(calls).toEqual(['down', 'start', 'finish']);
   });
 
-  it('满 350 ms 进录音；松开 = 记下；松手补在“＋”上的 click 吞掉（别处的不吞），过了 SWALLOW_MS 不再吞', () => {
+  it('满 350 ms 进录音；松开 = 记下；松手补在“＋”上的 click 吞掉（别处的不吞），过了 TAP_SWALLOW_MS.hold 不再吞', () => {
     const { sink, calls } = makeSink();
-    const h = createHoldInput(() => sink, now);
+    const h = createHoldInput(() => sink, swallow, now);
     h.onStart(ptr(300, 800));
     advance(HOLD_MS);
     expect(calls).toEqual(['down', 'start']);
@@ -94,7 +97,7 @@ describe('按住“＋”的手势', () => {
     const swallowed = new MouseEvent('click', { bubbles: true, cancelable: true });
     fab.dispatchEvent(swallowed);
     expect(swallowed.defaultPrevented, '补在“＋”上的这一下不能再打开打字条').toBe(true);
-    advance(SWALLOW_MS + 1);
+    advance(TAP_SWALLOW_MS.hold + 1);
     const later = new MouseEvent('click', { bubbles: true, cancelable: true });
     fab.dispatchEvent(later);
     expect(later.defaultPrevented, '之后的点按照常').toBe(false);
@@ -102,7 +105,7 @@ describe('按住“＋”的手势', () => {
 
   it('接收方不接手（start 返回 false，例如 exe、正在上传）：当没按住，松开什么都不做，也不吞 click', () => {
     const { sink, calls } = makeSink({ start: () => false });
-    const h = createHoldInput(() => sink, now);
+    const h = createHoldInput(() => sink, swallow, now);
     h.onStart(ptr(300, 800));
     advance(HOLD_MS);
     expect(marked()).toBe(false);
@@ -115,7 +118,7 @@ describe('按住“＋”的手势', () => {
 
   it('上拖进取消区：高亮；在区里松开 = 丢弃', () => {
     const { sink, calls } = makeSink();
-    const h = createHoldInput(() => sink, now);
+    const h = createHoldInput(() => sink, swallow, now);
     h.onStart(ptr(300, 800));
     advance(HOLD_MS);
     h.onMove(ptr(300, 50));
@@ -127,7 +130,7 @@ describe('按住“＋”的手势', () => {
 
   it('拖进取消区又拖出来再松开 = 记下', () => {
     const { sink, calls } = makeSink();
-    const h = createHoldInput(() => sink, now);
+    const h = createHoldInput(() => sink, swallow, now);
     h.onStart(ptr(300, 800));
     advance(HOLD_MS);
     h.onMove(ptr(300, 50));
@@ -139,7 +142,7 @@ describe('按住“＋”的手势', () => {
 
   it('拖进锁定区 = 锁定：之后松手、系统收走触摸都不结束（松手也在录）', () => {
     const { sink, calls } = makeSink();
-    const h = createHoldInput(() => sink, now);
+    const h = createHoldInput(() => sink, swallow, now);
     h.onStart(ptr(300, 800));
     advance(HOLD_MS);
     h.onMove(ptr(100, 950));
@@ -156,13 +159,13 @@ describe('按住“＋”的手势', () => {
 
   it('录着时系统收走触摸（pointercancel：来电、切走）= 丢弃；没进录音时什么都不做', () => {
     const a = makeSink();
-    const h = createHoldInput(() => a.sink, now);
+    const h = createHoldInput(() => a.sink, swallow, now);
     h.onStart(ptr(300, 800));
     advance(HOLD_MS);
     h.onCancel(ptr(300, 800));
     expect(a.calls.at(-1)).toBe('discard');
     const b = makeSink();
-    const h2 = createHoldInput(() => b.sink, now);
+    const h2 = createHoldInput(() => b.sink, swallow, now);
     h2.onStart(ptr(300, 800));
     advance(100);
     h2.onCancel(ptr(300, 800));
@@ -171,7 +174,7 @@ describe('按住“＋”的手势', () => {
 
   it('按下后先挪远（在滑动）：不进录音', () => {
     const { sink, calls } = makeSink();
-    const h = createHoldInput(() => sink, now);
+    const h = createHoldInput(() => sink, swallow, now);
     h.onStart(ptr(300, 800));
     advance(100);
     h.onMove(ptr(300, 760));
@@ -181,7 +184,7 @@ describe('按住“＋”的手势', () => {
 
   it('右键、第二根手指不算', () => {
     const { sink, calls } = makeSink();
-    const h = createHoldInput(() => sink, now);
+    const h = createHoldInput(() => sink, swallow, now);
     h.onStart(ptr(300, 800, { button: 2 }));
     h.onStart(ptr(300, 800, { isPrimary: false }));
     advance(HOLD_MS);
@@ -191,7 +194,7 @@ describe('按住“＋”的手势', () => {
 
   it('“＋”上：contextmenu 一律拦（不出长按菜单）；touchmove 只在按着时拦（非被动）', () => {
     const { sink } = makeSink();
-    const h = createHoldInput(() => sink, now);
+    const h = createHoldInput(() => sink, swallow, now);
     h.onStart(ptr(300, 800));
     const menu = new Event('contextmenu', { cancelable: true });
     fab.dispatchEvent(menu);
@@ -206,7 +209,7 @@ describe('按住“＋”的手势', () => {
   });
 
   it('还没有接收方（录音那一块没挂上）：按住只当点一下，不报错', () => {
-    const h = createHoldInput(() => null, now);
+    const h = createHoldInput(() => null, swallow, now);
     expect(() => {
       h.onStart(ptr(300, 800));
       advance(HOLD_MS);

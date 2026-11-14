@@ -12,11 +12,11 @@
 //   出“这条要新版本才能修改 · 更新”；电脑抽屉复用这个编辑器，列表页已在点开时拦下，这里兜住直接打开地址、打开后才变只读的情况
 // • 附件（B4b-1）：插图区下面挂 attachments 功能懒加载的附件区（加附件只在电脑布局，预览浮层再单独懒加载）
 // • 动效：只有抽屉最基本的滑入（R-376），按钮用 Pressable 的按下反馈
-import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Suspense, useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { DrawerClose, useInDrawer } from '../../../kit/components/DetailDrawer.tsx';
 import { DeletedNotice, ReadonlyNotice, useEditStatus, useEditT } from '../../../kit/components/EditNotices.tsx';
-import { enterCommits } from '../../../kit/components/Form.tsx';
+import { enterCommits, useCommitDraft } from '../../../kit/components/Form.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
 import { useHoldBusy } from '../../../kit/hooks/useHoldBusy.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -193,8 +193,8 @@ function CatChip(p: { value: string | null; options: CategoryOption[]; ai: boole
 }
 
 /**
- * 标题、正文框：本地草稿，停笔 BODY_IDLE_MS 存一次；失焦、卸载、pagehide、切到后台时把没存的补存一次（同 kit Form 的 useCommitDraft 的补交时机）。
- * 编辑中外面的值变了（别的设备改了）不打断；不在编辑时跟着外面的值走。
+ * 标题、正文框：草稿、补存都是 kit Form 的 useCommitDraft（停笔 BODY_IDLE_MS 存一次；失焦、卸载、pagehide、切到后台时把没存的补存一次；
+ * keepDirty：编辑中、或还有没存的字时外面的值变了（别的设备改了）不打断；都存了、不在编辑时跟着外面的值走）。这里只管跟着内容长高和标题单行。
  * single（标题）：长标题照线框 s8 换行显示、跟着内容长高；回车不换行，当作写完（失焦就存），粘贴进来的换行变空格
  */
 interface DraftAreaProps {
@@ -209,18 +209,8 @@ interface DraftAreaProps {
 }
 
 function DraftArea({ value, disabled, label, placeholder, maxLength, single = false, testId, onCommit }: DraftAreaProps) {
-  const [draft, setDraftState] = useState(value);
-  const [editing, setEditing] = useState(false);
+  const d = useCommitDraft(value, onCommit, { idleMs: BODY_IDLE_MS, keepDirty: true });
   const el = useRef<HTMLTextAreaElement>(null);
-  const live = useRef({ draft: value, value, onCommit, dirty: false, timer: null as ReturnType<typeof setTimeout> | null });
-  live.current.value = value;
-  live.current.onCommit = onCommit;
-  useEffect(() => {
-    if (!editing && !live.current.dirty) {
-      setDraftState(value);
-      live.current.draft = value;
-    }
-  }, [value, editing]);
   // 标题、正文都跟着内容长高（标题一行起；正文的最小高度在样式里，有图时降到两行，图紧跟在正文后面，NOTE_ED）
   useLayoutEffect(() => {
     const ta = el.current;
@@ -231,29 +221,7 @@ function DraftArea({ value, disabled, label, placeholder, maxLength, single = fa
     const h = ta.scrollHeight;
     ta.style.minHeight = '';
     ta.style.height = `${h}px`;
-  }, [draft]);
-
-  const flush = useCallback((): void => {
-    const l = live.current;
-    if (l.timer !== null) clearTimeout(l.timer);
-    l.timer = null;
-    if (!l.dirty) return;
-    l.dirty = false;
-    if (l.draft !== l.value) l.onCommit(l.draft);
-  }, []);
-
-  useEffect(() => {
-    const onHide = (): void => {
-      if (document.visibilityState === 'hidden') flush();
-    };
-    window.addEventListener('pagehide', flush);
-    document.addEventListener('visibilitychange', onHide);
-    return () => {
-      window.removeEventListener('pagehide', flush);
-      document.removeEventListener('visibilitychange', onHide);
-      flush();
-    };
-  }, [flush]);
+  }, [d.draft]);
 
   return (
     <textarea
@@ -264,27 +232,19 @@ function DraftArea({ value, disabled, label, placeholder, maxLength, single = fa
       maxLength={maxLength}
       disabled={disabled}
       rows={single ? 1 : undefined}
-      value={draft}
+      value={d.draft}
       data-testid={testId}
-      onFocus={() => setEditing(true)}
+      onFocus={() => d.setEditing(true)}
       onKeyDown={(e) => {
         if (single && enterCommits(e)) {
           e.preventDefault();
           e.currentTarget.blur();
         }
       }}
-      onChange={(e) => {
-        const v = single ? e.target.value.replace(/[\r\n]+/g, ' ') : e.target.value;
-        setDraftState(v);
-        const l = live.current;
-        l.draft = v;
-        l.dirty = true;
-        if (l.timer !== null) clearTimeout(l.timer);
-        l.timer = setTimeout(flush, BODY_IDLE_MS);
-      }}
+      onChange={(e) => d.setDraft(single ? e.target.value.replace(/[\r\n]+/g, ' ') : e.target.value)}
       onBlur={() => {
-        setEditing(false);
-        flush();
+        d.setEditing(false);
+        d.flush();
       }}
     />
   );

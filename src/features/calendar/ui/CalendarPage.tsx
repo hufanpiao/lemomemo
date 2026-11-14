@@ -242,7 +242,6 @@ export default function CalendarPage() {
         onPointerMove={swipe.onPointerMove}
         onPointerUp={swipe.onPointerUp}
         onPointerCancel={swipe.onPointerCancel}
-        onClickCapture={swipe.onClickCapture}
         data-testid="cal-pager"
       >
         {model.view.mode === 'month' ? (

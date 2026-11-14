@@ -30,7 +30,7 @@
 //   （不进编辑器、不开抽屉、不写），出 kit 的“这条要新版本才能修改 · 更新”（删除撤销、只读拦截、出错条走 kit 的 useListActions，插图提示和输入行上移在 hooks/useNotesToast.ts）。
 //   左滑、多选还没有入口，以后加时同样先判只读
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
-// • 隐私记（B5 S5、S7）：分类胶囊下面一行入口（vault 的 VaultParts lockrow）；“⋯”菜单、左滑（列表方式，NoteSwipe.tsx）加“移到隐私记”，
+// • 隐私记（B5 S5、S7）：分类胶囊下面一行入口（vault 的 VaultParts lockrow）；“⋯”菜单、左滑（列表方式，kit 的 SwipeRow；一次只露一行、点别处或 Esc 收起由 kit 管）加“移到隐私记”，
 //   移的流程（解锁、重试一次、带附件不能移）在 vault 的 VaultParts move；移好的先在本页藏起来，等同步把它改成隐私记行
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -40,6 +40,7 @@ import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
+import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
 import { Mist } from '../../../kit/components/Mist.tsx';
 import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
@@ -60,7 +61,6 @@ import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
 import { ConvertAsk, MoveAsk, MergeBar, MoreMenu, needsAsk, useConvertFlow, type PageTip } from './NotesActions.tsx';
 import { Dot } from './CatDot.tsx';
 import { InputRow, useInputDraft } from './NotesInputRow.tsx';
-import { SwipeRow } from './NoteSwipe.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import styles from './NotesPage.module.css';
 
@@ -103,7 +103,6 @@ function NotesList() {
   /** 带附件、插图的先问一次再移（B4b-1，线框 sAtt 最后一张“这条随手记和它的 N 个附件、M 张图会一起加密放进隐私记”） */
   const [askMove, setAskMove] = useState<NoteItem | null>(null);
   const [moved, setMoved] = useState<ReadonlySet<string>>(() => new Set());
-  const [swiped, setSwiped] = useState<string | null>(null);
 
   const selId = ds.sel?.id;
   const open = (id: string) => (isRo(id) ? guard.block() : ds.open({ id }, () => void navigate('note', id)));
@@ -234,15 +233,17 @@ function NotesList() {
                   <AppearItem key={it.id} className={selId === it.id ? `${row.lrow} ${styles.sel}` : row.lrow} data-testid={`notes-row-${it.id}`}>
                     {/* 左滑（B5 S7，线框 s7 NOTEROW_SW）：转成待办 / 移到隐私记 / 删除，和“⋯”菜单同一套动作 */}
                     <SwipeRow
-                      open={swiped === it.id}
-                      onOpenChange={(o) => setSwiped(o ? it.id : null)}
-                      testId={`notes-swipe-${it.id}`}
+                      className={styles.swp}
+                      data-testid={`notes-swipe-${it.id}`}
+                      look="compact"
+                      log={rlog}
                       actions={[
-                        { label: t('notes.sw.todo', {}), onClick: () => conv.start(it, 'todo'), testId: `notes-sw-todo-${it.id}` },
-                        { label: t('notes.sw.vault', {}), onClick: () => toVault(it.id), testId: `notes-sw-vault-${it.id}` },
-                        { label: t('notes.delete', {}), onClick: () => del(it.id), danger: true, testId: `notes-sw-del-${it.id}` },
+                        { key: 'todo', label: t('notes.sw.todo', {}), onClick: () => conv.start(it, 'todo'), testId: `notes-sw-todo-${it.id}` },
+                        { key: 'vault', label: t('notes.sw.vault', {}), onClick: () => toVault(it.id), testId: `notes-sw-vault-${it.id}` },
+                        { key: 'del', label: t('notes.delete', {}), onClick: () => del(it.id), danger: true, testId: `notes-sw-del-${it.id}` },
                       ]}
                     >
+                      <div className={styles.swRow}>
                       <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
                         <span className={row.rowTime}>{timeOf(it, false)}</span>
                         <span className={row.mn} aria-hidden="true" />
@@ -250,6 +251,7 @@ function NotesList() {
                         {it.cover ? <ListThumb img={it.cover} /> : null}
                       </button>
                       {more(it)}
+                      </div>
                     </SwipeRow>
                   </AppearItem>
                 ))}
