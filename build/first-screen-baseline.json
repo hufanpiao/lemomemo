@@ -1,7 +1,7 @@
 {
   "_说明": "首屏净增额度的基线，按批次分段（R-379：首屏净增额度按批次重设）。current 是当前批次，build/check_size.mjs 只按 batches[current] 查；以前批次的段原样留着当记录，不再参与检查。口径是 build/check_size.mjs 的 firstScreenStable：入口 index.html 和它静态 import 的 chunk，计数前把构建时刻、提交号、块文件名哈希换成固定值，再 gzip level 9 合计。这个口径同一份源码怎么构建都一样（11-09 实测 linux 镜像连构建两次、preview 和 e2e、带不带 GITHUB_SHA、本机 Windows 都是同一个数），所以每段只记一个数，不分平台、不留抖动余量。modes 里的模式超过 baseline + limitBytes 就失败；baseline 为 null 时关卡跳过",
   "_改法": "要放宽或换基线，必须有主持人或负责人定的需求编号，写进该批次的 _出处；别为了让 CI 变绿直接改数。开新批次：在 batches 里加一段（_出处、limitBytes、modes、baseline），再把 current 改成它",
-  "current": "B5",
+  "current": "审查",
   "batches": {
     "B3": {
       "_出处": "主持人 11-09 定：基线 = A 那一批（R-354 动画库移出首屏 + B3 前端）定稿暂存快照的量得值 − B3 前端净增。快照是暂存区树 6f0325b5206849133c2b6a0c47232f57daa0f186。量法（CI 审查员 11-09，两次结果相同）：git checkout-index 导出暂存区为 A 份；复制一份为 B 份，把 src/app/App.tsx、src/features/calendar/hooks/new-date.ts、shared/i18n/ko.ts、shared/i18n/zh.ts、src/features/plus/index.ts 换回 HEAD 版（前端 A 的量法）；两份都 npm run build -- --mode preview，读 firstScreenStable。A 份 112379 B，B 份 111404 B，B3 净增 975 B（在 1024 B 额度内）。baseline 取 B 份 111404，也就是 B3 前端开始前的首屏。稳定口径在 linux 镜像和本机 Windows 上同一个数。B2-UI-b W6 +422 B（10e2073，稳定口径），主持人 11-09 定额度 0.45 KB（含文案），见 B2-UI-b 任务单 V2/R4；baseline 111404 → 111826。11-10 负责人定放宽（底栏偏高修复，R-371，上限 1100）：limitBytes 1024 → 1096。当天 CI 上 4232233 稳定口径净增 1025 B（本机 1024），余量 0 被 1 B 卡住；放宽后先留余量，底栏修法待真机探测再定",
@@ -20,6 +20,12 @@
       "limitBytes": 1024,
       "modes": ["preview", "e2e"],
       "baseline": 115307
+    },
+    "审查": {
+      "_出处": "R-420（主持人 11-14 代定，负责人 11-13 授权不再问）：B5 功能已全部上线（preview.340），第三方全仓审查的修复算新的一批，按 R-379 批次做法新开 1 KB。baseline 取 5df3d153 之后、合入“左滑、草稿补存、吞点按收成一套”之前的本地 main（含前端-5～7、后端-1、-4、-8、-10 等审查修复，B5 已用 1020 B）稳定口径，主持人 11-14 本机全套检查 fc43 实测 preview 116327 B（115307 + 1020），同一提交 e2e 构建的默认组、快读组 e2e 两种浏览器全过；合入左滑那一批后实测 preview 116444 B（本批已用 117 B）",
+      "limitBytes": 1024,
+      "modes": ["preview", "e2e"],
+      "baseline": 116327
     }
   }
 }
