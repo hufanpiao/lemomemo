@@ -33,6 +33,16 @@ describe('desktop_scan.mjs', () => {
     }
   });
 
+  it('正式、预览两份 tauri 配置的 CSP 去掉各自站点主机名后逐字相同（第三方审查 CI-20：两份手抄，改一边漏一边查不出）', () => {
+    const csp = (file: string, env: 'production' | 'preview') => {
+      const conf = JSON.parse(readFileSync(join(ROOT, 'desktop', 'src-tauri', file), 'utf8')) as { app: { security: { csp: string } } };
+      const host = new URL(envs[env].site_origin).host;
+      expect(conf.app.security.csp, `${file} 要连本环境 ${host}`).toContain(`https://${host} wss://${host}`);
+      return conf.app.security.csp.split(host).join('<站点>');
+    };
+    expect(csp('tauri.preview.conf.json', 'preview')).toBe(csp('tauri.conf.json', 'production'));
+  });
+
   it('只有本环境的值：通过（正式、预览各一次；com.lemomemo.app.preview 不算成正式版的标识）', () => {
     expect(check('production', exe(values(envs.production)))).toEqual({ missing: [], found: [] });
     expect(check('preview', exe(values(envs.preview)))).toEqual({ missing: [], found: [] });
