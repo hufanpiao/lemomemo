@@ -5,7 +5,7 @@ import type { BootResult } from '../../boot.ts';
 import { clock, setup } from '../../__tests__/outbox-fixtures.ts';
 import { clearAllCollections } from '../../store.ts';
 import { pullRound, type RoundCtx } from '../round.ts';
-import type { SendFailure } from '../types.ts';
+import type { SendFailure } from '../../../../shared/schema/sync.ts';
 import { fakeTransport, identityParse } from './fake-server.ts';
 
 beforeEach(() => {

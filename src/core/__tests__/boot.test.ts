@@ -187,7 +187,7 @@ describe('离线冷启动', () => {
     const { factory } = fakeIndexedDB();
     clock.record(new Date(Date.now() + 3_600_000).toUTCString());   // 服务器比本机快 1 小时
     try {
-      const b = await coldStart({ ...opts(factory), now: undefined } as BootOptions);
+      const b = await coldStart({ ...opts(factory), now: undefined } as unknown as BootOptions);
       await b.outbox?.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
       const ts = (await b.outbox?.list())?.[0]?.client_ts ?? 0;
       expect(Math.abs(ts - clock.now())).toBeLessThan(5_000);
