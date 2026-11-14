@@ -68,7 +68,8 @@ interface Ctx {
   hub: Hub;
   runner: Runner;
   /** 排一件活（放手中不再排新的；跑完把写过的表交给 onChanged） */
-  run(task: () => Promise<void>): Promise<void>;
+  /** 排进串行链；what 是看门狗日志里的名字（runner.ts） */
+  run(task: () => Promise<void>, what: string): Promise<void>;
   d: PullDeps;
   round: RoundCtx;
   gated(): boolean;
@@ -100,11 +101,13 @@ function createPulls(c: Ctx) {
   const pullAll = (): Promise<void> => {
     if (pullQueued || c.isStopped()) return c.runner.tail();
     pullQueued = true;
-    return c.run(() =>
-      c.hub.busy(async () => {
-        pullQueued = false;
-        await roundWithAuth();
-      }),
+    return c.run(
+      () =>
+        c.hub.busy(async () => {
+          pullQueued = false;
+          await roundWithAuth();
+        }),
+      'pull',
     );
   };
   const touched = new Set<string>();
@@ -115,7 +118,7 @@ function createPulls(c: Ctx) {
     void c.run(async () => {
       touched.delete(table);
       if ((await pullTable(c.d, table, c.round.pendingFull.has(table))) === 'ok') c.round.pendingFull.delete(table);
-    });
+    }, `pull:${table}`);
   };
   return { pullAll, pullTableSoon, roundsStarted: () => roundsStarted, queued: () => pullQueued };
 }
@@ -140,18 +143,20 @@ function createSender(c: Ctx, tracked: Outbox, pullTableSoon: (t: string) => voi
   const kickSend = (): Promise<void> => {
     if (sendQueued || c.isStopped()) return c.runner.tail();
     sendQueued = true;
-    return c.run(() =>
-      c.hub.busy(async () => {
-        sendQueued = false;
-        const out = await sendAll({
-          outbox: tracked, transport: c.opts.transport, gated: c.gated, emit: c.hub.emit, removed: c.removed, touched: pullTableSoon,
-          blocked: () => c.boot.upgrade.getState().syncBlocked !== null, released: c.released, now: c.now,
-          ...(c.opts.log ? { log: c.opts.log } : {}),
-          ...(c.opts.insertDenied ? { insertDenied: c.opts.insertDenied } : {}),
-        });
-        if (out === 'retry') await scheduleRetry();
-        if (out === 'more') queueMicrotask(() => void kickSend());   // 一批发满了：排到链尾接着发，中间让拉取、Realtime 插进来
-      }),
+    return c.run(
+      () =>
+        c.hub.busy(async () => {
+          sendQueued = false;
+          const out = await sendAll({
+            outbox: tracked, transport: c.opts.transport, gated: c.gated, emit: c.hub.emit, removed: c.removed, touched: pullTableSoon,
+            blocked: () => c.boot.upgrade.getState().syncBlocked !== null, released: c.released, now: c.now,
+            ...(c.opts.log ? { log: c.opts.log } : {}),
+            ...(c.opts.insertDenied ? { insertDenied: c.opts.insertDenied } : {}),
+          });
+          if (out === 'retry') await scheduleRetry();
+          if (out === 'more') queueMicrotask(() => void kickSend());   // 一批发满了：排到链尾接着发，中间让拉取、Realtime 插进来
+        }),
+      'send',
     );
   };
   return { kickSend, clearRetry };
@@ -195,7 +200,7 @@ export function createSync(boot: BootResult, opts: SyncOptions): Sync {
   const runner = createRunner(gated, halt, opts.log, opts.taskTimeoutMs);
   const written = new Set<string>();
   const tracked = trackTables(outbox, written);
-  const run = (task: () => Promise<void>): Promise<void> =>
+  const run = (task: () => Promise<void>, what: string): Promise<void> =>
     runner.run(async () => {
       if (draining) return;
       try {
@@ -204,7 +209,7 @@ export function createSync(boot: BootResult, opts: SyncOptions): Sync {
         if (written.size && opts.onChanged) opts.onChanged([...written]);
         written.clear();
       }
-    });
+    }, what);
   const d: PullDeps = { cache, outbox: tracked, transport: opts.transport, parseRows: opts.parseRows ?? createParseRows(opts.readLog ? { log: opts.readLog } : {}), gated, now };
   if (opts.log) d.log = opts.log;
   const round: RoundCtx = {
@@ -232,8 +237,8 @@ export function createSync(boot: BootResult, opts: SyncOptions): Sync {
       void pullAll();
     },
     onStatus: (s) => hub.setState({ realtime: s }),
-    onRow: (table, raw) => void run(() => applyRealtimeRow(d, table, raw)),
-    onTombstone: (raw) => void run(() => applyRealtimeTombstone(d, raw)),
+    onRow: (table, raw) => void run(() => applyRealtimeRow(d, table, raw), `rt:${table}`),
+    onTombstone: (raw) => void run(() => applyRealtimeTombstone(d, raw), 'rt:tomb'),
     ...(opts.log ? { log: opts.log } : {}),
   });
   /** 连 Realtime 之前先看闸：设上了就停下，不订阅（K8 审查必改 3） */
@@ -249,7 +254,7 @@ export function createSync(boot: BootResult, opts: SyncOptions): Sync {
     // 故意把所有 pending 的 next_at 清成 0，包括 try_later 退避中的项（R272-sugg ①）：所有临时故障一致处理；
     // 只由用户切回前台或网络恢复触发（用户频繁切换标签页时每次切回都会马上重试一次），重试频率取决于用户操作、
     // 不会自行循环。meta 的 try_later_streak 不清：每撞一次 try_later，streak 加一、之后等得更久
-    void run(() => outbox.clearBackoff());
+    void run(() => outbox.clearBackoff(), 'clear-backoff');
     void kickSend();
     void pullAll();
   };
@@ -287,7 +292,7 @@ export function createSync(boot: BootResult, opts: SyncOptions): Sync {
       listen();
       sendTimer = setInterval(() => void kickSend(), SEND_INTERVAL_MS);
       round.withConfig = true;
-      void run(() => outbox.resetInflight());   // 拿到主页身份：上一个主页 drain 超时、崩溃留下的 inflight 改回 pending（4.3b，K8 复审必改）
+      void run(() => outbox.resetInflight(), 'reset-inflight');   // 拿到主页身份：上一个主页 drain 超时、崩溃留下的 inflight 改回 pending（4.3b，K8 复审必改）
       void kickSend();
       void pullAll();
       if (life.isVisible()) connect();

@@ -431,6 +431,12 @@ jobs:
         if: ${{ !cancelled() && steps.e2e.conclusion != 'skipped' }}
         run: npm run e2e:visual -- --project=chromium-tabbar-lock --project=chromium-b2uib-lock
 
+      # test-results*/.last-run.json 是 Playwright 自己记的“上次哪些用例失败”（给 --last-failed 用），报告里用不上；
+      # 不删的话下一步守卫会拦（4efa1079 的 ci 就是这样红的）
+      - name: 删掉 Playwright 自己写的 .last-run.json（报告用不上）
+        if: failure()
+        run: rm -f test-results-visual/.last-run.json
+
       - name: 要上传的报告目录里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉；没跑到的组没有目录，跳过）
         if: failure()
         run: bash build/ci/no-hidden-files.sh --allow-missing playwright-report/ playwright-report-fastread/ playwright-report-visual/ test-results-visual/

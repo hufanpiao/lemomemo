@@ -1,6 +1,8 @@
 // 横滑手势、吞点按的真浏览器用例（R-420 第三方审查二轮“横滑手势、吞点按、草稿框”）：jsdom 量不出动画和焦点，这里在 chromium、webkit 上守
 //   ① 月历翻页逐帧（审查第 2 条）：按钮翻页、手指横滑翻页以后，每一帧读 cal-pager 的计算 transform，新的一页真的从那一侧滑进来
-//      （中间有好几帧停在 0 和整宽之间，一路变小到 0），不是一下到位、也不是从错的位置起播
+//      （第一帧在 0 和整宽之间、挂着 transform 的 CSS 过渡，一路变小到 0），不是一下到位、也不是从错的位置起播。
+//      半路画出几帧取决于机器帧率（CI 的 WebKit 软件渲染一帧可能上百毫秒，4efa1079 只画出 1 帧），所以只要求 ≥1 帧半路，
+//      “真的在播”靠第一帧时挂着的过渡（时长 > 0）来证；报错信息带每帧的时间，帧间隔从日志直接看
 //   ② 翻不动也不播翻页动画（审查第 1 条）：到 2100 年 12 月再往左滑，松手只滑回原位（每一帧都 ≤ 0，不会从右边整页滑进来）
 //   ③ 一行露着时点另一行（审查第 7 条）：第一下只收起露着的那行，不打开点到的那行；再点一下才打开
 //   ④ 滑开后焦点在操作按钮上按 Esc 收起（审查第 6 条）：焦点交还给行面的主按钮，不掉回 body
@@ -22,8 +24,11 @@ test.afterAll(({ browserName }) => {
 
 type Act = { kind: 'next' } | { kind: 'swipe'; dx: number };
 
-/** 做一次翻页（按钮或手指横滑），接着用 rAF 连读 16 帧 cal-pager 的计算 transform 的横移（px，取整） */
-async function framesAfter(page: Page, act: Act): Promise<number[]> {
+type Frames = { x: number[]; ms: number[]; transitionMs: number | null };
+
+/** 做一次翻页（按钮或手指横滑），接着用 rAF 连读 16 帧 cal-pager 的计算 transform 的横移（px，取整）、每帧离第一帧的毫秒数，
+ *  以及第一帧时 cal-pager 上 transform 的 CSS 过渡时长（没有就是 null） */
+async function framesAfter(page: Page, act: Act): Promise<Frames> {
   return page.evaluate(async (a) => {
     const el = document.querySelector<HTMLElement>('[data-testid="cal-pager"]');
     if (!el) throw new Error('no pager');
@@ -45,16 +50,26 @@ async function framesAfter(page: Page, act: Act): Promise<number[]> {
       await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
       fire('pointerup', x0 + a.dx);
     }
-    const out: number[] = [];
+    const x: number[] = [];
+    const ms: number[] = [];
+    let transitionMs: number | null = null;
+    let t0: number | undefined;
     await new Promise<void>((res) => {
-      const tick = (): void => {
-        out.push(tx());
-        if (out.length < 16) requestAnimationFrame(tick);
+      const tick = (now: number): void => {
+        if (x.length === 0) {
+          const tr = el.getAnimations().find((an) => an instanceof CSSTransition && an.transitionProperty === 'transform');
+          const d = tr?.effect?.getTiming().duration;
+          transitionMs = typeof d === 'number' ? d : null;
+        }
+        x.push(tx());
+        t0 ??= now;
+        ms.push(Math.round(now - t0));
+        if (x.length < 16) requestAnimationFrame(tick);
         else res();
       };
       requestAnimationFrame(tick);
     });
-    return out;
+    return { x, ms, transitionMs };
   }, act);
 }
 
@@ -65,12 +80,15 @@ async function openMonth(page: Page, ym: string): Promise<void> {
   await page.waitForTimeout(FADE_GUARD_MS + 200);
 }
 
-/** 新的一页从右边（下一页）滑进来：起点在 (0, 整宽]，一路不变大，最后到 0，中间至少 3 帧停在半路 */
-function expectSlideFromRight(f: number[], width: number, what: string): void {
-  expect(f[0], `${what} 第一帧在右边`).toBeGreaterThan(0);
+/** 新的一页从右边（下一页）滑进来：起点在 (0, 整宽]，第一帧挂着 transform 的过渡，一路不变大，最后到 0，至少 1 帧停在半路 */
+function expectSlideFromRight(fr: Frames, width: number, what: string): void {
+  const f = fr.x;
+  const seen = `（每帧 x=${f.join(',')}，ms=${fr.ms.join(',')}，过渡 ${fr.transitionMs ?? '无'} ms）`;
+  expect(fr.transitionMs ?? 0, `${what} 第一帧挂着 transform 的过渡${seen}`).toBeGreaterThan(0);
+  expect(f[0], `${what} 第一帧在右边${seen}`).toBeGreaterThan(0);
   expect(f[0], `${what} 第一帧不超过整宽`).toBeLessThanOrEqual(width);
   for (let i = 1; i < f.length; i++) expect(f[i], `${what} 第 ${i} 帧不往回走`).toBeLessThanOrEqual(f[i - 1] as number);
-  expect(f.filter((x) => x > 0 && x < width).length, `${what} 真的在滑（半路的帧）`).toBeGreaterThanOrEqual(3);
+  expect(f.filter((x) => x > 0 && x < width).length, `${what} 真的在滑（半路的帧）${seen}`).toBeGreaterThanOrEqual(1);
   expect(f.at(-1), `${what} 最后回到 0`).toBe(0);
 }
 
@@ -79,18 +97,18 @@ test.describe('月历翻页逐帧（R-420 审查第 1、2 条）', () => {
     await openMonth(page, '2026-11');
     const width = Math.round((await page.getByTestId('cal-pager').boundingBox())?.width ?? 0);
     const byButton = await framesAfter(page, { kind: 'next' });
-    frameLog['按钮下一页'] = byButton;
+    frameLog['按钮下一页'] = byButton.x;
     expectSlideFromRight(byButton, width, '按钮下一页');
     await page.waitForTimeout(400);
     const bySwipe = await framesAfter(page, { kind: 'swipe', dx: -100 });
-    frameLog['左滑 100 下一页'] = bySwipe;
+    frameLog['左滑 100 下一页'] = bySwipe.x;
     expectSlideFromRight(bySwipe, width - 100 + 1, '左滑 100 下一页');
     await expect(page).toHaveURL(/2027-01/);
   });
 
   test('翻不动（2100 年 12 月再往后）：松手只滑回原位，不从右边整页滑进来', async ({ page }) => {
     await openMonth(page, '2100-12');
-    const f = await framesAfter(page, { kind: 'swipe', dx: -100 });
+    const f = (await framesAfter(page, { kind: 'swipe', dx: -100 })).x;
     frameLog['2100-12 左滑 100（翻不动）'] = f;
     for (const [i, x] of f.entries()) expect(x, `第 ${i} 帧不在右边`).toBeLessThanOrEqual(0);
     expect(f.at(-1)).toBe(0);
