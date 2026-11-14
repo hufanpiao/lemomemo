@@ -112,7 +112,10 @@ export interface OutboxStatus {
 export type OutboxEvent =
   /** 永久失败：已回滚 view，这一项进“发送失败”区 */
   | { type: 'error'; item: OutboxItem; code: string }
-  /** 被服务器拒收并丢掉（vault_required 等）：调用方整表重拉这张表、写 logs outbox_rejected */
+  /**
+   * 被服务器拒收并丢掉（vault_required 等）：调用方整表重拉这张表、写 logs outbox_rejected。
+   * code 为 purged：墓碑、整表重拉删了这一行，本机没发出去的修改随行丢掉（dropServer，每条记录一次；不重拉，界面出“已彻底删除”）
+   */
   | { type: 'rejected'; item: OutboxItem; code: string }
   /** 426：整个队列已暂停 */
   | { type: 'upgrade_required'; min: string | null }

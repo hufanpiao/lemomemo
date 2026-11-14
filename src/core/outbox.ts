@@ -291,6 +291,8 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
     async dropServer(table, ids, expectRevs) {
       if (suspended) return;
       if (ids.length === 0) return;
+      // 本机还有没发出去（pending）、发送失败（failed）的修改：随行一起丢掉，每条记录发一次 rejected（purged），界面出“已彻底删除”
+      const lost: OutboxItem[] = [];
       await rewriteRecs(ctx, table, ids, async (t) => {
         for (const id of ids) {
           const items = await t.getAllByIndex<OutboxItem>(OUTBOX, 'rec', recKey(table, id));
@@ -301,10 +303,13 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
             if (!row?.server || (typeof rev === 'number' ? rev : -1) !== expectRevs.get(id) || items.some((i) => i.state === 'inflight')) continue;
           }
           await t.delete(table, id);
+          const mine = items.find((i) => i.state !== 'inflight');
+          if (mine) lost.push(mine);
           for (const i of items) await t.delete(OUTBOX, i.op_id);
         }
       });
       await refresh();
+      for (const item of lost) ctx.emit({ type: 'rejected', item, code: 'purged' });
     },
     list,
     getStatus: () => status,

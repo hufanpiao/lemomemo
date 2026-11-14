@@ -46,6 +46,12 @@ describe('刚恢复的那一项（4.4，按 opId 认）', () => {
     expect(m.store.getState().queue).toEqual([]);
   });
 
+  it('rejected / purged（墓碑删掉了本机没发出去的修改，第三方审查第 8 条）：不用是刚恢复的，也出一次轻提示', () => {
+    const m = make();
+    m.store.onOutbox({ type: 'rejected', item: item('todos', 't1', {}, { op_id: 'op-x' }), code: 'purged' });
+    expect(m.store.getState().hardDeleted).toBe(1);
+  });
+
   it('离线超过 5 分钟才发出去（复审四 L1）：只要恢复项还在队列里就一直认得', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
