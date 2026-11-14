@@ -218,6 +218,11 @@ export function tomorrowOf(now: number, current: Tz): DateStr {
 }
 
 /** 时长文字的拆分（界面按语言拼）：照视觉稿 kDur，h 为 0 时只写分 */
+/** 暖心句选第几句（负责人 11-14）：按用户时区的当天日期固定，同一天每次打开同一句，第二天换下一句（从 1970-01-01 起的天数取余） */
+export function cheerIndex(today: DateStr, n: number): number {
+  return n > 0 ? ((diffDays('1970-01-01', today) % n) + n) % n : 0;
+}
+
 export function splitDur(min: number): { h: number; m: number } {
   const v = Math.max(0, Math.round(min));
   return { h: Math.floor(v / 60), m: v % 60 };

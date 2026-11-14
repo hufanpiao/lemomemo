@@ -1,5 +1,5 @@
 // 电脑版布局 e2e（B6）共用的东西：视口和会话设置、打开今天页、鼠标拖块、读本机库里存下的布局、截图、往本机库种随手记和今天的日程 / 待办 / 纪念日。
-// b6-desk-layout.spec.ts、b6-desk-today.spec.ts 共用
+// b6-desk-layout.spec.ts、b6-desk-today.spec.ts 共用；today-now-cheer.spec.ts 借用 DESK_USE、idbPut、shot
 import type { Locator, Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { expect, FAKE_USER_ID } from './session-fixture.ts';
@@ -67,8 +67,8 @@ export async function shot(page: Page, browserName: string, name: string): Promi
   await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, animations: 'disabled' });
 }
 
-/** 往本机库 planner-v4 原样写几行（[仓名, 一行]），写完刷新：seedNotes、seedToday 共用 */
-async function idbPut(page: Page, rows: [string, unknown][]): Promise<void> {
+/** 往本机库 planner-v4 原样写几行（[仓名, 一行]），写完刷新：seedNotes、seedToday、today-now-cheer.spec.ts 共用 */
+export async function idbPut(page: Page, rows: [string, unknown][]): Promise<void> {
   await page.evaluate(
     (all) =>
       new Promise<void>((resolve, reject) => {

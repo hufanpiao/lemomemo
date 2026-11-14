@@ -66,6 +66,22 @@
   font-size: var(--fs-15);
 }
 
+/* 浅色卡（负责人 11-14；线框 ④ emptyA）：下一件在时间尺外、今天整天没有日程时，不用黄色大卡，普通面板底 */
+.calm {
+  padding: 16px 18px;
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+
+.calm .quiet {
+  font-size: var(--fs-16);
+}
+
+.calm .sub {
+  color: var(--text-2);
+}
+
 .ruler {
   position: relative;
   height: 46px;
