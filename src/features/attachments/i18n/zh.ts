@@ -53,6 +53,7 @@ export const zh = {
   'att.share.again': '“{name}”准备好了，再点一次“用其他 App 打开”。',
   'att.share.no': '这台设备不能把“{name}”交给别的 App，请用“下载”。',
   'att.vault.added': '已加到隐私记（加密存放）',
+  'att.vault.loadFail': '没能读取附件',
   'att.vault.plain': '“{name}”已下载。下载后的文件不再加密。',
   'att.pv.close': '关闭',
   'att.pv.prev': '上一页',

@@ -24,6 +24,15 @@ export type PageTip = ImgTip | ConvTip | MergeUndo;
 /** 带插图的转换要先问一下（R-414，线框 S8-2） */
 export type ConvAsk = { id: string; kind: ConvertKind; images: number; files: number };
 
+/** 带附件、插图的先问一次（转成待办 / 日程、移进隐私记两处共用，评审 18） */
+export const needsAsk = (it: { files: number; images: number }): boolean => it.files > 0 || it.images > 0;
+
+/** 问询卡里“N 个附件、M 张图”那一段；转换、移动两张卡的措辞各自一套键（移动卡的前面带空格，接在“和它的”后面） */
+function whatText(t: ReturnType<typeof useNotesT>, scope: 'conv' | 'move', files: number, images: number): string {
+  const parts = [files > 0 ? t(`notes.${scope}.what.file`, { n: files }) : '', images > 0 ? t(`notes.${scope}.what.img`, { n: images }) : ''];
+  return parts.filter(Boolean).join(t('notes.conv.what.sep', {}));
+}
+
 /**
  * “⋯”菜单：看得见 24px，点按区 ::after 扩到 44。转成待办 / 转成日程（R-414）、移到隐私记（B5 S7，线框 s7 菜单）在“删除”上面。
  * long：备注放不下，两项变淡（aria-disabled）、下面写原因，点了不动；只读行的两项也变淡，点了由页面拦下
@@ -123,7 +132,7 @@ export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a
     ask,
     start(it: NoteItem, kind: ConvertKind) {
       if (a.isRo(it.id)) a.g.block();
-      else if (it.images > 0 || it.files > 0) setAsk({ id: it.id, kind, images: it.images, files: it.files });
+      else if (needsAsk(it)) setAsk({ id: it.id, kind, images: it.images, files: it.files });
       else void go(it.id, kind, false);
     },
     confirm() {
@@ -139,7 +148,7 @@ export function ConvertAsk({ ask, onOk, onCancel }: { ask: ConvAsk; onOk(): void
   const t = useNotesT();
   const todo = ask.kind === 'todo';
   const k = ask.files > 0 && ask.images > 0 ? 'both' : ask.files > 0 ? 'file' : 'img';
-  const what = [ask.files > 0 ? t('notes.conv.what.file', { n: ask.files }) : '', ask.images > 0 ? t('notes.conv.what.img', { n: ask.images }) : ''].filter(Boolean).join(t('notes.conv.what.sep', {}));
+  const what = whatText(t, 'conv', ask.files, ask.images);
   return (
     <ConfirmDialog
       open
@@ -157,7 +166,7 @@ export function ConvertAsk({ ask, onOk, onCancel }: { ask: ConvAsk; onOk(): void
 /** 带附件、插图的移进隐私记之前问一次（B4b-1，线框 sAtt 最后一张）：附件、图会一起加密搬进隐私记 */
 export function MoveAsk({ files, images, onOk, onCancel }: { files: number; images: number; onOk(): void; onCancel(): void }) {
   const t = useNotesT();
-  const what = [files > 0 ? t('notes.move.what.file', { n: files }) : '', images > 0 ? t('notes.move.what.img', { n: images }) : ''].filter(Boolean).join(t('notes.conv.what.sep', {}));
+  const what = whatText(t, 'move', files, images);
   return (
     <ConfirmDialog
       open

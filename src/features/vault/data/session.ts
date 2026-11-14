@@ -501,14 +501,18 @@ export function createVaultSession(d: VaultSessionDeps) {
       get: (id: string, part: 'full' | 'thumb') => fileOp((tok) => d.api.fileGet(id, part, tok), false),
       remove: (id: string) => fileOp((tok) => d.api.fileCall({ action: 'remove', id }, tok, vaultFileOkResponse), true),
       restore: (id: string) => fileOp((tok) => d.api.fileCall({ action: 'restore', id }, tok, vaultFileOkResponse), true),
-      // 发之前就记 msLive：请求在飞时上锁（回 STALE），服务器可能已经放了临时明文副本，上锁时也要发 end（多发一次无害）
-      msPreview(id: string) {
+      // 发之前就记 msLive：请求在飞时上锁（回 STALE），服务器可能已经放了临时明文副本，上锁时也要发 end（多发一次无害）。
+      // 回来后再记一次：在飞时预览已经关了（end 先发了、msLive 落回 false），服务器随后才放的副本，调用方回来再 end 一次时要真发出去
+      async msPreview(id: string) {
         msLive = true;
-        return fileOp((tok) => d.api.fileCall({ action: 'ms_preview', id }, tok, vaultFilePreviewResponse), true);
+        const r = await fileOp((tok) => d.api.fileCall({ action: 'ms_preview', id }, tok, vaultFilePreviewResponse), true);
+        msLive = true;
+        return r;
       },
       msPreviewEnd(): void {
         if (!msLive) return;
         msLive = false;
+        rlog(`vatt ms_preview_end ${token ? 'sent' : 'no_token'}`);
         if (token) d.api.fileEnd(token);
       },
     },

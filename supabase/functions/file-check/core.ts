@@ -12,7 +12,7 @@
 //   存储额度在写行时由触发器 media_quota_guard 判过、/files 的 put 复核过（迁移 2026111423xxxx），这里不再判。
 // 写回带条件 check_status = 'pending'：两边同时判时只有一边写成。日志只经 deps.log 记码，不记文件名、路径、内容。
 import { errorResponder, json, NO_STORE, cronGate } from '../_shared/http.ts';
-import { readJsonCapped } from '../_shared/body.ts';
+import { readAll, readJsonCapped } from '../_shared/body.ts';
 import type { AuthResult } from '../_shared/auth-result.ts';
 import { utcMinuteKey } from '../_shared/rate-key.ts';
 import { FILE_MAX_BYTES } from '../_shared/gen/logic/files/limits.ts';
@@ -81,10 +81,6 @@ type Code = 'not_found' | 'rate_limited' | 'try_later' | 'bad_request' | 'method
 const err = errorResponder<Code>();
 
 type Verdict = FileCheckRes | { status: 'lost' };
-
-async function readAll(body: unknown): Promise<Uint8Array> {
-  return new Uint8Array(await new Response(body as BodyInit).arrayBuffer());
-}
 
 /** 判一行；fromCron 时原文件缺了按 24 小时放弃、缩略图缺了不管 */
 export async function verify(row: FileRow, deps: Deps, r2: Obj, store: Store, fromCron: boolean): Promise<Verdict> {

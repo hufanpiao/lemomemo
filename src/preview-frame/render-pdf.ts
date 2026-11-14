@@ -94,11 +94,17 @@ export async function render(root: HTMLElement, bytes: ArrayBuffer, post: Post):
     thumbs[n - 1]?.firstElementChild?.replaceChildren(c);
   }
 
+  // 某一页画坏了就空着那一页，不影响别的页；从“画过”里去掉，滚回来再试一次（评审 20）
+  const tryDraw = (fn: (n: number) => Promise<void>, done: Set<number>, n: number): void => {
+    void fn(n).catch(() => {
+      done.delete(n);
+    });
+  };
   const near = new IntersectionObserver((es) => {
-    for (const e of es) if (e.isIntersecting) void draw(Number((e.target as HTMLElement).dataset['n'])).catch(() => undefined);   // 某一页画坏了就空着那一页，不影响别的页
+    for (const e of es) if (e.isIntersecting) tryDraw(draw, drawn, Number((e.target as HTMLElement).dataset['n']));
   }, { rootMargin: '800px 0px' });
   const nearThumb = new IntersectionObserver((es) => {
-    for (const e of es) if (e.isIntersecting) void drawThumb(Number((e.target as HTMLElement).dataset['n'])).catch(() => undefined);
+    for (const e of es) if (e.isIntersecting) tryDraw(drawThumb, thumbDrawn, Number((e.target as HTMLElement).dataset['n']));
   }, { root: rail, rootMargin: '300px 0px' });
   const seen = new IntersectionObserver((es) => {
     const hit = es.find((e) => e.isIntersecting);

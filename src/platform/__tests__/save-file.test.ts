@@ -22,8 +22,14 @@ describe('saveFile', () => {
   it('不是 iPhone 主屏幕版：直接 download，文件名照传', async () => {
     const e = env({ isIosStandalone: vi.fn(() => false) });
     expect(await saveFile(blob, NAME, 'application/gzip', e)).toBe('downloaded');
-    expect(e.download).toHaveBeenCalledWith(blob, NAME);
+    expect(e.download).toHaveBeenCalledWith(blob, NAME, 60_000);
     expect(e.share).not.toHaveBeenCalled();
+  });
+
+  it('blob URL 回收时间可以传短（隐私记的明文）', async () => {
+    const e = env({ isIosStandalone: vi.fn(() => false) });
+    await saveFile(blob, NAME, 'application/gzip', e, 10_000);
+    expect(e.download).toHaveBeenCalledWith(blob, NAME, 10_000);
   });
 
   it('iPhone 主屏幕版、canShare 认：用 navigator.share 分享一个同名文件，不再 download', async () => {

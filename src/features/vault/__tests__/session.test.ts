@@ -222,4 +222,13 @@ describe('文档附件（vault-file，B4b-1）', () => {
     s.lock();
     expect(api.fileEnd).toHaveBeenCalledTimes(1);
   });
+
+  it('请求在飞时预览就关了：先发一次 end；回来后调用方再 end，要真发出去（服务器可能是之后才放的副本）', async () => {
+    const { s, api } = await unlocked();
+    const p = s.file.msPreview(NID);
+    s.file.msPreviewEnd();
+    await p;
+    s.file.msPreviewEnd();
+    expect(api.fileEnd).toHaveBeenCalledTimes(2);
+  });
 });

@@ -14,7 +14,7 @@
 // • sweep：删过期登记的对象和登记；再删桶里早于“链接有效期 + 2 分钟”的对象（没登记的、或登记已过期的；没过期的登记一定比这年轻，
 //   因为先登记再写对象，所以不会误删正在用的预览）；写心跳 vault-file-sweep。
 // 日志只经 deps.log 记码，不记文件名、路径、签名链接、内容。
-import { readCapped, readJsonCapped } from '../_shared/body.ts';
+import { readAll, readCapped, readJsonCapped } from '../_shared/body.ts';
 import type { AuthResult } from '../_shared/auth-result.ts';
 import { cronGate, errorResponder, json, NO_STORE } from '../_shared/http.ts';
 import { utcHourKey, utcMinuteKey } from '../_shared/rate-key.ts';
@@ -139,10 +139,6 @@ const JSON_MAX_BODY = 1024;
 const PREVIEW_KIND = 'pptx';
 
 interface Ctx { uid: string; deps: Deps; rules: Rules; store: Store; r2: Obj; master: Bytes }
-
-async function readAll(body: unknown): Promise<Uint8Array> {
-  return new Uint8Array(await new Response(body as BodyInit).arrayBuffer());
-}
 
 async function blobBytes(v: FormDataEntryValue | null): Promise<Uint8Array | null> {
   if (v === null || typeof v === 'string') return null;

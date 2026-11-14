@@ -20,13 +20,15 @@ export interface SaveEnv {
   isIosStandalone(): boolean;
   share?: (data: { files: File[] }) => Promise<void>;
   canShare?: (data: { files: File[] }) => boolean;
-  download(blob: Blob, name: string): void;
+  download(blob: Blob, name: string, revokeMs?: number): void;
 }
 
 /** blob URL 回收前等多久（Safari 点完 a 以后要过一会儿才开始读） */
 const REVOKE_AFTER_MS = 60_000;
+/** 隐私记附件的明文：blob URL 只留 10 秒（评审 14；下载是本机内存里读，10 秒足够浏览器开始读） */
+export const VAULT_REVOKE_MS = 10_000;
 
-function browserDownload(blob: Blob, name: string): void {
+function browserDownload(blob: Blob, name: string, revokeMs: number = REVOKE_AFTER_MS): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -38,7 +40,7 @@ function browserDownload(blob: Blob, name: string): void {
     a.click();
   } finally {
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS);
+    setTimeout(() => URL.revokeObjectURL(url), revokeMs);
   }
 }
 
@@ -56,34 +58,6 @@ export function browserSaveEnv(): SaveEnv {
 }
 
 
-/** 存文件；download 本身抛错时往外抛（调用方提示“没存上”） */
-export async function saveFile(blob: Blob, name: string, type: string, env: SaveEnv = browserSaveEnv()): Promise<SaveOutcome> {
-  if (env.isIosStandalone() && env.share && env.canShare) {
-    let file: File | null = null;
-    try {
-      file = new File([blob], name, { type });
-    } catch {
-      file = null;
-    }
-    let ok = false;
-    try {
-      ok = file !== null && env.canShare({ files: [file] });
-    } catch {
-      ok = false;
-    }
-    if (file && ok) {
-      try {
-        await env.share({ files: [file] });
-        return 'shared';
-      } catch (e) {
-        return errName(e) === 'AbortError' ? 'cancelled' : 'needs_tap';
-      }
-    }
-  }
-  env.download(blob, name);
-  return 'downloaded';
-}
-
 const fileOf = (blob: Blob, name: string, type: string): File | null => {
   try {
     return new File([blob], name, { type });
@@ -91,6 +65,17 @@ const fileOf = (blob: Blob, name: string, type: string): File | null => {
     return null;
   }
 };
+
+/** 存文件；download 本身抛错时往外抛（调用方提示“没存上”）。主屏幕版走 shareFile（同一段分享逻辑，评审 17），它说分享不了才 download。
+ *  revokeMs：blob URL 多久后回收（隐私记的明文短一些） */
+export async function saveFile(blob: Blob, name: string, type: string, env: SaveEnv = browserSaveEnv(), revokeMs: number = REVOKE_AFTER_MS): Promise<SaveOutcome> {
+  if (env.isIosStandalone()) {
+    const r = await shareFile(blob, name, type, env);
+    if (r !== 'unsupported') return r;
+  }
+  env.download(blob, name, revokeMs);
+  return 'downloaded';
+}
 
 /** 这台设备能不能把文件交给别的 App（系统分享面板）；拿一个空文件问 canShare */
 export function canShareFiles(env: SaveEnv = browserSaveEnv(), type = 'application/pdf'): boolean {

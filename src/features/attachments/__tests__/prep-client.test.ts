@@ -50,4 +50,21 @@ describe('createPrepClient', () => {
     c.onMessage(msg(win, { t: 'prep', id: 'k3', pages: null, text: '', thumb: null }));
     expect(await empty).toEqual({ pages: null, text: null, thumb: null });
   });
+
+  it('隐藏沙箱卸下又挂上（评审 2）：新窗口回 ready 之前先排着，不发给旧窗口、不丢', async () => {
+    const a = frame();
+    const b = frame();
+    let cur: Window | null = a.win;
+    const c = createPrepClient(() => cur, { encode: async () => null, timeoutMs: 1000, newId: () => 'n1' });
+    c.onMessage(msg(a.win, { t: 'ready' }));
+    cur = null;   // 窗口拉窄：沙箱卸下
+    const p = c.extract(new Uint8Array([1]), 'pdf');
+    cur = b.win;   // 再拉宽：挂上新的
+    expect(a.sent).toEqual([]);
+    expect(b.sent).toEqual([]);
+    c.onMessage(msg(b.win, { t: 'ready' }));
+    expect(b.sent).toHaveLength(1);
+    c.onMessage(msg(b.win, { t: 'prep', id: 'n1', pages: 2, text: 'x', thumb: null }));
+    expect((await p)?.pages).toBe(2);
+  });
 });

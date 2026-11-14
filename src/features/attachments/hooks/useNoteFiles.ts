@@ -46,12 +46,12 @@ export function useNoteFiles(noteId: string | null): AttItem[] {
 }
 
 /** 隐私记这条的附件（vault-att 的快照，形状同 useNoteFiles） */
-export function useVaultFiles(va: VaultAtt): { loaded: boolean; items: AttItem[] } {
+export function useVaultFiles(va: VaultAtt): { loaded: boolean; failed: boolean; items: AttItem[] } {
   const snap = useSyncExternalStore(va.subscribe, va.get, va.get);
   return useMemo(() => {
     const items: AttItem[] = snap.files.map((f) => ({ id: f.id, file: f, pending: null }));
     for (const p of snap.pending) items.push({ id: p.id, file: null, pending: p });
-    return { loaded: snap.loaded, items };
+    return { loaded: snap.loaded, failed: snap.failed, items };
   }, [snap]);
 }
 

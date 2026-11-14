@@ -16,6 +16,7 @@ import { r2FromEnv } from '../_shared/objstore-env.ts';
 import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { versionGate } from '../_shared/version-gate.ts';
+import { sha256Hex } from '../_shared/vault-files.ts';
 import { sniffFile } from '../_shared/gen/logic/files/file-sniff.ts';
 import { inflateRaw } from '../_shared/gen/logic/files/inflate.ts';
 import { noteFilePath, noteFileThumbPath } from '../_shared/gen/logic/files/media-path.ts';
@@ -25,11 +26,6 @@ import { fileRow, settleRow, staleIds, writeHeartbeat } from './store.ts';
 
 const log = (code: string) => console.error(`file-check: ${code}`);
 const R2 = r2FromEnv();
-
-async function sha256Hex(b: Uint8Array): Promise<string> {
-  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', b as BufferSource));
-  return [...d].map((x) => x.toString(16).padStart(2, '0')).join('');
-}
 
 Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL');

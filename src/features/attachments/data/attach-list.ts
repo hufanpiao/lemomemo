@@ -39,6 +39,9 @@ function toFile(r: Row): NoteFile | null {
   };
 }
 
+/** 同一条随手记的附件按 id 排（uuid v7，就是加上的先后）；隐私记附件区也用这一个 */
+export const byId = (a: { id: string }, b: { id: string }): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
 /** 活着的附件按随手记分好，每条里按 id（加入先后）排 */
 export function filesByNote(rows: readonly Row[]): Map<string, NoteFile[]> {
   const out = new Map<string, NoteFile[]>();
@@ -49,6 +52,6 @@ export function filesByNote(rows: readonly Row[]): Map<string, NoteFile[]> {
     l.push(f);
     out.set(f.noteId, l);
   }
-  for (const l of out.values()) l.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const l of out.values()) l.sort(byId);
   return out;
 }

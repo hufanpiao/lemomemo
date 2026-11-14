@@ -51,20 +51,22 @@ describe('createVaultAtt', () => {
     va.source.onNotice((x) => seen.push(x.key));
     await va.load();
     const r = await va.source.add(NOTE, file);
-    await flush();
+    // add 等传完才回：没传上回 silent（提示已经经 onNotice 发过）
+    expect(r).toEqual({ ok: false, key: 'silent' });
+    const id = va.get().pending[0]?.id ?? '';
     expect(va.get().pending[0]?.fail).toBe('retry');
     expect(seen).toEqual(['retry']);
-    expect(r.ok && va.source.retry(r.id)).toBe(true);
+    expect(va.source.retry(id)).toBe(true);
     await flush();
     expect(va.get().pending).toEqual([]);
+    expect(va.get().files.map((f) => f.id)).toContain(id);
   });
 
   it('rejected 带 reason：不能重传；409 exists 当传上了、重新 list', async () => {
     const { va } = setup({ upload: vi.fn(async () => ({ ok: false as const, code: 'rejected', reason: 'bad_archive' as const })) });
-    const r = await va.source.add(NOTE, file);
-    await flush();
+    await va.source.add(NOTE, file);
     expect(va.get().pending[0]?.fail).toBe('bad_archive');
-    expect(r.ok && va.source.retry(r.id)).toBe(false);
+    expect(va.source.retry(va.get().pending[0]?.id ?? '')).toBe(false);
     const b = setup({ upload: vi.fn(async () => ({ ok: false as const, code: 'exists' })) });
     await b.va.source.add(NOTE, file);
     await flush();
@@ -95,10 +97,38 @@ describe('createVaultAtt', () => {
     const url = await va.source.msUrl({ ...f, kind: 'pptx' });
     expect(url).toBe(`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent('https://app.example/sb/storage/v1/object/sign/vault-preview/ab.pptx?token=t')}`);
     va.dispose();
+    // 有没有副本在、要不要真发，由隐私记会话记着（msLive，见 session 的测试）；这里只透传
     expect(api.msPreviewEnd).toHaveBeenCalledTimes(1);
     expect(va.source.inMemory(f.id)).toBe(false);
-    va.source.msEnd();
-    expect(api.msPreviewEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('传的途中去掉（评审 1）：传回来不进列表；服务器已经收下了就再删掉', async () => {
+    const box: { done?: () => void } = {};
+    const { api, va } = setup({
+      upload: vi.fn((m) => new Promise<{ ok: true; file: VaultFileItem }>((res) => { box.done = () => res({ ok: true, file: item(m.id) }); })),
+    });
+    await va.load();
+    const p = va.source.add(NOTE, file);
+    await flush();
+    const id = va.get().pending[0]?.id ?? '';
+    expect(await va.source.remove(id)).toBe('dropped');
+    expect(va.get().pending).toEqual([]);
+    box.done?.();
+    expect(await p).toEqual({ ok: false, key: 'silent' });
+    expect(api.remove).toHaveBeenCalledWith(id);
+    expect(va.get().files.map((f) => f.id)).not.toContain(id);
+  });
+
+  it('list 没取到（评审 10）：记 failed，不当成没有附件；重试成功后清掉', async () => {
+    let n = 0;
+    const { va } = setup({
+      list: vi.fn(async () => (++n === 1 ? { ok: false as const, code: 'offline' } : { ok: true as const, files: [item('0190a000-0000-7000-8000-00000000000b')] })),
+    });
+    await va.load();
+    expect(va.get()).toMatchObject({ loaded: true, failed: true, files: [] });
+    await va.load();
+    expect(va.get()).toMatchObject({ loaded: true, failed: false });
+    expect(va.get().files).toHaveLength(1);
   });
 
   it('不是 pptx 不要微软预览；取不到字节按码回原因', async () => {

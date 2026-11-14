@@ -75,41 +75,45 @@ async function fetchSigned(f: FileRef, purpose: 'view' | 'download', d?: string)
   return { ok: true, blob: b.blob };
 }
 
+/** 取到的字节核 sha256（和行上记的对不上就不交出去），对上了进缓存；预览、下载同一条规矩（评审 13） */
+async function fetchVerified(f: FileRef, purpose: 'view' | 'download', d?: string): Promise<OpenResult> {
+  const t0 = Date.now();
+  const b = await fetchSigned(f, purpose, d);
+  if (!b.ok) return b;
+  const bytes = await b.blob.arrayBuffer();
+  if ((await sha256Hex(new Uint8Array(bytes))) !== f.sha256) {
+    rlog(`att ${purpose} mismatch kind=${f.kind}`);
+    return { ok: false, why: 'mismatch' };
+  }
+  mem.set(f.id, bytes);
+  rlog(`att ${purpose} ok kind=${f.kind} kb=${Math.round(bytes.byteLength / 1024)} ms=${Date.now() - t0}`);
+  return { ok: true, bytes };
+}
+
 /** 交出缓存里的那一份（不复制，整块评审第 12 条）：只许读；要转移进预览沙箱的，转移前自己 slice 一份（SandboxFrame） */
 export async function openBytes(f: FileRef): Promise<OpenResult> {
-  const t0 = Date.now();
   const hit = mem.get(f.id);
   if (hit) {
     rlog(`att open mem kind=${f.kind}`);
     return { ok: true, bytes: hit };
   }
-  const b = await fetchSigned(f, 'view');
-  if (!b.ok) return b;
-  const bytes = await b.blob.arrayBuffer();
-  if ((await sha256Hex(new Uint8Array(bytes))) !== f.sha256) {
-    rlog(`att open mismatch kind=${f.kind}`);
-    return { ok: false, why: 'mismatch' };
-  }
-  mem.set(f.id, bytes);
-  rlog(`att open ok kind=${f.kind} kb=${Math.round(bytes.byteLength / 1024)} ms=${Date.now() - t0}`);
-  return { ok: true, bytes };
+  return fetchVerified(f, 'view');
 }
 
 export type DownloadResult = { ok: true; outcome: SaveOutcome } | { ok: false; why: OpenFail };
 
 export async function download(f: FileRef): Promise<DownloadResult> {
-  const cached = mem.get(f.id);
-  if (cached) return saveBytes(cached, f);
-  const b = await fetchSigned(f, 'download', sanitizeFileName(f.name, f.kind));
-  return b.ok ? saveBytes(await b.blob.arrayBuffer(), f) : b;
+  const b = mem.get(f.id) ?? (await fetchVerified(f, 'download', sanitizeFileName(f.name, f.kind)));
+  if (b instanceof ArrayBuffer) return saveBytes(b, f);
+  return b.ok ? saveBytes(b.bytes, f) : b;
 }
 
 /** 已经拿到明文字节：存到本机（普通、隐私记共用）。类型只取 DOC_TYPES 里这一类的，不沿用响应的 Content-Type（架构 5.13 第 4 点 (a)） */
-export async function saveBytes(bytes: ArrayBuffer, f: Pick<FileRef, 'kind' | 'name'>): Promise<DownloadResult> {
+export async function saveBytes(bytes: ArrayBuffer, f: Pick<FileRef, 'kind' | 'name'>, revokeMs?: number): Promise<DownloadResult> {
   const name = sanitizeFileName(f.name, f.kind);
   const type = DOC_TYPES[f.kind];
   try {
-    const outcome = await saveFile(new Blob([bytes], { type }), name, type);
+    const outcome = await saveFile(new Blob([bytes], { type }), name, type, undefined, revokeMs);
     rlog(`att download ${outcome} kind=${f.kind}`);
     return { ok: true, outcome };
   } catch {

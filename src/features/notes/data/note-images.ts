@@ -9,7 +9,7 @@
 //   网络、5xx、限流按 2 s、5 s、15 s 退避重试三次，还不行按“没传上”；account 类（停用、会话被吊销）走 accountExitOf → 离开本机（S13）
 // • 删除：发送失败区里还有这一行的新建 → 放弃（resolveFailedCreate drop）；否则软删（deleted_at），进“最近删除”
 // 纯 TS：不准 import React（A1）
-import { PUT_BACKOFF, putWithBackoff } from '../../../core/row-sync.ts';
+import { PUT_BACKOFF, putFailOf, putParts } from '../../../core/row-sync.ts';
 import type { FileError, UploadResult } from '../../../platform/files.ts';
 
 /** 插图失败的几种提示（i18n 键 notes.img.fail.<键>） */
@@ -45,27 +45,8 @@ export function imageRow(userId: string, noteId: string, id: string, m: ImageMet
   };
 }
 
-const LENGTH = new Set(['length_mismatch', 'length_required']);
-
-/** 上传的错误 → 提示；null = 可以退避重试（网络、5xx、限流、登录刷新、签名过期） */
-export function uploadFailKey(e: FileError): ImgFailKey | null {
-  if (e.reason === 'quota_exceeded' || e.code === 'quota_exceeded') return 'quota';
-  if (LENGTH.has(e.code) || (e.reason !== undefined && LENGTH.has(e.reason))) return 'length';
-  switch (e.kind) {
-    case 'retry':
-    case 'auth':
-    case 'resign':
-      return null;
-    case 'too_big':
-      return 'too_big';
-    case 'bad_type':
-      return 'bad_type';
-    case 'upgrade':
-      return 'upgrade';
-    default:
-      return 'denied';
-  }
-}
+/** 上传的错误 → 提示；null = 可以退避重试（分类在 core/row-sync.ts，插图的提示键和分类同名） */
+export const uploadFailKey = (e: FileError): ImgFailKey | null => putFailOf(e);
 
 /** 行写进 outbox 后被服务器拒的码 → 提示 */
 export const writeFailKey = (code: string | null): ImgFailKey => (code === 'quota_exceeded' ? 'quota' : 'write');
@@ -80,12 +61,5 @@ export async function uploadPair(
   sleep: (ms: number) => Promise<void>,
   backoff: readonly number[] = PUT_BACKOFF,
 ): Promise<'ok' | ImgFailKey | FileError> {
-  for (const [p, b] of [
-    [path, full],
-    [thumbPath(path), thumb],
-  ] as const) {
-    const r = await putWithBackoff<ImgFailKey>(() => up(p, b), uploadFailKey, 'retry', sleep, backoff);
-    if (r !== 'ok') return r;
-  }
-  return 'ok';
+  return putParts<readonly [string, Blob], ImgFailKey>([[path, full], [thumbPath(path), thumb]], ([p, b]) => up(p, b), uploadFailKey, 'retry', sleep, backoff);
 }

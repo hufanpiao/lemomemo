@@ -56,8 +56,8 @@ export interface AttPanelProps {
 }
 
 type Msg = { key: AttMsgKey; name: string };
-/** 提示条：删了能撤销（撤销调 undoRemove）；隐私记加上了能撤销（撤销调 remove） */
-type Undo = { id: string; name: string; added: boolean };
+/** 提示条：删了能撤销（撤销调 undoRemove）；隐私记加上了能撤销（撤销调 remove）。一次加了几个，“撤销”把这几个一起去掉（评审 11） */
+type Undo = { ids: readonly string[]; name: string; added: boolean };
 
 const isImage = (f: File): boolean => f.type.startsWith('image/');
 
@@ -86,12 +86,15 @@ export function AttPanel({ src, items, noteId, disabled, onImages }: AttPanelPro
       setMsg(null);
       const pics = files.filter(isImage);
       if (pics.length && onImages) onImages(pics);
+      const added: string[] = [];
       for (const f of files.filter((x) => !isImage(x))) {
         const r: AddResult = await src.add(noteId, f, prep.extract);
         // 别的失败上传器自己发提示（useAttNotices 收）；隐私记、只读这两种它不发
         if (!r.ok && (r.key === 'private' || r.key === 'readonly')) setMsg({ key: `att.fail.${r.key}`, name: f.name });
-        else if (r.ok && vault) setUndo({ id: r.id, name: f.name, added: true });
+        else if (r.ok && vault) added.push(r.id);
       }
+      // 隐私记的 add 等传上才回 ok：提示只在真传上以后出
+      if (added.length) setUndo({ ids: added, name: '', added: true });
     },
     [noteId, onImages, src, prep.extract, vault],
   );
@@ -123,7 +126,7 @@ export function AttPanel({ src, items, noteId, disabled, onImages }: AttPanelPro
     // 只有软删的才给“撤销”；行没写成被放弃的、本来就没了的，删掉就是删掉
     setMsg(null);
     const r = await src.remove(id);
-    if (r === 'soft') setUndo({ id, name, added: false });
+    if (r === 'soft') setUndo({ ids: [id], name, added: false });
     else if (r === false) setMsg({ key: 'att.fail.write', name });
   };
 
@@ -173,10 +176,10 @@ export function AttPanel({ src, items, noteId, disabled, onImages }: AttPanelPro
       {canAdd ? <iframe ref={prep.ref} hidden src="/app/preview" sandbox="allow-scripts" title={t('att.pv.frame', {})} data-testid="note-files-prep" /> : null}
       {undo ? (
         <UndoToast
-          key={undo.id}
+          key={undo.ids.join(',')}
           message={undo.added ? t('att.vault.added', {}) : t('att.deleted', { name: undo.name })}
           undoLabel={t('att.undo', {})}
-          onUndo={() => void (undo.added ? src.remove(undo.id) : src.undoRemove(undo.id))}
+          onUndo={() => void Promise.all(undo.ids.map((id) => (undo.added ? src.remove(id) : src.undoRemove(id))))}
           onClose={() => setUndo(null)}
           data-testid="note-files-undo"
         />

@@ -56,7 +56,7 @@ import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
-import { ConvertAsk, MoveAsk, MergeBar, MoreMenu, useConvertFlow, type PageTip } from './NotesActions.tsx';
+import { ConvertAsk, MoveAsk, MergeBar, MoreMenu, needsAsk, useConvertFlow, type PageTip } from './NotesActions.tsx';
 import { Dot } from './CatDot.tsx';
 import { InputRow, useInputDraft } from './NotesInputRow.tsx';
 import { SwipeRow } from './NoteSwipe.tsx';
@@ -121,7 +121,7 @@ function NotesList() {
     setMenu(null);
     const it = l.items.find((x) => x.id === id);
     if (isRo(id)) guard.block();
-    else if (it && (it.files > 0 || it.images > 0)) setAskMove(it);
+    else if (it && needsAsk(it)) setAskMove(it);
     else setMoving(id);
   };
   const shown = (it: NoteItem) => !moved.has(it.id);

@@ -56,6 +56,7 @@ export const ko = {
   'att.share.again': '“{name}” 준비가 끝났어요. ‘다른 앱으로 열기’를 한 번 더 눌러 주세요.', // REVIEW(ko)
   'att.share.no': '이 기기에서는 “{name}”을(를) 다른 앱으로 넘길 수 없어요. ‘다운로드’를 써 주세요.', // REVIEW(ko)
   'att.vault.added': '비밀 메모에 추가했어요(암호화해서 보관)', // REVIEW(ko)
+  'att.vault.loadFail': '첨부파일을 불러오지 못했어요', // REVIEW(ko)
   'att.vault.plain': '“{name}”을(를) 다운로드했어요. 다운로드한 파일은 암호화되지 않아요.', // REVIEW(ko)
   'att.pv.close': '닫기', // REVIEW(ko)
   'att.pv.prev': '이전 쪽', // REVIEW(ko)

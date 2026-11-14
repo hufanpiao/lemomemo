@@ -12,19 +12,7 @@ import { write } from './write.ts';
 import { accountExitOf, type FileError, type UploadResult } from '../platform/files.ts';
 import { readSessionId } from '../platform/session.ts';
 
-/** 时间有序的 UUID v7（同一条随手记里的图、附件按 id 排就是插入的先后） */
-export function uuidv7(now: number, rnd: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n))): string {
-  const b = rnd(16);
-  let t = Math.max(0, Math.floor(now));
-  for (let i = 5; i >= 0; i--) {
-    b[i] = t % 256;
-    t = Math.floor(t / 256);
-  }
-  b[6] = 0x70 | ((b[6] ?? 0) & 0x0f);
-  b[8] = 0x80 | ((b[8] ?? 0) & 0x3f);
-  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-}
+export { uuidv7 } from './uuidv7.ts';
 
 /** 这一行在 outbox 里的情况：pending 还在排、failed 进了发送失败区（带码）、confirmed 上了服务器、gone 行没了 */
 export type RowSync = { s: 'pending' } | { s: 'failed'; code: string | null } | { s: 'confirmed' } | { s: 'gone' };
@@ -104,6 +92,44 @@ export async function putWithBackoff<K>(
     if (wait === undefined) return retryKey;
     await sleep(wait);
   }
+}
+
+/** PUT 失败的分类（插图、附件两个上传器共用，各自再换成自己的提示键）；null = 可以退避重试（网络、5xx、限流、登录刷新、签名过期） */
+export type PutFail = 'quota' | 'length' | 'too_big' | 'bad_type' | 'upgrade' | 'denied';
+const LENGTH = new Set(['length_mismatch', 'length_required']);
+export function putFailOf(e: FileError): PutFail | null {
+  if (e.reason === 'quota_exceeded' || e.code === 'quota_exceeded') return 'quota';
+  if (LENGTH.has(e.code) || (e.reason !== undefined && LENGTH.has(e.reason))) return 'length';
+  switch (e.kind) {
+    case 'retry':
+    case 'auth':
+    case 'resign':
+      return null;
+    case 'too_big':
+      return 'too_big';
+    case 'bad_type':
+      return 'bad_type';
+    case 'upgrade':
+      return 'upgrade';
+    default:
+      return 'denied';
+  }
+}
+
+/** 依次 PUT 几份（原文件 / 原图在前、缩略图在后），每份退避重试；哪一份不是 ok 就停在那一份、原样交回 */
+export async function putParts<P, K>(
+  parts: readonly P[],
+  put: (x: P) => Promise<UploadResult>,
+  failKey: (e: FileError) => K | null,
+  retryKey: K,
+  sleep: (ms: number) => Promise<void>,
+  backoff: readonly number[] = PUT_BACKOFF,
+): Promise<'ok' | K | FileError> {
+  for (const x of parts) {
+    const r = await putWithBackoff(() => put(x), failKey, retryKey, sleep, backoff);
+    if (r !== 'ok') return r;
+  }
+  return 'ok';
 }
 
 /**

@@ -21,6 +21,7 @@
 //   ③ 抛错时先另开短事务看一眼，已经是目标状态就照上面补救、不删；看不了都不删（宁可留垃圾）。
 // 令牌由 core.ts 在进来之前单独验过；这里自己开事务，不占着 core 的事务做网络请求。
 // 日志只记结果码（move_missing_src、move_integrity、move_cleanup_failed、move_repair_failed、decrypt_failed），不记文件名、路径、内容。
+import { readAll } from '../_shared/body.ts';
 import { ENC_KEY_ID, openNote, sealNote } from '../_shared/vault-crypto.ts';
 import { IMAGE_TYPE, isExists, VAULT_IMAGE_BUCKET } from '../_shared/vault-images.ts';
 import {
@@ -57,10 +58,6 @@ function fileKeys(c: Ctx, f: FileRow): { key: string; part: 'file' | 'thumb' }[]
   const k: { key: string; part: 'file' | 'thumb' }[] = [{ key: c.deps.rules.fileKey(c.userId, f.note_id, f.id, f.kind), part: 'file' }];
   if (f.has_thumb) k.push({ key: c.deps.rules.fileThumbKey(c.userId, f.note_id, f.id), part: 'thumb' });
   return k;
-}
-
-async function readAll(body: unknown): Promise<Uint8Array> {
-  return new Uint8Array(await new Response(body as BodyInit).arrayBuffer());
 }
 
 /** 写一个对象；带 If-None-Match 时对象已经在算成功、不记进 written */

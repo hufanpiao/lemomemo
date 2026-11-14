@@ -138,7 +138,8 @@ export default function PreviewLayer({ src, file, desk, onClose, onDownload, onS
   const pages = st?.pages ?? 0;
   const page = st?.page ?? 1;
   const zoom = st?.zoom ?? 100;
-  const paged = phase.k === 'local' && (phase.way === 'pdf' || phase.way === 'pptx') && pages > 1;
+  // 只有 PDF 能翻页：PPT 本机退回是整份往下排（render-pptx 不回当前页，评审 4）
+  const paged = phase.k === 'local' && phase.way === 'pdf' && pages > 1;
   const zoomable = phase.k === 'local' && phase.way !== 'pptx';
 
   return createPortal(

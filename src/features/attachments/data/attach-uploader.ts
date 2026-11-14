@@ -11,7 +11,8 @@
 // • 运行日志（rlog）：每一步只记类型、大小、结果码和耗时，不记文件名和内容
 // 写行、等确认、待传列表、默认依赖和插图上传器共用 core/row-sync.ts；这里只写判型、拼行、PUT 之后的 file-check。
 // 纯 TS：不准 import React（A1）
-import { pendingList, putWithBackoff, rowState, rowUploadDefaults, uuidv7, waitRow, type RowUploadDeps } from '../../../core/row-sync.ts';
+import { pendingList, putFailOf, putParts, rowState, rowUploadDefaults, waitRow, type RowUploadDeps } from '../../../core/row-sync.ts';
+import { uuidv7 } from '../../../core/uuidv7.ts';
 import { collection } from '../../../core/store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { upload, type FileError, type UploadResult } from '../../../platform/files.ts';
@@ -20,7 +21,7 @@ import { noteFilePath, noteFileThumbPath } from '../../../../shared/logic/files/
 import type { DocKind } from '../../../../shared/manifests/attachments.ts';
 import type { RejectReason } from '../../../../shared/schema/attachments.ts';
 import { fileCheck, type CheckResult } from './file-check-api.ts';
-import { prepareFile, type Prepared, type PrepFail } from './file-prep.ts';
+import { prepareFile, prepWithExtras, type Prepared, type PrepFail } from './file-prep.ts';
 
 export const TABLE = 'note_files';
 
@@ -66,23 +67,10 @@ export interface AttUploaderDeps extends RowUploadDeps {
   log?: (line: string) => void;
 }
 
-/** PUT 的错误 → 提示；null = 退避重试 */
+/** PUT 的错误 → 提示；null = 退避重试（分类在 core/row-sync.ts；附件的“类型不认”提示叫 unknown，没有单独的“长度不对”，归 denied） */
 export function putFailKey(e: FileError): AttFailKey | null {
-  if (e.reason === 'quota_exceeded' || e.code === 'quota_exceeded') return 'quota';
-  switch (e.kind) {
-    case 'retry':
-    case 'auth':
-    case 'resign':
-      return null;
-    case 'too_big':
-      return 'too_big';
-    case 'bad_type':
-      return 'unknown';
-    case 'upgrade':
-      return 'upgrade';
-    default:
-      return 'denied';
-  }
+  const k = putFailOf(e);
+  return k === 'bad_type' ? 'unknown' : k === 'length' ? 'denied' : k;
 }
 
 const CHECK_TRIES = 3;
@@ -103,10 +91,11 @@ export function createAttUploader(deps: AttUploaderDeps) {
     list.notify({ key, noteId: it.noteId, name: it.name });
   };
 
-  /** PUT 一份（原文件或缩略图）；'not_pending'（上次其实传成了）单独回，交给 byRowStatus */
-  async function putOne(x: Part): Promise<'ok' | 'not_pending' | AttFailKey | FileError> {
-    return putWithBackoff<AttFailKey | 'not_pending'>(
-      async () => {
+  /** 原文件、缩略图依次 PUT；'not_pending'（上次其实传成了）单独回，交给 byRowStatus */
+  const put = (it: Item): Promise<'ok' | 'not_pending' | AttFailKey | FileError> =>
+    putParts<Part, AttFailKey | 'not_pending'>(
+      it.parts,
+      async (x) => {
         const r = await deps.upload(x.path, x.blob, x.mime);
         if (!r.ok) log(`att put ${r.kind} code=${r.code}${r.reason ? ` reason=${r.reason}` : ''}`);
         return r;
@@ -115,15 +104,6 @@ export function createAttUploader(deps: AttUploaderDeps) {
       'retry',
       deps.sleep,
     );
-  }
-  /** 原文件、缩略图依次 PUT；哪一份不是 ok 就停在那一份 */
-  async function put(it: Item): Promise<'ok' | 'not_pending' | AttFailKey | FileError> {
-    for (const x of it.parts) {
-      const r = await putOne(x);
-      if (r !== 'ok') return r;
-    }
-    return 'ok';
-  }
 
   /** 行已经不在 pending（0.33）：ok 当成功；rejected 当“没能加上”；行没了就丢掉 */
   function byRowStatus(id: string): void {
@@ -194,11 +174,9 @@ export function createAttUploader(deps: AttUploaderDeps) {
       if (uid === null) return end({ ok: false, key: 'silent' });
       if (deps.isPrivate(noteId)) return end({ ok: false, key: 'private' });
       if (deps.isReadonly(noteId)) return end({ ok: false, key: 'readonly' });
-      const p = await deps.prepare(file);
-      log(p.ok ? `att prep ok kind=${p.kind} kb=${Math.round(p.bytes.length / 1024)}` : `att prep ${p.reason} detail=${p.detail}`);
-      if (!p.ok) return end({ ok: false, key: p.reason });
-      const x = extract ? await extract(p.bytes, p.kind).catch(() => null) : null;
-      if (extract) log(`att extract ${x ? `ok pages=${x.pages ?? '-'} thumb=${x.thumb ? 1 : 0} chars=${x.text?.length ?? 0}` : 'none'}`);
+      const r = await prepWithExtras(file, deps.prepare, extract, log, 'att');
+      if (!r.ok) return end({ ok: false, key: r.reason });
+      const { p, x } = r;
       const id = uuidv7(deps.now());
       const now = deps.now();
       const path = noteFilePath(uid, noteId, id, p.kind);

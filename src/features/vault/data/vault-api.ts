@@ -13,7 +13,7 @@
 import type { z } from 'zod';
 import { isEntryErrorCode } from '../../../../shared/schema/entry-codes.ts';
 import { vaultErrorBody, vaultErrorCode, type VaultImageUploadQuery, type VaultRequest } from '../../../../shared/schema/vault.ts';
-import { VAULT_FILE_FN, vaultFileErrorBody, type VaultFileRequest } from '../../../../shared/schema/vault-file.ts';
+import { VAULT_FILE_FN, vaultFileErrorBody, vaultFileErrorCode, type VaultFileRequest } from '../../../../shared/schema/vault-file.ts';
 import type { RejectReason } from '../../../../shared/schema/attachments.ts';
 import { VAULT_TOKEN_HEADER } from '../../../core/vault-token.ts';
 import { buildInfo } from '../../../platform/env.ts';
@@ -56,7 +56,8 @@ export interface VaultApiOptions {
 /** vault-file 的失败响应 → 码：附件自己的码放 fileCode（导出给测试） */
 export function fileFailOf(status: number, body: unknown): VaultFail {
   const p = vaultFileErrorBody.safeParse(body);
-  if (p.success && !vaultErrorCode.safeParse(p.data.error).success && ['exists', 'rejected', 'quota_exceeded', 'corrupt'].includes(p.data.error)) {
+  // 附件自己的码 = vault-file 的码表（shared/schema/vault-file.ts）里、但不在隐私记共用码表里的那几个（exists、rejected、quota_exceeded、corrupt）
+  if (p.success && vaultFileErrorCode.safeParse(p.data.error).success && !vaultErrorCode.safeParse(p.data.error).success) {
     return { ok: false, code: 'unknown', fileCode: p.data.error, ...(p.data.reason ? { reason: p.data.reason } : {}) };
   }
   return failOf(status, body);
