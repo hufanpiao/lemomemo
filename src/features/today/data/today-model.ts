@@ -5,10 +5,12 @@
 // • “现在”卡四种状态：live（有正在进行的）、idle（没有进行中、今天还有下一件）、done（今天的日程都结束了）、empty（今天没有日程）；
 //   全天事项不算“正在进行”、不进时间轴（仍在今天列表里）
 // • 时间窗 kWin：照视觉稿 kWin() 逐条移植（分钟，相对今天 0 点；跨到明天的事项可以 > 1440）
-// • 没赶上：没完成、截止日早于今天的待办（逾 N 天）；今天有截止时刻、已经过了的也算（逾 0 天，界面写“已过 17:00”）
+// • 没赶上：没完成、截止日早于今天的待办（逾 N 天）；今天有截止时刻、已经过了的也算（逾 0 天，界面写“已过 17:00”）。
+//   “逾期”规则和读待办行只在 shared/logic/todo-row.ts（isLate、todoOf，和待办页共用）
 import { addDays, diffDays, fmtHm, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
+import { isLate, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 // 同一时刻按标题排：按当前语言、数字按数值（和待办页共用，shared/i18n/title-compare.ts）
 import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
@@ -153,30 +155,12 @@ export function nowCard(todayEvents: readonly EventOcc[], now: number, current: 
 
 // ---------- 待办：今天、没赶上 ----------
 
-export interface TodoOcc {
+/** 读一行和“逾期”规则在 shared/logic/todo-row.ts（和待办页共用） */
+export interface TodoOcc extends TodoFields {
   kind: 'todo';
-  id: string;
-  title: string;
-  project: string;
-  done: boolean;
-  important: boolean;
-  due: DateStr | null;
-  dueTime: string | null;
 }
 
-export function todoOcc(r: Row): TodoOcc {
-  const due = str(r['due']);
-  const dt = r['due_time'];
-  return {
-    kind: 'todo', id: r.id, title: str(r['title']), project: str(r['project']), done: r['done'] === true, important: r['important'] === true,
-    due: DATE.test(due) ? due : null, dueTime: typeof dt === 'string' && HM.test(dt) ? dt : null,
-  };
-}
-
-/** 截止时刻（epoch ms，按 current_tz，待办截止是浮动的）；没有截止时刻为 null */
-export function dueAtOf(t: TodoOcc, current: Tz): number | null {
-  return t.due && t.dueTime ? msAt(t.due, parseHm(t.dueTime), current) : null;
-}
+export const todoOcc = (r: Row): TodoOcc => ({ kind: 'todo', ...todoOf(r) });
 
 export interface Late {
   todo: TodoOcc;
@@ -192,10 +176,7 @@ export function lateTodos(rows: readonly Row[], now: number, current: Tz, locale
   for (const r of rows) {
     if (!isLiveRow(r)) continue;
     const t = todoOcc(r);
-    if (t.done || !t.due) continue;
-    const days = diffDays(t.due, today);
-    if (days > 0) out.push({ todo: t, days });
-    else if (days === 0 && (dueAtOf(t, current) ?? Infinity) <= now) out.push({ todo: t, days: 0 });
+    if (t.due && isLate(t, now, current)) out.push({ todo: t, days: diffDays(t.due, today) });
   }
   return out.sort((a, b) => b.days - a.days || (a.todo.dueTime ?? '').localeCompare(b.todo.dueTime ?? '') || byTitle(a.todo.title, b.todo.title));
 }
@@ -208,9 +189,7 @@ export function todayTodos(rows: readonly Row[], now: number, current: Tz, local
   for (const r of rows) {
     if (!isLiveRow(r)) continue;
     const t = todoOcc(r);
-    if (t.due !== today) continue;
-    if (!t.done && (dueAtOf(t, current) ?? Infinity) <= now) continue;
-    out.push(t);
+    if (t.due === today && !isLate(t, now, current)) out.push(t);
   }
   return out.sort((a, b) => Number(a.done) - Number(b.done) || (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99') || byTitle(a.title, b.title));
 }
@@ -239,6 +218,11 @@ export function tomorrowOf(now: number, current: Tz): DateStr {
 }
 
 /** 时长文字的拆分（界面按语言拼）：照视觉稿 kDur，h 为 0 时只写分 */
+/** 暖心句选第几句（负责人 11-14）：按用户时区的当天日期固定，同一天每次打开同一句，第二天换下一句（从 1970-01-01 起的天数取余） */
+export function cheerIndex(today: DateStr, n: number): number {
+  return n > 0 ? ((diffDays('1970-01-01', today) % n) + n) % n : 0;
+}
+
 export function splitDur(min: number): { h: number; m: number } {
   const v = Math.max(0, Math.round(min));
   return { h: Math.floor(v / 60), m: v % 60 };

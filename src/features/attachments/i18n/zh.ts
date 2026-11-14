@@ -77,4 +77,20 @@ export const zh = {
   'att.ms.loading': '正在用微软预览… 一般几秒；20 秒还没出来，会改成显示缩略图和每页文字',
   'att.ms.fallback': '微软这次没打开，先看缩略图和每页文字',
   'att.ms.again': '再试一次',
+  // B4b-2 识图：随手记图片下面的识别状态（线框 sAIst；att.ai.*）
+  'att.ai.pending': '识别中 · 几分钟内好，好了就能按意思找到',
+  'att.ai.failed': '没识别 · 试了 3 次没成功',
+  'att.ai.retry': '重新识别',
+  'att.ai.retryFail': '这次没连上，稍后再试一次',
+  'att.ai.off': '没交给 AI · AI 没打开或你没同意，这张图不能按意思找',
+  'att.ai.open': '去打开',
+  'att.ai.other': '没识别 · 这张图太大或打不开',
+  'att.ai.seen': 'AI 看到的',
+  'att.ai.tags': '标签',
+  'att.ai.hint': '只写是什么东西，不抄号码；用来按意思找',
+  // 看图页（点随手记里的插图打开；线框 sAIst 第一屏、d 屏看图浮层）
+  'att.iv.frame': '看图',
+  'att.iv.count': '第 {i} 张，共 {n} 张',
+  'att.iv.prev': '上一张',
+  'att.iv.next': '下一张',
 } as const;

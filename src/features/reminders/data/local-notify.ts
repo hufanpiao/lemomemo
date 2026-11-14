@@ -99,13 +99,13 @@ export function localText(r: Reminder, opts: { showTitle: boolean; tz: Tz; local
 /**
  * 系统里还挂着的某条通知（kind、id、那一次的 dueAt）是不是已经处理了：
  * 删了、撤销、待办完成、关了提醒、按了知道了，或者这一条现在的到点时刻已经不是那一次（改了时间、按了稍后）。
+ * 纪念日和日程、待办同一套（审查第 8 条）：list、rowKnown 只在纪念日推算加载好以后才带纪念日行（remind-list.ts），没加载好时 rowKnown 为 false、不动它。
  * rowKnown：本机集合里有没有这一行（含已删的）。本机没有这一行时不动它——可能是还没拉下来，不能当成已删（永久删除的靠墓碑删本机行后，
  * 下次打开也就留着那条通知；接受，点开整页提醒会写“找不到了”）
  */
 const num0 = (v: unknown): boolean => v === 0;
 
 export function shouldCloseShown(t: { kind: string; id: string; dueAt: number; occurrenceKey?: string | null }, list: readonly Reminder[], rowKnown: boolean, tz?: Tz): boolean {
-  if (t.kind === 'anniv') return false;   // 纪念日本批不在列表里，不动它
   const r = list.find((x) => x.kind === t.kind && x.id === t.id);
   if (!r) return rowKnown;
   if (r.handled) return true;

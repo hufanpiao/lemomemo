@@ -374,6 +374,31 @@ describe('ms_preview、ms_preview_end', () => {
     expect(w.objects.size + w.previews.size).toBe(0);
   });
 
+  it('审查第 4 条：ms_preview_end 只验 JWT 不验隐私记令牌——令牌过期、别处改过密码、没带令牌都照样删掉自己的临时明文副本；开预览照旧要令牌', async () => {
+    for (const token of [null, 'expired-token', RELOCK]) {
+      const w = world();
+      await w.seed(F, 'pptx', PPTX);
+      expect((await w.call({ action: 'ms_preview', id: F })).status).toBe(200);
+      expect(w.objects.size).toBe(1);
+      expect((await w.call({ action: 'ms_preview_end' }, { token })).json).toEqual({ ok: true });
+      expect(w.objects.size + w.previews.size).toBe(0);
+      expect((await w.call({ action: 'ms_preview', id: F }, { token })).status).toBe(401);
+    }
+  });
+
+  it('ms_preview_end 照旧先过 JWT（没登录的拒、副本不动）；别人的 JWT 删不到这个人的副本', async () => {
+    const w = world();
+    await w.seed(F, 'pptx', PPTX);
+    await w.call({ action: 'ms_preview', id: F });
+    expect((await w.call({ action: 'ms_preview_end' }, { user: B, token: null })).json).toEqual({ ok: true });
+    expect(w.objects.size).toBe(1);
+    const real = w.deps.authenticate;
+    w.deps.authenticate = async () => ({ ok: false, response: new Response('{"error":"unauthorized"}', { status: 401, headers: { 'content-type': 'application/json' } }) });
+    expect((await w.call({ action: 'ms_preview_end' }, { token: null })).status).toBe(401);
+    expect(w.objects.size).toBe(1);
+    w.deps.authenticate = real;
+  });
+
   it('写对象失败：删登记、回 503；签名失败：对象和登记都删', async () => {
     const w = world();
     await w.seed(F, 'pptx', PPTX);

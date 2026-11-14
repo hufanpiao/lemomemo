@@ -2,8 +2,9 @@
 // 只用到 fn_ai 的列级授权：public.note_files 的 id、user_id、note_id、kind、bytes、sha256、has_thumb、is_vault、deleted_at、check_status、created_at
 //   （sha256、created_at 由迁移 20261115000000 补授权）；写只写 check_status、etag；
 //   private.scan_note_files（跨用户只有定位列，20261115000000 加了 is_vault、created_at）；private.heartbeat（策略只放 file-check 等三个名字）。
+// retry_ai（B4b-2 识图）：public.note_images 读 (id, user_id, bucket, deleted_at, ai_status)、写 (ai_status, skip_reason, ai_tries, ai_next_at)（0003 已给 fn_ai）。
 import type { Tx } from '../_shared/db.ts';
-import type { FileRow } from './core.ts';
+import type { AiStatus, FileRow } from './core.ts';
 
 function rowOf(r: Record<string, unknown>): FileRow {
   return {
@@ -41,4 +42,17 @@ export async function settleRow(tx: Tx, row: FileRow, status: 'ok' | 'rejected',
 export async function writeHeartbeat(tx: Tx, detail: Record<string, number>): Promise<void> {
   await tx`insert into private.heartbeat (name, at, detail) values ('file-check', now(), ${tx.json(detail)})
     on conflict (name) do update set at = excluded.at, detail = excluded.detail`;
+}
+
+/** 重新识别：本人普通插图（images 桶、没删）failed → pending、ai_tries 清零；回改完以后的状态，没有这张回 null */
+export async function retryAi(tx: Tx, uid: string, id: string): Promise<AiStatus | null> {
+  const rows = await tx`with r as (
+      update public.note_images set ai_status = 'pending', skip_reason = null, ai_tries = 0, ai_next_at = null
+       where user_id = ${uid} and id = ${id} and bucket = 'images' and deleted_at is null and ai_status = 'failed' returning ai_status)
+    select ai_status from r
+    union all
+    select ai_status from public.note_images
+     where user_id = ${uid} and id = ${id} and bucket = 'images' and deleted_at is null and not exists (select 1 from r)`;
+  const s = rows[0]?.['ai_status'];
+  return s === 'pending' || s === 'done' || s === 'skip' || s === 'failed' ? s : null;
 }

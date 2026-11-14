@@ -8,6 +8,9 @@ import { describe, expect, it } from 'vitest';
 import { PURGE_WORK_OPS, R2_BUCKETS, type R2 } from '../../supabase/functions/account-purge/core.ts';
 import { A, B, type FakeBackups } from './account-fakes.ts';
 import { requestDeletion, runPurge, toFirstRun, world, type World } from './account-purge-harness.ts';
+import { logTag } from './account-fakes.ts';
+const tA = await logTag(A);   // 日志里认人的 HMAC 标签（安全审查第 11 条）
+const tB = await logTag(B);   // 日志里认人的 HMAC 标签（安全审查第 11 条）
 
 const MIN = 60_000;
 /** 一次删掉这么多对象，折算的调用次数就超过删除段的上限（列、删、再列：2 × 页数 + 删的次数） */
@@ -65,7 +68,7 @@ describe('删除段：按调用次数停手，不再领新账号，心跳带 rem
     if (pb) pb.notice_sent = false;   // B 没提醒过：这一轮补发（顺延），不删
     const r = await runPurge(w, { sendMail: async () => false });   // 补发也失败：B 留着（held）
     expect(r.body).toMatchObject({ purged: 0, failed: 1, held: 1, deferred: 0, remaining: 2 });
-    expect(r.logs).toContain(`purge_held_no_notice:${B.slice(0, 8)}`);
+    expect(r.logs).toContain(`purge_held_no_notice:${tB}`);
     expect(Object.keys(w.db.heartbeat ?? {}).sort()).toEqual(
       ['blocked', 'deferred', 'failed', 'forced', 'held', 'ms', 'ops', 'postponed', 'purged', 'remaining', 'remind_left', 'remind_ops', 'sent']);
     for (const v of Object.values(w.db.heartbeat ?? {})) expect(typeof v).toBe('number');
@@ -82,7 +85,7 @@ describe('删除段：半截续删，只在真删了东西之后停', () => {
     const r = await runPurge(w, { r2 });
     expect(r2.calls).toEqual([R2_BUCKETS[0]]);
     expect(r.body).toMatchObject({ purged: 0, deferred: 1, failed: 0, remaining: 1 });
-    expect(r.logs).toContain(`time_budget:${A.slice(0, 8)}`);
+    expect(r.logs).toContain(`time_budget:${tA}`);
     expect(w.db.pending.get(A)?.purge_started_at).toBeNull();
     expect(w.db.users.has(A)).toBe(true);
     expect(w.db.deleted.has(A)).toBe(false);
@@ -114,7 +117,7 @@ describe('删除段：半截续删，只在真删了东西之后停', () => {
     expect(calls).toEqual([...R2_BUCKETS]);
     expect(w.backups.count(A)).toBe(0);   // 唯一的日期也是最后一个日期：做完不停，一直走到第 5 步之后的墙钟检查
     expect(r.body).toMatchObject({ purged: 0, deferred: 1, remaining: 1 });
-    expect(r.logs).toContain(`time_budget:${A.slice(0, 8)}`);
+    expect(r.logs).toContain(`time_budget:${tA}`);
     expect(w.db.users.has(A)).toBe(true);
     expect(w.db.deleted.has(A)).toBe(false);
     expect(w.db.pending.get(A)?.purge_started_at).toBeNull();

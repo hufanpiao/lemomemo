@@ -11,7 +11,8 @@ import { deliver } from '../_shared/push/send.ts';
 import { resolveOverride } from '../_shared/push/stub.ts';
 import { cachedSigner, cachedVapid } from '../_shared/push/notify.ts';
 import { json } from '../_shared/http.ts';
-import { versionGate } from '../_shared/version-gate.ts';
+import { rpcTakeRate } from '../_shared/take-rate.ts';
+import { appConfigMinLoader, versionGate } from '../_shared/version-gate.ts';
 import { handle, type TestDevice } from './core.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
@@ -28,21 +29,12 @@ Deno.serve(async (req) => {
     return json(500, { error: 'misconfigured' });
   }
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
-  const blocked = await versionGate('push-test', req, async (signal) => {
-    const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
-    if (error) throw new Error('db');
-    return data?.min_client_version ?? null;
-  });
+  const blocked = await versionGate('push-test', req, appConfigMinLoader(admin));
   if (blocked) return blocked;
-  const priv = admin.schema('private');
   return handle(req, {
     authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
     store: {
-      async takeRate(k, limit, windowS) {
-        const { data, error } = await priv.rpc('take_rate', { p_key: k, p_limit: limit, p_window_s: windowS });
-        if (error) throw new Error('db');
-        return data === true;
-      },
+      takeRate: rpcTakeRate(admin),
       async devices(userId) {
         const { data, error } = await admin.from('devices').select('id, push_endpoint, p256dh, auth').eq('user_id', userId)
           .is('deleted_at', null).not('push_endpoint', 'is', null).order('id', { ascending: true });

@@ -1,6 +1,7 @@
 // 撤回判定按 occurrenceKey（REMIND-close-occkey 前端一半；方案第 6 节、修订 1 L1，第 9 节第 7 条里 App 那部分；SW 那部分归前端 A）
 // • shouldCloseShown：通知带了 key 先按 key 判——等于这一次的留着、不等就关，不看 tag（默认时刻 20:00 时“D 当天”和“D+1 前一天”同一个时刻）；
 //   没带 key 照旧（tag 相同留着、不同按天推断）
+// • 审查第 8 条：纪念日也在列表里（allReminders 第 7 个参数），别的设备按了“知道了”（notified_for 落到这一次）后本机挂着的那条要撤回
 // • closeHandledNotifications：从通知 data 读 occurrence_key，validOccurrenceKey 校验，不合格当没带
 import { describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
@@ -63,5 +64,28 @@ describe('closeHandledNotifications 读通知 data 的 occurrence_key', () => {
       { registration: async () => ({ getNotifications: async () => ns }) },
     );
     expect(seen).toEqual([`event:${ID}:allday:2026-11-06:1`, null, null, null, null]);
+  });
+});
+
+describe('shouldCloseShown 纪念日（审查第 8 条）', () => {
+  const AID = '0b6f4f1e-2c7d-4a7e-9a55-333333333333';
+  const due = at('2026-11-20', '09:00');
+  const annivAt = () => ({ at: due, date: '2026-11-20' as const });
+  const arow = (over: Record<string, unknown>) => ({ id: AID, name: '结婚纪念日', deleted_at: null, notified_for: null, snooze_at: null, ...over });
+  const alist = (over: Record<string, unknown>) => allReminders([], [], at('2026-11-20', '09:05'), SEOUL, null, undefined, { rows: [arow(over)], at: annivAt });
+  const shown = { kind: 'anniv', id: AID, dueAt: due };
+
+  it('别的设备按了知道了（notified_for = 这一次）：本机挂着的通知撤回；带 key 也一样', () => {
+    const l = alist({ notified_for: due });
+    expect(l[0]?.handled).toBe(true);
+    expect(shouldCloseShown(shown, l, true, SEOUL)).toBe(true);
+    expect(shouldCloseShown({ ...shown, occurrenceKey: `anniv:${AID}:${due}` }, l, true, SEOUL)).toBe(true);
+  });
+
+  it('还没处理：留着；本机有行但已不在列表（删了）：撤回；本机没这一行：不动', () => {
+    const l = alist({});
+    expect(shouldCloseShown(shown, l, true, SEOUL)).toBe(false);
+    expect(shouldCloseShown(shown, [], true, SEOUL)).toBe(true);
+    expect(shouldCloseShown(shown, [], false, SEOUL)).toBe(false);
   });
 });

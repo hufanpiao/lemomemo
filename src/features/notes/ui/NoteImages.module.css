@@ -95,6 +95,22 @@
   overflow: hidden;
 }
 
+/* 传好了的图整块是“看大图”按钮（点了打开看图页） */
+.open {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  cursor: zoom-in;
+}
+
+/* 图框 overflow: hidden 会裁掉画在外面的焦点框，往里收 */
+.open:focus-visible {
+  outline-offset: -3px;
+}
+
 /* 上传中：半透明盖一层，字居中 */
 .veil {
   position: absolute;

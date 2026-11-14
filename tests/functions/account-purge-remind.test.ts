@@ -9,6 +9,8 @@ import { deletionDoneMail, deletionReminderLateMail, deletionReminderMail, delet
 import { A, DAY, H, T0 } from './account-fakes.ts';
 import { markNoticed, requestDeletion, runPurge, world, type World } from './account-purge-harness.ts';
 import { tzLabel } from '../../shared/i18n/tz-label.ts';
+import { logTag } from './account-fakes.ts';
+const tA = await logTag(A);   // 日志里认人的 HMAC 标签（安全审查第 11 条）
 
 const MIN = 60_000;
 
@@ -123,7 +125,7 @@ describe('到期了还没提醒：补发并顺延 24 小时（负责人 11-04 �
     const now = w.clock.ms;
     const r = await runPurge(w);
     expect(r.body).toMatchObject({ sent: 1, postponed: 1, purged: 0, held: 0 });
-    expect(r.logs).toContain(`purge_postponed:${A.slice(0, 8)}`);
+    expect(r.logs).toContain(`purge_postponed:${tA}`);
     expect(w.db.pending.get(A)).toMatchObject({ notice_sent: true, purge_after: new Date(now + REMIND_LATE_POSTPONE_MS).toISOString() });
     expect(w.box.map((m) => m.mail.subject)).toEqual([deletionReminderLateMail('zh-CN', 0, 'Asia/Seoul', tzLabel).subject]);
     expect(w.box[0]?.mail.text).toBe(deletionReminderLateMail('zh-CN', now + REMIND_LATE_POSTPONE_MS, 'Asia/Seoul', tzLabel).text);
@@ -159,8 +161,8 @@ describe('到期了还没提醒：补发并顺延 24 小时（负责人 11-04 �
     const pa0 = await overdue(w);
     const r = await runPurge(w, { sendMail: async () => false });
     expect(r.body).toMatchObject({ sent: 0, postponed: 0, purged: 0, held: 1, remaining: 1 });
-    expect(r.logs).toContain(`remind_mail_failed:${A.slice(0, 8)}`);
-    expect(r.logs).toContain(`purge_held_no_notice:${A.slice(0, 8)}`);
+    expect(r.logs).toContain(`remind_mail_failed:${tA}`);
+    expect(r.logs).toContain(`purge_held_no_notice:${tA}`);
     expect(w.db.pending.get(A)).toMatchObject({ notice_sent: false, purge_after: pa0, purge_started_at: null });
     expect(w.db.users.has(A)).toBe(true);
     w.clock.advance(15 * MIN);
@@ -175,7 +177,7 @@ describe('到期了还没提醒：补发并顺延 24 小时（负责人 11-04 �
     const other = new Date(w.clock.ms + REMIND_LATE_POSTPONE_MS - MIN).toISOString();
     w.db.beforePostpone = () => { const d = w.db.pending.get(A); if (d) { d.notice_sent = true; d.purge_after = other; } };
     const r = await runPurge(w);
-    expect(r.logs).toContain(`remind_postpone_skipped:${A.slice(0, 8)}`);
+    expect(r.logs).toContain(`remind_postpone_skipped:${tA}`);
     expect(r.body).toMatchObject({ sent: 1, postponed: 0, purged: 0 });
     expect(w.db.pending.get(A)?.purge_after).toBe(other);   // 别人的顺延不被覆盖
     expect(w.db.users.has(A)).toBe(true);
@@ -191,7 +193,7 @@ describe('到期了还没提醒：补发并顺延 24 小时（负责人 11-04 �
         if (d) d.purge_started_at = new Date(w.clock.ms).toISOString();
       };
       const r = await runPurge(w);
-      expect(r.logs, how).toContain(`remind_postpone_skipped:${A.slice(0, 8)}`);
+      expect(r.logs, how).toContain(`remind_postpone_skipped:${tA}`);
       expect(r.body, how).toMatchObject({ postponed: 0, purged: 0 });
       if (how === 'claimed') expect(w.db.pending.get(A)).toMatchObject({ notice_sent: false, purge_after: pa0 });
       expect(w.db.users.has(A), how).toBe(true);

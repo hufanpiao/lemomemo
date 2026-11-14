@@ -1,4 +1,4 @@
-// file-check（B4b-1；架构 5.13 第 2 点“服务器 fn file-check”）：客户端 check、cron sweep 的判定和写回
+// file-check（B4b-1；架构 5.13 第 2 点“服务器 fn file-check”）：客户端 check、cron sweep 的判定和写回；B4b-2 识图加 retry_ai（重新识别）
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { sniffFile } from '../../shared/logic/files/file-sniff.ts';
@@ -6,7 +6,7 @@ import { inflateRaw } from '../../shared/logic/files/inflate.ts';
 import { FILE_MAX_BYTES } from '../../shared/logic/files/limits.ts';
 import { noteFilePath, noteFileThumbPath } from '../../shared/logic/files/media-path.ts';
 import { fileCheckReq } from '../../shared/schema/attachments.ts';
-import { type Deps, type FileRow, handle, MISSING_GIVE_UP_MS, RATE_PER_MIN, SWEEP_AFTER_MS } from '../../supabase/functions/file-check/core.ts';
+import { type AiStatus, type Deps, type FileRow, handle, MISSING_GIVE_UP_MS, RATE_PER_MIN, SWEEP_AFTER_MS } from '../../supabase/functions/file-check/core.ts';
 import { A, B, FakeR2, jwtFor, T0, uuid } from '../functions/vault-fakes.ts';
 
 const N = uuid(1);
@@ -23,6 +23,8 @@ function world(rowOver: Partial<FileRow> = {}) {
   const logs: string[] = [];
   const beats: Record<string, number>[] = [];
   const rate = new Map<string, number>();
+  /** retry_ai 用：本人普通插图的识别状态（id → [主人, 状态]） */
+  const images = new Map<string, [string, AiStatus]>([[uuid(7), [A, 'failed']], [uuid(8), [A, 'done']]]);
   const body = pdf();
   const rows = new Map<string, FileRow>([[F, {
     id: F, user_id: A, note_id: N, kind: 'pdf', bytes: body.length, sha256: hex(body), has_thumb: false, is_vault: false,
@@ -50,6 +52,12 @@ function world(rowOver: Partial<FileRow> = {}) {
         return true;
       },
       async heartbeat(d) { beats.push(d); },
+      async retryAi(u, id) {
+        const im = images.get(id);
+        if (!im || im[0] !== u) return null;
+        if (im[1] === 'failed') im[1] = 'pending';
+        return im[1];
+      },
     },
     r2: { get: async (b, k) => { const o = await r2.get(b, k); return o ? { ...o, etag: '"e1"' } : null; }, head: (b, k) => r2.head(b, k), deleteMany: (b, k) => r2.deleteMany(b, k) },
     sniff: (b) => sniffFile(b, inflateRaw),
@@ -63,7 +71,7 @@ function world(rowOver: Partial<FileRow> = {}) {
   const call = (b: unknown, h: Record<string, string> = {}, u = A) =>
     handle(new Request('http://x/functions/v1/file-check', { method: 'POST', headers: { authorization: `Bearer ${jwtFor(u, 60, ms)}`, ...h }, body: JSON.stringify(b) }), deps);
   const check = async (u = A) => { const r = await call({ action: 'check', id: F }, {}, u); return { status: r.status, body: (await r.json()) as Record<string, unknown> }; };
-  return { r2, rows, logs, beats, deps, body, key, putObj, call, check, advance: (d: number) => { ms += d; } };
+  return { r2, rows, images, logs, beats, deps, body, key, putObj, call, check, advance: (d: number) => { ms += d; } };
 }
 
 describe('check', () => {
@@ -145,6 +153,34 @@ describe('check', () => {
     const settle = w.deps.store!.settle;
     w.deps.store!.settle = async (row) => { w.rows.get(row.id)!.check_status = 'rejected'; return settle(row, 'ok', null); };
     expect((await w.check()).body).toEqual({ status: 'rejected' });
+  });
+});
+
+describe('retry_ai（B4b-2 识图“重新识别”）', () => {
+  it('failed 的改回 pending；已经识别好的原样回 done；别人的 404；不碰 R2', async () => {
+    const w = world();
+    w.deps.r2 = null;
+    const r = await w.call({ action: 'retry_ai', kind: 'image', id: uuid(7) });
+    expect([r.status, await r.json()]).toEqual([200, { ai_status: 'pending' }]);
+    expect(w.images.get(uuid(7))?.[1]).toBe('pending');
+    const d = await w.call({ action: 'retry_ai', kind: 'image', id: uuid(8) });
+    expect([d.status, await d.json()]).toEqual([200, { ai_status: 'done' }]);
+    expect((await w.call({ action: 'retry_ai', kind: 'image', id: uuid(7) }, {}, B)).status).toBe(404);
+    expect(w.logs).toEqual(['retry_ai:pending', 'retry_ai:done', 'retry_ai:not_found']);
+  });
+
+  it('kind 只收 image（文档的重新识别这一批没做）；同一个每分钟 30 次', async () => {
+    const w = world();
+    expect((await w.call({ action: 'retry_ai', kind: 'file', id: uuid(7) })).status).toBe(400);
+    for (let i = 0; i < RATE_PER_MIN; i++) await w.call({ action: 'retry_ai', kind: 'image', id: uuid(8) });
+    expect((await w.call({ action: 'retry_ai', kind: 'image', id: uuid(8) })).status).toBe(429);
+  });
+
+  it('账号停用（TC-B1-10）：原样回 403 account_disabled，不改状态', async () => {
+    const w = world();
+    w.deps.authenticate = async () => ({ ok: false, response: new Response('{"error":"account_disabled"}', { status: 403 }) });
+    expect((await w.call({ action: 'retry_ai', kind: 'image', id: uuid(7) })).status).toBe(403);
+    expect(w.images.get(uuid(7))?.[1]).toBe('failed');
   });
 });
 

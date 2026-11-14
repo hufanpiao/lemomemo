@@ -9,7 +9,8 @@
 //      claude-intake 同一个人用连接码记一句本机没把握的话：按本机规则记下（经 private.intake_insert 写进真表），Gemini 0 次、AI 计数不动；
 //   ③ TC-B3-29：同意了的人 ai-parse 成功一次，库里 ai:<uid>:<太平洋日期> 合计 1，用本人 JWT 调 my_ai_usage() 看到 ai_used = 1；
 //      再调一次 Gemini 回 500：预扣退回，my_ai_usage 仍是 1；
-//   ④ claude-intake 一句话里有日程和待办：两张表的行都在（一个事务写完）。
+//   ④ claude-intake 一句话里有日程和待办：两张表的行都在（一个事务写完）；
+//   ⑤ 安全审查第 12 条：token-admin 建码经 private.api_token_create，并发两笔冲不破 5 个上限。
 // 改 app_config.ai（provider、model、global_daily）跑 ③，结束时原样恢复。
 // 安全：只打本机。开跑先清上次残留：ai-store-it-*@example.com 的用户和他们的 counters；跑完照样清理。
 import postgres from 'postgres';
@@ -215,6 +216,23 @@ Deno.test({ name: 'TC-B1-10：真 JWT、没有 profiles 行的账号调 ai-parse
   assertEquals(geminiCalls - before, 0, 'Gemini 0 次');
   assertEquals(await keysOf(u), [], '不计数');
   assertEquals((await sql`select 1 from public.api_tokens where user_id = ${u}`).length, 0, '不建连接码');
+} });
+
+Deno.test({ name: '安全审查第 12 条：token-admin 经 private.api_token_create 建码；已有 4 个有效码时并发两笔只成一笔、另一笔 409', ...opts, async fn() {
+  const u = await mkUser('tokcap');
+  const jwt = await jwtOf(u);
+  for (let i = 0; i < 4; i++) await sql`insert into public.api_tokens (user_id, token_hash) values (${u}, ${await tokenHash(randomToken())})`;
+  const req = async (): Promise<RequestInit> => ({
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${jwt}`, 'x-app-version': await appVersion() },
+    body: JSON.stringify({ action: 'create', label: 'store-it' }),
+  });
+  const rs = await Promise.all([call(H.tokenAdmin, 'token-admin', await req()), call(H.tokenAdmin, 'token-admin', await req())]);
+  assertEquals(rs.map((r) => r.status).sort(), [200, 409], JSON.stringify(rs.map((r) => r.json)));
+  assertEquals(rs.find((r) => r.status === 409)?.json, { error: 'too_many_tokens' }, '409 的那一笔');
+  const live = await sql<{ n: number; s: string }[]>`select count(*)::int as n, string_agg(distinct array_to_string(scopes, ','), '|') as s
+    from public.api_tokens where user_id = ${u} and revoked_at is null`;
+  assertEquals([live[0]?.n, live[0]?.s], [5, 'create'], '有效码正好 5 个，scopes 都是 {create}');
+  assertEquals(await keysOf(u), [`token-admin:${u}:${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`], '只成的那一笔计了次数');
 } });
 
 Deno.test({ name: '架构审第九节第 3 条：没同意 AI，ai-parse、ai-voice 回 consent_required，Gemini 0 次、计数不动；claude-intake 只走本机规则', ...opts, async fn() {

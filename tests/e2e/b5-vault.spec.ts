@@ -30,6 +30,8 @@ interface FakeVault {
   notes: Map<string, Record<string, unknown>>;
   /** vault-file 收到的动作和上传的 meta（B4b-1） */
   files: { action: string; meta?: Record<string, unknown>; thumb?: boolean }[];
+  /** 设成 true：下一次 save 回 401 vault_locked（令牌过期），回完自动落回 false（审查第 1 条） */
+  expireNextSave: boolean;
 }
 
 const ZH_PDF = readFileSync(join(import.meta.dirname, 'fixtures', 'b4b1-zh-2p.pdf'));
@@ -72,7 +74,7 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
     return route.fulfill({ json: [] });
   });
 
-  const fv: FakeVault = { calls: [], notes: new Map(), files: [] };
+  const fv: FakeVault = { calls: [], notes: new Map(), files: [], expireNextSave: false };
   const PPTX = await pptx();
   const stored = new Map<string, Record<string, unknown>>();
   await page.route(/\/sb\/functions\/v1\/vault-file/, (route) => {
@@ -115,7 +117,7 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
     const now = Date.now();
     switch (action) {
       case 'status':
-        return route.fulfill({ json: { ok: true, set: pin !== null, locked_until: null, last_reset_at: null, webauthn: 0 } });
+        return route.fulfill({ json: { ok: true, set: pin !== null, locked_until: null, retry_after_s: null, last_reset_at: null, webauthn: 0 } });
       case 'setup':
         pin = String(body['pin']);
         return ok(route);
@@ -131,6 +133,10 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
       case 'list':
         return ok(route, { notes: [...fv.notes.values()] });
       case 'save': {
+        if (fv.expireNextSave) {
+          fv.expireNextSave = false;
+          return fail(route, 401, { error: 'vault_locked' });
+        }
         const id = String(body['id']);
         fv.notes.set(id, { id, title: body['title'], body: body['body'], category_id: null, created_at: body['created_at'], updated_at: body['updated_at'], deleted_at: null, images: [] });
         return ok(route);
@@ -147,10 +153,9 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
   return fv;
 }
 
-/** 在密码键盘上按一串数字再按“确定” */
+/** 在密码键盘上按 4 位数字（满 4 位自动交出，负责人 11-14“隐私记密只做4位数”，没有“确定”键） */
 async function typePin(page: Page, pad: string, digits: string): Promise<void> {
   for (const d of digits) await page.getByTestId(`${pad}-key-${d === '0' ? 9 : Number(d) - 1}`).click(); // 位置序号：1～9 是 key-0～key-8，0 是 key-9
-  await page.getByTestId(`${pad}-ok`).click();
 }
 
 async function shot(page: Page, name: string, browserName: string): Promise<void> {
@@ -234,7 +239,10 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   for (const secret of ['体检报告', '血压']) expect(log).not.toContain(secret);   // 密码本身不比：日志里的耗时数字可能碰巧含这几位，键位由上一行管
 
   await page.getByTestId('vault-back').click();
-  await expect(page.getByTestId('notes')).toBeVisible();
+  // 第一次进随手记：外壳 NotesRoot → NotesPage 和二十几个依赖分两层串着下，这时 SW 还在第一次装、整包预缓存一起在拉。
+  // 11-14 快读组两次红（chromium、webkit 各一次），重复 24 遍复现 3 次：trace 里每个分包 0.6～0.8 秒，点返回 5 秒后还有 11 个没到，
+  // 运行日志 sw register ok 8767ms 正好在这批请求发出时。同第 228 行等解锁列表，给到 15 秒
+  await expect(page.getByTestId('notes')).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('html')).not.toHaveAttribute('data-rt', '1');
   await shot(page, '01-入口行', browserName);
 });
@@ -390,4 +398,55 @@ test('隐私记里的文档附件（B4b-1）：电脑上加（加密）、写页
   const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
   expect(log).toMatch(/vatt upload ok/);
   expect(log).not.toContain('体检报告');
+});
+
+test('审查第 1 条：保存时令牌过期 → 解锁卡点取消 → 再解锁时那次保存不补发', async ({ page, baseURL, browserName }) => {
+  const fv = await fakeServer(page, baseURL);
+  await setupAndUnlock(page, browserName);
+  await page.goto('/app/#/vault/new');
+  await page.getByTestId('vault-edit-title').fill('取消以后不该存的');
+  fv.expireNextSave = true;
+  await page.getByTestId('vault-edit-save').click();
+  await expect(page.getByTestId('vault-unlock-card')).toBeVisible();
+  expect(fv.calls.filter((c) => c.action === 'save')).toHaveLength(1);
+  await page.getByTestId('vault-unlock-cancel').click();
+  // 桌面宽度下随手记页先挂分栏（desk，按需加载），几个 worker 并发时会超过默认 5 秒
+  await expect(page.getByTestId('notes')).toBeVisible({ timeout: 15_000 });
+  await page.goto('/app/#/vault');
+  await page.getByTestId('vault-unlock-pin').click();
+  await typePin(page, 'vault-unlock-pad', PIN);
+  await expect(page.getByTestId('vault-empty')).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(500);
+  expect(fv.calls.filter((c) => c.action === 'save')).toHaveLength(1);
+  expect(fv.notes.size).toBe(0);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault wait cancel n=\d/);
+});
+
+test('审查第 3 条：设密码时开了 Face ID、绑定没成：密码照样设好，隐私记页出提示（role=alert）；审查第 6 条：解锁卡是有名字的对话框、键盘焦点圈', async ({ page, baseURL, browserName }) => {
+  test.skip(browserName !== 'chromium', '虚拟验证器只有 chromium 的 CDP 有');
+  // 虚拟平台验证器：让“能用 Face ID”成立；RP ID 是 IP（127.0.0.1）不被认，绑定一定失败——正好是要测的那条路
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true } });
+  await fakeServer(page, baseURL);
+  await page.goto('/app/#/vault');
+  await expect(page.getByTestId('vault-setup')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('vault-setup-face').check({ force: true });
+  await typePin(page, 'vault-setup-pad', PIN);
+  await expect(page.getByTestId('vault-setup')).toHaveAttribute('data-step', '2');
+  await typePin(page, 'vault-setup-pad', PIN);
+  await expect(page.getByTestId('vault-empty')).toBeVisible({ timeout: 15_000 });
+  const toast = page.getByTestId('vault-bind-fail');
+  await expect(toast).toBeVisible();
+  await expect(toast).toHaveAttribute('role', 'alert');
+  await shot(page, '11-绑定失败提示', browserName);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault bind fail /);
+
+  await page.getByTestId('vault-lock-now').click();
+  const dlg = page.getByRole('dialog');
+  await expect(dlg).toBeVisible();
+  await expect(dlg).toHaveAccessibleName(/.+/);
+  await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="vault-unlock-card"]'))).toBe(true);
+  await page.keyboard.press('Tab');
+  await shot(page, '12-解锁卡键盘焦点', browserName);
 });

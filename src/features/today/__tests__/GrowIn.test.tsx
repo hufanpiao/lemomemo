@@ -105,6 +105,21 @@ describe('GrowIn', () => {
     expect(outer().dataset['anim']).toBe('on');
   });
 
+  it('按着时切走窗口（抬起丢了）：blur、visibilitychange 把“按着”清零，不一直卡住', async () => {
+    mount();
+    for (const fire of [() => window.dispatchEvent(new Event('blur')), () => document.dispatchEvent(new Event('visibilitychange'))]) {
+      resetGrowPointerForTest();
+      window.dispatchEvent(new Event('pointerdown'));
+      h = h === 52 ? 0 : 52;
+      await trigger();
+      await sleep(250);
+      expect(outer().style.height).not.toBe(`${h}px`);
+      fire();
+      await sleep(250);
+      expect(outer().style.height).toBe(`${h}px`);
+    }
+  });
+
   it('页面已经往下滚过：直接到位，同时把滚动位置补上同样的高度；收起时补回去', async () => {
     const by = vi.spyOn(window, 'scrollBy').mockImplementation(() => undefined);
     mount();

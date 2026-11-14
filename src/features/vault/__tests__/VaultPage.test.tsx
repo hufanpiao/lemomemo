@@ -28,7 +28,7 @@ function session(o: { offline?: boolean; purge?: () => void } = {}): VaultSessio
   const reply = (req: VaultRequest): unknown => {
     switch (req.action) {
       case 'status':
-        return o.offline ? { ok: false, code: 'offline' } : { ok: true, set: true, locked_until: null, last_reset_at: null, webauthn: 0 };
+        return o.offline ? { ok: false, code: 'offline' } : { ok: true, set: true, locked_until: null, retry_after_s: null, last_reset_at: null, webauthn: 0 };
       case 'list':
         return { ok: true, notes: [note(), note({ id: GONE, title: '旧的', body: '删掉的', deleted_at: 5 })], vault_token: TOK, expires_at: 9e12 };
       case 'purge':
@@ -51,7 +51,7 @@ function session(o: { offline?: boolean; purge?: () => void } = {}): VaultSessio
     fileCall: async () => ({ ok: false, code: 'unknown' }),
     fileGet: async () => ({ ok: false, code: 'unknown' }),
     fileUpload: async () => ({ ok: false, code: 'unknown' }),
-    fileEnd: () => undefined,
+    fileEnd: async () => true,
   };
   return createVaultSession({ api, onToken: () => undefined, createUrl: () => 'blob:x', revokeUrl: () => undefined });
 }
@@ -270,5 +270,81 @@ describe('11-14 整块评审第 22 条：令牌续不上（超过 12 小时、�
     });
     await waitFor(() => expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(1));
     expect(m.calls.find((c) => c.action === 'save')?.req).toMatchObject({ title: '草稿标题', body: '还没存的正文' });
+  });
+});
+
+describe('审查第 6 条：解锁遮罩是有名字的模态对话框，焦点移进去、圈在里面', () => {
+  it('锁着：role=dialog 的名字是“隐私记已上锁”；焦点在遮罩里；遮罩外的内容对读屏隐藏', async () => {
+    s = session();
+    installVaultSession(s);
+    render(<VaultPage />);
+    await screen.findByTestId('vault-unlock-card');
+    const dlg = await screen.findByRole('dialog', { name: '隐私记已上锁' });
+    expect(dlg.getAttribute('aria-modal')).toBe('true');
+    await waitFor(() => expect(dlg.contains(document.activeElement)).toBe(true));
+    expect(screen.getByTestId('vault-back').closest('[aria-hidden="true"]')).not.toBeNull();
+    // Esc 照旧是“取消”（Radix 接住后交给卡片的 cancel）：回随手记
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(window.location.hash).toBe('#/notes'));
+  });
+});
+
+describe('审查第 9 条：保存进行中碰上令牌过期，不再另交一份草稿', () => {
+  it('点保存 → vault_locked 换成解锁卡（编辑页卸载）→ 解锁：只重发那一次保存，不多存一次', async () => {
+    let n = 0;
+    const m = make({ save: () => (++n === 1 ? { ok: false, code: 'vault_locked' } : { ok: true, vault_token: 't'.repeat(32), expires_at: 9e12 }) });
+    installVaultSession(m.s);
+    window.location.hash = '#/vault/new';
+    render(<VaultPage />);
+    await screen.findByTestId('vault-unlock-card');
+    await act(async () => {
+      await m.s.refreshStatus();
+      await m.s.unlock('1234');
+    });
+    fireEvent.change(await screen.findByTestId('vault-edit-title'), { target: { value: '只存一次' } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('vault-edit-save'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await screen.findByTestId('vault-unlock-card');
+    await act(async () => {
+      await m.s.unlock('1234');
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    await waitFor(() => expect(m.calls.filter((c) => c.action === 'save').length).toBeGreaterThanOrEqual(2));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(2);
+  });
+});
+
+describe('审查第 1 条：令牌过期时解锁卡点“取消”，等着的请求、草稿一并作废', () => {
+  it('保存碰上令牌过期 → 出解锁卡 → 点取消：waiting 落回；之后再解锁不补发那次保存，也不保存卸载时交出的草稿', async () => {
+    let n = 0;
+    const m = make({ save: () => (++n === 1 ? { ok: false, code: 'vault_locked' } : { ok: true, vault_token: 't'.repeat(32), expires_at: 9e12 }) });
+    installVaultSession(m.s);
+    window.location.hash = '#/vault/new';
+    render(<VaultPage />);
+    await screen.findByTestId('vault-unlock-card');
+    await act(async () => {
+      await m.s.refreshStatus();
+      await m.s.unlock('1234');
+    });
+    fireEvent.change(await screen.findByTestId('vault-edit-title'), { target: { value: '没存上的' } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('vault-edit-save'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await screen.findByTestId('vault-unlock-card');
+    expect(m.s.get().waiting).toBe(true);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('vault-unlock-cancel'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(m.s.get().waiting).toBe(false);
+    await act(async () => {
+      await m.s.unlock('1234');
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(1);
   });
 });

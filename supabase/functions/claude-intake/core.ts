@@ -21,8 +21,9 @@
 import { aiGate, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
 import { aiFailCode, errNameOf, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, CheckCtx, CheckResult, ParseFail, ParseInput, ParseOk } from '../_shared/ai/parse-core.ts';
-import { readJsonCapped } from '../_shared/body.ts';
+import { readJsonObjectCapped } from '../_shared/body.ts';
 import { TOKEN_RE, tokenHash, tokenLive } from '../_shared/intake-token.ts';
+import { utcDayKey, utcHourKey } from '../_shared/rate-key.ts';
 
 export const HOURLY_LIMIT = 60;
 export const DAILY_ITEMS = 200;
@@ -117,18 +118,9 @@ import { json } from '../_shared/http.ts';
 export { json };
 const err = (status: number, code: string, extra: Record<string, unknown> = {}) => json(status, { error: code, ...extra });
 
-const utcHour = (ms: number) => new Date(ms).toISOString().slice(0, 13).replace(/[-T]/g, '');
-const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');
-export const hourKey = (tokenId: string, ms: number) => `claude-intake:${tokenId}:${utcHour(ms)}`;
-export const itemsKey = (tokenId: string, ms: number) => `claude-intake-items:${tokenId}:${utcDay(ms)}`;
-export const userItemsKey = (userId: string, ms: number) => `claude-intake-user:${userId}:${utcDay(ms)}`;
-
-/** 边读边计数（按字节，超了中断；安全审建议 1：这个函数网关不验 JWT） */
-async function readBody(req: Request): Promise<Record<string, unknown> | 'too_large' | null> {
-  const v = await readJsonCapped(req, MAX_BODY);
-  if (v === 'too_large') return v;
-  return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-}
+export const hourKey = (tokenId: string, ms: number) => utcHourKey('claude-intake', tokenId, ms);
+export const itemsKey = (tokenId: string, ms: number) => utcDayKey('claude-intake-items', tokenId, ms);
+export const userItemsKey = (userId: string, ms: number) => utcDayKey('claude-intake-user', userId, ms);
 
 /** 有 text：本机规则优先，没把握才走 AI（门不过、AI 失败都用本机结果） */
 async function fromText<Item extends ItemLike>(
@@ -190,7 +182,7 @@ export async function handle<Item extends ItemLike>(req: Request, deps: Deps<Ite
   }
 
   // ---- 请求体 ----
-  const read = await readBody(req);
+  const read = await readJsonObjectCapped(req, MAX_BODY);   // 边读边计字节（安全审建议 1：这个函数网关不验 JWT）
   if (read === 'too_large') return err(413, 'too_large');
   const body = read;
   const hasText = typeof body?.['text'] === 'string';
@@ -250,9 +242,11 @@ export async function handle<Item extends ItemLike>(req: Request, deps: Deps<Ite
   }
   const allowed: Row[] = [];
   try {
+    // 先扣码、再扣人（安全审查第 13 条）：两道都是同一个 UTC 日的键，计数不退。先扣人的话，码那一道不过时人已多计一条，
+    // 这个人别的连接码当天少记一条；先扣码，人那一道不过时码多计一条——人当天已用完，换哪个码都写不进，多计不影响什么
     for (const r of rows) {
-      if (!(await deps.store.takeRate(userItemsKey(userId, now), USER_DAILY_ITEMS, 86400))) break;
       if (!(await deps.store.takeRate(itemsKey(row.id, now), DAILY_ITEMS, 86400))) break;
+      if (!(await deps.store.takeRate(userItemsKey(userId, now), USER_DAILY_ITEMS, 86400))) break;
       allowed.push(r);
     }
   } catch {

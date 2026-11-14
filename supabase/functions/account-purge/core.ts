@@ -57,10 +57,11 @@
 //     写 deleted_accounts 之前（不可逆的几步之前）只看 110 秒墙钟上限：备份都删完了，剩下几次小查询，领了的账号尽量走完。
 //     已经删掉的 R2、备份不会回来，下一次从头再走一遍，删过的那些列出来是空的——同一个账号数据再多也能分几轮删完。
 //   上限的依据和本机实测见 docs/03-评审/B1/PURGE-cpu-budget-执行记录.md。
-// 日志只记错误码和 user_id 前 8 位（A23）：不打印邮箱、请求头、请求体。
+// 日志只记错误码和 user_id 的 HMAC 标签（A23；安全审查第 11 条起不再记 user_id 前 8 位原文，_shared/log-tag.ts）：不打印邮箱、请求头、请求体。
 
 import { deletionDoneMail, deletionReminderLateMail, deletionReminderMail, mailLocale, type Mail, type TzLabeler } from '../_shared/account-mail.ts';
 import { emailHash } from '../_shared/email-hash.ts';
+import { logUserTag } from '../_shared/log-tag.ts';
 import { cronGate, json } from '../_shared/http.ts';
 
 // ---------------- 常量（出处见行尾） ----------------
@@ -176,12 +177,15 @@ export interface Deps {
   /** 信里时区的通俗说法（shared/i18n/tz-label.ts，index.ts 从 _shared/gen 注入，KO-mail-nolink-tz） */
   tzLabel: TzLabeler;
   hashSecret: string | undefined;
+  /** 日志里认人的 HMAC 密钥（index.ts 传 SUPABASE_SERVICE_ROLE_KEY）；没有就记 '-' */
+  logSecret?: string | undefined;
   now: () => number;
   log?: (code: string) => void;
 }
 
 
-const short = (uid: string) => uid.slice(0, 8);
+/** 日志里认人（_shared/log-tag.ts：带服务器密钥的 HMAC 前 16 位，不可反查；安全审查第 11 条） */
+const who = (d: Deps, uid: string) => logUserTag(d.logSecret, uid);
 
 class StepError extends Error {}
 /** backups 里 <日期>/<user_id>/ 下出现子目录 */
@@ -192,30 +196,20 @@ export interface Ops { n: number }
 const PAGE = 1000;   // index.ts 列、删每次最多 1000 个
 type FullDeps = Deps & { store: PurgeStore; r2: R2; backups: Backups };
 
-/** 同一套依赖，每次调用给 ops 记数；两段各用一份，互不挤占 */
+/**
+ * 对象上的每个自有方法调一次给 ops 记一次；别的属性原样拷过去，this 仍是原对象（安全审查第 10 条：PurgeStore 以后加方法不用再来这里补）。
+ * 只认自有可枚举属性（Object.entries）：PurgeStore 两份实现（index.ts 的 makeStore、测试的 fakePurgeStore）都是对象字面量。
+ * 不用 Proxy + Reflect.get：键是 string，过不了 check_backend 的 F7；Object.entries 不按键取值。
+ */
+export function countCalls<T extends object>(obj: T, ops: Ops): T {
+  return Object.fromEntries(Object.entries(obj).map(([k, v]: [string, unknown]) => [k, typeof v === 'function'
+    ? (...a: unknown[]) => { ops.n++; return (v as (...x: unknown[]) => unknown).apply(obj, a); }
+    : v])) as T;
+}
+
+/** 同一套依赖，每次调用给 ops 记数；两段各用一份，互不挤占。store 每个方法一次（countCalls）；R2、backups 按分页折算 */
 function countedDeps(d: FullDeps, ops: Ops): FullDeps {
-  // 每个方法一次（逐个列出：PurgeStore 加了方法，这里不写 TypeScript 就报缺字段）
-  const c = <A extends unknown[], R>(f: (...a: A) => Promise<R>) => (...a: A): Promise<R> => { ops.n++; return f(...a); };
-  const s = d.store;
-  const store: PurgeStore = {
-    listRemind: c(s.listRemind.bind(s)),
-    casNotice: c(s.casNotice.bind(s)),
-    postponeNotice: c(s.postponeNotice.bind(s)),
-    listDue: c(s.listDue.bind(s)),
-    claim: c(s.claim.bind(s)),
-    release: c(s.release.bind(s)),
-    stillClaimed: c(s.stillClaimed.bind(s)),
-    backupsCursor: c(s.backupsCursor.bind(s)),
-    saveBackupsCursor: c(s.saveBackupsCursor.bind(s)),
-    isAdmin: c(s.isAdmin.bind(s)),
-    profile: c(s.profile.bind(s)),
-    deletePendingSignup: c(s.deletePendingSignup.bind(s)),
-    deleteCounterKey: c(s.deleteCounterKey.bind(s)),
-    deleteUserCounters: c(s.deleteUserCounters.bind(s)),
-    insertDeletedAccount: c(s.insertDeletedAccount.bind(s)),
-    remainingRows: c(s.remainingRows.bind(s)),
-    writeHeartbeat: c(s.writeHeartbeat.bind(s)),
-  };
+  const store = countCalls(d.store, ops);
   const pages = (n: number) => 1 + Math.floor(n / PAGE);
   return {
     ...d,
@@ -268,25 +262,25 @@ async function remind(deps: FullDeps, now: number, overBudget: () => boolean): P
       const [email, prof] = await Promise.all([deps.userEmail(r.user_id), store.profile(r.user_id)]);
       const loc = mailLocale(prof?.ui_locale);
       const mail = late ? deletionReminderLateMail(loc, due, prof?.current_tz, deps.tzLabel) : deletionReminderMail(loc, due, prof?.current_tz, deps.tzLabel);
-      if (email === null) { out.noEmail.add(r.user_id); log?.(`remind_no_email:${short(r.user_id)}`); continue; }
+      if (email === null) { out.noEmail.add(r.user_id); log?.(`remind_no_email:${await who(deps, r.user_id)}`); continue; }
       const ok = await deps.sendMail(email, mail).catch(() => false);
-      if (!ok) { log?.(`remind_mail_failed:${short(r.user_id)}`); continue; }   // 什么都不改（也不顺延），下一次运行补发
+      if (!ok) { log?.(`remind_mail_failed:${await who(deps, r.user_id)}`); continue; }   // 什么都不改（也不顺延），下一次运行补发
       out.sent++; out.reminded.add(r.user_id);
       if (late) {
         // 改不到（restore 删了这一行、并发的另一次先顺延了、被认领了）就不顺延，记一条；
         // 这时信里写的时刻晚于实际情况也不会让账号提前被删：没顺延的仍是 notice_sent = false，第二段不删
         if (await store.postponeNotice(r.user_id, r.purge_after, new Date(due).toISOString())) {
           out.postponed++;
-          log?.(`purge_postponed:${short(r.user_id)}`);
+          log?.(`purge_postponed:${await who(deps, r.user_id)}`);
         } else {
-          log?.(`remind_postpone_skipped:${short(r.user_id)}`);
+          log?.(`remind_postpone_skipped:${await who(deps, r.user_id)}`);
         }
       } else if (!(await store.casNotice(r.user_id, false, true))) {
         // 改不到（行已被 restore 删掉，或并发的另一次先标了）不要紧；改的时候出错，下一次运行会再发一封
-        log?.(`remind_mark_skipped:${short(r.user_id)}`);
+        log?.(`remind_mark_skipped:${await who(deps, r.user_id)}`);
       }
     } catch {
-      log?.(`remind_failed:${short(r.user_id)}`);
+      log?.(`remind_failed:${await who(deps, r.user_id)}`);
     }
   }
   return out;
@@ -342,8 +336,8 @@ async function purgeOne(
   // 1. 认领
   if (!(await store.claim(userId, claimedIso, staleIso))) return 'skipped';
   const giveUp = async (code: string): Promise<Outcome> => {
-    log?.(`${code}:${short(userId)}`);
-    await store.release(userId, claimedIso).catch(() => log?.(`release_failed:${short(userId)}`));
+    log?.(`${code}:${await who(deps, userId)}`);
+    await store.release(userId, claimedIso).catch(async () => log?.(`release_failed:${await who(deps, userId)}`));
     return GIVE_UP_AS.get(code) ?? 'failed';
   };
 
@@ -357,7 +351,7 @@ async function purgeOne(
     const reasonOk = prof?.disabled_reason === 'deletion' || (PURGE_ADMIN_DISABLED && prof?.disabled_reason === 'admin');
     if (!prof || prof.disabled_at === null || !reasonOk) return await giveUp('skip_not_disabled');
     email = await deps.userEmail(userId);   // deleteUser 以后就取不到了：留在内存里
-    if (email === null) log?.(`no_email:${short(userId)}`);
+    if (email === null) log?.(`no_email:${await who(deps, userId)}`);
     const loc = mailLocale(prof.ui_locale);
 
     // 2. R2 四个桶：删完再列一次，不为 0 就抛错（deletePrefix 自己做），整个账号停下
@@ -391,7 +385,7 @@ async function purgeOne(
         await store.deletePendingSignup(h);
         await store.deleteCounterKey(`signup-mail:mail:${h}`);
       } else {
-        log?.(`hash_secret_missing:${short(userId)}`);
+        log?.(`hash_secret_missing:${await who(deps, userId)}`);
       }
     }
 
@@ -404,7 +398,7 @@ async function purgeOne(
 
     // 6. 写 deleted_accounts 之前再查一次认领还在（TC-B1-108 ④）
     if (!(await store.stillClaimed(userId, claimedIso))) {
-      log?.(`skip_claim_gone:${short(userId)}`);
+      log?.(`skip_claim_gone:${await who(deps, userId)}`);
       return 'skipped';
     }
     await store.insertDeletedAccount(userId);
@@ -413,17 +407,17 @@ async function purgeOne(
     //    超时只是这边不等了，GoTrue 那边可能已经删完：出错先回读一次，人已不在就照常往下核对（否则这个人永远卡在“失败”）
     await deps.deleteUser(userId).catch(async (e: unknown) => {
       if (!(await deps.userGone(userId).catch(() => false))) throw e;
-      log?.(`delete_user_late:${short(userId)}`);
+      log?.(`delete_user_late:${await who(deps, userId)}`);
     });
     if ((await store.remainingRows(userId)) !== 0) {
-      log?.(`verify_failed:${short(userId)}`);   // 用户已删，认领行若还在由 lemo-ops 的 26 小时告警发现
+      log?.(`verify_failed:${await who(deps, userId)}`);   // 用户已删，认领行若还在由 lemo-ops 的 26 小时告警发现
       return 'failed';
     }
 
     // 8. 最后一封信（失败只记日志、不重试）
     if (email !== null) {
       const ok = await deps.sendMail(email, deletionDoneMail(loc)).catch(() => false);
-      if (!ok) log?.(`done_mail_failed:${short(userId)}`);
+      if (!ok) log?.(`done_mail_failed:${await who(deps, userId)}`);
     }
     return 'purged';
   } catch (e) {
@@ -431,7 +425,7 @@ async function purgeOne(
       : (e as { code?: unknown })?.code === 'not_empty' ? 'r2_not_empty' : 'step_error';
     // 游标里的日期都是这一轮或之前确认删空的：不管为什么停下都写回（写不成只记日志，下一轮多列几次而已）；放在放回认领之前（条件要认领时刻）
     if (cur.through !== null && cur.through !== cursor) {
-      await store.saveBackupsCursor(userId, claimedIso, cur.through).catch(() => log?.(`cursor_save_failed:${short(userId)}`));
+      await store.saveBackupsCursor(userId, claimedIso, cur.through).catch(async () => log?.(`cursor_save_failed:${await who(deps, userId)}`));
     }
     return await giveUp(code);
   }
@@ -482,7 +476,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     // 0. 不在同一轮里先提醒、后删除（复审中 A）：这一轮刚发过提醒（含补发）的，留给下一轮
     if (rr.reminded.has(r.user_id)) {
       held++;
-      deps.log?.(`purge_held_just_reminded:${short(r.user_id)}`);
+      deps.log?.(`purge_held_just_reminded:${await who(deps, r.user_id)}`);
       continue;
     }
     // 0'. 没收到到期提醒的不删（第一段这一轮补发也没成功），下一次运行再补；例外（复审中 B，负责人定）：
@@ -493,7 +487,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
       else if (Date.parse(r.purge_after) <= t0 - PURGE_HOLD_MAX_MS) force = 'purge_forced_no_notice';
       else {
         held++;
-        deps.log?.(`purge_held_no_notice:${short(r.user_id)}`);
+        deps.log?.(`purge_held_no_notice:${await who(deps, r.user_id)}`);
         continue;
       }
     }
@@ -504,10 +498,10 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
       o = await purgeOne(pd, r.user_id, overBudget, overWall);
     } catch {
       o = 'failed';
-      deps.log?.(`claim_error:${short(r.user_id)}`);
+      deps.log?.(`claim_error:${await who(deps, r.user_id)}`);
     }
     // 告警码只在真删成时记（第三轮低 I）；判了照删、这一轮没删成的另记 purge_forced_attempt，不进按码计数的告警
-    if (force) deps.log?.(`${o === 'purged' ? force : 'purge_forced_attempt'}:${short(r.user_id)}`);
+    if (force) deps.log?.(`${o === 'purged' ? force : 'purge_forced_attempt'}:${await who(deps, r.user_id)}`);
     if (o === 'purged') { purged++; if (force) forced++; }
     else if (o === 'failed') failed++;
     else if (o === 'deferred') deferred++;

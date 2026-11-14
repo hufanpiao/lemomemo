@@ -19,15 +19,17 @@ import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
 import { skipTestRecipients } from '../_shared/account-mail.ts';
 import { ACCOUNT_ERRS, DbError, exportTablesOf, handle, memProbeFor, withStoreTimeouts, type AccountStore } from './core.ts';
 import { json } from '../_shared/http.ts';
+import { logUserTag } from '../_shared/log-tag.ts';
 import { sendMail } from '../_shared/mail-send.ts';
+import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_SIZE_TIMEOUT_MS } from './store-timeout.ts';
 import { withVaultUser } from '../_shared/db.ts';
 import { decodeKey32 } from '../_shared/vault-crypto.ts';
 import { pinEpoch } from '../_shared/vault-epoch.ts';
 import { vaultTokenChecker } from '../_shared/vault-token.ts';
-import { cachedMinClientVersion } from '../_shared/version-gate.ts';
-import { blockedMin, upgradeRequiredResponse, VERSION_HEADER } from '../_shared/version-gate-core.ts';
+import { appConfigMinLoader, cachedMinClientVersion } from '../_shared/version-gate.ts';
+import { versionBlock } from '../_shared/version-gate-core.ts';
 
 /** rpc 抛出的业务错误（raise exception '<码>'），原样当错误码 */
 const RPC_CODES = new Set(['admin_cannot_delete', 'account_disabled', 'account_pending_deletion']);
@@ -51,11 +53,7 @@ export function makeStore(admin: Admin, signal: AbortSignal): AccountStore {
       const row = must(await priv.from('admins').select('user_id').eq('user_id', userId).abortSignal(signal).maybeSingle());
       return row !== null;
     },
-    async takeRate(key, limit, windowS) {
-      const data = must(await priv.rpc('take_rate', { p_key: key, p_limit: limit, p_window_s: windowS }).abortSignal(signal));
-      if (typeof data !== 'boolean') throw new Error('db');
-      return data;
-    },
+    takeRate: rpcTakeRate(admin, signal),
     async refundRate(key) {
       // 键最新窗口的 count 减 1：先读再比较并交换（并发时重试 3 次）；service role 对 counters 有 select、update（0001 第 18 节）
       const counters = () => priv.from('counters');
@@ -176,11 +174,6 @@ const memProbe = memProbeFor(Deno.env.get('EXPORT_MEM_PROBE'), Deno.env.get('SUP
   return { heap: m.heapUsed, total: m.heapUsed + m.external };
 }, log);
 
-/** 函数日志里认人用的 user_id 哈希（sha256 前 16 位十六进制，0.47 第 19 条 Q4）：日志里不出现 user_id 原文 */
-async function userHash(userId: string): Promise<string> {
-  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(userId)));
-  return [...d.slice(0, 8)].map((x) => x.toString(16).padStart(2, '0')).join('');
-}
 const EXPORT_TABLES = exportTablesOf(allManifests);
 // 本人的 pin_epoch 经 fn_vault 读（SQL 在 _shared/vault-epoch.ts，和 vault-image 共用）
 const checkVaultToken = vaultTokenChecker(decodeKey32(Deno.env.get('VAULT_TOKEN_SECRET')), Date.now, (uid) => withVaultUser(uid, (tx) => pinEpoch(tx, uid)), log);
@@ -212,17 +205,12 @@ Deno.serve((req) => {
     // 隐私记的令牌（vault_token）由 vault 函数签发，这里经 _shared/vault-token.ts 验（6.2 A2；B5 任务单 S10）：pin_epoch 经 fn_vault 读；
     // 没配 VAULT_TOKEN_SECRET 时带了令牌一律 vault_locked，并记 misconfigured:vault_token_secret（不带令牌照常导出）
     verifyVaultToken: async (userId, token) => (await checkVaultToken(userId, token)).verdict,
-    async checkVersion(r) {
-      const min = await cachedMinClientVersion(async (signal) => {
-        const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
-        if (error) throw new Error('db');
-        return data?.min_client_version ?? null;
-      });
-      const b = blockedMin(min, r.headers.get(VERSION_HEADER));
-      return b === null ? null : upgradeRequiredResponse(b);
+    checkVersion(r) {
+      return versionBlock(r, () => cachedMinClientVersion(appConfigMinLoader(admin)));
     },
     exportTables: EXPORT_TABLES,
-    userHash,
+    // 函数日志里认人：带服务器密钥的 HMAC 截断（_shared/log-tag.ts，安全审查第 11 条；原来不加盐 sha256，拿 user_id 一算就对上）
+    userHash: (uid) => logUserTag(key, uid),
     memProbe,
     proxySecret: Deno.env.get('PROXY_SECRET'),
     background,

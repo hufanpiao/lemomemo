@@ -7,8 +7,41 @@
 // 没传的列按“空”：没截止、没截止时刻、不提醒提前量、不重要、没项目备注、没批次、没来源、没简称；remind_time 默认 DEFAULT_REMIND_TIME。
 // remind_days 必须由调用方给（编辑页、生成待办是 0 当天，“＋”和随手记是 null 不提醒，两边本来就不同）。
 // 不写 ai_status（系统列）、deleted_at、undone（只能 update）、repeat（R-163）。done_at 跟 done：完成的记 now，没完成 0。纯函数，不读时钟
-import type { DateStr } from '../core/date.ts';
+// 读一行（todoOf）和“逾期”规则（isLate）也只有这一份（B6 整合）：待办页的分组和截止标签（features/todos/data/todo-list.ts）、
+// 今天页的“没赶上”和今天截止（features/today/data/today-model.ts）都经它
+import { diffDays, msAt, parseHm, todayOf, type DateStr } from '../core/date.ts';
+import type { Tz } from '../core/tz.ts';
 import { DEFAULT_REMIND_TIME } from './remind.ts';
+
+const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+/** 读出来的待办（列表要的几列）：不是字符串的当空；截止日不是 YYYY-MM-DD、截止时刻不是 HH:MM 的当没有，没截止日时截止时刻也当没有 */
+export interface TodoFields {
+  id: string;
+  title: string;
+  project: string;
+  done: boolean;
+  important: boolean;
+  due: DateStr | null;
+  dueTime: string | null;
+}
+
+export function todoOf(r: Readonly<{ id: string } & Record<string, unknown>>): TodoFields {
+  const due = str(r['due']);
+  const dt = str(r['due_time']);
+  const d = DATE.test(due) ? due : null;
+  return { id: r.id, title: str(r['title']), project: str(r['project']), done: r['done'] === true, important: r['important'] === true, due: d, dueTime: d && HM.test(dt) ? dt : null };
+}
+
+/** 逾期（待办页标红“逾 N 天”“已过 17:00”、今天页“没赶上”）：没完成，截止日早于今天，或今天截止、截止时刻已过。
+ *  待办截止是浮动的（架构 4.6），一律按 current_tz 判断；逾几天由调用方用 diffDays(due, 今天) 算（今天截止、时刻已过是 0） */
+export function isLate(t: Pick<TodoFields, 'done' | 'due' | 'dueTime'>, now: number, tz: Tz): boolean {
+  if (t.done || !t.due) return false;
+  const d = diffDays(t.due, todayOf(now, tz));
+  return d > 0 || (d === 0 && t.dueTime !== null && msAt(t.due, parseHm(t.dueTime), tz) <= now);
+}
 
 /** 新建的待办整行（列和 todosWrite 去掉 deleted_at、undone 一致）；用 type 不用 interface：写入口要的是 Record<string, unknown> */
 export type NewTodoRow = {

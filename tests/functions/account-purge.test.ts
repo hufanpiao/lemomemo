@@ -11,6 +11,8 @@ import { seedObjects } from '../fakes/objstore-seed.ts';
 import { A, B, C, CRON, cronReq, DAY, HASH_SECRET, purgeDeps } from './account-fakes.ts';
 import { world, requestDeletion, runPurge, seedOutside, FIRST_RUN_AFTER, toFirstRun } from './account-purge-harness.ts';
 import { tzLabel } from '../../shared/i18n/tz-label.ts';
+import { logTag } from './account-fakes.ts';
+const tA = await logTag(A);   // 日志里认人的 HMAC 标签（安全审查第 11 条）
 
 describe('鉴权', () => {
   it('TC-B1-101 ②：不带或带错 x-cron-secret 回 401，什么都不做', async () => {
@@ -135,7 +137,7 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
       expect(body).toMatchObject({ purged: 1, failed: 0 });
       expect(w.db.users.has(A)).toBe(false);
       expect(w.db.pendingSignups.has(eh)).toBe(true);   // 10 分钟就过期的东西，由每日清理删
-      if (hashSecret === undefined) expect(logs).toContain('hash_secret_missing:aaaaaaaa');
+      if (hashSecret === undefined) expect(logs).toContain(`hash_secret_missing:${tA}`);
     }
   });
 
@@ -157,14 +159,14 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
     const r1 = await runPurge(w);
     expect(r1.body).toMatchObject({ purged: 0, failed: 0, skipped: 1, blocked: 1 });
     expect(w.db.heartbeat).toMatchObject({ blocked: 1 });   // PURGE-halfway-flip：单独计数进心跳，lemo-ops 的 purge:blocked 读它
-    expect(r1.logs).toContain('skip_admin:aaaaaaaa');
+    expect(r1.logs).toContain(`skip_admin:${tA}`);
     expect(w.db.pending.get(A)?.purge_started_at).toBeNull();
     expect(w.db.users.has(A)).toBe(true);
     w.db.admins.delete(A);
     const p = w.db.profiles.get(A);
     if (p) { p.disabled_at = null; p.disabled_reason = null; }
     const r2 = await runPurge(w);
-    expect(r2.logs).toContain('skip_not_disabled:aaaaaaaa');
+    expect(r2.logs).toContain(`skip_not_disabled:${tA}`);
     expect(r2.body).toMatchObject({ skipped: 1, blocked: 1 });
     expect(w.db.users.has(A)).toBe(true);
   });
@@ -175,7 +177,7 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
     toFirstRun(w);
     w.db.beforeStillClaimed = () => { const p = w.db.pending.get(A); if (p) p.purge_started_at = null; };
     const r1 = await runPurge(w);
-    expect(r1.logs).toContain('skip_claim_gone:aaaaaaaa');
+    expect(r1.logs).toContain(`skip_claim_gone:${tA}`);
     expect(r1.body).toMatchObject({ purged: 0, skipped: 1, blocked: 0 });
     expect(w.db.heartbeat).toMatchObject({ blocked: 0 });
     w.db.beforeStillClaimed = null;
@@ -194,7 +196,7 @@ describe('TC-B1-102：一个失败不影响别人，第二天重试', () => {
     w.r2.failOnce('deleteMany');   // A 排在前面（purge_after 一样时按插入顺序），第一个 deleteMany 就是 A 的
     const day1 = await runPurge(w);
     expect(day1.body).toMatchObject({ purged: 1, failed: 1 });
-    expect(day1.logs.some((l) => l.endsWith(':aaaaaaaa'))).toBe(true);
+    expect(day1.logs.some((l) => l.endsWith(`:${tA}`))).toBe(true);
     expect(w.db.pending.get(A)).toMatchObject({ purge_started_at: null });
     expect(w.db.deleted.has(A)).toBe(false);
     expect(w.db.users.has(A)).toBe(true);
@@ -215,14 +217,14 @@ describe('TC-B1-102：一个失败不影响别人，第二天重试', () => {
     toFirstRun(w);
     const failing = { deletePrefix: async () => { throw Object.assign(new Error('objstore_not_empty'), { code: 'not_empty' }); } };
     const r1 = await runPurge(w, { r2: failing });
-    expect(r1.logs).toContain('r2_not_empty:aaaaaaaa');
+    expect(r1.logs).toContain(`r2_not_empty:${tA}`);
     expect(w.db.deleted.has(A)).toBe(false);
     expect(w.db.users.has(A)).toBe(true);
     expect(w.backups.count(A)).toBe(4);   // R2 没删完，备份也不动
 
     w.backups.removeKeepsOne = true;
     const r2 = await runPurge(w);
-    expect(r2.logs).toContain('backups_not_empty:aaaaaaaa');
+    expect(r2.logs).toContain(`backups_not_empty:${tA}`);
     expect(w.db.deleted.has(A)).toBe(false);
     expect(w.db.users.has(A)).toBe(true);
   });
@@ -247,7 +249,7 @@ describe('TC-B1-102：一个失败不影响别人，第二天重试', () => {
     toFirstRun(w);
     const r = await runPurge(w, { deleteUser: async (u) => { w.db.deleteUserCascade(u); throw new Error('auth'); } });
     expect(r.body).toMatchObject({ purged: 1, failed: 0 });
-    expect(r.logs).toContain('delete_user_late:aaaaaaaa');
+    expect(r.logs).toContain(`delete_user_late:${tA}`);
     // 回读也出错：照旧算失败（不当成删掉了）
     const w2 = world();
     await requestDeletion(w2, A);
@@ -270,7 +272,7 @@ describe('TC-B1-102：一个失败不影响别人，第二天重试', () => {
     toFirstRun(w);
     const r = await runPurge(w, { deleteUser: async () => { w.db.users.delete(A); } });   // 假装删了、其实没级联
     expect(r.body).toMatchObject({ purged: 0, failed: 1 });
-    expect(r.logs).toContain('verify_failed:aaaaaaaa');
+    expect(r.logs).toContain(`verify_failed:${tA}`);
   });
 });
 

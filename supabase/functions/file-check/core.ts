@@ -2,6 +2,8 @@
 // 纯逻辑，依赖由 index.ts 注入，Vitest 直接测（tests/edge/file-check.test.ts）。
 // • 客户端 {action: check, id}（JWT，requireActiveUser）：每人每分钟 30 次；只认本人、普通（is_vault = false）、没删的行，别的一律 404；
 //   行已经不在 pending 就直接回现在的结果（重复调用、补扫先判过了）。
+// • 客户端 {action: retry_ai, kind: image, id}（JWT，同一个每分钟 30 次）：识图“重新识别”（B4b-2 识图，架构 5.13 第 5 点“点‘重新识别’调 file-check {action: retry_ai}”）：
+//   本人普通插图（images 桶、没删）ai_status = failed 的改回 pending、ai_tries 清零（下一轮 ai-media 重新识别）；别的状态原样回；不是本人的、隐私记的、删了的 404。
 // • cron {action: sweep}（x-cron-secret）：一次最多 BATCH 行 created_at 早于 30 分钟、还在 pending 的（免得和正在上传的客户端抢），写心跳 file-check。
 // 判一行（verify）：
 //   ① 按行里的 user_id、note_id、id、kind 拼对象路径（shared/logic/files/media-path.ts），不读存下来的 path；
@@ -20,7 +22,9 @@ import { utcMinuteKey } from '../_shared/rate-key.ts';
 //   Vitest 的 tsc 解析不了）；index.ts 把 shared 的 fileCheckReq、sniffFile、noteFilePath 接进来时，deno check 按这里的形状核对
 /** 同 shared/schema/attachments.ts 的 REJECT_REASONS */
 export type RejectReason = 'unknown' | 'too_big' | 'bad_archive' | 'encrypted';
-type FileCheckReq = { action: 'check'; id: string } | { action: 'sweep' };
+type FileCheckReq = { action: 'check'; id: string } | { action: 'sweep' } | { action: 'retry_ai'; kind: 'image'; id: string };
+/** 同 shared/schema/attachments.ts 的 AI_STATUSES */
+export type AiStatus = 'pending' | 'done' | 'skip' | 'failed';
 type FileCheckRes = { status: 'ok' } | { status: 'rejected'; reason?: RejectReason } | { status: 'incomplete' };
 type SniffResult = { ok: true; kind: string } | { ok: false; reason: Exclude<RejectReason, 'too_big'> };
 
@@ -59,6 +63,8 @@ export interface Store {
   /** 带条件 check_status = 'pending' 写回；回写成没有 */
   settle(row: FileRow, status: 'ok' | 'rejected', etag: string | null): Promise<boolean>;
   heartbeat(detail: Record<string, number>): Promise<void>;
+  /** retry_ai：本人普通插图 failed → pending；回改完以后的状态，没有这张（不是本人的、隐私记的、删了的）回 null */
+  retryAi(userId: string, id: string): Promise<AiStatus | null>;
 }
 
 export interface Deps {
@@ -131,6 +137,16 @@ async function check(req: Request, deps: Deps, store: Store, r2: Obj, id: string
   return c ? json(200, c, NO_STORE) : err(503, 'try_later');
 }
 
+async function retryAi(req: Request, deps: Deps, store: Store, id: string): Promise<Response> {
+  const auth = await deps.authenticate(req);
+  if (!auth.ok) return auth.response;
+  const uid = auth.user.userId;
+  if (!(await deps.takeRate(utcMinuteKey('file-check-min', uid, deps.now()), RATE_PER_MIN, 60))) return err(429, 'rate_limited');
+  const s = await store.retryAi(uid, id);
+  deps.log(`retry_ai:${s ?? 'not_found'}`);
+  return s ? json(200, { ai_status: s }, NO_STORE) : err(404, 'not_found');
+}
+
 async function sweep(deps: Deps, store: Store, r2: Obj): Promise<Response> {
   const rows = await store.stale(deps.now() - SWEEP_AFTER_MS, BATCH);
   const d = { rows: rows.length, passed: 0, rejected: 0, incomplete: 0, failed: 0 };
@@ -159,11 +175,13 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
       const denied = cronGate(req.headers.get('x-cron-secret'), deps.cronSecret, deps.log);
       if (denied) return denied;
     }
-    if (!deps.store || !deps.r2) {
+    const { store, r2 } = deps;
+    if (store && r.action === 'retry_ai') return await retryAi(req, deps, store, r.id);   // 只改库、不碰 R2
+    if (!store || !r2) {
       deps.log('misconfigured');
       return err(500, 'misconfigured');
     }
-    return r.action === 'sweep' ? await sweep(deps, deps.store, deps.r2) : await check(req, deps, deps.store, deps.r2, r.id);
+    return r.action === 'sweep' ? await sweep(deps, store, r2) : await check(req, deps, store, r2, r.id);
   } catch {
     deps.log('try_later');
     return err(503, 'try_later');

@@ -2,6 +2,8 @@
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
 import type { AccountResult, ExportPart } from '../data/account-api.ts';
+
+vi.mock('../../../core/current-tz.ts', () => ({ currentTz: () => 'Asia/Seoul' }));
 import { EXPORT_RESUME_MS, fmtMb, jobExpired, newJob, partLooksWhole, runParts, type ExportJob } from '../data/export-run.ts';
 
 const EID = '9b2e4c6a-0000-4000-8000-0000000000aa';
@@ -48,11 +50,11 @@ describe('runParts', () => {
     expect(progress[0]).toBeLessThan(progress[1] ?? 0);
   });
 
-  it('只有一片（新账号）：一次就结束；读不到 content-disposition 时按 exported_at 的 UTC 日期拼文件名', async () => {
+  it('只有一片（新账号）：一次就结束；读不到 content-disposition 时按 exported_at 在用户时区的日期拼文件名（审查第 17 条：23:30Z 是首尔 10-31）', async () => {
     const take = vi.fn(async (): Promise<AccountResult<ExportPart>> => ({ ok: true, value: { blob: new Blob([new Uint8Array(gzipSync('x'))]), next: null, disposition: null, contentLength: null, contentEncoding: null } }));
     const out = await runParts({ takePart: take }, job({ exportedAt: '2026-10-30T23:30:00Z' }), { now: () => T0 });
     expect(take).toHaveBeenCalledTimes(1);
-    expect(out.kind === 'done' && out.file.name).toBe('lemomemo-export-2026-10-30.json.gz');
+    expect(out.kind === 'done' && out.file.name).toBe('lemomemo-export-2026-10-31.json.gz');
   });
 
   it('try_later（含 546、5xx、超时）和 offline 间隔 2 秒、5 秒自动再试 2 次（0.47 第 8 条、TC-B1-126 ②）、同一个游标；再试成功就接着取，结果和没出错一样', async () => {

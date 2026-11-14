@@ -110,6 +110,17 @@ describe('纪念日编辑表单（anniv-edit）', () => {
     const r = newRow('id1', a, 9);
     expect(r).toMatchObject({ id: 'id1', lunar_variant: 'cn', created_at: 9, updated_at: 9, remind_offsets: [7, 1], name: '妈妈' });
   });
+
+  it('审查第 7 条：改了日期（阳历 / 阴历、月、日、闰月、年份）换了“哪一次”，同一次写入里清掉旧的“知道了”“稍后”；只改名字、提醒提前天数、时刻不清（同日程 event-edit 的口径）', () => {
+    const a = formOf(row('x', { name: '妈妈', month: 3, day: 5 }));
+    for (const next of [{ month: 4 }, { day: 6 }, { calendar: 'lunar' as const }, { is_leap: true }, { year: 1990 }]) {
+      expect(patchOf({}, a, { ...a, ...next }, 5)).toMatchObject({ notified_for: null, snooze_at: null, updated_at: 5 });
+    }
+    for (const next of [{ name: '妈妈生日' }, { offsets: '3' }, { time: '08:00' }, { note: '买花' }]) {
+      const p = patchOf({}, a, { ...a, ...next }, 5) ?? {};
+      expect('notified_for' in p || 'snooze_at' in p).toBe(false);
+    }
+  });
 });
 
 describe('头像裁剪的数学（AvatarPicker）', () => {

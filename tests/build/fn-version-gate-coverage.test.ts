@@ -37,6 +37,7 @@ const PLAN = new Map<string, 'check' | readonly string[]>([
   ['vault-file', 'check'],          // B4b-1：upload 写同步表 note_files，不免查；客户端几支在 index.ts 入口 versionGate，带 x-cron-secret 的 sweep 跳过（同 file-check）
   ['note-search', ['POST']],        // B4b-2：只读（只回 id 和分数，不写任何表；架构第 6 节免查名单的只读函数）
   ['ai-embed', ['POST']],           // B4b-2：pg_cron 每 2 分钟带 x-cron-secret（架构第 6 节 ai-embed 行）
+  ['ai-media', ['POST']],           // B4b-2 识图：pg_cron 每 5 分钟带 x-cron-secret（架构第 6 节 ai-media 行）
 ]);
 
 /** 接入代码等审查通过再加的目录；接上以后从这里删掉（K10 安全审查后：invite-signup 已接，account 只收 POST、不接） */
@@ -90,11 +91,13 @@ function wiredAtIndex(index: string, name: string): boolean {
   return gateAt >= 0 && (handleAt < 0 || gateAt < handleAt);
 }
 
-/** core 里查：core.ts import 并调用 blockedMin、不自己定义；index.ts import 并调用 cachedMinClientVersion */
+/** core 里查：core.ts 从 version-gate-core.ts import 并调用 blockedMin 或 versionBlock（安全审查第 8 条收成的那一份）、不自己定义；
+ *  index.ts import 并调用 cachedMinClientVersion */
 function wiredInCore(index: string, core: string): boolean {
   const c = parse(core);
   const i = parse(index);
-  return importsFrom(c, '_shared/version-gate-core.ts', 'blockedMin') && !declares(c, 'blockedMin') && calledNames(c).has('blockedMin')
+  const viaCore = (fn: string) => importsFrom(c, '_shared/version-gate-core.ts', fn) && !declares(c, fn) && calledNames(c).has(fn);
+  return (viaCore('blockedMin') || viaCore('versionBlock'))
     && importsFrom(i, '_shared/version-gate.ts', 'cachedMinClientVersion') && calledNames(i).has('cachedMinClientVersion');
 }
 
