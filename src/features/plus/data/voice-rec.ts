@@ -29,13 +29,14 @@ export function createRecRoute(c: VoiceCore) {
       net = netFailed(net, now);
       if (speechByNet(net, now)) rlog('voice net_slow speech_on');
     }
-    if (res.kind === 'record') void rememberQuotaLeft(res.quotaLeft, now);
+    if (res.kind === 'record' || res.kind === 'intent') void rememberQuotaLeft(res.quotaLeft, now);
     if (res.kind === 'quota_out') {
       c.markQuotaOut();
       void rememberQuotaLeft(0, now);
     }
     const f = voiceFinal(res, c.d().ctx(), c.d().online());
     if (f.do === 'save') return c.savePlan(a, f.plan, f.raw);
+    if (f.do === 'ask') return c.askOut(a, f.ask, f.raw, 1);
     c.end(a);
     if (f.do === 'idle') return c.toIdle();
     c.go(f.status === 'no_speech' ? { type: 'no_speech' } : { type: 'done', status: f.status });

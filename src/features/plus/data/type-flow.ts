@@ -18,6 +18,9 @@ import { arrangeHint, clauseSeparators, confidence, parseSplit, recurHint, type 
 import { checkDefaultDay, normProjects, type AiItem } from '../../../../shared/schema/ai.ts';
 import type { AiKind } from '../../../../shared/schema/kinds.ts';
 import { cutAiText, outcomeOf, type AiOutcome } from './ai-outcome.ts';
+import { askOfLocal, type AssistAsk } from '../../../../shared/logic/parse/assist.ts';
+import { localIntent } from '../../../../shared/logic/parse/intent.ts';
+import { INTENT_SURE_MIN } from '../../../../shared/schema/intent.ts';
 import { quotaOutToday, rememberQuotaLeft } from './quota.ts';
 import { AI_PARSE_TIMEOUT_MS } from './record-logic.ts';
 import { SendError, withTimeoutRetry } from './send-error.ts';
@@ -96,6 +99,10 @@ export interface TypePlan {
   quotaLeft: number | null;
   /** 调 AI 没成的原因（日志、调试用；不给用户看） */
   aiReason: string | null;
+  /** 判出来不是记下（有把握）：不保存，交给结果层（items 为空）；aiUsed 这次花了几次 AI（判断那一次） */
+  ask: { ask: AssistAsk; aiUsed: 0 | 1 } | null;
+  /** 模糊，先按记下保存了（5.14 第 2 点）：提示条给“改成搜索”；found 时下面再给“也帮你找了一下 / 是要…吗？找到 N 条” */
+  alt: { ask: AssistAsk; found: boolean } | null;
 }
 
 /**
@@ -131,13 +138,41 @@ export async function askAi(req: AiParseReq, call: CallAi, timeoutMs = AI_PARSE_
   return r.ok ? outcomeOf(r.value) : { kind: 'ai_failed', reason: r.fail };
 }
 
-/** 整个打字流程（不保存；保存交给 capture-save）。signal 见 askAi */
+/** 只按本机规则记下（结果层的“改成记下”、quick-add 交来判成记下的）：不调 AI、不花次数，原话照记下流程拆 */
+export function recordLocal(text: string, ctx: TypeCtx): TypePlan {
+  const { result } = planLocal(text, ctx);
+  return { status: 'saved', origin: 'rule', items: result.items, hints: result.hints, quotaLeft: null, aiReason: null, ask: null, alt: null };
+}
+
+/** 本机规则看出的意图迹象（记下为 null）；sure：查找、总结、取消等本机就有把握 */
+export function localHint(text: string, ctx: Pick<TypeCtx, 'now' | 'tz'>): { hint: AssistAsk | null; sure: boolean } {
+  const li = localIntent(text, ctx.now, ctx.tz, { scope: 'main' });
+  const hint = askOfLocal(li);
+  return { hint, sure: hint !== null && li.sure };
+}
+
+/** AI 判成别的意图时算不算数：本机也看出了迹象（hint）且 AI 有把握（≥ 0.6）；本机一点迹象都没有就照记下存（D-15） */
+export const aiAskWins = (hint: AssistAsk | null, confidence: number): boolean => hint !== null && confidence >= INTENT_SURE_MIN;
+
+/** AI 判成记下时提示条的“改成搜索”：本机有迹象才给；AI 也没把握时下面再给查找结果 */
+export const recordAlt = (hint: AssistAsk | null, confidence: number): TypePlan['alt'] => (hint ? { ask: hint, found: confidence < INTENT_SURE_MIN } : null);
+
+/**
+ * 整个打字流程（不保存；保存交给 capture-save）。signal 见 askAi。意图（架构 5.14 第 2 点，B4b-3）：
+ * • 本机 localIntent 判成查找、总结且有把握：不调 AI，ask 交给结果层；
+ * • 本机判成别的意图但没把握：在线、开着 AI、有次数就调 ai-parse，AI 给的意图 confidence ≥ 0.6 才算数（ask）；
+ *   AI 说记下、AI 没把握、调不了 AI（离线、没同意、次数用完、失败）：先按记下保存（不丢记录），alt 带上本机或 AI 的判断，提示条给“改成搜索”“也帮你找了一下”；
+ * • 本机判成记下、AI 却说是别的意图（D-15 主持人代定）：照样先按记下保存，alt 带上 AI 的判断（found）——本机一点迹象都没有的句子绝不因 AI 判错而不保存
+ */
 export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: CallAi, signal?: AbortSignal): Promise<TypePlan> {
+  const { hint, sure: hintSure } = localHint(text, ctx);
   const { result, sure } = planLocal(text, ctx);
-  const local = (status: TypeStatus, aiReason: string | null = null, quotaLeft: number | null = null): TypePlan => ({
-    status, origin: 'rule', items: result.items, hints: result.hints, quotaLeft, aiReason,
+  const hintAlt = hint ? { ask: hint, found: true } : null;
+  const local = (status: TypeStatus, aiReason: string | null = null, quotaLeft: number | null = null, alt = hintAlt): TypePlan => ({
+    status, origin: 'rule', items: result.items, hints: result.hints, quotaLeft, aiReason, ask: null, alt,
   });
-  if (sure) return local('saved');
+  if (hintSure && hint) return { ...local('saved'), items: [], alt: null, ask: { ask: hint, aiUsed: 0 } };
+  if (sure && !hint) return local('saved');
   if (!env.online) return local('offline_saved');
   if (env.quotaOut) return local('quota_out');
   if (!env.aiOn) return local('saved');
@@ -151,8 +186,11 @@ export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: 
     case 'record': {
       if (out.items.length === 0) return local('saved_rule', 'empty', out.quotaLeft);
       const hints: ParseHints = { recur: recurHint(text), arrange: arrangeHint(text), bad_day: null };
-      return { status: 'saved', origin: 'ai', items: fillDay(out.items, ctx.day), hints, quotaLeft: out.quotaLeft, aiReason: null };
+      return { status: 'saved', origin: 'ai', items: fillDay(out.items, ctx.day), hints, quotaLeft: out.quotaLeft, aiReason: null, ask: null, alt: recordAlt(hint, out.confidence) };
     }
+    case 'intent':
+      if (aiAskWins(hint, out.confidence)) return { ...local('saved', null, out.quotaLeft), items: [], alt: null, ask: { ask: out.ask, aiUsed: 1 } };
+      return local('saved', `intent_${out.ask.intent}`, out.quotaLeft, { ask: out.ask, found: true });
     case 'quota_out':
       return local('quota_out', null, 0);
     case 'consent_required':

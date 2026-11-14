@@ -25,7 +25,8 @@ import { addRecent, loadRecent, recentSnapshot, subscribeRecent } from '../data/
 import { noteSearch, type SemResult } from '../data/note-search-api.ts';
 
 // ui 不能直接引自己的 data（ESLint boundaries，架构 2.1），面板要的常量、高亮函数和类型从这里转出去
-export { FIND_KINDS, markRanges, type FindHit, type FindKind, type TimeFilter } from '../data/find-local.ts';
+export { FIND_KINDS, markRanges, type FindHit, type FindItem, type FindKind, type TimeFilter } from '../data/find-local.ts';
+export { rowAct, undoTarget, type Applied, type RowAct } from '../data/target-act.ts';
 
 export const SEM_DEBOUNCE_MS = 400;
 
@@ -34,14 +35,12 @@ export type SemState = { s: 'idle' } | { s: 'wait' } | { s: 'done'; q: string; h
 
 export interface FindDeps {
   search?: (q: string, signal: AbortSignal) => Promise<SemResult>;
+  /** 不出现的 id（“也帮你找了一下”排除刚保存的这一批，0.23 L3）；图片、文档按所在随手记一起排除 */
+  exclude?: readonly string[] | undefined;
 }
 
-export function useFind(initial: string, deps: FindDeps = {}) {
-  const [q, setQ] = useState(initial);
-  const [kind, setKind] = useState<FindKind | 'all'>('all');
-  const [time, setTime] = useState<TimeFilter>('any');
-  const [retry, setRetry] = useState(0);
-  const [sem, setSem] = useState<SemState>({ s: 'idle' });
+/** 本机缓存 → 可查的条目，加上查找、结果层都要的几样（查找面板和 useAssist 共用这一份） */
+export function useFindSource() {
   const events = useCollection<Row>('events');
   const todos = useCollection<Row>('todos');
   const anniversaries = useCollection<Row>('anniversaries');
@@ -53,13 +52,29 @@ export function useFind(initial: string, deps: FindDeps = {}) {
   const now = useMinuteNow();
   const tz = currentTz();
   const aiOn = aiOnFor(settings, readSessionId());
-  const recent = useSyncExternalStore(subscribeRecent, recentSnapshot, recentSnapshot);
-  useEffect(() => void loadRecent(), []);
-
   const index = useMemo(
     () => buildIndex({ events, todos, anniversaries, notes, note_images: images, note_files: files }, tz),
     [events, todos, anniversaries, notes, images, files, tz],
   );
+  return { index, events, todos, online, now, tz, aiOn };
+}
+
+export function useFind(initial: string, deps: FindDeps = {}) {
+  const [q, setQ] = useState(initial);
+  const [kind, setKind] = useState<FindKind | 'all'>('all');
+  const [time, setTime] = useState<TimeFilter>('any');
+  const [retry, setRetry] = useState(0);
+  const [sem, setSem] = useState<SemState>({ s: 'idle' });
+  const src = useFindSource();
+  const { online, now, tz, aiOn } = src;
+  const ex = deps.exclude;
+  const index = useMemo(() => {
+    if (!ex || ex.length === 0) return src.index;
+    const set = new Set(ex);
+    return src.index.filter((it) => !set.has(it.id) && !(it.noteId !== null && set.has(it.noteId)));
+  }, [src.index, ex]);
+  const recent = useSyncExternalStore(subscribeRecent, recentSnapshot, recentSnapshot);
+  useEffect(() => void loadRecent(), []);
   const range = useMemo(() => rangeOf(time, now, tz), [time, now, tz]);
   const scoped = useMemo(() => inRange(index, range), [index, range]);
   // 关键词查找的耗时记在结果旁边，停下来以后才写日志（不是每个字写一次）

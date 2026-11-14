@@ -3,6 +3,8 @@
 // • move：把一条普通随手记移进隐私记（S7）：没设密码先去设；锁着就弹解锁卡，解锁后自动重试一次（TC-B5-47 ①）；
 //   带附件回 has_files → “带附件的随手记暂时不能移进隐私记”（D13）；结果回 onDone(true / false)
 // • settings：设置 › 隐私记（VaultSettings.tsx）
+// • findrow（B4b-3，线框 s12、sFind）：查找面板、结果层里的一行“隐私记锁着，里面的不在结果里 · 打开隐私记 ›”；没设过隐私记密码的不出。
+//   主页面的查找不查隐私记（D-16），隐私记里的查找要 VAULT_KEY，这一批不做，所以只给入口、不写“解锁后一起找”
 import { useEffect, useRef, useState } from 'react';
 import { navigate } from '../../../app/router.ts';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
@@ -14,12 +16,29 @@ import { UnlockOverlay, UnlockPanel } from './Unlock.tsx';
 import { VaultSettings } from './VaultSettings.tsx';
 import styles from './Vault.module.css';
 
-export type VaultPartsProps = { part: 'lockrow' } | { part: 'move'; noteId: string; onDone(moved: boolean): void } | { part: 'settings' };
+export type VaultPartsProps = { part: 'lockrow' } | { part: 'findrow' } | { part: 'move'; noteId: string; onDone(moved: boolean): void } | { part: 'settings' };
 
 export default function VaultParts(p: VaultPartsProps) {
   if (p.part === 'lockrow') return <LockRow />;
+  if (p.part === 'findrow') return <FindRow />;
   if (p.part === 'move') return <MoveToVault noteId={p.noteId} onDone={p.onDone} />;
   return <VaultSettings />;
+}
+
+function FindRow() {
+  const t = useVaultT();
+  const { state, s } = useVault();
+  useEffect(() => {
+    if (state.status === null && state.phase === 'loading') void s.refreshStatus();
+  }, [s, state.status, state.phase]);
+  if (state.status?.set !== true) return null;
+  return (
+    <button type="button" className={`${styles.lockrow} ${styles.findrow}`} onClick={() => void navigate('vault')} data-testid="vault-findrow">
+      <LockIcon />
+      <span className={styles.lockrowSub}>{t(state.phase === 'unlocked' ? 'vault.findrow.open' : 'vault.findrow.locked', {})}</span>
+      <span className={styles.lockrowGo}>{`${t('vault.findrow.go', {})} ›`}</span>
+    </button>
+  );
 }
 
 function LockRow() {

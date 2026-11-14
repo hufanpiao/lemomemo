@@ -9,9 +9,10 @@
 // • 合并“意思相近”（mergeFind）：服务器只回 [{kind, id, score}]，这里只认本机缓存里还活着的条目（删了、隐私记的、本机还没有的丢掉）。
 //   两边都中 → 最相关；其余关键词的 → 关键词找到；只有意思中的 → 意思相近（按分数）。
 // 纯 TS：不准 import React（A1）；不读时钟、不读设置，now、tz 由调用方给
-import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { addDays, fmtHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { firstOfMonth, lastOfMonth, monthOf, startOfWeek } from '../../../../shared/logic/calendar/cal-nav.ts';
+import { placeEvent, type CalEvent } from '../../../../shared/logic/calendar/cal-items.ts';
 import { isShownFile } from '../../../../shared/logic/files/shown-file.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
@@ -67,8 +68,10 @@ export function buildIndex(src: FindSources, tz: Tz): FindItem[] {
   for (const r of src.events) {
     if (!isLiveRow(r)) continue;
     const title = str(r['title']);
+    // 日子、时刻按 4.6 换算到设备时区（B4b-3：时间类查找“下周的日程”按换算后的那天算）；格式坏了的照原值
+    const p = placeEvent(r as unknown as CalEvent, tz);
     out.push({ ...base, kind: 'event', id: r.id, title, fields: [title, str(r['location']), str(r['note']), str(r['raw_text'])],
-      date: dateStr(r['date']), time: typeof r['time'] === 'string' ? r['time'] : null, extra: str(r['location']) });
+      date: p?.date ?? dateStr(r['date']), time: p ? (p.allDay ? null : fmtHm(p.startMin)) : typeof r['time'] === 'string' ? r['time'] : null, extra: str(r['location']) });
   }
   for (const r of src.todos) {
     if (!isLiveRow(r)) continue;

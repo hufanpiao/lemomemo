@@ -438,3 +438,73 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* ===== B4b-3 ===== */
+
+/* 一行：结果按钮占满，右边“⋯”（kit 的 NoteRow 样式） */
+.item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.item .row {
+  flex: 1;
+  min-width: 0;
+}
+
+/* “最相关”里的图片：一行三列（线框 sFind THUMBS） */
+.thumbs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+
+.thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.thumbBox {
+  display: block;
+  overflow: hidden;
+  height: 92px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+}
+
+.thumbBox > * {
+  width: 100%;
+  height: 100%;
+}
+
+.thumbT {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* “＋”判成查找打开时的页脚：总结一下、改成记下、这次用了几次 AI */
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 4px;
+}
+
+.footN {
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}

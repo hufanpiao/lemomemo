@@ -9,7 +9,8 @@
 // • 提示条：一条 → “已记下：…”；多条 → “已记下 N 条”，展开逐条改、撤，“拆错了，合并成一条”“全部撤销”
 // • 看起来是要查找（B4b-2，线框 sPlus“看起来是要查找 · Enter 查找”、架构 5.14 第 1 点）：本机规则 localIntent 判成查找、有把握、
 //   没带时间范围、查询词不空 → find 给出查询词，界面换成“找：…”，回车打开查找面板（features/smart-search）；“改成记下”把这一句当记下。
-//   没把握的、带时间范围的（“上周的会”“这个月的待办”）、总结、改期、完成都归 B4b-3（AI 判意图），这里照旧当记下
+//   没把握的、带时间范围的（“上周的会”“这个月的待办”）、总结、改期、完成：回车走 planText（B4b-3，本机或 AI 判意图），
+//   判成别的意图的不保存：清掉输入条、交给结果层（hooks/voice-main 的 toAssist，同时把原话写进草稿），调用方 onAsked 收起打字条
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { getBoot } from '../../../core/boot.ts';
@@ -24,6 +25,7 @@ import { clearTypeDraft, readTypeDraft, writeTypeDraft } from '../data/type-draf
 import { createBatchBox, createSavedBatch } from '../data/saved-batch.ts';
 import { keepAsked, navOnline, planLocal, planText, type CallAi } from '../data/type-flow.ts';
 import { useCaptureCtx } from './useCaptureCtx.ts';
+import { toAssist } from './voice-main.ts';
 import { useSavedBatch } from './useSavedBatch.ts';
 
 // ui 不能直接 import data（A1），界面要用的类型经这里转出去
@@ -40,6 +42,8 @@ export interface TypeBarOpts {
   writer?: Writer | undefined;
   /** 测试用：在线与否 */
   online?: (() => boolean) | undefined;
+  /** 判成查找、总结、取消改期完成，已经交给结果层（B4b-3）：调用方收起打字条 */
+  onAsked?: (() => void) | undefined;
 }
 
 export type TypeBarError = 'not_saved' | 'nothing' | null;
@@ -136,6 +140,14 @@ export function useTypeBar(o: TypeBarOpts) {
       const aiOn = aiOnNow();
       const { plan: p, quotaOut } = await planText(text, c, { online, aiOn, call: callAi });
       rlog(`typebar planned items=${p.items.length} ai=${aiOn} quotaOut=${quotaOut} origin=${p.origin} status=${p.status} reason=${p.aiReason ?? '-'} ms=${ms()}`);
+      if (p.ask) {
+        go({ type: 'reset' });
+        toAssist({ ask: p.ask.ask, raw: text, aiUsed: p.ask.aiUsed, from: 'plus' });
+        setTextRaw('');
+        typed.current = false;
+        o.onAsked?.();
+        return;
+      }
       saved.land(await saved.save(p, text), p);
     } catch (err) {
       rlog(`typebar submit threw ${(err as Error | undefined)?.name ?? ''} ${String((err as Error | undefined)?.message ?? err).slice(0, 200)}`);
@@ -144,7 +156,7 @@ export function useTypeBar(o: TypeBarOpts) {
       busy.current = false;
       rlog(`typebar recog off ms=${ms()}`);
     }
-  }, [text, status, ctx, callAi, aiOnNow, online, saved, go]);
+  }, [text, status, ctx, callAi, aiOnNow, online, saved, go, o]);
 
   // 确认行没选就关掉：原话去掉已经存了的几条、只留等确认那条的原文，填回输入条（去不干净时原话整句留着，partSaved 为 true：输入条上方提示，一改字就收起）
   const dismissConfirm = useCallback(() => {

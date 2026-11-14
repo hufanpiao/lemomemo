@@ -9,13 +9,14 @@
 // • 结果在界面上怎么收尾（voiceFinal）：记下的拼成和打字同一种 TypePlan，别的给出提示条种类
 // • 运行日志只记结果种类、原因、次数、毫秒、字节数，不记转写
 // 纯 TS：不准 import React（A1）
+import type { AssistAsk } from '../../../../shared/logic/parse/assist.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { cutAiText, isObj, outcomeOf } from './ai-outcome.ts';
 import type { CallVoice } from './ai-voice-api.ts';
 import { uploadTimeoutMs } from './record-logic.ts';
 import { withTimeoutRetry, type SendFail } from './send-error.ts';
-import { navOnline, planLocal, type AiReqCtx, type TypeCtx, type TypePlan } from './type-flow.ts';
+import { aiAskWins, localHint, navOnline, planLocal, recordAlt, type AiReqCtx, type TypeCtx, type TypePlan } from './type-flow.ts';
 
 /** 要上传的一段录音：mime 不带参数（audio/mp4），直接当 Content-Type */
 export interface VoiceClip {
@@ -30,7 +31,9 @@ export async function toUpload(clip: VoiceClip): Promise<VoiceClip> {
 
 export type VoiceResult =
   /** 识别成功 */
-  | { kind: 'record'; items: AiItem[]; transcript: string; quotaLeft: number }
+  | { kind: 'record'; items: AiItem[]; transcript: string; quotaLeft: number; confidence: number }
+  /** AI 判成查找、总结、取消、改期、完成（B4b-3） */
+  | { kind: 'intent'; ask: AssistAsk; transcript: string; quotaLeft: number; confidence: number }
   /** 没听到说话 */
   | { kind: 'no_speech' }
   /** 有转写、但 AI 结果用不了（不认识的 intent、读不懂）：用转写走本机规则 */
@@ -52,7 +55,9 @@ export function voiceResult(raw: unknown): VoiceResult {
   const out = outcomeOf(raw);
   switch (out.kind) {
     case 'record':
-      return { kind: 'record', items: out.items, transcript: cutAiText(out.transcript ?? ''), quotaLeft: out.quotaLeft };
+      return { kind: 'record', items: out.items, transcript: cutAiText(out.transcript ?? ''), quotaLeft: out.quotaLeft, confidence: out.confidence };
+    case 'intent':
+      return { kind: 'intent', ask: out.ask, transcript: cutAiText(out.transcript ?? ''), quotaLeft: out.quotaLeft, confidence: out.confidence };
     case 'quota_out':
       return { kind: 'quota_out' };
     case 'consent_required':
@@ -116,6 +121,8 @@ export type VoiceNote =
 /** 一次返回在界面上怎么收尾：save 记下（和打字同一种 TypePlan，raw 是转写）；note 出提示条（status 是状态机的终态）；idle 回到没按 */
 export type VoiceFinal =
   | { do: 'save'; plan: TypePlan; raw: string }
+  /** 判成查找等（有把握）：不保存，交给结果层（B4b-3；规则和打字同一套：本机有迹象且 AI ≥ 0.6，或本机就有把握） */
+  | { do: 'ask'; ask: AssistAsk; raw: string; quotaLeft: number }
   | { do: 'note'; status: 'no_speech' | 'quota_out' | 'ai_failed'; note: VoiceNote }
   | { do: 'idle' };
 
@@ -123,13 +130,25 @@ export type VoiceFinal =
  *  AI 没回应时在线出“重试 / 再说一次”，不在线出“没网”（录音都留着） */
 export function voiceFinal(res: VoiceResult, ctx: TypeCtx, online: boolean): VoiceFinal {
   switch (res.kind) {
-    case 'record': {
-      const hints = { ...planLocal(res.transcript, ctx).result.hints, bad_day: null };
-      return { do: 'save', raw: res.transcript, plan: { status: 'saved', origin: 'ai', items: res.items, hints, quotaLeft: res.quotaLeft, aiReason: null } };
+    case 'record':
+    case 'intent': {
+      const { hint, sure } = localHint(res.transcript, ctx);
+      const l = planLocal(res.transcript, ctx).result;
+      if (sure && hint) return { do: 'ask', ask: hint, raw: res.transcript, quotaLeft: res.quotaLeft };
+      if (res.kind === 'intent') {
+        if (aiAskWins(hint, res.confidence)) return { do: 'ask', ask: res.ask, raw: res.transcript, quotaLeft: res.quotaLeft };
+        // 本机看不出迹象或 AI 没把握：先按记下存（D-15，原话不丢），提示条给“改成搜索”和 AI 找到的
+        const plan: TypePlan = { status: 'saved', origin: 'rule', items: l.items, hints: l.hints, quotaLeft: res.quotaLeft, aiReason: `intent_${res.ask.intent}`, ask: null, alt: { ask: res.ask, found: true } };
+        return { do: 'save', raw: res.transcript, plan };
+      }
+      const hints = { ...l.hints, bad_day: null };
+      return { do: 'save', raw: res.transcript, plan: { status: 'saved', origin: 'ai', items: res.items, hints, quotaLeft: res.quotaLeft, aiReason: null, ask: null, alt: recordAlt(hint, res.confidence) } };
     }
     case 'rule': {
       const l = planLocal(res.transcript, ctx).result;
-      return { do: 'save', raw: res.transcript, plan: { status: 'saved_rule', origin: 'rule', items: l.items, hints: l.hints, quotaLeft: null, aiReason: res.reason } };
+      const { hint } = localHint(res.transcript, ctx);
+      const alt = hint ? { ask: hint, found: true } : null;
+      return { do: 'save', raw: res.transcript, plan: { status: 'saved_rule', origin: 'rule', items: l.items, hints: l.hints, quotaLeft: null, aiReason: res.reason, ask: null, alt } };
     }
     case 'no_speech':
       return { do: 'note', status: 'no_speech', note: 'no_speech' };

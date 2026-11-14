@@ -84,6 +84,10 @@ export interface BatchNotice {
   lines: NoticeLine[];
   entries: BatchEntry[];
   merge: boolean;
+  /** 模糊先按记下存了的（B4b-3，架构 5.14 第 2 点）：提示条给“改成搜索”，found 时再给“也帮你找了一下：N 条 ›” */
+  alt: TypePlan['alt'];
+  /** 这一批的原话（“改成搜索”撤销以后照它查找、“改成记下”照它再记） */
+  raw: string;
 }
 
 /** 这一批：记下的、确认行还要问的几条（过去的月日，R-166）、这次该不该提醒“今天的次数用完了” */
@@ -108,7 +112,7 @@ export function noticeOf({ batch, quotaDue }: BatchState): BatchNotice | null {
     mergeFailed: last === 'merge_failed', undoFailed: failedOf(batch), mergeLeft: merged?.mergeLeft ?? 0,
     annivKept: batch.entries.some((e) => e.undoTried && isAnniv(e.ref)) || merged?.annivLeft === true,
   });
-  return { lines, entries: batch.entries, merge: canMerge(batch) };
+  return { lines, entries: batch.entries, merge: canMerge(batch), alt: batch.plan.alt ?? null, raw: batch.raw };
 }
 
 /** 两边各自的那一点：go 自己的状态机；done 这一批都存好了；fail 新的一句没存上；error 确认行选了没存上（状态不动，还能再选） */

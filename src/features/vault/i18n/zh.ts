@@ -79,6 +79,9 @@ export const zh = {
   'vault.lockrow.pin': '输入密码解锁',
   'vault.lockrow.setup': '设个密码',
   'vault.lockrow.open': '打开',
+  'vault.findrow.locked': '隐私记锁着，里面的不在结果里',
+  'vault.findrow.open': '隐私记里的不在结果里',
+  'vault.findrow.go': '打开隐私记',
 
   'vault.move': '移到隐私记',
   'vault.moved': '已移到隐私记',

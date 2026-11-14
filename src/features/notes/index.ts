@@ -11,3 +11,6 @@ export const routes = [
 
 /** 电脑版今天页的“今天记的”块（B6，5.9b 的 notes-today；ui/TodayNotes.tsx）：只在电脑版今天页挂；onCount 报今天一共几条（块标题用） */
 export const TodayNotes = lazy(() => import('./ui/TodayNotes.tsx'));
+
+/** 一张插图的缩略图（B4b-3：查找面板“最相关”里的图片横排）：props 是 noteId、imageId；和插图同一包 */
+export const NoteThumb = lazy(() => import('./ui/note-thumb.tsx'));

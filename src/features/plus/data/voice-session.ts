@@ -31,7 +31,8 @@ import { markPlusHeld } from './plus-hint.ts';
 import { quotaOutToday } from './quota.ts';
 import { BLOB_KEEP_MS, speechByNet, type HoldZone } from './record-logic.ts';
 import { createBatchBox, createSavedBatch } from './saved-batch.ts';
-import { navOnline, type CallAi, type TypeCtx, type TypePlan } from './type-flow.ts';
+import type { AssistAsk } from '../../../../shared/logic/parse/assist.ts';
+import { navOnline, planText, recordLocal, type CallAi, type TypeCtx, type TypePlan } from './type-flow.ts';
 import type { VoiceNote } from './voice-flow.ts';
 import { createRecRoute } from './voice-rec.ts';
 import { createSpeechPath } from './voice-speech.ts';
@@ -59,6 +60,8 @@ export interface VoiceIo {
   callAi?: CallAi | undefined;
   online?: (() => boolean) | undefined;
   writer?: Writer | undefined;
+  /** 判成查找、总结、取消、改期、完成（B4b-3）：不保存，交给结果层（hooks/useVoice 给，打开 smart-search 的结果层）；raw 是转写 */
+  onAsk?: ((ask: AssistAsk, raw: string, aiUsed: 0 | 1) => void) | undefined;
 }
 
 /** 界面每次渲染给最新的一份（useCaptureCtx 给的：这一刻的上下文、能不能用 AI、界面语言，手机自带识别按它听）；卸载后留着最后一份 */
@@ -68,7 +71,7 @@ export interface VoiceBind {
   lang: Locale;
 }
 
-const ioOf = (io: VoiceIo) => ({ callVoice: io.callVoice ?? callAiVoice, callAi: io.callAi ?? callAiParse, online: io.online ?? navOnline });
+const ioOf = (io: VoiceIo) => ({ callVoice: io.callVoice ?? callAiVoice, callAi: io.callAi ?? callAiParse, online: io.online ?? navOnline, onAsk: io.onAsk ?? null });
 export type VoiceDeps = ReturnType<typeof ioOf> & VoiceBind;
 
 /** 一次录音（或一次手机识别、一次重试）：代号、取消（录音器和上传共用）、录音器、开始写库了没有 */
@@ -154,6 +157,14 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
     rlog(`voice attempt ${a.id} stale at=${at}`);
     return false;
   };
+  /** 判成别的意图（B4b-3）：这一次收掉、回到没按，交给结果层（不写库） */
+  const askOut = (a: Attempt, ask: AssistAsk, raw: string, aiUsed: 0 | 1): void => {
+    if (!alive(a, 'ask')) return;
+    end(a);
+    toIdle();
+    rlog(`voice ask intent=${ask.intent} ai=${aiUsed} len=${[...raw].length}`);
+    d().onAsk?.(ask, raw, aiUsed);
+  };
   // 记下的这一批：存完出结果；新的一句没存上（nothing：一条都没拆出来）；确认行选了没存上
   const batch = createSavedBatch({
     box: createBatchBox(), writer: io.writer, tag: 'voice', source: 'voice', env: () => ({ now: clock.now(), tz: currentTz(), day: null }),
@@ -193,7 +204,10 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
     alive,
     current: () => cur,
     /** 存这一次：开始写库以后一定落地（负责人定：已开始写库的照常存完），写完不再看这一次还是不是当前的 */
+    askOut,
     async savePlan(a: Attempt, p: TypePlan, raw: string) {
+      // 手机自带识别走 planText：判成别的意图的在这里分流（录音那一路在 voice-rec 的 voiceFinal 里分）
+      if (p.ask) return askOut(a, p.ask.ask, raw, p.ask.aiUsed);
       if (v().status !== 'organizing') go({ type: 'organize' });
       if (!alive(a, 'store')) return;
       a.committed = true;
@@ -327,6 +341,23 @@ export function createVoiceSession(io: VoiceIo = {}) {
       });
     },
     closeCard: () => card(null),
+    /** 结果层的“改成记下”“都不是 · 按原话记下”、quick-add 交来判成记下的（B4b-3）：原话只按本机规则记下（不花 AI 次数），
+     *  走这一批（提示条、撤销和录音同一套）。正在录、正在整理时不接（返回 false，原话还在草稿里） */
+    async record(raw: string, from: string, mode: 'local' | 'plan' = 'local'): Promise<boolean> {
+      if (!idleOrFinal() || raw.trim() === '') {
+        rlog(`voice record_raw skip from=${from} busy=${idleOrFinal() ? 0 : 1}`);
+        return false;
+      }
+      batch.fresh();
+      c.closeNote();
+      rlog(`voice record_raw from=${from} mode=${mode} len=${[...raw].length}`);
+      const a = c.begin();
+      // plan：quick-add 交来的一句和打字条一样走 planText（本机规则、AI 判意图），判成别的意图的 savePlan 里交给结果层
+      const p = mode === 'local' ? recordLocal(raw, d().ctx()) : (await planText(raw, d().ctx(), { online: d().online, aiOn: d().aiOn(), call: d().callAi, signal: a.ac.signal })).plan;
+      if (!c.alive(a, 'record_plan')) return false;
+      await c.savePlan(a, p, raw);
+      return true;
+    },
     /** 确认行没选就关掉：同一句里已经存了的几条照常在提示条上（能撤）；没存的这条丢掉（录音路没有输入条可以填回）。
      *  额度提示在存成那一刻已经定了，这里不再 land（第 12 条：原来 land 只为更新 quotaDue，还会发一个 idle 下不合法的 done） */
     dismissConfirm() {

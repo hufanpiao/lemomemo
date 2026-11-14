@@ -1,13 +1,20 @@
 // 查找面板的小零件（B4b-2；线框 s12、sFind）：命中词高亮、行首记号、每行第二行文字、电脑右栏预览、文案 hook。FindPanel.tsx 用
 import type { ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
+import { navigate } from '../../../app/router.ts';
 import { makeUseT } from '../../../kit/hooks/useT.ts';
-import { markRanges, type FindHit, type FindKind } from '../hooks/useFind.ts';
+import { markRanges, type FindHit, type FindItem, type FindKind } from '../hooks/useFind.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
 import styles from './FindPanel.module.css';
 
 export const useFindT = makeUseT({ zh, ko });
+
+/** 打开一条：日程、待办、纪念日进各自的编辑页；随手记、图片、文档进所在随手记（查找面板、结果层共用） */
+export function openItem(it: FindItem): void {
+  if (it.kind === 'event' || it.kind === 'todo' || it.kind === 'anniv') void navigate(it.kind, it.id);
+  else void navigate('note', it.noteId ?? it.id);
+}
 export type T = ReturnType<typeof useFindT>;
 
 /** 文字里命中的词标成黑底白字 */

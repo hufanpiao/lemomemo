@@ -1,0 +1,99 @@
+/* 结果层（B4b-3）：外壳、行、胶囊用查找面板的 FindPanel.module.css，这里只放结果层多出来的几样 */
+
+/* 电脑：结果层只有一栏，不用左右两栏的高度 */
+.panel {
+  height: auto;
+  max-height: min(640px, 80vh);
+}
+
+/* 顶上这次的话（不能改，点“关闭”回去重新说） */
+.said {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-16);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* “理解成：…” */
+.und {
+  flex: none;
+  margin: 10px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.6;
+}
+
+/* 电脑：和输入区同样左右留 20px；正文区不用手机那种撑满的负边距 */
+.deskPad {
+  margin: 10px 0 0;
+  padding: 0 20px;
+}
+
+.deskBody {
+  margin: 0;
+  padding: 4px 20px 20px;
+}
+
+.note {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+  line-height: 1.6;
+}
+
+.sum {
+  margin: 4px 0 8px;
+}
+
+/* 总结文字：纯文本，保留换行 */
+.sumText {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: var(--fs-14-5);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 总结里引用到的那几条：左边一道竖线 */
+.cited {
+  box-shadow: inset 3px 0 0 var(--text);
+  padding-left: 8px;
+}
+
+/* 截止到今天：过期没做完的标红（同列表） */
+.late {
+  color: var(--danger-text);
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.cand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+}
+
+.check {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+}
+
+.done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  font-size: var(--fs-14-5);
+}
