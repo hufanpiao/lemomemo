@@ -3,21 +3,36 @@
 // 这样 Vitest 和 tsc 能直接测它（tests/edge/ai-parse-with-ai.test.ts 注入真的 shared 版本）；函数和评测用的绑定在 parse-with-ai.ts。
 // 做的事：去控制字符、转义 </data>、截 2000 字 → 拼提示词 → 调 provider → 校验 → 返回校验后的结果和原始输出（评测两份都存）。
 // 不做的事：不查 AI 同意、不计次数和限流、不看“本机有把握就不调 AI”、不读写数据库（quota 只作为 reason 返回，ai_state 由调用方写）。
+// 三个入口（B4b-3）：parseWithAI（ai-parse，parse.v4，意图加记下）、voiceWithAI（ai-voice，voice.v4）、
+//   recordWithAI（claude-intake、评测测试集 ①，parse.v3，只做记下：AI 判成别的意图当 schema 拒收，recordOnly）。
 import { PROMPT_VERSION, TASK_PARAMS, PARSE_TIMEOUT_MS, VOICE_TIMEOUT_MS } from './params.ts';
 import { DEFAULT_DAY_RULE, PARSE_V3 } from './prompts/parse.v3.ts';
-import { VOICE_V3 } from './prompts/voice.v3.ts';
+import { PARSE_V4 } from './prompts/parse.v4.ts';
+import { VOICE_V4 } from './prompts/voice.v4.ts';
 import type { AIProvider, AiResult, QuotaKind } from './provider.ts';
 import { generateRetry503 } from './retry.ts';
 
 export type AiKindLike = 'event' | 'todo' | 'note' | 'anniv';
 export type InvalidReasonLike = 'missing_date_basis' | 'bad_date' | 'not_whitelisted' | 'out_of_range' | 'schema' | 'empty';
+/** shared/schema/intent.ts 的几个枚举（本文件不引 shared；tests/edge/ai-intent.test.ts 钉住两边相等） */
+export const PLUS_INTENTS_LIKE = ['record', 'search', 'summarize', 'cancel', 'reschedule', 'complete'] as const;
+export type NonRecordIntentLike = Exclude<(typeof PLUS_INTENTS_LIKE)[number], 'record'>;
+export const QUERY_KINDS_LIKE = ['event', 'todo', 'note'] as const;
+export const TARGET_KINDS_LIKE = ['event', 'todo'] as const;
+export const QUERY_DONE_LIKE = ['open', 'done', 'any'] as const;
+
+/** 校验以后的记下（shared/schema/ai.ts 的 RecordChecked） */
+export type RecordChecked<Item> = { intent: 'record'; confidence: number; items: Item[] };
+/** 别的意图（shared/schema/intent.ts 的 IntentChecked 满足这个形状） */
+export type IntentLike = { intent: NonRecordIntentLike; confidence: number; fixed?: boolean };
+export type Checked<Item, I extends IntentLike = IntentLike> = RecordChecked<Item> | I;
 
 /** 注入的校验（shared/schema/ai.ts 的同名函数满足这个形状） */
 export type CheckResult<T> = { ok: true; value: T } | { ok: false; invalid_reasons: InvalidReasonLike[]; issues: unknown[] };
 export interface CheckCtx { now: number; tz: string; features: readonly AiKindLike[]; defaultDay?: string | undefined }
-export interface Checkers<Item> {
-  checkParseOutput(raw: unknown, ctx: CheckCtx): CheckResult<{ items: Item[] }>;
-  checkVoiceOutput(raw: unknown, ctx: CheckCtx): CheckResult<{ transcript: string; items: Item[] }>;
+export interface Checkers<Item, I extends IntentLike = IntentLike> {
+  checkParseOutput(raw: unknown, ctx: CheckCtx): CheckResult<Checked<Item, I>>;
+  checkVoiceOutput(raw: unknown, ctx: CheckCtx): CheckResult<Checked<Item, I> & { transcript: string }>;
   /** 默认日子的校验（shared/schema/ai.ts 的 checkDefaultDay，和 ai-parse、ai-voice 入口同一个函数，R10） */
   checkDefaultDay: DayCheck;
 }
@@ -118,7 +133,8 @@ export function cleanProjects(ps: readonly string[]): string[] {
 const STR = { type: 'STRING' };
 const NSTR = { type: 'STRING', nullable: true };
 
-/** Gemini responseSchema（OpenAPI 子集）：kind 的枚举只放这个人能用的类型；没有 anniv 时整个 anniv 键不出现。不放 intent（Q2） */
+/** Gemini responseSchema（OpenAPI 子集）：kind 的枚举只放这个人能用的类型；没有 anniv 时整个 anniv 键不出现。
+ *  这一份只有记下的键、不放 intent：parse.v3（recordWithAI）直接用；parse.v4、voice.v4 经 plusSchema 加意图的键 */
 export function responseSchema(features: readonly AiKindLike[], voice: boolean): Record<string, unknown> {
   const props: Record<string, unknown> = {
     kind: { type: 'STRING', enum: [...features] },
@@ -151,6 +167,62 @@ export function responseSchema(features: readonly AiKindLike[], voice: boolean):
     : { type: 'OBJECT', properties: { items }, required: ['items'] };
 }
 
+const NDATE = NSTR;
+// 键名列表用 Object.keys 取（不在源码里写带引号的 from：voice-probe-guard 的依赖链检查按 from + 引号认 import）
+const RANGE_PROPS = { from: NDATE, to: NDATE };
+/** 意图的几个顶层键（Gemini OpenAPI 子集：可为 null 的写 nullable；with_overdue、all 可以不给） */
+const INTENT_PROPS: Record<string, unknown> = {
+  intent: { type: 'STRING', enum: [...PLUS_INTENTS_LIKE] },
+  confidence: { type: 'NUMBER' },
+  query: {
+    type: 'OBJECT', nullable: true,
+    properties: {
+      text: STR,
+      range: { type: 'OBJECT', nullable: true, properties: RANGE_PROPS, required: Object.keys(RANGE_PROPS) },
+      kinds: { type: 'ARRAY', items: { type: 'STRING', enum: [...QUERY_KINDS_LIKE] } },
+      done: { type: 'STRING', enum: [...QUERY_DONE_LIKE] },
+    },
+    required: ['text', 'range', 'kinds', 'done'],
+  },
+  target: {
+    type: 'OBJECT', nullable: true,
+    properties: {
+      text: STR, date: NDATE, time: NSTR,
+      kinds: { type: 'ARRAY', items: { type: 'STRING', enum: [...TARGET_KINDS_LIKE] } },
+      with_overdue: { type: 'BOOLEAN' }, all: { type: 'BOOLEAN' },
+    },
+    required: ['text', 'date', 'time', 'kinds'],
+  },
+  to: { type: 'OBJECT', nullable: true, properties: { date: NDATE, time: NSTR }, required: ['date', 'time'] },
+};
+
+/** parse.v4、voice.v4 的 responseSchema：记下那一份（responseSchema）加意图的几个键 */
+export function plusSchema(features: readonly AiKindLike[], voice: boolean): Record<string, unknown> {
+  const base = responseSchema(features, voice) as { properties: Record<string, unknown>; required: string[] };
+  return {
+    type: 'OBJECT',
+    properties: { ...base.properties, ...INTENT_PROPS },
+    required: [...base.required, 'intent', 'confidence', 'query', 'target', 'to'],
+  };
+}
+
+export const isRecord = <Item, I extends IntentLike>(v: Checked<Item, I>): v is RecordChecked<Item> => v.intent === 'record';
+
+/** 只做记下的（claude-intake、评测）：AI 判成别的意图当 schema 拒收；交出 {items}（和 B3 一样） */
+export function recordOnly<Item, I extends IntentLike>(v: CheckResult<Checked<Item, I>>): CheckResult<{ items: Item[] }> {
+  if (!v.ok) return v;
+  return isRecord(v.value) ? { ok: true, value: { items: v.value.items } } : { ok: false, invalid_reasons: ['schema'], issues: [] };
+}
+
+/**
+ * ai-parse、ai-voice 成功时的响应体（shared/schema/ai.ts 的 recordResponse、intent.ts 的 queryResponse / targetResponse）：
+ * 校验结果（录音的带 transcript）去掉 fixed（规整过没有，只给评测计数，不回给客户端），加 quota_left。
+ */
+export function plusBody<Item, I extends IntentLike>(v: Checked<Item, I>, quotaLeft: number): Record<string, unknown> {
+  const { fixed: _fixed, ...rest } = v as Checked<Item, I> & { fixed?: boolean };
+  return { ...rest, quota_left: quotaLeft };
+}
+
 function dataParts(text: string, projects: readonly string[]): string {
   return `<projects>${JSON.stringify(cleanProjects(projects))}</projects>\n<data>${sanitize(text)}</data>`;
 }
@@ -162,27 +234,40 @@ function failOf(r: Extract<AiResult, { ok: false }>): ParseFail {
   };
 }
 
-export function makeParseWithAI<Item>(checkers: Checkers<Item>) {
-  /** 文字：ai-parse、claude-intake、评测 */
-  async function parseWithAI(input: ParseInput, provider: AIProvider): Promise<ParseOk<{ items: Item[] }> | ParseFail> {
-    const fp = fillPrompt(PARSE_V3, input, checkers.checkDefaultDay);
+export function makeParseWithAI<Item, I extends IntentLike = IntentLike>(checkers: Checkers<Item, I>) {
+  /** 文字的一次调用：prompt 和 schema 两样不同，其余（数据区、参数、超时、校验）相同 */
+  async function text<T>(
+    tpl: string, schema: Record<string, unknown>, version: string, input: ParseInput, provider: AIProvider,
+    check: (raw: unknown, ctx: CheckCtx) => CheckResult<T>,
+  ): Promise<ParseOk<T> | ParseFail> {
+    const fp = fillPrompt(tpl, input, checkers.checkDefaultDay);
     const bad = fp.badDefaultDay ? ({ badDefaultDay: true } as const) : {};
     const r = await provider.generate({
       system: fp.system,
       parts: [{ text: dataParts(input.text, input.projects) }],
-      schema: responseSchema(input.features, false),
+      schema,
       params: TASK_PARAMS.parse,
       timeoutMs: PARSE_TIMEOUT_MS,
     });
     if (!r.ok) return { ...failOf(r), ...bad };
-    const v = checkers.checkParseOutput(r.json, { now: input.now, tz: input.tz, features: input.features, defaultDay: fp.defaultDay });
+    const v = check(r.json, { now: input.now, tz: input.tz, features: input.features, defaultDay: fp.defaultDay });
     if (!v.ok) return { ok: false, reason: 'invalid', raw: r.json, invalid_reasons: v.invalid_reasons, issues: v.issues, ...bad };
-    return { ok: true, value: v.value, raw: r.json, prompt: PROMPT_VERSION.parse, ...bad };
+    return { ok: true, value: v.value, raw: r.json, prompt: version, ...bad };
   }
 
-  /** 录音：ai-voice（一次完成转写和拆分；C 路不做评测，R-167） */
-  async function voiceWithAI(input: VoiceInput, provider: AIProvider): Promise<ParseOk<{ transcript: string; items: Item[] }> | ParseFail> {
-    const fp = fillPrompt(VOICE_V3, input, checkers.checkDefaultDay);
+  /** 文字的“＋”：ai-parse（parse.v4，意图加记下） */
+  function parseWithAI(input: ParseInput, provider: AIProvider): Promise<ParseOk<Checked<Item, I>> | ParseFail> {
+    return text(PARSE_V4, plusSchema(input.features, false), PROMPT_VERSION.parse, input, provider, (raw, ctx) => checkers.checkParseOutput(raw, ctx));
+  }
+
+  /** 文字、只做记下：claude-intake、评测测试集 ①（parse.v3，schema 里没有 intent） */
+  function recordWithAI(input: ParseInput, provider: AIProvider): Promise<ParseOk<{ items: Item[] }> | ParseFail> {
+    return text(PARSE_V3, responseSchema(input.features, false), PROMPT_VERSION.record, input, provider, (raw, ctx) => recordOnly(checkers.checkParseOutput(raw, ctx)));
+  }
+
+  /** 录音：ai-voice（voice.v4，一次完成转写、意图和拆分；C 路不做评测，R-167） */
+  async function voiceWithAI(input: VoiceInput, provider: AIProvider): Promise<ParseOk<Checked<Item, I> & { transcript: string }> | ParseFail> {
+    const fp = fillPrompt(VOICE_V4, input, checkers.checkDefaultDay);
     const bad = fp.badDefaultDay ? ({ badDefaultDay: true } as const) : {};
     // 11-11：Gemini 回 503 重试一次，两次合计不超过 VOICE_TIMEOUT_MS（retry.ts；B3 iPhone 实测 40 次里 4 次 503）
     const { result: r, retried } = await generateRetry503(provider, {
@@ -191,7 +276,7 @@ export function makeParseWithAI<Item>(checkers: Checkers<Item>) {
         { text: `<projects>${JSON.stringify(cleanProjects(input.projects))}</projects>` },
         { inlineData: { mimeType: input.mime, data: input.audio } },
       ],
-      schema: responseSchema(input.features, true),
+      schema: plusSchema(input.features, true),
       params: TASK_PARAMS.voice,
       timeoutMs: VOICE_TIMEOUT_MS,
     });
@@ -202,5 +287,5 @@ export function makeParseWithAI<Item>(checkers: Checkers<Item>) {
     return { ok: true, value: v.value, raw: r.json, prompt: PROMPT_VERSION.voice, ...bad, ...rt };
   }
 
-  return { parseWithAI, voiceWithAI };
+  return { parseWithAI, recordWithAI, voiceWithAI };
 }

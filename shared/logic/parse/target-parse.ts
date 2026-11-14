@@ -8,13 +8,11 @@ import { takeDate } from './date-words.ts';
 import { cleanTitle, takeKindWords } from './marks.ts';
 import { resolveTarget, type PlusTarget, type TargetIntent, type TargetKind } from './resolve-target.ts';
 import type { Rest } from './text.ts';
+import { TARGET_TEXT_MAX, type PlusTo } from '../../schema/intent.ts';
 import { takePeriodOnly, takeTime } from './time-words.ts';
 
-/** 改期改到哪天几点（只说时刻的 date 为 null，日子不变） */
-export interface PlusTo {
-  date: DateStr | null;
-  time: string | null;
-}
+/** 改期改到哪天几点：类型定义在 shared/schema/intent.ts，这里转出给老调用方 */
+export type { PlusTo } from '../../schema/intent.ts';
 
 const COMPLETE_RE = /标记为已?完成|标成完成|打个?勾|打钩|勾掉|做完了|搞定了|완료로\s*표시|완료\s*처리|체크해\s*줘/;
 /** 韩文“안 가”：单说，或带“가다”的词尾（안 가요、안 가기로 했어、안 가게 됐어、안 가겠어、안 가려고 해），以及 안 갈래、안 갈게、안 갈 거야、안 갑니다；
@@ -48,8 +46,6 @@ const RELATED_LEAD = new RegExp(`(?:${CLAUSE.source}|${LINK})\\s*(?:把|将)?\\s
 const RELATED_LINK = new RegExp(`^\\s*(?:이)?(?:${LINK})`);
 /** 不然“相关待办”那一段到标点或取消、改期、完成说法为止（说法留给 cutPhrase、splitReschedule） */
 const RELATED_END = new RegExp(`${CLAUSE.source}|${TARGET_PHRASE}`);
-/** target.text 最长多少（架构 5.14 第 7 点的输出结构） */
-const TARGET_TEXT_MAX = 60;
 
 /** 原话说的是改期、取消还是完成（同时说了几种时按这个先后）；都不是返回 null */
 export function targetIntentOf(pre: string): TargetIntent | null {

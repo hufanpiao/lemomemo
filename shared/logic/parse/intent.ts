@@ -11,22 +11,13 @@ import { cutGraphemes } from '../short.ts';
 import { KO_WEEK, takeDate, weekday, weekPrefix, ZH_WEEK_PREFIX } from './date-words.ts';
 import { cleanTitle, stripRequests, takeKindWords, takeNamedKind } from './marks.ts';
 import type { PlusTarget } from './resolve-target.ts';
-import { BULK_RE, RELATED_RE, saysOverdue, takeOverdue, takeTarget, targetIntentOf, type PlusTo } from './target-parse.ts';
+import { BULK_RE, RELATED_RE, saysOverdue, takeOverdue, takeTarget, targetIntentOf } from './target-parse.ts';
 import { LEFTOVER_RE, prepare, QUICK_MAX, take, type Rest } from './text.ts';
 import { takePeriodOnly } from './time-words.ts';
 
-export type { PlusTo } from './target-parse.ts';
-/** “＋”的意图（B4b-3 放开 shared/schema/ai.ts 的 INTENTS 时引用这一份） */
-export const PLUS_INTENTS = ['record', 'search', 'summarize', 'cancel', 'reschedule', 'complete'] as const;
-export type PlusIntent = (typeof PLUS_INTENTS)[number];
-export type QueryDone = 'open' | 'done' | 'any';
-export interface PlusQuery {
-  text: string;
-  /** from 为 null：截止到 to 为止（只配 kinds [todo]、done open） */
-  range: { from: DateStr | null; to: DateStr } | null;
-  kinds: IntentKind[];
-  done: QueryDone;
-}
+// 意图枚举、query、to 的类型定义在 shared/schema/intent.ts（AI 输出校验、函数返回和本机规则共用一份），这里转出给老调用方
+import { QUERY_TEXT_MAX, type PlusIntent, type PlusQuery, type PlusTo } from '../../schema/intent.ts';
+export { PLUS_INTENTS, type PlusIntent, type PlusQuery, type PlusTo, type QueryDone } from '../../schema/intent.ts';
 export interface LocalIntent {
   intent: PlusIntent;
   /** 有把握就不调 AI；没把握时在线交给 AI，离线先按记下保存 */
@@ -101,7 +92,6 @@ const ZH_WEEK = new RegExp(`(${ZH_WEEK_PREFIX})\\s*个?\\s*(?:周|星期|礼拜)
 const KO_WEEK_RE = new RegExp(`(${KO_WEEK})`);
 const ZH_MONTH = /(下|这|本)\s*个?\s*月/;
 const KO_MONTH = /(다음|이번)\s*달/;
-const QUERY_TEXT_MAX = 100;
 /** 句式表外、像是取消 / 改期 / 完成的词：意图仍是记下，但没把握（交给 AI 或先保存再提示，不当成有把握的新条目） */
 const SUSPECT_RE = /取消|推迟|延期|延后|改期|变更|변경|연기|미뤄|미루|标完成|标为完成|완료/;
 

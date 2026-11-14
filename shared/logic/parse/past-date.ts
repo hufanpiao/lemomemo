@@ -124,6 +124,11 @@ export function inAiRange(date: DateStr, today: DateStr): boolean {
   return date >= shiftYears(today, -1) && date <= shiftYears(today, 5);
 }
 
+/** “＋”查找、取消、改期、完成里说的日子：今天前后 5 年以内（架构 5.14 第 2 点“日期在今天前后 5 年以内”；B4b-3） */
+export function inIntentRange(date: DateStr, today: DateStr): boolean {
+  return date >= shiftYears(today, -5) && date <= shiftYears(today, 5);
+}
+
 /** pastDate 看的那几列（AI 校验后的条目、本机规则的条目同一结构） */
 export interface DatedItem {
   kind: string;

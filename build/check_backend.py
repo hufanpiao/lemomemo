@@ -211,7 +211,8 @@ GEMINI_KEY = re.compile(r"\bGEMINI_API_KEY\b")
 GEMINI_KEY_FILE = "_shared/ai/wire.ts"
 GEMINI_KEY_PREVIEW_DIR = "_preview/voice-probe/"
 # B4b-2 加 note-search、ai-embed：只经 wire.ts 的 embedderFor 拿带密钥的嵌入函数（gemini-embedding-2，架构 5.13 第 6 点）
-GEMINI_WIRE_FUNCS = frozenset({"ai-parse", "ai-voice", "ai-classify", "claude-intake", "note-search", "ai-embed"})
+# B4b-3 加 ai-summarize：经 wire.ts 的 gateDeps 拿服务商（同 ai-parse，架构 5.14 第 4 点）
+GEMINI_WIRE_FUNCS = frozenset({"ai-parse", "ai-voice", "ai-classify", "claude-intake", "note-search", "ai-embed", "ai-summarize"})
 
 # Deno 和打包器认的源码扩展名都算（代码审查有条件通过 4：原先漏了 .jsx、.cjs、.cts，import 进来的这类文件整个不查）
 SOURCE_EXT = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")

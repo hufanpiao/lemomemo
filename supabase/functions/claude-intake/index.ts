@@ -7,7 +7,8 @@
 //   private.counters、private.ai_state、logs（经 _shared/ai/store.ts）。不直连数据库，不碰 R2。不加 CORS（0.48 第 4 条）。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { isUsable } from '../_shared/auth.ts';
-import { parseWithAI } from '../_shared/ai/parse-with-ai.ts';
+import { recordWithAI } from '../_shared/ai/parse-with-ai.ts';
+import { recordOnly } from '../_shared/ai/parse-core.ts';
 import { logIntakeFail, type StoreAdmin } from '../_shared/ai/store.ts';
 import { gateDeps, isValidTz } from '../_shared/ai/wire.ts';
 import { aiAllowed } from '../_shared/consent.ts';
@@ -35,8 +36,9 @@ Deno.serve(async (req) => {
     logic: {
       parseSplit: (text, now, tz, locale, projects, opts) => parseSplit(text, now, tz, locale, projects, { features: [...opts.features] }),
       confidence: (r) => confidence(r as Parameters<typeof confidence>[0]),
-      checkParseOutput,
-      parseWithAI,
+      // 只做记下：AI 判成别的意图、Claude 直接交的 items 带了别的意图，一律当 schema 拒收（recordOnly）
+      checkParseOutput: (raw, ctx) => recordOnly(checkParseOutput(raw, ctx)),
+      recordWithAI,
       captureRow: (item, ctx) => captureRow(item, ctx) as Row | null,
       todayOf, recurHint, arrangeHint,
       normLocale,

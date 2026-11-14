@@ -6,7 +6,8 @@ import { AI_AUDIO_MAX_BYTES, audioType, aiParseRequest, aiResponse, checkDefault
 import { fillPrompt, makeParseWithAI, type InvalidReasonLike } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { PROMPT_VERSION } from '../../supabase/functions/_shared/ai/params.ts';
 import { PARSE_V3 } from '../../supabase/functions/_shared/ai/prompts/parse.v3.ts';
-import { VOICE_V3 } from '../../supabase/functions/_shared/ai/prompts/voice.v3.ts';
+import { PARSE_V4 } from '../../supabase/functions/_shared/ai/prompts/parse.v4.ts';
+import { VOICE_V4 } from '../../supabase/functions/_shared/ai/prompts/voice.v4.ts';
 import { handle as parseHandle, type Deps as ParseDeps } from '../../supabase/functions/ai-parse/core.ts';
 import { handle as voiceHandle, type Deps as VoiceDeps } from '../../supabase/functions/ai-voice/core.ts';
 import { fakeGate, okJson, UA, used, type GateOpts } from './ai-fakes.ts';
@@ -85,7 +86,7 @@ describe('R6 默认日子：ai.ts 兜一层、提示词只在传了时多一条'
   });
   it('提示词：传了才有“选中了 2026-11-20”那一条，没有漏填的占位符；不传时和没有这条一样', () => {
     const base = { now: NOW, tz: SEOUL, locale: 'zh' as const, features: ['event', 'todo'] as const };
-    for (const tpl of [PARSE_V3, VOICE_V3]) {
+    for (const tpl of [PARSE_V3, PARSE_V4, VOICE_V4]) {
       const with_ = fillPrompt(tpl, { ...base, defaultDay: '2026-11-20' }, checkDefaultDay).system;
       const without = fillPrompt(tpl, base, checkDefaultDay).system;
       expect(with_).toContain('用户在日历上选中了 2026-11-20');
@@ -93,11 +94,12 @@ describe('R6 默认日子：ai.ts 兜一层、提示词只在传了时多一条'
       for (const s of [with_, without]) expect(s).not.toMatch(/\{\{[A-Z_]+\}\}/);
       expect(without.split('\n').length).toBe(with_.split('\n').length - 1);
     }
-    expect(PROMPT_VERSION).toEqual({ parse: 'parse.v3', voice: 'voice.v3', classify: 'classify.v2' });   // B4 加 classify
+    // B4 加 classify；B4b-3 parse、voice 升 v4（意图），record 是只做记下的 parse.v3，加 summarize
+    expect(PROMPT_VERSION).toEqual({ parse: 'parse.v4', voice: 'voice.v4', record: 'parse.v3', classify: 'classify.v2', summarize: 'summarize.v1' });
   });
   it('提示词 v3（R-374）：中文相对时刻一条按填进去的现在时刻换算，文字和语音两份都有', () => {
     const base = { now: NOW, tz: SEOUL, locale: 'zh' as const, features: ['event', 'todo'] as const };
-    for (const tpl of [PARSE_V3, VOICE_V3]) {
+    for (const tpl of [PARSE_V3, PARSE_V4, VOICE_V4]) {
       const s = fillPrompt(tpl, base, checkDefaultDay).system;
       expect(s).toContain('中文相对时刻（“3分钟后”“半小时后”“一个半小时后”');
       expect(s).toContain('从现在 12:00 起往后算');
@@ -171,8 +173,8 @@ describe('R6 默认日子：ai-parse、ai-voice', () => {
 describe('R7 AI 回空列表', () => {
   it('ai.ts：文字 items 为空算 empty；录音转写为空回空结果，转写不空而 items 为空算 empty', () => {
     expect(checkParseOutput({ items: [] }, CTX)).toMatchObject({ ok: false, invalid_reasons: ['empty'] });
-    expect(checkVoiceOutput({ transcript: '  ', items: [] }, CTX)).toEqual({ ok: true, value: { transcript: '', items: [] } });
-    expect(checkVoiceOutput({ transcript: '', items: [{ kind: 'todo', title: '编的', due: null, time: null, date_basis: null }] }, CTX)).toEqual({ ok: true, value: { transcript: '', items: [] } });
+    expect(checkVoiceOutput({ transcript: '  ', items: [] }, CTX)).toEqual({ ok: true, value: { intent: 'record', confidence: 1, transcript: '', items: [] } });
+    expect(checkVoiceOutput({ transcript: '', items: [{ kind: 'todo', title: '编的', due: null, time: null, date_basis: null }] }, CTX)).toEqual({ ok: true, value: { intent: 'record', confidence: 1, transcript: '', items: [] } });
     expect(checkVoiceOutput({ transcript: '嗯嗯', items: [] }, CTX)).toMatchObject({ ok: false, invalid_reasons: ['empty'] });
   });
   it('ai-parse：回 {fallback, reason: invalid}、退回次数，原因 empty 写进 logs', async () => {

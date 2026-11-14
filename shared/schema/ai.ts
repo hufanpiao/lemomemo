@@ -16,12 +16,21 @@
 //   ⑥ 查“今天前 1 年到后 5 年”。
 // 整份拒收只用于结构不合格、键不在白名单、取值超范围、日子不存在；ai.ts 不替 AI 改类型（R-165、R-195、续第 151 条）。
 // 空列表（R7）：文字的 items 为空算 empty；录音的 transcript 为空回空结果（没听清，客户端按 no_speech），transcript 不空而 items 为空算 empty。
+// 意图（B4b-3，架构 5.14 第 2、7 点）：顶层多 intent、confidence、query、target、to（intent.ts 的 intentRawShape，缺 intent 按 record）。
+//   record：照上面 ①～⑥ 校验 items，交出 {intent: 'record', confidence, items}；
+//   别的意图：items 不看、一律丢掉（AI 只解析条件，不生成列表），query / target / to 过 intent.ts 的 normIntent 规整，交出 IntentChecked；
+//   规整不了的原因（bad_date、out_of_range、schema）就是这里的 InvalidReason。confidence 一律过 normConfidence（没给按 1）。
+// claude-intake、评测只做记下：经 _shared/ai/parse-core.ts 的 recordOnly 把非 record 当 schema 拒收。
 import { z } from 'zod';
 import { todayOf, type DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
 import { DATE_BASES, DATE_FMT_RE, dateExists, inAiRange, pastDate, type Confirm, type DateBasis } from '../logic/parse/past-date.ts';
 import { graphemeCount, SHORT_GRAPHEMES } from '../logic/short.ts';
 import { AI_KINDS, type AiKind } from './kinds.ts';
+import {
+  intentRawShape, normConfidence, normIntent, PLUS_INTENTS, queryResponse, targetResponse,
+  type IntentChecked, type IntentInvalid, type PlusIntent,
+} from './intent.ts';
 
 /** 一次最多几条（第 7 节） */
 export const AI_MAX_ITEMS = 10;
@@ -52,13 +61,16 @@ export function audioType(ct: string | null | undefined): AudioType | null {
   return (AUDIO_TYPES as readonly string[]).includes(base) ? (base as AudioType) : null;
 }
 
-/** B3 运行时只有 record（Q2）；B4b-3 放开枚举就改这一处 */
-export const INTENTS = ['record'] as const;
-export type Intent = (typeof INTENTS)[number];
+/** “＋”的意图：B4b-3 起就是 intent.ts 的主枚举（0.29 续第 168 条） */
+export const INTENTS = PLUS_INTENTS;
+export type Intent = PlusIntent;
 
 /** 校验失败的原因（第 7 节 InvalidReason） */
 export const INVALID_REASONS = ['missing_date_basis', 'bad_date', 'not_whitelisted', 'out_of_range', 'schema', 'empty'] as const;
 export type InvalidReason = (typeof INVALID_REASONS)[number];
+/** 意图规整不了的原因必须都在 InvalidReason 里（编译期核对：intent.ts 多加一种原因而这里没加，这一行编译不过） */
+const INTENT_REASONS_COVERED: IntentInvalid extends InvalidReason ? true : never = true;
+void INTENT_REASONS_COVERED;
 
 export const ANNIV_TYPES = ['birthday', 'anniversary', 'countdown'] as const;
 
@@ -123,10 +135,15 @@ const itemRaw = z
     }
   });
 
-/** ai-parse、claude-intake 的 AI 输出：{items} */
-export const aiParseRaw = z.strictObject({ items: z.array(itemRaw).max(AI_MAX_ITEMS) });
-/** ai-voice 的 AI 输出：{transcript, items}（transcript 存进各条的 raw_text） */
-export const aiVoiceRaw = z.strictObject({ transcript: z.string().pipe(maxCp(AI_TEXT_MAX)), items: z.array(itemRaw).max(AI_MAX_ITEMS) });
+const itemsRaw = z.array(itemRaw).max(AI_MAX_ITEMS);
+const transcriptRaw = z.string().pipe(maxCp(AI_TEXT_MAX));
+/** ai-parse、claude-intake 的 AI 输出（record）：{items}，加意图的几个键（intent 缺省按 record） */
+export const aiParseRaw = z.strictObject({ items: itemsRaw, ...intentRawShape });
+/** ai-voice 的 AI 输出（record）：{transcript, items}（transcript 存进各条的 raw_text），加意图的几个键 */
+export const aiVoiceRaw = z.strictObject({ transcript: transcriptRaw, items: itemsRaw, ...intentRawShape });
+/** 先读顶层：键在不在白名单、意图的几个键对不对；items 等判出是 record 才校验（别的意图整个丢掉，里面写了什么都不看） */
+const parseTop = z.strictObject({ items: z.unknown().optional(), ...intentRawShape });
+const voiceTop = z.strictObject({ transcript: transcriptRaw, items: z.unknown().optional(), ...intentRawShape });
 
 export interface AiAnniv {
   type: (typeof ANNIV_TYPES)[number];
@@ -256,24 +273,55 @@ function structural(issues: z.core.$ZodIssue[]): AiCheck<never> {
   return fail(issues.map(reasonOf), issues);
 }
 
-/** ai-parse、claude-intake：校验 AI 的 {items} 输出 */
-export function checkParseOutput(raw: unknown, ctx: AiCheckCtx): AiCheck<{ items: AiItem[] }> {
-  const p = aiParseRaw.safeParse(dropConfirm(raw));
+/** 校验以后的记下：items 是校验、规整过的条目，confidence 是 AI 给的（normConfidence，没给按 1） */
+export interface RecordChecked {
+  intent: 'record';
+  confidence: number;
+  items: AiItem[];
+}
+/** checkParseOutput 交出的：记下，或别的意图（intent.ts 的 IntentChecked） */
+export type ParseChecked = RecordChecked | IntentChecked;
+/** checkVoiceOutput 交出的：多一个 transcript */
+export type VoiceChecked = ParseChecked & { transcript: string };
+
+/** 非 record：丢掉 items，query / target / to 过 normIntent */
+function checkIntent(intent: Exclude<PlusIntent, 'record'>, top: z.infer<typeof parseTop>, ctx: AiCheckCtx): AiCheck<IntentChecked> {
+  const n = normIntent(intent, top, ctx.now, ctx.tz);
+  return n.ok ? { ok: true, value: n.value } : fail([n.reason]);
+}
+
+/** ai-parse、claude-intake：校验 AI 的 {intent?, confidence?, items, query?, target?, to?} 输出 */
+export function checkParseOutput(raw: unknown, ctx: AiCheckCtx): AiCheck<ParseChecked> {
+  const pre = dropConfirm(raw);
+  const top = parseTop.safeParse(pre);
+  if (!top.success) return structural(top.error.issues);
+  const intent = top.data.intent ?? 'record';
+  if (intent !== 'record') return checkIntent(intent, top.data, ctx);
+  const p = aiParseRaw.safeParse(pre);
   if (!p.success) return structural(p.error.issues);
   if (p.data.items.length === 0) return fail(['empty']);   // R7 ①：退回次数，客户端走本机规则
   const r = checkItems(p.data.items, ctx);
-  return r.ok ? { ok: true, value: { items: r.value } } : r;
+  return r.ok ? { ok: true, value: { intent: 'record', confidence: normConfidence(p.data.confidence), items: r.value } } : r;
 }
 
-/** ai-voice：校验 AI 的 {transcript, items} 输出 */
-export function checkVoiceOutput(raw: unknown, ctx: AiCheckCtx): AiCheck<{ transcript: string; items: AiItem[] }> {
-  const p = aiVoiceRaw.safeParse(dropConfirm(raw));
+/** ai-voice：校验 AI 的 {transcript, intent?, confidence?, items, query?, target?, to?} 输出 */
+export function checkVoiceOutput(raw: unknown, ctx: AiCheckCtx): AiCheck<VoiceChecked> {
+  const pre = dropConfirm(raw);
+  const top = voiceTop.safeParse(pre);
+  if (!top.success) return structural(top.error.issues);
+  const confidence = normConfidence(top.data.confidence);
+  // R7 ②：没听清（转写为空）照常算 1 次、回空结果（不管判的什么意图）；听清了却没拆出条目算失败、退回次数
+  if (top.data.transcript.trim() === '') return { ok: true, value: { intent: 'record', confidence, transcript: '', items: [] } };
+  const intent = top.data.intent ?? 'record';
+  if (intent !== 'record') {
+    const n = checkIntent(intent, top.data, ctx);
+    return n.ok ? { ok: true, value: { ...n.value, transcript: top.data.transcript } } : n;
+  }
+  const p = aiVoiceRaw.safeParse(pre);
   if (!p.success) return structural(p.error.issues);
-  // R7 ②：没听清（转写为空）照常算 1 次、回空结果；听清了却没拆出条目算失败、退回次数
-  if (p.data.transcript.trim() === '') return { ok: true, value: { transcript: '', items: [] } };
   if (p.data.items.length === 0) return fail(['empty']);
   const r = checkItems(p.data.items, ctx);
-  return r.ok ? { ok: true, value: { transcript: p.data.transcript, items: r.value } } : r;
+  return r.ok ? { ok: true, value: { intent: 'record', confidence, transcript: p.data.transcript, items: r.value } } : r;
 }
 
 // ---------- 请求入参（接口先定第 2 条） ----------
@@ -337,9 +385,9 @@ const itemOut = z.strictObject({
   confirm: confirmOut.nullable(),
 });
 
-/** 识别成功：{intent, confidence, items, quota_left}（ai-voice 多 transcript） */
+/** 记下：{intent: 'record', confidence, items, quota_left}（ai-voice 多 transcript）；别的意图见 intent.ts 的 queryResponse、targetResponse */
 export const recordResponse = z.strictObject({
-  intent: z.enum(INTENTS),
+  intent: z.literal('record'),
   confidence: z.number().min(0).max(1),
   items: z.array(itemOut).max(AI_MAX_ITEMS),
   quota_left: z.number().int().min(0),
@@ -352,12 +400,12 @@ export const FALLBACK_REASONS = ['invalid', 'timeout', 'error', 'quota', 'featur
 
 export const aiResponse = z.union([
   recordResponse,
+  queryResponse,
+  targetResponse,
   z.strictObject({ fallback: z.literal(true), reason: z.enum(FALLBACK_REASONS) }),
   z.strictObject({ consent_required: z.literal(true) }),
   z.strictObject({ quota_out: z.literal(true), quota_left: z.literal(0) }),
   z.strictObject({ ai_failed: z.literal(true), reason: z.enum(FALLBACK_REASONS) }),
 ]);
 export type AiResponse = z.infer<typeof aiResponse>;
-
-/** B3 服务器包外层时的 confidence：模型不判断意图（Q2），校验通过就是 1 */
-export const RECORD_CONFIDENCE = 1;
+export type { IntentChecked, QueryResponse, TargetResponse } from './intent.ts';

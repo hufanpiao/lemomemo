@@ -247,6 +247,10 @@ verify_jwt = false
 [functions.note-search]
 verify_jwt = true
 
+# B4b-3：ai-summarize 同样是用户带 JWT 调的（架构 5.14 第 4 点），显式写出来，理由同 note-search
+[functions.ai-summarize]
+verify_jwt = true
+
 [analytics]
 # 本地不需要日志分析，少起一个容器；【线上】照常有
 enabled = false

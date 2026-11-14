@@ -57,9 +57,10 @@ export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
   fn_ai: {
     'private.vault:SELECT': ['user_id', 'pin_epoch'],
     'private.heartbeat:SELECT': ['name', 'at', 'detail'],   // upsert 心跳要读（20261104140000，HEARTBEAT 选项 A）；策略 fn_ai_own 只放自己三个名字
-    'public.events:SELECT': ['id', 'user_id', 'title', 'note', 'location', 'deleted_at'],
-    'public.todos:SELECT': ['id', 'user_id', 'title', 'note', 'deleted_at'],
-    'public.notes:SELECT': ['id', 'user_id', 'title', 'body', 'body_enc', 'enc_key_id', 'is_private', 'category_id', 'deleted_at'],
+    // date、time、undone / due、due_time、done、undone / created_at、undone：20261115030000，B4b-3 ai-summarize 送时间、排除撤销的
+    'public.events:SELECT': ['id', 'user_id', 'title', 'note', 'location', 'deleted_at', 'date', 'time', 'undone'],
+    'public.todos:SELECT': ['id', 'user_id', 'title', 'note', 'deleted_at', 'due', 'due_time', 'done', 'undone'],
+    'public.notes:SELECT': ['id', 'user_id', 'title', 'body', 'body_enc', 'enc_key_id', 'is_private', 'category_id', 'deleted_at', 'created_at', 'undone'],
     'public.note_images:SELECT': ['id', 'user_id', 'note_id', 'bucket', 'path', 'has_thumb', 'mime', 'deleted_at',
       'ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at',
       'bytes'],   // bytes：vault-image 上传按预登记的字节数核对（20261114231000，B5 整块评审第 3 条）

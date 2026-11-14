@@ -15,7 +15,7 @@ import {
   diagLines, FEATURES, onlyName, paceOf, parseArgs, parseOnly, parseSet, PROJECTS, reportName, runEval, runSet, selectRows, type EvalDeps, type EvalRow,
 } from '../ai/run-core.ts';
 
-const { parseWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
+const { recordWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
 const NOW = 1793581200000;   // 2026-11-02T10:00:00+09:00（句库 1.2）
 const row = (o: Partial<EvalRow> = {}) =>
   JSON.stringify({ id: 'Z01', set_version: 'set1-v1.6', group: 'zh', source: 'typed', scored: 'main', text: '明天下午三点开会', now: NOW, tz: 'Asia/Seoul', locale: 'zh', expect: [], accept: {}, ...o });
@@ -77,7 +77,7 @@ describe('评测骨架：参数和速度', () => {
     for (const bad of ['../../x', 'parse.ok', 'Parse-ok', '-x', 'a/b']) expect(() => parseArgs(['--replay', bad, '--rpm', '1', '--rpd', '1', '--date', '2026-11-20']), bad).toThrow(/--replay/);
   });
   it('报告文件名照句库 5.3：set1-<日期>-<提示词版本>-<模型名>；模型名有怪字符报错', () => {
-    expect(reportName('2026-11-20', PROMPT_VERSION.parse, 'gemini-3.5-flash-lite')).toBe('set1-2026-11-20-parse.v3-gemini-3.5-flash-lite');
+    expect(reportName('2026-11-20', PROMPT_VERSION.record, 'gemini-3.5-flash-lite')).toBe('set1-2026-11-20-parse.v3-gemini-3.5-flash-lite');
     expect(() => reportName('2026-11-20', 'parse.v2', '../x')).toThrow();
   });
 });
@@ -92,7 +92,7 @@ describe('评测骨架：逐句调 parseWithAI（回放桩）', () => {
     const rp = replay(cassettes('parse-ok'));
     const provider = new GeminiProvider(REPLAY_MODEL, REPLAY_KEY, rp.fetch);
     const c = fakeClock();
-    const out = await runSet(rows(1), async (input) => { seenInput.push(input); return parseWithAI(input, provider); }, { rpm: 60, rpd: 100, ...c });
+    const out = await runSet(rows(1), async (input) => { seenInput.push(input); return recordWithAI(input, provider); }, { rpm: 60, rpd: 100, ...c });
     expect(seenInput).toEqual([{ text: '明天下午三点开会', now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: PROJECTS, features: FEATURES }]);
     const r = out.results[0];
     expect([r?.id, r?.ok, r?.reason]).toEqual(['Z01', true, null]);
@@ -104,7 +104,7 @@ describe('评测骨架：逐句调 parseWithAI（回放桩）', () => {
   it('失败也照记：坏输出 invalid（raw 留着、checked 为 null、带 invalid_reasons），服务商 500 error', async () => {
     const rp = replay(cassettes('bad-schema', 'http-500'));
     const provider = new GeminiProvider(REPLAY_MODEL, REPLAY_KEY, rp.fetch);
-    const out = await runSet(rows(2), (input) => parseWithAI(input, provider), { rpm: 60, rpd: 100, ...fakeClock() });
+    const out = await runSet(rows(2), (input) => recordWithAI(input, provider), { rpm: 60, rpd: 100, ...fakeClock() });
     expect(out.results.map((r) => [r.id, r.ok, r.reason, r.checked])).toEqual([['Z01', false, 'invalid', null], ['Z02', false, 'error', null]]);
     expect(out.results[0]?.raw).not.toBeNull();
     expect((out.results[0]?.invalid_reasons ?? []).length).toBeGreaterThan(0);
@@ -114,7 +114,7 @@ describe('评测骨架：逐句调 parseWithAI（回放桩）', () => {
   it('额度用完（quota）就停下这一轮，剩下的句子不调、列进 skipped（代码审 S4）', async () => {
     const rp = replay(cassettes('parse-ok', 'quota', 'http-500'));
     const provider = new GeminiProvider(REPLAY_MODEL, REPLAY_KEY, rp.fetch);
-    const out = await runSet(rows(4), (input) => parseWithAI(input, provider), { rpm: 60, rpd: 100, ...fakeClock() });
+    const out = await runSet(rows(4), (input) => recordWithAI(input, provider), { rpm: 60, rpd: 100, ...fakeClock() });
     expect(out.results.map((r) => [r.id, r.reason])).toEqual([['Z01', null], ['Z02', 'quota']]);
     expect(out.results[1]?.raw).toBeNull();
     expect([out.skipped, out.stopped, rp.calls]).toEqual([['Z03', 'Z04'], 'quota', 2]);
@@ -145,7 +145,7 @@ describe('评测骨架：逐句调 parseWithAI（回放桩）', () => {
   it('结果里不出现密钥：回放用的占位密钥不在落盘的 JSON 里', async () => {
     const rp = replay(cassettes('parse-ok'));
     const provider = new GeminiProvider(REPLAY_MODEL, REPLAY_KEY, rp.fetch);
-    const out = await runSet(rows(1), (input) => parseWithAI(input, provider), { rpm: 60, rpd: 100, ...fakeClock() });
+    const out = await runSet(rows(1), (input) => recordWithAI(input, provider), { rpm: 60, rpd: 100, ...fakeClock() });
     expect(JSON.stringify(out)).not.toContain(REPLAY_KEY);
     expect(Object.keys(out.results[0] ?? {}).sort()).toEqual(['checked', 'errName', 'group', 'id', 'invalid_reasons', 'issues', 'ms', 'ok', 'quotaKind', 'raw', 'reason', 'retryMs', 'scored', 'set_version', 'status']);
   });
@@ -167,7 +167,7 @@ describe('评测骨架：额度用完按类型处理（每分钟等了重试，�
     const rp = replay(cassettes('parse-ok', 'quota-minute', 'parse-ok', 'parse-ok'));
     const provider = new GeminiProvider(REPLAY_MODEL, REPLAY_KEY, rp.fetch);
     const c = fakeClock();
-    const out = await runSet(rows(3), (input) => parseWithAI(input, provider), { rpm: 60, rpd: 100, ...c });
+    const out = await runSet(rows(3), (input) => recordWithAI(input, provider), { rpm: 60, rpd: 100, ...c });
     expect(out.results.map((r) => [r.id, r.reason])).toEqual([['Z01', null], ['Z02', null], ['Z03', null]]);
     expect([out.stopped, out.skipped, out.calls, rp.calls]).toEqual([null, [], 4, 4]);
     expect(c.slept).toEqual([1250, 12_000, 1250]);   // 每分钟 48 句即 1.25 秒一句；重试前等 retryDelay
@@ -205,7 +205,7 @@ describe('评测骨架：额度用完按类型处理（每分钟等了重试，�
       const rp = replay(cassettes('parse-ok', name, 'parse-ok'));
       const provider = new GeminiProvider(REPLAY_MODEL, REPLAY_KEY, rp.fetch);
       const c = fakeClock();
-      const out = await runSet(rows(3), (input) => parseWithAI(input, provider), { rpm: 60, rpd: 100, ...c });
+      const out = await runSet(rows(3), (input) => recordWithAI(input, provider), { rpm: 60, rpd: 100, ...c });
       expect([out.results.map((r) => [r.id, r.reason, r.quotaKind]), out.stopped, out.skipped, out.calls, rp.calls], name)
         .toEqual([[['Z01', null, null], ['Z02', 'quota', kind]], 'quota', ['Z03'], 2, 2]);
       expect(c.slept, name).toEqual([1250]);
@@ -363,7 +363,7 @@ describe('评测骨架：--only 只跑指定句子（S19 补跑）', () => {
     expect(f.log).toEqual(['replay:parse-ok', 'copy', 'rows', 'load', 'write:temp']);
     expect([r.called, f.texts]).toEqual([1, ['ko']]);
     const name = f.written[0]?.name ?? '';
-    expect(name).toBe(`only-set1-2026-11-20-${PROMPT_VERSION.parse}-${REPLAY_MODEL}-t031522000`);
+    expect(name).toBe(`only-set1-2026-11-20-${PROMPT_VERSION.record}-${REPLAY_MODEL}-t031522000`);
     expect(name.startsWith('set1-')).toBe(false);   // 工作流按 set1-*.json 找第一遍，补跑不能混进去
     const meta = JSON.parse(f.written[0]?.json ?? '{}').meta;
     expect([meta.only, meta.total, meta.called]).toEqual([['K10'], 1, 1]);
@@ -390,7 +390,7 @@ describe('评测骨架：--only 只跑指定句子（S19 补跑）', () => {
   it('不带 --only：报告名、meta 照旧（only 为 null），和第一遍完全一样', async () => {
     const f = deps3();
     await runEval(['--replay', 'parse-ok', ...BASE], f.d);
-    expect(f.written[0]?.name).toBe(reportName('2026-11-20', PROMPT_VERSION.parse, REPLAY_MODEL));
+    expect(f.written[0]?.name).toBe(reportName('2026-11-20', PROMPT_VERSION.record, REPLAY_MODEL));
     expect(JSON.parse(f.written[0]?.json ?? '{}').meta.only).toBeNull();
     expect(f.texts).toHaveLength(3);
   });
