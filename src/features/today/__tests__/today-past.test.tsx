@@ -1,6 +1,6 @@
 // 今天页“已过去”折成一行（定稿线框 s1“已过去的折叠成一行”，时间河“▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓”；B6 对齐线框）：
 // • 结束了的日程、做完的待办不在列表里，收成“已过去 N 件：时刻 标题 · 标题 ✓”一行；进行中、全天、还没到的、没做完的照常列
-// • 点这一行展开（aria-expanded），过去的那几行排在最前面；再点收起
+// • 点这一行展开（aria-expanded），过去的那几行排在最前面；再点收起；展开着变成 0 件时展开状态收回
 // • 没有已过去的时候不画这一行
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -62,6 +62,29 @@ describe('今天页“已过去”折成一行', () => {
       fireEvent.click(fold);
     });
     expect(fold.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('展开着变成 0 件：展开状态收回，再有已过去的时照收起画', async () => {
+    const keep = { ...state };
+    try {
+      const { rerender } = render(<TodayPage />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('today-past'));
+      });
+      expect(screen.getByTestId('today-past').getAttribute('aria-expanded')).toBe('true');
+      state.events = [ev('e3', 'NEOX 横版对片', '13:00', NOW + 60_000)];
+      state.todos = [td('t1', '回邮件', false)];
+      rerender(<TodayPage />);
+      expect(screen.queryByTestId('today-past')).toBeNull();
+      state.events = keep.events;
+      state.todos = keep.todos;
+      rerender(<TodayPage />);
+      expect(screen.getByTestId('today-past').getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByTestId('today-event-e1')).toBeNull();
+    } finally {
+      state.events = keep.events;
+      state.todos = keep.todos;
+    }
   });
 
   it('没有已过去的：不画这一行', () => {

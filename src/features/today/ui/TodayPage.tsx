@@ -227,9 +227,11 @@ export default function TodayPage() {
     </AppearItem>
   );
   // 已过去（线框 s1“已过去的折叠成一行”，时间河“▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓”）：结束了的日程、做完的待办收成一行，
-  // 点一下展开、再点收起（这次打开记着，不存）；展开时过去的那几行排在最前面，照原来的行画
+  // 点一下展开、再点收起（这次打开记着，不存）；展开时过去的那几行排在最前面，照原来的行画。
+  // 变成 0 件（撤销了打勾、删掉了）时展开状态一起收回，下次再有已过去的照收起画（画的时候就收，不多等一拍）
   const past = useMemo(() => splitPast(v.events, v.todos, d.now), [v.events, v.todos, d.now]);
   const pastN = past.pastEvents.length + past.pastTodos.length;
+  if (!pastN && pastOpen) setPastOpen(false);
   const pastText = [...past.pastEvents.map((o) => `${o.time ?? ''} ${o.title}`), ...past.pastTodos.map((x) => `${x.title} ✓`)].join(' · ');
   const listItem = (titled: boolean) => (
     <AppearItem as="section" key="list" aria-labelledby={titled ? 'today-list' : undefined} data-testid="today-list">
