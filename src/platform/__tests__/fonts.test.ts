@@ -189,21 +189,20 @@ describe('applyFont', () => {
   it('网速慢但一直在下（每个分片 15 秒、合计超过 20 秒）：不算超时，下完照常成功（11-14 真机日志 font_timeout pct=57）', async () => {
     linkBehaves('load');
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((url: string) => {
-        if (url === '/app/fonts-index.json') return Promise.resolve(new Response(JSON.stringify({ v: 1, fonts: [entry('kai')] })));
-        return new Promise<Response>((ok) => setTimeout(() => ok(new Response(SHARD)), 15_000));
-      }),
-    );
+    const net = vi.fn((url: string) => {
+      if (url === '/app/fonts-index.json') return Promise.resolve(new Response(JSON.stringify({ v: 1, fonts: [entry('kai')] })));
+      return new Promise<Response>((ok) => setTimeout(() => ok(new Response(SHARD)), 15_000));
+    });
+    vi.stubGlobal('fetch', net);
     const m = await load();
     const log = vi.fn();
     const p = m.applyFont('kai', log);
-    // 哈希校验（crypto.subtle）走真实异步：按 1 秒一步推进，每步让真实事件循环跑几轮
-    const realTick = () => new Promise<void>((r) => setImmediate(r));
-    for (let i = 0; i < 31; i++) {
-      await vi.advanceTimersByTimeAsync(1_000);
-      for (let k = 0; k < 5; k++) await realTick();
+    // 两个分片各 15 秒（合计 30 秒，旧的 20 秒总时限会在第二片中途掐断）。哈希校验（crypto.subtle）走真实异步，
+    // 不赌事件循环跑几轮：每片先等它真的发出请求，推进 15 秒，再等进度真的往前走了才推下一片（11-14 全套检查满负载时偶发红）
+    for (const [i, want] of [50, 99].entries()) {
+      await vi.waitFor(() => expect(net).toHaveBeenCalledTimes(i + 2));
+      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.waitFor(() => expect(m.fontState.get().pct).toBeGreaterThanOrEqual(want));
     }
     await p;
     expect(codes(log)).toEqual(['start download', 'ok ms=* pct=100']);
