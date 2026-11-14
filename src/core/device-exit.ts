@@ -3,6 +3,8 @@
 // 不变量：被移除必须服务器确认（session_fate 回 revoked）才清库，查不了、查出错都只退出；停用、过期只退出；冷静期不删会话
 // 不变量：记号写好以后只关库、不再写第二次；写不了记号才退回清库：登录过期、未确认的被移除退回清库时提示 removed，停用仍提示 disabled
 // 不变量：同一页只执行一次（exited）。顺序：被移除先设闸、写记号、删会话、查服务器 → 只关库或清库 → 广播带原因的 reset → 删会话 → 回登录页
+// 不变量：交接救回（换上了新会话）不退出，但发现被移除的那一路已停下（outbox 设闸、引擎 halt、sync-wiring 只处理一次），都不会自己恢复：
+// 先解开 outbox 的闸（pagehide 时补存的草稿还能写进本机），再整页重新载入，用新会话从头启动
 import { closeCache, expireThisTab, markExpired, wipeLocal, type SessionLoss } from './account.ts';
 import type { AuthLossOutcome, AuthLossPath, AuthLossSignal } from './auth-loss.ts';
 import { resolveAuthLossLazy } from './auth-loss-lazy.ts';
@@ -12,6 +14,7 @@ import { readReauth } from '../platform/auth-loss-store.ts';
 import { clearLogQueue } from '../platform/log-store.ts';
 import { rlog } from '../platform/run-log-api.ts';
 import { clearCacheStorage, clearLocalSessionIf, goToAuth, type ExitNotice } from '../platform/session.ts';
+import { reloadPage } from '../platform/sw-register.ts';
 
 /** 为什么退出：服务器码映射出的原因、探测结果；active = 账号正常；followed = 别的标签页已退出，跟着清库（不删会话、不记原因、不广播） */
 export type ExitReason = ExitNotice | 'active' | 'followed';
@@ -57,6 +60,8 @@ export interface ExitDeps {
   resolveAuthLoss(signal: AuthLossSignal): Promise<AuthLossOutcome>;
   /** 记一条日志（只有 act，例如 auth_loss_store_failed）；不填不记 */
   log?(act: string): void;
+  /** 交接救回以后重新载入（默认 platform/sw-register.ts 的 reloadPage；测试换掉） */
+  reload?(): void;
 }
 
 /** 默认依赖；broadcastReset 由调用方给（platform/tab-leader.ts 的 postReset，或不广播的空函数），免得频道代码进首屏 */
@@ -171,7 +176,11 @@ export async function exitDevice(
   // 交接设备行结果不确定、新会话还在内存里（core/rebind-pending.ts）：先做完交接，换上了就不是被移除，不退出、不清库
   const rescued = facts.reason === 'removed' ? rescueByRebind() : null;
   if (rescued) {
-    if (await rescued) return void rlog('exit skip: rebound');
+    if (await rescued) {
+      boot?.outbox?.suspend(false);
+      rlog('exit skip: rebound, reload');
+      return (deps.reload ?? reloadPage)();
+    }
     if (exited.has(key)) return;
   }
   let fate: AuthLossOutcome | undefined;

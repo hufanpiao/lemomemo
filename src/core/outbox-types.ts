@@ -222,9 +222,10 @@ export interface Outbox {
   refresh(): Promise<void>;
   /**
    * 设闸（换账号、被移除；core/account.ts 的 watchAccount 同步调）：之后 enqueue 抛 OutboxRejectError('outbox_suspended')，
-   * next 返回 null，ack、fail、discard、retryFailed、clearBackoff、resume、applyServer、dropServer 什么也不做。不能解除（随后关库、重新载入）
+   * next 返回 null，ack、fail、discard、retryFailed、clearBackoff、resume、applyServer、dropServer 什么也不做。
+   * 只有一处解除（on = false）：交接救回、马上重新载入之前（core/device-exit.ts），让 pagehide 补存的草稿写得进去；别处设上就不解
    */
-  suspend(): void;
+  suspend(on?: boolean): void;
   isSuspended(): boolean;
 }
 

@@ -196,8 +196,8 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
   let suspended = false;
   const ctx: Ctx = {
     isSuspended: () => suspended,
-    suspend: () => {
-      suspended = true;
+    suspend: (on = true) => {
+      suspended = on;
     },
     cache,
     opts,
