@@ -60,7 +60,7 @@ test.describe('底栏视觉锁定（R-360、R-361，Chromium）', () => {
 
   for (const [skin, theme] of CASES) {
     test(`${SKIN_ZH[skin]} · ${THEME_ZH[theme]}：今天页底部底栏区域和基准逐像素一致`, async ({ page }, testInfo) => {
-      // 皮肤、深浅：入口页写死 data-skin="simple" data-theme="light"，在页面脚本之前改掉并守住；固定时钟、关光标（不插 <style>，不碰 CSP）。不模拟安全区（参照图无安全区）
+      // 皮肤、深浅：入口页写死 data-skin="glass" data-theme="light"（负责人 11-14 起默认磨砂玻璃），在页面脚本之前改掉并守住；固定时钟、关光标（不插 <style>，不碰 CSP）。不模拟安全区（参照图无安全区）
       await page.clock.setFixedTime(FIXED_NOW);
       await page.addInitScript(
         ({ skin, theme }) => {

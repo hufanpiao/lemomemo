@@ -18,6 +18,7 @@ import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { versionGate } from '../_shared/version-gate.ts';
 import { sha256Hex } from '../_shared/body.ts';
 import { sniffFile } from '../_shared/gen/logic/files/file-sniff.ts';
+import { FILE_MAX_BYTES } from '../_shared/gen/logic/files/limits.ts';
 import { inflateRaw } from '../_shared/gen/logic/files/inflate.ts';
 import { noteFilePath, noteFileThumbPath } from '../_shared/gen/logic/files/media-path.ts';
 import { fileCheckReq } from '../_shared/gen/schema/attachments.ts';
@@ -49,6 +50,7 @@ Deno.serve(async (req) => {
     authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
     takeRate: rpcTakeRate(admin),
     cronSecret: Deno.env.get('CRON_SECRET'),
+    maxBytes: FILE_MAX_BYTES,
     parse(v) {
       const p = fileCheckReq.safeParse(v);
       return p.success ? p.data : null;

@@ -32,3 +32,13 @@ reason = """zvariant 5.15.1、zbus_names 4.3.5、zvariant_derive 5.15.1 只出�
 id = "RUSTSEC-2026-0372"
 ignoreUntil = 2026-11-30
 reason = """zvariant 5.15.1、zbus_names 4.3.5、zvariant_derive 5.15.1 只出现在 desktop/src-tauri/Cargo.lock（正式外壳）的 Linux D-Bus 依赖链（zbus）里：引入路径是 tauri-plugin-single-instance 2.5.4 → zbus 5.19.0（插件的 Cargo.toml 写的是 [target.'cfg(target_os = "linux")'.dependencies.zbus]，只在 Linux 上依赖）→ zbus_names、zvariant → zvariant_derive；desktop/turnstile-probe/src-tauri/Cargo.lock 里没有这三个包。三条 RUSTSEC-2026-0370 / 0371 / 0372 都是“没人维护”（unmaintained）类警告，不是漏洞。核对过程（运维 11-03，本机 cargo 1.99.1，--offline --locked，在 desktop/src-tauri 下）：cargo tree --target x86_64-pc-windows-msvc -i zvariant、-i zbus_names、-i zvariant_derive、-i zbus 都输出 nothing to print；正向对照 -i webview2-com 正常打印 tauri 2.12.5 的依赖链，说明这个目标的解析是好的。cargo deny（deny.toml 只按 Windows 依赖树判断）对这三条一条都不报；cargo audit 不分平台，照样列为警告（deny.toml 注释有记）。结论：正式外壳只出 Windows 版，exe 里没有这三个包，不受影响。OSV 不分平台、扫的是整个 Cargo.lock，所以不删除；2026-11-30 复查（和上面 glib 三条一起，看 tauri-plugin-single-instance / zbus 是否已换掉这几个包）。会签：安全审查员 11-03（运维 11-03 提交，主持人用 OSV 公开查询接口发现 87c1424 的 unit 因这三条失败；安全审查员本机复核：Cargo.lock 里依赖 zbus 的只有 tauri-plugin-single-instance 2.5.4，插件 Cargo.toml 只在 cfg(target_os = "linux") 下依赖 zbus，cargo tree --target x86_64-pc-windows-msvc -i 四个包都是 nothing to print，探针的 Cargo.lock 里没有这三个包）。"""
+
+[[IgnoredVulns]]
+id = "GHSA-4r6h-8v6p-xvw6"
+ignoreUntil = 2027-02-14
+reason = """xlsx 0.20.3 从 SheetJS 官方 CDN 安装（package.json 写 https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz，package-lock.json 带 sha512 完整性值；B4b-1 随手记附件 Excel 本机预览用）。npm 公共仓库的 xlsx 停在 0.18.5，修复版只发在 CDN 上，所以 GHSA 两条通告的受影响范围在 OSV 里写成 introduced 0、没有 fixed，凡是 xlsx 都报。核对（主持人 11-14，查 api.osv.dev 通告原文）：GHSA-4r6h-8v6p-xvw6 / CVE-2023-30533 原型污染写明“through 0.19.2”受影响、0.19.3 修复；GHSA-5pgg-2g8v-p4x9 / CVE-2024-22363 ReDoS 写明“before 0.20.2”受影响、0.20.2 修复；两条都指明修复版从 cdn.sheetjs.com 下载。0.20.3 在两个修复之后，不受影响。复查日期：2027-02-14（看 SheetJS 有没有新的安全通告、CDN 有没有新版）；第三方全仓审查时一并复核。"""
+
+[[IgnoredVulns]]
+id = "GHSA-5pgg-2g8v-p4x9"
+ignoreUntil = 2027-02-14
+reason = """xlsx 0.20.3 从 SheetJS 官方 CDN 安装（package.json 写 https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz，package-lock.json 带 sha512 完整性值；B4b-1 随手记附件 Excel 本机预览用）。npm 公共仓库的 xlsx 停在 0.18.5，修复版只发在 CDN 上，所以 GHSA 两条通告的受影响范围在 OSV 里写成 introduced 0、没有 fixed，凡是 xlsx 都报。核对（主持人 11-14，查 api.osv.dev 通告原文）：GHSA-4r6h-8v6p-xvw6 / CVE-2023-30533 原型污染写明“through 0.19.2”受影响、0.19.3 修复；GHSA-5pgg-2g8v-p4x9 / CVE-2024-22363 ReDoS 写明“before 0.20.2”受影响、0.20.2 修复；两条都指明修复版从 cdn.sheetjs.com 下载。0.20.3 在两个修复之后，不受影响。复查日期：2027-02-14（看 SheetJS 有没有新的安全通告、CDN 有没有新版）；第三方全仓审查时一并复核。"""

@@ -15,7 +15,6 @@ import { errorResponder, json, NO_STORE, cronGate } from '../_shared/http.ts';
 import { readAll, readJsonCapped } from '../_shared/body.ts';
 import type { AuthResult } from '../_shared/auth-result.ts';
 import { utcMinuteKey } from '../_shared/rate-key.ts';
-import { FILE_MAX_BYTES } from '../_shared/gen/logic/files/limits.ts';
 
 // 请求、响应、判型结果只写这里用到的形状，不引 _shared/gen 下的 schema、清单（同 vault-image/core.ts：那些模块带 npm:zod，
 //   Vitest 的 tsc 解析不了）；index.ts 把 shared 的 fileCheckReq、sniffFile、noteFilePath 接进来时，deno check 按这里的形状核对
@@ -69,6 +68,8 @@ export interface Deps {
   parse(v: unknown): FileCheckReq | null;
   store: Store | null;
   r2: Obj | null;
+  /** 单个附件上限（shared/logic/files/limits.ts 的 FILE_MAX_BYTES）：由 index.ts 从 _shared/gen 注入，core 不 import gen（CI unit 不生成 gen） */
+  maxBytes: number;
   sniff(bytes: Uint8Array): Promise<SniffResult>;
   sha256Hex(bytes: Uint8Array): Promise<string>;
   path(userId: string, noteId: string, id: string, kind: string): string;
@@ -98,9 +99,9 @@ export async function verify(row: FileRow, deps: Deps, r2: Obj, store: Store, fr
     return { status: 'incomplete' };
   }
   if (!fromCron && row.has_thumb && !(await r2.head(BUCKET, thumb))) return { status: 'incomplete' };
-  if (obj.contentLength !== null && obj.contentLength > FILE_MAX_BYTES) return reject('too_big');
+  if (obj.contentLength !== null && obj.contentLength > deps.maxBytes) return reject('too_big');
   const bytes = await readAll(obj.body);
-  if (bytes.length > FILE_MAX_BYTES) return reject('too_big');
+  if (bytes.length > deps.maxBytes) return reject('too_big');
   if (bytes.length !== row.bytes) return reject('unknown');
   if ((await deps.sha256Hex(bytes)) !== row.sha256) return reject('unknown');
   const s = await deps.sniff(bytes);

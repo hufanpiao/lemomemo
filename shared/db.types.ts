@@ -328,14 +328,14 @@ isOneToOne: false
                   ]
                 },"scan_note_files": {
                   Row: {
-                    "ai_next_at": number | null,"ai_status": string | null,"check_status": string | null,"id": string | null,"user_id": string | null
+                    "ai_next_at": number | null,"ai_status": string | null,"check_status": string | null,"created_at": number | null,"id": string | null,"is_vault": boolean | null,"user_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                           "ai_next_at"?: number | null,"ai_status"?: string | null,"check_status"?: string | null,"id"?: string | null,"user_id"?: string | null
+                           "ai_next_at"?: number | null,"ai_status"?: string | null,"check_status"?: string | null,"created_at"?: number | null,"id"?: string | null,"is_vault"?: boolean | null,"user_id"?: string | null
                          }
                         Update: {
-                           "ai_next_at"?: number | null,"ai_status"?: string | null,"check_status"?: string | null,"id"?: string | null,"user_id"?: string | null
+                           "ai_next_at"?: number | null,"ai_status"?: string | null,"check_status"?: string | null,"created_at"?: number | null,"id"?: string | null,"is_vault"?: boolean | null,"user_id"?: string | null
                          }
                         Relationships: [
                     
