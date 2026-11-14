@@ -141,6 +141,8 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
     return 'removed';
   }
   if (s === 'network') return 'retry';
+  // 本机没有会话（退出登录由 watchAccount 管）：不拿 anon 去发——新建会被 RLS 拒（403 时归成永久失败），改也白发；停下等会话回来
+  if (s === 'failed') return 'stopped';
   let authRetried = false;
   const now = d.now ?? (() => Date.now());
   const batch = d.batch ?? SEND_BATCH;

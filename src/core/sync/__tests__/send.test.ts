@@ -269,6 +269,18 @@ describe('TC-B1-82 令牌过期（401）', () => {
     expect(t.calls).toEqual([]);
   });
 
+  it('发送前看令牌：本机没有会话（ensureSession 回 failed）就不发、停下（不拿 anon 去发，免得新建被归成永久失败）', async () => {
+    const { outbox } = await setup();
+    const t = fakeTransport();
+    t.ensure = 'failed';
+    await outbox.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
+    expect(await sendAll(deps(outbox, t))).toBe('stopped');
+    expect(t.calls).toEqual([]);
+    const it0 = (await outbox.list())[0];
+    expect(it0?.state).toBe('pending');
+    expect(it0?.sent).not.toBe(true);
+  });
+
   it('session_revoked（服务器回被移除）：outbox 设闸，发送停下', async () => {
     const { outbox } = await setup();
     const t = fakeTransport();
