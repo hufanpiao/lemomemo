@@ -320,7 +320,7 @@ async function loadCache(
   // 转 outbox 由提醒功能做（要按这一行现在的提醒核对 due_at：features/reminders/hooks/usePendingDrain.ts）。清理失败不影响启动，下次启动再清
   await prunePendingActions(cache, { userId, now: now() }).catch(() => 0);
 
-  // 日志：仓库里还没有日志层（core/log），outbox 的 log（R-229 outbox_vault_shell_drop）暂不接；接上以后经 opts.outboxOptions.log 传进来（接手清单 K6-log）
+  // 日志：outbox 的 log（R-229 outbox_vault_shell_drop 等）由 app/main.tsx 经 opts.outboxOptions.log 传进来（接手清单 K6-log）
   // outbox 用校正过偏差的时钟（platform/clock.ts，同步引擎同一个）：next_at 退避和引擎算重试等多久对得上
   const outbox = createOutbox(cache, { ...opts.outboxOptions, appVersion, now: opts.now ?? clock.now });
   result.outbox = outbox;
