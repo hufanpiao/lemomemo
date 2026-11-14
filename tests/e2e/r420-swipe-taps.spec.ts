@@ -1,7 +1,7 @@
 // 横滑手势、吞点按的真浏览器用例（R-420 第三方审查二轮“横滑手势、吞点按、草稿框”）：jsdom 量不出动画和焦点，这里在 chromium、webkit 上守
 //   ① 月历翻页逐帧（审查第 2 条）：按钮翻页、手指横滑翻页以后，每一帧读 cal-pager 的计算 transform，新的一页真的从那一侧滑进来
 //      （第一帧在 0 和整宽之间、挂着 transform 的 CSS 过渡，一路变小到 0），不是一下到位、也不是从错的位置起播。
-//      半路画出几帧取决于机器帧率（CI 的 WebKit 软件渲染一帧可能上百毫秒，4efa1079 只画出 1 帧），所以只要求 ≥1 帧半路，
+//      半路画出几帧取决于机器帧率（CI 的 WebKit 软件渲染一帧 240～580 ms，比 0.22 s 的过渡还长），所以逐帧时把 --dur-ui 调成 SLOW_DUR、只要求 ≥1 帧半路，
 //      “真的在播”靠第一帧时挂着的过渡（时长 > 0）来证；报错信息带每帧的时间，帧间隔从日志直接看
 //   ② 翻不动也不播翻页动画（审查第 1 条）：到 2100 年 12 月再往左滑，松手只滑回原位（每一帧都 ≤ 0，不会从右边整页滑进来）
 //   ③ 一行露着时点另一行（审查第 7 条）：第一下只收起露着的那行，不打开点到的那行；再点一下才打开
@@ -28,7 +28,7 @@ type Act = { kind: 'next' } | { kind: 'swipe'; dx: number };
  *  采帧的元素还在不在文档里、是不是页面上现在那个 cal-pager、data-snap、内联 transform、计算出的过渡、减少动态、没加载完的样式表数 */
 type Frames = { x: number[]; ms: number[]; transitionMs: number | null; diag: string };
 
-/** 做一次翻页（按钮或手指横滑），接着用 rAF 连读 16 帧 cal-pager 的计算 transform 的横移（px，取整）、每帧离第一帧的毫秒数，
+/** 做一次翻页（按钮或手指横滑），接着用 rAF 连读（至少 16 帧、读到回 0 为止）cal-pager 的计算 transform 的横移（px，取整）、每帧离第一帧的毫秒数，
  *  以及第一帧时 cal-pager 上 transform 的 CSS 过渡时长（没有就是 null） */
 async function framesAfter(page: Page, act: Act): Promise<Frames> {
   return page.evaluate(async (a) => {
@@ -36,7 +36,8 @@ async function framesAfter(page: Page, act: Act): Promise<Frames> {
     if (!el) throw new Error('no pager');
     const tx = (): number => {
       const m = getComputedStyle(el).transform;
-      return m === 'none' ? 0 : Math.round(new DOMMatrixReadOnly(m).m41);
+      // 快到终点时是 -0.3 这类小数，取整得 -0，归成 0
+      return m === 'none' ? 0 : Math.round(new DOMMatrixReadOnly(m).m41) || 0;
     };
     if (a.kind === 'next') {
       document.querySelector<HTMLElement>('[data-testid="cal-next"]')?.click();
@@ -80,7 +81,8 @@ async function framesAfter(page: Page, act: Act): Promise<Frames> {
         x.push(tx());
         t0 ??= now;
         ms.push(Math.round(now - t0));
-        if (x.length < 16) requestAnimationFrame(tick);
+        // 至少 16 帧，并且采到回到 0 为止（过渡调长到 SLOW_DUR 后可能要更久；最多 6 秒）
+        if ((x.length < 16 || x.at(-1) !== 0) && now - t0 < 6000) requestAnimationFrame(tick);
         else res();
       };
       requestAnimationFrame(tick);
@@ -89,9 +91,16 @@ async function framesAfter(page: Page, act: Act): Promise<Frames> {
   }, act);
 }
 
+/** 逐帧时把 --dur-ui 调长（只在这个页面、用 CSSOM 改根节点，不插 <style>，不触发 CSP）：
+ *  CI 的 WebKit 软件渲染一帧 240～580 ms，比 0.22 s 的过渡还长，过渡在两帧之间就播完了，采不到半路的帧（分诊表遗留⑤，
+ *  4ab18b3d 的诊断：按钮那次第一帧 x=358、过渡 220 ms，下一帧隔 582 ms 已回到 0；左滑那次第一帧前就播完、动画数 0）。
+ *  这里验的是从哪一侧进、一路往 0 走，不是时长；时长照常由 CSS 的 --dur-ui 定 */
+const SLOW_DUR = '1500ms';
+
 async function openMonth(page: Page, ym: string): Promise<void> {
   await page.goto(`/app/#/cal/month/${ym}`);
   await expect(page.getByTestId('cal-pager')).toBeVisible({ timeout: 30_000 });
+  await page.evaluate((d) => document.documentElement.style.setProperty('--dur-ui', d), SLOW_DUR);
   // 换页后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/index.ts 的 guardTaps）
   await page.waitForTimeout(FADE_GUARD_MS + 200);
 }
