@@ -1,13 +1,15 @@
 // SW 不存用户数据（接手清单 K-sw-seal；架构 4.1、8.1“SW 缓存策略”）
 // 退出时的封存（core/account.ts 的 sealForExit）只管得到本页的库连接，管不到 SW；靠下面几条钉住：
-// ① SW 只有三个运行时缓存：lemo-holidays（公共节假日 JSON）、lemo-fonts（公共字体分片）、lemo-font-index（公共的可选字体清单，11-14 起不进预缓存）；
+// ① SW 只有四个运行时缓存：lemo-holidays（公共节假日 JSON）、lemo-fonts（公共字体分片）、lemo-font-index（公共的可选字体清单，11-14 起不进预缓存）、
+//    lemo-prev-assets（上一版独有的 App 分包，只多留一版，11-14 同步层审查第 6 条之二）；
 //    都不以预缓存前缀开头，退出、换账号、被移除时 clearCacheStorage 照样删。
-//    页面导航 11-14 起只走网络、失败回预缓存的 index.html，不再缓存（同步层审查第 6 条）；原来的 lemo-nav 在 activate 时删掉——
-//    这是 SW 里唯一一处碰 Cache Storage（RETIRED_CACHE_DELETE，按次数核对），行为见 tests/build/sw-nav-shell.test.ts
+//    页面导航 11-14 起只走网络、失败回预缓存的 index.html，不再缓存（同步层审查第 6 条）；原来的 lemo-nav 在 activate 时删掉。
+//    SW 里碰 Cache Storage 的只有固定几处（CACHE_PASSTHROUGH，每处正好一次）：sw.ts 删 lemo-nav、把 self.caches 交给 keep-prev.ts；
+//    keep-prev.ts 只读预缓存、先整个删掉 lemo-prev-assets 再往里写（所以只留一版）。行为见 tests/build/sw-nav-shell.test.ts、sw-prev-assets.test.ts
 // ② /sb/*、/files/*、非 GET、别的源一律直连，进不了这三个缓存（routes.ts）
-// ③ SW 不自己发请求、不往缓存里手写（只准删退役的 lemo-nav）、不拿令牌（不读 localStorage、不带 Authorization）；不引会用 IndexedDB 的 Workbox 模块
+// ③ SW 不自己发请求、不往缓存里手写（只准 ① 那几处）、不拿令牌（不读 localStorage、不带 Authorization）；不引会用 IndexedDB 的 Workbox 模块
 //    （workbox-expiration、workbox-background-sync 会把请求体存进 IndexedDB）
-// ④ B2 起（0.29 续第 102 条③、第 107 条）放宽：SW 听 push、notificationclick、notificationclose（11-14 起另听 activate，只为删 lemo-nav），
+// ④ B2 起（0.29 续第 102 条③、第 107 条）放宽：SW 听 push、notificationclick、notificationclose（11-14 起自己挂 install、activate：预缓存安装、删 lemo-nav、多留上一版分包），
 //    通知上的“推迟”按键写本机库的 pending_actions，显示通知前只读核对 owner（B2 安全审查 FE-1）——
 //    **IndexedDB 只准在 src/sw/pending.ts 里碰**；别的文件里 indexedDB 只准出现在固定的几处（sw.ts 把 self.indexedDB 交给 push.ts，
 //    push.ts 原样交给 pending.ts 的 readSwOwner、writePendingAction），按次数核对；open、transaction、deleteDatabase 和增删改查一律不准
@@ -28,16 +30,49 @@ import { PRECACHE_PREFIX } from '../../src/platform/session.ts';
 import { routeOf } from '../../src/sw/routes.ts';
 
 const SW_DIR = join(import.meta.dirname, '../../src/sw');
-const RUNTIME_CACHES = ['lemo-font-index', 'lemo-fonts', 'lemo-holidays'];
-/** SW 里唯一准碰 Cache Storage 的一处：activate 时删掉 11-14 以前导航用的 lemo-nav（sw.ts 里正好一次） */
-const RETIRED_CACHE_DELETE = 'event.waitUntil(caches.delete(RETIRED_NAV_CACHE));';
+const RUNTIME_CACHES = ['lemo-font-index', 'lemo-fonts', 'lemo-holidays', 'lemo-prev-assets'];
 const RETIRED_CACHE_DECL = "const RETIRED_NAV_CACHE = 'lemo-nav';";
+/** 多留一版的分包缓存：路由只读不写（cacheWillUpdate 一律 null），缓存名由路由那份传给 keep-prev.ts */
+const PREV_ASSETS_DECL = "new CacheFirst({ cacheName: 'lemo-prev-assets', plugins: [{ cacheWillUpdate: () => Promise.resolve(null) }] })";
+const PREV_ASSETS_PASS = 'prevName: prevAssets.cacheName,';
+/** 只有这个文件动 Cache Storage 里的条目（它只经参数 storage 拿到 Cache Storage） */
+const CACHE_FILE = 'keep-prev.ts';
+/**
+ * SW 里碰 Cache Storage 的全部写法，每处正好一次（去掉以后剩下的代码里不准再有 caches、storage.、from.、to.）。
+ * keep-prev.ts：只读预缓存（open、keys、match）；lemo-prev-assets 先整个 delete 再 open、put——只留一版
+ */
+const CACHE_PASSTHROUGH: Record<string, readonly string[]> = {
+  'sw.ts': ['await self.caches.delete(RETIRED_NAV_CACHE);', 'await keepPreviousAssets(self.caches, {'],
+  [CACHE_FILE]: [
+    'await storage.open(d.precacheName);',
+    '(await from.keys())',
+    'await storage.delete(d.prevName);',
+    'await storage.open(d.prevName);',
+    'await from.match(r);',
+    'await to.put(r, res);',
+  ],
+};
+
+/** 按次数核对并去掉放行的 Cache Storage 写法；返回剩下的代码和违规说明 */
+function cacheRest(name: string, code: string): { rest: string; errors: string[] } {
+  const errors: string[] = [];
+  let rest = code;
+  for (const snip of CACHE_PASSTHROUGH[name] ?? []) {
+    const n = rest.split(snip).length - 1;
+    if (n !== 1) errors.push(`${name}：「${snip}」应正好出现 1 次，实际 ${n} 次`);
+    rest = rest.split(snip).join('');
+  }
+  if (/\bcaches\b/.test(rest)) errors.push(`${name}：放行以外又碰了 caches`);
+  if (name === CACHE_FILE && /\b(storage|from|to)\s*\./.test(rest)) errors.push(`${name}：放行以外又动了缓存`);
+  return { rest, errors };
+}
 const ALLOWED_IMPORTS = [
   '../../shared/i18n/i18n.ts',
   '../../shared/i18n/pick-locale.ts',
   // 按钮常量（不 import 任何东西，下面有一条钉住）；notify-text.ts 不准引（会带进时区、日期代码）
   '../../shared/logic/notify-actions.ts',
   '../../shared/logic/remind-route.ts',
+  './keep-prev.ts',
   './pending.ts',
   './push-actions.ts',
   // 隐私记推送的固定文案（B5，只有常量，不 import 任何东西）
@@ -107,7 +142,7 @@ function swSources(): Array<{ name: string; code: string }> {
 }
 
 describe('SW 不存用户数据（K-sw-seal）', () => {
-  it('运行时缓存只有 lemo-holidays、lemo-fonts、lemo-font-index，且都不是预缓存（退出时会被 clearCacheStorage 删掉）；导航不缓存', () => {
+  it('运行时缓存只有 lemo-holidays、lemo-fonts、lemo-font-index、lemo-prev-assets，且都不是预缓存（退出时会被 clearCacheStorage 删掉）；导航不缓存', () => {
     const names = swSources()
       .flatMap((f) => [...f.code.matchAll(/cacheName\s*:\s*['"`]([^'"`]+)['"`]/g)].map((m) => m[1] ?? ''))
       .sort();
@@ -120,22 +155,45 @@ describe('SW 不存用户数据（K-sw-seal）', () => {
       const n = f.code.split("'lemo-nav'").length - 1;
       expect(n, f.name).toBe(f.name === 'sw.ts' ? 1 : 0);
     }
-    expect(swSources().find((f) => f.name === 'sw.ts')?.code).toContain(RETIRED_CACHE_DECL);
+    const sw = swSources().find((f) => f.name === 'sw.ts')?.code ?? '';
+    expect(sw).toContain(RETIRED_CACHE_DECL);
+    // 多留一版的那份：路由不往里写，keep-prev.ts 用的就是这一份的名字
+    expect(sw).toContain(PREV_ASSETS_DECL);
+    expect(sw.split(PREV_ASSETS_PASS).length - 1).toBe(1);
+  });
+
+  it('只多留上一版：keep-prev.ts 先整个删掉 lemo-prev-assets 再写，只挪 /app/assets/，不删预缓存里的条目', () => {
+    const code = swSources().find((f) => f.name === CACHE_FILE)?.code ?? '';
+    const del = code.indexOf('await storage.delete(d.prevName);');
+    const open = code.indexOf('await storage.open(d.prevName);');
+    const put = code.indexOf('await to.put(r, res);');
+    expect(del).toBeGreaterThan(-1);
+    expect(del).toBeLessThan(open);
+    expect(open).toBeLessThan(put);
+    expect(code).toContain("export const PREV_ASSETS_DIR = '/app/assets/';");
+    expect(code).toMatch(/!d\.current\.has\(r\.url\) && new URL\(r\.url\)\.pathname\.startsWith\(PREV_ASSETS_DIR\)/);
+    // 反例：多删一处、多写一处、换个变量名绕开都会被拦
+    for (const bad of [
+      `${code}\nawait from.delete(r);`,
+      `${code}\nawait to.put(x, y);`,
+      `${code}\nconst c = await storage.open('x');`,
+      code.replace('await storage.delete(d.prevName);', ''),
+    ]) {
+      expect(cacheRest(CACHE_FILE, bad).errors, bad.slice(-40)).not.toEqual([]);
+    }
+    expect(cacheRest('routes.ts', 'await caches.open("x");').errors).not.toEqual([]);
+    expect(cacheRest('sw.ts', `${swSources().find((f) => f.name === 'sw.ts')?.code ?? ''}\nself.caches.keys();`).errors).not.toEqual([]);
   });
 
   it('SW 不手写缓存、不自己发请求、不拿令牌；IndexedDB 只在 pending.ts 里碰', () => {
     const forbidden: Array<[string, RegExp]> = [
-      ['手动开缓存或写缓存', /\bcaches\s*\./],
       ['SW 自己发请求', /(^|[^.\w])fetch\s*\(|importScripts|XMLHttpRequest|sendBeacon/],
       ['拿令牌、读会话', /localStorage|sessionStorage|Authorization|\/sb\//],
     ];
     for (const f of swSources()) {
-      // sw.ts 删 lemo-nav 的那一处正好一次，去掉以后再查（别处、多写一次都拦）
-      let code = f.code;
-      if (f.name === 'sw.ts') {
-        expect(code.split(RETIRED_CACHE_DELETE).length - 1, 'sw.ts 删 lemo-nav').toBe(1);
-        code = code.split(RETIRED_CACHE_DELETE).join('');
-      }
+      // Cache Storage 只准 CACHE_PASSTHROUGH 那几处、每处正好一次；去掉以后再查（别处、多写一次都拦）
+      const { rest: code, errors } = cacheRest(f.name, f.code);
+      expect(errors).toEqual([]);
       for (const [what, re] of forbidden) expect(code, `${f.name}：${what}`).not.toMatch(re);
       if (f.name === IDB_FILE) continue;
       expect(idbViolations(f.name, code)).toEqual([]);
@@ -236,11 +294,11 @@ describe('SW 不存用户数据（K-sw-seal）', () => {
     expect(actions).not.toMatch(/\bimport\b|\bfrom\s*['"]|\brequire\s*\(/);
   });
 
-  it('只听 fetch、message、activate（删 lemo-nav），和 B2 起的 push、notificationclick、notificationclose（没有 sync、periodicsync）', () => {
+  it('只听 fetch、message、install、activate（预缓存、删 lemo-nav、多留上一版），和 B2 起的 push、notificationclick、notificationclose（没有 sync、periodicsync）', () => {
     const events = swSources()
       .flatMap((f) => [...f.code.matchAll(/addEventListener\s*\(\s*['"`]([^'"`]+)['"`]/g)].map((m) => m[1] ?? ''))
       .sort();
-    expect(events).toEqual(['activate', 'fetch', 'message', 'notificationclick', 'notificationclose', 'push']);
+    expect(events).toEqual(['activate', 'fetch', 'install', 'message', 'notificationclick', 'notificationclose', 'push']);
     for (const f of swSources()) expect(f.code, f.name).not.toMatch(/\bon(push|notificationclick|notificationclose|sync|periodicsync)\s*=/);
   });
 
