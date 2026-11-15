@@ -457,13 +457,11 @@ export function createVaultSession(d: VaultSessionDeps) {
     /** 删除、撤销删除各发一次（后台队列发的也是这两个；不重拉列表） */
     remove: (id: string) => run({ action: 'delete', id }, vaultOkResponse),
     undelete: (id: string) => run({ action: 'undelete', id }, vaultOkResponse),
-    /** 永久删除（要确认，不进后台队列）：成了从仓库拿掉，队列里这几条的任务和“没保存上”标记一起撤掉 */
+    /** 永久删除（要确认，不进后台队列）：发出前先撤掉队列里这几条的任务和标记（不再 save 回来，H5）；成了从仓库拿掉 */
     async purge(items: readonly string[]) {
+      queue.forget(items);
       const r = await run({ action: 'purge', items: [...items] }, vaultPurgeResponse);
-      if (r.ok) {
-        queue.forget(items);
-        store.forget(items);
-      }
+      if (r.ok) store.forget(items);
       return r;
     },
     /** 普通随手记移进隐私记（S7）：要令牌，锁着时等解锁、重试一次；这一段解锁期拉过列表的，成了补拉一次（服务器那边才有这一条的明文） */
@@ -472,12 +470,23 @@ export function createVaultSession(d: VaultSessionDeps) {
       if (r.ok && state.listed) await list();
       return r;
     },
-    /** 移出隐私记：先等后台队列把这一条发完（没发完就移，服务器上是旧的那一份），成了从仓库拿掉 */
+    /**
+     * 移出隐私记：先等后台队列把这一条发完（没发完就移，服务器上是旧的那一份）；移出在路上时这一条先不发（H5：移出后再 save 会在隐私记里重建它），
+     * 成了从仓库、队列拿掉
+     */
     exportNote: async (noteId: string): Promise<VaultResult<unknown>> => {
       if (!(await queue.flush(noteId))) return { ok: false, code: 'try_later' };
-      const r = await run({ action: 'export', note_id: noteId }, vaultOkResponse);
-      if (r.ok) store.forget([noteId]);
-      return r;
+      queue.hold(noteId);
+      try {
+        const r = await run({ action: 'export', note_id: noteId }, vaultOkResponse);
+        if (r.ok) {
+          queue.forget([noteId]);
+          store.forget([noteId]);
+        }
+        return r;
+      } finally {
+        queue.release(noteId);
+      }
     },
     /**
      * 图片：拿字节做成 blob URL（只在内存、上锁时撤销，D3）；同一张同时只取一次，取到了缓存，没取到（失败、半路上锁）不缓存（M6）。

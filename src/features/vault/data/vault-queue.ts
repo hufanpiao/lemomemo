@@ -101,6 +101,8 @@ export function createVaultQueue(d: QueueDeps) {
   let running = false;
   /** 令牌过期上锁期间：不发 */
   let paused = false;
+  /** 正在移出隐私记的几条：改动照收，但不发（移出成了整条 forget，H5） */
+  const holds = new Set<string>();
   /** 正在发的那一条（discard 不能拿掉它：请求已经在路上） */
   let current: string | null = null;
   /** dropAll 一次加 1：在飞的那一次回来发现变了就什么都不做 */
@@ -229,7 +231,7 @@ export function createVaultQueue(d: QueueDeps) {
     running = true;
     try {
       while (!paused) {
-        const j = [...jobs.values()].find((x) => !x.failed && !x.partial);
+        const j = [...jobs.values()].find((x) => !x.failed && !x.partial && !holds.has(x.id));
         if (!j) break;
         current = j.id;
         await step(j);
@@ -264,6 +266,14 @@ export function createVaultQueue(d: QueueDeps) {
       j.row = { ...j.row, ...data, id };
       j.dirty = true;
       j.v += 1;
+    },
+    /** 移出隐私记在路上：这一条先不发（release 放开；移出成了调用方 forget） */
+    hold(id: string): void {
+      holds.add(id);
+    },
+    release(id: string): void {
+      holds.delete(id);
+      kick();
     },
     /** 令牌过期上锁：停下（不丢）；解锁后 resume */
     pause(): void {

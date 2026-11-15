@@ -5,6 +5,8 @@ import { noteRowOf } from '../data/vault-store.ts';
 import { held, listOk, make, NID, note, TOK, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 const locked = { ok: false, code: 'vault_locked' };
+/** 拿来触发令牌过期上锁的另一条（永久删除会先撤掉被删那几条的队列任务，H5） */
+const OTHER = '33333333-3333-4333-8333-333333333333';
 
 describe('M1：上锁只有一套做法（上锁以后回来的一律当失败；令牌过期时队列暂停、解锁后整条重发）', () => {
   const settle = async (): Promise<void> => {
@@ -18,7 +20,7 @@ describe('M1：上锁只有一套做法（上锁以后回来的一律当失败�
     const { s, calls } = await unlocked({ save: () => (++saves === 1 ? h.p : { ok: true, vault_token: TOK2, expires_at: 9e12 }), purge: () => locked });
     s.queue.wrote(row(), false);
     await settle();
-    await s.purge([NID]);
+    await s.purge([OTHER]);
     expect(s.get()).toMatchObject({ phase: 'locked', waiting: true });
     h.release({ ok: true, vault_token: TOK2, expires_at: 9e12 });
     await settle();
@@ -75,12 +77,59 @@ describe('M1：上锁只有一套做法（上锁以后回来的一律当失败�
     const { s, clock } = await unlocked({ purge: () => locked, save: () => h.p });
     s.hide(clock.ms, 'app');
     s.queue.wrote(row(), false);
-    await s.purge([NID]);
+    await s.purge([OTHER]);
     expect(s.get().waiting).toBe(true);
     expect(s.check(clock.ms + 61_000, 1)).toBe(true);
     expect(s.get()).toMatchObject({ phase: 'locked', waiting: false });
     expect(s.queue.size()).toBe(0);
     expect(s.store.getSnapshot().dropped).toBe(1);
+  });
+});
+
+describe('H5：永久删除、移出隐私记时队列里这一条不再 save 回来', () => {
+  const settle = async (): Promise<void> => {
+    for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 0));
+  };
+  const ok = { ok: true, vault_token: TOK2, expires_at: 9e12 };
+
+  it('改完马上永久删除：在路上的保存回来失败也不标“没保存上”、不再发；purge 发出去', async () => {
+    const h = held();
+    const { s, calls } = await unlocked({ save: () => h.p, purge: () => ({ ...ok, purged: 1 }) });
+    s.queue.wrote({ ...noteRowOf(note()), body: '刚改的' }, false);
+    await settle();
+    const p = s.purge([NID]);
+    expect(s.queue.size()).toBe(0);
+    h.release({ ok: false, code: 'not_found' });
+    await p;
+    await settle();
+    expect(calls.filter((c) => c.action === 'save')).toHaveLength(1);
+    expect(calls.filter((c) => c.action === 'purge')).toHaveLength(1);
+    expect(s.store.getSnapshot().failed.has(NID)).toBe(false);
+  });
+
+  it('移出在路上时又改了：这一条不发；移出成了整条丢掉，不在隐私记里重建', async () => {
+    const h = held();
+    const { s, calls } = await unlocked({ export: () => h.p });
+    const p = s.exportNote(NID);
+    await settle();
+    s.queue.wrote({ ...noteRowOf(note()), body: '移出时又改的' }, false);
+    await settle();
+    expect(calls.filter((c) => c.action === 'save')).toHaveLength(0);
+    h.release(ok);
+    expect((await p).ok).toBe(true);
+    await settle();
+    expect(calls.filter((c) => c.action === 'save')).toHaveLength(0);
+    expect(s.queue.size()).toBe(0);
+    expect(s.store.get(NID)).toBeUndefined();
+  });
+
+  it('移出失败：放开这一条，又改的照常发', async () => {
+    const { s, calls } = await unlocked({ export: () => ({ ok: false, code: 'not_found' }) });
+    const p = s.exportNote(NID);
+    s.queue.wrote({ ...noteRowOf(note()), body: '移出时又改的' }, false);
+    expect((await p).ok).toBe(false);
+    await settle();
+    expect(calls.filter((c) => c.action === 'save')).toHaveLength(1);
   });
 });
 
