@@ -45,6 +45,8 @@ function smallTargets(page: Page, hit: number): Promise<string[]> {
       if (el.closest('[aria-hidden="true"], [inert]')) return false;
       const cs = getComputedStyle(el);
       if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+      // 视觉隐藏、只给读屏和 Tab 用的（如 R-437 的“搜索本页”平时 1px + clip-path: inset(50%)）：手指点不到，不算点击区；Tab 到它时 :focus-visible 恢复成正常大小
+      if (cs.clipPath === 'inset(50%)') return false;
       const r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0;
     };
