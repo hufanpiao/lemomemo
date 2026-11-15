@@ -67,6 +67,8 @@ test.describe('只读行（FA-2）', () => {
     await page.getByTestId('today-done-t-ro').click({ force: true });
     // 行尾 × 去掉了（负责人 11-15“代办后面的x去掉”，R-428）：只读行左滑滑不开、露不出“删除”，行还在（可写的行滑开删掉见 today-swipe-del.spec.ts）
     await expect(page.getByTestId('today-del-t-ro')).toHaveCount(0);
+    // 今天页的 SwipeRow 等页里没焦点才换上（useSwapWhenSafe）；chromium 点按钮会把焦点留在页里，本条又定了钟（Date.now 不走，3 秒耐心期到不了）：先移走焦点
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await swipeRow(page, 'today-swipe-t-ro', 0.4);
     await page.waitForTimeout(300);
     await expect(page.getByTestId('today-swipe-t-ro')).not.toHaveAttribute('data-swipe', 'open');

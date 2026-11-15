@@ -147,7 +147,7 @@ export default function TodosPage() {
               <h2 className={styles.h2}>{groupTitle(g)}</h2>
             )}
             {g.key === 'done' && !doneOpen ? null : (
-            <AppearList as="ul" className={list.list}>
+            <AppearList as="ul" className={`${list.list} ${list.roomy}`}>
               {g.items.map(({ todo, tag }) => {
                 const subs = l.subs.get(todo.id);
                 const prog = subs ? t('items.progress', { done: subs.filter((x) => x.done).length, total: subs.length }) : '';

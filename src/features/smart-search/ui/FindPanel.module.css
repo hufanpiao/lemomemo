@@ -283,11 +283,13 @@
 .ring {
   width: 18px;
   height: 18px;
-  border: 1.5px solid var(--text);
-  border-radius: 50%;
+  border: 1.5px solid var(--text-2);
+
+  /* 没完成的待办：同待办列表的空心圆角方框（R-433，kit/CheckCircle.module.css 的边色、圆角比例），小一号 18px */
+  border-radius: calc(18px * 0.26);
 }
 
-/* 已完成的待办：同待办列表的打勾圆（kit/CheckCircle.module.css 的 .fill、.tick，data-state="on"），小一号 18px */
+/* 已完成的待办：同待办列表的打勾方框（kit/CheckCircle.module.css 的 .fill、.tick，data-state="on"），小一号 18px */
 .ringDone {
   --check-size: 18px;
 

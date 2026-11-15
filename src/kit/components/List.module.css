@@ -9,6 +9,8 @@
    • .unsynced：行尾“未同步”小标记那一格，没有时整格不画（不多出 gap）
    • .swp / .swRow：左滑删除的行（负责人 11-15 去掉行尾 ×，今天页、待办页的待办行；手势、行面、按钮是 kit 的 SwipeRow）：
      .swp 给 SwipeRow 的外框，占满一行；.swRow 是行面里的一行（打勾圈 ｜ 标题和副行），间距和最小高同 .row
+   • .roomy：待办那种松一点的列表（负责人 11-15 R-433，参考图“待办方框与行距”）：行高 56、左右内边距 16（行间细线照旧 --line）；
+     待办页、今天页（今天的安排、没赶上）用，同一份 .list/.row 加这一个类；日历、最近删除等别的列表不变
    • .empty / .emptyNext：空状态一句主文 + 可选一行“下一步”提示位，全站一种对齐（左对齐，同页面标题、说明；U6） */
 
 .panel,
@@ -39,6 +41,20 @@
 
 .row:last-child {
   border-bottom: 0;
+}
+
+/* .roomy（R-433）：放在 .panel 里面时（今天页“没赶上”）内边距由外面那层给，同样 16 */
+.list.roomy,
+.panel:has(> .roomy) {
+  padding: 0 16px;
+}
+
+.panel > .list.roomy {
+  padding: 0;
+}
+
+.roomy > .row {
+  min-height: 56px;
 }
 
 /* 电脑版详情抽屉里开着的那一行（行按钮 aria-current，B6 返工）：左边一道柠檬黄。

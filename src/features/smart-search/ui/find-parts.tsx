@@ -33,7 +33,7 @@ export function Marked({ text, q }: { text: string; q: string }): ReactNode {
   return out;
 }
 
-/** 左边的类型记号；done：已完成的待办画成实心打勾圆（和待办列表同一套 kit/CheckCircle 的圆盘、勾号，只是画，不接点按） */
+/** 左边的类型记号；done：已完成的待办画成实心打勾方框（和待办列表同一套 kit/CheckCircle 的填充块、勾号，只是画，不接点按；R-433 圆角方框） */
 export function Lead({ kind, done = false }: { kind: FindKind; done?: boolean }) {
   if (kind === 'todo' && done) {
     return (

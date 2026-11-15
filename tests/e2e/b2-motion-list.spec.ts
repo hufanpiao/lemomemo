@@ -10,7 +10,7 @@
 //   getComputedStyle 读到的晚一两帧，位置（layout 的 transform）却是当帧的；只看当帧会把残影估淡（第三轮：帧上 0.6、页面里读出 0.19）。
 //   按时间窗算、不按“前两次取样”算：webkit 取样间隔不匀，前两次可能隔了 50 ms 以上，会把早已淡掉的值算进来
 // • M1 补：220 ms 以后“已完成”组只往上走（top 单调不增），不往回退
-// • 负责人 11-15“已完成组折叠”：刚勾的那一条在撤销条开着的约 3 秒里留在原组，之后进默认收起的“已完成 N”；N1 打勾那条改成“先勾一条、再勾另一条把它顶走”
+// • 负责人 11-15“已完成组折叠”：刚勾的那一条在撤销条开着的约 3 秒里留在原组，之后进默认收起的“已完成 N”；N1 打勾那条的起点是撤销条收起那一刻（审查 11-15 第 4 条：撤销条开着期间勾过的都留在原位）
 // • N1 补帧（MOTION-n1-load-flaky）：离开那一项一挂上 leaving 就当场补量一帧（退场进度 0）。补帧只用来垫不透明度的历史（让之后 LAG_MS 窗口里的
 //   rAF 帧按它算），不计入“取到看得清的帧”（seen 只数 rAF 帧）：补帧拿的是上一帧别的行的位置，只认得出“离开那一项自己跳位”，
 //   认不出“别的行不走 FLIP、直接跳上来压住残影”（首屏判断放宽与推送认领核对审查 M1）。一次都没取到看得清的 rAF 帧（机器忙、帧落不进淡出那一百来毫秒）
@@ -285,17 +285,23 @@ test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1�
     await expect(page.getByTestId('todos-g-done').getByTestId('todos-row-t4')).toBeVisible();
   });
 
-  // 打勾：刚勾的那一条要等撤销条收起才离开（负责人 11-15 方案）。起点先勾 t4（撤销条开着、t4 留在原组），
-  // 取样时勾 t3：撤销条换成 t3 的，t4 就在这一下离开（松手即起点，同删除）
+  // 打勾：刚勾的那一条要等撤销条收起才离开（负责人 11-15 方案）。审查 11-15 第 4 条起撤销条开着期间勾过的都留在原位、
+  // 收起时一起离开（原来“再勾一条把它顶走”不再成立），所以起点改成撤销条收起那一刻：先勾 t4，等到撤销条快到点
+  // （DONE_LINGER_MS 3 秒，提前约 350 ms 开始取样），取样里等它收起，t4 就在这一下离开
   const tickFirst = async (page: Page): Promise<void> => {
     await seed(page);
     await page.getByTestId('todos-done-t4').click();
     await page.getByTestId('todos-done-toast').waitFor();
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(2650);
+  };
+  // 取样器从 pointerup 起算（startSampler）：这一下没有手指，补发一个 pointerup 当起点，再等撤销条收起
+  const tickClose = async (page: Page): Promise<void> => {
+    await page.evaluate(() => document.dispatchEvent(new PointerEvent('pointerup')));
+    await page.getByTestId('todos-done-toast').waitFor({ state: 'detached', timeout: 3000 });
   };
   // 删除：左滑一口气拉过大半行（负责人 11-15 去掉 ×，SwipeRow full），松手即删、即起点
   for (const [name, act, prepare] of [
-    ['打勾', (page: Page) => page.getByTestId('todos-done-t3').click(), tickFirst],
+    ['打勾', tickClose, tickFirst],
     ['删除', (page: Page) => swipeRow(page, 'todos-row-t3'), seed],
   ] as const) {
     test(`N1 ${name}：离开的那一项不透明度 > 0.25 的每一帧，它的字不压别的行、组标题的字`, async ({ page }) => {

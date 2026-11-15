@@ -38,7 +38,8 @@ import { CheckCircle, type CheckCircleProps } from '../../../kit/components/Chec
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
-import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
+import type { SwipeRowProps } from '../../../kit/components/SwipeRow.tsx';
+import type TodaySwipe from './TodaySwipe.tsx';
 import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
@@ -50,7 +51,7 @@ import { AppearItem, AppearList, useHoldView, useSwapWhenSafe } from '../../../m
 import { splitPast, useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
-import { loadTodayDesk, TodayRo } from '../index.ts';
+import { loadTodayDesk, loadTodaySwipe, TodayRo } from '../index.ts';
 import { useAnnivAny } from '../hooks/useAnnivAny.ts';
 import { TodaySubtasks } from '../../todos/index.ts';
 import { GrowIn } from './GrowIn.tsx';
@@ -80,8 +81,8 @@ function Check(p: CheckCircleProps) {
   return <span className={list.lead}>{p.readOnly ? <Ro part="check" {...p} /> : <CheckCircle {...p} />}</span>;
 }
 
-/** 待办的子任务进度“2/4 ▬▬▭▭”（R-350 方案 5.2，只看不摊开）：首屏画完以后才挂、才下载那一包（不算进首屏），没有子任务、分包下不来时不画 */
-function Subs({ id }: { id: string }) {
+/** 首屏画完了没有（root-paint 的 afterAppPainted）：按需下载的部件等它为真才挂，不算进首屏预算 */
+function usePainted(): boolean {
   const [on, setOn] = useState(isAppPainted);
   useEffect(() => {
     if (on) return;
@@ -91,7 +92,12 @@ function Subs({ id }: { id: string }) {
       live = false;
     };
   }, [on]);
-  if (!on) return null;
+  return on;
+}
+
+/** 待办的子任务进度“2/4 ▬▬▭▭”（R-350 方案 5.2，只看不摊开）：首屏画完以后才挂、才下载那一包（不算进首屏），没有子任务、分包下不来时不画 */
+function Subs({ id }: { id: string }) {
+  if (!usePainted()) return null;
   return (
     <QuietBoundary name="todo-subs">
       <Suspense fallback={null}>
@@ -99,6 +105,12 @@ function Subs({ id }: { id: string }) {
       </Suspense>
     </QuietBoundary>
   );
+}
+
+/** 待办行的左滑删除（R-428）：Impl 是首屏画完、页里没焦点时才交出的 SwipeRow（index.ts 的 loadTodaySwipe，useSwapWhenSafe）；
+ *  没交出、分包下不来时照原样画一行（同 .swp 外框，滑不开，点行进编辑页照旧能删） */
+function SwipeDel({ Impl, ...p }: SwipeRowProps & { 'data-testid': string; Impl: typeof TodaySwipe | undefined }) {
+  return Impl ? <Impl {...p} /> : <div className={p.className} data-testid={p['data-testid']}>{p.children}</div>;
 }
 
 /** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */
@@ -134,6 +146,7 @@ export default function TodayPage() {
   // 下好了、这一页里没有焦点和按住的指针时才换上（motion 的 useSwapWhenSafe）；在那之前照原来的一列画
   const page = useRef<HTMLElement>(null);
   const loaded = useSwapWhenSafe(useMedia(MQ_SIDEBAR), page, loadTodayDesk, afterAppPainted, opensKeyboard);
+  const swipe = useSwapWhenSafe(true, page, loadTodaySwipe, afterAppPainted, opensKeyboard);   // 待办行左滑（R-428），同一个守卫
   // 电脑版详情抽屉开着的那一条（kit useListActions.ts 的 useDrawerSel，同随手记页）：电脑版那一块画出错（QuietBoundary 退回手机排法）以后按没换上算，
   // 点行进编辑页、不画农历（抽屉也在出错的那一块里，独立评审第 5 条）
   const ds = useDrawerSel<TodaySel>(!!loaded);
@@ -152,7 +165,7 @@ export default function TodayPage() {
   const lateItem = v.late.length ? (
     <AppearItem as="section" key="late" className={`${list.panel} ${styles.late}`} aria-labelledby="today-late" data-testid="today-late">
       <h2 id="today-late" className={styles.h2}>{t('late.title', {})}</h2>
-      <AppearList as="ul" className={list.list}>
+      <AppearList as="ul" className={`${list.list} ${list.roomy}`}>
         {v.late.map(({ todo, days }) => (
           <AppearItem key={todo.id} className={list.row} data-readonly={g.isRo('todo', todo.id) ? '' : undefined}>
             <Check
@@ -201,7 +214,8 @@ export default function TodayPage() {
         data-readonly={ro ? '' : undefined}
       >
         {/* 左滑删除（负责人 11-15 去掉行尾 ×，同待办页）：露出“删除”点了删，一口气拉过大半行直接删；只读行不能滑 */}
-        <SwipeRow
+        <SwipeDel
+          Impl={swipe?.default}
           className={list.swp}
           disabled={ro}
           full="del"
@@ -227,7 +241,7 @@ export default function TodayPage() {
               <RowMark table="todos" id={td.id} />
             </button>
           </div>
-        </SwipeRow>
+        </SwipeDel>
       </AppearItem>
     );
   };
@@ -250,7 +264,7 @@ export default function TodayPage() {
           <span className={styles.pastText}>{t('list.past', { n: pastN, items: pastText })}</span>
         </button>
       ) : null}
-      <AppearList as="ul" className={list.list}>
+      <AppearList as="ul" className={`${list.list} ${list.roomy}`}>
         {pastOpen ? past.pastEvents.map(evRow) : null}
         {pastOpen ? past.pastTodos.map(tdRow) : null}
         {past.events.map(evRow)}

@@ -484,6 +484,22 @@
       "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
     },
     {
+      "id": "check-edge-panel",
+      "what": "待办打勾方框的边（kit CheckCircle，没勾时）/ 列表卡片底",
+      "fg": "--text-2",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "负责人 11-15 R-433：勾选框改圆角方框，边用次要文字一级的颜色，深浅两套都要过对比度"
+    },
+    {
+      "id": "check-edge-panel2",
+      "what": "子任务打勾方框的边 / 编辑页分组底（--panel-2）",
+      "fg": "--text-2",
+      "bg": "--panel-2",
+      "kind": "nontext",
+      "source": "负责人 11-15 R-433：子任务同样改方，小一号"
+    },
+    {
       "id": "p1s-screen",
       "what": "项目标记 1（平铺在底色、玻璃渐变上）",
       "fg": "--p1s",
