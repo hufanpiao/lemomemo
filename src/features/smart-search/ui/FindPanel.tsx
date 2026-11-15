@@ -13,6 +13,7 @@
 import * as RD from '@radix-ui/react-dialog';
 import { Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { navigateSub } from '../../../app/router-sub.ts';
+import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { TodayNotes } from '../../notes/index.ts';
 import { VaultParts } from '../../vault/index.ts';
@@ -194,7 +195,7 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
         {pics.map((h) => (
           <button key={h.item.id} type="button" className={styles.thumb} onClick={() => go(h)} data-testid="find-thumb">
             <span className={styles.thumbBox}>
-              <Suspense fallback={null}><TodayNotes part="thumb" noteId={h.item.noteId ?? ''} imageId={h.item.id} /></Suspense>
+              <QuietBoundary name="find-thumb"><Suspense fallback={null}><TodayNotes part="thumb" noteId={h.item.noteId ?? ''} imageId={h.item.id} /></Suspense></QuietBoundary>
             </span>
             <span className={styles.thumbT}>{h.item.extra || h.item.title}</span>
           </button>
@@ -234,7 +235,8 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
       </div>
     </>
   ) : null;
-  const vaultRow = <Suspense fallback={null}><VaultParts part="findrow" onGo={close} /></Suspense>;
+  // 隐私记那一行、图片缩略图是另下载的小块：下不来（离线、SW 没缓存到）只去掉这一块，不把整个面板关掉（11-16 ci webkit 离线用例，照随手记页 vault-lockrow 的做法）
+  const vaultRow = <QuietBoundary name="find-vault"><Suspense fallback={null}><VaultParts part="findrow" onGo={close} /></Suspense></QuietBoundary>;
   const results = q === '' ? (
     <>
       <p className={styles.start}>{t('find.start', {})}</p>
