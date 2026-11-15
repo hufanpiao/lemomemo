@@ -21,7 +21,7 @@ afterEach(() => {
 describe('会话：按原因记离开时刻', () => {
   it('离开隐私记页 59 秒不锁、61 秒锁（check）', async () => {
     const { s, clock } = await unlocked();
-    s.show(undefined, 1, 'page');
+    s.show(undefined, 'page');
     s.hide(undefined, 'page');
     clock.ms += 59_000;
     expect(s.check()).toBe(false);
@@ -33,10 +33,10 @@ describe('会话：按原因记离开时刻', () => {
 
   it('59 秒内回到隐私记页：计时作废，之后在页上待多久都不锁', async () => {
     const { s, clock } = await unlocked();
-    s.show(undefined, 1, 'page');
+    s.show(undefined, 'page');
     s.hide(undefined, 'page');
     clock.ms += 59_000;
-    expect(s.show(undefined, 1, 'page')).toBe(false);
+    expect(s.show(undefined, 'page')).toBe(false);
     clock.ms += 10 * 60_000;
     expect(s.check()).toBe(false);
     expect(s.get().phase).toBe('unlocked');
@@ -44,10 +44,10 @@ describe('会话：按原因记离开时刻', () => {
 
   it('隐私记页回来时离开满 61 秒：show 就锁上', async () => {
     const { s, clock } = await unlocked();
-    s.show(undefined, 1, 'page');
+    s.show(undefined, 'page');
     s.hide(undefined, 'page');
     clock.ms += 61_000;
-    expect(s.show(undefined, 1, 'page')).toBe(true);
+    expect(s.show(undefined, 'page')).toBe(true);
     expect(s.get().phase).toBe('locked');
   });
 
@@ -59,7 +59,7 @@ describe('会话：按原因记离开时刻', () => {
 
   it('离开 App（默认原因 app）照旧：回来时离开满 61 秒锁；隐私记页挂着时 59 秒不锁', async () => {
     const { s, clock } = await unlocked();
-    s.show(undefined, 1, 'page');
+    s.show(undefined, 'page');
     s.hide();
     clock.ms += 59_000;
     expect(s.show()).toBe(false);
@@ -70,7 +70,8 @@ describe('会话：按原因记离开时刻', () => {
 
   it('自动上锁时长按设置（5 分钟）：离开隐私记页 4 分钟不锁、5 分钟锁', async () => {
     const { s, clock } = await unlocked();
-    s.show(undefined, 5, 'page');
+    s.setAutolock(5);
+    s.show(undefined, 'page');
     s.hide(undefined, 'page');
     clock.ms += 4 * 60_000;
     expect(s.check()).toBe(false);
@@ -83,7 +84,7 @@ describe('会话：按原因记离开时刻', () => {
     const m = make();
     await m.s.refreshStatus();
     await m.s.unlock('1234');
-    m.s.show(undefined, 1, 'page');
+    m.s.show(undefined, 'page');
     m.s.hide(undefined, 'page');
     m.clock.ms += 59_000;
     vi.advanceTimersByTime(59_000);

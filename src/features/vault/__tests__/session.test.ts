@@ -70,26 +70,27 @@ describe('TC-B5-10：离开满时长才上锁（注入时间）', () => {
   it('1 分钟：59 秒回来仍解锁，61 秒回来已上锁', async () => {
     const { s } = await unlocked();
     s.hide(0);
-    expect(s.show(59_000, 1)).toBe(false);
+    expect(s.show(59_000)).toBe(false);
     expect(s.get().phase).toBe('unlocked');
     s.hide(100_000);
-    expect(s.show(161_000, 1)).toBe(true);
+    expect(s.show(161_000)).toBe(true);
     expect(s.get()).toMatchObject({ phase: 'locked', listed: false });
   });
 
   it('改时长生效：5 分钟时 4 分 59 秒不锁、5 分 1 秒锁', async () => {
     const { s } = await unlocked();
     s.hide(0);
-    expect(s.show(299_000, 5)).toBe(false);
+    s.setAutolock(5);
+    expect(s.show(299_000)).toBe(false);
     s.hide(0);
-    expect(s.show(301_000, 5)).toBe(true);
+    expect(s.show(301_000)).toBe(true);
   });
 
   it('锁着时离开、回来什么也不动', async () => {
     const m = make();
     await m.s.refreshStatus();
     m.s.hide(0);
-    expect(m.s.show(999_000, 1)).toBe(false);
+    expect(m.s.show(999_000)).toBe(false);
     expect(m.s.get().phase).toBe('locked');
   });
 });

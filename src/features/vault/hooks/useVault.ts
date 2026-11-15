@@ -4,7 +4,7 @@
 //   - visibilitychange → visible、pageshow、focus：离开满 vault.autolock_min 分钟就上锁；然后去掉遮罩（锁上了就露出解锁卡）
 // • 离开隐私记页（负责人 11-15“离开隐私记页 1 分钟不自动上锁”）：useVaultPresence 在页面挂上、卸下时报给会话（原因 'page'），会话自己计时
 // • 自动上锁的分钟数读本机 settings 的 vault.autolock_min（默认 1；只认 1～60 的整数）；读到就报给会话
-import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { fmtDate, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { currentTz } from '../../../core/current-tz.ts';
@@ -28,7 +28,6 @@ export function autolockOf(v: unknown): number {
 }
 
 let session: VaultSession | null = null;
-let autolockMin = AUTOLOCK_DEFAULT;
 
 /** 盖上 / 去掉多任务遮罩（同步改 DOM，不等 React 渲染） */
 export function setShield(on: boolean, root: HTMLElement = document.documentElement): void {
@@ -45,7 +44,7 @@ export function watchLeave(s: VaultSession, target: Window & typeof globalThis =
   };
   const back = (): void => {
     if (doc.visibilityState === 'hidden') return;
-    s.show(now(), autolockMin);
+    s.show(now());
     setShield(false, doc.documentElement);
   };
   const vis = (): void => (doc.visibilityState === 'hidden' ? leave() : back());
@@ -87,12 +86,13 @@ export function useVault(): { state: VaultState; s: VaultSession } {
   return { state, s };
 }
 
-/** 读自动上锁分钟数，并告诉会话（离开、回来时按它判断） */
+/**
+ * 读自动上锁分钟数，报给会话（会话里只这一份，M2）。layout effect：同一组件里排在后面的 show / check 读到的已经是设置里的值
+ */
 export function useAutolockMin(): number {
   const rows = useCollection<SettingRow>('settings');
   const min = autolockOf(settingValue(rows, AUTOLOCK_KEY));
-  useEffect(() => {
-    autolockMin = min;
+  useLayoutEffect(() => {
     vaultSession().setAutolock(min);
   }, [min]);
   return min;
@@ -101,10 +101,10 @@ export function useAutolockMin(): number {
 /** 隐私记页挂着（离开隐私记页满时长就锁，原因 'page'）：挂上报 show、卸下报 hide */
 export function useVaultPresence(): void {
   const { s } = useVault();
-  const min = useRef(useAutolockMin());
+  useAutolockMin();
   useLayoutEffect(() => {
     // 时刻用会话自己的钟（测试注入的时钟和离开时记的是同一个）
-    s.show(undefined, min.current, 'page');
+    s.show(undefined, 'page');
     return () => s.hide(undefined, 'page');
   }, [s]);
 }

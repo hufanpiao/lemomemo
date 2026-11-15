@@ -358,15 +358,15 @@ export function createVaultSession(d: VaultSessionDeps) {
     }, Math.max(0, due) + 50);
   }
 
-  /** 任何一个原因离开满 min 分钟就上锁；回 true 表示锁上了 */
-  function check(at: number = now(), min: number = autoMin): boolean {
+  /** 任何一个原因离开满自动上锁时长（setAutolock，只这一份）就上锁；回 true 表示锁上了 */
+  function check(at: number = now()): boolean {
     if (!live()) {
       away.clear();
       arm();
       return false;
     }
     for (const [why, t] of away) {
-      if (at - t >= minMs(min)) {
+      if (at - t >= minMs(autoMin)) {
         autolock(why);
         return true;
       }
@@ -570,17 +570,16 @@ export function createVaultSession(d: VaultSessionDeps) {
       if (live() && !away.has(why)) away.set(why, at);
       arm();
     },
-    /** 回来：这个原因离开满 min 分钟就上锁，等解锁的请求和后台队列一并作废（审查第 2 条）；再看别的原因（check）。回 true 表示锁上了 */
-    show(at: number = now(), min = autoMin, why: LeaveWhy = 'app'): boolean {
+    /** 回来：这个原因离开满自动上锁时长就上锁、丢掉后台队列（审查第 2 条）；再看别的原因（check）。回 true 表示锁上了 */
+    show(at: number = now(), why: LeaveWhy = 'app'): boolean {
       if (why === 'page') onPage = true;
-      autoMin = min;
       const h = away.get(why);
       away.delete(why);
-      if (live() && h !== undefined && at - h >= minMs(min)) {
+      if (live() && h !== undefined && at - h >= minMs(autoMin)) {
         autolock(why);
         return true;
       }
-      return check(at, min);
+      return check(at);
     },
     check,
     /** 设置里的自动上锁分钟数变了 */

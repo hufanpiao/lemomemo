@@ -22,7 +22,7 @@ describe('S1：请求在路上时上锁，回来的结果整个丢掉', () => {
     const { s, calls } = await unlocked({ delete: () => h.p });
     const p = s.remove(NID);
     s.hide(0);
-    expect(s.show(61_000, 1)).toBe(true);
+    expect(s.show(61_000)).toBe(true);
     h.release({ ok: true, vault_token: TOK2, expires_at: 9e12 });
     expect((await p).ok).toBe(false);
     expect(s.hasToken()).toBe(false);
@@ -51,7 +51,7 @@ describe('审查第 2 条：等解锁（waiting）时离开满时长也作废', 
     await vi.waitFor(() => expect(s.get().waiting).toBe(true));
     s.queue.wrote({ ...noteRowOf(note()), body: '正文' }, false);
     s.hide(0);
-    expect(s.show(61_000, 1)).toBe(true);
+    expect(s.show(61_000)).toBe(true);
     expect(s.queue.size()).toBe(0);
     expect(s.store.getSnapshot().dropped).toBe(1);
     expect((await r).ok).toBe(false);
@@ -65,7 +65,7 @@ describe('审查第 2 条：等解锁（waiting）时离开满时长也作废', 
     void s.remove(NID);
     await vi.waitFor(() => expect(s.get().waiting).toBe(true));
     s.hide(0);
-    expect(s.show(59_000, 1)).toBe(false);
+    expect(s.show(59_000)).toBe(false);
     expect(s.get().waiting).toBe(true);
   });
 });

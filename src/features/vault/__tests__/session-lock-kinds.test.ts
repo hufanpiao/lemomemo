@@ -79,7 +79,7 @@ describe('M1：上锁只有一套做法（上锁以后回来的一律当失败�
     s.queue.wrote(row(), false);
     await s.purge([OTHER]);
     expect(s.get().waiting).toBe(true);
-    expect(s.check(clock.ms + 61_000, 1)).toBe(true);
+    expect(s.check(clock.ms + 61_000)).toBe(true);
     expect(s.get()).toMatchObject({ phase: 'locked', waiting: false });
     expect(s.queue.size()).toBe(0);
     expect(s.store.getSnapshot().dropped).toBe(1);
@@ -142,7 +142,7 @@ describe('第 22 条配合：续期被拒（超过 12 小时、或闲置过期�
     let renews = 0;
     const { s, calls, clock } = await unlocked({ renew: () => (++renews === 1 ? locked : tokenOk), save: (_r, tok) => (tok ? { ok: true, vault_token: TOK2, expires_at: 9e12 } : locked) });
     // 人在隐私记页上（不在页上的话等解锁时离开计时照走，6 分钟早就硬上锁了，H1）
-    s.show(clock.ms, 1, 'page');
+    s.show(clock.ms, 'page');
     clock.ms += 6 * 60_000;
     s.touch();
     await settle();
