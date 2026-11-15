@@ -47,10 +47,13 @@ describe('分组', () => {
     ]);
   });
 
-  it('linger：刚打勾的那一条（已完成）照截止日留在原组，别的已完成照旧进“已完成”组（负责人 11-15）', () => {
-    const rows = [td({ id: 'x', title: 'x', done: true, done_at: 2, due: '2026-11-05' }), td({ id: 'y', title: 'y', done: true, done_at: 1 })];
-    const g = groupTodos(rows, NOW, TZ, null, 'zh-CN', 'x');
-    expect(g.map((x) => [x.key, x.items.map((i) => i.todo.id)])).toEqual([['today', ['x']], ['done', ['y']]]);
+  it('linger：撤销条开着期间勾过的几条（已完成）照截止日留在原组，别的已完成照旧进“已完成”组（负责人 11-15；审查 11-15 第 4 条改成集合）', () => {
+    const rows = [
+      td({ id: 'x', title: 'x', done: true, done_at: 2, due: '2026-11-05' }), td({ id: 'y', title: 'y', done: true, done_at: 1 }),
+      td({ id: 'z', title: 'z', done: true, done_at: 3 }),
+    ];
+    const g = groupTodos(rows, NOW, TZ, null, 'zh-CN', new Set(['x', 'z']));
+    expect(g.map((x) => [x.key, x.items.map((i) => i.todo.id)])).toEqual([['today', ['x']], ['nodate', ['z']], ['done', ['y']]]);
     expect(groupTodos(rows, NOW, TZ).map((x) => x.key)).toEqual(['done']);
   });
 

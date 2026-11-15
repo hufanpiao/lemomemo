@@ -7,6 +7,7 @@
 //   （用开发版试验页 #/dev-csp 的 Appear toast 模拟；关掉那一刻外层带 data-state="leaving"，透明度从 1 往下走，然后移除）
 import type { Page } from '@playwright/test';
 import { cached, idbPut } from './idb.ts';
+import { swipeRow } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -49,17 +50,18 @@ test.describe('R-354：动画实现到了以后换上（K2、K9）', () => {
     await page.reload();
     await page.getByTestId('today-todo-t3').waitFor({ timeout: 30000 });
     expect(await page.evaluate(() => document.documentElement.getAttribute('data-motion')), '拦住期间不该到').toBeNull();
-    await page.getByTestId('today-del-t3').focus();
-    expect(await focused(page)).toBe('today-del-t3');
+    await page.getByTestId('today-done-t3').focus();
+    expect(await focused(page)).toBe('today-done-t3');
     hold = false;
     release();
     await ready(page);
     await page.waitForTimeout(600);
-    expect(await focused(page), '换实现把焦点弄丢了').toBe('today-del-t3');
+    expect(await focused(page), '换实现把焦点弄丢了').toBe('today-done-t3');
     // 焦点移出列表：守卫放行，换成动画实现
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await page.waitForTimeout(600);
-    await page.getByTestId('today-del-t2').click();
+    // 行尾 × 去掉以后（负责人 11-15，R-428）改左滑一口气拉到底直接删
+    await swipeRow(page, 'today-swipe-t2');
     await expect(page.locator('[data-testid="today-todo-t2"][data-state="leaving"], [data-state="leaving"] [data-testid="today-todo-t2"]').first(), '换上以后删行要有退场').toBeAttached({ timeout: 2000 });
     await expect(page.getByTestId('today-todo-t2')).toHaveCount(0, { timeout: 3000 });
   });

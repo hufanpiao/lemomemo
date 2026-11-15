@@ -103,7 +103,9 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/app/CacheTooNewScreen.tsx': '只在本机库比 App 新（version_too_new）时整屏提示用',
   'src/motion/motion-impl.tsx': '动画实现和功能包合块，main.tsx 在 appPainted() 之后下载（R-354）',
   'src/features/plus/ui/TypeBar.tsx': '“＋”点一下打开的打字条：首屏画完以后 afterAppPainted 才预先下载（app/plus-slot.tsx），没下载好就点显示“准备中”（B3 Q4）；同一块里的 Preload（小气泡、按住“＋”录音那一套，B3 FA-3）下载好以后才挂',
-  'src/features/todos/ui/today-subs.ts': 'R-350 今天页待办行下面的子任务进度：今天页的 Subs 等首屏画完（afterAppPainted）才挂，挂上才下载（在待办列表页那一包里）',
+  'src/features/todos/data/todo-autodel.ts': '完成 7 天后自动删除（负责人 11-15）：同步引擎第一次拉取成功以后才下载（main.tsx 经 wireSync 的 onFirstPull，审查 11-15 第 1 条），首屏期间不下载',
+  'src/features/todos/ui/TodoSettings.tsx': '设置首页“完成 7 天后自动删除”那一行：设置页里用',
+  'src/features/todos/ui/today-subs.ts':'R-350 今天页待办行下面的子任务进度：今天页的 Subs 等首屏画完（afterAppPainted）才挂，挂上才下载（在待办列表页那一包里）',
   'src/features/reminders/ui/RemindHost.tsx': '首屏画完 + 浏览器空闲以后才挂（App.tsx 首屏减重 ⑥）',
   'src/features/reminders/ui/RemindSettings.tsx': '设置页里用',
   'src/features/reminders/ui/RemindSettingsValue.tsx': '设置页里用',
@@ -121,6 +123,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/platform/push-claim.ts': '推送认领本体：首屏画完设好上下文、真要认领时才下载（首屏瘦身 11-05）',
   'src/features/reminders/ui/FailedCreateActions.tsx': '“未同步”提示条里记录比能重试的多时才下载（新建失败的“另存为新的一条”“放弃”，R-378）',
   'src/features/reminders/ui/MissedSheet.tsx': '错过提醒的底部弹层：点开才下载，有错过时首屏画完、浏览器空闲才预取（前端 B 11-05 拆出）',
+  'src/features/today/ui/TodaySwipe.tsx': '今天页待办行的左滑删除（R-428，包着 kit 的 SwipeRow）：首屏画完以后才下载、页里没焦点时才换上（today/index.ts 的 loadTodaySwipe，TodayPage 经 motion 的 useSwapWhenSafe）',
   'src/features/today/ui/TodayToasts.tsx':
     '今天页页底提示条（撤销条、出错条、只读提示条）和重复事项横幅：真有一条提示、或有只读行时才下载（FA-2 返工，首屏预算；连着 UndoToast、只读横幅一起不进首屏）',
   'src/platform/sw-lifecycle.ts':
@@ -137,9 +140,6 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/features/today/ui/TodayDesk.tsx':
     '电脑版今天页的可拖动面板（B6，5.9b；连着 kit/components/DeskLayout、dnd-kit、desk-zh/ko 词典）：只在有侧栏的宽度（MQ_SIDEBAR ≥ 900px）、而且首屏画完（afterAppPainted）以后才挂、才下载；手机宽度不下载。没挂上、没下载好时今天页照原来的一列画',
   'src/features/notes/ui/TodayNotes.tsx': '电脑版今天页的“今天记的”块（B6）：TodayDesk 挂上以后才下载（首屏画完以后），条件同上；手机宽度不下载',
-  'src/features/todos/data/todo-autodel.ts':
-    '完成满 7 天的待办自动删除（负责人 11-15）：main.tsx 启动后段过了账号闸才 loadTodoAutoDel()（首屏画完以后），本机库能用、待办功能开着才下载',
-  'src/features/todos/ui/TodoSettings.tsx': '设置首页“完成 7 天后自动删除”那一行：打开设置页才下载（SettingsHome 的 Suspense）',
   'shared/logic/anniv/lunar-huangli.ts':
     '黄历宜忌表（R-431）：日历选中某天、中文界面时 useHuangli 经 core/anniv-lib.ts 的 HUANGLI_LIB 才下载',
   'src/features/todos/ui/todo-drawer.ts': '电脑版今天页详情抽屉里的待办编辑器（B6 返工）：在电脑版今天页点了一条待办才下载（待办编辑页那一包）；手机宽度点一行是换页，不经这里',

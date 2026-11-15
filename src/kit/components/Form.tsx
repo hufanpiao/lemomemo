@@ -252,9 +252,9 @@ export function Select({
 }
 
 /**
- * 勾选框。look="circle"（B2-UI-a U2-4）：和列表的完成圆圈同一画法、同一动效（用 CheckCircle.module.css 的类，不另画一份）；
+ * 勾选框。look="circle"（B2-UI-a U2-4）：和列表的完成标记同一画法、同一动效（用 CheckCircle.module.css 的类，不另画一份；R-433 起是圆角方框，名字沿用）；
  * look="switch"（B2-UI-b W5，负责人 11-09 定 D2 ①）：开关，role="switch"，画法用本文件样式里的 .switch（和设置页开关同一份，不另画）；
- * 待办“重要”、日程“全天”用它，圆圈只留给“完成”。默认还是系统方形复选框
+ * 待办“重要”、日程“全天”用它，完成标记只留给“完成”。默认还是系统方形复选框
  */
 export function Check({
   label, checked, onChange, disabled, look = 'box', ...p

@@ -45,12 +45,17 @@ describe('完成 7 天后自动删除', () => {
     expect(deletedIds().sort()).toEqual(['a', 'b']);
   });
 
-  it('写入走和手动删除同一条路：write.patch(todos, id, { deleted_at, updated_at }) 进 outbox；运行日志只记条数、不记标题', async () => {
-    put('todos').upsert([todo('a', 8 * DAY)]);
+  it('写入走和手动删除同一条路：write.patch(todos, id, { deleted_at, updated_at }) 进 outbox；运行日志每次扫都记一行、只记条数、不记标题（审查 11-15 第 5 条）', async () => {
+    put('todos').upsert([todo('a', 8 * DAY), todo('b', DAY)]);
     await run();
     expect(w.calls[0]?.slice(0, 3)).toEqual(['todos', 'a', { deleted_at: NOW, updated_at: NOW }]);
-    expect(logs).toEqual(['todo autodel n=1']);
+    expect(logs).toEqual(['todo autodel scan=2 due=1 n=1']);
     expect(logs.join()).not.toContain('标题');
+    // 没有该删的也记一行
+    logs.length = 0;
+    clearAllCollections();
+    await run();
+    expect(logs).toEqual(['todo autodel scan=0 due=0 n=0']);
   });
 
   it('完成以后编辑过（updated_at 晚于 done_at）不删；改过子任务（含删掉的子任务）也不删；子任务没动过的照删', async () => {
@@ -74,7 +79,7 @@ describe('完成 7 天后自动删除', () => {
     put('settings').upsert([{ id: 's1', key: AUTODEL_KEY, value: false, deleted_at: null }]);
     expect(await run()).toBe(0);
     expect(w.calls).toEqual([]);
-    expect(logs).toEqual([]);
+    expect(logs).toEqual(['todo autodel off']);
     put('settings').upsert([{ id: 's1', key: AUTODEL_KEY, value: false, deleted_at: NOW }]);
     expect(await run()).toBe(1);
   });
@@ -86,10 +91,18 @@ describe('完成 7 天后自动删除', () => {
     expect(deletedIds()).toEqual(['ok']);
   });
 
-  it('一条写失败不影响别的条，日志记失败条数', async () => {
+  it('一条写失败不影响别的条，日志里 due 和 n 对不上就是有没删成的', async () => {
     put('todos').upsert([todo('a', 8 * DAY), todo('b', 8 * DAY)]);
     const n = await runTodoAutoDel({ ...deps, remove: async (r) => (r.id === 'a' ? Promise.reject(new Error('x')) : 'saved') });
     expect(n).toBe(1);
-    expect(logs).toEqual(['todo autodel n=1 failed=1']);
+    expect(logs).toEqual(['todo autodel scan=2 due=2 n=1']);
+  });
+
+  it('扫的时候出错（读时钟、时区抛错）：不抛出去，记 todo autodel err=run，返回 0', async () => {
+    put('todos').upsert([todo('a', 8 * DAY)]);
+    const n = await runTodoAutoDel({ ...deps, tz: () => { throw new Error('tz'); } });
+    expect(n).toBe(0);
+    expect(w.calls).toEqual([]);
+    expect(logs).toEqual(['todo autodel err=run']);
   });
 });

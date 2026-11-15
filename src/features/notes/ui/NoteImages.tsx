@@ -13,7 +13,7 @@ import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, ty
 import { ImageAiStatus } from '../../attachments/index.ts';
 import { NoteImageView, type ViewOpen } from './NoteImageView.tsx';
 import { BlobImg, CameraIcon, failKey, ImgIcon } from './ImgParts.tsx';
-import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
+import { TrashLink } from '../../../kit/components/TrashLink.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { useNoteSource, type NoteImagesApi } from '../hooks/note-source.ts';
@@ -36,12 +36,8 @@ export function ImgMsgLine({ msg, className }: { msg: { key: ImgMsgKey; trash: b
   const t = useNotesT();
   return (
     <p className={className} role="alert" data-testid="note-edit-img-msg">
-      {t(msg.key, {})}{' '}
-      {msg.trash ? (
-        <a href={hrefOf('trash')} onClick={(e) => plainClick(e) && void navigate('trash')} data-testid="note-edit-img-trash">
-          {t('notes.img.trash', {})}
-        </a>
-      ) : null}
+      {t(msg.key, {})}
+      {msg.trash ? <TrashLink look="inline" to={['trash']} label={t('notes.img.trash', {})} testId="note-edit-img-trash" /> : null}
     </p>
   );
 }

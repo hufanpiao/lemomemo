@@ -26,6 +26,8 @@ export const listZh = {
   'list.deleted': '已删除',
   'list.undo': '撤销',
   'list.doneToast': '已完成',
+  // “最近删除”入口（审查 11-15 第 2 条：待办页标题下面、设置里自动删除的说明后面，kit TrashLink）
+  'list.trash': '最近删除',
   'list.err.save': '没保存上，稍后再试一次',
   'list.err.readonly': '这条要新版本才能修改',
   // 设置首页“完成 7 天后自动删除”（负责人 11-15 方案；ui/TodoSettings.tsx）

@@ -22,8 +22,10 @@ export type ListMsgKey = keyof typeof listZh & string;
 
 export const useListT = makeUseT({ zh: listZh, ko: listKo });
 
-/** linger：刚打勾、先留在原组的那一条（页面的撤销条开着期间；data/todo-list.ts 的 groupTodos） */
-export function useTodoList(linger: string | null = null) {
+const NONE: ReadonlySet<string> = new Set();
+
+/** linger：刚打勾、先留在原组的那几条（页面的撤销条开着期间；data/todo-list.ts 的 groupTodos）；同一份集合不变时不重算分组，页面要传同一个对象 */
+export function useTodoList(linger: ReadonlySet<string> = NONE) {
   const rows = useCollection<Row>('todos');
   const [project, setProject] = useState<string | null>(null);
   // 每分钟重算一次（“已过 17:00”跨分钟出现）

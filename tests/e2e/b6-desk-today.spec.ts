@@ -10,7 +10,7 @@
 // 评审截图（设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截）：今天页（含抽屉打开）、随手记页（含抽屉），1280×800、1440×900，浅色、深色
 // 点按前等换页淡入放完（page-helpers.ts 的 afterPageFade：分包挂上后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉）
 import { B6_NOW, DESK_USE, inCol, openToday, PAST_ID, seedNotes, seedToday, TODAY_IDS } from './b6-desk-helpers.ts';
-import { afterPageFade, shot, SHOT_DIR } from './page-helpers.ts';
+import { afterPageFade, shot, SHOT_DIR, swipeRow } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
 
@@ -85,8 +85,8 @@ test.describe('B6 电脑版今天页', () => {
     await expect(page.getByTestId('desk-col-1')).toHaveCount(0);
     await expect.poll(async () => Math.abs(((await page.getByTestId('desk-col-0').boundingBox())?.width ?? 0) - total)).toBeLessThan(2);
     await expect(page.getByTestId('desk-saved')).toBeVisible();
-    // 删一条待办：出“已删除 · 撤销”，“布局已保存”收起
-    await page.getByTestId(`today-del-${TODAY_IDS.todo}`).click();
+    // 删一条待办（行尾 × 去掉以后左滑拉到底直接删，负责人 11-15，R-428）：出“已删除 · 撤销”，“布局已保存”收起
+    await swipeRow(page, `today-swipe-${TODAY_IDS.todo}`);
     await expect(page.getByTestId('today-toast')).toBeVisible();
     await expect(page.getByTestId('desk-saved')).toHaveCount(0);
     await expect(page.locator('[data-undo-toast]')).toHaveCount(1);
@@ -143,7 +143,7 @@ test.describe('B6 对齐线框：已过去、今天记的、删开着的那条',
     await page.locator(`[data-open="${TODAY_IDS.todo}"]`).click();
     const drawer = page.getByTestId('today-drawer');
     await expect(drawer.getByTestId('todo-edit-title')).toHaveValue('NEOX 竖版 4K 导出');
-    await page.getByTestId(`today-del-${TODAY_IDS.todo}`).click();
+    await swipeRow(page, `today-swipe-${TODAY_IDS.todo}`);
     await expect(drawer).toHaveCount(0);
     await expect(page.getByTestId('today-toast')).toBeVisible();
   });

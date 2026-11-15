@@ -86,8 +86,9 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
   });
 
   // L17（代码审查复审建议 + 主持人 11-05 收紧、设计复审五 R6-a）：防的是“看着旧画面、点到新页面会改数据的东西”。
-  // 方案 B 下旧页在点页签那一刻就没了：换页 10 ms 点到新页同一位置的删除 × 要吞掉（不删、不出撤销条）；200 ms 点是真点，删掉、有撤销条、能撤销（代码审查方案 B M8）
-  test('L17 换页 10 ms 点今天页待办的删除 ×：吞掉，不删；200 ms 点：真删、有撤销条、能撤销', async ({ page }) => {
+  // 方案 B 下旧页在点页签那一刻就没了：换页 10 ms 点到新页同一位置的打勾圆圈要吞掉（不勾）；200 ms 点是真点，勾上、收进“已过去”（代码审查方案 B M8）。
+  // 原来点的是行尾删除 ×，负责人 11-15 去掉 ×、改左滑删除（R-428），改点同样会改数据的打勾圆圈
+  test('L17 换页 10 ms 点今天页待办的打勾圆圈：吞掉，不勾；200 ms 点：真勾上、收进已过去', async ({ page }) => {
     const TZ = 'Asia/Seoul';
     const day = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
     const row = { user_id: FAKE_USER_ID, tz: TZ, created_at: 1, updated_at: 1, deleted_at: null, undone: false, short: null, id: 't3', title: '买牛奶', project: '', due: day, due_time: null, done: false };
@@ -105,9 +106,9 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
       expect(b, id).not.toBeNull();
       return { x: (b?.x ?? 0) + (b?.width ?? 0) / 2, y: (b?.y ?? 0) + (b?.height ?? 0) / 2 };
     };
-    const del = await centre('today-del-t3');
+    const del = await centre('today-done-t3');
 
-    // 10 ms：页面里点页签、10 ms 后按 × 的坐标发 pointerdown、click（和真手指一样按坐标找元素）
+    // 10 ms：页面里点页签、10 ms 后按打勾圆圈的坐标发 pointerdown、click（和真手指一样按坐标找元素）
     await tab(page, 'todos').click();
     await expect(page.getByTestId('todos')).toBeVisible();
     await finishAll(page);
@@ -128,12 +129,13 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
         }),
       del,
     );
-    expect(hit, '10 ms 时坐标上应是新页的删除 ×').toMatch(/^today-del-t3@\d+$/);
+    expect(hit, '10 ms 时坐标上应是新页的打勾圆圈').toMatch(/^today-done-t3@\d+$/);
     expect(Number(hit.split('@')[1]), '定时器拖过了吞点按窗口').toBeLessThan(100);
     await finishAll(page);
     await page.waitForTimeout(300);
     await expect(page.getByTestId('today-todo-t3')).toBeVisible();
-    await expect(page.getByTestId('today-toast')).toHaveCount(0);
+    await expect(page.getByTestId('today-done-t3')).not.toBeChecked();
+    await expect(page.getByTestId('today-past')).toHaveCount(0);
 
     // 200 ms：真点
     await tab(page, 'todos').click();
@@ -146,10 +148,7 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
     await sinceTab(page, 200);
     await page.mouse.click(del.x, del.y);
     await finishAll(page);
-    await expect(page.getByTestId('today-todo-t3')).toHaveCount(0);
-    await expect(page.getByTestId('today-toast')).toBeVisible();
-    await page.getByTestId('today-toast').getByRole('button').first().click();
-    await expect(page.getByTestId('today-todo-t3')).toBeVisible();
+    await expect(page.getByTestId('today-past')).toContainText('买牛奶');
     await expect(page).toHaveURL(/#\/today$/);
   });
 });

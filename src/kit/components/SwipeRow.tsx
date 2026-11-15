@@ -3,9 +3,11 @@
 // • 手势底层是 motion 的 useHDrag（和月历翻页同一套，R-420 审查第 4 条）：横向先走过起滑距离且比竖向多才算“滑”（抓住指针、直接写 transform 跟手）；
 //   竖着先走就放手不管，行面写 touch-action: pan-y，竖着滚列表交给浏览器；左边缘 20 px 以内起手让给系统返回；电脑上鼠标也能拖（mouse: true）
 // • 松手：拉过操作区一半就停在“露出”，否则收回；滑过之后紧跟的那一下 click 吞掉（不进编辑）
-// • 拉到底直接做（full，可选；负责人 11-15 待办“露按钮 + 拉到底直删”，照 iOS 邮件整行滑删）：给了 full（某个动作的 key）时可以拉过操作区一直拉到整行，
-//   行底换成那个动作的底色（.fullBg）；松手时拉过整行 FULL_RATIO（大半行）就整行滑走、当场做这个动作（日志 swipe full），不用再点按钮；
-//   没过就照上面停在“露出”或收回。做完 FULL_RESET_MS 以后行面放回原位：行被删掉、离场了就什么都不动；没删成（出错）、撤销回来的时候不会一直空着。
+// • 拉到底直接做（full，可选；负责人 11-15 待办“露按钮 + 拉到底直删”，照 iOS 邮件整行滑删）：给了 full（某个动作的 key）时可以拉过操作区一直拉到整行；
+//   松手时拉过整行 FULL_RATIO（大半行）就整行滑走、当场做这个动作（日志 swipe full），不用再点按钮；没过就照上面停在“露出”或收回。
+//   阈值反馈（审查 11-15 第 3 条）：没过 FULL_RATIO 时行底是中性的灰（只有按钮是自己的底色）；跟手拉过了就在外框打 data-full，整行换成那个动作的底色，
+//   来回跨过阈值时跟着打上、摘掉（直接写 DOM 的 dataset，不经 React state，同跟手的 transform；日志 swipe full arm=1|0）；底色过渡写在 CSS，减少动态效果时没有。
+//   做完 FULL_RESET_MS 以后行面放回原位、摘掉 data-full：行被删掉、离场了就什么都不动；没删成（出错）、撤销回来的时候不会一直空着。
 //   随手记、纪念日不开
 // • 露着的时候（照 iOS，R-420 审查第 5、7 条主持人定）：
 //   – 行面可以直接拖回去；点一下行面是收起，那一下 click 吞掉
@@ -20,6 +22,13 @@
 // • 运行日志 log 必传（同 Mist：kit 不直接引 platform，调用方传 platform 的 rlog；必传就不会有哪一处忘了接，R-420 审查第 8 条）：
 //   按下、定方向、松手、取消各记一行，松手记按下到松手的毫秒数（ms=），不记内容
 // • 只渲染和手势，不碰数据：操作做什么由调用方给 onClick
+//
+// 谁负责收起别的行（一次只露一行；审查 11-15 第 10 条记成表，代码不动）：
+//   | 地方                          | 管什么                                                                                         |
+//   | start（这一行行面上的按下）    | 别的行露着、按在这一行行面上：先收起那一行，这一下补来的 click 吞掉（不打开这一行），接着横滑照常   |
+//   | document 捕获监听（露着时挂）  | 按在所有行面、这一行操作按钮以外的地方（页面别处、顶栏、底栏）：收起这一行；落在行面上的交给 start    |
+//   | useLayer（露着时算一层）       | 按 Esc、层栈要收起（它是栈顶时）：收起这一行；焦点由 closeNow 交还行面，层栈不另还                  |
+//   另外这一行自己露出时（open 变 true 的 effect）会先收起模块里记着的上一条（openRow），保证同一时间只有一条
 import { useEffect, useRef, useState, type ElementType, type ReactNode } from 'react';
 import { useHDrag } from '../../motion/gestures.ts';
 import { useLayer } from '../hooks/useLayer.ts';
@@ -75,6 +84,15 @@ export function SwipeRow({ actions, children, as: Tag = 'div', className, disabl
   const span = (): number => (fullAct ? (drag.bind.ref.current?.offsetWidth ?? 0) : width());
   const resetT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(resetT.current), []);
+  const wrap = useRef<HTMLElement>(null);
+  /** 拉过阈值没有：外框打 / 摘 data-full（整行底色跟着换，CSS），状态变了才记日志 */
+  const arm = (on: boolean): void => {
+    const el = wrap.current;
+    if (!el || ('full' in el.dataset) === on) return;
+    if (on) el.dataset['full'] = '';
+    else delete el.dataset['full'];
+    log(`swipe full arm=${on ? 1 : 0}`);
+  };
 
   /** 收起这一行（内容每次渲染更新）；me 是它固定身份的外壳，记在 openRow 里比“是不是这一行” */
   const closeNow = useRef(() => {});
@@ -97,7 +115,12 @@ export function SwipeRow({ actions, children, as: Tag = 'div', className, disabl
       log(`swipe down type=${e.pointerType} open=${openNow.current ? 1 : 0}`);
       return openNow.current ? -width() : 0;
     },
-    clamp: (x) => Math.min(0, Math.max(-span(), x)),
+    clamp: (x) => {
+      const row = span();
+      const c = Math.min(0, Math.max(-row, x));
+      if (fullAct) arm(c < -row * FULL_RATIO);
+      return c;
+    },
     end: ({ axis, x, cancel, ms }) => {
       const w = width();
       const slid = axis === 'h' && !cancel;
@@ -109,9 +132,13 @@ export function SwipeRow({ actions, children, as: Tag = 'div', className, disabl
         setOpen(false);
         fullAct.onClick();
         clearTimeout(resetT.current);
-        resetT.current = setTimeout(() => drag.place(0, false), FULL_RESET_MS);
+        resetT.current = setTimeout(() => {
+          drag.place(0, false);
+          arm(false);
+        }, FULL_RESET_MS);
         return;
       }
+      arm(false);
       const keep = slid && x < -w / 2;
       const was = tapCloses.current;
       tapCloses.current = false;
@@ -163,7 +190,7 @@ export function SwipeRow({ actions, children, as: Tag = 'div', className, disabl
   useLayer(open, { name: 'swipe', onEsc: me, back: () => [] });
 
   return (
-    <Tag className={[styles.wrap, fullAct?.danger && styles.fullBg, className].filter(Boolean).join(' ')} data-swipe={open ? 'open' : undefined} {...rest}>
+    <Tag ref={wrap} className={[styles.wrap, fullAct?.danger && styles.fullBg, className].filter(Boolean).join(' ')} data-swipe={open ? 'open' : undefined} {...rest}>
       <div
         className={styles.face}
         data-swipe-face=""
