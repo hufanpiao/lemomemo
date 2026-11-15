@@ -95,38 +95,45 @@ describe('TC-B5-10：离开满时长才上锁（注入时间）', () => {
 });
 
 describe('TC-B5-47：错误码怎么落', () => {
-  it('① vault_locked：上锁、弹解锁（waiting）；解锁成功后原请求自动重试一次，第二次带新令牌', async () => {
+  it('① vault_locked（后台队列发的）：上锁、弹解锁（waiting）、队列暂停不丢；解锁后队列重发一次，第二次带新令牌', async () => {
     let n = 0;
     const { s, calls } = await unlocked({
       delete: () => (++n === 1 ? { ok: false, code: 'vault_locked' } : { ok: true, vault_token: TOK2, expires_at: 9e12 }),
     });
-    const p = s.remove(NID);
+    const row = s.store.get(NID);
+    if (!row) throw new Error('no row');
+    s.queue.deleted({ ...row, deleted_at: 5 }, true);
     await vi.waitFor(() => expect(s.get().waiting).toBe(true));
     expect(s.get()).toMatchObject({ phase: 'locked', listed: false });
+    expect(s.queue.size()).toBe(1);
     await s.unlock('1234');
-    const r = await p;
-    expect(r.ok).toBe(true);
-    expect(calls.filter((c) => c.action === 'delete')).toHaveLength(2);
+    await vi.waitFor(() => expect(s.queue.size()).toBe(0));
+    const dels = calls.filter((c) => c.action === 'delete');
+    expect(dels).toHaveLength(2);
+    expect(dels[1]?.token).not.toBeNull();
     expect(s.get().waiting).toBe(false);
   });
 
-  it('① 重试还是 vault_locked：停下（只重试一次），保持锁着', async () => {
-    const { s, calls } = await unlocked({ delete: () => ({ ok: false, code: 'vault_locked' }) });
-    const p = s.remove(NID);
-    await vi.waitFor(() => expect(s.get().waiting).toBe(true));
-    await s.unlock('1234');
-    const r = await p;
+  it('① 不进队列的写（永久删除）锁着：直接回 vault_locked、弹解锁卡；会话不排队等，解锁后不自己重发', async () => {
+    const { s, calls } = await unlocked({ purge: () => ({ ok: false, code: 'vault_locked' }) });
+    const r = await s.purge([NID]);
     expect(r).toMatchObject({ ok: false, code: 'vault_locked' });
-    expect(calls.filter((c) => c.action === 'delete')).toHaveLength(2);
-    expect(s.get().phase).toBe('locked');
+    expect(s.get()).toMatchObject({ phase: 'locked', waiting: true });
+    await s.unlock('1234');
+    expect(calls.filter((c) => c.action === 'purge')).toHaveLength(1);
+    expect(s.get().phase).toBe('unlocked');
   });
 
-  it('① 取消解锁：原请求回失败，不再发', async () => {
+  it('① 取消解锁：等同主动上锁，队列整个丢掉（H2），不再发', async () => {
     const { s, calls } = await unlocked({ delete: () => ({ ok: false, code: 'vault_locked' }) });
-    const p = s.remove(NID);
+    const row = s.store.get(NID);
+    if (!row) throw new Error('no row');
+    s.queue.deleted({ ...row, deleted_at: 5 }, true);
     await vi.waitFor(() => expect(s.get().waiting).toBe(true));
     s.cancelWait();
-    expect((await p).ok).toBe(false);
+    expect(s.get()).toMatchObject({ phase: 'locked', waiting: false });
+    expect(s.queue.size()).toBe(0);
+    expect(s.store.getSnapshot().dropped).toBe(1);
     expect(calls.filter((c) => c.action === 'delete')).toHaveLength(1);
   });
 

@@ -1,7 +1,7 @@
 // 隐私记给别的功能用的几块（经 vault/index.ts 的一个懒加载导出 VaultParts 分发，首屏只多一个 lazy，B5 首屏额度）
 // • lockrow：随手记列表顶部的入口行（线框 s7 LOCKROW）：“🔒 隐私记 已上锁 … Face ID 解锁 ›”，点了进 #/vault；
 //   不写条数（负责人 11-15：“不管解锁没解锁里面几条这个不用显示”）
-// • move：把一条普通随手记移进隐私记（S7）：没设密码先去设；锁着就弹解锁卡，解锁后自动重试一次（TC-B5-47 ①）；
+// • move：把一条普通随手记移进隐私记（S7）：没设密码先去设；锁着就弹解锁卡，解锁后这里再移一次（TC-B5-47 ①；会话不排队等，M1）；
 //   带附件回 has_files → “带附件的随手记暂时不能移进隐私记”（D13）；结果回 onDone(true / false)
 // • settings：设置 › 隐私记（VaultSettings.tsx）
 // • lockrow、findrow、move 读隐私记状态前先 check（useVaultChecked）：离开隐私记页满自动上锁时长的这时就锁上（负责人 11-15）
@@ -25,6 +25,21 @@ export default function VaultParts(p: VaultPartsProps) {
   if (p.part === 'findrow') return <FindRow onGo={p.onGo} />;
   if (p.part === 'move') return <MoveToVault noteId={p.noteId} onDone={p.onDone} />;
   return <VaultSettings />;
+}
+
+/** 弹着解锁卡（waiting）时等结果：解锁了回 true，取消了（不再 waiting、没解锁）回 false；没在等回 false */
+function unlockedAgain(s: ReturnType<typeof useVault>['s']): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const look = (): boolean => {
+      const st = s.get();
+      if (st.waiting) return false;
+      off();
+      resolve(st.phase === 'unlocked');
+      return true;
+    };
+    const off = s.subscribe(() => void look());
+    look();
+  });
 }
 
 /** onGo：跳去隐私记前先关掉查找面板（面板是模态框，不关会盖在隐私记页上） */
@@ -104,7 +119,9 @@ function MoveToVault({ noteId, onDone }: { noteId: string; onDone(moved: boolean
       }
       // 离开隐私记页满时长的先锁上：移进去要重新解锁
       s.check();
-      const r = await s.importNote(noteId);
+      let r = await s.importNote(noteId);
+      // 锁着：会话已经弹了解锁卡（waiting），不在会话里排队等；这里等用户解锁了再移一次，取消了就算没移（M1）
+      if (!r.ok && r.code === 'vault_locked' && (await unlockedAgain(s))) r = await s.importNote(noteId);
       if (r.ok) done.current(true);
       else if (r.code === 'vault_locked') done.current(false);   // 取消了解锁
       else setErr(r.code);

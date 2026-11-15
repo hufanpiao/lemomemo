@@ -6,70 +6,81 @@ import { held, listOk, make, NID, note, TOK, TOK2, tokenOk, unlocked } from './s
 
 const locked = { ok: false, code: 'vault_locked' };
 
-describe('第 8 条：令牌过期的上锁不作废在飞的写请求', () => {
-  it('保存在路上时别的请求碰到令牌过期：保存回来也是过期 → 等解锁、重发一次，最后成功', async () => {
+describe('M1：上锁只有一套做法（上锁以后回来的一律当失败；令牌过期时队列暂停、解锁后整条重发）', () => {
+  const settle = async (): Promise<void> => {
+    for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 0));
+  };
+  const row = () => ({ ...noteRowOf(note()), body: '队列里的' });
+
+  it('队列的保存在路上时令牌过期上锁、保存回来成功：也当失败（锁着不收令牌），解锁后整条重发一次', async () => {
     const h = held();
     let saves = 0;
-    const { s, calls } = await unlocked({ save: () => (++saves === 1 ? h.p : { ok: true, vault_token: TOK2, expires_at: 9e12 }), delete: () => locked });
-    const p = s.save({ id: NID, title: '体检报告', body: '血压 120/80' });
-    void s.remove(NID);
-    await new Promise((r) => setTimeout(r, 0));
+    const { s, calls } = await unlocked({ save: () => (++saves === 1 ? h.p : { ok: true, vault_token: TOK2, expires_at: 9e12 }), purge: () => locked });
+    s.queue.wrote(row(), false);
+    await settle();
+    await s.purge([NID]);
     expect(s.get()).toMatchObject({ phase: 'locked', waiting: true });
-    h.release(locked);
-    await new Promise((r) => setTimeout(r, 0));
-    expect((await s.unlock('1234')).ok).toBe(true);
-    const r = await p;
-    expect(r).toEqual({ ok: true, value: NID });
-    expect(calls.filter((c) => c.action === 'save')).toHaveLength(2);
-  });
-
-  it('保存在路上时令牌过期上锁、保存回来成功：照常回成功，但锁着不收令牌、不拉明文', async () => {
-    const h = held();
-    const { s } = await unlocked({ save: () => h.p, delete: () => locked });
-    const p = s.save({ id: NID, title: '体检报告', body: '血压 120/80' });
-    void s.remove(NID);
-    await new Promise((r) => setTimeout(r, 0));
     h.release({ ok: true, vault_token: TOK2, expires_at: 9e12 });
-    expect(await p).toEqual({ ok: true, value: NID });
+    await settle();
     expect(s.hasToken()).toBe(false);
-    expect(s.get()).toMatchObject({ phase: 'locked', listed: false });
+    expect(s.queue.size()).toBe(1);
+    expect((await s.unlock('1234')).ok).toBe(true);
+    await settle();
+    expect(calls.filter((c) => c.action === 'save')).toHaveLength(2);
+    expect(s.queue.size()).toBe(0);
   });
 
-  it('等解锁时用户取消：在飞的保存回失败（不是悄悄丢掉），也不再弹解锁', async () => {
-    const h = held();
-    const { s } = await unlocked({ save: () => h.p, delete: () => locked });
-    const p = s.save({ id: NID, title: 't', body: 'b' });
-    void s.remove(NID);
-    await new Promise((r) => setTimeout(r, 0));
-    h.release(locked);
-    await new Promise((r) => setTimeout(r, 0));
-    s.cancelWait();
-    const r = await p;
-    expect(r).toMatchObject({ ok: false, code: 'vault_locked' });
-    expect(s.get().waiting).toBe(false);
+  it('锁着（等解锁）时补交的改动只记字段：解锁拉完列表合并成整行再发', async () => {
+    const { s, calls } = await unlocked({ purge: () => locked });
+    await s.purge([NID]);
+    s.queue.patched(NID, { body: '锁着时补交的' });
+    await settle();
+    expect(calls.filter((c) => c.action === 'save')).toHaveLength(0);
+    expect((await s.unlock('1234')).ok).toBe(true);
+    await settle();
+    const sent = calls.filter((c) => c.action === 'save');
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.req).toMatchObject({ title: '体检报告', body: '锁着时补交的' });
+    expect(s.store.get(NID)?.['body']).toBe('锁着时补交的');
   });
 
   it('读请求（list）在路上时令牌过期上锁：回来的明文照样丢', async () => {
     const h = held();
     let n = 0;
-    const { s } = await unlocked({ list: () => (++n === 1 ? listOk() : h.p), delete: () => locked });
+    const { s } = await unlocked({ list: () => (++n === 1 ? listOk() : h.p), purge: () => locked });
     const p = s.list();
-    void s.remove(NID);
-    await new Promise((r) => setTimeout(r, 0));
+    await s.purge([NID]);
     h.release(listOk([note({ title: '新的' })]));
     expect((await p).ok).toBe(false);
     expect(s.store.getSnapshot().notes).toEqual([]);
   });
 
-  it('用户主动上锁照旧作废在飞的保存（不重发）', async () => {
+  it('用户主动上锁：在飞的保存回来不算、队列丢掉记个数，解锁后不重发', async () => {
     const h = held();
     const { s, calls } = await unlocked({ save: () => h.p });
-    const p = s.save({ id: NID, title: 't', body: 'b' });
+    s.queue.wrote(row(), false);
+    await settle();
     s.lock();
     h.release({ ok: true, vault_token: TOK2, expires_at: 9e12 });
-    expect((await p).ok).toBe(false);
+    await settle();
     expect(s.hasToken()).toBe(false);
+    expect(s.store.getSnapshot().dropped).toBe(1);
+    expect((await s.unlock('1234')).ok).toBe(true);
+    await settle();
     expect(calls.filter((c) => c.action === 'save')).toHaveLength(1);
+  });
+
+  it('H1：令牌过期等解锁时离开计时不清、照常走，满时长硬上锁丢队列', async () => {
+    const h = held();
+    const { s, clock } = await unlocked({ purge: () => locked, save: () => h.p });
+    s.hide(clock.ms, 'app');
+    s.queue.wrote(row(), false);
+    await s.purge([NID]);
+    expect(s.get().waiting).toBe(true);
+    expect(s.check(clock.ms + 61_000, 1)).toBe(true);
+    expect(s.get()).toMatchObject({ phase: 'locked', waiting: false });
+    expect(s.queue.size()).toBe(0);
+    expect(s.store.getSnapshot().dropped).toBe(1);
   });
 });
 
@@ -81,6 +92,8 @@ describe('第 22 条配合：续期被拒（超过 12 小时、或闲置过期�
   it('打字触发续期回 vault_locked → 等解锁；队列里的改动解锁后发一次，拉完列表本机这一份盖回仓库', async () => {
     let renews = 0;
     const { s, calls, clock } = await unlocked({ renew: () => (++renews === 1 ? locked : tokenOk), save: (_r, tok) => (tok ? { ok: true, vault_token: TOK2, expires_at: 9e12 } : locked) });
+    // 人在隐私记页上（不在页上的话等解锁时离开计时照走，6 分钟早就硬上锁了，H1）
+    s.show(clock.ms, 1, 'page');
     clock.ms += 6 * 60_000;
     s.touch();
     await settle();
@@ -154,7 +167,7 @@ describe('第 14 条：运行日志', () => {
     expect(all).toMatch(/vault state unlocked/);
     expect(all).toMatch(/vault fail pin_wrong left=3/);
     expect(all).toMatch(/vault renew ok/);
-    expect(all).toMatch(/vault stale hard ok/);
+    expect(all).toMatch(/vault stale ok/);
     expect(all).toMatch(/vault image full wait try_later/);
     for (const bad of ['秘密标题', '秘密正文', '8642', '1234', TOK, TOK2, IMGX]) expect(all).not.toContain(bad);
   });

@@ -162,12 +162,27 @@ describe('发送队列', () => {
     expect(h.store.getSnapshot().failed.has(NID)).toBe(true);
   });
 
-  it('解锁卡点了取消（会话回 vault_locked）：整个队列丢掉、记下个数和一行 vault queue drop', async () => {
-    const h = harness({ save: () => ({ ok: false, code: 'vault_locked' }) });
+  it('令牌过期（会话上锁时 pause，save 回 vault_locked）：这一条原样留着不退避；resume 后整条重发', async () => {
+    let locked = true;
+    const h = harness({ save: () => (locked ? { ok: false, code: 'vault_locked' } : OK) });
+    h.q.wrote(row('a'), true);
+    h.q.pause();
+    await settle();
+    expect(h.q.size()).toBe(1);
+    expect(h.sleeps).toEqual([]);
+    expect(h.store.getSnapshot().failed.has(NID)).toBe(false);
+    locked = false;
+    h.q.resume();
+    await settle();
+    expect(h.saves.map((r) => r.body)).toEqual(['a', 'a']);
+    expect(h.q.size()).toBe(0);
+  });
+
+  it('取消解锁、主动上锁（会话调 dropAll）：整个队列丢掉、记下个数和一行 vault queue drop', () => {
+    const h = harness({ save: () => new Promise(() => undefined) });
     h.q.wrote(row('a'), true);
     h.q.wrote({ ...row('b'), id: IMG }, true);
-    await settle();
-    expect(h.q.size()).toBe(0);
+    expect(h.q.dropAll('cancel')).toBe(2);
     expect(h.store.getSnapshot().dropped).toBe(2);
     expect(h.logs).toContain('vault queue drop n=2 why=cancel');
   });

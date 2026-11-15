@@ -4,11 +4,11 @@
 // • 同一条两次 save 至少隔 SAVE_GAP_MS（1.5 秒）：编辑页停笔 800ms 存一次，连着打字不会每 0.8 秒打一次服务器（每人每分钟 60 次）
 // • 失败只按 vault-errors.ts 的落法（kind）分：
 //   - retry（offline、try_later、rate_limited）：2 秒、5 秒、15 秒退避 3 次，还不行标 failed（列表行、编辑页“没保存上 · 重试”），online 事件再试
-//   - unlock（vault_locked）：会话的 run 已经弹过解锁卡、解锁后重试过一次；走到这里说明用户点了取消 → 整个队列丢掉（安全优先）
-//   - relock、revoked：会话已经硬上锁、整个队列丢掉了（这里兜一下）；message（not_found、bad_request、too_large……）：标 failed，不自动重试
-// • 上锁：令牌过期那种（soft）队列不动——在飞的那一次由会话等解锁后重发，排着的接着发，解锁拉完列表用 overlay() 把本机还没发完的盖回仓库；
-//   作废在飞请求的上锁（主动上锁、离开超时、relock、revoked）由会话调 dropAll()：全部丢掉、个数记进仓库（解锁后报“有 N 处改动没来得及保存”），
-//   运行日志 vault queue drop n=（不带内容）
+//   - unlock（vault_locked，含上锁以后才回来的 STALE）：会话已经上锁、暂停了队列（pause）；这一条原样留着，解锁后 resume 整条重发
+//   - relock、revoked：会话已经上锁、整个队列丢掉了（这里兜一下）；message（not_found、bad_request、too_large……）：标 failed，不自动重试
+// • 上锁（session.ts 的 lock）：令牌过期那种 pause()——不发、不丢，锁着时编辑页卸下补交的改动 patched() 先记下来（只有改了的字段），
+//   解锁拉完列表 overlay() 合并到拉来的那一行、盖回仓库，resume() 接着发；
+//   别的上锁调 dropAll()：全部丢掉、个数记进仓库（解锁后报“有 N 处改动没来得及保存”），运行日志 vault queue drop n=（不带内容）
 // • 运行日志不记标题、正文、图片 id，只记动作、结果码、次数
 // • 不碰 core/cache、outbox、log（A18）；纯 TS，不准 import React（A1）
 import type { VaultImageAdd } from '../../../../shared/schema/vault.ts';
@@ -69,6 +69,8 @@ interface Job {
   removes: Set<string>;
   /** 服务器上已经有这一条 */
   known: boolean;
+  /** 锁着时记下的改动（row 只有改了的字段）：overlay 合并成整行以前不发 */
+  partial: boolean;
   lastSave: number;
   tries: number;
   failed: boolean;
@@ -97,6 +99,8 @@ const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.
 export function createVaultQueue(d: QueueDeps) {
   const jobs = new Map<string, Job>();
   let running = false;
+  /** 令牌过期上锁期间：不发 */
+  let paused = false;
   /** 正在发的那一条（discard 不能拿掉它：请求已经在路上） */
   let current: string | null = null;
   /** dropAll 一次加 1：在飞的那一次回来发现变了就什么都不做 */
@@ -105,10 +109,10 @@ export function createVaultQueue(d: QueueDeps) {
   const jobOf = (row: Row, known: boolean): Job => {
     let j = jobs.get(row.id);
     if (!j) {
-      j = { id: row.id, row, v: 0, dirty: false, del: null, adds: new Map(), removes: new Set(), known, lastSave: 0, tries: 0, failed: false, waiters: [] };
+      j = { id: row.id, row, v: 0, dirty: false, del: null, adds: new Map(), removes: new Set(), known, partial: false, lastSave: 0, tries: 0, failed: false, waiters: [] };
       jobs.set(row.id, j);
     }
-    j.row = row;
+    j.row = j.partial ? { ...j.row, ...row } : row;
     return j;
   };
 
@@ -141,8 +145,10 @@ export function createVaultQueue(d: QueueDeps) {
   async function fail(j: Job, code: VaultCode, imageId: string | null): Promise<void> {
     const kind = vaultErrorAction(code).kind;
     d.log(`vault queue fail ${code}${imageId ? ' img' : ''} try=${j.tries}`);
-    if (kind === 'unlock' || kind === 'relock' || kind === 'revoked') {
-      dropAll(kind === 'unlock' ? 'cancel' : kind);
+    // 会话上锁时已经 pause：原样留着等 resume（没暂停的 vault_locked 不会有，万一有就落成 failed，不空转）
+    if (kind === 'unlock' && paused) return;
+    if (kind === 'relock' || kind === 'revoked') {
+      dropAll(kind);
       return;
     }
     const wait = kind === 'retry' ? QUEUE_BACKOFF[j.tries] : undefined;
@@ -218,8 +224,8 @@ export function createVaultQueue(d: QueueDeps) {
     if (running) return;
     running = true;
     try {
-      for (;;) {
-        const j = [...jobs.values()].find((x) => !x.failed);
+      while (!paused) {
+        const j = [...jobs.values()].find((x) => !x.failed && !x.partial);
         if (!j) break;
         current = j.id;
         await step(j);
@@ -246,6 +252,21 @@ export function createVaultQueue(d: QueueDeps) {
       if (!j.known) d.store.setFresh(j.id, true);
       j.dirty = true;
       j.v += 1;
+      kick();
+    },
+    /** 锁着（令牌过期、仓库已清）时编辑页卸下补交的改动：只记改了的字段，解锁拉完列表 overlay 合并成整行再发 */
+    patched(id: string, data: Record<string, unknown>): void {
+      const j = jobs.get(id) ?? Object.assign(jobOf({ id }, true), { partial: true });
+      j.row = { ...j.row, ...data, id };
+      j.dirty = true;
+      j.v += 1;
+    },
+    /** 令牌过期上锁：停下（不丢）；解锁后 resume */
+    pause(): void {
+      paused = true;
+    },
+    resume(): void {
+      paused = false;
       kick();
     },
     /** 删除、撤销删除 */
@@ -319,7 +340,17 @@ export function createVaultQueue(d: QueueDeps) {
     },
     /** 解锁拉完列表以后：本机还没发完的那一份盖回仓库（行、待传的图、要删的图、没保存上的标记） */
     overlay(): void {
-      for (const j of jobs.values()) {
+      for (const j of [...jobs.values()]) {
+        if (j.partial) {
+          // 锁着时记下的改动：合并到拉来的那一行；服务器上已经没有这一条（别处永久删了）就丢掉
+          const base = d.store.get(j.id);
+          if (!base) {
+            jobs.delete(j.id);
+            continue;
+          }
+          j.row = { ...base, ...j.row };
+          j.partial = false;
+        }
         d.store.put(j.row);
         for (const a of j.adds.values()) {
           d.store.putImage(imageRowOf(j.id, { id: a.id, has_thumb: a.thumb !== null, width: a.width, height: a.height, bytes: a.full.size, deleted_at: null }));
