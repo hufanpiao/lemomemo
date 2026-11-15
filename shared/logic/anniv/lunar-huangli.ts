@@ -8,7 +8,7 @@
 import { parseDate, type DateStr } from '../../core/date.ts';
 import { HUANGLI_DAYS, HUANGLI_WORDS } from './lunar-huangli-data.ts';
 import { lunarMonthName, solarTermsOfYear, toLunar } from './lunar.ts';
-import { ZH_DAY_NAMES } from './lunar-names-data.ts';
+import { DI_ZHI, TIAN_GAN, ZH_DAY_NAMES } from './lunar-names-data.ts';
 
 export interface Huangli {
   /** 农历日：“初七” */
@@ -22,8 +22,6 @@ export interface Huangli {
   readonly ji: readonly string[];
 }
 
-const GAN = '甲乙丙丁戊己庚辛壬癸';
-const ZHI = '子丑寅卯辰巳午未申酉戌亥';
 const DAY_MS = 86_400_000;
 /** 1970-01-01（第 0 天）的日干支序号：辛巳 = 17 */
 const EPOCH_JIAZI = 17;
@@ -36,7 +34,7 @@ function itemAt<T>(arr: readonly T[], i: number): T | undefined {
 }
 
 /** 干支名：序号 0 甲子 … 59 癸亥 */
-export const ganzhiName = (i: number): string => GAN.charAt(mod(i, 10)) + ZHI.charAt(mod(i, 12));
+export const ganzhiName = (i: number): string => TIAN_GAN.charAt(mod(i, 10)) + DI_ZHI.charAt(mod(i, 12));
 
 /** 日干支序号（0 甲子 … 59 癸亥） */
 export function dayJiazi(date: DateStr): number {
