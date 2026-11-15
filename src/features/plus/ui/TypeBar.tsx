@@ -1,6 +1,9 @@
 // 打字条（B3 任务单 S2、FA-2；定稿线框“点一下＋打字”；R-353）
 // • 贴键盘上沿，打开就聚焦；边打边预览“会记成这样”；回车或“记下”保存
 // • 下滑把手 / “收起” / Esc：已打的字留草稿再关（“已记下”提示条还在时只收打字条、提示条留着，负责人 11-12 定）；“展开编辑”：把字和日历页选中的那天交给调用方开完整新建页
+// • 收起只有一个入口 settle(reason)（前端-17）：收起按钮、Esc、下滑、点空白（没打字）、记下后自动收起、查找、判成别的意图、展开编辑、换页（App 卸掉）
+//   都走它，收键盘、草稿（DRAFT 表：留 / 清 / 不动）、只收打字条还是真正关、运行日志 typebar settle reason= fold=0|1|end 都在这一处；
+//   换页原来什么都不做（打的字丢了），判成查找后提示条到时原来会写空草稿删掉 toAssist 写的原话，两处都按表改成和别的路一致
 // • 过去的月日：出确认行“补记 / 记到”，选了才保存；关掉确认行时输入条里只留等确认那条的原文（同一句里已经存了的去掉），
 //   去不干净时原话整句留着，输入条上方提示“同一句里其他几条已经记下了”（主持人 11-07 定）
 // • 打字条开着时，“已记下 · 撤销”提示条抬到打字条上方（负责人 11-11 选“现在就挪到打字条上方”：原来两者都贴 --dock-bottom，提示条被打字条压住、点不到）：
@@ -23,7 +26,7 @@
 // • 聚焦一律原地聚焦（台账 Q-8，platform/viewport.ts 文件头）：iPhone 上系统为了露出输入框会把页面滚一段，滚过以后光标画到“展开编辑”左边；
 //   打开时 focusInPlace，输入框挂 inPlaceTouchStart / inPlaceTouchEnd（没聚焦时的一下点改成原地聚焦）。打字条贴键盘照旧靠 --dock-bottom
 // • form 挂 onMouseDown={keepFieldFocus}（台账 Q-25）：按钮上按下不让输入框失焦，键盘不收、按钮不挪，“记下”等第一下就点得动；
-//   “收起”（close）自己先 blur 收键盘，“展开编辑”关掉打字条、输入框跟着卸掉，记下后自动收起照旧 blur
+//   收起（settle）自己先 blur 收键盘，“展开编辑”关掉打字条、输入框跟着卸掉，记下后自动收起照旧 blur
 // • 打字条后面的整页液态玻璃（R-399，负责人 11-11“按+出现的输入框之外的后面背景全做成液态模糊玻璃”，11-12 定中档 16px、点模糊处收起）：
 //   打字条画着就画这一层，收起（folded）或关掉就没；组件和样式是 kit 的 Mist（和随手记 R-401 共用），层级 --z-mist；点它见上面“点页面空白处”。
 //   出现、消失各记一行运行日志 typebar mist on/off（只记状态和实际生效的滤镜）
@@ -62,6 +65,15 @@ export const SWIPE_CLOSE_PX = 40;
 export const LIFT_GAP_PX = 8;
 /** 手上还有没落定的内容（打了字、确认行在问、正在整理）：点空白、记下后都只收键盘，不收起打字条 */
 const unsettled = (s: TypeBarState): boolean => s.text.trim() !== '' || s.asking !== null || s.status === 'organizing';
+
+/** 打字条收起的由来（settle 的 reason，运行日志 typebar settle reason=…）：
+ *  button 点“收起”、esc、swipe 下滑把手、blank 没打字点空白、saved 记下后自动收起、find 回车查找、asked 判成别的意图交给结果层、
+ *  expand “展开编辑”、route 换页（App 直接卸掉打字条） */
+export type SettleReason = 'button' | 'esc' | 'swipe' | 'blank' | 'saved' | 'find' | 'asked' | 'expand' | 'route';
+/** 各由来的草稿：keep 留已打的字（空串即删）；drop 清掉（字带去新建页了）；none 不动（原话已经由 toAssist 写进草稿） */
+const DRAFT: Record<SettleReason, 'keep' | 'drop' | 'none'> = {
+  button: 'keep', esc: 'keep', swipe: 'keep', blank: 'keep', saved: 'keep', route: 'keep', find: 'none', asked: 'none', expand: 'drop',
+};
 
 
 /** 提示条跟着打字条顶端走：量打字条高度写进外壳的 --type-lift；收起了就清掉（回到底栏上方） */
@@ -125,6 +137,63 @@ function useGripClose(close: () => void) {
   };
 }
 
+interface SettleDeps {
+  s: TypeBarState;
+  folded: boolean;
+  setFolded(): void;
+  input: RefObject<HTMLInputElement | null>;
+  day: DateStr | null;
+  onExpand(text: string, day: DateStr | null): void;
+  onClose(): void;
+}
+
+/** 收起打字条的唯一入口 settle(reason)（前端-17；负责人 11-12 选“统一成留着提示条”）：先收键盘（form 拦了按钮上的失焦，Q-25；焦点不由层栈还）；
+ *  “已记下 · 撤销”提示条还在（展开编辑、换页除外，页面要走了）：只收打字条，提示条留满 8 秒、仍可撤销，字留在状态里，提示条没了按同一由来收尾；
+ *  没有提示条：按由来处理草稿（DRAFT）再关。每次记一行 typebar settle reason= fold=0|1，收尾时 fold=end（只记由来，不记字）。
+ *  App 换页直接卸掉打字条时，没走过 settle 的按 route 收 */
+function useSettle(d: SettleDeps): (reason: SettleReason) => void {
+  /** 只收了打字条时记着由来；已经 onClose / onExpand 过就是 done（App 随后卸掉时不再按 route 收一次） */
+  const pending = useRef<SettleReason>('button');
+  const done = useRef(false);
+  const finish = (reason: SettleReason): void => {
+    done.current = true;
+    const how = DRAFT[reason];
+    if (how === 'drop') d.s.dropDraft();
+    const after = (): void => {
+      if (reason === 'expand') d.onExpand(d.s.text, d.day);
+      else if (reason !== 'route') d.onClose();
+    };
+    // route：没打字不写（空串会删掉已有草稿；StrictMode 挂上又卸的那一下也走这里）
+    if (how === 'keep' && !(reason === 'route' && d.s.text.trim() === '')) void d.s.stash().then(after);
+    else after();
+  };
+  const settle = (reason: SettleReason): void => {
+    const fold = d.s.notice !== null && reason !== 'expand' && reason !== 'route';
+    rlog(`typebar settle reason=${reason} fold=${fold ? 1 : 0}`);
+    d.input.current?.blur();
+    pending.current = reason;
+    if (fold) d.setFolded();
+    else finish(reason);
+  };
+  const live = useRef({ settle, finish });
+  live.current = { settle, finish };
+  const { folded } = d;
+  const notice = d.s.notice !== null;
+  useEffect(() => {
+    if (!folded || notice) return;
+    rlog(`typebar settle reason=${pending.current} fold=end`);
+    live.current.finish(pending.current);
+  }, [folded, notice]);
+  // 挂上时重置 done：StrictMode 卸了又挂的那一下不算收起过
+  useEffect(() => {
+    done.current = false;
+    return () => {
+      if (!done.current) live.current.settle('route');
+    };
+  }, []);
+  return settle;
+}
+
 const dayOf = (it: AiItem): string => {
   const d = it.kind === 'event' ? it.date : it.due;
   return [d ? d.slice(5) : '', it.time ?? ''].filter(Boolean).join(' ');
@@ -139,7 +208,7 @@ function hasTyping(el: EventTarget | null): boolean {
 
 export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit, opened, onClose }: TypeBarProps) {
   const t = usePlusT();
-  const s = useTypeBar({ day, callAi, writer, online, onAsked: () => asked() });
+  const s = useTypeBar({ day, callAi, writer, online, onAsked: () => live.current.settle('asked') });
   const input = useRef<HTMLInputElement>(null);
 
   // 收起了打字条、只留提示条（Q-10）：再点“＋”展开；提示条没了就真正关掉
@@ -155,27 +224,17 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     if (!folded) focusInPlace(input.current, 'open');
   }, [folded]);
   const bar = useRef<HTMLFormElement>(null);
-  /** 收起（“收起”、Esc、下滑、点模糊处、记下后自动收起都走这一个；负责人 11-12 选“统一成留着提示条”）：先收键盘（form 拦了按钮上的失焦，Q-25）；
-   *  “已记下 · 撤销”提示条还在：只收打字条，提示条留满 8 秒、仍可撤销，字留在状态里，提示条没了由下面的 effect 留草稿再真正关；
-   *  没有提示条：已打的字留草稿再关 */
-  const close = (): void => {
-    input.current?.blur();
-    if (s.notice) setFolded();
-    else void s.stash().then(onClose);
-  };
-  const live = useRef({ s, close });
-  live.current = { s, close };
+  const settle = useSettle({ s, folded, setFolded, input, day, onExpand, onClose });
+  const live = useRef({ s, settle });
+  live.current = { s, settle };
   const slot = useLift(bar, folded);
-  useEffect(() => {
-    if (folded && !s.notice) live.current.close();
-  }, [folded, s.notice]);
   // 记下后自动收起（R-392，负责人 11-11“记下一条后那个输入框不需要放在那边，还要我点收起才能收掉”）：
   // 新出一条“已记下”提示、手上没剩字也没等确认的 → 收键盘、收打字条，只留提示条；有剩的照旧留着。
   // 也看 status：提示条在存成那一刻就出来（那时还在“正在整理”、字也还在），收尾（done）时提示条没换，靠 status 变了再看一次
   useEffect(() => {
     const cur = live.current.s;
     if (!cur.notice || unsettled(cur)) return;
-    live.current.close();
+    live.current.settle('saved');
   }, [s.notice, s.status]);
   useKeys({
     'mod+z': (e) => {
@@ -192,27 +251,21 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     const keep = unsettled(s);
     rlog(`typebar blank act=${keep ? 'blur' : 'close'} len=${s.text.trim().length} asking=${s.asking ? 1 : 0} status=${s.status}`);
     if (keep) input.current?.blur();
-    else close();
+    else settle('blank');
   };
-  /** 交给结果层以后（B4b-3）：收键盘；有提示条只收打字条，没有就关 */
-  function asked(): void {
-    input.current?.blur();
-    if (s.notice) setFolded();
-    else onClose();
-  }
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (s.find !== null) {
       s.openFind();
-      asked();
+      settle('find');
       return;
     }
     void s.submit();
   };
   // 打字条画着（没收起）就是层栈里的一层（kit/hooks/layers.ts，非模态）：Esc 只在它是栈顶时收起，外面的详情抽屉不跟着关（独立评审第 1 条）；
-  // 焦点不由层栈还（收起时 close 自己收键盘）
-  useLayer(!folded, { name: 'typebar', onEsc: () => live.current.close(), back: () => [] });
-  const grip = useGripClose(close);
+  // 焦点不由层栈还（收起时 settle 自己收键盘）
+  useLayer(!folded, { name: 'typebar', onEsc: () => live.current.settle('esc'), back: () => [] });
+  const grip = useGripClose(() => settle('swipe'));
 
   const first = s.preview[0];
   const kind = (it: AiItem): string => t(`plus.kind.${it.kind}`, {});
@@ -271,11 +324,8 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
                     : first ? t('plus.type.preview', { text: s.preview.length > 1 ? `${previewText} · ${t('plus.type.more', { n: s.preview.length - 1 })}` : previewText }) : ''}
                 </div>
                 <div className={styles.row}>
-                  <FormButton type="button" variant="ghost" onClick={() => {
-                    s.dropDraft();
-                    onExpand(s.text, day);
-                  }}>{t('plus.type.expand', {})}</FormButton>
-                  <FormButton type="button" variant="ghost" onClick={close}>{t('plus.type.close', {})}</FormButton>
+                  <FormButton type="button" variant="ghost" onClick={() => settle('expand')}>{t('plus.type.expand', {})}</FormButton>
+                  <FormButton type="button" variant="ghost" onClick={() => settle('button')}>{t('plus.type.close', {})}</FormButton>
                 </div>
               </>
             )}

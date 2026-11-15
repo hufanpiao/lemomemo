@@ -12,7 +12,7 @@
 //   没把握的、带时间范围的（“上周的会”“这个月的待办”）、总结、改期、完成：回车走 planText（B4b-3，本机或 AI 判意图），
 //   判成别的意图的不保存：清掉输入条、交给结果层（hooks/assist-open 的 toAssist，同时把原话写进草稿），调用方 onAsked 收起打字条
 // • 等 AI 期间打字条被卸载（收起、切页；B4b-3 评审第 5 条）：这一次的请求当场中止，回来的结果丢掉——不写状态、不存、不打开结果层
-//   （收起时原话已经由 stash 写进草稿，下次打开填回）；日志 typebar submit dropped unmounted
+//   （收起、切页时原话已经由 stash 写进草稿，下次打开填回；ui/TypeBar.tsx 的 settle）；日志 typebar submit dropped unmounted
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { getBoot } from '../../../core/boot.ts';
