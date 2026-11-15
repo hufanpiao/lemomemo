@@ -111,6 +111,8 @@ export const zh = {
   'anniv.edit.details': '详情',
   'anniv.edit.delete': '删除这个纪念日',
   'anniv.edit.heroAgo': '天前',
+  'anniv.edit.heroDate': '{cal} · {md}',
+  'anniv.edit.heroDateYear': '{cal} · {md} · {y}',
   'anniv.edit.heroToday': '今天',
   'anniv.av.uploading': '正在上传头像…',
   'anniv.av.encode_failed': '这张图打不开或太大，换一张试试',

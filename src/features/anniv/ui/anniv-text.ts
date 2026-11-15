@@ -15,13 +15,27 @@ export function lunarMd(r: Pick<AnnivRec, 'month' | 'day' | 'is_leap'>, locale: 
   return annivLib().lunarText({ year: 2000, month: r.month, day: r.day, isLeap: r.is_leap }, locale);
 }
 
-/** 编辑页日期那一行（视觉稿 annface）：“阳历 10月27日 · 1997 年”“阴历 闰三月初十 · 1955 年”；不知道年份的不带年 */
-export function dateRowText(f: Pick<AnnivRec, 'calendar' | 'month' | 'day' | 'is_leap' | 'year'>, locale: UiLocale, t: AnnivT): string {
+type DateFields = Pick<AnnivRec, 'calendar' | 'month' | 'day' | 'is_leap' | 'year'>;
+
+/** 日子本身拆成“阳历 / 阴历”和月日（“10月27日”“闰三月初十”）：编辑页日期一行、主卡名字下面一行共用 */
+function dateParts(f: DateFields, locale: UiLocale, t: AnnivT): { cal: string; md: string } {
   const cal = t(f.calendar === 'lunar' ? 'anniv.edit.lunar' : 'anniv.edit.solar', {});
   const pad = (n: number): string => String(n).padStart(2, '0');
   // 2000 年是闰年：2月29日也认得
   const md = f.calendar === 'lunar' ? lunarMd(f, locale) : fmtDay(`2000-${pad(f.month)}-${pad(f.day)}` as DateStr, locale, 'monthDay');
+  return { cal, md };
+}
+
+/** 编辑页日期那一行（视觉稿 annface）：“阳历 10月27日 · 1997 年”“阴历 闰三月初十 · 1955 年”；不知道年份的不带年 */
+export function dateRowText(f: DateFields, locale: UiLocale, t: AnnivT): string {
+  const { cal, md } = dateParts(f, locale, t);
   return f.year === null ? t('anniv.edit.dateRow', { cal, md }) : t('anniv.edit.dateRowYear', { cal, md, y: f.year });
+}
+
+/** 编辑页主卡名字下面一行（R-436 确认图第 2 条）：原日期“阴历 · 腊月初九 · 1960”；不知道年份的不带年 */
+export function heroDateText(f: DateFields, locale: UiLocale, t: AnnivT): string {
+  const { cal, md } = dateParts(f, locale, t);
+  return f.year === null ? t('anniv.edit.heroDate', { cal, md }) : t('anniv.edit.heroDateYear', { cal, md, y: f.year });
 }
 
 /** 阴历日子那一列的选项文字（“初一”“十五”/“1일”）：月名之后那一段 */
@@ -83,21 +97,18 @@ export function cardRemindLine(r: AnnivRec, st: AnnivState, settings: Readonly<R
   return t('anniv.rm.cardLine', { date: fmtDay(st.next.date, locale, 'monthDayWeek'), offs: offsText(L.offsetsOf(r, settings), t, true), time: hm(L.remindTimeOf(r, settings)) });
 }
 
-/** 下一次哪天：阳历“10月27日 周二”（不在今年的带年份）；阴历“2027年 三月初十 → 公历 4月15日 周四”（编辑页主卡名字下面一行、新建页“下一次：…”） */
-export function nextWhen(r: AnnivRec, st: AnnivState, today: DateStr, locale: UiLocale, t: AnnivT): string {
+/** 新建页“下一次：…”：阳历“10月27日 周二 · 满 29 周岁”；阴历“2027年 三月初十 → 公历 4月15日 周四 · 满 72 周岁” */
+export function nextText(r: AnnivRec, st: AnnivState, today: DateStr, locale: UiLocale, t: AnnivT): string {
   const date = fmtDay(st.next.date, locale, 'monthDayWeek');
+  const age = ageText(r, st, t);
+  let head = date;
   if (r.calendar === 'lunar') {
     const L = annivLib();
     const l = L.toLunar(st.next.date, 'cn');
     const lunar = l ? `${t('anniv.edit.yearOpt', { y: l.year })} ${L.lunarText(l, locale)}` : '';
-    return t('anniv.edit.nextLunar', { lunar, date });
+    head = t('anniv.edit.nextLunar', { lunar, date });
+  } else if (parseDate(st.next.date).y !== parseDate(today).y) {
+    head = t('anniv.inYear', { y: parseDate(st.next.date).y, date });
   }
-  return parseDate(st.next.date).y !== parseDate(today).y ? t('anniv.inYear', { y: parseDate(st.next.date).y, date }) : date;
-}
-
-/** 新建页“下一次：…”：阳历“10月27日 周二 · 满 29 周岁”；阴历“2027年 三月初十 → 公历 4月15日 周四 · 满 72 周岁” */
-export function nextText(r: AnnivRec, st: AnnivState, today: DateStr, locale: UiLocale, t: AnnivT): string {
-  const head = nextWhen(r, st, today, locale, t);
-  const age = ageText(r, st, t);
   return age ? `${head} · ${age}` : head;
 }

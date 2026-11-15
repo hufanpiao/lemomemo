@@ -207,7 +207,7 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
               deleteLabel={t('anniv.edit.delete', {})}
             >
               {fresh ? null : (
-                <AnnivHero id={savedId} form={form} saved={ed.row} off={off} t={t} next={st ? { r, st, today, locale } : null} />
+                <AnnivHero id={savedId} form={form} saved={ed.row} off={off} t={t} locale={locale} next={st ? { r, st } : null} />
               )}
 
               <div className={styles.kindSeg}>

@@ -517,9 +517,11 @@
   background: var(--panel);
 }
 
-/* 头像外一圈柠檬黄细描边（隔 2px 面板色），右下角角标（.avBadge） */
+/* 头像外一圈柠檬黄细描边，和头像之间隔一圈 2px 的缝（缝是卡片底色 --panel：没照片时头像是黄底首字，描边也看得出来）；右下角角标（.avBadge）。
+   按钮用 flex 贴着头像（行内按钮会带出行高，圆不正、缝一边宽一边没有） */
 .heroAv {
   position: relative;
+  display: flex;
   flex: none;
   padding: 0;
   border: 0;

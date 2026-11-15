@@ -115,6 +115,8 @@ export const ko = {
   'anniv.edit.details': '자세히', // REVIEW(ko)
   'anniv.edit.delete': '이 기념일 삭제', // REVIEW(ko)
   'anniv.edit.heroAgo': '일 전', // REVIEW(ko)
+  'anniv.edit.heroDate': '{cal} · {md}', // REVIEW(ko)
+  'anniv.edit.heroDateYear': '{cal} · {md} · {y}', // REVIEW(ko)
   'anniv.edit.heroToday': '오늘', // REVIEW(ko)
   'anniv.av.uploading': '사진 올리는 중…', // REVIEW(ko)
   'anniv.av.encode_failed': '열 수 없거나 너무 큰 사진이에요. 다른 사진으로 해 보세요', // REVIEW(ko)

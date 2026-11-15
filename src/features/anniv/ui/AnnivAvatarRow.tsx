@@ -3,8 +3,6 @@
 // • 点圆圈从相册选一张，裁成圆形（kit 的 AvatarPicker 按需加载，和设置里的我的头像同一份；这里给纪念日的文案 anniv.crop.*、
 //   编码 data/avatar.ts、运行日志前缀 anniv、data-testid 前缀 anniv）；新建时先写名字存下来（有了 id）才能选
 import { lazy, Suspense, useRef, useState } from 'react';
-import type { DateStr } from '../../../../shared/core/date.ts';
-import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import type { AnnivRec, AnnivState } from '../../../../shared/logic/anniv/next-date.ts';
 import type { Crop } from '../../../kit/components/AvatarPicker.tsx';
@@ -12,7 +10,7 @@ import { Field, TextInput } from '../../../kit/components/Form.tsx';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { encodeAvatar, NAME_MAX, setAvatar, type AnnivForm, type AvatarResult } from '../hooks/anniv-view.ts';
 import type { AnnivT } from '../hooks/useAnnivT.ts';
-import { ageText, nextWhen } from './anniv-text.ts';
+import { ageText, heroDateText } from './anniv-text.ts';
 import { AnnivFace } from './AnnivFace.tsx';
 import styles from './AnnivPage.module.css';
 
@@ -96,21 +94,20 @@ function heroDays(r: AnnivRec, st: AnnivState, t: AnnivT): { num: string; sub: s
 }
 
 /**
- * 编辑页顶部主卡（R-436 精致化对照第 2、3 条）：左边头像（柠檬黄细描边、右下角角标，点了从相册换）、名字和下一次的日子，右边大号等宽天数。
+ * 编辑页顶部主卡（R-436 精致化对照第 2、3 条）：左边头像（隔一圈缝的柠檬黄细描边、右下角角标，点了从相册换）、名字和原日期（“阴历 · 腊月初九 · 1960”），右边大号等宽天数。
  * 原来的“头像”说明卡、“去掉”按钮不要了：“去掉头像”收进表单最后一行（AnnivEditor 里 FormRowButton）。选图、上传的状态写在名字下面那一行
  */
-export function AnnivHero({ id, form, saved, off, t, next }: {
+export function AnnivHero({ id, form, saved, off, t, locale, next }: {
   id: string | null;
   form: AnnivForm;
   saved: Record<string, unknown> | undefined;
   off: boolean;
   t: AnnivT;
-  /** 下一次（算不出来时 null，只画头像和名字） */
-  next: { r: AnnivRec; st: AnnivState; today: DateStr; locale: UiLocale } | null;
+  locale: UiLocale;
+  /** 下一次（算不出来时 null，右边不画天数） */
+  next: { r: AnnivRec; st: AnnivState } | null;
 }) {
   const days = next ? heroDays(next.r, next.st, t) : null;
-  // 名字下面一行：下一次哪天（倒数日过了写那一天）
-  const when = next ? (next.st.past ? fmtDay(next.st.next.date, next.locale, 'monthDayWeek') : nextWhen(next.r, next.st, next.today, next.locale, t)) : null;
   const av = useAvatar(id, saved, off, t);
   return (
     <div className={styles.hero} data-testid="anniv-hero">
@@ -120,7 +117,7 @@ export function AnnivHero({ id, form, saved, off, t, next }: {
       </button>
       <span className={styles.heroText}>
         <span className={styles.heroName}>{form.name || t('anniv.edit.namePh', {})}</span>
-        {av.st || !when ? null : <span className={styles.heroWhen}>{when}</span>}
+        {av.st ? null : <span className={styles.heroWhen}>{heroDateText(form, locale, t)}</span>}
         {/* 选图、上传的状态（R-117）：常驻的 role=status，平时没字，读屏只播报状态，不播报日期 */}
         <span className={styles.heroWhen} role="status">
           {av.st ? t(AV_KEY[av.st], {}) : id ? '' : t('anniv.edit.avatarNeedName', {})}

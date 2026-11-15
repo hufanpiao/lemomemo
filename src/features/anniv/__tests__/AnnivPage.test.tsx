@@ -150,6 +150,9 @@ describe('纪念日编辑页：R-436 精致化', () => {
     const hero = await edit();
     expect(hero.textContent).toContain('김지민');
     expect(within(hero).getByTestId('anniv-edit-next').textContent).toBe('3天后 · 满 29 周岁');
+    // 名字下面写原日期（确认图“阴历 · 腊月初九 · 1960”的格式），不写下一次哪天
+    expect(hero.textContent).toContain('阳历 · 11月16日 · 1997');
+    expect(hero.textContent).not.toMatch(/周[一二三四五六日]/);
     expect(screen.getByTestId('edit-status').textContent).toBe('');
     const del = screen.getByTestId('anniv-edit-delete');
     expect(del.textContent).toBe('删除这个纪念日');
