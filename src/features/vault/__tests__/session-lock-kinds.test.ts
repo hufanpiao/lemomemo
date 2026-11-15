@@ -253,3 +253,17 @@ describe('L1：删图、永久删除、移出时立即撤销 blob 地址', () =>
     expect(s.blobCount()).toBe(1);
   });
 });
+
+describe('L2：取图在路上时上锁', () => {
+  it('字节回来也不造 blob 地址、回 null', async () => {
+    const { s, api } = await unlocked();
+    const h = held();
+    (api.imageGet as unknown as { mockReturnValueOnce(v: unknown): void }).mockReturnValueOnce(h.p);
+    const p = s.image('77777777-7777-4777-8777-777777777777', 'full');
+    await new Promise((r) => setTimeout(r, 0));
+    s.lock();
+    h.release({ ok: true, value: new Blob(['x']) });
+    expect(await p).toBeNull();
+    expect(s.blobCount()).toBe(0);
+  });
+});

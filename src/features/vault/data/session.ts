@@ -522,6 +522,8 @@ export function createVaultSession(d: VaultSessionDeps) {
           if (kind === 'relock' || kind === 'revoked') onFail(r);
           return null;
         }
+        // 取图期间上过锁：字节丢掉，不造地址（L2：上锁时已经撤过一遍，这里再造的就留在内存里了）
+        if (epoch !== e) return null;
         const url = createUrl(r.value);
         blobs.set(key, url);
         return url;
