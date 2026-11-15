@@ -58,7 +58,7 @@ describe('编辑页占住 busy', () => {
 
   it('还没启动（拿不到升级中心）：照常画、不报错', () => {
     const r = render(shell());
-    expect(r.getByTestId('edit-status').textContent).toBe('改了就自动保存');
+    expect(r.getByTestId('edit-status').textContent).toBe('');   // R-436：没改过不写字（原“改了就自动保存”）
     expect(holdBusy).not.toHaveBeenCalled();
   });
 });

@@ -6,6 +6,52 @@
   background: var(--panel);
 }
 
+/* 卡片上方的小字分组名（GroupLabel，R-436“详情”）：第三层文字色、等宽字加字距 */
+.groupLabel {
+  margin: 4px 14px 6px;
+  color: var(--text-3);
+  font-family: var(--f-tnum);
+  font-size: var(--fs-11);
+  letter-spacing: 0.12em;
+}
+
+/* 表单卡片里的一整行按钮（FormRowButton，R-436 纪念日“去掉头像”）：和字段行同高、同一条分隔线规则，左对齐次要色 */
+.rowBtn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-15);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 整宽删除行（DeleteRow，R-436）：单独一张卡片，红字居中，圆角同 .group */
+.deleteRow {
+  width: 100%;
+  min-height: 52px;
+  margin: 8px 0 0;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--danger-text);
+  font: inherit;
+  font-size: var(--fs-16);
+  cursor: pointer;
+}
+
+.rowBtn:focus-visible,
+.deleteRow:focus-visible {
+  border-radius: var(--r-inp);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .field {
   display: flex;
   flex-wrap: wrap;
@@ -13,7 +59,9 @@
   gap: 4px 12px;
   min-height: var(--hit);
   padding: 6px 0;
-  border-bottom: 1px solid var(--line);
+
+  /* R-436：分隔线细到半像素（2×、3× 屏上是一条发丝线，1× 屏浏览器按 1px 画）；卡片左右各留 14，线从文字起点开始 */
+  border-bottom: 0.5px solid var(--line);
 }
 
 .field:last-child {
@@ -23,8 +71,10 @@
 .label {
   flex: 0 0 auto;
   min-width: 72px;
-  color: var(--text-2);
-  font-size: var(--fs-14);
+
+  /* R-436 三层文字色：左边名称用正文色，右边的值用次要色（各页自己定），空着的占位字再淡一档（--text-3） */
+  color: var(--text);
+  font-size: var(--fs-15);
 }
 
 .control {
@@ -116,7 +166,7 @@
 
 .input::placeholder,
 .area::placeholder {
-  color: var(--text-2);
+  color: var(--text-3);
 }
 
 /* 下拉框（G11 第三轮①）：和输入框同一套——同底色、细边框、圆角；去掉 WebKit 原生的凸边和深色下发亮的灰块（appearance: none，iOS Safari 15.4 起认不带前缀的写法），

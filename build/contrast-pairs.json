@@ -126,6 +126,54 @@
       "source": "皮肤视觉稿“对比度实测”"
     },
     {
+      "id": "seg-off-track",
+      "what": "滑块分段没选中的字 / 底槽（R-436 kit ModeSeg look=slide）",
+      "fg": "--text-2",
+      "bg": "--seg-track",
+      "kind": "text",
+      "source": "R-436 精致化对照（纪念日编辑页第 4 条）"
+    },
+    {
+      "id": "seg-on-thumb",
+      "what": "滑块分段选中的字 / 滑块",
+      "fg": "--text",
+      "bg": "--seg-thumb",
+      "kind": "text",
+      "source": "R-436 精致化对照（纪念日编辑页第 4 条）"
+    },
+    {
+      "id": "num-accent-panel",
+      "what": "强调大号数字 / 面板（纪念日编辑页主卡天数）",
+      "fg": "--num-accent",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "R-436 精致化对照（纪念日编辑页第 2 条）"
+    },
+    {
+      "id": "text3-panel",
+      "what": "第三层文字 / 面板（表单里空着的占位字）",
+      "fg": "--text-3",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "R-436 精致化对照（纪念日编辑页第 5 条）"
+    },
+    {
+      "id": "text3-panel2",
+      "what": "第三层文字 / 浅底块（输入框、分段底槽）",
+      "fg": "--text-3",
+      "bg": "--panel-2",
+      "kind": "text",
+      "source": "R-436 精致化对照"
+    },
+    {
+      "id": "text3-bg",
+      "what": "第三层文字 / 页面底色（分组小标签“详情”）",
+      "fg": "--text-3",
+      "bg": "--bg",
+      "kind": "text",
+      "source": "R-436 精致化对照（纪念日编辑页第 5 条）"
+    },
+    {
       "id": "on-accent",
       "what": "主按钮文字 / 柠檬黄",
       "fg": "--on-accent",

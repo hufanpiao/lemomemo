@@ -83,18 +83,21 @@ export function cardRemindLine(r: AnnivRec, st: AnnivState, settings: Readonly<R
   return t('anniv.rm.cardLine', { date: fmtDay(st.next.date, locale, 'monthDayWeek'), offs: offsText(L.offsetsOf(r, settings), t, true), time: hm(L.remindTimeOf(r, settings)) });
 }
 
-/** 编辑页“下一次：…”：阳历“10月27日 周二 · 满 29 周岁”；阴历“2027年 三月初十 → 公历 4月15日 周四 · 满 72 周岁” */
-export function nextText(r: AnnivRec, st: AnnivState, today: DateStr, locale: UiLocale, t: AnnivT): string {
+/** 下一次哪天：阳历“10月27日 周二”（不在今年的带年份）；阴历“2027年 三月初十 → 公历 4月15日 周四”（编辑页主卡名字下面一行、新建页“下一次：…”） */
+export function nextWhen(r: AnnivRec, st: AnnivState, today: DateStr, locale: UiLocale, t: AnnivT): string {
   const date = fmtDay(st.next.date, locale, 'monthDayWeek');
-  const age = ageText(r, st, t);
-  let head = date;
   if (r.calendar === 'lunar') {
     const L = annivLib();
     const l = L.toLunar(st.next.date, 'cn');
     const lunar = l ? `${t('anniv.edit.yearOpt', { y: l.year })} ${L.lunarText(l, locale)}` : '';
-    head = t('anniv.edit.nextLunar', { lunar, date });
-  } else if (parseDate(st.next.date).y !== parseDate(today).y) {
-    head = t('anniv.inYear', { y: parseDate(st.next.date).y, date });
+    return t('anniv.edit.nextLunar', { lunar, date });
   }
+  return parseDate(st.next.date).y !== parseDate(today).y ? t('anniv.inYear', { y: parseDate(st.next.date).y, date }) : date;
+}
+
+/** 新建页“下一次：…”：阳历“10月27日 周二 · 满 29 周岁”；阴历“2027年 三月初十 → 公历 4月15日 周四 · 满 72 周岁” */
+export function nextText(r: AnnivRec, st: AnnivState, today: DateStr, locale: UiLocale, t: AnnivT): string {
+  const head = nextWhen(r, st, today, locale, t);
+  const age = ageText(r, st, t);
   return age ? `${head} · ${age}` : head;
 }

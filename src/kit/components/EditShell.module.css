@@ -36,11 +36,12 @@
   font-weight: 600;
 }
 
+/* 保存状态（R-436）：小字“✓ 已保存”，改过才出现 */
 .status {
   justify-self: end;
   margin: 0;
   color: var(--text-2);
-  font-size: var(--fs-12-5);
+  font-size: var(--fs-12);
   text-align: right;
 }
 
@@ -55,13 +56,6 @@
   background: var(--danger-bg);
   color: var(--danger-text);
   font-size: var(--fs-14);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
 }
 
 /* 只读提示的外边距（灰条本身在 ReadonlyRow.module.css 的 .banner，EditNotices.tsx 的 ReadonlyNotice 画） */

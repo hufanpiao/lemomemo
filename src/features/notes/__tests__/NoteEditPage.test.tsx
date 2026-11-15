@@ -77,12 +77,12 @@ describe('新建 #/note/new', () => {
   it('标题和正文都空不写；写了正文失焦后 insert 整行（不带 ai_status、没分到类写 none），地址换成这一条；再改是 patch', async () => {
     const b = await boot();
     open('#/note/new');
-    expect(screen.getByTestId('edit-status').textContent).toBe('改了就自动保存');
+    expect(screen.getByTestId('edit-status').textContent).toBe('');   // R-436：没改过不写字（原“改了就自动保存”）
     await typeBody('   ');
     expect(notes().getSnapshot()).toHaveLength(0);
     await typeBody('想到一句');
     // 等保存状态出来再断言（默认 1 秒的 waitFor 在高负载下会超时，代码审 a4dc5a71）
-    await waitFor(() => expect(screen.getByTestId('edit-status').textContent).toBe('已自动保存'), { timeout: 5000 });
+    await waitFor(() => expect(screen.getByTestId('edit-status').textContent).toBe('✓ 已保存'), { timeout: 5000 });
     expect(notes().getSnapshot()).toHaveLength(1);
     const row = notes().getSnapshot()[0];
     expect(row).toMatchObject({ title: null, body: '想到一句', is_private: false, category_id: null, category_source: 'none', source: 'page', created_at: NOW });

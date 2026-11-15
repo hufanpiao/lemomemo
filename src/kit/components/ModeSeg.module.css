@@ -37,3 +37,38 @@
   color: var(--chip-on-fg);
   font-weight: 600;
 }
+
+.segBtn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* look="slide"（R-436 滑块分段）：整行宽、各段平分；灰色底槽 --seg-track，不描边；看得见 36 = 2 + 32 + 2 */
+.slide {
+  display: flex;
+  border: 0;
+  background: var(--seg-track);
+}
+
+.slide .segBtn {
+  flex: 1;
+  min-height: 32px;
+}
+
+/* 选中的那块是比底槽亮一档的滑块（--seg-thumb、细边、--shadow-1），字用正文色；文字前一个柠檬黄小点（只是装饰，不靠颜色传意思：选中还有滑块和粗字） */
+.slide .segBtn[aria-pressed='true'] {
+  background: var(--seg-thumb);
+  box-shadow: 0 0 0 0.5px var(--line), var(--shadow-1);
+  color: var(--text);
+}
+
+.slide .segBtn[aria-pressed='true']::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 2px;
+}

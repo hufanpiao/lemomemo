@@ -70,15 +70,15 @@ describe('新建', () => {
   it('标题为空不写；写上标题失焦后 insert 整行，之后再改是 patch（只带变了的列）', async () => {
     const b = await boot();
     open('#/todo/new');
-    expect(screen.getByTestId('edit-status').textContent).toBe('改了就自动保存');
+    expect(screen.getByTestId('edit-status').textContent).toBe('');   // R-436：没改过不写字（原“改了就自动保存”）
     await commitText('todo-edit-title', '   ');
     expect(todos().getSnapshot()).toHaveLength(0);
     await commitText('todo-edit-title', '买收纳盒');
     await waitFor(() => expect(todos().getSnapshot()).toHaveLength(1));
     const row = todos().getSnapshot()[0];
     expect(row).toMatchObject({ title: '买收纳盒', due: null, source: 'page', created_at: NOW });
-    // 行先进本地列表、发件箱写完状态才变“已自动保存”：等它变过来（11-14 全量满负载时这里读到“正在保存…”，见 vitest 原文）
-    await waitFor(() => expect(screen.getByTestId('edit-status').textContent).toBe('已自动保存'));
+    // 行先进本地列表、发件箱写完状态才变“✓ 已保存”：等它变过来（11-14 全量满负载时这里读到“正在保存…”，见 vitest 原文）
+    await waitFor(() => expect(screen.getByTestId('edit-status').textContent).toBe('✓ 已保存'));
     await commitText('todo-edit-title', '买两个收纳盒');
     await waitFor(() => expect(todos().getSnapshot()[0]?.['title']).toBe('买两个收纳盒'));
     const items = (await b.outbox?.list()) ?? [];
@@ -218,12 +218,12 @@ describe('编辑已有的', () => {
     expect(todos().get(ID)?.['title']).toBe('交报告');
   });
 
-  it('可写的行照旧：有“删除”、右上“改了就自动保存”、输入可用', async () => {
+  it('可写的行照旧：有“删除”、右上没改过不写字（R-436）、输入可用', async () => {
     const b = await boot();
     await b.outbox?.applyServer('todos', [{ row: serverTodo() }]);
     open(`#/todo/${ID}`);
     expect(screen.getByTestId('todo-edit-delete')).toBeTruthy();
-    expect(screen.getByTestId('edit-status').textContent).toBe('改了就自动保存');
+    expect(screen.getByTestId('edit-status').textContent).toBe('');   // R-436：没改过不写字（原“改了就自动保存”）
     expect((screen.getByTestId('todo-edit-title') as HTMLInputElement).disabled).toBe(false);
     expect(screen.queryByTestId('edit-notice')?.textContent ?? '').not.toContain('新版本');
     expect(screen.getByTestId('todo-edit-done').closest('label')?.textContent).toBe('已完成（打勾后也能继续改）');
@@ -231,7 +231,8 @@ describe('编辑已有的', () => {
     // G11：空字段有占位提示；“清掉”“删除”用项目的按钮样式（FormButton），不是浏览器原生按钮
     expect(document.querySelector('#todo-project')?.getAttribute('placeholder')).toBe('比如：工作、家里');
     expect(screen.getByTestId('todo-edit-due-clear').className).toMatch(/btn/);
-    expect(screen.getByTestId('todo-edit-delete').className).toMatch(/danger/);
+    // R-436：“删除”换成 kit 的整宽删除行（DeleteRow，红字居中），不再是描边小按钮
+    expect(screen.getByTestId('todo-edit-delete').className).toMatch(/deleteRow/);
   });
 
   it('删除：软删，页内出“撤销”；撤销后回来', async () => {
