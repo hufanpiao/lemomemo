@@ -81,6 +81,8 @@ export function NotesList({ head }: { head?: ReactNode }) {
   const t = useNotesT();
   const src = useNoteSource();
   const { caps } = src;
+  // 隐私记“没保存上”的条目：列表层订一次，传给每张卡片、每一行
+  const { failed } = src.useSync();
   const tEdit = useEditT();
   const locale = useUi((s) => s.locale);
   const view = useNotesViewValue();
@@ -233,7 +235,7 @@ export function NotesList({ head }: { head?: ReactNode }) {
                     aiMark(it)
                   )}
                   <FilesMark n={it.files} />
-                  <SyncMark id={it.id} />
+                  <SyncMark id={it.id} failed={failed.has(it.id)} />
                   <span className={styles.time}>{timeOf(it, true)}</span>
                   {more(it)}
                 </div>
@@ -261,7 +263,7 @@ export function NotesList({ head }: { head?: ReactNode }) {
                       <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
                         <span className={row.rowTime}>{timeOf(it, false)}</span>
                         <span className={row.mn} aria-hidden="true" />
-                        <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} />
+                        <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} failed={failed.has(it.id)} />
                         {it.cover ? <ListThumb img={it.cover} /> : null}
                       </button>
                       {more(it)}

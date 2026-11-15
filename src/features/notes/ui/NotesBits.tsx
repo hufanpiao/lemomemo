@@ -1,6 +1,7 @@
-// 随手记页的小部件（11-15 隐私记重写时从 NotesPage.tsx 拆出来，页面不超行数上限）：“附件 N”、列表行的字、撤销条、输入行上面的提示条、
-// 分类胶囊、只读、已转过、AI 小标；隐私记的后台同步状态（行上“没保存上”、编辑页“没保存上 · 重试”、解锁后“有 N 处改动没来得及保存”）
-// • 同步状态都从 hooks/note-source.ts 来源的 useSync 读：普通随手记一直是空的，什么都不画
+// 随手记页的小部件（11-15 隐私记重写时整理）：
+// • 8 个从 NotesPage.tsx 原样搬来（页面不超行数上限）：“附件 N”、列表行的字、撤销条、输入行上面的提示条、分类胶囊、只读、已转过、AI 小标
+// • 3 个新增（隐私记的后台同步状态）：SyncMark 行上“没保存上”、SyncLine 编辑页“没保存上 · 重试”、SyncDropped 解锁后“有 N 处改动没来得及保存”
+// • 同步状态都从 hooks/note-source.ts 来源的 useSync 读（普通随手记一直是空的，什么都不画）；列表上的 failed 由列表层读一次传进来，每行不各订一份
 import type { ReactNode } from 'react';
 import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
 import row from '../../../kit/components/NoteRow.module.css';
@@ -15,11 +16,10 @@ import { Dot } from './CatDot.tsx';
 import type { PageTip } from './NotesActions.tsx';
 import styles from './NotesPage.module.css';
 
-/** 列表行、卡片上的“没保存上”（隐私记的条目发了 3 次都没成） */
-export function SyncMark({ id }: { id: string }) {
+/** 列表行、卡片上的“没保存上”（隐私记的条目发了 3 次都没成）；failed 由列表层读 useSync 一次传进来 */
+export function SyncMark({ id, failed }: { id: string; failed: boolean }) {
   const t = useNotesT();
-  const { failed } = useNoteSource().useSync();
-  return failed.has(id) ? (
+  return failed ? (
     <span className={styles.atb} data-testid={`notes-sync-failed-${id}`}>
       {t('notes.sync.failed', {})}
     </span>
@@ -67,7 +67,7 @@ export function FilesMark({ n }: { n: number }) {
 }
 
 /** 列表行中间的字：标题；摘要 · 分类（+ AI 小标、没保存上）；只读行再在下面单独一行标“要新版本” */
-export function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: ReactNode }) {
+export function RowText({ it, ai, ro, failed }: { it: NoteItem; ai: ReactNode; ro: ReactNode; failed: boolean }) {
   return (
     <span className={row.ltext}>
       <span className={row.t1}>
@@ -78,7 +78,7 @@ export function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: React
         <span className={row.t2txt}>{[it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
         {ai}
         <FilesMark n={it.files} />
-        <SyncMark id={it.id} />
+        <SyncMark id={it.id} failed={failed} />
       </span>
       {ro}
     </span>
