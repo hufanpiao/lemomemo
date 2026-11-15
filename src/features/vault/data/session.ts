@@ -199,6 +199,7 @@ export function createVaultSession(d: VaultSessionDeps) {
       case 'setup':
       case 'reauth':
       case 'webauthn':
+      case 'retry':
       case 'message':
         rlog(`vault fail ${f.code}`);
         set({ lastError: f.code });

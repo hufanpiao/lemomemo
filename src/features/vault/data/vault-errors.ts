@@ -7,6 +7,7 @@
 //   - setup：not_set → 去设密码；pin_wrong / pin_locked：解锁卡显示“还能试 N 次”/ 倒计时
 //   - reauth：reset 时超过 10 分钟没验证邮箱 → 重新走一次验证码
 //   - revoked：session_revoked → 提示后交给同步引擎退出（和 B1 同一条路，outbox-logic.ts、sync/engine.ts）
+//   - retry：断网、服务忙、限流（offline、try_later、rate_limited）：提示一句；后台发送队列（vault-queue.ts）按它退避重试（B5 隐私记重写 11-15）
 //   - message：只提示一句（msg 是隐私记词典的键）
 import type { VaultErrorCode } from '../../../../shared/schema/vault.ts';
 
@@ -35,7 +36,7 @@ export type VaultMsgKey =
   | 'vault.err.upgrade'
   | 'vault.err.unknown';
 
-export type VaultErrKind = 'unlock' | 'relock' | 'setup' | 'pin_wrong' | 'pin_locked' | 'reauth' | 'webauthn' | 'revoked' | 'message';
+export type VaultErrKind = 'unlock' | 'relock' | 'setup' | 'pin_wrong' | 'pin_locked' | 'reauth' | 'webauthn' | 'revoked' | 'retry' | 'message';
 
 export interface VaultErrAction {
   kind: VaultErrKind;
@@ -81,9 +82,9 @@ export function serverAction(code: VaultErrorCode): VaultErrAction {
     case 'bad_image':
       return act('message', 'vault.err.badImage');
     case 'rate_limited':
-      return act('message', 'vault.err.rateLimited');
+      return act('retry', 'vault.err.rateLimited');
     case 'try_later':
-      return act('message', 'vault.err.tryLater');
+      return act('retry', 'vault.err.tryLater');
     default:
       return unhandled(code);
   }
@@ -96,7 +97,7 @@ export function clientAction(code: VaultClientCode): VaultErrAction {
     case 'signed_out':
       return act('revoked', 'vault.err.revoked');
     case 'offline':
-      return act('message', 'vault.err.offline');
+      return act('retry', 'vault.err.offline');
     case 'upgrade_required':
       return act('message', 'vault.err.upgrade');
     case 'bad_request':

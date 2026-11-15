@@ -20,7 +20,7 @@ describe('vaultErrorAction：每个码都有去处，文案中韩都有', () => 
     expect(vaultErrorAction('vault_locked').kind).toBe('unlock');
     expect(vaultErrorAction('vault_relock').kind).toBe('relock');
     expect(vaultErrorAction('session_revoked').kind).toBe('revoked');
-    expect(vaultErrorAction('try_later').kind).toBe('message');
+    expect(vaultErrorAction('try_later').kind).toBe('retry');
   });
 
   it('④ 入口共用码表里有 session_revoked（续第 98 条）', () => {
