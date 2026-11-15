@@ -3,11 +3,12 @@
 // • 分组顺序：过期 → 今天 → 明天 → 7 天内（按日期各一组）→ 以后 → 没日期 → 已完成（最近完成的在前）
 // • 过期：截止日早于今天，或今天的截止时刻已过（界面标红：“逾 N 天”“已过 17:00”）；规则和读一行都在 shared/logic/todo-row.ts（和今天页共用）
 // • 项目筛选只在待办页（架构 5.9“项目筛选”）：project 为 null 是“全部”
-// • linger（负责人 11-15“完成的待办怎么隐藏”）：刚打勾、撤销条还开着的那一条，照没完成时的截止分组留在原位（约 3 秒后才归进“已完成”组）
+// • linger（负责人 11-15“完成的待办怎么隐藏”；审查 11-15 第 4 条改成集合）：撤销条开着期间勾过的那几条，照没完成时的截止分组留在原位，
+//   撤销条都收起以后才一起归进“已完成”组（谁在 linger 里由待办页管，见 ui/TodosPage.tsx）
 import { addDays, diffDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
-import { isLate, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
+import { isLate, numOr, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 // 标题比较：按当前语言、数字按数值（“第 2 条”在“第 10 条”前；和今天页共用）
 import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
@@ -36,7 +37,7 @@ export interface Group {
 }
 
 export function itemOf(r: Row): TodoItem {
-  return { ...todoOf(r), doneAt: typeof r['done_at'] === 'number' ? r['done_at'] : 0 };
+  return { ...todoOf(r), doneAt: numOr(r['done_at'], 0) };
 }
 
 export function dueTagOf(t: TodoItem, now: number, tz: Tz): DueTag {
@@ -48,12 +49,14 @@ export function dueTagOf(t: TodoItem, now: number, tz: Tz): DueTag {
   return { kind: 'date', date: t.due, dueTime: t.dueTime };
 }
 
+const NO_LINGER: ReadonlySet<string> = new Set();
+
 const byDue = (byTitle: (a: string, b: string) => number) => (a: TodoItem, b: TodoItem) =>
   (a.due ?? '9999').localeCompare(b.due ?? '9999') || (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99') || Number(b.important) - Number(a.important) || byTitle(a.title, b.title);
 
 /** 待办页的分组；空组不出现。project 不为 null 时只留这个项目的 */
-/** locale：同一截止时刻、没日期那组按标题排时用哪种语言比（数字按数值）；linger：已完成但先留在原组的那一条 id */
-export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: string | null = null, locale: Locale = 'zh-CN', linger: string | null = null): Group[] {
+/** locale：同一截止时刻、没日期那组按标题排时用哪种语言比（数字按数值）；linger：已完成但先留在原组的那几条 id */
+export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: string | null = null, locale: Locale = 'zh-CN', linger: ReadonlySet<string> = NO_LINGER): Group[] {
   const byTitle = titleCompare(locale);
   const due = byDue(byTitle);
   const today = todayOf(now, tz);
@@ -70,7 +73,7 @@ export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: s
     const t = itemOf(r);
     if (project !== null && t.project !== project) continue;
     const tag = dueTagOf(t, now, tz);
-    if (t.done && t.id !== linger) put('done', null, t, tag);
+    if (t.done && !linger.has(t.id)) put('done', null, t, tag);
     else if (tag.kind === 'late') put('late', null, t, tag);
     else if (tag.kind === 'today') put('today', null, t, tag);
     else if (tag.kind === 'tomorrow') put('tomorrow', null, t, tag);

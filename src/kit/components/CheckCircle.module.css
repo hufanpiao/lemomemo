@@ -1,22 +1,27 @@
-/* 打勾圆圈（kit，B2 FA-5）：待办页、今天页共用。勾选完成的动效见 17.1：
-   空心圆圈（视觉稿 .done-c）；打勾时强调色圆盘从中间放大、淡入，盖满圆圈，勾号随之淡入；取消原路退回
-   圆圈直径可以由使用方在外层设 --check-size 改（默认 22px，点击区照样 44 × 44；R-350 子任务用小一号） */
+/* 打勾方框（kit，B2 FA-5；负责人 11-15 R-433 从圆圈改成圆角方框，待办页、今天页、子任务、查找结果、待办编辑页的“完成”一起改）。勾选完成的动效见 17.1：
+   空心圆角方框：照参考图 1 一模一样（负责人 11-15“细节好对好”“参考图的更圆润一点，按照参考图一模一样的来”“你画的比参考图粗”）。
+   3 倍图逐像素量：方框 72px = 24pt；边中间 4 个整像素加两侧各一个半透明，合计约 5.3px = 1.75pt；
+   圆角逐行拟合是普通圆弧、半径 27px = 9pt（边长的 37.5%），逐行误差 < 0.3px；
+   边色 --check-edge：深色照参考图原色 #69645C（卡片底 2.7:1，负责人定照原样，build/contrast-pairs.json 的 accepted）；
+   打勾时强调色方块从中间放大、淡入，盖满方框，勾号随之淡入；取消原路退回（同原来的圆盘，只是形状变方）
+   边长可以由使用方在外层设 --check-size 改（默认 24px，点击区照样 44 × 44；R-350 子任务、查找结果用小一号 18px）；
+   圆角按边长比例（24 → 9px，18 → 6.75px），小一号的不会显得更圆。组件名、类名沿用 CheckCircle（见 CheckCircle.tsx 文件头） */
 
 /* checkbox 叠在 label 外扩区（.checkBox::after）上面：点圆圈点到的是 checkbox 本身，点外扩区才经 label 转给它（不然 ::after 盖住 checkbox） */
 .check {
   position: relative;
   z-index: 1;
   grid-area: 1 / 1;
-  width: var(--check-size, 22px);
-  height: var(--check-size, 22px);
+  width: var(--check-size, 24px);
+  height: var(--check-size, 24px);
   margin: 0;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 2.5px var(--text);
+  border-radius: calc(var(--check-size, 24px) * 0.375);
+  box-shadow: inset 0 0 0 1.75px var(--check-edge);
   appearance: none;
 }
 
 .check:checked {
-  box-shadow: inset 0 0 0 2.5px var(--accent);
+  box-shadow: inset 0 0 0 1.75px var(--accent);
 }
 
 .check:focus-visible {
@@ -25,7 +30,7 @@
   outline-offset: 2px;
 }
 
-/* 圆盘和勾号是叠在圆圈上的两个 span（不接点按，点的还是下面的 checkbox），状态写在它们自身的 data-state 上，
+/* 填充块和勾号是叠在方框上的两个 span（不接点按，点的还是下面的 checkbox），状态写在它们自身的 data-state 上，
    点下去当下就开始（使用方给的是“刚点的值”，不等保存回来）。只动 transform、opacity，--dur-ui + --ease-out；
    CSS 过渡可中断（连点两下直接反向） */
 .checkBox {
@@ -33,13 +38,13 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: var(--check-size, 22px);
-  height: var(--check-size, 22px);
-  margin: calc((var(--hit) - var(--check-size, 22px)) / 2) 0;
+  width: var(--check-size, 24px);
+  height: var(--check-size, 24px);
+  margin: calc((var(--hit) - var(--check-size, 24px)) / 2) 0;
 }
 
 /* 点击区外扩到 44 × 44（B2-UI-a U4-4，A8 核实原来只有 22 × 22；写法同 Settings.module.css 的 .segBtn::after）：
-   .checkBox 是包着 checkbox 的 label，点到外扩区等于点 checkbox；圆圈本身大小不变 */
+   .checkBox 是包着 checkbox 的 label，点到外扩区等于点 checkbox；方框本身大小不变 */
 .checkBox::after {
   content: '';
   position: absolute;
@@ -52,9 +57,9 @@
 
 .fill {
   grid-area: 1 / 1;
-  width: var(--check-size, 22px);
-  height: var(--check-size, 22px);
-  border-radius: 50%;
+  width: var(--check-size, 24px);
+  height: var(--check-size, 24px);
+  border-radius: calc(var(--check-size, 24px) * 0.375);
   background: var(--accent);
   opacity: 0;
   pointer-events: none;
@@ -79,7 +84,7 @@
   opacity: 0;
   pointer-events: none;
 
-  /* 斜过来只是勾号的形状，不参与动画：勾号只淡入（圆盘填满时一起出现） */
+  /* 斜过来只是勾号的形状，不参与动画：勾号只淡入（填充块填满时一起出现） */
   transform: rotate(45deg);
   transition: opacity var(--dur-ui) var(--ease-out);
 }
@@ -103,7 +108,7 @@
   transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
 }
 
-/* 只读行（FA-2）：圆圈变淡，表示打不了勾（点了由使用方出“要新版本”提示条）；跟着 checkbox 的 aria-disabled，不另挂属性（首屏预算，11-06） */
+/* 只读行（FA-2）：方框变淡，表示打不了勾（点了由使用方出“要新版本”提示条）；跟着 checkbox 的 aria-disabled，不另挂属性（首屏预算，11-06） */
 .checkBox:has(> [aria-disabled='true']) {
   opacity: 0.45;
 }

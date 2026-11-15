@@ -18,6 +18,7 @@ import { trimItemTitle } from '../../../../shared/schema/rows.ts';
 import { DEFAULT_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime, todoRemindAt } from '../../../../shared/logic/remind.ts';
 import { todoRowOf, type NewTodoRow } from '../../../../shared/logic/todo-row.ts';
 import { todoRemindFlag } from '../../../core/remind-flag.ts';
+import { doneAtOf } from '../../../core/todo-done.ts';
 
 /** 编辑页能改的字段 */
 export interface TodoForm {
@@ -118,7 +119,7 @@ export function patchOf(
     data['short'] = null;
     data['short_by'] = null;
   }
-  if ('done' in data) data['done_at'] = next.done ? now : 0;
+  if ('done' in data) data['done_at'] = doneAtOf(row, next.done, now);   // done_at 规则只在 core/todo-done.ts 一份（审查 11-15 第 7 条）
   data['updated_at'] = now;
   return data;
 }

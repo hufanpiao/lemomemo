@@ -121,4 +121,16 @@ export const zh = {
   'as.peek.cancel': '是要取消吗？找到 {n} 条 ›',
   'as.peek.reschedule': '是要改期吗？找到 {n} 条 ›',
   'as.peek.complete': '是要标完成吗？找到 {n} 条 ›',
+  // 下拉搜索（R-437）：随手记、待办、日历页列表滚到顶再往下拉，标题下面露出的那一条
+  'pull.label': '搜索本页',
+  'pull.ph.note': '搜索随手记',
+  'pull.ph.todo': '搜索待办',
+  'pull.ph.event': '搜索日程',
+  'pull.cancel': '取消',
+  'pull.clear': '清空',
+  'pull.n': '找到 {n} 条',
+  'pull.none': '没有按字找到',
+  'pull.more': '只列出前 {n} 条，换个更准的词试试',
+  'pull.sub': '子任务：{t}',
+  'pull.ai': '用 AI 按意思找',
 } as const;

@@ -9,6 +9,7 @@
 // 不写 ai_status（系统列）、deleted_at、undone（只能 update）、repeat（R-163）。done_at 跟 done：完成的记 now，没完成 0。纯函数，不读时钟
 // 读一行（todoOf）和“逾期”规则（isLate）也只有这一份（B6 整合）：待办页的分组和截止标签（features/todos/data/todo-list.ts）、
 // 今天页的“没赶上”和今天截止（features/today/data/today-model.ts）都经它
+// 读数字列的 numOr 也在这里（审查 11-15 第 8 条：待办几处各写一份 num 合成这一个）：core/todo-done.ts、待办的 todo-actions、todo-autodel、todo-items、todo-list 共用
 import { diffDays, msAt, parseHm, todayOf, type DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
 import { DEFAULT_REMIND_TIME } from './remind.ts';
@@ -16,6 +17,11 @@ import { DEFAULT_REMIND_TIME } from './remind.ts';
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+/** 读一个数字列：是有限的数就用它，不然用 d（各处原来的默认值由调用方传：0 或 null） */
+export function numOr<D>(v: unknown, d: D): number | D {
+  return typeof v === 'number' && Number.isFinite(v) ? v : d;
+}
 
 /** 读出来的待办（列表要的几列）：不是字符串的当空；截止日不是 YYYY-MM-DD、截止时刻不是 HH:MM 的当没有，没截止日时截止时刻也当没有 */
 export interface TodoFields {

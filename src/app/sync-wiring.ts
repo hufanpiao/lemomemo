@@ -48,6 +48,11 @@ export interface WireSyncDeps extends SyncDisabledDeps {
   clearLogs?: () => void;
   /** 测试用：会话没了怎么定结局（默认 core/auth-loss.ts 的 resolveAuthLoss，R-382） */
   resolveAuthLoss?: (signal: AuthLossSignal) => Promise<'expired' | 'removed'>;
+  /**
+   * 这一页第一次整轮拉取成功（引擎状态的 lastPullAt 头一回有值）以后调一次（审查 11-15 第 1 条：待办自动删除等本机数据跟上服务器再扫）。
+   * 离线、拉取失败就一直不调；这一页不是主页（不跑引擎）时，等它接成主页、拉成功了再调
+   */
+  onFirstPull?: () => void;
   /** 测试用：换掉 createSync、选主、前后台、用户操作 */
   create?: (boot: BootResult, opts: SyncOptions) => Sync;
   leader?: (o: TabLeaderOptions) => TabLeader;
@@ -302,5 +307,17 @@ function wireWith(boot: BootResult, deps: WireSyncDeps, denied: InsertDeniedChec
   }
   // 同步冲突、gone 提示（K8 冲突提示，方案 2.1）：gate 跟着这个块下载，宿主有要显示的才按需下载；换账号、同步停了自己卸掉
   startSyncNotices(f.facade, boot, { log: deps.log });
+  if (deps.onFirstPull) afterFirstPull(f.facade, deps.onFirstPull);
   return f.facade;
+}
+
+/** 第一次拉取成功以后调一次 fn（引擎状态的 lastPullAt 只在整轮拉成功时写，见 core/sync/engine.ts），调完退订 */
+export function afterFirstPull(sync: Pick<Sync, 'subscribe' | 'getState'>, fn: () => void): void {
+  let done = false;
+  const off = sync.subscribe(() => {
+    if (done || sync.getState().lastPullAt === null) return;
+    done = true;
+    off();
+    fn();
+  });
 }

@@ -83,6 +83,7 @@ export function FoldHandle({ t, collapsed, controls, drag }: { t: CalViewT; coll
       className={styles.fold}
       aria-expanded={!collapsed}
       aria-controls={controls}
+      data-nopull=""
       aria-label={t(collapsed ? 'cal.fold.expand' : 'cal.fold.collapse', {})}
       onPointerDown={(e) => {
         try {

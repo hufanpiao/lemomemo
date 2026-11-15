@@ -200,7 +200,7 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
     caps: { ai: false, convert: false, merge: false, lockrow: false, moveIn: false, moveOut: true, filesMark: false },
     route: { list: 'vault', edit: 'vault' },
     desk: 'vault',
-    trash: { route: 'vault', sub: 'trash' },
+    trash: ['vault', 'trash'],
     useTrashCount: () => useVaultStore().notes.filter((n) => n['deleted_at'] !== null).length,
     text,
     useRows(): NoteRows {

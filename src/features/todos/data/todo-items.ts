@@ -10,6 +10,7 @@
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { cutGraphemes } from '../../../../shared/logic/short.ts';
+import { numOr } from '../../../../shared/logic/todo-row.ts';
 import { TODO_ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
 import { saveDeleted, saveInsert, savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
 import { collection } from '../../../core/store.ts';
@@ -35,15 +36,13 @@ export interface Subtask {
   createdAt: number;
 }
 
-const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
-
 /** 集合里的一行 → 子任务；删了、撤销了、没有 todo_id 的返回 null */
 export function subtaskOf(r: Row): Subtask | null {
   const todoId = r['todo_id'];
   if (typeof todoId !== 'string' || !isLiveRow(r)) return null;
   return {
     id: r.id, todoId, title: typeof r['title'] === 'string' ? r['title'] : '', done: r['done'] === true,
-    sort: num(r['sort'], 0), createdAt: num(r['created_at'], 0),
+    sort: numOr(r['sort'], 0), createdAt: numOr(r['created_at'], 0),
   };
 }
 

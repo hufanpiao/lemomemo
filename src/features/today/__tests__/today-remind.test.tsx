@@ -131,20 +131,22 @@ describe('引擎挂上以后', () => {
     expect(plain.childNodes).toHaveLength(0);
   });
 
-  it('日程行尾补一个和 × 一样宽的空格子（设计复审 今天页待办 M2）：读屏不读、不进 Tab、不能点；待办行没有（已经有 ×）', () => {
+  it('待办行尾没有 ×（负责人 11-15“代办后面的x去掉”）：待办行包在左滑行里（kit SwipeRow，删除按钮收着时 inert）；日程行不再补和 × 同宽的空格子，行尾就是行按钮', () => {
     const { container } = render(<TodayPage />);
     const evRows = [...container.querySelectorAll<HTMLElement>('[data-testid^="today-event-"]')];
     const tdRows = [...container.querySelectorAll<HTMLElement>('[data-testid^="today-todo-"]')];
     expect(evRows.length).toBeGreaterThan(0);
+    expect(tdRows.length).toBeGreaterThan(0);
     for (const row of evRows) {
-      const gap = row.lastElementChild as HTMLElement;
-      expect(gap.dataset['testid']).toMatch(/^today-del-gap-/);
-      expect(gap.getAttribute('aria-hidden')).toBe('true');
-      expect(gap.tagName).toBe('SPAN');
-      expect(gap.hasAttribute('tabindex')).toBe(false);
-      expect(gap.className).toContain('delGap');
+      expect(row.lastElementChild?.tagName).toBe('BUTTON');
+      expect(row.querySelector('[data-testid^="today-del-"]')).toBeNull();
     }
-    for (const row of tdRows) expect(row.querySelector('[data-testid^="today-del-gap-"]')).toBeNull();
+    for (const row of tdRows) {
+      const id = (row.dataset['testid'] ?? '').replace('today-todo-', '');
+      expect(row.querySelector(`[data-testid="today-swipe-${id}"]`)).not.toBeNull();
+      expect(row.querySelector(`[data-testid="today-del-${id}"]`)).toBeNull();
+      expect(row.querySelector(`[data-testid="today-swipe-del-${id}"]`)?.closest('[inert]')).not.toBeNull();
+    }
   });
 
   it('引擎卸载（退出登录、换账号）：“错过的提醒”跟着撤掉；提示、标记和引擎无关，照旧', async () => {

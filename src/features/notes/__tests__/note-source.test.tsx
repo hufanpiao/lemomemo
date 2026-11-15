@@ -140,7 +140,7 @@ describe('“最近删除”入口（负责人 11-15）', () => {
 
   it('隐私记来源：用来源的字、带条数，点了进 #/vault/trash', async () => {
     window.history.replaceState(null, '', '/app/#/vault');
-    at({ ...notesSource, kind: 'vault', trash: { route: 'vault', sub: 'trash' }, useTrashCount: () => 2, text: { title: '隐私记', empty: '', back: '', trash: '最近删除' } });
+    at({ ...notesSource, kind: 'vault', trash: ['vault', 'trash'], useTrashCount: () => 2, text: { title: '隐私记', empty: '', back: '', trash: '最近删除' } });
     const b = screen.getByTestId('vault-open-trash');
     expect(b.textContent).toBe('最近删除 2');
     await act(async () => {

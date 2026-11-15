@@ -122,6 +122,8 @@ export async function touchSwipe(page: Page, from: { x: number; y: number }, dx:
  * frac 给小一点（如 0.3）就是只露出“删除”按钮
  */
 export async function swipeRow(page: Page, rowTestId: string, frac = 0.8): Promise<void> {
+  // 行面挂上了才滑（今天页的 SwipeRow 首屏画完以后才下载，下好之前是滑不开的普通一行，R-428）
+  await page.getByTestId(rowTestId).locator('[data-swipe-face]').first().waitFor({ state: 'attached', timeout: 15000 });
   const b = await page.getByTestId(rowTestId).boundingBox();
   if (!b) throw new Error(`找不到行 ${rowTestId}`);
   await touchSwipe(page, { x: b.x + b.width - 30, y: b.y + Math.min(b.height / 2, 22) }, b.width * frac);

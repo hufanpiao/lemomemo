@@ -73,7 +73,7 @@
 .restore[aria-disabled='true'],   /* 只读行、进行中：“恢复”也灰掉 */
 .purge[aria-disabled='true'],
 .clear[aria-disabled='true'] {
-  opacity: 0.45;   /* 同 kit 只读行的 ×（List.module.css .trail） */
+  opacity: 0.45;   /* 同 kit 只读行的打勾圆圈变淡（kit CheckCircle.module.css） */
   cursor: default;
 }
 

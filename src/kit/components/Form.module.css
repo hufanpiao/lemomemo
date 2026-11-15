@@ -257,8 +257,8 @@
   opacity: 0.45;
 }
 
-/* 圆圈勾选（B2-UI-a U2-4，Check 的 look="circle"）：直接用列表完成圆圈的画法（CheckCircle.module.css 的 .checkBox/.check/.fill/.tick，
-   同一组令牌、同一个打勾动效）；禁用时整个圆圈一起变淡（不让里面的 checkbox 再淡一次） */
+/* 完成勾选（B2-UI-a U2-4，Check 的 look="circle"；R-433 起和列表一样画成圆角方框）：直接用列表完成标记的画法（CheckCircle.module.css 的 .checkBox/.check/.fill/.tick，
+   同一组令牌、同一个打勾动效）；禁用时整个方框一起变淡（不让里面的 checkbox 再淡一次） */
 .circleBox:has(> input:disabled) {
   opacity: 0.45;
 }
@@ -409,10 +409,10 @@
   box-shadow: inset 0 -2px 0 var(--focus);
 }
 
-/* 圆圈勾选和列表里的圆圈一样大（22，CheckCircle.module.css .check）：压过上面 .check input 的 20（代码审建议 1） */
+/* 完成勾选和列表里的方框一样大（24，CheckCircle.module.css .check）：压过上面 .check input 的 20（代码审建议 1） */
 .check .circleBox > input {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
 }
 
 .check .circleBox > input:disabled {

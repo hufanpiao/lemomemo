@@ -57,7 +57,7 @@
   color: var(--danger-text);
 }
 
-/* 列表行、行尾 ×、空状态在 kit 的 List.module.css（B2-UI-a U4、U6）；这里只留过期标签的红字。
+/* 列表行、左滑删除的行（.swp、.swRow）、空状态在 kit 的 List.module.css（B2-UI-a U4、U6；负责人 11-15 去掉行尾 ×）；这里只留过期标签的红字。
    字号在 kit 的 .meta；写成两级选择器，不靠两份样式表的先后顺序压过 .meta 的颜色 */
 .group .tagLate {
   color: var(--danger-text);
@@ -68,25 +68,7 @@
   pointer-events: none;
 }
 
-/* 左滑删除（负责人 11-15 去掉行尾 ×）：手势、行面、按钮是 kit 的 SwipeRow，这里只放待办行自己的排法
-   • .swp：kit 的外框，占满一行；.swRow：行面里的一行（打勾圈 ｜ 标题和副行），同 kit List.module.css 的 .row 的间距和最小高 */
-.swp {
-  display: flex;
-  flex: 1;
-  align-self: stretch;
-  min-width: 0;
-}
-
-.swRow {
-  display: flex;
-  flex: 1;
-  gap: 10px;
-  align-items: center;
-  min-width: 0;
-  min-height: var(--hit);
-}
-
-/* 有子任务的行（R-350）：子任务那一块（SubtaskCard）折到下一行、占满整行 */
+/* 有子任务的行（R-350；行本身是 kit List.module.css 的 .swRow）：子任务那一块（SubtaskCard）折到下一行、占满整行 */
 .hasSubs {
   flex-wrap: wrap;
   row-gap: 0;

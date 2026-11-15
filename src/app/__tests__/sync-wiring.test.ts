@@ -10,7 +10,7 @@ import { fakeTransport } from '../../core/sync/__tests__/fake-server.ts';
 import { fakeIndexedDB, nextDbVersion } from '../../core/__tests__/idb-fake.ts';
 import { todo, uid } from '../../core/__tests__/outbox-fixtures.ts';
 import { clearLocalSessionIf, readSessionId, readSessionUserId } from '../../platform/session.ts';
-import { wireSync } from '../sync-wiring.ts';
+import { afterFirstPull, wireSync } from '../sync-wiring.ts';
 
 const reload = vi.fn();
 
@@ -278,5 +278,35 @@ describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 
     t.release();
     await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
     expect(readSessionUserId()).toBe(A);   // s2 还在：没有“不管是谁都删”的兜底了
+  });
+});
+
+describe('afterFirstPull（审查 11-15 第 1 条：待办自动删除等第一次拉取成功再扫）', () => {
+  /** 只有 subscribe、getState 的假引擎：set 改状态并通知订阅者 */
+  function fakeState() {
+    let state = { syncing: false, realtime: 'down' as const, lastPullAt: null as number | null, stopped: false };
+    const ls = new Set<() => void>();
+    return {
+      sync: { subscribe: (l: () => void) => (ls.add(l), () => void ls.delete(l)), getState: () => state },
+      set(p: Partial<typeof state>) {
+        state = { ...state, ...p };
+        ls.forEach((l) => l());
+      },
+      listeners: () => ls.size,
+    };
+  }
+
+  it('拉取还没成功（离线、失败只改 syncing）不调；第一次 lastPullAt 有值时调一次、退订，之后再拉成功也不再调', () => {
+    const f = fakeState();
+    const fn = vi.fn();
+    afterFirstPull(f.sync, fn);
+    f.set({ syncing: true });
+    f.set({ syncing: false });
+    expect(fn).not.toHaveBeenCalled();
+    f.set({ lastPullAt: 1000 });
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(f.listeners()).toBe(0);
+    f.set({ lastPullAt: 2000 });
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 });

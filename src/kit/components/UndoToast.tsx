@@ -26,7 +26,7 @@ export interface UndoToastProps {
   onUndo?: (() => void) | undefined;
   /** 收起（到时、或点了撤销之后）；只调一次 */
   onClose(): void;
-  ms?: number;
+  ms?: number | undefined;
   /** 默认 status；被拦下这类“刚才那一下没生效”的提示用 alert（新挂上的 status 区域 iOS VoiceOver 常常不读，FA-2 审查第 1 条） */
   role?: 'status' | 'alert';
   /** 撤销后面再放一个按钮（电脑版布局的“恢复默认布局”，5.9b）：点了同样收起 */
