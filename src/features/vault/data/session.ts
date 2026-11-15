@@ -16,9 +16,13 @@
 //   - vault_locked → 上锁、置 waiting（界面弹解锁），等解锁成功后**自动重试一次**原请求；再失败就停（TC-B5-47 ①）；取消解锁回失败
 //   - vault_relock → 上锁、relocked = true（提示“密码已在别的设备修改”、不显示 Face ID，TC-B5-47 ②）
 //   - session_revoked → 上锁，交给同步引擎退出（D20：和 B1 同一条路）
-// • 离开、回来（S6）：hide(now) 记下离开时刻；show(now, min) 离开满 min 分钟就上锁（59 秒不锁、61 秒锁，TC-B5-10），否则什么也不动。
+// • 离开、回来（S6）：离开时刻按原因分开记（'app'：离开 App；'page'：离开隐私记页，负责人 11-15“离开隐私记页 1 分钟不自动上锁”）。
+//   hide(now, why) 记下；show(now, min, why) 这个原因离开满 min 分钟就上锁（59 秒不锁、61 秒锁，TC-B5-10），再看别的原因满没满（check）。
+//   check(now, min)：任何一个原因离开满时长就上锁；入口行、查找行、移进隐私记读状态前先调一次（计时器被浏览器压后时也对）。
+//   有离开原因时自己挂一个计时器到点调 check（App 在前台、只是离开了隐私记页，到点就锁，不等回来）。
+//   隐私记页没挂着时解锁的（移进隐私记弹的解锁卡）：解锁那一刻就记 'page'。默认原因是 'app'，原来的调用不用改。
 //   令牌过期、等解锁（waiting）时也算：满时长就作废等着的请求、丢掉后台队列（审查第 2 条：原来只认已解锁，没发完的明文一直留在内存）。
-//   盖遮罩、去遮罩由 hooks/useVault.ts 的 watchLeave 同步做，这里只管锁不锁
+//   盖遮罩、去遮罩由 hooks/useVault.ts 的 watchLeave 同步做；页面挂上、卸下由 useVaultPresence 报；这里只管锁不锁
 // • 取图（image）：同时最多 2 张（IMG_SLOTS），限流、服务忙、断网（kind retry）退避 2 秒、5 秒、15 秒再取；本机刚插的图 seedImage 直接放进图片表，不再取
 // • 续期（M2）：编辑页有输入时调 touch()，拿到令牌满 5 分钟就发一次 {renew}（按本机拿到令牌的时刻算，不受两边时钟差影响）；
 //   vault-image 只验不续，令牌过期（vault_locked）时先 {renew}（锁着就等解锁）再试一次；取图失败不缓存（M6）
@@ -91,6 +95,9 @@ export interface VaultSessionDeps {
 /** 发一次 save：分类、时间不给就是没分类、现在 */
 export type SaveInput = Pick<SaveReq, 'id' | 'title' | 'body'> & Partial<SaveReq>;
 
+/** 离开的原因：离开 App、离开隐私记页 */
+export type LeaveWhy = 'app' | 'page';
+
 /** 同时取几张图（列表封面只取看得见的，这里再限一道并发） */
 export const IMG_SLOTS = 2;
 
@@ -109,7 +116,13 @@ export function createVaultSession(d: VaultSessionDeps) {
   /** 本机拿到当前令牌的时刻（touch 据此判断该不该续） */
   let tokenAt = 0;
   let renewing = false;
-  let hiddenAt: number | null = null;
+  /** 按原因记的离开时刻 */
+  const away = new Map<LeaveWhy, number>();
+  /** 隐私记页挂着 */
+  let onPage = false;
+  /** 自动上锁分钟数（设置里的 vault.autolock_min，hooks/useVault.ts 的 useAutolockMin 报进来） */
+  let autoMin = 1;
+  let timer: ReturnType<typeof setTimeout> | null = null;
   /** 每上锁一次加 1（两种上锁都加）：读请求据此丢掉 */
   let epoch = 0;
   /** 只在作废在飞请求的上锁（hard）时加 1：写请求据此丢掉 */
@@ -185,7 +198,8 @@ export function createVaultSession(d: VaultSessionDeps) {
     revokeAll();
     store.clear();
     if (hard) queue.dropAll('lock');
-    hiddenAt = null;
+    away.clear();
+    arm();
     const set_ = state.status?.set ?? true;
     set({ phase: set_ ? 'locked' : 'unset', listed: false, ...patch });
   }
@@ -343,6 +357,9 @@ export function createVaultSession(d: VaultSessionDeps) {
     const st = state.status ? { ...state.status, set: true } : { set: true, lastResetAt: null, webauthn: 0 };
     set({ phase: 'unlocked', status: st, relocked: false, waiting: false, left: null, lockedUntil: null, lastError: null });
     if (endOwed) endPreview('resend');
+    // 不在隐私记页上解锁的（移进隐私记弹的解锁卡）：这一刻起就算离开了隐私记页
+    if (!onPage) away.set('page', now());
+    arm();
     const listed = await list();
     release(true);
     return listed.ok ? { ok: true, value: true } : listed;
@@ -360,6 +377,46 @@ export function createVaultSession(d: VaultSessionDeps) {
     set({ listed: true });
     queue.overlay();
     return { ok: true, value: true };
+  }
+
+  /** 已解锁，或令牌过期等解锁（waiting，后台队列里还有没发完的明文） */
+  const live = (): boolean => state.phase === 'unlocked' || state.waiting;
+  const minMs = (min: number): number => Math.max(1, min) * 60_000;
+
+  /** 离开满时长：作废等着的请求、后台队列，硬上锁 */
+  function autolock(why: LeaveWhy): void {
+    rlog(`vault autolock why=${why}${state.waiting ? ` waiting n=${waiters.length}` : ''}`);
+    release(false);
+    lock({ waiting: false }, true);
+  }
+
+  /** 有离开原因时挂一个计时器，到最早那个满时长时调 check */
+  function arm(): void {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    if (!live() || away.size === 0) return;
+    const due = Math.min(...away.values()) + minMs(autoMin) - now();
+    timer = setTimeout(() => {
+      timer = null;
+      check();
+    }, Math.max(0, due) + 50);
+  }
+
+  /** 任何一个原因离开满 min 分钟就上锁；回 true 表示锁上了 */
+  function check(at: number = now(), min: number = autoMin): boolean {
+    if (!live()) {
+      away.clear();
+      arm();
+      return false;
+    }
+    for (const [why, t] of away) {
+      if (at - t >= minMs(min)) {
+        autolock(why);
+        return true;
+      }
+    }
+    arm();
+    return false;
   }
 
   /** 本机刚插的图（原图、缩略图）放进图片表：显示直接用，不再经 vault-image 取（上锁时一起撤销） */
@@ -543,22 +600,29 @@ export function createVaultSession(d: VaultSessionDeps) {
     /** 已经在图片表里的地址（本机刚插的、取过的）；没有回 null，不去取 */
     peekImage: (imageId: string, part: 'full' | 'thumb'): string | null => blobs.get(`${imageId}:${part}`) ?? null,
     blobCount: (): number => blobs.size,
-    /** 已解锁、或令牌过期等解锁（waiting，后台队列里还有没发完的明文）时记下离开时刻 */
-    hide(at: number = now()): void {
-      if ((state.phase === 'unlocked' || state.waiting) && hiddenAt === null) hiddenAt = at;
+    /** 已解锁、或令牌过期等解锁时记下这个原因的离开时刻（同一个原因只记第一次） */
+    hide(at: number = now(), why: LeaveWhy = 'app'): void {
+      if (why === 'page') onPage = false;
+      if (live() && !away.has(why)) away.set(why, at);
+      arm();
     },
-    /** 回来：离开满 min 分钟就上锁，等解锁的请求和后台队列一并作废（审查第 2 条）；回 true 表示锁上了 */
-    show(at: number = now(), min = 1): boolean {
-      const h = hiddenAt;
-      hiddenAt = null;
-      if (h === null || (state.phase !== 'unlocked' && !state.waiting)) return false;
-      if (at - h >= Math.max(1, min) * 60_000) {
-        rlog(`vault autolock${state.waiting ? ` waiting n=${waiters.length}` : ''}`);
-        release(false);
-        lock({ waiting: false }, true);
+    /** 回来：这个原因离开满 min 分钟就上锁，等解锁的请求和后台队列一并作废（审查第 2 条）；再看别的原因（check）。回 true 表示锁上了 */
+    show(at: number = now(), min = autoMin, why: LeaveWhy = 'app'): boolean {
+      if (why === 'page') onPage = true;
+      autoMin = min;
+      const h = away.get(why);
+      away.delete(why);
+      if (live() && h !== undefined && at - h >= minMs(min)) {
+        autolock(why);
         return true;
       }
-      return false;
+      return check(at, min);
+    },
+    check,
+    /** 设置里的自动上锁分钟数变了 */
+    setAutolock(min: number): void {
+      autoMin = min;
+      arm();
     },
   };
 }

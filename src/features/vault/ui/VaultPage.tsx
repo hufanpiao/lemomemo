@@ -6,6 +6,7 @@
 // • 底栏照常（随手记页签），“＋”只在隐私记里新记（D14）：列表页由随手记的输入行自己登记 notesInput（新记的进隐私记来源）；
 //   编辑页、最近删除没有输入行，这里往 kit/state/new-item.ts 的 notesInput 登记成打开隐私记的新建页
 // • 网络回来（online）：没保存上的再发一次
+// • 挂上、卸下报给会话（useVaultPresence）：离开隐私记页满自动上锁时长就锁（负责人 11-15“离开隐私记页 1 分钟不自动上锁”）
 // • 不建液态玻璃副本、底栏和“＋”实色：挂着时经 platform/look.ts 的 holdReducedTransparency 让 <html data-rt="1">（同“减少透明效果”，
 //   motion/glass-ghost.ts 和 GlassBar 都认它），离开时放开、按设置和系统设置重算（TC-B5-12；hooks/useVault.ts 的 useSolidBars）
 // • 多任务遮罩 LockShield 一直挂在页面上（平时 visibility: hidden），离开时由 hooks/useVault.ts 同步盖上
@@ -17,7 +18,7 @@ import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { notesInput } from '../../../kit/state/new-item.ts';
 import { NotesSurface } from '../../notes/index.ts';
-import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultStatus } from '../hooks/useVault.ts';
+import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultPresence, useVaultStatus } from '../hooks/useVault.ts';
 import { useVaultNoteSource, useVaultStore } from '../hooks/vault-note-source.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import { LockIcon } from './Pin.tsx';
@@ -45,6 +46,7 @@ export default function VaultPage() {
   const [bindFail, setBindFail] = useState<string | null>(null);
   useSolidBars();
   useAutolockMin();
+  useVaultPresence();
   useKeys({
     'mod+l': () => {
       s.lock();

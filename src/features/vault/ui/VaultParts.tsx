@@ -4,12 +4,13 @@
 // • move：把一条普通随手记移进隐私记（S7）：没设密码先去设；锁着就弹解锁卡，解锁后自动重试一次（TC-B5-47 ①）；
 //   带附件回 has_files → “带附件的随手记暂时不能移进隐私记”（D13）；结果回 onDone(true / false)
 // • settings：设置 › 隐私记（VaultSettings.tsx）
+// • lockrow、findrow、move 读隐私记状态前先 check（useVaultChecked）：离开隐私记页满自动上锁时长的这时就锁上（负责人 11-15）
 // • findrow（B4b-3，线框 s12、sFind）：查找面板、结果层里的一行“隐私记锁着，里面的不在结果里 · 打开隐私记 ›”；没设过隐私记密码的不出。
 //   主页面的查找不查隐私记（D-16），隐私记里的查找要 VAULT_KEY，这一批不做，所以只给入口、不写“解锁后一起找”
 import { useEffect, useRef, useState } from 'react';
 import { navigate } from '../../../app/router.ts';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
-import { useErrText, useVault, type VaultCode } from '../hooks/useVault.ts';
+import { useErrText, useVault, useVaultChecked, type VaultCode } from '../hooks/useVault.ts';
 import { useWebauthn } from '../hooks/useVaultAuth.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import { LockIcon } from './Pin.tsx';
@@ -30,6 +31,7 @@ export default function VaultParts(p: VaultPartsProps) {
 function FindRow({ onGo }: { onGo?: (() => void) | undefined }) {
   const t = useVaultT();
   const { state, s } = useVault();
+  useVaultChecked();
   useEffect(() => {
     if (state.status === null && state.phase === 'loading') void s.refreshStatus();
   }, [s, state.status, state.phase]);
@@ -49,6 +51,7 @@ function FindRow({ onGo }: { onGo?: (() => void) | undefined }) {
 function LockRow() {
   const t = useVaultT();
   const { state, s } = useVault();
+  useVaultChecked();
   const wa = useWebauthn();
   useEffect(() => {
     if (state.status === null && state.phase === 'loading') void s.refreshStatus();
@@ -77,6 +80,7 @@ function MoveToVault({ noteId, onDone }: { noteId: string; onDone(moved: boolean
   const t = useVaultT();
   const errText = useErrText();
   const { state, s } = useVault();
+  useVaultChecked();
   const [err, setErr] = useState<VaultCode | 'unset' | null>(null);
   const started = useRef(false);
   const done = useRef(onDone);
@@ -98,6 +102,8 @@ function MoveToVault({ noteId, onDone }: { noteId: string; onDone(moved: boolean
         setErr('unset');
         return;
       }
+      // 离开隐私记页满时长的先锁上：移进去要重新解锁
+      s.check();
       const r = await s.importNote(noteId);
       if (r.ok) done.current(true);
       else if (r.code === 'vault_locked') done.current(false);   // 取消了解锁

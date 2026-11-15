@@ -2,8 +2,9 @@
 // • 会话第一次用到时才建（vault 块懒加载，不进首屏）；同时挂上离开、回来的监听（S6）：
 //   - visibilitychange → hidden、pagehide、blur：**同步**给 <html> 加 data-vault-shield="1"（LockShield 立刻盖上，不做动效，S21），记下离开时刻
 //   - visibilitychange → visible、pageshow、focus：离开满 vault.autolock_min 分钟就上锁；然后去掉遮罩（锁上了就露出解锁卡）
-// • 自动上锁的分钟数读本机 settings 的 vault.autolock_min（默认 1；只认 1～60 的整数）
-import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
+// • 离开隐私记页（负责人 11-15“离开隐私记页 1 分钟不自动上锁”）：useVaultPresence 在页面挂上、卸下时报给会话（原因 'page'），会话自己计时
+// • 自动上锁的分钟数读本机 settings 的 vault.autolock_min（默认 1；只认 1～60 的整数）；读到就报给会话
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { fmtDate, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { currentTz } from '../../../core/current-tz.ts';
@@ -92,8 +93,29 @@ export function useAutolockMin(): number {
   const min = autolockOf(settingValue(rows, AUTOLOCK_KEY));
   useEffect(() => {
     autolockMin = min;
+    vaultSession().setAutolock(min);
   }, [min]);
   return min;
+}
+
+/** 隐私记页挂着（离开隐私记页满时长就锁，原因 'page'）：挂上报 show、卸下报 hide */
+export function useVaultPresence(): void {
+  const { s } = useVault();
+  const min = useRef(useAutolockMin());
+  useLayoutEffect(() => {
+    // 时刻用会话自己的钟（测试注入的时钟和离开时记的是同一个）
+    s.show(undefined, min.current, 'page');
+    return () => s.hide(undefined, 'page');
+  }, [s]);
+}
+
+/** 读隐私记状态的入口（入口行、查找行）挂上时先 check 一次：离开隐私记页满时长的这时就锁上，不显示“已解锁” */
+export function useVaultChecked(): void {
+  const { s } = useVault();
+  useAutolockMin();
+  useLayoutEffect(() => {
+    s.check();
+  }, [s]);
 }
 
 /**
