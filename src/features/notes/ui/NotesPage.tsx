@@ -93,7 +93,7 @@ export function NotesList({ head }: { head?: ReactNode }) {
   const ds = useDrawerSel<{ id: string }>(!!loaded);
   const Desk = ds.on ? loaded : null;
   const l = useNoteList();
-  const a = useListActions<PageTip>('notes', { remove: l.remove, ro: src.useReadonly() });
+  const a = useListActions<PageTip>('notes', { remove: l.remove, useRo: src.useReadonly });
   const { g: guard, g: { toast }, isRo, report } = a;
   // 撤销条还在的那一对，提示条先不出（R-415 复查 B4）
   const merge = useMergeHint(toast?.kind === 'mergeUndo' ? toast.pair : null, caps.merge);

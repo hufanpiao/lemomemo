@@ -25,15 +25,16 @@ interface Hold {
 interface Acts {
   remove(id: string, deleted: boolean): Promise<ActionResult>;
   toggle?(id: string, on: boolean): Promise<ActionResult>;
-  /** 页面自己给的只读 id（随手记页按数据来源给，隐私记是空的）；不给就按 table 查 core */
-  ro?: ReadonlySet<string>;
+  /** 页面自己给的只读 id 钩子（调用方自己的数据来源）；不给就按 table 查 core 的只读 id。只调这一个，不额外再查 core */
+  useRo?: (table: string) => ReadonlySet<string>;
 }
 
 /** X：页面自己另加的提示条（随手记的插图提示），和撤销条、出错条共用一个位置 */
 export function useListActions<X = never>(table: string, act: Acts, hv?: Hold) {
   const g = useReadonlyGuard<ListToast | X>();
-  const coreRo = useReadonlyIds(table);
-  const ro = act.ro ?? coreRo;
+  // 同一页 act.useRo 给不给不会变（来源在挂上时就定了），钩子顺序不变
+  const useRo = act.useRo ?? useReadonlyIds;
+  const ro = useRo(table);
   const [picked, setPicked] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const isRo = (id: string) => ro.has(id);
   const holding = hv?.holding ?? false;
