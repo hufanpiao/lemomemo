@@ -19,7 +19,7 @@ import { useKeys } from '../../../kit/hooks/layers.ts';
 import { notesInput } from '../../../kit/state/new-item.ts';
 import { NotesSurface } from '../../notes/index.ts';
 import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultPresence, useVaultStatus } from '../hooks/useVault.ts';
-import { useVaultNoteSource, useVaultStore } from '../hooks/vault-note-source.ts';
+import { useVaultNoteSource } from '../hooks/vault-note-source.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import { LockIcon } from './Pin.tsx';
 import { SetupPin } from './SetupPin.tsx';
@@ -143,7 +143,7 @@ function VaultTop({ unlocked }: { unlocked: boolean }) {
   );
 }
 
-/** 解锁后：随手记的整套界面换成隐私记来源；列表页顶上是隐私记的顶栏、提示、“最近删除”入口 */
+/** 解锁后：随手记的整套界面换成隐私记来源；列表页顶上是隐私记的顶栏、提示（下面的“最近删除”入口是随手记列表那一份，按来源去 #/vault/trash） */
 function VaultSurface({ editing }: { editing: boolean }) {
   const source = useVaultNoteSource();
   return <NotesSurface source={source} editing={editing} head={<VaultHead />} />;
@@ -152,18 +152,12 @@ function VaultSurface({ editing }: { editing: boolean }) {
 function VaultHead() {
   const t = useVaultT();
   const min = useAutolockMin();
-  const trash = useVaultStore().notes.filter((n) => n['deleted_at'] !== null).length;
   return (
     <div>
       <VaultTop unlocked />
       <p className={styles.hint} data-testid="vault-hint">
         {t('vault.unlockedHint', { n: min })}
       </p>
-      <div className={styles.trashLink}>
-        <FormButton variant="ghost" onClick={() => void navigate('vault', 'trash')} data-testid="vault-open-trash">
-          {`${t('vault.trash', {})}${trash ? ` ${trash}` : ''}`}
-        </FormButton>
-      </div>
     </div>
   );
 }

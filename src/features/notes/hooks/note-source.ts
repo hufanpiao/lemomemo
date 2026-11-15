@@ -74,6 +74,8 @@ export interface NoteSourceText {
   empty: string;
   /** 编辑页左上角“‹ …” */
   back: string;
+  /** 列表上方“最近删除”入口的字 */
+  trash: string;
 }
 
 export interface NoteSource {
@@ -82,6 +84,11 @@ export interface NoteSource {
   /** 列表、编辑页的路由名；电脑布局存设置用的页名（两种来源分开存） */
   route: { list: 'notes' | 'vault'; edit: 'note' | 'vault' };
   desk: 'notes' | 'vault';
+  /** 列表上方居中的“最近删除”入口去哪（负责人 11-15：随手记页也常驻一个，原来只能从图片空间满的提示条进）：
+   *  随手记是全站的 #/trash，隐私记是自己的 #/vault/trash */
+  trash: { route: 'trash' } | { route: 'vault'; sub: 'trash' };
+  /** 入口上带的条数（隐私记：删了的几条）；不带数时 null（全站最近删除还有日程、待办，随手记页不另数一遍） */
+  useTrashCount(): number | null;
   text: NoteSourceText | null;
   useRows(): NoteRows;
   /** 只读行（要新版本才能改的） */

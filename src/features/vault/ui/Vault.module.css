@@ -107,12 +107,6 @@
   text-align: center;
 }
 
-.trashLink {
-  display: flex;
-  justify-content: center;
-  margin-top: 16px;
-}
-
 /* ===== 设密码、输密码（.pdots、.kpad） ===== */
 .pin {
   display: flex;

@@ -1,12 +1,14 @@
 // 随手记页的小部件（11-15 隐私记重写时整理）：
 // • 8 个从 NotesPage.tsx 原样搬来（页面不超行数上限）：“附件 N”、列表行的字、撤销条、输入行上面的提示条、分类胶囊、只读、已转过、AI 小标
 // • 3 个新增（隐私记的后台同步状态）：SyncMark 行上“没保存上”、SyncLine 编辑页“没保存上 · 重试”、SyncDropped 解锁后“有 N 处改动没来得及保存”
+// • 11-15 加 TrashLink：列表上方居中的“最近删除”入口（原来在 vault 的 VaultPage，挪来两种来源共用）
 // • 同步状态都从 hooks/note-source.ts 来源的 useSync 读（普通随手记一直是空的，什么都不画）；列表上的 failed 由列表层读一次传进来，每行不各订一份
 import type { ReactNode } from 'react';
 import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
 import row from '../../../kit/components/NoteRow.module.css';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyRow.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
+import { FormButton } from '../../../kit/components/Form.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import type { NoteItem } from '../hooks/useNoteList.ts';
@@ -143,5 +145,20 @@ export function AiMark({ id }: { id: string }) {
     <span className={styles.ai} aria-label={t('notes.aiLabel', {})} data-testid={`notes-ai-${id}`}>
       {t('notes.ai', {})}
     </span>
+  );
+}
+
+/** 列表上方居中的“最近删除”入口（负责人 11-15 随手记页也要常驻一个；原来只在隐私记页有，挪到这里两种来源共用一份）：去哪、带不带条数看来源 */
+export function TrashLink() {
+  const t = useNotesT();
+  const src = useNoteSource();
+  const n = src.useTrashCount();
+  const go = src.trash;
+  return (
+    <div className={styles.trashLink}>
+      <FormButton variant="ghost" onClick={() => void (go.route === 'vault' ? navigate(go.route, go.sub) : navigate(go.route))} data-testid={`${src.kind}-open-trash`}>
+        {`${src.text?.trash ?? t('notes.img.trash', {})}${n ? ` ${n}` : ''}`}
+      </FormButton>
+    </div>
   );
 }
