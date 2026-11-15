@@ -3,7 +3,7 @@
 //   ① 预加载表（__vite__mapDeps）里没有宿主静态闭包里的 JS；
 //   ② 目标块的闭包里，除了宿主已加载的那些，其余 JS 一个不少（也不多）；
 //   ③ CSS 列表和不去重时一模一样（顺序也一样）。
-// 11-16 起 App 入口块（main）只给首屏动态入口（FIRST_PAINT_DYNAMIC）列 JS（规则在 vite.config.ts 的 preloadDeps）：main 发起、目标不在首屏名单里的，② 要求一个 JS 都不列，CSS 照 ③ 核对
+// 11-16 起 App 入口块（main）只给首屏动态入口（FIRST_PAINT_DYNAMIC）列 JS（规则在 vite.config.ts 的 preloadDeps）：main 发起、目标不在首屏名单里的，② 要求只列目标块自己的 JS（不列它的依赖），CSS 照 ③ 核对
 // “不去重时”的表按 Vite 8.3.5 的 collectPreloadDependencies 从 manifest 重算：从目标块起深度优先，先记块自己的 JS，再走它静态引的块，最后记它的 CSS；宿主本身不算
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { posix, resolve } from 'node:path';
@@ -88,14 +88,14 @@ export function mapDepsCalls(code, host) {
 
 const isCss = (f) => f.endsWith('.css');
 
-/** 去重以后该留的：目标闭包里宿主没加载的 JS（含目标自己；keepJs 为 false 时一个不留），和全部 CSS（顺序同 Vite） */
+/** 去重以后该留的：目标闭包里宿主没加载的 JS（含目标自己；keepJs 为 false 时只留目标自己），和全部 CSS（顺序同 Vite） */
 function wanted(g, target, host, keepJs = true) {
   const loaded = new Set(staticClosure(g, [host]));
   const full = fullDeps(g, target, host);
-  return { loaded, full, js: keepJs ? full.filter((f) => !isCss(f) && !loaded.has(f)) : [], css: full.filter(isCss) };
+  return { loaded, full, js: full.filter((f) => !isCss(f) && !loaded.has(f) && (keepJs || f === target)), css: full.filter(isCss) };
 }
 
-/** 核对一处懒加载；keepJs 为 false：App 入口块发起、目标不在首屏名单里，表里不该有 JS。返回问题列表（空 = 通过） */
+/** 核对一处懒加载；keepJs 为 false：App 入口块发起、目标不在首屏名单里，表里只该有目标自己的 JS。返回问题列表（空 = 通过） */
 export function checkCall(g, host, target, actual, keepJs = true) {
   const where = `${host} → ${target ?? '?'}`;
   if (!target) return [`${where}：这张预加载表前面找不到 import("…") 地址，产物格式变了，核对脚本要跟着改`];
@@ -108,7 +108,7 @@ export function checkCall(g, host, target, actual, keepJs = true) {
   const missing = w.js.filter((f) => !actJs.includes(f));
   const extra = actJs.filter((f) => !w.js.includes(f) && !w.loaded.has(f));
   if (missing.length) errs.push(`${where}：② 少了 JS：${missing.join('、')}`);
-  if (extra.length) errs.push(`${where}：② 多了${keepJs ? '闭包外' : '（入口块只给首屏动态入口列 JS）'}的 JS：${extra.join('、')}`);
+  if (extra.length) errs.push(`${where}：② 多了${keepJs ? '闭包外' : '（入口块对非首屏目标只列目标自己）'}的 JS：${extra.join('、')}`);
   const wantCss = w.css.join(' ');
   const actCss = actual.filter(isCss).join(' ');
   if (wantCss !== actCss) errs.push(`${where}：③ CSS 和不去重时不一样：应为 [${wantCss}]，实际 [${actCss}]`);
