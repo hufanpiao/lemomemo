@@ -17,13 +17,17 @@ export const manifestSnapshot: readonly Manifest[] = [
         "clientWritable": [
           "display_name",
           "ui_locale",
-          "tz_mode"
+          "tz_mode",
+          "avatar_id",
+          "avatar_bytes"
         ],
         "insertOnly": [],
         "updateOnly": [
           "display_name",
           "ui_locale",
-          "tz_mode"
+          "tz_mode",
+          "avatar_id",
+          "avatar_bytes"
         ],
         "anonReadable": [],
         "clientDelete": false,
@@ -595,6 +599,25 @@ export const manifestSnapshot: readonly Manifest[] = [
         "userLookup": {
           "by": "pathPattern",
           "level": 2
+        }
+      },
+      {
+        "name": "images",
+        "store": "r2",
+        "maxBytes": 102400,
+        "pathPrefix": "<user_id>/me/",
+        "pathPattern": "^[0-9a-f-]{36}/me/[0-9a-f-]{36}\\.webp$",
+        "backup": "weekly-s3",
+        "export": "zip",
+        "countsToQuota": true,
+        "orphanSweep": {
+          "after": "24 hours",
+          "table": "profiles",
+          "col": "avatar_id"
+        },
+        "userLookup": {
+          "by": "pathPattern",
+          "level": 1
         }
       }
     ],

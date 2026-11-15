@@ -181,7 +181,7 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
       sub(
         t('settings.account.title', {}),
         'settings-account-back',
-        <AccountSection devices={devices} email={page.email} onExitHere={() => void askSignOut('device')} onDelete={() => openSub('delete')} />,
+        <AccountSection devices={devices} email={page.email} avatar={page.avatar} onExitHere={() => void askSignOut('device')} onDelete={() => openSub('delete')} />,
       )
     ) : view === 'data' ? (
       sub(t('settings.data.title', {}), 'settings-data-back', <DataSection task={exportTask} recent={recent} devices={devices.state} />)

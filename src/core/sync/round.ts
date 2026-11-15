@@ -3,7 +3,7 @@
 // 纯 TS：不准 import React 和任何功能（A1）
 import { parseVersion, versionAtLeast } from '../../../shared/core/version.ts';
 import { buildInfo } from '../../platform/env.ts';
-import { applyFreshConfig, type BootResult } from '../boot.ts';
+import { applyFreshConfig, profileEditCount, type BootResult } from '../boot.ts';
 import type { Cache, CachedConfig, CachedProfile } from '../cache.ts';
 import type { Outbox } from '../outbox-types.ts';
 import { pullTable, pullTombstones, refetchTable, type PullDeps, type PullOutcome } from './pull.ts';
@@ -64,11 +64,12 @@ export async function releaseUpgradePause(boot: BootResult, min: unknown, appVer
 /** 一轮完整拉取；返回 ok、auth（遇到 401）、net、stopped */
 export async function pullRound(c: RoundCtx, transport: SyncTransport): Promise<PullOutcome> {
   if (c.withConfig) {
+    const since = profileEditCount();   // 拉取期间本机换了头像：拉回来的旧 profile 不要（boot.applyFreshConfig）
     const cfg = await transport.fetchConfig();
     if (c.d.gated()) return 'stopped';
     if (cfg.ok) {
       const fresh = toCached(cfg.value);
-      await applyFreshConfig(c.boot, fresh);
+      await applyFreshConfig(c.boot, { ...fresh, since });
       await releaseUpgradePause(c.boot, fresh.config?.min_client_version);
       c.withConfig = false;
     }

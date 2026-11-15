@@ -765,14 +765,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "beta_features": (string)[],"consent_ai_at": string | null,"consent_policy_ver": string | null,"created_at": string,"current_tz": string,"current_tz_at": string | null,"current_tz_device": string | null,"disabled_at": string | null,"disabled_reason": string | null,"display_name": string | null,"tz_mode": string,"ui_locale": string,"user_id": string
+                    "avatar_bytes": number | null,"avatar_id": string | null,"beta_features": (string)[],"consent_ai_at": string | null,"consent_policy_ver": string | null,"created_at": string,"current_tz": string,"current_tz_at": string | null,"current_tz_device": string | null,"disabled_at": string | null,"disabled_reason": string | null,"display_name": string | null,"tz_mode": string,"ui_locale": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "beta_features"?: (string)[],"consent_ai_at"?: string | null,"consent_policy_ver"?: string | null,"created_at"?: string,"current_tz"?: string,"current_tz_at"?: string | null,"current_tz_device"?: string | null,"disabled_at"?: string | null,"disabled_reason"?: string | null,"display_name"?: string | null,"tz_mode"?: string,"ui_locale"?: string,"user_id": string
+                    "avatar_bytes"?: number | null,"avatar_id"?: string | null,"beta_features"?: (string)[],"consent_ai_at"?: string | null,"consent_policy_ver"?: string | null,"created_at"?: string,"current_tz"?: string,"current_tz_at"?: string | null,"current_tz_device"?: string | null,"disabled_at"?: string | null,"disabled_reason"?: string | null,"display_name"?: string | null,"tz_mode"?: string,"ui_locale"?: string,"user_id": string
                   }
                   Update: {
-                    "beta_features"?: (string)[],"consent_ai_at"?: string | null,"consent_policy_ver"?: string | null,"created_at"?: string,"current_tz"?: string,"current_tz_at"?: string | null,"current_tz_device"?: string | null,"disabled_at"?: string | null,"disabled_reason"?: string | null,"display_name"?: string | null,"tz_mode"?: string,"ui_locale"?: string,"user_id"?: string
+                    "avatar_bytes"?: number | null,"avatar_id"?: string | null,"beta_features"?: (string)[],"consent_ai_at"?: string | null,"consent_policy_ver"?: string | null,"created_at"?: string,"current_tz"?: string,"current_tz_at"?: string | null,"current_tz_device"?: string | null,"disabled_at"?: string | null,"disabled_reason"?: string | null,"display_name"?: string | null,"tz_mode"?: string,"ui_locale"?: string,"user_id"?: string
                   }
                   Relationships: [
                     

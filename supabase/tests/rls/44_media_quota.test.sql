@@ -4,7 +4,7 @@
 --   my_ai_usage 返回 media_used、media_limit（和触发器同一个公式）。
 -- 上限设成 1 MB（1048576 字节）好造数：A 在 private.user_limits 里 media_mb = 1。
 begin;
-select plan(49);
+select plan(54);
 \ir _helpers.psql
 select tests.seed();
 
@@ -188,6 +188,20 @@ insert into public.anniversaries (id, user_id, kind, name, calendar, month, day,
 select is(private.media_used('aaaaaaaa-0000-4000-8000-000000000001', null), 1048576::bigint, '负的 bytes、负的 avatar_bytes 都按 0 算：已用量不变');
 select is(tests.img('aaaaaaaa-0000-4000-8000-000000000001', '44000000-0000-4000-8000-0000000000a2', '4e000000-0000-4000-8000-0000000000a5',
                     1, false), 'P0001 quota_exceeded', '有负数旧行也腾不出额度：再写照样被拒');
+
+-- ================= 八、我的头像（R-384，迁移 20261115080000）：profiles.avatar_bytes 算进已用；改大才判 =================
+select is((select tgenabled::text from pg_trigger where tgname = 'profiles_media_quota' and tgrelid = 'public.profiles'::regclass), 'O',
+  'profiles 上有 before update of avatar_bytes 触发器 profiles_media_quota');
+create temp table me_b as select private.media_used('bbbbbbbb-0000-4000-8000-000000000002', null) as v;
+update public.profiles set avatar_id = '4c000000-0000-4000-8000-0000000000a1', avatar_bytes = 1000 where user_id = 'aaaaaaaa-0000-4000-8000-000000000001';
+select is(private.media_used('aaaaaaaa-0000-4000-8000-000000000001', null), 1049576::bigint, '我的头像 1000 字节算进已用（1048576 + 1000）');
+select is(private.media_used('bbbbbbbb-0000-4000-8000-000000000002', null), (select v from me_b), 'A 的头像不算进 B 的已用');
+select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001',
+  $$update public.profiles set avatar_bytes = 2000 where user_id = 'aaaaaaaa-0000-4000-8000-000000000001'$$,
+  null, 'aaaaaaaa-5555-4000-8000-000000000001') like '%quota_exceeded%', '已经满了：本人把头像改大被拒（quota_exceeded）');
+select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001',
+  $$update public.profiles set avatar_bytes = 500 where user_id = 'aaaaaaaa-0000-4000-8000-000000000001'$$,
+  null, 'aaaaaaaa-5555-4000-8000-000000000001'), 'ok', '改小不判：满了也能换成更小的头像');
 
 select * from finish();
 rollback;

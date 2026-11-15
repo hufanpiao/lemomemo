@@ -1,4 +1,4 @@
-// 设置页（B1 K9 骨架）的总 hook：把接口、离开本机、设备列表、中韩切换、导出和注销（R-256 ②⑤）接在一起
+// 设置页（B1 K9 骨架）的总 hook：把接口、离开本机、设备列表、中韩切换、导出和注销（R-256 ②⑤）、换头像（R-384）接在一起
 // 测试经 deps 换掉接口、清本机和跳转、时钟
 import { useCallback, useMemo, useRef } from 'react';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -14,6 +14,7 @@ import type { AccountActionDeps } from './useAccountActions.ts';
 import type { HotkeyApi } from './useQuickAddHotkey.ts';
 import { useDevices } from './useDevices.ts';
 import { useLocaleSwitch } from './useLocaleSwitch.ts';
+import { useMeAvatarEdit } from './useMeAvatarEdit.ts';
 import { useSessionExit, type SignOutHereDeps } from './useSessionExit.ts';
 
 export type { SettingsApi } from '../data/settings-api.ts';
@@ -102,6 +103,8 @@ export function useSettingsPage(deps: SettingsDeps = {}) {
     ...(deps.now ? { now: deps.now } : {}),
   });
   const locale = useLocaleSwitch(api, onRevoked, onSignedOut, onDisabled);
+  const avatarExits = useMemo(() => ({ onRevoked, onSignedOut, onDisabled }), [onRevoked, onSignedOut, onDisabled]);
+  const avatar = useMeAvatarEdit(api, avatarExits);
   const accountApi = useMemo(() => deps.account ?? createAccountApi(getSupabase), [deps.account]);
   const account: AccountActionDeps = useMemo(
     () => ({
@@ -127,5 +130,5 @@ export function useSettingsPage(deps: SettingsDeps = {}) {
       return null;
     }
   }, [readEmail]);
-  return { exit, devices, locale, account, recentExports, email };
+  return { exit, devices, locale, account, recentExports, email, avatar };
 }

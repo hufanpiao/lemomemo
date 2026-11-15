@@ -44,6 +44,7 @@ const DEVICE = {
   try_later: 'settings.err.tryLater',
   is_current_device: 'settings.err.unknown',
   device_not_found: 'settings.err.unknown',
+  quota_exceeded: 'settings.err.unknown', // 只有换头像（R-384）会回这个，设备列表遇不到
   unknown: 'settings.err.unknown',
 } as const satisfies Record<SettingsErr, DeviceErrKey>;
 

@@ -9,7 +9,7 @@ const upgrade = createUpgradeCenter({
   appVersion: '4.0.0', reload: vi.fn(), swUpdate: vi.fn(() => Promise.resolve('no_update' as const)), attempt: { get: () => null, set: () => undefined },
 });
 let loadPage: () => Promise<{ default: ComponentType }> = () => Promise.resolve({ default: () => <main data-feature="today">今天</main> });
-vi.mock('../../core/boot.ts', () => ({ getBoot: () => ({ upgrade, outbox: null }) }));
+vi.mock('../../core/boot.ts', () => ({ getBoot: () => ({ upgrade, outbox: null }), subscribeProfile: () => () => undefined }));
 vi.mock('../features.ts', () => ({
   featureRoutes: [{ name: 'today', Page: lazy(() => loadPage()) }],
   offRoutes: new Set(),

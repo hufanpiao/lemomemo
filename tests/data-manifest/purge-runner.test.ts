@@ -29,8 +29,8 @@ describe('注销 runner（离线：内存替身）', () => {
     for (const o of out) expect(o.problems, o.id).toEqual([]);
     expect(out).toHaveLength(4);
     const images = out.find((o) => o.id === 'TC-DEL-bucket-images');
-    expect(images?.before).toEqual({ mode: 'count', a: 3, b: 3 });
-    expect(images?.afterPurge).toEqual({ mode: 'count', a: 0, b: 3 });
+    expect(images?.before).toEqual({ mode: 'count', a: 4, b: 4 });   // 插图、缩略图、纪念日头像、我的头像（R-384）
+    expect(images?.afterPurge).toEqual({ mode: 'count', a: 0, b: 4 });
     for (const b of R2_BUCKETS) {
       expect(store.count(b, `${SEED_USERS.a}/`), b).toBe(0);
       expect(store.count(b, `${SEED_USERS.b}/`), b).toBe(seedObjects().filter((o) => o.bucket === b && o.owner === 'b').length);
@@ -135,7 +135,7 @@ describe.skipIf(!OBJSTORE_LIVE)('注销 runner：探针打真的 S3 替身（没
       const out = await runPurgeCases(cases, { store, acts: memoryPurgeActs(store, allManifests) });
       expect(out).toHaveLength(4);
       for (const o of out) expect(o.problems, o.id).toEqual([]);
-      expect(out.find((o) => o.id === 'TC-DEL-bucket-images')?.before).toEqual({ mode: 'count', a: 3, b: 3 });
+      expect(out.find((o) => o.id === 'TC-DEL-bucket-images')?.before).toEqual({ mode: 'count', a: 4, b: 4 });
       for (const b of R2_BUCKETS) {
         expect(await store.listAll(b, `${SEED_USERS.a}/`), b).toHaveLength(0);
         expect((await store.listAll(b, `${SEED_USERS.b}/`)).length, b).toBe(seedObjects().filter((o) => o.bucket === b && o.owner === 'b').length);
@@ -186,7 +186,7 @@ function positiveChain(title: string, skip: string | null, backend: () => LiveS3
       const out = await runPurgeCases(cases, { store: live.store, acts: live.acts });
       expect(out).toHaveLength(4);
       for (const o of out) expect(o.problems, o.id).toEqual([]);
-      expect(out.find((o) => o.id === 'TC-DEL-bucket-images')?.before).toEqual({ mode: 'count', a: 3, b: 3 });
+      expect(out.find((o) => o.id === 'TC-DEL-bucket-images')?.before).toEqual({ mode: 'count', a: 4, b: 4 });
       // 函数那一侧：这一次只删了 A；A 不在 auth.users 了，B 还在
       expect(live.lastPurge).toMatchObject({ ok: true, purged: 1, failed: 0 });
       expect([await live.userExists(a), await live.userExists(b)]).toEqual([false, true]);

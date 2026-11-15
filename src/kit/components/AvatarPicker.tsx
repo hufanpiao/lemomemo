@@ -1,18 +1,46 @@
-// 头像选区（B5 S16；R-117；代定 D16：不用第三方库，canvas + 指针事件，按需加载）
+// 头像选区（B5 S16；R-117；代定 D16：不用第三方库，canvas + 指针事件，按需加载）；R-384 起纪念日头像、设置里的我的头像共用
 // • 正方形取景框（圆形遮罩只是示意，存的是正方形，显示时裁成圆）：图片铺满取景框，拖动挪位置；双指捏合、滚轮、下面的滑块缩放（1～4 倍）
-// • 图片不能拖出取景框（四边都有图）；“用这张”按原图像素算选区，交给 data/avatar.ts 编码成 256 × 256 webp（≤ 100 KB，丢掉 EXIF）
-// • 解码用浏览器的 createImageBitmap（按 EXIF 方向转正；HEIC 能不能打开看浏览器，R-377）；打不开回 onDone(null)，编辑页提示换一张
+// • 图片不能拖出取景框（四边都有图）；“用这张”按原图像素算选区，交给调用方传进来的 encode（platform/avatar-encode.ts）编码成 256 × 256 webp（≤ 100 KB，丢掉 EXIF）
+// • 解码用浏览器的 createImageBitmap（按 EXIF 方向转正；HEIC 能不能打开看浏览器，R-377）；打不开回 onDone(null)，调用方提示换一张
+// • kit 不认识功能、不引 platform（A27、边界规则）：文案、编码函数、记日志的函数、data-testid 前缀都由调用方传
 // • 整块评审第 15 条：文件超过 AVATAR_FILE_MAX 直接不解码（提示换一张）；先用 <img> 读出尺寸，长边超过 DECODE_EDGE 时
 //   createImageBitmap 带 resizeWidth / resizeHeight 缩着解码，几千万像素的照片不整张铺进内存。缩出来的宽高比和读到的对不上
 //   （有的浏览器先缩放后转方向），退回整张解码
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
-import { Dialog } from '../../../kit/components/Dialog.tsx';
-import { FormButton } from '../../../kit/components/Form.tsx';
-import { setBlobSrc, useBlobSrc } from '../../../kit/hooks/useBlobSrc.ts';
-import { rlog } from '../../../platform/run-log-api.ts';
-import { encodeAvatar, type Crop } from '../hooks/anniv-view.ts';
-import { useAnnivT } from '../hooks/useAnnivT.ts';
-import styles from './AnnivPage.module.css';
+import { Dialog } from './Dialog.tsx';
+import { FormButton } from './Form.tsx';
+import { setBlobSrc, useBlobSrc } from '../hooks/useBlobSrc.ts';
+import styles from './AvatarPicker.module.css';
+
+/** 原图上的正方形选区（原图像素；和 platform/avatar-encode.ts 的 Crop 同形） */
+export interface Crop {
+  x: number;
+  y: number;
+  size: number;
+}
+
+/** 选区里的文案（调用方按自己功能的词典给） */
+export interface AvatarPickerText {
+  title: string;
+  hint: string;
+  area: string;
+  zoom: string;
+  ok: string;
+  cancel: string;
+}
+
+export interface AvatarPickerProps {
+  file: File;
+  onDone(b: Blob | null): void;
+  onCancel(): void;
+  /** 编码（platform/avatar-encode.ts 的 encodeAvatar，带上调用方的日志前缀） */
+  encode(src: ImageBitmap, crop: Crop): Promise<Blob | null>;
+  text: AvatarPickerText;
+  /** 记一行运行日志（解码失败、太大）；只给步骤和结果码，如 avatar-decode failed */
+  log(line: string): void;
+  /** data-testid 前缀：`${testId}-crop`、`${testId}-crop-zoom`、`${testId}-crop-ok` */
+  testId: string;
+}
 
 /** 取景框边长（CSS 像素） */
 const VIEW = 260;
@@ -88,8 +116,7 @@ export function cropOf(v: View, w: number, h: number): Crop {
   return { x: -v.x / s, y: -v.y / s, size: VIEW / s };
 }
 
-export default function AvatarPicker({ file, onDone, onCancel }: { file: File; onDone(b: Blob | null): void; onCancel(): void }) {
-  const t = useAnnivT();
+export default function AvatarPicker({ file, onDone, onCancel, encode, text, log, testId }: AvatarPickerProps) {
   const [img, setImg] = useState<{ bmp: ImageBitmap; url: string } | null>(null);
   const [v, setV] = useState<View>({ z: 1, x: 0, y: 0 });
   const [busy, setBusy] = useState(false);
@@ -100,7 +127,7 @@ export default function AvatarPicker({ file, onDone, onCancel }: { file: File; o
     let live = true;
     let made: { bmp: ImageBitmap; url: string } | null = null;
     if (file.size > AVATAR_FILE_MAX) {
-      rlog('anniv avatar-decode too_large');
+      log('avatar-decode too_large');
       onDone(null);
       return undefined;
     }
@@ -118,7 +145,7 @@ export default function AvatarPicker({ file, onDone, onCancel }: { file: File; o
       })
       .catch(() => {
         URL.revokeObjectURL(url);
-        rlog('anniv avatar-decode failed');
+        log('avatar-decode failed');
         if (live) onDone(null);
       });
     return () => {
@@ -128,7 +155,7 @@ export default function AvatarPicker({ file, onDone, onCancel }: { file: File; o
         URL.revokeObjectURL(made.url);
       }
     };
-    // onDone 不进依赖：换一个回调不重新解码
+    // onDone、log 不进依赖：换一个回调不重新解码
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
 
@@ -166,33 +193,33 @@ export default function AvatarPicker({ file, onDone, onCancel }: { file: File; o
   const ok = async (): Promise<void> => {
     if (!img) return;
     setBusy(true);
-    onDone(await encodeAvatar(img.bmp, cropOf(v, w, h)));
+    onDone(await encode(img.bmp, cropOf(v, w, h)));
   };
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onCancel()} title={t('anniv.crop.title', {})} description={t('anniv.crop.hint', {})}>
+    <Dialog open onOpenChange={(o) => !o && onCancel()} title={text.title} description={text.hint}>
       <div
         className={styles.crop}
         role="img"
-        aria-label={t('anniv.crop.area', {})}
+        aria-label={text.area}
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}
         onPointerCancel={up}
         onWheel={(e) => setV((x) => zoomTo(x, x.z * (e.deltaY < 0 ? 1.1 : 1 / 1.1), w, h))}
-        data-testid="anniv-crop"
+        data-testid={`${testId}-crop`}
       >
         {img ? <img ref={imgRef} className={styles.cropImg} alt="" draggable={false} style={{ width: w * s, height: h * s, transform: `translate(${v.x}px, ${v.y}px)` }} /> : null}
         <span className={styles.cropMask} aria-hidden="true" />
       </div>
       <label className={styles.zoom}>
-        {t('anniv.crop.zoom', {})}
-        <input type="range" min={1} max={ZOOM_MAX} step={0.01} value={v.z} onChange={(e) => setV((x) => zoomTo(x, Number(e.target.value), w, h))} data-testid="anniv-crop-zoom" />
+        {text.zoom}
+        <input type="range" min={1} max={ZOOM_MAX} step={0.01} value={v.z} onChange={(e) => setV((x) => zoomTo(x, Number(e.target.value), w, h))} data-testid={`${testId}-crop-zoom`} />
       </label>
       <div className={styles.cropActions}>
-        <FormButton onClick={onCancel}>{t('anniv.crop.cancel', {})}</FormButton>
-        <FormButton variant="primary" disabled={!img || busy} onClick={() => void ok()} data-testid="anniv-crop-ok">
-          {t('anniv.crop.ok', {})}
+        <FormButton onClick={onCancel}>{text.cancel}</FormButton>
+        <FormButton variant="primary" disabled={!img || busy} onClick={() => void ok()} data-testid={`${testId}-crop-ok`}>
+          {text.ok}
         </FormButton>
       </div>
     </Dialog>

@@ -200,4 +200,21 @@ export const zh = {
   'settings.about.version': '版本', // 设置 › 关于 卡片里“版本 4.0.0”（设计评审 M-1，11-06），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
   'settings.about.lunarCredit': '农历及节气数据：香港天文台',
   'settings.about.probe': '录音探测（试验）', // 只在非正式版的关于页显示（B3 FA-0，11-10）；和 voice-probe 同一个 PR 删
+  // R-384 设置 › 账号顶部的头像（更换、去掉；裁剪框文案照纪念日头像 anniv.crop.*）
+  'settings.avatar.label': '头像',
+  'settings.avatar.change': '更换头像',
+  'settings.avatar.remove': '去掉头像',
+  'settings.avatar.hint': '只有你自己看得到，各台设备同步显示',
+  'settings.avatar.busy': '正在保存头像…',
+  'settings.avatar.offline': '没有网络，联网后才能换头像',
+  'settings.avatar.encode_failed': '这张图打不开或太大，换一张试试',
+  'settings.avatar.write_failed': '没保存上，稍后再试',
+  'settings.avatar.upload_failed': '头像没传上，已换回原来的，联网后再试一次',
+  'settings.avatar.quota_exceeded': '存储空间满了，头像没换上。可以在设置 › 数据 里看哪些占地方',
+  'settings.avatar.crop.title': '挪一挪、缩放一下',
+  'settings.avatar.crop.hint': '拖动挪位置；双指、滚轮或下面的滑块缩放',
+  'settings.avatar.crop.zoom': '缩放',
+  'settings.avatar.crop.ok': '用这张',
+  'settings.avatar.crop.cancel': '取消',
+  'settings.avatar.crop.area': '头像选区',
 } as const;

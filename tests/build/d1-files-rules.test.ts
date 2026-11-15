@@ -7,9 +7,9 @@ describe('/files 规则表和清单一致（build/d1/files-rules.ts）', () => {
   const facts = filesRulesFacts(allManifests);
   const sample = [`// ${GENERATED_HEADER}`, ...facts.map((f) => f.forms[0] ?? '')].join('\n');
 
-  it('要核对的内容：images 两段、files 一段的 pathPattern，两个上限，类型', () => {
+  it('要核对的内容：images 三段（附件图、纪念日头像、R-384 我的头像）、files 一段的 pathPattern，两个上限，类型', () => {
     const what = facts.map((f) => f.what);
-    expect(what.filter((w) => w.includes('pathPattern'))).toHaveLength(3);
+    expect(what.filter((w) => w.includes('pathPattern'))).toHaveLength(4);
     expect(what).toContain('images 的大小上限 2097152');
     expect(what).toContain('files 的大小上限 10485760');
     expect(what.filter((w) => w.startsWith('files 的类型'))).toHaveLength(11);

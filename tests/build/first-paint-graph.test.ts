@@ -131,7 +131,9 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'shared/logic/anniv/lunar.ts':
     '农历换算和农历表：和 next-date.ts 同一次经 core/anniv-lib.ts 下载，条件同上（有纪念日、开关开着，首屏画完以后）',
   'src/features/anniv/data/avatar-view.ts':
-    '纪念日头像的签名和缓存（B5 S13，带 platform/files 的 zod）：页面上真有带头像的纪念日要画时才下载；今天页的纪念日一行先画首字圆，头像下好再换上，不挡首屏',
+    '纪念日头像仓（B5 S13；地址、Cache Storage，取图再按需加载带 platform/files 的 zod 的 core/avatar-view）：页面上真有带头像的纪念日要画时才下载；今天页的纪念日一行先画首字圆，头像下好再换上，不挡首屏',
+  'src/core/me-avatar.ts':
+    '我的头像（R-384）的头像仓（地址、Cache Storage、回滚补写；取图再按需加载带 zod 的 core/avatar-view）：kit/hooks/useMeAvatar 等首屏画完（appPainted）以后才下载；没下载好时右上角显示名字首字，不挡首屏',
   'src/features/today/ui/TodayDesk.tsx':
     '电脑版今天页的可拖动面板（B6，5.9b；连着 kit/components/DeskLayout、dnd-kit、desk-zh/ko 词典）：只在有侧栏的宽度（MQ_SIDEBAR ≥ 900px）、而且首屏画完（afterAppPainted）以后才挂、才下载；手机宽度不下载。没挂上、没下载好时今天页照原来的一列画',
   'src/features/notes/ui/TodayNotes.tsx': '电脑版今天页的“今天记的”块（B6）：TodayDesk 挂上以后才下载（首屏画完以后），条件同上；手机宽度不下载',

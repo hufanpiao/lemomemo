@@ -190,4 +190,21 @@ export const ko = {
   'settings.about.version': '버전', // 设置 › 关于“버전 4.0.0”（设计评审 M-1，11-06），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
   'settings.about.lunarCredit': '음력 및 절기 데이터: 홍콩 천문대', // REVIEW(ko)
   'settings.about.probe': '녹음 테스트(실험)', // REVIEW(ko)；只在非正式版的关于页显示（B3 FA-0，11-10）；和 voice-probe 同一个 PR 删
+  // R-384 设置 › 账号顶部的头像（裁剪框照 anniv.crop.*）
+  'settings.avatar.label': '프로필 사진', // REVIEW(ko)
+  'settings.avatar.change': '사진 바꾸기', // REVIEW(ko)
+  'settings.avatar.remove': '사진 지우기', // REVIEW(ko)
+  'settings.avatar.hint': '나만 볼 수 있어요. 바꾸면 모든 기기에 표시돼요', // REVIEW(ko)
+  'settings.avatar.busy': '사진 저장 중…', // REVIEW(ko)
+  'settings.avatar.offline': '인터넷에 연결된 뒤에 사진을 바꿀 수 있어요', // REVIEW(ko)
+  'settings.avatar.encode_failed': '열 수 없거나 너무 큰 사진이에요. 다른 사진으로 해 보세요', // REVIEW(ko)
+  'settings.avatar.write_failed': '저장하지 못했어요. 잠시 후 다시 해 보세요', // REVIEW(ko)
+  'settings.avatar.upload_failed': '사진을 올리지 못해 원래 사진으로 돌려놨어요. 인터넷에 연결된 뒤 다시 해 보세요', // REVIEW(ko)
+  'settings.avatar.quota_exceeded': '저장 공간이 가득 차서 사진을 바꾸지 못했어요. 설정 › 데이터에서 용량을 확인해 보세요', // REVIEW(ko)
+  'settings.avatar.crop.title': '위치와 크기 맞추기', // REVIEW(ko)
+  'settings.avatar.crop.hint': '끌어서 옮기고, 두 손가락·휠·아래 슬라이더로 크기를 바꿔요', // REVIEW(ko)
+  'settings.avatar.crop.zoom': '크기', // REVIEW(ko)
+  'settings.avatar.crop.ok': '이 사진으로', // REVIEW(ko)
+  'settings.avatar.crop.cancel': '취소', // REVIEW(ko)
+  'settings.avatar.crop.area': '사진 자르기 영역', // REVIEW(ko)
 } as const satisfies Record<keyof typeof zh, string>;

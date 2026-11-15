@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { loadAnnivLib } from '../../../core/anniv-lib.ts';
 import { annivList, itemOf, nextFew } from '../data/anniv-model.ts';
 import { dateValid, defaultsWrites, emptyForm, formOf, newRow, normalize, offsetsKey, offsetsList, patchOf, yearRange } from '../data/anniv-edit.ts';
-import { AVATAR_FILE_MAX, clampView, cropOf, decodeSize, scaleOf, zoomTo } from '../ui/AvatarPicker.tsx';
+import { AVATAR_FILE_MAX, clampView, cropOf, decodeSize, scaleOf, zoomTo } from '../../../kit/components/AvatarPicker.tsx';
 
 await loadAnnivLib();
 const TZ = 'Asia/Seoul';

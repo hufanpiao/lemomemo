@@ -34,6 +34,7 @@ function fakeApi(over: Partial<SettingsApi> = {}) {
     deleteOwnDevice: vi.fn(async () => undefined),
     dropLocalSession: vi.fn(async () => ({ serverDone: true })),
     saveLocale: vi.fn(async () => ok),
+    saveAvatar: vi.fn(async () => ok),
     ...over,
   };
 }

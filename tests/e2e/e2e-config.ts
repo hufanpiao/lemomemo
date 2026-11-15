@@ -18,6 +18,7 @@ const ROOT = join(import.meta.dirname, '..', '..');
  */
 export const FASTREAD_ONLY_SPECS: readonly string[] = [
   '**/r402-webp-wasm.spec.ts',
+  '**/r384-me-avatar.spec.ts',
   '**/b5-vault.spec.ts',
   '**/b4b1-attachments.spec.ts',
   '**/b4b2-find.spec.ts',

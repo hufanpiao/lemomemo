@@ -1,14 +1,19 @@
 // 纪念日编辑页的头像（B5 S15；R-117、R-121；视觉稿 annface、annnew）：从 AnnivEditor.tsx 分出来（那个文件超 300 行）
 // • 编辑页最上面“头像”一行：72px 圆、说明、“去掉”；新建页：名字左边一个头像圆圈，右下角小图标
-// • 点圆圈从相册选一张，裁成圆形（AvatarPicker 按需加载）；新建时先写名字存下来（有了 id）才能选
+// • 点圆圈从相册选一张，裁成圆形（kit 的 AvatarPicker 按需加载，和设置里的我的头像同一份；这里给纪念日的文案 anniv.crop.*、
+//   编码 data/avatar.ts、运行日志前缀 anniv、data-testid 前缀 anniv）；新建时先写名字存下来（有了 id）才能选
 import { lazy, Suspense, useRef, useState } from 'react';
+import type { Crop } from '../../../kit/components/AvatarPicker.tsx';
 import { Field, FormButton, TextInput } from '../../../kit/components/Form.tsx';
-import { clearAvatar, NAME_MAX, setAvatar, type AnnivForm, type AvatarResult } from '../hooks/anniv-view.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
+import { clearAvatar, encodeAvatar, NAME_MAX, setAvatar, type AnnivForm, type AvatarResult } from '../hooks/anniv-view.ts';
 import type { AnnivT } from '../hooks/useAnnivT.ts';
 import { AnnivFace } from './AnnivFace.tsx';
 import styles from './AnnivPage.module.css';
 
-const AvatarPicker = lazy(() => import('./AvatarPicker.tsx'));
+const AvatarPicker = lazy(() => import('../../../kit/components/AvatarPicker.tsx'));
+const pickerEncode = (src: ImageBitmap, crop: Crop): Promise<Blob | null> => encodeAvatar(src, crop);
+const pickerLog = (line: string): void => rlog(`anniv ${line}`);
 
 const AV_KEY = {
   uploading: 'anniv.av.uploading', ok: 'anniv.av.uploading', encode_failed: 'anniv.av.encode_failed', write_failed: 'anniv.av.write_failed', upload_failed: 'anniv.av.upload_failed',
@@ -22,7 +27,7 @@ interface PartProps {
 }
 
 /** 头像：点圆圈从相册选、裁成圆形（R-117）；新建页的小圆圈和编辑页的“头像”一行共用（选图、上传、状态） */
-function useAvatar(id: string | null, saved: Record<string, unknown> | undefined, off: boolean) {
+function useAvatar(id: string | null, saved: Record<string, unknown> | undefined, off: boolean, t: AnnivT) {
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [st, setSt] = useState<AvatarResult | 'uploading' | null>(null);
@@ -54,7 +59,22 @@ function useAvatar(id: string | null, saved: Record<string, unknown> | undefined
       />
       {file ? (
         <Suspense fallback={null}>
-          <AvatarPicker file={file} onDone={(b) => void done(b)} onCancel={() => setFile(null)} />
+          <AvatarPicker
+            file={file}
+            onDone={(b) => void done(b)}
+            onCancel={() => setFile(null)}
+            encode={pickerEncode}
+            text={{
+              title: t('anniv.crop.title', {}),
+              hint: t('anniv.crop.hint', {}),
+              area: t('anniv.crop.area', {}),
+              zoom: t('anniv.crop.zoom', {}),
+              ok: t('anniv.crop.ok', {}),
+              cancel: t('anniv.crop.cancel', {}),
+            }}
+            log={pickerLog}
+            testId="anniv"
+          />
         </Suspense>
       ) : null}
     </>
@@ -64,7 +84,7 @@ function useAvatar(id: string | null, saved: Record<string, unknown> | undefined
 
 /** 编辑页最上面“头像”一行（视觉稿 annface：72px 圆、说明、“去掉”） */
 export function AvatarRow({ id, form, saved, off, t }: { id: string | null; form: AnnivForm; saved: Record<string, unknown> | undefined; off: boolean; t: AnnivT }) {
-  const av = useAvatar(id, saved, off);
+  const av = useAvatar(id, saved, off, t);
   return (
     <div className={styles.avRow} data-testid="anniv-avatar-row">
       <button type="button" className={styles.avBtn} disabled={!av.can} onClick={av.pick} aria-label={t('anniv.edit.avatarPick', {})} data-testid="anniv-avatar-pick">
@@ -89,7 +109,7 @@ export function AvatarRow({ id, form, saved, off, t }: { id: string | null; form
 
 /** 新建页：名字左边一个头像圆圈（视觉稿 annnew；右下角小图标表示可以加；先写名字存下来才能选图） */
 export function NameWithAvatar({ id, saved, form, off, t, change }: PartProps & { id: string | null; saved: Record<string, unknown> | undefined }) {
-  const av = useAvatar(id, saved, off);
+  const av = useAvatar(id, saved, off, t);
   return (
     <Field label={t('anniv.edit.nameAv', {})} htmlFor="anniv-name">
       <span className={styles.nameRow}>
