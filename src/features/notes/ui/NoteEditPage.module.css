@@ -5,7 +5,6 @@
   min-height: 100dvh;
   margin: 0 auto;
   padding: max(var(--safe-top), 12px) 16px 40px;
-  background: var(--bg);
   color: var(--text);
 }
 

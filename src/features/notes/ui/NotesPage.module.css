@@ -6,7 +6,6 @@
 
   /* 底部多留输入行的高度（视觉稿第 1031 行：最后一条不被输入行挡住） */
   padding: max(var(--safe-top), 16px) 16px calc(var(--tabbar-pad) + 72px);
-  background: var(--bg);
   color: var(--text);
 }
 

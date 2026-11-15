@@ -174,6 +174,8 @@ test.describe('设置页按钮视觉锁定（B2-UI-b W4、V4；R-276、R-277，C
       await prep(page, theme, null);
       await page.goto('/app/#/settings');
       await page.getByTestId('settings-signout').waitFor({ timeout: 30_000 });
+      // “完成 7 天后自动删除”整行是懒加载的，到了会把“退出登录”往下推：先等它到再截（11-16 去掉说明后行高变了，没等就截到空处）
+      await page.getByTestId('settings-todo-autodel').waitFor({ state: 'attached', timeout: 30_000 });
       await calm(page);
       await expectRow44(page.getByTestId('settings-signout'), '“退出登录”');
       await lock(page, `设置-退出登录-${theme}`, page.getByTestId('settings-signout'), MSG);

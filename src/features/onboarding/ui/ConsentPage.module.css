@@ -7,7 +7,6 @@
   min-height: 100dvh;
   margin: 0 auto;
   padding: max(var(--safe-top), 32px) 20px max(env(safe-area-inset-bottom), 24px);
-  background: var(--bg);
   color: var(--text);
 }
 

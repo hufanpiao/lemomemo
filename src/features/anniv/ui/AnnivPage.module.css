@@ -5,7 +5,6 @@
   max-width: 720px;
   margin: 0 auto;
   padding: max(var(--safe-top), 12px) 16px var(--tabbar-pad);
-  background: var(--bg);
   color: var(--text);
 }
 

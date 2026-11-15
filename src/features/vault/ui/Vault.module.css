@@ -126,7 +126,7 @@
   inset: 0;
   overflow-y: auto;
   padding: max(var(--safe-top), 16px) 16px calc(var(--inset-bottom) + 24px);
-  background: var(--bg);
+  background: var(--scr-bg);
   color: var(--text);
 }
 

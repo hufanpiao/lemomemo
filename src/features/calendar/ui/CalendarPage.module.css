@@ -6,7 +6,6 @@
   max-width: 960px;
   margin: 0 auto;
   padding: max(var(--safe-top), 12px) 16px var(--tabbar-pad);
-  background: var(--bg);
   color: var(--text);
 
   /* 上拖收起要几层叠放（星期行压住上移的格子、日清单压住淡出的格子），层级关在页面里：
@@ -1105,11 +1104,11 @@
 
 /* ───────── 上拖收起（线框 s3、R-326） ───────── */
 
-/* 拖动柄和日清单：收起时整块上移，压住淡出的格子 */
+/* 拖动柄和日清单：收起时整块上移，盖在淡出的格子上面。不垫底色（R-439 磨砂玻璃页面底色是一张渐变，垫纯色会显出一块方块）：
+   被盖住的格子跟着进度淡出（MonthGrid 的 fade = 1 - p），停稳后其他行直接隐藏；日清单本身是 --panel 卡片 */
 .dayWrap {
   position: relative;
   z-index: 1;
-  background: var(--bg);
 }
 
 /* 拖动柄：整行宽、44 px 高的按钮；竖直方向的拖动交给页面（touch-action: none），点一下切换 */

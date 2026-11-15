@@ -136,9 +136,21 @@ body {
   font-size: var(--fs-15);
 }
 
+/* 页面底色（R-439，负责人 11-16“磨砂玻璃主题下底色是有个很淡的渐变背景的”）：只在这里画一层，固定在屏幕上、不随内容滚（同登录页 .page::before 的做法）；
+   各页面容器不再各自盖纯色 --bg。简洁皮肤 --scr-bg 就是 --bg，看不出变化；磨砂玻璃是皮肤视觉稿 .scr 那张很淡的渐变。
+   盖满全屏的层（查找面板、输密码页、整屏提示）自己画 var(--scr-bg)；前提同登录页：html 不设背景、body 不加 transform / filter / contain */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--scr-bg, var(--bg));
+  pointer-events: none;
+}
+
 /* 顶部状态栏底色条（负责人 10-30 在 iPhone 主屏幕版发现）：主屏幕版状态栏透明，往上滚的内容会从时间、信号图标底下穿过去。
    全局盖一条页面背景、高 var(--inset-top)（安全区本身）；有版本横幅时照样在，横幅固定在它下面（R-281）。
-   背景默认 --bg（深色皮肤跟着变）；背景不是纯色的页面（登录页的 --login-bg 渐变）在根节点设 --safe-top-bg，
+   背景默认 --scr-bg（页面底色那张，R-439；简洁皮肤就是 --bg）；背景不是纯色的页面（登录页的 --login-bg 渐变）在根节点设 --safe-top-bg，
    这里按整屏大小画（background-size 100vw 100vh，从屏幕左上角起），露出来的正好是页面那张固定渐变最上面一截，不切光晕。
    层级 1：压住页面内容（页面都不写 z-index）；弹层（kit Dialog 的 .scrim、.content 是 70）、版本横幅（50）、整屏提示（100）、
    启动画面都在它上面——注意弹层必须写正的 z-index：position: fixed 而 z-index 为 auto 的元素画在第 0 层，会被这条盖住。不挡点击 */
@@ -150,7 +162,7 @@ body::before {
   left: 0;
   z-index: var(--z-strip);
   height: calc(var(--inset-top) + var(--top-fade));
-  background: var(--safe-top-bg, var(--bg));
+  background: var(--safe-top-bg, var(--scr-bg, var(--bg)));
   background-size: 100vw 100vh;
   pointer-events: none;
 
