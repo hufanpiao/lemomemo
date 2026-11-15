@@ -3,8 +3,9 @@
 // • 每行：左边时刻（有时刻的日程写开始时刻；全天日程写“全天”；待办有截止时刻写时刻、没有写“待办”）、项目色竖线、完整标题；
 //   整行是按钮（44 高），点了打开那一条的编辑页（#/event/<id>、#/todo/<id>）
 // • 标题行：“10月24日 周六 · 农历九月十五”（中文界面有农历时），右边“6 项”
-// • 黄历卡（R-431，HuangliCard.tsx）：中文界面、黄历加载好、在数据范围内时画在标题行下面；有卡片时标题行不再写“· 农历…”（卡片里有农历日和月），
-//   没卡片（韩文界面、加载中、范围外）时标题行照旧
+// • 黄历卡（R-431，HuangliCard.tsx）：中文界面、在数据范围内时画在标题行下面，标题行不再写“· 农历…”（卡片里有农历日和月）；
+//   黄历还在加载时先画同样高的占位（HuangliHold），标题行也不写农历，加载完不跳（独立评审第 7 条）；
+//   没卡片（韩文界面、范围外、加载失败）时标题行照旧
 // • 跨午夜的日程（代码复审 N6）：dayEntries 只把它放在开始那天；这里给后面的日子补一行续段，排在最前，时刻写“至 01:00”
 //   （和周视图泳道次日的续段一致）；点了同样打开那条日程
 // • “往上拖列表、月历收成一周一行”的拖动柄在 CalNav.tsx 的 FoldHandle，这里只管列表
@@ -25,7 +26,7 @@ import type { CalViewT } from '../hooks/useCalViewT.ts';
 import type { Huangli } from '../hooks/useHuangli.ts';
 import styles from './CalendarPage.module.css';
 import { colorClass, hm, weekdayKey } from './cal-ui.ts';
-import { HuangliCard } from './HuangliCard.tsx';
+import { HuangliCard, HuangliHold } from './HuangliCard.tsx';
 
 function titleOf(items: CalItems, e: DayEntry): string {
   const row = e.kind === 'todo' ? items.todos.find((x) => x.id === e.itemId) : items.events.find((x) => x.id === e.itemId);
@@ -75,7 +76,7 @@ export function DayList({
   /** 中文界面的农历完整写法（“农历九月十五”）；没有时不写 */
   lunarText?: string | undefined;
   /** 黄历卡的内容（R-431）；null 时不画卡片 */
-  huangli?: Huangli | null;
+  huangli?: Huangli | 'wait' | null;
   /** 打开一条：页面给，只读行在那里拦下（FA-2）；不给就直接进编辑页 */
   onOpen?: (kind: 'event' | 'todo', id: string) => void;
   /** 这一条是不是只读行（FA-2） */
@@ -103,11 +104,11 @@ export function DayList({
       <h2 id="cal-day-title" className={styles.dayListHead}>
         <span>
           {head}
-          {lunarText && !huangli ? ` · ${lunarText}` : ''}
+          {lunarText && huangli === null ? ` · ${lunarText}` : ''}
         </span>
         <span className={styles.dayListN}>{t('cal.day.count', { n: total })}</span>
       </h2>
-      {huangli ? <HuangliCard key={date} h={huangli} t={t} /> : null}
+      {huangli === 'wait' ? <HuangliHold /> : huangli ? <HuangliCard key={date} h={huangli} t={t} /> : null}
       {total === 0 ? (
         <p className={list.empty}>{t('cal.day.empty', {})}</p>
       ) : (

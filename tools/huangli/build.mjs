@@ -90,9 +90,11 @@ export const HUANGLI_DAYS: readonly string[] = ${JSON.stringify(days)};
 export async function crossCheck(lib) {
   const url = (p) => pathToFileURL(join(ROOT, p)).href;
   const { huangliOf } = await import(url('shared/logic/anniv/lunar-huangli.ts'));
+  const { HUANGLI_FIRST, HUANGLI_LAST } = await import(url('shared/logic/anniv/huangli-range.ts'));
+  const utc = (ds) => Date.parse(`${ds}T00:00:00Z`);
   const bad = [];
   let n = 0;
-  for (let t = Date.UTC(1901, 0, 20); t <= Date.UTC(2100, 11, 31); t += 86_400_000) {
+  for (let t = utc(HUANGLI_FIRST); t <= utc(HUANGLI_LAST); t += 86_400_000) {
     const dt = new Date(t);
     const y = dt.getUTCFullYear();
     const m = dt.getUTCMonth() + 1;

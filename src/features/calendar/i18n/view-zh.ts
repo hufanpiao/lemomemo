@@ -62,6 +62,8 @@ export const viewZh = {
   'cal.hl.ji': '忌',
   'cal.hl.sep': ' · ',
   'cal.hl.none': '—',
+  'cal.hl.noneSr': '无',
+  'cal.hl.label': '黄历，{day}，{gz}年{m}，宜 {yi} 项，忌 {ji} 项',
   'cal.set.title': '日历',
   'cal.set.holidays': '节假日',
   'cal.set.hol.cn': '只显示中国',

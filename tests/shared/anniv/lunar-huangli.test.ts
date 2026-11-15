@@ -3,6 +3,8 @@
 // 1901～2100 全量逐日对拍在 npm run check:huangli（tools/huangli/build.mjs --check）。
 // 纯日期运算，和进程时区无关：npm run test:tz 在 UTC、首尔、洛杉矶各跑一遍；Deno（tests/shared）也跑。
 import { describe, expect, it } from 'vitest';
+import { addDays } from '../../../shared/core/date.ts';
+import { HUANGLI_FIRST, HUANGLI_LAST, inHuangliRange } from '../../../shared/logic/anniv/huangli-range.ts';
 import { dayJiazi, ganzhiName, huangliOf, monthZhi, yiJiOf } from '../../../shared/logic/anniv/lunar-huangli.ts';
 
 describe('lunar-huangli', () => {
@@ -68,6 +70,17 @@ describe('lunar-huangli', () => {
     expect(huangliOf('2100-12-31')).toMatchObject({ day: '初一', month: '腊月' });
     expect(huangliOf('2101-01-01')).toBeNull();
     expect(monthZhi('2101-06-01')).toBeNull();
+  });
+
+  it('huangli-range.ts 的范围和 huangliOf 的边界一致（日历页靠它在加载前占位，R-431 独立评审第 7 条）', () => {
+    for (const d of [HUANGLI_FIRST, HUANGLI_LAST]) {
+      expect(inHuangliRange(d)).toBe(true);
+      expect(huangliOf(d)).not.toBeNull();
+    }
+    for (const d of [addDays(HUANGLI_FIRST, -1), addDays(HUANGLI_LAST, 1)]) {
+      expect(inHuangliRange(d)).toBe(false);
+      expect(huangliOf(d)).toBeNull();
+    }
   });
 
   it('格式不对抛 bad_date（同 toLunar）', () => {

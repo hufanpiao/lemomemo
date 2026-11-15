@@ -55,6 +55,8 @@ export const viewKo = {
   'cal.hl.ji': '기', // REVIEW(ko)
   'cal.hl.sep': ' · ', // REVIEW(ko)
   'cal.hl.none': '—', // REVIEW(ko)
+  'cal.hl.noneSr': '없음', // REVIEW(ko)
+  'cal.hl.label': '황력, {day}, {gz}년 {m}, 의 {yi}개, 기 {ji}개', // REVIEW(ko)
   'cal.set.title': '캘린더', // R-106 B2 第一遍已审（11-04）（B2K-05；设置页 settings.cal.title 归前端 A，待同步）
   'cal.set.holidays': '공휴일', // REVIEW(ko)
   'cal.set.hol.cn': '중국만', // REVIEW(ko)

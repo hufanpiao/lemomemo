@@ -559,20 +559,25 @@
   font-weight: 400;
 }
 
-/* 黄历卡（R-431，HuangliCard.tsx）：标题行下面、行上面；整张是按钮，上面一条分隔线（下面一条是 .dayListRows 的） */
+/* 黄历卡（R-431，HuangliCard.tsx）：标题行下面、行上面；上面一条分隔线（下面一条是 .dayListRows 的）。
+   宜忌被截断时盖一层铺满整卡的透明按钮 .hlHit（点了展开 / 收起）；加载中的占位（HuangliHold）用同一套版面 */
 .hl {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
-  width: 100%;
-  margin: 0;
   padding: 10px 0 12px;
-  border: 0;
   border-top: 1px solid var(--line);
+}
+
+.hlHit {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
   background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
   cursor: pointer;
 }
 
@@ -643,7 +648,7 @@
   white-space: nowrap;
 }
 
-.hl[aria-expanded='true'] .hlItems {
+.hlOpen .hlItems {
   white-space: normal;
 }
 
