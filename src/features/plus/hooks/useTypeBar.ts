@@ -3,7 +3,8 @@
 // • 回车 / “记下”：planText（额度、planTyped、剩余次数，和手机自带识别同一份）→ 没有要问的几条先存；有过去的月日的出确认行（confirming），选了才加进同一批（R-166）；
 //   没选就关掉 → 原话留在输入条（已经存了的几条照常在提示条上，能撤）
 // • 保存经 data/saved-batch → data/capture-save（captureRow、batch_id、outbox）；没写进去：提示“没保存上”，输入框不清空
-// • 下滑 / “收起”：已打的字存草稿（本机库 drafts 仓，按账号分）；下次打开填回来
+// • 下滑 / “收起”：这次打过字（typed）才把字存草稿（本机库 drafts 仓，按账号分），没打过不碰——同一份草稿录音、quick-add、结果层也在写；
+//   挂上、收起后再展开时 refill 读回来（没打过字时填回）
 // • “展开编辑”：把已打的字和日历页选中的那天交给调用方，打开完整新建页（R-353）
 // • callAi 默认是真的 ai-parse（data/ai-parse-api.ts，B3 接线）；设置里 ai.enabled 没开时不调，没把握的也直接用本机规则，不出“AI 没回应”
 // • 提示条：一条 → “已记下：…”；多条 → “已记下 N 条”，展开逐条改、撤，“拆错了，合并成一条”“全部撤销”
@@ -11,13 +12,14 @@
 //   没带时间范围、查询词不空 → find 给出查询词，界面换成“找：…”，回车打开查找面板（features/smart-search）；“改成记下”把这一句当记下。
 //   没把握的、带时间范围的（“上周的会”“这个月的待办”）、总结、改期、完成：回车走 planText（B4b-3，本机或 AI 判意图），
 //   判成别的意图的不保存：清掉输入条、交给结果层（hooks/assist-open 的 toAssist，同时把原话写进草稿），调用方 onAsked 收起打字条
+//   （查找和判意图同一个出口 handOff，onAsked 带上由来 find / asked）
 // • 等 AI 期间打字条被卸载（收起、切页；B4b-3 评审第 5 条）：这一次的请求当场中止，回来的结果丢掉——不写状态、不存、不打开结果层
 //   （收起、切页时原话已经由 stash 写进草稿，下次打开填回；ui/TypeBar.tsx 的 settle）；日志 typebar submit dropped unmounted
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { getBoot } from '../../../core/boot.ts';
 import { currentTz } from '../../../core/current-tz.ts';
-import { askOfLocal } from '../../../../shared/logic/parse/assist.ts';
+import { askOfLocal, type AssistAsk } from '../../../../shared/logic/parse/assist.ts';
 import { localIntent } from '../../../../shared/logic/parse/intent.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -47,11 +49,14 @@ export interface TypeBarOpts {
   writer?: Writer | undefined;
   /** 测试用：在线与否 */
   online?: (() => boolean) | undefined;
-  /** 判成查找、总结、取消改期完成，已经交给结果层（B4b-3）：调用方收起打字条 */
-  onAsked?: (() => void) | undefined;
+  /** 判成查找、总结、取消改期完成，已经交给结果层（B4b-3）：调用方收起打字条；find 是回车查找，asked 是判意图判出来的 */
+  onAsked?: ((reason: HandOff) => void) | undefined;
 }
 
 export type TypeBarError = 'not_saved' | 'nothing' | null;
+
+/** 交给结果层的两种由来（onAsked 的参数，也是打字条 settle 的 reason） */
+export type HandOff = 'find' | 'asked';
 
 export type TypeBarState = ReturnType<typeof useTypeBar>;
 
@@ -78,8 +83,8 @@ export function useTypeBar(o: TypeBarOpts) {
       go,
       // 这一批都存好了：清输入条和草稿，出提示条
       done(p) {
-        setTextRaw('');
         typed.current = false;
+        setTextRaw('');
         void clearTypeDraft();
         go({ type: 'done', status: p.status });
       },
@@ -105,8 +110,8 @@ export function useTypeBar(o: TypeBarOpts) {
     setAsRecord(false);
   }, []);
 
-  // 打开时把草稿填回来（用户已经开始打字就不覆盖）
-  useEffect(() => {
+  /** 把草稿填回来（挂上、收起后再展开时由界面调；用户这次已经打过字就不覆盖）；返回取消（卸掉、又收起了，晚到的不填） */
+  const refill = useCallback((): (() => void) => {
     let live = true;
     void readTypeDraft().then((d) => {
       if (live && d && !typed.current) setTextRaw(d.text);
@@ -115,6 +120,8 @@ export function useTypeBar(o: TypeBarOpts) {
       live = false;
     };
   }, []);
+  /** 这次打过字没有（收起时留不留草稿看它） */
+  const dirty = useCallback((): boolean => typed.current, []);
 
   const preview = useMemo(() => (text.trim() === '' ? [] : planLocal(text, ctx()).result.items), [text, ctx]);
   /** 看起来是要查找时的查询词（见文件头）；不是查找、或点了“改成记下”为 null */
@@ -125,15 +132,20 @@ export function useTypeBar(o: TypeBarOpts) {
     return a && 'query' in a && a.query.range === null && a.query.text.trim() !== '' ? a : null;
   }, [text, asRecord]);
   const find = findAsk && 'query' in findAsk ? findAsk.query.text.trim() : null;
-  /** 回车或点“查找”：和判意图的那一路同一个出口（原话进草稿，查找面板页脚有“改成记下”“总结一下”）；清掉这句字 */
+  /** 交给结果层（查找、判意图共用）：原话进草稿（toAssist），清掉这句字、不再算打过字，调用方按由来收起 */
+  const handOff = useCallback((ask: AssistAsk, aiUsed: 0 | 1, reason: HandOff): void => {
+    toAssist({ ask, raw: text, aiUsed, from: 'plus', day: ctx().day });
+    typed.current = false;
+    setTextRaw('');
+    o.onAsked?.(reason);
+  }, [text, ctx, o]);
+  /** 回车或点“查找”：和判意图的那一路同一个出口 handOff（查找面板页脚有“改成记下”“总结一下”） */
   const openFind = useCallback((): void => {
     if (!findAsk) return;
     // 只记查询词的字数（和 B4b-2 同一口径）
     rlog(`typebar find len=${[...findAsk.query.text.trim()].length}`);
-    toAssist({ ask: findAsk, raw: text, aiUsed: 0, from: 'plus', day: ctx().day });
-    setTextRaw('');
-    typed.current = false;
-  }, [findAsk, text, ctx]);
+    handOff(findAsk, 0, 'find');
+  }, [findAsk, handOff]);
   const keepRecord = useCallback(() => setAsRecord(true), []);
 
   const submit = useCallback(async () => {
@@ -166,10 +178,7 @@ export function useTypeBar(o: TypeBarOpts) {
       rlog(`typebar planned items=${p.items.length} ai=${aiOn} quotaOut=${quotaOut} origin=${p.origin} status=${p.status} reason=${p.aiReason ?? '-'} ms=${ms()}`);
       if (p.ask) {
         go({ type: 'reset' });
-        toAssist({ ask: p.ask.ask, raw: text, aiUsed: p.ask.aiUsed, from: 'plus', day: c.day });
-        setTextRaw('');
-        typed.current = false;
-        o.onAsked?.();
+        handOff(p.ask.ask, p.ask.aiUsed, 'asked');
         return;
       }
       saved.land(await saved.save(p, text), p);
@@ -182,7 +191,7 @@ export function useTypeBar(o: TypeBarOpts) {
       if (inflight.current === ac) inflight.current = null;
       rlog(`typebar recog off ms=${ms()}`);
     }
-  }, [text, status, ctx, callAi, aiOnNow, online, saved, go, o]);
+  }, [text, status, ctx, callAi, aiOnNow, online, saved, go, handOff]);
 
   // 确认行没选就关掉：原话去掉已经存了的几条、只留等确认那条的原文，填回输入条（去不干净时原话整句留着，partSaved 为 true：输入条上方提示，一改字就收起）
   const dismissConfirm = useCallback(() => {
@@ -194,10 +203,14 @@ export function useTypeBar(o: TypeBarOpts) {
     }
   }, [saved, ctx]);
 
-  // 收起：留草稿；展开编辑：字带去新建页了，草稿清掉（下次打开不再填回）
-  const stash = useCallback(() => writeTypeDraft({ text, day }, clock.now()), [text, day]);
+  // 收起：这次打过字才留草稿（写前先置 false，同一句不写两遍）；展开编辑：字带去新建页了，草稿清掉（下次打开不再填回）
+  const stash = useCallback(async (): Promise<void> => {
+    if (!typed.current) return;
+    typed.current = false;
+    await writeTypeDraft({ text, day }, clock.now());
+  }, [text, day]);
 
   const dropDraft = useCallback(() => void clearTypeDraft(), []);
   const { choose, undo, undoOne, merge, closeNotice } = saved;
-  return { text, setText, status, preview, find, openFind, keepRecord, asking, notice, error, submit, choose, dismissConfirm, partSaved, undo, undoOne, merge, closeNotice, stash, dropDraft };
+  return { text, setText, status, preview, find, openFind, keepRecord, asking, notice, error, submit, choose, dismissConfirm, partSaved, undo, undoOne, merge, closeNotice, stash, dropDraft, refill, dirty };
 }
