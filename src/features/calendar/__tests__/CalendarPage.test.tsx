@@ -103,7 +103,7 @@ describe('月视图', () => {
     expect(cell('2026-11-11')?.getAttribute('aria-label')).toContain('没有安排');
   });
 
-  it('节假日：拉到文件就标出名字和灰底；补班另标；周末、节日名不另上颜色（设计审查 M4）', async () => {
+  it('节假日：拉到文件就标出名字和斜纹；补班格子右上角“班”圆标、那一行只写名字；周末不另上颜色（负责人 11-15“照参考图做”）', async () => {
     fetchStatus.mockImplementation(async (p: string) =>
       p === 'holidays/cn/2026.json'
         ? ok({ country: 'cn', year: 2026, days: [{ date: '2026-11-11', kind: 'off', name: { zh: '测试假' } }, { date: '2026-11-14', kind: 'work', name: { zh: '测试假' } }] })
@@ -113,7 +113,12 @@ describe('月视图', () => {
     await waitFor(() => expect(cell('2026-11-11')?.textContent).toContain('测试假'));
     expect(fetchStatus).toHaveBeenCalledWith('holidays/cn/2026.json');
     expect(cell('2026-11-11')?.className).toContain(styles.holiday);
-    expect(cell('2026-11-14')?.textContent).toContain('班');
+    expect(cell('2026-11-11')?.className).not.toContain(styles.workday);
+    expect(cell('2026-11-14')?.className).toContain(styles.workday);
+    expect(cell('2026-11-14')?.className).not.toContain(styles.holiday);
+    expect(cell('2026-11-14')?.querySelector(`.${styles.ban ?? 'x'}`)?.textContent).toBe('班');
+    expect(cell('2026-11-14')?.querySelector(`.${styles.lineTx ?? 'x'}`)?.textContent).toBe('测试假');
+    expect(cell('2026-11-13')?.querySelector(`.${styles.ban ?? 'x'}`)).toBeNull();
     expect(cell('2026-11-14')?.getAttribute('aria-label')).toContain('测试假（补班）');
     expect(screen.queryByTestId('cal-offline')).toBeNull();
     expect(Object.keys(styles)).not.toContain('weekend');
