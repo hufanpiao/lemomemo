@@ -1,7 +1,7 @@
 // 隐私记会话（data/session.ts）11-14 整块评审：第 8 条两种上锁、第 6 条 pin_wrong 带倒计时、第 14 条运行日志不带敏感内容
 import { afterEach, describe, expect, it } from 'vitest';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
-import { noteRowOf } from '../data/vault-store.ts';
+import { imageRowOf, noteRowOf } from '../data/vault-store.ts';
 import { held, listOk, make, NID, note, queueDelete, TOK, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 const locked = { ok: false, code: 'vault_locked' };
@@ -220,5 +220,36 @@ describe('第 14 条：运行日志', () => {
     expect(all).toMatch(/vault stale ok/);
     expect(all).toMatch(/vault image full wait try_later/);
     for (const bad of ['秘密标题', '秘密正文', '8642', '1234', TOK, TOK2, IMGX]) expect(all).not.toContain(bad);
+  });
+});
+
+describe('L1：删图、永久删除、移出时立即撤销 blob 地址', () => {
+  const IMGL = '55555555-5555-4555-8555-555555555555';
+  const ok = { ok: true, vault_token: TOK2, expires_at: 9e12 };
+  const seed = (s: Awaited<ReturnType<typeof unlocked>>['s']): void => {
+    s.seedImage(IMGL, new Blob(['f']), new Blob(['t']));
+    s.store.putImage(imageRowOf(NID, { id: IMGL, has_thumb: true, width: 1, height: 1, bytes: 1, deleted_at: null }));
+  };
+
+  it('永久删除成了：这一条的图的原图、缩略图地址都撤销', async () => {
+    const { s, revoked } = await unlocked({ purge: () => ({ ...ok, purged: 1 }) });
+    seed(s);
+    expect(s.blobCount()).toBe(2);
+    expect((await s.purge([NID])).ok).toBe(true);
+    expect(s.blobCount()).toBe(0);
+    expect(revoked).toHaveLength(2);
+  });
+
+  it('移出成了：撤销；删一张图（revokeImages）：只撤这一张', async () => {
+    const { s, revoked } = await unlocked({ export: () => ok });
+    seed(s);
+    expect((await s.exportNote(NID)).ok).toBe(true);
+    expect(s.blobCount()).toBe(0);
+    expect(revoked).toHaveLength(2);
+    s.seedImage('66666666-6666-4666-8666-666666666666', new Blob(['f']), null);
+    s.seedImage(IMGL, new Blob(['f']), null);
+    s.revokeImages([IMGL]);
+    expect(s.peekImage(IMGL, 'full')).toBeNull();
+    expect(s.blobCount()).toBe(1);
   });
 });

@@ -237,6 +237,7 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
             if (!row || !writable()) return false;
             store.patchImage(id, { deleted_at: Date.now() });
             queue.removeImage(row, id);
+            s.revokeImages([id]);
             return true;
           },
           retry: (id: string) => queue.retryImage(id),

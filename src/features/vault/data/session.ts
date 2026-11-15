@@ -163,6 +163,25 @@ export function createVaultSession(d: VaultSessionDeps) {
     onToken(token, p.data.expires_at);
   };
 
+  /** 这几张图的 blob 地址立即撤销（删图、永久删除、移出时，L1：不等上锁才撤） */
+  function revokeImages(ids: readonly string[]): void {
+    for (const id of ids) {
+      for (const part of ['full', 'thumb'] as const) {
+        const key = `${id}:${part}`;
+        const url = blobs.get(key);
+        if (url) revokeUrl(url);
+        blobs.delete(key);
+        pendingImg.delete(key);
+      }
+    }
+  }
+
+  /** 几条从仓库拿掉，连它们的图的 blob 地址一起撤销 */
+  function forgetNotes(ids: readonly string[]): void {
+    revokeImages(store.getSnapshot().images.filter((r) => ids.includes(String(r['note_id']))).map((r) => r.id));
+    store.forget(ids);
+  }
+
   function revokeAll(): void {
     for (const url of blobs.values()) revokeUrl(url);
     blobs.clear();
@@ -440,11 +459,12 @@ export function createVaultSession(d: VaultSessionDeps) {
     store,
     queue,
     seedImage,
+    revokeImages,
     /** 永久删除（要确认，不进后台队列）：发出前先撤掉队列里这几条的任务和标记（不再 save 回来，H5）；成了从仓库拿掉 */
     async purge(items: readonly string[]) {
       queue.forget(items);
       const r = await run({ action: 'purge', items: [...items] }, vaultPurgeResponse);
-      if (r.ok) store.forget(items);
+      if (r.ok) forgetNotes(items);
       return r;
     },
     /**
@@ -467,7 +487,7 @@ export function createVaultSession(d: VaultSessionDeps) {
         const r = await run({ action: 'export', note_id: noteId }, vaultOkResponse);
         if (r.ok) {
           queue.forget([noteId]);
-          store.forget([noteId]);
+          forgetNotes([noteId]);
         }
         return r;
       } finally {
