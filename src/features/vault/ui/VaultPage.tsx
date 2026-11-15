@@ -10,7 +10,7 @@
 // • 不建液态玻璃副本、底栏和“＋”实色：挂着时经 platform/look.ts 的 holdReducedTransparency 让 <html data-rt="1">（同“减少透明效果”，
 //   motion/glass-ghost.ts 和 GlassBar 都认它），离开时放开、按设置和系统设置重算（TC-B5-12；hooks/useVault.ts 的 useSolidBars）
 // • 多任务遮罩 LockShield 一直挂在页面上（平时 visibility: hidden），离开时由 hooks/useVault.ts 同步盖上
-import { Suspense, useEffect, useLayoutEffect, useState } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { backTo, navigate, useRoute } from '../../../app/router.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
@@ -122,7 +122,7 @@ export default function VaultPage() {
 }
 
 /** 顶栏“‹ 随手记 | 🔒 隐私记 | 立即锁上” */
-function VaultTop({ unlocked }: { unlocked: boolean }) {
+function VaultTop({ unlocked, trash = null }: { unlocked: boolean; trash?: ReactNode }) {
   const t = useVaultT();
   const { s } = useVault();
   return (
@@ -133,6 +133,7 @@ function VaultTop({ unlocked }: { unlocked: boolean }) {
         {t('vault.title', {})}
       </h1>
       <span className={styles.topEnd}>
+        {trash}
         {unlocked ? (
           <FormButton size="compact" onClick={() => s.lock()} data-testid="vault-lock-now">
             {t('vault.lockNow', {})}
@@ -146,15 +147,16 @@ function VaultTop({ unlocked }: { unlocked: boolean }) {
 /** 解锁后：随手记的整套界面换成隐私记来源；列表页顶上是隐私记的顶栏、提示（下面的“最近删除”入口是随手记列表那一份，按来源去 #/vault/trash） */
 function VaultSurface({ editing }: { editing: boolean }) {
   const source = useVaultNoteSource();
-  return <NotesSurface source={source} editing={editing} head={<VaultHead />} />;
+  return <NotesSurface source={source} editing={editing} head={(trash) => <VaultHead trash={trash} />} />;
 }
 
-function VaultHead() {
+/** trash：随手记列表给的“最近删除”图标（R-438，手机版放进顶栏右边、“立即锁上”左边；电脑版是 null） */
+function VaultHead({ trash }: { trash: ReactNode }) {
   const t = useVaultT();
   const min = useAutolockMin();
   return (
     <div>
-      <VaultTop unlocked />
+      <VaultTop unlocked trash={trash} />
       <p className={styles.hint} data-testid="vault-hint">
         {t('vault.unlockedHint', { n: min })}
       </p>

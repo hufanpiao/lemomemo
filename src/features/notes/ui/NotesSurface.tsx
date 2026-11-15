@@ -10,7 +10,7 @@ import { NotesList } from './NotesPage.tsx';
 export interface NotesSurfaceProps {
   source: NoteSource;
   editing: boolean;
-  head?: ReactNode;
+  head?: ((trash: ReactNode) => ReactNode) | undefined;
 }
 
 export default function NotesSurface({ source, editing, head }: NotesSurfaceProps) {

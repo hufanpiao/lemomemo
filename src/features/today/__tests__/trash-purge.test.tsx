@@ -8,6 +8,7 @@
 // • 回的条数比这批少：给提示，这批一项都不藏；藏起来的离开这页再回来也不冒出来
 // • 本机的行不在这里删（墓碑同步来删，0.29 续第 121 条⑤）；隐私记不进列表，全部清空也不传它（服务器只清普通行，R-193）
 // • ④ storage-sweep 孤儿清理按 R-377 不在 B4，这里不测
+// • ⑤ 只看一类（R-438）：#/trash/notes 只列随手记、#/trash/todos 只列待办，行里不写类型；全部清空只发这一类
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { coldStart, getBoot, resetBootForTest } from '../../../core/boot.ts';
@@ -46,7 +47,7 @@ const setOnline = (v: boolean): void => {
   window.dispatchEvent(new Event(v ? 'online' : 'offline'));
 };
 
-async function boot() {
+async function boot(hash = '/app/#/trash') {
   const { factory } = fakeIndexedDB();
   const b = await coldStart({
     userId: 'A', appVersion: '4.0.0', cacheOptions: { factory }, listen426: false, clearCacheStorage: () => Promise.resolve(),
@@ -58,7 +59,7 @@ async function boot() {
     await b.outbox?.applyServer('todos', [{ row: todo(2) }]);
     await b.outbox?.applyServer('events', [{ row: event(3) }]);
   });
-  window.history.replaceState(null, '', '/app/#/trash');
+  window.history.replaceState(null, '', hash);
   render(<RecentlyDeletedPage />);
   return b;
 }
@@ -321,5 +322,28 @@ describe('韩文', () => {
     expect(screen.getByTestId(`trash-purge-${uid(1)}`).textContent).toBe('영구 삭제');
     fireEvent.click(screen.getByTestId('trash-clear'));
     expect(within(await screen.findByRole('dialog', {}, { timeout: 5000 })).getByText('최근 삭제에 있는 3개 항목을 비울까요? 비우면 복원할 수 없어요')).toBeTruthy();
+  });
+});
+
+describe('⑤ 只看一类（R-438，负责人 11-16“每页只看到自己的删除那类吧”）', () => {
+  for (const [kind, n, tbl, other] of [['notes', 1, 'notes', '待办 ·'], ['todos', 2, 'todos', '随手记 ·']] as const) {
+    it(`#/trash/${kind}：只列这一类、行里不写类型；全部清空的确认框写 1 项，只传这一项，别的类不动`, async () => {
+      await boot(`/app/#/trash/${kind}`);
+      expect(rows().map((r) => r.getAttribute('data-testid'))).toEqual([`trash-row-${uid(n)}`]);
+      expect(screen.getByTestId(`trash-row-${uid(n)}`).textContent).not.toMatch(/随手记 ·|待办 ·|日程 ·/);
+      expect(document.body.textContent).not.toContain(other);
+      rpc.mockResolvedValueOnce({ data: 1, error: null });
+      fireEvent.click(screen.getByTestId('trash-clear'));
+      expect(within(await screen.findByRole('dialog', {}, { timeout: 5000 })).getByText('清空最近删除里的 1 项？清空后不能恢复')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('trash-confirm-ok'));
+      await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已清空'));
+      expect(sentKeys(0)).toEqual([{ tbl, id: uid(n) }]);
+    });
+  }
+
+  it('不带参数的 #/trash 照旧三类都列、行里写类型', async () => {
+    await boot();
+    expect(rows()).toHaveLength(3);
+    expect(screen.getByTestId(`trash-row-${uid(1)}`).textContent).toContain('随手记 ·');
   });
 });

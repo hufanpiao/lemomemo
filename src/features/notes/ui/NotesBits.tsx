@@ -101,7 +101,7 @@ export function DockTip({ toast }: { toast: { kind: 'error' } | Exclude<PageTip,
     <p className={styles.error} role="alert" data-testid={DOCK_TEST_ID[toast.kind]}>
       {t(toast.kind === 'error' ? 'notes.err.save' : toast.kind === 'moveOut' ? 'notes.err.moveOut' : toast.key, {})}
       {toast.kind === 'img' && toast.trash ? (
-        <KitTrashLink look="inline" to={['trash']} label={t('notes.img.trash', {})} testId="notes-img-trash" />
+        <KitTrashLink look="inline" to={['trash', 'notes']} label={t('notes.img.trash', {})} testId="notes-img-trash" />
       ) : null}
     </p>
   );
@@ -145,10 +145,11 @@ export function AiMark({ id }: { id: string }) {
   );
 }
 
-/** 列表上方居中的“最近删除”入口（负责人 11-15 随手记页也要常驻一个；原来只在隐私记页有，挪到这里两种来源共用一份）：去哪、带不带条数看来源 */
-export function TrashLink() {
+/** “最近删除”入口（负责人 11-15 随手记页也要常驻一个；原来只在隐私记页有，挪到这里两种来源共用一份）：去哪、带不带条数看来源。
+ *  icon：手机版顶栏里的垃圾桶图标（R-438）；不给：电脑版列表栏上方居中的胶囊 */
+export function TrashLink({ icon = false }: { icon?: boolean }) {
   const t = useNotesT();
   const src = useNoteSource();
   const n = src.useTrashCount();
-  return <KitTrashLink to={src.trash} label={`${src.text?.trash ?? t('notes.img.trash', {})}${n ? ` ${n}` : ''}`} testId={`${src.kind}-open-trash`} />;
+  return <KitTrashLink to={src.trash} label={`${src.text?.trash ?? t('notes.img.trash', {})}${n ? ` ${n}` : ''}`} testId={`${src.kind}-open-trash`} look={icon ? 'icon' : undefined} />;
 }

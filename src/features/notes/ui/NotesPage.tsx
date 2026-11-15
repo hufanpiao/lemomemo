@@ -34,8 +34,9 @@
 //   移的流程（解锁、重试一次、带附件不能移）在 vault 的 VaultParts move；移好的先在本页藏起来，等同步把它改成隐私记行
 // • 数据来源（B5 隐私记重写 11-15，hooks/note-source.ts）：隐私记页经 NotesSurface 用同一个列表，来源换成隐私记的内存仓库；
 //   两边不一样的只按来源的 caps 分（入口行、合并提示、转成待办 / 日程、移到 / 移出隐私记），标题、空态、编辑页路由、电脑布局存的页名也由来源给；
-//   head 给了就画它、不画本页的大标题和头像（隐私记页的“‹ 随手记 | 🔒 隐私记 | 立即锁上”）
-// • “最近删除”入口（负责人 11-15）：标题下面、分类胶囊上面居中一个（NotesBits 的 TrashLink），两种来源共用，去哪、带不带条数看来源
+//   head 给了就画它、不画本页的大标题和头像（隐私记页的“‹ 随手记 | 🔒 隐私记 | 立即锁上”）；head 是函数，参数是要放进顶栏的“最近删除”图标（电脑版传 null）
+// • “最近删除”入口（负责人 11-15 要常驻；R-438 11-16 嫌标题下面的胶囊“太突兀”，选标题行右边小图标）：手机版是顶栏里头像左边的垃圾桶图标（NotesBits 的 TrashLink icon），
+//   隐私记页由 head(trash) 放进它自己顶栏右边；电脑版列表栏没有顶栏，照旧列表上方居中的胶囊。两种来源共用，去哪、带不带条数看来源
 // • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal 管手势和打的字，smart-search 的 PullSearch 画搜索框和结果）；
 //   打了字就把“最近删除”、分类胶囊和列表藏起来、换成结果（kit 的 PullSlot，手机版、电脑版同一处 listPart）（按标题、正文、分类就地筛）。隐私记页不接（隐私记不搜）
 import { opensKeyboard } from '../../../platform/env.ts';
@@ -83,7 +84,7 @@ export default function NotesPage() {
   return useRoute().name === 'note' ? <NoteEditPage /> : <NotesList />;
 }
 
-export function NotesList({ head }: { head?: ReactNode }) {
+export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) | undefined }) {
   const t = useNotesT();
   const src = useNoteSource();
   const { caps } = src;
@@ -299,19 +300,23 @@ export function NotesList({ head }: { head?: ReactNode }) {
   );
   const mist = typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null;
   // 手机版、电脑版列表栏同一处（电脑版的分类在左栏，不画胶囊）：搜索本页、搜索框，打了字把“最近删除”、胶囊、列表藏起来
-  const listPart = (chips: ReactNode) => (
+  const listPart = (top: ReactNode) => (
     <PullSlot pull={pull} keyLabel={t('notes.pullKey', {})} search={<PullSearch pull={pull} scope="note" onOpen={open} />}>
-      <TrashLink />
-      {chips}
+      {top}
       {body}
     </PullSlot>
   );
   const phone = (
     <>
-      {head ?? (
+      {head ? (
+        head(<TrashLink icon />)
+      ) : (
         <header className={styles.top}>
           <h1 className={styles.h1}>{t('notes.title', {})}</h1>
-          <MeLink testId="notes-settings" />
+          <span className={styles.topEnd}>
+            <TrashLink icon />
+            <MeLink testId="notes-settings" />
+          </span>
         </header>
       )}
       {listPart(filterChips)}
@@ -332,8 +337,8 @@ export function NotesList({ head }: { head?: ReactNode }) {
             cats={{ total: l.total, counts: l.counts, category: l.category, set: l.setCategory }}
             list={
               <>
-                {head}
-                {listPart(null)}
+                {head?.(null)}
+                {listPart(<TrashLink />)}
                 {dock}
               </>
             }

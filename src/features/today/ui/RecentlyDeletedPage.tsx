@@ -5,7 +5,11 @@
 //   没有定稿视觉稿（线框、皮肤视觉稿里都没画这两个按钮）：沿用本页“恢复”胶囊和设置页确认弹层的样子；按 R-376 不加动效，左滑、长按菜单留到 UI 细修
 // • 隐私记有自己的“最近删除”（R-193，B5），这里的“全部清空”不含隐私记（服务器只清四张表的普通行）
 // • 路由 #/trash（app/router.ts 的 ROUTE_NAMES、today/index.ts 的 routes）；返回：App 里有上一页就退回，否则换到设置（S11）
-import { useEffect, useRef, useState } from 'react';
+// • 只看一类（R-438，负责人 11-16“每页只看到自己的删除那类吧”）：#/trash/notes 只列随手记（随手记页的图标、插图提示进来），#/trash/todos 只列待办
+//   （待办页的图标、设置里自动删除的说明进来）；先过滤再交给 useTrashPurge，所以“全部清空”也只清这一类（它只发列表里看得见的项）；
+//   只看一类时每行不再写“随手记 ·”“待办 ·”。不带参数的 #/trash 照旧三类都列（日程删了在这里找）
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRoute } from '../../../app/router.ts';
 import { backOr } from '../../../app/router-levels.ts';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
@@ -24,7 +28,10 @@ const back = (): void => backOr('settings');
 export default function RecentlyDeletedPage() {
   const t = useTrashT();
   const tToday = useTodayT();
-  const { items: all, restore } = useTrash();
+  const { items: every, restore } = useTrash();
+  const p0 = useRoute().params[0];
+  const only = p0 === 'notes' || p0 === 'todos' ? p0 : null;
+  const all = useMemo(() => (only ? every.filter((it) => it.table === only) : every), [every, only]);
   const [msg, setMsg] = useState<RestoreResult | null>(null);
   // 只读行（要新版本，TC-B4-09“写入入口统一拦下”；重复事项 R-148）进了“最近删除”也照样只读：标“要新版本”，
   // “恢复”“永久删除”都灰掉，点了只提示“这条要新版本才能修改”、不写、不调 RPC（core 也会按 readonly_row 拒，页面层先拦）；
@@ -77,7 +84,7 @@ export default function RecentlyDeletedPage() {
   };
 
   return (
-    <main className={styles.page} data-feature="trash" data-testid="trash">
+    <main className={styles.page} data-feature="trash" data-testid="trash" data-only={only ?? undefined}>
       <header className={styles.top}>
         <BackLink label={t('trash.back', {})} onBack={back} testId="trash-back" />
         <h1 className={styles.h1}>{t('trash.title', {})}</h1>
@@ -102,7 +109,8 @@ export default function RecentlyDeletedPage() {
               <span className={list.text}>
                 <span className={list.title}>{it.title}</span>
                 <span className={list.meta}>
-                  {t(it.table === 'events' ? 'trash.kind.events' : it.table === 'notes' ? 'trash.kind.notes' : 'trash.kind.todos', {})} · {t('trash.left', { n: it.daysLeft })}
+                  {only ? null : `${t(it.table === 'events' ? 'trash.kind.events' : it.table === 'notes' ? 'trash.kind.notes' : 'trash.kind.todos', {})} · `}
+                  {t('trash.left', { n: it.daysLeft })}
                 </span>
                 {isRo(it.table, it.id) ? (
                   <span className={styles.ro}>

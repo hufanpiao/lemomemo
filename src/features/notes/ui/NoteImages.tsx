@@ -37,7 +37,7 @@ export function ImgMsgLine({ msg, className }: { msg: { key: ImgMsgKey; trash: b
   return (
     <p className={className} role="alert" data-testid="note-edit-img-msg">
       {t(msg.key, {})}
-      {msg.trash ? <TrashLink look="inline" to={['trash']} label={t('notes.img.trash', {})} testId="note-edit-img-trash" /> : null}
+      {msg.trash ? <TrashLink look="inline" to={['trash', 'notes']} label={t('notes.img.trash', {})} testId="note-edit-img-trash" /> : null}
     </p>
   );
 }

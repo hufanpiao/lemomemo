@@ -115,7 +115,7 @@ describe('解锁、上锁', () => {
       fireEvent.click(await screen.findByTestId(`notes-del-${NID}`));
     });
     expect(s.store.get(NID)?.['deleted_at']).not.toBeNull();
-    await waitFor(() => expect(screen.getByTestId('vault-open-trash').textContent).toContain('2'));
+    await waitFor(() => expect(screen.getByTestId('vault-open-trash').getAttribute('aria-label')).toBe('最近删除 2'));
   });
 
   it('Ctrl+L 立即上锁', async () => {

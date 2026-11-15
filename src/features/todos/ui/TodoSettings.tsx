@@ -19,7 +19,7 @@ export default function TodoSettings() {
       note={
         <>
           {t('settings.autodel.note', {})}
-          <TrashLink look="inline" to={['trash']} label={t('list.trash', {})} testId="settings-todo-trash" />
+          <TrashLink look="inline" to={['trash', 'todos']} label={t('list.trash', {})} testId="settings-todo-trash" />
         </>
       }
       error={s.error ? t('list.err.save', {}) : null}

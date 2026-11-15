@@ -48,7 +48,7 @@ describe('完成 7 天后自动删除', () => {
     // 说明后面接一个“最近删除”链接（审查 11-15 第 2 条）：是 <a href="#/trash">，不是按钮；点它不碰开关
     const link = screen.getByTestId('settings-todo-trash');
     expect(link.tagName).toBe('A');
-    expect(link.getAttribute('href')).toBe('#/trash');
+    expect(link.getAttribute('href')).toBe('#/trash/todos');
     expect(link.textContent).toBe('最近删除');
     await act(async () => {
       fireEvent.click(sw);

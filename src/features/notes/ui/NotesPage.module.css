@@ -28,6 +28,12 @@
   margin-bottom: 8px;
 }
 
+/* 顶栏右边：“最近删除”图标 + 头像（R-438），两个都是 44 触控区，挨着放 */
+.topEnd {
+  display: flex;
+  align-items: center;
+}
+
 .h1 {
   margin: 0;
   font-size: var(--fs-22);

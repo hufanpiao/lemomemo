@@ -34,8 +34,24 @@
   text-decoration: underline;
 }
 
+/* .icon（R-438）：顶栏里头像左边的垃圾桶图标；大小照 MeLink 的 .me（触控区 --hit、圆形焦点框），颜色用次要色，不描边 */
+.icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  border-radius: 50%;
+  color: var(--text-2);
+}
+
+.icon:active {
+  opacity: var(--press-dim);
+}
+
 .pill:focus-visible,
-.inline:focus-visible {
+.inline:focus-visible,
+.icon:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }

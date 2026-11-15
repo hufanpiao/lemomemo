@@ -252,7 +252,7 @@ describe('超限和拒绝（TC-B4-11 前端一半；主持人定 2）', () => {
     });
     const msg = await screen.findByTestId('note-edit-img-msg');
     expect(msg.textContent).toContain('空间满了，图片没传上');
-    expect(screen.getByTestId('note-edit-img-trash').getAttribute('href')).toContain('#/trash');
+    expect(screen.getByTestId('note-edit-img-trash').getAttribute('href')).toBe('#/trash/notes');
     // 这张图标“没传上”，有“删除”“重新插入”
     const id = collection<Row>('note_images').getSnapshot()[0]?.id ?? '';
     expect(screen.getByTestId(`note-image-${id}`).getAttribute('data-state')).toBe('failed');
@@ -277,7 +277,7 @@ describe('超限和拒绝（TC-B4-11 前端一半；主持人定 2）', () => {
     });
     const tip = await screen.findByTestId('notes-img-tip');
     expect(tip.textContent).toContain('空间满了');
-    expect(screen.getByTestId('notes-img-trash').getAttribute('href')).toContain('#/trash');
+    expect(screen.getByTestId('notes-img-trash').getAttribute('href')).toBe('#/trash/notes');
     expect(upload).not.toHaveBeenCalled();
   });
 });
