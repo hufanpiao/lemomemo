@@ -637,6 +637,161 @@
       "source": "设计复审 N7（11-04）；R-132 简洁·浅色今天是透明底墨色细圈；月格 .today .dayNum、周视图 .laneToday"
     },
     {
+      "id": "hol-name-panel",
+      "what": "月历：放假的节日名 / 格子底",
+      "fg": "--hol-name",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-name-panel2",
+      "what": "月历：放假的节日名 / 选中那天的底",
+      "fg": "--hol-name",
+      "bg": "--panel-2",
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-name-hol-bg",
+      "what": "月历：放假的节日名 / 节假日底（视觉稿小月历）",
+      "fg": "--hol-name",
+      "bg": "--hol-bg",
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "text2-hol-bg",
+      "what": "次要文字 / 节假日底（视觉稿小月历）",
+      "fg": "--text-2",
+      "bg": "--hol-bg",
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-stripe-name",
+      "what": "放假斜纹从字底下穿过：节日名 / 斜纹叠在格子底上（最差像素）",
+      "fg": "--hol-name",
+      "bg": [
+        "--hol-stripe",
+        "--panel"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-stripe-name-sel",
+      "what": "放假斜纹从字底下穿过：节日名 / 斜纹叠在选中底上（最差像素）",
+      "fg": "--hol-name",
+      "bg": [
+        "--hol-stripe",
+        "--panel-2"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-stripe-text2",
+      "what": "放假斜纹从字底下穿过：次要文字（连休第二天起的农历、节气，周视图星期）/ 斜纹叠在格子底上",
+      "fg": "--text-2",
+      "bg": [
+        "--hol-stripe",
+        "--panel"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-stripe-text2-sel",
+      "what": "放假斜纹从字底下穿过：次要文字 / 斜纹叠在选中底上",
+      "fg": "--text-2",
+      "bg": [
+        "--hol-stripe",
+        "--panel-2"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-stripe-text",
+      "what": "放假斜纹从字底下穿过：日期数字（正文色）/ 斜纹叠在格子底上",
+      "fg": "--text",
+      "bg": [
+        "--hol-stripe",
+        "--panel"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-stripe-text-sel",
+      "what": "放假斜纹从字底下穿过：日期数字（正文色）/ 斜纹叠在选中底上",
+      "fg": "--text",
+      "bg": [
+        "--hol-stripe",
+        "--panel-2"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "work-stripe-text2",
+      "what": "补班斜纹从字底下穿过：次要文字（补班日的节日名）/ 斜纹叠在格子底上",
+      "fg": "--text-2",
+      "bg": [
+        "--work-stripe",
+        "--panel"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "work-stripe-text2-sel",
+      "what": "补班斜纹从字底下穿过：次要文字 / 斜纹叠在选中底上",
+      "fg": "--text-2",
+      "bg": [
+        "--work-stripe",
+        "--panel-2"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "work-stripe-text",
+      "what": "补班斜纹从字底下穿过：日期数字（正文色）/ 斜纹叠在格子底上",
+      "fg": "--text",
+      "bg": [
+        "--work-stripe",
+        "--panel"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "work-stripe-text-sel",
+      "what": "补班斜纹从字底下穿过：日期数字（正文色）/ 斜纹叠在选中底上",
+      "fg": "--text",
+      "bg": [
+        "--work-stripe",
+        "--panel-2"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "today-fg-bg",
+      "what": "今天的日期数字 / 今天圆底（简洁·浅色是透明底墨圈，不查）",
+      "fg": "--today-fg",
+      "bg": "--today-bg",
+      "kind": "text",
+      "themes": [
+        "simple-dark",
+        "glass-light",
+        "glass-dark"
+      ],
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
       "id": "focus-bg",
       "what": "聚焦框 / 页面底色（编辑页返回按钮、提醒页按钮；底栏页签聚焦时外圈 4px 的 --bg 也是它）",
       "fg": "--focus",
@@ -761,28 +916,28 @@
       "id": "focus-fab-in",
       "floor": 1.1935,
       "decided": "2026-11-07",
-      "reason": "11-15 负责人选暖黑（R-432），--text 改 #ECE7D8、底色变暖，同一例外重算为 1.1935（原 1.3288），性质不变、仍照原决定不改；负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45"
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45。11-15 负责人选暖黑（R-432）后 --text 和底色变暖，floor 按新色重算，性质不变"
     },
     {
       "theme": "simple-dark",
       "id": "focus-fab-out",
       "floor": 2.2072,
       "decided": "2026-11-07",
-      "reason": "11-15 负责人选暖黑（R-432），--text 改 #ECE7D8、底色变暖，同一例外重算为 2.2072（原 2.4574），性质不变、仍照原决定不改；负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45"
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45。11-15 负责人选暖黑（R-432）后 --text 和底色变暖，floor 按新色重算，性质不变"
     },
     {
       "theme": "glass-dark",
       "id": "focus-fab-in",
       "floor": 1.1935,
       "decided": "2026-11-07",
-      "reason": "11-15 负责人选暖黑（R-432），--text 改 #ECE7D8、底色变暖，同一例外重算为 1.1935（原 1.3171），性质不变、仍按 R-355 不改；负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45"
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45。11-15 负责人选暖黑（R-432）后 --text 和底色变暖，floor 按新色重算，性质不变"
     },
     {
       "theme": "glass-dark",
       "id": "focus-fab-out",
       "floor": 2.2072,
       "decided": "2026-11-07",
-      "reason": "11-15 负责人选暖黑（R-432），--text 改 #ECE7D8、底色变暖，同一例外重算为 2.2072（原 2.4357），性质不变、仍照原决定不改；负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45"
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45。11-15 负责人选暖黑（R-432）后 --text 和底色变暖，floor 按新色重算，性质不变"
     }
   ]
 }

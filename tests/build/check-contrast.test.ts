@@ -355,20 +355,20 @@ describe('build/check_contrast.py：真仓库的清单和皮肤', () => {
   });
 
   it.each([
-    // [主题, 清单 id, 视觉稿“对比度实测”的数]（深色四项 11-15 暖黑 R-432 后按脚本新值改，视觉稿深色两列待同步）；视觉稿把叠出来的颜色先取整成十六进制再算，差 0.01 以内算对上
+    // [主题, 清单 id, 视觉稿“对比度实测”的数]：11-15 暖黑（R-432）后视觉稿那张表四列按当前令牌、用本脚本的算法整表重算，两边取同一个两位小数，差 0.005 以内算对上
     ['simple-light', 'text2-login', 5.48],
     ['simple-dark', 'text2-login', 5.13],
     ['glass-light', 'text-screen', 12.91],
     ['glass-light', 'sheet-text', 11.86],
     ['glass-light', 'k-title', 12.07],
-    ['glass-light', 'p1s-screen', 3.38],
-    ['glass-light', 'late-red', 4.68],
+    ['glass-light', 'p1s-screen', 3.37],
+    ['glass-light', 'late-red', 4.67],
     ['glass-dark', 'late-red', 4.52],
     ['glass-dark', 'sheet-text2', 4.54],
     ['glass-dark', 'p4s-screen', 4.52],
     ['simple-light', 'on-p2', 10.12],
   ])('%s %s 和视觉稿一致（%s）', (theme, id, want) => {
     const r = one(report, theme, id);
-    expect(Math.abs(r.ratio - want)).toBeLessThanOrEqual(0.011);
+    expect(Math.abs(r.ratio - want)).toBeLessThanOrEqual(0.005);
   });
 });
