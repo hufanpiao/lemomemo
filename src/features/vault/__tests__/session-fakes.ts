@@ -1,4 +1,5 @@
-// 隐私记会话测试共用的桩：假 VaultApi（和服务器一样只收已保存隐私记的图）、注入时间的 make、手动放行的 held、已解锁的 unlocked
+// 隐私记测试共用的桩（会话、队列、页面三处共用这一份，L7）：一条隐私记 note()、假 VaultApi fakeApi（和服务器一样只收已保存隐私记的图）、
+// 注入时间的 make、手动放行的 held、已解锁的 unlocked
 import { expect, vi } from 'vitest';
 import type { z } from 'zod';
 import type { VaultNote, VaultRequest } from '../../../../shared/schema/vault.ts';
@@ -17,16 +18,17 @@ type Reply = (req: VaultRequest, token: string | null) => unknown;
 
 /**
  * 桩：按 action 回指定的东西（可以是 Promise，测“请求在路上”）；VaultFail 原样回，别的当成功响应按 schema 校验。
+ * 没单给的动作走 fallback（不给就回一个新令牌）。
  * 和服务器一样（11-14 整块评审第 3 条）：vault-image 只收 save 的 add_images 预登记过的图（按 隐私记 id/图片 id 记）
  */
-function fakeApi(replies: Partial<Record<VaultRequest['action'], Reply>>) {
+export function fakeApi(replies: Partial<Record<VaultRequest['action'], Reply>>, fallback?: Reply) {
   const calls: { action: string; token: string | null; req: VaultRequest }[] = [];
   const registered = new Set<string>();
   const api: VaultApi = {
     async call<S extends z.ZodType>(req: VaultRequest, token: string | null, schema: S): Promise<VaultResult<z.infer<S>>> {
       calls.push({ action: req.action, token, req });
       const fn = replies[req.action];
-      const v: unknown = await (fn ? fn(req, token) : { ok: true, vault_token: TOK, expires_at: 9e12 });
+      const v: unknown = await (fn ? fn(req, token) : fallback ? fallback(req, token) : { ok: true, vault_token: TOK, expires_at: 9e12 });
       if (typeof v === 'object' && v !== null && (v as { ok?: unknown }).ok === false) return v as VaultFail;
       const p = schema.safeParse(v);
       if (p.success && req.action === 'save') for (const i of req.add_images ?? []) registered.add(`${req.id}/${i.id}`);
@@ -70,10 +72,10 @@ export function make(replies: Partial<Record<VaultRequest['action'], Reply>> = {
 }
 
 /** 一个手动放行的请求：先挂起，release(v) 时才回 */
-export function held() {
-  let release!: (v: unknown) => void;
-  const p = new Promise<unknown>((r) => (release = r));
-  return { p, release: (v: unknown) => release(v) };
+export function held<T = unknown>() {
+  let release!: (v: T) => void;
+  const p = new Promise<T>((r) => (release = r));
+  return { p, release: (v: T) => release(v) };
 }
 
 export async function unlocked(replies: Partial<Record<VaultRequest['action'], Reply>> = {}) {

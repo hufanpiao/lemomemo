@@ -5,17 +5,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { z } from 'zod';
-import type { VaultNote, VaultRequest } from '../../../../shared/schema/vault.ts';
+import type { VaultRequest } from '../../../../shared/schema/vault.ts';
 import { createVaultSession, type VaultSession } from '../data/session.ts';
-import type { VaultApi, VaultFail, VaultResult } from '../data/vault-api.ts';
 import { installVaultSession, SHIELD_ATTR, watchLeave } from '../hooks/useVault.ts';
 import VaultPage from '../ui/VaultPage.tsx';
 import VaultParts from '../ui/VaultParts.tsx';
 import { applyLook } from '../../../platform/look.ts';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import type * as Enc from '../../../platform/image-encode.ts';
-import { make } from './session-fakes.ts';
+import { fakeApi, make, NID, note, TOK } from './session-fakes.ts';
 
 vi.mock('../../../kit/hooks/useCollection.ts', () => ({ useCollection: () => [] }));
 // 插图：jsdom 没有画布，压图换成桩（压成了一张 10×6 的图）
@@ -24,13 +22,8 @@ vi.mock('../../../platform/image-encode.ts', async (orig) => ({
   encodeImage: async () => ({ ok: true, full: new Blob(['full']), thumb: new Blob(['t']), width: 10, height: 6, takenAt: null }),
 }));
 
-const TOK = 't'.repeat(32);
-const NID = '11111111-1111-4111-8111-111111111111';
 const GONE = '22222222-2222-4222-8222-222222222222';
-const SECRET = '血压 120/80';
-const note = (over: Partial<VaultNote> = {}): VaultNote => ({
-  id: NID, title: '体检报告', body: SECRET, category_id: null, created_at: 1, updated_at: 2, deleted_at: null, images: [], ...over,
-});
+const SECRET = note().body;
 
 function session(o: { offline?: boolean; purge?: () => void } = {}): VaultSession {
   const reply = (req: VaultRequest): unknown => {
@@ -46,21 +39,8 @@ function session(o: { offline?: boolean; purge?: () => void } = {}): VaultSessio
         return { ok: true, vault_token: TOK, expires_at: 9e12 };
     }
   };
-  const api: VaultApi = {
-    async call<S extends z.ZodType>(req: VaultRequest, _t: string | null, schema: S): Promise<VaultResult<z.infer<S>>> {
-      const v = reply(req);
-      if ((v as { ok?: unknown }).ok === false) return v as VaultFail;
-      const p = schema.safeParse(v);
-      return p.success ? { ok: true, value: p.data } : { ok: false, code: 'unknown' };
-    },
-    imageGet: async () => ({ ok: true, value: new Blob(['x']) }),
-    imageUpload: async () => ({ ok: true, value: true }),
-    // 附件（vault-file）这里用不到
-    fileCall: async () => ({ ok: false, code: 'unknown' }),
-    fileGet: async () => ({ ok: false, code: 'unknown' }),
-    fileUpload: async () => ({ ok: false, code: 'unknown' }),
-    fileEnd: async () => true,
-  };
+  // 每个动作都走 reply（假 api 是会话测试那一份；时间、睡眠用真的，计时用例靠假计时器）
+  const { api } = fakeApi({}, reply);
   return createVaultSession({ api, onToken: () => undefined, createUrl: () => 'blob:x', revokeUrl: () => undefined });
 }
 

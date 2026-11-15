@@ -5,17 +5,12 @@
 // • 上锁丢掉时在飞的那次回来不再动；解锁拉完列表 overlay 把本机还没发完的盖回去；撤销没发出去的新建
 // • 永久删除成了（forget）：撤掉这条的任务和“没保存上”标记，在飞的那次回来不再动
 import { describe, expect, it } from 'vitest';
-import type { VaultNote } from '../../../../shared/schema/vault.ts';
 import type { VaultResult } from '../data/vault-api.ts';
 import { createVaultQueue, limiter, QUEUE_BACKOFF, SAVE_GAP_MS, type SaveReq } from '../data/vault-queue.ts';
 import { createVaultStore, noteRowOf, type Row } from '../data/vault-store.ts';
+import { held as heldReq, IMG, NID, note } from './session-fakes.ts';
 
-const NID = '11111111-1111-4111-8111-111111111111';
-const IMG = '22222222-2222-4222-8222-222222222222';
 const OK: VaultResult<unknown> = { ok: true, value: true };
-const note = (over: Partial<VaultNote> = {}): VaultNote => ({
-  id: NID, title: '体检报告', body: '血压 120/80', category_id: null, created_at: 1, updated_at: 2, deleted_at: null, images: [], ...over,
-});
 
 type Reply = VaultResult<unknown> | Promise<VaultResult<unknown>>;
 
@@ -58,11 +53,7 @@ const settle = async (): Promise<void> => {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
 };
 
-function held() {
-  let release!: (v: VaultResult<unknown>) => void;
-  const p = new Promise<VaultResult<unknown>>((r) => (release = r));
-  return { p, release };
-}
+const held = () => heldReq<VaultResult<unknown>>();
 
 const row = (body: string): Row => ({ ...noteRowOf(note()), body });
 

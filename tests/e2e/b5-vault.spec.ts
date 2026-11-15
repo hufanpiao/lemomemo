@@ -165,7 +165,8 @@ async function typePin(page: Page, pad: string, digits: string): Promise<void> {
   for (const d of digits) await page.getByTestId(`${pad}-key-${d === '0' ? 9 : Number(d) - 1}`).click(); // 位置序号：1～9 是 key-0～key-8，0 是 key-9
 }
 
-async function shot(page: Page, name: string, browserName: string): Promise<void> {
+/** 线框对照图：手机尺寸、浅色深色各一张（page-helpers 的 shot 只拍当前尺寸一张，这里另起名，不同名） */
+async function phoneShots(page: Page, name: string, browserName: string): Promise<void> {
   if (!SHOTS || browserName !== 'chromium') return;
   // 线框是手机版：拍的时候临时换成 iPhone 15 的尺寸，拍完还原（chromium 项目平时是桌面宽）
   const size = page.viewportSize();
@@ -188,7 +189,7 @@ async function setupAndUnlock(page: Page, browserName: string): Promise<void> {
   await expect(page.getByTestId('vault-setup-back')).toBeVisible();
   await expect(page.getByTestId('vault-setup-cancel')).toBeVisible();
   expect(await page.evaluate(() => !!document.elementFromPoint(innerWidth / 2, innerHeight - 30)?.closest('[data-testid="vault-setup-page"]'))).toBe(true);
-  await shot(page, '02-设密码', browserName);
+  await phoneShots(page, '02-设密码', browserName);
   await typePin(page, 'vault-setup-pad', PIN);
   await expect(page.getByTestId('vault-setup')).toHaveAttribute('data-step', '2');
   await typePin(page, 'vault-setup-pad', PIN);
@@ -221,12 +222,12 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   await write(page, 'note-edit-title', '体检报告');
   await write(page, 'note-edit-body', '血压 120/80');
   await expect(page.getByTestId('vault-edit-save'), '停笔自动存，没有“保存”按钮').toHaveCount(0);
-  await shot(page, '07-编辑页', browserName);
+  await phoneShots(page, '07-编辑页', browserName);
   await expect.poll(() => saved(fv).at(-1)?.body).toMatchObject({ title: '体检报告', body: '血压 120/80' });
   await page.getByTestId('edit-back').click();
   const list = page.getByTestId('vault-notes');
   await expect(list).toContainText('体检报告');
-  await shot(page, '06-解锁后的列表', browserName);
+  await phoneShots(page, '06-解锁后的列表', browserName);
 
   await page.getByTestId('vault-lock-now').click();
   // 线框 s9 UNLOCKOV：用不了 Face ID 时卡片只有“输入密码”“取消”，点了再进密码页
@@ -234,13 +235,13 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   await expect(page.getByTestId('vault-unlock-face')).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText('血压 120/80');
   await expect(page.locator('body')).not.toContainText('体检报告');
-  await shot(page, '03-解锁卡', browserName);
+  await phoneShots(page, '03-解锁卡', browserName);
   await page.getByTestId('vault-unlock-pin').click();
   await expect(page.getByTestId('vault-unlock-pinview')).toBeVisible();
 
   await typePin(page, 'vault-unlock-pad', '1111');
   await expect(page.getByTestId('vault-unlock-err')).toContainText('4');
-  await shot(page, '04-输错', browserName);
+  await phoneShots(page, '04-输错', browserName);
   // 锁着的时候服务器上多了一条昨天的、带分类的：解锁后 list 一次拉进来
   const day = 86_400_000;
   fv.notes.set(OLD, { id: OLD, title: '妈妈生日惊喜', body: '订那家蛋糕', category_id: CAT, created_at: Date.now() - day, updated_at: Date.now() - day, deleted_at: null, images: [] });
@@ -261,7 +262,7 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   // 运行日志 sw register ok 8767ms 正好在这批请求发出时。同第 228 行等解锁列表，给到 15 秒
   await expect(page.getByTestId('notes')).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('html')).not.toHaveAttribute('data-rt', '1');
-  await shot(page, '01-入口行', browserName);
+  await phoneShots(page, '01-入口行', browserName);
 });
 
 test('离开时同步盖多任务遮罩，不到 1 分钟回来自动去掉、仍解锁', async ({ page, baseURL, browserName }) => {
@@ -270,7 +271,7 @@ test('离开时同步盖多任务遮罩，不到 1 分钟回来自动去掉、�
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
   await expect(page.locator('html')).toHaveAttribute('data-vault-shield', '1');
   await expect(page.getByTestId('vault-shield')).toBeVisible();
-  await shot(page, '08-多任务遮罩', browserName);
+  await phoneShots(page, '08-多任务遮罩', browserName);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.locator('html')).not.toHaveAttribute('data-vault-shield', '1');
   await expect(vaultEmpty(page)).toBeVisible();
@@ -337,7 +338,7 @@ test('列表方式左滑：出“转成待办 / 移到隐私记 / 删除”，�
   for (let i = 1; i <= 10; i++) await page.mouse.move(from.x - i * 22, from.y);
   await page.mouse.up();
   await expectSwipeOpen(page, id, from, 'mouse');
-  await shot(page, '10-左滑按钮', browserName);
+  await phoneShots(page, '10-左滑按钮', browserName);
   await page.getByTestId(`notes-sw-vault-${id}`).click();
   await expect.poll(() => fv.calls.find((c) => c.action === 'import')?.body['note_id']).toBe(id);
   await expect(page.getByTestId(`notes-row-${id}`)).toHaveCount(0);
@@ -358,7 +359,7 @@ test('设置 › 隐私记：已设密码时有自动上锁、改密码、忘记
   await expect(page.getByTestId('vault-set-change')).toBeVisible();
   await expect(page.getByTestId('vault-set-forgot')).toBeVisible();
   await expect(page.getByTestId('vault-set-autolock')).toBeVisible();
-  await shot(page, '09-设置隐私记', browserName);
+  await phoneShots(page, '09-设置隐私记', browserName);
 });
 
 test('连续输错 5 次：锁定倒计时，键盘不能按', async ({ page, baseURL, browserName }) => {
@@ -370,7 +371,7 @@ test('连续输错 5 次：锁定倒计时，键盘不能按', async ({ page, ba
   await expect(page.getByTestId('vault-unlock-pad-key-0')).toBeDisabled();
   // 服务器说 60 秒：倒计时不能比 60 秒多（原来按卡片挂上时的时间算，显示过“1 分 2 秒”）
   await expect(page.getByText(/输错次数太多，(1 分 0 秒|\d+ 秒) 后再试/)).toBeVisible();
-  await shot(page, '05-锁定倒计时', browserName);
+  await phoneShots(page, '05-锁定倒计时', browserName);
 });
 
 test('隐私记里的文档附件（B4b-1）：电脑上加（加密）、写页数、预览中文 PDF、PPT 的卡多一句“会先解密”、只下载提示不再加密、上锁后不见', async ({ page, baseURL, browserName }) => {
@@ -395,7 +396,7 @@ test('隐私记里的文档附件（B4b-1）：电脑上加（加密）、写页
     expect(up?.thumb).toBe(true);
     expect(String(up?.meta?.['text'] ?? '')).toMatch(/[\u4e00-\u9fff]/);
   }
-  await shot(page, '08-隐私记附件', browserName);
+  await phoneShots(page, '08-隐私记附件', browserName);
 
   // 预览中文 PDF：字节从 vault-file get 来（服务器解密）
   const pid = ((await pdfRow.getAttribute('data-testid')) ?? '').replace('note-file-', '');
@@ -415,7 +416,7 @@ test('隐私记里的文档附件（B4b-1）：电脑上加（加密）、写页
   await page.getByTestId(`note-file-preview-${tid}`).click();
   await expect(page.getByTestId('att-ms-vault')).toHaveText('隐私记的文件会先解密再交给微软。');
   await expect(page.getByTestId('att-ms-ask')).toContainText('下载后的文件不再加密');
-  await shot(page, '09-隐私记PPT二选一', browserName);
+  await phoneShots(page, '09-隐私记PPT二选一', browserName);
   const dl = page.waitForEvent('download');
   await page.getByTestId('att-ms-no').click();
   expect((await dl).suggestedFilename()).toBe('复查安排.pptx');
@@ -476,7 +477,7 @@ test('审查第 3 条：设密码时开了 Face ID、绑定没成：密码照样
   const toast = page.getByTestId('vault-bind-fail');
   await expect(toast).toBeVisible();
   await expect(toast).toHaveAttribute('role', 'alert');
-  await shot(page, '11-绑定失败提示', browserName);
+  await phoneShots(page, '11-绑定失败提示', browserName);
   await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault bind fail /);
 
   await page.getByTestId('vault-lock-now').click();
@@ -485,7 +486,7 @@ test('审查第 3 条：设密码时开了 Face ID、绑定没成：密码照样
   await expect(dlg).toHaveAccessibleName(/.+/);
   await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="vault-unlock-card"]'))).toBe(true);
   await page.keyboard.press('Tab');
-  await shot(page, '12-解锁卡键盘焦点', browserName);
+  await phoneShots(page, '12-解锁卡键盘焦点', browserName);
 });
 
 /** 解锁后新建一条（停笔自动存）、等服务器收到；回这一条的 id */
@@ -512,7 +513,7 @@ test('负责人“插图打不开”：隐私记里插一张图，立刻显示�
   expect(fv.images).toEqual([`${id}/${imgId}:full`, `${id}/${imgId}:thumb`]);
   await page.getByTestId(`note-image-open-${imgId}`).click();
   await expect(page.getByTestId(`img-view-pic-${imgId}`)).toBeVisible({ timeout: 15_000 });
-  await shot(page, '13-隐私记看图', browserName);
+  await phoneShots(page, '13-隐私记看图', browserName);
   const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
   expect(log).toMatch(/vault img encode ok/);
   expect(log).not.toContain(imgId);
