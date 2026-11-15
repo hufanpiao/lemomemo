@@ -359,10 +359,10 @@
   box-shadow: inset 0 -2px 0 var(--focus);
 }
 
-/* 完成勾选和列表里的方框一样大（23，CheckCircle.module.css .check）：压过上面 .check input 的 20（代码审建议 1） */
+/* 完成勾选和列表里的方框一样大（24，CheckCircle.module.css .check）：压过上面 .check input 的 20（代码审建议 1） */
 .check .circleBox > input {
-  width: 23px;
-  height: 23px;
+  width: 24px;
+  height: 24px;
 }
 
 .check .circleBox > input:disabled {
