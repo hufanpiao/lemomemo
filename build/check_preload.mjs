@@ -3,10 +3,12 @@
 //   ① 预加载表（__vite__mapDeps）里没有宿主静态闭包里的 JS；
 //   ② 目标块的闭包里，除了宿主已加载的那些，其余 JS 一个不少（也不多）；
 //   ③ CSS 列表和不去重时一模一样（顺序也一样）。
+// 11-16 起 App 入口块（main）只给首屏动态入口（FIRST_PAINT_DYNAMIC）列 JS（规则在 vite.config.ts 的 preloadDeps）：main 发起、目标不在首屏名单里的，② 要求一个 JS 都不列，CSS 照 ③ 核对
 // “不去重时”的表按 Vite 8.3.5 的 collectPreloadDependencies 从 manifest 重算：从目标块起深度优先，先记块自己的 JS，再走它静态引的块，最后记它的 CSS；宿主本身不算
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { posix, resolve } from 'node:path';
 import { parseSync } from 'vite';
+import { FIRST_PAINT_DYNAMIC } from './check_first_paint_chunks.mjs';
 import { readManifest, staticClosure } from './vite_manifest.mjs';
 
 /** manifest 的键换成产物文件名：file → { imports、dynamic（动态 import 的目标）、css，都是文件名 } */
@@ -86,27 +88,27 @@ export function mapDepsCalls(code, host) {
 
 const isCss = (f) => f.endsWith('.css');
 
-/** 去重以后该留的：目标闭包里宿主没加载的 JS（含目标自己），和全部 CSS（顺序同 Vite） */
-function wanted(g, target, host) {
+/** 去重以后该留的：目标闭包里宿主没加载的 JS（含目标自己；keepJs 为 false 时一个不留），和全部 CSS（顺序同 Vite） */
+function wanted(g, target, host, keepJs = true) {
   const loaded = new Set(staticClosure(g, [host]));
   const full = fullDeps(g, target, host);
-  return { loaded, full, js: full.filter((f) => !isCss(f) && !loaded.has(f)), css: full.filter(isCss) };
+  return { loaded, full, js: keepJs ? full.filter((f) => !isCss(f) && !loaded.has(f)) : [], css: full.filter(isCss) };
 }
 
-/** 核对一处懒加载；返回问题列表（空 = 通过） */
-export function checkCall(g, host, target, actual) {
+/** 核对一处懒加载；keepJs 为 false：App 入口块发起、目标不在首屏名单里，表里不该有 JS。返回问题列表（空 = 通过） */
+export function checkCall(g, host, target, actual, keepJs = true) {
   const where = `${host} → ${target ?? '?'}`;
   if (!target) return [`${where}：这张预加载表前面找不到 import("…") 地址，产物格式变了，核对脚本要跟着改`];
   if (!g.has(target)) return [`${where}：import 的目标不在 manifest 里`];
   const errs = [];
-  const w = wanted(g, target, host);
+  const w = wanted(g, target, host, keepJs);
   const actJs = actual.filter((f) => !isCss(f));
   const dup = actJs.filter((f) => w.loaded.has(f));
   if (dup.length) errs.push(`${where}：① 表里还有宿主已加载的 JS：${dup.join('、')}`);
   const missing = w.js.filter((f) => !actJs.includes(f));
   const extra = actJs.filter((f) => !w.js.includes(f) && !w.loaded.has(f));
   if (missing.length) errs.push(`${where}：② 少了 JS：${missing.join('、')}`);
-  if (extra.length) errs.push(`${where}：② 多了闭包外的 JS：${extra.join('、')}`);
+  if (extra.length) errs.push(`${where}：② 多了${keepJs ? '闭包外' : '（入口块只给首屏动态入口列 JS）'}的 JS：${extra.join('、')}`);
   const wantCss = w.css.join(' ');
   const actCss = actual.filter(isCss).join(' ');
   if (wantCss !== actCss) errs.push(`${where}：③ CSS 和不去重时不一样：应为 [${wantCss}]，实际 [${actCss}]`);
@@ -120,9 +122,9 @@ function missingFiles(manifest, appDir) {
   return [...files].filter((f) => !existsSync(resolve(appDir, f)));
 }
 
-/** 整个产物：返回 { calls: 核对了几处懒加载, errors }。没有 assets 目录（check_size 测试造的假产物）时 calls 为 0、不算错。
+/** 整个产物：返回 { calls: 核对了几处懒加载, errors }。firstPaint：首屏动态入口（manifest 的键），默认 FIRST_PAINT_DYNAMIC。没有 assets 目录（check_size 测试造的假产物）时 calls 为 0、不算错。
  *  manifest 可能是 dist/vite-manifest 的后备（见 vite_manifest.mjs），所以先核对 manifest 里的文件都在产物里（复审建议 3） */
-export function checkPreload(appDir, manifest = readManifest(appDir)) {
+export function checkPreload(appDir, manifest = readManifest(appDir), firstPaint = FIRST_PAINT_DYNAMIC) {
   const assets = resolve(appDir, 'assets');
   if (!existsSync(assets)) return { calls: 0, errors: [] };
   const gone = missingFiles(manifest, appDir);
@@ -130,6 +132,9 @@ export function checkPreload(appDir, manifest = readManifest(appDir)) {
     return { calls: 0, errors: [`manifest 和产物对不上：manifest 里有 ${gone.length} 个文件在 ${appDir} 里找不到（例如 ${gone.slice(0, 3).join('、')}），多半是读到了别的构建的 manifest，没有逐个核对`] };
   }
   const g = graphOf(manifest);
+  const appEntry = manifest['index.html']?.file;
+  const firstPaintFiles = new Set(firstPaint.map((k) => manifest[k]?.file));
+  const keepJs = (host, target) => host !== appEntry || firstPaintFiles.has(target);
   let calls = 0;
   const errors = [];
   const seenPairs = new Set();
@@ -143,7 +148,7 @@ export function checkPreload(appDir, manifest = readManifest(appDir)) {
     for (const { target, deps } of mapDepsCalls(code, host)) {
       calls++;
       if (target) seenPairs.add(`${host} → ${target}`);
-      errors.push(...checkCall(g, host, target, deps));
+      errors.push(...checkCall(g, host, target, deps, keepJs(host, target)));
     }
   }
   // 整张表都不见了也要发现。Vite 只在不去重时表超过 1 项时写表；去重后该留的 JS 和 CSS 都空了（目标本身在宿主闭包里、又没有 CSS），
@@ -151,7 +156,7 @@ export function checkPreload(appDir, manifest = readManifest(appDir)) {
   for (const [host, c] of g) {
     for (const t of c.dynamic) {
       if (seenPairs.has(`${host} → ${t}`) || fullDeps(g, t, host).length <= 1) continue;
-      const w = wanted(g, t, host);
+      const w = wanted(g, t, host, keepJs(host, t));
       if (w.js.length + w.css.length > 0) errors.push(`${host} → ${t}：② 整张预加载表不见了`);
     }
   }

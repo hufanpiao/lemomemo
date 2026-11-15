@@ -17,6 +17,9 @@ const manifest = {
 // 不去重时 Vite 写的表：Page、jsx、Settings、Settings.css、Page.css；去重后去掉 jsx
 const GOOD = ['assets/Page.js', 'assets/Settings.js', 'assets/Settings.css', 'assets/Page.css'];
 
+/** 现有用例把 Page.tsx 当首屏动态入口（main 照旧给它列 JS）；入口块只给首屏名单列 JS 的那条另传空名单 */
+const check = (d: string, fp: string[] = ['Page.tsx']) => checkPreload(d, undefined, fp);
+
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
@@ -77,30 +80,30 @@ describe('预加载表去重的产物核对', () => {
   });
 
   it('去重对的产物通过', () => {
-    expect(checkPreload(app(GOOD))).toEqual({ calls: 1, errors: [] });
+    expect(check(app(GOOD))).toEqual({ calls: 1, errors: [] });
   });
 
   it('① 宿主已加载的 jsx 还在表里就失败', () => {
-    const r = checkPreload(app(['assets/Page.js', 'assets/jsx.js', 'assets/Settings.js', 'assets/Settings.css', 'assets/Page.css']));
+    const r = check(app(['assets/Page.js', 'assets/jsx.js', 'assets/Settings.js', 'assets/Settings.css', 'assets/Page.css']));
     expect(r.errors).toEqual([expect.stringContaining('① 表里还有宿主已加载的 JS：assets/jsx.js')]);
   });
 
   it('② 少了 Settings 就失败；多了闭包外的块也失败', () => {
-    expect(checkPreload(app(['assets/Page.js', 'assets/Settings.css', 'assets/Page.css'])).errors).toEqual([
+    expect(check(app(['assets/Page.js', 'assets/Settings.css', 'assets/Page.css'])).errors).toEqual([
       expect.stringContaining('② 少了 JS：assets/Settings.js'),
     ]);
-    expect(checkPreload(app([...GOOD, 'assets/Other.js'])).errors).toEqual([expect.stringContaining('② 多了闭包外的 JS：assets/Other.js')]);
+    expect(check(app([...GOOD, 'assets/Other.js'])).errors).toEqual([expect.stringContaining('② 多了闭包外的 JS：assets/Other.js')]);
   });
 
   it('② 该有表的懒加载整张表不见了就失败', () => {
-    expect(checkPreload(app(null)).errors).toEqual([expect.stringContaining('assets/main.js → assets/Page.js：② 整张预加载表不见了')]);
+    expect(check(app(null)).errors).toEqual([expect.stringContaining('assets/main.js → assets/Page.js：② 整张预加载表不见了')]);
   });
 
   it('③ CSS 少一个或顺序变了都失败', () => {
-    expect(checkPreload(app(['assets/Page.js', 'assets/Settings.js', 'assets/Page.css'])).errors).toEqual([
+    expect(check(app(['assets/Page.js', 'assets/Settings.js', 'assets/Page.css'])).errors).toEqual([
       expect.stringContaining('③ CSS 和不去重时不一样'),
     ]);
-    expect(checkPreload(app(['assets/Page.js', 'assets/Settings.js', 'assets/Page.css', 'assets/Settings.css'])).errors).toEqual([
+    expect(check(app(['assets/Page.js', 'assets/Settings.js', 'assets/Page.css', 'assets/Settings.css'])).errors).toEqual([
       expect.stringContaining('③ CSS 和不去重时不一样'),
     ]);
   });
@@ -111,7 +114,7 @@ describe('预加载表去重的产物核对', () => {
       '_jsx.js': { file: 'assets/jsx.js' },
       'Page.tsx': { file: 'assets/Page.js', imports: ['_jsx.js'] },
     };
-    expect(checkPreload(app(null, true, man))).toEqual({ calls: 0, errors: [] });
+    expect(check(app(null, true, man))).toEqual({ calls: 0, errors: [] });
   });
 
   it('建议 2：目标在宿主闭包里、只剩 CSS 时表的第一项是 CSS，按 import 地址认目标照样通过', () => {
@@ -120,19 +123,25 @@ describe('预加载表去重的产物核对', () => {
       '_jsx.js': { file: 'assets/jsx.js' },
       'Page.tsx': { file: 'assets/Page.js', imports: ['_jsx.js'], css: ['assets/Page.css'] },
     };
-    expect(checkPreload(app(['assets/Page.css'], true, man))).toEqual({ calls: 1, errors: [] });
+    expect(check(app(['assets/Page.css'], true, man))).toEqual({ calls: 1, errors: [] });
   });
 
   it('建议 3：manifest 里的文件在产物里找不到（读到了别的构建的 manifest），只报一条“对不上”，不逐个报假错', () => {
     const d = app(GOOD);
     rmSync(join(d, 'assets', 'Settings.js'));
     rmSync(join(d, 'assets', 'Page.css'));
-    const r = checkPreload(d);
+    const r = check(d);
     expect(r.calls).toBe(0);
     expect(r.errors).toEqual([expect.stringMatching(/manifest 和产物对不上：manifest 里有 2 个文件.*找不到/)]);
   });
 
+  it('App 入口块发起、目标不在首屏名单里：表里只该有 CSS，列了 JS 就失败（vite.config.ts 的 preloadDeps）', () => {
+    expect(check(app(['assets/Settings.css', 'assets/Page.css']), [])).toEqual({ calls: 1, errors: [] });
+    expect(check(app(GOOD), []).errors).toEqual([expect.stringContaining('② 多了（入口块只给首屏动态入口列 JS）的 JS：assets/Page.js、assets/Settings.js')]);
+    expect(check(app(['assets/Settings.css']), []).errors).toEqual([expect.stringContaining('③ CSS 和不去重时不一样')]);
+  });
+
   it('没有 assets 目录（check_size 测试的假产物）就跳过', () => {
-    expect(checkPreload(app(GOOD, false))).toEqual({ calls: 0, errors: [] });
+    expect(check(app(GOOD, false))).toEqual({ calls: 0, errors: [] });
   });
 });

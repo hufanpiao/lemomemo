@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin, type Rolldown } from 'vite';
 import { buildVersion, webOutDir } from './build/assemble_web.mjs';
+import { FIRST_PAINT_DYNAMIC } from './build/check_first_paint_chunks.mjs';
 
 const root = import.meta.dirname;
 /**
@@ -102,6 +103,27 @@ export function dropHostLoaded(bundle: Rolldown.OutputBundle | undefined, deps: 
 }
 
 /**
+ * App 入口块（main，src/index.html 的入口）的预加载表只给首屏动态入口列 JS（11-16 首屏预算 e2e 超线 151.1 KB，主持人派单）：
+ * main 里登记着几十个懒加载页和部件，每个列出整个静态闭包，表里两百多个文件名（gzip 约 4.6 KB）全在首屏下载，大部分是首屏用不到的页。
+ * 现在只有首屏名单 FIRST_PAINT_DYNAMIC（build/check_first_paint_chunks.mjs，tests/build/first-paint-graph.test.ts 从源码推着核对）里的目标
+ * 照旧列（再按 dropHostLoaded 去重），别的目标不列 JS、只留 Vite 自己追加的 CSS（样式照旧先到再挂，不闪）。
+ * 代价（加载瀑布）：首屏以外的页、部件第一次打开时，浏览器先下目标块，解析后再按它的静态 import 一层层下（11-16 产物里依赖链最长 7 层，最多多 6 次往返；启动后才挂的提醒引擎、今天页子任务进度这类部件也一样）；
+ * 装好 Service Worker 以后这些块都在预缓存里，多出来的只是本机缓存读取。懒加载块自己发起的 import（例如外壳 NotesRoot → NotesPage）不受影响。
+ * 登录页入口（auth）只有一个首屏就要的 AuthPage，不动。tests/build/preload-dedupe.test.ts 守规则，build/check_preload.mjs 拿真实产物核对
+ */
+const FIRST_PAINT_RE = pathRe(FIRST_PAINT_DYNAMIC.map((k) => `src/${k}`));
+const APP_ENTRY_RE = /[\\/]src[\\/]index\.html$/;
+
+export function preloadDeps(bundle: Rolldown.OutputBundle | undefined, file: string, deps: string[], hostId: string, hostType: 'html' | 'js'): string[] {
+  const host = hostType === 'js' ? bundle?.[hostId] : undefined;
+  if (host?.type === 'chunk' && APP_ENTRY_RE.test(host.facadeModuleId ?? '')) {
+    const target = bundle?.[file];
+    if (!(target?.type === 'chunk' && FIRST_PAINT_RE.test(target.facadeModuleId ?? ''))) return [];
+  }
+  return dropHostLoaded(bundle, deps, hostId, hostType);
+}
+
+/**
  * 产物图在 generateBundle 最前面记下，Vite 改写预加载表也在 generateBundle 里、排在它后面。
  * 这个先后依赖 Vite 自己的 vite:build-import-analysis 插件的 generateBundle 不是 order: 'pre'（8.3.5 源码 dist/node/chunks/node.js:27164 是普通顺序）；
  * 升级 Vite 时要重新核对：要是它也改成 pre，就可能排到我们前面，get() 拿到 undefined（buildStart 清过），去重整个不生效，方向安全但首屏会涨。
@@ -160,7 +182,7 @@ export default defineConfig(({ mode }) => {
       target: 'es2023',
       modulePreload: {
         polyfill: false,
-        resolveDependencies: (_file, deps, { hostId, hostType }) => dropHostLoaded(graph.get(), deps, hostId, hostType),
+        resolveDependencies: (file, deps, { hostId, hostType }) => preloadDeps(graph.get(), file, deps, hostId, hostType),
       },
       // 小文件也不内联成 data: URI（img-src 虽然放了 data:，字体等没放）
       assetsInlineLimit: 0,

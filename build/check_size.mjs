@@ -160,12 +160,12 @@ export const cli = withUsage((argv) => {
     console.error(g.error);
     failed = true;
   } else console.log(`${g.batch} 首屏净增：${g.net} B / 额度 ${g.limit} B（基线 ${g.base} B）`);
-  // 预加载表去重的产物核对（vite.config.ts 的 dropHostLoaded，见 check_preload.mjs）。manifest 里该有表的动态 import 在产物里找不到也算失败
+  // 预加载表去重的产物核对（vite.config.ts 的 preloadDeps、dropHostLoaded，见 check_preload.mjs）。manifest 里该有表的动态 import 在产物里找不到也算失败
   const p = checkPreload(appDir, manifest);
   if (p.errors.length) {
     for (const e of p.errors) console.error(`预加载表去重：${e}`);
     failed = true;
-  } else if (p.calls > 0) console.log(`预加载表去重：${p.calls} 处懒加载都核对过（宿主已加载的 JS 不列、其余 JS 一个不少、CSS 和不去重时一样）`);
+  } else if (p.calls > 0) console.log(`预加载表去重：${p.calls} 处懒加载都核对过（宿主已加载的 JS 不列、入口块只给首屏动态入口列 JS、其余 JS 一个不少、CSS 和不去重时一样）`);
   return failed ? 1 : 0;
 });
 
