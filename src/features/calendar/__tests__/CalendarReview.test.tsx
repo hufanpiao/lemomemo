@@ -1,7 +1,7 @@
 // 月历页面·FA-3 第二轮复审补的部分（11-04）之二：电脑周表头补班 / 放假（代码复审 N4）、现在线不压字（设计复审 N2）、
 // 完成的待办不撑宽时间轴（代码复审 N5）、跨午夜日程的次日续段（N6）、h1（N7）、“今天”跨午夜跟着变、闰月的农历写法
 // 集合、节假日文件用替身；“今天”固定在 2026-11-05（周四）09:00；界面语言中文（周一起始）
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { currentTz } from '../../../core/current-tz.ts';
@@ -81,6 +81,9 @@ afterEach(() => {
   delete (document as { startViewTransition?: unknown }).startViewTransition;
 });
 
+
+/** 选中那天清单的行（ul 里的按钮；标题行下面的黄历卡也是按钮，R-431，不算） */
+const dayRows = (): HTMLElement[] => [...screen.getByTestId('cal-day-list').querySelectorAll<HTMLElement>('li > button')];
 describe('其他复审项', () => {
   it('页面有 h1（视觉隐藏，代码复审 N7）', () => {
     open('#/calendar');
@@ -203,10 +206,10 @@ describe('其他复审项', () => {
     data.events = [ev('1', { title: '通宵', date: '2026-11-09', time: '23:00', duration_min: 120 }), ev('2', { title: '早会', date: '2026-11-10', time: '09:00' })];
     open('#/cal/month/2026-11');
     fireEvent.click(cell('2026-11-09') as HTMLElement);
-    expect(within(screen.getByTestId('cal-day-list')).getAllByRole('button').map((b) => b.textContent)).toEqual(['23:00通宵']);
+    expect(dayRows().map((b) => b.textContent)).toEqual(['23:00通宵']);
     fireEvent.click(cell('2026-11-10') as HTMLElement);
     const list = screen.getByTestId('cal-day-list');
-    const rows = within(list).getAllByRole('button');
+    const rows = dayRows();
     expect(rows.map((b) => b.textContent)).toEqual(['至 01:00通宵', '09:00早会']);
     expect(rows[0]?.getAttribute('data-kind')).toBe('cont');
     expect(list.textContent).toContain('2 项');
@@ -218,9 +221,9 @@ describe('其他复审项', () => {
     data.events = [ev('1', { title: '展会', date: '2026-11-09', time: '22:00', duration_min: 30 * 60 })];
     open('#/cal/month/2026-11');
     fireEvent.click(cell('2026-11-10') as HTMLElement);
-    expect(within(screen.getByTestId('cal-day-list')).getAllByRole('button').map((b) => b.textContent)).toEqual(['至 24:00展会']);
+    expect(dayRows().map((b) => b.textContent)).toEqual(['至 24:00展会']);
     fireEvent.click(cell('2026-11-11') as HTMLElement);
-    expect(within(screen.getByTestId('cal-day-list')).getAllByRole('button').map((b) => b.textContent)).toEqual(['至 04:00展会']);
+    expect(dayRows().map((b) => b.textContent)).toEqual(['至 04:00展会']);
   });
 
   it('“今天”跨过午夜跟着变：今天的圈、默认选中的那天都换到新的一天', async () => {

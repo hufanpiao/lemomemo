@@ -4,6 +4,7 @@
 // • 正文左右滑动翻页、跟手（motion 的 useSwipePager）；电脑键盘 ← → 翻页、T 回今天（焦点在输入框、浮层打开时不生效；日历内部一律原地换、不记历史，R-372）
 // • 离线、又没拉到要显示的节假日：月历上方提示“联网后显示节假日”（5.12 第 1 点）
 // • 点月格某天 / 周视图某条泳道：选中那一天，下面列出当天全部日程和待办（DayList）；默认选中今天（在这一页里时）
+// • 清单标题行下面的黄历卡（R-431）：hooks/useHuangli 按需加载，中文界面才有
 // • 月历下面不放图例（负责人 11-15 去掉）
 // • 翻页的动画（架构 5.12，代码复审 N1）：同一页内换地址一律不起整页 View Transition（useCalendar 走 replaceInPage，日历内部算同一层不记历史，R-372）；
 //   ‹ › 按钮翻页和滑动一样，新的一页从那一侧横滑进来（swipe.slideIn，--dur-ui + --ease-standard）；键盘 ← →、“今天”、年月选择直接切换
@@ -33,6 +34,7 @@ import { UnsyncedRemindHint } from '../../reminders/index.ts';
 import { useSwipePager } from '../../../motion/gestures.ts';
 import { useCalendar } from '../hooks/useCalendar.ts';
 import { useCalViewT, type CalViewT } from '../hooks/useCalViewT.ts';
+import { useHuangli } from '../hooks/useHuangli.ts';
 import { useMonthFold } from '../hooks/useMonthFold.ts';
 import { useNewDateSource } from '../hooks/new-date.ts';
 import { weekTitle } from './week-axis.ts';
@@ -167,6 +169,7 @@ export default function CalendarPage() {
 
   const lunarShort = model.lunar ? (d: DateStr) => model.lunar?.dayInfo(d).solarTerm ?? model.lunar?.dayInfo(d).lunar : undefined;
   const sel = selected;
+  const huangli = useHuangli(sel, model.locale);
   const { p } = fold;
 
   return (
@@ -263,7 +266,7 @@ export default function CalendarPage() {
             dueMins={model.dueMins}
             t={t}
             lunarText={model.lunar?.fullText(sel) ? t('cal.a11y.lunar', { text: model.lunar.fullText(sel) ?? '' }) : undefined}
-            onOpen={ro.open} isRo={ro.g.isRo}
+            onOpen={ro.open} isRo={ro.g.isRo} huangli={huangli}
           />
         ) : null}
       </div>

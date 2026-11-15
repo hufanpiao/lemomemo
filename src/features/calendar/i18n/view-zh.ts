@@ -56,6 +56,12 @@ export const viewZh = {
   'cal.day.todo': '待办',
   // 跨午夜日程在次日清单里的续段（代码复审 N6）
   'cal.day.until': '至 {t}',
+  // 黄历卡（R-431）：左边大字农历日，下面“丙午年 · 十月”；右边“宜”“忌”两行，事项用“ · ”隔开，那一边没有写“—”
+  'cal.hl.year': '{gz}年 · {m}',
+  'cal.hl.yi': '宜',
+  'cal.hl.ji': '忌',
+  'cal.hl.sep': ' · ',
+  'cal.hl.none': '—',
   'cal.set.title': '日历',
   'cal.set.holidays': '节假日',
   'cal.set.hol.cn': '只显示中国',

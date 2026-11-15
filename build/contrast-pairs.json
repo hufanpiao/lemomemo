@@ -78,6 +78,22 @@
       "source": "皮肤视觉稿“对比度实测”"
     },
     {
+      "id": "yi-tag",
+      "what": "黄历卡“宜”标的字 / 标底（R-431）",
+      "fg": "--yi-fg",
+      "bg": "--yi-bg",
+      "kind": "text",
+      "source": "R-431 黄历卡（calendar/ui/HuangliCard.tsx 的 .hlYi）"
+    },
+    {
+      "id": "ji-tag",
+      "what": "黄历卡“忌”标的字 / 标底（R-431）",
+      "fg": "--ji-fg",
+      "bg": "--ji-bg",
+      "kind": "text",
+      "source": "R-431 黄历卡（calendar/ui/HuangliCard.tsx 的 .hlJi）"
+    },
+    {
       "id": "text-screen",
       "what": "正文 / 画面底色（日期大标题下的小字也在底色上）",
       "fg": "--text",

@@ -215,7 +215,8 @@ describe('月视图', () => {
     expect(list.textContent).toContain('11月12日');
     expect(list.textContent).toContain('周四');
     expect(list.textContent).toContain('3 项');
-    const rows = within(list).getAllByRole('button');
+    // 清单的行在 ul 里（标题行下面的黄历卡也是按钮，R-431，不算）
+    const rows = within(list.querySelector('ul') as HTMLElement).getAllByRole('button');
     expect(rows.map((r) => r.textContent)).toEqual(['14:00客户会', '全天团建', '18:00交报告']);
     await act(async () => {
       fireEvent.click(rows[0] as HTMLElement);

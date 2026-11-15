@@ -559,6 +559,94 @@
   font-weight: 400;
 }
 
+/* 黄历卡（R-431，HuangliCard.tsx）：标题行下面、行上面；整张是按钮，上面一条分隔线（下面一条是 .dayListRows 的） */
+.hl {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 0 12px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hlDate {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  min-width: 68px;
+}
+
+.hlDay {
+  font-size: var(--fs-28);
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.hlYear {
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  white-space: nowrap;
+}
+
+.hlRows {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hlRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--fs-13);
+  line-height: 20px;
+}
+
+.hlTag {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: var(--fs-12);
+  font-weight: 600;
+}
+
+.hlYi {
+  background: var(--yi-bg);
+  color: var(--yi-fg);
+}
+
+.hlJi {
+  background: var(--ji-bg);
+  color: var(--ji-fg);
+}
+
+/* 收起：每行一行、末尾省略号；展开（点卡片）显示全部 */
+.hlItems {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hl[aria-expanded='true'] .hlItems {
+  white-space: normal;
+}
+
 /* 日程竖线 4 宽、左右各让 3，和待办小圆（10 宽）占同一宽度：日程、待办标题起点一致（B2-UI-a U4-2） */
 .dayMk {
   flex: none;
