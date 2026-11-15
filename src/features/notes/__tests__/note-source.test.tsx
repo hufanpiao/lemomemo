@@ -130,7 +130,7 @@ describe('“最近删除”入口（负责人 11-15）', () => {
     window.history.replaceState(null, '', '/app/#/notes');
     at(notesSource);
     const b = screen.getByTestId('notes-open-trash');
-    expect(b.textContent).toBe('最近删除');
+    expect(b.getAttribute('aria-label')).toBe('最近删除');
     await act(async () => {
       fireEvent.click(b);
     });
@@ -142,7 +142,7 @@ describe('“最近删除”入口（负责人 11-15）', () => {
     window.history.replaceState(null, '', '/app/#/vault');
     at({ ...notesSource, kind: 'vault', trash: ['vault', 'trash'], useTrashCount: () => 2, text: { title: '隐私记', empty: '', back: '', trash: '最近删除' } });
     const b = screen.getByTestId('vault-open-trash');
-    expect(b.textContent).toBe('最近删除 2');
+    expect(b.getAttribute('aria-label')).toBe('最近删除 2');
     await act(async () => {
       fireEvent.click(b);
     });

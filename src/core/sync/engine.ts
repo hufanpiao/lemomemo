@@ -40,8 +40,6 @@ export interface SyncOptions {
   transport: SyncTransport;
   /** 宽容读取；默认 K7 的 read/lenient.ts createParseRows（测试可换） */
   parseRows?: ParseServerRows;
-  /** 宽容读取丢行时的日志（row_unknown、table_unknown；只有表名、列名、错误码、id），默认 createParseRows 带上它 */
-  readLog?: (e: ReadLog) => void;
   /** 被移除（刷新令牌失败）：清本机、删本机会话、回登录页。只调一次。sid：被拒那次请求发出前本机会话的 session_id（K6-sugg4 ①） */
   onRemoved(code: string, sid: string | null): void;
   /** 一件活写过本机库的这些表（主页据此给别的页面发 changed，4.3b） */
@@ -162,6 +160,15 @@ function createSender(c: Ctx, tracked: Outbox, pullTableSoon: (t: string) => voi
   return { kickSend, clearRetry };
 }
 
+/**
+ * 宽容读取丢掉的行（row_unknown：表名、id、出问题的列名、原因码，不含内容）也走同步的 log：
+ * 11-16 种数据 location=null 整行被丢，运行日志里一个字都没有，只能翻本机库 refetch:events 才查到
+ */
+function readLogOf(log: SyncLog | undefined): { log?: (e: ReadLog) => void } {
+  if (!log) return {};
+  return { log: (e) => log(e.act, { coll: e.coll, code: e.code, fields: e.fields, ...(e.item_id ? { itemId: e.item_id } : {}) }) };
+}
+
 export function createSync(boot: BootResult, opts: SyncOptions): Sync {
   const cache = boot.cache;
   const outbox = boot.outbox;
@@ -210,7 +217,7 @@ export function createSync(boot: BootResult, opts: SyncOptions): Sync {
         written.clear();
       }
     }, what);
-  const d: PullDeps = { cache, outbox: tracked, transport: opts.transport, parseRows: opts.parseRows ?? createParseRows(opts.readLog ? { log: opts.readLog } : {}), gated, now };
+  const d: PullDeps = { cache, outbox: tracked, transport: opts.transport, parseRows: opts.parseRows ?? createParseRows(readLogOf(opts.log)), gated, now };
   if (opts.log) d.log = opts.log;
   const round: RoundCtx = {
     boot, cache, d, schemaV: opts.schemaV ?? SCHEMA_V, withConfig: false, refetch: { done: false },

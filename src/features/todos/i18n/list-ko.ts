@@ -31,7 +31,6 @@ export const listKo: Readonly<Record<keyof typeof listZh, string>> = {
   'list.err.save': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
   'list.err.readonly': '새 버전으로 업데이트해야 수정할 수 있어요', // REVIEW(ko)
   'settings.autodel': '완료 7일 후 자동 삭제', // REVIEW(ko)
-  'settings.autodel.note': '완료한 지 7일이 지나고 그 뒤로 수정하지 않은 할 일은 ‘최근 삭제’로 옮겨요. 30일 안에 복구할 수 있어요', // REVIEW(ko)
   'items.progress': '{done}/{total}',
   'items.progress.a11y': '하위 할 일 {total}개 중 {done}개 완료', // REVIEW(ko)
   'items.collapse': '접기', // REVIEW(ko)

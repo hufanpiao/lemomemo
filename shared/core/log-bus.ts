@@ -7,6 +7,8 @@ export interface LogFields {
   coll?: string;
   code?: string;
   itemId?: string;
+  /** 出问题的列名（logs.fields，只有列名；row_unknown 用） */
+  fields?: readonly string[];
   /** 出错的那个错误对象：sink 换成 code（jsErrorCode），不原样上传 */
   error?: unknown;
 }

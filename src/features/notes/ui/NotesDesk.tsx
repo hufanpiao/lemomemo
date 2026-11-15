@@ -37,17 +37,19 @@ export interface NotesDeskProps {
   /** 分类栏标题、读屏 h1；不给就是“随手记” */
   title: string | undefined;
   cats: DeskCats;
+  /** 分类栏标题右边的小图标（“最近删除”垃圾桶，R-438 第 2 组丙） */
+  titleEnd: ReactNode;
   /** list 块的内容（NotesPage 画好的） */
   list: ReactNode;
   drawer: ((side: 'left' | 'right', handle: ReactNode) => ReactNode) | undefined;
 }
 
-export default function NotesDesk({ page, title, cats, list, drawer }: NotesDeskProps) {
+export default function NotesDesk({ page, title, titleEnd, cats, list, drawer }: NotesDeskProps) {
   const t = useNotesT();
   const cur = cats.counts.find((c) => c.id === cats.category);
   const name = title ?? t('notes.title', {});
   const panels = {
-    cats: { title: name, big: 22 as const, body: <CatList cats={cats} /> },
+    cats: { title: name, big: 22 as const, body: <CatList cats={cats} />, end: titleEnd },
     // list 里有输入行（侧栏“＋”要聚焦它）：不能收起
     list: { title: cur ? `${cur.name} ${cur.count}` : t('notes.all', { n: cats.total }), big: 24 as const, body: list, fixed: true },
   };

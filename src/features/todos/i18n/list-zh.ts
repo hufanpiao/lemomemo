@@ -35,7 +35,6 @@ export const listZh = {
   'list.err.readonly': '这条要新版本才能修改',
   // 设置首页“完成 7 天后自动删除”（负责人 11-15 方案；ui/TodoSettings.tsx）
   'settings.autodel': '完成 7 天后自动删除',
-  'settings.autodel.note': '完成满 7 天、之后没再改过的待办移到“最近删除”，30 天内能恢复',
   // R-350 子任务（方案 5.1、5.5、6.2、6.5）：列表卡片只能勾、看进度、收起；加删改在编辑页
   'items.progress': '{done}/{total}',
   'items.progress.a11y': '子任务已完成 {done} 项，共 {total} 项',

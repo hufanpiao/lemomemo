@@ -46,13 +46,3 @@ test('待办页“最近删除”：标题行右边、头像左边的图标链�
   await link.click();
   await expect(page).toHaveURL(/#\/trash\/todos$/);
 });
-
-test('设置里“完成 7 天后自动删除”说明后面的“最近删除”：是链接，点了进 #/trash、开关不变', async ({ page }) => {
-  await page.goto('/app/#/settings');
-  const link = page.getByTestId('settings-todo-trash');
-  await expect(link).toHaveText('最近删除', { timeout: 30000 });
-  await expect(link).toHaveAttribute('href', '#/trash/todos');
-  await expect(page.getByTestId('settings-todo-autodel')).toBeChecked();
-  await link.click();
-  await expect(page).toHaveURL(/#\/trash\/todos$/);
-});

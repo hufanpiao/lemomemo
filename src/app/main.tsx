@@ -42,7 +42,7 @@ import { mountFeatures } from './features.ts';
 import { loadTodoAutoDel } from '../features/todos/index.ts';
 import { rlog } from '../platform/run-log-api.ts';
 import { goHref } from './router.ts';
-import { logQueueCleaner, outboxLog, toLogRecord } from './log-channel.ts';
+import { logQueueCleaner, logSink, outboxLog } from './log-channel.ts';
 import { GATE_LIMIT_MS, startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
 import { AFTER_PAINT_NOTICE_AT, lazyLogUploader, loadAfterPaint, startAfterPaint, type AfterPaint } from './after-paint.ts';
 import { applyDocLocale } from '../platform/doc-locale.ts';
@@ -152,7 +152,7 @@ async function start(): Promise<void> {
     store: logQueueStore(userId), upload: guardOwner(userId, readSessionUserId, lazyLogUploader()),
     isOnline: () => browserLifecycle.isOnline(), onOnline: (fn) => browserLifecycle.onOnline(fn),
   });
-  setLogSink((act, f) => logQueue.add(toLogRecord(act, f, Date.now())));
+  setLogSink(logSink(logQueue, rlog));
   // 上次会话丢失的原因码（R-382 架构 4.1a 第 3 点）：只把 uid_h 对得上本账号的几条按 auth_loss 上传，别的账号的直接丢；取完整个键删掉
   // 本机有这个键才动态引入（auth-loss-log.ts 带 crypto.subtle 哈希，不进首屏；平时没有这个键，不下载）
   if (hasAuthLoss()) void import('../platform/auth-loss-log.ts')

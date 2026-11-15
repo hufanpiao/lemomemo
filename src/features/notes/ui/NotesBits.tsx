@@ -146,10 +146,10 @@ export function AiMark({ id }: { id: string }) {
 }
 
 /** “最近删除”入口（负责人 11-15 随手记页也要常驻一个；原来只在隐私记页有，挪到这里两种来源共用一份）：去哪、带不带条数看来源。
- *  icon：手机版顶栏里的垃圾桶图标（R-438）；不给：电脑版列表栏上方居中的胶囊 */
-export function TrashLink({ icon = false }: { icon?: boolean }) {
+ *  垃圾桶图标（R-438）：手机版在顶栏头像左边，电脑版在分类栏标题右边（负责人 11-16 第 2 组选丙） */
+export function TrashLink() {
   const t = useNotesT();
   const src = useNoteSource();
   const n = src.useTrashCount();
-  return <KitTrashLink to={src.trash} label={`${src.text?.trash ?? t('notes.img.trash', {})}${n ? ` ${n}` : ''}`} testId={`${src.kind}-open-trash`} look={icon ? 'icon' : undefined} />;
+  return <KitTrashLink to={src.trash} label={`${src.text?.trash ?? t('notes.img.trash', {})}${n ? ` ${n}` : ''}`} testId={`${src.kind}-open-trash`} look="icon" />;
 }

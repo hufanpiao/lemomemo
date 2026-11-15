@@ -43,7 +43,7 @@ export const tokens: Record<Theme, Record<string, string>> = {
     "--mic-halo2": "rgba(20,21,24,.05)",
     "--text": "#141518",
     "--text-2": "#595C64",
-    "--text-3": "#65686F",
+    "--text-3": "#666970",
     "--check-edge": "#8C877D",
     "--ink": "var(--text)",
     "--on-ink": "#FFFFFF",

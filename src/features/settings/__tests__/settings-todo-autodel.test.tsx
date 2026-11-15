@@ -36,7 +36,7 @@ describe('完成 7 天后自动删除', () => {
     expect(main.indexOf('todos')).toBe(main.indexOf('notesView') + 1);
   });
 
-  it('默认开，带说明；关掉写 todo.autodel = false，再打开写 true', async () => {
+  it('默认开，不带说明（负责人 11-16 去掉）；关掉写 todo.autodel = false，再打开写 true', async () => {
     uiStore.getState().setLocale('zh-CN');
     await boot();
     await renderPage();
@@ -44,12 +44,8 @@ describe('完成 7 天后自动删除', () => {
     expect(sw.getAttribute('role')).toBe('switch');
     expect(sw.checked).toBe(true);
     expect(sw.closest('li')?.textContent).toContain('完成 7 天后自动删除');
-    expect(sw.closest('li')?.textContent).toContain('最近删除');
-    // 说明后面接一个“最近删除”链接（审查 11-15 第 2 条）：是 <a href="#/trash">，不是按钮；点它不碰开关
-    const link = screen.getByTestId('settings-todo-trash');
-    expect(link.tagName).toBe('A');
-    expect(link.getAttribute('href')).toBe('#/trash/todos');
-    expect(link.textContent).toBe('最近删除');
+    expect(sw.closest('li')?.textContent).not.toContain('最近删除');
+    expect(screen.queryByTestId('settings-todo-trash')).toBeNull();
     await act(async () => {
       fireEvent.click(sw);
     });

@@ -35,8 +35,8 @@
 // • 数据来源（B5 隐私记重写 11-15，hooks/note-source.ts）：隐私记页经 NotesSurface 用同一个列表，来源换成隐私记的内存仓库；
 //   两边不一样的只按来源的 caps 分（入口行、合并提示、转成待办 / 日程、移到 / 移出隐私记），标题、空态、编辑页路由、电脑布局存的页名也由来源给；
 //   head 给了就画它、不画本页的大标题和头像（隐私记页的“‹ 随手记 | 🔒 隐私记 | 立即锁上”）；head 是函数，参数是要放进顶栏的“最近删除”图标（电脑版传 null）
-// • “最近删除”入口（负责人 11-15 要常驻；R-438 11-16 嫌标题下面的胶囊“太突兀”，选标题行右边小图标）：手机版是顶栏里头像左边的垃圾桶图标（NotesBits 的 TrashLink icon），
-//   隐私记页由 head(trash) 放进它自己顶栏右边；电脑版列表栏没有顶栏，照旧列表上方居中的胶囊。两种来源共用，去哪、带不带条数看来源
+// • “最近删除”入口（负责人 11-15 要常驻；R-438 11-16 嫌标题下面的胶囊“太突兀”，选标题行右边小图标）：手机版是顶栏里头像左边的垃圾桶图标（NotesBits 的 TrashLink），电脑版是分类栏标题右边同一个图标（负责人 11-16 第 2 组选丙），
+//   隐私记页由 head(trash) 放进它自己顶栏右边。两种来源共用，去哪、带不带条数看来源
 // • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal 管手势和打的字，smart-search 的 PullSearch 画搜索框和结果）；
 //   打了字就把“最近删除”、分类胶囊和列表藏起来、换成结果（kit 的 PullSlot，手机版、电脑版同一处 listPart）（按标题、正文、分类就地筛）。隐私记页不接（隐私记不搜）
 import { opensKeyboard } from '../../../platform/env.ts';
@@ -309,12 +309,12 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
   const phone = (
     <>
       {head ? (
-        head(<TrashLink icon />)
+        head(<TrashLink />)
       ) : (
         <header className={styles.top}>
           <h1 className={styles.h1}>{t('notes.title', {})}</h1>
           <span className={styles.topEnd}>
-            <TrashLink icon />
+            <TrashLink />
             <MeLink testId="notes-settings" />
           </span>
         </header>
@@ -334,11 +334,12 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
           <Desk.default
             page={src.desk}
             title={src.text?.title}
+            titleEnd={<TrashLink />}
             cats={{ total: l.total, counts: l.counts, category: l.category, set: l.setCategory }}
             list={
               <>
                 {head?.(null)}
-                {listPart(<TrashLink />)}
+                {listPart(null)}
                 {dock}
               </>
             }

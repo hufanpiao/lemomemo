@@ -5,7 +5,24 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { logQueueKey } from '../../platform/log-store.ts';
 import { jsErrorCode } from '../../platform/env.ts';
-import { logQueueCleaner, outboxLog, toLogRecord } from '../log-channel.ts';
+import { logQueueCleaner, logSink, outboxLog, toLogRecord } from '../log-channel.ts';
+
+describe('logSink（总线 → 上传队列 + 运行日志）', () => {
+  it('同一条进上传队列，也抄一行进运行日志：row_unknown 带表名、原因码、id 前 8 位、列名', () => {
+    const add = vi.fn();
+    const rlog = vi.fn();
+    const id = '0e2e0000-0000-4000-8000-0000000ab002';
+    logSink({ add }, rlog, () => 5)('row_unknown', { coll: 'events', code: 'bad_type', itemId: id, fields: ['location'] });
+    expect(add).toHaveBeenCalledWith({ act: 'row_unknown', t: 5, coll: 'events', code: 'bad_type', itemId: id, fields: ['location'] });
+    expect(rlog).toHaveBeenCalledWith('log row_unknown coll=events code=bad_type id=0e2e0000 cols=location');
+  });
+
+  it('没有附加字段时运行日志只有 act；空列名不带', () => {
+    const rlog = vi.fn();
+    logSink({ add: vi.fn() }, rlog, () => 1)('sync_task_timeout', { fields: [] });
+    expect(rlog).toHaveBeenCalledWith('log sync_task_timeout');
+  });
+});
 
 describe('toLogRecord（总线 → 上传队列的一条）', () => {
   it('打上时刻；只带 act、coll、code、itemId，空的不带', () => {
@@ -89,7 +106,7 @@ describe('升级中心的日志接到同一条总线（PROBE-sugg2 ③）', () =
   it('main.tsx 只接一次总线（setLogSink → 上传队列），不再有别的日志 setter（提醒、QuietBoundary 直接 logEvent）', () => {
     const src = readFileSync(join(import.meta.dirname, '../main.tsx'), 'utf8');
     expect(src.match(/\bsetLogSink\(/g)?.length).toBe(1);
-    expect(src).toContain('setLogSink((act, f) => logQueue.add(toLogRecord(act, f, Date.now())));');
+    expect(src).toContain('setLogSink(logSink(logQueue, rlog));');
     for (const gone of ['createLogChannel', 'setRemindHoldLog', 'setQuietErrorLog', 'setRemindErrorLog', 'logs.log']) expect(src).not.toContain(gone);
   });
 });

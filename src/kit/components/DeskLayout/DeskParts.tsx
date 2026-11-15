@@ -16,6 +16,8 @@ export interface DeskPanel {
   go?: { label: string; onClick(): void } | undefined;
   /** 大标题（线框 s7 随手记页：分类栏“随手记”22px、列表“全部 34”24px）；不给是 13px 灰字小标题 */
   big?: 22 | 24 | undefined;
+  /** 紧跟标题右边的小图标（R-438 第 2 组丙：电脑版随手记“最近删除”垃圾桶，负责人 11-16 选左栏标题右边） */
+  end?: ReactNode;
 }
 
 /** 竖条键盘每次调多少（5.9b 第 5 点） */
@@ -39,6 +41,7 @@ export function Panel({ id, p, canDrag, held, hintId, onKey, onBlur, onCollapse 
         <h2 id={titleId} className={styles.title} data-big={p.big}>
           {p.title}
         </h2>
+        {p.end}
         {p.go ? (
           <button type="button" className={styles.go} onClick={p.go.onClick} data-testid={`desk-go-${id}`}>
             {p.go.label}

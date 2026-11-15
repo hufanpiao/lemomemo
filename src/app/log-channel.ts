@@ -4,7 +4,7 @@
 import type { LogRecord } from '../core/log/queue.ts';
 import type { OutboxOptions } from '../core/outbox-types.ts';
 import type { SyncLog } from '../core/sync/types.ts';
-import type { LogFields } from '../../shared/core/log-bus.ts';
+import type { LogFields, LogSink } from '../../shared/core/log-bus.ts';
 import { jsErrorCode } from '../platform/env.ts';
 import { clearLogQueue } from '../platform/log-store.ts';
 
@@ -15,7 +15,20 @@ export function toLogRecord(act: string, f: LogFields | undefined, t: number, or
   const code = f?.code ?? (f && 'error' in f ? jsErrorCode(f.error, {}, origin) : undefined);
   if (code) e.code = code;
   if (f?.itemId) e.itemId = f.itemId;
+  if (f?.fields?.length) e.fields = f.fields;
   return e;
+}
+
+/**
+ * main.tsx 接到总线上的 sink：每条进上传队列，同一条也抄一行进运行日志（一键复制那份，正式版 rlog 是空操作）。
+ * 以前业务日志（宽容读取丢行 row_unknown、quiet_error 等）只上传、本机看不到，11-16 牙医复诊排查只能翻本机库才查到
+ */
+export function logSink(queue: { add(r: LogRecord): void }, rlog: (line: string) => void, now: () => number = Date.now): LogSink {
+  return (act, f) => {
+    const r = toLogRecord(act, f, now());
+    queue.add(r);
+    rlog(`log ${act}${r.coll ? ` coll=${r.coll}` : ''}${r.code ? ` code=${r.code}` : ''}${r.itemId ? ` id=${r.itemId.slice(0, 8)}` : ''}${r.fields ? ` cols=${r.fields.join(',')}` : ''}`);
+  };
 }
 
 /** outbox 的 log（R-229 outbox_vault_shell_drop）接到同一条总线：表名、记录 id、丢掉的条数（logs 没有数字列，写进 code） */

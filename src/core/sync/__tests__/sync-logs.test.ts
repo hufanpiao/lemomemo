@@ -117,3 +117,27 @@ describe('engine.ts：outbox_rejected', () => {
     e.sync.stop();
   });
 });
+
+describe('engine.ts：宽容读取丢行记 row_unknown（11-16 牙医复诊排查：以前没接上，运行日志里查不到）', () => {
+  it('不传 parseRows（用默认宽容读取）：服务器来的一行读不了（测试数据缺列），log 收到 row_unknown，带表名、记录 id、列名，不带内容', async () => {
+    const boot = await coldStart({
+      userId: 'A', appVersion: '4.0.0', cacheOptions: { factory: fakeIndexedDB().factory }, listen426: false,
+      clearCacheStorage: () => Promise.resolve(),
+      upgradeDeps: { reload: () => undefined, swUpdate: () => Promise.resolve('no_update' as const), attempt: { get: () => null, set: () => undefined } },
+    });
+    const t = fakeTransport();
+    const id = uid(3);
+    t.server.insert('todos', { ...todo(3), title: '不该进日志的标题' });
+    const r = recorder();
+    const sync = createSync(boot, { transport: t, lifecycle: fakeLife(), now: () => clock.t, skipConfig: true, onRemoved: () => undefined, log: r.log });
+    sync.start();
+    await sync.idle();
+    const dropped = r.entries.filter(([a]) => a === 'row_unknown');
+    expect(dropped.length).toBeGreaterThan(0);
+    const hit = dropped.find(([, f]) => f?.itemId === id);
+    expect(hit?.[1]).toMatchObject({ coll: 'todos', itemId: id });
+    expect(hit?.[1]?.fields?.length).toBeGreaterThan(0);
+    expect(JSON.stringify(dropped)).not.toContain('不该进日志');
+    sync.stop();
+  });
+});

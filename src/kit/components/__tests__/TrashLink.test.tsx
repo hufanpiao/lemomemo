@@ -16,16 +16,6 @@ beforeEach(() => {
 });
 
 describe('TrashLink', () => {
-  it('胶囊：外面一层居中的 div，里面是 <a href>（地址经 hrefOf）；文案照调用方给的', () => {
-    render(<TrashLink to={['vault', 'trash']} label="最近删除 2" testId="t" />);
-    const a = screen.getByTestId('t');
-    expect(a.tagName).toBe('A');
-    expect(a.getAttribute('href')).toBe('#/vault/trash');
-    expect(a.textContent).toBe('最近删除 2');
-    expect(a.className).toMatch(/pill/);
-    expect(a.parentElement?.tagName).toBe('DIV');
-  });
-
   it('inline：句子里的一个链接，不另包一层', () => {
     const { container } = render(
       <p>
@@ -34,6 +24,9 @@ describe('TrashLink', () => {
       </p>,
     );
     const a = screen.getByTestId('t');
+    expect(a.tagName).toBe('A');
+    expect(a.getAttribute('href')).toBe('#/trash');
+    expect(a.textContent).toBe('最近删除');
     expect(a.className).toMatch(/inline/);
     expect(a.parentElement).toBe(container.querySelector('p'));
   });
@@ -53,7 +46,7 @@ describe('TrashLink', () => {
   });
 
   it('普通点按交给路由（navigate 同一组参数）；Ctrl 点不拦，交给浏览器开新标签页', () => {
-    render(<TrashLink to={['vault', 'trash']} label="最近删除" testId="t" />);
+    render(<TrashLink look="inline" to={['vault', 'trash']} label="最近删除" testId="t" />);
     fireEvent.click(screen.getByTestId('t'), { button: 0 });
     expect(nav.calls).toEqual([['vault', 'trash']]);
     fireEvent.click(screen.getByTestId('t'), { button: 0, ctrlKey: true });
