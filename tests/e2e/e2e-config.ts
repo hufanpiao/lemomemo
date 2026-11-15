@@ -22,6 +22,7 @@ export const FASTREAD_ONLY_SPECS: readonly string[] = [
   '**/b5-vault.spec.ts',
   '**/b4b1-attachments.spec.ts',
   '**/b4b2-find.spec.ts',
+  '**/r437-pull-search.spec.ts',
   '**/b4b2-image-ai.spec.ts',
   '**/b4b3-assist.spec.ts',
 ];

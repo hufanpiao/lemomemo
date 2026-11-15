@@ -2,6 +2,7 @@
 // 对外唯一入口（架构 2.1、A27）：只导出懒加载的组件和打开面板的加载器；别的功能只能 import 这个文件
 // 没有自己的页面（routes 空），不在 app/features.ts 登记（同 attachments）：只有“＋”那一块（features/plus，首屏画完才下载）引这个文件，
 //   这里的东西都不进首屏
+// • R-437 起随手记、待办、日历三页也引这个文件（只拿懒加载的 PullSearch）；三页都不在首屏
 import { lazy } from 'react';
 
 export const routes = [] as const;
@@ -23,3 +24,10 @@ export const loadFindOpen = () => import('./hooks/find-open.ts');
  * props: { ask（shared/logic/parse/assist.ts 的 AssistAsk）; exclude: 刚保存的这一批的 id; undoSaved(): 撤销这一批 }
  */
 export const AssistPeek = lazy(() => import('./ui/AssistPeek.tsx'));
+
+/**
+ * 下拉搜索（R-437，ui/PullSearch.tsx）：随手记、待办、日历页列表滚到顶再往下拉，标题下面露出的搜索框和结果；露出时才挂、才下载。
+ * props: { pull: kit 的 usePullReveal(页面 main, 页名) 的返回值; scope: 'note' | 'todo' | 'event'; onOpen(id): 点开一条（页面自己管只读拦截、抽屉） }。
+ * 页面在 pull.searching 时把本页列表换成它的结果
+ */
+export const PullSearch = lazy(() => import('./ui/PullSearch.tsx'));

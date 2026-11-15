@@ -21,7 +21,9 @@
 //   勾子任务：主待办只读或这一项只读 → 拦下出“要新版本”；勾上最后一项 → 主待办自动完成，先留住分组 --dur-ui（看到满格）再挪到“已完成”组，
 //   页底出“全部完成，已完成这条待办 · 撤销”（对“打勾没有撤销条”开的例外，方案 5.5；撤销时刚勾的那项和主待办一起撤回，Q1）；
 //   主待办已完成时取消勾某项 → 主待办改回未完成、卡片挪回原来的组，不出撤销条（Q2）。运行日志 todo sub auto done|undone 在 data 层记（不记标题）
-import { Suspense, useState } from 'react';
+// • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal + smart-search 的 PullSearch，和随手记、日历页同一套）；
+//   打了字就把项目筛选和列表换成结果（按标题和子任务就地筛，已完成的也在里面）；点一条和点标题一样进编辑页（只读的照样拦下）
+import { Suspense, useRef, useState } from 'react';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
@@ -35,12 +37,15 @@ import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
+import { usePullReveal } from '../../../kit/hooks/usePullReveal.ts';
+import { PullSlot } from '../../../kit/components/PullSlot.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
 import { useListT, useTodoList, type DueTag, type Group } from '../hooks/useTodoList.ts';
 import { DONE_GROUP, setCollapsed, useCollapsed } from '../hooks/useSubtasks.ts';
 import { SubtaskCard } from './SubtaskCard.tsx';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
+import { PullSearch } from '../../smart-search/index.ts';
 import styles from './TodosPage.module.css';
 
 /** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */
@@ -76,6 +81,8 @@ export default function TodosPage() {
     else if (doneToast?.id === id) a.g.dismiss(doneToast);
   };
   const open = (id: string) => (isRo(id) ? a.g.block() : void navigate('todo', id));
+  const page = useRef<HTMLElement>(null);
+  const pull = usePullReveal(page, 'todos');
   const roSubs = useReadonlyIds('todo_items');
   const isCollapsed = useCollapsed();
   const fold = (id: string, v: boolean) => setCollapsed(id, v, l.ids);   // 全部待办的 id（不按项目筛选，免得剔掉别的项目点过的）
@@ -106,12 +113,15 @@ export default function TodosPage() {
   const { groupTitle, tagText } = labelsOf(t, locale);
 
   return (
-    <main className={styles.page} data-feature="todos" data-testid="todos">
+    <main ref={page} className={styles.page} data-feature="todos" data-testid="todos">
       <header className={styles.top}>
         <h1 className={styles.h1}>{t('list.title', {})}</h1>
         {/* 新建待办在底栏的“＋”（负责人 11-05 ③，原来右上角的“＋ 新建”去掉）；右上角是设置入口头像（R-381，四页共用 MeLink） */}
         <MeLink testId="todos-settings" />
       </header>
+      <PullSlot pull={pull}><PullSearch pull={pull} scope="todo" onOpen={open} /></PullSlot>
+
+      {pull.searching ? null : (<>
 
       {l.projects.length ? (
         <div className={styles.filter} role="group" aria-label={t('list.filter', {})} data-testid="todos-filter">
@@ -198,6 +208,7 @@ export default function TodosPage() {
           </AppearItem>
         ))}
       </AppearList>
+      </>)}
 
       {a.g.toast?.kind === 'auto' ? autoToast(a.g.toast) : null}
       {/* 打勾的撤销条（负责人 11-15 方案）：开着期间那一条留在原位；撤销 = 再点一下圆圈（core/todo-done.ts 按撤销写回原来的 done_at） */}

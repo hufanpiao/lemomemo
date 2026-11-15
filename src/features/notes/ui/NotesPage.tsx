@@ -36,6 +36,8 @@
 //   两边不一样的只按来源的 caps 分（入口行、合并提示、转成待办 / 日程、移到 / 移出隐私记），标题、空态、编辑页路由、电脑布局存的页名也由来源给；
 //   head 给了就画它、不画本页的大标题和头像（隐私记页的“‹ 随手记 | 🔒 隐私记 | 立即锁上”）
 // • “最近删除”入口（负责人 11-15）：标题下面、分类胶囊上面居中一个（NotesBits 的 TrashLink），两种来源共用，去哪、带不带条数看来源
+// • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal 管手势和打的字，smart-search 的 PullSearch 画搜索框和结果）；
+//   打了字就把“最近删除”、分类胶囊和列表换成结果（按标题、正文、分类就地筛）。隐私记页不接（隐私记不搜）
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { Suspense, useRef, useState, type ReactNode } from 'react';
@@ -47,11 +49,14 @@ import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
 import { Mist } from '../../../kit/components/Mist.tsx';
 import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
+import { usePullReveal } from '../../../kit/hooks/usePullReveal.ts';
+import { PullSlot } from '../../../kit/components/PullSlot.tsx';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
 import { useEditT } from '../../../kit/components/EditNotices.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, useSwapWhenSafe } from '../../../motion/components.ts';
+import { PullSearch } from '../../smart-search/index.ts';
 import { VaultParts } from '../../vault/index.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import { useMergeHint } from '../hooks/useMergeHint.ts';
@@ -115,6 +120,12 @@ export function NotesList({ head }: { head?: ReactNode }) {
 
   const selId = ds.sel?.id;
   const open = (id: string) => (isRo(id) ? guard.block() : ds.open({ id }, () => void navigate(src.route.edit, id)));
+  const pull = usePullReveal(page, 'notes', src.kind !== 'vault');
+  const pullBar = (
+    <PullSlot pull={pull}>
+      <PullSearch pull={pull} scope="note" onOpen={open} />
+    </PullSlot>
+  );
   const del = (id: string) => {
     setMenu(null);
     ds.forget(id);
@@ -294,9 +305,14 @@ export function NotesList({ head }: { head?: ReactNode }) {
           <MeLink testId="notes-settings" />
         </header>
       )}
-      <TrashLink />
-      {filterChips}
-      {body}
+      {pullBar}
+      {pull.searching ? null : (
+        <>
+          <TrashLink />
+          {filterChips}
+          {body}
+        </>
+      )}
       {mist}
       {dock}
     </>
@@ -315,8 +331,13 @@ export function NotesList({ head }: { head?: ReactNode }) {
             list={
               <>
                 {head}
-                <TrashLink />
-                {body}
+                {pullBar}
+                {pull.searching ? null : (
+                  <>
+                    <TrashLink />
+                    {body}
+                  </>
+                )}
                 {dock}
               </>
             }
