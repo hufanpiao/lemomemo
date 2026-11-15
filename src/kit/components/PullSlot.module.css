@@ -1,0 +1,33 @@
+/* 下拉搜索的挂法（R-437，PullSlot.tsx）。只用令牌（A11）；没有动效 */
+
+/* 包本页列表的那一层：不参与排版；打了字时 hidden，整块不画（列表不卸） */
+.keep {
+  display: contents;
+}
+
+.keep[hidden] {
+  display: none;
+}
+
+/* “搜索本页”：平时视觉隐藏（读屏照样读得到），Tab 到（:focus-visible）才出现在标题行下面。外观同 kit TrashLink 的细线胶囊 */
+.key {
+  flex: none;
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-pill);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.key:not(:focus-visible) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -3,6 +3,7 @@ import type { listZh } from './list-zh.ts';
 
 export const listKo: Readonly<Record<keyof typeof listZh, string>> = {
   'list.title': '할 일', // REVIEW(ko)
+  'list.pullKey': '이 페이지 검색', // REVIEW(ko) R-437
   'list.all': '전체', // REVIEW(ko)
   'list.filter': '프로젝트별 보기', // REVIEW(ko)
   'list.g.late': '기한 지남', // REVIEW(ko)

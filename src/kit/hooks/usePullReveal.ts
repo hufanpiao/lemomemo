@@ -1,10 +1,18 @@
-// 下拉露出搜索框（R-437；同 iPhone 备忘录）：随手记、待办、日历三页共用这一个 hook，搜索框和结果在 smart-search 的 PullSearch
+// 下拉露出搜索框（R-437；同 iPhone 备忘录）：随手记、待办、日历三页共用这一个 hook，挂法见 kit/components/PullSlot.tsx，搜索框和结果在 smart-search 的 PullSearch
 // • 手机：页面滚到顶（window.scrollY ≤ 0）时按下，再往下拉过 PULL_OPEN_PX、竖着拉为主（横向不超过竖向一半）就露出。
 //   用 touch 事件（passive）：滚到顶以后往下拉，浏览器自己接手回弹，pointer 事件会被 pointercancel 掉，touch 事件照常来
-// • 电脑：滚到顶以后滚轮继续往上滚，累计过 WHEEL_OPEN_PX 就露出；刚滚到顶的 SETTLE_MS 内不算（触控板惯性滚到顶不误开）
-// • 只认按在 region（页面 main）里的：弹层是挂在 body 上的，不在 region 里；按在 [data-nopull] 里的不算（日历日清单的拖动柄本身就是上下拖）
-// • 露出以后一直留着，直到 close()（搜索框的“取消”：清空并收起）；q 放在这里，页面按 searching 把本页列表换成结果
-// • 运行日志：pull open <页> via=touch|wheel、pull close <页>（不记打的字）
+// • 电脑：滚到顶以后滚轮继续往上滚，累计过 WHEEL_OPEN_PX 就露出。防误触（R-437 评审第 2 条）：
+//   按着 Ctrl（触控板双指缩放）、横向为主的不算；滚到顶以后要先断开一段（两次滚轮隔 WHEEL_GAP_MS 以上，惯性流结束）才开始累计，
+//   所以从下面一路滚上来、惯性冲到顶的那一串不会打开
+// • 只认按在本页（ref 挂在页面 main 上）、而且是“页面本身”的地方（R-437 评审第 1 条，pullable）：从按下的元素往上找到页面，途中有
+//   – 真能滚的（overflow-y 是 auto / scroll，内容比框高）：电脑版随手记的详情抽屉、抽屉里的正文框，在里面滚是滚它自己；
+//   – position: fixed 的：抽屉内容短、不能滚时同样不算；随手记贴底的输入行也是；
+//   – [data-nopull]：日历日清单的拖动柄（往下拖是展开月历，它本身既不能滚也不是 fixed，只能这样标）
+//   都不算；弹层挂在 body 上，本来就不在页面里
+// • 键盘、读屏（R-437 评审第 3 条）：标题行下面一个平时看不见、Tab 到才出现的“搜索本页”（PullSlot 画，keyRef 挂在它上面），
+//   点了 reveal('key')，搜索框自己聚焦；收起（“取消”、输入框里按 Esc）以后焦点还给它
+// • 露出以后一直留着，直到 close()（清空并收起）；q 放在这里，PullSlot 按 searching 把本页列表藏起来（不卸）
+// • 运行日志：pull open <页> via=touch|wheel|key、pull close <页>（不记打的字）
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { rlog } from '../../platform/run-log-api.ts';
 
@@ -12,67 +20,92 @@ import { rlog } from '../../platform/run-log-api.ts';
 export const PULL_OPEN_PX = 64;
 /** 滚轮在顶上继续往上滚多少露出（px） */
 export const WHEEL_OPEN_PX = 120;
-/** 两次滚轮隔这么久就从头累计 */
-const WHEEL_GAP_MS = 250;
-/** 刚滚到顶的这段时间里滚轮不算（惯性） */
-export const SETTLE_MS = 300;
+/** 两次滚轮隔这么久算断开（惯性流结束），从头累计 */
+export const WHEEL_GAP_MS = 250;
 /** 滚轮按行滚时一行算多少 px */
 const LINE_PX = 16;
 
-export type PullVia = 'touch' | 'wheel';
+export type PullVia = 'touch' | 'wheel' | 'key';
 
 export interface PullReveal {
+  /** 这一页接不接（隐私记页不接：不画“搜索本页”、不接手势） */
+  enabled: boolean;
   open: boolean;
+  /** 怎么打开的（key：搜索框挂上就聚焦）；收着为 null */
+  via: PullVia | null;
   q: string;
   setQ(q: string): void;
-  /** 打了字（去掉空白不为空）：页面把本页列表换成结果 */
+  /** 打了字（去掉空白不为空）：本页列表藏起来、换成结果 */
   searching: boolean;
   reveal(via: PullVia): void;
-  /** 清空并收起 */
+  /** 清空并收起，焦点还给“搜索本页” */
   close(): void;
+  /** 挂在页面 main 上（回调 ref） */
+  ref(el: HTMLElement | null): void;
+  /** 挂在“搜索本页”按钮上 */
+  keyRef: RefObject<HTMLButtonElement | null>;
 }
 
 const atTop = (): boolean => window.scrollY <= 0;
-const inRegion = (region: HTMLElement | null, t: EventTarget | null): boolean =>
-  region !== null && t instanceof Element && region.contains(t) && t.closest('[data-nopull]') === null;
+
+const scrolls = (el: Element, cs: CSSStyleDeclaration): boolean =>
+  (cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight;
+
+/** 按在页面本身（见文件头）：在 region 里，往上到 region 之前没有能滚的、fixed 的、[data-nopull] 的 */
+export function pullable(region: HTMLElement | null, t: EventTarget | null): boolean {
+  if (region === null || !(t instanceof Element) || !region.contains(t)) return false;
+  for (let el: Element | null = t; el !== null && el !== region; el = el.parentElement) {
+    if (el.hasAttribute('data-nopull')) return false;
+    const cs = getComputedStyle(el);
+    if (cs.position === 'fixed' || scrolls(el, cs)) return false;
+  }
+  return true;
+}
 
 /** tag：页名，只进运行日志；enabled 为 false（隐私记页）时不接手势 */
-export function usePullReveal(region: RefObject<HTMLElement | null>, tag: string, enabled = true): PullReveal {
-  const [open, setOpen] = useState(false);
+export function usePullReveal(tag: string, enabled = true): PullReveal {
+  const [via, setVia] = useState<PullVia | null>(null);
   const [q, setQ] = useState('');
-  // open 只经 reveal、close 改，这一份跟着它们改（不在渲染时写 ref）
+  const region = useRef<HTMLElement | null>(null);
+  const keyRef = useRef<HTMLButtonElement | null>(null);
+  const ref = useCallback((el: HTMLElement | null) => {
+    region.current = el;
+  }, []);
+  // 开没开只经 reveal、close 改，这一份跟着它们改（不在渲染时写 ref）
   const openRef = useRef(false);
+  const refocus = useRef(false);
+  const open = via !== null;
 
-  const reveal = useCallback((via: PullVia) => {
+  const reveal = useCallback((how: PullVia) => {
     if (openRef.current) return;
     openRef.current = true;
-    setOpen(true);
-    rlog(`pull open ${tag} via=${via}`);
+    setVia(how);
+    rlog(`pull open ${tag} via=${how}`);
   }, [tag]);
   const close = useCallback(() => {
     setQ('');
     if (!openRef.current) return;
     openRef.current = false;
-    setOpen(false);
+    setVia(null);
     rlog(`pull close ${tag}`);
+    refocus.current = true;
   }, [tag]);
+  // 焦点还给“搜索本页”：它在搜索框露着时不画，收起这一次画完、它挂回来以后再聚焦
+  useEffect(() => {
+    if (open || !refocus.current) return;
+    refocus.current = false;
+    keyRef.current?.focus({ preventScroll: true });
+  }, [open]);
 
   useEffect(() => {
     if (!enabled || open) return undefined;
     let start: { x: number; y: number } | null = null;
     let acc = 0;
-    let last = 0;
-    // 打开页面时就在顶上：不算“刚滚到顶”
-    let topSince = -Infinity;
-    let wasTop = atTop();
-    const onScroll = (): void => {
-      const top = atTop();
-      if (top && !wasTop) topSince = performance.now();
-      wasTop = top;
-    };
+    let last = -Infinity;
+    let armed = false;
     const onStart = (e: TouchEvent): void => {
       const p = e.touches[0];
-      start = e.touches.length === 1 && p && atTop() && inRegion(region.current, e.target) ? { x: p.clientX, y: p.clientY } : null;
+      start = e.touches.length === 1 && p && atTop() && pullable(region.current, e.target) ? { x: p.clientX, y: p.clientY } : null;
     };
     const onMove = (e: TouchEvent): void => {
       const p = e.touches[0];
@@ -92,12 +125,24 @@ export function usePullReveal(region: RefObject<HTMLElement | null>, tag: string
     };
     const onWheel = (e: WheelEvent): void => {
       const now = performance.now();
-      if (e.deltaY >= 0 || !atTop() || !inRegion(region.current, e.target) || now - topSince < SETTLE_MS) {
+      const gap = now - last;
+      last = now;
+      if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      if (!atTop()) {
+        armed = false;
         acc = 0;
         return;
       }
-      if (now - last > WHEEL_GAP_MS) acc = 0;
-      last = now;
+      if (e.deltaY >= 0) {
+        acc = 0;
+        return;
+      }
+      // 到顶以后断开过一次才开始累计；断开以后的每一串都从头累计
+      if (gap > WHEEL_GAP_MS) {
+        armed = true;
+        acc = 0;
+      }
+      if (!armed || !pullable(region.current, e.target)) return;
       acc += -e.deltaY * (e.deltaMode === 1 ? LINE_PX : 1);
       if (acc >= WHEEL_OPEN_PX) {
         acc = 0;
@@ -105,21 +150,19 @@ export function usePullReveal(region: RefObject<HTMLElement | null>, tag: string
       }
     };
     const o = { passive: true } as const;
-    window.addEventListener('scroll', onScroll, o);
     window.addEventListener('touchstart', onStart, o);
     window.addEventListener('touchmove', onMove, o);
     window.addEventListener('touchend', onEnd, o);
     window.addEventListener('touchcancel', onEnd, o);
     window.addEventListener('wheel', onWheel, o);
     return () => {
-      window.removeEventListener('scroll', onScroll);
       window.removeEventListener('touchstart', onStart);
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
       window.removeEventListener('touchcancel', onEnd);
       window.removeEventListener('wheel', onWheel);
     };
-  }, [enabled, open, region, reveal]);
+  }, [enabled, open, reveal]);
 
-  return { open, q, setQ, searching: q.trim() !== '', reveal, close };
+  return { enabled, open, via, q, setQ, searching: q.trim() !== '', reveal, close, ref, keyRef };
 }

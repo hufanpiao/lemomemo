@@ -16,7 +16,8 @@ import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { readSessionId } from '../../../platform/session.ts';
 import type { FallbackReason } from '../../../../shared/schema/search.ts';
-export { SEARCH_Q_MAX } from '../../../../shared/schema/search.ts';
+import { useDebouncedLog } from '../../../kit/hooks/useDebouncedLog.ts';
+import { SEM_DEBOUNCE_MS } from './find-consts.ts';
 import {
   buildIndex, countKinds, findLocal, inRange, mergeFind, onlyKind, rangeOf, semReady,
   type FindGroups, type FindKind, type Row, type SemHit, type TimeFilter,
@@ -33,8 +34,6 @@ export { rowAct, undoTarget, type Applied, type RowAct } from '../data/target-ac
 export function actRow(act: RowAct, kind: 'event' | 'todo' | 'anniv' | 'note', id: string, at: Parameters<typeof rowAct>[3]): Promise<Applied> {
   return rowAct(act, kind, id, at, clock.now(), currentTz());
 }
-
-export const SEM_DEBOUNCE_MS = 400;
 
 /** done 带上是哪一句查出来的：刚改字那一次渲染里旧结果不和新关键词拼在一起 */
 export type SemState = { s: 'idle' } | { s: 'wait' } | { s: 'done'; q: string; hits: SemHit[] } | { s: 'fallback'; reason: FallbackReason };
@@ -83,35 +82,14 @@ export function useFind(initial: string, deps: FindDeps = {}) {
   useEffect(() => void loadRecent(), []);
   const range = useMemo(() => rangeOf(time, now, tz), [time, now, tz]);
   const scoped = useMemo(() => inRange(index, range), [index, range]);
-  // 关键词查找的耗时记在结果旁边，停下来以后才写日志（不是每个字写一次）
+  // 关键词查找的耗时记在结果旁边，停下来以后才写日志（不是每个字写一次；kit 的 useDebouncedLog：只按查询词计时，关面板时补记）
   const kw = useMemo(() => {
     const t0 = performance.now();
     const hits = findLocal(scoped, q);
     return { hits, ms: Math.round(performance.now() - t0) };
   }, [scoped, q]);
-  // 只按查询词去抖（同步来了新数据 kw 重算不重新计时），记的是那一刻最新的 kw；还没到点就关了面板（选中、Esc）也补记这一行
-  //（11-14 e2e 日志：打开 5.42、选中 6.42，kw 随数据重算把计时一直往后推，关面板时被清掉，这一行丢了）
-  const kwNow = useRef(kw);
-  const kwPending = useRef<(() => void) | null>(null);
-  useEffect(() => {
-    kwNow.current = kw;
-  }, [kw]);
-  // 先声明：卸载时清理按声明顺序跑，要在下面那个 effect 清掉待写之前补记
-  useEffect(() => () => kwPending.current?.(), []);
-  useEffect(() => {
-    const len = [...q.trim()].length;
-    if (len === 0) return undefined;
-    const fire = (): void => {
-      kwPending.current = null;
-      rlog(`find kw len=${len} n=${kwNow.current.hits.length} ms=${kwNow.current.ms}`);
-    };
-    kwPending.current = fire;
-    const id = setTimeout(fire, SEM_DEBOUNCE_MS);
-    return () => {
-      clearTimeout(id);
-      if (kwPending.current === fire) kwPending.current = null;
-    };
-  }, [q]);
+  const len = [...q.trim()].length;
+  useDebouncedLog(q, len === 0 ? null : `find kw len=${len} n=${kw.hits.length} ms=${kw.ms}`, SEM_DEBOUNCE_MS);
 
   const search = deps.search ?? noteSearch;
   useEffect(() => {

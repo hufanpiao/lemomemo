@@ -4,6 +4,7 @@ export const zh = {
   'find.ph': '想找什么',
   'find.close': '关闭',
   'find.clear': '清空',
+  'find.todo.sub': '子任务：{t}',
   'find.k.all': '全部 {n}',
   'find.k.event': '日程',
   'find.k.todo': '待办',
@@ -131,6 +132,5 @@ export const zh = {
   'pull.n': '找到 {n} 条',
   'pull.none': '没有按字找到',
   'pull.more': '只列出前 {n} 条，换个更准的词试试',
-  'pull.sub': '子任务：{t}',
   'pull.ai': '用 AI 按意思找',
 } as const;

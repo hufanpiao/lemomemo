@@ -22,10 +22,11 @@ import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { actRow, FIND_KINDS, SEARCH_Q_MAX, undoTarget, useFind, type Applied, type FindHit, type FindKind, type RowAct, type TimeFilter } from '../hooks/useFind.ts';
+import { actRow, FIND_KINDS, undoTarget, useFind, type Applied, type FindHit, type FindKind, type RowAct, type TimeFilter } from '../hooks/useFind.ts';
+import { SEARCH_Q_MAX } from '../hooks/find-consts.ts';
 import { RowMenu } from './RowMenu.tsx';
 import styles from './FindPanel.module.css';
-import { Lead, Marked, metaOf, openItem, Preview, useFindT } from './find-parts.tsx';
+import { doneAttr, HitBody, openItem, Preview, useFindT } from './find-parts.tsx';
 
 /** 每组先显示几条 */
 export const GROUP_SHOW = 5;
@@ -174,13 +175,9 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
           onMouseEnter={desk ? () => setSel(visible.indexOf(h)) : undefined}
           data-testid="find-row"
           data-kind={h.item.kind}
-          data-done={(h.item.kind === 'todo' && h.item.done) || undefined}
+          data-done={doneAttr(h.item)}
         >
-          <Lead kind={h.item.kind} done={h.item.done} />
-          <span className={styles.text}>
-            <span className={styles.title}><Marked text={h.item.title || t('find.noTitle', {})} q={q} /></span>
-            <span className={styles.meta}><Marked text={metaOf(h, t, locale)} q={q} /></span>
-          </span>
+          <HitBody h={h} q={q} t={t} locale={locale} />
         </button>
         <RowMenu it={h.item} onOpen={() => go(h)} onAct={(a) => act(h, a)} />
       </li>

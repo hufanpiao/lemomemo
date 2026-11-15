@@ -2,6 +2,7 @@
 // 文案照定稿线框 s7、s8 和皮肤视觉稿（空状态“想到什么就记一句”、输入行“接着记一句…”、“刚记下”）
 export const zh = {
   'notes.title': '随手记',
+  'notes.pullKey': '搜索本页', // R-437：标题行里平时看不见、Tab 到才出现的按钮（kit 的 PullKey）
   'notes.filter': '按分类看',
   'notes.all': '全部 {n}',
   'notes.empty': '想到什么就记一句',

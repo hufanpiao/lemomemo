@@ -2,6 +2,7 @@
 // 编辑页其余的在 zh.ts（那一份在审查中，列表另放一份）
 export const listZh = {
   'list.title': '待办',
+  'list.pullKey': '搜索本页', // R-437：标题行里平时看不见、Tab 到才出现的按钮（kit 的 PullKey）
   'list.all': '全部',
   'list.filter': '按项目筛选',
   'list.g.late': '过期',
