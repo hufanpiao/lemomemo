@@ -7,6 +7,8 @@
 // ① 设置里没有开关；② 系统设置了 reduce → 全部实色（只有 Chromium 能模拟这条媒体查询，WebKit 跳过）；③ 系统没设置 → 磨砂。
 // 系统“减少动态效果”同样并进 data-rm（Playwright 的 reducedMotion 两种浏览器都能模拟）。
 // 截图只在 Chromium 截（WebKit 不画模糊），存在 test-results 里
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { Page, TestInfo } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { putGoneTodo } from './idb.ts';
@@ -53,9 +55,25 @@ async function showAll(page: Page): Promise<void> {
 
 type Look = Record<'tabbar' | 'typeBar' | 'undo' | 'sync' | 'remind' | 'notesError', boolean | null>;
 
+/**
+ * 构建后的模块类名是 _<本地名>_<哈希>_<源文件行号>（行号就是这条规则在 .module.css 里的行）。
+ * 探针按“本地名 + 行号”在所有已加载的样式表里找，不认样式块的文件名：打包把 NotesPage.module.css 并进
+ * NoteDrawer-*.css 以后，按文件名找就找不到了（11-15 ci 2e5b1791 失败）
+ */
+function ruleLine(file: string, local: string): number {
+  const lines = readFileSync(fileURLToPath(new URL(`../../${file}`, import.meta.url)), 'utf8').split('\n');
+  const at = lines.findIndex((l) => new RegExp(`^\\.${local}\\s*\\{`).test(l));
+  if (at < 0) throw new Error(`${file} 里没有 .${local} 规则`);
+  return at + 1;
+}
+
 /** 每样浮层有没有模糊（true 磨砂、false 实色、null 找不到）；提醒横幅、随手记错误条用探针 */
 function frosted(page: Page): Promise<Look> {
-  return page.evaluate(() => {
+  const probes = {
+    remind: { local: 'banner', line: ruleLine('src/features/reminders/ui/Remind.module.css', 'banner') },
+    notesError: { local: 'error', line: ruleLine('src/features/notes/ui/NotesPage.module.css', 'error') },
+  };
+  return page.evaluate((probes) => {
     const fx = (e: Element, p?: string): string => {
       const s = getComputedStyle(e, p) as CSSStyleDeclaration & { webkitBackdropFilter?: string };
       return s.backdropFilter || s.webkitBackdropFilter || 'none';
@@ -64,34 +82,34 @@ function frosted(page: Page): Promise<Look> {
       if (!root) return null;
       return [root, ...root.querySelectorAll('*')].some((e) => [undefined, '::before', '::after'].some((p) => fx(e, p) !== 'none'));
     };
-    /** 构建后的模块类名是 _<本地名>_<哈希>_<行号>：在文件名以 chunk 开头的样式表里找到 .本地名 那条规则，挂一个同类名的探针 */
-    const probe = (chunk: string, local: string): boolean | null => {
-      const re = new RegExp(`^\\._${local}_[A-Za-z0-9-]+_\\d+$`);
+    /** 在所有样式表里找 ._本地名_哈希_行号 这条规则，挂一个同类名的探针；找不到或对上不止一个类名都算 null */
+    const probe = ({ local, line }: { local: string; line: number }): boolean | null => {
+      const re = new RegExp(`^\\._${local}_[A-Za-z0-9-]+_${line}$`);
+      const names = new Set<string>();
       for (const sh of [...document.styleSheets]) {
-        if (!sh.href?.includes(`/${chunk}-`)) continue;
         for (const r of [...sh.cssRules]) {
           const sel = (r as CSSStyleRule).selectorText ?? '';
-          if (!re.test(sel)) continue;
-          const el = document.createElement('div');
-          el.className = sel.slice(1);
-          el.dataset['probe'] = '1';
-          document.body.append(el);
-          const v = blurred(el);
-          el.remove();
-          return v;
+          if (re.test(sel)) names.add(sel.slice(1));
         }
       }
-      return null;
+      if (names.size !== 1) return null;
+      const el = document.createElement('div');
+      el.className = [...names][0] ?? '';
+      el.dataset['probe'] = '1';
+      document.body.append(el);
+      const v = blurred(el);
+      el.remove();
+      return v;
     };
     return {
       tabbar: blurred(document.querySelector('[data-testid="tabbar"]')),
       typeBar: blurred(document.querySelector('[data-testid="type-bar"]')),
       undo: blurred(document.querySelector('[data-undo-toast]')),
       sync: blurred(document.querySelector('[data-testid="sync-notice-card"]')),
-      remind: probe('Remind', 'banner'),
-      notesError: probe('NotesPage', 'error'),
+      remind: probe(probes.remind),
+      notesError: probe(probes.notesError),
     };
-  });
+  }, probes);
 }
 
 const all = (v: boolean): Look => ({ tabbar: v, typeBar: v, undo: v, sync: v, remind: v, notesError: v });
