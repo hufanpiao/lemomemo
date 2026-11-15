@@ -185,7 +185,8 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
     if (noteId === null || !row || !writable()) return { ok: false, code: 'silent' };
     const id = uuidv7(Date.now());
     s.seedImage(id, enc.full, enc.thumb);
-    store.putImage(imageRowOf(noteId, { id, has_thumb: true, width: enc.width, height: enc.height, bytes: enc.full.size, deleted_at: null }));
+    // has_thumb 跟交给队列的缩略图走（L3：和 add_images 预登记的同一个判断）
+    store.putImage(imageRowOf(noteId, { id, has_thumb: enc.thumb !== null, width: enc.width, height: enc.height, bytes: enc.full.size, deleted_at: null }));
     queue.addImage(row, { id, full: enc.full, thumb: enc.thumb, width: enc.width, height: enc.height });
     return { ok: true, id };
   }
