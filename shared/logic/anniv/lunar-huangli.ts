@@ -6,9 +6,10 @@
 // • 本文件静态引入 lunar.ts 和宜忌表，界面一侧只能按需加载本文件（core/anniv-lib.ts 的 loadHuangliLib；ESLint LUNAR 按文件名 lunar* 拦）
 // • 超出农历或节气数据范围（公历 1901-01-20～2100-12-31 以外）返回 null，界面不画卡片
 import { parseDate, type DateStr } from '../../core/date.ts';
+import { itemAt } from '../../core/item-at.ts';
 import { HUANGLI_DAYS, HUANGLI_WORDS } from './lunar-huangli-data.ts';
-import { lunarMonthName, solarTermsOfYear, toLunar } from './lunar.ts';
-import { DI_ZHI, TIAN_GAN, ZH_DAY_NAMES } from './lunar-names-data.ts';
+import { dayNumOf, lunarDayName, lunarMonthName, solarTermsOfYear, toLunar } from './lunar.ts';
+import { DI_ZHI, TIAN_GAN } from './lunar-names-data.ts';
 
 export interface Huangli {
   /** 农历日：“初七” */
@@ -22,24 +23,17 @@ export interface Huangli {
   readonly ji: readonly string[];
 }
 
-const DAY_MS = 86_400_000;
 /** 1970-01-01（第 0 天）的日干支序号：辛巳 = 17 */
 const EPOCH_JIAZI = 17;
 
 const mod = (a: number, n: number): number => ((a % n) + n) % n;
-
-/** 按下标取：不是非负整数回 undefined（同 lunar.ts 的 itemAt：shared 拷进 Edge Functions，F7 不许参数当方括号下标） */
-function itemAt<T>(arr: readonly T[], i: number): T | undefined {
-  return Number.isInteger(i) && i >= 0 ? arr.at(i) : undefined;
-}
 
 /** 干支名：序号 0 甲子 … 59 癸亥 */
 export const ganzhiName = (i: number): string => TIAN_GAN.charAt(mod(i, 10)) + DI_ZHI.charAt(mod(i, 12));
 
 /** 日干支序号（0 甲子 … 59 癸亥） */
 export function dayJiazi(date: DateStr): number {
-  const { y, m, d } = parseDate(date);
-  return mod(Math.round(Date.UTC(y, m - 1, d) / DAY_MS) + EPOCH_JIAZI, 60);
+  return mod(dayNumOf(date) + EPOCH_JIAZI, 60);
 }
 
 /** 节气月的月支序号（0 子 … 11 亥）：最近一个“节”（小寒、立春 … 大雪，TERMS 的偶数序号）定月，交节当天算新月；小寒以前是上一年大雪起的子月。没有节气数据回 null */
@@ -80,7 +74,7 @@ export function huangliOf(date: DateStr): Huangli | null {
   const yj = yiJiOf(date);
   if (yj === null) return null;
   return {
-    day: itemAt(ZH_DAY_NAMES, l.day - 1) ?? '',
+    day: lunarDayName(l.day),
     yearGz: ganzhiName(l.year - 4),
     month: lunarMonthName(l.month, l.isLeap, 'zh-CN'),
     yi: yj.yi,

@@ -22,6 +22,8 @@ import { argv, exit, stderr, stdout } from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+// 地支和运行时同一份（shared/logic/anniv/lunar-names-data.ts；node 24 直接读 .ts）
+const { DI_ZHI: ZHI } = await import(pathToFileURL(join(ROOT, 'shared', 'logic', 'anniv', 'lunar-names-data.ts')).href);
 export const OUT = join(ROOT, 'shared', 'logic', 'anniv', 'lunar-huangli-data.ts');
 const PKG = 'lunar-javascript';
 
@@ -34,7 +36,6 @@ export const ALLOW_DIFF = {
   '1927-09-08': '白露：香港天文台 09-08、库 09-09（我们按酉月、库按申月）',
 };
 
-const ZHI = '子丑寅卯辰巳午未申酉戌亥';
 
 function loadLib() {
   const req = createRequire(join(ROOT, 'package.json'));
