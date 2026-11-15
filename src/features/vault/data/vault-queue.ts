@@ -192,7 +192,11 @@ export function createVaultQueue(d: QueueDeps) {
       j.known = true;
       j.lastSave = d.now();
       j.tries = 0;
-      for (const a of adds) a.registered = true;
+      // 这次 save 预登记了的图、在路上时被删掉的（H3）：服务器上已经登记了，下次 save 带 remove_images 删掉
+      for (const a of adds) {
+        if (j.adds.get(a.id) === a) a.registered = true;
+        else j.removes.add(a.id);
+      }
       for (const x of removes) j.removes.delete(x);
       if (j.v === v) j.dirty = false;
     }

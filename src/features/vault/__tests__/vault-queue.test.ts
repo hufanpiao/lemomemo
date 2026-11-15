@@ -136,6 +136,22 @@ describe('发送队列', () => {
     gate.release(OK);
   });
 
+  it('H3：预登记这张图的 save 在路上时删了它：save 回来后再发一次 save 带 remove_images，不传字节', async () => {
+    const g = held();
+    let n = 0;
+    const h = harness({ save: () => (++n === 1 ? g.p : OK) });
+    const r = row('x');
+    h.q.addImage(r, { id: IMG, full: new Blob(['f']), thumb: null, width: 1, height: 1 });
+    await settle();
+    expect(h.saves[0]?.add_images?.map((a) => a.id)).toEqual([IMG]);
+    h.q.removeImage(r, IMG);
+    g.release(OK);
+    await settle();
+    expect(h.calls).toEqual(['save', 'save']);
+    expect(h.saves[1]?.remove_images).toEqual([IMG]);
+    expect(h.q.size()).toBe(0);
+  });
+
   it('断网：2、5、15 秒退避三次，再不行标“没保存上”；网络回来再试，成了去掉标记', async () => {
     let fail = true;
     const h = harness({ save: () => (fail ? { ok: false, code: 'offline' } : OK) });
