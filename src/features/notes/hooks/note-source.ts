@@ -85,8 +85,8 @@ export interface NoteSource {
   route: { list: 'notes' | 'vault'; edit: 'note' | 'vault' };
   desk: 'notes' | 'vault';
   /** 列表上方居中的“最近删除”入口去哪（负责人 11-15：随手记页也常驻一个，原来只能从图片空间满的提示条进）：
-   *  随手记是全站的 #/trash，隐私记是自己的 #/vault/trash */
-  trash: { route: 'trash' } | { route: 'vault'; sub: 'trash' };
+   *  随手记是全站的 #/trash，隐私记是自己的 #/vault/trash；写成路由和参数，直接交给 kit 的 TrashLink */
+  trash: readonly ['trash'] | readonly ['vault', 'trash'];
   /** 入口上带的条数（隐私记：删了的几条）；不带数时 null（全站最近删除还有日程、待办，随手记页不另数一遍） */
   useTrashCount(): number | null;
   text: NoteSourceText | null;

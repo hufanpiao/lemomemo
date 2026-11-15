@@ -1,5 +1,6 @@
 // 随手记页常驻的“最近删除”入口（负责人 11-15“随手记删除后在哪里可以找到？”）：标题下面、分类胶囊上面居中一个，点了进全站的 #/trash；
-// 删掉的随手记在那里能看到（原来只能从图片空间满的提示条进）。和隐私记页那一个是同一份（notes 的 TrashLink）
+// 删掉的随手记在那里能看到（原来只能从图片空间满的提示条进）。和隐私记页、待办页、设置里那几个是同一份（kit 的 TrashLink，<a href> 链接）
+// • 待办页（审查 11-15 第 2 条）：标题下面同样居中一个，点了进 #/trash；设置里“完成 7 天后自动删除”说明后面接一个“最近删除”链接，点了也进 #/trash
 import { cached, idbPut } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
@@ -29,4 +30,31 @@ test('随手记页“最近删除”：在标题下面居中，点了进 #/trash
   await link.click();
   await expect(page).toHaveURL(/#\/trash$/);
   await expect(page.getByTestId('trash-row-n-gone')).toContainText('删掉的一条');
+});
+
+test('待办页“最近删除”：标题下面居中的链接，点了进 #/trash', async ({ page }) => {
+  await page.goto('/app/#/todos');
+  await page.getByTestId('todos').waitFor({ timeout: 30000 });
+  const link = page.getByTestId('todos-open-trash');
+  await expect(link).toHaveText('最近删除');
+  await expect(link).toHaveAttribute('href', '#/trash');
+  const [h, b, vw] = await Promise.all([
+    page.locator('[data-testid="todos"] h1').boundingBox(),
+    link.boundingBox(),
+    page.evaluate(() => document.documentElement.clientWidth),
+  ]);
+  expect(b !== null && h !== null && b.y > h.y + h.height - 1).toBe(true);
+  expect(Math.abs((b?.x ?? 0) + (b?.width ?? 0) / 2 - vw / 2)).toBeLessThan(2);
+  await link.click();
+  await expect(page).toHaveURL(/#\/trash$/);
+});
+
+test('设置里“完成 7 天后自动删除”说明后面的“最近删除”：是链接，点了进 #/trash、开关不变', async ({ page }) => {
+  await page.goto('/app/#/settings');
+  const link = page.getByTestId('settings-todo-trash');
+  await expect(link).toHaveText('最近删除', { timeout: 30000 });
+  await expect(link).toHaveAttribute('href', '#/trash');
+  await expect(page.getByTestId('settings-todo-autodel')).toBeChecked();
+  await link.click();
+  await expect(page).toHaveURL(/#\/trash$/);
 });

@@ -1,14 +1,13 @@
 // 随手记页的小部件（11-15 隐私记重写时整理）：
 // • 8 个从 NotesPage.tsx 原样搬来（页面不超行数上限）：“附件 N”、列表行的字、撤销条、输入行上面的提示条、分类胶囊、只读、已转过、AI 小标
 // • 3 个新增（隐私记的后台同步状态）：SyncMark 行上“没保存上”、SyncLine 编辑页“没保存上 · 重试”、SyncDropped 解锁后“有 N 处改动没来得及保存”
-// • 11-15 加 TrashLink：列表上方居中的“最近删除”入口（原来在 vault 的 VaultPage，挪来两种来源共用）
+// • 11-15 加 TrashLink：列表上方居中的“最近删除”入口（原来在 vault 的 VaultPage，挪来两种来源共用）；链接本身是 kit 的 TrashLink（审查 11-15 第 2 条），这里只按来源给去哪、文案和条数
 // • 同步状态都从 hooks/note-source.ts 来源的 useSync 读（普通随手记一直是空的，什么都不画）；列表上的 failed 由列表层读一次传进来，每行不各订一份
 import type { ReactNode } from 'react';
-import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
 import row from '../../../kit/components/NoteRow.module.css';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyRow.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
-import { FormButton } from '../../../kit/components/Form.tsx';
+import { TrashLink as KitTrashLink } from '../../../kit/components/TrashLink.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import type { NoteItem } from '../hooks/useNoteList.ts';
@@ -102,9 +101,7 @@ export function DockTip({ toast }: { toast: { kind: 'error' } | Exclude<PageTip,
     <p className={styles.error} role="alert" data-testid={DOCK_TEST_ID[toast.kind]}>
       {t(toast.kind === 'error' ? 'notes.err.save' : toast.kind === 'moveOut' ? 'notes.err.moveOut' : toast.key, {})}
       {toast.kind === 'img' && toast.trash ? (
-        <a className={styles.tipLink} href={hrefOf('trash')} onClick={(e) => plainClick(e) && void navigate('trash')} data-testid="notes-img-trash">
-          {t('notes.img.trash', {})}
-        </a>
+        <KitTrashLink look="inline" to={['trash']} label={t('notes.img.trash', {})} testId="notes-img-trash" />
       ) : null}
     </p>
   );
@@ -153,12 +150,5 @@ export function TrashLink() {
   const t = useNotesT();
   const src = useNoteSource();
   const n = src.useTrashCount();
-  const go = src.trash;
-  return (
-    <div className={styles.trashLink}>
-      <FormButton variant="ghost" onClick={() => void (go.route === 'vault' ? navigate(go.route, go.sub) : navigate(go.route))} data-testid={`${src.kind}-open-trash`}>
-        {`${src.text?.trash ?? t('notes.img.trash', {})}${n ? ` ${n}` : ''}`}
-      </FormButton>
-    </div>
-  );
+  return <KitTrashLink to={src.trash} label={`${src.text?.trash ?? t('notes.img.trash', {})}${n ? ` ${n}` : ''}`} testId={`${src.kind}-open-trash`} />;
 }

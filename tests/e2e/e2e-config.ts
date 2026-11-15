@@ -23,6 +23,7 @@ export const FASTREAD_ONLY_SPECS: readonly string[] = [
   '**/b4b2-find.spec.ts',
   '**/b4b2-image-ai.spec.ts',
   '**/b4b3-assist.spec.ts',
+  '**/todo-autodel-pull.spec.ts',
 ];
 
 /** chromium（桌面）+ webkit（iPhone 15）：默认组、快读组的两个项目 */

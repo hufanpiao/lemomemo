@@ -46,12 +46,16 @@ export function useListActions<X = never>(table: string, act: Acts, hv?: Hold) {
     g,
     isRo,
     report,
-    tick(id: string, on: boolean) {
-      if (isRo(id)) return g.block();
-      if (!act.toggle) return;
+    /** 打勾；返回的 promise 在写完（结果已报给提示条）以后才完成，拦下、不打勾的页当场完成（待办页等写完再让那一条离开原位） */
+    tick(id: string, on: boolean): Promise<void> {
+      if (isRo(id)) {
+        g.block();
+        return Promise.resolve();
+      }
+      if (!act.toggle) return Promise.resolve();
       setPicked((m) => new Map(holding ? m : []).set(id, on));
       hv?.hold();
-      void act.toggle(id, on).then(report);
+      return act.toggle(id, on).then(report);
     },
     shown: (id: string, done: boolean) => (holding ? (picked.get(id) ?? done) : done),
     async del(id: string) {

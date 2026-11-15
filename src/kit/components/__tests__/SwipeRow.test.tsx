@@ -220,11 +220,13 @@ describe('拉到底直接做（full，负责人 11-15 待办“露按钮 + 拉�
     expect(onDel).toHaveBeenCalledTimes(1);
     expect(face('f').style.transform).toBe('translateX(-360px)');
     expect(screen.getByTestId('f').getAttribute('data-swipe')).toBeNull();
+    expect(screen.getByTestId('f').hasAttribute('data-full')).toBe(true);   // 整行滑走途中一直是红底
     expect(logs.some((l) => /^swipe full key=del w=360 ms=\d+$/.test(l))).toBe(true);
     act(() => {
       vi.advanceTimersByTime(FULL_RESET_MS);
     });
     expect(face('f').style.transform).toBe('');
+    expect(screen.getByTestId('f').hasAttribute('data-full')).toBe(false);
     vi.useRealTimers();
   });
 
@@ -254,5 +256,36 @@ describe('拉到底直接做（full，负责人 11-15 待办“露按钮 + 拉�
   it('警示动作才给整行铺底色（.fullBg）', () => {
     render(one(vi.fn()));
     expect(screen.getByTestId('f').className).toMatch(/fullBg/);
+  });
+
+  it('阈值反馈（审查 11-15 第 3 条）：跟手没过 60% 不打 data-full，过了打上，往回拉到线内摘掉；日志 swipe full arm=1|0；没过线松手不留着 data-full', () => {
+    const logs: string[] = [];
+    render(one(vi.fn(), 'del', (l) => void logs.push(l)));
+    const el = face('f');
+    const wrap = screen.getByTestId('f');
+    const move = (x: number) => fireEvent.pointerMove(el, { pointerId: 1, isPrimary: true, clientX: x, clientY: 20, pointerType: 'touch' });
+    fireEvent.pointerDown(el, { pointerId: 1, isPrimary: true, clientX: 350, clientY: 20, button: 0, pointerType: 'touch' });
+    move(300);
+    move(150);   // 拉了 200（< 216 = 360 × 60%）
+    expect(wrap.hasAttribute('data-full')).toBe(false);
+    move(120);   // 230：过线
+    expect(wrap.hasAttribute('data-full')).toBe(true);
+    move(200);   // 150：回到线内
+    expect(wrap.hasAttribute('data-full')).toBe(false);
+    move(100);   // 再过线
+    expect(wrap.hasAttribute('data-full')).toBe(true);
+    move(250);
+    fireEvent.pointerUp(el, { pointerId: 1, isPrimary: true, clientX: 250, clientY: 20, pointerType: 'touch' });
+    expect(wrap.hasAttribute('data-full')).toBe(false);
+    expect(logs.filter((l) => l.startsWith('swipe full arm='))).toEqual(['swipe full arm=1', 'swipe full arm=0', 'swipe full arm=1', 'swipe full arm=0']);
+  });
+
+  it('不给 full：拉多远都不打 data-full', () => {
+    render(one(vi.fn(), null));
+    const el = face('f');
+    fireEvent.pointerDown(el, { pointerId: 1, isPrimary: true, clientX: 350, clientY: 20, button: 0, pointerType: 'touch' });
+    fireEvent.pointerMove(el, { pointerId: 1, isPrimary: true, clientX: 300, clientY: 20, pointerType: 'touch' });
+    fireEvent.pointerMove(el, { pointerId: 1, isPrimary: true, clientX: 20, clientY: 20, pointerType: 'touch' });
+    expect(screen.getByTestId('f').hasAttribute('data-full')).toBe(false);
   });
 });

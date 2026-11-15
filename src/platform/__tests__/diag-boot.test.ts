@@ -60,7 +60,9 @@ describe('接线', () => {
     expect(main.match(/import\.meta\.env\.MODE !== 'production'/g)?.length).toBe(1);
     expect(main.match(/import\('\.\.\/platform\/diag-boot\.ts'\)/g)?.length).toBe(1);
     for (const key of ['lemo-vh-tl', 'lemo-sp-color', 'lemo-run-log']) expect(main).not.toContain(key);
-    for (const mod of ['run-log', 'vh-timeline', 'splash-probe', 'diag-boot']) expect(main).not.toMatch(new RegExp(`^import [^;]*${mod}`, 'm'));
+    // run-log-api.ts 不算诊断模块：它是业务代码记运行日志的那一行入口（rlog，首屏本来就在；main.tsx 记 todo autodel err=load，审查 11-15 第 5 条），
+    // 这里拦的是诊断那几块（run-log.ts、vh-timeline、splash-probe、diag-boot）
+    for (const mod of ['run-log(?!-api)', 'vh-timeline', 'splash-probe', 'diag-boot']) expect(main).not.toMatch(new RegExp(`^import [^;]*${mod}`, 'm'));
     expect(main).not.toMatch(/SPLASH_HOLD_ATTR|cancelSplashHold|diagReady|leaveSplash/);
   });
 

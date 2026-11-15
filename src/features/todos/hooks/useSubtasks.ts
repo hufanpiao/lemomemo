@@ -2,7 +2,8 @@
 // • 收起状态（方案第 3 节、5.4，Q4）：每台设备各记各的、不同步，存本机库 meta 仓的 ui.todo_collapsed（待办 id → true 收起 / false 展开），
 //   只存用户点过的；没点过的按默认：未完成展开、已完成收起。最多 COLLAPSED_MAX 个，写时剔掉已不在的待办、超了丢最早的。
 //   读不到（没启动、库已关）就全按默认；不写 localStorage（4.1：localStorage 只留 install_id）
-// • 同一份记录里还存“已完成”组整组收起没有（键 DONE_GROUP，负责人 11-15“完成的待办怎么隐藏”）：没点过默认收起；不是待办 id，写时不剔掉
+// • “已完成”组整组展开没有（负责人 11-15“完成的待办怎么隐藏”）另记在本机 meta 的 ui.todo_done_open（true / false），没点过默认收起；
+//   不放进上面的收起表（审查 11-15 第 6 条：那张表只认待办 id，写时按 id 剔掉不在的）。两样放在同一个模块状态里、一次读回来
 // • 收起状态放在模块里（离开待办页再回来不闪一下默认值）；第一次用时从 meta 读一次，读回来之前点过的以点过的为准
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { getBoot } from '../../../core/boot.ts';
@@ -47,11 +48,16 @@ export function usePicked(items: readonly Subtask[]): { shown(i: Subtask): boole
 }
 
 const META_KEY = 'ui.todo_collapsed';
+/** 待办页“已完成”组展开没有（负责人 11-15“完成的待办怎么隐藏”）：单独一个键，不和子任务收起表混在一起（审查 11-15 第 6 条） */
+const DONE_OPEN_KEY = 'ui.todo_done_open';
 export const COLLAPSED_MAX = 500;
-/** 待办页“已完成”组的收起状态在记录里的键（待办 id 是 uuid，不会撞上） */
-export const DONE_GROUP = '#done';
 
-let collapsed: Readonly<Record<string, boolean>> = {};
+/** 本机记着的两样：子任务收起表、“已完成”组展开没有（null 是没点过，按默认收起）。整份换新对象，useSyncExternalStore 认得出变了 */
+interface FoldState {
+  collapsed: Readonly<Record<string, boolean>>;
+  doneOpen: boolean | null;
+}
+let state: FoldState = { collapsed: {}, doneOpen: null };
 let loading: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 const emit = (): void => listeners.forEach((l) => l());
@@ -59,7 +65,7 @@ const subscribe = (l: () => void): (() => void) => {
   listeners.add(l);
   return () => listeners.delete(l);
 };
-const snapshot = () => collapsed;
+const snapshot = () => state;
 
 function openCache() {
   const c = getBoot()?.cache;
@@ -74,11 +80,13 @@ function load(): Promise<void> {
         loading = null;   // 还没启动好：下次进待办页再读
         return;
       }
-      const v = await c.getMeta(META_KEY);
-      if (v && typeof v === 'object') {
-        collapsed = { ...v, ...collapsed };
-        emit();
-      }
+      const [v, open] = await Promise.all([c.getMeta(META_KEY), c.getMeta(DONE_OPEN_KEY)]);
+      // 读回来之前点过的以点过的为准
+      state = {
+        collapsed: v && typeof v === 'object' ? { ...v, ...state.collapsed } : state.collapsed,
+        doneOpen: state.doneOpen ?? (typeof open === 'boolean' ? open : null),
+      };
+      emit();
     } catch {
       loading = null;   // 读不到先按默认（meta 可重建），下次再试
     }
@@ -88,24 +96,41 @@ function load(): Promise<void> {
 
 /** 记下一条的收起状态：剔掉已不在的待办（live），超过上限丢最早记的；写 meta 失败不提示（下次打开回到默认） */
 export function setCollapsed(id: string, value: boolean, live: ReadonlySet<string>): void {
-  const keep = Object.entries(collapsed).filter(([k]) => k !== id && (live.has(k) || k === DONE_GROUP));
+  const keep = Object.entries(state.collapsed).filter(([k]) => k !== id && live.has(k));
   keep.push([id, value]);
-  collapsed = Object.fromEntries(keep.slice(-COLLAPSED_MAX));
+  state = { ...state, collapsed: Object.fromEntries(keep.slice(-COLLAPSED_MAX)) };
   emit();
-  void openCache()?.setMeta(META_KEY, collapsed).catch(() => undefined);
+  void openCache()?.setMeta(META_KEY, state.collapsed).catch(() => undefined);
+}
+
+/** 记下“已完成”组展开没有；写 meta 失败不提示（下次打开回到默认收起） */
+export function setDoneOpen(open: boolean): void {
+  state = { ...state, doneOpen: open };
+  emit();
+  void openCache()?.setMeta(DONE_OPEN_KEY, open).catch(() => undefined);
 }
 
 /** 测试用：清掉模块里的状态 */
 export function resetCollapsedForTest(): void {
-  collapsed = {};
+  state = { collapsed: {}, doneOpen: null };
   loading = null;
 }
 
-/** 列表页：这条待办的子任务收起没有（点过的按点过的；没点过的已完成收起、未完成展开） */
-export function useCollapsed(): (id: string, done: boolean) => boolean {
+function useFoldState(): FoldState {
   const s = useSyncExternalStore(subscribe, snapshot, snapshot);
   useEffect(() => {
     void load();
   }, []);
-  return (id, done) => s[id] ?? done;
+  return s;
+}
+
+/** 列表页：这条待办的子任务收起没有（点过的按点过的；没点过的已完成收起、未完成展开） */
+export function useCollapsed(): (id: string, done: boolean) => boolean {
+  const s = useFoldState();
+  return (id, done) => s.collapsed[id] ?? done;
+}
+
+/** 待办页“已完成”组展开没有（没点过默认收起） */
+export function useDoneOpen(): boolean {
+  return useFoldState().doneOpen ?? false;
 }

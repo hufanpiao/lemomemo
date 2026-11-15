@@ -1,0 +1,41 @@
+/* “最近删除”入口（kit TrashLink.tsx）：只用令牌（A11）。
+   • .row + .pill：列表上方居中一颗细线胶囊（数值照原来随手记页 .trashLink 和 kit FormButton 的 ghost：上 16、高 --hit、左右 14、--line 细线、14 号字）
+   • .inline：句子里的下划线链接（数值照原来随手记输入行提示的 .tipLink：左 8、半粗、颜色跟着所在的句子） */
+
+.row {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  color: var(--text);
+  font-size: var(--fs-14);
+  text-decoration: none;
+}
+
+.pill:active {
+  opacity: var(--press-dim);
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--hit);
+  margin-left: 8px;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.pill:focus-visible,
+.inline:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

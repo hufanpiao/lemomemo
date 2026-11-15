@@ -53,7 +53,7 @@ async function stateOf(page: Page): Promise<{ done: unknown; outbox: number }> {
 }
 
 test.describe('只读行（FA-2）', () => {
-  test('今天页：顶部重复事项横幅；只读行行尾标记；点、打勾、删除都拦下（× 是 aria-disabled），本机库和队列不变；可写的照常', async ({ page }) => {
+  test('今天页：顶部重复事项横幅；只读行行尾标记；点、打勾拦下，左滑滑不开（负责人 11-15 去掉行尾 ×），本机库和队列不变；可写的照常', async ({ page }) => {
     await seed(page);
     await expect(page.getByTestId('today-repeat')).toContainText('有 2 条重复事项要新版本才能完整显示');
     await expect(page.getByTestId('today-repeat-update')).toHaveText('更新');
@@ -65,13 +65,12 @@ test.describe('只读行（FA-2）', () => {
     await expect(page).toHaveURL(/#\/today$/);
     await expect(page.getByTestId('today-ro-toast')).toContainText('这条要新版本才能修改');
     await page.getByTestId('today-done-t-ro').click({ force: true });
-    // 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条）：aria-disabled、读屏名字接“要更新到新版本才能修改”，点了出提示、不写、行还在
-    await expect(page.getByTestId('today-del-t-ro')).toHaveAttribute('aria-disabled', 'true');
-    await expect(page.getByTestId('today-del-t-ro')).toHaveAttribute('aria-label', '删除，要更新到新版本才能修改');
-    await page.getByTestId('today-del-t-ro').click({ force: true });
-    await expect(page.getByTestId('today-ro-toast')).toContainText('这条要新版本才能修改');
+    // 行尾 × 去掉了（负责人 11-15“代办后面的x去掉”，R-428）：只读行左滑滑不开、露不出“删除”，行还在（可写的行滑开删掉见 today-swipe-del.spec.ts）
+    await expect(page.getByTestId('today-del-t-ro')).toHaveCount(0);
+    await swipeRow(page, 'today-swipe-t-ro', 0.4);
+    await page.waitForTimeout(300);
+    await expect(page.getByTestId('today-swipe-t-ro')).not.toHaveAttribute('data-swipe', 'open');
     await expect(page.getByTestId('today-todo-t-ro')).toBeVisible();
-    await expect(page.getByTestId('today-del-t-ok')).not.toHaveAttribute('aria-disabled', 'true');
     expect(await stateOf(page)).toEqual({ done: false, outbox: 0 });
 
     await page.getByTestId('today-todo-t-ok').getByRole('button', { name: /买牛奶/ }).click();

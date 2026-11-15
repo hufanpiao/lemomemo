@@ -3,6 +3,8 @@
 // • 字重：只有页顶日期、“现在”卡进行中那一件的标题加粗；普通日程和待办标题 400（R-134、R-136，TC-B2-06）
 // • 固定时刻的日程换算成当前时区；和记录时的时区不同时加注“14:00（韩国时间 15:00）”（4.6）；全天不换算
 // • 点一行进编辑页；打勾就保存；删除后出撤销条（8 秒）；写不进去时出提示条，只读行提示“要新版本才能修改”
+// • 删除（负责人 11-15“代办后面的x去掉”，同待办页）：“今天的安排”里的待办行左滑露出“删除”，一口气拉过大半行直接删（kit 的 SwipeRow，full）；
+//   只读行滑不开（disabled）；键盘、读屏进编辑页（电脑版是详情抽屉）在那里删。日程行原来没有 ×，也就不再补和 × 同宽的空格子
 // • 已过去（线框 s1“已过去的折叠成一行”，B6 对齐线框）：结束了的日程、做完的待办收成“▸ 已过去 N 件：10:30 字幕校对 · 买咖啡豆 ✓”一行，点了展开（data/today-model.ts 的 splitPast）
 // • 动效（17.1，B2 FA-5；设计审查 M1～M3 返工 11-04）：打勾时圆圈在原地填满（kit CheckCircle），列表先不动（useHoldView 留住
 //   按下之前的两张列表 --dur-ui）；然后这一行淡出、同时下面的行收上来，挪到的地方等让开了再淡入（motion 的 AppearList）；第一次画不播
@@ -19,7 +21,7 @@
 //      没内容时不占位（.notice 里没有 p）；麦克风被拒时同一个容器里再出一行（MicDeniedNote，B3 S23、Q-22）
 //   ③ 每行行尾“未同步”小标记（UnsyncedRemindMark，在行按钮里、标题和副行的右边；没有时那一格不画）
 //   ②③ 只看本机待同步队列、和引擎无关，同日历页直接挂，不等引擎（M1）
-// • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记、圆圈变淡；点这一行、打勾、删除统一拦下，
+// • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记、圆圈变淡；点这一行、打勾统一拦下（左滑滑不开），
 //   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）。
 // • 待办子任务（R-350 方案 5.2，Q5）：待办行副行下面一行“已勾/总数”和细进度条，不摊开、不在这里勾（点进编辑页勾）；todos 的 TodaySubtasks 按需下载。顶部（日期下面）有带重复的只读行时出
 //   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner；4.1.0 的重复事项 4.0.x 只显示第一次）
@@ -36,13 +38,15 @@ import { CheckCircle, type CheckCircleProps } from '../../../kit/components/Chec
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
+import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
 import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { afterAppPainted, isAppPainted } from '../../../platform/root-paint.ts';
-import { AppearItem, AppearList, Pressable, useHoldView, useSwapWhenSafe } from '../../../motion/components.ts';
+import { AppearItem, AppearList, useHoldView, useSwapWhenSafe } from '../../../motion/components.ts';
 import { splitPast, useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
@@ -63,7 +67,7 @@ import type { TodayRoProps } from './TodayToasts.tsx';
 function Ro(p: TodayRoProps) {
   return (
     <QuietBoundary name="today-ro">
-      <Suspense fallback={p.part === 'check' ? <CheckCircle {...p} /> : p.part === 'del' ? p.render(p.label) : null}>
+      <Suspense fallback={p.part === 'check' ? <CheckCircle {...p} /> : null}>
         <TodayRo {...p} />
       </Suspense>
     </QuietBoundary>
@@ -154,7 +158,7 @@ export default function TodayPage() {
             <Check
               checked={shown(todo.id, false)}
               label={shown(todo.id, false) ? t('list.undoDone', {}) : t('list.done', {})}
-              onChange={(v) => tick(todo.id, v)}
+              onChange={(v) => void tick(todo.id, v)}
               testId={`today-done-${todo.id}`}
               readOnly={g.isRo('todo', todo.id)}
             />
@@ -184,18 +188,10 @@ export default function TodayPage() {
         {g.isRo('event', o.id) ? <Ro part="mark" testId={`today-ro-${o.id}`} /> : null}
         <RowMark table="events" id={o.id} />
       </button>
-      {/* 日程行没有 ×：补一个和 × 一样宽的空格子，“未同步”标记和待办行落在同一列（设计复审 今天页待办 M2）。
-          只有这里日程、待办混排；不能点、不进 Tab、读屏不读 */}
-      <span className={styles.delGap} aria-hidden="true" data-testid={`today-del-gap-${o.id}`} />
     </AppearItem>
   );
   const tdRow = (td: (typeof v.todos)[number]) => {
     const ro = g.isRo('todo', td.id);
-    const del = (label: string) => (
-      <Pressable className={list.trail} aria-label={label} aria-disabled={ro || undefined} onClick={() => void remove(td.id)} data-testid={`today-del-${td.id}`} data-no-proxy="">
-        ×
-      </Pressable>
-    );
     return (
       <AppearItem
         key={`t:${td.id}`}
@@ -204,25 +200,34 @@ export default function TodayPage() {
         data-done={td.done ? '' : undefined}
         data-readonly={ro ? '' : undefined}
       >
-        <Check
-          readOnly={ro}
-          checked={shown(td.id, td.done)}
-          label={shown(td.id, td.done) ? t('list.undoDone', {}) : t('list.done', {})}
-          onChange={(v) => tick(td.id, v)}
-          testId={`today-done-${td.id}`}
-        />
-        <button type="button" className={list.main} onClick={() => open({ kind: 'todo', id: td.id })} data-open={td.id} aria-current={cur(td.id)}>
-          <span className={list.text}>
-            <span className={list.title}>{td.title}</span>
-            <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
-            <Subs id={td.id} />
-          </span>
-          {ro ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
-          <RowMark table="todos" id={td.id} />
-        </button>
-        {/* 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条、代码复查二）：变淡、aria-disabled、读屏名字后接“要更新到新版本才能修改”；
-            点了照样由 del 里的 useReadonlyGuard 拦下出提示条、不写。只读和普通行是同一个按钮（del），只读时交给按需下载的那份接上读屏名字的后半句 */}
-        {ro ? <Ro part="del" label={t('list.delete', {})} render={del} /> : del(t('list.delete', {}))}
+        {/* 左滑删除（负责人 11-15 去掉行尾 ×，同待办页）：露出“删除”点了删，一口气拉过大半行直接删；只读行不能滑 */}
+        <SwipeRow
+          className={list.swp}
+          disabled={ro}
+          full="del"
+          log={rlog}
+          actions={[{ key: 'del', label: t('list.delete', {}), danger: true, onClick: () => void remove(td.id), testId: `today-swipe-del-${td.id}` }]}
+          data-testid={`today-swipe-${td.id}`}
+        >
+          <div className={list.swRow}>
+            <Check
+              readOnly={ro}
+              checked={shown(td.id, td.done)}
+              label={shown(td.id, td.done) ? t('list.undoDone', {}) : t('list.done', {})}
+              onChange={(v) => void tick(td.id, v)}
+              testId={`today-done-${td.id}`}
+            />
+            <button type="button" className={list.main} onClick={() => open({ kind: 'todo', id: td.id })} data-open={td.id} aria-current={cur(td.id)}>
+              <span className={list.text}>
+                <span className={list.title}>{td.title}</span>
+                <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
+                <Subs id={td.id} />
+              </span>
+              {ro ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
+              <RowMark table="todos" id={td.id} />
+            </button>
+          </div>
+        </SwipeRow>
       </AppearItem>
     );
   };

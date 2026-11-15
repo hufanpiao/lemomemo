@@ -113,10 +113,11 @@ export interface MetaMap {
   remind_seen: RemindSeenMeta;
   /**
    * 待办列表页子任务的收起状态（R-350 方案第 3 节、5.4，Q4）：待办 id → true 收起 / false 展开，只存用户点过的（没点过的按默认：
-   * 未完成展开、已完成收起）。每台设备各记各的、不同步；features/todos/hooks/useSubtasks.ts 读写，最多 500 个、写时剔掉已不在的待办；随整库清掉。
-   * 键 '#done' 是待办页“已完成”组整组收起没有（负责人 11-15；没点过默认收起）
+   * 未完成展开、已完成收起）。每台设备各记各的、不同步；features/todos/hooks/useSubtasks.ts 读写，最多 500 个、写时剔掉已不在的待办；随整库清掉
    */
   'ui.todo_collapsed': Readonly<Record<string, boolean>>;
+  /** 待办页“已完成”组展开没有（负责人 11-15；没有这个键是没点过，默认收起）：每台设备各记各的、不同步；features/todos/hooks/useSubtasks.ts 读写；随整库清掉 */
+  'ui.todo_done_open': boolean;
   /** 查找面板的“最近找过”（B4b-2，线框 s12）：最近的在前、最多 6 条；features/smart-search/data/find-recent.ts 读写；随整库清掉 */
   'ui.find_recent': readonly string[];
   /** 各表的同步游标（K8） */
