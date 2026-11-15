@@ -45,7 +45,7 @@ describe('pull-local', () => {
   });
 
   it('日程：只看标题（地点、备注不算）', () => {
-    const events: Row[] = [{ id: id(8), ...live, title: '看牙医', location: '江南站', note: '带医保卡', date: '2026-11-10', time: '15:00' }];
+    const events: Row[] = [{ id: id(8), ...live, title: '看牙医', location: '江南站', note: '带医保卡', date: '2026-11-10', time: '15:00', tz: null, duration_min: 60 }]; // tz 照真实行写全（null = 浮动时间）：漏了它 placeEvent 按机器时区换算，CI 的 UTC、洛杉矶作业会跨到 11-11
     const idx = pullIndex('event', events, [], TZ);
     expect(pullFind(idx, '牙医').map((h) => h.item.id)).toEqual([id(8)]);
     expect(idx[0]?.date).toBe('2026-11-10');
