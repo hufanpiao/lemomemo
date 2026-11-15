@@ -1,8 +1,27 @@
 // kit 设置组件的第二个文件（Settings.tsx 超 300 行，B2-UI-b W3、W4 拆开；各组件说明见 Settings.tsx 文件头，使用方一律从 Settings.tsx 引）：
 // SettingsChoiceCard、SettingsTimesRow、SettingsActionRow（W1）；SettingsList、SettingsDetailRow（W3、W4）。样式同用 Settings.module.css
-import { useId, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import form from '../Form.module.css';
+import { SettingsCard } from './Settings.tsx';
 import styles from './Settings.module.css';
+
+/** 行里的第二行灰字（meta，带 id 给 aria-describedby 用）和报错（error，一律 role="status"，出现时读屏会念）；入口行、开关行、分段行共用 */
+export function RowNotes({ metaId, meta, error }: { metaId: string; meta?: ReactNode; error?: ReactNode }) {
+  return (
+    <>
+      {meta === undefined ? null : (
+        <p id={metaId} className={styles.meta}>
+          {meta}
+        </p>
+      )}
+      {error === undefined || error === null ? null : (
+        <p className={styles.error} role="status">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
 
 export interface SettingsChoice<T extends string> {
   value: T;
@@ -26,14 +45,9 @@ export interface SettingsChoiceCardProps<T extends string> {
 }
 
 export function SettingsChoiceCard<T extends string>({ title, showTitle, name, options, value, onPick, note, testId }: SettingsChoiceCardProps<T>) {
-  const id = useId();
   return (
-    <section aria-labelledby={id} data-testid={testId}>
-      <h2 id={id} className={showTitle === true ? `${form.groupLabel} ${styles.gt}` : styles.srOnly}>
-        {title}
-      </h2>
-      <div className={styles.grp} role="radiogroup" aria-labelledby={id}>
-        {options.map((o) => {
+    <SettingsCard title={title} showTitle={showTitle} note={note} testId={testId} radio>
+      {options.map((o) => {
           const on = o.value === value;
           return (
             <label key={o.value} className={styles.choice} data-on={on ? '1' : undefined}>
@@ -54,9 +68,7 @@ export function SettingsChoiceCard<T extends string>({ title, showTitle, name, o
             </label>
           );
         })}
-      </div>
-      {note === undefined ? null : <p className={styles.note}>{note}</p>}
-    </section>
+    </SettingsCard>
   );
 }
 
@@ -96,7 +108,7 @@ export interface SettingsActionRowProps {
 /** 行名 + 右边一个行内按钮或一个值（不是整行可点；整行可点用 SettingsEntryRow） */
 export function SettingsActionRow({ label, action, value, valueTestId, testId, rowId }: SettingsActionRowProps) {
   return (
-    <li className={`${styles.row} ${styles.actRow}`} data-testid={testId} data-row-id={rowId}>
+    <li className={styles.row} data-testid={testId} data-row-id={rowId}>
       <span className={styles.tx}>{label}</span>
       {action === undefined ? (
         <span className={styles.v} data-testid={valueTestId}>
@@ -146,7 +158,7 @@ export interface SettingsDetailRowProps {
 export function SettingsDetailRow({ label, labelId, action, value, valueTestId, metas, testId, current }: SettingsDetailRowProps) {
   return (
     <li className={styles.row} data-testid={testId} data-current={current === true ? '1' : undefined}>
-      <span id={labelId} className={`${styles.tx} ${styles.grow}`}>
+      <span id={labelId} className={styles.tx}>
         {label}
       </span>
       {value === undefined ? null : (

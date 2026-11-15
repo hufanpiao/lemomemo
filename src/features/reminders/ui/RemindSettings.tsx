@@ -15,7 +15,7 @@ import { AnnivDefaults } from '../../anniv/index.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { annivOn } from '../../../kit/hooks/anniv-on.ts';
-import { SettingsActionRow, SettingsCard, SettingsEntryRow } from '../../../kit/components/Settings/Settings.tsx';
+import { SettingsActionRow, SettingsCard, settingsCardNoteClass, SettingsEntryRow } from '../../../kit/components/Settings/Settings.tsx';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { upcoming } from '../hooks/remind-view.ts';
 import { useReminderList } from '../hooks/useReminders.ts';
@@ -146,11 +146,11 @@ export default function RemindSettings({
         </SettingsCard>
       </div>
       {s.test && (
-        <p className={s.test === 'sent' || s.test === 'local_shown' ? styles.sn : styles.error} role="status" data-testid="remind-test-result" data-result={s.test}>
+        <p className={s.test === 'sent' || s.test === 'local_shown' ? settingsCardNoteClass : styles.error} role="status" data-testid="remind-test-result" data-result={s.test}>
           {testMsg(t, s.test)}
         </p>
       )}
-      {s.test === 'sent' && <p className={styles.sn}>{t('remind.set.test.help', {})}</p>}
+      {s.test === 'sent' && <p className={settingsCardNoteClass}>{t('remind.set.test.help', {})}</p>}
 
       {s.error && (
         <p className={styles.error} role="alert">

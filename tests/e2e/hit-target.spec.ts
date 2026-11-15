@@ -2,7 +2,7 @@
 // • 可点的元素：a[href]、button、[role="button"]、select、input（checkbox、radio 量包着它的 label——CheckCircle 那种
 //   “看得见 22 的圆圈、label 用 ::after 外扩到 44”的写法，点的是 label）、[tabindex]（不含 -1）。看不见的（display:none、
 //   visibility:hidden、宽高为 0、aria-hidden 里的）不算。
-// • 有效点击区 = 元素自己的框和它 ::after 的框（kit 的 ::after 外扩写法，同 Settings.module.css 的 .segBtn::after）取较大的那个；
+// • 有效点击区 = 元素自己的框和它 ::after 的框（kit 的 ::after 外扩写法，同 ModeSeg.module.css 的 .segBtn::after）取较大的那个；
 //   ::after 不是绝对定位、没内容的不算。只量大小，不量相邻元素有没有互相盖住。
 // • 不量：正文段落里的行内链接（WCAG 2.5.8 的“行内”例外；本批页面目前没有）。
 // • 页面：今天、待办、最近删除、日历（月视图 + 当天列表）、设置首页和各级子页、随手记、待办编辑、日程编辑；灌一份固定数据，让列表行、
@@ -114,7 +114,7 @@ async function measure(page: Page, pages: [string, string][]): Promise<Record<st
   return bad;
 }
 
-const MSG = '这些可点元素的点击区小于 44 × 44（不够的用 ::after 外扩，同 Settings.module.css 的 .segBtn::after）';
+const MSG = '这些可点元素的点击区小于 44 × 44（不够的用 ::after 外扩，同 ModeSeg.module.css 的 .segBtn::after）';
 
 for (const [w, h, label] of [
   [440, 956, '手机'],

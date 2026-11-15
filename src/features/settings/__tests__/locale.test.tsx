@@ -118,7 +118,7 @@ describe('中韩切换', () => {
       fireEvent.click(screen.getByRole('button', { name: zh['settings.lang.ko'] }));
     });
     expect(title()).toBe(`[ko]${zh['settings.title']}`);
-    expect((await screen.findByRole('alert')).textContent).toBe(`[ko]${zh['settings.lang.syncFailed']}`);
+    expect((await screen.findByText(`[ko]${zh['settings.lang.syncFailed']}`)).getAttribute('role')).toBe('status');
     expect(exit.wipe).not.toHaveBeenCalled();
   });
 });

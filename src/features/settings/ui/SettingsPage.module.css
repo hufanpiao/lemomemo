@@ -1,4 +1,4 @@
-/* 设置页骨架（B1 K9）：分组卡片照定稿线框 s13（组标题 .gt、说明 .sn；卡片和行 B2-UI-b 起用 kit 设置组件）；只用令牌，颜色在 skins/*.css（A11）
+/* 设置页骨架（B1 K9）：分组卡片照定稿线框 s13（组标题 .gt；卡片、行、卡下说明都用 kit 设置组件，说明的类是 settingsNoteClass）；只用令牌，颜色在 skins/*.css（A11）
    按下回弹由 motion 的 Pressable 自带（含减少动态效果的覆盖），这里不写 transition、不动 transform */
 .page {
   max-width: 560px;
@@ -41,9 +41,6 @@ h3.gt {
   outline-offset: 2px;
 }
 
-/* B2-UI-b W3、W4：原来的卡片、行、行名、值、行内灰字这几条样式（含两行内容的上下 8px、最后一行无分隔线）删了，
-   账号、数据、电脑三页的行都换成 kit 设置组件（src/kit/components/Settings/：SettingsList、SettingsDetailRow、SettingsEntryRow），数值原样搬在那边 */
-
 /* 设备名后面的“本机”“已退出”，最近的导出设备名后面的“本机” */
 .tag {
   display: inline-block;
@@ -58,14 +55,6 @@ h3.gt {
 
 .tagMuted {
   color: var(--text-2);
-}
-
-/* 说明文字断行（B2-UI-b W2，B11）：不用 text-wrap: pretty（中文会提前换行，拆开“之后”“能不能”），用浏览器默认禁则、行尾排满；
-   韩文按词断由 base.css 的 :lang(ko) body { word-break: keep-all } 继承下来，这里不另写（e2e b2-ui-b-settings-wrap 查计算样式） */
-.sn {
-  margin: 6px 4px 0;
-  color: var(--text-2);
-  font-size: var(--fs-12-5);
 }
 
 /* 关于页的诊断信息（11-06，连点“版本”5 下）：纯文字、等宽、长行折开，可以长按选中拷给我们 */
@@ -108,12 +97,6 @@ h3.gt {
   font-size: var(--fs-14);
   overflow-wrap: anywhere;
 }
-
-/* 中韩切换的分段按钮（R-282）合卡以后用 kit 的 SettingsSegRow，样式在 src/kit/components/Settings/Settings.module.css */
-
-/* B2-UI-b W4：原来的按钮样式（普通、危险、整行宽、页底退出登录、确认弹窗的主按钮和危险主按钮，含扩点击区、禁用灰字）删了，
-   一律用 kit 的 FormButton（对应表见任务单 W4：普通 → compact；危险 → compact danger；主按钮 → compact primary；
-   危险主按钮 → compact dangerFill；整行宽 → compact block；页底退出登录 → row block），数值在 kit/components/Form.module.css */
 
 .status {
   margin: 8px 4px 0;
@@ -161,9 +144,6 @@ h3.gt {
   margin-top: 12px;
 }
 
-/* B2-UI-b W3、W4：原来的整行按钮样式（含上下两行的写法、禁用灰字、按下变淡和减少动态效果的两条）删了，
-   改用 kit 的 SettingsEntryRow（危险色用它的 danger） */
-
 .line {
   margin: 0;
 }
@@ -210,16 +190,11 @@ h3.gt {
   margin-top: 20px;
 }
 
-.input {
+/* 注销页输入框：外观用 kit 表单的 .input（--inp-bg、--r-inp、细边框；触屏 16px 防放大也在那边），这里只管尺寸：高 44、左右 12。
+   写成 input.input（权重 0,1,1）压过表单那份 36 高（两份 CSS 模块谁先加载不固定，同登录页） */
+input.input {
   min-height: var(--hit);
   padding: 0 12px;
-  border: 1px solid var(--inp-line);
-  border-radius: var(--r-md);
-  background: var(--panel);
-  color: var(--text);
-
-  /* iOS 小于 16px 会在聚焦时放大页面 */
-  font-size: var(--fs-16);
 }
 
 /* 注销页的提交按钮外面那层（B2-UI-b W4）：对应表里没有原来的 .full，按钮本身用 FormButton compact dangerFill block，

@@ -140,7 +140,7 @@ test.describe('设置页骨架', () => {
     const so = await main.getByTestId('settings-signout').evaluate((el) => el.getBoundingClientRect().height);
     expect(Math.round(so)).toBe(44);
 
-    // R-282（负责人 10-30 选“再小一点”）：语言切换框看得见 38；两个选项看得见 32，上下边框外 2px 仍点到自己（点击区 44）。
+    // R-436（底子评审 11-15）：语言切换改用 kit 的 ModeSeg slide，外观以纪念日确认稿第 4 条为准——切换框看得见 36，两个选项看得见 30，上下边框外 2px 仍点到自己（点击区 44）。
     // 合卡以后语言行是两行（第二行灰字说明，M1），切换框不再按 44 的单行行居中，上下各留 3 不再量
     const seg = await main.getByTestId('settings-lang').evaluate((el) => {
       const b = el.getBoundingClientRect();
@@ -153,10 +153,10 @@ test.describe('设置页骨架', () => {
       });
       return { h: b.height, hit };
     });
-    expect(Math.round(seg.h)).toBe(38);
+    expect(Math.round(seg.h)).toBe(36);
     expect(seg.hit).toHaveLength(2);
     for (const b of seg.hit) {
-      expect(Math.round(b.h)).toBe(32);
+      expect(Math.round(b.h)).toBe(30);
       expect(b.up).toBe(true);
       expect(b.down).toBe(true);
     }

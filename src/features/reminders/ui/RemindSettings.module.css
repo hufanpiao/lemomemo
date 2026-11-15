@@ -1,7 +1,7 @@
 /* 设置 › 提醒与通知（B2 FA-4）。
    B2-UI-b W1（R-352）起提醒设置、免打扰、提醒里写什么三页的卡、行、开关、单选、时刻行都用 kit 设置组件（src/kit/components/Settings/），
    原来从设置页抄来的 .grp/.row/.rowBtn（含按下变淡）、.tx、.v、.choice、.check、.seg、.segBtn、.switchRow、.toggle、.timesRow、.timeLbl、.time、.srOnly 都删了；
-   这里只剩：卡片下面的说明和红字（.sn、.error）、两张卡之间的 12px（.nextCard）、顶部提示（.notice 等）和“未来 7 天的提醒”页（.upCard、.up*） */
+   这里只剩：红字（.error；卡片下面的说明用 kit 的 settingsCardNoteClass）、两张卡之间的 12px（.nextCard）、顶部提示（.notice 等）和“未来 7 天的提醒”页（.upCard、.up*） */
 
 /* “未来 7 天的提醒”页每天的小标题（R-436）：字样用 kit 的小字分组名（Form.tsx 的 groupLabelClass，和 .upHead 一起挂），这里不另写字号颜色 */
 
@@ -16,13 +16,6 @@
 /* 二级页“通知”单独一张卡，下面三行另一张（设计复审第二轮 N8）：没有说明夹在中间时两张卡之间留 12px；有说明时说明自己的下边距（16px）撑开 */
 .nextCard {
   margin-top: 12px;
-}
-
-/* 卡片下面的说明：中文用浏览器默认禁则、行尾排满，不用 text-wrap: pretty（B2-UI-b W1、W2，B11：它让中文提前换行） */
-.sn {
-  margin: 6px 4px 16px;
-  color: var(--text-2);
-  font-size: var(--fs-12-5);
 }
 
 /* 错误、时钟不准等红字（同上，不用 text-wrap: pretty） */
@@ -152,9 +145,4 @@ h2.upHead {
 .upText small {
   color: var(--text-2);
   font-size: var(--fs-12);
-}
-
-.upRow:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
 }

@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
+import form from '../../../kit/components/Form.module.css';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { useDeleteAccount, type AccountActionDeps } from '../hooks/useAccountActions.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
@@ -78,7 +79,7 @@ export function DeleteAccountView({ account, pendingCount, now, onBack }: Delete
           </label>
           <input
             id="settings-delete-input"
-            className={styles.input}
+            className={`${form.input} ${styles.input}`}
             value={value}
             disabled={busy}
             autoComplete="off"

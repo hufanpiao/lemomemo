@@ -589,19 +589,6 @@
   font-weight: 600;
 }
 
-.btn:focus-visible,
-.small:focus-visible,
-.circle:focus-visible,
-.bannerMain:focus-visible,
-.collapse:focus-visible,
-.missRow:focus-visible,
-.nextCard:focus-visible,
-.sheetTopAct:focus-visible,
-.rowBtn:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
 /* “未同步，提醒可能不响”一行（UNSYNCED-retry-ui）：文字和末尾“重试”同一行，放不下时“重试”换到下一行 */
 .unsynced {
   display: flex;

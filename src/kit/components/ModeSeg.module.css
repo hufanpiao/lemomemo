@@ -21,7 +21,7 @@
   cursor: pointer;
 }
 
-/* 看得见 40 高，点击区以按钮中心外扩到至少 44 × 44（B2-UI-a V5；写法同 Settings.module.css 的 .segBtn::after）；按钮本来比 44 宽的方向不扩，相邻按钮不互相盖住 */
+/* 看得见 40 高，点击区以按钮中心外扩到至少 44 × 44（B2-UI-a V5；原来照设置页那份分段写的，R-436 设置页分段并进这里，这一份就是唯一写法）；按钮本来比 44 宽的方向不扩，相邻按钮不互相盖住 */
 .segBtn::after {
   content: '';
   position: absolute;

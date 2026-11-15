@@ -8,6 +8,8 @@
 // • 只看一类（R-438，负责人 11-16“每页只看到自己的删除那类吧”）：#/trash/notes 只列随手记（随手记页的图标、插图提示进来），#/trash/todos 只列待办
 //   （待办页的图标、设置里自动删除的说明进来）；先过滤再交给 useTrashPurge，所以“全部清空”也只清这一类（它只发列表里看得见的项）；
 //   只看一类时每行不再写“随手记 ·”“待办 ·”。不带参数的 #/trash 照旧三类都列（日程删了在这里找）
+// • 页底提示（R-436 底子评审）：恢复的结果和永久删除、清空的结果是同一个 notice 状态，后到的覆盖先到的（永久删除、清空先等点过的“恢复”写完，
+//   所以它的结果总在后面）；页底一个常驻的 role=status 只换文字，不再按条件挂三个
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRoute } from '../../../app/router.ts';
 import { backOr } from '../../../app/router-levels.ts';
@@ -33,7 +35,6 @@ export default function RecentlyDeletedPage() {
   const p0 = useRoute().params[0];
   const only = p0 === 'notes' || p0 === 'todos' ? p0 : null;
   const all = useMemo(() => (only ? every.filter((it) => it.table === only) : every), [every, only]);
-  const [msg, setMsg] = useState<RestoreResult | null>(null);
   // 只读行（要新版本，TC-B4-09“写入入口统一拦下”；重复事项 R-148）进了“最近删除”也照样只读：标“要新版本”，
   // “恢复”“永久删除”都灰掉，点了只提示“这条要新版本才能修改”、不写、不调 RPC（core 也会按 readonly_row 拒，页面层先拦）；
   // 全部清空跳过它们（hooks/useTrashPurge.ts）
@@ -45,44 +46,52 @@ export default function RecentlyDeletedPage() {
   const { items, online, busy, confirm } = purge;
   const off = !online || busy;
 
+  const { msg: pmsg, roN } = purge;
+  const [notice, setNotice] = useState<Notice | null>(null);
+  // 永久删除、清空的结果到了：盖掉之前的提示（askOne / askAll 一开始就把 pmsg 清成 null，同样的结果再来一次照样会触发）
   useEffect(() => {
-    if (msg !== 'ok') return undefined;
-    const id = setTimeout(() => setMsg(null), 2000);
-    return () => clearTimeout(id);
-  }, [msg]);
-  const { msg: pmsg, roN, setMsg: setPmsg } = purge;
-  // 全部清空跳过了只读行：结果提示后面接“另有 N 项要新版本才能删除，留在列表里”（增量复审 11-11 必改），这时“已清空”也不自动收起
-  const roTail = roN > 0 && (pmsg === 'cleared' || pmsg === 'partial' || pmsg === 'not_synced') ? t('trash.ro.tail', { n: roN }) : '';
-  useEffect(() => {
-    if ((pmsg !== 'purged' && pmsg !== 'cleared' && pmsg !== 'syncing') || roTail !== '') return undefined;
-    const id = setTimeout(() => setPmsg(null), 2000);
-    return () => clearTimeout(id);
-  }, [pmsg, setPmsg, roTail]);
-  // 恢复的提示和永久删除的结果提示二选一显示，按后到的算：永久删除的结果出来以后，之前点的“恢复”晚到的“已恢复”不再盖住它
-  // （恢复失败照样提示）。代码复审 11-11
-  const restoreSeq = useRef(0);
-  useEffect(() => {
-    if (pmsg === null) return;
-    restoreSeq.current += 1;
-    setMsg(null);
+    if (pmsg !== null) setNotice({ kind: 'purge', m: pmsg });
   }, [pmsg]);
+  // 全部清空跳过了只读行：结果提示后面接“另有 N 项要新版本才能删除，留在列表里”（增量复审 11-11 必改），这时“已清空”也不自动收起
+  const roTail = notice?.kind === 'purge' && roN > 0 && (notice.m === 'cleared' || notice.m === 'partial' || notice.m === 'not_synced') ? t('trash.ro.tail', { n: roN }) : '';
+  const fleeting = notice !== null && roTail === '' && (notice.kind === 'restore' ? notice.r === 'ok' : notice.m === 'purged' || notice.m === 'cleared' || notice.m === 'syncing');
+  useEffect(() => {
+    if (!fleeting) return undefined;
+    const id = setTimeout(() => setNotice(null), 2000);
+    return () => clearTimeout(id);
+  }, [fleeting, notice]);
+  /** 只读行点了“恢复”“永久删除”：提示“这条要新版本才能修改”，不写、不调 RPC；返回 true 表示拦下了（两个按钮共用） */
+  const stopReadonly = (table: string, id: string): boolean => {
+    if (!isRo(table, id)) return false;
+    setNotice({ kind: 'restore', r: 'readonly' });
+    return true;
+  };
   const onRestore = (table: (typeof items)[number]['table'], id: string): void => {
     // 永久删除、全部清空的请求在路上时不能恢复：要删的项已经发出去了，恢复那次修改会回 not_found 被丢掉（代码复审 11-11 必改）
-    if (purge.busy) return;
-    if (isRo(table, id)) {
-      setPmsg(null);
-      setMsg('readonly');
-      return;
-    }
-    setPmsg(null);
-    const my = ++restoreSeq.current;
+    if (purge.busy || stopReadonly(table, id)) return;
+    setNotice(null);
     const job = restore(table, id);
     restoring.current.add(job);
     void job.finally(() => restoring.current.delete(job)).catch(() => undefined);
-    void job.then((r) => {
-      if (r !== 'ok' || restoreSeq.current === my) setMsg(r);
-    });
+    void job.then((r) => setNotice({ kind: 'restore', r }));
   };
+  const onPurge = (table: (typeof items)[number]['table'], id: string): void => {
+    if (purge.busy || stopReadonly(table, id)) return;
+    setNotice(null);
+    purge.askOne(table, id);
+  };
+  const noticeText =
+    notice === null
+      ? ''
+      : notice.kind === 'restore'
+        ? notice.r === 'ok'
+          ? t('trash.restored', {})
+          : tToday(notice.r === 'readonly' ? 'err.readonly' : 'err.save', {})
+        : notice.m === 'readonly'
+          ? tToday('err.readonly', {})
+          : notice.m === 'kept'
+            ? t('trash.ro.kept', { n: roN })
+            : t(PURGE_MSG[notice.m], {}) + roTail;
 
   return (
     <main className={styles.page} data-feature="trash" data-testid="trash" data-only={only ?? undefined}>
@@ -90,7 +99,7 @@ export default function RecentlyDeletedPage() {
         <BackLink label={t('trash.back', {})} onBack={back} testId="trash-back" />
         <h1 className={styles.h1}>{t('trash.title', {})}</h1>
         {items.length > 0 ? (
-          <Pressable className={styles.clear} aria-disabled={off || undefined} onClick={() => { setMsg(null); purge.askAll(); }} data-testid="trash-clear">
+          <Pressable className={styles.clear} aria-disabled={off || undefined} onClick={() => { setNotice(null); purge.askAll(); }} data-testid="trash-clear">
             {t('trash.clear', {})}
           </Pressable>
         ) : (
@@ -129,16 +138,7 @@ export default function RecentlyDeletedPage() {
                 size="compact"
                 danger
                 aria-disabled={off || isRo(it.table, it.id) || undefined}
-                onClick={() => {
-                  if (isRo(it.table, it.id)) {
-                    if (purge.busy) return;
-                    setPmsg(null);
-                    setMsg('readonly');
-                    return;
-                  }
-                  setMsg(null);
-                  purge.askOne(it.table, it.id);
-                }}
+                onClick={() => onPurge(it.table, it.id)}
                 data-testid={`trash-purge-${it.id}`}
               >
                 {t('trash.purge', {})}
@@ -147,19 +147,9 @@ export default function RecentlyDeletedPage() {
           </li>
         ))}
       </ul>
-      {msg === 'ok' ? (
-        <p className={styles.toast} role="status" data-testid="trash-msg">
-          {t('trash.restored', {})}
-        </p>
-      ) : msg === 'failed' || msg === 'readonly' ? (
-        <p className={styles.toast} role="alert" data-testid="trash-msg">
-          {tToday(msg === 'readonly' ? 'err.readonly' : 'err.save', {})}
-        </p>
-      ) : pmsg ? (
-        <p className={styles.toast} role={pmsg === 'purged' || pmsg === 'cleared' || pmsg === 'syncing' ? 'status' : 'alert'} data-testid="trash-purge-msg">
-          {pmsg === 'readonly' ? tToday('err.readonly', {}) : pmsg === 'kept' ? t('trash.ro.kept', { n: roN }) : t(PURGE_MSG[pmsg], {}) + roTail}
-        </p>
-      ) : null}
+      <p className={styles.toast} role="status" data-testid="trash-msg" data-kind={notice?.kind}>
+        {noticeText}
+      </p>
       <ConfirmDialog
         open={confirm !== null}
         title={confirm?.kind === 'all' ? t('trash.clear.title', {}) : t('trash.purge.title', {})}
@@ -178,6 +168,8 @@ export default function RecentlyDeletedPage() {
     </main>
   );
 }
+
+type Notice = { kind: 'restore'; r: RestoreResult } | { kind: 'purge'; m: PurgeMsg };
 
 const PURGE_MSG = {
   purged: 'trash.purged',

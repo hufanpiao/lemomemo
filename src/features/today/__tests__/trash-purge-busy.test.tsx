@@ -84,7 +84,7 @@ describe('请求在路上时不能恢复（代码复审 11-11 必改）', () => 
   const notRestored = async (b: Awaited<ReturnType<typeof boot>>, enqueue: { mock: { calls: unknown[] } }, n: number) => {
     expect(enqueue.mock.calls).toEqual([]);
     expect((await b.outbox?.list())?.some((i) => i.id === uid(n))).toBe(false);
-    expect(screen.queryByTestId('trash-msg')).toBeNull();
+    expect(screen.getByTestId('trash-msg').textContent).not.toBe('已恢复');
     expect((await b.cache?.getRow(n === 1 ? 'notes' : 'todos', uid(n)))?.view?.['deleted_at']).not.toBeNull();
   };
 
@@ -102,10 +102,10 @@ describe('请求在路上时不能恢复（代码复审 11-11 必改）', () => 
     expect(screen.getByTestId(`trash-row-${uid(2)}`)).toBeTruthy();
     await notRestored(b, enqueue, 2);
     await act(async () => release(3));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已清空'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已清空'));
     await settle();
     await notRestored(b, enqueue, 2);
-    expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已清空');
+    expect(screen.getByTestId('trash-msg').textContent).toBe('已清空');
   });
 
   it('单条永久删除挂起时：同一条和别的行的“恢复”都灰掉，点了不生效', async () => {
@@ -125,7 +125,7 @@ describe('请求在路上时不能恢复（代码复审 11-11 必改）', () => 
     await notRestored(b, enqueue, 1);
     await notRestored(b, enqueue, 2);
     await act(async () => release(1));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已永久删除'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已永久删除'));
     await settle();
     await notRestored(b, enqueue, 2);
     expect(screen.getByTestId(`trash-row-${uid(2)}`)).toBeTruthy();
@@ -157,14 +157,13 @@ describe('请求在路上时不能恢复（代码复审 11-11 必改）', () => 
     await act(async () => release());
     expect(within(await screen.findByRole('dialog', {}, { timeout: 5000 })).getByText('清空最近删除里的 2 项？清空后不能恢复')).toBeTruthy();
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已清空'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已清空'));
     const sent = (rpc.mock.calls[0]?.[1] as { p_items: { id: string }[] }).p_items.map((k) => k.id).sort();
     expect(sent).toEqual([uid(1), uid(3)]);
     expect((await b.cache?.getRow('todos', uid(2)))?.view?.['deleted_at']).toBeNull();
     expect((await b.outbox?.list())?.some((i) => i.id === uid(2))).toBe(true);
     await settle();
-    expect(screen.queryByTestId('trash-msg')).toBeNull();
-    expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已清空');
+    expect(screen.getByTestId('trash-msg').textContent).toBe('已清空');
   });
 
   it('恢复还没写完就对同一条点永久删除：先等恢复写完，它已经恢复了，不调 RPC', async () => {

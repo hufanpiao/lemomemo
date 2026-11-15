@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Segmented, SettingsCard, SettingsEntryRow, SettingsRow, SettingsSegRow, SettingsSwitchRow } from '../Settings/Settings.tsx';
+import { SettingsCard, SettingsEntryRow, SettingsRow, SettingsSegRow, SettingsSwitchRow } from '../Settings/Settings.tsx';
 
 afterEach(cleanup);
 
@@ -104,7 +104,7 @@ describe('SettingsSwitchRow（M2）', () => {
   });
 });
 
-describe('Segmented 和 SettingsSegRow（C、M1）', () => {
+describe('SettingsSegRow（C、M1；R-436 起内部用 kit 的 ModeSeg slide）', () => {
   const opts = [
     { value: 'zh', label: '中文', lang: 'zh' },
     { value: 'ko', label: '한국어', lang: 'ko' },
@@ -131,18 +131,13 @@ describe('Segmented 和 SettingsSegRow（C、M1）', () => {
     expect(screen.queryByRole('heading')).toBeNull();
   });
 
-  it('同步失败的报错写在行里（role=alert）', () => {
+  it('同步失败的报错写在行里（role=status，三种行共用 RowNotes）', () => {
     render(
       <ul>
         <SettingsSegRow label="界面语言" options={opts} value="ko" onChange={() => undefined} error="没能同步到其他设备" />
       </ul>,
     );
-    expect(screen.getByRole('alert').closest('li')).toBe(screen.getByRole('group').closest('li'));
-  });
-
-  it('单独用时可以直接给 label', () => {
-    render(<Segmented options={opts} value="zh" onChange={() => undefined} label="语言" />);
-    expect(screen.getByRole('group', { name: '语言' })).toBeTruthy();
+    expect(screen.getByRole('status').closest('li')).toBe(screen.getByRole('group').closest('li'));
   });
 });
 
@@ -153,11 +148,11 @@ describe('样式数值原样搬来（R-276、R-282）、值单行省略（M4、S
     if (i < 0) throw new Error(`没有 ${sel}`);
     return css.slice(i, css.indexOf('}', i));
   };
-  it('行 44、入口按钮 44、分段按钮 32 加扩到 44 的点击区、开关 48×28', () => {
+  it('行 44、入口按钮 44、分段用 ModeSeg（设置卡里底槽换成 --bg，自己不再留一份分段样式）、开关 48×28', () => {
     expect(rule('.row')).toContain('min-height: var(--hit);');
     expect(rule('.rowBtn')).toContain('min-height: var(--hit);');
-    expect(rule('.segBtn')).toContain('min-height: 32px;');
-    expect(rule('.segBtn::after')).toContain('height: max(100%, var(--hit));');
+    expect(rule('.segRow')).toContain('--seg-track: var(--bg);');
+    expect(css).not.toMatch(/\n\.seg(Btn)? \{/);
     // 开关画法 B2-UI-b W5 挪到 kit 共用开关，11-09 并进 Form.module.css 的 .switch，48×28 不变；设置行里不能再留一份，单独的 Switch.module.css 也已删掉
     const sw = readFileSync(join(import.meta.dirname, '..', 'Form.module.css'), 'utf8');
     expect(existsSync(join(import.meta.dirname, '..', 'Switch.module.css'))).toBe(false);

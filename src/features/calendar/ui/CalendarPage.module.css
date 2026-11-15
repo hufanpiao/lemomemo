@@ -91,7 +91,7 @@
 }
 
 /* 点按区各 44 px（视觉 32 px，伸出去的部分用伪元素补，R-101）：原来写 inset: -6px，按钮实际 30 高时只扩到 42（B2-UI-a V5 量出来），
-   改成以按钮中心外扩到至少 44 × 44（同 Settings.module.css 的 .segBtn::after），不随按钮自身大小变 */
+   改成以按钮中心外扩到至少 44 × 44（同 ModeSeg.module.css 的 .segBtn::after），不随按钮自身大小变 */
 .nb::after,
 .tdy::after {
   content: '';
