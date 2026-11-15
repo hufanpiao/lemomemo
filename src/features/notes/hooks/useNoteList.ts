@@ -77,10 +77,12 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
       const n = rows.find((x) => x.id === id);
       // 带图、带附件的都保留原条（D-13，R-118：新条目链回它，附件还在原处）
       const kept = keep || imagesByNote(pics).has(id) || fileCounts(files).has(id);
+      // 来源不让转（隐私记）：菜单本来就不出，这里再兜一道——convertNote 写的是本机 todos / events / outbox（H4）
+      if (!src.caps.convert) return { ok: false, reason: 'rejected', kept };
       if (!n) return { ok: false, reason: 'gone', kept };
       return { ...(await convertNote(n, kind, { now: clock.now(), tz, keepNote: kept })), kept };
     },
-    [rows, pics, files, tz],
+    [rows, pics, files, tz, src],
   );
   /** 这条转不了：备注放不下 */
   const tooLong = useCallback((id: string): boolean => {
