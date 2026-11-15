@@ -16,7 +16,7 @@ import { BlobImg, CameraIcon, failKey, ImgIcon } from './ImgParts.tsx';
 import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { useNoteSource } from '../hooks/note-source.ts';
+import { useNoteSource, type NoteImagesApi } from '../hooks/note-source.ts';
 import type { ImgFailKey, ImgNotice, InsertResult, NoteImage, PendingImage } from '../hooks/useNoteImages.ts';
 import type { ActionResult } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
@@ -228,7 +228,9 @@ function PendPic({ file, label, onRemove, testId }: { file: File; label: string;
 export function EditorImageBlock({ noteId, drawer, disabled, msgClass, dropRef }: { noteId: string | null; drawer: boolean; disabled: boolean; msgClass: string | undefined; dropRef?: MutableRefObject<((f: File) => void) | null> }) {
   const [msg, setMsg] = useState<ImgMsg | null>(null);
   const src = useNoteSource();
-  const { insert } = src.useImages(noteId);
+  // 这一条的图只订一次，交给下面的 EditorImages（L5：不各订一份）
+  const im = src.useImages(noteId);
+  const { insert } = im;
   useEffect(() => {
     if (!dropRef) return undefined;
     dropRef.current = (f: File) =>
@@ -247,16 +249,15 @@ export function EditorImageBlock({ noteId, drawer, disabled, msgClass, dropRef }
   return (
     <>
       {msg ? <ImgMsgLine className={msgClass} msg={msg} /> : null}
-      <EditorImages noteId={noteId} disabled={disabled} onMessage={(key) => setMsg({ key, trash: false })} />
+      <EditorImages im={im} noteId={noteId} disabled={disabled} onMessage={(key) => setMsg({ key, trash: false })} />
     </>
   );
 }
 
-/** 编辑器、抽屉里的图（正文下面）+ “图片”“拍照”；message 把失败提示交给编辑器显示 */
-export function EditorImages({ noteId, disabled, onMessage }: { noteId: string | null; disabled: boolean; onMessage(k: ImgMsgKey): void }) {
+/** 编辑器、抽屉里的图（正文下面）+ “图片”“拍照”；im 是 EditorImageBlock 订的那一份；message 把失败提示交给编辑器显示 */
+function EditorImages({ im, noteId, disabled, onMessage }: { im: NoteImagesApi; noteId: string | null; disabled: boolean; onMessage(k: ImgMsgKey): void }) {
   const t = useNotesT();
   const src = useNoteSource();
-  const im = src.useImages(noteId);
   const [view, setView] = useState<ViewOpen | null>(null);
   const insert = async (f: File): Promise<boolean> => {
     const r = await im.insert(f);
