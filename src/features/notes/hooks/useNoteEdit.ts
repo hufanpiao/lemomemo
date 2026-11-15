@@ -5,8 +5,8 @@
 // • 手动改分类：patchOf 同一个 patch 写 category_id、category_source = 'manual'、category_seen = true
 // • 正文连续打字：所有写入经 useEditRecord 串成一条链，排在后面的 patch 在 outbox 里合并、确认回来后推进 base_rev / own_revs，
 //   服务器不会把自己的上一次修改当成别人改的、不生成冲突副本（TC-B4-14，见 __tests__/NoteEditPage.test.tsx 的“连续打字不生成冲突副本”两条）
+// • 读写经 ./note-source.ts 的来源（useEditRecord 的 io；B5 隐私记重写 11-15）：普通随手记进 outbox，隐私记进它的内存仓库和发送队列
 import { useCallback, useEffect, useRef } from 'react';
-import { savePatch } from '../../../core/edit-save.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useEditRecord, type EditRecord } from '../../../kit/hooks/useEditRecord.ts';
 import { currentTz } from '../../../core/current-tz.ts';
@@ -17,6 +17,7 @@ import { ruleCategory } from '../data/classify.ts';
 import { aiMarkKept, contentOf, emptyForm, formOf, newNoteRow, patchOf, type NoteForm } from '../data/note-edit.ts';
 import { categoryNames } from '../../../core/categories.ts';
 import { categoryColor, dayKind, showsAi, type Row } from '../data/note-list.ts';
+import { useNoteSource } from './note-source.ts';
 
 export type { NoteForm } from '../data/note-edit.ts';
 export { BODY_MAX, TITLE_MAX } from '../data/note-edit.ts';
@@ -44,7 +45,9 @@ export function useNoteEdit(
   const options = [...categoryNames(cats)].map(([cid, name]) => ({ id: cid, name, color: colorOf.get(cid) ?? null }));
   const optRef = useRef(options);
   optRef.current = options;
+  const { editIo: io } = useNoteSource();
   const rec = useEditRecord<NoteForm>({
+    io,
     table: 'notes',
     id,
     formOf,
@@ -67,8 +70,8 @@ export function useNoteEdit(
   useEffect(() => {
     if (!ai || deleted || ro || rowId === null || seen.current === rowId) return;
     seen.current = rowId;
-    void savePatch('notes', rowId, { category_seen: true, updated_at: clock.now() }, false);
-  }, [ai, deleted, ro, rowId]);
+    void io.patch('notes', rowId, { category_seen: true, updated_at: clock.now() }, false);
+  }, [ai, deleted, ro, rowId, io]);
   // 编辑器里分类旁的“AI”：这次打开时是 AI 分的、还没看过就一直标着（写了已看也不马上消失），用户手动改了分类就不标
   const aiAtOpen = useRef(false);
   if (ai) aiAtOpen.current = true;

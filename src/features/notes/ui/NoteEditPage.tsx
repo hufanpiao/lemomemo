@@ -22,7 +22,7 @@ import { useHoldBusy } from '../../../kit/hooks/useHoldBusy.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { Pressable } from '../../../motion/components.ts';
-import { NoteAttachments } from '../../attachments/index.ts';
+import { useNoteSource } from '../hooks/note-source.ts';
 import { BODY_MAX, TITLE_MAX, useNoteEdit, type CategoryOption } from '../hooks/useNoteEdit.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
 import styles from './NoteEditPage.module.css';
@@ -49,6 +49,7 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
   // 编辑器挂着期间占住升级中心的 busy：不出版本横幅、不自动重新载入（同 kit EditShell）；抽屉里由 DetailDrawer 按焦点占（B6 独立评审第 12 条）
   useHoldBusy('editing', !drawer);
   const t = useNotesT();
+  const { Attachments } = useNoteSource();
   const ed = useNoteEdit(id, onCreated);
   const tEdit = useEditT();
   const { form, change, readonly, off } = ed;
@@ -150,7 +151,7 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
       <EditorImageBlock noteId={noteId} drawer={drawer} disabled={off} msgClass={styles.notice} dropRef={dropImg} />
       {/* 附件（B4b-1，线框 sAtt）：懒加载，插图区下面；拖进来、粘贴进来的图片照插图插进这一条 */}
       <Suspense fallback={null}>
-        <NoteAttachments noteId={noteId} disabled={off || ed.deleted} onImages={onImages} />
+        <Attachments noteId={noteId} disabled={off || ed.deleted} onImages={onImages} />
       </Suspense>
     </>
   );

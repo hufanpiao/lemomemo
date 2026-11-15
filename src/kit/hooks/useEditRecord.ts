@@ -14,6 +14,8 @@
 // • 时刻、时区：now 取 platform/clock（带偏差校正，K8-clock），浮动时刻按 core 的 currentTz
 // • 删除、撤销删除：软删（deleted_at），撤销把它改回 null（ADR-006）；也算 remind 标记（补审改法 ④）
 // • remind 标记由 spec.hasRemind 按“这一行、这次实际写出去的列”算（prevRemindAt 传不传在 data 层，补审改法 ①～③）
+// • 读行、只读 id、三种写入走 spec.io（不给就是 localIo：本机集合 + core 的 edit-save，进 outbox）；隐私记（B5 重写，11-15）给的是自己的内存仓库，
+//   页面和这里的规则一份不变
 import { useCallback, useRef, useState } from 'react';
 import type { Tz } from '../../../shared/core/tz.ts';
 import { currentTz } from '../../core/current-tz.ts';
@@ -25,6 +27,24 @@ import { useReadonlyIds } from './useReadonly.ts';
 export type EditStatus = 'idle' | 'saving' | 'empty_title' | 'missing' | SaveOutcome;
 
 type AnyRow = Readonly<Record<string, unknown>>;
+
+/** 编辑页读写一行经过的口子：useRow、useReadonly 是 hook（同一个 io 在同一页里不换，调用顺序不变） */
+export interface EditIo {
+  useRow(table: string, id: string | null): ({ id: string } & Record<string, unknown>) | undefined;
+  useReadonly(table: string): ReadonlySet<string>;
+  insert(table: string, row: Record<string, unknown> & { id: string }, remind: boolean): Promise<SaveOutcome>;
+  patch(table: string, id: string, data: Record<string, unknown>, remind: boolean): Promise<SaveOutcome>;
+  setDeleted(table: string, id: string, deleted: boolean, now: number, remind: boolean): Promise<SaveOutcome>;
+}
+
+/** 普通行：本机集合 + core 的 edit-save（写进 outbox、本机先生效）；写入包一层箭头，测试替换 edit-save 时照样生效 */
+export const localIo: EditIo = {
+  useRow: (table, id) => useItem<{ id: string } & Record<string, unknown>>(table, id),
+  useReadonly: (table) => useReadonlyIds(table),
+  insert: (table, row, remind) => saveInsert(table, row, remind),
+  patch: (table, id, data, remind) => savePatch(table, id, data, remind),
+  setDeleted: (table, id, deleted, now, remind) => saveDeleted(table, id, deleted, now, remind),
+};
 
 /** 算 remind 标记要的东西：row = 写之前的那一行（新建为 undefined）；data = 这次 patch（insert 为 null）；prev / next = 写之前 / 之后的表单 */
 export interface RemindCtx<F> {
@@ -51,6 +71,8 @@ export interface EditRecordSpec<F> {
   newId?: () => string;
   now?: () => number;
   tz?: () => Tz;
+  /** 读写口子；不给就是 localIo */
+  io?: EditIo;
 }
 
 export interface EditRecord<F> {
@@ -83,8 +105,9 @@ export function useEditRecord<F>(spec: EditRecordSpec<F>): EditRecord<F> {
   const isNewRoute = spec.id === 'new';
   const [createdId, setCreatedId] = useState<string | null>(null);
   const recordId = isNewRoute ? createdId : spec.id;
-  const roIds = useReadonlyIds(spec.table);
-  const row = useItem<{ id: string } & Record<string, unknown>>(spec.table, recordId);
+  const io = spec.io ?? localIo;
+  const roIds = io.useReadonly(spec.table);
+  const row = io.useRow(spec.table, recordId);
   const [dirty, setDirtyState] = useState<Partial<F>>({});
   const [status, setStatus] = useState<EditStatus>('idle');
   // 新建页的空表单只造一次（日期默认值等不随重画变）
@@ -162,7 +185,7 @@ export function useEditRecord<F>(spec: EditRecordSpec<F>): EditRecord<F> {
           // 第一次：insert 整行（新建页没有别人的修改要防，整张表单就是这一次要写的）
           const id = (s.newId ?? (() => crypto.randomUUID()))();
           const whole = { ...(empty.current as F), ...dirtyRef.current } as F;
-          r = await saveInsert(s.table, s.newRow(id, whole, now), s.hasRemind({ row: undefined, data: null, prev: null, next: whole, tz, now }));
+          r = await (s.io ?? localIo).insert(s.table, s.newRow(id, whole, now), s.hasRemind({ row: undefined, data: null, prev: null, next: whole, tz, now }));
           if (r === 'saved') {
             created.current = id;
             sentForm.current = whole;
@@ -195,7 +218,7 @@ export function useEditRecord<F>(spec: EditRecordSpec<F>): EditRecord<F> {
         const tz = s.tz ? s.tz() : currentTz();
         const f = s.formOf(cur);
         const remind = s.hasRemind({ row: cur, data: { deleted_at: deleted ? now : null }, prev: f, next: f, tz, now });
-        const r = await saveDeleted(s.table, cur.id, deleted, now, remind);
+        const r = await (s.io ?? localIo).setDeleted(s.table, cur.id, deleted, now, remind);
         if (mine === seq.current) setStatus(r);
         return r;
       });
@@ -244,7 +267,7 @@ async function patchFields<F>(c: PatchCtx<F>, fields: Partial<F>): Promise<SaveO
   const rowNow = cur ?? s.newRow(id, prev, now);
   const target = { ...prev, ...fields } as F;
   const data = s.patchOf(rowNow, prev, target, now);
-  const r = data ? await savePatch(s.table, id, data, s.hasRemind({ row: rowNow, data, prev, next: target, tz, now })) : 'saved';
+  const r = data ? await (s.io ?? localIo).patch(s.table, id, data, s.hasRemind({ row: rowNow, data, prev, next: target, tz, now })) : 'saved';
   if (r === 'saved' && !cur) c.sentForm.current = target;
   return r;
 }

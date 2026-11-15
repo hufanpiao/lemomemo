@@ -4,11 +4,11 @@
 //   （正文是输入框里的字，可以空），再把图插进这一条（data/image-uploader.ts）
 // • 删除：软删（deleted_at），进“最近删除”（ADR-006）；撤销把它改回 null。随手记没有提醒，remind 标记一律 false
 // • 转成待办 / 日程（S8，R-414）：经 data/note-convert.ts 的 convertNote；菜单变淡用 tooLong。规则见 shared/logic/notes/note-convert.ts 文件头
+// • 行和写入经 ./note-source.ts 的来源（B5 隐私记重写 11-15）：普通随手记是本机集合 + edit-save，隐私记是它的内存仓库；分类照旧读本机 categories
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { convertTooLong, type ConvertKind } from '../../../../shared/logic/notes/note-convert.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { actionResult, type ActionResult } from '../../../core/action-result.ts';
-import { saveDeleted, saveInsert, savePatch } from '../../../core/edit-save.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -19,6 +19,7 @@ import { convertNote, type ConvertResult } from '../data/note-convert.ts';
 import { BODY_MAX, newNoteRow } from '../data/note-edit.ts';
 import { categoryNames } from '../../../core/categories.ts';
 import { aliveCount, categoryCounts, fileCounts, groupByDay, imagesByNote, noteItems, type Row } from '../data/note-list.ts';
+import { useNoteSource } from './note-source.ts';
 
 export type { NoteGroup, NoteItem } from '../data/note-list.ts';
 export type { ActionResult, ConvertKind, ConvertResult };
@@ -26,10 +27,10 @@ export type { ActionResult, ConvertKind, ConvertResult };
 export { actionResult };
 
 export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
-  const rows = useCollection<Row>('notes');
+  const src = useNoteSource();
+  const { notes: rows, images: pics, files } = src.useRows();
   const cats = useCollection<Row>('categories');
-  const pics = useCollection<Row>('note_images');
-  const files = useCollection<Row>('note_files');
+  const io = src.editIo;
   const locale = useUi((s) => s.locale);
   const [category, setCategory] = useState<string | null>(null);
   // 每分钟重算一次（过了半夜“今天”变“昨天”）
@@ -54,21 +55,21 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
       const names = categoryNames(cats);
       const cat = ruleCategory({ title: '', body }, [...names].map(([cid, name]) => ({ id: cid, name })));
       const t = clock.now();
-      const r = actionResult(await saveInsert('notes', newNoteRow(id, { title: '', body, category_id: null }, t, cat), false));
+      const r = actionResult(await io.insert('notes', newNoteRow(id, { title: '', body, category_id: null }, t, cat), false));
       return { result: r, id: r === 'ok' ? id : null };
     },
-    [cats, newId],
+    [cats, newId, io],
   );
   const remove = useCallback(
     async (id: string, deleted: boolean): Promise<ActionResult> => {
       if (!rows.some((x) => x.id === id)) return 'failed';
-      return actionResult(await saveDeleted('notes', id, deleted, clock.now(), false));
+      return actionResult(await io.setDeleted('notes', id, deleted, clock.now(), false));
     },
-    [rows],
+    [rows, io],
   );
 
   /** 撤销刚新建的一条（undone，界面和“最近删除”都不显示）：输入行插图时，图片行没写成，不留一条空随手记 */
-  const discard = useCallback(async (id: string): Promise<ActionResult> => actionResult(await savePatch('notes', id, { undone: true, updated_at: clock.now() }, false)), []);
+  const discard = useCallback(async (id: string): Promise<ActionResult> => actionResult(await src.discard(id)), [src]);
 
   /** 转成待办 / 日程：keep 是弹窗问时定下的保留原条，和转换那一刻带图取或（不会说“保留”却删了原条）；结果带上 kept 给提示条用 */
   const convert = useCallback(

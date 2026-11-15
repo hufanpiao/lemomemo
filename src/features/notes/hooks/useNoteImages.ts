@@ -30,8 +30,8 @@ export function useNoteImages(noteId: string | null) {
   return { items, insert, remove, retry };
 }
 
-/** 输入行插图：编码成了才调 create 新建随手记，再插进去（create 回 null = 没建成） */
-export const insertImage = (create: () => Promise<string | null>, file: File): Promise<InsertResult> => uploader().insert(create, file);
+/** 输入行插图：编码成了才调 create 新建随手记，再插进去（create 回 null = 没建成）；给的是 id 就插进那一条 */
+export const insertImage = (create: string | (() => Promise<string | null>), file: File): Promise<InsertResult> => uploader().insert(create, file);
 
 export type ImageSrc = { url: string | null; missing: boolean; failed: boolean };
 

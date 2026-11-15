@@ -8,6 +8,7 @@
 // • 提示文案（imgMessage）：插入失败（HEIC 先转 JPG、打不开、存不上……）、上传失败、写行被拒，都写进 i18n
 // • 输入行选图（useAddImage；R-416：选了先挂成待记下的小图 PendingPics，点“记下”才存）、编辑器插图区连同提示（EditorImageBlock）也在这里，随手记页、编辑页不超行数上限
 // • 动效：只用 Pressable 的按下反馈（R-376）
+// • 图、取图、插图、提示都经 hooks/note-source.ts 的来源（B5 隐私记重写 11-15）：隐私记的图点开同样进看图页；识图状态只在 caps.ai 时挂
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { ImageAiStatus } from '../../attachments/index.ts';
 import { NoteImageView, type ViewOpen } from './NoteImageView.tsx';
@@ -15,7 +16,8 @@ import { BlobImg, CameraIcon, failKey, ImgIcon } from './ImgParts.tsx';
 import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { insertImage, useImageNotices, useImageSrc, useNoteImages, type ImgFailKey, type ImgNotice, type InsertResult, type NoteImage, type PendingImage } from '../hooks/useNoteImages.ts';
+import { useNoteSource } from '../hooks/note-source.ts';
+import type { ImgFailKey, ImgNotice, InsertResult, NoteImage, PendingImage } from '../hooks/useNoteImages.ts';
 import type { ActionResult } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
 import styles from './NoteImages.module.css';
@@ -93,11 +95,12 @@ export function PickButtons({ onFile, disabled, className, idPrefix, camera = tr
 /** 瀑布流卡片顶部的图：16:10、右上角“+N” */
 export function CardCover({ img, count }: { img: NoteImage; count: number }) {
   const t = useNotesT();
-  const src = useImageSrc(img, true);
+  const box = useRef<HTMLSpanElement>(null);
+  const src = useNoteSource().useImageSrc(img, true, box);
   const more = count - 1;
   const bad = failKey(src);
   return (
-    <span className={styles.cover} data-testid={`notes-cover-${img.noteId}`} data-state={bad ? 'failed' : 'ok'}>
+    <span ref={box} className={styles.cover} data-testid={`notes-cover-${img.noteId}`} data-state={bad ? 'failed' : 'ok'}>
       {src.url && !bad ? <BlobImg url={src.url} alt={t('notes.img.alt', {})} /> : null}
       {bad ? <span className={styles.coverFail}>{t(bad, {})}</span> : null}
       {more > 0 ? (
@@ -112,10 +115,11 @@ export function CardCover({ img, count }: { img: NoteImage; count: number }) {
 /** 列表行“⋯”前的缩略图（视觉验收必改 1；视觉稿 PH.notes .thumb）：取不到时标“!”，读屏念出原因 */
 export function ListThumb({ img }: { img: NoteImage }) {
   const t = useNotesT();
-  const src = useImageSrc(img, true);
+  const box = useRef<HTMLSpanElement>(null);
+  const src = useNoteSource().useImageSrc(img, true, box);
   const bad = failKey(src);
   return (
-    <span className={styles.thumb} data-testid={`notes-thumb-${img.noteId}`} data-state={bad ? 'failed' : 'ok'}>
+    <span ref={box} className={styles.thumb} data-testid={`notes-thumb-${img.noteId}`} data-state={bad ? 'failed' : 'ok'}>
       {src.url && !bad ? <BlobImg url={src.url} alt={t('notes.img.alt', {})} /> : null}
       {bad ? (
         <span className={styles.thumbFail} role="img" aria-label={t(bad, {})}>
@@ -145,15 +149,16 @@ export function useAddImage(
   report: (r: ActionResult) => void,
   notify: (m: ImgMsg) => void,
 ) {
+  const src = useNoteSource();
   const onImgNotice = useCallback((n: ImgNotice) => notify({ key: failMessage(n.key), trash: n.key === 'quota' }), [notify]);
-  useImageNotices(onImgNotice);
+  useEffect(() => src.onNotice(onImgNotice), [src, onImgNotice]);
   return async (text: string, files: readonly File[]): Promise<ImagesResult> => {
     let made = null as Made | null;
     let once: Promise<Made> | null = null;
     const note = async () => (made = await (once ??= l.add(text, true))).id;
     const left: File[] = [];
     for (const file of files) {
-      const r = await insertImage(note, file);
+      const r = await src.insertImage(note, file);
       if (!r.ok) left.push(file);
       const k = insertMessage(r);
       if (k) notify({ key: k, trash: false });
@@ -222,7 +227,8 @@ function PendPic({ file, label, onRemove, testId }: { file: File; label: string;
  */
 export function EditorImageBlock({ noteId, drawer, disabled, msgClass, dropRef }: { noteId: string | null; drawer: boolean; disabled: boolean; msgClass: string | undefined; dropRef?: MutableRefObject<((f: File) => void) | null> }) {
   const [msg, setMsg] = useState<ImgMsg | null>(null);
-  const { insert } = useNoteImages(noteId);
+  const src = useNoteSource();
+  const { insert } = src.useImages(noteId);
   useEffect(() => {
     if (!dropRef) return undefined;
     dropRef.current = (f: File) =>
@@ -237,7 +243,7 @@ export function EditorImageBlock({ noteId, drawer, disabled, msgClass, dropRef }
   const onNotice = useCallback((n: ImgNotice) => {
     if (!drawer && n.noteId === noteId) setMsg({ key: failMessage(n.key), trash: n.key === 'quota' });
   }, [drawer, noteId]);
-  useImageNotices(onNotice);
+  useEffect(() => src.onNotice(onNotice), [src, onNotice]);
   return (
     <>
       {msg ? <ImgMsgLine className={msgClass} msg={msg} /> : null}
@@ -249,7 +255,8 @@ export function EditorImageBlock({ noteId, drawer, disabled, msgClass, dropRef }
 /** 编辑器、抽屉里的图（正文下面）+ “图片”“拍照”；message 把失败提示交给编辑器显示 */
 export function EditorImages({ noteId, disabled, onMessage }: { noteId: string | null; disabled: boolean; onMessage(k: ImgMsgKey): void }) {
   const t = useNotesT();
-  const im = useNoteImages(noteId);
+  const src = useNoteSource();
+  const im = src.useImages(noteId);
   const [view, setView] = useState<ViewOpen | null>(null);
   const insert = async (f: File): Promise<boolean> => {
     const r = await im.insert(f);
@@ -262,7 +269,7 @@ export function EditorImages({ noteId, disabled, onMessage }: { noteId: string |
       {im.items.length ? (
         <ul className={styles.list} aria-label={t('notes.img.list', {})}>
           {im.items.map(({ img, pending }, i) => (
-            <OneImage key={img.id} img={img} n={i + 1} pending={pending} disabled={disabled} onRemove={() => void im.remove(img.id)} onRetry={() => im.retry(img.id)} onReplace={insert} onOpen={(from) => setView({ id: img.id, from })} />
+            <OneImage key={img.id} img={img} n={i + 1} pending={pending} disabled={disabled} ai={src.caps.ai} onRemove={() => void im.remove(img.id)} onRetry={() => im.retry(img.id)} onReplace={insert} onOpen={(from) => setView({ id: img.id, from })} />
           ))}
         </ul>
       ) : null}
@@ -274,9 +281,9 @@ export function EditorImages({ noteId, disabled, onMessage }: { noteId: string |
   );
 }
 
-function OneImage(p: { img: NoteImage; n: number; pending: PendingImage | null; disabled: boolean; onRemove(): void; onRetry(): boolean; onReplace(f: File): Promise<boolean>; onOpen(from: HTMLElement): void }) {
+function OneImage(p: { img: NoteImage; n: number; pending: PendingImage | null; disabled: boolean; ai: boolean; onRemove(): void; onRetry(): boolean; onReplace(f: File): Promise<boolean>; onOpen(from: HTMLElement): void }) {
   const t = useNotesT();
-  const src = useImageSrc(p.img, false);
+  const src = useNoteSource().useImageSrc(p.img, false);
   const [busy, setBusy] = useState(false);
   const [replaceInput, replace] = useFilePick((f) => {
     setBusy(true);
@@ -323,7 +330,7 @@ function OneImage(p: { img: NoteImage; n: number; pending: PendingImage | null; 
         ) : null}
       </span>
       {/* 识别状态（B4b-2 识图，线框 sAIst）：传好了才挂，懒加载 */}
-      {failed || uploading ? null : <Suspense fallback={null}><ImageAiStatus id={p.img.id} /></Suspense>}
+      {failed || uploading || !p.ai ? null : <Suspense fallback={null}><ImageAiStatus id={p.img.id} /></Suspense>}
       {replaceInput}
     </li>
   );
