@@ -12,6 +12,8 @@
 //   出“这条要新版本才能修改 · 更新”；电脑抽屉复用这个编辑器，列表页已在点开时拦下，这里兜住直接打开地址、打开后才变只读的情况
 // • 附件（B4b-1）：插图区下面挂 attachments 功能懒加载的附件区（加附件只在电脑布局，预览浮层再单独懒加载）
 // • 动效：只有抽屉最基本的滑入（R-376），按钮用 Pressable 的按下反馈
+// • 数据来源（B5 隐私记重写 11-15，hooks/note-source.ts）：隐私记页用同一个编辑器（#/vault/<id>、#/vault/new），左上角“‹ 隐私记”、
+//   “⋯”里多一项“移出隐私记”；后台没保存上时状态行下面出“没保存上 · 重试”（NotesBits 的 SyncLine）
 import { Suspense, useCallback, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { DrawerClose, useInDrawer } from '../../../kit/components/DetailDrawer.tsx';
@@ -27,18 +29,16 @@ import { BODY_MAX, TITLE_MAX, useNoteEdit, type CategoryOption } from '../hooks/
 import { useNotesT } from '../hooks/useNotesT.ts';
 import styles from './NoteEditPage.module.css';
 import { EditorImageBlock } from './NoteImages.tsx';
+import { SyncLine } from './NotesBits.tsx';
 
 const NONE = '';
 /** 正文停笔多久存一次 */
 export const BODY_IDLE_MS = 800;
 
-/** 直接打开的（书签、刷新）没有上一页：退回随手记页 */
-const back = (): void => backOr('notes');
-
-/** 手机整页编辑器（#/note/<id>、#/note/new） */
+/** 手机整页编辑器（#/note/<id>、#/note/new；隐私记 #/vault/<id>、#/vault/new） */
 export default function NoteEditPage() {
   // 新建保存后地址换成这一条的 id，编辑器不重挂（同待办编辑页）
-  const { id, key, onCreated } = useEditRoute('note');
+  const { id, key, onCreated } = useEditRoute(useNoteSource().route.edit);
   return <NoteEditor key={key} id={id} onCreated={onCreated} />;
 }
 
@@ -49,7 +49,10 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
   // 编辑器挂着期间占住升级中心的 busy：不出版本横幅、不自动重新载入（同 kit EditShell）；抽屉里由 DetailDrawer 按焦点占（B6 独立评审第 12 条）
   useHoldBusy('editing', !drawer);
   const t = useNotesT();
-  const { Attachments } = useNoteSource();
+  const { Attachments, caps, route, text, moveOut } = useNoteSource();
+  // 直接打开的（书签、刷新）没有上一页：退回列表页
+  const back = (): void => backOr(route.list);
+  const [outFail, setOutFail] = useState(false);
   const ed = useNoteEdit(id, onCreated);
   const tEdit = useEditT();
   const { form, change, readonly, off } = ed;
@@ -72,7 +75,7 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
       <div className={styles.top}>
         {drawer ? null : (
           <Pressable className={styles.back} onClick={back} data-testid="edit-back">
-            {`‹ ${t('note.edit.back', {})}`}
+            {`‹ ${text?.back ?? t('note.edit.back', {})}`}
           </Pressable>
         )}
         <CatChip
@@ -107,6 +110,19 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
           >
             {tEdit('edit.delete', {})}
           </Pressable>
+          {caps.moveOut && noteId ? (
+            <Pressable
+              className={styles.menuItem}
+              onClick={() => {
+                setMenu(false);
+                void moveOut(noteId).then((r) => (r === 'ok' ? (close ?? back)() : setOutFail(r === 'failed')));
+              }}
+              data-testid="note-edit-move-out"
+              data-no-proxy=""
+            >
+              {t('notes.fromVault', {})}
+            </Pressable>
+          ) : null}
         </Popover>
         {close ? <DrawerClose label={t('note.edit.close', {})} onClick={close} testId="note-edit-close" /> : null}
       </div>
@@ -114,6 +130,12 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
       <p className={st.bad ? styles.statusBad : styles.status} role="status" data-testid="edit-status">
         {readonly ? '' : st.text}
       </p>
+      <SyncLine id={noteId} className={styles.notice} />
+      {outFail ? (
+        <p className={styles.notice} role="alert" data-testid="note-edit-out-fail">
+          {t('notes.err.moveOut', {})}
+        </p>
+      ) : null}
       {/* 只读：和“已删除 · 撤销”同一种提示行，一句话加“更新”（同待办编辑页） */}
       {readonly ? <ReadonlyNotice plain role="status" testId="note-edit-ro" updateTestId="note-edit-update" className={styles.roNotice} /> : null}
       {ed.deleted ? (

@@ -26,7 +26,7 @@ export type { DeskPanel };
 
 export interface DeskLayoutProps {
   /** 存 settings 的页名（layout.<page>@inst:…）、日志用 */
-  page: 'today' | 'notes';
+  page: 'today' | 'notes' | 'vault';
   def: DeskLayoutValue;
   /** 每个块的标题和内容；默认布局里的 id 都要有 */
   panels: Readonly<Record<string, DeskPanel>>;

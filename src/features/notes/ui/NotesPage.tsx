@@ -32,11 +32,14 @@
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
 // • 隐私记（B5 S5、S7）：分类胶囊下面一行入口（vault 的 VaultParts lockrow）；“⋯”菜单、左滑（列表方式，kit 的 SwipeRow；一次只露一行、点别处或 Esc 收起由 kit 管）加“移到隐私记”，
 //   移的流程（解锁、重试一次、带附件不能移）在 vault 的 VaultParts move；移好的先在本页藏起来，等同步把它改成隐私记行
+// • 数据来源（B5 隐私记重写 11-15，hooks/note-source.ts）：隐私记页经 NotesSurface 用同一个列表，来源换成隐私记的内存仓库；
+//   两边不一样的只按来源的 caps 分（入口行、合并提示、转成待办 / 日程、移到 / 移出隐私记），标题、空态、编辑页路由、电脑布局存的页名也由来源给；
+//   head 给了就画它、不画本页的大标题和头像（隐私记页的“‹ 随手记 | 🔒 隐私记 | 立即锁上”）
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { Suspense, useRef, useState, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
-import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
+import { navigate, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
@@ -44,22 +47,23 @@ import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
 import { Mist } from '../../../kit/components/Mist.tsx';
 import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
-import { ReadonlyMark, ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
+import { ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
 import { useEditT } from '../../../kit/components/EditNotices.tsx';
-import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { AppearItem, AppearList, Pressable, useSwapWhenSafe } from '../../../motion/components.ts';
+import { AppearItem, AppearList, useSwapWhenSafe } from '../../../motion/components.ts';
 import { VaultParts } from '../../vault/index.ts';
+import { useNoteSource } from '../hooks/note-source.ts';
 import { useMergeHint } from '../hooks/useMergeHint.ts';
 import { useNoteList, type NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
-import { isUndo, mergeUndo, undoTipOf, useNotesToast, type MergeUndo, type UndoTip } from '../hooks/useNotesToast.ts';
+import { isUndo, mergeUndo, undoTipOf, useNotesToast } from '../hooks/useNotesToast.ts';
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
-import { ConvertAsk, MoveAsk, MergeBar, MoreMenu, needsAsk, useConvertFlow, type PageTip } from './NotesActions.tsx';
+import { ConvertAsk, MoveAsk, MergeBar, MoreMenu, needsAsk, swipeActs, useConvertFlow, type PageTip } from './NotesActions.tsx';
 import { Dot } from './CatDot.tsx';
+import { AiMark, Chip, ConvMark, DockTip, FilesMark, RoMark, RowText, SyncDropped, SyncMark, UndoBar } from './NotesBits.tsx';
 import { InputRow, useInputDraft } from './NotesInputRow.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import styles from './NotesPage.module.css';
@@ -73,8 +77,10 @@ export default function NotesPage() {
   return useRoute().name === 'note' ? <NoteEditPage /> : <NotesList />;
 }
 
-function NotesList() {
+export function NotesList({ head }: { head?: ReactNode }) {
   const t = useNotesT();
+  const src = useNoteSource();
+  const { caps } = src;
   const tEdit = useEditT();
   const locale = useUi((s) => s.locale);
   const view = useNotesViewValue();
@@ -85,7 +91,7 @@ function NotesList() {
   const ds = useDrawerSel<{ id: string }>(!!loaded);
   const Desk = ds.on ? loaded : null;
   const l = useNoteList();
-  const a = useListActions<PageTip>('notes', { remove: l.remove });
+  const a = useListActions<PageTip>('notes', { remove: l.remove, ro: src.useReadonly() });
   const { g: guard, g: { toast }, isRo, report } = a;
   // 撤销条还在的那一对，提示条先不出（R-415 复查 B4）
   const merge = useMergeHint(toast?.kind === 'mergeUndo' ? toast.pair : null);
@@ -105,7 +111,7 @@ function NotesList() {
   const [moved, setMoved] = useState<ReadonlySet<string>>(() => new Set());
 
   const selId = ds.sel?.id;
-  const open = (id: string) => (isRo(id) ? guard.block() : ds.open({ id }, () => void navigate('note', id)));
+  const open = (id: string) => (isRo(id) ? guard.block() : ds.open({ id }, () => void navigate(src.route.edit, id)));
   const del = (id: string) => {
     setMenu(null);
     ds.forget(id);
@@ -119,6 +125,12 @@ function NotesList() {
     else setMoving(id);
   };
   const shown = (it: NoteItem) => !moved.has(it.id);
+  /** 移出隐私记（隐私记来源）：没移成出提示 */
+  const moveOut = (id: string) => {
+    setMenu(null);
+    ds.forget(id);
+    void src.moveOut(id).then((r) => (r === 'failed' ? guard.show({ kind: 'conv', key: 'notes.err.moveOut' }) : report(r)));
+  };
   const addImage = useAddImage(l, setJust, report, (m) => guard.show({ kind: 'img', ...m }));
   const conv = useConvertFlow(l.convert, a);
   const add = async (text: string): Promise<boolean> => {
@@ -140,6 +152,7 @@ function NotesList() {
   const more = (it: NoteItem) => (
     <MoreMenu
       id={it.id}
+      caps={caps}
       ro={isRo(it.id)}
       open={menu === it.id}
       onOpenChange={(o) => setMenu(o ? it.id : null)}
@@ -150,6 +163,7 @@ function NotesList() {
         conv.start(it, kind);
       }}
       onMove={() => toVault(it.id)}
+      onMoveOut={() => moveOut(it.id)}
     />
   );
   const aiMark = (it: NoteItem) => (it.ai ? <AiMark id={it.id} /> : null);
@@ -174,18 +188,21 @@ function NotesList() {
   // 隐私记入口行、合并提示、空态、瀑布流或列表：手机直接画在页上，电脑放进 list 块
   const body = (
     <>
-      {/* 隐私记入口行（B5 S5，线框 s7 LOCKROW：分类胶囊下面、合并提示上面；两种显示方式都有） */}
-      <QuietBoundary name="vault-lockrow">
-        <Suspense fallback={null}>
-          <VaultParts part="lockrow" />
-        </Suspense>
-      </QuietBoundary>
+      {/* 隐私记入口行（B5 S5，线框 s7 LOCKROW：分类胶囊下面、合并提示上面；两种显示方式都有）；隐私记页里不出 */}
+      {caps.lockrow ? (
+        <QuietBoundary name="vault-lockrow">
+          <Suspense fallback={null}>
+            <VaultParts part="lockrow" />
+          </Suspense>
+        </QuietBoundary>
+      ) : null}
+      <SyncDropped />
 
-      {merge ? <MergeBar hint={merge} onResult={report} onMerged={(h) => guard.show(mergeUndo(h.key, () => void h.undo().then(report)))} /> : null}
+      {merge && caps.merge ? <MergeBar hint={merge} onResult={report} onMerged={(h) => guard.show(mergeUndo(h.key, () => void h.undo().then(report)))} /> : null}
 
       {l.items.length === 0 ? (
         <p className={list.empty} data-testid="notes-empty">
-          {t('notes.empty', {})}
+          {src.text?.empty ?? t('notes.empty', {})}
         </p>
       ) : null}
 
@@ -216,6 +233,7 @@ function NotesList() {
                     aiMark(it)
                   )}
                   <FilesMark n={it.files} />
+                  <SyncMark id={it.id} />
                   <span className={styles.time}>{timeOf(it, true)}</span>
                   {more(it)}
                 </div>
@@ -237,11 +255,7 @@ function NotesList() {
                       data-testid={`notes-swipe-${it.id}`}
                       look="compact"
                       log={rlog}
-                      actions={[
-                        { key: 'todo', label: t('notes.sw.todo', {}), onClick: () => conv.start(it, 'todo'), testId: `notes-sw-todo-${it.id}` },
-                        { key: 'vault', label: t('notes.sw.vault', {}), onClick: () => toVault(it.id), testId: `notes-sw-vault-${it.id}` },
-                        { key: 'del', label: t('notes.delete', {}), onClick: () => del(it.id), danger: true, testId: `notes-sw-del-${it.id}` },
-                      ]}
+                      actions={swipeActs(t, caps, it.id, { todo: () => conv.start(it, 'todo'), vault: () => toVault(it.id), out: () => moveOut(it.id), del: () => del(it.id) })}
                     >
                       <div className={styles.swRow}>
                       <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
@@ -271,10 +285,12 @@ function NotesList() {
   const mist = typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null;
   const phone = (
     <>
-      <header className={styles.top}>
-        <h1 className={styles.h1}>{t('notes.title', {})}</h1>
-        <MeLink testId="notes-settings" />
-      </header>
+      {head ?? (
+        <header className={styles.top}>
+          <h1 className={styles.h1}>{t('notes.title', {})}</h1>
+          <MeLink testId="notes-settings" />
+        </header>
+      )}
       {filterChips}
       {body}
       {mist}
@@ -283,15 +299,18 @@ function NotesList() {
   );
 
   return (
-    <main ref={page} className={styles.page} data-feature="notes" data-testid="notes" data-view={view}>
+    <main ref={page} className={styles.page} data-feature={src.kind === 'vault' ? 'vault' : 'notes'} data-testid={src.kind === 'vault' ? 'vault-notes' : 'notes'} data-view={view}>
       {/* 电脑版（B6，ui/NotesDesk.tsx）：分类一栏 + 列表一栏；电脑版没换上或画出错时照手机的排法画 */}
       {Desk ? (
         <QuietBoundary name="notes-desk" fallback={phone} onFail={ds.fail}>
           {mist}
           <Desk.default
+            page={src.desk}
+            title={src.text?.title}
             cats={{ total: l.total, counts: l.counts, category: l.category, set: l.setCategory }}
             list={
               <>
+                {head}
                 {body}
                 {dock}
               </>
@@ -335,89 +354,3 @@ function NotesList() {
   );
 }
 
-/** “附件 N”（B4b-1，线框 sAtt 第三张 ATB：列表行尾、瀑布流卡片底部）；没附件不画 */
-function FilesMark({ n }: { n: number }) {
-  const t = useNotesT();
-  return n > 0 ? (
-    <span className={styles.atb} data-testid="notes-files-mark">
-      {t('notes.files', { n })}
-    </span>
-  ) : null;
-}
-
-/** 列表行中间的字：标题；摘要 · 分类（+ AI 小标）；只读行再在下面单独一行标“要新版本” */
-function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: ReactNode }) {
-  return (
-    <span className={row.ltext}>
-      <span className={row.t1}>
-        {it.converted ? <ConvMark id={it.id} /> : null}
-        {it.title}
-      </span>
-      <span className={row.t2}>
-        <span className={row.t2txt}>{[it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
-        {ai}
-        <FilesMark n={it.files} />
-      </span>
-      {ro}
-    </span>
-  );
-}
-
-/** 页底的撤销条：删除的“已删除”、合并分类的“已合并”（R-415 ③），同一个 kit UndoToast、8 秒；画什么、点了做什么都在 tip 里（换一条就换一个 key，重新计时） */
-function UndoBar({ tip, onClose }: { tip: UndoTip; onClose(): void }) {
-  const t = useNotesT();
-  return <UndoToast message={t(tip.msgKey, {})} undoLabel={t('notes.undo', {})} onUndo={tip.undo} onClose={onClose} solo="keep" data-testid={tip.testId} />;
-}
-
-/** 输入行上面的提示条：没保存上、插图提示（空间满了的带“最近删除”入口）、转换结果 */
-function DockTip({ toast }: { toast: { kind: 'error' } | Exclude<PageTip, MergeUndo> }) {
-  const t = useNotesT();
-  return (
-    <p className={styles.error} role="alert" data-testid={toast.kind === 'error' ? 'notes-error' : toast.kind === 'img' ? 'notes-img-tip' : 'notes-conv-tip'}>
-      {t(toast.kind === 'error' ? 'notes.err.save' : toast.key, {})}
-      {toast.kind === 'img' && toast.trash ? (
-        <a className={styles.tipLink} href={hrefOf('trash')} onClick={(e) => plainClick(e) && void navigate('trash')} data-testid="notes-img-trash">
-          {t('notes.img.trash', {})}
-        </a>
-      ) : null}
-    </p>
-  );
-}
-
-function Chip({ on, onClick, label, color, testId }: { on: boolean; onClick(): void; label: string; color: string | null; testId: string }) {
-  return (
-    <Pressable className={on ? styles.chipOn : styles.chip} aria-pressed={on} onClick={onClick} data-testid={testId}>
-      <Dot color={color} big />
-      {label}
-    </Pressable>
-  );
-}
-
-/** 只读行的“要新版本”（S12，kit 的 ReadonlyMark） */
-// 只读标记单独一行：瀑布流放在正文下、底行上，列表放在摘要行下（视觉验收 11-11：挤在底行、摘要行会把时间、分类、“⋯”挤坏）
-const RoMark = ({ ro, id, cls }: { ro: boolean; id: string; cls: string | undefined }) =>
-  ro ? (
-    <span className={cls}>
-      <ReadonlyMark testId={`notes-ro-${id}`} />
-    </span>
-  ) : null;
-
-/** “已转过”描边小标（R-415 ③，负责人定方案丙）：卡片、列表行的标题前；后面一个视觉隐藏的“，”，读屏读成“已转过，标题”不连在一起 */
-function ConvMark({ id }: { id: string }) {
-  const t = useNotesT();
-  return (
-    <span className={styles.conv} data-testid={`notes-conv-${id}`}>
-      {t('notes.converted', {})}
-      <span className={styles.convSep}>，</span>
-    </span>
-  );
-}
-
-function AiMark({ id }: { id: string }) {
-  const t = useNotesT();
-  return (
-    <span className={styles.ai} aria-label={t('notes.aiLabel', {})} data-testid={`notes-ai-${id}`}>
-      {t('notes.ai', {})}
-    </span>
-  );
-}

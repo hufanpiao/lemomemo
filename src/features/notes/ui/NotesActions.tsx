@@ -1,5 +1,6 @@
 // 随手记页的“⋯”菜单、合并分类提示条、转成待办 / 日程的流程和确认窗（从 NotesPage.tsx 拆出来，R-413、R-414 11-13）
-// • 菜单：转成待办 / 转成日程 / 移到隐私记（B5 S7）/ 删除；只读行变淡、点了由页面拦下
+// • 菜单：转成待办 / 转成日程 / 移到隐私记（B5 S7）/ 删除；只读行变淡、点了由页面拦下。
+//   隐私记来源（B5 隐私记重写 11-15）按 caps 去掉转换、移进，换成“移出隐私记”；左滑的几个按钮同一套（swipeActs）
 // • 提示条（R-413，线框 MERGE）：“‘读书’和‘书单’两个分类很像，合成一个吗？ 合并 / 不用”
 // • 转换（R-414）的规则见 shared/logic/notes/note-convert.ts 文件头；结果出在输入行上面
 import { useState } from 'react';
@@ -11,6 +12,7 @@ import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { MergeHint } from '../hooks/useMergeHint.ts';
 import type { MergeUndo } from '../hooks/useNotesToast.ts';
+import type { NoteCaps } from '../hooks/note-source.ts';
 import { actionResult, type ActionResult, type ConvertKind, type NoteItem, type useNoteList } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
 import type { ImgMsgKey } from './NoteImages.tsx';
@@ -19,7 +21,7 @@ import styles from './NotesPage.module.css';
 
 /** 随手记页自己另加的提示条：插图提示、转换结果、合并的撤销条（删除的撤销条、出错条在 kit 的 useListActions 里） */
 export type ImgTip = { kind: 'img'; key: ImgMsgKey; trash: boolean };
-export type ConvTip = { kind: 'conv'; key: Extract<NotesMsgKey, `notes.conv.${'moved' | 'kept'}.${string}` | 'notes.conv.empty' | 'notes.conv.left' | 'notes.conv.long'> };
+export type ConvTip = { kind: 'conv'; key: Extract<NotesMsgKey, `notes.conv.${'moved' | 'kept'}.${string}` | 'notes.conv.empty' | 'notes.conv.left' | 'notes.conv.long' | 'notes.err.moveOut'> };
 export type PageTip = ImgTip | ConvTip | MergeUndo;
 /** 带插图的转换要先问一下（R-414，线框 S8-2） */
 export type ConvAsk = { id: string; kind: ConvertKind; images: number; files: number };
@@ -37,8 +39,8 @@ function whatText(t: ReturnType<typeof useNotesT>, scope: 'conv' | 'move', files
  * “⋯”菜单：看得见 24px，点按区 ::after 扩到 44。转成待办 / 转成日程（R-414）、移到隐私记（B5 S7，线框 s7 菜单）在“删除”上面。
  * long：备注放不下，两项变淡（aria-disabled）、下面写原因，点了不动；只读行的两项也变淡，点了由页面拦下
  */
-export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert, onMove }: {
-  id: string; ro: boolean; open: boolean; onOpenChange(o: boolean): void; onDelete(): void; long: boolean; onConvert(kind: ConvertKind): void; onMove(): void;
+export function MoreMenu({ id, caps, ro, open, onOpenChange, onDelete, long, onConvert, onMove, onMoveOut }: {
+  id: string; caps: NoteCaps; ro: boolean; open: boolean; onOpenChange(o: boolean): void; onDelete(): void; long: boolean; onConvert(kind: ConvertKind): void; onMove(): void; onMoveOut(): void;
 }) {
   const t = useNotesT();
   const conv = (kind: ConvertKind) => (
@@ -65,22 +67,39 @@ export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert
         </button>
       }
     >
-      {conv('todo')}
-      {conv('event')}
-      {long ? (
+      {caps.convert ? conv('todo') : null}
+      {caps.convert ? conv('event') : null}
+      {caps.convert && long ? (
         <p className={row.menuNote} data-testid={`notes-conv-long-${id}`}>
           {t('notes.conv.long', {})}
         </p>
       ) : null}
-      <Pressable className={`${row.menuItem} ${row.menuPlain}`} aria-disabled={ro || undefined} onClick={onMove} data-testid={`notes-to-vault-${id}`} data-no-proxy="">
-        {t('notes.toVault', {})}
-      </Pressable>
+      {caps.moveIn ? (
+        <Pressable className={`${row.menuItem} ${row.menuPlain}`} aria-disabled={ro || undefined} onClick={onMove} data-testid={`notes-to-vault-${id}`} data-no-proxy="">
+          {t('notes.toVault', {})}
+        </Pressable>
+      ) : null}
+      {caps.moveOut ? (
+        <Pressable className={`${row.menuItem} ${row.menuPlain}`} onClick={onMoveOut} data-testid={`notes-from-vault-${id}`} data-no-proxy="">
+          {t('notes.fromVault', {})}
+        </Pressable>
+      ) : null}
       {/* 只读行的“删除”变淡、aria-disabled，点了照样由 del 拦下出提示条（同待办页的 ×） */}
       <Pressable className={row.menuItem} aria-disabled={ro || undefined} onClick={onDelete} data-testid={`notes-del-${id}`} data-no-proxy="">
         {t('notes.delete', {})}
       </Pressable>
     </Popover>
   );
+}
+
+/** 列表方式左滑露出的按钮（B5 S7，线框 s7 NOTEROW_SW）：和“⋯”菜单同一套动作，按来源的 caps 取舍；删除一直在最后 */
+export function swipeActs(t: ReturnType<typeof useNotesT>, caps: NoteCaps, id: string, go: { todo(): void; vault(): void; out(): void; del(): void }) {
+  return [
+    ...(caps.convert ? [{ key: 'todo', label: t('notes.sw.todo', {}), onClick: go.todo, testId: `notes-sw-todo-${id}` }] : []),
+    ...(caps.moveIn ? [{ key: 'vault', label: t('notes.sw.vault', {}), onClick: go.vault, testId: `notes-sw-vault-${id}` }] : []),
+    ...(caps.moveOut ? [{ key: 'out', label: t('notes.sw.out', {}), onClick: go.out, testId: `notes-sw-out-${id}` }] : []),
+    { key: 'del', label: t('notes.delete', {}), onClick: go.del, danger: true, testId: `notes-sw-del-${id}` },
+  ];
 }
 
 /**

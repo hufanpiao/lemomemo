@@ -106,4 +106,11 @@ export const ko = {
   'notes.todayNone': '오늘은 아직 없어요', // REVIEW(ko) B6
   'notes.allName': '전체', // REVIEW(ko) B6
   'notes.aiHint': '분류는 AI가 만들어요', // REVIEW(ko) B6
+  'notes.fromVault': '비밀 메모에서 꺼내기', // REVIEW(ko) B5 隐私记重写
+  'notes.sw.out': '비밀 메모에서\n꺼내기',// REVIEW(ko) B5 隐私记重写
+  'notes.err.moveOut': '옮기지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko) B5 隐私记重写
+  'notes.sync.failed': '저장 안 됨', // REVIEW(ko) B5 隐私记重写
+  'notes.sync.retry': '다시 시도', // REVIEW(ko) B5 隐私记重写
+  'notes.sync.dropped': '저장하지 못한 변경 {n}건이 있어요', // REVIEW(ko) B5 隐私记重写
+  'notes.sync.ok': '확인', // REVIEW(ko) B5 隐私记重写
 } as const satisfies Record<keyof typeof zh, string>;

@@ -4,6 +4,7 @@
 //   list（标题是当前分类“全部 34”；隐私记入口行、合并提示、瀑布流或列表、底部输入行，都是 NotesPage 画好的）
 // • 默认两栏：左 0.22 分类、右 0.78 列表（线框 s7）；排法、拖动、收起、保存都在 kit 的 DeskLayout
 // • 详情抽屉：DeskLayout 给出抽屉在哪边和换边把手，交给 NotesPage 画 NoteDrawer
+// • 隐私记页（B5 隐私记重写 11-15）用同一个：page = 'vault'（布局和随手记分开存），title 换成“隐私记”
 import type { ReactNode } from 'react';
 import { LAYOUT_V, type DeskLayoutValue } from '../../../../shared/schema/layout.ts';
 import DeskLayout from '../../../kit/components/DeskLayout/DeskLayout.tsx';
@@ -31,25 +32,30 @@ export interface DeskCats {
 }
 
 export interface NotesDeskProps {
+  /** 布局存进 settings 用的页名（来源的 desk） */
+  page: 'notes' | 'vault';
+  /** 分类栏标题、读屏 h1；不给就是“随手记” */
+  title: string | undefined;
   cats: DeskCats;
   /** list 块的内容（NotesPage 画好的） */
   list: ReactNode;
   drawer: ((side: 'left' | 'right', handle: ReactNode) => ReactNode) | undefined;
 }
 
-export default function NotesDesk({ cats, list, drawer }: NotesDeskProps) {
+export default function NotesDesk({ page, title, cats, list, drawer }: NotesDeskProps) {
   const t = useNotesT();
   const cur = cats.counts.find((c) => c.id === cats.category);
+  const name = title ?? t('notes.title', {});
   const panels = {
-    cats: { title: t('notes.title', {}), big: 22 as const, body: <CatList cats={cats} /> },
+    cats: { title: name, big: 22 as const, body: <CatList cats={cats} /> },
     // list 里有输入行（侧栏“＋”要聚焦它）：不能收起
     list: { title: cur ? `${cur.name} ${cur.count}` : t('notes.all', { n: cats.total }), big: 24 as const, body: list, fixed: true },
   };
   return (
     <>
       {/* 页面主标题：电脑版看得见的是“随手记”块标题，读屏仍要一个 h1 */}
-      <h1 className={styles.sr}>{t('notes.title', {})}</h1>
-      <DeskLayout page="notes" def={NOTES_DEFAULT} panels={panels} drawer={drawer} />
+      <h1 className={styles.sr}>{name}</h1>
+      <DeskLayout page={page} def={NOTES_DEFAULT} panels={panels} drawer={drawer} />
     </>
   );
 }

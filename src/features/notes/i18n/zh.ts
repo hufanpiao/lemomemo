@@ -109,4 +109,12 @@ export const zh = {
   'notes.allName': '全部',
   // 电脑版分类栏底下的小字（线框 SIDENOTES；拖动排序、右键改名合并还没做，先只写这半句）
   'notes.aiHint': '分类由 AI 建立',
+  // 隐私记来源（B5 隐私记重写 11-15）：移出隐私记、后台同步状态
+  'notes.fromVault': '移出隐私记',
+  'notes.sw.out': '移出\n隐私记',
+  'notes.err.moveOut': '没移出去，稍后再试一次',
+  'notes.sync.failed': '没保存上',
+  'notes.sync.retry': '重试',
+  'notes.sync.dropped': '有 {n} 处改动没来得及保存',
+  'notes.sync.ok': '知道了',
 } as const;

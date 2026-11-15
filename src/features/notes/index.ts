@@ -12,3 +12,9 @@ export const routes = [
 /** 电脑版今天页的“今天记的”块（B6，5.9b 的 notes-today；ui/TodayNotes.tsx）：只在电脑版今天页挂；onCount 报今天一共几条（块标题用）。
  *  同一个入口按 part 还画抽屉里的编辑器（'edit'）和查找面板里一张插图的缩略图（'thumb'，B4b-3；不另开入口，这个文件在首屏主包里） */
 export const TodayNotes = lazy(() => import('./ui/TodayNotes.tsx'));
+
+/** 随手记的整套界面（列表、编辑器、电脑分栏、插图、看图页），数据来源由调用方给（B5 隐私记重写 11-15：隐私记页用它）。
+ *  props: { source: NoteSource; editing: boolean（画编辑器还是列表）; head?: 列表页顶上替换大标题的一块 } */
+export const NotesSurface = lazy(() => import('./ui/NotesSurface.tsx'));
+
+export type { NoteSource } from './hooks/note-source.ts';
