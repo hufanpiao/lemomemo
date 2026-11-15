@@ -101,11 +101,14 @@ function changedOf<F>(shown: F, next: F): Partial<F> {
   return out;
 }
 
+/** 这一页的读写口子：spec.io，不给就是 localIo（只在这一处取，钩子和三种写入共用） */
+const ioOf = (spec: { io?: EditIo }): EditIo => spec.io ?? localIo;
+
 export function useEditRecord<F>(spec: EditRecordSpec<F>): EditRecord<F> {
   const isNewRoute = spec.id === 'new';
   const [createdId, setCreatedId] = useState<string | null>(null);
   const recordId = isNewRoute ? createdId : spec.id;
-  const io = spec.io ?? localIo;
+  const io = ioOf(spec);
   const roIds = io.useReadonly(spec.table);
   const row = io.useRow(spec.table, recordId);
   const [dirty, setDirtyState] = useState<Partial<F>>({});
@@ -185,7 +188,7 @@ export function useEditRecord<F>(spec: EditRecordSpec<F>): EditRecord<F> {
           // 第一次：insert 整行（新建页没有别人的修改要防，整张表单就是这一次要写的）
           const id = (s.newId ?? (() => crypto.randomUUID()))();
           const whole = { ...(empty.current as F), ...dirtyRef.current } as F;
-          r = await (s.io ?? localIo).insert(s.table, s.newRow(id, whole, now), s.hasRemind({ row: undefined, data: null, prev: null, next: whole, tz, now }));
+          r = await ioOf(s).insert(s.table, s.newRow(id, whole, now), s.hasRemind({ row: undefined, data: null, prev: null, next: whole, tz, now }));
           if (r === 'saved') {
             created.current = id;
             sentForm.current = whole;
@@ -218,7 +221,7 @@ export function useEditRecord<F>(spec: EditRecordSpec<F>): EditRecord<F> {
         const tz = s.tz ? s.tz() : currentTz();
         const f = s.formOf(cur);
         const remind = s.hasRemind({ row: cur, data: { deleted_at: deleted ? now : null }, prev: f, next: f, tz, now });
-        const r = await (s.io ?? localIo).setDeleted(s.table, cur.id, deleted, now, remind);
+        const r = await ioOf(s).setDeleted(s.table, cur.id, deleted, now, remind);
         if (mine === seq.current) setStatus(r);
         return r;
       });
@@ -267,7 +270,7 @@ async function patchFields<F>(c: PatchCtx<F>, fields: Partial<F>): Promise<SaveO
   const rowNow = cur ?? s.newRow(id, prev, now);
   const target = { ...prev, ...fields } as F;
   const data = s.patchOf(rowNow, prev, target, now);
-  const r = data ? await (s.io ?? localIo).patch(s.table, id, data, s.hasRemind({ row: rowNow, data, prev, next: target, tz, now })) : 'saved';
+  const r = data ? await ioOf(s).patch(s.table, id, data, s.hasRemind({ row: rowNow, data, prev, next: target, tz, now })) : 'saved';
   if (r === 'saved' && !cur) c.sentForm.current = target;
   return r;
 }
