@@ -1,5 +1,6 @@
 // 周视图·电脑排布（B2 FA-3，皮肤视觉稿 .dwkv；从 WeekView.tsx 拆出来）：7 列时间格，纵向时间轴每小时 40 px
-// • 表头：星期、日期（今天墨色细圈 / 柠檬黄底）、节日或农历；补班写“班·名字”、放假的表头和那一列灰底（和月格、手机泳道一致，代码复审 N4）；
+// • 表头：星期、日期（今天墨色细圈 / 柠檬黄底）、节日或农历；补班写“班·名字”，连休只在第一天写节日名；
+//   放假、补班的表头和那一列画斜纹（和月格、手机泳道同一个类 .holiday / .workday，代码复审 N4、R-432）；
 //   点表头选中那一天，下面清单列出当天全部
 // • 顶部“全天”行：全天日程和当天截止的待办（○ 标题），点了打开编辑页
 // • 时间格：范围同手机（按当周事项自动伸缩，ui/week-axis.ts）；重叠的并排分列（buildWeek layout 'desk' 的 column / columns）；
@@ -10,7 +11,7 @@ import type { DeskDay } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
 import { useRoT } from '../../../kit/hooks/useRoT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, hm, holText, itemShort, itemTitle, labelInName, weekdayKey } from './cal-ui.ts';
+import { colorClass, dayKind, dayKindClass, hm, holText, itemShort, itemTitle, labelInName, namedHolidays, weekdayKey } from './cal-ui.ts';
 import type { HourRange } from './week-axis.ts';
 import type { WeekProps } from './WeekView.tsx';
 
@@ -26,22 +27,25 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
   const isRo = p.isRo ?? (() => false);
   const roLabel = (ro: boolean, label: string): string => (ro ? tRo('ro.named', { label }) : label);
   const dates = weekDates(p.start);
+  // 每天的斜纹类（表头和那一列同一个，和月格、手机泳道共用 .holiday / .workday）
+  const kinds = dates.map((date) => dayKindClass(dayKind(p.holidays.get(date) ?? [])));
   const hours = Array.from({ length: range.h1 - range.h0 }, (_, i) => range.h0 + i);
   const colH = (range.h1 - range.h0) * DESK_HOUR_PX;
   const y = (min: number): number => ((min - range.h0 * 60) / 60) * DESK_HOUR_PX;
   return (
     <section aria-label={p.label} data-testid="cal-week" data-layout="desk" data-range={`${range.h0}-${range.h1}`} className={`${styles.card} ${styles.dwk}`}>
       <div className={styles.dHead} />
-      {dates.map((date) => {
+      {dates.map((date, i) => {
         const sel = p.selected === date;
         const hol = p.holidays.get(date) ?? [];
-        const off = hol.some((h) => h.kind === 'off');
-        const sub = hol[0] ? holText(hol[0], t('cal.workday', {})) : (p.lunarOf?.(date) ?? '');
+        // 连休只在第一天写节日名，后几天照常写农历或节气（和月格同一条规则）
+        const [named] = namedHolidays(date, hol, p.holidays);
+        const sub = named ? holText(named, t('cal.workday', {})) : (p.lunarOf?.(date) ?? '');
         return (
           <button
             key={date}
             type="button"
-            className={[styles.dHead, styles.dHeadBtn, off ? styles.dOff : '', sel ? styles.dHeadSel : ''].filter(Boolean).join(' ')}
+            className={[styles.dHead, styles.dHeadBtn, kinds[i] ?? '', sel ? styles.dHeadSel : ''].filter(Boolean).join(' ')}
             aria-pressed={sel}
             onClick={() => p.onSelect(date)}
             data-date={date}
@@ -90,7 +94,7 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
       {dates.map((date, i) => (
         <div
           key={`col-${date}`}
-          className={[styles.dCol, (p.holidays.get(date) ?? []).some((h) => h.kind === 'off') ? styles.dOff : ''].filter(Boolean).join(' ')}
+          className={[styles.dCol, kinds[i] ?? ''].filter(Boolean).join(' ')}
           style={{ height: colH }}
         >
           {date === today && nowMin >= range.h0 * 60 && nowMin <= range.h1 * 60 ? <i className={styles.dNow} style={{ top: y(nowMin) }} data-testid="cal-now" /> : null}

@@ -332,8 +332,17 @@
   color: var(--text-2);
 }
 
-/* 放假：柠檬黄细斜虚线；调休补班：中性色细斜虚线 + 右上角“班”圆标（负责人 11-15“照参考图做”）。周末不另上颜色。
-   斜纹是“\”方向的 1px 细线（45° 渐变），再用 135° 的遮罩切成虚线；z-index -1 + 格子 isolation，压在字下面 */
+/* 节假日斜纹（负责人 11-15“照参考图做”；月格、手机周泳道、电脑周表头和那一列共用这一套，cal-ui.ts dayKindClass）：
+   放假柠檬黄细斜虚线，调休补班中性色细斜虚线；周末不另上颜色。
+   斜纹是“\”方向的 1px 细线（45° 渐变），再用 135° 的遮罩切成虚线；z-index -1 + isolation，压在字下面、底色（选中的 --panel-2）上面。
+   减少透明效果也是这一种画法（斜纹本来就是不透明的图案，不靠模糊）。
+   斜纹从字底下穿过：透明度按“叠在格子底 / 选中底上，节日名、次要文字、日期数字仍 ≥ 4.5”定（contrast-pairs.json hol-stripe-*、work-stripe-*） */
+.holiday,
+.workday {
+  position: relative;
+  isolation: isolate;
+}
+
 .holiday::before,
 .workday::before {
   position: absolute;
@@ -359,23 +368,22 @@
   opacity: 0.5;
 }
 
-/* 减少透明效果：垫上节假日底色，斜线不切成虚线，照样看得清 */
-:global(:root[data-rt='1']) .holiday,
-:global(:root[data-rt='1']) .workday {
-  background: var(--hol-bg);
+/* 第一行：日期数字 + 右边的补班标。放不下（窄屏的韩文“근무”）时标折到下一行、仍靠右，不压“今天”圆底（R-432 评审第 3 条） */
+.cellTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  row-gap: 2px;
 }
 
-:global(:root[data-rt='1']) .holiday::before,
-:global(:root[data-rt='1']) .workday::before {
-  mask-image: none;
-}
-
+/* 补班“班”标：中文单字是 15 px 的圆，韩文“근무”撑成胶囊（min-width + 左右 3 px） */
 .ban {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 15px;
+  box-sizing: border-box;
+  flex: none;
+  margin-left: auto;
+  min-width: 15px;
   height: 15px;
+  padding: 0 3px;
   border-radius: var(--r-pill);
   background: var(--accent);
   color: var(--on-accent);
@@ -383,6 +391,7 @@
   font-weight: 600;
   line-height: 15px;
   text-align: center;
+  white-space: nowrap;
 }
 
 .sel {
@@ -410,6 +419,18 @@
   font-weight: 700;
 }
 
+/* 手机窄屏（一格不到约 55 px）：日期圆缩到 20 px、格子左右各让 1 px，“今天”圆底和“班”标排得进同一行（320 宽中文；R-432 评审第 3 条） */
+@media (width < 420px) {
+  .cell {
+    padding-inline: 2px;
+  }
+
+  .dayNum {
+    min-width: 20px;
+    height: 20px;
+  }
+}
+
 /* 一行文字：节假日 > 节气 > 农历；纪念日菱形跟在后面。一直占着高度：农历按需加载，加载前后格子不跳动 */
 .line {
   display: flex;
@@ -429,13 +450,9 @@
   text-overflow: ellipsis;
 }
 
+/* 那一行写的是放假的节日名时才挂（MonthGrid 按 kind 只挂这一个类）；农历、节气、补班名照 .line 的 --text-2 */
 .holName {
   color: var(--hol-name);
-}
-
-.lunar,
-.work {
-  color: var(--text-2);
 }
 
 /* 纪念日菱形（R-105）：柠檬黄填充 + 正文色边（深色模式正文色是浅色，自动成浅色边） */
@@ -603,10 +620,6 @@
 
 .lane {
   border-top: 1px solid var(--line);
-}
-
-.laneOff {
-  background: var(--hol-bg);
 }
 
 .laneSel {
@@ -1025,11 +1038,6 @@
   height: 4px;
   border-radius: var(--r-pill);
   background: var(--text-2);
-}
-
-/* 电脑周视图：放假的表头和那一列灰底（代码复审 N4） */
-.dOff:not(.dHeadSel) {
-  background-color: var(--hol-bg);
 }
 
 /* 拖动柄已经占了 44 px 高，清单不再另留上边距 */
