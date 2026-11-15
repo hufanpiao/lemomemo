@@ -14,7 +14,7 @@
 // • 时刻、时区：now 取 platform/clock（带偏差校正，K8-clock），浮动时刻按 core 的 currentTz
 // • 删除、撤销删除：软删（deleted_at），撤销把它改回 null（ADR-006）；也算 remind 标记（补审改法 ④）
 // • remind 标记由 spec.hasRemind 按“这一行、这次实际写出去的列”算（prevRemindAt 传不传在 data 层，补审改法 ①～③）
-// • 读行、只读 id、三种写入走 spec.io（不给就是 localIo：本机集合 + core 的 edit-save，进 outbox）；隐私记（B5 重写，11-15）给的是自己的内存仓库，
+// • 读行、只读 id、三种写入走 spec.io（不给就是 localIo：本机集合 + core 的 edit-save，进 outbox）；调用方也可以给自己的仓库，
 //   页面和这里的规则一份不变
 import { useCallback, useRef, useState } from 'react';
 import type { Tz } from '../../../shared/core/tz.ts';
