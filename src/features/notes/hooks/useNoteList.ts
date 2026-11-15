@@ -36,10 +36,11 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   // 每分钟重算一次（过了半夜“今天”变“昨天”）
   const now = useMinuteNow();
   const tz = currentTz();
-  // 分类合并绕成圈的写回（数据层只写一次）
+  // 分类合并绕成圈的写回（数据层只写一次）；来源不支持合并分类（caps.merge=false，如隐私记）不写本机分类
+  const fixCycles = src.caps.merge;
   useEffect(() => {
-    void fixCategoryCycles(cats);
-  }, [cats]);
+    if (fixCycles) void fixCategoryCycles(cats);
+  }, [cats, fixCycles]);
   const counts = useMemo(() => categoryCounts(rows, cats, locale), [rows, cats, locale]);
   // 筛的分类没了（最后一条删掉、分类被合并）：回到“全部”
   const active = category !== null && counts.some((c) => c.id === category) ? category : null;

@@ -30,14 +30,14 @@ export interface MergeHint {
 const pairKey = (p: Pick<MergePair, 'keep' | 'merge'>): string => [p.keep, p.merge].sort().join('|');
 const EMPTY: ReadonlySet<string> = new Set();
 
-/** shown：页面当前撤销条对应的那一对（没有撤销条为 null） */
-export function useMergeHint(shown: string | null): MergeHint | null {
+/** shown：页面当前撤销条对应的那一对（没有撤销条为 null）；on=false（来源不支持合并分类，caps.merge）就不算、一直回 null */
+export function useMergeHint(shown: string | null, on = true): MergeHint | null {
   const cats = useCollection<Row>('categories');
   const { rows: settings, writer } = useSettingWriter();
   const [undoing, setUndoing] = useState(EMPTY);
   const pair: MergePair | undefined = useMemo(
-    () => openMergePairs(cats, settings).find((p) => pairKey(p) !== shown && !undoing.has(pairKey(p))),
-    [cats, settings, shown, undoing],
+    () => (on ? openMergePairs(cats, settings).find((p) => pairKey(p) !== shown && !undoing.has(pairKey(p))) : undefined),
+    [on, cats, settings, shown, undoing],
   );
   if (!pair) return null;
   const key = pairKey(pair);

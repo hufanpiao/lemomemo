@@ -20,11 +20,11 @@ import { boot, open, sendNext, serverNote, setupImageTests, uid, wire, type Row 
 /** 连点、计时两条用的桩：不为 null 时页面拿它当提示条 */
 let stubHint: MergeHint | null = null;
 vi.mock('../hooks/useMergeHint.ts', async (importOriginal) => {
-  const m = await importOriginal<{ useMergeHint(shown: string | null): MergeHint | null }>();
+  const m = await importOriginal<{ useMergeHint(shown: string | null, on?: boolean): MergeHint | null }>();
   return {
     ...m,
-    useMergeHint: (shown: string | null) => {
-      const real = m.useMergeHint(shown);
+    useMergeHint: (shown: string | null, on?: boolean) => {
+      const real = m.useMergeHint(shown, on);
       return stubHint ?? real;
     },
   };
