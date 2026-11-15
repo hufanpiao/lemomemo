@@ -57,13 +57,6 @@
   line-height: 1.5;
 }
 
-.keys {
-  margin: 12px 0 0;
-  color: var(--text-2);
-  font-size: var(--fs-12);
-  text-align: center;
-}
-
 /* 解锁后的列表、编辑器是随手记那一份（notes 的 NotesSurface，11-15 隐私记重写）；“最近删除”的外框用 kit 的 NoteRow.module.css 的 .lst，行用下面的 .row */
 .row {
   display: flex;
@@ -112,13 +105,6 @@
   color: var(--text-2);
   font-size: var(--fs-14);
   text-align: center;
-}
-
-.section {
-  margin: 20px 0 6px;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-  font-weight: 400;
 }
 
 .trashLink {

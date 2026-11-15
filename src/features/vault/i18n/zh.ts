@@ -12,7 +12,6 @@ export const zh = {
   'vault.retry': '重试',
   'vault.cancel': '取消',
   'vault.ok': '知道了',
-  'vault.shield': '柠檬记',
   'vault.method.faceid': 'Face ID',
   'vault.method.hello': 'Windows Hello',
 
@@ -52,8 +51,6 @@ export const zh = {
   'vault.purge.body': '删除后不能恢复。',
   'vault.purgeAll.title': '清空隐私记的最近删除？',
   'vault.purgeAll.body': '{n} 条会被永久删除，不能恢复。',
-  'vault.deleted': '已移到最近删除',
-  'vault.movedOut': '已移回随手记',
 
   'vault.lockrow.locked': '已上锁',
   'vault.lockrow.unlocked': '已解锁',
@@ -66,8 +63,6 @@ export const zh = {
   'vault.findrow.go': '打开隐私记',
 
   'vault.move': '移到隐私记',
-  'vault.moved': '已移到隐私记',
-  'vault.moving': '正在移到隐私记…',
 
   'vault.set.setup': '设个密码',
   'vault.set.setupSub': '设好以后，随手记可以移进来，别人打开 App 也看不到',
@@ -78,7 +73,6 @@ export const zh = {
   'vault.set.removeTitle': '移除这台设备的 {method}？',
   'vault.set.removeBody': '移除后这台设备只能输入密码解锁。',
   'vault.set.bindPin': '输入隐私记密码来绑定 {method}',
-  'vault.set.bound': '{method} 已绑定',
   'vault.set.bindFail': '没有绑定成功，请重试',
   'vault.set.autolock': '自动上锁',
   'vault.set.autolockVal': '离开 {n} 分钟',
@@ -87,12 +81,10 @@ export const zh = {
   'vault.set.forgotSub': '用登录邮箱重设',
   'vault.set.lastReset': '上次重设',
   'vault.set.never': '没有重设过',
-  'vault.set.unlockFirst': '先解锁隐私记',
   'vault.min': '{n} 分钟',
 
   'vault.change.old': '输入现在的密码',
   'vault.change.new': '输入新密码',
-  'vault.change.again': '再输一次新密码',
   'vault.change.done': '密码已修改',
 
   'vault.reset.title': '用登录邮箱重设密码',

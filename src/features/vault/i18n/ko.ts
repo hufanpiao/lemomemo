@@ -14,7 +14,6 @@ export const ko = {
   'vault.retry': '다시 시도', // REVIEW(ko)
   'vault.cancel': '취소', // REVIEW(ko)
   'vault.ok': '확인', // REVIEW(ko)
-  'vault.shield': '레모', // REVIEW(ko)
   'vault.method.faceid': 'Face ID', // REVIEW(ko)
   'vault.method.hello': 'Windows Hello', // REVIEW(ko)
 
@@ -54,8 +53,6 @@ export const ko = {
   'vault.purge.body': '삭제하면 되돌릴 수 없어요.', // REVIEW(ko)
   'vault.purgeAll.title': '비밀 메모의 최근 삭제를 비울까요?', // REVIEW(ko)
   'vault.purgeAll.body': '{n}개가 영구 삭제되고 되돌릴 수 없어요.', // REVIEW(ko)
-  'vault.deleted': '최근 삭제로 옮겼어요', // REVIEW(ko)
-  'vault.movedOut': '메모로 되돌렸어요', // REVIEW(ko)
 
   'vault.lockrow.locked': '잠김', // REVIEW(ko)
   'vault.lockrow.unlocked': '잠금 해제됨', // REVIEW(ko)
@@ -68,8 +65,6 @@ export const ko = {
   'vault.findrow.go': '비밀 메모 열기', // REVIEW(ko)
 
   'vault.move': '비밀 메모로 옮기기', // REVIEW(ko)
-  'vault.moved': '비밀 메모로 옮겼어요', // REVIEW(ko)
-  'vault.moving': '비밀 메모로 옮기는 중…', // REVIEW(ko)
 
   'vault.set.setup': '비밀번호 정하기', // REVIEW(ko)
   'vault.set.setupSub': '정해 두면 메모를 옮겨 넣을 수 있고, 다른 사람이 앱을 열어도 볼 수 없어요', // REVIEW(ko)
@@ -80,7 +75,6 @@ export const ko = {
   'vault.set.removeTitle': '이 기기의 {method}를 삭제할까요?', // REVIEW(ko)
   'vault.set.removeBody': '삭제하면 이 기기는 비밀번호로만 잠금 해제할 수 있어요.', // REVIEW(ko)
   'vault.set.bindPin': '{method}를 연결하려면 비밀 메모 비밀번호를 입력하세요', // REVIEW(ko)
-  'vault.set.bound': '{method}를 연결했어요', // REVIEW(ko)
   'vault.set.bindFail': '연결하지 못했어요. 다시 시도해 주세요', // REVIEW(ko)
   'vault.set.autolock': '자동 잠금', // REVIEW(ko)
   'vault.set.autolockVal': '떠나고 {n}분', // REVIEW(ko)
@@ -89,12 +83,10 @@ export const ko = {
   'vault.set.forgotSub': '로그인 이메일로 다시 정하기', // REVIEW(ko)
   'vault.set.lastReset': '마지막 재설정', // REVIEW(ko)
   'vault.set.never': '재설정한 적 없음', // REVIEW(ko)
-  'vault.set.unlockFirst': '먼저 비밀 메모를 잠금 해제하세요', // REVIEW(ko)
   'vault.min': '{n}분', // REVIEW(ko)
 
   'vault.change.old': '지금 비밀번호를 입력하세요', // REVIEW(ko)
   'vault.change.new': '새 비밀번호를 입력하세요', // REVIEW(ko)
-  'vault.change.again': '새 비밀번호를 한 번 더 입력하세요', // REVIEW(ko)
   'vault.change.done': '비밀번호를 바꿨어요', // REVIEW(ko)
 
   'vault.reset.title': '로그인 이메일로 비밀번호 다시 정하기', // REVIEW(ko)
