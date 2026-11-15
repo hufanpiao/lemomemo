@@ -8,7 +8,7 @@
 // • 附件区：attachments 的 VaultAttachments + 会话的 vault-file 方法（fileApiOf）；服务器上还没有这一条（新建还没存上）时不挂
 // • caps：没有 AI、转待办、合并分类、入口行、移进、附件个数；有“移出隐私记”；只读集合一直是空的
 // • 运行日志只记动作、结果码、大小，不记标题、正文、图片 id
-import { useEffect, useMemo, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { createElement, Suspense } from 'react';
 import { uuidv7 } from '../../../core/uuidv7.ts';
 import type { EditIo } from '../../../kit/hooks/useEditRecord.ts';
@@ -20,12 +20,13 @@ import type {
 } from '../../notes/index.ts';
 import type { VaultFail } from '../data/vault-api.ts';
 import type { VaultSession } from '../data/session.ts';
-import { imageRowOf, type Row, type StoreSnap } from '../data/vault-store.ts';
+import { imageRowOf, type Row, type StoreSnap, type UploadState } from '../data/vault-store.ts';
 import { useVault, vaultSession } from './useVault.ts';
 import { useVaultT } from './useVaultT.ts';
 
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 const NO_FILES: readonly Row[] = [];
+const NO_IMGS: ImgSel = [];
 
 const fileFail = (r: VaultFail): VaultFileFail => ({ ok: false, code: r.fileCode ?? r.code, ...(r.reason ? { reason: r.reason } : {}) });
 
@@ -66,6 +67,26 @@ export function useVaultStore(): StoreSnap {
   return useSyncExternalStore(st.subscribe, st.getSnapshot, st.getSnapshot);
 }
 
+/**
+ * 只订仓库里自己要的那一块（M5：打一个字仓库就换一份快照，整份订阅会让每张卡片的图都重算）：
+ * 选出来的和上一次 eq 就还回上一次那一份，React 不重渲染
+ */
+function useStoreSelect<T>(select: (snap: StoreSnap) => T, eq: (a: T, b: T) => boolean = Object.is): T {
+  const st = vaultSession().store;
+  const last = useRef<{ v: T } | null>(null);
+  const get = useCallback((): T => {
+    const next = select(st.getSnapshot());
+    if (last.current && eq(last.current.v, next)) return last.current.v;
+    last.current = { v: next };
+    return next;
+  }, [st, select, eq]);
+  return useSyncExternalStore(st.subscribe, get, get);
+}
+
+/** 一条随手记的图片行和各自的上传状态（行是仓库里同一个对象，没改就是同一个引用） */
+type ImgSel = readonly (readonly [Row, UploadState | undefined])[];
+const sameImgs = (a: ImgSel, b: ImgSel): boolean => a.length === b.length && a.every((x, i) => x[0] === b[i]?.[0] && x[1] === b[i]?.[1]);
+
 /** 元素进没进过视口（没给元素、没有 IntersectionObserver 就当看得见；看见过一次就不再变回去） */
 function useSeen(el: RefObject<Element | null> | undefined): boolean {
   const [seen, setSeen] = useState(() => !el || typeof IntersectionObserver === 'undefined');
@@ -81,15 +102,16 @@ function useSeen(el: RefObject<Element | null> | undefined): boolean {
   return seen;
 }
 
-/** 仓库里一条随手记的图（插入先后：id 是 uuidv7，按 id 排） */
-function imagesOf(snap: StoreSnap, noteId: string): NoteImage[] {
-  const out: NoteImage[] = [];
-  for (const r of snap.images) {
-    if (r['note_id'] !== noteId || r['deleted_at'] !== null) continue;
-    out.push({ id: r.id, noteId, path: String(r['path']), hasThumb: r['has_thumb'] === true, width: Number(r['width'] ?? 0), height: Number(r['height'] ?? 0) });
-  }
-  return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+/** 仓库里一条随手记还在的图行和上传状态（插入先后：id 是 uuidv7，按 id 排） */
+function imagesOf(snap: StoreSnap, noteId: string): ImgSel {
+  const out: [Row, UploadState | undefined][] = [];
+  for (const r of snap.images) if (r['note_id'] === noteId && r['deleted_at'] === null) out.push([r, snap.uploads.get(r.id)]);
+  return out.sort((a, b) => (a[0].id < b[0].id ? -1 : a[0].id > b[0].id ? 1 : 0));
 }
+
+const imageOf = (r: Row, noteId: string): NoteImage => ({
+  id: r.id, noteId, path: String(r['path']), hasThumb: r['has_thumb'] === true, width: Number(r['width'] ?? 0), height: Number(r['height'] ?? 0),
+});
 
 /** 隐私记的一条（插图、写入都只认 notes 这一张表） */
 function noteRowFrom(row: Record<string, unknown> & { id: string }): Row {
@@ -194,11 +216,11 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
       return editIo.setDeleted('notes', id, true, Date.now(), false);
     },
     useImages(noteId): NoteImagesApi {
-      const snap = useVaultStore();
+      const pick = useCallback((snap: StoreSnap): ImgSel => (noteId === null ? NO_IMGS : imagesOf(snap, noteId)), [noteId]);
+      const sel = useStoreSelect(pick, sameImgs);
       return useMemo(() => {
-        const list = noteId === null ? [] : imagesOf(snap, noteId);
-        const items = list.map((img) => {
-          const up = snap.uploads.get(img.id);
+        const items = sel.map(([r, up]) => {
+          const img = imageOf(r, String(noteId));
           const pending: PendingImage | null = up
             ? { id: img.id, noteId: img.noteId, path: img.path, url: s.peekImage(img.id, 'full') ?? '', state: up, fail: up === 'failed' ? 'retry' : null }
             : null;
@@ -217,14 +239,15 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
           },
           retry: (id: string) => queue.retryImage(id),
         };
-      }, [snap, noteId]);
+      }, [sel, noteId]);
     },
     useImageSrc(img, thumb, el): ImageSrc {
-      const snap = useVaultStore();
+      const id = img?.id ?? null;
+      const pickFailed = useCallback((snap: StoreSnap): boolean => id !== null && snap.uploads.get(id) === 'failed', [id]);
+      const failed = useStoreSelect(pickFailed);
       const { state } = useVault();
       const seen = useSeen(el);
       const part = thumb && img?.hasThumb ? 'thumb' : 'full';
-      const id = img?.id ?? null;
       const have = id === null ? null : s.peekImage(id, part);
       const [got, setGot] = useState<{ key: string; url: string | null } | null>(null);
       const key = `${id}:${part}`;
@@ -239,7 +262,6 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
           live = false;
         };
       }, [id, part, have, seen, unlocked, key]);
-      const failed = id !== null && snap.uploads.get(id) === 'failed';
       return { url: have ?? (got?.key === key ? got.url : null), missing: false, failed };
     },
     insertImage: insert,
