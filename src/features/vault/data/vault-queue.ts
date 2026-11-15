@@ -2,6 +2,7 @@
 // • 按条合并：同一条随手记的改动并成一份（job），发之前读这一份最新的行（发前读最新值），发出去以后又改了就再发一次
 // • 一条的顺序：save（带 add_images 预登记还没登记的图、remove_images）→ 每张图 vault-image 先传原图再传缩略图 → delete / undelete
 // • 同一条两次 save 至少隔 SAVE_GAP_MS（1.5 秒）：编辑页停笔 800ms 存一次，连着打字不会每 0.8 秒打一次服务器（每人每分钟 60 次）
+// • 退避、间隔都记在每一条自己的 nextAt 上（M4）：没到点的跳过、先发别的条；都没到点就睡到最早那一条，重试、新改动提前叫醒
 // • 失败只按 vault-errors.ts 的落法（kind）分：
 //   - retry（offline、try_later、rate_limited）：2 秒、5 秒、15 秒退避 3 次，还不行标 failed（列表行、编辑页“没保存上 · 重试”），online 事件再试
 //   - unlock（vault_locked，含上锁以后才回来的 STALE）：会话已经上锁、暂停了队列（pause）；这一条原样留着，解锁后 resume 整条重发
@@ -72,6 +73,8 @@ interface Job {
   /** 锁着时记下的改动（row 只有改了的字段）：overlay 合并成整行以前不发 */
   partial: boolean;
   lastSave: number;
+  /** 这个时刻以前不发（退避、两次 save 的间隔；M4：每条自己记，不让别的条跟着等） */
+  nextAt: number;
   tries: number;
   failed: boolean;
   waiters: ((ok: boolean) => void)[];
@@ -111,7 +114,7 @@ export function createVaultQueue(d: QueueDeps) {
   const jobOf = (row: Row, known: boolean): Job => {
     let j = jobs.get(row.id);
     if (!j) {
-      j = { id: row.id, row, v: 0, dirty: false, del: null, adds: new Map(), removes: new Set(), known, partial: false, lastSave: 0, tries: 0, failed: false, waiters: [] };
+      j = { id: row.id, row, v: 0, dirty: false, del: null, adds: new Map(), removes: new Set(), known, partial: false, lastSave: 0, nextAt: 0, tries: 0, failed: false, waiters: [] };
       jobs.set(row.id, j);
     }
     j.row = j.partial ? { ...j.row, ...row } : row;
@@ -156,7 +159,7 @@ export function createVaultQueue(d: QueueDeps) {
     const wait = kind === 'retry' ? QUEUE_BACKOFF[j.tries] : undefined;
     if (wait !== undefined) {
       j.tries += 1;
-      await d.sleep(wait);
+      j.nextAt = d.now() + wait;
       return;
     }
     j.failed = true;
@@ -173,11 +176,6 @@ export function createVaultQueue(d: QueueDeps) {
     const adds = [...j.adds.values()].filter((a) => !a.registered);
     const removes = [...j.removes];
     if (j.dirty || adds.length > 0 || removes.length > 0) {
-      const wait = j.lastSave + SAVE_GAP_MS - d.now();
-      if (wait > 0) {
-        await d.sleep(wait);
-        if (!alive()) return;
-      }
       const v = j.v;
       const row = j.row;
       const now = d.now();
@@ -193,6 +191,8 @@ export function createVaultQueue(d: QueueDeps) {
       if (!j.known) d.store.setFresh(j.id, false);
       j.known = true;
       j.lastSave = d.now();
+      // 下一次 save 至少隔 SAVE_GAP_MS（这一轮接着传图、删除不受影响）
+      j.nextAt = j.lastSave + SAVE_GAP_MS;
       j.tries = 0;
       // 这次 save 预登记了的图、在路上时被删掉的（H3）：服务器上已经登记了，下次 save 带 remove_images 删掉
       for (const a of adds) {
@@ -231,8 +231,18 @@ export function createVaultQueue(d: QueueDeps) {
     running = true;
     try {
       while (!paused) {
-        const j = [...jobs.values()].find((x) => !x.failed && !x.partial && !holds.has(x.id));
-        if (!j) break;
+        const ready = [...jobs.values()].filter((x) => !x.failed && !x.partial && !holds.has(x.id));
+        if (ready.length === 0) break;
+        const at = d.now();
+        const j = ready.find((x) => x.nextAt <= at);
+        if (!j) {
+          // 都还没到点：睡到最早那一条；重试、新改动（kick）提前叫醒。睡够了就算到点（计时器早几毫秒、测试里不走的钟都不空转）
+          const due = Math.min(...ready.map((x) => x.nextAt));
+          const woke = await Promise.race([d.sleep(due - at).then(() => false), new Promise<boolean>((r) => (wake = () => r(true)))]);
+          wake = null;
+          if (!woke) for (const x of ready) if (x.nextAt <= due) x.nextAt = 0;
+          continue;
+        }
         current = j.id;
         await step(j);
         current = null;
@@ -240,13 +250,19 @@ export function createVaultQueue(d: QueueDeps) {
     } finally {
       running = false;
       current = null;
+      wake = null;
     }
   }
-  const kick = (): void => void loop();
+  let wake: (() => void) | null = null;
+  const kick = (): void => {
+    if (wake) wake();
+    else void loop();
+  };
 
   const unfail = (j: Job): void => {
     j.failed = false;
     j.tries = 0;
+    j.nextAt = 0;
     d.store.setFailed(j.id, false);
     for (const a of j.adds.values()) d.store.setUpload(a.id, 'uploading');
   };
@@ -328,12 +344,12 @@ export function createVaultQueue(d: QueueDeps) {
     /** “没保存上 · 重试” */
     retry(id: string): void {
       const j = jobs.get(id);
-      if (j?.failed) unfail(j);
+      if (j && (j.failed || j.tries > 0)) unfail(j);
       kick();
     },
-    /** 网络回来了（online）：没保存上的都再试 */
+    /** 网络回来了（online）：没保存上的、正在退避的都立即再试（两次 save 的间隔照旧） */
     retryAll(): void {
-      for (const j of jobs.values()) if (j.failed) unfail(j);
+      for (const j of jobs.values()) if (j.failed || j.tries > 0) unfail(j);
       kick();
     },
     /** 一张没传上的图再传一次；字节不在内存里回 false（界面让用户重新选一张） */

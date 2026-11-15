@@ -19,7 +19,7 @@ const note = (over: Partial<VaultNote> = {}): VaultNote => ({
 
 type Reply = VaultResult<unknown> | Promise<VaultResult<unknown>>;
 
-function harness(o: { save?: (r: SaveReq) => Reply; del?: () => Reply; upload?: (part: string) => Reply } = {}) {
+function harness(o: { save?: (r: SaveReq) => Reply; del?: () => Reply; upload?: (part: string) => Reply; sleep?: (ms: number) => Promise<void> } = {}) {
   const store = createVaultStore();
   const calls: string[] = [];
   const saves: SaveReq[] = [];
@@ -46,6 +46,7 @@ function harness(o: { save?: (r: SaveReq) => Reply; del?: () => Reply; upload?: 
     now: () => clock.ms,
     sleep: async (ms) => {
       sleeps.push(ms);
+      if (o.sleep) return o.sleep(ms);
       clock.ms += ms;
     },
     log: (l) => logs.push(l),
@@ -167,6 +168,26 @@ describe('发送队列', () => {
     expect(h.saves[4]?.body).toBe('断网写的');
     expect(h.store.getSnapshot().failed.has(NID)).toBe(false);
     expect(h.logs.join('\n')).not.toContain('断网写的');
+  });
+
+  it('M4：一条在退避等着时别的条照发、flush 不被拖住；retryAll 立即重发，不等退避睡完', async () => {
+    const OTHER = '33333333-3333-4333-8333-333333333333';
+    let fail = true;
+    const h = harness({
+      save: (r) => (r.id === NID && fail ? { ok: false, code: 'offline' } : OK),
+      sleep: () => new Promise(() => undefined),   // 退避一直睡着
+    });
+    h.q.wrote(row('断网的那条'), true);
+    await settle();
+    expect(h.saves).toHaveLength(1);
+    h.q.wrote({ ...row('另一条'), id: OTHER }, true);
+    expect(await h.q.flush(OTHER)).toBe(true);
+    expect(h.saves.map((r) => r.id)).toEqual([NID, OTHER]);
+    fail = false;
+    h.q.retryAll();
+    await settle();
+    expect(h.saves.map((r) => r.id)).toEqual([NID, OTHER, NID]);
+    expect(h.q.size()).toBe(0);
   });
 
   it('not_found 这类只提示的码：直接标“没保存上”，不退避', async () => {
