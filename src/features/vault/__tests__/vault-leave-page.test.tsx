@@ -51,10 +51,22 @@ describe('会话：按原因记离开时刻', () => {
     expect(s.get().phase).toBe('locked');
   });
 
-  it('页外解锁（隐私记页没挂着）：解锁那一刻就算离开了隐私记页', async () => {
-    const { s, clock } = await unlocked();
+  it('页外解锁（隐私记页没挂着）：解锁那一刻就算离开了隐私记页；不拉列表（M3）', async () => {
+    const { s, clock, calls } = make();
+    await s.refreshStatus();
+    expect((await s.unlock('1234')).ok).toBe(true);
+    expect(calls.filter((c) => c.action === 'list')).toHaveLength(0);
+    expect(s.get()).toMatchObject({ phase: 'unlocked', listed: false });
     clock.ms += 61_000;
     expect(s.check()).toBe(true);
+  });
+
+  it('M3：拉过列表后移进一条：不整表重拉，记成没拉过（进隐私记页再拉）', async () => {
+    const { s, calls } = await unlocked();
+    const lists = calls.filter((c) => c.action === 'list').length;
+    expect((await s.importNote('22222222-2222-4222-8222-222222222222')).ok).toBe(true);
+    expect(calls.filter((c) => c.action === 'list')).toHaveLength(lists);
+    expect(s.get().listed).toBe(false);
   });
 
   it('离开 App（默认原因 app）照旧：回来时离开满 61 秒锁；隐私记页挂着时 59 秒不锁', async () => {

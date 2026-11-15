@@ -316,10 +316,10 @@ export function createVaultSession(d: VaultSessionDeps) {
     const st = state.status ? { ...state.status, set: true } : { set: true, lastResetAt: null, webauthn: 0 };
     set({ phase: 'unlocked', status: st, relocked: false, waiting: false, left: null, lockedUntil: null, lastError: null });
     if (endOwed) endPreview('resend');
-    // 不在隐私记页上解锁的（移进隐私记弹的解锁卡）：这一刻起就算离开了隐私记页
+    // 不在隐私记页上解锁的（移进隐私记弹的解锁卡）：这一刻起就算离开了隐私记页；也不拉列表（进隐私记页时再拉，M3）
     if (!onPage) away.set('page', now());
     arm();
-    const listed = await list();
+    const listed: VaultResult<true> = onPage ? await list() : { ok: true, value: true };
     // 列表没拉成也接着发：队列里是整行，发出去无害；下次拉列表时再盖回仓库
     if (state.phase === 'unlocked') queue.resume();
     return listed.ok ? { ok: true, value: true } : listed;
@@ -464,10 +464,13 @@ export function createVaultSession(d: VaultSessionDeps) {
       if (r.ok) store.forget(items);
       return r;
     },
-    /** 普通随手记移进隐私记（S7）：要令牌，锁着时等解锁、重试一次；这一段解锁期拉过列表的，成了补拉一次（服务器那边才有这一条的明文） */
+    /**
+     * 普通随手记移进隐私记（S7）：要令牌，锁着时回 vault_locked（界面等解锁再移一次）。
+     * 成了不整表重拉（M3）：拉过列表的记成没拉过，进隐私记页时再拉（这一条的明文只有服务器那边有）
+     */
     async importNote(noteId: string) {
       const r = await run({ action: 'import', note_id: noteId }, vaultOkResponse);
-      if (r.ok && state.listed) await list();
+      if (r.ok && state.listed) set({ listed: false });
       return r;
     },
     /**

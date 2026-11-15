@@ -79,6 +79,8 @@ export function held() {
 export async function unlocked(replies: Partial<Record<VaultRequest['action'], Reply>> = {}) {
   const m = make(replies);
   await m.s.refreshStatus();
+  // 人在隐私记页上（useVaultPresence 报的 show 'page'）：解锁时才拉列表（页外解锁不拉，M3）
+  m.s.show(undefined, 'page');
   expect((await m.s.unlock('1234')).ok).toBe(true);
   return m;
 }

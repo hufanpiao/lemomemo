@@ -69,6 +69,10 @@ export default function VaultPage() {
   const leave = () => backTo('notes');
   const forgot = () => void navigate('settings', 'vault', 'reset');
   const unlocked = state.phase === 'unlocked' && !state.waiting;
+  // 页外解锁的、移进过新的一条的：进到页上才拉列表（M3）；拉失败不重试（依赖不变，不会循环）
+  useEffect(() => {
+    if (unlocked && !state.listed) void s.list();
+  }, [s, unlocked, state.listed]);
   const surface = unlocked && state.listed && sub !== 'trash';
   let body;
   if (state.phase === 'loading') body = <p className={styles.empty}>{t('vault.loading', {})}</p>;
