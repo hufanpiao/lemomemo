@@ -24,7 +24,7 @@ describe('密码键盘和运行日志', () => {
       const b = screen.getByTestId(`pp-key-${i}`);
       fireEvent.pointerDown(b, { clientX: 10 * i + 3, clientY: 7 });
       fireEvent.pointerUp(b, { clientX: 10 * i + 3, clientY: 7 });
-      fireEvent.click(b);
+      fireEvent.click(b, { detail: 1 });   // 真实指针点出来的 click 带 detail=1（按下时已记，这里不重复记）
     }
     fireEvent.click(screen.getByTestId('pp-del'));
     expect(onSubmit.mock.calls).toEqual([['1234'], ['5678']]);
@@ -77,3 +77,25 @@ describe('只做 4 位', () => {
     expect(onSubmit).toHaveBeenLastCalledWith('4321');
   });
 });
+
+describe('快速连按不丢位（负责人 11-15“输入的比较快就识别不到”；运行日志 2436、2438 行：第二下只有 pointercancel、没有 click）', () => {
+  afterEach(cleanup);
+  it('按下就记一位：被系统取消、没有 click 的那一下也算；按下后再来 click（detail=1）不重复记；键盘激活的 click（detail=0）照记', () => {
+    const onSubmit = vi.fn();
+    render(<PinPad testId="pp" msgTestId="pp-err" onSubmit={onSubmit} />);
+    const key = (i: number) => screen.getByTestId(`pp-key-${i}`);
+    fireEvent.pointerDown(key(0), { button: 0 });
+    fireEvent.click(key(0), { detail: 1 });
+    fireEvent.pointerDown(key(1), { button: 0 });
+    fireEvent.pointerCancel(key(1));
+    expect(screen.getByTestId('pp-dots').getAttribute('data-n')).toBe('2');
+    fireEvent.pointerDown(key(2), { button: 2 });   // 右键不算
+    expect(screen.getByTestId('pp-dots').getAttribute('data-n')).toBe('2');
+    fireEvent.click(key(2), { detail: 0 });
+    fireEvent.pointerDown(screen.getByTestId('pp-del'), { button: 0 });
+    fireEvent.pointerDown(key(3), { button: 0 });
+    fireEvent.pointerDown(key(4), { button: 0 });
+    expect(onSubmit).toHaveBeenCalledWith('1245');
+  });
+});
+
