@@ -258,6 +258,9 @@
     width: 440px;
     background: var(--b-drawer);
     box-shadow: var(--b-drawer-shadow);
+
+    /* 宽屏时层贴着屏幕顶（上面的 inset 是 0），安全区要还给 EditShell，不然 iPad 主屏幕版横屏时顶栏压进状态栏（R-436 底子评审第 4 条） */
+    --safe-top: var(--inset-top, 0px);
   }
 }
 
@@ -569,6 +572,18 @@
 
 .heroWhen:empty {
   display: none;
+}
+
+/* 选图、上传的状态区（role=status）空着时不能 display:none：一开始就不显示的 live region，VoiceOver、NVDA 常常不登记，
+   之后写进“正在上传”“上传失败”也不播报（R-436 底子评审第 3 条）。空着时改成看不见、但还在无障碍树里 */
+.heroSt:empty {
+  position: absolute;
+  display: block;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .heroDays {

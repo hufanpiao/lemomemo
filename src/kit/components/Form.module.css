@@ -45,9 +45,14 @@
   cursor: pointer;
 }
 
-.rowBtn:focus-visible,
-.deleteRow:focus-visible {
+.rowBtn:focus-visible {
   border-radius: var(--r-inp);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 整宽删除行本身是一张卡片（圆角 --r-lg）：聚焦只加外框，不改圆角，否则卡片会从 20 变成 14（R-436 底子评审第 2 条） */
+.deleteRow:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }

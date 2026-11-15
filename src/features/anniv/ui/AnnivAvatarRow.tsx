@@ -119,7 +119,7 @@ export function AnnivHero({ id, form, saved, off, t, locale, next }: {
         <span className={styles.heroName}>{form.name || t('anniv.edit.namePh', {})}</span>
         {av.st ? null : <span className={styles.heroWhen}>{heroDateText(form, locale, t)}</span>}
         {/* 选图、上传的状态（R-117）：常驻的 role=status，平时没字，读屏只播报状态，不播报日期 */}
-        <span className={styles.heroWhen} role="status">
+        <span className={`${styles.heroWhen} ${styles.heroSt}`} role="status">
           {av.st ? t(AV_KEY[av.st], {}) : id ? '' : t('anniv.edit.avatarNeedName', {})}
         </span>
       </span>
