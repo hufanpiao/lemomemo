@@ -40,7 +40,7 @@ import { setVaultToken } from '../../../core/vault-token.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { VaultApi, VaultFail, VaultResult } from './vault-api.ts';
 import { unhandled, vaultErrorAction, type VaultCode } from './vault-errors.ts';
-import { createVaultQueue, limiter, QUEUE_BACKOFF, type SaveReq } from './vault-queue.ts';
+import { createVaultQueue, limiter, QUEUE_BACKOFF } from './vault-queue.ts';
 import { createVaultStore } from './vault-store.ts';
 
 export type VaultPhase = 'loading' | 'offline' | 'unset' | 'locked' | 'unlocked' | 'error';
@@ -89,9 +89,6 @@ export interface VaultSessionDeps {
   /** 测试用：退避等待（默认 setTimeout） */
   sleep?: (ms: number) => Promise<void>;
 }
-
-/** 发一次 save：分类、时间不给就是没分类、现在 */
-export type SaveInput = Pick<SaveReq, 'id' | 'title' | 'body'> & Partial<SaveReq>;
 
 /** 离开的原因：离开 App、离开隐私记页 */
 export type LeaveWhy = 'app' | 'page';
@@ -384,16 +381,6 @@ export function createVaultSession(d: VaultSessionDeps) {
     }
   }
 
-  /**
-   * 发一次 save（后台队列和测试用；带图时 add_images 只是预登记，图的字节由队列随后经 vault-image 传，11-14 整块评审第 3 条）。
-   * 不再重拉列表：仓库里本来就是本机最新的那一份
-   */
-  async function save(input: SaveInput): Promise<VaultResult<string>> {
-    const t = now();
-    const r = await run({ action: 'save', category_id: null, created_at: t, updated_at: t, ...input }, vaultOkResponse);
-    return r.ok ? { ok: true, value: input.id } : r;
-  }
-
   return {
     get: (): VaultState => state,
     subscribe(fn: () => void): () => void {
@@ -449,14 +436,10 @@ export function createVaultSession(d: VaultSessionDeps) {
       });
     },
     list,
-    save,
     /** 会话持有的内存仓库、后台发送队列（界面经 hooks/vault-note-source.ts 读写） */
     store,
     queue,
     seedImage,
-    /** 删除、撤销删除各发一次（后台队列发的也是这两个；不重拉列表） */
-    remove: (id: string) => run({ action: 'delete', id }, vaultOkResponse),
-    undelete: (id: string) => run({ action: 'undelete', id }, vaultOkResponse),
     /** 永久删除（要确认，不进后台队列）：发出前先撤掉队列里这几条的任务和标记（不再 save 回来，H5）；成了从仓库拿掉 */
     async purge(items: readonly string[]) {
       queue.forget(items);

@@ -2,7 +2,7 @@
 // TC-B5-47 ①②（vault_locked 等解锁后自动重试一次；vault_relock 丢令牌、记 relocked）、TC-B5-33（断网）、图片半路上锁丢掉结果
 import { describe, expect, it, vi } from 'vitest';
 import { noteRowOf } from '../data/vault-store.ts';
-import { IMG, listOk, make, NID, note, statusSet, TOK, TOK2, tokenOk, unlocked } from './session-fakes.ts';
+import { IMG, listOk, make, NID, note, queueDelete, statusSet, TOK, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 describe('解锁、上锁', () => {
   it('解锁后拉列表，明文只在内存；令牌抄给 core/vault-token', async () => {
@@ -140,9 +140,9 @@ describe('TC-B5-47：错误码怎么落', () => {
 
   it('② vault_relock：丢令牌、清明文、relocked = true（不显示 Face ID）；用新密码解锁后 relocked 复位', async () => {
     const { s } = await unlocked({ save: () => ({ ok: false, code: 'vault_relock' }) });
-    const r = await s.save({ id: NID, title: 'a', body: 'b' });
-    expect(r).toMatchObject({ ok: false, code: 'vault_relock' });
-    expect(s.get()).toMatchObject({ phase: 'locked', listed: false, relocked: true });
+    s.queue.wrote({ ...noteRowOf(note()), body: 'b' }, false);
+    await vi.waitFor(() => expect(s.get()).toMatchObject({ phase: 'locked', listed: false, relocked: true }));
+    expect(s.queue.size()).toBe(0);
     expect(s.hasToken()).toBe(false);
     await s.unlock('5678');
     expect(s.get().relocked).toBe(false);
@@ -157,8 +157,9 @@ describe('TC-B5-47：错误码怎么落', () => {
 
   it('⑥ try_later：只记码，不上锁', async () => {
     const { s } = await unlocked({ delete: () => ({ ok: false, code: 'try_later' }) });
-    await s.remove(NID);
-    expect(s.get()).toMatchObject({ phase: 'unlocked', lastError: 'try_later' });
+    queueDelete(s);
+    await vi.waitFor(() => expect(s.get().lastError).toBe('try_later'));
+    expect(s.get().phase).toBe('unlocked');
   });
 });
 
@@ -202,7 +203,8 @@ describe('保存、移进隐私记（B5 隐私记重写：界面只写仓库，�
 
   it('save 只发一次请求、不重拉列表', async () => {
     const { s, calls } = await unlocked();
-    expect((await s.save({ id: NID, title: 't', body: 'b' })).ok).toBe(true);
+    s.queue.wrote({ ...noteRowOf(note()), body: 'b' }, false);
+    await settle();
     expect(calls.filter((c) => c.action === 'save')).toHaveLength(1);
     expect(calls.at(-1)?.action).toBe('save');
   });

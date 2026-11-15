@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RENEW_AFTER_MS } from '../data/session.ts';
 import { noteRowOf } from '../data/vault-store.ts';
-import { held, IMG, listOk, make, NID, note, statusSet, TOK2, tokenOk, unlocked } from './session-fakes.ts';
+import { held, IMG, listOk, make, NID, note, queueDelete, statusSet, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 describe('S1：请求在路上时上锁，回来的结果整个丢掉', () => {
   it('list 在路上时 Ctrl+L：回来后不收令牌、不写明文', async () => {
@@ -17,14 +17,15 @@ describe('S1：请求在路上时上锁，回来的结果整个丢掉', () => {
     expect(s.get()).toMatchObject({ phase: 'locked', listed: false, waiting: false });
   });
 
-  it('普通请求（delete）在路上时离开满时长自动上锁：回来后不收令牌、不弹解锁、不重试', async () => {
+  it('后台队列的删除在路上时离开满时长自动上锁：回来后不收令牌、不弹解锁、不重试', async () => {
     const h = held();
     const { s, calls } = await unlocked({ delete: () => h.p });
-    const p = s.remove(NID);
+    queueDelete(s);
+    await vi.waitFor(() => expect(calls.some((c) => c.action === 'delete')).toBe(true));
     s.hide(0);
     expect(s.show(61_000)).toBe(true);
     h.release({ ok: true, vault_token: TOK2, expires_at: 9e12 });
-    expect((await p).ok).toBe(false);
+    await new Promise((r) => setTimeout(r, 0));
     expect(s.hasToken()).toBe(false);
     expect(s.get()).toMatchObject({ phase: 'locked', listed: false, waiting: false });
     expect(calls.filter((c) => c.action === 'delete')).toHaveLength(1);
@@ -47,14 +48,13 @@ describe('S1：请求在路上时上锁，回来的结果整个丢掉', () => {
 describe('审查第 2 条：等解锁（waiting）时离开满时长也作废', () => {
   it('令牌过期、队列里还有没发的改动时离开 61 秒回来：整个队列丢掉（记个数）、waiting 落回；之后解锁不保存', async () => {
     const { s, calls } = await unlocked({ delete: () => ({ ok: false, code: 'vault_locked' }) });
-    const r = s.remove(NID);
+    queueDelete(s);
     await vi.waitFor(() => expect(s.get().waiting).toBe(true));
     s.queue.wrote({ ...noteRowOf(note()), body: '正文' }, false);
     s.hide(0);
     expect(s.show(61_000)).toBe(true);
     expect(s.queue.size()).toBe(0);
     expect(s.store.getSnapshot().dropped).toBe(1);
-    expect((await r).ok).toBe(false);
     expect(s.get()).toMatchObject({ phase: 'locked', waiting: false });
     await s.unlock('1234');
     expect(calls.filter((c) => c.action === 'save' && c.token !== null)).toHaveLength(0);
@@ -62,7 +62,7 @@ describe('审查第 2 条：等解锁（waiting）时离开满时长也作废', 
 
   it('等解锁时离开 59 秒回来：什么也不动，还在等', async () => {
     const { s } = await unlocked({ delete: () => ({ ok: false, code: 'vault_locked' }) });
-    void s.remove(NID);
+    queueDelete(s);
     await vi.waitFor(() => expect(s.get().waiting).toBe(true));
     s.hide(0);
     expect(s.show(59_000)).toBe(false);

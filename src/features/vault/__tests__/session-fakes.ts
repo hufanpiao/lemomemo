@@ -2,7 +2,7 @@
 import { expect, vi } from 'vitest';
 import type { z } from 'zod';
 import type { VaultNote, VaultRequest } from '../../../../shared/schema/vault.ts';
-import { createVaultSession } from '../data/session.ts';
+import { createVaultSession, type VaultSession } from '../data/session.ts';
 import type { VaultApi, VaultFail, VaultResult } from '../data/vault-api.ts';
 
 export const TOK = 't'.repeat(32);
@@ -83,4 +83,11 @@ export async function unlocked(replies: Partial<Record<VaultRequest['action'], R
   m.s.show(undefined, 'page');
   expect((await m.s.unlock('1234')).ok).toBe(true);
   return m;
+}
+
+/** 经后台队列删掉 NID 那一条（会话不再有直接发 delete 的方法，M6） */
+export function queueDelete(s: VaultSession): void {
+  const r = s.store.get(NID);
+  if (!r) throw new Error('仓库里没有 NID');
+  s.queue.deleted({ ...r, deleted_at: 5 }, true);
 }

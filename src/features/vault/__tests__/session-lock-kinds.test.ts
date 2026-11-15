@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import { noteRowOf } from '../data/vault-store.ts';
-import { held, listOk, make, NID, note, TOK, TOK2, tokenOk, unlocked } from './session-fakes.ts';
+import { held, listOk, make, NID, note, queueDelete, TOK, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 const locked = { ok: false, code: 'vault_locked' };
 /** 拿来触发令牌过期上锁的另一条（永久删除会先撤掉被删那几条的队列任务，H5） */
@@ -205,10 +205,11 @@ describe('第 14 条：运行日志', () => {
     m3.clock.ms += 6 * 60_000;
     m3.s.touch();
     await new Promise((r) => setTimeout(r, 0));
-    const d = m3.s.remove(NID);
+    queueDelete(m3.s);
+    await new Promise((r) => setTimeout(r, 0));
     m3.s.lock();
     h.release({ ok: true, vault_token: TOK2, expires_at: 9e12 });
-    await d;
+    await new Promise((r) => setTimeout(r, 0));
     (api.imageGet as unknown as { mockResolvedValueOnce(v: unknown): void }).mockResolvedValueOnce({ ok: false, code: 'try_later' });
     await s.image(IMGX, 'full');
     const all = lines().join('\n');
