@@ -103,12 +103,11 @@ export function dropHostLoaded(bundle: Rolldown.OutputBundle | undefined, deps: 
 }
 
 /**
- * App 入口块（main，src/index.html 的入口）的预加载表只给首屏动态入口列整个闭包的 JS（11-16 首屏预算 e2e 超线 151.1 KB，主持人派单）：
+ * App 入口块（main，src/index.html 的入口）的预加载表只给首屏动态入口列 JS（11-16 首屏预算 e2e 超线 151.1 KB，主持人派单）：
  * main 里登记着几十个懒加载页和部件，每个列出整个静态闭包，表里两百多个文件名（gzip 约 4.6 KB）全在首屏下载，大部分是首屏用不到的页。
  * 现在只有首屏名单 FIRST_PAINT_DYNAMIC（build/check_first_paint_chunks.mjs，tests/build/first-paint-graph.test.ts 从源码推着核对）里的目标
- * 照旧列（再按 dropHostLoaded 去重），别的目标只列目标块自己的 JS、不列它的依赖，Vite 自己追加的 CSS 照留（样式照旧先到再挂，不闪）。
- * 目标块自己必须留：不列的话 Vite 要等 CSS 到了才开始下目标 JS，11-16 ci 的 webkit b4b2-find 离线用例里，查找面板挂 VaultParts 后 0.15 秒断网，目标 JS 没下完就断了，面板整个关掉。
- * 代价（加载瀑布）：首屏以外的页、部件第一次打开时，浏览器先下目标块（和 CSS 同时），解析后再按它的静态 import 一层层下（11-16 产物里依赖链最长 7 层，最多多 6 次往返；启动后才挂的提醒引擎、今天页子任务进度这类部件也一样）；
+ * 照旧列（再按 dropHostLoaded 去重），别的目标不列 JS、只留 Vite 自己追加的 CSS（样式照旧先到再挂，不闪）。
+ * 代价（加载瀑布）：首屏以外的页、部件第一次打开时，浏览器先下目标块，解析后再按它的静态 import 一层层下（11-16 产物里依赖链最长 7 层，最多多 6 次往返；启动后才挂的提醒引擎、今天页子任务进度这类部件也一样）；
  * 装好 Service Worker 以后这些块都在预缓存里，多出来的只是本机缓存读取。懒加载块自己发起的 import（例如外壳 NotesRoot → NotesPage）不受影响。
  * 登录页入口（auth）只有一个首屏就要的 AuthPage，不动。tests/build/preload-dedupe.test.ts 守规则，build/check_preload.mjs 拿真实产物核对
  */
@@ -119,7 +118,7 @@ export function preloadDeps(bundle: Rolldown.OutputBundle | undefined, file: str
   const host = hostType === 'js' ? bundle?.[hostId] : undefined;
   if (host?.type === 'chunk' && APP_ENTRY_RE.test(host.facadeModuleId ?? '')) {
     const target = bundle?.[file];
-    if (!(target?.type === 'chunk' && FIRST_PAINT_RE.test(target.facadeModuleId ?? ''))) return deps.filter((d) => d === file);
+    if (!(target?.type === 'chunk' && FIRST_PAINT_RE.test(target.facadeModuleId ?? ''))) return [];
   }
   return dropHostLoaded(bundle, deps, hostId, hostType);
 }
