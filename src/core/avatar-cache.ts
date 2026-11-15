@@ -1,8 +1,11 @@
 // 头像字节的本机缓存（Cache Storage；架构 5.4 头像一段，整块评审第 16 条）：纪念日头像、我的头像（R-384）共用这一份
 // • 一种头像一个缓存（名字由调用方给：lemo-anniv-avatar、lemo-me-avatar），键是按 avatar_id 拼的本站地址（不用带签名的链接）
 // • 打不开（隐私模式等）一律当没缓存，调用方照常走网络；退出登录、换账号时 platform/session.ts 的 clearCacheStorage 一起删（名字不以预缓存前缀开头）
-// • 只碰 Cache Storage，不带 platform/files（zod）：kit 的 useMeAvatar 首屏就静态引它，先读缓存，读不到才在首屏画完后加载 core/avatar-view.ts
-// • 这里只放首屏要的（读、删、键、打开）；写缓存只有取图、上传以后才用，放在 core/avatar-view.ts（首屏体积，R-384）
+// • 只碰 Cache Storage，不带 platform/files（zod）：头像仓 core/avatar-store.ts 先读这里，读不到才加载 core/avatar-view.ts 签名取图；
+//   写（取图、上传以后才有）在 core/avatar-view.ts
+
+/** 最多留几张（仓里的 blob: 地址、Cache Storage 里的字节都按这个数；先存的先删） */
+export const AVATAR_CACHE_MAX = 200;
 
 export interface AvatarCacheSpec {
   /** Cache Storage 的名字 */
@@ -11,16 +14,6 @@ export interface AvatarCacheSpec {
   keyPrefix: string;
   /** 运行日志前缀（anniv / me）：只记 `<tag> avatar-cache <结果码>` */
   tag: string;
-}
-
-/** 我的头像（R-384）：images 桶 <user_id>/me/<avatar_id>.webp */
-export const ME_AVATAR: AvatarCacheSpec = { cache: 'lemo-me-avatar', keyPrefix: '__me-avatar', tag: 'me' };
-export const meAvatarPath = (userId: string, avatarId: string): string => `${userId}/me/${avatarId}.webp`;
-
-/** profiles 本人那一行的 avatar_id；没有、不是字符串回 null */
-export function meAvatarId(profile: Readonly<Record<string, unknown>> | null | undefined): string | null {
-  const v = profile?.['avatar_id'];
-  return typeof v === 'string' && v !== '' ? v : null;
 }
 
 /** 缓存键：本站地址（不用带签名的链接） */

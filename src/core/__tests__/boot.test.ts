@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cacheOwner, claimCache } from '../account.ts';
 import { openCache } from '../cache.ts';
-import { applyFreshConfig, coldStart, enabledFlags, getBoot, LOCAL_PURGE_AFTER_MS, resetBootForTest, type BootOptions } from '../boot.ts';
+import { applyFreshConfig, coldStart, enabledFlags, getBoot, LOCAL_PURGE_AFTER_MS, profileEditCount, resetBootForTest, subscribeProfile, type BootOptions } from '../boot.ts';
 import { clearAllCollections, collection, readonlyIds } from '../store.ts';
 import { fakeIndexedDB, nextDbVersion } from './idb-fake.ts';
 import { clock } from '../../platform/clock.ts';
@@ -61,6 +61,33 @@ describe('离线冷启动', () => {
     const flags = await applyFreshConfig(b, { profile: { id: 'u1', beta_features: [] } });
     expect(flags?.has('note')).toBe(false);
     expect((await b.cache?.getMeta('profile'))?.beta_features).toEqual([]);
+  });
+
+  it('R-384 整块评审第 3 条：同步轮拉取期间本机换了头像，拉回来的旧 profile 丢掉（config 照用），下一轮的照收', async () => {
+    const { factory } = fakeIndexedDB();
+    const b = await coldStart(opts(factory));
+    const seen = vi.fn();
+    subscribeProfile(seen);
+    const since = profileEditCount();   // 同步轮发出拉取
+    await applyFreshConfig(b, { profile: { id: 'u1', avatar_id: 'new' } });   // 设置里换了头像（本机改）
+    await applyFreshConfig(b, { profile: { id: 'u1', avatar_id: 'old' }, config: { min_client_version: '4.0.0', features: {} }, since });
+    expect(b.profile?.['avatar_id']).toBe('new');
+    expect(b.config?.min_client_version).toBe('4.0.0');
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect((await b.cache?.getMeta('profile'))?.['avatar_id']).toBe('new');
+    await applyFreshConfig(b, { profile: { id: 'u1', avatar_id: 'new2' }, since: profileEditCount() });
+    expect(b.profile?.['avatar_id']).toBe('new2');
+    expect(seen).toHaveBeenCalledTimes(2);
+  });
+
+  it('R-384 整块评审第 6 条：resetBootForTest 清掉 profile 的订阅', async () => {
+    const { factory } = fakeIndexedDB();
+    const seen = vi.fn();
+    subscribeProfile(seen);
+    resetBootForTest();
+    const b = await coldStart(opts(factory));
+    await applyFreshConfig(b, { profile: { id: 'u1' } });
+    expect(seen).not.toHaveBeenCalled();
   });
 
   it('没有缓存的 config（第一次）：flags 为 null，入口按默认全挂', async () => {

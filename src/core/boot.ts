@@ -171,9 +171,16 @@ export function subscribeProfile(fn: () => void): () => void {
   return () => void profileSubs.delete(fn);
 }
 
+/** 本机改 profile 的次数（设置里换头像、改语言调 applyFreshConfig 不带 since）：同步轮在本机改之前发出的拉取结果整份丢掉（R-384 整块评审第 3 条） */
+let localProfileEdits = 0;
+/** 同步轮发出拉取前记下，拉回来交给 applyFreshConfig 的 since */
+export const profileEditCount = (): number => localProfileEdits;
+
 /** 测试之间清掉 */
 export function resetBootForTest(): void {
   current = null;
+  profileSubs.clear();
+  localProfileEdits = 0;
   off426?.();
   off426 = null;
   cancelBlockedPrompt?.();
@@ -405,19 +412,22 @@ async function loadCache(
 
 /**
  * 联网后（启动、切到前台）整行刷新了 app_config、profiles 本人那一行：写进 meta、重算功能开关、重新比最低版本。
- * 有新的 profile 时先通知 subscribeProfile 的订阅者（设置里换了头像也调这里，R-384）。
- * 由 K8 / 登录流程调用；返回新的开关集合（null 同 enabledFlags）
+ * 有新的 profile 时先通知 subscribeProfile 的订阅者（设置里换了头像、改语言也调这里，R-384）。
+ * since：同步轮发出拉取前的 profileEditCount()；这期间本机改过 profile（换了头像），拉回来的 profile 是旧的，丢掉（config 照用），
+ * 下一轮再拉到的就是新的。不带 since 的是本机改的，计一次。
+ * 由 K8 / 设置调用；返回新的开关集合（null 同 enabledFlags）
  */
 export async function applyFreshConfig(
   boot: BootResult,
-  fresh: { config?: CachedConfig; profile?: CachedProfile },
+  fresh: { config?: CachedConfig; profile?: CachedProfile; since?: number },
   appVersion: string = buildInfo.version,
 ): Promise<ReadonlySet<string> | null> {
   if (fresh.config) {
     boot.config = fresh.config;
     if (boot.cache && !boot.cache.isClosed()) await boot.cache.setMeta('config', fresh.config);
   }
-  if (fresh.profile) {
+  // 不带 since（本机改的）：计一次、照收；带 since：这期间本机没改过才收
+  if (fresh.profile && (fresh.since ?? ++localProfileEdits) === localProfileEdits) {
     boot.profile = fresh.profile;
     // 先通知再写 meta：界面换头像、名字不等本机库（库关着、写不进也照样换）
     for (const fn of [...profileSubs]) fn();

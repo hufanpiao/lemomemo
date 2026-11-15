@@ -1,24 +1,27 @@
-// 我的头像（kit 的 useMeAvatar / MeAvatar；R-384）：profile 里有 avatar_id 时先读 Cache Storage，读到就直接显示、不加载 core/avatar-view；
-// 读不到才（首屏画完后）加载 core/avatar-view 去取；profile 变了（applyFreshConfig 通知）跟着换；没头像显示名字首字
+// 我的头像（kit 的 useMeAvatar / MeAvatar；R-384）：只订阅头像仓（core/me-avatar.ts，首屏画完后加载）；profile 里有 avatar_id 时
+// 先读 Cache Storage，读到就直接显示、不加载取图模块 core/avatar-view；读不到才去取；取不到下一次通知照样再取（整块评审第 4 条）；
+// profile 变了（applyFreshConfig 通知）跟着换；没头像显示名字首字
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let profile: Record<string, unknown> | null = null;
 const subs = new Set<() => void>();
 const cached = new Map<string, Blob>();
-const load = vi.fn(async () => 'blob:net');
+const fetchAvatar = vi.fn(async (..._a: unknown[]): Promise<Blob | null> => new Blob([new Uint8Array(3)]));
 vi.mock('../../../core/boot.ts', () => ({
   getBoot: () => ({ userId: 'u1', profile }),
   subscribeProfile: (fn: () => void) => (subs.add(fn), () => subs.delete(fn)),
+  applyFreshConfig: async () => null,
 }));
 vi.mock('../../../core/avatar-cache.ts', () => ({
-  ME_AVATAR: { cache: 'c', keyPrefix: 'k', tag: 'me' },
-  meAvatarPath: (u: string, id: string) => `${u}/me/${id}.webp`,
-  meAvatarId: (p: Record<string, unknown> | null) => (typeof p?.['avatar_id'] === 'string' ? p['avatar_id'] : null),
+  AVATAR_CACHE_MAX: 200,
   readCachedAvatar: async (_s: unknown, id: string) => cached.get(id) ?? null,
   dropCachedAvatar: (_s: unknown, id: string) => void cached.delete(id),
 }));
-vi.mock('../../../core/avatar-view.ts', () => ({ meAvatarView: { load: (...a: unknown[]) => load(...(a as [])) } }));
+vi.mock('../../../core/avatar-view.ts', () => ({
+  fetchAvatar: (...a: unknown[]) => fetchAvatar(...a),
+  writeCachedAvatar: async () => undefined,
+}));
 vi.mock('../../../platform/root-paint.ts', () => ({ appPainted: async () => undefined }));
 
 const { MeAvatar } = await import('../../components/MeAvatar.tsx');
@@ -32,9 +35,9 @@ beforeEach(() => {
   profile = { id: 'u1', display_name: '王小明' };
   subs.clear();
   cached.clear();
-  load.mockClear();
+  fetchAvatar.mockClear();
   resetMeAvatarForTest();
-  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:cache');
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x');
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
 });
 afterEach(() => {
@@ -47,7 +50,7 @@ describe('MeAvatar', () => {
     render(<MeAvatar testId="me" />);
     expect(screen.getByTestId('me').textContent).toBe('王');
     expect(screen.getByTestId('me').hasAttribute('data-has-img')).toBe(false);
-    expect(load).not.toHaveBeenCalled();
+    expect(fetchAvatar).not.toHaveBeenCalled();
   });
 
   it('缓存里有：直接显示，不加载 core/avatar-view', async () => {
@@ -55,14 +58,14 @@ describe('MeAvatar', () => {
     cached.set('a1', new Blob([new Uint8Array(3)]));
     render(<MeAvatar testId="me" />);
     await waitFor(() => expect(screen.getByTestId('me').hasAttribute('data-has-img')).toBe(true));
-    expect(load).not.toHaveBeenCalled();
+    expect(fetchAvatar).not.toHaveBeenCalled();
   });
 
   it('缓存里没有：经 core/avatar-view 取；profile 去掉头像后变回首字', async () => {
     profile = { id: 'u1', display_name: 'Kim', avatar_id: 'a2' };
     render(<MeAvatar testId="me" />);
     await waitFor(() => expect(screen.getByTestId('me').hasAttribute('data-has-img')).toBe(true));
-    expect(load).toHaveBeenCalledWith('u1/me/a2.webp');
+    expect(fetchAvatar).toHaveBeenCalledWith('me', 'u1/me/a2.webp');
     profile = { id: 'u1', display_name: 'Kim', avatar_id: null };
     act(ping);
     expect(screen.getByTestId('me').textContent).toBe('K');
@@ -77,6 +80,17 @@ describe('MeAvatar', () => {
       </>,
     );
     await waitFor(() => expect(screen.getByTestId('y').hasAttribute('data-has-img')).toBe(true));
-    expect(load).toHaveBeenCalledTimes(1);
+    expect(fetchAvatar).toHaveBeenCalledTimes(1);
+  });
+
+  it('第 4 条：取不到先画首字，下一次 profile 通知照样再取', async () => {
+    profile = { id: 'u1', display_name: 'Kim', avatar_id: 'a4' };
+    fetchAvatar.mockResolvedValueOnce(null);
+    render(<MeAvatar testId="me" />);
+    await waitFor(() => expect(fetchAvatar).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('me').textContent).toBe('K');
+    act(ping);
+    await waitFor(() => expect(screen.getByTestId('me').hasAttribute('data-has-img')).toBe(true));
+    expect(fetchAvatar).toHaveBeenCalledTimes(2);
   });
 });

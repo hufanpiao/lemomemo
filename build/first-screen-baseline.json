@@ -28,7 +28,7 @@
       "baseline": 116327
     },
     "R-384": {
-      "_出处": "R-384 设置里换头像（主持人派单写明：首屏超额度就照 R-379 的做法申请新一批并写明理由）。为什么必须进首屏：四页右上角的 MeLink、电脑版侧栏的设置入口在首屏上，头像要在冷启动就从 Cache Storage 读出来（不然每次打开先闪一下首字再换图）；只读缓存的那一份（core/avatar-cache.ts 读和删、kit/hooks/useMeAvatar.ts 的小仓、MeAvatar 的图片分支、core/boot.ts 的 subscribeProfile）同步进首屏，签名取图（core/avatar-view.ts，带 platform/files 的 zod）和写缓存都在首屏画完（appPainted）以后才动态下载，见 tests/build/first-paint-graph.test.ts 的非首屏名单。已压过两次：写缓存原来和读缓存同一个模块、被一起带进首屏，挪进 core/avatar-view.ts 后省 115 B；小仓去掉“缓存读出的地址归谁管、换了 revoke”那一套、类名拼接改短，再省 50 B。量法（本 worktree 子 agent 11-15 本机实测，稳定口径）：起点 bf87710e（本地 main，审查一批已用 355 B）用 git archive 导出到临时目录单独构建，preview 116682 B、e2e 116682 B；套 R-384 后 preview 117659 B，自身增量 977 B，审查一批剩下的 669 B 装不下。baseline 取起点 116682，limitBytes 1024 不变，以后别的改动照旧受 1 KB 限制",
+      "_出处": "R-384 设置里换头像（主持人派单写明：首屏超额度就照 R-379 的做法申请新一批并写明理由）。为什么必须进首屏：四页右上角的 MeLink、电脑版侧栏的设置入口在首屏上，头像要在冷启动就从 Cache Storage 读出来（不然每次打开先闪一下首字再换图）；只读缓存的那一份（core/avatar-cache.ts 读和删、kit/hooks/useMeAvatar.ts 的小仓、MeAvatar 的图片分支、core/boot.ts 的 subscribeProfile）同步进首屏，签名取图（core/avatar-view.ts，带 platform/files 的 zod）和写缓存都在首屏画完（appPainted）以后才动态下载，见 tests/build/first-paint-graph.test.ts 的非首屏名单。已压过两次：写缓存原来和读缓存同一个模块、被一起带进首屏，挪进 core/avatar-view.ts 后省 115 B；小仓去掉“缓存读出的地址归谁管、换了 revoke”那一套、类名拼接改短，再省 50 B。量法（本 worktree 子 agent 11-15 本机实测，稳定口径）：起点 bf87710e（本地 main，审查一批已用 355 B）用 git archive 导出到临时目录单独构建，preview 116682 B、e2e 116682 B；套 R-384 后 preview 117659 B，自身增量 977 B，审查一批剩下的 669 B 装不下（11-15 整块评审第 1 条改成一个仓、仓首屏画完才加载以后实测 806 B）。baseline 取起点 116682，limitBytes 1024 不变，以后别的改动照旧受 1 KB 限制",
       "limitBytes": 1024,
       "modes": ["preview", "e2e"],
       "baseline": 116682

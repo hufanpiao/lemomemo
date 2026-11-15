@@ -6,7 +6,8 @@
 //   ②③ 没成（整块评审第 5 条）：avatar_id、avatar_bytes 写回换之前的值（原来没有就是 null），不留一个指向空对象的 avatar_id；
 //   界面提示“头像没传上，联网后再换一次”。离线时这次回写和 ① 在 outbox 里合并，等于没改
 // • 运行日志（整块评审第 6 条）：编码、写行、发送、上传每一步失败记一行 `anniv avatar-<步骤> <结果码>`，不记名字、日期、图片
-// • 本机这一张直接记进头像缓存（avatar-view.ts 的 seedAvatar），列表、今天页立刻显示，不等上传
+// • 写完行、上传之前，本机这一张直接记进头像仓（avatar-view.ts 的 seedAvatar；我的头像也是这个时机，R-384 整块评审第 8 条）：
+//   列表、今天页立刻显示，不去服务器取一个还没传上的对象；没传上时行写回原值，集合一通知，仓就按 live 撤掉这一张、删缓存
 // • 去掉头像：两列写 null；旧对象由以后的 storage-sweep 清（代定 D10，B5 不做）
 import { getBoot } from '../../../core/boot.ts';
 import { savePatch } from '../../../core/edit-save.ts';
@@ -16,8 +17,6 @@ import { putAvatar } from '../../../core/avatar-view.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { encodeAvatar as encodeShared, type Crop } from '../../../platform/avatar-encode.ts';
 import type { loadWebpWasm } from '../../../platform/webp-wasm.ts';
-
-export type { Crop } from '../../../platform/avatar-encode.ts';
 
 export type AvatarResult = 'ok' | 'encode_failed' | 'write_failed' | 'upload_failed';
 

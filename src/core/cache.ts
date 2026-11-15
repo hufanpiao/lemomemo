@@ -68,6 +68,12 @@ export interface CachedProfile {
   [col: string]: unknown;
 }
 
+/** profiles 本人那一行的 avatar_id（我的头像，R-384）；没有、不是字符串回 null */
+export function meAvatarId(profile: Readonly<Record<string, unknown>> | null | undefined): string | null {
+  const v = profile?.['avatar_id'];
+  return typeof v === 'string' && v !== '' ? v : null;
+}
+
 /** 队列因 426 暂停（0.27 第 1 点）：记下当时的 App 版本，新版启动时（版本变了）自动解除 */
 export interface OutboxPause {
   reason: 'upgrade';
@@ -118,6 +124,11 @@ export interface MetaMap {
   'ui.todo_collapsed': Readonly<Record<string, boolean>>;
   /** 查找面板的“最近找过”（B4b-2，线框 s12）：最近的在前、最多 6 条；features/smart-search/data/find-recent.ts 读写；随整库清掉 */
   'ui.find_recent': readonly string[];
+  /**
+   * 换我的头像没传上、两列改回原值也没写成时记下（R-384 整块评审第 2 条；core/me-avatar.ts 读写）：bad 是没传上的 avatar_id，
+   * id、bytes 是要写回的；以后每次 applyFreshConfig 再试，写成了删掉；随整库清掉
+   */
+  me_avatar_undo: { readonly bad: string; readonly id: string | null; readonly bytes: number | null };
   /** 各表的同步游标（K8） */
   [k: `cursor:${string}`]: SyncCursor;
   /** 各表“待补拉”的 id（K7：一行解析不了时记下，下次启动单独补拉） */
