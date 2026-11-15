@@ -4,6 +4,8 @@
 //   CopyrightNotice 开头的文件，按文件名排序）；包里一个都没有的写明只有许可证名
 // • 编进二进制里的第三方代码另列（EMBEDDED）：@jsquash/webp 的 wasm 里编的是 libwebp（Google，BSD-3，分发二进制必须带版权声明），
 //   原文在它包里的 codec/LICENSE.codec.md。原来手工拷的 src/public/licenses/webp-wasm.txt 并进这里，不再单独维护一份
+//   lunar-javascript（6tail，MIT）是开发依赖、不进包，但黄历卡的宜忌表 shared/logic/anniv/lunar-huangli-data.ts 是从它生成的（R-431），
+//   MIT 要求随“实质部分”带版权和许可声明，也列在这里；版本从它自己的 package.json 读（不在生产依赖里）
 // • 可选字体（架构 5.9c，B6 字体 11-14）：按 assets-src/fonts/<id>/font.json 的 licenses 逐项列字体名、版本、许可证、来源和许可证原文
 //   （OFL 1.1 第 2 条：分发字体要带版权声明和许可证；字体分片的名字表也留着版权、许可证两项）。登记是唯一来源，不另抄一份
 // • 输出只取决于 lock 和 node_modules：按包名排序、换行统一成 \n；同样的依赖构建两次一字不差
@@ -19,7 +21,10 @@ const LICENSE_FILE = /^(licen[cs]e|copying|notice|copyrightnotice)([.\-_].*)?$/i
 const RULE = '='.repeat(78);
 
 /** 编在别的包的二进制里的第三方代码：包名、包内许可文件、标题 */
-export const EMBEDDED = [{ pkg: '@jsquash/webp', file: 'codec/LICENSE.codec.md', title: 'libwebp（编在 @jsquash/webp 的 wasm 编码器里，Copyright (c) 2010, Google Inc.）— BSD-3-Clause' }];
+export const EMBEDDED = [
+  { pkg: '@jsquash/webp', file: 'codec/LICENSE.codec.md', title: 'libwebp（编在 @jsquash/webp 的 wasm 编码器里，Copyright (c) 2010, Google Inc.）— BSD-3-Clause' },
+  { pkg: 'lunar-javascript', file: 'LICENSE', title: '黄历宜忌表（日历黄历卡的数据从 lunar-javascript 生成，Copyright (c) 2018 6tail）— MIT' },
+];
 
 const norm = (s) => s.replace(/\r\n?/g, '\n').trimEnd();
 
@@ -65,13 +70,14 @@ export function licensesText(root = ROOT) {
   const parts = [
     '柠檬记随产物分发的第三方开源组件许可',
     '由 build/gen_licenses.mjs 在构建时按 package-lock.json 的生产依赖和 assets-src/fonts 的字体登记生成，不要手改。',
-    `共 ${pkgs.length} 个包，另有 ${EMBEDDED.length} 项编在二进制里的第三方代码（列在最前）、${fonts.length} 项可选字体（列在其后）。`,
+    `共 ${pkgs.length} 个包，另有 ${EMBEDDED.length} 项编在二进制或数据里的第三方代码（列在最前）、${fonts.length} 项可选字体（列在其后）。`,
     '',
   ];
   for (const e of EMBEDDED) {
     const p = pkgs.find((x) => x.name === e.pkg);
     const dir = p?.dir ?? join(root, 'node_modules', e.pkg);
-    parts.push(section(`${e.title}（随 ${e.pkg} ${p?.version ?? '?'} 分发）`, norm(readFileSync(join(dir, e.file), 'utf8'))));
+    const version = p?.version ?? JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).version;
+    parts.push(section(`${e.title}（随 ${e.pkg} ${version} 分发）`, norm(readFileSync(join(dir, e.file), 'utf8'))));
   }
   for (const f of fonts) parts.push(section(`字体：${f.name} ${f.version} — ${f.spdx}（设置 › 字体“${f.label}”，/app/fonts/${f.id}/；来源 ${f.sourceUrl}）`, f.text));
   for (const p of pkgs) {
