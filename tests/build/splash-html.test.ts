@@ -141,7 +141,7 @@ describe('启动画面整屏铺满（11-11，底部灰条）', () => {
   });
   it('启动期间页面底色 = 启动画面底部的颜色；开始收起就退回；深色主屏幕版跟着一起变深', () => {
     expect(cssNoComments).toMatch(/\n:root:has\(> body > \.lemo-splash:not\(\.is-leaving\)\) \{\s*background-color: #E8E9E8;/);
-    expect(cssNoComments).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*:root:has\(> body > \.lemo-splash:not\(\.is-leaving\)\) \{\s*background-color: #161717;/);
+    expect(cssNoComments).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*:root:has\(> body > \.lemo-splash:not\(\.is-leaving\)\) \{\s*background-color: #1E1B13;/);
     expect(cssNoComments).toMatch(/animation: lemo-splash-bg-to-dark var\(--dur-splash-dark\) var\(--ease-standard\) var\(--dur-splash-still\) forwards;/);
   });
   it('检查器拦得住产物里丢了整屏高度那几段', () => {
