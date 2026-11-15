@@ -15,7 +15,7 @@
 import type { VaultImageAdd } from '../../../../shared/schema/vault.ts';
 import type { VaultResult } from './vault-api.ts';
 import { vaultErrorAction, type VaultCode } from './vault-errors.ts';
-import { imageRowOf, type Row, type VaultStore } from './vault-store.ts';
+import { imageRowOf, str, type Row, type VaultStore } from './vault-store.ts';
 
 export const QUEUE_BACKOFF = [2000, 5000, 15000] as const;
 export const SAVE_GAP_MS = 1500;
@@ -96,7 +96,6 @@ export function limiter(n: number) {
   };
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 
 export function createVaultQueue(d: QueueDeps) {

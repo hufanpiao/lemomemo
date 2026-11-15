@@ -21,6 +21,8 @@ import type {
 import type { VaultFail } from '../data/vault-api.ts';
 import type { VaultSession } from '../data/session.ts';
 import { imageRowOf, type Row, type StoreSnap, type UploadState } from '../data/vault-store.ts';
+
+export { str } from '../data/vault-store.ts';
 import { useVault, vaultSession } from './useVault.ts';
 import { useVaultT } from './useVaultT.ts';
 

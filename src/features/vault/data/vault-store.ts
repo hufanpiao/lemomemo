@@ -21,6 +21,9 @@ export interface StoreSnap {
   dropped: number;
 }
 
+/** 行里的字符串字段（不是字符串就当空；队列发 save、回收站显示标题共用这一份） */
+export const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+
 /** 隐私记的一条 → 随手记集合那种行 */
 export function noteRowOf(n: VaultNote): Row {
   return {

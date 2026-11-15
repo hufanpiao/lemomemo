@@ -1,5 +1,5 @@
 // 隐私记自己的“最近删除”（B5 S9；#/vault/trash）：只有隐私记的内容，不进随手记的最近删除
-// • 读会话的内存仓库（data/vault-store.ts）里删了的那些；恢复走后台队列（同列表、编辑器的写法，界面立刻变）
+// • 读会话的内存仓库（data/vault-store.ts）里删了的那些；恢复走隐私记来源的 editIo.setDeleted（同列表、编辑器同一个口子，界面立刻变）
 // • 永久删除要确认，直接发 vault {purge}（不进队列：确认过的动作，等它回来再出结果）；成了会话从仓库拿掉
 // • 2026-11-15 从 VaultPage.tsx 拆出来（隐私记重写：列表、编辑器换成随手记那一份，这一块留着）
 import { useState } from 'react';
@@ -9,11 +9,9 @@ import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import { useErrText, useVault } from '../hooks/useVault.ts';
-import { useVaultStore } from '../hooks/vault-note-source.ts';
+import { str, useVaultNoteSource, useVaultStore } from '../hooks/vault-note-source.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import styles from './Vault.module.css';
-
-const text = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 export function VaultTrash() {
   const t = useVaultT();
@@ -23,10 +21,8 @@ export function VaultTrash() {
   const [ask, setAsk] = useState<string[] | null>(null);
   const [err, setErr] = useState('');
   const gone = snap.notes.filter((n) => n['deleted_at'] !== null);
-  const restore = (id: string): void => {
-    const r = s.store.patch(id, { deleted_at: null, updated_at: Date.now() });
-    if (r) s.queue.deleted(r, false);
-  };
+  const { editIo } = useVaultNoteSource();
+  const restore = (id: string): void => void editIo.setDeleted('notes', id, false, Date.now(), false);
   const purge = async (items: string[]): Promise<void> => {
     setErr('');
     const r = await s.purge(items);
@@ -58,7 +54,7 @@ export function VaultTrash() {
           {gone.map((n) => (
             <li key={n.id} className={styles.row} data-testid={`vault-trash-row-${n.id}`}>
               <span className={styles.rowMain}>
-                <span className={styles.rowTitle}>{text(n['title']) || text(n['body']).split('\n')[0] || t('vault.trash.untitled', {})}</span>
+                <span className={styles.rowTitle}>{str(n['title']) || str(n['body']).split('\n')[0] || t('vault.trash.untitled', {})}</span>
               </span>
               <span className={styles.rowActs}>
                 <FormButton size="compact" onClick={() => restore(n.id)} data-testid={`vault-restore-${n.id}`}>
