@@ -47,6 +47,13 @@ describe('分组', () => {
     ]);
   });
 
+  it('linger：刚打勾的那一条（已完成）照截止日留在原组，别的已完成照旧进“已完成”组（负责人 11-15）', () => {
+    const rows = [td({ id: 'x', title: 'x', done: true, done_at: 2, due: '2026-11-05' }), td({ id: 'y', title: 'y', done: true, done_at: 1 })];
+    const g = groupTodos(rows, NOW, TZ, null, 'zh-CN', 'x');
+    expect(g.map((x) => [x.key, x.items.map((i) => i.todo.id)])).toEqual([['today', ['x']], ['done', ['y']]]);
+    expect(groupTodos(rows, NOW, TZ).map((x) => x.key)).toEqual(['done']);
+  });
+
   it('组内：按截止日、截止时刻（没时刻的在后）、重要的在前', () => {
     const rows = [td({ due: '2026-11-05', title: 'a' }), td({ due: '2026-11-05', due_time: '18:00', title: 'b' }), td({ due: '2026-11-05', due_time: '15:00', title: 'c' })];
     expect(groupTodos(rows, NOW, TZ)[0]?.items.map((i) => i.todo.title)).toEqual(['c', 'b', 'a']);

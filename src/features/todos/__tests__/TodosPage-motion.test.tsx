@@ -1,5 +1,5 @@
 // 待办页的动效（架构 17.1“勾选完成”“列表增删”，17.4 B2；B2 FA-5）：
-// 打勾当下圆圈就填满（不等保存回来）；先在原处留 --dur-ui，再从原来的组离开（不接点按、移出文档流）、在“已完成”组出现；
+// 打勾当下圆圈就填满（不等保存回来）；撤销条开着的约 3 秒里留在原处，再从原来的组离开（不接点按、移出文档流）、归进默认收起的“已完成 N”（负责人 11-15）；
 // 删除先淡出再卸载、撤销恢复后淡入。时间上的手感由 e2e（b2-motion-list）和连续帧确认，这里证明结构和状态
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useSyncExternalStore } from 'react';
@@ -15,12 +15,6 @@ await loadMotionFeatures();
 // （真计时器下点击到断言若超过 220 ms 就会误判，前端 B 三时区并发跑时出现过）；推进完切回真计时器，Motion 的帧照常跑
 const HOLD_MS = 220;
 const holdTimers = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-const endHold = async () => {
-  await act(async () => {
-    vi.advanceTimersByTime(HOLD_MS);
-  });
-  vi.useRealTimers();
-};
 
 type Row = { id: string } & Record<string, unknown>;
 const db = { rows: [] as Row[], subs: new Set<() => void>() };
@@ -103,25 +97,54 @@ describe('待办页动效', () => {
     for (const s of row('a')?.querySelectorAll('span[data-state]') ?? []) expect(s.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('打勾：当下圆盘就是 on（保存还没回来）；保存回来后先留在原处 --dur-ui（列表不动，M1），然后旧行离开（leaving、移出文档流）、“已完成”组里出现这一条', async () => {
+  it('打勾：当下圆盘就是 on（保存还没回来）、页底出“已完成 · 撤销”；撤销条开着的约 3 秒里留在原组，收起以后旧行离开（leaving、移出文档流），归进默认收起的“已完成 N”', async () => {
     render(<TodosPage />);
     holdTimers();
     fireEvent.click(screen.getByTestId('todos-done-a'));
     expect(fill(row('a'))).toBe('on');
+    expect(screen.getByTestId('todos-done-toast').textContent).toContain('已完成');
     await act(async () => finish());
-    // 保存回来了，但还在留住的那一拍里：这一行仍在原来的组、圆盘 on，“已完成”组还没出现
+    // 留住的那一拍（--dur-ui）过了，撤销条还开着：仍在原来的组、圆盘 on，“已完成”组还没出现
+    await act(async () => {
+      vi.advanceTimersByTime(HOLD_MS);
+    });
     expect(screen.queryByTestId('todos-g-done')).toBeNull();
     expect(fill(within(screen.getByTestId('todos-g-nodate')).getByTestId('todos-row-a'))).toBe('on');
     const rec = recordStates('todos-row-a');
-    await endHold();
-    const done = await screen.findByTestId('todos-g-done', {}, { timeout: 3000 });
-    const moved = within(done).getByTestId('todos-row-a');
-    expect(fill(moved)).toBe('on');
-    // 离开那一次提交当下：原来那组里的旧行是 leaving、移出文档流（不靠 findBy 返回时动画还没播完）
+    // 撤销条到时收起（3 秒）：这一条离开原组
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+    vi.useRealTimers();
+    expect(screen.queryByTestId('todos-done-toast')).toBeNull();
+    const fold = await screen.findByTestId('todos-done-fold', {}, { timeout: 3000 });
     expect(rec.seen.some((s) => s.ancestors.includes('todos-g-nodate') && s.state === 'leaving' && s.position === 'absolute')).toBe(true);
     rec.stop();
     await waitFor(() => expect(within(screen.getByTestId('todos-g-nodate')).queryByTestId('todos-row-a')).toBeNull(), { timeout: 3000 });
-    expect(within(screen.getByTestId('todos-g-done')).getByTestId('todos-row-a')).toBe(moved);
+    // 默认收起：只有“已完成 1 ›”一行，里面的行不画；点开展开、再点收起
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    expect(fold.textContent).toContain('已完成 1');
+    expect(within(screen.getByTestId('todos-g-done')).queryByTestId('todos-row-a')).toBeNull();
+    fireEvent.click(fold);
+    expect(fold.getAttribute('aria-expanded')).toBe('true');
+    expect(fill(within(screen.getByTestId('todos-g-done')).getByTestId('todos-row-a'))).toBe('on');
+    fireEvent.click(fold);
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    await waitFor(() => expect(within(screen.getByTestId('todos-g-done')).queryByTestId('todos-row-a')).toBeNull(), { timeout: 3000 });
+  });
+
+  it('打勾的撤销条点“撤销”：这一条改回没完成、留在原组，撤销条收起，不出“已完成”组', async () => {
+    render(<TodosPage />);
+    fireEvent.click(screen.getByTestId('todos-done-a'));
+    await act(async () => finish());
+    await act(async () => {
+      fireEvent.click(within(screen.getByTestId('todos-done-toast')).getByRole('button'));
+    });
+    await act(async () => finish());
+    expect(screen.queryByTestId('todos-done-toast')).toBeNull();
+    expect(db.rows.find((r) => r.id === 'a')?.['done']).toBe(false);
+    await waitFor(() => expect(fill(within(screen.getByTestId('todos-g-nodate')).getByTestId('todos-row-a'))).toBe('off'), { timeout: 3000 });
+    expect(screen.queryByTestId('todos-g-done')).toBeNull();
   });
 
   it('留住的那一拍里能再点回去：两次都在原处，最后不挪', async () => {

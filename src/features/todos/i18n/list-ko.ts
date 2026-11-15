@@ -10,7 +10,7 @@ export const listKo: Readonly<Record<keyof typeof listZh, string>> = {
   'list.g.tomorrow': '내일', // REVIEW(ko)
   'list.g.later': '나중에', // REVIEW(ko)
   'list.g.nodate': '날짜 없음', // REVIEW(ko)
-  'list.g.done': '완료', // REVIEW(ko)
+  'list.g.doneN': '완료 {n}', // REVIEW(ko)
   'list.empty': '아직 할 일이 없어요', // REVIEW(ko)
   'list.tag.late': '{n}일 지남', // REVIEW(ko)
   'list.tag.passed': '{t} 지남', // REVIEW(ko)
@@ -26,6 +26,7 @@ export const listKo: Readonly<Record<keyof typeof listZh, string>> = {
   'list.delete': '삭제', // REVIEW(ko)
   'list.deleted': '삭제했어요', // REVIEW(ko)
   'list.undo': '실행 취소', // REVIEW(ko)
+  'list.doneToast': '완료했어요', // REVIEW(ko)
   'list.err.save': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
   'list.err.readonly': '새 버전으로 업데이트해야 수정할 수 있어요', // REVIEW(ko)
   'items.progress': '{done}/{total}',

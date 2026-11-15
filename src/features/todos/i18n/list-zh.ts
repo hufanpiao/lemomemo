@@ -9,7 +9,7 @@ export const listZh = {
   'list.g.tomorrow': '明天',
   'list.g.later': '以后',
   'list.g.nodate': '没有日期',
-  'list.g.done': '已完成',
+  'list.g.doneN': '已完成 {n}',
   'list.empty': '还没有待办',
   'list.tag.late': '逾 {n} 天',
   'list.tag.passed': '已过 {t}',
@@ -25,6 +25,7 @@ export const listZh = {
   'list.delete': '删除',
   'list.deleted': '已删除',
   'list.undo': '撤销',
+  'list.doneToast': '已完成',
   'list.err.save': '没保存上，稍后再试一次',
   'list.err.readonly': '这条要新版本才能修改',
   // R-350 子任务（方案 5.1、5.5、6.2、6.5）：列表卡片只能勾、看进度、收起；加删改在编辑页
