@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RENEW_AFTER_MS } from '../data/session.ts';
 import { noteRowOf } from '../data/vault-store.ts';
-import { held, IMG, listOk, make, NID, note, queueDelete, statusSet, TOK2, tokenOk, unlocked } from './session-fakes.ts';
+import { held, IMG, listOk, make, note, queueDelete, statusSet, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 describe('S1：请求在路上时上锁，回来的结果整个丢掉', () => {
   it('list 在路上时 Ctrl+L：回来后不收令牌、不写明文', async () => {
