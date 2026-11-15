@@ -7,7 +7,7 @@
 // • 只要有一次邮件没发出去，列表下方放一句提示（不每行重复）
 // • 90 天里没有导出也写一句（不是本人操作时，用户能看出“明明没导出过”）；还在读、读失败、断网时整块不显示
 import { useState } from 'react';
-import { FormButton } from '../../../kit/components/Form.tsx';
+import { FormButton, groupLabelClass } from '../../../kit/components/Form.tsx';
 import { SettingsDetailRow, SettingsList, type SettingsMeta } from '../../../kit/components/Settings/Settings.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import type { DevicesState } from '../hooks/useDevices.ts';
@@ -38,7 +38,7 @@ export function RecentExport({ state, devices }: { state: RecentExportState; dev
   const anyFailed = list.some((e) => e.mailFailed);
   return (
     <section aria-labelledby="settings-recent-export-title" data-testid="settings-recent-export">
-      <h3 id="settings-recent-export-title" className={styles.gt}>
+      <h3 id="settings-recent-export-title" className={`${groupLabelClass} ${styles.gt}`}>
         {t('settings.recentExport.title', {})}
       </h3>
       {list.length === 0 ? (

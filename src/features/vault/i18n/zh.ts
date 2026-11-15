@@ -43,6 +43,8 @@ export const zh = {
   'vault.trash.untitled': '没有标题',
   'vault.trash': '最近删除',
   'vault.trash.empty': '最近删除是空的',
+  // R-436 列表上方的小字分组名：共几项（同普通“最近删除”的 trash.count）
+  'vault.trash.count': '{n} 项',
   'vault.trash.hint': '只有隐私记自己的内容。永久删除以后不能恢复',
   'vault.restore': '恢复',
   'vault.purge': '永久删除',

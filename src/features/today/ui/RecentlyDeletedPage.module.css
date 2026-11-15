@@ -29,35 +29,14 @@
 
 /* 列表行、空状态在 kit 的 List.module.css（B2-UI-a U4、U6） */
 
-/* 上下留 6px（原来在行上的 padding，行样式并进 kit 以后放到这里）：44 高的胶囊不贴着行间的分隔线 */
-.restore {
+/* 行尾“恢复”“永久删除”（R-436）：kit 的 FormButton compact（看得见 38、灰色实底、点击区 44，永久删除只换危险色字），不再自己画描边胶囊；
+   这里只管两颗按钮并排的间距 */
+.acts {
+  display: flex;
   flex: none;
-  margin: 6px 0;
-  min-width: var(--hit);
-  min-height: var(--hit);
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: none;
-  color: var(--text);
-  font-size: var(--fs-14);
+  gap: 6px;
 }
 
-/* 永久删除（B4 S9，无定稿视觉稿）：和“恢复”同一个胶囊，字用警示色；离线、进行中 aria-disabled 灰掉 */
-.purge {
-  flex: none;
-  margin: 6px 0;
-  min-width: var(--hit);
-  min-height: var(--hit);
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: none;
-  color: var(--danger-text);
-  font-size: var(--fs-14);
-}
-
-/* 全部清空：右上角，和返回按钮一样不带框，字用警示色，点击区够 44 高 */
 .clear {
   justify-self: end;
   min-height: var(--hit);
@@ -70,15 +49,13 @@
   cursor: pointer;
 }
 
-.restore[aria-disabled='true'],   /* 只读行、进行中：“恢复”也灰掉 */
-.purge[aria-disabled='true'],
+.acts > [aria-disabled='true'],   /* 只读行、进行中：“恢复”“永久删除”灰掉 */
 .clear[aria-disabled='true'] {
   opacity: 0.45;   /* 同 kit 只读行的打勾圆圈变淡（kit CheckCircle.module.css） */
   cursor: default;
 }
 
-.clear:focus-visible,
-.purge:focus-visible {
+.clear:focus-visible {
   border-radius: var(--r-sm);
   outline: 2px solid var(--focus);
   outline-offset: 2px;

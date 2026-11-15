@@ -123,7 +123,8 @@ export default function FullReminderPage() {
     <main className={styles.page} data-testid="remind-full" data-kind={r.kind}>
       {top}
       {/* 线框 FULLALERT（设计 H1）：铃铛 + 类型行、大时刻、标题（待办的完成圆圈并排，不在 h1 里，L1）、“到 16:30 · 项目”、地点备注卡、下一条卡 */}
-      <p className={styles.kind} data-testid="remind-full-kind">
+      {/* R-436：类型行是大时刻上方的小字标签；红色只表示逾期（待办过了截止，remind.when.overdue），别的照常次要色 */}
+      <p className={styles.kind} data-testid="remind-full-kind" data-overdue={w.key === 'remind.when.overdue' ? '' : undefined}>
         <Bell className={styles.bell} />
         {t(`remind.full.head.${r.kind}`, { when: t(w.key, w.params as never) })}
       </p>

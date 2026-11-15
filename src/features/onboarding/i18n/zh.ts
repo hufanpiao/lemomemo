@@ -25,6 +25,8 @@ export const zh = {
   'consent.send.body': '文字、录音、查找时说的话；日程和待办的标题、备注、地点（用来按意思查找）；图片的缩略图（证件照也会送）；文档的文件名和前 2000 字；隐私记解密后的文字；总结时被总结的记录片段。',
   'consent.send.msLabel': '交给微软的：',
   'consent.send.msBody': '预览 PPT 时的整个文件，包括隐私记里的 PPT（先解密再交）。',
+  // R-436 清单上方的小字分组名（只是标签，不改告知内容）
+  'consent.itemsLabel': '用到 AI 的地方',
   'consent.check': '我同意把上面这些交给谷歌 AI 处理',
   'consent.needCheck': '先勾选上面的同意，才能点“同意并继续”',
   'consent.agree': '同意并继续',
@@ -52,6 +54,7 @@ export const zh = {
   'consent.update.item.cal.d': '标题、备注、地点交给谷歌 AI，用来按意思查找',
   'consent.update.item.ppt': '预览 PPT',
   'consent.update.item.ppt.d': '文件交给微软的在线预览，包括隐私记里的 PPT',
+  'consent.update.itemsLabel': '这次多了这些',
   'consent.update.check': '我同意更新后的内容',
   'consent.update.declineNote': '不同意：AI 功能先停用，按本地规则整理、只按关键词找；以后可在 设置 › 语音与 AI 打开',
 } as const;

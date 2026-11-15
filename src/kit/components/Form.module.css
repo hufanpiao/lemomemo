@@ -12,6 +12,7 @@
   color: var(--text-3);
   font-family: var(--f-tnum);
   font-size: var(--fs-11);
+  font-weight: 400;
   letter-spacing: 0.12em;
 }
 

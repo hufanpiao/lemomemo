@@ -5,6 +5,8 @@ export const trashZh = {
   'trash.note': '删除的日程、待办和随手记在这里留 30 天，之后自动清理',
   'trash.empty': '最近删除里没有东西',
   'trash.left': '{n} 天后清理',
+  // R-436 列表上方的小字分组名：共几项
+  'trash.count': '{n} 项',
   'trash.restore': '恢复',
   'trash.restored': '已恢复',
   'trash.kind.events': '日程',

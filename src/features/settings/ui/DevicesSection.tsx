@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fmtDate } from '../../../../shared/i18n/fmt.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
-import { FormButton } from '../../../kit/components/Form.tsx';
+import { FormButton, groupLabelClass } from '../../../kit/components/Form.tsx';
 import { SettingsDetailRow, SettingsList } from '../../../kit/components/Settings/Settings.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import type { DeviceNotice, DeviceView, useDevices } from '../hooks/useDevices.ts';
@@ -105,7 +105,7 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
 
   return (
     <section aria-labelledby="settings-devices-title">
-      <h3 id="settings-devices-title" className={styles.gt} ref={titleRef} tabIndex={-1}>
+      <h3 id="settings-devices-title" className={`${groupLabelClass} ${styles.gt}`} ref={titleRef} tabIndex={-1}>
         {t('settings.devices.title', {})}
       </h3>
       {state.kind === 'loading' ? (

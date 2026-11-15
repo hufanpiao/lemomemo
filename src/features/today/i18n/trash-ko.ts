@@ -8,6 +8,7 @@ export const trashKo = {
   'trash.note': '삭제한 일정, 할 일, 메모는 30일 동안 보관된 뒤 자동으로 정리돼요', // REVIEW(ko)
   'trash.empty': '최근 삭제한 항목이 없어요', // REVIEW(ko)
   'trash.left': '{n}일 후 정리', // REVIEW(ko)
+  'trash.count': '{n}개', // REVIEW(ko) R-436 列表上方的小字分组名
   'trash.restore': '복원', // REVIEW(ko)
   'trash.restored': '복원했어요', // REVIEW(ko)
   'trash.kind.events': '일정', // REVIEW(ko)

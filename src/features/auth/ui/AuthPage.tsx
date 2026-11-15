@@ -131,7 +131,7 @@ function CodeStep({ flow }: { flow: ReturnType<typeof useAuthFlow> }) {
       </p>
       {/* 架构 0.38 第 27 条：start 被限流、码不对、发信失败都回 {ok}，界面分不出来，只能提示没收到怎么办 */}
       {step === 'invite-code' && <p className={styles.lead}>{t('auth.invite.noMail', {})}</p>}
-      <label className={styles.label} htmlFor="auth-code">
+      <label className={form.groupLabel} htmlFor="auth-code">
         {t('auth.code.label', {})}
       </label>
       <input
@@ -221,7 +221,7 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
             void (step === 'invite' ? flow.sendInvite() : flow.sendCode());
           }}
         >
-          <label className={styles.label} htmlFor="auth-email">
+          <label className={form.groupLabel} htmlFor="auth-email">
             {t('auth.email.label', {})}
           </label>
           <input
@@ -241,7 +241,7 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
               <p className={styles.notice} role="status" data-testid="auth-not-registered">
                 {t('auth.invite.notRegistered', {})}
               </p>
-              <label className={styles.label} htmlFor="auth-invite">
+              <label className={form.groupLabel} htmlFor="auth-invite">
                 {t('auth.invite.label', {})}
               </label>
               <input

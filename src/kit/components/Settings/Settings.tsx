@@ -37,7 +37,7 @@ export function SettingsCard({ title, children, testId, showTitle, note, noteTes
   const id = useId();
   return (
     <section aria-labelledby={id} data-testid={testId}>
-      <h2 id={id} className={showTitle === true ? styles.gt : styles.srOnly}>
+      <h2 id={id} className={showTitle === true ? `${form.groupLabel} ${styles.gt}` : styles.srOnly}>
         {title}
       </h2>
       <ul className={styles.grp}>{children}</ul>
