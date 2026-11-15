@@ -23,7 +23,9 @@ import type { VaultSession } from '../data/session.ts';
 import { imageRowOf, type Row, type StoreSnap, type UploadState } from '../data/vault-store.ts';
 
 export { str } from '../data/vault-store.ts';
-import { useVault, vaultSession } from './useVault.ts';
+import { useVault, useVaultStore, vaultSession } from './useVault.ts';
+
+export { useVaultStore } from './useVault.ts';
 import { useVaultT } from './useVaultT.ts';
 
 const EMPTY_IDS: ReadonlySet<string> = new Set();
@@ -61,12 +63,6 @@ export function fileApiOf(s: VaultSession): VaultFileApi {
     },
     msPreviewEnd: () => s.file.msPreviewEnd(),
   };
-}
-
-/** 仓库快照（列表、编辑器、插图区共用一份订阅） */
-export function useVaultStore(): StoreSnap {
-  const st = vaultSession().store;
-  return useSyncExternalStore(st.subscribe, st.getSnapshot, st.getSnapshot);
 }
 
 /**

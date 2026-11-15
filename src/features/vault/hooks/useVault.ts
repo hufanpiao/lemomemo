@@ -15,6 +15,7 @@ import { holdReducedTransparency } from '../../../platform/look.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { createVaultApi } from '../data/vault-api.ts';
 import { createVaultSession, type VaultSession, type VaultState } from '../data/session.ts';
+import type { StoreSnap } from '../data/vault-store.ts';
 import { vaultErrorAction, type VaultCode } from '../data/vault-errors.ts';
 import { useVaultT } from './useVaultT.ts';
 
@@ -118,14 +119,20 @@ export function useVaultChecked(): void {
   }, [s]);
 }
 
+/** 仓库快照（列表、编辑器、插图区、条数共用一份订阅） */
+export function useVaultStore(): StoreSnap {
+  const st = vaultSession().store;
+  return useSyncExternalStore(st.subscribe, st.getSnapshot, st.getSnapshot);
+}
+
 /**
  * 隐私记有几条（锁着也能数）：本机 notes 集合里 is_private 的行只有密文列和中性列（0.27 第 1 点），数行数不碰明文；
  * 解锁拉过列表以后以内存仓库（data/vault-store.ts）为准
  */
 export function useVaultCount(): number {
   const rows = useCollection<{ id: string; is_private?: unknown; deleted_at?: unknown; undone?: unknown }>('notes');
-  const { state, s } = useVault();
-  const snap = useSyncExternalStore(s.store.subscribe, s.store.getSnapshot, s.store.getSnapshot);
+  const { state } = useVault();
+  const snap = useVaultStore();
   if (state.listed) return snap.notes.filter((n) => n['deleted_at'] === null).length;
   return rows.filter((r) => r.is_private === true && isLiveRow(r)).length;
 }
