@@ -75,9 +75,8 @@ export const ko = {
   'vault.edit.image': '사진', // REVIEW(ko)
   'vault.edit.imageFail': '이 사진은 처리할 수 없어요. 다른 사진으로 해 보세요', // REVIEW(ko)
 
-  'vault.lockrow.locked': '잠김 · {n}개', // REVIEW(ko)
-  'vault.lockrow.lockedNone': '잠김', // REVIEW(ko)
-  'vault.lockrow.unlocked': '잠금 해제됨 · {n}개', // REVIEW(ko)
+  'vault.lockrow.locked': '잠김', // REVIEW(ko)
+  'vault.lockrow.unlocked': '잠금 해제됨', // REVIEW(ko)
   'vault.lockrow.with': '{method}로 잠금 해제', // REVIEW(ko)
   'vault.lockrow.pin': '비밀번호로 잠금 해제', // REVIEW(ko)
   'vault.lockrow.setup': '비밀번호 정하기', // REVIEW(ko)

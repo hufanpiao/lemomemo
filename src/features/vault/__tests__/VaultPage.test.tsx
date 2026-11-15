@@ -11,6 +11,7 @@ import { createVaultSession, type VaultSession } from '../data/session.ts';
 import type { VaultApi, VaultFail, VaultResult } from '../data/vault-api.ts';
 import { installVaultSession, SHIELD_ATTR, watchLeave } from '../hooks/useVault.ts';
 import VaultPage from '../ui/VaultPage.tsx';
+import VaultParts from '../ui/VaultParts.tsx';
 import { applyLook } from '../../../platform/look.ts';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { make } from './session-fakes.ts';
@@ -374,5 +375,21 @@ describe('层栈整块评审第 1 条：锁屏是模态层，页面快捷键收�
     expect(behind).not.toHaveBeenCalled();
     expect(dots.getAttribute('data-n')).toBe('1');
     expect(document.documentElement.classList.contains('scroll-locked'), '锁屏不锁滚动（取消时直接换页，webkit View Transition 崩溃）').toBe(false);
+  });
+});
+
+describe('随手记页的入口行（lockrow）不写条数（负责人 11-15：“不管解锁没解锁里面几条这个不用显示”）', () => {
+  it('锁着写“已上锁”、解锁后写“已解锁”，都不带“N 条”', async () => {
+    s = session();
+    installVaultSession(s);
+    render(<VaultParts part="lockrow" />);
+    const row = await screen.findByTestId('vault-lockrow');
+    await waitFor(() => expect(row.textContent).toContain('已上锁'));
+    expect(row.textContent).not.toMatch(/\d+\s*条/);
+    await act(async () => {
+      await s.unlock('1234');
+    });
+    await waitFor(() => expect(row.textContent).toContain('已解锁'));
+    expect(row.textContent).not.toMatch(/\d+\s*条/);
   });
 });

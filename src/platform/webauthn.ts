@@ -30,20 +30,22 @@ function defaultEnv(): WebauthnEnv {
     tauri: isTauri(),
     secure: typeof isSecureContext === 'boolean' ? isSecureContext : false,
     api: typeof g.PublicKeyCredential === 'function' && typeof navigator !== 'undefined' && !!navigator.credentials,
-    platformAvailable: async () => {
-      try {
-        return (await g.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable?.()) === true;
-      } catch {
-        return false;
-      }
-    },
+    platformAvailable: async () => (await g.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable?.()) === true,
   };
 }
 
-/** 这台设备能不能显示 Face ID / Windows Hello：exe 不能；没有 API、不安全上下文、没有平台验证器都不能 */
-export async function webauthnUsable(env: WebauthnEnv = defaultEnv()): Promise<boolean> {
-  if (env.tauri || !env.secure || !env.api) return false;
-  return env.platformAvailable();
+/** 这台设备能不能显示 Face ID / Windows Hello（exe、没有 API、不安全上下文、没有平台验证器都不能）：结论和原因（原因进运行日志，11-15 负责人“设置里没有 Face ID 开关”时日志看不出是哪一关没过） */
+export type WebauthnWhy = 'ok' | 'tauri' | 'insecure' | 'no_api' | 'no_platform' | 'platform_err';
+
+export async function webauthnCheck(env: WebauthnEnv = defaultEnv()): Promise<WebauthnWhy> {
+  if (env.tauri) return 'tauri';
+  if (!env.secure) return 'insecure';
+  if (!env.api) return 'no_api';
+  try {
+    return (await env.platformAvailable()) ? 'ok' : 'no_platform';
+  } catch {
+    return 'platform_err';
+  }
 }
 
 export interface WebauthnOptions {

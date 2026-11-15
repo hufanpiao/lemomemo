@@ -73,9 +73,8 @@ export const zh = {
   'vault.edit.image': '图片',
   'vault.edit.imageFail': '这张图处理不了，换一张试试',
 
-  'vault.lockrow.locked': '已上锁 · {n} 条',
-  'vault.lockrow.lockedNone': '已上锁',
-  'vault.lockrow.unlocked': '已解锁 · {n} 条',
+  'vault.lockrow.locked': '已上锁',
+  'vault.lockrow.unlocked': '已解锁',
   'vault.lockrow.with': '{method} 解锁',
   'vault.lockrow.pin': '输入密码解锁',
   'vault.lockrow.setup': '设个密码',

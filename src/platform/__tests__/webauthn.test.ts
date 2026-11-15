@@ -1,17 +1,18 @@
 // Face ID / Windows Hello 封装（platform/webauthn.ts；B5 S4、R-105、D18）：能不能用、base64url 编码、取消回 null
 import { describe, expect, it, vi } from 'vitest';
-import { createPasskey, fromB64u, getAssertion, toB64u, webauthnUsable, type WebauthnEnv } from '../webauthn.ts';
+import { createPasskey, fromB64u, getAssertion, toB64u, webauthnCheck, type WebauthnEnv } from '../webauthn.ts';
 
 const env = (o: Partial<WebauthnEnv>): WebauthnEnv => ({ tauri: false, secure: true, api: true, platformAvailable: async () => true, ...o });
 const OPTS = { challenge: toB64u(new Uint8Array([1, 2, 3])), rpId: 'lemomemo.com', timeoutMs: 60_000, userId: toB64u(new Uint8Array([9])), credentialIds: [toB64u(new Uint8Array([7, 7]))] };
 
-describe('webauthnUsable', () => {
-  it('exe、不安全上下文、没有 API、没有平台验证器：都不能用', async () => {
-    expect(await webauthnUsable(env({ tauri: true }))).toBe(false);
-    expect(await webauthnUsable(env({ secure: false }))).toBe(false);
-    expect(await webauthnUsable(env({ api: false }))).toBe(false);
-    expect(await webauthnUsable(env({ platformAvailable: async () => false }))).toBe(false);
-    expect(await webauthnUsable(env({}))).toBe(true);
+describe('webauthnCheck', () => {
+  it('exe、不安全上下文、没有 API、没有平台验证器、查询抛错：各回各的原因（进运行日志）；都过了回 ok', async () => {
+    expect(await webauthnCheck(env({ tauri: true }))).toBe('tauri');
+    expect(await webauthnCheck(env({ secure: false }))).toBe('insecure');
+    expect(await webauthnCheck(env({ api: false }))).toBe('no_api');
+    expect(await webauthnCheck(env({ platformAvailable: async () => false }))).toBe('no_platform');
+    expect(await webauthnCheck(env({ platformAvailable: () => Promise.reject(new Error('x')) }))).toBe('platform_err');
+    expect(await webauthnCheck(env({}))).toBe('ok');
   });
 });
 

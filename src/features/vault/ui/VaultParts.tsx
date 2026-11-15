@@ -1,5 +1,6 @@
 // 隐私记给别的功能用的几块（经 vault/index.ts 的一个懒加载导出 VaultParts 分发，首屏只多一个 lazy，B5 首屏额度）
-// • lockrow：随手记列表顶部的入口行（线框 s7 LOCKROW）：“🔒 隐私记 已上锁 · 6 条 … Face ID 解锁 ›”，点了进 #/vault
+// • lockrow：随手记列表顶部的入口行（线框 s7 LOCKROW）：“🔒 隐私记 已上锁 … Face ID 解锁 ›”，点了进 #/vault；
+//   不写条数（负责人 11-15：“不管解锁没解锁里面几条这个不用显示”）
 // • move：把一条普通随手记移进隐私记（S7）：没设密码先去设；锁着就弹解锁卡，解锁后自动重试一次（TC-B5-47 ①）；
 //   带附件回 has_files → “带附件的随手记暂时不能移进隐私记”（D13）；结果回 onDone(true / false)
 // • settings：设置 › 隐私记（VaultSettings.tsx）
@@ -8,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { navigate } from '../../../app/router.ts';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
-import { useErrText, useVault, useVaultCount, type VaultCode } from '../hooks/useVault.ts';
+import { useErrText, useVault, type VaultCode } from '../hooks/useVault.ts';
 import { useWebauthn } from '../hooks/useVaultAuth.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import { LockIcon } from './Pin.tsx';
@@ -49,13 +50,12 @@ function LockRow() {
   const t = useVaultT();
   const { state, s } = useVault();
   const wa = useWebauthn();
-  const count = useVaultCount();
   useEffect(() => {
     if (state.status === null && state.phase === 'loading') void s.refreshStatus();
   }, [s, state.status, state.phase]);
   const unset = state.status?.set === false;
   const unlocked = state.phase === 'unlocked';
-  const sub = unset ? '' : unlocked ? t('vault.lockrow.unlocked', { n: count }) : count ? t('vault.lockrow.locked', { n: count }) : t('vault.lockrow.lockedNone', {});
+  const sub = unset ? '' : t(unlocked ? 'vault.lockrow.unlocked' : 'vault.lockrow.locked', {});
   const go = unset
     ? t('vault.lockrow.setup', {})
     : unlocked

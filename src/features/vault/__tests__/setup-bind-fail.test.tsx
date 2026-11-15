@@ -9,7 +9,7 @@ import { make, statusSet } from './session-fakes.ts';
 vi.mock('../../../kit/hooks/useCollection.ts', () => ({ useCollection: () => [] }));
 const passkey = vi.hoisted(() => ({ result: null as unknown }));
 vi.mock('../../../platform/webauthn.ts', () => ({
-  webauthnUsable: async () => true,
+  webauthnCheck: async () => 'ok',
   createPasskey: async () => passkey.result,
   getAssertion: async () => null,
 }));

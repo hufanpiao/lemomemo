@@ -11,7 +11,8 @@ import { appFetch } from '../../../platform/http.ts';
 import { readSessionEmail } from '../../../platform/session.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { createEphemeralDb } from '../../../platform/supabase/ephemeral.ts';
-import { createPasskey, getAssertion, webauthnUsable } from '../../../platform/webauthn.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
+import { createPasskey, getAssertion, webauthnCheck } from '../../../platform/webauthn.ts';
 import type { VaultState } from '../data/session.ts';
 import type { VaultResult } from '../data/vault-api.ts';
 import { useVault } from './useVault.ts';
@@ -27,7 +28,10 @@ export function useWebauthn() {
   const [usable, setUsable] = useState(false);
   useEffect(() => {
     let live = true;
-    void (usableMemo ??= webauthnUsable()).then((v) => {
+    void (usableMemo ??= webauthnCheck().then((why) => {
+      rlog(`vault webauthn ${why}`);   // 一次启动只查一次、记一次
+      return why === 'ok';
+    })).then((v) => {
       if (live) setUsable(v);
     });
     return () => {
