@@ -13,7 +13,7 @@
    颜色：深色底用图（splash-dark.png，glass 深色 --scr-bg，build/export_splash_blur.py 从 skins/glass.css 读值导出）；
    剩下三个字色写死，每处用 stylelint-disable-next-line 单独放行（只放那一行），理由：
    启动画面是品牌画面、不随皮肤，在 React 之前画，那时皮肤变量还没按 glass 深色生效；值和 logo-mark.svg（#141518）、
-   glass 深色 --text（#F1F2F4）、--text-2（#B4B8C1）相同，tests/build/splash-html.test.ts 核对 */
+   glass 深色 --text（#ECE7D8）、--text-2（#BAB5AA）相同，tests/build/splash-html.test.ts 核对 */
 @import url("./tokens.css");
 
 
@@ -139,7 +139,7 @@
 .lemo-splash-d {
   display: none;
   /* stylelint-disable-next-line color-no-hex -- 启动画面品牌字色（glass 深色 --text），见文件开头 */
-  color: #F1F2F4;
+  color: #ECE7D8;
   background: url("./splash/splash-dark.png") 0 0 / 100% 100% no-repeat;
 }
 
@@ -193,7 +193,7 @@
 .lemo-splash-d .lemo-splash-en,
 .lemo-splash-d .lemo-splash-foot {
   /* stylelint-disable-next-line color-no-hex -- 启动画面品牌字色（glass 深色 --text-2），见文件开头 */
-  color: #B4B8C1;
+  color: #BAB5AA;
 }
 
 /* 在听：0.8 秒后三根竖条依次轻轻起伏，只动 scaleY（合成层）。
@@ -231,7 +231,7 @@
 @media (prefers-color-scheme: dark) {
   :root:has(> body > .lemo-splash:not(.is-leaving)) {
     /* stylelint-disable-next-line color-no-hex -- 启动画面深色图底部的颜色，见上 */
-    background-color: #161717;
+    background-color: #1E1B13;
   }
 
   .lemo-splash-d {
@@ -267,7 +267,7 @@
 @keyframes lemo-splash-bg-to-dark {
   to {
     /* stylelint-disable-next-line color-no-hex -- 启动画面深色图底部的颜色，见上 */
-    background-color: #161717;
+    background-color: #1E1B13;
   }
 }
 
