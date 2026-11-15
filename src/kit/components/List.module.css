@@ -43,18 +43,33 @@
   border-bottom: 0;
 }
 
-/* .roomy（R-433）：放在 .panel 里面时（今天页“没赶上”）内边距由外面那层给，同样 16 */
-.list.roomy,
-.panel:has(> .roomy) {
+/* .roomy（R-433）：行高 56、左右 16 */
+.list.roomy {
   padding: 0 16px;
-}
-
-.panel > .list.roomy {
-  padding: 0;
 }
 
 .roomy > .row {
   min-height: 56px;
+}
+
+/* 逾期的一组（R-434 待办页过期组；R-436 第二批今天页“没赶上”同一份）：整块过期底 --late-bg、左边一条直的红竖线，红色只表示逾期。
+   竖线是列表上的 ::after（不用 inset 阴影，会顺着圆角弯成弧）；行自己的 ::before 留给电脑版抽屉选中的黄条。
+   行面不透明的（SwipeRow 的 .face）由使用方另设 --sw-face-bg: var(--late-bg) */
+.list.late {
+  position: relative;
+  background: var(--late-bg);
+}
+
+.list.late::after {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--danger-text);
+  content: '';
+  pointer-events: none;
 }
 
 /* 电脑版详情抽屉里开着的那一行（行按钮 aria-current，B6 返工）：左边一道柠檬黄。
@@ -85,7 +100,9 @@
   align-items: center;
   min-width: var(--hit);
   color: var(--text-2);
-  font-family: var(--f-num);
+
+  /* 行首的时刻（今天页日程行、日历日清单）：等宽字（R-436“日期时刻等宽数字”，第二批） */
+  font-family: var(--f-mono);
   font-size: var(--fs-13);
 
   /* 不折行（代码审建议 1）：“至 01:00”“01:00까지”比 44 宽时这一格跟着变宽（min-width），不折成两行把行撑高、也不压到标题上 */

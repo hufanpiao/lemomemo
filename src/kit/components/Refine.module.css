@@ -1,0 +1,32 @@
+/* R-436 精致化各页共用的三种字样（样板：待办页 518f49a0；第二批起今天页、日历页也用，原来写在 TodosPage.module.css，收到这里一份）：
+   • .title：页面大标题 28 号、半粗，下面一根短粗柠檬黄下划线（手法“页面大标题与当前页签的短粗下划线做出层级”）；
+   • .sub：标题下一行等宽小字（日期、完成数），第三层文字色；
+   • .num：一句话里的日期、时刻、天数换等宽字（手法“日期时刻等宽数字”），颜色跟着所在那一行 */
+.title {
+  margin: 0;
+  font-size: var(--fs-28);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.title::after {
+  content: '';
+  display: block;
+  width: 22px;
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.sub {
+  margin: 8px 0 10px;
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-11);
+  letter-spacing: 0.02em;
+}
+
+.num {
+  font-family: var(--f-mono);
+}

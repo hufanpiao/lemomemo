@@ -1,9 +1,11 @@
-/* “现在”卡（方案 K 小时间尺）：只用令牌（A11）；颜色令牌 --k-* 由皮肤给（简洁：普通卡片底；玻璃：柠檬黄 / 深橄榄渐变底） */
+/* “现在”卡（方案 K 小时间尺）：只用令牌（A11）；颜色令牌 --k-* 由皮肤给（简洁：普通卡片底；玻璃：柠檬黄 / 深橄榄渐变底）。
+   R-436：这一页的重点卡片——大圆角同下面的列表面板（--r-lg），带一层柔和投影（--b-tile-shadow：浅色是带暖黄调的淡阴影，深色是一圈极淡的亮边） */
 .card {
   margin: 0 0 16px;
   padding: 14px 16px 10px;
-  border-radius: 14px;
+  border-radius: var(--r-lg);
   background: var(--k-bg);
+  box-shadow: var(--b-tile-shadow);
   color: var(--k-fg);
 }
 
@@ -49,8 +51,9 @@
   color: var(--klv-fg);
 }
 
+/* 没在进行时的标签（“下一件”“今天没有日程”）：R-436 小胶囊浅底、不描边（底色同时间尺上“下一件”块的 --k-nxt-bg），空心小圆点照旧 */
 .labelIdle {
-  border: 1px solid currentcolor;
+  background: var(--k-nxt-bg);
 }
 
 .labelIdle .dot {

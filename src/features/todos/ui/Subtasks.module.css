@@ -123,7 +123,7 @@
   width: 100%;
   margin-top: 4px;
   color: var(--text-2);
-  font-family: var(--f-num);
+  font-family: var(--f-mono);   /* “2/4”等宽数字（R-436 第二批，同待办页卡片右下的“2/4 · 收起”） */
   font-size: var(--fs-12);
 }
 

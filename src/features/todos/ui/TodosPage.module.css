@@ -18,32 +18,7 @@
   align-items: center;
 }
 
-.h1 {
-  margin: 0;
-  font-size: var(--fs-28);
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-/* 大标题下面一根短粗柠檬黄下划线（R-436 第 1 条，确认图“待办页 · 美化后”①），和页签同一套语言 */
-.h1::after {
-  content: '';
-  display: block;
-  width: 22px;
-  height: 4px;
-  margin-top: 6px;
-  border-radius: 2px;
-  background: var(--accent);
-}
-
-/* 标题下一行等宽小字“11月15日 周日 · 1 / 10 完成”（第 2 条）：三级文字色、等宽数字字体 */
-.sub {
-  margin: 8px 0 10px;
-  color: var(--text-3);
-  font-family: var(--f-mono);
-  font-size: var(--fs-11);
-  letter-spacing: 0.02em;
-}
+/* 大标题加短粗下划线（R-436 第 1 条）、标题下一行等宽小字（第 2 条）、副行的等宽日期时刻：kit 的 Refine.module.css（今天页、日历页同一份） */
 
 .filter {
   display: flex;
@@ -107,34 +82,11 @@
   color: var(--danger-text);
 }
 
-/* 逾期的行（R-434）：整行过期底 --late-bg（确认图取色 (51,42,36)，暖暗褐只带一点红；不用报错红底 --danger-bg）、左边一条红竖线。过期组里全是逾期的行：
-   • 底色画在这一组的面板（kit List 的 .list）和行面上——行面是 SwipeRow 的不透明 .face，只给面板上色会只剩四边一圈红（11-16 截图）；
-     行面底色走 SwipeRow 开的变量 --sw-face-bg，这里只设变量，不从外面撬 SwipeRow 的内部结构；
-   • 竖线是面板上一条直的 ::after，不用 inset 阴影（会顺着面板圆角弯成弧）；不占行自己的 ::before（那个留给电脑版抽屉选中的黄条） */
+/* 逾期的行（R-434）：整行过期底 --late-bg（确认图取色 (51,42,36)，暖暗褐只带一点红；不用报错红底 --danger-bg）、左边一条红竖线。
+   面板底色和竖线在 kit List.module.css 的 .list.late（今天页“没赶上”同一份）；行面是 SwipeRow 的不透明 .face，
+   只给面板上色会只剩四边一圈红（11-16 截图），行面底色走 SwipeRow 开的变量 --sw-face-bg，这里只设变量 */
 .late {
   --sw-face-bg: var(--late-bg);
-}
-
-.late > ul {
-  position: relative;
-  background: var(--late-bg);
-}
-
-.late > ul::after {
-  position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: 0;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: var(--danger-text);
-  content: '';
-  pointer-events: none;
-}
-
-/* 副行的日期、时刻：等宽数字（R-434），颜色跟副行（逾期红、其余次要文字色） */
-.num {
-  font-family: var(--f-mono);
 }
 
 /* 已完成整行淡出加删除线（第 8 条；删除线、灰字在 kit 的 .row[data-done] .title）：方框照旧 kit CheckCircle，淡出后看着是浅柠檬黄 */

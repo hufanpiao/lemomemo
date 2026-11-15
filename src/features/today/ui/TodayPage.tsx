@@ -36,6 +36,10 @@ import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
 import list from '../../../kit/components/List.module.css';
+import refine from '../../../kit/components/Refine.module.css';
+// 分组名只要 kit 的类名：直接引样式表，不引 Form.tsx（那份 JS 会进首屏，首屏预算 150 KB）
+import form from '../../../kit/components/Form.module.css';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { PrioCycle, PrioDot } from '../../../kit/components/Priority.tsx';
 import { nextPriority, type Priority } from '../../../../shared/logic/todo-row.ts';
@@ -168,9 +172,13 @@ export default function TodayPage() {
   const prioBox = (id: string, p: Priority) => <PrioCycle p={p} label={t('prio', { p: t(`prio.${p}`, {}), next: t(`prio.${nextPriority(p)}`, {}) })} onChange={(x) => prio(id, x)} testId={`today-prio-${id}`} />;
 
   const lateItem = v.late.length ? (
-    <AppearItem as="section" key="late" className={`${list.panel} ${styles.late}`} aria-labelledby="today-late" data-testid="today-late">
-      <h2 id="today-late" className={styles.h2}>{t('late.title', {})}</h2>
-      <AppearList as="ul" className={`${list.list} ${list.roomy}`}>
+    <AppearItem as="section" key="late" className={styles.late} aria-labelledby="today-late" data-testid="today-late">
+      {/* 分组名小字加字距、右边条数；逾期带“!”、红字（R-436，同待办页的过期组） */}
+      <h2 id="today-late" className={`${form.groupLabel} ${styles.h2}`}>
+        <span><span aria-hidden="true">! </span>{t('late.title', {})}</span>
+        <span>{v.late.length}</span>
+      </h2>
+      <AppearList as="ul" className={`${list.list} ${list.roomy} ${list.late}`}>
         {v.late.map(({ todo, days }) => (
           <AppearItem key={todo.id} className={list.row} data-readonly={g.isRo('todo', todo.id) ? '' : undefined}>
             <Check
@@ -183,7 +191,9 @@ export default function TodayPage() {
             <button type="button" className={list.main} onClick={() => open({ kind: 'todo', id: todo.id })} data-open={todo.id} aria-current={cur(todo.id)}>
               <span className={list.text}>
                 <span className={list.title}><PrioDot p={todo.priority} />{todo.title}</span>
-                <span className={`${list.meta} ${styles.lateTag}`}>{days > 0 ? t('late.days', { n: days }) : t('late.passed', { t: todo.dueTime ?? '' })}</span>
+                <span className={`${list.meta} ${styles.lateTag}`}>
+                  {days > 0 ? <NumIn text={t('late.days', { n: days })} num={String(days)} /> : <NumIn text={t('late.passed', { t: todo.dueTime ?? '' })} num={todo.dueTime ?? ''} />}
+                </span>
                 <Subs id={todo.id} />
               </span>
               {g.isRo('todo', todo.id) ? <Ro part="mark" testId={`today-ro-${todo.id}`} /> : null}
@@ -229,7 +239,7 @@ export default function TodayPage() {
           actions={[{ key: 'del', label: t('list.delete', {}), danger: true, onClick: () => void remove(td.id), testId: `today-swipe-del-${td.id}` }]}
           data-testid={`today-swipe-${td.id}`}
         >
-          <div className={list.swRow}>
+          <div className={`${list.swRow} ${styles.face}`}>
             <Check
               readOnly={ro}
               checked={shown(td.id, td.done)}
@@ -240,7 +250,7 @@ export default function TodayPage() {
             <button type="button" className={list.main} onClick={() => open({ kind: 'todo', id: td.id })} data-open={td.id} aria-current={cur(td.id)}>
               <span className={list.text}>
                 <span className={list.title}><PrioDot p={td.priority} />{td.title}</span>
-                <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
+                <span className={list.meta}>{td.dueTime ? <NumIn text={t('list.due', { t: td.dueTime })} num={td.dueTime} /> : t('list.dueDay', {})}</span>
                 <Subs id={td.id} />
               </span>
               {ro ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
@@ -261,7 +271,12 @@ export default function TodayPage() {
   const pastText = [...past.pastEvents.map((o) => `${o.time ?? ''} ${o.title}`), ...past.pastTodos.map((x) => `${x.title} ✓`)].join(' · ');
   const listItem = (titled: boolean) => (
     <AppearItem as="section" key="list" aria-labelledby={titled ? 'today-list' : undefined} data-testid="today-list">
-      {titled ? <h2 id="today-list" className={styles.h2}>{t('list.title', {})}</h2> : null}
+      {titled ? (
+        <h2 id="today-list" className={`${form.groupLabel} ${styles.h2}`}>
+          <span>{t('list.title', {})}</span>
+          <span>{v.events.length + v.todos.length}</span>
+        </h2>
+      ) : null}
       {v.events.length === 0 && v.todos.length === 0 ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
       {pastN ? (
         <button type="button" className={styles.past} aria-expanded={pastOpen} onClick={() => setPastOpen((x) => !x)} data-testid="today-past">
@@ -307,7 +322,7 @@ export default function TodayPage() {
     <main ref={page} className={styles.page} data-feature="today" data-testid="today">
       <div className={styles.head}>
         {/* tabIndex=-1：弹层关上、打开按钮没了时焦点的退路（错过的提醒“全部知道了”以后，Dialog L-2），不进 Tab 顺序 */}
-        <h1 className={styles.date} tabIndex={-1}>
+        <h1 className={`${refine.title} ${styles.date}`} tabIndex={-1}>
           {fmtDay(d.today, locale, 'monthDayWeek')}
           {Desk ? (
             <QuietBoundary name="today-lunar">

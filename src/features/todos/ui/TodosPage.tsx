@@ -55,6 +55,7 @@ import { SubtaskCard } from './SubtaskCard.tsx';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import { PullSearch } from '../../smart-search/index.ts';
 import styles from './TodosPage.module.css';
+import refine from '../../../kit/components/Refine.module.css';
 
 /** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */
 function RowMark({ id }: { id: string }) {
@@ -132,7 +133,7 @@ export default function TodosPage() {
   return (
     <main ref={pull.ref} className={styles.page} data-feature="todos" data-testid="todos">
       <header className={styles.top}>
-        <h1 className={styles.h1}>{t('list.title', {})}</h1>
+        <h1 className={refine.title}>{t('list.title', {})}</h1>
         {/* 新建待办在底栏的“＋”（负责人 11-05 ③，原来右上角的“＋ 新建”去掉）；右上角是设置入口头像（R-381，四页共用 MeLink） */}
         <span className={styles.topEnd}>
           <TrashLink look="icon" to={['trash', 'todos']} label={t('list.trash', {})} testId="todos-open-trash" />
@@ -140,7 +141,7 @@ export default function TodosPage() {
         </span>
       </header>
       {/* 标题下面一行等宽小字（R-436 第 2 条）：今天的日期、这一页完成了几条 */}
-      <p className={styles.sub} data-testid="todos-sub">
+      <p className={refine.sub} data-testid="todos-sub">
         {t('list.sub', { date: fmtDay(l.today, locale, 'monthDayWeek'), done: l.count.done, total: l.count.total })}
       </p>
       <PullSlot pull={pull} keyLabel={t('list.pullKey', {})} search={<PullSearch pull={pull} scope="todo" onOpen={open} />}>
@@ -171,7 +172,7 @@ export default function TodosPage() {
               </h2>
             )}
             {g.key === 'done' && !doneOpen ? null : (
-            <AppearList as="ul" className={`${list.list} ${list.roomy}`}>
+            <AppearList as="ul" className={`${list.list} ${list.roomy}${g.key === 'late' ? ` ${list.late}` : ''}`}>
               {g.items.map(({ todo, tag }) => {
                 const subs = l.subs.get(todo.id);
                 const due = dueText(tag);
@@ -209,7 +210,7 @@ export default function TodosPage() {
                       {/* 副行（R-434、R-436 确认图）：逾期“! 过期 11/13 14:00 · 项目”红字；其余“项目 · 今天 14:00”；日期、时刻等宽数字 */}
                       <span className={tag.kind === 'late' ? `${list.meta} ${styles.tagLate}` : list.meta} data-testid={`todos-tag-${todo.id}`}>
                         {tag.kind === 'late' ? <span aria-hidden="true">! </span> : null}
-                        {metaParts(tag.kind === 'late', todo.project, due ? <span className={styles.num}>{due}</span> : null)}
+                        {metaParts(tag.kind === 'late', todo.project, due ? <span className={refine.num}>{due}</span> : null)}
                       </span>
                     </span>
                     {isRo(todo.id) ? <ReadonlyMark testId={`todos-ro-${todo.id}`} /> : null}

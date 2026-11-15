@@ -15,12 +15,8 @@
   margin: 0 0 12px;
 }
 
-/* 右上角头像（设置入口）在 kit 的 MeLink（R-381 起今天、待办、日历、随手记四页共用） */
-.date {
-  margin: 0;
-  font-size: var(--fs-20);
-  font-weight: 600;
-}
+/* 右上角头像（设置入口）在 kit 的 MeLink（R-381 起今天、待办、日历、随手记四页共用）。
+   页顶日期就是这一页的大标题：字号、短粗下划线挂 kit 的 Refine.module.css .title（R-436，同待办页） */
 
 /* 细线黑（架构 5.9c 第 1 点、R-135；皮肤视觉稿 .fthin .date）：日期大标题单独用特细 200，落到未来荧黑 / Pretendard 的 ExtraLight。
    ExtraLight 只有这一处用，build/fonts.py 登记里不预取它（prefetch: false），按 unicode-range 只下标题里那几个字所在的分片 */
@@ -28,23 +24,30 @@
   font-weight: 200;
 }
 
-.h2 {
-  margin: 16px 0 6px;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-  font-weight: 400;
+/* 分组名“没赶上”“今天的安排”（R-436，同待办页 .group .h2）：小字、等宽、字距挂 kit Form.module.css 的 .groupLabel，右边条数；
+   写成两级选择器，不靠两份样式表的先后压过 .groupLabel 的 margin */
+.page .h2 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 18px 4px 8px;
 }
 
-/* “没赶上”F 版：淡红细描边，含义靠红字（R-76）；令牌里还没有 --late-line（color-mix 被 A11 禁），先用 --danger-text，比设计深（待 B2 负责人补令牌）。
-   圆角、左右 12 由 kit 的 List.module.css .panel 给；底色保持透明（R-76 定的透明底、淡红细描边，本批不改，B2-UI-a 代码审 M1），这里去掉 .panel 的白底、加描边和下边距 */
+/* “没赶上”（R-436 照待办页的过期组，替换 R-76 的淡红细描边整框）：分组名红字带“!”；下面的列表整块过期底、左边一条直的红竖线
+   在 kit List.module.css 的 .list.late（同待办页过期组）。这一组的行不是 SwipeRow，没有不透明行面，不用设 --sw-face-bg */
 .late {
-  /* 自成一个排版上下文：里面标题的上边距留在框里，不从框顶漏出去（原来的 border 挡着，改成阴影以后要靠这个） */
-  display: flow-root;
   margin: 0 0 8px;
-  background: none;
+}
 
-  /* 描边用 inset 阴影、不占排版宽度：里面的标题起点和下面“今天的安排”对齐（U4-2，用 border 会多出 1px） */
-  box-shadow: inset 0 0 0 1px var(--danger-text);
+.late .h2 {
+  margin-top: 0;
+  color: var(--danger-text);
+}
+
+/* 做完的待办（展开“已过去”时）整行淡出（R-436，同待办页；删除线、灰字在 kit 的 .row[data-done] .title）。
+   淡的是行面（.swRow），左滑露出的“删除”不跟着淡 */
+.page [data-done] .face {
+  opacity: 0.5;
 }
 
 /* 副行的字号在 kit 的 .meta；这里只换红字。写成两级选择器，不靠两份样式表的先后顺序压过 .meta 的颜色 */
