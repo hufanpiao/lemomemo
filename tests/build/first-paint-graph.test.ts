@@ -137,6 +137,11 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/features/today/ui/TodayDesk.tsx':
     '电脑版今天页的可拖动面板（B6，5.9b；连着 kit/components/DeskLayout、dnd-kit、desk-zh/ko 词典）：只在有侧栏的宽度（MQ_SIDEBAR ≥ 900px）、而且首屏画完（afterAppPainted）以后才挂、才下载；手机宽度不下载。没挂上、没下载好时今天页照原来的一列画',
   'src/features/notes/ui/TodayNotes.tsx': '电脑版今天页的“今天记的”块（B6）：TodayDesk 挂上以后才下载（首屏画完以后），条件同上；手机宽度不下载',
+  'src/features/todos/data/todo-autodel.ts':
+    '完成满 7 天的待办自动删除（负责人 11-15）：main.tsx 启动后段过了账号闸才 loadTodoAutoDel()（首屏画完以后），本机库能用、待办功能开着才下载',
+  'src/features/todos/ui/TodoSettings.tsx': '设置首页“完成 7 天后自动删除”那一行：打开设置页才下载（SettingsHome 的 Suspense）',
+  'shared/logic/anniv/lunar-huangli.ts':
+    '黄历宜忌表（R-431）：日历选中某天、中文界面时 useHuangli 经 core/anniv-lib.ts 的 HUANGLI_LIB 才下载',
   'src/features/todos/ui/todo-drawer.ts': '电脑版今天页详情抽屉里的待办编辑器（B6 返工）：在电脑版今天页点了一条待办才下载（待办编辑页那一包）；手机宽度点一行是换页，不经这里',
   'src/features/calendar/ui/event-drawer.ts': '电脑版今天页详情抽屉里的日程编辑器（B6 返工）：在电脑版今天页点了一条日程才下载（日程编辑页那一包）；手机宽度点一行是换页，不经这里',
   'src/kit/components/GlassBar/GlassBarFx.tsx':
