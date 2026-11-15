@@ -310,6 +310,8 @@
 }
 
 .cell {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -330,9 +332,57 @@
   color: var(--text-2);
 }
 
-/* 放假只用灰底，周末、节日名不另上颜色（设计审查 M4） */
+/* 放假：柠檬黄细斜虚线；调休补班：中性色细斜虚线 + 右上角“班”圆标（负责人 11-15“照参考图做”）。周末不另上颜色。
+   斜纹是“\”方向的 1px 细线（45° 渐变），再用 135° 的遮罩切成虚线；z-index -1 + 格子 isolation，压在字下面 */
+.holiday::before,
+.workday::before {
+  position: absolute;
+  z-index: -1;
+  border-radius: 6px;
+  background: repeating-linear-gradient(45deg, var(--stripe) 0 1px, transparent 1px 6px);
+  content: '';
+  inset: 2px;
+  mask-image: repeating-linear-gradient(135deg, currentcolor 0 3px, transparent 3px 5px);
+  pointer-events: none;
+}
+
 .holiday {
+  --stripe: var(--hol-stripe);
+}
+
+.workday {
+  --stripe: var(--work-stripe);
+}
+
+.out.holiday::before,
+.out.workday::before {
+  opacity: 0.5;
+}
+
+/* 减少透明效果：垫上节假日底色，斜线不切成虚线，照样看得清 */
+:global(:root[data-rt='1']) .holiday,
+:global(:root[data-rt='1']) .workday {
   background: var(--hol-bg);
+}
+
+:global(:root[data-rt='1']) .holiday::before,
+:global(:root[data-rt='1']) .workday::before {
+  mask-image: none;
+}
+
+.ban {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-9-5);
+  font-weight: 600;
+  line-height: 15px;
+  text-align: center;
 }
 
 .sel {
@@ -380,7 +430,7 @@
 }
 
 .holName {
-  color: var(--text);
+  color: var(--hol-name);
 }
 
 .lunar,
