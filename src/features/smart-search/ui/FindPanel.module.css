@@ -262,7 +262,7 @@
   }
 }
 
-/* 行首记号：日程一道竖条、待办圆圈、随手记和文档一个小框、纪念日菱形、图片方块 */
+/* 行首记号：日程一道竖条、待办圆角方框、随手记和文档一个小框、纪念日菱形、图片方块 */
 .lead {
   display: inline-flex;
   flex: none;
@@ -283,10 +283,10 @@
 .ring {
   width: 18px;
   height: 18px;
-  border: 1.5px solid var(--text-2);
+  border: 1.75px solid var(--check-edge);
 
-  /* 没完成的待办：同待办列表的空心圆角方框（R-433，kit/CheckCircle.module.css 的边色、圆角比例），小一号 18px */
-  border-radius: calc(18px * 0.26);
+  /* 没完成的待办：同待办列表的空心圆角方框（R-433 照参考图 1，kit/CheckCircle.module.css 的边宽、边色、圆角比例 37.5%），小一号 18px */
+  border-radius: calc(18px * 0.375);
 }
 
 /* 已完成的待办：同待办列表的打勾方框（kit/CheckCircle.module.css 的 .fill、.tick，data-state="on"），小一号 18px */

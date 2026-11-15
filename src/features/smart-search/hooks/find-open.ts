@@ -4,7 +4,8 @@
 //   内容类查找（没有时间范围）直接是查找面板，页脚多“改成记下”“总结一下”；时间类、总结、取消改期完成是结果层（ui/AssistPanel）
 import type { AssistAsk } from '../../../../shared/logic/parse/assist.ts';
 
-export type FindFrom = 'plus' | 'ctrlk' | 'voice' | 'quick' | 'notice';
+/** pull：下拉搜索结果底下的“用 AI 按意思找”（R-437，ui/PullSearch.tsx） */
+export type FindFrom = 'plus' | 'ctrlk' | 'voice' | 'quick' | 'notice' | 'pull';
 
 /** 结果层要的（plus 那边给） */
 export interface AssistReq {

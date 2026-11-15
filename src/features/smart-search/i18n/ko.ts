@@ -124,4 +124,16 @@ export const ko = {
   'as.peek.cancel': '취소하려는 건가요? {n}개 찾았어요 ›', // REVIEW(ko)
   'as.peek.reschedule': '일정을 바꾸려는 건가요? {n}개 찾았어요 ›', // REVIEW(ko)
   'as.peek.complete': '완료하려는 건가요? {n}개 찾았어요 ›', // REVIEW(ko)
+  // 下拉搜索（R-437）
+  'pull.label': '이 페이지 검색', // REVIEW(ko)
+  'pull.ph.note': '메모 검색', // REVIEW(ko)
+  'pull.ph.todo': '할 일 검색', // REVIEW(ko)
+  'pull.ph.event': '일정 검색', // REVIEW(ko)
+  'pull.cancel': '취소', // REVIEW(ko)
+  'pull.clear': '지우기', // REVIEW(ko)
+  'pull.n': '{n}개 찾았어요', // REVIEW(ko)
+  'pull.none': '글자로는 못 찾았어요', // REVIEW(ko)
+  'pull.more': '앞의 {n}개만 보여요. 더 정확한 말로 찾아 보세요', // REVIEW(ko)
+  'pull.sub': '하위 할 일: {t}', // REVIEW(ko)
+  'pull.ai': 'AI로 뜻으로 찾기', // REVIEW(ko)
 } satisfies Record<keyof typeof zh, string>;
