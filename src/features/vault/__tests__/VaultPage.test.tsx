@@ -25,7 +25,7 @@ vi.mock('../../../platform/image-encode.ts', async (orig) => ({
 const GONE = '22222222-2222-4222-8222-222222222222';
 const SECRET = note().body;
 
-function session(o: { offline?: boolean; purge?: () => void } = {}): VaultSession {
+function session(o: { offline?: boolean; purge?: () => void; exportFail?: boolean } = {}): VaultSession {
   const reply = (req: VaultRequest): unknown => {
     switch (req.action) {
       case 'status':
@@ -35,6 +35,8 @@ function session(o: { offline?: boolean; purge?: () => void } = {}): VaultSessio
       case 'purge':
         o.purge?.();
         return { ok: true, purged: 1, vault_token: TOK, expires_at: 9e12 };
+      case 'export':
+        return o.exportFail ? { ok: false, code: 'unknown' } : { ok: true, vault_token: TOK, expires_at: 9e12 };
       default:
         return { ok: true, vault_token: TOK, expires_at: 9e12 };
     }
@@ -56,8 +58,8 @@ afterEach(() => {
   window.location.hash = '';
 });
 
-async function openUnlocked() {
-  s = session();
+async function openUnlocked(o: Parameters<typeof session>[0] = {}) {
+  s = session(o);
   installVaultSession(s);
   render(<VaultPage />);
   await screen.findByTestId('vault-unlock-card');
@@ -528,5 +530,16 @@ describe('随手记页的入口行（lockrow）不写条数（负责人 11-15：
     });
     await waitFor(() => expect(row.textContent).toContain('已解锁'));
     expect(row.textContent).not.toMatch(/\d+\s*条/);
+  });
+});
+
+describe('批 2 第 3 条：移出隐私记没成，提示是自己那一条（不借转换结果的 notes-conv-tip）', () => {
+  it('export 被拒：输入行上面出“没移出去，稍后再试一次”，testid 是 notes-moveout-tip', async () => {
+    await openUnlocked({ exportFail: true });
+    fireEvent.pointerDown(screen.getByTestId(`notes-more-${NID}`), { button: 0, ctrlKey: false });
+    fireEvent.click(screen.getByTestId(`notes-more-${NID}`));
+    fireEvent.click(await screen.findByTestId(`notes-from-vault-${NID}`));
+    expect((await screen.findByTestId('notes-moveout-tip')).textContent).toBe('没移出去，稍后再试一次');
+    expect(screen.queryByTestId('notes-conv-tip')).toBeNull();
   });
 });

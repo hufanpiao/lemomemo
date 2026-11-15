@@ -19,10 +19,12 @@ import type { ImgMsgKey } from './NoteImages.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import styles from './NotesPage.module.css';
 
-/** 随手记页自己另加的提示条：插图提示、转换结果、合并的撤销条（删除的撤销条、出错条在 kit 的 useListActions 里） */
+/** 随手记页自己另加的提示条：插图提示、转换结果、移出隐私记没成、合并的撤销条（删除的撤销条、出错条在 kit 的 useListActions 里） */
 export type ImgTip = { kind: 'img'; key: ImgMsgKey; trash: boolean };
-export type ConvTip = { kind: 'conv'; key: Extract<NotesMsgKey, `notes.conv.${'moved' | 'kept'}.${string}` | 'notes.conv.empty' | 'notes.conv.left' | 'notes.conv.long' | 'notes.err.moveOut'> };
-export type PageTip = ImgTip | ConvTip | MergeUndo;
+export type ConvTip = { kind: 'conv'; key: Extract<NotesMsgKey, `notes.conv.${'moved' | 'kept'}.${string}` | 'notes.conv.empty' | 'notes.conv.left' | 'notes.conv.long'> };
+/** 移出隐私记没成（隐私记来源）：自己一种，不借转换结果那一条 */
+export type MoveOutTip = { kind: 'moveOut' };
+export type PageTip = ImgTip | ConvTip | MoveOutTip | MergeUndo;
 /** 带插图的转换要先问一下（R-414，线框 S8-2） */
 export type ConvAsk = { id: string; kind: ConvertKind; images: number; files: number };
 

@@ -131,7 +131,7 @@ export function NotesList({ head }: { head?: ReactNode }) {
   const moveOut = (id: string) => {
     setMenu(null);
     ds.forget(id);
-    void src.moveOut(id).then((r) => (r === 'failed' ? guard.show({ kind: 'conv', key: 'notes.err.moveOut' }) : report(r)));
+    void src.moveOut(id).then((r) => (r === 'failed' ? guard.show({ kind: 'moveOut' }) : report(r)));
   };
   const addImage = useAddImage(l, setJust, report, (m) => guard.show({ kind: 'img', ...m }));
   const conv = useConvertFlow(l.convert, a);
