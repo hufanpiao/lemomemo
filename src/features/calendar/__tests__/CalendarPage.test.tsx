@@ -23,6 +23,7 @@ const { default: CalendarPage } = await import('../ui/CalendarPage.tsx');
 const { MonthGrid } = await import('../ui/MonthGrid.tsx');
 const { resetHolidayCacheForTest } = await import('../hooks/useHolidays.ts');
 const { resetLunarForTest } = await import('../hooks/useLunar.ts');
+const { lazyLib } = await import('../../../core/anniv-lib.ts');
 const { viewZh } = await import('../i18n/view-zh.ts');
 const realLunar = await import('../../../../shared/logic/anniv/lunar.ts');
 const { styles } = await import('./css-of.ts');
@@ -51,7 +52,7 @@ beforeEach(() => {
   fetchStatus.mockReset();
   fetchStatus.mockResolvedValue({ kind: 'missing' });
   resetHolidayCacheForTest();
-  resetLunarForTest(async () => realLunar);
+  resetLunarForTest(lazyLib('lunar', async () => realLunar));
 });
 afterEach(() => {
   cleanup();
@@ -215,7 +216,8 @@ describe('月视图', () => {
     expect(list.textContent).toContain('11月12日');
     expect(list.textContent).toContain('周四');
     expect(list.textContent).toContain('3 项');
-    const rows = within(list).getAllByRole('button');
+    // 清单的行在 ul 里（标题行下面的黄历卡也是按钮，R-431，不算）
+    const rows = within(list.querySelector('ul') as HTMLElement).getAllByRole('button');
     expect(rows.map((r) => r.textContent)).toEqual(['14:00客户会', '全天团建', '18:00交报告']);
     await act(async () => {
       fireEvent.click(rows[0] as HTMLElement);
@@ -272,7 +274,7 @@ describe('农历（按需加载）', () => {
 
   it('加载前：照常 42 格，农历行位置占着但是空的；加载后格子显示短写法，读屏带完整写法', async () => {
     let done: (m: typeof realLunar) => void = () => {};
-    resetLunarForTest(() => new Promise((r) => (done = r)));
+    resetLunarForTest(lazyLib('lunar', () => new Promise((r) => (done = r))));
     open('#/cal/month/2026-11');
     expect(document.querySelectorAll('[data-testid="cal-month"] button[data-date]')).toHaveLength(42);
     expect(lunarRow(D)?.textContent).toBe('');
@@ -306,7 +308,7 @@ describe('农历（按需加载）', () => {
     const load = vi.fn(async (): Promise<typeof realLunar> => {
       throw new Error('chunk 加载失败');
     });
-    resetLunarForTest(load);
+    resetLunarForTest(lazyLib('lunar', load));
     open('#/cal/month/2026-11');
     await act(async () => {
       await Promise.resolve();
@@ -321,7 +323,7 @@ describe('农历（按需加载）', () => {
 
   it('韩文界面：不下农历 chunk，月格不显示农历、也不显示节气，读屏不带“음력”（代码审查 L7）', async () => {
     const load = vi.fn(async () => realLunar);
-    resetLunarForTest(load);
+    resetLunarForTest(lazyLib('lunar', load));
     uiStore.getState().setLocale('ko-KR');
     open('#/cal/month/2026-11');
     await new Promise((r) => setTimeout(r, 20));

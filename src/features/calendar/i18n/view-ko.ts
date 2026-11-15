@@ -49,6 +49,14 @@ export const viewKo = {
   'cal.day.empty': '이날은 일정이 없어요', // REVIEW(ko)
   'cal.day.todo': '할 일', // REVIEW(ko)
   'cal.day.until': '{t}까지', // REVIEW(ko)
+  // 黄历卡只在中文界面出（R-431、R-318），韩文这几条备着
+  'cal.hl.year': '{gz}년 · {m}', // REVIEW(ko)
+  'cal.hl.yi': '의', // REVIEW(ko)
+  'cal.hl.ji': '기', // REVIEW(ko)
+  'cal.hl.sep': ' · ', // REVIEW(ko)
+  'cal.hl.none': '—', // REVIEW(ko)
+  'cal.hl.noneSr': '없음', // REVIEW(ko)
+  'cal.hl.label': '황력, {day}, {gz}년 {m}, 의 {yi}개, 기 {ji}개', // REVIEW(ko)
   'cal.set.title': '캘린더', // R-106 B2 第一遍已审（11-04）（B2K-05；设置页 settings.cal.title 归前端 A，待同步）
   'cal.set.holidays': '공휴일', // REVIEW(ko)
   'cal.set.hol.cn': '중국만', // REVIEW(ko)

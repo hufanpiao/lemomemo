@@ -36,9 +36,16 @@ describe('开源许可清单', () => {
     const apache = pkgFile('@jsquash/webp', 'LICENSE');
     expect(apache).toContain('Apache License');
     expect(text).toContain(apache);
-    expect(EMBEDDED.map((e) => e.pkg)).toEqual(['@jsquash/webp']);
+    expect(EMBEDDED.map((e) => e.pkg)).toEqual(['@jsquash/webp', 'lunar-javascript']);
     const { version } = req('@jsquash/webp/package.json') as { version: string };
     expect(text).toContain(`随 @jsquash/webp ${version} 分发`);
+  });
+  it('黄历宜忌表的来源 lunar-javascript（开发依赖，R-431）：MIT 原文和 6tail 版权声明带上，写明版本', () => {
+    const mit = pkgFile('lunar-javascript', 'LICENSE');
+    expect(mit).toContain('6tail');
+    expect(text).toContain(mit);
+    const { version } = req('lunar-javascript/package.json') as { version: string };
+    expect(text).toContain(`随 lunar-javascript ${version} 分发`);
   });
   it('React 的 MIT 原文、tslib 的版权声明都带上（包里的 LICENSE、CopyrightNotice 都收）', () => {
     expect(text).toContain(pkgFile('react', 'LICENSE'));

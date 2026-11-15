@@ -46,6 +46,7 @@ vi.mock('../../../core/boot.ts', async (orig) => ({ ...(await orig<typeof BootMo
 const { default: CalendarPage } = await import('../ui/CalendarPage.tsx');
 const { resetHolidayCacheForTest } = await import('../hooks/useHolidays.ts');
 const { resetLunarForTest } = await import('../hooks/useLunar.ts');
+const { lazyLib } = await import('../../../core/anniv-lib.ts');
 const realLunar = await import('../../../../shared/logic/anniv/lunar.ts');
 
 const TZ = currentTz();
@@ -61,7 +62,8 @@ function open(hash: string) {
   window.history.replaceState(null, '', `/app/${hash}`);
   return render(<CalendarPage />);
 }
-const rows = (): HTMLElement[] => within(screen.getByTestId('cal-day-list')).getAllByRole('button');
+// 清单的行（不含标题行下面的黄历卡按钮，R-431）
+const rows = (): HTMLElement[] => within(screen.getByTestId('cal-day-list')).getAllByRole('button').filter((b) => b.dataset['testid'] !== 'cal-huangli');
 const rowOf = (title: string): HTMLElement => {
   const r = rows().find((b) => (b.textContent ?? '').includes(title));
   if (!r) throw new Error(`没有“${title}”这一行`);
@@ -79,7 +81,7 @@ beforeEach(() => {
   fetchStatus.mockReset();
   fetchStatus.mockResolvedValue({ kind: 'missing' });
   resetHolidayCacheForTest();
-  resetLunarForTest(async () => realLunar);
+  resetLunarForTest(lazyLib('lunar', async () => realLunar));
 });
 afterEach(() => {
   cleanup();

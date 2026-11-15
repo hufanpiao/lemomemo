@@ -9,6 +9,7 @@
 // • 覆盖范围（中国）：公历 1901-01-20～2100-12-31。香港天文台的表从 1901-01-01 起，开头 19 天属哪个月推不出来（冬月还是闰冬月），不收；
 //   2100 年腊月只知道初一（2100-12-31），大小月不知道，lunarMonthDays 返回 null。
 import { fmtDateStr, parseDate, type DateStr } from '../../core/date.ts';
+import { itemAt } from '../../core/item-at.ts';
 import type { UiLocale } from '../../i18n/pick-locale.ts';
 import { LUNAR_CN, LUNAR_KR, TERMS_CN, TERMS_KR, type LunarTable, type TermTable } from './lunar-data.ts';
 import { LUNAR_WORDS, SOLAR_TERM_NAMES, ZH_DAY_NAMES, ZH_MONTH_NAMES } from './lunar-names-data.ts';
@@ -50,16 +51,8 @@ const cache = new Map<LunarTable, Decoded>();
 
 const keyOf = (y: number, m: number, leap: boolean): string => `${y}-${leap ? 'L' : ''}${m}`;
 
-/**
- * 按下标取数组元素：不是非负整数就返回 undefined。
- * 不用方括号下标（check_backend F7：shared 拷进 Edge Functions 后，方括号里的键不许是参数、属性或算出来的数）；
- * 也不直接用 .at()，因为 .at() 遇到负数会从末尾倒着取，表前面的年份会错拿到最后一年。
- */
-function itemAt<T>(arr: readonly T[], i: number): T | undefined {
-  return Number.isInteger(i) && i >= 0 ? arr.at(i) : undefined;
-}
-
-function dayNumOf(date: DateStr): number {
+/** 公历日期 → 相对 1970-01-01 的天数（黄历 lunar-huangli.ts 算日干支也用） */
+export function dayNumOf(date: DateStr): number {
   const { y, m, d } = parseDate(date);
   return Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
 }
@@ -270,8 +263,8 @@ export function solarTermsOfYear(year: number, variant: LunarVariant): readonly 
 /** 24 节气名（中、韩），从小寒起；文字在 lunar-names-data.ts */
 export { SOLAR_TERM_NAMES };
 
-/** 中文农历日：初一…初十、十一…二十、廿一…廿九、三十 */
-function zhDay(d: number): string {
+/** 中文农历日：初一…初十、十一…二十、廿一…廿九、三十（黄历卡的大字也用） */
+export function lunarDayName(d: number): string {
   return itemAt(ZH_DAY_NAMES, d - 1) ?? '';
 }
 
@@ -284,14 +277,14 @@ export function lunarMonthName(month: number, isLeap: boolean, locale: UiLocale)
 /** 完整写法：中文“九月十五”“闰二月十一”；韩文“9월 15일”“윤2월 11일”（前面要不要加“农历 / 음력”由界面定） */
 export function lunarText(l: LunarDate, locale: UiLocale): string {
   if (locale === 'ko-KR') return `${lunarMonthName(l.month, l.isLeap, locale)} ${l.day}${LUNAR_WORDS.koDay}`;
-  return `${lunarMonthName(l.month, l.isLeap, locale)}${zhDay(l.day)}`;
+  return `${lunarMonthName(l.month, l.isLeap, locale)}${lunarDayName(l.day)}`;
 }
 
 /** 月历格子里的短写法：初一显示月名（“九月”“闰二月”/“9월”“윤2월”），其余显示日（“十五”/“9.15”“윤2.11”） */
 export function lunarCellText(l: LunarDate, locale: UiLocale): string {
   if (l.day === 1) return lunarMonthName(l.month, l.isLeap, locale);
   if (locale === 'ko-KR') return `${l.isLeap ? LUNAR_WORDS.koLeap : ''}${l.month}.${l.day}`;
-  return zhDay(l.day);
+  return lunarDayName(l.day);
 }
 
 /**

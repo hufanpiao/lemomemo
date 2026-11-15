@@ -85,6 +85,9 @@ jobs:
       - name: 农历数据检查（lunar-data.ts 和 sources、sources 和香港天文台原始历表一致）
         run: npm run check:lunar
 
+      - name: 黄历宜忌表检查（lunar-huangli-data.ts 和 lunar-javascript 生成的一致、运行时查表和库 1901～2100 逐日一致，R-431）
+        run: npm run check:huangli
+
       - name: 节假日数据检查（src/public/holidays 下各年 JSON 的格式、日期、补班和替代公休日规则）
         run: npm run check:holidays
 

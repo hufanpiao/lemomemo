@@ -24,6 +24,10 @@ export const ZH_DAY_NAMES: readonly string[] = [
   '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十',
 ];
 
+/** 天干、地支（黄历卡的干支年、日干支，R-431；序号 0 起：甲、子） */
+export const TIAN_GAN = '甲乙丙丁戊己庚辛壬癸';
+export const DI_ZHI = '子丑寅卯辰巳午未申酉戌亥';
+
 /** 拼写用的字：闰月前缀、韩文“월”“일” */
 export const LUNAR_WORDS = {
   zhLeap: '闰',
