@@ -1,5 +1,7 @@
 // B5 隐私记客户端（S5～S9、S21）：真页面、真构建，/sb 在浏览器这一层答（假的 vault、vault-image 函数 + 随手记表），会话是假 JWT（session-fixture.ts）
-// • 设密码两次 → 解锁 → 新建保存 → 列表有它 → 立即锁上 → 内容没了、出密码键盘 → 输错提示“还能再试 N 次” → 正确解锁
+// • 设密码两次 → 解锁 → 新建（停笔自动存）→ 列表有它 → 立即锁上 → 内容没了、出密码键盘 → 输错提示“还能再试 N 次” → 正确解锁
+// • B5 隐私记重写（11-15）：解锁后是随手记那一份界面（列表、编辑器、插图、看图页）+ 隐私记来源；读写只碰内存仓库、后台队列去发。
+//   负责人报的三个问题各有一条：插图后点开出看图页；断网改了界面即时、网络回来补发；离开隐私记页 59 秒不锁、61 秒锁
 // • 隐私记页挂着时 <html data-rt="1">（底栏、“＋”实色，TC-B5-12），离开回随手记页去掉
 // • 离开（blur）同步盖多任务遮罩（TC-B5-44），回来（focus，不到 1 分钟）去掉
 // • 随手记“⋯”菜单、列表方式左滑两种方式“移到隐私记”：发 vault {action: import, note_id}，这一条在随手记页藏起来
@@ -12,7 +14,7 @@ import { join } from 'node:path';
 import type { Page, Route } from '@playwright/test';
 import JSZip from 'jszip';
 import { fakeRest } from './fake-rest.ts';
-import { stableBox, swipeDiag, touchSwipe } from './page-helpers.ts';
+import { jpeg, stableBox, swipeDiag, touchSwipe } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { runLog as readRunLog } from './fake-media.ts';
 
@@ -32,6 +34,10 @@ interface FakeVault {
   files: { action: string; meta?: Record<string, unknown>; thumb?: boolean }[];
   /** 设成 true：下一次 save 回 401 vault_locked（令牌过期），回完自动落回 false（审查第 1 条） */
   expireNextSave: boolean;
+  /** 设成 true：vault、vault-image 请求一律断开（断网） */
+  offline: boolean;
+  /** vault-image 收到的上传（隐私记 id/图片 id/part） */
+  images: string[];
 }
 
 const ZH_PDF = readFileSync(join(import.meta.dirname, 'fixtures', 'b4b1-zh-2p.pdf'));
@@ -57,7 +63,7 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
   const category = { id: CAT, user_id: UID, name: '健康', color: null, sort: 1, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, created_at: 1, updated_at: 1, rev: 1, synced_at: '2026-10-29T00:00:00.000Z' };
   await fakeRest(page, { user: UID, tables: { notes: [], settings: [], categories: [category] }, store: {} });
 
-  const fv: FakeVault = { calls: [], notes: new Map(), files: [], expireNextSave: false };
+  const fv: FakeVault = { calls: [], notes: new Map(), files: [], expireNextSave: false, offline: false, images: [] };
   const PPTX = await pptx();
   const stored = new Map<string, Record<string, unknown>>();
   await page.route(/\/sb\/functions\/v1\/vault-file/, (route) => {
@@ -92,8 +98,24 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
   const tok = () => ({ vault_token: `e2e-vault-token-${'x'.repeat(16)}`, expires_at: Date.now() + 600_000 });
   const ok = (route: Route, extra: Record<string, unknown> = {}) => route.fulfill({ json: { ok: true, ...tok(), ...extra } });
   const fail = (route: Route, status: number, body: Record<string, unknown>) => route.fulfill({ status, json: body });
-  await page.route(/\/sb\/functions\/v1\/vault-image/, (route) => route.fulfill({ status: 404, json: { error: 'not_found' } }));
+  // vault-image：上传（参数在查询串、包体是 webp 字节）存下来；取图（JSON）回存下的字节
+  const pics = new Map<string, Buffer>();
+  await page.route(/\/sb\/functions\/v1\/vault-image/, (route) => {
+    if (fv.offline) return route.abort('internetdisconnected');
+    const req = route.request();
+    const url = new URL(req.url());
+    if (url.searchParams.get('action') === 'upload') {
+      const key = `${url.searchParams.get('image_id')}:${url.searchParams.get('part')}`;
+      fv.images.push(`${url.searchParams.get('note_id')}/${key}`);
+      pics.set(key, req.postDataBuffer() ?? Buffer.alloc(0));
+      return route.fulfill({ json: { ok: true } });
+    }
+    const body = (req.postDataJSON() ?? {}) as Record<string, unknown>;
+    const got = pics.get(`${String(body['image_id'])}:${String(body['part'])}`);
+    return got ? route.fulfill({ status: 200, contentType: 'image/webp', body: got }) : route.fulfill({ status: 404, json: { error: 'not_found' } });
+  });
   await page.route(/\/sb\/functions\/v1\/vault(\?|$)/, (route) => {
+    if (fv.offline) return route.abort('internetdisconnected');
     const body = (route.request().postDataJSON() ?? {}) as Record<string, unknown>;
     const action = String(body['action']);
     fv.calls.push({ action, body });
@@ -121,7 +143,9 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
           return fail(route, 401, { error: 'vault_locked' });
         }
         const id = String(body['id']);
-        fv.notes.set(id, { id, title: body['title'], body: body['body'], category_id: null, created_at: body['created_at'], updated_at: body['updated_at'], deleted_at: null, images: [] });
+        const had = (fv.notes.get(id)?.['images'] ?? []) as Record<string, unknown>[];
+        const adds = ((body['add_images'] ?? []) as Record<string, unknown>[]).map((i) => ({ ...i, deleted_at: null }));
+        fv.notes.set(id, { id, title: body['title'], body: body['body'], category_id: body['category_id'] ?? null, created_at: body['created_at'], updated_at: body['updated_at'], deleted_at: null, images: [...had, ...adds] });
         return ok(route);
       }
       case 'import': {
@@ -168,8 +192,20 @@ async function setupAndUnlock(page: Page, browserName: string): Promise<void> {
   await typePin(page, 'vault-setup-pad', PIN);
   await expect(page.getByTestId('vault-setup')).toHaveAttribute('data-step', '2');
   await typePin(page, 'vault-setup-pad', PIN);
-  await expect(page.getByTestId('vault-empty')).toBeVisible({ timeout: 15_000 });
+  await expect(vaultEmpty(page)).toBeVisible({ timeout: 15_000 });
 }
+
+/** 解锁后隐私记列表空着（随手记那一份列表的空态，在隐私记页里） */
+const vaultEmpty = (page: Page) => page.getByTestId('vault-notes').getByTestId('notes-empty');
+
+/** 编辑页（随手记那一份）写一段、离开输入框：停笔自动存 */
+async function write(page: Page, testId: 'note-edit-title' | 'note-edit-body', text: string): Promise<void> {
+  const el = page.getByTestId(testId);
+  await el.fill(text);
+  await el.blur();
+}
+
+const saved = (fv: FakeVault) => fv.calls.filter((c) => c.action === 'save');
 
 test.afterEach(async ({ page }, info) => {
   if (info.status === info.expectedStatus) return;
@@ -182,20 +218,14 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   await expect(page.locator('html')).toHaveAttribute('data-rt', '1');
 
   await page.goto('/app/#/vault/new');
-  await page.getByTestId('vault-edit-title').fill('体检报告');
-  await page.getByTestId('vault-edit-body').fill('血压 120/80');
+  await write(page, 'note-edit-title', '体检报告');
+  await write(page, 'note-edit-body', '血压 120/80');
+  await expect(page.getByTestId('vault-edit-save'), '停笔自动存，没有“保存”按钮').toHaveCount(0);
   await shot(page, '07-编辑页', browserName);
-  // 再放一条昨天的、带分类的（线框 s9 PRIVLIST 的行：日期“昨天” | 图标 | 标题和灰字分类 | “⋯”）
-  const day = 86_400_000;
-  fv.notes.set(OLD, { id: OLD, title: '妈妈生日惊喜', body: '订那家蛋糕', category_id: CAT, created_at: Date.now() - day, updated_at: Date.now() - day, deleted_at: null, images: [] });
-  await page.getByTestId('vault-edit-save').click();
-  await expect.poll(() => fv.calls.filter((c) => c.action === 'save').length).toBe(1);
-  await page.getByTestId('vault-edit-back').click();
-  await expect(page.getByTestId('vault-list')).toContainText('体检报告');
-  const old = page.getByTestId(`vault-row-${OLD}`);
-  await expect(old).toContainText('昨天');
-  await expect(old).toContainText('健康');
-  await expect(page.getByTestId('vault-list')).not.toContainText('血压 120/80');   // 行里不出正文摘要
+  await expect.poll(() => saved(fv).at(-1)?.body).toMatchObject({ title: '体检报告', body: '血压 120/80' });
+  await page.getByTestId('edit-back').click();
+  const list = page.getByTestId('vault-notes');
+  await expect(list).toContainText('体检报告');
   await shot(page, '06-解锁后的列表', browserName);
 
   await page.getByTestId('vault-lock-now').click();
@@ -211,8 +241,12 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   await typePin(page, 'vault-unlock-pad', '1111');
   await expect(page.getByTestId('vault-unlock-err')).toContainText('4');
   await shot(page, '04-输错', browserName);
+  // 锁着的时候服务器上多了一条昨天的、带分类的：解锁后 list 一次拉进来
+  const day = 86_400_000;
+  fv.notes.set(OLD, { id: OLD, title: '妈妈生日惊喜', body: '订那家蛋糕', category_id: CAT, created_at: Date.now() - day, updated_at: Date.now() - day, deleted_at: null, images: [] });
   await typePin(page, 'vault-unlock-pad', PIN);
-  await expect(page.getByTestId('vault-list')).toContainText('体检报告', { timeout: 15_000 });
+  await expect(list).toContainText('体检报告', { timeout: 15_000 });
+  await expect(list).toContainText('妈妈生日惊喜');
   // 11-14 整块评审第 1、14 条：密码键盘的点按在运行日志里只记 masked（没有 testid、坐标）；隐私记状态迁移记了，标题、正文没进日志
   const runLog = (): Promise<string> => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
   await expect.poll(runLog).toMatch(/app vault state unlocked/);
@@ -239,15 +273,17 @@ test('离开时同步盖多任务遮罩，不到 1 分钟回来自动去掉、�
   await shot(page, '08-多任务遮罩', browserName);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.locator('html')).not.toHaveAttribute('data-vault-shield', '1');
-  await expect(page.getByTestId('vault-empty')).toBeVisible();
+  await expect(vaultEmpty(page)).toBeVisible();
 });
 
 test('随手记“⋯”菜单移到隐私记：发 import，这一条从随手记页藏起来', async ({ page, baseURL, browserName }) => {
   const fv = await fakeServer(page, baseURL);
   await setupAndUnlock(page, browserName);
   await page.goto('/app/#/notes');
-  await page.getByTestId('notes-input').fill('要移走的一条');
-  await page.getByTestId('notes-add').click();
+  // 只在随手记页里找：切页过渡那 300 毫秒隐私记页还没卸下，它也是随手记那一份界面、也有 notes-input（11-15 隐私记重写后）
+  const notes = page.getByTestId('notes');
+  await notes.getByTestId('notes-input').fill('要移走的一条');
+  await notes.getByTestId('notes-add').click();
   const card = page.locator('[data-testid^="notes-card-"]').filter({ hasText: '要移走的一条' });
   await expect(card).toBeVisible({ timeout: 15_000 });
   const id = (await card.getAttribute('data-testid'))?.replace('notes-card-', '') ?? '';
@@ -342,10 +378,10 @@ test('隐私记里的文档附件（B4b-1）：电脑上加（加密）、写页
   await page.setViewportSize({ width: 1280, height: 800 });
   await setupAndUnlock(page, browserName);
   await page.goto('/app/#/vault/new');
-  await page.getByTestId('vault-edit-title').fill('体检');
+  await expect(page.getByTestId('note-edit-title')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId('note-files'), '没保存过的新隐私记不出附件区').toHaveCount(0);
-  await page.getByTestId('vault-edit-save').click();
-  await expect.poll(() => fv.calls.filter((c) => c.action === 'save').length).toBe(1);
+  await write(page, 'note-edit-title', '体检');
+  await expect.poll(() => saved(fv).length).toBe(1);
   await expect(page.getByTestId('note-files-add')).toBeVisible({ timeout: 15_000 });
 
   await page.getByTestId('note-files-input').setInputFiles({ name: '体检报告.pdf', mimeType: 'application/pdf', buffer: ZH_PDF });
@@ -388,7 +424,7 @@ test('隐私记里的文档附件（B4b-1）：电脑上加（加密）、写页
   expect(fv.files.some((f) => f.action === 'ms_preview')).toBe(false);
 
   // 上锁：附件区跟着编辑页一起没了，DOM 里不留文件名
-  await page.getByTestId('vault-edit-back').click();
+  await page.getByTestId('edit-back').click();
   await page.getByTestId('vault-lock-now').click();
   await expect(page.getByTestId('vault-unlock-card')).toBeVisible();
   await expect(page.getByTestId('note-files')).toHaveCount(0);
@@ -398,26 +434,29 @@ test('隐私记里的文档附件（B4b-1）：电脑上加（加密）、写页
   expect(log).not.toContain('体检报告');
 });
 
-test('审查第 1 条：保存时令牌过期 → 解锁卡点取消 → 再解锁时那次保存不补发', async ({ page, baseURL, browserName }) => {
+test('审查第 1 条：保存时令牌过期 → 解锁卡点取消 → 再解锁时那次保存不补发，列表出“有 1 处改动没来得及保存”', async ({ page, baseURL, browserName }) => {
   const fv = await fakeServer(page, baseURL);
   await setupAndUnlock(page, browserName);
   await page.goto('/app/#/vault/new');
-  await page.getByTestId('vault-edit-title').fill('取消以后不该存的');
   fv.expireNextSave = true;
-  await page.getByTestId('vault-edit-save').click();
+  await write(page, 'note-edit-title', '取消以后不该存的');
   await expect(page.getByTestId('vault-unlock-card')).toBeVisible();
-  expect(fv.calls.filter((c) => c.action === 'save')).toHaveLength(1);
+  expect(saved(fv)).toHaveLength(1);
   await page.getByTestId('vault-unlock-cancel').click();
   // 桌面宽度下随手记页先挂分栏（desk，按需加载），几个 worker 并发时会超过默认 5 秒
   await expect(page.getByTestId('notes')).toBeVisible({ timeout: 15_000 });
   await page.goto('/app/#/vault');
   await page.getByTestId('vault-unlock-pin').click();
   await typePin(page, 'vault-unlock-pad', PIN);
-  await expect(page.getByTestId('vault-empty')).toBeVisible({ timeout: 15_000 });
-  // 先等运行日志记下“等解锁的那次保存已取消”（取消了就不会再补发），再数保存次数
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault wait cancel n=\d/);
-  expect(fv.calls.filter((c) => c.action === 'save')).toHaveLength(1);
+  await expect(vaultEmpty(page)).toBeVisible({ timeout: 15_000 });
+  // 先等运行日志记下“等解锁的那次保存已取消”、队列丢了 1 条（取消了就不会再补发），再数保存次数
+  const runLog = (): Promise<string> => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  await expect.poll(runLog).toMatch(/vault wait cancel n=\d/);
+  await expect.poll(runLog).toMatch(/vault queue drop n=1 why=cancel/);
+  expect(saved(fv)).toHaveLength(1);
   expect(fv.notes.size).toBe(0);
+  await expect(page.getByTestId('notes-sync-dropped')).toContainText('1');
+  expect(await runLog()).not.toContain('取消以后不该存的');
 });
 
 test('审查第 3 条：设密码时开了 Face ID、绑定没成：密码照样设好，隐私记页出提示（role=alert）；审查第 6 条：解锁卡是有名字的对话框、键盘焦点圈', async ({ page, baseURL, browserName }) => {
@@ -433,7 +472,7 @@ test('审查第 3 条：设密码时开了 Face ID、绑定没成：密码照样
   await typePin(page, 'vault-setup-pad', PIN);
   await expect(page.getByTestId('vault-setup')).toHaveAttribute('data-step', '2');
   await typePin(page, 'vault-setup-pad', PIN);
-  await expect(page.getByTestId('vault-empty')).toBeVisible({ timeout: 15_000 });
+  await expect(vaultEmpty(page)).toBeVisible({ timeout: 15_000 });
   const toast = page.getByTestId('vault-bind-fail');
   await expect(toast).toBeVisible();
   await expect(toast).toHaveAttribute('role', 'alert');
@@ -447,4 +486,81 @@ test('审查第 3 条：设密码时开了 Face ID、绑定没成：密码照样
   await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="vault-unlock-card"]'))).toBe(true);
   await page.keyboard.press('Tab');
   await shot(page, '12-解锁卡键盘焦点', browserName);
+});
+
+/** 解锁后新建一条（停笔自动存）、等服务器收到；回这一条的 id */
+async function oneNote(page: Page, fv: FakeVault, browserName: string, body: string): Promise<string> {
+  await setupAndUnlock(page, browserName);
+  await page.goto('/app/#/vault/new');
+  await expect(page.getByTestId('note-edit-body')).toBeVisible({ timeout: 15_000 });
+  await write(page, 'note-edit-body', body);
+  await expect.poll(() => saved(fv).length).toBe(1);
+  return String(saved(fv)[0]?.body['id']);
+}
+
+test('负责人“插图打不开”：隐私记里插一张图，立刻显示本机那一份；传好了点它出看图页', async ({ page, baseURL, browserName }) => {
+  const fv = await fakeServer(page, baseURL);
+  const id = await oneNote(page, fv, browserName, '带图的一条');
+  await page.getByTestId('note-edit-img-input').setInputFiles({ name: 'a.jpg', mimeType: 'image/jpeg', buffer: await jpeg(page) });
+  const item = page.locator('[data-testid^="note-image-"][data-state]');
+  await expect(item).toHaveCount(1, { timeout: 15_000 });
+  await expect(item.locator('img')).toBeVisible();
+  await expect(item).toHaveAttribute('data-state', 'done', { timeout: 15_000 });
+  const imgId = ((await item.getAttribute('data-testid')) ?? '').replace('note-image-', '');
+  // 先 save 预登记，再传原图、缩略图（同一条、同一张图）
+  expect(saved(fv).at(-1)?.body['add_images']).toEqual([expect.objectContaining({ id: imgId, has_thumb: true })]);
+  expect(fv.images).toEqual([`${id}/${imgId}:full`, `${id}/${imgId}:thumb`]);
+  await page.getByTestId(`note-image-open-${imgId}`).click();
+  await expect(page.getByTestId(`img-view-pic-${imgId}`)).toBeVisible({ timeout: 15_000 });
+  await shot(page, '13-隐私记看图', browserName);
+  const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  expect(log).toMatch(/vault img encode ok/);
+  expect(log).not.toContain(imgId);
+  expect(log).not.toContain('带图的一条');
+});
+
+test('负责人“读写慢”：断网时改了界面立刻就是新的，网络回来后台补发', async ({ page, baseURL, browserName }) => {
+  const fv = await fakeServer(page, baseURL);
+  await oneNote(page, fv, browserName, '断网前写的');
+  fv.offline = true;
+  await write(page, 'note-edit-body', '断网时改的');
+  await page.getByTestId('edit-back').click();
+  // 不等服务器：列表马上是改过的那一份
+  await expect(page.getByTestId('vault-notes')).toContainText('断网时改的', { timeout: 3_000 });
+  expect(saved(fv)).toHaveLength(1);
+  fv.offline = false;
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect.poll(() => saved(fv).at(-1)?.body['body'], { timeout: 30_000 }).toBe('断网时改的');
+  await expect(page.locator('[data-testid^="notes-sync-failed-"]')).toHaveCount(0);
+  const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  expect(log).toMatch(/vault queue fail offline/);
+  expect(log).not.toContain('断网时改的');
+});
+
+test('负责人“离开隐私记页 1 分钟不自动上锁”：换到随手记不到 1 分钟还解锁着，61 秒自己锁上', async ({ page, baseURL, browserName }) => {
+  await page.clock.install();
+  await fakeServer(page, baseURL);
+  await setupAndUnlock(page, browserName);
+  const lockrow = page.getByTestId('vault-lockrow');
+
+  // 不到 1 分钟（离开起算 58 秒，后面点回去还要一点时间）：入口行还是“已解锁”；回到隐私记页列表照样在（计时作废）。
+  // 装了假时钟时间照样在走：等入口行出现用掉的那一段从快进里扣掉（webkit 上约 1 秒，不扣就过了 60 秒，运行日志 vault autolock why=page）
+  const clockNow = (): Promise<number> => page.evaluate(() => Date.now());
+  const left = await clockNow();
+  await page.getByTestId('vault-back').click();
+  await expect(lockrow).toContainText('已解锁', { timeout: 15_000 });
+  await page.clock.fastForward(Math.max(0, 58_000 - ((await clockNow()) - left)));
+  await expect(lockrow).toContainText('已解锁');
+  await lockrow.click();
+  await expect(vaultEmpty(page)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('vault-unlock-card')).toHaveCount(0);
+
+  // 再离开 61 秒：App 在前台也到点自己锁上，入口行写“已上锁”；回隐私记页要解锁
+  await page.getByTestId('vault-back').click();
+  await expect(lockrow).toContainText('已解锁', { timeout: 15_000 });
+  await page.clock.fastForward(61_000);
+  await expect(lockrow).toContainText('已上锁');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault autolock why=page/);
+  await lockrow.click();
+  await expect(page.getByTestId('vault-unlock-card')).toBeVisible({ timeout: 15_000 });
 });

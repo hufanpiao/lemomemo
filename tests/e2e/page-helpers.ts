@@ -52,6 +52,22 @@ export async function stableBox(loc: Locator): Promise<{ x: number; y: number; w
  * 起点最上层是谁就派给谁，和真手指一样：挡在上面的层（pointer-events:none 的进场层会让点按穿到下面）照样会让左滑收不到。
  * pointerId 用 1（两种内核里一直“活着”的那个指针），左滑定方向后 setPointerCapture 才不报错
  */
+/** 浏览器里画一张 jpeg（插图用例的素材：真的能被压图那条路解开） */
+export async function jpeg(page: Page, hue = 40, w = 320, h = 240): Promise<Buffer> {
+  const bytes = await page.evaluate(async ([hh, ww, hgt]) => {
+    const c = document.createElement('canvas');
+    c.width = ww;
+    c.height = hgt;
+    const ctx = c.getContext('2d');
+    if (!ctx) throw new Error('no_ctx');
+    ctx.fillStyle = `hsl(${hh} 70% 55%)`;
+    ctx.fillRect(0, 0, ww, hgt);
+    const b = await new Promise<Blob>((res) => c.toBlob((x) => res(x as Blob), 'image/jpeg', 0.9));
+    return [...new Uint8Array(await b.arrayBuffer())];
+  }, [hue, w, h] as const);
+  return Buffer.from(Uint8Array.from(bytes));
+}
+
 export async function touchSwipe(page: Page, from: { x: number; y: number }, dx: number): Promise<void> {
   await page.evaluate(
     ([x, y, dx]) => {
