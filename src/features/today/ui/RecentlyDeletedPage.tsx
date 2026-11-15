@@ -13,7 +13,7 @@ import { useRoute } from '../../../app/router.ts';
 import { backOr } from '../../../app/router-levels.ts';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
-import { FormButton, GroupLabel } from '../../../kit/components/Form.tsx';
+import { FormButton } from '../../../kit/components/Form.tsx';
 import list from '../../../kit/components/List.module.css';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyMark.tsx';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
@@ -102,7 +102,7 @@ export default function RecentlyDeletedPage() {
       <p className={styles.offline} role="status" data-testid="trash-offline">
         {!online && items.length > 0 ? t('trash.offline', {}) : null}
       </p>
-      {items.length === 0 ? <p className={list.empty} data-testid="trash-empty">{t('trash.empty', {})}</p> : <GroupLabel>{t('trash.count', { n: items.length })}</GroupLabel>}
+      {items.length === 0 ? <p className={list.empty} data-testid="trash-empty">{t('trash.empty', {})}</p> : null}
       {/* R-436：行高 56、左右 16（kit 列表的 .roomy，同今天页、待办页）；“恢复”“永久删除”用 kit 的小号灰底按钮（FormButton compact），不再描边 */}
       <ul className={`${list.list} ${list.roomy}`}>
         {items.map((it) => (

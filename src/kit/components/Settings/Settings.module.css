@@ -20,22 +20,22 @@
   list-style: none;
 }
 
-/* R-276（负责人 10-30）：行里的 .rowBtn 至少 44、可点区不变；R-436 精致化“行高和留白加大”：行上下各加 4，单行整行 52；
-   分隔线 0.5px（同 kit 表单字段行），卡片左右内边距 14，线从文字起点开始 */
+/* R-276（负责人 10-30）：单行整行高 44、不加上下内边距；行里的 .rowBtn 44 撑满整行，可点区不变。
+   R-436：分隔线 0.5px（同 kit 表单字段行），行高照 R-276 不加（负责人 10-30“这个一行字的框也太宽了吧”） */
 .row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 10px;
   min-height: var(--hit);
-  padding: 4px 0;
+  padding: 0;
   border-bottom: 0.5px solid var(--line);
 }
 
-/* 两行内容的行（下面带一行灰字 .meta 或报错 .error）：上下各 10px，不然灰字压到卡片圆角（R-276 实测 8，R-436 加大 2） */
+/* 两行内容的行（下面带一行灰字 .meta 或报错 .error）：上下各 8px，不然灰字压到卡片圆角（R-276 实测）；单行的行仍是 44 */
 .row:has(> .meta),
 .row:has(> .error) {
-  padding: 10px 0;
+  padding: 8px 0;
 }
 
 .row:last-child {
@@ -114,7 +114,6 @@
 
 /* 入口行：整行一个按钮 */
 .rowBtn {
-  position: relative;
   display: flex;
   flex: 1 1 auto;
   align-items: center;
@@ -143,29 +142,19 @@
   opacity: var(--press-dim);
 }
 
-/* R-436 行上下各加 4 以后，整行按钮本身仍是 44（R-277 锁定），用 ::after 往上下各伸 4 把行的留白也算进点击区，
-   整行 52 处处点得到（同 Form.module.css 的 .compact::after 扩点击区做法；position: relative 写在 .rowBtn 块里） */
-.rowBtn::after {
-  content: '';
-  position: absolute;
-  inset: -4px 0;
-}
-
 /* 减少动态效果：变淡也直接切换（上面的 .row .rowBtn 权重比 Pressable 的 .pressable 高，要在这里自己关） */
 
 :global(:root[data-rm="1"]) .row .rowBtn {
   transition: none;
 }
 
-/* 开关行：<label> 包行名和 role="switch" 的复选框（写法同提醒页免打扰）。R-436：label 上下各外扩 4，盖住行的上下留白，整行 52 处处点得到（开关本身 48×28 不变；不用 ::after，免得叠在开关上面截走点击） */
+/* 开关行：<label> 包行名和 role="switch" 的复选框（写法同提醒页免打扰） */
 .switchRow {
   display: flex;
   flex: 1 1 100%;
   align-items: center;
   gap: 10px;
-  min-height: calc(var(--hit) + 8px);
-  margin: -4px 0;
-  padding: 4px 0;
+  min-height: var(--hit);
   cursor: pointer;
 }
 

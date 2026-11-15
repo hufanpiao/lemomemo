@@ -109,7 +109,7 @@ test.describe('设置页骨架', () => {
     expect(await pressedLocale(page)).toBe('zh');
   });
 
-  // R-276（负责人 10-30）：按钮 44（R-436 起行上下各加 4、整行 52）；按钮（.btn）看得见 38，点击区由 ::after 扩到 44——
+  // R-276（负责人 10-30）：单行行整行高 44；按钮（.btn）看得见 38，点击区由 ::after 扩到 44——
   // 在按钮上下边框外 2px 用 elementFromPoint 点，命中的仍是按钮本身。e2e 构建读不到设备，账号二级页里是“重试”按钮（.btn）
   test('R-276/R-277/R-282 实测：单行行高 44；“重试”看得见 38、上下边框外 2px 仍点到按钮本身；“退出登录”和注销那行一样高 44；语言切换框看得见 38', async ({ page }) => {
     await page.goto(SETTINGS);
@@ -122,8 +122,6 @@ test.describe('设置页骨架', () => {
     // 账号一行 11-06 起是邮箱、设备摘要上下两行（韩文审校 A-4），行高可以超过 44，另在“375 宽”两条里查不截断、不低于 44
     for (const id of ['settings-cal-summary', 'settings-remind-summary']) await expect(main.getByTestId(id), id).toHaveText(/\S/);
     for (const id of ['settings-data-entry', 'settings-about-entry', 'settings-cal-entry', 'settings-remind-entry']) {
-      // elementFromPoint 只认视口里的点：先把这一行滚到中间
-      await main.getByTestId(id).evaluate((el) => el.scrollIntoView({ block: 'center' }));
       const r = await main.getByTestId(id).evaluate((el) => {
         const li = el.closest('li');
         const cs = li ? getComputedStyle(li) : null;
@@ -132,19 +130,11 @@ test.describe('设置页骨架', () => {
           li: li?.getBoundingClientRect().height ?? 0,
           line: cs ? parseFloat(cs.borderBottomWidth) : -1,
           pad: cs ? parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) : -1,
-          // 行上下留白里（按钮上下边框外 2px）点下去仍是这个按钮：kit 的 .rowBtn::after 上下各伸 4
-          hit: [-2, 2].map((d) => {
-            const b = el.getBoundingClientRect();
-            const y = d < 0 ? b.top + d : b.bottom + d;
-            return el.ownerDocument.elementFromPoint(b.left + b.width / 2, y)?.closest('button') === el;
-          }),
         };
       });
-      // R-436 精致化“行高和留白加大”：按钮仍 44（R-276），行上下各加 4，整行 52；留白也点得到
       expect(Math.round(r.btn), id).toBe(44);
-      expect(r.pad, id).toBe(8);
-      expect(Math.round(r.li - r.line), id).toBe(52);
-      expect(r.hit, id).toEqual([true, true]);
+      expect(r.pad, id).toBe(0);
+      expect(Math.round(r.li - r.line), id).toBe(44);
     }
     // R-277（负责人 10-30）：“退出登录”整行高 44，和“注销账号”那行一样
     const so = await main.getByTestId('settings-signout').evaluate((el) => el.getBoundingClientRect().height);
@@ -152,8 +142,6 @@ test.describe('设置页骨架', () => {
 
     // R-282（负责人 10-30 选“再小一点”）：语言切换框看得见 38；两个选项看得见 32，上下边框外 2px 仍点到自己（点击区 44）。
     // 合卡以后语言行是两行（第二行灰字说明，M1），切换框不再按 44 的单行行居中，上下各留 3 不再量
-    // 上面量行时滚到了下面，切换框先滚回视口（elementFromPoint 只认视口里的点）
-    await main.getByTestId('settings-lang').evaluate((el) => el.scrollIntoView({ block: 'center' }));
     const seg = await main.getByTestId('settings-lang').evaluate((el) => {
       const b = el.getBoundingClientRect();
       const btns = [...el.querySelectorAll('button')];
@@ -177,11 +165,8 @@ test.describe('设置页骨架', () => {
     await main.getByTestId('settings-account-entry').click();
     await expect(page.getByRole('alert').first()).toBeVisible();
     await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
-    // R-277：“注销账号”按钮和“退出登录”一样高 44；R-436 起它所在的行上下各加 4，整行 52（留白由按钮的 ::after 接住）
-    const delBtn = await main.getByTestId('settings-delete-entry').evaluate((el) => el.getBoundingClientRect().height);
-    expect(Math.round(delBtn)).toBe(44);
     const del = await main.getByTestId('settings-delete-entry').locator('xpath=ancestor::li[1]').evaluate((el) => el.getBoundingClientRect().height);
-    expect(Math.round(del)).toBe(52);
+    expect(Math.round(del)).toBe(44);
     const buttons = [main.getByRole('alert').getByRole('button', { name: '重试' })];
     for (const btn of buttons) {
       const r = await btn.evaluate((el) => {

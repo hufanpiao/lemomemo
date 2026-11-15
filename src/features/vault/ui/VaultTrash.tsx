@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { navigate } from '../../../app/router.ts';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
-import { FormButton, GroupLabel } from '../../../kit/components/Form.tsx';
+import { FormButton } from '../../../kit/components/Form.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import { useErrText, useVault } from '../hooks/useVault.ts';
 import { str, useVaultNoteSource, useVaultStore } from '../hooks/vault-note-source.ts';
@@ -50,26 +50,23 @@ export function VaultTrash() {
       {gone.length === 0 ? (
         <p className={styles.empty}>{t('vault.trash.empty', {})}</p>
       ) : (
-        <>
-          <GroupLabel>{t('vault.trash.count', { n: gone.length })}</GroupLabel>
-          <ul className={row.lst}>
-            {gone.map((n) => (
-              <li key={n.id} className={styles.row} data-testid={`vault-trash-row-${n.id}`}>
-                <span className={styles.rowMain}>
-                  <span className={styles.rowTitle}>{str(n['title']) || str(n['body']).split('\n')[0] || t('vault.trash.untitled', {})}</span>
-                </span>
-                <span className={styles.rowActs}>
-                  <FormButton size="compact" onClick={() => restore(n.id)} data-testid={`vault-restore-${n.id}`}>
-                    {t('vault.restore', {})}
-                  </FormButton>
-                  <FormButton size="compact" danger onClick={() => setAsk([n.id])} data-testid={`vault-purge-${n.id}`}>
-                    {t('vault.purge', {})}
-                  </FormButton>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
+        <ul className={row.lst}>
+          {gone.map((n) => (
+            <li key={n.id} className={styles.row} data-testid={`vault-trash-row-${n.id}`}>
+              <span className={styles.rowMain}>
+                <span className={styles.rowTitle}>{str(n['title']) || str(n['body']).split('\n')[0] || t('vault.trash.untitled', {})}</span>
+              </span>
+              <span className={styles.rowActs}>
+                <FormButton size="compact" onClick={() => restore(n.id)} data-testid={`vault-restore-${n.id}`}>
+                  {t('vault.restore', {})}
+                </FormButton>
+                <FormButton size="compact" danger onClick={() => setAsk([n.id])} data-testid={`vault-purge-${n.id}`}>
+                  {t('vault.purge', {})}
+                </FormButton>
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
       <ConfirmDialog
         open={ask !== null}

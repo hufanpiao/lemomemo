@@ -152,17 +152,11 @@ describe('设置页组间距', () => {
     };
     const row = kitBlock('.row');
     expect(row).toMatch(/min-height: var\(--hit\);/);
-    // R-436 加大行高和留白：单行上下各 4（整行 52），两行内容上下各 10；分隔线 0.5px
-    expect(row).toMatch(/padding: 4px 0;/);
+    expect(row).toMatch(/padding: 0;/);
+    // R-436 只把分隔线改细到 0.5px，行高照 R-276
     expect(row).toMatch(/border-bottom: 0\.5px solid var\(--line\);/);
-    expect(kit).toMatch(/\n\.row:has\(> \.meta\),\n\.row:has\(> \.error\) \{\n {2}padding: 10px 0;/);
+    expect(kit).toMatch(/\n\.row:has\(> \.meta\),\n\.row:has\(> \.error\) \{\n {2}padding: 8px 0;/);
     expect(kitBlock('.rowBtn')).toMatch(/min-height: var\(--hit\);/);
-    // 整行按钮本身 44，::after 上下各伸 4 补上行的留白；开关行 label 上下各外扩 4（不用 ::after，免得盖住开关）。整行 52 处处点得到
-    expect(kitBlock('.rowBtn')).toMatch(/position: relative;/);
-    expect(kitBlock('.rowBtn::after')).toMatch(/inset: -4px 0;/);
-    expect(kitBlock('.switchRow')).toMatch(/margin: -4px 0;/);
-    expect(kitBlock('.switchRow')).toMatch(/padding: 4px 0;/);
-    expect(kit).not.toContain('.switchRow::after');
     expect(kitBlock('.tx')).toMatch(/margin: 0;/);
     // 设置页自己不再留一份
     for (const sel of ['.grp', '.row', '.rowBtn', '.tx', '.v', '.meta']) expect(block(sel), sel).toBe('');
