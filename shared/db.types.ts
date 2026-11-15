@@ -430,6 +430,9 @@ isOneToOne: false
 "files_authorize_impl":
 { Args: { "p_items": Json,"p_op": string }; Returns: Json
                            },
+"files_put_reason":
+{ Args: { "p_bytes": number,"p_cl": number,"p_exact": number,"p_exclude": string,"p_max": number,"p_thumb": boolean,"p_uid": string }; Returns: string
+                           },
 "intake_insert":
 { Args: { "p_rows": Json,"p_user": string }; Returns: undefined
                            },
