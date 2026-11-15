@@ -449,9 +449,9 @@ test('审查第 1 条：保存时令牌过期 → 解锁卡点取消 → 再解�
   await page.getByTestId('vault-unlock-pin').click();
   await typePin(page, 'vault-unlock-pad', PIN);
   await expect(vaultEmpty(page)).toBeVisible({ timeout: 15_000 });
-  // 先等运行日志记下“等解锁的那次保存已取消”、队列丢了 1 条（取消了就不会再补发），再数保存次数
+  // 先等运行日志记下“取消了解锁”、队列丢了 1 条（取消等同主动上锁，不会再补发，M1），再数保存次数
   const runLog = (): Promise<string> => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
-  await expect.poll(runLog).toMatch(/vault wait cancel n=\d/);
+  await expect.poll(runLog).toMatch(/vault wait cancel/);
   await expect.poll(runLog).toMatch(/vault queue drop n=1 why=cancel/);
   expect(saved(fv)).toHaveLength(1);
   expect(fv.notes.size).toBe(0);
