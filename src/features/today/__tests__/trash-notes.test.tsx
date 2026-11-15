@@ -62,6 +62,7 @@ describe('“最近删除”页', () => {
       fireEvent.click(screen.getByTestId(`trash-restore-${uid(1)}`));
     });
     await waitFor(() => expect(collection<{ id: string; deleted_at?: unknown }>('notes').get(uid(1))?.deleted_at).toBeNull());
-    expect((await screen.findByTestId('trash-msg')).textContent).toBe('已恢复');
+    // trash-msg 是常驻的 role=status（R-436 提示合一），一开始就在、只是空的：要等字出来，不能 findBy 一找到就比（11-16 ci UTC 作业负载高时挂过）
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已恢复'));
   });
 });
