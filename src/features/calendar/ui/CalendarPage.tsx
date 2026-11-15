@@ -4,7 +4,7 @@
 // • 正文左右滑动翻页、跟手（motion 的 useSwipePager）；电脑键盘 ← → 翻页、T 回今天（焦点在输入框、浮层打开时不生效；日历内部一律原地换、不记历史，R-372）
 // • 离线、又没拉到要显示的节假日：月历上方提示“联网后显示节假日”（5.12 第 1 点）
 // • 点月格某天 / 周视图某条泳道：选中那一天，下面列出当天全部日程和待办（DayList）；默认选中今天（在这一页里时）
-// • 月历底部常驻一行图例（线框 s3）
+// • 月历下面不放图例（负责人 11-15 去掉）
 // • 翻页的动画（架构 5.12，代码复审 N1）：同一页内换地址一律不起整页 View Transition（useCalendar 走 replaceInPage，日历内部算同一层不记历史，R-372）；
 //   ‹ › 按钮翻页和滑动一样，新的一页从那一侧横滑进来（swipe.slideIn，--dur-ui + --ease-standard）；键盘 ← →、“今天”、年月选择直接切换
 // • 上拖收起（线框 s3、架构 17、R-326）：月视图日清单顶上的拖动柄（FoldHandle）往上拖，月历收成一周一行（hooks/useMonthFold）；
@@ -32,7 +32,6 @@ import { rlog } from '../../../platform/run-log-api.ts';
 import { UnsyncedRemindHint } from '../../reminders/index.ts';
 import { useSwipePager } from '../../../motion/gestures.ts';
 import { useCalendar } from '../hooks/useCalendar.ts';
-import { useCalHolidayChoice } from '../hooks/useCalSettings.ts';
 import { useCalViewT, type CalViewT } from '../hooks/useCalViewT.ts';
 import { useMonthFold } from '../hooks/useMonthFold.ts';
 import { useNewDateSource } from '../hooks/new-date.ts';
@@ -40,7 +39,7 @@ import { weekTitle } from './week-axis.ts';
 import styles from './CalendarPage.module.css';
 import { CalNav, FoldHandle } from './CalNav.tsx';
 import { DayList } from './DayList.tsx';
-import { MonthGrid, MonthLegend } from './MonthGrid.tsx';
+import { MonthGrid } from './MonthGrid.tsx';
 import { MonthPicker } from './MonthPicker.tsx';
 import { WeekView } from './WeekView.tsx';
 
@@ -53,17 +52,6 @@ function weekTitleText(start: DateStr, t: CalViewT): string {
       return t('cal.weekTitleM', { m1: w.m1, d1: w.d1, m2: w.m2, d2: w.d2 });
     case 'year':
       return t('cal.weekTitleY', { y1: w.y1, m1: w.m1, d1: w.d1, y2: w.y2, m2: w.m2, d2: w.d2 });
-  }
-}
-
-function holShortKey(v: 'cn' | 'kr' | 'both'): 'cal.set.holShort.cn' | 'cal.set.holShort.kr' | 'cal.set.holShort.both' {
-  switch (v) {
-    case 'cn':
-      return 'cal.set.holShort.cn';
-    case 'kr':
-      return 'cal.set.holShort.kr';
-    case 'both':
-      return 'cal.set.holShort.both';
   }
 }
 
@@ -126,7 +114,6 @@ export default function CalendarPage() {
   const [picked, setPicked] = useState<DateStr | null>(null);
   const month = model.view.mode === 'month';
   const title = month ? t('cal.title', { y: model.header.y, m: model.header.m }) : weekTitleText(model.view.start, t);
-  const holChoice = useCalHolidayChoice();
   // 只读行（FA-2）：打开一条之前先看是不是只读，是就出提示条、不进编辑页
   const ro = useCalGuard();
 
@@ -234,7 +221,6 @@ export default function CalendarPage() {
                 gridRef={fold.gridRef}
                 gridId={GRID_ID}
               />
-              <MonthLegend t={t} country={t(holShortKey(holChoice), {})} fade={1 - p} />
             </>
           ) : null
         ) : (

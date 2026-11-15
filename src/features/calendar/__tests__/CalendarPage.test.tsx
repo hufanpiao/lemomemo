@@ -158,12 +158,10 @@ describe('月视图', () => {
     expect(cell('2026-11-11')?.querySelector(`.${styles.holName ?? 'x'}`)?.textContent).toBe('中国假');
   });
 
-  it('图例常驻：节假日国家（跟设置）、标签、+N、纪念日（线框 s3）', () => {
+  it('月历下面不放图例（负责人 11-15“下一版把这些去掉”）', () => {
     open('#/cal/month/2026-11');
-    const lg = screen.getByTestId('cal-legend');
-    expect(lg.textContent).toContain('中国');
-    expect(lg.textContent).toContain('+N');
-    expect(lg.textContent).toContain('纪念日');
+    expect(screen.queryByTestId('cal-legend')).toBeNull();
+    expect(screen.getByTestId('calendar-page').textContent).not.toContain('+N：');
   });
 
   it('翻页改地址；非法月份换成本月（replace）；到 1900-01 时“上个月”aria-disabled、点了不动（代码审查 L1）', async () => {

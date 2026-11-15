@@ -94,13 +94,11 @@ describe('上拖收起（线框 s3、R-326）', () => {
     // 今天 11-05 在 11-02～11-08 那一行
     for (const d of ['2026-11-02', '2026-11-05', '2026-11-08']) expect(cell(d)?.hasAttribute('inert')).toBe(false);
     for (const d of ['2026-10-26', '2026-11-01', '2026-11-12', '2026-12-06']) expect(cell(d)?.hasAttribute('inert')).toBe(true);
-    expect(screen.getByTestId('cal-legend').getAttribute('aria-hidden')).toBe('true');
     expect(screen.getByTestId('cal-prev').getAttribute('aria-label')).toBe('上一周');
     expect(screen.getByTestId('cal-next').getAttribute('aria-label')).toBe('下一周');
     fireEvent.click(btn);
     expect(btn.getAttribute('aria-expanded')).toBe('true');
     expect(cell('2026-11-12')?.hasAttribute('inert')).toBe(false);
-    expect(screen.getByTestId('cal-legend').hasAttribute('aria-hidden')).toBe(false);
   });
 
   it('锚点是选中那天的一行：先点 11-19 再收起，留下 11-16～11-22', () => {

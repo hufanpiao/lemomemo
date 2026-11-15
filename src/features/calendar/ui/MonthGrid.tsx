@@ -177,26 +177,3 @@ export function MonthGrid({
     </section>
   );
 }
-
-/** 月历底部常驻图例（线框 s3、视觉稿 .legend）：节假日在哪里改、标签是什么、+N、纪念日菱形 */
-export function MonthLegend({ t, country, fade = 1 }: { t: CalViewT; country: string; /** 上拖收起途中跟着淡出，0 时读屏也跳过 */ fade?: number }) {
-  return (
-    <div className={styles.legend} data-testid="cal-legend" style={fade < 1 ? { opacity: fade } : undefined} aria-hidden={fade === 0 || undefined}>
-      <span>
-        <i className={styles.legHol} aria-hidden="true" />
-        {t('cal.leg.hol', { country })}
-      </span>
-      <span>
-        <i className={`${styles.mark} ${styles.legTag} ${styles.c2}`} aria-hidden="true">
-          {t('cal.leg.tagSample', {})}
-        </i>
-        {t('cal.leg.tag', {})}
-      </span>
-      <span>{t('cal.leg.more', {})}</span>
-      <span>
-        <i className={styles.dia} aria-hidden="true" />
-        {t('cal.leg.anniv', {})}
-      </span>
-    </div>
-  );
-}

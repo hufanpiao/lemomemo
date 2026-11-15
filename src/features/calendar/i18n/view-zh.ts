@@ -49,14 +49,6 @@ export const viewZh = {
   'cal.overdue': '逾',
   // 离线又从没拉到过要显示的那一国（架构 5.12 第 1 点）
   'cal.offline': '联网后显示节假日',
-  // 月历底部常驻图例（线框 s3）
-  'cal.leg.hol': '灰底：{country}节假日（设置 › 日历 可改）',
-  'cal.leg.tag': '标签：一件事，写简称（颜色＝项目）',
-  'cal.leg.tagSample': '客户',
-  'cal.leg.more': '+N：还有 N 件',
-  'cal.leg.anniv': '纪念日',
-  'cal.leg.todo': '截止的待办',
-  'cal.leg.now': '竖线：现在',
   // 选中那一天下面的清单（线框 s2、s3）
   'cal.day.title': '{m}月{d}日 {wd}',
   'cal.day.count': '{n} 项',

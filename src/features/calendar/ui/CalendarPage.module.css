@@ -477,36 +477,6 @@
   color: var(--on-p);
 }
 
-/* 图例（线框 s3） */
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  margin: 8px 4px 0;
-  color: var(--text-2);
-  font-size: var(--fs-11);
-}
-
-.legend > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.legHol {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  background: var(--hol-bg);
-}
-
-.legTag {
-  display: inline-block;
-  height: 15px;
-}
-
 /* ───────── 选中那天的清单 ───────── */
 
 /* 白底、圆角、左右 12 由 kit 的 List.module.css .panel 给（B2-UI-a U4-5）；行、时刻那一格、标题、行尾标记、空状态也在那里 */

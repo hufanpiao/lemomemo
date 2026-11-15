@@ -44,13 +44,6 @@ export const viewKo = {
   'cal.subHolShort': '대체휴일',
   'cal.overdue': '지남', // REVIEW(ko)
   'cal.offline': '인터넷에 연결되면 공휴일이 표시돼요', // REVIEW(ko)
-  'cal.leg.hol': '회색 바탕: {country} 공휴일 (설정 › 캘린더에서 바꿀 수 있어요)', // R-106 B2 第一遍已审（11-04）（跟 cal.set.title 行名；括号前空格照 B1）
-  'cal.leg.tag': '태그: 일 하나, 줄임말(색 = 프로젝트)', // REVIEW(ko)
-  'cal.leg.tagSample': '고객', // REVIEW(ko)
-  'cal.leg.more': '+N: N건 더 있어요', // REVIEW(ko)
-  'cal.leg.anniv': '기념일', // REVIEW(ko)
-  'cal.leg.todo': '마감 할 일', // REVIEW(ko)
-  'cal.leg.now': '세로선: 지금', // REVIEW(ko)
   'cal.day.title': '{m}월 {d}일 {wd}', // REVIEW(ko)
   'cal.day.count': '{n}건', // REVIEW(ko)
   'cal.day.empty': '이날은 일정이 없어요', // REVIEW(ko)
