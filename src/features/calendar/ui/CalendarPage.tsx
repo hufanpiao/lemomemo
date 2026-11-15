@@ -224,6 +224,7 @@ export default function CalendarPage() {
             <>
               <MonthGrid
                 cells={model.cells}
+                holidays={model.holidays}
                 weekStart={model.weekStart}
                 t={t}
                 label={t('cal.grid', { y: model.header.y, m: model.header.m })}

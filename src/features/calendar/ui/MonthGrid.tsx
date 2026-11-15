@@ -4,7 +4,9 @@
 //   “两国都显示”时另一国的节日名小一号写在第二行（R-97，放不下省略）；
 //   下面是事项标签：底色是项目块色 --pN，左侧 2 px 深色竖线 --pNs，字 --on-p，9.5 px（R-104 有意例外，不要改）；多出来写“+N”
 // • 放假格子画柠檬黄细斜虚线（--hol-stripe），节日名用柠檬黄系（--hol-name）；调休补班格子画中性色细斜虚线（--work-stripe），
-//   右上角“班”小圆标，那一行只写节日名（“班”已在圆标里）；周末不另上颜色（负责人 11-15“照参考图做”，取代设计审查 M4 的纯灰底）
+//   右上角“班”小圆标（韩文“근무”放得下的胶囊），那一行只写节日名（“班”已在圆标里）；周末不另上颜色
+//   （负责人 11-15“照参考图做”，取代设计审查 M4 的纯灰底）。斜纹类和手机泳道、电脑周视图共用（cal-ui.ts dayKind / dayKindClass）
+// • 连续放假只在第一天写节日名，后面几天照常写节气或农历（cal-ui.ts namedHolidays）；读屏名字照旧念出这天属于哪个节假日
 // • 读屏：每格是一个按钮，名字先按显示顺序念格子里看得见的字（日期数字、那一行、第二个节日名、事项简称、“+N”，WCAG 2.5.3），
 //   再接“日期、星期几、今天、节假日、节气、农历（完整写法）、共几件、按项目汇总的件数、另有几件未显示、有纪念日”（cal-ui.ts labelInName）
 // • 点一格：选中那一天（aria-pressed），下面的清单列出当天全部日程和待办（线框 s3）
@@ -13,42 +15,48 @@
 import { Fragment, type CSSProperties, type Ref } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { WeekStart } from '../../../../shared/logic/calendar/cal-nav.ts';
+import type { HolidayKind, HolidayMark } from '../../../../shared/logic/calendar/holidays.ts';
 import type { MonthCell } from '../../../../shared/logic/calendar/month-grid.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, holText, labelInName, stripWorkdayTail, workdayA11y, weekdayKey } from './cal-ui.ts';
+import { colorClass, dayKind, dayKindClass, holA11y, holText, labelInName, namedHolidays, stripWorkdayTail, weekdayKey } from './cal-ui.ts';
 
-/** 这一格是不是调休补班（当天有放假的就按放假画） */
-function isWorkday(c: MonthCell): boolean {
-  return c.holidays.some((h) => h.kind === 'work') && !c.holidays.some((h) => h.kind === 'off');
+/** 一格里看得见的字（右上角“班”圆标、那一行：节假日 > 节气 > 农历、第二个节日名）和那一行是不是放假的节日名 */
+interface CellLines {
+  readonly badge: string;
+  readonly line: string;
+  readonly hol2: string;
+  readonly offName: boolean;
 }
 
 /**
- * 一格里看得见的字（右上角“班”圆标、那一行：节假日 > 节气 > 农历、第二个节日名）：画格子和读屏名字共用，两边永远一致。
- * 补班日的“班”放进圆标，那一行只写去掉补班尾巴的节日名
+ * 画格子和读屏名字共用，两边永远一致。kind 由调用方算一次（dayKind）传进来。
+ * 只写 named 里的（连休后几天不写节日名，见 namedHolidays）；补班日（当天只有补班）的“班”放进圆标，
+ * 那一行和第二个名字都只写去掉补班尾巴的节日名
  */
-function cellLines(c: MonthCell, t: CalViewT): { badge: string; line: string; hol2: string } {
+function cellLines(c: MonthCell, kind: HolidayKind | null, named: readonly HolidayMark[], t: CalViewT): CellLines {
   const sub = { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) };
-  const [first, second] = c.holidays;
-  const badge = isWorkday(c) ? t('cal.workday', {}) : '';
-  // 有圆标时当天只有补班（isWorkday），first 一定是补班
-  const holLine = (h: NonNullable<typeof first>): string => (badge === '' ? holText(h, t('cal.workday', {}), sub) : stripWorkdayTail(h.name));
+  const [first, second] = named;
+  const badge = kind === 'work' ? t('cal.workday', {}) : '';
+  const text = (h: HolidayMark): string => (badge === '' ? holText(h, t('cal.workday', {}), sub) : stripWorkdayTail(h.name));
   return {
     badge,
-    line: first ? holLine(first) : (c.solarTerm ?? c.lunar ?? ''),
-    hol2: second ? holText(second, t('cal.workday', {}), sub) : '',
+    line: first ? text(first) : (c.solarTerm ?? c.lunar ?? ''),
+    hol2: second ? text(second) : '',
+    offName: first?.kind === 'off',
   };
 }
 
-/** 一格的读屏名字 */
-export function cellLabel(c: MonthCell, t: CalViewT, lunarSay?: (date: DateStr) => string | undefined): string {
+/** 一格的读屏名字（lines 是 cellLines 的结果，和画出来的同一份） */
+function labelOf(c: MonthCell, t: CalViewT, lines: CellLines, lunarSay?: (date: DateStr) => string | undefined): string {
   const [, m = '1', d = '1'] = c.date.split('-');
-  const { badge, line, hol2 } = cellLines(c, t);
+  const { badge, line, hol2 } = lines;
   // 看得见的字，和下面画的顺序一致
   const shown = [String(Number(d)), badge, line, hol2, ...c.marks.map((mk) => mk.short), c.more > 0 ? t('cal.more', { n: c.more }) : ''];
   const parts = [t('cal.a11y.date', { m: Number(m), d: Number(d) }), t('cal.wdFull', { wd: t(weekdayKey(c.weekday), {}) })];
   if (c.isToday) parts.push(t('cal.a11y.todayMark', {}));
-  for (const h of c.holidays) parts.push(h.kind === 'work' ? workdayA11y(h.name, (name) => t('cal.a11y.workday', { name })) : h.name);
+  // 连休后几天格子里不写节日名，读屏照旧念出这天属于哪个节假日
+  for (const h of c.holidays) parts.push(holA11y(h, t));
   if (c.solarTerm) parts.push(c.solarTerm);
   if (c.lunar) parts.push(t('cal.a11y.lunar', { text: lunarSay?.(c.date) ?? c.lunar }));
   const total = c.a11y.reduce((n, p) => n + p.count, 0);
@@ -64,6 +72,7 @@ export function cellLabel(c: MonthCell, t: CalViewT, lunarSay?: (date: DateStr) 
 
 function Cell({
   c,
+  holidays,
   t,
   selected,
   onSelect,
@@ -72,6 +81,8 @@ function Cell({
   hidden,
 }: {
   c: MonthCell;
+  /** 全部节假日（看前一天是不是同一个假期，namedHolidays） */
+  holidays: ReadonlyMap<DateStr, readonly HolidayMark[]>;
   t: CalViewT;
   selected: boolean;
   onSelect: (date: DateStr) => void;
@@ -81,40 +92,40 @@ function Cell({
   /** 收起了、这一格不在锚点那一行 */
   hidden: boolean;
 }) {
-  const off = c.holidays.some((h) => h.kind === 'off');
-  const cls = [styles.cell, c.inMonth ? '' : styles.out, c.isToday ? styles.today : '', off ? styles.holiday : '', isWorkday(c) ? styles.workday : '', selected ? styles.sel : '']
-    .filter(Boolean)
-    .join(' ');
-  const [first, second] = c.holidays;
-  const { badge, line, hol2 } = cellLines(c, t);
+  const kind = dayKind(c.holidays);
+  const lines = cellLines(c, kind, namedHolidays(c.date, c.holidays, holidays), t);
+  const { badge, line, hol2 } = lines;
+  const cls = [styles.cell, c.inMonth ? '' : styles.out, c.isToday ? styles.today : '', dayKindClass(kind), selected ? styles.sel : ''].filter(Boolean).join(' ');
   return (
     <button
       type="button"
       className={cls}
-      aria-label={cellLabel(c, t, lunarSay)}
+      aria-label={labelOf(c, t, lines, lunarSay)}
       aria-pressed={selected}
       onClick={() => onSelect(c.date)}
       data-date={c.date}
       inert={hidden}
       style={fade < 1 ? { opacity: fade } : undefined}
     >
-      <span className={styles.dayNum} aria-hidden="true">
-        {Number(c.date.slice(8))}
+      {/* 第一行：日期数字 + 补班标（标靠右；格子窄、放不下时折到下一行靠右，不压“今天”圆底） */}
+      <span className={styles.cellTop} aria-hidden="true">
+        <span className={styles.dayNum}>{Number(c.date.slice(8))}</span>
+        {badge !== '' ? (
+          <>
+            {' '}
+            <span className={styles.ban} data-testid="cal-ban">
+              {badge}
+            </span>
+          </>
+        ) : null}
       </span>{' '}
-      {badge !== '' ? (
-        <>
-          <span className={styles.ban} aria-hidden="true">
-            {badge}
-          </span>{' '}
-        </>
-      ) : null}
       {/* 几段字之间的 {' '}：格子是 flex，空格不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}
       {/* 这一行一直占着高度：农历按需加载，加载前后格子不跳动 */}
-      <span className={[styles.line, first ? styles.holName : styles.lunar, first?.kind === 'work' ? styles.work : ''].filter(Boolean).join(' ')} aria-hidden="true">
+      <span className={lines.offName ? `${styles.line} ${styles.holName}` : styles.line} aria-hidden="true">
         <span className={styles.lineTx}>{line}</span>
         {c.anniv ? <span className={styles.dia} data-testid="cal-anniv" /> : null}
       </span>
-      {second ? (
+      {hol2 !== '' ? (
         <>
           {' '}
           <span className={styles.hol2} aria-hidden="true">
@@ -144,6 +155,7 @@ function Cell({
 
 export function MonthGrid({
   cells,
+  holidays,
   weekStart,
   t,
   label,
@@ -155,6 +167,8 @@ export function MonthGrid({
   gridId,
 }: {
   cells: readonly MonthCell[];
+  /** 全部节假日（和 buildMonth 用的同一份）：看前一天是不是同一个假期，连休只在第一天写节日名 */
+  holidays: ReadonlyMap<DateStr, readonly HolidayMark[]>;
   weekStart: WeekStart;
   t: CalViewT;
   label: string;
@@ -186,6 +200,7 @@ export function MonthGrid({
             <Cell
               key={c.date}
               c={c}
+              holidays={holidays}
               t={t}
               selected={c.date === selected}
               onSelect={onSelect}

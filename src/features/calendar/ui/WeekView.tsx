@@ -8,6 +8,8 @@
 //     （色块挨得近、高度不到 44，设计审查 M7 的做法：先选天、再在清单里点具体哪一条）
 // • 电脑（宽屏）：7 列时间格（纵向时间轴，每小时 40 px），表头星期、日期、农历，顶部“全天”行放全天日程和当天截止的待办（○ 标题）；
 //   重叠的并排分列（buildWeek layout 'desk' 的 column / columns）；色块点了打开编辑页；点表头选中那一天
+// • 节假日（R-432）：放假、补班的泳道（电脑是表头和那一列）和月格同一套斜纹（cal-ui.ts dayKind / dayKindClass）；
+//   连续放假只在第一天写节日名，后面几天照写农历（namedHolidays），读屏照旧念节日名（holA11y）
 // • 量宽：用回调 ref 量第一条轨道，翻周后轨道换了新元素会重新挂 ResizeObserver（代码审查 M1）
 // • 读屏：泳道按钮的名字先按显示顺序念看得见的字（“周一 19 十七 会议 +1 3 逾”，WCAG 2.5.3，cal-ui.ts labelInName），
 //   再接“10月19日，今天，节日，共 3 项，有逾期的待办”（星期前面已经念过，不再重复）；完整标题在下面的清单里
@@ -21,7 +23,7 @@ import { projectColorIndex, type ProjectColor } from '../../../../shared/logic/p
 import { axisFrac, axisTicks, phoneScale, weekHourRange, type HourRange } from './week-axis.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, holText, itemShort, labelInName, weekdayKey, workdayA11y } from './cal-ui.ts';
+import { colorClass, dayKind, dayKindClass, holA11y, holText, itemShort, labelInName, namedHolidays, weekdayKey } from './cal-ui.ts';
 import { DeskWeek } from './DeskWeek.tsx';
 
 /** 色块最短长度（px，5.12：约 28 px，视觉稿 --wmin） */
@@ -130,13 +132,14 @@ function Lane({
 }) {
   const { t, items, today, nowMin, dueMins } = p;
   const hol = p.holidays.get(date) ?? [];
-  const off = hol.some((h) => h.kind === 'off');
+  const [named] = namedHolidays(date, hol, p.holidays);
   const isToday = date === today;
   const sel = p.selected === date;
   const total = dayTotal(date, items, p.tz);
   const todoIds = day?.todos.map((e) => e.itemId) ?? [];
   const overdue = hasOverdue(date, todoIds, today, nowMin, dueMins);
-  const sub = hol[0] ? holText(hol[0], t('cal.workday', {}), { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) }) : (p.lunarOf?.(date) ?? '');
+  // 连休只在第一天写节日名，后几天照常写农历或节气（和月格同一条规则，cal-ui.ts namedHolidays）
+  const sub = named ? holText(named, t('cal.workday', {}), { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) }) : (p.lunarOf?.(date) ?? '');
   const shift = w > 0 ? phoneScale(w, range).shiftPx : 0;
   const allDay = day?.allDay;
   const allDayIds = allDay?.itemIds.filter((_, i) => allDay.kinds[i] !== 'todo') ?? [];
@@ -151,7 +154,7 @@ function Lane({
     [
       dateLabel(date, t),
       ...(isToday ? [t('cal.a11y.todayMark', {})] : []),
-      ...hol.map((h) => (h.kind === 'work' ? workdayA11y(h.name, (name) => t('cal.a11y.workday', { name })) : h.name)),
+      ...hol.map((h) => holA11y(h, t)),
       total === 0 ? t('cal.a11y.none', {}) : t('cal.a11y.total', { n: total }),
       ...(overdue ? [t('cal.a11y.overdue', {})] : []),
     ],
@@ -160,7 +163,7 @@ function Lane({
   // 同一处的待办依次往左错开：按位置分桶数
   const seen = new Map<number, number>();
   return (
-    <li className={[styles.lane, sel ? styles.laneSel : '', off ? styles.laneOff : ''].filter(Boolean).join(' ')} data-date={date}>
+    <li className={[styles.lane, sel ? styles.laneSel : '', dayKindClass(dayKind(hol))].filter(Boolean).join(' ')} data-date={date}>
       <button type="button" className={styles.laneBtn} aria-pressed={sel} aria-label={a11y} onClick={() => p.onSelect(date)}>
         <span className={styles.laneWd} aria-hidden="true">
           {/* 几段字之间的 {' '}：laneWd、tdn 是 flex，laneBtn 是 grid，轨道里全是绝对定位，空格都不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}

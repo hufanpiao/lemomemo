@@ -93,22 +93,39 @@ describe('其他复审项', () => {
     expect(h1.className).toContain(styles.srOnly);
   });
 
-  it('电脑周视图表头：补班写“班·名字”，放假的表头和那一列灰底（代码复审 N4）', async () => {
+  it('电脑周视图表头：补班写“班·名字”；放假、补班的表头和那一列画斜纹（和月格同一个类）；连休只在第一天写名字（代码复审 N4、R-432）', async () => {
     stubWide();
     fetchStatus.mockImplementation(async (p: string) =>
       p === 'holidays/cn/2026.json'
-        ? { kind: 'ok', json: { country: 'cn', year: 2026, days: [{ date: '2026-11-03', kind: 'off', name: { zh: '测试假' } }, { date: '2026-11-07', kind: 'work', name: { zh: '测试假' } }] } }
+        ? {
+            kind: 'ok',
+            json: {
+              country: 'cn',
+              year: 2026,
+              days: [
+                { date: '2026-11-03', kind: 'off', name: { zh: '测试假' } },
+                { date: '2026-11-04', kind: 'off', name: { zh: '测试假' } },
+                { date: '2026-11-07', kind: 'work', name: { zh: '测试假' } },
+              ],
+            },
+          }
         : { kind: 'missing' },
     );
     open('#/cal/week/2026-11-05');
     expect(screen.getByTestId('cal-week').getAttribute('data-layout')).toBe('desk');
     const head = (d: string) => document.querySelector<HTMLElement>(`[data-testid="cal-week"] button[data-date="${d}"]`);
     await waitFor(() => expect(head('2026-11-07')?.textContent).toContain('班·测试假'));
-    expect(head('2026-11-03')?.className).toContain(styles.dOff);
-    expect(head('2026-11-07')?.className).not.toContain(styles.dOff);
+    expect(head('2026-11-03')?.textContent).toContain('测试假');
+    expect(head('2026-11-04')?.textContent).not.toContain('测试假');
+    for (const d of ['2026-11-03', '2026-11-04']) expect(head(d)?.className).toContain(styles.holiday);
+    expect(head('2026-11-07')?.className).not.toContain(styles.holiday);
+    expect(head('2026-11-07')?.className).toContain(styles.workday);
+    expect(head('2026-11-05')?.className).not.toContain(styles.workday);
     const cols = document.querySelectorAll(`[data-testid="cal-week"] .${styles.dCol}`);
-    expect(cols[1]?.className).toContain(styles.dOff);
-    expect(cols[5]?.className).not.toContain(styles.dOff);
+    expect(cols[1]?.className).toContain(styles.holiday);
+    expect(cols[5]?.className).toContain(styles.workday);
+    expect(cols[3]?.className).not.toContain(styles.holiday);
+    expect(Object.keys(styles)).not.toContain('dOff');
   });
 
   it('补班写“班·名字”：“班”在最前，放不下时也看得见；名字带“补班”尾巴的去掉再拼（截图 11-04 发现）', async () => {

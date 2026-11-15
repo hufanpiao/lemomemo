@@ -1,7 +1,9 @@
-// 月历、周视图界面共用的小工具（B2 FA-3）：项目色的样式类、星期几的词典键、事项的标题和简称
-import { fmtHm } from '../../../../shared/core/date.ts';
+// 月历、周视图界面共用的小工具（B2 FA-3）：项目色的样式类、星期几的词典键、事项的标题和简称、节假日的画法和写法
+import { addDays, fmtHm, type DateStr } from '../../../../shared/core/date.ts';
 import { CN_WORKDAY_TAILS } from './holiday-tail-data.ts';
 import type { CalItems } from '../../../../shared/logic/calendar/cal-items.ts';
+import type { HolidayKind, HolidayMark } from '../../../../shared/logic/calendar/holidays.ts';
+import type { CalViewT } from '../hooks/useCalViewT.ts';
 import type { ProjectColor } from '../../../../shared/logic/project-color.ts';
 import { displayShort } from '../../../../shared/logic/short.ts';
 import styles from './CalendarPage.module.css';
@@ -94,6 +96,35 @@ export function stripWorkdayTail(name: string): string {
  */
 export function workdayA11y(name: string, wrap: (name: string) => string): string {
   return stripWorkdayTail(name) !== name ? name : wrap(name);
+}
+
+/** 一条节假日的读屏写法：放假读名字，补班按 workdayA11y（月格、手机泳道共用） */
+export function holA11y(h: HolidayMark, t: CalViewT): string {
+  return h.kind === 'work' ? workdayA11y(h.name, (name) => t('cal.a11y.workday', { name })) : h.name;
+}
+
+/**
+ * 这一天按哪种画（月格、手机泳道、电脑周表头和列共用一套斜纹类，CalendarPage.module.css .holiday / .workday）：
+ * 有放假的按放假；只有补班的按补班；都没有 null
+ */
+export function dayKind(hols: readonly HolidayMark[]): HolidayKind | null {
+  if (hols.some((h) => h.kind === 'off')) return 'off';
+  return hols.length > 0 ? 'work' : null;
+}
+
+/** dayKind → 斜纹样式类 */
+export function dayKindClass(kind: HolidayKind | null): string {
+  if (kind === 'off') return styles.holiday ?? '';
+  return kind === 'work' ? (styles.workday ?? '') : '';
+}
+
+/**
+ * 这一天要写出名字的节假日（负责人 11-15“照参考图做”：连续放假只在第一天写节日名，后面几天照常显示节气或农历）：
+ * 放假的、前一天同一国同名也放假的，算连休的后几天，不写；补班照旧写。读屏名字不用它，照旧念全部（月格 MonthGrid labelOf、手机泳道）
+ */
+export function namedHolidays(date: DateStr, hols: readonly HolidayMark[], all: ReadonlyMap<DateStr, readonly HolidayMark[]>): HolidayMark[] {
+  const prev = all.get(addDays(date, -1)) ?? [];
+  return hols.filter((h) => h.kind !== 'off' || !prev.some((p) => p.kind === 'off' && p.country === h.country && p.name === h.name));
 }
 
 export function holText(

@@ -25,6 +25,7 @@ const { resetHolidayCacheForTest } = await import('../hooks/useHolidays.ts');
 const { resetLunarForTest } = await import('../hooks/useLunar.ts');
 const { lazyLib } = await import('../../../core/anniv-lib.ts');
 const { viewZh } = await import('../i18n/view-zh.ts');
+const { viewKo } = await import('../i18n/view-ko.ts');
 const realLunar = await import('../../../../shared/logic/anniv/lunar.ts');
 const { styles } = await import('./css-of.ts');
 
@@ -123,6 +124,66 @@ describe('月视图', () => {
     expect(cell('2026-11-14')?.getAttribute('aria-label')).toContain('测试假（补班）');
     expect(screen.queryByTestId('cal-offline')).toBeNull();
     expect(Object.keys(styles)).not.toContain('weekend');
+  });
+
+  it('连续放假只在第一天写节日名、挂柠檬黄字色，后几天照常写农历或节气；斜纹每天都有；读屏名字照旧念节日名（负责人 11-15“照参考图做”）', async () => {
+    const off = (date: string) => ({ date, kind: 'off', name: { zh: '测试假' } });
+    fetchStatus.mockImplementation(async (p: string) =>
+      p === 'holidays/cn/2026.json' ? ok({ country: 'cn', year: 2026, days: [off('2026-11-11'), off('2026-11-12'), off('2026-11-13')] }) : { kind: 'missing' },
+    );
+    open('#/cal/month/2026-11');
+    await waitFor(() => expect(cell('2026-11-11')?.querySelector(`.${styles.lineTx ?? 'x'}`)?.textContent).toBe('测试假'));
+    expect(cell('2026-11-11')?.querySelector(`.${styles.holName ?? 'x'}`)).not.toBeNull();
+    for (const d of ['2026-11-12', '2026-11-13']) {
+      expect(cell(d)?.textContent).not.toContain('测试假');
+      expect(cell(d)?.querySelector(`.${styles.holName ?? 'x'}`)).toBeNull();
+      expect(cell(d)?.className).toContain(styles.holiday);
+      expect(cell(d)?.getAttribute('aria-label')).toContain('测试假');
+    }
+  });
+
+  it('当天两条都是补班：圆标一个“班”，两行名字都去掉补班尾巴（R-432 评审第 13 条）', () => {
+    const t = (k: string, v: Record<string, string | number>) => (viewZh as Record<string, string>)[k]?.replace(/\{(\w+)\}/g, (_, n: string) => String(v[n] ?? '')) ?? k;
+    const holidays = [
+      { country: 'cn', kind: 'work', name: '甲节补班' },
+      { country: 'cn', kind: 'work', name: '乙节补班' },
+    ] as const;
+    render(
+      <MonthGrid
+        cells={[{ date: '2026-11-05', inMonth: true, isToday: false, weekday: 4, holidays, marks: [], more: 0, a11y: [], anniv: false }]}
+        holidays={new Map([['2026-11-05', holidays]])}
+        weekStart={1}
+        t={t as never}
+        label="x"
+        selected={null}
+        onSelect={() => undefined}
+      />,
+    );
+    const c = document.querySelector('[data-date="2026-11-05"]');
+    expect(c?.className).toContain(styles.workday);
+    expect(c?.querySelectorAll(`.${styles.ban ?? 'x'}`)).toHaveLength(1);
+    expect(c?.querySelector(`.${styles.lineTx ?? 'x'}`)?.textContent).toBe('甲节');
+    expect(c?.querySelector(`.${styles.hol2 ?? 'x'}`)?.textContent).toBe('乙节');
+  });
+
+  it('韩文界面的补班格子：右上角标写“근무”（胶囊，样式见 .ban；排得下由 e2e b2-cal-holiday 量）', () => {
+    const t = (k: string, v: Record<string, string | number>) => (viewKo as Record<string, string>)[k]?.replace(/\{(\w+)\}/g, (_, n: string) => String(v[n] ?? '')) ?? k;
+    const holidays = [{ country: 'cn', kind: 'work', name: '국경절 대체 근무일' }] as const;
+    render(
+      <MonthGrid
+        cells={[{ date: '2026-10-10', inMonth: true, isToday: true, weekday: 6, holidays, marks: [], more: 0, a11y: [], anniv: false }]}
+        holidays={new Map([['2026-10-10', holidays]])}
+        weekStart={1}
+        t={t as never}
+        label="x"
+        selected={null}
+        onSelect={() => undefined}
+      />,
+    );
+    const c = document.querySelector('[data-date="2026-10-10"]');
+    expect(c?.querySelector(`.${styles.ban ?? 'x'}`)?.textContent).toBe('근무');
+    expect(c?.querySelector(`.${styles.lineTx ?? 'x'}`)?.textContent).toBe('국경절');
+    expect(c?.getAttribute('aria-label')).toContain('국경절 대체 근무일');
   });
 
   it('离线没拉到节假日：提示“联网后显示节假日”；不记死，online 事件后重拉、提示消失（代码审查 M2、安全 FA3-4）', async () => {
@@ -230,6 +291,7 @@ describe('月视图', () => {
     render(
       <MonthGrid
         cells={[{ date: '2026-11-05', inMonth: true, isToday: false, weekday: 4, holidays: [], marks: [], more: 0, a11y: [], anniv: true }]}
+        holidays={new Map()}
         weekStart={1}
         t={t as never}
         label="x"
@@ -269,7 +331,7 @@ describe('设置 › 日历 的两项（cal.week_start、cal.holidays）', () =>
 });
 
 describe('农历（按需加载）', () => {
-  const lunarRow = (date: string) => cell(date)?.querySelector(`.${styles.lunar ?? 'x'}`) ?? null;
+  const lunarRow = (date: string) => cell(date)?.querySelector(`.${styles.lineTx ?? 'x'}`) ?? null;
   const D = '2026-11-12';
 
   it('加载前：照常 42 格，农历行位置占着但是空的；加载后格子显示短写法，读屏带完整写法', async () => {

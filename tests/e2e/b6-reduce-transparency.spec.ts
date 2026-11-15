@@ -5,6 +5,7 @@
 //   底栏、打字条、撤销提示条、同步提示卡（真页面里调出来）；提醒横幅、随手记错误条（造数据代价大：从已加载的构建样式里取这两个部件的
 //   真类名挂一个探针元素，测的是同一条规则）。
 // ① 设置里没有开关；② 系统设置了 reduce → 全部实色（只有 Chromium 能模拟这条媒体查询，WebKit 跳过）；③ 系统没设置 → 磨砂。
+// ④ 月历：系统设置了 reduce 时节假日和平时同一种斜纹画法，选中的假日格底色是 --panel-2（R-432 评审第 11 条；只 Chromium）。
 // 系统“减少动态效果”同样并进 data-rm（Playwright 的 reducedMotion 两种浏览器都能模拟）。
 // 截图只在 Chromium 截（WebKit 不画模糊），存在 test-results 里
 import { readFileSync } from 'node:fs';
@@ -149,6 +150,35 @@ test.describe('减少透明效果：跟系统设置，六样浮层都变实色',
     await showAll(page);
     expect(await frosted(page)).toEqual(all(true));
     await shot(page, info, 'rt-off');
+  });
+});
+
+test.describe('减少透明效果：月历选中的假日格（R-432 评审第 11 条）', () => {
+  test('系统设置了 reduce：节假日和别的格子同一种画法，斜纹还在，选中底是 --panel-2', async ({ page, browserName }, info) => {
+    test.skip(browserName !== 'chromium', 'WebKit 不能模拟 prefers-reduced-transparency');
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] });
+    await page.clock.setFixedTime(new Date('2026-10-10T12:00:00+09:00'));
+    await page.goto('/app/#/cal/month/2026-10');
+    await page.getByTestId('cal-month').waitFor({ timeout: 30000 });
+    await expect.poll(() => attr(page, 'data-rt')).toBe('1');
+    const cell = page.locator('[data-testid="cal-month"] button[data-date="2026-10-01"]');
+    await expect(cell).toContainText('国庆节', { timeout: 10_000 });
+    await cell.click();
+    await expect(cell).toHaveAttribute('aria-pressed', 'true');
+    const got = await cell.evaluate((c) => {
+      // 用一个探针元素把 --panel-2 换算成浏览器里的颜色
+      const p = document.createElement('div');
+      p.style.background = 'var(--panel-2)';
+      document.body.append(p);
+      const panel2 = getComputedStyle(p).backgroundColor;
+      p.remove();
+      const before = getComputedStyle(c, '::before');
+      return { bg: getComputedStyle(c).backgroundColor, panel2, stripe: before.content !== 'none' && before.backgroundImage.includes('gradient') };
+    });
+    expect(got.bg, '选中的假日格底色').toBe(got.panel2);
+    expect(got.stripe, '斜纹还在').toBe(true);
+    await shot(page, info, 'rt-cal-holiday-sel');
   });
 });
 

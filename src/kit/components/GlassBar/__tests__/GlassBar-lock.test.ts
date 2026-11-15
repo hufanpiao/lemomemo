@@ -49,13 +49,13 @@ const SKINS = {
 const THEMES = ['light', 'dark'] as const;
 const TOKENS = ['--g-live-fx', '--g-tint', '--g-tint-fb', '--g-fab-tint'] as const;
 
-/** 锁定值（e96d8e2，R-361）。改任何一项都要带负责人新需求编号 */
+/** 锁定值（e96d8e2，R-361）。改任何一项都要带负责人新需求编号。深色 --g-tint-fb 11-15 随暖黑改暖（R-432，负责人 11-15 选暖黑；--g-tint 属于底栏透明玻璃不动） */
 const LOCK = {
   tokens: {
     'simple-light': { '--g-live-fx': 'blur(3px) saturate(1.8) brightness(1.04)', '--g-tint': 'rgba(255,255,255,.12)', '--g-tint-fb': 'rgba(255,255,255,.62)', '--g-fab-tint': 'rgba(242,223,74,.72)' },
-    'simple-dark': { '--g-live-fx': 'blur(3px) saturate(1.8) brightness(1.04)', '--g-tint': 'rgba(30,31,36,.44)', '--g-tint-fb': 'rgba(30,31,36,.72)', '--g-fab-tint': 'rgba(242,223,74,.86)' },
+    'simple-dark': { '--g-live-fx': 'blur(3px) saturate(1.8) brightness(1.04)', '--g-tint': 'rgba(30,31,36,.44)', '--g-tint-fb': 'rgba(30,28,24,.72)', '--g-fab-tint': 'rgba(242,223,74,.86)' },
     'glass-light': { '--g-live-fx': 'blur(3px) saturate(1.8) brightness(1.04)', '--g-tint': 'rgba(255,255,255,.12)', '--g-tint-fb': 'rgba(255,255,255,.62)', '--g-fab-tint': 'rgba(242,223,74,.72)' },
-    'glass-dark': { '--g-live-fx': 'blur(3px) saturate(1.8) brightness(1.04)', '--g-tint': 'rgba(30,31,36,.44)', '--g-tint-fb': 'rgba(30,31,36,.72)', '--g-fab-tint': 'rgba(242,223,74,.86)' },
+    'glass-dark': { '--g-live-fx': 'blur(3px) saturate(1.8) brightness(1.04)', '--g-tint': 'rgba(30,31,36,.44)', '--g-tint-fb': 'rgba(30,28,24,.72)', '--g-fab-tint': 'rgba(242,223,74,.86)' },
   },
   /** .bar、.fab 的模糊：首屏后备 8px，副本引擎接管后（data-glass="copy"，实际看到的样子）用 --g-live-fx */
   barFallback: 'blur(8px) saturate(1.8)',
