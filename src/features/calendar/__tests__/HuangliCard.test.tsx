@@ -13,6 +13,7 @@ vi.mock('../../../platform/app-static.ts', () => ({ fetchAppJsonStatus: async ()
 
 const { default: CalendarPage } = await import('../ui/CalendarPage.tsx');
 const { resetLunarForTest } = await import('../hooks/useLunar.ts');
+const { lazyLib } = await import('../../../core/anniv-lib.ts');
 const realLunar = await import('../../../../shared/logic/anniv/lunar.ts');
 
 const TZ = currentTz();
@@ -27,7 +28,7 @@ const head = (): string => document.getElementById('cal-day-title')?.textContent
 
 beforeEach(() => {
   vi.spyOn(clock, 'now').mockReturnValue(msAt('2026-11-05', 9 * 60, TZ));
-  resetLunarForTest(async () => realLunar);
+  resetLunarForTest(lazyLib('lunar', async () => realLunar));
 });
 afterEach(() => {
   cleanup();

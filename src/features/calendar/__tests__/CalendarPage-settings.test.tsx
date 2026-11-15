@@ -15,6 +15,7 @@ vi.mock('../../../platform/app-static.ts', () => ({ fetchAppJsonStatus: (p: stri
 const { default: CalendarPage } = await import('../ui/CalendarPage.tsx');
 const { resetHolidayCacheForTest } = await import('../hooks/useHolidays.ts');
 const { resetLunarForTest } = await import('../hooks/useLunar.ts');
+const { lazyLib } = await import('../../../core/anniv-lib.ts');
 const realLunar = await import('../../../../shared/logic/anniv/lunar.ts');
 const { styles } = await import('./css-of.ts');
 
@@ -29,7 +30,7 @@ beforeEach(() => {
   uiStore.getState().setLocale('zh-CN');
   vi.spyOn(clock, 'now').mockReturnValue(NOW);
   resetHolidayCacheForTest();
-  resetLunarForTest(async () => realLunar);
+  resetLunarForTest(lazyLib('lunar', async () => realLunar));
 });
 afterEach(() => {
   cleanup();

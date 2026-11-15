@@ -21,6 +21,7 @@ vi.mock('../../../platform/app-static.ts', () => ({ fetchAppJsonStatus: (p: stri
 const { default: CalendarPage } = await import('../ui/CalendarPage.tsx');
 const { resetHolidayCacheForTest } = await import('../hooks/useHolidays.ts');
 const { resetLunarForTest } = await import('../hooks/useLunar.ts');
+const { lazyLib } = await import('../../../core/anniv-lib.ts');
 const realLunar = await import('../../../../shared/logic/anniv/lunar.ts');
 
 const TZ = currentTz();
@@ -69,7 +70,7 @@ beforeEach(() => {
   fetchStatus.mockReset();
   fetchStatus.mockResolvedValue({ kind: 'missing' });
   resetHolidayCacheForTest();
-  resetLunarForTest(async () => realLunar);
+  resetLunarForTest(lazyLib('lunar', async () => realLunar));
 });
 afterEach(() => {
   cleanup();
@@ -91,7 +92,7 @@ const notStartShown = (sep: string): string[] =>
 describe('读屏名字以看得见的字开头（WCAG 2.5.3 Label in Name，axe label-content-name-mismatch，11-11）', () => {
   it('月格：日期数字、事项简称、“+N”按显示顺序在前，再接日期、星期、件数；农历加载前后都对得上', async () => {
     let done: (m: typeof realLunar) => void = () => {};
-    resetLunarForTest(() => new Promise((r) => (done = r)));
+    resetLunarForTest(lazyLib('lunar', () => new Promise((r) => (done = r))));
     data.events = [ev('1', { project: 'NEOX', time: '08:00' }), ev('2', { time: '10:00' }), ev('3', { time: '11:00' })];
     open('#/cal/month/2026-11');
     expect(cell('2026-11-10')?.getAttribute('aria-label')).toMatch(/^10 \S+ \S+ \+1，11月10日，周二，共 3 件，/);

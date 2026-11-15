@@ -46,6 +46,7 @@ vi.mock('../../../core/boot.ts', async (orig) => ({ ...(await orig<typeof BootMo
 const { default: CalendarPage } = await import('../ui/CalendarPage.tsx');
 const { resetHolidayCacheForTest } = await import('../hooks/useHolidays.ts');
 const { resetLunarForTest } = await import('../hooks/useLunar.ts');
+const { lazyLib } = await import('../../../core/anniv-lib.ts');
 const realLunar = await import('../../../../shared/logic/anniv/lunar.ts');
 
 const TZ = currentTz();
@@ -80,7 +81,7 @@ beforeEach(() => {
   fetchStatus.mockReset();
   fetchStatus.mockResolvedValue({ kind: 'missing' });
   resetHolidayCacheForTest();
-  resetLunarForTest(async () => realLunar);
+  resetLunarForTest(lazyLib('lunar', async () => realLunar));
 });
 afterEach(() => {
   cleanup();
