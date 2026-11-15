@@ -39,6 +39,7 @@ import { loadMotionFeatures, nextFrame } from '../motion/index.ts';
 import { registerSw, reloadPage, upgradeLogCountStore } from '../platform/sw-register.ts';
 import { mountExitScreen, watchExitIncomplete } from './exit-screen.tsx';
 import { mountFeatures } from './features.ts';
+import { loadTodoAutoDel } from '../features/todos/index.ts';
 import { goHref } from './router.ts';
 import { logQueueCleaner, outboxLog, toLogRecord } from './log-channel.ts';
 import { GATE_LIMIT_MS, startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
@@ -241,6 +242,9 @@ async function start(): Promise<void> {
     setPushClaimContext(null);
     return;
   }
+  // 完成满 7 天、没再动过的待办自动删除（负责人 11-15 方案）：首屏画完扫一遍本机待办，和手动删除同一个写法进 outbox、各设备同步；
+  // 本机库能用、待办功能开着才扫；代码按需下载（features/todos/data/todo-autodel.ts），失败不影响别的，下次启动再扫
+  if (boot.cache && (boot.flags === null || boot.flags.has('todo'))) void loadTodoAutoDel().then((m) => m.runTodoAutoDel()).catch(() => 0);
   // SW 注册不依赖下面那批代码（③ 审查 M1）：过了第一道闸就注册，下载失败、重试期间照样有 SW 缓存和新版本提示。version_too_new 时上面已经注册过
   // 注册以后盯住“后台装好了新版本”（8.1）：顶部提示“有新版本 · 重新打开”（App.tsx 的 UpdateBanner），不强制刷新；回到前台查新版本。
   // 注册的代码这时才下载（platform/sw-lifecycle.ts）；下载、注册都不设超时（安全审 M1、Q-23），下面的推送认领照常等到 reg；失败才是 null

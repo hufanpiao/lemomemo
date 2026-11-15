@@ -236,13 +236,14 @@ describe('退出登录（页面最底下单独一行）', () => {
 // 后面各批加行时复跑：只要求已有的行按 sections.ts 的相对顺序出现、不重复
 describe('设置首页的卡和行（TC-B1-71、R-325）', () => {
   const ORDER = [
-    'account', 'language', 'skin', 'font', 'notesView', 'calendar', 'reminders', 'voiceAi', 'vault', 'timezone',
+    'account', 'language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'timezone',
     'data', 'claude', 'invite', 'desktop', 'glossary', 'about',
   ];
 
   it('三张卡依次是账号、常用、更多；行的顺序和归卡照定稿；“退出登录”在最后一张卡之后；首页不出现二级页的内容', async () => {
     await renderPage();
     await screen.findByTestId('settings-cal-entry');
+    await screen.findByTestId('settings-todo-autodel');   // 待办开关那一行是懒加载的（负责人 11-15）
     const cards = screen.getAllByRole('heading', { level: 2 }).map((h) => h.closest('section') as HTMLElement);
     expect(cards.map((c) => c.getAttribute('data-testid'))).toEqual(['settings-card-account', 'settings-card-main', 'settings-card-more']);
     // 卡的标题看不见，但读屏能读（M3）：卡 1 就叫“账号”
@@ -252,8 +253,9 @@ describe('设置首页的卡和行（TC-B1-71、R-325）', () => {
       zh['settings.card.more'],
     ]);
     const ids = (c: HTMLElement): string[] => [...c.querySelectorAll('[data-row-id]')].map((el) => el.getAttribute('data-row-id') ?? '');
-    // B3 FA-4 起常用卡多“语音与 AI”、更多卡多“在 Claude 聊天里记事”；B4 起常用卡多“随手记布局”；B6 起多皮肤、字体；B5 起常用卡多“隐私记”（线框 v4 定稿的设置行）
-    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'font', 'notesView', 'calendar', 'reminders', 'voiceAi', 'vault'], ['data', 'claude', 'about']]);
+    // B3 FA-4 起常用卡多“语音与 AI”、更多卡多“在 Claude 聊天里记事”；B4 起常用卡多“随手记布局”；B6 起多皮肤、字体；B5 起常用卡多“隐私记”（线框 v4 定稿的设置行）；
+    // 11-15 起常用卡多待办“完成 7 天后自动删除”（负责人方案）
+    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault'], ['data', 'claude', 'about']]);
     const all = cards.flatMap(ids);
     expect(all).toEqual([...all].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
     expect(new Set(all).size).toBe(all.length);

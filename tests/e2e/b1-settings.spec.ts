@@ -43,8 +43,10 @@ test.describe('设置页骨架', () => {
       'settings-card-more',
     ]);
     // 日历、提醒与通知、语音与 AI、在 Claude 聊天里记事几行一开始就在（值懒加载，M4）；顺序照定稿线框 s13（B3 FA-4 加了 voiceAi、claude；B4 加了随手记显示方式 notesView；B6 加了皮肤 skin、字体 font；B5 加了隐私记 vault，同 SettingsPage.test.tsx）
+    // 11-15 加了待办“完成 7 天后自动删除”todos（开关整行懒加载，先等它到）
+    await expect(main.getByTestId('settings-todo-autodel')).toBeVisible();
     const rows = await main.locator('[data-row-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row-id')));
-    expect(rows).toEqual(['account', 'language', 'skin', 'font', 'notesView', 'calendar', 'reminders', 'voiceAi', 'vault', 'data', 'claude', 'about']);
+    expect(rows).toEqual(['account', 'language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'data', 'claude', 'about']);
     // e2e 构建读不到设备：账号一行写“设备列表读不出来”
     await expect(main.getByTestId('settings-account-summary')).toHaveText('设备列表读不出来');
     await expect(main.getByTestId('settings-export')).toHaveCount(0);

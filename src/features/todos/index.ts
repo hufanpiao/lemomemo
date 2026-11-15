@@ -13,3 +13,10 @@ export const TodaySubtasks = lazy(() => import('./ui/today-subs.ts'));
 
 /** 电脑今天页的详情抽屉里的待办编辑器（B6 返工）：props 是 id、onCreated（在不在抽屉里由 kit EditShell 的 useInDrawer 看）；在待办编辑页那一包里 */
 export const TodoDrawerEditor = lazy(() => import('./ui/todo-drawer.ts'));
+
+/** 完成满 7 天、没再动过的待办自动删除（负责人 11-15 方案）：app/main.tsx 首屏画完下载这一块、调 runTodoAutoDel 扫一遍。
+ *  拿的是一个函数不是组件，lazy 包不了：A27 受控例外（build/eslint-rules/feature-index-exports.js 的 LOADERS） */
+export const loadTodoAutoDel = () => import('./data/todo-autodel.ts');
+
+/** 设置首页“完成 7 天后自动删除”一行（开关；键和默认值只在 data/todo-autodel.ts 一处）；没有 props */
+export const TodoSettings = lazy(() => import('./ui/TodoSettings.tsx'));

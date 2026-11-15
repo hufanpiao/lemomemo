@@ -869,7 +869,9 @@ export const manifestSnapshot: readonly Manifest[] = [
         }
       }
     ],
-    "settingsKeys": [],
+    "settingsKeys": [
+      "todo.*"
+    ],
     "ai": {
       "sendsToAI": true,
       "functions": [

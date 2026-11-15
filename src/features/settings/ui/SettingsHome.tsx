@@ -3,6 +3,7 @@
 import { Fragment, Suspense, type ReactNode } from 'react';
 import { CalendarSettingsValue } from '../../calendar/index.ts';
 import { PlusSettings } from '../../plus/index.ts';
+import { TodoSettings } from '../../todos/index.ts';
 import { ClockWrongNote, RemindSettingsValue } from '../../reminders/index.ts';
 import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
 import { buildInfo } from '../../../platform/env.ts';
@@ -94,6 +95,8 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
         valueTestId="settings-notes-view-summary"
       />
     ),
+    // 待办“完成 7 天后自动删除”（负责人 11-15 方案）：开关整行由 todos 功能懒加载（键和默认值在那边一处），没到之前这一行不画
+    todos: <QuietBoundary name="todo-settings"><Suspense fallback={null}><TodoSettings /></Suspense></QuietBoundary>,
     // 日历（R-320）、提醒与通知（REMIND-wiring）：行名和整行由本页画，值由各自的功能懒加载（M4：行一开始就能点）；
     // 值没到之前空着，分包下载失败也只是空着（QuietBoundary 的 name 照约定写成字符串常量）
     calendar: (
