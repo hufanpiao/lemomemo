@@ -111,7 +111,7 @@ describe('① 单条永久删除', () => {
 
     fireEvent.click(screen.getByTestId(`trash-purge-${uid(1)}`));
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已永久删除'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已永久删除'));
     expect(rpc.mock.calls).toEqual([['purge_deleted', { p_items: [{ tbl: 'notes', id: uid(1) }] }]]);
     expect(screen.queryByTestId(`trash-row-${uid(1)}`)).toBeNull();
     expect(rows()).toHaveLength(2);
@@ -133,8 +133,9 @@ describe('① 单条永久删除', () => {
     rpc.mockResolvedValueOnce({ data: 0, error: null });
     fireEvent.click(screen.getByTestId(`trash-purge-${uid(4)}`));
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('这一项的删除还没同步上，联网等一会儿再试'));
-    expect(screen.getByTestId('trash-purge-msg').getAttribute('role')).toBe('alert');
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('这一项的删除还没同步上，联网等一会儿再试'));
+    // R-436 底子评审：页底提示合成一个常驻的 role=status，只换文字
+    expect(screen.getByTestId('trash-msg').getAttribute('role')).toBe('status');
     expect(screen.getByTestId(`trash-row-${uid(4)}`)).toBeTruthy();
   });
 
@@ -143,8 +144,8 @@ describe('① 单条永久删除', () => {
     rpc.mockResolvedValueOnce({ data: 0, error: null });
     fireEvent.click(screen.getByTestId(`trash-purge-${uid(2)}`));
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已删除，正在同步'));
-    expect(screen.getByTestId('trash-purge-msg').getAttribute('role')).toBe('status');
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已删除，正在同步'));
+    expect(screen.getByTestId('trash-msg').getAttribute('role')).toBe('status');
     expect(screen.queryByTestId(`trash-row-${uid(2)}`)).toBeNull();
   });
 
@@ -165,7 +166,7 @@ describe('① 单条永久删除', () => {
     rpc.mockResolvedValueOnce({ data: null, error: { message: 'session_revoked' } });
     fireEvent.click(screen.getByTestId(`trash-purge-${uid(1)}`));
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('没删成，请稍后再试'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('没删成，请稍后再试'));
     expect(rows()).toHaveLength(3);
     expect(await b.outbox?.list()).toEqual([]);
     expect(await b.cache?.getRow('notes', uid(1))).toBeTruthy();
@@ -188,7 +189,7 @@ describe('② 全部清空', () => {
     fireEvent.click(screen.getByTestId('trash-clear'));
     expect(within(await screen.findByRole('dialog', {}, { timeout: 5000 })).getByText('清空最近删除里的 3 项？清空后不能恢复')).toBeTruthy();
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已清空'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已清空'));
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(sentKeys(0)).toEqual([{ tbl: 'notes', id: uid(1) }, { tbl: 'todos', id: uid(2) }, { tbl: 'events', id: uid(3) }]);
     expect(rows()).toHaveLength(0);
@@ -210,7 +211,7 @@ describe('② 全部清空', () => {
     rpc.mockResolvedValueOnce({ data: 2, error: null });
     fireEvent.click(screen.getByTestId('trash-clear'));
     fireEvent.click(await screen.findByTestId('trash-confirm-ok', {}, { timeout: 5000 }));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('有几项的删除还没同步上，联网等一会儿再试'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('有几项的删除还没同步上，联网等一会儿再试'));
     expect(rows()).toHaveLength(3);
   });
 
@@ -234,7 +235,7 @@ describe('② 全部清空', () => {
     fireEvent.click(screen.getByTestId('trash-clear'));
     expect(within(await screen.findByRole('dialog', {}, { timeout: 5000 })).getByText('清空最近删除里的 2 项？清空后不能恢复')).toBeTruthy();
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已清空'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已清空'));
     expect(sentKeys(0)).toEqual([{ tbl: 'notes', id: uid(1) }, { tbl: 'events', id: uid(3) }]);
     expect((await b.cache?.getRow('todos', uid(2)))?.view?.['deleted_at']).toBeNull();
     expect((await b.outbox?.list())?.some((i) => i.table === 'todos' && i.id === uid(2))).toBe(true);
@@ -247,7 +248,7 @@ describe('② 全部清空', () => {
     fireEvent.click(screen.getByTestId('trash-clear'));
     expect(within(await screen.findByRole('dialog', {}, { timeout: 5000 })).getByText('清空最近删除里的 3 项？清空后不能恢复；另有 1 项的删除还没同步上，这次先不清')).toBeTruthy();
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('有几项的删除还没同步上，联网等一会儿再试'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('有几项的删除还没同步上，联网等一会儿再试'));
     expect(sentKeys(0).map((k) => k.id)).toEqual([uid(1), uid(2), uid(3)]);
     expect(rows().map((r) => r.getAttribute('data-testid'))).toEqual([`trash-row-${uid(4)}`]);
   });
@@ -264,7 +265,7 @@ describe('② 全部清空', () => {
       await new Promise((r) => setTimeout(r, 50));
     });
     expect(rpc).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('trash-purge-msg')).toBeNull();
+    expect(screen.getByTestId('trash-msg').textContent).not.toBe('已清空');
   });
 
   it('列表里的都还没发上去：不弹确认、不调 RPC，提示还没同步上', async () => {
@@ -273,7 +274,7 @@ describe('② 全部清空', () => {
     await waitFor(() => expect(rows()).toHaveLength(0));
     await deleteLocally(b, 4);
     fireEvent.click(screen.getByTestId('trash-clear'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('这一项的删除还没同步上，联网等一会儿再试'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('这一项的删除还没同步上，联网等一会儿再试'));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(rpc).not.toHaveBeenCalled();
   });
@@ -308,7 +309,7 @@ describe('③ 离线', () => {
     fireEvent.click(screen.getByTestId(`trash-purge-${uid(1)}`));
     act(() => setOnline(false));
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('连不上服务器，联网后再试'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('连不上服务器，联网后再试'));
     expect(rpc).not.toHaveBeenCalled();
     expect(rows()).toHaveLength(3);
   });
@@ -336,7 +337,7 @@ describe('⑤ 只看一类（R-438，负责人 11-16“每页只看到自己的�
       fireEvent.click(screen.getByTestId('trash-clear'));
       expect(within(await screen.findByRole('dialog', {}, { timeout: 5000 })).getByText('清空最近删除里的 1 项？清空后不能恢复')).toBeTruthy();
       fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-      await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已清空'));
+      await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已清空'));
       expect(sentKeys(0)).toEqual([{ tbl, id: uid(n) }]);
     });
   }

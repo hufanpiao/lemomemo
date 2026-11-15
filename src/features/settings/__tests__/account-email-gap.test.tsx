@@ -162,19 +162,18 @@ describe('设置页组间距', () => {
     for (const sel of ['.grp', '.row', '.rowBtn', '.tx', '.v', '.meta']) expect(block(sel), sel).toBe('');
   });
 
-  it('R-276/R-282：分段控件外框（.seg 上下内边距 + .segBtn 高）看得见 38、和本页其他按钮一样，在 44 的行里上下各留 3；数从 kit 的 CSS 源码里取（合卡以后语言行用 kit 的 SettingsSegRow）', () => {
-    const kit = readFileSync('src/kit/components/Settings/Settings.module.css', 'utf8');
-    const kitBlock = (sel: string): string => {
-      const at = kit.indexOf(`\n${sel} {`);
-      return at < 0 ? '' : kit.slice(at, kit.indexOf('}', at));
+  it('R-276/R-282、R-436：语言行的分段用 kit 的 ModeSeg slide（外观以纪念日确认稿为准）：外框高 36、内边 3（按钮占 30），在 44 的行里上下各留 4；设置卡里底槽换成 --bg', () => {
+    const seg = readFileSync('src/kit/components/ModeSeg.module.css', 'utf8');
+    const segBlock = (sel: string): string => {
+      const at = seg.indexOf(`\n${sel} {`);
+      return at < 0 ? '' : seg.slice(at, seg.indexOf('}', at));
     };
-    const pad = /padding: (\d+)px;/.exec(kitBlock('.seg'))?.[1];
-    const btnH = /min-height: (\d+)px;/.exec(kitBlock('.segBtn'))?.[1];
-    expect(pad).toBeDefined();
-    expect(btnH).toBeDefined();
-    expect(Number(btnH)).toBe(32);
-    expect(2 * Number(pad) + Number(btnH)).toBe(38);
-    expect((44 - (2 * Number(pad) + Number(btnH))) / 2).toBe(3);
+    expect(segBlock('.slide')).toMatch(/height: 36px;/);
+    expect(segBlock('.slide')).toMatch(/padding: 3px;/);
+    expect(segBlock('.slide .segBtn')).toMatch(/min-height: 0;/);
+    const kit = readFileSync('src/kit/components/Settings/Settings.module.css', 'utf8');
+    expect(kit).toMatch(/\n\.segRow \{[^}]*--seg-track: var\(--bg\);/);
+    expect(kit).not.toMatch(/\n\.segBtn \{/);
   });
 
   // B2-UI-b W4：设置页的 .btn、.primary、.signOut 删了，按钮一律用 kit 的 FormButton（对应表见 SettingsPage.module.css），数值在 Form.module.css 里核

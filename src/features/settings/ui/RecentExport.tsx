@@ -8,7 +8,7 @@
 // • 90 天里没有导出也写一句（不是本人操作时，用户能看出“明明没导出过”）；还在读、读失败、断网时整块不显示
 import { useState } from 'react';
 import { FormButton, groupLabelClass } from '../../../kit/components/Form.tsx';
-import { SettingsDetailRow, SettingsList, type SettingsMeta } from '../../../kit/components/Settings/Settings.tsx';
+import { SettingsDetailRow, SettingsList, type SettingsMeta, settingsNoteClass } from '../../../kit/components/Settings/Settings.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import type { DevicesState } from '../hooks/useDevices.ts';
 import type { ExportEntry, RecentExportState } from '../hooks/useRecentExport.ts';
@@ -42,7 +42,7 @@ export function RecentExport({ state, devices }: { state: RecentExportState; dev
         {t('settings.recentExport.title', {})}
       </h3>
       {list.length === 0 ? (
-        <p className={styles.sn}>{t('settings.recentExport.none', {})}</p>
+        <p className={settingsNoteClass}>{t('settings.recentExport.none', {})}</p>
       ) : (
         // B2-UI-b W4：行换成 kit 的 SettingsDetailRow（时间 + 右边设备名 + 下面的“未完成”“通知邮件没发出去”）
         <SettingsList>
@@ -74,7 +74,7 @@ export function RecentExport({ state, devices }: { state: RecentExportState; dev
         </FormButton>
       ) : null}
       {anyFailed ? (
-        <p className={`${styles.sn} ${styles.dangerText}`} data-testid="settings-recent-export-mail">
+        <p className={`${settingsNoteClass} ${styles.dangerText}`} data-testid="settings-recent-export-mail">
           {t('settings.recentExport.mailFailed', {})}
         </p>
       ) : null}

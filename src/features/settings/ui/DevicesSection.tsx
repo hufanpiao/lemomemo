@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { fmtDate } from '../../../../shared/i18n/fmt.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import { FormButton, groupLabelClass } from '../../../kit/components/Form.tsx';
-import { SettingsDetailRow, SettingsList } from '../../../kit/components/Settings/Settings.tsx';
+import { SettingsDetailRow, SettingsList, settingsNoteClass } from '../../../kit/components/Settings/Settings.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import type { DeviceNotice, DeviceView, useDevices } from '../hooks/useDevices.ts';
 import { onlineNow } from '../../../kit/hooks/useOnline.ts';
@@ -140,7 +140,7 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
             </SettingsList>
           )}
           {state.orphans.count > 0 ? (
-            <p className={styles.sn} data-testid="settings-orphans">
+            <p className={settingsNoteClass} data-testid="settings-orphans">
               {t('settings.devices.orphans', {
                 n: state.orphans.count,
                 date: state.orphans.lastAtMs === null ? '—' : fmtWhen(state.orphans.lastAtMs, locale),
@@ -150,7 +150,7 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
           <FormButton size="compact" block outline disabled={busy !== null} onClick={() => setPending({ kind: 'others' })}>
             {t('settings.devices.signOutOthers', {})}
           </FormButton>
-          <p className={styles.sn}>{t('settings.devices.residual', {})}</p>
+          <p className={settingsNoteClass}>{t('settings.devices.residual', {})}</p>
         </>
       ) : null}
       <DeviceNoticeView notice={notice} />

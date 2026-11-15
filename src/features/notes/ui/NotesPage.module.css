@@ -526,7 +526,7 @@
   color: var(--text);
 }
 
-/* 看得见 40 × 40，点击区以按钮中心外扩到 44 × 44（写法同 Settings.module.css 的 .segBtn::after），不占排版宽度 */
+/* 看得见 40 × 40，点击区以按钮中心外扩到 44 × 44（写法同 ModeSeg.module.css 的 .segBtn::after），不占排版宽度 */
 .img::after {
   content: '';
   position: absolute;

@@ -4,7 +4,9 @@
 //   值单行省略、行名不缩（S3）；例外：stacked 时值放在行名下面一行、可换行不省略（设置首页账号一行）；meta 是行里的第二行灰字
 // • SettingsSwitchRow：<label> 包行名和 role="switch" 的复选框；说明（note）和报错（error）写在这一行里、不挂在卡片下面（M2），
 //   说明用 aria-describedby 挂到开关上
-// • SettingsSegRow + Segmented：行名 + 分段按钮（界面语言，C：留分段按钮），分段按钮的组名取行名（aria-labelledby）
+// • SettingsSegRow：行名 + 分段按钮（界面语言，C：留分段按钮）。分段按钮就是 kit 的 ModeSeg look="slide"（R-436 底子评审：原来这里自己一份 Segmented，
+//   和 ModeSeg 两套画法，合成一个），组名取行名（aria-labelledby）
+// • 行里的第二行灰字（meta）和报错（error）三种行共用 RowNotes（SettingsRows.tsx）：报错一律 role="status"
 // • SettingsInfoRow：只显示的一行“行名 + 值”，不能点（关于页的版本号）
 // • SettingsRow：别的内容自己放
 // • B2-UI-b W1 加的（日历设置、提醒设置换 kit 时要用）：
@@ -20,29 +22,44 @@
 import { useId, type ReactNode } from 'react';
 import { Pressable } from '../../../motion/components.ts';
 import form from '../Form.module.css';
+import { ModeSeg } from '../ModeSeg.tsx';
+import { RowNotes } from './SettingsRows.tsx';
 import styles from './Settings.module.css';
+
+/** 卡下那种灰字说明的类名（设置页卡外的说明也用它，样式只在 Settings.module.css 的 .note 一处） */
+export const settingsNoteClass = styles.note;
+/** 同一句说明、下边再隔 16 把下一张卡隔开（SettingsCard 的 note 就是这个；提醒页卡下说明也用它） */
+export const settingsCardNoteClass = `${styles.note} ${styles.cardNote}`;
 
 export interface SettingsCardProps {
   title: string;
   children: ReactNode;
-  testId?: string;
+  testId?: string | undefined;
   /** 卡名写在卡片上方、看得见（默认只给读屏，M3） */
-  showTitle?: boolean;
+  showTitle?: boolean | undefined;
   /** 卡片下面的一句说明（灰字） */
-  note?: ReactNode;
+  note?: ReactNode | undefined;
   noteTestId?: string;
+  /** 卡里是一组单选（SettingsChoiceCard）：外框换成 role="radiogroup" 的 div，组名同卡名 */
+  radio?: boolean;
 }
 
-export function SettingsCard({ title, children, testId, showTitle, note, noteTestId }: SettingsCardProps) {
+export function SettingsCard({ title, children, testId, showTitle, note, noteTestId, radio }: SettingsCardProps) {
   const id = useId();
   return (
     <section aria-labelledby={id} data-testid={testId}>
       <h2 id={id} className={showTitle === true ? `${form.groupLabel} ${styles.gt}` : styles.srOnly}>
         {title}
       </h2>
-      <ul className={styles.grp}>{children}</ul>
+      {radio === true ? (
+        <div className={styles.grp} role="radiogroup" aria-labelledby={id}>
+          {children}
+        </div>
+      ) : (
+        <ul className={styles.grp}>{children}</ul>
+      )}
       {note === undefined ? null : (
-        <p className={styles.note} data-testid={noteTestId}>
+        <p className={settingsCardNoteClass} data-testid={noteTestId}>
           {note}
         </p>
       )}
@@ -57,6 +74,7 @@ export {
   SettingsDetailRow,
   SettingsList,
   SettingsTimesRow,
+  RowNotes,
   type SettingsActionRowProps,
   type SettingsChoice,
   type SettingsChoiceCardProps,
@@ -148,11 +166,7 @@ export function SettingsEntryRow({ label, lead, stacked, value, meta, onOpen, te
           ›
         </span>
       </Pressable>
-      {meta === undefined ? null : (
-        <p id={metaId} className={styles.meta}>
-          {meta}
-        </p>
-      )}
+      <RowNotes metaId={metaId} meta={meta} />
     </li>
   );
 }
@@ -187,16 +201,7 @@ export function SettingsSwitchRow({ label, checked, onChange, note, error, testI
           data-testid={testId}
         />
       </label>
-      {note === undefined ? null : (
-        <p id={noteId} className={styles.meta}>
-          {note}
-        </p>
-      )}
-      {error === undefined || error === null ? null : (
-        <p className={styles.error} role="status">
-          {error}
-        </p>
-      )}
+      <RowNotes metaId={noteId} meta={note} error={error} />
     </li>
   );
 }
@@ -210,46 +215,20 @@ export interface SegOption<T extends string> {
   testId?: string;
 }
 
-export interface SegmentedProps<T extends string> {
+export interface SettingsSegRowProps<T extends string> {
+  label: string;
   options: readonly SegOption<T>[];
   value: T;
   onChange(v: T): void;
-  /** 组名：传行名元素的 id（aria-labelledby），或者直接给 label（aria-label） */
-  labelledBy?: string;
-  label?: string;
-  /** 说明的 id（aria-describedby） */
-  describedBy?: string | undefined;
+  /** 分段按钮那一组的 data-testid */
   testId?: string;
-}
-
-export function Segmented<T extends string>({ options, value, onChange, labelledBy, label, describedBy, testId }: SegmentedProps<T>) {
-  return (
-    <div
-      className={styles.seg}
-      role="group"
-      aria-labelledby={labelledBy}
-      aria-label={labelledBy === undefined ? label : undefined}
-      aria-describedby={describedBy}
-      data-testid={testId}
-    >
-      {options.map((o) => (
-        <Pressable key={o.value} className={styles.segBtn} lang={o.lang} aria-pressed={o.value === value} data-value={o.value} data-testid={o.testId} onClick={() => onChange(o.value)}>
-          {o.label}
-        </Pressable>
-      ))}
-    </div>
-  );
-}
-
-export interface SettingsSegRowProps<T extends string> extends Omit<SegmentedProps<T>, 'labelledBy' | 'label' | 'describedBy'> {
-  label: string;
   meta?: ReactNode;
   error?: ReactNode;
   rowId?: string;
 }
 
-/** 行名 + 分段按钮；meta 是第二行灰字（界面语言的缩短说明，M1），error 是行里的报错（同步失败，role="alert"） */
-export function SettingsSegRow<T extends string>({ label, meta, error, rowId, ...seg }: SettingsSegRowProps<T>) {
+/** 行名 + 分段按钮（kit ModeSeg look="slide"）；meta 是第二行灰字（界面语言的缩短说明，M1），error 是行里的报错（同步失败） */
+export function SettingsSegRow<T extends string>({ label, options, value, onChange, testId, meta, error, rowId }: SettingsSegRowProps<T>) {
   const id = useId();
   const metaId = useId();
   return (
@@ -257,17 +236,14 @@ export function SettingsSegRow<T extends string>({ label, meta, error, rowId, ..
       <span id={id} className={styles.tx}>
         {label}
       </span>
-      <Segmented {...seg} labelledBy={id} describedBy={meta === undefined ? undefined : metaId} />
-      {meta === undefined ? null : (
-        <p id={metaId} className={styles.meta}>
-          {meta}
-        </p>
-      )}
-      {error === undefined || error === null ? null : (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-      )}
+      <ModeSeg
+        look="slide"
+        labelledBy={id}
+        describedBy={meta === undefined ? undefined : metaId}
+        testId={testId}
+        items={options.map((o) => ({ key: o.value, label: o.label, lang: o.lang, testId: o.testId, pressed: o.value === value, onClick: () => onChange(o.value) }))}
+      />
+      <RowNotes metaId={metaId} meta={meta} error={error} />
     </li>
   );
 }

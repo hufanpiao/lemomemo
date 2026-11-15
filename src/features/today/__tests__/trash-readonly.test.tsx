@@ -125,7 +125,7 @@ describe('只读行进了“最近删除”也照样只读', () => {
     fireEvent.click(await screen.findByTestId('trash-clear'));
     expect(within(await screen.findByRole('dialog', {}, { timeout: 5000 })).getByText('清空最近删除里的 3 项？清空后不能恢复；另有 3 项要新版本才能删除，会留下')).toBeTruthy();
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已清空；另有 3 项要新版本才能删除，留在列表里'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已清空；另有 3 项要新版本才能删除，留在列表里'));
     const sent = (rpc.mock.calls[0]?.[1] as { p_items: { id: string }[] }).p_items.map((k) => k.id).sort();
     expect(sent).toEqual([uid(1), uid(2), uid(3)]);
     expect(screen.queryAllByTestId(/^trash-row-/).map((r) => r.getAttribute('data-testid')).sort()).toEqual([5, 6, 7].map((n) => `trash-row-${uid(n)}`));
@@ -136,7 +136,7 @@ describe('只读行进了“最近删除”也照样只读', () => {
     for (const n of [1, 2, 3]) fireEvent.click(await screen.findByTestId(`trash-restore-${uid(n)}`));
     await waitFor(() => expect(screen.queryAllByTestId(/^trash-row-/)).toHaveLength(3));
     fireEvent.click(screen.getByTestId('trash-clear'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('这 3 项要新版本才能删除，留在列表里'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('这 3 项要新版本才能删除，留在列表里'));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(rpc).not.toHaveBeenCalled();
   });
@@ -148,7 +148,7 @@ describe('只读行进了“最近删除”也照样只读', () => {
     await screen.findByRole('dialog', {}, { timeout: 5000 });
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
     await waitFor(() =>
-      expect(screen.getByTestId('trash-purge-msg').textContent).toBe('有几项的删除还没同步上，联网等一会儿再试；另有 3 项要新版本才能删除，留在列表里'),
+      expect(screen.getByTestId('trash-msg').textContent).toBe('有几项的删除还没同步上，联网等一会儿再试；另有 3 项要新版本才能删除，留在列表里'),
     );
   });
 
@@ -158,7 +158,7 @@ describe('只读行进了“最近删除”也照样只读', () => {
     fireEvent.click(await screen.findByTestId('trash-clear'));
     await screen.findByRole('dialog', {}, { timeout: 5000 });
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已清空；另有 3 项要新版本才能删除，留在列表里'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已清空；另有 3 项要新版本才能删除，留在列表里'));
     // 本机刚删的一条待办，删除还没发上去（服务器那一份没删除）
     await act(async () => {
       await b.outbox?.applyServer('todos', [{ row: { ...todo(4), deleted_at: null } }]);
@@ -169,7 +169,7 @@ describe('只读行进了“最近删除”也照样只读', () => {
     fireEvent.click(await screen.findByTestId(`trash-purge-${uid(4)}`));
     await screen.findByRole('dialog', {}, { timeout: 5000 });
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('这一项的删除还没同步上，联网等一会儿再试'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('这一项的删除还没同步上，联网等一会儿再试'));
     expect(screen.getByTestId(`trash-row-${uid(4)}`)).toBeTruthy();
   });
 
@@ -183,7 +183,7 @@ describe('只读行进了“最近删除”也照样只读', () => {
     });
     await screen.findByTestId(`trash-ro-${uid(1)}`);
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('已清空；另有 4 项要新版本才能删除，留在列表里'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('已清空；另有 4 项要新版本才能删除，留在列表里'));
     const sent = (rpc.mock.calls[0]?.[1] as { p_items: { id: string }[] }).p_items.map((k) => k.id).sort();
     expect(sent).toEqual([uid(2), uid(3)]);
     expect(screen.getByTestId(`trash-row-${uid(1)}`)).toBeTruthy();
@@ -198,7 +198,7 @@ describe('只读行进了“最近删除”也照样只读', () => {
     });
     await screen.findByTestId(`trash-ro-${uid(2)}`);
     fireEvent.click(screen.getByTestId('trash-confirm-ok'));
-    await waitFor(() => expect(screen.getByTestId('trash-purge-msg').textContent).toBe('这条要新版本才能修改'));
+    await waitFor(() => expect(screen.getByTestId('trash-msg').textContent).toBe('这条要新版本才能修改'));
     expect(rpc).not.toHaveBeenCalled();
     expect(screen.getByTestId(`trash-row-${uid(2)}`)).toBeTruthy();
   });
@@ -212,6 +212,6 @@ describe('只读行进了“最近删除”也照样只读', () => {
     await waitFor(() => expect(rpc).toHaveBeenCalled());
     expect(screen.getByTestId('trash-clear').getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(screen.getByTestId(`trash-purge-${uid(5)}`));
-    expect(screen.queryByTestId('trash-msg')).toBeNull();
+    expect(screen.getByTestId('trash-msg').textContent).toBe('');
   });
 });

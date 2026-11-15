@@ -42,9 +42,9 @@
   border-bottom: 0;
 }
 
-/* 行名：不缩（S3），太长时换行，不省略 */
+/* 行名：占满剩下的宽度，把右边的按钮、值、开关推到右边；太长时换行，不省略（S3）。入口行例外见 .rowBtn .tx */
 .tx {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   margin: 0;
   font-size: var(--fs-15);
@@ -128,6 +128,11 @@
   text-align: left;
 }
 
+/* 入口行的行名不长：右边的值（.v，flex 1 1 0）拿走剩下的宽度，值单行省略、行名不缩（M4、S3） */
+.rowBtn .tx {
+  flex: 0 1 auto;
+}
+
 .rowBtn:disabled {
   color: var(--text-2);
 }
@@ -158,69 +163,12 @@
   cursor: pointer;
 }
 
-.switchRow > .tx {
-  flex: 1 1 auto;
-}
-
 /* 开关本身的画法在 kit 共用的 ../Form.module.css 的 .switch（B2-UI-b W5） */
 
-/* 带分段按钮的行：行名占左边，分段按钮靠右 */
-.segRow > .tx {
-  flex: 1 1 auto;
-}
-
-/* 分段按钮：宽度随文字（韩文长 20–40%，不写死宽度，2.4 第 7 条）。
-   R-436 滑块分段（同 kit ModeSeg look="slide" 的画法：底槽 + 亮一档的滑块 + 选中项柠檬黄小点）：这里放在卡片里面，
-   底槽用页面底色 --bg（卡片底色 --panel 上看得出凹下去一档；ModeSeg 的 --seg-track 深色时就是 --panel，放卡片里看不见），滑块 --seg-thumb */
-.seg {
-  display: inline-flex;
-  flex: none;
-  margin-left: auto;
-  padding: 3px;
-  border-radius: var(--r-pill);
-  background: var(--bg);
-}
-
-/* R-282（负责人 10-30 选“再小一点”）：外框 38 = 3 + 32 + 3，在 44 高的行里上下各留 3；点击区由 ::after 扩到 44 */
-.segBtn {
-  position: relative;
-  min-height: 32px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: none;
-  color: var(--text-2);
-  font-size: var(--fs-14);
-}
-
-.segBtn[aria-pressed='true'] {
-  background: var(--seg-thumb);
-  box-shadow: 0 0 0 0.5px var(--line), var(--shadow-1);
-  color: var(--text);
-  font-weight: 600;
-}
-
-/* 选中项文字前的柠檬黄小点：只是装饰，选中还有滑块和粗字（不靠颜色传意思） */
-.segBtn[aria-pressed='true']::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  vertical-align: 2px;
-}
-
-/* 扩点击区（令牌 --hit 的写法）：以按钮中心向外扩到至少 44×44；按钮本身比 44 宽的方向不扩，并排的两个不互相盖住 */
-.segBtn::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: max(100%, var(--hit));
-  height: max(100%, var(--hit));
-  transform: translate(-50%, -50%);
+/* 带分段按钮的行：行名占左边，分段按钮（kit ModeSeg look="slide"）靠右，宽度随文字（韩文长 20–40%，不写死宽度，2.4 第 7 条）。
+   ModeSeg 的底槽 --seg-track 深色时就是卡片底色 --panel，放在卡片里看不见：这一行把底槽换成页面底色 --bg（凹下去一档），其余外观照 ModeSeg */
+.segRow {
+  --seg-track: var(--bg);
 }
 
 /* ===== B2-UI-b W1：日历设置、提醒设置换 kit 时加的（数值从 CalendarSettings.module.css、RemindSettings.module.css 原样搬来） ===== */
@@ -235,11 +183,17 @@ section:first-child > h2.gt {
   margin-top: 4px;
 }
 
-/* 卡片下面的一句说明（note）；下边 16 把下一张卡隔开。不写 text-wrap: pretty（W2：中文提前换行，拆开词） */
+/* 卡片下面的一句说明（note；设置页卡外的说明也挂这个类，见 Settings.tsx 的 settingsNoteClass）。
+   不写 text-wrap: pretty（W2：中文提前换行，拆开“之后”“能不能”），用浏览器默认禁则；韩文按词断由 base.css 的 :lang(ko) body 继承（e2e b2-ui-b-settings-wrap 查计算样式） */
 .note {
-  margin: 6px 4px 16px;
+  margin: 6px 4px 0;
   color: var(--text-2);
   font-size: var(--fs-12-5);
+}
+
+/* SettingsCard 自己的卡下说明：下边 16 把下一张卡隔开 */
+.cardNote {
+  margin-bottom: 16px;
 }
 
 /* 单选每项一行：44 高、行间分隔线，整行可点（label），选中的右边墨色“✓”（设计审查 M8：不用柠檬黄圆点，白卡上对比度不够） */
@@ -256,10 +210,6 @@ section:first-child > h2.gt {
 
 .choice:last-child {
   border-bottom: 0;
-}
-
-.choice > .tx {
-  flex: 1 1 auto;
 }
 
 .choice:has(input:focus-visible) {
@@ -302,22 +252,12 @@ section:first-child > h2.gt {
   min-height: var(--hit);
 }
 
-/* 行名 + 行内按钮 / 值：行名占左边，按钮靠右 */
-.actRow > .tx {
-  flex: 1 1 auto;
-}
-
 .act {
   flex: none;
   margin-left: auto;
 }
 
 /* B2-UI-b W3、W4（设置页账号、数据、电脑三页换 kit）。数值从 features/settings/ui/SettingsPage.module.css 原样搬来 */
-
-/* SettingsDetailRow 的行名占满剩下的宽度，把右边的按钮、值推到右边（原 .tx 的 flex: 1 1 auto） */
-.grow {
-  flex: 1 1 auto;
-}
 
 /* SettingsDetailRow 右边的值：靠右、灰字，长了换行、不省略（原设置页 .v） */
 .end {

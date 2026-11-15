@@ -85,6 +85,12 @@
   font-size: var(--fs-14);
 }
 
+/* 页底提示是常驻的 role=status（R-436 底子评审）：没字时不画底、不占内边距，但留在无障碍树里，换上文字时读屏才会念 */
+.toast:empty {
+  padding: 0;
+  background: none;
+}
+
 /* 只读行的“要新版本”（TC-B4-09）：单独一行、左对齐，同随手记页（不挤标题和按钮） */
 .ro {
   display: flex;

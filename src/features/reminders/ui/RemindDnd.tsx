@@ -3,7 +3,7 @@
 // • 开始和结束选成同一时刻：提示、不写；下面一句说明落在免打扰里的提醒怎么办。顶栏、返回由设置页画，这里只画正文
 // • B2-UI-b W1（R-352）：卡、开关行、“从 / 到”时刻行换成 kit 设置组件（SettingsCard / SettingsSwitchRow / SettingsTimesRow）
 import { useState } from 'react';
-import { SettingsCard, SettingsSwitchRow, SettingsTimesRow } from '../../../kit/components/Settings/Settings.tsx';
+import { SettingsCard, settingsCardNoteClass, SettingsSwitchRow, SettingsTimesRow } from '../../../kit/components/Settings/Settings.tsx';
 import { isHm } from '../hooks/remind-view.ts';
 import { useRemindSettings } from '../hooks/useRemindSettings.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
@@ -54,7 +54,7 @@ function DndSection({ s }: { s: S }) {
           {t('remind.set.dnd.same', {})}
         </p>
       )}
-      <p className={styles.sn}>{t('remind.set.dnd.note', {})}</p>
+      <p className={settingsCardNoteClass}>{t('remind.set.dnd.note', {})}</p>
     </>
   );
 }

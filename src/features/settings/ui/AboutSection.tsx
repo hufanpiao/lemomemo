@@ -11,7 +11,7 @@
 //   录音探测的文案在词条 settings.about.probe（A20 不准在组件里写汉字；正式版里只剩词典里这一句、没有这一行）；testid 带 check_no_probe.mjs 的标记 csp-lab，正式产物里残留就失败。和 voice-probe 同一个 PR 删
 import { useEffect, useRef, useState } from 'react';
 import { navigateSub } from '../../../app/router-sub.ts';
-import { SettingsCard, SettingsEntryRow, SettingsInfoRow } from '../../../kit/components/Settings/Settings.tsx';
+import { SettingsCard, SettingsEntryRow, SettingsInfoRow, settingsNoteClass } from '../../../kit/components/Settings/Settings.tsx';
 import { collectDiag } from '../../../platform/diag-info.ts';
 import { buildInfo } from '../../../platform/env.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
@@ -69,7 +69,7 @@ export function AboutSection() {
           <SettingsEntryRow label={t('settings.about.probe', {})} onOpen={() => void navigateSub('dev-csp', 'voice')} testId="csp-lab-entry" />
         )}
       </SettingsCard>
-      <p className={styles.sn} data-testid="settings-lunar-credit">
+      <p className={settingsNoteClass} data-testid="settings-lunar-credit">
         {t('settings.about.lunarCredit', {})}
       </p>
       {diag && (

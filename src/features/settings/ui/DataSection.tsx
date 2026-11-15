@@ -13,7 +13,7 @@
 // • PPT 预览（B4b-1，线框 sPrev 第二张“可以在 设置 › 数据 里改”）：普通随手记、隐私记两行，先问 / 预览 / 只下载；只记在这台设备，排在导出前面
 import { useEffect, useRef } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
-import { SettingsCard, SettingsEntryRow, SettingsList, SettingsSegRow } from '../../../kit/components/Settings/Settings.tsx';
+import { SettingsCard, SettingsEntryRow, SettingsList, settingsNoteClass, SettingsSegRow } from '../../../kit/components/Settings/Settings.tsx';
 import { fmtMb, type ExportErr, type ExportTask } from '../hooks/useExport.ts';
 import { useOnline } from '../../../kit/hooks/useOnline.ts';
 import { useMsPrefSetting, type MsChoice } from '../hooks/useMsPrefSetting.ts';
@@ -65,7 +65,7 @@ export function DataSection({ task, recent, devices }: { task: ExportTask; recen
           testId="settings-export"
         />
       </SettingsList>
-      <p id="settings-export-notes" className={styles.sn} data-testid="settings-export-notes">
+      <p id="settings-export-notes" className={settingsNoteClass} data-testid="settings-export-notes">
         {t('settings.export.quota', {})}
         <br />
         {t('settings.export.wifi', {})}

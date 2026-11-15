@@ -15,6 +15,7 @@ import { dayMsg, eventStart, modeOf, timeOf, upcoming, wdKey, whenMsg, type Remi
 import { useReminderList } from '../hooks/useReminders.ts';
 import { useRemindT, type RemindT } from '../hooks/useRemindT.ts';
 import { KindMark } from './KindMark.tsx';
+import { settingsCardNoteClass } from '../../../kit/components/Settings/Settings.tsx';
 import styles from './RemindSettings.module.css';
 
 /** 切开“{days} 没有提醒”用的记号（不会出现在文案里） */
@@ -108,7 +109,7 @@ export default function RemindUpcoming() {
         )}
       </p>
       {days.length === 0 && (
-        <p className={styles.sn} data-testid="remind-upcoming-empty">
+        <p className={settingsCardNoteClass} data-testid="remind-upcoming-empty">
           {t('remind.up.empty', {})}
         </p>
       )}
