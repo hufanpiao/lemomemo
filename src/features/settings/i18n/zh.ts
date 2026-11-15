@@ -204,7 +204,7 @@ export const zh = {
   'settings.avatar.label': '头像',
   'settings.avatar.change': '更换头像',
   'settings.avatar.remove': '去掉头像',
-  'settings.avatar.hint': '只有你自己看得到，换了以后各台设备都会显示',
+  'settings.avatar.hint': '只有你自己看得到，各台设备同步显示',
   'settings.avatar.busy': '正在保存头像…',
   'settings.avatar.offline': '没有网络，联网后才能换头像',
   'settings.avatar.encode_failed': '这张图打不开或太大，换一张试试',
