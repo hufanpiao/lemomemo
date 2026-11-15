@@ -213,6 +213,7 @@
 
 .pad {
   display: grid;
+
   /* 快速连按不被 iOS 当成双击（Pin.tsx 头注释） */
   touch-action: manipulation;
   grid-template-columns: repeat(3, 76px);
