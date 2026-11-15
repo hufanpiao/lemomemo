@@ -260,6 +260,9 @@ test.describe('随手记页顶部安全区（B2-UI-b W8，模拟 62pt，Chromium
       await page.goto('/app/#/notes');
       const main = page.locator('main[data-feature="notes"]');
       await main.waitFor({ timeout: 30_000 });
+      // 隐私记入口行（线框 s9，ca5f2cda 起在基准里）是懒加载块，不等它就看加载快慢：11-15 镜像里重生成基准时截到了没有入口行的一帧
+      // （诊断：入口行在打开页面后 1.4～2.5 秒才出现，没有报错），所以先等它出来再静下来截图
+      await page.getByTestId('vault-lockrow').waitFor({ timeout: 30_000 });
       await calm(page);
       // 标题上沿要在安全区 + 顶部渐隐带（--top-fade 12px）之下：padding-top = max(var(--safe-top), 24px)
       const fade = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--top-fade')) || 0);
