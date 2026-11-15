@@ -521,24 +521,14 @@
 }
 
 /* 头像外一圈柠檬黄细描边，和头像之间隔一圈 2px 的缝（缝是卡片底色 --panel：没照片时头像是黄底首字，描边也看得出来）；右下角角标（.avBadge）。
-   按钮用 flex 贴着头像（行内按钮会带出行高，圆不正、缝一边宽一边没有） */
-.heroAv {
-  position: relative;
+   按钮用 flex 贴着头像（行内按钮会带出行高，圆不正、缝一边宽一边没有）。
+   按钮本身和新建页同一个 .avBtn，这里只加描边和 flex（底子评审第 12 条：原来整份重写了一遍） */
+.heroRing {
   display: flex;
-  flex: none;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: none;
   box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--accent);
-  cursor: pointer;
 }
 
-.heroAv:disabled {
-  cursor: default;
-}
-
-.heroAv:focus-visible {
+.heroRing:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 5px;
 }

@@ -1,5 +1,5 @@
 // 编辑页外框（B2 FA-2）：顶栏“‹ 返回 · 类型名 · 保存状态”、顶部提示（只读、已删除）、正文、底部整宽删除行（R-436）。保存状态、只读、删除按 useEditRecord 画（EditNotices.tsx），表单内容由调用方传
-// 保存状态是常驻的 role="status"，读屏会播报“已自动保存”“没保存上”
+// 保存状态是常驻的 role="status"，读屏会播报“✓ 已保存”“没保存上”；没改过时是空的（R-436）
 // 编辑页挂着期间占住升级中心的 busy（BUSY-wire）：不出版本横幅、不自动重新载入，离开编辑页就释放；放在详情抽屉里时不在这里占，
 // 由 DetailDrawer 按焦点在不在抽屉里占（抽屉在电脑上可能开一整天，B6 独立评审第 12 条）
 // 电脑版今天页的详情抽屉（B6 返工，线框 s1“选中一条：详情抽屉从右边盖上来”）也用它：在抽屉里（kit DetailDrawer 的 useInDrawer）就不画“‹ 返回”，顶行是“类型名 · 保存状态 · ×”，外层是 section（页面的 main 在外面）
@@ -34,10 +34,11 @@ export function EditShell({ kind, backLabel, onBack, rec, own, prefix, deleteLab
   const st = useEditStatus(rec.status, own);
   const { readonly, deleted } = rec;
   const del = (v: boolean) => void rec.setDeleted(v);
-  // 没改过时不写字（R-436：原来的“改了就自动保存”去掉，改过才出“✓ 已保存”）；只读时也不写（FA-2 视觉验收第 2 条）
+  // 没改过时不写字（R-436：原来的“改了就自动保存”去掉，改过才出“✓ 已保存”；idle 在 useEditStatus 里就是空串）。
+  // 只读时有状态照样写：待办、日程“找不到这一条”时标题只读，这句话要留着（随手记编辑页只读时不写，两边规则不同是有意的，底子评审第 10 条核过）
   const status = (
     <p className={`${styles.status}${st.bad ? ` ${styles.statusBad}` : ''}`} role="status" data-testid="edit-status">
-      {rec.status !== 'idle' || !readonly ? st.text : ''}
+      {st.text}
     </p>
   );
   const body = (

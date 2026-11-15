@@ -111,7 +111,7 @@ export function AnnivHero({ id, form, saved, off, t, locale, next }: {
   const av = useAvatar(id, saved, off, t);
   return (
     <div className={styles.hero} data-testid="anniv-hero">
-      <button type="button" className={styles.heroAv} disabled={!av.can} onClick={av.pick} aria-label={t('anniv.edit.avatarPick', {})} data-testid="anniv-avatar-pick">
+      <button type="button" className={`${styles.avBtn} ${styles.heroRing}`} disabled={!av.can} onClick={av.pick} aria-label={t('anniv.edit.avatarPick', {})} data-testid="anniv-avatar-pick">
         <AnnivFace id={id ?? 'new'} avatarId={saved?.['avatar_id']} name={form.name} kind={form.kind} size="lg" />
         <span className={styles.avBadge} aria-hidden="true" />
       </button>
