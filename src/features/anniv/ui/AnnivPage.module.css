@@ -311,12 +311,6 @@
   transform: translate(-50%, -50%) rotate(90deg);
 }
 
-/* 日期一行展开时箭头朝下 */
-.chev[data-open] {
-  display: inline-block;
-  rotate: 90deg;
-}
-
 /* 提醒时刻滚轮（视觉稿 annedit）：浅底胶囊，中间“09 : 00”大字，两边浅色露出上一个钟点、下一个分钟 */
 .timeWheel {
   display: flex;
@@ -411,26 +405,6 @@
   white-space: pre-wrap;
 }
 
-.rowBtn {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  width: 100%;
-  min-height: var(--hit);
-  border: 0;
-  background: none;
-  color: var(--text-2);
-  font: inherit;
-  font-size: var(--fs-15);
-  text-align: right;
-  cursor: pointer;
-}
-
-.chev {
-  color: var(--text-2);
-}
-
 .avBtn {
   position: relative;
   flex: none;
@@ -465,7 +439,7 @@
 }
 
 .rmReset:disabled {
-  opacity: 0.45;
+  opacity: var(--disabled-dim);
   cursor: default;
 }
 
@@ -552,9 +526,8 @@
 .heroWhen {
   overflow: hidden;
   color: var(--text-2);
-  font-family: var(--f-tnum);
+  font-family: var(--f-mono);
   font-size: var(--fs-11-5);
-  font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -587,9 +560,8 @@
 /* 大号等宽天数：--num-accent（深色柠檬黄、浅色墨黑），一页只这一处强调色 */
 .heroNum {
   color: var(--num-accent);
-  font-family: var(--f-tnum);
+  font-family: var(--f-mono);
   font-size: var(--fs-34);
-  font-variant-numeric: tabular-nums;
   font-weight: 600;
   line-height: 1;
 }

@@ -10,17 +10,21 @@
 .groupLabel {
   margin: 4px 14px 6px;
   color: var(--text-3);
-  font-family: var(--f-tnum);
+  font-family: var(--f-mono);
   font-size: var(--fs-11);
   font-weight: 400;
   letter-spacing: 0.12em;
 }
 
-/* 表单卡片里的一整行按钮（FormRowButton，R-436 纪念日“去掉头像”）：和字段行同高、同一条分隔线规则，左对齐次要色 */
+/* 表单卡片里的整行按钮，一份样式两种用法（评审第 6 条）：FieldButton（字段行右边的“值 ›”，纪念日日期行、提醒行）默认右对齐；
+   FormRowButton（R-436 纪念日“去掉头像”）加 .start 左对齐。和字段行同高，次要色 */
 .rowBtn {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   width: 100%;
+  min-width: 0;
   min-height: var(--hit);
   padding: 6px 0;
   border: 0;
@@ -28,8 +32,23 @@
   color: var(--text-2);
   font: inherit;
   font-size: var(--fs-15);
-  text-align: left;
+  text-align: right;
   cursor: pointer;
+}
+
+.start {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* FieldButton 的 ›：不缩；展开（data-open，日期行）时转成朝下 */
+.chev {
+  flex: none;
+}
+
+.chev[data-open] {
+  display: inline-block;
+  rotate: 90deg;
 }
 
 /* 整宽删除行（DeleteRow，R-436）：单独一张卡片，红字居中，圆角同 .group */
@@ -246,13 +265,13 @@
 }
 
 .check input:disabled {
-  opacity: 0.45;
+  opacity: var(--disabled-dim);
 }
 
 /* 完成勾选（B2-UI-a U2-4，Check 的 look="circle"；R-433 起和列表一样画成圆角方框）：直接用列表完成标记的画法（CheckCircle.module.css 的 .checkBox/.check/.fill/.tick，
    同一组令牌、同一个打勾动效）；禁用时整个方框一起变淡（不让里面的 checkbox 再淡一次） */
 .circleBox:has(> input:disabled) {
-  opacity: 0.45;
+  opacity: var(--disabled-dim);
 }
 
 /* kit 通用按钮（FormButton，G11①；B2-UI-a U3-1 升成五种 variant）：圆角胶囊，高度一律 --hit，浅色、深色一套。
@@ -311,7 +330,7 @@
 .danger:disabled,
 .dangerFill:disabled,
 .ghost:disabled {
-  opacity: var(--press-dim);
+  opacity: var(--disabled-dim);
 }
 
 /* FormButton size="compact"（B2-UI-b W4，D1 ① 外观不变只换实现；R-276）：设置页按钮原样搬过来——

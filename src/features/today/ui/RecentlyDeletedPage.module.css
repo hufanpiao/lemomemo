@@ -51,7 +51,7 @@
 
 .acts > [aria-disabled='true'],   /* 只读行、进行中：“恢复”“永久删除”灰掉 */
 .clear[aria-disabled='true'] {
-  opacity: 0.45;   /* 同 kit 只读行的打勾圆圈变淡（kit CheckCircle.module.css） */
+  opacity: var(--disabled-dim);   /* 同 kit 只读行的打勾圆圈变淡（kit CheckCircle.module.css） */
   cursor: default;
 }
 

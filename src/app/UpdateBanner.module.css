@@ -54,7 +54,7 @@
 }
 
 .action[aria-disabled='true'] {
-  opacity: 0.6;
+  opacity: var(--disabled-dim);
 }
 
 /* 只有“有新版本”这一种有关闭按钮 */

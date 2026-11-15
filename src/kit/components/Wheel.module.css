@@ -27,7 +27,7 @@
 
 .wheel[aria-disabled='true'] {
   overflow: hidden;
-  opacity: 0.6;
+  opacity: var(--disabled-dim);
 }
 
 .item {

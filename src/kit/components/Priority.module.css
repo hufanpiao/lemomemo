@@ -35,7 +35,7 @@
   border-radius: 5px;
   background: var(--panel-2);
   color: var(--text-3);
-  font-family: var(--f-tnum);
+  font-family: var(--f-mono);
   font-size: var(--fs-10-5);
   font-weight: 600;
   line-height: 1;
@@ -90,5 +90,5 @@
 }
 
 .seg .box:disabled {
-  opacity: var(--press-dim);
+  opacity: var(--disabled-dim);
 }

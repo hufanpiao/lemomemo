@@ -40,7 +40,7 @@
 
 .segBtn:disabled {
   cursor: default;
-  opacity: 0.6;
+  opacity: var(--disabled-dim);
 }
 
 /* look="slide"（R-436 滑块分段）：逐项照 11-15 精致化确认稿第 4 条的 .seg 写——整行宽、各段平分；底槽 --seg-track、圆角 12、内边 3、不描边；看得见 36 = 3 + 30 + 3（点击区仍由 .segBtn::after 扩到 44） */

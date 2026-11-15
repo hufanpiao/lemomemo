@@ -112,6 +112,11 @@
   font-size: var(--fs-20);
 }
 
+/* 占位字第三层文字色（评审第 14 条：全站占位字一种颜色，同 kit Form.module.css）；查找面板和下拉搜索（PullSearch 用这里的 .input）共用。原来没写，是浏览器默认灰 */
+.input::placeholder {
+  color: var(--text-3);
+}
+
 .close {
   flex: none;
   min-width: var(--hit);

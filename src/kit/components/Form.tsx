@@ -19,9 +19,25 @@ export function GroupLabel({ children }: { children: ReactNode }) {
 /** 同一个小字分组名的类名（R-436 设置等页）：要用 h2、h3、label 当分组名（能接焦点、关联输入框）时挂这个类，样式只在 Form.module.css 一处 */
 export const groupLabelClass = styles.groupLabel;
 
-/** 表单卡片里的一整行按钮（R-436：纪念日“去掉头像”收进表单最后一行）：左对齐、次要文字色，至少 --hit 高 */
+/** 表单卡片里的一整行按钮（R-436：纪念日“去掉头像”收进表单最后一行）：和 FieldButton 同一份 .rowBtn，只加左对齐修饰（.start），次要文字色，至少 --hit 高 */
 export function FormRowButton(p: Omit<ComponentProps<typeof Pressable>, 'className'>) {
-  return <Pressable {...p} className={styles.rowBtn} />;
+  return <Pressable {...p} className={`${styles.rowBtn} ${styles.start}`} />;
+}
+
+/**
+ * 字段行右边的“值 ›”按钮（评审第 6 条：按钮版的 FieldLink）：放在 Field 里，右对齐、次要文字色、单行放不下省略，至少 --hit 高。
+ * 点了不跳页、由调用方处理（纪念日编辑页的日期行展开日期框、提醒行打开提醒弹层）。
+ * expanded：这一下展开的是下面的一块（日期行）时传，写 aria-expanded，展开时 › 转成朝下；不传就不写 aria-expanded
+ */
+export function FieldButton({ expanded, children, ...p }: Omit<ComponentProps<typeof Pressable>, 'className' | 'aria-expanded'> & { expanded?: boolean }) {
+  return (
+    <Pressable {...p} aria-expanded={expanded} className={styles.rowBtn}>
+      <span className={styles.linkText}>{children}</span>
+      <span className={styles.chev} data-open={expanded === true ? '' : undefined} aria-hidden="true">
+        ›
+      </span>
+    </Pressable>
+  );
 }
 
 /** 整宽删除行（R-436）：单独一张卡片、红字居中，和上面的表单卡片同一套圆角；EditShell 底部的“删除”用它 */

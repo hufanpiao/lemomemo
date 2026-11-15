@@ -110,9 +110,8 @@
   background: none;
   color: var(--text-2);
   font: inherit;
-  font-family: var(--f-tnum);
+  font-family: var(--f-mono);
   font-size: var(--fs-11);
-  font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
@@ -241,7 +240,7 @@
 }
 
 .addInput::placeholder {
-  color: var(--text-2);
+  color: var(--text-3);
 }
 
 .addRow {

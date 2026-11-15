@@ -148,7 +148,7 @@
 
 /* 只读行的“删除”变淡（S12，同 kit 只读行的 ×）；点了由页面拦下出提示条 */
 .menuItem[aria-disabled='true'] {
-  opacity: 0.45;
+  opacity: var(--disabled-dim);
 }
 
 /* “转成待办 / 转成日程”（R-414）：样式同 .menuItem，只是用正文色，和红色的“删除”分开 */

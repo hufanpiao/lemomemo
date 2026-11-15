@@ -41,9 +41,8 @@
 .sub {
   margin: 8px 0 10px;
   color: var(--text-3);
-  font-family: var(--f-tnum);
+  font-family: var(--f-mono);
   font-size: var(--fs-11);
-  font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
 }
 
@@ -86,9 +85,8 @@
 }
 
 .chipN {
-  font-family: var(--f-tnum);
+  font-family: var(--f-mono);
   font-size: var(--fs-11);
-  font-variant-numeric: tabular-nums;
   opacity: 0.7;
 }
 
@@ -137,8 +135,7 @@
 
 /* 副行的日期、时刻：等宽数字（R-434），颜色跟副行（逾期红、其余次要文字色） */
 .num {
-  font-family: var(--f-tnum);
-  font-variant-numeric: tabular-nums;
+  font-family: var(--f-mono);
 }
 
 /* 已完成整行淡出加删除线（第 8 条；删除线、灰字在 kit 的 .row[data-done] .title）：方框照旧 kit CheckCircle，淡出后看着是浅柠檬黄 */

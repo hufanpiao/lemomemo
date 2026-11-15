@@ -463,7 +463,7 @@
   color: var(--danger-text);
 }
 
-/* 大时刻（视觉稿 .fa-big）：数字字体 + tabular-nums，各位等宽（R-436 核过：换成 --f-tnum 系统等宽字体后“0”带点、冒号占一整格，大字号下不好看，不换） */
+/* 大时刻（视觉稿 .fa-big）：数字字体 + tabular-nums，各位等宽（R-436 核过：换成 --f-mono 系统等宽字体后“0”带点、冒号占一整格，大字号下不好看，不换） */
 .bigTime {
   margin: 0;
   font-family: var(--f-num);

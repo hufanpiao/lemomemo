@@ -86,8 +86,7 @@
 
 /* 数字值（版本号）：R-436 等宽数字，和分组名同一个等宽字族 */
 .num {
-  font-family: var(--f-tnum);
-  font-variant-numeric: tabular-nums;
+  font-family: var(--f-mono);
 }
 
 .chev {

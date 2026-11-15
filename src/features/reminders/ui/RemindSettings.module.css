@@ -115,9 +115,8 @@ h2.upHead {
 .upTime {
   flex: none;
   width: 48px;
-  font-family: var(--f-tnum);
+  font-family: var(--f-mono);
   font-size: var(--fs-14);
-  font-variant-numeric: tabular-nums;
 }
 
 .upMk {

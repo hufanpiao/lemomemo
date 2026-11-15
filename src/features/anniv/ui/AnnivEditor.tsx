@@ -19,13 +19,12 @@ import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { AnnivKind } from '../../../../shared/logic/anniv/next-date.ts';
 import { backOr } from '../../../app/router-levels.ts';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
-import { Check, Field, FormGroup, FormRowButton, GroupLabel, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
+import { Check, Field, FieldButton, FormGroup, FormRowButton, GroupLabel, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
 import { ModeSeg } from '../../../kit/components/ModeSeg.tsx';
 import { Wheel, WheelPanel } from '../../../kit/components/Wheel.tsx';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { Pressable } from '../../../motion/components.ts';
 import { clearAvatar, leapOf, maxDay, NAME_MAX, NOTE_MAX, offsetsKey, offsetsList, recOf, yearRange, type AnnivForm } from '../hooks/anniv-view.ts';
 import { annivLib } from '../hooks/anniv-view.ts';
 import { useAnnivDefaults, useAnnivEdit, useToday } from '../hooks/useAnniv.ts';
@@ -228,12 +227,9 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
                       <TextInput id="anniv-name" className={styles.inlineIn} value={form.name} maxLength={NAME_MAX} disabled={off} placeholder={t('anniv.edit.namePh', {})} onCommit={(v) => change({ name: v.trim() })} data-testid="anniv-edit-name" />
                     </Field>
                     <Field label={t('anniv.edit.date', {})}>
-                      <Pressable type="button" className={styles.rowBtn} disabled={off} aria-expanded={dateOpen} onClick={() => setDateOpen((v) => !v)} data-testid="anniv-edit-date">
-                        <span>{dateRowText(form, locale, t)}</span>
-                        <span className={styles.chev} data-open={dateOpen || undefined} aria-hidden="true">
-                          ›
-                        </span>
-                      </Pressable>
+                      <FieldButton disabled={off} expanded={dateOpen} onClick={() => setDateOpen((v) => !v)} data-testid="anniv-edit-date">
+                        {dateRowText(form, locale, t)}
+                      </FieldButton>
                     </Field>
                   </>
                 )}
@@ -254,10 +250,9 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
                   </Field>
                 ) : null}
                 <Field label={t('anniv.edit.remind', {})}>
-                  <Pressable type="button" className={styles.rowBtn} disabled={off} onClick={() => setSheet(true)} data-testid="anniv-edit-remind">
-                    <span>{remindLine(r, defaults, t)}</span>
-                    <span className={styles.chev} aria-hidden="true">›</span>
-                  </Pressable>
+                  <FieldButton disabled={off} onClick={() => setSheet(true)} data-testid="anniv-edit-remind">
+                    {remindLine(r, defaults, t)}
+                  </FieldButton>
                 </Field>
                 <Field label={t('anniv.edit.note', {})} htmlFor="anniv-note">
                   <TextArea id="anniv-note" className={`${styles.inlineIn} ${styles.inlineArea}`} rows={1} value={form.note} maxLength={NOTE_MAX} disabled={off} placeholder={t('anniv.edit.notePh', {})} onCommit={(v) => change({ note: v })} data-testid="anniv-edit-note" />
