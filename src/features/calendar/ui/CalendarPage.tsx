@@ -19,8 +19,8 @@
 //   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）；页顶（提示条上面）有带重复的只读行时出
 //   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner）
 // • 下拉搜索（R-437）：页顶往下拉，标题行下面露出搜索框（kit 的 usePullReveal + smart-search 的 PullSearch，和随手记、待办页同一套）；
-//   打了字就把切换行、月历 / 周视图和日清单换成结果（只按日程标题就地筛）；点一条进日程编辑页（只读的照样拦下）。日清单的拖动柄带 data-nopull，往下拖是展开月历、不算下拉
-import { Suspense, useRef, useState } from 'react';
+//   打了字就把切换行、月历 / 周视图和日清单藏起来（kit 的 PullSlot，不卸）、换成结果（只按日程标题就地筛）；点一条进日程编辑页（只读的照样拦下）。日清单的拖动柄带 data-nopull，往下拖是展开月历、不算下拉
+import { Suspense, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { monthOf, weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
@@ -176,11 +176,10 @@ export default function CalendarPage() {
   const sel = selected;
   const huangli = useHuangli(sel, model.locale);
   const { p } = fold;
-  const page = useRef<HTMLElement>(null);
-  const pull = usePullReveal(page, 'calendar');
+  const pull = usePullReveal('calendar');
 
   return (
-    <main ref={page} className={styles.page} data-feature="calendar" data-testid="calendar-page" data-mode={model.view.mode} data-folded={fold.byWeek || undefined}>
+    <main ref={pull.ref} className={styles.page} data-feature="calendar" data-testid="calendar-page" data-mode={model.view.mode} data-folded={fold.byWeek || undefined}>
       <h1 className={styles.srOnly}>{t('cal.h1', {})}</h1>
       {picking && !model.wide ? <PickScrim /> : null}
       <div className={styles.top}>
@@ -202,8 +201,7 @@ export default function CalendarPage() {
         />
         <MeLink testId="cal-settings" />
       </div>
-      <PullSlot pull={pull}><PullSearch pull={pull} scope="event" onOpen={(id) => ro.open('event', id)} /></PullSlot>
-      {pull.searching ? null : (<>
+      <PullSlot pull={pull} keyLabel={t('cal.pullKey', {})} search={<PullSearch pull={pull} scope="event" onOpen={(id) => ro.open('event', id)} />}>
       <CalNav
         t={t}
         month={month}
@@ -280,7 +278,7 @@ export default function CalendarPage() {
           />
         ) : null}
       </div>
-      </>)}
+      </PullSlot>
     </main>
   );
 }

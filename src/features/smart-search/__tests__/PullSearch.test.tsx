@@ -1,13 +1,13 @@
 // 下拉搜索的搜索框和结果（R-437；ui/PullSearch.tsx、hooks/usePullFind.ts）：打字当场出结果、点一条交给页面、“用 AI 按意思找”打开查找面板、
-// 取消清空收起、运行日志只记数不记字
+// 取消、Esc 清空收起、从“搜索本页”打开的自动聚焦、读屏的条数去抖、运行日志只记数不记字
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { collection } from '../../../core/store.ts';
+import { PullSlot } from '../../../kit/components/PullSlot.tsx';
 import { usePullReveal } from '../../../kit/hooks/usePullReveal.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { closeFind, findOpenSnapshot } from '../hooks/find-open.ts';
-import { SEM_DEBOUNCE_MS } from '../hooks/useFind.ts';
+import { SEM_DEBOUNCE_MS } from '../hooks/find-consts.ts';
 import PullSearch from '../ui/PullSearch.tsx';
 import type { PullScope } from '../hooks/usePullFind.ts';
 
@@ -21,13 +21,13 @@ type R = { id: string } & Record<string, unknown>;
 const put = (name: string, rows: R[]) => collection<R>(name).upsert(rows);
 
 function Host({ scope, onOpen }: { scope: PullScope; onOpen(id: string): void }) {
-  const ref = useRef<HTMLElement>(null);
-  const pull = usePullReveal(ref, 'test');
+  const pull = usePullReveal('test');
   return (
-    <main ref={ref}>
+    <main ref={pull.ref}>
       <button type="button" onClick={() => pull.reveal('touch')}>open</button>
-      {pull.open ? <PullSearch pull={pull} scope={scope} onOpen={onOpen} /> : null}
-      {pull.searching ? null : <p data-testid="page-list">list</p>}
+      <PullSlot pull={pull} keyLabel="搜索本页" search={<PullSearch pull={pull} scope={scope} onOpen={onOpen} />}>
+        <p data-testid="page-list">list</p>
+      </PullSlot>
     </main>
   );
 }
@@ -58,7 +58,7 @@ describe('下拉搜索', () => {
     expect(screen.getByTestId('pull-input').getAttribute('placeholder')).toBe('搜索随手记');
     expect(screen.queryByTestId('pull-results')).toBeNull();
     typeQ('证件');
-    expect(screen.queryByTestId('page-list')).toBeNull();
+    expect(screen.getByTestId('pull-keep').hidden).toBe(true);
     expect(screen.getByTestId('pull-count').textContent).toBe('找到 1 条');
     fireEvent.click(screen.getByTestId(`pull-row-${id(1)}`));
     expect(onOpen).toHaveBeenCalledWith(id(1));
@@ -93,11 +93,49 @@ describe('下拉搜索', () => {
     typeQ('abc');
     fireEvent.click(screen.getByTestId('pull-clear'));
     expect(screen.getByTestId('pull-search')).toBeTruthy();
-    expect(screen.getByTestId('page-list')).toBeTruthy();
+    expect(screen.getByTestId('pull-keep').hidden).toBe(false);
     typeQ('abc');
     fireEvent.click(screen.getByTestId('pull-cancel'));
     expect(screen.queryByTestId('pull-search')).toBeNull();
-    expect(screen.getByTestId('page-list')).toBeTruthy();
+    expect(screen.getByTestId('pull-keep').hidden).toBe(false);
     expect(fx.logs).toContain('pull close test');
+  });
+
+  it('从“搜索本页”打开：输入框自动聚焦；输入框里按 Esc 清空收起，焦点回到“搜索本页”', () => {
+    render(<Host scope="note" onOpen={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('pull-key'));
+    expect(document.activeElement).toBe(screen.getByTestId('pull-input'));
+    typeQ('abc');
+    fireEvent.keyDown(screen.getByTestId('pull-input'), { key: 'Escape' });
+    expect(screen.queryByTestId('pull-search')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByTestId('pull-key'));
+    expect(fx.logs.slice(0, 2)).toEqual(['pull open test via=key', 'pull close test']);
+  });
+
+  it('下拉打开的不抢焦点（手指还按着，弹键盘会顶乱页面）', () => {
+    render(<Host scope="note" onOpen={vi.fn()} />);
+    fireEvent.click(screen.getByText('open'));
+    expect(document.activeElement).not.toBe(screen.getByTestId('pull-input'));
+  });
+
+  it('读屏：常驻的 role=status 停 SEM_DEBOUNCE_MS 才写条数，连着打字不一个字播一遍；清空后也清掉', () => {
+    put('notes', [{ id: id(5), ...live, title: '牛奶', body: '', category_id: null, is_private: false, created_at: NOW }]);
+    render(<Host scope="note" onOpen={vi.fn()} />);
+    fireEvent.click(screen.getByText('open'));
+    const status = screen.getByRole('status');
+    expect(status.textContent).toBe('');
+    typeQ('x');
+    act(() => void vi.advanceTimersByTime(SEM_DEBOUNCE_MS / 2));
+    typeQ('牛奶');
+    act(() => void vi.advanceTimersByTime(SEM_DEBOUNCE_MS / 2));
+    expect(status.textContent).toBe('');
+    // 看得见的条数照常跟手
+    expect(screen.getByTestId('pull-count').textContent).toBe('找到 1 条');
+    act(() => void vi.advanceTimersByTime(SEM_DEBOUNCE_MS));
+    expect(status.textContent).toBe('找到 1 条');
+    expect(screen.getByRole('status')).toBe(status);
+    typeQ('');
+    act(() => void vi.advanceTimersByTime(SEM_DEBOUNCE_MS));
+    expect(status.textContent).toBe('');
   });
 });

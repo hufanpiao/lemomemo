@@ -1,4 +1,5 @@
-// 查找面板的小零件（B4b-2；线框 s12、sFind）：命中词高亮、行首记号、每行第二行文字、电脑右栏预览、文案 hook。FindPanel.tsx 用
+// 查找面板的小零件（B4b-2；线框 s12、sFind）：命中词高亮、行首记号、每行第二行文字、一行结果的主体（HitBody）、电脑右栏预览、文案 hook。
+// FindPanel.tsx、PullSearch.tsx（R-437 下拉搜索）共用
 import type { ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
@@ -53,20 +54,36 @@ export function Lead({ kind, done = false }: { kind: FindKind; done?: boolean })
   );
 }
 
+/** 一行结果的主体：行首记号、标题、第二行（查找面板、下拉搜索的行按钮里都是这一份，R-437 评审第 9 条） */
+export function HitBody({ h, q, t, locale }: { h: FindHit; q: string; t: T; locale: 'zh-CN' | 'ko-KR' }) {
+  return (
+    <>
+      <Lead kind={h.item.kind} done={h.item.done} />
+      <span className={styles.text}>
+        <span className={styles.title}><Marked text={h.item.title || t('find.noTitle', {})} q={q} /></span>
+        <span className={styles.meta}><Marked text={metaOf(h, t, locale)} q={q} /></span>
+      </span>
+    </>
+  );
+}
+
+/** 行按钮的 data-done：只有做完了的待办带（标题灰色加删除线，FindPanel.module.css 的 .row[data-done]） */
+export const doneAttr = (it: FindItem): true | undefined => (it.kind === 'todo' && it.done) || undefined;
+
 /** 日子（带星期）和时刻，没有的部分不写；第二行和右栏预览共用 */
 const dayTime = (day: string, time: string | null | undefined): string => [day, time ?? ''].filter(Boolean).join(' ');
 /** 同上，日子还没格式化：“11月10日 周二 15:00”（查找面板、结果层的候选、改期按钮都用这一份，评审第 23 条） */
 export const whenText = (date: string | null | undefined, time: string | null | undefined, locale: 'zh-CN' | 'ko-KR'): string =>
   dayTime(date ? fmtDay(date, locale, 'monthDayWeek') : '', time);
 
-/** 第二行：日程“日子 时刻 · 地点”、待办“日子截止 · 项目”、纪念日“下一次 日子”、随手记和文档有片段给片段、图片和文档写在哪条随手记里 */
+/** 第二行：日程“日子 时刻 · 地点”、待办“日子截止 · 项目”（下拉搜索靠子任务命中的写“子任务：…”）、纪念日“下一次 日子”、随手记和文档有片段给片段、图片和文档写在哪条随手记里 */
 export function metaOf(h: FindHit, t: T, locale: 'zh-CN' | 'ko-KR'): string {
   const it = h.item;
   const day = it.date ? fmtDay(it.date, locale, 'monthDayWeek') : '';
   const join = (...xs: string[]) => xs.filter((x) => x !== '').join(' · ');
   switch (it.kind) {
     case 'event': return join(dayTime(day, it.time), it.extra);
-    case 'todo': return join(it.done ? t('find.todo.done', {}) : it.date ? t('find.todo.due', { d: day }) : t('find.todo.noDue', {}), it.extra);
+    case 'todo': return h.snippet !== null ? t('find.todo.sub', { t: h.snippet }) : join(it.done ? t('find.todo.done', {}) : it.date ? t('find.todo.due', { d: day }) : t('find.todo.noDue', {}), it.extra);
     case 'anniv': return it.date ? t('find.anniv.next', { d: day }) : '';
     case 'note': return h.snippet ? `“${h.snippet}”` : day;
     case 'file': return join(h.snippet ? `“${h.snippet}”` : '', t('find.inNote', { t: it.extra || t('find.noTitle', {}) }));

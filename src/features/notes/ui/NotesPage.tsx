@@ -37,10 +37,10 @@
 //   head 给了就画它、不画本页的大标题和头像（隐私记页的“‹ 随手记 | 🔒 隐私记 | 立即锁上”）
 // • “最近删除”入口（负责人 11-15）：标题下面、分类胶囊上面居中一个（NotesBits 的 TrashLink），两种来源共用，去哪、带不带条数看来源
 // • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal 管手势和打的字，smart-search 的 PullSearch 画搜索框和结果）；
-//   打了字就把“最近删除”、分类胶囊和列表换成结果（按标题、正文、分类就地筛）。隐私记页不接（隐私记不搜）
+//   打了字就把“最近删除”、分类胶囊和列表藏起来、换成结果（kit 的 PullSlot，手机版、电脑版同一处 listPart）（按标题、正文、分类就地筛）。隐私记页不接（隐私记不搜）
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { Suspense, useRef, useState, type ReactNode } from 'react';
+import { Suspense, useCallback, useRef, useState, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { navigate, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
@@ -120,12 +120,13 @@ export function NotesList({ head }: { head?: ReactNode }) {
 
   const selId = ds.sel?.id;
   const open = (id: string) => (isRo(id) ? guard.block() : ds.open({ id }, () => void navigate(src.route.edit, id)));
-  const pull = usePullReveal(page, 'notes', src.kind !== 'vault');
-  const pullBar = (
-    <PullSlot pull={pull}>
-      <PullSearch pull={pull} scope="note" onOpen={open} />
-    </PullSlot>
-  );
+  const pull = usePullReveal('notes', src.kind !== 'vault');
+  const pullRef = pull.ref;
+  // main 同时给电脑版换挂（useSwapWhenSafe 读 page）和下拉搜索（pull.ref）
+  const mainRef = useCallback((el: HTMLElement | null) => {
+    page.current = el;
+    pullRef(el);
+  }, [pullRef]);
   const del = (id: string) => {
     setMenu(null);
     ds.forget(id);
@@ -297,6 +298,14 @@ export function NotesList({ head }: { head?: ReactNode }) {
       </div>
   );
   const mist = typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null;
+  // 手机版、电脑版列表栏同一处（电脑版的分类在左栏，不画胶囊）：搜索本页、搜索框，打了字把“最近删除”、胶囊、列表藏起来
+  const listPart = (chips: ReactNode) => (
+    <PullSlot pull={pull} keyLabel={t('notes.pullKey', {})} search={<PullSearch pull={pull} scope="note" onOpen={open} />}>
+      <TrashLink />
+      {chips}
+      {body}
+    </PullSlot>
+  );
   const phone = (
     <>
       {head ?? (
@@ -305,21 +314,14 @@ export function NotesList({ head }: { head?: ReactNode }) {
           <MeLink testId="notes-settings" />
         </header>
       )}
-      {pullBar}
-      {pull.searching ? null : (
-        <>
-          <TrashLink />
-          {filterChips}
-          {body}
-        </>
-      )}
+      {listPart(filterChips)}
       {mist}
       {dock}
     </>
   );
 
   return (
-    <main ref={page} className={styles.page} data-feature={src.kind === 'vault' ? 'vault' : 'notes'} data-testid={src.kind === 'vault' ? 'vault-notes' : 'notes'} data-view={view}>
+    <main ref={mainRef} className={styles.page} data-feature={src.kind === 'vault' ? 'vault' : 'notes'} data-testid={src.kind === 'vault' ? 'vault-notes' : 'notes'} data-view={view}>
       {/* 电脑版（B6，ui/NotesDesk.tsx）：分类一栏 + 列表一栏；电脑版没换上或画出错时照手机的排法画 */}
       {Desk ? (
         <QuietBoundary name="notes-desk" fallback={phone} onFail={ds.fail}>
@@ -331,13 +333,7 @@ export function NotesList({ head }: { head?: ReactNode }) {
             list={
               <>
                 {head}
-                {pullBar}
-                {pull.searching ? null : (
-                  <>
-                    <TrashLink />
-                    {body}
-                  </>
-                )}
+                {listPart(null)}
                 {dock}
               </>
             }

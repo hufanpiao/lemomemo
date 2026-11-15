@@ -1,7 +1,9 @@
 // R-437 下拉搜索：随手记、待办、日历页滚到顶再往下拉，标题下面露出搜索框；打字就地筛本页（随手记标题 / 正文 / 分类，待办标题 / 子任务，日程标题），
 // 隐私记不出；结果最底下“用 AI 按意思找”打开现有的查找面板（带上打的字）；“取消”清空并收起；运行日志有 pull open / find / ai，不带打的字。
 // • 下拉手势：页面里派发只带 touches 坐标的 touchstart / touchmove / touchend（kit 的 usePullReveal 只读这几个），两种浏览器同一种做法；
-//   电脑滚轮在顶上继续往上滚另验一次（Chromium，WebKit 手机模拟不支持 mouse.wheel）
+//   电脑滚轮在顶上继续往上滚另验一次，电脑版随手记详情抽屉里滚轮不开（R-437 评审第 1 条；Chromium，WebKit 手机模拟不支持 mouse.wheel）
+// • 键盘：Tab 到“搜索本页”才看得见，回车打开、输入框自动聚焦，Esc 收起、焦点回到“搜索本页”（评审第 3 条）
+// • 打了字本页列表只藏不卸（评审第 8 条）：断言列表看不见，不断言不在
 // • 设了 LEMO_SHOT_DIR 时在 Chromium 上截三页“露出 + 有结果”的图（645×1398、DPR 2 → 1290 宽，浅色、深色）
 // 跑在快读组（playwright.fastread.config.ts）：数据经 /sb 同步下来，要会话令牌
 import type { Page } from '@playwright/test';
@@ -105,8 +107,9 @@ test.describe('R-437 下拉搜索：手机', () => {
     await expect(page.getByTestId(`pull-row-${NT}`)).toBeVisible();
     await expect(page.getByTestId('pull-results')).not.toContainText('拉面秘方');
     await expect(page.getByTestId('pull-count')).toHaveText('找到 1 条');
-    // 本页列表让位
-    await expect(page.getByTestId('notes-mason')).toHaveCount(0);
+    // 本页列表藏起来（不卸）
+    await expect(page.getByTestId('notes-mason')).toBeHidden();
+    await expect(page.getByTestId('notes-mason')).toHaveCount(1);
     // 分类名、正文也能筛
     await page.getByTestId('pull-input').fill('吃喝');
     await expect(page.getByTestId(`pull-row-${NT}`)).toBeVisible();
@@ -139,7 +142,7 @@ test.describe('R-437 下拉搜索：手机', () => {
     await expect(page.getByTestId('pull-input')).toHaveAttribute('placeholder', '搜索待办');
     await expect(page.getByTestId(`pull-row-${TD}`)).toContainText('子任务：带护照');
     await expect(page.getByTestId(`pull-row-${TD2}`)).toHaveCount(0);
-    await expect(page.getByTestId('todos-filter')).toHaveCount(0);
+    await expect(page.getByTestId('todos-filter')).toBeHidden();
     await page.getByTestId(`pull-row-${TD}`).click();
     await expect(page).toHaveURL(new RegExp(`#/todo/${TD}`));
   });
@@ -151,9 +154,36 @@ test.describe('R-437 下拉搜索：手机', () => {
     await expect(page.getByTestId('pull-input')).toHaveAttribute('placeholder', '搜索日程');
     await expect(page.getByTestId(`pull-row-${EV}`)).toBeVisible();
     await expect(page.getByTestId(`pull-row-${id(9)}`)).toHaveCount(0);
-    await expect(page.getByTestId('cal-pager')).toHaveCount(0);
+    await expect(page.getByTestId('cal-pager')).toBeHidden();
     await page.getByTestId(`pull-row-${EV}`).click();
     await expect(page).toHaveURL(new RegExp(`#/event/${EV}`));
+  });
+});
+
+test.describe('R-437 下拉搜索：键盘', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('Tab 到“搜索本页”才看得见；回车打开、输入框聚焦；Esc 收起、焦点回到它', async ({ page, baseURL }) => {
+    await fakeServer(page, baseURL);
+    await openPage(page, 'todos', 'todos', `todos-row-${TD}`);
+    const key = page.getByTestId('pull-key');
+    // 平时视觉隐藏（读屏照样读得到）
+    expect((await key.boundingBox())?.width ?? 0).toBeLessThanOrEqual(1);
+    await expect(key).toHaveAccessibleName('搜索本页');
+    await expect(async () => {
+      await page.keyboard.press('Tab');
+      await expect(key).toBeFocused({ timeout: 200 });
+    }).toPass({ timeout: 15_000 });
+    expect((await key.boundingBox())?.width ?? 0).toBeGreaterThan(40);
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('pull-input')).toBeFocused();
+    await page.keyboard.type('护照');
+    await expect(page.getByTestId(`pull-row-${TD}`)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('pull-search')).toHaveCount(0);
+    await expect(page.getByTestId(`todos-row-${TD}`)).toBeVisible();
+    await expect(key).toBeFocused();
+    await expect.poll(() => runLog(page), { timeout: 10_000 }).toMatch(/pull open todos via=key[\s\S]*pull close todos/);
   });
 });
 
@@ -172,6 +202,36 @@ test.describe('R-437 下拉搜索：电脑滚轮', () => {
       await expect(page.getByTestId('pull-search')).toBeVisible({ timeout: 1000 });
     }).toPass({ timeout: 10_000 });
     await expect.poll(() => runLog(page), { timeout: 10_000 }).toMatch(/pull open todos via=wheel/);
+  });
+
+  test('电脑版随手记：详情抽屉里往上滚不开搜索；回到列表上往上滚才开', async ({ page, baseURL, browserName }) => {
+    test.skip(browserName !== 'chromium', 'WebKit 这一组是 iPhone 模拟，不支持 mouse.wheel，也没有电脑版');
+    await fakeServer(page, baseURL);
+    await openPage(page, 'notes', 'notes', `notes-card-${NT}`);
+    await expect(page.getByTestId('desk-panel-list')).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId(`notes-card-${NT}`).locator('button').first().click();
+    const drawer = page.getByTestId('note-drawer');
+    await expect(drawer).toBeVisible();
+    const db = await drawer.boundingBox();
+    await page.mouse.move((db?.x ?? 900) + (db?.width ?? 300) / 2, (db?.y ?? 100) + (db?.height ?? 600) / 2);
+    // 每一串之间隔开 WHEEL_GAP_MS 以上（不在抽屉里的话，这样早就开了）
+    for (let i = 0; i < 4; i++) {
+      await page.mouse.wheel(0, -100);
+      await page.mouse.wheel(0, -100);
+      await page.waitForTimeout(400);
+    }
+    await expect(page.getByTestId('pull-search')).toHaveCount(0);
+    await expect(drawer).toBeVisible();
+    // 对照：同样的滚法在列表上会开
+    const lb = await page.getByTestId(`notes-card-${NT}`).boundingBox();
+    await page.mouse.move((lb?.x ?? 300) + 20, (lb?.y ?? 200) + 10);
+    await page.waitForTimeout(400);
+    await expect(async () => {
+      await page.mouse.wheel(0, -100);
+      await page.mouse.wheel(0, -100);
+      await expect(page.getByTestId('pull-search')).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 10_000 });
+    expect(await runLog(page)).toMatch(/pull open notes via=wheel/);
   });
 });
 

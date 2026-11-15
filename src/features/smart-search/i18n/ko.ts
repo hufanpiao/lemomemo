@@ -7,6 +7,7 @@ export const ko = {
   'find.ph': '무엇을 찾을까요', // REVIEW(ko)
   'find.close': '닫기', // REVIEW(ko)
   'find.clear': '지우기', // REVIEW(ko)
+  'find.todo.sub': '하위 할 일: {t}', // REVIEW(ko)
   'find.k.all': '전체 {n}', // REVIEW(ko)
   'find.k.event': '일정', // REVIEW(ko)
   'find.k.todo': '할 일', // REVIEW(ko)
@@ -134,6 +135,5 @@ export const ko = {
   'pull.n': '{n}개 찾았어요', // REVIEW(ko)
   'pull.none': '글자로는 못 찾았어요', // REVIEW(ko)
   'pull.more': '앞의 {n}개만 보여요. 더 정확한 말로 찾아 보세요', // REVIEW(ko)
-  'pull.sub': '하위 할 일: {t}', // REVIEW(ko)
   'pull.ai': 'AI로 뜻으로 찾기', // REVIEW(ko)
 } satisfies Record<keyof typeof zh, string>;

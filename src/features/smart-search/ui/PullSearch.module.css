@@ -1,4 +1,4 @@
-/* 下拉搜索（R-437）：随手记、待办、日历页标题下面露出的一条搜索框和结果。只用令牌（A11）；结果行用查找面板的 .row / .title / .meta（FindPanel.module.css），这里只管搜索框和页脚。
+/* 下拉搜索（R-437）：随手记、待办、日历页标题下面露出的一条搜索框和结果。只用令牌（A11）；搜索框、结果行用查找面板的 .field / .input / .row（FindPanel.module.css），这里只写不一样的。
    动效：露出时从标题底下往下滑出一点、同时淡入（transform + opacity，--dur-ui、--ease-out，@starting-style 只在挂上时播一次）；
    收起不播（“取消”是用户点的，马上回到本页列表）。减少动态效果（data-rm="1"，platform/look.ts 按设置开关或系统 reduce 写的，
    src 下不另写 prefers-reduced-* 媒体查询）：只淡入、不位移 */
@@ -30,19 +30,6 @@
   }
 }
 
-.field {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  min-height: 40px;
-  padding: 0 4px 0 12px;
-  border: 1px solid var(--inp-line);
-  border-radius: var(--r-inp);
-  background: var(--inp-bg);
-}
-
 /* 放大镜：细线圆加一道柄，用文字色画（不新增颜色） */
 .glass {
   position: relative;
@@ -65,26 +52,9 @@
   transform: rotate(45deg);
 }
 
-.input {
-  flex: 1;
-  min-width: 0;
-  min-height: 38px;
-  border: 0;
-  background: none;
-  color: var(--text);
-
-  /* 16px：iOS 聚焦不放大 */
-  font-size: var(--fs-16);
-  outline: none;
+/* 输入框、外框用查找面板的 .field / .input（FindPanel.module.css）；这里只去掉浏览器给 type=search 自带的清除叉（有自己的“×”） */
+.bar input::-webkit-search-cancel-button {
   appearance: none;
-}
-
-.input::-webkit-search-cancel-button {
-  appearance: none;
-}
-
-.input::placeholder {
-  color: var(--text-2);
 }
 
 .clear {
@@ -107,6 +77,17 @@
   background: none;
   color: var(--text);
   font-size: var(--fs-15);
+}
+
+/* 读屏播报（停一下才写）：视觉隐藏 */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .count {
