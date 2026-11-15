@@ -538,6 +538,40 @@ test('负责人“读写慢”：断网时改了界面立刻就是新的，网�
   expect(log).not.toContain('断网时改的');
 });
 
+/** 整页 HTML（含属性、aria、隐藏节点）里有没有这几段明文：上锁后下一帧就读，不等重试（L8） */
+async function plainLeft(page: Page, texts: readonly string[]): Promise<string[]> {
+  const html = await page.evaluate(async () => {
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    return document.documentElement.outerHTML;
+  });
+  return texts.filter((t) => html.includes(t));
+}
+
+test('L8：上锁后下一帧 DOM 里就没有标题、正文（列表上点“上锁”、编辑器开着时自动上锁两种）', async ({ page, baseURL, browserName }) => {
+  await page.clock.install();
+  const fv = await fakeServer(page, baseURL);
+  await oneNote(page, fv, browserName, '血压 120/80 明文正文');
+  await write(page, 'note-edit-title', '体检报告明文标题');
+  await expect.poll(() => saved(fv).at(-1)?.body['title']).toBe('体检报告明文标题');
+  const secrets = ['体检报告明文标题', '血压 120/80 明文正文'];
+
+  // ① 编辑器开着：离开（blur）满 61 秒，回来（focus）那一刻上锁
+  expect(await plainLeft(page, secrets), '上锁前编辑器里有明文（对照）').toEqual(secrets);
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.clock.fastForward(61_000);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  expect(await plainLeft(page, secrets), '编辑器开着时自动上锁，下一帧不留明文').toEqual([]);
+
+  // ② 列表上点“上锁”
+  await page.goto('/app/#/vault');
+  await page.getByTestId('vault-unlock-pin').click();
+  await typePin(page, 'vault-unlock-pad', PIN);
+  const list = page.getByTestId('vault-notes');
+  await expect(list).toContainText('体检报告明文标题', { timeout: 15_000 });
+  await page.getByTestId('vault-lock-now').click();
+  expect(await plainLeft(page, secrets), '点“上锁”下一帧不留明文').toEqual([]);
+});
+
 test('负责人“离开隐私记页 1 分钟不自动上锁”：换到随手记不到 1 分钟还解锁着，61 秒自己锁上', async ({ page, baseURL, browserName }) => {
   await page.clock.install();
   await fakeServer(page, baseURL);
