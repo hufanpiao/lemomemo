@@ -29,7 +29,7 @@ describe('顶部安全区底色条', () => {
     expect(b).toMatch(/top: 0;/);
     expect(b).toMatch(/height: calc\(var\(--inset-top\) \+ var\(--top-fade\)\);/); // 11-06 顶部渐变模糊带：安全区加一段过渡
     expect(block(base, ':root')).toMatch(/--inset-top: env\(safe-area-inset-top\);\s*\/\*[^*]*\*\/\s*--safe-top: calc\(var\(--inset-top\) \+ var\(--top-fade\)\);/);
-    expect(b).toMatch(/background: var\(--safe-top-bg, var\(--bg\)\);/);
+    expect(b).toMatch(/background: var\(--safe-top-bg, var\(--scr-bg, var\(--bg\)\)\);/); // R-439：默认跟页面底色（磨砂玻璃是渐变 --scr-bg）
     expect(b).toMatch(/background-size: 100vw 100vh;/);
     expect(b).toMatch(/pointer-events: none;/);
   });
@@ -74,9 +74,9 @@ describe('顶部安全区底色条', () => {
     expect(block(css, ':global(:root):has(.page)')).toMatch(/--safe-top-bg: var\(--login-bg, var\(--bg\)\);/);
   });
 
-  it('告知页背景就是纯 --bg：底色条用默认值，不另设 --safe-top-bg', () => {
+  it('告知页不自己画底色（R-439：露出 body::after 的页面底色），底色条用默认值，不另设 --safe-top-bg', () => {
     const css = readFileSync('src/features/onboarding/ui/ConsentPage.module.css', 'utf8');
-    expect(block(css, '.page')).toMatch(/background: var\(--bg\);/);
+    expect(block(css, '.page')).not.toMatch(/background/);
     expect(css).not.toMatch(/--safe-top-bg/);
   });
 

@@ -27,6 +27,8 @@
 //   提交 81b4a2bf：GlassBar.module.css、GlassBarFx.module.css、base.css 删掉 prefers-reduced-transparency / prefers-reduced-motion 媒体块（同样的规则原来就有 data-rt / data-rm 一份，系统设置由 look.ts 并进这两个属性），
 //   base.css 去掉 data-theme="system" 的 color-scheme（data-theme 只会是 light / dark，返工第 7 条）；glass-ghost.ts 的 reducedTransparency 只看 data-rt、不再监听媒体查询。
 //   外观不变：视觉锁定 tabbar-lock、g-plus-hold 0 像素差。
+// • 11-16 R-439（负责人：“磨砂玻璃主题下底色是有个很淡的渐变背景的”），提交 8a4ae431：base.css 加 body::after 画页面底色 var(--scr-bg)，顶部底色条默认改跟 --scr-bg；
+//   底栏本身的规则没动，底栏背后的底色变成渐变，视觉锁定 tabbar-lock 的 glass 两张、简洁浅色（R-438 第 4 组 #666970）一张按 CI 同款镜像重新生成（提交 49f23a02）。
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -35,13 +37,13 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf 按上面的更新记录换过 */
+/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）按上面的更新记录换过 */
 const PINNED: Record<string, string> = {
   'src/kit/components/GlassBar/GlassBar.module.css': '4fe2fdff0fb033fc77f7795945baf1b6052e9607135fe056fcb38fe6bc9af49f',
   'src/kit/components/GlassBar/GlassBarFx.tsx': '2cd1d04f069b8e10829389ca87e8b647678ba4c0057c1fb42dc777e342d75b0c',
   'src/kit/components/GlassBar/GlassBarFx.module.css': '3a7f59ede916fe65267888adbf53c60f622ba0e56d5c2b079d9665ad01b8dca3',
   'src/motion/glass-ghost.ts': '6211d651c7439b5aa35d8f755f33327b71213e68aa6c26e404b503ea25da701a',
-  'src/styles/base.css': 'fe356d597ddf6ed41a7d34c3929c8c72344658f1a3d94adf0cccc34465a2acc0',
+  'src/styles/base.css': 'ee39be6f148769cbab2e7a20ae36f9d2b800931d9c89fea573d0f504ddd6201d',
 };
 
 const sha256 = (rel: string): string => createHash('sha256').update(readFileSync(join(ROOT, rel))).digest('hex');

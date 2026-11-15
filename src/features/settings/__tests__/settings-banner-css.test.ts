@@ -21,7 +21,7 @@ describe('设置页 + 版本横幅（BANNER-safe）', () => {
   });
 
   it('不撑以后底下露出的 body 和页面同一个背景、同样撑满一屏', () => {
-    expect(block(css, '.page')).toMatch(/background: var\(--bg\);/);
+    expect(block(css, '.page')).not.toMatch(/background/); // R-439：页面不自己画底色，和 body 一样露出 body::after 的页面底色
     const body = block(base, 'body');
     expect(body).toMatch(/background: var\(--bg\);/);
     expect(body).toMatch(/min-height: 100dvh;/);
