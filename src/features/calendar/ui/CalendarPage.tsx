@@ -139,6 +139,16 @@ export default function CalendarPage() {
   const button = (n: -1 | 1): void => {
     if (turn(n)) swipe.slideIn(n);
   };
+  /** 点月格某天：选中它；点的是上个月、下个月的灰色日期，就翻到那个月再选中（负责人 11-15“点下一个月的日期现在是没反应”）。
+   *  展开时和 ‹ › 一样横滑进来；收起成一周时直接换到那个月（这时翻页按钮是按周走的） */
+  const choose = (d: DateStr): void => {
+    setPicked(d);
+    const first = model.cells?.find((c) => c.inMonth)?.date;
+    if (first === undefined || model.cells?.some((c) => c.inMonth && c.date === d)) return;
+    rlog(`cal pick out ${d < first ? 'prev' : 'next'}`);
+    if (fold.byWeek) cal.pick(monthOf(d));
+    else button(d < first ? -1 : 1);
+  };
   /** “今天”、T：选回今天；不在本月 / 本周时换过去（直接切换） */
   const goToday = (): void => {
     setPicked(null);
@@ -215,7 +225,7 @@ export default function CalendarPage() {
                 t={t}
                 label={t('cal.grid', { y: model.header.y, m: model.header.m })}
                 selected={sel}
-                onSelect={setPicked}
+                onSelect={choose}
                 lunarSay={model.lunar?.fullText}
                 fold={{ row: fold.row, p, shiftY: fold.geo.top, collapsed: fold.byWeek }}
                 gridRef={fold.gridRef}

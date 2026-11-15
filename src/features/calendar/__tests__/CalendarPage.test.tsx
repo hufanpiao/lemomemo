@@ -182,6 +182,21 @@ describe('月视图', () => {
     expect(screen.getByTestId('cal-today').getAttribute('aria-disabled')).toBeNull();
   });
 
+  it('点上个月、下个月的灰色日期：翻到那个月并选中那一天（负责人 11-15）', async () => {
+    open('#/cal/month/2026-11');
+    await act(async () => {
+      fireEvent.click(cell('2026-12-02') as HTMLElement);
+    });
+    await waitFor(() => expect(window.location.hash).toBe('#/cal/month/2026-12'));
+    await waitFor(() => expect(screen.getByTestId('cal-day-list').getAttribute('data-date')).toBe('2026-12-02'));
+    expect(cell('2026-12-02')?.getAttribute('aria-pressed')).toBe('true');
+    await act(async () => {
+      fireEvent.click(cell('2026-11-30') as HTMLElement);
+    });
+    await waitFor(() => expect(window.location.hash).toBe('#/cal/month/2026-11'));
+    await waitFor(() => expect(screen.getByTestId('cal-day-list').getAttribute('data-date')).toBe('2026-11-30'));
+  });
+
   it('点一格：选中那天（aria-pressed），下面清单列出当天全部日程和待办；默认选中今天；点清单一行打开编辑页（设计审查 M2）', async () => {
     data.events = [ev('1', { title: '客户会', date: '2026-11-12', time: '14:00' }), ev('2', { title: '团建', date: '2026-11-12', time: null, duration_min: null })];
     data.todos = [{ id: 't1', title: '交报告', short: null, project: '', due: '2026-11-12', due_time: '18:00', done: false, created_at: 1, deleted_at: null, undone: false }];
