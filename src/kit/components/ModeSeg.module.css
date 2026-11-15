@@ -43,32 +43,42 @@
   opacity: 0.6;
 }
 
-/* look="slide"（R-436 滑块分段）：整行宽、各段平分；灰色底槽 --seg-track，不描边；看得见 36 = 2 + 32 + 2 */
+/* look="slide"（R-436 滑块分段）：逐项照 11-15 精致化确认稿第 4 条的 .seg 写——整行宽、各段平分；底槽 --seg-track、圆角 12、内边 3、不描边；看得见 36 = 3 + 30 + 3（点击区仍由 .segBtn::after 扩到 44） */
 .slide {
   display: flex;
+  height: 36px;
+  padding: 3px;
   border: 0;
+  border-radius: 12px;
   background: var(--seg-track);
 }
 
+/* 各段圆角 9（= 底槽 12 − 内边 3，内外圆角同心） */
 .slide .segBtn {
+  display: flex;
   flex: 1;
-  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  border-radius: 9px;
+
+  /* 按钮改成 flex 后字可以折行：阳历 / 阴历那一行窄，“阳历”被挤成两行，所以不许折 */
+  white-space: nowrap;
 }
 
-/* 选中的那块是比底槽亮一档的滑块（--seg-thumb、细边、--shadow-1），字用正文色；文字前一个柠檬黄小点（只是装饰，不靠颜色传意思：选中还有滑块和粗字） */
+/* 选中的那块是比底槽亮一档的滑块（--seg-thumb）：一层 1px 投影加一圈极淡内描边（--seg-thumb-shadow），字用正文色、600；文字前一个 6px 柠檬黄小点（只是装饰，不靠颜色传意思：选中还有滑块和粗字） */
 .slide .segBtn[aria-pressed='true'] {
   background: var(--seg-thumb);
-  box-shadow: 0 0 0 0.5px var(--line), var(--shadow-1);
+  box-shadow: var(--seg-thumb-shadow);
   color: var(--text);
 }
 
 .slide .segBtn[aria-pressed='true']::before {
   content: '';
-  display: inline-block;
+  flex: none;
   width: 6px;
   height: 6px;
   margin-right: 6px;
   border-radius: 50%;
   background: var(--accent);
-  vertical-align: 2px;
 }
