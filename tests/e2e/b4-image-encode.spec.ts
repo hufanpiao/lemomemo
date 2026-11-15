@@ -15,6 +15,7 @@ import { buildSync } from 'esbuild';
 import { msAt } from '../../shared/core/date.ts';
 import { exifApp1, WEBP_IMAGE_CHUNKS } from '../../src/features/notes/__tests__/exif-sample.ts';
 import { expect, test } from './csp-fixture.ts';
+import { jpeg } from './page-helpers.ts';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const BUNDLE = buildSync({
@@ -46,29 +47,16 @@ test.beforeEach(async ({ page }) => {
 
 test('带 GPS 的 JPEG → webp：没有 EXIF、尺寸和大小在上限内，拍摄时间留着（TC-B4-02）', async ({ page }) => {
   const app1 = [...exifApp1({ date: '2026:10:21 14:05:09', gps: true })];
+  const pic = [...(await jpeg(page, { w: 3000, h: 2000, gradient: ['#f2df4a', '#1f77a6'], tiles: { n: 400, w: 60, h: 40 } }))];
   const r = await page.evaluate(
-    async ({ app1, tz }) => {
+    async ({ app1, pic, tz }) => {
       type Enc = {
         encodeImage(f: File, tz: string): Promise<{ ok: true; full: Blob; thumb: Blob; width: number; height: number; takenAt: number | null } | { ok: false; code: string }>;
         hasAscii(b: Uint8Array, s: string): boolean;
         riffChunks(b: Uint8Array): string[];
       };
       const M = (window as unknown as { __enc: Enc }).__enc;
-      const c = document.createElement('canvas');
-      c.width = 3000;
-      c.height = 2000;
-      const ctx = c.getContext('2d');
-      if (!ctx) throw new Error('no_ctx');
-      const g = ctx.createLinearGradient(0, 0, 3000, 2000);
-      g.addColorStop(0, '#f2df4a');
-      g.addColorStop(1, '#1f77a6');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, 3000, 2000);
-      for (let i = 0; i < 400; i++) {
-        ctx.fillStyle = `hsl(${(i * 37) % 360} 70% 50%)`;
-        ctx.fillRect((i * 97) % 3000, (i * 53) % 2000, 60, 40);
-      }
-      const jpeg = new Uint8Array(await (await new Promise<Blob>((res) => c.toBlob((b) => res(b as Blob), 'image/jpeg', 0.9))).arrayBuffer());
+      const jpeg = Uint8Array.from(pic);
       // XMP（APP1 + Adobe 命名空间）和 COM（FFFE）：长度两字节含自身
       const seg = (marker: number, body: Uint8Array) => {
         const n = body.length + 2;
@@ -113,7 +101,7 @@ test('带 GPS 的 JPEG → webp：没有 EXIF、尺寸和大小在上限内，�
         takenAt: out.takenAt,
       };
     },
-    { app1, tz: TZ },
+    { app1, pic, tz: TZ },
   );
   expect(r).toMatchObject({ ok: true, inputHasExif: true, fullType: 'image/webp', thumbType: 'image/webp', fullHead: 'RIFFWEBP', thumbHead: 'RIFFWEBP', width: 2048, height: 1365 });
   expect(r.fullSize).toBeLessThanOrEqual(2 * 1024 * 1024);

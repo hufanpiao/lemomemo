@@ -10,27 +10,11 @@
 //   分类没法在界面上建（都是 AI 分类时提出来的），先让 App 开好本机库，再往 categories、notes 仓写服务器形状的行、刷新
 // 截图：设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截（WebKit 截图会往页面插 <style>、被 CSP 记成违规，见 r416-notes-pend.spec.ts 文件头）；断言两种浏览器都跑
 import type { Page } from '@playwright/test';
-import { shot } from './page-helpers.ts';
+import { jpeg, shot } from './page-helpers.ts';
 import { cached, idbPut } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use({ trace: 'off', loggedIn: true, viewport: { width: 390, height: 844 }, hasTouch: true, timezoneId: 'Asia/Seoul' });
-
-/** 页面里用 canvas 画一张小 JPEG（选图用，内容随便） */
-async function jpeg(page: Page): Promise<Buffer> {
-  const bytes = await page.evaluate(async () => {
-    const c = document.createElement('canvas');
-    c.width = 320;
-    c.height = 240;
-    const ctx = c.getContext('2d');
-    if (!ctx) throw new Error('no_ctx');
-    ctx.fillStyle = 'hsl(40 70% 55%)';
-    ctx.fillRect(0, 0, 320, 240);
-    const b = await new Promise<Blob>((res) => c.toBlob((x) => res(x as Blob), 'image/jpeg', 0.9));
-    return [...new Uint8Array(await b.arrayBuffer())];
-  });
-  return Buffer.from(Uint8Array.from(bytes));
-}
 
 async function addNote(page: Page, text: string): Promise<void> {
   const input = page.getByTestId('notes-input');

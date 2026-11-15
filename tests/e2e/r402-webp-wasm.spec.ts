@@ -13,6 +13,7 @@ import { writeFileSync } from 'node:fs';
 import type { Page, Request } from '@playwright/test';
 import { exifApp1, hasAscii, isWebpFile, riffChunks, WEBP_IMAGE_CHUNKS, withExif } from '../../src/features/notes/__tests__/exif-sample.ts';
 import { fakeRest } from './fake-rest.ts';
+import { jpeg } from './page-helpers.ts';
 import { expect, FAKE_USER_ID, seedFakeSession, test } from './session-fixture.ts';
 
 test.skip(({ browserName }) => browserName !== 'chromium', '改的是 Chromium 的 canvas 导出（WebKit 原生行为只能真机看）；SW、断网在 chromium 跑一次');
@@ -32,22 +33,10 @@ const WASM_OK = /notes img encode ok .* path=wasm native=image\/png ms=\d+ loadM
 
 /** 页面里用 canvas 画一张 1600 × 1200 的真 JPEG，回到 Node 侧插上带拍摄时间和 GPS 的 EXIF */
 async function gpsJpeg(page: Page): Promise<Buffer> {
-  const bytes = await page.evaluate(async () => {
-    const c = document.createElement('canvas');
-    c.width = 1600;
-    c.height = 1200;
-    const ctx = c.getContext('2d');
-    if (!ctx) throw new Error('no_ctx');
-    for (let i = 0; i < 300; i++) {
-      ctx.fillStyle = `hsl(${(i * 37) % 360} 70% 50%)`;
-      ctx.fillRect((i * 97) % 1600, (i * 53) % 1200, 120, 80);
-    }
-    const b = await new Promise<Blob>((res) => c.toBlob((x) => res(x as Blob), 'image/jpeg', 0.9));
-    return [...new Uint8Array(await b.arrayBuffer())];
-  });
-  const jpeg = withExif(Uint8Array.from(bytes), exifApp1({ date: '2026:10:21 14:05:09', gps: true }));
-  expect(hasAscii(jpeg, 'Exif')).toBe(true);
-  return Buffer.from(jpeg);
+  const bytes = await jpeg(page, { w: 1600, h: 1200, tiles: { n: 300, w: 120, h: 80 } });
+  const out = withExif(Uint8Array.from(bytes), exifApp1({ date: '2026:10:21 14:05:09', gps: true }));
+  expect(hasAscii(out, 'Exif')).toBe(true);
+  return Buffer.from(out);
 }
 
 /** 假会话 + 浏览器这一层的假服务器（见文件头）；返回记下的上传请求 */

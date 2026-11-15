@@ -47,26 +47,57 @@ export async function stableBox(loc: Locator): Promise<{ x: number; y: number; w
   return box;
 }
 
+/** jpeg() 的选项：不给就是 320×240、hsl(40 70% 55%) 一色、质量 0.9 */
+export interface JpegOpts {
+  hue?: number;
+  w?: number;
+  h?: number;
+  /** 底色 hsl 的饱和度、亮度（默认 '70% 55%'） */
+  tone?: string;
+  /** 不给 hue 底色、改成左上到右下的渐变 */
+  gradient?: readonly [string, string];
+  /** 中间一块白方块（看得出是哪张图） */
+  box?: boolean;
+  /** 撒 n 块彩色小方块（压图用例要有细节、不是一色平铺） */
+  tiles?: { n: number; w: number; h: number };
+  quality?: number;
+}
+
+/** 浏览器里画一张 jpeg（插图、压图用例的素材：真的能被压图那条路解开）；e2e 只这一份 */
+export async function jpeg(page: Page, o: JpegOpts = {}): Promise<Buffer> {
+  const opts = { hue: 40, w: 320, h: 240, tone: '70% 55%', gradient: null, box: false, tiles: null, quality: 0.9, ...o };
+  const bytes = await page.evaluate(async (p) => {
+    const c = document.createElement('canvas');
+    c.width = p.w;
+    c.height = p.h;
+    const ctx = c.getContext('2d');
+    if (!ctx) throw new Error('no_ctx');
+    if (p.gradient) {
+      const g = ctx.createLinearGradient(0, 0, p.w, p.h);
+      g.addColorStop(0, p.gradient[0]);
+      g.addColorStop(1, p.gradient[1]);
+      ctx.fillStyle = g;
+    } else ctx.fillStyle = `hsl(${p.hue} ${p.tone})`;
+    ctx.fillRect(0, 0, p.w, p.h);
+    if (p.box) {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(100, 70, 120, 100);
+    }
+    for (let i = 0; i < (p.tiles?.n ?? 0); i++) {
+      ctx.fillStyle = `hsl(${(i * 37) % 360} 70% 50%)`;
+      ctx.fillRect((i * 97) % p.w, (i * 53) % p.h, p.tiles?.w ?? 0, p.tiles?.h ?? 0);
+    }
+    const b = await new Promise<Blob>((res) => c.toBlob((x) => res(x as Blob), 'image/jpeg', p.quality));
+    return [...new Uint8Array(await b.arrayBuffer())];
+  }, opts);
+  return Buffer.from(Uint8Array.from(bytes));
+}
+
 /**
  * 触摸左滑（chromium、webkit 都能跑）：在页面里对起点最上层的元素派发 pointerType=touch 的按下、10 次移动、松手。
  * 起点最上层是谁就派给谁，和真手指一样：挡在上面的层（pointer-events:none 的进场层会让点按穿到下面）照样会让左滑收不到。
  * pointerId 用 1（两种内核里一直“活着”的那个指针），左滑定方向后 setPointerCapture 才不报错
  */
-/** 浏览器里画一张 jpeg（插图用例的素材：真的能被压图那条路解开） */
-export async function jpeg(page: Page, hue = 40, w = 320, h = 240): Promise<Buffer> {
-  const bytes = await page.evaluate(async ([hh, ww, hgt]) => {
-    const c = document.createElement('canvas');
-    c.width = ww;
-    c.height = hgt;
-    const ctx = c.getContext('2d');
-    if (!ctx) throw new Error('no_ctx');
-    ctx.fillStyle = `hsl(${hh} 70% 55%)`;
-    ctx.fillRect(0, 0, ww, hgt);
-    const b = await new Promise<Blob>((res) => c.toBlob((x) => res(x as Blob), 'image/jpeg', 0.9));
-    return [...new Uint8Array(await b.arrayBuffer())];
-  }, [hue, w, h] as const);
-  return Buffer.from(Uint8Array.from(bytes));
-}
 
 export async function touchSwipe(page: Page, from: { x: number; y: number }, dx: number): Promise<void> {
   await page.evaluate(

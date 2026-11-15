@@ -9,7 +9,7 @@ import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
-import { shot } from './page-helpers.ts';
+import { jpeg, shot } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
 test.setTimeout(90_000);
@@ -19,21 +19,6 @@ const USER = '0e2e0000-0000-4000-8000-000000000001';
 const NOTE = '0e2e0000-0000-4000-8000-0000000b4c01';
 const img = (n: number) => `019a0000-0000-7000-8000-0000000b4c1${n}`;
 const [PEND, FAIL, OFF, DONE] = [img(1), img(2), img(3), img(4)];
-
-/** 一张 JPEG（页面里画，内容随便；默认 320×200 横图） */
-async function jpeg(page: Page, hue: number, w = 320, h = 200): Promise<Buffer> {
-  const b64 = await page.evaluate(([hue, w, h]) => {
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    const g = c.getContext('2d');
-    if (!g) return '';
-    g.fillStyle = `hsl(${hue} 45% 70%)`;
-    g.fillRect(0, 0, w, h);
-    return c.toDataURL('image/jpeg', 0.8).split(',')[1] ?? '';
-  }, [hue, w, h] as const);
-  return Buffer.from(b64, 'base64');
-}
 
 type Fake = { retries: unknown[] };
 
@@ -46,7 +31,7 @@ async function fakeServer(page: Page, baseURL: string | undefined, ai: boolean):
   const c = { user_id: USER, created_at: now, updated_at: now, deleted_at: null, undone: false, rev: 1, synced_at: at };
   const image = async (id: string, hue: number, o: Record<string, unknown>, size: [number, number] = [320, 200]) => {
     const path = `${USER}/${NOTE}/${id}.webp`;
-    bytes.set(`/files/v1/o/images/${path}`, await jpeg(page, hue, ...size));
+    bytes.set(`/files/v1/o/images/${path}`, await jpeg(page, { hue, w: size[0], h: size[1], tone: '45% 70%', quality: 0.8 }));
     return { id, ...c, note_id: NOTE, bucket: 'images', path, bytes: 1000, width: 320, height: 200, mime: 'image/webp', taken_at: null, has_thumb: false,
       ai_status: 'pending', skip_reason: null, ai_desc: null, ai_tags: [], ai_tries: 0, ...o };
   };

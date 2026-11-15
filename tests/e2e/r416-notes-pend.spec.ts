@@ -7,6 +7,7 @@
 // 键盘弹起时小图跟着输入行贴在键盘上（iOS 合成）这里测不了，只能 iPhone 看
 import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
+import { jpeg } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 // 这份不录 trace（失败照样有截图）：③ 的假 HEIC 解不出来，Playwright 录 trace 截 DOM 快照时会去 fetch 这张坏图的 blob: 地址，
@@ -20,24 +21,6 @@ const SIZES = [
   { name: '手机', viewport: { width: 390, height: 844 }, hasTouch: true },
   { name: '电脑', viewport: { width: 1280, height: 800 }, hasTouch: false },
 ] as const;
-
-/** 页面里用 canvas 画一张小 JPEG（选图用，内容随便） */
-async function jpeg(page: Page, hue: number): Promise<Buffer> {
-  const bytes = await page.evaluate(async (h) => {
-    const c = document.createElement('canvas');
-    c.width = 320;
-    c.height = 240;
-    const ctx = c.getContext('2d');
-    if (!ctx) throw new Error('no_ctx');
-    ctx.fillStyle = `hsl(${h} 70% 55%)`;
-    ctx.fillRect(0, 0, 320, 240);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(100, 70, 120, 100);
-    const b = await new Promise<Blob>((res) => c.toBlob((x) => res(x as Blob), 'image/jpeg', 0.9));
-    return [...new Uint8Array(await b.arrayBuffer())];
-  }, hue);
-  return Buffer.from(Uint8Array.from(bytes));
-}
 
 const box = async (page: Page, id: string) => {
   const b = await page.getByTestId(id).boundingBox();
@@ -76,8 +59,8 @@ for (const size of SIZES) {
       if (!size.hasTouch) await expect(page.getByTestId('desk')).toBeVisible();
       const cards = await page.locator('[data-testid^="notes-card-"]').count();
       const pickInput = page.getByTestId('notes-img-input');
-      await pickInput.setInputFiles({ name: 'a.jpg', mimeType: 'image/jpeg', buffer: await jpeg(page, 20) });
-      await pickInput.setInputFiles({ name: 'b.jpg', mimeType: 'image/jpeg', buffer: await jpeg(page, 200) });
+      await pickInput.setInputFiles({ name: 'a.jpg', mimeType: 'image/jpeg', buffer: await jpeg(page, { hue: 20, box: true }) });
+      await pickInput.setInputFiles({ name: 'b.jpg', mimeType: 'image/jpeg', buffer: await jpeg(page, { hue: 200, box: true }) });
       const pend = page.getByTestId('notes-pend');
       await expect(pend.locator('li')).toHaveCount(2);
       await expect(pend.locator('img').first()).toHaveJSProperty('complete', true);
