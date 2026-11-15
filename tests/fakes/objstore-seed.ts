@@ -31,12 +31,13 @@ export function seedObjects(): SeedObject[] {
     const u = SEED_USERS[owner];
     const note = id('40000000', owner, 1);
     const img = id('1e000000', owner, 1), img2 = id('1e000000', owner, 2);
-    const anniv = id('a0000000', owner, 1), avatar = id('0a000000', owner, 1);
+    const anniv = id('a0000000', owner, 1), avatar = id('0a000000', owner, 1), meAvatar = id('0b000000', owner, 1);
     const file = id('f0000000', owner, 1), vfile = id('f0000000', owner, 2);
     out.push(
       { bucket: 'images', key: `${u}/${note}/${img}.webp`, contentType: 'image/webp', body: WEBP, owner },
       { bucket: 'images', key: `${u}/${note}/${img}.t.webp`, contentType: 'image/webp', body: WEBP, owner },
       { bucket: 'images', key: `${u}/anniv/${anniv}/${avatar}.webp`, contentType: 'image/webp', body: WEBP, owner },
+      { bucket: 'images', key: `${u}/me/${meAvatar}.webp`, contentType: 'image/webp', body: WEBP, owner },   // R-384 我的头像
       { bucket: 'files', key: `${u}/${note}/${file}.pdf`, contentType: 'application/pdf', body: PDF, owner },
       { bucket: 'files', key: `${u}/${note}/${file}.t.webp`, contentType: 'image/webp', body: WEBP, owner },
       { bucket: 'vault-images', key: `${u}/${note}/${img2}.webp`, contentType: 'image/webp', body: WEBP, owner },

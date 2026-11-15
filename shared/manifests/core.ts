@@ -1,6 +1,6 @@
 // 核心清单（3.5 第 5 点）：账号、配置、限流、同步和运行的基础设施；不随某个功能删除
 import { defineManifest, type ManifestTableInput } from '../schema/manifest.ts';
-import { BY_USER, SOFT_DELETE_COLS } from './_common.ts';
+import { BY_USER, SOFT_DELETE_COLS, UUID_RE } from './_common.ts';
 
 const priv = { schema: 'private', sync: false, realtime: false, localCache: 'none', clientWritable: [], softDelete: false } satisfies Partial<ManifestTableInput>;
 
@@ -9,7 +9,8 @@ export const core = defineManifest({
   owner: 'core',
   tables: [
     { name: 'profiles', schema: 'public', sync: false, realtime: false, localCache: 'none',   // 存 meta，不走增量（P-22）
-      clientWritable: ['display_name', 'ui_locale', 'tz_mode'], updateOnly: ['display_name', 'ui_locale', 'tz_mode'],
+      clientWritable: ['display_name', 'ui_locale', 'tz_mode', 'avatar_id', 'avatar_bytes'],   // R-384：我的头像两列（迁移 20261115080000）
+      updateOnly: ['display_name', 'ui_locale', 'tz_mode', 'avatar_id', 'avatar_bytes'],
       softDelete: false, backup: 'json', export: 'json', onAccountDelete: 'cascade', userLookup: BY_USER, rebuildable: true },
     { name: 'settings', schema: 'public', sync: true, realtime: true, localCache: 'plain',
       clientWritable: ['id', 'key', 'value', ...SOFT_DELETE_COLS], insertOnly: ['id', 'key'], updateOnly: [...SOFT_DELETE_COLS],
@@ -64,6 +65,10 @@ export const core = defineManifest({
       pathPrefix: '<date>/<user_id>/', pathPattern: '^\\d{4}-\\d{2}-\\d{2}/[0-9a-f-]{36}/[a-z_]+(\\.\\d+)?\\.json\\.gz$',
       backup: 'none', export: 'none', countsToQuota: false, orphanSweep: null,
       userLookup: { by: 'pathPattern', level: 2 } },   // 0.29 续第 84 条：按第二级目录找人
+    // R-384 我的头像：images 桶的 <user_id>/me/ 段（桶归 notes）；100 KB、算进存储额度，孤儿按 profiles.avatar_id 清（迁移 20261115080000）
+    { name: 'images', store: 'r2', pathPrefix: '<user_id>/me/', maxBytes: 102400, pathPattern: `^${UUID_RE}/me/${UUID_RE}\\.webp$`,
+      backup: 'weekly-s3', export: 'zip', countsToQuota: true,
+      orphanSweep: { after: '24 hours', table: 'profiles', col: 'avatar_id' }, userLookup: { by: 'pathPattern', level: 1 } },
   ],
   // cal.* 归日历（calendar.ts，MANIFEST-settings-prefix，架构 3.5 第 5 点：各功能声明自己用到的键前缀）
   settingsKeys: ['ui.*', 'remind.*', 'ai.*', 'desk.*', 'layout.*'],

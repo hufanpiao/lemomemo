@@ -2,7 +2,7 @@
 -- /files 函数带用户的 JWT 调 public.files_authorize；这里用 tests.fa 模拟“以某人、某会话的身份经 PostgREST 调”
 -- 返回值：{uid, items: [{i, ok, reason?}]}，整批不过时 {uid, error, items: []}；入参不对报 22023
 begin;
-select plan(64);
+select plan(70);
 \ir _helpers.psql
 select tests.seed();
 
@@ -25,7 +25,9 @@ declare r jsonb := tests.fa('aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-55
                             -- 附件原文件：这一行的 bytes（20261115000000 起 put 要求 content_length 等于它，B4b-1）
                             (select nf.bytes from public.note_files nf where nf.path = p_path),
                             -- 头像：这一行的 avatar_bytes（20261114192000 起 put 要求 content_length 等于它）
-                            (select a.avatar_bytes from public.anniversaries a where p_path like '%/anniv/' || a.id::text || '/%'), 0) end)
+                            (select a.avatar_bytes from public.anniversaries a where p_path like '%/anniv/' || a.id::text || '/%'),
+                            -- 我的头像：本人 profiles 的 avatar_bytes（20261115080000 起，R-384）
+                            (select pr.avatar_bytes from public.profiles pr where p_path like pr.user_id::text || '/me/%'), 0) end)
        else '{}'::jsonb end));
 begin
   if r ? 'error' then return 'error:' || (r ->> 'error'); end if;
@@ -121,6 +123,23 @@ select is(tests.fa1('put', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/40000
   'deleted', '插图已删（最近删除里）：不能再传');
 select is(tests.fa1('put', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/1e000000-0000-4000-8000-0000000000a5.webp'),
   'not_owner', '隐私记的图（bucket = vault-images）不经 /files：not_owner');
+
+-- ===== R-384 我的头像（迁移 20261115080000）：<uid>/me/<avatar_id>.webp，核对本人 profiles 的 avatar_id
+--       （put 每分钟 30 次的限流整份共用：路径、主人的判法 get 也走同一段，这里只用一次 put） =====
+update public.profiles set avatar_id = '0b000000-0000-4000-8000-0000000000a1', avatar_bytes = 5000 where user_id = 'aaaaaaaa-0000-4000-8000-000000000001';
+select is(tests.fa1('put', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/me/0b000000-0000-4000-8000-0000000000a1.webp'),
+  'ok', '我的头像：路径和 profiles.avatar_id 一致、content_length = avatar_bytes：ok');
+select is(tests.fa1('get', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/me/0b000000-0000-4000-8000-0000000000a1.webp'),
+  'ok', '我的头像 get：ok');
+select is(tests.fa1('get', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/me/0b000000-0000-4000-8000-0000000000ff.webp'),
+  'not_owner', '我的头像：路径里的 id 不等于 avatar_id：not_owner');
+select is(tests.fa1('get', 'images', 'bbbbbbbb-0000-4000-8000-000000000002/me/0b000000-0000-4000-8000-0000000000a1.webp'),
+  'not_owner', '我的头像：别人的路径：not_owner');
+select is(tests.fa1('get', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/me/0b000000-0000-4000-8000-00000000000-.webp'),
+  'not_owner', '我的头像：id 段不是合法 uuid → not_owner（不报错）');
+select is(tests.fa1('get', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/me/0b000000-0000-4000-8000-0000000000a1.t.webp'),
+  'bad_path', '我的头像没有缩略图：.t.webp 不认（bad_path）');
+update public.profiles set avatar_id = null, avatar_bytes = null where user_id = 'aaaaaaaa-0000-4000-8000-000000000001';
 
 -- ===== TC-B0-101：附件只认本人、普通、pending、没删的行（原 file_slot_open） =====
 select is(tests.fa1('put', 'files', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/f0000000-0000-4000-8000-0000000000a1.pdf'),

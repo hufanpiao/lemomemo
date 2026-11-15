@@ -17,6 +17,7 @@ const HOT_TABLES: Readonly<Record<string, string>> = {
   'public.events': REWRITE,
   'public.todos': REWRITE,
   'public.anniversaries': REWRITE,
+  'public.profiles': '20261115080000',   // R-384 我的头像：profiles 加列、建额度触发器
 };
 
 /** 去掉 -- 注释（不处理字符串里的 --：迁移里改结构的语句不会这样写） */

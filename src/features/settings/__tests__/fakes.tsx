@@ -41,6 +41,7 @@ export function fakeApi(over: Partial<SettingsApi> = {}, order: string[] = []): 
       return done;
     }),
     saveLocale: vi.fn(async () => ok),
+    saveAvatar: vi.fn(async () => ok),
     ...over,
   } as Fake;
 }

@@ -31,3 +31,31 @@
   stroke-width: 2;
   stroke-linecap: round;
 }
+
+/* bare：外层自己画圈（电脑版侧栏设置入口的 .me::before，含悬停变色），这里不再叠一层 */
+.bare::before {
+  content: none;
+}
+
+/* R-384 有头像：圆形图片铺满内缩 4px 的那个圈（底色圈还在下面，图片没画出来时不露白） */
+.img {
+  position: absolute;
+  inset: 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+  border-radius: 50%;
+  object-fit: cover;
+  user-select: none;
+}
+
+/* 设置 › 账号顶部的大头像：外框 80px（圆 72px，同样内缩 4px），名字首字、人形跟着放大 */
+.lg {
+  width: 80px;
+  height: 80px;
+  font-size: var(--fs-28);
+}
+
+.lg svg {
+  width: 32px;
+  height: 36px;
+}

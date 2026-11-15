@@ -235,3 +235,40 @@
 .dangerText {
   color: var(--danger-text);
 }
+
+/* R-384 设置 › 账号顶部的头像：左边大头像（kit MeAvatar lg，80px 外框），右边两个按钮和一行说明；窄屏按钮换行不挤 */
+.meAv {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 4px 16px;
+}
+
+.meAvSide {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.meAvBtns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meAvHint,
+.meAvErr {
+  margin: 0;
+  font-size: var(--fs-13);
+  overflow-wrap: anywhere;
+}
+
+.meAvHint {
+  color: var(--text-2);
+}
+
+.meAvErr {
+  color: var(--danger-text);
+}

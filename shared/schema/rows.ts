@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { cutGraphemes } from '../logic/short.ts';
 
 /** 改了本文件的形状或枚举，就把它加 1（2.6：本机库按 schema_v 整表重拉） */
-export const SCHEMA_V = 3;   // 2：B0 集成按实际授权补列、加 devices；3：宽容读取补登记 notes、categories 的枚举列（架构 0.57，跟 B4 前端同一版发布）
+export const SCHEMA_V = 4;   // 2：B0 集成按实际授权补列、加 devices；3：宽容读取补登记 notes、categories 的枚举列（架构 0.57，跟 B4 前端同一版发布）；4：profiles 加 avatar_id、avatar_bytes（R-384）
 
 /** events、todos 各文字列的上限（UTF-16 单元，同 z.string().max 的口径；截断用 shared/logic/short.ts 的 cutGraphemes） */
 export const ITEM_TITLE_MAX = 160;
@@ -33,11 +33,13 @@ const epochMs = z.number().int().nonnegative();
 export const SNOOZE_AT_MAX = 4102444800000;
 const snoozeAt = epochMs.max(SNOOZE_AT_MAX).nullable();
 
-/** profiles：客户端只能改这三列（3.3） */
+/** profiles：客户端只能改这几列（3.3）；R-384 加我的头像两列（同空同非空、1～102400 字节，迁移 20261115080000） */
 export const profilesWrite = z.strictObject({
   display_name: z.string().max(40).nullable(),
   ui_locale: z.enum(['zh-CN', 'ko-KR']),
   tz_mode: z.enum(['device', 'fixed']),
+  avatar_id: uuid.nullable(),
+  avatar_bytes: z.number().int().min(1).max(102_400).nullable(),
 });
 
 const source = z.enum(['page', 'chat', 'voice', 'import']);
@@ -156,7 +158,7 @@ export const rowsWrite = {
  * insert: false 的表客户端不能 insert（profiles 由注册时的触发器建）
  */
 export const WRITE_RULES = {
-  profiles: { insert: false, insertOnly: [], updateOnly: ['display_name', 'ui_locale', 'tz_mode'] },
+  profiles: { insert: false, insertOnly: [], updateOnly: ['display_name', 'ui_locale', 'tz_mode', 'avatar_id', 'avatar_bytes'] },
   events: { insert: true, insertOnly: ['id', 'created_at'], updateOnly: ['deleted_at', 'undone'] },
   todos: { insert: true, insertOnly: ['id', 'created_at'], updateOnly: ['deleted_at', 'undone'] },
   todo_items: { insert: true, insertOnly: ['id', 'todo_id', 'created_at'], updateOnly: ['deleted_at', 'undone'] },

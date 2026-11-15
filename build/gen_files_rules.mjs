@@ -79,6 +79,11 @@ export function buildRules(manifests) {
         mustMatch(re, `${S}/anniv/${S}/${S}.webp`, where);
         if (!b.maxBytes) fail('纪念日头像那一段的清单要写 maxBytes（头像上限，B5 整块评审第 4 条）');
         rules.push({ bucket: 'images', segment: 'avatar', pathPattern: b.pathPattern, variants: [v('avatar', '.webp', WEBP, b.maxBytes, true)] });
+      } else if (b.pathPrefix === '<user_id>/me/') {
+        // R-384 我的头像（core.ts）：和纪念日头像同一类（segment avatar，链接有效期同 TTL.avatar）
+        mustMatch(re, `${S}/me/${S}.webp`, where);
+        if (!b.maxBytes) fail('我的头像那一段的清单要写 maxBytes（头像上限，R-384）');
+        rules.push({ bucket: 'images', segment: 'avatar', pathPattern: b.pathPattern, variants: [v('avatar', '.webp', WEBP, b.maxBytes, true)] });
       } else if (b.pathPrefix === '<user_id>/') {
         mustMatch(re, `${S}/${S}/${S}.webp`, where);
         mustMatch(re, `${S}/${S}/${S}.t.webp`, where);
@@ -150,7 +155,7 @@ export interface FilesRuleVariant {
 
 export interface FilesRule {
   readonly bucket: FilesBucket;
-  /** image：随手记插图和缩略图；avatar：纪念日头像；file：附件和缩略图 */
+  /** image：随手记插图和缩略图；avatar：纪念日头像、我的头像；file：附件和缩略图 */
   readonly segment: 'image' | 'avatar' | 'file';
   readonly pathPattern: string;
   readonly variants: readonly FilesRuleVariant[];

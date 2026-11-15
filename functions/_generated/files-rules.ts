@@ -20,13 +20,27 @@ export interface FilesRuleVariant {
 
 export interface FilesRule {
   readonly bucket: FilesBucket;
-  /** image：随手记插图和缩略图；avatar：纪念日头像；file：附件和缩略图 */
+  /** image：随手记插图和缩略图；avatar：纪念日头像、我的头像；file：附件和缩略图 */
   readonly segment: 'image' | 'avatar' | 'file';
   readonly pathPattern: string;
   readonly variants: readonly FilesRuleVariant[];
 }
 
 export const FILES_RULES: readonly FilesRule[] = [
+  {
+    "bucket": "images",
+    "segment": "avatar",
+    "pathPattern": "^[0-9a-f-]{36}/me/[0-9a-f-]{36}\\.webp$",
+    "variants": [
+      {
+        "kind": "avatar",
+        "suffix": ".webp",
+        "contentType": "image/webp",
+        "maxBytes": 102400,
+        "webp": true
+      }
+    ]
+  },
   {
     "bucket": "images",
     "segment": "image",

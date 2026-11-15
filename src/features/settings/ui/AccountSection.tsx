@@ -1,6 +1,7 @@
 // 设置 › 账号 二级页的正文（R-256 ①；SETTINGS-merge-cards 负责人 11-05 定 A 甲）：首页卡 1 只有一个入口行，点进来是这些——
 // 当前登录邮箱（R-275，只显示；读不到不显示）、已登录设备、退出其他所有设备（DevicesSection）、注销入口。
 // 标题由二级页顶栏的 h1 给，这里不再有组标题；“最近的导出”挪进了数据二级页（评审补充：不两边都显示）；“退出登录”仍在首页最底下
+// R-384：最上面是我的头像（MeAvatarSection：大头像、更换头像、去掉头像）
 import type { AccountErr } from '../hooks/useAccountActions.ts';
 import { onlineNow } from '../../../kit/hooks/useOnline.ts';
 import type { useDevices } from '../hooks/useDevices.ts';
@@ -9,6 +10,8 @@ import { SettingsEntryRow, SettingsList } from '../../../kit/components/Settings
 import { DevicesSection } from './DevicesSection.tsx';
 import styles from './SettingsPage.module.css';
 import { MailLabel } from './MailLabel.tsx';
+import { MeAvatarSection } from './MeAvatarSection.tsx';
+import type { MeAvatarEdit } from '../hooks/useMeAvatarEdit.ts';
 
 type T = ReturnType<typeof useSettingsT>;
 
@@ -48,9 +51,11 @@ export function accountErrText(e: AccountErr, t: T, online: boolean = onlineNow(
 }
 
 export function AccountSection({
-  devices, email, onExitHere, onDelete,
+  devices, email, avatar, onExitHere, onDelete,
 }: {
   devices: ReturnType<typeof useDevices>;
+  /** 换头像（R-384，hooks/useMeAvatarEdit） */
+  avatar: MeAvatarEdit;
   /** 当前登录邮箱（R-275，经 useSettingsPage 读本机会话）；null 时这一行不显示 */
   email: string | null;
   onExitHere(): void;
@@ -59,6 +64,7 @@ export function AccountSection({
   const t = useSettingsT();
   return (
     <div data-section="account">
+      <MeAvatarSection avatar={avatar} />
       {email ? (
         <p className={styles.email} data-testid="settings-account-email">
           <span className={styles.srOnly}>{t('settings.account.email', {})}</span>

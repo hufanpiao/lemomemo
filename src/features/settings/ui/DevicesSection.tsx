@@ -186,6 +186,7 @@ export function deviceErrKey(e: DeviceErr, online: boolean = onlineNow()): Extra
     case 'signed_out':
     case 'is_current_device':
     case 'device_not_found':
+    case 'quota_exceeded':
     case 'unknown':
       return 'settings.err.unknown';
   }

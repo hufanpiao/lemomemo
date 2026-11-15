@@ -33,7 +33,9 @@ describe('R-275 设置 › 账号：当前登录邮箱', () => {
   it('有邮箱：账号二级页最上面显示邮箱本身，读屏前缀是“当前登录邮箱”', async () => {
     await renderWith(() => LONG);
     const line = screen.getByTestId('settings-account-email');
-    expect(line.previousElementSibling).toBeNull();
+    // R-384 起账号页最上面是头像块（大头像 + 更换 / 去掉），邮箱紧跟在它下面，前面再没有别的
+    expect(line.previousElementSibling?.getAttribute('data-testid')).toBe('settings-me-avatar');
+    expect(line.previousElementSibling?.previousElementSibling).toBeNull();
     expect(line.parentElement?.getAttribute('data-section')).toBe('account');
     expect(text(line)).toBe(`${zh['settings.account.email']}${LONG}`);
     expect(line.tagName).toBe('P');

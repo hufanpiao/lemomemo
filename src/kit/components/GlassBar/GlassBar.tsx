@@ -12,6 +12,7 @@ import { hrefOf, navigateTab, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { MQ_SIDEBAR, useMedia } from '../../hooks/useMedia.ts';
 import { useT } from '../../hooks/useT.ts';
+import { MeAvatar } from '../MeAvatar.tsx';
 import type { GlassBarFxProps } from './GlassBarFx.tsx';
 import styles from './GlassBar.module.css';
 
@@ -154,10 +155,9 @@ export function GlassBar({ active, add, later = (fn) => fn() }: GlassBarProps) {
         ))}
         {/* 侧栏最下面的设置入口（头像，D5）：在首屏外壳里，首屏后部分下不来时宽屏也有设置入口（设计复审三 S1）；窄屏不显示，用今天页右上角的 */}
         {/* 点了按页签那套记历史（R-372 代码审建议）：从今天进压一条，从别的页签进原地换，设置里“‹ 今天”、左滑都回今天 */}
+        {/* R-384：名字首字、头像图片用 kit 的 MeAvatar（和四页右上角、设置首页账号一行同一个）；圈和悬停色仍是这里的 .me::before（bare） */}
         <a className={styles.me} href={hrefOf('settings')} onClick={(e) => plainClick(e) && navigateTab('settings')} aria-label={t('app.settings', {})} data-testid="tabbar-settings">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0" />
-          </svg>
+          <MeAvatar bare />
         </a>
       </nav>
       {!wide && fab}

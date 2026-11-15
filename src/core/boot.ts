@@ -162,6 +162,15 @@ export function getBoot(): BootResult | null {
   return current;
 }
 
+/** profiles 本人那一行换了（applyFreshConfig 收到新的 profile）时通知：kit 的 useMeAvatar、useMeInitial 跟着重画（R-384） */
+const profileSubs = new Set<() => void>();
+
+/** 订阅“profile 变了”；返回退订 */
+export function subscribeProfile(fn: () => void): () => void {
+  profileSubs.add(fn);
+  return () => void profileSubs.delete(fn);
+}
+
 /** 测试之间清掉 */
 export function resetBootForTest(): void {
   current = null;
@@ -396,6 +405,7 @@ async function loadCache(
 
 /**
  * 联网后（启动、切到前台）整行刷新了 app_config、profiles 本人那一行：写进 meta、重算功能开关、重新比最低版本。
+ * 有新的 profile 时先通知 subscribeProfile 的订阅者（设置里换了头像也调这里，R-384）。
  * 由 K8 / 登录流程调用；返回新的开关集合（null 同 enabledFlags）
  */
 export async function applyFreshConfig(
@@ -409,6 +419,8 @@ export async function applyFreshConfig(
   }
   if (fresh.profile) {
     boot.profile = fresh.profile;
+    // 先通知再写 meta：界面换头像、名字不等本机库（库关着、写不进也照样换）
+    for (const fn of [...profileSubs]) fn();
     if (boot.cache && !boot.cache.isClosed()) await boot.cache.setMeta('profile', fresh.profile);
   }
   boot.flags = enabledFlags(boot.config, boot.profile, appVersion);

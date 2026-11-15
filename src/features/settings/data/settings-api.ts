@@ -9,6 +9,7 @@
 //   dropLocalSession：auth.signOut({scope: 'local'})，不是 ok（断网、令牌失效、拿不到客户端）就删本机会话兜底
 // • 读列表、移除、退出其他设备、改语言各套 API_TIMEOUT_MS 超时，超时按 offline 处理（K9 第二轮 N2）
 // • 改语言：profiles.ui_locale（推送文案）＋ auth.updateUser({data: {locale}})（邮件模板）
+// • 我的头像（R-384）：直接改 profiles.avatar_id、avatar_bytes 两列（列级授权，迁移 20261115080000）；额度满了数据库回 quota_exceeded
 // 错误只认码：session_revoked、unauthorized、401、刷新令牌失效 → revoked（0.38 第 7 条：一律当“没登录”）；
 //   本机根本没有会话（别的标签页正常退出了）→ signed_out，提示“已退出登录”，不说“被移除”
 // • revoked、signed_out 带着这次请求用的会话的 session_id（sid；接手清单 K6-sugg4 ①）：发请求前记下（getSession 拿到的令牌里读；
@@ -38,6 +39,8 @@ export type SettingsErr =
   /** 想用 remove_device 移除本机（服务器回 is_current_device）：本机请用退出登录 */
   | 'is_current_device'
   | 'device_not_found'
+  /** 存储额度满了（R-384 换头像：profiles 的 media_quota_guard 触发器） */
+  | 'quota_exceeded'
   | 'unknown';
 
 /** 会话没了的两种错误：一定带着 sid（这次请求用的会话；那时本机没有会话为 null） */
@@ -83,6 +86,8 @@ export interface SettingsApi {
    */
   dropLocalSession(sessionId: string | null, prior?: Pick<PriorSession, 'token' | 'budgetMs'>): Promise<LocalSignOut>;
   saveLocale(locale: UiLocale): Promise<Result>;
+  /** 我的头像两列（R-384）：都给或都为 null（去掉头像） */
+  saveAvatar(avatarId: string | null, avatarBytes: number | null): Promise<Result>;
 }
 
 interface ErrLike {
@@ -113,6 +118,7 @@ export function mapSettingsError(e: unknown): SettingsErr {
   if (/\baccount_disabled\b/.test(msg) || code === 'account_disabled') return 'account_disabled';
   if (/\bis_current_device\b/.test(msg)) return 'is_current_device';
   if (/\bdevice_not_found\b/.test(msg)) return 'device_not_found';
+  if (/\bquota_exceeded\b/.test(msg)) return 'quota_exceeded';
   if (/\btry_later\b/.test(msg) || code === 'try_later' || status === 503) return 'try_later';
   if (name === 'AuthRetryableFetchError' || status === 0 || FETCH_FAILED.test(msg)) return 'offline';
   return 'unknown';
@@ -136,7 +142,9 @@ interface LooseDb {
     select(cols: string): { is(col: 'deleted_at', v: null): Res<unknown[]> };
     delete(): { eq(col: 'id', v: string): Res };
   };
-  from(table: 'profiles'): { update(v: { ui_locale: UiLocale }): { eq(col: 'user_id', v: string): Res } };
+  from(table: 'profiles'): {
+    update(v: { ui_locale: UiLocale } | { avatar_id: string | null; avatar_bytes: number | null }): { eq(col: 'user_id', v: string): Res };
+  };
 }
 const loose = (db: Db): LooseDb => db as unknown as LooseDb;
 
@@ -295,6 +303,14 @@ export function createSettingsApi(
           if (p.error) return fail(p.error, s.sessionId);
           const { error } = await db.auth.updateUser({ data: { locale } });
           return error ? fail(error, s.sessionId) : OK;
+        }),
+      ),
+
+    saveAvatar: (avatarId, avatarBytes) =>
+      timed(() =>
+        run(async (db, s) => {
+          const p = await loose(db).from('profiles').update({ avatar_id: avatarId, avatar_bytes: avatarBytes }).eq('user_id', s.userId);
+          return p.error ? fail(p.error, s.sessionId) : OK;
         }),
       ),
   };

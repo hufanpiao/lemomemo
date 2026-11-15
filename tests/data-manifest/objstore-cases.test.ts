@@ -60,11 +60,11 @@ describe('生成器：R2 桶用对象存储探针（真清单）', () => {
     expect(byId('TC-DEL-bucket-vault-preview')?.probe?.a).toContain('private.vault_preview');
   });
 
-  it('images 两段（notes 插图、anniv 头像）合成一条，两个选择器都按 <user> 前缀列，正则照抄清单', () => {
+  it('images 三段（notes 插图、anniv 头像、core 我的头像 R-384）合成一条，三个选择器都按 <user> 前缀列，正则照抄清单', () => {
     const c = byId('TC-DEL-bucket-images');
-    expect(c?.manifests.sort()).toEqual(['anniv', 'notes']);
+    expect(c?.manifests.sort()).toEqual(['anniv', 'core', 'notes']);
     const sels = c?.objProbe?.selectors ?? [];
-    expect(sels.map((s) => s.prefix).sort()).toEqual(['<user>/', '<user>/anniv/']);
+    expect(sels.map((s) => s.prefix).sort()).toEqual(['<user>/', '<user>/anniv/', '<user>/me/']);
     const patterns = allManifests.flatMap((m) => m.buckets).filter((b) => b.name === 'images').map((b) => b.pathPattern);
     expect(sels.map((s) => s.pattern).sort()).toEqual([...patterns].sort());
     expect(describeObjProbe(c?.objProbe ?? { bucket: 'x', mode: 'snapshot' })).toContain('<user>/anniv/');
@@ -72,7 +72,7 @@ describe('生成器：R2 桶用对象存储探针（真清单）', () => {
 
   it('R2 桶的孤儿清理用例也走对象存储（head :old_id、:new_id）', () => {
     const orphans = real.filter((c) => c.kind === 'orphan-sweep' && c.target.startsWith('r2:'));
-    expect(orphans.map((c) => c.id).sort()).toEqual(['TC-ORPHAN-files', 'TC-ORPHAN-images', 'TC-ORPHAN-images-anniv', 'TC-ORPHAN-vault-files', 'TC-ORPHAN-vault-images']);
+    expect(orphans.map((c) => c.id).sort()).toEqual(['TC-ORPHAN-files', 'TC-ORPHAN-images', 'TC-ORPHAN-images-anniv', 'TC-ORPHAN-images-me', 'TC-ORPHAN-vault-files', 'TC-ORPHAN-vault-images']);
     for (const c of orphans) expect(c.objProbe).toEqual({ bucket: c.target.slice(3), mode: 'head', keys: [':old_id', ':new_id'] });
   });
 
@@ -98,6 +98,7 @@ describe('runner：探针在 S3 替身上数得对（经 shared/objstore.ts）',
       await put(store, 'images', `${u}/${N}/${I}.webp`);
       await put(store, 'images', `${u}/${N}/${I}.t.webp`);
       await put(store, 'images', `${u}/anniv/${N}/${I}.webp`);
+      await put(store, 'images', `${u}/me/${I}.webp`);
       await put(store, 'files', `${u}/${N}/${I}.pdf`);
       await put(store, 'vault-images', `${u}/${N}/${I}.webp`);
       await put(store, 'vault-files', `${u}/${N}/${I}.t.webp`);
@@ -107,14 +108,14 @@ describe('runner：探针在 S3 替身上数得对（经 shared/objstore.ts）',
     const vars = { user_a: A, user_b: B };
     const before = await Promise.all(probes.map((p) => runObjProbe(store, p, vars)));
     expect(before).toEqual([
-      { mode: 'count', a: 3, b: 3 },
+      { mode: 'count', a: 4, b: 4 },
       { mode: 'count', a: 1, b: 1 },
       { mode: 'count', a: 1, b: 1 },
       { mode: 'count', a: 1, b: 1 },
     ]);
     for (const b of R2) await store.deletePrefix(b, `${A}/`);
     const after = await Promise.all(probes.map((p) => runObjProbe(store, p, vars)));
-    expect(after.map((r) => (r.mode === 'count' ? [r.a, r.b] : null))).toEqual([[0, 3], [0, 1], [0, 1], [0, 1]]);
+    expect(after.map((r) => (r.mode === 'count' ? [r.a, r.b] : null))).toEqual([[0, 4], [0, 1], [0, 1], [0, 1]]);
     // 真的打到了带前缀的桶
     expect([...fake.objects.keys()].every((k) => k.startsWith(prefix))).toBe(true);
   });
@@ -155,7 +156,7 @@ describe.skipIf(!OBJSTORE_LIVE)('探针打真的 S3 替身（没设 OBJSTORE_END
     const store = liveObjStore();
     const a = crypto.randomUUID(), b = crypto.randomUUID();
     const keys = (u: string) => ({
-      images: [`${u}/${N}/${I}.webp`, `${u}/${N}/${I}.t.webp`, `${u}/anniv/${N}/${I}.webp`],
+      images: [`${u}/${N}/${I}.webp`, `${u}/${N}/${I}.t.webp`, `${u}/anniv/${N}/${I}.webp`, `${u}/me/${I}.webp`],
       files: [`${u}/${N}/${I}.pdf`, `${u}/${N}/${I}.t.webp`],
       'vault-images': [`${u}/${N}/${I}.webp`],
       'vault-files': [`${u}/${N}/${I}.pdf`],
@@ -184,7 +185,7 @@ describe.skipIf(!OBJSTORE_LIVE)('探针打真的 S3 替身（没设 OBJSTORE_END
 const LIVE_SB = liveSupabase(env);
 const REAL_S3 = realS3Backend(env);
 const probeKeys = (u: string): Record<string, string[]> => ({
-  images: [`${u}/${N}/${I}.webp`, `${u}/${N}/${I}.t.webp`, `${u}/anniv/${N}/${I}.webp`],
+  images: [`${u}/${N}/${I}.webp`, `${u}/${N}/${I}.t.webp`, `${u}/anniv/${N}/${I}.webp`, `${u}/me/${I}.webp`],
   files: [`${u}/${N}/${I}.pdf`, `${u}/${N}/${I}.t.webp`],
   'vault-images': [`${u}/${N}/${I}.webp`, `${u}/${N}/${I}.t.webp`],
   'vault-files': [`${u}/${N}/${I}.pdf`],

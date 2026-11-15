@@ -8,7 +8,7 @@ export type FileBucket = (typeof FILE_BUCKETS)[number];
 
 // ───────── 路径和链接的核对 ─────────
 
-// 路径段：小写十六进制 uuid、anniv、带扩展名的文件名（images：<uid>/<note>/<id>(.t).webp、<uid>/anniv/<anniv>/<avatar>.webp；
+// 路径段：小写十六进制 uuid、anniv、me、带扩展名的文件名（images：<uid>/<note>/<id>(.t).webp、<uid>/anniv/<anniv>/<avatar>.webp、<uid>/me/<avatar>.webp；
 // files：<uid>/<note>/<id>.<ext>、<id>.t.webp）。精确的正则在服务器（清单 pathPattern），这里只挡明显不对的
 const SEGMENT = /^[0-9a-z][0-9a-z_-]*(\.[0-9a-z]+)*$/;
 
