@@ -278,6 +278,18 @@ export function createVaultQueue(d: QueueDeps) {
       finish(j, false);
       return true;
     },
+    /** 永久删除成了：这几条排着的、正在发的都撤掉（在飞的那一次回来 alive() 不成立、什么都不做），连同没保存上、新建、上传中的标记 */
+    forget(ids: readonly string[]): void {
+      for (const id of ids) {
+        const j = jobs.get(id);
+        if (!j) continue;
+        jobs.delete(id);
+        for (const a of j.adds.keys()) d.store.setUpload(a, null);
+        d.store.setFresh(id, false);
+        d.store.setFailed(id, false);
+        finish(j, false);
+      }
+    },
     /** “没保存上 · 重试” */
     retry(id: string): void {
       const j = jobs.get(id);

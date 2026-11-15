@@ -3,6 +3,7 @@
 // • 带图：save 预登记 → 原图 → 缩略图；传成了“上传中”去掉
 // • 失败按落法分：retry 退避 2/5/15 秒三次再标 failed、online 再试；message 直接 failed；unlock（取消解锁）整个丢掉并记个数
 // • 上锁丢掉时在飞的那次回来不再动；解锁拉完列表 overlay 把本机还没发完的盖回去；撤销没发出去的新建
+// • 永久删除成了（forget）：撤掉这条的任务和“没保存上”标记，在飞的那次回来不再动
 import { describe, expect, it } from 'vitest';
 import type { VaultNote } from '../../../../shared/schema/vault.ts';
 import type { VaultResult } from '../data/vault-api.ts';
@@ -219,6 +220,34 @@ describe('发送队列', () => {
     big.release(OK);
     await settle();
     expect(h2.saves.map((r) => r.body)).toEqual(['先占着']);
+  });
+
+  it('永久删除成了（forget）：没保存上的这条撤掉任务和标记，retryAll 也不再发', async () => {
+    const h = harness({ save: () => ({ ok: false, code: 'not_found' }) });
+    h.q.addImage(row('x'), { id: IMG, full: new Blob(['f']), thumb: null, width: 1, height: 1 });
+    await settle();
+    expect(h.store.getSnapshot().failed.has(NID)).toBe(true);
+    h.q.forget([NID]);
+    const snap = h.store.getSnapshot();
+    expect(snap.failed.has(NID)).toBe(false);
+    expect(snap.uploads.has(IMG)).toBe(false);
+    expect(h.q.has(NID)).toBe(false);
+    h.q.retryAll();
+    await settle();
+    expect(h.saves).toHaveLength(1);
+  });
+
+  it('永久删除时这条正在发：在飞的那次失败回来也不标“没保存上”、不再发', async () => {
+    const g = held();
+    const h = harness({ save: () => g.p });
+    h.q.wrote(row('x'), true);
+    await settle();
+    h.q.forget([NID]);
+    expect(h.store.getSnapshot().fresh.has(NID)).toBe(false);
+    g.release({ ok: false, code: 'not_found' });
+    await settle();
+    expect(h.store.getSnapshot().failed.has(NID)).toBe(false);
+    expect(h.calls).toEqual(['save']);
   });
 
   it('解锁拉完列表：本机还没发完的那一份盖回仓库（图片地址补放、没保存上的标记补回）', async () => {

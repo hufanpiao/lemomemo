@@ -505,10 +505,13 @@ export function createVaultSession(d: VaultSessionDeps) {
     /** 删除、撤销删除各发一次（后台队列发的也是这两个；不重拉列表） */
     remove: (id: string) => run({ action: 'delete', id }, vaultOkResponse),
     undelete: (id: string) => run({ action: 'undelete', id }, vaultOkResponse),
-    /** 永久删除（要确认，不进后台队列）：成了从仓库拿掉 */
+    /** 永久删除（要确认，不进后台队列）：成了从仓库拿掉，队列里这几条的任务和“没保存上”标记一起撤掉 */
     async purge(items: readonly string[]) {
       const r = await run({ action: 'purge', items: [...items] }, vaultPurgeResponse);
-      if (r.ok) store.forget(items);
+      if (r.ok) {
+        queue.forget(items);
+        store.forget(items);
+      }
       return r;
     },
     /** 普通随手记移进隐私记（S7）：要令牌，锁着时等解锁、重试一次；这一段解锁期拉过列表的，成了补拉一次（服务器那边才有这一条的明文） */
