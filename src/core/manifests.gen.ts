@@ -767,6 +767,7 @@ export const manifestSnapshot: readonly Manifest[] = [
           "done",
           "due",
           "important",
+          "priority",
           "project",
           "note",
           "source",

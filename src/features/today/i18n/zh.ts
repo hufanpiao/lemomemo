@@ -28,6 +28,11 @@ export const zh = {
   'list.allDay': '全天',
   'list.due': '{t} 截止',
   'list.dueDay': '今天截止',
+  // 待办行右边 H / M / L 的读屏名字（R-434，同待办页）
+  'prio': '优先级：{p}，点一下换成{next}',
+  'prio.high': '高',
+  'prio.mid': '中',
+  'prio.low': '低',
   'list.origin': '（{zone} {t}）',
   'list.done': '完成',
   'list.undoDone': '标成没完成',

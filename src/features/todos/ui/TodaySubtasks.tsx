@@ -15,7 +15,7 @@ export default function TodaySubtasks({ id }: { id: string }) {
     <span className={s.today} data-testid={`today-subs-${id}`}>
       <span aria-hidden="true">{t('items.progress', { done, total })}</span>
       <span className={s.sr}>{t('items.progress.a11y', { done, total })}</span>
-      <SubtaskBar thin done={done} total={total} />
+      <SubtaskBar short done={done} total={total} />
     </span>
   );
 }

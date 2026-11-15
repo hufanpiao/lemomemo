@@ -10,7 +10,10 @@ export const ko = {
   'todo.edit.titlePh': '무엇을 할까요', // REVIEW(ko)
   'todo.edit.done': '완료 (체크한 뒤에도 계속 고칠 수 있어요)', // REVIEW(ko)
   'todo.edit.doneShort': '완료', // REVIEW(ko) FA-2 只读编辑页：不写“체크한 뒤에도 계속 고칠 수 있어요”
-  'todo.edit.important': '중요', // REVIEW(ko)
+  'todo.edit.priority': '우선순위', // REVIEW(ko)
+  'todo.edit.prio.high': '높음', // REVIEW(ko)
+  'todo.edit.prio.mid': '보통', // REVIEW(ko)
+  'todo.edit.prio.low': '낮음', // REVIEW(ko)
   'todo.edit.due': '마감', // REVIEW(ko)
   'todo.edit.dueTime': '마감 시각', // REVIEW(ko)
   'todo.edit.clear': '지우기', // REVIEW(ko)

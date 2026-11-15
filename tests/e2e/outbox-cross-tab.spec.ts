@@ -153,7 +153,7 @@ const enqueue = (page: Page, input: Record<string, unknown>) => page.evaluate(as
 const setDown = (page: Page, down: boolean) => page.evaluate((d) => void (window.__s && (window.__s.down = d)), down);
 
 const TODO = {
-  id: ID, title: '待办', done: false, due: null, important: false, project: '', note: '', source: 'page', raw_text: '',
+  id: ID, title: '待办', done: false, due: null, important: false, priority: 'mid', project: '', note: '', source: 'page', raw_text: '',
   batch_id: null, from_note_id: null, from_anniv_id: null, short: null, short_by: null, done_at: 0, remind_days: null,
   remind_time: '09:00', due_time: null, remind_before_min: null, push_show_title: null, notified_for: null, snooze_at: null,
   created_at: 1, updated_at: 1,

@@ -5,6 +5,7 @@
    边色 --check-edge：深色照参考图原色 #69645C（卡片底 2.7:1，负责人定照原样，build/contrast-pairs.json 的 accepted）；
    打勾时强调色方块从中间放大、淡入，盖满方框，勾号随之淡入；取消原路退回（同原来的圆盘，只是形状变方）
    边长可以由使用方在外层设 --check-size 改（默认 24px，点击区照样 44 × 44；R-350 子任务、查找结果用小一号 18px）；
+   上下外边距 --check-margin（默认让方框在 44 高里居中）也由使用方在外层设；不播勾选动效用组件的 still（label 上 data-still，子任务用）；
    圆角按边长比例（24 → 9px，18 → 6.75px），小一号的不会显得更圆。组件名、类名沿用 CheckCircle（见 CheckCircle.tsx 文件头） */
 
 /* checkbox 叠在 label 外扩区（.checkBox::after）上面：点圆圈点到的是 checkbox 本身，点外扩区才经 label 转给它（不然 ::after 盖住 checkbox） */
@@ -18,16 +19,14 @@
   border-radius: calc(var(--check-size, 24px) * 0.375);
   box-shadow: inset 0 0 0 1.75px var(--check-edge);
   appearance: none;
+  transition: box-shadow var(--dur-ui) var(--ease-out);
 }
 
+/* 勾上以后边和填充同色（R-436 第 7、8 条：暗黄底 + 黄勾，没有亮黄的一圈）；checkbox 叠在填充块上面（z-index 1），边色要跟着换。
+   边色和填充块同一个时长、同一条曲线一起过渡（上面 .check 的 transition；不然勾的那一拍边先瞬间变色、填充还在从一半放大）；
+   聚焦框用全局 :focus-visible（base.css），这里不另写 */
 .check:checked {
-  box-shadow: inset 0 0 0 1.75px var(--accent);
-}
-
-.check:focus-visible {
-  /* 聚焦框全 App 一种（B2-UI-a U1-3）：黄色 --accent 在白底上约 1.3:1，不过 3:1 */
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1.75px var(--check-on-bg);
 }
 
 /* 填充块和勾号是叠在方框上的两个 span（不接点按，点的还是下面的 checkbox），状态写在它们自身的 data-state 上，
@@ -40,10 +39,10 @@
   place-items: center;
   width: var(--check-size, 24px);
   height: var(--check-size, 24px);
-  margin: calc((var(--hit) - var(--check-size, 24px)) / 2) 0;
+  margin: var(--check-margin, calc((var(--hit) - var(--check-size, 24px)) / 2)) 0;
 }
 
-/* 点击区外扩到 44 × 44（B2-UI-a U4-4，A8 核实原来只有 22 × 22；写法同 Settings.module.css 的 .segBtn::after）：
+/* 点击区外扩到 44 × 44（B2-UI-a U4-4，A8 核实原来只有 22 × 22；写法同 ModeSeg.module.css 的 .segBtn::after）：
    .checkBox 是包着 checkbox 的 label，点到外扩区等于点 checkbox；方框本身大小不变 */
 .checkBox::after {
   content: '';
@@ -60,7 +59,7 @@
   width: var(--check-size, 24px);
   height: var(--check-size, 24px);
   border-radius: calc(var(--check-size, 24px) * 0.375);
-  background: var(--accent);
+  background: var(--check-on-bg);   /* R-436 确认图第 7、8 条：勾上以后染成淡柠檬黄（深色暗黄底 + 黄勾），不再是亮黄实心 + 黑勾；方框本身（R-433）不动 */
   opacity: 0;
   pointer-events: none;
   transform: scale(0.5);
@@ -79,8 +78,8 @@
   width: 6px;
   height: 11px;
   margin-top: -3px;
-  border-right: 2.5px solid var(--on-accent);
-  border-bottom: 2.5px solid var(--on-accent);
+  border-right: 2.5px solid var(--check-on-fg);
+  border-bottom: 2.5px solid var(--check-on-fg);
   opacity: 0;
   pointer-events: none;
 
@@ -104,8 +103,17 @@
   transform: none;
 }
 
+:global(:root[data-rm="1"]) .check {
+  transition: none;
+}
+
 :global(:root[data-rm="1"]) .tick {
   transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
+}
+
+/* still（子任务一天勾上百次，R-350）：边色、填充块、勾号都不过渡，直接到位 */
+.checkBox[data-still] > * {
+  transition: none;
 }
 
 /* 只读行（FA-2）：方框变淡，表示打不了勾（点了由使用方出“要新版本”提示条）；跟着 checkbox 的 aria-disabled，不另挂属性（首屏预算，11-06） */

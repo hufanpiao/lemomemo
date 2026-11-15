@@ -12,6 +12,7 @@ import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import type { TrashTable } from '../data/today-actions.ts';
 import type { doneToggler } from '../../../core/todo-done.ts';
+import type { Priority } from '../../../../shared/logic/todo-row.ts';
 import { eventsOn, lateTodos, nowCard, nowEvents, todayTodos, tomorrowOf, type Row } from '../data/today-model.ts';
 
 export function useToday() {
@@ -62,5 +63,11 @@ export function useToday() {
     [events, todos],
   );
 
-  return { ...model, toggleDone, remove };
+  // 待办行右边 H / M / L 换档（R-434）：写入在 core/todo-priority.ts（和待办页同一份），点了才下载，不进首屏
+  const setPriority = useCallback(async (id: string, p: Priority): Promise<ActionResult> => {
+    const { setTodoPriority } = await import('../../../core/todo-priority.ts');
+    return actionResult(await setTodoPriority(id, p, clock.now()));
+  }, []);
+
+  return { ...model, toggleDone, remove, setPriority };
 }

@@ -10,6 +10,10 @@ import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { setTodoDeleted } from '../data/todo-actions.ts';
 import { doneToggler } from '../../../core/todo-done.ts';
+import { setTodoPriority } from '../../../core/todo-priority.ts';
+import { todayOf } from '../../../../shared/core/date.ts';
+import { isLiveRow } from '../../../../shared/logic/live-row.ts';
+import type { Priority } from '../../../../shared/logic/todo-row.ts';
 import { autoTodo, tickSubtask, undoAutoDone } from '../data/todo-items.ts';
 import { groupTodos, projectCounts, type Row } from '../data/todo-list.ts';
 import { listKo } from '../i18n/list-ko.ts';
@@ -34,9 +38,15 @@ export function useTodoList(linger: ReadonlySet<string> = NONE) {
   // 同一截止时刻、没日期那组按标题排，筛选条条数一样的按项目名排：按当前语言、数字按数值（“第 2 条”在“第 10 条”前）
   const locale = useUi((s) => s.locale);
   const projects = useMemo(() => projectCounts(rows, locale), [rows, locale]);
-  // 筛的项目没了（最后一条完成或删掉）：回到“全部”
+  // 筛的项目没了（这个项目的最后一条删掉、或改了项目；已完成的也算在条数里，完成不会让它消失）：回到“全部”
   const active = project !== null && projects.some((p) => p.project === project) ? project : null;
   const groups = useMemo(() => groupTodos(rows, now, tz, active, locale, linger), [rows, now, tz, active, locale, linger]);
+  // 标题下面一行“11月15日 周日 · 1 / 10 完成”（R-436 第 2 条）：按当前筛选数这一页的条数和完成的条数；
+  // “全部”胶囊的条数 all = 全部条数，含已完成（确认图“全部 10”和“1 / 10 完成”同一个口径；各项目胶囊同口径，见 projectCounts）
+  const count = useMemo(() => {
+    const items = groups.flatMap((g) => g.items);
+    return { total: items.length, done: items.filter((x) => x.todo.done).length, all: rows.filter(isLiveRow).length };
+  }, [groups, rows]);
 
   // 打勾：刚点过的再点回去按撤销写回原来的 done_at（core/todo-done.ts，评审第 15 条）；这一页挂着期间记着
   const [toggle] = useState(() => doneToggler());
@@ -75,6 +85,9 @@ export function useTodoList(linger: ReadonlySet<string> = NONE) {
     return r ? actionResult(await undoAutoDone(r, itemId, clock.now(), currentTz())) : 'failed';
   };
 
+  /** 行右边 H / M / L 点一下换档（R-434，core/todo-priority.ts，今天页同一份） */
+  const setPriority = async (id: string, p: Priority): Promise<ActionResult> => actionResult(await setTodoPriority(id, p, clock.now()));
+
   const ids = useMemo(() => new Set(rows.map((r) => r.id)), [rows]);
-  return { groups, projects, project: active, setProject, toggleDone, remove, total: rows.length, ids, subs, planAuto, tickSub, undoAuto };
+  return { today: todayOf(now, tz), count, setPriority, groups, projects, project: active, setProject, toggleDone, remove, ids, subs, planAuto, tickSub, undoAuto };
 }

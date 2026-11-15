@@ -1,7 +1,7 @@
 // token-admin、claude-intake 的 handle（core.ts）和连接码工具（_shared/intake-token.ts）。
 // B3 任务单 BE-5、S14、M2；TC-B3-19（第 201 条被拒、180 天过期）、20（只能新增）、25（未同意只走本机规则）、57（本机有把握不调 AI、不扣次数）。
 // 门和服务商用内存替身；本机规则、校验、行映射注入真的 shared。
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { todayOf } from '../../shared/core/date.ts';
@@ -18,6 +18,14 @@ import { cleanLabel, DAILY_LIMIT, MAX_ACTIVE, handle as adminHandle, rateKey, ty
 import { COUNTER_KEY, fakeGate, okJson, UA, used, type GateOpts } from './ai-fakes.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
+/** 最后一个定义 private.intake_insert 的迁移全文（R-434 迁移 20261115100000 照 20261107100000 逐字重建、todos 名单多 priority） */
+function intakeSql(): string {
+  const dir = join(ROOT, 'supabase', 'migrations');
+  const last = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
+    .filter((f) => /function private\.intake_insert\(/u.test(readFileSync(join(dir, f), 'utf8'))).at(-1);
+  if (!last) throw new Error('迁移里找不到 intake_insert');
+  return readFileSync(join(dir, last), 'utf8');
+}
 const NOW = Date.UTC(2026, 9, 28, 3, 0);   // 首尔 10-28 12:00
 const TID = '7e57a0a0-0000-4000-8000-000000000001';
 const DAY = 86_400_000;
@@ -385,13 +393,14 @@ describe('claude-intake：记事', () => {
     const part = src.slice(src.indexOf('async insertAll('), src.indexOf('async touchToken('));
     expect(part).toContain(".rpc('intake_insert', { p_user: userId, p_rows: rows })");
     expect(/\.(update|delete|upsert|from)\s*\(/.test(part)).toBe(false);
-    const sql = readFileSync(join(ROOT, 'supabase', 'migrations', '20261107100000_core_my_ai_usage.sql'), 'utf8');
-    const fn = sql.slice(sql.indexOf('create function private.intake_insert'), sql.indexOf('grant execute on function private.intake_insert'));
+    const sql = intakeSql();
+    const at = sql.search(/create (or replace )?function private\.intake_insert/u);
+    const fn = sql.slice(at, sql.indexOf('end $$;', at));
     expect(fn).toContain("'insert into public.%1$I (user_id, %2$s)");
     expect(/\b(update|delete|upsert|on conflict)\b/i.test(fn.replace(/--[^\n]*/g, ''))).toBe(false);
   });
   it('安全审复查：intake_insert 按表写死的列名单盖住 capture-map 产出的每一列；系统列的值正好是名单里的固定值', () => {
-    const sql = readFileSync(join(ROOT, 'supabase', 'migrations', '20261107100000_core_my_ai_usage.sql'), 'utf8');
+    const sql = intakeSql();
     const lit = (name: string): Record<string, unknown> => {
       const m = new RegExp(`${name} constant jsonb := '([^']*)'`).exec(sql);
       if (!m?.[1]) throw new Error(`迁移里找不到 ${name}`);

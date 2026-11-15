@@ -224,7 +224,7 @@ function EditRow({ it, done, first, last, off, dragging, over, rowRef, drag, onT
           </svg>
         </button>
       )}
-      <CheckCircle checked={done} label={it.title} readOnly={off} onChange={(v) => (off ? undefined : onTick(v))} testId={`todo-sub-done-${it.id}`} />
+      <CheckCircle still checked={done} label={it.title} readOnly={off} onChange={(v) => (off ? undefined : onTick(v))} testId={`todo-sub-done-${it.id}`} />
       <TextInput
         className={s.editInput}
         aria-label={t('items.itemLabel', title)}

@@ -11,7 +11,6 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
 }
 
 /* 顶栏右边：“最近删除”图标 + 头像（R-438），两个都是 44 触控区，挨着放 */
@@ -22,8 +21,30 @@
 
 .h1 {
   margin: 0;
-  font-size: var(--fs-22);
+  font-size: var(--fs-28);
   font-weight: 600;
+  line-height: 1.2;
+}
+
+/* 大标题下面一根短粗柠檬黄下划线（R-436 第 1 条，确认图“待办页 · 美化后”①），和页签同一套语言 */
+.h1::after {
+  content: '';
+  display: block;
+  width: 22px;
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* 标题下一行等宽小字“11月15日 周日 · 1 / 10 完成”（第 2 条）：三级文字色、等宽数字字体 */
+.sub {
+  margin: 8px 0 10px;
+  color: var(--text-3);
+  font-family: var(--f-tnum);
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
 }
 
 .filter {
@@ -34,33 +55,95 @@
   overflow-x: auto;
 }
 
+/* 筛选胶囊（第 3 条）：去掉描边、换浅底、高 30、字小一号；条数等宽淡色。点击区照样 44 高（::after 上下外扩 7，不撑高这一条） */
 .chip,
 .chipOn {
+  position: relative;
+  display: inline-flex;
   flex: none;
-  min-height: var(--hit);
-  padding: 0 14px;
-  border: 1px solid var(--line);
+  gap: 5px;
+  align-items: center;
+  height: 30px;
+  margin: 7px 0;
+  padding: 0 12px;
+  border: 0;
   border-radius: var(--r-pill);
-  background: none;
+  background: var(--panel-2);
   color: var(--text);
-  font-size: var(--fs-13-5);
+  font-size: var(--fs-13);
+}
+
+.chip::after,
+.chipOn::after {
+  content: '';
+  position: absolute;
+  inset: -7px 0;
 }
 
 .chipOn {
-  border-color: transparent;
   background: var(--chip-on-bg);
   color: var(--chip-on-fg);
 }
 
-.h2 {
-  margin: 16px 0 6px;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-  font-weight: 400;
+.chipN {
+  font-family: var(--f-tnum);
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+/* 分组名（第 4 条“小号字、字距拉开”）：字号、字体、字距、颜色挂 kit Form.tsx 的 groupLabelClass（GroupLabel 同一份，纪念日“详情”）；
+   这里是真标题 h2（读屏按标题跳组），所以不套那个 <p> 组件，只挂它的类。本地只留左右排开和间距（写成两级选择器，
+   不靠两份样式表的先后压过 .groupLabel 的 margin）；右边条数同一种小字；过期组带“!”、红字 */
+.group .h2 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 18px 4px 8px;
+}
+
+.cnt {
+  font-variant-numeric: tabular-nums;
 }
 
 .late .h2 {
   color: var(--danger-text);
+}
+
+/* 逾期的行（R-434）：整行过期底 --late-bg（确认图取色 (51,42,36)，暖暗褐只带一点红；不用报错红底 --danger-bg）、左边一条红竖线。过期组里全是逾期的行：
+   • 底色画在这一组的面板（kit List 的 .list）和行面上——行面是 SwipeRow 的不透明 .face，只给面板上色会只剩四边一圈红（11-16 截图）；
+     行面底色走 SwipeRow 开的变量 --sw-face-bg，这里只设变量，不从外面撬 SwipeRow 的内部结构；
+   • 竖线是面板上一条直的 ::after，不用 inset 阴影（会顺着面板圆角弯成弧）；不占行自己的 ::before（那个留给电脑版抽屉选中的黄条） */
+.late {
+  --sw-face-bg: var(--late-bg);
+}
+
+.late > ul {
+  position: relative;
+  background: var(--late-bg);
+}
+
+.late > ul::after {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--danger-text);
+  content: '';
+  pointer-events: none;
+}
+
+/* 副行的日期、时刻：等宽数字（R-434），颜色跟副行（逾期红、其余次要文字色） */
+.num {
+  font-family: var(--f-tnum);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 已完成整行淡出加删除线（第 8 条；删除线、灰字在 kit 的 .row[data-done] .title）：方框照旧 kit CheckCircle，淡出后看着是浅柠檬黄 */
+.group [data-done] .face {
+  opacity: 0.5;
 }
 
 /* 列表行、左滑删除的行（.swp、.swRow）、空状态在 kit 的 List.module.css（B2-UI-a U4、U6；负责人 11-15 去掉行尾 ×）；这里只留过期标签的红字。

@@ -9,7 +9,10 @@ export const zh = {
   'todo.edit.done': '已完成（打勾后也能继续改）',
   // 只读行的编辑页（FA-2）：改不了，不写“打勾后也能继续改”
   'todo.edit.doneShort': '已完成',
-  'todo.edit.important': '重要',
+  'todo.edit.priority': '优先级',
+  'todo.edit.prio.high': '高',
+  'todo.edit.prio.mid': '中',
+  'todo.edit.prio.low': '低',
   'todo.edit.due': '截止',
   'todo.edit.dueTime': '截止时刻',
   'todo.edit.clear': '清掉',

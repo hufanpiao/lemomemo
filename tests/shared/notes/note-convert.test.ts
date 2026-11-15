@@ -43,7 +43,7 @@ describe('convertRow：转成待办（TC-B4-08）', () => {
     expect(r).toStrictEqual({
       table: 'todos',
       row: {
-        id: uid(1), title: '买牛奶', done: false, due: null, important: false, project: '', note: '低脂的\n两盒', source: 'page', raw_text: '', batch_id: uid(2),
+        id: uid(1), title: '买牛奶', done: false, due: null, important: false, priority: 'mid', project: '', note: '低脂的\n两盒', source: 'page', raw_text: '', batch_id: uid(2),
         from_note_id: NOTE_ID, from_anniv_id: null, short: null, short_by: null, done_at: 0, remind_days: null, remind_time: '09:00', due_time: null,
         remind_before_min: null, push_show_title: null, notified_for: null, snooze_at: null, created_at: NOW, updated_at: NOW,
       },

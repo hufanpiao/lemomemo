@@ -1,0 +1,94 @@
+/* 待办优先级（kit，R-434；组件在 Priority.tsx）：只用令牌（A11），不新增颜色。
+   • .dot：标题前的彩点 6 × 6（负责人确认图“精致化对照”第 5 条）；高 --p3s、中 --p1s、低 --check-edge（红色只留给逾期，R-436）
+   • .box：行右边 H / M / L 小方块 20 × 20、圆角 5、浅底 --panel-2、等宽小字、三级文字色 --text-3，不抢标题（确认图第 6 条）；
+     点击区照样 44 × 44（::after 外扩，同 kit CheckCircle 的做法），不撑高行
+   • .seg：编辑页三档并排（参考图 3 的分段样子）：浅底一条，选中的那一格换面板底、字用档位色 */
+
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-inline-end: 7px;
+  border-radius: 50%;
+  background: var(--check-edge);
+  vertical-align: middle;
+}
+
+.dot[data-p='high'] {
+  background: var(--p3s);
+}
+
+.dot[data-p='mid'] {
+  background: var(--p1s);
+}
+
+.box {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: var(--panel-2);
+  color: var(--text-3);
+  font-family: var(--f-tnum);
+  font-size: var(--fs-10-5);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.box::after {
+  content: '';
+  position: absolute;
+  inset: -12px;
+}
+
+@media (hover: hover) {
+  .box:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+.seg {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+}
+
+.seg .box {
+  width: 36px;
+  height: 30px;
+  border-radius: 8px;
+  background: none;
+  font-size: var(--fs-12);
+}
+
+/* 三格挨着（每格看得见 36 × 30）：外扩区上下各 7、左右各 4，扩到 44 × 44（tests/e2e/hit-target.spec.ts）；
+   左右会和相邻那格的外扩区叠 6（2 的间隙两边各伸 4），叠住的那条归后画的一格，各格独占的点按宽度仍不小于 36 */
+.seg .box::after {
+  inset: -7px -4px;
+}
+
+.seg .box[aria-pressed='true'] {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.seg .box[aria-pressed='true'][data-p='high'] {
+  color: var(--p3s);
+}
+
+.seg .box[aria-pressed='true'][data-p='mid'] {
+  color: var(--p1s);
+}
+
+.seg .box:disabled {
+  opacity: var(--press-dim);
+}

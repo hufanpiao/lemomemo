@@ -7,7 +7,7 @@ export const todos = defineManifest({
   owner: 'feature',
   tables: [
     { name: 'todos', schema: 'public', sync: true, realtime: true, localCache: 'plain',
-      clientWritable: ['id', 'title', 'done', 'due', 'important', 'project', 'note', 'source', 'raw_text', 'batch_id',
+      clientWritable: ['id', 'title', 'done', 'due', 'important', 'priority', 'project', 'note', 'source', 'raw_text', 'batch_id',
         'from_note_id', 'from_anniv_id', 'short', 'short_by', 'done_at', 'remind_days', 'remind_time', 'due_time', 'remind_before_min',
         'push_show_title', 'notified_for', 'snooze_at', 'created_at', 'updated_at', ...SOFT_DELETE_COLS],
       insertOnly: ['id', 'created_at'], updateOnly: [...SOFT_DELETE_COLS],

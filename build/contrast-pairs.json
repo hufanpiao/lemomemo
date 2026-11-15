@@ -412,6 +412,30 @@
       "source": "TC-B2-62（R-171、R-172）"
     },
     {
+      "id": "check-on-tick",
+      "what": "打勾方框勾上以后：勾号 / 填充（kit CheckCircle，R-436 第 7、8 条）",
+      "fg": "--check-on-fg",
+      "bg": "--check-on-bg",
+      "kind": "nontext",
+      "source": "R-436 确认图“待办页 · 美化后”第 7、8 条"
+    },
+    {
+      "id": "late-row-text",
+      "what": "待办页过期组：标题正文 / 过期行底",
+      "fg": "--text",
+      "bg": "--late-bg",
+      "kind": "text",
+      "source": "R-434、R-436 确认图“待办页 · 美化后”第 5 条"
+    },
+    {
+      "id": "late-row-danger",
+      "what": "待办页过期组：副行“! 过期 日期 时刻”红字 / 过期行底",
+      "fg": "--danger-text",
+      "bg": "--late-bg",
+      "kind": "text",
+      "source": "R-434、R-436 确认图“待办页 · 美化后”第 5 条"
+    },
+    {
       "id": "fab",
       "what": "“＋”图标 / “＋”按钮",
       "fg": "--fab-fg",

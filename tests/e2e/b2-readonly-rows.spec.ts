@@ -27,7 +27,7 @@ async function seed(page: Page): Promise<void> {
     ...base, id, title, date: d, time: '23:00', duration_min: 30, remind_min: null, remind_days: null, location: null, ...over,
   });
   const td = (id: string, title: string, over: Record<string, unknown>) => ({
-    ...base, id, title, due: d, due_time: null, done: false, important: false, ...over,
+    ...base, id, title, due: d, due_time: null, done: false, important: false, priority: 'mid', ...over,
   });
   await idbPut(page, [
     ['events', { ...cached(ev('e-ro', '每周例会', { repeat: { freq: 'week' } })), ro: true }],

@@ -28,7 +28,7 @@ async function boot() {
 
 const serverTodo = (over: Record<string, unknown> = {}): ServerRow =>
   ({
-    id: ID, title: '交报告', done: false, due: '2026-11-05', important: false, project: '', note: '', source: 'voice', raw_text: '今天五点前交报告',
+    id: ID, title: '交报告', done: false, due: '2026-11-05', important: false, priority: 'mid', project: '', note: '', source: 'voice', raw_text: '今天五点前交报告',
     batch_id: null, from_note_id: null, from_anniv_id: null, short: '交报', short_by: 'ai', done_at: 0, remind_days: 0, remind_time: '09:00',
     due_time: null, remind_before_min: null, push_show_title: null, notified_for: null, snooze_at: null, deleted_at: null, undone: false,
     created_at: 1, updated_at: 1, rev: 3, ...over,
@@ -184,17 +184,23 @@ describe('编辑已有的', () => {
     await waitFor(() => expect(todos().get(ID)).toMatchObject({ title: '交周报', short: null, short_by: null }));
   });
 
-  it('“重要”是开关（B2-UI-b W5，D2 ①）：读屏念开关，点一下写 important=true；“已完成”仍是圆圈勾选', async () => {
+  it('优先级三档（R-434，原来的“重要”开关）：aria-pressed 按钮组（同 ModeSeg，不是 radiogroup），老行 important=false 读成“中”；点“H”写 priority=high、双写 important=true；点“L”写 low、important=false', async () => {
     const b = await boot();
     await b.outbox?.applyServer('todos', [{ row: serverTodo() }]);
     open(`#/todo/${ID}`);
-    const imp = screen.getByTestId('todo-edit-important');
-    expect(imp.getAttribute('role')).toBe('switch');
+    expect(screen.getByTestId('todo-edit-prio').getAttribute('role')).toBe('group');
+    expect(screen.getByTestId('todo-edit-prio-mid').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('todo-edit-prio-high').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('todo-edit-prio-mid').getAttribute('role')).toBeNull();
     expect(screen.getByTestId('todo-edit-done').getAttribute('role')).toBeNull();
     await act(async () => {
-      fireEvent.click(imp);
+      fireEvent.click(screen.getByTestId('todo-edit-prio-high'));
     });
-    await waitFor(() => expect(todos().get(ID)).toMatchObject({ important: true }));
+    await waitFor(() => expect(todos().get(ID)).toMatchObject({ priority: 'high', important: true }));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('todo-edit-prio-low'));
+    });
+    await waitFor(() => expect(todos().get(ID)).toMatchObject({ priority: 'low', important: false }));
   });
 
   it('只读行（带不认识的值，0.27①“只读显示”）：一进来顶部就出“这条要新版本才能修改 · 更新”；输入全禁用、没有“删除”、不写“改了就自动保存”；改不进去', async () => {

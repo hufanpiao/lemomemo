@@ -16,7 +16,7 @@ import type { Tz } from '../../../../shared/core/tz.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
 import { trimItemTitle } from '../../../../shared/schema/rows.ts';
 import { DEFAULT_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime, todoRemindAt } from '../../../../shared/logic/remind.ts';
-import { todoRowOf, type NewTodoRow } from '../../../../shared/logic/todo-row.ts';
+import { prioCols, priorityOf, todoRowOf, type NewTodoRow, type Priority } from '../../../../shared/logic/todo-row.ts';
 import { todoRemindFlag } from '../../../core/remind-flag.ts';
 import { doneAtOf } from '../../../core/todo-done.ts';
 
@@ -24,7 +24,8 @@ import { doneAtOf } from '../../../core/todo-done.ts';
 export interface TodoForm {
   title: string;
   done: boolean;
-  important: boolean;
+  /** R-434 三档（原来的“重要”开关） */
+  priority: Priority;
   due: DateStr | null;
   due_time: string | null;
   /** 有截止时刻时才用；null = 不提醒 */
@@ -50,7 +51,7 @@ export function formOf(row: Readonly<Record<string, unknown>>): TodoForm {
   return {
     title: str(row['title']),
     done: row['done'] === true,
-    important: row['important'] === true,
+    priority: priorityOf(row),
     due: strOrNull(row['due']),
     due_time: strOrNull(row['due_time']),
     remind_before_min: before(row['remind_before_min']),
@@ -64,7 +65,7 @@ export function formOf(row: Readonly<Record<string, unknown>>): TodoForm {
 /** 新建时的表单：没有截止日、当天 9:00 提醒（要设了截止日才生效） */
 export function emptyForm(): TodoForm {
   return {
-    title: '', done: false, important: false, due: null, due_time: null, remind_before_min: null,
+    title: '', done: false, priority: 'mid', due: null, due_time: null, remind_before_min: null,
     remind_days: 0, remind_time: DEFAULT_REMIND_TIME, project: '', note: '',
   };
 }
@@ -102,7 +103,7 @@ export function remindPassed(form: TodoForm, tz: Tz, now: number): boolean {
 
 
 const FIELDS: readonly (keyof TodoForm)[] = [
-  'title', 'done', 'important', 'due', 'due_time', 'remind_before_min', 'remind_days', 'remind_time', 'project', 'note',
+  'title', 'done', 'priority', 'due', 'due_time', 'remind_before_min', 'remind_days', 'remind_time', 'project', 'note',
 ];
 
 /** 前后两份表单 → patch（只放变了的列）；没变返回 null。row 是集合里的原行（看 short_by） */
@@ -119,6 +120,7 @@ export function patchOf(
     data['short'] = null;
     data['short_by'] = null;
   }
+  if ('priority' in data) Object.assign(data, prioCols(next.priority));   // 双写旧列 important（迁移 20261115100000）
   if ('done' in data) data['done_at'] = doneAtOf(row, next.done, now);   // done_at 规则只在 core/todo-done.ts 一份（审查 11-15 第 7 条）
   data['updated_at'] = now;
   return data;

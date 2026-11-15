@@ -50,7 +50,7 @@ export const syncNoticeZh = {
   'sn.f.done': '已完成',
   'sn.f.due': '截止',
   'sn.f.dueTime': '截止时刻',
-  'sn.f.important': '重要',
+  'sn.f.priority': '优先级',
   'sn.f.remindBefore': '提前提醒',
   'sn.f.name': '名字',
   'sn.f.color': '颜色',

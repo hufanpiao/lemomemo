@@ -34,7 +34,7 @@ export const FIELDS: Readonly<Record<NoticeTable, Readonly<Record<string, FieldS
   },
   todos: {
     ...META, ...REMIND_META,
-    title: f('sn.f.title', 'text'), done: f('sn.f.done', 'bool'), due: f('sn.f.due', 'date'), important: f('sn.f.important', 'bool'),
+    title: f('sn.f.title', 'text'), done: f('sn.f.done', 'bool'), due: f('sn.f.due', 'date'), priority: f('sn.f.priority', 'changed'), important: H,
     project: f('sn.f.project', 'text'), note: f('sn.f.note', 'text'), raw_text: f('sn.f.raw', 'text'),
     from_note_id: H, from_anniv_id: H, short: H, short_by: H, done_at: H,
     remind_days: f('sn.f.remindDays', 'days'), remind_time: f('sn.f.remindTime', 'hm'), due_time: f('sn.f.dueTime', 'hm'),

@@ -17,12 +17,14 @@ export interface CheckCircleProps {
    * 由 ReadonlyRow.tsx 的 RoCheckCircle 拼进 label：那句词条不进首屏（首屏预算 150 KB，11-06），这里只用传进来的 label
    */
   readOnly?: boolean;
+  /** 不播勾选动效（子任务一天勾上百次，R-350）：直接到位；样式在 CheckCircle.module.css 的 .checkBox[data-still] */
+  still?: boolean;
 }
 
-export function CheckCircle({ checked, label, onChange, testId, readOnly = false }: CheckCircleProps) {
+export function CheckCircle({ checked, label, onChange, testId, readOnly = false, still = false }: CheckCircleProps) {
   const state = checked ? 'on' : 'off';
   return (
-    <label className={styles.checkBox}>
+    <label className={styles.checkBox} data-still={still || undefined}>
       <input
         type="checkbox"
         className={styles.check}

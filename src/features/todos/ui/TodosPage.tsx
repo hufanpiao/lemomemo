@@ -4,12 +4,12 @@
 // • 每行：打勾（就地保存）、标题（常规字重）、截止标签（“今天 17:00 截止”）；点标题进编辑页。
 //   删除（软删 + 8 秒撤销条）：左滑露出“删除”，一口气拉过大半行直接删（负责人 11-15 去掉行尾 ×，kit 的 SwipeRow，电脑上鼠标也能拖）；
 //   键盘、读屏进编辑页在那里删（编辑页有“删除”）
-// • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记，圆圈变淡；点这一行、打勾、删除统一拦下（不进编辑页、不写），
+// • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记，方框变淡；点这一行、打勾、删除统一拦下（不进编辑页、不写），
 //   出提示条“这条要新版本才能修改 · 更新”（kit 的 useReadonlyGuard、ReadonlyToast）。只读 id 来自 core 的 readonlyIds。
 //   左滑：只读行不能滑（SwipeRow disabled）；多选这一页还没有，以后加的时候照样先看 ro.has(id)
 // • 行尾“未同步”小标记（REMIND-wiring；TC-B2-69；reminders 的 UnsyncedRemindMark 懒加载）：带提醒、还没同步上的那条标，在行按钮里、
 //   标题和截止标签的右边；只看本机待同步队列，同日历页直接挂、不等提醒引擎（今天页待办 代码审查 M1），没有时那一格不画
-// • 动效（17.1“勾选完成”“列表增删”，B2 FA-5；设计审查 M1～M3 返工 11-04）：打勾时圆圈在原地填满（CSS，--dur-ui），
+// • 动效（17.1“勾选完成”“列表增删”，B2 FA-5；设计审查 M1～M3 返工 11-04）：打勾时方框在原地填满（CSS，--dur-ui；R-433 圆圈改成圆角方框），
 //   列表先不动（useHoldView 留住按下之前的分组）；然后这一条从原来的组淡出、同时下面的行收上来，“已完成”组让开位置后它再淡入。
 //   删除：淡出和收拢同时；撤销恢复：先让开位置再淡入（不和别的行叠着）。第一次画列表不播。分组整组出现、消失同样淡入淡出。
 // • 已完成组折叠（负责人 11-15“完成的待办怎么隐藏比较好”，已选方案）：列表最下面只留一行“已完成 N ›”（按钮，aria-expanded），点开展开、再点收起；
@@ -17,9 +17,9 @@
 // • 完成以后离开原位（审查 11-15 第 4 条收成一套）：打勾完成、勾完最后一个子任务自动完成走同一条路——这一条记进 linger（集合），
 //   页底出“已完成 · 撤销”（DONE_LINGER_MS 约 3 秒，solo keep，后出的顶掉前一条；鼠标停在条上时一起多留），两种只差文案和撤销做什么（onUndo）。
 //   撤销条开着期间勾过的都留在原位，最后一条撤销条收起（到时、被删除的撤销条或出错条顶掉）时一起归进“已完成”组。
-//   点了撤销、或自己把圆圈点回去：那一条等写入完成（promise 回来）才从 linger 里拿掉，不靠 useHoldView 停一拍的时机兜底。
+//   点了撤销、或自己把方框点回去：那一条等写入完成（promise 回来）才从 linger 里拿掉，不靠 useHoldView 停一拍的时机兜底。
 //   分组时怎么留在原位在 data/todo-list.ts 的 linger
-// • 子任务（R-350 方案 5.1、5.4、5.5）：有子任务的待办，副行最前面是“已勾/总数”，行下面摊开勾选清单、底部分段进度条、右下“收起 / 展开”
+// • 子任务（R-350 方案 5.1、5.4、5.5）：有子任务的待办，行下面摊开勾选清单、底部分段进度条、右下“已勾/总数 · 收起 / 展开”
 //   （SubtaskCard；收起状态每台设备各记各的，未完成默认展开、已完成默认收起）。列表页只能勾，加删改在编辑页（Q10）。
 //   勾子任务：主待办只读或这一项只读 → 拦下出“要新版本”；勾上最后一项 → 主待办自动完成，和打勾一样留在原位、出撤销条
 //   （文案“全部完成，已完成这条待办”，方案 5.5；撤销时刚勾的那项和主待办一起撤回，Q1）；
@@ -27,7 +27,7 @@
 // • “最近删除”入口（审查 11-15 第 2 条；R-438 负责人 11-16 嫌胶囊“太突兀”）：顶栏里头像左边的垃圾桶图标（kit 的 TrashLink look="icon"，同随手记页），去 #/trash/todos（只列待办）
 // • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal + smart-search 的 PullSearch，和随手记、日历页同一套）；
 //   打了字就把“最近删除”、项目筛选和列表藏起来、换成结果（kit 的 PullSlot）（按标题和子任务就地筛，已完成的也在里面）；点一条和点标题一样进编辑页（只读的照样拦下）
-import { Suspense, useMemo, useRef, useState } from 'react';
+import { Fragment, Suspense, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
@@ -36,7 +36,11 @@ import list from '../../../kit/components/List.module.css';
 import { ListToasts, type ExtraUndo } from '../../../kit/components/ListToasts.tsx';
 import { ReadonlyMark, RoCheckCircle } from '../../../kit/components/ReadonlyRow.tsx';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
+import { PrioCycle, PrioDot } from '../../../kit/components/Priority.tsx';
+import { groupLabelClass } from '../../../kit/components/Form.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
+import { nextPriority, type Priority } from '../../../../shared/logic/todo-row.ts';
+import type { DateStr } from '../../../../shared/core/date.ts';
 import { TrashLink } from '../../../kit/components/TrashLink.tsx';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
@@ -71,7 +75,7 @@ export default function TodosPage() {
   // 完成以后先留在原位的那几条：跟着页底“已完成 · 撤销”条走（条在 a.g 里，a 又要用 l，所以记一份、画的时候对上，见下面）
   const lg = useLinger();
   const l = useTodoList(lg.ids);
-  // 打勾先留住按下之前的分组 --dur-ui（圆圈在原地填满，17.1 勾选完成）；只读行统一拦下；撤销条、出错条也在 a.g 里（kit 的 useListActions）
+  // 打勾先留住按下之前的分组 --dur-ui（方框在原地填满，17.1 勾选完成）；只读行统一拦下；撤销条、出错条也在 a.g 里（kit 的 useListActions）
   const hv = useHoldView(l.groups);
   const a = useListActions<DoneToast>('todos', { toggle: l.toggleDone, remove: l.remove }, hv);
   const { isRo, tick, shown, del } = a;
@@ -111,7 +115,7 @@ export default function TodosPage() {
       a.report(res);
     });
   };
-  /** 撤销条的文案和撤销做什么：打勾的撤销 = 再点一下圆圈（core/todo-done.ts 按撤销写回原来的 done_at）；自动完成的撤销连刚勾的那项一起撤回（Q1） */
+  /** 撤销条的文案和撤销做什么：打勾的撤销 = 再点一下方框（core/todo-done.ts 按撤销写回原来的 done_at）；自动完成的撤销连刚勾的那项一起撤回（Q1） */
   const undoOf = (x: DoneToast): ExtraUndo => ({
     key: `done:${x.n}`,
     message: t(x.sub === null ? 'list.doneToast' : 'items.autoDone', {}),
@@ -120,7 +124,10 @@ export default function TodosPage() {
     testId: x.sub === null ? 'todos-done-toast' : 'todos-auto-toast',
   });
 
-  const { groupTitle, tagText } = labelsOf(t, locale);
+  const { groupTitle, dueText } = labelsOf(t, locale);
+  const prioName = (p: Priority) => t(`list.prio.${p}`, {});
+  /** 行右边 H / M / L 换档（R-434）：只读行拦下出“要新版本”；写入结果照打勾一样报（出错条） */
+  const prio = (id: string, p: Priority) => (isRo(id) ? a.g.block() : void l.setPriority(id, p).then(a.report));
 
   return (
     <main ref={pull.ref} className={styles.page} data-feature="todos" data-testid="todos">
@@ -132,13 +139,17 @@ export default function TodosPage() {
           <MeLink testId="todos-settings" />
         </span>
       </header>
+      {/* 标题下面一行等宽小字（R-436 第 2 条）：今天的日期、这一页完成了几条 */}
+      <p className={styles.sub} data-testid="todos-sub">
+        {t('list.sub', { date: fmtDay(l.today, locale, 'monthDayWeek'), done: l.count.done, total: l.count.total })}
+      </p>
       <PullSlot pull={pull} keyLabel={t('list.pullKey', {})} search={<PullSearch pull={pull} scope="todo" onOpen={open} />}>
 
       {l.projects.length ? (
         <div className={styles.filter} role="group" aria-label={t('list.filter', {})} data-testid="todos-filter">
-          <Chip on={l.project === null} onClick={() => l.setProject(null)} label={t('list.all', {})} testId="todos-filter-all" />
+          <Chip on={l.project === null} onClick={() => l.setProject(null)} name={t('list.all', {})} n={l.count.all} testId="todos-filter-all" />
           {l.projects.map((p) => (
-            <Chip key={p.project} on={l.project === p.project} onClick={() => l.setProject(p.project)} label={`${p.project} ${p.count}`} testId={`todos-filter-${p.project}`} />
+            <Chip key={p.project} on={l.project === p.project} onClick={() => l.setProject(p.project)} name={p.project} n={p.count} testId={`todos-filter-${p.project}`} />
           ))}
         </div>
       ) : null}
@@ -153,13 +164,17 @@ export default function TodosPage() {
             {g.key === 'done' ? (
               <DoneFold title={groupTitle(g)} open={doneOpen} onToggle={() => setDoneOpen(!doneOpen)} />
             ) : (
-              <h2 className={styles.h2}>{groupTitle(g)}</h2>
+              <h2 className={`${groupLabelClass} ${styles.h2}`}>
+                {/* 分组名小字、加字距，右边条数（R-436 第 4 条）；过期组带“!”、红字 */}
+                <span>{g.key === 'late' ? <span aria-hidden="true">! </span> : null}{groupTitle(g)}</span>
+                <span className={styles.cnt}>{g.items.length}</span>
+              </h2>
             )}
             {g.key === 'done' && !doneOpen ? null : (
             <AppearList as="ul" className={`${list.list} ${list.roomy}`}>
               {g.items.map(({ todo, tag }) => {
                 const subs = l.subs.get(todo.id);
-                const prog = subs ? t('items.progress', { done: subs.filter((x) => x.done).length, total: subs.length }) : '';
+                const due = dueText(tag);
                 return (
                 <AppearItem
                   key={todo.id}
@@ -177,7 +192,7 @@ export default function TodosPage() {
                     actions={[{ key: 'del', label: t('list.delete', {}), danger: true, onClick: () => void del(todo.id), testId: `todos-swipe-del-${todo.id}` }]}
                     data-testid={`todos-swipe-${todo.id}`}
                   >
-                  <div className={subs ? `${list.swRow} ${styles.hasSubs}` : list.swRow}>
+                  <div className={`${list.swRow} ${styles.face}${subs ? ` ${styles.hasSubs}` : ''}`}>
                   <span className={list.lead}>
                     <RoCheckCircle
                       readOnly={isRo(todo.id)}
@@ -189,14 +204,24 @@ export default function TodosPage() {
                   </span>
                   <button type="button" className={list.main} onClick={() => open(todo.id)}>
                     <span className={list.text}>
-                      <span className={list.title}>{todo.title}</span>
+                      {/* 标题前一个优先级彩点（R-434） */}
+                      <span className={list.title}><PrioDot p={todo.priority} />{todo.title}</span>
+                      {/* 副行（R-434、R-436 确认图）：逾期“! 过期 11/13 14:00 · 项目”红字；其余“项目 · 今天 14:00”；日期、时刻等宽数字 */}
                       <span className={tag.kind === 'late' ? `${list.meta} ${styles.tagLate}` : list.meta} data-testid={`todos-tag-${todo.id}`}>
-                        {[prog, todo.important ? t('list.important', {}) : '', todo.project, tagText(tag)].filter(Boolean).join(' · ')}
+                        {tag.kind === 'late' ? <span aria-hidden="true">! </span> : null}
+                        {metaParts(tag.kind === 'late', todo.project, due ? <span className={styles.num}>{due}</span> : null)}
                       </span>
                     </span>
                     {isRo(todo.id) ? <ReadonlyMark testId={`todos-ro-${todo.id}`} /> : null}
                     <RowMark id={todo.id} />
                   </button>
+                  {/* 行右边 H / M / L（R-434）：点一下换下一档，在行按钮外面（按钮里不能套按钮） */}
+                  <PrioCycle
+                    p={todo.priority}
+                    label={t('list.prio', { p: prioName(todo.priority), next: prioName(nextPriority(todo.priority)) })}
+                    onChange={(p) => prio(todo.id, p)}
+                    testId={`todos-prio-${todo.id}`}
+                  />
                   {subs ? (
                     <SubtaskCard
                       todoId={todo.id}
@@ -268,6 +293,9 @@ function useLinger() {
 export { default as TodaySubtasks } from './TodaySubtasks.tsx';
 export { default as SubtaskEditor } from './SubtaskEditor.tsx';
 
+/** “2026-11-13” → “11/13”（副行的日期，等宽数字；两种语言同一种写法） */
+const md = (d: DateStr): string => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+
 /** 组标题、截止标签的文字（从页面拆出来，只看词典和语言） */
 function labelsOf(t: ReturnType<typeof useListT>, locale: Locale) {
   const groupTitle = (g: Group): string => {
@@ -281,25 +309,30 @@ function labelsOf(t: ReturnType<typeof useListT>, locale: Locale) {
       case 'done': return t('list.g.doneN', { n: g.items.length });
     }
   };
-  const tagText = (tag: DueTag): string => {
+  /** 副行的截止（R-434、R-436 确认图）：日期一律“月/日”数字，有时刻跟在后面；逾期前面“过期”，今天、明天写字 */
+  const dueText = (tag: DueTag): string => {
+    if (tag.kind === 'none') return '';
+    const at = tag.dueTime ? ` ${tag.dueTime}` : '';
     switch (tag.kind) {
-      case 'none': return '';
-      case 'late': return tag.days > 0 ? t('list.tag.late', { n: tag.days }) : t('list.tag.passed', { t: tag.dueTime ?? '' });
-      case 'today': return tag.dueTime ? t('list.tag.todayAt', { t: tag.dueTime }) : t('list.tag.today', {});
-      case 'tomorrow': return tag.dueTime ? t('list.tag.tomorrowAt', { t: tag.dueTime }) : t('list.tag.tomorrow', {});
-      case 'date': {
-        const date = fmtDay(tag.date, locale, 'monthDay');
-        return tag.dueTime ? t('list.tag.dateAt', { date, t: tag.dueTime }) : t('list.tag.date', { date });
-      }
+      case 'late': return `${t('list.due.late', {})} ${md(tag.due)}${at}`;
+      case 'today': return `${t('list.due.today', {})}${at}`;
+      case 'tomorrow': return `${t('list.due.tomorrow', {})}${at}`;
+      case 'date': return `${md(tag.date)}${at}`;
     }
   };
-  return { groupTitle, tagText };
+  return { groupTitle, dueText };
+}
+
+/** 副行的几段（R-434）：逾期“过期 11/13 14:00 · 项目”，其余“项目 · 今天 14:00”；空的那段不画，中间用“ · ”连 */
+function metaParts(late: boolean, project: string, due: ReactNode) {
+  const parts = [{ k: 'p', v: project || null }, { k: 'd', v: due }].filter((x) => x.v);
+  return (late ? parts.reverse() : parts).map((x, i) => <Fragment key={x.k}>{i > 0 ? ' · ' : null}{x.v}</Fragment>);
 }
 
 /** “已完成 N ›”：组标题本身就是展开 / 收起的按钮（负责人 11-15 方案）；› 的朝向跟着 data-open 转 */
 function DoneFold({ title, open, onToggle }: { title: string; open: boolean; onToggle(): void }) {
   return (
-    <h2 className={styles.h2}>
+    <h2 className={`${groupLabelClass} ${styles.h2}`}>
       <button type="button" className={styles.fold} aria-expanded={open} onClick={onToggle} data-testid="todos-done-fold">
         {title}
         <span className={styles.chev} data-open={open ? '' : undefined} aria-hidden="true">›</span>
@@ -308,10 +341,12 @@ function DoneFold({ title, open, onToggle }: { title: string; open: boolean; onT
   );
 }
 
-function Chip({ on, onClick, label, testId }: { on: boolean; onClick(): void; label: string; testId: string }) {
+/** 筛选胶囊（R-436 第 3 条）：名字 + 等宽淡色条数 */
+function Chip({ on, onClick, name, n, testId }: { on: boolean; onClick(): void; name: string; n: number; testId: string }) {
   return (
     <Pressable className={on ? styles.chipOn : styles.chip} aria-pressed={on} onClick={onClick} data-testid={testId}>
-      {label}
+      {name}
+      <span className={styles.chipN}>{n}</span>
     </Pressable>
   );
 }

@@ -11,14 +11,15 @@ vi.mock('../../reminders/index.ts', () => ({
   UnsyncedRemindMark: ({ table, id }: { table: string; id: string }) =>
     recs.has(`${table}:${id}`) ? <span data-testid="fake-mark">未同步</span> : null,
 }));
-const todo = (id: string, title: string) => ({ id, title, done: false, important: false, project: '', due: '2026-11-05', dueTime: '15:00' });
+const todo = (id: string, title: string) => ({ id, title, done: false, priority: 'mid', project: '', due: '2026-11-05', dueTime: '15:00' });
 vi.mock('../hooks/useTodoList.ts', async (orig) => ({
   ...(await orig<typeof ListMod>()),
   useTodoList: () => ({
     groups: [
       { key: 'today', date: null, items: [{ todo: todo('t1', '回邮件'), tag: { kind: 'today', dueTime: '15:00' } }, { todo: todo('t2', '交房租'), tag: { kind: 'today', dueTime: null } }] },
     ],
-    projects: [], project: null, setProject: () => undefined, toggleDone: async () => 'ok', remove: async () => 'ok', total: 2,
+    projects: [], project: null, setProject: () => undefined, toggleDone: async () => 'ok', remove: async () => 'ok',
+    today: '2026-11-05', count: { total: 2, done: 0, all: 2 }, setPriority: async () => 'ok',   // R-434、R-436
     subs: new Map(),   // R-350：没有子任务
   }),
 }));

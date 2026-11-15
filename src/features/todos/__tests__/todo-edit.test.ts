@@ -77,14 +77,14 @@ describe('patchOf：只写变了的列', () => {
 
 describe('newTodoRow：整行可写列，过得了 insert 的校验', () => {
   it('整行钉住（todos 加列只改 shared/logic/todo-row.ts 一处，这里跟着改）：标题去首尾空白、done_at 跟 done、其余来源列为空', () => {
-    const f = base({ title: '  交报告 ', done: true, due: '2026-11-05', due_time: '17:00', remind_before_min: 30, important: true, project: 'NEOX', note: 'n' });
+    const f = base({ title: '  交报告 ', done: true, due: '2026-11-05', due_time: '17:00', remind_before_min: 30, priority: 'high', project: 'NEOX', note: 'n' });
     expect(newTodoRow(ID, f, 7)).toStrictEqual({
-      id: ID, title: '交报告', done: true, important: true, due: '2026-11-05', due_time: '17:00', remind_before_min: 30, remind_days: 0, remind_time: '09:00',
+      id: ID, title: '交报告', done: true, priority: 'high', important: true, due: '2026-11-05', due_time: '17:00', remind_before_min: 30, remind_days: 0, remind_time: '09:00',
       project: 'NEOX', note: 'n', source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: null, short: null, short_by: null,
       done_at: 7, push_show_title: null, notified_for: null, snooze_at: null, created_at: 7, updated_at: 7,
     });
     expect(newTodoRow(ID, base({ remind_days: null, remind_time: '07:30' }), 8)).toStrictEqual({
-      id: ID, title: '交报告', done: false, important: false, due: null, due_time: null, remind_before_min: null, remind_days: null, remind_time: '07:30',
+      id: ID, title: '交报告', done: false, priority: 'mid', important: false, due: null, due_time: null, remind_before_min: null, remind_days: null, remind_time: '07:30',
       project: '', note: '', source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: null, short: null, short_by: null,
       done_at: 0, push_show_title: null, notified_for: null, snooze_at: null, created_at: 8, updated_at: 8,
     });
@@ -97,7 +97,7 @@ describe('newTodoRow：整行可写列，过得了 insert 的校验', () => {
   });
 
   it('formOf(newTodoRow(...)) 回到同一份表单', () => {
-    const f = base({ due: '2026-11-05', due_time: '17:00', remind_before_min: 30, important: true, project: 'NEOX', note: 'n' });
+    const f = base({ due: '2026-11-05', due_time: '17:00', remind_before_min: 30, priority: 'high', project: 'NEOX', note: 'n' });
     expect(formOf(newTodoRow(ID, f, 1))).toEqual(f);
   });
 
@@ -138,7 +138,7 @@ describe('hasRemind：和 shared 的 remindAtOf 同一份（BE-4 共用）', () 
     expect(prevRemindAtOf(row, null)).toBeUndefined();
     // 改标题、打勾 / 取消、标重要、改项目、改备注、改“当天 / 前一天”、改当天提醒时刻、删除 / 恢复：传这一行的 remind_at
     for (const data of [
-      { title: 'x', short: null, short_by: null }, { done: true, done_at: 5 }, { done: false, done_at: 0 }, { important: true },
+      { title: 'x', short: null, short_by: null }, { done: true, done_at: 5 }, { done: false, done_at: 0 }, { priority: 'low', important: false },
       { project: 'P' }, { note: 'n' }, { remind_days: 1 }, { remind_time: '20:00' }, { deleted_at: 5 }, { deleted_at: null },
     ]) {
       expect(prevRemindAtOf(row, { ...data, updated_at: 5 })).toBe(dueAt);

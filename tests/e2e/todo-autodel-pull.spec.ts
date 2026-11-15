@@ -35,7 +35,7 @@ async function fakeServer(page: Page, baseURL: string | undefined, o: { autodel?
   const todo = (rid: string, title: string, ago: number, editedAgo?: number) => {
     const done = now - ago * DAY;
     return {
-      id: rid, ...c, ...item, title, note: '', due: null, done: true, important: false, from_note_id: null, from_anniv_id: null, done_at: done,
+      id: rid, ...c, ...item, title, note: '', due: null, done: true, important: false, priority: 'mid', from_note_id: null, from_anniv_id: null, done_at: done,
       updated_at: editedAgo === undefined ? done : now - editedAgo * DAY, remind_days: null, remind_time: '09:00', due_time: null, remind_before_min: null,
     };
   };

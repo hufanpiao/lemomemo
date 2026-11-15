@@ -2,9 +2,9 @@
 // 那是 insert 和 update 可写列的并集，新增时带了只能 update 的 deleted_at、undone 也拦不住，e2e 才报 invalid_row）。
 // 11-09 起 captureRow 不再带 deleted_at、undone（库默认 null、false），captureRow 的行有两个去处，这里两边都核：
 //   • 客户端（features/plus 经 outbox）：events、todos 原样过 shared/schema/rows.ts 的 insertSchema(table)（严格对象，多一列就挂）；
-//   • claude-intake（intake_insert）：整行原样写，每一列必须在迁移 20261107100000 的 allowed 名单里，
+//   • claude-intake（intake_insert）：整行原样写，每一列必须在最后一个定义 intake_insert 的迁移（R-434 起是 20261115100000）的 allowed 名单里，
 //     或在 fixed 名单里且值一模一样（纪念日没有 insertSchema，只能按这份名单核）。
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { captureRow, type CaptureCtx, type CaptureItem, type CaptureRow } from '../../shared/logic/capture-map.ts';
 import { insertSchema, WRITE_RULES } from '../../shared/schema/rows.ts';
@@ -33,7 +33,11 @@ const CASES: { name: string; item: CaptureItem; ctx?: Partial<CaptureCtx>; table
 
 /** 读迁移里 intake_insert 的 allowed、fixed 两份名单（和服务器用的是同一份文字） */
 function intakeLists(): { allowed: Record<string, string[]>; fixed: Record<string, Record<string, unknown>> } {
-  const sql = readFileSync(new URL('../../supabase/migrations/20261107100000_core_my_ai_usage.sql', import.meta.url), 'utf8');
+  const dir = new URL('../../supabase/migrations/', import.meta.url);
+  const last = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
+    .filter((f) => /function private\.intake_insert\(/u.test(readFileSync(new URL(f, dir), 'utf8'))).at(-1);
+  if (!last) throw new Error('迁移里找不到 intake_insert');
+  const sql = readFileSync(new URL(last, dir), 'utf8');
   const grab = (name: string): unknown => {
     const m = new RegExp(`${name} constant jsonb := '([^']*)'`).exec(sql);
     if (!m) throw new Error(`迁移里找不到 ${name} 名单`);
@@ -91,7 +95,7 @@ describe('captureRow 的截断：按 UTF-16 单元截（同 insertSchema 的 max
 
 describe('captureRow 待办整行钉住（todos 加列只改 shared/logic/todo-row.ts 一处）', () => {
   const base = {
-    id: '00000000-0000-4000-8000-000000000001', title: '买牛奶', done: false, important: false, project: '', note: '', raw_text: '原话',
+    id: '00000000-0000-4000-8000-000000000001', title: '买牛奶', done: false, important: false, priority: 'mid', project: '', note: '', raw_text: '原话',
     batch_id: '00000000-0000-4000-8000-0000000000b1', from_note_id: null, from_anniv_id: null, done_at: 0, remind_days: null, remind_time: '09:00',
     push_show_title: null, notified_for: null, snooze_at: null, created_at: NOW, updated_at: NOW,
   };
@@ -104,7 +108,7 @@ describe('captureRow 待办整行钉住（todos 加列只改 shared/logic/todo-r
     const it2 = item({ due: '2026-11-04' as CaptureItem['due'], time: '18:00', important: true, short: '奶', project: '工作', body: '两盒' });
     expect(captureRow(it2, ctx({ source: 'voice' }))).toStrictEqual({
       table: 'todos',
-      row: { ...base, source: 'voice', important: true, project: '工作', note: '两盒', due: '2026-11-04', due_time: '18:00', remind_before_min: 60, short: '奶', short_by: 'ai' },
+      row: { ...base, source: 'voice', important: true, priority: 'high', project: '工作', note: '两盒', due: '2026-11-04', due_time: '18:00', remind_before_min: 60, short: '奶', short_by: 'ai' },
     });
   });
   it('只说时刻：截止记今天；本机规则不写简称', () => {

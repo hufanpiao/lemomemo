@@ -7,6 +7,7 @@
 //   新写 insertSchema / patchSchema 按表分开
 import { z } from 'zod';
 import { cutGraphemes } from '../logic/short.ts';
+import { PRIORITIES } from '../logic/todo-row.ts';
 
 /** 改了本文件的形状或枚举，就把它加 1（2.6：本机库按 schema_v 整表重拉） */
 export const SCHEMA_V = 4;   // 2：B0 集成按实际授权补列、加 devices；3：宽容读取补登记 notes、categories 的枚举列（架构 0.57，跟 B4 前端同一版发布）；4：profiles 加 avatar_id、avatar_bytes（R-384）
@@ -91,7 +92,9 @@ export const todosWrite = z.strictObject({
   title: z.string().min(1).max(ITEM_TITLE_MAX),
   done: z.boolean(),
   due: dateStr.nullable(),
+  // important：旧列，新客户端双写成 priority = 'high'（todo-row.ts 的 prioCols），下一版删；priority：R-434 三档（todos_priority_in）
   important: z.boolean(),
+  priority: z.enum(PRIORITIES),
   project: z.string().max(PROJECT_MAX),
   note: z.string().max(ITEM_NOTE_MAX),
   source,

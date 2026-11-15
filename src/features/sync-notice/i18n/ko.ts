@@ -50,7 +50,7 @@ export const syncNoticeKo = {
   'sn.f.done': '완료', // REVIEW(ko)
   'sn.f.due': '마감', // REVIEW(ko)
   'sn.f.dueTime': '마감 시각', // REVIEW(ko)
-  'sn.f.important': '중요', // REVIEW(ko)
+  'sn.f.priority': '우선순위', // REVIEW(ko)
   'sn.f.remindBefore': '미리 알림', // REVIEW(ko)
   'sn.f.name': '이름', // REVIEW(ko)
   'sn.f.color': '색상', // REVIEW(ko)

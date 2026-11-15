@@ -11,7 +11,7 @@ import { FAKE_USER_ID } from './session-fixture.ts';
 const TZ = 'Asia/Seoul';
 test.use({ loggedIn: true, timezoneId: TZ, viewport: { width: 390, height: 844 }, locale: 'zh-CN' });
 const DAY = 86400000;
-const base = { user_id: FAKE_USER_ID, tz: TZ, created_at: 1, deleted_at: null, undone: false, short: null, due: null, due_time: null, important: false, project: '' };
+const base = { user_id: FAKE_USER_ID, tz: TZ, created_at: 1, deleted_at: null, undone: false, short: null, due: null, due_time: null, important: false, priority: 'mid', project: '' };
 const at = Date.now() - 8 * DAY;
 const OLD = { ...base, id: 'old', title: '八天前完成', done: true, done_at: at, updated_at: at };
 

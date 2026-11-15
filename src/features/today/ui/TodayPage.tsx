@@ -37,6 +37,8 @@ import { navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
+import { PrioCycle, PrioDot } from '../../../kit/components/Priority.tsx';
+import { nextPriority, type Priority } from '../../../../shared/logic/todo-row.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import type { SwipeRowProps } from '../../../kit/components/SwipeRow.tsx';
 import type TodaySwipe from './TodaySwipe.tsx';
@@ -161,6 +163,9 @@ export default function TodayPage() {
     return del(id);
   };
   const [pastOpen, setPastOpen] = useState(false);
+  /** 待办行右边 H / M / L（R-434，同待办页）：只读行拦下出“要新版本”；写入结果照打勾一样报 */
+  const prio = (id: string, p: Priority) => (g.isRo('todo', id) ? g.block() : void d.setPriority(id, p).then(a.report));
+  const prioBox = (id: string, p: Priority) => <PrioCycle p={p} label={t('prio', { p: t(`prio.${p}`, {}), next: t(`prio.${nextPriority(p)}`, {}) })} onChange={(x) => prio(id, x)} testId={`today-prio-${id}`} />;
 
   const lateItem = v.late.length ? (
     <AppearItem as="section" key="late" className={`${list.panel} ${styles.late}`} aria-labelledby="today-late" data-testid="today-late">
@@ -177,13 +182,14 @@ export default function TodayPage() {
             />
             <button type="button" className={list.main} onClick={() => open({ kind: 'todo', id: todo.id })} data-open={todo.id} aria-current={cur(todo.id)}>
               <span className={list.text}>
-                <span className={list.title}>{todo.title}</span>
+                <span className={list.title}><PrioDot p={todo.priority} />{todo.title}</span>
                 <span className={`${list.meta} ${styles.lateTag}`}>{days > 0 ? t('late.days', { n: days }) : t('late.passed', { t: todo.dueTime ?? '' })}</span>
                 <Subs id={todo.id} />
               </span>
               {g.isRo('todo', todo.id) ? <Ro part="mark" testId={`today-ro-${todo.id}`} /> : null}
               <RowMark table="todos" id={todo.id} />
             </button>
+            {prioBox(todo.id, todo.priority)}
           </AppearItem>
         ))}
       </AppearList>
@@ -233,13 +239,14 @@ export default function TodayPage() {
             />
             <button type="button" className={list.main} onClick={() => open({ kind: 'todo', id: td.id })} data-open={td.id} aria-current={cur(td.id)}>
               <span className={list.text}>
-                <span className={list.title}>{td.title}</span>
+                <span className={list.title}><PrioDot p={td.priority} />{td.title}</span>
                 <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
                 <Subs id={td.id} />
               </span>
               {ro ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
               <RowMark table="todos" id={td.id} />
             </button>
+            {prioBox(td.id, td.priority)}
           </div>
         </SwipeDel>
       </AppearItem>

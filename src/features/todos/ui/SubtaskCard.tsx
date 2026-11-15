@@ -33,6 +33,7 @@ export function SubtaskCard(p: SubtaskCardProps) {
         {p.items.map((i) => (
           <li key={i.id} className={s.item} data-done={shown(i) ? '' : undefined}>
             <RoCheckCircle
+              still
               readOnly={p.readOnly(i.id)}
               checked={shown(i)}
               label={i.title}
@@ -59,7 +60,8 @@ export function SubtaskCard(p: SubtaskCardProps) {
           onClick={() => p.onCollapse(!p.collapsed)}
           data-testid={`todos-fold-${p.todoId}`}
         >
-          {t(p.collapsed ? 'items.expand' : 'items.collapse', {})}
+          {/* 进度条后面跟“2/4 · 收起”等宽小字（R-436 第 7 条；原来行副行最前面的“2/4”挪到这里） */}
+          {`${t('items.progress', { done, total })} · ${t(p.collapsed ? 'items.expand' : 'items.collapse', {})}`}
         </button>
       </div>
     </div>

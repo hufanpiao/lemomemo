@@ -100,6 +100,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/features/notes/ui/NotesSurface.tsx': 'B5 隐私记页用的随手记整套界面（notes/index.ts 的 lazy 出口）：只在隐私记解锁后挂，首屏不下载',
   'src/core/todo-done.ts': '今天页打勾第一次点时才下载（useToday，11-15 首屏 150.3 KB 超线后挪出；今天页出现之前用不到）',
   'src/features/today/data/today-actions.ts': '今天页删除、撤销删除第一次点时才下载（useToday，同上）',
+  'src/core/todo-priority.ts': '今天页待办行右边 H / M / L 第一次点时才下载（useToday，R-434，同上）',
   'src/app/CacheTooNewScreen.tsx': '只在本机库比 App 新（version_too_new）时整屏提示用',
   'src/motion/motion-impl.tsx': '动画实现和功能包合块，main.tsx 在 appPainted() 之后下载（R-354）',
   'src/features/plus/ui/TypeBar.tsx': '“＋”点一下打开的打字条：首屏画完以后 afterAppPainted 才预先下载（app/plus-slot.tsx），没下载好就点显示“准备中”（B3 Q4）；同一块里的 Preload（小气泡、按住“＋”录音那一套，B3 FA-3）下载好以后才挂',

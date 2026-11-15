@@ -32,15 +32,17 @@ describe('字段描述', () => {
   it('各格式：文本、日期、时刻、开关、提醒选项、列表、纪念日的提前天数', () => {
     const lines = describeConflict(
       'todos',
-      ['title', 'due', 'due_time', 'important', 'remind_before_min', 'remind_days'],
-      { title: '另一台', due: '2026-11-08', due_time: '09:30', important: true, remind_before_min: 120, remind_days: 1 },
+      ['title', 'due', 'due_time', 'done', 'priority', 'important', 'remind_before_min', 'remind_days'],
+      { title: '另一台', due: '2026-11-08', due_time: '09:30', done: true, priority: 'high', important: true, remind_before_min: 120, remind_days: 1 },
       'zh-CN', zh,
     );
     expect(lines).toEqual([
       { field: '标题', value: '另一台' },
       { field: '截止', value: '11月8日 周日' },
       { field: '截止时刻', value: '09:30' },
-      { field: '重要', value: '是' },
+      { field: '已完成', value: '是' },
+      // 优先级（R-434）写“（已改过）”；旧列 important 双写、不显示
+      { field: '优先级', value: '（已改过）' },
       { field: '提前提醒', value: '提前 2 小时' },
       { field: '提醒的日子', value: '前一天' },
     ]);
@@ -68,7 +70,7 @@ describe('字段描述', () => {
   });
 
   it('格式化抛错（值的类型不对）写“（已改过）”，不露原始 JSON', () => {
-    const bad = describeConflict('todos', ['due', 'important', 'remind_days'], { due: { y: 1 }, important: 'yes', remind_days: 5 }, 'zh-CN', zh);
+    const bad = describeConflict('todos', ['due', 'done', 'remind_days'], { due: { y: 1 }, done: 'yes', remind_days: 5 }, 'zh-CN', zh);
     expect(bad.map((l) => l.value)).toEqual(['（已改过）', '（已改过）', '（已改过）']);
     for (const l of bad) expect(l.value).not.toMatch(/[{}[\]"]/);
   });

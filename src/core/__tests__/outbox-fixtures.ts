@@ -8,7 +8,7 @@ export const uid = (n: number): string => `00000000-0000-4000-8000-${String(n).p
 /** todos 的一整行可写列（insert 用，去掉只能 update 的 deleted_at、undone） */
 export function todo(n: number, over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    id: uid(n), title: `待办${n}`, done: false, due: null, important: false, project: '', note: '', source: 'page', raw_text: '',
+    id: uid(n), title: `待办${n}`, done: false, due: null, important: false, priority: 'mid', project: '', note: '', source: 'page', raw_text: '',
     batch_id: null, from_note_id: null, from_anniv_id: null, short: null, short_by: null, done_at: 0, remind_days: null,
     remind_time: '09:00', due_time: null, remind_before_min: null, push_show_title: null, notified_for: null, snooze_at: null,
     created_at: 1, updated_at: 1, ...over,

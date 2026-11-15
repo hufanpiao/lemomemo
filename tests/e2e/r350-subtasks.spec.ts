@@ -25,7 +25,7 @@ async function seed(page: Page): Promise<void> {
   await page.goto('/app/#/today');
   await page.getByTestId('today').waitFor({ timeout: 30000 });
   const d = today();
-  const td = (id: string, title: string) => ({ ...base, id, title, due: d, due_time: null, done: false, important: false, project: '', short: null, undone: false });
+  const td = (id: string, title: string) => ({ ...base, id, title, due: d, due_time: null, done: false, important: false, priority: 'mid', project: '', short: null, undone: false });
   const it = (id: string, todo_id: string, title: string, sort: number, done: boolean) => ({ ...base, id, todo_id, title, sort, done });
   await idbPut(page, [
     ...[td(T1, '买菜'), td('t2', '回邮件')].map((r) => ['todos', cached(r)] as const),
@@ -59,7 +59,8 @@ test.describe('R-350 待办子任务', () => {
     await page.goto('/app/#/todos');
     await page.reload();
     await page.getByTestId(`todos-subs-${T1}`).waitFor({ timeout: 30000 });
-    await expect(page.getByTestId(`todos-tag-${T1}`)).toContainText('1/3');
+    // R-436 第 7 条：“已勾/总数”从副行最前面挪到进度条后面（“1/3 · 收起”）
+    await expect(page.getByTestId(`todos-fold-${T1}`)).toHaveText('1/3 · 收起');
     if (SHOTS && browserName === 'chromium') await page.screenshot({ path: `${SHOTS}/todos.png` });
     await page.getByTestId('todos-sub-b').click();
     await expect(page.getByTestId(`todos-bar-${T1}`)).toHaveAttribute('aria-valuenow', '2');

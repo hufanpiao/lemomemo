@@ -139,7 +139,7 @@ export function captureRow(item: CaptureItem, ctx: CaptureCtx): CaptureRow | nul
       return {
         table: 'todos',
         row: todoRowOf({
-          id: ctx.id, title, due, important: item.important, project, note, source: ctx.source, raw_text: raw, batch_id: ctx.batchId,
+          id: ctx.id, title, due, priority: item.important ? 'high' : 'mid', project, note, source: ctx.source, raw_text: raw, batch_id: ctx.batchId,
           ...shortOf(item, ctx), remind_days: null, due_time: dueTime, remind_before_min: dueTime === null ? null : DEFAULT_REMIND_BEFORE_MIN, now: ctx.now,
         }),
       };

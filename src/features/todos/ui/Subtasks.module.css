@@ -1,14 +1,11 @@
 /* 待办子任务（R-350 方案 5.1～5.3、6.2）：列表卡片里摊开的勾选清单、分段进度条、收起按钮；今天页一行进度；编辑页“子任务”区。只用令牌（A11）
-   • 勾子任务一天上百次：不播动画——方框的填充块、勾号（kit CheckCircle 里带 data-state 的两个 span）去掉过渡，进度段直接变色
+   • 勾子任务一天上百次：不播动画——kit CheckCircle 传 still（SubtaskCard、SubtaskEditor），进度段直接变色
    • 方框比主待办小一号（--check-size: 18px，R-433 同样是圆角方框），点击区照样 44 × 44（kit CheckCircle 的外扩区）
-   • 进度段：没勾的是空心描边（--text-2，和卡片底色对比 ≥ 3:1，同空心圆圈的意思），勾上的填强调色 */
+   • 进度段（R-436 确认图第 7 条）：没勾的是暗灰实心细条 --step-off，勾上的填强调色；段的颜色只是装饰，几项勾了由后面的“2/4”文字和 progressbar 的 aria-valuenow 说
+   • 勾上的子任务：方框是 kit CheckCircle 的勾上样子（--check-on-bg、--check-on-fg，同已完成的待办），文字淡出成 --text-3 */
 
 .subs {
   --check-size: 18px;
-}
-
-.subs [data-state] {
-  transition: none;
 }
 
 /* ---------- 进度条 ---------- */
@@ -17,24 +14,22 @@
   flex: 1 1 auto;
   gap: 3px;
   min-width: 0;
-  height: 6px;
+  height: 3px;   /* R-436 第 7 条：从 6 细到 3；今天页的短条（.short）同一个粗细 */
 }
 
-.thin {
+.short {
   flex: 0 1 96px;
-  height: 4px;
 }
 
 .seg {
   flex: 1 1 0;
   min-width: 2px;
   border-radius: var(--r-pill);
-  box-shadow: inset 0 0 0 1px var(--text-2);
+  background: var(--step-off);
 }
 
 .seg[data-on] {
   background: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 /* ---------- 列表页卡片（待办行下面占满一整行；左边让出圆圈那一格，和标题起点对齐） ---------- */
@@ -54,17 +49,23 @@
   display: none;
 }
 
+/* 行距（R-436 确认图第 7 条，约 34pt 一行）：看得见的一行 34 高；方框（kit CheckCircle 开的 --check-margin，上下各让 8）和标题的点击区
+   照样 44 高——都用 ::after 上下各外扩 5（方框的外扩区是 kit 自己的 max(100%, --hit)）。相邻两行的外扩区上下各重叠 5，
+   重叠处归后画的那一行（下一行），每一行独占的点按高度是 34 */
 .item {
+  --check-margin: 8px;
+
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: var(--hit);
+  min-height: 34px;
 }
 
 .itemText {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
-  min-height: var(--hit);
+  min-height: 34px;
   padding: 0;
   overflow: hidden;
   border: 0;
@@ -77,14 +78,15 @@
   white-space: nowrap;
 }
 
-.itemText:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
+.itemText::after {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
 }
 
-/* 已勾的标题变淡、不加删除线（方案 5.1） */
+/* 已勾的标题淡出、不加删除线（方案 5.1；R-436 第 7 条“已勾的淡出”） */
 .item[data-done] .itemText {
-  color: var(--text-2);
+  color: var(--text-3);
 }
 
 @media (hover: hover) {
@@ -108,13 +110,10 @@
   background: none;
   color: var(--text-2);
   font: inherit;
-  font-size: var(--fs-12-5);
+  font-family: var(--f-tnum);
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
   text-align: right;
-}
-
-.toggle:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
 }
 
 /* ---------- 今天页的一行：已勾/总数 + 细进度条，不摊开（Q5） ---------- */
@@ -168,7 +167,7 @@
   align-items: center;
   gap: 4px;
   min-height: var(--hit);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0.5px solid var(--line);   /* R-436 各页分隔线一律 0.5 */
 }
 
 .editRow[data-over='before'] {

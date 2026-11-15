@@ -43,7 +43,7 @@ async function fakeServer(page: Page, baseURL: string | undefined, o: Opts = {})
   const tables: Record<string, Record<string, unknown>[]> = {
     // 日程、待办要带齐必填列（shared/schema/rows-read.ts 的 requiredColsOf，缺了宽容读取当坏行丢掉）
     events: [{ id: EV, ...c, ...item, title: '看牙医', date: day, time: '15:00', tz: 'Asia/Seoul', duration_min: 60, location: '江南站 3 号口', note: '带医保卡', remind_min: null, remind_days: null }],
-    todos: [{ id: TD, ...c, ...item, title: '预约洗牙', note: '', project: '健康', due: null, done: false, important: false, from_note_id: null, from_anniv_id: null, done_at: 0, remind_days: null, remind_time: '09:00', due_time: null, remind_before_min: null }],
+    todos: [{ id: TD, ...c, ...item, title: '预约洗牙', note: '', project: '健康', due: null, done: false, important: false, priority: 'mid', from_note_id: null, from_anniv_id: null, done_at: 0, remind_days: null, remind_time: '09:00', due_time: null, remind_before_min: null }],
     notes: [
       { id: NT, ...c, title: '拉面店', body: '弘大那家拉面店，汤头很浓。', is_private: false, category_id: null, category_source: 'none', category_seen: true, tags: [], converted_to: null, source: 'page', raw_text: '', batch_id: null },
       { id: VN, ...c, title: '牙医收据', body: '隐私记', is_private: true, category_id: null, category_source: 'none', category_seen: true, tags: [], converted_to: null, source: 'page', raw_text: '', batch_id: null },

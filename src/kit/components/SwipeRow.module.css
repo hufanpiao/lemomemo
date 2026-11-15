@@ -1,6 +1,7 @@
 /* 左滑露出操作的列表行（kit，SwipeRow.tsx）：只用令牌（A11）。
    • .wrap：外框（列表里是 li，和 List.module.css 的 .row 一起用），裁掉滑出去的部分
-   • .acts：右侧操作按钮，压在行面下面；.face：行面（底色同列表面板，z-index 盖住排在它后面的按钮），跟手只动 transform
+   • .acts：右侧操作按钮，压在行面下面；.face：行面（底色同列表面板，z-index 盖住排在它后面的按钮），跟手只动 transform；
+     使用方要换行面底色（待办页过期组 --late-bg）就在外层设 --sw-face-bg，不从外面改 .face
    • .face[data-snap]：松手后收回或停住的过渡；减少动态效果时没有过渡、直接到位
    • .fullBg（给了 full、那个动作是警示的）：拉过操作区以后露出来的行底。没过阈值是中性的 --panel-2（只有按钮自己是红的）；
      过了阈值（外框 [data-full]）整行换成“删除”按钮的底色，看得出松手就删；来回跨阈值时底色过渡 --dur-ui，减少动态效果时直接换
@@ -57,7 +58,7 @@
   align-self: stretch;
   align-items: center;
   min-width: 0;
-  background: var(--panel);
+  background: var(--sw-face-bg, var(--panel));
   touch-action: pan-y;
 }
 

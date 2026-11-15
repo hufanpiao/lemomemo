@@ -8,7 +8,7 @@ import { FAKE_USER_ID } from './session-fixture.ts';
 
 const TZ = 'Asia/Seoul';
 test.use({ loggedIn: true, timezoneId: TZ, viewport: { width: 393, height: 852 }, locale: 'zh-CN' });
-const base = { user_id: FAKE_USER_ID, tz: TZ, created_at: 1, updated_at: 1, deleted_at: null, undone: false, short: null, project: '', due: null, due_time: null, done: false, important: false, rev: 1 };
+const base = { user_id: FAKE_USER_ID, tz: TZ, created_at: 1, updated_at: 1, deleted_at: null, undone: false, short: null, project: '', due: null, due_time: null, done: false, important: false, priority: 'mid', rev: 1 };
 
 async function seed(page: Page): Promise<void> {
   await page.goto('/app/#/todos');

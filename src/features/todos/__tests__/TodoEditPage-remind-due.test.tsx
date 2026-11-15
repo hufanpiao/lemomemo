@@ -30,7 +30,7 @@ async function boot() {
 
 const serverTodo = (over: Record<string, unknown> = {}): ServerRow =>
   ({
-    id: ID, title: '交报告', done: false, due: '2026-11-05', important: false, project: '', note: '', source: 'voice', raw_text: '今天五点前交报告',
+    id: ID, title: '交报告', done: false, due: '2026-11-05', important: false, priority: 'mid', project: '', note: '', source: 'voice', raw_text: '今天五点前交报告',
     batch_id: null, from_note_id: null, from_anniv_id: null, short: '交报', short_by: 'ai', done_at: 0, remind_days: 0, remind_time: '09:00',
     due_time: null, remind_before_min: null, push_show_title: null, notified_for: null, snooze_at: null, deleted_at: null, undone: false,
     created_at: 1, updated_at: 1, rev: 3, ...over,

@@ -45,9 +45,10 @@ afterEach(() => {
 });
 
 describe('列表页卡片（5.1、5.4、6.2）', () => {
-  it('副行最前面是“已勾/总数”；进度条 role=progressbar 带总数、已勾、读屏句；没有子任务的行不画卡片', async () => {
+  it('进度条后面跟“已勾/总数 · 收起”（R-436 第 7 条，原来在副行最前面）；进度条 role=progressbar 带总数、已勾、读屏句；没有子任务的行不画卡片', async () => {
     render(<TodosPage />);
-    expect((await screen.findByTestId('todos-tag-t1')).textContent).toMatch(/^1\/3/);
+    expect((await screen.findByTestId('todos-tag-t1')).textContent).not.toMatch(/1\/3/);
+    expect(screen.getByTestId('todos-fold-t1').textContent).toBe('1/3 · 收起');
     const bar = screen.getByTestId('todos-bar-t1');
     expect(bar.getAttribute('role')).toBe('progressbar');
     expect([bar.getAttribute('aria-valuemin'), bar.getAttribute('aria-valuemax'), bar.getAttribute('aria-valuenow')]).toEqual(['0', '3', '1']);

@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { dueTagOf, groupTodos, itemOf, projectCounts, type Row } from '../data/todo-list.ts';
+import { nextPriority, prioCols, PRIORITIES } from '../../../../shared/logic/todo-row.ts';
 
 const TZ = 'Asia/Seoul';
 const NOW = msAt('2026-11-05', 14 * 60 + 17, TZ);
@@ -15,8 +16,8 @@ describe('截止标签', () => {
 
   it('今天 17:00 截止；今天 12:00 已过 → 过期（逾 0 天）；昨天 → 逾 1 天；明天；后天写日期；没日期', () => {
     expect(tag({ due: '2026-11-05', due_time: '17:00' })).toEqual({ kind: 'today', dueTime: '17:00' });
-    expect(tag({ due: '2026-11-05', due_time: '12:00' })).toEqual({ kind: 'late', days: 0, dueTime: '12:00' });
-    expect(tag({ due: '2026-11-04' })).toEqual({ kind: 'late', days: 1, dueTime: null });
+    expect(tag({ due: '2026-11-05', due_time: '12:00' })).toEqual({ kind: 'late', days: 0, due: '2026-11-05', dueTime: '12:00' });
+    expect(tag({ due: '2026-11-04' })).toEqual({ kind: 'late', days: 1, due: '2026-11-04', dueTime: null });
     expect(tag({ due: '2026-11-06' })).toEqual({ kind: 'tomorrow', dueTime: null });
     expect(tag({ due: '2026-11-07', due_time: '09:00' })).toEqual({ kind: 'date', date: '2026-11-07', dueTime: '09:00' });
     expect(tag({})).toEqual({ kind: 'none' });
@@ -62,10 +63,10 @@ describe('分组', () => {
     expect(groupTodos(rows, NOW, TZ)[0]?.items.map((i) => i.todo.title)).toEqual(['c', 'b', 'a']);
   });
 
-  it('项目筛选：只留这个项目；筛选条按没完成的条数', () => {
-    const rows = [td({ project: 'NEOX' }), td({ project: 'NEOX' }), td({ project: 'SignPlex' }), td({ project: 'SignPlex', done: true }), td({})];
+  it('项目筛选：只留这个项目；筛选条的条数含已完成（R-436 确认图“全部 10”与“1 / 10 完成”同口径），删了的不算', () => {
+    const rows = [td({ project: 'NEOX' }), td({ project: 'NEOX' }), td({ project: 'SignPlex' }), td({ project: 'SignPlex', done: true }), td({}), td({ project: 'SignPlex', deleted_at: 1 })];
     expect(groupTodos(rows, NOW, TZ, 'SignPlex').flatMap((g) => g.items.map((i) => i.todo.project))).toEqual(['SignPlex', 'SignPlex']);
-    expect(projectCounts(rows)).toEqual([{ project: 'NEOX', count: 2 }, { project: 'SignPlex', count: 1 }]);
+    expect(projectCounts(rows)).toEqual([{ project: 'NEOX', count: 2 }, { project: 'SignPlex', count: 2 }]);
   });
 
   it('筛选条条数一样：按项目名，数字按数值、按当前语言（代码复审第三轮，和标题同一个比较）', () => {
@@ -119,5 +120,31 @@ describe('同一截止时刻、没日期那组按标题排：数字按数值（�
   it('按传入的语言比：中文按拼音，“北京”在“上海”前（按码位会反过来）', () => {
     const rows = ['上海出差', '北京出差'].map((title) => td({ title }));
     expect(titlesOf(groupTodos(rows, NOW, TZ, null, 'zh-CN'), 'nodate')).toEqual(['北京出差', '上海出差']);
+  });
+});
+
+describe('优先级三档（R-434）', () => {
+  const titlesOf = (g: ReturnType<typeof groupTodos>, key: string) => g.find((x) => x.key === key)?.items.map((i) => i.todo.title);
+
+  it('读一行：priority 是三档之一就用它；本机还没拉到 priority 的老行按 important 推（true 高，其余中）；不认识的值也按 important 推', () => {
+    expect(itemOf(td({ priority: 'low' })).priority).toBe('low');
+    expect(itemOf(td({ priority: 'high', important: false })).priority).toBe('high');
+    expect(itemOf(td({ important: true })).priority).toBe('high');
+    expect(itemOf(td({})).priority).toBe('mid');
+    expect(itemOf(td({ priority: 'urgent', important: false })).priority).toBe('mid');
+  });
+
+  it('换档高 → 中 → 低 → 高；写入双写旧列 important（只有高是 true）', () => {
+    expect([nextPriority('high'), nextPriority('mid'), nextPriority('low')]).toEqual(['mid', 'low', 'high']);
+    expect(PRIORITIES.map(prioCols)).toEqual([
+      { priority: 'high', important: true }, { priority: 'mid', important: false }, { priority: 'low', important: false },
+    ]);
+  });
+
+  it('同一截止时刻、没日期那组：高在中前、中在低前，最后才按标题', () => {
+    const rows = [td({ title: 'a', priority: 'low' }), td({ title: 'b', priority: 'mid' }), td({ title: 'c', priority: 'high' }), td({ title: 'd', priority: 'mid' })];
+    expect(titlesOf(groupTodos(rows, NOW, TZ), 'nodate')).toEqual(['c', 'b', 'd', 'a']);
+    const due = rows.map((r) => ({ ...r, due: '2026-11-05', due_time: '18:00' }));
+    expect(titlesOf(groupTodos(due, NOW, TZ), 'today')).toEqual(['c', 'b', 'd', 'a']);
   });
 });
