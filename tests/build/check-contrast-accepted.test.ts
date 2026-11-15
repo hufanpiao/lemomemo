@@ -110,9 +110,12 @@ describe('build/check_contrast.py：真仓库的例外名单', () => {
     // 11-07 负责人定（R-355，B2-UI-a 代码审 M1）：深色“＋”的键盘聚焦框（--focus 跟 --text）内外两侧都不到 3:1，登记为例外，GlassBar.module.css 不改
     want.push(['simple-dark', 'focus-fab-in', 1.1935], ['simple-dark', 'focus-fab-out', 2.2072]); // 11-15 暖黑（R-432）重算
     want.push(['glass-dark', 'focus-fab-in', 1.1935], ['glass-dark', 'focus-fab-out', 2.2072]);
+    // 11-15 负责人定（R-433“按照参考图一模一样的来”）：深色勾选框边用参考图原色 #69645C，卡片底、编辑页分组底都不到 3:1，登记为例外
+    for (const skin of ['glass', 'simple']) want.push([`${skin}-dark`, 'check-edge-panel', 2.7074], [`${skin}-dark`, 'check-edge-panel2', 2.4092]);
     expect((data.accepted ?? []).map((e) => [e.theme, e.id, e.floor]).sort()).toEqual(want.sort());
     for (const e of data.accepted ?? []) {
       if (e.id.startsWith('focus-')) expect(e).toMatchObject({ decided: '2026-11-07', reason: expect.stringContaining('R-355') });
+      else if (e.id.startsWith('check-edge-')) expect(e).toMatchObject({ decided: '2026-11-15', reason: expect.stringContaining('一模一样') });
       else expect(e).toMatchObject({ decided: '2026-11-06', reason: REASON });
     }
     // 自动深浅 11-06 取消，它的两对颜色也删了
@@ -122,6 +125,6 @@ describe('build/check_contrast.py：真仓库的例外名单', () => {
     for (const id of ['g-tint-floor', 'g-fg-on-floor']) expect(data.pairs.find((p) => p.id === id)?.over).toBeUndefined();
     const { code, report } = exec(ROOT);
     expect(code).toBe(0);
-    expect(report).toMatchObject({ failed: 0, accepted: 12 });
+    expect(report).toMatchObject({ failed: 0, accepted: 16 });
   });
 });
