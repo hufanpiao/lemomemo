@@ -1,4 +1,4 @@
-// 编辑页外框（B2 FA-2）：顶栏“‹ 返回 · 类型名 · 保存状态”、顶部提示（只读、已删除）、正文、底部“删除”。保存状态、只读、删除按 useEditRecord 画（EditNotices.tsx），表单内容由调用方传
+// 编辑页外框（B2 FA-2）：顶栏“‹ 返回 · 类型名 · 保存状态”、顶部提示（只读、已删除）、正文、底部整宽删除行（R-436）。保存状态、只读、删除按 useEditRecord 画（EditNotices.tsx），表单内容由调用方传
 // 保存状态是常驻的 role="status"，读屏会播报“已自动保存”“没保存上”
 // 编辑页挂着期间占住升级中心的 busy（BUSY-wire）：不出版本横幅、不自动重新载入，离开编辑页就释放；放在详情抽屉里时不在这里占，
 // 由 DetailDrawer 按焦点在不在抽屉里占（抽屉在电脑上可能开一整天，B6 独立评审第 12 条）
@@ -10,7 +10,7 @@ import { BackLink } from './BackLink.tsx';
 import { DrawerClose, useInDrawer } from './DetailDrawer.tsx';
 import { DeletedNotice, ReadonlyNotice, useEditStatus, useEditT, type OwnStatus } from './EditNotices.tsx';
 import styles from './EditShell.module.css';
-import { FormButton } from './Form.tsx';
+import { DeleteRow } from './Form.tsx';
 
 export interface EditShellProps {
   kind: string;
@@ -22,17 +22,19 @@ export interface EditShellProps {
   own: OwnStatus;
   /** 页面和按钮的测试 id 前缀（todo-edit、event-edit） */
   prefix: string;
+  /** 底部整宽删除行的字（R-436 纪念日“删除这个纪念日”）；不传是“删除” */
+  deleteLabel?: string;
   children: ReactNode;
 }
 
-export function EditShell({ kind, backLabel, onBack, rec, own, prefix, children }: EditShellProps) {
+export function EditShell({ kind, backLabel, onBack, rec, own, prefix, deleteLabel, children }: EditShellProps) {
   const onClose = useInDrawer();
   useHoldBusy('editing', !onClose);
   const t = useEditT();
   const st = useEditStatus(rec.status, own);
   const { readonly, deleted } = rec;
   const del = (v: boolean) => void rec.setDeleted(v);
-  // 只读时不写“改了就自动保存”（FA-2 视觉验收第 2 条）
+  // 没改过时不写字（R-436：原来的“改了就自动保存”去掉，改过才出“✓ 已保存”）；只读时也不写（FA-2 视觉验收第 2 条）
   const status = (
     <p className={`${styles.status}${st.bad ? ` ${styles.statusBad}` : ''}`} role="status" data-testid="edit-status">
       {rec.status !== 'idle' || !readonly ? st.text : ''}
@@ -63,11 +65,9 @@ export function EditShell({ kind, backLabel, onBack, rec, own, prefix, children 
       ) : null}
       {children}
       {rec.row && !deleted && !readonly ? (
-        <div className={styles.actions}>
-          <FormButton danger onClick={() => del(true)} data-testid={`${prefix}-delete`} data-no-proxy="">
-            {t('edit.delete', {})}
-          </FormButton>
-        </div>
+        <DeleteRow onClick={() => del(true)} data-testid={`${prefix}-delete`} data-no-proxy="">
+          {deleteLabel ?? t('edit.delete', {})}
+        </DeleteRow>
       ) : null}
     </>
   );

@@ -35,49 +35,6 @@
   margin-bottom: 10px;
 }
 
-/* 编辑页的分段（类型、阳历阴历）：整行宽、各段平分；页顶“周 / 月 / 纪念日”用 kit 的 ModeSeg，和日历页同一份 */
-.seg {
-  display: flex;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--panel);
-}
-
-.segBtn {
-  position: relative;
-  flex: 1;
-  min-height: 40px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: none;
-  color: var(--text-2);
-  font-size: var(--fs-14);
-  cursor: pointer;
-}
-
-.segBtn::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: max(100%, var(--hit));
-  height: max(100%, var(--hit));
-  transform: translate(-50%, -50%);
-}
-
-.segBtn[aria-pressed='true'] {
-  background: var(--chip-on-bg);
-  color: var(--chip-on-fg);
-  font-weight: 600;
-}
-
-.segBtn:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
 /* 筛选胶囊、提醒天数胶囊 */
 .chips {
   display: flex;
@@ -271,6 +228,10 @@
   border-radius: var(--r-xl) var(--r-xl) 0 0;
   background: var(--bg);
   animation: anniv-sheet-in var(--dur-sheet) var(--ease-drawer) both;
+
+  /* R-436 第 1 条“去掉顶部空白”：层本身已经让出了安全区（上面的 inset），里面 EditShell 的 .page 再按 --safe-top 让一次就空出一大块；
+     层里把 --safe-top 归零（同 base.css 有版本横幅时的写法），EditShell 只留自己的 16 */
+  --safe-top: 0px;
 }
 
 @keyframes anniv-sheet-in {
@@ -318,24 +279,33 @@
   min-width: 0;
 }
 
-/* 头像右下角的小图标：表示点了可以加头像 */
+/* 头像右下角的角标（R-436 第 3 条）：柠檬黄小圆、中间一个墨色“＋”，一眼看出点它能换；新建页、编辑页主卡同一个 */
 .avBadge {
   position: absolute;
   right: -2px;
   bottom: -2px;
-  width: 18px;
-  height: 18px;
-  border: 1.5px solid var(--text);
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--panel);
   border-radius: 50%;
-  background: var(--panel);
+  background: var(--accent);
 }
 
+.avBadge::before,
 .avBadge::after {
   content: '';
   position: absolute;
-  inset: 4px 3.5px;
-  border: 1.5px solid var(--text);
-  border-radius: 2px;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--on-accent);
+  transform: translate(-50%, -50%);
+}
+
+.avBadge::after {
+  transform: translate(-50%, -50%) rotate(90deg);
 }
 
 /* 日期一行展开时箭头朝下 */
@@ -375,7 +345,7 @@
   font-size: var(--fs-12-5);
 }
 
-/* 编辑页卡片下面一行灰字“下一次：…”（视觉稿 annface，不做带色条的卡） */
+/* 新建页卡片下面一行灰字“下一次：…”（编辑页在顶部主卡里，R-436） */
 .nextLine {
   margin: -4px 4px 12px;
   color: var(--text-2);
@@ -391,18 +361,23 @@
   border: 0;
   border-radius: var(--r-inp);
   background: none;
-  color: var(--text);
+
+  /* R-436 三层文字色：右边的值用次要色，空着的占位字再淡一档 */
+  color: var(--text-2);
   font: inherit;
   font-size: var(--fs-16);
   text-align: right;
 }
 
 .inlineIn::placeholder {
-  color: var(--text-2);
+  color: var(--text-3);
 }
 
+
+/* 正在改的时候出浅底，字回到正文色 */
 .inlineIn:focus {
   background: var(--inp-bg);
+  color: var(--text);
 }
 
 /* 键盘聚焦的框和 kit 输入框同一套（Form.module.css） */
@@ -444,20 +419,13 @@
   background: none;
   color: var(--text-2);
   font: inherit;
-  font-size: var(--fs-14);
+  font-size: var(--fs-15);
   text-align: right;
   cursor: pointer;
 }
 
 .chev {
   color: var(--text-2);
-}
-
-.avRow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 0;
 }
 
 .avBtn {
@@ -472,17 +440,6 @@
 
 .avBtn:disabled {
   cursor: default;
-}
-
-.avText {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.avTitle {
-  font-size: var(--fs-15);
 }
 
 /* 提醒弹层。“恢复默认”：标题同一行右边的小字（视觉稿 annedit 弹层，经 kit Dialog 的 aside），不做成大按钮 */
@@ -548,3 +505,97 @@
   font-size: var(--fs-13);
 }
 
+
+/* ───────── 编辑页顶部主卡（R-436 第 2、3 条）：头像 + 名字 + 下一次哪天，右边大号等宽天数 ───────── */
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 12px;
+  padding: 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+/* 头像外一圈柠檬黄细描边，和头像之间隔一圈 2px 的缝（缝是卡片底色 --panel：没照片时头像是黄底首字，描边也看得出来）；右下角角标（.avBadge）。
+   按钮用 flex 贴着头像（行内按钮会带出行高，圆不正、缝一边宽一边没有） */
+.heroAv {
+  position: relative;
+  display: flex;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--accent);
+  cursor: pointer;
+}
+
+.heroAv:disabled {
+  cursor: default;
+}
+
+.heroAv:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 5px;
+}
+
+.heroText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.heroName {
+  overflow: hidden;
+  font-size: var(--fs-20);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heroWhen {
+  overflow: hidden;
+  color: var(--text-2);
+  font-family: var(--f-tnum);
+  font-size: var(--fs-11-5);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heroWhen:empty {
+  display: none;
+}
+
+.heroDays {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+/* 大号等宽天数：--num-accent（深色柠檬黄、浅色墨黑），一页只这一处强调色 */
+.heroNum {
+  color: var(--num-accent);
+  font-family: var(--f-tnum);
+  font-size: var(--fs-34);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.heroSub {
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  white-space: nowrap;
+}
+
+/* 类型滑块分段（kit ModeSeg look="slide"）和下面“详情”之间的距离 */
+.kindSeg {
+  margin: 0 0 16px;
+}

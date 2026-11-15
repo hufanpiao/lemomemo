@@ -14,7 +14,7 @@ import ro from './ReadonlyRow.module.css';
 export const useEditT = makeUseT({ zh: editZh, ko: editKo });
 
 const ST: Record<Exclude<EditStatus, 'empty_title' | 'rejected'>, EditMsgKey | null> = {
-  idle: 'edit.st.idle',
+  idle: null,   // R-436：没改过不写字（原“改了就自动保存”），改过才出“✓ 已保存”
   saving: 'edit.st.saving',
   saved: 'edit.st.saved',
   missing: 'edit.st.missing',

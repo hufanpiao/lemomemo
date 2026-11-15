@@ -11,6 +11,21 @@ export function FormGroup({ children }: { children: ReactNode }) {
   return <div className={styles.group}>{children}</div>;
 }
 
+/** 卡片上方的小字分组名（R-436：“详情”）：第三层文字色、等宽字加字距；只是标签，不是标题（读屏照常读字） */
+export function GroupLabel({ children }: { children: ReactNode }) {
+  return <p className={styles.groupLabel}>{children}</p>;
+}
+
+/** 表单卡片里的一整行按钮（R-436：纪念日“去掉头像”收进表单最后一行）：左对齐、次要文字色，至少 --hit 高 */
+export function FormRowButton(p: Omit<ComponentProps<typeof Pressable>, 'className'>) {
+  return <Pressable {...p} className={styles.rowBtn} />;
+}
+
+/** 整宽删除行（R-436）：单独一张卡片、红字居中，和上面的表单卡片同一套圆角；EditShell 底部的“删除”用它 */
+export function DeleteRow(p: Omit<ComponentProps<typeof Pressable>, 'className'>) {
+  return <Pressable {...p} className={styles.deleteRow} />;
+}
+
 /** 一行：左边字段名、右边控件；hint 是控件下面的一行灰字 */
 export function Field({ label, children, hint, htmlFor }: { label: string; children: ReactNode; hint?: ReactNode; htmlFor?: string }) {
   return (

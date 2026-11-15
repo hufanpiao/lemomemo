@@ -195,7 +195,7 @@ describe('只读行（0.27①“只读显示”，FA-2 视觉验收第 2 条）'
     await b.outbox?.applyServer('events', [{ row: serverEvent({ rev: 9 }) }]);
     open(`#/event/${ID}`);
     expect(screen.getByTestId('event-edit-delete')).toBeTruthy();
-    expect(screen.getByTestId('edit-status').textContent).toBe('改了就自动保存');
+    expect(screen.getByTestId('edit-status').textContent).toBe('');   // R-436：没改过不写字（原“改了就自动保存”）
   });
 });
 

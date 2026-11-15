@@ -12,6 +12,10 @@ const data: { anniversaries: Row[]; settings: Row[] } = { anniversaries: [], set
 vi.mock('../../../kit/hooks/useCollection.ts', () => ({
   useCollection: (name: string) => (data as Record<string, Row[] | undefined>)[name] ?? [],
 }));
+// 编辑页读一行（kit useEditRecord → useItem）：从同一份替身里找
+vi.mock('../../../kit/hooks/useItem.ts', () => ({
+  useItem: (name: string, id: string | null) => ((data as Record<string, Row[] | undefined>)[name] ?? []).find((r) => r.id === id),
+}));
 
 const { default: AnnivPage } = await import('../ui/AnnivPage.tsx');
 await (await import('../../../core/anniv-lib.ts')).loadAnnivLib();
@@ -126,5 +130,45 @@ describe('纪念日编辑层：键盘和读屏', () => {
     expect(screen.getByTestId('anniv-edit-layer')).toBeTruthy();
     fireEvent.keyDown(screen.getByTestId('anniv-edit-name'), { key: 'Enter', ctrlKey: true });
     await layerGone();
+  });
+});
+
+// R-436 精致化（纪念日编辑页 7 条，负责人 11-15 看对照图选“照这个做”）：顶部主卡大号天数、没改过不写保存状态、
+// “去掉头像”收进表单最后一行（有照片才有）、整宽删除行“删除这个纪念日”
+describe('纪念日编辑页：R-436 精致化', () => {
+  // 编辑地址只认 uuid 样子的 id（router-levels useEditRoute）
+  const ID = '0e2e0000-0000-4000-8000-000000436a01';
+  const edit = async (over: Record<string, unknown> = {}) => {
+    data.anniversaries = [an(ID, { name: '김지민', month: 11, day: 16, year: 1997, ...over })];
+    open(`#/anniv/${ID}`);
+    // 行读进表单以后主卡才写上名字
+    await waitFor(() => expect(screen.getByTestId('anniv-hero').textContent).toContain('김지민'));
+    return screen.getByTestId('anniv-hero');
+  };
+
+  it('主卡：名字、右边大号天数“3 / 天后 · 满 29 周岁”；没改过右上不写字；删除是整宽一行“删除这个纪念日”；没照片没有“去掉头像”', async () => {
+    const hero = await edit();
+    expect(hero.textContent).toContain('김지민');
+    expect(within(hero).getByTestId('anniv-edit-next').textContent).toBe('3天后 · 满 29 周岁');
+    // 名字下面写原日期（确认图“阴历 · 腊月初九 · 1960”的格式），不写下一次哪天
+    expect(hero.textContent).toContain('阳历 · 11月16日 · 1997');
+    expect(hero.textContent).not.toMatch(/周[一二三四五六日]/);
+    expect(screen.getByTestId('edit-status').textContent).toBe('');
+    const del = screen.getByTestId('anniv-edit-delete');
+    expect(del.textContent).toBe('删除这个纪念日');
+    expect(del.className).toMatch(/deleteRow/);
+    expect(screen.queryByTestId('anniv-avatar-remove')).toBeNull();
+    expect(screen.getByTestId('anniv-kind-birthday').getAttribute('aria-pressed')).toBe('true');
+    await act(async () => undefined);
+  });
+
+  it('有照片：“去掉头像”是表单卡片的最后一行（备注下面），不在主卡里', async () => {
+    const hero = await edit({ avatar_id: 'a1', avatar_bytes: 100 });
+    const rm = screen.getByTestId('anniv-avatar-remove');
+    expect(rm.textContent).toBe('去掉头像');
+    expect(hero.contains(rm)).toBe(false);
+    expect(rm.parentElement?.lastElementChild).toBe(rm);
+    expect(rm.parentElement?.contains(screen.getByTestId('anniv-edit-note'))).toBe(true);
+    await act(async () => undefined);
   });
 });

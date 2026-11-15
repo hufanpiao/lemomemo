@@ -10,6 +10,8 @@
 //   提醒一行（点开弹层，RemindSheet）→ 备注；卡片下面一行灰字“下一次……”实时算
 // • 编辑页（视觉稿 annface，主持人 11-14 定照稿）：名字、日期、提醒、备注同一张卡四行，左标签右值；名字、备注是右对齐的文字样式（.inlineIn，可直接改，
 //   聚焦时出底色看得出在改，字号 16px 防 iOS 放大）；备注收起一行，聚焦后左对齐、撑高多行。“再往后”两次稿里没有，去掉
+// • R-436 精致化（负责人 11-15 看对照图选“照这个做”，只改编辑页）：顶部主卡（头像描边加角标、名字、下一次哪天、右边大号等宽天数）→ 类型滑块分段 →
+//   小字分组名“详情”→ 表单（最后一行“去掉头像”）→ 整宽删除行“删除这个纪念日”（EditShell）；保存状态只在改过以后出小字“✓ 已保存”。新建页版式不变
 // • 只读行（D1：韩国阴历、认不出的值）：EditShell 顶部出“要新版本”，输入全禁用
 import * as RD from '@radix-ui/react-dialog';
 import { useRef, useState } from 'react';
@@ -17,18 +19,19 @@ import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { AnnivKind } from '../../../../shared/logic/anniv/next-date.ts';
 import { backOr } from '../../../app/router-levels.ts';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
-import { Check, Field, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
+import { Check, Field, FormGroup, FormRowButton, GroupLabel, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
+import { ModeSeg } from '../../../kit/components/ModeSeg.tsx';
 import { Wheel, WheelPanel } from '../../../kit/components/Wheel.tsx';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
-import { leapOf, maxDay, NAME_MAX, NOTE_MAX, offsetsKey, offsetsList, recOf, yearRange, type AnnivForm } from '../hooks/anniv-view.ts';
+import { clearAvatar, leapOf, maxDay, NAME_MAX, NOTE_MAX, offsetsKey, offsetsList, recOf, yearRange, type AnnivForm } from '../hooks/anniv-view.ts';
 import { annivLib } from '../hooks/anniv-view.ts';
 import { useAnnivDefaults, useAnnivEdit, useToday } from '../hooks/useAnniv.ts';
 import { useAnnivT, type AnnivT } from '../hooks/useAnnivT.ts';
 import { dateRowText, lunarDayName, nextText, remindLine } from './anniv-text.ts';
-import { AvatarRow, NameWithAvatar } from './AnnivAvatarRow.tsx';
+import { AnnivHero, NameWithAvatar } from './AnnivAvatarRow.tsx';
 import styles from './AnnivPage.module.css';
 import { RemindSheet } from './RemindSheet.tsx';
 
@@ -71,13 +74,18 @@ function DateFields({ form, off, t, change, locale, today, label }: PartProps & 
     <>
       {/* 编辑页上面已经有“日期”一行，展开后阳历 / 阴历这一行不再写标签（Field 的空标签不显示） */}
       <Field label={label ? t('anniv.edit.date', {}) : ''}>
-        <span className={styles.seg} role="group" aria-label={t('anniv.edit.calLabel', {})}>
-          {(['solar', 'lunar'] as const).map((c) => (
-            <button key={c} type="button" className={styles.segBtn} aria-pressed={form.calendar === c} disabled={off} onClick={() => change({ calendar: c })} data-testid={`anniv-cal-${c}`}>
-              {t(c === 'solar' ? 'anniv.edit.solar' : 'anniv.edit.lunar', {})}
-            </button>
-          ))}
-        </span>
+        <ModeSeg
+          look="slide"
+          label={t('anniv.edit.calLabel', {})}
+          items={(['solar', 'lunar'] as const).map((c) => ({
+            key: c,
+            label: t(c === 'solar' ? 'anniv.edit.solar' : 'anniv.edit.lunar', {}),
+            pressed: form.calendar === c,
+            disabled: off,
+            onClick: () => change({ calendar: c }),
+            testId: `anniv-cal-${c}`,
+          }))}
+        />
       </Field>
       <WheelPanel label={t('anniv.edit.date', {})} className={styles.wheels}>
         {form.year !== null ? (
@@ -168,6 +176,7 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
     st = null;
   }
   const kind = t(ed.isNew ? 'anniv.edit.new' : 'anniv.edit.kind', {});
+  const savedId = ed.savedId;
   return (
     <RD.Root open onOpenChange={(o) => (o ? undefined : done())}>
       <RD.Portal>
@@ -195,21 +204,21 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
               onBack={close}
               rec={rec}
               own={{ empty: t('anniv.edit.st.empty', {}), rejected: t('anniv.edit.st.rejected', {}) }}
+              deleteLabel={t('anniv.edit.delete', {})}
             >
-              <div className={styles.seg} role="group" aria-label={t('anniv.edit.typeLabel', {})}>
-                {KINDS.map((k) => (
-                  <button key={k} type="button" className={styles.segBtn} aria-pressed={form.kind === k} disabled={off} onClick={() => change({ kind: k })} data-testid={`anniv-kind-${k}`}>
-                    {t(KIND_KEY[k], {})}
-                  </button>
-                ))}
-              </div>
-
               {fresh ? null : (
-                <FormGroup>
-                  <AvatarRow id={ed.savedId} form={form} saved={ed.row} off={off} t={t} />
-                </FormGroup>
+                <AnnivHero id={savedId} form={form} saved={ed.row} off={off} t={t} locale={locale} next={st ? { r, st } : null} />
               )}
 
+              <div className={styles.kindSeg}>
+                <ModeSeg
+                  look="slide"
+                  label={t('anniv.edit.typeLabel', {})}
+                  items={KINDS.map((k) => ({ key: k, label: t(KIND_KEY[k], {}), pressed: form.kind === k, disabled: off, onClick: () => change({ kind: k }), testId: `anniv-kind-${k}` }))}
+                />
+              </div>
+
+              {fresh ? null : <GroupLabel>{t('anniv.edit.details', {})}</GroupLabel>}
               <FormGroup>
                 {fresh ? (
                   <NameWithAvatar id={ed.savedId} saved={ed.row} form={form} off={off} t={t} change={change} />
@@ -253,9 +262,16 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
                 <Field label={t('anniv.edit.note', {})} htmlFor="anniv-note">
                   <TextArea id="anniv-note" className={`${styles.inlineIn} ${styles.inlineArea}`} rows={1} value={form.note} maxLength={NOTE_MAX} disabled={off} placeholder={t('anniv.edit.notePh', {})} onCommit={(v) => change({ note: v })} data-testid="anniv-edit-note" />
                 </Field>
+                {/* “去掉头像”收进表单最后一行（R-436 第 6 条）：有照片、能改时才有 */}
+                {!fresh && typeof ed.row?.['avatar_id'] === 'string' && savedId && !off ? (
+                  <FormRowButton onClick={() => void clearAvatar(savedId)} data-testid="anniv-avatar-remove">
+                    {t('anniv.edit.avatarRemove', {})}
+                  </FormRowButton>
+                ) : null}
               </FormGroup>
 
-              {st ? (
+              {/* 新建页没有主卡：“下一次……”仍是卡片下面一行字；编辑页在主卡里 */}
+              {fresh && st ? (
                 <p className={styles.nextLine} data-testid="anniv-edit-next">
                   {st.past ? t('anniv.edit.pastLine', { n: -st.days, date: fmtDay(st.next.date, locale, 'monthDayWeek') }) : t('anniv.edit.next', { text: nextText(r, st, today, locale, t) })}
                 </p>
