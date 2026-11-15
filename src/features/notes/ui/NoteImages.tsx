@@ -17,7 +17,7 @@ import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { useNoteSource, type NoteImagesApi } from '../hooks/note-source.ts';
-import type { ImgFailKey, ImgNotice, InsertResult, NoteImage, PendingImage } from '../hooks/useNoteImages.ts';
+import { useImageNotices, type ImgFailKey, type ImgNotice, type InsertResult, type NoteImage, type PendingImage } from '../hooks/useNoteImages.ts';
 import type { ActionResult } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
 import styles from './NoteImages.module.css';
@@ -151,7 +151,7 @@ export function useAddImage(
 ) {
   const src = useNoteSource();
   const onImgNotice = useCallback((n: ImgNotice) => notify({ key: failMessage(n.key), trash: n.key === 'quota' }), [notify]);
-  useEffect(() => src.onNotice(onImgNotice), [src, onImgNotice]);
+  useImageNotices(src, onImgNotice);
   return async (text: string, files: readonly File[]): Promise<ImagesResult> => {
     let made = null as Made | null;
     let once: Promise<Made> | null = null;
@@ -245,7 +245,7 @@ export function EditorImageBlock({ noteId, drawer, disabled, msgClass, dropRef }
   const onNotice = useCallback((n: ImgNotice) => {
     if (!drawer && n.noteId === noteId) setMsg({ key: failMessage(n.key), trash: n.key === 'quota' });
   }, [drawer, noteId]);
-  useEffect(() => src.onNotice(onNotice), [src, onNotice]);
+  useImageNotices(src, onNotice);
   return (
     <>
       {msg ? <ImgMsgLine className={msgClass} msg={msg} /> : null}

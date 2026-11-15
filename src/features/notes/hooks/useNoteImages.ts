@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { imageView } from '../data/image-view.ts';
 import { uploader, type ImgNotice, type InsertResult, type PendingImage } from '../data/image-uploader.ts';
+import type { NoteSource } from './note-source.ts';
 import { thumbPath } from '../data/note-images.ts';
 import { imagesByNote, type NoteImage, type Row } from '../data/note-list.ts';
 
@@ -74,7 +75,7 @@ export function useImageSrc(img: NoteImage | null, thumb: boolean): ImageSrc {
   return got && got.path === path ? got.src : { url: null, missing: false, failed: false };
 }
 
-/** 插图的失败提示（插入、上传、写行被拒） */
-export function useImageNotices(fn: (n: ImgNotice) => void): void {
-  useEffect(() => uploader().onNotice(fn), [fn]);
+/** 插图的失败提示（插入、上传、写行被拒）：订的是来源的 onNotice（普通随手记是上传器，隐私记是它自己的），卸下时退订 */
+export function useImageNotices(src: Pick<NoteSource, 'onNotice'>, fn: (n: ImgNotice) => void): void {
+  useEffect(() => src.onNotice(fn), [src, fn]);
 }
