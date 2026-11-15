@@ -64,7 +64,7 @@ export function make(replies: Partial<Record<VaultRequest['action'], Reply>> = {
     onToken: (t) => tokens.push(t),
     createUrl: () => `blob:x/${++n}`,
     revokeUrl: (u) => revoked.push(u),
-    newId: () => '33333333-3333-4333-8333-333333333333',
+    sleep: async () => undefined,
   });
   return { s, api, calls, tokens, revoked, clock };
 }

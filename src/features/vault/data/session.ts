@@ -1,6 +1,9 @@
 // 隐私记会话（B5 FA-1；架构 5.5、0.27 第 5 点、0.29 续第 87、94、127 条；S6；TC-B5-10、11、44、47）
-// • 令牌、明文（notes）、图片的 blob URL 只在这个对象的内存里；令牌另抄一份到 core/vault-token.ts（导出要带），同样只在内存
-// • lock()：清明文、令牌、撤销全部 blob URL（TC-B5-11：上锁后组件树、DOM 里不留明文；D3：撤销后的地址再用就失效）
+// • 令牌、明文、图片的 blob URL 只在这个对象的内存里；令牌另抄一份到 core/vault-token.ts（导出要带），同样只在内存
+// • 明文放在会话持有的内存仓库 store（./vault-store.ts）：解锁时 list 一次全量放进去，之后界面读写都只碰它；
+//   改动交给会话持有的发送队列 queue（./vault-queue.ts）在后台串行发（B5 隐私记重写 11-15，负责人“读取跟写入速度太慢了”）。
+//   作废在飞请求的上锁丢掉整个队列（个数记进仓库，解锁后报一句）；令牌过期的上锁队列不动，解锁拉完列表把本机还没发完的盖回仓库
+// • lock()：清仓库里的明文、令牌、撤销全部 blob URL（TC-B5-11：上锁后组件树、DOM 里不留明文；D3：撤销后的地址再用就失效）
 // • 半路上锁（11-14 独立评审 S1；11-14 整块评审第 8 条）：上锁分两种——
 //   - 作废在飞请求的上锁（hard）：用户主动上锁、离开超时、vault_relock、session_revoked。回来的结果整个丢掉（STALE）：
 //     不收令牌、不写明文、不造 blob 地址、不弹解锁、不重试
@@ -14,8 +17,9 @@
 //   - vault_relock → 上锁、relocked = true（提示“密码已在别的设备修改”、不显示 Face ID，TC-B5-47 ②）
 //   - session_revoked → 上锁，交给同步引擎退出（D20：和 B1 同一条路）
 // • 离开、回来（S6）：hide(now) 记下离开时刻；show(now, min) 离开满 min 分钟就上锁（59 秒不锁、61 秒锁，TC-B5-10），否则什么也不动。
-//   令牌过期、等解锁（waiting）时也算：满时长就作废等着的请求和草稿（审查第 2 条：原来只认已解锁，草稿明文一直留在内存）。
+//   令牌过期、等解锁（waiting）时也算：满时长就作废等着的请求、丢掉后台队列（审查第 2 条：原来只认已解锁，没发完的明文一直留在内存）。
 //   盖遮罩、去遮罩由 hooks/useVault.ts 的 watchLeave 同步做，这里只管锁不锁
+// • 取图（image）：同时最多 2 张（IMG_SLOTS），限流、服务忙、断网（kind retry）退避 2 秒、5 秒、15 秒再取；本机刚插的图 seedImage 直接放进图片表，不再取
 // • 续期（M2）：编辑页有输入时调 touch()，拿到令牌满 5 分钟就发一次 {renew}（按本机拿到令牌的时刻算，不受两边时钟差影响）；
 //   vault-image 只验不续，令牌过期（vault_locked）时先 {renew}（锁着就等解锁）再试一次；取图失败不缓存（M6）
 // • 文档附件（B4b-1，vault-file）：同 vault-image 只验不续（withImageToken）；成功放了微软预览的临时明文副本时记下，上锁时先发 ms_preview_end（keepalive）。
@@ -24,13 +28,15 @@
 import { z } from 'zod';
 import {
   vaultCredentialsResponse, vaultListResponse, vaultOkResponse, vaultPurgeResponse, vaultStatusResponse, vaultTokenResponse,
-  webauthnOptionsResponse, type VaultImageAdd, type VaultNote, type VaultRequest,
+  webauthnOptionsResponse, type VaultRequest,
 } from '../../../../shared/schema/vault.ts';
 import { vaultFileListResponse, vaultFileOkResponse, vaultFilePreviewResponse, vaultFileUploadResponse, type VaultFileMeta } from '../../../../shared/schema/vault-file.ts';
 import { setVaultToken } from '../../../core/vault-token.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { VaultApi, VaultFail, VaultResult } from './vault-api.ts';
 import { unhandled, vaultErrorAction, type VaultCode } from './vault-errors.ts';
+import { createVaultQueue, limiter, QUEUE_BACKOFF, type SaveReq } from './vault-queue.ts';
+import { createVaultStore } from './vault-store.ts';
 
 export type VaultPhase = 'loading' | 'offline' | 'unset' | 'locked' | 'unlocked' | 'error';
 
@@ -43,8 +49,8 @@ export interface VaultStatus {
 export interface VaultState {
   phase: VaultPhase;
   status: VaultStatus | null;
-  /** 明文，只在已解锁时有 */
-  notes: readonly VaultNote[] | null;
+  /** 这一段解锁期拉过列表了（明文在 store 里，这里只记拉没拉过） */
+  listed: boolean;
   /** 别处改过、重设过密码：提示一句、不显示 Face ID，直到用新密码解锁 */
   relocked: boolean;
   /** 有请求等着解锁后重试（界面据此弹解锁） */
@@ -58,7 +64,7 @@ export interface VaultState {
 }
 
 const INIT: VaultState = {
-  phase: 'loading', status: null, notes: null, relocked: false, waiting: false, left: null, lockedUntil: null, lastError: null,
+  phase: 'loading', status: null, listed: false, relocked: false, waiting: false, left: null, lockedUntil: null, lastError: null,
 };
 
 const tokenShape = z.object({ vault_token: z.string(), expires_at: z.number() });
@@ -78,18 +84,15 @@ export interface VaultSessionDeps {
   onToken?: (token: string | null, expiresAt: number) => void;
   createUrl?: (b: Blob) => string;
   revokeUrl?: (url: string) => void;
-  newId?: () => string;
+  /** 测试用：退避等待（默认 setTimeout） */
+  sleep?: (ms: number) => Promise<void>;
 }
 
-export interface SaveInput {
-  id: string | null;
-  title: string;
-  body: string;
-  createdAt?: number;
-  /** id：编辑页给每张待传的图定好的 id（重试时复用同一个，同一个键再传算成功，不留多份对象） */
-  addImages?: readonly { id: string; full: Blob; thumb: Blob | null; width: number | null; height: number | null }[];
-  removeImages?: readonly string[];
-}
+/** 发一次 save：分类、时间不给就是没分类、现在 */
+export type SaveInput = Pick<SaveReq, 'id' | 'title' | 'body'> & Partial<SaveReq>;
+
+/** 同时取几张图（列表封面只取看得见的，这里再限一道并发） */
+export const IMG_SLOTS = 2;
 
 export type VaultSession = ReturnType<typeof createVaultSession>;
 
@@ -98,7 +101,8 @@ export function createVaultSession(d: VaultSessionDeps) {
   const onToken = d.onToken ?? setVaultToken;
   const createUrl = d.createUrl ?? ((b: Blob) => URL.createObjectURL(b));
   const revokeUrl = d.revokeUrl ?? ((u: string) => URL.revokeObjectURL(u));
-  const newId = d.newId ?? (() => crypto.randomUUID());
+  const sleep = d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const imgSlot = limiter(IMG_SLOTS);
 
   let state: VaultState = INIT;
   let token: string | null = null;
@@ -118,6 +122,24 @@ export function createVaultSession(d: VaultSessionDeps) {
   /** 发过 ms_preview_end、还没确认成了：解锁后补发一次 */
   let endOwed = false;
   const listeners = new Set<() => void>();
+  const store = createVaultStore();
+  const queue = createVaultQueue({
+    store,
+    save: (req) => run({ action: 'save', ...req }, vaultOkResponse),
+    setDeleted: (id, del) => run({ action: del ? 'delete' : 'undelete', id }, vaultOkResponse),
+    async upload(noteId, imageId, part, blob) {
+      const r = await withImageToken((tok) => d.api.imageUpload({ note_id: noteId, image_id: imageId, part }, blob, tok), true);
+      if (!r.ok && !dropped(r)) {
+        const kind = vaultErrorAction(r.code).kind;
+        if (kind === 'relock' || kind === 'revoked') onFail(r);
+      }
+      return r;
+    },
+    seed: (imageId, full, thumb) => seedImage(imageId, full, thumb),
+    now,
+    sleep,
+    log: rlog,
+  });
 
   const set = (patch: Partial<VaultState>): void => {
     const was = state;
@@ -161,9 +183,11 @@ export function createVaultSession(d: VaultSessionDeps) {
     if (hard) hardEpoch += 1;
     onToken(null, 0);
     revokeAll();
+    store.clear();
+    if (hard) queue.dropAll('lock');
     hiddenAt = null;
     const set_ = state.status?.set ?? true;
-    set({ phase: set_ ? 'locked' : 'unset', notes: null, ...patch });
+    set({ phase: set_ ? 'locked' : 'unset', listed: false, ...patch });
   }
 
   function release(ok: boolean): void {
@@ -332,49 +356,29 @@ export function createVaultSession(d: VaultSessionDeps) {
       if (!dropped(r)) onFail(r);
       return r;
     }
-    set({ notes: r.value.notes });
+    store.load(r.value.notes);
+    set({ listed: true });
+    queue.overlay();
     return { ok: true, value: true };
   }
 
-  async function uploadImages(noteId: string, imgs: NonNullable<SaveInput['addImages']>): Promise<VaultResult<true>> {
-    for (const img of imgs) {
-      for (const [part, blob] of [['full', img.full], ['thumb', img.thumb]] as const) {
-        if (!blob) continue;
-        const r = await withImageToken((tok) => d.api.imageUpload({ note_id: noteId, image_id: img.id, part }, blob, tok), true);
-        if (!r.ok) {
-          if (!dropped(r)) onFail(r);
-          return r;
-        }
-      }
+  /** 本机刚插的图（原图、缩略图）放进图片表：显示直接用，不再经 vault-image 取（上锁时一起撤销） */
+  function seedImage(imageId: string, full: Blob, thumb: Blob | null): void {
+    if (!token) return;
+    for (const [part, b] of [['full', full], ['thumb', thumb]] as const) {
+      const key = `${imageId}:${part}`;
+      if (b && !blobs.has(key)) blobs.set(key, createUrl(b));
     }
-    return { ok: true, value: true };
   }
 
   /**
-   * 保存。带图（11-14 整块评审第 3 条）：先 save 带 add_images 预登记图片行（这条没有就同时建出来），再经 vault-image 传原图和缩略图——
-   * vault-image 只收已登记的 image_id、原图字节数要等于登记的 bytes。传图失败时这条和图片行都已建好，
-   * 编辑页用同一个 id、同一批图片 id 重试：服务器把字节数一样的重发当成已登记，再传一次对象
+   * 发一次 save（后台队列和测试用；带图时 add_images 只是预登记，图的字节由队列随后经 vault-image 传，11-14 整块评审第 3 条）。
+   * 不再重拉列表：仓库里本来就是本机最新的那一份
    */
   async function save(input: SaveInput): Promise<VaultResult<string>> {
-    const id = input.id ?? newId();
-    const old = state.notes?.find((n) => n.id === id);
     const t = now();
-    const add: VaultImageAdd[] = (input.addImages ?? []).map((img) => ({ id: img.id, bytes: img.full.size, width: img.width, height: img.height, has_thumb: img.thumb !== null }));
-    const r = await run(
-      {
-        action: 'save' as const, id, title: input.title, body: input.body, category_id: old?.category_id ?? null, created_at: old?.created_at ?? input.createdAt ?? t, updated_at: t,
-        ...(add.length ? { add_images: add } : {}),
-        ...(input.removeImages?.length ? { remove_images: [...input.removeImages] } : {}),
-      },
-      vaultOkResponse,
-    );
-    if (!r.ok) return r;
-    if (input.addImages?.length) {
-      const up = await uploadImages(id, input.addImages);
-      if (!up.ok) return up;
-    }
-    const l = await list();
-    return l.ok ? { ok: true, value: id } : l;
+    const r = await run({ action: 'save', category_id: null, created_at: t, updated_at: t, ...input }, vaultOkResponse);
+    return r.ok ? { ok: true, value: input.id } : r;
   }
 
   return {
@@ -437,43 +441,36 @@ export function createVaultSession(d: VaultSessionDeps) {
     },
     list,
     save,
-    /**
-     * 令牌过期上锁、等解锁时编辑页被换下（第 22 条：没存的草稿不丢）：草稿只在这个闭包里（不进 DOM），解锁后保存一次；
-     * 用户取消解锁、或被作废在飞请求的上锁（主动上锁、超时、relock、revoked）打断就丢掉
-     */
-    async saveWhenUnlocked(input: SaveInput): Promise<VaultResult<string>> {
-      const h = hardEpoch;
-      if (!(await waitUnlock()) || hardEpoch !== h) return CANCELLED;
-      rlog('vault draft saved-after-unlock');
-      return save(input);
-    },
-    async remove(id: string) {
-      const r = await run({ action: 'delete', id }, vaultOkResponse);
-      if (r.ok) await list();
-      return r;
-    },
-    async undelete(id: string) {
-      const r = await run({ action: 'undelete', id }, vaultOkResponse);
-      if (r.ok) await list();
-      return r;
-    },
+    /** 会话持有的内存仓库、后台发送队列（界面经 hooks/vault-note-source.ts 读写） */
+    store,
+    queue,
+    seedImage,
+    /** 删除、撤销删除各发一次（后台队列发的也是这两个；不重拉列表） */
+    remove: (id: string) => run({ action: 'delete', id }, vaultOkResponse),
+    undelete: (id: string) => run({ action: 'undelete', id }, vaultOkResponse),
+    /** 永久删除（要确认，不进后台队列）：成了从仓库拿掉 */
     async purge(items: readonly string[]) {
       const r = await run({ action: 'purge', items: [...items] }, vaultPurgeResponse);
-      if (r.ok) await list();
+      if (r.ok) store.forget(items);
       return r;
     },
-    /** 普通随手记移进隐私记（S7）：要令牌，锁着时等解锁、重试一次 */
+    /** 普通随手记移进隐私记（S7）：要令牌，锁着时等解锁、重试一次；这一段解锁期拉过列表的，成了补拉一次（服务器那边才有这一条的明文） */
     async importNote(noteId: string) {
       const r = await run({ action: 'import', note_id: noteId }, vaultOkResponse);
-      if (r.ok && state.notes) await list();
+      if (r.ok && state.listed) await list();
       return r;
     },
-    exportNote: async (noteId: string) => {
+    /** 移出隐私记：先等后台队列把这一条发完（没发完就移，服务器上是旧的那一份），成了从仓库拿掉 */
+    exportNote: async (noteId: string): Promise<VaultResult<unknown>> => {
+      if (!(await queue.flush(noteId))) return { ok: false, code: 'try_later' };
       const r = await run({ action: 'export', note_id: noteId }, vaultOkResponse);
-      if (r.ok) await list();
+      if (r.ok) store.forget([noteId]);
       return r;
     },
-    /** 图片：拿字节做成 blob URL（只在内存、上锁时撤销，D3）；同一张同时只取一次，取到了缓存，没取到（失败、半路上锁）不缓存（M6） */
+    /**
+     * 图片：拿字节做成 blob URL（只在内存、上锁时撤销，D3）；同一张同时只取一次，取到了缓存，没取到（失败、半路上锁）不缓存（M6）。
+     * 同时最多 IMG_SLOTS 张；限流、服务忙、断网退避再取（QUEUE_BACKOFF），还不行这一张先不显示
+     */
     image(imageId: string, part: 'full' | 'thumb'): Promise<string | null> {
       const key = `${imageId}:${part}`;
       const have = blobs.get(key);
@@ -481,8 +478,16 @@ export function createVaultSession(d: VaultSessionDeps) {
       const going = pendingImg.get(key);
       if (going) return going;
       if (!token) return Promise.resolve(null);
+      const e = epoch;
       const p = (async () => {
-        const r = await withImageToken((tok) => d.api.imageGet(imageId, part, tok), false);
+        let r = await imgSlot(() => withImageToken((tok) => d.api.imageGet(imageId, part, tok), false));
+        for (const ms of QUEUE_BACKOFF) {
+          if (r.ok || dropped(r) || vaultErrorAction(r.code).kind !== 'retry') break;
+          rlog(`vault image ${part} wait ${r.code}`);
+          await sleep(ms);
+          if (epoch !== e) return null;
+          r = await imgSlot(() => withImageToken((tok) => d.api.imageGet(imageId, part, tok), false));
+        }
         if (!r.ok) {
           // 只有“密码在别处改了”“设备被移除”要落（上锁）；没找到、服务忙只是这张图不显示，不改界面状态
           const kind = dropped(r) ? null : vaultErrorAction(r.code).kind;
@@ -535,12 +540,14 @@ export function createVaultSession(d: VaultSessionDeps) {
         if (msLive) endPreview('close');
       },
     },
+    /** 已经在图片表里的地址（本机刚插的、取过的）；没有回 null，不去取 */
+    peekImage: (imageId: string, part: 'full' | 'thumb'): string | null => blobs.get(`${imageId}:${part}`) ?? null,
     blobCount: (): number => blobs.size,
-    /** 已解锁、或令牌过期等解锁（waiting，草稿明文还在闭包里）时记下离开时刻 */
+    /** 已解锁、或令牌过期等解锁（waiting，后台队列里还有没发完的明文）时记下离开时刻 */
     hide(at: number = now()): void {
       if ((state.phase === 'unlocked' || state.waiting) && hiddenAt === null) hiddenAt = at;
     },
-    /** 回来：离开满 min 分钟就上锁，等解锁的请求和草稿一并作废（审查第 2 条）；回 true 表示锁上了 */
+    /** 回来：离开满 min 分钟就上锁，等解锁的请求和后台队列一并作废（审查第 2 条）；回 true 表示锁上了 */
     show(at: number = now(), min = 1): boolean {
       const h = hiddenAt;
       hiddenAt = null;

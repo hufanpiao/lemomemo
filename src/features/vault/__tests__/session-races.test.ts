@@ -1,7 +1,8 @@
 // 隐私记会话（data/session.ts）独立评审修复：S1 请求在路上时上锁整个丢掉、M6 取图失败不缓存 + 令牌过期先续期、M2 编辑时续期、M3 改密码
 import { describe, expect, it, vi } from 'vitest';
 import { RENEW_AFTER_MS } from '../data/session.ts';
-import { held, IMG, listOk, make, NID, statusSet, TOK2, tokenOk, unlocked } from './session-fakes.ts';
+import { noteRowOf } from '../data/vault-store.ts';
+import { held, IMG, listOk, make, NID, note, statusSet, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 describe('S1：请求在路上时上锁，回来的结果整个丢掉', () => {
   it('list 在路上时 Ctrl+L：回来后不收令牌、不写明文', async () => {
@@ -13,7 +14,7 @@ describe('S1：请求在路上时上锁，回来的结果整个丢掉', () => {
     h.release(listOk());
     expect((await p).ok).toBe(false);
     expect(s.hasToken()).toBe(false);
-    expect(s.get()).toMatchObject({ phase: 'locked', notes: null, waiting: false });
+    expect(s.get()).toMatchObject({ phase: 'locked', listed: false, waiting: false });
   });
 
   it('普通请求（delete）在路上时离开满时长自动上锁：回来后不收令牌、不弹解锁、不重试', async () => {
@@ -25,7 +26,7 @@ describe('S1：请求在路上时上锁，回来的结果整个丢掉', () => {
     h.release({ ok: true, vault_token: TOK2, expires_at: 9e12 });
     expect((await p).ok).toBe(false);
     expect(s.hasToken()).toBe(false);
-    expect(s.get()).toMatchObject({ phase: 'locked', notes: null, waiting: false });
+    expect(s.get()).toMatchObject({ phase: 'locked', listed: false, waiting: false });
     expect(calls.filter((c) => c.action === 'delete')).toHaveLength(1);
   });
 
@@ -44,18 +45,19 @@ describe('S1：请求在路上时上锁，回来的结果整个丢掉', () => {
 });
 
 describe('审查第 2 条：等解锁（waiting）时离开满时长也作废', () => {
-  it('令牌过期、草稿交给 saveWhenUnlocked 后离开 61 秒回来：草稿丢掉、waiting 落回；之后解锁不保存', async () => {
+  it('令牌过期、队列里还有没发的改动时离开 61 秒回来：整个队列丢掉（记个数）、waiting 落回；之后解锁不保存', async () => {
     const { s, calls } = await unlocked({ delete: () => ({ ok: false, code: 'vault_locked' }) });
     const r = s.remove(NID);
     await vi.waitFor(() => expect(s.get().waiting).toBe(true));
-    const draft = s.saveWhenUnlocked({ id: NID, title: '草稿', body: '正文' });
+    s.queue.wrote({ ...noteRowOf(note()), body: '正文' }, false);
     s.hide(0);
     expect(s.show(61_000, 1)).toBe(true);
-    expect((await draft).ok).toBe(false);
+    expect(s.queue.size()).toBe(0);
+    expect(s.store.getSnapshot().dropped).toBe(1);
     expect((await r).ok).toBe(false);
     expect(s.get()).toMatchObject({ phase: 'locked', waiting: false });
     await s.unlock('1234');
-    expect(calls.filter((c) => c.action === 'save')).toHaveLength(0);
+    expect(calls.filter((c) => c.action === 'save' && c.token !== null)).toHaveLength(0);
   });
 
   it('等解锁时离开 59 秒回来：什么也不动，还在等', async () => {
@@ -69,12 +71,12 @@ describe('审查第 2 条：等解锁（waiting）时离开满时长也作废', 
 });
 
 describe('M6：取图失败不缓存；令牌过期先续期', () => {
-  it('取图失败（服务忙）回 null，下次再取会重新请求、能拿到；界面状态不变', async () => {
+  it('取图失败（服务忙）退避再取 3 次还不行回 null，下次再取会重新请求、能拿到；界面状态不变', async () => {
     const { s, api } = await unlocked();
-    vi.mocked(api.imageGet).mockResolvedValueOnce({ ok: false, code: 'try_later' });
+    for (let i = 0; i < 4; i++) vi.mocked(api.imageGet).mockResolvedValueOnce({ ok: false, code: 'try_later' });
     expect(await s.image(IMG, 'full')).toBeNull();
     expect(await s.image(IMG, 'full')).toBe('blob:x/1');
-    expect(api.imageGet).toHaveBeenCalledTimes(2);
+    expect(api.imageGet).toHaveBeenCalledTimes(5);
     expect(s.get()).toMatchObject({ phase: 'unlocked', lastError: null });
   });
 

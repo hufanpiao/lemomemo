@@ -17,4 +17,6 @@ export const TodayNotes = lazy(() => import('./ui/TodayNotes.tsx'));
  *  props: { source: NoteSource; editing: boolean（画编辑器还是列表）; head?: 列表页顶上替换大标题的一块 } */
 export const NotesSurface = lazy(() => import('./ui/NotesSurface.tsx'));
 
-export type { NoteSource } from './hooks/note-source.ts';
+export type {
+  ImageSrc, ImgNotice, InsertResult, NoteAttachmentsProps, NoteImage, NoteImagesApi, NoteRows, NoteSource, NoteSourceText, NoteSync, PendingImage,
+} from './hooks/note-source.ts';

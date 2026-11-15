@@ -1,7 +1,8 @@
 // 隐私记会话（data/session.ts）11-14 整块评审：第 8 条两种上锁、第 6 条 pin_wrong 带倒计时、第 14 条运行日志不带敏感内容
 import { afterEach, describe, expect, it } from 'vitest';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
-import { held, listOk, make, NID, note, TOK, TOK2, unlocked } from './session-fakes.ts';
+import { noteRowOf } from '../data/vault-store.ts';
+import { held, listOk, make, NID, note, TOK, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 const locked = { ok: false, code: 'vault_locked' };
 
@@ -31,7 +32,7 @@ describe('第 8 条：令牌过期的上锁不作废在飞的写请求', () => {
     h.release({ ok: true, vault_token: TOK2, expires_at: 9e12 });
     expect(await p).toEqual({ ok: true, value: NID });
     expect(s.hasToken()).toBe(false);
-    expect(s.get()).toMatchObject({ phase: 'locked', notes: null });
+    expect(s.get()).toMatchObject({ phase: 'locked', listed: false });
   });
 
   it('等解锁时用户取消：在飞的保存回失败（不是悄悄丢掉），也不再弹解锁', async () => {
@@ -57,7 +58,7 @@ describe('第 8 条：令牌过期的上锁不作废在飞的写请求', () => {
     await new Promise((r) => setTimeout(r, 0));
     h.release(listOk([note({ title: '新的' })]));
     expect((await p).ok).toBe(false);
-    expect(s.get().notes).toBeNull();
+    expect(s.store.getSnapshot().notes).toEqual([]);
   });
 
   it('用户主动上锁照旧作废在飞的保存（不重发）', async () => {
@@ -72,32 +73,42 @@ describe('第 8 条：令牌过期的上锁不作废在飞的写请求', () => {
   });
 });
 
-describe('第 22 条配合：续期被拒（超过 12 小时、或闲置过期）时没存的草稿不丢', () => {
-  it('打字触发续期回 vault_locked → 等解锁；编辑页交出的草稿解锁后保存一次', async () => {
-    const { s, calls, clock } = await unlocked({ renew: () => locked });
+describe('第 22 条配合：续期被拒（超过 12 小时、或闲置过期）时没发完的改动不丢', () => {
+  const settle = async (): Promise<void> => {
+    for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 0));
+  };
+
+  it('打字触发续期回 vault_locked → 等解锁；队列里的改动解锁后发一次，拉完列表本机这一份盖回仓库', async () => {
+    let renews = 0;
+    const { s, calls, clock } = await unlocked({ renew: () => (++renews === 1 ? locked : tokenOk), save: (_r, tok) => (tok ? { ok: true, vault_token: TOK2, expires_at: 9e12 } : locked) });
     clock.ms += 6 * 60_000;
     s.touch();
-    await new Promise((r) => setTimeout(r, 0));
-    expect(s.get()).toMatchObject({ phase: 'locked', waiting: true, notes: null });
-    const p = s.saveWhenUnlocked({ id: NID, title: '草稿', body: '还没存' });
-    expect(calls.filter((c) => c.action === 'save')).toHaveLength(0);
+    await settle();
+    expect(s.get()).toMatchObject({ phase: 'locked', waiting: true, listed: false });
+    s.queue.wrote({ ...noteRowOf(note()), title: '草稿', body: '还没存' }, false);
+    await settle();
     expect((await s.unlock('1234')).ok).toBe(true);
-    expect(await p).toEqual({ ok: true, value: NID });
-    const sent = calls.filter((c) => c.action === 'save');
+    await settle();
+    const sent = calls.filter((c) => c.action === 'save' && c.token !== null);
     expect(sent).toHaveLength(1);
     expect(sent[0]?.req).toMatchObject({ title: '草稿', body: '还没存' });
+    expect(s.store.get(NID)?.['body']).toBe('还没存');
+    expect(s.queue.size()).toBe(0);
   });
 
-  it('等解锁时用户主动上锁或取消：草稿丢掉，不发保存', async () => {
-    const { s, calls, clock } = await unlocked({ renew: () => locked });
+  it('等解锁时用户主动上锁：队列丢掉、记下个数，不发保存', async () => {
+    const { s, calls, clock } = await unlocked({ renew: () => locked, save: (_r, tok) => (tok ? tokenOk : locked) });
     clock.ms += 6 * 60_000;
     s.touch();
-    await new Promise((r) => setTimeout(r, 0));
-    const p = s.saveWhenUnlocked({ id: NID, title: '草稿', body: 'x' });
+    await settle();
+    s.queue.wrote({ ...noteRowOf(note()), body: 'x' }, false);
+    await settle();
     s.lock();
-    expect((await p).ok).toBe(false);
+    expect(s.store.getSnapshot().dropped).toBe(1);
     expect((await s.unlock('1234')).ok).toBe(true);
-    expect(calls.filter((c) => c.action === 'save')).toHaveLength(0);
+    await settle();
+    expect(calls.filter((c) => c.action === 'save' && c.token !== null)).toHaveLength(0);
+    expect(s.store.getSnapshot().dropped).toBe(1);
   });
 });
 
@@ -144,7 +155,7 @@ describe('第 14 条：运行日志', () => {
     expect(all).toMatch(/vault fail pin_wrong left=3/);
     expect(all).toMatch(/vault renew ok/);
     expect(all).toMatch(/vault stale hard ok/);
-    expect(all).toMatch(/vault image full fail try_later/);
+    expect(all).toMatch(/vault image full wait try_later/);
     for (const bad of ['秘密标题', '秘密正文', '8642', '1234', TOK, TOK2, IMGX]) expect(all).not.toContain(bad);
   });
 });

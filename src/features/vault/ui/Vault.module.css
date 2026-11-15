@@ -64,7 +64,7 @@
   text-align: center;
 }
 
-/* 列表外框（.lst）、解锁后列表的行和“⋯”菜单用 kit 的 NoteRow.module.css（同随手记列表方式，线框 s9 PRIVLIST）；下面的 .row 只给“最近删除” */
+/* 解锁后的列表、编辑器是随手记那一份（notes 的 NotesSurface，11-15 隐私记重写）；“最近删除”的外框用 kit 的 NoteRow.module.css 的 .lst，行用下面的 .row */
 .row {
   display: flex;
   gap: 10px;
@@ -393,111 +393,6 @@
 .shieldLogo {
   width: 96px;
   height: 96px;
-}
-
-/* ===== 编辑 ===== */
-.editTitle {
-  width: 100%;
-  margin: 6px 0 10px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-24);
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.editBody {
-  width: 100%;
-  min-height: 240px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-
-  /* 触屏输入框 ≥ 16px（iOS 聚焦不放大页面，input-font-size.test.ts） */
-  font-size: var(--fs-16);
-  line-height: 1.8;
-  resize: none;
-}
-
-/* 写字区不画焦点框、不留拖拽角：同随手记编辑页 NoteEditPage.module.css 的 .title、.body（光标就是焦点提示） */
-.editTitle:focus,
-.editBody:focus {
-  outline: none;
-}
-
-.editTitle::placeholder,
-.editBody::placeholder {
-  color: var(--text-2);
-}
-
-.imgs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 10px 0;
-}
-
-.img {
-  position: relative;
-  width: 104px;
-  height: 104px;
-  overflow: hidden;
-  border-radius: var(--r-md);
-  background: var(--panel-2);
-}
-
-.img img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.imgDel {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--panel);
-  color: var(--text);
-  font-size: var(--fs-14);
-}
-
-.imgDel::after {
-  position: absolute;
-  inset: -8px;
-  content: '';
-}
-
-.editActs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.status {
-  justify-self: end;
-  margin: 0;
-  color: var(--text-2);
-  font-size: var(--fs-12-5);
-}
-
-.fileInput {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
 }
 
 /* ===== 随手记列表顶部的入口行（线框 s7 LOCKROW；视觉稿 .lockrow） ===== */

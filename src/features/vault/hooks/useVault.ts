@@ -4,15 +4,12 @@
 //   - visibilitychange → visible、pageshow、focus：离开满 vault.autolock_min 分钟就上锁；然后去掉遮罩（锁上了就露出解锁卡）
 // • 自动上锁的分钟数读本机 settings 的 vault.autolock_min（默认 1；只认 1～60 的整数）
 import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
-import { addDays, todayOf } from '../../../../shared/core/date.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { fmtDate, fmtTime } from '../../../../shared/i18n/fmt.ts';
-import { categoryNameOf } from '../../../core/categories.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { settingValue, type SettingRow } from '../../../core/setting-read.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
-import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { holdReducedTransparency } from '../../../platform/look.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { createVaultApi } from '../data/vault-api.ts';
@@ -101,12 +98,13 @@ export function useAutolockMin(): number {
 
 /**
  * 隐私记有几条（锁着也能数）：本机 notes 集合里 is_private 的行只有密文列和中性列（0.27 第 1 点），数行数不碰明文；
- * 解锁以后以内存里的明文列表为准
+ * 解锁拉过列表以后以内存仓库（data/vault-store.ts）为准
  */
 export function useVaultCount(): number {
   const rows = useCollection<{ id: string; is_private?: unknown; deleted_at?: unknown; undone?: unknown }>('notes');
-  const { state } = useVault();
-  if (state.notes) return state.notes.filter((n) => n.deleted_at === null).length;
+  const { state, s } = useVault();
+  const snap = useSyncExternalStore(s.store.subscribe, s.store.getSnapshot, s.store.getSnapshot);
+  if (state.listed) return snap.notes.filter((n) => n['deleted_at'] === null).length;
   return rows.filter((r) => r.is_private === true && isLiveRow(r)).length;
 }
 
@@ -135,27 +133,5 @@ export function useFmtAt(): (ms: number) => string {
   return (ms) => {
     const tz = currentTz();
     return `${fmtDate(ms, tz, locale, 'monthDay')} ${fmtTime(ms, tz)}`;
-  };
-}
-
-/**
- * 解锁后列表一行的日期和分类名（线框 s9 PRIVLIST：“昨天”“10/20”、灰字分类）：
- * 日期按当前时区，今天写时刻、昨天写“昨天”、更早写“月/日”；分类顺着合并归到留下的那个（core/categories.ts，同随手记）
- */
-export function useVaultRowMeta(): { dayOf(ms: number): string; catOf(id: string | null): string | null } {
-  const t = useVaultT();
-  const now = useMinuteNow();
-  const tz = currentTz();
-  const catOf = categoryNameOf(useCollection('categories'));
-  return {
-    dayOf(ms) {
-      const d = todayOf(ms, tz);
-      const today = todayOf(now, tz);
-      if (d === today) return fmtTime(ms, tz);
-      if (d === addDays(today, -1)) return t('vault.list.yesterday', {});
-      const [, m = '', day = ''] = d.split('-');
-      return t('vault.list.md', { m: Number(m), d: Number(day) });
-    },
-    catOf,
   };
 }

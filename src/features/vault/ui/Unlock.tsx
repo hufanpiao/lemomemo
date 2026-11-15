@@ -38,7 +38,7 @@ function useLeft(until: number | null): number {
 
 /**
  * onCancel：取消以后还要做的事（隐私记页回随手记）；可以不给。
- * 有请求等着解锁（waiting）时，取消一律先作废它们（会话的 cancelWait：原请求回失败、卸载时交出的草稿丢掉），三处用法不再各自调（审查第 1 条）
+ * 有请求等着解锁（waiting）时，取消一律先作废它们（会话的 cancelWait：原请求回失败、后台队列整个丢掉并记个数），三处用法不再各自调（审查第 1 条）
  */
 export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backLabel }: { onCancel?(): void; onForgot(): void; testId?: string; backLabel?: string }) {
   const t = useVaultT();

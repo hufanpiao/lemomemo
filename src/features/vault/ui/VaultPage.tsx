@@ -1,27 +1,29 @@
 // 隐私记页面（B5 S5、S6、S9；定稿线框 s9 PRIVLIST；代定 D14）：#/vault（列表）、#/vault/new、#/vault/<id>（编辑）、#/vault/trash（自己的“最近删除”）
+// • 列表、编辑器、电脑分栏、插图、看图页是随手记那一份（notes 的 NotesSurface + hooks/vault-note-source.ts 的隐私记来源；B5 隐私记重写 11-15，
+//   主持人定稿“隐私记页面按照随手记的样子全部重写”）：停笔自动存、读写只碰内存仓库，后台队列去发；“最近删除”是 ./VaultTrash.tsx
 // • 状态：查状态中 → 断网（要联网才能打开，TC-B5-33）/ 没设过密码（设密码）/ 锁着（磨砂遮罩 + 解锁卡）/ 已解锁（内容）
 // • 已解锁：顶栏“‹ 随手记 | 🔒 隐私记 | 立即锁上”，下面一条“已解锁 · 离开 App 1 分钟自动锁上…”；Ctrl+L 立即上锁
-// • 底栏照常（随手记页签），“＋”只打开隐私记的新建页（D14：往 kit/state/new-item.ts 的 notesInput 登记）
+// • 底栏照常（随手记页签），“＋”只在隐私记里新记（D14）：列表页由随手记的输入行自己登记 notesInput（新记的进隐私记来源）；
+//   编辑页、最近删除没有输入行，这里往 kit/state/new-item.ts 的 notesInput 登记成打开隐私记的新建页
+// • 网络回来（online）：没保存上的再发一次
 // • 不建液态玻璃副本、底栏和“＋”实色：挂着时经 platform/look.ts 的 holdReducedTransparency 让 <html data-rt="1">（同“减少透明效果”，
 //   motion/glass-ghost.ts 和 GlassBar 都认它），离开时放开、按设置和系统设置重算（TC-B5-12；hooks/useVault.ts 的 useSolidBars）
 // • 多任务遮罩 LockShield 一直挂在页面上（平时 visibility: hidden），离开时由 hooks/useVault.ts 同步盖上
-import { useLayoutEffect, useState } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useState } from 'react';
 import { backTo, navigate, useRoute } from '../../../app/router.ts';
-import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
-import row from '../../../kit/components/NoteRow.module.css';
-import { Popover } from '../../../kit/components/Popover.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { notesInput } from '../../../kit/state/new-item.ts';
-import { Pressable } from '../../../motion/components.ts';
-import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultRowMeta, useVaultStatus } from '../hooks/useVault.ts';
+import { NotesSurface } from '../../notes/index.ts';
+import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultStatus } from '../hooks/useVault.ts';
+import { useVaultNoteSource, useVaultStore } from '../hooks/vault-note-source.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import { LockIcon } from './Pin.tsx';
 import { SetupPin } from './SetupPin.tsx';
 import { UnlockOverlay, UnlockPanel } from './Unlock.tsx';
-import { VaultEditor } from './VaultEditor.tsx';
+import { VaultTrash } from './VaultTrash.tsx';
 import styles from './Vault.module.css';
 
 /** 只有 Lemo 图标的实色遮罩（S6、TC-B5-44） */
@@ -50,15 +52,22 @@ export default function VaultPage() {
     },
   });
   useLayoutEffect(() => {
+    if (!sub) return undefined;
     notesInput.focus = () => void navigate('vault', 'new');
     return () => {
       notesInput.focus = undefined;
     };
-  }, []);
+  }, [sub]);
+  useEffect(() => {
+    const again = (): void => s.queue.retryAll();
+    window.addEventListener('online', again);
+    return () => window.removeEventListener('online', again);
+  }, [s]);
 
   const leave = () => backTo('notes');
   const forgot = () => void navigate('settings', 'vault', 'reset');
   const unlocked = state.phase === 'unlocked' && !state.waiting;
+  const surface = unlocked && state.listed && sub !== 'trash';
   let body;
   if (state.phase === 'loading') body = <p className={styles.empty}>{t('vault.loading', {})}</p>;
   else if (state.phase === 'offline' || state.phase === 'error')
@@ -73,28 +82,21 @@ export default function VaultPage() {
       </div>
     );
   else if (state.phase === 'unset') body = <SetupPin onCancel={leave} onBindFail={setBindFail} />;
-  else if (unlocked) body = sub === 'trash' ? <VaultTrash /> : sub ? <VaultEditor key={sub} id={sub === 'new' ? null : sub} /> : <VaultList />;
+  else if (unlocked && sub === 'trash') body = <VaultTrash />;
   else body = null;
 
   return (
-    <main className={styles.page} data-feature="vault" data-testid="vault" data-phase={state.phase}>
-      {state.phase !== 'unset' && !(unlocked && sub) ? (
-        <header className={styles.top}>
-          <BackLink label={t('vault.back', {})} onBack={leave} testId="vault-back" />
-          <h1 className={styles.h1}>
-            <LockIcon />
-            {t('vault.title', {})}
-          </h1>
-          <span className={styles.topEnd}>
-            {unlocked ? (
-              <FormButton size="compact" onClick={() => s.lock()} data-testid="vault-lock-now">
-                {t('vault.lockNow', {})}
-              </FormButton>
-            ) : null}
-          </span>
-        </header>
-      ) : null}
-      {body}
+    <div data-testid="vault" data-phase={state.phase}>
+      {surface ? (
+        <Suspense fallback={null}>
+          <VaultSurface editing={Boolean(sub)} />
+        </Suspense>
+      ) : (
+        <main className={styles.page} data-feature="vault">
+          {state.phase !== 'unset' && !(unlocked && sub) ? <VaultTop unlocked={unlocked} /> : null}
+          {body}
+        </main>
+      )}
       <UnlockOverlay open={state.phase === 'locked' || state.waiting}>
         <UnlockPanel onCancel={leave} onForgot={forgot} />
       </UnlockOverlay>
@@ -109,164 +111,53 @@ export default function VaultPage() {
         />
       ) : null}
       <LockShield />
-    </main>
+    </div>
   );
 }
 
-/**
- * 解锁后的列表（线框 s9 PRIVLIST）：和随手记列表方式同一种行（kit 的 NoteRow.module.css）——日期 | 随手记小图标 | 标题（单行省略）和灰字分类 | “⋯”。
- * 不显示正文摘要；没有标题时取正文第一行当标题（同随手记）。“⋯”（右键同）：移出隐私记 / 删除，和编辑页底部两个按钮同一套动作
- */
-function VaultList() {
+/** 顶栏“‹ 随手记 | 🔒 隐私记 | 立即锁上” */
+function VaultTop({ unlocked }: { unlocked: boolean }) {
   const t = useVaultT();
-  const { state, s } = useVault();
-  const errText = useErrText();
-  const min = useAutolockMin();
-  const { dayOf, catOf } = useVaultRowMeta();
-  const [menu, setMenu] = useState<string | null>(null);
-  const [err, setErr] = useState('');
-  const notes = (state.notes ?? []).filter((n) => n.deleted_at === null).sort((a, b) => b.updated_at - a.updated_at);
-  const trash = (state.notes ?? []).filter((n) => n.deleted_at !== null).length;
-  const act = (go: () => Promise<{ ok: true } | { ok: false; code: Parameters<typeof errText>[0] }>) => {
-    setMenu(null);
-    setErr('');
-    void go().then((r) => (r.ok ? undefined : setErr(errText(r.code))));
-  };
+  const { s } = useVault();
   return (
-    <>
+    <header className={styles.top}>
+      <BackLink label={t('vault.back', {})} onBack={() => backTo('notes')} testId="vault-back" />
+      <h1 className={styles.h1}>
+        <LockIcon />
+        {t('vault.title', {})}
+      </h1>
+      <span className={styles.topEnd}>
+        {unlocked ? (
+          <FormButton size="compact" onClick={() => s.lock()} data-testid="vault-lock-now">
+            {t('vault.lockNow', {})}
+          </FormButton>
+        ) : null}
+      </span>
+    </header>
+  );
+}
+
+/** 解锁后：随手记的整套界面换成隐私记来源；列表页顶上是隐私记的顶栏、提示、“最近删除”入口 */
+function VaultSurface({ editing }: { editing: boolean }) {
+  const source = useVaultNoteSource();
+  return <NotesSurface source={source} editing={editing} head={<VaultHead />} />;
+}
+
+function VaultHead() {
+  const t = useVaultT();
+  const min = useAutolockMin();
+  const trash = useVaultStore().notes.filter((n) => n['deleted_at'] !== null).length;
+  return (
+    <div>
+      <VaultTop unlocked />
       <p className={styles.hint} data-testid="vault-hint">
         {t('vault.unlockedHint', { n: min })}
       </p>
-      {err ? (
-        <p className={styles.notice} role="alert" data-testid="vault-list-err">
-          {err}
-        </p>
-      ) : null}
-      {notes.length === 0 ? (
-        <p className={styles.empty} data-testid="vault-empty">
-          {t('vault.empty', {})}
-        </p>
-      ) : (
-        <ul className={row.lst} data-testid="vault-list">
-          {notes.map((n) => (
-            <li key={n.id} className={row.lrow} data-testid={`vault-row-${n.id}`}>
-              <button
-                type="button"
-                className={row.lmain}
-                onClick={() => void navigate('vault', n.id)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setMenu(n.id);
-                }}
-              >
-                <span className={row.rowTime}>{dayOf(n.updated_at)}</span>
-                <span className={row.mn} aria-hidden="true" />
-                <span className={row.ltext}>
-                  <span className={row.t1}>{n.title || n.body.split('\n')[0] || t('vault.list.untitled', {})}</span>
-                  <span className={row.t2}>
-                    <span className={row.t2txt}>{catOf(n.category_id) ?? ''}</span>
-                  </span>
-                </span>
-              </button>
-              <Popover
-                open={menu === n.id}
-                onOpenChange={(o) => setMenu(o ? n.id : null)}
-                label={t('vault.menu', {})}
-                align="end"
-                className={row.menu}
-                trigger={
-                  <button type="button" className={row.more} aria-label={t('vault.more', {})} data-testid={`vault-more-${n.id}`}>
-                    ⋯
-                  </button>
-                }
-              >
-                <Pressable className={`${row.menuItem} ${row.menuPlain}`} onClick={() => act(() => s.exportNote(n.id))} data-testid={`vault-out-${n.id}`} data-no-proxy="">
-                  {t('vault.moveOut', {})}
-                </Pressable>
-                <Pressable className={row.menuItem} onClick={() => act(() => s.remove(n.id))} data-testid={`vault-del-${n.id}`} data-no-proxy="">
-                  {t('vault.delete', {})}
-                </Pressable>
-              </Popover>
-            </li>
-          ))}
-        </ul>
-      )}
       <div className={styles.trashLink}>
         <FormButton variant="ghost" onClick={() => void navigate('vault', 'trash')} data-testid="vault-open-trash">
           {`${t('vault.trash', {})}${trash ? ` ${trash}` : ''}`}
         </FormButton>
       </div>
-    </>
-  );
-}
-
-function VaultTrash() {
-  const t = useVaultT();
-  const { state, s } = useVault();
-  const errText = useErrText();
-  const [ask, setAsk] = useState<string[] | null>(null);
-  const [err, setErr] = useState('');
-  const gone = (state.notes ?? []).filter((n) => n.deleted_at !== null);
-  const run = async (go: () => Promise<{ ok: boolean; code?: Parameters<typeof errText>[0] }>) => {
-    setErr('');
-    const r = await go();
-    if (!r.ok) setErr(errText(r.code ?? 'unknown'));
-  };
-  return (
-    <section data-testid="vault-trash">
-      <div className={styles.top}>
-        <BackLink label={t('vault.title', {})} onBack={() => void navigate('vault')} testId="vault-trash-back" />
-        <h2 className={styles.h1}>{t('vault.trash', {})}</h2>
-        <span className={styles.topEnd}>
-          {gone.length ? (
-            <FormButton size="compact" danger onClick={() => setAsk(gone.map((n) => n.id))} data-testid="vault-purge-all">
-              {t('vault.purgeAll', {})}
-            </FormButton>
-          ) : null}
-        </span>
-      </div>
-      <p className={styles.hint}>{t('vault.trash.hint', {})}</p>
-      {err ? (
-        <p className={styles.notice} role="alert">
-          {err}
-        </p>
-      ) : null}
-      {gone.length === 0 ? (
-        <p className={styles.empty}>{t('vault.trash.empty', {})}</p>
-      ) : (
-        <ul className={row.lst}>
-          {gone.map((n) => (
-            <li key={n.id} className={styles.row} data-testid={`vault-trash-row-${n.id}`}>
-              <span className={styles.rowMain}>
-                <span className={styles.rowTitle}>{n.title || n.body.split('\n')[0] || t('vault.list.untitled', {})}</span>
-              </span>
-              <span className={styles.rowActs}>
-                <FormButton size="compact" onClick={() => void run(() => s.undelete(n.id))} data-testid={`vault-restore-${n.id}`}>
-                  {t('vault.restore', {})}
-                </FormButton>
-                <FormButton size="compact" danger onClick={() => setAsk([n.id])} data-testid={`vault-purge-${n.id}`}>
-                  {t('vault.purge', {})}
-                </FormButton>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <ConfirmDialog
-        open={ask !== null}
-        title={ask && ask.length > 1 ? t('vault.purgeAll.title', {}) : t('vault.purge.title', {})}
-        body={ask && ask.length > 1 ? t('vault.purgeAll.body', { n: ask.length }) : t('vault.purge.body', {})}
-        okLabel={t('vault.purge', {})}
-        cancelLabel={t('vault.cancel', {})}
-        danger
-        testId="vault-purge-confirm"
-        onOk={() => {
-          const items = ask ?? [];
-          setAsk(null);
-          void run(() => s.purge(items));
-        }}
-        onCancel={() => setAsk(null)}
-      />
-    </section>
+    </div>
   );
 }

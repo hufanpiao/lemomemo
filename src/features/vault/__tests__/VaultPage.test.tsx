@@ -14,9 +14,15 @@ import VaultPage from '../ui/VaultPage.tsx';
 import VaultParts from '../ui/VaultParts.tsx';
 import { applyLook } from '../../../platform/look.ts';
 import { useKeys } from '../../../kit/hooks/layers.ts';
+import type * as Enc from '../../../platform/image-encode.ts';
 import { make } from './session-fakes.ts';
 
 vi.mock('../../../kit/hooks/useCollection.ts', () => ({ useCollection: () => [] }));
+// 插图：jsdom 没有画布，压图换成桩（压成了一张 10×6 的图）
+vi.mock('../../../platform/image-encode.ts', async (orig) => ({
+  ...(await orig<typeof Enc>()),
+  encodeImage: async () => ({ ok: true, full: new Blob(['full']), thumb: new Blob(['t']), width: 10, height: 6, takenAt: null }),
+}));
 
 const TOK = 't'.repeat(32);
 const NID = '11111111-1111-4111-8111-111111111111';
@@ -78,7 +84,7 @@ async function openUnlocked() {
   await act(async () => {
     await s.unlock('1234');
   });
-  await screen.findByTestId('vault-list');
+  await screen.findByTestId('vault-notes');
 }
 
 describe('解锁、上锁', () => {
@@ -103,26 +109,31 @@ describe('解锁、上锁', () => {
 
   it('锁着：只有解锁卡，没有内容；解锁后列出；TC-B5-11 上锁后 DOM 里不留明文', async () => {
     await openUnlocked();
-    // 线框 s9 PRIVLIST：行里只有日期、标题、分类，不出正文摘要
-    expect(screen.getByTestId(`vault-row-${NID}`).textContent).toContain('体检报告');
-    expect(document.body.textContent).not.toContain(SECRET);
+    // B5 隐私记重写：列表跟随手记一样（标题、摘要）；删了的那条不在列表里
+    expect(screen.getByTestId('vault-notes').textContent).toContain('体检报告');
+    expect(screen.getByTestId('vault-notes').textContent).not.toContain('删掉的');
     act(() => s.lock());
     await screen.findByTestId('vault-unlock-card');
     expect(document.body.textContent).not.toContain(SECRET);
     expect(document.body.textContent).not.toContain('体检报告');
-    expect(screen.queryByTestId('vault-list')).toBeNull();
+    expect(screen.queryByTestId('vault-notes')).toBeNull();
   });
 
-  it('列表行的“⋯”：移出隐私记、删除，和编辑页底部两个按钮同一套动作', async () => {
+  it('随手记那一份“⋯”：移出隐私记走 exportNote；删除立刻从列表拿掉、进隐私记自己的最近删除（后台发 delete）', async () => {
     await openUnlocked();
     const out = vi.spyOn(s, 'exportNote').mockResolvedValue({ ok: true, value: { ok: true, vault_token: 't', expires_at: 0 } });
-    const del = vi.spyOn(s, 'remove').mockResolvedValue({ ok: true, value: { ok: true, vault_token: 't', expires_at: 0 } });
-    fireEvent.click(screen.getByTestId(`vault-more-${NID}`));
-    fireEvent.click(await screen.findByTestId(`vault-out-${NID}`));
+    fireEvent.click(screen.getByTestId(`notes-more-${NID}`));
+    expect(screen.queryByTestId(`notes-to-vault-${NID}`)).toBeNull();
+    await act(async () => {
+      fireEvent.click(await screen.findByTestId(`notes-from-vault-${NID}`));
+    });
     expect(out).toHaveBeenCalledWith(NID);
-    fireEvent.click(screen.getByTestId(`vault-more-${NID}`));
-    fireEvent.click(await screen.findByTestId(`vault-del-${NID}`));
-    expect(del).toHaveBeenCalledWith(NID);
+    fireEvent.click(screen.getByTestId(`notes-more-${NID}`));
+    await act(async () => {
+      fireEvent.click(await screen.findByTestId(`notes-del-${NID}`));
+    });
+    expect(s.store.get(NID)?.['deleted_at']).not.toBeNull();
+    await waitFor(() => expect(screen.getByTestId('vault-open-trash').textContent).toContain('2'));
   });
 
   it('Ctrl+L 立即上锁', async () => {
@@ -246,32 +257,175 @@ describe('TC-B5-48 ②：隐私记自己的“最近删除”', () => {
   });
 });
 
-describe('11-14 整块评审第 22 条：令牌续不上（超过 12 小时、闲置过期）时编辑页的草稿不丢', () => {
-  it('打字触发续期被拒 → 换成解锁卡、DOM 里没有草稿；解锁后草稿自动保存一次', async () => {
-    const m = make({ renew: () => ({ ok: false, code: 'vault_locked' }) });
+/** 编辑页输入一段字、离开输入框（停笔提交，同随手记编辑页） */
+async function type(testId: 'note-edit-title' | 'note-edit-body', value: string) {
+  const el = await screen.findByTestId(testId);
+  fireEvent.focus(el);
+  fireEvent.change(el, { target: { value } });
+  await act(async () => {
+    fireEvent.blur(el);
+    await new Promise((r) => setTimeout(r, 0));
+  });
+}
+const saves = (m: ReturnType<typeof make>) => m.calls.filter((c) => c.action === 'save' && c.token !== null);
+
+describe('11-14 整块评审第 22 条：令牌续不上（超过 12 小时、闲置过期）时编辑页没发完的改动不丢', () => {
+  it('打字触发续期被拒 → 换成解锁卡、DOM 里没有草稿；解锁后改动发出去、编辑页还是本机那一份', async () => {
+    let renews = 0;
+    // 假服务器记住存上的正文（解锁后 list 回的是它）
+    let body = SECRET;
+    const m = make({
+      renew: () => (++renews === 1 ? { ok: false, code: 'vault_locked' } : { ok: true, vault_token: TOK, expires_at: 9e12 }),
+      save: (req, tok) => {
+        if (!tok) return { ok: false, code: 'vault_locked' };
+        if (req.action === 'save') body = req.body;
+        return { ok: true, vault_token: TOK, expires_at: 9e12 };
+      },
+      list: () => ({ ok: true, notes: [note({ body })], vault_token: TOK, expires_at: 9e12 }),
+    });
     installVaultSession(m.s);
-    window.location.hash = '#/vault/new';
+    window.location.hash = `#/vault/${NID}`;
     render(<VaultPage />);
     await screen.findByTestId('vault-unlock-card');
     await act(async () => {
       await m.s.refreshStatus();
       await m.s.unlock('1234');
     });
-    const title = await screen.findByTestId('vault-edit-title');
-    fireEvent.change(title, { target: { value: '草稿标题' } });
+    await screen.findByTestId('note-edit-body');
     m.clock.ms += 6 * 60_000;
-    await act(async () => {
-      fireEvent.change(screen.getByTestId('vault-edit-body'), { target: { value: '还没存的正文' } });
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    await type('note-edit-body', '还没存的正文');
     await screen.findByTestId('vault-unlock-card');
     expect(document.body.textContent).not.toContain('还没存的正文');
-    expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(0);
     await act(async () => {
       await m.s.unlock('1234');
+      await new Promise((r) => setTimeout(r, 0));
     });
-    await waitFor(() => expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(1));
-    expect(m.calls.find((c) => c.action === 'save')?.req).toMatchObject({ title: '草稿标题', body: '还没存的正文' });
+    await waitFor(() => expect(saves(m).some((c) => c.req.action === 'save' && c.req.body === '还没存的正文')).toBe(true));
+    expect((await screen.findByTestId('note-edit-body') as HTMLTextAreaElement).value).toBe('还没存的正文');
+  });
+});
+
+describe('B5 隐私记重写：停笔自动存、读写只碰内存仓库', () => {
+  it('新建：停笔就进列表（不等服务器），后台发一次 save；没有“保存”按钮', async () => {
+    const m = make();
+    installVaultSession(m.s);
+    window.location.hash = '#/vault/new';
+    render(<VaultPage />);
+    await act(async () => {
+      await m.s.refreshStatus();
+      await m.s.unlock('1234');
+    });
+    await type('note-edit-body', '新记的一条');
+    expect(screen.queryByTestId('vault-edit-save')).toBeNull();
+    expect(m.s.store.getSnapshot().notes.some((n) => n['body'] === '新记的一条')).toBe(true);
+    await waitFor(() => expect(saves(m)).toHaveLength(1));
+    expect(saves(m)[0]?.req).toMatchObject({ body: '新记的一条' });
+  });
+
+  it('保存碰上令牌过期 → 出解锁卡 → 解锁：只重发那一次，不多存', async () => {
+    let n = 0;
+    const m = make({ save: () => (++n === 1 ? { ok: false, code: 'vault_locked' } : { ok: true, vault_token: TOK, expires_at: 9e12 }) });
+    installVaultSession(m.s);
+    window.location.hash = '#/vault/new';
+    render(<VaultPage />);
+    await act(async () => {
+      await m.s.refreshStatus();
+      await m.s.unlock('1234');
+    });
+    await type('note-edit-body', '只存一次');
+    await screen.findByTestId('vault-unlock-card');
+    await act(async () => {
+      await m.s.unlock('1234');
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    await waitFor(() => expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(2));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(2);
+  });
+
+  it('审查第 1 条：令牌过期时解锁卡点“取消”：队列整个丢掉；再解锁不补发，列表出“有 1 处改动没来得及保存”', async () => {
+    let n = 0;
+    const m = make({ save: () => (++n === 1 ? { ok: false, code: 'vault_locked' } : { ok: true, vault_token: TOK, expires_at: 9e12 }) });
+    installVaultSession(m.s);
+    window.location.hash = '#/vault/new';
+    render(<VaultPage />);
+    await act(async () => {
+      await m.s.refreshStatus();
+      await m.s.unlock('1234');
+    });
+    await type('note-edit-body', '没存上的');
+    await screen.findByTestId('vault-unlock-card');
+    expect(m.s.get().waiting).toBe(true);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('vault-unlock-cancel'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(m.s.get().waiting).toBe(false);
+    expect(m.s.store.getSnapshot().dropped).toBe(1);
+    window.location.hash = '#/vault';
+    await act(async () => {
+      await m.s.unlock('1234');
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(1);
+    expect((await screen.findByTestId('notes-sync-dropped')).textContent).toContain('1');
+  });
+
+  it('负责人“插图打不开”：编辑页插一张图 → 立刻显示本机那一份；传好了点它出看图页', async () => {
+    const m = make();
+    installVaultSession(m.s);
+    window.location.hash = `#/vault/${NID}`;
+    render(<VaultPage />);
+    await act(async () => {
+      await m.s.refreshStatus();
+      await m.s.unlock('1234');
+    });
+    await screen.findByTestId('note-edit-body');
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('note-edit-img-input'), { target: { files: [new File([new Uint8Array(5)], 'a.jpg', { type: 'image/jpeg' })] } });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    const imgId = m.s.store.getSnapshot().images[0]?.id ?? '';
+    expect(imgId).not.toBe('');
+    await waitFor(() => expect(screen.getByTestId(`note-image-${imgId}`).getAttribute('data-state')).toBe('done'));
+    expect(vi.mocked(m.api.imageUpload).mock.calls.map((c) => c[0].part)).toEqual(['full', 'thumb']);
+    fireEvent.click(screen.getByTestId(`note-image-open-${imgId}`));
+    expect(await screen.findByTestId(`img-view-pic-${imgId}`)).toBeTruthy();
+    expect(m.api.imageGet).not.toHaveBeenCalled();
+  });
+
+  it('列表封面只取看得见的：没进视口的卡片不发 vault-image', async () => {
+    const seen = new Set<Element>();
+    const observers: { cb: IntersectionObserverCallback; els: Element[] }[] = [];
+    class FakeIO {
+      constructor(cb: IntersectionObserverCallback) {
+        observers.push({ cb, els: [] });
+      }
+      observe(el: Element) {
+        observers.at(-1)?.els.push(el);
+        seen.add(el);
+      }
+      disconnect() {}
+    }
+    vi.stubGlobal('IntersectionObserver', FakeIO);
+    const pic = { id: GONE, has_thumb: true, width: 10, height: 6, bytes: 3, deleted_at: null };
+    const m = make({ list: () => ({ ok: true, notes: [note({ images: [pic] })], vault_token: TOK, expires_at: 9e12 }) });
+    installVaultSession(m.s);
+    render(<VaultPage />);
+    await act(async () => {
+      await m.s.refreshStatus();
+      await m.s.unlock('1234');
+    });
+    await screen.findByTestId('vault-notes');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(m.api.imageGet).not.toHaveBeenCalled();
+    expect(seen.size).toBeGreaterThan(0);
+    await act(async () => {
+      for (const o of observers) o.cb(o.els.map((target) => ({ target, isIntersecting: true }) as IntersectionObserverEntry), {} as IntersectionObserver);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await waitFor(() => expect(m.api.imageGet).toHaveBeenCalled());
+    vi.unstubAllGlobals();
   });
 });
 
@@ -288,66 +442,6 @@ describe('审查第 6 条：解锁遮罩是有名字的模态对话框，焦点�
     // Esc 照旧是“取消”（Radix 接住后交给卡片的 cancel）：回随手记
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     await waitFor(() => expect(window.location.hash).toBe('#/notes'));
-  });
-});
-
-describe('审查第 9 条：保存进行中碰上令牌过期，不再另交一份草稿', () => {
-  it('点保存 → vault_locked 换成解锁卡（编辑页卸载）→ 解锁：只重发那一次保存，不多存一次', async () => {
-    let n = 0;
-    const m = make({ save: () => (++n === 1 ? { ok: false, code: 'vault_locked' } : { ok: true, vault_token: 't'.repeat(32), expires_at: 9e12 }) });
-    installVaultSession(m.s);
-    window.location.hash = '#/vault/new';
-    render(<VaultPage />);
-    await screen.findByTestId('vault-unlock-card');
-    await act(async () => {
-      await m.s.refreshStatus();
-      await m.s.unlock('1234');
-    });
-    fireEvent.change(await screen.findByTestId('vault-edit-title'), { target: { value: '只存一次' } });
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('vault-edit-save'));
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    await screen.findByTestId('vault-unlock-card');
-    await act(async () => {
-      await m.s.unlock('1234');
-      await new Promise((r) => setTimeout(r, 10));
-    });
-    await waitFor(() => expect(m.calls.filter((c) => c.action === 'save').length).toBeGreaterThanOrEqual(2));
-    await new Promise((r) => setTimeout(r, 10));
-    expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(2);
-  });
-});
-
-describe('审查第 1 条：令牌过期时解锁卡点“取消”，等着的请求、草稿一并作废', () => {
-  it('保存碰上令牌过期 → 出解锁卡 → 点取消：waiting 落回；之后再解锁不补发那次保存，也不保存卸载时交出的草稿', async () => {
-    let n = 0;
-    const m = make({ save: () => (++n === 1 ? { ok: false, code: 'vault_locked' } : { ok: true, vault_token: 't'.repeat(32), expires_at: 9e12 }) });
-    installVaultSession(m.s);
-    window.location.hash = '#/vault/new';
-    render(<VaultPage />);
-    await screen.findByTestId('vault-unlock-card');
-    await act(async () => {
-      await m.s.refreshStatus();
-      await m.s.unlock('1234');
-    });
-    fireEvent.change(await screen.findByTestId('vault-edit-title'), { target: { value: '没存上的' } });
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('vault-edit-save'));
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    await screen.findByTestId('vault-unlock-card');
-    expect(m.s.get().waiting).toBe(true);
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('vault-unlock-cancel'));
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(m.s.get().waiting).toBe(false);
-    await act(async () => {
-      await m.s.unlock('1234');
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(1);
   });
 });
 

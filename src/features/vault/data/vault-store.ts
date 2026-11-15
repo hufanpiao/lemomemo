@@ -4,7 +4,8 @@
 // • 行的形状照本机集合（notes、note_images），随手记界面的纯函数（note-list.ts 的 noteItems、imagesByNote，note-edit.ts 的 formOf、patchOf）原样用：
 //   隐私记行 is_private 写 false（这里只有隐私记，不靠它筛）、category_source 写 'manual'（没有 AI 分类）；图片行的 path 是占位（隐私记的图按 id 经 vault-image 取）
 // • 上锁就清空（明文不留，TC-B5-11）；“有 N 处改动没来得及保存”的个数（dropped）不随上锁清，看过了才清（只记个数，不带内容）
-// • failed：发了几次都没成的条目（列表行、编辑页标“没保存上”）；uploads：还在传、没传上的图
+// • failed：发了几次都没成的条目（列表行、编辑页标“没保存上”）；uploads：还在传、没传上的图；
+//   fresh：本机新建、服务器上还没有的条目（第一次 save 成了才去掉；附件区等它，vault-file 要这一条已经在服务器上）
 // • 不碰 core/cache、outbox、log（A18）；纯 TS，不准 import React（A1）
 import type { VaultNote } from '../../../../shared/schema/vault.ts';
 
@@ -16,6 +17,7 @@ export interface StoreSnap {
   images: readonly Row[];
   failed: ReadonlySet<string>;
   uploads: ReadonlyMap<string, UploadState>;
+  fresh: ReadonlySet<string>;
   dropped: number;
 }
 
@@ -37,6 +39,7 @@ export function createVaultStore() {
   let images = new Map<string, Row>();
   let failed: ReadonlySet<string> = new Set();
   let uploads: ReadonlyMap<string, UploadState> = new Map();
+  let fresh: ReadonlySet<string> = new Set();
   let dropped = 0;
   let snap: StoreSnap | null = null;
   const listeners = new Set<() => void>();
@@ -45,10 +48,18 @@ export function createVaultStore() {
     snap = null;
     for (const fn of [...listeners]) fn();
   };
+  /** 集合里加、减一个 id（没变回原来那个） */
+  const toggled = (set: ReadonlySet<string>, id: string, on: boolean): ReadonlySet<string> => {
+    if (set.has(id) === on) return set;
+    const next = new Set(set);
+    if (on) next.add(id);
+    else next.delete(id);
+    return next;
+  };
 
   return {
     getSnapshot(): StoreSnap {
-      snap ??= { notes: [...notes.values()], images: [...images.values()], failed, uploads, dropped };
+      snap ??= { notes: [...notes.values()], images: [...images.values()], failed, uploads, fresh, dropped };
       return snap;
     },
     subscribe(fn: () => void): () => void {
@@ -69,6 +80,7 @@ export function createVaultStore() {
       images = new Map();
       failed = new Set();
       uploads = new Map();
+      fresh = new Set();
       changed();
     },
     get: (id: string): Row | undefined => notes.get(id),
@@ -111,11 +123,15 @@ export function createVaultStore() {
       changed();
     },
     setFailed(id: string, on: boolean): void {
-      if (failed.has(id) === on) return;
-      const next = new Set(failed);
-      if (on) next.add(id);
-      else next.delete(id);
+      const next = toggled(failed, id, on);
+      if (next === failed) return;
       failed = next;
+      changed();
+    },
+    setFresh(id: string, on: boolean): void {
+      const next = toggled(fresh, id, on);
+      if (next === fresh) return;
+      fresh = next;
       changed();
     },
     setUpload(id: string, state: UploadState | null): void {

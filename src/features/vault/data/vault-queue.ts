@@ -127,7 +127,10 @@ export function createVaultQueue(d: QueueDeps) {
     gen += 1;
     const all = [...jobs.values()];
     jobs.clear();
-    for (const j of all) finish(j, false);
+    for (const j of all) {
+      if (!j.known) d.store.setFresh(j.id, false);
+      finish(j, false);
+    }
     if (n > 0) {
       d.log(`vault queue drop n=${n} why=${why}`);
       d.store.addDropped(n);
@@ -179,6 +182,7 @@ export function createVaultQueue(d: QueueDeps) {
       });
       if (!alive()) return;
       if (!r.ok) return fail(j, r.code, null);
+      if (!j.known) d.store.setFresh(j.id, false);
       j.known = true;
       j.lastSave = d.now();
       j.tries = 0;
@@ -239,6 +243,7 @@ export function createVaultQueue(d: QueueDeps) {
     /** 新建或改了内容（isNew：本机刚建的，服务器上还没有） */
     wrote(row: Row, isNew: boolean): void {
       const j = jobOf(row, !isNew);
+      if (!j.known) d.store.setFresh(j.id, true);
       j.dirty = true;
       j.v += 1;
       kick();
@@ -269,6 +274,7 @@ export function createVaultQueue(d: QueueDeps) {
       const j = jobs.get(id);
       if (!j || j.known || j.lastSave > 0 || current === id) return false;
       jobs.delete(id);
+      d.store.setFresh(id, false);
       finish(j, false);
       return true;
     },
@@ -310,6 +316,7 @@ export function createVaultQueue(d: QueueDeps) {
         }
         for (const x of j.removes) d.store.patchImage(x, { deleted_at: d.now() });
         if (j.failed) d.store.setFailed(j.id, true);
+        if (!j.known) d.store.setFresh(j.id, true);
       }
       kick();
     },

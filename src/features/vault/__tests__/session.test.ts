@@ -1,13 +1,15 @@
 // 隐私记会话（data/session.ts）：TC-B5-10（59 秒 / 61 秒，注入时间）、TC-B5-11（上锁不留明文、blob 撤销）、
 // TC-B5-47 ①②（vault_locked 等解锁后自动重试一次；vault_relock 丢令牌、记 relocked）、TC-B5-33（断网）、图片半路上锁丢掉结果
 import { describe, expect, it, vi } from 'vitest';
-import { IMG, listOk, make, NID, statusSet, TOK, TOK2, tokenOk, unlocked } from './session-fakes.ts';
+import { noteRowOf } from '../data/vault-store.ts';
+import { IMG, listOk, make, NID, note, statusSet, TOK, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 describe('解锁、上锁', () => {
   it('解锁后拉列表，明文只在内存；令牌抄给 core/vault-token', async () => {
     const { s, tokens } = await unlocked();
     expect(s.get().phase).toBe('unlocked');
-    expect(s.get().notes?.[0]?.body).toBe('血压 120/80');
+    expect(s.get().listed).toBe(true);
+    expect(s.store.get(NID)?.['body']).toBe('血压 120/80');
     expect(tokens.at(-1)).toBe(TOK);
     expect(s.hasToken()).toBe(true);
   });
@@ -18,7 +20,8 @@ describe('解锁、上锁', () => {
     expect(url).toBe('blob:x/1');
     expect(s.blobCount()).toBe(1);
     s.lock();
-    expect(s.get()).toMatchObject({ phase: 'locked', notes: null });
+    expect(s.get()).toMatchObject({ phase: 'locked', listed: false });
+    expect(s.store.getSnapshot()).toMatchObject({ notes: [], images: [] });
     expect(s.hasToken()).toBe(false);
     expect(tokens.at(-1)).toBeNull();
     expect(revoked).toEqual(['blob:x/1']);
@@ -71,7 +74,7 @@ describe('TC-B5-10：离开满时长才上锁（注入时间）', () => {
     expect(s.get().phase).toBe('unlocked');
     s.hide(100_000);
     expect(s.show(161_000, 1)).toBe(true);
-    expect(s.get()).toMatchObject({ phase: 'locked', notes: null });
+    expect(s.get()).toMatchObject({ phase: 'locked', listed: false });
   });
 
   it('改时长生效：5 分钟时 4 分 59 秒不锁、5 分 1 秒锁', async () => {
@@ -99,7 +102,7 @@ describe('TC-B5-47：错误码怎么落', () => {
     });
     const p = s.remove(NID);
     await vi.waitFor(() => expect(s.get().waiting).toBe(true));
-    expect(s.get()).toMatchObject({ phase: 'locked', notes: null });
+    expect(s.get()).toMatchObject({ phase: 'locked', listed: false });
     await s.unlock('1234');
     const r = await p;
     expect(r.ok).toBe(true);
@@ -131,7 +134,7 @@ describe('TC-B5-47：错误码怎么落', () => {
     const { s } = await unlocked({ save: () => ({ ok: false, code: 'vault_relock' }) });
     const r = await s.save({ id: NID, title: 'a', body: 'b' });
     expect(r).toMatchObject({ ok: false, code: 'vault_relock' });
-    expect(s.get()).toMatchObject({ phase: 'locked', notes: null, relocked: true });
+    expect(s.get()).toMatchObject({ phase: 'locked', listed: false, relocked: true });
     expect(s.hasToken()).toBe(false);
     await s.unlock('5678');
     expect(s.get().relocked).toBe(false);
@@ -141,7 +144,7 @@ describe('TC-B5-47：错误码怎么落', () => {
     let n = 0;
     const { s } = await unlocked({ list: () => (++n === 1 ? listOk() : { ok: false, code: 'session_revoked' }) });
     await s.list();
-    expect(s.get()).toMatchObject({ phase: 'locked', notes: null, lastError: 'session_revoked' });
+    expect(s.get()).toMatchObject({ phase: 'locked', listed: false, lastError: 'session_revoked' });
   });
 
   it('⑥ try_later：只记码，不上锁', async () => {
@@ -156,7 +159,7 @@ describe('TC-B5-33：断网', () => {
     let online = false;
     const m = make({ status: () => (online ? statusSet : { ok: false, code: 'offline' }) });
     await m.s.refreshStatus();
-    expect(m.s.get()).toMatchObject({ phase: 'offline', notes: null });
+    expect(m.s.get()).toMatchObject({ phase: 'offline', listed: false });
     online = true;
     await m.s.refreshStatus();
     expect(m.s.get().phase).toBe('locked');
@@ -165,46 +168,79 @@ describe('TC-B5-33：断网', () => {
   });
 });
 
-describe('保存、移进隐私记', () => {
+describe('保存、移进隐私记（B5 隐私记重写：界面只写仓库，后台队列去发）', () => {
   const NEW = '33333333-3333-4333-8333-333333333333';
   const IMG_NEW = '44444444-4444-4444-8444-444444444444';
   const pic = { id: IMG_NEW, full: new Blob(['f']), thumb: new Blob(['t']), width: 10, height: 20 };
+  const settle = async (): Promise<void> => {
+    for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 0));
+  };
+  const newRow = () => ({ ...noteRowOf(note({ id: NEW, title: 't', body: 'b' })) });
 
-  it('新建带图（整块评审第 3 条）：先 save 带 add_images 预登记（字节数取原图），再传 full、thumb；成功后重新拉列表', async () => {
+  it('新建再插图（整块评审第 3 条）：新建的 save 之后，下一次 save 带 add_images 预登记（字节数取原图），再传 full、thumb；不再重拉列表', async () => {
     const { s, api, calls } = await unlocked();
-    const r = await s.save({ id: null, title: 't', body: 'b', addImages: [pic] });
-    expect(r).toEqual({ ok: true, value: NEW });
+    const row = newRow();
+    s.store.put(row);
+    s.queue.wrote(row, true);
+    s.queue.addImage(row, pic);
+    await settle();
     expect(vi.mocked(api.imageUpload).mock.calls.map((c) => [c[0].note_id, c[0].image_id, c[0].part])).toEqual([[NEW, IMG_NEW, 'full'], [NEW, IMG_NEW, 'thumb']]);
     const order = calls.map((c) => c.action);
-    expect(order.slice(order.indexOf('save'))).toEqual(['save', 'list']);
+    expect(order.slice(order.indexOf('save'))).toEqual(['save', 'save']);
     const saves = calls.flatMap((c) => (c.req.action === 'save' ? [c.req] : []));
-    expect(saves.map((x) => x.add_images ?? null)).toEqual([[{ id: IMG_NEW, bytes: pic.full.size, width: 10, height: 20, has_thumb: true }]]);
+    expect(saves.map((x) => x.add_images ?? null)).toEqual([null, [{ id: IMG_NEW, bytes: pic.full.size, width: 10, height: 20, has_thumb: true }]]);
+    expect(s.store.getSnapshot()).toMatchObject({ uploads: new Map(), fresh: new Set() });
   });
 
-  it('改已有的一条带图：也只 save 一次', async () => {
+  it('save 只发一次请求、不重拉列表', async () => {
     const { s, calls } = await unlocked();
-    expect((await s.save({ id: NID, title: 't', body: 'b', addImages: [pic] })).ok).toBe(true);
+    expect((await s.save({ id: NID, title: 't', body: 'b' })).ok).toBe(true);
     expect(calls.filter((c) => c.action === 'save')).toHaveLength(1);
+    expect(calls.at(-1)?.action).toBe('save');
   });
 
-  it('传图失败后重试：同一个图片 id、同一条隐私记（不另生成），第二次成功', async () => {
+  it('传图失败（服务忙）退避重传：同一个图片 id、同一条隐私记（不另生成），第二次成功', async () => {
     const { s, api } = await unlocked();
     vi.mocked(api.imageUpload).mockResolvedValueOnce({ ok: false, code: 'try_later' });
-    const id = '55555555-5555-4555-8555-555555555555';
-    const input = { id, title: 't', body: 'b', addImages: [pic] };
-    expect(await s.save(input)).toMatchObject({ ok: false, code: 'try_later' });
-    expect((await s.save(input)).ok).toBe(true);
+    const row = noteRowOf(note());
+    s.queue.addImage(row, pic);
+    await settle();
     const keys = vi.mocked(api.imageUpload).mock.calls.map((c) => `${c[0].note_id}/${c[0].image_id}`);
-    expect(new Set(keys)).toEqual(new Set([`${id}/${IMG_NEW}`]));
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys)).toEqual(new Set([`${NID}/${IMG_NEW}`]));
+    expect(s.store.getSnapshot().uploads.size).toBe(0);
   });
 
   it('传图时令牌过期（vault_locked）：先发 renew（不是 list_credentials）换新令牌再传', async () => {
     const { s, api, calls } = await unlocked({ renew: () => ({ ok: true, vault_token: TOK2, expires_at: 9e12 }) });
     vi.mocked(api.imageUpload).mockResolvedValueOnce({ ok: false, code: 'vault_locked' });
-    expect((await s.save({ id: NID, title: 't', body: 'b', addImages: [pic] })).ok).toBe(true);
+    s.queue.addImage(noteRowOf(note()), pic);
+    await settle();
     expect(calls.map((c) => c.action)).toContain('renew');
     expect(calls.map((c) => c.action)).not.toContain('list_credentials');
     expect(vi.mocked(api.imageUpload).mock.calls[1]?.[2]).toBe(TOK2);
+  });
+
+  it('本机刚插的图直接进图片表（seedImage），显示不再经 vault-image 取；上锁一起撤销', async () => {
+    const { s, api, revoked } = await unlocked();
+    s.seedImage(IMG_NEW, pic.full, pic.thumb);
+    expect(s.peekImage(IMG_NEW, 'thumb')).toBe('blob:x/2');
+    expect(await s.image(IMG_NEW, 'full')).toBe('blob:x/1');
+    expect(api.imageGet).not.toHaveBeenCalled();
+    s.lock();
+    expect(revoked.sort()).toEqual(['blob:x/1', 'blob:x/2']);
+    expect(s.peekImage(IMG_NEW, 'full')).toBeNull();
+  });
+
+  it('移出隐私记：先等队列把这一条发完再 export；成了从仓库拿掉', async () => {
+    const { s, calls } = await unlocked({ export: () => tokenOk });
+    const row = { ...noteRowOf(note()), body: '改过' };
+    s.store.put(row);
+    s.queue.wrote(row, false);
+    expect((await s.exportNote(NID)).ok).toBe(true);
+    const order = calls.map((c) => c.action);
+    expect(order.slice(order.indexOf('save'))).toEqual(['save', 'export']);
+    expect(s.store.get(NID)).toBeUndefined();
   });
 
   it('importNote：锁着时也是走 run（vault_locked 会等解锁）；成功后已解锁才重新拉列表', async () => {
