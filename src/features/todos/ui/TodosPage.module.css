@@ -68,6 +68,24 @@
   pointer-events: none;
 }
 
+/* 左滑删除（负责人 11-15 去掉行尾 ×）：手势、行面、按钮是 kit 的 SwipeRow，这里只放待办行自己的排法
+   • .swp：kit 的外框，占满一行；.swRow：行面里的一行（打勾圈 ｜ 标题和副行），同 kit List.module.css 的 .row 的间距和最小高 */
+.swp {
+  display: flex;
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+}
+
+.swRow {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  min-height: var(--hit);
+}
+
 /* 有子任务的行（R-350）：子任务那一块（SubtaskCard）折到下一行、占满整行 */
 .hasSubs {
   flex-wrap: wrap;

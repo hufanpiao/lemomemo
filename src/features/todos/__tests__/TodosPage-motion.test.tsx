@@ -175,7 +175,8 @@ describe('待办页动效', () => {
     render(<TodosPage />);
     const del = recordStates('todos-row-b');
     await act(async () => {
-      fireEvent.click(screen.getByTestId('todos-del-b'));
+      // 删除在左滑露出的“删除”上（负责人 11-15 去掉 ×）；手势本身在 kit 的 SwipeRow.test.tsx 和 e2e todos-swipe 里测，这里只看删行的动效
+      fireEvent.click(screen.getByTestId('todos-swipe-del-b'), { detail: 1 });
     });
     // 点删除那一次提交当下就是 leaving（不读 act 返回后的状态：淡出只有 110 ms）
     expect(del.seen.some((s) => s.state === 'leaving')).toBe(true);

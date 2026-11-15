@@ -111,8 +111,8 @@ describe('CI webkit 关模糊名单', () => {
 
   it('参数化的 N1 两条名字和源码里的参数对得上', () => {
     const src = spec('b2-motion-list.spec.ts');
-    expect(src).toContain("['打勾', 'todos-done-t3', tickFirst]");
-    expect(src).toContain("['删除', 'todos-del-t3', seed]");
+    expect(src).toMatch(/\['打勾', \(page: Page\) => page\.getByTestId\('todos-done-t3'\)\.click\(\), tickFirst\]/);
+    expect(src).toMatch(/\['删除', \(page: Page\) => swipeRow\(page, 'todos-row-t3'\), seed\]/);
   });
 
   it('只在 CI 的 webkit、名单内的用例生效', () => {

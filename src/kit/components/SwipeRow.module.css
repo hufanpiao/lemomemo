@@ -2,12 +2,17 @@
    • .wrap：外框（列表里是 li，和 List.module.css 的 .row 一起用），裁掉滑出去的部分
    • .acts：右侧操作按钮，压在行面下面；.face：行面（底色同列表面板，z-index 盖住排在它后面的按钮），跟手只动 transform
    • .face[data-snap]：松手后收回或停住的过渡；减少动态效果时没有过渡、直接到位
+   • .fullBg（给了 full、那个动作是警示的）：拉过操作区以后露出来的整行底色同“删除”按钮，看得出松手就删
    • .compact（look="compact"，随手记列表行，视觉稿 .swp .acts span；R-171、R-172；原随手记 NoteSwipe.module.css 的数值）：
      按钮每个 64 宽、12 号字、文案照换行断；旁边的按钮深色主题 --text-2 底、--panel 字，浅色主题浅底，“删除”警示色、半粗 */
 
 .wrap {
   position: relative;
   overflow: hidden;
+}
+
+.fullBg {
+  background: var(--danger-bg);
 }
 
 .acts {

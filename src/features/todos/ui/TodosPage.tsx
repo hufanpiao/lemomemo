@@ -1,10 +1,12 @@
 // 待办列表页（B2 FA-2；定稿线框 s6；架构 5.9“项目筛选”；R-134、R-136）
 // • 顶部项目筛选条：“全部 / 各项目 + 条数”，只作用于这一页（不写 settings）
 // • 分组：过期（标红：逾 N 天 / 已过 17:00）→ 今天 → 明天 → 7 天内按日期 → 以后 → 没有日期 → 已完成
-// • 每行：打勾（就地保存）、标题（常规字重）、截止标签（“今天 17:00 截止”）、删除（软删 + 8 秒撤销条）；点标题进编辑页
+// • 每行：打勾（就地保存）、标题（常规字重）、截止标签（“今天 17:00 截止”）；点标题进编辑页。
+//   删除（软删 + 8 秒撤销条）：左滑露出“删除”，一口气拉过大半行直接删（负责人 11-15 去掉行尾 ×，kit 的 SwipeRow，电脑上鼠标也能拖）；
+//   键盘、读屏进编辑页在那里删（编辑页有“删除”）
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记，圆圈变淡；点这一行、打勾、删除统一拦下（不进编辑页、不写），
 //   出提示条“这条要新版本才能修改 · 更新”（kit 的 useReadonlyGuard、ReadonlyToast）。只读 id 来自 core 的 readonlyIds。
-//   左滑和多选这一页还没有，以后加的时候照样先看 ro.has(id)
+//   左滑：只读行不能滑（SwipeRow disabled）；多选这一页还没有，以后加的时候照样先看 ro.has(id)
 // • 行尾“未同步”小标记（REMIND-wiring；TC-B2-69；reminders 的 UnsyncedRemindMark 懒加载）：带提醒、还没同步上的那条标，在行按钮里、
 //   标题和截止标签的右边；只看本机待同步队列，同日历页直接挂、不等提醒引擎（今天页待办 代码审查 M1），没有时那一格不画
 // • 动效（17.1“勾选完成”“列表增删”，B2 FA-5；设计审查 M1～M3 返工 11-04）：打勾时圆圈在原地填满（CSS，--dur-ui），
@@ -29,7 +31,8 @@ import list from '../../../kit/components/List.module.css';
 import { ListToasts } from '../../../kit/components/ListToasts.tsx';
 import { ReadonlyMark, RoCheckCircle } from '../../../kit/components/ReadonlyRow.tsx';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
-import { useRoT } from '../../../kit/hooks/useRoT.ts';
+import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -55,7 +58,6 @@ function RowMark({ id }: { id: string }) {
 
 export default function TodosPage() {
   const t = useListT();
-  const tRo = useRoT();
   const locale = useUi((s) => s.locale);
   // 刚打勾、先留在原组的那一条：跟着页底“已完成 · 撤销”条走（条在 a.g 里，a 又要用 l，所以记一份、画的时候对上，见下面）
   const [linger, setLinger] = useState<string | null>(null);
@@ -140,11 +142,21 @@ export default function TodosPage() {
                 return (
                 <AppearItem
                   key={todo.id}
-                  className={subs ? `${list.row} ${styles.hasSubs}` : list.row}
+                  className={list.row}
                   data-done={todo.done ? '' : undefined}
                   data-readonly={isRo(todo.id) ? '' : undefined}
                   data-testid={`todos-row-${todo.id}`}
                 >
+                  {/* 左滑删除（负责人 11-15 去掉行尾 ×）：露出“删除”点了删，一口气拉过大半行直接删（kit SwipeRow 的 full）；只读行不能滑 */}
+                  <SwipeRow
+                    className={styles.swp}
+                    disabled={isRo(todo.id)}
+                    full="del"
+                    log={rlog}
+                    actions={[{ key: 'del', label: t('list.delete', {}), danger: true, onClick: () => void del(todo.id), testId: `todos-swipe-del-${todo.id}` }]}
+                    data-testid={`todos-swipe-${todo.id}`}
+                  >
+                  <div className={subs ? `${styles.swRow} ${styles.hasSubs}` : styles.swRow}>
                   <span className={list.lead}>
                     <RoCheckCircle
                       readOnly={isRo(todo.id)}
@@ -164,18 +176,6 @@ export default function TodosPage() {
                     {isRo(todo.id) ? <ReadonlyMark testId={`todos-ro-${todo.id}`} /> : null}
                     <RowMark id={todo.id} />
                   </button>
-                  {/* 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条、代码复查二）：变淡、aria-disabled、读屏名字后接“要更新到新版本才能修改”；
-                      点了照样由 del 里的 useReadonlyGuard 拦下出提示条、不写 */}
-                  <Pressable
-                    className={list.trail}
-                    aria-label={isRo(todo.id) ? tRo('ro.named', { label: t('list.delete', {}) }) : t('list.delete', {})}
-                    aria-disabled={isRo(todo.id) || undefined}
-                    onClick={() => void del(todo.id)}
-                    data-testid={`todos-del-${todo.id}`}
-                    data-no-proxy=""
-                  >
-                    ×
-                  </Pressable>
                   {subs ? (
                     <SubtaskCard
                       todoId={todo.id}
@@ -188,6 +188,8 @@ export default function TodosPage() {
                       readOnly={(itemId) => isRo(todo.id) || roSubs.has(itemId)}
                     />
                   ) : null}
+                  </div>
+                  </SwipeRow>
                 </AppearItem>
                 );
               })}

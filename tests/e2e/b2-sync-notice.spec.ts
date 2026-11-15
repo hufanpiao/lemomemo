@@ -5,6 +5,7 @@
 // • 冲突卡（conflict、forked）要同步引擎发事件，这里造不出来；它的界面逻辑在 src/features/sync-notice/__tests__/SyncNoticeHost.test.tsx
 import type { Page } from '@playwright/test';
 import { idbRead, putGoneTodo } from './idb.ts';
+import { swipeRow } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -75,7 +76,7 @@ test.describe('K8 gone 卡', () => {
     await seed(page);
     await expect(card(page)).toBeVisible({ timeout: 15000 });
     const before = await settledY(page);
-    await page.getByTestId('todos-del-n1').click();
+    await swipeRow(page, 'todos-row-n1');   // 左滑拉到底删（负责人 11-15 去掉 ×）
     const toast = page.locator('[data-undo-toast]');
     await expect(toast).toBeVisible();
     const t = await toast.boundingBox();

@@ -23,6 +23,7 @@
 // 示例待办和 FA-5 连续帧同一份（docs/02-设计/当前界面截图-1104/动效-*.png）
 import type { Page } from '@playwright/test';
 import { cached, idbPut } from './idb.ts';
+import { swipeRow } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -292,12 +293,13 @@ test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1�
     await page.getByTestId('todos-done-toast').waitFor();
     await page.waitForTimeout(500);
   };
-  for (const [name, testId, prepare] of [
-    ['打勾', 'todos-done-t3', tickFirst],
-    ['删除', 'todos-del-t3', seed],
+  // 删除：左滑一口气拉过大半行（负责人 11-15 去掉 ×，SwipeRow full），松手即删、即起点
+  for (const [name, act, prepare] of [
+    ['打勾', (page: Page) => page.getByTestId('todos-done-t3').click(), tickFirst],
+    ['删除', (page: Page) => swipeRow(page, 'todos-row-t3'), seed],
   ] as const) {
     test(`N1 ${name}：离开的那一项不透明度 > 0.25 的每一帧，它的字不压别的行、组标题的字`, async ({ page }) => {
-      const { seen, bad, traces } = await ghostRun(page, 'todos', () => prepare(page), () => page.getByTestId(testId).click());
+      const { seen, bad, traces } = await ghostRun(page, 'todos', () => prepare(page), () => act(page));
       expect(bad).toEqual([]);
       expect(seen, `做了 ${GHOST_TRIES} 次都没取到离开那一项看得清的 rAF 帧（补帧不算，否则这条什么都没测）。取样：${traces.join(' ｜ ')}`).toBeGreaterThan(0);
     });
@@ -321,7 +323,7 @@ test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1�
 
   test('M2 撤销恢复：新行看得见的每一帧都不和别的行、组标题重叠', async ({ page }) => {
     await seed(page);
-    await page.getByTestId('todos-del-t3').click();
+    await swipeRow(page, 'todos-row-t3');
     await expect(page.getByTestId('todos-row-t3')).toHaveCount(0);
     await startSampler(page, 'overlap', 't3', 900);
     await page.getByTestId('todos-toast').getByRole('button').first().click();
