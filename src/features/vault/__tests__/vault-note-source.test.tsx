@@ -10,7 +10,7 @@ import { make, note, NID } from './session-fakes.ts';
 vi.mock('../../../kit/hooks/useCollection.ts', () => ({ useCollection: () => [] }));
 
 const IMG = '22222222-2222-4222-8222-222222222222';
-const TEXT = { title: '隐私记', empty: '', back: '隐私记' };
+const TEXT = { title: '隐私记', empty: '', back: '隐私记', trash: '最近删除' };
 
 afterEach(() => {
   cleanup();

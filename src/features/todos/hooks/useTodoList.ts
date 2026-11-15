@@ -22,7 +22,8 @@ export type ListMsgKey = keyof typeof listZh & string;
 
 export const useListT = makeUseT({ zh: listZh, ko: listKo });
 
-export function useTodoList() {
+/** linger：刚打勾、先留在原组的那一条（页面的撤销条开着期间；data/todo-list.ts 的 groupTodos） */
+export function useTodoList(linger: string | null = null) {
   const rows = useCollection<Row>('todos');
   const [project, setProject] = useState<string | null>(null);
   // 每分钟重算一次（“已过 17:00”跨分钟出现）
@@ -33,7 +34,7 @@ export function useTodoList() {
   const projects = useMemo(() => projectCounts(rows, locale), [rows, locale]);
   // 筛的项目没了（最后一条完成或删掉）：回到“全部”
   const active = project !== null && projects.some((p) => p.project === project) ? project : null;
-  const groups = useMemo(() => groupTodos(rows, now, tz, active, locale), [rows, now, tz, active, locale]);
+  const groups = useMemo(() => groupTodos(rows, now, tz, active, locale, linger), [rows, now, tz, active, locale, linger]);
 
   // 打勾：刚点过的再点回去按撤销写回原来的 done_at（core/todo-done.ts，评审第 15 条）；这一页挂着期间记着
   const [toggle] = useState(() => doneToggler());

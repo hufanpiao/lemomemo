@@ -3,7 +3,7 @@
 // 手指、鼠标补来的 click 带 detail: 1（真浏览器的样子）；键盘的 click 前面有 keydown，滑完不吞它（R-420 审查第 12 条）
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SwipeRow } from '../SwipeRow.tsx';
+import { FULL_RESET_MS, SwipeRow } from '../SwipeRow.tsx';
 
 afterEach(cleanup);
 
@@ -195,5 +195,64 @@ describe('SwipeRow', () => {
     expect(lines.some((l) => l.startsWith('swipe axis=h'))).toBe(true);
     expect(lines.find((l) => l.startsWith('swipe up'))).toMatch(/ ms=\d+/);
     expect(lines.join('\n')).not.toContain('行');
+  });
+});
+
+describe('拉到底直接做（full，负责人 11-15 待办“露按钮 + 拉到底直删”）', () => {
+  // 整行 360 宽、操作区 72 宽（行面带 data-swipe-face）
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-swipe-face') ? 360 : 72;
+    });
+  });
+  const one = (onDel: () => void, full: string | null = 'del', log: (line: string) => void = noLog) => (
+    <SwipeRow data-testid="f" log={log} full={full ?? undefined} actions={[{ key: 'del', label: '删除', danger: true, onClick: onDel, testId: 'f-del' }]}>
+      <button type="button" data-testid="f-main">行</button>
+    </SwipeRow>
+  );
+
+  it('拉过大半行（> 60%）松手：整行滑走、当场做那个动作、不停在露出；日志 swipe full；过一会儿行面放回原位', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const onDel = vi.fn();
+    const logs: string[] = [];
+    render(one(onDel, 'del', (l) => void logs.push(l)));
+    swipe(face('f'), -240);
+    expect(onDel).toHaveBeenCalledTimes(1);
+    expect(face('f').style.transform).toBe('translateX(-360px)');
+    expect(screen.getByTestId('f').getAttribute('data-swipe')).toBeNull();
+    expect(logs.some((l) => /^swipe full key=del w=360 ms=\d+$/.test(l))).toBe(true);
+    act(() => {
+      vi.advanceTimersByTime(FULL_RESET_MS);
+    });
+    expect(face('f').style.transform).toBe('');
+    vi.useRealTimers();
+  });
+
+  it('拉过操作区、没过大半行：照旧停在露出，不做动作；跟手能拉过操作区（不夹在 72）', () => {
+    const onDel = vi.fn();
+    render(one(onDel));
+    const el = face('f');
+    fireEvent.pointerDown(el, { pointerId: 1, isPrimary: true, clientX: 300, clientY: 20, button: 0, pointerType: 'touch' });
+    fireEvent.pointerMove(el, { pointerId: 1, isPrimary: true, clientX: 250, clientY: 20, pointerType: 'touch' });
+    fireEvent.pointerMove(el, { pointerId: 1, isPrimary: true, clientX: 150, clientY: 20, pointerType: 'touch' });
+    expect(el.style.transform).toBe('translateX(-150px)');
+    fireEvent.pointerUp(el, { pointerId: 1, isPrimary: true, clientX: 150, clientY: 20, pointerType: 'touch' });
+    expect(onDel).not.toHaveBeenCalled();
+    expect(screen.getByTestId('f').getAttribute('data-swipe')).toBe('open');
+    expect(el.style.transform).toBe('translateX(-72px)');
+  });
+
+  it('不给 full（随手记、纪念日）：拉多远都夹在操作区宽、松手停在露出，不直接做', () => {
+    const onDel = vi.fn();
+    render(one(onDel, null));
+    swipe(face('f'), -300);
+    expect(onDel).not.toHaveBeenCalled();
+    expect(face('f').style.transform).toBe('translateX(-72px)');
+    expect(screen.getByTestId('f').getAttribute('data-swipe')).toBe('open');
+  });
+
+  it('警示动作才给整行铺底色（.fullBg）', () => {
+    render(one(vi.fn()));
+    expect(screen.getByTestId('f').className).toMatch(/fullBg/);
   });
 });

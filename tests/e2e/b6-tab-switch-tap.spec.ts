@@ -32,11 +32,12 @@ async function seed(page: Page): Promise<void> {
 
 const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
 
-test('随手记 → 待办：窗口以内点删除被吞、日志记 prevented-later；过了窗口再点真删、出撤销条', async ({ page }) => {
+// 点的是打勾圈（负责人 11-15 待办去掉行尾 ×、删除改左滑以后，行上一点就生效的就是打勾）：打勾也出撤销条
+test('随手记 → 待办：窗口以内点打勾被吞、日志记 prevented-later；过了窗口再点真勾上、出撤销条', async ({ page }) => {
   await seed(page);
   await go(page, '#/notes');
   await page.getByTestId('notes').waitFor({ timeout: 30000 });
-  // 切回待办，新页的删除 × 一出来就在页面里点（page 的往返赶不上 100 ms）；返回离换页过了多少毫秒
+  // 切回待办，新页的打勾圈一出来就在页面里点（page 的往返赶不上 100 ms）；返回离换页过了多少毫秒
   const at = await page.evaluate(
     () =>
       new Promise<number>((resolve) => {
@@ -45,7 +46,7 @@ test('随手记 → 待办：窗口以内点删除被吞、日志记 prevented-l
           () => {
             const t0 = performance.now();
             const poll = (): void => {
-              const x = document.querySelector<HTMLElement>('[data-testid="todos-del-n1"]');
+              const x = document.querySelector<HTMLElement>('[data-testid="todos-done-n1"]');
               if (!x) return void requestAnimationFrame(poll);
               x.click();
               resolve(performance.now() - t0);
@@ -58,13 +59,13 @@ test('随手记 → 待办：窗口以内点删除被吞、日志记 prevented-l
       }),
   );
   expect(at, '新页出来得太晚，已经过了吞点按的窗口').toBeLessThan(FADE_GUARD_MS);
-  await expect.poll(() => runLog(page), { timeout: 3000 }).toMatch(/ click button#todos-del-n1 prevented-later/);
-  await expect(page.getByTestId('todos-row-n1')).toHaveCount(1);
+  await expect.poll(() => runLog(page), { timeout: 3000 }).toMatch(/ click input\[checkbox\]#todos-done-n1 prevented-later/);
+  await expect(page.getByTestId('todos-done-n1')).not.toBeChecked();
   await expect(page.locator('[data-undo-toast]')).toHaveCount(0);
 
   // 过了窗口（新页早已出来，从现在起再等一整段）再点：真删
   await page.waitForTimeout(FADE_GUARD_MS);
-  await page.getByTestId('todos-del-n1').click();
+  await page.getByTestId('todos-done-n1').click();
   await expect(page.locator('[data-undo-toast]')).toBeVisible();
-  await expect(page.getByTestId('todos-row-n1')).toHaveCount(0);
+  await expect(page.getByTestId('todos-done-n1')).toBeChecked();
 });

@@ -1,4 +1,4 @@
-// 待办列表的只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记；点这一行、打勾、删除统一拦下（不进编辑页、不写），
+// 待办列表的只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记；点这一行、打勾统一拦下（不进编辑页、不写），左滑删除滑不开，
 // 出“这条要新版本才能修改 · 更新”，“更新”走 requestAppUpdate；可写的行照常
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +14,15 @@ vi.mock('../../../core/todo-done.ts', async (orig) => ({ ...(await orig<object>(
 vi.mock('../data/todo-actions.ts', async (orig) => ({ ...(await orig<object>()), setTodoDeleted: () => setDeleted() }));
 
 const { default: TodosPage } = await import('../ui/TodosPage.tsx');
+
+/** 在这一行的行面上左滑 50 px（过操作区一半就停在露出） */
+function swipeLeft(id: string): void {
+  const el = screen.getByTestId(`todos-swipe-${id}`).querySelector<HTMLElement>('[data-swipe-face]') as HTMLElement;
+  fireEvent.pointerDown(el, { pointerId: 1, isPrimary: true, clientX: 200, clientY: 20, button: 0, pointerType: 'touch' });
+  fireEvent.pointerMove(el, { pointerId: 1, isPrimary: true, clientX: 175, clientY: 20, pointerType: 'touch' });
+  fireEvent.pointerMove(el, { pointerId: 1, isPrimary: true, clientX: 150, clientY: 20, pointerType: 'touch' });
+  fireEvent.pointerUp(el, { pointerId: 1, isPrimary: true, clientX: 150, clientY: 20, pointerType: 'touch' });
+}
 
 const row = (id: string, title: string, over: Record<string, unknown> = {}) => ({
   id, title, done: false, important: false, project: '', due: null, due_time: null, deleted_at: null, ...over,
@@ -78,24 +87,30 @@ describe('待办列表的只读行', () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 
-  it('打勾、删除：都不写，出同一条提示（× 是 aria-disabled）；可写的行照常写、照常进编辑页', async () => {
-    render(<TodosPage />);
-    fireEvent.click(screen.getByTestId('todos-done-ro1'));
-    expect(await screen.findByTestId('todos-ro-toast')).toBeTruthy();
-    // 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条）：aria-disabled、读屏名字接“要更新到新版本才能修改”，点了拦下不写
-    const x = screen.getByTestId('todos-del-ro1');
-    expect(x.getAttribute('aria-disabled')).toBe('true');
-    expect(x.getAttribute('aria-label')).toBe('删除，要更新到新版本才能修改');
-    fireEvent.click(x);
-    expect(screen.getByTestId('todos-del-ok1').getAttribute('aria-disabled')).toBeNull();
-    expect(setDone).not.toHaveBeenCalled();
-    expect(setDeleted).not.toHaveBeenCalled();
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('todos-del-ok1'));
+  it('打勾、删除：都不写（打勾出提示条，只读行左滑不动）；可写的行左滑露出“删除”照常写、照常进编辑页', async () => {
+    // jsdom 量不出宽度、没有指针捕获（同 kit 的 SwipeRow.test.tsx）
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-swipe-face') ? 360 : 72;   // 整行 360、“删除”按钮 72
     });
-    expect(setDeleted).toHaveBeenCalledTimes(1);
+    HTMLElement.prototype.setPointerCapture = () => undefined;
+    render(<TodosPage />);
     fireEvent.click(titleBtn('回邮件'));
     expect(window.location.hash).toBe('#/todo/ok1');
+    window.location.hash = '#/todos';
+    fireEvent.click(screen.getByTestId('todos-done-ro1'));
+    expect(await screen.findByTestId('todos-ro-toast')).toBeTruthy();
+    // 只读行（负责人 11-15 去掉 × 改左滑）：滑不开、露不出“删除”
+    swipeLeft('ro1');
+    expect(screen.getByTestId('todos-swipe-ro1').getAttribute('data-swipe')).toBeNull();
+    expect(setDone).not.toHaveBeenCalled();
+    expect(setDeleted).not.toHaveBeenCalled();
+    swipeLeft('ok1');
+    expect(screen.getByTestId('todos-swipe-ok1').getAttribute('data-swipe')).toBe('open');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('todos-swipe-del-ok1'), { detail: 1 });
+    });
+    expect(setDeleted).toHaveBeenCalledTimes(1);
+    vi.restoreAllMocks();
   });
 
   it('数据层把这一行变回可写：标记跟着消失', async () => {

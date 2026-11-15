@@ -2,6 +2,7 @@
 // • 收起状态（方案第 3 节、5.4，Q4）：每台设备各记各的、不同步，存本机库 meta 仓的 ui.todo_collapsed（待办 id → true 收起 / false 展开），
 //   只存用户点过的；没点过的按默认：未完成展开、已完成收起。最多 COLLAPSED_MAX 个，写时剔掉已不在的待办、超了丢最早的。
 //   读不到（没启动、库已关）就全按默认；不写 localStorage（4.1：localStorage 只留 install_id）
+// • 同一份记录里还存“已完成”组整组收起没有（键 DONE_GROUP，负责人 11-15“完成的待办怎么隐藏”）：没点过默认收起；不是待办 id，写时不剔掉
 // • 收起状态放在模块里（离开待办页再回来不闪一下默认值）；第一次用时从 meta 读一次，读回来之前点过的以点过的为准
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { getBoot } from '../../../core/boot.ts';
@@ -47,6 +48,8 @@ export function usePicked(items: readonly Subtask[]): { shown(i: Subtask): boole
 
 const META_KEY = 'ui.todo_collapsed';
 export const COLLAPSED_MAX = 500;
+/** 待办页“已完成”组的收起状态在记录里的键（待办 id 是 uuid，不会撞上） */
+export const DONE_GROUP = '#done';
 
 let collapsed: Readonly<Record<string, boolean>> = {};
 let loading: Promise<void> | null = null;
@@ -85,7 +88,7 @@ function load(): Promise<void> {
 
 /** 记下一条的收起状态：剔掉已不在的待办（live），超过上限丢最早记的；写 meta 失败不提示（下次打开回到默认） */
 export function setCollapsed(id: string, value: boolean, live: ReadonlySet<string>): void {
-  const keep = Object.entries(collapsed).filter(([k]) => k !== id && live.has(k));
+  const keep = Object.entries(collapsed).filter(([k]) => k !== id && (live.has(k) || k === DONE_GROUP));
   keep.push([id, value]);
   collapsed = Object.fromEntries(keep.slice(-COLLAPSED_MAX));
   emit();

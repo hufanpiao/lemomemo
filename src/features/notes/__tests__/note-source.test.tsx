@@ -3,7 +3,8 @@
 // • L6：来源不支持合并分类（caps.merge = false）时，useNoteList 不调 fixCategoryCycles（它写本机 categories）
 // • 默认来源（普通随手记）和收拢之前一模一样：写入原样转给 core 的 saveInsert / saveDeleted / savePatch（参数、返回值不改），
 //   行读本机集合 notes、note_images、note_files，只读 id 读 readonlyIds('notes')，撤销新建写 undone
-import { act, renderHook } from '@testing-library/react';
+// • “最近删除”入口（NotesBits 的 TrashLink，负责人 11-15）：两种来源共用一份，去哪、带不带条数看来源
+import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Row } from '../data/note-list.ts';
@@ -42,6 +43,7 @@ vi.mock('../../../kit/hooks/useItem.ts', () => ({
 const { NoteSourceProvider } = await import('../hooks/note-source.ts');
 const { notesSource } = await import('../hooks/note-source-default.ts');
 const { useNoteList } = await import('../hooks/useNoteList.ts');
+const { TrashLink } = await import('../ui/NotesBits.tsx');
 
 const NID = '11111111-1111-4111-8111-111111111111';
 const ROW: Row = {
@@ -118,5 +120,33 @@ describe('批 2 第 8 条：默认来源（普通随手记）和收拢之前一�
     expect([...new Set(read.collections)]).toEqual(['notes', 'note_images', 'note_files']);
     expect([...new Set(read.ro)]).toEqual(['notes']);
     expect(read.items[0]).toEqual(['notes', NID]);
+  });
+});
+
+describe('“最近删除”入口（负责人 11-15）', () => {
+  const at = (src: typeof notesSource) => render(<NoteSourceProvider value={src}><TrashLink /></NoteSourceProvider>);
+
+  it('随手记：“最近删除”不带条数，点了进全站的 #/trash', async () => {
+    window.history.replaceState(null, '', '/app/#/notes');
+    at(notesSource);
+    const b = screen.getByTestId('notes-open-trash');
+    expect(b.textContent).toBe('最近删除');
+    await act(async () => {
+      fireEvent.click(b);
+    });
+    expect(window.location.hash).toBe('#/trash');
+    cleanup();
+  });
+
+  it('隐私记来源：用来源的字、带条数，点了进 #/vault/trash', async () => {
+    window.history.replaceState(null, '', '/app/#/vault');
+    at({ ...notesSource, kind: 'vault', trash: { route: 'vault', sub: 'trash' }, useTrashCount: () => 2, text: { title: '隐私记', empty: '', back: '', trash: '最近删除' } });
+    const b = screen.getByTestId('vault-open-trash');
+    expect(b.textContent).toBe('最近删除 2');
+    await act(async () => {
+      fireEvent.click(b);
+    });
+    expect(window.location.hash).toBe('#/vault/trash');
+    cleanup();
   });
 });

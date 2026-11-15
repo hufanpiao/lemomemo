@@ -27,4 +27,6 @@ export const todos = defineManifest({
   ],
   ai: { sendsToAI: true, functions: ['ai-parse', 'ai-voice', 'ai-embed'], vectors: { todos: ['title', 'note'] } },   // todos 没有 location（P-03）
   usageReport: { rows: true, buckets: false },
+  // todo.autodel：完成 7 天后自动删除（负责人 11-15；src/features/todos/data/todo-autodel.ts）
+  settingsKeys: ['todo.*'],
 });

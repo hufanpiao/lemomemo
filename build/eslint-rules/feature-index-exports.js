@@ -5,11 +5,12 @@
 // • 受控例外（只能是 () => import('./…')，只有指定的功能能导出）：
 //   vault 的 plusAdapter（0.23 M1）；plus 的 loadTypeBar（Q-24：打字条下载好以后要当场渲染，lazy 第一次渲染总要挂起，iOS 不弹键盘）；
 //   today 的 loadTodayDesk（B6：电脑版面板下好、页里没焦点时才换上，lazy 第一次渲染挂起会先闪回原来的排法、多重挂一次）；
-//   smart-search 的 loadFindOpen（B4b-2：打字条判成查找后要打开查找面板，拿的是一个函数不是组件，lazy 包不了）
+//   smart-search 的 loadFindOpen（B4b-2：打字条判成查找后要打开查找面板，拿的是一个函数不是组件，lazy 包不了）；
+//   todos 的 loadTodoAutoDel（负责人 11-15：启动后扫一遍完成满 7 天的待办自动删除，同样是函数）
 const INNER = /^\.\/(ui|hooks|data|i18n)(\/|$)/;
 const MANIFEST = /^\.\/data\.manifest(\.ts)?$/;
 /** 受控例外：导出名 → 唯一能导出它的功能 */
-const LOADERS = { plusAdapter: 'vault', loadTypeBar: 'plus', loadTodayDesk: 'today', loadFindOpen: 'smart-search' };
+const LOADERS = { plusAdapter: 'vault', loadTypeBar: 'plus', loadTodayDesk: 'today', loadFindOpen: 'smart-search', loadTodoAutoDel: 'todos' };
 
 function featureOf(filename) {
   const m = /[\\/]src[\\/]features[\\/]([^\\/]+)[\\/]index\.ts$/.exec(filename);

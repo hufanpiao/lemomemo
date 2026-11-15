@@ -3,6 +3,7 @@
 // • 分组顺序：过期 → 今天 → 明天 → 7 天内（按日期各一组）→ 以后 → 没日期 → 已完成（最近完成的在前）
 // • 过期：截止日早于今天，或今天的截止时刻已过（界面标红：“逾 N 天”“已过 17:00”）；规则和读一行都在 shared/logic/todo-row.ts（和今天页共用）
 // • 项目筛选只在待办页（架构 5.9“项目筛选”）：project 为 null 是“全部”
+// • linger（负责人 11-15“完成的待办怎么隐藏”）：刚打勾、撤销条还开着的那一条，照没完成时的截止分组留在原位（约 3 秒后才归进“已完成”组）
 import { addDays, diffDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
@@ -51,8 +52,8 @@ const byDue = (byTitle: (a: string, b: string) => number) => (a: TodoItem, b: To
   (a.due ?? '9999').localeCompare(b.due ?? '9999') || (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99') || Number(b.important) - Number(a.important) || byTitle(a.title, b.title);
 
 /** 待办页的分组；空组不出现。project 不为 null 时只留这个项目的 */
-/** locale：同一截止时刻、没日期那组按标题排时用哪种语言比（数字按数值） */
-export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: string | null = null, locale: Locale = 'zh-CN'): Group[] {
+/** locale：同一截止时刻、没日期那组按标题排时用哪种语言比（数字按数值）；linger：已完成但先留在原组的那一条 id */
+export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: string | null = null, locale: Locale = 'zh-CN', linger: string | null = null): Group[] {
   const byTitle = titleCompare(locale);
   const due = byDue(byTitle);
   const today = todayOf(now, tz);
@@ -69,7 +70,7 @@ export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: s
     const t = itemOf(r);
     if (project !== null && t.project !== project) continue;
     const tag = dueTagOf(t, now, tz);
-    if (t.done) put('done', null, t, tag);
+    if (t.done && t.id !== linger) put('done', null, t, tag);
     else if (tag.kind === 'late') put('late', null, t, tag);
     else if (tag.kind === 'today') put('today', null, t, tag);
     else if (tag.kind === 'tomorrow') put('tomorrow', null, t, tag);

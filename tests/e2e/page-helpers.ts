@@ -118,6 +118,16 @@ export async function touchSwipe(page: Page, from: { x: number; y: number }, dx:
 }
 
 /**
+ * 待办行左滑删除（负责人 11-15 去掉行尾 ×，kit SwipeRow 的 full）：在行右侧起手，触摸一口气拉过 80% 行宽，过了大半行松手直接删。
+ * frac 给小一点（如 0.3）就是只露出“删除”按钮
+ */
+export async function swipeRow(page: Page, rowTestId: string, frac = 0.8): Promise<void> {
+  const b = await page.getByTestId(rowTestId).boundingBox();
+  if (!b) throw new Error(`找不到行 ${rowTestId}`);
+  await touchSwipe(page, { x: b.x + b.width - 30, y: b.y + Math.min(b.height / 2, 22) }, b.width * frac);
+}
+
+/**
  * 左滑没打开时的诊断（只在失败时调）：点按起点最上层是谁、这一行往上每一层的 data-state 和 pointer-events、
  * 列表里带 data-state 的各层（进场、离场）、左滑运行日志、运行日志最后 30 行（运行日志 300ms 防抖才落到 localStorage，先等日志里出现松手那一行或最多 2 秒）
  */

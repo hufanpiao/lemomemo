@@ -22,6 +22,8 @@ export const notesSource: NoteSource = {
   caps: { ai: true, convert: true, merge: true, lockrow: true, moveIn: true, moveOut: false, filesMark: true },
   route: { list: 'notes', edit: 'note' },
   desk: 'notes',
+  trash: { route: 'trash' },
+  useTrashCount: () => null,
   text: null,
   useRows() {
     const notes = useCollection<Row>('notes');

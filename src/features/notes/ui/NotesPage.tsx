@@ -35,6 +35,7 @@
 // • 数据来源（B5 隐私记重写 11-15，hooks/note-source.ts）：隐私记页经 NotesSurface 用同一个列表，来源换成隐私记的内存仓库；
 //   两边不一样的只按来源的 caps 分（入口行、合并提示、转成待办 / 日程、移到 / 移出隐私记），标题、空态、编辑页路由、电脑布局存的页名也由来源给；
 //   head 给了就画它、不画本页的大标题和头像（隐私记页的“‹ 随手记 | 🔒 隐私记 | 立即锁上”）
+// • “最近删除”入口（负责人 11-15）：标题下面、分类胶囊上面居中一个（NotesBits 的 TrashLink），两种来源共用，去哪、带不带条数看来源
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { Suspense, useRef, useState, type ReactNode } from 'react';
@@ -63,7 +64,7 @@ import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
 import { ConvertAsk, MoveAsk, MergeBar, MoreMenu, needsAsk, swipeActs, useConvertFlow, type PageTip } from './NotesActions.tsx';
 import { Dot } from './CatDot.tsx';
-import { AiMark, Chip, ConvMark, DockTip, FilesMark, RoMark, RowText, SyncDropped, SyncMark, UndoBar } from './NotesBits.tsx';
+import { AiMark, Chip, ConvMark, DockTip, FilesMark, RoMark, RowText, SyncDropped, SyncMark, TrashLink, UndoBar } from './NotesBits.tsx';
 import { InputRow, useInputDraft } from './NotesInputRow.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import styles from './NotesPage.module.css';
@@ -293,6 +294,7 @@ export function NotesList({ head }: { head?: ReactNode }) {
           <MeLink testId="notes-settings" />
         </header>
       )}
+      <TrashLink />
       {filterChips}
       {body}
       {mist}
@@ -313,6 +315,7 @@ export function NotesList({ head }: { head?: ReactNode }) {
             list={
               <>
                 {head}
+                <TrashLink />
                 {body}
                 {dock}
               </>

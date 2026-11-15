@@ -200,6 +200,8 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
     caps: { ai: false, convert: false, merge: false, lockrow: false, moveIn: false, moveOut: true, filesMark: false },
     route: { list: 'vault', edit: 'vault' },
     desk: 'vault',
+    trash: { route: 'vault', sub: 'trash' },
+    useTrashCount: () => useVaultStore().notes.filter((n) => n['deleted_at'] !== null).length,
     text,
     useRows(): NoteRows {
       const snap = useVaultStore();
@@ -284,5 +286,6 @@ export function useVaultNoteSource(): NoteSource {
   const { s } = useVault();
   const title = t('vault.title', {});
   const empty = t('vault.empty', {});
-  return useMemo(() => createVaultNoteSource(s, { title, empty, back: title }), [s, title, empty]);
+  const trash = t('vault.trash', {});
+  return useMemo(() => createVaultNoteSource(s, { title, empty, back: title, trash }), [s, title, empty, trash]);
 }

@@ -639,3 +639,10 @@
   min-width: 0;
   min-height: 60px;
 }
+
+/* 列表上方居中的“最近删除”入口（NotesBits 的 TrashLink；负责人 11-15，随手记、隐私记共用，原来在 vault 的 Vault.module.css） */
+.trashLink {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}

@@ -5,6 +5,7 @@
 // • A2：日历“纪念日”置灰、不跳 #/anniv 占位页，点了出“纪念日即将推出”
 import type { Page } from '@playwright/test';
 import { cached, idbPut, idbRead } from './idb.ts';
+import { swipeRow } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -78,7 +79,7 @@ test.describe('只读行（FA-2）', () => {
     await expect.poll(async () => /#\/todo\/t-ok$/.test(page.url()) || (await page.getByTestId('today-drawer').getByTestId('todo-edit').count()) > 0).toBe(true);
   });
 
-  test('待办页：只读行打勾、删除不写（× 是 aria-disabled），点了不进编辑页', async ({ page }) => {
+  test('待办页：只读行打勾、删除不写（左滑滑不开），点了不进编辑页', async ({ page }) => {
     await seed(page);
     await open(page, '#/todos', 'todos-row-t-ro');
     await expect(page.getByTestId('todos-ro-t-ro')).toBeVisible();
@@ -87,12 +88,13 @@ test.describe('只读行（FA-2）', () => {
     await expect(page.getByTestId('todos-ro-toast')).toContainText('这条要新版本才能修改');
     await page.getByTestId('todos-row-t-ro').getByRole('button', { name: /每天吃药/ }).click();
     await expect(page).toHaveURL(/#\/todos$/);
-    await expect(page.getByTestId('todos-del-t-ro')).toHaveAttribute('aria-disabled', 'true');
-    await expect(page.getByTestId('todos-del-t-ro')).toHaveAttribute('aria-label', '删除，要更新到新版本才能修改');
-    await page.getByTestId('todos-del-t-ro').click({ force: true });
-    await expect(page.getByTestId('todos-ro-toast')).toContainText('这条要新版本才能修改');
+    // 删除在左滑里（负责人 11-15 去掉 ×）：只读行拉到底也滑不开、不删；可写的行轻拉露出“删除”
+    await swipeRow(page, 'todos-row-t-ro');
+    await expect(page.getByTestId('todos-swipe-t-ro')).not.toHaveAttribute('data-swipe', 'open');
     await expect(page.getByTestId('todos-row-t-ro')).toBeVisible();
-    await expect(page.getByTestId('todos-del-t-ok')).not.toHaveAttribute('aria-disabled', 'true');
+    await swipeRow(page, 'todos-row-t-ok', 0.3);
+    await expect(page.getByTestId('todos-swipe-t-ok')).toHaveAttribute('data-swipe', 'open');
+    await expect(page.getByTestId('todos-swipe-del-t-ok')).toBeVisible();
     expect(await stateOf(page)).toEqual({ done: false, outbox: 0 });
   });
 

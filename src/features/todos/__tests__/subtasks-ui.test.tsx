@@ -68,6 +68,8 @@ describe('列表页卡片（5.1、5.4、6.2）', () => {
     expect(fold.getAttribute('aria-expanded')).toBe('false');
     expect(fold.getAttribute('aria-label')).toBe('展开「买菜」的子任务');
     expect(list?.hidden).toBe(true);
+    // 已完成的 t3 在“已完成”组里，组默认收起：先展开组（负责人 11-15 方案）
+    fireEvent.click(screen.getByTestId('todos-done-fold'));
     expect(screen.getByTestId('todos-fold-t3').getAttribute('aria-expanded')).toBe('false');
   });
 

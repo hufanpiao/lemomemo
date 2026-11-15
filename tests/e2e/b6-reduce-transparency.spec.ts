@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import type { Page, TestInfo } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { putGoneTodo } from './idb.ts';
+import { swipeRow } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -45,7 +46,7 @@ async function showAll(page: Page): Promise<void> {
   // 页签互切后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/index.ts 的 guardTaps；11-14 运行日志 route 1.63 → click 1.70，
   // 推进计划 7b 查明，见 b6-tab-switch-tap.spec.ts）：新页已经出来，从这时起过一整段窗口再点
   await page.waitForTimeout(FADE_GUARD_MS);
-  await page.getByTestId('todos-del-n1').click();
+  await swipeRow(page, 'todos-row-n1');   // 左滑拉到底删（负责人 11-15 去掉 ×）
   await expect(page.locator('[data-undo-toast]')).toBeVisible();
   await page.getByTestId('tabbar-add').click();
   await expect(page.getByTestId('type-bar')).toBeVisible();
