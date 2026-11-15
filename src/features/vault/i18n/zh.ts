@@ -4,7 +4,7 @@ export const zh = {
   'vault.title': '隐私记',
   'vault.back': '随手记',
   'vault.lockNow': '立即锁上',
-  'vault.unlockedHint': '已解锁 · 离开 App {n} 分钟自动锁上。在这里点“＋”，新记的直接放进隐私记。',
+  'vault.unlockedHint': '已解锁 · 离开隐私记或 App {n} 分钟自动锁上。在这里记的直接放进隐私记。',
   'vault.empty': '这里还没有内容。点“＋”记下第一条',
   'vault.keys': 'Ctrl + L 立即上锁 · Esc 取消',
   'vault.loading': '正在打开隐私记…',
@@ -23,7 +23,7 @@ export const zh = {
   'vault.setup.faceid': '以后用 {method} 解锁（支持的设备）',
   'vault.setup.bindFail': '密码设好了，{method} 没绑上',
   'vault.setup.bindGo': '去设置',
-  'vault.autolock': '离开 App {n} 分钟后自动重新上锁，设置里可改',
+  'vault.autolock': '离开隐私记或 App {n} 分钟后自动重新上锁，设置里可改',
 
   'vault.locked.title': '隐私记已上锁',
   'vault.locked.count': '里面有 {n} 条',

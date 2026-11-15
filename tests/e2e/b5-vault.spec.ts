@@ -265,6 +265,19 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   await phoneShots(page, '01-入口行', browserName);
 });
 
+test('隐私记页底部输入行记一句：发给隐私记（vault save），不进随手记本机库', async ({ page, baseURL, browserName }) => {
+  const fv = await fakeServer(page, baseURL);
+  await setupAndUnlock(page, browserName);
+  const vault = page.getByTestId('vault-notes');
+  await vault.getByTestId('notes-input').fill('只该在隐私记里的一句');
+  await vault.getByTestId('notes-add').click();
+  await expect(vault).toContainText('只该在隐私记里的一句');
+  await expect.poll(() => saved(fv).at(-1)?.body).toMatchObject({ body: '只该在隐私记里的一句' });
+  await page.goto('/app/#/notes');
+  await expect(page.getByTestId('notes-input')).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('只该在隐私记里的一句');
+});
+
 test('离开时同步盖多任务遮罩，不到 1 分钟回来自动去掉、仍解锁', async ({ page, baseURL, browserName }) => {
   await fakeServer(page, baseURL);
   await setupAndUnlock(page, browserName);
