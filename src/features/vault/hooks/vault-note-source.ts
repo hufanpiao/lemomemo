@@ -104,14 +104,26 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
   /** 锁着（等解锁、已上锁）不写：仓库已经清了，写进去的会留着明文 */
   const writable = (): boolean => s.hasToken() && s.get().phase === 'unlocked';
 
+  /** 令牌过期上锁时编辑页卸下补交的那一次（停笔还没到的字，同随手记离开编辑页立即保存）：会话留着的那一条才收，只进队列不进仓库，解锁拉完列表盖回 */
+  const heldWrite = (id: string, data: Record<string, unknown>, isNew: boolean): 'saved' | 'rejected' => {
+    const r = s.holdWrite(id, data, isNew);
+    if (!r) return 'rejected';
+    queue.wrote(r, isNew);
+    return 'saved';
+  };
+
   const editIo: EditIo = {
     useRow(_table, id) {
       const snap = useVaultStore();
+      useEffect(() => {
+        s.editing(id);
+        return () => s.editing(undefined);
+      }, [id]);
       return useMemo(() => (id === null ? undefined : snap.notes.find((n) => n.id === id)), [snap, id]);
     },
     useReadonly: () => EMPTY_IDS,
     async insert(_table, row) {
-      if (!writable()) return 'rejected';
+      if (!writable()) return heldWrite(row.id, noteRowFrom(row), true);
       const r = noteRowFrom(row);
       store.put(r);
       queue.wrote(r, true);
@@ -119,7 +131,7 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
       return 'saved';
     },
     async patch(_table, id, data) {
-      if (!writable()) return 'rejected';
+      if (!writable()) return heldWrite(id, data, false);
       const r = store.patch(id, data);
       if (!r) return 'rejected';
       queue.wrote(r, false);

@@ -8,7 +8,8 @@
 //   - 作废在飞请求的上锁（hard）：用户主动上锁、离开超时、vault_relock、session_revoked。回来的结果整个丢掉（STALE）：
 //     不收令牌、不写明文、不造 blob 地址、不弹解锁、不重试
 //   - 令牌过期的上锁（soft，vault_locked：等解锁重试那种）：同时在飞的写请求（保存、传图、移进移出……）不丢——
-//     回来成功就照常算成功（只是不收令牌，锁着不留令牌），失败就进 waiters，解锁后重发一次；list、取图这类读请求照样丢（锁着不写明文）
+//     回来成功就照常算成功（只是不收令牌，锁着不留令牌），失败就进 waiters，解锁后重发一次；list、取图这类读请求照样丢（锁着不写明文）。
+//     这时编辑页开着的那一条留一份行（held）：编辑页卸下补交停笔还没到的字（holdWrite），直接进队列，解锁后照常发
 // • 运行日志（第 14 条）：状态迁移（phase、waiting、relock）、错误码和 left、STALE 丢弃、续期结果、取图失败经 rlog 记；
 //   不记标题、正文、密码、令牌、图片 id
 // • 失败怎么落只按 data/vault-errors.ts 的落法（kind）分支（onFail 里穷尽 switch），不另写一套按码判断
@@ -40,7 +41,7 @@ import { rlog } from '../../../platform/run-log-api.ts';
 import type { VaultApi, VaultFail, VaultResult } from './vault-api.ts';
 import { unhandled, vaultErrorAction, type VaultCode } from './vault-errors.ts';
 import { createVaultQueue, limiter, QUEUE_BACKOFF, type SaveReq } from './vault-queue.ts';
-import { createVaultStore } from './vault-store.ts';
+import { createVaultStore, type Row } from './vault-store.ts';
 
 export type VaultPhase = 'loading' | 'offline' | 'unset' | 'locked' | 'unlocked' | 'error';
 
@@ -135,6 +136,13 @@ export function createVaultSession(d: VaultSessionDeps) {
   /** 发过 ms_preview_end、还没确认成了：解锁后补发一次 */
   let endOwed = false;
   const listeners = new Set<() => void>();
+  /** 编辑页开着的那一条（null：新建页还没存过；undefined：没开编辑页）；hooks/vault-note-source.ts 的 useRow 报进来 */
+  let editingId: string | null | undefined;
+  /**
+   * 令牌过期上锁那一刻编辑页开着的那一条（只这一条的行，不是整个仓库）：编辑页卸下时补交的草稿（停笔 800ms 还没到的字）只认它，
+   * 直接交给队列、不进仓库（锁着仓库是空的）；作废在飞请求的上锁、取消解锁、解锁拉完列表时清掉
+   */
+  let held: { id: string | null; row: Row | undefined } | null = null;
   const store = createVaultStore();
   const queue = createVaultQueue({
     store,
@@ -196,6 +204,8 @@ export function createVaultSession(d: VaultSessionDeps) {
     if (hard) hardEpoch += 1;
     onToken(null, 0);
     revokeAll();
+    if (hard) held = null;
+    else if (editingId !== undefined && !held) held = { id: editingId, row: editingId === null ? undefined : store.get(editingId) };
     store.clear();
     if (hard) queue.dropAll('lock');
     away.clear();
@@ -376,6 +386,7 @@ export function createVaultSession(d: VaultSessionDeps) {
     store.load(r.value.notes);
     set({ listed: true });
     queue.overlay();
+    held = null;
     return { ok: true, value: true };
   }
 
@@ -448,6 +459,25 @@ export function createVaultSession(d: VaultSessionDeps) {
     },
     hasToken: (): boolean => token !== null,
     refreshStatus,
+    /** 编辑页开着哪一条（null：新建页；undefined：关了） */
+    editing(id: string | null | undefined): void {
+      editingId = id;
+    },
+    /**
+     * 令牌过期上锁时编辑页卸下补交的一次写：是上锁那一刻开着的那一条就合并进留着的行、回给调用方交队列；别的回 null（照旧拒）。
+     * isNew：新建页第一次存（上锁时还没存过）
+     */
+    holdWrite(id: string, data: Record<string, unknown>, isNew: boolean): Row | null {
+      if (!held) return null;
+      if (isNew) {
+        if (held.id !== null) return null;
+        held = { id, row: { ...data, id } };
+        return held.row ?? null;
+      }
+      if (held.id !== id || !held.row) return null;
+      held.row = { ...held.row, ...data, id };
+      return held.row;
+    },
     lock: (): void => {
       release(false);
       lock({ waiting: false }, true);
@@ -455,6 +485,7 @@ export function createVaultSession(d: VaultSessionDeps) {
     /** 取消等待中的解锁：原请求回失败 */
     cancelWait(): void {
       rlog(`vault wait cancel n=${waiters.length}`);
+      held = null;
       release(false);
       set({ waiting: false });
     },

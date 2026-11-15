@@ -303,6 +303,69 @@ describe('11-14 整块评审第 22 条：令牌续不上（超过 12 小时、�
     await waitFor(() => expect(saves(m).some((c) => c.req.action === 'save' && c.req.body === '还没存的正文')).toBe(true));
     expect((await screen.findByTestId('note-edit-body') as HTMLTextAreaElement).value).toBe('还没存的正文');
   });
+
+  it('停笔 800ms 还没到就碰上令牌过期的上锁：编辑页卸下那一刻草稿交给队列，解锁后照常发；DOM 里不留草稿', async () => {
+    let renews = 0;
+    let body = SECRET;
+    const m = make({
+      renew: () => (++renews === 1 ? { ok: false, code: 'vault_locked' } : { ok: true, vault_token: TOK, expires_at: 9e12 }),
+      save: (req, tok) => {
+        if (!tok) return { ok: false, code: 'vault_locked' };
+        if (req.action === 'save') body = req.body;
+        return { ok: true, vault_token: TOK, expires_at: 9e12 };
+      },
+      list: () => ({ ok: true, notes: [note({ body })], vault_token: TOK, expires_at: 9e12 }),
+    });
+    installVaultSession(m.s);
+    window.location.hash = `#/vault/${NID}`;
+    render(<VaultPage />);
+    await act(async () => {
+      await m.s.refreshStatus();
+      await m.s.unlock('1234');
+    });
+    const el = await screen.findByTestId('note-edit-body');
+    // 只敲字、不失焦、不等停笔：草稿还在输入框里没交
+    fireEvent.focus(el);
+    fireEvent.change(el, { target: { value: '停笔前的字' } });
+    m.clock.ms += 6 * 60_000;
+    await act(async () => {
+      m.s.touch();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await screen.findByTestId('vault-unlock-card');
+    expect(document.body.textContent).not.toContain('停笔前的字');
+    await act(async () => {
+      await m.s.unlock('1234');
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await waitFor(() => expect(saves(m).some((c) => c.req.action === 'save' && c.req.body === '停笔前的字')).toBe(true));
+    expect((await screen.findByTestId('note-edit-body') as HTMLTextAreaElement).value).toBe('停笔前的字');
+  });
+
+  it('主动上锁（作废在飞请求的上锁）时停笔还没到的字：不交、不发（安全优先，同上锁丢队列）', async () => {
+    const m = make();
+    installVaultSession(m.s);
+    window.location.hash = `#/vault/${NID}`;
+    render(<VaultPage />);
+    await act(async () => {
+      await m.s.refreshStatus();
+      await m.s.unlock('1234');
+    });
+    const el = await screen.findByTestId('note-edit-body');
+    fireEvent.focus(el);
+    fireEvent.change(el, { target: { value: '锁前没停笔' } });
+    await act(async () => {
+      m.s.lock();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await screen.findByTestId('vault-unlock-card');
+    await act(async () => {
+      await m.s.unlock('1234');
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(m.calls.some((c) => c.action === 'save' && c.req.action === 'save' && c.req.body === '锁前没停笔')).toBe(false);
+    expect(m.s.queue.size()).toBe(0);
+  });
 });
 
 describe('B5 隐私记重写：停笔自动存、读写只碰内存仓库', () => {
