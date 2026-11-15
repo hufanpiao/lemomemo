@@ -52,8 +52,8 @@
 
 .hint {
   margin: 0 0 8px;
-  padding: 8px 12px;
-  border-radius: var(--r-md);
+  padding: 10px 14px;
+  border-radius: var(--r-lg);
   background: var(--panel-2);
   color: var(--text);
   font-size: var(--fs-12);
@@ -66,7 +66,7 @@
   gap: 10px;
   align-items: center;
   min-height: 60px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0.5px solid var(--line);
 }
 
 .row:last-child {
@@ -252,10 +252,10 @@
   justify-content: space-between;
   width: 100%;
   min-height: var(--hit);
-  padding: 0 14px;
-  border-radius: var(--r-md);
+  padding: 4px 14px;
+  border-radius: var(--r-lg);
   background: var(--panel);
-  font-size: var(--fs-14);
+  font-size: var(--fs-15);
   text-align: left;
 }
 
@@ -349,8 +349,8 @@
 
 .notice {
   margin: 0 0 12px;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
+  padding: 12px 14px;
+  border-radius: var(--r-lg);
   background: var(--panel-2);
   color: var(--text);
   font-size: var(--fs-13);

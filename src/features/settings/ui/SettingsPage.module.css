@@ -31,14 +31,14 @@
   margin: 0;
   font-size: var(--fs-17);
   font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
-.gt {
-  margin: 16px 4px 6px;
+/* 二级页里的小标题（已登录设备、最近的导出）：R-436 起字样用 kit 的小字分组名（Form.tsx 的 groupLabelClass，两个类一起挂），
+   这里只管它在本页的位置：上面隔 16（和以前一样）、左右跟卡片里的字对齐 14。写成 h3.gt（权重 0,1,1）压过分组名那份 margin（两份 CSS 模块谁先加载不固定） */
+h3.gt {
+  margin: 16px 14px 6px;
   outline-offset: 2px;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-  font-weight: 400;
 }
 
 /* B2-UI-b W3、W4：原来的卡片、行、行名、值、行内灰字这几条样式（含两行内容的上下 8px、最后一行无分隔线）删了，
@@ -48,16 +48,15 @@
 .tag {
   display: inline-block;
   margin-left: 6px;
-  padding: 0 8px;
+  padding: 1px 8px;
   border-radius: var(--r-pill);
-  background: var(--chip-on-bg);
-  color: var(--chip-on-fg);
-  font-size: var(--fs-12);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-11-5);
   vertical-align: middle;
 }
 
 .tagMuted {
-  background: var(--panel-2);
   color: var(--text-2);
 }
 
@@ -184,28 +183,31 @@
   white-space: nowrap;
 }
 
+/* 注销页的说明卡片（R-436 留白加大）：左右 16、段间距 12、行高 1.55 */
 .card {
-  padding: 4px 14px;
+  padding: 6px 16px;
   border-radius: var(--r-lg);
   background: var(--panel);
 }
 
 .para {
-  margin: 10px 0;
+  margin: 12px 0;
   font-size: var(--fs-15);
+  line-height: 1.55;
   overflow-wrap: anywhere;
+}
+
+/* 注销页“请输入‘注销’确认”：是要照着做的说明，不是分组名，保持次要色 13 号（R-436 核过不换成小字分组名） */
+.label {
+  color: var(--text-2);
+  font-size: var(--fs-13);
 }
 
 .form {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 16px;
-}
-
-.label {
-  color: var(--text-2);
-  font-size: var(--fs-13);
+  margin-top: 20px;
 }
 
 .input {

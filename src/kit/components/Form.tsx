@@ -16,6 +16,9 @@ export function GroupLabel({ children }: { children: ReactNode }) {
   return <p className={styles.groupLabel}>{children}</p>;
 }
 
+/** 同一个小字分组名的类名（R-436 设置等页）：要用 h2、h3、label 当分组名（能接焦点、关联输入框）时挂这个类，样式只在 Form.module.css 一处 */
+export const groupLabelClass = styles.groupLabel;
+
 /** 表单卡片里的一整行按钮（R-436：纪念日“去掉头像”收进表单最后一行）：左对齐、次要文字色，至少 --hit 高 */
 export function FormRowButton(p: Omit<ComponentProps<typeof Pressable>, 'className'>) {
   return <Pressable {...p} className={styles.rowBtn} />;

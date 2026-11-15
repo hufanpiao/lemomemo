@@ -1,21 +1,10 @@
 /* 设置 › 提醒与通知（B2 FA-4）。
    B2-UI-b W1（R-352）起提醒设置、免打扰、提醒里写什么三页的卡、行、开关、单选、时刻行都用 kit 设置组件（src/kit/components/Settings/），
    原来从设置页抄来的 .grp/.row/.rowBtn（含按下变淡）、.tx、.v、.choice、.check、.seg、.segBtn、.switchRow、.toggle、.timesRow、.timeLbl、.time、.srOnly 都删了；
-   这里只剩：卡片下面的说明和红字（.sn、.error）、两张卡之间的 12px（.nextCard）、顶部提示（.notice 等）和“未来 7 天的提醒”页（.gt、.upCard、.up*） */
+   这里只剩：卡片下面的说明和红字（.sn、.error）、两张卡之间的 12px（.nextCard）、顶部提示（.notice 等）和“未来 7 天的提醒”页（.upCard、.up*） */
 
-/* 组标题写在卡片上方（同设置页 .gt） */
-.gt {
-  margin: 16px 4px 6px;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-  font-weight: 400;
-}
+/* “未来 7 天的提醒”页每天的小标题（R-436）：字样用 kit 的小字分组名（Form.tsx 的 groupLabelClass，和 .upHead 一起挂），这里不另写字号颜色 */
 
-section:first-child > .gt {
-  margin-top: 0;
-}
-
-/* “未来 7 天的提醒”页每天一张卡（列表卡，不是设置行；原 .grp） */
 .upCard {
   margin: 0;
   padding: 0 14px;
@@ -44,8 +33,8 @@ section:first-child > .gt {
 }
 
 .chev {
-  color: var(--text-2);
-  font-size: var(--fs-13);
+  color: var(--text-3);
+  font-size: var(--fs-15);
 }
 
 /* 顶部提示（推送被占着、要重新打开、不支持）：浅色卡片，下面一个行内按钮 */
@@ -94,19 +83,22 @@ section:first-child > .gt {
   white-space: nowrap;
 }
 
-.upHead {
+/* 写成 h2.upHead（权重 0,1,1）压过分组名那份 margin（两份 CSS 模块谁先加载不固定）：天和天之间隔 16，左右跟卡片里的字对齐 14 */
+h2.upHead {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+  margin: 16px 14px 6px;
 }
 
+/* 小标题里的哪一天比右边的条数深一档（--text-2），条数用分组名本身的第三层色 */
 .upDay {
-  color: var(--text);
-  font-weight: 600;
+  color: var(--text-2);
 }
 
+/* 行间分隔线 0.5px，从卡片内边距（文字起点）开始（R-436，同 kit 设置行） */
 .rowLi {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0.5px solid var(--line);
 }
 
 .rowLi:last-child {
@@ -129,8 +121,8 @@ section:first-child > .gt {
 
 .upTime {
   flex: none;
-  width: 44px;
-  font-family: var(--f-num);
+  width: 48px;
+  font-family: var(--f-tnum);
   font-size: var(--fs-14);
   font-variant-numeric: tabular-nums;
 }

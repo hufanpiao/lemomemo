@@ -9,6 +9,7 @@
 // 底部隐私说明、条款链接：网页版新窗口打开；exe 里新窗口只放 https，相对地址打不开，点击时拼成本站绝对地址交给系统浏览器（kit/hooks/useOpenLink.ts）
 // 接线（CONSENT-wire）：路由 #/onboarding 走 ui/ConsentRoute.tsx，启动关口走 ui/ConsentGate.tsx；ai.enabled 由接线方在 onDone(true) 里写（hooks/useConsentWiring.ts）
 import { useId } from 'react';
+import { Check, GroupLabel } from '../../../kit/components/Form.tsx';
 import { sitePageClickHandler } from '../../../kit/hooks/useOpenLink.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { onlineNow, useConsent, type ConsentApi, type ConsentErr } from '../hooks/useConsent.ts';
@@ -57,11 +58,11 @@ const UPDATE_ITEMS = [
 
 const COPY = {
   first: {
-    step: 'consent', title: 'consent.title', lead: 'consent.lead', items: ITEMS, terms: true,
+    step: 'consent', title: 'consent.title', lead: 'consent.lead', items: ITEMS, itemsLabel: 'consent.itemsLabel', terms: true,
     check: 'consent.check', declineNote: 'consent.declineNote',
   },
   updated: {
-    step: 'policy-update', title: 'consent.update.title', lead: 'consent.update.lead', items: UPDATE_ITEMS, terms: false,
+    step: 'policy-update', title: 'consent.update.title', lead: 'consent.update.lead', items: UPDATE_ITEMS, itemsLabel: 'consent.update.itemsLabel', terms: false,
     check: 'consent.update.check', declineNote: 'consent.update.declineNote',
   },
 } as const;
@@ -70,7 +71,6 @@ export default function ConsentPage({ api, onDone, onRevoked, onDisabled, onSkip
   const t = useOnboardingT();
   const c = COPY[variant];
   const ko = useUi((s) => s.locale) === 'ko-KR';
-  const checkId = useId();
   const needId = useId();
   const { checked, setChecked, busy, slow, err, submit, skip } = useConsent(api, { onDone, onRevoked, onDisabled, onSkip });
   const blocked = err === 'no_policy';
@@ -82,17 +82,21 @@ export default function ConsentPage({ api, onDone, onRevoked, onDisabled, onSkip
       <h1 className={styles.title}>{t(c.title, {})}</h1>
       <p className={styles.lead}>{t(c.lead, {})}</p>
 
-      <ul className={styles.items} data-testid="consent-items">
-        {c.items.map(([k, d, isNew]) => (
-          <li key={k} className={styles.item}>
-            <span className={styles.itemTitle}>
-              {t(k, {})}
-              {isNew && <span className={styles.newTag}>{t('consent.newTag', {})}</span>}
-            </span>
-            <span className={styles.itemDesc}>{t(d, {})}</span>
-          </li>
-        ))}
-      </ul>
+      {/* R-436：清单上方的小字分组名（kit GroupLabel），清单和标题之间多一层 */}
+      <div>
+        <GroupLabel>{t(c.itemsLabel, {})}</GroupLabel>
+        <ul className={styles.items} data-testid="consent-items">
+          {c.items.map(([k, d, isNew]) => (
+            <li key={k} className={styles.item}>
+              <span className={styles.itemTitle}>
+                {t(k, {})}
+                {isNew && <span className={styles.newTag}>{t('consent.newTag', {})}</span>}
+              </span>
+              <span className={styles.itemDesc}>{t(d, {})}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <section className={styles.panel} data-testid="consent-notice">
         <p className={styles.privacy} data-testid="consent-privacy">
@@ -113,16 +117,9 @@ export default function ConsentPage({ api, onDone, onRevoked, onDisabled, onSkip
         </p>
       </section>
 
+      {/* R-436：勾选框用 kit 的 Check look="circle"（R-433 起全 App 同一个圆角方框、同一个打勾动效），不再是系统方框 */}
       <div className={styles.agree}>
-        <input
-          id={checkId}
-          className={styles.check}
-          type="checkbox"
-          checked={checked}
-          disabled={busy || blocked}
-          onChange={(e) => setChecked(e.currentTarget.checked)}
-        />
-        <label htmlFor={checkId}>{t(c.check, {})}</label>
+        <Check look="circle" label={t(c.check, {})} checked={checked} disabled={busy || blocked} onChange={setChecked} />
       </div>
 
       {err && err !== 'revoked' && err !== 'disabled' && (

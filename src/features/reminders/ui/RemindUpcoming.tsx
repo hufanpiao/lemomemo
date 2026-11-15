@@ -9,6 +9,7 @@
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { navigate } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
+import { groupLabelClass } from '../../../kit/components/Form.tsx';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { dayMsg, eventStart, modeOf, timeOf, upcoming, wdKey, whenMsg, type Reminder } from '../hooks/remind-view.ts';
 import { useReminderList } from '../hooks/useReminders.ts';
@@ -113,7 +114,7 @@ export default function RemindUpcoming() {
       )}
       {days.map((d) => (
         <section key={d.date} aria-labelledby={`remind-up-${d.date}`} data-testid="remind-upcoming-day" data-date={d.date}>
-          <h2 id={`remind-up-${d.date}`} className={`${styles.gt} ${styles.upHead}`}>
+          <h2 id={`remind-up-${d.date}`} className={`${groupLabelClass} ${styles.upHead}`}>
             <span className={styles.upDay}>{dayHead(t, d.date, today)}</span>
             <span>{t('remind.up.count', { n: d.items.length })}</span>
           </h2>

@@ -13,6 +13,7 @@ import { useRoute } from '../../../app/router.ts';
 import { backOr } from '../../../app/router-levels.ts';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
+import { FormButton } from '../../../kit/components/Form.tsx';
 import list from '../../../kit/components/List.module.css';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyMark.tsx';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
@@ -102,7 +103,8 @@ export default function RecentlyDeletedPage() {
         {!online && items.length > 0 ? t('trash.offline', {}) : null}
       </p>
       {items.length === 0 ? <p className={list.empty} data-testid="trash-empty">{t('trash.empty', {})}</p> : null}
-      <ul className={list.list}>
+      {/* R-436：行高 56、左右 16（kit 列表的 .roomy，同今天页、待办页）；“恢复”“永久删除”用 kit 的小号灰底按钮（FormButton compact），不再描边 */}
+      <ul className={`${list.list} ${list.roomy}`}>
         {items.map((it) => (
           <li key={`${it.table}:${it.id}`} className={list.row} data-testid={`trash-row-${it.id}`}>
             <span className={list.main}>
@@ -119,26 +121,29 @@ export default function RecentlyDeletedPage() {
                 ) : null}
               </span>
             </span>
-            <Pressable className={styles.restore} aria-disabled={busy || isRo(it.table, it.id) || undefined} onClick={() => onRestore(it.table, it.id)} data-testid={`trash-restore-${it.id}`}>
-              {t('trash.restore', {})}
-            </Pressable>
-            <Pressable
-              className={styles.purge}
-              aria-disabled={off || isRo(it.table, it.id) || undefined}
-              onClick={() => {
-                if (isRo(it.table, it.id)) {
-                  if (purge.busy) return;
-                  setPmsg(null);
-                  setMsg('readonly');
-                  return;
-                }
-                setMsg(null);
-                purge.askOne(it.table, it.id);
-              }}
-              data-testid={`trash-purge-${it.id}`}
-            >
-              {t('trash.purge', {})}
-            </Pressable>
+            <span className={styles.acts}>
+              <FormButton size="compact" aria-disabled={busy || isRo(it.table, it.id) || undefined} onClick={() => onRestore(it.table, it.id)} data-testid={`trash-restore-${it.id}`}>
+                {t('trash.restore', {})}
+              </FormButton>
+              <FormButton
+                size="compact"
+                danger
+                aria-disabled={off || isRo(it.table, it.id) || undefined}
+                onClick={() => {
+                  if (isRo(it.table, it.id)) {
+                    if (purge.busy) return;
+                    setPmsg(null);
+                    setMsg('readonly');
+                    return;
+                  }
+                  setMsg(null);
+                  purge.askOne(it.table, it.id);
+                }}
+                data-testid={`trash-purge-${it.id}`}
+              >
+                {t('trash.purge', {})}
+              </FormButton>
+            </span>
           </li>
         ))}
       </ul>

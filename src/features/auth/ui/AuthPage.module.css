@@ -34,26 +34,25 @@
   --safe-top-bg: var(--login-bg, var(--bg));
 }
 
+/* R-436 大标题层级：30、粗体、字距略收，和下面 14 的说明拉开 */
 .title {
-  margin: 0 0 8px;
-  font-size: var(--fs-24);
+  margin: 0 0 10px;
+  font-size: var(--fs-30);
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .lead {
-  margin: 0 0 20px;
+  margin: 0 0 28px;
   color: var(--text-2);
   font-size: var(--fs-14);
 }
 
+/* 输入框上的“邮箱”“验证码”“邀请码”（R-436）：字样用 kit 的小字分组名（Form.module.css 的 .groupLabel，AuthPage.tsx 直接挂），这里不另写 */
 .form {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.label {
-  font-size: var(--fs-13);
-  color: var(--text-2);
 }
 
 /* 登录框（B2-UI-a U2-5、U1-2；代码审 M4）：AuthPage.tsx 同时挂 kit 表单的 .input（Form.module.css）和这里的 .input。
@@ -74,10 +73,11 @@ input.input {
   color: var(--text-2);
 }
 
-/* 验证码框 22px 数字字体：同样写成 input.code，压过表单触屏规则里的 16px */
+/* 验证码框 22px 数字字体：同样写成 input.code，压过表单触屏规则里的 16px；R-436 数字用等宽（tabular-nums），每位一样宽，敲进去不左右跳 */
 input.code {
   font-family: var(--f-num);
   font-size: var(--fs-22);
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.4em;
 }
 
@@ -89,6 +89,7 @@ input.code {
   background: var(--accent);
   color: var(--on-accent);
   font-size: var(--fs-16);
+  font-weight: 600;
 }
 
 .primary:disabled {

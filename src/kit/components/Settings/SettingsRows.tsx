@@ -29,7 +29,7 @@ export function SettingsChoiceCard<T extends string>({ title, showTitle, name, o
   const id = useId();
   return (
     <section aria-labelledby={id} data-testid={testId}>
-      <h2 id={id} className={showTitle === true ? styles.gt : styles.srOnly}>
+      <h2 id={id} className={showTitle === true ? `${form.groupLabel} ${styles.gt}` : styles.srOnly}>
         {title}
       </h2>
       <div className={styles.grp} role="radiogroup" aria-labelledby={id}>

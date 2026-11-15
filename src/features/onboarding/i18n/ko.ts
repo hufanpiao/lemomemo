@@ -26,6 +26,7 @@ export const ko = {
   'consent.send.body': '글, 녹음, 찾을 때 한 말, 일정과 할 일의 제목·메모·장소(의미로 찾기에 써요), 사진 썸네일(신분증 사진 포함), 문서 이름과 앞 2000자, 비밀 메모 본문, 요약할 기록 일부.', // 视觉稿
   'consent.send.msLabel': '마이크로소프트로 보내는 것:', // 视觉稿；R-106 B1 第一遍已审（11-03），按审校意见 K-13 改过，视觉稿同步（第 48 条）
   'consent.send.msBody': 'PPT를 미리 볼 때 파일 전체(비밀 메모의 PPT도 복호화해서 보내요).', // 视觉稿
+  'consent.itemsLabel': 'AI를 쓰는 곳', // REVIEW(ko) R-436 清单上方的小字分组名
   'consent.check': '위 내용을 구글 AI가 처리하는 데 동의해요', // 视觉稿
   'consent.needCheck': '위의 동의에 체크해야 “동의하고 계속”을 누를 수 있어요', // R-106 B1 第一遍已审（10-29）
   'consent.agree': '동의하고 계속', // 视觉稿
@@ -51,6 +52,7 @@ export const ko = {
   'consent.update.item.cal.d': '제목·메모·장소가 구글 AI로 가요 (의미로 찾기)', // 视觉稿
   'consent.update.item.ppt': 'PPT 미리보기', // 视觉稿
   'consent.update.item.ppt.d': '파일이 마이크로소프트로 가요 (비밀 메모의 PPT 포함)', // 视觉稿
+  'consent.update.itemsLabel': '이번에 추가된 것', // REVIEW(ko) R-436 清单上方的小字分组名
   'consent.update.check': '바뀐 내용에 동의해요', // 视觉稿
   'consent.update.declineNote': '동의하지 않으면 AI 기능은 우선 꺼져요. 기기 규칙으로 정리하고 키워드로만 찾아요. 나중에 설정 › 음성과 AI에서 켤 수 있어요', // R-106 B1 第一遍已审（10-31）；自译（视觉稿没画这行）
 } as const satisfies Record<keyof typeof zh, string>;

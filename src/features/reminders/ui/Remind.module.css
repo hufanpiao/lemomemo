@@ -247,8 +247,10 @@
   width: 24px;
   height: 24px;
   padding: 0;
-  border: 2px solid var(--pc, currentcolor);
-  border-radius: 50%;
+  border: 1.75px solid var(--pc, currentcolor);
+
+  /* R-433 起全 App 的完成标记是圆角方框（kit CheckCircle：边长 24、圆角 37.5%、边 1.75），横幅、整页提醒这个也跟着改形状，项目色描边不变 */
+  border-radius: 37.5%;
   background: none;
 }
 
@@ -446,16 +448,22 @@
   margin-bottom: 14px;
 }
 
+/* 类型行（铃铛 + “待办 · 已过截止”）：R-436 大时刻上方的小字标签，次要色、略加字距；逾期（data-overdue）换危险色，红色只表示逾期 */
 .kind {
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0;
-  color: var(--text);
-  font-size: var(--fs-14);
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  letter-spacing: 0.04em;
 }
 
-/* 大时刻（视觉稿 .fa-big） */
+.kind[data-overdue] {
+  color: var(--danger-text);
+}
+
+/* 大时刻（视觉稿 .fa-big）：数字字体 + tabular-nums，各位等宽（R-436 核过：换成 --f-tnum 系统等宽字体后“0”带点、冒号占一整格，大字号下不好看，不换） */
 .bigTime {
   margin: 0;
   font-family: var(--f-num);
@@ -482,7 +490,7 @@
 }
 
 .sub {
-  margin: 0 0 6px;
+  margin: 0 0 10px;
   color: var(--text-2);
   font-size: var(--fs-14);
 }
@@ -490,8 +498,8 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 12px;
+  padding: 14px 16px;
   border-radius: var(--r-lg);
   background: var(--panel);
 }

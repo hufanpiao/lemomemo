@@ -134,7 +134,9 @@ describe('设置页组间距', () => {
     // “设置”标题到第一组：.top 下边距 8 + .groups 上内边距 8 = 16
     expect(g).toMatch(/padding-top: 8px;/);
     expect(block('.top')).toMatch(/margin-bottom: 8px;/);
-    expect(block('.gt')).toMatch(/margin: 16px 4px 6px;/);
+    // R-436：小标题挂 kit 的 groupLabelClass（外观在 Form.module.css 的 .groupLabel），这里只压上边距 16；
+    // 写成 h3.gt 抬权重，免得 CSS Modules 加载顺序不定时被 .groupLabel 的 4px 压掉；左右 14 和 kit 分组名对齐
+    expect(block('h3.gt')).toMatch(/margin: 16px 14px 6px;/);
     // 旧写法不留（合卡以后没有 .slot 了）
     expect(css).not.toMatch(/\.slot\b/);
     // 组末尾常驻的空播报区（导出状态）不占位置，组底到“退出登录”的距离和改前一样
@@ -151,6 +153,8 @@ describe('设置页组间距', () => {
     const row = kitBlock('.row');
     expect(row).toMatch(/min-height: var\(--hit\);/);
     expect(row).toMatch(/padding: 0;/);
+    // R-436 只把分隔线改细到 0.5px，行高照 R-276
+    expect(row).toMatch(/border-bottom: 0\.5px solid var\(--line\);/);
     expect(kit).toMatch(/\n\.row:has\(> \.meta\),\n\.row:has\(> \.error\) \{\n {2}padding: 8px 0;/);
     expect(kitBlock('.rowBtn')).toMatch(/min-height: var\(--hit\);/);
     expect(kitBlock('.tx')).toMatch(/margin: 0;/);
@@ -210,8 +214,11 @@ describe('设置页组间距', () => {
     expect(e).toMatch(/color: var\(--text\);/);
     expect(e).toMatch(/font-size: var\(--fs-14\);/);
     expect(e).toMatch(/overflow-wrap: anywhere;/);
-    expect(block('.gt')).toMatch(/color: var\(--text-2\);/);
-    expect(block('.gt')).toMatch(/font-size: var\(--fs-13\);/);
+    // R-436：组标题换成 kit 分组名（第三层灰、11 号等宽加字距），外观只在 Form.module.css 一处；设置页不再自写颜色字号
+    const gl = formBlock('.groupLabel');
+    expect(gl).toMatch(/color: var\(--text-3\);/);
+    expect(gl).toMatch(/font-size: var\(--fs-11\);/);
+    expect(block('h3.gt')).not.toMatch(/color:|font-size:/);
     expect(block('.srOnly')).toMatch(/clip-path: inset\(50%\);/);
     // 不再挂次要文字 .sn（否则颜色字号跟着组标题一样灰、小）
     await renderWith(() => LONG);
