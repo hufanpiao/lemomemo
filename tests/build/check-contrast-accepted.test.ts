@@ -108,8 +108,8 @@ describe('build/check_contrast.py：真仓库的例外名单', () => {
       want.push([`${skin}-light`, 'g-tint-floor', 1.4053], [`${skin}-light`, 'g-fg-on-floor', 1.4053]);
     }
     // 11-07 负责人定（R-355，B2-UI-a 代码审 M1）：深色“＋”的键盘聚焦框（--focus 跟 --text）内外两侧都不到 3:1，登记为例外，GlassBar.module.css 不改
-    want.push(['simple-dark', 'focus-fab-in', 1.3288], ['simple-dark', 'focus-fab-out', 2.4574]);
-    want.push(['glass-dark', 'focus-fab-in', 1.3171], ['glass-dark', 'focus-fab-out', 2.4357]);
+    want.push(['simple-dark', 'focus-fab-in', 1.1935], ['simple-dark', 'focus-fab-out', 2.2072]); // 11-15 暖黑（R-432）重算
+    want.push(['glass-dark', 'focus-fab-in', 1.1935], ['glass-dark', 'focus-fab-out', 2.2072]);
     expect((data.accepted ?? []).map((e) => [e.theme, e.id, e.floor]).sort()).toEqual(want.sort());
     for (const e of data.accepted ?? []) {
       if (e.id.startsWith('focus-')) expect(e).toMatchObject({ decided: '2026-11-07', reason: expect.stringContaining('R-355') });
