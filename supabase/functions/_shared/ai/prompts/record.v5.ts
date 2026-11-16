@@ -1,5 +1,5 @@
-// 提示词 record.v4（只做记下；架构第 7 节“提示词”、5.1 各条口径；B3 任务单 BE-1、Q2：不让模型判断意图，responseSchema 里也不放 intent）。
-// 拆分规则 PARSE_RULES 也在这一份，parse.v5（ai-parse）、voice.v5（ai-voice）共用。
+// 提示词 record.v5（只做记下；架构第 7 节“提示词”、5.1 各条口径；B3 任务单 BE-1、Q2：不让模型判断意图，responseSchema 里也不放 intent）。
+// 拆分规则 PARSE_RULES 也在这一份，parse.v6（ai-parse）、voice.v6（ai-voice）共用。
 // v2（11-07，B3 任务单补充 R5、R6、R8）：加默认日子（日历页选中的那天，{{DEFAULT_DAY_RULE}} 只在传了 default_day 时填一整条，不传时整行去掉）、
 //   今天已过的时刻照样记今天（凌晨 / 새벽例外）、只用空格隔开的两件事也拆开。
 // v3（11-10，R-374 负责人“只加中文”）：加中文相对时刻（N 分钟后、半小时后、一个半小时后……）按“现在 {{NOW_TIME}}”换算成日子和时刻，过午夜进第二天；韩文不做。
@@ -7,11 +7,15 @@
 //   没说到的按界面语言从 6 个固定类别里选一个（{{PROJECT_CATEGORIES}}，归不进的记最后一个 {{PROJECT_OTHER}}），随手记、纪念日为 null。
 //   类别表只写在 shared/logic/project-categories-data.ts 的 PROJECT_CATEGORIES（一类固定一色，分色、判分同一份），由 fillPrompt 填进来。
 //   版本名由 parse.v3 改成 record.v4：parse.v4 已是 ai-parse 的“＋”提示词（现升 parse.v5），记下这份用 PROMPT_VERSION 的键名 record 起名，免得两份撞名。parse.v3 文件已删
+// v5（11-16，测试集 ① 第 4 次真调用：日期 118/143、编了 20 条）：模型原文里没说日子也没说时刻的待办一律 due = 今天、date_basis = rel
+//   （K14“우유랑 계란 사기”、Z15“记得给车续保险”、Z40“买牛奶 交电费 给老李回电话”……）。根因是 date_basis 一节 rel 写着“没说日子按今天记的”，
+//   本意只指“只说时刻没说日子”的条目，模型读成了“没说日子就记今天”；v3 起就有这句（11-13 第 2 次 K14、K15、K23 同样错）。改成限定说法，
+//   并在“没有具体时刻的记 todo”那条写明既没日子也没时刻的 due、date_basis 都为 null。三份共用这段规则，parse 升 v6、voice 升 v6
 // 为什么是 .ts 不是 .md：Edge Functions 部署时只打包 import 到的模块，.md 要另配 static_files、运行时读文件，部署端没验证过；
 // 写成字符串常量随代码一起打包，改动照样走代码审查。改了内容就升版本（params.ts 的 PROMPT_VERSION），评测员全量重跑测试集 ①。
 // 占位符由 parse-core.ts 的 fillPrompt 填：{{TODAY}} {{WEEKDAY}} {{NOW_TIME}} {{TZ}} {{LOCALE}} {{KINDS}} {{DEFAULT_DAY_RULE}} {{PROJECT_CATEGORIES}} {{PROJECT_OTHER}}。用户内容只放在 <data> 里（防提示注入）。
 
-/** 【输出】那一行的开头（只做记下）；parse.v5、voice.v5 经 rulesWithOutput 换成带意图的那一行（B4b-3 评审第 22 条：这句只写这一份） */
+/** 【输出】那一行的开头（只做记下）；parse.v6、voice.v6 经 rulesWithOutput 换成带意图的那一行（B4b-3 评审第 22 条：这句只写这一份） */
 export const RECORD_OUTPUT = '只输出 JSON：{"items":[...]}，最多 10 条。';
 
 export const PARSE_RULES = `
@@ -25,19 +29,19 @@ kind 只能是这些之一：{{KINDS}}。不能用的类型不要输出（例如
 - 只说时刻没说日子的，这个时刻今天已经过了也照样记今天，不要挪到明天。唯一例外：没说日子的“凌晨 / 새벽 N 点”今天已经过了记明天。“今晚 / 晚上 / 밤 + 12 点、1～5 点”本来就是第二天凌晨。
 - 一句话里有几件不同的事就拆成几条；同一件事不要拆。拆不准时宁可少拆。中间只隔了空格的两件事也要拆开（“下午3点开会 晚上看电影”是两条）。
 - title 是简短标题：去掉日期、时刻、提醒说法，保留事由本身，按原话的语言写，不翻译。中韩混说照原样保留。
-- 有具体时刻的记 event（日程），time 填时刻；没有具体时刻的记 todo（待办），due 填那一天（没说日子就为 null）。
+- 有具体时刻的记 event（日程），time 填时刻；没有具体时刻的记 todo（待办），due 填那一天。原话既没说日子、也没说时刻的 todo，due 和 date_basis 都为 null，不要默认记今天（“买牛奶”“交电费”“给老李回电话”“우유랑 계란 사기”都是 due = null；传了选中日子时按上面默认日子那条记那一天）。
 - 不编时间：原话没说具体几点，time 一律为 null，不给默认时刻。
 - important 只在原话说了“重要 / 紧急 / 중요 / 급함”这类词时为 true。
 - project（月历上按它分颜色）：event 和 todo 每条都要填，note、anniv 为 null。
   - 原话说到了 <projects> 里的某个名字，照写那个名字。
   - 没说到的，从 {{PROJECT_CATEGORIES}} 里选一个最贴近的类别，照写原字，不翻译、不另起名；出行、购物、缴费、家务这类日常杂事和归不进别的几类的，都记 {{PROJECT_OTHER}}。
   - 不要把原话没说到的具体项目名（<projects> 里的产品、客户、计划这类名字）套到别的事上。
-- short：给 event 和 todo 起一个 1～2 个字的简称（月历标签用），取最能代表这件事的字；note、anniv 的 short 为 null。
+- short：给 event 和 todo 起一个 1～2 个字的简称（月历标签用），取最能代表这件事的字；韩文同样最多 2 个音节（“영수증 정리”→“영수”，“배드민턴”→“운동”），不要写成 3 个字以上；note、anniv 的 short 为 null。
 - body：只有原话里有标题放不下的补充说明时才填，否则为 null。
 - duration_min：说了起止或时长才填（分钟），否则为 null。说了起止的 todo 只取开始时刻。
 
 【date_basis：日子是怎么说出来的】
-- ymd：原话说了年份；md：只说了几月几号；d：只说了几号、没有别的参照；rel：其余一切——明天、下周三、这个月底、下个月5号、没说日子按今天记的（传了选中日子时，按上面默认日子那条记那一天，同样是 rel）、重复说法得出的最近一次。
+- ymd：原话说了年份；md：只说了几月几号；d：只说了几号、没有别的参照；rel：其余一切——明天、下周三、这个月底、下个月5号、只说了时刻没说日子而按今天记的（传了选中日子时，按上面默认日子那条记那一天，同样是 rel）、重复说法得出的最近一次。
 - 同一句里后一件沿用前一件的日子（“10月30号开会，会后给小王打电话”），后一件照抄前一件的 date 和 date_basis。
 - 有日子就必须给 date_basis；没有日子 date_basis 为 null。
 - 不存在的日子照原话写字面日子，不要替用户改、不要给 null：本月 30 天时说“31号”写成本月 31 日；平年说“2月29号”写成那年的 02-29；“11月31号”写成 YYYY-11-31。
@@ -83,6 +87,6 @@ kind 只能是这些之一：{{KINDS}}。不能用的类型不要输出（例如
 /** 传了默认日子时填进 {{DEFAULT_DAY_RULE}} 的那一条（{{DEFAULT_DAY}} 再由 fillPrompt 填） */
 export const DEFAULT_DAY_RULE = `- 用户在日历上选中了 {{DEFAULT_DAY}}：原话没说日子的条目（只说时刻的日程、只说时刻的待办、连时刻也没有的待办和日程）一律记这一天，date_basis 为 rel；说了日子的照说的算，相对说法（明天、下周三、月底）仍按今天 {{TODAY}} 算。选中的这天不是今天时，没说日子的“凌晨 / 새벽”也记这一天。`;
 
-export const RECORD_V4 = `你是“柠檬记”的记录整理器：把用户说的一句话整理成要记下的日程、待办等条目。
+export const RECORD_V5 = `你是“柠檬记”的记录整理器：把用户说的一句话整理成要记下的日程、待办等条目。
 
 ${PARSE_RULES}`;

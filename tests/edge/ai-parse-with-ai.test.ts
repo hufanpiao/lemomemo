@@ -6,9 +6,9 @@ import { AI_KINDS, type AiKind } from '../../shared/schema/kinds.ts';
 import { GEMINI_BASE, GeminiProvider, geminiBody, quotaInfo, retryDelayMs, toBase64 } from '../../supabase/functions/_shared/ai/gemini.ts';
 import { GEN_PARAMS, PARSE_TIMEOUT_MS, PROMPT_VERSION, TASK_PARAMS, VOICE_PROBE_PARAMS, VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
 import { cleanProjects, fillPrompt, makeParseWithAI, PROJECT_LEN, PROJECTS_MAX, responseSchema, sanitize, TEXT_MAX, wallOf, type AiKindLike, type InvalidReasonLike, type ParseInput } from '../../supabase/functions/_shared/ai/parse-core.ts';
-import { RECORD_V4 } from '../../supabase/functions/_shared/ai/prompts/record.v4.ts';
-import { PARSE_V5 } from '../../supabase/functions/_shared/ai/prompts/parse.v5.ts';
-import { VOICE_V5 } from '../../supabase/functions/_shared/ai/prompts/voice.v5.ts';
+import { RECORD_V5 } from '../../supabase/functions/_shared/ai/prompts/record.v5.ts';
+import { PARSE_V6 } from '../../supabase/functions/_shared/ai/prompts/parse.v6.ts';
+import { VOICE_V6 } from '../../supabase/functions/_shared/ai/prompts/voice.v6.ts';
 import { pickProvider, readAiConfig } from '../../supabase/functions/_shared/ai/router.ts';
 import { okJson, StubProvider } from './ai-fakes.ts';
 import { PROJECT_CATEGORIES } from '../../shared/logic/project-color.ts';
@@ -39,7 +39,7 @@ describe('防提示注入：sanitize、cleanProjects', () => {
 
 describe('提示词和 responseSchema', () => {
   it('两份提示词填完没有漏下的 {{…}}；今天、星期、时刻、时区按 now、tz 算', () => {
-    for (const tpl of [RECORD_V4, PARSE_V5, VOICE_V5]) {
+    for (const tpl of [RECORD_V5, PARSE_V6, VOICE_V6]) {
       const p = fillPrompt(tpl, { now: NOW, tz: 'Asia/Seoul', locale: 'ko', features: ['event', 'todo'] }, checkDefaultDay, PROJECT_CATEGORIES).system;
       expect(/\{\{[^}]*\}\}/.test(p)).toBe(false);
       expect(p).toContain('2026-10-28');
@@ -49,7 +49,7 @@ describe('提示词和 responseSchema', () => {
     expect(wallOf(NOW, 'America/Los_Angeles')).toEqual({ today: '2026-10-27', weekday: '周二', time: '20:00' });
   });
   it('R-440：三份提示词都要求日程、待办给项目或类别；类别按界面语言从 PROJECT_CATEGORIES 填一套，杂事归最后一个', () => {
-    for (const tpl of [RECORD_V4, PARSE_V5, VOICE_V5]) {
+    for (const tpl of [RECORD_V5, PARSE_V6, VOICE_V6]) {
       expect(tpl).toContain('event 和 todo 每条都要填，note、anniv 为 null');
       expect(tpl).not.toContain('已有的项目名才填');
       const fill = (locale: 'zh' | 'ko') => fillPrompt(tpl, { now: NOW, tz: 'Asia/Seoul', locale, features: ['event', 'todo'] }, checkDefaultDay, PROJECT_CATEGORIES).system;

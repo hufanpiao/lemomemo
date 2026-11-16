@@ -1,22 +1,22 @@
-// 提示词 parse.v5（架构 5.14 第 2、3、7 点；B4b-3）：在 record.v4 的记下规则上加“意图”一节，一次调用里判断这句话是要
+// 提示词 parse.v6（架构 5.14 第 2、3、7 点；B4b-3）：在 record.v5 的记下规则上加“意图”一节，一次调用里判断这句话是要
 // 记下（record）、查找（search）、总结（summarize）、取消（cancel）、改期（reschedule）还是完成（complete），不多扣次数。
-// 记下的拆分规则和 record.v4 同一份（PARSE_RULES），只改【输出】那一行；改记下规则时两边一起变，升版本、重跑测试集。
-// 只给 ai-parse（经 parse-core.ts 的 parseWithAI）。claude-intake 和评测测试集 ① 只做记下，用 record.v4（recordWithAI）。
+// 记下的拆分规则和 record.v5 同一份（PARSE_RULES），只改【输出】那一行；改记下规则时两边一起变，升版本、重跑测试集。
+// 只给 ai-parse（经 parse-core.ts 的 parseWithAI）。claude-intake 和评测测试集 ① 只做记下，用 record.v5（recordWithAI）。
 // v5（11-16，R-440）：意图一节没改，跟着共用的 PARSE_RULES 升版本（project 改成日程、待办都给项目或类别）。parse.v4 文件已删。
-// 占位符同 record.v4（parse-core.ts 的 fillPrompt 填）。用户内容只放在 <data> 里（防提示注入）。
-import { PARSE_RULES, RECORD_OUTPUT } from './record.v4.ts';
+// 占位符同 record.v5（parse-core.ts 的 fillPrompt 填）。用户内容只放在 <data> 里（防提示注入）。
+import { PARSE_RULES, RECORD_OUTPUT } from './record.v5.ts';
 
-/** 拆分规则换掉【输出】一行（parse.v5、voice.v5 共用）；规则里找不到那一行就抛，不悄悄留下只记下的旧输出 */
+/** 拆分规则换掉【输出】一行（parse.v6、voice.v6 共用）；规则里找不到那一行就抛，不悄悄留下只记下的旧输出 */
 export function rulesWithOutput(out: string, rules: string = PARSE_RULES): string {
   if (!rules.includes(RECORD_OUTPUT)) throw new Error('parse rules: output line not found');
   return rules.replace(RECORD_OUTPUT, out);
 }
 
-/** parse.v5 的【输出】一行：顶层多 intent、confidence、query、target、to（Gemini responseSchema 见 parse-core.ts 的 plusSchema） */
+/** parse.v6 的【输出】一行：顶层多 intent、confidence、query、target、to（Gemini responseSchema 见 parse-core.ts 的 plusSchema） */
 export const PLUS_OUTPUT =
   '只输出 JSON：{"intent":"...","confidence":0.0,"items":[...],"query":null,"target":null,"to":null}。intent 是 record 时 items 最多 10 条；别的意图 items 一律为空数组。';
 
-/** 意图一节（parse.v5、voice.v5 共用） */
+/** 意图一节（parse.v6、voice.v6 共用） */
 export const INTENT_RULES = `
 【意图：先判断这句话要做什么】
 - intent 只能是 record、search、summarize、cancel、reschedule、complete 之一：
@@ -52,7 +52,7 @@ export const INTENT_RULES = `
 - 所有日子都在今天前后 5 年以内。
 `.trim();
 
-export const PARSE_V5 = `你是“柠檬记”的“＋”助手：先判断用户说的一句话是要记下，还是要查找、总结、取消、改期、完成已经记下的东西；要记下的整理成日程、待办等条目。
+export const PARSE_V6 = `你是“柠檬记”的“＋”助手：先判断用户说的一句话是要记下，还是要查找、总结、取消、改期、完成已经记下的东西；要记下的整理成日程、待办等条目。
 
 ${INTENT_RULES}
 

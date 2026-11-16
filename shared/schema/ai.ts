@@ -4,12 +4,13 @@
 //
 // 校验顺序（0.29 续第 68 条）：
 //   ① 结构：只认白名单里的键（多一个键 not_whitelisted；AI 自己带的 confirm 先丢掉、由这里重算，TC-B3-42）、items ≤ 10、
-//      日期只查格式（YYYY-MM-DD，月 01～12、日 01～31）、short ≤ 2 个字形簇（超了 out_of_range）、anniv.year 1900～2100；
+//      日期只查格式（YYYY-MM-DD，月 01～12、日 01～31）、anniv.year 1900～2100；
 //      日程有 date、待办有 due 而 date_basis 缺或为 null 打 missing_date_basis（superRefine，带 params.reason）；
 //      日子为 null 而 basis 有值算 schema；
 //   ② kind 必须在这个人能用的类型里（featureOn 算好的 features），不在算 not_whitelisted、整份退回；
 //   ③ 字段和 kind 对不上的清成 null、不整份拒收（纪念日的 date、due、time、short，随手记的 short、date、due、time；
-//      待办的 time 不清，它是截止时刻）；
+//      待办的 time 不清，它是截止时刻）；short 超过 2 个字形簇也清成 null（11-16 测试集 ① 第 4 次：韩文“영수증”“배드민턴”整份被拒、整句退回本机规则；
+//      short 只是月历标签，清掉后照架构 R-104 按标题取前 2 个字形簇，条目本身没错，不该连累整句）；
 //   ④ 待办给了 time 没给 due：补 due = 今天（调用方传了默认日子就是那一天）、date_basis = rel（数据库要求有 due_time 必须有 due）；
 //      调用方传了默认日子（日历页选中的，R-353、R6）时，日程没给 date、待办没给 due 的也补成那一天、date_basis = rel；
 //   ⑤ 按 basis 重配、查存在不存在、加 confirm（shared/logic/parse/past-date.ts，和本机规则同一个函数）；
@@ -129,10 +130,6 @@ const itemRaw = z
       }
     }
     if (it.kind === 'anniv' && !it.anniv) ctx.addIssue({ code: 'custom', path: ['anniv'], message: 'anniv_required' });
-    const s = it.short ?? null;
-    if (s !== null && s.trim() !== '' && graphemeCount(s.trim()) > SHORT_GRAPHEMES) {
-      ctx.addIssue({ code: 'custom', path: ['short'], message: 'short_too_long', params: { reason: 'out_of_range' } });
-    }
   });
 
 const itemsRaw = z.array(itemRaw).max(AI_MAX_ITEMS);
@@ -219,7 +216,8 @@ type ItemIn = z.infer<typeof itemRaw>;
 
 /** ③④：清掉和 kind 对不上的字段、补待办的今天 */
 function normalize(it: ItemIn, today: DateStr, dflt: DateStr | null): Omit<AiItem, 'confirm'> {
-  const short = it.short?.trim() ? it.short.trim() : null;
+  const s = it.short?.trim() ?? '';
+  const short = s !== '' && graphemeCount(s) <= SHORT_GRAPHEMES ? s : null;
   const base: Omit<AiItem, 'confirm'> = {
     kind: it.kind,
     title: it.title,

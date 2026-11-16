@@ -55,10 +55,11 @@ describe('ai.ts：AI 输出校验（第 7 节）', () => {
     expect(v.ok && itemsOf(v.value)[0]?.title).toBe('开会');
   });
 
-  it('TC-B3-05：简称最多 2 个字形簇；3 个算 out_of_range', () => {
+  it('TC-B3-05：简称最多 2 个字形簇；超了清成 null（显示时按标题取前 2 个），不整份拒收', () => {
     expect(first(checkParseOutput({ items: [ev({ short: '会议' })] }, ALL)).short).toBe('会议');
     expect(first(checkParseOutput({ items: [ev({ short: '👨\u200D👩\u200D👧会' })] }, ALL)).short).toBe('👨\u200D👩\u200D👧会');
-    expect(reasons(checkParseOutput({ items: [ev({ short: '开会了' })] }, ALL))).toEqual(['out_of_range']);
+    expect(first(checkParseOutput({ items: [ev({ short: '开会了' })] }, ALL)).short).toBeNull();
+    expect(first(checkParseOutput({ items: [ev({ short: '영수증' })] }, ALL)).short).toBeNull();
   });
 
   it('TC-B3-42：AI 自己带的 confirm 不采用，由服务器按 basis 重算', () => {

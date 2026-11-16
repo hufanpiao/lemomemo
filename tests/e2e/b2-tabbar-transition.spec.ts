@@ -344,9 +344,38 @@ test.describe('底栏：进出没有底栏的页照旧 View Transition（代码�
     // B3 M4 起“＋”点一下打开打字条，“展开编辑”才换到新建日程页
     await page.getByTestId('tabbar-add').click();
     await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 10_000 });
+    // 诊断（11-16：CI webkit 自 b6832069 起连挂“没等到切页过渡”，本机和 CI 同款镜像都复现不了）：记下 startViewTransition 调没调、
+    // ready / finished 什么时候结束（被跳过时 ready 会 reject）、点击后每帧的时间。只在这条没等到过渡时打进失败信息，下次 CI 挂了按它定根因
+    await page.evaluate(() => {
+      const w = window as unknown as { __vtdiag: string[] };
+      const t0 = performance.now();
+      const at = () => Math.round(performance.now() - t0);
+      w.__vtdiag = [];
+      const d = document as unknown as { startViewTransition?: (cb: () => void) => { ready: Promise<void>; finished: Promise<void> } };
+      const orig = d.startViewTransition?.bind(document);
+      if (!orig) w.__vtdiag.push('没有 startViewTransition');
+      else
+        d.startViewTransition = (cb) => {
+          w.__vtdiag.push(`调用 ${at()}`);
+          const vt = orig(cb);
+          vt.ready.then(() => w.__vtdiag.push(`ready ${at()}`), (e: unknown) => w.__vtdiag.push(`ready 拒绝 ${at()} ${String(e).slice(0, 80)}`));
+          vt.finished.then(() => w.__vtdiag.push(`finished ${at()}`), () => w.__vtdiag.push(`finished 拒绝 ${at()}`));
+          return vt;
+        };
+      let n = 0;
+      const tick = () => {
+        n++;
+        if (n <= 40) {
+          w.__vtdiag.push(`帧 ${at()}`);
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
     await page.getByTestId('type-bar').getByRole('button', { name: '展开编辑' }).click({ noWaitAfter: true });
-    const s = await holdAndRead(page);
-    expect(s, '没等到切页过渡').not.toBeNull();
+    const s = await holdAndRead(page).catch(() => null);
+    const diag = s ? '' : await page.evaluate(() => (window as unknown as { __vtdiag?: string[] }).__vtdiag?.join(' | ') ?? '无');
+    expect(s, `没等到切页过渡；诊断：${diag}`).not.toBeNull();
     expect(s?.group.shadow, '组上有阴影（只有一边有底栏时会剩空壳）').toBe('none');
     expect(s?.addGroup.shadow).toBe('none');
     expect(s?.old.shadow).not.toBe('none');
