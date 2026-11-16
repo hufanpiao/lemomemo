@@ -7,7 +7,11 @@
 // • 句库和结果对不上（分母不是 40 / 13 / 18、有句子没跑到、句库版本不同）时结论是“未定”，不凑成通过。
 // 输出里只有句子 id、字段名和数字，不放句子原文和模型原文（工作流摘要页是公开的；原文在结果 JSON 里，只进工作流产物）。
 
+import { PROJECT_CATEGORIES } from '../../shared/logic/project-color.ts';
+
 export const KINDS = ['event', 'todo', 'note', 'anniv'] as const;
+/** 日程、待办没说到已有项目时认的类别（中韩两套都认，提示词按界面语言取一套） */
+const CATEGORIES: ReadonlySet<string> = new Set([...PROJECT_CATEGORIES.zh, ...PROJECT_CATEGORIES.ko]);
 export type Kind = (typeof KINDS)[number];
 export const SCORED = ['main', 'rule', 'observe'] as const;
 /** 三组计分句（4.1 前四行） */
@@ -214,8 +218,14 @@ export function judgeItem(e: ExpItem, a: Item | null, row: Pick<SetRow, 'scored'
   const hay = e.kind === 'note' ? title + normTitle(typeof a['body'] === 'string' ? a['body'] : '') : title;
   if (!(e.title_has ?? []).every((w) => hay.includes(normTitle(w)))) wrong.push('title_has');
   if ((e.title_forbid ?? []).some((w) => title.includes(normTitle(w)))) wrong.push('title_forbid');
-  // 项目：随手记不评；期望为空的必须为空（不许编项目）
-  if (e.kind !== 'note' && (e.project ?? null) !== (a['project'] ?? null)) wrong.push('project');
+  // 项目（R-440 起）：随手记不评；期望写了项目名的必须一字不差；纪念日期望为空的必须为空；
+  // 日程、待办期望为空 = 原话没说到已有项目，必须给固定类别（shared/logic/project-categories-data.ts 的 PROJECT_CATEGORIES）里的一个（空着、自己起名、套上没说到的已有项目都算错）
+  if (e.kind !== 'note') {
+    const want = e.project ?? null;
+    const got = a['project'] ?? null;
+    const ok = want !== null || !timed(e.kind) ? want === got : typeof got === 'string' && CATEGORIES.has(got);
+    if (!ok) wrong.push('project');
+  }
   if ((e.important === true) !== (a['important'] === true)) wrong.push('important');
   if (e.kind === 'anniv') {
     const x = a['anniv'];

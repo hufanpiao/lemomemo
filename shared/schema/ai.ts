@@ -245,10 +245,11 @@ function normalize(it: ItemIn, today: DateStr, dflt: DateStr | null): Omit<AiIte
       if (t.due === null && (dflt !== null || t.time !== null)) return { ...t, due: dflt ?? today, date_basis: 'rel' };
       return t;
     }
+    // 随手记、纪念日没有项目（notes、anniversaries 表都没有 project 列；R-440 提示词同样要求为 null），AI 给了也清掉
     case 'note':
-      return { ...base, date: null, due: null, time: null, short: null, duration_min: null, date_basis: null, anniv: null };
+      return { ...base, date: null, due: null, time: null, short: null, duration_min: null, project: null, date_basis: null, anniv: null };
     case 'anniv':
-      return { ...base, date: null, due: null, time: null, short: null, duration_min: null, date_basis: null };
+      return { ...base, date: null, due: null, time: null, short: null, duration_min: null, project: null, date_basis: null };
     default: {
       const never: never = it.kind;
       return never;

@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { placeEvent, projectColorIndex, PROJECT_COLORS } from '../../../shared/logic/calendar/cal-items.ts';
 import { buildMonth, dayEntries, monthGridDates, MONTH_CELLS, type MonthCell } from '../../../shared/logic/calendar/month-grid.ts';
-import { normalizeProject, projectColorIndex as colorFromModule } from '../../../shared/logic/project-color.ts';
+import { normalizeProject, PROJECT_CATEGORIES, projectColorIndex as colorFromModule } from '../../../shared/logic/project-color.ts';
 import { ev, timed, todo, unsynced } from './fixtures.ts';
 
 const SEOUL = 'Asia/Seoul';
@@ -100,7 +100,25 @@ describe('项目色', () => {
     expect(projectColorIndex('')).toBe(0);
     expect(projectColorIndex('   ')).toBe(0);
   });
+
+  it('R-440：AI 的 6 个固定类别一类一色、互不相同，中韩同义同色；首尾空白照样查表；别的名字仍按散列', () => {
+    const { zh, ko } = PROJECT_CATEGORIES;
+    expect([zh.length, ko.length]).toEqual([PROJECT_COLORS, PROJECT_COLORS]);
+    const zhColors = zh.map((n) => projectColorIndex(n));
+    expect(zhColors).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(ko.map((n) => projectColorIndex(n))).toEqual(zhColors);
+    expect(projectColorIndex(' 健康 ')).toBe(3);
+    // 自起名不在表里：仍是 FNV-1a 散列，颜色和改动前一样
+    for (const name of ['NEOX', '出行', '购物', '사이니지']) expect(projectColorIndex(name)).toBe(fnv(name));
+  });
 });
+
+/** 改动前的散列（照抄 FNV-1a 32 位，钉住表外名字的颜色不变） */
+function fnv(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
+  return (h % PROJECT_COLORS) + 1;
+}
 
 describe('一天 5 件事（TC-B2-08）', () => {
   const day = '2026-10-24';

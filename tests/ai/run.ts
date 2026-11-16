@@ -59,7 +59,7 @@ const deps: EvalDeps = {
   loadParse: async () =>
     ((await import('../../supabase/functions/_shared/ai/parse-with-ai.ts')) as {
       recordWithAI: (input: ParseInput, p: AIProvider) => Promise<ParseOk<unknown> | ParseFail>;
-    }).recordWithAI,   // 测试集 ① 只做记下：parse.v3（B4b-3 起 ai-parse 的 parseWithAI 是 parse.v4）
+    }).recordWithAI,   // 测试集 ① 只做记下：record.v4（ai-parse 的 parseWithAI 是 parse.v5）
   liveProvider: (model, key) => new GeminiProvider(model, key, fetch),
   replayProvider: (name) => ({ provider: replayProvider(name).provider, model: REPLAY_MODEL }),
   async write(where, name, json) {

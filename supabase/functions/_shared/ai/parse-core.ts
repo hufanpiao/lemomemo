@@ -3,12 +3,12 @@
 // 这样 Vitest 和 tsc 能直接测它（tests/edge/ai-parse-with-ai.test.ts 注入真的 shared 版本）；函数和评测用的绑定在 parse-with-ai.ts。
 // 做的事：去控制字符、转义 </data>、截 2000 字 → 拼提示词 → 调 provider → 校验 → 返回校验后的结果和原始输出（评测两份都存）。
 // 不做的事：不查 AI 同意、不计次数和限流、不看“本机有把握就不调 AI”、不读写数据库（quota 只作为 reason 返回，ai_state 由调用方写）。
-// 三个入口（B4b-3）：parseWithAI（ai-parse，parse.v4，意图加记下）、voiceWithAI（ai-voice，voice.v4）、
-//   recordWithAI（claude-intake、评测测试集 ①，parse.v3，只做记下：AI 判成别的意图当 schema 拒收，recordOnly）。
+// 三个入口（B4b-3）：parseWithAI（ai-parse，parse.v5，意图加记下）、voiceWithAI（ai-voice，voice.v5）、
+//   recordWithAI（claude-intake、评测测试集 ①，record.v4，只做记下：AI 判成别的意图当 schema 拒收，recordOnly）。
 import { PROMPT_VERSION, TASK_PARAMS, PARSE_TIMEOUT_MS, VOICE_TIMEOUT_MS } from './params.ts';
-import { DEFAULT_DAY_RULE, PARSE_V3 } from './prompts/parse.v3.ts';
-import { PARSE_V4 } from './prompts/parse.v4.ts';
-import { VOICE_V4 } from './prompts/voice.v4.ts';
+import { DEFAULT_DAY_RULE, RECORD_V4 } from './prompts/record.v4.ts';
+import { PARSE_V5 } from './prompts/parse.v5.ts';
+import { VOICE_V5 } from './prompts/voice.v5.ts';
 import type { AIProvider, AiResult, QuotaKind } from './provider.ts';
 import { generateRetry503 } from './retry.ts';
 
@@ -35,7 +35,12 @@ export interface Checkers<Item, I extends IntentLike = IntentLike> {
   checkVoiceOutput(raw: unknown, ctx: CheckCtx): CheckResult<Checked<Item, I> & { transcript: string }>;
   /** 默认日子的校验（shared/schema/ai.ts 的 checkDefaultDay，和 ai-parse、ai-voice 入口同一个函数，R10） */
   checkDefaultDay: DayCheck;
+  /** 提示词里 project 的固定类别（shared/logic/project-categories-data.ts 的 PROJECT_CATEGORIES，和分色同一份；R-440） */
+  projectCategories: ProjectCategoriesLike;
 }
+
+/** 固定类别：中韩各一套，最后一个是收日常杂事的“生活 / 생활” */
+export interface ProjectCategoriesLike { zh: readonly string[]; ko: readonly string[] }
 
 /** 默认日子校验：不传 null；格式不对、不存在、不在今天前 1 年到后 5 年之内 'bad' */
 export type DayCheck = (v: unknown, now: number, tz: string) => string | null | 'bad';
@@ -111,13 +116,16 @@ export function fillPrompt(
   tpl: string,
   input: { now: number; tz: string; locale: 'zh' | 'ko'; features: readonly AiKindLike[]; defaultDay?: string | undefined },
   checkDay: DayCheck,
+  cats: ProjectCategoriesLike,
 ): FilledPrompt {
   const checked = input.defaultDay === undefined ? null : checkDay(input.defaultDay, input.now, input.tz);
   const day = checked === null || checked === 'bad' ? undefined : checked;
   const w = wallOf(input.now, input.tz);
+  const list = input.locale === 'ko' ? cats.ko : cats.zh;
   const map: Record<string, string> = {
     TODAY: w.today, WEEKDAY: w.weekday, NOW_TIME: w.time, TZ: input.tz,
     LOCALE: input.locale === 'ko' ? '韩文' : '中文', KINDS: input.features.join(', '), DEFAULT_DAY: day ?? '',
+    PROJECT_CATEGORIES: `“${list.join('、')}”`, PROJECT_OTHER: `“${list.at(-1) ?? ''}”`,
   };
   // 默认日子那一条：传了才有，不传整行去掉（R6：今天页、待办页、评测不传，提示词不变）
   const withRule = tpl.replace(/^\{\{DEFAULT_DAY_RULE\}\}\n/m, day ? `${DEFAULT_DAY_RULE}\n` : '');
@@ -134,7 +142,7 @@ const STR = { type: 'STRING' };
 const NSTR = { type: 'STRING', nullable: true };
 
 /** Gemini responseSchema（OpenAPI 子集）：kind 的枚举只放这个人能用的类型；没有 anniv 时整个 anniv 键不出现。
- *  这一份只有记下的键、不放 intent：parse.v3（recordWithAI）直接用；parse.v4、voice.v4 经 plusSchema 加意图的键 */
+ *  这一份只有记下的键、不放 intent：record.v4（recordWithAI）直接用；parse.v5、voice.v5 经 plusSchema 加意图的键 */
 export function responseSchema(features: readonly AiKindLike[], voice: boolean): Record<string, unknown> {
   const props: Record<string, unknown> = {
     kind: { type: 'STRING', enum: [...features] },
@@ -196,7 +204,7 @@ const INTENT_PROPS: Record<string, unknown> = {
   to: { type: 'OBJECT', nullable: true, properties: { date: NDATE, time: NSTR }, required: ['date', 'time'] },
 };
 
-/** parse.v4、voice.v4 的 responseSchema：记下那一份（responseSchema）加意图的几个键 */
+/** parse.v5、voice.v5 的 responseSchema：记下那一份（responseSchema）加意图的几个键 */
 export function plusSchema(features: readonly AiKindLike[], voice: boolean): Record<string, unknown> {
   const base = responseSchema(features, voice) as { properties: Record<string, unknown>; required: string[] };
   return {
@@ -240,7 +248,7 @@ export function makeParseWithAI<Item, I extends IntentLike = IntentLike>(checker
     tpl: string, schema: Record<string, unknown>, version: string, input: ParseInput, provider: AIProvider,
     check: (raw: unknown, ctx: CheckCtx) => CheckResult<T>,
   ): Promise<ParseOk<T> | ParseFail> {
-    const fp = fillPrompt(tpl, input, checkers.checkDefaultDay);
+    const fp = fillPrompt(tpl, input, checkers.checkDefaultDay, checkers.projectCategories);
     const bad = fp.badDefaultDay ? ({ badDefaultDay: true } as const) : {};
     const r = await provider.generate({
       system: fp.system,
@@ -255,19 +263,19 @@ export function makeParseWithAI<Item, I extends IntentLike = IntentLike>(checker
     return { ok: true, value: v.value, raw: r.json, prompt: version, ...bad };
   }
 
-  /** 文字的“＋”：ai-parse（parse.v4，意图加记下） */
+  /** 文字的“＋”：ai-parse（parse.v5，意图加记下） */
   function parseWithAI(input: ParseInput, provider: AIProvider): Promise<ParseOk<Checked<Item, I>> | ParseFail> {
-    return text(PARSE_V4, plusSchema(input.features, false), PROMPT_VERSION.parse, input, provider, (raw, ctx) => checkers.checkParseOutput(raw, ctx));
+    return text(PARSE_V5, plusSchema(input.features, false), PROMPT_VERSION.parse, input, provider, (raw, ctx) => checkers.checkParseOutput(raw, ctx));
   }
 
-  /** 文字、只做记下：claude-intake、评测测试集 ①（parse.v3，schema 里没有 intent） */
+  /** 文字、只做记下：claude-intake、评测测试集 ①（record.v4，schema 里没有 intent） */
   function recordWithAI(input: ParseInput, provider: AIProvider): Promise<ParseOk<{ items: Item[] }> | ParseFail> {
-    return text(PARSE_V3, responseSchema(input.features, false), PROMPT_VERSION.record, input, provider, (raw, ctx) => recordOnly(checkers.checkParseOutput(raw, ctx)));
+    return text(RECORD_V4, responseSchema(input.features, false), PROMPT_VERSION.record, input, provider, (raw, ctx) => recordOnly(checkers.checkParseOutput(raw, ctx)));
   }
 
-  /** 录音：ai-voice（voice.v4，一次完成转写、意图和拆分；C 路不做评测，R-167） */
+  /** 录音：ai-voice（voice.v5，一次完成转写、意图和拆分；C 路不做评测，R-167） */
   async function voiceWithAI(input: VoiceInput, provider: AIProvider): Promise<ParseOk<Checked<Item, I> & { transcript: string }> | ParseFail> {
-    const fp = fillPrompt(VOICE_V4, input, checkers.checkDefaultDay);
+    const fp = fillPrompt(VOICE_V5, input, checkers.checkDefaultDay, checkers.projectCategories);
     const bad = fp.badDefaultDay ? ({ badDefaultDay: true } as const) : {};
     // 11-11：Gemini 回 503 重试一次，两次合计不超过 VOICE_TIMEOUT_MS（retry.ts；B3 iPhone 实测 40 次里 4 次 503）
     const { result: r, retried } = await generateRetry503(provider, {

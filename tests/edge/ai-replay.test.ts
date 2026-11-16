@@ -16,9 +16,10 @@ import { handle as intakeHandle, type Deps as IntakeDeps, type Row } from '../..
 import { randomToken, tokenHash } from '../../supabase/functions/_shared/intake-token.ts';
 import { replayProvider, type Replay } from '../ai/replay/replay.ts';
 import { fakeGate, UA, used, type FakeGate, type GateOpts } from './ai-fakes.ts';
+import { PROJECT_CATEGORIES } from '../../shared/logic/project-color.ts';
 
 const NOW = Date.UTC(2026, 9, 28, 3, 0);   // 首尔 10-28 12:00
-const { parseWithAI, recordWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
+const { parseWithAI, recordWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay, projectCategories: PROJECT_CATEGORIES });
 
 /** 门用内存替身，服务商换成“真 GeminiProvider + 回放桩” */
 function gateWith(cassette: string, o: GateOpts = {}): { g: FakeGate; rp: Replay } {

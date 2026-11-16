@@ -16,6 +16,7 @@ import { randomToken, TOKEN_RE, TOKEN_TTL_MS, tokenHash, tokenLive } from '../..
 import { ASK_BAD_DAY, ASK_MONTH, ASK_YEAR, DAILY_ITEMS, failFields, StoreError, NOTE_RESEND, TIP_ARRANGE, TIP_RECUR, handle as intakeHandle, HOURLY_LIMIT, hourKey, itemsKey, USER_DAILY_ITEMS, userItemsKey, type Deps as IntakeDeps, type Row, type TokenRow } from '../../supabase/functions/claude-intake/core.ts';
 import { cleanLabel, DAILY_LIMIT, MAX_ACTIVE, handle as adminHandle, rateKey, type Deps as AdminDeps } from '../../supabase/functions/token-admin/core.ts';
 import { COUNTER_KEY, fakeGate, okJson, UA, used, type GateOpts } from './ai-fakes.ts';
+import { PROJECT_CATEGORIES } from '../../shared/logic/project-color.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 /** 最后一个定义 private.intake_insert 的迁移全文（R-434 迁移 20261115100000 照 20261107100000 逐字重建、todos 名单多 priority） */
@@ -29,7 +30,7 @@ function intakeSql(): string {
 const NOW = Date.UTC(2026, 9, 28, 3, 0);   // 首尔 10-28 12:00
 const TID = '7e57a0a0-0000-4000-8000-000000000001';
 const DAY = 86_400_000;
-const { recordWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
+const { recordWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay, projectCategories: PROJECT_CATEGORIES });
 
 describe('连接码（_shared/intake-token.ts）', () => {
   it('lmc_ + 43 位 base64url；库里存 SHA-256 十六进制；180 天内没吊销才有效', async () => {

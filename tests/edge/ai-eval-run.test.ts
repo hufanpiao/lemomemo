@@ -14,8 +14,9 @@ import { replay, REPLAY_KEY, REPLAY_MODEL } from '../ai/replay/replay.ts';
 import {
   diagLines, FEATURES, onlyName, paceOf, parseArgs, parseOnly, parseSet, PROJECTS, reportName, runEval, runSet, selectRows, type EvalDeps, type EvalRow,
 } from '../ai/run-core.ts';
+import { PROJECT_CATEGORIES } from '../../shared/logic/project-color.ts';
 
-const { recordWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
+const { recordWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay, projectCategories: PROJECT_CATEGORIES });
 const NOW = 1793581200000;   // 2026-11-02T10:00:00+09:00（句库 1.2）
 const row = (o: Partial<EvalRow> = {}) =>
   JSON.stringify({ id: 'Z01', set_version: 'set1-v1.6', group: 'zh', source: 'typed', scored: 'main', text: '明天下午三点开会', now: NOW, tz: 'Asia/Seoul', locale: 'zh', expect: [], accept: {}, ...o });
@@ -77,7 +78,7 @@ describe('评测骨架：参数和速度', () => {
     for (const bad of ['../../x', 'parse.ok', 'Parse-ok', '-x', 'a/b']) expect(() => parseArgs(['--replay', bad, '--rpm', '1', '--rpd', '1', '--date', '2026-11-20']), bad).toThrow(/--replay/);
   });
   it('报告文件名照句库 5.3：set1-<日期>-<提示词版本>-<模型名>；模型名有怪字符报错', () => {
-    expect(reportName('2026-11-20', PROMPT_VERSION.record, 'gemini-3.5-flash-lite')).toBe('set1-2026-11-20-parse.v3-gemini-3.5-flash-lite');
+    expect(reportName('2026-11-20', PROMPT_VERSION.record, 'gemini-3.5-flash-lite')).toBe('set1-2026-11-20-record.v4-gemini-3.5-flash-lite');
     expect(() => reportName('2026-11-20', 'parse.v2', '../x')).toThrow();
   });
 });
@@ -263,7 +264,7 @@ describe('评测骨架：主流程 runEval 的顺序（代码审 M1、S1、S6）
     const f = fakeDeps({ key: 'k-not-real' });
     const r = await runEval(LIVE, f.deps);
     expect(f.log).toEqual(['key', 'copy', 'rows', 'load', 'live:gemini-3.5-flash-lite', 'write:reports']);
-    expect([r.called, f.calls(), f.written[0]?.name]).toEqual([2, 2, 'set1-2026-11-20-parse.v3-gemini-3.5-flash-lite']);
+    expect([r.called, f.calls(), f.written[0]?.name]).toEqual([2, 2, 'set1-2026-11-20-record.v4-gemini-3.5-flash-lite']);
     expect(f.written[0]?.json).not.toContain('k-not-real');
   });
 
@@ -374,7 +375,7 @@ describe('评测骨架：--only 只跑指定句子（S19 补跑）', () => {
     const r = await runEval(['--model', 'gemini-3.5-flash-lite', ...BASE, '--only', 'Z02,K10'], f.d);
     expect(f.log).toEqual(['key', 'copy', 'rows', 'load', 'live:gemini-3.5-flash-lite', 'write:reports']);
     expect([r.called, f.texts]).toEqual([2, ['zh', 'ko']]);
-    expect(f.written[0]?.name).toMatch(/^only-set1-2026-11-20-parse\.v\d+-gemini-3\.5-flash-lite-t\d{9}$/);
+    expect(f.written[0]?.name).toMatch(/^only-set1-2026-11-20-[a-z]+\.v\d+-gemini-3\.5-flash-lite-t\d{9}$/);
     expect(f.written[0]?.json).not.toContain('k-not-real');
   });
 

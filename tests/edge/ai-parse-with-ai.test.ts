@@ -6,16 +6,17 @@ import { AI_KINDS, type AiKind } from '../../shared/schema/kinds.ts';
 import { GEMINI_BASE, GeminiProvider, geminiBody, quotaInfo, retryDelayMs, toBase64 } from '../../supabase/functions/_shared/ai/gemini.ts';
 import { GEN_PARAMS, PARSE_TIMEOUT_MS, PROMPT_VERSION, TASK_PARAMS, VOICE_PROBE_PARAMS, VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
 import { cleanProjects, fillPrompt, makeParseWithAI, PROJECT_LEN, PROJECTS_MAX, responseSchema, sanitize, TEXT_MAX, wallOf, type AiKindLike, type InvalidReasonLike, type ParseInput } from '../../supabase/functions/_shared/ai/parse-core.ts';
-import { PARSE_V3 } from '../../supabase/functions/_shared/ai/prompts/parse.v3.ts';
-import { PARSE_V4 } from '../../supabase/functions/_shared/ai/prompts/parse.v4.ts';
-import { VOICE_V4 } from '../../supabase/functions/_shared/ai/prompts/voice.v4.ts';
+import { RECORD_V4 } from '../../supabase/functions/_shared/ai/prompts/record.v4.ts';
+import { PARSE_V5 } from '../../supabase/functions/_shared/ai/prompts/parse.v5.ts';
+import { VOICE_V5 } from '../../supabase/functions/_shared/ai/prompts/voice.v5.ts';
 import { pickProvider, readAiConfig } from '../../supabase/functions/_shared/ai/router.ts';
 import { okJson, StubProvider } from './ai-fakes.ts';
+import { PROJECT_CATEGORIES } from '../../shared/logic/project-color.ts';
 
 // B4b-3 起校验结果是几种意图的联合：记下那一种才有 items，这里取出来（别的意图给空）
 const itemsOf = (v: object): AiItem[] => ('items' in v ? (v as { items: AiItem[] }).items : []);
 
-const { parseWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
+const { parseWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay, projectCategories: PROJECT_CATEGORIES });
 const NOW = Date.UTC(2026, 9, 28, 3, 0);
 const input = (o: Partial<ParseInput> = {}): ParseInput => ({
   text: '明天下午三点开会', now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: ['NEOX'], features: ['event', 'todo'], ...o,
@@ -38,14 +39,26 @@ describe('防提示注入：sanitize、cleanProjects', () => {
 
 describe('提示词和 responseSchema', () => {
   it('两份提示词填完没有漏下的 {{…}}；今天、星期、时刻、时区按 now、tz 算', () => {
-    for (const tpl of [PARSE_V3, PARSE_V4, VOICE_V4]) {
-      const p = fillPrompt(tpl, { now: NOW, tz: 'Asia/Seoul', locale: 'ko', features: ['event', 'todo'] }, checkDefaultDay).system;
+    for (const tpl of [RECORD_V4, PARSE_V5, VOICE_V5]) {
+      const p = fillPrompt(tpl, { now: NOW, tz: 'Asia/Seoul', locale: 'ko', features: ['event', 'todo'] }, checkDefaultDay, PROJECT_CATEGORIES).system;
       expect(/\{\{[^}]*\}\}/.test(p)).toBe(false);
       expect(p).toContain('2026-10-28');
       expect(p).toContain('Asia/Seoul');
     }
     expect(wallOf(NOW, 'Asia/Seoul')).toEqual({ today: '2026-10-28', weekday: '周三', time: '12:00' });
     expect(wallOf(NOW, 'America/Los_Angeles')).toEqual({ today: '2026-10-27', weekday: '周二', time: '20:00' });
+  });
+  it('R-440：三份提示词都要求日程、待办给项目或类别；类别按界面语言从 PROJECT_CATEGORIES 填一套，杂事归最后一个', () => {
+    for (const tpl of [RECORD_V4, PARSE_V5, VOICE_V5]) {
+      expect(tpl).toContain('event 和 todo 每条都要填，note、anniv 为 null');
+      expect(tpl).not.toContain('已有的项目名才填');
+      const fill = (locale: 'zh' | 'ko') => fillPrompt(tpl, { now: NOW, tz: 'Asia/Seoul', locale, features: ['event', 'todo'] }, checkDefaultDay, PROJECT_CATEGORIES).system;
+      expect(fill('zh')).toContain('从 “工作、学习、健康、家庭、社交、生活” 里选一个');
+      expect(fill('zh')).toContain('都记 “生活”');
+      expect(fill('zh')).not.toContain('업무');
+      expect(fill('ko')).toContain('从 “업무、공부、건강、가족、모임、생활” 里选一个');
+      expect(fill('ko')).toContain('都记 “생활”');
+    }
   });
   it('Q2：responseSchema 里没有 intent；kind 只放能用的类型；没有 anniv 时整个 anniv 键不出现；录音多 transcript', () => {
     const s = responseSchema(['event', 'todo'], false);

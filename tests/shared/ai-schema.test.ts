@@ -78,15 +78,18 @@ describe('ai.ts：AI 输出校验（第 7 节）', () => {
     const r = checkParseOutput({
       items: [
         ev(),
-        { kind: 'anniv', title: '妈妈生日', due: '2026-11-05', time: '09:00', date_basis: 'rel', anniv: { type: 'birthday', calendar: 'solar', month: 11, day: 5 } },
-        { kind: 'note', title: '想法', short: '想法', time: '10:00' },
+        { kind: 'anniv', title: '妈妈生日', due: '2026-11-05', time: '09:00', date_basis: 'rel', project: '家庭', anniv: { type: 'birthday', calendar: 'solar', month: 11, day: 5 } },
+        { kind: 'note', title: '想法', short: '想法', time: '10:00', project: '生活' },
+        { kind: 'todo', title: '买菜', project: '购物' },
       ],
     }, ALL);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const [, a, n] = itemsOf(r.value);
-    expect([a?.due, a?.time, a?.date_basis, a?.anniv?.is_leap, a?.anniv?.year]).toEqual([null, null, null, false, null]);
-    expect([n?.short, n?.time]).toEqual([null, null]);
+    const [, a, n, t] = itemsOf(r.value);
+    // R-440：纪念日、随手记的 project 清掉；日程、待办的类别名（不在 projects[] 里也行）原样留下
+    expect([a?.due, a?.time, a?.date_basis, a?.anniv?.is_leap, a?.anniv?.year, a?.project]).toEqual([null, null, null, false, null, null]);
+    expect([n?.short, n?.time, n?.project]).toEqual([null, null, null]);
+    expect(t?.project).toBe('购物');
     expect(reasons(checkParseOutput({ items: [ev({ foo: 1 })] }, ALL))).toEqual(['not_whitelisted']);
     // B4b-3：intent 等几个键进了白名单（intent.ts 的 intentRawShape），别的顶层键照样 not_whitelisted；不认识的意图算 schema
     expect(reasons(checkParseOutput({ items: [ev()], intent: 'record' }, ALL))).toEqual([]);

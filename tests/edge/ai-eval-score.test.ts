@@ -12,9 +12,9 @@ const V = 'set1-v1.6';
 const ev = (o: Partial<ExpItem> = {}): ExpItem => ({
   kind: 'event', date: '2026-11-03', time: '15:00', title_has: ['开会'], title_forbid: ['明天'], project: null, important: false, confirm: null, ...o,
 });
-/** 和 ev() 一致的一条校验后结果 */
+/** 和 ev() 一致的一条校验后结果（R-440：没说到已有项目的日程给固定类别） */
 const okItem = (o: Record<string, unknown> = {}) => ({
-  kind: 'event', title: '和客户开会', date: '2026-11-03', time: '15:00', duration_min: null, due: null, important: false, project: null,
+  kind: 'event', title: '和客户开会', date: '2026-11-03', time: '15:00', duration_min: null, due: null, important: false, project: '工作',
   body: null, short: null, date_basis: 'rel', anniv: null, confirm: null, ...o,
 });
 const row = (id: string, group: string, scored: SetRow['scored'] = 'main', expect: ExpItem[] = [ev()]): SetRow =>
@@ -98,8 +98,17 @@ describe('judgeItem：逐字段（句库 1.4）', () => {
     expect(judgeItem(e, a, main).wrong).toEqual([]);
     expect(judgeItem(e, { ...a, short: '灵' }, main).wrong).toEqual(['short']);
   });
-  it('项目不许编；重要必须一致', () => {
+  it('项目（R-440）：说到已有项目的一字不差；没说到的日程、待办必须是固定类别（中韩都认），空着、自己起名、套已有项目都错；重要必须一致', () => {
     expect(judgeItem(ev(), okItem({ project: 'NEOX' }), main).wrong).toEqual(['project']);
+    expect(judgeItem(ev(), okItem({ project: null }), main).wrong).toEqual(['project']);
+    expect(judgeItem(ev(), okItem({ project: '客户会议' }), main).wrong).toEqual(['project']);
+    expect(judgeItem(ev(), okItem({ project: '업무' }), main).wrong).toEqual([]);
+    expect(judgeItem(ev({ project: 'NEOX' }), okItem({ project: 'NEOX' }), main).wrong).toEqual([]);
+    expect(judgeItem(ev({ project: 'NEOX' }), okItem({ project: '工作' }), main).wrong).toEqual(['project']);
+    const td: ExpItem = { kind: 'todo', due: null, time: null, title_has: ['开会'], project: null, important: false, confirm: null };
+    const tdA = okItem({ kind: 'todo', date: null, time: null, date_basis: null, project: '生活' });
+    expect(judgeItem(td, tdA, main).wrong).toEqual([]);
+    expect(judgeItem(td, { ...tdA, project: null }, main).wrong).toEqual(['project']);
     expect(judgeItem(ev({ important: true }), okItem(), main).wrong).toEqual(['important']);
   });
   it('confirm：要问的 past、next 都对；不该问的必须不带', () => {
@@ -120,6 +129,7 @@ describe('judgeItem：逐字段（句库 1.4）', () => {
     const a = { kind: 'anniv', title: '妈妈生日', anniv: an, project: null, short: null };
     expect(judgeItem(e, a, main).wrong).toEqual([]);
     expect(judgeItem(e, { ...a, anniv: { ...an, year: 1960 } }, main).wrong).toEqual(['anniv']);
+    expect(judgeItem(e, { ...a, project: '家庭' }, main).wrong).toEqual(['project']);
     const d = judgeItem(e, { ...a, anniv: { ...an, calendar: 'solar' } }, main);
     expect(d.wrong).toEqual(['date', 'anniv']);
   });

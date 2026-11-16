@@ -1,6 +1,6 @@
 // ai-parse（架构第 6 节函数表 ai-parse 行、第 7 节、5.1；B3 任务单 S8、S12、S15、BE-4，Q2：服务器包 intent）。
 // 顺序：方法（只收 POST）→ JWT（requireActiveUser，index.ts 注入成 authenticate）→ 请求体（default_day 不合格回 400，R6）→ 共用的门（_shared/ai/gate.ts：
-// 同意、类型开关、模型配置、每分钟 6 次、谷歌额度、每人每天和全项目预扣）→ parseWithAI（parse.v4，B4b-3 起一次调用里判意图）→ 成功按意图回
+// 同意、类型开关、模型配置、每分钟 6 次、谷歌额度、每人每天和全项目预扣）→ parseWithAI（parse.v5，B4b-3 起一次调用里判意图）→ 成功按意图回
 // {intent: 'record', confidence, items, quota_left} / {intent: search|summarize, confidence, query, quota_left} /
 // {intent: cancel|reschedule|complete, confidence, target, to, quota_left}（架构 5.14 第 2、7 点；不多扣次数，confidence 是 AI 给的）；
 // 失败退回预扣、回 {fallback, reason}（客户端改用本机规则，原话不丢）。

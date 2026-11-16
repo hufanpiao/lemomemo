@@ -46,7 +46,8 @@ export const SUMMARIZE_TIMEOUT_MS = 10_000;
  * 11-07 由 v1 升到 v2（B3 任务单补充 R5、R6、R8）；11-10 升到 v3（R-374 中文相对时刻）；classify 11-13 升 v2（R-413 加相似分类对）；
  * B4b-3：parse（ai-parse 的“＋”）、voice（ai-voice）升 v4，加意图判断；record 是只做记下的 parse.v3（claude-intake、评测测试集 ①，经 recordWithAI）；
  * media 是 ai-media（B4b-2 识图）的 v1；summarize 是 ai-summarize 的 v1。
+ * 11-16（R-440 日程按项目分颜色）：共用的拆分规则改了 project 一条，三份一起升：record 由 parse.v3 改名 record.v4（parse.v4 已被“＋”用掉，免得撞名）、parse 升 v5、voice 升 v5。
  */
 export const PROMPT_VERSION = Object.freeze({
-  parse: 'parse.v4', voice: 'voice.v4', record: 'parse.v3', classify: 'classify.v2', media: 'media.v1', summarize: 'summarize.v1',
+  parse: 'parse.v5', voice: 'voice.v5', record: 'record.v4', classify: 'classify.v2', media: 'media.v1', summarize: 'summarize.v1',
 });

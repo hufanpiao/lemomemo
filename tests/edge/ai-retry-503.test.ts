@@ -9,6 +9,7 @@ import { makeParseWithAI, type ParseInput } from '../../supabase/functions/_shar
 import type { AiRequest, AiResult } from '../../supabase/functions/_shared/ai/provider.ts';
 import { generateRetry503, is503, RETRY_BACKOFF_MS, RETRY_MIN_LEFT_MS } from '../../supabase/functions/_shared/ai/retry.ts';
 import { fakeGate, okJson, StubProvider, UA, type GateOpts } from './ai-fakes.ts';
+import { PROJECT_CATEGORIES } from '../../shared/logic/project-color.ts';
 
 const E503: AiResult = { ok: false, reason: 'error', status: 503 };
 const REQ: AiRequest = { system: 's', parts: [{ text: 't' }], schema: {}, params: { temperature: 0, candidateCount: 1 }, timeoutMs: 15_000 };
@@ -71,7 +72,7 @@ describe('generateRetry503', () => {
 });
 
 describe('正式路径：voiceWithAI 503 重试一次，parseWithAI 不重试', () => {
-  const { parseWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
+  const { parseWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay, projectCategories: PROJECT_CATEGORIES });
   const input: ParseInput = { text: '明天下午三点开会', now: Date.UTC(2026, 9, 28, 3, 0), tz: 'Asia/Seoul', locale: 'zh', projects: [], features: ['event', 'todo'] };
   it('voiceWithAI：第一次 503、第二次成功 → ok，第二次超时不超过 15 秒', async () => {
     let n = 0;
@@ -97,7 +98,7 @@ describe('正式路径：voiceWithAI 503 重试一次，parseWithAI 不重试', 
 });
 
 describe('ai-voice：503 重试透出 retried（11-11 架构复审）', () => {
-  const { voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
+  const { voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay, projectCategories: PROJECT_CATEGORIES });
   const EV = { kind: 'event', title: '开会', date: '2026-10-29', time: '15:00', date_basis: 'rel' };
   const OK = okJson({ transcript: '明天下午三点开会', items: [EV] });
   function run(replies: (AiResult | 'throw')[], extra: Partial<VoiceDeps<AiItem>> = {}, o: GateOpts = {}) {

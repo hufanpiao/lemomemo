@@ -7,8 +7,9 @@ import { makeParseWithAI } from '../../supabase/functions/_shared/ai/parse-core.
 import { handle as parseHandle, MAX_BODY, type Deps as ParseDeps } from '../../supabase/functions/ai-parse/core.ts';
 import { bytesBucket, decodeProjects, handle as voiceHandle, MAX_PROJECTS_HEADER, readCapped, type Deps as VoiceDeps } from '../../supabase/functions/ai-voice/core.ts';
 import { fakeGate, okJson, UA, used, type GateOpts } from './ai-fakes.ts';
+import { PROJECT_CATEGORIES } from '../../shared/logic/project-color.ts';
 
-const { parseWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
+const { parseWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay, projectCategories: PROJECT_CATEGORIES });
 const NOW = Date.UTC(2026, 9, 28, 3, 0);
 const EV = { kind: 'event', title: '开会', date: '2026-10-29', time: '15:00', date_basis: 'rel' };
 const authed = async () => ({ ok: true as const, user: { userId: UA } });
