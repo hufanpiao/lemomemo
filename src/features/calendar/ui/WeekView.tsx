@@ -22,6 +22,7 @@ import { buildWeek, dayEntries, type DeskDay, type PhoneDay } from '../../../../
 import { projectColorIndex, type ProjectColor } from '../../../../shared/logic/project-color.ts';
 import { axisFrac, axisTicks, phoneScale, weekHourRange, type HourRange } from './week-axis.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
+import refine from '../../../kit/components/Refine.module.css';
 import styles from './CalendarPage.module.css';
 import { colorClass, dayKind, dayKindClass, holA11y, holText, itemShort, labelInName, namedHolidays, weekdayKey } from './cal-ui.ts';
 import { DeskWeek } from './DeskWeek.tsx';
@@ -225,7 +226,7 @@ function Lane({
           })}
         </span>{' '}
         <span className={styles.tdn} aria-hidden="true">
-          {total}
+          <span className={refine.num}>{total}</span>
           {overdue ? ' ' : null}
           {overdue ? <em>{t('cal.overdue', {})}</em> : null}
         </span>

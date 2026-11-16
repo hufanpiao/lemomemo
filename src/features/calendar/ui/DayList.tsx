@@ -20,6 +20,7 @@ import { eventEntry, liveEventsNear, type CalItems, type DayEntry } from '../../
 import { dayEntries } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyRow.tsx';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
@@ -106,7 +107,9 @@ export function DayList({
           {head}
           {lunarText && huangli === null ? ` · ${lunarText}` : ''}
         </span>
-        <span className={styles.dayListN}>{t('cal.day.count', { n: total })}</span>
+        <span className={styles.dayListN}>
+          <NumIn text={t('cal.day.count', { n: total })} num={String(total)} />
+        </span>
       </h2>
       {huangli === 'wait' ? <HuangliHold /> : huangli ? <HuangliCard key={date} h={huangli} t={t} /> : null}
       {total === 0 ? (

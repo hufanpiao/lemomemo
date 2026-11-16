@@ -29,6 +29,10 @@ export const zh = {
   'event.edit.projectPh': '比如：工作、家里',
   'event.edit.notePh': '补充说明（可不填）',
   'event.edit.raw': '原话',
+  // R-436 第二批（同纪念日编辑页）：表单分组小字、底部整宽删除行
+  'event.edit.groupTime': '时间',
+  'event.edit.groupDetail': '详情',
+  'event.edit.delete': '删除这个日程',
   'event.edit.st.empty': '写上标题才会保存',
   'event.edit.st.rejected': '格式不对，没保存上（标题太长、日期或时区不对）',
 } as const;

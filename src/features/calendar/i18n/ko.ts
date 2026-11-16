@@ -31,6 +31,9 @@ export const ko = {
   'event.edit.projectPh': '예: 회사, 집', // REVIEW(ko) G11 占位
   'event.edit.notePh': '덧붙일 내용 (선택)', // REVIEW(ko) G11 占位
   'event.edit.raw': '원래 한 말', // REVIEW(ko)
+  'event.edit.groupTime': '시간', // REVIEW(ko)
+  'event.edit.groupDetail': '자세히', // REVIEW(ko)
+  'event.edit.delete': '이 일정 삭제', // REVIEW(ko)
   'event.edit.st.empty': '제목을 써야 저장돼요', // REVIEW(ko)
   'event.edit.st.rejected': '형식이 맞지 않아 저장하지 못했어요 (제목이 너무 길거나 날짜·시간대가 맞지 않아요)', // REVIEW(ko)
 } as const satisfies Record<keyof typeof zh, string>;

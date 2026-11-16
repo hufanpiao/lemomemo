@@ -3,9 +3,10 @@
 // • 全天 / 有时刻：有时刻是固定时刻，按“时区”（只让选 Intl 支持的，D7）；和当前时区不同时写出“在你这里是哪天几点”
 // • 地点 / 链接：输入框下面用 kit 的 LocationText 显示，能过 safeHref 的才是可点的链接（SAFE-link-real）
 // • 只读行、删除和撤销：和待办编辑页同一套（kit 的 useEditRecord、EditShell）
+// • R-436 第二批（照纪念日编辑页）：时间、详情两组上面各一个小字分组名（kit GroupLabel）；底部整宽删除行写全“删除这个日程”
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
-import { Check, Field, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
+import { Check, Field, FormGroup, GroupLabel, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
 import { LocationText } from '../../../kit/components/LocationText.tsx';
 import { useCalendarT, type CalendarMsgKey } from '../hooks/useCalendarT.ts';
 import { ITEM_TITLE_MAX, LOCATION_MAX, NOTE_MAX, PROJECT_MAX, REMIND_MIN_OPTIONS, useEventEdit, type EventForm } from '../hooks/useEventEdit.ts';
@@ -39,6 +40,7 @@ export function EventEditor({ id, onCreated }: { id: string; onCreated(id: strin
       onBack={back}
       rec={ed}
       own={{ empty: t('event.edit.st.empty', {}), rejected: t('event.edit.st.rejected', {}) }}
+      deleteLabel={t('event.edit.delete', {})}
     >
       <FormGroup>
         <TextInput
@@ -53,6 +55,7 @@ export function EventEditor({ id, onCreated }: { id: string; onCreated(id: strin
         />
       </FormGroup>
 
+      <GroupLabel>{t('event.edit.groupTime', {})}</GroupLabel>
       <FormGroup>
         <Field label={t('event.edit.date', {})} htmlFor="event-date">
           <TextInput id="event-date" type="date" value={form.date} disabled={off} onCommit={(v) => v !== '' && change({ date: v })} data-testid="event-edit-date" />
@@ -121,6 +124,7 @@ export function EventEditor({ id, onCreated }: { id: string; onCreated(id: strin
         )}
       </FormGroup>
 
+      <GroupLabel>{t('event.edit.groupDetail', {})}</GroupLabel>
       <FormGroup>
         <Field label={t('event.edit.location', {})} htmlFor="event-location" hint={form.location ? <LocationText text={form.location} /> : undefined}>
           <TextInput

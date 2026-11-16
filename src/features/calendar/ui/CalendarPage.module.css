@@ -303,8 +303,10 @@
 
 .wd {
   padding: 6px 0 4px;
-  color: var(--text-2);
-  font-size: var(--fs-12);
+
+  /* 星期行是小字标签（R-436 第二批，照待办页的小字分组名）：第三层文字色、小一号 */
+  color: var(--text-3);
+  font-size: var(--fs-11);
   text-align: center;
 }
 
@@ -492,6 +494,9 @@
 
 .more {
   color: var(--text-2);
+
+  /* “+4”：等宽数字（R-436） */
+  font-family: var(--f-mono);
   font-size: var(--fs-9-5);
   line-height: 13px;
 }
@@ -568,10 +573,11 @@
   border-top: 1px solid var(--line);
 }
 
+/* 右边“6 项”：第三层文字色小字，只有数字等宽（R-436 第二批，同待办页分组名右边的条数；整串等宽时“项”前的空格变宽，DayList 用 NumIn 只包数字） */
 .dayListN {
   flex: none;
-  color: var(--text-2);
-  font-size: var(--fs-12);
+  color: var(--text-3);
+  font-size: var(--fs-11);
   font-weight: 400;
 }
 
@@ -693,8 +699,10 @@
 
   /* 和泳道按钮对齐：左边 8 内边距 + 64 星期列 + 8 间距，右边 8 + 28 + 8 */
   margin: 6px 44px 0 80px;
-  color: var(--text-2);
-  font-family: var(--f-num);
+
+  /* 时间刻度是小字标签：等宽数字、第三层文字色（R-436 第二批） */
+  color: var(--text-3);
+  font-family: var(--f-mono);
   font-size: var(--fs-10);
 }
 
@@ -746,7 +754,8 @@
 }
 
 .laneWd small {
-  color: var(--text-2);
+  /* “周一”和农历是日期上下的小字标签：第三层文字色（R-436 第二批） */
+  color: var(--text-3);
   font-size: var(--fs-10);
 }
 
@@ -922,6 +931,7 @@
   background: var(--nowline);
 }
 
+/* 泳道右边的条数：右对齐，数字等宽（R-436“日期时刻等宽数字”；WeekView 只给数字包 Refine 的 .num，“逾”照旧正文字）；“逾”红字只表示逾期 */
 .tdn {
   display: flex;
   flex-direction: column;
