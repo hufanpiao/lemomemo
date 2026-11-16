@@ -329,7 +329,10 @@ test.describe('底栏：进出没有底栏的页照旧 View Transition（代码�
           return { group: pick('::view-transition-group(tabbar)'), old: pick('::view-transition-old(tabbar)'), addGroup: pick('::view-transition-group(tabbar-add)'), addOld: pick('::view-transition-old(tabbar-add)') };
         },
         undefined,
-        { timeout: 2000, polling: 4 },
+        // 等过渡开始放宽到 10 秒：cb2bac25 的 CI webkit 诊断“帧 278 | 帧 3379 | … | 调用 3407”——点下去后主线程整卡 3 秒
+        // （无 GPU、backdrop-filter 软件合成，见 webkit-ci-nofx.ts 头注释），startViewTransition 3.4 秒才调到，原来 2 秒等不到。
+        // 切页过渡用例按规定不进关模糊名单（e2e-webkit-nofx.test.ts 禁 transition 文件名），所以只放宽等待；一出现过渡照旧当场暂停在 120 ms 读样式，断言不变
+        { timeout: 10_000, polling: 4 },
       )
       .then((h) => h.jsonValue());
   const finishAll = (page: Page) =>
