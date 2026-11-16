@@ -138,7 +138,7 @@ function AnnivList() {
       <ModeRow t={t} today={data.today} />
       <div className={styles.chips} role="group" aria-label={t('anniv.filterLabel', {})}>
         {FILTERS.map((f) => (
-          <button key={f} type="button" className={styles.chip} aria-pressed={filter === f} onClick={() => setFilter(f)} data-testid={`anniv-filter-${f}`}>
+          <button key={f} type="button" className={filter === f ? chip.chipOn : chip.chip} aria-pressed={filter === f} onClick={() => setFilter(f)} data-testid={`anniv-filter-${f}`}>
             {/* 条数只给数字等宽淡色（R-436，同待办页筛选胶囊的 kit .chipN；词条照旧整句） */}
             <NumIn text={t(FILTER_KEY[f], { n: data.counts[f] })} num={String(data.counts[f])} className={chip.chipN} />
           </button>

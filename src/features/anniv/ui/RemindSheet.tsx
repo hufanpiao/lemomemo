@@ -17,6 +17,7 @@ import { clock } from '../../../platform/clock.ts';
 import { annivLib } from '../hooks/anniv-view.ts';
 import { useAnnivT } from '../hooks/useAnnivT.ts';
 import { hm, offsText } from './anniv-text.ts';
+import chip from '../../../kit/components/Chip.module.css';
 import styles from './AnnivPage.module.css';
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
@@ -102,7 +103,7 @@ export function RemindSheet({
       <p className={styles.rmLabel}>{t('anniv.rm.daysLabel', {})}</p>
       <div className={`${styles.chips} ${styles.rmChips}`} role="group" aria-label={t('anniv.rm.daysLabel', {})}>
         {choices.map((n) => (
-          <button key={n} type="button" className={`${styles.chip} ${styles.rmChip}`} aria-pressed={offs.includes(n)} onClick={() => toggle(n)} data-testid={`anniv-rm-off-${n}`}>
+          <button key={n} type="button" className={`${offs.includes(n) ? chip.chipOn : chip.chip} ${styles.rmChip}`} aria-pressed={offs.includes(n)} onClick={() => toggle(n)} data-testid={`anniv-rm-off-${n}`}>
             {offsText([n], t)}
           </button>
         ))}

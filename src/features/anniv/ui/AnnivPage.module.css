@@ -34,37 +34,13 @@
   margin-bottom: 10px;
 }
 
-/* 筛选胶囊、提醒天数胶囊：高 36（视觉稿 anniv .chip），::after 上下外扩 4 凑够 44 点击区；条数是 kit Chip 的 .chipN（等宽淡色，R-436） */
+/* 筛选胶囊、提醒天数胶囊：用 kit 的 Chip.module.css（高 30、无描边浅底，和待办页筛选同一份，负责人 11-16“胶囊太大了！参考现在的待办页”）；
+   这里只管排布。kit 胶囊自带上下 7 外边距撑出 44 点击区，所以行距给 0、整排上下各收 7 */
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0;
-}
-
-.chip {
-  position: relative;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--panel);
-  color: var(--text);
-  font-size: var(--fs-13);
-  cursor: pointer;
-}
-
-.chip::after {
-  content: '';
-  position: absolute;
-  inset: -4px 0;
-}
-
-.chip[aria-pressed='true'] {
-  border-color: var(--chip-on-bg);
-  background: var(--chip-on-bg);
-  color: var(--chip-on-fg);
-  font-weight: 600;
+  column-gap: 8px;
+  margin: 5px 0;
 }
 
 /* “最近的一个”大卡（R-132 方案 C） */
@@ -463,11 +439,7 @@
 /* 弹层里提前几天的选项（视觉稿 annedit）：没选的只写字、不描边，选上的深色底带“✓”。
    一排胶囊紧跟在小标题下面（视觉稿：标题下隔 8，胶囊自己不再加上下边距） */
 .rmChips {
-  margin: 0;
-}
-
-.rmChip {
-  border-color: transparent;
+  margin: -7px 0;
 }
 
 .rmChip[aria-pressed='true']::before {
