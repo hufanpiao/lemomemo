@@ -16,7 +16,7 @@ import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
 import { PrioSeg } from '../../../kit/components/Priority.tsx';
-import { Check, Field, FieldLink, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
+import { Check, Field, FieldLink, FormButton, FormGroup, GroupLabel, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
 import { ITEM_TITLE_MAX, NOTE_MAX, PROJECT_MAX, REMIND_BEFORE_OPTIONS, useTodoEdit, type TodoSource } from '../hooks/useTodoEdit.ts';
 import { useTodosT, type TodosMsgKey } from '../hooks/useTodosT.ts';
 
@@ -49,6 +49,7 @@ export function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string
       onBack={back}
       rec={ed}
       own={{ empty: t('todo.edit.st.empty', {}), rejected: t('todo.edit.st.rejected', {}) }}
+      deleteLabel={t('todo.edit.delete', {})}
     >
       <FormGroup>
         <TextInput
@@ -83,12 +84,14 @@ export function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string
         </Suspense>
       </QuietBoundary>
 
+      {/* R-436 第二批（照纪念日、日程编辑页）：时间、详情两组上面各一个小字分组名 */}
+      <GroupLabel>{t('todo.edit.groupTime', {})}</GroupLabel>
       <FormGroup>
         <Field label={t('todo.edit.due', {})} htmlFor="todo-due">
           <TextInput id="todo-due" type="date" value={form.due ?? ''} disabled={off} onCommit={(v) => change({ due: v === '' ? null : v })} data-testid="todo-edit-due" />
           {/* 只读时“清掉”和“删除”一样不出（FA-2 视觉验收第二轮第 3 条） */}
           {form.due !== null && !readonly ? (
-            <FormButton onClick={() => change({ due: null })} disabled={off} data-testid="todo-edit-due-clear">
+            <FormButton size="compact" onClick={() => change({ due: null })} disabled={off} data-testid="todo-edit-due-clear">
               {t('todo.edit.clear', {})}
             </FormButton>
           ) : null}
@@ -104,7 +107,7 @@ export function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string
               data-testid="todo-edit-due-time"
             />
             {form.due_time !== null && !readonly ? (
-              <FormButton onClick={() => change({ due_time: null })} disabled={off} data-testid="todo-edit-due-time-clear">
+              <FormButton size="compact" onClick={() => change({ due_time: null })} disabled={off} data-testid="todo-edit-due-time-clear">
                 {t('todo.edit.clear', {})}
               </FormButton>
             ) : null}
@@ -149,6 +152,7 @@ export function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string
         )}
       </FormGroup>
 
+      <GroupLabel>{t('todo.edit.groupDetail', {})}</GroupLabel>
       <FormGroup>
         <Field label={t('todo.edit.project', {})} htmlFor="todo-project">
           <TextInput id="todo-project" value={form.project} maxLength={PROJECT_MAX} disabled={off} placeholder={t('todo.edit.projectPh', {})} onCommit={(v) => change({ project: v.trim() })} />

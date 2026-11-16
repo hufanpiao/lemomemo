@@ -36,6 +36,10 @@ export const zh = {
   'todo.edit.projectPh': '比如：工作、家里',
   'todo.edit.notePh': '补充说明（可不填）',
   'todo.edit.raw': '原话',
+  // R-436 第二批（同纪念日、日程编辑页）：表单分组小字、底部整宽删除行
+  'todo.edit.groupTime': '时间',
+  'todo.edit.groupDetail': '详情',
+  'todo.edit.delete': '删除这条待办',
   // R-415 ①（负责人定方案丙）：随手记转来的待办，最后一组“来源 随手记 · 标题 ›”；原随手记删了时变灰、下面一行说明
   'todo.edit.source': '来源',
   'todo.edit.sourceNote': '随手记',

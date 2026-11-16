@@ -37,6 +37,9 @@ export const ko = {
   'todo.edit.projectPh': '예: 회사, 집', // REVIEW(ko) G11 占位
   'todo.edit.notePh': '덧붙일 내용 (선택)', // REVIEW(ko) G11 占位
   'todo.edit.raw': '원래 한 말', // REVIEW(ko)
+  'todo.edit.groupTime': '시간', // REVIEW(ko)
+  'todo.edit.groupDetail': '자세히', // REVIEW(ko)
+  'todo.edit.delete': '이 할 일 삭제', // REVIEW(ko)
   'todo.edit.source': '출처', // REVIEW(ko) R-415
   'todo.edit.sourceNote': '메모', // REVIEW(ko) R-415：随手记的韩文名同 notes.title
   'todo.edit.st.empty': '제목을 써야 저장돼요', // REVIEW(ko)

@@ -147,8 +147,18 @@
   align-items: center;
   gap: 12px;
   min-height: var(--hit);
-  color: var(--text-2);
-  font-size: var(--fs-14);
+}
+
+/* “子任务”挂 kit 的小字分组名（groupLabelClass）；在卡片里面，不要它卡片外用的左右 14 和上下边距（两级选择器压过 .groupLabel） */
+.editHead > span:first-child {
+  margin: 0;
+}
+
+/* “2/4”：等宽小字、第三层文字色 */
+.editN {
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-11);
 }
 
 .editHead .bar {
@@ -235,8 +245,9 @@
   clip-path: inset(50%);
 }
 
+/* 编辑页已勾的子任务同样淡出到第三层文字色（R-436 第二批，原来是次要色） */
 .editRow[data-done] .editInput {
-  color: var(--text-2);
+  color: var(--text-3);
 }
 
 .addInput::placeholder {

@@ -10,7 +10,7 @@
 // • 不播动画：圆圈去掉过渡（Subtasks.module.css 的 .subs）；拖动只画放下位置的一条线
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { CheckCircle } from '../../../kit/components/CheckCircle.tsx';
-import { enterCommits, FormGroup, TextInput } from '../../../kit/components/Form.tsx';
+import { enterCommits, FormGroup, groupLabelClass, TextInput } from '../../../kit/components/Form.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useLayer } from '../../../kit/hooks/useLayer.ts';
 import { ITEMS_MAX, TODO_ITEM_TITLE_MAX, useSubtaskEditor } from '../hooks/useSubtaskEditor.ts';
@@ -87,10 +87,11 @@ export default function SubtaskEditor({ todoId, todo, off }: SubtaskEditorProps)
     <FormGroup>
       <div className={`${s.subs} ${s.edit}`} data-testid="todo-subs">
         <div className={s.editHead}>
-          <span>{t('items.title', {})}</span>
+          {/* “子任务”是小字分组名、“2/4”等宽小字（R-436 第二批，同待办页卡片右下的“2/4 · 收起”） */}
+          <span className={groupLabelClass}>{t('items.title', {})}</span>
           {total ? (
             <>
-              <span aria-hidden="true">{t('items.progress', { done, total })}</span>
+              <span className={s.editN} aria-hidden="true">{t('items.progress', { done, total })}</span>
               <SubtaskBar done={done} total={total} label={t('items.progress.a11y', { done, total })} testId="todo-subs-bar" />
             </>
           ) : null}
