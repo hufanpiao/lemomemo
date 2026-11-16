@@ -118,6 +118,7 @@ export const ko = {
   'vault.err.badImage': '이 사진은 처리할 수 없어요. 다른 사진으로 해 보세요', // REVIEW(ko)
   'vault.err.rateLimited': '너무 자주 시도했어요. 잠시 뒤 다시 해 주세요', // REVIEW(ko)
   'vault.err.tryLater': '서버가 바빠요. 잠시 뒤 다시 시도해 주세요', // REVIEW(ko)
+  'vault.err.stale': '다른 곳에서 방금 바뀐 메모라 옮기지 않았어요', // REVIEW(ko) R-429
   'vault.err.revoked': '로그인이 만료됐어요. 다시 로그인해 주세요', // REVIEW(ko)
   'vault.err.offline': '비밀 메모는 인터넷에 연결돼야 쓸 수 있어요. 연결한 뒤 다시 시도해 주세요', // REVIEW(ko)
   'vault.err.upgrade': '먼저 앱을 업데이트해 주세요', // REVIEW(ko)

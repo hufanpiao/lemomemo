@@ -46,6 +46,22 @@ describe('save、list（加密存、解密读）', () => {
     expect((await call(w, save(N1, { sort_key: '170', updated_at: 5 }), { token: tok })).status).toBe(400);
   });
 
+  it('只拖了顺序带 base_updated_at（R-429）：库里 updated_at 对得上才写；别处刚改过回 409 stale、正文和排序值都不动', async () => {
+    const w = world();
+    const tok = await unlocked(w);
+    await call(w, save(N1, { updated_at: 3 }), { token: tok });
+    expect((await call(w, save(N1, { sort_key: '17', updated_at: 3, base_updated_at: 3 }), { token: tok })).status).toBe(200);
+    // 另一台设备改了正文（updated_at 7）；这台还拿着旧正文、旧 updated_at 拖了一下
+    await call(w, save(N1, { body: '别处改的', updated_at: 7 }), { token: tok });
+    const r = await call(w, save(N1, { sort_key: '19', updated_at: 3, base_updated_at: 3 }), { token: tok });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toBe('stale');
+    const n = ((await call(w, { action: 'list' }, { token: tok })).body.notes as { body: string; sort_key: string | null; updated_at: number }[])[0];
+    expect(n).toMatchObject({ body: '别处改的', sort_key: '17', updated_at: 7 });
+    // 新建（库里没有这一条）不看 base
+    expect((await call(w, save(N2, { base_updated_at: 99 }), { token: tok })).status).toBe(200);
+  });
+
   it('add_images 预登记图片行（skip / vault_off，按报的 bytes 算额度；不查 R2，整块评审第 3、10 条）；原样重发算成功', async () => {
     const w = world();
     const tok = await unlocked(w);

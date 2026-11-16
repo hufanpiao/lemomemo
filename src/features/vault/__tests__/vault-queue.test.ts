@@ -38,6 +38,7 @@ function harness(o: { save?: (r: SaveReq) => Reply; del?: () => Reply; upload?: 
       return o.upload ? o.upload(part) : OK;
     },
     seed: (id) => seeded.push(id),
+    reload: () => calls.push('reload'),
     now: () => clock.ms,
     sleep: async (ms) => {
       sleeps.push(ms);
@@ -188,6 +189,37 @@ describe('发送队列', () => {
     expect(h.saves).toHaveLength(1);
     expect(h.sleeps).toEqual([]);
     expect(h.store.getSnapshot().failed.has(NID)).toBe(true);
+  });
+
+  it('只拖了顺序（R-429）：save 带 base_updated_at；回 stale 丢掉这一笔、记一次 stale、重新拉列表，不标没保存上', async () => {
+    const h = harness({ save: () => ({ ok: false, code: 'stale' }) });
+    h.q.wrote({ ...row('x'), sort_key: '17', updated_at: 5 }, false, true);
+    await settle();
+    expect(h.saves[0]).toMatchObject({ sort_key: '17', updated_at: 5, base_updated_at: 5 });
+    expect(h.calls).toEqual(['save', 'reload']);
+    expect(h.store.getSnapshot()).toMatchObject({ stale: 1 });
+    expect(h.store.getSnapshot().failed.has(NID)).toBe(false);
+    expect(h.q.has(NID)).toBe(false);
+    h.store.ackStale();
+    expect(h.store.getSnapshot().stale).toBe(0);
+  });
+
+  it('拖动那一笔在路上时又改了正文：stale 回来不丢，马上不带 base 重发正文；新建不带 base（照旧后写的算数）', async () => {
+    const first = held();
+    let n = 0;
+    const h = harness({ save: () => (++n === 1 ? first.p : OK) });
+    h.q.wrote(row('x'), false, true);
+    await settle();
+    h.q.wrote(row('改了'), false, false);
+    first.release({ ok: false, code: 'stale' });
+    await settle();
+    expect(h.saves.map((s) => [s.body, s.base_updated_at])).toEqual([['x', expect.any(Number)], ['改了', undefined]]);
+    expect(h.calls).not.toContain('reload');
+    expect(h.store.getSnapshot().stale).toBe(0);
+    const g = harness();
+    g.q.wrote(row('新'), true, true);
+    await settle();
+    expect(g.saves[0]?.base_updated_at).toBeUndefined();
   });
 
   it('令牌过期（会话上锁时 pause，save 回 vault_locked）：这一条原样留着不退避；resume 后整条重发', async () => {

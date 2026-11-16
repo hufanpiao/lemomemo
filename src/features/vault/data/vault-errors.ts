@@ -34,6 +34,7 @@ export type VaultMsgKey =
   | 'vault.err.revoked'
   | 'vault.err.offline'
   | 'vault.err.upgrade'
+  | 'vault.err.stale'
   | 'vault.err.unknown';
 
 export type VaultErrKind = 'unlock' | 'relock' | 'setup' | 'pin_wrong' | 'pin_locked' | 'reauth' | 'webauthn' | 'revoked' | 'retry' | 'message';
@@ -85,6 +86,8 @@ export function serverAction(code: VaultErrorCode): VaultErrAction {
       return act('retry', 'vault.err.rateLimited');
     case 'try_later':
       return act('retry', 'vault.err.tryLater');
+    case 'stale':
+      return act('message', 'vault.err.stale');
     default:
       return unhandled(code);
   }

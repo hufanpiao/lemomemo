@@ -15,7 +15,7 @@ import type { Row } from '../data/note-list.ts';
 import type { NoteSource, NoteSync } from './note-source.ts';
 import { insertImage, useImageSrc, useNoteImages } from './useNoteImages.ts';
 
-const NO_SYNC: NoteSync = { failed: new Set(), dropped: 0, retry: () => undefined, ack: () => undefined };
+const NO_SYNC: NoteSync = { failed: new Set(), dropped: 0, stale: 0, retry: () => undefined, ack: () => undefined, ackStale: () => undefined };
 
 export const notesSource: NoteSource = {
   kind: 'notes',

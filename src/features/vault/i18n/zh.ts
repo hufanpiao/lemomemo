@@ -116,6 +116,7 @@ export const zh = {
   'vault.err.badImage': '这张图处理不了，换一张试试',
   'vault.err.rateLimited': '操作太频繁，请稍后再试',
   'vault.err.tryLater': '服务器忙，稍后再试',
+  'vault.err.stale': '这条刚在别处改过，没有移动',
   'vault.err.revoked': '登录已失效，请重新登录',
   'vault.err.offline': '要联网才能用隐私记，连上网络后再试',
   'vault.err.upgrade': '请先更新 App',

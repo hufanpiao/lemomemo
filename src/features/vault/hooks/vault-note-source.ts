@@ -156,7 +156,8 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
       }
       const r = store.patch(id, data);
       if (!r) return 'rejected';
-      queue.wrote(r, false);
+      // 只拖了顺序（R-429）：队列 save 带 base_updated_at，别处刚改过就不写（vault-queue.ts 文件头）
+      queue.wrote(r, false, Object.keys(data).every((k) => k === 'sort_key'));
       s.touch();
       return 'saved';
     },
@@ -276,7 +277,7 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
     },
     useSync(): NoteSync {
       const snap = useVaultStore();
-      return useMemo(() => ({ failed: snap.failed, dropped: snap.dropped, retry: (id: string) => queue.retry(id), ack: () => store.ackDropped() }), [snap]);
+      return useMemo(() => ({ failed: snap.failed, dropped: snap.dropped, stale: snap.stale, retry: (id: string) => queue.retry(id), ack: () => store.ackDropped(), ackStale: () => store.ackStale() }), [snap]);
     },
   };
 }

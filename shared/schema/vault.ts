@@ -27,6 +27,7 @@ export const VAULT_ERROR_CODES = [
   'bad_image',             // 415  不是 webp（文件头不是 RIFF????WEBP）
   'rate_limited',          // 429  每人每分钟 60 次（vault-image 30 次）；交接设备行另见 account
   'try_later',             // 503  数据库、R2 暂时不通
+  'stale',                 // 409  save 带了 base_updated_at（R-429 隐私记只拖了顺序）而库里这条的 updated_at 对不上：别处刚改过，什么都没写
 ] as const;
 export const vaultErrorCode = z.enum(VAULT_ERROR_CODES);
 export type VaultErrorCode = z.infer<typeof vaultErrorCode>;
@@ -96,6 +97,8 @@ export const vaultRequest = z.discriminatedUnion('action', [
     category_id: uuid.nullable(), created_at: ms, updated_at: ms,
     // 拖动排序的排序值（R-429）：放进加密载荷；不带（旧客户端）就保留密文里原来的那个
     sort_key: sortKey.optional(),
+    // 只拖了顺序（R-429）时带上本机这条最后一次从服务器拿到的 updated_at：库里对不上（别处刚改过）回 409 stale、不写，不拿旧正文盖掉别处的改动
+    base_updated_at: ms.optional(),
     add_images: z.array(vaultImageAdd).max(VAULT_IMAGES_PER_SAVE).optional(),
     remove_images: z.array(uuid).max(VAULT_IMAGES_PER_SAVE).optional() }),
   z.object({ action: z.literal('delete'), id: uuid }),

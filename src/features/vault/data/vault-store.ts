@@ -19,6 +19,8 @@ export interface StoreSnap {
   uploads: ReadonlyMap<string, UploadState>;
   fresh: ReadonlySet<string>;
   dropped: number;
+  /** 只拖了顺序、服务器回 stale（别处刚改过）没移动的条数（R-429）；看过才清 */
+  stale: number;
 }
 
 /** 行里的字符串字段（不是字符串就当空；队列发 save、回收站显示标题共用这一份） */
@@ -44,6 +46,7 @@ export function createVaultStore() {
   let uploads: ReadonlyMap<string, UploadState> = new Map();
   let fresh: ReadonlySet<string> = new Set();
   let dropped = 0;
+  let stale = 0;
   let snap: StoreSnap | null = null;
   const listeners = new Set<() => void>();
 
@@ -62,7 +65,7 @@ export function createVaultStore() {
 
   return {
     getSnapshot(): StoreSnap {
-      snap ??= { notes: [...notes.values()], images: [...images.values()], failed, uploads, fresh, dropped };
+      snap ??= { notes: [...notes.values()], images: [...images.values()], failed, uploads, fresh, dropped, stale };
       return snap;
     },
     subscribe(fn: () => void): () => void {
@@ -153,6 +156,15 @@ export function createVaultStore() {
     ackDropped(): void {
       if (dropped === 0) return;
       dropped = 0;
+      changed();
+    },
+    addStale(): void {
+      stale += 1;
+      changed();
+    },
+    ackStale(): void {
+      if (stale === 0) return;
+      stale = 0;
       changed();
     },
   };

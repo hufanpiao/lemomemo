@@ -7,7 +7,8 @@
 //   客户端随后经 vault-image 上传对象——vault-image 只收已登记、没删的 image_id，原图字节数必须等于登记的 bytes（11-14 整块评审第 3 条，
 //   和普通插图“先写行、/files 再按行核 content_length”同一口径；这里不再 HEAD R2，整块评审第 10 条随之没有了）；
 //   同 id 已经有行：是这条、没删、字节数和有无缩略图都一样的算重发成功；对不上，或行在别的随手记、别人名下，一律 400 bad_request、什么都不写（整块评审第 12 条）；
-//   remove_images：软删，事务提交后尽力删对象（整块评审第 2 条）。
+//   remove_images：软删，事务提交后尽力删对象（整块评审第 2 条）；
+//   base_updated_at（R-429：客户端只拖了顺序时带）：库里这条的 updated_at 对不上就回 409 stale、什么都不写（别处刚改过正文，不拿旧正文盖掉）。
 // • delete / undelete：软删和恢复；purge：private.purge_vault_impl，只删已软删的，回删了几条；图片行随外键级联，提交后尽力删对象。
 // • 解不开的密文（钥匙换了、数据坏了）不回这一条，记一次 decrypt_failed，不让整张列表失败。
 import { ENC_KEY_ID, openNote, sealNote } from '../_shared/vault-crypto.ts';
@@ -61,10 +62,11 @@ async function keptSortKey(c: Ctx, key: CryptoKey, cur: NoteRow | null): Promise
   return (await openNote(key, c.userId, cur.id, cur.enc_key_id, cur.body_enc))?.sort_key ?? null;
 }
 
-/** {save, id, title, body, category_id, created_at, updated_at, sort_key?, add_images?, remove_images?} */
+/** {save, id, title, body, category_id, created_at, updated_at, sort_key?, base_updated_at?, add_images?, remove_images?} */
 export async function save(c: Ctx, t: VaultTx, r: ReqOf<'save'>): Promise<Out | Response> {
   const cur = await t.note(r.id);
   if (cur && (!cur.is_private || cur.deleted_at !== null)) return err(404, 'not_found');
+  if (cur && r.base_updated_at !== undefined && cur.updated_at !== r.base_updated_at) return err(409, 'stale');
   const add = r.add_images?.length ? await toRegister(t, r.id, cur !== null, r.add_images) : [];
   if (add instanceof Response) return add;
   const key = await noteKey(c);

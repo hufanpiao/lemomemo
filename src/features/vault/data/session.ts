@@ -141,6 +141,7 @@ export function createVaultSession(d: VaultSessionDeps) {
       return r;
     },
     seed: (imageId, full, thumb) => seedImage(imageId, full, thumb),
+    reload: () => void list(),
     now,
     sleep,
     log: rlog,

@@ -28,7 +28,7 @@ export type VaultReq =
   | { action: 'list' }
   | {
     action: 'save'; id: Uuid; title: string; body: string; category_id: Uuid | null; created_at: number; updated_at: number;
-    sort_key?: string | null | undefined;
+    sort_key?: string | null | undefined; base_updated_at?: number | undefined;
     add_images?: ImageAdd[] | undefined; remove_images?: Uuid[] | undefined;
   }
   | { action: 'delete'; id: Uuid }
@@ -208,7 +208,7 @@ export const out = (body: Record<string, unknown>, epoch: number | null): Out =>
 
 export type VaultErrCode =
   | 'vault_locked' | 'vault_relock' | 'not_set' | 'already_set' | 'bad_pin' | 'pin_wrong' | 'pin_locked' | 'reauth_required'
-  | 'webauthn_failed' | 'webauthn_unavailable' | 'not_found' | 'too_large' | 'bad_image' | 'rate_limited' | 'try_later'
+  | 'webauthn_failed' | 'webauthn_unavailable' | 'not_found' | 'too_large' | 'bad_image' | 'rate_limited' | 'try_later' | 'stale'
   | 'bad_request' | 'method_not_allowed';
 export const err = errorResponder<VaultErrCode>();
 

@@ -1,10 +1,14 @@
 /* 长按拖动排序（kit，SortDrag.tsx；R-429、R-433）：只用令牌（A11）；动效只动 transform、opacity。
    • .box：列表外框（落点横线相对它定位）
    • .row：能拖的行（li、卡片）。定位给 6 个点；长按不出 iPhone 的放大镜、“拷贝”菜单，不选字（拖动要用长按）
-   • [data-sort-lifted]：被拿起的那一行，浮在别的行上面、带投影；位移由 SortDrag.tsx 跟手直接写 transform，这里不写过渡（跟手不能拖慢）
-   • .grip：竖排 6 个点（两列三行，3px 圆点、间隔 2px），放在行左边缘外侧（待办行的勾选框左边，参考图 2；--sort-grip-x 可改），
-     平时透明，被拿起的那一行才显出来（opacity 过渡 --dur-ui；减少动态效果时直接显出）
-   • .line：落点那一条强调色细横线（2px、圆头）；位置和宽由 SortDrag.tsx 写（transform、width），盖在行上面、不接点按
+   • [data-sort-lifted]：被拿起的那一行留在原处当空位：看不见、高度照占（下面的行不会从浮层底下露出来）
+   • .float：复制出来挂在 body 上的浮层（主持人 11-16 返工第 1、2 条）：贴在视口上（z-index 2：挂在 body 上，压住页面内容和顶部模糊带 --z-strip 1，在随手记整页模糊 --z-notes-mist 4、输入行、底栏下面；
+     不加令牌：base.css 是底栏外观锁定文件），同列表卡片的圆角 --r-lg、
+     抬起阴影 --shadow-2、不透明底 --panel、放大 1.02；位置由 SortDrag.tsx 写 transform，换落点、放下归位时滑过去（--dur-ui），
+     减少动态效果（data-rm，系统设置由 look.ts 折进来）时直接到
+   • .grip：竖排 6 个点（两列三行，3px 圆点、间隔 2px），放在行左边缘（--sort-grip-x 可改；浮层圆角会裁掉外侧，默认放在里面贴左边），
+     平时透明，只在浮层里显出来
+   • .line：落点那一条强调色细横线（2px、圆头），画在两行之间的缝上；位置和宽由 SortDrag.tsx 写（transform、width），不接点按
    • 外框 [data-sort-dragging]：拖着的时候整个列表不接悬停、光标是“抓着” */
 
 .box {
@@ -18,24 +22,38 @@
 }
 
 .row[data-sort-lifted] {
+  visibility: hidden;
+}
+
+.float {
+  position: fixed;
   z-index: 2;
-  border-radius: var(--r-md);
+  box-sizing: border-box;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--r-lg);
   background: var(--panel);
   box-shadow: var(--shadow-2);
-  opacity: 0.96;
+  list-style: none;
+  pointer-events: none;
+  transform-origin: center;
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+
+:global(:root[data-rm="1"]) .float {
+  transition: none;
 }
 
 .grip {
   position: absolute;
   top: 50%;
-  left: var(--sort-grip-x, -13px);
+  left: var(--sort-grip-x, 4px);
   display: grid;
   grid-template-columns: repeat(2, 3px);
   gap: 2px;
   margin-top: -6.5px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--dur-ui) var(--ease-out);
 }
 
 .grip > i {
@@ -45,12 +63,8 @@
   background: var(--text-3);
 }
 
-.row[data-sort-lifted] .grip {
+.float .grip {
   opacity: 1;
-}
-
-:global(:root[data-rm="1"]) .grip {
-  transition: none;
 }
 
 .line {

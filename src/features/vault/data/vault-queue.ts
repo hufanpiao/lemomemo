@@ -10,6 +10,8 @@
 // • 上锁（session.ts 的 lock）：令牌过期那种 pause()——不发、不丢，锁着时编辑页卸下补交的改动 patched() 先记下来（只有改了的字段），
 //   解锁拉完列表 overlay() 合并到拉来的那一行、盖回仓库，resume() 接着发；
 //   别的上锁调 dropAll()：全部丢掉、个数记进仓库（解锁后报“有 N 处改动没来得及保存”），运行日志 vault queue drop n=（不带内容）
+// • 只拖了顺序（R-429，这一条排着的改动只有 sort_key）：save 带 base_updated_at（拖动不改 updated_at，就是最后一次从服务器拿到的那个）；
+//   服务器回 stale（别处刚改过）：丢掉这一笔、仓库记一次 stale（页面出“这条刚在别处改过，没有移动”）、重新拉列表（本机顺序回到服务器那份）
 // • 运行日志不记标题、正文、图片 id，只记动作、结果码、次数
 // • 不碰 core/cache、outbox、log（A18）；纯 TS，不准 import React（A1）
 import { sortKeyOf } from '../../../../shared/logic/sort-key.ts';
@@ -30,6 +32,8 @@ export interface SaveReq {
   sort_key: string | null;
   created_at: number;
   updated_at: number;
+  /** 只拖了顺序时带（R-429，见文件头） */
+  base_updated_at?: number;
   add_images?: VaultImageAdd[];
   remove_images?: string[];
 }
@@ -41,6 +45,8 @@ export interface QueueDeps {
   upload(noteId: string, imageId: string, part: 'full' | 'thumb', blob: Blob): Promise<VaultResult<unknown>>;
   /** 本机那一份图放进会话的图片表（做成 blob 地址，上锁时撤销）：解锁后 overlay 时补一次 */
   seed(imageId: string, full: Blob, thumb: Blob | null): void;
+  /** 重新拉列表（服务器回 stale 时，本机顺序回到服务器那份） */
+  reload(): void;
   now(): number;
   sleep(ms: number): Promise<void>;
   log(line: string): void;
@@ -75,6 +81,8 @@ interface Job {
   known: boolean;
   /** 锁着时记下的改动（row 只有改了的字段）：overlay 合并成整行以前不发 */
   partial: boolean;
+  /** 排着的改动只有排序值（R-429）：save 带 base_updated_at */
+  sortOnly: boolean;
   lastSave: number;
   /** 这个时刻以前不发（退避、两次 save 的间隔；M4：每条自己记，不让别的条跟着等） */
   nextAt: number;
@@ -116,7 +124,7 @@ export function createVaultQueue(d: QueueDeps) {
   const jobOf = (row: Row, known: boolean): Job => {
     let j = jobs.get(row.id);
     if (!j) {
-      j = { id: row.id, row, v: 0, dirty: false, del: null, adds: new Map(), removes: new Set(), known, partial: false, lastSave: 0, nextAt: 0, tries: 0, failed: false, waiters: [] };
+      j = { id: row.id, row, v: 0, dirty: false, del: null, adds: new Map(), removes: new Set(), known, partial: false, sortOnly: true, lastSave: 0, nextAt: 0, tries: 0, failed: false, waiters: [] };
       jobs.set(row.id, j);
     }
     j.row = j.partial ? { ...j.row, ...row } : row;
@@ -152,6 +160,18 @@ export function createVaultQueue(d: QueueDeps) {
   async function fail(j: Job, code: VaultCode, imageId: string | null): Promise<void> {
     const kind = vaultErrorAction(code).kind;
     d.log(`vault queue fail ${code}${imageId ? ' img' : ''} try=${j.tries}`);
+    if (code === 'stale') {
+      // 在路上时又改了正文（不再只是拖动）：不丢，马上不带 base 重发（编辑照旧后写的算数）
+      if (!j.sortOnly) {
+        j.nextAt = 0;
+        return;
+      }
+      jobs.delete(j.id);
+      d.store.addStale();
+      finish(j, false);
+      d.reload();
+      return;
+    }
     // 会话上锁时已经 pause：原样留着等 resume（没暂停的 vault_locked 不会有，万一有就落成 failed，不空转）
     if (kind === 'unlock' && paused) return;
     if (kind === 'relock' || kind === 'revoked') {
@@ -185,6 +205,7 @@ export function createVaultQueue(d: QueueDeps) {
         id: j.id, title: str(row['title']).trim(), body: str(row['body']),
         category_id: typeof row['category_id'] === 'string' ? row['category_id'] : null, sort_key: sortKeyOf(row),
         created_at: num(row['created_at'], now), updated_at: num(row['updated_at'], now),
+        ...(j.sortOnly && j.known ? { base_updated_at: num(row['updated_at'], now) } : {}),
         ...(adds.length ? { add_images: adds.map((a) => ({ id: a.id, bytes: a.full.size, width: a.width || null, height: a.height || null, has_thumb: a.thumb !== null })) } : {}),
         ...(removes.length ? { remove_images: removes } : {}),
       });
@@ -270,9 +291,10 @@ export function createVaultQueue(d: QueueDeps) {
   };
 
   return {
-    /** 新建或改了内容（isNew：本机刚建的，服务器上还没有） */
-    wrote(row: Row, isNew: boolean): void {
+    /** 新建或改了内容（isNew：本机刚建的，服务器上还没有；sortOnly：这一下只改了排序值，R-429） */
+    wrote(row: Row, isNew: boolean, sortOnly = false): void {
       const j = jobOf(row, !isNew);
+      j.sortOnly &&= sortOnly && !isNew;
       if (!j.known) d.store.setFresh(j.id, true);
       j.dirty = true;
       j.v += 1;
@@ -281,6 +303,7 @@ export function createVaultQueue(d: QueueDeps) {
     /** 锁着（令牌过期、仓库已清）时编辑页卸下补交的改动：只记改了的字段，解锁拉完列表 overlay 合并成整行再发 */
     patched(id: string, data: Record<string, unknown>): void {
       const j = jobs.get(id) ?? Object.assign(jobOf({ id }, true), { partial: true });
+      j.sortOnly = false;
       j.row = { ...j.row, ...data, id };
       j.dirty = true;
       j.v += 1;
@@ -303,12 +326,15 @@ export function createVaultQueue(d: QueueDeps) {
     },
     /** 删除、撤销删除 */
     deleted(row: Row, deleted: boolean): void {
-      jobOf(row, true).del = deleted;
+      const j = jobOf(row, true);
+      j.sortOnly = false;
+      j.del = deleted;
       kick();
     },
     /** 插一张图（行已经在仓库里）：仓库里多一张“上传中”，字节等着传 */
     addImage(row: Row, img: QueuedImage): void {
       const j = jobOf(row, jobs.get(row.id)?.known ?? true);
+      j.sortOnly = false;
       j.adds.set(img.id, { ...img, registered: false, done: { full: false, thumb: false } });
       d.store.setUpload(img.id, 'uploading');
       kick();
@@ -316,6 +342,7 @@ export function createVaultQueue(d: QueueDeps) {
     /** 删一张图：还没登记的就地丢掉，登记过的、本来就有的下次 save 带 remove_images */
     removeImage(row: Row, imageId: string): void {
       const j = jobOf(row, jobs.get(row.id)?.known ?? true);
+      j.sortOnly = false;
       const a = j.adds.get(imageId);
       j.adds.delete(imageId);
       d.store.setUpload(imageId, null);

@@ -72,6 +72,21 @@ function edgeSpeed(y: number, top: number, bottom: number): number {
 }
 
 /** 挂到列表外框元素上（box 换了就重挂；null 不挂） */
+/** 从下一帧起每帧调一次 step，直到它回 true；返回取消函数（kit SortDrag 放下后等列表画好、浮层归位用，A25：帧循环只写在 motion 里） */
+export function eachFrame(step: () => boolean): () => void {
+  let id = 0;
+  let dead = false;
+  const tick = (): void => {
+    if (dead || step()) return;
+    id = requestAnimationFrame(tick);
+  };
+  id = requestAnimationFrame(tick);
+  return () => {
+    dead = true;
+    cancelAnimationFrame(id);
+  };
+}
+
 export function useLongPressDrag(box: HTMLElement | null, opts: LongPressDragOptions): void {
   const o = useRef(opts);
   o.current = opts;

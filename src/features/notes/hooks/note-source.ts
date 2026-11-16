@@ -56,9 +56,13 @@ export interface NoteImagesApi {
 export interface NoteSync {
   failed: ReadonlySet<string>;
   dropped: number;
+  /** 隐私记只拖了顺序、别处刚改过没移动的条数（R-429） */
+  stale: number;
   retry(id: string): void;
   /** 看过“有 N 处改动没来得及保存”了 */
   ack(): void;
+  /** 看过“这条刚在别处改过，没有移动”了 */
+  ackStale(): void;
 }
 
 export interface NoteAttachmentsProps {

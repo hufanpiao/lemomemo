@@ -121,4 +121,5 @@ export const zh = {
   'notes.sync.retry': '重试',
   'notes.sync.dropped': '有 {n} 处改动没来得及保存',
   'notes.sync.ok': '知道了',
+  'notes.sync.stale': '这条刚在别处改过，没有移动',
 } as const;

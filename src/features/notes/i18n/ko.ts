@@ -116,4 +116,5 @@ export const ko = {
   'notes.sync.retry': '다시 시도', // REVIEW(ko) B5 隐私记重写
   'notes.sync.dropped': '저장하지 못한 변경 {n}건이 있어요', // REVIEW(ko) B5 隐私记重写
   'notes.sync.ok': '확인', // REVIEW(ko) B5 隐私记重写
+  'notes.sync.stale': '다른 곳에서 방금 바뀐 메모라 옮기지 않았어요', // REVIEW(ko) R-429
 } as const satisfies Record<keyof typeof zh, string>;

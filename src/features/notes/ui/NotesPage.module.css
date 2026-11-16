@@ -160,9 +160,6 @@
 }
 
 .card {
-  /* 拖动时的 6 个点放在卡片里面（卡片裁了圆角，放外面会被裁掉；R-429） */
-  --sort-grip-x: 4px;
-
   break-inside: avoid;
   margin-bottom: 10px;
   border-radius: 22px;

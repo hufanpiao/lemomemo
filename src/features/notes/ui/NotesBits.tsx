@@ -57,6 +57,21 @@ export function SyncDropped() {
   );
 }
 
+/** 隐私记拖动后服务器回 stale（R-429）：“这条刚在别处改过，没有移动”；点“知道了”收起 */
+export function SyncStale() {
+  const t = useNotesT();
+  const sync = useNoteSource().useSync();
+  if (sync.stale === 0) return null;
+  return (
+    <p className={styles.error} role="alert" data-testid="notes-sync-stale">
+      {t('notes.sync.stale', {})}
+      <Pressable type="button" className={styles.tipLink} onClick={sync.ackStale} data-testid="notes-sync-stale-ok">
+        {t('notes.sync.ok', {})}
+      </Pressable>
+    </p>
+  );
+}
+
 /** “附件 N”（B4b-1，线框 sAtt 第三张 ATB：列表行尾、瀑布流卡片底部）；没附件不画 */
 export function FilesMark({ n }: { n: number }) {
   const t = useNotesT();

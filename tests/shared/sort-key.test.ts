@@ -96,7 +96,8 @@ describe('planMove', () => {
 
   it('跨组拖进来（不在 list 里）：带上原来的键当 prev', () => {
     const w = planMove(list, 'x', 2, NOW, '77');
-    expect(w).toEqual([{ id: 'x', key: expect.any(String), prev: '77' }]);
+    // deno 的 expect 垫片没有 expect.any：键单独比
+    expect(w.map((x) => ({ ...x, key: typeof x.key }))).toEqual([{ id: 'x', key: 'string', prev: '77' }]);
     expect(w[0]!.key < '14' && w[0]!.key > '13').toBe(true);
   });
 

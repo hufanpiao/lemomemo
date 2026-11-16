@@ -75,7 +75,7 @@ import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
 import { ConvertAsk, MoveAsk, MergeBar, MoreMenu, needsAsk, swipeActs, useConvertFlow, type PageTip } from './NotesActions.tsx';
 import { Dot } from './CatDot.tsx';
-import { AiMark, Chip, ConvMark, DockTip, FilesMark, RoMark, RowText, SyncDropped, SyncMark, TrashLink, UndoBar } from './NotesBits.tsx';
+import { AiMark, Chip, ConvMark, DockTip, FilesMark, RoMark, RowText, SyncDropped, SyncMark, SyncStale, TrashLink, UndoBar } from './NotesBits.tsx';
 import { InputRow, useInputDraft } from './NotesInputRow.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import styles from './NotesPage.module.css';
@@ -255,6 +255,7 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
         </QuietBoundary>
       ) : null}
       <SyncDropped />
+      <SyncStale />
 
       {merge ? <MergeBar hint={merge} onResult={report} onMerged={(h) => guard.show(mergeUndo(h.key, () => void h.undo().then(report)))} /> : null}
 
