@@ -4,6 +4,8 @@
 // • 11-15 加 TrashLink：列表上方居中的“最近删除”入口（原来在 vault 的 VaultPage，挪来两种来源共用）；链接本身是 kit 的 TrashLink（审查 11-15 第 2 条），这里只按来源给去哪、文案和条数
 // • 同步状态都从 hooks/note-source.ts 来源的 useSync 读（普通随手记一直是空的，什么都不画）；列表上的 failed 由列表层读一次传进来，每行不各订一份
 import type { ReactNode } from 'react';
+import chip from '../../../kit/components/Chip.module.css';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyRow.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
@@ -122,11 +124,13 @@ export function DockTip({ toast }: { toast: { kind: 'error' } | Exclude<PageTip,
   );
 }
 
-export function Chip({ on, onClick, label, color, testId }: { on: boolean; onClick(): void; label: string; color: string | null; testId: string }) {
+/** 分类筛选胶囊（R-436，照待办页 518f49a0）：kit 的 Chip.module.css（高 30、无描边浅底，负责人 11-16“胶囊太大了！参考现在的待办页”）；
+ *  色点 8px（视觉稿 .chip .d）；条数只给数字等宽淡色（kit .chipN），词条照旧整句（“全部 {n}”） */
+export function Chip({ on, onClick, label, n, color, testId }: { on: boolean; onClick(): void; label: string; n: number; color: string | null; testId: string }) {
   return (
-    <Pressable className={on ? styles.chipOn : styles.chip} aria-pressed={on} onClick={onClick} data-testid={testId}>
+    <Pressable className={on ? chip.chipOn : chip.chip} aria-pressed={on} onClick={onClick} data-testid={testId}>
       <Dot color={color} big />
-      {label}
+      <NumIn text={label} num={String(n)} className={chip.chipN} />
     </Pressable>
   );
 }

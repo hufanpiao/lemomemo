@@ -2,6 +2,7 @@
 // • 两种显示：瀑布流（默认，手机两列、窗口 ≥ 900px 三列）和列表（按今天 / 昨天 / 日期分组）；页面上没有切换按钮，
 //   只在“设置 › 随手记显示方式”里改，按设备类型分开记（R-78，hooks/useNotesView.ts）
 // • 顶部：大标题 + 右上角头像（设置入口，同今天页；电脑上设置在侧栏，这里藏掉）；下面分类胶囊：全部 N + 各分类条数，只筛这一页（不写 settings）
+//   R-436 精致化照待办页（518f49a0）：大标题短粗下划线 + 下一行等宽小字（日期 · 共 N 条），胶囊用 kit Chip（条数等宽淡色），列表分组名挂 kit groupLabelClass、右边等宽条数，列表行时刻等宽字（卡片底行时间不换：等宽字更宽，会把分类名挤掉，11-11 定的窄卡退路是按原字体量的）
 // • 卡片 / 行：没有标题时取正文第一行当标题；分类前有 6px 色点（categories.color）；AI 分过、还没看过的标“AI”
 //   瀑布流卡片底部：分类 · 时间 · “⋯”（看得见 24px，点按区用 ::after 透明扩到 44，不占排版宽度，视觉稿第 264～266 行）
 //   列表一行：时刻 | 随手记小图标 | 标题和摘要 | “⋯”（视觉稿 PH.notes：44px 18px 1fr … 24px）
@@ -49,7 +50,10 @@ import { rlog } from '../../../platform/run-log-api.ts';
 import { Suspense, useCallback, useRef, useState, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { navigate, useRoute } from '../../../app/router.ts';
+import { todayOf } from '../../../../shared/core/date.ts';
+import { groupLabelClass } from '../../../kit/components/Form.tsx';
 import list from '../../../kit/components/List.module.css';
+import refine from '../../../kit/components/Refine.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
@@ -235,9 +239,9 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
     <>
       {l.counts.length ? (
         <div className={styles.filter} role="group" aria-label={t('notes.filter', {})} data-testid="notes-filter">
-          <Chip on={l.category === null} onClick={() => l.setCategory(null)} label={t('notes.all', { n: l.total })} color={null} testId="notes-filter-all" />
+          <Chip on={l.category === null} onClick={() => l.setCategory(null)} label={t('notes.all', { n: l.total })} n={l.total} color={null} testId="notes-filter-all" />
           {l.counts.map((c) => (
-            <Chip key={c.id} on={l.category === c.id} onClick={() => l.setCategory(c.id)} label={`${c.name} ${c.count}`} color={c.color} testId={`notes-filter-${c.id}`} />
+            <Chip key={c.id} on={l.category === c.id} onClick={() => l.setCategory(c.id)} label={`${c.name} ${c.count}`} n={c.count} color={c.color} testId={`notes-filter-${c.id}`} />
           ))}
         </div>
       ) : null}
@@ -313,11 +317,15 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
         </div>
       ) : (
         <AppearList as="div" data-testid="notes-list">
-          {l.groups.filter((g) => g.items.some(shown)).map((g) => (
+          {l.groups.map((g) => ({ g, items: g.items.filter(shown) })).filter((x) => x.items.length > 0).map(({ g, items }) => (
             <AppearItem as="section" key={g.date} className={styles.group} data-testid={`notes-g-${g.date}`}>
-              <h2 className={styles.h2}>{g.key === 'today' ? t('notes.g.today', {}) : g.key === 'yesterday' ? t('notes.g.yesterday', {}) : fmtDay(g.date, locale, 'monthDay')}</h2>
+              {/* 分组名小字、加字距，右边等宽条数（R-436，同待办页分组：kit groupLabelClass） */}
+              <h2 className={`${groupLabelClass} ${styles.h2}`}>
+                <span>{g.key === 'today' ? t('notes.g.today', {}) : g.key === 'yesterday' ? t('notes.g.yesterday', {}) : fmtDay(g.date, locale, 'monthDay')}</span>
+                <span className={styles.cnt}>{items.length}</span>
+              </h2>
               <AppearList as="ul" className={row.lst}>
-                {g.items.filter(shown).map((it) => listRow(it, false))}
+                {items.map((it) => listRow(it, false))}
               </AppearList>
             </AppearItem>
           ))}
@@ -346,12 +354,18 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
       {head ? (
         head(<TrashLink />)
       ) : (
-        <header className={styles.top}>
-          <h1 className={styles.h1}>{t('notes.title', {})}</h1>
-          <span className={styles.topEnd}>
-            <MeLink testId="notes-settings" />
-          </span>
-        </header>
+        <>
+          {/* 大标题 + 短粗下划线、标题下一行等宽小字（今天的日期 · 共几条），同待办页（R-436，kit Refine.module.css） */}
+          <header className={styles.top}>
+            <h1 className={refine.title}>{t('notes.title', {})}</h1>
+            <span className={styles.topEnd}>
+              <MeLink testId="notes-settings" />
+            </span>
+          </header>
+          <p className={refine.sub} data-testid="notes-sub">
+            {t('notes.sub', { date: fmtDay(todayOf(l.now, l.tz), locale, 'monthDayWeek'), n: l.total })}
+          </p>
+        </>
       )}
       {listPart(filterChips)}
       {mist}

@@ -24,7 +24,6 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
 }
 
 /* 顶栏右边：“最近删除”图标 + 头像（R-438），两个都是 44 触控区，挨着放 */
@@ -33,11 +32,7 @@
   align-items: center;
 }
 
-.h1 {
-  margin: 0;
-  font-size: var(--fs-22);
-  font-weight: 600;
-}
+/* 大标题加短粗下划线、标题下一行等宽小字：kit 的 Refine.module.css（R-436，待办页同一份） */
 
 /* 电脑版（B6，ui/NotesDesk.tsx；线框 s7 电脑画面）：分类一栏 + 列表一栏，铺满侧栏右边；页顶大标题换成“随手记”块的标题。
    按里面真有面板（DeskLayout 根节点的 data-desk）判断：面板没换上、画出错退回一列时照原来的排法 */
@@ -105,26 +100,7 @@
   overflow-x: auto;
 }
 
-.chip,
-.chipOn {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 6px;
-  min-height: var(--hit);
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: none;
-  color: var(--text);
-  font-size: var(--fs-13-5);
-}
-
-.chipOn {
-  border-color: transparent;
-  background: var(--chip-on-bg);
-  color: var(--chip-on-fg);
-}
+/* 分类筛选胶囊：kit 的 Chip.module.css（高 30、无描边浅底，待办页筛选同一份；负责人 11-16“胶囊太大了！参考现在的待办页”），这里只管排布 */
 
 /* 分类色点：卡片、行上 6px（PH.mason 第 1341 行），胶囊上 8px（.chip .d 第 222 行）；颜色从行内 --dot 来（categories.color） */
 .dot,
@@ -365,14 +341,14 @@
   flex: none;
 }
 
-/* 合并分类提示（R-413，线框 MERGE）：分类胶囊下面一张浅底条，一行字 + “合并”“不用” */
+/* 合并分类提示（R-413，线框 MERGE；圆角、内边距照皮肤视觉稿 .merge）：分类胶囊下面一张浅底条，一行字 + “合并”“不用” */
 .merge {
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 8px 0 4px;
-  padding: 8px 10px 8px 14px;
-  border-radius: var(--r-md);
+  padding: 10px 12px 10px 16px;
+  border-radius: var(--r-lg);
   background: var(--panel-2);
 }
 
@@ -387,11 +363,17 @@
   margin-top: 4px;
 }
 
-.h2 {
-  margin: 16px 0 6px;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-  font-weight: 400;
+/* 分组名（R-436，同待办页第 4 条“小号字、字距拉开”）：字号、字体、字距、颜色挂 kit Form.tsx 的 groupLabelClass；
+   本地只留左右排开和间距（两级选择器，不靠样式表先后压过 .groupLabel 的 margin），右边条数同一种等宽小字 */
+.group .h2 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 18px 4px 8px;
+}
+
+.cnt {
+  font-variant-numeric: tabular-nums;
 }
 
 /* 电脑上点开抽屉的那一行：浅灰底 + 柠檬竖条（R-142） */

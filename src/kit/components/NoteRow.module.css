@@ -50,10 +50,11 @@
   text-align: left;
 }
 
+/* 行首时刻：等宽字（R-436“日期时刻等宽数字”，同 kit List.module.css 的 .lead；视觉稿 PH.notes 用 .num） */
 .rowTime {
   color: var(--text);
+  font-family: var(--f-mono);
   font-size: var(--fs-13);
-  font-variant-numeric: tabular-nums;
 }
 
 /* 随手记小图标（视觉稿 .mn：16 × 19 的纸，两道横线） */
