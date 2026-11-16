@@ -39,7 +39,22 @@ describe('planNoteDrop', () => {
     const w = planNoteDrop(shown, 'c', 0, NOW);
     expect(w).toHaveLength(1);
     expect(w[0]).toMatchObject({ id: 'c', prev: null });
-    expect(w[0]!.key > shown[0]!.key).toBe(true);
+    expect((w[0]?.key ?? '') > shown[0]!.key).toBe(true);
+  });
+
+  it('R-429 评审第 2 条：按时间排时拖动要切到自己排，这一串里以前拖过的旧排序值一起清掉，切过去顺序就是松手时页面上的顺序；撤销写回原值', () => {
+    const rows = [note('a', { created_at: at(12) }), note('b', { created_at: at(11), sort_key: '9' }), note('c', { created_at: at(10) })];
+    const shown = noteItems(rows, [], TZ, null, [], [], 'time');
+    expect(shown.map((x) => x.id)).toEqual(['a', 'b', 'c']);
+    const w = planNoteDrop(shown, 'c', 0, NOW, true);
+    const after = rows.map((r) => {
+      const x = w.find((y) => y.id === r.id);
+      return x ? { ...r, sort_key: x.key } : r;
+    });
+    expect(noteItems(after, [], TZ, null, [], [], 'manual').map((x) => x.id)).toEqual(['c', 'a', 'b']);
+    expect(w.find((x) => x.id === 'b')).toEqual({ id: 'b', key: null, prev: '9' });
+    // 本来就是自己排：不动别的条
+    expect(planNoteDrop(noteItems(rows, [], TZ, null, [], [], 'manual'), 'c', 0, NOW, false).map((x) => x.id)).toEqual(['c']);
   });
 
   it('applyNoteSort：每一笔经 patch 写 sort_key（不带 remind）；撤销写 prev；一笔没成回那一笔的结果', async () => {

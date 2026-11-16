@@ -57,7 +57,8 @@ import refine from '../../../kit/components/Refine.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
-import { SortGrip, sortBoxClass, sortRowClass, useSortDrag, type SortDrop } from '../../../kit/components/SortDrag.tsx';
+import { SortGrip, sortBoxClass, sortRowClass, useSortDrag } from '../../../kit/components/SortDrag.tsx';
+import { useSortDropFlow } from '../../../kit/hooks/useSortDropFlow.ts';
 import { Mist } from '../../../kit/components/Mist.tsx';
 import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
 import { usePullReveal } from '../../../kit/hooks/usePullReveal.ts';
@@ -193,16 +194,19 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
     />
   );
   const aiMark = (it: NoteItem) => (it.ai ? <AiMark id={it.id} /> : null);
-  // 长按拖动（R-429）：放下按页面上这一串（和 DOM 顺序一致）算；只读行行上已 data-sort-off，这里再兜一道
-  const dropped = (d: SortDrop) => {
-    if (isRo(d.id)) return guard.block();
-    void l.move(l.items.filter(shown), d.id, d.index).then((r) => {
-      if (!r) return;
-      // 有一笔没写成：整批撤回（切过的排序方式也切回），不留半截顺序
-      if (r.res !== 'ok') return void l.undoMove(r.m).then(() => report(r.res));
-      guard.show(moveUndo(r.m.switched, () => void l.undoMove(r.m).then(report)));
-    });
-  };
+  // 长按拖动（R-429）：放下按页面上这一串（和 DOM 顺序一致）算；只读行行上已 data-sort-off，kit 的流程里再兜一道；
+  // 没写成整批撤回（切过的排序方式也切回）
+  const dropped = useSortDropFlow({
+    tag: src.kind,
+    log: rlog,
+    ro: isRo,
+    block: () => guard.block(),
+    order: () => l.items.filter(shown).map((x) => x.id),
+    move: (m) => l.move(l.items.filter(shown), m.id, m.index),
+    undo: l.undoMove,
+    report,
+    moved: (m) => guard.show(moveUndo(m.switched, () => void l.undoMove(m).then(report))),
+  });
   const sd = useSortDrag({ tag: src.kind, axis: view === 'masonry' ? 'xy' : 'y', canDrop: () => true, onDrop: dropped, log: rlog });
   /** 能拖的行、卡片上的标记（整页一串） */
   const sortAttrs = (it: NoteItem) => ({ 'data-sort-id': it.id, 'data-sort-group': 'all', 'data-sort-off': isRo(it.id) ? '' : undefined });

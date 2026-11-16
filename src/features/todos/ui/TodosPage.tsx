@@ -44,7 +44,8 @@ import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { PrioCycle, PrioDot } from '../../../kit/components/Priority.tsx';
 import { groupLabelClass } from '../../../kit/components/Form.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
-import { SortGrip, sortBoxClass, sortRowClass, useSortDrag, type SortDrop } from '../../../kit/components/SortDrag.tsx';
+import { SortGrip, sortBoxClass, sortRowClass, useSortDrag } from '../../../kit/components/SortDrag.tsx';
+import { useSortDropFlow } from '../../../kit/hooks/useSortDropFlow.ts';
 import { nextPriority, type Priority } from '../../../../shared/logic/todo-row.ts';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -138,17 +139,21 @@ export default function TodosPage() {
   });
 
   const { groupTitle, dueText } = labelsOf(t, locale);
-  // 长按拖动（R-429）：放下按页面此刻画着的分组算（hv.view，和 DOM 里的顺序一致）；只读行行上已 data-sort-off，这里再兜一道
-  const dropped = (d: SortDrop) => {
-    if (isRo(d.id)) return a.g.block();
-    void l.sortDrop(hv.view, d).then((r) => {
-      if (!r) return;
-      // 有一笔没写成（只读行、离线满了）：整批撤回，不留半截顺序
-      if (r.res !== 'ok') return void l.sortUndo(r.plan).then(() => a.report(r.res));
+  // 长按拖动（R-429）：放下按页面此刻画着的分组算（hv.view，和 DOM 里的顺序一致）；只读行行上已 data-sort-off，kit 的流程里再兜一道
+  const dropped = useSortDropFlow({
+    tag: 'todos',
+    log: rlog,
+    ro: isRo,
+    block: () => a.g.block(),
+    order: (group) => hv.view.find((g) => groupId(g) === group)?.items.map((x) => x.todo.id) ?? [],
+    move: (m) => l.sortDrop(hv.view, m),
+    undo: l.sortUndo,
+    report: a.report,
+    moved: (plan) => {
       seq.current += 1;
-      a.g.show({ kind: 'moved', plan: r.plan, to: r.plan.to ? groupTitle(r.plan.to) : null, n: seq.current });
-    });
-  };
+      a.g.show({ kind: 'moved', plan, to: plan.to ? groupTitle(plan.to) : null, n: seq.current });
+    },
+  });
   const sd = useSortDrag({ tag: 'todos', axis: 'y', canDrop: canDropTodo, onDrop: dropped, log: rlog });
   const prioName = (p: Priority) => t(`list.prio.${p}`, {});
   /** 行右边 H / M / L 换档（R-434）：只读行拦下出“要新版本”；写入结果照打勾一样报（出错条） */

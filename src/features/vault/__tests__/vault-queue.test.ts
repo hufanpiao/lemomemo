@@ -193,7 +193,7 @@ describe('发送队列', () => {
 
   it('只拖了顺序（R-429）：save 带 base_updated_at；回 stale 丢掉这一笔、记一次 stale、重新拉列表，不标没保存上', async () => {
     const h = harness({ save: () => ({ ok: false, code: 'stale' }) });
-    h.q.wrote({ ...row('x'), sort_key: '17', updated_at: 5 }, false, true);
+    h.q.wrote({ ...row('x'), sort_key: '17', updated_at: 5 }, false, ['sort_key']);
     await settle();
     expect(h.saves[0]).toMatchObject({ sort_key: '17', updated_at: 5, base_updated_at: 5 });
     expect(h.calls).toEqual(['save', 'reload']);
@@ -204,20 +204,48 @@ describe('发送队列', () => {
     expect(h.store.getSnapshot().stale).toBe(0);
   });
 
+  it('R-429 评审第 3 条：只改正文的 save 不带 sort_key（交给服务器保留密文里的，不把别的设备刚拖好的位置盖回去）；拖过顺序的才带', async () => {
+    const h = harness();
+    h.q.wrote({ ...row('改正文'), sort_key: '旧位置' }, false, ['body']);
+    await settle();
+    expect(h.saves[0]).not.toHaveProperty('sort_key');
+    h.q.wrote({ ...row('改正文'), sort_key: '9' }, false, ['sort_key']);
+    await settle();
+    expect(h.saves[1]).toMatchObject({ sort_key: '9' });
+    // 拖了顺序、还没发出去时又改了正文：合并成一份，排序值照样带上
+    const first = held();
+    let n = 0;
+    const g = harness({ save: () => (++n === 1 ? first.p : OK) });
+    g.q.wrote(row('a'), false, ['body']);
+    await settle();
+    g.q.wrote({ ...row('a'), sort_key: '5' }, false, ['sort_key']);
+    g.q.wrote({ ...row('b'), sort_key: '5' }, false, ['body']);
+    first.release(OK);
+    await settle();
+    expect(g.saves[0]).not.toHaveProperty('sort_key');
+    expect(g.saves[1]).toMatchObject({ body: 'b', sort_key: '5' });
+    expect(g.saves[1]?.base_updated_at).toBeUndefined();
+    // 新建的照带（服务器上还没有这一条）
+    const k = harness();
+    k.q.wrote({ ...row('新'), sort_key: null }, true);
+    await settle();
+    expect(k.saves[0]).toHaveProperty('sort_key', null);
+  });
+
   it('拖动那一笔在路上时又改了正文：stale 回来不丢，马上不带 base 重发正文；新建不带 base（照旧后写的算数）', async () => {
     const first = held();
     let n = 0;
     const h = harness({ save: () => (++n === 1 ? first.p : OK) });
-    h.q.wrote(row('x'), false, true);
+    h.q.wrote(row('x'), false, ['sort_key']);
     await settle();
-    h.q.wrote(row('改了'), false, false);
+    h.q.wrote(row('改了'), false, ['body']);
     first.release({ ok: false, code: 'stale' });
     await settle();
     expect(h.saves.map((s) => [s.body, s.base_updated_at])).toEqual([['x', expect.any(Number)], ['改了', undefined]]);
     expect(h.calls).not.toContain('reload');
     expect(h.store.getSnapshot().stale).toBe(0);
     const g = harness();
-    g.q.wrote(row('新'), true, true);
+    g.q.wrote(row('新'), true, ['sort_key']);
     await settle();
     expect(g.saves[0]?.base_updated_at).toBeUndefined();
   });
