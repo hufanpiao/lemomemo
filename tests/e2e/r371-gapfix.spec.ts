@@ -106,7 +106,9 @@ const shot = async (page: Page, name: string): Promise<Buffer> => {
     return Buffer.from(print);
   }
   mkdirSync(SHOTS, { recursive: true });
-  return page.screenshot({ path: `${SHOTS}/${name}.png`, animations: 'disabled' });
+  // 盖住今天页“现在”卡：卡里的时间尺圆点、“现在 HH:MM”跟着真实时钟走，开、关两张图隔几秒截会挪零点几个像素（11-16 本机 chromium 圆点边差 42 级，
+  // r371 偶发的根因）；R-439 起卡的渐变阴影合成在渐变底上，两次渲染也会差 1 级。盖的是同一块实色，卡要是跟着版面错位，色块位置照样对不上
+  return page.screenshot({ path: `${SHOTS}/${name}.png`, animations: 'disabled', mask: [page.getByTestId('now-card')] });
 };
 
 test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () => {
