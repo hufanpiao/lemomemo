@@ -18,6 +18,7 @@ function note(r: Record<string, unknown>): NoteRow {
     title: (r.title ?? null) as string | null, body: (r.body ?? null) as string | null,
     body_enc: r.body_enc ? bytes(r.body_enc) : null, enc_key_id: msOrNull(r.enc_key_id),
     category_id: (r.category_id ?? null) as string | null, created_at: Number(r.created_at), updated_at: Number(r.updated_at),
+    sort_key: (r.sort_key ?? null) as string | null,
   };
 }
 
@@ -41,7 +42,7 @@ function file(r: Record<string, unknown>): FileRow {
 export function vaultStore(tx: Tx, uid: string): VaultTx {
   const imgPath = (noteId: string, id: string) => vaultImageKey(uid, noteId, id, 'full');   // note_images.path 记原图的对象键
   const noteCols = () => tx`id, is_private, deleted_at::float8 as deleted_at, title, body, body_enc, enc_key_id, category_id,
-    created_at::float8 as created_at, updated_at::float8 as updated_at`;
+    created_at::float8 as created_at, updated_at::float8 as updated_at, sort_key`;
   const imgCols = () => tx`id, note_id, bucket, has_thumb, width, height, bytes, deleted_at::float8 as deleted_at`;
   const s: VaultTx = {
     async vault(lock) {
@@ -178,13 +179,13 @@ export function vaultStore(tx: Tx, uid: string): VaultTx {
     },
     async toVault(id, bodyEnc, encKeyId, updatedAt) {
       const rows = await tx`update public.notes set is_private = true, body_enc = ${bodyEnc}, enc_key_id = ${encKeyId}, title = null, body = null,
-          raw_text = '', tags = '{}', ai_meta = null, converted_to = null, updated_at = ${updatedAt}
+          raw_text = '', tags = '{}', ai_meta = null, converted_to = null, sort_key = null, updated_at = ${updatedAt}
         where user_id = ${uid} and id = ${id} and not is_private and deleted_at is null returning 1 as x`;
       return rows.length === 1;
     },
-    async toPlain(id, title, body, updatedAt) {
+    async toPlain(id, title, body, sortKey, updatedAt) {
       const rows = await tx`update public.notes set is_private = false, body_enc = null, enc_key_id = null, title = ${title}, body = ${body},
-          updated_at = ${updatedAt}
+          sort_key = ${sortKey}, updated_at = ${updatedAt}
         where user_id = ${uid} and id = ${id} and is_private and deleted_at is null returning 1 as x`;
       return rows.length === 1;
     },

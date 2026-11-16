@@ -22,6 +22,7 @@ export const notesSource: NoteSource = {
   caps: { ai: true, convert: true, merge: true, lockrow: true, moveIn: true, moveOut: false, filesMark: true },
   route: { list: 'notes', edit: 'note' },
   desk: 'notes',
+  orderKey: 'notes.order',
   trash: ['trash', 'notes'],
   useTrashCount: () => null,
   text: null,

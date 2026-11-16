@@ -12,25 +12,32 @@ import type { NotesMsgKey } from './useNotesT.ts';
 /** 页底撤销条的一份：文案、test id、点了撤销做什么；key 换了就是新的一条（重新计 8 秒） */
 export interface UndoTip {
   key: string;
-  msgKey: Extract<NotesMsgKey, 'notes.deleted' | 'notes.merge.done'>;
-  testId: 'notes-toast' | 'notes-merge-toast';
+  msgKey: Extract<NotesMsgKey, 'notes.deleted' | 'notes.merge.done' | 'notes.moved' | 'notes.order.switched'>;
+  testId: 'notes-toast' | 'notes-merge-toast' | 'notes-moved-toast';
   undo(): void;
 }
 /** 合并分类后的撤销条（R-415 ③）：自带 UndoTip，放进和删除撤销条同一个提示条位置；pair 是合并的那一对（useMergeHint 的 key），撤销条在时提示条不出它 */
 export type MergeUndo = { kind: 'mergeUndo'; pair: string } & UndoTip;
+/** 拖动放下后的撤销条（R-429）：组内换序“已移动 · 撤销”；顺手切到了自己排的那一次是“已切到自己排，设置里可改回 · 撤销” */
+export type MoveUndo = { kind: 'moveUndo' } & UndoTip;
 type DeleteUndo = Extract<ListToast, { kind: 'undo' }>;
 
 let seq = 0;
 /** 合并成了出的撤销条：每次一个新 key（连着合并两对，第二条重新计时） */
 export const mergeUndo = (pair: string, undo: () => void): MergeUndo => ({ kind: 'mergeUndo', pair, key: `merge:${++seq}`, msgKey: 'notes.merge.done', testId: 'notes-merge-toast', undo });
 
-export function isUndo<T extends { kind: string }>(t: T | null): t is Extract<T, DeleteUndo | MergeUndo> {
-  return t?.kind === 'undo' || t?.kind === 'mergeUndo';
+/** 拖动放下成了出的撤销条：每次一个新 key */
+export const moveUndo = (switched: boolean, undo: () => void): MoveUndo => ({
+  kind: 'moveUndo', key: `move:${++seq}`, msgKey: switched ? 'notes.order.switched' : 'notes.moved', testId: 'notes-moved-toast', undo,
+});
+
+export function isUndo<T extends { kind: string }>(t: T | null): t is Extract<T, DeleteUndo | MergeUndo | MoveUndo> {
+  return t?.kind === 'undo' || t?.kind === 'mergeUndo' || t?.kind === 'moveUndo';
 }
 
-/** 撤销条 → 画的那一份：合并的本来就是；删除的是 kit 的 {kind: 'undo', id}（今天页、待办页共用这个形状），在这里补上文案和撤销 */
-export const undoTipOf = (t: DeleteUndo | MergeUndo, undoDelete: (id: string) => void): UndoTip =>
-  t.kind === 'mergeUndo' ? t : { key: `undo:${t.id}`, msgKey: 'notes.deleted', testId: 'notes-toast', undo: () => undoDelete(t.id) };
+/** 撤销条 → 画的那一份：合并、拖动的本来就是；删除的是 kit 的 {kind: 'undo', id}（今天页、待办页共用这个形状），在这里补上文案和撤销 */
+export const undoTipOf = (t: DeleteUndo | MergeUndo | MoveUndo, undoDelete: (id: string) => void): UndoTip =>
+  t.kind === 'undo' ? { key: `undo:${t.id}`, msgKey: 'notes.deleted', testId: 'notes-toast', undo: () => undoDelete(t.id) } : t;
 
 export function useNotesToast<X extends { kind: string; trash?: boolean }>(g: ReadonlyGuard<ListToast | X>): boolean {
   const { toast } = g;

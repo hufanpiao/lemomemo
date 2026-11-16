@@ -27,7 +27,7 @@ export const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 /** 隐私记的一条 → 随手记集合那种行 */
 export function noteRowOf(n: VaultNote): Row {
   return {
-    id: n.id, title: n.title, body: n.body, category_id: n.category_id, category_source: 'manual', category_seen: true, is_private: false,
+    id: n.id, title: n.title, body: n.body, category_id: n.category_id, sort_key: n.sort_key ?? null, category_source: 'manual', category_seen: true, is_private: false,
     converted_to: null, undone: false, created_at: n.created_at, updated_at: n.updated_at, deleted_at: n.deleted_at,
   };
 }

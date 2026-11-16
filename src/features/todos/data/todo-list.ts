@@ -5,9 +5,12 @@
 // • 项目筛选只在待办页（架构 5.9“项目筛选”）：project 为 null 是“全部”
 // • linger（负责人 11-15“完成的待办怎么隐藏”；审查 11-15 第 4 条改成集合）：撤销条开着期间勾过的那几条，照没完成时的截止分组留在原位，
 //   撤销条都收起以后才一起归进“已完成”组（谁在 linger 里由待办页管，见 ui/TodosPage.tsx）
+// • 拖动排序（R-429）：没完成的各组里，没拖过的（sort_key 为空）照原来的规则排在前面，拖过的跟在后面、按排序值大的在上
+//   （shared/logic/sort-key.ts；新加进这一组的没拖过，排最上面）；“已完成”组照旧按完成时刻
 import { addDays, diffDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
+import { sortKeyOf } from '../../../../shared/logic/sort-key.ts';
 import { isLate, numOr, PRIORITIES, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 // 标题比较：按当前语言、数字按数值（“第 2 条”在“第 10 条”前；和今天页共用）
@@ -17,6 +20,8 @@ export type Row = Readonly<{ id: string } & Record<string, unknown>>;
 
 export interface TodoItem extends TodoFields {
   doneAt: number;
+  /** 拖动排序的排序值（R-429）：没拖过为 null */
+  sortKey: string | null;
 }
 
 /** 截止标签：界面按 kind 拼文字（“今天 17:00 截止”“逾 2 天”） */
@@ -37,7 +42,7 @@ export interface Group {
 }
 
 export function itemOf(r: Row): TodoItem {
-  return { ...todoOf(r), doneAt: numOr(r['done_at'], 0) };
+  return { ...todoOf(r), doneAt: numOr(r['done_at'], 0), sortKey: sortKeyOf(r) };
 }
 
 export function dueTagOf(t: TodoItem, now: number, tz: Tz): DueTag {
@@ -53,6 +58,10 @@ const NO_LINGER: ReadonlySet<string> = new Set();
 
 /** 优先级高的在前（R-434：高 → 中 → 低，替掉原来的“重要的在前”） */
 const byPrio = (a: TodoItem, b: TodoItem) => PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority);
+
+/** 拖动排序（R-429，见文件头）：没拖过的在前；都拖过的排序值大的在上；都没拖过回 0，交给原来的规则 */
+const byKey = (a: TodoItem, b: TodoItem): number =>
+  a.sortKey === b.sortKey ? 0 : a.sortKey === null ? -1 : b.sortKey === null ? 1 : a.sortKey > b.sortKey ? -1 : 1;
 
 const byDue = (byTitle: (a: string, b: string) => number) => (a: TodoItem, b: TodoItem) =>
   (a.due ?? '9999').localeCompare(b.due ?? '9999') || (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99') || byPrio(a, b) || byTitle(a.title, b.title);
@@ -86,10 +95,10 @@ export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: s
   }
   const order: GroupKey[] = ['late', 'today', 'tomorrow', 'day', 'later', 'nodate', 'done'];
   const out = [...groups.values()].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key) || (a.date ?? '').localeCompare(b.date ?? ''));
+  const nodate = (a: TodoItem, b: TodoItem) => byPrio(a, b) || byTitle(a.title, b.title);
   for (const g of out) {
     if (g.key === 'done') g.items.sort((a, b) => b.todo.doneAt - a.todo.doneAt);
-    else if (g.key === 'nodate') g.items.sort((a, b) => byPrio(a.todo, b.todo) || byTitle(a.todo.title, b.todo.title));
-    else g.items.sort((a, b) => due(a.todo, b.todo));
+    else g.items.sort((a, b) => byKey(a.todo, b.todo) || (g.key === 'nodate' ? nodate : due)(a.todo, b.todo));
   }
   return out;
 }

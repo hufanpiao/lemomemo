@@ -13,11 +13,11 @@ export const notes = defineManifest({
       systemCols: [], noConflict: ['sort'] },
     { name: 'notes', schema: 'public', sync: true, realtime: true, localCache: 'plain',
       clientWritable: ['id', 'title', 'body', 'is_private', 'category_id', 'category_source', 'category_seen', 'tags', 'converted_to',
-        'source', 'raw_text', 'batch_id', 'created_at', 'updated_at', ...SOFT_DELETE_COLS],
-      insertOnly: ['id', 'is_private', 'created_at'], updateOnly: [...SOFT_DELETE_COLS],   // is_private 只能 insert false（RLS）
+        'source', 'raw_text', 'batch_id', 'sort_key', 'created_at', 'updated_at', ...SOFT_DELETE_COLS],
+      insertOnly: ['id', 'is_private', 'created_at'], updateOnly: [...SOFT_DELETE_COLS, 'sort_key'],   // sort_key：新建不带，拖动才写（R-429）   // is_private 只能 insert false（RLS）
       softDelete: true, backup: 'json', export: 'json', onAccountDelete: 'cascade', userLookup: BY_USER,
       vaultRows: { flag: 'is_private', cipherCols: ['body_enc', 'enc_key_id'],
-        plainColsMustBeNull: ['title', 'body', 'raw_text', 'tags', 'ai_meta', 'converted_to'],
+        plainColsMustBeNull: ['title', 'body', 'raw_text', 'tags', 'ai_meta', 'converted_to', 'sort_key'],   // sort_key：R-429，隐私记的放加密载荷
         neutralCols: [...COMMON_COLS, 'is_private', 'category_id', 'category_source', 'category_seen', 'ai_status', 'source', 'batch_id', 'created_at', 'updated_at'] },
       systemCols: ['ai_status', 'ai_meta'], noConflict: ['updated_at'] },
     { name: 'note_images', schema: 'public', sync: true, realtime: true, localCache: 'plain',

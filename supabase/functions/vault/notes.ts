@@ -1,6 +1,6 @@
 // vault 的隐私记读写（架构 5.5、0.29 续第 121 条；B5 任务单 S5；TC-B5-08、17）：list、save、delete、undelete、purge。
 // 都要有效令牌，跑在 core.ts 验令牌的同一个 fn_vault 事务里。
-// • 正文：{v: 1, title, body} 用 VAULT_KEY 派生的 note 钥匙 AES-GCM 加密，AAD = user_id|note_id|enc_key_id（_shared/vault-crypto.ts，代定 D7）；
+// • 正文：{v: 1, title, body}（拖过的再带 sort_key，R-429）用 VAULT_KEY 派生的 note 钥匙 AES-GCM 加密，AAD = user_id|note_id|enc_key_id（_shared/vault-crypto.ts，代定 D7）；
 //   notes 的 title、body 列为空，category_id 照旧明文。
 // • save：没有这条就新建，有就改（只改本人没删的隐私记；同 id 是普通随手记回 not_found，不让覆盖）；
 //   add_images：**预登记**图片行（bucket vault-images、ai_status skip、skip_reason vault_off；行数上限和存储额度由 row_quota、media_quota_guard 触发器管），
@@ -11,7 +11,7 @@
 // • delete / undelete：软删和恢复；purge：private.purge_vault_impl，只删已软删的，回删了几条；图片行随外键级联，提交后尽力删对象。
 // • 解不开的密文（钥匙换了、数据坏了）不回这一条，记一次 decrypt_failed，不让整张列表失败。
 import { ENC_KEY_ID, openNote, sealNote } from '../_shared/vault-crypto.ts';
-import { type Ctx, err, type ImageAdd, imageKeys, noteKey, type Out, out, type ReqOf, StoreDataError, type VaultTx } from './common.ts';
+import { type Ctx, err, type ImageAdd, imageKeys, noteKey, type NoteRow, type Out, out, type ReqOf, StoreDataError, type VaultTx } from './common.ts';
 
 /** {list}：本人全部隐私记（含已删，回收站要用）和它们的图片行 */
 export async function list(c: Ctx, t: VaultTx): Promise<Out> {
@@ -27,7 +27,7 @@ export async function list(c: Ctx, t: VaultTx): Promise<Out> {
     }
     items.push({
       id: n.id, title: p.title, body: p.body, category_id: n.category_id, created_at: n.created_at, updated_at: n.updated_at,
-      deleted_at: n.deleted_at,
+      deleted_at: n.deleted_at, sort_key: p.sort_key ?? null,
       images: imgs.filter((i) => i.note_id === n.id).map((i) => ({
         id: i.id, has_thumb: i.has_thumb, width: i.width, height: i.height, bytes: i.bytes, deleted_at: i.deleted_at,
       })),
@@ -52,13 +52,24 @@ async function toRegister(t: VaultTx, noteId: string, exists: boolean, add: read
   return fresh;
 }
 
-/** {save, id, title, body, category_id, created_at, updated_at, add_images?, remove_images?} */
+/**
+ * 密文里原来的排序值（R-429）：save 不带 sort_key（旧客户端）时保留它，不让旧客户端一存就把拖好的位置冲掉。
+ * 解不开当没有（这条本来就显示不出来，list 已经记 decrypt_failed）
+ */
+async function keptSortKey(c: Ctx, key: CryptoKey, cur: NoteRow | null): Promise<string | null> {
+  if (!cur?.body_enc || cur.enc_key_id === null) return null;
+  return (await openNote(key, c.userId, cur.id, cur.enc_key_id, cur.body_enc))?.sort_key ?? null;
+}
+
+/** {save, id, title, body, category_id, created_at, updated_at, sort_key?, add_images?, remove_images?} */
 export async function save(c: Ctx, t: VaultTx, r: ReqOf<'save'>): Promise<Out | Response> {
   const cur = await t.note(r.id);
   if (cur && (!cur.is_private || cur.deleted_at !== null)) return err(404, 'not_found');
   const add = r.add_images?.length ? await toRegister(t, r.id, cur !== null, r.add_images) : [];
   if (add instanceof Response) return add;
-  const body_enc = await sealNote(await noteKey(c), c.userId, r.id, r.title, r.body, ENC_KEY_ID);
+  const key = await noteKey(c);
+  const sortKey = r.sort_key !== undefined ? r.sort_key : await keptSortKey(c, key, cur);
+  const body_enc = await sealNote(key, c.userId, r.id, r.title, r.body, ENC_KEY_ID, sortKey);
   if (cur) {
     if (!(await t.updatePrivateNote(r.id, { body_enc, enc_key_id: ENC_KEY_ID, category_id: r.category_id, updated_at: r.updated_at }))) return err(404, 'not_found');
   } else {

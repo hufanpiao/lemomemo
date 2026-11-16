@@ -62,6 +62,9 @@ export const zh = {
   'notes.merge.no': '不用',
   // R-415 ③ 合并后的撤销条“已合并 · 撤销”（8 秒，和删除同一个撤销条）
   'notes.merge.done': '已合并',
+  // 长按拖动排序（R-429）：放下后的撤销条；按时间排时拖了一次就切到“自己排”，那一次说清楚去哪改回
+  'notes.moved': '已移动',
+  'notes.order.switched': '已切到自己排，设置里可改回',
   'notes.converted': '已转过',
   'notes.conv.todo': '转成待办',
   'notes.conv.event': '转成日程',

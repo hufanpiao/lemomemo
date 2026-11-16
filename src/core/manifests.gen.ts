@@ -768,6 +768,7 @@ export const manifestSnapshot: readonly Manifest[] = [
           "due",
           "important",
           "priority",
+          "sort_key",
           "project",
           "note",
           "source",
@@ -796,7 +797,8 @@ export const manifestSnapshot: readonly Manifest[] = [
         ],
         "updateOnly": [
           "deleted_at",
-          "undone"
+          "undone",
+          "sort_key"
         ],
         "anonReadable": [],
         "clientDelete": false,
@@ -979,6 +981,7 @@ export const manifestSnapshot: readonly Manifest[] = [
           "source",
           "raw_text",
           "batch_id",
+          "sort_key",
           "created_at",
           "updated_at",
           "deleted_at",
@@ -991,7 +994,8 @@ export const manifestSnapshot: readonly Manifest[] = [
         ],
         "updateOnly": [
           "deleted_at",
-          "undone"
+          "undone",
+          "sort_key"
         ],
         "anonReadable": [],
         "clientDelete": false,
@@ -1011,7 +1015,8 @@ export const manifestSnapshot: readonly Manifest[] = [
             "raw_text",
             "tags",
             "ai_meta",
-            "converted_to"
+            "converted_to",
+            "sort_key"
           ],
           "neutralCols": [
             "id",

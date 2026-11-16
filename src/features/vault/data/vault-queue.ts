@@ -12,6 +12,7 @@
 //   别的上锁调 dropAll()：全部丢掉、个数记进仓库（解锁后报“有 N 处改动没来得及保存”），运行日志 vault queue drop n=（不带内容）
 // • 运行日志不记标题、正文、图片 id，只记动作、结果码、次数
 // • 不碰 core/cache、outbox、log（A18）；纯 TS，不准 import React（A1）
+import { sortKeyOf } from '../../../../shared/logic/sort-key.ts';
 import type { VaultImageAdd } from '../../../../shared/schema/vault.ts';
 import type { VaultResult } from './vault-api.ts';
 import { vaultErrorAction, type VaultCode } from './vault-errors.ts';
@@ -25,6 +26,8 @@ export interface SaveReq {
   title: string;
   body: string;
   category_id: string | null;
+  /** 拖动排序的排序值（R-429）：放进密文；没拖过为 null */
+  sort_key: string | null;
   created_at: number;
   updated_at: number;
   add_images?: VaultImageAdd[];
@@ -180,7 +183,7 @@ export function createVaultQueue(d: QueueDeps) {
       const now = d.now();
       const r = await d.save({
         id: j.id, title: str(row['title']).trim(), body: str(row['body']),
-        category_id: typeof row['category_id'] === 'string' ? row['category_id'] : null,
+        category_id: typeof row['category_id'] === 'string' ? row['category_id'] : null, sort_key: sortKeyOf(row),
         created_at: num(row['created_at'], now), updated_at: num(row['updated_at'], now),
         ...(adds.length ? { add_images: adds.map((a) => ({ id: a.id, bytes: a.full.size, width: a.width || null, height: a.height || null, has_thumb: a.thumb !== null })) } : {}),
         ...(removes.length ? { remove_images: removes } : {}),

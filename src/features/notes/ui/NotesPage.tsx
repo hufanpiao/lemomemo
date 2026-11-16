@@ -39,6 +39,10 @@
 //   隐私记页由 head(trash) 放进它自己顶栏右边。两种来源共用，去哪、带不带条数看来源
 // • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal 管手势和打的字，smart-search 的 PullSearch 画搜索框和结果）；
 //   打了字就把“最近删除”、分类胶囊和列表藏起来、换成结果（kit 的 PullSlot，手机版、电脑版同一处 listPart）（按标题、正文、分类就地筛）。隐私记页不接（隐私记不搜）
+// • 长按拖动排序（R-429，含 R-433 拖动时左边的 6 个点；隐私记页同一份）：kit 的 useSortDrag，瀑布流（两列，横竖都跟）和列表都能拖；按住 0.4 秒没动才拿起，
+//   动了交给左滑或滚动；拿起的那一张、那一行左边出 6 个点，落点一条强调色细横线。整页是一串（data-sort-group 都是 all），放下按页面上的顺序算排序值（data/note-sort.ts）。
+//   按时间排时拖了一次就切到“自己排”（不按天分组、列表行的时间带日期；设置 › 随手记显示方式里可切回），提示条“已切到自己排，设置里可改回 · 撤销”；
+//   之后每次放下出“已移动 · 撤销”（和删除、合并同一个 UndoBar）。只读行不能拖；运行日志 sort notes|vault lift / drop / cancel（kit 记，只记条数）
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { Suspense, useCallback, useRef, useState, type ReactNode } from 'react';
@@ -48,6 +52,7 @@ import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
+import { SortGrip, sortBoxClass, sortRowClass, useSortDrag, type SortDrop } from '../../../kit/components/SortDrag.tsx';
 import { Mist } from '../../../kit/components/Mist.tsx';
 import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
 import { usePullReveal } from '../../../kit/hooks/usePullReveal.ts';
@@ -63,7 +68,7 @@ import { useNoteSource } from '../hooks/note-source.ts';
 import { useMergeHint } from '../hooks/useMergeHint.ts';
 import { useNoteList, type NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
-import { isUndo, mergeUndo, undoTipOf, useNotesToast } from '../hooks/useNotesToast.ts';
+import { isUndo, mergeUndo, moveUndo, undoTipOf, useNotesToast } from '../hooks/useNotesToast.ts';
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
@@ -183,6 +188,43 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
     />
   );
   const aiMark = (it: NoteItem) => (it.ai ? <AiMark id={it.id} /> : null);
+  // 长按拖动（R-429）：放下按页面上这一串（和 DOM 顺序一致）算；只读行行上已 data-sort-off，这里再兜一道
+  const dropped = (d: SortDrop) => {
+    if (isRo(d.id)) return guard.block();
+    void l.move(l.items.filter(shown), d.id, d.index).then((r) => {
+      if (!r) return;
+      // 有一笔没写成：整批撤回（切过的排序方式也切回），不留半截顺序
+      if (r.res !== 'ok') return void l.undoMove(r.m).then(() => report(r.res));
+      guard.show(moveUndo(r.m.switched, () => void l.undoMove(r.m).then(report)));
+    });
+  };
+  const sd = useSortDrag({ tag: src.kind, axis: view === 'masonry' ? 'xy' : 'y', canDrop: () => true, onDrop: dropped, log: rlog });
+  /** 能拖的行、卡片上的标记（整页一串） */
+  const sortAttrs = (it: NoteItem) => ({ 'data-sort-id': it.id, 'data-sort-group': 'all', 'data-sort-off': isRo(it.id) ? '' : undefined });
+  /** 列表方式的一行；withDay：自己排时不按天分组，时间带上日期 */
+  const listRow = (it: NoteItem, withDay: boolean) => (
+    <AppearItem key={it.id} className={`${selId === it.id ? `${row.lrow} ${styles.sel}` : row.lrow} ${sortRowClass}`} {...sortAttrs(it)} data-testid={`notes-row-${it.id}`}>
+      <SortGrip />
+      {/* 左滑（B5 S7，线框 s7 NOTEROW_SW）：转成待办 / 移到隐私记 / 删除，和“⋯”菜单同一套动作 */}
+      <SwipeRow
+        className={styles.swp}
+        data-testid={`notes-swipe-${it.id}`}
+        look="compact"
+        log={rlog}
+        actions={swipeActs(t, caps, it.id, { todo: () => conv.start(it, 'todo'), vault: () => toVault(it.id), out: () => moveOut(it.id), del: () => del(it.id) })}
+      >
+        <div className={styles.swRow}>
+        <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
+          <span className={row.rowTime}>{timeOf(it, withDay)}</span>
+          <span className={row.mn} aria-hidden="true" />
+          <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} failed={failed.has(it.id)} />
+          {it.cover ? <ListThumb img={it.cover} /> : null}
+        </button>
+        {more(it)}
+        </div>
+      </SwipeRow>
+    </AppearItem>
+  );
   const onMenuKey = (id: string) => (e: { preventDefault(): void }) => {
     e.preventDefault();
     setMenu(id);
@@ -222,10 +264,11 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
         </p>
       ) : null}
 
+      <div ref={sd.ref} className={sortBoxClass}>
       {view === 'masonry' ? (
         <AppearList as="ul" className={styles.mason} data-testid="notes-mason">
           {l.items.filter(shown).map((it) => (
-            <AppearItem key={it.id} className={styles.card} data-testid={`notes-card-${it.id}`}>
+            <AppearItem key={it.id} className={`${styles.card} ${sortRowClass}`} {...sortAttrs(it)} data-testid={`notes-card-${it.id}`}>
               <div onContextMenu={onMenuKey(it.id)}>
                 <button type="button" className={styles.cardMain} onClick={() => open(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
                   {it.cover ? (
@@ -254,42 +297,32 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
                   {more(it)}
                 </div>
               </div>
+              {/* 拿起时的 6 个点（R-433）：绝对定位，放在最后不改卡片里原来的结构 */}
+              <SortGrip />
             </AppearItem>
           ))}
         </AppearList>
+      ) : l.order === 'manual' ? (
+        // 自己排（R-429）：不按天分组，一整串
+        <div data-testid="notes-list">
+          <AppearList as="ul" className={`${row.lst} ${styles.flat}`}>
+            {l.items.filter(shown).map((it) => listRow(it, true))}
+          </AppearList>
+        </div>
       ) : (
         <AppearList as="div" data-testid="notes-list">
           {l.groups.filter((g) => g.items.some(shown)).map((g) => (
             <AppearItem as="section" key={g.date} className={styles.group} data-testid={`notes-g-${g.date}`}>
               <h2 className={styles.h2}>{g.key === 'today' ? t('notes.g.today', {}) : g.key === 'yesterday' ? t('notes.g.yesterday', {}) : fmtDay(g.date, locale, 'monthDay')}</h2>
               <AppearList as="ul" className={row.lst}>
-                {g.items.filter(shown).map((it) => (
-                  <AppearItem key={it.id} className={selId === it.id ? `${row.lrow} ${styles.sel}` : row.lrow} data-testid={`notes-row-${it.id}`}>
-                    {/* 左滑（B5 S7，线框 s7 NOTEROW_SW）：转成待办 / 移到隐私记 / 删除，和“⋯”菜单同一套动作 */}
-                    <SwipeRow
-                      className={styles.swp}
-                      data-testid={`notes-swipe-${it.id}`}
-                      look="compact"
-                      log={rlog}
-                      actions={swipeActs(t, caps, it.id, { todo: () => conv.start(it, 'todo'), vault: () => toVault(it.id), out: () => moveOut(it.id), del: () => del(it.id) })}
-                    >
-                      <div className={styles.swRow}>
-                      <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
-                        <span className={row.rowTime}>{timeOf(it, false)}</span>
-                        <span className={row.mn} aria-hidden="true" />
-                        <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} failed={failed.has(it.id)} />
-                        {it.cover ? <ListThumb img={it.cover} /> : null}
-                      </button>
-                      {more(it)}
-                      </div>
-                    </SwipeRow>
-                  </AppearItem>
-                ))}
+                {g.items.filter(shown).map((it) => listRow(it, false))}
               </AppearList>
             </AppearItem>
           ))}
         </AppearList>
       )}
+      {sd.line}
+      </div>
 
     </>
   );

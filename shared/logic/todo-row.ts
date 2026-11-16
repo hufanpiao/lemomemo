@@ -4,7 +4,7 @@
 //   • 纪念日提醒“生成待办”（features/reminders/data/remind-write.ts 的 annivTodoRow：带 from_anniv_id）；
 //   • “＋”识别（shared/logic/capture-map.ts 的 captureRow，客户端和 claude-intake 共用：带 source、raw_text、batch_id、AI 简称）；
 //   • 随手记转待办（shared/logic/notes/note-convert.ts 经 captureRow，再盖上 from_note_id）。
-// 没传的列按“空”：没截止、没截止时刻、不提醒提前量、优先级中、没项目备注、没批次、没来源、没简称；remind_time 默认 DEFAULT_REMIND_TIME。
+// 没传的列按“空”：没截止、没截止时刻、不提醒提前量、优先级中、没项目备注、没批次、没来源、没简称；不带排序值（sort_key 只能 update，拖动才写，R-429）；remind_time 默认 DEFAULT_REMIND_TIME。
 // remind_days 必须由调用方给（编辑页、生成待办是 0 当天，“＋”和随手记是 null 不提醒，两边本来就不同）。
 // 不写 ai_status（系统列）、deleted_at、undone（只能 update）、repeat（R-163）。done_at 跟 done：完成的记 now，没完成 0。纯函数，不读时钟
 // 读一行（todoOf）和“逾期”规则（isLate）也只有这一份（B6 整合）：待办页的分组和截止标签（features/todos/data/todo-list.ts）、

@@ -25,9 +25,25 @@ describe('save、list（加密存、解密读）', () => {
     expect(await openNote(await aesKeyFor(MASTER, A, 'note'), A, N1, 1, row.body_enc!)).toEqual({ v: 1, title: '标题', body: '正文' });
     await call(w, save(N1, { title: '新', updated_at: 3 }), { token: tok });
     const l = await call(w, { action: 'list' }, { token: tok });
-    expect(l.body.notes).toEqual([{ id: N1, title: '新', body: '正文', category_id: null, created_at: 1, updated_at: 3, deleted_at: null, images: [] }]);
+    expect(l.body.notes).toEqual([{ id: N1, title: '新', body: '正文', category_id: null, created_at: 1, updated_at: 3, deleted_at: null, sort_key: null, images: [] }]);
     w.db.plainNote(A, N2, 'p', 'q');
     expect((await call(w, save(N2), { token: tok })).body.error).toBe('not_found');
+  });
+
+  it('排序值（R-429）：进密文、不进明文列；list 解开带回；旧客户端 save 不带 sort_key 时保留原来的；带 null 清掉', async () => {
+    const w = world();
+    const tok = await unlocked(w);
+    expect((await call(w, save(N1, { sort_key: '1735' }), { token: tok })).status).toBe(200);
+    const row = w.db.s.notes.get(N1)!;
+    expect(row.sort_key).toBeNull();
+    expect(await openNote(await aesKeyFor(MASTER, A, 'note'), A, N1, 1, row.body_enc!)).toEqual({ v: 1, title: '标题', body: '正文', sort_key: '1735' });
+    const list = async () => ((await call(w, { action: 'list' }, { token: tok })).body.notes as { sort_key: string | null }[])[0]?.sort_key;
+    expect(await list()).toBe('1735');
+    await call(w, save(N1, { title: '改', updated_at: 3 }), { token: tok });
+    expect(await list()).toBe('1735');
+    await call(w, save(N1, { sort_key: null, updated_at: 4 }), { token: tok });
+    expect(await list()).toBeNull();
+    expect((await call(w, save(N1, { sort_key: '170', updated_at: 5 }), { token: tok })).status).toBe(400);
   });
 
   it('add_images 预登记图片行（skip / vault_off，按报的 bytes 算额度；不查 R2，整块评审第 3、10 条）；原样重发算成功', async () => {
@@ -161,6 +177,17 @@ describe('移进、移出（TC-B5-08、TC-B0-75）', () => {
     expect(w.db.s.notes.get(N1)).toMatchObject({ is_private: false, title: '明文标题', body: '明文正文', body_enc: null });
     expect(w.db.s.images.get(I1)).toMatchObject({ bucket: 'images', ai_status: 'pending' });
     expect(w.r2.keys('vault-images')).toEqual([]);
+  });
+
+  it('排序值（R-429）跟着移：移进时明文列的 sort_key 进密文、明文列清空；移出时写回明文列', async () => {
+    const { w, tok } = await setupPlain();
+    w.db.s.notes.get(N1)!.sort_key = '1729';
+    await call(w, { action: 'import', note_id: N1 }, { token: tok });
+    expect(w.db.s.notes.get(N1)?.sort_key).toBeNull();
+    const l = await call(w, { action: 'list' }, { token: tok });
+    expect((l.body.notes as { sort_key: string | null }[])[0]?.sort_key).toBe('1729');
+    await call(w, { action: 'export', note_id: N1 }, { token: tok });
+    expect(w.db.s.notes.get(N1)).toMatchObject({ is_private: false, sort_key: '1729' });
   });
 
   it('已软删的图片行跟着换桶，对象也跟着搬（整块评审第 7 条）', async () => {

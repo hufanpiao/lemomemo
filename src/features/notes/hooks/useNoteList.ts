@@ -4,12 +4,17 @@
 //   （正文是输入框里的字，可以空），再把图插进这一条（data/image-uploader.ts）
 // • 删除：软删（deleted_at），进“最近删除”（ADR-006）；撤销把它改回 null。随手记没有提醒，remind 标记一律 false
 // • 转成待办 / 日程（S8，R-414）：经 data/note-convert.ts 的 convertNote；菜单变淡用 tooLong。规则见 shared/logic/notes/note-convert.ts 文件头
+// • 长按拖动排序（R-429）：排序方式读来源的设置键（随手记 notes.order、隐私记 vault.order，各记各的；kit 的 useSettingWriter 写）；
+//   move 按页面上这一串算要写的排序值（data/note-sort.ts），按时间排时顺手切到“自己排”（switched，提示条说“已切到自己排，设置里可改回”）；
+//   undoMove 写回原来的排序值，切过的再切回按时间
 // • 行和写入经 ./note-source.ts 的来源（B5 隐私记重写 11-15）：普通随手记是本机集合 + edit-save，隐私记是它的内存仓库；分类照旧读本机 categories
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { convertTooLong, type ConvertKind } from '../../../../shared/logic/notes/note-convert.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { actionResult, type ActionResult } from '../../../core/action-result.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
+import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
+import { settingValue } from '../../../core/setting-read.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -18,10 +23,18 @@ import { ruleCategory } from '../data/classify.ts';
 import { convertNote, type ConvertResult } from '../data/note-convert.ts';
 import { BODY_MAX, newNoteRow } from '../data/note-edit.ts';
 import { categoryNames } from '../../../core/categories.ts';
-import { aliveCount, categoryCounts, fileCounts, groupByDay, imagesByNote, noteItems, type Row } from '../data/note-list.ts';
+import { aliveCount, categoryCounts, fileCounts, groupByDay, imagesByNote, noteItems, type NoteItem, type Row } from '../data/note-list.ts';
+import { orderOf } from '../../../../shared/logic/sort-key.ts';
+import { applyNoteSort, planNoteDrop, type NoteKeyWrite } from '../data/note-sort.ts';
 import { useNoteSource } from './note-source.ts';
 
-export type { NoteGroup, NoteItem } from '../data/note-list.ts';
+export type { NoteGroup, NoteItem, NoteOrder } from '../data/note-list.ts';
+
+/** 一次拖动放下写了什么（撤销照它写回）；switched：这一次顺手从按时间切到了自己排 */
+export interface NoteMove {
+  writes: NoteKeyWrite[];
+  switched: boolean;
+}
 export type { ActionResult, ConvertKind, ConvertResult };
 /** 写入结果换界面码只经 core 这一份（页面的转换流程也用） */
 export { actionResult };
@@ -44,7 +57,9 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   const counts = useMemo(() => categoryCounts(rows, cats, locale), [rows, cats, locale]);
   // 筛的分类没了（最后一条删掉、分类被合并）：回到“全部”
   const active = category !== null && counts.some((c) => c.id === category) ? category : null;
-  const items = useMemo(() => noteItems(rows, cats, tz, active, pics, files), [rows, cats, tz, active, pics, files]);
+  const settings = useSettingWriter();
+  const order = orderOf(settingValue(settings.rows, src.orderKey));
+  const items = useMemo(() => noteItems(rows, cats, tz, active, pics, files, order), [rows, cats, tz, active, pics, files, order]);
   const groups = useMemo(() => groupByDay(items, now, tz), [items, now, tz]);
 
   /** 底部输入行记下一句：正文就是这句话，标题空着（列表里取正文第一行当标题）；成功回新条目的 id */
@@ -90,5 +105,17 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
     const n = rows.find((x) => x.id === id);
     return n !== undefined && convertTooLong({ title: n['title'], body: n['body'] });
   }, [rows]);
-  return { items, groups, counts, category: active, setCategory, add, remove, discard, convert, tooLong, total: aliveCount(rows), now, tz };
+  /** 拖动放下（R-429）：shown 是页面上这一串（显示顺序）；没什么要写回 null */
+  const move = async (shown: readonly NoteItem[], id: string, index: number): Promise<{ res: ActionResult; m: NoteMove } | null> => {
+    const writes = planNoteDrop(shown, id, index, clock.now());
+    if (writes.length === 0) return null;
+    const switched = order !== 'manual';
+    if (switched) void settings.save(src.orderKey, 'manual');
+    return { res: await applyNoteSort(io, writes, false), m: { writes, switched } };
+  };
+  const undoMove = async (m: NoteMove): Promise<ActionResult> => {
+    if (m.switched) void settings.save(src.orderKey, 'time');
+    return applyNoteSort(io, m.writes, true);
+  };
+  return { items, groups, order, counts, category: active, setCategory, add, remove, discard, convert, tooLong, move, undoMove, total: aliveCount(rows), now, tz };
 }

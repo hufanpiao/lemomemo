@@ -57,7 +57,7 @@ export class FakeVault {
   /** 一个普通随手记（明文），可带图片 */
   plainNote(uid: string, id: string, title: string, body: string, imgs: { id: string; has_thumb?: boolean; taken_at?: number }[] = []) {
     this.s.notes.set(id, {
-      id, user_id: uid, is_private: false, deleted_at: null, title, body, body_enc: null, enc_key_id: null, category_id: null,
+      id, user_id: uid, is_private: false, deleted_at: null, title, body, body_enc: null, enc_key_id: null, category_id: null, sort_key: null,
       created_at: this.ms, updated_at: this.ms, raw_text: body, tags: ['t'], ai_meta: { a: 1 }, converted_to: null,
     });
     for (const i of imgs) {
@@ -126,7 +126,7 @@ export class FakeVault {
       async imagesOf(nid) { return [...s.images.values()].filter((i) => i.user_id === uid && i.note_id === nid).sort((a, b) => (a.id < b.id ? -1 : 1)); },
       async insertPrivateNote(n) {
         if (s.notes.has(n.id)) throw new StoreDataError('data');
-        const row: NoteFull = { ...n, user_id: uid, is_private: true, deleted_at: null, title: null, body: null, raw_text: '', tags: [], ai_meta: null, converted_to: null };
+        const row: NoteFull = { ...n, user_id: uid, is_private: true, deleted_at: null, title: null, body: null, raw_text: '', tags: [], ai_meta: null, converted_to: null, sort_key: null };
         check(row);
         s.notes.set(n.id, row);
       },
@@ -186,14 +186,14 @@ export class FakeVault {
       async toVault(id, enc, kid, at) {
         const n = mine(s.notes.get(id));
         if (!n || n.is_private || n.deleted_at !== null) return false;
-        Object.assign(n, { is_private: true, body_enc: enc, enc_key_id: kid, title: null, body: null, raw_text: '', tags: [], ai_meta: null, converted_to: null, updated_at: at });
+        Object.assign(n, { is_private: true, body_enc: enc, enc_key_id: kid, title: null, body: null, raw_text: '', tags: [], ai_meta: null, converted_to: null, sort_key: null, updated_at: at });
         check(n);
         return true;
       },
-      async toPlain(id, title, body, at) {
+      async toPlain(id, title, body, sortKey, at) {
         const n = mine(s.notes.get(id));
         if (!n || !n.is_private || n.deleted_at !== null) return false;
-        Object.assign(n, { is_private: false, body_enc: null, enc_key_id: null, title, body, updated_at: at });
+        Object.assign(n, { is_private: false, body_enc: null, enc_key_id: null, title, body, sort_key: sortKey, updated_at: at });
         check(n);
         return true;
       },

@@ -12,7 +12,7 @@ import { Pressable } from '../../../motion/components.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import type { NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
-import type { MergeUndo, UndoTip } from '../hooks/useNotesToast.ts';
+import type { MergeUndo, MoveUndo, UndoTip } from '../hooks/useNotesToast.ts';
 import { Dot } from './CatDot.tsx';
 import type { PageTip } from './NotesActions.tsx';
 import styles from './NotesPage.module.css';
@@ -95,7 +95,7 @@ export function UndoBar({ tip, onClose }: { tip: UndoTip; onClose(): void }) {
 const DOCK_TEST_ID = { error: 'notes-error', img: 'notes-img-tip', conv: 'notes-conv-tip', moveOut: 'notes-moveout-tip' } as const;
 
 /** 输入行上面的提示条：没保存上、插图提示（空间满了的带“最近删除”入口）、转换结果、移出隐私记没成 */
-export function DockTip({ toast }: { toast: { kind: 'error' } | Exclude<PageTip, MergeUndo> }) {
+export function DockTip({ toast }: { toast: { kind: 'error' } | Exclude<PageTip, MergeUndo | MoveUndo> }) {
   const t = useNotesT();
   return (
     <p className={styles.error} role="alert" data-testid={DOCK_TEST_ID[toast.kind]}>

@@ -149,12 +149,19 @@ describe('rows 严格版', () => {
       id: ID, title: 'T', done: false, due: null, important: false, priority: 'mid', project: '', note: '', source: 'page', raw_text: '',
       batch_id: null, from_note_id: null, from_anniv_id: null, short: null, short_by: null, done_at: 0, remind_days: null,
       remind_time: '09:00', due_time: null, remind_before_min: null, push_show_title: null, notified_for: null, snooze_at: null,
-      deleted_at: null, undone: false, created_at: 1, updated_at: 1,
+      deleted_at: null, undone: false, sort_key: null, created_at: 1, updated_at: 1,
     };
     expect(todosWrite.safeParse(todo).success).toBe(true);
     expect(todosWrite.safeParse({ ...todo, due_time: '18:00' }).success).toBe(false);
     expect(todosWrite.safeParse({ ...todo, due: '2026-11-01', due_time: '18:00', remind_before_min: 30 }).success).toBe(true);
     expect(todosWrite.safeParse({ ...todo, remind_before_min: 5 }).success).toBe(false);
+    // 排序值（R-429）：数字串、末位不是 0；只能 update，新建整行不带
+    expect(todosWrite.safeParse({ ...todo, sort_key: '1735' }).success).toBe(true);
+    expect(todosWrite.safeParse({ ...todo, sort_key: '170' }).success).toBe(false);
+    expect(todosWrite.safeParse({ ...todo, sort_key: 'a1' }).success).toBe(false);
+    const ins = Object.fromEntries(Object.entries(todo).filter(([k]) => !['deleted_at', 'undone', 'sort_key'].includes(k)));
+    expect(insertSchema('todos').safeParse(ins).success).toBe(true);
+    expect(insertSchema('todos').safeParse({ ...ins, sort_key: '17' }).success).toBe(false);
   });
 });
 

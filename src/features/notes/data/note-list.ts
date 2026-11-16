@@ -1,7 +1,9 @@
 // 随手记列表的数据逻辑（B4 S1、S2；定稿线框 s7；皮肤视觉稿“随手记：瀑布流 / 列表”）
 // • 只列普通随手记：删了的（deleted_at）、撤销了的（undone）、隐私记（is_private，B5）不出
 // • 排序：最近记的在前（created_at 倒序，一样的按 id），新记的一条出现在最上面
-// • 分组（列表方式）：今天 / 昨天 / 日期（按 current_tz 算哪一天）
+// • 自己排（R-429，拖过一次切过来，设置里可切回；随手记 notes.order、隐私记 vault.order 各记各的）：按排序值大的在上（shared/logic/sort-key.ts 的 effKey：
+//   拖过的用 sort_key，没拖过的用 created_at 的时间键，新记的照样在最上面），不按天分组
+// • 分组（列表方式、按时间排时）：今天 / 昨天 / 日期（按 current_tz 算哪一天）
 // • 没有标题时取正文前两行当标题（线框 s7 注）：第一行当标题，第二行起当摘要
 // • “AI”小标：AI 分过类、用户还没看过（category_source = 'ai' 且 category_seen = false）
 // • “已转过”（R-415 ③）：converted_to 至少一项（转成过待办 / 日程，带图保留的原条、恢复回来的原条都会有）
@@ -14,6 +16,7 @@
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isShownFile } from '../../../../shared/logic/files/shown-file.ts';
+import { effKey, sortKeyOf, type ListOrder } from '../../../../shared/logic/sort-key.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
 import { categoryNames, categoryResolver, type Row } from '../../../core/categories.ts';
@@ -34,6 +37,10 @@ export interface NoteItem {
   converted: boolean;
   createdAt: number;
   date: DateStr;
+  /** 拖动排序的排序值（R-429）：没拖过为 null */
+  sortKey: string | null;
+  /** 拖动算键、自己排时排序用：自己排时拖过的是 sortKey、没拖过的是 created_at 的时间键；按时间排时一律是时间键（和屏幕顺序一致） */
+  key: string;
   /** 第一张插图（没有为 null） */
   cover: NoteImage | null;
   /** 一共几张插图 */
@@ -57,6 +64,9 @@ export interface NoteGroup {
   date: DateStr;
   items: NoteItem[];
 }
+
+/** 排序方式（R-429）：按时间（默认，列表方式按天分组）/ 自己排；定义在 shared/logic/sort-key.ts */
+export type NoteOrder = ListOrder;
 
 export interface CategoryCount {
   id: string;
@@ -125,8 +135,8 @@ export function fileCounts(files: readonly Row[]): Map<string, number> {
   return out;
 }
 
-/** 列表要的条目（已筛掉删了的、隐私记），最近记的在前；category 不为 null 时只留这个分类的 */
-export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: Tz, category: string | null = null, images: readonly Row[] = [], files: readonly Row[] = []): NoteItem[] {
+/** 列表要的条目（已筛掉删了的、隐私记），最近记的在前（自己排时排序值大的在前）；category 不为 null 时只留这个分类的 */
+export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: Tz, category: string | null = null, images: readonly Row[] = [], files: readonly Row[] = [], order: NoteOrder = 'time'): NoteItem[] {
   const names = categoryNames(categories);
   const target = categoryResolver(categories);
   const pics = imagesByNote(images);
@@ -138,6 +148,7 @@ export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: 
     const cid = target(r['category_id']);
     if (category !== null && cid !== category) continue;
     const createdAt = num(r['created_at']);
+    const sortKey = sortKeyOf(r);
     out.push({
       id: r.id,
       ...titleAndSummary(r['title'], r['body']),
@@ -148,12 +159,17 @@ export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: 
       converted: Array.isArray(r['converted_to']) && r['converted_to'].length > 0,
       createdAt,
       date: todayOf(createdAt, tz),
+      sortKey,
+      key: effKey(order === 'manual' ? sortKey : null, createdAt),
       cover: pics.get(r.id)?.[0] ?? null,
       images: pics.get(r.id)?.length ?? 0,
       files: nFiles.get(r.id) ?? 0,
     });
   }
-  return out.sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const byId = (a: NoteItem, b: NoteItem) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  return out.sort(order === 'manual'
+    ? (a, b) => (a.key === b.key ? byId(a, b) : a.key > b.key ? -1 : 1)
+    : (a, b) => b.createdAt - a.createdAt || byId(a, b));
 }
 
 /** 某个时刻落在今天、昨天，还是更早的某天（瀑布流卡片、电脑抽屉顶行的时间写法） */

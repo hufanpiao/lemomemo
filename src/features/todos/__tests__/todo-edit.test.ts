@@ -59,7 +59,7 @@ describe('patchOf：只写变了的列', () => {
     const prev = base({ due: '2026-11-05', due_time: '17:00', remind_before_min: 60 });
     const p = patchOf(row, prev, normalize(prev, { ...prev, due: null }), 5);
     expect(p).toEqual({ due: null, due_time: null, remind_before_min: null, updated_at: 5 });
-    expect(todosWrite.safeParse({ ...newTodoRow(ID, prev, 1), ...p, deleted_at: null, undone: false }).success).toBe(true);
+    expect(todosWrite.safeParse({ ...newTodoRow(ID, prev, 1), ...p, deleted_at: null, undone: false, sort_key: null }).success).toBe(true);
   });
 
   it('改标题：简称是 AI 起的就清掉 short、short_by；用户自己写的不动', () => {
@@ -92,7 +92,7 @@ describe('newTodoRow：整行可写列，过得了 insert 的校验', () => {
 
   it('有截止时刻的、没有日期的都合格', () => {
     for (const f of [base(), base({ due: '2026-11-05', due_time: '17:00', remind_before_min: 60 })]) {
-      expect(todosWrite.safeParse({ ...newTodoRow(ID, f, 1_800_000_000_000), deleted_at: null, undone: false }).success).toBe(true);
+      expect(todosWrite.safeParse({ ...newTodoRow(ID, f, 1_800_000_000_000), deleted_at: null, undone: false, sort_key: null }).success).toBe(true);
     }
   });
 

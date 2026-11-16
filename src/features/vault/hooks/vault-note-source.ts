@@ -114,7 +114,7 @@ const imageOf = (r: Row, noteId: string): NoteImage => ({
 /** 隐私记的一条（插图、写入都只认 notes 这一张表） */
 function noteRowFrom(row: Record<string, unknown> & { id: string }): Row {
   return {
-    id: row.id, title: row['title'] ?? '', body: row['body'] ?? '', category_id: row['category_id'] ?? null, category_source: 'manual', category_seen: true,
+    id: row.id, title: row['title'] ?? '', body: row['body'] ?? '', category_id: row['category_id'] ?? null, sort_key: row['sort_key'] ?? null, category_source: 'manual', category_seen: true,
     is_private: false, converted_to: null, undone: false, created_at: row['created_at'], updated_at: row['updated_at'], deleted_at: null,
   };
 }
@@ -200,6 +200,7 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
     caps: { ai: false, convert: false, merge: false, lockrow: false, moveIn: false, moveOut: true, filesMark: false },
     route: { list: 'vault', edit: 'vault' },
     desk: 'vault',
+    orderKey: 'vault.order',
     trash: ['vault', 'trash'],
     useTrashCount: () => useVaultStore().notes.filter((n) => n['deleted_at'] !== null).length,
     text,

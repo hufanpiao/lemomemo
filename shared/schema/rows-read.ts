@@ -110,6 +110,7 @@ const SERVER_READ: Readonly<Record<string, Readonly<Record<string, ReadCol>>>> =
     category_source: enumOf(['ai', 'rule', 'manual', 'none']),   // notes_category_source_in；客户端会写、也按它判断（manual 不让 AI 改、“AI”小标）
     source: enumOf(['page', 'chat', 'voice', 'import']),   // notes_source_in
     ai_status: plain(z.string()),   // notes_ai_status_in（pending、done、rule）：系统列，客户端不写、不按它判断；服务器加状态不能把整条锁成只读
+    sort_key: plain(z.string().nullable()),   // R-429 拖动排序（notes_sort_key_fmt）；隐私记行不留（不在 vaultRows.neutralCols，隐私记的排序值在加密载荷里）
   },
   categories: {
     created_by: enumOf(['ai', 'user']),   // 0003_notes.sql 的 check (created_by in ('ai','user'))

@@ -87,11 +87,14 @@ export function noteAad(userId: string, noteId: string, encKeyId: number): strin
   return `${userId}|${noteId}|${encKeyId}`;
 }
 
-/** 隐私记正文密文里的东西（代定 D7） */
-export type NotePlain = { v: 1; title: string; body: string };
+/**
+ * 隐私记正文密文里的东西（代定 D7）。sort_key：拖动排序的排序值（R-429，主持人 11-15 定“放进加密载荷，不进明文列”）；
+ * 没拖过就不写这一项（老的密文、没拖过的照旧只有 v、title、body，版本号不变）。格式由请求校验（shared/schema/vault.ts 的 save），这里只认字符串
+ */
+export type NotePlain = { v: 1; title: string; body: string; sort_key?: string };
 
-export async function sealNote(key: CryptoKey, userId: string, noteId: string, title: string, body: string, encKeyId = ENC_KEY_ID): Promise<Bytes> {
-  const plain: NotePlain = { v: 1, title, body };
+export async function sealNote(key: CryptoKey, userId: string, noteId: string, title: string, body: string, encKeyId = ENC_KEY_ID, sortKey: string | null = null): Promise<Bytes> {
+  const plain: NotePlain = sortKey === null ? { v: 1, title, body } : { v: 1, title, body, sort_key: sortKey };
   return seal(key, noteAad(userId, noteId, encKeyId), utf8(JSON.stringify(plain)));
 }
 
@@ -102,7 +105,7 @@ export async function openNote(key: CryptoKey, userId: string, noteId: string, e
   try {
     const v = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(pt)) as Partial<NotePlain>;
     if (v.v !== 1 || typeof v.title !== 'string' || typeof v.body !== 'string') return null;
-    return { v: 1, title: v.title, body: v.body };
+    return typeof v.sort_key === 'string' ? { v: 1, title: v.title, body: v.body, sort_key: v.sort_key } : { v: 1, title: v.title, body: v.body };
   } catch {
     return null;
   } finally {

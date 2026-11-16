@@ -62,6 +62,8 @@ export const ko = {
   'notes.merge.go': '합치기', // REVIEW(ko)
   'notes.merge.no': '괜찮아요', // REVIEW(ko)
   'notes.merge.done': '합쳤어요', // REVIEW(ko) R-415
+  'notes.moved': '옮겼어요', // REVIEW(ko) R-429
+  'notes.order.switched': '직접 정렬로 바꿨어요. 설정에서 되돌릴 수 있어요', // REVIEW(ko) R-429
   'notes.converted': '변환함', // REVIEW(ko) R-415
   'notes.conv.todo': '할 일로 바꾸기', // REVIEW(ko)
   'notes.conv.event': '일정으로 바꾸기', // REVIEW(ko)

@@ -6,6 +6,7 @@
 //   类型经 notes/index.ts 的 export type 给出去（A27）
 // • caps：两种来源界面上不一样的地方只按这几个开关分，不按 kind 到处判断
 // • 放在 hooks 不放 data：类型里有 React 组件（附件区），data 层不准 import React（A1）
+import type { OrderKey } from '../../../../shared/logic/sort-key.ts';
 import { createContext, useContext, type ComponentType, type RefObject } from 'react';
 import type { ActionResult } from '../../../core/action-result.ts';
 import type { SaveOutcome } from '../../../core/edit-save.ts';
@@ -84,6 +85,8 @@ export interface NoteSource {
   /** 列表、编辑页的路由名；电脑布局存设置用的页名（两种来源分开存） */
   route: { list: 'notes' | 'vault'; edit: 'note' | 'vault' };
   desk: 'notes' | 'vault';
+  /** 排序方式存在哪个设置键（R-429：随手记、隐私记各记各的；值 'manual' = 自己排，别的都是按时间、按天分组） */
+  orderKey: OrderKey;
   /** 列表上方居中的“最近删除”入口去哪（负责人 11-15：随手记页也常驻一个，原来只能从图片空间满的提示条进）：
    *  随手记是全站的 #/trash，隐私记是自己的 #/vault/trash；写成路由和参数，直接交给 kit 的 TrashLink */
   trash: readonly ['trash', 'notes'] | readonly ['vault', 'trash'];

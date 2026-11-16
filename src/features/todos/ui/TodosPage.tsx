@@ -27,6 +27,10 @@
 // • “最近删除”入口（审查 11-15 第 2 条；R-438 负责人 11-16 嫌胶囊“太突兀”）：顶栏里头像左边的垃圾桶图标（kit 的 TrashLink look="icon"，同随手记页），去 #/trash/todos（只列待办）
 // • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal + smart-search 的 PullSearch，和随手记、日历页同一套）；
 //   打了字就把“最近删除”、项目筛选和列表藏起来、换成结果（kit 的 PullSlot）（按标题和子任务就地筛，已完成的也在里面）；点一条和点标题一样进编辑页（只读的照样拦下）
+// • 长按拖动排序（R-429，含 R-433 拖动时左边的 6 个点）：kit 的 useSortDrag（按住 0.4 秒没动才拿起，动了交给左滑或滚动；拿起的那一行左边出 SortGrip 的 6 个点、
+//   落点一条强调色细横线）。组内换序；拖到今天、明天、7 天内某一天那组就改截止日期（“过期”只出不进，“以后”“没日期”只组内换），规则和写入在 data/todo-sort.ts。
+//   已完成的（含留在原位的）、只读行不能拖（data-sort-off）。放下出“已移动 · 撤销”，跨组出“已改到 X · 撤销”（X 是组名），和“已完成 · 撤销”同一个提示条（ListToasts 的 extra）；
+//   运行日志 sort todos lift / drop / cancel（kit 记，只记组和条数）
 import { Fragment, Suspense, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
@@ -39,6 +43,7 @@ import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { PrioCycle, PrioDot } from '../../../kit/components/Priority.tsx';
 import { groupLabelClass } from '../../../kit/components/Form.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
+import { SortGrip, sortBoxClass, sortRowClass, useSortDrag, type SortDrop } from '../../../kit/components/SortDrag.tsx';
 import { nextPriority, type Priority } from '../../../../shared/logic/todo-row.ts';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { TrashLink } from '../../../kit/components/TrashLink.tsx';
@@ -49,7 +54,7 @@ import { usePullReveal } from '../../../kit/hooks/usePullReveal.ts';
 import { PullSlot } from '../../../kit/components/PullSlot.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
-import { useListT, useTodoList, type DueTag, type Group } from '../hooks/useTodoList.ts';
+import { canDropTodo, groupId, useListT, useTodoList, type DueTag, type Group, type TodoSortPlan } from '../hooks/useTodoList.ts';
 import { setCollapsed, setDoneOpen, useCollapsed, useDoneOpen } from '../hooks/useSubtasks.ts';
 import { SubtaskCard } from './SubtaskCard.tsx';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
@@ -79,7 +84,7 @@ export default function TodosPage() {
   const l = useTodoList(lg.ids);
   // 打勾先留住按下之前的分组 --dur-ui（方框在原地填满，17.1 勾选完成）；只读行统一拦下；撤销条、出错条也在 a.g 里（kit 的 useListActions）
   const hv = useHoldView(l.groups);
-  const a = useListActions<DoneToast>('todos', { toggle: l.toggleDone, remove: l.remove }, hv);
+  const a = useListActions<PageToast>('todos', { toggle: l.toggleDone, remove: l.remove }, hv);
   const { isRo, tick, shown, del } = a;
   const doneToast = a.g.toast?.kind === 'done' ? a.g.toast : null;
   // 撤销条都收起了：留在原位的一起归进“已完成”。画的时候就对上（React 的“画时调整状态”，不等 effect、不闪一帧）
@@ -117,8 +122,14 @@ export default function TodosPage() {
       a.report(res);
     });
   };
-  /** 撤销条的文案和撤销做什么：打勾的撤销 = 再点一下方框（core/todo-done.ts 按撤销写回原来的 done_at）；自动完成的撤销连刚勾的那项一起撤回（Q1） */
-  const undoOf = (x: DoneToast): ExtraUndo => ({
+  /** 撤销条的文案和撤销做什么：打勾的撤销 = 再点一下方框（core/todo-done.ts 按撤销写回原来的 done_at）；自动完成的撤销连刚勾的那项一起撤回（Q1）；
+   *  拖动放下的撤销按原样写回排序值、截止（R-429） */
+  const undoOf = (x: PageToast): ExtraUndo => x.kind === 'moved' ? {
+    key: `moved:${x.n}`,
+    message: x.to === null ? t('list.moved', {}) : t('list.movedTo', { g: x.to }),
+    onUndo: () => void l.sortUndo(x.plan).then(a.report),
+    testId: 'todos-moved-toast',
+  } : ({
     key: `done:${x.n}`,
     message: t(x.sub === null ? 'list.doneToast' : 'items.autoDone', {}),
     onUndo: () => lg.settle(x.id, x.sub === null ? tick(x.id, false) : l.undoAuto(x.id, x.sub).then(a.report)),
@@ -127,6 +138,18 @@ export default function TodosPage() {
   });
 
   const { groupTitle, dueText } = labelsOf(t, locale);
+  // 长按拖动（R-429）：放下按页面此刻画着的分组算（hv.view，和 DOM 里的顺序一致）；只读行行上已 data-sort-off，这里再兜一道
+  const dropped = (d: SortDrop) => {
+    if (isRo(d.id)) return a.g.block();
+    void l.sortDrop(hv.view, d).then((r) => {
+      if (!r) return;
+      // 有一笔没写成（只读行、离线满了）：整批撤回，不留半截顺序
+      if (r.res !== 'ok') return void l.sortUndo(r.plan).then(() => a.report(r.res));
+      seq.current += 1;
+      a.g.show({ kind: 'moved', plan: r.plan, to: r.plan.to ? groupTitle(r.plan.to) : null, n: seq.current });
+    });
+  };
+  const sd = useSortDrag({ tag: 'todos', axis: 'y', canDrop: canDropTodo, onDrop: dropped, log: rlog });
   const prioName = (p: Priority) => t(`list.prio.${p}`, {});
   /** 行右边 H / M / L 换档（R-434）：只读行拦下出“要新版本”；写入结果照打勾一样报（出错条） */
   const prio = (id: string, p: Priority) => (isRo(id) ? a.g.block() : void l.setPriority(id, p).then(a.report));
@@ -157,6 +180,7 @@ export default function TodosPage() {
       ) : null}
 
       {hv.view.length === 0 ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
+      <div ref={sd.ref} className={sortBoxClass}>
       <AppearList as="div">
         {hv.view.map((g) => (
           <AppearItem
@@ -180,11 +204,16 @@ export default function TodosPage() {
                 return (
                 <AppearItem
                   key={todo.id}
-                  className={list.row}
+                  className={`${list.row} ${sortRowClass}`}
                   data-done={todo.done ? '' : undefined}
                   data-readonly={isRo(todo.id) ? '' : undefined}
+                  data-sort-id={todo.id}
+                  data-sort-group={groupId(g)}
+                  data-sort-off={todo.done || isRo(todo.id) ? '' : undefined}
                   data-testid={`todos-row-${todo.id}`}
                 >
+                  {/* 拿起时左边的 6 个点（R-433，勾选框左边；平时透明） */}
+                  <SortGrip />
                   {/* 左滑删除（负责人 11-15 去掉行尾 ×）：露出“删除”点了删，一口气拉过大半行直接删（kit SwipeRow 的 full）；只读行不能滑 */}
                   <SwipeRow
                     className={list.swp}
@@ -246,6 +275,8 @@ export default function TodosPage() {
           </AppearItem>
         ))}
       </AppearList>
+      {sd.line}
+      </div>
       </PullSlot>
 
       {/* 页底提示条只这一处（kit ListToasts）：删除的撤销条、出错条、只读提示条，加上打勾、自动完成的“已完成 · 撤销”（undoOf） */}
@@ -262,6 +293,9 @@ export default function TodosPage() {
 
 /** 完成以后的撤销条（负责人 11-15 方案；R-350 方案 5.5 的自动完成同一种）：sub 是自动完成时刚勾的那一项（打勾完成是 null），n 每出一条加一（换一条重新计时） */
 type DoneToast = { kind: 'done'; id: string; sub: string | null; n: number };
+/** 拖动放下以后的撤销条（R-429）：plan 是写了什么（撤销照它写回），to 是跨组时目标组的名字（组内换序为 null） */
+type MoveToast = { kind: 'moved'; plan: TodoSortPlan; to: string | null; n: number };
+type PageToast = DoneToast | MoveToast;
 /** 撤销条开着期间勾过的在原位留多久（撤销条同样长；负责人 11-15 选的“约 3 秒”） */
 const DONE_LINGER_MS = 3000;
 const NO_LINGER: ReadonlyMap<string, boolean> = new Map();

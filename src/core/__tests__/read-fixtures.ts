@@ -9,10 +9,10 @@ export function common(n: number, rev = 3): Record<string, unknown> {
   };
 }
 
-/** 服务器上的一行 todos（可写列 + 公共列 + 系统列） */
+/** 服务器上的一行 todos（可写列 + 公共列 + 系统列；sort_key 只能 update，新建整行 todo() 不带，服务器回的整行里有，R-429） */
 export function serverTodo(n: number, over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    ...todo(n), ...common(n), remind_at: null, pushed_for: null, defer_until: null, ai_status: 'none', ...over,
+    ...todo(n), ...common(n), sort_key: null, remind_at: null, pushed_for: null, defer_until: null, ai_status: 'none', ...over,
   };
 }
 
@@ -33,7 +33,7 @@ export const SECRET = '隐私记明文-不该进本机';
 export function serverNote(n: number, priv: boolean, over: Record<string, unknown> = {}): Record<string, unknown> {
   const base = {
     ...common(n), category_id: null, category_source: 'none', category_seen: false, ai_status: 'done', source: 'page', batch_id: null,
-    created_at: 1, updated_at: 1, ai_meta: null, converted_to: null, tags: [],
+    created_at: 1, updated_at: 1, ai_meta: null, converted_to: null, tags: [], sort_key: null,
   };
   return priv
     ? { ...base, is_private: true, title: null, body: null, raw_text: null, body_enc: 'ZW5j', enc_key_id: 'k1', ...over }

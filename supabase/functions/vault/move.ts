@@ -145,13 +145,14 @@ const pending = (fs: readonly FileRow[]) => fs.some((f) => f.deleted_at === null
 async function writeNote(c: Ctx, t: VaultTx, n: NoteRow, d: Dir): Promise<boolean | Response> {
   const key = await noteKey(c);
   const at = c.deps.now();
-  if (!d.wantPrivate) return t.toVault(n.id, await sealNote(key, c.userId, n.id, n.title ?? '', n.body ?? '', ENC_KEY_ID), ENC_KEY_ID, at);
+  // 排序值（R-429）跟着搬：移进时明文列的 sort_key 放进密文，移出时密文里的写回明文列
+  if (!d.wantPrivate) return t.toVault(n.id, await sealNote(key, c.userId, n.id, n.title ?? '', n.body ?? '', ENC_KEY_ID, n.sort_key), ENC_KEY_ID, at);
   const p = n.body_enc && n.enc_key_id !== null ? await openNote(key, c.userId, n.id, n.enc_key_id, n.body_enc) : null;
   if (!p) {
     c.deps.log('decrypt_failed');
     return err(503, 'try_later');
   }
-  return t.toPlain(n.id, p.title === '' ? null : p.title, p.body, at);
+  return t.toPlain(n.id, p.title === '' ? null : p.title, p.body, p.sort_key ?? null, at);
 }
 
 /** 按桶分组删；失败只记日志 */

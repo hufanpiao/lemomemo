@@ -28,6 +28,7 @@ export type VaultReq =
   | { action: 'list' }
   | {
     action: 'save'; id: Uuid; title: string; body: string; category_id: Uuid | null; created_at: number; updated_at: number;
+    sort_key?: string | null | undefined;
     add_images?: ImageAdd[] | undefined; remove_images?: Uuid[] | undefined;
   }
   | { action: 'delete'; id: Uuid }
@@ -71,6 +72,8 @@ export interface CredRow { id: string; public_key: Uint8Array; sign_count: numbe
 export interface NoteRow {
   id: Uuid; is_private: boolean; deleted_at: number | null; title: string | null; body: string | null;
   body_enc: Uint8Array | null; enc_key_id: number | null; category_id: Uuid | null; created_at: number; updated_at: number;
+  /** 明文列 sort_key（R-429）：普通随手记拖过的排序值；隐私记一律 null（排序值在密文里） */
+  sort_key: string | null;
 }
 export interface ImageRow {
   id: Uuid; note_id: Uuid; bucket: 'images' | 'vault-images'; has_thumb: boolean; width: number | null; height: number | null;
@@ -129,10 +132,10 @@ export interface VaultTx {
   fileToVault(id: Uuid, p: FileToVault, updatedAt: number): Promise<boolean>;
   /** 只改本人、隐私记的那一行（check_status 保持原样）；0 行回 false */
   fileToPlain(id: Uuid, p: FileToPlain, updatedAt: number): Promise<boolean>;
-  /** 移进：同一条 update 写密文、清明文残留，is_private = true；只改没删的普通随手记，0 行回 false */
+  /** 移进：同一条 update 写密文、清明文残留（含 sort_key，排序值随密文走），is_private = true；只改没删的普通随手记，0 行回 false */
   toVault(id: Uuid, bodyEnc: Uint8Array, encKeyId: number, updatedAt: number): Promise<boolean>;
-  /** 移出：写回明文，is_private = false、body_enc 清空；只改没删的隐私记，0 行回 false */
-  toPlain(id: Uuid, title: string | null, body: string, updatedAt: number): Promise<boolean>;
+  /** 移出：写回明文（含密文里的排序值 sortKey，R-429），is_private = false、body_enc 清空；只改没删的隐私记，0 行回 false */
+  toPlain(id: Uuid, title: string | null, body: string, sortKey: string | null, updatedAt: number): Promise<boolean>;
   /** 这条的图片行换桶（vault-images 清 taken_at、ai_desc、ai_tags） */
   moveImages(noteId: Uuid, to: 'images' | 'vault-images'): Promise<void>;
   /** 删这条和它图片、附件的旧向量、vault_ai（触发器按新身份重新入队） */

@@ -8,9 +8,10 @@
 import { z } from 'zod';
 import { cutGraphemes } from '../logic/short.ts';
 import { PRIORITIES } from '../logic/todo-row.ts';
+import { SORT_KEY_MAX, SORT_KEY_RE } from '../logic/sort-key.ts';
 
 /** 改了本文件的形状或枚举，就把它加 1（2.6：本机库按 schema_v 整表重拉） */
-export const SCHEMA_V = 4;   // 2：B0 集成按实际授权补列、加 devices；3：宽容读取补登记 notes、categories 的枚举列（架构 0.57，跟 B4 前端同一版发布）；4：profiles 加 avatar_id、avatar_bytes（R-384）
+export const SCHEMA_V = 5;   // 2：B0 集成按实际授权补列、加 devices；3：宽容读取补登记 notes、categories 的枚举列（架构 0.57，跟 B4 前端同一版发布）；4：profiles 加 avatar_id、avatar_bytes（R-384）；5：todos、notes 加 sort_key（R-429）
 
 /** events、todos 各文字列的上限（UTF-16 单元，同 z.string().max 的口径；截断用 shared/logic/short.ts 的 cutGraphemes） */
 export const ITEM_TITLE_MAX = 160;
@@ -26,6 +27,8 @@ const uuid = z.uuid();
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const hm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const epochMs = z.number().int().nonnegative();
+/** 拖动排序的排序值（R-429，shared/logic/sort-key.ts；迁移 20261116090000 的 todos_sort_key_fmt、notes_sort_key_fmt）：没拖过为 null */
+export const sortKey = z.string().max(SORT_KEY_MAX).regex(SORT_KEY_RE).nullable();
 /**
  * snooze_at 的上限：2100-01-01 00:00 UTC（含）。和迁移 20261103140000_core_remind_due.sql 第 ③ 条的约束
  * events_snooze_at_range、todos_snooze_at_range、anniversaries_snooze_at_range（“为空，或 0～4102444800000”）一致，
@@ -95,6 +98,7 @@ export const todosWrite = z.strictObject({
   // important：旧列，新客户端双写成 priority = 'high'（todo-row.ts 的 prioCols），下一版删；priority：R-434 三档（todos_priority_in）
   important: z.boolean(),
   priority: z.enum(PRIORITIES),
+  sort_key: sortKey,
   project: z.string().max(PROJECT_MAX),
   note: z.string().max(ITEM_NOTE_MAX),
   source,
@@ -163,7 +167,7 @@ export const rowsWrite = {
 export const WRITE_RULES = {
   profiles: { insert: false, insertOnly: [], updateOnly: ['display_name', 'ui_locale', 'tz_mode', 'avatar_id', 'avatar_bytes'] },
   events: { insert: true, insertOnly: ['id', 'created_at'], updateOnly: ['deleted_at', 'undone'] },
-  todos: { insert: true, insertOnly: ['id', 'created_at'], updateOnly: ['deleted_at', 'undone'] },
+  todos: { insert: true, insertOnly: ['id', 'created_at'], updateOnly: ['deleted_at', 'undone', 'sort_key'] },   // sort_key：新建不带，拖动才写（R-429）
   todo_items: { insert: true, insertOnly: ['id', 'todo_id', 'created_at'], updateOnly: ['deleted_at', 'undone'] },
   devices: { insert: true, insertOnly: ['id', 'platform', 'install_id'], updateOnly: ['deleted_at', 'undone'] },
 } as const satisfies Record<keyof typeof rowsWrite, { insert: boolean; insertOnly: readonly string[]; updateOnly: readonly string[] }>;

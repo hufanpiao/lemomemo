@@ -144,6 +144,12 @@ export const zh = {
   'settings.notesView.mobileNote': '只对手机生效，电脑另外设',
   'settings.notesView.desktopNote': '只对电脑生效，手机另外设',
   'settings.notesView.err': '没保存上，稍后再选一次',
+  // 排序方式（R-429）：随手记、隐私记各一张
+  'settings.notesOrder.notes': '随手记排序',
+  'settings.notesOrder.vault': '隐私记排序',
+  'settings.notesOrder.time': '按时间',
+  'settings.notesOrder.manual': '自己排',
+  'settings.notesOrder.note': '在列表里长按拖过一次会切到自己排，按时间时按天分组',
   'settings.cal.title': '日历',
   // 设置 › 提醒与通知 二级页、未来 7 天的提醒 的顶栏标题（REMIND-wiring；线框 sR7；和 reminders 词典的 remind.set.title、remind.set.upcoming 同一个词）
   'settings.remind.title': '提醒与通知',

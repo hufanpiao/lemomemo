@@ -1,8 +1,10 @@
 // 设置 › 随手记显示方式 的读写（B4 S1；R-53、R-78；TC-B4-01）：瀑布流 / 列表，按这台设备的类型存 notes.view@mobile 或 notes.view@desktop，只对本类设备生效
 // • 键名、默认瀑布流和随手记页（notes 的 hooks/useNotesView.ts）一致；设备类型在 platform/env.ts（thisDeviceKind）
 // • 写经 kit 的 useSettingWriter（进 outbox、本机先生效，连点排队；同提醒、日历设置）
+// • 排序方式（R-429）：按时间（按天分组）/ 自己排。随手记 notes.order、隐私记 vault.order 各记各的，不分设备（拖过一次随手记页自己切到“自己排”，这里切回）
 import { useCallback, useState } from 'react';
 import { settingValue } from '../../../core/setting-read.ts';
+import { orderOf, type ListOrder, type OrderKey } from '../../../../shared/logic/sort-key.ts';
 import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
 import { perDeviceKey, thisDeviceKind, type DeviceKind } from '../../../platform/device-kind.ts';
 
@@ -17,4 +19,13 @@ export function useNotesViewSetting(newId: () => string = () => crypto.randomUUI
   const [kind] = useState(thisDeviceKind);
   const set = useCallback((v: NotesView): Promise<boolean> => save(keyOf(kind), v), [save, kind]);
   return { kind, view: viewOf(settingValue(rows, keyOf(kind))), set, error };
+}
+
+export type { ListOrder as NoteOrder, OrderKey } from '../../../../shared/logic/sort-key.ts';
+export { ORDER_KEYS } from '../../../../shared/logic/sort-key.ts';
+
+export function useNoteOrderSetting(newId: () => string = () => crypto.randomUUID()) {
+  const { rows, save, error } = useSettingWriter(newId);
+  const set = useCallback((k: OrderKey, v: ListOrder): Promise<boolean> => save(k, v), [save]);
+  return { order: (k: OrderKey) => orderOf(settingValue(rows, k)), set, error };
 }

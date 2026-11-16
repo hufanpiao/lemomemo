@@ -35,8 +35,8 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<void
   const c = { user_id: USER, created_at: now, updated_at: now, deleted_at: null, undone: false, rev: 1, synced_at: at };
   const item = { project: '', source: 'page', raw_text: '', short: null, short_by: null, push_show_title: null, batch_id: null, notified_for: null, snooze_at: null };
   const day = new Date(now + 9 * 3600_000).toISOString().slice(0, 10);
-  const note = { is_private: false, category_id: null, category_source: 'none', category_seen: true, tags: [], converted_to: null, source: 'page', raw_text: '', batch_id: null };
-  const todo = { note: '', due: null, done: false, important: false, priority: 'mid', from_note_id: null, from_anniv_id: null, done_at: 0, remind_days: null, remind_time: '09:00', due_time: null, remind_before_min: null };
+  const note = { is_private: false, category_id: null, category_source: 'none', category_seen: true, sort_key: null, tags: [], converted_to: null, source: 'page', raw_text: '', batch_id: null };
+  const todo = { note: '', due: null, done: false, important: false, priority: 'mid', sort_key: null, from_note_id: null, from_anniv_id: null, done_at: 0, remind_days: null, remind_time: '09:00', due_time: null, remind_before_min: null };
   const tables: Record<string, Record<string, unknown>[]> = {
     events: [
       { id: EV, ...c, ...item, title: '看牙医', date: day, time: '15:00', tz: 'Asia/Seoul', duration_min: 60, location: '江南站 3 号口', note: '', remind_min: null, remind_days: null },

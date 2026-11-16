@@ -11,7 +11,7 @@ import type { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { MergeHint } from '../hooks/useMergeHint.ts';
-import type { MergeUndo } from '../hooks/useNotesToast.ts';
+import type { MergeUndo, MoveUndo } from '../hooks/useNotesToast.ts';
 import type { NoteCaps } from '../hooks/note-source.ts';
 import { actionResult, type ActionResult, type ConvertKind, type NoteItem, type useNoteList } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
@@ -24,7 +24,7 @@ export type ImgTip = { kind: 'img'; key: ImgMsgKey; trash: boolean };
 export type ConvTip = { kind: 'conv'; key: Extract<NotesMsgKey, `notes.conv.${'moved' | 'kept'}.${string}` | 'notes.conv.empty' | 'notes.conv.left' | 'notes.conv.long'> };
 /** 移出隐私记没成（隐私记来源）：自己一种，不借转换结果那一条 */
 export type MoveOutTip = { kind: 'moveOut' };
-export type PageTip = ImgTip | ConvTip | MoveOutTip | MergeUndo;
+export type PageTip = ImgTip | ConvTip | MoveOutTip | MergeUndo | MoveUndo;
 /** 带插图的转换要先问一下（R-414，线框 S8-2） */
 export type ConvAsk = { id: string; kind: ConvertKind; images: number; files: number };
 

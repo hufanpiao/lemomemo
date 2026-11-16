@@ -34,7 +34,7 @@ export const FIELDS: Readonly<Record<NoticeTable, Readonly<Record<string, FieldS
   },
   todos: {
     ...META, ...REMIND_META,
-    title: f('sn.f.title', 'text'), done: f('sn.f.done', 'bool'), due: f('sn.f.due', 'date'), priority: f('sn.f.priority', 'changed'), important: H,
+    title: f('sn.f.title', 'text'), done: f('sn.f.done', 'bool'), due: f('sn.f.due', 'date'), priority: f('sn.f.priority', 'changed'), important: H, sort_key: H,
     project: f('sn.f.project', 'text'), note: f('sn.f.note', 'text'), raw_text: f('sn.f.raw', 'text'),
     from_note_id: H, from_anniv_id: H, short: H, short_by: H, done_at: H,
     remind_days: f('sn.f.remindDays', 'days'), remind_time: f('sn.f.remindTime', 'hm'), due_time: f('sn.f.dueTime', 'hm'),
@@ -48,7 +48,7 @@ export const FIELDS: Readonly<Record<NoticeTable, Readonly<Record<string, FieldS
     ...META,
     title: f('sn.f.title', 'text'), body: f('sn.f.body', 'text'), is_private: f('sn.f.private', 'bool'),
     category_id: f('sn.f.category', 'changed'), category_source: H, category_seen: H, tags: f('sn.f.tags', 'list'),
-    converted_to: H, raw_text: f('sn.f.raw', 'text'),
+    converted_to: H, raw_text: f('sn.f.raw', 'text'), sort_key: H,
   },
   // 待办子任务（R-350）：只有标题、勾选两列看得见；排序、所属待办不写
   todo_items: {

@@ -131,6 +131,11 @@ export const ko = {
   'settings.notesView.mobileNote': '휴대폰에만 적용돼요. 컴퓨터는 따로 설정해요', // REVIEW(ko)
   'settings.notesView.desktopNote': '컴퓨터에만 적용돼요. 휴대폰은 따로 설정해요', // REVIEW(ko)
   'settings.notesView.err': '저장하지 못했어요. 잠시 후 다시 골라 주세요', // REVIEW(ko)
+  'settings.notesOrder.notes': '메모 정렬', // REVIEW(ko) R-429
+  'settings.notesOrder.vault': '비밀 메모 정렬', // REVIEW(ko) R-429
+  'settings.notesOrder.time': '시간순', // REVIEW(ko) R-429
+  'settings.notesOrder.manual': '직접 정렬', // REVIEW(ko) R-429
+  'settings.notesOrder.note': '목록에서 길게 눌러 한 번 옮기면 직접 정렬로 바뀌어요. 시간순일 때는 날짜별로 묶여요', // REVIEW(ko) R-429
   'settings.cal.title': '캘린더', // R-106 B2 第一遍已审（11-04）（B2K-05，和 calendar 的 cal.set.title、cal.h1 同名）
   'settings.remind.title': '알림', // REVIEW(ko)：照 reminders 的 remind.set.title
   'settings.remind.upcoming': '앞으로 7일 알림', // REVIEW(ko)：照 reminders 的 remind.set.upcoming

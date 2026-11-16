@@ -5,8 +5,9 @@
 //
 // 令牌（vault_token）：请求头 x-vault-token；签发和续期都在 JSON 响应体的 vault_token、expires_at（毫秒）里回。
 //   vault 每一次带令牌的成功调用都续 10 分钟（5.5“每次调用续期”）；vault-image 只验、不续（回的是图片字节，不夹 JSON）。
-// 隐私记的正文密文里放 {v: 1, title, body}（代定 D7），notes 的 title、body 列为空；category_id 照旧明文。
+// 隐私记的正文密文里放 {v: 1, title, body}，拖过的再带 sort_key（代定 D7；R-429），notes 的 title、body、sort_key 列为空；category_id 照旧明文。
 import { z } from 'zod';
+import { sortKey } from './rows.ts';
 
 /** 隐私记自己的错误码；HTTP 状态写在行尾 */
 export const VAULT_ERROR_CODES = [
@@ -93,6 +94,8 @@ export const vaultRequest = z.discriminatedUnion('action', [
   z.object({ action: z.literal('list') }),
   z.object({ action: z.literal('save'), id: uuid, title: z.string().max(VAULT_TITLE_MAX), body: z.string().max(VAULT_BODY_MAX),
     category_id: uuid.nullable(), created_at: ms, updated_at: ms,
+    // 拖动排序的排序值（R-429）：放进加密载荷；不带（旧客户端）就保留密文里原来的那个
+    sort_key: sortKey.optional(),
     add_images: z.array(vaultImageAdd).max(VAULT_IMAGES_PER_SAVE).optional(),
     remove_images: z.array(uuid).max(VAULT_IMAGES_PER_SAVE).optional() }),
   z.object({ action: z.literal('delete'), id: uuid }),
@@ -135,6 +138,8 @@ export const vaultNoteImage = z.object({
 });
 export const vaultNote = z.object({
   id: uuid, title: z.string(), body: z.string(), category_id: uuid.nullable(),
+  // 拖动排序的排序值（R-429，密文里的）：没拖过为 null；旧服务器不回这一项
+  sort_key: z.string().nullable().optional(),
   created_at: ms, updated_at: ms, deleted_at: ms.nullable(), images: z.array(vaultNoteImage),
 });
 export type VaultNote = z.infer<typeof vaultNote>;
