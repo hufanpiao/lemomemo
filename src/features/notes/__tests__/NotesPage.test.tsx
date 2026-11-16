@@ -80,8 +80,9 @@ describe('两种显示（R-78，TC-B4-01 页面一半）', () => {
     });
     open();
     expect(screen.getByTestId('notes').getAttribute('data-view')).toBe('list');
-    expect(within(screen.getByTestId('notes-g-2026-11-10')).getByRole('heading').textContent).toBe('今天');
-    expect(within(screen.getByTestId('notes-g-2026-11-09')).getByRole('heading').textContent).toBe('昨天');
+    // 分组名右边是这一组的条数（R-436，同待办页）
+    expect(within(screen.getByTestId('notes-g-2026-11-10')).getByRole('heading').textContent).toBe('今天1');
+    expect(within(screen.getByTestId('notes-g-2026-11-09')).getByRole('heading').textContent).toBe('昨天1');
   });
 
   it('这台是手机（触屏）：读 notes.view@mobile', async () => {

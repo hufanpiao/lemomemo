@@ -31,27 +31,18 @@
   font-size: var(--fs-14);
 }
 
-/* 分类胶囊（s8“工作灵感 AI ▾”）：原生下拉透明盖在上面，点哪儿都能选 */
-.chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+/* 分类胶囊（s8“工作灵感 AI ▾”）：外观是 kit Chip.module.css 的 .chip（高 30、无描边浅底，R-436）；这里只让它能缩（名字省略）。
+   写成两级选择器，不靠两份样式表的先后压过 kit 的 flex: none。原生下拉透明盖在上面，连 kit 胶囊 ::after 外扩的点击区（上下各 7）一起盖住，点哪儿都能选 */
+.top .cat {
+  flex: 0 1 auto;
   min-width: 0;
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--panel);
-  color: var(--text);
-  font-size: var(--fs-13);
 }
 
 .chipStart {
   margin-right: auto;
 }
 
-.chip:focus-within {
+.cat:focus-within {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -77,7 +68,9 @@
   height: 18px;
   padding: 0 6px;
   border-radius: var(--r-pill);
-  background: var(--panel-2);
+
+  /* 胶囊本身是 --panel-2 浅底，AI 小标反过来用 --panel（同列表卡片 .cat .ai） */
+  background: var(--panel);
   color: var(--text);
   font-size: var(--fs-10-5);
 }
@@ -90,7 +83,7 @@
 
 .select {
   position: absolute;
-  inset: 0;
+  inset: -7px 0;
   width: 100%;
   opacity: 0;
   font-size: var(--fs-16);
@@ -229,11 +222,11 @@
 }
 
 /* 只读行（TC-B4-09）：分类胶囊和“⋯”一样变淡 */
-.chip[data-muted] {
+.cat[data-muted] {
   color: var(--text-2);
 }
 
-.chip[data-muted] .dot {
+.cat[data-muted] .dot {
   opacity: 0.5;
 }
 

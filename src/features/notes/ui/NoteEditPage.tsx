@@ -27,6 +27,7 @@ import { Pressable } from '../../../motion/components.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import { BODY_MAX, TITLE_MAX, useNoteEdit, type CategoryOption } from '../hooks/useNoteEdit.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
+import chip from '../../../kit/components/Chip.module.css';
 import styles from './NoteEditPage.module.css';
 import { EditorImageBlock } from './NoteImages.tsx';
 import { SyncLine } from './NotesBits.tsx';
@@ -188,12 +189,13 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
   );
 }
 
-/** 顶栏的分类胶囊（s8“工作灵感 AI ▾”）：色点 + 名字 + AI + ▾；原生下拉透明盖在上面 */
+/** 顶栏的分类胶囊（s8“工作灵感 AI ▾”）：色点 + 名字 + AI + ▾；原生下拉透明盖在上面。
+ *  外观是 kit 的 Chip.module.css（高 30、无描边浅底，R-436，负责人 11-16“胶囊太大了！参考现在的待办页”），本页只补省略、下拉和 AI 小标 */
 function CatChip(p: { value: string | null; options: CategoryOption[]; ai: boolean; disabled: boolean; muted: boolean; drawer: boolean; onChange(v: string | null): void }) {
   const t = useNotesT();
   const cur = p.options.find((c) => c.id === p.value) ?? null;
   return (
-    <span className={p.drawer ? `${styles.chip} ${styles.chipStart}` : styles.chip} data-muted={p.muted || undefined} data-testid="note-edit-chip">
+    <span className={p.drawer ? `${chip.chip} ${styles.cat} ${styles.chipStart}` : `${chip.chip} ${styles.cat}`} data-muted={p.muted || undefined} data-testid="note-edit-chip">
       {cur?.color ? <i className={styles.dot} style={{ '--dot': cur.color } as CSSProperties} aria-hidden="true" /> : null}
       <span className={styles.chipName}>{cur ? cur.name : t('note.edit.noCategory', {})}</span>
       {p.ai ? (

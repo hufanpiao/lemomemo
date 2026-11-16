@@ -4,6 +4,7 @@ import type { zh } from './zh.ts';
 
 export const ko = {
   'notes.title': '메모', // REVIEW(ko)
+  'notes.sub': '{date} · {n}개', // REVIEW(ko) R-436
   'notes.pullKey': '이 페이지 검색', // REVIEW(ko) R-437
   'notes.filter': '분류별로 보기', // REVIEW(ko)
   'notes.all': '전체 {n}', // REVIEW(ko)

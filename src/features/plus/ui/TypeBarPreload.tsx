@@ -1,5 +1,6 @@
 // 首屏画完以后挂一份的东西（index.ts 的 TypeBarPreload，跟打字条同一块下载），不碰 App.tsx 和底栏：
-// • “＋”上方的小气泡（B3 S23，PlusHint；开关关着时什么都不画）
+// • “＋”上方的小气泡（B3 S23，PlusHint；开关关着时什么都不画）。随手记页不出（R-436 主持人 11-16 定：这页的“＋”是聚焦底部输入行，
+//   气泡“按住说话 · 点一下打字”的后半句对不上）；看路由放在这块懒加载里判断，不往首屏 App / tab-of 加字节
 // • 按住“＋”录音的整套界面（B3 FA-3，RecordHost）：再按需加载一块（录音器、手机识别、面板、说明卡），挂上以后才接手手势
 // • 小气泡和录音那一套放在同一个 Suspense 里，等录音那一块连同它的样式（RecordHost、Dialog 两份 CSS）都到了才一起挂：
 //   WebKit 在还有样式表没加载完时，新挂上的元素拿不到作者样式（气泡 position: static、占在文档流里高 19 px），
@@ -13,6 +14,7 @@
 //   （收起、只剩提示条时靠它重新展开、聚焦，独立验证 11-11）。首屏刚画完、这一块还没下载好时按 Ctrl+N 不响应（和 Ctrl+K 同一个取舍）
 // 打字条本身的预先下载不在这里，见 index.ts 的 loadTypeBar 和 app/plus-slot.tsx（Q-24）
 import { lazy, Suspense, useEffect } from 'react';
+import { useRoute } from '../../../app/router.ts';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { FindHost } from '../../smart-search/index.ts';
 import { setTypeOpener } from '../hooks/assist-open.ts';
@@ -23,6 +25,8 @@ const RecordHost = lazy(() => import('./RecordHost.tsx').then((m) => ({ default:
 /** onType：“改用打字”打开打字条（App 的 open，经 app/plus-slot.tsx 传进来）；也登记给结果层的“改”（hooks/assist-open.ts）
  *  hold：这一页能不能按住“＋”说话（app/tab-of.ts，隐私记页、纪念日页不能），不能时小气泡不出 */
 export default function TypeBarPreload({ onType, hold = true }: { onType?: (() => void) | undefined; hold?: boolean }) {
+  const onNotes = useRoute().name === 'notes';
+  const hint = hold && !onNotes;
   useEffect(() => {
     setTypeOpener(onType ?? null);
     return () => setTypeOpener(null);
@@ -38,7 +42,7 @@ export default function TypeBarPreload({ onType, hold = true }: { onType?: (() =
     <>
       <Suspense fallback={null}>
         <RecordHost onType={onType} />
-        {hold ? <PlusHint /> : null}
+        {hint ? <PlusHint /> : null}
       </Suspense>
       <Suspense fallback={null}>
         <FindHost />
