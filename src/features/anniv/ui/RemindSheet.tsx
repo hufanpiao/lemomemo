@@ -100,7 +100,7 @@ export function RemindSheet({
       }
     >
       <p className={styles.rmLabel}>{t('anniv.rm.daysLabel', {})}</p>
-      <div className={styles.chips} role="group" aria-label={t('anniv.rm.daysLabel', {})}>
+      <div className={`${styles.chips} ${styles.rmChips}`} role="group" aria-label={t('anniv.rm.daysLabel', {})}>
         {choices.map((n) => (
           <button key={n} type="button" className={`${styles.chip} ${styles.rmChip}`} aria-pressed={offs.includes(n)} onClick={() => toggle(n)} data-testid={`anniv-rm-off-${n}`}>
             {offsText([n], t)}
@@ -120,7 +120,8 @@ export function RemindSheet({
           onChange={(e) => setCustom(e.target.value)}
           data-testid="anniv-rm-custom"
         />
-        <FormButton onClick={addCustom} data-testid="anniv-rm-add">
+        {/* 灰底无描边、看得见 38、点击区 44（R-436 第 3 条“去描边换浅底”，同待办编辑页“清掉”） */}
+        <FormButton size="compact" onClick={addCustom} data-testid="anniv-rm-add">
           {t('anniv.rm.add', {})}
         </FormButton>
       </div>
@@ -139,7 +140,7 @@ export function RemindSheet({
         <Wheel axis="x" align="start" label={t('anniv.rm.minute', {})} options={minuteOptions(mm)} value={mm} onChange={(m) => setTime(`${hh}:${m}`)} data-testid="anniv-rm-minute" />
       </div>
       {nextLine ? (
-        <p className={styles.hint} data-testid="anniv-rm-next">
+        <p className={`${styles.hint} ${styles.rmNext}`} data-testid="anniv-rm-next">
           {nextLine}
         </p>
       ) : null}

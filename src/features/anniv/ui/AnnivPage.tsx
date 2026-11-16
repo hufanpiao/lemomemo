@@ -11,8 +11,10 @@
 import { useState } from 'react';
 import { navigate, replaceRoute, useRoute } from '../../../app/router.ts';
 import { useEditRoute } from '../../../app/router-levels.ts';
+import chip from '../../../kit/components/Chip.module.css';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { ModeSeg } from '../../../kit/components/ModeSeg.tsx';
 import { ListToasts } from '../../../kit/components/ListToasts.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
@@ -108,7 +110,7 @@ function AnnivList() {
         data-testid="anniv-row"
         data-ro={x.ro || undefined}
       >
-        <Pressable type="button" className={list.main} onClick={() => open(x)}>
+        <Pressable type="button" className={`${list.main} ${styles.main}`} onClick={() => open(x)}>
           <AnnivFace id={x.id} avatarId={x.row['avatar_id']} name={x.name} kind={x.row['kind']} size="sm" />
           <span className={list.text}>
             <span className={styles.name}>
@@ -137,7 +139,8 @@ function AnnivList() {
       <div className={styles.chips} role="group" aria-label={t('anniv.filterLabel', {})}>
         {FILTERS.map((f) => (
           <button key={f} type="button" className={styles.chip} aria-pressed={filter === f} onClick={() => setFilter(f)} data-testid={`anniv-filter-${f}`}>
-            {t(FILTER_KEY[f], { n: data.counts[f] })}
+            {/* 条数只给数字等宽淡色（R-436，同待办页筛选胶囊的 kit .chipN；词条照旧整句） */}
+            <NumIn text={t(FILTER_KEY[f], { n: data.counts[f] })} num={String(data.counts[f])} className={chip.chipN} />
           </button>
         ))}
       </div>
@@ -157,7 +160,8 @@ function AnnivList() {
             <span className={styles.nearToday}>{t('anniv.near.today', {})}</span>
           ) : (
             <span className={styles.nearDays}>
-              <span className={styles.nearNum}>{near.state.days}</span> {t('anniv.near.after', {})}
+              <span className={styles.nearNum}>{near.state.days}</span>
+              <span>{t('anniv.near.after', {})}</span>
             </span>
           )}
           <span className={styles.nearTitle}>{[near.name, ageText(near.rec, near.state, t)].filter(Boolean).join(' · ')}</span>
@@ -178,7 +182,9 @@ function AnnivList() {
 
       {data.past.length ? (
         <details className={styles.past} data-testid="anniv-past">
-          <summary className={styles.pastSum}>{t('anniv.past', { n: data.past.length })}</summary>
+          <summary className={styles.pastSum}>
+            <NumIn text={t('anniv.past', { n: data.past.length })} num={String(data.past.length)} />
+          </summary>
           <ul className={`${list.list} ${styles.rows}`}>{data.past.map(row)}</ul>
         </details>
       ) : null}

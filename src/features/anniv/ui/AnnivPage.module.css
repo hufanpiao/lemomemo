@@ -34,7 +34,7 @@
   margin-bottom: 10px;
 }
 
-/* 筛选胶囊、提醒天数胶囊 */
+/* 筛选胶囊、提醒天数胶囊：高 36（视觉稿 anniv .chip），::after 上下外扩 4 凑够 44 点击区；条数是 kit Chip 的 .chipN（等宽淡色，R-436） */
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -44,7 +44,7 @@
 
 .chip {
   position: relative;
-  min-height: 34px;
+  min-height: 36px;
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
@@ -57,7 +57,7 @@
 .chip::after {
   content: '';
   position: absolute;
-  inset: -5px 0;
+  inset: -4px 0;
 }
 
 .chip[aria-pressed='true'] {
@@ -118,8 +118,13 @@
   background: var(--accent);
 }
 
+/* 大号天数和“天后”：基线对齐、隔 8（视觉稿 anniv：数字后面 15 号单位） */
 .nearDays {
-  font-size: var(--fs-16);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: var(--fs-15);
 }
 
 /* 大号天数下面一笔荧光笔底（简洁浅色有颜色，别的皮肤 --now-hl 是透明） */
@@ -129,7 +134,8 @@
   font-family: var(--f-num);
   font-size: var(--fs-44);
   font-weight: 400;
-  line-height: 1.1;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
 }
 
 .nearToday {
@@ -150,6 +156,12 @@
    两份 CSS 谁后插进页面不一定，所以带上列表的类、优先级高一级 */
 .rows .row {
   min-height: 64px;
+}
+
+/* 列表面板左右 14、上下 2（视觉稿 anniv .lst）：行面（SwipeRow 的不透明 .face）离开圆角，首尾两行的方角不再从 20 圆角里戳出来；
+   两级选择器压过 kit .list 的 padding（两份样式表先后不定） */
+.page .rows {
+  padding: 2px 14px;
 }
 
 .name {
@@ -176,19 +188,31 @@
   font-size: var(--fs-11);
 }
 
+/* 头像和名字之间 10（视觉稿 annrow gap），副行 12 号（视觉稿 .t2） */
+.rows .main {
+  gap: 10px;
+}
+
+.rows .meta {
+  font-size: var(--fs-12);
+}
+
+/* 行右大号天数（视觉稿 annrow .dn：24 号、字距 -0.02em，单位 12 号次要色） */
 .days {
   flex: none;
   margin-left: auto;
   font-family: var(--f-num);
-  font-size: var(--fs-22);
+  font-size: var(--fs-24);
   font-weight: 400;
+  letter-spacing: -0.02em;
   white-space: nowrap;
 }
 
 .days small {
   margin-left: 2px;
   color: var(--text-2);
-  font-size: var(--fs-11);
+  font-size: var(--fs-12);
+  letter-spacing: 0;
 }
 
 .past {
@@ -376,12 +400,6 @@
   color: var(--text);
 }
 
-/* 键盘聚焦的框和 kit 输入框同一套（Form.module.css） */
-.inlineIn:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
 .inlineIn:disabled {
   color: var(--text-2);
 }
@@ -442,7 +460,12 @@
   cursor: default;
 }
 
-/* 弹层里提前几天的选项（视觉稿 annedit）：没选的只写字、不描边，选上的深色底带“✓” */
+/* 弹层里提前几天的选项（视觉稿 annedit）：没选的只写字、不描边，选上的深色底带“✓”。
+   一排胶囊紧跟在小标题下面（视觉稿：标题下隔 8，胶囊自己不再加上下边距） */
+.rmChips {
+  margin: 0;
+}
+
 .rmChip {
   border-color: transparent;
 }
@@ -452,15 +475,22 @@
   margin-right: 4px;
 }
 
+/* 弹层小标题（视觉稿 annedit：13 号、上 16 下 8） */
 .rmLabel {
-  margin: 12px 0 0;
-  font-size: var(--fs-14);
+  margin: 16px 0 8px;
+  font-size: var(--fs-13);
 }
 
 .rmCustom {
   display: flex;
   gap: 8px;
   align-items: center;
+  margin-top: 12px;
+}
+
+/* “下一次提醒”：离滚轮 12、离“好了”16（视觉稿 annedit），原来贴着按钮 */
+.rmNext {
+  margin: 12px 0 16px;
 }
 
 .num {
