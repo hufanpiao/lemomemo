@@ -18,6 +18,9 @@ import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { TodayNotes } from '../../notes/index.ts';
 import { VaultParts } from '../../vault/index.ts';
 import { openAssist, type AssistReq, type FindFrom } from '../hooks/find-open.ts';
+import chip from '../../../kit/components/Chip.module.css';
+import form from '../../../kit/components/Form.module.css';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -140,12 +143,12 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
 
   const chips = q === '' ? null : (
     <div className={styles.chips} role="group" aria-label={t('find.label', {})}>
-      <button type="button" className={f.kind === 'all' ? styles.chipOn : styles.chip} aria-pressed={f.kind === 'all'} onClick={() => f.setKind('all')} data-testid="find-kind-all">
-        {t('find.k.all', { n: total })}
+      <button type="button" className={f.kind === 'all' ? chip.chipOn : chip.chip} aria-pressed={f.kind === 'all'} onClick={() => f.setKind('all')} data-testid="find-kind-all">
+        <NumIn text={t('find.k.all', { n: total })} num={String(total)} className={chip.chipN} />
       </button>
       {kinds.map((k) => (
-        <button key={k} type="button" className={f.kind === k ? styles.chipOn : styles.chip} aria-pressed={f.kind === k} onClick={() => f.setKind(k)} data-testid={`find-kind-${k}`}>
-          {t('find.kn', { k: t(`find.k.${k}`, {}), n: f.counts[k] })}
+        <button key={k} type="button" className={f.kind === k ? chip.chipOn : chip.chip} aria-pressed={f.kind === k} onClick={() => f.setKind(k)} data-testid={`find-kind-${k}`}>
+          <NumIn text={t('find.kn', { k: t(`find.k.${k}`, {}), n: f.counts[k] })} num={String(f.counts[k])} className={chip.chipN} />
         </button>
       ))}
     </div>
@@ -153,7 +156,7 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
   const times = q === '' || desk ? null : (
     <div className={styles.chips} role="group" aria-label={t('find.t.any', {})}>
       {TIMES.map((x) => (
-        <button key={x} type="button" className={f.time === x ? styles.chipOn : styles.chip} aria-pressed={f.time === x} onClick={() => f.setTime(x)} data-testid={`find-time-${x}`}>
+        <button key={x} type="button" className={f.time === x ? chip.chipOn : chip.chip} aria-pressed={f.time === x} onClick={() => f.setTime(x)} data-testid={`find-time-${x}`}>
           {t(`find.t.${x}`, {})}
         </button>
       ))}
@@ -209,13 +212,13 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
   const foot = (withSum: boolean) => assist === null ? null : (
     <div className={styles.foot}>
       {withSum ? (
-        <button type="button" className={styles.chip} onClick={() => {
+        <button type="button" className={chip.chip} onClick={() => {
           rlog('find to_summary');
           if ('query' in assist.ask) openAssist({ ...assist, ask: { intent: 'summarize', query: { ...assist.ask.query, text: q } } });
         }} data-testid="find-summarize">{t('as.sum.btn', {})}</button>
       ) : null}
       {rec ? (
-        <button type="button" className={styles.chip} onClick={() => {
+        <button type="button" className={chip.chip} onClick={() => {
           rlog('find to_record');
           void rec();
           close();
@@ -227,10 +230,10 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
   const anyHit = groups.some((g) => g.hits.length > 0);
   const recent = f.recent.length > 0 ? (
     <>
-      <div className={styles.gh}><b>{t('find.recent', {})}</b></div>
+      <div className={styles.gh}><b className={form.groupLabel}>{t('find.recent', {})}</b></div>
       <div className={styles.chips}>
         {f.recent.map((r) => (
-          <button key={r} type="button" className={styles.chip} onClick={() => f.setQ(r)} data-testid="find-recent">{r}</button>
+          <button key={r} type="button" className={chip.chip} onClick={() => f.setQ(r)} data-testid="find-recent">{r}</button>
         ))}
       </div>
     </>
@@ -261,7 +264,7 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
       const wait = g.key === 'sem' && f.sem.s === 'wait';
       return (
         <section key={g.key} aria-label={g.head} data-testid={`find-group-${g.key}`}>
-          <div className={styles.gh}><b>{g.head}</b>{g.sub ? <span>{g.sub}</span> : null}</div>
+          <div className={styles.gh}><b className={form.groupLabel}>{g.head}</b>{g.sub ? <span>{g.sub}</span> : null}</div>
           {wait ? (
             <div className={styles.skel} aria-hidden="true"><i /><i /></div>
           ) : (

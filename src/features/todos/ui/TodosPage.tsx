@@ -55,6 +55,7 @@ import { SubtaskCard } from './SubtaskCard.tsx';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import { PullSearch } from '../../smart-search/index.ts';
 import styles from './TodosPage.module.css';
+import chip from '../../../kit/components/Chip.module.css';
 import refine from '../../../kit/components/Refine.module.css';
 
 /** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */
@@ -345,9 +346,9 @@ function DoneFold({ title, open, onToggle }: { title: string; open: boolean; onT
 /** 筛选胶囊（R-436 第 3 条）：名字 + 等宽淡色条数 */
 function Chip({ on, onClick, name, n, testId }: { on: boolean; onClick(): void; name: string; n: number; testId: string }) {
   return (
-    <Pressable className={on ? styles.chipOn : styles.chip} aria-pressed={on} onClick={onClick} data-testid={testId}>
+    <Pressable className={on ? chip.chipOn : chip.chip} aria-pressed={on} onClick={onClick} data-testid={testId}>
       {name}
-      <span className={styles.chipN}>{n}</span>
+      <span className={chip.chipN}>{n}</span>
     </Pressable>
   );
 }

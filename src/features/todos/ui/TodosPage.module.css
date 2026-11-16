@@ -28,41 +28,7 @@
   overflow-x: auto;
 }
 
-/* 筛选胶囊（第 3 条）：去掉描边、换浅底、高 30、字小一号；条数等宽淡色。点击区照样 44 高（::after 上下外扩 7，不撑高这一条） */
-.chip,
-.chipOn {
-  position: relative;
-  display: inline-flex;
-  flex: none;
-  gap: 5px;
-  align-items: center;
-  height: 30px;
-  margin: 7px 0;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--panel-2);
-  color: var(--text);
-  font-size: var(--fs-13);
-}
-
-.chip::after,
-.chipOn::after {
-  content: '';
-  position: absolute;
-  inset: -7px 0;
-}
-
-.chipOn {
-  background: var(--chip-on-bg);
-  color: var(--chip-on-fg);
-}
-
-.chipN {
-  font-family: var(--f-mono);
-  font-size: var(--fs-11);
-  opacity: 0.7;
-}
+/* 筛选胶囊（第 3 条）：kit 的 Chip.module.css（查找面板同一份） */
 
 /* 分组名（第 4 条“小号字、字距拉开”）：字号、字体、字距、颜色挂 kit Form.tsx 的 groupLabelClass（GroupLabel 同一份，纪念日“详情”）；
    这里是真标题 h2（读屏按标题跳组），所以不套那个 <p> 组件，只挂它的类。本地只留左右排开和间距（写成两级选择器，

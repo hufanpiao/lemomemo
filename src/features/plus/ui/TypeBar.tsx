@@ -43,6 +43,7 @@ import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import form from '../../../kit/components/Form.module.css';
 import { Mist } from '../../../kit/components/Mist.tsx';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { useLayer } from '../../../kit/hooks/useLayer.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
@@ -314,15 +315,17 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
                     {t(s.find !== null ? 'plus.type.find' : 'plus.type.save', {})}
                   </FormButton>
                 </div>
+                {/* 预览里的日期时刻“11-07 15:00”等宽（R-436 日期时刻等宽数字） */}
                 <div className={styles.preview} aria-live="polite" data-testid="type-preview">
                   {s.status === 'organizing'
                     ? t('plus.type.recognizing', {})
                     : s.find !== null ? t('plus.type.findAsRecord', {})
-                    : first ? t('plus.type.preview', { text: s.preview.length > 1 ? `${previewText} · ${t('plus.type.more', { n: s.preview.length - 1 })}` : previewText }) : ''}
+                    : first ? <NumIn text={t('plus.type.preview', { text: s.preview.length > 1 ? `${previewText} · ${t('plus.type.more', { n: s.preview.length - 1 })}` : previewText })} num={dayOf(first)} /> : ''}
                 </div>
+                {/* 展开编辑 / 收起：compact 灰底无描边（R-436“去描边换浅底”，同待办编辑页“清掉”），点击区照样 44 */}
                 <div className={styles.row}>
-                  <FormButton type="button" variant="ghost" onClick={() => settle('expand')}>{t('plus.type.expand', {})}</FormButton>
-                  <FormButton type="button" variant="ghost" onClick={() => settle('button')}>{t('plus.type.close', {})}</FormButton>
+                  <FormButton type="button" variant="ghost" size="compact" onClick={() => settle('expand')}>{t('plus.type.expand', {})}</FormButton>
+                  <FormButton type="button" variant="ghost" size="compact" onClick={() => settle('button')}>{t('plus.type.close', {})}</FormButton>
                 </div>
               </>
             )}

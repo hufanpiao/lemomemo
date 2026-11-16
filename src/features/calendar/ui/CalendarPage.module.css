@@ -937,7 +937,6 @@
   flex-direction: column;
   align-items: flex-end;
   color: var(--text-2);
-  font-family: var(--f-num);
   font-size: var(--fs-13);
 }
 

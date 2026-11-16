@@ -15,6 +15,8 @@ import * as RD from '@radix-ui/react-dialog';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
+import chip from '../../../kit/components/Chip.module.css';
+import form from '../../../kit/components/Form.module.css';
 import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -163,7 +165,7 @@ export default function AssistPanel({ req, onClose }: { req: AssistReq; onClose(
     ) : q.range !== null ? (
       byDay(s.items).map((g) => (
         <section key={g.date} aria-label={fmtDay(g.date, locale, 'monthDayWeek')} data-testid="assist-day">
-          <div className={styles.gh}><b>{fmtDay(g.date, locale, 'monthDayWeek')}</b></div>
+          <div className={styles.gh}><b className={form.groupLabel}>{fmtDay(g.date, locale, 'monthDayWeek')}</b></div>
           <ul className={styles.list}>{g.items.map((it) => row(it))}</ul>
         </section>
       ))
@@ -279,8 +281,8 @@ function TargetCard({ req, s, t, locale, onRecord, onClose }: { req: AssistReq; 
   };
   const tail = (
     <div className={a.foot}>
-      {onRecord ? <button type="button" className={styles.chip} onClick={onRecord} data-testid="assist-record">{t('as.recordRaw', {})}</button> : null}
-      <button type="button" className={styles.chip} onClick={onClose} data-testid="assist-dismiss">{t('as.close', {})}</button>
+      {onRecord ? <button type="button" className={chip.chip} onClick={onRecord} data-testid="assist-record">{t('as.recordRaw', {})}</button> : null}
+      <button type="button" className={chip.chip} onClick={onClose} data-testid="assist-dismiss">{t('as.close', {})}</button>
     </div>
   );
 
@@ -308,7 +310,7 @@ function TargetCard({ req, s, t, locale, onRecord, onClose }: { req: AssistReq; 
       <div data-testid="assist-target-none">
         <div className={styles.empty}><div className={styles.emptyT}>{t('as.t.none', {})}</div></div>
         <div className={a.foot}>
-          <button type="button" className={styles.chip} onClick={() => { onClose(); void navigate('calendar'); }} data-testid="assist-go-cal">{t('as.t.goCal', {})}</button>
+          <button type="button" className={chip.chip} onClick={() => { onClose(); void navigate('calendar'); }} data-testid="assist-go-cal">{t('as.t.goCal', {})}</button>
         </div>
         {tail}
       </div>
@@ -330,7 +332,7 @@ function TargetCard({ req, s, t, locale, onRecord, onClose }: { req: AssistReq; 
               <span className={styles.meta}>{meta(h)}</span>
             </span>
             {batch ? null : (
-              <button type="button" className={styles.chipOn} disabled={busy} onClick={() => void go([h])} data-testid="assist-cand-act">
+              <button type="button" className={chip.chipOn} disabled={busy} onClick={() => void go([h])} data-testid="assist-cand-act">
                 {ask.intent === 'reschedule' ? t('as.t.btn.reschedule', { to: toText(h, ask.to, s.today, locale) }) : t(`as.t.btn.${ask.intent}`, {})}
               </button>
             )}
@@ -340,7 +342,7 @@ function TargetCard({ req, s, t, locale, onRecord, onClose }: { req: AssistReq; 
       {s.match.more > 0 ? <p className={a.note}>{t('as.t.more', { n: s.match.more })}</p> : null}
       {batch ? (
         <div className={a.foot}>
-          <button type="button" className={styles.chipOn} disabled={busy || chosen.length === 0} onClick={() => void go(chosen)} data-testid="assist-batch-act">
+          <button type="button" className={chip.chipOn} disabled={busy || chosen.length === 0} onClick={() => void go(chosen)} data-testid="assist-batch-act">
             {t('as.t.btnAll', { to: s.match.hits[0] ? toText(s.match.hits[0], ask.to, s.today, locale) : '', n: chosen.length })}
           </button>
         </div>

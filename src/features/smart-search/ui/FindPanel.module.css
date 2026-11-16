@@ -2,7 +2,7 @@
    • 手机（窄于 900px）：整屏一层（--z-dialog），页面底色；顶上输入条 + 关闭，下面胶囊两排、只按关键词一行、结果分组，整块在中间滚动
      （线框 s12 第二张：输入条在顶部，结果区在键盘上方滚动，不会被挡）
    • 电脑（≥ 900px，同 MQ_SIDEBAR）：后面一层磨砂遮罩（--scrim、--scrim-blur），居中一块面板，左边结果、右边预览选中的一条（线框 s12、sFind 电脑版）
-   • 胶囊照随手记分类胶囊的写法（features/notes 的 .chip / .chipOn），高 44 的触控区 */
+   • 胶囊用 kit 的 Chip.module.css（高 30，点击区外扩到 44） */
 
 .scrim {
   position: fixed;
@@ -131,7 +131,9 @@
   display: flex;
   flex: none;
   gap: 8px;
-  margin: 8px -16px 0;
+
+  /* 上下的空由胶囊自己的 7 外边距给（kit Chip.module.css，留给 44 点击区），这里不再加 */
+  margin: 0 -16px;
   padding: 0 16px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -144,28 +146,7 @@
   padding: 0;
 }
 
-.chip,
-.chipOn {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 14px;
-
-  /* --line 在手机灰底（--bg）上几乎看不见，线框里没选中的胶囊有清楚的细边框，用输入框那条线 */
-  border: 1px solid var(--inp-line);
-  border-radius: var(--r-pill);
-  background: none;
-  color: var(--text);
-  font-size: var(--fs-13-5);
-  white-space: nowrap;
-}
-
-.chipOn {
-  border-color: transparent;
-  background: var(--chip-on-bg);
-  color: var(--chip-on-fg);
-}
+/* 胶囊本身在 kit 的 Chip.module.css（R-436：去描边换浅底，和待办页筛选同一份）；这里只排一行 */
 
 /* 只按关键词（线框 sFind 第二张：左边一道竖线 + 小字） */
 .fb {
@@ -220,18 +201,20 @@
   overflow-y: auto;
 }
 
+/* 分组头（R-436 第 4 条，同待办页分组名）：组名挂 kit Form.module.css 的 .groupLabel（等宽小字、字距拉开、第三层文字色），
+   右边的说明同一种淡色小字。组名的左右外边距是卡片外用的，这里贴齐结果行，两级选择器压过 .groupLabel */
 .gh {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  margin: 14px 0 2px;
-  color: var(--text-2);
-  font-size: var(--fs-12-5);
+  margin: 18px 0 4px;
+  color: var(--text-3);
+  font-size: var(--fs-11);
 }
 
-.gh b {
-  color: var(--text);
+.gh > b {
+  margin: 0;
   font-weight: 400;
 }
 
