@@ -19,6 +19,8 @@ export const SETTINGS_SECTION_ORDER = [
   'voiceAi',
   'vault',
   'timezone',
+  /** 最近删除（R-441）：待办、随手记两行，各带条数，点进 #/trash/todos、#/trash/notes */
+  'trash',
   /** 数据（B1 只有“导出全部”一行） */
   'data',
   /** 在 Claude 聊天里记事 */
@@ -46,11 +48,13 @@ export function orderSections<T>(present: Partial<Record<SettingsSectionId, T>>)
 
 /**
  * 设置首页的三张卡（R-325 按定稿线框 s13 合卡；SETTINGS-merge-cards 方案第 2 节）：每个分组只在一张卡里，卡里照 SETTINGS_SECTION_ORDER 的先后排。
- * 卡 1 账号单独一张；卡 2 是界面语言到时区；卡 3 是数据到关于。“退出登录”不在卡里，在所有卡之后
+ * 卡 1 账号单独一张；卡 2 是界面语言到时区；卡 3 是数据到关于。“退出登录”不在卡里，在所有卡之后。
+ * R-441 在卡 2、卡 3 中间加一张“最近删除”（卡名看得见：两行只写“待办”“随手记”，要有组名才看得懂）
  */
 export const SETTINGS_CARDS = [
   { id: 'account', ids: ['account'] },
   { id: 'main', ids: ['language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'timezone'] },
+  { id: 'trash', ids: ['trash'] },
   { id: 'more', ids: ['data', 'claude', 'invite', 'desktop', 'glossary', 'about'] },
 ] as const satisfies ReadonlyArray<{ id: string; ids: readonly SettingsSectionId[] }>;
 

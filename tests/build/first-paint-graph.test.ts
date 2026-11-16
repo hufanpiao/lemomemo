@@ -124,6 +124,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/platform/push-claim.ts': '推送认领本体：首屏画完设好上下文、真要认领时才下载（首屏瘦身 11-05）',
   'src/features/reminders/ui/FailedCreateActions.tsx': '“未同步”提示条里记录比能重试的多时才下载（新建失败的“另存为新的一条”“放弃”，R-378）',
   'src/features/reminders/ui/MissedSheet.tsx': '错过提醒的底部弹层：点开才下载，有错过时首屏画完、浏览器空闲才预取（前端 B 11-05 拆出）',
+  'src/features/today/ui/TrashCount.tsx': '设置首页“最近删除”一组两行的条数（R-441）：只在设置首页画行时下载（today/index.ts 的 TrashCount，SettingsHome → TrashRows 的 Suspense），首屏的今天页不用',
   'src/features/today/ui/TodaySwipe.tsx': '今天页待办行的左滑删除（R-428，包着 kit 的 SwipeRow）：首屏画完以后才下载、页里没焦点时才换上（today/index.ts 的 loadTodaySwipe，TodayPage 经 motion 的 useSwapWhenSafe）',
   'src/features/today/ui/TodayToasts.tsx':
     '今天页页底提示条（撤销条、出错条、只读提示条）和重复事项横幅：真有一条提示、或有只读行时才下载（FA-2 返工，首屏预算；连着 UndoToast、只读横幅一起不进首屏）',

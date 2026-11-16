@@ -28,3 +28,10 @@ export function useTrash() {
   );
   return { items, restore };
 }
+
+/** 一类（待办或随手记）在“最近删除”里有几条：设置首页“最近删除”一组的条数（R-441，ui/TrashCount.tsx），和本页同一个数法（trashOf） */
+export function useTrashCount(table: 'todos' | 'notes'): number {
+  const rows = useCollection<Row>(table);
+  const now = useMinuteNow();
+  return useMemo(() => (table === 'todos' ? trashOf([], rows, now) : trashOf([], [], now, rows)).length, [table, rows, now]);
+}

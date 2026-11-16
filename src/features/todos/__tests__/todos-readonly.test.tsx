@@ -46,18 +46,19 @@ afterEach(() => {
 const titleBtn = (title: string) => screen.getByText(title).closest('button') as HTMLButtonElement;
 
 describe('待办页顶栏（R-381）', () => {
-  it('“待办”标题右端是设置入口头像（和今天页、随手记页同一个组件），左边紧挨“最近删除”图标', async () => {
+  it('“待办”标题右端是设置入口头像（和今天页、随手记页同一个组件）；顶栏没有“最近删除”（R-441 挪到设置页）', async () => {
     render(<TodosPage />);
     const me = await screen.findByTestId('todos-settings');
     expect(me.getAttribute('href')).toContain('#/settings');
     expect(me.getAttribute('aria-label')).toBe('设置');
     const h1 = screen.getByRole('heading', { level: 1 });
-    // R-438：头像和“最近删除”图标一起放在顶栏右边那一组里，头像在最右、图标紧挨着在它左边
+    // 头像在顶栏右边那一组里、在最右；R-441 起这一组只有头像（R-438 的“最近删除”图标去掉了）
     const end = me.parentElement;
     expect(end?.parentElement).toBe(h1.parentElement);
     expect(h1.parentElement?.lastElementChild).toBe(end);
     expect(end?.lastElementChild).toBe(me);
-    expect(me.previousElementSibling).toBe(screen.getByTestId('todos-open-trash'));
+    expect(me.previousElementSibling).toBeNull();
+    expect(screen.queryByTestId('todos-open-trash')).toBeNull();
   });
 });
 

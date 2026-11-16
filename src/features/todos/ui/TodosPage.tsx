@@ -24,7 +24,8 @@
 //   勾子任务：主待办只读或这一项只读 → 拦下出“要新版本”；勾上最后一项 → 主待办自动完成，和打勾一样留在原位、出撤销条
 //   （文案“全部完成，已完成这条待办”，方案 5.5；撤销时刚勾的那项和主待办一起撤回，Q1）；
 //   主待办已完成时取消勾某项 → 主待办改回未完成，先留住分组 --dur-ui 再挪回原来的组，不出撤销条（Q2）。运行日志 todo sub auto done|undone 在 data 层记（不记标题）
-// • “最近删除”入口（审查 11-15 第 2 条；R-438 负责人 11-16 嫌胶囊“太突兀”）：顶栏里头像左边的垃圾桶图标（kit 的 TrashLink look="icon"，同随手记页），去 #/trash/todos（只列待办）
+// • “最近删除”入口不在本页（R-441 负责人 11-16“代办页跟随手记页的删除按钮去掉，删除确认放在设置页”，取代 R-438 的顶栏图标）：
+//   设置首页“最近删除”一组的“待办”一行进 #/trash/todos；设置里“完成 7 天后自动删除”说明后面的链接照旧
 // • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal + smart-search 的 PullSearch，和随手记、日历页同一套）；
 //   打了字就把“最近删除”、项目筛选和列表藏起来、换成结果（kit 的 PullSlot）（按标题和子任务就地筛，已完成的也在里面）；点一条和点标题一样进编辑页（只读的照样拦下）
 // • 长按拖动排序（R-429，含 R-433 拖动时左边的 6 个点）：kit 的 useSortDrag（按住 0.4 秒没动才拿起，动了交给左滑或滚动；拿起的那一行左边出 SortGrip 的 6 个点、
@@ -46,7 +47,6 @@ import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
 import { SortGrip, sortBoxClass, sortRowClass, useSortDrag, type SortDrop } from '../../../kit/components/SortDrag.tsx';
 import { nextPriority, type Priority } from '../../../../shared/logic/todo-row.ts';
 import type { DateStr } from '../../../../shared/core/date.ts';
-import { TrashLink } from '../../../kit/components/TrashLink.tsx';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
@@ -160,7 +160,6 @@ export default function TodosPage() {
         <h1 className={refine.title}>{t('list.title', {})}</h1>
         {/* 新建待办在底栏的“＋”（负责人 11-05 ③，原来右上角的“＋ 新建”去掉）；右上角是设置入口头像（R-381，四页共用 MeLink） */}
         <span className={styles.topEnd}>
-          <TrashLink look="icon" to={['trash', 'todos']} label={t('list.trash', {})} testId="todos-open-trash" />
           <MeLink testId="todos-settings" />
         </span>
       </header>

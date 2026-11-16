@@ -29,24 +29,25 @@ test.describe('设置页骨架', () => {
     });
   });
 
-  // TC-B1-71（R-256 改过；R-325 合卡）：三张卡依次是账号、常用、更多，行按定稿顺序；“退出登录”单独一行在所有卡之后。
+  // TC-B1-71（R-256 改过；R-325 合卡；R-441 加“最近删除”一张）：四张卡依次是账号、常用、最近删除、更多，行按定稿顺序；“退出登录”单独一行在所有卡之后。
   // 导出、注销的流程（含断网、错误码、确认词）在组件测试 src/features/settings/__tests__/account.test.tsx
-  test('能打开；三张卡是账号、常用、更多，行的顺序照定稿；“退出登录”在最底下；导出在数据二级页、注销在账号二级页；读设备失败有提示，仍停在 /app/', async ({ page }) => {
+  test('能打开；四张卡是账号、常用、最近删除、更多，行的顺序照定稿；“退出登录”在最底下；导出在数据二级页、注销在账号二级页；读设备失败有提示，仍停在 /app/', async ({ page }) => {
     await page.goto(SETTINGS);
     const main = settingsMain(page);
     await expect(main).toBeVisible();
     const cards = main.locator('section[data-testid^="settings-card-"]');
-    await expect(cards).toHaveCount(3);
+    await expect(cards).toHaveCount(4);
     expect(await cards.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')))).toEqual([
       'settings-card-account',
       'settings-card-main',
+      'settings-card-trash',
       'settings-card-more',
     ]);
     // 日历、提醒与通知、语音与 AI、在 Claude 聊天里记事几行一开始就在（值懒加载，M4）；顺序照定稿线框 s13（B3 FA-4 加了 voiceAi、claude；B4 加了随手记显示方式 notesView；B6 加了皮肤 skin、字体 font；B5 加了隐私记 vault，同 SettingsPage.test.tsx）
     // 11-15 加了待办“完成 7 天后自动删除”todos（开关整行懒加载，先等它到）
     await expect(main.getByTestId('settings-todo-autodel')).toBeVisible();
     const rows = await main.locator('[data-row-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row-id')));
-    expect(rows).toEqual(['account', 'language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'data', 'claude', 'about']);
+    expect(rows).toEqual(['account', 'language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'trash-todos', 'trash-notes', 'data', 'claude', 'about']);
     // e2e 构建读不到设备：账号一行写“设备列表读不出来”
     await expect(main.getByTestId('settings-account-summary')).toHaveText('设备列表读不出来');
     await expect(main.getByTestId('settings-export')).toHaveCount(0);

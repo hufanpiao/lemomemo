@@ -116,10 +116,10 @@ function block(selector: string): string {
 }
 
 describe('设置页组间距', () => {
-  it('三张卡装在同一个外层容器 .groups 里，卡和卡之间靠外层的间距隔开', async () => {
+  it('四张卡（R-441 加“最近删除”）装在同一个外层容器 .groups 里，卡和卡之间靠外层的间距隔开', async () => {
     await renderWith(() => null, '#/settings');
     const cards = [...document.querySelectorAll('[data-testid^="settings-card-"]')];
-    expect(cards).toHaveLength(3);
+    expect(cards).toHaveLength(4);
     expect(new Set(cards.map((s) => s.parentElement)).size).toBe(1);
     expect(cards[0]?.parentElement?.className).not.toBe('');
     expect(cards[0]?.parentElement?.tagName).toBe('DIV');

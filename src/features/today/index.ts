@@ -8,6 +8,9 @@ export const routes = [
   { name: 'trash', Page: lazy(() => import('./ui/RecentlyDeletedPage.tsx')) },
 ] as const;
 
+/** 设置首页“最近删除”一组（R-441）两行右边的条数（ui/TrashCount.tsx，和“最近删除”页同一个数法）；设置页自己画行，值晚到也不挡点 */
+export const TrashCount = lazy(() => import('./ui/TrashCount.tsx'));
+
 /**
  * 今天页按需下载的只读行部件和页底提示条（ui/TodayToasts.tsx，按 part 画哪一块；只给 ui/TodayPage.tsx 用，不是对外接口）。
  * 懒加载写在这里而不写在 TodayPage：这个文件在主包里，Vite 给 import() 生成的预载文件名单和主包已有的那份共用，

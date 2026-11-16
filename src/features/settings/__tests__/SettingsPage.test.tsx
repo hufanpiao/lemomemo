@@ -237,25 +237,31 @@ describe('退出登录（页面最底下单独一行）', () => {
 describe('设置首页的卡和行（TC-B1-71、R-325）', () => {
   const ORDER = [
     'account', 'language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'timezone',
-    'data', 'claude', 'invite', 'desktop', 'glossary', 'about',
+    'trash-todos', 'trash-notes', 'data', 'claude', 'invite', 'desktop', 'glossary', 'about',
   ];
 
-  it('三张卡依次是账号、常用、更多；行的顺序和归卡照定稿；“退出登录”在最后一张卡之后；首页不出现二级页的内容', async () => {
+  // R-441 起常用和更多之间多一张“最近删除”（卡名看得见），两行“待办”“随手记”
+  it('四张卡依次是账号、常用、最近删除、更多；行的顺序和归卡照定稿；“退出登录”在最后一张卡之后；首页不出现二级页的内容', async () => {
     await renderPage();
     await screen.findByTestId('settings-cal-entry');
     await screen.findByTestId('settings-todo-autodel');   // 待办开关那一行是懒加载的（负责人 11-15）
     const cards = screen.getAllByRole('heading', { level: 2 }).map((h) => h.closest('section') as HTMLElement);
-    expect(cards.map((c) => c.getAttribute('data-testid'))).toEqual(['settings-card-account', 'settings-card-main', 'settings-card-more']);
+    expect(cards.map((c) => c.getAttribute('data-testid'))).toEqual(['settings-card-account', 'settings-card-main', 'settings-card-trash', 'settings-card-more']);
     // 卡的标题看不见，但读屏能读（M3）：卡 1 就叫“账号”
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => (h.textContent ?? '').trim())).toEqual([
       zh['settings.account.title'],
       zh['settings.card.main'],
+      zh['settings.trash.title'],
       zh['settings.card.more'],
     ]);
+    // 只有“最近删除”的卡名看得见（两行只写“待办”“随手记”，要有组名）
+    const hs = screen.getAllByRole('heading', { level: 2 });
+    expect(hs[2]?.className).not.toBe(hs[0]?.className);
+    expect(hs[3]?.className).toBe(hs[0]?.className);
     const ids = (c: HTMLElement): string[] => [...c.querySelectorAll('[data-row-id]')].map((el) => el.getAttribute('data-row-id') ?? '');
     // B3 FA-4 起常用卡多“语音与 AI”、更多卡多“在 Claude 聊天里记事”；B4 起常用卡多“随手记布局”；B6 起多皮肤、字体；B5 起常用卡多“隐私记”（线框 v4 定稿的设置行）；
     // 11-15 起常用卡多待办“完成 7 天后自动删除”（负责人方案）
-    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault'], ['data', 'claude', 'about']]);
+    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault'], ['trash-todos', 'trash-notes'], ['data', 'claude', 'about']]);
     const all = cards.flatMap(ids);
     expect(all).toEqual([...all].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
     expect(new Set(all).size).toBe(all.length);

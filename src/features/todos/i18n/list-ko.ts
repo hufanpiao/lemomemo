@@ -29,7 +29,6 @@ export const listKo: Readonly<Record<keyof typeof listZh, string>> = {
   'list.doneToast': '완료했어요', // REVIEW(ko)
   'list.moved': '옮겼어요', // REVIEW(ko)
   'list.movedTo': '{g}(으)로 옮겼어요', // REVIEW(ko)
-  'list.trash': '최근 삭제', // REVIEW(ko)
   'list.err.save': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
   'list.err.readonly': '새 버전으로 업데이트해야 수정할 수 있어요', // REVIEW(ko)
   'settings.autodel': '완료 7일 후 자동 삭제', // REVIEW(ko)

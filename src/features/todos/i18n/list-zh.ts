@@ -32,8 +32,6 @@ export const listZh = {
   // 长按拖动排序（R-429）：组内换序“已移动 · 撤销”，跨组放下改截止日期“已改到 X · 撤销”（X 是组名：今天、明天、11月18日 周三）
   'list.moved': '已移动',
   'list.movedTo': '已改到 {g}',
-  // “最近删除”入口（审查 11-15 第 2 条：待办页标题下面、设置里自动删除的说明后面，kit TrashLink）
-  'list.trash': '最近删除',
   'list.err.save': '没保存上，稍后再试一次',
   'list.err.readonly': '这条要新版本才能修改',
   // 设置首页“完成 7 天后自动删除”（负责人 11-15 方案；ui/TodoSettings.tsx）

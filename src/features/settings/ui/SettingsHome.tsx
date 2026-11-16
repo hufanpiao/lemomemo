@@ -20,6 +20,7 @@ import { LanguageSection } from './LanguageSection.tsx';
 import { MailLabel } from './MailLabel.tsx';
 import { FontHomeRow } from './FontSection.tsx';
 import { SkinHomeRows } from './SkinSection.tsx';
+import { TrashRows } from './TrashRows.tsx';
 import type { SubName } from './SettingsSub.tsx';
 import styles from './SettingsPage.module.css';
 
@@ -34,11 +35,12 @@ type HomeProps = {
   footer: ReactNode;
 };
 
+const CARD_TITLE = { account: 'settings.account.title', main: 'settings.card.main', trash: 'settings.trash.title', more: 'settings.card.more' } as const;
+
 export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, onOpen, footer }: HomeProps) {
   const t = useSettingsT();
-  /** 卡片看不见的标题（M3）：卡 1 就叫“账号” */
-  const cardTitle = (card: SettingsCardId): string =>
-    card === 'account' ? t('settings.account.title', {}) : card === 'main' ? t('settings.card.main', {}) : t('settings.card.more', {});
+  /** 卡名（M3 只给读屏；卡 1 就叫“账号”）；“最近删除”一张看得见（R-441） */
+  const cardTitle = (card: SettingsCardId): string => t(CARD_TITLE[card], {});
   /** 账号一行的值（评审 A）：读设备列表时是固定宽度的占位，读不出来写一句，读到了写“N 台设备：本机、其他…”（放在邮箱下面一行，太长时换行、不省略，见 stacked） */
   const accountValue =
     devices.kind === 'loading' ? (
@@ -152,6 +154,8 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
     ),
     // 隐私记（B5 S11，线框 s13 SETDETAIL）：进二级页，正文由 vault 功能懒加载
     vault: <SettingsEntryRow rowId="vault" label={t('settings.vault.title', {})} onOpen={() => onOpen('vault')} testId="settings-vault-entry" />,
+    // 最近删除（R-441）：两行“待办”“随手记”带条数，点进只列这一类的最近删除页（TrashRows.tsx）
+    trash: <TrashRows />,
     data: entry('data', t('settings.data.title', {}), 'data', dataValue),
     claude: (
       <SettingsEntryRow
@@ -181,7 +185,7 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
     <>
       <div className={styles.groups}>
         {cardsOf(rows).map(([card, list]) => (
-          <SettingsCard key={card} title={cardTitle(card)} testId={`settings-card-${card}`}>
+          <SettingsCard key={card} title={cardTitle(card)} showTitle={card === 'trash'} testId={`settings-card-${card}`}>
             {list.map(([id, node]) => (
               <Fragment key={id}>{node}</Fragment>
             ))}

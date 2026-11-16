@@ -159,6 +159,11 @@ export const zh = {
   'settings.claude.title': '在 Claude 聊天里记事',
   // B5 S11：设置 › 隐私记（二级页正文由 vault 功能的 VaultParts settings 画）
   'settings.vault.title': '隐私记',
+  // R-441：设置首页“最近删除”一组（卡名看得见）两行，右边条数
+  'settings.trash.title': '最近删除',
+  'settings.trash.todos': '待办',
+  'settings.trash.notes': '随手记',
+  'settings.trash.n': '{n} 条',
   'settings.remind.showTitle': '提醒里写什么',
   'settings.remind.dnd': '免打扰',
   'settings.delete.body.what': '注销后，你在柠檬记里的全部记录、照片、附件、设置，以及服务器上的备份都会删除。',

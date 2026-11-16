@@ -126,7 +126,7 @@ describe('批 2 第 8 条：默认来源（普通随手记）和收拢之前一�
 describe('“最近删除”入口（负责人 11-15）', () => {
   const at = (src: typeof notesSource) => render(<NoteSourceProvider value={src}><TrashLink /></NoteSourceProvider>);
 
-  it('随手记：“最近删除”不带条数，点了进 #/trash/notes（只列随手记，R-438）', async () => {
+  it('组件按来源：随手记来源不带条数、进 #/trash/notes（R-438；R-441 起随手记页不再放这个图标，只隐私记页用）', async () => {
     window.history.replaceState(null, '', '/app/#/notes');
     at(notesSource);
     const b = screen.getByTestId('notes-open-trash');
