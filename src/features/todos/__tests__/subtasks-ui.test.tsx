@@ -1,5 +1,6 @@
 // 待办子任务的界面（R-350 方案 5.1～5.5、6.1、6.2；TC-R350-01～09、14 的界面部分）：
-// 列表页卡片（摊开的勾选清单、分段进度条、收起/展开、只读拦下、勾完最后一项自动完成 + 撤销条）、今天页的就地展开（InlineSubtasks，R-442）、编辑页“子任务”区。
+// 列表页卡片（摊开的勾选清单、分段进度条、收起/展开、只读拦下、勾完最后一项自动完成 + 撤销条）、今天页和日历日清单的就地展开（InlineSubtasks，R-442、R-443）、
+// 日历日清单的待办组（DayTodos：H/M/L 排序、就地完成和撤销条）、编辑页“子任务”区。
 // 写入层（core/edit-save.ts）用替身记下每一笔，规则本身在 todo-items.test.ts
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,6 +20,7 @@ vi.mock('../../reminders/index.ts', () => ({ UnsyncedRemindMark: () => null }));
 
 const { default: TodosPage } = await import('../ui/TodosPage.tsx');
 const { default: InlineSubtasks } = await import('../ui/InlineSubtasks.tsx');
+const { default: DayTodos } = await import('../ui/DayTodos.tsx');
 const { default: SubtaskEditor } = await import('../ui/SubtaskEditor.tsx');
 const { resetCollapsedForTest } = await import('../hooks/useSubtasks.ts');
 
@@ -123,7 +125,7 @@ describe('列表页卡片（5.1、5.4、6.2）', () => {
   });
 });
 
-describe('今天页的就地展开（InlineSubtasks，R-442）', () => {
+describe('今天页、日历的就地展开（InlineSubtasks，R-442）', () => {
   const props = (over: Partial<Parameters<typeof InlineSubtasks>[0]> = {}) => ({
     prefix: 'today', id: 't1', title: '买菜', readOnly: false, onBlock: vi.fn(), onOpen: vi.fn(), onPlan: vi.fn(), onResult: vi.fn(), ...over,
   });
@@ -174,6 +176,60 @@ describe('今天页的就地展开（InlineSubtasks，R-442）', () => {
     fireEvent.click(screen.getByTestId('today-fold-t1'));
     fireEvent.click(screen.getByTestId('today-sub-b'));
     expect(p.onBlock).toHaveBeenCalled();
+    expect(save.calls).toHaveLength(0);
+  });
+});
+
+describe('日历日清单的待办组（DayTodos，R-443）', () => {
+  const D = '2026-11-17';
+  const seed = () => {
+    clearAllCollections();
+    collection('todos').upsert([
+      todo('l1', '低 09:00', { due: D, due_time: '09:00', priority: 'low', created_at: 1 }),
+      todo('h1', '高 无时刻', { due: D, priority: 'high', created_at: 2 }),
+      todo('m1', '中 12:00', { due: D, due_time: '12:00', priority: 'mid', created_at: 3 }),
+      todo('h2', '高 08:00', { due: D, due_time: '08:00', priority: 'high', created_at: 4 }),
+      todo('x1', '别的日子', { due: '2026-11-18', created_at: 5 }),
+      todo('d1', '做完了', { due: D, done: true, done_at: 3, created_at: 6 }),
+    ]);
+    collection('todo_items').upsert([item('s1', 'm1', 1), item('s2', 'm1', 2)]);
+  };
+
+  it('组头“待办 · 4”，只列这一天没完成的；组内 H → M → L、同档有时刻的在前；有时刻才出第二行，过了截止的红字', async () => {
+    seed();
+    render(<DayTodos date={D} today={D} nowMin={10 * 60} onOpen={vi.fn()} />);
+    const g = await screen.findByTestId('cal-todos');
+    expect(g.querySelector('h2')?.textContent).toBe('待办 · 4');
+    const ids = [...g.querySelectorAll('[data-testid^="cal-todo-"]')].map((x) => x.getAttribute('data-testid')).filter((x) => !x?.startsWith('cal-todo-time-'));
+    expect(ids).toEqual(['cal-todo-h2', 'cal-todo-h1', 'cal-todo-m1', 'cal-todo-l1']);
+    expect(screen.queryByTestId('cal-todo-time-h1')).toBeNull();
+    expect(screen.getByTestId('cal-todo-time-h2').getAttribute('data-tone')).toBe('late');
+    expect(screen.getByTestId('cal-todo-time-m1').getAttribute('data-tone')).toBeNull();
+    // 有子任务的行带就地展开（默认收起）
+    expect(screen.getByTestId('cal-fold-m1').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('点方框就地完成：写 done，留在原位、出“已完成 · 撤销”；点撤销写回；点标题交给 onOpen', async () => {
+    seed();
+    const onOpen = vi.fn();
+    render(<DayTodos date={D} today={D} nowMin={10 * 60} onOpen={onOpen} />);
+    fireEvent.click(await screen.findByTestId('cal-done-h1'));
+    await waitFor(() => expect(save.calls.some((c) => c[1] === 'todos' && c[2] === 'h1')).toBe(true));
+    expect((await screen.findByTestId('cal-todos-done-toast')).textContent).toContain('已完成');
+    expect(screen.getByTestId('cal-todo-h1')).toBeTruthy();
+    save.calls = [];
+    fireEvent.click(screen.getByText('撤销'));
+    await waitFor(() => expect(save.calls.some((c) => c[1] === 'todos' && c[2] === 'h1')).toBe(true));
+    fireEvent.click(screen.getByTestId('cal-day-row-m1'));
+    expect(onOpen).toHaveBeenCalledWith('todo', 'm1');
+  });
+
+  it('只读行：方框点了拦下出“要新版本”，不写', async () => {
+    seed();
+    readonlyIds('todos').set([{ id: 'h1', ro: true }]);
+    render(<DayTodos date={D} onOpen={vi.fn()} />);
+    fireEvent.click(await screen.findByTestId('cal-done-h1'));
+    expect(await screen.findByText(/要新版本才能修改/)).toBeTruthy();
     expect(save.calls).toHaveLength(0);
   });
 });

@@ -1,4 +1,4 @@
-// 待办勾完以后的那一秒（负责人 11-17 定的勾选特效分镜；原来负责人 11-15 方案是“留在原位约 3 秒、撤销条收起才走”，这次按分镜改）：待办页用，
+// 待办勾完以后的那一秒（负责人 11-17 定的勾选特效分镜；原来负责人 11-15 方案是“留在原位约 3 秒、撤销条收起才走”，这次按分镜改）：待办页和日历日清单的待办组（R-443）共用，
 // 原来写在 ui/TodosPage.tsx 里，R-442 重写待办页时挪到这里（页面文件只管画）
 // • 打勾完成、勾完最后一个子任务自动完成走同一条路（stay）：
 //   ① 按下、② 勾上加划线在方框和标题自己的 CSS 里（kit CheckCircle、TodosPage.module.css）；
@@ -57,7 +57,7 @@ interface Acts {
   report(r: ActionResult): void;
 }
 
-/** hold：页面 useHoldView 的 hold（改回未完成时先留住列表）；text.done 是打勾完成那条的文案；prefix 是测试 id 前缀（todos） */
+/** hold：页面 useHoldView 的 hold（改回未完成时先留住列表）；text.done 是打勾完成那条的文案；prefix 是测试 id 前缀（todos、cal） */
 export function useDoneFlow(a: Acts, lg: Linger, hold: () => void, text: { done: string }, prefix: string) {
   // 计时到点时用最新一次渲染的 a、lg（不用闭包里旧的那份）
   const cur = useRef({ a, lg });

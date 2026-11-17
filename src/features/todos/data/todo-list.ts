@@ -6,7 +6,7 @@
 // • linger（负责人 11-15“完成的待办怎么隐藏”；审查 11-15 第 4 条改成集合）：撤销条开着期间勾过的那几条，照没完成时的截止分组留在原位，
 //   撤销条都收起以后才一起归进“已完成”组（谁在 linger 里由待办页管，见 ui/TodosPage.tsx）
 // • 组内先后（R-442，取代 R-429 的拖动排序）：没完成的各组按 shared/logic/todo-row.ts 的 compareTodos（高 → 中 → 低，同档按截止时刻、
-//   没时刻的在后，再按创建时间；今天页同一个函数）；“已完成”组照旧按完成时刻（最近完成的在前）
+//   没时刻的在后，再按创建时间；今天页、日历日清单同一个函数）；“已完成”组照旧按完成时刻（最近完成的在前）
 import { addDays, diffDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';

@@ -17,11 +17,11 @@
 // • 勾完的那一秒（负责人 11-17 定的勾选特效分镜，取代 11-15 的“留在原位约 3 秒”）：打勾完成、勾完最后一个子任务自动完成走同一条路——
 //   按下方框缩 0.92、勾上填充回弹加一圈小点、标题从左往右划线变淡（kit CheckCircle、本页样式）→ 停到 700ms → 这一行 280ms 收起、
 //   页底同时升起“已完成 · 撤销”（kit UndoToast，8 秒柠檬黄倒计时色带，R-450）→ 归进“已完成”组；减弱动态效果时只变淡、不收高度。
-//   计时在 hooks/useDoneFlow.ts，分组时怎么留在原位在 data/todo-list.ts 的 linger
+//   计时在 hooks/useDoneFlow.ts（日历日清单的待办组同一份，R-443），分组时怎么留在原位在 data/todo-list.ts 的 linger
 // • T-A 行细节（负责人 11-17 选 T-A）：有子任务的方框里按做到几成从下往上填、画小脸（kit CheckCircle 的 progress），副行最前面“起步 / 大半”小标签
 //   和等宽“1/3”（SubtaskBar.tsx 的 SubStage）；行尾 H / M / L 三格并排（kit PrioCycle，推翻 R-434 的单格）；完成的待办、子任务都变淡加删除线
 // • 子任务（R-350 方案 5.1、5.4、5.5）：有子任务的待办，行下面摊开勾选清单、底部分段进度条、右下“已勾/总数 · 收起 / 展开”
-//   （T-A 起“收起 / 展开”在左下、进度条在行底；InlineSubtasks → SubtaskCard，今天页同一个；收起状态每台设备各记各的，未完成默认展开、已完成默认收起）。列表页只能勾，加删改在编辑页（Q10）。
+//   （T-A 起“收起 / 展开”在左下、进度条在行底；InlineSubtasks → SubtaskCard，今天页、日历日清单同一个；收起状态每台设备各记各的，未完成默认展开、已完成默认收起）。列表页只能勾，加删改在编辑页（Q10）。
 //   勾子任务：主待办只读或这一项只读 → 拦下出“要新版本”；勾上最后一项 → 主待办自动完成，和打勾一样留在原位、出撤销条
 //   （文案“全部完成，已完成这条待办”，方案 5.5；撤销时刚勾的那项和主待办一起撤回，Q1）；
 //   主待办已完成时取消勾某项 → 主待办改回未完成，先留住分组 --dur-ui 再挪回原来的组，不出撤销条（Q2）。运行日志 todo sub auto done|undone 在 data 层记（不记标题）
@@ -30,7 +30,7 @@
 // • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal + smart-search 的 PullSearch，和随手记、日历页同一套）；
 //   打了字就把“最近删除”、项目筛选和列表藏起来、换成结果（kit 的 PullSlot）（按标题和子任务就地筛，已完成的也在里面）；点一条和点标题一样进编辑页（只读的照样拦下）
 // • 不能拖动排序（R-442 负责人“待办里面不需要拖动，只用HML来排序”，取代 R-429 的待办部分、R-433 的拖动 6 个点）：每组里按 H → M → L、
-//   同档按截止时刻（没时刻的在后）、再按创建时间排（shared/logic/todo-row.ts 的 compareTodos，今天页同一个）；长按什么都不拿起
+//   同档按截止时刻（没时刻的在后）、再按创建时间排（shared/logic/todo-row.ts 的 compareTodos，今天页、日历日清单同一个）；长按什么都不拿起
 import { Fragment, Suspense, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
@@ -85,7 +85,7 @@ export default function TodosPage() {
   const hv = useHoldView(l.groups);
   const a = useListActions<DoneToast>('todos', { toggle: l.toggleDone, remove: l.remove }, hv);
   const { isRo, shown, del } = a;
-  // 打勾、勾完子任务自动完成：留在原位、出“已完成 · 撤销”
+  // 打勾、勾完子任务自动完成：留在原位、出“已完成 · 撤销”（日历日清单同一份）
   const flow = useDoneFlow(a, lg, hv.hold, { done: t('list.doneToast', {}) }, 'todos');
   const open = (id: string) => (isRo(id) ? a.g.block() : void navigate('todo', id));
   const pull = usePullReveal('todos');
@@ -148,7 +148,7 @@ export default function TodosPage() {
                 return (
                 <AppearItem
                   key={todo.id}
-                  className={`${list.row} ${styles.item}`}
+                  className={`${list.row} ${list.fold}`}
                   data-done={checked ? '' : undefined}
                   data-out={flow.out.has(todo.id) ? '' : undefined}
                   data-readonly={isRo(todo.id) ? '' : undefined}
@@ -177,7 +177,7 @@ export default function TodosPage() {
                   <button type="button" className={list.main} onClick={() => open(todo.id)}>
                     <span className={list.text}>
                       {/* 标题前一个优先级彩点（R-434） */}
-                      <span className={list.title} data-done={checked ? '' : undefined}><PrioDot p={todo.priority} />{todo.title}</span>
+                      <span className={list.title} data-done={checked ? '' : undefined}><PrioDot p={todo.priority} /><span className={list.strike} data-done={checked ? '' : undefined}>{todo.title}</span></span>
                       {/* 副行（R-434、R-436 确认图）：逾期“! 过期 11/13 14:00 · 项目”红字；其余“项目 · 今天 14:00”；日期、时刻等宽数字 */}
                       <span className={tag.kind === 'late' ? `${list.meta} ${styles.tagLate}` : list.meta} data-testid={`todos-tag-${todo.id}`}>
                         {/* 有子任务的：最前面“起步 / 大半”小标签和等宽“1/3”（负责人 11-17 选 T-A；逾期的“!”跟在它后面，标签本身不标红） */}
@@ -235,10 +235,11 @@ export default function TodosPage() {
   );
 }
 
-// 今天页的子任务就地展开、编辑页的“子任务”区从这一包转出（R-350、R-442）：功能入口 index.ts、TodoEditPage 都按名字懒加载这一个模块，
-// 子任务界面不另拆分包（首屏里每多一个分包要多登记一个文件名）。今天页经 inline-subs.ts 转一手（A27 要求入口是 lazy(() => import('./…'))）；
+// 今天页、日历日清单的子任务就地展开和日历的待办组、编辑页的“子任务”区从这一包转出（R-350、R-442、R-443）：功能入口 index.ts、TodoEditPage 都按名字懒加载这一个模块，
+// 子任务界面不另拆分包（首屏里每多一个分包要多登记一个文件名）。今天页、日历经 inline-subs.ts、day-todos.ts 转一手（A27 要求入口是 lazy(() => import('./…'))）；
 // 今天页有待办时首屏画完就会下载这一包（不是点进待办页才下），换来不多占首屏
 export { default as InlineSubtasks } from './InlineSubtasks.tsx';
+export { default as DayTodos } from './DayTodos.tsx';
 export { default as SubtaskEditor } from './SubtaskEditor.tsx';
 
 /** “2026-11-13” → “11/13”（副行的日期，等宽数字；两种语言同一种写法） */

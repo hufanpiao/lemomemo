@@ -9,6 +9,10 @@ export const dur = {
   press: 0.12,
   /** --dur-ui 220ms：提示条、勾选、淡入淡出、列表增删 */
   ui: 0.22,
+  /** --dur-burst 300ms：亲手勾上待办时方框外一圈小火花（负责人 11-17 勾选特效分镜，kit CheckCircle） */
+  burst: 0.3,
+  /** --dur-collapse 280ms：勾完的待办行收起（同一分镜，kit List 的 .fold；features/todos/hooks/useDoneFlow.ts 的 DONE_OUT_MS 同值） */
+  collapse: 0.28,
   /** --dur-sheet 380ms：弹层、录音面板、页面切换 */
   sheet: 0.38,
   /** --dur-drop 0.55s：底栏液滴（R-155，唯一超过 400ms 的例外） */
@@ -71,6 +75,8 @@ export const cssVarOf = {
   dur: {
     press: '--dur-press',
     ui: '--dur-ui',
+    burst: '--dur-burst',
+    collapse: '--dur-collapse',
     sheet: '--dur-sheet',
     drop: '--dur-drop',
     glass: '--dur-glass',

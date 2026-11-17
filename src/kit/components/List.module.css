@@ -201,3 +201,82 @@
   margin-top: 4px;
   color: var(--text);
 }
+
+/* .fold：勾完的那一秒（负责人 11-17 定的勾选特效分镜；计时在 features/todos/hooks/useDoneFlow.ts）：待办页、日历日清单的待办行（R-443）挂上，
+   行（li）里只放一个子元素（行面），这一格 grid 才收得动；标题和标题里包着文字的 .strike 都要带 data-done（和行的 data-done 同步）
+   • 标题划线从左往右画出、字色转 --text-2（第 ② 段，--dur-ui · --ease-out）：.row[data-done] .title 的删除线在 .fold 里换成一条 1px 背景线，
+     好让它有方向地画出来（text-decoration 不能过渡）；本来就勾上的直接画好，不播
+   • 这一行收起（第 ④ 段）：行是一格的 grid，data-out 时这一格从 1fr 收到 0fr、同时淡出（280ms · --ease-drawer），下面的行跟着上来，
+     不另播位移；只动 grid-template-rows 和 opacity，不逐帧改 height
+   • 淡出用 data-out 上的一段 keyframes，不在行上常挂 opacity 过渡：平时这一行的淡入淡出（删除离场、撤销进场）是 Motion 逐帧写行内 opacity，
+     常挂的 opacity 过渡会把每一帧拖慢 280ms（webkit 删除离场时残影一直不透明、压到组标题，e2e b2-motion-list N1 删除抓到）
+   • 减弱动态效果：划线直接到位；不收高度，只淡出 --dur-ui 的一半（110ms，useDoneFlow 的 DONE_OUT_RM_MS） */
+.fold {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--dur-collapse) var(--ease-drawer);
+}
+
+.fold[data-out] {
+  grid-template-rows: 0fr;
+  min-height: 0;
+  border-bottom-color: transparent;
+  pointer-events: none;
+  animation: todo-out var(--dur-collapse) var(--ease-drawer) forwards;
+}
+
+@keyframes todo-out {
+  to {
+    opacity: 0;
+  }
+}
+
+.fold[data-out] > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.row.fold .title {
+  transition: color var(--dur-ui) var(--ease-out);
+}
+
+.row.fold .title[data-done] {
+  text-decoration: none;
+}
+
+/* 划线只画在标题文字上（.strike 包着文字，不含前面的优先级彩点；11-17 截图里线从彩点穿过去） */
+.strike {
+  background-image: linear-gradient(currentcolor, currentcolor);
+  background-position: 0 55%;
+  background-repeat: no-repeat;
+  background-size: 0 1px;
+  transition: background-size var(--dur-ui) var(--ease-out);
+}
+
+.strike[data-done] {
+  background-size: 100% 1px;
+}
+
+:global(:root[data-rm='1']) .fold {
+  transition: none;
+}
+
+:global(:root[data-rm='1']) .fold[data-out] {
+  grid-template-rows: 1fr;
+  animation-duration: calc(var(--dur-ui) / 2);
+  animation-timing-function: var(--ease-out);
+}
+
+:global(:root[data-rm='1']) .row.fold .title {
+  transition: none;
+}
+
+:global(:root[data-rm='1']) .strike {
+  transition: none;
+}
+
+/* 减弱动态效果：不画背景线，直接用删除线（到位、不画出来） */
+:global(:root[data-rm='1']) .strike[data-done] {
+  background-size: 0 1px;
+  text-decoration: line-through;
+}

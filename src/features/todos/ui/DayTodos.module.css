@@ -1,0 +1,36 @@
+/* 日历日清单的待办组（R-443，ui/DayTodos.tsx）：组头“● 待办 · N”、截止时刻、完成的整行变淡（T-A，同待办页）。行、面板、方框都用 kit（List.module.css、CheckCircle），这里只补这几样。只用令牌（A11） */
+
+.group {
+  margin-top: 12px;
+}
+
+/* 组头：kit 的分组小标签（groupLabelClass）；前面一个强调色小圆点 */
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+/* 截止时刻：等宽数字、次要色（kit .meta 的字号和颜色）；过了截止没完成的红字（R-436，红色只表示逾期） */
+.time {
+  font-family: var(--f-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.time[data-tone='late'] {
+  color: var(--danger-text);
+}
+
+/* 完成的整行变淡（T-A，同待办页 TodosPage.module.css 的 .face；删除线、灰字在 kit 的 .row[data-done] .title、.fold） */
+[data-done] > .face {
+  opacity: 0.5;
+}

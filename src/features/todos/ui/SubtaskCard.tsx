@@ -1,4 +1,4 @@
-// 待办卡片里的子任务（待办页；今天页经 InlineSubtasks.tsx 用同一个，R-442）（R-350 方案 5.1、5.4、6.2；负责人 11-07 定“简单勾选清单”）：摊开的勾选清单 + 左下“收起 / 展开” + 行底整宽分段进度条
+// 待办卡片里的子任务（待办页；今天页、日历日清单经 InlineSubtasks.tsx 用同一个，R-442、R-443）（R-350 方案 5.1、5.4、6.2；负责人 11-07 定“简单勾选清单”）：摊开的勾选清单 + 左下“收起 / 展开” + 行底整宽分段进度条
 // • 负责人 11-17 选 T-A：子任务勾上变淡加删除线（推翻 R-350 方案 5.1 的“只变淡”）；“收起 / 展开”挪到左下；进度条挪到行底、占满整行
 //   （待办页副行已有“起步 · 1/3”，counted 为 true 时按钮只写“收起 / 展开”；今天页副行没有，按钮写“1/3 · 展开”）
 // • 列表页只能勾，不能加删改排序（Q10）；点子任务的字和点主标题一样进编辑页（那个按钮不进 Tab、读屏不读，读屏走勾选框，名字就是子任务标题）
@@ -13,7 +13,7 @@ import { SubtaskBar } from './SubtaskBar.tsx';
 import s from './Subtasks.module.css';
 
 export interface SubtaskCardProps {
-  /** 测试 id 前缀：待办页 todos（默认），今天页 today */
+  /** 测试 id 前缀：待办页 todos（默认），今天页 today，日历 cal */
   prefix?: string;
   todoId: string;
   todoTitle: string;

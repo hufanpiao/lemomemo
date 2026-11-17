@@ -2,6 +2,8 @@
 // • 列表页：副行“1/3”、摊开的勾选清单、分段进度条；勾一项写进 outbox（本机库 view 跟着变）；收起以后重新载入还是收起（每台设备各记各的）
 // • 今天页（R-442）：待办行下面进度条和“1/3 · 展开”（按需下载那一包，下完才出现），默认收起；点了就地展开、勾一项写进 outbox，
 //   勾完最后一项主待办自动完成、出“全部完成 · 撤销”，撤销以后主待办回到“今天的安排”；运行日志 subs today open n=3
+// • 日历日清单（R-443）：日程后面单独一组“待办 · N”，方框就地完成、出“已完成 · 撤销”；有子任务的就地展开、勾选；
+//   行和待办页同一套 T-A（负责人 11-17 选 T-A）：副行“起步 · 1/3”、行尾 H / M / L 三格，勾上停一下、收起、从这一天拿掉，撤销放回来
 // • 编辑页：“子任务”区列出各项，回车加一项写进 outbox
 // • 启动清孤儿（5.6 第 1 条）：主待办在本机已经没有的子任务，重新载入后本机库里删掉
 // • 环境变量 R350_SHOTS 指一个本机文件夹时（只在 Chromium），顺手截列表页、今天页、编辑页三张图给人看，不进仓库
@@ -70,6 +72,34 @@ test.describe('R-350 待办子任务', () => {
     expect((await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).includes('subs today open n=3')).toBe(true);
   });
 
+  test('日历日清单：待办单独一组，方框就地完成、撤销；子任务就地展开、勾选', async ({ page }) => {
+    await seed(page);
+    await page.goto('/app/#/calendar');
+    await page.reload();
+    const group = page.getByTestId('cal-todos');
+    await expect(group).toBeVisible({ timeout: 30000 });
+    await expect(group.locator('h2')).toHaveText('待办 · 2');
+    // T-A：副行“起步 1/3”，行尾 H / M / L 三格、当前档亮起
+    await expect(page.getByTestId(`cal-stage-${T1}`)).toHaveText('起步1/3');
+    await expect(page.getByTestId(`cal-prio-${T1}`).locator('[data-on]')).toHaveCount(1);
+    // 子任务就地展开、勾一项
+    const fold = page.getByTestId(`cal-fold-${T1}`);
+    await expect(fold).toHaveAttribute('aria-expanded', 'false');
+    await expect(fold).toHaveText('展开');
+    await fold.click();
+    await page.getByTestId('cal-sub-b').click();
+    await expect(page.getByTestId(`cal-bar-${T1}`)).toHaveAttribute('aria-valuenow', '2');
+    await expect.poll(() => outboxOf(page)).toContainEqual({ table: 'todo_items', id: 'b', op: 'patch' });
+    // 方框就地完成（勾选特效分镜）：停一下、收起、从这一天拿掉，页底出“已完成 · 撤销”；撤销写回、放回来
+    await page.getByTestId('cal-done-t2').click();
+    await expect(page.getByTestId('cal-todos-done-toast')).toContainText('已完成');
+    await expect.poll(() => outboxOf(page)).toContainEqual({ table: 'todos', id: 't2', op: 'patch' });
+    await expect(page.getByTestId('cal-todo-t2')).toHaveCount(0);
+    await page.getByTestId('cal-todos-done-toast').getByRole('button').click();
+    await expect(page.getByTestId('cal-done-t2')).not.toBeChecked();
+    await expect(page.getByTestId('cal-todo-t2')).toBeVisible();
+  });
+
   test('列表页：卡片、勾一项写进 outbox、收起后重新载入还是收起', async ({ page, browserName }) => {
     await seed(page);
     await page.goto('/app/#/todos');
@@ -85,6 +115,8 @@ test.describe('R-350 待办子任务', () => {
     const fold = page.getByTestId(`todos-fold-${T1}`);
     await fold.click();
     await expect(fold).toHaveAttribute('aria-expanded', 'false');
+    // 收起状态（true 是收起）写进本机库 meta（ui.todo_collapsed）是异步的：写进去了再重新载入，不和写入抢
+    await expect.poll(async () => JSON.stringify(await idbRead(page, 'meta', 'get', 'ui.todo_collapsed'))).toContain(`"${T1}":true`);
     await page.reload();
     await expect(page.getByTestId(`todos-fold-${T1}`)).toHaveAttribute('aria-expanded', 'false', { timeout: 30000 });
   });

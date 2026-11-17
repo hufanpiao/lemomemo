@@ -4,7 +4,7 @@
 //   读不到（没启动、库已关）就全按默认；不写 localStorage（4.1：localStorage 只留 install_id）
 // • “已完成”组整组展开没有（负责人 11-15“完成的待办怎么隐藏”）另记在本机 meta 的 ui.todo_done_open（true / false），没点过默认收起；
 //   不放进上面的收起表（审查 11-15 第 6 条：那张表只认待办 id，写时按 id 剔掉不在的）。两样放在同一个模块状态里、一次读回来
-// • 勾子任务的写入（useTodoSubtasks）：待办页、今天页的就地展开（ui/InlineSubtasks.tsx，R-442）共用这一份；
+// • 勾子任务的写入（useTodoSubtasks）：待办页、今天页和日历日清单的就地展开（ui/InlineSubtasks.tsx，R-442、R-443）共用这一份；
 //   主待办跟着改的规则在 data/todo-items.ts 的 autoTodo（planAuto 让页面先知道会不会挪卡片）、撤销“自动完成”是 undoAutoDone（Q1：刚勾的那项和主待办一起撤回）
 // • 收起状态放在模块里（离开待办页再回来不闪一下默认值）；第一次用时从 meta 读一次，读回来之前点过的以点过的为准
 import { useEffect, useState, useSyncExternalStore } from 'react';
@@ -23,7 +23,7 @@ export function useSubtaskGroups(): ReadonlyMap<string, readonly Subtask[]> {
   return groupsOf(useCollection<Row>(ITEMS_TABLE));
 }
 
-/** 同一份集合快照只分一次组（今天页每条待办各挂一个 InlineSubtasks，不各算一遍） */
+/** 同一份集合快照只分一次组（今天页、日历每条待办各挂一个 InlineSubtasks，不各算一遍） */
 const grouped = new WeakMap<readonly Row[], ReadonlyMap<string, readonly Subtask[]>>();
 function groupsOf(rows: readonly Row[]): ReadonlyMap<string, readonly Subtask[]> {
   let g = grouped.get(rows);

@@ -11,9 +11,9 @@ import { clock } from '../../../platform/clock.ts';
 import { setTodoDeleted } from '../data/todo-actions.ts';
 import { doneToggler } from '../../../core/todo-done.ts';
 import { setTodoPriority } from '../../../core/todo-priority.ts';
-import { todayOf } from '../../../../shared/core/date.ts';
+import { todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
-import { type Priority } from '../../../../shared/logic/todo-row.ts';
+import { compareTodos, todoOf, type Priority } from '../../../../shared/logic/todo-row.ts';
 import { groupTodos, projectCounts, type Row } from '../data/todo-list.ts';
 import { listKo } from '../i18n/list-ko.ts';
 import { listZh } from '../i18n/list-zh.ts';
@@ -47,17 +47,25 @@ export function useTodoList(linger: ReadonlySet<string> = NONE) {
     return { total: items.length, done: items.filter((x) => x.todo.done).length, all: rows.filter(isLiveRow).length };
   }, [groups, rows]);
 
-  const { toggleDone, remove } = useTodoWrites(rows);
+  const { toggleDone, remove, setPriority } = useTodoWrites(rows);
   const subs = useSubtaskGroups();
-
-  /** 行右边 H / M / L 点一下换档（R-434，core/todo-priority.ts，今天页同一份） */
-  const setPriority = async (id: string, p: Priority): Promise<ActionResult> => actionResult(await setTodoPriority(id, p, clock.now()));
 
   const ids = useMemo(() => new Set(rows.map((r) => r.id)), [rows]);
   return { today: todayOf(now, tz), count, setPriority, groups, projects, project: active, setProject, toggleDone, remove, ids, subs };
 }
 
-/** 打勾、删除的写入：打勾时刚点过的再点回去按撤销写回原来的 done_at（core/todo-done.ts，评审第 15 条），挂着期间记着 */
+/** 日历日清单的待办组（R-443，ui/DayTodos.tsx）：截止日是这一天、没删、没完成的待办（同月历的 todoDate），完成了还留在原位的（linger）照列；
+ *  组内按 compareTodos（R-442）；带上打勾、删除的写入 */
+export function useDayTodos(date: DateStr, linger: ReadonlySet<string>) {
+  const rows = useCollection<Row>('todos');
+  const todos = useMemo(
+    () => rows.filter(isLiveRow).map(todoOf).filter((x) => x.due === date && (!x.done || linger.has(x.id))).sort(compareTodos),
+    [rows, date, linger],
+  );
+  return { todos, ...useTodoWrites(rows) };
+}
+
+/** 打勾、删除、换优先级的写入（待办页、日历日清单的待办组共用，R-443）：打勾时刚点过的再点回去按撤销写回原来的 done_at（core/todo-done.ts，评审第 15 条），挂着期间记着 */
 export function useTodoWrites(rows: readonly Row[]) {
   const [toggle] = useState(() => doneToggler());
   const toggleDone = useCallback(
@@ -76,5 +84,7 @@ export function useTodoWrites(rows: readonly Row[]) {
     },
     [rows],
   );
-  return { toggleDone, remove };
+  /** 行右边 H / M / L 点一下换档（R-434，core/todo-priority.ts，今天页同一份） */
+  const setPriority = async (id: string, p: Priority): Promise<ActionResult> => actionResult(await setTodoPriority(id, p, clock.now()));
+  return { toggleDone, remove, setPriority };
 }
