@@ -1,6 +1,7 @@
 // R-371 底栏偏高修复 Gap fix（platform/vh-gapfix.ts；11-11 起 iOS 主屏幕版默认开，诊断页“Gap fix: OFF (compare)”关掉对照）：Chromium 里模拟负责人那次冷启动——
 // iPhone（navigator.userAgent 换成 iPhone 的，只在页面里换，请求头不动）、主屏幕版（navigator.standalone）、屏幕 956、可见高度 895（视口 440×895）、顶部安全区 61（--inset-top；Chromium 的 env() 恒为 0，用 CSSOM 盖上）。
-// ① 根据：895 高时只有日历页文档比视口高（6 行月格，和数据无关），今天页正好一屏——负责人“只有切到日历才回落”，iOS 是在文档变得能滚时重算的；
+// ① 根据：当时 895 高时只有日历页文档比视口高（6 行月格，和数据无关），今天页正好一屏——负责人“只有切到日历才回落”，iOS 是在文档变得能滚时重算的；
+//    R-472 月格变矮后日历页也正好一屏，这里改成四页都断言一屏；
 // ② 默认开着：底栏挂上以后放看不见的垫块让今天页文档比视口高（照日历），Chromium 不会改 innerHeight，到 1.5 秒撤掉，日志记 no-change；
 //    垫块在的时候底栏位置不变、点不到垫块；稳定后的今天页和开关关着时逐像素一样；
 // ③ 诊断页关掉：什么都不做、不记日志；④ 正常启动（956 / 956）开着也只记 skip，画面和关着时逐像素一样
@@ -121,7 +122,9 @@ const shot = async (page: Page, name: string): Promise<Buffer> => {
 test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () => {
   test.use({ loggedIn: true, viewport: { width: 440, height: 895 }, timezoneId: 'Asia/Seoul' });
 
-  test('根据：895 高时日历页文档比视口高，今天、待办、随手记不超过一屏', async ({ page }) => {
+  // R-472（11-17 月格方案乙，格高 90 → 78、整月矮 90）以后，6 行月格的日历页在 895 高时也正好一屏，不再是“只有日历页能滚”：
+  // 原来这里断言日历页比视口高（负责人“只有切到日历才回落”那次的版面事实），现在改成四页都不超过一屏。Gap fix 自己放垫块让文档变得能滚，不靠日历页
+  test('根据：895 高时日历、今天、待办、随手记都不超过一屏（R-472 起日历页也是一屏）', async ({ page }) => {
     await launch(page, { on: false, screenH: 956, top: 61 });
     const docH = async (name: string): Promise<number> => {
       await page.goto(`/app/#/${name}`);
@@ -130,9 +133,8 @@ test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () =>
       return page.evaluate(() => document.documentElement.scrollHeight);
     };
     const rest = await restH(page, 895);
-    expect(await docH('calendar')).toBeGreaterThan(rest);
-    // 今天、待办、随手记：正好是不撑开时的高（电脑 895；触屏 896，只多 base.css 那 1px）
-    for (const name of ['today', 'todos', 'notes']) expect(await docH(name), name).toBe(rest);
+    // 正好是不撑开时的高（电脑 895；触屏 896，只多 base.css 那 1px）
+    for (const name of ['calendar', 'today', 'todos', 'notes']) expect(await docH(name), name).toBe(rest);
   });
 
   test('默认开着：底栏挂上后放垫块，今天页文档比视口高、底栏不动、垫块看不见也点不到；1.5 秒撤掉，记 no-change；稳定后和关着时逐像素一样', async ({ page }) => {
