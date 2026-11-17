@@ -9,7 +9,8 @@
 // 暖心句按用户时区的当天日期固定选一句（useCheerText，按语言懒加载）；句子下载好之前这一行是空的，CSS 留一行高（.cheer:empty），卡片不跳
 // 时间尺只是示意（aria-hidden），读屏靠页头和标题行的文字；进行中、下一件又在时间尺里时，另给读屏一句“下一件 …”（看得见的只有尺上的色块）
 // 时间尺照视觉稿 kRuler：第二件（co）用自己的 --k-co 色；下一件左边竖条是项目色；磨砂玻璃皮肤的当前事项是 8px 胶囊、此刻是带圈圆头（样式里按皮肤分）
-import { useEffect, type CSSProperties } from 'react';
+import { useEffect, type CSSProperties, type ReactNode } from 'react';
+import refine from '../../../kit/components/Refine.module.css';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { NowCard as Card, NowSeg, NowState } from '../hooks/today-types.ts';
@@ -18,13 +19,31 @@ import styles from './NowCard.module.css';
 
 type T = ReturnType<typeof useTodayT>;
 
+/** 数字段换等宽（R-436 丁批：“现在 10:21”、时长“1 小时 13 分”里的数字，照 kit NumIn 的做法只包数字、整句字体不换）。
+ *  词条整句照旧翻译：要换等宽的参数先用 num() 包上记号，show() 再把记号里的数字包成 Refine.module.css 的 .num；标题等用户写的字不包、原样输出 */
+const num = (v: string | number): string => `${v}`;   // 私用区字符当记号，词条和用户的字里不会出现
+function show(s: string): ReactNode {
+  const out: ReactNode[] = [];
+  let at = 0;
+  for (const m of s.matchAll(/([^]*)/g)) {
+    out.push(s.slice(at, m.index));
+    for (const d of (m[1] ?? '').matchAll(/\d+(?::\d+)?|\D+/g)) {
+      // key 用它在整句里的位置（同一句里不会重）
+      out.push(/^\d/.test(d[0]) ? <span key={m.index + d.index} className={refine.num}>{d[0]}</span> : d[0]);
+    }
+    at = m.index + m[0].length;
+  }
+  out.push(s.slice(at));
+  return out;
+}
+
 /** 每种状态的页头标签 */
 const LABEL: Record<NowState, (c: Card, t: T) => string> = {
-  live: (c, t) => (c.liveN > 1 ? t('now.live2', { n: c.liveN }) : t('now.live', {})),
+  live: (c, t) => (c.liveN > 1 ? t('now.live2', { n: num(c.liveN) }) : t('now.live', {})),
   idle: (_, t) => t('now.idle', {}),
   far: (_, t) => t('now.idle', {}),
   done: (_, t) => t('now.done', {}),
-  allday: (c, t) => (c.allDay && c.allDay.n > 1 ? t('now.allDayN', { n: c.allDay.n }) : t('now.allDay', { title: c.allDay?.title ?? '' })),
+  allday: (c, t) => (c.allDay && c.allDay.n > 1 ? t('now.allDayN', { n: num(c.allDay.n) }) : t('now.allDay', { title: c.allDay?.title ?? '' })),
   empty: (_, t) => t('now.empty', {}),
 };
 
@@ -75,12 +94,12 @@ export function NowCard({ card, today }: { card: Card; today: DateStr }) {
       <p className={styles.head}>
         <span className={live ? styles.labelLive : styles.labelIdle}>
           <i className={styles.dot} />
-          <span className={styles.labelText}>{LABEL[card.state](card, t)}</span>
+          <span className={styles.labelText}>{show(LABEL[card.state](card, t))}</span>
         </span>
-        <span className={styles.nowText}>{t('now.now', { t: card.nowText })}</span>
+        <span className={styles.nowText}>{show(t('now.now', { t: num(card.nowText) }))}</span>
         {card.left !== null ? (
           <span className={styles.left} data-testid="now-left">
-            {live ? t('now.left', { d: durText(card.left, locale) }) : t('now.in', { d: durText(card.left, locale) })}
+            {show(live ? t('now.left', { d: num(durText(card.left, locale)) }) : t('now.in', { d: num(durText(card.left, locale)) }))}
           </span>
         ) : null}
       </p>
@@ -97,8 +116,8 @@ export function NowCard({ card, today }: { card: Card; today: DateStr }) {
       {card.also ? (
         <p className={styles.sub} data-testid="now-also">
           {'more' in card.also
-            ? t('now.alsoMore', { n: card.also.more })
-            : t('now.also', { title: card.also.title, end: card.also.end, d: durText(card.also.left, locale) })}
+            ? show(t('now.alsoMore', { n: num(card.also.more) }))
+            : show(t('now.also', { title: card.also.title, end: num(card.also.end), d: num(durText(card.also.left, locale)) }))}
         </p>
       ) : null}
       {live && card.next && card.foot === null ? (
@@ -122,11 +141,11 @@ export function NowCard({ card, today }: { card: Card; today: DateStr }) {
       </div>
       {card.foot?.kind === 'next' ? (
         <p className={styles.sub} data-testid="now-hint">
-          {t('now.hint', { t: card.foot.time, title: card.foot.title, d: durText(card.foot.inMin, locale) })}
+          {show(t('now.hint', { t: num(card.foot.time), title: card.foot.title, d: num(durText(card.foot.inMin, locale)) }))}
         </p>
       ) : card.foot?.kind === 'tomorrow' ? (
         <p className={styles.sub} data-testid="now-tomorrow">
-          {t('now.doneNext', { t: card.foot.time, title: card.foot.title })}
+          {show(t('now.doneNext', { t: num(card.foot.time), title: card.foot.title }))}
         </p>
       ) : null}
     </section>

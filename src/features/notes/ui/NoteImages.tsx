@@ -20,6 +20,7 @@ import { useNoteSource, type NoteImagesApi } from '../hooks/note-source.ts';
 import { useImageNotices, type ImgFailKey, type ImgNotice, type InsertResult, type NoteImage, type PendingImage } from '../hooks/useNoteImages.ts';
 import type { ActionResult } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
+import chip from '../../../kit/components/Chip.module.css';
 import styles from './NoteImages.module.css';
 
 /** 插图提示的文案键（都不带参数） */
@@ -64,12 +65,12 @@ function useFilePick(onFile: (f: File) => void, camera: boolean, testId: string)
   return [input, () => ref.current?.click()];
 }
 
-/** “图片”“拍照”两个按钮；className 给按钮（输入行沿用 .img 的 40 × 40 灰圆，编辑器用这里的胶囊） */
+/** “图片”“拍照”两个按钮；className 给按钮（输入行沿用 .img 的 40 × 40 灰圆）；不给时是编辑器里的 kit 胶囊（Chip.module.css .chip，R-436 丁批，不再照抄一份胶囊样式） */
 export function PickButtons({ onFile, disabled, className, idPrefix, camera = true }: { onFile(f: File): void; disabled?: boolean; className?: string | undefined; idPrefix: string; camera?: boolean }) {
   const t = useNotesT();
   const [pickInput, pick] = useFilePick(onFile, false, `${idPrefix}-img-input`);
   const [camInput, cam] = useFilePick(onFile, true, `${idPrefix}-camera-input`);
-  const cls = className ?? styles.pick;
+  const cls = className ?? chip.chip;
   return (
     <>
       <Pressable type="button" className={cls} onClick={pick} disabled={disabled} aria-label={t('notes.img', {})} data-testid={`${idPrefix}-img`}>
@@ -308,12 +309,12 @@ function OneImage(p: { img: NoteImage; n: number; pending: PendingImage | null; 
           <span className={styles.failBox} role="alert">
             <span>{t(bad ?? 'notes.img.failed', {})}</span>
             <span className={styles.failBtns}>
-              <Pressable type="button" className={styles.failBtn} onClick={p.onRemove} disabled={p.disabled || busy} data-testid={`note-image-delete-${p.img.id}`}>
+              <Pressable type="button" className={`${chip.chip} ${chip.onGray}`} onClick={p.onRemove} disabled={p.disabled || busy} data-testid={`note-image-delete-${p.img.id}`}>
                 {t('notes.img.delete', {})}
               </Pressable>
               <Pressable
                 type="button"
-                className={styles.failBtn}
+                className={`${chip.chip} ${chip.onGray}`}
                 onClick={() => {
                   if (!p.onRetry()) replace();
                 }}

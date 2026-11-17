@@ -1,6 +1,5 @@
 /* 随手记插图（皮肤视觉稿 .mcard .im：16:10、右上角“+N”深色小牌；NOTE_ED：16:10、圆角 18、上边距 14）
-   R-436 乙批：“+N”等宽数字；没传上时的“重试 / 去掉”去描边；“图片”“拍照”收成 kit 胶囊的尺寸（高 30、字 13、点按区 44）——
-   用这两颗的 NoteEditPage.tsx 不在这一批范围里，先在这里照 kit Chip.module.css 的 .chip 写同样的尺寸，之后页面改挂 kit 胶囊时删掉这几行 */
+   R-436 乙批：“+N”等宽数字；丁批：“图片”“拍照”和失败图块的“删除”“重试”改挂 kit 胶囊（Chip.module.css .chip / .chip.onGray），删掉这里照抄的胶囊样式 */
 
 .ic {
   width: 20px;
@@ -152,54 +151,17 @@
   flex-wrap: wrap;
 }
 
-.failBtn {
-  min-width: var(--hit);
-  min-height: var(--hit);
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--panel);
-  box-shadow: var(--shadow-1);
-  color: var(--text);
-  font-size: var(--fs-14);
-}
-
-/* 编辑器里的“图片”“拍照”：正文下面一行小胶囊 */
+/* 编辑器里的“图片”“拍照”：正文下面一行 kit 胶囊（Chip.module.css .chip，R-436 丁批；胶囊自带上下 7 外边距撑出 44 点击区，这里上边距少给 7） */
 .picks {
   display: flex;
   gap: 8px;
   margin-top: 7px;
 }
 
-.pick {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 30px;
-  margin: 7px 0;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--panel-2);
-  color: var(--text);
-  font-size: var(--fs-13);
-}
-
-.pick::after {
-  content: '';
-  position: absolute;
-  inset: -7px 0;
-}
-
-.pick .ic {
+/* 胶囊高 30，图标跟着收到 16（默认 .ic 是输入行 40 圆按钮里的 20） */
+.picks .ic {
   width: 16px;
   height: 16px;
-}
-
-.pick:disabled,
-.failBtn:disabled {
-  opacity: 0.5;
 }
 
 /* 输入行上待记下的图（R-416）：在输入行正上方的外框里（NotesPage.module.css .above，位置跟着输入行），横排、放不下就换一行（往上长）。

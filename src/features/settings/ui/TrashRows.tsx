@@ -4,6 +4,7 @@
 // • 读屏名称是整行按钮的字（行名 + 条数）；组名“最近删除”是这张卡看得见的卡名（SettingsHome 的 showTitle）
 import { Suspense } from 'react';
 import { navigate } from '../../../app/router.ts';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { SettingsEntryRow } from '../../../kit/components/Settings/Settings.tsx';
 import { TrashCount } from '../../today/index.ts';
@@ -21,7 +22,7 @@ export function TrashRows() {
           value={
             <QuietBoundary name="trash-count">
               <Suspense fallback={null}>
-                <TrashCount table={k} format={(n) => t('settings.trash.n', { n })} />
+                <TrashCount table={k} format={(n) => <NumIn text={t('settings.trash.n', { n })} num={String(n)} />} />
               </Suspense>
             </QuietBoundary>
           }

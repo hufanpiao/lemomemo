@@ -15,7 +15,7 @@
 // 设置 › 皮肤（#/settings/skin，ADR-008）同随手记显示方式：首页一行“简洁 · 白天 / 夜间跟着手机 ›”加两个开关，正文在本功能的 SkinSection.tsx；
 // 设置 › 字体（#/settings/font，架构 5.9c）同样：首页一行“字体 › 系统字体（默认）”，正文在 FontSection.tsx
 // 设置 › 语音与 AI（#/settings/ai）、在 Claude 聊天里记事（#/settings/claude）同日历（B3 FA-4）：正文由 plus 功能懒加载提供
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { backTo, hrefOf, plainClick, useRoute } from '../../../app/router.ts';
 import { backOrReplace, navigateSub } from '../../../app/router-sub.ts';
 import { CalendarSettings } from '../../calendar/index.ts';
@@ -30,6 +30,7 @@ import { useExport } from '../hooks/useExport.ts';
 import { useRecentExport } from '../hooks/useRecentExport.ts';
 import { useQuickAddHotkey } from '../hooks/useQuickAddHotkey.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { AboutSection } from './AboutSection.tsx';
 import { AccountSection } from './AccountSection.tsx';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
@@ -166,6 +167,13 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   const exportTask = useExport(account, bumpExport);
   /** R-297：电脑版 exe 的快速记录热键；不在 exe 里读回 null，“电脑”这一行不出现 */
   const hotkey = useQuickAddHotkey(deps?.hotkey);
+  // “电脑”二级页只在电脑版 exe 里有内容（R-297）：网页版、手机读回 null，首页本来就不出这一行，但直接打开 #/settings/desktop（书签、刷新、地址栏）
+  // 原来画出一页只有标题的空白（R-436 丁批审查“电脑子页手机宽度下空白”，根因 DesktopSection.tsx 的 if (!status) return null）。读回 null 就退回设置首页
+  useEffect(() => {
+    if (view !== 'desktop' || hotkey.status !== null) return;
+    rlog('settings desktop-unavailable back=home');
+    backOrReplace('settings');
+  }, [view, hotkey.status]);
 
   /** 顶栏“‹ 设置”的二级页。key 用地址：两个二级页之间直接换地址（不经过首页）时整页重新挂载，
    *  上一页的分包失败状态不带过来，标题照样拿到焦点（合卡代码审查 S1） */

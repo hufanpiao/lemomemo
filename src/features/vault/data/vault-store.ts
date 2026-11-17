@@ -6,7 +6,11 @@
 // • 上锁就清空（明文不留，TC-B5-11）；“有 N 处改动没来得及保存”的个数（dropped）不随上锁清，看过了才清（只记个数，不带内容）
 // • failed：发了几次都没成的条目（列表行、编辑页标“没保存上”）；uploads：还在传、没传上的图；
 //   fresh：本机新建、服务器上还没有的条目（第一次 save 成了才去掉；附件区等它，vault-file 要这一条已经在服务器上）
+// • known：上一段解锁期里知道的、还活着的隐私记 id（只有 id，不带内容）。上锁清明文时留下它，锁着时数“里面有 N 条”用（countVault）：
+//   隐私记的写入只走 vault 函数、不进本机 notes 集合（session.ts、vault-queue.ts 不碰 core/cache），本机集合要等同步拉回来才有那一行；
+//   刚记的、刚移进来的、还在后台队列里的，锁上后原来数不到，卡片写“里面有 0 条”（R-436 丁批审查）
 // • 不碰 core/cache、outbox、log（A18）；纯 TS，不准 import React（A1）
+import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import type { VaultNote } from '../../../../shared/schema/vault.ts';
 
 export type Row = { id: string } & Record<string, unknown>;
@@ -21,6 +25,27 @@ export interface StoreSnap {
   dropped: number;
   /** 只拖了顺序、服务器回 stale（别处刚改过）没移动的条数（R-429）；看过才清 */
   stale: number;
+  /** 上锁前知道的活着的隐私记 id（见文件头 known）；解锁拉过列表以后不用它 */
+  known: ReadonlySet<string>;
+}
+
+/** 本机 notes 集合里的一行（隐私记行只有中性列，0.27 第 1 点） */
+export type LocalNoteRow = { id: string; is_private?: unknown; deleted_at?: unknown; undone?: unknown };
+
+/**
+ * 隐私记有几条（锁着也能数，不碰明文）：
+ * • 这一段解锁期拉过列表（listed）：以内存仓库为准；
+ * • 没拉过（锁着）：本机集合里活着的隐私记行，并上上锁前知道的（known，同步还没拉回来的），本机集合里已经删了、撤销了的不算
+ */
+export function countVault(local: readonly LocalNoteRow[], listed: boolean, snap: StoreSnap): number {
+  if (listed) return snap.notes.filter((n) => n['deleted_at'] == null).length;
+  const ids = new Set(snap.known);
+  for (const r of local) {
+    if (r.is_private !== true) continue;
+    if (isLiveRow(r)) ids.add(r.id);
+    else ids.delete(r.id);
+  }
+  return ids.size;
 }
 
 /** 行里的字符串字段（不是字符串就当空；队列发 save、回收站显示标题共用这一份） */
@@ -47,6 +72,9 @@ export function createVaultStore() {
   let fresh: ReadonlySet<string> = new Set();
   let dropped = 0;
   let stale = 0;
+  let known: ReadonlySet<string> = new Set();
+  /** 拉过全量列表（load）：上锁时 notes 就是全部，known 整个换成它；没拉过只把仓库里有的并进去 */
+  let loaded = false;
   let snap: StoreSnap | null = null;
   const listeners = new Set<() => void>();
 
@@ -65,7 +93,7 @@ export function createVaultStore() {
 
   return {
     getSnapshot(): StoreSnap {
-      snap ??= { notes: [...notes.values()], images: [...images.values()], failed, uploads, fresh, dropped, stale };
+      snap ??= { notes: [...notes.values()], images: [...images.values()], failed, uploads, fresh, dropped, stale, known };
       return snap;
     },
     subscribe(fn: () => void): () => void {
@@ -78,10 +106,18 @@ export function createVaultStore() {
     load(list: readonly VaultNote[]): void {
       notes = new Map(list.map((n) => [n.id, noteRowOf(n)]));
       images = new Map(list.flatMap((n) => n.images.map((im) => [im.id, imageRowOf(n.id, im)] as const)));
+      loaded = true;
       changed();
     },
     /** 上锁：明文、图片行、状态全清（dropped 留着，解锁后报一句） */
     clear(): void {
+      // 明文清掉之前先记下活着的 id（只留 id）：锁着时“里面有 N 条”照样数得到同步还没拉回来的
+      const live = [...notes.values()].filter((n) => n['deleted_at'] == null).map((n) => n.id);
+      const dead = [...notes.values()].filter((n) => n['deleted_at'] != null).map((n) => n.id);
+      const next = new Set(loaded ? live : [...known, ...live]);
+      for (const id of dead) next.delete(id);
+      known = next;
+      loaded = false;
       notes = new Map();
       images = new Map();
       failed = new Set();
@@ -110,6 +146,7 @@ export function createVaultStore() {
       notes = new Map(notes);
       images = new Map(images);
       for (const id of ids) notes.delete(id);
+      if (ids.some((id) => known.has(id))) known = new Set([...known].filter((id) => !ids.includes(id)));
       for (const [k, r] of images) if (ids.includes(String(r['note_id']))) images.delete(k);
       changed();
     },

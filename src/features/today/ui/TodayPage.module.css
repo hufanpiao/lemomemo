@@ -60,31 +60,38 @@
   pointer-events: none;
 }
 
-/* 已过去折成一行（线框 s1 .done：灰字 13px）：整行是按钮，放不下省略号；展开时“▸”换成“▾” */
+/* 已过去折成一行（线框 s1 .done）：整行是按钮，放不下省略号。R-436 丁批照待办页的“已完成 N ›”折叠行（TodosPage.module.css .fold、.chev）：
+   点击区 44 高、左右和分组名对齐（4px），字小一号、次要色；行尾 ›，展开时直接转成朝下（data-open，不播转动，展开的行自己有淡入） */
 .past {
   display: flex;
   gap: 6px;
   align-items: center;
   width: 100%;
   min-height: var(--hit);
-  padding: 0;
+  padding: 0 4px;
   border: 0;
   background: none;
   color: var(--text-2);
   font: inherit;
-  font-size: var(--fs-13);
+  font-size: var(--fs-12-5);
   text-align: start;
   cursor: pointer;
 }
 
-.pastMark {
-  flex: none;
-}
-
 .pastText {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chev {
+  flex: none;
+  color: var(--text-3);
+}
+
+.chev[data-open] {
+  transform: rotate(90deg);
 }
 
 /* 包着“错过 N 条提醒”那一行：有这一行（button）时下面留 8px（M1），没有时不占位；在 GrowIn 里，8px 算进展开的高度 */
@@ -130,27 +137,18 @@
   margin-top: 4px;
 }
 
-/* 纪念日一行（B5 S14；线框 s1 ANNLINE）：浅色胶囊，小头像 + “3 天后” + 名字；放不下省略号 */
-.anniv {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+/* 纪念日一行（B5 S14；线框 s1 ANNLINE）：kit 胶囊（Chip.module.css .chip：高 30、无描边 --panel-2 底，R-436 丁批收到和待办页胶囊一个量级，原来 44 高白底），
+   小头像 + “3 天后” + 名字；放不下省略号。这里只管左边给头像让出的内边距、和下面“现在”卡的距离（两级选择器压过 kit 的 margin） */
+.page .anniv {
   max-width: 100%;
-  min-height: var(--hit);
-  margin: 0 0 8px;
-  padding: 0 12px 0 6px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--panel);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-13);
+  margin: 0 0 10px;
+  padding-left: 4px;
   cursor: pointer;
 }
 
 .annivWhen {
   flex: none;
-  font-weight: 600;
+  color: var(--text-2);
 }
 
 .annivName {

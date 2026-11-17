@@ -6,6 +6,7 @@ import { PlusSettings } from '../../plus/index.ts';
 import { TodoSettings } from '../../todos/index.ts';
 import { ClockWrongNote, RemindSettingsValue } from '../../reminders/index.ts';
 import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
+import refine from '../../../kit/components/Refine.module.css';
 import { buildInfo } from '../../../platform/env.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { SettingsCard, SettingsEntryRow } from '../../../kit/components/Settings/Settings.tsx';
@@ -178,7 +179,7 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
       ? { desktop: entry('desktop', t('settings.desktop.title', {}), 'desktop', hotkeyLabel(hotkey.status.accelerator, t('settings.hotkey.space', {}))) }
       : {}),
     // 关于一行的值是版本号（设计评审 M-1，线框“关于 4.0.0 ›”）
-    about: entry('about', t('settings.about.title', {}), 'about', buildInfo.version),
+    about: entry('about', t('settings.about.title', {}), 'about', <span className={refine.num}>{buildInfo.version}</span>),   // 版本号等宽（R-436 丁批）
   };
 
   return (
