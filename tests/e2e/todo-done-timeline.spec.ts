@@ -1,5 +1,5 @@
 // 待办勾选完成时间线（负责人 11-17：“现在我的动效太轻了，根本反应不过来，并且完成时的横线是从左到右画上去的”；“这个间距太挤了”）。
-// 不要后端：直接往本机库 planner-v4 写好待办和子任务再重新载入，待办页逐帧取样（每个 rAF 一次）：
+// 不要后端：直接往本机库 planner-v4 写好待办和子任务再重新载入，在待办页勾一条，删除线、方框的动画停住后按 5 ms 一格拨时间取样（不靠帧率，见 record 的注释）：
 // • 删除线（kit TodoRow 标题里的 .line，scaleX）从 0 单调长到 1，起步不早于 --dur-done-strike-at 的一半（不和方框同一拍）、900 ms 内画满
 // • 方框（kit CheckCircle 的 .checkBox）放大峰值不低于 1.25（参考视频第 4–5 帧约 1.3 倍），最后回到 1
 // • 打上 data-out 以后这一行在 --dur-collapse（100 ms）加两帧余量内收完、离开原组
@@ -34,88 +34,135 @@ async function seed(page: Page): Promise<void> {
   await page.waitForTimeout(400);
 }
 
-/** [距点下毫秒, 删除线 scaleX, 方框 scale, 行在不在原组（1/0）, 行上有没有 data-out（1/0）] */
-type F = [number, number | null, number | null, number, number];
+/** [动画自己的时间（毫秒）, 值]：删除线是 scaleX，方框是 scale */
+type S = [number, number];
+/**
+ * 一次勾选记下的：line、box 是删除线、方框的整段动画按 5 ms 一格拨时间取的值；
+ * outAt、goneAt 是打上 data-out、离开原组的时刻（距 pointerdown，毫秒）；boxAtOut 是打上 data-out 那一刻方框的缩放
+ */
+interface Rec {
+  line: S[] | null;
+  box: S[] | null;
+  outAt: number | null;
+  goneAt: number | null;
+  boxAtOut: number | null;
+}
 
-/** 点 id 那一行的方框，从 pointerdown 起逐帧记 1200 ms */
-async function record(page: Page, id: string): Promise<F[]> {
+/**
+ * 点 id 那一行的方框并记下整条时间线。不按 rAF 逐帧取样：CI 的 WebKit 在 430×932、DPR 3 下一帧要 150～400 ms
+ * （11-17 CI 跑 5dd426c4 的记录：22、185、336、459 ms 各一帧），130 ms 的删除线整个落在两帧之间，量不到中间值。
+ * 改成删除线、方框的 CSS 动画一出现（MutationObserver 看到 data-done、.pop，强制算一次样式让过渡建起来）就先停住，
+ * 用 currentTime 从 0 拨到 END_MS、每 5 ms 读一次计算后的 transform（同步做完，中间不出帧、计时器不插进来），再拨回原处接着播：
+ * 读到的是浏览器真正在播的那段动画（时长、延迟、曲线、关键帧都是它自己的），和机器快慢无关。
+ * 收起（data-out → 离开原组）是 useDoneFlow 的计时器，不是动画：用 MutationObserver 记时刻，也不靠帧
+ */
+async function record(page: Page, id: string): Promise<Rec> {
   await page.evaluate((id) => {
-    type W = Window & { __f?: unknown[] };
-    const w = window as W;
-    w.__f = [];
-    const scaleOf = (el: Element | null | undefined): number | null => {
-      if (!el) return null;
+    const END_MS = 800;
+    const STEP_MS = 5;
+    const rec: Rec = { line: null, box: null, outAt: null, goneAt: null, boxAtOut: null };
+    (window as Window & { __rec?: Rec }).__rec = rec;
+    const scaleOf = (el: Element): number => {
       const t = getComputedStyle(el).transform;
       if (t === 'none') return 1;
       const m = /matrix\(([^,]+),\s*([^,]+)/.exec(t);
-      return m ? Math.hypot(Number(m[1]), Number(m[2])) : null;
+      return m ? Math.hypot(Number(m[1]), Number(m[2])) : Number.NaN;
+    };
+    /** 停住 el 自己的动画（不带子元素），拨时间取样，再拨回原处接着播；没有动画就只取当前值一格 */
+    const sample = (el: Element): S[] => {
+      scaleOf(el); // 先算一次样式：data-done、.pop 刚打上，过渡和动画在这一步才建起来
+      const anims = el.getAnimations();
+      if (anims.length === 0) return [[0, scaleOf(el)]];
+      const saved = anims.map((a) => [a, a.currentTime] as const);
+      for (const a of anims) a.pause();
+      // 拨到动画结束前 1 ms 为止：拨过结束点，动画不再起作用，读到的是拨时间造出来的底值（WebKit 上方框会读成按下时的 0.8），不是用户看到的
+      const end = Math.min(END_MS, Math.max(...anims.map((a) => Number(a.effect?.getComputedTiming().endTime ?? 0))) - 1);
+      const out: S[] = [];
+      for (let t = 0; t < end + STEP_MS; t += STEP_MS) {
+        const at = Math.min(t, end);
+        for (const a of anims) a.currentTime = at;
+        out.push([at, scaleOf(el)]);
+      }
+      for (const [a, c] of saved) {
+        a.currentTime = c;
+        a.play();
+      }
+      return out;
     };
     let t0 = 0;
-    const tick = (): void => {
-      const dt = performance.now() - t0;
+    let seen = false;
+    const look = (): void => {
+      if (!t0) return;
       const row = document.querySelector(`[data-row-id="${id}"]:not([data-state="leaving"])`);
-      w.__f?.push([
-        dt,
-        scaleOf(row?.querySelector('[class*="line"][aria-hidden]')),
-        scaleOf(row?.querySelector('label[class*="checkBox"]')),
-        row ? 1 : 0,
-        row?.hasAttribute('data-out') ? 1 : 0,
-      ]);
-      if (dt < 1200) requestAnimationFrame(tick);
+      if (row) seen = true;
+      const line = row?.querySelector('[class*="line"][aria-hidden]');
+      const box = row?.querySelector('label[class*="checkBox"]');
+      if (!rec.line && line?.hasAttribute('data-done')) rec.line = sample(line);
+      if (!rec.box && box && /pop/.test(box.className)) rec.box = sample(box);
+      if (rec.outAt === null && row?.hasAttribute('data-out')) {
+        rec.outAt = performance.now() - t0;
+        rec.boxAtOut = box ? scaleOf(box) : null;
+      }
+      if (rec.goneAt === null && seen && !row) rec.goneAt = performance.now() - t0;
     };
+    new MutationObserver(look).observe(document.body, { subtree: true, childList: true, attributes: true });
     document.addEventListener(
       'pointerdown',
       () => {
         t0 = performance.now();
-        requestAnimationFrame(tick);
+        look();
       },
       { once: true, capture: true },
     );
   }, id);
   await page.getByTestId(`todos-done-${id}`).click();
-  await expect.poll(() => page.evaluate(() => ((window as Window & { __f?: F[] }).__f ?? []).at(-1)?.[0] ?? 0), { timeout: 5000 }).toBeGreaterThanOrEqual(1200);
-  return (await page.evaluate(() => (window as Window & { __f?: unknown[] }).__f ?? [])) as F[];
+  await expect.poll(() => page.evaluate(() => (window as Window & { __rec?: Rec }).__rec?.goneAt ?? null), { timeout: 5000 }).not.toBeNull();
+  return (await page.evaluate(() => (window as Window & { __rec?: Rec }).__rec)) as Rec;
 }
 
-const show = (f: F[]): string => f.map(([t, l, b, r, o]) => `${t.toFixed(0)}:${l?.toFixed(2) ?? '-'}/${b?.toFixed(2) ?? '-'}/${r}${o}`).join(' ');
+const curve = (s: S[] | null): string => (s ?? []).filter(([t], i, all) => t % 20 === 0 || i === all.length - 1).map(([t, v]) => `${t.toFixed(0)}:${v.toFixed(2)}`).join(' ');
+const show = (r: Rec): string =>
+  `删除线 ${curve(r.line)} ｜ 方框 ${curve(r.box)} ｜ data-out ${r.outAt?.toFixed(0) ?? '-'} ms（方框 ${r.boxAtOut?.toFixed(2) ?? '-'}）、离开 ${r.goneAt?.toFixed(0) ?? '-'} ms`;
 
 test.describe('待办勾选完成时间线', () => {
   test('删除线从左往右单调画满、方框放大过头 ≥ 1.25 再回 1、收起在 --dur-collapse 内完成', async ({ page }) => {
     await seed(page);
-    const f = await record(page, 't2');
-    const trace = show(f);
-    const lines = f.map((x) => x[1]).filter((x): x is number => x !== null);
-    expect(lines.length, `取样不够：${trace}`).toBeGreaterThan(5);
-    // ① 删除线：单调不减、最后画满；起步晚于方框（等 --dur-done-strike-at，170 ms），不是一点下去就画了一半
+    const r = await record(page, 't2');
+    const trace = show(r);
+    console.log(`勾选时间线 ${test.info().project.name}：${trace}`);
+    const line = r.line ?? [];
+    const lines = line.map(([, v]) => v);
+    expect(lines.length, `删除线没有过渡（取样不够）：${trace}`).toBeGreaterThan(5);
+    // ① 删除线：单调不减、最后画满；起步晚于方框（等 --dur-done-strike-at，170 ms），不是一打上就画了一半
     for (let k = 1; k < lines.length; k += 1) expect(lines[k]!, `删除线往回缩：${trace}`).toBeGreaterThanOrEqual(lines[k - 1]! - 0.01);
     expect(lines.at(-1)!, `删除线没画满：${trace}`).toBeGreaterThan(0.99);
-    const early = f.filter((x) => x[0] < 80 && x[1] !== null && x[1] > 0.05);
+    const early = line.filter(([t, v]) => t < 80 && v > 0.05);
     expect(early, `删除线和方框同一拍就起步了：${trace}`).toEqual([]);
     const mid = lines.filter((x) => x > 0.05 && x < 0.95);
     expect(mid.length, `删除线没有中间帧（一下子画满，不是从左往右画）：${trace}`).toBeGreaterThan(0);
     // ② 方框放大过头不低于 1.25，最后回到 1
-    const boxes = f.map((x) => x[2]).filter((x): x is number => x !== null);
+    const boxes = (r.box ?? []).map(([, v]) => v);
     expect(Math.max(...boxes), `方框放大峰值不够：${trace}`).toBeGreaterThanOrEqual(1.25);
-    // ③ 打上 data-out 以后 100 ms（--dur-collapse）加 3 帧余量内离开原组
-    const outAt = f.find((x) => x[4] === 1)?.[0];
-    expect(outAt, `1200 ms 里没开始收起：${trace}`).toBeDefined();
-    const goneAt = f.find((x) => x[3] === 0)?.[0];
-    expect(goneAt, `1200 ms 里没收完：${trace}`).toBeDefined();
-    expect(goneAt! - outAt!, `收起太慢：${trace}`).toBeLessThanOrEqual(100 + 3 * 34);
-    const beforeOut = boxes.slice(0, f.findIndex((x) => x[4] === 1)).at(-1);
-    expect(beforeOut!, `收起前方框没回到 1：${trace}`).toBeLessThan(1.02);
+    expect(boxes.at(-1)!, `方框最后没回到 1：${trace}`).toBeLessThan(1.02);
+    // ③ 打上 data-out 以后 100 ms（--dur-collapse）加 3 帧余量内离开原组；打上 data-out 那一刻方框已经回到 1
+    expect(r.outAt, `没开始收起：${trace}`).not.toBeNull();
+    expect(r.goneAt, `没收完：${trace}`).not.toBeNull();
+    expect(r.goneAt! - r.outAt!, `收起太慢：${trace}`).toBeLessThanOrEqual(100 + 3 * 34);
+    expect(r.boxAtOut!, `收起前方框没回到 1：${trace}`).toBeLessThan(1.02);
   });
 
   test('减弱动态效果：方框不缩放、删除线直接画满（没有中间帧）', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await seed(page);
     await page.waitForFunction(() => document.documentElement.getAttribute('data-rm') === '1', undefined, { timeout: 10000 });
-    const f = await record(page, 't2');
-    const trace = show(f);
-    const boxes = f.map((x) => x[2]).filter((x): x is number => x !== null);
-    expect(Math.max(...boxes), `减弱动态效果时方框还在放大：${trace}`).toBeLessThan(1.01);
-    const mid = f.map((x) => x[1]).filter((x): x is number => x !== null && x > 0.05 && x < 0.95);
+    const r = await record(page, 't2');
+    const trace = show(r);
+    const boxes = (r.box ?? []).map(([, v]) => v);
+    expect(Math.max(1, ...boxes), `减弱动态效果时方框还在放大：${trace}`).toBeLessThan(1.01);
+    expect(r.line, `删除线没打上 data-done：${trace}`).not.toBeNull();
+    const mid = (r.line ?? []).map(([, v]) => v).filter((x) => x > 0.05 && x < 0.95);
     expect(mid, `减弱动态效果时删除线还在过渡：${trace}`).toEqual([]);
+    expect(r.line!.at(-1)![1], `减弱动态效果时删除线没直接画满：${trace}`).toBeGreaterThan(0.99);
   });
 
   test('间距：标题和副行之间、副行和展开后的第一条子任务之间都留出空', async ({ page, browserName }) => {

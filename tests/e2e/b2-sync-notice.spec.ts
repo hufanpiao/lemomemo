@@ -79,6 +79,9 @@ test.describe('K8 gone 卡', () => {
     await swipeRow(page, 'todos-row-n1');   // 左滑拉到底删（负责人 11-15 去掉 ×）
     const toast = page.locator('[data-undo-toast]');
     await expect(toast).toBeVisible();
+    // 等撤销条自己的升起动画（undo-rise，translate 带小数）播完再量：播到一半量，WebKit 的高度会是 55.99997、56.00003 这种（11-17 CI 跑 5dd426c4 时挂；本机 webkit 重复 8 次复现 2 次）。
+    // 只等它本身的动画（getAnimations 不带 subtree），不等里面 5 秒的倒计时色带
+    await toast.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
     const t = await toast.boundingBox();
     expect(t?.height).toBe(56);
     await expect.poll(async () => {

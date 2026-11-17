@@ -70,7 +70,16 @@ for (const size of SIZES) {
 
       const row = await box(page, 'notes-input-row');
       const strip = await thumbs(page);
-      expect(strip.y + strip.height, '小图在输入行上面、不压住').toBeLessThanOrEqual(row.y - 4);
+      // 11-17 CI（5dd426c4）WebKit 电脑版挂过一次、重试过了：输入行 y=106、小图下沿 179，本机 webkit 重复 8 次没复现。
+      // 根因还没定，先把当时的版面写进失败信息（两个框、desk 的版式、输入行外框的类名），下次挂了直接看
+      const at = await page.evaluate(() => ({
+        desk: document.querySelector('[data-testid="desk"]')?.getAttribute('data-desk') ?? null,
+        wrap: document.querySelector('[data-testid="notes-input-row"]')?.parentElement?.className ?? null,
+        vh: window.innerHeight,
+        sy: window.scrollY,
+      }));
+      const geo = `输入行 ${JSON.stringify(row)}，小图 ${JSON.stringify(strip)}，${JSON.stringify(at)}`;
+      expect(strip.y + strip.height, `小图在输入行上面、不压住：${geo}`).toBeLessThanOrEqual(row.y - 4);
       expect(row.y - (strip.y + strip.height), '离输入行不远（8px 左右）').toBeLessThanOrEqual(12);
       expect(Math.abs(strip.x - row.x), '和输入行左边对齐').toBeLessThanOrEqual(1);
       const del = await box(page, 'notes-pend-del-0');
