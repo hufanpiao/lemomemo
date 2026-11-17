@@ -1,4 +1,4 @@
-// 长按拿起、拖着走的底层（R-429 拖动排序，主持人 11-15 定：kit 手写一份长按拖动，待办页、随手记页、隐私记页三处共用，不用 dnd-kit；
+// 长按拿起、拖着走的底层（R-429 拖动排序，主持人 11-15 定：kit 手写一份长按拖动，不用 dnd-kit；现在只有随手记页（隐私记页同一个组件）在用；
 // 电脑版布局拖面板 DeskLayout 用的是 dnd-kit，两套各管各的，不混用）。经 gestures.ts 出口给 kit 的 useSortDrag 用，不进首屏的 main 块。
 // 这里只管手势，不管“落在哪”和数据：
 // • 按住 LIFT_MS（0.4 秒）没动才拿起；没到时间先走过 SLOP_PX（同左滑的起滑距离）就放手不管，交给左滑（kit SwipeRow）或页面滚动
@@ -12,7 +12,7 @@
 //     外框的捕获阶段再拦一道（stopPropagation），行里的左滑、按钮收不到
 //   – 非 passive 的 touchmove：拿起以后 preventDefault（iPhone 上手指再动页面不滚）、stopPropagation（下拉搜索在 window 上听的 touchmove 收不到）。
 //     外框上常挂一个（iPhone 要按下之前就挂着才拦得住），拿起期间 window 捕获阶段再挂一个兜底；没拿起时什么都不做
-//   – 拿起期间拦掉 contextmenu（安卓长按菜单）、selectstart（选字）
+//   – 从按下那一刻（不是拿起以后，R-461）到这次结束拦掉 contextmenu（安卓长按菜单）、selectstart（选字）；动了、抬手没拿起就摘掉
 // • 拖着走：每次 pointermove 和自动滚动的每一帧都把手指的视口坐标交给 move；手指离滚动区上下边缘 EDGE_SCROLL_PX 以内就自动滚（越近越快），
 //   滚动区是外框往上第一个能竖着滚的祖先，没有就是整页
 // • 松手交给 drop，随后补来的那一下 click 吞掉（swallow-click.ts，只吞落在外框里的）；
@@ -87,9 +87,17 @@ export function useLongPressDrag(box: HTMLElement | null, opts: LongPressDragOpt
     /** 结束这次拿起的那一下（pointerup / pointercancel）：window 上先收了，外框捕获阶段照样拦住它 */
     let ender: Event | null = null;
 
+    /** 选字、长按菜单的拦截：从按下那一刻挂到这次结束（R-461 选字防护第 3 层；不是拿起以后才挂，按住的 0.4 秒里 iOS 已经可能开始选字） */
+    const guard = (on: boolean): void => {
+      for (const type of ['contextmenu', 'selectstart']) {
+        if (on) window.addEventListener(type, block, true);
+        else window.removeEventListener(type, block, true);
+      }
+    };
     const clearPress = (): void => {
       if (press) clearTimeout(press.timer);
       press = null;
+      if (!lifted) guard(false);
     };
     /** 自动滚动：手指在滚动区边缘时每帧滚一点，滚动了就把手指位置再交一次 move */
     const scrollStep = (): void => {
@@ -113,8 +121,7 @@ export function useLongPressDrag(box: HTMLElement | null, opts: LongPressDragOpt
       window.removeEventListener('pointercancel', onLiftCancel, true);
       window.removeEventListener('touchmove', onTouchMove, true);
       window.removeEventListener('keydown', onKey, true);
-      window.removeEventListener('contextmenu', block, true);
-      window.removeEventListener('selectstart', block, true);
+      guard(false);
       window.removeEventListener('blur', onHide);
       document.removeEventListener('visibilitychange', onHide);
     };
@@ -139,9 +146,8 @@ export function useLongPressDrag(box: HTMLElement | null, opts: LongPressDragOpt
     const lift = (): void => {
       const p = press;
       press = null;
-      if (!p || !p.row.isConnected) return;
+      if (!p || !p.row.isConnected || !o.current.lift(p.row, { x: p.x0, y: p.y0 })) return void guard(false);
       const at = { x: p.x0, y: p.y0 };
-      if (!o.current.lift(p.row, at)) return;
       // 行里的左滑按这一下“被收走了”收尾（见文件头）；自己补发的这一下下面的监听不认
       if (typeof PointerEvent === 'function') {
         synthetic = true;
@@ -163,8 +169,6 @@ export function useLongPressDrag(box: HTMLElement | null, opts: LongPressDragOpt
       window.addEventListener('pointercancel', onLiftCancel, true);
       window.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
       window.addEventListener('keydown', onKey, true);
-      window.addEventListener('contextmenu', block, true);
-      window.addEventListener('selectstart', block, true);
       window.addEventListener('blur', onHide);
       document.addEventListener('visibilitychange', onHide);
     };
@@ -176,6 +180,7 @@ export function useLongPressDrag(box: HTMLElement | null, opts: LongPressDragOpt
       const row = o.current.pick(e.target);
       if (!row) return;
       press = { id: e.pointerId, type: e.pointerType, x0: e.clientX, y0: e.clientY, target: e.target, row, timer: setTimeout(lift, LIFT_MS) };
+      guard(true);
     };
     // 外框捕获阶段：按住期间看动没动、抬没抬；拿起以后这个指针的事件只拦下（真正的处理在下面 window 上）
     const onMove = (e: PointerEvent): void => {

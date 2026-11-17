@@ -1,5 +1,5 @@
 // 电脑版今天页“今天记的”块（定稿线框 s1 电脑画面 NOTESTODAY，5.9b 的 notes-today 块）：今天（当前时区）记的随手记，新的在前，最多 5 条
-// • 一行：随手记小图标 | 标题 | 时刻 · 分类；点了在今天页的详情抽屉里打开这一条（线框 s1“选中一条：详情抽屉从右边盖上来”，B6 对齐线框）；没有时写“今天还没记”
+// • 一行（kit List.module.css 的行，不是随手记列表的 NoteRow）：标题 | 时刻 · 分类；R-463 起同样去掉纸片小图标；点了在今天页的详情抽屉里打开这一条（线框 s1“选中一条：详情抽屉从右边盖上来”，B6 对齐线框）；没有时写“今天还没记”
 // • 经 notes/index.ts 懒加载，只在电脑版今天页下载（手机今天页没有这一块）
 // • onCount：今天一共几条，交给今天页写进块标题“今天记的 2”（线框 NOTESTODAY；标题在 kit DeskLayout 里画，不在这个块里）
 // • 同一个懒加载入口按 part 画三样（同 today 的 TodayToasts）：'list' 是这一块，'drawer' 是随手记页同一个 NoteDrawer（外壳和编辑器，再按需下载；
@@ -9,7 +9,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { fmtTime } from '../../../../shared/i18n/fmt.ts';
 import list from '../../../kit/components/List.module.css';
-import row from '../../../kit/components/NoteRow.module.css';
 import { useNotesT } from '../hooks/useNotesT.ts';
 import { useTodayNotes } from '../hooks/useTodayNotes.ts';
 import type { NoteDrawerProps } from './NoteDrawer.tsx';
@@ -45,7 +44,6 @@ function NotesToday({ onCount, onOpen, selected }: Extract<TodayNotesProps, { pa
       {items.map((it) => (
         <li key={it.id} className={list.row}>
           <button type="button" className={list.main} onClick={() => onOpen(it.id)} data-open={it.id} aria-current={selected === it.id ? 'true' : undefined}>
-            <span className={row.mn} aria-hidden="true" />
             <span className={list.text}>
               <span className={list.title}>{it.title}</span>
               <span className={list.meta}>{[fmtTime(it.createdAt, tz), it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
