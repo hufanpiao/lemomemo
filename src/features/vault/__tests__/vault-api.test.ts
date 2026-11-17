@@ -38,6 +38,33 @@ describe('call / fileCall 同一套 JSON 读法', () => {
     expect(await api(() => new Response('<html>', { status: 502 })).a.call({ action: 'status' }, null, okShape)).toEqual({ ok: false, code: 'try_later' });
   });
 
+  it('11-18 评审加密组第 1 条：401 先换一次登录令牌再发，成了就不算会话被吊销；换不到或还是 401 才落 session_revoked', async () => {
+    const mk = (fresh: string | null, second: number) => {
+      const calls: string[] = [];
+      const d = {
+        auth: {
+          getSession: async () => ({ data: { session: { access_token: 'jwt' } }, error: null }),
+          refreshSession: async () => (fresh ? { data: { session: { access_token: fresh } }, error: null } : { data: { session: null }, error: new Error('x') }),
+        },
+      } as unknown as Db;
+      const fetch = vi.fn(async (_u: string, init: RequestInit) => {
+        const auth = (init.headers as Record<string, string>)['authorization'] ?? '';
+        calls.push(auth);
+        return auth === 'Bearer jwt' ? json(401, { error: 'unauthorized' }) : second === 200 ? json(200, { ok: true }) : json(second, { error: 'unauthorized' });
+      });
+      return { a: createVaultApi(async () => d, { fetch: fetch as never, base: 'https://x/functions/v1', anonKey: 'anon' }), calls };
+    };
+    const ok = mk('jwt2', 200);
+    expect(await ok.a.call({ action: 'status' }, 'tok', okShape)).toEqual({ ok: true, value: { ok: true } });
+    expect(ok.calls).toEqual(['Bearer jwt', 'Bearer jwt2']);
+    const still = mk('jwt2', 401);
+    expect(await still.a.call({ action: 'status' }, 'tok', okShape)).toEqual({ ok: false, code: 'session_revoked' });
+    expect(still.calls).toHaveLength(2);
+    const none = mk(null, 200);
+    expect(await none.a.call({ action: 'status' }, 'tok', okShape)).toEqual({ ok: false, code: 'session_revoked' });
+    expect(none.calls).toHaveLength(1);
+  });
+
   it('审查第 4 条：ms_preview_end 同步拿本机会话的 access token、当场发出 keepalive（不先 await getSession）；没令牌不带令牌头；回成没成', async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     let resolve!: (r: Response) => void;

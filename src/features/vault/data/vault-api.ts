@@ -19,6 +19,7 @@ import { VAULT_FILE_FN, vaultFileErrorBody, vaultFileErrorCode, type VaultFileRe
 import type { RejectReason } from '../../../../shared/schema/attachments.ts';
 import { VAULT_TOKEN_HEADER } from '../../../core/vault-token.ts';
 import { buildInfo } from '../../../platform/env.ts';
+import { sendFn } from '../../../platform/fn-send.ts';
 import { appFetch } from '../../../platform/http.ts';
 import { readSessionAccessToken } from '../../../platform/session.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
@@ -123,6 +124,13 @@ export function createVaultApi(getDb: () => Promise<Db>, o: VaultApiOptions = {}
     }
   }
 
+  /** 401 时换一次登录令牌；换不到返回 null（sendFn 就不再重发，按原来的 401 归类） */
+  async function refreshToken(): Promise<string | null> {
+    const db = await getDb();
+    const { data, error } = await db.auth.refreshSession();
+    return error ? null : (data.session?.access_token ?? null);
+  }
+
   async function send<T>(
     path: string,
     init: { body: BodyInit; type: string | null; token: string | null; fail?: typeof failOf },
@@ -134,10 +142,19 @@ export function createVaultApi(getDb: () => Promise<Db>, o: VaultApiOptions = {}
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), timeoutMs);
     try {
-      const headers: Record<string, string> = { authorization: `Bearer ${at}`, apikey: anonKey };
+      const headers: Record<string, string> = {};
       if (init.type !== null) headers['content-type'] = init.type;
       if (init.token) headers[VAULT_TOKEN_HEADER] = init.token;
-      const res = await doFetch(`${base}/${path}`, { method: 'POST', headers, body: init.body, signal: ac.signal, cache: 'no-store' });
+      // 走 platform 的 sendFn：401 先换一次登录令牌再发（令牌刚好过期、本机时钟偏时不再当成“会话被吊销”，
+      // 否则 session 上锁、后台队列 dropAll 丢掉还没发出的隐私记改动；11-18 全 app 评审加密组第 1 条）
+      const res = await sendFn(path, { headers, body: init.body }, ac.signal, {
+        fetch: doFetch,
+        url: `${base}/${path}`,
+        anonKey,
+        token: () => Promise.resolve(at),
+        refresh: refreshToken,
+      });
+      if (res === null) return { ok: false, code: 'signed_out' };
       if (!res.ok) return (init.fail ?? failOf)(res.status, await readJson(res));
       return { ok: true, value: await read(res) };
     } catch (e) {
