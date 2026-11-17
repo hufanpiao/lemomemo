@@ -15,7 +15,7 @@ import { readManifest, staticClosure } from './vite_manifest.mjs';
 
 /**
  * 首屏期间会下载的动态入口（manifest 的键相对 vite 的 root，即 src/）：今天页、告知页关口和它懒加载的告知页（新用户的第一屏），
- * 今天页里的提醒部件：未同步提示条、每行的未同步小标记一打开就挂；错过提醒那一行（MissedReminders）等提醒引擎 armed 或 remindDown 以后才挂
+ * 今天页里的提醒部件：未同步提示条、每行的未同步小标记首屏画完（appPainted）就挂（11-17 起，原来一打开就挂），离首屏很近，照旧留在名单里从严查；错过提醒那一行（MissedReminders）等提醒引擎 armed 或 remindDown 以后才挂
  *（REMIND-shown-persist 修订 1 P2，11-05 改掉 J1 的“一打开就挂”，openedAt 已删）——armed 可能落在首屏期间，所以照旧留在名单里受同样的检查
  *（③ 审查第三轮 R3b 漏登过它）。
  * 这份名单由 tests/build/first-paint-graph.test.ts 从源码推着核对：首屏路径上新加的 import() 没归类就挂。

@@ -38,6 +38,12 @@ export interface UndoToastProps {
 
 export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST_MS, role = 'status', more, solo, 'data-testid': testId }: UndoToastProps) {
   const [paused, setPaused] = useState(false);
+  /** 第几轮计时：暂停后移开重新计 ms，倒计时色带跟着从满格重来（key 换了就重播动画） */
+  const [round, setRound] = useState(0);
+  const pause = (on: boolean) => () => {
+    setPaused(on);
+    if (!on) setRound((r) => r + 1);
+  };
   const done = useRef(false);
   const close = useRef(onClose);
   close.current = onClose;
@@ -85,11 +91,16 @@ export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST
       data-undo-toast=""
       role={role}
       data-testid={testId}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
-      onBlur={() => setPaused(false)}
+      onMouseEnter={pause(true)}
+      onMouseLeave={pause(false)}
+      onFocus={pause(true)}
+      onBlur={pause(false)}
     >
+      {/* 倒计时色带（R-450，负责人 11-17“所有完成或者删除后等待的提示框要有一个倒计时的色带”）：贴底一条柠檬黄，ms 内从满格缩到没有；
+          悬停、焦点在条上时计时停了，色带先不画；移开后计时从满 ms 重来，色带换 key 从满格重新走 */}
+      {paused ? null : (
+        <span key={round} className={styles.bar} style={{ animationDuration: `${ms}ms` }} aria-hidden="true" data-testid={testId ? `${testId}-bar` : undefined} />
+      )}
       <span className={styles.msg}>{message}</span>
       {onUndo && undoLabel ? (
         <button type="button" className={styles.undo} onClick={act(onUndo)} data-testid={testId ? `${testId}-undo` : undefined}>

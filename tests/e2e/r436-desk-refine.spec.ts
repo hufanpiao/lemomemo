@@ -54,10 +54,16 @@ test('随手记页：分类栏是 kit 胶囊；抽屉圆角 24、背景模糊，
   // 滑入动画走完再量（竖直方向不动，只是稳妥起见等一等位置稳定）
   await expect.poll(async () => Math.abs((await midY(grip)) - (await midY(page.getByTestId('note-edit-chip'))))).toBeLessThanOrEqual(1);
   expect(Math.abs((await midY(grip)) - (await midY(page.getByTestId('note-edit-close'))))).toBeLessThanOrEqual(1);
-  // 把手在胶囊左边、不压住它
-  const gripRight = await grip.evaluate((el) => el.getBoundingClientRect().right);
-  const chipLeft = await page.getByTestId('note-edit-chip').evaluate((el) => el.getBoundingClientRect().left);
-  expect(gripRight).toBeLessThanOrEqual(chipLeft);
+  // 把手在胶囊左边、不压住它：布局上正好挨着（把手 left 6 + 宽 44 = 50，胶囊在抽屉 padding 20 + 顶行 padding-left 30 = 50）。
+  // 等抽屉横向滑入走完、在同一次 evaluate 里一起量（11-17 ci 6b72c450 挂过 914.63 > 914.32：原来分两次 evaluate，
+  // 抽屉还在往左滑（transform 还没归零），后量的胶囊已经又左移了 0.3px，不是布局重叠）
+  await expect.poll(() => drawer.evaluate((el) => getComputedStyle(el).transform)).toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
+  const gap = await page.evaluate(() => {
+    const g = document.querySelector('[data-testid="desk-drawer-side"]');
+    const c = document.querySelector('[data-testid="note-edit-chip"]');
+    return g && c ? c.getBoundingClientRect().left - g.getBoundingClientRect().right : Number.NaN;
+  });
+  expect(gap).toBeGreaterThanOrEqual(0);
 });
 
 test('今天页：小块标题等宽小字；待办抽屉类型名 14px 常规、和换边把手同一行；侧栏页签字重', async ({ page }) => {
