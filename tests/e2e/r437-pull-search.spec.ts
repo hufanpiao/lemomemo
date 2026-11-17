@@ -71,7 +71,8 @@ async function openPage(page: Page, hash: string, testId: string, ready: string)
 }
 
 /** 在页面里从 (x, 120) 往下拉 dy（只带 touches 坐标的 touch 事件，见文件头） */
-async function pullDown(page: Page, testId: string, dy = 160): Promise<void> {
+// 默认拉 240：要过 src/kit/hooks/usePullReveal.ts 的 PULL_OPEN_PX（11-18 是 200）。原来写 160，门槛提到 200 后 ci 快读组 6 条露不出搜索框
+async function pullDown(page: Page, testId: string, dy = 240): Promise<void> {
   await page.evaluate(({ sel, dy }) => {
     const el = document.querySelector(`[data-testid="${sel}"]`) ?? document.body;
     const fire = (type: string, y: number | null) => {
