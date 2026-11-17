@@ -77,14 +77,14 @@
   text-overflow: ellipsis;
 }
 
-/* 轨道里上下怎么排，全从 --cal-bar-h（全天条高 16）和排间缝 --row-gap 推出来：
+/* 轨道里上下怎么排，全从 --cal-bar-h-lane（全天条高 16；R-472 月格条压到 13 用的是 --cal-bar-h，泳道不跟着变）和排间缝 --row-gap 推出来：
    • 全天条在顶上，离上沿一道缝（4～20）；单排时刻块高 --blk-h = 条高 + 一道缝（20）；
    • 上下两排时各高 --blk2-h（两块加中间半道缝正好等于两个单排块：19），上排离上沿 --two-top：没有全天条时一道缝（4），有时让出全天条再加一道缝（24）；
    • 单排时刻块离上沿 --trk-top：定稿实测值 16 / 27（有全天条），和条高、缝没有固定关系，照实测写；
    待办空心圆竖直对着单排时刻块的中线 */
 .trk {
   --row-gap: 4px;
-  --blk-h: calc(var(--cal-bar-h) + var(--row-gap));
+  --blk-h: calc(var(--cal-bar-h-lane) + var(--row-gap));
   --blk2-gap: calc(var(--row-gap) / 2);
   --blk2-h: calc(var(--blk-h) - var(--blk2-gap) / 2);
   --trk-top: 16px;
@@ -96,7 +96,7 @@
 
 .trkAll {
   --trk-top: 27px;
-  --two-top: calc(2 * var(--row-gap) + var(--cal-bar-h));
+  --two-top: calc(2 * var(--row-gap) + var(--cal-bar-h-lane));
 }
 
 /* 全天日程：轨道顶上一整条（R-445 周视图 A；跨天的每天都画，右端写“2/3”，被切开的一端见 cal-common .contStart / .contEnd） */
@@ -105,8 +105,8 @@
   top: var(--row-gap);
   right: 0;
   left: 0;
-  height: var(--cal-bar-h);
-  line-height: var(--cal-bar-h);
+  height: var(--cal-bar-h-lane);
+  line-height: var(--cal-bar-h-lane);
 }
 
 .wev {

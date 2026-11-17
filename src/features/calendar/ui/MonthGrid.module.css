@@ -73,11 +73,11 @@
   display: grid;
   grid-row: span 3;
   grid-template-rows: subgrid;
-  row-gap: 2px;
+  row-gap: 1px;
   align-content: start;
   min-width: 0;
   min-height: var(--cal-cell-h);
-  padding: 3px var(--pad);
+  padding: 2px var(--pad);
   border: 0;
   border-radius: var(--cal-cell-r);
   background: var(--day-bg, var(--cal-cell));
@@ -121,11 +121,11 @@
   min-width: 0;
 }
 
-/* 第三段：事项标签和“+N” */
+/* 第三段：事项标签和“+N”（R-472 方案乙：条高 13、条与条 / 条与“+N”之间缝 1，格子上下内边距 2、段缝 1，最矮 78 正好装下两条 + “+N”） */
 .marks {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
 }
 
@@ -205,8 +205,8 @@
 .more {
   color: var(--text-2);
 
-  /* “+4”：等宽数字（R-436） */
+  /* “+4”：等宽数字（R-436）；R-472 方案乙字号 9、行高 10 */
   font-family: var(--f-mono);
-  font-size: var(--fs-9-5);
-  line-height: 13px;
+  font-size: var(--fs-9);
+  line-height: 10px;
 }
