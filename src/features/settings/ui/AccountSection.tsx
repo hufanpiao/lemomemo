@@ -2,6 +2,7 @@
 // 当前登录邮箱（R-275，只显示；读不到不显示）、已登录设备、退出其他所有设备（DevicesSection）、注销入口。
 // 标题由二级页顶栏的 h1 给，这里不再有组标题；“最近的导出”挪进了数据二级页（评审补充：不两边都显示）；“退出登录”仍在首页最底下
 // R-384：最上面是我的头像（MeAvatarSection：大头像、更换头像、去掉头像）
+// R-454（负责人 11-17 选方案 C，iOS 分组表）：邮箱挪进头像那一组（头像旁边：邮箱 + 说明）；注销入口单独一组、居中红字、不带 ›
 import type { AccountErr } from '../hooks/useAccountActions.ts';
 import { onlineNow } from '../../../kit/hooks/useOnline.ts';
 import type { useDevices } from '../hooks/useDevices.ts';
@@ -9,7 +10,6 @@ import { useSettingsT } from '../hooks/useSettingsT.ts';
 import { SettingsEntryRow, SettingsList } from '../../../kit/components/Settings/Settings.tsx';
 import { DevicesSection } from './DevicesSection.tsx';
 import styles from './SettingsPage.module.css';
-import { MailLabel } from './MailLabel.tsx';
 import { MeAvatarSection } from './MeAvatarSection.tsx';
 import type { MeAvatarEdit } from '../hooks/useMeAvatarEdit.ts';
 
@@ -64,18 +64,12 @@ export function AccountSection({
   const t = useSettingsT();
   return (
     <div data-section="account">
-      <MeAvatarSection avatar={avatar} />
-      {email ? (
-        <p className={styles.email} data-testid="settings-account-email">
-          <span className={styles.srOnly}>{t('settings.account.email', {})}</span>
-          <MailLabel mail={email} />
-        </p>
-      ) : null}
+      <MeAvatarSection avatar={avatar} email={email} />
       <DevicesSection devices={devices} onExitHere={onExitHere} />
-      {/* 注销入口（B2-UI-b W3）：kit 整行按钮的危险色，› 和别的入口行同一个 */}
+      {/* 注销入口（B2-UI-b W3）：kit 整行按钮的危险色（带 data-no-proxy）；R-454 单独一组、字居中、不带 › */}
       <div className={styles.gap}>
         <SettingsList>
-          <SettingsEntryRow label={t('settings.account.delete', {})} danger disabled={devices.busy !== null} onOpen={onDelete} testId="settings-delete-entry" />
+          <SettingsEntryRow label={t('settings.account.delete', {})} danger center disabled={devices.busy !== null} onOpen={onDelete} testId="settings-delete-entry" />
         </SettingsList>
       </div>
     </div>

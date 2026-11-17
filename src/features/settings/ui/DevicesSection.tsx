@@ -1,11 +1,13 @@
 // 设置 › 已登录设备（架构 0.29 续第 98、103、108、111 条；15.7 第 19 项）
 // 每台：名字（没起名按平台）、本机 / 已退出标记、最近使用时间（本机写“正在使用”，A4）、“很久没用，<日期> 后自动移除”、移除按钮；
 // 下面“另有 N 个登录没有设备记录（最近一次 <时间>）”（N 为 0 时不显示）和“退出其他所有设备”
+// R-454（负责人 11-17 选方案 C，iOS 分组表）：每台前面一个手机小方块图标（本机柠檬黄），右边“退出这台设备”“移除”是危险色文字按钮；
+// “退出其他所有设备”单独一组、居中红字，说明小字放在这一组下面当脚注。点了做什么、确认弹窗都照旧
 import { useEffect, useRef, useState } from 'react';
 import { fmtDate } from '../../../../shared/i18n/fmt.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import { FormButton, groupLabelClass } from '../../../kit/components/Form.tsx';
-import { SettingsDetailRow, SettingsList, settingsNoteClass } from '../../../kit/components/Settings/Settings.tsx';
+import { SettingsDetailRow, SettingsEntryRow, SettingsIcon, SettingsList, settingsNoteClass } from '../../../kit/components/Settings/Settings.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import type { DeviceNotice, DeviceView, useDevices } from '../hooks/useDevices.ts';
 import { onlineNow } from '../../../kit/hooks/useOnline.ts';
@@ -36,15 +38,24 @@ export function deviceName(d: DeviceView, t: T): string {
 
 type Pending = { kind: 'remove'; device: DeviceView } | { kind: 'others' } | null;
 
+/** 设备行前面的手机图标（stroke 由 kit .ico svg 统一画） */
+const PHONE = (
+  <svg viewBox="0 0 24 24">
+    <rect x="6.5" y="2.5" width="11" height="19" rx="2.6" />
+    <path d="M10.5 18.5h3" />
+  </svg>
+);
+
 function DeviceRowView({ d, busy, onRemove }: { d: DeviceView; busy: boolean; onRemove(): void }) {
   const t = useSettingsT();
   const locale = useUi((s) => s.locale);
   const name = deviceName(d, t);
-  // B2-UI-b W3、W4：行换成 kit 的 SettingsDetailRow，“移除”换成 FormButton（.btn.danger → compact danger）
+  // B2-UI-b W3、W4：行换成 kit 的 SettingsDetailRow；R-454 前面加手机图标（本机柠檬黄），“移除”换成危险色文字按钮（FormButton dangerText）
   return (
     <SettingsDetailRow
       testId="settings-device"
       current={d.isCurrent}
+      lead={<SettingsIcon accent={d.isCurrent}>{PHONE}</SettingsIcon>}
       label={
         <>
           {name}
@@ -54,8 +65,7 @@ function DeviceRowView({ d, busy, onRemove }: { d: DeviceView; busy: boolean; on
       }
       action={
         <FormButton
-          size="compact"
-          danger
+          variant="dangerText"
           disabled={busy}
           onClick={onRemove}
           // 读屏名要包含看得见的文字（WCAG 2.5.3）；整句走词典，韩文按韩语语序（KO-K43-a11y）
@@ -147,10 +157,19 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
               })}
             </p>
           ) : null}
-          <FormButton size="compact" block outline disabled={busy !== null} onClick={() => setPending({ kind: 'others' })}>
-            {t('settings.devices.signOutOthers', {})}
-          </FormButton>
-          <p className={settingsNoteClass}>{t('settings.devices.residual', {})}</p>
+          <div className={styles.gap}>
+            <SettingsList>
+              <SettingsEntryRow
+                label={t('settings.devices.signOutOthers', {})}
+                dangerText
+                center
+                disabled={busy !== null}
+                onOpen={() => setPending({ kind: 'others' })}
+                testId="settings-devices-others"
+              />
+            </SettingsList>
+          </div>
+          <p className={`${settingsNoteClass} ${styles.foot}`}>{t('settings.devices.residual', {})}</p>
         </>
       ) : null}
       <DeviceNoticeView notice={notice} />

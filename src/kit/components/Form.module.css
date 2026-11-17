@@ -326,6 +326,25 @@
   color: var(--text);
 }
 
+/* R-454 危险色文字按钮：不描边、没底色，右边只留 2 让字贴近卡片右边；高、宽都至少 44（点击区 44 见方）；圆角只给聚焦框用 */
+.dangerText {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 2px 0 10px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--danger-text);
+  font: inherit;
+  font-size: var(--fs-15);
+  cursor: pointer;
+}
+
+.dangerText:disabled {
+  opacity: var(--disabled-dim);
+}
+
 /* FormButton strong：字重 600（代码审 M2：设置 › 提醒的“重新连接”“移除它…”“取消”原来就是 600，编辑页“删除”保持 400） */
 .strong {
   font-weight: 600;
@@ -398,13 +417,6 @@
 .block.compact.ghost {
   margin-top: 16px;
   background: var(--panel);
-}
-
-/* outline（R-366，负责人 11-09 选 D5 方案 A）：compact 次要按钮改透明底 + 1px --inp-line 描边（和 regular 的 .btn 同一种写法），
-   只改底色和描边，高度、圆角、点击区、间距照 compact；写在 .block.compact.btn 后面、选择器同样三个类，压得住它的底色 */
-.compact.btn.outline {
-  border: 1px solid var(--inp-line);
-  background: none;
 }
 
 /* 只有标题一项的卡片（编辑日程）：标题下面那条线就是卡片底边，会伸进下面的圆角（G11 第三轮③），去掉 */

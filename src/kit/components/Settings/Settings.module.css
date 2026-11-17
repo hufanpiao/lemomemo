@@ -270,3 +270,63 @@ section:first-child > h2.gt {
 .danger {
   color: var(--danger-text);
 }
+
+/* ===== R-454（负责人 11-17 选方案 C：设置 › 账号换成 iOS 分组表） ===== */
+
+/* 行名前面的小方块图标（SettingsIcon）：30 见方、小圆角；灰底次要色，accent（本机、更换头像）柠檬黄底。
+   右边多 2：加上行里原有的间距 10，图标和字隔 12 */
+.ico {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 2px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+
+.icoOn {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.ico svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 组里有图标时，分隔线从行名起画、画到卡片右边沿，不从图标下面穿过（iOS 设置的画法）；
+   没图标的行（账号页最上面的头像行）从卡片左边的内边距起。42 = 图标 30 + 间距 12；-14 = 组的左右内边距 */
+.grp:has(.ico) > .row {
+  position: relative;
+  border-bottom: 0;
+}
+
+.grp:has(.ico) > .row:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -14px;
+  bottom: 0;
+  left: 0;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.grp:has(.ico) > .row:has(.ico):not(:last-child)::after {
+  left: 42px;
+}
+
+/* 字居中、不带 › 的整行按钮（SettingsEntryRow center，单独一组的红字操作行） */
+.center {
+  justify-content: center;
+}
+
+.rowBtn.center .tx {
+  flex: none;
+}
