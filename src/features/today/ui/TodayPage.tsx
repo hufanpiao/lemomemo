@@ -58,7 +58,7 @@ import { AppearItem, AppearList, useHoldView, useSwapWhenSafe } from '../../../m
 import { splitPast, useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
-import { loadTodayDesk, loadTodaySwipe, TodayRo } from '../index.ts';
+import { loadTodayDesk, loadTodaySwipe } from '../index.ts';
 import { useAnnivAny } from '../hooks/useAnnivAny.ts';
 import { TodaySubtasks } from '../../todos/index.ts';
 import { GrowIn } from './GrowIn.tsx';
@@ -68,8 +68,11 @@ import styles from './TodayPage.module.css';
 import type { TodaySel } from './TodayDesk.tsx';
 import type { TodayRoProps } from './TodayToasts.tsx';
 
-// 页底提示条、顶部重复事项横幅、只读行的行尾标记和打勾圆圈：同一个按需下载的文件，按 part 画哪一块；
-// 懒加载写在功能入口 ../index.ts（预载名单和主包共用，首屏预算 150 KB，FA-2 返工）
+// 页底提示条、顶部重复事项横幅、只读行的行尾标记和打勾圆圈：同一个按需下载的文件（TodayToasts.tsx），按 part 画哪一块。
+// 懒加载写在今天页的块里、不写在功能入口 ../index.ts（11-17 改）：写在入口时 import() 由主包发起，主包的预加载表只给首屏名单列 JS
+//（vite.config.ts 的 preloadDeps），这一块的依赖要 TodayToasts → ReadonlyRow 等 → useRoT 等三层往返一层层下，机器忙时横幅 5 秒出不来
+//（e2e b2-readonly-rows:56 本机加压挂过）。写在这里由今天页的块发起，预加载表照常列它的 JS（已在今天页闭包里的去掉），一层并发下完
+const TodayRo = lazy(() => import('./TodayToasts.tsx'));
 
 /** 分包下不来时那一块不画（QuietBoundary），不把整页换成出错页 */
 function Ro(p: TodayRoProps) {
