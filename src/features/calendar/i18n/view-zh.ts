@@ -29,6 +29,7 @@ export const viewZh = {
   'cal.backToday': '回到今天',
   // 页面标题（读屏用，视觉隐藏；代码复审 N7）
   'cal.h1': '日历',
+  'cal.drawer': '详情', // R-130 电脑版日历详情抽屉的读屏名字（同今天页 desk.drawer）
   'cal.pullKey': '搜索本页', // R-437：标题行里平时看不见、Tab 到才出现的按钮（kit 的 PullKey）
   // 月历上拖收起（线框 s3、R-326）：拖动柄按钮的名字
   'cal.fold.collapse': '收起成一周',

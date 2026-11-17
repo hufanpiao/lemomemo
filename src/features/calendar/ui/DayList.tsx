@@ -15,6 +15,7 @@
 // • 行尾“未同步”小标记（REMIND-wiring；TC-B2-69、架构 4.2）：带提醒、还没同步上的那一条才标，同步上自动消失；
 //   由 reminders 功能懒加载提供（UnsyncedRemindMark），没标时那一格不占位。周视图泳道、月格不标（定稿线框 s2、s3 没有这个标记）
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记（kit 的 ReadonlyMark）；点了交给页面的 onOpen，由页面拦下、出提示条
+// • 电脑版详情抽屉（R-130）：行按钮带 data-open（抽屉关上时找回这一行），抽屉里开着的那条 aria-current（kit List 的左边柠檬黄一道，同今天页）
 import { Suspense } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { minOfDay, msAt, todayOf, weekdayOf } from '../../../../shared/core/date.ts';
@@ -79,6 +80,7 @@ export function DayList({
   nowMin,
   onOpen = (kind, id) => void navigate(kind, id),
   isRo = () => false,
+  openId = null,
 }: {
   date: DateStr;
   items: CalItems;
@@ -96,7 +98,10 @@ export function DayList({
   onOpen?: (kind: 'event' | 'todo', id: string) => void;
   /** 这一条是不是只读行（FA-2） */
   isRo?: (kind: 'event' | 'todo', id: string) => boolean;
+  /** 电脑版详情抽屉里开着的那一条（R-130）；没开时 null */
+  openId?: string | null | undefined;
 }) {
+  const cur = (id: string) => (openId === id ? ('true' as const) : undefined);
   let entries: DayEntry[] = [];
   let cont: { entry: DayEntry; endMin: number }[] = [];
   try {
@@ -139,7 +144,7 @@ export function DayList({
         <ul className={`${list.list} ${styles.dayListRows}`}>
           {cont.map(({ entry: e, endMin }) => (
             <li key={`cont-${e.itemId}`} className={list.row}>
-              <button type="button" className={list.main} onClick={() => onOpen('event', e.itemId)} data-kind="cont" data-readonly={isRo('event', e.itemId) ? '' : undefined}>
+              <button type="button" className={list.main} onClick={() => onOpen('event', e.itemId)} data-kind="cont" data-readonly={isRo('event', e.itemId) ? '' : undefined} data-open={e.itemId} aria-current={cur(e.itemId)}>
                 <span className={`${list.lead} ${styles.dayTime}`} data-tone={passed(endMin) ? 'past' : undefined}>
                   {t('cal.day.until', { t: endMin >= 24 * 60 ? '24:00' : hm(endMin) })}
                 </span>
@@ -158,6 +163,8 @@ export function DayList({
                 onClick={() => onOpen(e.kind === 'todo' ? 'todo' : 'event', e.itemId)}
                 data-kind={e.kind}
                 data-readonly={isRo(e.kind === 'todo' ? 'todo' : 'event', e.itemId) ? '' : undefined}
+                data-open={e.itemId}
+                aria-current={cur(e.itemId)}
                 data-testid={`cal-day-row-${e.itemId}`}
               >
                 <span className={`${list.lead} ${styles.dayTime}`} data-tone={toneOf(e)}>

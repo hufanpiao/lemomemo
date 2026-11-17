@@ -20,6 +20,10 @@
 //   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner）
 // • 下拉搜索（R-437）：页顶往下拉，标题行下面露出搜索框（kit 的 usePullReveal + smart-search 的 PullSearch，和随手记、待办页同一套）；
 //   打了字就把切换行、月历 / 周视图和日清单藏起来（kit 的 PullSlot，不卸）、换成结果（只按日程标题就地筛）；点一条进日程编辑页（只读的照样拦下）。日清单的拖动柄带 data-nopull，往下拖是展开月历、不算下拉
+// • 电脑版详情抽屉（R-130“包括周视图、月视图”，11-17 接上）：有侧栏的宽度（MQ_SIDEBAR，同今天页）点日清单的行、电脑周表的时间块和全天行、搜索结果，
+//   不换页，在右边的详情抽屉里编辑（CalDrawer.tsx，外壳是 kit 的 DetailDrawer；开着哪一条由 kit useListActions.ts 的 useDrawerSel 管，同今天页）。
+//   只读行照旧先拦下；窗口变窄、抽屉画出错时清掉、退回进编辑页。打开时运行日志记一行“cal drawer open kind= view=”（不记标题）。
+//   页顶 h1 带 tabIndex=-1：抽屉里删了这一条、关上时那一行已经不在，焦点退到这里（DetailDrawer 的 rowOf），不掉到 body
 import { Suspense, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { DateStr } from '../../../../shared/core/date.ts';
@@ -28,6 +32,9 @@ import { navigate, replaceRoute, useRoute } from '../../../app/router.ts';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { annivOn } from '../../../kit/hooks/anniv-on.ts';
 import { useKeys } from '../../../kit/hooks/layers.ts';
+import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
+import { useDrawerSel } from '../../../kit/hooks/useListActions.ts';
+import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { usePullReveal } from '../../../kit/hooks/usePullReveal.ts';
 import { PullSlot } from '../../../kit/components/PullSlot.tsx';
 import { ReadonlyToast, RepeatBanner } from '../../../kit/components/ReadonlyRow.tsx';
@@ -44,6 +51,7 @@ import { useMonthFold } from '../hooks/useMonthFold.ts';
 import { useNewDateSource } from '../hooks/new-date.ts';
 import { weekTitle } from './week-axis.ts';
 import styles from './CalendarPage.module.css';
+import { CalDrawer, type CalSel } from './CalDrawer.tsx';
 import { CalNav, FoldHandle } from './CalNav.tsx';
 import { DayList } from './DayList.tsx';
 import { MonthGrid } from './MonthGrid.tsx';
@@ -104,11 +112,17 @@ function NoticeBlock({ offline, t }: { offline: boolean; t: CalViewT }) {
   );
 }
 
-/** 只读行（FA-2）：open 打开一条之前先看是不是只读，是就出提示条、不进编辑页 */
-function useCalGuard() {
+/** 只读行（FA-2）：open 打开一条之前先看是不是只读，是就出提示条、不进编辑页；
+ *  电脑宽度（MQ_SIDEBAR，同今天页）开详情抽屉（R-130），不然进编辑页。view 只给运行日志用 */
+function useCalGuard(view: 'month' | 'week') {
   const g = useReadonlyGuard();
-  const open = (kind: 'event' | 'todo', id: string): void => (g.isRo(kind, id) ? g.block() : void navigate(kind, id));
-  return { g, open };
+  const ds = useDrawerSel<CalSel>(useMedia(MQ_SIDEBAR));
+  const open = (kind: 'event' | 'todo', id: string): void => {
+    if (g.isRo(kind, id)) return g.block();
+    if (ds.on) rlog(`cal drawer open kind=${kind} view=${view}`);
+    ds.open({ kind, id }, () => void navigate(kind, id));
+  };
+  return { g, open, ds };
 }
 type CalGuard = ReturnType<typeof useCalGuard>;
 
@@ -122,7 +136,9 @@ export default function CalendarPage() {
   const month = model.view.mode === 'month';
   const title = month ? t('cal.title', { y: model.header.y, m: model.header.m }) : weekTitleText(model.view.start, t);
   // 只读行（FA-2）：打开一条之前先看是不是只读，是就出提示条、不进编辑页
-  const ro = useCalGuard();
+  const ro = useCalGuard(model.view.mode);
+  /** 抽屉里开着的那一条（行按钮 aria-current；data-open 给抽屉关上时找回焦点用） */
+  const openId = ro.ds.sel?.id ?? null;
 
   // 这一页里有哪几天：选中的那天不在这一页（翻走了）就回到今天（今天也不在就不选）
   const inView = (d: DateStr): boolean =>
@@ -180,7 +196,9 @@ export default function CalendarPage() {
 
   return (
     <main ref={pull.ref} className={styles.page} data-feature="calendar" data-testid="calendar-page" data-mode={model.view.mode} data-folded={fold.byWeek || undefined}>
-      <h1 className={styles.srOnly}>{t('cal.h1', {})}</h1>
+      <h1 className={styles.srOnly} tabIndex={-1}>
+        {t('cal.h1', {})}
+      </h1>
       {picking && !model.wide ? <PickScrim /> : null}
       <div className={styles.top}>
         <MonthPicker
@@ -259,6 +277,7 @@ export default function CalendarPage() {
             onSelect={setPicked}
             onOpen={ro.open}
             isRo={ro.g.isRo}
+            openId={openId}
             t={t}
             label={t('cal.weekGrid', { from: t('cal.a11y.date', { m: Number(model.view.start.slice(5, 7)), d: Number(model.view.start.slice(8)) }) })}
           />
@@ -274,11 +293,17 @@ export default function CalendarPage() {
             dueMins={model.dueMins}
             t={t}
             lunarText={model.lunar?.fullText(sel) ? t('cal.a11y.lunar', { text: model.lunar.fullText(sel) ?? '' }) : undefined}
-            onOpen={ro.open} isRo={ro.g.isRo} huangli={huangli} today={model.today} nowMin={model.nowMin}
+            onOpen={ro.open} isRo={ro.g.isRo} openId={openId} huangli={huangli} today={model.today} nowMin={model.nowMin}
           />
         ) : null}
       </div>
       </PullSlot>
+      {/* 电脑版详情抽屉（R-130）：画出错时（QuietBoundary）按没开算，以后点行进编辑页 */}
+      {ro.ds.sel ? (
+        <QuietBoundary name="cal-drawer-shell" onFail={ro.ds.fail}>
+          <CalDrawer sel={ro.ds.sel} t={t} onClose={ro.ds.close} />
+        </QuietBoundary>
+      ) : null}
     </main>
   );
 }
