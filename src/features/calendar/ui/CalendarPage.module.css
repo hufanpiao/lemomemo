@@ -894,14 +894,6 @@
   --two-top: 24px;
 }
 
-.tick {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--line);
-}
-
 /* 全天日程：轨道顶上一整条（R-445 周视图 A；跨天的每天都画，右端写“2/3”，被切开的一端直角 .contStart / .contEnd） */
 .allDay {
   position: absolute;
