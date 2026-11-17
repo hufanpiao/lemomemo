@@ -9,8 +9,9 @@ vi.mock('../../../core/edit-save.ts', () => ({
 }));
 
 import {
-  addSubtasks, autoTodo, cleanTitle, groupSubtasks, ITEMS_MAX, moveSorts, nextSort, progressOf, splitLines, tickSubtask, undoAutoDone, type Subtask,
+  addSubtasks, autoTodo, cleanTitle, groupSubtasks, ITEMS_MAX, moveSorts, nextSort, splitLines, tickSubtask, undoAutoDone, type Subtask,
 } from '../data/todo-items.ts';
+import { subProgress } from '../../../../shared/logic/todo-row.ts';
 
 const TZ = 'Asia/Seoul';
 const sub = (id: string, sort: number, done = false): Subtask => ({ id, todoId: 't', title: id, done, sort, createdAt: 0 });
@@ -22,7 +23,7 @@ beforeEach(() => {
 
 describe('分组和进度', () => {
   it('按 todo_id 分组、按 sort 排（一样时按 created_at、id）；删了、撤销了、没有 todo_id 的不要', () => {
-    const g = groupSubtasks([
+    const rows = [
       { id: 'b', todo_id: 't1', title: 'B', sort: 2, created_at: 1 },
       { id: 'a', todo_id: 't1', title: 'A', sort: 1, created_at: 5, done: true },
       { id: 'c', todo_id: 't1', title: 'C', sort: 2, created_at: 0 },
@@ -30,10 +31,12 @@ describe('分组和进度', () => {
       { id: 'e', todo_id: 't1', sort: 4, undone: true },
       { id: 'f', sort: 1 },
       { id: 'g', todo_id: 't2', title: 'G', sort: 1 },
-    ]);
+    ];
+    const g = groupSubtasks(rows);
     expect(g.get('t1')?.map((s) => s.id)).toEqual(['a', 'c', 'b']);
     expect(g.get('t2')?.map((s) => s.id)).toEqual(['g']);
-    expect(progressOf(g.get('t1') ?? [])).toEqual({ done: 1, total: 3 });
+    // 计数（shared/logic/todo-row.ts 的 subProgress，今天页、待办页、日清单的方框进度和副行“大半 3/4”）和分组认同一套“活着的子任务”
+    expect(subProgress(rows)).toEqual(new Map([['t1', { done: 1, total: 3 }], ['t2', { done: 0, total: 1 }]]));
   });
 });
 

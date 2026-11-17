@@ -43,10 +43,37 @@
   transition: transform var(--dur-press) var(--ease-press);
 }
 
-/* 按下（负责人 11-17 定的勾选特效分镜第 ① 段）：整个方框（边、填充块、勾号、小脸一起）缩到 0.92，松手弹回（--dur-press + --ease-press）；
-   缩的是外层 label，点在 44 的外扩区上也一样缩；子任务（still）不缩 */
+/* 勾选完成时间线（负责人 11-17 原话“动效太轻了，根本反应不过来”加参考视频 点击特效.mp4 逐帧量；时刻、时长全在动效令牌“勾选完成时间线”一段）：
+   ① 按下：整个方框（边、填充块、勾号、小脸一起）缩到 0.8（参考第 1 帧缩成小圈；原来 0.92 看不出来），--dur-press；
+      缩的是外层 label，点在 44 的外扩区上也一样缩；子任务（still）不缩
+   ② 亲手勾上（组件给 label 加上 .pop 这个类）：从 0.8 放大过头到 1.3（约 150ms，参考第 4–5 帧）、回落到 1.1（参考第 6–9 帧）、再回 1.0，
+      共 --dur-done-pop；松手时的 :active 回弹被这段动画盖住，不会先弹回 1 再放大
+   ③ --dur-done-burst-at 起外圈一圈小点往外炸开、一圈边往外扩，--dur-burst 扩散变淡（.burst）
+   删除线、行收起在 kit List.module.css 的 .strike、.fold */
 .checkBox:active {
-  transform: scale(0.92);
+  transform: scale(0.8);
+}
+
+.pop {
+  animation: check-pop var(--dur-done-pop) var(--ease-out);
+}
+
+@keyframes check-pop {
+  0% {
+    transform: scale(0.8);
+  }
+
+  33% {
+    transform: scale(1.3);
+  }
+
+  55% {
+    transform: scale(1.1);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* 只读行（FA-2）：方框变淡，表示打不了勾（点了由使用方出“要新版本”提示条）；跟着 checkbox 的 aria-disabled，不另挂属性（首屏预算，11-06） */
@@ -146,7 +173,8 @@
   content: none;
 }
 
-/* 勾上那一下外扩的一圈小点（T-A 专属，分镜第 ② 段）：6 个，半径 14 → 22、300ms 淡出；只动 transform、opacity */
+/* ③ 炸开：8 个 4px 小点从半径 13 往外扩到 26、边缩小边变淡，加一圈和方框一样圆角的边从 1 倍扩到 1.7 倍变淡（参考第 4–13 帧“边缘像炸开”“小点往外扩”）；
+   从 --dur-done-burst-at 起播（之前 opacity 0 看不见），只动 transform、opacity */
 .burst {
   position: absolute;
   top: 50%;
@@ -156,28 +184,52 @@
   pointer-events: none;
 }
 
+.ring {
+  position: absolute;
+  top: calc(var(--check-size, 24px) / -2);
+  left: calc(var(--check-size, 24px) / -2);
+  width: var(--check-size, 24px);
+  height: var(--check-size, 24px);
+  border: 2px solid var(--check-on-fg);
+  border-radius: calc(var(--check-size, 24px) * 0.375);
+  opacity: 0;
+  animation: check-ring var(--dur-burst) var(--ease-out) var(--dur-done-burst-at);
+}
+
 .burst > i {
   position: absolute;
   top: 0;
   left: 0;
-  width: 3px;
-  height: 3px;
-  margin: -1.5px 0 0 -1.5px;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
   border-radius: 50%;
   background: var(--check-on-fg);
   opacity: 0;
-  animation: check-burst var(--dur-burst) var(--ease-out);
+  animation: check-burst var(--dur-burst) var(--ease-out) var(--dur-done-burst-at);
 }
 
 @keyframes check-burst {
   from {
-    opacity: 0.8;
-    transform: rotate(var(--a)) translateX(14px);
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(13px) scale(1);
   }
 
   to {
     opacity: 0;
-    transform: rotate(var(--a)) translateX(22px);
+    transform: rotate(var(--a)) translateX(26px) scale(0.3);
+  }
+}
+
+@keyframes check-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.7);
   }
 }
 
@@ -209,7 +261,15 @@
   transform: none;
 }
 
+:global(:root[data-rm="1"]) .pop {
+  animation: none;
+}
+
 :global(:root[data-rm="1"]) .burst > i {
+  animation: none;
+}
+
+:global(:root[data-rm="1"]) .ring {
   animation: none;
 }
 

@@ -14,6 +14,7 @@ import { collection } from '../../../core/store.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { clock } from '../../../platform/clock.ts';
+import { subProgress } from '../../../../shared/logic/todo-row.ts';
 import { autoTodo, groupSubtasks, ITEMS_TABLE, tickSubtask, undoAutoDone, type Subtask } from '../data/todo-items.ts';
 import type { Row } from '../data/todo-list.ts';
 
@@ -23,6 +24,15 @@ export type { Subtask } from '../data/todo-items.ts';
 export function useSubtaskGroups(): ReadonlyMap<string, readonly Subtask[]> {
   return groupsOf(useCollection<Row>(ITEMS_TABLE));
 }
+
+/** 每条待办的子任务做了几项、共几项（方框进度、副行“大半 3/4”；计数在 shared/logic/todo-row.ts 的 subProgress，今天页同一个） */
+export function useSubProgress(): ReadonlyMap<string, { done: number; total: number }> {
+  const rows = useCollection<Row>(ITEMS_TABLE);
+  let m = counted.get(rows);
+  if (!m) counted.set(rows, (m = subProgress(rows)));
+  return m;
+}
+const counted = new WeakMap<readonly Row[], ReadonlyMap<string, { done: number; total: number }>>();
 
 /** 同一份集合快照只分一次组（今天页、日历每条待办各挂一个 InlineSubtasks，不各算一遍） */
 const grouped = new WeakMap<readonly Row[], ReadonlyMap<string, readonly Subtask[]>>();

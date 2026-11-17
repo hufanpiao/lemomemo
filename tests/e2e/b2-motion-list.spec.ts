@@ -10,7 +10,7 @@
 //   getComputedStyle 读到的晚一两帧，位置（layout 的 transform）却是当帧的；只看当帧会把残影估淡（第三轮：帧上 0.6、页面里读出 0.19）。
 //   按时间窗算、不按“前两次取样”算：webkit 取样间隔不匀，前两次可能隔了 50 ms 以上，会把早已淡掉的值算进来
 // • M1 补：220 ms 以后“已完成”组只往上走（top 单调不增），不往回退
-// • 负责人 11-17 勾选特效分镜（替换 11-15“撤销条开着的约 3 秒里留在原组”）：刚勾的那一条在原组停 700 ms（DONE_HOLD_MS），再原地收起 280 ms、同时页底升起撤销条，
+// • 负责人 11-17 勾选特效分镜（替换 11-15“撤销条开着的约 3 秒里留在原组”）：刚勾的那一条在原组停 800 ms（--dur-done-pop + --dur-done-rest，kit useDoneFlow 的 HOLD_MS），再原地收起 100 ms（--dur-collapse）、同时页底升起撤销条，
 //   收完进默认收起的“已完成 N”。收起时这一行已经原地淡到 0（kit List 的 .foldBody），离开的那一份看不见，N1 那套量不到东西；
 //   打勾单独量收起那一段（主持人 11-17 复审必改 A）：这一行高度单调降到约 0、下一行 top 单调上移、卸载前后下一行跳动 ≤ 1px、离开的那一份不透明度从不超过 0.25
 // • N1 补帧（MOTION-n1-load-flaky）：离开那一项一挂上 leaving 就当场补量一帧（退场进度 0）。补帧只用来垫不透明度的历史（让之后 LAG_MS 窗口里的
@@ -230,15 +230,16 @@ const GHOST_TRIES = 3;
  * 做一次 N1：prepare（回到起点）→ 开始取样 → act（打勾、删除）→ 判。seen 为 0 就从 prepare 重来，最多 GHOST_TRIES 次。
  * 返回各次的压字（带第几次）、最后一次的 seen 和每次的取样
  */
-async function ghostRun(page: Page, root: string, prepare: () => Promise<void>, act: () => Promise<void>): Promise<{ seen: number; bad: string[]; traces: string[] }> {
+/** ms：从动手起取样多久（打勾要等停留、收起完才离开，比删除晚：kit useDoneFlow 的 HOLD_MS + OUT_MS） */
+async function ghostRun(page: Page, root: string, prepare: () => Promise<void>, act: () => Promise<void>, ms = 900): Promise<{ seen: number; bad: string[]; traces: string[] }> {
   const bad: string[] = [];
   const traces: string[] = [];
   let seen = 0;
   for (let i = 1; i <= GHOST_TRIES && seen === 0; i += 1) {
     await prepare();
-    await startSampler(page, 'ghost', '', 900, root);
+    await startSampler(page, 'ghost', '', ms, root);
     await act();
-    const r = ghostHits(await samples<GhostFrame>(page, 900));
+    const r = ghostHits(await samples<GhostFrame>(page, ms));
     seen = r.seen;
     bad.push(...r.bad.map((b) => `第 ${i} 次：${b}`));
     traces.push(`第 ${i} 次：${r.trace}`);
@@ -293,7 +294,7 @@ test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1�
     expect(seen, `做了 ${GHOST_TRIES} 次都没取到离开那一项看得清的 rAF 帧（补帧不算，否则这条什么都没测）。取样：${traces.join(' ｜ ')}`).toBeGreaterThan(0);
   });
 
-  // 打勾（负责人 11-17 分镜；主持人 11-17 复审必改 A）：勾上后停 700 ms，再原地收起 280 ms（data-out），收完离开原组。
+  // 打勾（负责人 11-17 分镜；主持人 11-17 复审必改 A）：勾上后停 800 ms，再原地收起 100 ms（data-out；负责人 11-17 参考视频“整行快速收起”），收完离开原组。
   // 离开的那一份在收起时已经淡到 0，N1 那套“离开那一项看得清的帧”量不到东西，所以打勾单独量收起这一段：
   // 从打上 data-out 起逐帧记 [距 data-out 毫秒, 这一行的高（还在原组时）, 下一行的 top（含 layout 的 transform）, 离开那一份行面的不透明度（自身连同祖先）]
   test('N1 打勾：收起时这一行高度单调降到约 0、下一行单调上移，卸载前后下一行不跳；离开的那一份看不见', async ({ page }) => {
@@ -375,8 +376,9 @@ test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1�
       await expect(page.locator('[data-testid="today"] [data-state="entering"]')).toHaveCount(0);
       await page.waitForTimeout(500);
     };
-    // 只点没在离开中的那一份（代码审查 FA5-CR A4：打勾后退场和进场会短暂同时有两个 today-done-<id>）
-    const { seen, bad, traces } = await ghostRun(page, 'today', prepare, () => page.locator('[data-testid="today-done-t1"]:not([data-state="leaving"] *)').click());
+    // 只点没在离开中的那一份（代码审查 FA5-CR A4：打勾后退场和进场会短暂同时有两个 today-done-<id>）。
+    // 11-17 起今天页的待办行是 kit TodoRow：先停 800 ms、原地收起 100 ms 才整组离开，取样拉到 1600 ms
+    const { seen, bad, traces } = await ghostRun(page, 'today', prepare, () => page.locator('[data-testid="today-done-t1"]:not([data-state="leaving"] *)').click(), 1600);
     expect(bad).toEqual([]);
     expect(seen, `做了 ${GHOST_TRIES} 次都没取到离开那一组看得清的 rAF 帧（补帧不算，否则这条什么都没测）。取样：${traces.join(' ｜ ')}`).toBeGreaterThan(0);
     await expect(page.getByTestId('today-late')).toHaveCount(0);

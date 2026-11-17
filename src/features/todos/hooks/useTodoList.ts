@@ -1,5 +1,5 @@
 // 待办列表页的 hook（B2 FA-2）：分组、项目筛选（只在这一页，不写 settings，架构 5.9）、打勾、删除和撤销
-// R-350：子任务按主待办分组（subs，页面据此给有子任务的行加样式）；勾子任务、撤销“自动完成”在 ui/InlineSubtasks.tsx（经 useSubtasks.ts 的 subtaskOps，三页同一份）
+// R-350：每条待办的子任务做了几项（subs，页面据此画方框进度、副行“大半 3/4”、挂子任务卡片）；勾子任务、撤销“自动完成”在 ui/InlineSubtasks.tsx（经 useSubtasks.ts 的 subtaskOps，三页同一份）
 // R-442：待办页不再长按拖动（R-429 的待办部分作废），组内只按优先级排（data/todo-list.ts）
 import { useCallback, useMemo, useState } from 'react';
 import { currentTz } from '../../../core/current-tz.ts';
@@ -18,7 +18,7 @@ import { groupTodos, projectCounts, type Row } from '../data/todo-list.ts';
 import { listKo } from '../i18n/list-ko.ts';
 import { listZh } from '../i18n/list-zh.ts';
 import { makeUseT } from '../../../kit/hooks/useT.ts';
-import { useSubtaskGroups } from './useSubtasks.ts';
+import { useSubProgress } from './useSubtasks.ts';
 
 export type { DueTag, Group, TodoItem } from '../data/todo-list.ts';
 export type ListMsgKey = keyof typeof listZh & string;
@@ -48,7 +48,7 @@ export function useTodoList(linger: ReadonlySet<string> = NONE) {
   }, [groups, rows]);
 
   const { toggleDone, remove, setPriority } = useTodoWrites(rows);
-  const subs = useSubtaskGroups();
+  const subs = useSubProgress();
 
   const ids = useMemo(() => new Set(rows.map((r) => r.id)), [rows]);
   return { today: todayOf(now, tz), count, setPriority, groups, projects, project: active, setProject, toggleDone, remove, ids, subs };

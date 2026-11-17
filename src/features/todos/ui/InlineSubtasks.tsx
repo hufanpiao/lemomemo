@@ -1,6 +1,6 @@
 // 待办行里的子任务卡片（R-350；R-442“今天页可以展开待办的子任务”、R-443“日历下面的待办…子任务可以展开”，取代 R-350 Q5 的“今天页只显示进度、不摊开”）：
 // 待办页、今天页、日历日清单三处都用它，勾子任务的写入只这一处（hooks/useSubtasks.ts 的 useTodoSubtasks）
-// • 画的是 SubtaskCard（勾选清单 + 分段进度条 + 右边“2/4 · 展开 / 收起”按钮，aria-expanded，点按区 44），这里管三件事：
+// • 画的是 SubtaskCard（勾选清单 + 分段进度条 + 左下“展开 / 收起”按钮，aria-expanded，点按区 44），这里管三件事：
 //   ① 收起没有：待办页给（collapsed、onCollapse，每台设备各记各的）；今天页、日历不给，只记在这一行挂着期间（不持久化），默认收起；
 //   ② 勾子任务：勾最后一项自动完成主待办、主待办已完成时取消勾某项改回未完成（Q1、Q2，规则在 data 层）；
 //   ③ 运行日志记“subs <页> open|close n=<项数>”（不记标题）
@@ -28,8 +28,6 @@ export interface InlineSubtasksProps {
   /** 待办页给（收起状态每台设备各记各的，hooks/useSubtasks.ts 的 useCollapsed）；不给就只记在这一行挂着期间，默认收起 */
   collapsed?: boolean | undefined;
   onCollapse?: ((v: boolean) => void) | undefined;
-  /** 页面副行已经写了“1/3”（待办页 T-A）：卡片按钮只写“收起 / 展开” */
-  counted?: boolean | undefined;
   onBlock(): void;
   onOpen(): void;
   onPlan?(plan: boolean | null): void;
@@ -57,7 +55,6 @@ export default function InlineSubtasks(p: InlineSubtasksProps) {
       todoTitle={p.title}
       items={items}
       collapsed={p.collapsed ?? own}
-      counted={p.counted}
       onCollapse={(v) => {
         rlog(`subs ${p.prefix} ${v ? 'close' : 'open'} n=${items.length}`);
         if (p.onCollapse) p.onCollapse(v);

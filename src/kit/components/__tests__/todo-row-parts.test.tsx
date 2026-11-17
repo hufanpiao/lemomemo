@@ -46,17 +46,19 @@ describe('CheckCircle 子任务进度和小点', () => {
     expect(part?.style.getPropertyValue('--part')).toBe('1');
   });
 
-  it('亲手勾上播一圈小点，播完（animationend）拿掉', () => {
+  it('亲手勾上放大过头、播一圈小点和外圈，外圈播完（animationend）拿掉', () => {
     const { rerender } = render(<CheckCircle checked={false} label="完成" onChange={() => undefined} testId="c" />);
     fireEvent.click(screen.getByTestId('c'));
     rerender(<CheckCircle checked label="完成" onChange={() => undefined} testId="c" />);
     const burst = document.querySelector('label > span:last-child');
-    expect(burst?.querySelectorAll('i')).toHaveLength(6);
+    expect(burst?.querySelectorAll('i')).toHaveLength(8);
+    expect(document.querySelector('label')?.className).toMatch(/pop/);
     // jsdom 的样式里没有 animation 属性，React 按带前缀的名字监听：两个名字都发一次（真浏览器只有不带前缀的那个）
-    const dot = burst?.querySelector('i') as Element;
+    const ring = burst?.querySelector('b') as Element;
     act(() => {
-      for (const type of ['animationend', 'webkitAnimationEnd']) dot.dispatchEvent(new Event(type, { bubbles: true }));
+      for (const type of ['animationend', 'webkitAnimationEnd']) ring.dispatchEvent(new Event(type, { bubbles: true }));
     });
     expect(document.querySelectorAll('label i')).toHaveLength(0);
+    expect(document.querySelector('label')?.className).not.toMatch(/pop/);
   });
 });

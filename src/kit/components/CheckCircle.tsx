@@ -15,7 +15,7 @@ export interface CheckCircleProps {
   /**
    * 只读行（FA-2，架构 0.27 第 1 点）：aria-disabled、方框变淡；点了照样回调 onChange，由使用方拦下并出“要新版本”提示条
    * （不用 disabled：点了没反应、读屏也跳过，用户不知道为什么）。读屏名字后面接“要更新到新版本才能修改”（FA-2 审查第 5 条）
-   * 由 ReadonlyRow.tsx 的 RoCheckCircle 拼进 label：那句词条不进首屏（首屏预算 150 KB，11-06），这里只用传进来的 label
+   * 由 ReadonlyMark.tsx 的 RoCheckCircle 拼进 label：那句词条不进首屏（首屏预算 150 KB，11-06），这里只用传进来的 label
    */
   readOnly?: boolean;
   /** 不播勾选动效（子任务一天勾上百次，R-350）：直接到位；样式在 CheckCircle.module.css 的 .checkBox[data-still] */
@@ -35,18 +35,24 @@ export function partStage(done: number, total: number): 0 | 1 | 2 | 3 {
   return done * 2 < total ? 1 : 2;
 }
 
-/** 勾上那一下外扩的一圈小点（T-A 专属，分镜第 ② 段）：6 个，60° 一个 */
-const BURST = [0, 60, 120, 180, 240, 300] as const;
+/** 勾上那一下外扩的一圈小点（勾选完成时间线第 ③ 段，负责人 11-17）：8 个，45° 一个 */
+const BURST = [0, 45, 90, 135, 180, 225, 270, 315] as const;
 
 export function CheckCircle({ checked, label, onChange, testId, readOnly = false, still = false, progress }: CheckCircleProps) {
   const state = checked ? 'on' : 'off';
-  // 一圈小点只在用户亲手勾上的那一下播（key 换一次重播一次）；挂载时已经勾上的、只读拦下的、子任务（still）都不播；
-  // 播完（animationend）清零、拿掉这一圈，之后再重新画（例如撤销以后又照数据显示成勾上）不会重播
+  // 放大过头（label 上的 .pop）和一圈小点只在用户亲手勾上的那一下播（key 换一次重播一次）；挂载时已经勾上的、只读拦下的、子任务（still）都不播；
+  // 外圈那道边播完（它和小点同时起、同样长，是勾选特效里最后结束的：--dur-done-burst-at + --dur-burst 晚于 --dur-done-pop）清零、拿掉这一圈，
+  // 之后再重新画（例如撤销以后又照数据显示成勾上）不会重播；减弱动态效果时外圈不播，pop 留着也不画什么（.pop、.ring 都是 animation: none）；
+  // 取消勾时 .pop 跟着拿掉，再勾时重新加上、重播
   const [pop, setPop] = useState(0);
+  const popping = checked && pop > 0;
   const stage = !checked && progress ? partStage(progress.done, progress.total) : 0;
   const ratio = stage && progress ? Math.min(1, progress.done / progress.total) : 0;
   return (
-    <label className={styles.checkBox} data-still={still || undefined}>
+    <label
+      className={popping ? `${styles.checkBox} ${styles.pop}` : styles.checkBox}
+      data-still={still || undefined}
+    >
       <input
         type="checkbox"
         className={styles.check}
@@ -64,8 +70,9 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
       ) : null}
       <span className={styles.fill} data-state={state} aria-hidden="true" />
       <span className={styles.tick} data-state={state} aria-hidden="true" />
-      {checked && pop > 0 ? (
-        <span key={pop} className={styles.burst} aria-hidden="true" onAnimationEnd={() => setPop(0)}>
+      {popping ? (
+        <span key={pop} className={styles.burst} aria-hidden="true">
+          <b className={styles.ring} onAnimationEnd={() => setPop(0)} />
           {BURST.map((a) => (
             <i key={a} style={{ '--a': `${a}deg` } as CSSProperties} />
           ))}

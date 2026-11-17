@@ -8,9 +8,8 @@
 // • 子任务的 insert 不用自己写 deps：core 入队时按 todo_id 自动依赖主待办（outbox-new-item.ts 的 PARENT_OF），主待办一定先发
 // 纯 TS：不准 import React（A1）
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { cutGraphemes } from '../../../../shared/logic/short.ts';
-import { numOr } from '../../../../shared/logic/todo-row.ts';
+import { numOr, subOwner } from '../../../../shared/logic/todo-row.ts';
 import { TODO_ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
 import { saveDeleted, saveInsert, savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
 import { collection } from '../../../core/store.ts';
@@ -38,8 +37,8 @@ export interface Subtask {
 
 /** 集合里的一行 → 子任务；删了、撤销了、没有 todo_id 的返回 null */
 export function subtaskOf(r: Row): Subtask | null {
-  const todoId = r['todo_id'];
-  if (typeof todoId !== 'string' || !isLiveRow(r)) return null;
+  const todoId = subOwner(r);
+  if (todoId === null) return null;
   return {
     id: r.id, todoId, title: typeof r['title'] === 'string' ? r['title'] : '', done: r['done'] === true,
     sort: numOr(r['sort'], 0), createdAt: numOr(r['created_at'], 0),
@@ -60,11 +59,6 @@ export function groupSubtasks(rows: readonly Row[]): ReadonlyMap<string, readonl
   }
   for (const list of m.values()) list.sort(bySort);
   return m;
-}
-
-/** 已勾 / 总数 */
-export function progressOf(items: readonly Subtask[]): { done: number; total: number } {
-  return { done: items.reduce((n, i) => n + (i.done ? 1 : 0), 0), total: items.length };
 }
 
 /** 子任务标题：去掉首尾空白，截到 100 个 UTF-16 单元、不截半个字（同 trimItemTitle 的写法） */
