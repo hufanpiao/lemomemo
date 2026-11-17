@@ -119,7 +119,9 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
   let quotaOut = false;
 
   const go = (e: ViewEvent<VoiceNote>): void => {
-    const next = viewStep(v(), e);
+    const step = viewStep(v(), e);
+    // 回到没按：边说边出字的字清掉（R-456），下次按住不会先闪上一次的字
+    const next = step.status === 'idle' && step.live !== '' ? { ...step, live: '' } : step;
     if (next.status !== v().status) rlog(`voice ${v().status}->${next.status} path=${v().path ?? '-'}`);
     st.setState(next, true);
     if (busyNow(next) === (free !== null)) return;

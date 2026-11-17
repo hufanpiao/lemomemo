@@ -22,6 +22,7 @@ import type * as VoiceFlow from '../data/voice-flow.ts';
 import type { HoldPointer } from '../data/hold-input.ts';
 import { hold } from '../hooks/voice-sink.ts';
 import { HOLD_MS } from '../data/record-logic.ts';
+import { LIVE_LATE_MS } from '../data/voice-live.ts';
 import { createVoiceSession, type VoiceSession } from '../data/voice-session.ts';
 import { RecordHost } from '../ui/RecordHost.tsx';
 
@@ -37,6 +38,12 @@ const fx = vi.hoisted(() => ({
   liveSay: '',
   /** 给了就让录音这一路的识别按这个失败（stop 时） */
   liveFail: null as null | string,
+  /** 录音这一路的识别不发 start（还没开始收音） */
+  liveNoStart: false,
+  /** 录音这一路的识别再开就开不起来（重开失败） */
+  liveRefuse: false,
+  /** 录音这一路的识别 stop 以后先不交结局（测试里调 run.end） */
+  liveHang: false,
   /** 录音器开录的结果：null 正常开录；给了就按这个失败 */
   startFail: null as null | string,
   /** 录音器 stop() 交出的结局：null 正常交出 2000 字节 */
@@ -106,14 +113,16 @@ vi.mock('../../../platform/speech.ts', () => ({
   startSpeech: (lang: string, h: { onStart(): void; onEnd(r: unknown): void; onText?(t: string): void }) => {
     // 要中途文字的是录音这一路边说边出字的那个（R-456），不要的是手机自带识别那一路
     const live = h.onText !== undefined;
+    if (live && fx.liveRefuse) return { ok: false, fail: 'error' };
     const run = { lang, end: (r: unknown) => h.onEnd(r), text: (t: string) => h.onText?.(t), live, cancelled: false };
     fx.speech.push(run);
-    queueMicrotask(() => h.onStart());
+    if (!(live && fx.liveNoStart)) queueMicrotask(() => h.onStart());
     return {
       ok: true,
       session: {
         stop: () => {
           if (!live) return h.onEnd({ ok: true, text: '买牛奶' });
+          if (fx.liveHang) return;
           h.onEnd(fx.liveFail === null ? { ok: true, text: fx.liveSay } : { ok: false, fail: fx.liveFail });
         },
         cancel: () => {
@@ -185,6 +194,9 @@ beforeEach(() => {
   fx.speech = [];
   fx.liveSay = '';
   fx.liveFail = null;
+  fx.liveNoStart = false;
+  fx.liveRefuse = false;
+  fx.liveHang = false;
   fx.startFail = null;
   fx.stopEnd = null;
   fx.stopHang = false;
@@ -683,7 +695,7 @@ describe('边说边出字、先存、AI 后台整理（R-456）', () => {
     expect(fx.busy, '后台整理期间不占 busy').toEqual([]);
     expect(logged(/^voice live take=1$/)).toBe(true);
     expect(logged(/^voice live end speech=ok len=3 rec=ok bytes=2000$/)).toBe(true);
-    expect(logged(/^voice live saved out=ok n=1 ms=\d+$/)).toBe(true);
+    expect(logged(/^voice live saved out=ok n=1 ai=0 ms=\d+$/)).toBe(true);
     expect(log.some((l) => l.includes('买牛奶')), '不记说的内容').toBe(false);
     await act(async () => ai.box.open({ ...VOICE_OK, transcript: '买牛奶', items: [{ ...ITEM, title: '买牛奶' }] }));
   });
@@ -730,7 +742,7 @@ describe('边说边出字、先存、AI 后台整理（R-456）', () => {
     await waitFor(() => expect(writer.patch.mock.calls.map((c) => c[1])).toEqual([first, ...ids]));
   });
 
-  it('提示条 8 秒到了（或点 ×）以后 AI 才回来：照样换，提示条带着“AI 已整理”重新出来', async () => {
+  it('提示条 8 秒到了（或点 ×）以后 AI 才回来：库里照样换，提示条不再弹出来', async () => {
     fx.liveSay = '买牛奶明天下午三点开会';
     const ai = held();
     const { writer, session } = setup({ call: ai.call });
@@ -741,7 +753,8 @@ describe('边说边出字、先存、AI 后台整理（R-456）', () => {
     expect(screen.queryByTestId('type-notice')).toBeNull();
     await act(async () => ai.box.open(TWO));
     await waitFor(() => expect(logged(/out=replaced/)).toBe(true));
-    expect((await screen.findByTestId('type-notice')).textContent).toContain('AI 已整理');
+    expect(writer.insert, '库里换了：AI 那两条存上').toHaveBeenCalledTimes(3);
+    expect(screen.queryByTestId('type-notice'), '关掉了的不再弹出来').toBeNull();
   });
 
   it('AI 回来之前用户已经撤销了这一批：不替换（不再写库），日志 out=skip_touched', async () => {
@@ -846,5 +859,154 @@ describe('边说边出字、先存、AI 后台整理（R-456）', () => {
     await waitFor(() => expect(logged(/^voice live ai via=parse out=same ms=\d+$/)).toBe(true));
     expect(call).not.toHaveBeenCalled();
     expect(writer.insert).toHaveBeenCalledTimes(1);
+  });
+  it('只点一下“＋”（没按满 350 ms）：按下时先开的识别被关掉', async () => {
+    setup();
+    act(() => hold.onStart(ptr()));
+    await sleep(40);
+    await release();
+    expect(fx.speech.map((r) => [r.live, r.cancelled])).toEqual([[true, true]]);
+  });
+
+  it('松手前识别自己结束了、手指还按着：自动重开一次，新认出的字接在后面，先存整句；日志 restart n=1 ok=1', async () => {
+    fx.liveSay = '明天下午三点开会';
+    const { writer } = setup({ call: held().call });
+    await holdDown();
+    await act(async () => fx.speech[0]?.end({ ok: true, text: '买牛奶' }));
+    expect(fx.speech.filter((r) => r.live)).toHaveLength(2);
+    expect(logged(/^voice live restart n=1 ok=1$/)).toBe(true);
+    await act(async () => fx.speech[1]?.text('明天'));
+    expect(screen.getByTestId('rec-live').textContent).toBe('买牛奶明天');
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalled());
+    expect(logged(/^voice live end speech=ok len=11 rec=ok bytes=2000$/), '两段接起来交给先存').toBe(true);
+    expect(logged(/^voice live saved out=ok n=\d+ ai=0 ms=\d+$/)).toBe(true);
+  });
+
+  it('重开开不起来：这一次不先存，整段上传、等 AI 回来再存；日志 restart n=1 ok=0、end speech=broken', async () => {
+    const { writer, call } = setup();
+    await holdDown();
+    fx.liveRefuse = true;
+    await act(async () => fx.speech[0]?.end({ ok: true, text: '买牛奶' }));
+    expect(logged(/^voice live restart n=1 ok=0$/)).toBe(true);
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(ins(writer, 0).title, 'AI 那一份').toBe('买猫砂');
+    expect(logged(/^voice live end speech=broken len=3 rec=ok bytes=2000$/)).toBe(true);
+    expect(logged(/voice live saved/)).toBe(false);
+  });
+
+  it('重开以后又提前结束：不再重开，整段上传', async () => {
+    const { writer, call } = setup();
+    await holdDown();
+    await act(async () => fx.speech[0]?.end({ ok: true, text: '买牛奶' }));
+    await act(async () => fx.speech[1]?.end({ ok: true, text: '开会' }));
+    expect(logged(/^voice live restart n=2 ok=0$/)).toBe(true);
+    expect(fx.speech.filter((r) => r.live)).toHaveLength(2);
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(ins(writer, 0).title).toBe('买猫砂');
+  });
+
+  it('松手时识别还没开始收音：当场关掉、当没开，不白等，照原来上传；日志 not_started', async () => {
+    fx.liveNoStart = true;
+    fx.liveSay = '买牛奶';
+    const { writer, call } = setup();
+    await holdDown();
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1), { timeout: 800 });
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(fx.speech[0]?.cancelled).toBe(true);
+    expect(logged(/^voice live not_started$/)).toBe(true);
+    expect(logged(/^voice live end speech=off len=0 rec=ok bytes=2000$/)).toBe(true);
+  });
+
+  it('等识别结局时点“取消”：识别关掉，不存、不上传', async () => {
+    fx.liveHang = true;
+    fx.liveSay = '买牛奶';
+    const { writer, call } = setup();
+    await holdDown();
+    await release();
+    fireEvent.click(await screen.findByText('取消'));
+    await act(async () => fx.speech[0]?.end({ ok: true, text: '买牛奶' }));
+    await sleep(30);
+    expect(fx.speech[0]?.cancelled).toBe(true);
+    expect(writer.insert).not.toHaveBeenCalled();
+    expect(call).not.toHaveBeenCalled();
+    expect(live?.view().live, '字清掉').toBe('');
+  });
+
+  it('本机规则判成查找：不先存，照原来整段上传给 ai-voice', async () => {
+    fx.liveSay = '找一下发票';
+    const { writer, call } = setup();
+    await holdDown();
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(ins(writer, 0).title).toBe('买猫砂');
+    expect(logged(/voice live saved/)).toBe(false);
+  });
+
+  it('录音器没录成、识别正常结束但没认出字：出 no_speech，不出“录音没开起来”', async () => {
+    fx.startFail = 'start_failed';
+    const { writer } = setup();
+    await holdDown();
+    await release();
+    const note = await screen.findByTestId('voice-notice');
+    expect(note.dataset['note']).toBe('no_speech');
+    expect(writer.insert).not.toHaveBeenCalled();
+  });
+
+  it('替换进行中：提示条上的按钮全部禁用，点“撤销”不撤', async () => {
+    fx.liveSay = '买牛奶明天下午三点开会';
+    const ai = held();
+    const { writer } = setup({ call: ai.call });
+    await holdDown();
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    const first = ins(writer, 0).id;
+    const gate: { open: () => void } = { open: () => undefined };
+    writer.insert.mockImplementationOnce(() => new Promise<WriteResult>((ok) => (gate.open = () => ok(OK))));
+    await act(async () => ai.box.open(TWO));
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(2));
+    const buttons = [...screen.getByTestId('type-notice').querySelectorAll('button')];
+    expect(buttons.length).toBeGreaterThan(0);
+    expect(buttons.every((b) => b.disabled), '全部禁用').toBe(true);
+    for (const b of buttons) fireEvent.click(b);
+    await act(async () => gate.open());
+    await waitFor(() => expect(logged(/out=replaced/)).toBe(true));
+    expect(writer.patch.mock.calls.map((c) => c[1]), '只撤了先存的那条（换的那一步），没有多撤').toEqual([first]);
+  });
+
+  it('在别处改过先存的那条以后 AI 才回来：不换，日志 out=skip_touched', async () => {
+    fx.liveSay = '买牛奶明天下午三点开会';
+    const ai = held();
+    const { writer } = setup({ call: ai.call });
+    await holdDown();
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    const first = ins(writer, 0);
+    const table = String(writer.insert.mock.calls[0]?.[0]);
+    collection(table).upsert([{ ...first, updated_at: NOW + 1000, deleted_at: null, done_at: null } as never]);
+    await act(async () => ai.box.open(TWO));
+    await waitFor(() => expect(logged(/^voice live ai via=voice out=skip_touched ms=\d+$/),).toBe(true));
+    expect(writer.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('松手后超过 20 秒 AI 才回来：不换，日志 out=skip_late', async () => {
+    fx.liveSay = '买牛奶明天下午三点开会';
+    const ai = held();
+    const { writer } = setup({ call: ai.call });
+    await holdDown();
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    const real = performance.now.bind(performance);
+    vi.spyOn(performance, 'now').mockImplementation(() => real() + LIVE_LATE_MS + 1000);
+    await act(async () => ai.box.open(TWO));
+    await waitFor(() => expect(logged(/^voice live ai via=voice out=skip_late ms=\d+$/)).toBe(true));
+    expect(writer.insert).toHaveBeenCalledTimes(1);
+    expect(writer.patch).not.toHaveBeenCalled();
   });
 });

@@ -96,7 +96,7 @@ export function RecordPanel({ v }: { v: VoiceState }) {
       <Appear kind="sheet" show={show} className={styles.dock}>
         <section className={styles.sheet} data-locked={v.locked ? '' : undefined} aria-label={t('plus.rec.label', {})} data-testid="rec-panel" data-status={v.status}>
           {text === '' ? null : (
-            <div ref={said} className={styles.said} aria-label={t('plus.rec.live', {})} data-testid="rec-live">
+            <div ref={said} className={styles.said} role="log" aria-live="off" aria-label={t('plus.rec.live', {})} data-testid="rec-live">
               {text}
             </div>
           )}

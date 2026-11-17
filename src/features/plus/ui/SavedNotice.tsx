@@ -7,6 +7,7 @@
 // • 展开后每条的类型（“待办”）写成前面一格淡色小字，标题正文色（R-436 三层文字色；磨砂底上的淡色用 --toast-fg2）
 // • 模糊先按记下保存的（B4b-3，notice.alt，架构 5.14 第 2、7 点）：一条也用展开式的块，多一行“改成搜索”（撤销这一批，按同一句话查找）；
 //   alt.found 时下面再给 smart-search 的 AssistPeek“也帮你找了一下：N 条 ›”“是要取消吗？找到 N 条 ›”（排除这一批）
+// • AI 后台整理正在换这一批（R-456，notice.busy）：按钮全部禁用；一条的 UndoToast 也先不出
 import { Suspense, useState } from 'react';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { AssistPeek } from '../../smart-search/index.ts';
@@ -41,7 +42,7 @@ export function SavedNotice({ notice, acts, onEdit }: SavedNoticeProps) {
   };
   const altRows = alt === null || toSearch === null ? null : (
     <div className={styles.row} data-testid="type-notice-alt">
-      <FormButton type="button" variant="ghost" size="compact" onClick={toSearch} data-testid="notice-to-search">{t('plus.notice.toSearch', {})}</FormButton>
+      <FormButton type="button" disabled={notice.busy} variant="ghost" size="compact" onClick={toSearch} data-testid="notice-to-search">{t('plus.notice.toSearch', {})}</FormButton>
       {alt.found ? (
         <Suspense fallback={null}>
           <AssistPeek ask={alt.ask} exclude={notice.entries.map((e) => e.ref.id)} undoSaved={() => acts.undo()} />
@@ -49,7 +50,8 @@ export function SavedNotice({ notice, acts, onEdit }: SavedNoticeProps) {
       ) : null}
     </div>
   );
-  if (notice.entries.length <= 1 && altRows === null) {
+  // AI 整理正在换这一批（R-456）：按钮全部禁用；一条的撤销条没有禁用态，换的这一下用展开式的块
+  if (notice.entries.length <= 1 && altRows === null && !notice.busy) {
     return <UndoToast message={text} undoLabel={t('plus.notice.undo', {})} onUndo={undoAll} onClose={acts.closeNotice} solo="keep" data-testid="type-notice" />;
   }
   return (
@@ -57,9 +59,9 @@ export function SavedNotice({ notice, acts, onEdit }: SavedNoticeProps) {
       <div className={styles.row}>
         <span className={styles.grow}>{text}</span>
         {notice.entries.length <= 1 ? (
-          <FormButton type="button" variant="ghost" size="compact" onClick={undoAll}>{t('plus.notice.undo', {})}</FormButton>
+          <FormButton type="button" disabled={notice.busy} variant="ghost" size="compact" onClick={undoAll}>{t('plus.notice.undo', {})}</FormButton>
         ) : (
-          <FormButton type="button" variant="ghost" size="compact" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <FormButton type="button" disabled={notice.busy} variant="ghost" size="compact" aria-expanded={open} onClick={() => setOpen(!open)}>
             {t(open ? 'plus.notice.less' : 'plus.notice.more', {})}
           </FormButton>
         )}
@@ -77,21 +79,21 @@ export function SavedNotice({ notice, acts, onEdit }: SavedNoticeProps) {
                     <span className={styles.kind}>{kind}</span> {ref.title}
                   </span>
                   {onEdit ? (
-                    <FormButton type="button" variant="ghost" size="compact" aria-label={t('plus.notice.editOne', { label })} onClick={() => onEdit(ref.table, ref.id)}>{t('plus.notice.edit', {})}</FormButton>
+                    <FormButton type="button" disabled={notice.busy} variant="ghost" size="compact" aria-label={t('plus.notice.editOne', { label })} onClick={() => onEdit(ref.table, ref.id)}>{t('plus.notice.edit', {})}</FormButton>
                   ) : null}
-                  <FormButton type="button" variant="ghost" size="compact" aria-label={t('plus.notice.undoOne', { label })} onClick={() => void acts.undoOne(ref.id)}>{t('plus.notice.undo', {})}</FormButton>
+                  <FormButton type="button" disabled={notice.busy} variant="ghost" size="compact" aria-label={t('plus.notice.undoOne', { label })} onClick={() => void acts.undoOne(ref.id)}>{t('plus.notice.undo', {})}</FormButton>
                 </li>
               );
             })}
           </ul>
           <div className={styles.row}>
-            {notice.merge ? <FormButton type="button" variant="ghost" size="compact" onClick={() => void acts.merge()}>{t('plus.notice.merge', {})}</FormButton> : null}
-            <FormButton type="button" variant="ghost" size="compact" onClick={undoAll}>{t('plus.notice.undoAll', {})}</FormButton>
+            {notice.merge ? <FormButton type="button" disabled={notice.busy} variant="ghost" size="compact" onClick={() => void acts.merge()}>{t('plus.notice.merge', {})}</FormButton> : null}
+            <FormButton type="button" disabled={notice.busy} variant="ghost" size="compact" onClick={undoAll}>{t('plus.notice.undoAll', {})}</FormButton>
           </div>
         </>
       ) : null}
       <div className={styles.row}>
-        <FormButton type="button" variant="ghost" size="compact" onClick={acts.closeNotice}>{t('plus.notice.close', {})}</FormButton>
+        <FormButton type="button" disabled={notice.busy} variant="ghost" size="compact" onClick={acts.closeNotice}>{t('plus.notice.close', {})}</FormButton>
       </div>
     </div>
   );

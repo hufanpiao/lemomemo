@@ -4,9 +4,9 @@
 // • 网络原因失败的计数（net）跟着控制器那一份：“10 分钟内 2 次”要跨挂载算（FA-3 复查第 1 条；控制器不随 RecordHost 卸载）
 // • 边说边出字（R-456，voice-live.ts）：录音器照旧开，同时接手按下时先开的手机自带识别。松手等录音器和识别都交了结局（settle）：
 //   - 识别出了字：交给 voice-live 先按本机规则存、AI 在后台整理（录音器没录成就把字交 ai-parse）
-//   - 识别没开起来、报错、没出字（iPhone 主屏幕版上识别和录音可能抢麦克风）：完全照原来，上传、等 AI 回来再存
-//   - 录音器开不起来、识别已经在听：接着听（麦克风被拒照原来出说明卡）
-//   运行日志：voice live rec_fail=录音器开不起来、接着听；voice live end speech=识别结局 len=字数 rec=录音结局 bytes=字节数（每次松手一行，凭它判断识别和录音能不能同时用）
+//   - 识别没开起来、报错、没出字、中途断过（iPhone 主屏幕版上识别和录音可能抢麦克风）：完全照原来，上传、等 AI 回来再存
+//   - 录音器开不起来、识别已经在听：接着听（麦克风被拒照原来出说明卡）；松手时识别正常结束却没认出字出 no_speech，不出 rec_failed
+//   运行日志：voice live rec_fail=录音器开不起来、接着听；voice live end speech=识别结局（ok|broken|off|失败原因） len=字数 rec=录音结局 bytes=字节数（每次松手一行，凭它判断识别和录音能不能同时用）
 // 纯 TS：不准 import React（A1）
 import { AI_AUDIO_BITS_PER_SECOND, AI_AUDIO_MAX_BYTES } from '../../../../shared/schema/ai.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -17,7 +17,7 @@ import { rememberQuotaLeft } from './quota.ts';
 import { NET_OK, REC_MAX_MS, isNetFail, keptExpired, netFailed, speechByNet, type KeptAudio, type NetFallback } from './record-logic.ts';
 import { baseReqCtx } from './type-flow.ts';
 import { sendVoice, toUpload, voiceFinal, type VoiceClip, type VoiceResult } from './voice-flow.ts';
-import { createLiveRoute } from './voice-live.ts';
+import { createLiveRoute, type Heard } from './voice-live.ts';
 import type { Attempt, VoiceCore } from './voice-session.ts';
 
 /** 开录音器等了这么久还没开起来，当作中间弹过 iOS 系统麦克风框（R-417：主屏幕版每次启动第一次按都弹；不弹时约 0.7 秒） */
@@ -69,17 +69,22 @@ export function createRecRoute(c: VoiceCore) {
     await handle(a, res);
   };
 
-  /** 松手以后录音器、识别都交了结局：有字先存（voice-live），没字照原来上传 */
-  const settle = async (a: Attempt, r: RecEnd | null, h: SpeechEnd | null, t0: number): Promise<void> => {
+  /** 松手以后录音器、识别都交了结局：有字先存（voice-live），没字、识别断过而有录音的照原来上传 */
+  const settle = async (a: Attempt, r: RecEnd | null, h: Heard | null, t0: number): Promise<void> => {
     if (!c.alive(a, 'rec_stop')) return;
-    const text = h?.ok ? h.text : '';
-    const speech = h === null ? 'off' : h.ok ? 'ok' : h.fail;
+    const end: SpeechEnd | null = h?.end ?? null;
+    const text = end?.ok ? end.text : '';
+    const speech = end === null ? 'off' : end.ok ? (h?.broken ? 'broken' : 'ok') : end.fail;
     rlog(`voice live end speech=${speech} len=${[...text].length} rec=${r === null ? 'off' : r.ok ? 'ok' : r.fail} bytes=${r?.ok ? r.clip.blob.size : 0}`);
-    if (text !== '' && (await live.quick(a, text, r?.ok ? r.clip : null, t0))) return;
+    // 识别断过（后半句可能没听到）而有录音：不先存，整段上传
+    const usable = text !== '' && !(h?.broken && r?.ok);
+    if (usable && (await live.quick(a, text, r?.ok ? r.clip : null, t0))) return;
     if (!r?.ok) {
       c.end(a);
       c.toIdle();
-      c.show(recNote(r));
+      // 识别正常结束但一个字没认出：是没说话，不是录音没开起来（录音器自己判的“没收到”照旧）
+      const note = recNote(r);
+      c.show(note === 'rec_failed' && end?.ok === true && text === '' ? 'no_speech' : note);
       return;
     }
     void upload(a, r.clip);

@@ -13,11 +13,14 @@
 // • “该不该提醒今天的次数用完了”在这一批第一次有条目存成的那一刻定、记一笔（一天只提醒一次）；确认行没选就关掉不再补（第 12 条）
 // • 打字条和按住录音共用这一份（FA-3 第二轮第 5 条）：存（save）、存完往哪走（land）、确认行（choose）、撤销、合并、关掉；
 //   两边只给自己的状态机、收尾和失败提示（flow）。录音那份由控制器持有（切页重挂提示条还在，第 11 条），打字条每次挂载一份
-// • AI 后台整理完换掉先存的（R-456 replace）：和合并同一个 swap（先存新的一批、存成了再撤原来的、没存上原样留着），也走同一把锁。
-//   先存那一刻 mark() 记下这一批和改动号（rev）；之后用户动过这一批（撤销、逐条撤、合并、确认行选或关、点了“修改”touch、新的一句、新的一次按住）
-//   改动号就变了，不替换。只关掉提示条（自己点 × 或 8 秒到了）不算动过：替换以后提示条带着“AI 已整理”重新出来，撤销照样能用
+// • AI 后台整理完换掉先存的（R-456 replace）：和合并同一个 swap（先存新的一批、存成了再撤原来的、没存上原样留着），也走同一把锁，
+//   换的时候 swapping 置上，提示条上的按钮全部禁用。先存那一刻 mark() 记下这一批、改动号（rev）和库里每一条的样子（updated_at、deleted_at、done_at）：
+//   之后用户在提示条上动过这一批（撤销、逐条撤、合并、确认行选或关、点了“修改”touch、新的一句、新的一次按住）改动号就变了；
+//   在别处改过、勾完成、删掉（按 id 读回对不上）也算动过：都不替换（skip_touched）。
+//   提示条已经关掉（自己点 × 或 8 秒到了）的：库里照样换，提示条不再弹出来；还开着的换成 AI 那一批，加一句“AI 已整理”，撤销照样能用
 // 纯 TS：不准 import React（A1）
 import { createStore } from 'zustand/vanilla';
+import { collection } from '../../../core/store.ts';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { quotaResetClock } from '../../../../shared/logic/ai-quota.ts';
@@ -60,20 +63,33 @@ export interface Batch {
   byAi?: true;
 }
 
-/** 先存那一刻记下的（R-456）：这一批、当时的改动号 */
+/** 先存那一刻记下的（R-456）：这一批、当时的改动号、库里每一条的样子（peek 读的，和 entries 一一对应） */
 export interface BatchMark {
   batch: Batch;
   rev: number;
+  seen: (string | null)[];
 }
+
+/** 库里这一条现在的样子（改过、勾完成、删掉都会变）；读不到是 null */
+export type Peek = (ref: SavedRef) => string | null;
+
+const peekStore: Peek = (ref) => {
+  const row = collection(ref.table).get(ref.id) as Record<string, unknown> | undefined;
+  return row ? JSON.stringify([row['updated_at'] ?? null, row['deleted_at'] ?? null, row['done_at'] ?? null]) : null;
+};
 
 /** AI 后台整理的结果：replaced 换了；same 和先存的一样；not_saved 新的没存上（先存的原样留着）；skip_* 没换（为什么） */
 export type ReplaceOut = 'replaced' | 'same' | 'not_saved' | 'skip_touched' | 'skip_confirm' | 'skip_busy';
 
-/** 两次拆出来的算不算一样（R-456）：条数、每条的类型、日子、截止、时刻、时长都一样（标题措辞不同不算） */
+/** 比标题前去掉空白和标点（“买牛奶。”和“买 牛奶”算一样） */
+const bare = (s: string): string => s.replace(/[\s\p{P}]/gu, '');
+
+/** 两次拆出来的算不算一样（R-456）：条数、每条的类型、标题（去掉空白和标点）、日子、截止、时刻、时长都一样。
+ *  标题也比：AI 后台整理就是要纠正识别错的字，结构一样、字不一样也要换 */
 export function sameItems(a: readonly AiItem[], b: readonly AiItem[]): boolean {
   return a.length === b.length && a.every((x, i) => {
     const y = b[i];
-    return y !== undefined && x.kind === y.kind && x.date === y.date && x.due === y.due && x.time === y.time && x.duration_min === y.duration_min;
+    return y !== undefined && x.kind === y.kind && bare(x.title) === bare(y.title) && x.date === y.date && x.due === y.due && x.time === y.time && x.duration_min === y.duration_min;
   });
 }
 
@@ -110,6 +126,8 @@ export interface BatchNotice {
   alt: TypePlan['alt'];
   /** 这一批的原话（“改成搜索”撤销以后照它查找、“改成记下”照它再记） */
   raw: string;
+  /** AI 整理正在换这一批（R-456）：按钮全部禁用 */
+  busy: boolean;
 }
 
 /** 这一批：记下的、确认行还要问的几条（过去的月日，R-166）、这次该不该提醒“今天的次数用完了” */
@@ -117,14 +135,16 @@ export interface BatchState {
   batch: Batch | null;
   ask: AiItem[];
   quotaDue: boolean;
+  /** AI 整理正在换这一批（R-456 replace 进行中） */
+  swapping: boolean;
 }
 
 /** 这一批放在哪（zustand 的 vanilla store；不是组件状态） */
-export const createBatchBox = () => createStore<BatchState>(() => ({ batch: null, ask: [], quotaDue: false }));
+export const createBatchBox = () => createStore<BatchState>(() => ({ batch: null, ask: [], quotaDue: false, swapping: false }));
 export type BatchBox = ReturnType<typeof createBatchBox>;
 
 /** 提示条（没有记下的就是 null；确认行出着时调用方不画它） */
-export function noticeOf({ batch, quotaDue }: BatchState): BatchNotice | null {
+export function noticeOf({ batch, quotaDue, swapping }: BatchState): BatchNotice | null {
   if (!batch || batch.entries.length === 0) return null;
   const last = batch.last;
   const merged = last !== null && last !== 'merge_failed' ? last : null;
@@ -134,7 +154,7 @@ export function noticeOf({ batch, quotaDue }: BatchState): BatchNotice | null {
     mergeFailed: last === 'merge_failed', undoFailed: failedOf(batch), mergeLeft: merged?.mergeLeft ?? 0, aiTidied: batch.byAi === true,
     annivKept: batch.entries.some((e) => e.undoTried && isAnniv(e.ref)) || merged?.annivLeft === true,
   });
-  return { lines, entries: batch.entries, merge: canMerge(batch), alt: batch.plan.alt ?? null, raw: batch.raw };
+  return { lines, entries: batch.entries, merge: canMerge(batch), alt: batch.plan.alt ?? null, raw: batch.raw, busy: swapping };
 }
 
 /** 两边各自的那一点：go 自己的状态机；done 这一批都存好了；fail 新的一句没存上；error 确认行选了没存上（状态不动，还能再选） */
@@ -154,11 +174,13 @@ export interface SavedBatchOpts {
   source?: 'page' | 'voice';
   env(): SaveEnv;
   flow: BatchFlow;
+  /** 测试用：读库里一条的样子（不给读本机库） */
+  peek?: Peek | undefined;
 }
 
 export type SavedBatch = ReturnType<typeof createSavedBatch>;
 
-export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedBatchOpts) {
+export function createSavedBatch({ box, writer, tag, source, env, flow, peek = peekStore }: SavedBatchOpts) {
   const get = box.getState;
   const put = (s: Partial<BatchState>): void => box.setState(s);
   /** 代号：新的一句、新的一次按住、关掉提示条时加 1；await 回来变了就不写回 */
@@ -333,24 +355,30 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     /** 先存那一刻记下这一批（R-456：AI 后台整理回来时拿它比、拿它撤）；还没有记下的为 null */
     mark(): BatchMark | null {
       const batch = get().batch;
-      return batch ? { batch, rev } : null;
+      return batch ? { batch, rev, seen: batch.entries.map((e) => peek(e.ref)) } : null;
     },
     /** 用户点了某一条的“修改”（R-456）：算动过这一批，AI 整理回来不再替换 */
     touch(): void {
       rev += 1;
     },
     /** AI 后台整理完（R-456）：和先存的不一样就换（swap：先存 AI 的、存成了再撤先存的，没存上原样留着）。
-     *  动过这一批、确认行还在问、AI 的结果里有要问的过去月日：不换。换了以后提示条带“AI 已整理”（关掉了的重新出来） */
+     *  动过这一批（提示条上动过，或按 id 读回和先存时不一样）、确认行还在问、AI 的结果里有要问的过去月日：不换。
+     *  换的时候按钮禁用；换完提示条还开着的换成 AI 那一批、带“AI 已整理”，已经关掉的不再弹出来 */
     async replace(m: BatchMark, plan: TypePlan, raw: string): Promise<ReplaceOut> {
-      if (m.rev !== rev) return 'skip_touched';
+      if (m.rev !== rev || m.batch.entries.some((e, i) => peek(e.ref) !== m.seen[i])) return 'skip_touched';
       if (get().ask.length > 0 || plan.items.some((it) => it.confirm !== null)) return 'skip_confirm';
       if (sameItems(m.batch.entries.map((e) => e.item), plan.items)) return 'same';
       const out = await once<ReplaceOut>('replace', async (g) => {
-        const r = await swap(m.batch, plan, raw, plan.items, env());
-        if (!r) return 'not_saved';
-        if (stale(g, 'replace')) return 'replaced';
-        put({ batch: { ...r.batch, byAi: true, last: r.left.length > 0 ? leftOf(r.left) : null } });
-        return 'replaced';
+        put({ swapping: true });
+        try {
+          const r = await swap(m.batch, plan, raw, plan.items, env());
+          if (!r) return 'not_saved';
+          if (stale(g, 'replace') || get().batch === null) return 'replaced';
+          put({ batch: { ...r.batch, byAi: true, last: r.left.length > 0 ? leftOf(r.left) : null } });
+          return 'replaced';
+        } finally {
+          put({ swapping: false });
+        }
       });
       return out ?? 'skip_busy';
     },

@@ -95,6 +95,10 @@ export function createSpeechRoute(host: SpeechHost, now: () => number = () => pe
     },
     /** 接手：先开的那次，没有就当场开一次（调用方也在手势里）。开不起来返回 false */
     take(lang: Locale): boolean {
+      // 还接手着的旧的那次先关掉（不报结果），免得两个同时在听
+      active?.s.cancel();
+      active = null;
+      clearTimeout(timer);
       const run = pending ?? open(lang);
       pending = null;
       if (!run) return false;

@@ -40,12 +40,15 @@ function setup(entries?: BatchEntry[], plan?: TypePlan) {
   const box = createBatchBox();
   box.setState({ batch: batchOf(entries, plan) });
   const flow = { go: vi.fn(), done: vi.fn(), fail: vi.fn(), error: vi.fn() };
-  const b = createSavedBatch({ box, writer, tag: 'test', env: () => ({ now: NOW, tz: 'Asia/Seoul', day: null }), flow });
+  /** 库里每一条的样子（id → 版本）：测试里改它就等于“在别处改过” */
+  const rows = new Map<string, string | null>();
+  const peek = (ref: { id: string }): string | null => (rows.has(ref.id) ? (rows.get(ref.id) ?? null) : 'v0');
+  const b = createSavedBatch({ box, writer, tag: 'test', env: () => ({ now: NOW, tz: 'Asia/Seoul', day: null }), flow, peek });
   const notice = () => noticeOf(box.getState());
   const keys = (): string[] => notice()?.lines.map((l) => l.key) ?? [];
   const line = (key: string) => notice()?.lines.find((l) => l.key === key);
   const ids = (): string[] => notice()?.entries.map((e) => e.ref.id) ?? [];
-  return { writer, b, notice, keys, line, ids, flow, box, patchFail };
+  return { writer, b, notice, keys, line, ids, flow, box, patchFail, rows };
 }
 
 /** 让写入口下一次调用卡住，返回放开它的函数 */
@@ -328,8 +331,9 @@ describe('确认行连点（第二轮复查续第 2 条）', () => {
 
 describe('AI 后台整理换掉先存的（R-456）', () => {
   const ai = (items: AiItem[]): TypePlan => ({ ...PLAN, origin: 'ai', items });
-  it('sameItems：只比条数、类型、日子、截止、时刻、时长，标题措辞不同算一样', () => {
-    expect(sameItems([todo('买牛奶')], [todo('买点牛奶')])).toBe(true);
+  it('sameItems：条数、类型、标题（去掉空白和标点）、日子、截止、时刻、时长都比', () => {
+    expect(sameItems([todo('买牛奶')], [todo('买 牛奶。')]), '只差空白和标点：算一样').toBe(true);
+    expect(sameItems([todo('买牛奶')], [todo('买点牛奶')]), '标题字不一样：不算一样').toBe(false);
     expect(sameItems([todo('买牛奶')], [todo('买牛奶'), todo('开会')])).toBe(false);
     expect(sameItems([todo('开会')], [{ ...todo('开会'), kind: 'event', date: '2026-11-03', time: '15:00' } as AiItem])).toBe(false);
   });
@@ -353,6 +357,42 @@ describe('AI 后台整理换掉先存的（R-456）', () => {
     b.touch();
     expect(await b.replace(m, ai([todo('买牛奶'), todo('开会')]), '买牛奶开会')).toBe('skip_touched');
     expect(writer.insert).not.toHaveBeenCalled();
+  });
+
+  it('标题不一样（识别错字）也换：先存的“买流奶”换成 AI 的“买牛奶”', async () => {
+    const { b, ids } = setup([{ ref: { table: 'todos', id: 't1', title: '买流奶' }, item: todo('买流奶') }]);
+    const m = b.mark();
+    if (!m) throw new Error('没有这一批');
+    expect(await b.replace(m, ai([todo('买牛奶')]), '买牛奶')).toBe('replaced');
+    expect(ids()).not.toContain('t1');
+  });
+
+  it('在别处改过、勾完成、删掉（按 id 读回和先存时不一样）：不换（skip_touched）', async () => {
+    for (const now of ['v1', null]) {
+      const { writer, b, rows } = setup([t1]);
+      const m = b.mark();
+      if (!m) throw new Error('没有这一批');
+      rows.set('t1', now);
+      expect(await b.replace(m, ai([todo('买牛奶'), todo('开会')]), '买牛奶开会')).toBe('skip_touched');
+      expect(writer.insert).not.toHaveBeenCalled();
+    }
+  });
+
+  it('换的那一下提示条 busy（按钮禁用）；提示条已经关掉的换完不再弹出来', async () => {
+    const { writer, b, notice, box } = setup([t1]);
+    const m = b.mark();
+    if (!m) throw new Error('没有这一批');
+    const gate = hangNext(writer.insert);
+    const run = b.replace(m, ai([todo('买牛奶'), todo('开会')]), '买牛奶开会');
+    await vi.waitFor(() => expect(notice()?.busy).toBe(true));
+    gate.open();
+    expect(await run).toBe('replaced');
+    expect(notice()?.busy).toBe(false);
+    const m2 = b.mark();
+    if (!m2) throw new Error('没有这一批');
+    box.setState({ batch: null }); // 提示条关了（点 × 或 8 秒到了）
+    expect(await b.replace(m2, ai([todo('买牛奶')]), '买牛奶')).toBe('replaced');
+    expect(box.getState().batch, '关掉了的不再弹出来').toBeNull();
   });
 
   it('换成了：提示条是 AI 那一批，带“AI 已整理”；原来的撤不掉的指路句照合并的规矩', async () => {
