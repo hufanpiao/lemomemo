@@ -172,7 +172,7 @@ function gripLook(page: Page): Promise<{ overlap: number; gap: number; who: stri
       r.selectNodeContents(n);
       // 省略号截掉的字不算：右边界取到最近一层裁切（overflow 不是 visible）的祖先为止
       let clip = Infinity;
-      for (let p = n.parentElement; p && p !== f; p = p.parentElement) if (getComputedStyle(p).overflowX !== 'visible') clip = Math.min(clip, p.getBoundingClientRect().right);
+      for (let p: HTMLElement | null = n.parentElement; p && p !== f; p = p.parentElement) if (getComputedStyle(p).overflowX !== 'visible') clip = Math.min(clip, p.getBoundingClientRect().right);
       for (const b of r.getClientRects()) {
         if (b.width > 0 && b.top < g.bottom && b.bottom > g.top && Math.min(b.right, clip) > right) {
           right = Math.min(b.right, clip);

@@ -4,7 +4,8 @@ import { DAY_MINUTES, parseDate, weekdayOf, type DateStr } from '../core/date.ts
 import { wallTime, type Tz } from '../core/tz.ts';
 import { t, type Locale } from './i18n.ts';
 
-export type DayStyle = 'monthDay' | 'monthDayWeek';
+/** num：纯数字“11/13”（中韩写法一样，不进词典；随手记瀑布流窄卡底行，R-463） */
+export type DayStyle = 'monthDay' | 'monthDayWeek' | 'num';
 
 const WD_KEYS = ['fmt.wd.0', 'fmt.wd.1', 'fmt.wd.2', 'fmt.wd.3', 'fmt.wd.4', 'fmt.wd.5', 'fmt.wd.6'] as const;
 
@@ -18,6 +19,7 @@ export function weekdayName(i: number, locale: Locale): string {
 /** 日期（不带时刻）：fmtDay('2026-10-25', 'zh-CN', 'monthDayWeek') → '10月25日 周日' */
 export function fmtDay(dateStr: DateStr, locale: Locale, style: DayStyle): string {
   const { m, d } = parseDate(dateStr);
+  if (style === 'num') return `${m}/${d}`;
   if (style === 'monthDay') return t('fmt.monthDay', { m, d }, locale);
   return t('fmt.monthDayWeek', { m, d, w: weekdayName(weekdayOf(dateStr), locale) }, locale);
 }

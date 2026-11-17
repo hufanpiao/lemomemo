@@ -76,7 +76,7 @@ class Spring {
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
-/** 复制这一行：去掉 id、data-testid、拖动标记，整份 inert、读屏不念 */
+/** 复制这一行：去掉 id、data-testid、拖动标记和 Motion 写在行上的位移、透明度，整份 inert、读屏不念 */
 function cloneRow(row: HTMLElement): HTMLElement {
   const c = row.cloneNode(true) as HTMLElement;
   for (const el of [c, ...c.querySelectorAll<HTMLElement>('[data-testid], [id]')]) {
@@ -85,6 +85,8 @@ function cloneRow(row: HTMLElement): HTMLElement {
   }
   for (const k of Object.keys(c.dataset)) if (k.startsWith('sort')) delete c.dataset[k];
   c.style.margin = '0';
+  c.style.transform = '';
+  c.style.opacity = '';
   return c;
 }
 
@@ -95,9 +97,14 @@ export function liftFloat(row: HTMLElement, o: SortFloatOptions): SortFloat {
   outer.dataset['testid'] = 'sort-float';
   outer.setAttribute('aria-hidden', 'true');
   outer.inert = true;
-  Object.assign(outer.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+  // 列表行的左右留白在外层面板上（kit NoteRow .lst 的 padding），浮层左右各补上同样的宽，字不贴边；瀑布流的父层没有内边距，照原样
+  const ps = row.parentElement ? getComputedStyle(row.parentElement) : null;
+  const pl = ps ? parseFloat(ps.paddingLeft) || 0 : 0;
+  const pr = ps ? parseFloat(ps.paddingRight) || 0 : 0;
+  Object.assign(outer.style, { left: `${r.left - pl}px`, top: `${r.top}px`, width: `${r.width + pl + pr}px`, height: `${r.height}px` });
   const card = document.createElement('div');
   card.className = o.cls.card;
+  if (pl || pr) card.style.padding = `0 ${pr}px 0 ${pl}px`;
   // 圆角跟这一行自己的（瀑布流卡片 22、列表行没有就用 CSS 默认的 --r-lg）
   const radius = getComputedStyle(row).borderRadius;
   if (radius && radius !== '0px') card.style.borderRadius = radius;

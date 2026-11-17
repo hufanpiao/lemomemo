@@ -85,6 +85,63 @@ describe('两种显示（R-78，TC-B4-01 页面一半）', () => {
     expect(within(screen.getByTestId('notes-g-2026-11-09')).getByRole('heading').textContent).toBe('昨天1');
   });
 
+  // R-463 列表一、瀑布流二：时间怎么写、瀑布流也按天分组
+  const threeDays = async () => {
+    const b = await boot();
+    await act(async () => {
+      await b.outbox?.applyServer('categories', [{ row: { ...serverCat(uid(50), '生活'), color: '#7fb069' } as ServerRow }]);
+      await b.outbox?.applyServer('notes', [
+        { row: serverNote(1, { category_id: uid(50), category_source: 'manual' }) },
+        { row: serverNote(2, { created_at: msAt('2026-11-09', 21 * 60 + 15, 'Asia/Seoul') }) },
+        { row: serverNote(3, { created_at: msAt('2026-11-08', 8 * 60, 'Asia/Seoul') }) },
+      ]);
+    });
+    return b;
+  };
+  const foot = (n: number) => screen.getByTestId(`notes-more-${uid(n)}`).parentElement?.parentElement as HTMLElement;
+
+  it('R-463 瀑布流按时间排：按天加组名（同列表），卡片底行不写日期、没有胶囊', async () => {
+    await threeDays();
+    open();
+    const mason = screen.getByTestId('notes-mason');
+    expect(within(mason).getByTestId('notes-g-2026-11-10').querySelector('h2')?.textContent).toBe('今天1');
+    expect(within(mason).getByTestId('notes-g-2026-11-09').querySelector('h2')?.textContent).toBe('昨天1');
+    expect(within(mason).getByTestId('notes-g-2026-11-08').querySelector('h2')?.textContent).toBe('11月8日1');
+    expect(foot(1).textContent).toBe('生活⋯');
+    expect(foot(2).textContent).not.toMatch(/昨天|\d+:\d+|\//);
+  });
+
+  it('R-463 自己排：瀑布流不分组，底行补“· 日期”（今天、昨天写字，再早写 11/8）；列表时间带日期', async () => {
+    const b = await threeDays();
+    await act(async () => {
+      await b.outbox?.applyServer('settings', [{ row: serverSetting('notes.order', 'manual') }]);
+    });
+    open();
+    expect(screen.getByTestId('notes-mason').querySelector('h2')).toBeNull();
+    expect(foot(1).textContent).toBe('生活·今天⋯');
+    expect(foot(2).textContent).toBe('昨天⋯');
+    expect(foot(3).textContent).toBe('11/8⋯');
+    cleanup();
+    await act(async () => {
+      await b.outbox?.applyServer('settings', [{ row: { ...serverSetting('notes.view@desktop', 'list'), id: uid(901) } as ServerRow }]);
+    });
+    open();
+    const time = (n: number) => screen.getByTestId(`notes-row-${uid(n)}`).querySelector('[class*="tm"]')?.textContent;
+    expect([time(1), time(2), time(3)]).toEqual(['今天 09:01', '昨天 21:15', '11月8日']);
+  });
+
+  it('R-463 列表按时间排：标题右边只写时刻；没有纸片小图标；第二行带分类色点', async () => {
+    const b = await threeDays();
+    await act(async () => {
+      await b.outbox?.applyServer('settings', [{ row: { ...serverSetting('notes.view@desktop', 'list'), id: uid(901) } as ServerRow }]);
+    });
+    open();
+    const r1 = screen.getByTestId(`notes-row-${uid(1)}`);
+    expect(r1.querySelector('[class*="tm"]')?.textContent).toBe('09:01');
+    expect(r1.querySelector('[class*="mn"]')).toBeNull();
+    expect(r1.querySelector('[class*="t2"] i[aria-hidden]')).toBeTruthy();
+  });
+
   it('这台是手机（触屏）：读 notes.view@mobile', async () => {
     vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(pointer: coarse)', media: q, addEventListener() {}, removeEventListener() {} }));
     const b = await boot();
@@ -120,7 +177,7 @@ describe('卡片', () => {
     expect(screen.getByTestId(`notes-card-${uid(2)}`)).toBeTruthy();
   });
 
-  it('窄卡退路只在视觉上藏分类名：底行里分类名文字还在（读屏照念），样式里 .catName 不用 display:none', async () => {
+  it('窄卡底行（R-463 瀑布流二，去掉胶囊）：分类名照写、放不下省略号；样式里只剩一条 .catName，没有 @container 退路', async () => {
     const b = await boot();
     await act(async () => {
       await b.outbox?.applyServer('categories', [{ row: serverCat(uid(50), '韩国生活与签证材料整理清单') }]);
@@ -137,8 +194,10 @@ describe('卡片', () => {
     }
     const css = readFileSync('src/features/notes/ui/NotesPage.module.css', 'utf8');
     const rules = [...css.matchAll(/([^{}]*\.catName[^{}]*)\{([^}]*)\}/g)];
-    expect(rules.length).toBeGreaterThan(1);
-    for (const [, sel, body] of rules) expect(body, sel).not.toMatch(/display:\s*none/);
+    expect(rules.length).toBe(1);
+    expect(rules[0]?.[2]).toMatch(/text-overflow:\s*ellipsis/);
+    expect(rules[0]?.[2]).not.toMatch(/display:\s*none/);
+    expect(css).not.toMatch(/@container|container-type/);
   });
 });
 

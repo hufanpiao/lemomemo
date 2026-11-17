@@ -117,7 +117,8 @@ export function AppearItem({ as = 'li', className, children, ...data }: AppearIt
   // 第一次画列表时（AnimatePresence initial={false}）不播进场，也就不算“进场中”；之后加进来的才算
   const firstPaint = useContext(PresenceContext)?.initial === false;
   // 功能包还没到时挂上的：Motion 不会补播它的入场（FA-6 ②），直接显示，不算“进场中”
-  const [cold] = useState(() => !motionFeaturesReady());
+  // 拖动排序中挂上的（按天分组时拿着的那一条跨进别的组、取消时回原组）：是同一条换了组，不是新加的，也直接显示（R-463 评审第 1 条）
+  const [cold] = useState(() => springy || !motionFeaturesReady());
   const [entering, setEntering] = useState(!firstPaint && !cold);
   // 进场的淡入等挂载后第一帧再开始（见文件头“起点也要对齐”）；不进场的（第一次画、冷挂上）直接是 true
   const [go, setGo] = useState(!entering);

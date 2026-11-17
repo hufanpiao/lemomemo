@@ -84,23 +84,32 @@ export function FilesMark({ n }: { n: number }) {
   ) : null;
 }
 
-/** 列表行中间的字：标题；摘要 · 分类（+ AI 小标、没保存上）；只读行再在下面单独一行标“要新版本” */
-/** mark：标题、摘要的字怎么画（下拉搜索就地筛时给命中的字加短下划线，kit PullHit；不给原样） */
 const same = (text: string): ReactNode => text;
 
-export function RowText({ it, ai, ro, failed, mark = same }: { it: NoteItem; ai: ReactNode; ro: ReactNode; failed: boolean; mark?: (text: string) => ReactNode }) {
+/** 列表行中间的字：标题 + 时间；“● 摘要 · 分类”（+ AI 小标、附件、没保存上，什么都没有时不画这一行）；只读行再在下面单独一行标“要新版本”。
+ *  mark：标题、摘要的字怎么画（下拉搜索就地筛时给命中的字加短下划线，kit PullHit；不给原样） */
+export function RowText({ it, time, ai, ro, failed, mark = same }: { it: NoteItem; time: string; ai: ReactNode; ro: ReactNode; failed: boolean; mark?: (text: string) => ReactNode }) {
+  const sub = [it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ');
+  const line2 = sub !== '' || it.categoryColor !== null || ai !== null || it.files > 0 || failed;
   return (
     <span className={row.ltext}>
-      <span className={row.t1}>
-        {it.converted ? <ConvMark id={it.id} /> : null}
-        {mark(it.title)}
+      {/* R-463 列表一：标题占满一行，时间小号淡色字贴右；第二行“● 摘要 · 分类 AI” */}
+      <span className={row.l1}>
+        <span className={row.t1}>
+          {it.converted ? <ConvMark id={it.id} /> : null}
+          {mark(it.title)}
+        </span>
+        <span className={row.tm}>{time}</span>
       </span>
-      <span className={row.t2}>
-        <span className={row.t2txt}>{mark([it.summary, it.categoryName ?? ''].filter(Boolean).join(' · '))}</span>
-        {ai}
-        <FilesMark n={it.files} />
-        <SyncMark id={it.id} failed={failed} />
-      </span>
+      {line2 ? (
+        <span className={row.t2}>
+          <Dot color={it.categoryColor} />
+          <span className={row.t2txt}>{mark(sub)}</span>
+          {ai}
+          <FilesMark n={it.files} />
+          <SyncMark id={it.id} failed={failed} />
+        </span>
+      ) : null}
       {ro}
     </span>
   );
