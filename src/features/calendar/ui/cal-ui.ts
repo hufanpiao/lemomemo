@@ -2,10 +2,10 @@
 import { addDays, type DateStr } from '../../../../shared/core/date.ts';
 import { CN_WORKDAY_TAILS } from './holiday-tail-data.ts';
 import type { CalItems } from '../../../../shared/logic/calendar/cal-items.ts';
+import type { Cont } from '../../../../shared/logic/calendar/event-span.ts';
 import type { HolidayKind, HolidayMark } from '../../../../shared/logic/calendar/holidays.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import type { ProjectColor } from '../../../../shared/logic/project-color.ts';
-import { displayShort } from '../../../../shared/logic/short.ts';
 import styles from './CalendarPage.module.css';
 
 /** 项目色 0–6 → 样式类（check_backend F7：不用方括号查表，用 switch） */
@@ -55,12 +55,6 @@ type ItemKind = 'allDay' | 'todo' | 'timed';
 
 function rowOf(items: CalItems, kind: ItemKind, id: string) {
   return kind === 'todo' ? items.todos.find((x) => x.id === id) : items.events.find((x) => x.id === id);
-}
-
-/** 事项的简称（R-106：用户写的简称，没有就自动截） */
-export function itemShort(items: CalItems, kind: ItemKind, id: string): string {
-  const row = rowOf(items, kind, id);
-  return row ? displayShort(row) : '';
 }
 
 /** 事项的完整标题（找不到时空串） */
@@ -131,6 +125,48 @@ export function holText(
   if (h.kind !== 'work') return narrow ? narrowHolName(h.name, narrow) : h.name;
   const base = stripWorkdayTail(h.name);
   return base === '' ? workday : `${workday}·${base}`;
+}
+
+/** 一天看得见的那几段字（月格、手机周泳道共用，画格子和读屏名字用同一份）：右上角 / 数字旁“班”标、那一行（节假日 > fallback）、第二个节日名、那一行是不是放假的节日名 */
+export interface DayLines {
+  readonly badge: string;
+  readonly line: string;
+  readonly hol2: string;
+  readonly offName: boolean;
+}
+
+/**
+ * 只写 named 里的（连休后几天不写节日名，见 namedHolidays）；补班日（当天只有补班）的“班”放进小圆标，
+ * 那一行和第二个名字都只写去掉补班尾巴的节日名。fallback：没有要写的节日时那一行写什么（节气或农历）
+ */
+export function dayLines(kind: HolidayKind | null, named: readonly HolidayMark[], fallback: string, t: CalViewT): DayLines {
+  const sub = { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) };
+  const [first, second] = named;
+  const badge = kind === 'work' ? t('cal.workday', {}) : '';
+  const text = (h: HolidayMark): string => (badge === '' ? holText(h, t('cal.workday', {}), sub) : stripWorkdayTail(h.name));
+  return { badge, line: first ? text(first) : fallback, hol2: second ? text(second) : '', offName: first?.kind === 'off' };
+}
+
+/** 跨天日程这一天是第几天、共几天的写法“2/3”（周泳道条右端、电脑周表全天行共用；R-444、R-445） */
+export function ofText(of: { readonly index: number; readonly days: number } | undefined): string {
+  return of ? `${of.index}/${of.days}` : '';
+}
+
+/** 被切开的一边 → 样式类（月格跨天色块、周泳道全天条和时刻块同一套 .contStart / .contEnd：那一端直角，头从前面接过来的不画左侧深色竖线） */
+export function contClass(cont: Cont | undefined): string {
+  const start = cont === 'start' || cont === 'both' ? (styles.contStart ?? '') : '';
+  const end = cont === 'end' || cont === 'both' ? (styles.contEnd ?? '') : '';
+  return [start, end].filter(Boolean).join(' ');
+}
+
+/** 读屏念的“10月19日”（月格、周泳道、周视图标题共用） */
+export function dateA11y(date: DateStr, t: CalViewT): string {
+  return t('cal.a11y.date', { m: Number(date.slice(5, 7)), d: Number(date.slice(8, 10)) });
+}
+
+/** 周六、周日（0 = 周日）：月格、周泳道“周末淡底加灰字”（R-445） */
+export function weekendClass(weekday: number): string {
+  return weekday === 0 || weekday === 6 ? (styles.wkend ?? '') : '';
 }
 
 /**

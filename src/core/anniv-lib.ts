@@ -1,8 +1,8 @@
 // 纪念日的推算、农历和黄历（shared/logic/anniv/next-date.ts、lunar.ts、lunar-huangli.ts）按需加载的唯一一处（11-15 R-431 独立评审第 1 条：日历 useLunar 原来自带的一套也并进来）（架构 2.6；ESLint lemo/import-bounds 的 LUNAR：src 里一律不准静态引它们）。
 // 11-14 整块评审第 19 条：原来纪念日页（features/anniv/data/anniv-lib.ts）、提醒列表（reminders/hooks/remind-list.ts）、
-//   月历菱形（calendar/hooks/useAnnivDates.ts）各写一份 import() 和缓存，合成这一份放 core（各功能的 data 层也能用），
+//   月历小爱心（calendar/hooks/useAnnivDates.ts）各写一份 import() 和缓存，合成这一份放 core（各功能的 data 层也能用），
 //   React 一侧的状态钩子是 kit/hooks/useAnnivLib.ts。
-// • 三块各自加载（lazyLib）：推算和农历（ANNIV_LIB：纪念日页、提醒、月历菱形、今天页农历）；只有农历（LUNAR_LIB：日历月格、周格的农历和节气）；
+// • 三块各自加载（lazyLib）：推算和农历（ANNIV_LIB：纪念日页、提醒、月历小爱心、今天页农历）；只有农历（LUNAR_LIB：日历月格、周格的农历和节气）；
 //   黄历（HUANGLI_LIB，R-431：只有日历页的黄历卡用，宜忌表 gzip 约 12 KB，不让纪念日页、今天页跟着下）。lunar.ts 三块共用，Vite 拆成共用的一块，不重复下载
 // • 页面挂上时 useLazyLib(lib, want) 先加载，加载好了才画；之后同步用 lib.get() 取（没加载就调是程序错，直接抛）
 // • next-date.ts 本来就静态引 lunar.ts，两块一起加载不多花

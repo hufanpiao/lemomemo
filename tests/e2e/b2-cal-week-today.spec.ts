@@ -42,9 +42,11 @@ test.describe('手机周视图：今天的日期圆圈不贴上下两行字（CA
         return {
           date: li.dataset.date ?? '',
           sub: down.textContent ?? '',
-          allDay: (col?.children.length ?? 0) > 3,
+          // R-445 周视图 A：全天日程画在右边轨道顶上一整条，不再在左列多一行标签
+          allDay: (li.textContent ?? '').includes('出差'),
           rowH: Math.round(li.getBoundingClientRect().height),
-          ring: getComputedStyle(b).boxShadow !== 'none',
+          // R-445：今天是淡黄小框，刚打开时今天也是选中日（深色小方块、不画框线），都按“日期数字有底色”认
+          ring: getComputedStyle(b).backgroundColor !== 'rgba(0, 0, 0, 0)',
           w: Math.round(r.width),
           h: Math.round(r.height),
           gapUp: r.top - u.bottom,

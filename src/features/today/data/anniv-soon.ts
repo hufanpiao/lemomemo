@@ -2,7 +2,7 @@
 // • 用服务器算好的 next_date（push-dispatch、anniv-roll 写的系统列），今天页不加载农历推算（next-date.ts 带农历表，2.6 不进首屏）；
 //   离线新建、还没同步回来的那一条没有 next_date，这一行先不出，同步回来就出
 // • 以服务器为准（整块评审第 19 条核过，不改成本机现算）：离线改了日期、还没同步回来时这里还是旧的 next_date；
-//   本机现算要在首屏画完前加载农历表，今天页首屏预算不允许。纪念日页、提醒、月历菱形才按需现算（core/anniv-lib.ts）
+//   本机现算要在首屏画完前加载农历表，今天页首屏预算不允许。纪念日页、提醒、月历小爱心才按需现算（core/anniv-lib.ts）
 // • 7 天内（含今天）最近的一个；已删、撤销、已归档（已过去的倒数日）、next_date 早于今天（还没滚到下一次）的不算；同一天按名字
 // • 电脑版“快到了”块（30 天内最多 3 个）用同一个 annivUpcoming；两处显示的名字（annivLabel，生日加“生日”）、还有几天（annivWhen）也只在这里算
 import { addDays, diffDays, type DateStr } from '../../../../shared/core/date.ts';

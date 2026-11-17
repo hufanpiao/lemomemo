@@ -4,7 +4,7 @@
 // 横向拖动的底层（锁方向、左边缘避让、跟手、滑完吞点按；R-420 审查第 4 条合成一套）：kit 左滑行 SwipeRow 用
 export { useHDrag, type HDrag, type HDragEnd } from './hdrag.ts';
 // 左右滑动翻页（B2 FA-3 月历、周视图；底下是同一个 useHDrag）
-export { useSwipePager, type SwipePager } from './swipe-pager.ts';
+export { flipMs, useSwipePager, type SwipePager } from './swipe-pager.ts';
 // 上下拖动收起 / 展开（B2 FA-3 月历上拖收起）
 export { useDragCollapse, type DragCollapse } from './drag-collapse.ts';
 // 长按拿起、拖着走（R-429 拖动排序；kit 的 useSortDrag 用，待办页、随手记页、隐私记页三处共用）

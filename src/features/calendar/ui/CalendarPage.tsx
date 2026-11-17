@@ -7,7 +7,8 @@
 // • 清单标题行下面的黄历卡（R-431）：hooks/useHuangli 按需加载，中文界面才有
 // • 月历下面不放图例（负责人 11-15 去掉）
 // • 翻页的动画（架构 5.12，代码复审 N1）：同一页内换地址一律不起整页 View Transition（useCalendar 走 replaceInPage，日历内部算同一层不记历史，R-372）；
-//   ‹ › 按钮翻页和滑动一样，新的一页从那一侧横滑进来（swipe.slideIn，--dur-ui + --ease-standard）；键盘 ← →、“今天”、年月选择直接切换
+//   左右滑、‹ › 按钮（和点上个月、下个月的灰色日期）都是“原地淡换”（R-457 负责人 11-17 选 C、放慢 4 倍，swipe.flip）；
+//   键盘 ← →、“今天”、年月选择直接切换。翻成了记运行日志“cal page prev|next via=swipe|btn|key”
 // • 上拖收起（线框 s3、架构 17、R-326）：月视图日清单顶上的拖动柄（FoldHandle）往上拖，月历收成一周一行（hooks/useMonthFold）；
 //   收起后 ‹ ›、← →、左右滑翻的是周
 // • 手机上年月选择器打开时，后面加一层半透明遮罩把内容压暗（设计复审 N1）；电脑不压暗
@@ -54,6 +55,7 @@ import { weekTitle } from './week-axis.ts';
 import styles from './CalendarPage.module.css';
 import { CalDrawer, type CalSel } from './CalDrawer.tsx';
 import { CalNav, FoldHandle } from './CalNav.tsx';
+import { dateA11y } from './cal-ui.ts';
 import { DayList } from './DayList.tsx';
 import { MonthGrid } from './MonthGrid.tsx';
 import { MonthPicker } from './MonthPicker.tsx';
@@ -149,20 +151,20 @@ export default function CalendarPage() {
   // 底栏“＋”、Ctrl+N 新建日程带上选中的那天（FA-7 第 5 项，hooks/new-date.ts）
   useNewDateSource(selected);
 
-  /** 翻一页（收起时翻一周）；翻不动返回 false */
-  const turn = (n: -1 | 1): boolean => {
-    if (fold.byWeek) return fold.step(n);
-    if (n < 0 ? !model.canPrev : !model.canNext) return false;
-    if (n < 0) cal.prev();
+  /** 翻一页（收起时翻一周）；翻不动返回 false。翻成了记一行运行日志“cal page prev|next via=swipe|btn|key”（R-457） */
+  const turn = (n: -1 | 1, via: 'swipe' | 'btn' | 'key'): boolean => {
+    let ok = true;
+    if (fold.byWeek) ok = fold.step(n);
+    else if (n < 0 ? !model.canPrev : !model.canNext) ok = false;
+    else if (n < 0) cal.prev();
     else cal.next();
-    return true;
+    if (ok) rlog(`cal page ${n < 0 ? 'prev' : 'next'} via=${via}`);
+    return ok;
   };
-  // 滑动翻页：翻不动（turn 返回 false）就按“不够”滑回原位（R-420 审查第 1 条）；跟手直接写 transform，不让这一页重画（第 3 条）
+  // 滑动、‹ › 按钮翻页：原地淡换（R-457“C 原地淡换”放慢 4 倍，motion/swipe-pager.ts）；翻不动（turn 返回 false）就回原位（R-420 审查第 1 条）；
+  // 跟手直接写 transform，不让这一页重画（第 3 条）
   const swipe = useSwipePager(turn, rlog);
-  /** ‹ › 按钮：翻页后新的一页从那一侧横滑进来（和滑动一样，5.12） */
-  const button = (n: -1 | 1): void => {
-    if (turn(n)) swipe.slideIn(n);
-  };
+  const button = (n: -1 | 1): void => void swipe.flip(n, 'btn');
   /** 点月格某天：选中它；点的是上个月、下个月的灰色日期，就翻到那个月再选中（负责人 11-15“点下一个月的日期现在是没反应”）。
    *  展开时和 ‹ › 一样横滑进来；收起成一周时直接换到那个月（这时翻页按钮是按周走的） */
   const choose = (d: DateStr): void => {
@@ -186,13 +188,15 @@ export default function CalendarPage() {
     act();
     return true;
   };
-  const shift = (n: 1 | -1) => key(() => (fold.byWeek ? fold.step(n) : cal.keyShift(n)));
+  const shift = (n: 1 | -1) =>
+    key(() => {
+      if (fold.byWeek ? fold.step(n) : cal.keyShift(n)) rlog(`cal page ${n < 0 ? 'prev' : 'next'} via=key`);
+    });
   useKeys({ ArrowLeft: shift(-1), ArrowRight: shift(1), t: key(goToday) });
 
   const lunarShort = model.lunar ? (d: DateStr) => model.lunar?.dayInfo(d).solarTerm ?? model.lunar?.dayInfo(d).lunar : undefined;
   const sel = selected;
   const huangli = useHuangli(sel, model.locale);
-  const { p } = fold;
   const pull = usePullReveal('calendar');
 
   return (
@@ -262,7 +266,7 @@ export default function CalendarPage() {
                 selected={sel}
                 onSelect={choose}
                 lunarSay={model.lunar?.fullText}
-                fold={{ row: fold.row, p, shiftY: fold.geo.top, collapsed: fold.byWeek }}
+                fold={{ row: fold.row, collapsed: fold.byWeek, folded: fold.folded }}
                 gridRef={fold.gridRef}
                 gridId={GRID_ID}
               />
@@ -285,11 +289,11 @@ export default function CalendarPage() {
             isRo={ro.g.isRo}
             openId={openId}
             t={t}
-            label={t('cal.weekGrid', { from: t('cal.a11y.date', { m: Number(model.view.start.slice(5, 7)), d: Number(model.view.start.slice(8)) }) })}
+            label={t('cal.weekGrid', { from: dateA11y(model.view.start, t) })}
           />
         )}
       </div>
-      <div className={styles.dayWrap} ref={fold.dayRef} style={fold.dayStyle}>
+      <div className={styles.dayWrap} ref={fold.dayRef}>
         {fold.active ? <FoldHandle t={t} collapsed={fold.collapsed} controls={GRID_ID} drag={fold.drag} /> : null}
         {sel ? (
           <DayList

@@ -112,9 +112,12 @@ describe('build/check_contrast.py：真仓库的例外名单', () => {
     want.push(['glass-dark', 'focus-fab-in', 1.1935], ['glass-dark', 'focus-fab-out', 2.2072]);
     // 11-15 负责人定（R-433“按照参考图一模一样的来”）：深色勾选框边用参考图原色 #69645C，卡片底、编辑页分组底都不到 3:1，登记为例外
     for (const skin of ['glass', 'simple']) want.push([`${skin}-dark`, 'check-edge-panel', 2.7074], [`${skin}-dark`, 'check-edge-panel2', 2.4092]);
+    // 11-17 负责人定（R-445）：深色放假斜纹保持 .28，斜纹上的次要文字（格子底、周末淡底）不到 4.5，登记为例外
+    for (const skin of ['glass', 'simple']) want.push([`${skin}-dark`, 'hol-stripe-text2', 3.5859], [`${skin}-dark`, 'hol-stripe-text2-wkend', 3.3924]);
     expect((data.accepted ?? []).map((e) => [e.theme, e.id, e.floor]).sort()).toEqual(want.sort());
     for (const e of data.accepted ?? []) {
       if (e.id.startsWith('focus-')) expect(e).toMatchObject({ decided: '2026-11-07', reason: expect.stringContaining('R-355') });
+      else if (e.id.startsWith('hol-stripe-')) expect(e).toMatchObject({ decided: '2026-11-17', reason: expect.stringContaining('保持 .28') });
       else if (e.id.startsWith('check-edge-')) expect(e).toMatchObject({ decided: '2026-11-15', reason: expect.stringContaining('一模一样') });
       else expect(e).toMatchObject({ decided: '2026-11-06', reason: REASON });
     }
@@ -125,6 +128,6 @@ describe('build/check_contrast.py：真仓库的例外名单', () => {
     for (const id of ['g-tint-floor', 'g-fg-on-floor']) expect(data.pairs.find((p) => p.id === id)?.over).toBeUndefined();
     const { code, report } = exec(ROOT);
     expect(code).toBe(0);
-    expect(report).toMatchObject({ failed: 0, accepted: 16 });
+    expect(report).toMatchObject({ failed: 0, accepted: 20 });
   });
 });

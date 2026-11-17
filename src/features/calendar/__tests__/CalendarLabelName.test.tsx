@@ -107,16 +107,16 @@ describe('读屏名字以看得见的字开头（WCAG 2.5.3 Label in Name，axe 
     expect(notStartShown('，')).toEqual([]);
   });
 
-  it('手机泳道：星期、日期、农历、色块简称、“+N”、件数、“逾”在前；星期不念两遍', async () => {
+  it('手机泳道：星期、日期、农历、色块简称、“+N”在前（件数、“逾”R-445 起不画，只在后面念）；星期不念两遍', async () => {
     data.events = [ev('9', { date: '2026-11-05', time: '10:00' })];
     data.todos = [todo('t1', { due: '2026-11-04' })];
     open('#/cal/week/2026-11-02');
     const l4 = () => document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-04"]');
-    await waitFor(() => expect(shown(l4())).toMatch(/^周三 4 \S+ 1 逾$/));
+    await waitFor(() => expect(shown(l4())).toMatch(/^周三 4 \S+$/));
     const name = l4()?.querySelector('button')?.getAttribute('aria-label') ?? '';
     expect(name.startsWith(`${shown(l4())}，11月4日，共 1 件，有逾期的待办`)).toBe(true);
     expect(name.split('周三')).toHaveLength(2);
-    expect(shown(document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-05"]'))).toMatch(/^周四 5 \S+ 日程 1$/);
+    expect(shown(document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-05"]'))).toMatch(/^周四 5 \S+ 日程$/);
     expect(notStartShown('，')).toEqual([]);
   });
 
@@ -136,7 +136,7 @@ describe('读屏名字以看得见的字开头（WCAG 2.5.3 Label in Name，axe 
     expect(notStartShown(', ')).toEqual([]);
     cleanup();
     open('#/cal/week/2026-11-02');
-    expect(document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-05"] button')?.getAttribute('aria-label')).toMatch(/^목요일 5 \S+ 1, 11월 5일, 오늘, /);
+    expect(document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-05"] button')?.getAttribute('aria-label')).toMatch(/^목요일 5 \S+, 11월 5일, 오늘, /);
     expect(notStartShown(', ')).toEqual([]);
   });
 });
