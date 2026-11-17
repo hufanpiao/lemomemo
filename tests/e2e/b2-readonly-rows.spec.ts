@@ -4,6 +4,7 @@
 // • 拦下以后本机库和 outbox 都不变（真的没写）；可写的行照常进编辑页
 // • A2：日历“纪念日”置灰、不跳 #/anniv 占位页，点了出“纪念日即将推出”
 import type { Page } from '@playwright/test';
+import { logOnFail } from './fail-log.ts';
 import { cached, idbPut, idbRead } from './idb.ts';
 import { swipeRow } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
@@ -12,6 +13,8 @@ import { FAKE_USER_ID } from './session-fixture.ts';
 const TZ = 'Asia/Seoul';
 // 浏览器时区和造数据用的时区要一致：不然本机时区和首尔跨零点的那几个小时里“今天”对不上，今天页找不到这几条
 test.use({ loggedIn: true, timezoneId: TZ });
+// 失败时附运行日志、控制台报错、没回来的请求（11-17 加压偶发挂在第 80 行、找不到 today-swipe-t-ro，先要日志定根因）
+logOnFail(test);
 // 钟定在首尔中午：日程写在 23:00、23:30，不定钟的话首尔 23:30 以后跑，今天页把它们收进“已过去”，只读标记找不到（3130e72f 的 ci 夜里红过）
 const NOW = new Date('2026-11-12T12:00:00+09:00');
 const DAY = '2026-11-12';
@@ -55,6 +58,10 @@ async function stateOf(page: Page): Promise<{ done: unknown; outbox: number }> {
 test.describe('只读行（FA-2）', () => {
   test('今天页：顶部重复事项横幅；只读行行尾标记；点、打勾拦下，左滑滑不开（负责人 11-15 去掉行尾 ×），本机库和队列不变；可写的照常', async ({ page }) => {
     await seed(page);
+    // 电脑宽度（chromium 项目，Desktop Chrome 1280）：今天页先照手机排成一列，首屏画完以后电脑版面板（TodayDesk）和左滑（TodaySwipe）各自下载、
+    // 各自换上，面板换上时整列在 DeskLayout 里重新挂载。先等面板换上，后面点行、量行、左滑用的才是最终那一批节点
+    //（11-17 加压复现：swipeRow 等到行面以后面板才换上，trace 里 116109 有行面没面板、116211 才有面板，boundingBox 量到已卸下的旧行，报“找不到行”）
+    if ((page.viewportSize()?.width ?? 0) >= 900) await page.getByTestId('desk-panel-week').waitFor({ timeout: 30000 });
     await expect(page.getByTestId('today-repeat')).toContainText('有 2 条重复事项要新版本才能完整显示');
     await expect(page.getByTestId('today-repeat-update')).toHaveText('更新');
     await expect(page.getByTestId('today-ro-t-ro')).toBeVisible();
