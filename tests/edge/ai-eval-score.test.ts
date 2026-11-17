@@ -133,9 +133,11 @@ describe('judgeItem：逐字段（句库 1.4）', () => {
     const d = judgeItem(e, { ...a, anniv: { ...an, calendar: 'solar' } }, main);
     expect(d.wrong).toEqual(['date', 'anniv']);
   });
-  it('日程、待办的 short 超过 2 个字形簇算错（\u{1F468}\u200d\u{1F469}\u200d\u{1F467} 是 1 个）', () => {
+  it('日程、待办的 short 超过 4 个字形簇算错（R-446；\u{1F468}\u200d\u{1F469}\u200d\u{1F467} 是 1 个）', () => {
     expect(judgeItem(ev(), okItem({ short: '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}' }), main).wrong).toEqual([]);
-    expect(judgeItem(ev(), okItem({ short: '开会了' }), main).wrong).toEqual(['short']);
+    expect(judgeItem(ev(), okItem({ short: '瓶子出货' }), main).wrong).toEqual([]);
+    expect(judgeItem(ev(), okItem({ short: '배드민턴' }), main).wrong).toEqual([]);
+    expect(judgeItem(ev(), okItem({ short: '瓶子出货了' }), main).wrong).toEqual(['short']);
   });
   it('说了时长的才评时长', () => {
     expect(judgeItem(ev({ duration_min: 120 }), okItem({ duration_min: 60 }), main).wrong).toEqual(['duration_min']);

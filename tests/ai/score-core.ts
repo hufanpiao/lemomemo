@@ -8,6 +8,7 @@
 // 输出里只有句子 id、字段名和数字，不放句子原文和模型原文（工作流摘要页是公开的；原文在结果 JSON 里，只进工作流产物）。
 
 import { PROJECT_CATEGORIES } from '../../shared/logic/project-color.ts';
+import { graphemeCount, SHORT_GRAPHEMES } from '../../shared/logic/short.ts';
 
 export const KINDS = ['event', 'todo', 'note', 'anniv'] as const;
 /** 日程、待办没说到已有项目时认的类别（中韩两套都认，提示词按界面语言取一套） */
@@ -153,7 +154,6 @@ const minutes = (t: unknown): number | null => {
   const m = /^(\d{1,2}):(\d{2})$/.exec(t);
   return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
 };
-const graphemes = (s: string): number => [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(s)].length;
 /** 日程看 date、待办看 due（句库 1.4 日期一行） */
 const dayOf = (it: Item): unknown => (it['kind'] === 'event' ? it['date'] : it['kind'] === 'todo' ? it['due'] : null) ?? null;
 const timed = (k: unknown) => k === 'event' || k === 'todo';
@@ -232,9 +232,9 @@ export function judgeItem(e: ExpItem, a: Item | null, row: Pick<SetRow, 'scored'
     const w = e.anniv;
     if (!(isObj(x) && w && x['type'] === w.type && x['calendar'] === w.calendar && x['month'] === w.month && x['day'] === w.day && x['is_leap'] === w.is_leap && (x['year'] ?? null) === w.year)) wrong.push('anniv');
   }
-  // short：日程、待办只查格式（1–2 个字形簇或 null）；随手记、纪念日必须为 null
+  // short：日程、待办只查格式（1～SHORT_GRAPHEMES 个字形簇或 null，R-446 起 4 个）；随手记、纪念日必须为 null
   const s = a['short'] ?? null;
-  if (timed(a['kind']) ? !(s === null || (typeof s === 'string' && graphemes(s) >= 1 && graphemes(s) <= 2)) : s !== null) wrong.push('short');
+  if (timed(a['kind']) ? !(s === null || (typeof s === 'string' && graphemeCount(s) >= 1 && graphemeCount(s) <= SHORT_GRAPHEMES)) : s !== null) wrong.push('short');
   return { wrong: [...new Set(wrong)], date: { on: dateOn, ok: dateOk, madeUp: dateMadeUp }, time: { on: timeOn, ok: timeOk, madeUp: timeMadeUp }, basis };
 }
 

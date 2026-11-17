@@ -14,10 +14,10 @@ import { displayShort } from '../short.ts';
 export { PROJECT_COLORS, projectColorIndex, type ProjectColor } from '../project-color.ts';
 
 /** 月历、周视图用到的日程列，加上删除、撤销两列（live-row.ts 的 Tombstone，可以没有；本机缓存里的行直接传进来即可） */
-export type CalEvent = Readonly<Pick<EventWrite, 'id' | 'title' | 'short' | 'project' | 'date' | 'time' | 'tz' | 'duration_min' | 'created_at'>> &
+export type CalEvent = Readonly<Pick<EventWrite, 'id' | 'title' | 'short' | 'short_by' | 'project' | 'date' | 'time' | 'tz' | 'duration_min' | 'created_at'>> &
   Tombstone;
-/** 月历用到的待办列 */
-export type CalTodo = Readonly<Pick<TodoWrite, 'id' | 'title' | 'short' | 'project' | 'due' | 'done' | 'created_at'>> & Tombstone;
+/** 月历用到的待办列（short_by：displayShort 分用户手改和 AI 起的，R-446） */
+export type CalTodo = Readonly<Pick<TodoWrite, 'id' | 'title' | 'short' | 'short_by' | 'project' | 'due' | 'done' | 'created_at'>> & Tombstone;
 
 /** 月历、单日列表的输入 */
 export interface CalItems {

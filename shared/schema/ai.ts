@@ -9,8 +9,8 @@
 //      日子为 null 而 basis 有值算 schema；
 //   ② kind 必须在这个人能用的类型里（featureOn 算好的 features），不在算 not_whitelisted、整份退回；
 //   ③ 字段和 kind 对不上的清成 null、不整份拒收（纪念日的 date、due、time、short，随手记的 short、date、due、time；
-//      待办的 time 不清，它是截止时刻）；short 超过 2 个字形簇也清成 null（11-16 测试集 ① 第 4 次：韩文“영수증”“배드민턴”整份被拒、整句退回本机规则；
-//      short 只是月历标签，清掉后照架构 R-104 按标题取前 2 个字形簇，条目本身没错，不该连累整句）；
+//      待办的 time 不清，它是截止时刻）；short 超过 SHORT_GRAPHEMES 个字形簇（R-446 起 4 个）也清成 null（11-16 测试集 ① 第 4 次：
+//      当时上限 2，韩文“영수증”“배드민턴”整份被拒、整句退回本机规则；short 只是月历标签，清掉后照 R-104、R-446 按标题取，条目本身没错，不该连累整句）；
 //   ④ 待办给了 time 没给 due：补 due = 今天（调用方传了默认日子就是那一天）、date_basis = rel（数据库要求有 due_time 必须有 due）；
 //      调用方传了默认日子（日历页选中的，R-353、R6）时，日程没给 date、待办没给 due 的也补成那一天、date_basis = rel；
 //   ⑤ 按 basis 重配、查存在不存在、加 confirm（shared/logic/parse/past-date.ts，和本机规则同一个函数）；
