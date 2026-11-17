@@ -43,11 +43,13 @@ export interface TodoRowProps {
   meta(stage: ReactNode, checked: boolean): ReactNode;
   /** 日清单的行按钮多出来的几样：data-kind、data-open（日历页认行）、抽屉开着的那条 aria-current、测试 id；给了还带 data-readonly */
   main?: Readonly<{ kind: string; open: string; current: boolean; testId: string }> | undefined;
+  /** 标题文字怎么画（待办页下拉搜索就地筛时给命中的字加短下划线，kit PullHit；不给原样） */
+  mark?(text: string): ReactNode;
   /** 行面外面再包一层（待办页的左滑删除 SwipeRow） */
   wrap?(face: ReactNode): ReactNode;
 }
 
-export function TodoRow({ r, todo, subs, ids, onOpen, collapsed, onCollapse, meta, main, wrap }: TodoRowProps) {
+export function TodoRow({ r, todo, subs, ids, onOpen, collapsed, onCollapse, meta, main, mark, wrap }: TodoRowProps) {
   const { t, a, flow } = r;
   const id = todo.id;
   const ro = a.isRo(id);
@@ -79,7 +81,7 @@ export function TodoRow({ r, todo, subs, ids, onOpen, collapsed, onCollapse, met
           {/* 标题前一个优先级彩点（R-434）；划线只画在文字上 */}
           <span className={list.title}>
             <PrioDot p={todo.priority} />
-            <span className={list.strike} data-done={checked ? '' : undefined}>{todo.title}</span>
+            <span className={list.strike} data-done={checked ? '' : undefined}>{mark ? mark(todo.title) : todo.title}</span>
           </span>
           {meta(subs ? <SubStage done={subDone} total={subs.length} testId={`${ids.stage}-${id}`} /> : null, checked)}
         </span>

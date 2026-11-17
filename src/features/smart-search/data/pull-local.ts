@@ -3,13 +3,13 @@
 //   随手记：标题、正文、分类名（R-437 原话“按标题、正文、分类筛”；分类名按 core 的 categoryNameOf 归到合并后留下的那个）；
 //   待办：标题、子任务（todo_items 里还活着的）；日程：只看标题
 // • 隐私记不搜：buildIndex 本来就不收 is_private 的随手记（D-16）；删了、撤销的不出
-// • 待办是靠子任务命中的，片段给命中的那一项子任务（第二行写“子任务：…”）
+// • 只出命中了哪几条（页面就地筛）；待办靠子任务命中的也算，不另给片段（R-447 起待办页不再列结果行，片段没人画）
 // 纯 TS：不准 import React（A1）
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { str } from '../../../../shared/logic/notes/note-headline.ts';
 import { categoryNameOf } from '../../../core/categories.ts';
-import { buildIndex, findLocal, markRanges, type FindHit, type FindItem, type Row } from './find-local.ts';
+import { buildIndex, type FindItem, type Row } from './find-local.ts';
 
 export type PullScope = 'note' | 'todo' | 'event';
 
@@ -43,13 +43,4 @@ export function pullIndex(scope: PullScope, rows: readonly Row[], extra: readonl
   const nameOf = categoryNameOf(extra);
   const cat = new Map(rows.map((r) => [r.id, nameOf(r['category_id']) ?? '']));
   return buildIndex({ ...base, notes: rows }, tz).map((it) => ({ ...it, fields: [it.title, it.fields[1] ?? '', cat.get(it.id) ?? ''] }));
-}
-
-/** 就地筛：查询为空返回空数组；待办靠子任务命中时片段给那一项子任务 */
-export function pullFind(index: readonly FindItem[], q: string): FindHit[] {
-  return findLocal(index, q).map((h) => {
-    if (h.item.kind !== 'todo' || markRanges(h.item.title, q).length > 0) return h;
-    const sub = h.item.fields.slice(1).find((f) => markRanges(f, q).length > 0);
-    return sub === undefined ? h : { ...h, snippet: sub };
-  });
 }

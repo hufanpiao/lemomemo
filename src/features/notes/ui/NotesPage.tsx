@@ -39,8 +39,9 @@
 // • “最近删除”入口（R-441 负责人 11-16“代办页跟随手记页的删除按钮去掉，删除确认放在设置页”，取代 R-438）：随手记页手机版顶栏、电脑版分类栏标题右边都不放，
 //   改从设置首页“最近删除”一组的“随手记”一行进 #/trash/notes；图片报错提示里的“去最近删除”行内链接照旧。
 //   隐私记页不变：NotesBits 的 TrashLink 由 head(trash) 放进它自己顶栏右边（手机版），电脑版放在分类栏标题右边（隐私记要解锁后才能看，不挪到设置）
-// • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal 管手势和打的字，smart-search 的 PullSearch 画搜索框和结果）；
-//   打了字就把“最近删除”、分类胶囊和列表藏起来、换成结果（kit 的 PullSlot，手机版、电脑版同一处 listPart）（按标题、正文、分类就地筛）。隐私记页不接（隐私记不搜）
+// • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出一条扁搜索框（kit 的 usePullReveal 管手势和打的字，smart-search 的 PullSearch 画搜索框、条数和“用 AI 按意思找”）；
+//   R-447（负责人 11-17 选 S-B“原列表筛选”）：打了字瀑布流 / 列表照原样留着，只画命中的（按标题、正文、分类，kit 的 pull.shows），标题、摘要里命中的字加短下划线（kit PullHit），
+//   没有命中的日期组不画；分类胶囊照样筛（手机版、电脑版同一处 listPart）。筛着的时候不能拖动排序（落点按整串算，筛掉的会被挤乱）。隐私记页不接（隐私记不搜）
 // • 长按拖动排序（R-429，含 R-433 拖动时左边的 6 个点；隐私记页同一份）：kit 的 useSortDrag，瀑布流（两列，横竖都跟）和列表都能拖；按住 0.4 秒没动才拿起，
 //   动了交给左滑或滚动；拿起的那一张、那一行左边出 6 个点，落点一条强调色细横线。整页是一串（data-sort-group 都是 all），放下按页面上的顺序算排序值（data/note-sort.ts）。
 //   按时间排时拖了一次就切到“自己排”（不按天分组、列表行的时间带日期；设置 › 随手记显示方式里可切回），提示条“已切到自己排，设置里可改回 · 撤销”；
@@ -62,7 +63,7 @@ import { useSortDropFlow } from '../../../kit/hooks/useSortDropFlow.ts';
 import { Mist } from '../../../kit/components/Mist.tsx';
 import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
 import { usePullReveal } from '../../../kit/hooks/usePullReveal.ts';
-import { PullSlot } from '../../../kit/components/PullSlot.tsx';
+import { PullHit, PullSlot } from '../../../kit/components/PullSlot.tsx';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
 import { useEditT } from '../../../kit/components/EditNotices.tsx';
@@ -152,6 +153,9 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
     else setMoving(id);
   };
   const shown = (it: NoteItem) => !moved.has(it.id);
+  // 画不画：移走的不画；下拉搜索就地筛时只画命中的（R-447）。拖动排序的整串仍按 shown 算（筛着时不能拖）
+  const vis = (it: NoteItem) => shown(it) && pull.shows(it.id);
+  const mark = (text: string) => <PullHit pull={pull} text={text} />;
   /** 移出隐私记（隐私记来源）：没移成出提示 */
   const moveOut = (id: string) => {
     setMenu(null);
@@ -209,7 +213,7 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
   });
   const sd = useSortDrag({ tag: src.kind, axis: view === 'masonry' ? 'xy' : 'y', canDrop: () => true, onDrop: dropped, log: rlog });
   /** 能拖的行、卡片上的标记（整页一串） */
-  const sortAttrs = (it: NoteItem) => ({ 'data-sort-id': it.id, 'data-sort-group': 'all', 'data-sort-off': isRo(it.id) ? '' : undefined });
+  const sortAttrs = (it: NoteItem) => ({ 'data-sort-id': it.id, 'data-sort-group': 'all', 'data-sort-off': isRo(it.id) || pull.searching ? '' : undefined });
   /** 列表方式的一行；withDay：自己排时不按天分组，时间带上日期 */
   const listRow = (it: NoteItem, withDay: boolean) => (
     <AppearItem key={it.id} className={`${selId === it.id ? `${row.lrow} ${styles.sel}` : row.lrow} ${sortRowClass}`} {...sortAttrs(it)} data-testid={`notes-row-${it.id}`}>
@@ -226,7 +230,7 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
         <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
           <span className={row.rowTime}>{timeOf(it, withDay)}</span>
           <span className={row.mn} aria-hidden="true" />
-          <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} failed={failed.has(it.id)} />
+          <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} failed={failed.has(it.id)} mark={mark} />
           {it.cover ? <ListThumb img={it.cover} /> : null}
         </button>
         {more(it)}
@@ -268,7 +272,7 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
 
       {merge ? <MergeBar hint={merge} onResult={report} onMerged={(h) => guard.show(mergeUndo(h.key, () => void h.undo().then(report)))} /> : null}
 
-      {l.items.length === 0 ? (
+      {l.items.length === 0 && !pull.searching ? (
         <p className={list.empty} data-testid="notes-empty">
           {src.text?.empty ?? t('notes.empty', {})}
         </p>
@@ -277,7 +281,7 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
       <div ref={sd.ref} className={sortBoxClass}>
       {view === 'masonry' ? (
         <AppearList as="ul" className={styles.mason} data-testid="notes-mason">
-          {l.items.filter(shown).map((it) => (
+          {l.items.filter(vis).map((it) => (
             <AppearItem key={it.id} className={`${styles.card} ${sortRowClass}`} {...sortAttrs(it)} data-testid={`notes-card-${it.id}`}>
               <div onContextMenu={onMenuKey(it.id)}>
                 <button type="button" className={styles.cardMain} onClick={() => open(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
@@ -286,8 +290,8 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
                       <CardCover img={it.cover} count={it.images} />
                     </span>
                   ) : null}
-                  <span className={styles.cardTitle}>{it.converted ? <ConvMark id={it.id} /> : null}{it.title}</span>
-                  {it.summary ? <span className={styles.cardSum}>{it.summary}</span> : null}
+                  <span className={styles.cardTitle}>{it.converted ? <ConvMark id={it.id} /> : null}{mark(it.title)}</span>
+                  {it.summary ? <span className={styles.cardSum}>{mark(it.summary)}</span> : null}
                 </button>
                 <RoMark ro={isRo(it.id)} id={it.id} cls={styles.roCard} />
                 <div className={styles.cardFoot}>
@@ -316,12 +320,12 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
         // 自己排（R-429）：不按天分组，一整串
         <div data-testid="notes-list">
           <AppearList as="ul" className={`${row.lst} ${styles.flat}`}>
-            {l.items.filter(shown).map((it) => listRow(it, true))}
+            {l.items.filter(vis).map((it) => listRow(it, true))}
           </AppearList>
         </div>
       ) : (
         <AppearList as="div" data-testid="notes-list">
-          {l.groups.map((g) => ({ g, items: g.items.filter(shown) })).filter((x) => x.items.length > 0).map(({ g, items }) => (
+          {l.groups.map((g) => ({ g, items: g.items.filter(vis) })).filter((x) => x.items.length > 0).map(({ g, items }) => (
             <AppearItem as="section" key={g.date} className={styles.group} data-testid={`notes-g-${g.date}`}>
               {/* 分组名小字、加字距，右边等宽条数（R-436，同待办页分组：kit groupLabelClass） */}
               <h2 className={`${groupLabelClass} ${styles.h2}`}>
@@ -346,9 +350,10 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
       </div>
   );
   const mist = typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null;
-  // 手机版、电脑版列表栏同一处（电脑版的分类在左栏，不画胶囊）：搜索本页、搜索框，打了字把“最近删除”、胶囊、列表藏起来
+  // 手机版、电脑版列表栏同一处（电脑版的分类在左栏，不画胶囊）：搜索本页、搜索框和条数在列表上面，打了字列表就地筛、下面一行“用 AI 按意思找”
+  const found = l.items.filter(vis).length;
   const listPart = (top: ReactNode) => (
-    <PullSlot pull={pull} keyLabel={t('notes.pullKey', {})} search={<PullSearch pull={pull} scope="note" onOpen={open} />}>
+    <PullSlot pull={pull} keyLabel={t('notes.pullKey', {})} search={(part) => <PullSearch part={part} pull={pull} scope="note" found={found} />}>
       {top}
       {body}
     </PullSlot>
