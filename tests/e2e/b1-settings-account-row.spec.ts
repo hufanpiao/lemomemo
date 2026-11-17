@@ -43,7 +43,9 @@ test.describe('设置首页账号一行', () => {
       page.locator(sel).evaluate((el) => {
         const r = el.getBoundingClientRect();
         const b = getComputedStyle(el, '::before');
-        return { w: r.width, h: r.height, inset: b.inset, radius: b.borderRadius, bg: b.backgroundColor, fs: getComputedStyle(el).fontSize };
+        // 宽高保留两位小数再比：webkit 下随手记页量出 44.0000038（亚像素浮点误差，11-18 本机 e2e），不是真的不一样大
+        const r2 = (v: number) => Math.round(v * 100) / 100;
+        return { w: r2(r.width), h: r2(r.height), inset: b.inset, radius: b.borderRadius, bg: b.backgroundColor, fs: getComputedStyle(el).fontSize };
       });
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today-settings')).toBeVisible();
