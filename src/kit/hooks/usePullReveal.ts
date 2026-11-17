@@ -20,8 +20,10 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { queryTerms } from '../../../shared/logic/search.ts';
 import { rlog } from '../../platform/run-log-api.ts';
 
-/** 往下拉多少露出（px）。原来 64，负责人 11-17“现在往下轻微一拉就出现，改成要往下多拉一下才会出现”：改 110（约原来的 1.7 倍，iPhone 上要明显拉一下） */
-export const PULL_OPEN_PX = 110;
+/** 手指往下拉多少露出（px，量的是手指移动，不是画面位移）。原来 64；11-17 第一次改 110；
+ *  负责人 11-17 晚又发截图“搜索框还是一拉就出来，改成拉到图片这么多的时候才出来”：iOS 橡皮筋让画面只跟手指走一半左右，
+ *  截图里画面拉开约 90pt，对应手指约 200 */
+export const PULL_OPEN_PX = 200;
 /** 滚轮在顶上继续往上滚多少露出（px） */
 export const WHEEL_OPEN_PX = 120;
 /** 两次滚轮隔这么久算断开（惯性流结束），从头累计 */
@@ -121,7 +123,9 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
     let acc = 0;
     let last = -Infinity;
     let armed = false;
+    let maxDy = 0;
     const onStart = (e: TouchEvent): void => {
+      maxDy = 0;
       const p = e.touches[0];
       start = e.touches.length === 1 && p && atTop() && pullable(region.current, e.target) ? { x: p.clientX, y: p.clientY } : null;
     };
@@ -136,10 +140,15 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
       if (dy >= PULL_OPEN_PX && Math.abs(p.clientX - start.x) * 2 < dy) {
         start = null;
         reveal('touch');
+        return;
       }
+      if (dy > maxDy) maxDy = dy;
     };
     const onEnd = (): void => {
+      // 没拉到门槛就松手：记下最远拉了多少，下次调门槛按日志里的数，不靠估
+      if (start && maxDy >= 24) rlog(`pull short ${tag} dy=${Math.round(maxDy)}`);
       start = null;
+      maxDy = 0;
     };
     const onWheel = (e: WheelEvent): void => {
       const now = performance.now();
@@ -180,7 +189,7 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
       window.removeEventListener('touchcancel', onEnd);
       window.removeEventListener('wheel', onWheel);
     };
-  }, [enabled, open, reveal]);
+  }, [enabled, open, reveal, tag]);
 
   // 和查找同一个判断（queryTerms）：只打了标点、空白时没有可查的词，不算在搜，页面照常显示（R-447 评审第 3 条）
   const searching = queryTerms(q).length > 0;

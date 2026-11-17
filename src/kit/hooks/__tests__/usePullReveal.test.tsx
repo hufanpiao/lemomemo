@@ -102,10 +102,11 @@ describe('usePullReveal 手势', () => {
     drag(screen.getByTestId('in'), 0, PULL_OPEN_PX + 4);
     expect(state()).toBe('open touch');
     drag(screen.getByTestId('in'), 0, PULL_OPEN_PX + 4);
-    expect(fx.logs).toEqual(['pull open notes via=touch']);
+    // 没拉到门槛那一次记下最远距离（负责人 11-17 晚：门槛按日志里的数调）
+    expect(fx.logs).toEqual([`pull short notes dy=${PULL_OPEN_PX - 4}`, 'pull open notes via=touch']);
     fireEvent.keyDown(screen.getByTestId('q'), { key: 'Escape' });
     expect(state()).toBe('closed');
-    expect(fx.logs).toEqual(['pull open notes via=touch', 'pull close notes']);
+    expect(fx.logs.slice(1)).toEqual(['pull open notes via=touch', 'pull close notes']);
   });
 
   it('横着拉、不在顶上、data-nopull、fixed 的抽屉、真能滚的框、页面外、关掉的都不露出', () => {
@@ -125,7 +126,8 @@ describe('usePullReveal 手势', () => {
     expect(screen.queryByTestId('pull-key')).toBeNull();
     drag(screen.getByTestId('in'), 0, 200);
     expect(state()).toBe('closed');
-    expect(fx.logs).toEqual([]);
+    // 只许有“没拉到”的距离记录，不许露出
+    expect(fx.logs.filter((s) => !s.startsWith('pull short '))).toEqual([]);
   });
 
   it('overflow-y:auto 但内容不够高（不能滚）的框照样算页面本身', () => {
