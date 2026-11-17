@@ -223,7 +223,10 @@ describe('结果层：取消、改期、完成卡片', () => {
 
   it('“这次用了 N 次 AI”只出一行（面板页脚出；卡片自己的按钮行不再重复，11-14 评审截图里出了两遍）', () => {
     show(req(target('cancel', '牙医'), { aiUsed: 1 }));
-    expect(screen.getAllByText('这次用了 1 次 AI')).toHaveLength(1);
+    // 数字段包了等宽的一层（kit NumIn，R-436），按整行的文字比
+    const rows = screen.getAllByTestId('assist-usage');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.textContent).toBe('这次用了 1 次 AI');
   });
 
   it('写不进去：不撤销刚保存的这一批，写“1 条没改上”', async () => {

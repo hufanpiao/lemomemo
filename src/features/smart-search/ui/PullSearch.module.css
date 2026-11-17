@@ -90,31 +90,33 @@
   white-space: nowrap;
 }
 
+/* 条数“找到 2 条”：小字、第三层文字色（R-436 三层文字色）；正文字体，只有数字段等宽（PullSearch.tsx 用 kit NumIn 包，
+   主持人核图：整句等宽会把中韩文撑开） */
 .count {
-  margin: 2px 0 4px;
-  color: var(--text-2);
-  font-size: var(--fs-12-5);
+  margin: 4px 0 6px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
 }
 
-/* 结果最底下一行：点了才走查找面板的按意思找 */
+/* 结果最底下一行：点了才走查找面板的按意思找。R-436 去描边换底色：放在页面底色上，用面板白底（--panel-2 在浅色页面底上几乎看不出来），“›”第三层文字色 */
 .ai {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
   min-height: var(--hit);
-  margin: 6px 0 0;
-  padding: 0 12px;
-  border: 1px solid var(--inp-line);
+  margin: 10px 0 0;
+  padding: 0 14px;
+  border: 0;
   border-radius: var(--r-md);
-  background: none;
+  background: var(--panel);
   color: var(--text);
   font-size: var(--fs-14);
   text-align: left;
 }
 
 .ai span:last-child {
-  color: var(--text-2);
+  color: var(--text-3);
 }
 
 @media (hover: hover) {

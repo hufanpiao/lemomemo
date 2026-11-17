@@ -31,7 +31,9 @@
   z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+
+  /* 6：按钮看得见 38（FormButton compact），上下行的 44 点击区不叠在一起 */
+  gap: 6px;
   max-width: 560px;
   max-height: 60vh;
   margin: 0 auto;
@@ -74,6 +76,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* 展开后的每一条：行高留够 44，相邻两行按钮的点击区不叠（排在 .row 之后，no-descending-specificity） */
+.list > .row {
+  min-height: var(--hit);
 }
 
 .preview {
@@ -125,9 +132,17 @@
   min-width: 0;
 }
 
+/* 在磨砂底上：淡一档用 --toast-fg2（原来的 --text-2 是按页面底色配的，见上面 .err 的说明） */
 .findSub {
-  color: var(--text-2);
+  color: var(--toast-fg2);
   font-size: var(--fs-12-5);
+}
+
+/* 多条提示条展开后每条前面的类型“待办”“日程”：淡一档小字（R-436 三层文字色，磨砂底上用 --toast-fg2）；和标题之间有一个空格（读屏不连读），再加一点外边距 */
+.kind {
+  margin-right: 4px;
+  color: var(--toast-fg2);
+  font-size: var(--fs-12);
 }
 
 /* “＋”上方的小气泡（B3 S23，PlusHint.tsx 用；放在这个文件里是为了不多一个样式块（首屏主块的依赖表少一项，主持人 11-09 定）；线框 .hint：深底白字、圆角 14、下沿小三角指着“＋”的中线） */

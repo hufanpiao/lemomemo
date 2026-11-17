@@ -3,7 +3,8 @@
 // • 一条：kit 的 UndoToast“已记下：… · 撤销”（8 秒自动收起）
 // • 多条：“已记下 N 条”，展开后每条能修改（调用方开编辑页）或撤销；“拆错了，合并成一条”（这一批单条撤成过就不给）“全部撤销”；不自动收起，点“关闭”
 // • 主句和附加句用“ · ”拼成一行；每条的标签是“类型 · 库里存的标题”
-// • 按钮都是 kit 的 FormButton（点击区 --hit）
+// • 按钮都是 kit 的 FormButton size="compact"（R-436 去描边换浅底，同打字条“展开编辑 / 收起”；看得见 38、点击区 --hit）
+// • 展开后每条的类型（“待办”）写成前面一格淡色小字，标题正文色（R-436 三层文字色；磨砂底上的淡色用 --toast-fg2）
 // • 模糊先按记下保存的（B4b-3，notice.alt，架构 5.14 第 2、7 点）：一条也用展开式的块，多一行“改成搜索”（撤销这一批，按同一句话查找）；
 //   alt.found 时下面再给 smart-search 的 AssistPeek“也帮你找了一下：N 条 ›”“是要取消吗？找到 N 条 ›”（排除这一批）
 import { Suspense, useState } from 'react';
@@ -40,7 +41,7 @@ export function SavedNotice({ notice, acts, onEdit }: SavedNoticeProps) {
   };
   const altRows = alt === null || toSearch === null ? null : (
     <div className={styles.row} data-testid="type-notice-alt">
-      <FormButton type="button" variant="ghost" onClick={toSearch} data-testid="notice-to-search">{t('plus.notice.toSearch', {})}</FormButton>
+      <FormButton type="button" variant="ghost" size="compact" onClick={toSearch} data-testid="notice-to-search">{t('plus.notice.toSearch', {})}</FormButton>
       {alt.found ? (
         <Suspense fallback={null}>
           <AssistPeek ask={alt.ask} exclude={notice.entries.map((e) => e.ref.id)} undoSaved={() => acts.undo()} />
@@ -56,9 +57,9 @@ export function SavedNotice({ notice, acts, onEdit }: SavedNoticeProps) {
       <div className={styles.row}>
         <span className={styles.grow}>{text}</span>
         {notice.entries.length <= 1 ? (
-          <FormButton type="button" variant="ghost" onClick={undoAll}>{t('plus.notice.undo', {})}</FormButton>
+          <FormButton type="button" variant="ghost" size="compact" onClick={undoAll}>{t('plus.notice.undo', {})}</FormButton>
         ) : (
-          <FormButton type="button" variant="ghost" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <FormButton type="button" variant="ghost" size="compact" aria-expanded={open} onClick={() => setOpen(!open)}>
             {t(open ? 'plus.notice.less' : 'plus.notice.more', {})}
           </FormButton>
         )}
@@ -68,26 +69,29 @@ export function SavedNotice({ notice, acts, onEdit }: SavedNoticeProps) {
         <>
           <ul className={styles.list} aria-label={t('plus.notice.list', {})}>
             {notice.entries.map(({ ref, item }) => {
-              const label = `${t(`plus.kind.${item.kind}`, {})} · ${ref.title}`;
+              const kind = t(`plus.kind.${item.kind}`, {});
+              const label = `${kind} · ${ref.title}`;
               return (
                 <li key={ref.id} className={styles.row}>
-                  <span className={styles.grow}>{label}</span>
+                  <span className={styles.grow}>
+                    <span className={styles.kind}>{kind}</span> {ref.title}
+                  </span>
                   {onEdit ? (
-                    <FormButton type="button" variant="ghost" aria-label={t('plus.notice.editOne', { label })} onClick={() => onEdit(ref.table, ref.id)}>{t('plus.notice.edit', {})}</FormButton>
+                    <FormButton type="button" variant="ghost" size="compact" aria-label={t('plus.notice.editOne', { label })} onClick={() => onEdit(ref.table, ref.id)}>{t('plus.notice.edit', {})}</FormButton>
                   ) : null}
-                  <FormButton type="button" variant="ghost" aria-label={t('plus.notice.undoOne', { label })} onClick={() => void acts.undoOne(ref.id)}>{t('plus.notice.undo', {})}</FormButton>
+                  <FormButton type="button" variant="ghost" size="compact" aria-label={t('plus.notice.undoOne', { label })} onClick={() => void acts.undoOne(ref.id)}>{t('plus.notice.undo', {})}</FormButton>
                 </li>
               );
             })}
           </ul>
           <div className={styles.row}>
-            {notice.merge ? <FormButton type="button" variant="ghost" onClick={() => void acts.merge()}>{t('plus.notice.merge', {})}</FormButton> : null}
-            <FormButton type="button" variant="ghost" onClick={undoAll}>{t('plus.notice.undoAll', {})}</FormButton>
+            {notice.merge ? <FormButton type="button" variant="ghost" size="compact" onClick={() => void acts.merge()}>{t('plus.notice.merge', {})}</FormButton> : null}
+            <FormButton type="button" variant="ghost" size="compact" onClick={undoAll}>{t('plus.notice.undoAll', {})}</FormButton>
           </div>
         </>
       ) : null}
       <div className={styles.row}>
-        <FormButton type="button" variant="ghost" onClick={acts.closeNotice}>{t('plus.notice.close', {})}</FormButton>
+        <FormButton type="button" variant="ghost" size="compact" onClick={acts.closeNotice}>{t('plus.notice.close', {})}</FormButton>
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import { useUi } from '../../../kit/state/ui-store.ts';
 import type { PullReveal } from '../../../kit/hooks/usePullReveal.ts';
 import { SEARCH_Q_MAX, SEM_DEBOUNCE_MS } from '../hooks/find-consts.ts';
 import { usePullFind, PULL_MAX, type PullScope } from '../hooks/usePullFind.ts';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { doneAttr, HitBody, useFindT } from './find-parts.tsx';
 import find from './FindPanel.module.css';
 import styles from './PullSearch.module.css';
@@ -74,7 +75,7 @@ export default function PullSearch({ pull, scope, onOpen }: PullSearchProps) {
       <p className={styles.sr} role="status" data-testid="pull-status">{said}</p>
       {searching ? (
         <div data-testid="pull-results">
-          <p className={styles.count} data-testid="pull-count">{count}</p>
+          <p className={styles.count} data-testid="pull-count"><NumIn text={count} num={total === 0 ? '' : String(total)} /></p>
           {hits.length ? (
             <ul className={find.list}>
               {hits.map((h) => (
@@ -86,7 +87,7 @@ export default function PullSearch({ pull, scope, onOpen }: PullSearchProps) {
               ))}
             </ul>
           ) : null}
-          {total > PULL_MAX ? <p className={styles.count}>{t('pull.more', { n: PULL_MAX })}</p> : null}
+          {total > PULL_MAX ? <p className={styles.count}><NumIn text={t('pull.more', { n: PULL_MAX })} num={String(PULL_MAX)} /></p> : null}
           <button type="button" className={styles.ai} onClick={ai} data-testid="pull-ai">
             <span>{t('pull.ai', {})}</span>
             <span aria-hidden="true">›</span>

@@ -17,6 +17,7 @@ import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import chip from '../../../kit/components/Chip.module.css';
 import form from '../../../kit/components/Form.module.css';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -101,7 +102,9 @@ export default function AssistPanel({ req, onClose }: { req: AssistReq; onClose(
   const sumN = s.sum.s === 'done' ? 1 : 0;
   const aiN = judgeN + sumN;
   const aiText = aiN === 0 ? '' : judgeN > 0 && sumN > 0 ? t('as.ai2', { n: aiN, j: judgeN, s: sumN }) : t('as.ai', { n: aiN });
-  const usageText = aiText === '' ? '' : [aiText, s.usage ? t('as.today', { used: s.usage.used, limit: s.usage.limit }) : ''].filter(Boolean).join(' · ');
+  // 用量一行是正文字体，只有数字段等宽（kit NumIn，R-436 主持人核图：等宽不用在整句上，中韩文会被撑开）
+  const today = s.usage ? `${s.usage.used} / ${s.usage.limit}` : '';
+  const usage = aiText === '' ? null : <><NumIn text={aiText} num={String(aiN)} />{today ? <> · <NumIn text={t('as.today', { used: s.usage?.used ?? 0, limit: s.usage?.limit ?? 0 })} num={today} /></> : null}</>;
 
   const done = (it: FindItem): boolean => it.kind === 'todo' && it.done;
   /** num：依据列表里的序号（和正文角标对应）；0 是没引用的，不编号、第二行写“没引用”；undefined 是普通列表，不留序号那一格 */
@@ -196,7 +199,7 @@ export default function AssistPanel({ req, onClose }: { req: AssistReq; onClose(
           {showRec ? <button type="button" className={a.act} onClick={asRecord ?? undefined} data-testid="assist-record">{t('as.record', {})}</button> : null}
         </div>
       ) : null}
-      {usageText ? <p className={a.usage} data-testid="assist-usage">{usageText}</p> : null}
+      {usage ? <p className={a.usage} data-testid="assist-usage">{usage}</p> : null}
     </>
   );
 
@@ -245,7 +248,7 @@ function PanelHead({ t, desk, said, understand, onClose, onEdit }: { t: T; desk:
       {understand ? (
         <div className={desk ? `${a.und} ${a.deskMx}` : a.und}>
           <span className={a.undText} data-testid="assist-understand">{pre}<b>{understand}</b>{post}</span>
-          {onEdit ? <button type="button" className={a.edit} onClick={onEdit} data-testid="assist-edit">{t('as.edit', {})}</button> : null}
+          {onEdit ? <button type="button" className={`${chip.chip} ${a.edit}`} onClick={onEdit} data-testid="assist-edit">{t('as.edit', {})}</button> : null}
         </div>
       ) : null}
     </>

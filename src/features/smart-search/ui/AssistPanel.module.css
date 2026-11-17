@@ -52,7 +52,7 @@
   gap: 8px;
   margin: 10px 0 0;
   padding: 6px 6px 6px 12px;
-  border-radius: 12px;
+  border-radius: var(--r-md);
   background: var(--panel);
   color: var(--text);
   font-size: var(--fs-13);
@@ -68,16 +68,12 @@
   font-weight: 600;
 }
 
-.edit {
-  flex: none;
+/* “改”用 kit 的 Chip.module.css .chip（R-436 去描边换浅底，高 30、点击区上下外扩到 44）；放在浅底行里，上下外边距收掉（行自己有内边距）；
+   一个字太窄，宽度至少 --hit，点击区左右也够 44 */
+.und > .edit {
+  justify-content: center;
   min-width: var(--hit);
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--inp-line);
-  border-radius: var(--r-pill);
-  background: var(--panel-2);
-  color: var(--text);
-  font-size: var(--fs-12-5);
+  margin: 0;
 }
 
 /* 电脑：和输入区同样左右留 20px；面板底是白的，“理解成”行用浅灰 */
@@ -108,17 +104,20 @@
   line-height: 1.6;
 }
 
-/* 总结卡：带边框；小字标题；正文；底部“依据：N 条记录 · 收起” */
+/* 总结卡：这一层的重点卡片（R-436“重点卡片柔和投影”“卡片大圆角大而淡的阴影”，同今天页“现在”卡）——原来 1.5px 黑描边换成大圆角 + --b-tile-shadow；
+   小字标题；正文；底部“依据：N 条记录 · 收起” */
 .sum {
-  margin: 12px 0 8px;
-  padding: 12px 12px 10px;
-  border: 1.5px solid var(--text);
-  border-radius: var(--r-md);
+  margin: 12px 0 10px;
+  padding: 14px 14px 12px;
+  border-radius: var(--r-lg);
   background: var(--panel);
+  box-shadow: var(--b-tile-shadow);
 }
 
+/* 小字标题“AI 总结 · 只显示，不保存”：小字、第三层文字色（R-436 三层文字色）；是一整句话，用正文字体、不加字距
+   （主持人核图：等宽字用在整句上，中韩文会被撑开） */
 .sumHead {
-  color: var(--text-2);
+  color: var(--text-3);
   font-size: var(--fs-12);
 }
 
@@ -144,9 +143,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   padding: 0 4px 0 12px;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   background: var(--panel-2);
   color: var(--text);
   font-size: var(--fs-12-5);
@@ -164,16 +163,18 @@
 /* 依据列表：一张卡，行左边一格序号（没引用的空着） */
 .basis {
   margin: 0 0 8px;
-  padding: 4px 12px;
-  border-radius: var(--r-md);
+  padding: 4px 14px;
+  border-radius: var(--r-lg);
   background: var(--panel);
 }
 
+/* 序号（和正文角标对应）：等宽小字、第三层文字色（R-436 小字标签、计数等宽） */
 .num {
   flex: none;
   width: 16px;
-  color: var(--text);
-  font-size: var(--fs-13);
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-12);
   text-align: center;
 }
 
@@ -182,7 +183,8 @@
   color: var(--danger-text);
 }
 
-/* 页脚：两颗等宽的圆角按钮（“总结一下”深一点的边框），下面一行小字用量 */
+/* 页脚：两颗等宽的圆角按钮，下面一行小字用量。R-436 去描边换底色：普通的用面板底 --panel（手机整屏是页面底色，--panel-2 在上面几乎看不出来）；
+   “总结一下”是这一层唯一的主操作，用胶囊选中色 --chip-on-bg（一页一个强调色）。点击区照样 --hit */
 .acts {
   display: flex;
   gap: 8px;
@@ -193,21 +195,22 @@
   flex: 1;
   min-height: var(--hit);
   padding: 0 12px;
-  border: 1px solid var(--inp-line);
+  border: 0;
   border-radius: var(--r-pill);
   background: var(--panel);
-  color: var(--text-2);
+  color: var(--text);
   font-size: var(--fs-14);
 }
 
 .actMain {
-  border-color: var(--text);
-  color: var(--text);
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
 }
 
+/* 用量“这次用了 N 次 AI · 今天 19 / 50”：小字、第三层文字色；正文字体，只有数字段等宽（AssistPanel.tsx 用 kit NumIn 包） */
 .usage {
-  margin: 8px 0 0;
-  color: var(--text-2);
+  margin: 10px 0 0;
+  color: var(--text-3);
   font-size: var(--fs-11);
   text-align: center;
 }
@@ -242,4 +245,10 @@
   gap: 8px;
   margin: 16px 0 0;
   font-size: var(--fs-14-5);
+}
+
+/* 电脑：面板本身就是 --panel 白底，总结卡、页脚普通按钮换成浅底 --panel-2 才分得出来（手机整屏是页面底色，用 --panel）；排在 .sum、.act 之后（no-descending-specificity） */
+.deskBody .sum,
+.deskBody .act:not(.actMain) {
+  background: var(--panel-2);
 }
