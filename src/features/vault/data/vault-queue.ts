@@ -12,6 +12,8 @@
 //   别的上锁调 dropAll()：全部丢掉、个数记进仓库（解锁后报“有 N 处改动没来得及保存”），运行日志 vault queue drop n=（不带内容）
 // • 只拖了顺序（R-429，这一条排着的改动只有 sort_key）：save 带 base_updated_at（拖动不改 updated_at，就是最后一次从服务器拿到的那个）；
 //   服务器回 stale（别处刚改过）：丢掉这一笔、仓库记一次 stale（页面出“这条刚在别处改过，没有移动”）、重新拉列表（本机顺序回到服务器那份）
+// • sort_key 只在这一条排着的改动确实改过它（或者是新建）时才带；只改正文的 save 不带，服务器保留密文里原来的那个（vault/notes.ts 的 keptSortKey），
+//   不把别的设备刚拖好的位置盖回去（R-429 评审第 3 条）
 // • 运行日志不记标题、正文、图片 id，只记动作、结果码、次数
 // • 不碰 core/cache、outbox、log（A18）；纯 TS，不准 import React（A1）
 import { sortKeyOf } from '../../../../shared/logic/sort-key.ts';
@@ -28,8 +30,8 @@ export interface SaveReq {
   title: string;
   body: string;
   category_id: string | null;
-  /** 拖动排序的排序值（R-429）：放进密文；没拖过为 null */
-  sort_key: string | null;
+  /** 拖动排序的排序值（R-429）：放进密文；没拖过为 null。排着的改动没改它时不带（见文件头） */
+  sort_key?: string | null;
   created_at: number;
   updated_at: number;
   /** 只拖了顺序时带（R-429，见文件头） */
@@ -83,6 +85,8 @@ interface Job {
   partial: boolean;
   /** 排着的改动只有排序值（R-429）：save 带 base_updated_at */
   sortOnly: boolean;
+  /** 排着的改动改过排序值（或者是新建）：save 才带 sort_key */
+  sortDirty: boolean;
   lastSave: number;
   /** 这个时刻以前不发（退避、两次 save 的间隔；M4：每条自己记，不让别的条跟着等） */
   nextAt: number;
@@ -124,7 +128,7 @@ export function createVaultQueue(d: QueueDeps) {
   const jobOf = (row: Row, known: boolean): Job => {
     let j = jobs.get(row.id);
     if (!j) {
-      j = { id: row.id, row, v: 0, dirty: false, del: null, adds: new Map(), removes: new Set(), known, partial: false, sortOnly: true, lastSave: 0, nextAt: 0, tries: 0, failed: false, waiters: [] };
+      j = { id: row.id, row, v: 0, dirty: false, del: null, adds: new Map(), removes: new Set(), known, partial: false, sortOnly: true, sortDirty: false, lastSave: 0, nextAt: 0, tries: 0, failed: false, waiters: [] };
       jobs.set(row.id, j);
     }
     j.row = j.partial ? { ...j.row, ...row } : row;
@@ -200,10 +204,12 @@ export function createVaultQueue(d: QueueDeps) {
     if (j.dirty || adds.length > 0 || removes.length > 0) {
       const v = j.v;
       const row = j.row;
+      const sortDirty = j.sortDirty;
       const now = d.now();
       const r = await d.save({
         id: j.id, title: str(row['title']).trim(), body: str(row['body']),
-        category_id: typeof row['category_id'] === 'string' ? row['category_id'] : null, sort_key: sortKeyOf(row),
+        category_id: typeof row['category_id'] === 'string' ? row['category_id'] : null,
+        ...(sortDirty ? { sort_key: sortKeyOf(row) } : {}),
         created_at: num(row['created_at'], now), updated_at: num(row['updated_at'], now),
         ...(j.sortOnly && j.known ? { base_updated_at: num(row['updated_at'], now) } : {}),
         ...(adds.length ? { add_images: adds.map((a) => ({ id: a.id, bytes: a.full.size, width: a.width || null, height: a.height || null, has_thumb: a.thumb !== null })) } : {}),
@@ -223,7 +229,10 @@ export function createVaultQueue(d: QueueDeps) {
         else j.removes.add(a.id);
       }
       for (const x of removes) j.removes.delete(x);
-      if (j.v === v) j.dirty = false;
+      if (j.v === v) {
+        j.dirty = false;
+        j.sortDirty = false;
+      }
     }
     for (const a of [...j.adds.values()]) {
       if (!a.registered) continue;
@@ -291,10 +300,11 @@ export function createVaultQueue(d: QueueDeps) {
   };
 
   return {
-    /** 新建或改了内容（isNew：本机刚建的，服务器上还没有；sortOnly：这一下只改了排序值，R-429） */
-    wrote(row: Row, isNew: boolean, sortOnly = false): void {
+    /** 新建或改了内容（isNew：本机刚建的，服务器上还没有；keys：这一下改了哪几列，只有 sort_key 就是“只拖了顺序”，R-429） */
+    wrote(row: Row, isNew: boolean, keys: readonly string[] = []): void {
       const j = jobOf(row, !isNew);
-      j.sortOnly &&= sortOnly && !isNew;
+      j.sortOnly &&= !isNew && keys.length > 0 && keys.every((k) => k === 'sort_key');
+      j.sortDirty ||= isNew || keys.includes('sort_key');
       if (!j.known) d.store.setFresh(j.id, true);
       j.dirty = true;
       j.v += 1;
@@ -304,6 +314,7 @@ export function createVaultQueue(d: QueueDeps) {
     patched(id: string, data: Record<string, unknown>): void {
       const j = jobs.get(id) ?? Object.assign(jobOf({ id }, true), { partial: true });
       j.sortOnly = false;
+      j.sortDirty ||= 'sort_key' in data;
       j.row = { ...j.row, ...data, id };
       j.dirty = true;
       j.v += 1;

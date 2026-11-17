@@ -54,7 +54,8 @@ async function toRegister(t: VaultTx, noteId: string, exists: boolean, add: read
 }
 
 /**
- * 密文里原来的排序值（R-429）：save 不带 sort_key（旧客户端）时保留它，不让旧客户端一存就把拖好的位置冲掉。
+ * 密文里原来的排序值（R-429）：save 不带 sort_key（旧客户端；新客户端只改正文、没拖顺序时也不带，src/features/vault/data/vault-queue.ts）时保留它，
+ * 不让一次改正文就把别处拖好的位置冲掉。
  * 解不开当没有（这条本来就显示不出来，list 已经记 decrypt_failed）
  */
 async function keptSortKey(c: Ctx, key: CryptoKey, cur: NoteRow | null): Promise<string | null> {

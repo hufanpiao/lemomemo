@@ -1,26 +1,28 @@
 // 长按拖动排序（kit，R-429；R-433“拖动的时候前面有那 6 个小点”）：待办页、随手记页（列表、瀑布流）、隐私记页三处共用这一份，不用 dnd-kit
 // （电脑版布局拖面板 DeskLayout 是 dnd-kit 的，两套不混用）。手势底层是 motion 的 useLongPressDrag（按住 0.4 秒没动才拿起，动了交给左滑或滚动）。
 // 用法：
-//   const sd = useSortDrag({ tag: 'todos', axis: 'y', canDrop, onDrop, log: rlog });
-//   <div ref={sd.ref} className={sortBoxClass}>…<li data-sort-id={id} data-sort-group={g} className={sortRowClass}><SortGrip />…</li>…{sd.line}</div>
-// • 行：data-sort-id（这一条的 id）、data-sort-group（它在哪一组，同一组里 DOM 顺序就是显示顺序）；不能拖的行再加 data-sort-off（已完成、只读……）。
-//   行上挂 sortRowClass（定位、长按不出 iPhone 的放大镜和菜单、不选字），行里放一个 SortGrip（竖排 6 个点，只在浮层里显出来）
-// • 拿起（主持人 11-16 返工第 1、2 条）：记下每一行此刻的位置（相对外框），原来那一行打 data-sort-lifted（看不见、高度照占，就是空位）；
+//   const sd = useSortDrag({ tag: 'todos', axis: 'y', canDrop, onDrop: useSortDropFlow({...}), log: rlog });
+//   <div ref={sd.ref} className={sortBoxClass}>…<AppearItem data-sort-id={id} data-sort-group={g} className={sortRowClass}><SortGrip />…</AppearItem>…{sd.line}</div>
+// • 行：必须是 motion 的 AppearItem（拿着的那一条由它按 data-sort-id 藏起来、不播 layout 动画，motion/sort-hold.ts）；
+//   data-sort-id（这一条的 id）、data-sort-group（它在哪一组，同一组里 DOM 顺序就是显示顺序）；不能拖的行再加 data-sort-off（已完成、只读……）。
+//   行上挂 sortRowClass（定位、长按不出 iPhone 的放大镜和菜单、不选字），行里放一个 SortGrip（竖排 6 个点，只在浮层里显出来）。
+//   退场中的旧元素（list-impl 打 data-state="leaving"）一律不算
+// • 拿起（主持人 11-16 返工第 1、2 条）：记下每一行此刻的位置（相对外框）和每组的 id 顺序，holdSortRow(id)：原来那一行打 data-sort-lifted（看不见、高度照占，就是空位）；
 //   复制一份做浮层挂到 body（不在列表的 isolation 里，压得住所有行）：同列表卡片的圆角 --r-lg、抬起阴影 --shadow-2、放大 1.02、不透明底；
 //   复制出来的那份去掉 data-testid、id，整份 inert、读屏不念；运行日志 sort lift
 // • 落点：手指离哪个“空隙”最近（每一行的上沿 = 放到它前面；每一列最后一行的下沿 = 放到它后面），横向不在那一列里的加罚分；
 //   canDrop(from, to) 不让进的组不算。落点画一条强调色细横线（sd.line），画在那条缝上（相邻两行的分隔线处）；
 //   浮层不跟着手指盖住缝，而是停在“落下去会在的地方”：上沿在缝下面 FLOAT_GAP，横线露在浮层和上一行之间，不和任何一行的字重叠；
 //   还在原位（没落点）时浮层盖在空位上；换落点时浮层滑过去（只动 transform；减少动态效果时直接到）
-// • 放下：交给 onDrop({id, from, to, index})，index 是放下后它在那一组里排第几（从 0 起，按去掉它以后的那一组数）；落回原位、没落点只记日志。
-//   浮层不马上撤（返工第 5 条“先跳回原位再滑过去”：列表项是 Motion 的 layout 动画，重排后这一行会从旧位置用 transform 滑到新位置）：
-//   等列表按新顺序画出来（这一行换了组、组里排第几变了、换了元素，或最多 SETTLE_WAIT_MS），期间这一条在列表里一直看不见；
-//   浮层滑到它的最终位置（量到的位置减掉 layout 动画正在加的平移）、等它淡入完（跨组时新挂上的那一行要淡入），撤掉浮层，行才显出来。
-//   退场中的旧元素（list-impl 的 popStyle：内联 position: absolute）不算。运行日志 sort settle moved= wait= dy=（等了多久、最后滑了多远）
-//   运行日志 sort drop from= to= i= n=（组名只记冒号前那段，例如 day:2026-11-18 记 day；不记标题）、sort drop same、sort cancel why=
+// • 放下：交给 onDrop({id, from, to, beforeId, afterId})——放下后排在它前面、后面的那两条（按拿起那一刻的顺序，不含它自己；组的头、尾为 null）。
+//   不交下标：拖动中列表可能变了（同步回来一条），页面按邻居 id 在“此刻”的列表里找下标（dropAt），找不到当取消（kit/hooks/useSortDropFlow.ts）。
+//   落回原位、没落点只记日志。运行日志 sort drop from= to= n=（组名只记冒号前那段，例如 day:2026-11-18 记 day；不记标题）、sort drop same、sort cancel why=
+// • 收尾（返工第 5 条“先跳回原位再滑过去”）：这一条从拿起到浮层撤掉都由 holdSortRow 拿着——藏着、不播 layout 动画（新挂上的也不淡入），重排后直接在新位置。
+//   等列表按新顺序画出来（页面重画后 layout 阶段看它的排版位置变了，最多 SETTLE_WAIT_MS），浮层滑到它的排版位置（offsetTop 一路加到外框，不含任何 transform），
+//   滑完撤浮层、放开这一条。取消、落回原位不等，直接滑回空位。运行日志 sort settle moved= wait= dy=（等了多久、最后滑了多远）
 // • 动效只用 transform、opacity；减少动态效果时浮层不过渡（CSS 认 :root[data-rm="1"] 和系统设置）
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { eachFrame, useLongPressDrag, type Point } from '../../motion/gestures.ts';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { holdSortRow, useLongPressDrag, type Point } from '../../motion/gestures.ts';
 import styles from './SortDrag.module.css';
 
 /** 行上挂的类（见文件头） */
@@ -32,12 +34,17 @@ export const sortBoxClass = styles.box;
 const FLOAT_GAP = 6;
 /** 放下后最多等列表按新顺序画出来多久 */
 const SETTLE_WAIT_MS = 600;
+/** 外框里算数的行：退场中的旧元素不算（见文件头） */
+const LIVE = '[data-sort-id]:not([data-state="leaving"])';
 
 export interface SortDrop {
   id: string;
   from: string;
   to: string;
-  index: number;
+  /** 放下后排在它前面（上面）的那一条；排第一为 null */
+  beforeId: string | null;
+  /** 放下后排在它后面（下面）的那一条；排最后为 null */
+  afterId: string | null;
 }
 
 export interface SortDragOptions {
@@ -60,23 +67,25 @@ interface Gap {
 }
 
 interface Lift {
+  box: HTMLElement;
   row: HTMLElement;
   float: HTMLElement;
   /** 拿起那一刻行的视口位置（浮层的原点） */
   rect: DOMRect;
+  /** 拿起那一刻行的排版位置（相对外框，见 layoutPos） */
+  home: { top: number; left: number };
   id: string;
   group: string;
   /** 在自己那一组里的下标 */
   self: number;
-  /** 每组几条（日志用） */
-  sizes: Map<string, number>;
+  /** 拿起那一刻每组的 id 顺序（含它自己） */
+  order: Map<string, string[]>;
   gaps: Gap[];
   target: { group: string; index: number } | null;
-  /** 撤掉藏行（见 hold） */
-  release: () => void;
 }
 
-const groupKind = (g: string): string => g.split(':')[0] ?? g;
+/** 组名只留冒号前那段（运行日志用，不记日期） */
+export const groupKind = (g: string): string => g.split(':')[0] ?? g;
 
 /** 外框里能放的空隙（拿起那一刻量一次；见文件头“落点”） */
 export function gapsOf(rows: readonly { group: string; top: number; bottom: number; left: number; width: number }[]): Gap[] {
@@ -113,6 +122,31 @@ export function dropIndex(gap: Gap, fromGroup: string, self: number): number | n
   const i = gap.index > self ? gap.index - 1 : gap.index;
   return i === self ? null : i;
 }
+
+/**
+ * 页面按邻居 id 找放下后的下标（order：目标组此刻的 id 顺序，含不含拖的这一条都行）：
+ * 排在 beforeId 后面、afterId 前面；两个邻居此刻不挨着、不在了（拖动中列表变了）回 null，当取消
+ */
+export function dropAt(order: readonly string[], d: Pick<SortDrop, 'id' | 'beforeId' | 'afterId'>): number | null {
+  const rest = order.filter((x) => x !== d.id);
+  const i = d.beforeId === null ? 0 : rest.indexOf(d.beforeId) + 1;
+  if (i === 0 && d.beforeId !== null) return null;
+  return (rest[i] ?? null) === d.afterId ? i : null;
+}
+
+/** 行的排版位置（相对外框）：offsetTop / offsetLeft 一路加到外框，不含任何 transform（layout 动画、浮层都不影响） */
+function layoutPos(el: HTMLElement, box: HTMLElement): { top: number; left: number } {
+  let top = 0;
+  let left = 0;
+  for (let e: Element | null = el; e instanceof HTMLElement && e !== box; e = e.offsetParent) {
+    top += e.offsetTop;
+    left += e.offsetLeft;
+  }
+  return { top, left };
+}
+
+/** 这一条现在的那一行（不算退场中的旧元素） */
+const rowOf = (box: HTMLElement, id: string): HTMLElement | null => box.querySelector<HTMLElement>(`[data-sort-id="${CSS.escape(id)}"]:not([data-state="leaving"])`);
 
 /** 浮层左右比行宽出多少：列表的左右内边距（--sort-float-pad，从列表继承；kit List 的 .list 12px、.roomy 16px），这样浮层像一小张卡片、6 个点落在左边那段里 */
 function floatPad(row: HTMLElement): number {
@@ -154,6 +188,22 @@ function afterSlide(f: HTMLElement): Promise<void> {
   });
 }
 
+/** 撤掉这一次：浮层、拿着的那一条、外框上的“拖动中” */
+function teardown(l: Lift): void {
+  l.float.remove();
+  holdSortRow(null);
+  delete l.box.dataset['sortDragging'];
+}
+
+/** 正在收尾的那一次：等列表画出新位置（waiting）、落地（land）、撤掉（finish） */
+interface Settle {
+  l: Lift;
+  t0: number;
+  waiting: boolean;
+  land(changed: boolean): void;
+  finish(): void;
+}
+
 export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | null) => void; line: ReactNode } {
   const o = useRef(opts);
   // 外框用回调 ref 存成状态：电脑版换挂、断点切换时外框换了，手势层跟着重挂
@@ -162,7 +212,7 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
   const line = useRef<HTMLDivElement>(null);
   const cur = useRef<Lift | null>(null);
   /** 正在收尾（放下、取消后浮层还没撤）的那一次：卸载、再拿起时直接收掉 */
-  const settling = useRef<(() => void) | null>(null);
+  const settling = useRef<Settle | null>(null);
 
   /** 横线就在外框里、外框是定位容器：空隙的外框坐标直接用（不量 offsetParent，线隐藏时量不到） */
   const showLine = (gap: Gap | null): void => {
@@ -177,95 +227,54 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
     el.style.transform = `translate3d(${Math.round(gap.x)}px, ${Math.round(gap.y - 1)}px, 0)`;
   };
 
-  /** 这一条在列表里的那几个元素（换组时退场中的旧元素和新挂上的那个会同时在） */
-  const rowsOf = (id: string): HTMLElement[] => (boxEl ? [...boxEl.querySelectorAll<HTMLElement>(`[data-sort-id="${CSS.escape(id)}"]`)] : []);
-  /** 这一条现在的那一行（不算退场中的旧元素：list-impl 的 popStyle 给它内联 position: absolute） */
-  const rowOf = (id: string): HTMLElement | null => rowsOf(id).find((el) => el.style.position !== 'absolute') ?? null;
-  /** 在自己那一组里排第几（DOM 顺序） */
-  const indexOf = (r: HTMLElement): number =>
-    boxEl ? [...boxEl.querySelectorAll<HTMLElement>('[data-sort-id]')].filter((el) => el.dataset['sortGroup'] === r.dataset['sortGroup'] && el.style.position !== 'absolute').indexOf(r) : -1;
-
-  /**
-   * 藏行：从拿起到收尾，这一条的元素都打 data-sort-lifted（CSS 规则：看不见、高度照占）。
-   * 不写内联 visibility：Motion 的 layout 动画每帧把内联 visibility 清成 ""（motion-dom create-projection-node 的 targetStyle.visibility）。
-   * 列表在拖动中、放下后可能把这一行换成新元素（运行中实测拖着时整行被重新挂上；换组时也会），MutationObserver 在画出来之前给新元素补上
-   */
-  const hold = (id: string): (() => void) => {
-    const mark = (): void => {
-      for (const el of rowsOf(id)) el.dataset['sortLifted'] = '';
-    };
-    mark();
-    const mo = new MutationObserver(mark);
-    if (boxEl) mo.observe(boxEl, { childList: true, subtree: true });
-    return () => {
-      mo.disconnect();
-      for (const el of rowsOf(id)) delete el.dataset['sortLifted'];
-    };
-  };
-
-  /**
-   * 收尾：等列表画出新位置（moved 为 false 时不等，例如取消、落回原位），浮层滑过去、撤掉，行显出来。
-   * 期间这一条的行（新挂上的也算）一直看不见
-   */
+  /** 收尾：moved 为 false（取消、落回原位）直接滑回空位；否则等列表按新顺序画出来（下面的 layout effect，最多 SETTLE_WAIT_MS）再滑过去 */
   const settle = (l: Lift, moved: boolean): void => {
-    const t0 = performance.now();
-    let over = false;
-    let stop: () => void = () => undefined;
-    const finish = (): void => {
-      if (over) return;
-      over = true;
-      stop();
-      settling.current = null;
-      l.float.remove();
-      l.release();
-      if (boxEl) delete boxEl.dataset['sortDragging'];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const s: Settle = {
+      l,
+      t0: performance.now(),
+      waiting: moved,
+      land(changed) {
+        s.waiting = false;
+        clearTimeout(timer);
+        const el = rowOf(l.box, l.id) ?? l.row;
+        const b = l.box.getBoundingClientRect();
+        const p = layoutPos(el, l.box);
+        const top = b.top + p.top;
+        const left = b.left + p.left - (l.rect.width - el.offsetWidth) / 2;
+        const now = l.float.getBoundingClientRect();
+        o.current.log(`sort ${o.current.tag} settle moved=${changed ? 1 : 0} wait=${Math.round(performance.now() - s.t0)} dy=${Math.round(top - now.top)}`);
+        l.float.style.transform = `translate3d(${Math.round(left - l.rect.left)}px, ${Math.round(top - l.rect.top)}px, 0)`;
+        void afterSlide(l.float).then(() => s.finish());
+      },
+      finish() {
+        if (settling.current !== s) return;
+        settling.current = null;
+        clearTimeout(timer);
+        teardown(l);
+      },
     };
-    settling.current = finish;
-    const land = (r: HTMLElement | null, changed: boolean): void => {
-      const el = r ?? l.row;
-      // 最终位置：量到的位置减掉 layout 动画此刻加的平移
-      const m = new DOMMatrixReadOnly(getComputedStyle(el).transform === 'none' ? undefined : getComputedStyle(el).transform);
-      const to = el.getBoundingClientRect();
-      const top = to.top - m.m42;
-      const left = to.left - m.m41 - (l.rect.width - to.width) / 2;
-      const now = l.float.getBoundingClientRect();
-      o.current.log(`sort ${o.current.tag} settle moved=${changed ? 1 : 0} wait=${Math.round(performance.now() - t0)} dy=${Math.round(top - now.top)}`);
-      l.float.style.transform = `translate3d(${Math.round(left - l.rect.left)}px, ${Math.round(top - l.rect.top)}px, 0)`;
-      void afterSlide(l.float).then(() => {
-        // 这一行还在动（跨组新挂上的在淡入、layout 平移还没走完）：等它停稳了再撤浮层（最多 SETTLE_WAIT_MS）
-        const t1 = performance.now();
-        stop = eachFrame(() => {
-          if (over) return true;
-          const n = rowOf(l.id);
-          const cs = n ? getComputedStyle(n) : null;
-          const tm = cs && cs.transform !== 'none' ? new DOMMatrixReadOnly(cs.transform) : null;
-          const settled = !cs || (parseFloat(cs.opacity) >= 0.99 && (!tm || (Math.abs(tm.m41) < 0.5 && Math.abs(tm.m42) < 0.5)));
-          if (!settled && performance.now() - t1 <= SETTLE_WAIT_MS) return false;
-          finish();
-          return true;
-        });
-      });
-    };
-    if (!moved) {
-      land(l.row, false);
-      return;
-    }
-    stop = eachFrame(() => {
-      if (over) return true;
-      const r = rowOf(l.id);
-      const changed = r !== null && (r !== l.row || r.dataset['sortGroup'] !== l.group || indexOf(r) !== l.self);
-      if (!changed && performance.now() - t0 <= SETTLE_WAIT_MS) return false;
-      land(r, changed);
-      return true;
-    });
+    settling.current = s;
+    if (moved) timer = setTimeout(() => s.land(false), SETTLE_WAIT_MS);
+    else s.land(false);
   };
 
-  useEffect(() => () => settling.current?.(), []);
+  // 页面每次重画以后（还没画到屏幕上）：在等的那一次看这一条的排版位置变了没有，变了就落地（见文件头“收尾”）
+  useLayoutEffect(() => {
+    const s = settling.current;
+    if (!s?.waiting) return;
+    const r = rowOf(s.l.box, s.l.id);
+    if (!r) return;
+    const p = layoutPos(r, s.l.box);
+    if (r !== s.l.row || Math.abs(p.top - s.l.home.top) > 0.5 || Math.abs(p.left - s.l.home.left) > 0.5) s.land(true);
+  });
+
+  useEffect(() => () => settling.current?.finish(), []);
 
   useLongPressDrag(boxEl, {
     pick(target) {
       const row = target.closest<HTMLElement>('[data-sort-id]');
-      if (!row || !boxEl?.contains(row) || 'sortOff' in row.dataset) return null;
+      if (!row || !boxEl?.contains(row) || 'sortOff' in row.dataset || row.dataset['state'] === 'leaving') return null;
       // 左滑露着按钮的那一行不拿（先收起左滑；kit SwipeRow 露着时外框打 data-swipe="open"）
       return row.querySelector('[data-swipe="open"]') || row.matches('[data-swipe="open"]') ? null : row;
     },
@@ -274,16 +283,16 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
       const id = row.dataset['sortId'];
       const group = row.dataset['sortGroup'];
       if (!b || !id || group === undefined) return false;
-      settling.current?.();
+      settling.current?.finish();
       const br = b.getBoundingClientRect();
-      const all = [...b.querySelectorAll<HTMLElement>('[data-sort-id]')];
-      const sizes = new Map<string, number>();
+      const order = new Map<string, string[]>();
       let self = -1;
-      const rects = all.map((el) => {
+      const rects = [...b.querySelectorAll<HTMLElement>(LIVE)].map((el) => {
         const g = el.dataset['sortGroup'] ?? '';
-        const n = sizes.get(g) ?? 0;
-        if (el === row) self = n;
-        sizes.set(g, n + 1);
+        const ids = order.get(g) ?? [];
+        if (el === row) self = ids.length;
+        ids.push(el.dataset['sortId'] ?? '');
+        order.set(g, ids);
         const r = el.getBoundingClientRect();
         return { group: g, top: r.top - br.top, bottom: r.bottom - br.top, left: r.left - br.left, width: r.width };
       });
@@ -292,27 +301,27 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
       const rr = row.getBoundingClientRect();
       const rect = new DOMRect(rr.left - pad, rr.top, rr.width + pad * 2, rr.height);
       const float = makeFloat(row, rect, pad);
-      cur.current = { row, float, rect, id, group, self, sizes, gaps, target: null, release: hold(id) };
+      cur.current = { box: b, row, float, rect, home: layoutPos(row, b), id, group, self, order, gaps, target: null };
+      holdSortRow(id);
       b.dataset['sortDragging'] = '';
       try {
         navigator.vibrate?.(8);
       } catch {
         // 不支持、不让震：不要紧
       }
-      o.current.log(`sort ${o.current.tag} lift g=${groupKind(group)} n=${sizes.get(group) ?? 0}`);
+      o.current.log(`sort ${o.current.tag} lift g=${groupKind(group)} n=${order.get(group)?.length ?? 0}`);
       return true;
     },
     move(at: Point) {
       const l = cur.current;
-      const b = boxEl;
-      if (!l || !b) return;
-      const br = b.getBoundingClientRect();
+      if (!l) return;
+      const br = l.box.getBoundingClientRect();
       const gap = nearestGap(l.gaps, at.x - br.left, at.y - br.top);
       const index = gap ? dropIndex(gap, l.group, l.self) : null;
       l.target = gap && index !== null ? { group: gap.group, index } : null;
       showLine(l.target ? gap : null);
       // 浮层：有落点停在缝下面（见文件头），没有就盖在空位上（空位跟着列表滚）
-      const home = (rowOf(l.id) ?? l.row).getBoundingClientRect();
+      const home = (rowOf(l.box, l.id) ?? l.row).getBoundingClientRect();
       const pad = (l.rect.width - home.width) / 2;
       const x = (l.target && gap && o.current.axis === 'xy' ? br.left + gap.x : home.left) - pad;
       const y = l.target && gap ? br.top + gap.y + FLOAT_GAP : home.top;
@@ -330,9 +339,10 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
         return;
       }
       const t = l.target;
-      o.current.log(`sort ${tag} drop from=${groupKind(l.group)} to=${groupKind(t.group)} i=${t.index} n=${l.sizes.get(t.group) ?? 0}`);
+      const rest = (l.order.get(t.group) ?? []).filter((x) => x !== l.id);
+      o.current.log(`sort ${tag} drop from=${groupKind(l.group)} to=${groupKind(t.group)} i=${t.index} n=${rest.length}`);
       settle(l, true);
-      o.current.onDrop({ id: l.id, from: l.group, to: t.group, index: t.index });
+      o.current.onDrop({ id: l.id, from: l.group, to: t.group, beforeId: rest[t.index - 1] ?? null, afterId: rest[t.index] ?? null });
     },
     cancel(why) {
       const l = cur.current;
@@ -340,12 +350,8 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
       showLine(null);
       if (!l) return;
       o.current.log(`sort ${o.current.tag} cancel why=${why} g=${groupKind(l.group)}`);
-      if (why === 'unmount') {
-        l.float.remove();
-        l.release();
-        return;
-      }
-      settle(l, false);
+      if (why === 'unmount') teardown(l);
+      else settle(l, false);
     },
   });
 

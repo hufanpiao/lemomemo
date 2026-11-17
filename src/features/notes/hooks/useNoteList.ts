@@ -106,12 +106,12 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
     return n !== undefined && convertTooLong({ title: n['title'], body: n['body'] });
   }, [rows]);
   /** 拖动放下（R-429）：shown 是页面上这一串（显示顺序）；没什么要写回 null */
-  const move = async (shown: readonly NoteItem[], id: string, index: number): Promise<{ res: ActionResult; m: NoteMove } | null> => {
-    const writes = planNoteDrop(shown, id, index, clock.now());
-    if (writes.length === 0) return null;
+  const move = async (shown: readonly NoteItem[], id: string, index: number): Promise<{ res: ActionResult; plan: NoteMove } | null> => {
     const switched = order !== 'manual';
+    const writes = planNoteDrop(shown, id, index, clock.now(), switched);
+    if (writes.length === 0) return null;
     if (switched) void settings.save(src.orderKey, 'manual');
-    return { res: await applyNoteSort(io, writes, false), m: { writes, switched } };
+    return { res: await applyNoteSort(io, writes, false), plan: { writes, switched } };
   };
   const undoMove = async (m: NoteMove): Promise<ActionResult> => {
     if (m.switched) void settings.save(src.orderKey, 'time');

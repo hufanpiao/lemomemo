@@ -26,9 +26,13 @@
 // • 减少动态效果：和 <Appear> 同一个判断，只淡入淡出、时长减半、新行不等；MotionConfig 让 layout 位移直接到位
 // • 功能包异步加载（B2 FA-6 ②，见 ./features.ts）：功能包还没到时加进来的行直接显示（initial={false}），不打“进场中”、照常接点按；
 //   不会停在 opacity 0。这段时间里删掉的行当场移除（没有淡出、下面的行直接跳上来）
+// • 拖动排序拿着的那一条（./sort-hold.ts，按行上的 data-sort-id 认）：带 data-sort-lifted（看不见、高度照占）、layout 动画直接到位
+//   （transition.layout 换成 type: false，同减少动态效果那条路；不能靠 layoutDependency：LayoutGroup 里一行重排会让同组每一行都拍快照，
+//   webkit 实测拿着的那一行照样从旧位置滑过来），这期间新挂上的直接显示、不播淡入。退场中的打 data-state="leaving"，kit 的 SortDrag 只认这个标记
 import { AnimatePresence, LayoutGroup, LazyMotion, m, MotionConfig, PresenceContext, useIsPresent, type MotionStyle } from 'motion/react';
 import { createElement, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { motionFeatures, motionFeaturesReady } from './features.ts';
+import { isSortHeld, useSortHeld } from './sort-hold.ts';
 import { dur, LIST_LAYOUT_LAG, tr } from './tokens.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
 
@@ -107,13 +111,17 @@ const ENTERING_STYLE: MotionStyle = { pointerEvents: 'none' };
 /** 进场中挂上：有 onUpdate 时 Motion 不用 WAAPI，淡入和周围行的 layout 位移由同一个 JS 帧循环推（见文件头） */
 const SAME_CLOCK = (): void => undefined;
 
+/** 拖动排序拿着的那一条：layout 动画直接到位（见文件头） */
+const HELD_LAYOUT = { delay: 0, type: false } as const;
+
 /** 列表里的一项：进出场只动 opacity，位置变化用 layout 平移过去 */
 export function AppearItem({ as = 'li', className, children, ...data }: AppearItemProps) {
   const present = useIsPresent();
+  const held = useSortHeld(data['data-sort-id']);
   // 第一次画列表时（AnimatePresence initial={false}）不播进场，也就不算“进场中”；之后加进来的才算
   const firstPaint = useContext(PresenceContext)?.initial === false;
-  // 功能包还没到时挂上的：Motion 不会补播它的入场（FA-6 ②），直接显示，不算“进场中”
-  const [cold] = useState(() => !motionFeaturesReady());
+  // 功能包还没到时挂上的：Motion 不会补播它的入场（FA-6 ②），直接显示，不算“进场中”；拖动排序拿着时新挂上的同样直接显示
+  const [cold] = useState(() => !motionFeaturesReady() || isSortHeld(data['data-sort-id']));
   const [entering, setEntering] = useState(!firstPaint && !cold);
   // 进场的淡入等挂载后第一帧再开始（见文件头“起点也要对齐”）；不进场的（第一次画、冷挂上）直接是 true
   const [go, setGo] = useState(!entering);
@@ -157,13 +165,14 @@ export function AppearItem({ as = 'li', className, children, ...data }: AppearIt
       className={className}
       {...(style ? { style } : {})}
       data-state={present ? (entering ? 'entering' : data['data-state']) : 'leaving'}
+      data-sort-lifted={held ? '' : undefined}
       // 离开途中键盘、读屏也碰不到（和 Appear 一致；FA-6 ② 审查 L3）：pointer-events 只挡鼠标和触摸
       inert={present ? undefined : true}
       layout="position"
       initial={cold ? false : mo.initial}
       animate={go ? mo.animate : mo.initial}
       exit={mo.exit}
-      transition={mo.transition}
+      transition={held ? { ...mo.transition, layout: HELD_LAYOUT } : mo.transition}
       onAnimationComplete={entered}
       {...(entering ? { onUpdate: SAME_CLOCK } : {})}
     >

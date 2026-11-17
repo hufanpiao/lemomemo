@@ -8,6 +8,8 @@ export { useSwipePager, type SwipePager } from './swipe-pager.ts';
 // 上下拖动收起 / 展开（B2 FA-3 月历上拖收起）
 export { useDragCollapse, type DragCollapse } from './drag-collapse.ts';
 // 长按拿起、拖着走（R-429 拖动排序；kit 的 useSortDrag 用，待办页、随手记页、隐私记页三处共用）
-export { eachFrame, useLongPressDrag, type LongPressDragOptions, type Point } from './long-press-drag.ts';
+export { LIFT_MS, useLongPressDrag, type LongPressDragOptions, type Point } from './long-press-drag.ts';
+// 拖动排序拿着的那一条（列表行据此藏起来、不播 layout 动画，见 sort-hold.ts）
+export { holdSortRow } from './sort-hold.ts';
 // 电脑版布局拖面板的位移过渡（B6，5.9b；只给 kit/components/DeskLayout 用，跟着电脑版布局的块走）
 export { deskSortTransition, type SortTransition } from './desk-sort.ts';
