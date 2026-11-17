@@ -110,10 +110,11 @@ function segCont(before: boolean, after: boolean): Cont | undefined {
 }
 
 /** 一周 7 天的标签和 more：先排跨天色块（开始早的、跨得长的在上），再把单日的填进空着的排（R-445） */
-function layoutWeek(week: readonly DateStr[], lists: readonly (readonly DayEntry[])[], maxMarks: number): { marks: MonthMark[][]; more: number[] } {
-  const marks: MonthMark[][] = week.map(() => []);
-  const more: number[] = week.map(() => 0);
-  const used: Set<number>[] = week.map(() => new Set<number>());
+// 每一列一份状态（标签、“+N”、已占的排），按列号一律用 .at() 取：shared 会复制给服务器函数，check_backend F7 不放行
+// forEach 下标、算出来的列号放进方括号（CI deploy-preview a8f59046 构建被拦）；三份平行数组合成一份，也少了按下标对齐
+type WeekCol = { marks: MonthMark[]; more: number; used: Set<number> };
+function layoutWeek(week: readonly DateStr[], lists: readonly (readonly DayEntry[])[], maxMarks: number): WeekCol[] {
+  const cs: WeekCol[] = week.map(() => ({ marks: [], more: 0, used: new Set<number>() }));
   const bars = new Map<string, { e: DayEntry; from: number; to: number }>();
   lists.forEach((list, col) => {
     for (const e of list) {
@@ -127,33 +128,37 @@ function layoutWeek(week: readonly DateStr[], lists: readonly (readonly DayEntry
   for (const { e, from, to } of order) {
     const cols = Array.from({ length: to - from + 1 }, (_, i) => from + i);
     let slot = 0;
-    while (slot < maxMarks && cols.some((c) => used[c]?.has(slot))) slot++;
+    while (slot < maxMarks && cols.some((c) => cs.at(c)?.used.has(slot))) slot++;
     const span = e.span;
-    const cont = span === undefined ? undefined : segCont(span.date < (week[from] ?? span.date), span.lastDate > (week[to] ?? span.lastDate));
+    const cont = span === undefined ? undefined : segCont(span.date < (week.at(from) ?? span.date), span.lastDate > (week.at(to) ?? span.lastDate));
     for (const c of cols) {
+      const col = cs.at(c);
+      if (!col) continue;
       if (slot >= maxMarks || span === undefined) {
-        more[c] = (more[c] ?? 0) + 1;
+        col.more += 1;
         continue;
       }
-      used[c]?.add(slot);
-      marks[c]?.push(markOf(e, slot, { head: c === from, cols: to - from + 1, ...(cont ? { cont } : {}) }));
+      col.used.add(slot);
+      col.marks.push(markOf(e, slot, { head: c === from, cols: to - from + 1, ...(cont ? { cont } : {}) }));
     }
   }
-  lists.forEach((list, col) => {
+  lists.forEach((list, i) => {
+    const col = cs.at(i);
+    if (!col) return;
     for (const e of list) {
       if (e.span !== undefined) continue;
       let slot = 0;
-      while (slot < maxMarks && used[col]?.has(slot)) slot++;
+      while (slot < maxMarks && col.used.has(slot)) slot++;
       if (slot >= maxMarks) {
-        more[col] = (more[col] ?? 0) + 1;
+        col.more += 1;
         continue;
       }
-      used[col]?.add(slot);
-      marks[col]?.push(markOf(e, slot));
+      col.used.add(slot);
+      col.marks.push(markOf(e, slot));
     }
-    marks[col]?.sort((a, b) => a.slot - b.slot);
+    col.marks.sort((a, b) => a.slot - b.slot);
   });
-  return { marks, more };
+  return cs;
 }
 
 /** 某年某月的 6×7 格子 */
@@ -169,8 +174,9 @@ export function buildMonth(ym: YearMonth, items: MonthItems, opts: MonthOpts): M
   for (let w = 0; w < dates.length; w += 7) {
     const week = dates.slice(w, w + 7);
     const lists = week.map((d) => buckets.get(d) ?? []);
-    const { marks, more } = layoutWeek(week, lists, opts.maxMarks);
-    week.forEach((date, col) => {
+    const cs = layoutWeek(week, lists, opts.maxMarks);
+    week.forEach((date, i) => {
+      const col = cs.at(i);
       const info = opts.dayInfo?.(date);
       cells.push({
         date,
@@ -180,10 +186,10 @@ export function buildMonth(ym: YearMonth, items: MonthItems, opts: MonthOpts): M
         holidays: opts.holidays?.get(date) ?? [],
         ...(info?.solarTerm === undefined ? {} : { solarTerm: info.solarTerm }),
         ...(info?.lunar === undefined ? {} : { lunar: info.lunar }),
-        marks: marks[col] ?? [],
-        more: more[col] ?? 0,
+        marks: col?.marks ?? [],
+        more: col?.more ?? 0,
         anniv: opts.annivDates?.has(date) ?? false,
-        a11y: summarize(lists[col] ?? []),
+        a11y: summarize(lists.at(i) ?? []),
       });
     });
   }
