@@ -4,7 +4,6 @@ export const zh = {
   'find.ph': '想找什么',
   'find.close': '关闭',
   'find.clear': '清空',
-  'find.todo.sub': '子任务：{t}',
   'find.k.all': '全部 {n}',
   'find.k.event': '日程',
   'find.k.todo': '待办',

@@ -14,6 +14,7 @@
 // • 读屏：条数写进一个常驻的 role="status"（没打字时是空的），停 SEM_DEBOUNCE_MS 才写，免得每个字播一遍（评审第 4 条）；看得见的条数照常跟手
 // • 搜不到的提示居中：App 里空态一律左对齐（U6），这一处是负责人 11-17 选 S-B 时一并接受的例外（R-447），别的空态照旧左对齐
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { queryTerms } from '../../../../shared/logic/search.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import type { PullReveal } from '../../../kit/hooks/usePullReveal.ts';
 import { pullHitClass, type PullPart } from '../../../kit/components/PullSlot.tsx';
@@ -47,7 +48,7 @@ function Head({ pull, scope, found, done, onOpen }: PullSearchProps) {
   const { q, hits, total } = usePullFind(scope, pull.q, found);
   const ids = useMemo(() => new Set(hits.map((h) => h.item.id)), [hits]);
   useEffect(() => {
-    setFound(q.trim() === '' ? null : { q, ids });
+    setFound(queryTerms(q).length === 0 ? null : { q, ids });
   }, [q, ids, setFound]);
   useEffect(() => () => setFound(null), [setFound]);
   const input = useRef<HTMLInputElement>(null);
@@ -86,7 +87,11 @@ function Head({ pull, scope, found, done, onOpen }: PullSearchProps) {
           data-testid="pull-input"
         />
         {pull.q !== '' ? (
-          <button type="button" className={styles.clear} aria-label={t('pull.clear', {})} onClick={() => setQ('')} data-testid="pull-clear">
+          <button type="button" className={styles.clear} aria-label={t('pull.clear', {})} onClick={() => {
+            // 清空后“×”会卸掉，焦点放回输入框，不掉到 body 上（R-447 评审第 4 条）
+            setQ('');
+            input.current?.focus();
+          }} data-testid="pull-clear">
             ×
           </button>
         ) : null}

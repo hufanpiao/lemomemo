@@ -7,7 +7,6 @@ export const ko = {
   'find.ph': '무엇을 찾을까요', // REVIEW(ko)
   'find.close': '닫기', // REVIEW(ko)
   'find.clear': '지우기', // REVIEW(ko)
-  'find.todo.sub': '하위 할 일: {t}', // REVIEW(ko)
   'find.k.all': '전체 {n}', // REVIEW(ko)
   'find.k.event': '일정', // REVIEW(ko)
   'find.k.todo': '할 일', // REVIEW(ko)

@@ -1,6 +1,7 @@
 // 下拉搜索的本机筛选（R-437；data/pull-local.ts）：每页查哪几个字段、隐私记不搜、子任务命中给片段
 import { describe, expect, it } from 'vitest';
-import { pullFind, pullIndex } from '../data/pull-local.ts';
+import { findLocal } from '../data/find-local.ts';
+import { pullIndex } from '../data/pull-local.ts';
 import type { Row } from '../data/find-local.ts';
 
 const TZ = 'Asia/Seoul' as never;
@@ -19,15 +20,15 @@ describe('pull-local', () => {
   it('随手记：按标题、正文、分类名筛；隐私记、删了的不出；标签不算（R-437 只说分类）', () => {
     const idx = pullIndex('note', notes, cats, TZ);
     expect(idx.map((x) => x.id)).toEqual([id(1)]);
-    expect(pullFind(idx, '拉面').map((h) => h.item.id)).toEqual([id(1)]);
-    expect(pullFind(idx, '汤头').map((h) => h.snippet)).toEqual(['弘大那家，汤头很浓']);
-    expect(pullFind(idx, '吃喝').map((h) => h.item.id)).toEqual([id(1)]);
-    expect(pullFind(idx, '美食')).toEqual([]);
-    expect(pullFind(idx, '护照')).toEqual([]);
-    expect(pullFind(idx, '')).toEqual([]);
+    expect(findLocal(idx, '拉面').map((h) => h.item.id)).toEqual([id(1)]);
+    expect(findLocal(idx, '汤头').map((h) => h.snippet)).toEqual(['弘大那家，汤头很浓']);
+    expect(findLocal(idx, '吃喝').map((h) => h.item.id)).toEqual([id(1)]);
+    expect(findLocal(idx, '美食')).toEqual([]);
+    expect(findLocal(idx, '护照')).toEqual([]);
+    expect(findLocal(idx, '')).toEqual([]);
   });
 
-  it('待办：按标题和子任务筛；子任务命中时片段是那一项；删了的子任务不算；备注不算', () => {
+  it('待办：按标题和子任务筛；子任务命中的也算（不给片段）；删了的子任务不算；备注不算', () => {
     const todos: Row[] = [
       { id: id(4), ...live, title: '出差准备', note: '记得带充电器', project: '', due: null, done: false },
       { id: id(5), ...live, title: '买护照夹', note: '', project: '', due: null, done: true },
@@ -37,19 +38,19 @@ describe('pull-local', () => {
       { id: id(7), deleted_at: NOW, undone: false, todo_id: id(4), title: '订机票', done: false },
     ];
     const idx = pullIndex('todo', todos, items, TZ);
-    const hits = pullFind(idx, '护照');
-    expect(hits.map((h) => [h.item.id, h.snippet])).toEqual([[id(5), null], [id(4), '带护照']]);
+    const hits = findLocal(idx, '护照');
+    expect(hits.map((h) => [h.item.id, h.snippet])).toEqual([[id(5), null], [id(4), null]]);
     expect(hits[0]?.item.done).toBe(true);
-    expect(pullFind(idx, '机票')).toEqual([]);
-    expect(pullFind(idx, '充电器')).toEqual([]);
+    expect(findLocal(idx, '机票')).toEqual([]);
+    expect(findLocal(idx, '充电器')).toEqual([]);
   });
 
   it('日程：只看标题（地点、备注不算）', () => {
     const events: Row[] = [{ id: id(8), ...live, title: '看牙医', location: '江南站', note: '带医保卡', date: '2026-11-10', time: '15:00', tz: null, duration_min: 60 }]; // tz 照真实行写全（null = 浮动时间）：漏了它 placeEvent 按机器时区换算，CI 的 UTC、洛杉矶作业会跨到 11-11
     const idx = pullIndex('event', events, [], TZ);
-    expect(pullFind(idx, '牙医').map((h) => h.item.id)).toEqual([id(8)]);
+    expect(findLocal(idx, '牙医').map((h) => h.item.id)).toEqual([id(8)]);
     expect(idx[0]?.date).toBe('2026-11-10');
-    expect(pullFind(idx, '江南')).toEqual([]);
-    expect(pullFind(idx, '医保')).toEqual([]);
+    expect(findLocal(idx, '江南')).toEqual([]);
+    expect(findLocal(idx, '医保')).toEqual([]);
   });
 });

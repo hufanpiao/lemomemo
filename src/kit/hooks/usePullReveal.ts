@@ -17,6 +17,7 @@
 //   还没算出来（那一块还在下载）时 found 为 null，什么都不藏
 // • 运行日志：pull open <页> via=touch|wheel|key、pull close <页>（不记打的字）
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { queryTerms } from '../../../shared/logic/search.ts';
 import { rlog } from '../../platform/run-log-api.ts';
 
 /** 往下拉多少露出（px）。原来 64，负责人 11-17“现在往下轻微一拉就出现，改成要往下多拉一下才会出现”：改 110（约原来的 1.7 倍，iPhone 上要明显拉一下） */
@@ -181,7 +182,8 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
     };
   }, [enabled, open, reveal]);
 
-  const searching = q.trim() !== '';
+  // 和查找同一个判断（queryTerms）：只打了标点、空白时没有可查的词，不算在搜，页面照常显示（R-447 评审第 3 条）
+  const searching = queryTerms(q).length > 0;
   const live = searching ? found : null;
   const shows = useCallback((id: string) => live === null || live.ids.has(id), [live]);
   return { enabled, open, via, q, setQ, searching, found: live, setFound, shows, markQ: live?.q ?? '', reveal, close, ref, keyRef };

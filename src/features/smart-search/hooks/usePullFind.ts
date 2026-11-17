@@ -8,8 +8,8 @@ import { currentTz } from '../../../core/current-tz.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useDebouncedLog } from '../../../kit/hooks/useDebouncedLog.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { PULL_TABLES, pullFind, pullIndex, type PullScope } from '../data/pull-local.ts';
-import type { Row } from '../data/find-local.ts';
+import { PULL_TABLES, pullIndex, type PullScope } from '../data/pull-local.ts';
+import { findLocal, type Row } from '../data/find-local.ts';
 import { SEM_DEBOUNCE_MS } from './find-consts.ts';
 import { openFind } from './find-open.ts';
 
@@ -28,7 +28,7 @@ export function usePullFind(scope: PullScope, q: string, shown?: number) {
   const index = useMemo(() => pullIndex(scope, rows, extra, tz), [scope, rows, extra, tz]);
   const r = useMemo(() => {
     const t0 = performance.now();
-    const hits = pullFind(index, dq);
+    const hits = findLocal(index, dq);
     return { hits, ms: Math.round(performance.now() - t0) };
   }, [index, dq]);
   const total = r.hits.length;

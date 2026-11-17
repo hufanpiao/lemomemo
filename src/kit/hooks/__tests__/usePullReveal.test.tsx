@@ -202,6 +202,10 @@ describe('PullSlot', () => {
     expect(screen.getByTestId('shows').textContent).toBe('true false 牛');
     fireEvent.change(screen.getByTestId('q'), { target: { value: '' } });
     expect(screen.getByTestId('shows').textContent).toBe('true true ');
+    // 只打了标点、空白：没有可查的词，不算在搜，什么都不藏、不挂 foot（评审第 3 条）
+    fireEvent.change(screen.getByTestId('q'), { target: { value: '， #' } });
+    expect(screen.getByTestId('shows').textContent).toBe('true true ');
+    expect(screen.queryByTestId('foot')).toBeNull();
     fireEvent.change(screen.getByTestId('q'), { target: { value: '牛奶' } });
     fireEvent.keyDown(screen.getByTestId('q'), { key: 'Escape' });
     expect(screen.getByTestId('shows').textContent).toBe('true true ');

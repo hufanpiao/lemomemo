@@ -152,6 +152,8 @@ describe('下拉搜索', () => {
     typeQ('abc');
     fireEvent.click(screen.getByTestId('pull-clear'));
     expect(screen.getByTestId('pull-search')).toBeTruthy();
+    // “×”清空后自己卸掉，焦点回到输入框（评审第 4 条）
+    expect(document.activeElement).toBe(screen.getByTestId('pull-input'));
     expect(screen.queryByTestId('pull-ai')).toBeNull();
     typeQ('abc');
     fireEvent.click(screen.getByTestId('pull-cancel'));
