@@ -10,6 +10,8 @@ export const SETTINGS_SECTION_ORDER = [
   'font',
   /** 随手记显示方式 */
   'notesView',
+  /** 声音和触感：操作音效和震动的开关（R-471，默认开） */
+  'fx',
   /** 待办：完成 7 天后自动删除（负责人 11-15） */
   'todos',
   'calendar',
@@ -53,7 +55,7 @@ export function orderSections<T>(present: Partial<Record<SettingsSectionId, T>>)
  */
 export const SETTINGS_CARDS = [
   { id: 'account', ids: ['account'] },
-  { id: 'main', ids: ['language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'timezone'] },
+  { id: 'main', ids: ['language', 'skin', 'font', 'notesView', 'fx', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'timezone'] },
   { id: 'trash', ids: ['trash'] },
   { id: 'more', ids: ['data', 'claude', 'invite', 'desktop', 'glossary', 'about'] },
 ] as const satisfies ReadonlyArray<{ id: string; ids: readonly SettingsSectionId[] }>;

@@ -47,6 +47,7 @@
 //   按时间排时拖了一次就切到“自己排”（不按天分组、列表行的时间带日期；设置 › 随手记显示方式里可切回），提示条“已切到自己排，设置里可改回 · 撤销”；
 //   之后每次放下出“已移动 · 撤销”（和删除、合并同一个 UndoBar）。只读行不能拖；运行日志 sort notes|vault lift / drop / cancel（kit 记，只记条数）
 import { opensKeyboard } from '../../../platform/env.ts';
+import { fx } from '../../../platform/fx-api.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { Suspense, useCallback, useRef, useState, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
@@ -211,7 +212,7 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
     report,
     moved: (m) => guard.show(moveUndo(m.switched, () => void l.undoMove(m).then(report))),
   });
-  const sd = useSortDrag({ tag: src.kind, axis: view === 'masonry' ? 'xy' : 'y', canDrop: () => true, onDrop: dropped, log: rlog });
+  const sd = useSortDrag({ tag: src.kind, axis: view === 'masonry' ? 'xy' : 'y', canDrop: () => true, onDrop: dropped, log: rlog, fx });
   /** 能拖的行、卡片上的标记（整页一串） */
   const sortAttrs = (it: NoteItem) => ({ 'data-sort-id': it.id, 'data-sort-group': 'all', 'data-sort-off': isRo(it.id) || pull.searching ? '' : undefined });
   /** 列表方式的一行；withDay：自己排时不按天分组，时间带上日期 */

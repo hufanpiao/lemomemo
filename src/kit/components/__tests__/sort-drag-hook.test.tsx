@@ -51,7 +51,8 @@ const ptr = (el: Element, type: string, y: number, id = 5) =>
   });
 
 function Page({ ids, onDrop, log, leaving = false }: { ids: string[]; onDrop: (d: SortDrop) => void; log: (l: string) => void; leaving?: boolean }) {
-  const sd = useSortDrag({ tag: 't', axis: 'y', canDrop: () => true, onDrop, log });
+  // 音效和震动（R-471）记进同一串，好按先后断言
+  const sd = useSortDrag({ tag: 't', axis: 'y', canDrop: () => true, onDrop, log, fx: (k) => log(`fx ${k}`) });
   return (
     <div ref={sd.ref} className={sortBoxClass} data-testid="box">
       <AppearList as="ul">
@@ -103,11 +104,22 @@ describe('useSortDrag 手势（R-429 评审第 1 条）', () => {
     await ptr(document.body, 'pointermove', 52);
     await ptr(document.body, 'pointerup', 52);
     expect(s.drops).toEqual([{ id: 'c', from: 'all', to: 'all', beforeId: 'a', afterId: 'b' }]);
+    // 拿起只震、放到新位置响一下震一下（R-471），各一次
+    expect(s.logs.filter((l) => l.startsWith('fx '))).toEqual(['fx lift', 'fx drop']);
     // 浮层看不看得见（真机 11-17）：第一次挪动记一行 sort float（放下不量，会弄跳落位），带位置、computed 样式、中心最上面是谁；不记标题
     expect(s.logs.filter((l) => /^sort t float move r=-?\d+,-?\d+,\d+x\d+ vp=\d+x\d+ sy=\d+ css=\S+ on=body top=\S+ under=/.test(l))).toHaveLength(1);
     await wait(700);
     expect(document.querySelector('[data-testid="sort-float"]')).toBeNull();
     expect(s.box.hasAttribute('data-sort-dragging')).toBe(false);
+  });
+
+  it('拿起没挪就松手（落回原位）：只有拿起那一下震，放下不响（R-471）', async () => {
+    const s = setup();
+    const span = await lift(s);
+    await ptr(span, 'pointerup', 125);
+    expect(s.drops).toEqual([]);
+    expect(s.logs.filter((l) => l.startsWith('fx '))).toEqual(['fx lift']);
+    await wait(700);
   });
 });
 

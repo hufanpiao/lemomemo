@@ -404,3 +404,65 @@ test.describe('底栏：进出没有底栏的页照旧 View Transition（代码�
     expect(names.shown).toEqual(['tabbar', 'tabbar-add']);
   });
 });
+
+test.describe('底栏：页签互切淡入上移（R-471，负责人 11-17“用淡入上移效果，300毫秒”）', () => {
+  test.use({ loggedIn: true, viewport: { width: 375, height: 812 } });
+
+  /** 点页签（同一个任务里）读新页 main 和它里面的动画：谁在动、关键帧、时长，动的元素和它里面有没有 position: fixed 的 */
+  const clickAndRead = (page: Page, tab: string) =>
+    page.evaluate((t) => {
+      document.querySelector<HTMLElement>(`[data-testid="tabbar"] a[data-tab="${t}"]`)?.click();
+      const m = document.querySelector('main');
+      if (!m) return null;
+      const hasFixed = (el: Element): boolean => [el, ...el.querySelectorAll('*')].some((x) => getComputedStyle(x).position === 'fixed');
+      return document
+        .getAnimations()
+        .filter((a) => !(a instanceof CSSTransition) && a.effect instanceof KeyframeEffect && a.effect.target instanceof Element && m.contains(a.effect.target))
+        .map((a) => {
+          const e = a.effect as KeyframeEffect;
+          const el = e.target as Element;
+          return {
+            main: el === m,
+            frames: e.getKeyframes().map((k) => [k['opacity'] ?? null, k['transform'] ?? null]),
+            dur: Number(e.getTiming().duration),
+            fixedInside: hasFixed(el),
+          };
+        });
+    }, tab);
+
+  test('新页 opacity 0→1、从下方 16px 上移到位，300ms；随手记贴底输入行（fixed）不跟着上移；减少动态效果时直接换', async ({ page }) => {
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible();
+    // 分包先都到：头一次进某页时分包晚到，淡入会等新页出来才建
+    for (const [tab, id] of [['todos', 'todos'], ['notes', 'notes'], ['today', 'today']] as const) {
+      await page.getByTestId('tabbar').locator(`a[data-tab="${tab}"]`).click();
+      await expect(page.getByTestId(id)).toBeVisible({ timeout: 10_000 });
+      await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => !(a instanceof CSSTransition)).length), { timeout: 5000 }).toBe(0);
+    }
+    for (const tab of ['todos', 'notes']) {
+      const anims = await clickAndRead(page, tab);
+      expect(anims, `${tab}：点完新页还没出来`).not.toBeNull();
+      const list = anims ?? [];
+      const fade = list.find((a) => a.main && a.frames[0]?.[0] !== null);
+      expect(fade, `${tab}：main 上没有淡入 ${JSON.stringify(list)}`).toBeDefined();
+      expect(Number(fade?.frames[0]?.[0])).toBe(0);
+      expect(Number(fade?.frames.at(-1)?.[0])).toBe(1);
+      expect(fade?.dur).toBe(300);
+      const rise = list.filter((a) => a.frames[0]?.[1] !== null);
+      expect(rise.length, `${tab}：没有上移 ${JSON.stringify(list)}`).toBeGreaterThan(0);
+      for (const r of rise) {
+        expect(r.frames[0]?.[1]).toBe('translateY(16px)');
+        expect(r.frames.at(-1)?.[1]).toBe('none');
+        expect(r.dur).toBe(300);
+        // 上移的元素里不能有 fixed 的（祖先带 transform 会让它改按祖先定位、错位）
+        expect(r.fixedInside, `${tab}：上移的元素里有 fixed 元素`).toBe(false);
+      }
+      await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => !(a instanceof CSSTransition)).length), { timeout: 5000 }).toBe(0);
+    }
+    // 随手记页真有贴底输入行这种 fixed 元素（不然上一条“不跟着上移”测了个空）
+    expect(await page.evaluate(() => [...(document.querySelector('main')?.querySelectorAll('*') ?? [])].some((x) => getComputedStyle(x).position === 'fixed'))).toBe(true);
+    await page.evaluate(() => document.documentElement.setAttribute('data-rm', '1'));
+    expect(await clickAndRead(page, 'todos')).toEqual([]);
+    await page.evaluate(() => document.documentElement.removeAttribute('data-rm'));
+  });
+});

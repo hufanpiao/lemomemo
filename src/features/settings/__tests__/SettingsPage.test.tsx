@@ -236,7 +236,7 @@ describe('退出登录（页面最底下单独一行）', () => {
 // 后面各批加行时复跑：只要求已有的行按 sections.ts 的相对顺序出现、不重复
 describe('设置首页的卡和行（TC-B1-71、R-325）', () => {
   const ORDER = [
-    'account', 'language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'timezone',
+    'account', 'language', 'skin', 'font', 'notesView', 'fx', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'timezone',
     'trash-todos', 'trash-notes', 'data', 'claude', 'invite', 'desktop', 'glossary', 'about',
   ];
 
@@ -260,8 +260,8 @@ describe('设置首页的卡和行（TC-B1-71、R-325）', () => {
     expect(hs[3]?.className).toBe(hs[0]?.className);
     const ids = (c: HTMLElement): string[] => [...c.querySelectorAll('[data-row-id]')].map((el) => el.getAttribute('data-row-id') ?? '');
     // B3 FA-4 起常用卡多“语音与 AI”、更多卡多“在 Claude 聊天里记事”；B4 起常用卡多“随手记布局”；B6 起多皮肤、字体；B5 起常用卡多“隐私记”（线框 v4 定稿的设置行）；
-    // 11-15 起常用卡多待办“完成 7 天后自动删除”（负责人方案）
-    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault'], ['trash-todos', 'trash-notes'], ['data', 'claude', 'about']]);
+    // 11-15 起常用卡多待办“完成 7 天后自动删除”（负责人方案）；11-17 起多“声音和触感”（R-471）
+    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'font', 'notesView', 'fx', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault'], ['trash-todos', 'trash-notes'], ['data', 'claude', 'about']]);
     const all = cards.flatMap(ids);
     expect(all).toEqual([...all].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
     expect(new Set(all).size).toBe(all.length);

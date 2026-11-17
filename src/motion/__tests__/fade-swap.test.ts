@@ -1,7 +1,7 @@
 // 四个页签互切的淡入（负责人 11-06 方案 B）：不起 View Transition，新页 main 做一次 opacity 0→1；连点取消上一次；减少动态效果时不动；
 // 换页后 FADE_GUARD_MS 内吞掉 main 里的点按（代码审查方案 B M8）；等分包时走了整页过渡、同页内切换就停掉（M9）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, cancelFade, fadeSwap, transition } from '../index.ts';
+import { FADE_GUARD_MS, FADE_RISE_PX, FADE_SKIP_MS, FADE_WAIT_MS, cancelFade, fadeSwap, transition } from '../index.ts';
 import { dur, ease } from '../tokens.ts';
 
 /** 换成只有一个 main 的页面（name 为 null 时清空：新页分包还没到） */
@@ -53,7 +53,7 @@ afterEach(() => {
 const pickMain = (): Element | null => document.querySelector('main');
 
 describe('fadeSwap', () => {
-  it('同步换页、不起 View Transition；新页 main 用 --dur-ui、--ease-out 从 0 淡到 1，跳过第一帧（不画整页透明的一帧）', async () => {
+  it('同步换页、不起 View Transition；新页 main 用 --dur-tab、--ease-out 从 0 淡到 1、从下方 16px 上移到位，跳过第一帧（不画整页透明的一帧）', async () => {
     const vt = vi.fn();
     (document as { startViewTransition?: unknown }).startViewTransition = vt;
     const update = vi.fn(() => {
@@ -64,8 +64,10 @@ describe('fadeSwap', () => {
     expect(vt).not.toHaveBeenCalled();
     expect(anims).toHaveLength(1);
     expect(anims[0]?.el).toBe(document.querySelector('main'));
-    expect(anims[0]?.frames).toEqual([{ opacity: 0 }, { opacity: 1 }]);
-    expect(anims[0]?.opts.duration).toBe(dur.ui * 1000);
+    expect(FADE_RISE_PX).toBe(16);
+    expect(anims[0]?.frames).toEqual([{ opacity: 0, transform: 'translateY(16px)' }, { opacity: 1, transform: 'none' }]);
+    expect(dur.tab).toBe(0.3);
+    expect(anims[0]?.opts.duration).toBe(dur.tab * 1000);
     expect(anims[0]?.currentTime, '跳过 opacity 0 的第一帧').toBe(FADE_SKIP_MS);
     expect(anims[0]?.opts.easing).toBe(`cubic-bezier(${ease.out.join(',')})`);
     anims[0]?.finish();
@@ -83,6 +85,35 @@ describe('fadeSwap', () => {
     await expect(p1).resolves.toBeUndefined();
     anims[1]?.finish();
     await expect(p2).resolves.toBeUndefined();
+  });
+
+  it('可打断（R-471）：上一次走到 60% 时又点了别的页签，新页从 opacity 0.6、偏移 6.4px 接着走、用剩下 40% 的时长，不跳第一帧', () => {
+    fadeSwap(() => setPage('today'), pickMain);
+    (anims[0] as unknown as { effect: unknown }).effect = { getComputedTiming: () => ({ progress: 0.6 }) };
+    fadeSwap(() => setPage('notes'), pickMain);
+    expect(anims[0]?.cancel).toHaveBeenCalledTimes(1);
+    expect(anims[1]?.frames).toEqual([{ opacity: 0.6, transform: 'translateY(6.4px)' }, { opacity: 1, transform: 'none' }]);
+    expect(anims[1]?.opts.duration).toBeCloseTo(dur.tab * 1000 * 0.4, 6);
+    expect(anims[1]?.currentTime).toBe(0);
+  });
+
+  it('main 里有 position: fixed 的元素（随手记贴底输入行）：淡入加在 main，上移只加在不含 fixed 的子树上，fixed 的原地不动', () => {
+    const el = (tag: string, id: string, ...kids: Element[]): HTMLElement => {
+      const e = Object.assign(document.createElement(tag), { id });
+      e.append(...kids);
+      return e;
+    };
+    const inrow = el('div', 'inrow');
+    inrow.style.position = 'fixed';
+    fadeSwap(() => document.body.replaceChildren(el('main', 'm', el('header', 'h'), el('div', 'wrap', el('ul', 'list'), el('div', 'dock', inrow, el('span', 'tip'))))), pickMain);
+    const main = document.querySelector('main');
+    expect(anims[0]?.el).toBe(main);
+    expect(anims[0]?.frames).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+    const moved = anims.slice(1).map((a) => a.el.id);
+    expect(moved).toEqual(['h', 'list', 'tip']);
+    for (const a of anims.slice(1)) expect(a.frames).toEqual([{ transform: 'translateY(16px)' }, { transform: 'none' }]);
+    cancelFade();
+    expect(anims.every((a) => a.cancel.mock.calls.length === 1)).toBe(true);
   });
 
   it('减少动态效果（data-rm="1"）：只换页，不动', async () => {

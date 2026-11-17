@@ -144,6 +144,9 @@ export const zh = {
   'settings.notesView.mobileNote': '只对手机生效，电脑另外设',
   'settings.notesView.desktopNote': '只对电脑生效，手机另外设',
   'settings.notesView.err': '没保存上，稍后再选一次',
+  // 声音和触感（R-471）：操作音效和震动的总开关
+  'settings.fx.title': '声音和触感',
+  'settings.fx.err': '没保存上，稍后再点一次',
   // 排序方式（R-429）：随手记、隐私记各一张
   'settings.notesOrder.notes': '随手记排序',
   'settings.notesOrder.vault': '隐私记排序',

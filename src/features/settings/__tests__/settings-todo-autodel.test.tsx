@@ -31,9 +31,10 @@ afterEach(() => {
 });
 
 describe('完成 7 天后自动删除', () => {
-  it('排在主卡“随手记显示方式”后面', () => {
+  it('排在主卡“随手记显示方式”“声音和触感”（R-471）后面', () => {
     const main: readonly string[] = SETTINGS_CARDS[1].ids;
-    expect(main.indexOf('todos')).toBe(main.indexOf('notesView') + 1);
+    expect(main.indexOf('fx')).toBe(main.indexOf('notesView') + 1);
+    expect(main.indexOf('todos')).toBe(main.indexOf('fx') + 1);
   });
 
   it('默认开，不带说明（负责人 11-16 去掉）；关掉写 todo.autodel = false，再打开写 true', async () => {

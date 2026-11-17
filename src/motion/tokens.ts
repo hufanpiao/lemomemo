@@ -28,6 +28,8 @@ export const dur = {
   collapse: 0.1,
   /** --dur-sheet 380ms：弹层、录音面板、页面切换 */
   sheet: 0.38,
+  /** --dur-tab 300ms：底栏四个页签互切，新页淡入上移（R-471，负责人 11-17“用淡入上移效果，300毫秒”；motion 的 fadeSwap） */
+  tab: 0.3,
   /** --dur-drop 0.55s：底栏液滴（R-155，唯一超过 400ms 的例外） */
   drop: 0.55,
   /** --dur-glass 0.3s：液态玻璃深浅切换 */
@@ -98,6 +100,7 @@ export const cssVarOf = {
     doneRest: '--dur-done-rest',
     collapse: '--dur-collapse',
     sheet: '--dur-sheet',
+    tab: '--dur-tab',
     drop: '--dur-drop',
     glass: '--dur-glass',
     dropPress: '--dur-drop-press',

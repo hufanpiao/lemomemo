@@ -3,9 +3,11 @@
 // 启动画面颜色诊断（台账 Q-2）、键盘上方输入辅助条诊断（台账 Q-11），Gap fix 的日志并进全局运行日志。现在两排：
 // • Gap fix（R-371，platform/vh-gapfix.ts，iOS 主屏幕版默认开）：开关是“关掉用来对照”——默认 ON，点成 OFF 存本机，下次冷启动起不做（再点回 ON 恢复默认）；
 //   每一步的日志在全局运行日志里（gapfix 开头的行）
+// • Test haptic（R-471）：同一排，点一下震一下，按钮上写震动走的哪条路（switch：iOS 18 系统开关；vibrate：navigator.vibrate；none：都没有）
 // • 全局运行日志（platform/run-log.ts，非正式版一直在记）：“Send run log”一键发送、“Copy run log”整段复制、“Clear run log”清空
 import { useState } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
+import { tryHaptic, type HapticPath } from '../../../platform/feedback.ts';
 import { gapFixOn, setGapFixOn } from '../../../platform/vh-gapfix.ts';
 import { clearRunLog, readRunLog } from '../../../platform/run-log.ts';
 import { useRunLogSend, type RunLogSendState } from '../hooks/useRunLogSend.ts';
@@ -26,9 +28,13 @@ export const RL_SEND_LABEL: Record<Exclude<RunLogSendState, ''>, string> = {
 };
 export const GF_LABEL_ON = 'Gap fix: ON';
 export const GF_LABEL_OFF = 'Gap fix: OFF (compare)';
+/** 试震动（R-471，platform/feedback.ts 的 tryHaptic；不看“声音和触感”开关）：按过以后写 Haptic: switch / vibrate / none */
+export const HAP_TRY = 'Test haptic';
+export const HAP_DONE = 'Haptic: ';
 
 export function VhProbe() {
   const [gf, setGf] = useState(() => gapFixOn());
+  const [hap, setHap] = useState<HapticPath | null>(null);
   const [rlCopied, setRlCopied] = useState<'' | 'ok' | 'fail'>('');
   const rlSend = useRunLogSend();
   /** 整段复制（按的时候重新读本机，记着的时候也拿最新的） */
@@ -55,6 +61,10 @@ export function VhProbe() {
           }}
         >
           {gf ? GF_LABEL_ON : GF_LABEL_OFF}
+        </FormButton>
+        {/* 在点按里同步震一下，按钮上写走的哪条路（R-471：负责人在方案页试震动没反应，要在主屏幕版上实测） */}
+        <FormButton size="compact" data-testid="vh-haptic" onClick={() => setHap(tryHaptic())}>
+          {hap === null ? HAP_TRY : `${HAP_DONE}${hap}`}
         </FormButton>
       </div>
       <div className={`${styles.actions} ${styles.probeActions}`}>

@@ -23,6 +23,7 @@
 // • 收尾（返工第 5 条“先跳回原位再滑过去”）：这一条从拿起到浮层撤掉都由 holdSortRow 拿着——藏着、不播 layout 动画（新挂上的也不淡入），重排后直接在新位置。
 //   等列表按新顺序画出来（页面重画后 layout 阶段看它的排版位置变了，最多 SETTLE_WAIT_MS），浮层滑到它的排版位置（offsetTop 一路加到外框，不含任何 transform），
 //   滑完撤浮层、放开这一条。取消、落回原位不等，直接滑回空位。运行日志 sort settle moved= wait= dy=（等了多久、最后滑了多远）
+// • 震动和音效（R-471，页面传进来的 fx，即 platform/fx-api.ts）：拿起 fx('lift') 只震；放到新位置 fx('drop') 音效甲 + 震；落回原位、取消不响
 // • 动效只用 transform、opacity；减少动态效果时浮层不过渡（CSS 认 :root[data-rm="1"] 和系统设置）
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { holdSortRow, useLongPressDrag, type Point } from '../../motion/gestures.ts';
@@ -58,6 +59,8 @@ export interface SortDragOptions {
   onDrop(d: SortDrop): void;
   /** 记一行运行日志（platform 的 rlog；必传，同 SwipeRow） */
   log(line: string): void;
+  /** 拿起、放下的音效和震动（platform/fx-api.ts 的 fx，R-471；kit 组件引不到 platform，同 log 由页面传）；不传不响不震 */
+  fx?(kind: 'lift' | 'drop'): void;
 }
 
 /** 一个空隙：放进 group 排第 index（含被拿起那一条时的下标）；y、x、w 相对外框 */
@@ -336,11 +339,8 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
       cur.current = { box: b, row, float, rect, home: layoutPos(row, b), id, group, self, order, gaps, target: null, probed: false };
       holdSortRow(id);
       b.dataset['sortDragging'] = '';
-      try {
-        navigator.vibrate?.(8);
-      } catch {
-        // 不支持、不让震：不要紧
-      }
+      // 拿起：只震不响（R-471）
+      o.current.fx?.('lift');
       const rs = getComputedStyle(row);
       o.current.log(`sort ${o.current.tag} lift g=${groupKind(group)} n=${order.get(group)?.length ?? 0} us=${rs.userSelect || '-'}/${rs.getPropertyValue('-webkit-user-select') || '-'}`);
       return true;
@@ -378,6 +378,8 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
       const t = l.target;
       const rest = (l.order.get(t.group) ?? []).filter((x) => x !== l.id);
       o.current.log(`sort ${tag} drop from=${groupKind(l.group)} to=${groupKind(t.group)} i=${t.index} n=${rest.length}`);
+      // 放到了新位置：音效甲 + 震一下（R-471；松手里同步调）。落回原位、取消不响
+      o.current.fx?.('drop');
       settle(l, true);
       o.current.onDrop({ id: l.id, from: l.group, to: t.group, beforeId: rest[t.index - 1] ?? null, afterId: rest[t.index] ?? null });
     },
