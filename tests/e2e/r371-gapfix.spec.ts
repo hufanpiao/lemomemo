@@ -76,6 +76,9 @@ async function settle(page: Page): Promise<void> {
   const band = page.getByTestId('tabbar-band');
   await expect(band).toBeAttached({ timeout: 10_000 });
   await expect.poll(() => band.evaluate((el) => (el.getAnimations().length === 0 ? Number(getComputedStyle(el).opacity) : -1)), { timeout: 5000 }).toBe(1);
+  // “＋”上方的新手气泡（前 3 次打开都出；每条用例新开的 context 只开两次）挂在首屏以后才下载的那一块里，机器慢时 2.5 秒后才出来：
+  // 等它出来再截，不然开、关两张一张有气泡一张没有（11-17 CI 同款镜像里探针实测过一次）
+  await expect(page.getByTestId('plus-hint')).toBeVisible({ timeout: 10_000 });
 }
 
 /** 不撑开时的文档高：触屏（hover: none，webkit 项目是 iPhone 15）上 base.css 的 html { min-height: calc(100% + 1px) }（CI-webkit-crash 11-04）
@@ -107,8 +110,12 @@ const shot = async (page: Page, name: string): Promise<Buffer> => {
   }
   mkdirSync(SHOTS, { recursive: true });
   // 盖住今天页“现在”卡：卡里的时间尺圆点、“现在 HH:MM”跟着真实时钟走，开、关两张图隔几秒截会挪零点几个像素（11-16 本机 chromium 圆点边差 42 级，
-  // r371 偶发的根因）；R-439 起卡的渐变阴影合成在渐变底上，两次渲染也会差 1 级。盖的是同一块实色，卡要是跟着版面错位，色块位置照样对不上
-  return page.screenshot({ path: `${SHOTS}/${name}.png`, animations: 'disabled', mask: [page.getByTestId('now-card')] });
+  // r371 偶发的根因）；R-439 起卡的渐变阴影合成在渐变底上，两次渲染也会差 1 级。盖的是同一块实色，卡要是跟着版面错位，色块位置照样对不上。
+  // 同样盖住右上角头像圈（today-settings）：CI 同款 Linux 镜像里（11-17 ci 9e39ba10 r371:131 红），只要启动时文档短暂比视口高（垫块在），
+  // Chromium 画这个圆圈下半圈描边的抗锯齿就时而差 1～3 级（固定是 (387～416, 106～107) 那 9 个像素）：关、关两次冷启动 3/3 一样；
+  // 关着只在注入时仿早试放 1 秒垫块，2 次里 1 次差；开、开两次 2 次里 1 次差，差的都是这 9 个像素；头像的位置大小、样式开关两边一样。
+  // 是渲染器的抗锯齿，不是 Gap fix 留了东西；盖住以后头像要是跟着版面挪了，色块位置照样对不上
+  return page.screenshot({ path: `${SHOTS}/${name}.png`, animations: 'disabled', mask: [page.getByTestId('now-card'), page.getByTestId('today-settings')] });
 };
 
 test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () => {

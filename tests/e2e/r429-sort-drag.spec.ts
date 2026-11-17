@@ -141,9 +141,13 @@ async function shot(page: Page, browserName: string, name: string): Promise<void
 }
 
 test.describe('长按拖动排序（R-429、R-433）', () => {
-  // 失败时把运行日志里拖动、左滑那几行打出来（先看日志定根因）
+  // 失败时把运行日志里拖动、左滑那几行打出来（先看日志定根因）；连同换页（route）、按下、抬起、点击和当时的地址：
+  // 11-17 ci 上 webkit 待办那条偶发红、重试过，本机和 CI 同款镜像里连跑 20 次没复现，CI 日志匿名取不到——下次红了直接看这几行
   test.afterEach(async ({ page }, info) => {
-    if (info.status !== info.expectedStatus) console.log((await runLog(page).catch(() => [])).filter((l) => /sort|swipe|hdrag/.test(l)).slice(-40).join('\n'));
+    if (info.status !== info.expectedStatus) {
+      const lines = (await runLog(page).catch(() => [])).filter((l) => /sort|swipe|hdrag| route | down | up | click /.test(l)).slice(-60);
+      console.log(`地址 ${page.url()}\n${lines.join('\n')}`);
+    }
   });
 
   test('R-442 待办页：一组里按 H → M → L 排；长按再拖不拿起、不改顺序、不写', async ({ page }) => {

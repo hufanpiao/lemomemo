@@ -16,7 +16,8 @@ import type { Tz } from '../../../../shared/core/tz.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
 import { trimItemTitle } from '../../../../shared/schema/rows.ts';
 import { DEFAULT_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime, todoRemindAt } from '../../../../shared/logic/remind.ts';
-import { prioCols, priorityOf, todoRowOf, type NewTodoRow, type Priority } from '../../../../shared/logic/todo-row.ts';
+import { prioCols, priorityOf, type Priority } from '../../../../shared/logic/todo-row.ts';
+import { todoRowOf, type NewTodoRow } from '../../../../shared/logic/todo-new.ts';
 import { todoRemindFlag } from '../../../core/remind-flag.ts';
 import { doneAtOf } from '../../../core/todo-done.ts';
 
@@ -126,7 +127,7 @@ export function patchOf(
   return data;
 }
 
-/** 新建的整行（shared/logic/todo-row.ts 的 todoRowOf；表单整份传进去，标题去首尾空白） */
+/** 新建的整行（shared/logic/todo-new.ts 的 todoRowOf；表单整份传进去，标题去首尾空白） */
 export function newTodoRow(id: string, form: TodoForm, now: number): NewTodoRow {
   return todoRowOf({ id, ...form, title: trimItemTitle(form.title), now });
 }
