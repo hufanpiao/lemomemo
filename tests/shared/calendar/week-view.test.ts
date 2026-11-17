@@ -30,7 +30,7 @@ describe('手机布局（R-109、R-110）', () => {
   it('10 分钟的事项显示长度不小于 28 px，从自己的开始时刻画起；带简称', () => {
     const d = dayOf(buildWeek(WEEK, { todos: [], events: [timed('a', '2026-10-20', '09:00', SEOUL, 10, { title: '校对稿件' })] }, phone), '2026-10-20');
     expect(d.blocks).toEqual([
-      { itemId: 'a', colorIndex: 0, short: '校对', startMin: 540, endMin: 550, startPx: 540, widthPx: 28, row: 0, rows: 1 },
+      { itemId: 'a', colorIndex: 0, short: '校对稿件', title: '校对稿件', startMin: 540, endMin: 550, startPx: 540, widthPx: 28, row: 0, rows: 1 },
     ]);
     expect(d.groups).toEqual([{ moreAtPx: 568, more: 0, hiddenIds: [] }]);
   });
@@ -121,7 +121,7 @@ describe('手机布局（R-109、R-110）', () => {
       },
       phone,
     );
-    expect({ ...dayOf(days, '2026-10-21'), allDay: ad(dayOf(days, '2026-10-21').allDay) }).toEqual({ date: '2026-10-21', allDay: { count: 1, short: '회의', ids: ['x'], kinds: ['allDay'] }, todos: [], blocks: [], groups: [] });
+    expect({ ...dayOf(days, '2026-10-21'), allDay: ad(dayOf(days, '2026-10-21').allDay) }).toEqual({ date: '2026-10-21', allDay: { count: 1, short: '회의준비', ids: ['x'], kinds: ['allDay'] }, todos: [], blocks: [], groups: [] });
     expect(ad(dayOf(days, '2026-10-22').allDay)).toEqual({ count: 2, short: null, ids: ['z', 'y'], kinds: ['allDay', 'allDay'] });
     expect(dayOf(days, '2026-10-20').allDay.count).toBe(0);
   });

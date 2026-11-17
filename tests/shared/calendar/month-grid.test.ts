@@ -150,10 +150,10 @@ describe('一天 5 件事（TC-B2-08）', () => {
   it('一件事一个 mark；按“有时刻的日程（按时刻）→ 全天 → 待办”排；电脑 4 个全显示', () => {
     const cell = cellOf(buildMonth({ y: 2026, m: 10 }, items, { ...base, maxMarks: 4 }), day);
     expect(cell.marks).toEqual([
-      { itemId: 'e-la', kind: 'timed', colorIndex: projectColorIndex('NEOX'), short: 'NE', slot: 0 },
-      { itemId: 'e-neox', kind: 'timed', colorIndex: projectColorIndex('NEOX'), short: '校对', slot: 1 },
-      { itemId: 'e-allday', kind: 'allDay', colorIndex: 0, short: '회의', slot: 2 },
-      { itemId: 't-open', kind: 'todo', colorIndex: projectColorIndex('SignPlex'), short: 'Si', slot: 3 },
+      { itemId: 'e-la', kind: 'timed', colorIndex: projectColorIndex('NEOX'), short: 'NEOX', slot: 0 },
+      { itemId: 'e-neox', kind: 'timed', colorIndex: projectColorIndex('NEOX'), short: '校对稿件', slot: 1 },
+      { itemId: 'e-allday', kind: 'allDay', colorIndex: 0, short: '회의준비', slot: 2 },
+      { itemId: 't-open', kind: 'todo', colorIndex: projectColorIndex('SignPlex'), short: 'Sign', slot: 3 },
     ]);
     expect(cell.more).toBe(0);
   });

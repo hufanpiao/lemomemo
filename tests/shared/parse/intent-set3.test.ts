@@ -46,8 +46,8 @@ const groupOf = (name: string): FixtureGroup => {
   return g;
 };
 const itemsOf = (g: FixtureGroup): TargetItems => ({
-  events: g.events.map((e) => ({ short: null, project: '', tz: 'Asia/Seoul', duration_min: 60, created_at: 0, location: '', ...e })),
-  todos: g.todos.map((t) => ({ short: null, project: '', done: false, due_time: null, created_at: 0, ...t })),
+  events: g.events.map((e) => ({ short: null, short_by: null, project: '', tz: 'Asia/Seoul', duration_min: 60, created_at: 0, location: '', ...e })),
+  todos: g.todos.map((t) => ({ short: null, short_by: null, project: '', done: false, due_time: null, created_at: 0, ...t })),
 });
 /** 负责人句按原编号分语言：R01～R10 中文、R11～R20 韩文、R21～R30 混说（句库第 3 节） */
 const langOf = (r: Set3Row): string => (r.group !== 'owner' ? r.group : Number(r.id.slice(1)) <= 10 ? 'zh' : Number(r.id.slice(1)) <= 20 ? 'ko' : 'mix');

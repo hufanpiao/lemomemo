@@ -44,6 +44,8 @@ export interface DayEntry {
   readonly project: string;
   readonly colorIndex: ProjectColor;
   readonly short: string;
+  /** 完整标题（手机周视图色块、全天条写它，负责人 11-17“周历上显示全部文字”；月格照旧写 short） */
+  readonly title: string;
   /** 有时刻的日程的开始时刻；全天日程、待办为 null */
   readonly startMs: number | null;
   /** 有时刻的日程的结束时刻；全天日程、待办为 null */
@@ -86,6 +88,7 @@ export function eventEntry(ev: CalEvent, p: EventPlacement, day: DateStr = p.dat
     project: normalizeProject(ev.project),
     colorIndex: projectColorIndex(ev.project),
     short: displayShort(ev),
+    title: ev.title,
     startMs: p.allDay ? null : p.startMs,
     endMs: p.allDay ? null : p.endMs,
     createdAt: ev.created_at,
@@ -102,6 +105,7 @@ export function todoEntry(td: CalTodo): DayEntry {
     project: normalizeProject(td.project),
     colorIndex: projectColorIndex(td.project),
     short: displayShort(td),
+    title: td.title,
     startMs: null,
     endMs: null,
     createdAt: td.created_at,

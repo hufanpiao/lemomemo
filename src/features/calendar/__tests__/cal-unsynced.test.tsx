@@ -111,7 +111,8 @@ describe('日清单行尾“未同步”小标记', () => {
     data.events = [ev('e1')];
     box.recs = new Set(['events:x']);
     open('#/calendar');
-    await screen.findByText('待办x');
+    // R-446 起月格简称取 4 个字，“待办x”在月格和日清单里各出现一次
+    await screen.findAllByText('待办x');
     // 等懒加载的组件出来（另一条以 events 为准的同样不会标）
     await act(async () => {
       box.set(['events:x', 'events:e1']);
@@ -222,7 +223,7 @@ describe('“未同步，提醒可能不响”一行', () => {
 
   it('没有没同步上的：不出提示', async () => {
     open('#/calendar');
-    await screen.findByText('日程e1');
+    await screen.findAllByText('日程e1');
     // 给懒加载留时间：等标记组件能出来的时刻再看
     await act(async () => {
       box.set([]);

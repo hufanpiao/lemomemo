@@ -3,8 +3,8 @@
 // • 全天日程不上时间轴，记成“全天 N”（N = 1 时带简称）；跨天的全天日程（R-444）它占的每一天都算一件，allDay.entries 里带 span（第几天、被切的一边）；
 // • 有时刻的日程按设备时区换算，跨午夜、跨多天的（R-444，最长 31 天）按午夜切段，各归各天，cont 标出被切的一边（'end' = 尾部被切，
 //   'start' = 头部被切，'both' = 两头都被切，中间整天那几段），界面在被切的一端画成直边；
-// • 手机（layout 'phone'，时间轴横向）：色块长度取 max(按时长算的长度, minBlockPx)，超出当天末尾的截到末尾，
-//   截完不够最小长度的右端对齐当天末尾、往左补足；显示区间有交叠的归一组，组内上排空着放上排（row 0），
+// • 手机（layout 'phone'，时间轴横向）：色块长度取 max(按时长算的长度, minBlockPx, 写下完整标题的宽 textPx)，超出轨道末端的截到末端，
+//   截完不够最小长度的右端对齐末端、往左补足（负责人 11-17“周历上显示全部文字，时间以开始时间为准”）；显示区间有交叠的归一组，组内上排空着放上排（row 0），
 //   否则下排空着放下排（row 1），两排都占着的不画、记进这一组的 more；组里有两排时 rows = 2，否则 1；
 // • 电脑（layout 'desk'，时间轴纵向，相当于 minBlockPx = 0）：按真实时长画，重叠的并排分列，块带 column、columns。
 // • 待办（和前端 A 对过的接口）：规则和月历一样（todoDate：删掉的、撤销的、已完成的、没有截止日的不放，截止日是浮动日期不换算），
@@ -36,6 +36,8 @@ interface BlockBase {
   readonly itemId: string;
   readonly colorIndex: ProjectColor;
   readonly short: string;
+  /** 完整标题（手机周视图色块写它，负责人 11-17“周历上显示全部文字”） */
+  readonly title: string;
   /** 当天第几分钟开始、结束（结束可以是 1440 = 到当天末尾） */
   readonly startMin: number;
   readonly endMin: number;
@@ -101,6 +103,16 @@ export interface PhoneWeekOpts {
    * 不是固定值；0:00 在 0、24:00 在 dayPx。窗口宽度变了要用新的值重算
    */
   readonly dayPx: number;
+  /**
+   * 轨道右端在这一天坐标里的位置（px，0:00 在 0）：时间轴只显示到 22 点这类时，色块撑开后写到这里为止。不传就是 dayPx（24:00）
+   */
+  readonly endPx?: number;
+  /**
+   * 写下完整标题要多宽（px，含色块左右内边距）：界面按色块实际字体量（WeekView 用 canvas measureText，结果缓存）。
+   * 传了时色块宽 = max(按时长的宽, minBlockPx, textPx(标题))，从开始时刻起画、写到轨道末端为止（负责人 11-17“周历上显示全部文字，
+   * 时间以开始时间为准，结束时间对不上也没关系”）；撑开后撞上的照样进第二排或 more。不传（服务器一侧、单测）按原来的规则
+   */
+  readonly textPx?: (text: string) => number;
 }
 
 export interface DeskWeekOpts {
@@ -160,6 +172,7 @@ function base(s: Segment): BlockBase {
     itemId: s.entry.itemId,
     colorIndex: s.entry.colorIndex,
     short: s.entry.short,
+    title: s.entry.title,
     startMin: s.startMin,
     endMin: s.endMin,
     ...(span === undefined ? {} : { cont: span.cont }),
@@ -188,18 +201,26 @@ function clusters<T>(sorted: readonly T[], startOf: (x: T) => number, endOf: (x:
   return out;
 }
 
-/** 手机：按显示区间分组、上下两排（R-109、R-110） */
-function layoutPhone(segs: readonly Segment[], minPx: number, dayPx: number): { blocks: PhoneBlock[]; groups: PhoneGroup[] } {
+/**
+ * 手机：按显示区间分组、上下两排（R-109、R-110）。
+ * 色块从开始时刻起画，想要的宽 = max(按时长的宽, minPx, 写下完整标题的宽)，写到轨道末端（end）为止；
+ * 剩下不到 minPx 时右端对齐末端、往左补足（原来的兜底）。撑开后的宽度直接拿去分组、排两排，撞上的进第二排或 more，不叠在一起
+ */
+function layoutPhone(
+  segs: readonly Segment[],
+  minPx: number,
+  dayPx: number,
+  end: number = dayPx,
+  textPx?: (text: string) => number,
+): { blocks: PhoneBlock[]; groups: PhoneGroup[] } {
   const scale = dayPx / DAY_MINUTES;
   const placed = segs.map((s) => {
     let startPx = s.startMin * scale;
-    let widthPx = Math.max((s.endMin - s.startMin) * scale, minPx);
-    if (startPx + widthPx > dayPx) {
-      widthPx = dayPx - startPx;
-      if (widthPx < minPx) {
-        startPx = Math.max(0, dayPx - minPx);
-        widthPx = dayPx - startPx;
-      }
+    const want = Math.max((s.endMin - s.startMin) * scale, minPx, textPx ? textPx(s.entry.title) : 0);
+    let widthPx = Math.min(want, end - startPx);
+    if (widthPx < minPx) {
+      startPx = Math.max(0, end - minPx);
+      widthPx = end - startPx;
     }
     return { s, startPx, widthPx };
   });
@@ -276,7 +297,7 @@ export function buildWeek(weekStart: DateStr, items: WeekItems, opts: PhoneWeekO
       date,
       allDay: allDayOf(b.allDay.get(date) ?? []),
       todos: todosOf(date).sort(compareEntries),
-      ...layoutPhone(segsOf(date), opts.minBlockPx, opts.dayPx),
+      ...layoutPhone(segsOf(date), opts.minBlockPx, opts.dayPx, Math.min(opts.endPx ?? opts.dayPx, opts.dayPx), opts.textPx),
     }));
   }
   // 电脑：待办并进全天那一行（compareEntries 把待办排在全天日程后面）

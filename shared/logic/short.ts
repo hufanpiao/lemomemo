@@ -6,6 +6,7 @@
 // （整万写“N万”、整千写“N千”，标题含谚文写 만、천；其余数字照留），再去掉紧跟的一个量词，然后取前 4 个
 // （“5000个瓶子出货”→“5千瓶子”，“3个会”→“3会”）。数字后面紧跟年月日、时刻、小数点这类的不动（“2000年计划”→“2000”）。
 // 纯函数：不碰 DOM、不读设置，前端和 Edge Functions 共用。
+import { COUNTERS, HANGUL, NOT_COUNT_NEXT, NOUN_SUFFIX, NUM_UNITS } from './short-data.ts';
 
 /** 简称最多几个字形簇（月格色块按 4 字画；AI 输出校验 shared/schema/ai.ts、提示词 record.v7 同一个数） */
 export const SHORT_GRAPHEMES = 4;
@@ -28,28 +29,25 @@ const PUNCT = /(?<!\d)\p{P}|\p{P}(?!\d)/gu;
 const ANY_SPACE = /\s+/gu;
 /** 开头的整数：1234 或带千分位的 1,234 */
 const LEADING_INT = /^(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)/u;
-/** 数字后面紧跟这些就不是“个数”（日期、时刻、小数、范围、百分比），整段原样留着 */
-const NOT_COUNT_NEXT = /^(?:[年月日号號点點时時分秒년월일시분초~～%％]|\p{P})/u;
-/** 数字后面去掉的一个量词（长的放前面，先配“상자”再配别的） */
-const COUNTERS = [
-  '상자', '박스', '봉지', '켤레', '公斤',
-  '个', '個', '件', '只', '台', '箱', '包', '瓶', '张', '張', '份', '次', '名', '位', '条', '條', '本', '套', '双', '雙', '盒', '袋', '桶', '斤', '块', '塊', '杯', '罐', '支', '辆', '輛',
-  '개', '명', '번', '병', '장', '권', '대', '잔', '통', '벌', '마리',
-] as const;
-const HANGUL = /[가-힣]/u;
+// 词表（量词、日期时刻字、万千写法）在 short-data.ts（架构 A20：源码字符串里不放汉字谚文）
 
-/** 整万、整千缩写（R-446）；ko 为 true 用 만、천 */
+/** 整万、整千缩写（R-446）；ko 为 true 用韩文的万、千 */
 function abbrInt(n: number, ko: boolean): string {
-  if (n >= 10000 && n % 10000 === 0) return `${n / 10000}${ko ? '만' : '万'}`;
-  if (n >= 1000 && n % 1000 === 0) return `${n / 1000}${ko ? '천' : '千'}`;
+  const [wan, qian] = ko ? NUM_UNITS.ko : NUM_UNITS.zh;
+  if (n >= 10000 && n % 10000 === 0) return `${n / 10000}${wan}`;
+  if (n >= 1000 && n % 1000 === 0) return `${n / 1000}${qian}`;
   return String(n);
 }
 
-/** 去掉开头一个量词（kg 不分大小写）；没有量词原样返回 */
+/**
+ * 去掉开头一个量词（kg 不分大小写）；没有量词原样返回。
+ * 量词后面紧跟“子”的是名词本身（“3000瓶子”的瓶子、箱子、盒子、袋子、本子），不去。
+ */
 function dropCounter(rest: string): string {
   if (/^kg/iu.test(rest)) return rest.slice(2);
   const c = COUNTERS.find((w) => rest.startsWith(w));
-  return c === undefined ? rest : rest.slice(c.length);
+  if (c === undefined || rest.startsWith(NOUN_SUFFIX, c.length)) return rest;
+  return rest.slice(c.length);
 }
 
 /**

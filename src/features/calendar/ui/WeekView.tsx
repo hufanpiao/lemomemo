@@ -6,6 +6,8 @@
 //   – 顶部刻度数字、每 2 小时一条刻度线；今天那条泳道上一条竖线是“现在”
 //   – 全天日程画成轨道顶上一整条（跨天的每天都画，右端写“2/3”；当天还有别的全天日程再写“+N”），有它时时刻块往下让一排（CSS .trkAll 换 --trk-top）
 //   – 日程色块：底色项目块色、左侧 2 px 深色竖线、--on-p 字（R-104、R-107、R-109、R-110 的排布交给前端 B 的 buildWeek）；跨天的同样右端写“2/3”
+//   – 色块和全天条写完整标题，不写简称（负责人 11-17“周历上显示全部文字，时间以开始时间为准，结束时间对不上也没关系”）：
+//     色块从开始时刻起画，宽度按 useTextPx 量的字宽撑开、写到轨道末端为止，再放不下才省略号（.wevTx）；撑开后撞上的进第二排或“+N”
 //   – 跨天的续条（全天条、时刻块）：被切开的一端画直角，头从前一天接过来的不画左侧深色竖线（cal-ui.ts contClass，和月格同一套；字色不变，对比度照 --on-p）
 //   – 待办：泳道上的空心圆（有截止时刻画在那个时刻，没有的画在末端；同一处几个依次往左错开），不占上下两排、不算进“+N”
 //   – 整条泳道是一个按钮：点了选中那一天（数字深色小方块），下面的清单列出当天全部日程和待办；色块、“+N”不单独接点按
@@ -15,8 +17,8 @@
 // • 节假日（R-432）：放假、补班的泳道（电脑是表头和那一列）和月格同一套斜纹（cal-ui.ts dayKind / dayKindClass）；
 //   连续放假只在第一天写节日名，后面几天照写农历（namedHolidays），读屏照旧念节日名（holA11y）
 // • 量宽：用回调 ref 量第一条轨道，翻周后轨道换了新元素会重新挂 ResizeObserver（代码审查 M1）
-// • 读屏：泳道按钮的名字先按显示顺序念看得见的字（“周一 19 十七 出差 2/3 会议 +1”，WCAG 2.5.3，cal-ui.ts labelInName），
-//   再接“10月19日，今天，节日，共 3 项，有逾期的待办”（星期前面已经念过，不再重复）；完整标题在下面的清单里。
+// • 读屏：泳道按钮的名字先按显示顺序念看得见的字（“周一 19 十七 出差 2/3 周会 +1”，WCAG 2.5.3，cal-ui.ts labelInName），
+//   再接“10月19日，今天，节日，共 3 项，有逾期的待办”（星期前面已经念过，不再重复）。
 //   共几项、有没有逾期按电脑排布那一份（rangeOf 本来就算了，不按宽度，量到宽度之前也对）
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
@@ -38,8 +40,35 @@ const TODO_STEP_PX = 10;
 /** 没有截止时刻的待办画在轨道末端往里多少（px）：空心圆 9 px 宽、居中，往里 8 不出轨道 */
 const TODO_END_INSET_PX = 8;
 
-/** 量一条轨道的宽度：回调 ref，换了元素（翻周后 key 变了）就重新挂 ResizeObserver */
-export function useTrackWidth(): [(el: HTMLElement | null) => void, number] {
+/** 色块左右内边距（.wev padding 6 + 4）再留 2 px 余量：量出来的字宽加上它就是写得下完整标题的色块宽 */
+const BLOCK_PAD_PX = 12;
+
+/**
+ * 量完整标题要多宽（负责人 11-17“周历上显示全部文字”）：按轨道里色块的实际字体（.wev 的字号 --fs-11、字体跟页面走）用 canvas measureText，
+ * 同一个标题只量一次。没有 OffscreenCanvas 的环境（jsdom 单测）返回 undefined，buildWeek 按原来的规则排
+ */
+function useTextPx(el: HTMLElement | null): ((text: string) => number) | undefined {
+  return useMemo(() => {
+    if (el === null || typeof OffscreenCanvas !== 'function') return undefined;
+    const ctx = new OffscreenCanvas(1, 1).getContext('2d');
+    if (ctx === null) return undefined;
+    const cs = getComputedStyle(el);
+    const size = cs.getPropertyValue('--fs-11').trim() || '11px';
+    ctx.font = `${size} ${cs.fontFamily}`;
+    const cache = new Map<string, number>();
+    return (text: string): number => {
+      let px = cache.get(text);
+      if (px === undefined) {
+        px = Math.ceil(ctx.measureText(text).width) + BLOCK_PAD_PX;
+        cache.set(text, px);
+      }
+      return px;
+    };
+  }, [el]);
+}
+
+/** 量一条轨道的宽度：回调 ref，换了元素（翻周后 key 变了）就重新挂 ResizeObserver；也把元素交出来给 useTextPx 取字体 */
+export function useTrackWidth(): [(el: HTMLElement | null) => void, number, HTMLElement | null] {
   const [el, setEl] = useState<HTMLElement | null>(null);
   const [w, setW] = useState(0);
   useEffect(() => {
@@ -52,7 +81,7 @@ export function useTrackWidth(): [(el: HTMLElement | null) => void, number] {
     return () => ro.disconnect();
   }, [el]);
   const ref = useCallback((x: HTMLElement | null) => setEl(x), []);
-  return [ref, w];
+  return [ref, w, el];
 }
 
 export interface WeekProps {
@@ -153,9 +182,9 @@ function Lane({
     String(Number(date.slice(8))),
     badge,
     sub,
-    first?.short ?? '',
+    first?.title ?? '',
     allDayEnd,
-    ...(day?.blocks.flatMap((b) => [b.short, ofText(b.dayOf)]) ?? []),
+    ...(day?.blocks.flatMap((b) => [b.title, ofText(b.dayOf)]) ?? []),
     ...moreTexts,
   ];
   // 当天共几项、有没有逾期不再画在泳道右边（R-445 周视图 A 定稿没有这一列），读屏照旧念
@@ -202,7 +231,7 @@ function Lane({
             <>
               {' '}
               <span className={[styles.allDay, colorClass(first.colorIndex), contClass(first.span?.cont)].filter(Boolean).join(' ')} data-item={first.itemId}>
-                <span className={styles.wevTx}>{first.short}</span>
+                <span className={styles.wevTx}>{first.title}</span>
                 {allDayEnd !== '' ? (
                   <>
                     {' '}
@@ -220,7 +249,7 @@ function Lane({
                 style={{ left: b.startPx - shift, width: b.widthPx }}
                 data-item={b.itemId}
               >
-                <span className={styles.wevTx}>{b.short}</span>
+                <span className={styles.wevTx}>{b.title}</span>
                 {b.dayOf ? (
                   <>
                     {' '}
@@ -255,18 +284,21 @@ function Lane({
 }
 
 function PhoneWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | null }) {
-  const [trackRef, w] = useTrackWidth();
+  const [trackRef, w, trackEl] = useTrackWidth();
+  const textPx = useTextPx(trackEl);
   const { start, items, tz, range } = p;
   const days = useMemo<(PhoneDay | null)[]>(() => {
     const dates = weekDates(start);
     // 还没量到宽度（第一次画）：先画空的七条泳道，量到以后再排色块
     if (w <= 0) return dates.map(() => null);
     try {
-      return buildWeek(start, items, { layout: 'phone', tz, minBlockPx: MIN_BLOCK_PX, dayPx: phoneScale(w, range).dayPx });
+      const { dayPx, shiftPx } = phoneScale(w, range);
+      // 色块写完整标题、写到轨道右端为止（endPx = 显示范围的末端，时间轴只到 22 点时不出轨道）
+      return buildWeek(start, items, { layout: 'phone', tz, minBlockPx: MIN_BLOCK_PX, dayPx, endPx: shiftPx + w, ...(textPx ? { textPx } : {}) });
     } catch {
       return dates.map(() => null);
     }
-  }, [start, items, tz, w, range]);
+  }, [start, items, tz, w, range, textPx]);
   const dates = weekDates(start);
   return (
     <section aria-label={p.label} data-testid="cal-week" data-layout="phone" data-range={`${range.h0}-${range.h1}`} className={`${styles.card} ${styles.pweek}`}>
