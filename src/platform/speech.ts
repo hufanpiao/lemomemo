@@ -38,6 +38,8 @@ interface Recognition {
   onresult: ((ev: SpeechRecognitionEvent) => void) | null;
   onerror: ((ev: SpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
+  onaudiostart: (() => void) | null;
+  onspeechstart: (() => void) | null;
   start(): void;
   stop(): void;
   abort(): void;
@@ -98,8 +100,12 @@ export function startSpeech(
       segments = ev.results.length;
       h.onText?.(all);
     };
+    // 诊断（负责人 11-17：“有时候说话语音不识别，那个说话时的波动条也不动”）：系统识别什么时候开始收到声音、听出有人说话
+    r.onaudiostart = () => rlog(`speech audio_start ${since()}`);
+    r.onspeechstart = () => rlog(`speech speech_start ${since()}`);
     r.onerror = (ev) => {
       const code = String(ev.error);
+      if (!done && NOT_A_FAILURE.includes(code)) rlog(`speech note code=${code} ${since()}`);
       if (done || NOT_A_FAILURE.includes(code)) return;
       const fail = FAIL_OF[code] ?? 'error';
       rlog(`speech fail reason=${fail}${/^[a-z-]{1,40}$/.test(code) ? ` code=${code}` : ''} ${since()}`);

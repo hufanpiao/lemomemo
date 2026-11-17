@@ -73,9 +73,12 @@ function openMeter(stream: MediaStream): Meter | null {
     an.fftSize = 256;
     ctx.createMediaStreamSource(stream).connect(an);
     // 不在手势里建的可能是 suspended：试着恢复，不行就一直量到 0（波形平着，不影响录音）
-    void ctx.resume().catch(() => undefined);
-    const buf = new Uint8Array(an.fftSize);
     const c = ctx;
+    // 诊断（负责人 11-17：“有时候说话语音不识别，那个说话时的波动条也不动”）：音频上下文的状态和每次变化都记下
+    rlog(`rec meter ctx=${c.state}`);
+    c.onstatechange = () => rlog(`rec meter ctx=${c.state}`);
+    void c.resume().catch((e: unknown) => rlog(`rec meter resume_fail ${errTag(e)}`));
+    const buf = new Uint8Array(an.fftSize);
     return {
       read() {
         an.getByteTimeDomainData(buf);
@@ -84,6 +87,7 @@ function openMeter(stream: MediaStream): Meter | null {
         return Math.min(1, Math.sqrt(sum / buf.length) * 4);
       },
       close() {
+        c.onstatechange = null;
         void c.close().catch(() => undefined);
       },
     };
@@ -156,6 +160,15 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
     let end: RecEnd | null = null;
     /** 音量计：undefined = 还没接过；null = 接不上 */
     let meter: Meter | null | undefined;
+    /** 诊断：这一段录音量到的最大音量、量了几次、几次低于 0.02（波动条平着的那种），结束时记一行 */
+    const lv = { max: 0, reads: 0, low: 0 };
+    // 诊断：麦克风音轨开录时的状态和中途被系统静音、恢复、结束（iOS 被别的东西占麦克风时轨道会 mute，录到的是静音）
+    for (const t of stream.getTracks()) {
+      rlog(`rec track muted=${t.muted ? 1 : 0} state=${t.readyState}`);
+      t.onmute = () => rlog('rec track mute');
+      t.onunmute = () => rlog('rec track unmute');
+      t.onended = () => rlog('rec track ended');
+    }
     let giveEnd: (r: RecEnd) => void = () => undefined;
     const ended = new Promise<RecEnd>((r) => (giveEnd = r));
 
@@ -174,8 +187,10 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
       clearTimeout(timer);
       o.signal?.removeEventListener('abort', onAbort);
       halt();
+      if (meter) rlog(`rec level max=${lv.max.toFixed(2)} reads=${lv.reads} low=${lv.low}`);
       meter?.close();
       meter = null;
+      for (const t of stream.getTracks()) t.onmute = t.onunmute = t.onended = null;
       closeTracks(stream);
       parts.length = 0;
       rlog(log);
@@ -212,7 +227,12 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
               meter = openMeter(stream);
               rlog(`rec meter ${meter ? 'on' : 'off'}`);
             }
-            return meter ? meter.read() : -1;
+            if (!meter) return -1;
+            const x = meter.read();
+            lv.reads++;
+            if (x > lv.max) lv.max = x;
+            if (x < 0.02) lv.low++;
+            return x;
           },
           stop() {
             asked = true;
