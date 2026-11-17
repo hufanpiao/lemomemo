@@ -6,7 +6,7 @@
 // • far（下一件在时间尺外）、done（今天的都结束了）、allday（只有全天的）、empty（今天没有日程）：标题行写暖心句
 //   （负责人 11-14：“没有日程的时候可以显示一些鼓励的句子或者暖心句子”；11-15：“跟有日程的时候一样的样式！不是一个小框加一句话”），
 //   照样画此刻前后的时间尺；far 在时间尺下面写一次“下一件 17:00 逛街 · 4 小时 21 分后”，done 有明天第一件时写“明天 11:00 …”
-// 暖心句按用户时区的当天日期固定选一句（useCheerText，按语言懒加载）；句子下载好之前这一行是空的，CSS 留一行高（.cheer:empty），卡片不跳
+// 暖心句按用户时区的钟点每小时换一句（负责人 11-17，50 句；useCheerText，按语言懒加载）；句子下载好之前这一行是空的，CSS 留一行高（.cheer:empty），卡片不跳
 // 时间尺只是示意（aria-hidden），读屏靠页头和标题行的文字；进行中、下一件又在时间尺里时，另给读屏一句“下一件 …”（看得见的只有尺上的色块）
 // 时间尺照视觉稿 kRuler：第二件（co）用自己的 --k-co 色；下一件左边竖条是项目色；磨砂玻璃皮肤的当前事项是 8px 胶囊、此刻是带圈圆头（样式里按皮肤分）
 import { useEffect, type CSSProperties, type ReactNode } from 'react';
@@ -54,7 +54,8 @@ const LANE = { 1: { h: 20, gap: 0 }, 2: { h: 13, gap: 4 } } as const;
 export function NowCard({ card, today }: { card: Card; today: DateStr }) {
   const t = useTodayT();
   const locale = useLocale();
-  const cheer = useCheerText(today, locale);
+  // 暖心句每小时换一句（负责人 11-17）：小时取自 nowText（用户时区的“HH:MM”，卡片每分钟跟着走，整点自然换句）
+  const cheer = useCheerText(today, parseInt(card.nowText, 10) || 0, locale);
   const live = card.state === 'live';
   // 运行日志：卡片换状态时记一行（负责人 11-14 说“框没做”，日志里看不出当时是哪种卡）
   useEffect(() => {
