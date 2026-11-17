@@ -50,7 +50,7 @@ function DeviceRowView({ d, busy, onRemove }: { d: DeviceView; busy: boolean; on
   const t = useSettingsT();
   const locale = useUi((s) => s.locale);
   const name = deviceName(d, t);
-  // B2-UI-b W3、W4：行换成 kit 的 SettingsDetailRow；R-454 前面加手机图标（本机柠檬黄），“移除”换成危险色文字按钮（FormButton dangerText）
+  // B2-UI-b W3、W4：行换成 kit 的 SettingsDetailRow；R-454 前面加手机图标（本机柠檬黄），“移除”换成危险色文字按钮（FormButton textDanger）
   return (
     <SettingsDetailRow
       testId="settings-device"
@@ -65,7 +65,7 @@ function DeviceRowView({ d, busy, onRemove }: { d: DeviceView; busy: boolean; on
       }
       action={
         <FormButton
-          variant="dangerText"
+          variant="textDanger"
           disabled={busy}
           onClick={onRemove}
           // 读屏名要包含看得见的文字（WCAG 2.5.3）；整句走词典，韩文按韩语语序（KO-K43-a11y）
@@ -150,7 +150,7 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
             </SettingsList>
           )}
           {state.orphans.count > 0 ? (
-            <p className={settingsNoteClass} data-testid="settings-orphans">
+            <p className={`${settingsNoteClass} ${styles.foot}`} data-testid="settings-orphans">
               {t('settings.devices.orphans', {
                 n: state.orphans.count,
                 date: state.orphans.lastAtMs === null ? '—' : fmtWhen(state.orphans.lastAtMs, locale),
@@ -161,7 +161,7 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
             <SettingsList>
               <SettingsEntryRow
                 label={t('settings.devices.signOutOthers', {})}
-                dangerText
+                danger
                 center
                 disabled={busy !== null}
                 onOpen={() => setPending({ kind: 'others' })}

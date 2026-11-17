@@ -1,12 +1,13 @@
 // 设置 › 账号顶部的头像（R-384）：大头像（kit 的 MeAvatar size lg，和四页右上角同一套取图）+“更换头像”+“去掉头像”（有头像才有）
 // R-454（负责人 11-17 选方案 C，iOS 分组表）：这些装进一组（kit SettingsList）——第一行头像、当前登录邮箱（R-275）和说明，
-// 下面“更换头像”（柠檬黄图标、带 ›）、“去掉头像”（灰图标、不带 ›）两行整行可点；testid、禁用条件、点了做什么都照旧
+// 下面“更换头像”（柠檬黄图标、带 ›）、“去掉头像”（灰图标、不带 ›）两行整行可点；testid、禁用条件、点了做什么都照旧。
+// 两行禁用时（没网、正在换）aria-describedby 指向下面那句说明（“没有网络，联网后才能换头像”等），读屏知道为什么点不了
 // • 点“更换头像”从相册选一张 → kit 的 AvatarPicker（按需加载）裁成圆 → hooks/useMeAvatarEdit 写行、上传、失败回滚
 // • 没网：两个按钮置灰，下面写“没有网络，联网后才能换头像”；额度满了出 settings.avatar.quota_exceeded
 // • 状态行 role="status"（读屏念得到），失败的那几句 role="alert"
-import { lazy, Suspense, useRef } from 'react';
+import { lazy, Suspense, useId, useRef } from 'react';
 import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
-import { SettingsEntryRow, SettingsIcon, SettingsList, SettingsRow } from '../../../kit/components/Settings/Settings.tsx';
+import { settingsErrorClass, SettingsEntryRow, SettingsIcon, SettingsList, settingsMetaClass, SettingsRow } from '../../../kit/components/Settings/Settings.tsx';
 import { useHasMeAvatar } from '../../../kit/hooks/useMeAvatar.ts';
 import { useOnline } from '../../../kit/hooks/useOnline.ts';
 import { meAvatarEncode, meAvatarLog, type MeAvatarEdit, type MeAvatarState } from '../hooks/useMeAvatarEdit.ts';
@@ -47,6 +48,7 @@ export function MeAvatarSection({ avatar, email }: { avatar: MeAvatarEdit; email
   const online = useOnline();
   const has = useHasMeAvatar();
   const input = useRef<HTMLInputElement>(null);
+  const msgId = useId();
   const busy = avatar.state === 'busy' || avatar.file !== null;
   const off = !online || busy;
   const msg: { key: AvKey; alert: boolean } =
@@ -75,7 +77,7 @@ export function MeAvatarSection({ avatar, email }: { avatar: MeAvatarEdit; email
                   <MailLabel mail={email} />
                 </p>
               ) : null}
-              <p className={msg.alert ? styles.meAvErr : styles.meAvHint} role={msg.alert ? 'alert' : 'status'} data-testid="settings-me-avatar-msg">
+              <p id={msgId} className={msg.alert ? settingsErrorClass : settingsMetaClass} role={msg.alert ? 'alert' : 'status'} data-testid="settings-me-avatar-msg">
                 {t(msg.key, {})}
               </p>
             </div>
@@ -85,6 +87,7 @@ export function MeAvatarSection({ avatar, email }: { avatar: MeAvatarEdit; email
           lead={<SettingsIcon accent>{CAMERA}</SettingsIcon>}
           label={t('settings.avatar.change', {})}
           disabled={off}
+          describedBy={off ? msgId : undefined}
           onOpen={() => input.current?.click()}
           testId="settings-me-avatar-change"
         />
@@ -94,6 +97,7 @@ export function MeAvatarSection({ avatar, email }: { avatar: MeAvatarEdit; email
             label={t('settings.avatar.remove', {})}
             chev={false}
             disabled={off}
+            describedBy={off ? msgId : undefined}
             onOpen={() => void avatar.remove()}
             testId="settings-me-avatar-remove"
           />

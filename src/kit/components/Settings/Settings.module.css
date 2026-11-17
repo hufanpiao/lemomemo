@@ -322,11 +322,12 @@ section:first-child > h2.gt {
   left: 42px;
 }
 
-/* 字居中、不带 › 的整行按钮（SettingsEntryRow center，单独一组的红字操作行） */
+/* 字居中、不带 › 的整行按钮（SettingsEntryRow center，单独一组的红字操作行）；行名照样能缩、能折行（韩文长文案、系统字号放大时不溢出卡片），折行后每行居中 */
 .center {
   justify-content: center;
 }
 
 .rowBtn.center .tx {
-  flex: none;
+  flex: 0 1 auto;
+  text-align: center;
 }

@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SettingsCard, SettingsEntryRow, SettingsRow, SettingsSegRow, SettingsSwitchRow } from '../Settings/Settings.tsx';
+import { SettingsCard, SettingsDetailRow, SettingsEntryRow, SettingsIcon, SettingsList, SettingsRow, SettingsSegRow, SettingsSwitchRow } from '../Settings/Settings.tsx';
 
 afterEach(cleanup);
 
@@ -200,3 +200,66 @@ describe('SettingsEntryRow stacked（韩文审校 A-4：设置首页账号一行
   });
 });
 
+describe('R-454 账号页 iOS 分组表用到的几项（center、chev、lead、SettingsIcon、danger）', () => {
+  const css = readFileSync(join(import.meta.dirname, '..', 'Settings', 'Settings.module.css'), 'utf8');
+  it('center：字居中、不带 ›、不显示值；行名照样能缩能折行（flex 0 1 auto，不是 none），折行后居中', () => {
+    render(
+      <SettingsList>
+        <SettingsEntryRow label="退出其他所有设备" value="不显示" center onOpen={() => undefined} testId="c" />
+      </SettingsList>,
+    );
+    const b = screen.getByTestId('c');
+    expect(b.textContent).toBe('退出其他所有设备');
+    expect(b.className).toMatch(/center/);
+    const at = css.indexOf('.rowBtn.center .tx {');
+    expect(at).toBeGreaterThan(0);
+    const r = css.slice(at, css.indexOf('}', at));
+    expect(r).toContain('flex: 0 1 auto;');
+    expect(r).toContain('text-align: center;');
+    expect(r).not.toContain('flex: none');
+  });
+  it('chev={false}：不带 ›，别的照旧；默认带 ›', () => {
+    render(
+      <SettingsList>
+        <SettingsEntryRow label="去掉头像" chev={false} onOpen={() => undefined} testId="n" />
+        <SettingsEntryRow label="更换头像" onOpen={() => undefined} testId="y" />
+      </SettingsList>,
+    );
+    expect(screen.getByTestId('n').textContent).toBe('去掉头像');
+    expect(screen.getByTestId('y').textContent).toBe('更换头像›');
+  });
+  it('SettingsIcon 只是装饰（aria-hidden），accent 多一个柠檬黄的类；放进入口行不进读屏名字', () => {
+    render(
+      <SettingsList>
+        <SettingsEntryRow label="更换头像" lead={<SettingsIcon accent>图</SettingsIcon>} onOpen={() => undefined} testId="e" />
+      </SettingsList>,
+    );
+    const ico = screen.getByTestId('e').querySelector('[aria-hidden="true"]');
+    expect(ico?.className).toMatch(/ico/);
+    expect(ico?.className).toMatch(/icoOn/);
+    expect(screen.getByRole('button', { name: /更换头像/ })).toBe(screen.getByTestId('e'));
+  });
+  it('SettingsDetailRow 的 lead：图标在最前，行名和灰字摞在它右边的同一个竖排容器里；按钮在后', () => {
+    render(
+      <SettingsList>
+        <SettingsDetailRow testId="d" lead={<SettingsIcon>图</SettingsIcon>} label="iPhone" metas={[{ text: '正在使用' }]} action={<button type="button">移除</button>} />
+      </SettingsList>,
+    );
+    const li = screen.getByTestId('d');
+    const kids = [...li.children];
+    expect(kids[0]?.getAttribute('aria-hidden')).toBe('true');
+    expect(kids[1]?.textContent).toBe('iPhone正在使用');
+    expect(kids[2]?.textContent).toBe('移除');
+  });
+  it('danger：危险色、带 data-no-proxy（底栏过渡不代点）；不带 danger 的没有', () => {
+    render(
+      <SettingsList>
+        <SettingsEntryRow label="注销账号" danger center onOpen={() => undefined} testId="x" />
+        <SettingsEntryRow label="更换头像" onOpen={() => undefined} testId="z" />
+      </SettingsList>,
+    );
+    expect(screen.getByTestId('x').hasAttribute('data-no-proxy')).toBe(true);
+    expect(screen.getByTestId('x').className).toMatch(/danger/);
+    expect(screen.getByTestId('z').hasAttribute('data-no-proxy')).toBe(false);
+  });
+});

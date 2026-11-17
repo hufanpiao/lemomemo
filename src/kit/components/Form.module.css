@@ -286,7 +286,8 @@
 .primary,
 .danger,
 .dangerFill,
-.ghost {
+.ghost,
+.textDanger {
   flex: none;
   min-height: var(--hit);
   padding: 0 14px;
@@ -326,23 +327,14 @@
   color: var(--text);
 }
 
-/* R-454 危险色文字按钮：不描边、没底色，右边只留 2 让字贴近卡片右边；高、宽都至少 44（点击区 44 见方）；圆角只给聚焦框用 */
-.dangerText {
-  flex: none;
+/* R-454 危险色文字按钮：底座（高 44、没底色、禁用变淡）同上面那组，这里只写不同的：宽至少 44（点击区 44 见方）、
+   不描边、右边只留 2 让字贴近卡片右边、字号 15 */
+.textDanger {
   min-width: var(--hit);
-  min-height: var(--hit);
   padding: 0 2px 0 10px;
   border: 0;
-  border-radius: var(--r-pill);
-  background: none;
   color: var(--danger-text);
-  font: inherit;
   font-size: var(--fs-15);
-  cursor: pointer;
-}
-
-.dangerText:disabled {
-  opacity: var(--disabled-dim);
 }
 
 /* FormButton strong：字重 600（代码审 M2：设置 › 提醒的“重新连接”“移除它…”“取消”原来就是 600，编辑页“删除”保持 400） */
@@ -354,7 +346,8 @@
 .primary:disabled,
 .danger:disabled,
 .dangerFill:disabled,
-.ghost:disabled {
+.ghost:disabled,
+.textDanger:disabled {
   opacity: var(--disabled-dim);
 }
 

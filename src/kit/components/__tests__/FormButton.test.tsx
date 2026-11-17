@@ -1,5 +1,7 @@
-// FormButton（B2-UI-a U3-1）：六种 variant（R-454 加 dangerText） 各对一个类；老写法 danger（布尔）等于 variant="danger"；
+// FormButton（B2-UI-a U3-1）：六种 variant（R-454 加 textDanger） 各对一个类；老写法 danger（布尔）等于 variant="danger"；
 // strong 加字重 600 的类（代码审 M2：设置 › 提醒的“重新连接”“移除它…”“取消”保持 600，编辑页“删除”不传、保持 400）
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FormButton, type ButtonVariant } from '../Form.tsx';
@@ -13,7 +15,7 @@ const CLASS: Record<ButtonVariant, string | undefined> = {
   danger: styles.danger,
   dangerFill: styles.dangerFill,
   ghost: styles.ghost,
-  dangerText: styles.dangerText,
+  textDanger: styles.textDanger,
 };
 
 describe('FormButton', () => {
@@ -78,5 +80,17 @@ describe('FormButton', () => {
     );
     const cls = screen.getByRole('button', { name: '退出登录' }).className.split(' ');
     expect(cls).toEqual(expect.arrayContaining([styles.btn, styles.compact, styles.row, styles.block]));
+  });
+
+  // R-454：textDanger（账号页设备行的“退出这台设备”“移除”）点击区 44 见方：高来自公共底座那组，宽它自己写
+  it('textDanger：公共底座组里带 min-height: var(--hit)，自己的规则带 min-width: var(--hit)；禁用和别的变体一样变淡', () => {
+    const css = readFileSync(join(import.meta.dirname, '..', 'Form.module.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, sel, body]) => ({ sel: (sel ?? '').split(',').map((x) => x.trim()), body: body ?? '' }));
+    const base = rules.find((r) => r.sel.includes('.textDanger') && r.sel.includes('.btn'));
+    expect(base?.body).toContain('min-height: var(--hit)');
+    const own = rules.find((r) => r.sel.length === 1 && r.sel[0] === '.textDanger');
+    expect(own?.body).toContain('min-width: var(--hit)');
+    expect(own?.body).not.toContain('min-height');
+    expect(rules.some((r) => r.sel.includes('.textDanger:disabled') && r.sel.includes('.btn:disabled'))).toBe(true);
   });
 });

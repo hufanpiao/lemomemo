@@ -139,7 +139,8 @@ h3.gt {
   font-variant-numeric: tabular-nums;
 }
 
-/* “退出其他所有设备”那一组下面的脚注（R-454 方案 C）：左右和卡片里的字、组标题对齐 14。写成 p.foot（权重 0,1,1）压过 kit 卡下说明那份 margin（两份 CSS 模块谁先加载不固定） */
+/* 账号页设备组下面的两句说明（“另有 N 个登录…”、“退出其他所有设备”那一组的脚注；R-454 方案 C）：左右和卡片里的字、组标题对齐 14。
+   kit 的 .note 别处（日历、提醒、数据、关于、电脑等十来处）都用 4，不动它，只在这一页两句上加。写成 p.foot（权重 0,1,1）压过 kit 卡下说明那份 margin（两份 CSS 模块谁先加载不固定） */
 p.foot {
   margin: 6px 14px 0;
 }
@@ -236,17 +237,4 @@ input.input {
   min-width: 0;
 }
 
-.meAvHint,
-.meAvErr {
-  margin: 0;
-  font-size: var(--fs-13);
-  overflow-wrap: anywhere;
-}
-
-.meAvHint {
-  color: var(--text-2);
-}
-
-.meAvErr {
-  color: var(--danger-text);
-}
+/* 头像旁边那句说明、失败提示用 kit 的行内灰字、报错（Settings.tsx 的 settingsMetaClass、settingsErrorClass），这里不另写 */
