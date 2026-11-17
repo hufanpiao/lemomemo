@@ -153,13 +153,17 @@ export default function TodosPage() {
                     onCollapse={(v) => fold(todo.id, v)}
                     // 副行（R-434、R-436 确认图）：逾期“! 过期 11/13 14:00 · 项目”红字；其余“项目 · 今天 14:00”；日期、时刻等宽数字；
                     // 有子任务的最前面“起步 / 大半”小标签和等宽“1/3”（负责人 11-17 选 T-A；逾期的“!”跟在它后面，标签本身不标红）
-                    meta={(stage) => (
-                      <span className={tag.kind === 'late' ? `${list.meta} ${styles.tagLate}` : list.meta} data-testid={`todos-tag-${todo.id}`}>
-                        {stage ? <>{stage}{' · '}</> : null}
-                        {tag.kind === 'late' ? <span aria-hidden="true">! </span> : null}
-                        {metaParts(tag.kind === 'late', todo.project, due ? <span className={refine.num}>{due}</span> : null)}
-                      </span>
-                    )}
+                    // 后面没有项目、日期时，“1/3”后面不拼“ · ”（负责人 11-17 截图里没日期的待办副行写成“0/1 ·”）
+                    meta={(stage) => {
+                      const rest = metaParts(tag.kind === 'late', todo.project, due ? <span className={refine.num}>{due}</span> : null);
+                      return (
+                        <span className={tag.kind === 'late' ? `${list.meta} ${styles.tagLate}` : list.meta} data-testid={`todos-tag-${todo.id}`}>
+                          {stage ? <>{stage}{rest.length > 0 ? ' · ' : null}</> : null}
+                          {tag.kind === 'late' ? <span aria-hidden="true">! </span> : null}
+                          {rest}
+                        </span>
+                      );
+                    }}
                     // 左滑删除（负责人 11-15 去掉行尾 ×）：露出“删除”点了删，一口气拉过大半行直接删（kit SwipeRow 的 full）；只读行不能滑
                     wrap={(face) => (
                       <SwipeRow
