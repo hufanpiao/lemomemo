@@ -1,6 +1,7 @@
 // 电脑版可拖动布局（5.9b）的小零件：块（标题栏 + 把手 + “–”）、栏间竖条、侧栏底部“⋯”菜单、抽屉换边把手。排法和状态在 DeskLayout.tsx
 import { useRef, useState, type CSSProperties, type KeyboardEvent as RKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { DeskLayoutValue } from '../../../../shared/schema/layout.ts';
+import { groupLabelClass } from '../Form.tsx';
 import { Popover } from '../Popover.tsx';
 import { DndCol, useDeskSortable } from './DeskDnd.tsx';
 import { useDeskT } from '../../hooks/useDeskT.ts';
@@ -38,7 +39,8 @@ export function Panel({ id, p, canDrag, held, hintId, onKey, onBlur, onCollapse 
   return (
     <section ref={s.ref} className={styles.panel} style={s.style} aria-labelledby={titleId} data-dragging={s.dragging ? '' : undefined} data-held={held ? '' : undefined} data-testid={`desk-panel-${id}`}>
       <header className={styles.head}>
-        <h2 id={titleId} className={styles.title} data-big={p.big}>
+        {/* 小块标题是分组名（R-436，同待办页：kit groupLabelClass）；大标题（随手记页“随手记”“全部 N”）照旧 */}
+        <h2 id={titleId} className={p.big ? styles.title : `${groupLabelClass} ${styles.title}`} data-big={p.big}>
           {p.title}
         </h2>
         {p.end}
@@ -184,7 +186,7 @@ export function MoreMenu({ btn, layout, names, onLock, onRestore, onReset }: { b
         </span>
         {t('desk.lock', {})}
       </button>
-      <p className={styles.group}>{t('desk.collapsed', {})}</p>
+      <p className={`${groupLabelClass} ${styles.group}`}>{t('desk.collapsed', {})}</p>
       {layout.collapsed.length === 0 ? <p className={styles.none}>{t('desk.collapsedNone', {})}</p> : null}
       {layout.collapsed.map((id) => (
         <button key={id} type="button" className={styles.item} aria-label={t('desk.restore', { name: names(id) })} onClick={act(() => onRestore(id))} data-testid={`desk-restore-${id}`}>

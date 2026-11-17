@@ -7,6 +7,7 @@
 // • 隐私记页（B5 隐私记重写 11-15）用同一个：page = 'vault'（布局和随手记分开存），title 换成“隐私记”
 import type { ReactNode } from 'react';
 import { LAYOUT_V, type DeskLayoutValue } from '../../../../shared/schema/layout.ts';
+import chip from '../../../kit/components/Chip.module.css';
 import DeskLayout from '../../../kit/components/DeskLayout/DeskLayout.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
@@ -62,16 +63,18 @@ export default function NotesDesk({ page, title, titleEnd, cats, list, drawer }:
   );
 }
 
-/** 竖排分类（线框 s7 左栏）：名字在左、条数在右，选中的深底；testid 和手机胶囊一样（e2e 共用） */
+/** 竖排分类（线框 s7 左栏）：名字在左、条数在右；testid 和手机胶囊一样（e2e 共用）。
+ *  R-436：外观是 kit 的 Chip.module.css（高 30 的胶囊、条数等宽淡色 .chipN，同待办页筛选；负责人 11-16“胶囊太大了！参考现在的待办页”），
+ *  选中的就是 kit .chipOn；没选中的去掉浅底（竖排一列全是灰胶囊太重），悬停再出 */
 function CatList({ cats }: { cats: DeskCats }) {
   const t = useNotesT();
   const item = (id: string | null, name: string, n: number, color: string | null, testId: string) => {
     const on = cats.category === id;
     return (
-      <Pressable key={testId} className={on ? styles.catOn : styles.catItem} aria-pressed={on} onClick={() => cats.set(id)} data-testid={testId}>
+      <Pressable key={testId} className={on ? chip.chipOn : `${chip.chip} ${styles.catItem}`} aria-pressed={on} onClick={() => cats.set(id)} data-testid={testId}>
         <Dot color={color} big />
         <span className={styles.catLabel}>{name}</span>
-        <span className={styles.catN}>{n}</span>
+        <span className={chip.chipN}>{n}</span>
       </Pressable>
     );
   };

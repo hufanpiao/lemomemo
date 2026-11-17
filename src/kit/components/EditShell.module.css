@@ -27,12 +27,21 @@
 .topDrawer {
   grid-template-columns: auto 1fr auto;
   gap: 8px;
+
+  /* 左边让出抽屉的换边把手（kit DetailDrawer.module.css 的 .grip，R-436） */
+  padding-left: var(--drawer-lead, 0);
 }
 
 .kind {
   margin: 0;
   font-size: var(--fs-17);
   font-weight: 600;
+}
+
+/* 抽屉里的类型名（“待办”“日程”）是小字标签，标题在下面的表单里（视觉稿 TODO_ED：类型名 14px 常规字重，标题 22px） */
+.topDrawer .kind {
+  font-size: var(--fs-14);
+  font-weight: 400;
 }
 
 /* 保存状态（R-436）：小字“✓ 已保存”，改过才出现 */

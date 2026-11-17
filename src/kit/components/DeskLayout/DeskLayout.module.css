@@ -1,4 +1,5 @@
-/* 电脑版可拖动布局（5.9b，方案 B：渐变画布上的分栏面板；线框 s1 .dm > .col：圆角 20 的白底卡，栏间 12）。只用令牌（A11、A24） */
+/* 电脑版可拖动布局（5.9b，方案 B：渐变画布上的分栏面板，栏间 12；圆角 22 照电脑版布局-对比.html 方案 B 的 --tile-r、皮肤视觉稿 .desk .col）。只用令牌（A11、A24）
+   R-436 精致化（照待办页 518f49a0 的做法）：小块标题挂 kit 的 groupLabelClass（等宽小字、加字距，DeskParts.tsx），焦点框走全局 :focus-visible 不再各写一份 */
 .root {
   position: relative;
 }
@@ -21,7 +22,7 @@
 
 /* 拖到这一栏上空时（data-over）：栏底给一条淡的落点提示 */
 .col[data-over] {
-  border-radius: 20px;
+  border-radius: 22px;
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
@@ -81,7 +82,7 @@
 .panel {
   min-width: 0;
   padding: 4px 16px 14px;
-  border-radius: 20px;
+  border-radius: 22px;
   background: var(--b-tile);
   box-shadow: var(--b-tile-shadow);
 }
@@ -110,13 +111,14 @@
 .title {
   flex: 1;
   min-width: 0;
-  margin: 0;
   overflow: hidden;
-  color: var(--text);
-  font-size: var(--fs-13);
-  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 小块标题的字样在 kit Form.module.css 的 .groupLabel（同待办页分组名）；这里只去掉它的外边距（两级选择器，不靠两份样式表的先后） */
+.head .title {
+  margin: 0;
 }
 
 /* 大标题（线框 s7 的 .d1：分类栏 22px、列表 24px；R-136 起标题非必要不加粗，用半粗） */
@@ -149,11 +151,6 @@
   .go:hover {
     color: var(--text);
   }
-}
-
-.go:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
 }
 
 .handle,
@@ -277,15 +274,15 @@
   text-align: center;
 }
 
-.group,
-.none {
+/* 菜单里的分组名（“收起的块”）：字样是 kit 的 groupLabelClass（DeskParts.tsx），这里只管和菜单项对齐的外边距 */
+.menu .group {
   margin: 6px 12px 2px 32px;
-  color: var(--text-2);
-  font-size: var(--fs-12);
 }
 
 .none {
-  margin-top: 0;
+  margin: 0 12px 2px 32px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
 }
 
 /* 菜单里的分隔线：通栏（左右各伸出菜单的 6px 内边距，贴到菜单两边） */
@@ -311,14 +308,4 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-/* 键盘焦点环（放在最后：各按钮的基础样式在前面） */
-.handle:focus-visible,
-.fold:focus-visible,
-.more:focus-visible,
-.dhandle:focus-visible,
-.item:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
 }

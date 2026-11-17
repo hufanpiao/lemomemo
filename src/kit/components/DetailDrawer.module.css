@@ -1,5 +1,6 @@
 /* 电脑版详情抽屉的外壳（kit DetailDrawer.tsx；随手记页、今天页共用。皮肤视觉稿 DK.mason / NOTE_ED：边上浮起的圆角面板，--b-drawer）。只用令牌（A11）。
-   右边（或左边）浮起，侧栏和列表留着；进场只有最基本的滑入（R-376），减少动态效果时只淡入 */
+   右边（或左边）浮起，侧栏和列表留着；进场只有最基本的滑入（R-376），减少动态效果时只淡入。
+   R-436 精致化：圆角 24、背景模糊照视觉稿（.desk .col.ed 是 .col，带 blur(var(--b-blur))：磨砂玻璃 24px，简洁 0），压在列表上时底下的字不再透上来 */
 .drawer {
   position: fixed;
   inset: calc(16px + var(--inset-top, 0px)) var(--drawer-right, 16px) calc(16px + var(--inset-bottom, 0px)) var(--drawer-left, auto);
@@ -7,9 +8,12 @@
   width: min(400px, calc(100vw - 160px));
   padding: 14px 20px 24px;
   overflow-y: auto;
-  border-radius: 22px;
+  border-radius: 24px;
   background: var(--b-drawer);
   box-shadow: var(--b-drawer-shadow);
+
+  /* avoid-ai-design-ignore: K3 负责人指定液态玻璃（视觉稿电脑版抽屉同侧栏、面板一套 --b-blur） */
+  backdrop-filter: blur(var(--b-blur));
   animation: drawer-in var(--dur-ui) var(--ease-out) both;
 }
 
@@ -18,6 +22,11 @@
   --drawer-from: -24px;
   --drawer-left: 110px;
   --drawer-right: auto;
+}
+
+/* 有换边把手（下面的 .grip）时，编辑器顶行往右让出的距离 */
+.drawer:has(> .grip) {
+  --drawer-lead: 30px;
 }
 
 @keyframes drawer-in {
@@ -36,6 +45,20 @@
 /* 设置里“减少动态效果”（data-rm）：同样只淡入 */
 :global(:root[data-rm="1"]) .drawer {
   animation-name: drawer-fade;
+}
+
+/* 换边把手（DeskLayout 给的 44 方块）：不单占一行，叠在抽屉左上角、和里面编辑器的顶行（类型名或分类胶囊 … ×）同一行（视觉稿 .dtop：⠿ 和 × 在同一行）。
+   编辑器顶行按 --drawer-lead（上面 .drawer:has(> .grip) 给）往右让出把手的位置（EditShell.module.css、NoteEditPage.module.css 各一处） */
+.grip {
+  position: absolute;
+  top: 14px;
+  left: 6px;
+}
+
+/* 减少透明效果（data-rt）：实色、不模糊（同 TypeBar、RecordPanel） */
+:global(:root[data-rt='1']) .drawer {
+  background-color: var(--float-solid);
+  backdrop-filter: none;
 }
 
 /* 抽屉右上角的“×”（DrawerClose） */

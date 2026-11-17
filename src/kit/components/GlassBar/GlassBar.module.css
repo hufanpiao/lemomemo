@@ -262,6 +262,7 @@
    左 16、宽 78、圆角 28、--b-rail 底色 + --b-blur 模糊、--b-rail-shadow（皮肤-v4/电脑版布局-对比.html 的 .desk .rail）；
    页签 62×58、圆角 18、未选中 --text-2、选中 --accent 底 --on-accent 字（视觉稿最后定的那条；--nav-active-bg 在简洁浅色是白底白栏）；
    “＋”54px，上下留 4 / 14。不用液滴（藏掉）、不用玻璃层和内容副本。
+   页签字（R-436 精致化）：照视觉稿 .rail .rt 11.5px 常规字重、选中的半粗（.rail .rt.on 600，同上面底栏的 .tab 规则），原来宽屏一律 700 显得挤。
    有底栏的页（#root 里有 .bar）左边让出侧栏的位置；底部留白、浮条位置在 base.css 同一断点里改 */
 @media (width >= 900px) {
   .bar {
@@ -293,7 +294,7 @@
     height: 58px;
     border-radius: 18px;
     color: var(--text-2);
-    font-weight: 700;
+    font-size: var(--fs-11-5);
     text-shadow: none;
   }
 
@@ -355,11 +356,6 @@
     stroke: currentColor;
     stroke-width: 2;
     stroke-linecap: round;
-  }
-
-  .me:focus-visible {
-    outline: 2px solid var(--focus);
-    outline-offset: 2px;
   }
 }
 

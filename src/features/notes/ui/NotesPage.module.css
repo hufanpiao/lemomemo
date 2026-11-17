@@ -45,49 +45,34 @@
 .cats {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
-/* 分类栏底下的小字（线框 SIDENOTES：11px 灰字、上空 14、左右缩进 10） */
+/* 分类栏底下的小字（线框 SIDENOTES：11px 灰字、上空 14 = 胶囊下外边距 7 + 7、左右缩进同胶囊内边距 12） */
 .aiHint {
-  margin: 14px 0 0;
-  padding: 0 10px;
+  margin: 7px 0 0;
+  padding: 0 12px;
   color: var(--text-2);
   font-size: var(--fs-11);
 }
 
-.catItem,
-.catOn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: var(--hit);
-  padding: 0 12px;
-  border: 0;
-  border-radius: 12px;
+/* 竖排的分类胶囊：外观全是 kit Chip.module.css（.chip / .chipOn / .chipN），这里只让没选中的去掉浅底、悬停再出（两级选择器压过 kit 的 .chip） */
+.cats > .catItem {
   background: none;
-  color: var(--text);
-  font-size: var(--fs-14);
-  text-align: left;
 }
 
-.catOn {
-  background: var(--chip-on-bg);
-  color: var(--chip-on-fg);
+@media (hover: hover) {
+  .cats > .catItem:hover {
+    background: var(--panel-2);
+  }
 }
 
 .catLabel {
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.catN {
-  flex: none;
-  opacity: 0.7;
-  font-variant-numeric: tabular-nums;
 }
 
 /* 右上角头像（设置入口，notesHead 第 1321 行）在 kit 的 MeLink（R-381，四页共用；触控区 44，圆在 kit 的 MeAvatar 里） */
