@@ -4,8 +4,9 @@
 //   一天一条泳道（--cal-lane-h 高），左边“周一 / 19 / 农历或节日”，右边横向时间轴（定稿没有原来右边“当天共几项、逾”那一列，读屏照旧念）
 //   – 周六周日淡底加灰字、放假斜纹、补班点阵加数字旁“班”标、今天淡黄小框、选中数字深色小方块：和月格同一套类（.wkend .holiday .workday .today .sel .dayNum）
 //   – 顶部刻度数字、每 2 小时一条刻度线；今天那条泳道上一条竖线是“现在”
-//   – 全天日程画成轨道顶上一整条（跨天的每天都画；续条字淡一档 --on-p-2、右端写“2/3”；当天还有别的全天日程再写“+N”），有它时时刻块往下让一排
-//   – 日程色块：底色项目块色、左侧 2 px 深色竖线、--on-p 字（R-104、R-107、R-109、R-110 的排布交给前端 B 的 buildWeek）；跨天的续段同样字淡一档、右端写“2/3”
+//   – 全天日程画成轨道顶上一整条（跨天的每天都画，右端写“2/3”；当天还有别的全天日程再写“+N”），有它时时刻块往下让一排（CSS .trkAll 换 --trk-top）
+//   – 日程色块：底色项目块色、左侧 2 px 深色竖线、--on-p 字（R-104、R-107、R-109、R-110 的排布交给前端 B 的 buildWeek）；跨天的同样右端写“2/3”
+//   – 跨天的续条（全天条、时刻块）：被切开的一端画直角，头从前一天接过来的不画左侧深色竖线（cal-ui.ts contClass，和月格同一套；字色不变，对比度照 --on-p）
 //   – 待办：泳道上的空心圆（有截止时刻画在那个时刻，没有的画在末端；同一处几个依次往左错开），不占上下两排、不算进“+N”
 //   – 整条泳道是一个按钮：点了选中那一天（数字深色小方块），下面的清单列出当天全部日程和待办；色块、“+N”不单独接点按
 //     （色块挨得近、高度不到 44，设计审查 M7 的做法：先选天、再在清单里点具体哪一条）
@@ -15,24 +16,27 @@
 //   连续放假只在第一天写节日名，后面几天照写农历（namedHolidays），读屏照旧念节日名（holA11y）
 // • 量宽：用回调 ref 量第一条轨道，翻周后轨道换了新元素会重新挂 ResizeObserver（代码审查 M1）
 // • 读屏：泳道按钮的名字先按显示顺序念看得见的字（“周一 19 十七 出差 2/3 会议 +1”，WCAG 2.5.3，cal-ui.ts labelInName），
-//   再接“10月19日，今天，节日，共 3 项，有逾期的待办”（星期前面已经念过，不再重复）；完整标题在下面的清单里
+//   再接“10月19日，今天，节日，共 3 项，有逾期的待办”（星期前面已经念过，不再重复）；完整标题在下面的清单里。
+//   共几项、有没有逾期按电脑排布那一份（rangeOf 本来就算了，不按宽度，量到宽度之前也对）
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
 import { todoDate, type CalItems } from '../../../../shared/logic/calendar/cal-items.ts';
+import { dayOfSpan } from '../../../../shared/logic/calendar/event-span.ts';
 import type { HolidayMark } from '../../../../shared/logic/calendar/holidays.ts';
-import { buildWeek, dayEntries, type DeskDay, type PhoneDay } from '../../../../shared/logic/calendar/month-grid.ts';
-import { projectColorIndex, type ProjectColor } from '../../../../shared/logic/project-color.ts';
+import { buildWeek, type DeskDay, type PhoneDay } from '../../../../shared/logic/calendar/month-grid.ts';
 import { axisFrac, axisTicks, phoneScale, weekHourRange, type HourRange } from './week-axis.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, dayKind, dayKindClass, dayLines, holA11y, itemShort, labelInName, namedHolidays, weekdayKey, weekendClass } from './cal-ui.ts';
+import { colorClass, contClass, dateA11y, dayKind, dayKindClass, dayLines, holA11y, labelInName, namedHolidays, ofText, weekdayKey, weekendClass } from './cal-ui.ts';
 import { DeskWeek } from './DeskWeek.tsx';
 
 /** 色块最短长度（px，5.12：约 28 px，视觉稿 --wmin） */
 export const MIN_BLOCK_PX = 28;
 /** 同一处几个待办空心圆依次往左错开多少 */
 const TODO_STEP_PX = 10;
+/** 没有截止时刻的待办画在轨道末端往里多少（px）：空心圆 9 px 宽、居中，往里 8 不出轨道 */
+const TODO_END_INSET_PX = 8;
 
 /** 量一条轨道的宽度：回调 ref，换了元素（翻周后 key 变了）就重新挂 ResizeObserver */
 export function useTrackWidth(): [(el: HTMLElement | null) => void, number] {
@@ -94,14 +98,6 @@ function rangeOf(start: DateStr, items: CalItems, tz: string, dueMins: ReadonlyM
   return { range: weekHourRange(spans), desk };
 }
 
-function dayTotal(date: DateStr, items: CalItems, tz: string): number {
-  try {
-    return dayEntries(date, items, tz).length;
-  } catch {
-    return 0;
-  }
-}
-
 /** 这一天有没有逾期没做完的待办：日子已过，或者是今天、截止时刻已过 */
 function hasOverdue(date: DateStr, todoIds: readonly string[], today: DateStr, nowMin: number, dueMins: ReadonlyMap<string, number>): boolean {
   if (todoIds.length === 0) return false;
@@ -113,16 +109,12 @@ function hasOverdue(date: DateStr, todoIds: readonly string[], today: DateStr, n
   });
 }
 
-function dateLabel(date: DateStr, t: CalViewT): string {
-  const [, m = '1', d = '1'] = date.split('-');
-  return t('cal.a11y.date', { m: Number(m), d: Number(d) });
-}
-
 // ───────── 手机：泳道 ─────────
 
 function Lane({
   date,
   day,
+  desk,
   w,
   range,
   p,
@@ -130,30 +122,30 @@ function Lane({
 }: {
   date: DateStr;
   day: PhoneDay | null;
+  /** 同一天的电脑排布（件数、待办；不按宽度，量到宽度之前也有） */
+  desk: DeskDay | undefined;
   w: number;
   range: HourRange;
   p: WeekProps;
   trackRef: ((el: HTMLElement | null) => void) | null;
 }) {
-  const { t, items, today, nowMin, dueMins } = p;
+  const { t, today, nowMin, dueMins } = p;
   const hol = p.holidays.get(date) ?? [];
   const kind = dayKind(hol);
   const isToday = date === today;
   const sel = p.selected === date;
-  const total = dayTotal(date, items, p.tz);
-  const todoIds = day?.todos.map((e) => e.itemId) ?? [];
+  const total = desk ? desk.allDay.count + desk.blocks.length : 0;
+  const todoIds = desk?.allDay.entries.filter((e) => e.kind === 'todo').map((e) => e.itemId) ?? [];
   const overdue = hasOverdue(date, todoIds, today, nowMin, dueMins);
   // 和月格同一套（cal-ui.ts dayLines）：补班的“班”放进数字旁的小圆标，那一行写节日名；连休只在第一天写节日名，后几天照常写农历或节气
   const { badge, line: sub } = dayLines(kind, namedHolidays(date, hol, p.holidays), p.lunarOf?.(date) ?? '', t);
   const shift = w > 0 ? phoneScale(w, range).shiftPx : 0;
-  const allDay = day?.allDay;
-  const allDayIds = allDay?.itemIds.filter((_, i) => allDay.kinds[i] !== 'todo') ?? [];
-  const allDayFirst = allDayIds[0];
-  const allDayOf = allDay?.dayOf[0];
+  // 手机排布里全天这一行只有全天日程（待办另放在 todos）：画第一件
+  const allDay = day?.allDay.entries ?? [];
+  const first = allDay[0];
   const wd = t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) });
-  const allDayText = allDayFirst === undefined ? '' : itemShort(items, 'allDay', allDayFirst);
   // 全天条右端：跨天的写“2/3”，当天还有别的全天日程写“+N”
-  const allDayEnd = [allDayOf ? `${allDayOf.index}/${allDayOf.days}` : '', allDayIds.length > 1 ? t('cal.more', { n: allDayIds.length - 1 }) : ''].filter(Boolean).join(' ');
+  const allDayEnd = [ofText(first?.span && dayOfSpan(first.span, date)), allDay.length > 1 ? t('cal.more', { n: allDay.length - 1 }) : ''].filter(Boolean).join(' ');
   const moreTexts = day?.groups.filter((g) => g.more > 0).map((g) => t('cal.more', { n: g.more })) ?? [];
   // 看得见的字，和下面画的顺序一致：星期、日期数字、“班”、农历或节日、全天条、色块简称、“+N”
   const shown = [
@@ -161,16 +153,16 @@ function Lane({
     String(Number(date.slice(8))),
     badge,
     sub,
-    allDayText,
+    first?.short ?? '',
     allDayEnd,
-    ...(day?.blocks.flatMap((b) => [b.short, b.dayOf ? `${b.dayOf.index}/${b.dayOf.days}` : '']) ?? []),
+    ...(day?.blocks.flatMap((b) => [b.short, ofText(b.dayOf)]) ?? []),
     ...moreTexts,
   ];
   // 当天共几项、有没有逾期不再画在泳道右边（R-445 周视图 A 定稿没有这一列），读屏照旧念
   const a11y = labelInName(
     shown,
     [
-      dateLabel(date, t),
+      dateA11y(date, t),
       ...(isToday ? [t('cal.a11y.todayMark', {})] : []),
       ...hol.map((h) => holA11y(h, t)),
       total === 0 ? t('cal.a11y.none', {}) : t('cal.a11y.total', { n: total }),
@@ -200,7 +192,7 @@ function Lane({
           </span>{' '}
           <small className={styles.laneSub}>{sub}</small>
         </span>{' '}
-        <span className={allDayFirst !== undefined ? `${styles.trk} ${styles.trkAll}` : styles.trk} ref={trackRef ?? undefined} aria-hidden="true">
+        <span className={first ? `${styles.trk} ${styles.trkAll}` : styles.trk} ref={trackRef ?? undefined} aria-hidden="true">
           {axisTicks(range).map((h) => (
             <i key={h} className={styles.tick} style={{ left: `${axisFrac(h * 60, range) * 100}%` }} />
           ))}
@@ -208,14 +200,11 @@ function Lane({
           {isToday && nowMin >= range.h0 * 60 && nowMin <= range.h1 * 60 ? (
             <i className={styles.wnow} style={{ left: `${axisFrac(nowMin, range) * 100}%` }} data-testid="cal-now" />
           ) : null}
-          {allDayFirst !== undefined ? (
+          {first ? (
             <>
               {' '}
-              <span
-                className={[styles.allDay, colorClass(colorOfAllDay(items, allDayFirst)), allDayOf && allDayOf.index > 1 ? styles.barCont : ''].filter(Boolean).join(' ')}
-                data-item={allDayFirst}
-              >
-                <span className={styles.wevTx}>{allDayText}</span>
+              <span className={[styles.allDay, colorClass(first.colorIndex), contClass(first.span?.cont)].filter(Boolean).join(' ')} data-item={first.itemId}>
+                <span className={styles.wevTx}>{first.short}</span>
                 {allDayEnd !== '' ? (
                   <>
                     {' '}
@@ -229,15 +218,7 @@ function Lane({
             <Fragment key={`${b.itemId}-${b.startMin}`}>
               {' '}
               <span
-                className={[
-                  styles.wev,
-                  colorClass(b.colorIndex),
-                  b.rows === 2 ? (b.row === 1 ? styles.r1 : styles.r0) : '',
-                  b.cont === 'start' || b.cont === 'both' ? `${styles.contStart} ${styles.barCont}` : '',
-                  b.cont === 'end' || b.cont === 'both' ? styles.contEnd : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
+                className={[styles.wev, colorClass(b.colorIndex), b.rows === 2 ? (b.row === 1 ? styles.r1 : styles.r0) : '', contClass(b.cont)].filter(Boolean).join(' ')}
                 style={{ left: b.startPx - shift, width: b.widthPx }}
                 data-item={b.itemId}
               >
@@ -245,7 +226,7 @@ function Lane({
                 {b.dayOf ? (
                   <>
                     {' '}
-                    <span className={styles.wevOf}>{`${b.dayOf.index}/${b.dayOf.days}`}</span>
+                    <span className={styles.wevOf}>{ofText(b.dayOf)}</span>
                   </>
                 ) : null}
               </span>
@@ -263,7 +244,7 @@ function Lane({
             ))}
           {day?.todos.map((e) => {
             const due = dueMins.get(e.itemId);
-            const at = due === undefined ? w - 8 : axisFrac(due, range) * w;
+            const at = due === undefined ? w - TODO_END_INSET_PX : axisFrac(due, range) * w;
             const k = Math.round(at);
             const n = seen.get(k) ?? 0;
             seen.set(k, n + 1);
@@ -275,13 +256,7 @@ function Lane({
   );
 }
 
-/** 全天那个小标签的颜色：第一件全天日程的项目色 */
-function colorOfAllDay(items: CalItems, id: string): ProjectColor {
-  const ev = items.events.find((x) => x.id === id);
-  return ev ? projectColorIndex(ev.project) : 0;
-}
-
-function PhoneWeek(p: WeekProps & { range: HourRange }) {
+function PhoneWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | null }) {
   const [trackRef, w] = useTrackWidth();
   const { start, items, tz, range } = p;
   const days = useMemo<(PhoneDay | null)[]>(() => {
@@ -296,7 +271,7 @@ function PhoneWeek(p: WeekProps & { range: HourRange }) {
   }, [start, items, tz, w, range]);
   const dates = weekDates(start);
   return (
-    <section aria-label={p.label} data-testid="cal-week" data-layout="phone" data-range={`${range.h0}-${range.h1}`} className={styles.card}>
+    <section aria-label={p.label} data-testid="cal-week" data-layout="phone" data-range={`${range.h0}-${range.h1}`} className={`${styles.card} ${styles.pweek}`}>
       <div className={styles.wrul} aria-hidden="true">
         {axisTicks(range).map((h) => (
           <span key={h} style={{ left: `${axisFrac(h * 60, range) * 100}%` }}>
@@ -306,7 +281,7 @@ function PhoneWeek(p: WeekProps & { range: HourRange }) {
       </div>
       <ol className={styles.lanes}>
         {dates.map((date, i) => (
-          <Lane key={date} date={date} day={days[i] ?? null} w={w} range={range} p={p} trackRef={i === 0 ? trackRef : null} />
+          <Lane key={date} date={date} day={days[i] ?? null} desk={p.desk?.[i]} w={w} range={range} p={p} trackRef={i === 0 ? trackRef : null} />
         ))}
       </ol>
     </section>
@@ -316,5 +291,5 @@ function PhoneWeek(p: WeekProps & { range: HourRange }) {
 export function WeekView(p: WeekProps) {
   const { start, items, tz, dueMins } = p;
   const { range, desk } = useMemo(() => rangeOf(start, items, tz, dueMins), [start, items, tz, dueMins]);
-  return p.wide ? <DeskWeek {...p} range={range} desk={desk} /> : <PhoneWeek {...p} range={range} />;
+  return p.wide ? <DeskWeek {...p} range={range} desk={desk} /> : <PhoneWeek {...p} range={range} desk={desk} />;
 }

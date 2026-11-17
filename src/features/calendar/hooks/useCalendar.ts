@@ -6,7 +6,7 @@
 // • 月格按 (年月、数据、今天、每格几个标签、节假日) 记住；周视图的排布要量出时间轴宽度，在界面一侧算（WeekView）
 // • 日历内部一律原地换（R-372 ②，负责人选“算同一层（推荐）”）：翻月、切月/周、“今天”、年月选择、点某天进周视图、键盘 ← → 都用 replaceInPage，
 //   不记步数，左滑直接回到进日历之前那一层（今天）
-// • 纪念日菱形（B5）：hooks/useAnnivDates.ts 按需加载 next-date，开关关着不画
+// • 纪念日小爱心（B5）：hooks/useAnnivDates.ts 按需加载 next-date，开关关着不画
 // • 节假日没拉到（离线）时 model.holidaysOffline = true，页面提示“联网后显示节假日”；韩文界面不加载农历（useLunar）
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { addDays, daysIn, fmtDateStr, minOfDay, todayOf, type DateStr } from '../../../../shared/core/date.ts';
@@ -85,7 +85,7 @@ export function useCalendar(params: readonly string[]) {
   const holidays = hol.marks;
   const lunar = useLunar(locale);
 
-  // 纪念日菱形（B5）：这个月前后各多看一段，42 格都盖住
+  // 纪念日小爱心（B5）：这个月前后各多看一段，42 格都盖住
   const annivDates = useAnnivDates(
     view.mode === 'month' ? addDays(fmtDateStr(view.ym.y, view.ym.m, 1), -7) : null,
     view.mode === 'month' ? addDays(fmtDateStr(view.ym.y, view.ym.m, daysIn(view.ym.y, view.ym.m)), 14) : null,
@@ -113,12 +113,14 @@ export function useCalendar(params: readonly string[]) {
 
   const viewRef = useRef(view);
   viewRef.current = view;
-  const keyShift = useCallback((n: -1 | 1) => {
+  /** 键盘翻一页；翻不动返回 false */
+  const keyShift = useCallback((n: -1 | 1): boolean => {
     const v = shiftView(viewRef.current, n);
-    if (!v) return;
+    if (!v) return false;
     // 同一次按键事件里地址还没变：先记下新视图，连按时从它往下翻
     viewRef.current = v;
     void replaceInPage('cal', ...paramsOf(v));
+    return true;
   }, []);
 
   const model: CalendarModel = {

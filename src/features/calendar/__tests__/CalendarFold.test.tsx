@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { navigate } from '../../../app/router.ts';
+import { flipMs } from '../../../motion/gestures.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -215,26 +216,36 @@ describe('翻页动画（架构 5.12，代码复审 N1）', () => {
     expect(vt).toHaveBeenCalledTimes(1);
   });
 
-  it('‹ › 按钮：新的一页从那一侧横滑进来（先放在一侧，再带过渡回 0，同一下里做完、不等下一帧）；键盘直接切换、不横滑', async () => {
-    open('#/cal/month/2026-11');
-    const pager = screen.getByTestId('cal-pager');
-    // 记下 style 每一次改之前的值：中间那一下是“放在一侧”（真浏览器里逐帧的位移见 tests/e2e/r420-swipe-taps.spec.ts）
-    const mo = new MutationObserver(() => undefined);
-    mo.observe(pager, { attributes: true, attributeFilter: ['style'], attributeOldValue: true });
-    const placed = (): (string | null)[] => mo.takeRecords().map((r) => r.oldValue);
-    fireEvent.click(screen.getByTestId('cal-next'));
-    expect(window.location.hash).toBe('#/cal/month/2026-12');
-    expect(placed()).toContain(`transform: translateX(${W}px);`);
-    expect(pager.style.transform).toBe('');
-    expect(pager.dataset['snap']).toBe('');
-    fireEvent.click(screen.getByTestId('cal-prev'));
-    expect(placed()).toContain(`transform: translateX(${-W}px);`);
-    expect(pager.style.transform).toBe('');
-    await act(async () => {
-      key('ArrowRight');
-    });
-    expect(placed()).toEqual([]);
-    mo.disconnect();
+  it('‹ › 按钮：原地淡换（R-457“放慢4倍的C原地淡换”）：旧的一页拍成副本叠在原位淡出、新的一页淡入，都是 --dur-ui × 4，不横移；键盘直接切换、不加动效', async () => {
+    const calls: { el: Element; kf: Keyframe[]; o: KeyframeAnimationOptions }[] = [];
+    HTMLElement.prototype.animate = function (this: HTMLElement, kf: Keyframe[], o: KeyframeAnimationOptions) {
+      calls.push({ el: this, kf, o });
+      return { cancel: () => undefined, finished: new Promise(() => undefined) } as unknown as Animation;
+    } as unknown as HTMLElement['animate'];
+    try {
+      open('#/cal/month/2026-11');
+      const pager = screen.getByTestId('cal-pager');
+      fireEvent.click(screen.getByTestId('cal-next'));
+      expect(window.location.hash).toBe('#/cal/month/2026-12');
+      const ghost = pager.previousElementSibling as HTMLElement | null;
+      expect(ghost?.getAttribute('aria-hidden')).toBe('true');
+      expect(ghost?.inert).toBe(true);
+      // 副本里没有测试标记、没有 data-date：测试和点按只认新的一页
+      expect(ghost?.querySelector('[data-date]')).toBeNull();
+      expect(calls.map((c) => (c.el === pager ? 'page' : c.el === ghost ? 'ghost' : 'other'))).toEqual(['ghost', 'page']);
+      expect(calls.map((c) => c.o.duration)).toEqual([flipMs(false), flipMs(false)]);
+      expect(calls[0]?.kf.at(-1)?.opacity).toBe(0);
+      expect(calls[1]?.kf[0]?.opacity).toBe(0);
+      expect(pager.style.transform).toBe('');
+      calls.length = 0;
+      await act(async () => {
+        key('ArrowRight');
+      });
+      expect(window.location.hash).toBe('#/cal/month/2027-01');
+      expect(calls).toEqual([]);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+    }
   });
 
   it('减少动态效果：按钮翻页也不横滑', async () => {

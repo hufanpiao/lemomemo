@@ -1,5 +1,5 @@
 // 周视图·电脑排布（B2 FA-3，皮肤视觉稿 .dwkv；从 WeekView.tsx 拆出来）：7 列时间格，纵向时间轴每小时 40 px
-// • 表头：星期、日期（今天墨色细圈 / 柠檬黄底）、节日或农历；补班写“班·名字”，连休只在第一天写节日名；
+// • 表头：星期、日期（和月格同一个 .dayNum：今天淡黄小框、选中深色小方块、周末灰字，R-445）、节日或农历；补班写“班·名字”，连休只在第一天写节日名；
 //   放假、补班的表头和那一列画斜纹（和月格、手机泳道同一个类 .holiday / .workday，代码复审 N4、R-432）；
 //   点表头选中那一天，下面清单列出当天全部
 // • 顶部“全天”行：全天日程和当天截止的待办（○ 标题），点了打开编辑页（电脑版详情抽屉，R-130：页面的 onOpen 决定；按钮带 data-open、开着的那条 aria-current）
@@ -12,7 +12,8 @@ import { navigate } from '../../../app/router.ts';
 import { useRoT } from '../../../kit/hooks/useRoT.ts';
 import { useT } from '../../../kit/hooks/useT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, dayKind, dayKindClass, holText, itemShort, itemTitle, labelInName, namedHolidays, weekdayKey } from './cal-ui.ts';
+import { dayOfSpan } from '../../../../shared/logic/calendar/event-span.ts';
+import { colorClass, dayKind, dayKindClass, holText, itemTitle, labelInName, namedHolidays, ofText, weekdayKey, weekendClass } from './cal-ui.ts';
 import type { HourRange } from './week-axis.ts';
 import type { WeekProps } from './WeekView.tsx';
 
@@ -44,17 +45,12 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
         // 连休只在第一天写节日名，后几天照常写农历或节气（和月格同一条规则）
         const [named] = namedHolidays(date, hol, p.holidays);
         const sub = named ? holText(named, t('cal.workday', {})) : (p.lunarOf?.(date) ?? '');
+        // 日期数字和月格、手机泳道同一套（R-445）：周末灰字、今天淡黄小框、选中深色小方块（.wkend .today .sel .dayNum）
+        const cls = [styles.dHead, styles.dHeadBtn, kinds[i] ?? '', weekendClass(weekdayOf(date)), date === today ? styles.today : '', sel ? styles.sel : ''];
         return (
-          <button
-            key={date}
-            type="button"
-            className={[styles.dHead, styles.dHeadBtn, kinds[i] ?? '', sel ? styles.dHeadSel : ''].filter(Boolean).join(' ')}
-            aria-pressed={sel}
-            onClick={() => p.onSelect(date)}
-            data-date={date}
-          >
+          <button key={date} type="button" className={cls.filter(Boolean).join(' ')} aria-pressed={sel} onClick={() => p.onSelect(date)} data-date={date}>
             <span>{t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) })}</span>
-            <b className={date === today ? styles.todayNum : undefined}>{Number(date.slice(8))}</b>
+            <b className={styles.dayNum}>{Number(date.slice(8))}</b>
             <small>{sub}</small>
           </button>
         );
@@ -64,11 +60,10 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
         const ad = p.desk?.[i]?.allDay;
         return (
           <div key={`ad-${date}`} className={styles.dAll}>
-            {ad?.itemIds.map((id, k) => {
-              const kind = ad.kinds[k] ?? 'allDay';
-              // 跨天的全天日程（R-444）：先用最朴素的写法，每天各一块，标题后面写“(2/3)”；连条画法等负责人定了图再做
-              const span = ad.dayOf[k];
-              const title = (itemTitle(items, kind, id) || itemShort(items, kind, id)) + (span ? ` (${span.index}/${span.days})` : '');
+            {ad?.entries.map(({ itemId: id, kind, short, span }) => {
+              // 跨天的全天日程（R-444）：电脑周表每天各一块，标题后面写“(2/3)”
+              const of = ofText(span && dayOfSpan(span, date));
+              const title = (itemTitle(items, kind, id) || short) + (of ? ` (${of})` : '');
               const which = kind === 'todo' ? 'todo' : 'event';
               const ro = isRo(which, id);
               return (

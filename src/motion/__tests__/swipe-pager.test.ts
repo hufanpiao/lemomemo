@@ -1,11 +1,12 @@
-// 左右滑动翻页（B2 FA-3，架构 5.12 第 3 点）：先竖着动交给滚动、左边缘 20 px 让给系统返回手势、松手横移 60 px 才翻；
-// 跟手只写 DOM 的 transform（不让页面重画，R-420 审查第 3 条）、松手滑到位；翻不动（onPage 返回 false）按“不够”滑回原位（第 1 条）。
+// 左右滑动翻页（B2 FA-3，架构 5.12 第 3 点；R-457 原地淡换）：先竖着动交给滚动、左边缘 20 px 让给系统返回手势、松手横移 60 px 才翻；
+// 跟手只写 DOM 的 transform（不让页面重画，R-420 审查第 3 条），只走一小段（followX）；翻成了原地淡换（flip 拍副本淡出），翻不动（onPage 返回 false）带过渡回原位（第 1 条）。
 // 锁方向、避让、跟手、吞点按在 hdrag.ts（和 kit 左滑行共用）；这里直接调 bind 上的四个处理函数测
-// 真浏览器里逐帧的位移（新的一页真的从那一侧滑进来）由 tests/e2e/r420-swipe-taps.spec.ts 在 chromium、webkit 上量
+// 真浏览器里的淡换（副本叠在原位淡出、新的一页淡入）由 e2e 在 chromium、webkit 上看
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EDGE_PX, inEdge, lockOf, SLOP_PX } from '../hdrag.ts';
-import { enterOffset, swipeResult, TRIGGER_PX, useSwipePager } from '../swipe-pager.ts';
+import { dur } from '../tokens.ts';
+import { flipMs, FOLLOW_MAX_PX, followX, swipeResult, TRIGGER_PX, useSwipePager } from '../swipe-pager.ts';
 
 describe('swipe-pager 判断', () => {
   it('数字照架构 5.12：左边缘 20 px、横移 60 px；起滑距离 10 px（和左滑行同一个）', () => {
@@ -36,9 +37,16 @@ describe('swipe-pager 判断', () => {
     expect(swipeResult(-(TRIGGER_PX - 1))).toBe(0);
   });
 
-  it('新的一页从拖出的那一侧接着滑进来', () => {
-    expect(enterOffset(1, -80, 390)).toBe(310);
-    expect(enterOffset(-1, 80, 390)).toBe(-310);
+  it('跟手只走一小段：手指横移的 0.15 倍、最多 16 px（R-457 方案 C）', () => {
+    expect(followX(-30)).toBeCloseTo(-4.5);
+    expect(followX(40)).toBeCloseTo(6);
+    expect(followX(-500)).toBe(-FOLLOW_MAX_PX);
+    expect(followX(500)).toBe(FOLLOW_MAX_PX);
+  });
+
+  it('翻页时长：--dur-ui 的 4 倍（负责人原话“放慢4倍”）；减少动态效果时只留 --dur-ui', () => {
+    expect(flipMs(false)).toBeCloseTo(dur.ui * 4000);
+    expect(flipMs(true)).toBeCloseTo(dur.ui * 1000);
   });
 });
 
@@ -77,10 +85,11 @@ describe('useSwipePager', () => {
     vi.restoreAllMocks();
     document.documentElement.removeAttribute('data-rm');
     document.body.replaceChildren();
+    Reflect.deleteProperty(HTMLElement.prototype, 'animate');
   });
 
   function setup(turns = true) {
-    const onPage = vi.fn((_dir: -1 | 1) => turns);
+    const onPage = vi.fn((_dir: -1 | 1, _via: 'swipe' | 'btn') => turns);
     let renders = 0;
     const h = renderHook(() => {
       renders++;
@@ -92,20 +101,20 @@ describe('useSwipePager', () => {
     return { onPage, h, b, ...p, renders: () => renders };
   }
 
-  it('横滑跟手只写 transform、不重画；锁成横滑后抓住指针；松手够了翻下一页，新的一页从右边（拖出的那一侧）带过渡滑回 0', () => {
+  it('横滑跟手只写 transform、不重画、只走一小段；锁成横滑后抓住指针；松手够了翻下一页，直接回到 0（不再整页滑进来）', () => {
     const { onPage, b, el, writes, renders } = setup();
     act(() => b().onPointerDown(ev(el, { clientX: 200, clientY: 100 })));
     const before = renders();
     for (const x of [190, 180, 170]) act(() => b().onPointerMove(ev(el, { clientX: x, clientY: 102 })));
     expect(renders() - before, '跟手不让用它的页面重画').toBe(0);
     expect(el.setPointerCapture).toHaveBeenCalledWith(1);
-    expect(el.style.transform).toBe('translateX(-30px)');
+    expect(el.style.transform).toBe('translateX(-4.5px)');
     expect(el.dataset['snap']).toBeUndefined();
     act(() => b().onPointerUp(ev(el, { clientX: 120, clientY: 104 })));
-    expect(onPage).toHaveBeenCalledWith(1);
-    expect(writes.at(-2)).toBe(`translateX(${390 - 80}px)`);
+    expect(onPage).toHaveBeenCalledWith(1, 'swipe');
+    expect(writes.filter((w) => Math.abs(parseFloat(w.slice(11)) || 0) > FOLLOW_MAX_PX), '没有整页位移').toEqual([]);
     expect(el.style.transform).toBe('');
-    expect(el.dataset['snap']).toBe('');
+    expect(el.dataset['snap']).toBeUndefined();
   });
 
   it('翻不动（onPage 返回 false，到了范围边上）：按“不够”滑回原位，不从右边整页滑进来', () => {
@@ -113,7 +122,7 @@ describe('useSwipePager', () => {
     act(() => b().onPointerDown(ev(el, { clientX: 200, clientY: 100 })));
     act(() => b().onPointerMove(ev(el, { clientX: 150, clientY: 100 })));
     act(() => b().onPointerUp(ev(el, { clientX: 100, clientY: 100 })));
-    expect(onPage).toHaveBeenCalledWith(1);
+    expect(onPage).toHaveBeenCalledWith(1, 'swipe');
     expect(writes.filter((w) => /translateX\(\d/.test(w)), '没有往右边放过').toEqual([]);
     expect(el.style.transform).toBe('');
     expect(el.dataset['snap']).toBe('');
@@ -171,19 +180,51 @@ describe('useSwipePager', () => {
     act(() => b().onPointerMove(ev(el, { clientX: 120 })));
     expect(el.style.transform).toBe('');
     act(() => b().onPointerUp(ev(el, { clientX: 120 })));
-    expect(onPage).toHaveBeenCalledWith(1);
+    expect(onPage).toHaveBeenCalledWith(1, 'swipe');
     expect(writes.every((w) => w === '')).toBe(true);
   });
 
-  it('按钮翻页 slideIn：新的一页先放到那一侧（不带过渡）、再带过渡滑到 0；减少动态效果时什么都不做', () => {
-    const { h, el, writes } = setup();
-    act(() => h.result.current.slideIn(-1));
-    expect(writes).toEqual(['translateX(-390px)', '']);
-    expect(el.dataset['snap']).toBe('');
-    writes.length = 0;
+  it('按钮翻页 flip：拍一份副本叠在原位（去掉测试标记、aria-hidden、inert）、新的一页淡入；翻不动时副本收掉', () => {
+    const { h, el, onPage } = setup();
+    el.dataset['testid'] = 'cal-grid';
+    const anims: { kf: Keyframe[]; o: KeyframeAnimationOptions }[] = [];
+    const fake = (kf: Keyframe[], o: KeyframeAnimationOptions) => {
+      anims.push({ kf, o });
+      return { cancel: vi.fn(), finished: new Promise(() => undefined) } as unknown as Animation;
+    };
+    HTMLElement.prototype.animate = fake as unknown as HTMLElement['animate'];
+    let ok = false;
+    act(() => {
+      ok = h.result.current.flip(-1, 'btn');
+    });
+    expect(ok).toBe(true);
+    expect(onPage).toHaveBeenCalledWith(-1, 'btn');
+    const ghost = el.previousElementSibling as HTMLElement;
+    expect(ghost.getAttribute('aria-hidden')).toBe('true');
+    expect(ghost.inert).toBe(true);
+    expect(ghost.dataset['testid']).toBeUndefined();
+    expect(anims.map((a) => a.o.duration)).toEqual([flipMs(false), flipMs(false)]);
+    expect(anims[0]?.kf.at(-1)?.opacity).toBe(0);
+    expect(anims[1]?.kf.at(-1)?.opacity).toBe(1);
+    // 减少动态效果：只淡入淡出、--dur-ui，不模糊
     document.documentElement.setAttribute('data-rm', '1');
     h.rerender();
-    act(() => h.result.current.slideIn(1));
-    expect(writes).toEqual([]);
+    anims.length = 0;
+    act(() => void h.result.current.flip(1, 'btn'));
+    expect(document.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1);
+    expect(anims.map((a) => a.o.duration)).toEqual([flipMs(true), flipMs(true)]);
+    expect(anims.every((a) => a.kf.every((k) => k.filter === undefined))).toBe(true);
+  });
+
+  it('flip 翻不动（onPage 返回 false）：副本收掉，画面不动', () => {
+    const { h, el } = setup(false);
+    HTMLElement.prototype.animate = vi.fn() as unknown as HTMLElement['animate'];
+    let ok = true;
+    act(() => {
+      ok = h.result.current.flip(1, 'btn');
+    });
+    expect(ok).toBe(false);
+    expect(el.previousElementSibling?.getAttribute('aria-hidden') ?? null, '没留下副本').toBeNull();
+    expect(HTMLElement.prototype.animate).not.toHaveBeenCalled();
   });
 });

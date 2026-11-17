@@ -5,7 +5,7 @@
 // • 纪念日、倒数日不占标签，只看 opts.annivDates 标 anniv；
 // • 每格最多 opts.maxMarks 排（手机 2、电脑 4，由界面按窗口档位给），多出来的件数记进 more（显示“+N”）；
 // • 跨天的日程（R-444；R-445 负责人选“一整条色块”）按周排：同一周里它占的几格画成一整条，排在同一排（slot）；
-//   跨到下一周的另起一段，每段开头再写一次名字（before = 头是从前面接过来的，界面字淡一档、不画左侧深色竖线）。
+//   跨到下一周的另起一段，每段开头再写一次名字；bar.cont 标出被切开的一边（和周视图时刻块同一个 Cont，界面那一端画直角、不画左侧深色竖线）。
 //   一周里先给跨天的排位（开始得早的、跨得长的在上面），再把当天的单日事项按顺序填进空着的排；排不下的都记进 more；
 // • 读屏 a11y 按规整后的项目名（normalizeProject，和分色同一套）汇总当天全部件数（含没显示出来的），
 //   顺序按当天排序后各项目第一次出现的先后。
@@ -15,6 +15,7 @@ import type { Tz } from '../../core/tz.ts';
 import type { ProjectColor } from '../project-color.ts';
 import { assertTz, collectEntries, compareEntries, type CalItems, type DayEntry } from './cal-items.ts';
 import { checkYm, firstOfMonth, startOfWeek, type WeekStart, type YearMonth } from './cal-nav.ts';
+import type { Cont } from './event-span.ts';
 import type { HolidayMark } from './holidays.ts';
 
 /** 格子数：6 周 × 7 天 */
@@ -26,10 +27,8 @@ export interface MonthBar {
   readonly head: boolean;
   /** 这一段占几格（同一周里，1～7） */
   readonly cols: number;
-  /** 段头是从前一天接过来的（续条：字淡一档、不画左侧深色竖线） */
-  readonly before: boolean;
-  /** 段尾还接着下一天（下一周） */
-  readonly after: boolean;
+  /** 这一段被切开的一边（和周视图时刻块同一个 Cont：'start' 头从上一周接过来、'end' 尾接到下一周、'both' 两头都接着）；整段都在这一周里的没有 */
+  readonly cont?: Cont;
 }
 
 /** 格子里的一个标签 */
@@ -104,6 +103,12 @@ function markOf(e: DayEntry, slot: number, bar?: MonthBar): MonthMark {
   return { itemId: e.itemId, kind: e.kind, colorIndex: e.colorIndex, short: e.short, slot, ...(bar ? { bar } : {}) };
 }
 
+/** 一段的头接着前面、尾接着后面 → 被切开的一边 */
+function segCont(before: boolean, after: boolean): Cont | undefined {
+  if (before) return after ? 'both' : 'start';
+  return after ? 'end' : undefined;
+}
+
 /** 一周 7 天的标签和 more：先排跨天色块（开始早的、跨得长的在上），再把单日的填进空着的排（R-445） */
 function layoutWeek(week: readonly DateStr[], lists: readonly (readonly DayEntry[])[], maxMarks: number): { marks: MonthMark[][]; more: number[] } {
   const marks: MonthMark[][] = week.map(() => []);
@@ -124,14 +129,14 @@ function layoutWeek(week: readonly DateStr[], lists: readonly (readonly DayEntry
     let slot = 0;
     while (slot < maxMarks && cols.some((c) => used[c]?.has(slot))) slot++;
     const span = e.span;
+    const cont = span === undefined ? undefined : segCont(span.date < (week[from] ?? span.date), span.lastDate > (week[to] ?? span.lastDate));
     for (const c of cols) {
       if (slot >= maxMarks || span === undefined) {
         more[c] = (more[c] ?? 0) + 1;
         continue;
       }
       used[c]?.add(slot);
-      const before = c === from ? span.date < (week[from] ?? span.date) : true;
-      marks[c]?.push(markOf(e, slot, { head: c === from, cols: to - from + 1, before, after: span.lastDate > (week[to] ?? span.lastDate) }));
+      marks[c]?.push(markOf(e, slot, { head: c === from, cols: to - from + 1, ...(cont ? { cont } : {}) }));
     }
   }
   lists.forEach((list, col) => {

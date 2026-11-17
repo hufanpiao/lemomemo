@@ -290,7 +290,7 @@ describe('月视图', () => {
     expect(window.location.hash).toBe('#/event/1');
   });
 
-  it('纪念日：文字行后面画菱形，读屏写“有纪念日”（R-105；纪念日数据 B5 接入前用月格直接验）', () => {
+  it('纪念日：文字行后面画小爱心（R-458），读屏写“有纪念日”（R-105；纪念日数据 B5 接入前用月格直接验）', () => {
     const t = (k: string, v: Record<string, string | number>) => (viewZh as Record<string, string>)[k]?.replace(/\{(\w+)\}/g, (_, n: string) => String(v[n] ?? '')) ?? k;
     render(
       <MonthGrid
@@ -303,7 +303,7 @@ describe('月视图', () => {
         onSelect={() => undefined}
       />,
     );
-    expect(screen.getByTestId('cal-anniv').className).toContain(styles.dia);
+    expect(screen.getByTestId('cal-anniv').getAttribute('class')).toContain(styles.heart);
     expect(document.querySelector('[data-date="2026-11-05"]')?.getAttribute('aria-label')).toContain('有纪念日');
   });
 });

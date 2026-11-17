@@ -154,17 +154,17 @@ describe('月格：跨天画成一整条（R-445“一整条色块”）', () =>
   const opts = { tz: SEOUL, today: '2026-11-17', weekStart: 1 as const, maxMarks: 2 };
   const at = (cells: ReturnType<typeof buildMonth>, d: string) => cells.find((c) => c.date === d)?.marks ?? [];
 
-  it('同一周里只有段头那一格画（cols 写占几格），别的格子同一排空着；跨到下一周另起一段、before 标出是续条', () => {
+  it('同一周里只有段头那一格画（cols 写占几格），别的格子同一排空着；跨到下一周另起一段、cont 标出被切开的一边（R-445 评审第 3 条）', () => {
     const events = [
       ev({ id: 'trip', date: '2026-11-18', duration_min: 3 * DAY }),
       ev({ id: 'wk', date: '2026-11-21', duration_min: 3 * DAY }),
       timed('one', '2026-11-19', '10:00', SEOUL, 60),
     ];
     const cells = buildMonth({ y: 2026, m: 11 }, { events, todos: [] }, opts);
-    expect(at(cells, '2026-11-18')).toEqual([expect.objectContaining({ itemId: 'trip', slot: 0, bar: { head: true, cols: 3, before: false, after: false } })]);
+    expect(at(cells, '2026-11-18')).toEqual([expect.objectContaining({ itemId: 'trip', slot: 0, bar: { head: true, cols: 3 } })]);
     expect(at(cells, '2026-11-19').map((m) => [m.itemId, m.slot, m.bar?.head])).toEqual([['trip', 0, false], ['one', 1, undefined]]);
-    expect(at(cells, '2026-11-21')).toEqual([expect.objectContaining({ itemId: 'wk', slot: 0, bar: { head: true, cols: 2, before: false, after: true } })]);
-    expect(at(cells, '2026-11-23')).toEqual([expect.objectContaining({ itemId: 'wk', slot: 0, bar: { head: true, cols: 1, before: true, after: false } })]);
+    expect(at(cells, '2026-11-21')).toEqual([expect.objectContaining({ itemId: 'wk', slot: 0, bar: { head: true, cols: 2, cont: 'end' } })]);
+    expect(at(cells, '2026-11-23')).toEqual([expect.objectContaining({ itemId: 'wk', slot: 0, bar: { head: true, cols: 1, cont: 'start' } })]);
   });
 
   it('先排跨天的（开始早的、跨得长的在上），单日的填空着的排；排不下的每一格都记进 more', () => {
@@ -185,9 +185,9 @@ describe('月格：跨天画成一整条（R-445“一整条色块”）', () =>
 describe('周视图：全天行每天一条、时间块按天切段', () => {
   const WEEK = '2026-11-16'; // 周一
 
-  it('全天 3 天：周三到周五各一条，dayOf 写第几天、共几天', () => {
+  it('全天 3 天：周三到周五各一条，按 span 算第几天、共几天', () => {
     const days = buildWeek(WEEK, { events: [ev({ id: 'trip', date: '2026-11-18', duration_min: 3 * DAY })], todos: [] }, { layout: 'desk', tz: SEOUL });
-    expect(days.map((d) => d.allDay.dayOf)).toEqual([[], [], [{ index: 1, days: 3 }], [{ index: 2, days: 3 }], [{ index: 3, days: 3 }], [], []]);
+    expect(days.map((d) => d.allDay.entries.map((e) => e.span && dayOfSpan(e.span, d.date)))).toEqual([[], [], [{ index: 1, days: 3 }], [{ index: 2, days: 3 }], [{ index: 3, days: 3 }], [], []]);
   });
 
   it('有时刻 09:00 起 2 天 9 小时：三段 09:00–24:00、整天、00:00–18:00，cont 为 end、both、start', () => {

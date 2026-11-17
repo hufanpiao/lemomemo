@@ -1,6 +1,6 @@
 // 周视图的数据和布局（架构 5.12 第 2 点、R-107、R-109、R-110；第 9 节“buildWeek 布局”；TC-B2-09）
 // buildWeek(weekStart, items, opts)：weekStart 是这一周的第一天，返回 7 天，每天：
-// • 全天日程不上时间轴，记成“全天 N”（N = 1 时带简称）；跨天的全天日程（R-444）它占的每一天都算一件，allDay.dayOf 标出是第几天、共几天；
+// • 全天日程不上时间轴，记成“全天 N”（N = 1 时带简称）；跨天的全天日程（R-444）它占的每一天都算一件，allDay.entries 里带 span（第几天、被切的一边）；
 // • 有时刻的日程按设备时区换算，跨午夜、跨多天的（R-444，最长 31 天）按午夜切段，各归各天，cont 标出被切的一边（'end' = 尾部被切，
 //   'start' = 头部被切，'both' = 两头都被切，中间整天那几段），界面在被切的一端画成直边；
 // • 手机（layout 'phone'，时间轴横向）：色块长度取 max(按时长算的长度, minBlockPx)，超出当天末尾的截到末尾，
@@ -68,11 +68,11 @@ export interface DeskBlock extends BlockBase {
 export interface AllDay {
   readonly count: number;
   readonly short: string | null;
-  readonly itemIds: readonly string[];
-  /** 和 itemIds 一一对应：'allDay' 是全天日程（events 表），'todo' 是待办（todos 表，画空心圆）。代码审查 S9 */
-  readonly kinds: readonly DayEntry['kind'][];
-  /** 和 itemIds 一一对应：跨天的全天日程这一天是第几天、共几天（R-444；R-445 手机周泳道画成顶上一整条、右端写“2/3”）；只占一天的、待办为 undefined */
-  readonly dayOf: readonly ({ readonly index: number; readonly days: number } | undefined)[];
+  /**
+   * 这一天的全天事项（按 compareEntries 排好）：kind 'allDay' 是全天日程，'todo' 是待办（只有电脑那一行有，画“○ 标题”）；
+   * 项目色、简称直接用，不回原始数据里找；跨天的看 span（第几天、共几天用 dayOfSpan，被切的一边是 span.cont，R-444、R-445）
+   */
+  readonly entries: readonly DayEntry[];
 }
 
 export interface PhoneDay {
@@ -142,16 +142,10 @@ function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets
   return { allDay, timed, todos };
 }
 
-function allDayOf(entries: DayEntry[], date: DateStr): AllDay {
+function allDayOf(entries: DayEntry[]): AllDay {
   const sorted = entries.sort(compareEntries);
   const only = sorted.length === 1 ? sorted[0] : undefined;
-  return {
-    count: sorted.length,
-    short: only ? only.short : null,
-    itemIds: sorted.map((e) => e.itemId),
-    kinds: sorted.map((e) => e.kind),
-    dayOf: sorted.map((e) => (e.span ? dayOfSpan(e.span, date) : undefined)),
-  };
+  return { count: sorted.length, short: only ? only.short : null, entries: sorted };
 }
 
 /** 段的排序：开始分钟，再按创建时间、id（结果稳定） */
@@ -280,11 +274,11 @@ export function buildWeek(weekStart: DateStr, items: WeekItems, opts: PhoneWeekO
   if (opts.layout === 'phone') {
     return dates.map((date) => ({
       date,
-      allDay: allDayOf(b.allDay.get(date) ?? [], date),
+      allDay: allDayOf(b.allDay.get(date) ?? []),
       todos: todosOf(date).sort(compareEntries),
       ...layoutPhone(segsOf(date), opts.minBlockPx, opts.dayPx),
     }));
   }
   // 电脑：待办并进全天那一行（compareEntries 把待办排在全天日程后面）
-  return dates.map((date) => ({ date, allDay: allDayOf([...(b.allDay.get(date) ?? []), ...todosOf(date)], date), blocks: layoutDesk(segsOf(date)) }));
+  return dates.map((date) => ({ date, allDay: allDayOf([...(b.allDay.get(date) ?? []), ...todosOf(date)]), blocks: layoutDesk(segsOf(date)) }));
 }

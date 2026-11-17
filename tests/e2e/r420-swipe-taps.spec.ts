@@ -1,9 +1,9 @@
 // 横滑手势、吞点按的真浏览器用例（R-420 第三方审查二轮“横滑手势、吞点按、草稿框”）：jsdom 量不出动画和焦点，这里在 chromium、webkit 上守
-//   ① 月历翻页逐帧（审查第 2 条）：按钮翻页、手指横滑翻页以后，每一帧读 cal-pager 的计算 transform，新的一页真的从那一侧滑进来
-//      （第一帧在 0 和整宽之间、挂着 transform 的 CSS 过渡，一路变小到 0），不是一下到位、也不是从错的位置起播。
-//      半路画出几帧取决于机器帧率（CI 的 WebKit 软件渲染一帧 240～580 ms，比 0.22 s 的过渡还长），所以逐帧时把 --dur-ui 调成 SLOW_DUR、只要求 ≥1 帧半路，
-//      “真的在播”靠第一帧时挂着的过渡（时长 > 0）来证；报错信息带每帧的时间，帧间隔从日志直接看
-//   ② 翻不动也不播翻页动画（审查第 1 条）：到 2100 年 12 月再往左滑，松手只滑回原位（每一帧都 ≤ 0，不会从右边整页滑进来）
+//   ① 月历翻页逐帧（审查第 2 条；R-457 负责人 11-17 选“放慢4倍的C原地淡换”）：按钮翻页、手指横滑翻页以后，每一帧读
+//      新的一页（cal-pager）的计算透明度和横移、旧的一页副本（叠在原位、aria-hidden）在不在和它的透明度：
+//      第一帧副本叠着、新的一页还没完全显出来；新的一页一路变实、副本一路变淡，至少 1 帧停在半路；横移从头到尾不超过跟手的那一小段（不整页滑）；
+//      最后副本撤掉、新的一页不透明。报错信息带每帧的时间，帧间隔从日志直接看
+//   ② 翻不动也不播翻页动画（审查第 1 条）：到 2100 年 12 月再往左滑，松手只滑回原位（每一帧都 ≤ 0，不会从右边整页滑进来），也不拍副本
 //   ③ 一行露着时点另一行（审查第 7 条）：第一下只收起露着的那行，不打开点到的那行；再点一下才打开
 //   ④ 滑开后焦点在操作按钮上按 Esc 收起（审查第 6 条）：焦点交还给行面的主按钮，不掉回 body
 //   ⑤ 左滑完马上在行面按 Enter（审查第 12 条）：键盘的 click（detail 为 0）不当成滑完补来的那一下，照常打开
@@ -12,6 +12,7 @@
 import { writeFileSync } from 'node:fs';
 import type { Locator, Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { FOLLOW_MAX_PX } from '../../src/motion/swipe-pager.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use({ trace: 'off', loggedIn: true, viewport: { width: 390, height: 844 }, hasTouch: true, timezoneId: 'Asia/Seoul', locale: 'zh-CN' });
@@ -24,12 +25,8 @@ test.afterAll(({ browserName }) => {
 
 type Act = { kind: 'next' } | { kind: 'swipe'; dx: number };
 
-/** diag：第一帧时的诊断（CI webkit 偶发“16 帧全是 0、过渡无”，分诊表遗留⑤，先记证据再改）：
- *  采帧的元素还在不在文档里、是不是页面上现在那个 cal-pager、data-snap、内联 transform、计算出的过渡、减少动态、没加载完的样式表数 */
-type Frames = { x: number[]; ms: number[]; transitionMs: number | null; diag: string };
-
-/** 做一次翻页（按钮或手指横滑），接着用 rAF 连读（至少 16 帧、读到回 0 为止）cal-pager 的计算 transform 的横移（px，取整）、每帧离第一帧的毫秒数，
- *  以及第一帧时 cal-pager 上 transform 的 CSS 过渡时长（没有就是 null） */
+/** 每帧：新的一页的横移（px，取整）、透明度（两位小数）、副本的透明度（没有副本 null）、离第一帧的毫秒数；diag 第一帧时的诊断 */
+type Frames = { x: number[]; op: number[]; ghost: (number | null)[]; ms: number[]; diag: string };
 async function framesAfter(page: Page, act: Act): Promise<Frames> {
   return page.evaluate(async (a) => {
     const el = document.querySelector<HTMLElement>('[data-testid="cal-pager"]');
@@ -54,47 +51,40 @@ async function framesAfter(page: Page, act: Act): Promise<Frames> {
       fire('pointerup', x0 + a.dx);
     }
     const x: number[] = [];
+    const op: number[] = [];
+    const ghost: (number | null)[] = [];
     const ms: number[] = [];
-    let transitionMs: number | null = null;
     let diag = '';
     let t0: number | undefined;
+    const ghostEl = (): HTMLElement | null => {
+      const g = el.previousElementSibling;
+      return g instanceof HTMLElement && g.getAttribute('aria-hidden') === 'true' ? g : null;
+    };
+    const opOf = (e: Element): number => Math.round(Number(getComputedStyle(e).opacity) * 100) / 100;
     await new Promise<void>((res) => {
       const tick = (now: number): void => {
+        const g = ghostEl();
         if (x.length === 0) {
-          const tr = el.getAnimations().find((an) => an instanceof CSSTransition && an.transitionProperty === 'transform');
-          const d = tr?.effect?.getTiming().duration;
-          transitionMs = typeof d === 'number' ? d : null;
-          const cs = getComputedStyle(el);
-          const pendingCss = [...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')].filter((l) => !l.sheet).length;
-          diag = [
-            `connected=${el.isConnected}`,
-            `same=${el === document.querySelector('[data-testid="cal-pager"]')}`,
-            `snap=${'snap' in el.dataset}`,
-            `inline=${el.style.transform || '-'}`,
-            `trans=${cs.transitionProperty}/${cs.transitionDuration}`,
-            `rm=${document.documentElement.dataset['rm'] ?? '-'}`,
-            `reduce=${matchMedia('(prefers-reduced-motion: reduce)').matches}`,
-            `pendingCss=${pendingCss}`,
-            `anims=${el.getAnimations().length}`,
-          ].join(' ');
+          diag = [`connected=${el.isConnected}`, `ghost=${g !== null}`, `anims=${el.getAnimations().length}`, `rm=${document.documentElement.dataset['rm'] ?? '-'}`].join(' ');
         }
         x.push(tx());
+        op.push(opOf(el));
+        ghost.push(g ? opOf(g) : null);
         t0 ??= now;
         ms.push(Math.round(now - t0));
-        // 至少 16 帧，并且采到回到 0 为止（过渡调长到 SLOW_DUR 后可能要更久；最多 6 秒）
-        if ((x.length < 16 || x.at(-1) !== 0) && now - t0 < 6000) requestAnimationFrame(tick);
+        // 至少 16 帧，并且采到副本撤掉、新的一页不透明、回到原位为止（最多 6 秒）
+        const rest = g === null && op.at(-1) === 1 && x.at(-1) === 0;
+        if ((x.length < 16 || !rest) && now - t0 < 6000) requestAnimationFrame(tick);
         else res();
       };
       requestAnimationFrame(tick);
     });
-    return { x, ms, transitionMs, diag };
+    return { x, op, ghost, ms, diag };
   }, act);
 }
 
-/** 逐帧时把 --dur-ui 调长（只在这个页面、用 CSSOM 改根节点，不插 <style>，不触发 CSP）：
- *  CI 的 WebKit 软件渲染一帧 240～580 ms，比 0.22 s 的过渡还长，过渡在两帧之间就播完了，采不到半路的帧（分诊表遗留⑤，
- *  4ab18b3d 的诊断：按钮那次第一帧 x=358、过渡 220 ms，下一帧隔 582 ms 已回到 0；左滑那次第一帧前就播完、动画数 0）。
- *  这里验的是从哪一侧进、一路往 0 走，不是时长；时长照常由 CSS 的 --dur-ui 定 */
+/** 逐帧时把 --dur-ui 调长（只在这个页面、用 CSSOM 改根节点，不插 <style>，不触发 CSP）：翻不动时“滑回原位”是 CSS 过渡，
+ *  CI 的 WebKit 软件渲染一帧 240～580 ms，比 0.22 s 的过渡还长（分诊表遗留⑤）。翻页淡换是 JS 动画（--dur-ui × 4 = 880 ms），不受它影响 */
 const SLOW_DUR = '1500ms';
 
 async function openMonth(page: Page, ym: string): Promise<void> {
@@ -105,38 +95,42 @@ async function openMonth(page: Page, ym: string): Promise<void> {
   await page.waitForTimeout(FADE_GUARD_MS + 200);
 }
 
-/** 新的一页从右边（下一页）滑进来：起点在 (0, 整宽]，第一帧挂着 transform 的过渡，一路不变大，最后到 0，至少 1 帧停在半路 */
-function expectSlideFromRight(fr: Frames, width: number, what: string): void {
-  const f = fr.x;
-  const seen = `（每帧 x=${f.join(',')}，ms=${fr.ms.join(',')}，过渡 ${fr.transitionMs ?? '无'} ms；第一帧 ${fr.diag}）`;
-  expect(fr.transitionMs ?? 0, `${what} 第一帧挂着 transform 的过渡${seen}`).toBeGreaterThan(0);
-  expect(f[0], `${what} 第一帧在右边${seen}`).toBeGreaterThan(0);
-  expect(f[0], `${what} 第一帧不超过整宽`).toBeLessThanOrEqual(width);
-  for (let i = 1; i < f.length; i++) expect(f[i], `${what} 第 ${i} 帧不往回走`).toBeLessThanOrEqual(f[i - 1] as number);
-  expect(f.filter((x) => x > 0 && x < width).length, `${what} 真的在滑（半路的帧）${seen}`).toBeGreaterThanOrEqual(1);
-  expect(f.at(-1), `${what} 最后回到 0`).toBe(0);
+/** 原地淡换：第一帧副本叠着、新的一页没完全显出来；新的一页一路不变淡、副本一路不变实，至少 1 帧半路；横移不超过跟手那一小段；最后副本撤掉、不透明 */
+function expectCrossFade(fr: Frames, what: string): void {
+  const seen = `（每帧 x=${fr.x.join(',')}，op=${fr.op.join(',')}，副本=${fr.ghost.map((g) => g ?? '-').join(',')}，ms=${fr.ms.join(',')}；第一帧 ${fr.diag}）`;
+  expect(fr.ghost[0], `${what} 第一帧旧的一页副本叠在原位${seen}`).not.toBeNull();
+  expect(fr.op[0], `${what} 第一帧新的一页还没完全显出来${seen}`).toBeLessThan(1);
+  for (let i = 1; i < fr.op.length; i++) expect(fr.op[i], `${what} 第 ${i} 帧新的一页不往回变淡${seen}`).toBeGreaterThanOrEqual((fr.op[i - 1] as number) - 0.01);
+  const g = fr.ghost.filter((v): v is number => v !== null);
+  for (let i = 1; i < g.length; i++) expect(g[i], `${what} 副本不往回变实${seen}`).toBeLessThanOrEqual((g[i - 1] as number) + 0.01);
+  expect(fr.op.filter((o) => o > 0 && o < 1).length, `${what} 真的在淡换（半路的帧）${seen}`).toBeGreaterThanOrEqual(1);
+  for (const [i, x] of fr.x.entries()) expect(Math.abs(x), `${what} 第 ${i} 帧不整页横移${seen}`).toBeLessThanOrEqual(FOLLOW_MAX_PX);
+  expect(fr.ghost.at(-1), `${what} 最后副本撤掉${seen}`).toBeNull();
+  expect(fr.op.at(-1), `${what} 最后不透明`).toBe(1);
+  expect(fr.x.at(-1), `${what} 最后回到原位`).toBe(0);
 }
 
 test.describe('月历翻页逐帧（R-420 审查第 1、2 条）', () => {
-  test('按钮翻页、手指横滑翻页：新的一页从右边滑进来，逐帧变小到 0', async ({ page }) => {
+  test('按钮翻页、手指横滑翻页：原地淡换（旧页副本淡出、新页淡入），不整页横移', async ({ page }) => {
     await openMonth(page, '2026-11');
-    const width = Math.round((await page.getByTestId('cal-pager').boundingBox())?.width ?? 0);
     const byButton = await framesAfter(page, { kind: 'next' });
-    frameLog['按钮下一页'] = byButton.x;
-    expectSlideFromRight(byButton, width, '按钮下一页');
+    frameLog['按钮下一页'] = byButton.op;
+    expectCrossFade(byButton, '按钮下一页');
     await page.waitForTimeout(400);
     const bySwipe = await framesAfter(page, { kind: 'swipe', dx: -100 });
-    frameLog['左滑 100 下一页'] = bySwipe.x;
-    expectSlideFromRight(bySwipe, width - 100 + 1, '左滑 100 下一页');
+    frameLog['左滑 100 下一页'] = bySwipe.op;
+    expectCrossFade(bySwipe, '左滑 100 下一页');
     await expect(page).toHaveURL(/2027-01/);
   });
 
-  test('翻不动（2100 年 12 月再往后）：松手只滑回原位，不从右边整页滑进来', async ({ page }) => {
+  test('翻不动（2100 年 12 月再往后）：松手只滑回原位，不从右边整页滑进来、不淡换', async ({ page }) => {
     await openMonth(page, '2100-12');
-    const f = (await framesAfter(page, { kind: 'swipe', dx: -100 })).x;
+    const fr = await framesAfter(page, { kind: 'swipe', dx: -100 });
+    const f = fr.x;
     frameLog['2100-12 左滑 100（翻不动）'] = f;
     for (const [i, x] of f.entries()) expect(x, `第 ${i} 帧不在右边`).toBeLessThanOrEqual(0);
     expect(f.at(-1)).toBe(0);
+    expect(fr.ghost.filter((g) => g !== null), '翻不动不拍副本').toEqual([]);
     await expect(page).toHaveURL(/2100-12/);
   });
 });
