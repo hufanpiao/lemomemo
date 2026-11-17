@@ -21,7 +21,7 @@
 //   ② 再下面：“未同步，提醒可能不响”（UnsyncedRemindHint），浅灰条同日历页（R-346）；外面是常驻的 role="status" 空容器，内容后填进去读屏才播报，
 //      没内容时不占位（.notice 里没有 p）；麦克风被拒时同一个容器里再出一行（MicDeniedNote，B3 S23、Q-22）
 //   ③ 每行行尾“未同步”小标记（UnsyncedRemindMark，在行按钮里、标题和副行的右边；没有时那一格不画）
-//   ②③ 只看本机待同步队列、和引擎无关，同日历页直接挂，不等引擎（M1）
+//   ②③ 只看本机待同步队列、和引擎无关，不等引擎（M1）；但等首屏画完（usePainted）才挂、才下载，不算进首屏预算（11-17 ci 首屏 150.0 KB 超线）
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记、圆圈变淡；点这一行、打勾统一拦下（左滑滑不开），
 //   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）。
 // • 待办子任务（R-350 方案 5.2，Q5）：待办行副行下面一行“已勾/总数”和细进度条，不摊开、不在这里勾（点进编辑页勾）；todos 的 TodaySubtasks 按需下载。顶部（日期下面）有带重复的只读行时出
@@ -120,15 +120,19 @@ function SwipeDel({ Impl, ...p }: SwipeRowProps & { 'data-testid': string; Impl:
   return Impl ? <Impl {...p} /> : <div className={p.className} data-testid={p['data-testid']}>{p.children}</div>;
 }
 
-/** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */
+/** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画。
+ *  首屏画完以后才挂、才下载那一包（同 Subs；11-17 ci 首屏预算 150.0 KB 超线，这一包和提示条一起约 2.2 KB 挪出首屏） */
 function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
+  const painted = usePainted();
   return (
     <span className={list.unsynced}>
-      <QuietBoundary name="unsynced-mark">
-        <Suspense fallback={null}>
-          <UnsyncedRemindMark table={table} id={id} />
-        </Suspense>
-      </QuietBoundary>
+      {painted ? (
+        <QuietBoundary name="unsynced-mark">
+          <Suspense fallback={null}>
+            <UnsyncedRemindMark table={table} id={id} />
+          </Suspense>
+        </QuietBoundary>
+      ) : null}
     </span>
   );
 }
@@ -359,6 +363,8 @@ export default function TodayPage() {
 
 /** 页顶的几条提示：错过的提醒（引擎 armed 或出错以后才挂，晚到时高度展开，GrowIn）、只读行横幅、未同步和麦克风提示 */
 function TopNotices({ missedOn, repeat }: { missedOn: boolean; repeat: ReactNode }) {
+  // “未同步”提示条首屏画完以后才挂（同 RowMark），不算进首屏预算；常驻的 role="status" 容器照旧一开始就在
+  const painted = usePainted();
   return (
     <>
       {/* 外面包一层：有“错过 N 条提醒”那一行时下面留 8px（和日历页 .unsynced 同一个值；设计复审 今天页待办 M1），没有时不占位；没有登录会话时不挂 */}
@@ -374,11 +380,13 @@ function TopNotices({ missedOn, repeat }: { missedOn: boolean; repeat: ReactNode
       {/* 有只读行才下载横幅（条数在横幅里数，N 为 0 不画） */}
       {repeat}
       <div className={styles.notice} role="status" data-testid="today-notice">
-        <QuietBoundary name="unsynced-hint">
-          <Suspense fallback={null}>
-            <UnsyncedRemindHint />
-          </Suspense>
-        </QuietBoundary>
+        {painted ? (
+          <QuietBoundary name="unsynced-hint">
+            <Suspense fallback={null}>
+              <UnsyncedRemindHint />
+            </Suspense>
+          </QuietBoundary>
+        ) : null}
         <QuietBoundary name="mic-denied">
           <MicDeniedNote />
         </QuietBoundary>
