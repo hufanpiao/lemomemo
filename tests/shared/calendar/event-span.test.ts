@@ -161,10 +161,12 @@ describe('月格：跨天画成一整条（R-445“一整条色块”）', () =>
       timed('one', '2026-11-19', '10:00', SEOUL, 60),
     ];
     const cells = buildMonth({ y: 2026, m: 11 }, { events, todos: [] }, opts);
-    expect(at(cells, '2026-11-18')).toEqual([expect.objectContaining({ itemId: 'trip', slot: 0, bar: { head: true, cols: 3 } })]);
+    // 不用 expect.objectContaining：tests/shared 还要在 Deno 下经 deno-vitest-shim 跑一遍（ci 的 deno task test），替身没有它
+    const row = (d: string) => at(cells, d).map((m) => [m.itemId, m.slot, m.bar]);
+    expect(row('2026-11-18')).toEqual([['trip', 0, { head: true, cols: 3 }]]);
     expect(at(cells, '2026-11-19').map((m) => [m.itemId, m.slot, m.bar?.head])).toEqual([['trip', 0, false], ['one', 1, undefined]]);
-    expect(at(cells, '2026-11-21')).toEqual([expect.objectContaining({ itemId: 'wk', slot: 0, bar: { head: true, cols: 2, cont: 'end' } })]);
-    expect(at(cells, '2026-11-23')).toEqual([expect.objectContaining({ itemId: 'wk', slot: 0, bar: { head: true, cols: 1, cont: 'start' } })]);
+    expect(row('2026-11-21')).toEqual([['wk', 0, { head: true, cols: 2, cont: 'end' }]]);
+    expect(row('2026-11-23')).toEqual([['wk', 0, { head: true, cols: 1, cont: 'start' }]]);
   });
 
   it('先排跨天的（开始早的、跨得长的在上），单日的填空着的排；排不下的每一格都记进 more', () => {

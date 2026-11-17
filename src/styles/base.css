@@ -469,6 +469,13 @@ html.scroll-locked body {
   outline-offset: 2px;
 }
 
+/* 打字的框（输入框、多行框、可编辑区）聚焦不画黑框（负责人 11-17：“所有输入框都不要带这个大黑框”）：
+   手指点进输入框也命中 :focus-visible，原来每个框都套 2px 黑框；有闪烁的光标就看得出在哪个框里。
+   勾选框、单选、按钮、链接、下拉不在这里，键盘聚焦框照旧。全仓库只在这一处管，组件里不再给输入框单独画描边 */
+:is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit'], [type='reset'], [type='color'], [type='file']), textarea, [contenteditable]):focus-visible {
+  outline: none;
+}
+
 /* 程序放焦点的非控件（子页标题 h1、设备分组标题 tabIndex={-1}，给读屏用；弹层内容框）不画焦点框（设计复审第二轮 N4）：
    标题不能操作，刷新或用键盘进来时命中 :focus-visible 会套一个方框，像是选中了什么。能操作的控件不写 tabindex=-1，照旧走上面的
    :focus-visible；月份选择器的年列（roving tabindex）方向键先选中再移焦点，拿到焦点的那一年已经是 tabIndex 0 */

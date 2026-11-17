@@ -193,9 +193,7 @@ function Lane({
           <small className={styles.laneSub}>{sub}</small>
         </span>{' '}
         <span className={first ? `${styles.trk} ${styles.trkAll}` : styles.trk} ref={trackRef ?? undefined} aria-hidden="true">
-          {axisTicks(range).map((h) => (
-            <i key={h} className={styles.tick} style={{ left: `${axisFrac(h * 60, range) * 100}%` }} />
-          ))}
+          {/* 轨道里不画整点竖线（负责人 11-17：“周历的竖向分割线去掉”）；整点只在顶上刻度尺 .wrul 写数字 */}
           {/* 现在线排在日程块前面：画在块下面，不压块上的字（设计复审 N2） */}
           {isToday && nowMin >= range.h0 * 60 && nowMin <= range.h1 * 60 ? (
             <i className={styles.wnow} style={{ left: `${axisFrac(nowMin, range) * 100}%` }} data-testid="cal-now" />
