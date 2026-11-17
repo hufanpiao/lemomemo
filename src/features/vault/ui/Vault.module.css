@@ -50,12 +50,13 @@
   color: var(--text);
 }
 
+/* 已解锁的提示块（R-436 丁批）：浅灰底、次要色小字（第二层文字色，不和列表标题抢），分钟数等宽（VaultPage.tsx 经 kit NumIn） */
 .hint {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   padding: 10px 14px;
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   background: var(--panel-2);
-  color: var(--text);
+  color: var(--text-2);
   font-size: var(--fs-12);
   line-height: 1.5;
 }
@@ -331,7 +332,7 @@
 .cardTitle {
   margin: 10px 0 0;
   font-size: var(--fs-20);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .cardSub {
@@ -346,9 +347,27 @@
   gap: 10px;
 }
 
-.cardFoot {
-  margin: 12px 0 0;
+/* “取消”：不描边的整宽文字按钮（R-436 丁批，原 FormButton ghost 带 1px 描边），次要色、点击区 44 */
+.cardCancel {
+  min-height: var(--hit);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
   color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-15);
+  cursor: pointer;
+}
+
+.cardCancel:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 自动上锁说明：第三层文字色（R-436 三层文字色），分钟数等宽 */
+.cardFoot {
+  margin: 8px 0 0;
+  color: var(--text-3);
   font-size: var(--fs-12);
 }
 

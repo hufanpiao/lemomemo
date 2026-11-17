@@ -1,4 +1,4 @@
-// 设置 › 电脑 › 快速记录热键（R-297）：只在 exe 显示；没注册上提示“热键被占用”；录新热键；四种失败的提示；恢复默认；空格按语言显示。另含 设置 › 关于 的农历出处（R-306）
+// 设置 › 电脑 › 快速记录热键（R-297）：只在 exe 显示（不在 exe 里直接打开 #/settings/desktop 退回设置首页，R-436 丁批）；没注册上提示“热键被占用”；录新热键；四种失败的提示；恢复默认；空格按语言显示。另含 设置 › 关于 的农历出处（R-306）
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
@@ -7,7 +7,8 @@ import { useQuickAddHotkey, type HotkeyApi } from '../hooks/useQuickAddHotkey.ts
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
 import { DesktopSection } from '../ui/DesktopSection.tsx';
-import { renderPage } from './fakes.tsx';
+import SettingsPage from '../ui/SettingsPage.tsx';
+import { fakeApi, fakeExit, now, renderPage } from './fakes.tsx';
 
 const DEF = 'Ctrl+Shift+Space';
 const st = (accelerator = DEF, registered = true): HotkeyStatus => ({ accelerator, defaultAccelerator: DEF, registered });
@@ -186,5 +187,22 @@ describe('设置 › 关于（R-306）', () => {
     const credit = screen.getByTestId('settings-lunar-credit');
     expect(card.contains(credit)).toBe(false);
     expect(card.compareDocumentPosition(credit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('直接打开 #/settings/desktop（R-436 丁批：原来不在 exe 里是一页空白）', () => {
+  const open = (api: HotkeyApi) => {
+    window.history.replaceState(null, '', '#/settings/desktop');
+    render(<SettingsPage deps={{ api: fakeApi(), exit: fakeExit().exit, now, hotkey: api }} />);
+  };
+  it('不在 exe 里（热键读回 null）：退回设置首页，不留空白页', async () => {
+    open(fakeHotkey(null).api);
+    await waitFor(() => expect(window.location.hash).toBe('#/settings'));
+    await screen.findByTestId('settings-about-entry');
+  });
+  it('在 exe 里：照常显示热键', async () => {
+    open(fakeHotkey(st()).api);
+    await screen.findByTestId('settings-hotkey-current');
+    expect(window.location.hash).toBe('#/settings/desktop');
   });
 });

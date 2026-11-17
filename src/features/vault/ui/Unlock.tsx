@@ -12,6 +12,7 @@
 import * as RD from '@radix-ui/react-dialog';
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useAutolockMin, useErrText, useVault, useVaultCount } from '../hooks/useVault.ts';
@@ -94,7 +95,7 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
         {relock}
         <LockIcon big />
         <h2 className={styles.cardTitle}>{t('vault.locked.title', {})}</h2>
-        <p className={styles.cardSub}>{faceFails > 0 ? t('vault.unlock.notRecognized', { method }) : t('vault.locked.count', { n: count })}</p>
+        <p className={styles.cardSub}>{faceFails > 0 ? t('vault.unlock.notRecognized', { method }) : <NumIn text={t('vault.locked.count', { n: count })} num={String(count)} />}</p>
         <div className={styles.cardBtns}>
           {canFace ? (
             <FormButton variant="primary" block disabled={busy} onClick={() => void face()} data-testid={`${testId}-face`}>
@@ -104,11 +105,12 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
           <FormButton {...(canFace ? {} : { variant: 'primary' as const })} block onClick={() => setMode('pin')} data-testid={`${testId}-pin`}>
             {t('vault.unlock.pin', {})}
           </FormButton>
-          <FormButton variant="ghost" block onClick={cancel} data-testid={`${testId}-cancel`}>
+          {/* “取消”不描边（R-436 丁批：去掉 1px 描边按钮），整宽次要色字、点击区 44 */}
+          <button type="button" className={styles.cardCancel} onClick={cancel} data-testid={`${testId}-cancel`}>
             {t('vault.cancel', {})}
-          </FormButton>
+          </button>
         </div>
-        <p className={styles.cardFoot}>{t('vault.autolock', { n: min })}</p>
+        <p className={styles.cardFoot}><NumIn text={t('vault.autolock', { n: min })} num={String(min)} /></p>
       </div>
     );
   }

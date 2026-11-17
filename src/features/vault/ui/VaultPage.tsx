@@ -14,6 +14,8 @@ import { Suspense, useEffect, useLayoutEffect, useState, type ReactNode } from '
 import { backTo, navigate, useRoute } from '../../../app/router.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
+import chip from '../../../kit/components/Chip.module.css';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { notesInput } from '../../../kit/state/new-item.ts';
@@ -135,9 +137,10 @@ function VaultTop({ unlocked, trash = null }: { unlocked: boolean; trash?: React
       <span className={styles.topEnd}>
         {trash}
         {unlocked ? (
-          <FormButton size="compact" onClick={() => s.lock()} data-testid="vault-lock-now">
+          // “立即锁上”用 kit 胶囊（R-436 丁批，同待办页筛选胶囊：高 30、无描边浅底）
+          <button type="button" className={chip.chip} onClick={() => s.lock()} data-testid="vault-lock-now">
             {t('vault.lockNow', {})}
-          </FormButton>
+          </button>
         ) : null}
       </span>
     </header>
@@ -158,7 +161,7 @@ function VaultHead({ trash }: { trash: ReactNode }) {
     <div>
       <VaultTop unlocked trash={trash} />
       <p className={styles.hint} data-testid="vault-hint">
-        {t('vault.unlockedHint', { n: min })}
+        <NumIn text={t('vault.unlockedHint', { n: min })} num={String(min)} />
       </p>
     </div>
   );

@@ -19,10 +19,19 @@
   margin-bottom: 6px;
 }
 
-.h1 {
-  margin: 0;
-  font-size: var(--fs-26);
-  font-weight: 700;
+/* 页面大标题用 kit 的 Refine.module.css .title（28 号半粗 + 短粗柠檬黄下划线，R-436 丁批，同待办页）；连下划线 44 高，.top 的 min-height 不变，从日历切过来分段不跳 */
+
+/* 空状态（R-436 丁批）：主句正文色，下面一行“下一步”提示次要色小一号（kit List.module.css 的 .emptyNext 是正文色，比主句 --text-2 还深，层级反了） */
+.page .emptyMain {
+  display: block;
+  color: var(--text);
+  font-size: var(--fs-15);
+}
+
+.page .emptyNext {
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
 }
 
 /* 页顶第二行：分段（新建走底栏“＋”，负责人 11-14） */
@@ -113,7 +122,7 @@
 .nearNum {
   padding: 0 2px;
   background: linear-gradient(transparent 58%, var(--now-hl) 58%);
-  font-family: var(--f-num);
+  font-family: var(--f-mono);
   font-size: var(--fs-44);
   font-weight: 400;
   line-height: 1.05;
@@ -179,11 +188,11 @@
   font-size: var(--fs-12);
 }
 
-/* 行右大号天数（视觉稿 annrow .dn：24 号、字距 -0.02em，单位 12 号次要色） */
+/* 行右大号天数（视觉稿 annrow .dn：24 号、字距 -0.02em，单位 12 号次要色）；数字段等宽（R-436 丁批：AnnivPage.tsx 只把数字包成 kit Refine 的 .num，
+   同编辑页主卡 .heroNum），“今天”和单位“天”照正文字体 */
 .days {
   flex: none;
   margin-left: auto;
-  font-family: var(--f-num);
   font-size: var(--fs-24);
   font-weight: 400;
   letter-spacing: -0.02em;
@@ -272,6 +281,15 @@
 /* 年月日滚轮那一块（kit 的 WheelPanel）的上下间距 */
 .wheels {
   margin: 4px 0 6px;
+}
+
+/* 选中行的框（R-436 丁批“粗黑框改轻”）：kit Wheel.module.css .panel::before 是 1.5px 正文色描边，在浅灰面板上像一道粗黑框；
+   改成整行 --panel 浅底块（不描边），选中项本身仍是大一号加粗的正文色，和上下两行的次要色对比照旧。
+   框画在各列滚轮下面（kit 的 .wheel 本身 position: relative，后画、盖在框上）。纪念日编辑页是 WheelPanel 唯一的用处；类名写两遍压过 kit（两份样式表先后不定）。建议以后并进 kit */
+.wheels.wheels::before {
+  border: 0;
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
 }
 
 /* 新建页：头像圆圈在名字左边（视觉稿 annnew） */

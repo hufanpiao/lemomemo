@@ -1,7 +1,8 @@
 // 隐私记会话（data/session.ts）：TC-B5-10（59 秒 / 61 秒，注入时间）、TC-B5-11（上锁不留明文、blob 撤销）、
-// TC-B5-47 ①②（vault_locked 等解锁后自动重试一次；vault_relock 丢令牌、记 relocked）、TC-B5-33（断网）、图片半路上锁丢掉结果
+// TC-B5-47 ①②（vault_locked 等解锁后自动重试一次；vault_relock 丢令牌、记 relocked）、TC-B5-33（断网）、图片半路上锁丢掉结果、
+// 锁着时“里面有 N 条”（R-436 丁批：同步还没拉回本机集合的也数上，原来写 0 条）
 import { describe, expect, it, vi } from 'vitest';
-import { noteRowOf } from '../data/vault-store.ts';
+import { countVault, noteRowOf } from '../data/vault-store.ts';
 import { IMG, listOk, make, NID, note, queueDelete, statusSet, TOK, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 describe('解锁、上锁', () => {
@@ -314,5 +315,42 @@ describe('文档附件（vault-file，B4b-1）', () => {
     s.lock();
     await s.unlock('1234');
     expect(api.fileEnd).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('锁着时数“里面有 N 条”（R-436 丁批）', () => {
+  const A = '33333333-3333-4333-8333-333333333333';
+  const B = '44444444-4444-4444-8444-444444444444';
+  it('解锁拉过列表的 3 条，本机集合还没同步到：上锁后照样数 3 条（原来 0 条）', async () => {
+    const { s } = await unlocked({ list: () => listOk([note(), note({ id: A }), note({ id: B })]) });
+    expect(countVault([], true, s.store.getSnapshot())).toBe(3);
+    s.lock();
+    expect(s.store.getSnapshot().notes).toEqual([]);
+    expect(countVault([], s.get().listed, s.store.getSnapshot())).toBe(3);
+  });
+
+  it('本机集合里已经同步到的不重复算；别处删掉了的（本机行 deleted_at）不算；普通随手记不算', async () => {
+    const { s } = await unlocked({ list: () => listOk([note(), note({ id: A })]) });
+    s.lock();
+    const local = [
+      { id: NID, is_private: true, deleted_at: null, undone: false },
+      { id: A, is_private: true, deleted_at: 5, undone: false },
+      { id: B, is_private: true, deleted_at: null, undone: false },
+      { id: 'plain', is_private: false, deleted_at: null, undone: false },
+    ];
+    expect(countVault(local, false, s.store.getSnapshot())).toBe(2);
+  });
+
+  it('解锁期里移出、永久删除的（forget）上锁后不再算；连着锁两次不把记下的清空', async () => {
+    const { s } = await unlocked({ list: () => listOk([note(), note({ id: A })]) });
+    s.store.forget([A]);
+    s.lock();
+    s.lock();
+    expect(countVault([], false, s.store.getSnapshot())).toBe(1);
+  });
+
+  it('从没解锁过：只数本机集合', () => {
+    const { s } = make();
+    expect(countVault([{ id: A, is_private: true, deleted_at: null, undone: false }], false, s.store.getSnapshot())).toBe(1);
   });
 });

@@ -11,6 +11,7 @@
 //   录音探测的文案在词条 settings.about.probe（A20 不准在组件里写汉字；正式版里只剩词典里这一句、没有这一行）；testid 带 check_no_probe.mjs 的标记 csp-lab，正式产物里残留就失败。和 voice-probe 同一个 PR 删
 import { useEffect, useRef, useState } from 'react';
 import { navigateSub } from '../../../app/router-sub.ts';
+import refine from '../../../kit/components/Refine.module.css';
 import { SettingsCard, SettingsEntryRow, SettingsInfoRow, settingsNoteClass } from '../../../kit/components/Settings/Settings.tsx';
 import { collectDiag } from '../../../platform/diag-info.ts';
 import { buildInfo } from '../../../platform/env.ts';
@@ -64,7 +65,7 @@ export function AboutSection() {
   return (
     <div data-section="about" ref={box}>
       <SettingsCard title={t('settings.about.title', {})} testId="settings-about-card">
-        <SettingsInfoRow label={t('settings.about.version', {})} value={buildInfo.version} testId="settings-about-version" valueTestId="settings-about-version-value" />
+        <SettingsInfoRow label={t('settings.about.version', {})} value={<span className={refine.num}>{buildInfo.version}</span>} testId="settings-about-version" valueTestId="settings-about-version-value" />
         {import.meta.env.MODE !== 'production' && (
           <SettingsEntryRow label={t('settings.about.probe', {})} onOpen={() => void navigateSub('dev-csp', 'voice')} testId="csp-lab-entry" />
         )}

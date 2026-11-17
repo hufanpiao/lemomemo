@@ -31,8 +31,8 @@ export type HotkeyNotice = 'invalid' | 'in_use' | 'save_failed' | 'failed' | 'co
 const MODIFIER_CODES = /^(Control|Alt|Shift|Meta|OS)(Left|Right)?$/;
 
 export interface QuickAddHotkey {
-  /** null：不在 exe 里、读失败、或还没读回来（都不显示这一项） */
-  status: HotkeyStatus | null;
+  /** undefined：还没读回来；null：不在 exe 里、读失败（都不显示这一项；读回 null 后“电脑”二级页退回设置首页，R-436 丁批） */
+  status: HotkeyStatus | null | undefined;
   recording: boolean;
   saving: boolean;
   notice: HotkeyNotice | null;
@@ -44,7 +44,7 @@ export interface QuickAddHotkey {
 }
 
 export function useQuickAddHotkey(api: HotkeyApi = defaultHotkeyApi): QuickAddHotkey {
-  const [status, setStatus] = useState<HotkeyStatus | null>(null);
+  const [status, setStatus] = useState<HotkeyStatus | null | undefined>(undefined);
   const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<HotkeyNotice | null>(null);

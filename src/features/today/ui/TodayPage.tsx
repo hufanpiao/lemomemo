@@ -5,7 +5,8 @@
 // • 点一行进编辑页；打勾就保存；删除后出撤销条（8 秒）；写不进去时出提示条，只读行提示“要新版本才能修改”
 // • 删除（负责人 11-15“代办后面的x去掉”，同待办页）：“今天的安排”里的待办行左滑露出“删除”，一口气拉过大半行直接删（kit 的 SwipeRow，full）；
 //   只读行滑不开（disabled）；键盘、读屏进编辑页（电脑版是详情抽屉）在那里删。日程行原来没有 ×，也就不再补和 × 同宽的空格子
-// • 已过去（线框 s1“已过去的折叠成一行”，B6 对齐线框）：结束了的日程、做完的待办收成“▸ 已过去 N 件：10:30 字幕校对 · 买咖啡豆 ✓”一行，点了展开（data/today-model.ts 的 splitPast）
+// • 已过去（线框 s1“已过去的折叠成一行”，B6 对齐线框）：结束了的日程、做完的待办收成“已过去 N 件：10:30 字幕校对 · 买咖啡豆 ✓ ›”一行，点了展开（data/today-model.ts 的 splitPast）；
+//   R-436 丁批照待办页“已完成 N ›”的折叠行：小字次要色、件数等宽、行尾 › 展开时转成朝下
 // • 动效（17.1，B2 FA-5；设计审查 M1～M3 返工 11-04）：打勾时圆圈在原地填满（kit CheckCircle），列表先不动（useHoldView 留住
 //   按下之前的两张列表 --dur-ui）；然后这一行淡出、同时下面的行收上来，挪到的地方等让开了再淡入（motion 的 AppearList）；第一次画不播
 // • 提醒的几块（REMIND-wiring；reminders 的 index.ts 懒加载；外面包 kit 的 QuietBoundary，分包下不来时那一块不画、不把整页换成出错页）：
@@ -280,10 +281,8 @@ export default function TodayPage() {
       {v.events.length === 0 && v.todos.length === 0 ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
       {pastN ? (
         <button type="button" className={styles.past} aria-expanded={pastOpen} onClick={() => setPastOpen((x) => !x)} data-testid="today-past">
-          <span className={styles.pastMark} aria-hidden="true">
-            {pastOpen ? '▾' : '▸'}
-          </span>
-          <span className={styles.pastText}>{t('list.past', { n: pastN, items: pastText })}</span>
+          <span className={styles.pastText}><NumIn text={t('list.past', { n: pastN, items: '' })} num={String(pastN)} />{pastText}</span>
+          <span className={styles.chev} data-open={pastOpen ? '' : undefined} aria-hidden="true">›</span>
         </button>
       ) : null}
       <AppearList as="ul" className={`${list.list} ${list.roomy}`}>

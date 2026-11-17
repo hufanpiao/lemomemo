@@ -15,6 +15,7 @@ import chip from '../../../kit/components/Chip.module.css';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { NumIn } from '../../../kit/components/NumIn.tsx';
+import refine from '../../../kit/components/Refine.module.css';
 import { ModeSeg } from '../../../kit/components/ModeSeg.tsx';
 import { ListToasts } from '../../../kit/components/ListToasts.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
@@ -123,7 +124,7 @@ function AnnivList() {
           </span>
           {st && !st.past ? (
             <span className={styles.days}>
-              {st.days === 0 ? t('anniv.today', {}) : <>{st.days}<small>{t('anniv.daysUnit', {})}</small></>}
+              {st.days === 0 ? t('anniv.today', {}) : <><span className={refine.num}>{st.days}</span><small>{t('anniv.daysUnit', {})}</small></>}
             </span>
           ) : null}
         </Pressable>
@@ -134,7 +135,7 @@ function AnnivList() {
   return (
     <main className={styles.page} data-feature="anniv" data-testid="anniv-page">
       <div className={styles.top}>
-        <h1 className={styles.h1}>{t('anniv.h1', {})}</h1>
+        <h1 className={refine.title}>{t('anniv.h1', {})}</h1>
         <MeLink testId="anniv-settings" />
       </div>
       <ModeRow t={t} today={data.today} />
@@ -177,8 +178,9 @@ function AnnivList() {
         </ul>
       ) : data.past.length === 0 ? (
         <p className={list.empty} data-testid="anniv-empty">
-          {filter === 'all' ? t('anniv.empty', {}) : t('anniv.emptyFilter', {})}
-          {filter === 'all' ? <span className={list.emptyNext}>{t('anniv.emptyNext', {})}</span> : null}
+          {/* 空状态层级（R-436 丁批）：主句正文色在上、下一步提示次要色在下（kit .emptyNext 原是正文色，比主句还深，层级颠倒；这里两级选择器压正） */}
+          <span className={styles.emptyMain}>{filter === 'all' ? t('anniv.empty', {}) : t('anniv.emptyFilter', {})}</span>
+          {filter === 'all' ? <span className={`${list.emptyNext} ${styles.emptyNext}`}>{t('anniv.emptyNext', {})}</span> : null}
         </p>
       ) : null}
 

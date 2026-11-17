@@ -28,12 +28,16 @@
 
 /* 列表行、空状态在 kit 的 List.module.css（B2-UI-a U4、U6） */
 
-/* 行尾“恢复”“永久删除”（R-436）：kit 的 FormButton compact（看得见 38、灰色实底、点击区 44，永久删除只换危险色字），不再自己画描边胶囊；
-   这里只管两颗按钮并排的间距 */
+/* 行尾“恢复”“永久删除”（R-436 丁批）：kit 胶囊（Chip.module.css .chip：看得见 30、--panel-2 浅底、无描边，点击区 ::after 撑到 44），
+   这里只管两颗并排的间距和“永久删除”的危险色字（红色只用在危险操作上） */
 .acts {
   display: flex;
   flex: none;
   gap: 6px;
+}
+
+.acts .danger {
+  color: var(--danger-text);
 }
 
 .clear {

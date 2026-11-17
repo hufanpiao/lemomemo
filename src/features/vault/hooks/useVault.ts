@@ -5,7 +5,6 @@
 // • 离开隐私记页（负责人 11-15“离开隐私记页 1 分钟不自动上锁”）：useVaultPresence 在页面挂上、卸下时报给会话（原因 'page'），会话自己计时
 // • 自动上锁的分钟数读本机 settings 的 vault.autolock_min（默认 1；只认 1～60 的整数）；读到就报给会话
 import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
-import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { fmtDate, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { settingValue, type SettingRow } from '../../../core/setting-read.ts';
@@ -15,7 +14,7 @@ import { holdReducedTransparency } from '../../../platform/look.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { createVaultApi } from '../data/vault-api.ts';
 import { createVaultSession, type VaultSession, type VaultState } from '../data/session.ts';
-import type { StoreSnap } from '../data/vault-store.ts';
+import { countVault, type LocalNoteRow, type StoreSnap } from '../data/vault-store.ts';
 import { vaultErrorAction, type VaultCode } from '../data/vault-errors.ts';
 import { useVaultT } from './useVaultT.ts';
 
@@ -127,14 +126,13 @@ export function useVaultStore(): StoreSnap {
 
 /**
  * 隐私记有几条（锁着也能数）：本机 notes 集合里 is_private 的行只有密文列和中性列（0.27 第 1 点），数行数不碰明文；
- * 解锁拉过列表以后以内存仓库（data/vault-store.ts）为准
+ * 解锁拉过列表以后以内存仓库（data/vault-store.ts）为准；锁着时并上上锁前知道的 id（同步还没拉回来的，countVault，R-436 丁批）
  */
 export function useVaultCount(): number {
-  const rows = useCollection<{ id: string; is_private?: unknown; deleted_at?: unknown; undone?: unknown }>('notes');
+  const rows = useCollection<LocalNoteRow>('notes');
   const { state } = useVault();
   const snap = useVaultStore();
-  if (state.listed) return snap.notes.filter((n) => n['deleted_at'] === null).length;
-  return rows.filter((r) => r.is_private === true && isLiveRow(r)).length;
+  return countVault(rows, state.listed, snap);
 }
 
 /** 第一次打开时查一次状态（设没设过、是不是锁定中、绑了几个 Face ID） */

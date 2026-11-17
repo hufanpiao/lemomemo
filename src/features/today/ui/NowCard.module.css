@@ -63,7 +63,6 @@
 
 .nowText {
   flex: none;
-  font-family: var(--f-num);
 }
 
 /* 右边的分钟数不让 */
@@ -72,9 +71,9 @@
   margin-left: auto;
 }
 
-/* 下一件标题前的开始时刻用数字字体（视觉稿 kcard 的 .num） */
+/* 下一件标题前的开始时刻：等宽数字（R-436 丁批；“现在 10:21”、时长里的数字由 NowCard.tsx 的 show() 只把数字包成 kit Refine 的 .num，整句字体不换） */
 .num {
-  font-family: var(--f-num);
+  font-family: var(--f-mono);
 }
 
 /* 标题 17px 半粗，一行，放不下用省略号；只有“进行中”那一件加粗（R-134） */
@@ -219,7 +218,7 @@
 .tick {
   position: absolute;
   top: calc(var(--lh) + 11px);
-  font-family: var(--f-num);
+  font-family: var(--f-mono);
   font-size: var(--fs-11);
   color: var(--k-fg2);
   white-space: nowrap;
