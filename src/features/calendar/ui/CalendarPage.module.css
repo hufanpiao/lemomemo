@@ -72,6 +72,12 @@
   margin-bottom: 10px;
 }
 
+/* 页顶“周 / 月 / 纪念日”（kit ModeSeg look="slide"）：slide 外观各段 flex: 1（按 0 起分），放在宽度随内容的页顶里会被平分成 53 宽，
+   比“纪念日”本身（约 66）还窄、选中时加小点和粗字更挤。这里每段按自己的内容宽（flex: none），纪念日页 .modeRow 同一条。根本改法在 kit（报告里提了） */
+.calnav [role='group'] > button {
+  flex: none;
+}
+
 .navBtns {
   display: flex;
   align-items: center;

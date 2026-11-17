@@ -34,6 +34,12 @@
   margin-bottom: 10px;
 }
 
+/* 页顶“周 / 月 / 纪念日”（kit ModeSeg look="slide"，同日历页 .calnav 那一条）：slide 外观各段 flex: 1（按 0 起分），放在宽度随内容的页顶里会被
+   平分成 55 宽，选中的“• 纪念日”（小点 + 粗字，约 81）挤出滑块。这里每段按自己的内容宽（flex: none）。根本改法在 kit（报告里提了），kit 不归本批改 */
+.modeRow [role='group'] > button {
+  flex: none;
+}
+
 /* 筛选胶囊、提醒天数胶囊：用 kit 的 Chip.module.css（高 30、无描边浅底，和待办页筛选同一份，负责人 11-16“胶囊太大了！参考现在的待办页”）；
    这里只管排布。kit 胶囊自带上下 7 外边距撑出 44 点击区，所以行距给 0、整排上下各收 7 */
 .chips {
