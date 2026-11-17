@@ -106,7 +106,7 @@ export function swipeActs(t: ReturnType<typeof useNotesT>, caps: NoteCaps, id: s
 
 /**
  * 合并分类提示条（R-413，线框 MERGE）：两个按钮没写成的结果都由页面的出错条、只读提示接；“不用”记下这一对，提示条随即换下一对或消失。
- * 合并成了调 onMerged(这一对)（页面出 8 秒撤销条，撤销调它的 undo，R-415 ③）。写入期间两个按钮都禁用：连点不会落到写完以后换上来的下一对上，
+ * 合并成了调 onMerged(这一对)（页面出 5 秒撤销条，撤销调它的 undo，R-415 ③）。写入期间两个按钮都禁用：连点不会落到写完以后换上来的下一对上，
  * 也不会再合并一次把第一次的撤销条顶掉
  */
 export function MergeBar({ hint, onResult, onMerged }: { hint: MergeHint; onResult(r: ActionResult): void; onMerged(hint: MergeHint): void }) {

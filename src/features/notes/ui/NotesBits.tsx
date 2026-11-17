@@ -106,7 +106,7 @@ export function RowText({ it, ai, ro, failed, mark = same }: { it: NoteItem; ai:
   );
 }
 
-/** 页底的撤销条：删除的“已删除”、合并分类的“已合并”（R-415 ③），同一个 kit UndoToast、8 秒；画什么、点了做什么都在 tip 里（换一条就换一个 key，重新计时） */
+/** 页底的撤销条：删除的“已删除”、合并分类的“已合并”（R-415 ③），同一个 kit UndoToast、5 秒；画什么、点了做什么都在 tip 里（换一条就换一个 key，重新计时） */
 export function UndoBar({ tip, onClose }: { tip: UndoTip; onClose(): void }) {
   const t = useNotesT();
   return <UndoToast message={t(tip.msgKey, {})} undoLabel={t('notes.undo', {})} onUndo={tip.undo} onClose={onClose} solo="keep" data-testid={tip.testId} />;

@@ -1,4 +1,4 @@
-// 合并分类后的 8 秒撤销条（R-415 ③ 后半）：和删除同一个 kit UndoToast（8 秒、同一个位置）。
+// 合并分类后的撤销条（R-415 ③ 后半；时长 UNDO_TOAST_MS，R-460 起 5 秒）：和删除同一个 kit UndoToast（同一时长、同一个位置）。
 // 点“撤销”= 点了“不用”（这一对记进 notes.merge_dismissed，负责人 11-13 定）+ 被合并的分类回到 merged_into: null：
 //   合并那一笔还没发（outbox 合成一笔 null）、已经发了（另写一笔 null）、发送失败（直接丢掉它，不另写）三种都测。
 // 合并、撤销写库抛异常都接住出错条；提示条写入期间两个按钮禁用（连点只算一下）。
@@ -87,7 +87,7 @@ const clickUndo = async () => {
   });
 };
 
-/** 撤销条被换下去（这里删掉那条随手记，换成“已删除”撤销条；真实里也可能是 8 秒到了） */
+/** 撤销条被换下去（这里删掉那条随手记，换成“已删除”撤销条；真实里也可能是时间到了） */
 async function replaceToast() {
   await act(async () => {
     fireEvent.pointerDown(screen.getByTestId(`notes-more-${uid(1)}`), { button: 0, ctrlKey: false });
@@ -286,7 +286,7 @@ describe('undoMerge（data）', () => {
   });
 });
 
-describe('提示条写入期间锁住、撤销条 8 秒（提示条换成桩）', () => {
+describe('提示条写入期间锁住、撤销条按时收起（提示条换成桩）', () => {
   function hintStub() {
     let done: (r: 'ok') => void = () => undefined;
     const hint = {
@@ -322,7 +322,7 @@ describe('提示条写入期间锁住、撤销条 8 秒（提示条换成桩）'
     await act(async () => undefined);
   });
 
-  it(`撤销条 ${UNDO_TOAST_MS} ms：7.9 秒还在，8.1 秒收起；收起时不撤销`, async () => {
+  it(`撤销条 ${UNDO_TOAST_MS} ms：差 0.1 秒还在，过 0.1 秒收起；收起时不撤销`, async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       const { hint, finish } = hintStub();
@@ -332,7 +332,7 @@ describe('提示条写入期间锁住、撤销条 8 秒（提示条换成桩）'
         finish();
       });
       expect(screen.getByTestId('notes-merge-toast')).toBeTruthy();
-      act(() => vi.advanceTimersByTime(7900));
+      act(() => vi.advanceTimersByTime(UNDO_TOAST_MS - 100));
       expect(screen.queryByTestId('notes-merge-toast')).not.toBeNull();
       act(() => vi.advanceTimersByTime(200));
       expect(screen.queryByTestId('notes-merge-toast')).toBeNull();

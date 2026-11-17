@@ -32,6 +32,7 @@ import type { DateStr } from '../../../../shared/core/date.ts';
 import { isFinal, viewStep, type CaptureView, type ViewEvent } from './capture-state.ts';
 import { markPlusHeld } from './plus-hint.ts';
 import { quotaOutToday } from './quota.ts';
+import { TOAST_MS } from '../../../../shared/logic/toast.ts';
 import { BLOB_KEEP_MS, speechByNet, type HoldZone } from './record-logic.ts';
 import { createBatchBox, createSavedBatch } from './saved-batch.ts';
 import type { AssistAsk } from '../../../../shared/logic/parse/assist.ts';
@@ -56,9 +57,8 @@ export interface VoiceView extends CaptureView<VoiceNote> {
 
 export const VIEW0: VoiceView = { status: 'idle', capturing: false, path: null, locked: false, zone: null, why: null, card: null, note: null, secs: 0, live: '' };
 
-/** 留着录音的两种：到 2 分钟自动关；别的 8 秒 */
+/** 留着录音的两种：到 2 分钟自动关；别的同所有提示条（shared/logic/toast.ts 的 TOAST_MS，5 秒） */
 const KEEPS: readonly VoiceNote[] = ['ai_failed', 'net_down'];
-export const NOTE_MS = 8000;
 
 /** 建控制器时定下的（不给用正式的；测试传桩） */
 export interface VoiceIo {
@@ -149,8 +149,8 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
     rlog(`voice note ${n}`);
     clearTimeout(noteTimer);
     go({ type: 'note', note: n });
-    // 失败提示留着录音最多 2 分钟，别的 8 秒，到了自动关
-    noteTimer = setTimeout(closeNote, KEEPS.includes(n) ? BLOB_KEEP_MS : NOTE_MS);
+    // 失败提示留着录音最多 2 分钟，别的 5 秒，到了自动关
+    noteTimer = setTimeout(closeNote, KEEPS.includes(n) ? BLOB_KEEP_MS : TOAST_MS);
   };
   /** 当前这次作废：录音器按取消收拾（停录、关麦克风），上传也一并取消 */
   const drop = (by: string): void => {

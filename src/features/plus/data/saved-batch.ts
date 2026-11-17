@@ -17,7 +17,7 @@
 //   换的时候 swapping 置上，提示条上的按钮全部禁用。先存那一刻 mark() 记下这一批、改动号（rev）和库里每一条的样子（updated_at、deleted_at、done_at）：
 //   之后用户在提示条上动过这一批（撤销、逐条撤、合并、确认行选或关、点了“修改”touch、新的一句、新的一次按住）改动号就变了；
 //   在别处改过、勾完成、删掉（按 id 读回对不上）也算动过：都不替换（skip_touched）。
-//   提示条已经关掉（自己点 × 或 8 秒到了）的：库里照样换，提示条不再弹出来；还开着的换成 AI 那一批，加一句“AI 已整理”，撤销照样能用
+//   提示条已经关掉（自己点 × 或 5 秒到了）的：库里照样换，提示条不再弹出来；还开着的换成 AI 那一批，加一句“AI 已整理”，撤销照样能用
 // 纯 TS：不准 import React（A1）
 import { createStore } from 'zustand/vanilla';
 import { collection } from '../../../core/store.ts';

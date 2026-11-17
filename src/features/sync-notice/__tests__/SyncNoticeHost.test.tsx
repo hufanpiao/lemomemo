@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useLayoutEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TOAST_MS } from '../../../../shared/logic/toast.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import type { ConflictNotice, GoneNotice, Notice, NoticeSnapshot, SyncNoticeStore } from '../hooks/notice-types.ts';
 
@@ -176,10 +177,10 @@ describe('按钮（4.2）', () => {
 });
 
 describe('计时（M3、M4）', () => {
-  it('冲突卡 8 秒后自动收起；gone 卡不自动收', () => {
+  it('冲突卡 TOAST_MS（R-460，5 秒）后自动收起；gone 卡不自动收', () => {
     vi.useFakeTimers();
     const m = mount([conflict()]);
-    act(() => vi.advanceTimersByTime(7_900));
+    act(() => vi.advanceTimersByTime(TOAST_MS - 100));
     expect(m.store.dismiss).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(300));
     expect(m.store.dismiss).toHaveBeenCalledWith('todos:t1');
@@ -206,18 +207,18 @@ describe('计时（M3、M4）', () => {
     act(() => vi.advanceTimersByTime(20_000));
     expect(m.store.dismiss).not.toHaveBeenCalled();
     fireEvent.blur(screen.getByTestId('sync-notice-ok'));
-    act(() => vi.advanceTimersByTime(8_100));
+    act(() => vi.advanceTimersByTime(TOAST_MS + 100));
     expect(m.store.dismiss).toHaveBeenCalledTimes(1);
   });
 
-  it('指针、焦点在卡上时点“知道了”（卡直接卸掉，收不到 mouseleave、blur）：下一张冲突卡照样 8 秒收起（代码审查 K8 界面批 M3）', () => {
+  it('指针、焦点在卡上时点“知道了”（卡直接卸掉，收不到 mouseleave、blur）：下一张冲突卡照样到时收起（代码审查 K8 界面批 M3）', () => {
     vi.useFakeTimers();
     const m = mount([conflict(), conflict({ key: 'todos:t2', id: 't2' })]);
     fireEvent.mouseEnter(screen.getByTestId('sync-notice-card'));
     fireEvent.focus(screen.getByTestId('sync-notice-ok'));
     fireEvent.click(screen.getByTestId('sync-notice-ok'));
     expect(m.store.dismiss).toHaveBeenCalledWith('todos:t1');
-    act(() => vi.advanceTimersByTime(8_100));
+    act(() => vi.advanceTimersByTime(TOAST_MS + 100));
     expect(m.store.dismiss).toHaveBeenLastCalledWith('todos:t2');
   });
 
@@ -284,7 +285,7 @@ describe('彻底删除的轻提示（P2）', () => {
     });
     expect(m.live.textContent).toBe('这条已彻底删除，无法恢复。');
     act(() => uiStore.getState().setLocale('ko-KR'));   // 中途换界面语言（t 换了身份）：计时不丢，照样到点消失
-    act(() => vi.advanceTimersByTime(8_100));
+    act(() => vi.advanceTimersByTime(TOAST_MS + 100));
     vi.useRealTimers();
     await waitFor(() => expect(screen.queryByTestId('sync-notice-hard-deleted')).toBeNull());
     raf.mockRestore();

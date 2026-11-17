@@ -276,7 +276,7 @@ test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1�
       const [dt, top] = tail[i] as [number, number];
       expect(top, `松手后 ${dt.toFixed(0)} ms“已完成”组往回退了`).toBeLessThanOrEqual((tail[i - 1] as [number, number])[1] + 0.5);
     }
-    // 收尾（负责人 11-17 分镜）：停留、收起以后 t4 进了“已完成”组（组默认收起，点开才看得到）；撤销条照旧开着（8 秒倒计时）
+    // 收尾（负责人 11-17 分镜）：停留、收起以后 t4 进了“已完成”组（组默认收起，点开才看得到）；撤销条照旧开着（5 秒倒计时，R-460）
     await expect(page.getByTestId('todos-done-toast')).toBeVisible();
     await expect(page.getByTestId('todos-g-nodate').getByTestId('todos-row-t4')).toHaveCount(0);
     await expect(page.getByTestId('todos-done-fold')).toHaveAttribute('aria-expanded', 'false');

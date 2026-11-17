@@ -34,8 +34,6 @@ export interface DeskLayoutProps {
   drawer?: ((side: 'left' | 'right', handle: ReactNode) => ReactNode) | undefined;
 }
 
-/** 提示条停多久（5.9b 第 1 点） */
-export const SAVED_MS = 6000;
 const ARROWS: Readonly<Record<string, 'up' | 'down' | 'left' | 'right'>> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 type SayKey = 'desk.picked' | 'desk.at' | 'desk.dropped' | 'desk.cancelled';
 
@@ -179,7 +177,6 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
           undoLabel={t('desk.undo', {})}
           onUndo={d.undo}
           onClose={() => d.closeSaved(saved)}
-          ms={SAVED_MS}
           more={{ label: t('desk.reset', {}), onClick: d.reset }}
           solo="yield"
           data-testid="desk-saved"
