@@ -9,7 +9,7 @@
 //   那条改动发出去以后，提醒时刻没变的再补写一次（第三轮 L10，hooks/useReminders.ts 的 laterAcks）
 import { addDays, type DateStr } from '../../../../shared/core/date.ts';
 import { occurrenceChanged } from '../../../../shared/logic/remind-occurrence.ts';
-import { todoRowOf, type NewTodoRow } from '../../../../shared/logic/todo-row.ts';
+import { todoRowOf, type NewTodoRow } from '../../../../shared/logic/todo-new.ts';
 import { saveInsert, savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
 import type { Reminder } from './reminder-model.ts';
 
@@ -68,7 +68,7 @@ export function snoozeReminder(r: Reminder, at: number, now: number): Promise<Sa
 
 /**
  * 纪念日提醒的“生成待办”（B5 S15；线框“提醒响起时”第三张：新建一条待办，截止在纪念日前一天）：
- * 新建待办的整行（shared/logic/todo-row.ts 的 todoRowOf，和新建待办同一份；当天提醒、时刻用默认），
+ * 新建待办的整行（shared/logic/todo-new.ts 的 todoRowOf，和新建待办同一份；当天提醒、时刻用默认），
  * from_anniv_id 记来源。due 由调用方按纪念日这一次的日期算好传进来（前一天）
  */
 export function annivTodoRow(id: string, title: string, due: DateStr, annivId: string, now: number): NewTodoRow {

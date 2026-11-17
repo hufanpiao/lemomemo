@@ -14,6 +14,9 @@
 // 11-07 动画库移出首屏（R-354，前端 A 量）：Motion 的实现和功能包合成 motion-impl 一块（gzip 约 45.3 KB），main.tsx 在 appPainted() 之后才下载；
 // 首屏 148.8 KB → 132.9 KB（本 spec 的口径，chromium、webkit 各 3 次都是 132.9 KB；构建时 check_size 的静态口径 110.2 KB）。
 // build/check_first_paint_chunks.mjs 同时加了 MOTION_MARKS（transformPerspective、whileInView），首屏闭包里出现就挂。
+// 11-17 ci（9e39ba10）150.2 KB 超线：比 d10573b1 的 147.7 KB 多出的 2.5 KB 是 R-444 跨天（event-span、useSpanT、公共词典 span.*、fmt.dur.*）、
+// T-A 打勾（CheckCircle、Priority）和运行日志 tap-hl 带进来的，都是首屏要画的；拆掉的是一直白带的提醒算法块：todo-row.ts 只为新建整行的
+// DEFAULT_REMIND_TIME 引了 remind.ts，今天页首屏就连带下载 remind 块（0.7 KB）。新建整行挪到 todo-new.ts 后两个浏览器都是 149.2 KB。
 // 审查变异 R3b 在独立副本里重做过（11-05）：zod 那条两个浏览器都挂（首屏下载了 zod-jitless），体积 154.1 → 180.5 KB。
 import { gzipSync } from 'node:zlib';
 import type { Page } from '@playwright/test';
