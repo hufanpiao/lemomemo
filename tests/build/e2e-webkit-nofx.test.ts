@@ -29,7 +29,7 @@ function allE2eTs(dir: string = E2E): string[] {
 const FROZEN = {
   'b2-motion-list.spec.ts': [
     'M1 打勾后头 220 ms 里“已完成”组不动，之后只往上走、不回退',
-    'N1 打勾：离开的那一项不透明度 > 0.25 的每一帧，它的字不压别的行、组标题的字',
+    'N1 打勾：收起时这一行高度单调降到约 0、下一行单调上移，卸载前后下一行不跳；离开的那一份看不见',
     'N1 删除：离开的那一项不透明度 > 0.25 的每一帧，它的字不压别的行、组标题的字',
     'N1 今天页“没赶上”最后一条打勾：整组离开，不透明度 > 0.25 的每一帧，它的字不压“今天的安排”等别的字（第三轮 P2）',
     'M2 撤销恢复：新行看得见的每一帧都不和别的行、组标题重叠',
@@ -109,12 +109,6 @@ describe('CI webkit 关模糊名单', () => {
     }
   });
 
-  it('参数化的 N1 两条名字和源码里的参数对得上', () => {
-    const src = spec('b2-motion-list.spec.ts');
-    expect(src).toMatch(/\['打勾', tickClose, tickFirst\]/);
-    expect(src).toMatch(/\['删除', \(page: Page\) => swipeRow\(page, 'todos-row-t3'\), seed\]/);
-  });
-
   it('只在 CI 的 webkit、名单内的用例生效', () => {
     const file = join(ROOT, 'tests', 'e2e', 'b2-tabbar.spec.ts');
     const title = '切页过程中底栏一直看得见；液滴点下去就走，不等页面（设计动效评审 D1）';
@@ -132,9 +126,9 @@ describe('CI webkit 关模糊名单', () => {
     expect(decls).toEqual(['backdrop-filter: none !important', '-webkit-backdrop-filter: none !important']);
   });
 
-  it('helper 展开真的生效：N1 的正文只有 ghostRun(...)，展开后要带上取样函数', () => {
+  it('helper 展开真的生效：N1 删除的正文只有 ghostRun(...)，展开后要带上取样函数', () => {
     const src = spec('b2-motion-list.spec.ts');
-    const t = 'N1 打勾：离开的那一项不透明度 > 0.25 的每一帧，它的字不压别的行、组标题的字';
+    const t = 'N1 删除：离开的那一项不透明度 > 0.25 的每一帧，它的字不压别的行、组标题的字';
     const code = withHelpers(src, bodyOf(src, t) ?? '');
     expect(code).toContain('async function ghostRun(');
     expect(code).toContain('async function startSampler(');

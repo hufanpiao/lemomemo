@@ -231,8 +231,9 @@ export const LEGACY_DURATION_MAX = 1440;
  */
 function legacyItem(it: unknown): unknown {
   if (typeof it !== 'object' || it === null) return it;
-  const d = (it as { duration_min?: unknown }).duration_min;
-  return typeof d === 'number' && d > LEGACY_DURATION_MAX ? { ...it, duration_min: LEGACY_DURATION_MAX } : it;
+  const row = it as Record<string, unknown>;
+  const d = row['duration_min'];
+  return typeof d === 'number' && d > LEGACY_DURATION_MAX ? { ...row, duration_min: LEGACY_DURATION_MAX } : it;
 }
 
 /**

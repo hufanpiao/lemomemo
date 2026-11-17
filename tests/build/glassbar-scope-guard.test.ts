@@ -32,6 +32,8 @@
 // • 11-17 R-436 精致化最后一处（负责人 11-16：“精致化按照待办页的思路去做整个app的页面”；主持人派单范围含电脑版侧栏），本分支提交：
 //   GlassBar.module.css 只动 (width >= 900px) 里的侧栏：页签字 700 改回常规字重、字号 --fs-11-5（视觉稿 .rail .rt 11.5px 常规、选中 600 走底栏同一条 .tab[aria-current] 规则），
 //   删掉和全局 :focus-visible 一样的 .me:focus-visible。窄屏底栏、“＋”的规则一行没动；视觉锁定基准都是手机宽度，不受影响。
+// • 11-17 负责人：“点进去的时候有瞬间的灰框，奇丑无比”（真机图灰框是随手记行按钮 .lmain 的大小，是 iOS 默认点按高亮），提交 3a066c28：
+//   base.css 在 html 上加 -webkit-tap-highlight-color: transparent，只关系统按下时画的灰框；底栏、“＋”的规则一行没动，静止画面不变，:focus-visible 照旧。
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -40,13 +42,13 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、GlassBar.module.css 又在 R-436 侧栏精致化按上面的更新记录换过 */
+/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、3a066c28（点按灰框）、GlassBar.module.css 又在 R-436 侧栏精致化按上面的更新记录换过 */
 const PINNED: Record<string, string> = {
   'src/kit/components/GlassBar/GlassBar.module.css': '9272755e89c97f451123ae01801cbb2f026ad6e8fce3246fab1c5df541fa07cd',
   'src/kit/components/GlassBar/GlassBarFx.tsx': '2cd1d04f069b8e10829389ca87e8b647678ba4c0057c1fb42dc777e342d75b0c',
   'src/kit/components/GlassBar/GlassBarFx.module.css': '3a7f59ede916fe65267888adbf53c60f622ba0e56d5c2b079d9665ad01b8dca3',
   'src/motion/glass-ghost.ts': '6211d651c7439b5aa35d8f755f33327b71213e68aa6c26e404b503ea25da701a',
-  'src/styles/base.css': 'ee39be6f148769cbab2e7a20ae36f9d2b800931d9c89fea573d0f504ddd6201d',
+  'src/styles/base.css': '8022712ac9b118684e6b54994533532e0973d7fb02c2ec81b76db7af4f45e0d2',
 };
 
 const sha256 = (rel: string): string => createHash('sha256').update(readFileSync(join(ROOT, rel))).digest('hex');
