@@ -66,7 +66,7 @@ export const remindZh = {
   'remind.rel.dueInD': '{n} 天后截止',
   'remind.full.head.event': '日程 · {when}',
   'remind.full.head.todo': '待办 · {when}', // 线框 FULLALERT：“待办 · 1 小时后截止”（设计复审 M3）
-  'remind.full.until': '到 {time}',
+  // 副标题的“至 16:30”“至 11月20日 16:30”（R-444）用公共词典 span.until、span.untilDate，和日清单同一套
   'remind.full.loc': '地点 / 链接',
   'remind.full.note': '备注',
   'remind.full.next': '下一条：{title}',

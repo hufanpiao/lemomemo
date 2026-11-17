@@ -5,7 +5,9 @@ import { offsetMin, wallTime, type Tz } from './tz.ts';
 /** 'YYYY-MM-DD' */
 export type DateStr = string;
 
-const DAY_MS = 86_400_000;
+/** 一天多少分钟：日程时长、提醒提前量、时刻换算共用这一个（R-444） */
+export const DAY_MINUTES = 1440;
+const DAY_MS = DAY_MINUTES * 60_000;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
@@ -37,7 +39,7 @@ function wallAsUtc(s: DateStr, min: number): number {
  * 夏令时：拨快跳过的那段时间按拨快后的时间算（2:30 → 3:30）；拨慢重复的那段取先出现的一次。
  */
 export function msAt(dateStr: DateStr, min: number, tz: Tz): number {
-  if (!Number.isInteger(min) || min < 0 || min >= 1440) throw new Error(`bad_min:${min}`);
+  if (!Number.isInteger(min) || min < 0 || min >= DAY_MINUTES) throw new Error(`bad_min:${min}`);
   const local = wallAsUtc(dateStr, min);
   const before = offsetMin(local - DAY_MS, tz);
   const after = offsetMin(local + DAY_MS, tz);
@@ -103,4 +105,9 @@ export function parseHm(hm: string): number {
 /** 当天第几分钟（0～1439）→ 'HH:MM'，parseHm 的反方向 */
 export function fmtHm(min: number): string {
   return `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}`;
+}
+
+/** 当天第几分钟 → 'HH:MM'，四舍五入、截到 0～1440，到当天末尾的写 '24:00'（日历色块、跨天日程“至 24:00”共用这一份） */
+export function hm24(min: number): string {
+  return fmtHm(Math.max(0, Math.min(DAY_MINUTES, Math.round(min))));
 }

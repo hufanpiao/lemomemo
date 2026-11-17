@@ -65,7 +65,6 @@ export const remindKo = {
   'remind.rel.dueInD': '{n}일 후 마감', // REVIEW(ko)
   'remind.full.head.event': '일정 · {when}', // REVIEW(ko)
   'remind.full.head.todo': '할 일 · {when}', // REVIEW(ko)
-  'remind.full.until': '{time}까지', // REVIEW(ko)
   'remind.full.loc': '장소 / 링크', // REVIEW(ko)
   'remind.full.note': '메모', // REVIEW(ko)
   'remind.full.next': '다음: {title}', // REVIEW(ko)

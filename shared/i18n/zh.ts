@@ -71,6 +71,11 @@ export const zh = {
   'fmt.wd.4': '周四',
   'fmt.wd.5': '周五',
   'fmt.wd.6': '周六',
+  // 时长（fmt.ts 的 fmtDur）：“13 分钟”“1 小时 13 分”“2 天 9 小时”，前面有天、小时时分钟写“分”（视觉稿 kDur）
+  'fmt.dur.d': '{n} 天',
+  'fmt.dur.h': '{n} 小时',
+  'fmt.dur.m': '{n} 分钟',
+  'fmt.dur.mTail': '{n} 分',
   // 主 App 收到 account_disabled、探测说账号正常，但 5 分钟内已重新载入过一次：同步暂停（app/sync-wiring.ts 限次，10-30 复审建议）；按钮沿用 update.reopen
   'update.syncPaused': '同步暂停，请稍后重新打开',
   // 查到了新版本但 30 秒内没装好、接管（BANNER-sugg ⑤）：不重新载入，提示稍后再试（core/upgrade.ts 的 stalled）
@@ -85,5 +90,12 @@ export const zh = {
   'exit.unavailable.title': '读不到这台电脑上的登录信息',
   'exit.unavailable.body': '请重新打开柠檬记。还不行的话，重启电脑后再试。',
   'exit.unavailable.reopen': '重新打开',
+  // 日程在某一天的写法（R-444）：“全天”和跨天的几句，日历日清单和周视图、今天页、全屏提醒页共用这一套（event-span.ts 的 spanTextOn 给键和参数，kit/hooks/useSpanT.ts 翻译）。
+  // 中间整天行首“持续”；最后一天行首“至 18:00”；没到最后一天的标题下面“至 11月20日 18:00”；跨天的全天日程“第 2/3 天”
+  'span.allDay': '全天',
+  'span.ongoing': '持续',
+  'span.until': '至 {t}',
+  'span.untilDate': '至 {m}月{d}日 {t}',
+  'span.dayOf': '第 {i}/{n} 天',
   // 时区的通俗说法（tz.*）11-05 挪到 shared/i18n/tz-zh.ts、tz-ko.ts：只有登录页的恢复页和邮件用，不进主 App 首屏的公共词典
 } as const;

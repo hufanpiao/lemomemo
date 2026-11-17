@@ -8,10 +8,12 @@ export const ko = {
   'event.edit.back': '뒤로', // REVIEW(ko)
   'event.edit.titleLabel': '제목', // REVIEW(ko)
   'event.edit.titlePh': '무슨 일인가요', // REVIEW(ko)
-  'event.edit.date': '날짜', // REVIEW(ko)
+  'event.edit.startTime': '시작 시간', // REVIEW(ko) R-444
+  'event.edit.endTime': '종료 시간', // REVIEW(ko) R-444
   'event.edit.allDay': '종일', // R-365 负责人 11-09 定（原“하루 종일”，375 宽日期框放不下）
   'event.edit.start': '시작', // REVIEW(ko)
   'event.edit.end': '종료', // REVIEW(ko)
+  'event.edit.endFixed': '종료는 시작보다 빠를 수 없어 시작일로 맞췄어요', // REVIEW(ko) R-444
   'event.edit.tz': '시간대', // REVIEW(ko)
   'event.edit.tzLocal': '이 시간대 기준이에요. 지금 계신 곳에서는 {date} {time}이에요', // REVIEW(ko)
   'event.edit.remind': '알림', // REVIEW(ko)

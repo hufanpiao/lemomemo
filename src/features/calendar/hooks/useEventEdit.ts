@@ -4,15 +4,17 @@
 // • 时区只让选 Intl 支持的（D7）：不在表里的不写、状态报 rejected（S5）
 // • 全天 ↔ 有时刻（S3）：切成全天前记住原来的时刻、时区、提醒，同一页里切回来时恢复（误点一下不丢“纽约 15:00”）；
 //   没记过的（一开始就是全天）切回来用 9:00、本机时区。切成全天保留的是日程自己时区里的日期，不是“在你这里”的日期（两者可能差一天）
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { todayOf } from '../../../../shared/core/date.ts';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { addDays, todayOf } from '../../../../shared/core/date.ts';
+import { EVENT_SPAN_MAX_DAYS } from '../../../../shared/logic/calendar/event-span.ts';
 import { deviceTz } from '../../../core/current-tz.ts';
 import { useEditRecord, type EditRecord } from '../../../kit/hooks/useEditRecord.ts';
 import { useTypedTitle } from '../../../kit/hooks/useTypedTitle.ts';
 import { clock } from '../../../platform/clock.ts';
 import { clearNewDate, pendingNewDate } from './new-date.ts';
 import {
-  durationOf, emptyForm, endOf, formOf, hasRemind, localOf, newEventRow, normalize, patchOf, tzAllowed, tzChoices, type EventForm,
+  allDayDurationOf, allDayDurationTo, allDayLastOf, durationTo, emptyForm, endAtOf, formOf, hasRemind, localOf, newEventRow, normalize, patchOf,
+  timedDurationOf, tzAllowed, tzChoices, type EventForm,
 } from '../data/event-edit.ts';
 
 export type { EventForm } from '../data/event-edit.ts';
@@ -25,9 +27,16 @@ export interface EventEdit extends EditRecord<EventForm> {
   change(p: Partial<EventForm>): void;
   /** 全天 / 有时刻切换（S3：切回来时恢复切走前的时刻、时区、提醒） */
   setAllDay(allDay: boolean): void;
-  /** 结束时刻（墙上时间）；全天为 null */
+  /** 结束时刻（墙上时间，日程自己的时区）；全天为 null */
   end: string | null;
-  setEnd(end: string): void;
+  /** 结束日期（R-444）：有时刻的是结束那一刻的日期，全天的是最后一天 */
+  endDate: string;
+  /** 改结束日期、时刻（R-444，可跨多天，最多 31 天）：只给一样时另一样沿用现在的；全天只看 date */
+  setEnd(p: { date?: string; time?: string }): void;
+  /** 结束日期最晚能选到哪天：开始 + 30 天（共 31 天；有时刻的再晚就超时长上限，干脆不让选）；没日期为 undefined */
+  endDateMax: string | undefined;
+  /** 刚选的结束日期早于开始日期、已按开始那天算（日期框下面写一行提示）；下一次改结束就清掉 */
+  endFixed: boolean;
   tzList: readonly string[];
   /** 和本机时区不同时：在本机时区是哪天几点 */
   local: { date: string; time: string } | null;
@@ -61,33 +70,50 @@ export function useEventEdit(id: string, onCreated?: (id: string) => void): Even
   );
   // 打字条“展开编辑”带过来的字（R-353）：填进标题、照常保存
   useTypedTitle(id, change);
-  const before = useRef<Pick<EventForm, 'time' | 'tz' | 'remind_min'> | null>(null);
+  // 切成全天前记住的：时刻、时区、提醒、时长，加上切成全天时写的时长（allDayDur；切回来时全天的天数没改过才恢复原来的时长，R-444）
+  const before = useRef<(Pick<EventForm, 'time' | 'tz' | 'remind_min' | 'duration_min'> & { allDayDur: number }) | null>(null);
   const setAllDay = useCallback(
     (allDay: boolean) => {
       if (allDay) {
         if (form.time === null) return;
-        before.current = { time: form.time, tz: form.tz, remind_min: form.remind_min };
-        change({ time: null });
+        const allDayDur = allDayDurationOf(form, deviceTz());
+        before.current = { time: form.time, tz: form.tz, remind_min: form.remind_min, duration_min: form.duration_min, allDayDur };
+        change({ time: null, ...(allDayDur === form.duration_min ? {} : { duration_min: allDayDur }) });
         return;
       }
       if (form.time !== null) return;
       const b = before.current;
-      change(b ? { time: b.time, tz: b.tz, remind_min: b.remind_min } : { time: DEFAULT_START });
+      const timed = b ? { time: b.time, tz: b.tz, remind_min: b.remind_min } : { time: DEFAULT_START };
+      const dur = b && b.allDayDur === form.duration_min ? b.duration_min : timedDurationOf(normalize({ ...form, ...timed }, deviceTz()), form.duration_min, deviceTz());
+      change({ ...timed, ...(dur === form.duration_min ? {} : { duration_min: dur }) });
     },
-    [form.time, form.tz, form.remind_min, change],
+    [form, change],
   );
+  const endAt = endAtOf(form, deviceTz());
+  const [endFixed, setEndFixed] = useState(false);
   const setEnd = useCallback(
-    (end: string) => {
-      if (form.time !== null && end !== '') change({ duration_min: durationOf(form.time, end) });
+    (p: { date?: string; time?: string }) => {
+      const date = p.date ?? endAt?.date ?? form.date;
+      if (date === '' || form.date === '') return;
+      setEndFixed(p.date !== undefined && p.date < form.date);
+      if (form.time === null) {
+        change({ duration_min: allDayDurationTo(form.date, date) });
+        return;
+      }
+      const time = p.time ?? endAt?.time ?? '';
+      if (time !== '') change({ duration_min: durationTo(form, date, time, deviceTz()) });
     },
-    [form.time, change],
+    [form, endAt?.date, endAt?.time, change],
   );
   const tzList = useMemo(() => tzChoices([original, form.tz, deviceTz()]), [original, form.tz]);
   return {
     ...rec,
     change,
     setAllDay,
-    end: form.time === null ? null : endOf(form.time, form.duration_min),
+    end: endAt?.time ?? null,
+    endDate: endAt?.date ?? allDayLastOf(form),
+    endDateMax: form.date === '' ? undefined : addDays(form.date, EVENT_SPAN_MAX_DAYS - 1),
+    endFixed,
     setEnd,
     tzList,
     local: localOf(form, deviceTz()),

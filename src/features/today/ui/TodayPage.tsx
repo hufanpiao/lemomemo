@@ -59,7 +59,7 @@ import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { afterAppPainted, isAppPainted } from '../../../platform/root-paint.ts';
 import { AppearItem, AppearList, useHoldView, useSwapWhenSafe } from '../../../motion/components.ts';
-import { splitPast, useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
+import { eventSpanText, splitPast, useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
 import { loadTodayDesk, loadTodaySwipe } from '../index.ts';
@@ -71,6 +71,7 @@ import { NowCard } from './NowCard.tsx';
 import styles from './TodayPage.module.css';
 import type { TodaySel } from './TodayDesk.tsx';
 import type { TodayAutoToast, TodayRoProps } from './TodayToasts.tsx';
+import { useSpanT } from '../../../kit/hooks/useSpanT.ts';
 
 // 页底提示条、顶部重复事项横幅、只读行的行尾标记和打勾圆圈：同一个按需下载的文件（TodayToasts.tsx），按 part 画哪一块。
 // 懒加载写在今天页的块里、不写在功能入口 ../index.ts（11-17 改）：写在入口时 import() 由主包发起，主包的预加载表只给首屏名单列 JS
@@ -149,6 +150,7 @@ const AnnivLine = lazy(() => import('./AnnivLine.tsx'));
 
 export default function TodayPage() {
   const t = useTodayT();
+  const spanT = useSpanT();
   const locale = useLocale();
   const d = useToday();
   /** 引擎 armed 或出错（含 App 的看门狗：迟迟不 armed 也算出错）才挂“错过的提醒”（REMIND-shown-persist 修订 1 P2） */
@@ -243,19 +245,30 @@ export default function TodayPage() {
     </AppearItem>
   ) : null;
   // 日程行、待办行：“今天的安排”里照常画，展开“已过去”时过去的那几行也用它（key 不变，打勾挪进挪出“已过去”时行走 AppearList 的离开、进场）
-  const evRow = (o: (typeof v.events)[number]) => (
-    <AppearItem key={`e:${o.id}`} className={list.row} data-readonly={g.isRo('event', o.id) ? '' : undefined} data-testid={`today-event-${o.id}`}>
-      <span className={list.lead}>{o.time ?? t('list.allDay', {})}</span>
-      <button type="button" className={list.main} onClick={() => open({ kind: 'event', id: o.id })} data-open={o.id} aria-current={cur(o.id)}>
-        <span className={list.text}>
-          <span className={list.title}>{o.title}</span>
-          {o.origin ? <span className={list.meta}>{t('list.origin', { zone: zoneName(o.origin.tz, locale), t: o.origin.time })}</span> : null}
-        </span>
-        {g.isRo('event', o.id) ? <Ro part="mark" testId={`today-ro-${o.id}`} /> : null}
-        <RowMark table="events" id={o.id} />
-      </button>
-    </AppearItem>
-  );
+  // 跨天的日程（R-444）：前几天开始的行首写“持续”/“至 18:00”，没到最后一天的标题下面写“至 11月20日 18:00”，跨天的全天日程写“第 2/3 天”（同日清单）
+  const evLead = (o: (typeof v.events)[number], s: ReturnType<typeof eventSpanText>): string => {
+    if (s.lead !== 'start') return spanT(s.lead);
+    return o.time ?? '';
+  };
+  const evMeta = (s: ReturnType<typeof eventSpanText>): string | null => (s.meta === null ? null : spanT(s.meta));
+  const evRow = (o: (typeof v.events)[number]) => {
+    const s = eventSpanText(o, d.today, d.tz);
+    const meta = evMeta(s);
+    return (
+      <AppearItem key={`e:${o.id}`} className={list.row} data-readonly={g.isRo('event', o.id) ? '' : undefined} data-testid={`today-event-${o.id}`}>
+        <span className={list.lead}>{evLead(o, s)}</span>
+        <button type="button" className={list.main} onClick={() => open({ kind: 'event', id: o.id })} data-open={o.id} aria-current={cur(o.id)}>
+          <span className={list.text}>
+            <span className={list.title}>{o.title}</span>
+            {meta !== null ? <span className={list.meta} data-testid={`today-span-${o.id}`}>{meta}</span> : null}
+            {o.origin ? <span className={list.meta}>{t('list.origin', { zone: zoneName(o.origin.tz, locale), t: o.origin.time })}</span> : null}
+          </span>
+          {g.isRo('event', o.id) ? <Ro part="mark" testId={`today-ro-${o.id}`} /> : null}
+          <RowMark table="events" id={o.id} />
+        </button>
+      </AppearItem>
+    );
+  };
   const tdRow = (td: (typeof v.todos)[number]) => {
     const ro = g.isRo('todo', td.id);
     return (

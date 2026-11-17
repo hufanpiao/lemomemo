@@ -14,7 +14,8 @@ import { Pressable } from '../../../motion/components.ts';
 import { clock } from '../../../platform/clock.ts';
 import { reminderHash, type ReminderKind } from '../../../platform/native-bridge.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
-import { eventEnd, eventStart, findReminder, parseReminderHash, relMsg, timeOf, type Reminder } from '../hooks/remind-view.ts';
+import { useSpanT } from '../../../kit/hooks/useSpanT.ts';
+import { endMsg, eventStart, findReminder, parseReminderHash, relMsg, timeOf, type Reminder } from '../hooks/remind-view.ts';
 import { actionsOf, useReminderList, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
 import { Bell } from './Bell.tsx';
@@ -57,6 +58,7 @@ const leave = (): void => backOr('today');
 
 export default function FullReminderPage() {
   const t = useRemindT();
+  const spanT = useSpanT();
   const hash = useSyncExternalStore(subscribeHash, getHash, () => '');
   const ref = parseReminderHash(hash);
   const now = useMinuteNow();
@@ -111,7 +113,9 @@ export default function FullReminderPage() {
 
   // 类型行写“还有多久”，大号字写时刻，不重复（设计复审 今天页待办 M3）；页面每分钟随 useMinuteNow 重画
   const w = relMsg(r, clock.now(), tz, prefs.defaultTime);
-  const end = r.kind === 'event' ? eventEnd(r, tz) : null;
+  // “至 16:30”；跨天的（R-444）写“至 11月20日 16:30”（词条同日清单，公共词典 span.*）
+  const endM = r.kind === 'event' ? endMsg(r, tz) : null;
+  const end = endM === null ? null : spanT(endM);
   const loc = typeof r.row['location'] === 'string' ? r.row['location'] : '';
   const note = typeof r.row['note'] === 'string' ? r.row['note'] : '';
   const project = typeof r.row['project'] === 'string' ? r.row['project'] : '';
@@ -153,7 +157,7 @@ export default function FullReminderPage() {
       </div>
       {(end !== null || project) && (
         <p className={styles.sub} data-testid="remind-full-sub">
-          {[end !== null ? t('remind.full.until', { time: timeOf(end, tz) }) : '', project].filter(Boolean).join(' · ')}
+          {[end ?? '', project].filter(Boolean).join(' · ')}
         </p>
       )}
       {doneFail && (

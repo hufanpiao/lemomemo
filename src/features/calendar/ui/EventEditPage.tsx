@@ -76,23 +76,31 @@ export function EventEditor({ id, onCreated }: { id: string; onCreated(id: strin
 
       <GroupLabel>{t('event.edit.groupTime', {})}</GroupLabel>
       <FormGroup>
-        <Field label={t('event.edit.date', {})} htmlFor="event-date">
+        {/* R-444 跨天日程：开始、结束各一行“日期 + 时刻”（全天只有日期）；结束日期不早于开始、最多 31 天（超出的由 useEventEdit 截住） */}
+        <Field label={t('event.edit.start', {})} htmlFor="event-date">
           <TextInput id="event-date" type="date" className={NUM} value={form.date} disabled={off} onCommit={(v) => v !== '' && change({ date: v })} data-testid="event-edit-date" />
+          {form.time !== null ? (
+            <TextInput type="time" className={NUM} aria-label={t('event.edit.startTime', {})} value={form.time} disabled={off} onCommit={(v) => v !== '' && change({ time: v })} data-testid="event-edit-start" />
+          ) : null}
+        </Field>
+        <Field label={t('event.edit.end', {})} htmlFor="event-end-date" hint={ed.endFixed ? t('event.edit.endFixed', {}) : undefined}>
+          <TextInput
+            id="event-end-date"
+            type="date"
+            className={NUM}
+            min={form.date}
+            max={ed.endDateMax}
+            value={ed.endDate}
+            disabled={off}
+            onCommit={(v) => v !== '' && ed.setEnd({ date: v })}
+            data-testid="event-edit-end-date"
+          />
+          {form.time !== null ? (
+            <TextInput type="time" className={NUM} aria-label={t('event.edit.endTime', {})} value={ed.end ?? ''} disabled={off} onCommit={(v) => v !== '' && ed.setEnd({ time: v })} data-testid="event-edit-end" />
+          ) : null}
         </Field>
         {form.time !== null ? (
           <>
-            <Field label={t('event.edit.start', {})} htmlFor="event-start">
-              <TextInput id="event-start" type="time" className={NUM} value={form.time} disabled={off} onCommit={(v) => v !== '' && change({ time: v })} data-testid="event-edit-start" />
-              <TextInput
-                type="time"
-                className={NUM}
-                aria-label={t('event.edit.end', {})}
-                value={ed.end ?? ''}
-                disabled={off}
-                onCommit={(v) => ed.setEnd(v)}
-                data-testid="event-edit-end"
-              />
-            </Field>
             <Field
               label={t('event.edit.tz', {})}
               htmlFor="event-tz"

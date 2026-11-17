@@ -1,6 +1,6 @@
 // ai-parse（架构第 6 节函数表 ai-parse 行、第 7 节、5.1；B3 任务单 S8、S12、S15、BE-4，Q2：服务器包 intent）。
 // 顺序：方法（只收 POST）→ JWT（requireActiveUser，index.ts 注入成 authenticate）→ 请求体（default_day 不合格回 400，R6）→ 共用的门（_shared/ai/gate.ts：
-// 同意、类型开关、模型配置、每分钟 6 次、谷歌额度、每人每天和全项目预扣）→ parseWithAI（parse.v6，B4b-3 起一次调用里判意图）→ 成功按意图回
+// 同意、类型开关、模型配置、每分钟 6 次、谷歌额度、每人每天和全项目预扣）→ parseWithAI（parse.v7，B4b-3 起一次调用里判意图）→ 成功按意图回
 // {intent: 'record', confidence, items, quota_left} / {intent: search|summarize, confidence, query, quota_left} /
 // {intent: cancel|reschedule|complete, confidence, target, to, quota_left}（架构 5.14 第 2、7 点；不多扣次数，confidence 是 AI 给的）；
 // 失败退回预扣、回 {fallback, reason}（客户端改用本机规则，原话不丢）。
@@ -20,7 +20,7 @@ export type AuthResult = SharedAuthResult;
 
 /** shared/schema/ai.ts 里入参相关的几个函数（index.ts 从 _shared/gen/ 注入，单测注入真的 shared） */
 export interface Logic<Item, I extends IntentLike = IntentLike> {
-  parseRequest(body: unknown): { ok: true; value: { text: string; now: number; tz: string; locale?: string | undefined; projects?: unknown[] | undefined; scope?: 'main' | 'vault' | undefined; default_day?: string | undefined } } | { ok: false };
+  parseRequest(body: unknown): { ok: true; value: { text: string; now: number; tz: string; locale?: string | undefined; projects?: unknown[] | undefined; scope?: 'main' | 'vault' | undefined; default_day?: string | undefined; span?: 1 | undefined } } | { ok: false };
   normLocale(v: unknown): 'zh' | 'ko';
   normProjects(v: unknown): string[];
   isValidTz(tz: string): boolean;
@@ -71,5 +71,5 @@ export async function handle<Item, I extends IntentLike = IntentLike>(req: Reque
     await settleFailure(deps, gate, userId, 'ai-parse', r);
     return json(200, { fallback: true, reason: clientReason(r) });   // 每分钟限额回 error，客户端不记“今天用完”
   }
-  return json(200, plusBody(r.value, gate.quotaLeft));
+  return json(200, plusBody(r.value, gate.quotaLeft, body.span === 1));   // 没带 span 的旧版客户端时长规整到 1440 以内（R-444）
 }

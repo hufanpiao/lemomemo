@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { projectColorIndex } from '../../../../shared/logic/project-color.ts';
-import { eventOcc, eventsOn, kWin, lateTodos, nowCard, nowEvents, splitDur, splitPast, todayTodos, type Row } from '../data/today-model.ts';
+import { eventOcc, eventSpanText, eventsOn, kWin, lateTodos, nowCard, nowEvents, splitPast, todayTodos, type Row } from '../data/today-model.ts';
 
 const SEOUL = 'Asia/Seoul';
 const SH = 'Asia/Shanghai';
@@ -56,7 +56,9 @@ describe('日程换算（架构 4.6）', () => {
   it('跨日：首尔 00:30 在上海是前一天 23:30，放进前一天', () => {
     const r = ev({ time: '00:30', tz: SEOUL });
     expect(eventsOn([r], '2026-11-04', SH).map((o) => o.time)).toEqual(['23:30']);
-    expect(eventsOn([r], DAY, SH)).toEqual([]);
+    // 上海 23:30 起 1 小时，跨过午夜进到 11-05（R-444：跨午夜的两天都算），开始那天仍是 11-04
+    expect(eventsOn([r], DAY, SH).map((o) => o.date)).toEqual(['2026-11-04']);
+    expect(eventsOn([{ ...r, duration_min: 30 }], DAY, SH)).toEqual([]);
   });
 
   it('同一时区不加注；全天不换算；坏值不显示', () => {
@@ -110,10 +112,31 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
     expect(c).toMatchObject({ nowText: '14:17', left: 13 });
   });
 
+  it('占不占大卡的边界：跨零点 1439 分钟（23:30 到次日 23:29）占，1440 分钟（10:00 到次日 10:00）不占、按全天日程算', () => {
+    const short = ev({ title: '长班', date: '2026-11-04', time: '23:30', tz: SEOUL, duration_min: 1439 });
+    expect(nowCard(nowEvents([short], at('14:17'), SEOUL), at('14:17'), SEOUL)).toMatchObject({ state: 'live', title: '长班' });
+    const full = ev({ title: '值班', date: '2026-11-04', time: '10:00', tz: SEOUL, duration_min: 1440 });
+    expect(nowCard(nowEvents([full], at('09:00'), SEOUL), at('09:00'), SEOUL)).toMatchObject({ state: 'allday', allDay: { title: '值班', n: 1 } });
+  });
+
+  it('多天的有时刻日程不占大卡（负责人 11-17）：不进 cur、不当 c0，大卡给真正的下一件；今天只有这类日程时按没有带时刻的日程算', () => {
+    // 昨天 10:00 开始、明天 10:00 结束的出差：此刻 14:17 正在进行，但大卡不给它
+    const trip = ev({ title: '出差', date: '2026-11-04', time: '10:00', tz: SEOUL, duration_min: 2 * 1440 });
+    const shop = ev({ title: '逛街', time: '15:30', tz: SEOUL });
+    const c = nowCard(day([trip, shop]), at('14:17'), SEOUL);
+    expect(c).toMatchObject({ state: 'idle', title: '逛街', liveN: 0, also: null, next: { time: '15:30', title: '逛街' } });
+    expect(c.ruler.segs.map((s) => s.id)).not.toContain(trip.id);
+    // 列表照样有它（“今天的安排”里写第几天）
+    expect(day([trip, shop]).map((o) => o.id)).toContain(trip.id);
+    // 今天只有多天日程：不算“进行中”，按全天日程走 allday、标题写它（第三轮复审必改 1：不写“今天没有日程”）
+    expect(nowCard(day([trip]), at('14:17'), SEOUL)).toMatchObject({ state: 'allday', liveN: 0, allDay: { title: '出差', n: 1 } });
+    // 同时有真正的全天日程：按 allday 原规则取第一条（真正的全天日程排前面），条数两条都算
+    expect(nowCard(day([trip, ev({ title: '休假', time: null })]), at('14:17'), SEOUL)).toMatchObject({ state: 'allday', allDay: { title: '休假', n: 2 } });
+  });
+
   it('② idle：下一件在时间尺里，标题“开始时刻 标题”、1 小时 13 分后；卡底不重复写', () => {
     const c = nowCard(day([ev({ title: '逛街', time: '15:30', tz: SEOUL })]), at('14:17'), SEOUL);
     expect(c).toMatchObject({ state: 'idle', time: '15:30', title: '逛街', left: 73, also: null, foot: null, next: { time: '15:30', title: '逛街', inMin: 73 } });
-    expect(splitDur(73)).toEqual({ h: 1, m: 13 });
     // 底线只画在色块左边，挨着色块那头让出 3px（视觉稿 kRuler）
     expect(nowCard(day([ev({ time: '15:30', tz: SEOUL })]), at('14:17'), SEOUL).ruler.trk).toEqual([{ x0: 0, x1: 2 / 3, gapL: false, gapR: true }]);
   });
@@ -155,7 +178,7 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
     });
   });
 
-  it('跨零点：昨天 23:30 开始、到 01:00 的日程，00:30 时仍是“进行中”；时间尺从昨天 23:00 起', () => {
+  it('跨零点：昨天 23:30 开始、到 01:00 的日程，00:30 时仍是“进行中”（不满 24 小时照常占大卡，主持人 11-17 定）；时间尺从昨天 23:00 起', () => {
     const rows = [ev({ title: '夜班', date: '2026-11-04', time: '23:30', tz: SEOUL, duration_min: 90 })];
     const c = nowCard(nowEvents(rows, at('00:30'), SEOUL), at('00:30'), SEOUL);
     expect(c).toMatchObject({ state: 'live', title: '夜班', left: 30, nowText: '00:30' });
@@ -300,5 +323,37 @@ describe('已过去（线框 s1“已过去的折叠成一行”）：结束了�
     expect(s.todos.map((t) => t.id)).toEqual(['y']);
     expect(splitPast(evs, [], at('10:00')).pastEvents.map((o) => o.id)).toEqual(['a']);
     expect(splitPast(evs, [], at('09:59')).pastEvents).toEqual([]);
+  });
+});
+
+describe('跨天日程（R-444）', () => {
+  it('全天 3 天：开始那天到最后一天都在今天的清单里，第 2 天写“第 2/3 天”', () => {
+    const r = ev({ duration_min: 3 * 1440 });
+    expect(['2026-11-04', DAY, '2026-11-06', '2026-11-07', '2026-11-08'].map((d) => eventsOn([r], d, SEOUL).length)).toEqual([0, 1, 1, 1, 0]);
+    const o = eventsOn([r], '2026-11-06', SEOUL)[0];
+    expect(o && eventSpanText(o, '2026-11-06', SEOUL)).toEqual({ lead: { key: 'span.allDay', params: {} }, endMin: null, meta: { key: 'span.dayOf', params: { i: 2, n: 3 } } });
+  });
+
+  it('有时刻 09:00 起 50 小时：中间那天写“持续”，最后一天写“至 11:00”；超过 31 天的坏值按 1 小时', () => {
+    const r = ev({ time: '09:00', tz: SEOUL, duration_min: 50 * 60 });
+    expect([DAY, '2026-11-06', '2026-11-07', '2026-11-08'].map((d) => eventsOn([r], d, SEOUL).length)).toEqual([1, 1, 1, 0]);
+    const lead = (d: string) => { const o = eventsOn([r], d, SEOUL)[0]; return o && eventSpanText(o, d, SEOUL).lead; };
+    expect([DAY, '2026-11-06', '2026-11-07'].map(lead)).toEqual(['start', { key: 'span.ongoing', params: {} }, { key: 'span.until', params: { t: '11:00' } }]);
+    expect(eventOcc(ev({ time: '09:00', tz: SEOUL, duration_min: 31 * 1440 + 1 }), SEOUL)?.end).toBe(at('10:00'));
+  });
+
+  it('回落规则和日历同一套（评审第 13 条）：时区名无效按当前时区照样显示（原来今天页不显示、日历照显示）；时刻坏了不显示；时长 0 按 1 小时', () => {
+    expect(eventOcc(ev({ time: '09:00', tz: 'Foo/Bar' }), SEOUL)).toMatchObject({ date: DAY, time: '09:00', start: at('09:00'), origin: null });
+    expect(eventOcc(ev({ time: '9点', tz: SEOUL }), SEOUL)).toBeNull();
+    expect(eventOcc(ev({ time: '09:00', tz: SEOUL, duration_min: 0 }), SEOUL)?.end).toBe(at('10:00'));
+  });
+
+  it('nowEvents：前天开始、此刻还没完的带进来；已经结束的不带，明天才结束的今天开始的不重复；多天的不占大卡（负责人 11-17）', () => {
+    const long = ev({ date: '2026-11-03', time: '20:00', tz: SEOUL, duration_min: 3 * 1440 });   // 11-03 20:00 → 11-06 20:00
+    const over = ev({ date: '2026-11-04', time: '23:00', tz: SEOUL, duration_min: 90 });          // 11-04 23:00 → 11-05 00:30
+    const late = ev({ time: '23:00', tz: SEOUL, duration_min: 120 });                             // 11-05 23:00 → 11-06 01:00
+    const ids = nowEvents([long, over, late], at('10:00'), SEOUL).map((o) => o.id);
+    expect(ids).toEqual([long.id, late.id]);
+    expect(nowCard(nowEvents([long], at('10:00'), SEOUL), at('10:00'), SEOUL).state).toBe('allday');
   });
 });

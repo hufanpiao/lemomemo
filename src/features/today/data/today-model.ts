@@ -7,8 +7,9 @@
 // • 时间窗 kWin：照视觉稿 kWin() 逐条移植（分钟，相对今天 0 点；跨到明天的事项可以 > 1440）
 // • 没赶上：没完成、截止日早于今天的待办（逾 N 天）；今天有截止时刻、已经过了的也算（逾 0 天，界面写“已过 17:00”）。
 //   “逾期”规则和读待办行只在 shared/logic/todo-row.ts（isLate、todoOf，和待办页共用）
-import { addDays, diffDays, fmtHm, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { addDays, DAY_MINUTES, diffDays, fmtHm, minOfDay, msAt, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
+import { coversDay, ownTzOf, placeEvent, spanRowOf, spanTextOn, type EventPlacement, type SpanText } from '../../../../shared/logic/calendar/event-span.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { projectColorIndex, type ProjectColor } from '../../../../shared/logic/project-color.ts';
 import { compareTodos, isLate, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
@@ -19,8 +20,6 @@ import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
 export type Row = Readonly<{ id: string } & Record<string, unknown>>;
 
 const MIN = 60_000;
-const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -29,8 +28,10 @@ export interface EventOcc {
   id: string;
   title: string;
   project: string;
-  /** 当前时区的日期 */
+  /** 当前时区的日期（开始那天） */
   date: DateStr;
+  /** 最后一天（R-444 跨天日程；只占一天时等于 date） */
+  lastDate: DateStr;
   allDay: boolean;
   /** 时刻（epoch ms）；全天为 null */
   start: number | null;
@@ -39,40 +40,39 @@ export interface EventOcc {
   time: string | null;
   /** 和当前时区不同：日程自己的时区和那里的墙上时间（“首尔 15:00”）；相同或全天为 null */
   origin: { tz: Tz; time: string } | null;
+  /** 放在哪几天、几点（event-span.ts 的 placeEvent；行在某一天怎么写直接交给 spanTextOn） */
+  place: EventPlacement;
 }
 
-/** 一条日程换算到当前时区；字段坏了返回 null（不显示，不抛） */
+/** 一条日程换算到当前时区；字段坏了返回 null（不显示，不抛）。放在哪几天、回落规则同日历（event-span.ts 的 placeEvent） */
 export function eventOcc(r: Row, current: Tz): EventOcc | null {
-  const date = str(r['date']);
-  if (!DATE.test(date)) return null;
-  const base = { kind: 'event' as const, id: r.id, title: str(r['title']), project: str(r['project']) };
-  const time = r['time'];
-  if (typeof time !== 'string' || !HM.test(time)) {
-    return { ...base, date, allDay: true, start: null, end: null, time: null, origin: null };
-  }
-  const tz = typeof r['tz'] === 'string' && r['tz'] !== '' ? r['tz'] : current;
-  let start: number;
-  try {
-    start = msAt(date, parseHm(time), tz);
-  } catch {
-    return null;
-  }
-  const dur = typeof r['duration_min'] === 'number' && r['duration_min'] >= 1 && r['duration_min'] <= 1440 ? r['duration_min'] : 60;
-  const localTime = fmtHm(minOfDay(start, current));
-  const origin = tz !== current && localTime !== time ? { tz, time } : null;
-  return { ...base, date: todayOf(start, current), allDay: false, start, end: start + dur * MIN, time: localTime, origin };
+  const row = spanRowOf(r);
+  const p = row && placeEvent(row, current);
+  if (!row || !p) return null;
+  const base = { kind: 'event' as const, id: r.id, title: str(r['title']), project: str(r['project']), date: p.date, lastDate: p.lastDate, place: p };
+  if (p.allDay) return { ...base, allDay: true, start: null, end: null, time: null, origin: null };
+  const time = fmtHm(p.startMin);
+  // 和记录时的时区不同：带上那里的墙上时间（ownTzOf：时区无效的已按当前时区放，不带）
+  const tz = ownTzOf(row.tz, current);
+  const origin = tz !== current && row.time !== null && time !== row.time ? { tz, time: row.time } : null;
+  return { ...base, allDay: false, start: p.startMs, end: p.endMs, time, origin };
 }
 
-/** 某一天的日程：全天的在前，有时刻的按开始先后 */
+/** 某一天的日程（R-444：跨天的它占的每一天都算，含前几天开始、今天还没完的）：全天的在前，有时刻的按开始先后 */
 export function eventsOn(rows: readonly Row[], day: DateStr, current: Tz, locale: Locale = 'zh-CN'): EventOcc[] {
   const byTitle = titleCompare(locale);
   const out: EventOcc[] = [];
   for (const r of rows) {
     if (!isLiveRow(r)) continue;
     const o = eventOcc(r, current);
-    if (o && o.date === day) out.push(o);
+    if (o && coversDay(o, day)) out.push(o);
   }
   return out.sort((a, b) => (a.start ?? -Infinity) - (b.start ?? -Infinity) || byTitle(a.title, b.title));
+}
+
+/** 今天页日程行在 day 这一天怎么写（R-444 跨天：同日清单，event-span.ts 的 spanTextOn） */
+export function eventSpanText(o: EventOcc, day: DateStr, current: Tz): SpanText {
+  return spanTextOn(o.place, day, current);
 }
 
 // ---------- “现在”卡 ----------
@@ -198,12 +198,14 @@ const isTimed = (o: EventOcc): o is TimedOcc => !o.allDay && o.start !== null &&
 const SOON_MIN = 180;
 
 /** 喂给“现在”卡的日程：今天的，加上跨零点两头的——
- *  昨天开始、此刻还没结束的（00:30 时仍是“进行中”，整块评审第 4 条）；明天 3 小时以内开始的（23:45 时明天 00:15 那件是“下一件”，复审第 1 条） */
+ *  前几天开始、此刻还没结束的（00:30 时仍是“进行中”，整块评审第 4 条；R-444 跨多天的同样，eventsOn 已经算进今天，这里去掉今天之前开始、已经结束的）；
+ *  明天 3 小时以内开始的（23:45 时明天 00:15 那件是“下一件”，复审第 1 条；只算明天开始的，今天开始跨进明天的已经在今天里） */
 export function nowEvents(rows: readonly Row[], now: number, current: Tz, locale: Locale = 'zh-CN'): EventOcc[] {
   const today = todayOf(now, current);
-  const carry = eventsOn(rows, addDays(today, -1), current, locale).filter((o) => isTimed(o) && o.end > now);
-  const soon = eventsOn(rows, addDays(today, 1), current, locale).filter((o) => isTimed(o) && o.start - now <= SOON_MIN * MIN);
-  return [...carry, ...eventsOn(rows, today, current, locale), ...soon];
+  const tomorrow = addDays(today, 1);
+  const cur = eventsOn(rows, today, current, locale).filter((o) => o.date === today || !isTimed(o) || o.end > now);
+  const soon = eventsOn(rows, tomorrow, current, locale).filter((o) => isTimed(o) && o.date === tomorrow && o.start - now <= SOON_MIN * MIN);
+  return [...cur, ...soon];
 }
 
 /** 日程 → “现在”卡；today 是当前时区的今天；tomorrowFirst 是明天第一件带时刻的日程（done 时写在卡底） */
@@ -214,8 +216,12 @@ export function nowCard(events: readonly EventOcc[], now: number, current: Tz, t
   const untilMin = (ms: number) => Math.ceil((ms - now) / MIN);
   const hmOf = (ms: number) => fmtHm(minOfDay(ms, current));
 
-  const timed = events.filter(isTimed);
-  const allDays = events.filter((o) => o.allDay);
+  // 负责人 11-17：多天的有时刻日程（lastDate ≠ date 且时长满 24 小时，R-444）不占大卡——不进 cur、不当 c0，也不算下一件，只在“今天的安排”列表里写“第 2/3 天 · 至 …”；
+  // 跨零点但不满 24 小时的（23:30 到 01:00 的夜班）照常占大卡（主持人 11-17 定）。大卡照旧给真正的下一件；
+  // 算 state 时多天日程当全天日程（第三轮复审必改 1）：今天只有它时走 allday、标题写它，不写“今天没有日程”；同时有真正的全天日程时排在后面，按 allday 原规则取第一条
+  const multi = (o: EventOcc): o is TimedOcc => isTimed(o) && o.lastDate !== o.date && o.end - o.start >= DAY_MINUTES * MIN;
+  const timed = events.filter((o): o is TimedOcc => isTimed(o) && !multi(o));
+  const allDays = [...events.filter((o) => o.allDay), ...events.filter(multi)];
   const cur = timed.filter((o) => o.start <= now && now < o.end).sort((a, b) => a.end - b.end);
   const next = timed.filter((o) => o.start > now).sort((a, b) => a.start - b.start)[0] ?? null;
   const nowM = off(now);
@@ -329,8 +335,3 @@ export function cheerIndex(today: DateStr, n: number): number {
   return n > 0 ? ((diffDays('1970-01-01', today) % n) + n) % n : 0;
 }
 
-/** 时长文字的拆分（界面按语言拼）：照视觉稿 kDur，h 为 0 时只写分 */
-export function splitDur(min: number): { h: number; m: number } {
-  const v = Math.max(0, Math.round(min));
-  return { h: Math.floor(v / 60), m: v % 60 };
-}

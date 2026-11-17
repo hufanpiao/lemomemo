@@ -26,7 +26,7 @@
 // 纪念日归 B5（logic/anniv），这里不算。
 // 免打扰不并进 remind_at：架构 5.3 第 2 步在发送时判断，落在免打扰里的写 defer_until = 免打扰结束（dndDeferUntil）；
 //   本机提醒同样经 applyDnd 推迟（可能晚于截止，R-183 接受）。
-import { addDays, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../core/date.ts';
+import { addDays, DAY_MINUTES, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
 
 /**
@@ -40,6 +40,8 @@ export const REMIND_RULES_VER = 1;
 export const REMIND_BEFORE_CHOICES: readonly number[] = [0, 10, 30, 60, 120, 1440];
 /** 新建或第一次设 due_time 时的提前量 */
 export const DEFAULT_REMIND_BEFORE_MIN = 60;
+/** 有时刻的日程默认提前几分钟提醒：编辑页新建、“＋”识别（capture-map）共用这一个（定稿线框 s13“日程默认提前 15 分钟”） */
+export const EVENT_REMIND_MIN_DEFAULT = 15;
 /**
  * 出厂提醒时刻（只有这一份）：待办 remind_time 为空、remind.default_time（全天日程当天提醒、全天日程的“开始”）没设、
  * anniv.default_time（纪念日）没设或认不出，都按它。待办“明天再提醒”的固定时刻另见 remind-actions.ts 的 TOMORROW_TIME
@@ -51,7 +53,6 @@ export const ALL_DAY_EVE_TIME = '20:00';
 export const ALL_DAY_LIVE_UNTIL = '23:59';
 
 const MIN_MS = 60_000;
-const DAY_MIN = 1440;
 
 export interface TodoRemindRow {
   due: DateStr | null;
@@ -97,7 +98,7 @@ export function todoRemindAt(row: TodoRemindRow, tz: Tz, now: number, prevRemind
   if (before === null) return null;
   const dueMin = parseHm(row.due_time);
   const dueAt = msAt(row.due, dueMin, tz);
-  const remind = before === DAY_MIN ? msAt(addDays(row.due, -1), dueMin, tz) : dueAt - before * MIN_MS;
+  const remind = before === DAY_MINUTES ? msAt(addDays(row.due, -1), dueMin, tz) : dueAt - before * MIN_MS;
   if (remind >= now) return remind;
   if (prevRemindAt === undefined) return dueAt >= now ? dueAt : null;   // ① 新建或改了时刻：回落
   return prevRemindAt === dueAt ? dueAt : remind;                       // ② 其余重算：不回落，保留原来的

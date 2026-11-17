@@ -120,6 +120,68 @@ describe('时区提示（架构 4.6）', () => {
   });
 });
 
+describe('结束日期、时刻（R-444 跨天日程）', () => {
+  it('有时刻：结束一行是“日期 + 时刻”；选到后天 18:00，时长写成真实分钟，提醒不动', async () => {
+    const b = await boot();
+    await b.outbox?.applyServer('events', [{ row: serverEvent() }]);
+    open(`#/event/${ID}`);
+    const endDate = screen.getByTestId('event-edit-end-date') as HTMLInputElement;
+    expect(endDate.value).toBe('2026-11-06');
+    expect(endDate.min).toBe('2026-11-06');
+    expect(endDate.max).toBe('2026-12-06'); // 有时刻的也是开始 + 30 天（评审第 4 条）
+    expect((screen.getByTestId('event-edit-end') as HTMLInputElement).value).toBe('16:00');
+    await commitText('event-edit-end-date', '2026-11-08');
+    await waitFor(() => expect(events().get(ID)?.['duration_min']).toBe(2 * 1440 + 60));
+    await commitText('event-edit-end', '18:00');
+    await waitFor(() => expect(events().get(ID)?.['duration_min']).toBe(2 * 1440 + 180));
+    expect((screen.getByTestId('event-edit-end-date') as HTMLInputElement).value).toBe('2026-11-08');
+    expect(events().get(ID)).toMatchObject({ date: '2026-11-06', time: '15:00', remind_min: 15 });
+  });
+
+  it('结束日期早于开始：按开始那天算，日期框下面写一行提示；下一次改结束就清掉（第二轮评审建议 5）', async () => {
+    const b = await boot();
+    await b.outbox?.applyServer('events', [{ row: serverEvent() }]);
+    open(`#/event/${ID}`);
+    const tip = '结束不能早于开始，已按开始那天算';
+    expect(screen.queryByText(tip)).toBeNull();
+    await commitText('event-edit-end-date', '2026-11-04');
+    expect(screen.getByText(tip)).toBeTruthy();
+    expect(events().get(ID)?.['duration_min']).toBe(60);
+    await commitText('event-edit-end-date', '2026-11-07');
+    await waitFor(() => expect(events().get(ID)?.['duration_min']).toBe(1440 + 60));
+    expect(screen.queryByText(tip)).toBeNull();
+  });
+
+  it('全天：结束只有日期；选到 3 天后记成 4 × 1440，改开始日期时整段跟着挪', async () => {
+    const b = await boot();
+    await b.outbox?.applyServer('events', [{ row: serverEvent({ time: null, tz: null, remind_min: null, remind_days: 0 }) }]);
+    open(`#/event/${ID}`);
+    expect(screen.queryByTestId('event-edit-end')).toBeNull();
+    expect((screen.getByTestId('event-edit-end-date') as HTMLInputElement).value).toBe('2026-11-06');
+    expect((screen.getByTestId('event-edit-end-date') as HTMLInputElement).max).toBe('2026-12-06');
+    await commitText('event-edit-end-date', '2026-11-09');
+    await waitFor(() => expect(events().get(ID)?.['duration_min']).toBe(4 * 1440));
+    await commitText('event-edit-date', '2026-11-10');
+    await waitFor(() => expect(events().get(ID)?.['date']).toBe('2026-11-10'));
+    expect((screen.getByTestId('event-edit-end-date') as HTMLInputElement).value).toBe('2026-11-13');
+  });
+
+  it('跨 3 天的有时刻日程切成全天：记 3 天；同一页切回来恢复原来的时刻和时长', async () => {
+    const b = await boot();
+    await b.outbox?.applyServer('events', [{ row: serverEvent({ duration_min: 2 * 1440 + 60 }) }]);
+    open(`#/event/${ID}`);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('event-edit-allday'));
+    });
+    await waitFor(() => expect(events().get(ID)).toMatchObject({ time: null, duration_min: 3 * 1440 }));
+    expect((screen.getByTestId('event-edit-end-date') as HTMLInputElement).value).toBe('2026-11-08');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('event-edit-allday'));
+    });
+    await waitFor(() => expect(events().get(ID)).toMatchObject({ time: '15:00', duration_min: 2 * 1440 + 60 }));
+  });
+});
+
 describe('全天切换', () => {
   it('改成全天：时刻、时区一起清，提醒换成“当天 / 前一天”；同一页里改回来：恢复原来的时刻、时区、提醒（S3）', async () => {
     const b = await boot();

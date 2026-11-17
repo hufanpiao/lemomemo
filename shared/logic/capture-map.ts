@@ -3,7 +3,7 @@
 //   • 待办：AI / 本机规则输出里一律叫 time，存成 todos 行时才映射成 due_time，remind_before_min 默认 60；
 //     有 time 没有 due（只说了时刻）记今天（ai.ts 已补，这里再兜一次，数据库要求有 due_time 必须有 due）；
 //   • 日程：没有日子（AI 给了 null）记今天；有时刻时 tz 记“记录时的时区”（ctx.tz：客户端是本机时区，claude-intake 是 profiles.current_tz），
-//     提醒默认提前 15 分钟（和完整新建页 event-edit.ts 的 DEFAULT_REMIND_MIN 一致）；全天日程不设提醒（按设置的全天提醒走）；
+//     提醒默认提前 15 分钟（remind.ts 的 EVENT_REMIND_MIN_DEFAULT，和完整新建页同一个）；全天日程不设提醒（按设置的全天提醒走）；
 //   • 简称：AI 给了 short 存 short、short_by = 'ai'；没给存 null，显示时取 itemShort（shared/logic/short.ts 的 displayShort）；
 //     本机规则（origin = 'rule'）不写 short；
 //   • 纪念日：阴历一律存中国农历 lunar_variant = 'cn'（R-169，说“음력”也一样），用户到编辑页能改成韩国阴历；B3 只测这一映射，端到端随 B5；
@@ -13,14 +13,11 @@
 import type { DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
 import { ITEM_NOTE_MAX, ITEM_TITLE_MAX, PROJECT_MAX, RAW_TEXT_MAX } from '../schema/rows.ts';
-import { DEFAULT_REMIND_BEFORE_MIN } from './remind.ts';
+import { allDayDuration, allDaySpanDays, EVENT_DURATION_DEFAULT } from './calendar/event-span.ts';
+import { DEFAULT_REMIND_BEFORE_MIN, EVENT_REMIND_MIN_DEFAULT } from './remind.ts';
 import { cutGraphemes } from './short.ts';
 import { todoRowOf, type NewTodoRow } from './todo-row.ts';
 
-/** 有时刻的日程默认提前几分钟提醒（同 event-edit.ts 的 DEFAULT_REMIND_MIN） */
-export const EVENT_REMIND_MIN_DEFAULT = 15;
-/** 日程默认时长（同 event-edit.ts 的 DEFAULT_DURATION_MIN） */
-export const EVENT_DURATION_DEFAULT = 60;
 /** 纪念日名字最长（anniversaries.name 的约束） */
 export const ANNIV_NAME_MAX = 60;
 
@@ -122,11 +119,14 @@ export function captureRow(item: CaptureItem, ctx: CaptureCtx): CaptureRow | nul
   switch (item.kind) {
     case 'event': {
       const time = item.time;
+      // 全天日程的时长按天记（R-444，event-span.ts 文件头）：AI 给全天日程的 duration_min 可能是“180 分钟”这类，规整成一天（默认值）或“天数 × 1440”；
+      // 提示词 record.v6 起写明全天跨天时长 = 天数 × 1440（含首尾两天），这里照旧兜底规整，客户端保存和 claude-intake 写库都过这里
+      const dur = item.duration_min ?? EVENT_DURATION_DEFAULT;
       return {
         table: 'events',
         row: {
           id: ctx.id, title, date: item.date ?? ctx.today, time, tz: time === null ? null : ctx.tz,
-          duration_min: item.duration_min ?? EVENT_DURATION_DEFAULT, project, note, source: ctx.source, raw_text: raw, location: '',
+          duration_min: time === null ? allDayDuration(allDaySpanDays(dur)) : dur, project, note, source: ctx.source, raw_text: raw, location: '',
           ...shortOf(item, ctx), push_show_title: null, batch_id: ctx.batchId,
           remind_min: time === null ? null : EVENT_REMIND_MIN_DEFAULT, remind_days: null,
           notified_for: null, snooze_at: null, created_at: ctx.now, updated_at: ctx.now,

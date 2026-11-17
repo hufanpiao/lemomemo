@@ -1,5 +1,5 @@
 // 月历、周视图界面共用的小工具（B2 FA-3）：项目色的样式类、星期几的词典键、事项的标题和简称、节假日的画法和写法
-import { addDays, fmtHm, type DateStr } from '../../../../shared/core/date.ts';
+import { addDays, type DateStr } from '../../../../shared/core/date.ts';
 import { CN_WORKDAY_TAILS } from './holiday-tail-data.ts';
 import type { CalItems } from '../../../../shared/logic/calendar/cal-items.ts';
 import type { HolidayKind, HolidayMark } from '../../../../shared/logic/calendar/holidays.ts';
@@ -50,10 +50,6 @@ export function weekdayKey(wd: number): WeekdayKey {
   }
 }
 
-/** 当天第几分钟 → “HH:MM”（1440 写成 24:00，色块到当天末尾时用） */
-export function hm(min: number): string {
-  return fmtHm(Math.max(0, Math.min(1440, Math.round(min))));
-}
 
 type ItemKind = 'allDay' | 'todo' | 'timed';
 

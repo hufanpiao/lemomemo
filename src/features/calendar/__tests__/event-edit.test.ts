@@ -2,8 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { eventsWrite } from '../../../../shared/schema/rows.ts';
+import { placeEvent } from '../../../../shared/logic/calendar/event-span.ts';
 import {
-  durationOf, emptyForm, endOf, EVENT_TIMING_COLS, formOf, hasRemind, localOf, newEventRow, normalize, patchOf, prevRemindAtOf, tzAllowed, tzChoices,
+  allDayDurationOf, allDayDurationTo, allDayLastOf, durationTo, emptyForm, endAtOf, EVENT_TIMING_COLS, timedDurationOf, formOf, hasRemind, localOf, newEventRow, normalize, patchOf, prevRemindAtOf, tzAllowed, tzChoices,
   type EventForm,
 } from '../data/event-edit.ts';
 import type { EventRemindRow } from '../../../../shared/logic/remind.ts';
@@ -11,6 +12,7 @@ import type { EventRemindRow } from '../../../../shared/logic/remind.ts';
 const ID = '00000000-0000-4000-8000-000000000002';
 const SEOUL = 'Asia/Seoul';
 const SH = 'Asia/Shanghai';
+const NY = 'America/New_York';
 const base = (over: Partial<EventForm> = {}): EventForm => ({ ...emptyForm('2026-11-05', SEOUL), title: '客户反馈会', ...over });
 
 describe('normalize：全天 / 有时刻', () => {
@@ -21,13 +23,84 @@ describe('normalize：全天 / 有时刻', () => {
   });
 });
 
-describe('时长', () => {
-  it('结束晚于开始：差值；不晚于开始：算到第二天；上限 1 天', () => {
-    expect(durationOf('15:30', '16:30')).toBe(60);
-    expect(durationOf('23:00', '01:00')).toBe(120);
-    expect(durationOf('09:00', '09:00')).toBe(1440);
-    expect(endOf('23:30', 90)).toBe('01:00');
-    expect(endOf('15:30', 60)).toBe('16:30');
+describe('时长、结束日期和时刻（R-444 跨天）', () => {
+  it('同一天只改结束时刻：晚于开始是差值；不晚于开始照旧算到第二天', () => {
+    const f = base({ time: '15:30' });
+    expect(durationTo(f, '2026-11-05', '16:30', SH)).toBe(60);
+    expect(durationTo(base({ time: '23:00' }), '2026-11-05', '01:00', SH)).toBe(120);
+    expect(durationTo(base({ time: '09:00' }), '2026-11-05', '09:00', SH)).toBe(1440);
+  });
+
+  it('选了别的结束日期：按日程自己的时区算真实分钟；早于开始日期按开始那天；最多 31 天', () => {
+    const f = base({ time: '09:00', tz: SEOUL });
+    expect(durationTo(f, '2026-11-07', '18:00', SH)).toBe(2 * 1440 + 9 * 60);
+    expect(durationTo(f, '2026-11-01', '10:00', SH)).toBe(60);
+    // 第二轮评审建议 4：超过上限（31 天）不悄悄截短，原样返回，由写入校验拒掉、编辑页提示
+    expect(durationTo(f, '2027-01-01', '09:00', SH)).toBe(57 * 1440);
+  });
+
+  it('夏令时那天按墙上时间算（评审第 3 条）：洛杉矶 3-08 拨快 1 小时', () => {
+    const LA = 'America/Los_Angeles';
+    // 3-08 01:00 开始、结束时刻选 00:30（不晚于开始，算到第二天）：真实只过了 22.5 小时，原来 −30 + 1440 = 1410 多算 1 小时
+    expect(durationTo(base({ date: '2026-03-08', time: '01:00', tz: LA }), '2026-03-08', '00:30', LA)).toBe(22 * 60 + 30);
+    expect(durationTo(base({ date: '2026-03-07', time: '09:00', tz: LA }), '2026-03-08', '09:00', LA)).toBe(23 * 60);
+  });
+
+  it('endAtOf：结束在日程自己时区的哪天几点（跨午夜、跨多天）；全天为 null', () => {
+    expect(endAtOf(base({ time: '23:30', duration_min: 90 }), SH)).toEqual({ date: '2026-11-06', time: '01:00' });
+    expect(endAtOf(base({ time: '15:30', duration_min: 60 }), SH)).toEqual({ date: '2026-11-05', time: '16:30' });
+    expect(endAtOf(base({ time: '09:00', duration_min: 2 * 1440 + 540 }), SH)).toEqual({ date: '2026-11-07', time: '18:00' });
+    expect(endAtOf(base({ time: null }), SH)).toBeNull();
+  });
+
+  it('endAtOf 出错返回 null、不抛（评审第 10 条）：日期坏了、时刻坏了、时区算不出来', () => {
+    expect(endAtOf(base({ date: '' }), SH)).toBeNull();
+    expect(endAtOf(base({ time: '9点' }), SH)).toBeNull();
+    expect(() => endAtOf(base({ tz: null }), 'Bad/Zone')).not.toThrow();
+    expect(endAtOf(base({ tz: null }), 'Bad/Zone')).toBeNull();
+  });
+
+  it('全天：最后一天 ↔ 天数 × 1440；旧行（60）是一天；最多 31 天', () => {
+    expect(allDayLastOf(base({ time: null, duration_min: 60 }))).toBe('2026-11-05');
+    expect(allDayLastOf(base({ time: null, duration_min: 3 * 1440 }))).toBe('2026-11-07');
+    expect(allDayDurationTo('2026-11-05', '2026-11-07')).toBe(3 * 1440);
+    // 只选一天写默认 1 小时，不写 1440（评审第 1 条）
+    expect(allDayDurationTo('2026-11-05', '2026-11-05')).toBe(60);
+    expect(allDayDurationTo('2026-11-05', '2026-11-01')).toBe(60);
+    expect(allDayDurationTo('2026-11-05', '2027-03-01')).toBe(31 * 1440);
+  });
+
+  it('全天 ↔ 有时刻切换：不超过一天的算一天、时长不动；超过一天的按占几天记；切回有时刻到最后一天同一时刻再过 1 小时', () => {
+    expect(allDayDurationOf(base({ time: '09:00', duration_min: 60 }), SH)).toBe(60);
+    // 评审第 2 条：23:00 开始 90 分钟、22:00 开始 1440 分钟都只是一天，不变成 2880；第二轮建议 2：一天一律记 allDayDuration(1)（默认 60）
+    expect(allDayDurationOf(base({ time: '23:00', duration_min: 90 }), SH)).toBe(60);
+    expect(allDayDurationOf(base({ time: '22:00', duration_min: 1440 }), SH)).toBe(60);
+    expect(allDayDurationOf(base({ time: null, duration_min: 3 * 1440 }), SH)).toBe(3 * 1440);
+    expect(allDayDurationOf(base({ time: '22:00', duration_min: 1500 }), SH)).toBe(2 * 1440);
+    expect(allDayDurationOf(base({ time: '09:00', duration_min: 2 * 1440 + 540 }), SH)).toBe(3 * 1440);
+    const nine = base({ time: '09:00' });
+    expect(timedDurationOf(nine, 60, SH)).toBe(60);
+    // 评审第 1 条：只占一天的（含旧的全天行 1440）一律回默认 1 小时
+    expect(timedDurationOf(nine, 1440, SH)).toBe(60);
+    expect(timedDurationOf(nine, 90, SH)).toBe(60);
+    expect(timedDurationOf(nine, 3 * 1440, SH)).toBe(2 * 1440 + 60);
+    // 第三轮复审建议 2：23:30 开始、3 天：最后一天同一时刻再过 1 小时会落到第 4 天，截到第 3 天的 24:00
+    const late = base({ time: '23:30' });
+    const d = timedDurationOf(late, 3 * 1440, SH);
+    expect(d).toBe(2 * 1440 + 30);
+    expect(placeEvent({ ...late, duration_min: d }, SH)).toMatchObject({ date: '2026-11-05', lastDate: '2026-11-07' });
+  });
+
+  it('全天 → 有时刻按墙上时间算（第二轮建议 1）：纽约 11-01 夏令时结束那天多 1 小时，结束照样落在最后一天 10:00', () => {
+    const f = base({ date: '2026-10-31', time: '09:00', tz: NY });
+    const dur = timedDurationOf(f, 3 * 1440, NY);
+    expect(dur).toBe(2 * 1440 + 60 + 60);
+    expect(endAtOf({ ...f, duration_min: dur }, NY)).toEqual({ date: '2026-11-02', time: '10:00' });
+  });
+
+  it('formOf：超过 1 天的时长照原值读出来（原来超过 1440 会变回 60）；超过 31 天的坏值按 60', () => {
+    expect(formOf({ date: '2026-11-05', time: '09:00', tz: SEOUL, duration_min: 4320 }).duration_min).toBe(4320);
+    expect(formOf({ date: '2026-11-05', time: '09:00', tz: SEOUL, duration_min: 44641 }).duration_min).toBe(60);
   });
 });
 

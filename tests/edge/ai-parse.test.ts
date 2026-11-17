@@ -274,3 +274,30 @@ describe('ai-voice', () => {
     expect(v.g.provider.stub.calls.length).toBe(0);
   });
 });
+
+describe('旧版客户端的窗口期（R-444 第三轮复审必改 3 方案 a）：没带 span 标记的时长规整到 1440 以内', () => {
+  const ITEMS = [
+    { kind: 'event', title: '出差', date: '2026-10-29', time: null, duration_min: 3 * 1440, date_basis: 'rel' },
+    { kind: 'event', title: '展会', date: '2026-10-29', time: '09:00', duration_min: 2000, date_basis: 'rel' },
+    { kind: 'event', title: '开会', date: '2026-10-29', time: '15:00', duration_min: 90, date_basis: 'rel' },
+  ];
+  const durs = (b: Record<string, unknown>) => (b['items'] as { duration_min: number | null }[]).map((i) => i.duration_min);
+
+  it('ai-parse：带 span: 1 原样回（最多到 44640）；没带的跨天全天、超过 24 小时的有时刻都记 1440，别的不动，一条不少', async () => {
+    const { deps } = parseDeps({ reply: () => okJson({ items: ITEMS }) });
+    const neu = await call(await parseHandle(parseReq({ ...BODY, span: 1 }), deps));
+    expect(durs(neu.body)).toEqual([3 * 1440, 2000, 90]);
+    const old = await call(await parseHandle(parseReq(BODY), deps));
+    expect(durs(old.body)).toEqual([1440, 1440, 90]);
+    expect(aiResponse.safeParse(old.body).success).toBe(true);
+  });
+
+  it('ai-voice：带 X-Span: 1 原样回；没带的同样规整到 1440', async () => {
+    const { deps } = voiceDeps({ reply: () => okJson({ transcript: '出差三天', items: ITEMS }) });
+    const neu = await call(await voiceHandle(voiceReq(new Uint8Array(100), { 'x-span': '1' }), deps));
+    expect(durs(neu.body)).toEqual([3 * 1440, 2000, 90]);
+    const old = await call(await voiceHandle(voiceReq(new Uint8Array(100)), deps));
+    expect(durs(old.body)).toEqual([1440, 1440, 90]);
+    expect(old.body).toMatchObject({ transcript: '出差三天' });
+  });
+});

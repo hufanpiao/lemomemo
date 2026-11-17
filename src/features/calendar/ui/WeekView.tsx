@@ -26,6 +26,7 @@ import refine from '../../../kit/components/Refine.module.css';
 import styles from './CalendarPage.module.css';
 import { colorClass, dayKind, dayKindClass, holA11y, holText, itemShort, labelInName, namedHolidays, weekdayKey } from './cal-ui.ts';
 import { DeskWeek } from './DeskWeek.tsx';
+import { useT } from '../../../kit/hooks/useT.ts';
 
 /** 色块最短长度（px，5.12：约 28 px，视觉稿 --wmin） */
 export const MIN_BLOCK_PX = 28;
@@ -134,6 +135,7 @@ function Lane({
   trackRef: ((el: HTMLElement | null) => void) | null;
 }) {
   const { t, items, today, nowMin, dueMins } = p;
+  const tc = useT();
   const hol = p.holidays.get(date) ?? [];
   const [named] = namedHolidays(date, hol, p.holidays);
   const isToday = date === today;
@@ -148,7 +150,7 @@ function Lane({
   const allDayIds = allDay?.itemIds.filter((_, i) => allDay.kinds[i] !== 'todo') ?? [];
   const allDayFirst = allDayIds[0];
   const wd = t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) });
-  const allDayText = allDayFirst === undefined ? '' : allDayIds.length === 1 ? itemShort(items, 'allDay', allDayFirst) : `${t('cal.allDay', {})} ${allDayIds.length}`;
+  const allDayText = allDayFirst === undefined ? '' : allDayIds.length === 1 ? itemShort(items, 'allDay', allDayFirst) : `${tc('span.allDay', {})} ${allDayIds.length}`;
   const moreTexts = day?.groups.filter((g) => g.more > 0).map((g) => t('cal.more', { n: g.more })) ?? [];
   // 看得见的字，和下面画的顺序一致：星期、日期数字、农历或节日、全天标签、色块简称、“+N”、当天件数、“逾”
   const shown = [wd, String(Number(date.slice(8))), sub, allDayText, ...(day?.blocks.map((b) => b.short) ?? []), ...moreTexts, String(total), overdue ? t('cal.overdue', {}) : ''];

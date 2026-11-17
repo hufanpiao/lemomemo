@@ -28,6 +28,7 @@ import type { Tz } from '../core/tz.ts';
 import { DATE_BASES, DATE_FMT_RE, dateExists, inAiRange, pastDate, type Confirm, type DateBasis } from '../logic/parse/past-date.ts';
 import { graphemeCount, SHORT_GRAPHEMES } from '../logic/short.ts';
 import { AI_KINDS, type AiKind } from './kinds.ts';
+import { EVENT_DURATION_MAX } from './rows.ts';
 import {
   intentRawShape, normConfidence, normIntent, PLUS_INTENTS, queryResponse, targetResponse,
   type IntentChecked, type IntentInvalid, type PlusIntent,
@@ -106,7 +107,7 @@ const itemRaw = z
     title: z.string().transform(stripCtlLine).pipe(z.string().trim().min(1).pipe(maxCp(160))),
     date: dateFmt.nullable().optional(),
     time: hm.nullable().optional(),
-    duration_min: z.number().int().min(1).max(1440).nullable().optional(),
+    duration_min: z.number().int().min(1).max(EVENT_DURATION_MAX).nullable().optional(),   // R-444：跨天的日程最多 31 天，同 events 表
     due: dateFmt.nullable().optional(),
     important: z.boolean().optional(),
     project: z.string().transform(stripCtlLine).pipe(maxCp(AI_PROJECT_LEN)).nullable().optional(),
@@ -352,6 +353,8 @@ export const aiParseRequest = z.object({
   projects: z.array(z.unknown()).max(200).optional(),
   scope: z.enum(['main', 'vault']).optional(),
   default_day: z.string().max(16).optional(),
+  /** R-444 起的客户端带 1：能存跨天日程（duration_min 到 44640）；没带的是旧版，服务器把时长规整到 1440 以内（parse-core.ts 的 plusBody） */
+  span: z.literal(1).optional(),
 });
 
 /** 默认日子（R6：ai-parse 请求体 default_day、ai-voice 请求头 X-Default-Day）：不传回 null；

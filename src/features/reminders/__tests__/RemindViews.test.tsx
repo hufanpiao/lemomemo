@@ -95,7 +95,7 @@ const armedNow = () =>
   });
 
 describe('整页提醒照线框排（设计 H1）', () => {
-  it('铃铛类型行、大时刻（开始时刻）、标题、“到 16:30 · 项目”、地点备注一张卡、下一条卡（时刻 · 类型 · 项目）、主按钮整行 + 其余两颗一排', async () => {
+  it('铃铛类型行、大时刻（开始时刻）、标题、“至 16:30 · 项目”（span.until，同日历）、地点备注一张卡、下一条卡（时刻 · 类型 · 项目）、主按钮整行 + 其余两颗一排', async () => {
     data.events = [
       ev(E1, 'SignPlex 客户反馈会', '15:30', { project: 'SignPlex', location: 'Zoom', note: '带上问题清单' }),
       ev(E2, '牙医', '15:45'),
@@ -115,7 +115,7 @@ describe('整页提醒照线框排（设计 H1）', () => {
     const back = screen.getByTestId('remind-full-back');
     expect(back.querySelector('[aria-hidden="true"]')?.textContent).toBe('‹');
     expect(screen.getByRole('button', { name: '返回' })).toBe(back);
-    expect(screen.getByTestId('remind-full-sub').textContent).toBe('到 16:30 · SignPlex');
+    expect(screen.getByTestId('remind-full-sub').textContent).toBe('至 16:30 · SignPlex');
     expect(screen.getByTestId('remind-full-detail').textContent).toContain('带上问题清单');
     const next = screen.getByTestId('remind-full-next');
     expect(next.textContent).toContain('下一条：牙医');

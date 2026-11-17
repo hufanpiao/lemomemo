@@ -1,6 +1,6 @@
 // shared/i18n（架构 2.4）：中韩词典键一致、占位符一致；t() 填参数；fmt 不依赖 Intl 的本地化输出
 import { describe, expect, it } from 'vitest';
-import { fmtDate, fmtDay, fmtTime, weekdayName } from '../../shared/i18n/fmt.ts';
+import { fmtDate, fmtDay, fmtDur, fmtTime, weekdayName } from '../../shared/i18n/fmt.ts';
 import { createT, fill, placeholdersOf, t } from '../../shared/i18n/i18n.ts';
 import { ko } from '../../shared/i18n/ko.ts';
 import { zh } from '../../shared/i18n/zh.ts';
@@ -35,6 +35,15 @@ describe('t()', () => {
   it('createT：韩文缺键（运行时拼出来的）退回中文', () => {
     const tt = createT({ zh: { x: 'X' } as const, ko: {} as Readonly<Record<'x', string>> });
     expect(tt('x', {}, 'ko-KR')).toBe('X');
+  });
+});
+
+describe('fmtDur（今天页还剩几分、同步提示的时长共用一套）', () => {
+  it('按天、小时、分钟写，为 0 的段不写；前面有段时分钟写短的“分”；全 0 写“0 分钟”', () => {
+    expect([0, 13, 60, 73, 1440, 1500, 2 * 1440 + 9 * 60 + 5].map((m) => fmtDur(m, 'zh-CN'))).toEqual([
+      '0 分钟', '13 分钟', '1 小时', '1 小时 13 分', '1 天', '1 天 1 小时', '2 天 9 小时 5 分',
+    ]);
+    expect([13, 73, 1500].map((m) => fmtDur(m, 'ko-KR'))).toEqual(['13분', '1시간 13분', '1일 1시간']);
   });
 });
 

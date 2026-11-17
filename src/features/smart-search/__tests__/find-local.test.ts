@@ -99,6 +99,13 @@ describe('buildIndex：日程按设备时区换算日子和时刻（B4b-3，4.6�
     expect(evOf(ev({ time: null }), 'America/Los_Angeles')).toMatchObject({ date: '2026-11-10', time: null });
     expect(evOf(ev({ tz: null }), 'America/Los_Angeles')).toMatchObject({ date: '2026-11-10', time: '01:00' });
   });
+  it('跨天的日程（R-444）带最后一天，按交叠筛：11-10 起全天 3 天，查 11-12 那天也在；只占一天的 lastDate 为 null', () => {
+    const trip = evOf(ev({ time: null, duration_min: 3 * 1440 }), 'Asia/Seoul');
+    expect(trip).toMatchObject({ date: '2026-11-10', lastDate: '2026-11-12' });
+    expect(evOf(ev({}), 'Asia/Seoul')?.lastDate).toBeNull();
+    expect(inRange(trip ? [trip] : [], { from: '2026-11-12', to: '2026-11-12' })).toHaveLength(1);
+    expect(inRange(trip ? [trip] : [], { from: '2026-11-13', to: '2026-11-20' })).toHaveLength(0);
+  });
   it('时刻格式坏了的照原值', () => {
     expect(evOf(ev({ time: '25:99' }), 'America/Los_Angeles')).toMatchObject({ date: '2026-11-10', time: '25:99' });
   });

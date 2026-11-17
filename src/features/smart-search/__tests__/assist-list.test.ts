@@ -8,7 +8,7 @@ import type { FindItem } from '../data/find-local.ts';
 
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const it0 = (over: Partial<FindItem> & Pick<FindItem, 'kind' | 'id'>): FindItem => ({
-  title: '', fields: [over.title ?? ''], date: null, time: null, extra: '', noteId: null, done: false, hasThumb: false, ...over,
+  title: '', fields: [over.title ?? ''], date: null, lastDate: null, time: null, extra: '', noteId: null, done: false, hasThumb: false, ...over,
 });
 const q = (over: Partial<PlusQuery> = {}): PlusQuery => ({ text: '', range: null, kinds: [], done: 'any', ...over });
 
@@ -46,6 +46,11 @@ describe('listQuery：时间类（range 不为空）', () => {
     expect(todos('done')).toEqual([uid(5)]);
     expect(todos('any')).toEqual([uid(4), uid(5)]);
     expect(listQuery(INDEX, q({ range: WEEK, kinds: ['event'], done: 'done' }))).toHaveLength(3);
+  });
+  it('跨天的日程（R-444）：上周开始、跨进这一周的也列出；整段都在范围外的不列', () => {
+    const trip = it0({ kind: 'event', id: uid(12), title: '出差', date: '2026-11-06', lastDate: '2026-11-10' });
+    const gone = it0({ kind: 'event', id: uid(13), title: '旧会', date: '2026-11-01', lastDate: '2026-11-08' });
+    expect(ids(listQuery([trip, gone], q({ range: WEEK, kinds: ['event'] })))).toEqual([uid(12)]);
   });
   it('range.from 为 null = 截止到 to（含更早的）', () => {
     const old = it0({ kind: 'todo', id: uid(11), title: '旧的', date: '2025-01-01' });

@@ -224,7 +224,8 @@ describe('其他复审项', () => {
     data.events = [ev('1', { title: '通宵', date: '2026-11-09', time: '23:00', duration_min: 120 }), ev('2', { title: '早会', date: '2026-11-10', time: '09:00' })];
     open('#/cal/month/2026-11');
     fireEvent.click(cell('2026-11-09') as HTMLElement);
-    expect(dayRows().map((b) => b.textContent)).toEqual(['23:00通宵']);
+    // R-444：开始那天标题下面写到哪天几点
+    expect(dayRows().map((b) => b.textContent)).toEqual(['23:00通宵至 11月10日 01:00']);
     fireEvent.click(cell('2026-11-10') as HTMLElement);
     const list = screen.getByTestId('cal-day-list');
     const rows = dayRows();
@@ -235,13 +236,34 @@ describe('其他复审项', () => {
     expect(screen.getByTestId('cal-day-list').textContent).toContain('这一天没有安排');
   });
 
-  it('跨两天以上的：中间那天写“至 24:00”', () => {
+  it('跨两天以上的（R-444）：中间整天写“持续”、标题下面写到哪天几点；最后一天“至 04:00”', () => {
     data.events = [ev('1', { title: '展会', date: '2026-11-09', time: '22:00', duration_min: 30 * 60 })];
     open('#/cal/month/2026-11');
     fireEvent.click(cell('2026-11-10') as HTMLElement);
-    expect(dayRows().map((b) => b.textContent)).toEqual(['至 24:00展会']);
+    expect(dayRows().map((b) => b.textContent)).toEqual(['持续展会至 11月11日 04:00']);
+    expect(dayRows()[0]?.getAttribute('data-kind')).toBe('cont');
     fireEvent.click(cell('2026-11-11') as HTMLElement);
     expect(dayRows().map((b) => b.textContent)).toEqual(['至 04:00展会']);
+    fireEvent.click(cell('2026-11-12') as HTMLElement);
+    expect(screen.getByTestId('cal-day-list').textContent).toContain('这一天没有安排');
+  });
+
+  it('全天跨 3 天（R-444）：三天的清单都有，标题下面写“第 N/3 天”；月格三天都有它', () => {
+    data.events = [ev('1', { title: '出差', date: '2026-11-18', time: null, tz: null, duration_min: 3 * 1440 })];
+    open('#/cal/month/2026-11');
+    for (const [d, i] of [['2026-11-18', 1], ['2026-11-19', 2], ['2026-11-20', 3]] as const) {
+      fireEvent.click(cell(d) as HTMLElement);
+      expect(dayRows().map((b) => b.textContent)).toEqual([`全天出差第 ${i}/3 天`]);
+    }
+    fireEvent.click(cell('2026-11-21') as HTMLElement);
+    expect(screen.getByTestId('cal-day-list').textContent).toContain('这一天没有安排');
+  });
+
+  it('电脑周表全天行（R-444）：跨 3 天的每天一块，标题后面写“(N/3)”（连条画法等负责人定图）', () => {
+    stubWide();
+    data.events = [ev('1', { title: '出差', date: '2026-11-18', time: null, tz: null, duration_min: 3 * 1440 })];
+    open('#/cal/week/2026-11-18');
+    expect(screen.getAllByTestId('cal-desk-all-1').map((b) => b.textContent)).toEqual(['出差 (1/3)', '出差 (2/3)', '出差 (3/3)']);
   });
 
   it('“今天”跨过午夜跟着变：今天的圈、默认选中的那天都换到新的一天', async () => {

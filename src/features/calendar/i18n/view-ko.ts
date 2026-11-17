@@ -49,7 +49,6 @@ export const viewKo = {
   'cal.day.title': '{m}월 {d}일 {wd}', // REVIEW(ko)
   'cal.day.count': '{n}건', // REVIEW(ko)
   'cal.day.empty': '이날은 일정이 없어요', // REVIEW(ko)
-  'cal.day.until': '{t}까지', // REVIEW(ko)
   // 黄历卡只在中文界面出（R-431、R-318），韩文这几条备着
   'cal.hl.year': '{gz}년 · {m}', // REVIEW(ko)
   'cal.hl.yi': '의', // REVIEW(ko)
@@ -87,7 +86,6 @@ export const viewKo = {
   'cal.a11y.workday': '{name}(대체 근무)', // REVIEW(ko)
   'cal.a11y.overdue': '기한 지난 할 일 있음', // REVIEW(ko)
   'cal.a11y.selected': '선택됨', // REVIEW(ko)
-  'cal.allDay': '종일', // REVIEW(ko)
   'cal.todoMark': '할 일: {title}', // REVIEW(ko)
   'cal.grid': '{y}년 {m}월 달력', // REVIEW(ko)
   'cal.weekGrid': '{from}부터 한 주', // REVIEW(ko)

@@ -55,8 +55,7 @@ export const viewZh = {
   'cal.day.title': '{m}月{d}日 {wd}',
   'cal.day.count': '{n} 项',
   'cal.day.empty': '这一天没有安排',
-  // 跨午夜日程在次日清单里的续段（代码复审 N6）
-  'cal.day.until': '至 {t}',
+  // 跨午夜、跨天日程的“持续”“至 18:00”“第 2/3 天”（R-444）在公共词典 span.*，和今天页共用
   // 黄历卡（R-431）：左边大字农历日，下面“丙午年 · 十月”；右边“宜”“忌”两行，事项用“ · ”隔开，那一边没有写“—”
   'cal.hl.year': '{gz}年 · {m}',
   'cal.hl.yi': '宜',
@@ -94,7 +93,6 @@ export const viewZh = {
   'cal.a11y.workday': '{name}（补班）',
   'cal.a11y.overdue': '有逾期的待办',
   'cal.a11y.selected': '已选中',
-  'cal.allDay': '全天',
   'cal.todoMark': '待办：{title}',
   'cal.grid': '{y}年{m}月月历',
   'cal.weekGrid': '{from} 起的一周',

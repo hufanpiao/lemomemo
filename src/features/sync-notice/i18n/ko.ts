@@ -38,7 +38,7 @@ export const syncNoticeKo = {
   'sn.f.date': '날짜', // REVIEW(ko)
   'sn.f.time': '시작', // REVIEW(ko)
   'sn.f.tz': '시간대', // REVIEW(ko)
-  'sn.f.duration': '소요 시간(분)', // REVIEW(ko)
+  'sn.f.duration': '소요 시간', // REVIEW(ko) R-444 去掉“(분)”，值按일/시간/분 写
   'sn.f.location': '장소 / 링크', // REVIEW(ko)
   'sn.f.project': '프로젝트', // REVIEW(ko)
   'sn.f.note': '메모', // REVIEW(ko)

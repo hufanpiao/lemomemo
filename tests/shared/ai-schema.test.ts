@@ -96,7 +96,10 @@ describe('ai.ts：AI 输出校验（第 7 节）', () => {
     expect(reasons(checkParseOutput({ items: [ev()], intent: 'record' }, ALL))).toEqual([]);
     expect(reasons(checkParseOutput({ items: [ev()], answer: 'x' }, ALL))).toEqual(['not_whitelisted']);
     expect(reasons(checkParseOutput({ items: [ev()], intent: 'ask' }, ALL))).toEqual(['schema']);
-    expect(reasons(checkParseOutput({ items: [ev({ duration_min: 2000 })] }, ALL))).toEqual(['out_of_range']);
+    // R-444：跨天的日程最长 31 天（44640 分钟）；2000 分钟（一天多）现在合格，超过 31 天才算超范围
+    expect(reasons(checkParseOutput({ items: [ev({ duration_min: 2000 })] }, ALL))).toEqual([]);
+    expect(reasons(checkParseOutput({ items: [ev({ duration_min: 44640 })] }, ALL))).toEqual([]);
+    expect(reasons(checkParseOutput({ items: [ev({ duration_min: 44641 })] }, ALL))).toEqual(['out_of_range']);
     expect(reasons(checkParseOutput({ items: Array.from({ length: 11 }, () => ev()) }, ALL))).toEqual(['out_of_range']);
     expect(reasons(checkParseOutput({ items: [ev({ time: '25:00' })] }, ALL))).toEqual(['schema']);
     expect(reasons(checkParseOutput('not json', ALL))).toEqual(['schema']);

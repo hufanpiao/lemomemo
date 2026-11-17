@@ -6,12 +6,13 @@
 // • 时刻（events.time、todos.due_time、remind_time）是“HH:MM”墙上时间，按原样写；日程的时区单独一列（tz）
 // • 分类的颜色、随手记的分类、纪念日的类型和历法这类只存 id 或枚举的列，写“（已改过）”（字段名照写）
 // 纯 TS
-import type { DateStr } from '../../../../shared/core/date.ts';
-import { fmtDay } from '../../../../shared/i18n/fmt.ts';
+import { DAY_MINUTES, type DateStr } from '../../../../shared/core/date.ts';
+import { allDaySpanDays } from '../../../../shared/logic/calendar/event-span.ts';
+import { fmtDay, fmtDur } from '../../../../shared/i18n/fmt.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import type { NoticeTable } from './notice-tables.ts';
 
-type Fmt = 'text' | 'date' | 'hm' | 'bool' | 'num' | 'mins' | 'days' | 'offsets' | 'list' | 'changed';
+type Fmt = 'text' | 'date' | 'hm' | 'bool' | 'num' | 'mins' | 'days' | 'dur' | 'offsets' | 'list' | 'changed';
 /** 字段名词条（sn.f.*，都不带占位符；__tests__/fields.test.ts 查每个都在词典里） */
 type LabelKey = `sn.f.${string}`;
 export type FieldSpec = { label: LabelKey; fmt: Fmt } | 'hidden';
@@ -28,7 +29,7 @@ export const FIELDS: Readonly<Record<NoticeTable, Readonly<Record<string, FieldS
   events: {
     ...META, ...REMIND_META,
     title: f('sn.f.title', 'text'), date: f('sn.f.date', 'date'), time: f('sn.f.time', 'hm'), tz: f('sn.f.tz', 'text'),
-    duration_min: f('sn.f.duration', 'num'), project: f('sn.f.project', 'text'), note: f('sn.f.note', 'text'),
+    duration_min: f('sn.f.duration', 'dur'), project: f('sn.f.project', 'text'), note: f('sn.f.note', 'text'),
     raw_text: f('sn.f.raw', 'text'), location: f('sn.f.location', 'text'), short: H, short_by: H,
     remind_min: f('sn.f.remind', 'mins'), remind_days: f('sn.f.remindDays', 'days'),
   },
@@ -73,7 +74,7 @@ function mins(v: unknown, tr: FieldT): string {
   if (v === null) return tr('sn.v.none', {});
   need(typeof v === 'number' && Number.isInteger(v) && v >= 0);
   if (v === 0) return tr('sn.v.atStart', {});
-  if (v % 1440 === 0) return tr('sn.v.dayBefore', { n: v / 1440 });
+  if (v % DAY_MINUTES === 0) return tr('sn.v.dayBefore', { n: v / DAY_MINUTES });
   if (v % 60 === 0) return tr('sn.v.hourBefore', { n: v / 60 });
   return tr('sn.v.minBefore', { n: v });
 }
@@ -84,10 +85,19 @@ function days(v: unknown, tr: FieldT): string {
   return tr(v === 0 ? 'sn.v.sameDay' : 'sn.v.dayEarlier', {});
 }
 
+/**
+ * 日程时长（R-444，“44640”看不懂）：有时刻的按天、小时、分钟写（shared/i18n/fmt.ts 的 fmtDur，同今天页）；
+ * 全天的（time 为 null）按占几天写（event-span.ts 的 allDaySpanDays：60、1440 都是“1 天”）。看不到 time 的行在 describeConflict 里写“（已改过）”（不猜全天还是有时刻）
+ */
+function dur(v: unknown, time: unknown, loc: Locale): string {
+  need(typeof v === 'number' && Number.isInteger(v) && v >= 1);
+  return fmtDur(time === null ? allDaySpanDays(v) * DAY_MINUTES : v, loc);
+}
+
 const isStrList = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
 const isDayList = (v: unknown): v is number[] => Array.isArray(v) && v.every((x) => typeof x === 'number' && Number.isInteger(x) && x >= 0);
 
-function value(fmt: Fmt, v: unknown, loc: Locale, tr: FieldT): string {
+function value(fmt: Fmt, v: unknown, loc: Locale, tr: FieldT, row: Readonly<Record<string, unknown>>): string {
   if (fmt === 'changed') return tr('sn.changed', {});
   if (fmt === 'mins') return mins(v, tr);
   if (fmt === 'days') return days(v, tr);
@@ -109,6 +119,8 @@ function value(fmt: Fmt, v: unknown, loc: Locale, tr: FieldT): string {
     case 'num':
       need(typeof v === 'number' && Number.isFinite(v));
       return String(v);
+    case 'dur':
+      return dur(v, row['time'], loc);
     case 'list':
       need(isStrList(v));
       return v.length === 0 ? tr('sn.v.empty', {}) : v.join(sep);
@@ -142,9 +154,11 @@ export function describeConflict(
       continue;
     }
     if (s === 'hidden') continue;
+    // 时长要看是不是全天（time）才知道怎么写：拿不到 old 或 old 里没有 time 的写“（已改过）”（同函数头的约定），免得把全天的“60”写成“1 小时”
+    const known = old !== null && Object.hasOwn(old, col) && (s.fmt !== 'dur' || Object.hasOwn(old, 'time'));
     let v: string;
     try {
-      v = old && Object.hasOwn(old, col) ? value(s.fmt, old[col], loc, tr) : tr('sn.changed', {});
+      v = old && known ? value(s.fmt, old[col], loc, tr, old) : tr('sn.changed', {});
     } catch {
       v = tr('sn.changed', {});
     }

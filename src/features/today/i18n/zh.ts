@@ -17,15 +17,11 @@ export const zh = {
   'now.alsoMore': '同时还有 {n} 件',
   'now.hint': '下一件 {t} {title} · {d}后',
   'now.doneNext': '明天 {t} {title}',
-  'dur.hm': '{h} 小时 {m} 分',
-  'dur.h': '{h} 小时',
-  'dur.m': '{m} 分钟',
   'late.title': '没赶上',
   'late.days': '逾 {n} 天',
   'late.passed': '已过 {t}',
   'list.title': '今天的安排',
   'list.empty': '今天没有安排',
-  'list.allDay': '全天',
   'list.due': '{t} 截止',
   'list.dueDay': '今天截止',
   // 待办行右边 H / M / L 的读屏名字（R-434，同待办页）
@@ -34,6 +30,7 @@ export const zh = {
   'prio.mid': '中',
   'prio.low': '低',
   'list.origin': '（{zone} {t}）',
+  // 跨天日程（R-444）的“持续”“至 18:00”“第 2/3 天”在公共词典 span.*，和日历日清单共用
   'list.done': '完成',
   'list.undoDone': '标成没完成',
   'list.delete': '删除',

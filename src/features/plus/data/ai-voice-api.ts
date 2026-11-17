@@ -29,6 +29,7 @@ export function voiceHeaders(req: AiVoiceReq): Record<string, string> {
     'x-tz': req.tz,
     'x-locale': req.locale,
     'x-scope': req.scope,
+    'x-span': String(req.span),
     ...(projects !== null ? { 'x-projects': projects } : {}),
     ...(req.default_day !== undefined ? { 'x-default-day': req.default_day } : {}),
   };

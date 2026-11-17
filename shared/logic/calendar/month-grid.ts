@@ -110,6 +110,6 @@ export function buildMonth(ym: YearMonth, items: MonthItems, opts: MonthOpts): M
 
 // 架构审 Q3 ①：buildMonth、buildWeek 都从 month-grid.ts 取。buildWeek 的实现放在 week-view.ts（合在一个文件会超过 W1 的 300 行），这里转出
 export { buildWeek } from './week-view.ts';
-export type { PhoneDay, DeskDay, PhoneBlock, DeskBlock, PhoneGroup, AllDay, PhoneWeekOpts, DeskWeekOpts, WeekItems, Cont } from './week-view.ts';
+export type { PhoneDay, DeskDay, PhoneBlock, DeskBlock, PhoneGroup, AllDay, PhoneWeekOpts, DeskWeekOpts, WeekItems } from './week-view.ts';
 // 单日列表也从这里取（前端 A 会审 ③）
 export { dayEntries, type DayEntry } from './cal-items.ts';

@@ -38,7 +38,7 @@ export const syncNoticeZh = {
   'sn.f.date': '日期',
   'sn.f.time': '开始',
   'sn.f.tz': '时区',
-  'sn.f.duration': '时长（分钟）',
+  'sn.f.duration': '时长',
   'sn.f.location': '地点 / 链接',
   'sn.f.project': '项目',
   'sn.f.note': '备注',

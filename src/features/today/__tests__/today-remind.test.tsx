@@ -20,7 +20,7 @@ vi.mock('../hooks/useToday.ts', () => ({
   useToday: () => ({
     today: '2026-11-05', tz: 'Asia/Seoul', now: 0, card: null, tomorrowFirst: null,
     late: [{ todo: { id: 'l1', title: '交房租', dueTime: null }, days: 2 }],
-    events: [{ id: 'e1', title: '客户周会', time: '10:00', origin: null }],
+    events: [{ id: 'e1', title: '客户周会', time: '10:00', origin: null, place: { allDay: false as const, date: '2026-11-14', lastDate: '2026-11-14', startMs: 0, endMs: 0, startMin: 0 } }],
     todos: [{ id: 't1', title: '回邮件', dueTime: '15:00', done: false }],
     toggleDone: async () => 'ok', remove: async () => 'ok',
   }),

@@ -6,6 +6,7 @@ import { addDays, diffDays, fmtHm, todayOf, type DateStr } from '../../core/date
 import type { Tz } from '../../core/tz.ts';
 import type { EventWrite, TodoWrite } from '../../schema/rows.ts';
 import { assertTz, isOpenTodo, liveEventsNear, type CalEvent, type CalTodo } from '../calendar/cal-items.ts';
+import { EVENT_SPAN_MAX_DAYS, overlapsDays } from '../calendar/event-span.ts';
 import { matchScore, type Field } from '../search.ts';
 import { specificWords } from './generic-words.ts';
 import { isScoped, type PlusTarget, type TargetKind } from './resolve-target.ts';
@@ -38,10 +39,10 @@ interface Row extends TargetHit {
   fields: readonly Field[];
 }
 
-/** 没删、没撤销的日程里，换算后落在 from～to 的 */
+/** 没删、没撤销的日程里，换算后和 from～to 有交叠的（R-444：前几天开始、跨进来的也算，预筛往前多看 31 天） */
 function placedEvents(events: readonly TargetEvent[], from: DateStr, to: DateStr, tz: Tz): Row[] {
-  return liveEventsNear(events, from, to, tz)
-    .filter(([, p]) => p.date >= from && p.date <= to)
+  return liveEventsNear(events, from, to, tz, EVENT_SPAN_MAX_DAYS)
+    .filter(([, p]) => overlapsDays(p, from, to))
     .map(([ev, p]) => ({ kind: 'event' as const, id: ev.id, date: p.date, time: p.allDay ? null : fmtHm(p.startMin), fields: [ev.title, ev.location] }));
 }
 

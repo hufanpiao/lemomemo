@@ -1,7 +1,8 @@
 // shared/logic/calendar/month-grid.ts、cal-items.ts（TC-B2-08；架构 5.12 第 2 点、4.6、第 9 节单元 month-grid）
 // 每个用例都显式传设备时区，和进程的 TZ 无关（test:tz 三个时区结果必须相同）
 import { describe, expect, it } from 'vitest';
-import { placeEvent, projectColorIndex, PROJECT_COLORS } from '../../../shared/logic/calendar/cal-items.ts';
+import { projectColorIndex, PROJECT_COLORS } from '../../../shared/logic/calendar/cal-items.ts';
+import { placeEvent } from '../../../shared/logic/calendar/event-span.ts';
 import { buildMonth, dayEntries, monthGridDates, MONTH_CELLS, type MonthCell } from '../../../shared/logic/calendar/month-grid.ts';
 import { normalizeProject, PROJECT_CATEGORIES, projectColorIndex as colorFromModule } from '../../../shared/logic/project-color.ts';
 import { ev, timed, todo, unsynced } from './fixtures.ts';

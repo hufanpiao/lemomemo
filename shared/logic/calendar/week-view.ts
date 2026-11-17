@@ -1,41 +1,33 @@
 // 周视图的数据和布局（架构 5.12 第 2 点、R-107、R-109、R-110；第 9 节“buildWeek 布局”；TC-B2-09）
 // buildWeek(weekStart, items, opts)：weekStart 是这一周的第一天，返回 7 天，每天：
-// • 全天日程不上时间轴，记成“全天 N”（N = 1 时带简称）；
-// • 有时刻的日程按设备时区换算，跨午夜的在午夜切成两段，各归各天，cont 标出被切的一边（'end' = 尾部被切，
-//   'start' = 头部被切，'both' = 两头都被切），界面在被切的一端画成直边；
+// • 全天日程不上时间轴，记成“全天 N”（N = 1 时带简称）；跨天的全天日程（R-444）它占的每一天都算一件，allDay.dayOf 标出是第几天、共几天；
+// • 有时刻的日程按设备时区换算，跨午夜、跨多天的（R-444，最长 31 天）按午夜切段，各归各天，cont 标出被切的一边（'end' = 尾部被切，
+//   'start' = 头部被切，'both' = 两头都被切，中间整天那几段），界面在被切的一端画成直边；
 // • 手机（layout 'phone'，时间轴横向）：色块长度取 max(按时长算的长度, minBlockPx)，超出当天末尾的截到末尾，
 //   截完不够最小长度的右端对齐当天末尾、往左补足；显示区间有交叠的归一组，组内上排空着放上排（row 0），
 //   否则下排空着放下排（row 1），两排都占着的不画、记进这一组的 more；组里有两排时 rows = 2，否则 1；
 // • 电脑（layout 'desk'，时间轴纵向，相当于 minBlockPx = 0）：按真实时长画，重叠的并排分列，块带 column、columns。
 // • 待办（和前端 A 对过的接口）：规则和月历一样（todoDate：删掉的、撤销的、已完成的、没有截止日的不放，截止日是浮动日期不换算），
 //   手机放进当天的 todos（kind 'todo'，泳道上画空心圆），电脑并进 allDay 那一行（排在全天日程后面）。纯函数。
-import { addDays, minOfDay, msAt, todayOf, type DateStr } from '../../core/date.ts';
+import { DAY_MINUTES, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import type { ProjectColor } from '../project-color.ts';
 import {
   assertTz,
+  collectEntries,
   compareEntries,
-  eventEntry,
-  liveEventsNear,
-  todoDate,
-  todoEntry,
   type CalEvent,
   type CalTodo,
   type DayEntry,
 } from './cal-items.ts';
 import { weekDates } from './cal-nav.ts';
+import { dayOfSpan, endMinOn, type Cont } from './event-span.ts';
 
-const DAY_MIN = 1440;
-
-/** 被午夜切开的一边 */
-export type Cont = 'start' | 'end' | 'both';
-
-/** 一天里的一段（跨午夜的日程切开以后各段分别算） */
+/** 一天里的一段（跨午夜的日程切开以后各段分别算；被切的哪一边看 entry.span.cont） */
 interface Segment {
   readonly entry: DayEntry;
   readonly startMin: number;
   readonly endMin: number;
-  readonly cont?: Cont;
 }
 
 interface BlockBase {
@@ -75,6 +67,8 @@ export interface AllDay {
   readonly itemIds: readonly string[];
   /** 和 itemIds 一一对应：'allDay' 是全天日程（events 表），'todo' 是待办（todos 表，画空心圆）。代码审查 S9 */
   readonly kinds: readonly DayEntry['kind'][];
+  /** 和 itemIds 一一对应：跨天的全天日程这一天是第几天、共几天（R-444，界面在标题后面写“(2/3)”；跨天连条的画法等负责人定了图再做）；只占一天的、待办为 undefined */
+  readonly dayOf: readonly ({ readonly index: number; readonly days: number } | undefined)[];
 }
 
 export interface PhoneDay {
@@ -116,41 +110,13 @@ export interface WeekItems {
   readonly todos: readonly CalTodo[];
 }
 
-function contOf(i: number, n: number): Cont | undefined {
-  if (n <= 1) return undefined;
-  if (i === 0) return 'end';
-  if (i === n - 1) return 'start';
-  return 'both';
-}
-
-/** 有时刻的日程按设备时区在午夜切段，返回 [日期, 段] */
-function splitAtMidnight(entry: DayEntry, date: DateStr, startMs: number, endMs: number, tz: Tz): [DateStr, Segment][] {
-  const parts: [DateStr, number, number][] = [];
-  let day = date;
-  let from = startMs;
-  // duration_min ≤ 1440，最多跨两天；上限 3 段只是防御
-  while (from < endMs && parts.length < 3) {
-    const next = addDays(day, 1);
-    const dayEnd = msAt(next, 0, tz);
-    const to = Math.min(endMs, dayEnd);
-    const startMin = parts.length === 0 ? minOfDay(from, tz) : 0;
-    const endMin = to === dayEnd ? DAY_MIN : Math.max(startMin, minOfDay(to, tz));
-    parts.push([day, startMin, endMin]);
-    day = next;
-    from = dayEnd;
-  }
-  return parts.map(([d, startMin, endMin], i) => {
-    const cont = contOf(i, parts.length);
-    return [d, { entry, startMin, endMin, ...(cont === undefined ? {} : { cont }) }];
-  });
-}
-
 interface DayBuckets {
   readonly allDay: Map<DateStr, DayEntry[]>;
   readonly timed: Map<DateStr, Segment[]>;
   readonly todos: Map<DateStr, DayEntry[]>;
 }
 
+/** 这一周每天的事项按种类分开：月历、日清单同一份 collectEntries（每天一条、已排好），有时刻的按那一天切成段 */
 function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets {
   const allDay = new Map<DateStr, DayEntry[]>(dates.map((d) => [d, []]));
   const timed = new Map<DateStr, Segment[]>(dates.map((d) => [d, []]));
@@ -158,26 +124,30 @@ function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets
   const first = dates[0];
   const last = dates[dates.length - 1];
   if (first === undefined || last === undefined) return { allDay, timed, todos };
-  // 预筛（代码审查 A）：除了换算时区可能差的天数，前面再多留 1 天——前一天开始、跨午夜进到这一周的那一段也要算
-  for (const [ev, p] of liveEventsNear(items.events, first, last, tz, 1)) {
-    const entry = eventEntry(ev, p);
-    if (p.allDay) {
-      allDay.get(p.date)?.push(entry);
-      continue;
+  for (const [d, entries] of collectEntries(items, first, last, tz)) {
+    for (const e of entries) {
+      if (e.kind === 'todo') todos.get(d)?.push(e);
+      else if (e.place === undefined || e.place.allDay) allDay.get(d)?.push(e);
+      else {
+        // 开始那天从开始时刻起、其余从 0:00 起；结束不在这一天的到 24:00
+        const startMin = d === e.place.date ? e.place.startMin : 0;
+        timed.get(d)?.push({ entry: e, startMin, endMin: Math.max(startMin, endMinOn(e.place.endMs, d, tz)) });
+      }
     }
-    for (const [d, seg] of splitAtMidnight(entry, todayOf(p.startMs, tz), p.startMs, p.endMs, tz)) timed.get(d)?.push(seg);
-  }
-  for (const td of items.todos) {
-    const d = todoDate(td);
-    if (d !== null) todos.get(d)?.push(todoEntry(td));
   }
   return { allDay, timed, todos };
 }
 
-function allDayOf(entries: DayEntry[]): AllDay {
+function allDayOf(entries: DayEntry[], date: DateStr): AllDay {
   const sorted = entries.sort(compareEntries);
   const only = sorted.length === 1 ? sorted[0] : undefined;
-  return { count: sorted.length, short: only ? only.short : null, itemIds: sorted.map((e) => e.itemId), kinds: sorted.map((e) => e.kind) };
+  return {
+    count: sorted.length,
+    short: only ? only.short : null,
+    itemIds: sorted.map((e) => e.itemId),
+    kinds: sorted.map((e) => e.kind),
+    dayOf: sorted.map((e) => (e.span ? dayOfSpan(e.span, date) : undefined)),
+  };
 }
 
 /** 段的排序：开始分钟，再按创建时间、id（结果稳定） */
@@ -192,7 +162,7 @@ function base(s: Segment): BlockBase {
     short: s.entry.short,
     startMin: s.startMin,
     endMin: s.endMin,
-    ...(s.cont === undefined ? {} : { cont: s.cont }),
+    ...(s.entry.span === undefined ? {} : { cont: s.entry.span.cont }),
   };
 }
 
@@ -219,7 +189,7 @@ function clusters<T>(sorted: readonly T[], startOf: (x: T) => number, endOf: (x:
 
 /** 手机：按显示区间分组、上下两排（R-109、R-110） */
 function layoutPhone(segs: readonly Segment[], minPx: number, dayPx: number): { blocks: PhoneBlock[]; groups: PhoneGroup[] } {
-  const scale = dayPx / DAY_MIN;
+  const scale = dayPx / DAY_MINUTES;
   const placed = segs.map((s) => {
     let startPx = s.startMin * scale;
     let widthPx = Math.max((s.endMin - s.startMin) * scale, minPx);
@@ -303,11 +273,11 @@ export function buildWeek(weekStart: DateStr, items: WeekItems, opts: PhoneWeekO
   if (opts.layout === 'phone') {
     return dates.map((date) => ({
       date,
-      allDay: allDayOf(b.allDay.get(date) ?? []),
+      allDay: allDayOf(b.allDay.get(date) ?? [], date),
       todos: todosOf(date).sort(compareEntries),
       ...layoutPhone(segsOf(date), opts.minBlockPx, opts.dayPx),
     }));
   }
   // 电脑：待办并进全天那一行（compareEntries 把待办排在全天日程后面）
-  return dates.map((date) => ({ date, allDay: allDayOf([...(b.allDay.get(date) ?? []), ...todosOf(date)]), blocks: layoutDesk(segsOf(date)) }));
+  return dates.map((date) => ({ date, allDay: allDayOf([...(b.allDay.get(date) ?? []), ...todosOf(date)], date), blocks: layoutDesk(segsOf(date)) }));
 }
