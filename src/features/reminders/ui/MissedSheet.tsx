@@ -4,6 +4,7 @@
 // 每条一张小卡（“今天 12:50 · 记号 日程（已经开始过了）”+ 粗体标题 + 按类型的按钮，设计 M4）；已经开始过的日程只给“知道了”；点标题进整页提醒
 import { useState } from 'react';
 import { todayOf } from '../../../../shared/core/date.ts';
+import chip from '../../../kit/components/Chip.module.css';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { openReminder } from './open-reminder.ts';
@@ -48,7 +49,7 @@ export default function MissedSheet({ open, onOpenChange, items, now, tz, prefs,
       {items.length > 1 && (
         <Pressable
           type="button"
-          className={styles.sheetTopAct}
+          className={`${chip.chip} ${styles.sheetTopAct}`}
           data-testid="remind-missed-all"
           onClick={async () => {
             const n = await ackAll(items);

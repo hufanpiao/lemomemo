@@ -3,7 +3,8 @@
    • 位置（主持人已定）：从下到上依次是底栏、撤销条、提示卡。平时在 var(--dock-bottom)；撤销条开着时往上让一条（data-undo-toast，:has 要 iOS 15.4+）
    • 主 App 弹层打开时（<html class="scroll-locked">）藏起来（M4）；卡自己开的对话框（容器上标 data-own-dialog）不藏
    • 告知页（ConsentPage 不在 App 路由里时）藏起来：body 里有 main[data-feature="onboarding"]
-   • .region 由宿主挂到 gate 预建的容器上；容器本身不接点按，只有卡接 */
+   • .region 由宿主挂到 gate 预建的容器上；容器本身不接点按，只有卡接
+   • R-436 乙批：卡片留白加大、标题略加粗、说明行高放松；“还有 N 条”等宽小字；对话框各行 0.5px 细线、留白加大，“知道了”主按钮胶囊形加粗 */
 .region {
   position: fixed;
   left: 16px;
@@ -56,7 +57,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 4px 12px;
-  padding: 12px 6px 6px 16px;
+  padding: 14px 6px 6px 16px;
 }
 
 .text {
@@ -67,6 +68,8 @@
 .t1 {
   margin: 0;
   font-size: var(--fs-15);
+  font-weight: 500;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
@@ -75,6 +78,15 @@
   margin: 4px 0 0;
   color: var(--toast-fg2);
   font-size: var(--fs-13);
+  line-height: 1.5;
+}
+
+/* “还有 N 条”：计数小字等宽加字距（R-436 小字标签） */
+.more {
+  margin-top: 6px;
+  font-family: var(--f-mono);
+  font-size: var(--fs-11-5);
+  letter-spacing: 0.04em;
 }
 
 .actions {
@@ -132,9 +144,14 @@
 }
 
 .row {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+  border-bottom: 0.5px solid var(--line);
   font-size: var(--fs-14);
+  line-height: 1.5;
+}
+
+.row:last-child {
+  border-bottom: 0;
 }
 
 .val {
@@ -149,18 +166,19 @@
 .dialogActs {
   display: flex;
   justify-content: flex-end;
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .dialogBtn {
   min-width: var(--hit);
   min-height: var(--hit);
-  padding: 0 16px;
+  padding: 0 20px;
   border: 0;
-  border-radius: var(--r-md);
+  border-radius: var(--r-pill);
   background: var(--accent);
   color: var(--on-accent);
   font-size: var(--fs-15);
+  font-weight: 600;
 }
 
 .dialogBtn:focus-visible {

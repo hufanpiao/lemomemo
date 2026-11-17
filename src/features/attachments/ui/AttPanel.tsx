@@ -14,6 +14,8 @@
 // • 预览浮层（PreviewLayer.tsx）单独懒加载：点了“预览”才下载
 // • 运行日志：data/ 那一层各自记结果码，这里只记拖放、粘贴的个数，不记文件名
 import { lazy, Suspense, useCallback, useState, type ReactNode } from 'react';
+import chip from '../../../kit/components/Chip.module.css';
+import { groupLabelClass } from '../../../kit/components/Form.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
@@ -143,7 +145,7 @@ export function AttPanel({ src, items, noteId, disabled, onImages }: AttPanelPro
       ) : null}
       {items.length ? (
         <>
-          <div className={styles.head}>
+          <div className={`${groupLabelClass} ${styles.head}`}>
             <b>{t('att.head', { n: items.length })}</b>
             <span>{t('att.total', { s: sizeText(total) })}</span>
           </div>
@@ -270,12 +272,12 @@ function AttRow(p: {
         {failed ? (
           <span className={styles.failBtns}>
             {it.pending && attRetryable(it.pending) ? (
-              <Pressable className={styles.btnS} onClick={() => p.src.retry(it.id)} disabled={p.disabled} data-testid={`note-file-retry-${it.id}`}>
+              <Pressable className={chip.chip} onClick={() => p.src.retry(it.id)} disabled={p.disabled} data-testid={`note-file-retry-${it.id}`}>
                 {t('att.st.retry', {})}
               </Pressable>
             ) : null}
             {p.desk ? (
-              <Pressable className={styles.btnS} onClick={() => p.onRemove(it.id, name)} disabled={p.disabled} data-testid={`note-file-drop-${it.id}`}>
+              <Pressable className={chip.chip} onClick={() => p.onRemove(it.id, name)} disabled={p.disabled} data-testid={`note-file-drop-${it.id}`}>
                 {t('att.st.drop', {})}
               </Pressable>
             ) : null}
@@ -304,7 +306,7 @@ function AttRow(p: {
       {ready && way === null ? (
         <p className={styles.only}>
           {t(isMacro(kind) ? 'att.macro' : 'att.legacy', {})}
-          <Pressable className={styles.btnS} onClick={() => p.onDownload(f)} data-testid={`note-file-only-dl-${it.id}`}>
+          <Pressable className={`${chip.chip} ${styles.onGray}`} onClick={() => p.onDownload(f)} data-testid={`note-file-only-dl-${it.id}`}>
             {t('att.download', {})}
           </Pressable>
         </p>

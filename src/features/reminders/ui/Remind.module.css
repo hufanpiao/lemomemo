@@ -320,45 +320,37 @@
 .dim {
   color: var(--text-2);
   font-size: var(--fs-13);
+
+  /* “今天 08:30 · 待办”这类时刻：等宽数字（R-436） */
+  font-variant-numeric: tabular-nums;
 }
 
-/* 错过的提醒弹层：“全部知道了”在右上（弹层外框 .dock 是 fixed，绝对定位相对它：16px 外边距 + 16px 内边距） */
-.sheetTopAct {
+/* 错过的提醒弹层：“全部知道了”在右上（弹层外框 .dock 是 fixed，绝对定位相对它：16px 外边距 + 16px 内边距）。
+   R-436 乙批：样子是 kit 胶囊（MissedSheet.tsx 同时挂 Chip.module.css 的 .chip：无描边浅底、高 30、点按区 44），这里只管位置；
+   写成 button.sheetTopAct 压过胶囊那份 position、margin（两份 CSS 模块谁先加载不固定）。胶囊比原来矮 6，top 加 3 让它和标题仍居中对齐 */
+button.sheetTopAct {
   position: absolute;
-  top: 14px;
+  top: 17px;
   right: 30px;
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1.5px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--panel-2);
-  color: var(--text);
-  font-size: var(--fs-13);
-  white-space: nowrap;
-}
-
-.sheetTopAct::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
+  margin: 0;
 }
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* 每条一张小卡（线框 MISSSHEET） */
+/* 每条一张小卡（线框 MISSSHEET）：R-436 大圆角、留白加大 */
 .missCard {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border-radius: var(--r-md);
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
   background: var(--panel-2);
 }
 
@@ -367,11 +359,40 @@
   gap: 6px;
 }
 
+/* 卡里的按钮（RemindButtons，和横幅、整页提醒共用 .btn / .primary）：R-436“胶囊太大了”——卡里改成无描边、--panel 底（卡是 --panel-2 浅底）、
+   看得见 34 高，点按区经 ::after 上下各撑 5 到 44；“知道了”主按钮仍是柠檬黄实底。只改卡里这几颗，横幅、整页提醒的照旧。
+   宽度按字长分（flex 1 1 auto，原来四颗等分）：四颗一排时韩文“내일 다시 알림”原来就超出按钮，卡片留白加大后更挤，按字长分以后放得下（430 宽截图核过） */
+.missBtns .btn {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  background: var(--panel);
+}
+
+.missBtns .btn::after {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+
+.missBtns .primary {
+  background: var(--accent);
+}
+
 .itemText {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
+}
+
+/* 卡里的标题（粗体）：15 号，和上面那行小字拉开层级 */
+.itemText b {
+  font-size: var(--fs-15);
+  font-weight: 600;
 }
 
 .rowBtn {

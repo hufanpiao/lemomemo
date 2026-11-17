@@ -1,4 +1,6 @@
-/* 看图页（线框 sAIst 第一屏）：顶行“✕ 关闭 · 1 / 3”，中间大图（圆角、不裁），底部“AI 看到的”白底卡片、描边标签胶囊。外壳（scrim / full / box / solid）用 layer.module.css */
+/* 看图页（线框 sAIst 第一屏）：顶行“✕ 关闭 · 1 / 3”，中间大图（圆角、不裁），底部“AI 看到的”卡片、标签小胶囊。外壳（scrim / full / box / solid）用 layer.module.css
+   R-436 乙批：计数等宽小字；“AI 看到的”换 kit 小字分组名（ImageViewer.tsx 同时挂 groupLabelClass）；卡片去描边换 --panel-2 浅底、大圆角；
+   标签去描边换 --panel 底小字（卡片是浅底，标签反过来用面板色才看得出）；说明小字第三层色 */
 
 .top {
   position: relative;
@@ -34,9 +36,10 @@
 .count {
   position: absolute;
   left: 50%;
-  color: var(--text);
-  font-size: var(--fs-14);
-  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: var(--fs-13);
+  letter-spacing: 0.06em;
   transform: translateX(-50%);
 }
 
@@ -111,20 +114,18 @@
 .seen {
   flex: none;
   margin: 0 16px 16px;
-  padding: 12px 14px;
-  border-radius: var(--r-md);
-  background: var(--panel);
-  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel-2);
 }
 
-.cap {
+/* 字样用 kit 分组名；写成 p.cap 压过它的左右外边距（卡片里不缩进） */
+p.cap {
   margin: 0;
-  color: var(--text-2);
-  font-size: var(--fs-12);
 }
 
 .desc {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   color: var(--text);
   font-size: var(--fs-14);
   line-height: 1.6;
@@ -134,21 +135,21 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   padding: 0;
   list-style: none;
 }
 
 .tag {
-  padding: 3px 12px;
-  border: 1px solid var(--line);
+  padding: 4px 10px;
   border-radius: var(--r-pill);
+  background: var(--panel);
   color: var(--text);
-  font-size: var(--fs-13);
+  font-size: var(--fs-12);
 }
 
 .hint {
-  margin: 8px 0 0;
-  color: var(--text-2);
+  margin: 10px 0 0;
+  color: var(--text-3);
   font-size: var(--fs-12);
 }

@@ -1,4 +1,5 @@
-/* 整屏提示共用的样式（本机库来自更新的版本 K6-ver-new、被别的标签页挡住、退出没完成、出错兜底）：盖住整个视口，不给继续使用 */
+/* 整屏提示共用的样式（本机库来自更新的版本 K6-ver-new、被别的标签页挡住、退出没完成、出错兜底）：盖住整个视口，不给继续使用
+   R-436 乙批：标题层级照登录页（24、粗体、字距略收）、说明行高放松、主按钮字加粗、状态行等宽数字 */
 .screen {
   position: fixed;
   inset: 0;
@@ -18,15 +19,17 @@
 .title {
   margin: 0 0 12px;
   color: var(--text);
-  font-size: var(--fs-22);
+  font-size: var(--fs-24);
+  font-weight: 700;
   line-height: 1.35;
+  letter-spacing: -0.01em;
 }
 
 .body {
-  margin: 0 0 24px;
+  margin: 0 0 28px;
   color: var(--text-2);
   font-size: var(--fs-15);
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 /* 没有按钮的（被别的标签页挡住）：说明下面不留空 */
@@ -52,6 +55,7 @@
 .primary {
   background: var(--accent);
   color: var(--on-accent);
+  font-weight: 600;
 }
 
 .primary[aria-disabled='true'] {
@@ -65,8 +69,9 @@
 
 .status {
   min-height: 1.5em;
-  margin: 12px 0 0;
+  margin: 14px 0 0;
   color: var(--text-2);
   font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }

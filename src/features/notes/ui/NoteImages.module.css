@@ -1,4 +1,6 @@
-/* 随手记插图（皮肤视觉稿 .mcard .im：16:10、右上角“+N”深色小牌；NOTE_ED：16:10、圆角 18、上边距 14） */
+/* 随手记插图（皮肤视觉稿 .mcard .im：16:10、右上角“+N”深色小牌；NOTE_ED：16:10、圆角 18、上边距 14）
+   R-436 乙批：“+N”等宽数字；没传上时的“重试 / 去掉”去描边；“图片”“拍照”收成 kit 胶囊的尺寸（高 30、字 13、点按区 44）——
+   用这两颗的 NoteEditPage.tsx 不在这一批范围里，先在这里照 kit Chip.module.css 的 .chip 写同样的尺寸，之后页面改挂 kit 胶囊时删掉这几行 */
 
 .ic {
   width: 20px;
@@ -34,6 +36,7 @@
   border-radius: 8px;
   background: var(--img-badge-bg);
   color: var(--img-badge-fg);
+  font-family: var(--f-mono);
   font-size: var(--fs-11);
 }
 
@@ -156,7 +159,7 @@
   border: 0;
   border-radius: var(--r-pill);
   background: var(--panel);
-  box-shadow: inset 0 0 0 1px var(--inp-line), var(--shadow-1);
+  box-shadow: var(--shadow-1);
   color: var(--text);
   font-size: var(--fs-14);
 }
@@ -165,20 +168,33 @@
 .picks {
   display: flex;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 7px;
 }
 
 .pick {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: var(--hit);
-  padding: 0 14px;
+  gap: 5px;
+  height: 30px;
+  margin: 7px 0;
+  padding: 0 12px;
   border: 0;
   border-radius: var(--r-pill);
   background: var(--panel-2);
   color: var(--text);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
+}
+
+.pick::after {
+  content: '';
+  position: absolute;
+  inset: -7px 0;
+}
+
+.pick .ic {
+  width: 16px;
+  height: 16px;
 }
 
 .pick:disabled,

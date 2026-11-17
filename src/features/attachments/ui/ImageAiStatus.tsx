@@ -5,6 +5,7 @@
 // • 没交给 AI：灰底一行 +“去打开”（设置 › 语音与 AI）
 // • 识别好了：这里不出东西（线框原话“好了就消失”）；描述和标签在看图页底部（ui/ImageViewer.tsx）
 // 动效：只用 Pressable 的按下反馈（R-376）
+import chip from '../../../kit/components/Chip.module.css';
 import { Pressable } from '../../../motion/components.ts';
 import { useAttT } from '../hooks/useNoteFiles.ts';
 import { useImageAi } from '../hooks/useImageAi.ts';
@@ -23,12 +24,12 @@ export default function ImageAiStatus({ id }: { id: string }) {
       <p className={styles.bar} role="status">
         <span className={styles.tx}>{t(text, {})}</span>
         {v.kind === 'failed' ? (
-          <Pressable type="button" className={styles.btn} onClick={s.retry} disabled={s.busy} data-testid={`img-ai-retry-${id}`}>
+          <Pressable type="button" className={`${chip.chip} ${styles.btn}`} onClick={s.retry} disabled={s.busy} data-testid={`img-ai-retry-${id}`}>
             {t('att.ai.retry', {})}
           </Pressable>
         ) : null}
         {v.kind === 'off' ? (
-          <Pressable type="button" className={styles.btn} onClick={s.open} data-testid={`img-ai-open-${id}`}>
+          <Pressable type="button" className={`${chip.chip} ${styles.btn}`} onClick={s.open} data-testid={`img-ai-open-${id}`}>
             {t('att.ai.open', {})}
           </Pressable>
         ) : null}

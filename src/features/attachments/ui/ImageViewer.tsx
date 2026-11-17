@@ -8,6 +8,7 @@
 // • 运行日志：打开和换张（att view i=第几张/共几张）、关上（att view close）；不记图和描述
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { groupLabelClass } from '../../../kit/components/Form.tsx';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -135,7 +136,7 @@ function AiSeen({ id }: { id: string }) {
   if (v?.kind !== 'seen') return null;
   return (
     <div className={styles.seen} data-testid={`img-view-ai-${id}`}>
-      <p className={styles.cap}>{t('att.ai.seen', {})}</p>
+      <p className={`${groupLabelClass} ${styles.cap}`}>{t('att.ai.seen', {})}</p>
       <p className={styles.desc}>{v.desc}</p>
       {v.tags.length ? (
         <ul className={styles.tags} aria-label={t('att.ai.tags', {})}>

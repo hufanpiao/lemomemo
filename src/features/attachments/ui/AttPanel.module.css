@@ -1,55 +1,56 @@
-/* 随手记里的附件区（线框 sAtt：.st 小标题“附件 4 · 共 8.1 MB”、.att 一行“类型标记 · 名字 / 大小 · ⋯”、.upb 上传条、DDRAG 拖进来的虚线框） */
+/* 随手记里的附件区（线框 sAtt：.st 小标题“附件 4 · 共 8.1 MB”、.att 一行“类型标记 · 名字 / 大小 · ⋯”、.upb 上传条、DDRAG 拖进来的虚线框）
+   R-436 乙批：头一行换 kit 小字分组名（AttPanel.tsx 同时挂 groupLabelClass）；卡片去描边平铺、行高 60、行间 0.5px 细线；
+   类型标记去墨色粗框换浅底等宽小字；“再试一次”“去掉”“下载”换 kit 胶囊（Chip.module.css） */
 
 .box {
   margin-top: 18px;
 }
 
-.head {
+/* 字样（等宽 11 号、第三层色、字距）用 kit 分组名；这里只管左右分开。写成 div.head 压过分组名那份 margin（两份 CSS 模块谁先加载不固定） */
+div.head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 6px;
-  color: var(--text-2);
-  font-size: var(--fs-13);
+  margin: 4px 14px 6px;
 }
 
 .head b {
-  color: var(--text);
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .list {
   margin: 0;
-  padding: 0 12px;
-  border: 1px solid var(--line);
+  padding: 0 14px;
   border-radius: var(--r-lg);
   background: var(--panel);
   list-style: none;
 }
 
 .row + .row {
-  border-top: 1px solid var(--line);
+  border-top: 0.5px solid var(--line);
 }
 
 .line {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 56px;
+  gap: 12px;
+  min-height: 60px;
 }
 
-/* 类型标记：线框 .fi（描边小方块里写 PDF / W / X / P） */
+/* 类型标记：线框 .fi 的 PDF / W / X / P。R-436“类型色只用极淡底”：不再用墨色粗描边，浅底 + 等宽小字、次要色 */
 .mark {
   display: grid;
   flex: none;
   place-items: center;
   width: 34px;
   height: 40px;
-  border: 1.5px solid var(--ink);
-  border-radius: 8px;
-  color: var(--ink);
-  font-size: var(--fs-11);
-  font-weight: 700;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: var(--fs-10-5);
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 /* 电脑上的首页缩略图：和类型标记同一个位置、同样大小（线框 sAtt 说明“有首页缩略图的在电脑上显示缩略图”） */
@@ -57,8 +58,8 @@
   flex: none;
   width: 34px;
   height: 40px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
   background: var(--panel);
   object-fit: cover;
   object-position: top;
@@ -73,16 +74,19 @@
 
 .name {
   overflow: hidden;
-  font-size: var(--fs-14);
+  font-size: var(--fs-15);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* 大小、页数这一行：数字等宽（R-436），和名字隔 2 */
 .sub,
 .subBad {
+  margin-top: 2px;
   color: var(--text-2);
   font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
 }
 
 .subBad {
@@ -94,7 +98,7 @@
   position: relative;
   overflow: hidden;
   height: 3px;
-  margin-top: 4px;
+  margin-top: 6px;
   border-radius: 2px;
   background: var(--panel-2);
 }
@@ -147,43 +151,35 @@
   gap: 6px;
 }
 
-.btnS {
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--panel);
-  color: var(--text);
-  font-size: var(--fs-12);
-}
-
-.btnS:disabled {
-  opacity: 0.5;
-}
-
 /* 只存不预览的说明（线框 sPrev 第五张：灰底小框，右边“下载”） */
 .only {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: -2px 0 10px;
-  padding: 8px 10px;
-  border-radius: var(--r-sm);
+  margin: -2px 0 12px;
+  padding: 4px 6px 4px 12px;
+  border-radius: var(--r-md);
   background: var(--panel-2);
   color: var(--text-2);
   font-size: var(--fs-12);
+  line-height: 1.5;
 }
 
-.only .btnS {
-  flex: none;
+/* 放在灰底框里的胶囊（“只能下载”框的“下载”、隐私记附件没取到时的“再试一次”）：kit 胶囊本身是 --panel-2 底，
+   放在同色框里看不出来，换 --panel 底；写成 button.onGray 压过胶囊那份底色（两份 CSS 模块谁先加载不固定） */
+button.onGray {
+  background: var(--panel);
+}
+
+.only > .onGray {
   margin-left: auto;
 }
 
 .note,
 .msg {
   margin: 8px 0 0;
-  padding: 8px 12px;
-  border-radius: var(--r-md);
+  padding: 10px 14px;
+  border-radius: var(--r-lg);
   background: var(--panel-2);
   color: var(--text-2);
   font-size: var(--fs-12);

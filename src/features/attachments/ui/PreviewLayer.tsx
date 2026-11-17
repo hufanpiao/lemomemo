@@ -12,6 +12,7 @@
 // • 运行日志：打开（way、结果码）、微软问答和超时；不记文件名
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import chip from '../../../kit/components/Chip.module.css';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -191,7 +192,7 @@ export default function PreviewLayer({ src, file, desk, onClose, onDownload, onS
         {st && st.sheets.length > 1 ? (
           <div className={styles.sheets} role="tablist" aria-label={t('att.pv.sheets', {})}>
             {st.sheets.map((s, i) => (
-              <button key={s} type="button" role="tab" aria-selected={i === st.sheet} className={i === st.sheet ? styles.sheetOn : styles.sheet} onClick={() => send({ t: 'sheet', i })} data-testid={`att-pv-sheet-${i}`}>
+              <button key={s} type="button" role="tab" aria-selected={i === st.sheet} className={i === st.sheet ? chip.chipOn : chip.chip} onClick={() => send({ t: 'sheet', i })} data-testid={`att-pv-sheet-${i}`}>
                 {s}
               </button>
             ))}

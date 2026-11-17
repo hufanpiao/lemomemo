@@ -5,6 +5,7 @@
 // • 列表没取到（离线、稍后再试）：写“没能读取附件”加“再试一次”，不当成没有附件（评审 10）
 import { useEffect, useState } from 'react';
 import { Pressable } from '../../../motion/components.ts';
+import chip from '../../../kit/components/Chip.module.css';
 import { AttPanel } from './AttPanel.tsx';
 import styles from './AttPanel.module.css';
 import { createVaultAtt, useAttT, useVaultFiles, type VaultAtt, type VaultFileApi } from '../hooks/useNoteFiles.ts';
@@ -39,7 +40,7 @@ function Loaded({ va, noteId, disabled }: { va: VaultAtt; noteId: string; disabl
       <section className={styles.box} aria-label={t('att.list', {})} data-testid="note-files">
         <p className={styles.msg} role="alert" data-testid="note-files-load-fail">
           {t('att.vault.loadFail', {})}{' '}
-          <Pressable className={styles.btnS} onClick={() => void va.load()} data-testid="note-files-reload">
+          <Pressable className={`${chip.chip} ${styles.onGray}`} onClick={() => void va.load()} data-testid="note-files-reload">
             {t('att.st.retry', {})}
           </Pressable>
         </p>

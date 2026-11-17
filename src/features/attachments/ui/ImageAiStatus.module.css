@@ -1,11 +1,13 @@
-/* 识别状态（线框 sAIst 第二屏）：图片下面灰底一行，右边胶囊按钮（“AI 看到的”卡片在看图页 ImageViewer） */
+/* 识别状态（线框 sAIst 第二屏）：图片下面灰底一行，右边胶囊按钮（“AI 看到的”卡片在看图页 ImageViewer）
+   R-436 乙批：灰底条大圆角、留白加大；“再试一次”“去打开”换 kit 胶囊（ImageAiStatus.tsx 挂 Chip.module.css 的 .chip），
+   胶囊默认 --panel-2 底和这条灰底同色，这里只把底换成 --panel */
 .bar {
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 8px 0 0;
-  padding: 8px 10px 8px 12px;
-  border-radius: var(--r-sm);
+  padding: 10px 8px 10px 14px;
+  border-radius: var(--r-md);
   background: var(--panel-2);
   color: var(--text-2);
   font-size: var(--fs-12);
@@ -17,31 +19,15 @@
   min-width: 0;
 }
 
-/* 看得见 32 高，点按区经 ::before 撑到 44 */
-.btn {
-  position: relative;
-  flex: none;
-  min-height: 32px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
+/* 高 30、点按区 44 都由 kit 胶囊给；写成 button.btn 压过胶囊那份底色和上下外边距（两份 CSS 模块谁先加载不固定）。
+   上下 -4：胶囊伸进灰条的上下留白里，有按钮、没按钮的灰条高度相近（42 和 38） */
+button.btn {
+  margin: -4px 0;
   background: var(--panel);
-  color: var(--text);
-  font-size: var(--fs-13);
-}
-
-.btn::before {
-  position: absolute;
-  inset: -6px 0;
-  content: '';
-}
-
-.btn:disabled {
-  opacity: 0.5;
 }
 
 .err {
-  margin: 6px 0 0;
+  margin: 6px 0 0 14px;
   color: var(--text-2);
   font-size: var(--fs-12);
 }
