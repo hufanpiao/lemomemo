@@ -121,6 +121,16 @@ describe('周视图（手机排布）', () => {
     expect(within(l6).getByRole('button').getAttribute('aria-label')).toContain('共 1 件');
   });
 
+  it('今天截止、正好到截止那一分钟算逾期，和待办页 isLate（<= now）同一个边界（11-18 评审日历组第 1 条）', () => {
+    data.todos = [todo('t1', { due: '2026-11-05', due_time: '09:00' }), todo('t2', { due: '2026-11-05', due_time: '09:01' })];
+    open('#/cal/week/2026-11-02');
+    expect(within(lane('2026-11-05') as HTMLElement).getByRole('button').getAttribute('aria-label')).toContain('有逾期的待办');
+    cleanup();
+    data.todos = [todo('t2', { due: '2026-11-05', due_time: '09:01' })];
+    open('#/cal/week/2026-11-02');
+    expect(within(lane('2026-11-05') as HTMLElement).getByRole('button').getAttribute('aria-label')).not.toContain('有逾期的待办');
+  });
+
   it('点一条泳道：选中那天（aria-pressed），下面清单列出当天全部；点清单一行打开编辑页（设计审查 M7）', async () => {
     data.events = [ev('1', { title: '客户会', date: '2026-11-03', time: '12:00' })];
     open('#/cal/week/2026-11-02');

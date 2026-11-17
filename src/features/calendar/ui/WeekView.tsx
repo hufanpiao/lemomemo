@@ -187,7 +187,7 @@ function hasOverdue(date: DateStr, todoIds: readonly string[], today: DateStr, n
   if (date > today) return false;
   return todoIds.some((id) => {
     const due = dueMins.get(id);
-    return due !== undefined && due < nowMin;
+    return due !== undefined && due <= nowMin;
   });
 }
 
