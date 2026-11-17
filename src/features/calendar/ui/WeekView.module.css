@@ -1,0 +1,192 @@
+/* 周视图·手机（R-445 周视图 A“时间轴泳道”，定稿图 定稿_周视图A_浅.png；11-17 日历整块评审从 CalendarPage.module.css 拆出）。
+   套月格那一套（周末、节假日、今天、选中、日期数字和“班”标、项目色、续条）：在 cal-common.module.css，WeekView 先引那一份 */
+
+/* 泳道的几个尺寸（定稿实测：轨道从卡片左边 56pt 起；右边原定稿 9pt，11-17 负责人“最上面的22快顶到边缘了”改 18pt，
+   刻度尺最后一个数字居中压在轨道末端，离卡片边留约 12pt）：刻度行和泳道按钮都按它们排，改一处两边一起动。
+   色块左右内边距 --wev-pl / --wev-pr 和“2/3”前的空隙 --wev-of-gap 不在这里写：WeekView.tsx 量字宽要用同一个数，由它写在这一块的内联样式上 */
+.pweek {
+  --lane-l: 10px; /* 泳道按钮左内边距 */
+  --lane-col: 46px; /* 左边“周一 / 5 / 廿五”那一列 */
+  --lane-r: 18px; /* 右内边距 */
+  --lane-py: 4px; /* 上下内边距 */
+}
+
+.wrul {
+  position: relative;
+  height: 18px;
+
+  /* 和泳道按钮的轨道对齐 */
+  margin: 6px var(--lane-r) 0 calc(var(--lane-l) + var(--lane-col));
+
+  /* 时间刻度是小字标签：等宽数字、第三层文字色（R-436 第二批） */
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-10);
+}
+
+.wrul > span {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+}
+
+.lanes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 泳道之间半像素细线（R-436“行间极细分隔线”）；选中不再画整条的框（R-445），只把日期数字换成深色小方块 */
+.lane {
+  border-top: 0.5px solid var(--line);
+}
+
+.laneBtn {
+  display: grid;
+  grid-template-columns: var(--lane-col) minmax(0, 1fr);
+  align-items: stretch;
+  width: 100%;
+  min-height: var(--cal-lane-h);
+  padding: var(--lane-py) var(--lane-r) var(--lane-py) var(--lane-l);
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 左边“周一 / 5 / 廿五”：靠上排（定稿实测“周一”中线离泳道上沿约 14pt）；日期数字和“班”标是 DayNum（cal-common .numLane） */
+.laneWd {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-top: 4px;
+  line-height: 1.2;
+}
+
+.laneWd small {
+  /* “周一”和农历是日期上下的小字标签：第三层文字色（R-436 第二批）；周末灰字（--day-dim-fg，cal-common .wkend 设） */
+  color: var(--day-dim-fg, var(--text-3));
+  font-size: var(--fs-10);
+}
+
+.laneSub {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 轨道里上下怎么排，全从 --cal-bar-h（全天条高 16）和排间缝 --row-gap 推出来：
+   • 全天条在顶上，离上沿一道缝（4～20）；单排时刻块高 --blk-h = 条高 + 一道缝（20）；
+   • 上下两排时各高 --blk2-h（两块加中间半道缝正好等于两个单排块：19），上排离上沿 --two-top：没有全天条时一道缝（4），有时让出全天条再加一道缝（24）；
+   • 单排时刻块离上沿 --trk-top：定稿实测值 16 / 27（有全天条），和条高、缝没有固定关系，照实测写；
+   待办空心圆竖直对着单排时刻块的中线 */
+.trk {
+  --row-gap: 4px;
+  --blk-h: calc(var(--cal-bar-h) + var(--row-gap));
+  --blk2-gap: calc(var(--row-gap) / 2);
+  --blk2-h: calc(var(--blk-h) - var(--blk2-gap) / 2);
+  --trk-top: 16px;
+  --two-top: var(--row-gap);
+
+  position: relative;
+  height: calc(var(--cal-lane-h) - 2 * var(--lane-py));
+}
+
+.trkAll {
+  --trk-top: 27px;
+  --two-top: calc(2 * var(--row-gap) + var(--cal-bar-h));
+}
+
+/* 全天日程：轨道顶上一整条（R-445 周视图 A；跨天的每天都画，右端写“2/3”，被切开的一端见 cal-common .contStart / .contEnd） */
+.allDay {
+  position: absolute;
+  top: var(--row-gap);
+  right: 0;
+  left: 0;
+  height: var(--cal-bar-h);
+  line-height: var(--cal-bar-h);
+}
+
+.wev {
+  position: absolute;
+  top: var(--trk-top);
+  height: var(--blk-h);
+  line-height: var(--blk-h);
+}
+
+/* 圆角写整圈 3px，没读 cal-common 的 --cont-l / --cont-r：续条被切开那一端照旧是圆角（拆文件前同优先级的 .wev 排在 .contStart 后面、压掉了它的直角，
+   11-17 整块评审逐像素不变，这处照原样留着，交主持人定要不要改成直角） */
+.allDay,
+.wev {
+  display: flex;
+  overflow: hidden;
+  padding: 0 var(--wev-pr) 0 var(--wev-pl);
+  border-radius: 3px;
+  font-size: var(--fs-11);
+  white-space: nowrap;
+}
+
+/* 上下两排 */
+.r0,
+.r1 {
+  height: var(--blk2-h);
+  line-height: var(--blk2-h);
+}
+
+.r0 {
+  top: var(--two-top);
+}
+
+.r1 {
+  top: calc(var(--two-top) + var(--blk2-h) + var(--blk2-gap));
+}
+
+.wevTx {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 跨天的“1/3”：靠右、等宽小字（放不下时先让标题省略）；字色同条上的字，不降透明度（对比度照 --on-p） */
+.wevOf {
+  flex: none;
+  margin-left: auto;
+  padding-left: var(--wev-of-gap);
+  font-family: var(--f-mono);
+  font-size: var(--fs-10);
+}
+
+/* “+2”：等宽数字，同月格 .more（R-436） */
+.wmore {
+  position: absolute;
+  bottom: -2px;
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: var(--fs-9-5);
+}
+
+/* 待办空心圆：边色取项目竖线色 --ps（cal-common .c0～.c6 设）；项目色类的底色和竖线由这里盖掉（同优先级，这份排在后面） */
+.wtd {
+  position: absolute;
+  top: calc(var(--trk-top) + var(--blk-h) / 2);
+  width: 9px;
+  height: 9px;
+  margin: -5px 0 0 -5px;
+  border: 1.5px solid var(--ps, var(--text-2));
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  box-shadow: none;
+}
+
+/* 现在线 */
+.wnow {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--nowline);
+}

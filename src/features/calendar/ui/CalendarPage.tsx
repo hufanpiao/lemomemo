@@ -52,6 +52,7 @@ import { useHuangli } from '../hooks/useHuangli.ts';
 import { useMonthFold } from '../hooks/useMonthFold.ts';
 import { useNewDateSource } from '../hooks/new-date.ts';
 import { weekTitle } from './week-axis.ts';
+import common from './cal-common.module.css';
 import styles from './CalendarPage.module.css';
 import { CalDrawer, type CalSel } from './CalDrawer.tsx';
 import { CalNav, FoldHandle } from './CalNav.tsx';
@@ -201,7 +202,7 @@ export default function CalendarPage() {
 
   return (
     <main ref={pull.ref} className={styles.page} data-feature="calendar" data-testid="calendar-page" data-mode={model.view.mode} data-folded={fold.byWeek || undefined}>
-      <h1 className={styles.srOnly} tabIndex={-1}>
+      <h1 className={common.srOnly} tabIndex={-1}>
         {t('cal.h1', {})}
       </h1>
       {picking && !model.wide ? <PickScrim /> : null}

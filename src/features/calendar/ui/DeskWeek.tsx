@@ -6,22 +6,24 @@
 // • 顶部“全天”行：全天日程和当天截止的待办（○ 标题），点了打开编辑页（电脑版详情抽屉，R-130：页面的 onOpen 决定；按钮带 data-open、开着的那条 aria-current）
 // • 时间格：范围同手机（按当周事项自动伸缩，ui/week-axis.ts）；重叠的并排分列（buildWeek layout 'desk' 的 column / columns）；
 //   今天有现在线，画在日程块下面（DOM 里排在前面），不压字（设计复审 N2）
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { hm24, weekdayOf } from '../../../../shared/core/date.ts';
 import { weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
 import { buildWeek, type DeskDay } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
 import { useRoT } from '../../../kit/hooks/useRoT.ts';
 import { useT } from '../../../kit/hooks/useT.ts';
-import styles from './CalendarPage.module.css';
+import common from './cal-common.module.css';
+import styles from './DeskWeek.module.css';
 import { dayOfSpan } from '../../../../shared/logic/calendar/event-span.ts';
 import { colorClass, dayKind, dayKindClass, dayLines, labelInName, namedHolidays, ofText, weekdayKey, weekendClass } from './cal-ui.ts';
 import { DayNum } from './DayNum.tsx';
 import type { HourRange } from './week-axis.ts';
 import type { WeekProps } from './WeekView.tsx';
 
-/** 电脑时间格每小时多高（视觉稿 .dwkv 40 px；CalendarPage.module.css 的 .dCol 网格线同值） */
+/** 电脑时间格每小时多高（视觉稿 .dwkv 40 px）：色块位置用它算，DeskWeek.module.css 的 .dCol 网格线读这里写进内联样式的 --hour-px，只写这一处 */
 export const DESK_HOUR_PX = 40;
+const DESK_VARS = { '--hour-px': `${DESK_HOUR_PX}px` } as CSSProperties;
 
 export function DeskWeek(p: WeekProps & { range: HourRange }) {
   const { t, start, items, tz, today, nowMin, range } = p;
@@ -48,7 +50,7 @@ export function DeskWeek(p: WeekProps & { range: HourRange }) {
   const colH = (range.h1 - range.h0) * DESK_HOUR_PX;
   const y = (min: number): number => ((min - range.h0 * 60) / 60) * DESK_HOUR_PX;
   return (
-    <section aria-label={p.label} data-testid="cal-week" data-layout="desk" data-range={`${range.h0}-${range.h1}`} className={`${styles.card} ${styles.dwk}`}>
+    <section aria-label={p.label} data-testid="cal-week" data-layout="desk" data-range={`${range.h0}-${range.h1}`} className={`${common.card} ${styles.dwk}`} style={DESK_VARS}>
       <div className={styles.dHead} />
       {dates.map((date, i) => {
         const sel = p.selected === date;
@@ -57,11 +59,11 @@ export function DeskWeek(p: WeekProps & { range: HourRange }) {
         // 连休只在第一天写节日名，后几天照常写农历或节气；表头宽，节日名写全称（wide）
         const { badge, line: sub } = dayLines(dayKind(hol), namedHolidays(date, hol, p.holidays), p.lunarOf?.(date) ?? '', t, true);
         // 日期数字和月格、手机泳道同一套（R-445）：周末灰字、今天淡黄小框、选中深色小方块（.wkend .today .sel .dayNum）
-        const cls = [styles.dHead, styles.dHeadBtn, kinds[i] ?? '', weekendClass(weekdayOf(date)), date === today ? styles.today : '', sel ? styles.sel : ''];
+        const cls = [styles.dHead, styles.dHeadBtn, kinds[i] ?? '', weekendClass(weekdayOf(date)), date === today ? common.today : '', sel ? common.sel : ''];
         return (
           <button key={date} type="button" className={cls.filter(Boolean).join(' ')} aria-pressed={sel} onClick={() => p.onSelect(date)} data-date={date}>
             <span>{t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) })}</span>{' '}
-            <DayNum date={date} badge={badge} className={styles.dNum ?? ''} />{' '}
+            <DayNum date={date} badge={badge} look="desk" />{' '}
             <small>{sub}</small>
           </button>
         );

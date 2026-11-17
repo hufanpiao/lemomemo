@@ -6,7 +6,7 @@ import type { Cont } from '../../../../shared/logic/calendar/event-span.ts';
 import type { HolidayKind, HolidayMark } from '../../../../shared/logic/calendar/holidays.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import type { ProjectColor } from '../../../../shared/logic/project-color.ts';
-import styles from './CalendarPage.module.css';
+import styles from './cal-common.module.css';
 
 /** 项目色 0–6 → 样式类（check_backend F7：不用方括号查表，用 switch） */
 export function colorClass(i: ProjectColor): string {
@@ -82,7 +82,7 @@ export function holA11y(h: HolidayMark, t: CalViewT): string {
 }
 
 /**
- * 这一天按哪种画（月格、手机泳道、电脑周表头和列共用一套斜纹类，CalendarPage.module.css .holiday / .workday）：
+ * 这一天按哪种画（月格、手机泳道、电脑周表头和列共用一套斜纹类，cal-common.module.css .holiday / .workday）：
  * 有放假的按放假；只有补班的按补班；都没有 null
  */
 export function dayKind(hols: readonly HolidayMark[]): HolidayKind | null {

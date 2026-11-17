@@ -34,7 +34,8 @@ import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import { DayTodos } from '../../todos/index.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import type { Huangli } from '../hooks/useHuangli.ts';
-import styles from './CalendarPage.module.css';
+import './cal-common.module.css';
+import styles from './DayList.module.css';
 import { colorClass, weekdayKey } from './cal-ui.ts';
 import { HuangliCard, HuangliHold } from './HuangliCard.tsx';
 

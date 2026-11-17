@@ -21,7 +21,8 @@ import type { WeekStart } from '../../../../shared/logic/calendar/cal-nav.ts';
 import type { HolidayMark } from '../../../../shared/logic/calendar/holidays.ts';
 import type { MonthCell, MonthMark } from '../../../../shared/logic/calendar/month-grid.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
-import styles from './CalendarPage.module.css';
+import common from './cal-common.module.css';
+import styles from './MonthGrid.module.css';
 import { colorClass, contClass, dayA11y, dayKind, dayKindClass, dayLines, labelInName, namedHolidays, weekdayKey, weekendClass, type DayLines } from './cal-ui.ts';
 import { DayNum } from './DayNum.tsx';
 
@@ -113,7 +114,7 @@ function Cell({
   const kind = dayKind(c.holidays);
   const lines = dayLines(kind, namedHolidays(c.date, c.holidays, holidays), c.solarTerm ?? c.lunar ?? '', t);
   const { badge, line, hol2 } = lines;
-  const cls = [styles.cell, weekendClass(c.weekday), c.inMonth ? '' : styles.out, c.isToday ? styles.today : '', dayKindClass(kind), selected ? styles.sel : '', off ? styles.foldOff : '']
+  const cls = [styles.cell, weekendClass(c.weekday), c.inMonth ? '' : common.out, c.isToday ? common.today : '', dayKindClass(kind), selected ? common.sel : '', off ? styles.foldOff : '']
     .filter(Boolean)
     .join(' ');
   // 有跨天色块的段头：这一格压在右边几格上面（色块伸进右边的格子里）；越靠左的越在上（色块只往右伸）
@@ -130,7 +131,7 @@ function Cell({
       style={style}
     >
       {/* ① 日期数字 + 补班标（标靠右；格子窄、放不下时折到下一行靠右，不压“今天”小框） */}
-      <DayNum date={c.date} badge={badge} className={styles.cellTop ?? ''} as="span" hidden />{' '}
+      <DayNum date={c.date} badge={badge} look="month" as="span" hidden />{' '}
       {/* 几段字之间的 {' '}：格子是 grid、几段里是 flex，空格不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}
       {/* ② 那一行一直占着高度：农历按需加载，加载前后格子不跳动 */}
       <span className={styles.lines} aria-hidden="true">
@@ -194,7 +195,7 @@ export function MonthGrid({
 }) {
   const heads = Array.from({ length: 7 }, (_, i) => (weekStart + i) % 7);
   return (
-    <section aria-label={label} data-testid="cal-month" className={`${styles.card} ${styles.monthCard}`}>
+    <section aria-label={label} data-testid="cal-month" className={`${common.card} ${styles.monthCard}`}>
       <div className={styles.weekdays} aria-hidden="true">
         {heads.map((wd) => (
           <span key={wd} className={styles.wd}>

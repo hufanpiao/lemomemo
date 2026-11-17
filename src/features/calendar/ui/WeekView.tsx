@@ -21,7 +21,7 @@
 //   再接“10月19日，今天，节日，共 3 项，有逾期的待办”（星期前面已经念过，不再重复；打头几段和月格同一份 cal-ui.ts dayA11y）。
 //   共几项、有没有逾期、时间轴范围都按这一周每天的事项（collectEntries，和月历、日清单同一份）算，不按宽度，量到宽度之前也对；
 //   手机上不再为了这几个数整周排一遍电脑布局（11-17 日历整块评审第 4 条），电脑布局只在 DeskWeek 里排
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { addDays, weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
 import { assertTz, collectEntries, type CalItems, type DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
@@ -30,7 +30,8 @@ import type { HolidayMark } from '../../../../shared/logic/calendar/holidays.ts'
 import { buildWeek, segmentOn, type DayOf, type PhoneDay } from '../../../../shared/logic/calendar/month-grid.ts';
 import { axisFrac, axisTicks, phoneScale, weekHourRange, type HourRange } from './week-axis.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
-import styles from './CalendarPage.module.css';
+import common from './cal-common.module.css';
+import styles from './WeekView.module.css';
 import { colorClass, contClass, dayA11y, dayKind, dayKindClass, dayLines, labelInName, namedHolidays, ofText, weekdayKey, weekendClass } from './cal-ui.ts';
 import { DayNum } from './DayNum.tsx';
 import { DeskWeek } from './DeskWeek.tsx';
@@ -42,10 +43,14 @@ const TODO_STEP_PX = 10;
 /** 没有截止时刻的待办画在轨道末端往里多少（px）：空心圆 9 px 宽、居中，往里 8 不出轨道 */
 const TODO_END_INSET_PX = 8;
 
-/** 色块左右内边距（.wev padding 6 + 4）再留 2 px 余量：量出来的字宽加上它就是写得下完整标题的色块宽 */
-const BLOCK_PAD_PX = 12;
-/** 跨天“2/3”前面的空隙（.wevOf 的 padding-left） */
+/** 色块左右内边距（.allDay / .wev 的 padding-left / padding-right）和跨天“2/3”前面的空隙（.wevOf 的 padding-left）：
+ *  量字宽和画色块用同一个数，只写在这里，由 PhoneWeek 写进 --wev-pl / --wev-pr / --wev-of-gap 给 WeekView.module.css 读（11-17 日历整块评审） */
+const WEV_PL_PX = 6;
+const WEV_PR_PX = 4;
 const OF_GAP_PX = 4;
+/** 左右内边距再留 2 px 余量：量出来的字宽加上它就是写得下完整标题的色块宽 */
+const BLOCK_PAD_PX = WEV_PL_PX + WEV_PR_PX + 2;
+const WEV_VARS = { '--wev-pl': `${WEV_PL_PX}px`, '--wev-pr': `${WEV_PR_PX}px`, '--wev-of-gap': `${OF_GAP_PX}px` } as CSSProperties;
 
 /**
  * 量过的字宽（px，不含内边距）：键是“字体 | 语言 | 字”，换了字体（切语言 :lang(ko)、换字体设置、换皮肤）不会拿到旧字体量的结果；
@@ -247,14 +252,14 @@ function Lane({
   );
   // 同一处的待办依次往左错开：按位置分桶数
   const seen = new Map<number, number>();
-  const cls = [styles.lane, weekendClass(weekdayOf(date)), dayKindClass(kind), isToday ? styles.today : '', sel ? styles.sel : ''].filter(Boolean).join(' ');
+  const cls = [styles.lane, weekendClass(weekdayOf(date)), dayKindClass(kind), isToday ? common.today : '', sel ? common.sel : ''].filter(Boolean).join(' ');
   return (
     <li className={cls} data-date={date}>
       <button type="button" className={styles.laneBtn} aria-pressed={sel} aria-label={a11y} onClick={() => p.onSelect(date)}>
         <span className={styles.laneWd} aria-hidden="true">
-          {/* 几段字之间的 {' '}：laneWd、laneNum 是 flex，laneBtn 是 grid，轨道里全是绝对定位，空格都不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}
+          {/* 几段字之间的 {' '}：laneWd、DayNum 外层是 flex，laneBtn 是 grid，轨道里全是绝对定位，空格都不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}
           <small>{wd}</small>{' '}
-          <DayNum date={date} badge={badge} className={styles.laneNum ?? ''} />{' '}
+          <DayNum date={date} badge={badge} look="lane" />{' '}
           <small className={styles.laneSub}>{sub}</small>
         </span>{' '}
         <span className={first ? `${styles.trk} ${styles.trkAll}` : styles.trk} ref={trackRef ?? undefined} aria-hidden="true">
@@ -337,7 +342,7 @@ function PhoneWeek(p: WeekProps & { range: HourRange; byDay: ReadonlyMap<DateStr
   }, [start, items, tz, w, range, textPx]);
   const dates = weekDates(start);
   return (
-    <section aria-label={p.label} data-testid="cal-week" data-layout="phone" data-range={`${range.h0}-${range.h1}`} className={`${styles.card} ${styles.pweek}`}>
+    <section aria-label={p.label} data-testid="cal-week" data-layout="phone" data-range={`${range.h0}-${range.h1}`} className={`${common.card} ${styles.pweek}`} style={WEV_VARS}>
       <div className={styles.wrul} aria-hidden="true">
         {axisTicks(range).map((h) => (
           <span key={h} style={{ left: `${axisFrac(h * 60, range) * 100}%` }}>

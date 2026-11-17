@@ -81,7 +81,8 @@ function paintFold(grid: HTMLElement, day: HTMLElement | null, g: FoldGeo, a: nu
   }
   // 裁到锚点那一行下面再留一道格缝（聚焦框），别的行压扁后都在这一道缝里，看不见
   const clip = grid.parentElement;
-  if (clip) clip.style.clipPath = f.cut > 0 ? `inset(0 -8px calc(${f.cut}px - var(--cal-gap)))` : '';
+  // 左右放出多少读 .gridClip 的 --clip-x（MonthGrid.module.css，只写那一处）
+  if (clip) clip.style.clipPath = f.cut > 0 ? `inset(0 var(--clip-x) calc(${f.cut}px - var(--cal-gap)))` : '';
   if (day) day.style.transform = f.cut > 0 ? `translateY(${-f.cut}px)` : '';
 }
 
