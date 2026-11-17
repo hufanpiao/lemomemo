@@ -48,10 +48,10 @@
   user-select: none;
 }
 
-/* 设置 › 账号顶部的大头像：外框 80px（圆 72px，同样内缩 4px），名字首字、人形跟着放大 */
+/* 设置 › 账号顶部的大头像：外框 68px（圆 60px，同样内缩 4px；R-454 方案 C 头像放进第一组，圆 60），名字首字、人形跟着放大 */
 .lg {
-  width: 80px;
-  height: 80px;
+  width: 68px;
+  height: 68px;
   font-size: var(--fs-28);
 }
 

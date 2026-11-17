@@ -33,10 +33,13 @@ describe('R-275 设置 › 账号：当前登录邮箱', () => {
   it('有邮箱：账号二级页最上面显示邮箱本身，读屏前缀是“当前登录邮箱”', async () => {
     await renderWith(() => LONG);
     const line = screen.getByTestId('settings-account-email');
-    // R-384 起账号页最上面是头像块（大头像 + 更换 / 去掉），邮箱紧跟在它下面，前面再没有别的
-    expect(line.previousElementSibling?.getAttribute('data-testid')).toBe('settings-me-avatar');
-    expect(line.previousElementSibling?.previousElementSibling).toBeNull();
-    expect(line.parentElement?.getAttribute('data-section')).toBe('account');
+    // R-454（方案 C）起邮箱在账号页最上面那一组的第一行、头像旁边：头像块是账号页的第一个元素，邮箱是它第一行文字里第一句看得见的
+    const block = screen.getByTestId('settings-me-avatar');
+    expect(block.parentElement?.getAttribute('data-section')).toBe('account');
+    expect(block.previousElementSibling).toBeNull();
+    expect(block.querySelector('li')?.contains(line)).toBe(true);
+    expect(line.previousElementSibling?.textContent).toBe(zh['settings.avatar.label']);
+    expect(line.nextElementSibling?.getAttribute('data-testid')).toBe('settings-me-avatar-msg');
     expect(text(line)).toBe(`${zh['settings.account.email']}${LONG}`);
     expect(line.tagName).toBe('P');
     // 屏幕上只显示邮箱：标签放在只给读屏的 span 里
@@ -196,7 +199,7 @@ describe('设置页组间距', () => {
     expect(compact).toMatch(/min-height: 38px;/);
     expect(compact).toMatch(/position: relative;/);
     expect(form).toMatch(/\n\.compact\.primary,\n\.compact\.dangerFill \{[^}]*font-size: var\(--fs-15\);/);
-    expect(form).toMatch(/\n\.btn,\n\.primary,\n\.danger,\n\.dangerFill,\n\.ghost \{[^}]*font-size: var\(--fs-14\);/);
+    expect(form).toMatch(/\n\.btn,\n\.primary,\n\.danger,\n\.dangerFill,\n\.ghost,\n\.textDanger \{[^}]*font-size: var\(--fs-14\);/);
     const after = formBlock('.compact::after');
     expect(after).toMatch(/content: '';/);
     expect(after).toMatch(/position: absolute;/);
@@ -208,10 +211,11 @@ describe('设置页组间距', () => {
     expect(css).not.toContain('.btn::after');
   });
 
-  it('CSS：邮箱那一行是正文色、正文（15）的次一级 14，和灰色 13 的组标题分开；长邮箱任意处换行；读屏标签视觉上隐藏', async () => {
+  it('CSS：邮箱那一行是正文色 17 粗（R-454 方案 C：头像旁边的主角），和灰色 13 的组标题分开；长邮箱任意处换行；读屏标签视觉上隐藏', async () => {
     const e = block('.email');
     expect(e).toMatch(/color: var\(--text\);/);
-    expect(e).toMatch(/font-size: var\(--fs-14\);/);
+    expect(e).toMatch(/font-size: var\(--fs-17\);/);
+    expect(e).toMatch(/font-weight: 600;/);
     expect(e).toMatch(/overflow-wrap: anywhere;/);
     // R-436：组标题换成 kit 分组名（第三层灰、11 号等宽加字距），外观只在 Form.module.css 一处；设置页不再自写颜色字号
     const gl = formBlock('.groupLabel');

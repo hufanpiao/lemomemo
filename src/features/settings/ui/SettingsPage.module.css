@@ -89,11 +89,12 @@ h3.gt {
   vertical-align: middle;
 }
 
-/* 设置 › 账号标题下的当前登录邮箱（R-275）：正文色、正文（15）的次一级 14，和灰色小号的组标题分开；长邮箱在任意位置换行，不撑破卡片宽度 */
+/* 设置 › 账号头像旁边的当前登录邮箱（R-275；R-454 方案 C 挪进头像那一组）：正文色 17 粗，是这一组的主角；长邮箱在任意位置换行，不撑破卡片宽度 */
 .email {
-  margin: 0 4px;
+  margin: 0;
   color: var(--text);
-  font-size: var(--fs-14);
+  font-size: var(--fs-17);
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
@@ -138,9 +139,15 @@ h3.gt {
   font-variant-numeric: tabular-nums;
 }
 
-/* 账号组里设备列表下面的另一张卡片（注销入口） */
+/* 账号页设备组下面的两句说明（“另有 N 个登录…”、“退出其他所有设备”那一组的脚注；R-454 方案 C）：左右和卡片里的字、组标题对齐 14。
+   kit 的 .note 别处（日历、提醒、数据、关于、电脑等十来处）都用 4，不动它，只在这一页两句上加。写成 p.foot（权重 0,1,1）压过 kit 卡下说明那份 margin（两份 CSS 模块谁先加载不固定） */
+p.foot {
+  margin: 6px 14px 0;
+}
+
+/* 账号页单独成组的“退出其他所有设备”“注销账号”（R-454 方案 C）：和上面隔 22 */
 .gap {
-  margin-top: 12px;
+  margin-top: 22px;
 }
 
 .line {
@@ -212,39 +219,22 @@ input.input {
   color: var(--danger-text);
 }
 
-/* R-384 设置 › 账号顶部的头像：左边大头像（kit MeAvatar lg，80px 外框），右边两个按钮和一行说明；窄屏按钮换行不挤 */
+/* R-384 设置 › 账号顶部的头像；R-454 方案 C 起是头像那一组的第一行：左边大头像（kit MeAvatar lg，68 外框），右边邮箱和一行说明，上下各 14 */
 .meAv {
   display: flex;
+  flex: 1;
   align-items: center;
-  gap: 12px;
-  margin: 0 4px 16px;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 0;
 }
 
 .meAvSide {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
 }
 
-.meAvBtns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.meAvHint,
-.meAvErr {
-  margin: 0;
-  font-size: var(--fs-13);
-  overflow-wrap: anywhere;
-}
-
-.meAvHint {
-  color: var(--text-2);
-}
-
-.meAvErr {
-  color: var(--danger-text);
-}
+/* 头像旁边那句说明、失败提示用 kit 的行内灰字、报错（Settings.tsx 的 settingsMetaClass、settingsErrorClass），这里不另写 */

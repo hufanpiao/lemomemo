@@ -1,5 +1,5 @@
 // kit 设置组件的第二个文件（Settings.tsx 超 300 行，B2-UI-b W3、W4 拆开；各组件说明见 Settings.tsx 文件头，使用方一律从 Settings.tsx 引）：
-// SettingsChoiceCard、SettingsTimesRow、SettingsActionRow（W1）；SettingsList、SettingsDetailRow（W3、W4）。样式同用 Settings.module.css
+// SettingsChoiceCard、SettingsTimesRow、SettingsActionRow（W1）；SettingsList、SettingsDetailRow（W3、W4）；SettingsIcon、SettingsDetailRow 的 lead（R-454）。样式同用 Settings.module.css
 import { type ReactNode } from 'react';
 import form from '../Form.module.css';
 import { SettingsCard } from './Settings.tsx';
@@ -152,26 +152,49 @@ export interface SettingsDetailRowProps {
   testId?: string;
   /** 本机那一行（写 data-current="1"，测试按它找） */
   current?: boolean;
+  /** 行名前面的小方块图标（SettingsIcon，R-454）；给了时行名和灰字上下摞在图标右边，图标上下居中 */
+  lead?: ReactNode;
 }
 
 /** 多段的一行（见文件头）。行名占满剩下的宽度，右边的按钮、值靠右 */
-export function SettingsDetailRow({ label, labelId, action, value, valueTestId, metas, testId, current }: SettingsDetailRowProps) {
+export function SettingsDetailRow({ label, labelId, action, value, valueTestId, metas, testId, current, lead }: SettingsDetailRowProps) {
+  const name = (
+    <span id={labelId} className={styles.tx}>
+      {label}
+    </span>
+  );
+  const notes = metas?.map((m) => (
+    <p key={m.testId ?? String(m.text)} className={m.danger === true ? `${styles.meta} ${styles.danger}` : styles.meta} data-testid={m.testId}>
+      {m.text}
+    </p>
+  ));
   return (
     <li className={styles.row} data-testid={testId} data-current={current === true ? '1' : undefined}>
-      <span id={labelId} className={styles.tx}>
-        {label}
-      </span>
+      {lead}
+      {lead === undefined ? (
+        name
+      ) : (
+        <span className={styles.stack}>
+          {name}
+          {notes}
+        </span>
+      )}
       {value === undefined ? null : (
         <span className={styles.end} data-testid={valueTestId}>
           {value}
         </span>
       )}
       {action}
-      {metas?.map((m) => (
-        <p key={m.testId ?? String(m.text)} className={m.danger === true ? `${styles.meta} ${styles.danger}` : styles.meta} data-testid={m.testId}>
-          {m.text}
-        </p>
-      ))}
+      {lead === undefined ? notes : null}
     </li>
+  );
+}
+
+/** 行名前面的小方块图标（R-454）：只是装饰（aria-hidden）；accent 时柠檬黄底（本机、更换头像），否则灰底 */
+export function SettingsIcon({ accent, children }: { accent?: boolean; children: ReactNode }) {
+  return (
+    <span className={accent === true ? `${styles.ico} ${styles.icoOn}` : styles.ico} aria-hidden="true">
+      {children}
+    </span>
   );
 }

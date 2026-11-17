@@ -18,6 +18,10 @@
 //   SettingsList：只有一组行、没有卡名（标题由使用方自己写在外面，例如“已登录设备”要能接焦点）；
 //   SettingsDetailRow：多段的一行——行名（可带标签）+ 右边按钮或值（值可换行、不省略）+ 下面一行或几行灰字（已登录设备、最近的导出、快捷键）；
 //   SettingsEntryRow 的 danger（危险色整行，“注销账号”）、describedBy、busy（“导出全部数据”）
+// • R-454 加的（设置 › 账号换成 iOS 分组表，负责人 11-17 选方案 C）：
+//   SettingsIcon：行名前面的小方块图标（accent 时柠檬黄底），放进 SettingsEntryRow / SettingsDetailRow 的 lead；
+//   组里有图标时分隔线从行名起画、不从图标下面穿过（样式见 Settings.module.css 的 .ico 一节）；
+//   SettingsEntryRow 的 center（字居中、不带 ›，“退出其他所有设备”“注销账号”各自一组，都用 danger）、chev={false}（不带 ›，“去掉头像”）
 // 文案一律由使用方传进来，这里不认 i18n 键
 import { useId, type ReactNode } from 'react';
 import { Pressable } from '../../../motion/components.ts';
@@ -28,6 +32,9 @@ import styles from './Settings.module.css';
 
 /** 卡下那种灰字说明的类名（设置页卡外的说明也用它，样式只在 Settings.module.css 的 .note 一处） */
 export const settingsNoteClass = styles.note;
+/** 行里第二行灰字、行里报错的类名（RowNotes 用的同一份；R-454 账号页头像旁边那句说明、失败提示也用它，不在页面里另写） */
+export const settingsMetaClass = styles.meta;
+export const settingsErrorClass = styles.error;
 /** 同一句说明、下边再隔 16 把下一张卡隔开（SettingsCard 的 note 就是这个；提醒页卡下说明也用它） */
 export const settingsCardNoteClass = `${styles.note} ${styles.cardNote}`;
 
@@ -72,6 +79,7 @@ export {
   SettingsActionRow,
   SettingsChoiceCard,
   SettingsDetailRow,
+  SettingsIcon,
   SettingsList,
   SettingsTimesRow,
   RowNotes,
@@ -127,17 +135,21 @@ export interface SettingsEntryRowProps {
    */
   danger?: boolean;
   /** 说明写在行外面时，说明元素的 id（aria-describedby；有 meta 时用 meta） */
-  describedBy?: string;
+  describedBy?: string | undefined;
   /** 正在处理（aria-busy） */
   busy?: boolean;
+  /** 字居中、不带 ›、不显示值（R-454：单独一组的红字操作行） */
+  center?: boolean;
+  /** false 时不带 ›（R-454“去掉头像”：点了直接做，不进二级页）；默认带 */
+  chev?: boolean;
 }
 
-export function SettingsEntryRow({ label, lead, stacked, value, meta, onOpen, testId, valueTestId, disabled, rowId, danger, describedBy, busy }: SettingsEntryRowProps) {
+export function SettingsEntryRow({ label, lead, stacked, value, meta, onOpen, testId, valueTestId, disabled, rowId, danger, describedBy, busy, center, chev }: SettingsEntryRowProps) {
   const metaId = useId();
   return (
     <li className={styles.row} data-row-id={rowId}>
       <Pressable
-        className={danger === true ? `${styles.rowBtn} ${styles.danger}` : styles.rowBtn}
+        className={[styles.rowBtn, danger === true && styles.danger, center === true && styles.center].filter(Boolean).join(' ')}
         onClick={onOpen}
         data-testid={testId}
         disabled={disabled}
@@ -147,7 +159,9 @@ export function SettingsEntryRow({ label, lead, stacked, value, meta, onOpen, te
         data-no-proxy={danger === true ? '' : undefined}
       >
         {lead}
-        {stacked ? (
+        {center === true ? (
+          <span className={styles.tx}>{label}</span>
+        ) : stacked ? (
           <span className={styles.stack}>
             <span className={styles.tx}>{label}</span>
             <span className={`${styles.v} ${styles.vBelow}`} data-testid={valueTestId}>
@@ -162,9 +176,11 @@ export function SettingsEntryRow({ label, lead, stacked, value, meta, onOpen, te
             </span>
           </>
         )}
-        <span className={styles.chev} aria-hidden>
-          ›
-        </span>
+        {center === true || chev === false ? null : (
+          <span className={styles.chev} aria-hidden>
+            ›
+          </span>
+        )}
       </Pressable>
       <RowNotes metaId={metaId} meta={meta} />
     </li>

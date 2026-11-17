@@ -327,7 +327,7 @@ export function Check({
  * 编辑页的按钮（“清掉”“删除”“撤销”；G11：不用浏览器原生按钮，浅色灰框、深色凸边都不要）：圆角胶囊描边，和设置 › 提醒的按钮一套写法；
  * danger 是“删除”：危险色描边和字（同 RemindSettings 的 .danger）。聚焦 var(--focus)
  */
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'dangerFill' | 'ghost';
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'dangerFill' | 'ghost' | 'textDanger';
 
 const VARIANT: Record<ButtonVariant, string | undefined> = {
   primary: styles.primary,
@@ -335,10 +335,12 @@ const VARIANT: Record<ButtonVariant, string | undefined> = {
   danger: styles.danger,
   dangerFill: styles.dangerFill,
   ghost: styles.ghost,
+  textDanger: styles.textDanger,
 };
 
 /**
- * kit 通用按钮（B2-UI-a U3-1）：五种 variant，高度一律 --hit。原来的写法照用：不写 variant 是 secondary，
+ * kit 通用按钮（B2-UI-a U3-1）：六种 variant，高度一律 --hit。textDanger（R-454）：不描边、没底色的危险色文字按钮（设置 › 账号设备行右边的“退出这台设备”“移除”），
+ * 点击区至少 44 见方，只配合 regular 用。原来的写法照用：不写 variant 是 secondary，
  * 只写 danger（布尔）等于 variant="danger"。
  * strong：字重 600（代码审 M2）。primary、dangerFill 本来就是 600；secondary、danger、ghost 默认 400（编辑页“删除”“清掉”），
  * 设置 › 提醒的“重新连接”“移除它…”“取消”原来是 600，传 strong 保持原样（只有任务单写明的颜色可以变，字重不变）
@@ -349,15 +351,14 @@ const VARIANT: Record<ButtonVariant, string | undefined> = {
  * - compact：设置页按钮（R-276）：看得见 38、灰色实底、点击区扩到 44；primary、dangerFill 是确认弹窗那一对。
  * - row：compact 的外观、看得见 44（R-277：页底“退出登录”和设置行一样高）。
  * block：整行宽；compact、row 的灰底按钮整行宽时底色换 --panel、上面隔 16（原设置页 .wide）
- * outline（R-366，负责人 11-09 选 D5 方案 A）：只配合 size="compact" 的次要按钮用，改成透明底 + 1px --inp-line 描边（regular 次要按钮同一种写法），
- *   高度、圆角、点击区、间距都照 compact 不变（账号页“退出其他所有设备”，和下面的“注销账号”入口行分开）；别的 size 传了也不生效
+ * （R-366 的 outline 描边已删：唯一用它的账号页“退出其他所有设备”R-454 起换成单独一组的居中红字整行）
  */
 export type ButtonSize = 'regular' | 'compact' | 'row';
 
 export function FormButton({
-  danger = false, variant, strong = false, size = 'regular', block = false, outline = false, ...p
+  danger = false, variant, strong = false, size = 'regular', block = false, ...p
 }: Omit<ComponentProps<typeof Pressable>, 'className'> & {
-  danger?: boolean; variant?: ButtonVariant; strong?: boolean; size?: ButtonSize; block?: boolean; outline?: boolean;
+  danger?: boolean; variant?: ButtonVariant; strong?: boolean; size?: ButtonSize; block?: boolean;
 }) {
   const cls = [
     VARIANT[variant ?? (danger ? 'danger' : 'secondary')],
@@ -365,7 +366,6 @@ export function FormButton({
     size !== 'regular' && styles.compact,
     size === 'row' && styles.row,
     block && styles.block,
-    outline && size === 'compact' && styles.outline,
   ].filter(Boolean).join(' ');
   return <Pressable {...p} className={cls} />;
 }
