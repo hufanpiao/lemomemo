@@ -1084,6 +1084,17 @@
   cursor: pointer;
 }
 
+/* 日期数字加补班“班”标（DayNum 的外层）：和手机泳道 .laneNum 一样横排 */
+.dNum {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dNum .ban {
+  margin-left: 0;
+}
+
 /* 日期数字：月格同一个 .dayNum 小方块（今天、选中、周末的画法在文件末尾），这里只放大 */
 .dHeadBtn .dayNum {
   align-self: center;

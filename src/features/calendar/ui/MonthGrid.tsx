@@ -22,7 +22,8 @@ import type { HolidayMark } from '../../../../shared/logic/calendar/holidays.ts'
 import type { MonthCell, MonthMark } from '../../../../shared/logic/calendar/month-grid.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, contClass, dateA11y, dayKind, dayKindClass, dayLines, holA11y, labelInName, namedHolidays, weekdayKey, weekendClass, type DayLines } from './cal-ui.ts';
+import { colorClass, contClass, dayA11y, dayKind, dayKindClass, dayLines, labelInName, namedHolidays, weekdayKey, weekendClass, type DayLines } from './cal-ui.ts';
+import { DayNum } from './DayNum.tsx';
 
 /** 收起：row 锚点那一行（0–5），collapsed 已定为收起，folded 停在收起（只排锚点那一行；useMonthFold） */
 export interface MonthFold {
@@ -69,10 +70,8 @@ function labelOf(c: MonthCell, t: CalViewT, lines: DayLines, lunarSay?: (date: D
   const { badge, line, hol2 } = lines;
   // 看得见的字，和下面画的顺序一致
   const shown = [String(Number(c.date.slice(8))), badge, line, hol2, ...c.marks.filter(drawn).map((mk) => mk.short), c.more > 0 ? t('cal.more', { n: c.more }) : ''];
-  const parts = [dateA11y(c.date, t), t('cal.wdFull', { wd: t(weekdayKey(c.weekday), {}) })];
-  if (c.isToday) parts.push(t('cal.a11y.todayMark', {}));
-  // 连休后几天格子里不写节日名，读屏照旧念出这天属于哪个节假日
-  for (const h of c.holidays) parts.push(holA11y(h, t));
+  // 连休后几天格子里不写节日名，读屏照旧念出这天属于哪个节假日（dayA11y，和手机泳道同一份）
+  const parts = dayA11y(c.date, c.holidays, c.isToday, t, t('cal.wdFull', { wd: t(weekdayKey(c.weekday), {}) }));
   if (c.solarTerm) parts.push(c.solarTerm);
   if (c.lunar) parts.push(t('cal.a11y.lunar', { text: lunarSay?.(c.date) ?? c.lunar }));
   const total = c.a11y.reduce((n, p) => n + p.count, 0);
@@ -131,17 +130,7 @@ function Cell({
       style={style}
     >
       {/* ① 日期数字 + 补班标（标靠右；格子窄、放不下时折到下一行靠右，不压“今天”小框） */}
-      <span className={styles.cellTop} aria-hidden="true">
-        <span className={styles.dayNum}>{Number(c.date.slice(8))}</span>
-        {badge !== '' ? (
-          <>
-            {' '}
-            <span className={styles.ban} data-testid="cal-ban">
-              {badge}
-            </span>
-          </>
-        ) : null}
-      </span>{' '}
+      <DayNum date={c.date} badge={badge} className={styles.cellTop ?? ''} as="span" hidden />{' '}
       {/* 几段字之间的 {' '}：格子是 grid、几段里是 flex，空格不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}
       {/* ② 那一行一直占着高度：农历按需加载，加载前后格子不跳动 */}
       <span className={styles.lines} aria-hidden="true">

@@ -82,7 +82,6 @@ afterEach(() => {
   delete (document as { startViewTransition?: unknown }).startViewTransition;
 });
 
-
 /** 选中那天清单的行（ul 里的按钮；标题行下面的黄历卡也是按钮，R-431，不算） */
 const dayRows = (): HTMLElement[] => [...screen.getByTestId('cal-day-list').querySelectorAll<HTMLElement>('li > button')];
 describe('其他复审项', () => {
@@ -93,7 +92,7 @@ describe('其他复审项', () => {
     expect(h1.className).toContain(styles.srOnly);
   });
 
-  it('电脑周视图表头：补班写“班·名字”；放假、补班的表头和那一列画斜纹（和月格同一个类）；连休只在第一天写名字（代码复审 N4、R-432）', async () => {
+  it('电脑周视图表头：补班日数字旁“班”标、下面写名字（11-17 日历整块评审第 6 条起和月格、泳道同一份 dayLines）；放假、补班的表头和那一列画斜纹（和月格同一个类）；连休只在第一天写名字（代码复审 N4、R-432）', async () => {
     stubWide();
     fetchStatus.mockImplementation(async (p: string) =>
       p === 'holidays/cn/2026.json'
@@ -114,7 +113,8 @@ describe('其他复审项', () => {
     open('#/cal/week/2026-11-05');
     expect(screen.getByTestId('cal-week').getAttribute('data-layout')).toBe('desk');
     const head = (d: string) => document.querySelector<HTMLElement>(`[data-testid="cal-week"] button[data-date="${d}"]`);
-    await waitFor(() => expect(head('2026-11-07')?.textContent).toContain('班·测试假'));
+    await waitFor(() => expect(head('2026-11-07')?.querySelector('small')?.textContent).toBe('测试假'));
+    expect(['2026-11-07', '2026-11-05'].map((d) => head(d)?.querySelector('[data-testid="cal-ban"]')?.textContent ?? null)).toEqual(['班', null]);
     expect(head('2026-11-03')?.textContent).toContain('测试假');
     expect(head('2026-11-04')?.textContent).not.toContain('测试假');
     for (const d of ['2026-11-03', '2026-11-04']) expect(head(d)?.className).toContain(styles.holiday);

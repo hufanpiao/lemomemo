@@ -1,7 +1,7 @@
-// 月历、周视图界面共用的小工具（B2 FA-3）：项目色的样式类、星期几的词典键、事项的标题和简称、节假日的画法和写法
+// 月历、周视图界面共用的小工具（B2 FA-3）：项目色的样式类、星期几的词典键、节假日的画法和写法、一天看得见的字和读屏打头几段
+// （事项标题直接用 DayEntry.title / BlockBase.title，不再回 items 里按 id 找，11-17 日历整块评审第 3 条）
 import { addDays, type DateStr } from '../../../../shared/core/date.ts';
 import { CN_WORKDAY_TAILS } from './holiday-tail-data.ts';
-import type { CalItems } from '../../../../shared/logic/calendar/cal-items.ts';
 import type { Cont } from '../../../../shared/logic/calendar/event-span.ts';
 import type { HolidayKind, HolidayMark } from '../../../../shared/logic/calendar/holidays.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
@@ -48,18 +48,6 @@ export function weekdayKey(wd: number): WeekdayKey {
     default:
       return 'cal.wd.0';
   }
-}
-
-
-type ItemKind = 'allDay' | 'todo' | 'timed';
-
-function rowOf(items: CalItems, kind: ItemKind, id: string) {
-  return kind === 'todo' ? items.todos.find((x) => x.id === id) : items.events.find((x) => x.id === id);
-}
-
-/** 事项的完整标题（找不到时空串） */
-export function itemTitle(items: CalItems, kind: ItemKind, id: string): string {
-  return rowOf(items, kind, id)?.title ?? '';
 }
 
 /**
@@ -137,14 +125,23 @@ export interface DayLines {
 
 /**
  * 只写 named 里的（连休后几天不写节日名，见 namedHolidays）；补班日（当天只有补班）的“班”放进小圆标，
- * 那一行和第二个名字都只写去掉补班尾巴的节日名。fallback：没有要写的节日时那一行写什么（节气或农历）
+ * 那一行和第二个名字都只写去掉补班尾巴的节日名。fallback：没有要写的节日时那一行写什么（节气或农历）。
+ * 月格、手机泳道、电脑周表头三处共用（11-17 日历整块评审第 6 条）；wide 为 true（电脑周表头）时节日名写全称，不换窄处短写（narrowHolName）
  */
-export function dayLines(kind: HolidayKind | null, named: readonly HolidayMark[], fallback: string, t: CalViewT): DayLines {
-  const sub = { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) };
+export function dayLines(kind: HolidayKind | null, named: readonly HolidayMark[], fallback: string, t: CalViewT, wide = false): DayLines {
+  const sub = wide ? undefined : { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) };
   const [first, second] = named;
   const badge = kind === 'work' ? t('cal.workday', {}) : '';
   const text = (h: HolidayMark): string => (badge === '' ? holText(h, t('cal.workday', {}), sub) : stripWorkdayTail(h.name));
   return { badge, line: first ? text(first) : fallback, hol2: second ? text(second) : '', offName: first?.kind === 'off' };
+}
+
+/**
+ * 一天的读屏补充说明里打头的那几段（月格、手机泳道共用；11-17 日历整块评审第 6 条）：“10月19日”、星期（月格要念，泳道前面已念过、不传）、
+ * “今天”、这一天的全部节假日（连休后几天格子里不写名字，读屏照旧念，holA11y）。后面接什么由各自加（农历、件数、逾期……）
+ */
+export function dayA11y(date: DateStr, hols: readonly HolidayMark[], isToday: boolean, t: CalViewT, weekday?: string): string[] {
+  return [dateA11y(date, t), ...(weekday === undefined ? [] : [weekday]), ...(isToday ? [t('cal.a11y.todayMark', {})] : []), ...hols.map((h) => holA11y(h, t))];
 }
 
 /** 跨天日程这一天是第几天、共几天的写法“2/3”（周泳道条右端、电脑周表全天行共用；R-444、R-445） */

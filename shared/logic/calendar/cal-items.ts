@@ -79,10 +79,13 @@ export function compareEntries(a: DayEntry, b: DayEntry): number {
   );
 }
 
-/** 日程 → 月历条目（kind 由 placement 定）；跨天的日程每一天各一条，day 是哪一天（默认开始那天） */
-export function eventEntry(ev: CalEvent, p: EventPlacement, day: DateStr = p.date): DayEntry {
-  const cont = contOn(p, day);
-  return {
+/**
+ * 日程 → 月历条目（kind 由 placement 定）；跨天的日程 days 里每一天各一条，只差 span（哪一段）。
+ * 简称（displayShort 要切字形簇）、项目色每件事只算一次，不按天重算（11-17 日历整块评审第 4 条）
+ */
+function eventEntries(ev: CalEvent, p: EventPlacement, days: readonly DateStr[]): [DateStr, DayEntry][] {
+  if (days.length === 0) return [];
+  const base: DayEntry = {
     itemId: ev.id,
     kind: p.allDay ? 'allDay' : 'timed',
     project: normalizeProject(ev.project),
@@ -93,8 +96,11 @@ export function eventEntry(ev: CalEvent, p: EventPlacement, day: DateStr = p.dat
     endMs: p.allDay ? null : p.endMs,
     createdAt: ev.created_at,
     place: p,
-    ...(cont === undefined ? {} : { span: { cont, date: p.date, lastDate: p.lastDate } }),
   };
+  return days.map((day) => {
+    const cont = contOn(p, day);
+    return [day, cont === undefined ? base : { ...base, span: { cont, date: p.date, lastDate: p.lastDate } }];
+  });
 }
 
 /** 待办 → 月历条目 */
@@ -156,7 +162,7 @@ export function collectEntries(items: CalItems, from: DateStr, to: DateStr, tz: 
   const out = new Map<DateStr, DayEntry[]>();
   for (let d = from; d <= to; d = addDays(d, 1)) out.set(d, []);
   for (const [ev, p] of liveEventsNear(items.events, from, to, tz, EVENT_SPAN_MAX_DAYS)) {
-    for (const d of spanDaysIn(p, from, to)) out.get(d)?.push(eventEntry(ev, p, d));
+    for (const [d, e] of eventEntries(ev, p, spanDaysIn(p, from, to))) out.get(d)?.push(e);
   }
   for (const td of items.todos) {
     const d = todoDate(td);

@@ -2,7 +2,7 @@
 // emoji 的 ZWJ、变体选择符写成转义（LINT-bidi 不准原样出现）
 import { describe, expect, it } from 'vitest';
 import { parseSplit } from '../../shared/logic/parse/index.ts';
-import { cutGraphemes, displayShort, graphemeCount, itemShort, projectShort, shortPatchOnTitleChange } from '../../shared/logic/short.ts';
+import { cutGraphemes, displayShort, graphemeCount, itemShort, shortPatchOnTitleChange } from '../../shared/logic/short.ts';
 import { eventsWrite } from '../../shared/schema/rows.ts';
 
 const ZWJ = '\u200D';
@@ -40,12 +40,6 @@ describe('itemShort：前 4 个字形簇（TC-B2-10、R-446）', () => {
     expect(itemShort('été')).toBe('été');
     // 分开写的谚文字母（ᄒ ᅬ ᄋ ᅴ）NFC 规整成音节后取前 4 个（只有 3 个音节，全留）
     expect(itemShort('회의 준')).toBe('회의준');
-  });
-
-  it('projectShort 和 itemShort 同一个规则', () => {
-    expect(projectShort('NEOX 品牌')).toBe('NEOX');
-    expect(projectShort('  사이니지 광고')).toBe('사이니지');
-    expect(projectShort('')).toBe('');
   });
 });
 
