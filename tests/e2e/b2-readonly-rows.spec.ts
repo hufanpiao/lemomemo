@@ -107,8 +107,10 @@ test.describe('只读行（FA-2）', () => {
     await page.getByTestId('cal-day-row-e-ro').click();
     await expect(page.getByTestId('cal-ro-toast')).toContainText('这条要新版本才能修改');
     await expect(page).not.toHaveURL(/#\/event\//);
+    await expect(page.getByTestId('cal-drawer')).toHaveCount(0);
 
+    // 普通行：手机宽度进编辑页；电脑宽度（R-130，11-17 合入）在右侧详情抽屉里编辑——两种都算打开了
     await page.getByTestId('cal-day-row-e-ok').click();
-    await expect(page).toHaveURL(/#\/event\/e-ok$/);
+    await expect.poll(async () => /#\/event\/e-ok$/.test(page.url()) || (await page.getByTestId('cal-drawer').getByTestId('event-edit-title').count()) > 0, { timeout: 20_000 }).toBe(true);
   });
 });
