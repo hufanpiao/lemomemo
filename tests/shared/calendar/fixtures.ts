@@ -5,6 +5,7 @@ export function ev(p: Partial<CalEvent> & Pick<CalEvent, 'id' | 'date'>): CalEve
   return {
     title: `event ${p.id}`,
     short: null,
+    short_by: null,
     project: '',
     time: null,
     tz: null,
@@ -19,6 +20,7 @@ export function todo(p: Partial<CalTodo> & Pick<CalTodo, 'id'>): CalTodo {
   return {
     title: `todo ${p.id}`,
     short: null,
+    short_by: null,
     project: '',
     due: null,
     done: false,

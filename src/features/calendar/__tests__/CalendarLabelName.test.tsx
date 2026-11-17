@@ -116,13 +116,13 @@ describe('读屏名字以看得见的字开头（WCAG 2.5.3 Label in Name，axe 
     const name = l4()?.querySelector('button')?.getAttribute('aria-label') ?? '';
     expect(name.startsWith(`${shown(l4())}，11月4日，共 1 件，有逾期的待办`)).toBe(true);
     expect(name.split('周三')).toHaveLength(2);
-    expect(shown(document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-05"]'))).toMatch(/^周四 5 \S+ 日程$/);
+    expect(shown(document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-05"]'))).toMatch(/^周四 5 \S+ 日程9$/); // 手机周视图色块写完整标题（负责人 11-17）
     expect(notStartShown('，')).toEqual([]);
   });
 
   it('电脑周视图时间块：简称和标题不同时名字先念简称', () => {
     stubWide();
-    data.events = [ev('r1', { title: '交季度报告', short: '交报', date: '2026-11-03', time: '10:00' }), ev('r2', { title: '复盘', date: '2026-11-04', time: '10:00' })];
+    data.events = [ev('r1', { title: '交季度报告', short: '交报', short_by: 'user', date: '2026-11-03', time: '10:00' }), ev('r2', { title: '复盘', date: '2026-11-04', time: '10:00' })];
     open('#/cal/week/2026-11-02');
     expect(screen.getByTestId('cal-desk-block-r1').getAttribute('aria-label')).toBe('交报，交季度报告，10:00～11:00');
     expect(screen.getByTestId('cal-desk-block-r2').getAttribute('aria-label')).toBe('复盘，10:00～11:00');

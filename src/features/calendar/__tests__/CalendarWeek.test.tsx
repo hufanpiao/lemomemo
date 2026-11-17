@@ -76,7 +76,7 @@ afterEach(() => {
 });
 
 describe('周视图（手机排布）', () => {
-  it('任一天落到那一周（地址不改，L4）；七条泳道；默认 8～22 点，色块按轨道宽排（12:00 在 4/14 处），显示简称', async () => {
+  it('任一天落到那一周（地址不改，L4）；七条泳道；默认 8～22 点，色块按轨道宽排（12:00 在 4/14 处），写完整标题（负责人 11-17“周历上显示全部文字”）', async () => {
     data.events = [ev('1', { title: '客户会', date: '2026-11-10', time: '12:00' })];
     open('#/cal/week/2026-11-12');
     const week = screen.getByTestId('cal-week');
@@ -84,7 +84,7 @@ describe('周视图（手机排布）', () => {
     expect(window.location.hash).toBe('#/cal/week/2026-11-12');
     expect(week.getAttribute('data-range')).toBe('8-22');
     expect(week.querySelectorAll('li[data-date]')).toHaveLength(7);
-    const block = (await within(week).findByText('客户')).closest('[data-item]') as HTMLElement;
+    const block = (await within(week).findByText('客户会')).closest('[data-item]') as HTMLElement;
     expect(block.style.left).toBe(`${(TRACK * 4) / 14}px`);
     expect(block.className).toContain(styles.wev);
   });

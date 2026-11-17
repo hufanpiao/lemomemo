@@ -10,9 +10,12 @@ describe('calItemsOf', () => {
       [{ id: 't1', title: '买', due: '2026-11-06', done: false, project: '', short: '买', created_at: 2, undone: true }],
     );
     expect(r.events[0]).toEqual({
-      id: 'e1', title: '会', short: null, project: 'A', date: '2026-11-05', time: '09:00', tz: 'Asia/Seoul', duration_min: 60, created_at: 3, deleted_at: 9, undone: false,
+      id: 'e1', title: '会', short: null, short_by: null, project: 'A', date: '2026-11-05', time: '09:00', tz: 'Asia/Seoul', duration_min: 60, created_at: 3, deleted_at: 9, undone: false,
     });
-    expect(r.todos[0]).toMatchObject({ id: 't1', due: '2026-11-06', done: false, deleted_at: null, undone: true });
+    expect(r.todos[0]).toMatchObject({ id: 't1', due: '2026-11-06', done: false, deleted_at: null, undone: true, short_by: null });
+    // 简称是谁写的（R-446 displayShort 用）：只认 ai、user，别的当 null
+    const by = calItemsOf([], [{ id: 'a', short_by: 'user' }, { id: 'b', short_by: 'ai' }, { id: 'c', short_by: 'model' }]).todos.map((t) => t.short_by);
+    expect(by).toEqual(['user', 'ai', null]);
   });
 
   it('没有日期的日程跳过；时刻、时长原样交给 placeEvent（坏时刻统一不显示，同提醒、今天页）；标题坏了给空串；待办截止日坏了当没有', () => {

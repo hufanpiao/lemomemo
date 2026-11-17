@@ -476,6 +476,27 @@
   }
 }
 
+/* 320 宽这一档（iPhone SE 一代）：上面那档放进去只剩 0.2 px 余量，ci 的 Linux 字体、滚动条一占就把“班”挤到下一行
+   （b2-cal-holiday.spec.ts“窄屏 320 宽：今天恰好是补班日”）。字号、日期小框 20 px 不动，让出三处：格子内边距 0（+2）、
+   单字“班”圆 15 → 13（+2.5，字照旧 9.5 px；“근무”照样撑成胶囊、320 宽照旧折到下一行）、格缝 4 → 2（每格 +1.7）；余量约 6.4 px */
+@media (width < 340px) {
+  .weekdays,
+  .grid {
+    --cal-gap: 2px;
+  }
+
+  .cell {
+    --pad: 0px;
+  }
+
+  .cell .ban {
+    min-width: 13px;
+    height: 13px;
+    padding: 0 1px;
+    line-height: 13px;
+  }
+}
+
 /* 第二段：那一行文字 + 第二个节日名（两国都显示时） */
 .lines {
   display: flex;
