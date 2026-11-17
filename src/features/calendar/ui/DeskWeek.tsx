@@ -16,7 +16,7 @@ import { useT } from '../../../kit/hooks/useT.ts';
 import common from './cal-common.module.css';
 import styles from './DeskWeek.module.css';
 import { dayOfSpan } from '../../../../shared/logic/calendar/event-span.ts';
-import { colorClass, dayKind, dayKindClass, dayLines, labelInName, namedHolidays, ofText, weekdayKey, weekendClass } from './cal-ui.ts';
+import { colorClass, dayKind, dayKindClass, dayLines, namedHolidays, ofText, weekdayKey, weekendClass } from './cal-ui.ts';
 import { DayNum } from './DayNum.tsx';
 import type { HourRange } from './week-axis.ts';
 import type { WeekProps } from './WeekView.tsx';
@@ -118,8 +118,8 @@ export function DeskWeek(p: WeekProps & { range: HourRange }) {
             const h = Math.max(14, y(b.endMin) - top - 2);
             const ro = isRo('event', b.itemId);
             const title = b.title || b.short;
-            // 块上只画简称：简称和标题不一样（“交报” / “交报告”）时名字先念简称（WCAG 2.5.3，cal-ui.ts labelInName）
-            const name = labelInName(title === b.short ? [] : [b.short], [t('cal.a11y.block', { title, start: hm24(b.startMin), end: hm24(b.endMin) })], t('cal.a11y.sep', {}));
+            // 块上画完整标题（负责人 11-18 弹窗定“电脑版也显示全部文字”，和手机周视图一致），放得下就折行，名字就是看得见的标题
+            const name = t('cal.a11y.block', { title, start: hm24(b.startMin), end: hm24(b.endMin) });
             return (
               <button
                 key={`${b.itemId}-${b.startMin}`}
@@ -133,7 +133,7 @@ export function DeskWeek(p: WeekProps & { range: HourRange }) {
                 aria-current={cur(b.itemId)}
                 data-testid={`cal-desk-block-${b.itemId}`}
               >
-                <span className={styles.beSh}>{b.short}</span>
+                <span className={styles.beSh}>{title}</span>
               </button>
             );
           })}

@@ -116,14 +116,13 @@
   line-height: var(--blk-h);
 }
 
-/* 圆角写整圈 3px，没读 cal-common 的 --cont-l / --cont-r：续条被切开那一端照旧是圆角（拆文件前同优先级的 .wev 排在 .contStart 后面、压掉了它的直角，
-   11-17 整块评审逐像素不变，这处照原样留着，交主持人定要不要改成直角） */
+/* 圆角和月格色块 .mark 同一套：读 cal-common 的 --cont-l / --cont-r，跨天续条被切开的那一端直角（负责人 11-18 弹窗定“续上的那端改直角”） */
 .allDay,
 .wev {
   display: flex;
   overflow: hidden;
   padding: 0 var(--wev-pr) 0 var(--wev-pl);
-  border-radius: 3px;
+  border-radius: var(--cont-l, 3px) var(--cont-r, 3px) var(--cont-r, 3px) var(--cont-l, 3px);
   font-size: var(--fs-11);
   white-space: nowrap;
 }

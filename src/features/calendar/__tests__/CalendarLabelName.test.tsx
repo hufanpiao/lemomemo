@@ -120,11 +120,12 @@ describe('读屏名字以看得见的字开头（WCAG 2.5.3 Label in Name，axe 
     expect(notStartShown('，')).toEqual([]);
   });
 
-  it('电脑周视图时间块：简称和标题不同时名字先念简称', () => {
+  it('电脑周视图时间块：块上写完整标题（负责人 11-18），名字就是标题，不再先念简称', () => {
     stubWide();
     data.events = [ev('r1', { title: '交季度报告', short: '交报', short_by: 'user', date: '2026-11-03', time: '10:00' }), ev('r2', { title: '复盘', date: '2026-11-04', time: '10:00' })];
     open('#/cal/week/2026-11-02');
-    expect(screen.getByTestId('cal-desk-block-r1').getAttribute('aria-label')).toBe('交报，交季度报告，10:00～11:00');
+    expect(screen.getByTestId('cal-desk-block-r1').getAttribute('aria-label')).toBe('交季度报告，10:00～11:00');
+    expect(screen.getByTestId('cal-desk-block-r1').textContent).toBe('交季度报告');
     expect(screen.getByTestId('cal-desk-block-r2').getAttribute('aria-label')).toBe('复盘，10:00～11:00');
   });
 
