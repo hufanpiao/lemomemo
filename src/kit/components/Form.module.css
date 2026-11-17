@@ -289,7 +289,7 @@
 .danger,
 .dangerFill,
 .ghost,
-.textDanger {
+.text {
   flex: none;
   min-height: var(--hit);
   padding: 0 14px;
@@ -329,13 +329,13 @@
   color: var(--text);
 }
 
-/* R-454 危险色文字按钮：底座（高 44、没底色、禁用变淡）同上面那组，这里只写不同的：宽至少 44（点击区 44 见方）、
-   不描边、右边只留 2 让字贴近卡片右边、字号 15 */
-.textDanger {
+/* R-454 文字按钮：底座（高 44、没底色、禁用变淡）同上面那组，这里只写不同的：宽至少 44（点击区 44 见方）、
+   不描边、右边只留 2 让字贴近卡片右边、字号 15。字色用正文色（R-469 负责人 11-17：“除了注销账户其他的字全部用黑色”） */
+.text {
   min-width: var(--hit);
   padding: 0 2px 0 10px;
   border: 0;
-  color: var(--danger-text);
+  color: var(--text);
   font-size: var(--fs-15);
 }
 
@@ -349,7 +349,7 @@
 .danger:disabled,
 .dangerFill:disabled,
 .ghost:disabled,
-.textDanger:disabled {
+.text:disabled {
   opacity: var(--disabled-dim);
 }
 
