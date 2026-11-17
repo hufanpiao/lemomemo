@@ -21,9 +21,6 @@
 }
 
 .list {
-  /* 长按拖动时浮层左右比行宽出这么多（kit SortDrag，R-429），等于左右内边距 */
-  --sort-float-pad: 12px;
-
   margin: 0;
   list-style: none;
 }
@@ -48,8 +45,6 @@
 
 /* .roomy（R-433）：行高 56、左右 16 */
 .list.roomy {
-  --sort-float-pad: 16px;
-
   padding: 0 16px;
 }
 

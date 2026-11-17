@@ -1,5 +1,5 @@
 // “现在”卡的暖心句（负责人 11-14：“没有日程的时候可以显示一些鼓励的句子或者暖心句子”；11-15：“跟有日程的时候一样的样式！不是一个小框加一句话”）：
-// • cheerIndex / pickCheer：按当天日期固定选一句，同一天同一句、第二天换下一句，到头绕回；中韩句数一样、每句不超过 20 个字、不重复
+// • cheerIndex / pickCheer：每小时换一句（负责人 11-17：“没有日程的时候暖心语句一个小时更换一条，给我准备50条”），同一小时同一句、下一个整点换下一句、跨天接着往下、到头绕回；中韩各 50 句、每句不超过 20 个字、不重复
 // • 所有状态都是同一张大卡：页头标签 + “现在 HH:MM”、标题行、时间尺；没有浅色小卡
 // • ② 下一件在时间尺窗口外（far）：标签“下一件”，标题行写暖心句，时间尺下面“下一件 17:00 逛街 · 4 小时 20 分后”只出一次
 // • ② 下一件在窗口里：照旧黄卡加时间尺，没有暖心句、卡底不重复写“下一件……”
@@ -34,19 +34,32 @@ beforeEach(() => uiStore.getState().setLocale('zh-CN'));
 afterEach(cleanup);
 
 describe('暖心句', () => {
-  it('同一天同一句，第二天换下一句，到头绕回', () => {
+  it('同一小时同一句，下一个整点换下一句，跨天接着往下，到头绕回', () => {
     expect(cheerIndex('2026-11-14', 30)).toBe(cheerIndex('2026-11-14', 30));
     expect((cheerIndex('2026-11-14', 30) + 1) % 30).toBe(cheerIndex('2026-11-15', 30));
     expect(cheerIndex('1970-01-31', 30)).toBe(0);
     expect(cheerIndex('1969-12-31', 30)).toBe(29);
     expect(cheerIndex('2026-11-14', 0)).toBe(0);
-    expect(pickCheer(cheerZh, '2026-11-14')).toBe(cheerZh[cheerIndex('2026-11-14', 30)]);
-    expect(pickCheer(cheerKo, '2026-11-14')).toBe(cheerKo[cheerIndex('2026-11-14', 30)]);
+    const n = cheerZh.length;
+    const slot = (day: string, h: number) => cheerZh.indexOf(pickCheer(cheerZh, day, h));
+    // 1970-01-01 0 点是第 0 句、1 点第 1 句；第 2 天 0 点接着是第 24 句
+    expect(slot('1970-01-01', 0)).toBe(0);
+    expect(slot('1970-01-01', 1)).toBe(1);
+    expect(slot('1970-01-02', 0)).toBe(24 % n);
+    // 同一天里每个整点都换一句：23 点到第二天 0 点也只往下走一句
+    for (let h = 0; h < 23; h += 1) expect(slot('2026-11-14', h + 1)).toBe((slot('2026-11-14', h) + 1) % n);
+    expect(slot('2026-11-15', 0)).toBe((slot('2026-11-14', 23) + 1) % n);
+    // 连着 50 个小时 50 句各出一次，不重复
+    const seen = new Set<string>();
+    for (let k = 0; k < n; k += 1) seen.add(pickCheer(cheerZh, k < 24 ? '2026-11-14' : k < 48 ? '2026-11-15' : '2026-11-16', k % 24));
+    expect(seen.size).toBe(n);
+    expect(pickCheer([], '2026-11-14', 9)).toBe('');
+    expect(pickCheer(cheerKo, '2026-11-14', 9)).toBe(cheerKo[(cheerIndex('2026-11-14', cheerKo.length) * 24 + 9) % cheerKo.length]);
   });
 
-  it('中韩各 30 句，一样多、每句不超过 20 个字、不重复', () => {
+  it('中韩各 50 句，一样多、每句不超过 20 个字、不重复', () => {
     for (const list of [cheerZh, cheerKo]) {
-      expect(list.length).toBe(30);
+      expect(list.length).toBe(50);
       expect(new Set(list).size).toBe(list.length);
       for (const s of list) expect([...s].length).toBeLessThanOrEqual(20);
     }
@@ -67,7 +80,7 @@ describe('“现在”卡：没有日程时也是同一张大卡', () => {
     const card = show([ev('e1', '逛街', 17), allDay('e2', '逛街')], at(12, 40));
     expect(card.getAttribute('data-state')).toBe('far');
     sameBigCard(card, '下一件');
-    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY)));
+    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY, 12)));
     expect(screen.getByTestId('now-hint').textContent).toBe('下一件 17:00 逛街 · 4 小时 20 分后');
     expect(card.textContent?.split('逛街').length).toBe(2);
     expect(card.textContent?.split('4 小时 20 分后').length).toBe(2);
@@ -96,25 +109,25 @@ describe('“现在”卡：没有日程时也是同一张大卡', () => {
     expect(card.getAttribute('data-state')).toBe('empty');
     sameBigCard(card, '今天没有日程');
     expect(card.querySelector('p')?.textContent).toContain('现在 09:05');
-    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY)));
+    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY, 9)));
     cleanup();
     uiStore.getState().setLocale('ko-KR');
     const ko = show([], at(9, 5));
     sameBigCard(ko, '오늘 일정 없음', '지금 ');
-    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerKo, DAY)));
+    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerKo, DAY, 9)));
   });
 
   it('③ 今天的日程都结束了：同一张大卡，标签“今天的日程都结束了”，标题行暖心句，有明天第一件时写明天', async () => {
     const card = show([ev('e1', '逛街', 9)], at(21, 40), { ...ev('t1', '开会', 11), date: '2026-11-15' });
     expect(card.getAttribute('data-state')).toBe('done');
     sameBigCard(card, '今天的日程都结束了');
-    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY)));
+    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY, 21)));
     expect(card.textContent).toContain('明天 11:00 开会');
   });
 
   it('③ 没有明天第一件：页头一行 + 暖心句一行，不写明天', async () => {
     const card = show([ev('e1', '逛街', 9)], at(21, 40));
-    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY)));
+    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY, 21)));
     expect(screen.queryByTestId('now-tomorrow')).toBeNull();
     expect(card.textContent).not.toContain('明天');
   });
@@ -123,7 +136,7 @@ describe('“现在”卡：没有日程时也是同一张大卡', () => {
     const card = show([allDay('a1', '休假')], at(10));
     expect(card.getAttribute('data-state')).toBe('allday');
     sameBigCard(card, '全天 · 休假');
-    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY)));
+    await waitFor(() => expect(screen.getByTestId('now-cheer').textContent).toBe(pickCheer(cheerZh, DAY, 10)));
     cleanup();
     sameBigCard(show([allDay('a1', '休假'), allDay('a2', '搬家')], at(10)), '全天 2 件');
     cleanup();

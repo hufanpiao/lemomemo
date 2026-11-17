@@ -154,7 +154,8 @@ test.describe('减少透明效果：跟系统设置，六样浮层都变实色',
 });
 
 test.describe('减少透明效果：月历选中的假日格（R-432 评审第 11 条）', () => {
-  test('系统设置了 reduce：节假日和别的格子同一种画法，斜纹还在，选中底是 --panel-2', async ({ page, browserName }, info) => {
+  // R-445：选中不再整格换底，格子照旧是格子底（--cal-cell），只把日期数字换成深色小方块（--cal-sel-bg）
+  test('系统设置了 reduce：节假日和别的格子同一种画法，斜纹还在，选中只换日期小方块', async ({ page, browserName }, info) => {
     test.skip(browserName !== 'chromium', 'WebKit 不能模拟 prefers-reduced-transparency');
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] });
@@ -167,16 +168,27 @@ test.describe('减少透明效果：月历选中的假日格（R-432 评审第 1
     await cell.click();
     await expect(cell).toHaveAttribute('aria-pressed', 'true');
     const got = await cell.evaluate((c) => {
-      // 用一个探针元素把 --panel-2 换算成浏览器里的颜色
-      const p = document.createElement('div');
-      p.style.background = 'var(--panel-2)';
-      document.body.append(p);
-      const panel2 = getComputedStyle(p).backgroundColor;
-      p.remove();
+      // 用探针元素把令牌换算成浏览器里的颜色（探针放在格子里，令牌按格子所在的皮肤取值）
+      const probe = (v: string): string => {
+        const p = document.createElement('div');
+        p.style.background = `var(${v})`;
+        c.append(p);
+        const got = getComputedStyle(p).backgroundColor;
+        p.remove();
+        return got;
+      };
+      const num = c.querySelector<HTMLElement>(':scope > span > span');
       const before = getComputedStyle(c, '::before');
-      return { bg: getComputedStyle(c).backgroundColor, panel2, stripe: before.content !== 'none' && before.backgroundImage.includes('gradient') };
+      return {
+        bg: getComputedStyle(c).backgroundColor,
+        cell: probe('--cal-cell'),
+        num: num ? getComputedStyle(num).backgroundColor : '',
+        sel: probe('--cal-sel-bg'),
+        stripe: before.content !== 'none' && before.backgroundImage.includes('gradient'),
+      };
     });
-    expect(got.bg, '选中的假日格底色').toBe(got.panel2);
+    expect(got.bg, '选中的假日格底色照旧是格子底').toBe(got.cell);
+    expect(got.num, '选中日的日期数字是深色小方块').toBe(got.sel);
     expect(got.stripe, '斜纹还在').toBe(true);
     await shot(page, info, 'rt-cal-holiday-sel');
   });

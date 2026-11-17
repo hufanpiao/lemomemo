@@ -1,6 +1,6 @@
 // 随手记页提示条里自己的两样（B4）：删除撤销、只读拦截、出错条走 kit 的 useListActions（提示条状态在它的 g 里），这里只管
-// • 插图提示（S3）、转换结果（R-414）、出错条 4 秒后自己收起；空间满了、带“最近删除”入口的插图提示留 8 秒，来得及点
-// • 撤销条（删除的、合并分类的，R-415 ③）由 kit 的 UndoToast 自己计 8 秒，这里不收；isUndo 是“哪些算撤销条”的唯一口径，
+// • 插图提示（S3）、转换结果（R-414）、出错条 4 秒后自己收起；空间满了、带“最近删除”入口的插图提示留 5 秒，来得及点
+// • 撤销条（删除的、合并分类的，R-415 ③）由 kit 的 UndoToast 自己计 5 秒，这里不收；isUndo 是“哪些算撤销条”的唯一口径，
 //   画成什么、点了做什么统一成一份 UndoTip（undoTipOf），页面的 UndoBar 只管画
 // • 返回值 up：撤销条或只读提示条出着，底部输入行往上让一格
 import { useEffect } from 'react';
@@ -9,7 +9,7 @@ import type { ListToast } from '../../../kit/hooks/useListActions.ts';
 import type { ReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import type { NotesMsgKey } from './useNotesT.ts';
 
-/** 页底撤销条的一份：文案、test id、点了撤销做什么；key 换了就是新的一条（重新计 8 秒） */
+/** 页底撤销条的一份：文案、test id、点了撤销做什么；key 换了就是新的一条（重新计 5 秒） */
 export interface UndoTip {
   key: string;
   msgKey: Extract<NotesMsgKey, 'notes.deleted' | 'notes.merge.done' | 'notes.moved' | 'notes.order.switched'>;

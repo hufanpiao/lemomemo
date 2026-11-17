@@ -1,16 +1,28 @@
-/* 下拉搜索（R-437）：随手记、待办、日历页标题下面露出的一条搜索框和结果。只用令牌（A11）；搜索框、结果行用查找面板的 .field / .input / .row（FindPanel.module.css），这里只写不一样的。
+/* 下拉搜索（R-437；R-447 S-B、负责人“搜索框要样式按照kenotex的那种扁的”）：随手记、待办、日历页标题下面露出的一条搜索框，框下一行小字条数，列表下面“用 AI 按意思找 ›”。
+   只用令牌（A11）：框高 --pull-h（36px，比查找面板 44px 的输入框扁），底色、细线用输入框的 --inp-bg、--inp-line，圆角 --r-sm；
+   深浅两色、两套皮肤都只经这几个令牌变。日历页的结果行用查找面板的 .list / .row（FindPanel.module.css）。
    动效：露出时从标题底下往下滑出一点、同时淡入（transform + opacity，--dur-ui、--ease-out，@starting-style 只在挂上时播一次）；
    收起不播（“取消”是用户点的，马上回到本页列表）。减少动态效果（data-rm="1"，platform/look.ts 按设置开关或系统 reduce 写的，
    src 下不另写 prefers-reduced-* 媒体查询）：只淡入、不位移 */
 
+/* 扁的一条：放大镜 | 输入 | “×” | 细竖线 | “取消”，都在同一个框里（方案图 S-B、kenotex 参考图） */
 .bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 10px;
+  height: var(--pull-h);
+  margin: 0 0 8px;
+  padding: 0 0 0 12px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-sm);
+  background: var(--inp-bg);
   transition:
     opacity var(--dur-ui) var(--ease-out),
     transform var(--dur-ui) var(--ease-out);
+}
+
+/* 输入框聚焦时框线换成第三层文字色（框本身就是输入框的外形；光标也在） */
+.bar:focus-within {
+  border-color: var(--text-3);
 }
 
 @starting-style {
@@ -30,12 +42,13 @@
   }
 }
 
-/* 放大镜：细线圆加一道柄，用文字色画（不新增颜色） */
+/* 放大镜：细线圆加一道柄，用第二层文字色画（不新增颜色） */
 .glass {
   position: relative;
   flex: none;
   width: 13px;
   height: 13px;
+  margin-right: 8px;
   border: 1.5px solid var(--text-2);
   border-radius: 50%;
 }
@@ -52,29 +65,63 @@
   transform: rotate(45deg);
 }
 
-/* 输入框、外框用查找面板的 .field / .input（FindPanel.module.css）；这里只去掉浏览器给 type=search 自带的清除叉（有自己的“×”） */
-.bar input::-webkit-search-cancel-button {
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+
+  /* 16px：iOS 聚焦不放大（框扁靠高度，不靠缩字） */
+  font-size: var(--fs-16);
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--text-3);
+}
+
+/* 浏览器给 type=search 自带的清除叉去掉（有自己的“×”） */
+.input::-webkit-search-cancel-button {
   appearance: none;
 }
 
-.clear {
+/* “×”“取消”：看得见的高度跟框（--pull-h），点按区用透明伪元素上下扩到 --hit（不撑高框） */
+.clear,
+.cancel {
+  position: relative;
   flex: none;
-  min-width: 36px;
-  min-height: 36px;
+  height: 100%;
   border: 0;
   background: none;
+}
+
+.clear::after,
+.cancel::after {
+  position: absolute;
+  inset: calc((var(--pull-h) - var(--hit)) / 2) 0;
+  content: '';
+}
+
+.clear {
+  min-width: 32px;
   color: var(--text-2);
   font-size: var(--fs-17);
   line-height: 1;
 }
 
-.cancel {
+/* “×”和“取消”中间一道细竖线（方案图 S-B） */
+.sep {
   flex: none;
-  min-width: var(--hit);
-  min-height: var(--hit);
-  padding: 0 4px;
-  border: 0;
-  background: none;
+  width: 1px;
+  height: 16px;
+  background: var(--inp-line);
+}
+
+.cancel {
+  padding: 0 12px;
   color: var(--text);
   font-size: var(--fs-15);
 }
@@ -90,39 +137,111 @@
   white-space: nowrap;
 }
 
-/* 条数“找到 2 条”：小字、第三层文字色（R-436 三层文字色）；正文字体，只有数字段等宽（PullSearch.tsx 用 kit NumIn 包，
-   主持人核图：整句等宽会把中韩文撑开） */
+/* 框下一行小字“3 未完成 · 全部未完成⌄”：第三层文字色（R-436 三层文字色），正文字体，只有数字段等宽（kit NumIn）；左边和框里的放大镜对齐 */
 .count {
-  margin: 4px 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0 2px;
   color: var(--text-3);
   font-size: var(--fs-12);
 }
 
-/* 结果最底下一行：点了才走查找面板的按意思找。R-436 去描边换底色：放在页面底色上，用面板白底（--panel-2 在浅色页面底上几乎看不出来），“›”第三层文字色 */
-.ai {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  min-height: var(--hit);
-  margin: 10px 0 0;
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--r-md);
-  background: var(--panel);
-  color: var(--text);
-  font-size: var(--fs-14);
-  text-align: left;
+.dot {
+  color: var(--text-3);
 }
 
-.ai span:last-child {
-  color: var(--text-3);
+/* 待办页的“全部未完成⌄”：原生下拉（键盘、读屏、手机系统选单都现成），外观去掉成一段小字 + 一个小折角 */
+.scope {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding-right: 12px;
+  color: var(--text-2);
+}
+
+/* 透明盖在“全部未完成”小字上的真下拉：字号 16px（iPhone 点字号 < 16px 的控件会整页放大），竖向撑到 --hit 高当点按区（独立评审第 9 条）；
+   看得见的字是前面那个 span；键盘聚焦时焦点框画在 .scope 上 */
+.scopeSel {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: var(--hit);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: var(--fs-16);
+  transform: translateY(-50%);
+  appearance: none;
+}
+
+.scope:has(.scopeSel:focus-visible) {
+  border-radius: 4px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.chev {
+  position: absolute;
+  right: 2px;
+  width: 5px;
+  height: 5px;
+  border-right: 1.2px solid var(--text-2);
+  border-bottom: 1.2px solid var(--text-2);
+  pointer-events: none;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+/* 列表下面“用 AI 按意思找 ›”：一行带下划线的文字链接（方案图 S-B），左边和分组名对齐 */
+.foot {
+  margin: 14px 0 0;
+  padding: 0 4px;
+}
+
+.ai {
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-15);
+  text-decoration-line: underline;
+  text-decoration-color: var(--text-3);
+  text-decoration-thickness: 1px;
+  text-underline-offset: var(--hl-gap);
+}
+
+/* 搜不到：一个小点、一句话、链接，整块居中（R-447：负责人选 S-B 一并接受，只这一处不按 U6 左对齐） */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 96px 16px 0;
+  text-align: center;
+}
+
+.emptyDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.emptyText {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-15);
 }
 
 @media (hover: hover) {
   .ai,
   .cancel,
-  .clear {
+  .clear,
+  .scopeSel {
     cursor: pointer;
   }
 }

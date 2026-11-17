@@ -84,26 +84,38 @@ export function FilesMark({ n }: { n: number }) {
   ) : null;
 }
 
-/** 列表行中间的字：标题；摘要 · 分类（+ AI 小标、没保存上）；只读行再在下面单独一行标“要新版本” */
-export function RowText({ it, ai, ro, failed }: { it: NoteItem; ai: ReactNode; ro: ReactNode; failed: boolean }) {
+const same = (text: string): ReactNode => text;
+
+/** 列表行中间的字：标题 + 时间；“● 摘要 · 分类”（+ AI 小标、附件、没保存上，什么都没有时不画这一行）；只读行再在下面单独一行标“要新版本”。
+ *  mark：标题、摘要的字怎么画（下拉搜索就地筛时给命中的字加短下划线，kit PullHit；不给原样） */
+export function RowText({ it, time, ai, ro, failed, mark = same }: { it: NoteItem; time: string; ai: ReactNode; ro: ReactNode; failed: boolean; mark?: (text: string) => ReactNode }) {
+  const sub = [it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ');
+  const line2 = sub !== '' || it.categoryColor !== null || ai !== null || it.files > 0 || failed;
   return (
     <span className={row.ltext}>
-      <span className={row.t1}>
-        {it.converted ? <ConvMark id={it.id} /> : null}
-        {it.title}
+      {/* R-463 列表一：标题占满一行，时间小号淡色字贴右；第二行“● 摘要 · 分类 AI” */}
+      <span className={row.l1}>
+        <span className={row.t1}>
+          {it.converted ? <ConvMark id={it.id} /> : null}
+          {mark(it.title)}
+        </span>
+        <span className={row.tm}>{time}</span>
       </span>
-      <span className={row.t2}>
-        <span className={row.t2txt}>{[it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
-        {ai}
-        <FilesMark n={it.files} />
-        <SyncMark id={it.id} failed={failed} />
-      </span>
+      {line2 ? (
+        <span className={row.t2}>
+          <Dot color={it.categoryColor} />
+          <span className={row.t2txt}>{mark(sub)}</span>
+          {ai}
+          <FilesMark n={it.files} />
+          <SyncMark id={it.id} failed={failed} />
+        </span>
+      ) : null}
       {ro}
     </span>
   );
 }
 
-/** 页底的撤销条：删除的“已删除”、合并分类的“已合并”（R-415 ③），同一个 kit UndoToast、8 秒；画什么、点了做什么都在 tip 里（换一条就换一个 key，重新计时） */
+/** 页底的撤销条：删除的“已删除”、合并分类的“已合并”（R-415 ③），同一个 kit UndoToast、5 秒；画什么、点了做什么都在 tip 里（换一条就换一个 key，重新计时） */
 export function UndoBar({ tip, onClose }: { tip: UndoTip; onClose(): void }) {
   const t = useNotesT();
   return <UndoToast message={t(tip.msgKey, {})} undoLabel={t('notes.undo', {})} onUndo={tip.undo} onClose={onClose} solo="keep" data-testid={tip.testId} />;

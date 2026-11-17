@@ -42,11 +42,13 @@ export interface TodoRowProps {
   meta(stage: ReactNode, checked: boolean): ReactNode;
   /** 行按钮多出来的几样：data-kind、data-open（日历页、今天页认行）、抽屉开着的那条 aria-current、测试 id；给了还带 data-readonly */
   main?: Readonly<{ kind: string; open: string; current: boolean; testId: string }> | undefined;
+  /** 标题文字怎么画（待办页下拉搜索就地筛时给命中的字加短下划线，kit PullHit；不给原样） */
+  mark?: ((text: string) => ReactNode) | undefined;
   /** 行面外面再包一层（待办页、今天页的左滑删除） */
   wrap?: ((face: ReactNode) => ReactNode) | undefined;
 }
 
-export function TodoRow({ r, todo, progress, ids, onOpen, collapsed, onCollapse, meta, main, wrap }: TodoRowProps) {
+export function TodoRow({ r, todo, progress, ids, onOpen, collapsed, onCollapse, meta, main, mark, wrap }: TodoRowProps) {
   const { words, parts, a, flow } = r;
   const id = todo.id;
   const ro = a.isRo(id);
@@ -74,7 +76,7 @@ export function TodoRow({ r, todo, progress, ids, onOpen, collapsed, onCollapse,
           <span className={list.title}>
             <PrioDot p={todo.priority} />
             <span className={list.strike}>
-              {todo.title}
+              {mark ? mark(todo.title) : todo.title}
               <span className={list.line} data-done={checked ? '' : undefined} aria-hidden="true" />
             </span>
           </span>

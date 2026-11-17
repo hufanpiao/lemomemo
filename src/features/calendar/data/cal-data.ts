@@ -16,6 +16,8 @@ const strOrNull = (v: unknown): string | null => (typeof v === 'string' ? v : nu
 const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const isDate = (v: unknown): v is DateStr => typeof v === 'string' && DATE.test(v);
+/** 简称是谁写的（R-446 displayShort 用）：不认识的值当 null */
+const shortByOf = (v: unknown): 'ai' | 'user' | null => (v === 'ai' || v === 'user' ? v : null);
 
 /** 日期、时刻、时区、时长照原样交给 event-span.ts 的 placeEvent（spanRowOf 只管类型）：坏日期、坏时刻不显示，坏时区按设备时区，坏时长按 1 小时，和今天页、提醒同一套 */
 function eventOf(r: Row): CalEvent | null {
@@ -25,6 +27,7 @@ function eventOf(r: Row): CalEvent | null {
     id: r.id,
     title: str(r['title']),
     short: strOrNull(r['short']),
+    short_by: shortByOf(r['short_by']),
     project: str(r['project']),
     ...span,
     created_at: num(r['created_at'], 0),
@@ -39,6 +42,7 @@ function todoOf(r: Row): CalTodo | null {
     id: r.id,
     title: str(r['title']),
     short: strOrNull(r['short']),
+    short_by: shortByOf(r['short_by']),
     project: str(r['project']),
     due: isDate(r['due']) ? r['due'] : null,
     done: r['done'] === true,

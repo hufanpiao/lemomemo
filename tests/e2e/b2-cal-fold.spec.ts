@@ -1,6 +1,5 @@
 // B2 FA-3：月历上拖收起后按周翻（设计第三轮复审 H1）。在真浏览器里量位置，jsdom 量不出布局
-// H1 的根因：按钮翻页横滑时 .pager 带着 translateX，Chrome 里带 transform 的祖先会变成 offsetParent，
-// 量出来的 grid.offsetTop 少了一截，清单块多往上走 118 px、盖住星期表头和锚点行（useMonthFold 的 layoutTop）
+// H1 当年是按 offsetTop 算日清单上移多少、翻页横滑时算错；R-457 重写后停在收起时月格真的只排一行，日清单不靠位移，这里照样守住每一步对齐
 // 每一步断言：锚点那一行（选中那天）的下沿 = 日清单那一块（拖动柄 + 清单）的上沿；星期表头整条看得见、没被盖住
 // 示例日程让各行高度不一样（第 2 行有两个标签更高），收起状态下换锚点行时 shift 必须重量
 import type { Page } from '@playwright/test';

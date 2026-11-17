@@ -1,20 +1,23 @@
 // 随手记页（B4 S1、S2；交互照定稿线框 s7（第 873～907 行）、R-78（第 528 行），视觉照皮肤视觉稿 notesHead / PH.mason / PH.notes / DK.mason / DK.notes）
-// • 两种显示：瀑布流（默认，手机两列、窗口 ≥ 900px 三列）和列表（按今天 / 昨天 / 日期分组）；页面上没有切换按钮，
-//   只在“设置 › 随手记显示方式”里改，按设备类型分开记（R-78，hooks/useNotesView.ts）
+// • 两种显示：瀑布流（默认，手机两列、窗口 ≥ 900px 三列）和列表；页面上没有切换按钮，
+//   只在“设置 › 随手记显示方式”里改，按设备类型分开记（R-78，hooks/useNotesView.ts）。
+//   两种显示同一套外层（R-463）：按时间排时按今天 / 昨天 / 日期分组（组名同一种样式、右边条数），每组里放列表或两列瀑布流；自己排时不分组、一整串
 // • 顶部：大标题 + 右上角头像（设置入口，同今天页；电脑上设置在侧栏，这里藏掉）；下面分类胶囊：全部 N + 各分类条数，只筛这一页（不写 settings）
-//   R-436 精致化照待办页（518f49a0）：大标题短粗下划线 + 下一行等宽小字（日期 · 共 N 条），胶囊用 kit Chip（条数等宽淡色），列表分组名挂 kit groupLabelClass、右边等宽条数，列表行时刻等宽字（卡片底行时间不换：等宽字更宽，会把分类名挤掉，11-11 定的窄卡退路是按原字体量的）
+//   R-436 精致化照待办页（518f49a0）：大标题短粗下划线 + 下一行等宽小字（日期 · 共 N 条），胶囊用 kit Chip（条数等宽淡色），列表分组名挂 kit groupLabelClass、右边等宽条数，列表行时刻、卡片底行日期都用等宽字（R-463 起卡片只在自己排时写“11/13”这类短日期，分类名放不下照省略）
 // • 卡片 / 行：没有标题时取正文第一行当标题；分类前有 6px 色点（categories.color）；AI 分过、还没看过的标“AI”
-//   瀑布流卡片底部：分类 · 时间 · “⋯”（看得见 24px，点按区用 ::after 透明扩到 44，不占排版宽度，视觉稿第 264～266 行）
-//   列表一行：时刻 | 随手记小图标 | 标题和摘要 | “⋯”（视觉稿 PH.notes：44px 18px 1fr … 24px）
+//   瀑布流卡片底行（R-463 瀑布流二）：“● 分类 AI …… ⋯”一行小字、不要胶囊底色；按天分组时卡片里不写日期，自己排时补“· 11/13”（今天、昨天写字）
+//   （“⋯”看得见 24px，点按区用 ::after 透明扩到 44，不占排版宽度）
+//   列表一行（R-463 列表一）：标题 …… 时间 | 缩略图 | “⋯”，第二行“● 摘要 · 分类 AI”；左边日期栏和纸片小图标去掉了。
+//   时间：按天分组时只写时刻；自己排时写日期（“11月13日”，今天、昨天写“昨天 00:07”）；刚记下的写“刚记下”
 // • 点开：手机进编辑器 #/note/<id>；电脑（≥ 900px，有侧栏，电脑版换上以后）从右边滑出详情抽屉（DK.mason），侧栏和列表留着，Esc 或“×”关；
 //   开着哪一条由 kit 的 useDrawerSel（在 useListActions.ts）管（同今天页）：电脑版没换上、画出错退回手机排法时点开进编辑页
-// • “⋯”打开菜单；右键（安卓长按）也打开同一个菜单。菜单：转成待办 / 转成日程 / 删除（S8，R-414；线框里的“移到隐私记”等 B5 隐私记做了再加）；
-//   瀑布流里不能左滑（R-78），列表的左滑以后和别的页一起加
+// • “⋯”打开菜单；鼠标右键也打开同一个菜单（触屏长按是拖动排序，R-429；只有不能拖的只读行、下拉搜索筛着时长按才出系统菜单）。
+//   菜单：转成待办 / 转成日程 / 删除（S8，R-414）、移到隐私记（B5）；瀑布流里不能左滑（R-78），列表能左滑（见下面“隐私记”一条）
 // • 转成待办 / 日程（R-414）：规则见 shared/logic/notes/note-convert.ts 文件头；转完在输入行上面出一句提示（同插图提示的位置）
 // • 合并分类提示（S7，R-413；线框 MERGE）：分类胶囊下面一张浅底条“‘读书’和‘书单’两个分类很像，合成一个吗？ 合并 / 不用”，
-//   哪几对由 hooks/useMergeHint.ts 给（AI 判的 + 本机规则），一次只出一对；点“合并”成了底部出 8 秒撤销条“已合并 · 撤销”（R-415 ③，和删除同一个 UndoBar），
+//   哪几对由 hooks/useMergeHint.ts 给（AI 判的 + 本机规则），一次只出一对；点“合并”成了底部出 5 秒撤销条“已合并 · 撤销”（R-415 ③，和删除同一个 UndoBar），
 //   撤销就当点了“不用”（这一对记进 notes.merge_dismissed），被合并的分类回到 merged_into: null（data 的 undoMerge）；写入期间提示条两个按钮禁用
-// • 删除：软删，进“最近删除”，出 8 秒撤销条
+// • 删除：软删，进“最近删除”，出 5 秒撤销条
 // • 底部输入行（视觉稿 .inrow、线框 COMPOSER；ui/NotesInputRow.tsx）：右边是“图片”，打了字或挂了图才出“记下”；回车或点“记下”就存，新的一条出现在最上面、时间写“刚记下”。
 //   选了图（R-416）：先挂在输入行上方成待记下的小图（可点“×”去掉、可再加），点“记下”时用输入框里的字（可以空）新建一条随手记，再把图依次插进去（S3，ui/NoteImages.tsx）。电脑上输入行铺满内容栏、左右各留 22px（DK.notes）
 // • 插图（S3）：瀑布流卡片顶部放第一张（16:10、右上角“+N”）；插入、上传失败出提示条，空间满了的带“最近删除”入口
@@ -25,12 +28,11 @@
 // • 输入框有焦点时后面整页盖一层液态模糊玻璃（R-401，负责人 11-13“随手记点输入框背景也要模糊”；和打字条 R-399 同一个 kit Mist，16px）：
 //   放在 .dock 旁边、层级用令牌 --z-notes-mist（在输入行下面，NotesPage.module.css .mist），输入行、底栏、提示条都在它上面；
 //   点模糊处只让输入框失焦收键盘（输入行一直在，没有“收起”；同 R-399 打了字时的做法），字留着；运行日志 notes mist on/off
-// • 这一批不做：隐私记那一行（B5）
-// • 插图（S3）：卡片顶上放第一张图（多张标“+N”），列表行有图时在“⋯”前放缩略图；输入行只有“图片”（拍照在编辑页）
+// • 插图补充：列表行有图时在“⋯”前放缩略图；输入行只有“图片”（拍照在编辑页）
 // • 只读行（S12，R-148，TC-B4-09；照待办页）：带认不出的值的行（core 的 readonlyIds）标“要新版本”（单独一行：瀑布流在正文下、底行上，列表在摘要行下），菜单里的“删除”变淡；点开、删除统一拦下
 //   （不进编辑器、不开抽屉、不写），出 kit 的“这条要新版本才能修改 · 更新”（删除撤销、只读拦截、出错条走 kit 的 useListActions，插图提示和输入行上移在 hooks/useNotesToast.ts）。
 //   左滑、多选还没有入口，以后加时同样先判只读
-// • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
+// • 动效：AppearList（增删淡入淡出）、Pressable（按下反馈）、长按拖动 kit SortDrag（浮层 motion/sort-float，让位弹簧 motion/sort-spring，R-461）；抽屉只有最基本的滑入（R-376）
 // • 隐私记（B5 S5、S7）：分类胶囊下面一行入口（vault 的 VaultParts lockrow）；“⋯”菜单、左滑（列表方式，kit 的 SwipeRow；一次只露一行、点别处或 Esc 收起由 kit 管）加“移到隐私记”，
 //   移的流程（解锁、重试一次、带附件不能移）在 vault 的 VaultParts move；移好的先在本页藏起来，等同步把它改成隐私记行
 // • 数据来源（B5 隐私记重写 11-15，hooks/note-source.ts）：隐私记页经 NotesSurface 用同一个列表，来源换成隐私记的内存仓库；
@@ -39,10 +41,12 @@
 // • “最近删除”入口（R-441 负责人 11-16“代办页跟随手记页的删除按钮去掉，删除确认放在设置页”，取代 R-438）：随手记页手机版顶栏、电脑版分类栏标题右边都不放，
 //   改从设置首页“最近删除”一组的“随手记”一行进 #/trash/notes；图片报错提示里的“去最近删除”行内链接照旧。
 //   隐私记页不变：NotesBits 的 TrashLink 由 head(trash) 放进它自己顶栏右边（手机版），电脑版放在分类栏标题右边（隐私记要解锁后才能看，不挪到设置）
-// • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal 管手势和打的字，smart-search 的 PullSearch 画搜索框和结果）；
-//   打了字就把“最近删除”、分类胶囊和列表藏起来、换成结果（kit 的 PullSlot，手机版、电脑版同一处 listPart）（按标题、正文、分类就地筛）。隐私记页不接（隐私记不搜）
-// • 长按拖动排序（R-429，含 R-433 拖动时左边的 6 个点；隐私记页同一份）：kit 的 useSortDrag，瀑布流（两列，横竖都跟）和列表都能拖；按住 0.4 秒没动才拿起，
-//   动了交给左滑或滚动；拿起的那一张、那一行左边出 6 个点，落点一条强调色细横线。整页是一串（data-sort-group 都是 all），放下按页面上的顺序算排序值（data/note-sort.ts）。
+// • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出一条扁搜索框（kit 的 usePullReveal 管手势和打的字，smart-search 的 PullSearch 画搜索框、条数和“用 AI 按意思找”）；
+//   R-447（负责人 11-17 选 S-B“原列表筛选”）：打了字瀑布流 / 列表照原样留着，只画命中的（按标题、正文、分类，kit 的 pull.shows），标题、摘要里命中的字加短下划线（kit PullHit），
+//   没有命中的日期组不画；分类胶囊照样筛（手机版、电脑版同一处 listPart）。筛着的时候不能拖动排序（落点按整串算，筛掉的会被挤乱）。隐私记页不接（隐私记不搜）
+// • 长按拖动排序（R-429；R-461 整块重写：C“让位加倾斜”、摆法 1；隐私记页同一份）：kit 的 useSortDrag，瀑布流（两列，横竖都跟）和列表都能拖；按住 0.4 秒没动才拿起，
+//   动了交给左滑或滚动；拿起的那一张、那一行浮起来，行尾“⋯”那一格换成 6 个点（kit SortEnd），其他行让位。整页是一串：
+//   拖动中按 sd.preview 的预览顺序画（按天分组时拿着的那一条算进前一条那一天），放下按页面上的顺序算排序值（data/note-sort.ts）。
 //   按时间排时拖了一次就切到“自己排”（不按天分组、列表行的时间带日期；设置 › 随手记显示方式里可切回），提示条“已切到自己排，设置里可改回 · 撤销”；
 //   之后每次放下出“已移动 · 撤销”（和删除、合并同一个 UndoBar）。只读行不能拖；运行日志 sort notes|vault lift / drop / cancel（kit 记，只记条数）
 import { opensKeyboard } from '../../../platform/env.ts';
@@ -57,12 +61,12 @@ import refine from '../../../kit/components/Refine.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
-import { SortGrip, sortBoxClass, sortRowClass, useSortDrag } from '../../../kit/components/SortDrag.tsx';
+import { SortBox, SortEnd, sortRowClass, useSortDrag } from '../../../kit/components/SortDrag.tsx';
 import { useSortDropFlow } from '../../../kit/hooks/useSortDropFlow.ts';
 import { Mist } from '../../../kit/components/Mist.tsx';
 import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
 import { usePullReveal } from '../../../kit/hooks/usePullReveal.ts';
-import { PullSlot } from '../../../kit/components/PullSlot.tsx';
+import { PullHit, PullSlot } from '../../../kit/components/PullSlot.tsx';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
 import { useEditT } from '../../../kit/components/EditNotices.tsx';
@@ -89,6 +93,13 @@ import styles from './NotesPage.module.css';
 /** 电脑版（B6）：有侧栏的宽度才下载；下好了、页里没有焦点和按住的指针时才换上（motion 的 useSwapWhenSafe）。随手记页不在首屏，马上就下 */
 const loadNotesDesk = () => import('./NotesDesk.tsx');
 const now = (fn: () => void) => fn();
+
+/** 拖动中拿着的那一条算进它此刻前一条（排第一时后一条）那一天（按天分组时跟着预览顺序挪进别的组，R-461）；没拖原样 */
+function withHeldDay(items: readonly NoteItem[], held: string | null): readonly NoteItem[] {
+  const i = held === null ? -1 : items.findIndex((x) => x.id === held);
+  const nb = items[i - 1] ?? items[i + 1];
+  return i < 0 || !nb ? items : items.map((x, k) => (k === i ? { ...x, date: nb.date } : x));
+}
 
 /** #/notes 是列表，#/note/<id> 是编辑器：两条路由同一个分包（index.ts，B4 首屏额度），这里按路由名分 */
 export default function NotesPage() {
@@ -152,6 +163,9 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
     else setMoving(id);
   };
   const shown = (it: NoteItem) => !moved.has(it.id);
+  // 画不画：移走的不画；下拉搜索就地筛时只画命中的（R-447）。拖动排序的整串仍按 shown 算（筛着时不能拖）
+  const vis = (it: NoteItem) => shown(it) && pull.shows(it.id);
+  const mark = (text: string) => <PullHit pull={pull} text={text} />;
   /** 移出隐私记（隐私记来源）：没移成出提示 */
   const moveOut = (id: string) => {
     setMenu(null);
@@ -167,14 +181,21 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
     return result === 'ok';
   };
 
-  /** 卡片、行上的时间：刚记下的写“刚记下”；列表里只写时刻（组标题已有日期），瀑布流写“今天 11:40 / 昨天 21:15 / 10月21日” */
-  const timeOf = (it: NoteItem, withDay: boolean): string => {
+  // 时间怎么写（见文件头）：按天分组时组名已有日期；自己排时没有组名，行、卡片自己带日期
+  const manual = l.order === 'manual';
+  /** 组名、卡片日期共用：今天 / 昨天写字，再早按 style 写日期（组名“11月13日”，卡片“11/13”） */
+  const dayWord = (kind: string, date: string, style: 'monthDay' | 'num'): string =>
+    kind === 'today' ? t('notes.g.today', {}) : kind === 'yesterday' ? t('notes.g.yesterday', {}) : fmtDay(date, locale, style);
+  /** 列表行标题右边：刚记下 / 时刻（分组时）/ 今天 11:40、昨天 21:15、10月21日（自己排时） */
+  const rowTime = (it: NoteItem): string => {
     if (it.id === just) return t('notes.just', {});
     const hm = fmtTime(it.createdAt, l.tz);
-    if (!withDay) return hm;
-    const g = l.groups.find((x) => x.date === it.date)?.key;
+    if (!manual) return hm;
+    const g = l.dayOf(it.createdAt);
     return g === 'today' ? t('notes.at.today', { t: hm }) : g === 'yesterday' ? t('notes.at.yesterday', { t: hm }) : fmtDay(it.date, locale, 'monthDay');
   };
+  /** 卡片底行的日期：刚记下 / 分组时不写（null）/ 今天、昨天、11/13（自己排时，窄卡只写短的） */
+  const cardDay = (it: NoteItem): string | null => (it.id === just ? t('notes.just', {}) : manual ? dayWord(l.dayOf(it.createdAt), it.date, 'num') : null);
 
   const more = (it: NoteItem) => (
     <MoreMenu
@@ -207,16 +228,19 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
     report,
     moved: (m) => guard.show(moveUndo(m.switched, () => void l.undoMove(m).then(report))),
   });
-  const sd = useSortDrag({ tag: src.kind, axis: view === 'masonry' ? 'xy' : 'y', canDrop: () => true, onDrop: dropped, log: rlog });
-  /** 能拖的行、卡片上的标记（整页一串） */
-  const sortAttrs = (it: NoteItem) => ({ 'data-sort-id': it.id, 'data-sort-group': 'all', 'data-sort-off': isRo(it.id) ? '' : undefined });
-  /** 列表方式的一行；withDay：自己排时不按天分组，时间带上日期 */
-  const listRow = (it: NoteItem, withDay: boolean) => (
+  const sd = useSortDrag({ tag: src.kind, axis: view === 'masonry' ? 'xy' : 'y', onDrop: dropped, log: rlog });
+  /** 能拖的行、卡片上的标记（整页一串；只读、下拉搜索筛着时不能拖） */
+  const sortAttrs = (it: NoteItem) => sd.attrs(it.id, isRo(it.id) || pull.searching);
+  // 页面上画的这一串：移走的、下拉搜索没命中的不画；拖动中按预览顺序（拿着的那一条在落点处占位）
+  const visible = l.items.filter(vis);
+  const shownItems = sd.preview(visible, (x) => x.id);
+  // 按时间排时按天分组：拖动中拿着的那一条算进它此刻前一条（排第一时后一条）那一天，跟着预览顺序挪进别的组
+  const days = manual ? null : l.byDay(withHeldDay(shownItems, sd.held));
+  /** 列表方式的一行 */
+  const listRow = (it: NoteItem) => (
     <AppearItem key={it.id} className={`${selId === it.id ? `${row.lrow} ${styles.sel}` : row.lrow} ${sortRowClass}`} {...sortAttrs(it)} data-testid={`notes-row-${it.id}`}>
-      <SortGrip />
       {/* 左滑（B5 S7，线框 s7 NOTEROW_SW）：转成待办 / 移到隐私记 / 删除，和“⋯”菜单同一套动作 */}
       <SwipeRow
-        className={styles.swp}
         data-testid={`notes-swipe-${it.id}`}
         look="compact"
         log={rlog}
@@ -224,12 +248,10 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
       >
         <div className={styles.swRow}>
         <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
-          <span className={row.rowTime}>{timeOf(it, withDay)}</span>
-          <span className={row.mn} aria-hidden="true" />
-          <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} failed={failed.has(it.id)} />
+          <RowText it={it} time={rowTime(it)} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} failed={failed.has(it.id)} mark={mark} />
           {it.cover ? <ListThumb img={it.cover} /> : null}
         </button>
-        {more(it)}
+        <SortEnd>{more(it)}</SortEnd>
         </div>
       </SwipeRow>
     </AppearItem>
@@ -238,6 +260,49 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
     e.preventDefault();
     setMenu(id);
   };
+  /** 瀑布流的一张卡 */
+  const card = (it: NoteItem) => {
+    const day = cardDay(it);
+    return (
+      <AppearItem key={it.id} className={`${styles.card} ${sortRowClass}`} {...sortAttrs(it)} data-testid={`notes-card-${it.id}`}>
+        <div onContextMenu={onMenuKey(it.id)}>
+          <button type="button" className={styles.cardMain} onClick={() => open(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
+            {it.cover ? (
+              <span className={styles.cardCover}>
+                <CardCover img={it.cover} count={it.images} />
+              </span>
+            ) : null}
+            <span className={styles.cardTitle}>{it.converted ? <ConvMark id={it.id} /> : null}{mark(it.title)}</span>
+            {it.summary ? <span className={styles.cardSum}>{mark(it.summary)}</span> : null}
+          </button>
+          <RoMark ro={isRo(it.id)} id={it.id} cls={styles.roCard} />
+          <div className={styles.cardFoot}>
+            <Dot color={it.categoryColor} />
+            {it.categoryName ? <span className={styles.catName}>{it.categoryName}</span> : null}
+            {aiMark(it)}
+            {day !== null && (it.categoryName || it.ai) ? <span aria-hidden="true">·</span> : null}
+            {day !== null ? <span className={styles.time}>{day}</span> : null}
+            <FilesMark n={it.files} />
+            <SyncMark id={it.id} failed={failed.has(it.id)} />
+            <span className={styles.grow} />
+            <SortEnd>{more(it)}</SortEnd>
+          </div>
+        </div>
+      </AppearItem>
+    );
+  };
+  /** 一组里（或自己排时整串）的条目：列表一块白面板，瀑布流两列 */
+  const block = (items: readonly NoteItem[]) =>
+    view === 'masonry' ? (
+      <AppearList as="ul" className={styles.mason}>
+        {items.map(card)}
+      </AppearList>
+    ) : (
+      <AppearList as="ul" className={days === null ? `${row.lst} ${styles.flat}` : row.lst}>
+        {items.map(listRow)}
+      </AppearList>
+    );
+  const listTestId = view === 'masonry' ? 'notes-mason' : 'notes-list';
 
   const filterChips = (
     <>
@@ -268,75 +333,31 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
 
       {merge ? <MergeBar hint={merge} onResult={report} onMerged={(h) => guard.show(mergeUndo(h.key, () => void h.undo().then(report)))} /> : null}
 
-      {l.items.length === 0 ? (
+      {l.items.length === 0 && !pull.searching ? (
         <p className={list.empty} data-testid="notes-empty">
           {src.text?.empty ?? t('notes.empty', {})}
         </p>
       ) : null}
 
-      <div ref={sd.ref} className={sortBoxClass}>
-      {view === 'masonry' ? (
-        <AppearList as="ul" className={styles.mason} data-testid="notes-mason">
-          {l.items.filter(shown).map((it) => (
-            <AppearItem key={it.id} className={`${styles.card} ${sortRowClass}`} {...sortAttrs(it)} data-testid={`notes-card-${it.id}`}>
-              <div onContextMenu={onMenuKey(it.id)}>
-                <button type="button" className={styles.cardMain} onClick={() => open(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
-                  {it.cover ? (
-                    <span className={styles.cardCover}>
-                      <CardCover img={it.cover} count={it.images} />
-                    </span>
-                  ) : null}
-                  <span className={styles.cardTitle}>{it.converted ? <ConvMark id={it.id} /> : null}{it.title}</span>
-                  {it.summary ? <span className={styles.cardSum}>{it.summary}</span> : null}
-                </button>
-                <RoMark ro={isRo(it.id)} id={it.id} cls={styles.roCard} />
-                <div className={styles.cardFoot}>
-                  {/* 定稿 PH.mason 底行只有“分类 · 时间 · ⋯”：AI 小标并进分类胶囊（“● 工作灵感 AI”，同 PH.notes），没分类时单独出 */}
-                  {it.categoryName ? (
-                    <span className={styles.cat}>
-                      <Dot color={it.categoryColor} />
-                      <span className={styles.catName}>{it.categoryName}</span>
-                      {aiMark(it)}
-                    </span>
-                  ) : (
-                    aiMark(it)
-                  )}
-                  <FilesMark n={it.files} />
-                  <SyncMark id={it.id} failed={failed.has(it.id)} />
-                  <span className={styles.time}>{timeOf(it, true)}</span>
-                  {more(it)}
-                </div>
-              </div>
-              {/* 拿起时的 6 个点（R-433）：绝对定位，放在最后不改卡片里原来的结构 */}
-              <SortGrip />
-            </AppearItem>
-          ))}
-        </AppearList>
-      ) : l.order === 'manual' ? (
+      <SortBox sd={sd}>
+      {days === null ? (
         // 自己排（R-429）：不按天分组，一整串
-        <div data-testid="notes-list">
-          <AppearList as="ul" className={`${row.lst} ${styles.flat}`}>
-            {l.items.filter(shown).map((it) => listRow(it, true))}
-          </AppearList>
-        </div>
+        <div data-testid={listTestId}>{block(shownItems)}</div>
       ) : (
-        <AppearList as="div" data-testid="notes-list">
-          {l.groups.map((g) => ({ g, items: g.items.filter(shown) })).filter((x) => x.items.length > 0).map(({ g, items }) => (
+        <AppearList as="div" data-testid={listTestId}>
+          {days.map(({ items, ...g }) => (
             <AppearItem as="section" key={g.date} className={styles.group} data-testid={`notes-g-${g.date}`}>
-              {/* 分组名小字、加字距，右边等宽条数（R-436，同待办页分组：kit groupLabelClass） */}
+              {/* 分组名小字、加字距，右边等宽条数（R-436，同待办页分组：kit groupLabelClass；R-463 起瀑布流也分组） */}
               <h2 className={`${groupLabelClass} ${styles.h2}`}>
-                <span>{g.key === 'today' ? t('notes.g.today', {}) : g.key === 'yesterday' ? t('notes.g.yesterday', {}) : fmtDay(g.date, locale, 'monthDay')}</span>
+                <span>{dayWord(g.key, g.date, 'monthDay')}</span>
                 <span className={styles.cnt}>{items.length}</span>
               </h2>
-              <AppearList as="ul" className={row.lst}>
-                {items.map((it) => listRow(it, false))}
-              </AppearList>
+              {block(items)}
             </AppearItem>
           ))}
         </AppearList>
       )}
-      {sd.line}
-      </div>
+      </SortBox>
 
     </>
   );
@@ -346,9 +367,10 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
       </div>
   );
   const mist = typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null;
-  // 手机版、电脑版列表栏同一处（电脑版的分类在左栏，不画胶囊）：搜索本页、搜索框，打了字把“最近删除”、胶囊、列表藏起来
+  // 手机版、电脑版列表栏同一处（电脑版的分类在左栏，不画胶囊）：搜索本页、搜索框和条数在列表上面，打了字列表就地筛、下面一行“用 AI 按意思找”
+  const found = visible.length;
   const listPart = (top: ReactNode) => (
-    <PullSlot pull={pull} keyLabel={t('notes.pullKey', {})} search={<PullSearch pull={pull} scope="note" onOpen={open} />}>
+    <PullSlot pull={pull} keyLabel={t('notes.pullKey', {})} search={(part) => <PullSearch part={part} pull={pull} scope="note" found={found} />}>
       {top}
       {body}
     </PullSlot>

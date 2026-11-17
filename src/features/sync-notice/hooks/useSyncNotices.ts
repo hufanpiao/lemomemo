@@ -29,7 +29,7 @@ export function canCount(doc: Document = document): boolean {
 }
 
 /**
- * 冲突卡 8 秒后自动收起（同 UNDO_TOAST_MS，M3、M4）：只在卡显示着（active）、canCount()、指针和焦点都不在卡上时走；
+ * 冲突卡 5 秒后自动收起（同 UNDO_TOAST_MS，M3、M4）：只在卡显示着（active）、canCount()、指针和焦点都不在卡上时走；
  * 换了一张卡（key 变了）重新计，悬停、焦点也清掉。返回给卡挂的四个事件
  */
 export function useAutoDismiss(key: string | null, active: boolean, onDone: (key: string) => void, ms = UNDO_TOAST_MS) {

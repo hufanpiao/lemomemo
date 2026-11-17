@@ -14,10 +14,10 @@ import { displayShort } from '../short.ts';
 export { PROJECT_COLORS, projectColorIndex, type ProjectColor } from '../project-color.ts';
 
 /** 月历、周视图用到的日程列，加上删除、撤销两列（live-row.ts 的 Tombstone，可以没有；本机缓存里的行直接传进来即可） */
-export type CalEvent = Readonly<Pick<EventWrite, 'id' | 'title' | 'short' | 'project' | 'date' | 'time' | 'tz' | 'duration_min' | 'created_at'>> &
+export type CalEvent = Readonly<Pick<EventWrite, 'id' | 'title' | 'short' | 'short_by' | 'project' | 'date' | 'time' | 'tz' | 'duration_min' | 'created_at'>> &
   Tombstone;
-/** 月历用到的待办列 */
-export type CalTodo = Readonly<Pick<TodoWrite, 'id' | 'title' | 'short' | 'project' | 'due' | 'done' | 'created_at'>> & Tombstone;
+/** 月历用到的待办列（short_by：displayShort 分用户手改和 AI 起的，R-446） */
+export type CalTodo = Readonly<Pick<TodoWrite, 'id' | 'title' | 'short' | 'short_by' | 'project' | 'due' | 'done' | 'created_at'>> & Tombstone;
 
 /** 月历、单日列表的输入 */
 export interface CalItems {
@@ -44,6 +44,8 @@ export interface DayEntry {
   readonly project: string;
   readonly colorIndex: ProjectColor;
   readonly short: string;
+  /** 完整标题（手机周视图色块、全天条写它，负责人 11-17“周历上显示全部文字”；月格照旧写 short） */
+  readonly title: string;
   /** 有时刻的日程的开始时刻；全天日程、待办为 null */
   readonly startMs: number | null;
   /** 有时刻的日程的结束时刻；全天日程、待办为 null */
@@ -86,6 +88,7 @@ export function eventEntry(ev: CalEvent, p: EventPlacement, day: DateStr = p.dat
     project: normalizeProject(ev.project),
     colorIndex: projectColorIndex(ev.project),
     short: displayShort(ev),
+    title: ev.title,
     startMs: p.allDay ? null : p.startMs,
     endMs: p.allDay ? null : p.endMs,
     createdAt: ev.created_at,
@@ -102,6 +105,7 @@ export function todoEntry(td: CalTodo): DayEntry {
     project: normalizeProject(td.project),
     colorIndex: projectColorIndex(td.project),
     short: displayShort(td),
+    title: td.title,
     startMs: null,
     endMs: null,
     createdAt: td.created_at,

@@ -1,6 +1,6 @@
 /* 月历、周视图（B2 FA-3，架构 5.12；定稿线框 s2、s3，皮肤视觉稿 .mv-c / .wlane / .dwkv / .ympop）：只用令牌（A11）
    项目色 1–6：块底色 --pN、左侧深色竖线 --pNs、字 --on-p（设计审查 H1）；0 = 没有项目（--panel-2 底、--text-2 竖线、--text 字）
-   今天：--today-bg 底 + --today-ring 圈（简洁·浅色是透明底墨色细圈，R-132，设计审查 H2） */
+   今天：--today-bg 淡黄小框 + --today-ring 柠檬黄边（R-445 改 R-132，四套皮肤一样）；选中那天：数字深色小方块 --cal-sel-*（R-445） */
 .page {
   position: relative;
   max-width: 960px;
@@ -182,8 +182,11 @@
   overflow: hidden;
 }
 
-/* 月格卡片不整体垫底色，底色画在每一格（.cell）上：上拖收起时别的行淡出，连底色一起淡掉，露出页面底色 */
+/* 月格卡片不整体垫底色、不切圆角（R-445：每一格自己是圆角小格块，底色画在 .cell 上）：上拖收起时别的行淡出，连底色一起淡掉，露出页面底色。
+   收起时上移的格子由 .gridClip 裁掉，这里不用 overflow 裁 */
 .monthCard {
+  overflow: visible;
+  border-radius: 0;
   background: none;
 }
 
@@ -257,7 +260,7 @@
   background: var(--panel-2);
 }
 
-/* 选中的年 / 月：R-436 丙批改轻，不再是墨色实块（深色皮肤下是米白实块），换成和月格选中日（.sel）同一种写法——
+/* 选中的年 / 月：R-436 丙批改轻，不再是墨色实块（深色皮肤下是米白实块），换成 R-436 时月格选中日的写法（R-445 起月格选中改成数字深色小方块，这里照旧）——
    --panel-2 浅底 + 1px 第三层灰内描边 + 粗字；描边 --text-3 压在 --panel-2 上 ≥ 4.5（contrast-pairs.json text3-panel2），选中看得出来 */
 .ymOn,
 .ymOn:hover {
@@ -302,23 +305,43 @@
 
 /* “回到今天”不在这里写外观：MonthPicker 直接挂 kit 的 Chip.module.css 胶囊（R-436“胶囊统一”，高 30、无描边浅底、点击区外扩到 44） */
 
-/* ───────── 月格 ───────── */
+/* ───────── 月格（R-445 负责人 11-17 逐项选定，定稿图 2026-11-17_日历月周\定稿\定稿_手机月_*.png） ───────── */
 .weekdays,
 .grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
-/* 上拖收起时格子整片上移，从星期行底下穿过：星期行垫底色、压在上面 */
+/* 星期行不垫底色（定稿图透明，磨砂玻璃的渐变底照样透出来）；收起时上移的格子由下面的 .gridClip 裁掉 */
 .weekdays {
   position: relative;
   z-index: 1;
-  background: var(--panel);
+  column-gap: var(--cal-gap);
 }
 
-/* 页面量锚点那一行的位置用（格子的 offsetTop 相对它） */
+/* 收起（R-457 C 压扁收起）途中 useMonthFold 按进度从下沿裁掉（直接写 clip-path）；平时只裁上边（往上走的行不盖到星期行上），左右下各放出一截，格子的聚焦框不被切掉 */
+.gridClip {
+  clip-path: inset(0 -8px -9999px);
+}
+
+/* 页面量各行的位置用（格子的 offsetTop 相对它）。格与格之间 4pt 缝（R-445 第二版选“① 4pt 缝”）。
+   isolation：有跨天色块的格子带 z-index（见 .bar），层级关在格子这一层里，不盖过下面的日清单。
+   每周三条行轨（日期 / 那一行文字 / 事项标签），格子用 subgrid 跨这三条：同一周七格的同一段一样高，
+   哪一格多了第二个节日名、“근무”标折了行，整周一起往下推，跨天色块（伸进右边几格）始终对着同一排，不压字（评审第 2 条） */
 .grid {
   position: relative;
+  isolation: isolate;
+  grid-template-rows: repeat(6, auto auto 1fr);
+  gap: var(--cal-gap);
+}
+
+/* 停在收起（R-457）：只排锚点那一行，别的行不排（MonthGrid 的 folded）；行轨只留一周的三条，空行轨不再带格缝 */
+.grid[data-folded] {
+  grid-template-rows: auto auto 1fr;
+}
+
+.grid > .foldOff {
+  display: none;
 }
 
 .wd {
@@ -334,36 +357,43 @@
   text-align: center;
 }
 
+/* 一格：圆角小格块（R-445“整体用 B”）。--pad 是左右内边距，跨天色块按它算伸进右边几格的宽度 */
 .cell {
+  --pad: var(--cal-pad);
+
   position: relative;
   isolation: isolate;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: 2px;
+  align-content: start;
   min-width: 0;
-  min-height: 80px;
-  padding: 4px 3px;
+  padding: 3px var(--pad);
   border: 0;
-
-  /* 行间分隔线细到半像素（R-436“行间极细分隔线”，同 kit 表单行 .field；2×、3× 屏上是发丝线，1× 屏按 1px 画） */
-  border-top: 0.5px solid var(--line);
-  background: var(--panel);
+  border-radius: var(--cal-cell-r);
+  background: var(--cal-cell);
   color: var(--text);
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.out {
-  color: var(--text-2);
+/* 周六周日淡底加灰字（R-445；灰字在文件末尾“日期数字的层叠顺序”）；放假的节日名照旧柠檬黄系 */
+.wkend {
+  background: var(--cal-wkend);
 }
 
-/* 节假日斜纹（负责人 11-15“照参考图做”；月格、手机周泳道、电脑周表头和那一列共用这一套，cal-ui.ts dayKindClass）：
-   放假柠檬黄细斜虚线，调休补班中性色细斜虚线；周末不另上颜色。
-   斜纹是“\”方向的 1px 细线（45° 渐变），再用 135° 的遮罩切成虚线；z-index -1 + isolation，压在字下面、底色（选中的 --panel-2）上面。
-   减少透明效果也是这一种画法（斜纹本来就是不透明的图案，不靠模糊）。
-   斜纹从字底下穿过：透明度按“叠在格子底 / 选中底上，节日名、次要文字、日期数字仍 ≥ 4.5”定（contrast-pairs.json hol-stripe-*、work-stripe-*） */
+/* 上个月、下个月的补位格：半透明底透出页面底色（定稿实测字约淡到 .45） */
+.out {
+  background: var(--cal-out);
+}
+
+/* 节假日（月格、手机周泳道、电脑周表头和那一列共用这一套，cal-ui.ts dayKindClass）：
+   放假柠檬黄细斜虚线（R-445 照旧，深色透明度 .28）；调休补班小圆点阵（R-445 第二版选“② 小圆点阵”）。
+   斜纹是“\”方向的 1px 细线（45° 渐变），再用 135° 的遮罩切成虚线；z-index -1 + isolation，压在字下面、格子底色上面。
+   减少透明效果也是这一种画法（本来就是不透明的图案，不靠模糊）。
+   透明度按“叠在格子底上，节日名、次要文字、日期数字仍 ≥ 4.5”定（contrast-pairs.json hol-stripe-*、work-stripe-*） */
 .holiday,
 .workday {
   position: relative;
@@ -374,28 +404,22 @@
 .workday::before {
   position: absolute;
   z-index: -1;
-  border-radius: 6px;
-  background: repeating-linear-gradient(45deg, var(--stripe) 0 1px, transparent 1px 6px);
+  border-radius: inherit;
   content: '';
-  inset: 2px;
-  mask-image: repeating-linear-gradient(135deg, currentcolor 0 3px, transparent 3px 5px);
+  inset: 0;
   pointer-events: none;
 }
 
-.holiday {
-  --stripe: var(--hol-stripe);
+.holiday::before {
+  background: repeating-linear-gradient(45deg, var(--hol-stripe) 0 1px, transparent 1px 6px);
+  mask-image: repeating-linear-gradient(135deg, currentcolor 0 3px, transparent 3px 5px);
 }
 
-.workday {
-  --stripe: var(--work-stripe);
+.workday::before {
+  background: radial-gradient(circle, var(--work-stripe) 0 0.8px, transparent 1.3px) 0 0 / 5px 5px;
 }
 
-.out.holiday::before,
-.out.workday::before {
-  opacity: 0.5;
-}
-
-/* 第一行：日期数字 + 右边的补班标。放不下（窄屏的韩文“근무”）时标折到下一行、仍靠右，不压“今天”圆底（R-432 评审第 3 条） */
+/* 第一行：日期数字 + 右边的补班标。放不下（窄屏的韩文“근무”）时标折到下一行、仍靠右，不压“今天”小框（R-432 评审第 3 条） */
 .cellTop {
   display: flex;
   flex-wrap: wrap;
@@ -421,15 +445,8 @@
   white-space: nowrap;
 }
 
-/* 选中的那天：R-436 丙批改轻。原来 1.5px 墨色框（深色皮肤下是白框）加上“今天”的墨色细圈太重；
-   换成 --panel-2 浅底 + 1px 第三层灰内描边（--text-3 压在 --panel-2 上 ≥ 4.5，比非文字元素要的 3 还高，选中仍看得出来）。
-   手机周泳道选中（.laneSel .laneBtn）、年月选择器选中（.ymOn）同一种写法。“今天”的细圈是 R-132 定的，不动 */
-.sel {
-  border-radius: 8px;
-  background: var(--panel-2);
-  box-shadow: inset 0 0 0 1px var(--text-3);
-}
-
+/* 日期数字：圆角小方块（R-445）。今天是淡黄色小框（改 R-132），选中那天是深色小方块（取代原来整格的框）；
+   月格、手机周泳道同一套（.today / .sel 挂在格子或泳道上）。今天、选中、周末灰字三条在文件末尾按先后排好 */
 .dayNum {
   display: inline-flex;
   align-self: flex-start;
@@ -437,7 +454,8 @@
   justify-content: center;
   min-width: 22px;
   height: 22px;
-  border-radius: var(--r-pill);
+  padding: 0 2px;
+  border-radius: var(--cal-cell-r);
 
   /* 日期数字等宽字（R-436 丙批“日期用等宽数字”，同待办页的日期） */
   font-family: var(--f-mono);
@@ -445,26 +463,57 @@
   font-variant-numeric: tabular-nums;
 }
 
-.today .dayNum {
-  background: var(--today-bg);
-  box-shadow: inset 0 0 0 1.5px var(--today-ring);
-  color: var(--today-fg);
-  font-weight: 700;
-}
-
-/* 手机窄屏（一格不到约 55 px）：日期圆缩到 20 px、格子左右各让 1 px，“今天”圆底和“班”标排得进同一行（320 宽中文；R-432 评审第 3 条） */
+/* 手机窄屏（一格不到约 55 px）：月格日期小框缩到 20 px、格子左右内边距缩到 1 px，“今天”小框和“班”标排得进同一行
+   （320 宽中文、393 宽韩文“근무”；R-432 评审第 3 条。R-445 格子间多了 4pt 缝，所以内边距比原来再让 1 px）。周泳道的日期不缩（CAL-week-today-circle 要 22 px） */
 @media (width < 420px) {
   .cell {
-    padding-inline: 2px;
+    --pad: calc(var(--cal-pad) - 2px);
   }
 
-  .dayNum {
+  .cell .dayNum {
     min-width: 20px;
     height: 20px;
   }
 }
 
-/* 一行文字：节假日 > 节气 > 农历；纪念日菱形跟在后面。一直占着高度：农历按需加载，加载前后格子不跳动 */
+/* 320 宽这一档（iPhone SE 一代）：上面那档放进去只剩 0.2 px 余量，ci 的 Linux 字体、滚动条一占就把“班”挤到下一行
+   （b2-cal-holiday.spec.ts“窄屏 320 宽：今天恰好是补班日”）。字号、日期小框 20 px 不动，让出三处：格子内边距 0（+2）、
+   单字“班”圆 15 → 13（+2.5，字照旧 9.5 px；“근무”照样撑成胶囊、320 宽照旧折到下一行）、格缝 4 → 2（每格 +1.7）；余量约 6.4 px */
+@media (width < 340px) {
+  .weekdays,
+  .grid {
+    --cal-gap: 2px;
+  }
+
+  .cell {
+    --pad: 0px;
+  }
+
+  .cell .ban {
+    min-width: 13px;
+    height: 13px;
+    padding: 0 1px;
+    line-height: 13px;
+  }
+}
+
+/* 第二段：那一行文字 + 第二个节日名（两国都显示时） */
+.lines {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 第三段：事项标签和“+N”。格子最矮 --cal-cell-h：这一段补足（减去上下内边距 3 + 3、日期 22、那一行 12、两道 2 的缝） */
+.marks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: calc(var(--cal-cell-h) - 44px);
+}
+
+/* 一行文字：节假日 > 节气 > 农历；纪念日小爱心跟在后面。一直占着高度：农历按需加载，加载前后格子不跳动 */
 .line {
   display: flex;
   align-items: center;
@@ -488,16 +537,13 @@
   color: var(--hol-name);
 }
 
-/* 纪念日菱形（R-105）：柠檬黄填充 + 正文色边（深色模式正文色是浅色，自动成浅色边） */
-.dia {
-  display: inline-block;
+/* 纪念日小爱心（R-458 负责人 11-17 选“A 小爱心”，换掉 R-105 的菱形）：约 9×9，填项目色 3 的深色（--p3s，浅色、深色皮肤各自一套）；
+   对比度见 contrast-pairs 的 anniv-heart*（格子底、周末淡底、放假斜纹） */
+.heart {
   flex: none;
-  width: 7px;
-  height: 7px;
-  margin: 0 1px;
-  background: var(--accent);
-  box-shadow: inset 0 0 0 1.5px var(--text);
-  transform: rotate(45deg);
+  width: 9px;
+  height: 8px;
+  fill: var(--p3s);
 }
 
 /* 两国都显示：另一国的节日小一号写在第二行（R-97） */
@@ -510,18 +556,31 @@
   text-overflow: ellipsis;
 }
 
-/* 事项标签：9.5 px（R-104 有意例外，不要改） */
+/* 事项标签：9.5 px（R-104 有意例外，不要改）；按排画，空着的排垫 .markGap 同高的空位 */
+.mark,
+.markGap {
+  flex: none;
+  height: var(--cal-bar-h);
+}
+
 .mark {
   display: block;
-  height: 15px;
   overflow: hidden;
   padding: 0 3px 0 5px;
   border-radius: 3px;
   font-size: var(--fs-9-5);
   font-style: normal;
-  line-height: 15px;
+  line-height: var(--cal-bar-h);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* 跨天日程（R-445“一整条色块”）：段头这一格的标签加宽到 --cols 格（每格多出左右内边距，格与格之间加一道缝），伸进右边几格。
+   这一格的 z-index 由 MonthGrid 按列给（越靠左越高），色块压在右边格子上；不接点按，点到的是底下那一格 */
+.bar {
+  position: relative;
+  width: calc(var(--cols) * (100% + 2 * var(--pad)) + (var(--cols) - 1) * var(--cal-gap) - 2 * var(--pad));
+  pointer-events: none;
 }
 
 .more {
@@ -531,10 +590,6 @@
   font-family: var(--f-mono);
   font-size: var(--fs-9-5);
   line-height: 13px;
-}
-
-.out .mark {
-  opacity: 0.55;
 }
 
 /* 项目色：1–6；0 = 没有项目。底色 + 左侧 2 px 深色竖线 + --on-p 字（视觉稿 .lgtag / .wev） */
@@ -578,6 +633,20 @@
   background: var(--p6);
   box-shadow: inset 2px 0 0 var(--p6s);
   color: var(--on-p);
+}
+
+/* 跨天日程被切开的一端（月格色块、周泳道全天条和时刻块同一套，cal-ui.ts contClass）：那一端画直角；
+   头从前面接过来的（续条，每行 / 每天开头再写一次名字）不画左侧深色竖线。字色不变（照 --on-p，对比度清单 on-p1～6 已管），不用透明度降字色。
+   要排在 .c0～.c6 后面：同一优先级，后写的压过项目色的竖线 */
+.contStart {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow: none;
+}
+
+.contEnd {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 /* ───────── 选中那天的清单 ───────── */
@@ -738,13 +807,23 @@
   background: none;
 }
 
-/* ───────── 周视图·手机（视觉稿 .wlane） ───────── */
+/* ───────── 周视图·手机（R-445 周视图 A“时间轴泳道”，定稿图 定稿_周视图A_浅.png；套月格的 .wkend .holiday .workday .today .sel .dayNum） ───────── */
+
+/* 泳道的几个尺寸（定稿实测：轨道从卡片左边 56pt 起；右边原定稿 9pt，11-17 负责人“最上面的22快顶到边缘了”改 18pt，
+   刻度尺最后一个数字居中压在轨道末端，离卡片边留约 12pt）：刻度行和泳道按钮都按它们排，改一处两边一起动 */
+.pweek {
+  --lane-l: 10px; /* 泳道按钮左内边距 */
+  --lane-col: 46px; /* 左边“周一 / 5 / 廿五”那一列 */
+  --lane-r: 18px; /* 右内边距 */
+  --lane-py: 4px; /* 上下内边距 */
+}
+
 .wrul {
   position: relative;
   height: 18px;
 
-  /* 和泳道按钮对齐：左边 8 内边距 + 64 星期列 + 8 间距，右边 8 + 28 + 8 */
-  margin: 6px 44px 0 80px;
+  /* 和泳道按钮的轨道对齐 */
+  margin: 6px var(--lane-r) 0 calc(var(--lane-l) + var(--lane-col));
 
   /* 时间刻度是小字标签：等宽数字、第三层文字色（R-436 第二批） */
   color: var(--text-3);
@@ -764,29 +843,18 @@
   list-style: none;
 }
 
-/* 泳道之间半像素细线（R-436“行间极细分隔线”）；选中那条照视觉稿 .wlane.sel 圆角 --r-md，上下两条线让开，不从圆角外面穿过 */
+/* 泳道之间半像素细线（R-436“行间极细分隔线”）；选中不再画整条的框（R-445），只把日期数字换成深色小方块 */
 .lane {
   border-top: 0.5px solid var(--line);
 }
 
-.laneSel {
-  border-radius: var(--r-md);
-  background: var(--panel-2);
-}
-
-.laneSel,
-.laneSel + .lane {
-  border-top-color: transparent;
-}
-
 .laneBtn {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 28px;
-  align-items: center;
-  gap: 8px;
+  grid-template-columns: var(--lane-col) minmax(0, 1fr);
+  align-items: stretch;
   width: 100%;
-  min-height: 58px;
-  padding: 4px 8px;
+  min-height: var(--cal-lane-h);
+  padding: var(--lane-py) var(--lane-r) var(--lane-py) var(--lane-l);
   border: 0;
   background: none;
   color: var(--text);
@@ -795,15 +863,12 @@
   cursor: pointer;
 }
 
-.laneSel .laneBtn {
-  border-radius: var(--r-md);
-  box-shadow: inset 0 0 0 1px var(--text-3);
-}
-
+/* 左边“周一 / 5 / 廿五”：靠上排（定稿实测“周一”中线离泳道上沿约 14pt） */
 .laneWd {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  padding-top: 4px;
   line-height: 1.2;
 }
 
@@ -813,25 +878,21 @@
   font-size: var(--fs-10);
 }
 
-/* 日期数字定高 22px、上下各留 2px：今天的圆圈不贴着“周三”和“廿六”（CAL-week-today-circle）。
-   每行都这样排，不只今天，免得今天那行比别的行高 */
-.laneWd b {
-  align-self: flex-start;
-  min-width: 22px;
-  height: 22px;
+/* 日期数字（月格同一个 .dayNum 小方块）加补班“班”标；每行都上下各留 2px，今天的小框不贴着“周三”和“廿六”（CAL-week-today-circle） */
+.laneNum {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin: 2px 0;
-  line-height: 22px;
-  border-radius: var(--r-pill);
-  font-family: var(--f-mono);
-  font-size: var(--fs-15);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
 }
 
-.laneToday {
-  background: var(--today-bg);
-  box-shadow: inset 0 0 0 1.5px var(--today-ring);
-  color: var(--today-fg);
+.laneNum .dayNum {
+  font-size: var(--fs-15);
+  font-weight: 700;
+}
+
+.laneNum .ban {
+  margin-left: 0;
 }
 
 .laneSub {
@@ -840,46 +901,49 @@
   text-overflow: ellipsis;
 }
 
-.allDay {
-  display: block;
-  max-width: 100%;
-  margin-top: 2px;
-  overflow: hidden;
-  padding: 0 3px 0 5px;
-  border-radius: 3px;
-  font-size: var(--fs-9-5);
-  line-height: 14px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
+/* 轨道：--trk-top 单排时刻块离轨道上沿多少（定稿实测 16），--two-top 上下两排时上排离上沿多少；
+   有全天条（.trkAll，条在顶上 4～20）时两个都往下让一排。时刻块、两排、待办空心圆都按这两个排 */
 .trk {
+  --trk-top: 16px;
+  --two-top: 4px;
+
   position: relative;
-  height: 44px;
+  height: calc(var(--cal-lane-h) - 2 * var(--lane-py));
 }
 
-.tick {
+.trkAll {
+  --trk-top: 27px;
+  --two-top: 24px;
+}
+
+/* 全天日程：轨道顶上一整条（R-445 周视图 A；跨天的每天都画，右端写“2/3”，被切开的一端直角 .contStart / .contEnd） */
+.allDay {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--line);
+  top: 4px;
+  right: 0;
+  left: 0;
+  height: var(--cal-bar-h);
+  line-height: var(--cal-bar-h);
 }
 
 .wev {
   position: absolute;
-  top: 12px;
+  top: var(--trk-top);
   height: 20px;
-  overflow: hidden;
-  padding: 0 3px 0 5px;
-  border-radius: 3px;
-  font-size: var(--fs-9-5);
   line-height: 20px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
-/* 上下两排时各占一半 */
+.allDay,
+.wev {
+  display: flex;
+  overflow: hidden;
+  padding: 0 4px 0 6px;
+  border-radius: 3px;
+  font-size: var(--fs-11);
+  white-space: nowrap;
+}
+
+/* 上下两排时各占一半：19 高、中间 2 的缝 */
 .r0,
 .r1 {
   height: 19px;
@@ -887,21 +951,27 @@
 }
 
 .r0 {
-  top: 2px;
+  top: var(--two-top);
 }
 
 .r1 {
-  top: 23px;
+  top: calc(var(--two-top) + 21px);
 }
 
-.contStart {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
+.wevTx {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.contEnd {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
+/* 跨天的“1/3”：靠右、等宽小字（放不下时先让简称省略）；字色同条上的字，不降透明度（对比度照 --on-p） */
+.wevOf {
+  flex: none;
+  margin-left: auto;
+  padding-left: 4px;
+  font-family: var(--f-mono);
+  font-size: var(--fs-10);
 }
 
 /* “+2”：等宽数字，同月格 .more（R-436） */
@@ -913,10 +983,10 @@
   font-size: var(--fs-9-5);
 }
 
-/* 待办空心圆：边色取项目竖线色（.cN 的 box-shadow 不适用，这里单独写边） */
+/* 待办空心圆：边色取项目竖线色（.cN 的 box-shadow 不适用，这里单独写边）；竖直方向对着单排时刻块（20 高）的中线 */
 .wtd {
   position: absolute;
-  top: 50%;
+  top: calc(var(--trk-top) + 10px);
   width: 9px;
   height: 9px;
   margin: -5px 0 0 -5px;
@@ -988,21 +1058,6 @@
   background: var(--nowline);
 }
 
-/* 泳道右边的条数：右对齐，数字等宽（R-436“日期时刻等宽数字”；WeekView 只给数字包 Refine 的 .num，“逾”照旧正文字）；“逾”红字只表示逾期 */
-.tdn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-}
-
-.tdn em {
-  color: var(--danger-text);
-  font-size: var(--fs-10);
-  font-style: normal;
-}
-
 /* ───────── 周视图·电脑（视觉稿 .dwkv） ───────── */
 .dwk {
   display: grid;
@@ -1029,12 +1084,12 @@
   cursor: pointer;
 }
 
-.dHeadBtn b {
+/* 日期数字：月格同一个 .dayNum 小方块（今天、选中、周末的画法在文件末尾），这里只放大 */
+.dHeadBtn .dayNum {
+  align-self: center;
   min-width: 26px;
-  border-radius: var(--r-pill);
-  font-family: var(--f-mono);
+  height: 26px;
   font-size: var(--fs-17);
-  font-variant-numeric: tabular-nums;
 }
 
 /* 农历、节气小字：照旧次要色 --text-2，不换第三层灰——放假那一列表头有斜纹从字底下穿过，斜纹透明度是按 --text-2 ≥ 4.5 定的（R-432），
@@ -1046,10 +1101,6 @@
   font-size: var(--fs-10);
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.dHeadSel {
-  background: var(--panel-2);
 }
 
 /* “全天”小字标签、左边时刻刻度：第三层灰；刻度等宽数字（R-436，同手机周视图 .wrul） */
@@ -1175,8 +1226,8 @@
 
 /* ───────── 上拖收起（线框 s3、R-326） ───────── */
 
-/* 拖动柄和日清单：收起时整块上移，盖在淡出的格子上面。不垫底色（R-439 磨砂玻璃页面底色是一张渐变，垫纯色会显出一块方块）：
-   被盖住的格子跟着进度淡出（MonthGrid 的 fade = 1 - p），停稳后其他行直接隐藏；日清单本身是 --panel 卡片 */
+/* 拖动柄和日清单：收起途中整块上移（useMonthFold 直接写 transform），月格同时从下沿裁掉同样的距离，后面不留字，所以不垫底色
+   （R-439 磨砂玻璃页面底色是一张渐变，垫纯色会显出一块方块）；停稳在收起时月格只排一行，它就在那一行下面，没有任何位移。日清单本身是 --panel 卡片 */
 .dayWrap {
   position: relative;
   z-index: 1;
@@ -1206,4 +1257,34 @@
 /* 拖动柄已经占了 44 px 高，清单不再另留上边距 */
 .fold + .dayList {
   margin-top: 0;
+}
+
+/* ───────── 日期数字的层叠顺序（R-445）：周末灰字 → 今天淡黄小框 → 选中深色小方块，后面的压前面的（今天又是周末按今天画，选中的按选中画）。
+   放在文件末尾：stylelint no-descending-specificity 要求同一元素的低优先级选择器排在前面 ───────── */
+.wkend .dayNum,
+.wkend .line:not(.holName),
+.out .dayNum,
+.out .line:not(.holName),
+.wkend .laneWd small {
+  color: var(--cal-wkend-fg);
+}
+
+/* 补位格：日期和农历不整体变淡（axe 对比度要过），用上面同一档灰字；日程色块和补班标淡下去 */
+.out .mark,
+.out .ban {
+  opacity: var(--cal-out-dim);
+}
+
+.today .dayNum {
+  background: var(--today-bg);
+  box-shadow: inset 0 0 0 1.5px var(--today-ring);
+  color: var(--today-fg);
+  font-weight: 700;
+}
+
+.sel .dayNum {
+  background: var(--cal-sel-bg);
+  box-shadow: none;
+  color: var(--cal-sel-fg);
+  font-weight: 700;
 }

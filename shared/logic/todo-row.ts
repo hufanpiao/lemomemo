@@ -1,13 +1,6 @@
-// 新建一条待办的整行（insert 要整行可写列；shared/schema/rows.ts 的 todosWrite 去掉只能 update 的 deleted_at、undone）：只有这一份。
-// todos 表加了客户端可写列，只改这里（和 rows.ts 的 todosWrite）。四处新建都经它：
-//   • 待办编辑页新建（features/todos/data/todo-edit.ts 的 newTodoRow：表单整份传进来）；
-//   • 纪念日提醒“生成待办”（features/reminders/data/remind-write.ts 的 annivTodoRow：带 from_anniv_id）；
-//   • “＋”识别（shared/logic/capture-map.ts 的 captureRow，客户端和 claude-intake 共用：带 source、raw_text、batch_id、AI 简称）；
-//   • 随手记转待办（shared/logic/notes/note-convert.ts 经 captureRow，再盖上 from_note_id）。
-// 没传的列按“空”：没截止、没截止时刻、不提醒提前量、优先级中、没项目备注、没批次、没来源、没简称；不带排序值（sort_key 列还在，R-442 去掉待办拖动以后前端不再读写）；remind_time 默认 DEFAULT_REMIND_TIME。
-// remind_days 必须由调用方给（编辑页、生成待办是 0 当天，“＋”和随手记是 null 不提醒，两边本来就不同）。
-// 不写 ai_status（系统列）、deleted_at、undone（只能 update）、repeat（R-163）。done_at 跟 done：完成的记 now，没完成 0。纯函数，不读时钟
-// 读一行（todoOf）和“逾期”规则（isLate）也只有这一份（B6 整合）：待办页的分组和截止标签（features/todos/data/todo-list.ts）、
+// 待办的优先级三档、读一行、逾期、组内先后（纯函数，不读时钟）。新建一条待办的整行（todoRowOf、NewTodoRow）在 todo-new.ts：
+// 那边要引 remind.ts，放在这里会让今天页首屏连带下载提醒算法块（11-17 ci 首屏预算 150.2 KB 超线，拆开）
+// 读一行（todoOf）和“逾期”规则（isLate）只有这一份（B6 整合）：待办页的分组和截止标签（features/todos/data/todo-list.ts）、
 // 今天页的“没赶上”和今天截止（features/today/data/today-model.ts）都经它
 // 同一组里待办的先后（compareTodos，R-442）也只有这一份：待办页各组（features/todos/data/todo-list.ts）、今天页“没赶上”和“今天的安排”（today-model.ts）、
 // 日历日清单的待办组（features/todos/ui/DayTodos.tsx）都经它
@@ -17,7 +10,6 @@
 import { diffDays, msAt, parseHm, todayOf, type DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
 import { isLiveRow } from './live-row.ts';
-import { DEFAULT_REMIND_TIME } from './remind.ts';
 
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -105,52 +97,4 @@ export function subProgress(rows: readonly Readonly<Record<string, unknown>>[]):
     m.set(id, { done: c.done + (r['done'] === true ? 1 : 0), total: c.total + 1 });
   }
   return m;
-}
-
-/** 新建的待办整行（列和 todosWrite 去掉 deleted_at、undone 一致）；用 type 不用 interface：写入口要的是 Record<string, unknown> */
-export type NewTodoRow = {
-  id: string;
-  title: string;
-  done: boolean;
-  priority: Priority;
-  important: boolean;
-  due: DateStr | null;
-  due_time: string | null;
-  remind_before_min: number | null;
-  remind_days: 0 | 1 | null;
-  remind_time: string;
-  project: string;
-  note: string;
-  source: 'page' | 'voice' | 'chat';
-  raw_text: string;
-  batch_id: string | null;
-  from_note_id: string | null;
-  from_anniv_id: string | null;
-  short: string | null;
-  short_by: 'ai' | null;
-  done_at: number;
-  push_show_title: null;
-  notified_for: null;
-  snooze_at: null;
-  created_at: number;
-  updated_at: number;
-};
-
-/** todoRowOf 的入参：id、title、now、remind_days 必填，其余没传按文件头的“空” */
-export type TodoRowInput = Pick<NewTodoRow, 'id' | 'title' | 'remind_days'> & {
-  now: number;
-} & Partial<Pick<NewTodoRow,
-  'done' | 'priority' | 'due' | 'due_time' | 'remind_before_min' | 'remind_time' | 'project' | 'note'
-  | 'source' | 'raw_text' | 'batch_id' | 'from_note_id' | 'from_anniv_id' | 'short' | 'short_by'>>;
-
-/** 新建一条待办的整行（规则见文件头）；标题、项目、备注的截短由调用方做 */
-export function todoRowOf(i: TodoRowInput): NewTodoRow {
-  const done = i.done ?? false;
-  return {
-    id: i.id, title: i.title, done, ...prioCols(i.priority ?? 'mid'), due: i.due ?? null, due_time: i.due_time ?? null,
-    remind_before_min: i.remind_before_min ?? null, remind_days: i.remind_days, remind_time: i.remind_time ?? DEFAULT_REMIND_TIME,
-    project: i.project ?? '', note: i.note ?? '', source: i.source ?? 'page', raw_text: i.raw_text ?? '', batch_id: i.batch_id ?? null,
-    from_note_id: i.from_note_id ?? null, from_anniv_id: i.from_anniv_id ?? null, short: i.short ?? null, short_by: i.short_by ?? null,
-    done_at: done ? i.now : 0, push_show_title: null, notified_for: null, snooze_at: null, created_at: i.now, updated_at: i.now,
-  };
 }

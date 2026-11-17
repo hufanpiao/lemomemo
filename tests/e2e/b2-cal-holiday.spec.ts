@@ -92,7 +92,8 @@ test.describe('月历节假日：连休只在第一天写名字、补班“班�
           // 那一行紧跟在第一行下面（格子第一行的类名曾和页顶的 .top 撞名，被撑成 44 px 高，把农历挤到格子底部）
           gap: top && line ? line.getBoundingClientRect().top - top.getBoundingClientRect().bottom : -1,
           line: line?.textContent ?? '',
-          lineColor: line ? getComputedStyle(line).color : '',
+          // 第二段里第一行才是“那一行”（R-445 评审第 2 条：第二段外面一层 .lines 收着那一行和第二个节日名，颜色挂在里面）
+          lineColor: line?.firstElementChild ? getComputedStyle(line.firstElementChild).color : '',
           stripe: getComputedStyle(c, '::before').content !== 'none',
           label: c.getAttribute('aria-label') ?? '',
         };

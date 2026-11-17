@@ -52,6 +52,8 @@ describe('列表页卡片（5.1、5.4、6.2）', () => {
     const stage = await screen.findByTestId('todos-stage-t1');
     expect(stage.textContent).toBe('起步1/3');
     expect(stage.getAttribute('aria-hidden')).toBe('true');
+    // 没有项目、日期时“1/3”后面不拼“ · ”（负责人 11-17 截图里写成了“0/1 ·”）
+    expect(screen.getByTestId('todos-tag-t1').textContent).toBe('起步1/3');
     expect(screen.getByTestId('todos-fold-t1').textContent).toBe('收起');
     const bar = screen.getByTestId('todos-bar-t1');
     expect(bar.getAttribute('role')).toBe('progressbar');
@@ -111,7 +113,7 @@ describe('列表页卡片（5.1、5.4、6.2）', () => {
     await act(() => new Promise((r) => setTimeout(r, 500)));
     fireEvent.pointerMove(title, { pointerId: 1, clientX: 100, clientY: 160, pointerType: 'touch', isPrimary: true });
     fireEvent.pointerUp(title, { pointerId: 1, clientX: 100, clientY: 160, pointerType: 'touch', isPrimary: true });
-    expect(document.querySelector('[data-sort-lifted]')).toBeNull();
+    expect(document.querySelector('[data-sort-held], [data-testid="sort-float"]')).toBeNull();
     expect(logs.filter((l) => l.startsWith('sort '))).toEqual([]);
     expect(save.calls).toHaveLength(0);
   });

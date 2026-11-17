@@ -6,7 +6,7 @@
 //  （kit CheckCircle、kit List 的 .strike），这里只排两个计时——停到 --dur-done-pop + --dur-done-rest 开始收起，再过 --dur-collapse 收完
 // • 打勾完成、勾完最后一个子任务自动完成走同一条路（stay）：
 //   ① 这一条记进 linger 留在原位、方框按 linger 画成勾上（不等写入回来，也不调页面的 hold）；
-//   ② 停到 HOLD_MS、而且写入回来是 ok，才打上 out（行上 data-out，高度收到 0 同时淡出），同时页底升起撤销条（kit UndoToast，8 秒倒计时色带）；
+//   ② 停到 HOLD_MS、而且写入回来是 ok，才打上 out（行上 data-out，高度收到 0 同时淡出），同时页底升起撤销条（kit UndoToast，5 秒倒计时色带）；
 //      写入不是 ok（出错、只读）就不收、不出撤销条，从 linger 拿掉，出错条留着；
 //   开始收起的同时，焦点在这一行里的（键盘、读屏勾的）移到下一行的方框，没有下一行就移到本页撤销条的按钮（画出来以后），焦点不丢；
 //   ③ 收完（再过 OUT_MS）从 linger 拿掉，这一条归进“已完成”组 /“已过去”（收着就不见了）
@@ -216,7 +216,7 @@ export function useDoneFlow(a: Acts, lg: Linger, hold: () => void, text: { done:
       if (g !== undefined) lg.drop(id, g);
       a.report(r.res);
     },
-    /** 撤销条的文案和撤销做什么（kit ListToasts 的 extra）；时长用 kit 默认的 8 秒（UNDO_TOAST_MS，倒计时色带同一时长） */
+    /** 撤销条的文案和撤销做什么（kit ListToasts 的 extra）；时长用 kit 默认的 5 秒（UNDO_TOAST_MS，倒计时色带同一时长） */
     undoOf: (x: DoneToast): ExtraUndo => ({
       key: `done:${x.n}`,
       message: x.message,

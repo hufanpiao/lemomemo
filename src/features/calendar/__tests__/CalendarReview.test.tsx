@@ -181,25 +181,26 @@ describe('其他复审项', () => {
     expect(holText({ kind: 'off', name: '대체공휴일(추석)' }, '班')).toBe('대체공휴일(추석)');
   });
 
-  it('layoutTop：沿 offsetParent 链一路加到 root；中途祖先带 transform 变成 offsetParent 也照样算对（设计第三轮复审 H1 的根因）', async () => {
-    const { layoutTop } = await import('../hooks/useMonthFold.ts');
-    const page = document.createElement('main');
-    const pager = document.createElement('div');
-    const grid = document.createElement('div');
-    const fake = (el: HTMLElement, top: number, parent: Element | null) => {
-      Object.defineProperty(el, 'offsetTop', { configurable: true, get: () => top });
-      Object.defineProperty(el, 'offsetParent', { configurable: true, get: () => parent });
-    };
-    // 正常：grid 的 offsetParent 就是 page
-    fake(grid, 143, page);
-    expect(layoutTop(grid, page)).toBe(143);
-    // 横滑时 pager 带 translateX、成了 grid 的 offsetParent：grid 相对 pager 25，pager 相对 page 118
-    fake(grid, 25, pager);
-    fake(pager, 118, page);
-    expect(layoutTop(grid, page)).toBe(143);
-    // 链上碰不到 root：加到顶为止
-    fake(pager, 118, null);
-    expect(layoutTop(grid, page)).toBe(143);
+  it('foldFrame（R-457 C 压扁收起）：锚点那一行被上面的行带上去；别的行压扁淡掉；月格裁掉、日清单上移的都是“六行高 − 锚点那一行高”', async () => {
+    const { foldFrame } = await import('../hooks/useMonthFold.ts');
+    // 六行：每行高 60、格缝 4（行距 64），第 2 行多一个节日名高 80（行距 84）；月格总高 6×60+20+5×4 = 400
+    const tops = [0, 64, 128, 212, 276, 340];
+    const g = { rows: tops.map((top, i) => ({ top, h: i === 2 ? 80 : 60 })), full: 400 };
+    expect(foldFrame(g, 2, 0).row(0)).toBeNull();
+    expect(foldFrame(g, 2, 0).cut).toBe(0);
+    const f = foldFrame(g, 2, 1);
+    // 锚点第 2 行：上面两行的行距 64 + 64 都收掉，正好顶到月格上沿
+    expect(f.row(2)).toEqual({ transform: 'translateY(-128px)', opacity: '' });
+    expect(f.cut).toBe(400 - 80);
+    // 第 3 行：上面除了锚点那一行的行距（64 + 64）收掉，压扁、淡没
+    expect(f.row(3)?.transform).toBe('translateY(-128px) scaleY(0.0001)');
+    expect(f.row(3)?.opacity).toBe('0');
+    // 进度一半：位移一半，字已经淡掉大半（淡得比压扁快）
+    const h = foldFrame(g, 2, 0.5);
+    expect(h.row(2)?.transform).toBe('translateY(-64px)');
+    expect(Number(h.row(0)?.opacity)).toBeCloseTo(0, 5);
+    expect(Number(foldFrame(g, 2, 0.2).row(0)?.opacity)).toBeCloseTo(0.56, 5);
+    expect(h.cut).toBe(160);
   });
 
   it('电脑周视图：现在线排在日程块前面（画在块下面，不压字；设计复审 N2）', () => {
@@ -305,15 +306,18 @@ describe('其他复审项', () => {
 // 代码复审 R1：收起的补间进行到一半被系统取消（pointercancel）——画面回到页面记的状态（收起），
 // 和拖动柄的 aria-expanded、别的行 inert 一致；不按按下时的进度吸附回展开
 describe('补间中被取消：画面和状态一致', () => {
-  it('点柄收起、补间才走一点就按住又被取消：别的行最后透明度 0，aria-expanded 仍是 false、仍 inert', () => {
+  it('点柄收起、弹簧才走一点就按住又被取消：最后停在收起（月格只排锚点那一行），aria-expanded 仍是 false、别的行仍 inert', () => {
     let now = 0;
     const q: FrameRequestCallback[] = [];
     vi.spyOn(performance, 'now').mockImplementation(() => now);
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => q.push(cb));
     vi.stubGlobal('cancelAnimationFrame', () => q.splice(0));
+    // 一帧一帧往前推（弹簧每帧最多算 32 ms）
     const flush = (at: number) => act(() => {
-      now = at;
-      for (let n = 0; q.length > 0 && n < 50; n++) q.shift()?.(now);
+      for (let n = 0; q.length > 0 && now < at && n < 2000; n++) {
+        now += 16;
+        q.shift()?.(now);
+      }
     });
     open('#/cal/month/2026-11');
     const btn = screen.getByTestId('cal-fold');
@@ -330,7 +334,10 @@ describe('补间中被取消：画面和状态一致', () => {
     flush(10_000);
     expect(btn.getAttribute('aria-expanded')).toBe('false');
     expect(cell('2026-11-12')?.hasAttribute('inert')).toBe(true);
-    expect(cell('2026-11-12')?.style.opacity).toBe('0');
+    // 停稳在收起：换成真的一行排布（data-folded），动画途中直接写上去的透明度、位移都清掉了（R-457 重写）
+    expect(screen.getByTestId('cal-month').querySelector('[data-folded]')).not.toBeNull();
+    expect(cell('2026-11-12')?.style.opacity).toBe('');
+    expect(cell('2026-11-12')?.style.transform).toBe('');
   });
 });
 

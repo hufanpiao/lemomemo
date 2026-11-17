@@ -105,6 +105,14 @@ jobs:
       - name: 需求记录索引
         run: python -I build/req_index.py --check
 
+      # R-462：改到 30 天内已提交 3 次以上的源码文件，提交说明要带“重写评估：”（本机 .githooks/commit-msg 同一条规则）
+      - name: 改动热点要有重写评估
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+        run: |
+          git fetch --no-tags --filter=blob:none --unshallow origin || true
+          python -I build/check_rewrite.py --range "$RANGE"
+
       - name: 设计令牌
         run: python -I build/tokens.py --check
 

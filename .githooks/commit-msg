@@ -1,0 +1,6 @@
+#!/bin/sh
+# 改动热点：改到 30 天内已提交 3 次以上的源码文件，提交说明要带“重写评估：”（R-462，build/check_rewrite.py；CI 的 unit.yml 同一条规则再查一遍）。
+# 不要用 --no-verify 绕过：先想清楚能不能整块重写，把结论写进提交说明。
+py=python
+command -v python >/dev/null 2>&1 || py=python3
+exec "$py" -I build/check_rewrite.py --commit-msg "$1"

@@ -46,8 +46,12 @@ describe('useDragCollapse', () => {
     expect(result.current.progress).toBe(0.5);
     act(() => result.current.onPointerUp(ptr(195, 2100)));
     expect(onChange).toHaveBeenCalledWith(true);
-    await waitFor(() => expect(result.current.progress).toBe(1));
-    expect(result.current.moving).toBe(false);
+    // 进度读的是此刻的值；停稳以后那一次重画 moving 才是 false
+    await waitFor(() => {
+      expect(result.current.progress).toBe(1);
+      expect(result.current.moving).toBe(false);
+      expect(result.current.rest).toBe(1);
+    });
   });
 
   it('拖得不到一半、慢慢松手：弹回展开，不调回调', async () => {
@@ -141,9 +145,12 @@ describe('useDragCollapse', () => {
     vi.spyOn(performance, 'now').mockImplementation(() => now);
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => q.push(cb));
     vi.stubGlobal('cancelAnimationFrame', () => q.splice(0));
+    // 一帧一帧往前推（弹簧每帧最多算 32 ms，直接跳到很久以后只算一步），最多推到 at
     const run = (at: number) => act(() => {
-      now = at;
-      for (let n = 0; q.length > 0 && n < 50; n++) q.shift()?.(now);
+      for (let n = 0; q.length > 0 && now < at && n < 2000; n++) {
+        now += 16;
+        q.shift()?.(now);
+      }
     });
     let collapsed = false;
     const onChange = vi.fn();
@@ -164,7 +171,7 @@ describe('useDragCollapse', () => {
     collapsed = false;
     rerender();
     act(() => {
-      now = 10_010;
+      now += 10;
       q.shift()?.(now);
     });
     expect(result.current.progress).toBeGreaterThan(0.5);

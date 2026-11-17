@@ -1,27 +1,26 @@
-/* 长按拖动排序（kit，SortDrag.tsx；R-429、R-433）：只用令牌（A11）；动效只动 transform、opacity。
-   • .box：列表外框（落点横线相对它定位）
-   • .row：能拖的行（li、卡片）。定位给 6 个点；长按不出 iPhone 的放大镜、“拷贝”菜单，不选字（拖动要用长按）
-   • [data-sort-lifted]：被拿起的那一行留在原处当空位：看不见、高度照占（下面的行不会从浮层底下露出来）
-   • .float：复制出来挂在 body 上的浮层（主持人 11-16 返工第 1、2 条）：贴在视口上（z-index 2：挂在 body 上，压住页面内容和顶部模糊带 --z-strip 1，在随手记整页模糊 --z-notes-mist 4、输入行、底栏下面；
-     不加令牌：base.css 是底栏外观锁定文件），同列表卡片的圆角 --r-lg、
-     抬起阴影 --shadow-2、不透明底 --panel、放大 1.02；位置由 SortDrag.tsx 写 transform，换落点、放下归位时滑过去（--dur-ui），
-     减少动态效果（data-rm，系统设置由 look.ts 折进来）时直接到
-   • .grip：竖排 6 个点（两列三行，3px 圆点、间隔 2px），放在行左边缘（--sort-grip-x 可改；浮层圆角会裁掉外侧，默认放在里面贴左边），
-     平时透明，只在浮层里显出来
-   • .line：落点那一条强调色细横线（2px、圆头），画在两行之间的缝上；位置和宽由 SortDrag.tsx 写（transform、width），不接点按
-   • 外框 [data-sort-dragging]：拖着的时候整个列表不接悬停、光标是“抓着” */
+/* 长按拖动排序（kit，SortDrag.tsx；R-429 起，R-461 整块重写：C“让位加倾斜”、6 个点摆法 1）：只用令牌（A11）；动效只动 transform、opacity。
+   • .box：列表外框（定位容器，行的排版位置量到它为止）
+   • .row：能拖的行（li、卡片）：长按不出 iPhone 的放大镜、“拷贝”菜单，不选字（选字防护第 1 层；iOS 只认带 -webkit- 前缀的，stylelint 已放行这一个前缀）
+   • [data-sort-held]：拿着的那一条在预览顺序里的占位：看不见、位置照占
+   • .float / .card：motion/sort-float.ts 挂到 body 上的浮层。外层 .float 贴在视口上，位置和倾斜由 JS 写 transform（跟手不加过渡）；
+     z-index 2：压住页面内容和顶部模糊带 --z-strip 1，在随手记整页模糊 --z-notes-mist 4、输入行、底栏下面（不加令牌：base.css 是底栏外观锁定文件）。
+     里层 .card 管拿起：先原样画一帧，再给它打 data-up，放大到 1.04、阴影（::after 上的 --shadow-2，只动 opacity）淡入，--dur-ui --ease-out；放下去掉 data-up 缩回。
+     减少动态效果（:root[data-rm="1"]，系统设置由 look.ts 折进来）：不放大，只有阴影和 6 个点淡入淡出
+   • .end：行尾一格（摆法 1）：“⋯”和竖排 6 个点（两列三行，3px 圆点、间隔 3px）叠在一起；只在浮层里拿起时“⋯”淡出、6 个点淡入，放下换回来
+   • 拖动中整页（html[data-sort-dragging]，选字防护第 2 层）：所有元素不选字、不出长按菜单，光标“抓着”。写在这里不写 base.css（底栏外观锁定文件）；
+     第 3 层是 motion/long-press-drag.ts 按下就拦 selectstart、contextmenu，拿起时清掉已有选区 */
 
 .box {
   position: relative;
 }
 
 .row {
-  position: relative;
   -webkit-touch-callout: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 
-.row[data-sort-lifted] {
+.row[data-sort-held] {
   visibility: hidden;
 }
 
@@ -30,58 +29,93 @@
   z-index: 2;
   box-sizing: border-box;
   margin: 0;
-  overflow: hidden;
-  border-radius: var(--r-lg);
-  background: var(--panel);
-  box-shadow: var(--shadow-2);
-  list-style: none;
   pointer-events: none;
   transform-origin: center;
+}
+
+.card {
+  position: relative;
+  height: 100%;
+  border-radius: var(--r-lg);
+  background: var(--panel);
   transition: transform var(--dur-ui) var(--ease-out);
 }
 
-:global(:root[data-rm="1"]) .float {
-  transition: none;
+.card::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: var(--shadow-2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-ui) var(--ease-out);
+  content: '';
+}
+
+/* 复制出来的那一行：贴满浮层，自己的圆角裁住图，不带外边距、分隔线、平时的卡片阴影 */
+.card > * {
+  height: 100%;
+  border-bottom: 0;
+  border-radius: inherit;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.card[data-up] {
+  transform: scale(1.04);
+}
+
+.card[data-up]::after {
+  opacity: 1;
+}
+
+:global(:root[data-rm="1"]) .card,
+:global(:root[data-rm="1"]) .card[data-up] {
+  transform: none;
+}
+
+.end {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+}
+
+.end > * {
+  transition: opacity var(--dur-ui) var(--ease-out);
 }
 
 .grip {
   position: absolute;
   top: 50%;
-  left: var(--sort-grip-x, 4px);
+  left: 50%;
   display: grid;
   grid-template-columns: repeat(2, 3px);
-  gap: 2px;
-  margin-top: -6.5px;
+  gap: 3px;
   opacity: 0;
   pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 .grip > i {
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: var(--text-3);
+  background: var(--text-2);
 }
 
-.float .grip {
+.card[data-up] .end > :not(.grip) {
+  opacity: 0;
+}
+
+.card[data-up] .grip {
   opacity: 1;
 }
 
-.line {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 2;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--accent);
-  pointer-events: none;
-}
-
-:global([data-sort-dragging]) {
+:global(html[data-sort-dragging]),
+:global(html[data-sort-dragging]) :global(*) {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
   cursor: grabbing;
-}
-
-:global([data-sort-dragging]) .row:not([data-sort-lifted]) {
-  pointer-events: none;
 }

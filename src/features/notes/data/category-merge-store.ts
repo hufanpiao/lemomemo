@@ -4,7 +4,7 @@
 //   执行合并只写被合并分类一笔 merged_into（不软删、不逐条改随手记）：条目在读的时候由 note-list.ts 的 categoryResolver 归到留下的分类
 //   （列表、分类胶囊、编辑页的 formOf 都经它；新读 notes.category_id 的地方也必须经它）。
 //   两台设备各合并一次绕成圈：fixCategoryCycles 给圈里留下的那个写回 merged_into: null（每个分类只写一次）。
-//   合并后的撤销条（R-415 ③，8 秒，和删除同一个 kit UndoToast）点“撤销”：undoMerge 丢掉 outbox 里发送失败的合并那一笔，本机还合并着就写一笔 null，
+//   合并后的撤销条（R-415 ③，5 秒，和删除同一个 kit UndoToast）点“撤销”：undoMerge 丢掉 outbox 里发送失败的合并那一笔，本机还合并着就写一笔 null，
 //   最后把这一对记进“不用”（负责人 11-13：撤销就当点了“不用”，经 dismissMerge；写 null 没写成不记）。顺序见 undoMerge。
 //   “写回 merged_into: null”只在 unmerge 一处，成环写回、撤销合并共用，都经 outbox。
 //   运行日志（不记分类名）：notes merge category|undo|dismiss <结果码> merge=<id> keep=<id>，合并那行再带 why=ai|rule；抛异常记 threw <错误名>（platform 的 errName）

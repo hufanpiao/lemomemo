@@ -16,7 +16,7 @@ import { overlapsDays, placeEvent, spanRowOf } from '../../../../shared/logic/ca
 import { isShownFile } from '../../../../shared/logic/files/shown-file.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
-import { normalizeForSearch, queryTerms, searchItems, termVariants } from '../../../../shared/logic/search.ts';
+import { markRanges, normalizeForSearch, searchItems } from '../../../../shared/logic/search.ts';
 
 export type Row = Readonly<Record<string, unknown>> & { readonly id: string };
 export const FIND_KINDS = ['event', 'todo', 'anniv', 'note', 'image', 'file'] as const;
@@ -144,30 +144,8 @@ export interface FindHit {
 const SNIP_BEFORE = 10;
 const SNIP_AFTER = 26;
 
-/**
- * 查询词在原文里出现的位置（大小写、全角半角不计；空白、标点不算进词）：给高亮和片段用。
- * 查找本身按归一后的文字比（shared/logic/search.ts），这里只在原文里找词本身，找不到的（中间夹了空格、标点）就不高亮，不影响命中
- */
-export function markRanges(text: string, q: string): [number, number][] {
-  const hay = text.normalize('NFKC').toLowerCase();
-  // NFKC 可能改变长度（全角英数是一对一，合成谚文字母不是）：长度不一样就不标，免得标错位置
-  if (hay.length !== text.length) return [];
-  const out: [number, number][] = [];
-  for (const t of queryTerms(q)) {
-    // 原词没有就试去掉助词的写法，用第一个找得到的
-    const v = termVariants(t).find((x) => hay.includes(x));
-    if (v === undefined) continue;
-    for (let at = hay.indexOf(v); at >= 0; at = hay.indexOf(v, at + v.length)) out.push([at, at + v.length]);
-  }
-  out.sort((a, b) => a[0] - b[0]);
-  const merged: [number, number][] = [];
-  for (const r of out) {
-    const last = merged.at(-1);
-    if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
-    else merged.push([r[0], r[1]]);
-  }
-  return merged;
-}
+/** 查询词在原文里出现的位置（高亮、片段用）：R-447 起挪到 shared/logic/search.ts（kit 的 Marked、下拉搜索就地筛的行高亮也用），这里转出 */
+export { markRanges };
 
 /** 命中位置前后截一段（单行），两头被截掉时加“…” */
 export function snippetOf(text: string, q: string): string | null {

@@ -16,7 +16,7 @@ import { ITEM_NOTE_MAX, ITEM_TITLE_MAX, PROJECT_MAX, RAW_TEXT_MAX } from '../sch
 import { allDayDuration, allDaySpanDays, EVENT_DURATION_DEFAULT } from './calendar/event-span.ts';
 import { DEFAULT_REMIND_BEFORE_MIN, EVENT_REMIND_MIN_DEFAULT } from './remind.ts';
 import { cutGraphemes } from './short.ts';
-import { todoRowOf, type NewTodoRow } from './todo-row.ts';
+import { todoRowOf, type NewTodoRow } from './todo-new.ts';
 
 /** 纪念日名字最长（anniversaries.name 的约束） */
 export const ANNIV_NAME_MAX = 60;

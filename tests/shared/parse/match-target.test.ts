@@ -13,10 +13,10 @@ const T = '2026-11-02';
 const TM = '2026-11-03';
 
 const ev = (id: string, title: string, date: string, time: string | null, o: Partial<TargetEvent> = {}): TargetEvent => ({
-  id, title, date, time, short: null, project: '', tz: SEOUL, duration_min: 60, created_at: 0, location: '', ...o,
+  id, title, date, time, short: null, short_by: null, project: '', tz: SEOUL, duration_min: 60, created_at: 0, location: '', ...o,
 });
 const td = (id: string, title: string, due: string | null, o: Partial<TargetTodo> = {}): TargetTodo => ({
-  id, title, due, due_time: null, done: false, short: null, project: '', created_at: 0, ...o,
+  id, title, due, due_time: null, done: false, short: null, short_by: null, project: '', created_at: 0, ...o,
 });
 const tg = (o: Partial<PlusTarget>): PlusTarget => ({ text: '', date: null, time: null, kinds: ['event', 'todo'], ...o });
 const ids = (r: ReturnType<typeof matchTarget>) => r.hits.map((h) => h.id);

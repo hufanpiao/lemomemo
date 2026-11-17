@@ -42,3 +42,8 @@ reason = """xlsx 0.20.3 从 SheetJS 官方 CDN 安装（package.json 写 https:/
 id = "GHSA-5pgg-2g8v-p4x9"
 ignoreUntil = 2027-02-14
 reason = """xlsx 0.20.3 从 SheetJS 官方 CDN 安装（package.json 写 https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz，package-lock.json 带 sha512 完整性值；B4b-1 随手记附件 Excel 本机预览用）。npm 公共仓库的 xlsx 停在 0.18.5，修复版只发在 CDN 上，所以 GHSA 两条通告的受影响范围在 OSV 里写成 introduced 0、没有 fixed，凡是 xlsx 都报。核对（主持人 11-14，查 api.osv.dev 通告原文）：GHSA-4r6h-8v6p-xvw6 / CVE-2023-30533 原型污染写明“through 0.19.2”受影响、0.19.3 修复；GHSA-5pgg-2g8v-p4x9 / CVE-2024-22363 ReDoS 写明“before 0.20.2”受影响、0.20.2 修复；两条都指明修复版从 cdn.sheetjs.com 下载。0.20.3 在两个修复之后，不受影响。复查日期：2027-02-14（看 SheetJS 有没有新的安全通告、CDN 有没有新版）；第三方全仓审查时一并复核。"""
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+ignoreUntil = 2027-02-17
+reason = """chrono 0.4.45 只出现在 desktop/src-tauri/Cargo.lock（正式外壳）和 desktop/turnstile-probe/src-tauri/Cargo.lock：两份 Cargo.toml 都没有直接依赖 chrono，引入路径是 tauri-utils → serde_with → chrono（Tauri 自带）。RUSTSEC-2026-0543 是“没人维护”类提示，不是漏洞：OSV 通告 summary 为“chrono is unmaintained”、informational 为 unmaintained，没有 severity、cvss 为 null，受影响范围从 0.0.0-0 起、没有修复版本可升，通告推荐换 jiff 或 time（通告发布于 2026-09-14）。11-17 起 OSV-Scanner 开始报这条，ci 3df9bf39 的 unit 因此失败、挡住预览部署。网页版、PWA 不含 Rust 代码，不受影响。处理：等 Tauri 上游把 serde_with 或 chrono 换掉后升 Tauri、删掉这条；2027-02-17 复查上游进度。负责人 11-17 弹窗同意加这条豁免（主持人查通告原文和两份 Cargo.lock 后提出）；安全审查员会签见提交说明。"""

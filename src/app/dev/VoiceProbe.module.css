@@ -48,6 +48,7 @@
   color: var(--on-ink);
   font-size: var(--fs-16);
   touch-action: none;
+  -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
 }

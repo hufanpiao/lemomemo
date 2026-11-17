@@ -107,22 +107,22 @@ describe('读屏名字以看得见的字开头（WCAG 2.5.3 Label in Name，axe 
     expect(notStartShown('，')).toEqual([]);
   });
 
-  it('手机泳道：星期、日期、农历、色块简称、“+N”、件数、“逾”在前；星期不念两遍', async () => {
+  it('手机泳道：星期、日期、农历、色块简称、“+N”在前（件数、“逾”R-445 起不画，只在后面念）；星期不念两遍', async () => {
     data.events = [ev('9', { date: '2026-11-05', time: '10:00' })];
     data.todos = [todo('t1', { due: '2026-11-04' })];
     open('#/cal/week/2026-11-02');
     const l4 = () => document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-04"]');
-    await waitFor(() => expect(shown(l4())).toMatch(/^周三 4 \S+ 1 逾$/));
+    await waitFor(() => expect(shown(l4())).toMatch(/^周三 4 \S+$/));
     const name = l4()?.querySelector('button')?.getAttribute('aria-label') ?? '';
     expect(name.startsWith(`${shown(l4())}，11月4日，共 1 件，有逾期的待办`)).toBe(true);
     expect(name.split('周三')).toHaveLength(2);
-    expect(shown(document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-05"]'))).toMatch(/^周四 5 \S+ 日程 1$/);
+    expect(shown(document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-05"]'))).toMatch(/^周四 5 \S+ 日程9$/); // 手机周视图色块写完整标题（负责人 11-17）
     expect(notStartShown('，')).toEqual([]);
   });
 
   it('电脑周视图时间块：简称和标题不同时名字先念简称', () => {
     stubWide();
-    data.events = [ev('r1', { title: '交季度报告', short: '交报', date: '2026-11-03', time: '10:00' }), ev('r2', { title: '复盘', date: '2026-11-04', time: '10:00' })];
+    data.events = [ev('r1', { title: '交季度报告', short: '交报', short_by: 'user', date: '2026-11-03', time: '10:00' }), ev('r2', { title: '复盘', date: '2026-11-04', time: '10:00' })];
     open('#/cal/week/2026-11-02');
     expect(screen.getByTestId('cal-desk-block-r1').getAttribute('aria-label')).toBe('交报，交季度报告，10:00～11:00');
     expect(screen.getByTestId('cal-desk-block-r2').getAttribute('aria-label')).toBe('复盘，10:00～11:00');
@@ -136,7 +136,7 @@ describe('读屏名字以看得见的字开头（WCAG 2.5.3 Label in Name，axe 
     expect(notStartShown(', ')).toEqual([]);
     cleanup();
     open('#/cal/week/2026-11-02');
-    expect(document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-05"] button')?.getAttribute('aria-label')).toMatch(/^목요일 5 \S+ 1, 11월 5일, 오늘, /);
+    expect(document.querySelector('[data-testid="cal-week"] li[data-date="2026-11-05"] button')?.getAttribute('aria-label')).toMatch(/^목요일 5 \S+, 11월 5일, 오늘, /);
     expect(notStartShown(', ')).toEqual([]);
   });
 });

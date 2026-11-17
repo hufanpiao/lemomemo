@@ -47,9 +47,10 @@ export const SUMMARIZE_TIMEOUT_MS = 10_000;
  * B4b-3：parse（ai-parse 的“＋”）、voice（ai-voice）升 v4，加意图判断；record 是只做记下的 parse.v3（claude-intake、评测测试集 ①，经 recordWithAI）；
  * media 是 ai-media（B4b-2 识图）的 v1；summarize 是 ai-summarize 的 v1。
  * 11-16（R-440 日程按项目分颜色）：共用的拆分规则改了 project 一条，三份一起升：record 由 parse.v3 改名 record.v4（parse.v4 已被“＋”用掉，免得撞名）、parse 升 v5、voice 升 v5。
- * 11-16（测试集 ① 第 4 次：没说日子也没说时刻的待办被记成今天，record.v6 文件头 v5 一条写了根因）：共用的日期规则改了两句，三份再一起升：record.v5、parse.v6、voice.v6。
+ * 11-16（测试集 ① 第 4 次：没说日子也没说时刻的待办被记成今天，record.v7 文件头 v5 一条写了根因）：共用的日期规则改了两句，三份再一起升：record.v5、parse.v6、voice.v6。
  * 11-17（R-444 跨天日程）：共用规则的 duration_min 一条补全天跨天口径（天数 × 1440，含首尾两天），三份再一起升：record.v6、parse.v7、voice.v7。
+ * 11-17（R-446 月历简称放宽到 4 个字）：共用规则的 short 一条由 1～2 个字改成 1～4 个字，三份再一起升：record.v7、parse.v8、voice.v8。
  */
 export const PROMPT_VERSION = Object.freeze({
-  parse: 'parse.v7', voice: 'voice.v7', record: 'record.v6', classify: 'classify.v2', media: 'media.v1', summarize: 'summarize.v1',
+  parse: 'parse.v8', voice: 'voice.v8', record: 'record.v7', classify: 'classify.v2', media: 'media.v1', summarize: 'summarize.v1',
 });

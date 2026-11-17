@@ -79,6 +79,7 @@
   box-shadow: var(--shadow-2), inset 0 0 0 1.5px var(--accent);
   backdrop-filter: blur(6px) saturate(var(--float-sat));
   touch-action: pan-x;
+  -webkit-user-select: none;
   user-select: none;
 }
 

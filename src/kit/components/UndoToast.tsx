@@ -10,9 +10,11 @@
 //   'yield'：电脑版布局的“布局已保存”，新出来只收起别的 yield 条；已经有 keep 条开着时让路、自己直接收起（布局还能从“⋯”恢复默认）。
 //   冲突提示卡这类本来就和撤销条并存的不带 solo
 import { useEffect, useRef, useState } from 'react';
+import { TOAST_MS } from '../../../shared/logic/toast.ts';
 import styles from './UndoToast.module.css';
 
-export const UNDO_TOAST_MS = 8000;
+/** 提示条默认停多久：唯一一份在 shared/logic/toast.ts（R-460，5 秒） */
+export const UNDO_TOAST_MS = TOAST_MS;
 
 export type UndoSolo = 'keep' | 'yield';
 
