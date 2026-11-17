@@ -114,10 +114,11 @@
   box-shadow: var(--b-tile-shadow);
 }
 
-/* 小字标题“AI 总结 · 只显示，不保存”：挂 kit Form.module.css 的 .groupLabel（等宽小字、字距、第三层文字色，R-436 小字标签）；
-   在卡片里贴齐正文，两级选择器压过 .groupLabel 的外边距 */
-.sum > .sumHead {
-  margin: 0;
+/* 小字标题“AI 总结 · 只显示，不保存”：小字、第三层文字色（R-436 三层文字色）；是一整句话，用正文字体、不加字距
+   （主持人核图：等宽字用在整句上，中韩文会被撑开） */
+.sumHead {
+  color: var(--text-3);
+  font-size: var(--fs-12);
 }
 
 /* 总结文字：纯文本，保留换行 */
@@ -206,13 +207,11 @@
   color: var(--chip-on-fg);
 }
 
-/* 用量“这次用了 N 次 AI · 今天 19 / 50”：等宽小字加字距、第三层文字色（R-436 小字标签、计数等宽） */
+/* 用量“这次用了 N 次 AI · 今天 19 / 50”：小字、第三层文字色；正文字体，只有数字段等宽（AssistPanel.tsx 用 kit NumIn 包） */
 .usage {
   margin: 10px 0 0;
   color: var(--text-3);
-  font-family: var(--f-mono);
   font-size: var(--fs-11);
-  letter-spacing: 0.02em;
   text-align: center;
 }
 

@@ -90,13 +90,12 @@
   white-space: nowrap;
 }
 
-/* 条数“找到 2 条”：等宽小字加字距、第三层文字色（R-436 小字标签“计数”，同待办页标题下那行 Refine .sub） */
+/* 条数“找到 2 条”：小字、第三层文字色（R-436 三层文字色）；正文字体，只有数字段等宽（PullSearch.tsx 用 kit NumIn 包，
+   主持人核图：整句等宽会把中韩文撑开） */
 .count {
   margin: 4px 0 6px;
   color: var(--text-3);
-  font-family: var(--f-mono);
-  font-size: var(--fs-11);
-  letter-spacing: 0.02em;
+  font-size: var(--fs-12);
 }
 
 /* 结果最底下一行：点了才走查找面板的按意思找。R-436 去描边换底色：放在页面底色上，用面板白底（--panel-2 在浅色页面底上几乎看不出来），“›”第三层文字色 */
