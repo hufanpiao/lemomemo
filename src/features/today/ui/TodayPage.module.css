@@ -44,12 +44,6 @@
   color: var(--danger-text);
 }
 
-/* 做完的待办（展开“已过去”时）整行淡出（R-436，同待办页；删除线、灰字在 kit 的 .row[data-done] .title）。
-   淡的是行面（.swRow），左滑露出的“删除”不跟着淡 */
-.page [data-done] .face {
-  opacity: 0.5;
-}
-
 /* 副行的字号在 kit 的 .meta；这里只换红字。写成两级选择器，不靠两份样式表的先后顺序压过 .meta 的颜色 */
 .late .lateTag {
   color: var(--danger-text);

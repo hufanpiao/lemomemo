@@ -36,6 +36,9 @@ export const ko: Readonly<Record<keyof typeof zh, string>> = {
   'list.past': '지난 일 {n}건: {items}', // REVIEW(ko) B6 线框 s1“已过去”
   'toast.deleted': '삭제했어요', // REVIEW(ko)
   'toast.undo': '실행 취소', // REVIEW(ko)
+  'toast.done': '완료했어요', // REVIEW(ko) 11-17 同待办页 list.doneToast
+  'stage.1': '시작', // REVIEW(ko) 11-17 同待办页 items.stage.1
+  'stage.2': '절반 넘음', // REVIEW(ko) 11-17 同待办页 items.stage.2
   'err.save': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
   'err.readonly': '새 버전으로 업데이트해야 수정할 수 있어요', // REVIEW(ko)
   'today.micDenied': '마이크가 꺼져 있어서 음성 기록을 쓸 수 없어요. iPhone “설정”에서 이 앱의 마이크를 켜 주세요.', // REVIEW(ko)

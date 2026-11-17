@@ -11,9 +11,12 @@
 // 今天页的“没赶上”和今天截止（features/today/data/today-model.ts）都经它
 // 同一组里待办的先后（compareTodos，R-442）也只有这一份：待办页各组（features/todos/data/todo-list.ts）、今天页“没赶上”和“今天的安排”（today-model.ts）、
 // 日历日清单的待办组（features/todos/ui/DayTodos.tsx）都经它
+// 子任务一行属于哪条待办（subOwner）、每条待办的子任务做了几项（subProgress）也在这里（11-17）：待办那一包的 todo-items.ts 读子任务、
+// 今天页首屏画方框进度和“大半 3/4”都经它（今天页引不到待办那一包）
 // 读数字列的 numOr 也在这里（审查 11-15 第 8 条：待办几处各写一份 num 合成这一个）：core/todo-done.ts、待办的 todo-actions、todo-autodel、todo-items、todo-list 共用
 import { diffDays, msAt, parseHm, todayOf, type DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
+import { isLiveRow } from './live-row.ts';
 import { DEFAULT_REMIND_TIME } from './remind.ts';
 
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -84,6 +87,24 @@ export function isLate(t: Pick<TodoFields, 'done' | 'due' | 'dueTime'>, now: num
   if (t.done || !t.due) return false;
   const d = diffDays(t.due, todayOf(now, tz));
   return d > 0 || (d === 0 && t.dueTime !== null && msAt(t.due, parseHm(t.dueTime), tz) <= now);
+}
+
+/** 子任务表（todo_items）的一行属于哪条待办：删了、撤销了、没有 todo_id 的返回 null */
+export function subOwner(r: Readonly<Record<string, unknown>>): string | null {
+  const id = r['todo_id'];
+  return typeof id === 'string' && isLiveRow(r) ? id : null;
+}
+
+/** 每条待办的子任务做了几项、共几项（没有子任务的不在里面） */
+export function subProgress(rows: readonly Readonly<Record<string, unknown>>[]): ReadonlyMap<string, { done: number; total: number }> {
+  const m = new Map<string, { done: number; total: number }>();
+  for (const r of rows) {
+    const id = subOwner(r);
+    if (id === null) continue;
+    const c = m.get(id) ?? { done: 0, total: 0 };
+    m.set(id, { done: c.done + (r['done'] === true ? 1 : 0), total: c.total + 1 });
+  }
+  return m;
 }
 
 /** 新建的待办整行（列和 todosWrite 去掉 deleted_at、undone 一致）；用 type 不用 interface：写入口要的是 Record<string, unknown> */

@@ -19,6 +19,9 @@ import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
 
 export type Row = Readonly<{ id: string } & Record<string, unknown>>;
 
+/** 没有留在原位的（keep 的默认值） */
+const NONE: ReadonlySet<string> = new Set();
+
 const MIN = 60_000;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -283,20 +286,22 @@ export interface Late {
   days: number;
 }
 
-/** 没赶上：没完成，截止日早于今天，或今天的截止时刻已过；先后按 compareTodos（R-442：H → M → L，同档截止早的在前，再按创建时间） */
-export function lateTodos(rows: readonly Row[], now: number, current: Tz): Late[] {
+/** 没赶上：没完成，截止日早于今天，或今天的截止时刻已过；先后按 compareTodos（R-442：H → M → L，同档截止早的在前，再按创建时间）；
+ *  keep 里的（刚勾完、还留在原位的，kit/components/useDoneFlow.ts 的 linger）照没完成算，收起以前留在这一组 */
+export function lateTodos(rows: readonly Row[], now: number, current: Tz, keep: ReadonlySet<string> = NONE): Late[] {
   const today = todayOf(now, current);
   const out: Late[] = [];
   for (const r of rows) {
     if (!isLiveRow(r)) continue;
     const t = todoOcc(r);
-    if (t.due && isLate(t, now, current)) out.push({ todo: t, days: diffDays(t.due, today) });
+    if (t.due && isLate(keep.has(t.id) ? { ...t, done: false } : t, now, current)) out.push({ todo: t, days: diffDays(t.due, today) });
   }
   return out.sort((a, b) => compareTodos(a.todo, b.todo));
 }
 
-/** 今天截止、还没过的待办（过了的进“没赶上”）：没完成的在前（做完的收进“已过去”），其余按 compareTodos（R-442：H → M → L，同档按截止时刻、没时刻的在后，再按创建时间） */
-export function todayTodos(rows: readonly Row[], now: number, current: Tz): TodoOcc[] {
+/** 今天截止、还没过的待办（过了的进“没赶上”）：没完成的在前（做完的收进“已过去”），其余按 compareTodos（R-442：H → M → L，同档按截止时刻、没时刻的在后，再按创建时间）；
+ *  keep 里的（刚勾完、还留在原位的，kit/components/useDoneFlow.ts 的 linger）照没完成排 */
+export function todayTodos(rows: readonly Row[], now: number, current: Tz, keep: ReadonlySet<string> = NONE): TodoOcc[] {
   const today = todayOf(now, current);
   const out: TodoOcc[] = [];
   for (const r of rows) {
@@ -304,24 +309,28 @@ export function todayTodos(rows: readonly Row[], now: number, current: Tz): Todo
     const t = todoOcc(r);
     if (t.due === today && !isLate(t, now, current)) out.push(t);
   }
-  return out.sort((a, b) => Number(a.done) - Number(b.done) || compareTodos(a, b));
+  const done = (t: TodoOcc): number => Number(t.done && !keep.has(t.id));
+  return out.sort((a, b) => done(a) - done(b) || compareTodos(a, b));
 }
 
 // ---------- 已过去 ----------
 
 /** 今天的安排里“已过去”的（定稿线框 s1“已过去的折叠成一行”，时间河 river()“▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓”）：
- *  有时刻、结束不晚于此刻的日程，和做完的待办；全天日程不算（没有结束时刻）。其余的照原顺序留在列表里 */
-export function splitPast<E extends Pick<EventOcc, 'end'>, T extends Pick<TodoOcc, 'done'>>(
+ *  有时刻、结束不晚于此刻的日程，和做完的待办；全天日程不算（没有结束时刻）。其余的照原顺序留在列表里；
+ *  keep 里的待办（刚勾完、还留在原位的）收起以前不算已过去 */
+export function splitPast<E extends Pick<EventOcc, 'end'>, T extends Pick<TodoOcc, 'id' | 'done'>>(
   events: readonly E[],
   todos: readonly T[],
   now: number,
+  keep: ReadonlySet<string> = NONE,
 ): { pastEvents: E[]; pastTodos: T[]; events: E[]; todos: T[] } {
   const ended = (o: E): boolean => o.end !== null && o.end <= now;
+  const past = (t: T): boolean => t.done && !keep.has(t.id);
   return {
     pastEvents: events.filter(ended),
-    pastTodos: todos.filter((t) => t.done),
+    pastTodos: todos.filter(past),
     events: events.filter((o) => !ended(o)),
-    todos: todos.filter((t) => !t.done),
+    todos: todos.filter((t) => !past(t)),
   };
 }
 

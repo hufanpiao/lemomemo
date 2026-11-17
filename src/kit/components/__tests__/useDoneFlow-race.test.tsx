@@ -1,9 +1,9 @@
-// useDoneFlow 子任务自动完成那条路的竞态（主持人 11-17 复审必改 B）：先勾主待办，700ms 停留期间又勾完最后一项子任务——
+// useDoneFlow 子任务自动完成那条路的竞态（主持人 11-17 复审必改 B）：先勾主待办，停留（HOLD_MS）期间又勾完最后一项子任务——
 // plan 不能盖掉正在走的那一轮（方框照旧勾上、代号不变），result 不能把这一行从 linger 里拿掉；到点照常收起、出撤销条，收完才离开
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ActionResult } from '../../../core/action-result.ts';
-import { DONE_HOLD_MS, DONE_OUT_MS, useDoneFlow, useLinger } from '../hooks/useDoneFlow.ts';
+import type { ActionResult } from '../../hooks/useListActions.ts';
+import { HOLD_MS, OUT_MS, useDoneFlow, useLinger } from '../useDoneFlow.ts';
 
 type Acts = Parameters<typeof useDoneFlow>[0];
 
@@ -42,18 +42,18 @@ describe('先勾主待办、停留期间又勾完最后一项子任务', () => {
     act(() => h.result.current.f.plan('a', true));
     expect(h.result.current.f.shown('a', false)).toBe(true);
     expect(hold).not.toHaveBeenCalled();
-    act(() => h.result.current.f.result('a', { plan: true, res: 'ok', auto: null, undo: () => Promise.resolve('ok'), message: '全部完成' }));
+    act(() => h.result.current.f.result('a', { res: 'ok', auto: null, undo: () => Promise.resolve('ok'), message: '全部完成' }));
     expect(h.result.current.lg.ids.has('a')).toBe(true);
     expect(h.result.current.f.shown('a', false)).toBe(true);
-    // 停够 700ms：照常收起、出撤销条
+    // 停够 HOLD_MS：照常收起、出撤销条
     await act(async () => {
-      vi.advanceTimersByTime(DONE_HOLD_MS - 300);
+      vi.advanceTimersByTime(HOLD_MS - 300);
     });
     expect(h.result.current.f.out.has('a')).toBe(true);
     expect(show).toHaveBeenCalledTimes(1);
     // 收完才离开
     await act(async () => {
-      vi.advanceTimersByTime(DONE_OUT_MS);
+      vi.advanceTimersByTime(OUT_MS);
     });
     expect(h.result.current.lg.ids.has('a')).toBe(false);
     expect(h.result.current.f.out.has('a')).toBe(false);
@@ -63,7 +63,7 @@ describe('先勾主待办、停留期间又勾完最后一项子任务', () => {
     const { h } = setup();
     act(() => h.result.current.f.plan('b', true));
     expect(h.result.current.lg.ids.has('b')).toBe(true);
-    act(() => h.result.current.f.result('b', { plan: true, res: 'failed', auto: null, undo: () => Promise.resolve('ok'), message: '' }));
+    act(() => h.result.current.f.result('b', { res: 'failed', auto: null, undo: () => Promise.resolve('ok'), message: '' }));
     expect(h.result.current.lg.ids.has('b')).toBe(false);
   });
 });
