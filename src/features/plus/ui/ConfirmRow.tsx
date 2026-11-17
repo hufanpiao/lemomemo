@@ -1,6 +1,7 @@
 // 过去的月日先问（R-166；架构 5.1“没写年份、已经过去的月日”）：
 // “10 月 30 日已经过了 · 补记今年（10/30） · 明年（2027/10/30）”；只说几号的：“补记本月（11/1） · 下个月（12/1）”
 // 选了才保存这一条；“收起”= 没选，原话留在输入条（不悄悄按某一种保存）
+// 按钮用 FormButton size="compact"（R-436 去描边换浅底，同打字条“展开编辑 / 收起”；点击区照样 44）
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { usePlusT } from '../hooks/usePlusT.ts';
@@ -21,13 +22,13 @@ export function ConfirmRow({ item, onChoose, onDismiss }: { item: AiItem; onChoo
   return (
     <div className={styles.ask} role="group" aria-label={q} data-testid="type-confirm">
       <span>{q}</span>
-      <FormButton type="button" onClick={() => onChoose('past')}>
+      <FormButton type="button" size="compact" onClick={() => onChoose('past')}>
         {t(byMonth ? 'plus.confirm.pastMonth' : 'plus.confirm.pastYear', { date: md(c.past) })}
       </FormButton>
-      <FormButton type="button" onClick={() => onChoose('next')}>
+      <FormButton type="button" size="compact" onClick={() => onChoose('next')}>
         {t(byMonth ? 'plus.confirm.nextMonth' : 'plus.confirm.nextYear', { date: byMonth ? ymd(c.next, c.past) : `${parts(c.next).y}/${md(c.next)}` })}
       </FormButton>
-      <FormButton type="button" variant="ghost" onClick={onDismiss}>{t('plus.type.close', {})}</FormButton>
+      <FormButton type="button" variant="ghost" size="compact" onClick={onDismiss}>{t('plus.type.close', {})}</FormButton>
     </div>
   );
 }

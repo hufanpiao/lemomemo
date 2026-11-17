@@ -68,9 +68,9 @@
   box-shadow: 0 0 0 4px var(--rec-dot-halo);
 }
 
-/* 计时（皮肤视觉稿 PH.rec：数字字体、400 字重，已录的深色、“/ 1:00”浅色） */
+/* 计时（皮肤视觉稿 PH.rec：400 字重，已录的深色、“/ 1:00”浅色）；R-436 起时刻一律等宽字（同今天页日程行首时刻） */
 .clock {
-  font-family: var(--f-num);
+  font-family: var(--f-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

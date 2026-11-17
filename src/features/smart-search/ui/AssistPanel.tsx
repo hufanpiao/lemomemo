@@ -134,7 +134,7 @@ export default function AssistPanel({ req, onClose }: { req: AssistReq; onClose(
     const basis = cited === null ? [] : s.items.map((it) => ({ it, n: numOf(it) })).sort((x, y) => (x.n || Infinity) - (y.n || Infinity));
     const sum = !sumAsked ? null : (
       <section className={a.sum} aria-live="polite" data-testid="assist-summary" data-state={s.sum.s}>
-        <div className={a.sumHead}>{t('as.sum.head', {})}</div>
+        <div className={`${form.groupLabel} ${a.sumHead}`}>{t('as.sum.head', {})}</div>
         {s.sum.s === 'wait' ? <p className={a.sumText}>{t('as.sum.wait', {})}</p> : null}
         {s.sum.s === 'done' ? (
           <>
@@ -245,7 +245,7 @@ function PanelHead({ t, desk, said, understand, onClose, onEdit }: { t: T; desk:
       {understand ? (
         <div className={desk ? `${a.und} ${a.deskMx}` : a.und}>
           <span className={a.undText} data-testid="assist-understand">{pre}<b>{understand}</b>{post}</span>
-          {onEdit ? <button type="button" className={a.edit} onClick={onEdit} data-testid="assist-edit">{t('as.edit', {})}</button> : null}
+          {onEdit ? <button type="button" className={`${chip.chip} ${a.edit}`} onClick={onEdit} data-testid="assist-edit">{t('as.edit', {})}</button> : null}
         </div>
       ) : null}
     </>
