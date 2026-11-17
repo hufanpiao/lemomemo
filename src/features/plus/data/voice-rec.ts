@@ -2,10 +2,10 @@
 // • 松手（或点“记下”）面板就收起，进“上传中”：停录那一步也能在提示条上取消（录音器停不下来时最多等 REC_STOP_WAIT_MS）
 // • AI 没回应：录音留在内存（最多 2 分钟）可以“重试”（同一段），或“再说一次”（改用手机自带识别，voice-speech.ts）
 // • 网络原因失败的计数（net）跟着控制器那一份：“10 分钟内 2 次”要跨挂载算（FA-3 复查第 1 条；控制器不随 RecordHost 卸载）
-// • 边说边出字（R-456，voice-live.ts）：录音器照旧开，同时接手按下时先开的手机自带识别。松手等录音器和识别都交了结局（settle）：
+// • 边说边出字（R-456，voice-live.ts）：录音器照旧开，开起来以后再开手机自带识别（R-470：先录音、后识别，不再按下就先开识别）。松手等录音器和识别都交了结局（settle）：
 //   - 识别出了字：交给 voice-live 先按本机规则存、AI 在后台整理（录音器没录成就把字交 ai-parse）
 //   - 识别没开起来、报错、没出字、中途断过（iPhone 主屏幕版上识别和录音可能抢麦克风）：完全照原来，上传、等 AI 回来再存
-//   - 录音器开不起来、识别已经在听：接着听（麦克风被拒照原来出说明卡）；松手时识别正常结束却没认出字出 no_speech，不出 rec_failed
+//   - 录音器开不起来（不是被拒）：开识别顶上接着听（麦克风被拒照原来出说明卡）；松手时识别正常结束却没认出字出 no_speech，不出 rec_failed
 //   运行日志：voice live rec_fail=录音器开不起来、接着听；voice live end speech=识别结局（ok|broken|off|失败原因） len=字数 rec=录音结局 bytes=字节数（每次松手一行，凭它判断识别和录音能不能同时用）
 // 纯 TS：不准 import React（A1）
 import { AI_AUDIO_BITS_PER_SECOND, AI_AUDIO_MAX_BYTES } from '../../../../shared/schema/ai.ts';
@@ -91,17 +91,13 @@ export function createRecRoute(c: VoiceCore) {
   };
 
   return {
-    /** 按下那一下先开边说边出字的识别（R-456；要在手势里） */
-    prime: live.prime,
-    /** 只关先开、还没接手的那次 */
-    drop: live.drop,
-    /** 开录音器（按住满 350 ms） */
+    /** 开录音器（按住满 350 ms），开起来以后再开边说边出字的识别 */
     async begin() {
       const a = c.begin();
       const t0 = clock.now();
       c.set({ path: 'rec', why: null, live: '' });
       c.go({ type: 'prepare' });
-      live.take(a);
+      const p0 = performance.now();
       const r = await startRecorder({
         maxMs: REC_MAX_MS,
         maxBytes: AI_AUDIO_MAX_BYTES,
@@ -123,13 +119,13 @@ export function createRecRoute(c: VoiceCore) {
         return;
       }
       if (!r.ok) {
-        // 录音器开不起来，识别已经在听：接着听，松手先存、字交给 ai-parse 整理（R-456）；麦克风被拒照原来出说明卡
-        if (r.fail !== 'denied' && live.listening(a)) {
+        // 录音器开不起来（不是被拒）：开识别顶上接着听，松手先存、字交给 ai-parse 整理（R-456）；麦克风被拒照原来出说明卡
+        if (r.fail !== 'denied') live.take(a, 'rec_fail', performance.now() - p0);
+        if (live.on(a)) {
           rlog(`voice live rec_fail=${r.fail} keep=speech`);
           c.go({ type: 'start', path: 'rec' });
           return;
         }
-        live.cancel();
         c.end(a);
         c.toIdle();
         if (r.fail === 'denied') c.go({ type: 'card', card: 'denied' });
@@ -138,6 +134,8 @@ export function createRecRoute(c: VoiceCore) {
       }
       a.rec = r.rec;
       c.go({ type: 'start', path: 'rec' });
+      // R-470：录音器拿到麦克风、start 事件到了以后才开识别（先开识别，iPhone 主屏幕版上录音器拿到的流全是 0）
+      live.take(a, 'rec', performance.now() - p0);
     },
     /** 松手、点“记下”、60 秒到了：停录（和识别）、交给 settle */
     stop() {

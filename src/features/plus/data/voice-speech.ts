@@ -93,7 +93,8 @@ export function createSpeechRoute(host: SpeechHost, now: () => number = () => pe
       drop();
       pending = open(lang);
     },
-    /** 接手：先开的那次，没有就当场开一次（调用方也在手势里）。开不起来返回 false */
+    /** 接手：先开的那次，没有就当场开一次。开不起来返回 false。
+     *  手机自带识别那一路接手的是手势里先开的；录音这一路（voice-live）不先开，录音器开起来以后当场开，已不在手势里（R-470），开不起来只丢边说边出字 */
     take(lang: Locale): boolean {
       // 还接手着的旧的那次先关掉（不报结果），免得两个同时在听
       active?.s.cancel();

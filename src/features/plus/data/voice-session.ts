@@ -3,7 +3,7 @@
 // • 选路（按下的那一下定，满 350 ms 照用；之后额度刷新了也不改路，那时已不在手势里）：
 //   离线 → 提示“没网，语音用不了，请用键盘”；麦克风没允许过 → 说明卡，被拒 → “麦克风没有打开”卡；
 //   开着 AI、今天有次数、网络不慢 → 录音 → 松手上传 ai-voice；额度用完、没开 AI / 没同意、10 分钟内网络原因失败 2 次 → 手机自带识别
-// • 录音这一路同时开手机自带识别边说边出字（R-456，部分取代 R-62“录音时不边说边出字”）：按下那一下先开（prime，要在手势里），
+// • 录音这一路同时开手机自带识别边说边出字（R-456，部分取代 R-62“录音时不边说边出字”）：录音器开起来以后才开（R-470，不再按下就先开），
 //   松手识别出了字就先按本机规则存、AI 在后台整理（voice-rec.ts、voice-live.ts）；识别没开起来、没出字就照原来松手上传、等 AI 回来再存
 // • 状态、锁定、手指所在区、说明卡、提示一起经 capture-state 的 viewStep 走，不合法的组合拦下
 // • 每次录音一个代号（attempt），从开录到存完都有效：丢掉、取消让它作废；每个 await 之后先看“还是不是当前这次”，
@@ -264,11 +264,8 @@ export function createVoiceSession(io: VoiceIo = {}) {
     return null;
   };
   const idleOrFinal = (): boolean => c.view().status === 'idle' || isFinal(c.view().status);
-  /** 按下时先开的识别（两条路各一个）都关掉：没按满、没接手、切页 */
-  const dropPrimed = (): void => {
-    speech.drop();
-    rec.drop();
-  };
+  /** 按下时先开的识别（只有手机自带识别那一路先开）关掉：没按满、没接手、切页 */
+  const dropPrimed = (): void => speech.drop();
 
   function finish(): void {
     const v = c.view();
@@ -300,10 +297,9 @@ export function createVoiceSession(io: VoiceIo = {}) {
     down() {
       picked = speechWhy();
       refreshQuota();
-      // 手机自带识别要在手势里 start()：这条路就在按下的这一下里开，没按满 350 ms 再关掉；录音这一路也在这一下开边说边出字的那个（R-456）
-      if (exe || lastMicResult() !== 'granted' || !d().online() || !speechSupported() || !idleOrFinal()) return;
-      if (picked !== null) speech.prime();
-      else rec.prime();
+      // 手机自带识别那一路要在手势里 start()：就在按下的这一下里开，没按满 350 ms 再关掉。
+      // 录音这一路不在这里开识别（R-470）：等录音器拿到麦克风以后才开（voice-rec.ts），先开识别 iPhone 上录音器拿到的流全是 0
+      if (picked !== null && !exe && lastMicResult() === 'granted' && d().online() && speechSupported() && idleOrFinal()) speech.prime();
     },
     start() {
       if (exe || !idleOrFinal() || c.view().card !== null) {
@@ -317,7 +313,6 @@ export function createVoiceSession(io: VoiceIo = {}) {
       const online = d().online();
       rlog(`voice hold start online=${online ? 1 : 0} mic=${mic} route=${picked ?? 'rec'}`);
       if (picked === null || !online || mic !== 'granted') speech.drop();
-      if (picked !== null || !online || mic !== 'granted') rec.drop();
       if (!online) show('offline');
       else if (mic !== 'granted') {
         rlog(`voice card ${mic === 'denied' ? 'denied' : 'ask'}`);
@@ -405,9 +400,9 @@ export function createVoiceSession(io: VoiceIo = {}) {
     },
     /** 当前这次作废、手机识别关掉、计时器清掉、busy 放开（测试用完一份调） */
     dispose() {
+      // 录音这一路的识别跟着这一次作废（c.stop 里 drop → abort）一起关
       c.stop();
       speech.cancel();
-      rec.drop();
     },
   };
 }
