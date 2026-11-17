@@ -1,7 +1,8 @@
 // 下拉露出搜索框（R-437；kit/hooks/usePullReveal.ts + kit/components/PullSlot.tsx）：
 // • 手势：滚到顶往下拉过阈值才露出；横着拉、不在顶上、按在 data-nopull / fixed / 真能滚的元素里、页面外都不算
 // • 滚轮：到顶后先断开 WHEEL_GAP_MS 才累计（惯性冲到顶的那一串不算）；按着 Ctrl、横向为主的不算
-// • 键盘：“搜索本页”平时在、露出后不画，点了 via=key；收起后焦点回到它；打了字列表只藏不卸
+// • 键盘：“搜索本页”平时在、露出后不画，点了 via=key；收起后焦点回到它
+// • 就地筛（R-447）：默认列表留着、foot 打了字才挂，shows / markQ 跟着 setFound；inPlace=false（日历）打了字列表只藏不卸
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,7 +22,7 @@ function Counter() {
   );
 }
 
-function Host({ enabled = true }: { enabled?: boolean }) {
+function Host({ enabled = true, inPlace = true }: { enabled?: boolean; inPlace?: boolean }) {
   const pull = usePullReveal('notes', enabled);
   return (
     <>
@@ -29,13 +30,18 @@ function Host({ enabled = true }: { enabled?: boolean }) {
         <PullSlot
           pull={pull}
           keyLabel="搜索本页"
-          search={
-            <input
-              data-testid="q"
-              value={pull.q}
-              onChange={(e) => pull.setQ(e.target.value)}
-              onKeyDown={(e) => (e.key === 'Escape' ? pull.close() : undefined)}
-            />
+          inPlace={inPlace}
+          search={(part) =>
+            part === 'head' ? (
+              <input
+                data-testid="q"
+                value={pull.q}
+                onChange={(e) => pull.setQ(e.target.value)}
+                onKeyDown={(e) => (e.key === 'Escape' ? pull.close() : undefined)}
+              />
+            ) : (
+              <p data-testid="foot">foot</p>
+            )
           }
         >
           <p data-testid="in">list</p>
@@ -49,6 +55,8 @@ function Host({ enabled = true }: { enabled?: boolean }) {
           </div>
         </PullSlot>
         <span data-testid="state">{pull.open ? `open ${pull.via}` : 'closed'}</span>
+        <button type="button" data-testid="found" onClick={() => pull.setFound({ q: '牛', ids: new Set(['a']) })}>found</button>
+        <span data-testid="shows">{`${pull.shows('a')} ${pull.shows('b')} ${pull.markQ}`}</span>
       </main>
       <div data-testid="out">outside</div>
     </>
@@ -181,8 +189,27 @@ describe('PullSlot', () => {
     expect(document.activeElement).toBe(screen.getByTestId('pull-key'));
   });
 
-  it('打了字列表只藏不卸（里面的状态留着），清空后原样回来', () => {
+  it('就地筛（默认）：打了字列表留着、列表下面挂 foot；shows、markQ 跟着 setFound，清空、收起都复原', () => {
     render(<Host />);
+    fireEvent.click(screen.getByTestId('pull-key'));
+    expect(screen.queryByTestId('foot')).toBeNull();
+    fireEvent.click(screen.getByTestId('found'));
+    // 没打字：什么都不藏
+    expect(screen.getByTestId('shows').textContent).toBe('true true ');
+    fireEvent.change(screen.getByTestId('q'), { target: { value: '牛奶' } });
+    expect(screen.getByTestId('pull-keep').hidden).toBe(false);
+    expect(screen.getByTestId('foot')).toBeTruthy();
+    expect(screen.getByTestId('shows').textContent).toBe('true false 牛');
+    fireEvent.change(screen.getByTestId('q'), { target: { value: '' } });
+    expect(screen.getByTestId('shows').textContent).toBe('true true ');
+    fireEvent.change(screen.getByTestId('q'), { target: { value: '牛奶' } });
+    fireEvent.keyDown(screen.getByTestId('q'), { key: 'Escape' });
+    expect(screen.getByTestId('shows').textContent).toBe('true true ');
+    expect(screen.queryByTestId('foot')).toBeNull();
+  });
+
+  it('inPlace=false（日历）：打了字列表只藏不卸（里面的状态留着），清空后原样回来', () => {
+    render(<Host inPlace={false} />);
     fireEvent.click(screen.getByTestId('counter'));
     fireEvent.click(screen.getByTestId('pull-key'));
     expect(screen.getByTestId('pull-keep').hidden).toBe(false);

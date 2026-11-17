@@ -3,8 +3,9 @@
 // • 下拉手势：页面里派发只带 touches 坐标的 touchstart / touchmove / touchend（kit 的 usePullReveal 只读这几个），两种浏览器同一种做法；
 //   电脑滚轮在顶上继续往上滚另验一次，电脑版随手记详情抽屉里滚轮不开（R-437 评审第 1 条；Chromium，WebKit 手机模拟不支持 mouse.wheel）
 // • 键盘：Tab 到“搜索本页”才看得见，回车打开、输入框自动聚焦，Esc 收起、焦点回到“搜索本页”（评审第 3 条）
-// • 打了字本页列表只藏不卸（评审第 8 条）：断言列表看不见，不断言不在
-// • 设了 LEMO_SHOT_DIR 时在 Chromium 上截三页“露出 + 有结果”的图（645×1398、DPR 2 → 1290 宽，浅色、深色）
+// • R-447（负责人 11-17 选 S-B 原列表筛选）：随手记、待办打了字原来的列表留着、只画命中的，命中的字下面一道短下划线（<mark>），框下一行条数，
+//   列表下面“用 AI 按意思找 ›”，搜不到时居中提示；日历（不就地筛）照旧把本页只藏不卸（评审第 8 条：断言看不见，不断言不在）、结果在搜索框下面列
+// • 设了 LEMO_SHOT_DIR 时在 Chromium 上截三页“露出 + 有结果”的图（430×932、DPR 3 → 1290 宽，同 iPhone 真机尺寸；浅色、深色）
 // 跑在快读组（playwright.fastread.config.ts）：数据经 /sb 同步下来，要会话令牌
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
@@ -89,13 +90,13 @@ async function search(page: Page, pageId: string, q: string): Promise<void> {
   await pullDown(page, pageId);
   await expect(page.getByTestId('pull-input')).toBeVisible({ timeout: 10_000 });
   await page.getByTestId('pull-input').fill(q);
-  await expect(page.getByTestId('pull-results')).toBeVisible();
+  await expect(page.getByTestId('pull-count')).toBeVisible();
 }
 
 test.describe('R-437 下拉搜索：手机', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('随手记：下拉露出 → 按标题 / 正文 / 分类就地筛、隐私记不出 → “用 AI 按意思找”打开查找面板 → 取消收起；日志不带打的字', async ({ page, baseURL }) => {
+  test('随手记：下拉露出 → 原列表按标题 / 正文 / 分类就地筛、隐私记不出 → “用 AI 按意思找”打开查找面板 → 取消收起；日志不带打的字', async ({ page, baseURL }) => {
     await fakeServer(page, baseURL);
     await openPage(page, 'notes', 'notes', `notes-card-${NT}`);
     // 往下拉得不够不露出：轻轻一拉（90px，原来的阈值 64 会露出）不出（负责人 11-17）
@@ -104,24 +105,31 @@ test.describe('R-437 下拉搜索：手机', () => {
     await expect(page.getByTestId('pull-search')).toHaveCount(0);
     await search(page, 'notes', '拉面');
     await expect(page.getByTestId('pull-input')).toHaveAttribute('placeholder', '搜索随手记');
-    await expect(page.getByTestId(`pull-row-${NT}`)).toBeVisible();
-    await expect(page.getByTestId('pull-results')).not.toContainText('拉面秘方');
-    await expect(page.getByTestId('pull-count')).toHaveText('找到 1 条');
-    // 本页列表藏起来（不卸）
-    await expect(page.getByTestId('notes-mason')).toBeHidden();
-    await expect(page.getByTestId('notes-mason')).toHaveCount(1);
+    // 原列表就地筛：命中的卡片还是原来那张，命中的字有下划线；没命中的不画；隐私记不出；不另出结果列表
+    await expect(page.getByTestId(`notes-card-${NT}`)).toBeVisible();
+    await expect(page.getByTestId(`notes-card-${NT}`).locator('mark').first()).toHaveText('拉面');
+    await expect(page.getByTestId(`notes-card-${NT2}`)).toHaveCount(0);
+    await expect(page.getByTestId('notes-mason')).not.toContainText('拉面秘方');
+    await expect(page.getByTestId('pull-results')).toHaveCount(0);
+    await expect(page.getByTestId('pull-count')).toHaveText('1 条');
     // 分类名、正文也能筛
     await page.getByTestId('pull-input').fill('吃喝');
-    await expect(page.getByTestId(`pull-row-${NT}`)).toBeVisible();
+    await expect(page.getByTestId(`notes-card-${NT}`)).toBeVisible();
     await page.getByTestId('pull-input').fill('三本');
-    await expect(page.getByTestId(`pull-row-${NT2}`)).toBeVisible();
+    await expect(page.getByTestId(`notes-card-${NT2}`)).toBeVisible();
+    await expect(page.getByTestId(`notes-card-${NT}`)).toHaveCount(0);
+    // 搜不到：居中一句 + 同一个“用 AI 按意思找”
+    await page.getByTestId('pull-input').fill('发票');
+    await expect(page.getByTestId('pull-empty')).toContainText('随手记里没有“发票”。');
+    await expect(page.getByTestId('pull-count')).toHaveText('0 条');
+    await page.getByTestId('pull-input').fill('三本');
     // 用 AI 按意思找：打开现有查找面板，输入框里是打的字
     await page.getByTestId('pull-ai').click();
     await expect(page.getByTestId('find-panel')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('find-input')).toHaveValue('三本');
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('find-panel')).toHaveCount(0);
-    // 搜索框还在，结果还在；取消清空并收起，列表回来
+    // 搜索框还在，筛的结果还在；取消清空并收起，列表全回来
     await expect(page.getByTestId('pull-input')).toHaveValue('三本');
     await page.getByTestId('pull-cancel').click();
     await expect(page.getByTestId('pull-search')).toHaveCount(0);
@@ -129,21 +137,28 @@ test.describe('R-437 下拉搜索：手机', () => {
     await expect.poll(() => runLog(page), { timeout: 10_000 }).toMatch(/pull close notes/);
     const log = await runLog(page);
     expect(log).toMatch(/pull open notes via=touch/);
-    expect(log).toMatch(/pull find note len=\d+ n=\d+ ms=\d+/);
+    expect(log).toMatch(/pull find note len=\d+ n=\d+ shown=\d+ ms=\d+/);
     expect(log).toMatch(/pull ai note n=1/);
     expect(log).toMatch(/find open from=pull/);
     for (const w of ['拉面', '吃喝', '三本']) expect(log).not.toContain(w);
   });
 
-  test('待办：按子任务筛，第二行写“子任务：…”；点一条进编辑页', async ({ page, baseURL }) => {
+  test('待办：原列表就地筛（按子任务命中的那一行留着），条数“1 未完成”；命中标题的字有下划线；搜不到居中提示；点行照常进编辑页', async ({ page, baseURL }) => {
     await fakeServer(page, baseURL);
     await openPage(page, 'todos', 'todos', `todos-row-${TD}`);
     await search(page, 'todos', '护照');
     await expect(page.getByTestId('pull-input')).toHaveAttribute('placeholder', '搜索待办');
-    await expect(page.getByTestId(`pull-row-${TD}`)).toContainText('子任务：带护照');
-    await expect(page.getByTestId(`pull-row-${TD2}`)).toHaveCount(0);
-    await expect(page.getByTestId('todos-filter')).toBeHidden();
-    await page.getByTestId(`pull-row-${TD}`).click();
+    await expect(page.getByTestId(`todos-row-${TD}`)).toBeVisible();
+    await expect(page.getByTestId(`todos-row-${TD2}`)).toHaveCount(0);
+    await expect(page.getByTestId('pull-count')).toContainText('1 未完成');
+    await expect(page.getByTestId('pull-scope')).toHaveValue('open');
+    await page.getByTestId('pull-input').fill('房租');
+    await expect(page.getByTestId(`todos-row-${TD2}`).locator('mark')).toHaveText('房租');
+    await expect(page.getByTestId(`todos-row-${TD}`)).toHaveCount(0);
+    await page.getByTestId('pull-input').fill('发票');
+    await expect(page.getByTestId('pull-empty')).toContainText('待办里没有“发票”。');
+    await page.getByTestId('pull-input').fill('出差');
+    await page.getByTestId(`todos-row-${TD}`).getByText('准备').click();
     await expect(page).toHaveURL(new RegExp(`#/todo/${TD}`));
   });
 
@@ -153,6 +168,8 @@ test.describe('R-437 下拉搜索：手机', () => {
     await search(page, 'calendar-page', '牙医');
     await expect(page.getByTestId('pull-input')).toHaveAttribute('placeholder', '搜索日程');
     await expect(page.getByTestId(`pull-row-${EV}`)).toBeVisible();
+    await expect(page.getByTestId(`pull-row-${EV}`).locator('mark').first()).toHaveText('牙医');
+    await expect(page.getByTestId('pull-count')).toHaveText('1 条');
     await expect(page.getByTestId(`pull-row-${id(9)}`)).toHaveCount(0);
     await expect(page.getByTestId('cal-pager')).toBeHidden();
     await page.getByTestId(`pull-row-${EV}`).click();
@@ -178,7 +195,8 @@ test.describe('R-437 下拉搜索：键盘', () => {
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('pull-input')).toBeFocused();
     await page.keyboard.type('护照');
-    await expect(page.getByTestId(`pull-row-${TD}`)).toBeVisible();
+    await expect(page.getByTestId(`todos-row-${TD2}`)).toHaveCount(0);
+    await expect(page.getByTestId(`todos-row-${TD}`)).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('pull-search')).toHaveCount(0);
     await expect(page.getByTestId(`todos-row-${TD}`)).toBeVisible();
@@ -236,7 +254,7 @@ test.describe('R-437 下拉搜索：电脑滚轮', () => {
 });
 
 test.describe('R-437 下拉搜索：评审截图', () => {
-  test.use({ viewport: { width: 645, height: 1398 }, deviceScaleFactor: 2 });
+  test.use({ viewport: { width: 430, height: 932 }, deviceScaleFactor: 3 });
 
   test('三页露出 + 有结果（浅色、深色）', async ({ page, baseURL, browserName }) => {
     test.skip(browserName !== 'chromium' || !SHOT_DIR, '只在 Chromium、设了 LEMO_SHOT_DIR 时截');

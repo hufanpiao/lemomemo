@@ -26,8 +26,10 @@ export const loadFindOpen = () => import('./hooks/find-open.ts');
 export const AssistPeek = lazy(() => import('./ui/AssistPeek.tsx'));
 
 /**
- * 下拉搜索（R-437，ui/PullSearch.tsx）：随手记、待办、日历页列表滚到顶再往下拉，标题下面露出的搜索框和结果；露出时才挂、才下载。
- * props: { pull: kit 的 usePullReveal(页面 main, 页名) 的返回值; scope: 'note' | 'todo' | 'event'; onOpen(id): 点开一条（页面自己管只读拦截、抽屉） }。
- * 页面在 pull.searching 时把本页列表换成它的结果
+ * 下拉搜索（R-437、R-447，ui/PullSearch.tsx）：随手记、待办、日历页列表滚到顶再往下拉，标题下面露出的扁搜索框；露出时才挂、才下载。
+ * 挂在 kit PullSlot 的 search={(part) => …} 里（part：'head' 列表上面的搜索框和条数，'foot' 列表下面的“用 AI 按意思找”）。
+ * props: { part; pull: kit 的 usePullReveal(页名) 的返回值; scope: 'note' | 'todo' | 'event';
+ *   found?: 就地筛的页给（页面按 pull.shows(id) 筛完画出来几条），不给 = 不就地筛（日历），结果在这一块里列；
+ *   done?: 待办页的“全部未完成 / 含已完成”；onOpen?(id): 日历页点开一条（页面自己管只读拦截、抽屉） }
  */
 export const PullSearch = lazy(() => import('./ui/PullSearch.tsx'));

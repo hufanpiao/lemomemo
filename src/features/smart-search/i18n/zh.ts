@@ -129,8 +129,15 @@ export const zh = {
   'pull.ph.event': '搜索日程',
   'pull.cancel': '取消',
   'pull.clear': '清空',
-  'pull.n': '找到 {n} 条',
-  'pull.none': '没有按字找到',
+  // R-447 S-B：框下一行小字条数（待办页默认只数未完成，后面一个小下拉换成“含已完成”）；搜不到时居中一句
+  'pull.n': '{n} 条',
+  'pull.open': '{n} 未完成',
+  'pull.scope': '查找范围',
+  'pull.scope.open': '全部未完成',
+  'pull.scope.all': '含已完成',
+  'pull.empty.note': '随手记里没有“{q}”。',
+  'pull.empty.todo': '待办里没有“{q}”。',
+  'pull.empty.event': '日程里没有“{q}”。',
   'pull.more': '只列出前 {n} 条，换个更准的词试试',
   'pull.ai': '用 AI 按意思找',
 } as const;

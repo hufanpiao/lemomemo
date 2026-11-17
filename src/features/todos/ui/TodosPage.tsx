@@ -28,11 +28,13 @@
 //   主待办已完成时取消勾某项 → 主待办改回未完成，先留住分组 --dur-ui 再挪回原来的组，不出撤销条（Q2）。运行日志 todo sub auto done|undone 在 data 层记（不记标题）
 // • “最近删除”入口不在本页（R-441 负责人 11-16“代办页跟随手记页的删除按钮去掉，删除确认放在设置页”，取代 R-438 的顶栏图标）：
 //   设置首页“最近删除”一组的“待办”一行进 #/trash/todos；设置里“完成 7 天后自动删除”说明后面的链接照旧
-// • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出搜索框（kit 的 usePullReveal + smart-search 的 PullSearch，和随手记、日历页同一套）；
-//   打了字就把“最近删除”、项目筛选和列表藏起来、换成结果（kit 的 PullSlot）（按标题和子任务就地筛，已完成的也在里面）；点一条和点标题一样进编辑页（只读的照样拦下）
+// • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出一条扁搜索框（kit 的 usePullReveal、PullSlot + smart-search 的 PullSearch，和随手记、日历页同一套）；
+//   R-447（负责人 11-17 选 S-B“原列表筛选”）：打了字原来的分组和行留着，只画命中的（按标题和子任务，kit 的 pull.shows），命中的字加短下划线（kit PullHit），
+//   没有命中的组整组不画；项目胶囊照样筛。框下一行“3 未完成 · 全部未完成⌄”：默认已完成组不画，小下拉换成“含已完成”时已完成组展开画出命中的；
+//   列表下面“用 AI 按意思找 ›”，一条都没有时居中提示（PullSearch 的 foot）。行还是原来的行：打勾、H/M/L、左滑删除、子任务都照常
 // • 不能拖动排序（R-442 负责人“待办里面不需要拖动，只用HML来排序”，取代 R-429 的待办部分、R-433 的拖动 6 个点）：每组里按 H → M → L、
 //   同档按截止时刻（没时刻的在后）、再按创建时间排（shared/logic/todo-row.ts 的 compareTodos，今天页、日历日清单同一个）；长按什么都不拿起
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import { navigate } from '../../../app/router.ts';
@@ -44,7 +46,7 @@ import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { usePullReveal } from '../../../kit/hooks/usePullReveal.ts';
-import { PullSlot } from '../../../kit/components/PullSlot.tsx';
+import { PullHit, PullSlot } from '../../../kit/components/PullSlot.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable } from '../../../motion/components.ts';
 import { useListT, useTodoList, type DueTag, type Group } from '../hooks/useTodoList.ts';
@@ -73,6 +75,15 @@ export default function TodosPage() {
   const { isRo, del } = a;
   const open = (id: string) => (isRo(id) ? a.g.block() : void navigate('todo', id));
   const pull = usePullReveal('todos');
+  // 就地筛（R-447）：没打字时原样；打了字只留命中的行、没有命中的组不画，已完成组只在选了“含已完成”时画（选的值只在这一页记着）
+  const [withDone, setWithDone] = useState(false);
+  const view = pull.searching
+    ? r.view.flatMap((g) => {
+        const items = g.key === 'done' && !withDone ? [] : g.items.filter((x) => pull.shows(x.todo.id));
+        return items.length ? [{ ...g, items }] : [];
+      })
+    : r.view;
+  const found = view.reduce((n, g) => n + g.items.length, 0);
   const isCollapsed = useCollapsed();
   const fold = (id: string, v: boolean) => setCollapsed(id, v, l.ids);   // 全部待办的 id（不按项目筛选，免得剔掉别的项目点过的）
   const doneOpen = useDoneOpen();
@@ -92,7 +103,11 @@ export default function TodosPage() {
       <p className={refine.sub} data-testid="todos-sub">
         {t('list.sub', { date: fmtDay(l.today, locale, 'monthDayWeek'), done: l.count.done, total: l.count.total })}
       </p>
-      <PullSlot pull={pull} keyLabel={t('list.pullKey', {})} search={<PullSearch pull={pull} scope="todo" onOpen={open} />}>
+      <PullSlot
+        pull={pull}
+        keyLabel={t('list.pullKey', {})}
+        search={(part) => <PullSearch part={part} pull={pull} scope="todo" found={found} done={{ all: withDone, set: setWithDone }} />}
+      >
 
       {l.projects.length ? (
         <div className={styles.filter} role="group" aria-label={t('list.filter', {})} data-testid="todos-filter">
@@ -103,23 +118,24 @@ export default function TodosPage() {
         </div>
       ) : null}
 
-      {r.view.length === 0 ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
+      {r.view.length === 0 && !pull.searching ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
       <AppearList as="div">
-        {r.view.map((g) => (
+        {view.map((g) => (
           <AppearItem
             as="section"
             key={`${g.key}:${g.date ?? ''}`}
             className={g.key === 'late' ? `${styles.group} ${styles.late}` : styles.group} data-testid={`todos-g-${g.key}${g.date ? `-${g.date}` : ''}`}>
-            {g.key === 'done' ? (
+            {/* 已完成组：平时标题就是展开 / 收起按钮；就地筛时整组摊开画命中的，标题只是一行字（“已完成 N”已带条数，右边不再写） */}
+            {g.key === 'done' && !pull.searching ? (
               <DoneFold title={groupTitle(g)} open={doneOpen} onToggle={() => setDoneOpen(!doneOpen)} />
             ) : (
               <h2 className={`${groupLabelClass} ${styles.h2}`}>
                 {/* 分组名小字、加字距，右边条数（R-436 第 4 条）；过期组带“!”、红字 */}
                 <span>{g.key === 'late' ? <span aria-hidden="true">! </span> : null}{groupTitle(g)}</span>
-                <span className={styles.cnt}>{g.items.length}</span>
+                {g.key === 'done' ? null : <span className={styles.cnt}>{g.items.length}</span>}
               </h2>
             )}
-            {g.key === 'done' && !doneOpen ? null : (
+            {g.key === 'done' && !doneOpen && !pull.searching ? null : (
             <AppearList as="ul" className={`${list.list} ${list.roomy}${g.key === 'late' ? ` ${list.late}` : ''}`}>
               {g.items.map(({ todo, tag }) => {
                 const subs = l.subs.get(todo.id);
@@ -132,6 +148,7 @@ export default function TodosPage() {
                     subs={subs}
                     ids={IDS}
                     onOpen={() => open(todo.id)}
+                    mark={(text) => <PullHit pull={pull} text={text} />}
                     collapsed={isCollapsed(todo.id, todo.done)}
                     onCollapse={(v) => fold(todo.id, v)}
                     // 副行（R-434、R-436 确认图）：逾期“! 过期 11/13 14:00 · 项目”红字；其余“项目 · 今天 14:00”；日期、时刻等宽数字；

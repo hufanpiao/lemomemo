@@ -11,7 +11,10 @@
 //   都不算；弹层挂在 body 上，本来就不在页面里
 // • 键盘、读屏（R-437 评审第 3 条）：标题行下面一个平时看不见、Tab 到才出现的“搜索本页”（PullSlot 画，keyRef 挂在它上面），
 //   点了 reveal('key')，搜索框自己聚焦；收起（“取消”、输入框里按 Esc）以后焦点还给它
-// • 露出以后一直留着，直到 close()（清空并收起）；q 放在这里，PullSlot 按 searching 把本页列表藏起来（不卸）
+// • 露出以后一直留着，直到 close()（清空并收起）；q 放在这里
+// • 就地筛（R-447，负责人 11-17 选 S-B“原列表筛选”）：搜索框那一块（smart-search 的 PullSearch）按本页记录算出命中的 id，setFound 交回这里；
+//   页面照原来的分组和行画，只画 shows(id) 为真的，标题用 PullSlot 的 PullHit 给命中的字加短下划线（markQ 是算出这一批命中用的那个查询）。
+//   还没算出来（那一块还在下载）时 found 为 null，什么都不藏
 // • 运行日志：pull open <页> via=touch|wheel|key、pull close <页>（不记打的字）
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { rlog } from '../../platform/run-log-api.ts';
@@ -27,6 +30,11 @@ const LINE_PX = 16;
 
 export type PullVia = 'touch' | 'wheel' | 'key';
 
+export interface PullFound {
+  q: string;
+  ids: ReadonlySet<string>;
+}
+
 export interface PullReveal {
   /** 这一页接不接（隐私记页不接：不画“搜索本页”、不接手势） */
   enabled: boolean;
@@ -35,8 +43,15 @@ export interface PullReveal {
   via: PullVia | null;
   q: string;
   setQ(q: string): void;
-  /** 打了字（去掉空白不为空）：本页列表藏起来、换成结果 */
+  /** 打了字（去掉空白不为空）：本页就地筛（日历页没有整串列表，藏起来换成结果，PullSlot 的 inPlace） */
   searching: boolean;
+  /** 搜索框那一块算出的命中（id 集合 + 算它用的查询）；没打字、还没算出来时为 null */
+  found: PullFound | null;
+  setFound(f: PullFound | null): void;
+  /** 这一条在就地筛时画不画（没在筛、还没算出来时都画） */
+  shows(id: string): boolean;
+  /** 给命中的字加下划线用的查询（没在筛时为空串） */
+  markQ: string;
   reveal(via: PullVia): void;
   /** 清空并收起，焦点还给“搜索本页” */
   close(): void;
@@ -66,6 +81,7 @@ export function pullable(region: HTMLElement | null, t: EventTarget | null): boo
 export function usePullReveal(tag: string, enabled = true): PullReveal {
   const [via, setVia] = useState<PullVia | null>(null);
   const [q, setQ] = useState('');
+  const [found, setFound] = useState<PullFound | null>(null);
   const region = useRef<HTMLElement | null>(null);
   const keyRef = useRef<HTMLButtonElement | null>(null);
   const ref = useCallback((el: HTMLElement | null) => {
@@ -84,6 +100,7 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
   }, [tag]);
   const close = useCallback(() => {
     setQ('');
+    setFound(null);
     if (!openRef.current) return;
     openRef.current = false;
     setVia(null);
@@ -164,5 +181,8 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
     };
   }, [enabled, open, reveal]);
 
-  return { enabled, open, via, q, setQ, searching: q.trim() !== '', reveal, close, ref, keyRef };
+  const searching = q.trim() !== '';
+  const live = searching ? found : null;
+  const shows = useCallback((id: string) => live === null || live.ids.has(id), [live]);
+  return { enabled, open, via, q, setQ, searching, found: live, setFound, shows, markQ: live?.q ?? '', reveal, close, ref, keyRef };
 }

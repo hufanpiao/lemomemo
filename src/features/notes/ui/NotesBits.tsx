@@ -85,15 +85,18 @@ export function FilesMark({ n }: { n: number }) {
 }
 
 /** 列表行中间的字：标题；摘要 · 分类（+ AI 小标、没保存上）；只读行再在下面单独一行标“要新版本” */
-export function RowText({ it, ai, ro, failed }: { it: NoteItem; ai: ReactNode; ro: ReactNode; failed: boolean }) {
+/** mark：标题、摘要的字怎么画（下拉搜索就地筛时给命中的字加短下划线，kit PullHit；不给原样） */
+const same = (text: string): ReactNode => text;
+
+export function RowText({ it, ai, ro, failed, mark = same }: { it: NoteItem; ai: ReactNode; ro: ReactNode; failed: boolean; mark?: (text: string) => ReactNode }) {
   return (
     <span className={row.ltext}>
       <span className={row.t1}>
         {it.converted ? <ConvMark id={it.id} /> : null}
-        {it.title}
+        {mark(it.title)}
       </span>
       <span className={row.t2}>
-        <span className={row.t2txt}>{[it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
+        <span className={row.t2txt}>{mark([it.summary, it.categoryName ?? ''].filter(Boolean).join(' · '))}</span>
         {ai}
         <FilesMark n={it.files} />
         <SyncMark id={it.id} failed={failed} />

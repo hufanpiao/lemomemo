@@ -32,3 +32,11 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* 就地筛时行标题里命中的字（R-447 S-B 方案图）：不改字色，字下面一道短下划线，粗细走令牌 --hl-line，颜色用第二层文字色，深浅两色、两套皮肤都跟着走。
+   线画成 <mark> 自己内容框底边的一条背景线，不用 text-decoration：列表标题是一行省略号（kit List 的 .title overflow: hidden），
+   往下偏的下划线会被裁掉（11-17 出图看到过一次：样式算对了、图上没有线） */
+.hit {
+  background: linear-gradient(var(--text-2), var(--text-2)) left bottom / 100% var(--hl-line) no-repeat;
+  color: inherit;
+}

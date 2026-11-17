@@ -19,7 +19,8 @@
 //   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）；页顶（提示条上面）有带重复的只读行时出
 //   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner）
 // • 下拉搜索（R-437）：页顶往下拉，标题行下面露出搜索框（kit 的 usePullReveal + smart-search 的 PullSearch，和随手记、待办页同一套）；
-//   打了字就把切换行、月历 / 周视图和日清单藏起来（kit 的 PullSlot，不卸）、换成结果（只按日程标题就地筛）；点一条进日程编辑页（只读的照样拦下）。日清单的拖动柄带 data-nopull，往下拖是展开月历、不算下拉
+//   打了字就把切换行、月历 / 周视图和日清单藏起来（kit 的 PullSlot inPlace=false，不卸）、换成结果（只按日程标题筛）。R-447 待办、随手记改成原列表就地筛（S-B），
+//   日历没有一整串记录可以就地筛，只换上同一条扁搜索框、同一行小字条数、同一道命中下划线和居中的“没有”提示；点一条进日程编辑页（只读的照样拦下）。日清单的拖动柄带 data-nopull，往下拖是展开月历、不算下拉
 // • 电脑版详情抽屉（R-130“包括周视图、月视图”，11-17 接上）：有侧栏的宽度（MQ_SIDEBAR，同今天页）点日清单的行、电脑周表的时间块和全天行、搜索结果，
 //   不换页，在右边的详情抽屉里编辑（CalDrawer.tsx，外壳是 kit 的 DetailDrawer；开着哪一条由 kit useListActions.ts 的 useDrawerSel 管，同今天页）。
 //   只读行照旧先拦下；窗口变窄、抽屉画出错时清掉、退回进编辑页。打开时运行日志记一行“cal drawer open kind= view=”（不记标题）。
@@ -219,7 +220,12 @@ export default function CalendarPage() {
         />
         <MeLink testId="cal-settings" />
       </div>
-      <PullSlot pull={pull} keyLabel={t('cal.pullKey', {})} search={<PullSearch pull={pull} scope="event" onOpen={(id) => ro.open('event', id)} />}>
+      <PullSlot
+        pull={pull}
+        keyLabel={t('cal.pullKey', {})}
+        inPlace={false}
+        search={(part) => <PullSearch part={part} pull={pull} scope="event" onOpen={(id) => ro.open('event', id)} />}
+      >
       <CalNav
         t={t}
         month={month}
