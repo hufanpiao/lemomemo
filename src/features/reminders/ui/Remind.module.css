@@ -298,10 +298,10 @@
 .missRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   min-height: calc(var(--hit) + 4px);
-  padding: 0 16px;
+  padding: 0 18px;
   border: 1px solid var(--k-line);
   border-radius: var(--r-pill);
   background: var(--mid-bg);
@@ -314,6 +314,7 @@
 .missOpen {
   flex: none;
   color: var(--text-2);
+  font-size: var(--fs-14);
   font-weight: 400;
 }
 
