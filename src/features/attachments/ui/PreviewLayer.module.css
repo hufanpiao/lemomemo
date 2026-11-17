@@ -1,4 +1,6 @@
-/* 附件预览浮层（线框 sPrev）的内部：顶行、工具、沙箱、PPT 询问、底部“下载”。外壳（scrim / box / full）在 layer.module.css */
+/* 附件预览浮层（线框 sPrev）的内部：顶行、工具、沙箱、PPT 询问、底部“下载”。外壳（scrim / box / full）在 layer.module.css
+   R-436 乙批：分隔线 0.5px；类型标记同附件区（浅底等宽小字）；页码、缩放用等宽数字；PPT 询问卡留白加大、标题加粗、按钮去描边；
+   Excel 工作表切换换 kit 胶囊（PreviewLayer.tsx 挂 Chip.module.css 的 .chip / .chipOn） */
 
 .top {
   display: flex;
@@ -6,7 +8,7 @@
   gap: 10px;
   min-height: 56px;
   padding: 0 12px 0 18px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0.5px solid var(--line);
   font-size: var(--fs-14);
 }
 
@@ -16,15 +18,19 @@
   place-items: center;
   width: 30px;
   height: 34px;
-  border: 1.5px solid var(--ink);
-  border-radius: 7px;
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-family: var(--f-mono);
   font-size: var(--fs-10);
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .name {
   overflow: hidden;
   min-width: 0;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -34,6 +40,7 @@
   min-width: 0;
   color: var(--text-2);
   font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -66,9 +73,11 @@
   opacity: 0.35;
 }
 
+/* “第 1 / 2 页”“100%”：等宽数字，翻页、缩放时宽度不跳（R-436） */
 .page {
   color: var(--text-2);
   font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -77,7 +86,7 @@
   align-items: center;
   gap: 10px;
   margin: 0;
-  padding: 8px 18px;
+  padding: 10px 18px;
   background: var(--panel-2);
   color: var(--text-2);
   font-size: var(--fs-12);
@@ -119,42 +128,47 @@
   gap: 10px;
   width: min(420px, calc(100% - 32px));
   margin: auto;
-  padding: 22px 24px;
+  padding: 24px 24px 20px;
   border-radius: 22px;
   background: var(--sheet-bg);
+  box-shadow: var(--shadow-1);
 }
 
 .askTitle {
   font-size: var(--fs-19);
-  font-weight: 400;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .askBody {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   color: var(--text-2);
   font-size: var(--fs-13);
   line-height: 1.7;
 }
 
+/* 次要按钮（“只下载”、底部“下载 / 用其他 App 打开”）去描边换浅底（R-436 第 3 条），主按钮仍是墨色实底 */
 .askYes,
 .askNo,
 .footBtn {
   min-height: var(--hit);
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--r-pill);
-  background: var(--panel);
+  background: var(--panel-2);
   color: var(--text);
   font-size: var(--fs-15);
 }
 
 .askYes {
-  border-color: var(--ink);
   background: var(--ink);
   color: var(--on-ink);
+  font-weight: 600;
 }
 
+/* “这台设备只问一次…”：小字第三层色（R-436 三层文字色） */
 .askOnce {
-  color: var(--text-2);
+  margin-top: 2px;
+  color: var(--text-3);
   font-size: var(--fs-12);
   text-align: center;
 }
@@ -162,34 +176,16 @@
 .sheets {
   display: flex;
   overflow-x: auto;
-  gap: 4px;
-  padding: 8px 18px;
-  border-top: 1px solid var(--line);
-}
-
-.sheet,
-.sheetOn {
-  flex: none;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: none;
-  color: var(--text);
-  font-size: var(--fs-13);
-}
-
-.sheetOn {
-  border-color: var(--chip-on-bg);
-  background: var(--chip-on-bg);
-  color: var(--chip-on-fg);
+  gap: 6px;
+  padding: 0 18px;
+  border-top: 0.5px solid var(--line);
 }
 
 .foot {
   display: flex;
   gap: 10px;
   padding: 10px 16px;
-  border-top: 1px solid var(--line);
+  border-top: 0.5px solid var(--line);
 }
 
 .footBtn {

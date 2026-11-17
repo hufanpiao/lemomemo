@@ -30,22 +30,36 @@
   font-size: var(--fs-15);
 }
 
-/* 顶部提示（推送被占着、要重新打开、不支持）：浅色卡片，下面一个行内按钮 */
+/* 顶部提示卡（推送被占着、要重新打开、不支持）：浅色卡片，下面一个行内按钮。
+   R-436 乙批去掉整圈 1.5px 柠檬黄描边，改成左边一条柠檬黄竖线（同 kit List 的 .late 竖线画法：卡片上的 ::after，直的、不顺着圆角弯），留白加大 */
 .notice {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
   margin: 0 0 16px;
-  padding: 12px 14px;
-  border: 1.5px solid var(--accent);
+  padding: 14px 16px;
   border-radius: var(--r-lg);
   background: var(--panel);
+}
+
+.notice::after {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+  content: '';
+  pointer-events: none;
 }
 
 .noticeText {
   margin: 0;
   font-size: var(--fs-14);
+  line-height: 1.55;
   overflow-wrap: anywhere;
 }
 
