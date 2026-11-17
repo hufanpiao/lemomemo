@@ -5,7 +5,7 @@
 //   列表里这一条的按钮统一认 data-open="<id>"（今天页、随手记页的行和卡片都带）；那一行也没了（删了、日子过了）退到页顶能接焦点的 h1（今天页的日期，tabIndex=-1），
 //   焦点不掉到 body（独立评审第 10 条）
 // • 读屏：aside 带名字；不加 aria-modal（侧栏和列表照样能用）
-// • side：在哪边（默认右边，左边时贴着侧栏右沿）；handle：kit DeskLayout 给的换边把手，放在抽屉最上面
+// • side：在哪边（默认右边，左边时贴着侧栏右沿）；handle：kit DeskLayout 给的换边把手，叠在抽屉左上角、和编辑器顶行同一行（R-436，视觉稿 .dtop）
 // • 升级中心的 busy（不出版本横幅、不自动重新载入）：焦点在抽屉里（含抽屉里弹出的 radix 浮层）时才占，点回列表、侧栏就放开。
 //   抽屉在电脑上可能开一整天，一直占着新版本永远不出（B6 独立评审第 12 条）；里面的编辑器在抽屉模式下自己不占（EditShell、NoteEditor）
 // • 在不在抽屉里只有一种判断：useInDrawer()（抽屉往里传 onClose；不在抽屉里是 null）。编辑器靠它决定画“×”还是“‹ 返回”、占不占 busy
@@ -92,7 +92,7 @@ export function DetailDrawer({ id, label, onClose, side, handle, initial, 'data-
       onFocus={() => setInside(true)}
       onBlur={onBlur}
     >
-      {handle}
+      {handle ? <div className={styles.grip}>{handle}</div> : null}
       <InDrawer.Provider value={onClose}>{children}</InDrawer.Provider>
     </aside>
   );

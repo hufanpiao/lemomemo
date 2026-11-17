@@ -21,6 +21,11 @@
   font-size: var(--fs-14);
 }
 
+/* 抽屉里顶行左边让出换边把手（kit DetailDrawer.module.css 的 .grip，R-436） */
+.inDrawer > .top {
+  padding-left: var(--drawer-lead, 0);
+}
+
 .back {
   flex: none;
   min-height: var(--hit);

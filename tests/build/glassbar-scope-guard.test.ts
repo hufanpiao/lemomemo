@@ -29,6 +29,9 @@
 //   外观不变：视觉锁定 tabbar-lock、g-plus-hold 0 像素差。
 // • 11-16 R-439（负责人：“磨砂玻璃主题下底色是有个很淡的渐变背景的”），提交 8a4ae431：base.css 加 body::after 画页面底色 var(--scr-bg)，顶部底色条默认改跟 --scr-bg；
 //   底栏本身的规则没动，底栏背后的底色变成渐变，视觉锁定 tabbar-lock 的 glass 两张、简洁浅色（R-438 第 4 组 #666970）一张按 CI 同款镜像重新生成（提交 49f23a02）。
+// • 11-17 R-436 精致化最后一处（负责人 11-16：“精致化按照待办页的思路去做整个app的页面”；主持人派单范围含电脑版侧栏），本分支提交：
+//   GlassBar.module.css 只动 (width >= 900px) 里的侧栏：页签字 700 改回常规字重、字号 --fs-11-5（视觉稿 .rail .rt 11.5px 常规、选中 600 走底栏同一条 .tab[aria-current] 规则），
+//   删掉和全局 :focus-visible 一样的 .me:focus-visible。窄屏底栏、“＋”的规则一行没动；视觉锁定基准都是手机宽度，不受影响。
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -37,9 +40,9 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）按上面的更新记录换过 */
+/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、GlassBar.module.css 又在 R-436 侧栏精致化按上面的更新记录换过 */
 const PINNED: Record<string, string> = {
-  'src/kit/components/GlassBar/GlassBar.module.css': '4fe2fdff0fb033fc77f7795945baf1b6052e9607135fe056fcb38fe6bc9af49f',
+  'src/kit/components/GlassBar/GlassBar.module.css': '9272755e89c97f451123ae01801cbb2f026ad6e8fce3246fab1c5df541fa07cd',
   'src/kit/components/GlassBar/GlassBarFx.tsx': '2cd1d04f069b8e10829389ca87e8b647678ba4c0057c1fb42dc777e342d75b0c',
   'src/kit/components/GlassBar/GlassBarFx.module.css': '3a7f59ede916fe65267888adbf53c60f622ba0e56d5c2b079d9665ad01b8dca3',
   'src/motion/glass-ghost.ts': '6211d651c7439b5aa35d8f755f33327b71213e68aa6c26e404b503ea25da701a',
