@@ -1,6 +1,8 @@
 // 隐私记给别的功能用的几块（经 vault/index.ts 的一个懒加载导出 VaultParts 分发，首屏只多一个 lazy，B5 首屏额度）
-// • lockrow：随手记列表顶部的入口行（线框 s7 LOCKROW）：“🔒 隐私记 已上锁 … Face ID 解锁 ›”，点了进 #/vault；
-//   不写条数（负责人 11-15：“不管解锁没解锁里面几条这个不用显示”）
+// • lockrow：随手记列表顶部的入口行（线框 s7 LOCKROW）：“🔒 隐私记 … 已上锁 · Face ID 解锁 ›”，点了进 #/vault；
+//   不写条数（负责人 11-15：“不管解锁没解锁里面几条这个不用显示”）。
+//   样子是 R-452 V2“kenotex 风”（负责人 11-17 选，图 设计方案/2026-11-17_打字条与隐私记/v-v2-lockrow-*）：上面一行字距拉开的小字分组标签“隐私”，
+//   下面一行平铺、上下两根细线、不画卡片底和阴影；状态和去处合成右边一段第三层灰字
 // • move：把一条普通随手记移进隐私记（S7）：没设密码先去设；锁着就弹解锁卡，解锁后这里再移一次（TC-B5-47 ①；会话不排队等，M1）；
 //   带附件回 has_files → “带附件的随手记暂时不能移进隐私记”（D13）；结果回 onDone(true / false)
 // • settings：设置 › 隐私记（VaultSettings.tsx）
@@ -52,7 +54,7 @@ function FindRow({ onGo }: { onGo?: (() => void) | undefined }) {
   }, [s, state.status, state.phase]);
   if (state.status?.set !== true) return null;
   return (
-    <button type="button" className={`${styles.lockrow} ${styles.findrow}`} onClick={() => {
+    <button type="button" className={styles.findrow} onClick={() => {
       onGo?.();
       void navigate('vault');
     }} data-testid="vault-findrow">
@@ -82,12 +84,14 @@ function LockRow() {
         ? t('vault.lockrow.with', { method: wa.label })
         : t('vault.lockrow.pin', {});
   return (
-    <button type="button" className={styles.lockrow} onClick={() => void navigate('vault')} data-testid="vault-lockrow">
-      <LockIcon />
-      <b>{t('vault.title', {})}</b>
-      <span className={styles.lockrowSub}>{sub}</span>
-      <span className={styles.lockrowGo}>{`${go} ›`}</span>
-    </button>
+    <>
+      <div className={styles.glabel}>{t('vault.lockrow.group', {})}</div>
+      <button type="button" className={styles.lockrow} onClick={() => void navigate('vault')} data-testid="vault-lockrow">
+        <LockIcon />
+        <span>{t('vault.title', {})}</span>
+        <span className={styles.lockrowGo}>{sub ? `${sub} · ${go} ›` : `${go} ›`}</span>
+      </button>
+    </>
   );
 }
 

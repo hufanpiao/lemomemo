@@ -76,7 +76,9 @@ describe('解锁、上锁', () => {
     render(<VaultPage />);
     const card = await screen.findByTestId('vault-unlock-card');
     expect(screen.queryByTestId('vault-unlock-face')).toBeNull();
-    expect([...card.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['输入密码', '取消']);
+    // 负责人 11-17 选 V2：“取消”挪到标题行右边（DOM 里排第一），打开时焦点仍落在主按钮“输入密码”上
+    expect([...card.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['取消', '输入密码']);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('vault-unlock-pin')));
     expect(screen.queryByTestId('vault-unlock-pinview')).toBeNull();
     fireEvent.click(screen.getByTestId('vault-unlock-pin'));
     const view = await screen.findByTestId('vault-unlock-pinview');

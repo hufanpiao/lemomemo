@@ -8,9 +8,13 @@ import type * as Hint from '../data/plus-hint.ts';
 
 const launch = vi.fn();
 vi.mock('../data/plus-hint.ts', async (orig) => ({ ...(await orig<typeof Hint>()), plusHintThisLaunch: () => launch() }));
+// TypeBarPreload 里和气泡挂在一起的录音那一套、查找面板：这里只看气泡，换成空的
+vi.mock('../ui/RecordHost.tsx', () => ({ RecordHost: () => null }));
+vi.mock('../../smart-search/index.ts', () => ({ FindHost: () => null }));
 const { markPlusHeld, resetPlusHintForTest } = await import('../data/plus-hint.ts');
 const { spotOf } = await import('../hooks/usePlusHint.ts');
 const { default: PlusHint } = await import('../ui/PlusHint.tsx');
+const { default: TypeBarPreload } = await import('../ui/TypeBarPreload.tsx');
 
 /** 窄屏：和 GlassBar.module.css 一样，根节点 data-kbhide 时把“＋”藏起来（visibility: hidden） */
 function hideOnKb(): void {
@@ -218,3 +222,42 @@ describe('S23 复审 R1（11-10）', () => {
   });
 });
 
+describe('R-451 打字条开着时不出气泡（主持人 11-17）', () => {
+  /** 等懒加载的 RecordHost 放出 Suspense、气泡查完这次启动 */
+  const settle = async (): Promise<void> => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  it('打字条开着：气泡不画；收起后照原规则再出，也不记成“按住过、以后不出”', async () => {
+    addFab({ top: 740, right: 359, width: 56, height: 56 });
+    const held = vi.spyOn(await import('../data/plus-hint.ts'), 'markPlusHeld');
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(<TypeBarPreload typing={false} />);
+      await settle();
+    });
+    expect(screen.getByTestId('plus-hint')).toBeTruthy();
+
+    await act(async () => {
+      view.rerender(<TypeBarPreload typing />);
+      await settle();
+    });
+    expect(screen.queryByTestId('plus-hint')).toBeNull();
+
+    await act(async () => {
+      view.rerender(<TypeBarPreload typing={false} />);
+      await settle();
+    });
+    expect(screen.getByTestId('plus-hint')).toBeTruthy();
+    expect(held).not.toHaveBeenCalled();
+  });
+
+  it('一打开就是开着的（Ctrl+N 等）：从头到尾不画', async () => {
+    addFab({ top: 740, right: 359, width: 56, height: 56 });
+    await act(async () => {
+      render(<TypeBarPreload typing />);
+      await settle();
+    });
+    expect(screen.queryByTestId('plus-hint')).toBeNull();
+  });
+});

@@ -6,7 +6,7 @@ export const ko = {
   'vault.title': '비밀 메모', // REVIEW(ko)
   'vault.back': '메모', // REVIEW(ko)
   'vault.lockNow': '지금 잠그기', // REVIEW(ko)
-  'vault.unlockedHint': '잠금 해제됨 · 비밀 메모나 앱을 떠나고 {n}분 뒤 자동으로 잠겨요. 여기서 적은 건 바로 비밀 메모에 들어가요.', // REVIEW(ko)
+  'vault.unlockedHint': '잠금 해제됨 · 떠나고 {n}분 뒤 자동 잠금 · 여기서 적은 건 비밀 메모에만 들어가요', // REVIEW(ko)
   'vault.empty': '아직 아무것도 없어요. “＋”를 눌러 첫 메모를 적어 보세요', // REVIEW(ko)
   'vault.keys': 'Ctrl + L 지금 잠그기 · Esc 취소', // REVIEW(ko)
   'vault.loading': '비밀 메모를 여는 중…', // REVIEW(ko)
@@ -29,6 +29,7 @@ export const ko = {
 
   'vault.locked.title': '비밀 메모가 잠겨 있어요', // REVIEW(ko)
   'vault.locked.count': '{n}개가 들어 있어요', // REVIEW(ko)
+  'vault.locked.countShort': '· {n}개', // REVIEW(ko)
   'vault.unlock.with': '{method}로 잠금 해제', // REVIEW(ko)
   'vault.unlock.pin': '비밀번호 입력', // REVIEW(ko)
   'vault.unlock.enter': '비밀 메모 비밀번호를 입력하세요', // REVIEW(ko)
@@ -54,6 +55,7 @@ export const ko = {
   'vault.purgeAll.title': '비밀 메모의 최근 삭제를 비울까요?', // REVIEW(ko)
   'vault.purgeAll.body': '{n}개가 영구 삭제되고 되돌릴 수 없어요.', // REVIEW(ko)
 
+  'vault.lockrow.group': '비밀', // REVIEW(ko)
   'vault.lockrow.locked': '잠김', // REVIEW(ko)
   'vault.lockrow.unlocked': '잠금 해제됨', // REVIEW(ko)
   'vault.lockrow.with': '{method}로 잠금 해제', // REVIEW(ko)

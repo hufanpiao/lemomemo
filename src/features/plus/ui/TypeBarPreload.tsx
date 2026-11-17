@@ -23,10 +23,12 @@ import PlusHint from './PlusHint.tsx';
 const RecordHost = lazy(() => import('./RecordHost.tsx').then((m) => ({ default: m.RecordHost })));
 
 /** onType：“改用打字”打开打字条（App 的 open，经 app/plus-slot.tsx 传进来）；也登记给结果层的“改”（hooks/assist-open.ts）
- *  hold：这一页能不能按住“＋”说话（app/tab-of.ts，隐私记页、纪念日页不能），不能时小气泡不出 */
-export default function TypeBarPreload({ onType, hold = true }: { onType?: (() => void) | undefined; hold?: boolean }) {
+ *  hold：这一页能不能按住“＋”说话（app/tab-of.ts，隐私记页、纪念日页不能），不能时小气泡不出
+ *  typing：打字条开着（app/plus-slot.tsx 的 open）。开着时小气泡不画：已经在打字，提示多余，还压在打字条右下角（R-451 主持人 11-17 定）；
+ *  只是不画，不记“看过”：收起后照原规则（这次启动查过的结果，见 ../data/plus-hint.ts）再出 */
+export default function TypeBarPreload({ onType, hold = true, typing = false }: { onType?: (() => void) | undefined; hold?: boolean; typing?: boolean }) {
   const onNotes = useRoute().name === 'notes';
-  const hint = hold && !onNotes;
+  const hint = hold && !onNotes && !typing;
   useEffect(() => {
     setTypeOpener(onType ?? null);
     return () => setTypeOpener(null);

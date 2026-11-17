@@ -1,6 +1,7 @@
 // 随手记页精致化 e2e（R-436，照待办页 518f49a0 的做法）：
 // • 随手记页不出“＋”上方的新手气泡（主持人 11-16 代定：这页“＋”是聚焦底部输入行，“按住说话 · 点一下打字”对不上）；
 //   今天页照常出，切到随手记页收起，回今天页再出（同 b5-anniv.spec.ts 纪念日页那条的走法）
+// • 打字条开着时也不出气泡（R-451 主持人 11-17：已经在打字，提示多余、压在打字条右下角）；收起后照原规则再出
 // • 分类胶囊用 kit 的 Chip（负责人 11-16“胶囊太大了！参考现在的待办页”）：高 30、没有描边；条数是等宽字
 // • 标题下一行等宽小字“日期 · 共 N 条”；列表方式的分组名右边等宽条数
 import { cached, idbPut } from './idb.ts';
@@ -27,6 +28,17 @@ test('今天页有“＋”气泡；切到随手记页不出，回今天页再�
     location.hash = '#/today';
   });
   await expect(page.getByTestId('plus-hint')).toBeVisible({ timeout: 30_000 });
+});
+
+test('今天页点“＋”打开打字条：气泡不见；“收起”以后再出（R-451）', async ({ page }) => {
+  await page.goto('/app/#/today');
+  await expect(page.getByTestId('plus-hint')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('tabbar-add').click();
+  await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('plus-hint')).toHaveCount(0);
+  await page.getByTestId('type-bar').getByRole('button', { name: '收起' }).click();
+  await expect(page.getByTestId('type-bar')).toHaveCount(0);
+  await expect(page.getByTestId('plus-hint')).toBeVisible({ timeout: 10_000 });
 });
 
 test('直接打开随手记页也不出“＋”气泡', async ({ page }) => {

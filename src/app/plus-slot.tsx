@@ -94,7 +94,7 @@ export function PlusSlot(
     <>
       {Pre && (
         <ErrorBoundary fallback={null}>
-          <Pre onType={onOpen} hold={hold} />
+          <Pre onType={onOpen} hold={hold} typing={open} />
         </ErrorBoundary>
       )}
       {open &&
