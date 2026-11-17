@@ -2,7 +2,7 @@
 // • 表头：星期、日期（今天墨色细圈 / 柠檬黄底）、节日或农历；补班写“班·名字”，连休只在第一天写节日名；
 //   放假、补班的表头和那一列画斜纹（和月格、手机泳道同一个类 .holiday / .workday，代码复审 N4、R-432）；
 //   点表头选中那一天，下面清单列出当天全部
-// • 顶部“全天”行：全天日程和当天截止的待办（○ 标题），点了打开编辑页
+// • 顶部“全天”行：全天日程和当天截止的待办（○ 标题），点了打开编辑页（电脑版详情抽屉，R-130：页面的 onOpen 决定；按钮带 data-open、开着的那条 aria-current）
 // • 时间格：范围同手机（按当周事项自动伸缩，ui/week-axis.ts）；重叠的并排分列（buildWeek layout 'desk' 的 column / columns）；
 //   今天有现在线，画在日程块下面（DOM 里排在前面），不压字（设计复审 N2）
 import { weekdayOf } from '../../../../shared/core/date.ts';
@@ -25,6 +25,7 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
   // 只读行（FA-2 审查第 2 条）：块太小放不下“要新版本”字样，改成斜纹底（data-readonly），读屏名字后接“要更新到新版本才能修改”
   const tRo = useRoT();
   const isRo = p.isRo ?? (() => false);
+  const cur = (id: string) => (p.openId === id ? ('true' as const) : undefined);
   const roLabel = (ro: boolean, label: string): string => (ro ? tRo('ro.named', { label }) : label);
   const dates = weekDates(p.start);
   // 每天的斜纹类（表头和那一列同一个，和月格、手机泳道共用 .holiday / .workday）
@@ -74,6 +75,8 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
                   onClick={() => open(which, id)}
                   aria-label={roLabel(ro, kind === 'todo' ? t('cal.todoMark', { title }) : `${t('cal.allDay', {})} ${title}`)}
                   data-readonly={ro ? '' : undefined}
+                  data-open={id}
+                  aria-current={cur(id)}
                   data-testid={`cal-desk-all-${id}`}
                 >
                   {kind === 'todo' ? '○ ' : ''}
@@ -114,6 +117,8 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
                 aria-label={roLabel(ro, name)}
                 onClick={() => open('event', b.itemId)}
                 data-readonly={ro ? '' : undefined}
+                data-open={b.itemId}
+                aria-current={cur(b.itemId)}
                 data-testid={`cal-desk-block-${b.itemId}`}
               >
                 <span className={styles.beSh}>{b.short}</span>

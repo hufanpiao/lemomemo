@@ -27,6 +27,7 @@ export const viewKo = {
   'cal.pickHintWeek': '그달 1일이 있는 주로 · 작은 점은 오늘', // REVIEW(ko)
   'cal.backToday': '오늘로 돌아가기', // REVIEW(ko)
   'cal.h1': '캘린더', // R-106 B2 第一遍已审（11-04）（B2K-05，和底栏同名）
+  'cal.drawer': '상세', // REVIEW(ko) R-130 电脑版日历详情抽屉（同今天页 desk.drawer）
   'cal.pullKey': '이 페이지 검색', // REVIEW(ko) R-437
   'cal.fold.collapse': '한 주만 보기', // REVIEW(ko)
   'cal.fold.expand': '한 달 펼치기', // REVIEW(ko)
