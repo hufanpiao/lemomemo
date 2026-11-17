@@ -293,25 +293,28 @@
 }
 
 /* 今天页顶部“错过 N 条提醒 · 查看 ›”（R-453 负责人 11-17 选 B 无框浅底胶囊）：去掉原来 1.5px 墨色描边，
-   半透明浅底 + 一根和分隔线同色的细边，整条圆成胶囊；铃铛右上角一个小红点表示“有没看的”，文字常规字重，“查看 ›”降一档灰 */
+   半透明浅底（--mid-bg，浅色透出背后的晕染）+ 一根 --k-line 淡边（浅深色都看得见），整条圆成胶囊、高 48（点按区多留 4）；
+   铃铛右上角一个小红点（外圈 2px 页面底色和铃铛隔开），文字 500 字重，“查看 ›”降一档灰。数值按方案图 miss-b 实测对齐 */
 .missRow {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: var(--hit);
+  min-height: calc(var(--hit) + 4px);
   padding: 0 16px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--k-line);
   border-radius: var(--r-pill);
-  background: var(--glass-bg);
+  background: var(--mid-bg);
   color: var(--text);
   font: inherit;
+  font-weight: 500;
   text-align: left;
 }
 
 .missOpen {
   flex: none;
   color: var(--text-2);
+  font-weight: 400;
 }
 
 .bellDot {
@@ -329,6 +332,7 @@
   height: 7px;
   border-radius: 50%;
   background: var(--rec-dot);
+  box-shadow: 0 0 0 2px var(--bg);
 }
 
 .grow {
