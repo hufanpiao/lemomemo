@@ -6,6 +6,8 @@
 // • 焦点进出（是点出来的还是程序聚焦、值的长度、选区）；输入法开始/结束；beforeinput 的 inputType；每个按键（字符键只记“char”）
 // • 回车：所在表单、输入框值的长度、提交按钮在不在、禁没禁用、是不是正在用输入法；表单真提交了另记 submit
 // • 点按（down/up/cancel/click）：点到哪个元素、坐标；路由；前后台；报错、未处理的 Promise 拒绝、console.error/warn；网络请求（方法、路径不带参数、状态、耗时）
+// • 选字（R-429 真机 11-17“已移动”被蓝色选区盖住、出蓝色手柄）：selectstart、contextmenu 落在哪、有没有被拦；selectionchange 只在类型或两端所在元素变了时记一行
+//   （sel type=Range|Caret|None a=起点所在元素 f=终点所在元素，不记选中的字）；开头一行带根元素的点按高亮色 tap-hl（iOS 按下时的灰框，11-17）
 // • 业务代码经 run-log-api.ts 的 rlog 记的结果（提交了没有、为什么没提交）
 // • 焦点进出、路由变化后 400ms 再拍一次版面快照（等键盘、动画停稳）；焦点进来后 400ms、1500ms 各记一行 kbcheck（系统滚没滚页面、浮条贴没贴键盘，台账 Q-8）
 // 版面快照、kbcheck 的读法在 run-log-layout.ts；这里挂事件、存日志、接 console 和 fetch。
@@ -165,7 +167,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const nav = win.navigator as Navigator & { standalone?: boolean };
   const standalone = isStandalone(nav, (q) => win.matchMedia?.(q).matches === true);
   push(
-    `=== start ${new Date(t0).toISOString()} v=${opts.version ?? `${buildInfo.version}@${buildInfo.commit}`} screen=${win.screen.width}x${win.screen.height} dpr=${win.devicePixelRatio} standalone=${standalone} route=${win.location.hash || '/'} ua=${nav.userAgent.slice(0, 160)}`,
+    `=== start ${new Date(t0).toISOString()} v=${opts.version ?? `${buildInfo.version}@${buildInfo.commit}`} screen=${win.screen.width}x${win.screen.height} dpr=${win.devicePixelRatio} standalone=${standalone} tap-hl=${win.getComputedStyle(doc.documentElement).getPropertyValue('-webkit-tap-highlight-color') || '-'} route=${win.location.hash || '/'} ua=${nav.userAgent.slice(0, 160)}`,
   );
   save();
 
@@ -256,6 +258,24 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   };
   const onCompStart = (e: Event): void => add(`composition start on=${describeEl(e.target)}`);
   const onCompEnd = (e: Event): void => add(`composition end on=${describeEl(e.target)}${fieldState(e.target)}`);
+  /** 选字（见文件头）：开始选、长按菜单落在哪，后面有没有人拦 */
+  const onSelStart = (e: Event): void => {
+    add(`selectstart ${describeEl(pickTarget(e.target))}${e.defaultPrevented ? ' prevented' : ''}`);
+    preventedLater(e, `selectstart ${describeEl(pickTarget(e.target))}`);
+  };
+  const onMenu = (e: Event): void => {
+    add(`contextmenu ${describeEl(pickTarget(e.target))}${e.defaultPrevented ? ' prevented' : ''}`);
+    preventedLater(e, `contextmenu ${describeEl(pickTarget(e.target))}`);
+  };
+  let lastSel = '';
+  const onSelChange = (): void => {
+    const sel = doc.getSelection();
+    const host = (n: Node | null | undefined): string => describeEl(pickTarget(n instanceof Element ? n : (n?.parentElement ?? null)));
+    const s = sel ? `sel type=${sel.type} a=${host(sel.anchorNode)} f=${host(sel.focusNode)}` : 'sel none';
+    if (s === lastSel) return;
+    lastSel = s;
+    add(s);
+  };
   const onSubmit = (e: Event): void => add(`submit ${describeEl(e.target)} by=${describeEl((e as SubmitEvent).submitter)}`);
   const onHash = (): void => {
     // add 自己会补 route 行；这里只等画面稳下来再拍一次
@@ -313,6 +333,9 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     [doc, 'compositionstart', onCompStart, true],
     [doc, 'compositionend', onCompEnd, true],
     [doc, 'submit', onSubmit, true],
+    [doc, 'selectstart', onSelStart, true],
+    [doc, 'contextmenu', onMenu, true],
+    [doc, 'selectionchange', onSelChange, undefined],
     [win, 'hashchange', onHash, undefined],
     [doc, 'visibilitychange', onVis, undefined],
     [win, 'pageshow', onPageShow, undefined],

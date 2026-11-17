@@ -17,6 +17,9 @@
 // • 放下：交给 onDrop({id, from, to, beforeId, afterId})——放下后排在它前面、后面的那两条（按拿起那一刻的顺序，不含它自己；组的头、尾为 null）。
 //   不交下标：拖动中列表可能变了（同步回来一条），页面按邻居 id 在“此刻”的列表里找下标（dropAt），找不到当取消（kit/hooks/useSortDropFlow.ts）。
 //   落回原位、没落点只记日志。运行日志 sort drop from= to= n=（组名只记冒号前那段，例如 day:2026-11-18 记 day；不记标题）、sort drop same、sort cancel why=
+// • 浮层看不看得见（真机 11-17：iPhone 主屏幕版拖着时只剩空位、看不到浮层，网页上复现不了）：拿起后第一次挪动、放下时各记一行 sort float
+//   （浮层视口位置、窗口大小和滚动、computed 的 display/visibility/opacity/z-index、此刻浮层中心最上面的是谁 top=float 或 标签#testid.第一个类名、浮层以外最上面的 under=）；
+//   拿起那一行带上行的 user-select / -webkit-user-select（iOS 长按选字，同一天的蓝色选区）
 // • 收尾（返工第 5 条“先跳回原位再滑过去”）：这一条从拿起到浮层撤掉都由 holdSortRow 拿着——藏着、不播 layout 动画（新挂上的也不淡入），重排后直接在新位置。
 //   等列表按新顺序画出来（页面重画后 layout 阶段看它的排版位置变了，最多 SETTLE_WAIT_MS），浮层滑到它的排版位置（offsetTop 一路加到外框，不含任何 transform），
 //   滑完撤浮层、放开这一条。取消、落回原位不等，直接滑回空位。运行日志 sort settle moved= wait= dy=（等了多久、最后滑了多远）
@@ -82,6 +85,8 @@ interface Lift {
   order: Map<string, string[]>;
   gaps: Gap[];
   target: { group: string; index: number } | null;
+  /** 拿起后第一次挪动记过 sort float 没有 */
+  probed: boolean;
 }
 
 /** 组名只留冒号前那段（运行日志用，不记日期） */
@@ -170,6 +175,33 @@ function makeFloat(row: HTMLElement, r: DOMRect, pad: number): HTMLElement {
   Object.assign(f.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, paddingLeft: `${pad}px`, paddingRight: `${pad}px`, transform: 'scale(1.02)' });
   document.body.appendChild(f);
   return f;
+}
+
+/** 运行日志用：元素只记标签、data-testid、第一个类名（不记文字） */
+function who(el: Element | null, f: HTMLElement): string {
+  if (!el) return 'null';
+  if (el === f || f.contains(el)) return 'float';
+  const id = el.getAttribute('data-testid');
+  const cls = typeof el.className === 'string' ? el.className.split(' ')[0] : '';
+  return `${el.tagName.toLowerCase()}${id ? `#${id.slice(0, 40)}` : ''}${cls ? `.${cls.slice(0, 30)}` : ''}`;
+}
+
+/**
+ * 浮层此刻画没画出来（见文件头“浮层看不看得见”）：位置、窗口、computed 样式、浮层中心最上面是谁。
+ * 浮层平时不接点按、inert（elementsFromPoint 都会跳过它）：量的那一下同步临时打开再关回去，中间不出帧、不派发事件
+ */
+function floatState(f: HTMLElement): string {
+  const r = f.getBoundingClientRect();
+  const cs = getComputedStyle(f);
+  f.style.pointerEvents = 'auto';
+  f.inert = false;
+  // jsdom 没有 elementsFromPoint（单测里记 none）
+  const top = typeof document.elementsFromPoint === 'function' ? document.elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2) : [];
+  f.inert = true;
+  f.style.pointerEvents = '';
+  const n = (x: number): number => Math.round(x);
+  return `r=${n(r.left)},${n(r.top)},${n(r.width)}x${n(r.height)} vp=${window.innerWidth}x${window.innerHeight} sy=${n(window.scrollY)} ` +
+    `css=${cs.display}/${cs.visibility}/${cs.opacity}/z${cs.zIndex} on=${f.parentElement?.tagName.toLowerCase() ?? 'none'} top=${who(top[0] ?? null, f)} under=${who(top.find((e) => e !== f && !f.contains(e)) ?? null, f)}`;
 }
 
 /** 浮层这次挪动有没有过渡（减少动态效果时没有）：有就等它放完（最多多给 80ms），没有马上回 */
@@ -301,7 +333,7 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
       const rr = row.getBoundingClientRect();
       const rect = new DOMRect(rr.left - pad, rr.top, rr.width + pad * 2, rr.height);
       const float = makeFloat(row, rect, pad);
-      cur.current = { box: b, row, float, rect, home: layoutPos(row, b), id, group, self, order, gaps, target: null };
+      cur.current = { box: b, row, float, rect, home: layoutPos(row, b), id, group, self, order, gaps, target: null, probed: false };
       holdSortRow(id);
       b.dataset['sortDragging'] = '';
       try {
@@ -309,7 +341,8 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
       } catch {
         // 不支持、不让震：不要紧
       }
-      o.current.log(`sort ${o.current.tag} lift g=${groupKind(group)} n=${order.get(group)?.length ?? 0}`);
+      const rs = getComputedStyle(row);
+      o.current.log(`sort ${o.current.tag} lift g=${groupKind(group)} n=${order.get(group)?.length ?? 0} us=${rs.userSelect || '-'}/${rs.getPropertyValue('-webkit-user-select') || '-'}`);
       return true;
     },
     move(at: Point) {
@@ -326,6 +359,10 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
       const x = (l.target && gap && o.current.axis === 'xy' ? br.left + gap.x : home.left) - pad;
       const y = l.target && gap ? br.top + gap.y + FLOAT_GAP : home.top;
       l.float.style.transform = `translate3d(${Math.round(x - l.rect.left)}px, ${Math.round(y - l.rect.top)}px, 0) scale(1.02)`;
+      if (!l.probed) {
+        l.probed = true;
+        o.current.log(`sort ${o.current.tag} float move ${floatState(l.float)}`);
+      }
     },
     drop() {
       const l = cur.current;
@@ -333,6 +370,7 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
       showLine(null);
       if (!l) return;
       const tag = o.current.tag;
+      o.current.log(`sort ${tag} float drop ${floatState(l.float)}`);
       if (!l.target) {
         o.current.log(`sort ${tag} drop same g=${groupKind(l.group)}`);
         settle(l, false);

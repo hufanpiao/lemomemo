@@ -5,6 +5,7 @@
 // • 拿起（主持人 11-16 返工第 1、2 条）：原行留空位（看不见、高度照占），复制一份浮层挂在 body 上、带 6 个点；
 //   落点横线上下 4px 内没有任何看得见的字（逐个文字节点量，浮层里的字也算）
 // • 放下（返工第 5 条“先跳回原位再滑过去”）：从松手起逐帧记这一条的行，只要它看得见，浮层已经撤掉、位置就是最终位置（差 ≤ 1px）
+// • 随手记行按下不出系统点按灰框（11-17）；拖动时运行日志记 sort float（浮层中心最上面是不是浮层自己）
 // • 设了 LEMO_SHOT_DIR 时，Chromium 在拖动中各截一帧（430×932、DPR 3），给负责人看 6 个点和落点横线；LEMO_SHOT_THEME 给截图文件名加后缀（dark 开头时待办那段按系统深色跑）
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -212,6 +213,9 @@ test.describe('长按拖动排序（R-429、R-433）', () => {
     const row = (id: string) => page.getByTestId(`notes-row-${id}`);
     await row('n1').waitFor({ timeout: 30000 });
     expect(await ids(page, 'notes-row-')).toEqual(['n1', 'n2', 'n3']);
+    // 按下一行不出系统的半透明灰框（负责人 11-17“奇丑无比”，base.css 全局关掉）：Chromium 读得到 computed 值；桌面 WebKit 不认这条属性（读到空），iPhone 只能真机看
+    const hl = await row('n1').locator('button[data-open]').evaluate((e) => getComputedStyle(e).getPropertyValue('-webkit-tap-highlight-color'));
+    expect(['', 'rgba(0, 0, 0, 0)']).toContain(hl);
 
     // n3 拖到 n1 和 n2 之间
     await drag(page, row('n3'), row('n2'), 2, async () => {
@@ -220,6 +224,11 @@ test.describe('长按拖动排序（R-429、R-433）', () => {
       await watchSettle(page, 'n3');
     });
     await expect(page.getByTestId('notes-moved-toast')).toContainText('已切到自己排，设置里可改回');
+    // 浮层没被别的东西盖住（真机 11-17 看不到浮层，这一行是真机定根因用的；网页上应当是浮层自己在最上面）
+    // 运行日志 300ms 攒一次存盘：等两行都存下来
+    const floats = () => runLog(page).then((ls) => ls.filter((l) => / sort notes float (move|drop) /.test(l)));
+    await expect.poll(async () => (await floats()).length).toBe(2);
+    expect((await floats()).filter((l) => !l.includes(' top=float '))).toEqual([]);
     await expectNoSnapBack(page);
     await expect.poll(() => ids(page, 'notes-row-')).toEqual(['n1', 'n3', 'n2']);
     await expect(page.getByTestId('notes-list').locator('h2')).toHaveCount(0);

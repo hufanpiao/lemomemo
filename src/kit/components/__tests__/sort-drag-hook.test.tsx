@@ -103,6 +103,8 @@ describe('useSortDrag 手势（R-429 评审第 1 条）', () => {
     await ptr(document.body, 'pointermove', 52);
     await ptr(document.body, 'pointerup', 52);
     expect(s.drops).toEqual([{ id: 'c', from: 'all', to: 'all', beforeId: 'a', afterId: 'b' }]);
+    // 浮层看不看得见（真机 11-17）：第一次挪动、放下各记一行 sort float，带位置、computed 样式、中心最上面是谁；不记标题
+    expect(s.logs.filter((l) => /^sort t float (move|drop) r=-?\d+,-?\d+,\d+x\d+ vp=\d+x\d+ sy=\d+ css=\S+ on=body top=\S+ under=/.test(l))).toHaveLength(2);
     await wait(700);
     expect(document.querySelector('[data-testid="sort-float"]')).toBeNull();
     expect(s.box.hasAttribute('data-sort-dragging')).toBe(false);
@@ -113,7 +115,7 @@ describe('退场中的元素（R-429 评审第 4、5 条）', () => {
   it('拿起时不算退场中的旧元素：条数、落点都照看得见的那几行', async () => {
     const s = setup({ leaving: true });
     await lift(s);
-    expect(s.logs).toContain('sort t lift g=all n=3');
+    expect(s.logs.some((l) => l.startsWith('sort t lift g=all n=3 us='))).toBe(true);
     await ptr(s.box, 'pointermove', 52);
     await ptr(s.box, 'pointerup', 52);
     expect(s.drops).toEqual([{ id: 'c', from: 'all', to: 'all', beforeId: 'a', afterId: 'b' }]);

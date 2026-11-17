@@ -9,6 +9,10 @@ html {
   /* stylelint-disable-next-line property-no-vendor-prefix -- iOS Safari 只认带前缀的写法 */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+
+  /* iPhone 按下可点的元素时系统画的半透明灰框（负责人 11-17“点进去的时候有瞬间的灰框，奇丑无比”：真机图上灰框正好是随手记行里那个按钮 .lmain 的大小，
+     不含右边的“⋯”）：全局关掉。只关系统的按下高亮，键盘聚焦框 :focus-visible（下面）照旧 */
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* App 页面不许整页双指缩放、双击放大（负责人 11-11“今天，代办跟随手记为啥可以用双指扩大整个画面”；viewport 的 user-scalable=no iOS 不认，

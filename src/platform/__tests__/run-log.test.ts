@@ -84,6 +84,33 @@ describe('全局运行日志', () => {
     expect(log.match(/click button#记下$/gm)).toHaveLength(2);
   });
 
+  it('选字（真机 11-17 蓝色选区）：selectstart、contextmenu 记落在哪、被拦补记；selectionchange 只在类型或两端元素变了时记，不记选中的字；开头带 tap-hl', async () => {
+    vi.useFakeTimers();
+    const p = document.createElement('p');
+    p.setAttribute('data-testid', 'toast');
+    p.textContent = '已移动秘密';
+    document.body.append(p);
+    const stop = startRunLog(window, { version: 't' });
+    const eat = (e: Event): void => e.preventDefault();
+    document.addEventListener('selectstart', eat, true);
+    p.dispatchEvent(new Event('selectstart', { bubbles: true, cancelable: true }));
+    document.removeEventListener('selectstart', eat, true);
+    p.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const text = p.firstChild as Text;
+    document.getSelection()?.setBaseAndExtent(text, 0, text, 3);
+    document.dispatchEvent(new Event('selectionchange'));
+    document.dispatchEvent(new Event('selectionchange'));
+    await vi.advanceTimersByTimeAsync(500);
+    stop();
+    document.getSelection()?.removeAllRanges();
+    const log = readRunLog();
+    expect(log).toMatch(/=== start .* tap-hl=\S+ route=/);
+    expect(log).toMatch(/selectstart p#toast prevented-later/);
+    expect(log).toMatch(/contextmenu p#toast$/m);
+    expect(log.match(/sel type=Range a=p#toast f=p#toast/g)).toHaveLength(1);
+    expect(log).not.toContain('秘密');
+  });
+
   it('业务代码 rlog：下载前排队的补进来，之后直接写', () => {
     rlog('typebar submit len=3');
     const stop = startRunLog(window, { version: 't' });
