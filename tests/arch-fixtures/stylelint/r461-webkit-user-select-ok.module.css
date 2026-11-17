@@ -1,0 +1,5 @@
+/* arch-fixture: path=src/kit/components/Ok.module.css expect=none rule=R-461 （iOS Safari 只认带前缀的 -webkit-user-select，只放行这一个前缀） */
+.a {
+  -webkit-user-select: none;
+  user-select: none;
+}

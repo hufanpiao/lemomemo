@@ -302,6 +302,7 @@
 :global(html[data-plus-hold]),
 :global(html[data-plus-hold]) * {
   -webkit-touch-callout: none;
+  -webkit-user-select: none;
   user-select: none;
   touch-action: none;
 }

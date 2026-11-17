@@ -77,6 +77,14 @@
         "message": "17.2 第 6 点（UI-4 M4）：选择器里不准写 CSS 转义（\\），减少动态效果的检查认不出转义后的类名（%s）"
       }
     ],
+    "property-no-vendor-prefix": [
+      true,
+      {
+        "ignoreProperties": [
+          "/^-webkit-user-select$/"
+        ]
+      }
+    ],
     "selector-class-pattern": null,
     "custom-property-pattern": null,
     "keyframes-name-pattern": null,

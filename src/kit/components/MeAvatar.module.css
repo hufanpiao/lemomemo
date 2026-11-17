@@ -45,6 +45,7 @@
   height: calc(100% - 8px);
   border-radius: 50%;
   object-fit: cover;
+  -webkit-user-select: none;
   user-select: none;
 }
 
