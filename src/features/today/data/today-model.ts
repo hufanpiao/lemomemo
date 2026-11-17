@@ -7,7 +7,7 @@
 // • 时间窗 kWin：照视觉稿 kWin() 逐条移植（分钟，相对今天 0 点；跨到明天的事项可以 > 1440）
 // • 没赶上：没完成、截止日早于今天的待办（逾 N 天）；今天有截止时刻、已经过了的也算（逾 0 天，界面写“已过 17:00”）。
 //   “逾期”规则和读待办行只在 shared/logic/todo-row.ts（isLate、todoOf，和待办页共用）
-import { addDays, diffDays, fmtHm, minOfDay, msAt, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { addDays, DAY_MINUTES, diffDays, fmtHm, minOfDay, msAt, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { coversDay, ownTzOf, placeEvent, spanRowOf, spanTextOn, type EventPlacement, type SpanText } from '../../../../shared/logic/calendar/event-span.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
@@ -216,9 +216,9 @@ export function nowCard(events: readonly EventOcc[], now: number, current: Tz, t
   const untilMin = (ms: number) => Math.ceil((ms - now) / MIN);
   const hmOf = (ms: number) => fmtHm(minOfDay(ms, current));
 
-  // 负责人 11-17：多天的有时刻日程（lastDate ≠ date，R-444）不占大卡——不进 cur、不当 c0，也不算下一件，只在“今天的安排”列表里写“第 2/3 天 · 至 …”；
-  // 大卡照旧给真正的下一件。今天只有这类日程时按没有带时刻的日程算（allday / empty）
-  const timed = events.filter((o): o is TimedOcc => isTimed(o) && o.lastDate === o.date);
+  // 负责人 11-17：多天的有时刻日程（lastDate ≠ date 且时长满 24 小时，R-444）不占大卡——不进 cur、不当 c0，也不算下一件，只在“今天的安排”列表里写“第 2/3 天 · 至 …”；
+  // 跨零点但不满 24 小时的（23:30 到 01:00 的夜班）照常占大卡（主持人 11-17 定）。大卡照旧给真正的下一件；今天只有多天日程时按没有带时刻的日程算（allday / empty）
+  const timed = events.filter((o): o is TimedOcc => isTimed(o) && !(o.lastDate !== o.date && o.end - o.start >= DAY_MINUTES * 60_000));
   const allDays = events.filter((o) => o.allDay);
   const cur = timed.filter((o) => o.start <= now && now < o.end).sort((a, b) => a.end - b.end);
   const next = timed.filter((o) => o.start > now).sort((a, b) => a.start - b.start)[0] ?? null;

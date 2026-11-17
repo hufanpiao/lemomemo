@@ -112,6 +112,13 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
     expect(c).toMatchObject({ nowText: '14:17', left: 13 });
   });
 
+  it('占不占大卡的边界：跨零点 1439 分钟（23:30 到次日 23:29）占，1440 分钟（10:00 到次日 10:00）不占', () => {
+    const short = ev({ title: '长班', date: '2026-11-04', time: '23:30', tz: SEOUL, duration_min: 1439 });
+    expect(nowCard(nowEvents([short], at('14:17'), SEOUL), at('14:17'), SEOUL)).toMatchObject({ state: 'live', title: '长班' });
+    const full = ev({ title: '值班', date: '2026-11-04', time: '10:00', tz: SEOUL, duration_min: 1440 });
+    expect(nowCard(nowEvents([full], at('09:00'), SEOUL), at('09:00'), SEOUL).state).toBe('empty');
+  });
+
   it('多天的有时刻日程不占大卡（负责人 11-17）：不进 cur、不当 c0，大卡给真正的下一件；今天只有这类日程时按没有带时刻的日程算', () => {
     // 昨天 10:00 开始、明天 10:00 结束的出差：此刻 14:17 正在进行，但大卡不给它
     const trip = ev({ title: '出差', date: '2026-11-04', time: '10:00', tz: SEOUL, duration_min: 2 * 1440 });
@@ -170,12 +177,12 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
     });
   });
 
-  it('跨零点：昨天 23:30 开始、到 01:00 的日程，00:30 时还在今天的清单里；它跨了两天，按负责人 11-17 的口径不占大卡', () => {
+  it('跨零点：昨天 23:30 开始、到 01:00 的日程，00:30 时仍是“进行中”（不满 24 小时照常占大卡，主持人 11-17 定）；时间尺从昨天 23:00 起', () => {
     const rows = [ev({ title: '夜班', date: '2026-11-04', time: '23:30', tz: SEOUL, duration_min: 90 })];
-    expect(nowEvents(rows, at('00:30'), SEOUL).map((o) => o.title)).toEqual(['夜班']);
     const c = nowCard(nowEvents(rows, at('00:30'), SEOUL), at('00:30'), SEOUL);
-    expect(c).toMatchObject({ state: 'empty', nowText: '00:30' });
-    expect(c.ruler.segs).toEqual([]);
+    expect(c).toMatchObject({ state: 'live', title: '夜班', left: 30, nowText: '00:30' });
+    expect(c.ruler.segs[0]).toMatchObject({ kind: 'cur', x0: 30 / 150, x1: 120 / 150, clipL: false, clipR: false });
+    expect(c.ruler.ticks.map((k) => k.text)).toEqual(['23:00', '0:00', '1:00']);
     // 已经结束的昨天日程不带进来
     expect(nowEvents(rows, at('01:10'), SEOUL)).toEqual([]);
   });
