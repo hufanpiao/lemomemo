@@ -34,7 +34,7 @@ export interface SubDone {
   message: string;
 }
 
-/** 从勾上到开始收起：方框动画播完（--dur-done-pop）再停一拍（--dur-done-rest），共 800ms */
+/** 从勾上到开始收起：方框回弹播完（--dur-done-pop）再停一拍（--dur-done-rest），共 720ms（负责人 11-18 定稿乙4） */
 export const HOLD_MS = Math.round((dur.donePop + dur.doneRest) * 1000);
 /** 这一行收起的时长（--dur-collapse，同 kit List.module.css 的 .fold；减弱动态效果时是同样长的淡出） */
 export const OUT_MS = Math.round(dur.collapse * 1000);
@@ -189,6 +189,11 @@ export function useDoneFlow(a: Acts, lg: Linger, hold: () => void, text: { done:
     undoRef,
     /** 方框画成什么：留在原位的那几条按 linger，其余照 kit useListActions 的 shown（改回未完成时留着的期间按刚点成什么） */
     shown: (id: string, done: boolean): boolean => lg.shownOf(id) ?? a.shown(id, done),
+    /**
+     * 这一行刚勾上、还在原位（kit CheckCircle 的 fresh，方框画亮柠檬黄）：linger 里按“勾上”留着的那几条——打勾、子任务自动完成停留和收起期间；
+     * 收完从 linger 拿掉（归进“已完成”）、撤销（按“没勾上”留着）、写入失败都不算，挂载时就勾上的不在 linger 里
+     */
+    fresh: (id: string): boolean => lg.shownOf(id) === true,
     /** 打勾；收起之前把方框自己点回去 = 撤销（撤销条是它的就一起收起）；只读行 tick 里拦下 */
     check(id: string, v: boolean) {
       if (a.isRo(id)) return void a.tick(id, v);

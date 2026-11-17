@@ -3,7 +3,7 @@
    3 倍图逐像素量：方框 72px = 24pt；边中间 4 个整像素加两侧各一个半透明，合计约 5.3px = 1.75pt；
    圆角逐行拟合是普通圆弧、半径 27px = 9pt（边长的 37.5%），逐行误差 < 0.3px；
    边色 --check-edge：深色照参考图原色 #69645C（卡片底 2.7:1，负责人定照原样，build/contrast-pairs.json 的 accepted）；
-   打勾时强调色方块从中间放大、淡入，盖满方框，勾号随之淡入；取消原路退回（同原来的圆盘，只是形状变方）
+   打勾时填充块从中间一个小圆长成圆角方块、淡入，盖满方框，勾号随之淡入；取消原路退回
    边长可以由使用方在外层设 --check-size 改（默认 24px，点击区照样 44 × 44；R-350 子任务、查找结果用小一号 18px）；
    上下外边距 --check-margin（默认让方框在 44 高里居中）也由使用方在外层设；不播勾选动效用组件的 still（label 上 data-still，子任务用）；
    圆角按边长比例（24 → 9px，18 → 6.75px），小一号的不会显得更圆。组件名、类名沿用 CheckCircle（见 CheckCircle.tsx 文件头） */
@@ -23,15 +23,13 @@
 }
 
 /* 勾上以后边和填充同色（R-436 第 7、8 条：暗黄底 + 黄勾，没有亮黄的一圈）；checkbox 叠在填充块上面（z-index 1），边色要跟着换。
-   边色和填充块同一个时长、同一条曲线一起过渡（上面 .check 的 transition；不然勾的那一拍边先瞬间变色、填充还在从一半放大）；
-   聚焦框用全局 :focus-visible（base.css），这里不另写 */
+   边色和填充块一起过渡（上面 .check 的 transition）；聚焦框用全局 :focus-visible（base.css），这里不另写 */
 .check:checked {
   box-shadow: inset 0 0 0 1.75px var(--check-on-bg);
 }
 
 /* 填充块和勾号是叠在方框上的两个 span（不接点按，点的还是下面的 checkbox），状态写在它们自身的 data-state 上，
-   点下去当下就开始（使用方给的是“刚点的值”，不等保存回来）。只动 transform、opacity，--dur-ui + --ease-out；
-   CSS 过渡可中断（连点两下直接反向） */
+   点下去当下就开始（使用方给的是“刚点的值”，不等保存回来）。只动 transform、opacity、圆角；CSS 过渡可中断（连点两下直接反向） */
 .checkBox {
   position: relative;
   display: grid;
@@ -41,39 +39,6 @@
   height: var(--check-size, 24px);
   margin: var(--check-margin, calc((var(--hit) - var(--check-size, 24px)) / 2)) 0;
   transition: transform var(--dur-press) var(--ease-press);
-}
-
-/* 勾选完成时间线（负责人 11-17 原话“动效太轻了，根本反应不过来”加参考视频 点击特效.mp4 逐帧量；时刻、时长全在动效令牌“勾选完成时间线”一段）：
-   ① 按下：整个方框（边、填充块、勾号、小脸一起）缩到 0.8（参考第 1 帧缩成小圈；原来 0.92 看不出来），--dur-press；
-      缩的是外层 label，点在 44 的外扩区上也一样缩；子任务（still）不缩
-   ② 亲手勾上（组件给 label 加上 .pop 这个类）：从 0.8 放大过头到 1.3（约 150ms，参考第 4–5 帧）、回落到 1.1（参考第 6–9 帧）、再回 1.0，
-      共 --dur-done-pop；松手时的 :active 回弹被这段动画盖住，不会先弹回 1 再放大
-   ③ --dur-done-burst-at 起外圈一圈小点往外炸开、一圈边往外扩，--dur-burst 扩散变淡（.burst）
-   删除线、行收起在 kit List.module.css 的 .strike、.fold */
-.checkBox:active {
-  transform: scale(0.8);
-}
-
-.pop {
-  animation: check-pop var(--dur-done-pop) var(--ease-out);
-}
-
-@keyframes check-pop {
-  0% {
-    transform: scale(0.8);
-  }
-
-  33% {
-    transform: scale(1.3);
-  }
-
-  55% {
-    transform: scale(1.1);
-  }
-
-  100% {
-    transform: scale(1);
-  }
 }
 
 /* 只读行（FA-2）：方框变淡，表示打不了勾（点了由使用方出“要新版本”提示条）；跟着 checkbox 的 aria-disabled，不另挂属性（首屏预算，11-06） */
@@ -89,20 +54,68 @@
   inset: min(0px, calc((100% - var(--hit)) / 2));
 }
 
+/* —— 勾选完成时间线（负责人 11-18 定稿：对照页第 11 版“乙4”，本机资料 设计方案/2026-11-18_完成动效/对照页源文件.html 的 data-v="d"）——
+   时刻、时长全在动效令牌“勾选完成时间线”一段；时间从勾上那一刻算：
+   ① 按下：没勾上的方框缩到 0.45（已勾上的按下仍是 0.8），--dur-press · --ease-press；缩的是外层 label，点在 44 的外扩区上也一样缩；子任务（still）不缩
+   ② 亲手勾上（组件给 label 加 .pop）：0.45 → 1.22 → 0.96 → 1.02 → 1，共 --dur-done-pop，分段曲线 --ease-done-pop-in、--ease-done-pop；
+      填充块同时从小圆（0.3 倍、圆角 50%）长成圆角方块（--dur-done-fill，淡入 --dur-done-fade）
+   ③ --dur-done-spark-at 起 14 个小点贴着方块边长出来、往外飘、逐帧变暗（--dur-spark）
+   ④ --dur-done-ring-at 起方块外一圈细正圆边扩边淡（--dur-ring），始终比小点暗、比小点先消失
+   颜色（负责人选“乙”，R-436 改）：这一行刚勾上、还在原位时（label 上 data-fresh，组件的 fresh），填充、边是亮柠檬黄 --accent、勾号 --on-accent；
+   收进“已完成”以后、挂载时就勾上的，照旧 --check-on-bg / --check-on-fg（亮色那几条写在文件最后，按选择器特异性排）。
+   删除线、行收起在 kit List.module.css 的 .strike、.fold。已勾上的按下 0.8 写在减弱动态效果一段后面（同样是特异性顺序） */
+.checkBox:active {
+  transform: scale(0.45);
+}
+
+.pop {
+  animation: check-pop var(--dur-done-pop) var(--ease-linear);
+}
+
+@keyframes check-pop {
+  0% {
+    transform: scale(0.45);
+    animation-timing-function: var(--ease-done-pop-in);
+  }
+
+  38% {
+    transform: scale(1.22);
+    animation-timing-function: var(--ease-done-pop);
+  }
+
+  64% {
+    transform: scale(0.96);
+    animation-timing-function: var(--ease-done-pop);
+  }
+
+  84% {
+    transform: scale(1.02);
+    animation-timing-function: var(--ease-done-pop);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 填充块：没勾上是中间一个 0.3 倍的小圆（看不见，opacity 0），勾上长成盖满方框的圆角方块（R-436 确认图第 7、8 条：淡柠檬黄底） */
 .fill {
   grid-area: 1 / 1;
   width: var(--check-size, 24px);
   height: var(--check-size, 24px);
   border-radius: calc(var(--check-size, 24px) * 0.375);
-  background: var(--check-on-bg);   /* R-436 确认图第 7、8 条：勾上以后染成淡柠檬黄（深色暗黄底 + 黄勾），不再是亮黄实心 + 黑勾；方框本身（R-433）不动 */
+  background: var(--check-on-bg);
   opacity: 0;
   pointer-events: none;
-  transform: scale(0.5);
-
-  /* 勾选特效分镜第 ② 段（负责人 11-17 定稿）：填充从 0.5 放大到 1、稍过冲回弹（--ease-spring），淡入同 --dur-ui */
+  transform: scale(0.3);
   transition:
-    transform var(--dur-ui) var(--ease-spring),
-    opacity var(--dur-ui) var(--ease-out);
+    transform var(--dur-done-fill) var(--ease-spring),
+    opacity var(--dur-done-fade) var(--ease-out),
+    border-radius var(--dur-done-fill) var(--ease-out);
+}
+
+.fill[data-state="off"] {
+  border-radius: 50%;
 }
 
 .fill[data-state="on"] {
@@ -173,8 +186,8 @@
   content: none;
 }
 
-/* ③ 炸开：8 个 4px 小点从半径 13 往外扩到 26、边缩小边变淡，加一圈和方框一样圆角的边从 1 倍扩到 1.7 倍变淡（参考第 4–13 帧“边缘像炸开”“小点往外扩”）；
-   从 --dur-done-burst-at 起播（之前 opacity 0 看不见），只动 transform、opacity */
+/* ③④ 小点和细正圆：.burst 是方框正中一个 0 × 0 的锚点，里面先是细正圆（b.ring），后面 14 个小点（i，--a 是角度）；
+   小点的 translateX 是离中心的半径（px，按 24 的方框量；只有 24 的待办方框会播），只动 transform、opacity */
 .burst {
   position: absolute;
   top: 50%;
@@ -190,50 +203,120 @@
   left: calc(var(--check-size, 24px) / -2);
   width: var(--check-size, 24px);
   height: var(--check-size, 24px);
-  border: 2px solid var(--check-on-fg);
-  border-radius: calc(var(--check-size, 24px) * 0.375);
+  border: 0.7px solid var(--check-ring);
+  border-radius: 50%;
   opacity: 0;
-  animation: check-ring var(--dur-burst) var(--ease-out) var(--dur-done-burst-at);
+  animation: check-ring var(--dur-ring) var(--ease-linear) var(--dur-done-ring-at) both;
 }
 
+@keyframes check-ring {
+  0% {
+    opacity: 0;
+    transform: scale(1.2);
+    animation-timing-function: var(--ease-done-ring-in);
+  }
+
+  12% {
+    opacity: 1;
+    transform: scale(1.36);
+    animation-timing-function: var(--ease-linear);
+  }
+
+  45% {
+    opacity: 0.6;
+    transform: scale(1.72);
+    animation-timing-function: var(--ease-linear);
+  }
+
+  75% {
+    opacity: 0.2;
+    transform: scale(1.88);
+    animation-timing-function: var(--ease-linear);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.95);
+  }
+}
+
+/* 两种颜色交替（.burst 的第一个孩子是 .ring，所以 nth-child(odd) 落在第 2、4、6… 个小点上，同定稿页） */
 .burst > i {
   position: absolute;
   top: 0;
   left: 0;
-  width: 4px;
-  height: 4px;
-  margin: -2px 0 0 -2px;
+  width: 2.6px;
+  height: 2.6px;
+  margin: -1.3px 0 0 -1.3px;
   border-radius: 50%;
-  background: var(--check-on-fg);
+  background-color: var(--check-spark-b);
   opacity: 0;
-  animation: check-burst var(--dur-burst) var(--ease-out) var(--dur-done-burst-at);
+  animation: check-spark var(--dur-spark) var(--ease-linear) var(--dur-done-spark-at) both;
 }
 
-@keyframes check-burst {
-  from {
+.burst > i:nth-child(odd) {
+  background-color: var(--check-spark-a);
+}
+
+@keyframes check-spark {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(12px) scale(0.8);
+  }
+
+  16% {
     opacity: 1;
-    transform: rotate(var(--a)) translateX(13px) scale(1);
+    transform: rotate(var(--a)) translateX(15px) scale(1);
   }
 
-  to {
+  26% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(18px) scale(1);
+  }
+
+  35% {
+    opacity: 0.83;
+    transform: rotate(var(--a)) translateX(21px) scale(1);
+  }
+
+  44% {
+    opacity: 0.6;
+    transform: rotate(var(--a)) translateX(23px) scale(0.95);
+  }
+
+  53% {
+    opacity: 0.46;
+    transform: rotate(var(--a)) translateX(26px) scale(0.9);
+  }
+
+  61% {
+    opacity: 0.34;
+    transform: rotate(var(--a)) translateX(29px) scale(0.85);
+  }
+
+  70% {
+    opacity: 0.28;
+    transform: rotate(var(--a)) translateX(30.5px) scale(0.8);
+  }
+
+  79% {
+    opacity: 0.19;
+    transform: rotate(var(--a)) translateX(31.5px) scale(0.75);
+  }
+
+  88% {
+    opacity: 0.12;
+    transform: rotate(var(--a)) translateX(32px) scale(0.7);
+  }
+
+  100% {
     opacity: 0;
-    transform: rotate(var(--a)) translateX(26px) scale(0.3);
+    transform: rotate(var(--a)) translateX(32.5px) scale(0.7);
   }
 }
 
-@keyframes check-ring {
-  from {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-
-  to {
-    opacity: 0;
-    transform: scale(1.7);
-  }
-}
-
-/* 减少动态效果（17.2 第 5 点）：不缩放，只淡入淡出、时长减半 */
+/* 减少动态效果（17.2 第 5 点）：不缩放、没有小点和细圆线，只淡入淡出、时长减半；圆角直接是方块（不从圆变方）。
+   动画不播、animationend 不来，组件那边靠“变回没勾上当场清零”保证不重播（CheckCircle.tsx） */
 
 :global(:root[data-rm="1"]) .fill {
   transform: none;
@@ -244,6 +327,10 @@
   transform: none;
 }
 
+:global(:root[data-rm="1"]) .fill[data-state="off"] {
+  border-radius: calc(var(--check-size, 24px) * 0.375);
+}
+
 :global(:root[data-rm="1"]) .check {
   transition: none;
 }
@@ -252,12 +339,19 @@
   transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
 }
 
-/* 减少动态效果时按下不缩放、没有小点（分镜表“减少动态效果”一栏） */
 :global(:root[data-rm="1"]) .checkBox {
   transition: none;
 }
 
 :global(:root[data-rm="1"]) .checkBox:active {
+  transform: none;
+}
+
+.checkBox:has(> .check:checked):active {
+  transform: scale(0.8);
+}
+
+:global(:root[data-rm="1"]) .checkBox:has(> .check:checked):active {
   transform: none;
 }
 
@@ -281,11 +375,25 @@
   transition: none;
 }
 
-/* still（子任务一天勾上百次，R-350）：边色、填充块、勾号都不过渡，直接到位 */
+/* still（子任务一天勾上百次，R-350）：边色、填充块、勾号都不过渡，直接到位；按下不缩（勾上没勾上都一样） */
 .checkBox[data-still] > * {
   transition: none;
 }
 
-.checkBox[data-still]:active {
+.checkBox[data-still]:active,
+.checkBox[data-still]:has(> .check:checked):active {
   transform: none;
+}
+
+/* 亮色（这一行刚勾上、还在原位，label 上 data-fresh）：边、填充亮柠檬黄，勾号深色；只换颜色，不动形状和时长 */
+.checkBox[data-fresh] > .check:checked {
+  box-shadow: inset 0 0 0 1.75px var(--accent);
+}
+
+.checkBox[data-fresh] > .fill {
+  background: var(--accent);
+}
+
+.checkBox[data-fresh] > .tick {
+  border-color: var(--on-accent);
 }

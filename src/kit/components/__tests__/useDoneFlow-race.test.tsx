@@ -67,3 +67,25 @@ describe('先勾主待办、停留期间又勾完最后一项子任务', () => {
     expect(h.result.current.lg.ids.has('b')).toBe(false);
   });
 });
+
+describe('fresh（方框亮柠檬黄，负责人 11-18 选“乙”）：只在刚勾上、还在原位时', () => {
+  it('勾上当下到收完是 fresh；收完归进“已完成”、照数据画的不是；收起之前点回去（撤销）当场不是', async () => {
+    const { h } = setup();
+    expect(h.result.current.f.fresh('a')).toBe(false);
+    await act(async () => h.result.current.f.check('a', true));
+    expect(h.result.current.f.fresh('a')).toBe(true);
+    await act(async () => {
+      vi.advanceTimersByTime(HOLD_MS);
+    });
+    expect(h.result.current.f.out.has('a')).toBe(true);
+    expect(h.result.current.f.fresh('a')).toBe(true);
+    await act(async () => {
+      vi.advanceTimersByTime(OUT_MS);
+    });
+    expect(h.result.current.f.fresh('a')).toBe(false);
+    // 再勾一条，停留期间点回去：按“没勾上”留着，不是 fresh
+    await act(async () => h.result.current.f.check('c', true));
+    await act(async () => h.result.current.f.check('c', false));
+    expect(h.result.current.f.fresh('c')).toBe(false);
+  });
+});

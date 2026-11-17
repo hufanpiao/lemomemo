@@ -26,6 +26,12 @@ export interface CheckCircleProps {
    * 满填、不画脸（主持人 11-17 评审）；只是画（aria-hidden），几项做完由行里的文字和读屏说
    */
   progress?: { done: number; total: number } | undefined;
+  /**
+   * 这一行刚勾上、还留在原位（负责人选“乙”，R-436 改）：勾上时填充、边画成亮柠檬黄、勾号深色；收进“已完成”以后、挂载时就勾上的照旧暗黄。
+   * 由使用方按行的状态给（kit TodoRow 给 useDoneFlow 的 fresh：linger 里按“勾上”留着的那几条），不放在组件自己的状态里：
+   * 今天页“已过去”展开时，收完的那一行和原来同一个 key、同一张列表，组件不重新挂载，自己的状态会一直留着
+   */
+  fresh?: boolean | undefined;
 }
 
 /** 做到几成的档：0 没开始，1 起步（不到一半），2 大半（一半及以上、没做完），3 全做完；待办页的“起步 / 大半”标签同一个分法（3 不出标签） */
@@ -35,16 +41,19 @@ export function partStage(done: number, total: number): 0 | 1 | 2 | 3 {
   return done * 2 < total ? 1 : 2;
 }
 
-/** 勾上那一下外扩的一圈小点（勾选完成时间线第 ③ 段，负责人 11-17）：8 个，45° 一个 */
-const BURST = [0, 45, 90, 135, 180, 225, 270, 315] as const;
+/** 勾上那一下长出来的一圈小点（勾选完成时间线第 ③ 段，负责人 11-18 定稿乙4）：14 个，每 360/14 度一个 */
+const SPARKS = Array.from({ length: 14 }, (_, i) => (360 / 14) * i);
 
-export function CheckCircle({ checked, label, onChange, testId, readOnly = false, still = false, progress }: CheckCircleProps) {
+export function CheckCircle({ checked, label, onChange, testId, readOnly = false, still = false, progress, fresh = false }: CheckCircleProps) {
   const state = checked ? 'on' : 'off';
-  // 放大过头（label 上的 .pop）和一圈小点只在用户亲手勾上的那一下播（key 换一次重播一次）；挂载时已经勾上的、只读拦下的、子任务（still）都不播；
-  // 外圈那道边播完（它和小点同时起、同样长，是勾选特效里最后结束的：--dur-done-burst-at + --dur-burst 晚于 --dur-done-pop）清零、拿掉这一圈，
-  // 之后再重新画（例如撤销以后又照数据显示成勾上）不会重播；减弱动态效果时外圈不播，pop 留着也不画什么（.pop、.ring 都是 animation: none）；
-  // 取消勾时 .pop 跟着拿掉，再勾时重新加上、重播
+  // 回弹（label 上的 .pop）、一圈小点和细正圆只在用户亲手勾上的那一下开始（key 换一次重播一次）；挂载时已经勾上的、只读拦下的、子任务（still）都不开始。
+  // 清零有两处，不靠“动画一定会播完”：label 自己的回弹播完（--dur-done-pop 420ms，比小点 --dur-done-spark-at + --dur-spark = 410ms、
+  // 细正圆 345ms 都晚，是最后结束的）；方框变回没勾上（点回去、撤销、写入失败照数据退回，不管动画播完没有）。
+  // 所以减弱动态效果时（CSS 里这几段都是 animation: none，animationend 永远不来——独立评审提过“清不掉、之后会重播”）
+  // .pop 留着也什么都不画（小点 display: none），一变回没勾上就清掉，之后照数据再显示成勾上不会重播。
+  // 不在这里读 data-rm：引 motion/index.ts 会把它拆成首屏多出来的一块（构建的首屏文件数上限）
   const [pop, setPop] = useState(0);
+  if (!checked && pop > 0) setPop(0);
   const popping = checked && pop > 0;
   const stage = !checked && progress ? partStage(progress.done, progress.total) : 0;
   const ratio = stage && progress ? Math.min(1, progress.done / progress.total) : 0;
@@ -52,6 +61,10 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
     <label
       className={popping ? `${styles.checkBox} ${styles.pop}` : styles.checkBox}
       data-still={still || undefined}
+      data-fresh={fresh && checked ? '' : undefined}
+      onAnimationEnd={(e) => {
+        if (e.target === e.currentTarget) setPop(0);
+      }}
     >
       <input
         type="checkbox"
@@ -72,8 +85,8 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
       <span className={styles.tick} data-state={state} aria-hidden="true" />
       {popping ? (
         <span key={pop} className={styles.burst} aria-hidden="true">
-          <b className={styles.ring} onAnimationEnd={() => setPop(0)} />
-          {BURST.map((a) => (
+          <b className={styles.ring} />
+          {SPARKS.map((a) => (
             <i key={a} style={{ '--a': `${a}deg` } as CSSProperties} />
           ))}
         </span>

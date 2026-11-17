@@ -1,5 +1,5 @@
 // 待办页的动效（架构 17.1“勾选完成”“列表增删”，17.4 B2；B2 FA-5）：
-// 打勾当下圆圈就填满（不等保存回来）；按负责人 11-17 定的勾选特效分镜：勾上后在原处停 DONE_HOLD_MS（--dur-done-pop + --dur-done-rest 共 800ms，勾选完成时间线），
+// 打勾当下圆圈就填满（不等保存回来）；按负责人 11-17 定的勾选特效分镜：勾上后在原处停 DONE_HOLD_MS（--dur-done-pop + --dur-done-rest 共 720ms，勾选完成时间线，负责人 11-18 定稿乙4），
 // 再收起这一行、页底升起撤销条，收完（+DONE_OUT_MS）从原来的组离开（不接点按、移出文档流）、归进默认收起的“已完成 N”（原来负责人 11-15 是“撤销条开着的约 3 秒里留在原处”）；
 // 删除先淡出再卸载、撤销恢复后淡入。时间上的手感由 e2e（b2-motion-list）和连续帧确认，这里证明结构和状态
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -102,7 +102,7 @@ describe('待办页动效', () => {
     for (const s of row('a')?.querySelectorAll('span[data-state]') ?? []) expect(s.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('打勾（负责人 11-17 分镜）：当下圆盘就是 on（保存还没回来）、原处停 HOLD_MS（800ms）才升起“已完成 · 撤销”；再收起 OUT_MS（100ms）以后旧行离开（leaving、移出文档流），归进默认收起的“已完成 N”', async () => {
+  it('打勾（负责人 11-17 分镜）：当下圆盘就是 on（保存还没回来）、原处停 HOLD_MS（720ms）才升起“已完成 · 撤销”；再收起 OUT_MS（100ms）以后旧行离开（leaving、移出文档流），归进默认收起的“已完成 N”', async () => {
     render(<TodosPage />);
     holdTimers();
     fireEvent.click(screen.getByTestId('todos-done-a'));

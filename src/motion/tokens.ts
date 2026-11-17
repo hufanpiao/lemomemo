@@ -9,21 +9,30 @@ export const dur = {
   press: 0.12,
   /** --dur-ui 220ms：提示条、勾选、淡入淡出、列表增删 */
   ui: 0.22,
-  // —— 勾选完成时间线（负责人 11-17 原话“动效太轻了，根本反应不过来”加参考视频 点击特效.mp4 逐帧量；从勾上那一刻算起）——
-  // 0 按下缩小 → donePop 放大过头再回落（kit CheckCircle）→ doneBurstAt 起外圈小点炸开 burst → doneStrikeAt 起删除线从左往右画 strike
-  //（kit List 的 .strike）→ donePop 播完再停 doneRest → 开始收起 collapse（kit List 的 .fold；kit/components/useDoneFlow.ts 只排“donePop + doneRest”和 collapse 两个计时）
-  /** --dur-done-pop 400ms：方框从按下的 0.8 放大过头到约 1.3、回落到约 1.1、再回 1.0 */
-  donePop: 0.4,
-  /** --dur-done-burst-at 130ms：外圈小点开始炸开的时刻 */
-  doneBurstAt: 0.13,
-  /** --dur-burst 300ms：外圈小点炸开、扩散变淡 */
-  burst: 0.3,
-  /** --dur-done-strike-at 170ms：删除线开始画的时刻 */
-  doneStrikeAt: 0.17,
-  /** --dur-strike 130ms：删除线从左往右画满 */
-  strike: 0.13,
-  /** --dur-done-rest 400ms：方框回到 1.0 以后停住多久再收起（勾上到开始收起 = donePop + doneRest = 800ms） */
-  doneRest: 0.4,
+  // —— 勾选完成时间线（负责人 11-18 定稿：对照页第 11 版“乙4”，按参考视频 点击特效.mp4 逐帧对齐；从勾上那一刻算起）——
+  // 按下缩到 0.45（press）→ 0 起方框回弹 donePop（kit CheckCircle 的 check-pop）、填充块由小圆长成圆角方块 doneFill（淡入 doneFade）、
+  // 删除线 doneStrikeAt（0）起画 strike（kit List 的 .strike）→ doneSparkAt 起 14 个小点 spark（最后结束：30 + 380 = 410ms）→ doneRingAt 起细正圆 ring
+  // → donePop 播完再停 doneRest → 开始收起 collapse（kit List 的 .fold；kit/components/useDoneFlow.ts 只排“donePop + doneRest”和 collapse 两个计时）
+  /** --dur-done-pop 420ms：方框从按下的 0.45 回弹到 1.22、回落 0.96、再 1.02、停在 1（TC-B0-10 的例外，负责人 11-18 定） */
+  donePop: 0.42,
+  /** --dur-done-fill 260ms：填充块从小圆（0.3 倍）长成圆角方块的放大和圆角过渡 */
+  doneFill: 0.26,
+  /** --dur-done-fade 120ms：填充块淡入 */
+  doneFade: 0.12,
+  /** --dur-done-spark-at 30ms：14 个小点开始长出来的时刻 */
+  doneSparkAt: 0.03,
+  /** --dur-spark 380ms：小点往外飘、变暗到消失 */
+  spark: 0.38,
+  /** --dur-done-ring-at 175ms：细正圆出现的时刻 */
+  doneRingAt: 0.175,
+  /** --dur-ring 170ms：细正圆边扩边淡 */
+  ring: 0.17,
+  /** --dur-done-strike-at 0ms：删除线开始画的时刻（勾上当下） */
+  doneStrikeAt: 0,
+  /** --dur-strike 90ms：删除线从左往右画满 */
+  strike: 0.09,
+  /** --dur-done-rest 300ms：方框回弹播完以后停住多久再收起（勾上到开始收起 = donePop + doneRest = 720ms） */
+  doneRest: 0.3,
   /** --dur-collapse 100ms：这一行收起（11-17 从 280ms 改，参考视频整行约 100ms 快速收起） */
   collapse: 0.1,
   /** --dur-sheet 380ms：弹层、录音面板、页面切换 */
@@ -72,8 +81,14 @@ export const ease = {
   press: [0.3, 1.5, 0.5, 1],
   /** --ease-splash-breathe：启动画面竖条起伏（等于 ease-in-out），别处不用 */
   splashBreathe: [0.42, 0, 0.58, 1],
-  /** --ease-linear：只给倒计时（撤销条色带，R-450），表示剩多少时间，不是装饰动效；CSS 里写 linear，等于 cubic-bezier(0,0,1,1) */
+  /** --ease-linear：倒计时（撤销条色带，R-450），表示剩多少时间；另给逐帧量出来的分段关键帧（勾选完成的小点、细圆线）整段匀速用。等于 cubic-bezier(0,0,1,1) */
   linear: [0, 0, 1, 1],
+  /** --ease-done-pop-in：方框回弹第一段（0.45 → 1.22），只给 kit CheckCircle 的 check-pop（11-18 乙4） */
+  donePopIn: [0.2, 0.9, 0.3, 1],
+  /** --ease-done-pop：方框回弹后面几段（1.22 → 0.96 → 1.02 → 1） */
+  donePop: [0.45, 0, 0.55, 1],
+  /** --ease-done-ring-in：细正圆出现那一段（0 → 12%） */
+  doneRingIn: [0.2, 0.6, 0.35, 1],
 } as const satisfies Record<string, Bezier>;
 
 /** 弹簧：刚度 380、阻尼比 0.78、质量 1；Motion 用 damping，按 m = 1 换算成 2·ζ·√k（17.2） */
@@ -93,8 +108,12 @@ export const cssVarOf = {
     press: '--dur-press',
     ui: '--dur-ui',
     donePop: '--dur-done-pop',
-    doneBurstAt: '--dur-done-burst-at',
-    burst: '--dur-burst',
+    doneFill: '--dur-done-fill',
+    doneFade: '--dur-done-fade',
+    doneSparkAt: '--dur-done-spark-at',
+    spark: '--dur-spark',
+    doneRingAt: '--dur-done-ring-at',
+    ring: '--dur-ring',
     doneStrikeAt: '--dur-done-strike-at',
     strike: '--dur-strike',
     doneRest: '--dur-done-rest',
@@ -122,6 +141,9 @@ export const cssVarOf = {
     press: '--ease-press',
     splashBreathe: '--ease-splash-breathe',
     linear: '--ease-linear',
+    donePopIn: '--ease-done-pop-in',
+    donePop: '--ease-done-pop',
+    doneRingIn: '--ease-done-ring-in',
   },
 } as const satisfies { dur: Record<keyof typeof dur, string>; ease: Record<keyof typeof ease, string> };
 

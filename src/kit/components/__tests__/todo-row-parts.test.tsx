@@ -2,6 +2,7 @@
 // • PrioCycle：手指、鼠标点在哪一格就设成哪一档（点当前那一档什么都不做）；键盘、读屏按下去（click 的 detail 为 0）照旧换下一档
 // • CheckCircle：子任务做到几成的档（partStage）——全做完、主待办没勾时是 3，方框满填、不画脸；勾上那一圈小点播完就拿掉，不重播
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CheckCircle, partStage } from '../CheckCircle.tsx';
 import { PrioCycle } from '../Priority.tsx';
@@ -46,19 +47,66 @@ describe('CheckCircle 子任务进度和小点', () => {
     expect(part?.style.getPropertyValue('--part')).toBe('1');
   });
 
-  it('亲手勾上放大过头、播一圈小点和外圈，外圈播完（animationend）拿掉', () => {
-    const { rerender } = render(<CheckCircle checked={false} label="完成" onChange={() => undefined} testId="c" />);
-    fireEvent.click(screen.getByTestId('c'));
-    rerender(<CheckCircle checked label="完成" onChange={() => undefined} testId="c" />);
-    const burst = document.querySelector('label > span:last-child');
-    expect(burst?.querySelectorAll('i')).toHaveLength(8);
-    expect(document.querySelector('label')?.className).toMatch(/pop/);
-    // jsdom 的样式里没有 animation 属性，React 按带前缀的名字监听：两个名字都发一次（真浏览器只有不带前缀的那个）
-    const ring = burst?.querySelector('b') as Element;
+  // jsdom 的样式里没有 animation 属性，React 按带前缀的名字监听：两个名字都发一次（真浏览器只有不带前缀的那个）
+  const animEnd = (el: Element) =>
     act(() => {
-      for (const type of ['animationend', 'webkitAnimationEnd']) ring.dispatchEvent(new Event(type, { bubbles: true }));
+      for (const type of ['animationend', 'webkitAnimationEnd']) el.dispatchEvent(new Event(type, { bubbles: true }));
     });
+  const box = (checked: boolean, fresh?: boolean) => <CheckCircle checked={checked} label="完成" onChange={() => undefined} testId="c" fresh={fresh} />;
+  const label = () => document.querySelector('label') as HTMLLabelElement;
+  /** 和页面一样：点了当场就按“刚点的值”画（TodoRow 经 useDoneFlow 同一拍改 checked）；set 是“照数据改”（撤销、写入失败退回） */
+  let set: (v: boolean) => void = () => undefined;
+  function Live() {
+    const [on, setOn] = useState(false);
+    set = setOn;
+    return <CheckCircle checked={on} label="完成" onChange={setOn} testId="c" />;
+  }
+
+  it('亲手勾上（负责人 11-18 定稿乙4）：回弹、14 个小点（每 360/14 度一个）和细正圆；小点、细正圆先播完不清，方框自己的回弹播完（最后结束）才拿掉', () => {
+    render(<Live />);
+    fireEvent.click(screen.getByTestId('c'));
+    const burst = document.querySelector('label > span:last-child') as Element;
+    const dots = [...burst.querySelectorAll<HTMLElement>('i')];
+    expect(dots).toHaveLength(14);
+    expect(Number.parseFloat(dots[1]!.style.getPropertyValue('--a'))).toBeCloseTo(360 / 14, 6);
+    expect(burst.querySelector('b')).not.toBeNull();
+    expect(label().className).toMatch(/pop/);
+    animEnd(dots[13]!);
+    animEnd(burst.querySelector('b')!);
+    expect(label().className).toMatch(/pop/);
+    animEnd(label());
     expect(document.querySelectorAll('label i')).toHaveLength(0);
-    expect(document.querySelector('label')?.className).not.toMatch(/pop/);
+    expect(label().className).not.toMatch(/pop/);
+  });
+
+  it('减弱动态效果（动画不播、animationend 一直不来）：撤销以后照数据再显示成勾上，不重播', () => {
+    render(<Live />);
+    fireEvent.click(screen.getByTestId('c'));
+    expect(label().className).toMatch(/pop/);
+    // 不发 animationend：停留期间、收起以后一直勾着，.pop 留着（CSS 里是 animation: none、小点 display: none，什么都不画）
+    act(() => set(false));
+    expect(label().className).not.toMatch(/pop/);
+    act(() => set(true));
+    expect(label().className).not.toMatch(/pop/);
+    expect(document.querySelectorAll('label i')).toHaveLength(0);
+  });
+
+  it('动画没播完就变回没勾上（撤销、写入失败照数据退回）：清零；之后照数据再显示成勾上不重播', () => {
+    render(<Live />);
+    fireEvent.click(screen.getByTestId('c'));
+    expect(label().className).toMatch(/pop/);
+    act(() => set(false));
+    act(() => set(true));
+    expect(label().className).not.toMatch(/pop/);
+    expect(document.querySelectorAll('label i')).toHaveLength(0);
+  });
+
+  it('亮色（fresh）：勾上而且使用方说还在原位才打 data-fresh；没勾上、不给 fresh 都不打', () => {
+    const { rerender } = render(box(true, true));
+    expect(label().hasAttribute('data-fresh')).toBe(true);
+    rerender(box(true));
+    expect(label().hasAttribute('data-fresh')).toBe(false);
+    rerender(box(false, true));
+    expect(label().hasAttribute('data-fresh')).toBe(false);
   });
 });

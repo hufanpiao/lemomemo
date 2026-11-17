@@ -8,7 +8,7 @@
 //   完成的灰字加删除线。不再有“待办”行首标签，时刻不放在左边时刻列。一行画在 kit TodoRow、动作在 kit/components/useTodoRows.ts（待办页、今天页同一份），这里只给副行和行按钮属性
 // • 点标题照旧交给日历页的 onOpen（手机进编辑页，电脑开详情抽屉，R-130；只读行在那里拦下）；行按钮带 data-open、抽屉开着的那条 aria-current
 // • 打勾就地完成：写入和待办页同一份（hooks/useTodoList.ts 的 useTodoWrites）；勾选特效和待办页同一条时间线（kit/components/useDoneFlow.ts、动效令牌“勾选完成时间线”）：
-//   勾上放大过头、炸开、划线 → 停到 800ms → 这一行收起、页底升起“已完成 · 撤销”→ 从这一天的清单里拿掉；只读行方框变淡，点了拦下出“要新版本”（kit useListActions）
+//   勾上回弹、小点和细正圆、划线 → 停到 720ms → 这一行收起、页底升起“已完成 · 撤销”→ 从这一天的清单里拿掉；只读行方框变淡，点了拦下出“要新版本”（kit useListActions）
 // • 有子任务的：InlineSubtasks 就地展开、收起、勾选（今天页同一个；勾最后一项自动完成主待办、出“全部完成 · 撤销”）
 // • 组内先后：shared/logic/todo-row.ts 的 compareTodos（H → M → L，同档按截止时刻、没时刻的在后，再按创建时间；R-442，待办页、今天页同一个）
 // • 哪些待办算这一天：截止日是这一天、没删、没完成（同月历的 todoDate）；完成了还留在原位的照画

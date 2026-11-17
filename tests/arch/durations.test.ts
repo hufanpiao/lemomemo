@@ -1,6 +1,8 @@
 // TC-B0-10（架构 17.2 第 6 点、R-155；QA D-06）：单个动效 ≤ 400ms，只有底栏液滴 --dur-drop（0.55s）例外。
 // 10-29 加第二组例外：启动画面专用的 --dur-splash-*（R-254 负责人选定的方向 B 时间线：0.8 秒静止、1.6 秒一轮起伏、0.6 秒变暗、
-// 6 秒兜底；still / bar2 / bar3 / failsafe 是开始时刻，不是时长），只准在生成的 tokens.css 里定义、只在 src/styles/splash.css 里用
+// 6 秒兜底；still / bar2 / bar3 / failsafe 是开始时刻，不是时长），只准在生成的 tokens.css 里定义、只在 src/styles/splash.css 里用。
+// 11-18 加第三个例外：勾选完成方框回弹 --dur-done-pop 420ms（负责人 11-18 定稿对照页第 11 版“乙4”，按参考视频逐帧对齐的回弹时长，
+// 本机资料 设计方案/2026-11-18_完成动效/对照页源文件.html；只多 20ms，砍到 400 会把 0.96 → 1.02 → 1 那两下压扁）
 // 扫 src 下所有 CSS（含生成的 tokens.css、skins/*.css）里的时长令牌和 transition / animation，再看 src/motion/tokens.ts 的 dur；
 // 违规样例 tests/arch-fixtures/durations/tc-b0-10-500ms.css 证明 500ms 会被报出
 import { readdirSync, readFileSync } from 'node:fs';
@@ -12,7 +14,7 @@ import { FIXTURES, ROOT } from './fixture-header.ts';
 /** 上限（毫秒）和唯一的例外 */
 const MAX_MS = 400;
 const SPLASH = ['still', 'bar2', 'bar3', 'breathe', 'dark', 'failsafe'].map((k) => `--dur-splash-${k}`);
-const EXCEPTIONS = new Set(['--dur-drop', ...SPLASH]);
+const EXCEPTIONS = new Set(['--dur-drop', '--dur-done-pop', ...SPLASH]);
 /** 启动画面令牌在 src/motion/tokens.ts 里的键 */
 const SPLASH_TS = new Set(['splashStill', 'splashBar2', 'splashBar3', 'splashBreathe', 'splashDark', 'splashFailsafe']);
 /** 启动画面令牌（--dur-splash-*、--ease-splash-*，TS 里的 dur.splash*、ease.splashBreathe）只准出现在这几个文件 */
@@ -65,14 +67,15 @@ function cssFiles(dir: string): string[] {
   });
 }
 
-describe('TC-B0-10：单个动效 ≤ 400ms，例外只有 --dur-drop 和启动画面的 --dur-splash-*（R-254，只限 splash.css）', () => {
-  it('src 下所有 CSS：超过 400ms 的只有 --dur-drop 和 --dur-splash-*', () => {
+describe('TC-B0-10：单个动效 ≤ 400ms，例外只有 --dur-drop、--dur-done-pop 和启动画面的 --dur-splash-*（R-254，只限 splash.css）', () => {
+  it('src 下所有 CSS：超过 400ms 的只有 --dur-drop、--dur-done-pop 和 --dur-splash-*', () => {
     const files = cssFiles(join(ROOT, 'src'));
     expect(files.length).toBeGreaterThan(3);
     const hits = files.flatMap((f) => longDurations(readFileSync(f, 'utf8'), relative(ROOT, f).replaceAll('\\', '/')));
     expect(hits.filter((h) => !EXCEPTIONS.has(h.prop))).toEqual([]);
     // 例外确实在（0.55s 和启动画面那几个），而且只在生成的 tokens.css 里定义
     expect(hits.map((h) => `${h.file} ${h.prop} ${h.ms}`)).toEqual([
+      'src/styles/tokens.css --dur-done-pop 420',
       'src/styles/tokens.css --dur-drop 550',
       'src/styles/tokens.css --dur-splash-still 800',
       'src/styles/tokens.css --dur-splash-bar2 1000',
@@ -101,11 +104,11 @@ describe('TC-B0-10：单个动效 ≤ 400ms，例外只有 --dur-drop 和启动�
     expect(splashTokenUses('.a{transition: opacity var(--dur-ui) var(--ease-out)} hideSplash(); SPLASH_FADE_RM_MS')).toEqual([]);
   });
 
-  it('src/motion/tokens.ts 的 dur：超过 0.4 秒的只有 drop（和启动画面那几个）', () => {
+  it('src/motion/tokens.ts 的 dur：超过 0.4 秒的只有 donePop、drop（和启动画面那几个）', () => {
     const long = Object.entries(dur)
       .filter(([k, s]) => s * 1000 > MAX_MS && !SPLASH_TS.has(k))
       .map(([k]) => k);
-    expect(long).toEqual(['drop']);
+    expect(long).toEqual(['donePop', 'drop']);
   });
 
   it('违规样例：加一个 500ms 的令牌和一条 0.5s 的 transition → 两处都报', () => {

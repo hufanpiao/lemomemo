@@ -1,9 +1,12 @@
-// 待办勾选完成时间线（负责人 11-17：“现在我的动效太轻了，根本反应不过来，并且完成时的横线是从左到右画上去的”；“这个间距太挤了”）。
+// 待办勾选完成时间线（负责人 11-17：“现在我的动效太轻了，根本反应不过来，并且完成时的横线是从左到右画上去的”；“这个间距太挤了”；
+// 11-18 定稿对照页第 11 版“乙4”，本机资料 设计方案/2026-11-18_完成动效/对照页源文件.html 的 data-v="d"）。
 // 不要后端：直接往本机库 planner-v4 写好待办和子任务再重新载入，在待办页勾一条，删除线、方框的动画停住后按 5 ms 一格拨时间取样（不靠帧率，见 record 的注释）：
-// • 删除线（kit TodoRow 标题里的 .line，scaleX）从 0 单调长到 1，起步不早于 --dur-done-strike-at 的一半（不和方框同一拍）、900 ms 内画满
-// • 方框（kit CheckCircle 的 .checkBox）放大峰值不低于 1.25（参考视频第 4–5 帧约 1.3 倍），最后回到 1
-// • 打上 data-out 以后这一行在 --dur-collapse（100 ms）加两帧余量内收完、离开原组
-// • 减弱动态效果：方框不缩放、不炸开，删除线直接画满，没有中间值
+// • 删除线（kit TodoRow 标题里的 .line，scaleX）勾上当下（--dur-done-strike-at 0）从 0 起、单调长到 1，--dur-strike（90 ms）加一格余量内画满
+// • 方框（kit CheckCircle 的 .checkBox）从按下的 0.45 起回弹，峰值约 1.22（不低于 1.2），中间落回 1 以下（约 0.96），最后回到 1
+// • 勾上那一刻：14 个小点和一圈细正圆；方框亮柠檬黄（--accent）、勾号 --on-accent；回弹播完拿掉 .pop 和小点
+// • 勾上后约 720 ms（--dur-done-pop + --dur-done-rest）才打上 data-out；打上以后这一行在 --dur-collapse（100 ms）加两帧余量内收完、离开原组；
+//   收进“已完成”组以后方框照旧暗黄（--check-on-bg），不是亮色
+// • 减弱动态效果：方框不缩放、看不到小点和细正圆，删除线直接画满，没有中间值
 // • 间距：标题和副行之间、副行和展开后的第一条子任务之间各至少留 3.5 / 13 px（负责人“太挤了”时是 0 / 10 px）
 // • 字号：待办行副行（带子任务的“起步 · 1/3”胶囊和普通行的“工作”）和页头“· 0 / 3 完成”同一档（负责人 11-17 17:31“整体在小一圈”）
 // • 环境变量 DONE_SHOTS 指一个本机文件夹时（只在 Chromium），截 430×932、DPR 3 的浅色、深色各一张，加勾选特效的关键帧连拍，不进仓库
@@ -46,6 +49,10 @@ interface Rec {
   outAt: number | null;
   goneAt: number | null;
   boxAtOut: number | null;
+  /** 打上 .pop 那一刻：小点几个、有没有细正圆，填充块、勾号的颜色和 --accent、--on-accent 是否一样 */
+  pop: { dots: number; ring: boolean; burstShown: boolean; fillAccent: boolean; tickOnAccent: boolean } | null;
+  /** 拿掉 .pop 的时刻（距 pointerdown，毫秒） */
+  popEndAt: number | null;
 }
 
 /**
@@ -60,7 +67,16 @@ async function record(page: Page, id: string): Promise<Rec> {
   await page.evaluate((id) => {
     const END_MS = 800;
     const STEP_MS = 5;
-    const rec: Rec = { line: null, box: null, outAt: null, goneAt: null, boxAtOut: null };
+    const rec: Rec = { line: null, box: null, outAt: null, goneAt: null, boxAtOut: null, pop: null, popEndAt: null };
+    /** 一个颜色令牌算出来的 rgb（拿一个临时元素套上再读，和计算后的颜色同一种写法） */
+    const colorOf = (v: string): string => {
+      const probe = document.createElement('i');
+      probe.style.color = `var(${v})`;
+      document.body.append(probe);
+      const c = getComputedStyle(probe).color;
+      probe.remove();
+      return c;
+    };
     (window as Window & { __rec?: Rec }).__rec = rec;
     const scaleOf = (el: Element): number => {
       const t = getComputedStyle(el).transform;
@@ -98,7 +114,19 @@ async function record(page: Page, id: string): Promise<Rec> {
       const line = row?.querySelector('[class*="line"][aria-hidden]');
       const box = row?.querySelector('label[class*="checkBox"]');
       if (!rec.line && line?.hasAttribute('data-done')) rec.line = sample(line);
-      if (!rec.box && box && /pop/.test(box.className)) rec.box = sample(box);
+      if (!rec.box && box && /pop/.test(box.className)) {
+        const fill = box.querySelector('[class*="fill"]');
+        const tick = box.querySelector('[class*="tick"]');
+        rec.pop = {
+          dots: box.querySelectorAll('i').length,
+          ring: Boolean(box.querySelector('b')),
+          burstShown: [...box.querySelectorAll('span[aria-hidden]')].some((s) => s.querySelector('i') && getComputedStyle(s).display !== 'none'),
+          fillAccent: fill ? getComputedStyle(fill).backgroundColor === colorOf('--accent') : false,
+          tickOnAccent: tick ? getComputedStyle(tick).borderRightColor === colorOf('--on-accent') : false,
+        };
+        rec.box = sample(box);
+      }
+      if (rec.box && rec.popEndAt === null && box && !/pop/.test(box.className)) rec.popEndAt = performance.now() - t0;
       if (rec.outAt === null && row?.hasAttribute('data-out')) {
         rec.outAt = performance.now() - t0;
         rec.boxAtOut = box ? scaleOf(box) : null;
@@ -125,7 +153,7 @@ const show = (r: Rec): string =>
   `删除线 ${curve(r.line)} ｜ 方框 ${curve(r.box)} ｜ data-out ${r.outAt?.toFixed(0) ?? '-'} ms（方框 ${r.boxAtOut?.toFixed(2) ?? '-'}）、离开 ${r.goneAt?.toFixed(0) ?? '-'} ms`;
 
 test.describe('待办勾选完成时间线', () => {
-  test('删除线从左往右单调画满、方框放大过头 ≥ 1.25 再回 1、收起在 --dur-collapse 内完成', async ({ page }) => {
+  test('删除线勾上当下起画、90 ms 内画满；方框 0.45 起回弹到约 1.22 再落回 1；14 个小点、亮柠檬黄；约 720 ms 后收起、收进“已完成”是暗黄', async ({ page }) => {
     await seed(page);
     const r = await record(page, 't2');
     const trace = show(r);
@@ -133,22 +161,47 @@ test.describe('待办勾选完成时间线', () => {
     const line = r.line ?? [];
     const lines = line.map(([, v]) => v);
     expect(lines.length, `删除线没有过渡（取样不够）：${trace}`).toBeGreaterThan(5);
-    // ① 删除线：单调不减、最后画满；起步晚于方框（等 --dur-done-strike-at，170 ms），不是一打上就画了一半
+    // ① 删除线：从 0 起（勾上当下，--dur-done-strike-at 0）、单调不减、有中间帧，--dur-strike（90 ms）加一格取样内画满
+    expect(lines[0]!, `删除线不是从 0 起画：${trace}`).toBeLessThan(0.05);
     for (let k = 1; k < lines.length; k += 1) expect(lines[k]!, `删除线往回缩：${trace}`).toBeGreaterThanOrEqual(lines[k - 1]! - 0.01);
     expect(lines.at(-1)!, `删除线没画满：${trace}`).toBeGreaterThan(0.99);
-    const early = line.filter(([t, v]) => t < 80 && v > 0.05);
-    expect(early, `删除线和方框同一拍就起步了：${trace}`).toEqual([]);
+    const late = line.filter(([t, v]) => t >= 95 && v < 0.99);
+    expect(late, `删除线 95 ms 还没画满（定稿 90 ms，勾上当下就画）：${trace}`).toEqual([]);
     const mid = lines.filter((x) => x > 0.05 && x < 0.95);
     expect(mid.length, `删除线没有中间帧（一下子画满，不是从左往右画）：${trace}`).toBeGreaterThan(0);
-    // ② 方框放大过头不低于 1.25，最后回到 1
-    const boxes = (r.box ?? []).map(([, v]) => v);
-    expect(Math.max(...boxes), `方框放大峰值不够：${trace}`).toBeGreaterThanOrEqual(1.25);
+    // ② 方框：从按下的 0.45 起，峰值约 1.22（38% 处），落回 1 以下（64% 处约 0.96），最后回到 1
+    const box = r.box ?? [];
+    const boxes = box.map(([, v]) => v);
+    expect(boxes[0]!, `方框回弹不是从 0.45 起：${trace}`).toBeLessThan(0.5);
+    expect(Math.max(...boxes), `方框回弹峰值不够：${trace}`).toBeGreaterThanOrEqual(1.2);
+    expect(Math.max(...boxes), `方框回弹冲过头太多：${trace}`).toBeLessThan(1.25);
+    expect(Math.min(...box.filter(([t]) => t > 200).map(([, v]) => v)), `方框峰值以后没落回 1 以下再弹：${trace}`).toBeLessThan(0.98);
     expect(boxes.at(-1)!, `方框最后没回到 1：${trace}`).toBeLessThan(1.02);
-    // ③ 打上 data-out 以后 100 ms（--dur-collapse）加 3 帧余量内离开原组；打上 data-out 那一刻方框已经回到 1
+    // ③ 勾上那一刻：14 个小点、一圈细正圆；这一行还在原位，方框亮柠檬黄、勾号 --on-accent；回弹播完才拿掉
+    expect(r.pop, `没播勾选特效：${trace}`).toEqual({ dots: 14, ring: true, burstShown: true, fillAccent: true, tickOnAccent: true });
+    expect(r.popEndAt, `.pop 一直没拿掉：${trace}`).not.toBeNull();
+    expect(r.popEndAt!, `.pop 回弹没播完就拿掉了：${trace}`).toBeGreaterThanOrEqual(400);
+    // ④ 勾上后约 720 ms 才打上 data-out；打上以后 100 ms（--dur-collapse）加 3 帧余量内离开原组；打上 data-out 那一刻方框已经回到 1
     expect(r.outAt, `没开始收起：${trace}`).not.toBeNull();
+    expect(r.outAt!, `收起开始得太早（定稿 720 ms）：${trace}`).toBeGreaterThanOrEqual(700);
     expect(r.goneAt, `没收完：${trace}`).not.toBeNull();
     expect(r.goneAt! - r.outAt!, `收起太慢：${trace}`).toBeLessThanOrEqual(100 + 3 * 34);
     expect(r.boxAtOut!, `收起前方框没回到 1：${trace}`).toBeLessThan(1.02);
+    // ⑤ 收进“已完成”组（展开看）以后照旧暗黄：填充块是 --check-on-bg，不是亮色、没有 data-fresh
+    await page.getByTestId('todos-done-fold').click();
+    const done = page.getByTestId('todos-g-done').locator('[data-row-id="t2"]');
+    await expect(done).toBeVisible();
+    const dark = await done.evaluate((row) => {
+      const probe = document.createElement('i');
+      probe.style.color = 'var(--check-on-bg)';
+      document.body.append(probe);
+      const want = getComputedStyle(probe).color;
+      probe.remove();
+      const label = row.querySelector('label');
+      const fill = label?.querySelector('[class*="fill"]');
+      return { fresh: label?.hasAttribute('data-fresh') ?? null, fill: fill ? getComputedStyle(fill).backgroundColor === want : null };
+    });
+    expect(dark, `收进“已完成”以后方框不是暗黄：${trace}`).toEqual({ fresh: false, fill: true });
   });
 
   test('减弱动态效果：方框不缩放、删除线直接画满（没有中间帧）', async ({ page }) => {
@@ -159,6 +212,8 @@ test.describe('待办勾选完成时间线', () => {
     const trace = show(r);
     const boxes = (r.box ?? []).map(([, v]) => v);
     expect(Math.max(1, ...boxes), `减弱动态效果时方框还在放大：${trace}`).toBeLessThan(1.01);
+    // 小点和细正圆看不见（.burst display: none）
+    expect(r.pop?.burstShown ?? false, `减弱动态效果时还在画小点：${trace}`).toBe(false);
     expect(r.line, `删除线没打上 data-done：${trace}`).not.toBeNull();
     const mid = (r.line ?? []).map(([, v]) => v).filter((x) => x > 0.05 && x < 0.95);
     expect(mid, `减弱动态效果时删除线还在过渡：${trace}`).toEqual([]);

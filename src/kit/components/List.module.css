@@ -298,7 +298,7 @@
      11-17 逐帧查过，原来的 background-size 过渡要主线程每帧重画，webkit 第一次勾时点下后约 200ms 没出帧，等出帧时线已经画了一半）；
      本来就勾上的直接画好、不播（过渡只在 data-done 变化时播）
    • 原来行面整体变淡 0.5 去掉（11-17）：方框在放大、炸开时被一起压暗，特效看着就“轻”；做完的认灰字加删除线，同参考视频
-   • 这一行收起：li 是一格的 grid，data-out 时这一格从 1fr 收到 0fr（--dur-collapse 100ms · --ease-drawer），下面的行跟着上来，不逐帧改 height；
+   • 这一行收起：勾上后 --dur-done-pop + --dur-done-rest（720ms）开始；li 是一格的 grid，data-out 时这一格从 1fr 收到 0fr（--dur-collapse 100ms · --ease-drawer），下面的行跟着上来，不逐帧改 height；
      .foldBody 同时淡出，用写在它自己身上的 opacity 过渡：可以打断（收起途中撤销会原路淡回），也不碰 li——li 的淡入淡出（删除离场、撤销进场）
      是 Motion 逐帧写行内 opacity，li 上常挂 opacity 过渡会把每一帧拖慢（webkit 删除离场残影一直不透明，e2e b2-motion-list N1 抓到过）
    • 减弱动态效果：删除线直接画好；不收高度，只用同样的 --dur-collapse 淡出 */
@@ -336,8 +336,8 @@
   color: var(--text-2);
 }
 
-/* 删除线只画在标题文字上（.strike 包着文字，不含前面的优先级彩点；11-17 截图里线从彩点穿过去）；从左往右长：只在变成 data-done 时等 --dur-done-strike-at 再画，
-   取消勾时直接收回（过渡按目标状态取 delay） */
+/* 删除线只画在标题文字上（.strike 包着文字，不含前面的优先级彩点；11-17 截图里线从彩点穿过去），线只到文字末尾；从左往右长：只在变成 data-done 时等 --dur-done-strike-at 再画
+   （负责人 11-18 定稿乙4：0，勾上当下就画，--dur-strike 90ms 画满），取消勾时直接收回（过渡按目标状态取 delay） */
 .strike {
   position: relative;
 }

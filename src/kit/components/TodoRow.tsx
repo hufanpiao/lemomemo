@@ -47,7 +47,8 @@ export function TodoRow({ r, todo, progress, tid, onOpen, collapsed, onCollapse,
   const checked = flow.shown(id, todo.done);
   const stage = progress ? partStage(progress.done, progress.total) : 0;
   // 只读行的方框换成页面给的只读部件（读屏名字后接“要更新到新版本才能修改”），别的都一样
-  const box = { checked, label: checked ? words.undoDone : words.done, progress, onChange: (v: boolean) => flow.check(id, v), testId: `${tid}-done-${id}` };
+  // fresh：刚勾上还在原位时方框画亮柠檬黄（负责人选“乙”）；按行的 linger 给，不靠方框自己的状态（今天页“已过去”里同一个 key 不重新挂载）
+  const box = { checked, label: checked ? words.undoDone : words.done, progress, fresh: flow.fresh(id), onChange: (v: boolean) => flow.check(id, v), testId: `${tid}-done-${id}` };
   const face = (
     <div className={list.swRow}>
       <span className={list.lead}>
