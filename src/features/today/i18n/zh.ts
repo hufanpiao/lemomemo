@@ -29,7 +29,7 @@ export const zh = {
   'list.due': '{t} 截止',
   'list.dueDay': '今天截止',
   // 待办行右边 H / M / L 的读屏名字（R-434，同待办页）
-  'prio': '优先级：{p}，点一下换成{next}',
+  'prio': '优先级：{p}，按一下换成{next}',
   'prio.high': '高',
   'prio.mid': '中',
   'prio.low': '低',

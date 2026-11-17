@@ -63,7 +63,11 @@ function open(hash: string) {
   return render(<CalendarPage />);
 }
 // 清单的行（不含标题行下面的黄历卡按钮，R-431）
-const rows = (): HTMLElement[] => within(screen.getByTestId('cal-day-list')).getAllByRole('button').filter((b) => b.dataset['testid'] !== 'cal-huangli');
+// 行按钮：去掉黄历条和待办行尾的 H / M / L（T-A，负责人 11-17 选定、日清单待办行对齐，那是行外的另一个按钮）
+const rows = (): HTMLElement[] =>
+  within(screen.getByTestId('cal-day-list'))
+    .getAllByRole('button')
+    .filter((b) => b.dataset['testid'] !== 'cal-huangli' && !(b.dataset['testid'] ?? '').startsWith('cal-prio-'));
 const rowOf = (title: string): HTMLElement => {
   const r = rows().find((b) => (b.textContent ?? '').includes(title));
   if (!r) throw new Error(`没有“${title}”这一行`);

@@ -12,6 +12,8 @@ export { vtName } from './vt.ts';
 // 吞掉手势后补来的那一下 click（换页守卫、翻页、kit 左滑行、按住“＋”共用这一个；时限在 tokens.ts 的 TAP_SWALLOW_MS）
 export { swallowNextClick, type SwallowClickOptions } from './swallow-click.ts';
 export { TAP_SWALLOW_MS } from './tokens.ts';
+// 时长令牌（秒）给要按动效时长排计时的地方读（例如待办勾完停留、收起，features/todos/hooks/useDoneFlow.ts），不另写一份毫秒数
+export { dur } from './tokens.ts';
 // 减少动态效果只有一套判断（系统设置或 <html data-rm="1">，UI-4 M-1）；React 组件经 useReducedMotionPref 读同一个
 export { prefersReducedMotion, subscribeReducedMotion } from './reduced.ts';
 export type { AppearKind } from './presets.ts';

@@ -1,5 +1,6 @@
 // 长按拖动排序（R-429，含 R-433 拿起时左边的 6 个点）：不要后端，往本机库 planner-v4 写好行再重新载入，用鼠标“按住 0.5 秒 → 拖 → 松手”
-// • 待办页：拿起的那一行 6 个点显出来、落点一条横线；组内换序 → “已移动 · 撤销”、写进 outbox、顺序变了；拖到“明天”那一组 → “已改到 明天”，撤销回到今天
+// • 待办页（R-442 负责人“待办里面不需要拖动，只用HML来排序”，取代 R-429 的待办部分）：一组里按 H → M → L 排；按住 0.55 秒再拖不拿起——
+//   没有浮层、没有横线、顺序不变、不写 outbox、运行日志里没有 sort 行
 // • 随手记页（列表方式）：第一次拖 → “已切到自己排，设置里可改回”，不按天分组、顺序照放下的；设置 › 随手记显示方式里“随手记排序”是“自己排”，切回“按时间”恢复原顺序
 // • 按住不到 0.4 秒就动：不拿起（没有横线）
 // • 拿起（主持人 11-16 返工第 1、2 条）：原行留空位（看不见、高度照占），复制一份浮层挂在 body 上、带 6 个点；
@@ -145,58 +146,37 @@ test.describe('长按拖动排序（R-429、R-433）', () => {
     if (info.status !== info.expectedStatus) console.log((await runLog(page).catch(() => [])).filter((l) => /sort|swipe|hdrag/.test(l)).slice(-40).join('\n'));
   });
 
-  test('待办页：组内换序、拖到明天改截止、撤销；按住不够久不拿起', async ({ page, browserName }) => {
-    // 截深色那张（LEMO_SHOT_THEME 以 dark 开头）：皮肤默认跟着系统，系统换成深色
-    if (process.env['LEMO_SHOT_THEME']?.startsWith('dark')) await page.emulateMedia({ colorScheme: 'dark' });
+  test('R-442 待办页：一组里按 H → M → L 排；长按再拖不拿起、不改顺序、不写', async ({ page }) => {
     await page.goto('/app/#/todos');
     await page.waitForLoadState('domcontentloaded');
     const today = await dayOf(page, 0);
-    const tomorrow = await dayOf(page, 1);
     await idbPut(page, [
-      { ...todo, id: 't1', title: '交报销单', due: today, created_at: 3 },
-      { ...todo, id: 't2', title: '准备提纲', due: today, created_at: 2 },
-      { ...todo, id: 't3', title: '给猫买猫砂', due: today, created_at: 1 },
-      { ...todo, id: 'm1', title: '取快递', due: tomorrow },
+      { ...todo, id: 't1', title: '低：给猫买猫砂', due: today, priority: 'low', created_at: 1 },
+      { ...todo, id: 't2', title: '高：交报销单', due: today, priority: 'high', created_at: 2 },
+      { ...todo, id: 't3', title: '中：准备提纲', due: today, priority: 'mid', created_at: 3 },
     ].map((r) => ['todos', cached(r)] as const));
     await page.reload();
     const row = (id: string) => page.getByTestId(`todos-row-${id}`);
     await row('t1').waitFor({ timeout: 30000 });
-    // 今天那一组此刻的顺序（没拖过的按原规则排）
-    const todayIds = () => page.locator('[data-sort-group="today:"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-sort-id') ?? ''));
-    const before = await todayIds();
-    expect(before).toHaveLength(3);
-    const [first, mid, last] = before as [string, string, string];
+    const order = () => page.getByTestId('todos-g-today').locator('[data-testid^="todos-row-"]').evaluateAll((els) => els.map((e) => (e.getAttribute('data-testid') ?? '').slice(10)));
+    await expect.poll(order).toEqual(['t2', 't3', 't1']);
+    await expect(page.locator('[data-sort-id]')).toHaveCount(0);
 
-    // 按住不到 0.4 秒就动：不拿起，顺序不变
-    await drag(page, row(last), row(first), 2, async () => {
-      await expect(page.getByTestId('sort-line')).toBeHidden();
-    }, 150);
-    expect(await todayIds()).toEqual(before);
-
-    // 组内换序：最后一条拖到最上面
-    await drag(page, row(last), row(first), 2, async () => {
-      await expectLifted(page, row(last));
-      await shot(page, browserName, 'todos-dragging');
-      await watchSettle(page, last);
-    });
-    await expect(page.getByTestId('todos-moved-toast')).toContainText('已移动');
-    await expectNoSnapBack(page);
-    await expect.poll(todayIds).toEqual([last, first, mid]);
-    await expect.poll(() => outboxOf(page)).toContain(`todos:${last}:patch`);
-    await expect(row(last)).not.toHaveAttribute('data-sort-lifted', '');
-
-    // 跨组：原来的第一条拖到“明天”那一组里 m1 下面
-    await drag(page, row(first), row('m1'), 40, () => watchSettle(page, first));
-    await expect(page.getByTestId('todos-moved-toast')).toContainText('已改到 明天');
-    await expectNoSnapBack(page);
-    // 换组时旧位置那一行先做退出动画，同一个 testid 短暂有两个：等只剩一个再看
-    const inGroup = (id: string, g: string) => page.locator(`[data-testid="todos-row-${id}"][data-sort-group="${g}"]`);
-    await expect(inGroup(first, 'tomorrow:')).toHaveCount(1);
-    await expect(row(first)).toHaveCount(1);
-    // 撤销：回到今天
-    await page.getByTestId('todos-moved-toast').getByRole('button').click();
-    await expect(inGroup(first, 'today:')).toHaveCount(1);
-    await expect(row(first)).toHaveCount(1);
+    // 按住 0.55 秒（原来拿起的时长）再往上拖到第一行
+    const a = await row('t1').boundingBox();
+    const b = await row('t2').boundingBox();
+    if (!a || !b) throw new Error('找不到行');
+    await page.mouse.move(a.x + a.width * 0.45, a.y + a.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(550);
+    await page.mouse.move(b.x + b.width * 0.45, b.y + 2, { steps: 12 });
+    await expect(page.getByTestId('sort-float')).toHaveCount(0);
+    await expect(page.getByTestId('sort-line')).toHaveCount(0);
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    expect(await order()).toEqual(['t2', 't3', 't1']);
+    expect((await outboxOf(page)).filter((x) => x.startsWith('todos:'))).toEqual([]);
+    expect((await runLog(page)).filter((l) => l.includes('sort todos'))).toEqual([]);
   });
 
   test('随手记页（列表方式）：第一次拖切到自己排、顺序照放下的；设置里切回按时间', async ({ page, browserName }) => {

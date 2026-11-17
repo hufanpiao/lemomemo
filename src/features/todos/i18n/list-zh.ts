@@ -19,7 +19,7 @@ export const listZh = {
   // 标题下面一行等宽小字（R-436 第 2 条）：“11月15日 周日 · 1 / 10 完成”
   'list.sub': '{date} · {done} / {total} 完成',
   // 行右边 H / M / L（R-434）：读屏名字；编辑页的“优先级”三档在 zh.ts
-  'list.prio': '优先级：{p}，点一下换成{next}',
+  'list.prio': '优先级：{p}，按一下换成{next}',
   'list.prio.high': '高',
   'list.prio.mid': '中',
   'list.prio.low': '低',
@@ -29,9 +29,8 @@ export const listZh = {
   'list.deleted': '已删除',
   'list.undo': '撤销',
   'list.doneToast': '已完成',
-  // 长按拖动排序（R-429）：组内换序“已移动 · 撤销”，跨组放下改截止日期“已改到 X · 撤销”（X 是组名：今天、明天、11月18日 周三）
-  'list.moved': '已移动',
-  'list.movedTo': '已改到 {g}',
+  // 日历日清单的待办组组头“● 待办 · 3”（R-443）
+  'list.dayTodos': '待办',
   'list.err.save': '没保存上，稍后再试一次',
   'list.err.readonly': '这条要新版本才能修改',
   // 设置首页“完成 7 天后自动删除”（负责人 11-15 方案；ui/TodoSettings.tsx）
@@ -44,6 +43,9 @@ export const listZh = {
   'items.collapse.a11y': '收起「{title}」的子任务',
   'items.expand.a11y': '展开「{title}」的子任务',
   'items.autoDone': '全部完成，已完成这条待办',
+  // 待办页副行的进度标签（负责人 11-17 选 T-A“起步、大半”标签）：不到一半起步、一半及以上大半（kit CheckCircle 的 partStage）
+  'items.stage.1': '起步',
+  'items.stage.2': '大半',
   // 编辑页“子任务”区（SubtaskEditor 在待办列表页那一包里，只用这一本词典，免得和编辑页共用词典多拆出一个分包）
   'items.title': '子任务',
   'items.add': '添加子任务',

@@ -53,12 +53,12 @@ describe('分组', () => {
       td({ id: 'x', title: 'x', done: true, done_at: 2, due: '2026-11-05' }), td({ id: 'y', title: 'y', done: true, done_at: 1 }),
       td({ id: 'z', title: 'z', done: true, done_at: 3 }),
     ];
-    const g = groupTodos(rows, NOW, TZ, null, 'zh-CN', new Set(['x', 'z']));
+    const g = groupTodos(rows, NOW, TZ, null, new Set(['x', 'z']));
     expect(g.map((x) => [x.key, x.items.map((i) => i.todo.id)])).toEqual([['today', ['x']], ['nodate', ['z']], ['done', ['y']]]);
     expect(groupTodos(rows, NOW, TZ).map((x) => x.key)).toEqual(['done']);
   });
 
-  it('组内：按截止日、截止时刻（没时刻的在后）、重要的在前', () => {
+  it('组内：同档按截止时刻（没时刻的在后）', () => {
     const rows = [td({ due: '2026-11-05', title: 'a' }), td({ due: '2026-11-05', due_time: '18:00', title: 'b' }), td({ due: '2026-11-05', due_time: '15:00', title: 'c' })];
     expect(groupTodos(rows, NOW, TZ)[0]?.items.map((i) => i.todo.title)).toEqual(['c', 'b', 'a']);
   });
@@ -85,41 +85,41 @@ describe('分组', () => {
   });
 });
 
-describe('同一截止时刻、没日期那组按标题排：数字按数值（设计审查：“第 1、10、11 … 2、20”；和今天页共用 shared/i18n/title-compare.ts）', () => {
-  const mix = <T,>(a: T[]): T[] => [a[3], a[0], a[2], a[1]] as T[];
+describe('组内先后（R-442：H → M → L，同档按截止时刻、没时刻的在后，再按创建时间；取代 R-429 拖动排序）', () => {
   const titlesOf = (g: ReturnType<typeof groupTodos>, key: string) => g.find((x) => x.key === key)?.items.map((i) => i.todo.title);
 
-  it('没日期那组：中文 1、2、10、20；韩文 1、2、10、20', () => {
-    const zh = ['第 1 条', '第 2 条', '第 10 条', '第 20 条'];
-    expect(titlesOf(groupTodos(mix(zh).map((title) => td({ title })), NOW, TZ, null, 'zh-CN'), 'nodate')).toEqual(zh);
-    const ko = ['할 일 1', '할 일 2', '할 일 10', '할 일 20'];
-    expect(titlesOf(groupTodos(mix(ko).map((title) => td({ title })), NOW, TZ, null, 'ko-KR'), 'nodate')).toEqual(ko);
-  });
-
-  it('同一天同一截止时刻：中文、韩文都是 1、2、10、20', () => {
-    const zh = ['报表 1', '报表 2', '报表 10', '报表 20'];
-    const rowsZh = mix(zh).map((title) => td({ title, due: '2026-11-08', due_time: '10:00' }));
-    expect(titlesOf(groupTodos(rowsZh, NOW, TZ, null, 'zh-CN'), 'day')).toEqual(zh);
-    const ko = ['보고서 1', '보고서 2', '보고서 10', '보고서 20'];
-    const rowsKo = mix(ko).map((title) => td({ title, due: '2026-11-08', due_time: '10:00' }));
-    expect(titlesOf(groupTodos(rowsKo, NOW, TZ, null, 'ko-KR'), 'day')).toEqual(ko);
-  });
-
-  it('排序口径不变：重要的仍在前，截止时刻仍先比，标题只是最后一道', () => {
+  it('优先级压过截止时刻：低档 09:00 排在高档 18:00 后面', () => {
     const rows = [
-      td({ title: '第 1 条' }),
-      td({ title: '第 20 条', important: true }),
-      td({ title: '第 2 条', due: '2026-11-08', due_time: '11:00' }),
-      td({ title: '第 10 条', due: '2026-11-08', due_time: '09:00' }),
+      td({ title: 'L 09:00', priority: 'low', due: '2026-11-08', due_time: '09:00' }),
+      td({ title: 'H 18:00', priority: 'high', due: '2026-11-08', due_time: '18:00' }),
+      td({ title: 'M 12:00', priority: 'mid', due: '2026-11-08', due_time: '12:00' }),
     ];
-    const g = groupTodos(rows, NOW, TZ, null, 'zh-CN');
-    expect(titlesOf(g, 'nodate')).toEqual(['第 20 条', '第 1 条']);
-    expect(titlesOf(g, 'day')).toEqual(['第 10 条', '第 2 条']);
+    expect(titlesOf(groupTodos(rows, NOW, TZ), 'day')).toEqual(['H 18:00', 'M 12:00', 'L 09:00']);
   });
 
-  it('按传入的语言比：中文按拼音，“北京”在“上海”前（按码位会反过来）', () => {
-    const rows = ['上海出差', '北京出差'].map((title) => td({ title }));
-    expect(titlesOf(groupTodos(rows, NOW, TZ, null, 'zh-CN'), 'nodate')).toEqual(['北京出差', '上海出差']);
+  it('同档：有时刻的按时刻，没时刻的排在有时刻的后面；都没时刻按创建时间（早建的在前），不按标题', () => {
+    const rows = [
+      td({ title: 'b 无时刻 晚建', due: '2026-11-05', created_at: 30 }),
+      td({ title: 'a 无时刻 早建', due: '2026-11-05', created_at: 10 }),
+      td({ title: 'z 18:00', due: '2026-11-05', due_time: '18:00', created_at: 50 }),
+      td({ title: 'y 15:00', due: '2026-11-05', due_time: '15:00', created_at: 60 }),
+    ];
+    expect(titlesOf(groupTodos(rows, NOW, TZ), 'today')).toEqual(['y 15:00', 'z 18:00', 'a 无时刻 早建', 'b 无时刻 晚建']);
+  });
+
+  it('没日期那组：H → M → L，同档按创建时间；拖过的排序值（sort_key）不再起作用', () => {
+    const rows = [
+      td({ title: 'M 晚建', priority: 'mid', created_at: 9, sort_key: 'zzzz' }),
+      td({ title: 'L', priority: 'low', created_at: 1 }),
+      td({ title: 'M 早建', priority: 'mid', created_at: 2 }),
+      td({ title: 'H', priority: 'high', created_at: 5, sort_key: 'a0' }),
+    ];
+    expect(titlesOf(groupTodos(rows, NOW, TZ), 'nodate')).toEqual(['H', 'M 早建', 'M 晚建', 'L']);
+  });
+
+  it('“以后”组里日期不同：同档截止日早的在前', () => {
+    const rows = [td({ title: '12/1', due: '2026-12-01' }), td({ title: '11/20 10:00', due: '2026-11-20', due_time: '10:00' }), td({ title: '11/20', due: '2026-11-20' })];
+    expect(titlesOf(groupTodos(rows, NOW, TZ), 'later')).toEqual(['11/20 10:00', '11/20', '12/1']);
   });
 });
 
@@ -141,8 +141,8 @@ describe('优先级三档（R-434）', () => {
     ]);
   });
 
-  it('同一截止时刻、没日期那组：高在中前、中在低前，最后才按标题', () => {
-    const rows = [td({ title: 'a', priority: 'low' }), td({ title: 'b', priority: 'mid' }), td({ title: 'c', priority: 'high' }), td({ title: 'd', priority: 'mid' })];
+  it('同一截止时刻、没日期那组：高在中前、中在低前，同档按创建时间', () => {
+    const rows = [td({ title: 'a', priority: 'low', created_at: 1 }), td({ title: 'b', priority: 'mid', created_at: 2 }), td({ title: 'c', priority: 'high', created_at: 3 }), td({ title: 'd', priority: 'mid', created_at: 4 })];
     expect(titlesOf(groupTodos(rows, NOW, TZ), 'nodate')).toEqual(['c', 'b', 'd', 'a']);
     const due = rows.map((r) => ({ ...r, due: '2026-11-05', due_time: '18:00' }));
     expect(titlesOf(groupTodos(due, NOW, TZ), 'today')).toEqual(['c', 'b', 'd', 'a']);

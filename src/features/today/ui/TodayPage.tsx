@@ -24,7 +24,11 @@
 //   ②③ 只看本机待同步队列、和引擎无关，不等引擎（M1）；但等首屏画完（usePainted）才挂、才下载，不算进首屏预算（11-17 ci 首屏 150.0 KB 超线）
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记、圆圈变淡；点这一行、打勾统一拦下（左滑滑不开），
 //   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）。
-// • 待办子任务（R-350 方案 5.2，Q5）：待办行副行下面一行“已勾/总数”和细进度条，不摊开、不在这里勾（点进编辑页勾）；todos 的 TodaySubtasks 按需下载。顶部（日期下面）有带重复的只读行时出
+// • 待办子任务（R-442 负责人“今天页可以展开待办的子任务”，取代 R-350 Q5 的只显示进度）：有子任务的待办行下面一行进度条和“2/4 · 展开”，
+//   点了就地摊开勾选清单、直接勾（todos 的 InlineSubtasks，待办页同一个卡片和写入；展开没有不存，默认收起）；勾最后一项自动完成主待办，
+//   页底出“全部完成，已完成这条待办 · 撤销”（撤销时刚勾的那项一起撤回，Q1）；会改动主待办时先留住两张列表 --dur-ui。首屏画完才下载那一包
+// • 待办的先后（R-442）：“没赶上”“今天的安排”里的待办之间按 H → M → L、同档按截止时刻、再按创建时间（data/today-model.ts，和待办页同一个 compareTodos）；
+//   日程照旧按时刻，日程在前、待办在后（两张单子各排各的，不混成一条时间线）。顶部（日期下面）有带重复的只读行时出
 //   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner；4.1.0 的重复事项 4.0.x 只显示第一次）
 // • 纪念日一行（B5 S14；线框 s1 ANNLINE）：提示块下面、“现在”卡上面，7 天内最近的一个“3 天后 김지민 生日”；用服务器算好的 next_date（hooks/useAnnivUpcoming.ts → data/anniv-soon.ts），
 //   开关开着、有纪念日才下载 AnnivLine（useAnnivAny；挑哪一条在 AnnivLine 里算，不进首屏；分包下不来那一行不画）
@@ -32,7 +36,7 @@
 // • 电脑版（B6，5.9b；有侧栏的宽度）：交给按需下载的 TodayDesk 排成可拖动的块；提示、“现在”卡、没赶上、今天的安排合成一块时间河
 //   （块标题“今天的安排”，里面不再画这个小标题；B6 返工 11-14）。页顶日期行固定不动：日期后面加农历（TodayDesk 的 Lunar），下面是纪念日胶囊（同手机的 AnnivLine）。
 //   点一行不换页，在详情抽屉里编辑（选中哪一条由 kit 的 useDrawerSel（在 useListActions.ts）管，同随手记页；窗口变窄、电脑版卸下或画出错时清掉；“今天记的”里的随手记也开在这个抽屉里，同样先判只读）。电脑版分包没到、下不来时照手机的排法画
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
@@ -42,8 +46,8 @@ import refine from '../../../kit/components/Refine.module.css';
 import form from '../../../kit/components/Form.module.css';
 import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
-import { PrioCycle, PrioDot } from '../../../kit/components/Priority.tsx';
-import { nextPriority, type Priority } from '../../../../shared/logic/todo-row.ts';
+import { PrioCycle, PrioDot, prioLabel, prioSet } from '../../../kit/components/Priority.tsx';
+import type { Priority } from '../../../../shared/logic/todo-row.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import type { SwipeRowProps } from '../../../kit/components/SwipeRow.tsx';
 import type TodaySwipe from './TodaySwipe.tsx';
@@ -60,13 +64,13 @@ import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
 import { loadTodayDesk, loadTodaySwipe } from '../index.ts';
 import { useAnnivAny } from '../hooks/useAnnivAny.ts';
-import { TodaySubtasks } from '../../todos/index.ts';
+import { InlineSubtasks } from '../../todos/index.ts';
 import { GrowIn } from './GrowIn.tsx';
 import MicDeniedNote from './MicDeniedNote.tsx';
 import { NowCard } from './NowCard.tsx';
 import styles from './TodayPage.module.css';
 import type { TodaySel } from './TodayDesk.tsx';
-import type { TodayRoProps } from './TodayToasts.tsx';
+import type { TodayAutoToast, TodayRoProps } from './TodayToasts.tsx';
 
 // 页底提示条、顶部重复事项横幅、只读行的行尾标记和打勾圆圈：同一个按需下载的文件（TodayToasts.tsx），按 part 画哪一块。
 // 懒加载写在今天页的块里、不写在功能入口 ../index.ts（11-17 改）：写在入口时 import() 由主包发起，主包的预加载表只给首屏名单列 JS
@@ -105,13 +109,13 @@ function usePainted(): boolean {
   return on;
 }
 
-/** 待办的子任务进度“2/4 ▬▬▭▭”（R-350 方案 5.2，只看不摊开）：首屏画完以后才挂、才下载那一包（不算进首屏），没有子任务、分包下不来时不画 */
-function Subs({ id }: { id: string }) {
+/** 待办的子任务（R-442，就地展开、勾选）：首屏画完以后才挂、才下载那一包（不算进首屏），没有子任务、分包下不来时不画；放在行按钮外面 */
+function Subs(p: ComponentProps<typeof InlineSubtasks>) {
   if (!usePainted()) return null;
   return (
     <QuietBoundary name="todo-subs">
       <Suspense fallback={null}>
-        <TodaySubtasks id={id} />
+        <InlineSubtasks {...p} />
       </Suspense>
     </QuietBoundary>
   );
@@ -153,7 +157,7 @@ export default function TodayPage() {
   // 撤销条、出错条也在 g 里（kit 的 useListActions）
   const hv = useHoldView({ late: d.late, events: d.events, todos: d.todos });
   const v = hv.view;
-  const a = useListActions('todos', { toggle: d.toggleDone, remove: (id, deleted) => d.remove('todos', id, deleted) }, hv);
+  const a = useListActions<TodayAutoToast>('todos', { toggle: d.toggleDone, remove: (id, deleted) => d.remove('todos', id, deleted) }, hv);
   const { g, tick, shown, del } = a;
   const anniv = useAnnivAny();
   // 有侧栏的宽度（电脑版）：面板布局（5.9b）。面板那一块（DeskLayout、dnd-kit、zod 约 49 KB）首屏画完才下载（首屏预算 150 KB 按 1280 宽也量），
@@ -175,9 +179,34 @@ export default function TodayPage() {
     return del(id);
   };
   const [pastOpen, setPastOpen] = useState(false);
-  /** 待办行右边 H / M / L（R-434，同待办页）：只读行拦下出“要新版本”；写入结果照打勾一样报 */
-  const prio = (id: string, p: Priority) => (g.isRo('todo', id) ? g.block() : void d.setPriority(id, p).then(a.report));
-  const prioBox = (id: string, p: Priority) => <PrioCycle p={p} label={t('prio', { p: t(`prio.${p}`, {}), next: t(`prio.${nextPriority(p)}`, {}) })} onChange={(x) => prio(id, x)} testId={`today-prio-${id}`} />;
+  /** 待办行右边 H / M / L（R-434，同待办页）：换档、读屏名字用 kit 的 prioSet、prioLabel（待办页、日清单同一份） */
+  const prioBox = (id: string, p: Priority) => (
+    <PrioCycle
+      p={p}
+      label={prioLabel(p, (q) => t(`prio.${q}`, {}), (v) => t('prio', v))}
+      onChange={(x) => prioSet(g.isRo('todo', id), () => g.block(), () => d.setPriority(id, x), a.report)}
+      testId={`today-prio-${id}`}
+    />
+  );
+  // 子任务就地展开（R-442）：会改动主待办时先留住两张列表 --dur-ui；勾完最后一项自动完成，页底出“全部完成 · 撤销”（撤销调回来的 undo，Q1）
+  const seq = useRef(0);
+  const subsOf = (id: string, title: string, done: boolean) => (
+    <Subs
+      prefix="today"
+      id={id}
+      title={title}
+      done={done}
+      readOnly={g.isRo('todo', id)}
+      onBlock={() => g.block()}
+      onOpen={() => open({ kind: 'todo', id })}
+      onPlan={(plan) => (plan === null ? undefined : hv.hold())}
+      onResult={(r) => {
+        if (r.res !== 'ok' || r.auto !== true) return a.report(r.res);
+        seq.current += 1;
+        g.show({ kind: 'auto', n: seq.current, message: r.message, undo: () => void r.undo().then(a.report) });
+      }}
+    />
+  );
 
   const lateItem = v.late.length ? (
     <AppearItem as="section" key="late" className={styles.late} aria-labelledby="today-late" data-testid="today-late">
@@ -202,12 +231,12 @@ export default function TodayPage() {
                 <span className={`${list.meta} ${styles.lateTag}`}>
                   {days > 0 ? <NumIn text={t('late.days', { n: days })} num={String(days)} /> : <NumIn text={t('late.passed', { t: todo.dueTime ?? '' })} num={todo.dueTime ?? ''} />}
                 </span>
-                <Subs id={todo.id} />
               </span>
               {g.isRo('todo', todo.id) ? <Ro part="mark" testId={`today-ro-${todo.id}`} /> : null}
               <RowMark table="todos" id={todo.id} />
             </button>
             {prioBox(todo.id, todo.priority)}
+            {subsOf(todo.id, todo.title, false)}
           </AppearItem>
         ))}
       </AppearList>
@@ -259,12 +288,12 @@ export default function TodayPage() {
               <span className={list.text}>
                 <span className={list.title}><PrioDot p={td.priority} />{td.title}</span>
                 <span className={list.meta}>{td.dueTime ? <NumIn text={t('list.due', { t: td.dueTime })} num={td.dueTime} /> : t('list.dueDay', {})}</span>
-                <Subs id={td.id} />
               </span>
               {ro ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
               <RowMark table="todos" id={td.id} />
             </button>
             {prioBox(td.id, td.priority)}
+            {subsOf(td.id, td.title, td.done)}
           </div>
         </SwipeDel>
       </AppearItem>

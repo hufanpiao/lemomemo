@@ -32,13 +32,12 @@ beforeEach(() => {
 afterEach(() => act(() => uiStore.getState().setLocale('zh-CN')));
 
 describe('useToday 按当前语言排（X12）', () => {
-  it('今天的日程、今天的待办、已过期的待办', () => {
+  // 待办之间不再按标题排（R-442：H/M/L → 截止时刻 → 创建时间，和语言无关），这里只守日程；待办的先后在 today-model.test.ts
+  it('今天的日程', () => {
     for (const [loc, want] of [['zh-CN', ZH], ['ko-KR', KO]] as const) {
       act(() => uiStore.getState().setLocale(loc));
       const { result, unmount } = renderHook(() => useToday());
       expect(result.current.events.map((o) => o.title), `${loc} 日程`).toEqual(want);
-      expect(result.current.todos.map((o) => o.title), `${loc} 待办`).toEqual(want);
-      expect(result.current.late.map((o) => o.todo.title), `${loc} 过期`).toEqual(want);
       unmount();
     }
   });

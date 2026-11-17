@@ -54,6 +54,8 @@
 }
 
 .roomy > .row {
+  --fold-min: 56px;
+
   min-height: 56px;
 }
 
@@ -77,15 +79,25 @@
   pointer-events: none;
 }
 
+/* 有子任务的行（R-350、R-442、R-443）：子任务卡片（features/todos 的 SubtaskCard，带 data-subcard）直接放在行（今天页 .row）
+   或行面（.swRow，那一条在 .swRow 后面）里，宿主有卡片时折行、卡片落到下一行；宿主行的分隔线让给卡片底部的整宽进度条（不然进度条下面紧跟一条分隔线） */
+.row:has(> [data-subcard]) {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
+.row:has([data-subcard]) {
+  border-bottom-color: transparent;
+}
+
 /* 电脑版详情抽屉里开着的那一行（行按钮 aria-current，B6 返工）：左边一道柠檬黄。
-   画在行左沿外 6～9px（绝对定位的 ::before，不占位），和时间隔 6px；行高和别的行都不动（主持人 11-14：黄条压住了“08:35”） */
-.row:has(> .main[aria-current="true"]),
-.row:has(> .swp .swRow > .main[aria-current="true"]) {
+   画在行左沿外 6～9px（绝对定位的 ::before，不占位），和时间隔 6px；行高和别的行都不动（主持人 11-14：黄条压住了“08:35”）。
+   行按钮在行里哪一层都认（今天页直接在行里；待办行在 .foldBody、SwipeRow 里面） */
+.row:has(.main[aria-current="true"]) {
   position: relative;
 }
 
-.row:has(> .main[aria-current="true"])::before,
-.row:has(> .swp .swRow > .main[aria-current="true"])::before {
+.row:has(.main[aria-current="true"])::before {
   content: '';
   position: absolute;
   inset: 5px auto 5px -9px;
@@ -153,7 +165,9 @@
   white-space: nowrap;
 }
 
-.row[data-done] .title {
+/* 做完的行（今天页“已过去”等）：灰字加删除线。待办页、日清单的待办行（.fold）用 :not 排除在外（划线要从左往右画，见下面 .fold 一段），
+   不靠两条规则谁写在后面决胜；包一层 :where 只是把权重压回和 .title 一样，免得后面 .fold 那几条按 no-descending-specificity 得挪到前面来 */
+:where(.row[data-done]:not(.fold)) .title {
   color: var(--text-2);
   text-decoration: line-through;
 }
@@ -188,6 +202,11 @@
   min-height: var(--hit);
 }
 
+.swRow:has(> [data-subcard]) {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
 .empty {
   margin: 12px 0;
   color: var(--text-2);
@@ -200,4 +219,112 @@
   display: block;
   margin-top: 4px;
   color: var(--text);
+}
+
+/* .fold：勾完的那一秒（负责人 11-17 定的勾选特效分镜；计时在 features/todos/hooks/useDoneFlow.ts）：待办页、日历日清单的待办行（R-443）
+   都由 features/todos/ui/TodoRow.tsx 画：li.row.fold 里只放一层 .foldBody（这一格 grid 才收得动），.foldBody 里是行面（.swRow，待办页外面再套 SwipeRow）。
+   “完成了没有”只看行（li）上的 data-done；唯一的例外是标题文字外面那层 .strike 自己也带 data-done——划线要从左往右画（背景线的 background-size 过渡），
+   会动的属性状态得写在元素自身上（样式规则 lemo/reduced-motion-override）
+   • 已完成：行面变淡 0.5（待办页、日清单共用这一份，原来两页各写一份；今天页“已过去”里做完的那几条还是 TodayPage.module.css 自己那条，
+     今天页跟上 T-A 是后续），--dur-ui 过渡；标题字色转 --text-2；
+     标题划线是一条 1px 背景线（text-decoration 不能过渡），本来就勾上的直接画好、不播
+   • 这一行收起（第 ④ 段）：li 是一格的 grid，data-out 时这一格从 1fr 收到 0fr（280ms · --ease-drawer），下面的行跟着上来，不逐帧改 height；
+     .foldBody 同时淡出，用写在它自己身上的 opacity 过渡：可以打断（收起途中撤销会原路淡回），也不碰 li——li 的淡入淡出（删除离场、撤销进场）
+     是 Motion 逐帧写行内 opacity，li 上常挂 opacity 过渡会把每一帧拖慢（webkit 删除离场残影一直不透明，e2e b2-motion-list N1 抓到过）
+   • 减弱动态效果：划线直接到位、变淡不过渡；不收高度，只淡出 --dur-ui 的一半（110ms，useDoneFlow 的 DONE_OUT_RM_MS） */
+.fold {
+  display: grid;
+  grid-template-rows: 1fr;
+  min-height: var(--fold-min, var(--hit));
+  transition:
+    grid-template-rows var(--dur-collapse) var(--ease-drawer),
+    min-height var(--dur-collapse) var(--ease-drawer);
+}
+
+/* min-height 和格子一起过渡（.fold 自己写最小高度 --fold-min，.roomy 里是 56px，减弱动态效果写回同一个值）：行比内容（47px + 1px 边线）高，最小高度若一下子变 0，打上 data-out 那一帧整行先塌 8px，
+   下一行的 layout（FLIP）把这 8px 补成先往下推再收回（主持人 11-17 复审必改 A 的逐帧取样抓到，chromium） */
+.fold[data-out] {
+  grid-template-rows: 0fr;
+  min-height: 0;
+  border-bottom-color: transparent;
+  pointer-events: none;
+}
+
+.foldBody {
+  display: flex;
+  min-width: 0;
+  transition: opacity var(--dur-collapse) var(--ease-drawer);
+}
+
+.fold[data-out] > .foldBody {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.fold .swRow {
+  transition: opacity var(--dur-ui) var(--ease-out);
+}
+
+.fold[data-done] .swRow {
+  opacity: 0.5;
+}
+
+.row.fold .title {
+  transition: color var(--dur-ui) var(--ease-out);
+}
+
+.row.fold[data-done] .title {
+  color: var(--text-2);
+}
+
+/* 划线只画在标题文字上（.strike 包着文字，不含前面的优先级彩点；11-17 截图里线从彩点穿过去） */
+.strike {
+  background-image: linear-gradient(currentcolor, currentcolor);
+  background-position: 0 55%;
+  background-repeat: no-repeat;
+  background-size: 0 1px;
+  transition: background-size var(--dur-ui) var(--ease-out);
+}
+
+.strike[data-done] {
+  background-size: 100% 1px;
+}
+
+:global(:root[data-rm='1']) .fold {
+  transition: none;
+}
+
+/* 减弱动态效果不收高度：最小高度也写回 .fold 自己那个值，不然淡出时整行先塌一截 */
+:global(:root[data-rm='1']) .fold[data-out] {
+  grid-template-rows: 1fr;
+  min-height: var(--fold-min, var(--hit));
+}
+
+:global(:root[data-rm='1']) .foldBody {
+  transition-duration: calc(var(--dur-ui) / 2);
+  transition-timing-function: var(--ease-out);
+}
+
+/* 规则要求写回 .fold 自己的最小高度；格子不收，行面最小高度和行一样，排版不变 */
+:global(:root[data-rm='1']) .fold[data-out] > .foldBody {
+  min-height: var(--fold-min, var(--hit));
+}
+
+:global(:root[data-rm='1']) .fold .swRow {
+  transition: none;
+}
+
+:global(:root[data-rm='1']) .row.fold .title {
+  transition: none;
+}
+
+:global(:root[data-rm='1']) .strike {
+  transition: none;
+}
+
+/* 减弱动态效果：不画背景线，直接用删除线（到位、不画出来） */
+:global(:root[data-rm='1']) .strike[data-done] {
+  background-size: 0 1px;
+  text-decoration: line-through;
 }

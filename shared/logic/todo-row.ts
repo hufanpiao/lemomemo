@@ -4,11 +4,13 @@
 //   • 纪念日提醒“生成待办”（features/reminders/data/remind-write.ts 的 annivTodoRow：带 from_anniv_id）；
 //   • “＋”识别（shared/logic/capture-map.ts 的 captureRow，客户端和 claude-intake 共用：带 source、raw_text、batch_id、AI 简称）；
 //   • 随手记转待办（shared/logic/notes/note-convert.ts 经 captureRow，再盖上 from_note_id）。
-// 没传的列按“空”：没截止、没截止时刻、不提醒提前量、优先级中、没项目备注、没批次、没来源、没简称；不带排序值（sort_key 只能 update，拖动才写，R-429）；remind_time 默认 DEFAULT_REMIND_TIME。
+// 没传的列按“空”：没截止、没截止时刻、不提醒提前量、优先级中、没项目备注、没批次、没来源、没简称；不带排序值（sort_key 列还在，R-442 去掉待办拖动以后前端不再读写）；remind_time 默认 DEFAULT_REMIND_TIME。
 // remind_days 必须由调用方给（编辑页、生成待办是 0 当天，“＋”和随手记是 null 不提醒，两边本来就不同）。
 // 不写 ai_status（系统列）、deleted_at、undone（只能 update）、repeat（R-163）。done_at 跟 done：完成的记 now，没完成 0。纯函数，不读时钟
 // 读一行（todoOf）和“逾期”规则（isLate）也只有这一份（B6 整合）：待办页的分组和截止标签（features/todos/data/todo-list.ts）、
 // 今天页的“没赶上”和今天截止（features/today/data/today-model.ts）都经它
+// 同一组里待办的先后（compareTodos，R-442）也只有这一份：待办页各组（features/todos/data/todo-list.ts）、今天页“没赶上”和“今天的安排”（today-model.ts）、
+// 日历日清单的待办组（features/todos/ui/DayTodos.tsx）都经它
 // 读数字列的 numOr 也在这里（审查 11-15 第 8 条：待办几处各写一份 num 合成这一个）：core/todo-done.ts、待办的 todo-actions、todo-autodel、todo-items、todo-list 共用
 import { diffDays, msAt, parseHm, todayOf, type DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
@@ -52,13 +54,28 @@ export interface TodoFields {
   priority: Priority;
   due: DateStr | null;
   dueTime: string | null;
+  /** 创建时刻（epoch ms）；没有、坏了当 0 */
+  createdAt: number;
 }
 
 export function todoOf(r: Readonly<{ id: string } & Record<string, unknown>>): TodoFields {
   const due = str(r['due']);
   const dt = str(r['due_time']);
   const d = DATE.test(due) ? due : null;
-  return { id: r.id, title: str(r['title']), project: str(r['project']), done: r['done'] === true, priority: priorityOf(r), due: d, dueTime: d && HM.test(dt) ? dt : null };
+  return { id: r.id, title: str(r['title']), project: str(r['project']), done: r['done'] === true, priority: priorityOf(r), due: d, dueTime: d && HM.test(dt) ? dt : null, createdAt: numOr(r['created_at'], 0) };
+}
+
+/**
+ * 同一组里待办的先后（R-442 负责人“只用 HML 来排序”，取代 R-429 的拖动排序）：
+ * 优先级 高 → 中 → 低；同档按截止（日期早的在前；同一天有截止时刻的按时刻，没有时刻的排在有时刻的后面；没截止日的最后）；
+ * 再按创建时间（早建的在前）；最后按 id，顺序稳定。“已完成”怎么排由调用方定（待办页按完成时刻）
+ */
+export function compareTodos(a: Pick<TodoFields, 'id' | 'priority' | 'due' | 'dueTime' | 'createdAt'>, b: Pick<TodoFields, 'id' | 'priority' | 'due' | 'dueTime' | 'createdAt'>): number {
+  return PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority)
+    || (a.due ?? '9999-99-99').localeCompare(b.due ?? '9999-99-99')
+    || (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99')
+    || a.createdAt - b.createdAt
+    || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
 /** 逾期（待办页标红“逾 N 天”“已过 17:00”、今天页“没赶上”）：没完成，截止日早于今天，或今天截止、截止时刻已过。

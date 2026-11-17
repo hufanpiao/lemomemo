@@ -96,7 +96,7 @@ describe('电脑版日历的详情抽屉（R-130）', () => {
     expect(logs).toContain('cal drawer open kind=event view=month');
     expect(logs.join('\n')).not.toContain('日程e1');
 
-    await click(screen.getByTestId('cal-day-row-t1'));
+    await click(await screen.findByTestId('cal-day-row-t1'));   // 待办组是懒加载的（R-443）
     expect((await screen.findByTestId('fake-todo-editor')).textContent).toBe('t1');
     expect(row.hasAttribute('aria-current')).toBe(false);
     expect(screen.getByTestId('cal-day-row-t1').getAttribute('aria-current')).toBe('true');

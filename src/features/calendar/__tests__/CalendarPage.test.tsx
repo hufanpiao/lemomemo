@@ -279,7 +279,11 @@ describe('月视图', () => {
     expect(list.textContent).toContain('3 项');
     // 清单的行在 ul 里（标题行下面的黄历卡也是按钮，R-431，不算）
     const rows = within(list.querySelector('ul') as HTMLElement).getAllByRole('button');
-    expect(rows.map((r) => r.textContent)).toEqual(['14:00客户会', '全天团建', '18:00交报告']);
+    expect(rows.map((r) => r.textContent)).toEqual(['14:00客户会', '全天团建']);
+    // 待办单独一组画在日程后面（R-443，todos 的 DayTodos 懒加载）：方框 + 标题，下面一行截止时刻；不再有左边的时刻列
+    const todoRow = await screen.findByTestId('cal-day-row-t1');
+    expect(within(list).getByTestId('cal-todos').querySelector('h2')?.textContent).toBe('待办 · 1');
+    expect(todoRow.textContent).toBe('交报告18:00');
     await act(async () => {
       fireEvent.click(rows[0] as HTMLElement);
     });

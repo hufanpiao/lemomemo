@@ -4,11 +4,17 @@
 //   读不到（没启动、库已关）就全按默认；不写 localStorage（4.1：localStorage 只留 install_id）
 // • “已完成”组整组展开没有（负责人 11-15“完成的待办怎么隐藏”）另记在本机 meta 的 ui.todo_done_open（true / false），没点过默认收起；
 //   不放进上面的收起表（审查 11-15 第 6 条：那张表只认待办 id，写时按 id 剔掉不在的）。两样放在同一个模块状态里、一次读回来
+// • 勾子任务的写入（useTodoSubtasks）：待办页、今天页和日历日清单的就地展开（ui/InlineSubtasks.tsx，R-442、R-443）共用这一份；
+//   主待办跟着改的规则在 data/todo-items.ts 的 autoTodo（planAuto 让页面先知道会不会挪卡片）、撤销“自动完成”是 undoAutoDone（Q1：刚勾的那项和主待办一起撤回）
 // • 收起状态放在模块里（离开待办页再回来不闪一下默认值）；第一次用时从 meta 读一次，读回来之前点过的以点过的为准
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { actionResult, type ActionResult } from '../../../core/action-result.ts';
 import { getBoot } from '../../../core/boot.ts';
+import { collection } from '../../../core/store.ts';
+import { currentTz } from '../../../core/current-tz.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
-import { groupSubtasks, ITEMS_TABLE, progressOf, type Subtask } from '../data/todo-items.ts';
+import { clock } from '../../../platform/clock.ts';
+import { autoTodo, groupSubtasks, ITEMS_TABLE, tickSubtask, undoAutoDone, type Subtask } from '../data/todo-items.ts';
 import type { Row } from '../data/todo-list.ts';
 
 export type { Subtask } from '../data/todo-items.ts';
@@ -18,7 +24,7 @@ export function useSubtaskGroups(): ReadonlyMap<string, readonly Subtask[]> {
   return groupsOf(useCollection<Row>(ITEMS_TABLE));
 }
 
-/** 同一份集合快照只分一次组（今天页每条待办各挂一个进度，不各算一遍） */
+/** 同一份集合快照只分一次组（今天页、日历每条待办各挂一个 InlineSubtasks，不各算一遍） */
 const grouped = new WeakMap<readonly Row[], ReadonlyMap<string, readonly Subtask[]>>();
 function groupsOf(rows: readonly Row[]): ReadonlyMap<string, readonly Subtask[]> {
   let g = grouped.get(rows);
@@ -26,10 +32,42 @@ function groupsOf(rows: readonly Row[]): ReadonlyMap<string, readonly Subtask[]>
   return g;
 }
 
-/** 一条待办的子任务进度（今天页用）；没有子任务为 null */
-export function useSubtaskProgress(todoId: string): { done: number; total: number } | null {
+/** 勾一项子任务写完以后交给页面的（ui/InlineSubtasks.tsx 的 onResult） */
+export interface SubTickResult {
+  /** 写之前算的：勾这一项会不会顺带改主待办（true 完成、false 改回未完成、null 不动） */
+  plan: boolean | null;
+  res: ActionResult;
+  /** 主待办实际跟着改了没有：true 自动完成、false 改回未完成、null 没动 */
+  auto: boolean | null;
+  /** 撤销“自动完成”（Q1：刚勾的那项和主待办一起撤回） */
+  undo(): Promise<ActionResult>;
+  /** 自动完成那条撤销条的文案 */
+  message: string;
+}
+
+/**
+ * 一条待办的子任务和勾选写入（见文件头）：items 没有子任务时为 undefined。
+ * 主待办完成没有由调用方给（行上本来就有，主持人 11-17 复审第 6 条：原来每一行各订阅整张 todos 表再查找）；
+ * 写的时候才从集合快照里取主待办那一行（不订阅，写入函数本来也按快照里最新的那份判断）
+ */
+export function useTodoSubtasks(todoId: string, todoDone: boolean) {
   const items = useSubtaskGroups().get(todoId);
-  return items?.length ? progressOf(items) : null;
+  const rowNow = (): Row | undefined => collection<Row>('todos').getSnapshot().find((x) => x.id === todoId);
+  return {
+    items,
+    /** 勾这一项会不会顺带改主待办（true 完成、false 改回未完成、null 不动）：会改的话页面先留住列表再挪 */
+    planAuto: (itemId: string, on: boolean): boolean | null => (items ? autoTodo(todoDone, items, itemId, on) : null),
+    async tick(itemId: string, on: boolean): Promise<{ res: ActionResult; auto: boolean | null }> {
+      const r = rowNow();
+      if (!r || !items) return { res: 'failed', auto: null };
+      const x = await tickSubtask(r, items, itemId, on, clock.now(), currentTz());
+      return { res: actionResult(x.out), auto: x.auto };
+    },
+    undoAuto: async (itemId: string): Promise<ActionResult> => {
+      const r = rowNow();
+      return r ? actionResult(await undoAutoDone(r, itemId, clock.now(), currentTz())) : 'failed';
+    },
+  };
 }
 
 /**

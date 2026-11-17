@@ -254,28 +254,32 @@ describe('待办：没赶上、今天', () => {
   });
 });
 
-describe('同一时刻按标题排：数字按数值（设计审查：长列表“第 1、10、11 … 2、20”）', () => {
-  const titles = (ts: string[]) => ts.map((title) => td({ title, due: DAY }));
-  const shuffled = (a: string[]) => [a[3], a[0], a[2], a[1]] as string[];
-
-  it('今天的待办：中文 1、2、10、20', () => {
-    const want = ['第 1 条：整理清单', '第 2 条：整理清单', '第 10 条：整理清单', '第 20 条：整理清单'];
-    expect(todayTodos(titles(shuffled(want)), at('08:00'), SEOUL, 'zh-CN').map((t) => t.title)).toEqual(want);
+describe('待办的先后（R-442：H → M → L，同档按截止时刻、没时刻的在后，再按创建时间；和待办页同一个 compareTodos）', () => {
+  it('今天的安排：优先级先比，压过截止时刻；同档有时刻的按时刻，没时刻的在后；再按创建时间', () => {
+    const rows = [
+      td({ title: 'L 09:00', priority: 'low', due: DAY, due_time: '09:00', created_at: 1 }),
+      td({ title: 'M 无时刻 早建', priority: 'mid', due: DAY, created_at: 2 }),
+      td({ title: 'H 18:00', priority: 'high', due: DAY, due_time: '18:00', created_at: 3 }),
+      td({ title: 'M 无时刻 晚建', priority: 'mid', due: DAY, created_at: 9 }),
+      td({ title: 'M 10:00', priority: 'mid', due: DAY, due_time: '10:00', created_at: 8 }),
+      td({ title: 'H 12:00', priority: 'high', due: DAY, due_time: '12:00', created_at: 4 }),
+    ];
+    expect(todayTodos(rows, at('08:00'), SEOUL).map((t) => t.title)).toEqual(['H 12:00', 'H 18:00', 'M 10:00', 'M 无时刻 早建', 'M 无时刻 晚建', 'L 09:00']);
   });
 
-  it('今天的待办：韩文 1、2、10、20', () => {
-    const want = ['할 일 1', '할 일 2', '할 일 10', '할 일 20'];
-    expect(todayTodos(titles(shuffled(want)), at('08:00'), SEOUL, 'ko-KR').map((t) => t.title)).toEqual(want);
+  it('没赶上：同样先比优先级（不再是逾得久的在前）；同档截止早的在前', () => {
+    const rows = [
+      td({ title: 'M 11/02', priority: 'mid', due: '2026-11-02' }),
+      td({ title: 'H 11/04', priority: 'high', due: '2026-11-04' }),
+      td({ title: 'L 10/30', priority: 'low', due: '2026-10-30' }),
+      td({ title: 'M 11/01', priority: 'mid', due: '2026-11-01' }),
+    ];
+    expect(lateTodos(rows, at('08:00'), SEOUL).map((l) => l.todo.title)).toEqual(['H 11/04', 'M 11/01', 'M 11/02', 'L 10/30']);
   });
 
-  it('没赶上的待办、同一时刻的日程也一样；排序口径不变（标题仍是最后一道）', () => {
-    const late = ['报表 1', '报表 2', '报表 10', '报表 20'].map((title) => td({ title, due: '2026-11-04' }));
-    expect(lateTodos([late[3]!, late[0]!, late[2]!, late[1]!], at('08:00'), SEOUL, 'zh-CN').map((l) => l.todo.title)).toEqual(['报表 1', '报表 2', '报表 10', '报表 20']);
+  it('同一时刻的日程照旧按标题排（数字按数值），日程不跟待办的规则', () => {
     const evs = ['회의 1', '회의 2', '회의 10', '회의 20'].map((title) => ev({ title, time: '09:00', tz: SEOUL }));
     expect(eventsOn([evs[3]!, evs[0]!, evs[2]!, evs[1]!], DAY, SEOUL, 'ko-KR').map((o) => o.title)).toEqual(['회의 1', '회의 2', '회의 10', '회의 20']);
-    // 时刻仍然先比：10:00 的“第 1 条”排在 09:00 的“第 20 条”后面
-    const mixed = [td({ title: '第 1 条', due: DAY, due_time: '10:00' }), td({ title: '第 20 条', due: DAY, due_time: '09:00' })];
-    expect(todayTodos(mixed, at('08:00'), SEOUL, 'zh-CN').map((t) => t.title)).toEqual(['第 20 条', '第 1 条']);
   });
 });
 

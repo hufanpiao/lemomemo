@@ -10,7 +10,9 @@
 //   getComputedStyle 读到的晚一两帧，位置（layout 的 transform）却是当帧的；只看当帧会把残影估淡（第三轮：帧上 0.6、页面里读出 0.19）。
 //   按时间窗算、不按“前两次取样”算：webkit 取样间隔不匀，前两次可能隔了 50 ms 以上，会把早已淡掉的值算进来
 // • M1 补：220 ms 以后“已完成”组只往上走（top 单调不增），不往回退
-// • 负责人 11-15“已完成组折叠”：刚勾的那一条在撤销条开着的约 3 秒里留在原组，之后进默认收起的“已完成 N”；N1 打勾那条的起点是撤销条收起那一刻（审查 11-15 第 4 条：撤销条开着期间勾过的都留在原位）
+// • 负责人 11-17 勾选特效分镜（替换 11-15“撤销条开着的约 3 秒里留在原组”）：刚勾的那一条在原组停 700 ms（DONE_HOLD_MS），再原地收起 280 ms、同时页底升起撤销条，
+//   收完进默认收起的“已完成 N”。收起时这一行已经原地淡到 0（kit List 的 .foldBody），离开的那一份看不见，N1 那套量不到东西；
+//   打勾单独量收起那一段（主持人 11-17 复审必改 A）：这一行高度单调降到约 0、下一行 top 单调上移、卸载前后下一行跳动 ≤ 1px、离开的那一份不透明度从不超过 0.25
 // • N1 补帧（MOTION-n1-load-flaky）：离开那一项一挂上 leaving 就当场补量一帧（退场进度 0）。补帧只用来垫不透明度的历史（让之后 LAG_MS 窗口里的
 //   rAF 帧按它算），不计入“取到看得清的帧”（seen 只数 rAF 帧）：补帧拿的是上一帧别的行的位置，只认得出“离开那一项自己跳位”，
 //   认不出“别的行不走 FLIP、直接跳上来压住残影”（首屏判断放宽与推送认领核对审查 M1）。一次都没取到看得清的 rAF 帧（机器忙、帧落不进淡出那一百来毫秒）
@@ -274,10 +276,9 @@ test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1�
       const [dt, top] = tail[i] as [number, number];
       expect(top, `松手后 ${dt.toFixed(0)} ms“已完成”组往回退了`).toBeLessThanOrEqual((tail[i - 1] as [number, number])[1] + 0.5);
     }
-    // 收尾（负责人 11-15 方案）：撤销条开着的约 3 秒里 t4 留在原组；撤销条收起后进了“已完成”组（组默认收起，点开才看得到）
+    // 收尾（负责人 11-17 分镜）：停留、收起以后 t4 进了“已完成”组（组默认收起，点开才看得到）；撤销条照旧开着（8 秒倒计时）
     await expect(page.getByTestId('todos-done-toast')).toBeVisible();
-    await expect(page.getByTestId('todos-g-nodate').getByTestId('todos-row-t4')).toBeVisible();
-    await expect(page.getByTestId('todos-done-toast')).toHaveCount(0, { timeout: 6000 });
+    await expect(page.getByTestId('todos-g-nodate').getByTestId('todos-row-t4')).toHaveCount(0);
     await expect(page.getByTestId('todos-done-fold')).toHaveAttribute('aria-expanded', 'false');
     await expect(page.getByTestId('todos-done-fold')).toContainText('已完成 2');
     await expect(page.getByTestId('todos-row-t4')).toHaveCount(0);
@@ -285,31 +286,85 @@ test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1�
     await expect(page.getByTestId('todos-g-done').getByTestId('todos-row-t4')).toBeVisible();
   });
 
-  // 打勾：刚勾的那一条要等撤销条收起才离开（负责人 11-15 方案）。审查 11-15 第 4 条起撤销条开着期间勾过的都留在原位、
-  // 收起时一起离开（原来“再勾一条把它顶走”不再成立），所以起点改成撤销条收起那一刻：先勾 t4，等到撤销条快到点
-  // （DONE_LINGER_MS 3 秒，提前约 350 ms 开始取样），取样里等它收起，t4 就在这一下离开
-  const tickFirst = async (page: Page): Promise<void> => {
-    await seed(page);
-    await page.getByTestId('todos-done-t4').click();
-    await page.getByTestId('todos-done-toast').waitFor();
-    await page.waitForTimeout(2650);
-  };
-  // 取样器从 pointerup 起算（startSampler）：这一下没有手指，补发一个 pointerup 当起点，再等撤销条收起
-  const tickClose = async (page: Page): Promise<void> => {
-    await page.evaluate(() => document.dispatchEvent(new PointerEvent('pointerup')));
-    await page.getByTestId('todos-done-toast').waitFor({ state: 'detached', timeout: 3000 });
-  };
   // 删除：左滑一口气拉过大半行（负责人 11-15 去掉 ×，SwipeRow full），松手即删、即起点
-  for (const [name, act, prepare] of [
-    ['打勾', tickClose, tickFirst],
-    ['删除', (page: Page) => swipeRow(page, 'todos-row-t3'), seed],
-  ] as const) {
-    test(`N1 ${name}：离开的那一项不透明度 > 0.25 的每一帧，它的字不压别的行、组标题的字`, async ({ page }) => {
-      const { seen, bad, traces } = await ghostRun(page, 'todos', () => prepare(page), () => act(page));
-      expect(bad).toEqual([]);
-      expect(seen, `做了 ${GHOST_TRIES} 次都没取到离开那一项看得清的 rAF 帧（补帧不算，否则这条什么都没测）。取样：${traces.join(' ｜ ')}`).toBeGreaterThan(0);
-    });
-  }
+  test('N1 删除：离开的那一项不透明度 > 0.25 的每一帧，它的字不压别的行、组标题的字', async ({ page }) => {
+    const { seen, bad, traces } = await ghostRun(page, 'todos', () => seed(page), () => swipeRow(page, 'todos-row-t3'));
+    expect(bad).toEqual([]);
+    expect(seen, `做了 ${GHOST_TRIES} 次都没取到离开那一项看得清的 rAF 帧（补帧不算，否则这条什么都没测）。取样：${traces.join(' ｜ ')}`).toBeGreaterThan(0);
+  });
+
+  // 打勾（负责人 11-17 分镜；主持人 11-17 复审必改 A）：勾上后停 700 ms，再原地收起 280 ms（data-out），收完离开原组。
+  // 离开的那一份在收起时已经淡到 0，N1 那套“离开那一项看得清的帧”量不到东西，所以打勾单独量收起这一段：
+  // 从打上 data-out 起逐帧记 [距 data-out 毫秒, 这一行的高（还在原组时）, 下一行的 top（含 layout 的 transform）, 离开那一份行面的不透明度（自身连同祖先）]
+  test('N1 打勾：收起时这一行高度单调降到约 0、下一行单调上移，卸载前后下一行不跳；离开的那一份看不见', async ({ page }) => {
+    type F = [number, number | null, number | null, number | null];
+    let frames: F[] = [];
+    for (let i = 0; i < GHOST_TRIES && frames.filter((f) => f[1] !== null).length < 3; i += 1) {
+      await seed(page);
+      const g = page.getByTestId('todos-g-today');
+      const ids = await g.locator('[data-row-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row-id') ?? ''));
+      expect(ids.length).toBeGreaterThanOrEqual(2);
+      const [me, next] = ids as [string, string];
+      await page.evaluate(
+        ({ me, next }) => {
+          type W = Window & { __col?: unknown[] };
+          const w = window as W;
+          w.__col = [];
+          const host = document.querySelector('[data-testid="todos-g-today"]');
+          const alpha = (el: Element | null): number => {
+            let a = 1;
+            for (let e = el; e; e = e.parentElement) a *= Number(getComputedStyle(e).opacity);
+            return a;
+          };
+          let t0 = -1;
+          const tick = (): void => {
+            const dt = performance.now() - t0;
+            const row = host?.querySelector(`[data-row-id="${me}"]:not([data-state="leaving"])`);
+            const ghost = document.querySelector(`[data-row-id="${me}"][data-state="leaving"]`);
+            const nx = host?.querySelector(`[data-row-id="${next}"]:not([data-state="leaving"])`);
+            // 淡出写在行面（li 里唯一的 .foldBody）上，所以从它往上乘
+            w.__col?.push([dt, row ? row.getBoundingClientRect().height : null, nx ? nx.getBoundingClientRect().top : null, ghost ? alpha(ghost.firstElementChild ?? ghost) : null]);
+            if (dt < 900) requestAnimationFrame(tick);
+          };
+          const mo = new MutationObserver(() => {
+            if (!host?.querySelector(`[data-row-id="${me}"][data-out]`)) return;
+            mo.disconnect();
+            t0 = performance.now();
+            tick();
+          });
+          if (host) mo.observe(host, { subtree: true, attributes: true, attributeFilter: ['data-out'] });
+        },
+        { me, next },
+      );
+      await page.getByTestId(`todos-done-${me}`).click();
+      await expect.poll(() => page.evaluate(() => {
+        const c = (window as Window & { __col?: [number][] }).__col ?? [];
+        return c.length ? (c[c.length - 1]?.[0] ?? 0) : 0;
+      }), { timeout: 5000 }).toBeGreaterThanOrEqual(900);
+      frames = (await page.evaluate(() => (window as Window & { __col?: unknown[] }).__col ?? [])) as F[];
+    }
+    const trace = frames.map(([t, h, y, a]) => `${t.toFixed(0)}:${h?.toFixed(1) ?? '-'}/${y?.toFixed(1) ?? '-'}/${a?.toFixed(2) ?? '-'}`).join(' ');
+    const present = frames.filter((f) => f[1] !== null);
+    expect(present.length, `收起期间取到的帧不够：${trace}`).toBeGreaterThanOrEqual(3);
+    // ① 高度单调下降，最后一帧降到约 0（li 只剩 1px 透明下边线）
+    for (let k = 1; k < present.length; k += 1) expect(present[k]![1]!, `高度回升：${trace}`).toBeLessThanOrEqual(present[k - 1]![1]! + 0.5);
+    expect(present[present.length - 1]![1]!, `没降到约 0：${trace}`).toBeLessThanOrEqual(2);
+    expect(present[0]![1]!, `一开始就没有高度，什么都没量到：${trace}`).toBeGreaterThan(20);
+    // ② 下一行的 top 单调往上
+    const ys = frames.map((f) => f[2]).filter((y): y is number => y !== null);
+    for (let k = 1; k < ys.length; k += 1) expect(ys[k]!, `下一行往回退：${trace}`).toBeLessThanOrEqual(ys[k - 1]! + 0.5);
+    // ③ 这一行卸载（离开原组）前后，下一行跳动不超过 1px
+    const cut = frames.findIndex((f) => f[1] === null);
+    expect(cut, `900 ms 里这一行没离开原组：${trace}`).toBeGreaterThan(0);
+    const before = frames[cut - 1]![2];
+    const after = frames.slice(cut).find((f) => f[2] !== null)?.[2];
+    expect(before).not.toBeNull();
+    expect(after).toBeDefined();
+    expect(Math.abs(after! - before!), `卸载前后下一行跳了：${trace}`).toBeLessThanOrEqual(1);
+    // ④ 离开的那一份看不见：不透明度从来不超过 0.25（seen === 0）
+    const seen = frames.filter((f) => f[3] !== null && f[3] > 0.25).length;
+    expect(seen, `离开的那一份看得见：${trace}`).toBe(0);
+  });
 
   test('N1 今天页“没赶上”最后一条打勾：整组离开，不透明度 > 0.25 的每一帧，它的字不压“今天的安排”等别的字（第三轮 P2）', async ({ page }) => {
     const prepare = async (): Promise<void> => {
