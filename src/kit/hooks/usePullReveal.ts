@@ -16,8 +16,8 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { rlog } from '../../platform/run-log-api.ts';
 
-/** 往下拉多少露出（px） */
-export const PULL_OPEN_PX = 64;
+/** 往下拉多少露出（px）。原来 64，负责人 11-17“现在往下轻微一拉就出现，改成要往下多拉一下才会出现”：改 110（约原来的 1.7 倍，iPhone 上要明显拉一下） */
+export const PULL_OPEN_PX = 110;
 /** 滚轮在顶上继续往上滚多少露出（px） */
 export const WHEEL_OPEN_PX = 120;
 /** 两次滚轮隔这么久算断开（惯性流结束），从头累计 */

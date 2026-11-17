@@ -70,7 +70,7 @@ async function openPage(page: Page, hash: string, testId: string, ready: string)
 }
 
 /** 在页面里从 (x, 120) 往下拉 dy（只带 touches 坐标的 touch 事件，见文件头） */
-async function pullDown(page: Page, testId: string, dy = 120): Promise<void> {
+async function pullDown(page: Page, testId: string, dy = 160): Promise<void> {
   await page.evaluate(({ sel, dy }) => {
     const el = document.querySelector(`[data-testid="${sel}"]`) ?? document.body;
     const fire = (type: string, y: number | null) => {
@@ -98,8 +98,8 @@ test.describe('R-437 下拉搜索：手机', () => {
   test('随手记：下拉露出 → 按标题 / 正文 / 分类就地筛、隐私记不出 → “用 AI 按意思找”打开查找面板 → 取消收起；日志不带打的字', async ({ page, baseURL }) => {
     await fakeServer(page, baseURL);
     await openPage(page, 'notes', 'notes', `notes-card-${NT}`);
-    // 往下拉得不够不露出
-    await pullDown(page, 'notes', 30);
+    // 往下拉得不够不露出：轻轻一拉（90px，原来的阈值 64 会露出）不出（负责人 11-17）
+    await pullDown(page, 'notes', 90);
     await page.waitForTimeout(300);
     await expect(page.getByTestId('pull-search')).toHaveCount(0);
     await search(page, 'notes', '拉面');
