@@ -18,6 +18,7 @@ import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { parseFromFrame, ZOOM_MAX, ZOOM_MIN, type FrameWay, type FromFrame, type ToFrame } from '../../../../shared/logic/files/preview-protocol.ts';
 import { DOC_TYPES } from '../../../../shared/manifests/attachments.ts';
+import { fromUiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { canShareFiles, markOf, previewOf, readMsPref, sizeText, useAttT, writeMsPref, type AttMsgKey, type AttSource, type NoteFile } from '../hooks/useNoteFiles.ts';
 import { safeHref } from '../../../../shared/logic/link.ts';
 import { useShellLayer } from './layer.ts';
@@ -293,7 +294,7 @@ function SandboxFrame(p: { frame: React.RefObject<HTMLIFrameElement | null>; way
       if (m.t === 'ready' && !sent) {
         sent = true;
         const b = cbs.current.bytes.slice(0);   // 交出的是副本：bytes 是缓存里那一份，退路重挂时还要再发
-        win.postMessage({ t: 'open', way: cbs.current.way, bytes: b, lang: lang === 'ko-KR' ? 'ko' : 'zh' } satisfies ToFrame, '*', [b]);
+        win.postMessage({ t: 'open', way: cbs.current.way, bytes: b, lang: fromUiLocale(lang) } satisfies ToFrame, '*', [b]);
       } else if (m.t === 'state') {
         if (!logged) rlog(`att preview open way=${cbs.current.way} ok pages=${m.pages}`);
         logged = true;

@@ -3,6 +3,7 @@
 // • AI 开着 = 设置里 ai.enabled 为 true，且同意版本没有明确过期（S1，kit/state/consent-fresh.ts）
 import { useCallback, useMemo } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
+import { fromUiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import type { SettingRow } from '../../../core/setting-read.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
@@ -26,7 +27,7 @@ export function useCaptureCtx(day: DateStr | null) {
   const todos = useCollection<{ id: string; project?: unknown }>('todos');
   const events = useCollection<{ id: string; project?: unknown }>('events');
   const projects = useMemo(() => projectsOf([todos, events]), [todos, events]);
-  const locale: TypeCtx['locale'] = lang === 'ko-KR' ? 'ko' : 'zh';
+  const locale: TypeCtx['locale'] = fromUiLocale(lang);
   const aiOn = useCallback(() => aiOnFor(settings, readSessionId()), [settings]);
   const ctx = useCallback((): TypeCtx => ({ now: clock.now(), tz: currentTz(), locale, projects, day }), [locale, projects, day]);
   return { lang, locale, aiOn, ctx };
