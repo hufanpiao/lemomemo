@@ -47,3 +47,8 @@ reason = """xlsx 0.20.3 从 SheetJS 官方 CDN 安装（package.json 写 https:/
 id = "RUSTSEC-2026-0543"
 ignoreUntil = 2027-02-17
 reason = """chrono 0.4.45 只出现在 desktop/src-tauri/Cargo.lock（正式外壳）和 desktop/turnstile-probe/src-tauri/Cargo.lock：两份 Cargo.toml 都没有直接依赖 chrono，引入路径是 tauri-utils → serde_with → chrono（Tauri 自带）。RUSTSEC-2026-0543 是“没人维护”类提示，不是漏洞：OSV 通告 summary 为“chrono is unmaintained”、informational 为 unmaintained，没有 severity、cvss 为 null，受影响范围从 0.0.0-0 起、没有修复版本可升，通告推荐换 jiff 或 time（通告发布于 2026-09-14）。11-17 起 OSV-Scanner 开始报这条，ci 3df9bf39 的 unit 因此失败、挡住预览部署。网页版、PWA 不含 Rust 代码，不受影响。处理：等 Tauri 上游把 serde_with 或 chrono 换掉后升 Tauri、删掉这条；2027-02-17 复查上游进度。负责人 11-17 弹窗同意加这条豁免（主持人查通告原文和两份 Cargo.lock 后提出）；安全审查员会签见提交说明。"""
+
+[[IgnoredVulns]]
+id = "GHSA-fc5q-39xc-vjpf"
+ignoreUntil = 2026-12-18
+reason = """picomatch（package-lock 里 2.3.2 一份、4.0.7 五份）ReDoS：能提交 +(*) 这类单分支重复 extglob 时可让 Node 进程卡死。通告受影响范围写到 4.0.7（npm 上最新版），没有修复版，overrides 无从升级。只出现在开发和构建工具链（vite、vitest、eslint 一系、stylelint、tinyglobby、fdir、micromatch）：npm ls picomatch --omit=dev 为空，npm audit --omit=dev 为 0，tools/deploy 的 npm audit 为 0；网页版、PWA、服务器函数运行时都不含 picomatch。构建用的 glob 都是仓库写死的模式，不接外部输入，不受影响。11-18 起 npm 公告库开始报，93d6b30f 起 unit 依赖审计失败、挡住预览部署；npm audit 没有按编号忽略的开关，unit.yml 改走 build/ci/npm_audit_gate.mjs，和 OSV 共用这一份清单。复查日期：2026-12-18（picomatch 出修复版就用 overrides 升级并删掉这条）。负责人 11-18 弹窗同意加这条豁免（主持人核通告原文和依赖树后提出）。"""

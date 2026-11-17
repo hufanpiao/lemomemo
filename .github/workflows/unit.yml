@@ -243,11 +243,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: npm audit（有高危就失败）
-        # 只读 package-lock.json，不安装
+      - name: npm audit（有未豁免的高危就失败）
+        # 只读 package-lock.json，不安装；高危要在 osv-scanner.toml 里豁免且未过期才放行（和 OSV 共用一份清单；11-18 picomatch 无修复版，负责人同意）
         run: |
-          npm audit --audit-level=high
-          npm audit --audit-level=high --prefix tools/deploy
+          node build/ci/npm_audit_gate.mjs
+          node build/ci/npm_audit_gate.mjs --prefix tools/deploy
 
       - name: 安装 OSV-Scanner（版本和 SHA-256 见 tools/ci-tools.lock）
         run: bash build/ci/install-tool.sh osv-scanner
