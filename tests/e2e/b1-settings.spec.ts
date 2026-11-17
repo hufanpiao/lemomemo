@@ -49,7 +49,8 @@ test.describe('设置页骨架', () => {
     // 11-15 加了待办“完成 7 天后自动删除”todos（开关整行懒加载，先等它到）
     await expect(main.getByTestId('settings-todo-autodel')).toBeVisible();
     const rows = await main.locator('[data-row-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row-id')));
-    expect(rows).toEqual(['account', 'language', 'skin', 'font', 'notesView', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'trash-todos', 'trash-notes', 'data', 'claude', 'about']);
+    // R-471 加了“声音和触感”开关 fx（同 SettingsPage.test.tsx）
+    expect(rows).toEqual(['account', 'language', 'skin', 'font', 'notesView', 'fx', 'todos', 'calendar', 'reminders', 'voiceAi', 'vault', 'trash-todos', 'trash-notes', 'data', 'claude', 'about']);
     // e2e 构建读不到设备：账号一行写“设备列表读不出来”
     await expect(main.getByTestId('settings-account-summary')).toHaveText('设备列表读不出来');
     await expect(main.getByTestId('settings-export')).toHaveCount(0);
