@@ -24,23 +24,34 @@
   margin-bottom: 6px;
 }
 
-/* 标题胶囊（R-101“白底圆角、细描边”）。R-436 丙批照视觉稿 .date.pick：细描边改成内描边 1px（不占版面），外面加一层淡阴影 --shadow-1
-   （简洁皮肤这一档是 none，只剩细描边）；年月数字等宽（日期时刻等宽数字） */
+/* 标题胶囊（R-101“白底圆角、细描边”，这两点不动）。R-436 丙批改轻：看得见 36 高、字 15（原来 44 高、17 号，压过下面的分段）、
+   细描边是 1px 内描边（不占版面）、不再加阴影；点击区照样 44（::after 外扩，同 .nb）；年月数字等宽 */
 .pill {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: var(--hit);
-  padding: 0 14px;
+  min-height: 36px;
+  padding: 0 12px 0 14px;
   border: 0;
   border-radius: var(--r-pill);
   background: var(--panel);
-  box-shadow: inset 0 0 0 1px var(--line), var(--shadow-1);
+  box-shadow: inset 0 0 0 1px var(--line);
   color: var(--text);
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
+}
+
+.pill::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
 }
 
 .pillChev {
@@ -69,15 +80,15 @@
   gap: 12px;
 }
 
-/* ‹ 今天 ›（视觉稿 .mnav-b）：R-436 丙批去描边，面板底 + 淡阴影 --shadow-1（简洁皮肤 none，面板底和页面底色本身分得开） */
+/* ‹ 今天 ›（视觉稿 .mnav-b）：R-436 丙批照 kit 胶囊（Chip.module.css .chip）的样子——不描边、不加阴影、--panel-2 浅底、字 13。
+   不直接挂 .chip：它的 ::after 只上下外扩，这里 ‹ › 只有 32 宽，要以中心外扩到 44 × 44，三个点按区刚好相接（设计复审 N6），所以照抄外观、点击区自己写 */
 .nb,
 .tdy {
   position: relative;
   min-height: 32px;
   border: 0;
   border-radius: var(--r-pill);
-  background: var(--panel);
-  box-shadow: var(--shadow-1);
+  background: var(--panel-2);
   color: var(--text);
   font-size: var(--fs-13);
   cursor: pointer;
@@ -116,9 +127,9 @@
   cursor: default;
 }
 
-/* “今天”灰的时候（就在本月 / 本周）：面板底、次要文字色，和能点时的墨色差得开（设计复审 N3；视觉稿 .tdy） */
+/* “今天”灰的时候（就在本月 / 本周）：和 ‹ › 同一种浅底胶囊、次要文字色，和能点时的墨色差得开（设计复审 N3；视觉稿 .tdy） */
 .tdy[aria-disabled='true'] {
-  background: var(--panel);
+  background: var(--panel-2);
 }
 
 /* 页顶提示（离线“联网后显示节假日”、reminders 的“未同步，提醒可能不响”）：一块常驻的 role="status" 容器（代码审查 L3）。
@@ -230,7 +241,7 @@
   border-radius: var(--r-sm);
   background: none;
   color: var(--text);
-  font-family: var(--f-num);
+  font-family: var(--f-mono);
   font-size: var(--fs-14);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
@@ -240,10 +251,12 @@
   background: var(--panel-2);
 }
 
+/* 选中的年 / 月：R-436 丙批改轻，不再是墨色实块（深色皮肤下是米白实块），换成和月格选中日（.sel）同一种写法——
+   --panel-2 浅底 + 1px 第三层灰内描边 + 粗字；描边 --text-3 压在 --panel-2 上 ≥ 4.5（contrast-pairs.json text3-panel2），选中看得出来 */
 .ymOn,
 .ymOn:hover {
-  background: var(--ink);
-  color: var(--on-ink);
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--text-3);
   font-weight: 600;
 }
 
@@ -305,9 +318,13 @@
 .wd {
   padding: 6px 0 4px;
 
-  /* 星期行是小字标签（R-436 第二批，照待办页的小字分组名）：第三层文字色、小一号 */
+  /* 星期行是小字标签（R-436，照待办页的小字分组名 kit groupLabelClass）：第三层文字色、11 号、等宽字、字距 0.12em。
+     字距加在每个字后面，居中时整体右偏半个字距：用等量的左内边距抵掉 */
+  padding-left: 0.12em;
   color: var(--text-3);
+  font-family: var(--f-mono);
   font-size: var(--fs-11);
+  letter-spacing: 0.12em;
   text-align: center;
 }
 
@@ -398,10 +415,13 @@
   white-space: nowrap;
 }
 
+/* 选中的那天：R-436 丙批改轻。原来 1.5px 墨色框（深色皮肤下是白框）加上“今天”的墨色细圈太重；
+   换成 --panel-2 浅底 + 1px 第三层灰内描边（--text-3 压在 --panel-2 上 ≥ 4.5，比非文字元素要的 3 还高，选中仍看得出来）。
+   手机周泳道选中（.laneSel .laneBtn）、年月选择器选中（.ymOn）同一种写法。“今天”的细圈是 R-132 定的，不动 */
 .sel {
   border-radius: 8px;
   background: var(--panel-2);
-  box-shadow: inset 0 0 0 1.5px var(--ink);
+  box-shadow: inset 0 0 0 1px var(--text-3);
 }
 
 .dayNum {
@@ -412,7 +432,9 @@
   min-width: 22px;
   height: 22px;
   border-radius: var(--r-pill);
-  font-family: var(--f-num);
+
+  /* 日期数字等宽字（R-436 丙批“日期用等宽数字”，同待办页的日期） */
+  font-family: var(--f-mono);
   font-size: var(--fs-13);
   font-variant-numeric: tabular-nums;
 }
@@ -769,7 +791,7 @@
 
 .laneSel .laneBtn {
   border-radius: var(--r-md);
-  box-shadow: inset 0 0 0 1.5px var(--ink);
+  box-shadow: inset 0 0 0 1px var(--text-3);
 }
 
 .laneWd {
@@ -794,7 +816,7 @@
   margin: 2px 0;
   line-height: 22px;
   border-radius: var(--r-pill);
-  font-family: var(--f-num);
+  font-family: var(--f-mono);
   font-size: var(--fs-15);
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -1004,7 +1026,7 @@
 .dHeadBtn b {
   min-width: 26px;
   border-radius: var(--r-pill);
-  font-family: var(--f-num);
+  font-family: var(--f-mono);
   font-size: var(--fs-17);
   font-variant-numeric: tabular-nums;
 }

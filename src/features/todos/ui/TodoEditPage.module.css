@@ -4,3 +4,10 @@
 input.num {
   font-family: var(--f-mono);
 }
+
+/* .empty：还没填的截止日期、截止时刻（新建待办时）。浏览器在空的日期、时刻框里画“yyyy/mm/dd”“--:--”格式骨架，看着粗糙：
+   没聚焦时把这层骨架的字设成透明，框和右边的日历、时钟图标照样在；一聚焦（要填了）就照常显示。
+   ::-webkit-datetime-edit 是 Chromium 和 Safari（含 iOS）共有的日期框文字层；不认识它的浏览器照旧显示骨架，不影响使用 */
+input.num.empty:not(:focus)::-webkit-datetime-edit {
+  color: transparent;
+}

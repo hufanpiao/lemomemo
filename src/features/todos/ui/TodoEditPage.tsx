@@ -13,6 +13,7 @@
 // • R-350：标题那一组下面是“子任务”区（SubtaskEditor，懒加载）：加删改、勾选、排序都在那里；新建页标题还没保存时灰掉
 // • R-436 丙批：截止日期、截止时刻、提醒时刻框里的数字换等宽字（kit .input 加本页 TodoEditPage.module.css 的 .num）；
 //   “清掉”从 44 高的整块按钮换成 kit 的小胶囊（Chip.module.css，高 30、点击区照样 44；R-436“胶囊统一”）
+//   截止日期、截止时刻还空着时挂 .empty，不露浏览器的“yyyy/mm/dd”“--:--”骨架（聚焦后照常显示）
 import { lazy, Suspense } from 'react';
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import chip from '../../../kit/components/Chip.module.css';
@@ -25,8 +26,9 @@ import { ITEM_TITLE_MAX, NOTE_MAX, PROJECT_MAX, REMIND_BEFORE_OPTIONS, useTodoEd
 import { useTodosT, type TodosMsgKey } from '../hooks/useTodosT.ts';
 import s from './TodoEditPage.module.css';
 
-/** 日期、时刻框：kit 输入框 + 等宽数字 */
+/** 日期、时刻框：kit 输入框 + 等宽数字；空的时候再加 .empty（不露浏览器的“yyyy/mm/dd”“--:--”骨架） */
 const NUM = `${formCss.input} ${s.num}`;
+const numOf = (v: string | null): string => (v === null || v === '' ? `${NUM} ${s.empty}` : NUM);
 
 type BeforeKey = Extract<TodosMsgKey, `todo.edit.before.${string}`>;
 /** “子任务”区（R-350 方案 5.3）：懒加载，在待办列表页那一包里（多半已经下载过）；分包下不来时那一块不画，不把整页换成出错页 */
@@ -96,7 +98,7 @@ export function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string
       <GroupLabel>{t('todo.edit.groupTime', {})}</GroupLabel>
       <FormGroup>
         <Field label={t('todo.edit.due', {})} htmlFor="todo-due">
-          <TextInput id="todo-due" type="date" className={NUM} value={form.due ?? ''} disabled={off} onCommit={(v) => change({ due: v === '' ? null : v })} data-testid="todo-edit-due" />
+          <TextInput id="todo-due" type="date" className={numOf(form.due)} value={form.due ?? ''} disabled={off} onCommit={(v) => change({ due: v === '' ? null : v })} data-testid="todo-edit-due" />
           {/* 只读时“清掉”和“删除”一样不出（FA-2 视觉验收第二轮第 3 条） */}
           {form.due !== null && !readonly ? (
             <button type="button" className={chip.chip} onClick={() => change({ due: null })} disabled={off} data-testid="todo-edit-due-clear">
@@ -109,7 +111,7 @@ export function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string
             <TextInput
               id="todo-due-time"
               type="time"
-              className={NUM}
+              className={numOf(form.due_time)}
               value={form.due_time ?? ''}
               disabled={off}
               onCommit={(v) => change({ due_time: v === '' ? null : v })}

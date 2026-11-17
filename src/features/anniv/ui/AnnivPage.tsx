@@ -65,7 +65,9 @@ function EditLayer() {
 function ModeRow({ t, today }: { t: AnnivT; today: string }) {
   return (
     <div className={styles.modeRow}>
+      {/* look="slide"：和日历页那一份一起换（R-436 丙批），两页来回切时分段不变样 */}
       <ModeSeg
+        look="slide"
         label={t('anniv.modeLabel', {})}
         items={[
           { key: 'week', label: t('anniv.mode.week', {}), pressed: false, onClick: () => void replaceRoute('cal', 'week', today), testId: 'anniv-mode-week' },
