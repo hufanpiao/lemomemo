@@ -19,7 +19,14 @@
   border-radius: calc(var(--check-size, 24px) * 0.375);
   box-shadow: inset 0 0 0 1.75px var(--check-edge);
   appearance: none;
-  transition: box-shadow var(--dur-ui) var(--ease-out);
+  transition:
+    box-shadow var(--dur-ui) var(--ease-out),
+    transform var(--dur-press) var(--ease-press);
+}
+
+/* 按下（负责人 11-17 定的勾选特效分镜第 ① 段）：方框缩到 0.92，松手弹回（--dur-press + --ease-press）；子任务（still）不缩 */
+.check:active {
+  transform: scale(0.92);
 }
 
 /* 勾上以后边和填充同色（R-436 第 7、8 条：暗黄底 + 黄勾，没有亮黄的一圈）；checkbox 叠在填充块上面（z-index 1），边色要跟着换。
@@ -63,8 +70,10 @@
   opacity: 0;
   pointer-events: none;
   transform: scale(0.5);
+
+  /* 勾选特效分镜第 ② 段（负责人 11-17 定稿）：填充从 0.5 放大到 1、稍过冲回弹（--ease-spring），淡入同 --dur-ui */
   transition:
-    transform var(--dur-ui) var(--ease-out),
+    transform var(--dur-ui) var(--ease-spring),
     opacity var(--dur-ui) var(--ease-out);
 }
 
@@ -92,6 +101,81 @@
   opacity: 1;
 }
 
+/* 子任务做到几成（负责人 11-17 选 T-A）：没勾上的方框里从下往上填淡柠檬黄（--part 是 0～1），中间一张小脸——起步一个点、大半两个点。
+   跟着方框的圆角裁；填多少只动 transform（scaleY），勾上时整块换成 .fill */
+.part {
+  position: relative;
+  grid-area: 1 / 1;
+  width: var(--check-size, 24px);
+  height: var(--check-size, 24px);
+  overflow: hidden;
+  border-radius: calc(var(--check-size, 24px) * 0.375);
+  pointer-events: none;
+}
+
+.part::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--check-on-bg);
+  transform: scaleY(var(--part, 0));
+  transform-origin: center bottom;
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+
+/* 小脸：两只眼睛，起步只亮中间一只（box-shadow 画第二只，起步不画） */
+.part::after {
+  content: '';
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  margin-left: -1.5px;
+  border-radius: 50%;
+  background: var(--check-on-fg);
+}
+
+.part[data-stage='2']::after {
+  margin-left: -4.5px;
+  box-shadow: 6px 0 0 var(--check-on-fg);
+}
+
+/* 勾上那一下外扩的一圈小点（T-A 专属，分镜第 ② 段）：6 个，半径 14 → 22、300ms 淡出；只动 transform、opacity */
+.burst {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.burst > i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 3px;
+  margin: -1.5px 0 0 -1.5px;
+  border-radius: 50%;
+  background: var(--check-on-fg);
+  opacity: 0;
+  animation: check-burst var(--dur-burst) var(--ease-out);
+}
+
+@keyframes check-burst {
+  from {
+    opacity: 0.8;
+    transform: rotate(var(--a)) translateX(14px);
+  }
+
+  to {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(22px);
+  }
+}
+
 /* 减少动态效果（17.2 第 5 点）：不缩放，只淡入淡出、时长减半 */
 
 :global(:root[data-rm="1"]) .fill {
@@ -111,9 +195,30 @@
   transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
 }
 
+/* 减少动态效果时按下不缩放、没有小点（分镜表“减少动态效果”一栏） */
+:global(:root[data-rm="1"]) .check:active {
+  transform: none;
+}
+
+:global(:root[data-rm="1"]) .burst > i {
+  animation: none;
+}
+
+:global(:root[data-rm="1"]) .burst {
+  display: none;
+}
+
+:global(:root[data-rm="1"]) .part::before {
+  transition: none;
+}
+
 /* still（子任务一天勾上百次，R-350）：边色、填充块、勾号都不过渡，直接到位 */
 .checkBox[data-still] > * {
   transition: none;
+}
+
+.checkBox[data-still] > .check:active {
+  transform: none;
 }
 
 /* 只读行（FA-2）：方框变淡，表示打不了勾（点了由使用方出“要新版本”提示条）；跟着 checkbox 的 aria-disabled，不另挂属性（首屏预算，11-06） */

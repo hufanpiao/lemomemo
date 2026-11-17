@@ -1,5 +1,6 @@
 // 待办页的动效（架构 17.1“勾选完成”“列表增删”，17.4 B2；B2 FA-5）：
-// 打勾当下圆圈就填满（不等保存回来）；撤销条开着的约 3 秒里留在原处，再从原来的组离开（不接点按、移出文档流）、归进默认收起的“已完成 N”（负责人 11-15）；
+// 打勾当下圆圈就填满（不等保存回来）；按负责人 11-17 定的勾选特效分镜：勾上后在原处停 DONE_HOLD_MS（700ms），
+// 再收起这一行、页底升起撤销条，收完（+DONE_OUT_MS）从原来的组离开（不接点按、移出文档流）、归进默认收起的“已完成 N”（原来负责人 11-15 是“撤销条开着的约 3 秒里留在原处”）；
 // 删除先淡出再卸载、撤销恢复后淡入。时间上的手感由 e2e（b2-motion-list）和连续帧确认，这里证明结构和状态
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useSyncExternalStore } from 'react';
@@ -11,9 +12,8 @@ import { loadMotionFeatures } from '../../../motion/index.ts';
 // 动效功能包异步加载（B2 FA-6 ②）：这里测的是功能包到了以后的手感，先等它到（真实页面里首屏画完后才有人操作）
 await loadMotionFeatures();
 
-// 留住的那一拍（useHoldView，--dur-ui）只假 setTimeout：断言“还在原处”之前计时器不会因为机器忙先到期
-// （真计时器下点击到断言若超过 220 ms 就会误判，前端 B 三时区并发跑时出现过）；推进完切回真计时器，Motion 的帧照常跑
-const HOLD_MS = 220;
+// 停留、收起（useDoneFlow）和留住的那一拍（useHoldView）只假 setTimeout：断言“还在原处”之前计时器不会因为机器忙先到期
+// （前端 B 三时区并发跑时出现过）；推进完切回真计时器，Motion 的帧照常跑
 const holdTimers = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
 type Row = { id: string } & Record<string, unknown>;
@@ -52,6 +52,7 @@ vi.mock('../data/todo-actions.ts', () => ({
 }));
 
 const { default: TodosPage } = await import('../ui/TodosPage.tsx');
+const { DONE_HOLD_MS, DONE_OUT_MS } = await import('../hooks/useDoneFlow.ts');
 
 beforeEach(() => {
   uiStore.getState().setLocale('zh-CN');
@@ -97,26 +98,33 @@ describe('待办页动效', () => {
     for (const s of row('a')?.querySelectorAll('span[data-state]') ?? []) expect(s.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('打勾：当下圆盘就是 on（保存还没回来）、页底出“已完成 · 撤销”；撤销条开着的约 3 秒里留在原组，收起以后旧行离开（leaving、移出文档流），归进默认收起的“已完成 N”', async () => {
+  it('打勾（负责人 11-17 分镜）：当下圆盘就是 on（保存还没回来）、原处停 700ms 才升起“已完成 · 撤销”；再收起 280ms 以后旧行离开（leaving、移出文档流），归进默认收起的“已完成 N”', async () => {
     render(<TodosPage />);
     holdTimers();
     fireEvent.click(screen.getByTestId('todos-done-a'));
     expect(fill(row('a'))).toBe('on');
-    expect(screen.getByTestId('todos-done-toast').textContent).toContain('已完成');
+    // 停留那一段：撤销条还没出来，行还在原组
+    expect(screen.queryByTestId('todos-done-toast')).toBeNull();
     await act(async () => finish());
-    // 留住的那一拍（--dur-ui）过了，撤销条还开着：仍在原来的组、圆盘 on，“已完成”组还没出现
     await act(async () => {
-      vi.advanceTimersByTime(HOLD_MS);
+      vi.advanceTimersByTime(DONE_HOLD_MS - 1);
     });
-    expect(screen.queryByTestId('todos-g-done')).toBeNull();
+    expect(screen.queryByTestId('todos-done-toast')).toBeNull();
     expect(fill(within(screen.getByTestId('todos-g-nodate')).getByTestId('todos-row-a'))).toBe('on');
-    const rec = recordStates('todos-row-a');
-    // 撤销条到时收起（3 秒）：这一条离开原组
+    // 到点：页底升起撤销条，这一行开始收起（仍在原组），“已完成”组还没出现
     await act(async () => {
-      vi.advanceTimersByTime(3000);
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByTestId('todos-done-toast').textContent).toContain('已完成');
+    expect(screen.queryByTestId('todos-g-done')).toBeNull();
+    expect(within(screen.getByTestId('todos-g-nodate')).getByTestId('todos-row-a').closest('[data-out]')).not.toBeNull();
+    const rec = recordStates('todos-row-a');
+    // 收完：这一条离开原组；撤销条照旧开着（kit 默认 8 秒）
+    await act(async () => {
+      vi.advanceTimersByTime(DONE_OUT_MS);
     });
     vi.useRealTimers();
-    expect(screen.queryByTestId('todos-done-toast')).toBeNull();
+    expect(screen.getByTestId('todos-done-toast')).not.toBeNull();
     const fold = await screen.findByTestId('todos-done-fold', {}, { timeout: 3000 });
     expect(rec.seen.some((s) => s.ancestors.includes('todos-g-nodate') && s.state === 'leaving' && s.position === 'absolute')).toBe(true);
     rec.stop();
@@ -133,10 +141,16 @@ describe('待办页动效', () => {
     await waitFor(() => expect(within(screen.getByTestId('todos-g-done')).queryByTestId('todos-row-a')).toBeNull(), { timeout: 3000 });
   });
 
-  it('打勾的撤销条点“撤销”：这一条改回没完成、留在原组，撤销条收起，不出“已完成”组', async () => {
+  it('打勾的撤销条点“撤销”：这一条改回没完成、回到原组，撤销条收起，不出“已完成”组', async () => {
     render(<TodosPage />);
+    holdTimers();
     fireEvent.click(screen.getByTestId('todos-done-a'));
     await act(async () => finish());
+    // 分镜：700ms 后撤销条才升起
+    await act(async () => {
+      vi.advanceTimersByTime(DONE_HOLD_MS);
+    });
+    vi.useRealTimers();
     await act(async () => {
       fireEvent.click(within(screen.getByTestId('todos-done-toast')).getByRole('button'));
     });

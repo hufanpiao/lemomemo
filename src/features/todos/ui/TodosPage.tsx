@@ -14,10 +14,14 @@
 //   删除：淡出和收拢同时；撤销恢复：先让开位置再淡入（不和别的行叠着）。第一次画列表不播。分组整组出现、消失同样淡入淡出。
 // • 已完成组折叠（负责人 11-15“完成的待办怎么隐藏比较好”，已选方案）：列表最下面只留一行“已完成 N ›”（按钮，aria-expanded），点开展开、再点收起；
 //   默认收起，展开没有记在本机 meta 的 ui.todo_done_open（hooks/useSubtasks.ts 的 useDoneOpen，每台设备各记各的）。
-// • 完成以后离开原位（审查 11-15 第 4 条收成一套）：打勾完成、勾完最后一个子任务自动完成走同一条路——留在原位、页底出“已完成 · 撤销”，
-//   撤销条都收起时一起归进“已完成”组；规则在 hooks/useDoneFlow.ts。分组时怎么留在原位在 data/todo-list.ts 的 linger
+// • 勾完的那一秒（负责人 11-17 定的勾选特效分镜，取代 11-15 的“留在原位约 3 秒”）：打勾完成、勾完最后一个子任务自动完成走同一条路——
+//   按下方框缩 0.92、勾上填充回弹加一圈小点、标题从左往右划线变淡（kit CheckCircle、本页样式）→ 停到 700ms → 这一行 280ms 收起、
+//   页底同时升起“已完成 · 撤销”（kit UndoToast，8 秒柠檬黄倒计时色带，R-450）→ 归进“已完成”组；减弱动态效果时只变淡、不收高度。
+//   计时在 hooks/useDoneFlow.ts，分组时怎么留在原位在 data/todo-list.ts 的 linger
+// • T-A 行细节（负责人 11-17 选 T-A）：有子任务的方框里按做到几成从下往上填、画小脸（kit CheckCircle 的 progress），副行最前面“起步 / 大半”小标签
+//   和等宽“1/3”（SubtaskBar.tsx 的 SubStage）；行尾 H / M / L 三格并排（kit PrioCycle，推翻 R-434 的单格）；完成的待办、子任务都变淡加删除线
 // • 子任务（R-350 方案 5.1、5.4、5.5）：有子任务的待办，行下面摊开勾选清单、底部分段进度条、右下“已勾/总数 · 收起 / 展开”
-//   （InlineSubtasks → SubtaskCard，今天页同一个；收起状态每台设备各记各的，未完成默认展开、已完成默认收起）。列表页只能勾，加删改在编辑页（Q10）。
+//   （T-A 起“收起 / 展开”在左下、进度条在行底；InlineSubtasks → SubtaskCard，今天页同一个；收起状态每台设备各记各的，未完成默认展开、已完成默认收起）。列表页只能勾，加删改在编辑页（Q10）。
 //   勾子任务：主待办只读或这一项只读 → 拦下出“要新版本”；勾上最后一项 → 主待办自动完成，和打勾一样留在原位、出撤销条
 //   （文案“全部完成，已完成这条待办”，方案 5.5；撤销时刚勾的那项和主待办一起撤回，Q1）；
 //   主待办已完成时取消勾某项 → 主待办改回未完成，先留住分组 --dur-ui 再挪回原来的组，不出撤销条（Q2）。运行日志 todo sub auto done|undone 在 data 层记（不记标题）
@@ -50,6 +54,7 @@ import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/
 import { useListT, useTodoList, type DueTag, type Group } from '../hooks/useTodoList.ts';
 import { useDoneFlow, useLinger, type DoneToast } from '../hooks/useDoneFlow.ts';
 import { setCollapsed, setDoneOpen, useCollapsed, useDoneOpen } from '../hooks/useSubtasks.ts';
+import { SubStage } from './SubtaskBar.tsx';
 import InlineSubtasks from './InlineSubtasks.tsx';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import { PullSearch } from '../../smart-search/index.ts';
@@ -137,12 +142,15 @@ export default function TodosPage() {
             <AppearList as="ul" className={`${list.list} ${list.roomy}${g.key === 'late' ? ` ${list.late}` : ''}`}>
               {g.items.map(({ todo, tag }) => {
                 const subs = l.subs.get(todo.id);
+                const subDone = subs ? subs.filter((x) => x.done).length : 0;
                 const due = dueText(tag);
+                const checked = shown(todo.id, todo.done);
                 return (
                 <AppearItem
                   key={todo.id}
-                  className={list.row}
-                  data-done={todo.done ? '' : undefined}
+                  className={`${list.row} ${styles.item}`}
+                  data-done={checked ? '' : undefined}
+                  data-out={flow.out.has(todo.id) ? '' : undefined}
                   data-readonly={isRo(todo.id) ? '' : undefined}
                   data-testid={`todos-row-${todo.id}`}
                 >
@@ -159,8 +167,9 @@ export default function TodosPage() {
                   <span className={list.lead}>
                     <RoCheckCircle
                       readOnly={isRo(todo.id)}
-                      checked={shown(todo.id, todo.done)}
-                      label={shown(todo.id, todo.done) ? t('list.undoDone', {}) : t('list.done', {})}
+                      checked={checked}
+                      label={checked ? t('list.undoDone', {}) : t('list.done', {})}
+                      progress={subs ? { done: subDone, total: subs.length } : undefined}
                       onChange={(v) => flow.check(todo.id, v)}
                       testId={`todos-done-${todo.id}`}
                     />
@@ -168,9 +177,11 @@ export default function TodosPage() {
                   <button type="button" className={list.main} onClick={() => open(todo.id)}>
                     <span className={list.text}>
                       {/* 标题前一个优先级彩点（R-434） */}
-                      <span className={list.title}><PrioDot p={todo.priority} />{todo.title}</span>
+                      <span className={list.title} data-done={checked ? '' : undefined}><PrioDot p={todo.priority} />{todo.title}</span>
                       {/* 副行（R-434、R-436 确认图）：逾期“! 过期 11/13 14:00 · 项目”红字；其余“项目 · 今天 14:00”；日期、时刻等宽数字 */}
                       <span className={tag.kind === 'late' ? `${list.meta} ${styles.tagLate}` : list.meta} data-testid={`todos-tag-${todo.id}`}>
+                        {/* 有子任务的：最前面“起步 / 大半”小标签和等宽“1/3”（负责人 11-17 选 T-A；逾期的“!”跟在它后面，标签本身不标红） */}
+                        {subs ? <><SubStage done={subDone} total={subs.length} testId={`todos-stage-${todo.id}`} />{' · '}</> : null}
                         {tag.kind === 'late' ? <span aria-hidden="true">! </span> : null}
                         {metaParts(tag.kind === 'late', todo.project, due ? <span className={refine.num}>{due}</span> : null)}
                       </span>
@@ -192,6 +203,7 @@ export default function TodosPage() {
                       title={todo.title}
                       readOnly={isRo(todo.id)}
                       collapsed={isCollapsed(todo.id, todo.done)}
+                      counted
                       onCollapse={(v) => fold(todo.id, v)}
                       onBlock={() => a.g.block()}
                       onOpen={() => open(todo.id)}

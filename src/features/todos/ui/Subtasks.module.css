@@ -2,7 +2,10 @@
    • 勾子任务一天上百次：不播动画——kit CheckCircle 传 still（SubtaskCard、SubtaskEditor），进度段直接变色
    • 方框比主待办小一号（--check-size: 18px，R-433 同样是圆角方框），点击区照样 44 × 44（kit CheckCircle 的外扩区）
    • 进度段（R-436 确认图第 7 条）：没勾的是暗灰实心细条 --step-off，勾上的填强调色；段的颜色只是装饰，几项勾了由后面的“2/4”文字和 progressbar 的 aria-valuenow 说
-   • 勾上的子任务：方框是 kit CheckCircle 的勾上样子（--check-on-bg、--check-on-fg，同已完成的待办），文字淡出成 --text-3 */
+   • 勾上的子任务：方框是 kit CheckCircle 的勾上样子（--check-on-bg、--check-on-fg，同已完成的待办），文字淡出成 --text-3、加删除线
+     （负责人 11-17 选 T-A、改划线，推翻 R-350 方案 5.1 的“不加删除线”）
+   • T-A 卡片：“收起 / 展开”在左下，进度条在行底占满整行（左边伸到方框那一格下面），宿主行的分隔线让给这条进度条；
+     待办页副行最前面“起步 / 大半”小标签和等宽“1/3”（SubtaskBar.tsx 的 SubStage） */
 
 .subs {
   --check-size: 18px;
@@ -87,9 +90,10 @@
   inset: -5px 0;
 }
 
-/* 已勾的标题淡出、不加删除线（方案 5.1；R-436 第 7 条“已勾的淡出”） */
+/* 已勾的标题淡出加删除线（负责人 11-17 选 T-A、改划线；原来方案 5.1 只淡出） */
 .item[data-done] .itemText {
   color: var(--text-3);
+  text-decoration: line-through;
 }
 
 @media (hover: hover) {
@@ -98,24 +102,81 @@
   }
 }
 
-.foot {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .toggle {
-  flex: none;
+  display: block;
   min-width: var(--hit);
   min-height: var(--hit);
-  padding: 0 0 0 8px;
+  padding: 0;
   border: 0;
   background: none;
   color: var(--text-2);
   font: inherit;
+  font-size: var(--fs-13);
+  text-align: left;
+}
+
+/* 行底整宽进度条（T-A）：左边伸回方框那一格（卡片左内边距），右边到行尾；离上面的“收起”留 6、离行底 10 */
+.card > .bar {
+  margin: 6px 0 10px calc(-1 * (var(--hit) + 10px));
+}
+
+/* 宿主行的分隔线让给行底进度条（不然一条进度条下面紧跟一条分隔线） */
+li:has(.card) {
+  border-bottom-color: transparent;
+}
+
+/* 待办页副行“起步 · 1/3”：小标签是淡柠檬黄胶囊（同勾上的方框底色），三格小图标亮几格看档；“1/3”等宽 */
+.stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--check-on-bg);
+  color: var(--check-on-fg);
+  font-size: var(--fs-12);
+}
+
+.bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 10px;
+}
+
+.bars > i {
+  width: 3px;
+  border-radius: 1px;
+  background: currentcolor;
+  opacity: 0.35;
+}
+
+.bars > i:nth-child(1) {
+  height: 5px;
+  opacity: 1;
+}
+
+.bars > i:nth-child(2) {
+  height: 7.5px;
+}
+
+.bars > i:nth-child(3) {
+  height: 10px;
+}
+
+.pill[data-stage='2'] .bars > i:nth-child(2) {
+  opacity: 1;
+}
+
+.frac {
   font-family: var(--f-mono);
-  font-size: var(--fs-11);
-  text-align: right;
+  color: var(--text-2);
 }
 
 /* ---------- 编辑页“子任务”区 ---------- */

@@ -37,6 +37,8 @@ export const listKo: Readonly<Record<keyof typeof listZh, string>> = {
   'items.collapse.a11y': '‘{title}’ 하위 할 일 접기', // REVIEW(ko)
   'items.expand.a11y': '‘{title}’ 하위 할 일 펼치기', // REVIEW(ko)
   'items.autoDone': '모두 완료해서 할 일을 완료했어요', // REVIEW(ko)
+  'items.stage.1': '시작', // REVIEW(ko)
+  'items.stage.2': '절반 넘음', // REVIEW(ko)
   'items.title': '하위 할 일', // REVIEW(ko)
   'items.add': '하위 할 일 추가', // REVIEW(ko)
   'items.itemLabel': '하위 할 일 ‘{title}’', // REVIEW(ko)

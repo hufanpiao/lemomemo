@@ -75,8 +75,9 @@ test.describe('R-350 待办子任务', () => {
     await page.goto('/app/#/todos');
     await page.reload();
     await page.getByTestId(`todos-subs-${T1}`).waitFor({ timeout: 30000 });
-    // R-436 第 7 条：“已勾/总数”从副行最前面挪到进度条后面（“1/3 · 收起”）
-    await expect(page.getByTestId(`todos-fold-${T1}`)).toHaveText('1/3 · 收起');
+    // 负责人 11-17 选 T-A：“已勾/总数”回到副行最前面、跟在“起步 / 大半”标签后面，收起按钮只写“收起”（原来 R-436 第 7 条是“1/3 · 收起”）
+    await expect(page.getByTestId(`todos-stage-${T1}`)).toHaveText('起步1/3');
+    await expect(page.getByTestId(`todos-fold-${T1}`)).toHaveText('收起');
     if (SHOTS && browserName === 'chromium') await page.screenshot({ path: `${SHOTS}/todos.png` });
     await page.getByTestId('todos-sub-b').click();
     await expect(page.getByTestId(`todos-bar-${T1}`)).toHaveAttribute('aria-valuenow', '2');

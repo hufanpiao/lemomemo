@@ -26,6 +26,8 @@ export interface InlineSubtasksProps {
   /** 待办页给（收起状态每台设备各记各的，hooks/useSubtasks.ts 的 useCollapsed）；不给就只记在这一行挂着期间，默认收起 */
   collapsed?: boolean | undefined;
   onCollapse?(v: boolean): void;
+  /** 页面副行已经写了“1/3”（待办页 T-A）：卡片按钮只写“收起 / 展开” */
+  counted?: boolean | undefined;
   onBlock(): void;
   onOpen(): void;
   onPlan?(plan: boolean | null): void;
@@ -53,6 +55,7 @@ export default function InlineSubtasks(p: InlineSubtasksProps) {
       todoTitle={p.title}
       items={items}
       collapsed={p.collapsed ?? own}
+      counted={p.counted}
       onCollapse={(v) => {
         rlog(`subs ${p.prefix} ${v ? 'close' : 'open'} n=${items.length}`);
         if (p.onCollapse) p.onCollapse(v);

@@ -87,7 +87,7 @@ export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST
 
   return (
     <div
-      className={styles.toast}
+      className={`${styles.toast} ${styles.rise}`}
       data-undo-toast=""
       role={role}
       data-testid={testId}

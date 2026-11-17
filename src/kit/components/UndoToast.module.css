@@ -21,6 +21,28 @@
   overflow: hidden;   /* 倒计时色带跟着圆角裁 */
 }
 
+/* 出现时从下方 12px 升起并淡入（负责人 11-17 定的勾选特效分镜第 ⑤ 段，所有撤销条一起）；减弱动态效果时只淡入 */
+.rise {
+  animation: undo-rise var(--dur-ui) var(--ease-out);
+}
+
+@keyframes undo-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes undo-in {
+  from {
+    opacity: 0;
+  }
+}
+
+:global(:root[data-rm='1']) .rise {
+  animation-name: undo-in;
+}
+
 /* 倒计时色带（R-450）：贴底 3px 柠檬黄，从左边固定、往左缩；只动 transform，不占高度（--undo-h 不变）。
    时长由组件按 ms 写在 style 上；线性走——它表示剩下多少时间，不是装饰动效，系统“减弱动态效果”打开时（:root[data-rm='1']）不缩短、改成原地由实变淡，照样看得出剩多少时间，没有位移 */
 .bar {

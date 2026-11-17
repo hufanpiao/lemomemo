@@ -41,6 +41,9 @@ export const listZh = {
   'items.collapse.a11y': '收起「{title}」的子任务',
   'items.expand.a11y': '展开「{title}」的子任务',
   'items.autoDone': '全部完成，已完成这条待办',
+  // 待办页副行的进度标签（负责人 11-17 选 T-A“起步、大半”标签）：不到一半起步、一半及以上大半（kit CheckCircle 的 partStage）
+  'items.stage.1': '起步',
+  'items.stage.2': '大半',
   // 编辑页“子任务”区（SubtaskEditor 在待办列表页那一包里，只用这一本词典，免得和编辑页共用词典多拆出一个分包）
   'items.title': '子任务',
   'items.add': '添加子任务',

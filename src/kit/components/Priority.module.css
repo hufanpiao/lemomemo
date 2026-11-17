@@ -2,6 +2,8 @@
    • .dot：标题前的彩点 6 × 6（负责人确认图“精致化对照”第 5 条）；高 --p3s、中 --p1s、低 --check-edge（红色只留给逾期，R-436）
    • .box：行右边 H / M / L 小方块 20 × 20、圆角 5、浅底 --panel-2、等宽小字、三级文字色 --text-3，不抢标题（确认图第 6 条）；
      点击区照样 44 × 44（::after 外扩，同 kit CheckCircle 的做法），不撑高行
+   • .tri：行右边 H / M / L 三格并排（负责人 11-17 选 T-A，推翻 R-434 的单格）：浅底一条，当前档那一格换面板底、字用档位色，
+     另两格三级文字色；整条是一个按钮，点击区上下外扩到 44
    • .seg：编辑页三档并排（参考图 3 的分段样子）：浅底一条，选中的那一格换面板底、字用档位色 */
 
 .dot {
@@ -91,4 +93,55 @@
 
 .seg .box:disabled {
   opacity: var(--disabled-dim);
+}
+
+/* 行右边三格并排（负责人 11-17 选 T-A）：看得见 3 × 20 宽、24 高，点击区上下各外扩 10 到 44 */
+.tri {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  gap: 1px;
+  padding: 2px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--panel-2);
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-10-5);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.tri::after {
+  content: '';
+  position: absolute;
+  inset: -10px -2px;
+}
+
+.cell {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+}
+
+.cell[data-on] {
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+
+.cell[data-on][data-p='high'] {
+  color: var(--p3s);
+}
+
+.cell[data-on][data-p='mid'] {
+  color: var(--p1s);
+}
+
+@media (hover: hover) {
+  .tri {
+    cursor: pointer;
+  }
 }
