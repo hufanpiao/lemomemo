@@ -35,7 +35,7 @@ export function SubtaskCard(p: SubtaskCardProps) {
   const total = p.items.length;
   const px = p.prefix ?? 'todos';
   return (
-    <div className={`${s.subs} ${s.card}`} data-testid={`${px}-subs-${p.todoId}`}>
+    <div className={`${s.subs} ${s.card}`} data-subcard="" data-testid={`${px}-subs-${p.todoId}`}>
       <ul id={listId} className={s.items} hidden={p.collapsed}>
         {p.items.map((i) => (
           <li key={i.id} className={s.item} data-done={shown(i) ? '' : undefined}>

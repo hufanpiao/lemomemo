@@ -1,5 +1,5 @@
 // 待办行结构（R-434）和待办页精致化（R-436）：不要后端，往本机库 planner-v4 写好待办再重新载入
-// • 标题前优先级彩点、行右边 H / M / L：点一下换下一档（中 → 低 → 高），写进 outbox，重新载入还是新的那一档；老行只有 important=true 的按“高”
+// • 标题前优先级彩点、行右边 H / M / L：点哪一格就设成哪一档（主持人 11-17 评审），键盘按下去照旧换下一档，写进 outbox，重新载入还是新的那一档；老行只有 important=true 的按“高”
 // • 逾期的行副行“! 过期 11/13 14:00 · 项目”（日期、时刻等宽数字）；标题下面一行“月日 周几 · 完成 / 总数 完成”
 // • 今天页的待办行同一套 H / M / L
 // • 负责人 11-17 选 T-A：行尾 H / M / L 三格并排、当前档那一格亮起（推翻 R-434 第 6 条单格），所以这里断言亮起那一格（[data-on]）的字母
@@ -48,29 +48,34 @@ test.describe('待办优先级和行结构（R-434、R-436）', () => {
     await expect(lit(page.getByTestId('todos-prio-p3'))).toHaveText('H');
     const p1 = page.getByTestId('todos-prio-p1');
     await expect(lit(p1)).toHaveText('M');
-    await expect(p1).toHaveAccessibleName('优先级：中，点一下换成低');
+    await expect(p1).toHaveAccessibleName('优先级：中，按一下换成低');
     // 逾期副行
     const md = `${Number(late.slice(5, 7))}/${Number(late.slice(8, 10))}`;
     await expect(page.getByTestId('todos-tag-p1')).toHaveText(`! 过期 ${md} 14:00 · 工作`);
     await expect(page.getByTestId('todos-sub')).toContainText('· 1 / 4 完成');
     // “全部”胶囊和标题下一行同一个口径：含已完成（确认图“全部 10”“1 / 10 完成”）
     await expect(page.getByTestId('todos-filter-all')).toHaveText(/^全部\s*4$/);
-    // 点一下：中 → 低
-    await p1.click();
+    // 点在哪一格就设成哪一档（主持人 11-17 评审）：点“L”那一格，中 → 低
+    await p1.locator('[data-p="low"]').click();
     await expect(lit(p1)).toHaveText('L');
     await expect.poll(() => outboxOf(page)).toContain('todos:p1:patch');
     await page.reload();
     await expect(lit(page.getByTestId('todos-prio-p1'))).toHaveText('L', { timeout: 30000 });
-    // 再点一下：低 → 高
-    await page.getByTestId('todos-prio-p1').click();
+    // 点“H”那一格：低 → 高（不是轮换的下一档，跳过中）
+    await page.getByTestId('todos-prio-p1').locator('[data-p="high"]').click();
     await expect(lit(page.getByTestId('todos-prio-p1'))).toHaveText('H');
+    // 键盘按下去没有落点：照旧换下一档，高 → 中
+    await page.getByTestId('todos-prio-p1').focus();
+    await page.keyboard.press('Enter');
+    await expect(lit(page.getByTestId('todos-prio-p1'))).toHaveText('M');
   });
 
   test('今天页：今天截止的待办行右边同一套 H / M / L', async ({ page }) => {
     await seed(page, '/app/#/today');
     const box = page.getByTestId('today-prio-p2');
     await expect(lit(box)).toHaveText('H', { timeout: 30000 });
-    await box.click();
+    // 点“M”那一格
+    await box.locator('[data-p="mid"]').click();
     // 今天页的写入在按需下载的 core/todo-priority.ts，点了才下：两种浏览器一起跑时这一包可能排队几秒（11-15 trace：请求还没回）
     await expect(lit(box)).toHaveText('M', { timeout: 15000 });
     await expect.poll(() => outboxOf(page)).toContain('todos:p2:patch');

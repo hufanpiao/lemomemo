@@ -15,11 +15,12 @@
 // • 已完成组折叠（负责人 11-15“完成的待办怎么隐藏比较好”，已选方案）：列表最下面只留一行“已完成 N ›”（按钮，aria-expanded），点开展开、再点收起；
 //   默认收起，展开没有记在本机 meta 的 ui.todo_done_open（hooks/useSubtasks.ts 的 useDoneOpen，每台设备各记各的）。
 // • 勾完的那一秒（负责人 11-17 定的勾选特效分镜，取代 11-15 的“留在原位约 3 秒”）：打勾完成、勾完最后一个子任务自动完成走同一条路——
-//   按下方框缩 0.92、勾上填充回弹加一圈小点、标题从左往右划线变淡（kit CheckCircle、本页样式）→ 停到 700ms → 这一行 280ms 收起、
+//   按下方框缩 0.92、勾上填充回弹加一圈小点、标题从左往右划线、整行变淡（kit CheckCircle、kit List 的 .fold）→ 停到 700ms → 这一行 280ms 收起、
 //   页底同时升起“已完成 · 撤销”（kit UndoToast，8 秒柠檬黄倒计时色带，R-450）→ 归进“已完成”组；减弱动态效果时只变淡、不收高度。
 //   计时在 hooks/useDoneFlow.ts（日历日清单的待办组同一份，R-443），分组时怎么留在原位在 data/todo-list.ts 的 linger
 // • T-A 行细节（负责人 11-17 选 T-A）：有子任务的方框里按做到几成从下往上填、画小脸（kit CheckCircle 的 progress），副行最前面“起步 / 大半”小标签
-//   和等宽“1/3”（SubtaskBar.tsx 的 SubStage）；行尾 H / M / L 三格并排（kit PrioCycle，推翻 R-434 的单格）；完成的待办、子任务都变淡加删除线
+//   和等宽“1/3”（SubtaskBar.tsx 的 SubStage）；行尾 H / M / L 三格并排（kit PrioCycle，推翻 R-434 的单格；点哪格设哪档、键盘读屏换下一档）；
+//   完成的待办、子任务都变淡加删除线。一行画在 TodoRow.tsx、动作在 hooks/useTodoRowActions.ts（日历日清单同一份），这里只给副行和左滑删除
 // • 子任务（R-350 方案 5.1、5.4、5.5）：有子任务的待办，行下面摊开勾选清单、底部分段进度条、右下“已勾/总数 · 收起 / 展开”
 //   （T-A 起“收起 / 展开”在左下、进度条在行底；InlineSubtasks → SubtaskCard，今天页、日历日清单同一个；收起状态每台设备各记各的，未完成默认展开、已完成默认收起）。列表页只能勾，加删改在编辑页（Q10）。
 //   勾子任务：主待办只读或这一项只读 → 拦下出“要新版本”；勾上最后一项 → 主待办自动完成，和打勾一样留在原位、出撤销条
@@ -31,62 +32,45 @@
 //   打了字就把“最近删除”、项目筛选和列表藏起来、换成结果（kit 的 PullSlot）（按标题和子任务就地筛，已完成的也在里面）；点一条和点标题一样进编辑页（只读的照样拦下）
 // • 不能拖动排序（R-442 负责人“待办里面不需要拖动，只用HML来排序”，取代 R-429 的待办部分、R-433 的拖动 6 个点）：每组里按 H → M → L、
 //   同档按截止时刻（没时刻的在后）、再按创建时间排（shared/logic/todo-row.ts 的 compareTodos，今天页、日历日清单同一个）；长按什么都不拿起
-import { Fragment, Suspense, type ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import { navigate } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
 import { ListToasts } from '../../../kit/components/ListToasts.tsx';
-import { ReadonlyMark, RoCheckCircle } from '../../../kit/components/ReadonlyRow.tsx';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
-import { PrioCycle, PrioDot } from '../../../kit/components/Priority.tsx';
 import { groupLabelClass } from '../../../kit/components/Form.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
-import { nextPriority, type Priority } from '../../../../shared/logic/todo-row.ts';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
-import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { usePullReveal } from '../../../kit/hooks/usePullReveal.ts';
 import { PullSlot } from '../../../kit/components/PullSlot.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
+import { AppearItem, AppearList, Pressable } from '../../../motion/components.ts';
 import { useListT, useTodoList, type DueTag, type Group } from '../hooks/useTodoList.ts';
-import { useDoneFlow, useLinger, type DoneToast } from '../hooks/useDoneFlow.ts';
+import { useLinger } from '../hooks/useDoneFlow.ts';
+import { useTodoRowActions } from '../hooks/useTodoRowActions.ts';
 import { setCollapsed, setDoneOpen, useCollapsed, useDoneOpen } from '../hooks/useSubtasks.ts';
-import { SubStage } from './SubtaskBar.tsx';
-import InlineSubtasks from './InlineSubtasks.tsx';
-import { UnsyncedRemindMark } from '../../reminders/index.ts';
+import { TodoRow, type TodoRowIds } from './TodoRow.tsx';
 import { PullSearch } from '../../smart-search/index.ts';
 import styles from './TodosPage.module.css';
 import chip from '../../../kit/components/Chip.module.css';
 import refine from '../../../kit/components/Refine.module.css';
 
-/** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */
-function RowMark({ id }: { id: string }) {
-  return (
-    <span className={list.unsynced}>
-      <QuietBoundary name="unsynced-mark">
-        <Suspense fallback={null}>
-          <UnsyncedRemindMark table="todos" id={id} />
-        </Suspense>
-      </QuietBoundary>
-    </span>
-  );
-}
+/** 行里各处的测试 id 前缀（ui/TodoRow.tsx） */
+const IDS: TodoRowIds = { row: 'todos-row', done: 'todos-done', prio: 'todos-prio', stage: 'todos-stage', ro: 'todos-ro', subs: 'todos' };
 
 export default function TodosPage() {
   const t = useListT();
   const locale = useUi((s) => s.locale);
-  // 完成以后先留在原位的那几条：跟着页底“已完成 · 撤销”条走（hooks/useDoneFlow.ts）
+  // 勾完先留在原位的那几条（hooks/useDoneFlow.ts）：分组时按它们没完成时的组留着
   const lg = useLinger();
   const l = useTodoList(lg.ids);
-  // 打勾先留住按下之前的分组 --dur-ui（方框在原地填满，17.1 勾选完成）；只读行统一拦下；撤销条、出错条也在 a.g 里（kit 的 useListActions）
-  const hv = useHoldView(l.groups);
-  const a = useListActions<DoneToast>('todos', { toggle: l.toggleDone, remove: l.remove }, hv);
-  const { isRo, shown, del } = a;
-  // 打勾、勾完子任务自动完成：留在原位、出“已完成 · 撤销”（日历日清单同一份）
-  const flow = useDoneFlow(a, lg, hv.hold, { done: t('list.doneToast', {}) }, 'todos');
+  // 行的动作（日历日清单同一份，hooks/useTodoRowActions.ts）：改回未完成时先留住按下之前的分组 --dur-ui；只读行统一拦下；
+  // 撤销条、出错条在 r.a.g 里（kit 的 useListActions）；打勾、勾完子任务自动完成的停留、收起、“已完成 · 撤销”在 r.flow
+  const r = useTodoRowActions(l.groups, lg, l, 'todos');
+  const { a } = r;
+  const { isRo, del } = a;
   const open = (id: string) => (isRo(id) ? a.g.block() : void navigate('todo', id));
   const pull = usePullReveal('todos');
   const isCollapsed = useCollapsed();
@@ -94,9 +78,6 @@ export default function TodosPage() {
   const doneOpen = useDoneOpen();
 
   const { groupTitle, dueText } = labelsOf(t, locale);
-  const prioName = (p: Priority) => t(`list.prio.${p}`, {});
-  /** 行右边 H / M / L 换档（R-434）：只读行拦下出“要新版本”；写入结果照打勾一样报（出错条） */
-  const prio = (id: string, p: Priority) => (isRo(id) ? a.g.block() : void l.setPriority(id, p).then(a.report));
 
   return (
     <main ref={pull.ref} className={styles.page} data-feature="todos" data-testid="todos">
@@ -122,9 +103,9 @@ export default function TodosPage() {
         </div>
       ) : null}
 
-      {hv.view.length === 0 ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
+      {r.view.length === 0 ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
       <AppearList as="div">
-        {hv.view.map((g) => (
+        {r.view.map((g) => (
           <AppearItem
             as="section"
             key={`${g.key}:${g.date ?? ''}`}
@@ -142,78 +123,40 @@ export default function TodosPage() {
             <AppearList as="ul" className={`${list.list} ${list.roomy}${g.key === 'late' ? ` ${list.late}` : ''}`}>
               {g.items.map(({ todo, tag }) => {
                 const subs = l.subs.get(todo.id);
-                const subDone = subs ? subs.filter((x) => x.done).length : 0;
                 const due = dueText(tag);
-                const checked = shown(todo.id, todo.done);
                 return (
-                <AppearItem
-                  key={todo.id}
-                  className={`${list.row} ${list.fold}`}
-                  data-done={checked ? '' : undefined}
-                  data-out={flow.out.has(todo.id) ? '' : undefined}
-                  data-readonly={isRo(todo.id) ? '' : undefined}
-                  data-testid={`todos-row-${todo.id}`}
-                >
-                  {/* 左滑删除（负责人 11-15 去掉行尾 ×）：露出“删除”点了删，一口气拉过大半行直接删（kit SwipeRow 的 full）；只读行不能滑 */}
-                  <SwipeRow
-                    className={list.swp}
-                    disabled={isRo(todo.id)}
-                    full="del"
-                    log={rlog}
-                    actions={[{ key: 'del', label: t('list.delete', {}), danger: true, onClick: () => void del(todo.id), testId: `todos-swipe-del-${todo.id}` }]}
-                    data-testid={`todos-swipe-${todo.id}`}
-                  >
-                  <div className={`${list.swRow} ${styles.face}${subs ? ` ${styles.hasSubs}` : ''}`}>
-                  <span className={list.lead}>
-                    <RoCheckCircle
-                      readOnly={isRo(todo.id)}
-                      checked={checked}
-                      label={checked ? t('list.undoDone', {}) : t('list.done', {})}
-                      progress={subs ? { done: subDone, total: subs.length } : undefined}
-                      onChange={(v) => flow.check(todo.id, v)}
-                      testId={`todos-done-${todo.id}`}
-                    />
-                  </span>
-                  <button type="button" className={list.main} onClick={() => open(todo.id)}>
-                    <span className={list.text}>
-                      {/* 标题前一个优先级彩点（R-434） */}
-                      <span className={list.title} data-done={checked ? '' : undefined}><PrioDot p={todo.priority} /><span className={list.strike} data-done={checked ? '' : undefined}>{todo.title}</span></span>
-                      {/* 副行（R-434、R-436 确认图）：逾期“! 过期 11/13 14:00 · 项目”红字；其余“项目 · 今天 14:00”；日期、时刻等宽数字 */}
+                  <TodoRow
+                    key={todo.id}
+                    r={r}
+                    todo={todo}
+                    subs={subs}
+                    ids={IDS}
+                    onOpen={() => open(todo.id)}
+                    collapsed={isCollapsed(todo.id, todo.done)}
+                    onCollapse={(v) => fold(todo.id, v)}
+                    // 副行（R-434、R-436 确认图）：逾期“! 过期 11/13 14:00 · 项目”红字；其余“项目 · 今天 14:00”；日期、时刻等宽数字；
+                    // 有子任务的最前面“起步 / 大半”小标签和等宽“1/3”（负责人 11-17 选 T-A；逾期的“!”跟在它后面，标签本身不标红）
+                    meta={(stage) => (
                       <span className={tag.kind === 'late' ? `${list.meta} ${styles.tagLate}` : list.meta} data-testid={`todos-tag-${todo.id}`}>
-                        {/* 有子任务的：最前面“起步 / 大半”小标签和等宽“1/3”（负责人 11-17 选 T-A；逾期的“!”跟在它后面，标签本身不标红） */}
-                        {subs ? <><SubStage done={subDone} total={subs.length} testId={`todos-stage-${todo.id}`} />{' · '}</> : null}
+                        {stage ? <>{stage}{' · '}</> : null}
                         {tag.kind === 'late' ? <span aria-hidden="true">! </span> : null}
                         {metaParts(tag.kind === 'late', todo.project, due ? <span className={refine.num}>{due}</span> : null)}
                       </span>
-                    </span>
-                    {isRo(todo.id) ? <ReadonlyMark testId={`todos-ro-${todo.id}`} /> : null}
-                    <RowMark id={todo.id} />
-                  </button>
-                  {/* 行右边 H / M / L（R-434）：点一下换下一档，在行按钮外面（按钮里不能套按钮） */}
-                  <PrioCycle
-                    p={todo.priority}
-                    label={t('list.prio', { p: prioName(todo.priority), next: prioName(nextPriority(todo.priority)) })}
-                    onChange={(p) => prio(todo.id, p)}
-                    testId={`todos-prio-${todo.id}`}
+                    )}
+                    // 左滑删除（负责人 11-15 去掉行尾 ×）：露出“删除”点了删，一口气拉过大半行直接删（kit SwipeRow 的 full）；只读行不能滑
+                    wrap={(face) => (
+                      <SwipeRow
+                        className={list.swp}
+                        disabled={isRo(todo.id)}
+                        full="del"
+                        log={rlog}
+                        actions={[{ key: 'del', label: t('list.delete', {}), danger: true, onClick: () => void del(todo.id), testId: `todos-swipe-del-${todo.id}` }]}
+                        data-testid={`todos-swipe-${todo.id}`}
+                      >
+                        {face}
+                      </SwipeRow>
+                    )}
                   />
-                  {subs ? (
-                    <InlineSubtasks
-                      prefix="todos"
-                      id={todo.id}
-                      title={todo.title}
-                      readOnly={isRo(todo.id)}
-                      collapsed={isCollapsed(todo.id, todo.done)}
-                      counted
-                      onCollapse={(v) => fold(todo.id, v)}
-                      onBlock={() => a.g.block()}
-                      onOpen={() => open(todo.id)}
-                      onPlan={(plan) => flow.plan(todo.id, plan)}
-                      onResult={(r) => flow.result(todo.id, r)}
-                    />
-                  ) : null}
-                  </div>
-                  </SwipeRow>
-                </AppearItem>
                 );
               })}
             </AppearList>
@@ -223,14 +166,8 @@ export default function TodosPage() {
       </AppearList>
       </PullSlot>
 
-      {/* 页底提示条只这一处（kit ListToasts）：删除的撤销条、出错条、只读提示条，加上打勾、自动完成的“已完成 · 撤销”（flow.undoOf） */}
-      <ListToasts
-        g={a.g}
-        onUndo={a.undo}
-        text={{ deleted: t('list.deleted', {}), undo: t('list.undo', {}), error: t('list.err.save', {}), readonly: t('list.err.readonly', {}) }}
-        prefix="todos"
-        extra={flow.undoOf}
-      />
+      {/* 页底提示条只这一处（kit ListToasts）：删除的撤销条、出错条、只读提示条，加上打勾、自动完成的“已完成 · 撤销”（r.flow.undoOf） */}
+      <ListToasts {...r.toasts} />
     </main>
   );
 }

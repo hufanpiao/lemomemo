@@ -84,7 +84,7 @@ export function useTodoWrites(rows: readonly Row[]) {
     },
     [rows],
   );
-  /** 行右边 H / M / L 点一下换档（R-434，core/todo-priority.ts，今天页同一份） */
+  /** 行右边 H / M / L 换档（R-434，core/todo-priority.ts，今天页同一份；点哪格设哪档在 kit PrioCycle） */
   const setPriority = async (id: string, p: Priority): Promise<ActionResult> => actionResult(await setTodoPriority(id, p, clock.now()));
   return { toggleDone, remove, setPriority };
 }

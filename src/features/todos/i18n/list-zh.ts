@@ -19,7 +19,7 @@ export const listZh = {
   // 标题下面一行等宽小字（R-436 第 2 条）：“11月15日 周日 · 1 / 10 完成”
   'list.sub': '{date} · {done} / {total} 完成',
   // 行右边 H / M / L（R-434）：读屏名字；编辑页的“优先级”三档在 zh.ts
-  'list.prio': '优先级：{p}，点一下换成{next}',
+  'list.prio': '优先级：{p}，按一下换成{next}',
   'list.prio.high': '高',
   'list.prio.mid': '中',
   'list.prio.low': '低',

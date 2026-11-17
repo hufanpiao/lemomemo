@@ -1,6 +1,8 @@
 // TC-B0-10（架构 17.2 第 6 点、R-155；QA D-06）：单个动效 ≤ 400ms，只有底栏液滴 --dur-drop（0.55s）例外。
 // 10-29 加第二组例外：启动画面专用的 --dur-splash-*（R-254 负责人选定的方向 B 时间线：0.8 秒静止、1.6 秒一轮起伏、0.6 秒变暗、
 // 6 秒兜底；still / bar2 / bar3 / failsafe 是开始时刻，不是时长），只准在生成的 tokens.css 里定义、只在 src/styles/splash.css 里用
+// 11-17 加第三个例外：--dur-done-hold（700ms，负责人 11-17 勾选特效分镜第 ③ 段“勾上后停在原位”）是停留时间、不是动效时长，
+// 只给 features/todos/hooks/useDoneFlow.ts 排计时用，不准写进任何 transition / animation（下面单独一条拦）
 // 扫 src 下所有 CSS（含生成的 tokens.css、skins/*.css）里的时长令牌和 transition / animation，再看 src/motion/tokens.ts 的 dur；
 // 违规样例 tests/arch-fixtures/durations/tc-b0-10-500ms.css 证明 500ms 会被报出
 import { readdirSync, readFileSync } from 'node:fs';
@@ -12,7 +14,9 @@ import { FIXTURES, ROOT } from './fixture-header.ts';
 /** 上限（毫秒）和唯一的例外 */
 const MAX_MS = 400;
 const SPLASH = ['still', 'bar2', 'bar3', 'breathe', 'dark', 'failsafe'].map((k) => `--dur-splash-${k}`);
-const EXCEPTIONS = new Set(['--dur-drop', ...SPLASH]);
+const EXCEPTIONS = new Set(['--dur-drop', '--dur-done-hold', ...SPLASH]);
+/** 停留时间令牌（不是动效时长）：CSS 只准在生成的 tokens.css 里定义，TS 里的 dur.doneHold 只准 useDoneFlow.ts 用 */
+const HOLD_ALLOWED = new Set(['src/styles/tokens.css', 'src/motion/tokens.ts', 'src/features/todos/hooks/useDoneFlow.ts']);
 /** 启动画面令牌在 src/motion/tokens.ts 里的键 */
 const SPLASH_TS = new Set(['splashStill', 'splashBar2', 'splashBar3', 'splashBreathe', 'splashDark', 'splashFailsafe']);
 /** 启动画面令牌（--dur-splash-*、--ease-splash-*，TS 里的 dur.splash*、ease.splashBreathe）只准出现在这几个文件 */
@@ -73,6 +77,7 @@ describe('TC-B0-10：单个动效 ≤ 400ms，例外只有 --dur-drop 和启动�
     expect(hits.filter((h) => !EXCEPTIONS.has(h.prop))).toEqual([]);
     // 例外确实在（0.55s 和启动画面那几个），而且只在生成的 tokens.css 里定义
     expect(hits.map((h) => `${h.file} ${h.prop} ${h.ms}`)).toEqual([
+      'src/styles/tokens.css --dur-done-hold 700',
       'src/styles/tokens.css --dur-drop 550',
       'src/styles/tokens.css --dur-splash-still 800',
       'src/styles/tokens.css --dur-splash-bar2 1000',
@@ -105,7 +110,15 @@ describe('TC-B0-10：单个动效 ≤ 400ms，例外只有 --dur-drop 和启动�
     const long = Object.entries(dur)
       .filter(([k, s]) => s * 1000 > MAX_MS && !SPLASH_TS.has(k))
       .map(([k]) => k);
-    expect(long).toEqual(['drop']);
+    expect(long).toEqual(['doneHold', 'drop']);
+  });
+
+  it('停留时间 --dur-done-hold / dur.doneHold 只在定义文件和 useDoneFlow.ts 里出现（不进任何过渡、动画）', () => {
+    const hits = sourceFiles(join(ROOT, 'src'))
+      .map((f) => relative(ROOT, f).replaceAll('\\', '/'))
+      .filter((rel) => !HOLD_ALLOWED.has(rel) && !/(^|\/)__tests__\//.test(rel))
+      .filter((rel) => /--dur-done-hold|doneHold/.test(readFileSync(join(ROOT, rel), 'utf8')));
+    expect(hits).toEqual([]);
   });
 
   it('违规样例：加一个 500ms 的令牌和一条 0.5s 的 transition → 两处都报', () => {

@@ -32,16 +32,18 @@ vi.mock('../../../kit/hooks/useCollection.ts', () => ({
       () => db.rows,
     ),
 }));
-// 保存由测试决定什么时候“回来”
-let finish: () => void = () => undefined;
+// 保存由测试决定什么时候“回来”：按点的先后排队，finish() 让最早的那一次回来；outcome 不是 saved 时算没写进去（不改数据）
+const pending: (() => void)[] = [];
+const finish = () => pending.shift()?.();
+let outcome = 'saved';
 const patch = (id: string, p: Record<string, unknown>) => put(db.rows.map((r) => (r.id === id ? { ...r, ...p } : r)));
 vi.mock('../../../core/todo-done.ts', () => ({
   doneToggler: () => (r: Row, done: boolean) =>
     new Promise((ok) => {
-      finish = () => {
-        patch(r.id, { done, done_at: done ? 1 : null });
-        ok('saved');
-      };
+      pending.push(() => {
+        if (outcome === 'saved') patch(r.id, { done, done_at: done ? 1 : null });
+        ok(outcome);
+      });
     }),
 }));
 vi.mock('../data/todo-actions.ts', () => ({
@@ -55,6 +57,8 @@ const { default: TodosPage } = await import('../ui/TodosPage.tsx');
 const { DONE_HOLD_MS, DONE_OUT_MS } = await import('../hooks/useDoneFlow.ts');
 
 beforeEach(() => {
+  pending.length = 0;
+  outcome = 'saved';
   uiStore.getState().setLocale('zh-CN');
   vi.spyOn(clock, 'now').mockReturnValue(Date.UTC(2026, 10, 5, 0));
   put([
@@ -183,6 +187,70 @@ describe('待办页动效', () => {
     expect(rec.seen.filter((x) => x.state === 'leaving')).toEqual([]);
     expect(screen.queryByTestId('todos-g-done')).toBeNull();
     expect(row('a')?.dataset['state']).toBeUndefined();
+  });
+
+  it('写入没成功（主持人 11-17 评审必改 1）：方框回到没勾，不收起、不出撤销条，出错条留着', async () => {
+    render(<TodosPage />);
+    holdTimers();
+    outcome = 'conflict';
+    fireEvent.click(screen.getByTestId('todos-done-a'));
+    expect(fill(row('a'))).toBe('on');
+    await act(async () => finish());
+    expect(fill(row('a'))).toBe('off');
+    await act(async () => {
+      vi.advanceTimersByTime(DONE_HOLD_MS + DONE_OUT_MS);
+    });
+    expect(screen.queryByTestId('todos-done-toast')).toBeNull();
+    expect(screen.getByTestId('todos-error')).not.toBeNull();
+    const a = within(screen.getByTestId('todos-g-nodate')).getByTestId('todos-row-a');
+    expect(a.hasAttribute('data-out')).toBe(false);
+    expect(screen.queryByTestId('todos-g-done')).toBeNull();
+  });
+
+  it('勾、取消、再勾（主持人 11-17 评审必改 2）：取消那次写入晚回来，不会把新一轮留在原位的那一条拿掉', async () => {
+    render(<TodosPage />);
+    holdTimers();
+    fireEvent.click(screen.getByTestId('todos-done-a'));
+    await act(async () => finish());
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+    fireEvent.click(screen.getByTestId('todos-done-a'));
+    fireEvent.click(screen.getByTestId('todos-done-a'));
+    expect(fill(row('a'))).toBe('on');
+    // 取消那次的写入这时才回来（数据改回没完成）：第三下那一轮还在原位、方框照旧勾上
+    await act(async () => finish());
+    expect(fill(within(screen.getByTestId('todos-g-nodate')).getByTestId('todos-row-a'))).toBe('on');
+    await act(async () => finish());
+    await act(async () => {
+      vi.advanceTimersByTime(DONE_HOLD_MS);
+    });
+    expect(screen.getByTestId('todos-done-toast')).not.toBeNull();
+    expect(within(screen.getByTestId('todos-g-nodate')).getByTestId('todos-row-a').hasAttribute('data-out')).toBe(true);
+  });
+
+  it('键盘勾完（主持人 11-17 评审必改 5）：这一行离开前焦点移到下一行的方框；没有下一行就移到撤销条的按钮', async () => {
+    render(<TodosPage />);
+    holdTimers();
+    const box = screen.getByTestId('todos-done-a');
+    box.focus();
+    fireEvent.click(box);
+    await act(async () => finish());
+    await act(async () => {
+      vi.advanceTimersByTime(DONE_HOLD_MS + DONE_OUT_MS);
+    });
+    expect(document.activeElement).toBe(screen.getByTestId('todos-done-b'));
+    // 只剩 b：勾完焦点落到撤销条的“撤销”
+    fireEvent.click(screen.getByTestId('todos-done-b'));
+    await act(async () => finish());
+    await act(async () => {
+      vi.advanceTimersByTime(DONE_HOLD_MS);
+    });
+    // 撤销条在停够时升起、画出来，收完（再过 DONE_OUT_MS）时焦点移过去
+    await act(async () => {
+      vi.advanceTimersByTime(DONE_OUT_MS);
+    });
+    expect(document.activeElement).toBe(screen.getByTestId('todos-done-toast-undo'));
   });
 
   it('删除：先淡出（leaving）再卸载；撤销恢复：淡入（起点透明）', async () => {

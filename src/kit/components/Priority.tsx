@@ -1,8 +1,10 @@
 // 待办优先级的三个小部件（R-434；样式只在 Priority.module.css）：待办页、今天页、待办编辑页共用，不各写一份
 // • PrioDot：标题前的优先级彩点（只画、读屏不读，档位由 PrioCycle 的名字说出来）
-// • PrioCycle：行右边的 H / M / L 三格并排（负责人 11-17 选 T-A“行尾 H/M/L 三格并排”，推翻 R-434 确认图第 6 条的单格；当前档那一格亮起），
-//   三格一体是一个按钮、点一下换下一档（高 → 中 → 低 → 高，shared/logic/todo-row.ts 的 nextPriority；每格只有 20 多宽，分开点点按区不够 44）；
-//   字母不翻译（负责人确认图），读屏名字由使用方按语言给（“优先级：高，点一下换成中”）；只读行照样回调，由使用方拦下出“要新版本”
+// • PrioCycle：行右边的 H / M / L 三格并排（负责人 11-17 选 T-A“行尾 H/M/L 三格并排”，推翻 R-434 确认图第 6 条的单格；当前档那一格亮起）。
+//   三格一体是一个按钮（每格只有 20 多宽，分开做三个按钮点按区不够 44）：手指、鼠标点在哪一格就直接设成哪一档（按横向位置算第几格，
+//   点在上下外扩区也按横向算）；键盘、读屏按下去没有落点，照旧换下一档（高 → 中 → 低 → 高，shared/logic/todo-row.ts 的 nextPriority）。
+//   主持人 11-17 评审定的取舍：看着是三格就该点哪格是哪格，读屏只能是一个按钮，所以只对它保留轮换。
+//   字母不翻译（负责人确认图），读屏名字由使用方按语言给（“优先级：高，按一下换成中”）；只读行照样回调，由使用方拦下出“要新版本”
 // • PrioSeg：编辑页的三档并排（同一套小方块，选中的那一格浅底 + 档位色），和 kit ModeSeg 一样是 aria-pressed 按钮组（role=group）；
 //   不用 radiogroup / radio：那套语义要方向键和 roving tabindex，三个按钮各自 Tab 到、按下去就选更简单
 // 档位色只用现有令牌（不新增颜色）：高 --p3s、中 --p1s、低 --check-edge；红色只留给逾期（R-436）
@@ -17,15 +19,24 @@ export function PrioDot({ p }: { p: Priority }) {
 
 export interface PrioCycleProps {
   p: Priority;
-  /** 读屏名字（使用方按语言拼，含“点一下换成哪一档”） */
+  /** 读屏名字（使用方按语言拼，含“按一下换成哪一档”：键盘、读屏照旧轮换） */
   label: string;
   onChange(next: Priority): void;
   testId: string;
 }
 
+/** 点在三格里的第几格：detail 为 0（键盘、读屏按下去）或量不到宽度时回 null（照旧轮换） */
+export function cellAt(e: { detail: number; clientX: number; currentTarget: Element }): Priority | null {
+  if (e.detail === 0) return null;
+  const r = e.currentTarget.getBoundingClientRect();
+  if (r.width <= 0) return null;
+  const i = Math.floor((PRIORITIES.length * (e.clientX - r.left)) / r.width);
+  return PRIORITIES[Math.min(PRIORITIES.length - 1, Math.max(0, i))] ?? null;
+}
+
 export function PrioCycle({ p, label, onChange, testId }: PrioCycleProps) {
   return (
-    <button type="button" className={styles.tri} data-p={p} aria-label={label} onClick={() => onChange(nextPriority(p))} data-testid={testId}>
+    <button type="button" className={styles.tri} data-p={p} aria-label={label} onClick={(e) => onChange(cellAt(e) ?? nextPriority(p))} data-testid={testId}>
       {PRIORITIES.map((q) => (
         <span key={q} className={styles.cell} data-p={q} data-on={q === p ? '' : undefined} aria-hidden="true">
           {LETTER[q]}

@@ -21,7 +21,9 @@
   overflow: hidden;   /* 倒计时色带跟着圆角裁 */
 }
 
-/* 出现时从下方 12px 升起并淡入（负责人 11-17 定的勾选特效分镜第 ⑤ 段，所有撤销条一起）；减弱动态效果时只淡入 */
+/* 出现时从下方 12px 升起并淡入（负责人 11-17 定的勾选特效分镜第 ⑤ 段，所有撤销条一起）；减弱动态效果时只淡入。
+   用独立的 translate 属性、不用 transform：TypeBar 的 .noticeSlot 拿 transform 把撤销条抬到打字条上面，
+   keyframes 写 transform 会在动画期间盖掉抬升量（位移变成 12 + lift）；translate 和 transform 分开叠加，互不干扰 */
 .rise {
   animation: undo-rise var(--dur-ui) var(--ease-out);
 }
@@ -29,7 +31,7 @@
 @keyframes undo-rise {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    translate: 0 12px;
   }
 }
 

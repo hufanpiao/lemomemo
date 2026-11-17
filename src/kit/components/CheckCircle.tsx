@@ -22,14 +22,16 @@ export interface CheckCircleProps {
   still?: boolean;
   /**
    * 子任务做到几成（负责人 11-17 选 T-A“方框里用小表情表示子任务做到几成”）：没勾上、done 大于 0 时方框从下往上按比例填淡柠檬黄，
-   * 中间一张“小脸”——不到一半一个点（起步）、一半及以上两个点（大半）；只是画（aria-hidden），几项做完由行里的文字和读屏说
+   * 中间一张“小脸”——不到一半一个点（起步）、一半及以上两个点（大半）；子任务全做完、主待办还没勾（编辑页改过、别处同步来的）时
+   * 满填、不画脸（主持人 11-17 评审）；只是画（aria-hidden），几项做完由行里的文字和读屏说
    */
   progress?: { done: number; total: number } | undefined;
 }
 
-/** 做到几成的档：0 没开始，1 起步（不到一半），2 大半（一半及以上、没做完）；待办页的“起步 / 大半”标签同一个分法 */
-export function partStage(done: number, total: number): 0 | 1 | 2 {
-  if (total <= 0 || done <= 0 || done >= total) return 0;
+/** 做到几成的档：0 没开始，1 起步（不到一半），2 大半（一半及以上、没做完），3 全做完；待办页的“起步 / 大半”标签同一个分法（3 不出标签） */
+export function partStage(done: number, total: number): 0 | 1 | 2 | 3 {
+  if (total <= 0 || done <= 0) return 0;
+  if (done >= total) return 3;
   return done * 2 < total ? 1 : 2;
 }
 
@@ -38,10 +40,11 @@ const BURST = [0, 60, 120, 180, 240, 300] as const;
 
 export function CheckCircle({ checked, label, onChange, testId, readOnly = false, still = false, progress }: CheckCircleProps) {
   const state = checked ? 'on' : 'off';
-  // 一圈小点只在用户亲手勾上的那一下播（key 换一次重播一次）；挂载时已经勾上的、只读拦下的、子任务（still）都不播
+  // 一圈小点只在用户亲手勾上的那一下播（key 换一次重播一次）；挂载时已经勾上的、只读拦下的、子任务（still）都不播；
+  // 播完（animationend）清零、拿掉这一圈，之后再重新画（例如撤销以后又照数据显示成勾上）不会重播
   const [pop, setPop] = useState(0);
   const stage = !checked && progress ? partStage(progress.done, progress.total) : 0;
-  const ratio = stage && progress ? progress.done / progress.total : 0;
+  const ratio = stage && progress ? Math.min(1, progress.done / progress.total) : 0;
   return (
     <label className={styles.checkBox} data-still={still || undefined}>
       <input
@@ -62,7 +65,7 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
       <span className={styles.fill} data-state={state} aria-hidden="true" />
       <span className={styles.tick} data-state={state} aria-hidden="true" />
       {checked && pop > 0 ? (
-        <span key={pop} className={styles.burst} aria-hidden="true">
+        <span key={pop} className={styles.burst} aria-hidden="true" onAnimationEnd={() => setPop(0)}>
           {BURST.map((a) => (
             <i key={a} style={{ '--a': `${a}deg` } as CSSProperties} />
           ))}

@@ -1,4 +1,4 @@
-/* 日历日清单的待办组（R-443，ui/DayTodos.tsx）：组头“● 待办 · N”、截止时刻、完成的整行变淡（T-A，同待办页）。行、面板、方框都用 kit（List.module.css、CheckCircle），这里只补这几样。只用令牌（A11） */
+/* 日历日清单的待办组（R-443，ui/DayTodos.tsx）：组头“● 待办 · N”、截止时刻。行、面板、方框、完成的变淡都用 kit（List.module.css、CheckCircle），这里只补这几样。只用令牌（A11） */
 
 .group {
   margin-top: 12px;
@@ -28,9 +28,4 @@
 
 .time[data-tone='late'] {
   color: var(--danger-text);
-}
-
-/* 完成的整行变淡（T-A，同待办页 TodosPage.module.css 的 .face；删除线、灰字在 kit 的 .row[data-done] .title、.fold） */
-[data-done] > .face {
-  opacity: 0.5;
 }

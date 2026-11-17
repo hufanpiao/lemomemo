@@ -1,6 +1,7 @@
 // 列表页的打勾、删除和撤销、只读拦截、出错条只在这里做（架构 10.1）：今天页、待办页、随手记页共用；今天页、待办页的提示条画在 kit 的 ListToasts.tsx
 // • 只读行：按 table 查 core 的只读 id；打勾、删除统一拦下，出“这条要新版本才能修改 · 更新”（useReadonlyGuard）；写入回 readonly 也拦
-// • 打勾（只有传了 toggle 的页）：先留住按下之前的列表 --dur-ui（页面的 useHoldView），留着的期间圆圈按“刚点成什么”画（picked）
+// • 打勾（只有传了 toggle 的页）：先留住按下之前的列表 --dur-ui（页面的 useHoldView），留着的期间圆圈按“刚点成什么”画（picked）；
+//   待办页、日清单勾上那条路传 keep=false，自己用 features/todos/hooks/useDoneFlow.ts 的 linger 留住
 // • 写入回 failed 出页面的出错条；silent（switching）不提示。撤销条、出错条、只读提示条、页面自己加的提示（X）同一个位置，同时只出一条
 // 这个文件在首屏（今天页）：只放判断和状态，不包 useCallback（拿去用的地方不靠函数身份）
 // useDrawerSel 也放这里：电脑版列表页（今天页、随手记页）的详情抽屉开着哪一条（B6 整合，两页原来各写一份；
@@ -46,16 +47,24 @@ export function useListActions<X = never>(table: string, act: Acts, hv?: Hold) {
     g,
     isRo,
     report,
-    /** 打勾；返回的 promise 在写完（结果已报给提示条）以后才完成，拦下、不打勾的页当场完成（待办页等写完再让那一条离开原位） */
-    tick(id: string, on: boolean): Promise<void> {
+    /**
+     * 打勾；返回的 promise 在写完（结果已报给提示条）以后才完成、带回写入结果，拦下的当场回 readonly、不打勾的页当场回 ok
+     * （待办页看结果决定这一条收不收起）。keep 为 false 时不留住列表、不记 picked：待办页勾上那条路自己用 linger 留住、按 linger 画方框
+     */
+    tick(id: string, on: boolean, keep = true): Promise<ActionResult> {
       if (isRo(id)) {
         g.block();
-        return Promise.resolve();
+        return Promise.resolve('readonly');
       }
-      if (!act.toggle) return Promise.resolve();
-      setPicked((m) => new Map(holding ? m : []).set(id, on));
-      hv?.hold();
-      return act.toggle(id, on).then(report);
+      if (!act.toggle) return Promise.resolve('ok');
+      if (keep) {
+        setPicked((m) => new Map(holding ? m : []).set(id, on));
+        hv?.hold();
+      }
+      return act.toggle(id, on).then((r) => {
+        report(r);
+        return r;
+      });
     },
     shown: (id: string, done: boolean) => (holding ? (picked.get(id) ?? done) : done),
     async del(id: string) {

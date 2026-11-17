@@ -55,11 +55,6 @@
   --sw-face-bg: var(--late-bg);
 }
 
-/* 已完成整行淡出加删除线（第 8 条；删除线、灰字在 kit 的 .row[data-done] .title）：方框照旧 kit CheckCircle，淡出后看着是浅柠檬黄 */
-.group [data-done] .face {
-  opacity: 0.5;
-}
-
 /* 列表行、左滑删除的行（.swp、.swRow）、空状态在 kit 的 List.module.css（B2-UI-a U4、U6；负责人 11-15 去掉行尾 ×）；这里只留过期标签的红字。
    字号在 kit 的 .meta；写成两级选择器，不靠两份样式表的先后顺序压过 .meta 的颜色 */
 .group .tagLate {
@@ -69,12 +64,6 @@
 /* 离开途中（AppearItem 打 data-state="leaving"）：淡出、卸载之前不接点按（行的那条在 kit 的 List.module.css） */
 .group[data-state="leaving"] {
   pointer-events: none;
-}
-
-/* 有子任务的行（R-350；行本身是 kit List.module.css 的 .swRow）：子任务那一块（SubtaskCard）折到下一行、占满整行 */
-.hasSubs {
-  flex-wrap: wrap;
-  row-gap: 0;
 }
 
 /* “已完成 N ›”（负责人 11-15“完成的待办怎么隐藏”）：组标题本身就是展开 / 收起的按钮，整行可点、点击区不小于 44 高；

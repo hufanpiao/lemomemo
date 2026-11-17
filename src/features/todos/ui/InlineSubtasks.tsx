@@ -25,7 +25,7 @@ export interface InlineSubtasksProps {
   prefix: string;
   /** 待办页给（收起状态每台设备各记各的，hooks/useSubtasks.ts 的 useCollapsed）；不给就只记在这一行挂着期间，默认收起 */
   collapsed?: boolean | undefined;
-  onCollapse?(v: boolean): void;
+  onCollapse?: ((v: boolean) => void) | undefined;
   /** 页面副行已经写了“1/3”（待办页 T-A）：卡片按钮只写“收起 / 展开” */
   counted?: boolean | undefined;
   onBlock(): void;
