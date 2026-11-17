@@ -34,12 +34,14 @@ import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import { DayTodos } from '../../todos/index.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import type { Huangli } from '../hooks/useHuangli.ts';
-import styles from './CalendarPage.module.css';
+import './cal-common.module.css';
+import styles from './DayList.module.css';
 import { colorClass, weekdayKey } from './cal-ui.ts';
 import { HuangliCard, HuangliHold } from './HuangliCard.tsx';
 
-function titleOf(items: CalItems, e: DayEntry): string {
-  return items.events.find((x) => x.id === e.itemId)?.title || e.short;
+/** 行上的完整标题：条目自己带着（DayEntry.title），不回 items 里按 id 找（11-17 日历整块评审第 3 条）；空标题写简称 */
+function titleOf(e: DayEntry): string {
+  return e.title || e.short;
 }
 
 /**
@@ -157,10 +159,10 @@ export function DayList({
                   </span>
                   <span className={`${styles.dayMk} ${colorClass(e.colorIndex)}`} aria-hidden="true" />
                   {meta === null ? (
-                    <span className={list.title}>{titleOf(items, e)}</span>
+                    <span className={list.title}>{titleOf(e)}</span>
                   ) : (
                     <span className={list.text}>
-                      <span className={list.title}>{titleOf(items, e)}</span>
+                      <span className={list.title}>{titleOf(e)}</span>
                       <span className={list.meta} data-testid={`cal-day-span-${e.itemId}`}>{meta}</span>
                     </span>
                   )}

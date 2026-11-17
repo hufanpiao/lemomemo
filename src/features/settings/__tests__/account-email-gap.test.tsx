@@ -199,7 +199,7 @@ describe('设置页组间距', () => {
     expect(compact).toMatch(/min-height: 38px;/);
     expect(compact).toMatch(/position: relative;/);
     expect(form).toMatch(/\n\.compact\.primary,\n\.compact\.dangerFill \{[^}]*font-size: var\(--fs-15\);/);
-    expect(form).toMatch(/\n\.btn,\n\.primary,\n\.danger,\n\.dangerFill,\n\.ghost,\n\.textDanger \{[^}]*font-size: var\(--fs-14\);/);
+    expect(form).toMatch(/\n\.btn,\n\.primary,\n\.danger,\n\.dangerFill,\n\.ghost,\n\.text \{[^}]*font-size: var\(--fs-14\);/);
     const after = formBlock('.compact::after');
     expect(after).toMatch(/content: '';/);
     expect(after).toMatch(/position: absolute;/);

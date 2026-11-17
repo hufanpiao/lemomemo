@@ -60,4 +60,20 @@ describe('手机色块写完整标题：按字宽撑开', () => {
     const d = dayOf(buildWeek(WEEK, { todos: [], events }, phone));
     expect(d.blocks.map((b) => [b.itemId, b.startPx, b.widthPx])).toEqual([['a', 540, 28], ['b', 1412, 28]]);
   });
+
+  it('跨天的这一段右端写“2/3”：textPx 带上第几天、共几天，色块宽把这几个字也算进去（11-17 日历整块评审第 1 条）', () => {
+    const seen: [string, string][] = [];
+    // 假的量法：标题每字 10 px，跨天的另加 30 px 写“2/2”，再加 12 px 内边距
+    const withOf = (title: string, of?: { index: number; days: number }): number => {
+      seen.push([title, of ? `${of.index}/${of.days}` : '']);
+      return [...title].length * 10 + (of ? 30 : 0) + 12;
+    };
+    // 10-20 23:30 起两小时，跨到 10-21 01:30：第二天那一段 0～90 分钟
+    const events = [timed('a', DAY, '23:30', SEOUL, 120, { title: '和客户开视频会' }), timed('b', DAY, '09:00', SEOUL, 10, { title: '周会' })];
+    const days = buildWeek(WEEK, { todos: [], events }, { ...phone, textPx: withOf });
+    const next = days.find((x) => x.date === '2026-10-21');
+    expect(next?.blocks.map((b) => [b.itemId, b.startPx, b.widthPx, b.dayOf])).toEqual([['a', 0, 112, { index: 2, days: 2 }]]);
+    expect(seen).toContainEqual(['和客户开视频会', '2/2']);
+    expect(seen).toContainEqual(['周会', '']);
+  });
 });

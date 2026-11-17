@@ -24,8 +24,10 @@ VIS = DIR / "皮肤视觉稿.html"
 OUT_CSS = DIR / "令牌/tokens.css"
 OUT_TS = DIR / "令牌/tokens.ts"
 APP_STYLES = ROOT / "src/styles"
-# 和皮肤无关、进 src/styles/tokens.css 的令牌（按前缀；四套主题的值必须一样，否则报错）
-SKINLESS = ("--dur-", "--ease-", "--press-", "--disabled-", "--r-", "--f-", "--fs-", "--hit")
+# 和皮肤无关、进 src/styles/tokens.css 的令牌（按前缀；四套主题的值必须一样，否则报错）。
+# 日历几何尺寸（格缝、格子圆角、最矮格高、格内边距、事项条高、泳道高）四套皮肤一样，11-17 日历整块评审从皮肤里挪到这里（写全名，--cal- 开头的颜色仍按皮肤）
+SKINLESS = ("--dur-", "--ease-", "--press-", "--disabled-", "--r-", "--f-", "--fs-", "--hit",
+            "--cal-gap", "--cal-cell-r", "--cal-cell-h", "--cal-pad", "--cal-bar-h", "--cal-lane-h")
 # 液态玻璃必须有的令牌（架构 0.27 第 5 点“令牌补齐”，TC-B1-56）：少了就报错。
 # --g-pill-solid（“减少透明效果”时液滴的实色）：R-244 定为沿用 --glass-solid（tokens.json 里写成 var(--glass-solid)）
 GLASS_REQUIRED = {
@@ -109,7 +111,7 @@ def app_styles(d, toks):
         if len(set(t["values"].values())) != 1:
             raise SystemExit(f"令牌 {t['name']} 四套主题的值不一样，不能放进和皮肤无关的 tokens.css")
     first = d["themes"][0]
-    css = [head, "/* 和皮肤无关的令牌（架构 17.2）：时长、曲线、按下反馈、禁用变淡、圆角、字体、字号、点按区域 */",
+    css = [head, "/* 和皮肤无关的令牌（架构 17.2）：时长、曲线、按下反馈、禁用变淡、圆角、字体、字号、点按区域、日历尺寸 */",
            ":root{" + ";".join(f'{t["name"]}:{t["values"][first]}' for t in skinless) + "}",
            '/* 减少动态效果：按下回弹的时长设 0（17.2 第 5 点）；data-rm="1" 由 platform/look.ts 写（设置里的开关或系统设置） */',
            ':root[data-rm="1"]{--dur-press:0ms}']

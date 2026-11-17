@@ -332,7 +332,7 @@ export function Check({
  * 编辑页的按钮（“清掉”“删除”“撤销”；G11：不用浏览器原生按钮，浅色灰框、深色凸边都不要）：圆角胶囊描边，和设置 › 提醒的按钮一套写法；
  * danger 是“删除”：危险色描边和字（同 RemindSettings 的 .danger）。聚焦 var(--focus)
  */
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'dangerFill' | 'ghost' | 'textDanger';
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'dangerFill' | 'ghost' | 'text';
 
 const VARIANT: Record<ButtonVariant, string | undefined> = {
   primary: styles.primary,
@@ -340,11 +340,12 @@ const VARIANT: Record<ButtonVariant, string | undefined> = {
   danger: styles.danger,
   dangerFill: styles.dangerFill,
   ghost: styles.ghost,
-  textDanger: styles.textDanger,
+  text: styles.text,
 };
 
 /**
- * kit 通用按钮（B2-UI-a U3-1）：六种 variant，高度一律 --hit。textDanger（R-454）：不描边、没底色的危险色文字按钮（设置 › 账号设备行右边的“退出这台设备”“移除”），
+ * kit 通用按钮（B2-UI-a U3-1）：六种 variant，高度一律 --hit。text（R-454；R-469 负责人 11-17“除了注销账户其他的字全部用黑色”改成正文色）：
+ * 不描边、没底色的文字按钮（设置 › 账号设备行右边的“退出这台设备”“移除”），
  * 点击区至少 44 见方，只配合 regular 用。原来的写法照用：不写 variant 是 secondary，
  * 只写 danger（布尔）等于 variant="danger"。
  * strong：字重 600（代码审 M2）。primary、dangerFill 本来就是 600；secondary、danger、ghost 默认 400（编辑页“删除”“清掉”），

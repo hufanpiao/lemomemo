@@ -1,5 +1,5 @@
 // 宽屏判断、断点只在这里做（架构 10.1）：JS 里的断点字符串只写这一份，组件按名字用。CSS 媒体查询里不能用变量，同一个数照写在
-// GlassBar、GlassBarFx、MeLink、随手记页、base.css（侧栏）和 CalendarPage.module.css（月历宽屏）里，src/app/__tests__/layers-media-css.test.ts 核对一致。
+// GlassBar、GlassBarFx、MeLink、随手记页、base.css（侧栏）和 MonthPicker.module.css（月历宽屏，年月选择器）里，src/app/__tests__/layers-media-css.test.ts 核对一致。
 // 没有 matchMedia（测试环境、老浏览器）一律当不匹配
 import { useCallback, useSyncExternalStore } from 'react';
 

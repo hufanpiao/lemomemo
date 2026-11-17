@@ -1,0 +1,150 @@
+/* 周视图·电脑（视觉稿 .dwkv；11-17 日历整块评审从 CalendarPage.module.css 拆出）。
+   卡片、项目色、周末 / 节假日 / 今天 / 选中、日期数字和“班”标在 cal-common.module.css，DeskWeek 先引那一份。
+   每小时多高 --hour-px 由 DeskWeek.tsx 写在这一块的内联样式上（DESK_HOUR_PX，色块位置和网格线用同一个数） */
+.dwk {
+  display: grid;
+  grid-template-columns: 48px repeat(7, minmax(0, 1fr));
+}
+
+.dHead {
+  border-bottom: 1px solid var(--line);
+}
+
+/* 表头按钮不垫周末淡底（cal-common .wkend 的底色由这里的 background: none 盖掉，同优先级、这份排在后面） */
+.dHeadBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 64px;
+  padding: 6px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+
+/* 农历、节气小字：照旧次要色 --text-2，不换第三层灰——放假那一列表头有斜纹从字底下穿过，斜纹透明度是按 --text-2 ≥ 4.5 定的（R-432），
+   换 --text-3 压在斜纹线上只有 3～4 */
+.dHeadBtn small {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-10);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* “全天”小字标签、左边时刻刻度：第三层灰；刻度等宽数字（R-436，同手机周视图 .wrul） */
+.dAllLab {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-3);
+  font-size: var(--fs-10);
+  letter-spacing: 0.06em;
+}
+
+.dAll {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.dAllItem {
+  min-height: 24px;
+  overflow: hidden;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-11);
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.dHours {
+  position: relative;
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-10);
+}
+
+.dHours > span {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+}
+
+.dHours > span:first-child {
+  transform: none;
+}
+
+.dCol {
+  position: relative;
+  border-left: 1px solid var(--line);
+  background-image: linear-gradient(var(--line) 1px, transparent 1px);
+  background-size: 100% var(--hour-px);
+}
+
+.be {
+  position: absolute;
+  overflow: hidden;
+  padding: 2px 4px 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  font: inherit;
+  font-size: var(--fs-11);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 只读行（FA-2 审查第 2 条）：电脑周视图的全天行、时间块放不下“要新版本”字样，改成斜纹底；
+   含义另由读屏名字和点了出的提示条给，斜纹只是“这条不一样”的提示。
+   斜纹用 --text-2 加透明度画在伪元素上（不用 color-mix，A11；--line 在深色下几乎看不见，视觉验收第 4 条），
+   isolation 让它压在字下面、块底色上面；全天行本来不是定位元素，加 relative 给伪元素当参照（时间块本来就是 absolute） */
+.dAllItem[data-readonly] {
+  position: relative;
+}
+
+.dAllItem[data-readonly],
+.be[data-readonly] {
+  isolation: isolate;
+}
+
+.dAllItem[data-readonly]::before,
+.be[data-readonly]::before {
+  position: absolute;
+  z-index: -1;
+  border-radius: inherit;
+  background-image: repeating-linear-gradient(135deg, transparent 0 4px, var(--text-2) 4px 6px);
+  content: '';
+  opacity: 0.28;
+  pointer-events: none;
+  inset: 0;
+}
+
+.beSh {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dNow {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--nowline);
+}

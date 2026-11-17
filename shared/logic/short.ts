@@ -75,11 +75,6 @@ export function itemShort(title: string): string {
   return firstGraphemes(title, SHORT_GRAPHEMES);
 }
 
-/** 项目名的简称（规则和 itemShort 相同，给以后的项目标签用） */
-export function projectShort(name: string): string {
-  return firstGraphemes(name, SHORT_GRAPHEMES);
-}
-
 /** 字符串有几个字形簇（AI 输出 schema 校验 short 不超过 SHORT_GRAPHEMES 个字形簇） */
 export function graphemeCount(text: string): number {
   return graphemes(text).length;

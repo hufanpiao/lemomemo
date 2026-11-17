@@ -1,0 +1,243 @@
+/* 日历几处共用的样式（11-17 日历整块评审第二部分从 CalendarPage.module.css 拆出；只用令牌，A11）：
+   月格（MonthGrid.module.css）、手机周泳道（WeekView.module.css）、电脑周表（DeskWeek.module.css）、日清单（DayList.module.css）都用到的这几样——
+   卡片 .card、项目色 .c0～.c6、跨天续条 .contStart / .contEnd、一天的状态（周末 .wkend、补位 .out、放假 .holiday、补班 .workday、今天 .today、选中 .sel）、
+   日期数字和“班”标（DayNum.tsx）、读屏隐藏 .srOnly。
+   ⚠ 引入顺序：各组件先引这一份、再引自己那一份（import 写在前面），自己那份同优先级的规则排在后面、压得过这里（如 .wtd 盖掉项目色的底色和竖线）。
+   跨文件不写组合选择器：状态类只在这里设变量，各组件的部件读变量（--day-bg 格子底、--day-dim-fg 周末和补位的灰字、--day-out-dim 补位格色块变淡、
+   --cont-l / --cont-r 跨天续条被切开那一端的圆角），所以不靠文件先后。
+   项目色 1–6：块底色 --pN、左侧深色竖线 --ps（= --pNs）、字 --on-p（设计审查 H1）；0 = 没有项目（--panel-2 底、--text-2 竖线、--text 字）。
+   今天：--today-bg 淡黄小框 + --today-ring 柠檬黄边（R-445 改 R-132，四套皮肤一样）；选中那天：数字深色小方块 --cal-sel-*（R-445） */
+
+/* 月历、周视图那一块：大圆角，和下面日清单的面板（kit List .panel）同一档 --r-lg（R-436“卡片大圆角”，视觉稿 .panel.mgrid） */
+.card {
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+/* ───────── 项目色（视觉稿 .lgtag / .wev）：每个 .cN 只定一次竖线色 --ps，底色、竖线、周泳道待办空心圆的边（WeekView .wtd）都读它 ───────── */
+.c0,
+.c1,
+.c2,
+.c3,
+.c4,
+.c5,
+.c6 {
+  box-shadow: inset 2px 0 0 var(--ps);
+  color: var(--on-p);
+}
+
+.c0 {
+  --ps: var(--text-2);
+
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.c1 {
+  --ps: var(--p1s);
+
+  background: var(--p1);
+}
+
+.c2 {
+  --ps: var(--p2s);
+
+  background: var(--p2);
+}
+
+.c3 {
+  --ps: var(--p3s);
+
+  background: var(--p3);
+}
+
+.c4 {
+  --ps: var(--p4s);
+
+  background: var(--p4);
+}
+
+.c5 {
+  --ps: var(--p5s);
+
+  background: var(--p5);
+}
+
+.c6 {
+  --ps: var(--p6s);
+
+  background: var(--p6);
+}
+
+/* 跨天日程被切开的一端（月格色块、周泳道全天条和时刻块同一套，cal-ui.ts contClass）：头从前面接过来的（续条）不画左侧深色竖线；
+   那一端画直角：只设 --cont-l / --cont-r，月格色块 .mark 的圆角读它们（周泳道的 .allDay / .wev 一直写的是整圈 3px，没读，照旧）。
+   字色不变（照 --on-p，对比度清单 on-p1～6 已管），不用透明度降字色。要排在 .c0～.c6 后面：同一优先级，后写的压过项目色的竖线 */
+.contStart {
+  --cont-l: 0;
+
+  box-shadow: none;
+}
+
+.contEnd {
+  --cont-r: 0;
+}
+
+/* ───────── 一天的状态（月格格子、手机泳道、电脑周表头和那一列共用，cal-ui.ts weekendClass / dayKindClass，MonthGrid 的 .out） ───────── */
+
+/* 周六周日淡底加灰字（R-445）：泳道直接画底色；月格格子的底色由 .cell 读 --day-bg（.cell 自己有默认底，同优先级排在后面）；
+   电脑表头 .dHeadBtn 不垫底（背景 none 写在它自己那份里）。灰字：日期数字见文件末尾，月格那一行 .line、泳道左列小字读 --day-dim-fg；放假的节日名照旧柠檬黄系 */
+.wkend {
+  --day-bg: var(--cal-wkend);
+  --day-dim-fg: var(--cal-wkend-fg);
+
+  background: var(--cal-wkend);
+}
+
+/* 上个月、下个月的补位格（只在月格）：半透明底透出页面底色（定稿实测字约淡到 .45）；日期和农历用周末同一档灰字（axe 对比度要过），
+   日程色块和补班标淡下去（--day-out-dim） */
+.out {
+  --day-bg: var(--cal-out);
+  --day-dim-fg: var(--cal-wkend-fg);
+  --day-out-dim: var(--cal-out-dim);
+}
+
+/* 节假日：放假柠檬黄细斜虚线（R-445 照旧，深色透明度 .28）；调休补班小圆点阵（R-445 第二版选“② 小圆点阵”）。
+   斜纹是“\”方向的 1px 细线（45° 渐变），再用 135° 的遮罩切成虚线；z-index -1 + isolation，压在字下面、格子底色上面。
+   减少透明效果也是这一种画法（本来就是不透明的图案，不靠模糊）。
+   透明度按“叠在格子底上，节日名、次要文字、日期数字仍 ≥ 4.5”定（contrast-pairs.json hol-stripe-*、work-stripe-*） */
+.holiday,
+.workday {
+  position: relative;
+  isolation: isolate;
+}
+
+.holiday::before,
+.workday::before {
+  position: absolute;
+  z-index: -1;
+  border-radius: inherit;
+  content: '';
+  inset: 0;
+  pointer-events: none;
+}
+
+.holiday::before {
+  background: repeating-linear-gradient(45deg, var(--hol-stripe) 0 1px, transparent 1px 6px);
+  mask-image: repeating-linear-gradient(135deg, currentcolor 0 3px, transparent 3px 5px);
+}
+
+.workday::before {
+  background: radial-gradient(circle, var(--work-stripe) 0 0.8px, transparent 1.3px) 0 0 / 5px 5px;
+}
+
+/* ───────── 日期数字和补班“班”标（DayNum.tsx：月格 .numMonth、泳道 .numLane、电脑表头 .numDesk 三种排法） ───────── */
+
+/* 月格：数字和右边的补班标一行，放不下（窄屏的韩文“근무”）时标折到下一行、仍靠右，不压“今天”小框（R-432 评审第 3 条） */
+.numMonth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  row-gap: 2px;
+}
+
+/* 泳道、电脑表头：数字和“班”标横排；泳道每行上下各留 2px，今天的小框不贴着“周三”和“廿六”（CAL-week-today-circle） */
+.numLane,
+.numDesk {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.numLane {
+  margin: 2px 0;
+}
+
+/* 补班“班”标：中文单字是 15 px 的圆（月格窄屏 --ban-size 缩到 13，见 MonthGrid.module.css），韩文“근무”撑成胶囊（min-width + 左右 --ban-px） */
+.ban {
+  box-sizing: border-box;
+  flex: none;
+  margin-left: auto;
+  min-width: var(--ban-size, 15px);
+  height: var(--ban-size, 15px);
+  padding: 0 var(--ban-px, 3px);
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-9-5);
+  font-weight: 600;
+  line-height: var(--ban-size, 15px);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.numLane .ban,
+.numDesk .ban {
+  margin-left: 0;
+}
+
+/* 日期数字：圆角小方块（R-445）。今天是淡黄色小框（改 R-132），选中那天是深色小方块（取代原来整格的框）；
+   月格窄屏小框缩到 --day-num（MonthGrid.module.css）。今天、选中、周末灰字三条在文件末尾按先后排好 */
+.dayNum {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--day-num, 22px);
+  height: var(--day-num, 22px);
+  padding: 0 2px;
+  border-radius: var(--cal-cell-r);
+
+  /* 日期数字等宽字（R-436 丙批“日期用等宽数字”，同待办页的日期） */
+  font-family: var(--f-mono);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.numLane .dayNum {
+  font-size: var(--fs-15);
+  font-weight: 700;
+}
+
+/* 电脑表头：放大 */
+.numDesk .dayNum {
+  align-self: center;
+  min-width: 26px;
+  height: 26px;
+  font-size: var(--fs-17);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ───────── 日期数字的层叠顺序（R-445）：周末灰字 → 今天淡黄小框 → 选中深色小方块，后面的压前面的（今天又是周末按今天画，选中的按选中画）。
+   放在文件末尾：stylelint no-descending-specificity 要求同一元素的低优先级选择器排在前面 ───────── */
+.wkend .dayNum,
+.out .dayNum {
+  color: var(--cal-wkend-fg);
+}
+
+/* 补位格：补班标淡下去（月格色块读 --day-out-dim） */
+.out .ban {
+  opacity: var(--cal-out-dim);
+}
+
+.today .dayNum {
+  background: var(--today-bg);
+  box-shadow: inset 0 0 0 1.5px var(--today-ring);
+  color: var(--today-fg);
+  font-weight: 700;
+}
+
+.sel .dayNum {
+  background: var(--cal-sel-bg);
+  box-shadow: none;
+  color: var(--cal-sel-fg);
+  font-weight: 700;
+}

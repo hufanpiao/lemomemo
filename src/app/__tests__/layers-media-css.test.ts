@@ -64,8 +64,8 @@ describe('断点', () => {
     expect(others).toEqual([]);
   });
 
-  it('月历宽屏断点：CalendarPage.module.css 的窄屏媒体查询正好是 MQ_CAL_WIDE 的反面', () => {
+  it('月历宽屏断点：MonthPicker.module.css（年月选择器）的窄屏媒体查询正好是 MQ_CAL_WIDE 的反面', () => {
     expect(MQ_CAL_WIDE).toBe(`(min-width: ${cal}px)`);
-    expect(noComments(readFileSync('src/features/calendar/ui/CalendarPage.module.css', 'utf8'))).toContain(`@media (width < ${cal}px)`);
+    expect(noComments(readFileSync('src/features/calendar/ui/MonthPicker.module.css', 'utf8'))).toContain(`@media (width < ${cal}px)`);
   });
 });

@@ -10,7 +10,8 @@
 import { useLayoutEffect, useRef, useState, type Ref } from 'react';
 import type { Huangli } from '../hooks/useHuangli.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
-import styles from './CalendarPage.module.css';
+import common from './cal-common.module.css';
+import styles from './DayList.module.css';
 
 const cut = (el: HTMLElement | null): boolean => el !== null && el.scrollWidth > el.clientWidth;
 
@@ -40,7 +41,7 @@ function Items({ ws, t, at }: { ws: readonly string[]; t: CalViewT; at: Ref<HTML
       ) : (
         <>
           <span aria-hidden="true">{t('cal.hl.none', {})}</span>
-          <span className={styles.srOnly}>{t('cal.hl.noneSr', {})}</span>
+          <span className={common.srOnly}>{t('cal.hl.noneSr', {})}</span>
         </>
       )}
     </span>

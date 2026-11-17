@@ -248,7 +248,9 @@ describe('运行日志：开始、结束、失败各一行，只有约定的键�
     if (!r.ok) throw new Error(r.fail);
     t = 2180;
     await r.rec.stop();
-    expect(log.lines).toEqual(['rec start mime=audio/mp4 gum_ms=120 start_ms=60', 'rec end bytes=100 ms=2000 auto=0']);
+    // 音轨状态（11-17 诊断“波动条不动”）每条轨道开录时记一行，只带 0/1 和 readyState
+    expect(log.lines.filter((l) => l.startsWith('rec track ')).every((l) => /^rec track muted=[01] state=\w*$/.test(l))).toBe(true);
+    expect(log.lines.filter((l) => !l.startsWith('rec track '))).toEqual(['rec start mime=audio/mp4 gum_ms=120 start_ms=60', 'rec end bytes=100 ms=2000 auto=0']);
   });
 
   it('失败：带原因；有错误类型名时只收字母；超限带字节数和时长', async () => {
@@ -266,7 +268,7 @@ describe('运行日志：开始、结束、失败各一行，只有约定的键�
     const rec = await recording({ maxBytes: 50 });
     await rec.stop();
     expect(log.lines.at(-1)).toBe('rec fail reason=too_large bytes=100 ms=0');
-    expect(log.lines).toHaveLength(2);
+    expect(log.lines.filter((l) => !l.startsWith('rec track '))).toHaveLength(2);
   });
 
   it('录音器和各片都没标类型：no_mime，不交出录音（发出去服务器只会回 415）；原因记进 rec fail', async () => {
