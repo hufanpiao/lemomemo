@@ -5,6 +5,7 @@ import { msAt } from '../../../../shared/core/date.ts';
 import { remindAtOf } from '../../../../shared/logic/remind.ts';
 import { allReminders, missed, modeOf, occurrenceKey, reminderOf, ringing, upcoming, type Row } from '../data/reminder-model.ts';
 import { ackPatch, snoozePatch } from '../data/remind-write.ts';
+import { endMsg } from '../data/remind-format.ts';
 
 const SEOUL = 'Asia/Seoul';
 const DAY = '2026-11-03';
@@ -31,6 +32,15 @@ describe('TC-B2-29：本机用 remindAtOf 现算', () => {
     expect(r?.tag).toBe(`event:${uuid(1)}:${at(DAY, '15:15')}`);
     expect(Object.keys(ackPatch(r!, now))).not.toContain('remind_at');
     expect(Object.keys(snoozePatch(now + 600_000, now))).not.toContain('remind_at');
+  });
+  it('跨天日程（R-444）：提醒只按开始时刻算，时长 1 小时、3 天、31 天都一样；全屏页副标题结束不在开始那天时带上日子', () => {
+    const now = at(DAY, '09:00');
+    const tags = [60, 3 * 1440, 31 * 1440].map((d) => reminderOf('event', ev(1, { duration_min: d }), now, SEOUL)?.remindAt);
+    expect(tags).toEqual([at(DAY, '15:15'), at(DAY, '15:15'), at(DAY, '15:15')]);
+    const one = reminderOf('event', ev(1), now, SEOUL);
+    const three = reminderOf('event', ev(1, { duration_min: 2 * 1440 + 60 }), now, SEOUL);
+    expect(one && endMsg(one, SEOUL)).toEqual({ key: 'remind.full.until', params: { time: '16:30' } });
+    expect(three && endMsg(three, SEOUL)).toEqual({ key: 'remind.full.untilDate', params: { m: 11, d: 5, time: '16:30' } });
   });
   it('离线新建（本机还没有 remind_at 这一列）：走新建的回落；同步回来以后按“其余重算”', () => {
     const now = at(DAY, '16:30');

@@ -6,7 +6,9 @@ export const zh = {
   'event.edit.back': '返回',
   'event.edit.titleLabel': '标题',
   'event.edit.titlePh': '什么事',
-  'event.edit.date': '日期',
+  // R-444：开始、结束各一行“日期 + 时刻”，行名“开始”“结束”，时刻框的读屏名
+  'event.edit.startTime': '开始时刻',
+  'event.edit.endTime': '结束时刻',
   'event.edit.allDay': '全天',
   'event.edit.start': '开始',
   'event.edit.end': '结束',

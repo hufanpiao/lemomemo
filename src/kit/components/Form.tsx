@@ -89,6 +89,9 @@ interface CommitProps {
   className?: string | undefined;
   /** 多行框的行数（TextArea；纪念日编辑页备注收起时一行，视觉稿 annface） */
   rows?: number;
+  /** 日期框能选的范围（'YYYY-MM-DD'；R-444 日程结束日期不早于开始、不超过 31 天） */
+  min?: string | undefined;
+  max?: string | undefined;
 }
 
 /** useCommitDraft 的可选项 */
@@ -198,6 +201,8 @@ export function TextInput({ value, onCommit, type = 'text', title = false, ...p 
     <input
       id={p.id}
       maxLength={p.maxLength}
+      min={p.min}
+      max={p.max}
       disabled={p.disabled}
       placeholder={p.disabled ? undefined : p.placeholder}
       aria-label={p['aria-label']}

@@ -14,7 +14,7 @@ import { Pressable } from '../../../motion/components.ts';
 import { clock } from '../../../platform/clock.ts';
 import { reminderHash, type ReminderKind } from '../../../platform/native-bridge.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
-import { eventEnd, eventStart, findReminder, parseReminderHash, relMsg, timeOf, type Reminder } from '../hooks/remind-view.ts';
+import { endMsg, eventStart, findReminder, parseReminderHash, relMsg, timeOf, type Reminder } from '../hooks/remind-view.ts';
 import { actionsOf, useReminderList, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
 import { Bell } from './Bell.tsx';
@@ -111,7 +111,9 @@ export default function FullReminderPage() {
 
   // 类型行写“还有多久”，大号字写时刻，不重复（设计复审 今天页待办 M3）；页面每分钟随 useMinuteNow 重画
   const w = relMsg(r, clock.now(), tz, prefs.defaultTime);
-  const end = r.kind === 'event' ? eventEnd(r, tz) : null;
+  // “到 16:30”；跨天的（R-444）写“到 11月20日 16:30”
+  const endM = r.kind === 'event' ? endMsg(r, tz) : null;
+  const end = endM === null ? null : endM.key === 'remind.full.until' ? t('remind.full.until', endM.params) : t('remind.full.untilDate', endM.params);
   const loc = typeof r.row['location'] === 'string' ? r.row['location'] : '';
   const note = typeof r.row['note'] === 'string' ? r.row['note'] : '';
   const project = typeof r.row['project'] === 'string' ? r.row['project'] : '';
@@ -153,7 +155,7 @@ export default function FullReminderPage() {
       </div>
       {(end !== null || project) && (
         <p className={styles.sub} data-testid="remind-full-sub">
-          {[end !== null ? t('remind.full.until', { time: timeOf(end, tz) }) : '', project].filter(Boolean).join(' · ')}
+          {[end ?? '', project].filter(Boolean).join(' · ')}
         </p>
       )}
       {doneFail && (

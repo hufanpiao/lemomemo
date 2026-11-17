@@ -1,6 +1,6 @@
 // “＋”判成查找、总结以后列出哪些（架构 5.14 第 3、4 点；B4b-3）。纯函数：本机索引（find-local 的 buildIndex）进、条目出
 // • 时间类（query.range 不为空）：只用 range、kinds、done 三个条件精确列出，query.text 不再过滤（“AI 只解析条件，不生成列表”）；
-//   日程按换算到设备时区后的日子（buildIndex 已换算），待办按截止日（没有截止日的不列），随手记按创建那天；
+//   日程按换算到设备时区后的日子（buildIndex 已换算；跨天的按开始～最后一天和范围交叠算，R-444），待办按截止日（没有截止日的不列），随手记按创建那天；
 //   range.from 为 null = 截止到 to（“今天没完成的”）。按日子、时刻排，同一天的放一组
 // • 内容类（range 为空）：按 query.text 关键词找（同查找面板的关键词一路），再按 kinds、done 筛
 // • kinds：event / todo / note；note 连带这条随手记里的图片、文档；没给（空）= 三种都要。纪念日不进
@@ -11,7 +11,7 @@ import type { DateStr } from '../../../../shared/core/date.ts';
 import type { IntentKind } from '../../../../shared/schema/kinds.ts';
 import type { PlusQuery } from '../../../../shared/schema/intent.ts';
 import { SUMMARY_MAX_ITEMS, type SummaryRef } from '../../../../shared/schema/summarize.ts';
-import { findLocal, type FindItem, type FindKind } from './find-local.ts';
+import { findLocal, overlaps, type FindItem, type FindKind } from './find-local.ts';
 
 const KIND_OF: Record<IntentKind, readonly FindKind[]> = { event: ['event'], todo: ['todo'], note: ['note', 'image', 'file'] };
 
@@ -32,7 +32,7 @@ export function listQuery(index: readonly FindItem[], q: PlusQuery, exclude: Rea
   }
   const { from, to } = q.range;
   return index
-    .filter((it) => keep(it) && it.date !== null && (from === null || it.date >= from) && it.date <= to)
+    .filter((it) => keep(it) && overlaps(it, from, to))
     .sort((a, b) => (ord(a) < ord(b) ? -1 : ord(a) > ord(b) ? 1 : 0));
 }
 

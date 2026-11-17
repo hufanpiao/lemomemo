@@ -9,7 +9,7 @@ import { useUi } from '../../../kit/state/ui-store.ts';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { cheerIndex, splitDur } from '../data/today-model.ts';
 
-export { splitPast } from '../data/today-model.ts';
+export { eventSpanText, splitPast } from '../data/today-model.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
 import { makeUseT } from '../../../kit/hooks/useT.ts';

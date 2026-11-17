@@ -6,8 +6,8 @@
 // • 黄历卡（R-431，HuangliCard.tsx）：中文界面、在数据范围内时画在标题行下面，标题行不再写“· 农历…”（卡片里有农历日和月）；
 //   黄历还在加载时先画同样高的占位（HuangliHold），标题行也不写农历，加载完不跳（独立评审第 7 条）；
 //   没卡片（韩文界面、范围外、加载失败）时标题行照旧
-// • 跨午夜的日程（代码复审 N6）：dayEntries 只把它放在开始那天；这里给后面的日子补一行续段，排在最前，时刻写“至 01:00”
-//   （和周视图泳道次日的续段一致）；点了同样打开那条日程
+// • 跨午夜、跨多天的日程（代码复审 N6；R-444）：dayEntries 在它占的每一天都放一条（带 span）；开始那天写开始时刻、标题下面“至 11月20日 18:00”，
+//   中间整天写“持续”，最后一天写“至 01:00”（后面几天的那一段标 data-kind="cont"，和周视图泳道次日的续段一致）；全天的跨天日程标题下面写“第 2/3 天”
 // • “往上拖列表、月历收成一周一行”的拖动柄在 CalNav.tsx 的 FoldHandle，这里只管列表
 // • 行的样式（白面板、行、时刻那一格、标题、行尾标记、空状态）用 kit 的 List.module.css，和今天页、待办页同一份（B2-UI-a U4、U6）
 // • R-436 丙批（照视觉稿日清单、待办页分组）：标题行挪到面板上方，挂 kit 的小字分组名 groupLabelClass；黄历卡和行在下面一块面板里。
@@ -18,8 +18,9 @@
 // • 电脑版详情抽屉（R-130）：行按钮带 data-open（抽屉关上时找回这一行），抽屉里开着的那条 aria-current（kit List 的左边柠檬黄一道，同今天页）
 import { Suspense } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
-import { minOfDay, msAt, todayOf, weekdayOf } from '../../../../shared/core/date.ts';
-import { eventEntry, liveEventsNear, type CalItems, type DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
+import { minOfDay, parseDate, weekdayOf } from '../../../../shared/core/date.ts';
+import type { CalItems, DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
+import { spanTextOn, type SpanText } from '../../../../shared/logic/calendar/event-span.ts';
 import { dayEntries } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
 import { groupLabelClass } from '../../../kit/components/Form.tsx';
@@ -37,25 +38,17 @@ function titleOf(items: CalItems, e: DayEntry): string {
   return row?.title || e.short;
 }
 
-/** 前一两天开始、跨进 date 的有时刻日程（按设备时区）：续段条目和结束时刻（date 当天第几分钟，过了午夜还没完的写 24:00） */
-export function carryOver(date: DateStr, items: CalItems, tz: string): { entry: DayEntry; endMin: number }[] {
-  const dayStart = msAt(date, 0, tz);
-  const out: { entry: DayEntry; endMin: number }[] = [];
-  // 日程最长 1440 分钟，跨进 date 的只会是前一天开始的；extraBefore = 1 让预筛再往前放宽一天
-  for (const [ev, p] of liveEventsNear(items.events, date, date, tz, 1)) {
-    if (p.allDay || p.date >= date || p.endMs <= dayStart) continue;
-    const endMin = todayOf(p.endMs, tz) === date ? minOfDay(p.endMs, tz) : 24 * 60;
-    out.push({ entry: eventEntry(ev, p), endMin });
-  }
-  return out.sort((a, b) => (a.entry.startMs ?? 0) - (b.entry.startMs ?? 0));
+/**
+ * 日程在 date 这一天怎么写（event-span.ts 的 spanTextOn）；待办为 null。
+ * 跨天的（R-444，含跨午夜的）dayEntries 已经在它占的每一天各放了一条（带 span）：开始那天写开始时刻、标题下面“至 11月20日 18:00”；
+ * 中间整天写“持续”；最后一天写“至 18:00”。全天的跨天日程照写“全天”，标题下面“第 2/3 天”
+ */
+function spanOf(e: DayEntry, date: DateStr, tz: string): SpanText | null {
+  if (e.kind === 'todo') return null;
+  return spanTextOn({ date: e.span?.date ?? date, lastDate: e.span?.lastDate ?? date, endMs: e.kind === 'timed' ? e.endMs : null }, date, tz);
 }
 
-/** 有时刻的日程在当天第几分钟结束（跨午夜的到 24:00 为止）；全天日程、待办没有 */
-function endMinOf(items: CalItems, e: DayEntry, tz: string): number | null {
-  if (e.kind !== 'timed' || e.startMs === null) return null;
-  const dur = items.events.find((x) => x.id === e.itemId)?.duration_min ?? 0;
-  return Math.min(minOfDay(e.startMs, tz) + dur, 24 * 60);
-}
+const hm24 = (min: number): string => (min >= 24 * 60 ? '24:00' : hm(min));
 
 /** 行尾的“未同步”小标记（没有时整格不画，见 .dayUnsynced:empty） */
 function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
@@ -103,29 +96,38 @@ export function DayList({
 }) {
   const cur = (id: string) => (openId === id ? ('true' as const) : undefined);
   let entries: DayEntry[] = [];
-  let cont: { entry: DayEntry; endMin: number }[] = [];
   try {
     entries = dayEntries(date, items, tz);
-    cont = carryOver(date, items, tz);
   } catch {
     entries = [];
   }
-  const total = entries.length + cont.length;
+  const total = entries.length;
   const [, m = '1', d = '1'] = date.split('-');
   const head = t('cal.day.title', { m: Number(m), d: Number(d), wd: t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) }) });
-  const timeOf = (e: DayEntry): string => {
-    if (e.kind === 'timed' && e.startMs !== null) return hm(minOfDay(e.startMs, tz));
-    if (e.kind === 'allDay') return t('cal.allDay', {});
-    const due = dueMins.get(e.itemId);
-    return due === undefined ? t('cal.day.todo', {}) : hm(due);
+  const timeOf = (e: DayEntry, s: SpanText | null): string => {
+    if (s === null) {
+      const due = dueMins.get(e.itemId);
+      return due === undefined ? t('cal.day.todo', {}) : hm(due);
+    }
+    if (s.lead === 'allDay') return t('cal.allDay', {});
+    if (s.lead === 'ongoing') return t('cal.day.ongoing', {});
+    if (s.lead === 'until') return t('cal.day.until', { t: hm24(s.endMin ?? 24 * 60) });
+    return e.startMs === null ? '' : hm(minOfDay(e.startMs, tz));
+  };
+  /** 跨天日程标题下面那行小字（R-444） */
+  const metaOf = (s: SpanText | null): string | null => {
+    if (s === null || s.meta === null) return null;
+    if (s.meta.kind === 'dayOf') return t('cal.day.dayOf', { i: s.meta.index, n: s.meta.days });
+    const { m: em, d: ed } = parseDate(s.meta.date);
+    return t('cal.day.untilDate', { m: em, d: ed, t: hm24(s.meta.endMin) });
   };
   /** 过去了：那天整天已过，或者就是今天、endMin（日程结束 / 待办截止）已经到了；没有 endMin 的今天不算 */
   const passed = (endMin: number | null | undefined): boolean =>
     today !== undefined && (date < today || (date === today && nowMin !== undefined && typeof endMin === 'number' && endMin <= nowMin));
   /** 行首时刻的状态（R-436）：已过去的日程 past（第三层灰）、过了截止没完成的待办 late（红字，红色只表示逾期） */
-  const toneOf = (e: DayEntry): 'past' | 'late' | undefined => {
-    if (e.kind === 'todo') return passed(dueMins.get(e.itemId)) ? 'late' : undefined;
-    return passed(endMinOf(items, e, tz)) ? 'past' : undefined;
+  const toneOf = (e: DayEntry, s: SpanText | null): 'past' | 'late' | undefined => {
+    if (s === null) return passed(dueMins.get(e.itemId)) ? 'late' : undefined;
+    return passed(s.endMin) ? 'past' : undefined;
   };
   return (
     <section className={styles.dayList} aria-labelledby="cal-day-title" data-testid="cal-day-list" data-date={date}>
@@ -142,41 +144,42 @@ export function DayList({
         <p className={list.empty}>{t('cal.day.empty', {})}</p>
       ) : (
         <ul className={`${list.list} ${styles.dayListRows}`}>
-          {cont.map(({ entry: e, endMin }) => (
-            <li key={`cont-${e.itemId}`} className={list.row}>
-              <button type="button" className={list.main} onClick={() => onOpen('event', e.itemId)} data-kind="cont" data-readonly={isRo('event', e.itemId) ? '' : undefined} data-open={e.itemId} aria-current={cur(e.itemId)}>
-                <span className={`${list.lead} ${styles.dayTime}`} data-tone={passed(endMin) ? 'past' : undefined}>
-                  {t('cal.day.until', { t: endMin >= 24 * 60 ? '24:00' : hm(endMin) })}
-                </span>
-                <span className={`${styles.dayMk} ${colorClass(e.colorIndex)}`} aria-hidden="true" />
-                <span className={list.title}>{titleOf(items, e)}</span>
-                {isRo('event', e.itemId) ? <ReadonlyMark /> : null}
-                <RowMark table="events" id={e.itemId} />
-              </button>
-            </li>
-          ))}
-          {entries.map((e) => (
+          {entries.map((e) => {
+            const s = spanOf(e, date, tz);
+            const meta = metaOf(s);
+            // 有时刻的跨天日程在后面几天的那一段（原来的“续段”）仍标 data-kind="cont"
+            const contRow = e.kind === 'timed' && (e.span?.cont === 'start' || e.span?.cont === 'both');
+            return (
             <li key={`${e.kind}-${e.itemId}`} className={list.row}>
               <button
                 type="button"
                 className={list.main}
                 onClick={() => onOpen(e.kind === 'todo' ? 'todo' : 'event', e.itemId)}
-                data-kind={e.kind}
+                data-kind={contRow ? 'cont' : e.kind}
+                data-span={e.span?.cont}
                 data-readonly={isRo(e.kind === 'todo' ? 'todo' : 'event', e.itemId) ? '' : undefined}
                 data-open={e.itemId}
                 aria-current={cur(e.itemId)}
                 data-testid={`cal-day-row-${e.itemId}`}
               >
-                <span className={`${list.lead} ${styles.dayTime}`} data-tone={toneOf(e)}>
-                  {timeOf(e)}
+                <span className={`${list.lead} ${styles.dayTime}`} data-tone={toneOf(e, s)}>
+                  {timeOf(e, s)}
                 </span>
                 <span className={`${styles.dayMk} ${colorClass(e.colorIndex)} ${e.kind === 'todo' ? styles.dayMkTodo : ''}`} aria-hidden="true" />
-                <span className={list.title}>{titleOf(items, e)}</span>
+                {meta === null ? (
+                  <span className={list.title}>{titleOf(items, e)}</span>
+                ) : (
+                  <span className={list.text}>
+                    <span className={list.title}>{titleOf(items, e)}</span>
+                    <span className={list.meta} data-testid={`cal-day-span-${e.itemId}`}>{meta}</span>
+                  </span>
+                )}
                 {isRo(e.kind === 'todo' ? 'todo' : 'event', e.itemId) ? <ReadonlyMark testId={`cal-ro-${e.itemId}`} /> : null}
                 <RowMark table={e.kind === 'todo' ? 'todos' : 'events'} id={e.itemId} />
               </button>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
       </div>

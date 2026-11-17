@@ -19,10 +19,10 @@ const TZ = 'Asia/Seoul';
 const DAY = '2026-11-14';
 const at = (h: number, m = 0) => msAt(DAY, h * 60 + m, TZ);
 const ev = (id: string, title: string, h: number, durMin = 60): EventOcc => ({
-  kind: 'event', id, title, project: '', date: DAY, allDay: false, start: at(h), end: at(h) + durMin * 60_000,
+  kind: 'event', id, title, project: '', date: DAY, lastDate: DAY, allDay: false, start: at(h), end: at(h) + durMin * 60_000,
   time: `${String(h).padStart(2, '0')}:00`, origin: null,
 });
-const allDay = (id: string, title: string): EventOcc => ({ kind: 'event', id, title, project: '', date: DAY, allDay: true, start: null, end: null, time: null, origin: null });
+const allDay = (id: string, title: string): EventOcc => ({ kind: 'event', id, title, project: '', date: DAY, lastDate: DAY, allDay: true, start: null, end: null, time: null, origin: null });
 
 function show(events: EventOcc[], now: number, tomorrowFirst: EventOcc | null = null) {
   render(<NowCard card={nowCard(events, now, TZ, DAY, tomorrowFirst)} today={DAY} />);

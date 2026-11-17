@@ -55,7 +55,7 @@ import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { afterAppPainted, isAppPainted } from '../../../platform/root-paint.ts';
 import { AppearItem, AppearList, useHoldView, useSwapWhenSafe } from '../../../motion/components.ts';
-import { splitPast, useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
+import { eventSpanText, splitPast, useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
 import { loadTodayDesk, loadTodaySwipe, TodayRo } from '../index.ts';
@@ -67,6 +67,10 @@ import { NowCard } from './NowCard.tsx';
 import styles from './TodayPage.module.css';
 import type { TodaySel } from './TodayDesk.tsx';
 import type { TodayRoProps } from './TodayToasts.tsx';
+import { fmtHm } from '../../../../shared/core/date.ts';
+
+/** 当天第几分钟 → HH:MM，到当天末尾的写 24:00（跨天日程“至 24:00”，R-444） */
+const hm24 = (min: number): string => (min >= 24 * 60 ? '24:00' : fmtHm(min));
 
 // 页底提示条、顶部重复事项横幅、只读行的行尾标记和打勾圆圈：同一个按需下载的文件，按 part 画哪一块；
 // 懒加载写在功能入口 ../index.ts（预载名单和主包共用，首屏预算 150 KB，FA-2 返工）
@@ -207,19 +211,37 @@ export default function TodayPage() {
     </AppearItem>
   ) : null;
   // 日程行、待办行：“今天的安排”里照常画，展开“已过去”时过去的那几行也用它（key 不变，打勾挪进挪出“已过去”时行走 AppearList 的离开、进场）
-  const evRow = (o: (typeof v.events)[number]) => (
+  // 跨天的日程（R-444）：前几天开始的行首写“持续”/“至 18:00”，没到最后一天的标题下面写“至 11月20日 18:00”，跨天的全天日程写“第 2/3 天”（同日清单）
+  const evLead = (o: (typeof v.events)[number], s: ReturnType<typeof eventSpanText>): string => {
+    if (s.lead === 'allDay') return t('list.allDay', {});
+    if (s.lead === 'ongoing') return t('list.ongoing', {});
+    if (s.lead === 'until') return t('list.until', { t: hm24(s.endMin ?? 24 * 60) });
+    return o.time ?? '';
+  };
+  const evMeta = (s: ReturnType<typeof eventSpanText>): string | null => {
+    if (s.meta === null) return null;
+    if (s.meta.kind === 'dayOf') return t('list.dayOf', { i: s.meta.index, n: s.meta.days });
+    const [, m = '1', dd = '1'] = s.meta.date.split('-');
+    return t('list.untilDate', { m: Number(m), d: Number(dd), t: hm24(s.meta.endMin) });
+  };
+  const evRow = (o: (typeof v.events)[number]) => {
+    const s = eventSpanText(o, d.today, d.tz);
+    const meta = evMeta(s);
+    return (
     <AppearItem key={`e:${o.id}`} className={list.row} data-readonly={g.isRo('event', o.id) ? '' : undefined} data-testid={`today-event-${o.id}`}>
-      <span className={list.lead}>{o.time ?? t('list.allDay', {})}</span>
+      <span className={list.lead}>{evLead(o, s)}</span>
       <button type="button" className={list.main} onClick={() => open({ kind: 'event', id: o.id })} data-open={o.id} aria-current={cur(o.id)}>
         <span className={list.text}>
           <span className={list.title}>{o.title}</span>
+          {meta !== null ? <span className={list.meta} data-testid={`today-span-${o.id}`}>{meta}</span> : null}
           {o.origin ? <span className={list.meta}>{t('list.origin', { zone: zoneName(o.origin.tz, locale), t: o.origin.time })}</span> : null}
         </span>
         {g.isRo('event', o.id) ? <Ro part="mark" testId={`today-ro-${o.id}`} /> : null}
         <RowMark table="events" id={o.id} />
       </button>
     </AppearItem>
-  );
+    );
+  };
   const tdRow = (td: (typeof v.todos)[number]) => {
     const ro = g.isRo('todo', td.id);
     return (

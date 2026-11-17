@@ -67,6 +67,8 @@ export const remindZh = {
   'remind.full.head.event': '日程 · {when}',
   'remind.full.head.todo': '待办 · {when}', // 线框 FULLALERT：“待办 · 1 小时后截止”（设计复审 M3）
   'remind.full.until': '到 {time}',
+  // 跨天日程（R-444）：结束不在开始那天时带上日子
+  'remind.full.untilDate': '到 {m}月{d}日 {time}',
   'remind.full.loc': '地点 / 链接',
   'remind.full.note': '备注',
   'remind.full.next': '下一条：{title}',

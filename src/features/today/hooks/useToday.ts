@@ -26,7 +26,9 @@ export function useToday() {
 
   const model = useMemo(() => {
     const evToday = eventsOn(events, today, tz, locale);
-    const tomorrow = eventsOn(events, tomorrowOf(now, tz), tz, locale).filter((o) => !o.allDay);
+    // 明天开始的第一件（R-444：今天开始、跨进明天的也在明天的清单里，不算）
+    const tmr = tomorrowOf(now, tz);
+    const tomorrow = eventsOn(events, tmr, tz, locale).filter((o) => !o.allDay && o.date === tmr);
     return {
       today,
       tz,

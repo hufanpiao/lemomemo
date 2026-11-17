@@ -64,7 +64,9 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
           <div key={`ad-${date}`} className={styles.dAll}>
             {ad?.itemIds.map((id, k) => {
               const kind = ad.kinds[k] ?? 'allDay';
-              const title = itemTitle(items, kind, id) || itemShort(items, kind, id);
+              // 跨天的全天日程（R-444）：先用最朴素的写法，每天各一块，标题后面写“(2/3)”；连条画法等负责人定了图再做
+              const span = ad.dayOf[k];
+              const title = (itemTitle(items, kind, id) || itemShort(items, kind, id)) + (span ? ` (${span.index}/${span.days})` : '');
               const which = kind === 'todo' ? 'todo' : 'event';
               const ro = isRo(which, id);
               return (

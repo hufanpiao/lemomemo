@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { eventsWrite } from '../../../../shared/schema/rows.ts';
 import {
-  durationOf, emptyForm, endOf, EVENT_TIMING_COLS, formOf, hasRemind, localOf, newEventRow, normalize, patchOf, prevRemindAtOf, tzAllowed, tzChoices,
+  allDayDurationOf, allDayDurationTo, allDayLastOf, durationTo, emptyForm, endAtOf, EVENT_TIMING_COLS, timedDurationOf, formOf, hasRemind, localOf, newEventRow, normalize, patchOf, prevRemindAtOf, tzAllowed, tzChoices,
   type EventForm,
 } from '../data/event-edit.ts';
 import type { EventRemindRow } from '../../../../shared/logic/remind.ts';
@@ -21,13 +21,47 @@ describe('normalize：全天 / 有时刻', () => {
   });
 });
 
-describe('时长', () => {
-  it('结束晚于开始：差值；不晚于开始：算到第二天；上限 1 天', () => {
-    expect(durationOf('15:30', '16:30')).toBe(60);
-    expect(durationOf('23:00', '01:00')).toBe(120);
-    expect(durationOf('09:00', '09:00')).toBe(1440);
-    expect(endOf('23:30', 90)).toBe('01:00');
-    expect(endOf('15:30', 60)).toBe('16:30');
+describe('时长、结束日期和时刻（R-444 跨天）', () => {
+  it('同一天只改结束时刻：晚于开始是差值；不晚于开始照旧算到第二天', () => {
+    const f = base({ time: '15:30' });
+    expect(durationTo(f, '2026-11-05', '16:30', SH)).toBe(60);
+    expect(durationTo(base({ time: '23:00' }), '2026-11-05', '01:00', SH)).toBe(120);
+    expect(durationTo(base({ time: '09:00' }), '2026-11-05', '09:00', SH)).toBe(1440);
+  });
+
+  it('选了别的结束日期：按日程自己的时区算真实分钟；早于开始日期按开始那天；最多 31 天', () => {
+    const f = base({ time: '09:00', tz: SEOUL });
+    expect(durationTo(f, '2026-11-07', '18:00', SH)).toBe(2 * 1440 + 9 * 60);
+    expect(durationTo(f, '2026-11-01', '10:00', SH)).toBe(60);
+    expect(durationTo(f, '2027-01-01', '09:00', SH)).toBe(31 * 1440);
+  });
+
+  it('endAtOf：结束在日程自己时区的哪天几点（跨午夜、跨多天）；全天为 null', () => {
+    expect(endAtOf(base({ time: '23:30', duration_min: 90 }), SH)).toEqual({ date: '2026-11-06', time: '01:00' });
+    expect(endAtOf(base({ time: '15:30', duration_min: 60 }), SH)).toEqual({ date: '2026-11-05', time: '16:30' });
+    expect(endAtOf(base({ time: '09:00', duration_min: 2 * 1440 + 540 }), SH)).toEqual({ date: '2026-11-07', time: '18:00' });
+    expect(endAtOf(base({ time: null }), SH)).toBeNull();
+  });
+
+  it('全天：最后一天 ↔ 天数 × 1440；旧行（60）是一天；最多 31 天', () => {
+    expect(allDayLastOf(base({ time: null, duration_min: 60 }))).toBe('2026-11-05');
+    expect(allDayLastOf(base({ time: null, duration_min: 3 * 1440 }))).toBe('2026-11-07');
+    expect(allDayDurationTo('2026-11-05', '2026-11-07')).toBe(3 * 1440);
+    expect(allDayDurationTo('2026-11-05', '2026-11-01')).toBe(1440);
+    expect(allDayDurationTo('2026-11-05', '2027-03-01')).toBe(31 * 1440);
+  });
+
+  it('全天 ↔ 有时刻切换：跨几天就记几天；只占一天的时长不动；切回有时刻到最后一天同一时刻再过 1 小时', () => {
+    expect(allDayDurationOf(base({ time: '09:00', duration_min: 60 }), SH)).toBe(60);
+    expect(allDayDurationOf(base({ time: '22:00', duration_min: 1440 }), SH)).toBe(2 * 1440);
+    expect(timedDurationOf(60)).toBe(60);
+    expect(timedDurationOf(1440)).toBe(1440);
+    expect(timedDurationOf(3 * 1440)).toBe(2 * 1440 + 60);
+  });
+
+  it('formOf：超过 1 天的时长照原值读出来（原来超过 1440 会变回 60）；超过 31 天的坏值按 60', () => {
+    expect(formOf({ date: '2026-11-05', time: '09:00', tz: SEOUL, duration_min: 4320 }).duration_min).toBe(4320);
+    expect(formOf({ date: '2026-11-05', time: '09:00', tz: SEOUL, duration_min: 44641 }).duration_min).toBe(60);
   });
 });
 

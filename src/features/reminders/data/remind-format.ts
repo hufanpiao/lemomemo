@@ -138,3 +138,15 @@ export function eventEnd(r: Reminder, tz: Tz): number | null {
   if (date === null || time === null || dur <= 0) return null;
   return startAtOf({ date, time, tz: str(r.row['tz']) }, tz) + dur * 60_000;
 }
+
+/** 全屏提醒页副标题的“到 16:30”；结束和开始不在同一天（R-444 跨天日程）带上日子“到 11月20日 16:30”；没有结束时刻为 null */
+export function endMsg(r: Reminder, tz: Tz): { key: 'remind.full.until'; params: { time: string } } | { key: 'remind.full.untilDate'; params: { m: number; d: number; time: string } } | null {
+  const end = eventEnd(r, tz);
+  const start = eventStart(r, tz);
+  if (end === null) return null;
+  const time = hhmm(end, tz);
+  const endDay = todayOf(end, tz);
+  if (start !== null && todayOf(start, tz) === endDay) return { key: 'remind.full.until', params: { time } };
+  const { m, d } = parseDate(endDay);
+  return { key: 'remind.full.untilDate', params: { m, d, time } };
+}

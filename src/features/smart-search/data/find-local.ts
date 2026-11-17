@@ -43,6 +43,8 @@ export interface FindItem {
   fields: readonly string[];
   /** 时间筛选用的日子；没有为 null */
   date: DateStr | null;
+  /** 跨天的日程（R-444）最后一天：时间筛选按 date～lastDate 和范围有交叠就算；别的、只占一天的为 null */
+  lastDate: DateStr | null;
   /** 日程的时刻（HH:MM）；别的为 null */
   time: string | null;
   /** 第二行补充：日程地点、待办项目、文档所在随手记的标题 */
@@ -64,14 +66,15 @@ const createdDay = (r: Row, tz: Tz): DateStr | null => (typeof r['created_at'] =
 /** 本机缓存 → 可查的条目（隐私记、删了的、撤销的不进；见文件头） */
 export function buildIndex(src: FindSources, tz: Tz): FindItem[] {
   const out: FindItem[] = [];
-  const base = { time: null, extra: '', noteId: null, done: false, hasThumb: false };
+  const base = { time: null, lastDate: null, extra: '', noteId: null, done: false, hasThumb: false };
   for (const r of src.events) {
     if (!isLiveRow(r)) continue;
     const title = str(r['title']);
     // 日子、时刻按 4.6 换算到设备时区（B4b-3：时间类查找“下周的日程”按换算后的那天算）；格式坏了的照原值
     const p = placeEvent(r as unknown as CalEvent, tz);
     out.push({ ...base, kind: 'event', id: r.id, title, fields: [title, str(r['location']), str(r['note']), str(r['raw_text'])],
-      date: p?.date ?? dateStr(r['date']), time: p ? (p.allDay ? null : fmtHm(p.startMin)) : typeof r['time'] === 'string' ? r['time'] : null, extra: str(r['location']) });
+      date: p?.date ?? dateStr(r['date']), lastDate: p && p.lastDate !== p.date ? p.lastDate : null,
+      time: p ? (p.allDay ? null : fmtHm(p.startMin)) : typeof r['time'] === 'string' ? r['time'] : null, extra: str(r['location']) });
   }
   for (const r of src.todos) {
     if (!isLiveRow(r)) continue;
@@ -182,9 +185,14 @@ function snippetFor(it: FindItem, q: string): string | null {
   return body === '' ? null : snippetOf(body, q);
 }
 
+/** 条目的日子和 from～to 有没有交叠（from 为 null = 截止到 to）：跨天的日程（R-444）按 date～lastDate 算，前几天开始、跨进范围的也算；没有日子的不算 */
+export function overlaps(it: Pick<FindItem, 'date' | 'lastDate'>, from: DateStr | null, to: DateStr): boolean {
+  return it.date !== null && it.date <= to && (from === null || (it.lastDate ?? it.date) >= from);
+}
+
 /** 按时间筛选（range 为 null 原样）：没有日子的不出 */
 export function inRange(index: readonly FindItem[], range: { from: DateStr; to: DateStr } | null): readonly FindItem[] {
-  return range === null ? index : index.filter((it) => it.date !== null && it.date >= range.from && it.date <= range.to);
+  return range === null ? index : index.filter((it) => overlaps(it, range.from, range.to));
 }
 
 /** 关键词查找：查询为空返回空数组 */

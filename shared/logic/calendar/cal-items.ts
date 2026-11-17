@@ -5,12 +5,14 @@
 import { addDays, msAt, parseDate, parseHm, todayOf, minOfDay, type DateStr } from '../../core/date.ts';
 import { isValidTz, type Tz } from '../../core/tz.ts';
 import type { EventWrite, TodoWrite } from '../../schema/rows.ts';
+import { allDaySpanDays, contOn, EVENT_SPAN_MAX_DAYS, spanDaysIn, timedDurationMin, timedLastDate, type Cont } from './event-span.ts';
 import { normalizeProject, projectColorIndex, type ProjectColor } from '../project-color.ts';
 import { isLiveRow, type Tombstone } from '../live-row.ts';
 import { displayShort } from '../short.ts';
 
 // 项目色挪到 shared/logic/project-color.ts（前端 A 会审 ①），这里转出保持原来的引用路径能用
 export { PROJECT_COLORS, projectColorIndex, type ProjectColor } from '../project-color.ts';
+export type { Cont } from './event-span.ts';
 
 /** 月历、周视图用到的日程列，加上删除、撤销两列（live-row.ts 的 Tombstone，可以没有；本机缓存里的行直接传进来即可） */
 export type CalEvent = Readonly<Pick<EventWrite, 'id' | 'title' | 'short' | 'project' | 'date' | 'time' | 'tz' | 'duration_min' | 'created_at'>> &
@@ -37,11 +39,18 @@ export function assertTz(tz: Tz): void {
 
 /** 日程放在设备时区的哪一天、几点 */
 export type EventPlacement =
-  | { readonly allDay: true; readonly date: DateStr }
+  | {
+      readonly allDay: true;
+      readonly date: DateStr;
+      /** 最后一天（含；只占一天时等于 date，R-444） */
+      readonly lastDate: DateStr;
+    }
   | {
       readonly allDay: false;
       /** 换算到设备时区后的开始日期 */
       readonly date: DateStr;
+      /** 设备时区里结束前那一刻落在哪天（结束正好在午夜算前一天；只占一天时等于 date，R-444） */
+      readonly lastDate: DateStr;
       /** 开始、结束的绝对时刻（毫秒） */
       readonly startMs: number;
       readonly endMs: number;
@@ -65,7 +74,7 @@ function isDateStr(s: string): boolean {
  */
 export function placeEvent(ev: CalEvent, tz: Tz): EventPlacement | null {
   if (!isDateStr(ev.date)) return null;
-  if (ev.time === null) return { allDay: true, date: ev.date };
+  if (ev.time === null) return { allDay: true, date: ev.date, lastDate: addDays(ev.date, allDaySpanDays(ev.duration_min) - 1) };
   let min: number;
   try {
     min = parseHm(ev.time);
@@ -74,11 +83,14 @@ export function placeEvent(ev: CalEvent, tz: Tz): EventPlacement | null {
   }
   const srcTz = ev.tz !== null && isValidTz(ev.tz) ? ev.tz : tz;
   const startMs = msAt(ev.date, min, srcTz);
+  const endMs = startMs + timedDurationMin(ev.duration_min) * 60_000;
+  const date = todayOf(startMs, tz);
   return {
     allDay: false,
-    date: todayOf(startMs, tz),
+    date,
+    lastDate: timedLastDate(startMs, endMs, tz),
     startMs,
-    endMs: startMs + ev.duration_min * 60_000,
+    endMs,
     startMin: minOfDay(startMs, tz),
   };
 }
@@ -93,7 +105,11 @@ export interface DayEntry {
   readonly short: string;
   /** 有时刻的日程的开始时刻；全天日程、待办为 null */
   readonly startMs: number | null;
+  /** 有时刻的日程的结束时刻；全天日程、待办为 null */
+  readonly endMs: number | null;
   readonly createdAt: number;
+  /** 跨天的日程（R-444）：这一条是哪一天的那一段（cont 同 Cont）、开始和最后一天；只占一天的没有 */
+  readonly span?: { readonly cont: Cont; readonly date: DateStr; readonly lastDate: DateStr };
 }
 
 /** 排序时的先后：有时刻的日程 0、全天日程 1、待办 2（check_backend F7：方括号里的键要追得到字面量，查表改用 switch） */
@@ -118,8 +134,9 @@ export function compareEntries(a: DayEntry, b: DayEntry): number {
   );
 }
 
-/** 日程 → 月历条目（kind 由 placement 定） */
-export function eventEntry(ev: CalEvent, p: EventPlacement): DayEntry {
+/** 日程 → 月历条目（kind 由 placement 定）；跨天的日程每一天各一条，day 是哪一天（默认开始那天） */
+export function eventEntry(ev: CalEvent, p: EventPlacement, day: DateStr = p.date): DayEntry {
+  const cont = contOn(p, day);
   return {
     itemId: ev.id,
     kind: p.allDay ? 'allDay' : 'timed',
@@ -127,7 +144,9 @@ export function eventEntry(ev: CalEvent, p: EventPlacement): DayEntry {
     colorIndex: projectColorIndex(ev.project),
     short: displayShort(ev),
     startMs: p.allDay ? null : p.startMs,
+    endMs: p.allDay ? null : p.endMs,
     createdAt: ev.created_at,
+    ...(cont === undefined ? {} : { span: { cont, date: p.date, lastDate: p.lastDate } }),
   };
 }
 
@@ -140,6 +159,7 @@ export function todoEntry(td: CalTodo): DayEntry {
     colorIndex: projectColorIndex(td.project),
     short: displayShort(td),
     startMs: null,
+    endMs: null,
     createdAt: td.created_at,
   };
 }
@@ -181,12 +201,15 @@ export function liveEventsNear<E extends CalEvent>(events: readonly E[], from: D
 /**
  * from～to（含两头）每一天有哪几件事，已按 compareEntries 排好。
  * 算进去的：没删掉、没撤销的日程（固定时刻按设备时区换算后的日期）、截止日在范围里且未完成的待办（isLiveRow）。
+ * 跨天的日程（R-444；含跨午夜的）它占的每一天都放一条，带 span 标出是哪一段；预筛往前多看 31 天（最长跨度），前一个月开始、跨进来的也算。
  * 月历的 buildMonth 和单日列表的 dayEntries 共用这一套。
  */
 export function collectEntries(items: CalItems, from: DateStr, to: DateStr, tz: Tz): Map<DateStr, DayEntry[]> {
   const out = new Map<DateStr, DayEntry[]>();
   for (let d = from; d <= to; d = addDays(d, 1)) out.set(d, []);
-  for (const [ev, p] of liveEventsNear(items.events, from, to, tz)) out.get(p.date)?.push(eventEntry(ev, p));
+  for (const [ev, p] of liveEventsNear(items.events, from, to, tz, EVENT_SPAN_MAX_DAYS)) {
+    for (const d of spanDaysIn(p, from, to)) out.get(d)?.push(eventEntry(ev, p, d));
+  }
   for (const td of items.todos) {
     const d = todoDate(td);
     if (d !== null) out.get(d)?.push(todoEntry(td));

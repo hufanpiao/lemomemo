@@ -34,6 +34,10 @@ export const ko: Readonly<Record<keyof typeof zh, string>> = {
   'prio.mid': '보통', // REVIEW(ko)
   'prio.low': '낮음', // REVIEW(ko)
   'list.origin': '({zone} {t})', // REVIEW(ko)
+  'list.ongoing': '계속', // REVIEW(ko) R-444
+  'list.until': '{t}까지', // REVIEW(ko) R-444
+  'list.untilDate': '{m}월 {d}일 {t}까지', // REVIEW(ko) R-444
+  'list.dayOf': '{i}/{n}일째', // REVIEW(ko) R-444
   'list.done': '완료', // REVIEW(ko)
   'list.undoDone': '완료 취소', // REVIEW(ko)
   'list.delete': '삭제', // REVIEW(ko)

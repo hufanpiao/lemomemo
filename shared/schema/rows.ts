@@ -20,6 +20,9 @@ export const RAW_TEXT_MAX = 2000;
 export const PROJECT_MAX = 40;
 /** 待办子任务标题的上限（R-350 方案 6.1；数据库 check char_length(title) between 1 and 100） */
 export const TODO_ITEM_TITLE_MAX = 100;
+/** 日程时长上限（R-444 跨天，31 天）：正本在 shared/logic/calendar/event-span.ts（不带 zod，首屏的今天页、日历也用），这里转出给校验用 */
+import { EVENT_DURATION_MAX } from '../logic/calendar/event-span.ts';
+export { DAY_MINUTES, EVENT_DURATION_MAX, EVENT_SPAN_MAX_DAYS } from '../logic/calendar/event-span.ts';
 /** 编辑页保存的日程、待办标题：去掉首尾空白，截到 ITEM_TITLE_MAX 个 UTF-16 单元、不截半个字（cutGraphemes，同 capture-map）；日程、待办编辑页共用这一份 */
 export const trimItemTitle = (s: string): string => cutGraphemes(s.trim(), ITEM_TITLE_MAX);
 
@@ -67,7 +70,7 @@ export const eventsWrite = z
     time: hm.nullable(),
     // 和迁移 20261031110000 的 events_tz_fmt 一致：≤ 64 字、只许字母数字和 _ + / -（IANA 时区名都在里面）
     tz: z.string().min(1).max(64).regex(/^[A-Za-z0-9_+/-]+$/).nullable(),
-    duration_min: z.number().int().min(1).max(1440),
+    duration_min: z.number().int().min(1).max(EVENT_DURATION_MAX),
     project: z.string().max(PROJECT_MAX),
     note: z.string().max(ITEM_NOTE_MAX),
     source,
