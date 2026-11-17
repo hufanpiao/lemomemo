@@ -36,6 +36,7 @@ export const ko = {
   'plus.notice.mergeFailed': '합치지 못했어요. 원래 항목은 그대로 있어요', // REVIEW(ko)
   'plus.notice.undoFailed': '{n}개는 되돌리지 못했어요. 다시 시도해 주세요', // REVIEW(ko)
   'plus.notice.mergeLeft': '{n}개는 되돌리지 못했어요. 목록에서 삭제해 주세요', // REVIEW(ko) R-405 초안
+  'plus.notice.aiTidied': 'AI가 정리했어요', // REVIEW(ko) R-456
   'plus.notice.annivKept': '기념일은 기념일 페이지에서 삭제해 주세요', // REVIEW(ko) 중성 문구, 최종은 책임자가 정함
   'plus.notice.notSaved': '저장하지 못했어요. 입력한 내용은 입력창에 그대로 있어요', // REVIEW(ko)
   'plus.notice.nothing': '기록할 내용을 찾지 못했어요. 입력한 내용은 입력창에 그대로 있어요', // REVIEW(ko)
@@ -102,6 +103,7 @@ export const ko = {
   'plus.mic.denied.type': '입력으로 기록', // REVIEW(ko)
   'plus.mic.denied.retry': '켰어요, 다시 시도', // REVIEW(ko)
   'plus.rec.label': '녹음', // REVIEW(ko)
+  'plus.rec.live': '들은 내용', // REVIEW(ko) R-456
   'plus.rec.prep': '녹음 시작', // REVIEW(ko)
   'plus.rec.on': '녹음 중', // REVIEW(ko)
   'plus.rec.locked': '고정됨, 손을 떼도 녹음 중', // REVIEW(ko)

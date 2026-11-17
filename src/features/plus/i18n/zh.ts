@@ -36,6 +36,7 @@ export const zh = {
   'plus.notice.mergeFailed': '合并没保存上，原来的几条还在',
   'plus.notice.undoFailed': '{n} 条没撤销成功，可以再试一次',
   'plus.notice.mergeLeft': '{n} 条没撤销成功，请到列表里删除', // 合并后撤不掉的旧条（负责人 11-13 弹窗定“改成指路”，R-405）
+  'plus.notice.aiTidied': 'AI 已整理', // R-456：先按本机规则记下，AI 后台整理完换掉了
   'plus.notice.annivKept': '纪念日请到纪念日页删除', // 中性文案，最终由负责人定（FA-3 复查第 4 条）
   'plus.notice.notSaved': '没保存上，原话还在输入框里',
   'plus.notice.nothing': '没认出要记的内容，原话还在输入框里',
@@ -108,6 +109,7 @@ export const zh = {
   'plus.mic.denied.retry': '我已打开，再试一次',
   // 录音面板（B3 FA-3；定稿线框“按住‘＋’说话”RECPREP、REC、锁定后、RECFB 原文，皮肤视觉稿 PH.rec）
   'plus.rec.label': '录音',
+  'plus.rec.live': '听到的字', // R-456 录音面板上边说边出字那一框
   'plus.rec.prep': '开始录音',
   'plus.rec.on': '正在录音',
   'plus.rec.locked': '已锁定，松开手也在录',

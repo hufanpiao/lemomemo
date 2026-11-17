@@ -83,6 +83,22 @@
   color: var(--text-2);
 }
 
+/* 边说边出字的框（R-456）：计时上方，深底浅字（两套皮肤深浅色都是 --img-badge-bg / --img-badge-fg），最多约 5 行，多了框里滚 */
+.said {
+  max-height: 152px;
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  overflow-y: auto;
+  border-radius: var(--r-lg);
+  background: var(--rec-live-bg);
+  color: var(--rec-live-fg);
+  box-shadow: inset 0 0 0 1px var(--k-line);
+  font-size: var(--fs-17);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* 手机自带识别顶上来的原因（线框 RECFB） */
 .why {
   margin-top: 10px;

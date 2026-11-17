@@ -4,6 +4,7 @@
 //   不该出时退成普通“已记下”）；离线 → “没网，已存在手机里：…”，带提醒的再加“未同步，提醒可能不响”
 // • 附加句：重复 → R-163；“安排时间” → R-200；没有的日子 → R-166（续第 68 条）；
 //   合并没存上、全部撤销有几条没撤成（FA-3 整块评审第 13 条：原来的几条留在提示条上，写明没成）；
+//   AI 后台整理换掉了先存的（R-456）：主句后面加“AI 已整理”；
 //   这几项的条数、有没有由 saved-batch 的 noticeOf 按这一批现算（撤过没撤成的条标着 undoTried、合并结果在 last），这里只按数出句子
 // 纯 TS：不准 import React（A1）
 import type { TypeStatus } from './type-flow.ts';
@@ -21,7 +22,8 @@ export type NoticeKey =
   | 'plus.notice.mergeFailed'
   | 'plus.notice.undoFailed'
   | 'plus.notice.mergeLeft'
-  | 'plus.notice.annivKept';
+  | 'plus.notice.annivKept'
+  | 'plus.notice.aiTidied';
 
 export interface NoticeLine {
   key: NoticeKey;
@@ -46,6 +48,8 @@ export interface NoticeInput {
   mergeLeft?: number;
   /** 有纪念日撤不掉（这里撤不了纪念日） */
   annivKept?: boolean;
+  /** AI 后台整理换掉了先存的（R-456） */
+  aiTidied?: boolean;
 }
 
 function mainLine(n: NoticeInput): NoticeLine {
@@ -71,6 +75,7 @@ function mainLine(n: NoticeInput): NoticeLine {
 /** 提示条的几行：第一行主句，后面是附加句 */
 export function noticeLines(n: NoticeInput): NoticeLine[] {
   const out: NoticeLine[] = [mainLine(n)];
+  if (n.aiTidied) out.push({ key: 'plus.notice.aiTidied', params: {} });
   if (n.undoFailed) out.push({ key: 'plus.notice.undoFailed', params: { n: n.undoFailed } });
   if (n.mergeLeft) out.push({ key: 'plus.notice.mergeLeft', params: { n: n.mergeLeft } });
   if (n.mergeFailed) out.push({ key: 'plus.notice.mergeFailed', params: {} });

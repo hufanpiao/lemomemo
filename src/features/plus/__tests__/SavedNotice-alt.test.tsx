@@ -27,7 +27,7 @@ const ASK: AssistAsk = { intent: 'search', query: { text: '发票', range: null,
 
 function notice(alt: BatchNotice['alt'], n = 1): BatchNotice {
   const entries = Array.from({ length: n }, (_v, i) => ({ ref: { table: 'todos' as const, id: `id-${i}`, title: `找所有发票${i}` }, item: ITEM }));
-  return { lines: [{ key: 'plus.notice.saved', params: { title: '找所有发票' } }], entries, merge: false, alt, raw: '帮我找所有发票' };
+  return { lines: [{ key: 'plus.notice.saved', params: { title: '找所有发票' } }], entries, merge: false, alt, raw: '帮我找所有发票', busy: false };
 }
 function acts(undone = true): BatchActs & { order: string[] } {
   const order: string[] = [];

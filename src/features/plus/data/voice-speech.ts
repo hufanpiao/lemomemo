@@ -5,6 +5,7 @@
 // • 先开的那一次可能在接手之前就已经开始收音（at），甚至已经结束（early）：接手时补上
 // • 开始收音以后最长 60 秒（REC_MAX_MS，和录音同一个上限）到了交给 host.cap()（useVoice 当松手处理）
 // • 只有接手了的那一次的开始、结束才报给 host；先开又被关掉的不报
+// • host 给了 text（R-456 录音路边说边出字）才向识别要中途的字（已定稿 + 没定稿）；接手时把接手前已经认出的补上
 // 纯 TS：不准 import React（A1）
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -21,6 +22,8 @@ export interface SpeechHost {
   ended(res: SpeechEnd): void;
   /** 收了 60 秒 */
   cap(): void;
+  /** 接手的这一次到现在为止认出的全文（R-456；不给就不要中途的字，手机自带识别那一路不给） */
+  text?(t: string): void;
 }
 
 interface Run {
@@ -29,6 +32,8 @@ interface Run {
   at: number | null;
   /** 还没接手就结束了 */
   early: SpeechEnd | null;
+  /** 到现在为止认出的字（host 要 text 时才记） */
+  said: string;
 }
 
 export function createSpeechRoute(host: SpeechHost, now: () => number = () => performance.now()) {
@@ -62,9 +67,18 @@ export function createSpeechRoute(host: SpeechHost, now: () => number = () => pe
         if (active === run) end(run, res);
         else run.early = res;
       },
+      ...(host.text
+        ? {
+            onText: (t: string) => {
+              if (!run) return;
+              run.said = t;
+              if (active === run) host.text?.(t);
+            },
+          }
+        : {}),
     });
     if (!r.ok) return null;
-    run = { s: r.session, at: null, early: null };
+    run = { s: r.session, at: null, early: null, said: '' };
     return run;
   };
   /** 只关先开、还没接手的那次（点一下、没按满） */
@@ -81,10 +95,15 @@ export function createSpeechRoute(host: SpeechHost, now: () => number = () => pe
     },
     /** 接手：先开的那次，没有就当场开一次（调用方也在手势里）。开不起来返回 false */
     take(lang: Locale): boolean {
+      // 还接手着的旧的那次先关掉（不报结果），免得两个同时在听
+      active?.s.cancel();
+      active = null;
+      clearTimeout(timer);
       const run = pending ?? open(lang);
       pending = null;
       if (!run) return false;
       active = run;
+      if (run.said !== '') host.text?.(run.said);
       if (run.early) end(run, run.early);
       else if (run.at !== null) {
         arm();
@@ -104,6 +123,8 @@ export function createSpeechRoute(host: SpeechHost, now: () => number = () => pe
       drop();
     },
     drop,
+    /** 接手的这一次已经开始收音、还没结束（R-456：录音器开不起来时靠它接着听） */
+    listening: (): boolean => active !== null && active.at !== null,
     /** 接手的这一次开始收音多久了（毫秒；还没开始 0） */
     elapsed(): number {
       const at = active?.at ?? null;

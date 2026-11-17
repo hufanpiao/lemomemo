@@ -2,30 +2,40 @@
 // • 松手（或点“记下”）面板就收起，进“上传中”：停录那一步也能在提示条上取消（录音器停不下来时最多等 REC_STOP_WAIT_MS）
 // • AI 没回应：录音留在内存（最多 2 分钟）可以“重试”（同一段），或“再说一次”（改用手机自带识别，voice-speech.ts）
 // • 网络原因失败的计数（net）跟着控制器那一份：“10 分钟内 2 次”要跨挂载算（FA-3 复查第 1 条；控制器不随 RecordHost 卸载）
+// • 边说边出字（R-456，voice-live.ts）：录音器照旧开，同时接手按下时先开的手机自带识别。松手等录音器和识别都交了结局（settle）：
+//   - 识别出了字：交给 voice-live 先按本机规则存、AI 在后台整理（录音器没录成就把字交 ai-parse）
+//   - 识别没开起来、报错、没出字、中途断过（iPhone 主屏幕版上识别和录音可能抢麦克风）：完全照原来，上传、等 AI 回来再存
+//   - 录音器开不起来、识别已经在听：接着听（麦克风被拒照原来出说明卡）；松手时识别正常结束却没认出字出 no_speech，不出 rec_failed
+//   运行日志：voice live rec_fail=录音器开不起来、接着听；voice live end speech=识别结局（ok|broken|off|失败原因） len=字数 rec=录音结局 bytes=字节数（每次松手一行，凭它判断识别和录音能不能同时用）
 // 纯 TS：不准 import React（A1）
 import { AI_AUDIO_BITS_PER_SECOND, AI_AUDIO_MAX_BYTES } from '../../../../shared/schema/ai.ts';
 import { clock } from '../../../platform/clock.ts';
-import { startRecorder } from '../../../platform/recorder.ts';
+import { startRecorder, type RecEnd } from '../../../platform/recorder.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
+import type { SpeechEnd } from '../../../platform/speech.ts';
 import { rememberQuotaLeft } from './quota.ts';
 import { NET_OK, REC_MAX_MS, isNetFail, keptExpired, netFailed, speechByNet, type KeptAudio, type NetFallback } from './record-logic.ts';
 import { baseReqCtx } from './type-flow.ts';
 import { sendVoice, toUpload, voiceFinal, type VoiceClip, type VoiceResult } from './voice-flow.ts';
+import { createLiveRoute, type Heard } from './voice-live.ts';
 import type { Attempt, VoiceCore } from './voice-session.ts';
 
 /** 开录音器等了这么久还没开起来，当作中间弹过 iOS 系统麦克风框（R-417：主屏幕版每次启动第一次按都弹；不弹时约 0.7 秒） */
 export const MIC_PROMPT_MS = 1500;
+
+/** 停录以后录音器没交出录音时的提示条种类 */
+const recNote = (r: RecEnd | null): 'no_speech' | 'not_heard' | 'rec_failed' =>
+  r?.ok === false && r.fail === 'empty' ? 'no_speech' : r?.ok === false && r.fail === 'stop_timeout' ? 'not_heard' : 'rec_failed';
 
 export function createRecRoute(c: VoiceCore) {
   let kept: KeptAudio | null = null;
   /** 10 分钟内网络原因失败几次 */
   let net: NetFallback = NET_OK;
 
-  const handle = async (a: Attempt, res: VoiceResult): Promise<void> => {
+  /** 每次 ai-voice 回来都记的（后台整理那一次也记）：网络原因的失败（10 分钟两次改用手机识别）、剩余次数、用完了 */
+  const account = (res: VoiceResult): void => {
     const now = clock.now();
-    // 只有“AI 没回应”留着录音（可以重试）；网络原因的失败记一笔（10 分钟两次改用手机识别）
-    if (res.kind !== 'failed') kept = null;
-    else if (res.fail !== null && isNetFail(res.fail)) {
+    if (res.kind === 'failed' && res.fail !== null && isNetFail(res.fail)) {
       net = netFailed(net, now);
       if (speechByNet(net, now)) rlog('voice net_slow speech_on');
     }
@@ -34,6 +44,13 @@ export function createRecRoute(c: VoiceCore) {
       c.markQuotaOut();
       void rememberQuotaLeft(0, now);
     }
+  };
+  const live = createLiveRoute(c, account);
+
+  const handle = async (a: Attempt, res: VoiceResult): Promise<void> => {
+    // 只有“AI 没回应”留着录音（可以重试）
+    if (res.kind !== 'failed') kept = null;
+    account(res);
     const f = voiceFinal(res, c.d().ctx(), c.d().online());
     if (f.do === 'save') return void (await c.savePlan(a, f.plan, f.raw));
     if (f.do === 'ask') return c.askOut(a, f.ask, f.raw, 1);
@@ -52,13 +69,39 @@ export function createRecRoute(c: VoiceCore) {
     await handle(a, res);
   };
 
+  /** 松手以后录音器、识别都交了结局：有字先存（voice-live），没字、识别断过而有录音的照原来上传 */
+  const settle = async (a: Attempt, r: RecEnd | null, h: Heard | null, t0: number): Promise<void> => {
+    if (!c.alive(a, 'rec_stop')) return;
+    const end: SpeechEnd | null = h?.end ?? null;
+    const text = end?.ok ? end.text : '';
+    const speech = end === null ? 'off' : end.ok ? (h?.broken ? 'broken' : 'ok') : end.fail;
+    rlog(`voice live end speech=${speech} len=${[...text].length} rec=${r === null ? 'off' : r.ok ? 'ok' : r.fail} bytes=${r?.ok ? r.clip.blob.size : 0}`);
+    // 识别断过（后半句可能没听到）而有录音：不先存，整段上传
+    const usable = text !== '' && !(h?.broken && r?.ok);
+    if (usable && (await live.quick(a, text, r?.ok ? r.clip : null, t0))) return;
+    if (!r?.ok) {
+      c.end(a);
+      c.toIdle();
+      // 识别正常结束但一个字没认出：是没说话，不是录音没开起来（录音器自己判的“没收到”照旧）
+      const note = recNote(r);
+      c.show(note === 'rec_failed' && end?.ok === true && text === '' ? 'no_speech' : note);
+      return;
+    }
+    void upload(a, r.clip);
+  };
+
   return {
+    /** 按下那一下先开边说边出字的识别（R-456；要在手势里） */
+    prime: live.prime,
+    /** 只关先开、还没接手的那次 */
+    drop: live.drop,
     /** 开录音器（按住满 350 ms） */
     async begin() {
       const a = c.begin();
       const t0 = clock.now();
-      c.set({ path: 'rec', why: null });
+      c.set({ path: 'rec', why: null, live: '' });
       c.go({ type: 'prepare' });
+      live.take(a);
       const r = await startRecorder({
         maxMs: REC_MAX_MS,
         maxBytes: AI_AUDIO_MAX_BYTES,
@@ -80,6 +123,13 @@ export function createRecRoute(c: VoiceCore) {
         return;
       }
       if (!r.ok) {
+        // 录音器开不起来，识别已经在听：接着听，松手先存、字交给 ai-parse 整理（R-456）；麦克风被拒照原来出说明卡
+        if (r.fail !== 'denied' && live.listening(a)) {
+          rlog(`voice live rec_fail=${r.fail} keep=speech`);
+          c.go({ type: 'start', path: 'rec' });
+          return;
+        }
+        live.cancel();
         c.end(a);
         c.toIdle();
         if (r.fail === 'denied') c.go({ type: 'card', card: 'denied' });
@@ -89,24 +139,18 @@ export function createRecRoute(c: VoiceCore) {
       a.rec = r.rec;
       c.go({ type: 'start', path: 'rec' });
     },
-    /** 松手、点“记下”、60 秒到了：停录、上传 */
+    /** 松手、点“记下”、60 秒到了：停录（和识别）、交给 settle */
     stop() {
       const a = c.current();
-      const rec = a?.rec;
-      if (c.view().status !== 'recording' || !a || !rec) return;
+      if (c.view().status !== 'recording' || !a) return;
+      const rec = a.rec;
+      if (!rec && !live.on(a)) return;
+      const t0 = performance.now();
       // 面板收起，提示条“正在听你说的… · 取消”：停录这一步也能取消
-      c.set({ secs: Math.max(1, Math.round(rec.elapsed() / 1000)) });
+      c.set({ secs: Math.max(1, Math.round((rec ? rec.elapsed() : live.elapsed()) / 1000)) });
       c.go({ type: 'stop' });
-      void rec.stop().then((r) => {
-        if (!c.alive(a, 'rec_stop')) return;
-        if (!r.ok) {
-          c.end(a);
-          c.toIdle();
-          c.show(r.fail === 'empty' ? 'no_speech' : r.fail === 'stop_timeout' ? 'not_heard' : 'rec_failed');
-          return;
-        }
-        void upload(a, r.clip);
-      });
+      live.stop(a);
+      void Promise.all([rec ? rec.stop() : null, live.heard(a)]).then(([r, h]) => settle(a, r, h, t0));
     },
     /** “重试”：同一段录音再传一次 */
     retry() {
@@ -132,7 +176,10 @@ export function createRecRoute(c: VoiceCore) {
       kept = null;
     },
     net: () => net,
-    elapsed: () => c.current()?.rec?.elapsed() ?? 0,
+    elapsed: () => {
+      const a = c.current();
+      return a?.rec?.elapsed() ?? (a && live.on(a) ? live.elapsed() : 0);
+    },
     level: () => c.current()?.rec?.level() ?? -1,
   };
 }

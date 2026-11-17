@@ -2,6 +2,7 @@
 // • useVoice 挂上才接手手势（data/hold-input.ts 的 sink），没挂上之前按住“＋”只当点一下
 // • 画：录音面板、松手以后的提示条、记下了的“已记下 · 撤销”（和打字条同一个 SavedNotice）、过去月日的确认行、麦克风说明卡
 // • exe 不做语音（R-90）：useVoice 里按住不接手，说明卡也不会出
+// • 提示条里点了“修改”算动过这一批（R-456 touch）：AI 后台整理回来不再替换
 import { useState } from 'react';
 import { useVoice, type VoiceOpts } from '../hooks/useVoice.ts';
 import { ConfirmRow } from './ConfirmRow.tsx';
@@ -30,7 +31,20 @@ export function RecordHost({ onEdit, ...opts }: RecordHostProps) {
           <ConfirmRow item={v.asking} onChoose={(c) => void v.choose(c)} onDismiss={v.dismissConfirm} />
         </div>
       ) : null}
-      {v.notice && v.note === null ? <SavedNotice notice={v.notice} acts={v} onEdit={onEdit} /> : null}
+      {v.notice && v.note === null ? (
+        <SavedNotice
+          notice={v.notice}
+          acts={v}
+          onEdit={
+            onEdit
+              ? (table, id) => {
+                  v.touch();
+                  onEdit(table, id);
+                }
+              : undefined
+          }
+        />
+      ) : null}
       {/* ask：“允许麦克风”在这一下点按里申请；denied：“我已打开，再试一次”重新申请一次，还是不行就留在这张卡 */}
       <MicCard
         open={v.card !== null}
