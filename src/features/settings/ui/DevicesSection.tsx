@@ -50,7 +50,7 @@ function DeviceRowView({ d, busy, onRemove }: { d: DeviceView; busy: boolean; on
   const t = useSettingsT();
   const locale = useUi((s) => s.locale);
   const name = deviceName(d, t);
-  // B2-UI-b W3、W4：行换成 kit 的 SettingsDetailRow；R-454 前面加手机图标（本机柠檬黄），“移除”换成危险色文字按钮（FormButton textDanger）
+  // B2-UI-b W3、W4：行换成 kit 的 SettingsDetailRow；R-454 前面加手机图标（本机柠檬黄），“移除”换成文字按钮（FormButton text；R-469 负责人 11-17“除了注销账户其他的字全部用黑色”：这里和“退出其他所有设备”都用正文色，只有“注销账号”留危险色）
   return (
     <SettingsDetailRow
       testId="settings-device"
@@ -65,7 +65,7 @@ function DeviceRowView({ d, busy, onRemove }: { d: DeviceView; busy: boolean; on
       }
       action={
         <FormButton
-          variant="textDanger"
+          variant="text"
           disabled={busy}
           onClick={onRemove}
           // 读屏名要包含看得见的文字（WCAG 2.5.3）；整句走词典，韩文按韩语语序（KO-K43-a11y）
@@ -161,7 +161,6 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
             <SettingsList>
               <SettingsEntryRow
                 label={t('settings.devices.signOutOthers', {})}
-                danger
                 center
                 disabled={busy !== null}
                 onOpen={() => setPending({ kind: 'others' })}
