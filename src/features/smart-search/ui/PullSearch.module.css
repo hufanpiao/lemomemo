@@ -157,16 +157,31 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  padding-right: 12px;
+  color: var(--text-2);
 }
 
-.scope select {
-  min-height: 24px;
-  padding: 0 12px 0 0;
+/* 透明盖在“全部未完成”小字上的真下拉：字号 16px（iPhone 点字号 < 16px 的控件会整页放大），竖向撑到 --hit 高当点按区（独立评审第 9 条）；
+   看得见的字是前面那个 span；键盘聚焦时焦点框画在 .scope 上 */
+.scopeSel {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: var(--hit);
+  margin: 0;
+  padding: 0;
   border: 0;
-  background: none;
-  color: var(--text-2);
-  font: inherit;
+  opacity: 0;
+  font-size: var(--fs-16);
+  transform: translateY(-50%);
   appearance: none;
+}
+
+.scope:has(.scopeSel:focus-visible) {
+  border-radius: 4px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .chev {
@@ -226,7 +241,7 @@
   .ai,
   .cancel,
   .clear,
-  .scope select {
+  .scopeSel {
     cursor: pointer;
   }
 }

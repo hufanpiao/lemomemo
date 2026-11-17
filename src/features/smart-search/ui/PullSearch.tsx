@@ -107,8 +107,11 @@ function Head({ pull, scope, found, done, onOpen }: PullSearchProps) {
           {done ? (
             <>
               <span className={styles.dot} aria-hidden="true">·</span>
+              {/* 看得见的是 12px 小字；真的 select 透明盖在上面、字号 16px（iPhone 点字号 < 16px 的控件会整页放大，src/app/__tests__/input-font-size.test.ts） */}
               <span className={styles.scope}>
+                <span aria-hidden="true">{t(done.all ? 'pull.scope.all' : 'pull.scope.open', {})}</span>
                 <select
+                  className={styles.scopeSel}
                   value={done.all ? 'all' : 'open'}
                   aria-label={t('pull.scope', {})}
                   onChange={(e) => done.set(e.target.value === 'all')}
