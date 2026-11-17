@@ -1,5 +1,6 @@
 // 解锁（线框 s9 UNLOCKOV / PWERR；视觉稿 PH.unlock）：绑定过 Face ID 时磨砂遮罩 + 解锁卡；输密码是盖满屏幕的整页（同设密码页）
-// • 卡片：“隐私记已上锁 / 里面有 N 条 / 用 Face ID 解锁 / 输入密码 / 取消 / 离开隐私记或 App 1 分钟后自动重新上锁”
+// • 卡片（R-452 V2，负责人 11-17 选“kenotex 风”，图 设计方案/2026-11-17_打字条与隐私记/v-v2-card-*）：贴在底栏上方的一条，
+//   第一行“🔒 隐私记已上锁 · N 条 …… 取消”，第二行“用 Face ID 解锁”“输入密码”并排；自动上锁说明从卡上拿掉（解锁后提示行、设置 › 隐私记“自动上锁”都有）
 //   Face ID 按钮只在这台设备能用（exe、不支持的环境不显示）、绑定过、没有“别处改过密码”（relock）时出现（S4、TC-B5-47 ②）
 // • 用不了 Face ID（没绑定、设备不支持、relock）时卡片只有“输入密码”“取消”（线框 s9 说明：“就只显示‘输入密码’”），点了再进密码页
 // • 点“输入密码”换成密码键盘；Face ID 连续两次没认出来自动换成密码键盘（D18），标题下写“Face ID 没认出来，请输入密码”
@@ -15,11 +16,19 @@ import { FormButton } from '../../../kit/components/Form.tsx';
 import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
-import { useAutolockMin, useErrText, useVault, useVaultCount } from '../hooks/useVault.ts';
+import { useErrText, useVault, useVaultCount } from '../hooks/useVault.ts';
 import { useWebauthn } from '../hooks/useVaultAuth.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import { LockIcon, PadLayer, PinPad, PinTop, useDuration } from './Pin.tsx';
 import styles from './Vault.module.css';
+
+/** 解锁遮罩打开时把焦点给卡上的主按钮（data-unlock-main）；没有（输密码整页）就照 Radix 默认落第一个可聚焦的 */
+function focusMain(e: Event, root: HTMLElement | null): void {
+  const main = root?.querySelector<HTMLElement>('[data-unlock-main]');
+  if (!main) return;
+  e.preventDefault();
+  main.focus();
+}
 
 /** 遮罩把 Esc 交给里面的解锁卡（卡片挂上时登记自己的 cancel） */
 const EscCtx = createContext<{ current: (() => void) | null }>({ current: null });
@@ -48,7 +57,6 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
   const { state, s } = useVault();
   const wa = useWebauthn();
   const count = useVaultCount();
-  const min = useAutolockMin();
   const [mode, setMode] = useState<'card' | 'pin'>('card');
   const [faceFails, setFaceFails] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -93,24 +101,26 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
     return (
       <div className={styles.card} data-testid={`${testId}-card`}>
         {relock}
-        <LockIcon big />
-        <h2 className={styles.cardTitle}>{t('vault.locked.title', {})}</h2>
-        <p className={styles.cardSub}>{faceFails > 0 ? t('vault.unlock.notRecognized', { method }) : <NumIn text={t('vault.locked.count', { n: count })} num={String(count)} />}</p>
-        <div className={styles.cardBtns}>
-          {canFace ? (
-            <FormButton variant="primary" block disabled={busy} onClick={() => void face()} data-testid={`${testId}-face`}>
-              {t('vault.unlock.with', { method })}
-            </FormButton>
-          ) : null}
-          <FormButton {...(canFace ? {} : { variant: 'primary' as const })} block onClick={() => setMode('pin')} data-testid={`${testId}-pin`}>
-            {t('vault.unlock.pin', {})}
-          </FormButton>
-          {/* “取消”不描边（R-436 丁批：去掉 1px 描边按钮），整宽次要色字、点击区 44 */}
+        <div className={styles.cardHead}>
+          <LockIcon />
+          <h2 className={styles.cardTitle}>{t('vault.locked.title', {})}</h2>
+          <span className={styles.cardSub}><NumIn text={t('vault.locked.countShort', { n: count })} num={String(count)} /></span>
+          {/* “取消”是右上角的文字按钮（不描边、次要色、点击区 44） */}
           <button type="button" className={styles.cardCancel} onClick={cancel} data-testid={`${testId}-cancel`}>
             {t('vault.cancel', {})}
           </button>
         </div>
-        <p className={styles.cardFoot}><NumIn text={t('vault.autolock', { n: min })} num={String(min)} /></p>
+        {faceFails > 0 ? <p className={styles.cardMsg} role="status">{t('vault.unlock.notRecognized', { method })}</p> : null}
+        <div className={styles.cardBtns}>
+          {canFace ? (
+            <FormButton variant="primary" size="row" strong disabled={busy} onClick={() => void face()} data-testid={`${testId}-face`} data-unlock-main="">
+              {t('vault.unlock.with', { method })}
+            </FormButton>
+          ) : null}
+          <FormButton {...(canFace ? {} : { variant: 'primary' as const, strong: true, 'data-unlock-main': '' })} size="row" onClick={() => setMode('pin')} data-testid={`${testId}-pin`}>
+            {t('vault.unlock.pin', {})}
+          </FormButton>
+        </div>
       </div>
     );
   }
@@ -169,7 +179,8 @@ export function UnlockOverlay({ open, children, testId = 'vault-scrim' }: { open
   const leaving = !open;
   return (
     <RD.Root open={open} onOpenChange={(o) => (o || !open ? undefined : esc.current?.())}>
-      <RD.Content asChild forceMount aria-describedby={undefined} onPointerDownOutside={prevent} onFocusOutside={prevent} onInteractOutside={prevent} onCloseAutoFocus={prevent}>
+      {/* 打开时焦点落到主按钮（Face ID，没有就“输入密码”），不落到标题行右边的“取消”（R-452 V2 把“取消”挪到了第一行，DOM 里排第一） */}
+      <RD.Content asChild forceMount aria-describedby={undefined} onOpenAutoFocus={(e) => focusMain(e, scrim.current)} onPointerDownOutside={prevent} onFocusOutside={prevent} onInteractOutside={prevent} onCloseAutoFocus={prevent}>
         <div
           ref={scrim}
           className={leaving ? `${styles.scrim} ${styles.scrimOut}` : styles.scrim}

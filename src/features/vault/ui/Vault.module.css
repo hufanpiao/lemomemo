@@ -50,15 +50,25 @@
   color: var(--text);
 }
 
-/* 已解锁的提示块（R-436 丁批）：浅灰底、次要色小字（第二层文字色，不和列表标题抢），分钟数等宽（VaultPage.tsx 经 kit NumIn） */
+/* 已解锁的提示（R-452 V2，负责人 11-17 选）：不画底色，顶栏下一行第三层灰色小字，前面一个 12px 开锁图标；分钟数等宽（VaultPage.tsx 经 kit NumIn） */
 .hint {
-  margin: 0 0 10px;
-  padding: 10px 14px;
-  border-radius: var(--r-md);
-  background: var(--panel-2);
-  color: var(--text-2);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0 2px 6px;
+  color: var(--text-3);
   font-size: var(--fs-12);
   line-height: 1.5;
+}
+
+.hintIc {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
 /* 解锁后的列表、编辑器是随手记那一份（notes 的 NotesSurface，11-15 隐私记重写）；“最近删除”的外框用 kit 的 NoteRow.module.css 的 .lst，行用下面的 .row */
@@ -288,9 +298,11 @@
   z-index: var(--z-dialog);
   inset: 0;
   display: flex;
-  align-items: center;
+
+  /* R-452 V2：上锁条贴在底栏上方（和撤销条、收起键盘的打字条同一个位置 --dock-bottom）；输密码整页是 fixed 铺满，不受影响 */
+  align-items: flex-end;
   justify-content: center;
-  padding: 24px;
+  padding: 16px 16px max(var(--dock-bottom), 16px);
   background: var(--scrim);
   backdrop-filter: blur(14px);
   opacity: 1;
@@ -319,56 +331,72 @@
   backdrop-filter: none;
 }
 
+/* 上锁条（R-452 V2“kenotex 风”，负责人 11-17 选；规格见 docs/02-设计/皮肤-v4/打字条与隐私记-方案对比.html 的 .sheet-v2）：
+   整宽一条、圆角 --r-lg、0.5px 细描边；两行（标题行 44 + 按钮行 44），约 110 高 */
 .card {
   width: 100%;
-  max-width: 400px;
-  padding: 26px 22px 20px;
-  border-radius: 30px;
+  max-width: 560px;
+  padding: 6px 12px 12px 16px;
+  border-radius: var(--r-lg);
   background: var(--panel);
-  box-shadow: var(--shadow-2);
-  text-align: center;
+  box-shadow: var(--shadow-2), inset 0 0 0 0.5px var(--inp-line);
+}
+
+.cardHead {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: var(--hit);
 }
 
 .cardTitle {
-  margin: 10px 0 0;
-  font-size: var(--fs-20);
+  margin: 0;
+  font-size: var(--fs-15);
   font-weight: 600;
 }
 
+/* 条数：第三层灰小字，数字等宽（kit NumIn） */
 .cardSub {
-  margin: 4px 0 18px;
+  color: var(--text-3);
+  font-size: var(--fs-12-5);
+}
+
+/* Face ID 没认出来：标题行下面一行次要色小字 */
+.cardMsg {
+  margin: 0 0 6px;
   color: var(--text-2);
   font-size: var(--fs-13);
 }
 
+/* 两颗按钮并排（Face ID 宽一点）；只有“输入密码”一颗时占满整行 */
 .cardBtns {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
 }
 
-/* “取消”：不描边的整宽文字按钮（R-436 丁批，原 FormButton ghost 带 1px 描边），次要色、点击区 44 */
+.cardBtns > :only-child {
+  grid-column: 1 / -1;
+}
+
+/* “取消”：标题行右边的文字按钮（不描边），次要色、点击区 44 */
 .cardCancel {
   min-height: var(--hit);
+  margin-left: auto;
+  padding: 0 4px 0 12px;
   border: 0;
   border-radius: var(--r-pill);
   background: none;
   color: var(--text-2);
   font: inherit;
-  font-size: var(--fs-15);
+  font-size: var(--fs-14);
   cursor: pointer;
 }
 
 .cardCancel:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-}
-
-/* 自动上锁说明：第三层文字色（R-436 三层文字色），分钟数等宽 */
-.cardFoot {
-  margin: 8px 0 0;
-  color: var(--text-3);
-  font-size: var(--fs-12);
 }
 
 .notice {
@@ -402,33 +430,50 @@
   height: 96px;
 }
 
-/* ===== 随手记列表顶部的入口行（线框 s7 LOCKROW；视觉稿 .lockrow） ===== */
+/* ===== 随手记列表顶部的入口行（线框 s7 LOCKROW；R-452 V2“kenotex 风”，负责人 11-17 选） =====
+   分组小字“隐私”：第三层灰、字距拉开（照 kenotex 的“个人”“进行中”） */
+.glabel {
+  margin: 16px 2px 2px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  letter-spacing: 0.5em;
+}
+
+/* 平铺一行：上下两根 0.5px 细线，不画卡片底和阴影；46 高（点击区 ≥ 44） */
 .lockrow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 2px;
+  border: 0;
+  border-top: 0.5px solid var(--inp-line);
+  border-bottom: 0.5px solid var(--inp-line);
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-15);
+  text-align: left;
+}
+
+/* 查找里那一行（B4b-3）：浅底小卡、不加阴影，和结果行分开（不跟入口行的 V2 平铺样子走） */
+.findrow {
   display: flex;
   gap: 10px;
   align-items: center;
   width: 100%;
-  height: 52px;
-  margin-top: 12px;
-  padding: 0 16px;
+  min-height: 44px;
+  margin: 10px 0 0;
+  padding: 8px 12px;
   border: 0;
   border-radius: var(--r-lg);
-  background: var(--panel);
-  box-shadow: var(--shadow-1);
+  background: var(--panel-2);
   color: var(--text);
   font: inherit;
   font-size: var(--fs-14);
   text-align: left;
-}
-
-/* 查找里那一行（B4b-3）：浅底、不加阴影，和结果行分开 */
-.findrow {
-  height: auto;
-  min-height: 44px;
-  margin: 10px 0 0;
-  padding: 8px 12px;
-  background: var(--panel-2);
-  box-shadow: none;
 }
 
 .lockrowSub {
@@ -440,6 +485,11 @@
   margin-left: auto;
   font-size: var(--fs-13);
   font-weight: 400;
+}
+
+/* 入口行右边“已上锁 · Face ID 解锁 ›”：第三层灰（V2）；查找行里的“打开隐私记 ›”照旧正文色 */
+.lockrow > .lockrowGo {
+  color: var(--text-3);
 }
 
 /* ===== 设置 › 隐私记 ===== */

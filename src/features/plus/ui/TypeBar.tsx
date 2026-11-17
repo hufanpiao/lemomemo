@@ -36,16 +36,18 @@
 // • 看起来是要查找（B4b-2，线框 sPlus“点按＋打字：预览先显示查找”；判断在 useTypeBar 的 find）：输入框上方出“看起来是要查找 · Enter 查找”和“找：…”一张卡，
 //   按钮变“查找”，回车或按钮打开查找面板（useTypeBar 的 openFind → hooks/assist-open 的 toAssist → smart-search 的 openAssist）、清掉这句字、收起打字条（有提示条时只收打字条）；
 //   点“找：…”那张卡 = 改成记下（这一句照旧记下，下面一行提示怎么改）。运行日志 typebar find len=（只记字数）
-// • 文字一律经 t()（A20）；按钮用 kit 的 FormButton，输入框用 kit Form 的 .input（G11 输入框令牌、触屏 16px）
+// • 文字一律经 t()（A20）
+// • 样子（R-451，负责人 11-17 选方向 C“无框撰写卡”，图在本机资料 设计方案/2026-11-17_打字条与隐私记/tb-c-*）：输入区不画框、聚焦不画全站 2px 聚焦框，只看光标；
+//   底下一条工具行（上面 0.5px 细线）：左边“展开编辑”“收起”两枚 44×44 图标按钮（aria-label + title 照旧是这两个字），右边“记下”胶囊——没打字灰、打了字柠檬黄（全页唯一一处黄）；
+//   “会记成这样”打了字才占位（空了 :empty 不占）。下滑把手不画出来，改成卡片顶边一条透明的拖动起点（样子照图，手势照旧）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type FormEvent, type PointerEvent } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
-import { FormButton } from '../../../kit/components/Form.tsx';
-import form from '../../../kit/components/Form.module.css';
 import { Mist } from '../../../kit/components/Mist.tsx';
 import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { useLayer } from '../../../kit/hooks/useLayer.ts';
+import { Pressable } from '../../../motion/components.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, keepFieldFocus } from '../../../platform/viewport.ts';
@@ -298,34 +300,36 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
                     </button>
                   </>
                 ) : null}
-                <div className={styles.row}>
-                  <input
-                    ref={input}
-                    className={form.input}
-                    value={s.text}
-                    onChange={(e) => s.setText(e.target.value)}
-                    onTouchStart={inPlaceTouchStart}
-                    onTouchEnd={inPlaceTouchEnd}
-                    placeholder={t('plus.type.ph', {})}
-                    aria-label={t('plus.type.label', {})}
-                    enterKeyHint="done"
-                    data-testid="type-input"
-                  />
-                  <FormButton type="submit" variant="primary" disabled={s.text.trim() === '' || s.status === 'organizing'}>
-                    {t(s.find !== null ? 'plus.type.find' : 'plus.type.save', {})}
-                  </FormButton>
-                </div>
-                {/* 预览里的日期时刻“11-07 15:00”等宽（R-436 日期时刻等宽数字） */}
-                <div className={styles.preview} aria-live="polite" data-testid="type-preview">
+                <input
+                  ref={input}
+                  className={styles.field}
+                  value={s.text}
+                  onChange={(e) => s.setText(e.target.value)}
+                  onTouchStart={inPlaceTouchStart}
+                  onTouchEnd={inPlaceTouchEnd}
+                  placeholder={t('plus.type.ph', {})}
+                  aria-label={t('plus.type.label', {})}
+                  enterKeyHint="done"
+                  data-testid="type-input"
+                />
+                {/* 预览里的日期时刻“11-07 15:00”等宽（R-436 日期时刻等宽数字）；没字时节点留着（aria-live 要先在），:empty 不占位 */}
+                <div className={styles.say} aria-live="polite" data-testid="type-preview">
                   {s.status === 'organizing'
                     ? t('plus.type.recognizing', {})
                     : s.find !== null ? t('plus.type.findAsRecord', {})
-                    : first ? <NumIn text={t('plus.type.preview', { text: s.preview.length > 1 ? `${previewText} · ${t('plus.type.more', { n: s.preview.length - 1 })}` : previewText })} num={dayOf(first)} /> : ''}
+                    : first ? <NumIn text={t('plus.type.preview', { text: s.preview.length > 1 ? `${previewText} · ${t('plus.type.more', { n: s.preview.length - 1 })}` : previewText })} num={dayOf(first)} /> : null}
                 </div>
-                {/* 展开编辑 / 收起：compact 灰底无描边（R-436“去描边换浅底”，同待办编辑页“清掉”），点击区照样 44 */}
-                <div className={styles.row}>
-                  <FormButton type="button" variant="ghost" size="compact" onClick={() => settle('expand')}>{t('plus.type.expand', {})}</FormButton>
-                  <FormButton type="button" variant="ghost" size="compact" onClick={() => settle('button')}>{t('plus.type.close', {})}</FormButton>
+                {/* 工具行（方向 C）：图标按钮只有图标不好认，aria-label 给读屏、title 给电脑悬停；“记下”禁用时灰底灰字 */}
+                <div className={styles.tools}>
+                  <Pressable className={styles.icon} onClick={() => settle('expand')} aria-label={t('plus.type.expand', {})} title={t('plus.type.expand', {})}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" /></svg>
+                  </Pressable>
+                  <Pressable className={styles.icon} onClick={() => settle('button')} aria-label={t('plus.type.close', {})} title={t('plus.type.close', {})}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" /></svg>
+                  </Pressable>
+                  <Pressable type="submit" className={styles.save} disabled={s.text.trim() === '' || s.status === 'organizing'}>
+                    {t(s.find !== null ? 'plus.type.find' : 'plus.type.save', {})}
+                  </Pressable>
                 </div>
               </>
             )}

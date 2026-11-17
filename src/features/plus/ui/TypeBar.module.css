@@ -1,5 +1,7 @@
 /* 打字条（B3 FA-2；定稿线框“点一下＋打字”）：贴键盘上沿（--dock-bottom 已取键盘高度 --kb 和底栏上方两者大的，变量在 styles/base.css）；
-   磨砂和提示条、撤销条同一套（R-122）；只用令牌（A11）。输入框本身用 kit 的 Form .input（--inp-bg、--r-inp、--fs-inp、聚焦令牌，G11） */
+   磨砂和提示条、撤销条同一套（R-122）；只用令牌（A11）。
+   样子是 R-451 方向 C“无框撰写卡”（负责人 11-17 选，规格见 docs/02-设计/皮肤-v4/打字条与隐私记-方案对比.html 的 .dc）：
+   输入区无框（.field）、预览打了字才占位（.say）、0.5px 细线下一条工具行（.tools）；没打字 107 高、打了字 129 高 */
 .bar {
   position: fixed;
   left: 16px;
@@ -8,10 +10,9 @@
   z-index: var(--z-float);
   display: flex;
   flex-direction: column;
-  gap: 6px;
   max-width: 560px;
   margin: 0 auto;
-  padding: 8px;
+  padding: 8px 8px 6px;
   border-radius: var(--r-lg);
   background: var(--toast-bg);
   color: var(--toast-fg);
@@ -61,15 +62,114 @@
   white-space: nowrap;
 }
 
-/* 下滑收起的把手：整条宽、够高好按（44px 点击区由按钮行保证，这条只是拖动起点） */
+/* 下滑收起的拖动起点：方向 C 的图上不画把手（负责人 11-17 选 C），改成卡片顶边一条整宽透明带（不占位、看不见），
+   盖住卡片上沿 8px 内边距再往下 6px，手势照旧（useGripClose）；不盖到输入文字（输入区上内边距 10） */
 .grip {
-  align-self: center;
-  width: 36px;
-  height: 4px;
-  border-radius: 2px;
-  background: currentcolor;
-  opacity: 0.35;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
   touch-action: none;
+}
+
+/* 输入区（方向 C）：不画框、不画底，字直接写在磨砂条上，聚焦只看光标；字号一律 16（iOS 小于 16 聚焦会放大页面）。
+   全站 :focus-visible（styles/base.css）给文字输入框也套 2px 框，这里单独去掉（R-451 根因）；按钮的键盘聚焦框不动 */
+.field {
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 10px 8px 6px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+}
+
+.field::placeholder {
+  color: var(--text-3);
+}
+
+.field:focus-visible {
+  outline: none;
+}
+
+/* “会记成这样”：淡一档小字，打了字才占一行（没字时节点还在给 aria-live 用，:empty 不画） */
+.say {
+  padding: 0 8px 6px;
+  overflow: hidden;
+  color: var(--toast-fg2);
+  font-size: var(--fs-12-5);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.say:empty {
+  display: none;
+}
+
+/* 底部工具行：上面一根 0.5px 细线和输入区分开 */
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-top: 4px;
+  border-top: 0.5px solid var(--inp-line);
+}
+
+/* 图标按钮（展开编辑、收起）：44×44，图标 18，淡一档色；名字在 aria-label 和 title 上 */
+.icon {
+  display: grid;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--toast-fg2);
+  cursor: pointer;
+}
+
+.icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* “记下”：看得见 36 高的胶囊，上下各扩 4 到 44 点击区（同 kit compact 写法）；打了字柠檬黄（全页唯一一处黄），没打字（禁用）灰底灰字 */
+.save {
+  position: relative;
+  min-width: 64px;
+  height: 36px;
+  margin-left: auto;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-size: var(--fs-15);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.save::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+
+.save:disabled {
+  background: var(--panel-2);
+  color: var(--text-3);
+  font-weight: 400;
+  cursor: default;
 }
 
 .row {
@@ -83,8 +183,10 @@
   min-height: var(--hit);
 }
 
+/* 输入区上方的提示（同一句里其他几条已记下、看起来是要查找）：和输入文字左边对齐 */
 .preview {
   min-height: 20px;
+  padding: 4px 8px 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -95,10 +197,12 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  padding: 6px 0 2px 8px;
 }
 
 /* 提示文字都在磨砂底上：一律用 --toast-fg（--text-2、--danger-text 是按页面底色配的，放这里对比度不保证），错误句靠加粗区分 */
 .err {
+  padding: 4px 8px 2px;
   font-weight: 600;
 }
 
@@ -109,7 +213,7 @@
   gap: 10px;
   width: 100%;
   min-height: var(--hit);
-  padding: 4px 0;
+  padding: 4px 8px;
   border: 0;
   background: none;
   color: inherit;

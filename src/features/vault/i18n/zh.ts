@@ -4,7 +4,7 @@ export const zh = {
   'vault.title': '隐私记',
   'vault.back': '随手记',
   'vault.lockNow': '立即锁上',
-  'vault.unlockedHint': '已解锁 · 离开隐私记或 App {n} 分钟自动锁上。在这里记的直接放进隐私记。',
+  'vault.unlockedHint': '已解锁 · 离开 {n} 分钟自动锁上 · 这里记的只进隐私记', // R-452 V2 负责人 11-17 选，同意改短
   'vault.empty': '这里还没有内容。点“＋”记下第一条',
   'vault.keys': 'Ctrl + L 立即上锁 · Esc 取消',
   'vault.loading': '正在打开隐私记…',
@@ -27,6 +27,7 @@ export const zh = {
 
   'vault.locked.title': '隐私记已上锁',
   'vault.locked.count': '里面有 {n} 条',
+  'vault.locked.countShort': '· {n} 条', // R-452 V2 上锁条标题后面
   'vault.unlock.with': '用 {method} 解锁',
   'vault.unlock.pin': '输入密码',
   'vault.unlock.enter': '输入隐私记密码',
@@ -52,6 +53,7 @@ export const zh = {
   'vault.purgeAll.title': '清空隐私记的最近删除？',
   'vault.purgeAll.body': '{n} 条会被永久删除，不能恢复。',
 
+  'vault.lockrow.group': '隐私', // R-452 V2 入口行上面的分组小字（字距由样式拉开）
   'vault.lockrow.locked': '已上锁',
   'vault.lockrow.unlocked': '已解锁',
   'vault.lockrow.with': '{method} 解锁',

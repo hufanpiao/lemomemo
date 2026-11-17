@@ -160,8 +160,13 @@ function VaultHead({ trash }: { trash: ReactNode }) {
   return (
     <div>
       <VaultTop unlocked trash={trash} />
+      {/* R-452 V2（负责人 11-17 选）：去掉底色，顶栏下一行灰色小字，前面一个开锁小图标；文案改成“这里记的只进隐私记” */}
       <p className={styles.hint} data-testid="vault-hint">
-        <NumIn text={t('vault.unlockedHint', { n: min })} num={String(min)} />
+        <svg className={styles.hintIc} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="5" y="11" width="14" height="10" rx="2" />
+          <path d="M8 11V8a4 4 0 0 1 7.6-1.7" />
+        </svg>
+        <span><NumIn text={t('vault.unlockedHint', { n: min })} num={String(min)} /></span>
       </p>
     </div>
   );
