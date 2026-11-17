@@ -17,7 +17,7 @@
 // • 放下：交给 onDrop({id, from, to, beforeId, afterId})——放下后排在它前面、后面的那两条（按拿起那一刻的顺序，不含它自己；组的头、尾为 null）。
 //   不交下标：拖动中列表可能变了（同步回来一条），页面按邻居 id 在“此刻”的列表里找下标（dropAt），找不到当取消（kit/hooks/useSortDropFlow.ts）。
 //   落回原位、没落点只记日志。运行日志 sort drop from= to= n=（组名只记冒号前那段，例如 day:2026-11-18 记 day；不记标题）、sort drop same、sort cancel why=
-// • 浮层看不看得见（真机 11-17：iPhone 主屏幕版拖着时只剩空位、看不到浮层，网页上复现不了）：拿起后第一次挪动、放下时各记一行 sort float
+// • 浮层看不看得见（真机 11-17：iPhone 主屏幕版拖着时只剩空位、看不到浮层，网页上复现不了）：拿起后第一次挪动时记一行 sort float（放下那一刻不量：同步重排、切 inert 正赶上放下动画起步，r429 webkit 待办落位跳 11px）
 //   （浮层视口位置、窗口大小和滚动、computed 的 display/visibility/opacity/z-index、此刻浮层中心最上面的是谁 top=float 或 标签#testid.第一个类名、浮层以外最上面的 under=）；
 //   拿起那一行带上行的 user-select / -webkit-user-select（iOS 长按选字，同一天的蓝色选区）
 // • 收尾（返工第 5 条“先跳回原位再滑过去”）：这一条从拿起到浮层撤掉都由 holdSortRow 拿着——藏着、不播 layout 动画（新挂上的也不淡入），重排后直接在新位置。
@@ -370,7 +370,6 @@ export function useSortDrag(opts: SortDragOptions): { ref: (el: HTMLElement | nu
       showLine(null);
       if (!l) return;
       const tag = o.current.tag;
-      o.current.log(`sort ${tag} float drop ${floatState(l.float)}`);
       if (!l.target) {
         o.current.log(`sort ${tag} drop same g=${groupKind(l.group)}`);
         settle(l, false);

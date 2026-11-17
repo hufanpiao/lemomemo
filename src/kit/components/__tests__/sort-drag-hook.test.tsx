@@ -103,8 +103,8 @@ describe('useSortDrag 手势（R-429 评审第 1 条）', () => {
     await ptr(document.body, 'pointermove', 52);
     await ptr(document.body, 'pointerup', 52);
     expect(s.drops).toEqual([{ id: 'c', from: 'all', to: 'all', beforeId: 'a', afterId: 'b' }]);
-    // 浮层看不看得见（真机 11-17）：第一次挪动、放下各记一行 sort float，带位置、computed 样式、中心最上面是谁；不记标题
-    expect(s.logs.filter((l) => /^sort t float (move|drop) r=-?\d+,-?\d+,\d+x\d+ vp=\d+x\d+ sy=\d+ css=\S+ on=body top=\S+ under=/.test(l))).toHaveLength(2);
+    // 浮层看不看得见（真机 11-17）：第一次挪动记一行 sort float（放下不量，会弄跳落位），带位置、computed 样式、中心最上面是谁；不记标题
+    expect(s.logs.filter((l) => /^sort t float move r=-?\d+,-?\d+,\d+x\d+ vp=\d+x\d+ sy=\d+ css=\S+ on=body top=\S+ under=/.test(l))).toHaveLength(1);
     await wait(700);
     expect(document.querySelector('[data-testid="sort-float"]')).toBeNull();
     expect(s.box.hasAttribute('data-sort-dragging')).toBe(false);

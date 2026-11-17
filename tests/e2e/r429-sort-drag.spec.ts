@@ -225,9 +225,9 @@ test.describe('长按拖动排序（R-429、R-433）', () => {
     });
     await expect(page.getByTestId('notes-moved-toast')).toContainText('已切到自己排，设置里可改回');
     // 浮层没被别的东西盖住（真机 11-17 看不到浮层，这一行是真机定根因用的；网页上应当是浮层自己在最上面）
-    // 运行日志 300ms 攒一次存盘：等两行都存下来
-    const floats = () => runLog(page).then((ls) => ls.filter((l) => / sort notes float (move|drop) /.test(l)));
-    await expect.poll(async () => (await floats()).length).toBe(2);
+    // 运行日志 300ms 攒一次存盘：等这一行存下来（只在拿起后第一次挪动时量，放下不量）
+    const floats = () => runLog(page).then((ls) => ls.filter((l) => / sort notes float move /.test(l)));
+    await expect.poll(async () => (await floats()).length).toBe(1);
     expect((await floats()).filter((l) => !l.includes(' top=float '))).toEqual([]);
     await expectNoSnapBack(page);
     await expect.poll(() => ids(page, 'notes-row-')).toEqual(['n1', 'n3', 'n2']);
