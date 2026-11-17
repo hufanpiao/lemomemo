@@ -21,7 +21,7 @@
 //   ② 再下面：“未同步，提醒可能不响”（UnsyncedRemindHint），浅灰条同日历页（R-346）；外面是常驻的 role="status" 空容器，内容后填进去读屏才播报，
 //      没内容时不占位（.notice 里没有 p）；麦克风被拒时同一个容器里再出一行（MicDeniedNote，B3 S23、Q-22）
 //   ③ 每行行尾“未同步”小标记（UnsyncedRemindMark，在行按钮里、标题和副行的右边；没有时那一格不画）
-//   ②③ 只看本机待同步队列、和引擎无关，同日历页直接挂，不等引擎（M1）
+//   ②③ 只看本机待同步队列、和引擎无关，不等引擎（M1）；但等首屏画完（usePainted）才挂、才下载，不算进首屏预算（11-17 ci 首屏 150.0 KB 超线）
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记、圆圈变淡；点这一行、打勾统一拦下（左滑滑不开），
 //   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）。
 // • 待办子任务（R-442 负责人“今天页可以展开待办的子任务”，取代 R-350 Q5 的只显示进度）：有子任务的待办行下面一行进度条和“2/4 · 展开”，
@@ -62,7 +62,7 @@ import { AppearItem, AppearList, useHoldView, useSwapWhenSafe } from '../../../m
 import { splitPast, useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
-import { loadTodayDesk, loadTodaySwipe, TodayRo } from '../index.ts';
+import { loadTodayDesk, loadTodaySwipe } from '../index.ts';
 import { useAnnivAny } from '../hooks/useAnnivAny.ts';
 import { InlineSubtasks } from '../../todos/index.ts';
 import { GrowIn } from './GrowIn.tsx';
@@ -72,8 +72,11 @@ import styles from './TodayPage.module.css';
 import type { TodaySel } from './TodayDesk.tsx';
 import type { TodayAutoToast, TodayRoProps } from './TodayToasts.tsx';
 
-// 页底提示条、顶部重复事项横幅、只读行的行尾标记和打勾圆圈：同一个按需下载的文件，按 part 画哪一块；
-// 懒加载写在功能入口 ../index.ts（预载名单和主包共用，首屏预算 150 KB，FA-2 返工）
+// 页底提示条、顶部重复事项横幅、只读行的行尾标记和打勾圆圈：同一个按需下载的文件（TodayToasts.tsx），按 part 画哪一块。
+// 懒加载写在今天页的块里、不写在功能入口 ../index.ts（11-17 改）：写在入口时 import() 由主包发起，主包的预加载表只给首屏名单列 JS
+//（vite.config.ts 的 preloadDeps），这一块的依赖要 TodayToasts → ReadonlyRow 等 → useRoT 等三层往返一层层下，机器忙时横幅 5 秒出不来
+//（e2e b2-readonly-rows:56 本机加压挂过）。写在这里由今天页的块发起，预加载表照常列它的 JS（已在今天页闭包里的去掉），一层并发下完
+const TodayRo = lazy(() => import('./TodayToasts.tsx'));
 
 /** 分包下不来时那一块不画（QuietBoundary），不把整页换成出错页 */
 function Ro(p: TodayRoProps) {
@@ -124,15 +127,19 @@ function SwipeDel({ Impl, ...p }: SwipeRowProps & { 'data-testid': string; Impl:
   return Impl ? <Impl {...p} /> : <div className={p.className} data-testid={p['data-testid']}>{p.children}</div>;
 }
 
-/** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */
+/** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画。
+ *  首屏画完以后才挂、才下载那一包（同 Subs；11-17 ci 首屏预算 150.0 KB 超线，这一包和提示条一起约 2.2 KB 挪出首屏） */
 function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
+  const painted = usePainted();
   return (
     <span className={list.unsynced}>
-      <QuietBoundary name="unsynced-mark">
-        <Suspense fallback={null}>
-          <UnsyncedRemindMark table={table} id={id} />
-        </Suspense>
-      </QuietBoundary>
+      {painted ? (
+        <QuietBoundary name="unsynced-mark">
+          <Suspense fallback={null}>
+            <UnsyncedRemindMark table={table} id={id} />
+          </Suspense>
+        </QuietBoundary>
+      ) : null}
     </span>
   );
 }
@@ -381,6 +388,8 @@ export default function TodayPage() {
 
 /** 页顶的几条提示：错过的提醒（引擎 armed 或出错以后才挂，晚到时高度展开，GrowIn）、只读行横幅、未同步和麦克风提示 */
 function TopNotices({ missedOn, repeat }: { missedOn: boolean; repeat: ReactNode }) {
+  // “未同步”提示条首屏画完以后才挂（同 RowMark），不算进首屏预算；常驻的 role="status" 容器照旧一开始就在
+  const painted = usePainted();
   return (
     <>
       {/* 外面包一层：有“错过 N 条提醒”那一行时下面留 8px（和日历页 .unsynced 同一个值；设计复审 今天页待办 M1），没有时不占位；没有登录会话时不挂 */}
@@ -396,11 +405,13 @@ function TopNotices({ missedOn, repeat }: { missedOn: boolean; repeat: ReactNode
       {/* 有只读行才下载横幅（条数在横幅里数，N 为 0 不画） */}
       {repeat}
       <div className={styles.notice} role="status" data-testid="today-notice">
-        <QuietBoundary name="unsynced-hint">
-          <Suspense fallback={null}>
-            <UnsyncedRemindHint />
-          </Suspense>
-        </QuietBoundary>
+        {painted ? (
+          <QuietBoundary name="unsynced-hint">
+            <Suspense fallback={null}>
+              <UnsyncedRemindHint />
+            </Suspense>
+          </QuietBoundary>
+        ) : null}
         <QuietBoundary name="mic-denied">
           <MicDeniedNote />
         </QuietBoundary>

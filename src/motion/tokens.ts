@@ -57,6 +57,8 @@ export const ease = {
   press: [0.3, 1.5, 0.5, 1],
   /** --ease-splash-breathe：启动画面竖条起伏（等于 ease-in-out），别处不用 */
   splashBreathe: [0.42, 0, 0.58, 1],
+  /** --ease-linear：只给倒计时（撤销条色带，R-450），表示剩多少时间，不是装饰动效；CSS 里写 linear，等于 cubic-bezier(0,0,1,1) */
+  linear: [0, 0, 1, 1],
 } as const satisfies Record<string, Bezier>;
 
 /** 弹簧：刚度 380、阻尼比 0.78、质量 1；Motion 用 damping，按 m = 1 换算成 2·ζ·√k（17.2） */
@@ -98,6 +100,7 @@ export const cssVarOf = {
     gel: '--ease-gel',
     press: '--ease-press',
     splashBreathe: '--ease-splash-breathe',
+    linear: '--ease-linear',
   },
 } as const satisfies { dur: Record<keyof typeof dur, string>; ease: Record<keyof typeof ease, string> };
 

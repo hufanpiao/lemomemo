@@ -87,8 +87,10 @@ const PAGES: [route: string, ready: string][] = [
   ['trash', '[data-testid="trash-row-t4"]'],
   ['calendar', '[data-testid="cal-day-list"]'],
   ['settings', 'main[data-feature="settings"]'],
-  // 设置的二级、三级页（主持人 11-07：点进去的页都量）：账号（含设备列表）、注销、日历、提醒和它的三个子页、数据（导出）、电脑版、关于
-  ...(['account', 'delete', 'calendar', 'remind', 'remind/upcoming', 'remind/show-title', 'remind/dnd', 'data', 'desktop', 'about'] as const).map(
+  // 设置的二级、三级页（主持人 11-07：点进去的页都量）：账号（含设备列表）、注销、日历、提醒和它的三个子页、数据（导出）、关于。
+  // “电脑”子页（desktop）不量：R-436 丁批（9a060063）起只在电脑版 exe 里有内容，网页、手机读不到快速记录热键就退回设置首页
+  //（SettingsPage.tsx 的 desktop-unavailable），这一组跑在浏览器里根本进不去（11-17 ci 6b72c450 这里收到 4 张首页分卡）
+  ...(['account', 'delete', 'calendar', 'remind', 'remind/upcoming', 'remind/show-title', 'remind/dnd', 'data', 'about'] as const).map(
     (sub): [string, string] => [`settings/${sub}`, 'main[data-feature="settings"]'],
   ),
   ['notes', 'main[data-feature="notes"]'],

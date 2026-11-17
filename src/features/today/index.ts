@@ -11,18 +11,11 @@ export const routes = [
 /** 设置首页“最近删除”一组（R-441）两行右边的条数（ui/TrashCount.tsx，和“最近删除”页同一个数法）；设置页自己画行，值晚到也不挡点 */
 export const TrashCount = lazy(() => import('./ui/TrashCount.tsx'));
 
-/**
- * 今天页按需下载的只读行部件和页底提示条（ui/TodayToasts.tsx，按 part 画哪一块；只给 ui/TodayPage.tsx 用，不是对外接口）。
- * 懒加载写在这里而不写在 TodayPage：这个文件在主包里，Vite 给 import() 生成的预载文件名单和主包已有的那份共用，
- * 写在 TodayPage 里要在今天页的块里另带一份二十来个带哈希的文件名（首屏预算 150 KB，FA-2 返工 11-06 量过）
- */
-export const TodayRo = lazy(() => import('./ui/TodayToasts.tsx'));
-
 /** 今天页待办行的左滑删除（ui/TodaySwipe.tsx 包着 kit 的 SwipeRow，R-428）：首屏画完以后才下载（连着 useHDrag、层栈约 5 KB，放进首屏会超 150 KB 预算，
  *  e2e b2-first-screen-budget），经 motion 的 useSwapWhenSafe 等页里没焦点、没按住的指针才换上（换上时行内容重挂，焦点在行里会丢，R-354 同理）；
  *  A27 受控例外，同 loadTodayDesk */
 export const loadTodaySwipe = () => import('./ui/TodaySwipe.tsx');
 
 /** 电脑版（有侧栏的宽度）今天页的可拖动面板（5.9b；ui/TodayDesk.tsx，只给 ui/TodayPage.tsx 经 motion 的 useSwapWhenSafe 用）：首屏画完才下载、手机宽度不下载，
- *  按需下载写在这里的理由同上；下好了直接用模块里的组件（不经 lazy，换上时不先挂起一拍；A27 受控例外，同 plus 的 loadTypeBar） */
+ *  按需下载写在功能入口（主包发起，预加载表只列 CSS、JS 按静态 import 一层层下，首屏画完以后才换上，晚一点无妨）；下好了直接用模块里的组件（不经 lazy，换上时不先挂起一拍；A27 受控例外，同 plus 的 loadTypeBar） */
 export const loadTodayDesk = () => import('./ui/TodayDesk.tsx');
