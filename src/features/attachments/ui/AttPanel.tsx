@@ -306,7 +306,7 @@ function AttRow(p: {
       {ready && way === null ? (
         <p className={styles.only}>
           {t(isMacro(kind) ? 'att.macro' : 'att.legacy', {})}
-          <Pressable className={`${chip.chip} ${styles.onGray}`} onClick={() => p.onDownload(f)} data-testid={`note-file-only-dl-${it.id}`}>
+          <Pressable className={`${chip.chip} ${chip.onGray} ${styles.onlyAct}`} onClick={() => p.onDownload(f)} data-testid={`note-file-only-dl-${it.id}`}>
             {t('att.download', {})}
           </Pressable>
         </p>

@@ -40,7 +40,7 @@ function Loaded({ va, noteId, disabled }: { va: VaultAtt; noteId: string; disabl
       <section className={styles.box} aria-label={t('att.list', {})} data-testid="note-files">
         <p className={styles.msg} role="alert" data-testid="note-files-load-fail">
           {t('att.vault.loadFail', {})}{' '}
-          <Pressable className={`${chip.chip} ${styles.onGray}`} onClick={() => void va.load()} data-testid="note-files-reload">
+          <Pressable className={`${chip.chip} ${chip.onGray}`} onClick={() => void va.load()} data-testid="note-files-reload">
             {t('att.st.retry', {})}
           </Pressable>
         </p>

@@ -165,13 +165,8 @@ div.head {
   line-height: 1.5;
 }
 
-/* 放在灰底框里的胶囊（“只能下载”框的“下载”、隐私记附件没取到时的“再试一次”）：kit 胶囊本身是 --panel-2 底，
-   放在同色框里看不出来，换 --panel 底；写成 button.onGray 压过胶囊那份底色（两份 CSS 模块谁先加载不固定） */
-button.onGray {
-  background: var(--panel);
-}
-
-.only > .onGray {
+/* “只能下载”框的“下载”靠右；灰底上的胶囊底色用 kit 胶囊的 .onGray */
+.only > .onlyAct {
   margin-left: auto;
 }
 

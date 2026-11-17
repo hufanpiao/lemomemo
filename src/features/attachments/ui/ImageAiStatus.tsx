@@ -24,12 +24,12 @@ export default function ImageAiStatus({ id }: { id: string }) {
       <p className={styles.bar} role="status">
         <span className={styles.tx}>{t(text, {})}</span>
         {v.kind === 'failed' ? (
-          <Pressable type="button" className={`${chip.chip} ${styles.btn}`} onClick={s.retry} disabled={s.busy} data-testid={`img-ai-retry-${id}`}>
+          <Pressable type="button" className={`${chip.chip} ${chip.onGray} ${styles.btn}`} onClick={s.retry} disabled={s.busy} data-testid={`img-ai-retry-${id}`}>
             {t('att.ai.retry', {})}
           </Pressable>
         ) : null}
         {v.kind === 'off' ? (
-          <Pressable type="button" className={`${chip.chip} ${styles.btn}`} onClick={s.open} data-testid={`img-ai-open-${id}`}>
+          <Pressable type="button" className={`${chip.chip} ${chip.onGray} ${styles.btn}`} onClick={s.open} data-testid={`img-ai-open-${id}`}>
             {t('att.ai.open', {})}
           </Pressable>
         ) : null}

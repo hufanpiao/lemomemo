@@ -19,11 +19,10 @@
   min-width: 0;
 }
 
-/* 高 30、点按区 44 都由 kit 胶囊给；写成 button.btn 压过胶囊那份底色和上下外边距（两份 CSS 模块谁先加载不固定）。
+/* 高 30、点按区 44、灰底上的 --panel 底都由 kit 胶囊（.chip.onGray）给；写成 button.btn 压过胶囊的上下外边距（两份 CSS 模块谁先加载不固定）。
    上下 -4：胶囊伸进灰条的上下留白里，有按钮、没按钮的灰条高度相近（42 和 38） */
 button.btn {
   margin: -4px 0;
-  background: var(--panel);
 }
 
 .err {

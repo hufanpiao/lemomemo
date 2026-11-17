@@ -38,6 +38,12 @@
   opacity: var(--disabled-dim);
 }
 
+/* 放在 --panel-2 灰底框里的胶囊（附件“只能下载”框、识别状态条）：本身也是 --panel-2 底会看不出来，换 --panel 底。
+   写成 .chip.onGray，同一份模块里靠优先级压过 .chip，不靠两份模块的加载先后 */
+.chip.onGray {
+  background: var(--panel);
+}
+
 .chipN {
   font-family: var(--f-mono);
   font-size: var(--fs-11);
