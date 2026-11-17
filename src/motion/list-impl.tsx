@@ -112,7 +112,7 @@ const ENTERING_STYLE: MotionStyle = { pointerEvents: 'none' };
 const SAME_CLOCK = (): void => undefined;
 
 /** 拖动排序拿着的那一条：layout 动画直接到位（见文件头） */
-const HELD_LAYOUT = { delay: 0, type: false } as const;
+const HELD_LAYOUT = { type: false } as const;
 
 /** 列表里的一项：进出场只动 opacity，位置变化用 layout 平移过去 */
 export function AppearItem({ as = 'li', className, children, ...data }: AppearItemProps) {
