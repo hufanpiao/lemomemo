@@ -167,12 +167,13 @@ describe('错过的提醒照线框（设计 M3、M4）', () => {
       vi.unstubAllGlobals();
     }
   });
-  it('那一行有铃铛和粗体；弹层标题带条数，“全部知道了”在弹层里；每条一张小卡，已经开始的日程只给“知道了”（弹层分包点开才下，等它出来）', async () => {
+  it('那一行有铃铛、不再用粗体（R-453 选 B）；弹层标题带条数，“全部知道了”在弹层里；每条一张小卡，已经开始的日程只给“知道了”（弹层分包点开才下，等它出来）', async () => {
     nowMs = at('16:10');
     render(<MissedReminders />);
     const row = screen.getByTestId('remind-missed-row');
     expect(row.querySelector('svg')).not.toBeNull();
-    expect(row.querySelector('b')?.textContent).toBe('错过 2 条提醒');
+    expect(row.querySelector('b')).toBeNull();
+    expect(row.textContent).toContain('错过 2 条提醒');
     fireEvent.click(row);
     expect((await screen.findByRole('dialog', {}, { timeout: 5000 })).textContent).toContain('错过的提醒 2');
     expect(screen.getByTestId('remind-missed-all').textContent).toBe('全部知道了');

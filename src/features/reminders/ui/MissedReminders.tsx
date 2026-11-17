@@ -3,7 +3,7 @@
 //   底部弹层在 MissedSheet.tsx，点开才要。有错过的提醒时，首屏画完、浏览器空闲再预取弹层的分包，点开时一般已经到了；
 //   预取失败（离线）时点开再下一次，再失败这一下点开没反应、那一行照旧在（弹层外面单独包 QuietBoundary，重点一次重挂一次）
 // • 最近 7 天里已到点、没按“知道了”、不在正在响的队列里的（收起的、打开 App 前就到点的都算），有才显示一行：
-//   1.5px 墨色描边、铃铛、粗体“错过 N 条提醒”、“查看 ›”（设计 M3）
+//   无框浅底胶囊、铃铛带小红点、“错过 N 条提醒”、灰色“查看 ›”（R-453 负责人 11-17 选 B；原设计 M3 的墨色描边作废）
 // • 点开底部弹层：标题“错过的提醒 N”，“全部知道了”在右上（只有 1 条时不出，和这一条的“知道了”重复；负责人 11-04 定，设计复审 L2）；每条一张小卡（“今天 12:50 · 记号 日程（已经开始过了）”+ 粗体标题 + 按类型的按钮，设计 M4）；
 //   已经开始过的日程只给“知道了”（线框）；纪念日（含“生成待办”）归 B5，本批不出；点标题进整页提醒
 // • 只算 since 之前到点的和响过的（REMIND-missed-flash）。since 是 kit 的 armedSince（这次打开 App 的时刻）；引擎 armed 之前不画
@@ -102,9 +102,11 @@ export default function MissedReminders() {
           }}
           data-testid="remind-missed-row"
         >
-          <Bell className={styles.bell} />
-          <b className={styles.grow}>{t('remind.missed.row', { n: items.length })}</b>
-          <span>{t('remind.missed.open', {})}</span>
+          <span className={styles.bellDot}>
+            <Bell className={styles.bell} />
+          </span>
+          <span className={styles.grow}>{t('remind.missed.row', { n: items.length })}</span>
+          <span className={styles.missOpen}>{t('remind.missed.open', {})}</span>
         </Pressable>
       )}
       {tries > 0 && Sheet && (
