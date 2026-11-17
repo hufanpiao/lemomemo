@@ -279,6 +279,45 @@ test('隐私记页底部输入行记一句：发给隐私记（vault save），�
   await expect(page.locator('body')).not.toContainText('只该在隐私记里的一句');
 });
 
+// R-461：隐私记页是同一个 NotesPage，拖动排序照样能用（拿起留占位、放下换序、发 save、日志不带标题）
+test('隐私记页长按拖动：最下面一条拖到最上面，顺序照放下的、发 save', async ({ page, baseURL, browserName }) => {
+  const fv = await fakeServer(page, baseURL);
+  await setupAndUnlock(page, browserName);
+  const vault = page.getByTestId('vault-notes');
+  for (const t of ['隐私一', '隐私二', '隐私三']) {
+    await vault.getByTestId('notes-input').fill(t);
+    await vault.getByTestId('notes-add').click();
+    await expect(vault).toContainText(t);
+  }
+  const rows = vault.locator('[data-sort-id]:not([data-state="leaving"])');
+  await expect(rows).toHaveCount(3);
+  const order = () => rows.evaluateAll((els) => els.map((e) => e.textContent?.match(/隐私[一二三]/)?.[0] ?? ''));
+  await expect.poll(order).toEqual(['隐私三', '隐私二', '隐私一']);
+  const box = async (i: number) => {
+    const b = await stableBox(rows.nth(i));
+    return { x: b.x + b.width * 0.45, y: b.y + b.height / 2, top: b.y, h: b.height };
+  };
+  const from = await box(2);
+  const to = await box(0);
+  const savesBefore = saved(fv).length;
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.waitForTimeout(550);
+  await expect(vault.locator('[data-sort-held]')).toHaveCount(1);
+  // 电脑宽度、手机上隐私记默认都可能是瀑布流（卡片分在几列）：拖到第一张自己的位置
+  await page.mouse.move(to.x, to.top + to.h * 0.25, { steps: 14 });
+  await page.waitForTimeout(450);
+  await page.mouse.up();
+  await page.waitForTimeout(800);
+  const sortLines = (await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).split('\n').filter((x) => / sort | down | vault /.test(x)).slice(-20).join('\n');
+  await expect.poll(order, sortLines).toEqual(['隐私一', '隐私三', '隐私二']);
+  await expect(page.getByTestId('sort-float')).toHaveCount(0);
+  await expect.poll(() => saved(fv).length).toBeGreaterThan(savesBefore);
+  const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  expect(log).toMatch(/ sort \w+ drop i=2 to=0 n=3/);
+  for (const secret of ['隐私一', '隐私二', '隐私三']) expect(log).not.toContain(secret);
+});
+
 test('离开时同步盖多任务遮罩，不到 1 分钟回来自动去掉、仍解锁', async ({ page, baseURL, browserName }) => {
   await fakeServer(page, baseURL);
   await setupAndUnlock(page, browserName);

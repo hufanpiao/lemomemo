@@ -42,8 +42,9 @@
 // • 下拉搜索（R-437）：滚到顶再往下拉，标题下面露出一条扁搜索框（kit 的 usePullReveal 管手势和打的字，smart-search 的 PullSearch 画搜索框、条数和“用 AI 按意思找”）；
 //   R-447（负责人 11-17 选 S-B“原列表筛选”）：打了字瀑布流 / 列表照原样留着，只画命中的（按标题、正文、分类，kit 的 pull.shows），标题、摘要里命中的字加短下划线（kit PullHit），
 //   没有命中的日期组不画；分类胶囊照样筛（手机版、电脑版同一处 listPart）。筛着的时候不能拖动排序（落点按整串算，筛掉的会被挤乱）。隐私记页不接（隐私记不搜）
-// • 长按拖动排序（R-429，含 R-433 拖动时左边的 6 个点；隐私记页同一份）：kit 的 useSortDrag，瀑布流（两列，横竖都跟）和列表都能拖；按住 0.4 秒没动才拿起，
-//   动了交给左滑或滚动；拿起的那一张、那一行左边出 6 个点，落点一条强调色细横线。整页是一串（data-sort-group 都是 all），放下按页面上的顺序算排序值（data/note-sort.ts）。
+// • 长按拖动排序（R-429；R-461 整块重写：C“让位加倾斜”、摆法 1；隐私记页同一份）：kit 的 useSortDrag，瀑布流（两列，横竖都跟）和列表都能拖；按住 0.4 秒没动才拿起，
+//   动了交给左滑或滚动；拿起的那一张、那一行浮起来，行尾“⋯”那一格换成 6 个点（kit SortEnd），其他行让位。整页是一串：
+//   拖动中按 sd.preview 的预览顺序画（按天分组时拿着的那一条算进前一条那一天），放下按页面上的顺序算排序值（data/note-sort.ts）。
 //   按时间排时拖了一次就切到“自己排”（不按天分组、列表行的时间带日期；设置 › 随手记显示方式里可切回），提示条“已切到自己排，设置里可改回 · 撤销”；
 //   之后每次放下出“已移动 · 撤销”（和删除、合并同一个 UndoBar）。只读行不能拖；运行日志 sort notes|vault lift / drop / cancel（kit 记，只记条数）
 import { opensKeyboard } from '../../../platform/env.ts';
@@ -58,7 +59,7 @@ import refine from '../../../kit/components/Refine.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
-import { SortGrip, sortBoxClass, sortRowClass, useSortDrag } from '../../../kit/components/SortDrag.tsx';
+import { SortBox, SortEnd, sortRowClass, useSortDrag } from '../../../kit/components/SortDrag.tsx';
 import { useSortDropFlow } from '../../../kit/hooks/useSortDropFlow.ts';
 import { Mist } from '../../../kit/components/Mist.tsx';
 import { useDrawerSel, useListActions } from '../../../kit/hooks/useListActions.ts';
@@ -90,6 +91,13 @@ import styles from './NotesPage.module.css';
 /** 电脑版（B6）：有侧栏的宽度才下载；下好了、页里没有焦点和按住的指针时才换上（motion 的 useSwapWhenSafe）。随手记页不在首屏，马上就下 */
 const loadNotesDesk = () => import('./NotesDesk.tsx');
 const now = (fn: () => void) => fn();
+
+/** 拖动中拿着的那一条算进它此刻前一条（排第一时后一条）那一天（按天分组时跟着预览顺序挪进别的组，R-461）；没拖原样 */
+function withHeldDay(items: readonly NoteItem[], held: string | null): readonly NoteItem[] {
+  const i = held === null ? -1 : items.findIndex((x) => x.id === held);
+  const nb = items[i - 1] ?? items[i + 1];
+  return i < 0 || !nb ? items : items.map((x, k) => (k === i ? { ...x, date: nb.date } : x));
+}
 
 /** #/notes 是列表，#/note/<id> 是编辑器：两条路由同一个分包（index.ts，B4 首屏额度），这里按路由名分 */
 export default function NotesPage() {
@@ -176,7 +184,7 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
     if (it.id === just) return t('notes.just', {});
     const hm = fmtTime(it.createdAt, l.tz);
     if (!withDay) return hm;
-    const g = l.groups.find((x) => x.date === it.date)?.key;
+    const g = l.dayOf(it.createdAt);
     return g === 'today' ? t('notes.at.today', { t: hm }) : g === 'yesterday' ? t('notes.at.yesterday', { t: hm }) : fmtDay(it.date, locale, 'monthDay');
   };
 
@@ -211,13 +219,16 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
     report,
     moved: (m) => guard.show(moveUndo(m.switched, () => void l.undoMove(m).then(report))),
   });
-  const sd = useSortDrag({ tag: src.kind, axis: view === 'masonry' ? 'xy' : 'y', canDrop: () => true, onDrop: dropped, log: rlog });
-  /** 能拖的行、卡片上的标记（整页一串） */
-  const sortAttrs = (it: NoteItem) => ({ 'data-sort-id': it.id, 'data-sort-group': 'all', 'data-sort-off': isRo(it.id) || pull.searching ? '' : undefined });
+  const sd = useSortDrag({ tag: src.kind, axis: view === 'masonry' ? 'xy' : 'y', onDrop: dropped, log: rlog });
+  /** 能拖的行、卡片上的标记（整页一串；只读、下拉搜索筛着时不能拖） */
+  const sortAttrs = (it: NoteItem) => sd.attrs(it.id, isRo(it.id) || pull.searching);
+  // 页面上画的这一串：移走的、下拉搜索没命中的不画；拖动中按预览顺序（拿着的那一条在落点处占位）
+  const shownItems = sd.preview(l.items.filter(vis), (x) => x.id);
+  // 按时间排时按天分组：拖动中拿着的那一条算进它此刻前一条（排第一时后一条）那一天，跟着预览顺序挪进别的组
+  const days = l.order === 'manual' ? null : l.byDay(withHeldDay(shownItems, sd.held));
   /** 列表方式的一行；withDay：自己排时不按天分组，时间带上日期 */
   const listRow = (it: NoteItem, withDay: boolean) => (
     <AppearItem key={it.id} className={`${selId === it.id ? `${row.lrow} ${styles.sel}` : row.lrow} ${sortRowClass}`} {...sortAttrs(it)} data-testid={`notes-row-${it.id}`}>
-      <SortGrip />
       {/* 左滑（B5 S7，线框 s7 NOTEROW_SW）：转成待办 / 移到隐私记 / 删除，和“⋯”菜单同一套动作 */}
       <SwipeRow
         className={styles.swp}
@@ -233,7 +244,7 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
           <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} failed={failed.has(it.id)} mark={mark} />
           {it.cover ? <ListThumb img={it.cover} /> : null}
         </button>
-        {more(it)}
+        <SortEnd>{more(it)}</SortEnd>
         </div>
       </SwipeRow>
     </AppearItem>
@@ -278,10 +289,10 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
         </p>
       ) : null}
 
-      <div ref={sd.ref} className={sortBoxClass}>
+      <SortBox sd={sd}>
       {view === 'masonry' ? (
         <AppearList as="ul" className={styles.mason} data-testid="notes-mason">
-          {l.items.filter(vis).map((it) => (
+          {shownItems.map((it) => (
             <AppearItem key={it.id} className={`${styles.card} ${sortRowClass}`} {...sortAttrs(it)} data-testid={`notes-card-${it.id}`}>
               <div onContextMenu={onMenuKey(it.id)}>
                 <button type="button" className={styles.cardMain} onClick={() => open(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
@@ -308,24 +319,22 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
                   <FilesMark n={it.files} />
                   <SyncMark id={it.id} failed={failed.has(it.id)} />
                   <span className={styles.time}>{timeOf(it, true)}</span>
-                  {more(it)}
+                  <SortEnd>{more(it)}</SortEnd>
                 </div>
               </div>
-              {/* 拿起时的 6 个点（R-433）：绝对定位，放在最后不改卡片里原来的结构 */}
-              <SortGrip />
             </AppearItem>
           ))}
         </AppearList>
-      ) : l.order === 'manual' ? (
+      ) : days === null ? (
         // 自己排（R-429）：不按天分组，一整串
         <div data-testid="notes-list">
           <AppearList as="ul" className={`${row.lst} ${styles.flat}`}>
-            {l.items.filter(vis).map((it) => listRow(it, true))}
+            {shownItems.map((it) => listRow(it, true))}
           </AppearList>
         </div>
       ) : (
         <AppearList as="div" data-testid="notes-list">
-          {l.groups.map((g) => ({ g, items: g.items.filter(vis) })).filter((x) => x.items.length > 0).map(({ g, items }) => (
+          {days.map(({ items, ...g }) => (
             <AppearItem as="section" key={g.date} className={styles.group} data-testid={`notes-g-${g.date}`}>
               {/* 分组名小字、加字距，右边等宽条数（R-436，同待办页分组：kit groupLabelClass） */}
               <h2 className={`${groupLabelClass} ${styles.h2}`}>
@@ -339,8 +348,7 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
           ))}
         </AppearList>
       )}
-      {sd.line}
-      </div>
+      </SortBox>
 
     </>
   );

@@ -8,9 +8,8 @@
 // • 实现到了以后在安全的时机换上（整个列表子树重挂一次，DOM 一样，看不出来）：焦点不在列表里、没有按住的指针、
 //   不在 useHoldView 停一拍期间，三件都满足才换，否则隔一会儿再看（./swap-guard.ts）。换完以后删行、打勾、撤销的动画和原来一样
 // • 重挂会丢行内的临时状态：现在行内只有 Pressable 的按下态（按住时不换）；以后行里有别的状态要记得这一条
-// • 拖动排序拿着的那一条（./sort-hold.ts，按行上的 data-sort-id 认）：行上带 data-sort-lifted；拿着期间不换实现（守卫里算一次停一拍）
+// • 拖动排序拿着浮层期间不换实现（./sort-float.ts 拿起时在守卫里算一次停一拍，R-461）
 import { createContext, createElement, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { useSortHeld } from './sort-hold.ts';
 import { useMotionImpl, watchPointers, whenSafe } from './swap-guard.ts';
 
 type ListTag = 'ul' | 'ol' | 'div';
@@ -66,8 +65,7 @@ export function AppearList(props: AppearListProps) {
 export function AppearItem(props: AppearItemProps) {
   const live = useContext(LiveCtx);
   const impl = useMotionImpl();
-  const held = useSortHeld(props['data-sort-id']);
   if (live && impl) return <impl.AppearItem {...props} />;
   const { as = 'li', className, children, ...rest } = props;
-  return createElement(as, { ...rest, 'data-sort-lifted': held ? '' : undefined, className, style: ITEM_STYLE }, children);
+  return createElement(as, { ...rest, className, style: ITEM_STYLE }, children);
 }

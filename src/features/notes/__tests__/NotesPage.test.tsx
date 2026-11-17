@@ -131,7 +131,8 @@ describe('卡片', () => {
     });
     open();
     for (const n of [1, 2]) {
-      const foot = screen.getByTestId(`notes-more-${uid(n)}`).parentElement as HTMLElement;
+      // 底行：“⋯”外面包着行尾一格（kit SortEnd，R-461），再往上一层才是底行
+      const foot = screen.getByTestId(`notes-more-${uid(n)}`).parentElement?.parentElement as HTMLElement;
       expect(foot.textContent).toContain('韩国生活与签证材料整理清单');
     }
     const css = readFileSync('src/features/notes/ui/NotesPage.module.css', 'utf8');

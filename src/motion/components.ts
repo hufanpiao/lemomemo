@@ -5,6 +5,8 @@ export { SharedLayout } from './SharedLayout.tsx';
 export { Celebrate } from './Celebrate.tsx';
 export { useReducedMotionPref } from './useReducedMotionPref.ts';
 export { AppearList, AppearItem } from './AppearList.tsx';
+// 拖动排序期间列表让位用弹簧（R-461，kit 的 SortBox 包）
+export { SortSpring } from './sort-spring.tsx';
 // 打勾停一拍再挪走：留住按下之前的那一份 --dur-ui（B2 FA-5 设计审查 M1）
 export { useHoldView } from './useHoldView.ts';
 // 整页换排法（电脑版面板，B6）等到没有焦点、没有按住的指针再换：和动画实现换上同一个守卫

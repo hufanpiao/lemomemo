@@ -6,9 +6,6 @@
 
 /* 列表方式（PH.notes 第 1331 行）：时刻 44 | 随手记小图标 18 | 标题和摘要 | “⋯”24 */
 .lst {
-  /* 长按拖动时浮层左右比行宽出这么多（kit SortDrag，R-429），等于左右内边距 */
-  --sort-float-pad: 14px;
-
   margin: 0;
   padding: 2px 14px;
   border-radius: 22px;

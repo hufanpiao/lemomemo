@@ -23,7 +23,7 @@ import { ruleCategory } from '../data/classify.ts';
 import { convertNote, type ConvertResult } from '../data/note-convert.ts';
 import { BODY_MAX, newNoteRow } from '../data/note-edit.ts';
 import { categoryNames } from '../../../core/categories.ts';
-import { aliveCount, categoryCounts, fileCounts, groupByDay, imagesByNote, noteItems, type NoteItem, type Row } from '../data/note-list.ts';
+import { aliveCount, categoryCounts, dayKind, fileCounts, groupByDay, imagesByNote, noteItems, type NoteItem, type Row } from '../data/note-list.ts';
 import { orderOf } from '../../../../shared/logic/sort-key.ts';
 import { applyNoteSort, planNoteDrop, type NoteKeyWrite } from '../data/note-sort.ts';
 import { useNoteSource } from './note-source.ts';
@@ -60,7 +60,10 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   const settings = useSettingWriter();
   const order = orderOf(settingValue(settings.rows, src.orderKey));
   const items = useMemo(() => noteItems(rows, cats, tz, active, pics, files, order), [rows, cats, tz, active, pics, files, order]);
-  const groups = useMemo(() => groupByDay(items, now, tz), [items, now, tz]);
+  /** 按天分组（按时间排时的列表、瀑布流）：页面按它此刻画的顺序调（拖动中是预览顺序，R-461） */
+  const byDay = useCallback((shown: readonly NoteItem[]) => groupByDay(shown, now, tz), [now, tz]);
+  /** 卡片、行上的时间写“今天 / 昨天”还是日期 */
+  const dayOf = useCallback((at: number) => dayKind(at, now, tz), [now, tz]);
 
   /** 底部输入行记下一句：正文就是这句话，标题空着（列表里取正文第一行当标题）；成功回新条目的 id */
   const add = useCallback(
@@ -117,5 +120,5 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
     if (m.switched) void settings.save(src.orderKey, 'time');
     return applyNoteSort(io, m.writes, true);
   };
-  return { items, groups, order, counts, category: active, setCategory, add, remove, discard, convert, tooLong, move, undoMove, total: aliveCount(rows), now, tz };
+  return { items, byDay, dayOf, order, counts, category: active, setCategory, add, remove, discard, convert, tooLong, move, undoMove, total: aliveCount(rows), now, tz };
 }
