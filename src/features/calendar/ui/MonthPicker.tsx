@@ -8,6 +8,7 @@
 // • 月视图选了跳到那个月；周视图跳到那个月 1 日所在的那一周（useCalendar 的 pick）
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { MAX_YEAR, MIN_YEAR, type YearMonth } from '../../../../shared/logic/calendar/cal-nav.ts';
+import chip from '../../../kit/components/Chip.module.css';
 import { Popover } from '../../../kit/components/Popover.tsx';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
@@ -145,7 +146,7 @@ export function MonthPicker({ value, today, week, t, open, onOpenChange, onPick,
         <span className={styles.ymHint}>{t(week ? 'cal.pickHintWeek' : 'cal.pickHintMonth', {})}</span>
         <button
           type="button"
-          className={styles.ymToday}
+          className={chip.chip}
           onClick={() => {
             onOpenChange(false);
             onToday();

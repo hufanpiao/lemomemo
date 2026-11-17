@@ -10,6 +10,8 @@
 //   （和周视图泳道次日的续段一致）；点了同样打开那条日程
 // • “往上拖列表、月历收成一周一行”的拖动柄在 CalNav.tsx 的 FoldHandle，这里只管列表
 // • 行的样式（白面板、行、时刻那一格、标题、行尾标记、空状态）用 kit 的 List.module.css，和今天页、待办页同一份（B2-UI-a U4、U6）
+// • R-436 丙批（照视觉稿日清单、待办页分组）：标题行挪到面板上方，挂 kit 的小字分组名 groupLabelClass；黄历卡和行在下面一块面板里。
+//   行首时刻按状态上色（today、nowMin 由页面给）：已经过去的日程第三层灰，过了截止没完成的待办红字（红色只表示逾期），其余照常
 // • 行尾“未同步”小标记（REMIND-wiring；TC-B2-69、架构 4.2）：带提醒、还没同步上的那一条才标，同步上自动消失；
 //   由 reminders 功能懒加载提供（UnsyncedRemindMark），没标时那一格不占位。周视图泳道、月格不标（定稿线框 s2、s3 没有这个标记）
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记（kit 的 ReadonlyMark）；点了交给页面的 onOpen，由页面拦下、出提示条
@@ -19,8 +21,8 @@ import { minOfDay, msAt, todayOf, weekdayOf } from '../../../../shared/core/date
 import { eventEntry, liveEventsNear, type CalItems, type DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
 import { dayEntries } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
+import { groupLabelClass } from '../../../kit/components/Form.tsx';
 import list from '../../../kit/components/List.module.css';
-import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyRow.tsx';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
@@ -47,6 +49,13 @@ export function carryOver(date: DateStr, items: CalItems, tz: string): { entry: 
   return out.sort((a, b) => (a.entry.startMs ?? 0) - (b.entry.startMs ?? 0));
 }
 
+/** 有时刻的日程在当天第几分钟结束（跨午夜的到 24:00 为止）；全天日程、待办没有 */
+function endMinOf(items: CalItems, e: DayEntry, tz: string): number | null {
+  if (e.kind !== 'timed' || e.startMs === null) return null;
+  const dur = items.events.find((x) => x.id === e.itemId)?.duration_min ?? 0;
+  return Math.min(minOfDay(e.startMs, tz) + dur, 24 * 60);
+}
+
 /** 行尾的“未同步”小标记（没有时整格不画，见 .dayUnsynced:empty） */
 function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
   return (
@@ -66,6 +75,8 @@ export function DayList({
   t,
   lunarText,
   huangli = null,
+  today,
+  nowMin,
   onOpen = (kind, id) => void navigate(kind, id),
   isRo = () => false,
 }: {
@@ -78,6 +89,9 @@ export function DayList({
   lunarText?: string | undefined;
   /** 黄历卡的内容（R-431）；null 时不画卡片 */
   huangli?: Huangli | 'wait' | null;
+  /** 今天、现在是当天第几分钟（设备时区）：给了才按状态给行首时刻上色（R-436） */
+  today?: DateStr | undefined;
+  nowMin?: number | undefined;
   /** 打开一条：页面给，只读行在那里拦下（FA-2）；不给就直接进编辑页 */
   onOpen?: (kind: 'event' | 'todo', id: string) => void;
   /** 这一条是不是只读行（FA-2） */
@@ -100,17 +114,24 @@ export function DayList({
     const due = dueMins.get(e.itemId);
     return due === undefined ? t('cal.day.todo', {}) : hm(due);
   };
+  /** 过去了：那天整天已过，或者就是今天、endMin（日程结束 / 待办截止）已经到了；没有 endMin 的今天不算 */
+  const passed = (endMin: number | null | undefined): boolean =>
+    today !== undefined && (date < today || (date === today && nowMin !== undefined && typeof endMin === 'number' && endMin <= nowMin));
+  /** 行首时刻的状态（R-436）：已过去的日程 past（第三层灰）、过了截止没完成的待办 late（红字，红色只表示逾期） */
+  const toneOf = (e: DayEntry): 'past' | 'late' | undefined => {
+    if (e.kind === 'todo') return passed(dueMins.get(e.itemId)) ? 'late' : undefined;
+    return passed(endMinOf(items, e, tz)) ? 'past' : undefined;
+  };
   return (
-    <section className={`${list.panel} ${styles.dayList}`} aria-labelledby="cal-day-title" data-testid="cal-day-list" data-date={date}>
-      <h2 id="cal-day-title" className={styles.dayListHead}>
+    <section className={styles.dayList} aria-labelledby="cal-day-title" data-testid="cal-day-list" data-date={date}>
+      <h2 id="cal-day-title" className={`${groupLabelClass} ${styles.dayListHead}`}>
         <span>
           {head}
           {lunarText && huangli === null ? ` · ${lunarText}` : ''}
         </span>
-        <span className={styles.dayListN}>
-          <NumIn text={t('cal.day.count', { n: total })} num={String(total)} />
-        </span>
+        <span>{t('cal.day.count', { n: total })}</span>
       </h2>
+      <div className={`${list.panel} ${styles.dayPanel}`}>
       {huangli === 'wait' ? <HuangliHold /> : huangli ? <HuangliCard key={date} h={huangli} t={t} /> : null}
       {total === 0 ? (
         <p className={list.empty}>{t('cal.day.empty', {})}</p>
@@ -119,7 +140,9 @@ export function DayList({
           {cont.map(({ entry: e, endMin }) => (
             <li key={`cont-${e.itemId}`} className={list.row}>
               <button type="button" className={list.main} onClick={() => onOpen('event', e.itemId)} data-kind="cont" data-readonly={isRo('event', e.itemId) ? '' : undefined}>
-                <span className={list.lead}>{t('cal.day.until', { t: endMin >= 24 * 60 ? '24:00' : hm(endMin) })}</span>
+                <span className={`${list.lead} ${styles.dayTime}`} data-tone={passed(endMin) ? 'past' : undefined}>
+                  {t('cal.day.until', { t: endMin >= 24 * 60 ? '24:00' : hm(endMin) })}
+                </span>
                 <span className={`${styles.dayMk} ${colorClass(e.colorIndex)}`} aria-hidden="true" />
                 <span className={list.title}>{titleOf(items, e)}</span>
                 {isRo('event', e.itemId) ? <ReadonlyMark /> : null}
@@ -137,7 +160,9 @@ export function DayList({
                 data-readonly={isRo(e.kind === 'todo' ? 'todo' : 'event', e.itemId) ? '' : undefined}
                 data-testid={`cal-day-row-${e.itemId}`}
               >
-                <span className={list.lead}>{timeOf(e)}</span>
+                <span className={`${list.lead} ${styles.dayTime}`} data-tone={toneOf(e)}>
+                  {timeOf(e)}
+                </span>
                 <span className={`${styles.dayMk} ${colorClass(e.colorIndex)} ${e.kind === 'todo' ? styles.dayMkTodo : ''}`} aria-hidden="true" />
                 <span className={list.title}>{titleOf(items, e)}</span>
                 {isRo(e.kind === 'todo' ? 'todo' : 'event', e.itemId) ? <ReadonlyMark testId={`cal-ro-${e.itemId}`} /> : null}
@@ -147,6 +172,7 @@ export function DayList({
           ))}
         </ul>
       )}
+      </div>
     </section>
   );
 }

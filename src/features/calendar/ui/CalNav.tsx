@@ -39,7 +39,10 @@ export function CalNav({
 }) {
   return (
     <div className={styles.calnav}>
+      {/* R-436 丙批：换 kit ModeSeg 的 look="slide"（灰底槽 + 浅色滑块 + 柠檬黄小点，纪念日编辑页同一种，确认稿第 4 条）；
+          原来的 pill 外观选中填 --chip-on-bg，三套皮肤分别是黑、米白、黄，不一致。纪念日页顶那一份（AnnivPage ModeRow）一起换 */}
       <ModeSeg
+        look="slide"
         label={t('cal.modeLabel', {})}
         items={[
           { key: 'week', label: t('cal.week', {}), pressed: !month, onClick: () => onMode('week'), testId: 'cal-mode-week' },

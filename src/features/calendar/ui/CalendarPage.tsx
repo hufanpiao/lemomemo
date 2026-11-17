@@ -274,7 +274,7 @@ export default function CalendarPage() {
             dueMins={model.dueMins}
             t={t}
             lunarText={model.lunar?.fullText(sel) ? t('cal.a11y.lunar', { text: model.lunar.fullText(sel) ?? '' }) : undefined}
-            onOpen={ro.open} isRo={ro.g.isRo} huangli={huangli}
+            onOpen={ro.open} isRo={ro.g.isRo} huangli={huangli} today={model.today} nowMin={model.nowMin}
           />
         ) : null}
       </div>

@@ -72,14 +72,22 @@ describe('地点 / 链接（TC-B2-02，SAFE-link-real）', () => {
     expect(a.getAttribute('target')).toBe('_blank');
   });
 
-  it('javascript: 只显示文字，不是链接；改地点照样存', async () => {
+  it('javascript: 不是链接，下面不出那一行；改地点照样存', async () => {
     const b = await boot();
     await b.outbox?.applyServer('events', [{ row: serverEvent() }]);
     const { container } = open(`#/event/${ID}`);
     await commitText('event-edit-location', 'javascript:alert(1)');
     await waitFor(() => expect(events().get(ID)?.['location']).toBe('javascript:alert(1)'));
-    expect(screen.getByText('javascript:alert(1)', { selector: 'span' })).toBeTruthy();
+    expect(screen.queryByText('javascript:alert(1)', { selector: 'span, a' })).toBeNull();
     expect(container.querySelector('a[href]')).toBeNull();
+  });
+
+  it('普通地名：只在输入框里，下面不再原样写一遍（R-436 丙批）', async () => {
+    const b = await boot();
+    await b.outbox?.applyServer('events', [{ row: serverEvent({ location: '연남동' }) }]);
+    open(`#/event/${ID}`);
+    expect((screen.getByTestId('event-edit-location') as HTMLInputElement).value).toBe('연남동');
+    expect(screen.queryByText('연남동')).toBeNull();
   });
 });
 

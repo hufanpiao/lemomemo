@@ -4,12 +4,20 @@
 // • 地点 / 链接：输入框下面用 kit 的 LocationText 显示，能过 safeHref 的才是可点的链接（SAFE-link-real）
 // • 只读行、删除和撤销：和待办编辑页同一套（kit 的 useEditRecord、EditShell）
 // • R-436 第二批（照纪念日编辑页）：时间、详情两组上面各一个小字分组名（kit GroupLabel）；底部整宽删除行写全“删除这个日程”
+// • R-436 丙批：日期、开始、结束三个框里的数字换等宽字（kit .input 加本页 EventEditPage.module.css 的 .num）；
+//   “全天”开关挪进标题那一组（同待办编辑页“标题 + 已完成”，标题不再单独一张胶囊卡）；地点下面那一行只在地点是链接时出
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
+import formCss from '../../../kit/components/Form.module.css';
 import { Check, Field, FormGroup, GroupLabel, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
 import { LocationText } from '../../../kit/components/LocationText.tsx';
+import { safeHref } from '../../../../shared/logic/link.ts';
 import { useCalendarT, type CalendarMsgKey } from '../hooks/useCalendarT.ts';
 import { ITEM_TITLE_MAX, LOCATION_MAX, NOTE_MAX, PROJECT_MAX, REMIND_MIN_OPTIONS, useEventEdit, type EventForm } from '../hooks/useEventEdit.ts';
+import s from './EventEditPage.module.css';
+
+/** 日期、时刻框：kit 输入框 + 等宽数字 */
+const NUM = `${formCss.input} ${s.num}`;
 
 /** 不带参数的那些键（t 的第二个参数要能写成 {}） */
 type PlainKey = Exclude<CalendarMsgKey, 'event.edit.tzLocal'>;
@@ -53,12 +61,8 @@ export function EventEditor({ id, onCreated }: { id: string; onCreated(id: strin
           onCommit={(v) => change({ title: v })}
           data-testid="event-edit-title"
         />
-      </FormGroup>
-
-      <GroupLabel>{t('event.edit.groupTime', {})}</GroupLabel>
-      <FormGroup>
-        <Field label={t('event.edit.date', {})} htmlFor="event-date">
-          <TextInput id="event-date" type="date" value={form.date} disabled={off} onCommit={(v) => v !== '' && change({ date: v })} data-testid="event-edit-date" />
+        {/* “全天”开关放在标题那一组（同待办编辑页“标题 + 已完成”）：原来标题一个人一张卡，看着是一颗白胶囊，和待办编辑页不一致 */}
+        <Field label="">
           <Check
             label={t('event.edit.allDay', {})}
             checked={form.time === null}
@@ -68,12 +72,20 @@ export function EventEditor({ id, onCreated }: { id: string; onCreated(id: strin
             data-testid="event-edit-allday"
           />
         </Field>
+      </FormGroup>
+
+      <GroupLabel>{t('event.edit.groupTime', {})}</GroupLabel>
+      <FormGroup>
+        <Field label={t('event.edit.date', {})} htmlFor="event-date">
+          <TextInput id="event-date" type="date" className={NUM} value={form.date} disabled={off} onCommit={(v) => v !== '' && change({ date: v })} data-testid="event-edit-date" />
+        </Field>
         {form.time !== null ? (
           <>
             <Field label={t('event.edit.start', {})} htmlFor="event-start">
-              <TextInput id="event-start" type="time" value={form.time} disabled={off} onCommit={(v) => v !== '' && change({ time: v })} data-testid="event-edit-start" />
+              <TextInput id="event-start" type="time" className={NUM} value={form.time} disabled={off} onCommit={(v) => v !== '' && change({ time: v })} data-testid="event-edit-start" />
               <TextInput
                 type="time"
+                className={NUM}
                 aria-label={t('event.edit.end', {})}
                 value={ed.end ?? ''}
                 disabled={off}
@@ -126,7 +138,8 @@ export function EventEditor({ id, onCreated }: { id: string; onCreated(id: strin
 
       <GroupLabel>{t('event.edit.groupDetail', {})}</GroupLabel>
       <FormGroup>
-        <Field label={t('event.edit.location', {})} htmlFor="event-location" hint={form.location ? <LocationText text={form.location} /> : undefined}>
+        {/* 地点是链接（能过 safeHref）时，下面一行显示成可点的链接；普通地名不再在下面原样再写一遍（R-436 丙批审查：之前对所有非空地点都挂 hint，是回显） */}
+        <Field label={t('event.edit.location', {})} htmlFor="event-location" hint={safeHref(form.location) !== undefined ? <LocationText text={form.location} /> : undefined}>
           <TextInput
             id="event-location"
             value={form.location}

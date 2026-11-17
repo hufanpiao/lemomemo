@@ -234,9 +234,9 @@ describe('编辑已有的', () => {
     expect(screen.queryByTestId('edit-notice')?.textContent ?? '').not.toContain('新版本');
     expect(screen.getByTestId('todo-edit-done').closest('label')?.textContent).toBe('已完成（打勾后也能继续改）');
     expect(screen.getByTestId('todo-edit-due-clear')).toBeTruthy();
-    // G11：空字段有占位提示；“清掉”“删除”用项目的按钮样式（FormButton），不是浏览器原生按钮
+    // G11：空字段有占位提示；“清掉”“删除”用项目的样式，不是浏览器原生按钮（R-436 丙批起“清掉”是 kit Chip.module.css 的小胶囊）
     expect(document.querySelector('#todo-project')?.getAttribute('placeholder')).toBe('比如：工作、家里');
-    expect(screen.getByTestId('todo-edit-due-clear').className).toMatch(/btn/);
+    expect(screen.getByTestId('todo-edit-due-clear').className).toMatch(/chip/);
     // R-436：“删除”换成 kit 的整宽删除行（DeleteRow，红字居中），不再是描边小按钮
     expect(screen.getByTestId('todo-edit-delete').className).toMatch(/deleteRow/);
   });

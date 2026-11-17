@@ -24,19 +24,34 @@
   margin-bottom: 6px;
 }
 
+/* 标题胶囊（R-101“白底圆角、细描边”，这两点不动）。R-436 丙批改轻：看得见 36 高、字 15（原来 44 高、17 号，压过下面的分段）、
+   细描边是 1px 内描边（不占版面）、不再加阴影；点击区照样 44（::after 外扩，同 .nb）；年月数字等宽 */
 .pill {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: var(--hit);
-  padding: 0 14px;
-  border: 1px solid var(--line);
+  min-height: 36px;
+  padding: 0 12px 0 14px;
+  border: 0;
   border-radius: var(--r-pill);
   background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--line);
   color: var(--text);
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
+}
+
+.pill::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
 }
 
 .pillChev {
@@ -57,6 +72,12 @@
   margin-bottom: 10px;
 }
 
+/* 页顶“周 / 月 / 纪念日”（kit ModeSeg look="slide"）：slide 外观各段 flex: 1（按 0 起分），放在宽度随内容的页顶里会被平分成 53 宽，
+   比“纪念日”本身（约 66）还窄、选中时加小点和粗字更挤。这里每段按自己的内容宽（flex: none），纪念日页 .modeRow 同一条。根本改法在 kit（报告里提了） */
+.calnav [role='group'] > button {
+  flex: none;
+}
+
 .navBtns {
   display: flex;
   align-items: center;
@@ -65,15 +86,17 @@
   gap: 12px;
 }
 
+/* ‹ 今天 ›（视觉稿 .mnav-b）：R-436 丙批照 kit 胶囊（Chip.module.css .chip）的样子——不描边、不加阴影、--panel-2 浅底、字 13。
+   不直接挂 .chip：它的 ::after 只上下外扩，这里 ‹ › 只有 32 宽，要以中心外扩到 44 × 44，三个点按区刚好相接（设计复审 N6），所以照抄外观、点击区自己写 */
 .nb,
 .tdy {
   position: relative;
   min-height: 32px;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--r-pill);
-  background: var(--panel);
+  background: var(--panel-2);
   color: var(--text);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   cursor: pointer;
 }
 
@@ -84,9 +107,11 @@
   line-height: 1;
 }
 
+/* “今天”能点（不在本月 / 本周）时填墨色（R-101“不在本周 / 本月时‘今天’变黑”，视觉稿 .tdy.on）；在本月时见下面 aria-disabled */
 .tdy {
   padding: 0 12px;
-  font-weight: 600;
+  background: var(--ink);
+  color: var(--on-ink);
 }
 
 /* 点按区各 44 px（视觉 32 px，伸出去的部分用伪元素补，R-101）：原来写 inset: -6px，按钮实际 30 高时只扩到 42（B2-UI-a V5 量出来），
@@ -108,10 +133,9 @@
   cursor: default;
 }
 
-/* “今天”灰的时候和能点的时候差得更明显（设计复审 N3）：不填底、不加粗，只留细边 */
+/* “今天”灰的时候（就在本月 / 本周）：和 ‹ › 同一种浅底胶囊、次要文字色，和能点时的墨色差得开（设计复审 N3；视觉稿 .tdy） */
 .tdy[aria-disabled='true'] {
-  background: none;
-  font-weight: 400;
+  background: var(--panel-2);
 }
 
 /* 页顶提示（离线“联网后显示节假日”、reminders 的“未同步，提醒可能不响”）：一块常驻的 role="status" 容器（代码审查 L3）。
@@ -151,8 +175,9 @@
   transition: none;
 }
 
+/* 月历、周视图那一块：大圆角，和下面日清单的面板（kit List .panel）同一档 --r-lg（R-436“卡片大圆角”，视觉稿 .panel.mgrid） */
 .card {
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   background: var(--panel);
   overflow: hidden;
 }
@@ -190,10 +215,13 @@
   gap: 10px;
 }
 
+/* “年”“月”两个小字标签（R-436 小字标签）：第三层文字色、等宽字加字距，同 kit 分组名 */
 .ymHead {
   margin-bottom: 6px;
-  color: var(--text-2);
-  font-size: var(--fs-12);
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-11);
+  letter-spacing: 0.12em;
 }
 
 .ymYears {
@@ -219,8 +247,9 @@
   border-radius: var(--r-sm);
   background: none;
   color: var(--text);
-  font-family: var(--f-num);
+  font-family: var(--f-mono);
   font-size: var(--fs-14);
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 
@@ -228,10 +257,12 @@
   background: var(--panel-2);
 }
 
+/* 选中的年 / 月：R-436 丙批改轻，不再是墨色实块（深色皮肤下是米白实块），换成和月格选中日（.sel）同一种写法——
+   --panel-2 浅底 + 1px 第三层灰内描边 + 粗字；描边 --text-3 压在 --panel-2 上 ≥ 4.5（contrast-pairs.json text3-panel2），选中看得出来 */
 .ymOn,
 .ymOn:hover {
-  background: var(--ink);
-  color: var(--on-ink);
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--text-3);
   font-weight: 600;
 }
 
@@ -261,7 +292,7 @@
 .ymHint {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-2);
+  color: var(--text-3);
   font-size: var(--fs-11);
 
   /* 不折行（设计复审 N5）；放不下时省略 */
@@ -269,18 +300,7 @@
   text-overflow: ellipsis;
 }
 
-.ymToday {
-  flex: none;
-  min-height: var(--hit);
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--panel-2);
-  color: var(--text);
-  font-size: var(--fs-13);
-  font-weight: 600;
-  cursor: pointer;
-}
+/* “回到今天”不在这里写外观：MonthPicker 直接挂 kit 的 Chip.module.css 胶囊（R-436“胶囊统一”，高 30、无描边浅底、点击区外扩到 44） */
 
 /* ───────── 月格 ───────── */
 .weekdays,
@@ -304,9 +324,13 @@
 .wd {
   padding: 6px 0 4px;
 
-  /* 星期行是小字标签（R-436 第二批，照待办页的小字分组名）：第三层文字色、小一号 */
+  /* 星期行是小字标签（R-436，照待办页的小字分组名 kit groupLabelClass）：第三层文字色、11 号、等宽字、字距 0.12em。
+     字距加在每个字后面，居中时整体右偏半个字距：用等量的左内边距抵掉 */
+  padding-left: 0.12em;
   color: var(--text-3);
+  font-family: var(--f-mono);
   font-size: var(--fs-11);
+  letter-spacing: 0.12em;
   text-align: center;
 }
 
@@ -321,7 +345,9 @@
   min-height: 80px;
   padding: 4px 3px;
   border: 0;
-  border-top: 1px solid var(--line);
+
+  /* 行间分隔线细到半像素（R-436“行间极细分隔线”，同 kit 表单行 .field；2×、3× 屏上是发丝线，1× 屏按 1px 画） */
+  border-top: 0.5px solid var(--line);
   background: var(--panel);
   color: var(--text);
   font: inherit;
@@ -395,10 +421,13 @@
   white-space: nowrap;
 }
 
+/* 选中的那天：R-436 丙批改轻。原来 1.5px 墨色框（深色皮肤下是白框）加上“今天”的墨色细圈太重；
+   换成 --panel-2 浅底 + 1px 第三层灰内描边（--text-3 压在 --panel-2 上 ≥ 4.5，比非文字元素要的 3 还高，选中仍看得出来）。
+   手机周泳道选中（.laneSel .laneBtn）、年月选择器选中（.ymOn）同一种写法。“今天”的细圈是 R-132 定的，不动 */
 .sel {
   border-radius: 8px;
   background: var(--panel-2);
-  box-shadow: inset 0 0 0 1.5px var(--ink);
+  box-shadow: inset 0 0 0 1px var(--text-3);
 }
 
 .dayNum {
@@ -409,8 +438,11 @@
   min-width: 22px;
   height: 22px;
   border-radius: var(--r-pill);
-  font-family: var(--f-num);
+
+  /* 日期数字等宽字（R-436 丙批“日期用等宽数字”，同待办页的日期） */
+  font-family: var(--f-mono);
   font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }
 
 .today .dayNum {
@@ -550,45 +582,57 @@
 
 /* ───────── 选中那天的清单 ───────── */
 
-/* 白底、圆角、左右 12 由 kit 的 List.module.css .panel 给（B2-UI-a U4-5）；行、时刻那一格、标题、行尾标记、空状态也在那里 */
+/* R-436 丙批照视觉稿（日清单标题在面板外、行在白面板里）和待办页分组的写法：
+   • 标题“11月12日 周四 · 农历…”和右边“6 项”是面板上方的小字分组名，挂 kit Form 的 groupLabelClass（第三层灰、等宽字加字距，同待办页 .group .h2）；
+     这里只管左右排开和间距，写成两级选择器，不靠两份样式表的先后压过 .groupLabel 的 margin
+   • 面板（黄历卡 + 行）是 kit List 的 .panel（白底、--r-lg）；左右留白加大到 16（同待办页 .roomy），行高 52（行高留白加大）
+   • 行首时刻右对齐、按状态上色（.dayTime） */
 .dayList {
   margin-top: 12px;
-  padding-top: 4px;
-  padding-bottom: 8px;
 }
 
-.dayListHead {
+.dayList .dayListHead {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  margin: 0;
-  padding: 10px 0 6px;
-  font-size: var(--fs-14);
-  font-weight: 600;
+  margin: 4px 14px 8px;
 }
 
-/* 标题和行之间的分隔线只在有行时画；当天没有安排时“这一天没有安排”上面不多一条线（同 HEAD，B2-UI-a 代码审建议 2） */
-.dayListRows {
-  border-top: 1px solid var(--line);
+.dayList > .dayPanel {
+  padding: 2px 16px;
 }
 
-/* 右边“6 项”：第三层文字色小字，只有数字等宽（R-436 第二批，同待办页分组名右边的条数；整串等宽时“项”前的空格变宽，DayList 用 NumIn 只包数字） */
-.dayListN {
-  flex: none;
+.dayListRows > li {
+  min-height: 52px;
+}
+
+/* 行首时刻（R-436“日期时刻等宽数字按状态上色、右对齐”）：等宽字在 kit .lead；这里靠右排、宽度齐一格。
+   状态：已经过去的日程（那天已过、或今天已结束）第三层灰；过了截止还没完成的待办红字（红色只表示逾期）；其余照 .lead 的次要色 */
+.dayListRows .dayTime {
+  justify-content: flex-end;
+  min-width: 48px;
+}
+
+.dayTime[data-tone='past'] {
   color: var(--text-3);
-  font-size: var(--fs-11);
-  font-weight: 400;
 }
 
-/* 黄历卡（R-431，HuangliCard.tsx）：标题行下面、行上面；上面一条分隔线（下面一条是 .dayListRows 的）。
+.dayTime[data-tone='late'] {
+  color: var(--danger-text);
+}
+
+/* 黄历卡（R-431，HuangliCard.tsx）：面板里最上面、行上面，下面一条分隔线隔开行（.hl + .dayListRows）。
    宜忌被截断时盖一层铺满整卡的透明按钮 .hlHit（点了展开 / 收起）；加载中的占位（HuangliHold）用同一套版面 */
 .hl {
   position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 0 12px;
+  padding: 12px 0;
+}
+
+.hl + .dayListRows {
   border-top: 1px solid var(--line);
 }
 
@@ -617,10 +661,12 @@
   line-height: 1.15;
 }
 
+/* “丙午年 · 十月”：小字标签，第三层灰加字距（R-436 小字标签） */
 .hlYear {
   margin-top: 4px;
-  color: var(--text-2);
+  color: var(--text-3);
   font-size: var(--fs-11);
+  letter-spacing: 0.06em;
   white-space: nowrap;
 }
 
@@ -718,12 +764,19 @@
   list-style: none;
 }
 
+/* 泳道之间半像素细线（R-436“行间极细分隔线”）；选中那条照视觉稿 .wlane.sel 圆角 --r-md，上下两条线让开，不从圆角外面穿过 */
 .lane {
-  border-top: 1px solid var(--line);
+  border-top: 0.5px solid var(--line);
 }
 
 .laneSel {
+  border-radius: var(--r-md);
   background: var(--panel-2);
+}
+
+.laneSel,
+.laneSel + .lane {
+  border-top-color: transparent;
 }
 
 .laneBtn {
@@ -743,7 +796,8 @@
 }
 
 .laneSel .laneBtn {
-  box-shadow: inset 0 0 0 1.5px var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: inset 0 0 0 1px var(--text-3);
 }
 
 .laneWd {
@@ -768,8 +822,9 @@
   margin: 2px 0;
   line-height: 22px;
   border-radius: var(--r-pill);
-  font-family: var(--f-num);
+  font-family: var(--f-mono);
   font-size: var(--fs-15);
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
@@ -849,10 +904,12 @@
   border-bottom-left-radius: 0;
 }
 
+/* “+2”：等宽数字，同月格 .more（R-436） */
 .wmore {
   position: absolute;
   bottom: -2px;
   color: var(--text-2);
+  font-family: var(--f-mono);
   font-size: var(--fs-9-5);
 }
 
@@ -975,10 +1032,13 @@
 .dHeadBtn b {
   min-width: 26px;
   border-radius: var(--r-pill);
-  font-family: var(--f-num);
+  font-family: var(--f-mono);
   font-size: var(--fs-17);
+  font-variant-numeric: tabular-nums;
 }
 
+/* 农历、节气小字：照旧次要色 --text-2，不换第三层灰——放假那一列表头有斜纹从字底下穿过，斜纹透明度是按 --text-2 ≥ 4.5 定的（R-432），
+   换 --text-3 压在斜纹线上只有 3～4 */
 .dHeadBtn small {
   max-width: 100%;
   overflow: hidden;
@@ -992,11 +1052,13 @@
   background: var(--panel-2);
 }
 
+/* “全天”小字标签、左边时刻刻度：第三层灰；刻度等宽数字（R-436，同手机周视图 .wrul） */
 .dAllLab {
   padding: 6px 4px;
   border-bottom: 1px solid var(--line);
-  color: var(--text-2);
+  color: var(--text-3);
   font-size: var(--fs-10);
+  letter-spacing: 0.06em;
 }
 
 .dAll {
@@ -1026,8 +1088,8 @@
 
 .dHours {
   position: relative;
-  color: var(--text-2);
-  font-family: var(--f-num);
+  color: var(--text-3);
+  font-family: var(--f-mono);
   font-size: var(--fs-10);
 }
 

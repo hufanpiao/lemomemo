@@ -1,0 +1,13 @@
+/* 待办编辑页自己的一点样式（R-436 丙批）；表单外观全在 kit 的 Form.module.css，这里不重写。
+   .num：截止日期、截止时刻、提醒时刻三个框里的数字换等宽字（R-436“日期、时刻用等宽数字”）。挂在 kit .input 后面一起用（TextInput 的 className），
+   写成 input.num 压过 .input 的 font: inherit，不靠两份样式表的先后。“清掉”直接挂 kit Chip.module.css 的胶囊，不在这里写 */
+input.num {
+  font-family: var(--f-mono);
+}
+
+/* .empty：还没填的截止日期、截止时刻（新建待办时）。浏览器在空的日期、时刻框里画“yyyy/mm/dd”“--:--”格式骨架，看着粗糙：
+   没聚焦时把这层骨架的字设成透明，框和右边的日历、时钟图标照样在；一聚焦（要填了）就照常显示。
+   ::-webkit-datetime-edit 是 Chromium 和 Safari（含 iOS）共有的日期框文字层；不认识它的浏览器照旧显示骨架，不影响使用 */
+input.num.empty:not(:focus)::-webkit-datetime-edit {
+  color: transparent;
+}
