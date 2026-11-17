@@ -92,7 +92,11 @@ export const FADE_SKIP_MS = 1000 / 60;
  * 原来 R6 的 EARLY_MS 是 50 ms；这里取 100 ms（新页第一帧约 17 ms 才画出来，再加人眼看清的最短时间），底栏不在 main 里，连点页签不受影响
  */
 export const FADE_GUARD_MS = 100;
+/** 页签互切新页从下方多少 px 升上来（R-471，负责人 11-17“用淡入上移效果，300毫秒”） */
+export const FADE_RISE_PX = 16;
+/** 正在播的页签淡入：main 那一个（读进度、等它放完）和上移的那几个（见 riseTargets）；取消时一起取消 */
 let fadeAnim: Animation | null = null;
+let fadeRest: Animation[] = [];
 let fadeStop: (() => void) | null = null;
 let guardStop: (() => void) | null = null;
 
@@ -161,20 +165,55 @@ export function cancelFade(anim = true): void {
   guardStop?.();
   if (!anim) return;
   fadeAnim?.cancel();
+  for (const a of fadeRest) a.cancel();
   fadeAnim = null;
+  fadeRest = [];
+}
+
+/** 正在播的页签淡入走到哪了（0～1，已按曲线算好）；没在播为 0。连点时下一页从这里接着走（R-471“可打断”） */
+function fadeProgress(): number {
+  const p = fadeAnim?.effect?.getComputedTiming().progress;
+  return typeof p === 'number' && p > 0 && p < 1 ? p : 0;
+}
+
+/**
+ * 上移加在哪些元素上（R-471）：main 里没有 position: fixed 的元素时就是 main 自己；有的话（随手记贴底的输入行、页底提示条），
+ * 祖先带 transform 会让它们改按祖先定位、过渡期间错位，所以只给“不含 fixed 元素的最大子树”加上移，fixed 的那几个原地不动（同底栏）。
+ * 淡入（opacity）照样加在 main 上：opacity 不改 fixed 元素的定位
+ */
+function riseTargets(main: Element): Element[] {
+  const tainted = new Set<Element>();
+  for (const el of main.querySelectorAll('*')) {
+    if (getComputedStyle(el).position !== 'fixed') continue;
+    for (let e: Element | null = el; e !== null && e !== main; e = e.parentElement) tainted.add(e);
+  }
+  if (tainted.size === 0) return [main];
+  const out: Element[] = [];
+  const walk = (el: Element): void => {
+    for (const c of el.children) {
+      if (!tainted.has(c)) out.push(c);
+      else if (getComputedStyle(c).position !== 'fixed') walk(c);
+    }
+  };
+  walk(main);
+  return out;
 }
 
 /**
  * 四个页签之间互切（负责人 11-06 选方案 B，B2-动效审查-切页先出后入.md 第四批）：不起 View Transition，
  * 底栏、“＋”、液滴、顶部两层模糊一直是真元素、一直实时模糊（WebKit bug 302256：过渡期间不画 backdrop-filter），液滴连续滑。
- * 新页直接换上（update 同步画完，旧页已经卸掉，两页不同时在屏上），再给新页的 main 做一次 opacity 0→1（--dur-ui、--ease-out）。
- * 连点：取消上一次还没播完的淡入（和还在等分包的那一次）；减少动态效果时只换页、不动。
+ * 新页直接换上（update 同步画完，旧页已经卸掉，两页不同时在屏上），再给新页做一次淡入上移（R-471，负责人 11-17“用淡入上移效果，300毫秒”）：
+ * main 的 opacity 0→1，同时从下方 FADE_RISE_PX 上移到位（translateY 16px→0；加在哪见 riseTargets），--dur-tab、--ease-out。
+ * 连点（可打断）：上一次还没播完时，新页从上一次此刻的样子（透明度、偏移）接着走、用剩下的时长，不跳回起点；
+ * 上一次那几个动画（和还在等分包的那一次）取消。减少动态效果时只换页、不动。
  * pick 找页面的 main。新页分包没到时 React 先留着旧页（webkit e2e 实测第一次切到待办约 50 ms），pick 还是旧的那个：
  * 换页前先记下旧的，只认换上来的新元素；还没出来就看着 body 等，最多 FADE_WAIT_MS；等的时候走了整页过渡或同页内切换，cancelFade 停掉（M9）。
  * 换页后 FADE_GUARD_MS 以内落在 main 里的点按吞掉（M8）。
- * 返回的 Promise 等淡入放完（约 220 ms）才 resolve，比原来的 View Transition 早一点结束；等分包时 await 完拿到的可能是还没淡完的页（代码审查 L20）
+ * 返回的 Promise 等淡入放完（约 300 ms）才 resolve；等分包时 await 完拿到的可能是还没淡完的页（代码审查 L20）
  */
 export function fadeSwap(update: () => void, pick: () => Element | null): Promise<void> {
+  // 先读上一次走到哪（取消以后就读不到了）
+  const from = fadeProgress();
   cancelFade();
   const before = pick();
   update();
@@ -184,12 +223,25 @@ export function fadeSwap(update: () => void, pick: () => Element | null): Promis
   if (prefersReducedMotion()) return Promise.resolve();
   const play = (el: Element): Promise<void> => {
     if (typeof el.animate !== 'function') return Promise.resolve();
-    const a = el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: dur.ui * 1000, easing: bezierCss(ease.out) });
-    // 跳过第一帧：从 0 起播时画出来的第一帧整页透明，只剩底色和底栏，等于一帧空白（11-06 chromium 逐帧实测）；从一帧以后起，第一帧约 0.3
-    a.currentTime = FADE_SKIP_MS;
+    const rise = (p: number): string => `translateY(${Math.round((1 - p) * FADE_RISE_PX * 100) / 100}px)`;
+    const opts = { duration: dur.tab * 1000 * (1 - from), easing: bezierCss(ease.out) };
+    const targets = riseTargets(el);
+    const whole = targets.length === 1 && targets[0] === el;
+    const a = el.animate(
+      whole ? [{ opacity: from, transform: rise(from) }, { opacity: 1, transform: 'none' }] : [{ opacity: from }, { opacity: 1 }],
+      opts,
+    );
+    const rest = whole ? [] : targets.map((t) => t.animate([{ transform: rise(from) }, { transform: 'none' }], opts));
+    // 和 main 那个同起同停，只等 main 那个；取消时 finished 会被拒，这里接住
+    for (const x of rest) x.finished.catch(() => undefined);
+    // 从头起播时跳过第一帧：从 0 起播时画出来的第一帧整页透明，只剩底色和底栏，等于一帧空白（11-06 chromium 逐帧实测）；接着上一次走的不用跳
+    if (from === 0) for (const x of [a, ...rest]) x.currentTime = FADE_SKIP_MS;
     fadeAnim = a;
+    fadeRest = rest;
     const done = (): void => {
-      if (fadeAnim === a) fadeAnim = null;
+      if (fadeAnim !== a) return;
+      fadeAnim = null;
+      fadeRest = [];
     };
     return a.finished.then(done, done);
   };

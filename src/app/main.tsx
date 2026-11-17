@@ -124,6 +124,8 @@ async function start(): Promise<void> {
   whenContent(() => void nextFrame(() => void hideSplash()));
   // 底部安全区“稳定”从首屏画完起算（G10，底栏跟着第一个页面出来）
   afterAppPainted(markInsetPainted);
+  // 操作音效和震动（R-471）：实现首屏画完才下载（首屏净增额度），接上 settings 的“声音和触感”开关 ui.fx；下载失败只是不响不震
+  afterAppPainted(() => void import('../platform/feedback.ts').then((m) => m.startFx(collection<LookRow & { id: string }>('settings')), () => rlog('fx load failed')));
   el.dataset['version'] = buildInfo.version;
 
   const userId = readSessionUserId();

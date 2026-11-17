@@ -15,9 +15,11 @@
 // • 就地筛（R-447，负责人 11-17 选 S-B“原列表筛选”）：搜索框那一块（smart-search 的 PullSearch）按本页记录算出命中的 id，setFound 交回这里；
 //   页面照原来的分组和行画，只画 shows(id) 为真的，标题用 PullSlot 的 PullHit 给命中的字加短下划线（markQ 是算出这一批命中用的那个查询）。
 //   还没算出来（那一块还在下载）时 found 为 null，什么都不藏
+// • 手机拉过 PULL_OPEN_PX 那一下震一下、不响（R-471，platform/feedback.ts 的 fx('pull')）
 // • 运行日志：pull open <页> via=touch|wheel|key、pull close <页>（不记打的字）
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { queryTerms } from '../../../shared/logic/search.ts';
+import { fx } from '../../platform/fx-api.ts';
 import { rlog } from '../../platform/run-log-api.ts';
 
 /** 手指往下拉多少露出（px，量的是手指移动，不是画面位移）。原来 64；11-17 第一次改 110；
@@ -139,6 +141,8 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
       const dy = p.clientY - start.y;
       if (dy >= PULL_OPEN_PX && Math.abs(p.clientX - start.x) * 2 < dy) {
         start = null;
+        // 过了拉出的那条线：只震不响（R-471）。滚轮、键盘打开不震
+        fx('pull');
         reveal('touch');
         return;
       }

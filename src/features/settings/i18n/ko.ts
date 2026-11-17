@@ -131,6 +131,8 @@ export const ko = {
   'settings.notesView.mobileNote': '휴대폰에만 적용돼요. 컴퓨터는 따로 설정해요', // REVIEW(ko)
   'settings.notesView.desktopNote': '컴퓨터에만 적용돼요. 휴대폰은 따로 설정해요', // REVIEW(ko)
   'settings.notesView.err': '저장하지 못했어요. 잠시 후 다시 골라 주세요', // REVIEW(ko)
+  'settings.fx.title': '소리 및 햅틱', // REVIEW(ko) R-471
+  'settings.fx.err': '저장하지 못했어요. 잠시 후 다시 눌러 주세요', // REVIEW(ko) R-471
   'settings.notesOrder.notes': '메모 정렬', // REVIEW(ko) R-429
   'settings.notesOrder.vault': '비밀 메모 정렬', // REVIEW(ko) R-429
   'settings.notesOrder.time': '시간순', // REVIEW(ko) R-429

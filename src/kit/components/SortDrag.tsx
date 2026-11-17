@@ -18,6 +18,7 @@
 // • 收尾：浮层停稳（弹簧停、--dur-ui 过完）→ 预览顺序清空、占位显出来，同一次提交画到屏幕前撤浮层、去掉 html 标记（不出空帧）。卸载中途直接撤
 // • 运行日志（只记数字和类型，不记文字）：sort <页> lift i= n= view=list|mason sel=（拿起前选区长度）us=（行上 computed 的 -webkit-user-select）、
 //   over i=（每次换位一行）、drop i= to= n= / drop same / cancel why=、settle moved= ms=（松手到撤掉）same=（撤掉那一刻页面顺序和预览顺序一致没有，0 就是数据还没跟上、会跳一下）
+// • 震动和音效（R-471，页面传进来的 fx，即 platform/fx-api.ts）：拿起 fx('lift') 只震；放到新位置 fx('drop') 音效甲 + 震；落回原位、取消不响
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { SortSpring } from '../../motion/components.ts';
 import { liftFloat, useLongPressDrag, type Point, type SortFloat } from '../../motion/gestures.ts';
@@ -45,6 +46,8 @@ export interface SortDragOptions {
   onDrop(d: SortDrop): void;
   /** 记一行运行日志（platform 的 rlog；必传） */
   log(line: string): void;
+  /** 拿起、放下的音效和震动（platform/fx-api.ts 的 fx，R-471；kit 组件引不到 platform，同 log 由页面传）；不传不响不震 */
+  fx?(kind: 'lift' | 'drop'): void;
 }
 
 export interface SortDrag {
@@ -240,11 +243,8 @@ export function useSortDrag(opts: SortDragOptions): SortDrag {
       const float = liftFloat(row, { box, axis: o.current.axis, at, cls: { float: styles.float ?? '', card: styles.card ?? '' } });
       cur.current = { id, box, float, start: order, order, landing: false, t0: 0, c: null };
       setView({ held: id, order });
-      try {
-        navigator.vibrate?.(8);
-      } catch {
-        // 不支持、不让震：不要紧（iOS 网页本来就不震）
-      }
+      // 拿起：只震不响（R-471）
+      o.current.fx?.('lift');
       const rs = getComputedStyle(row);
       log(`lift i=${order.indexOf(id)} n=${order.length} view=${o.current.axis === 'y' ? 'list' : 'mason'} sel=${selLen} us=${rs.getPropertyValue('-webkit-user-select') || rs.userSelect || '-'}`);
       return true;
@@ -262,6 +262,8 @@ export function useSortDrag(opts: SortDragOptions): SortDrag {
       else {
         const i = l.order.indexOf(l.id);
         log(`drop i=${l.start.indexOf(l.id)} to=${i} n=${l.order.length}`);
+        // 放到了新位置：音效甲 + 震一下（R-471；松手里同步调）。落回原位、取消不响
+        o.current.fx?.('drop');
         o.current.onDrop({ id: l.id, beforeId: l.order[i - 1] ?? null, afterId: l.order[i + 1] ?? null });
       }
       land(l);

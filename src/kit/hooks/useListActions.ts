@@ -2,6 +2,7 @@
 // • 只读行：按 table 查 core 的只读 id；打勾、删除统一拦下，出“这条要新版本才能修改 · 更新”（useReadonlyGuard）；写入回 readonly 也拦
 // • 打勾（只有传了 toggle 的页）：先留住按下之前的列表 --dur-ui（页面的 useHoldView），留着的期间圆圈按“刚点成什么”画（picked）；
 //   待办页、日清单勾上那条路传 keep=false，自己用 kit/components/useDoneFlow.ts 的 linger 留住
+// • 音效和震动（R-471，platform/feedback.ts）：勾上完成 fx('done')、删除 fx('delete')，都在点按里同步调；只读拦下的不响
 // • 写入回 failed 出页面的出错条；silent（switching）不提示。撤销条、出错条、只读提示条、页面自己加的提示（X）同一个位置，同时只出一条
 // 这个文件在首屏（今天页）：只放判断和状态，不包 useCallback（拿去用的地方不靠函数身份）
 // useDrawerSel 也放这里：电脑版列表页（今天页、随手记页）的详情抽屉开着哪一条（B6 整合，两页原来各写一份；
@@ -12,6 +13,7 @@
 //   （B6 独立评审第 11 条：不然抽屉里“已删除 · 撤销”和页底撤销条两个撤销入口同时在）
 import { useCallback, useEffect, useState } from 'react';
 import type { ActionResult } from '../../core/action-result.ts';
+import { fx } from '../../platform/fx-api.ts';
 
 /** 写入结果码（core/action-result.ts）转给 kit 的组件（kit/components 按边界规则引不到 core） */
 export type { ActionResult };
@@ -60,6 +62,8 @@ export function useListActions<X = never>(table: string, act: Acts, hv?: Hold) {
         return Promise.resolve('readonly');
       }
       if (!act.toggle) return Promise.resolve('ok');
+      // 勾上完成：音效甲 + 震一下（R-471；在点按里同步调，iOS 的系统轻触反馈才会出）；取消勾选不响
+      if (on) fx('done');
       if (keep) {
         setPicked((m) => new Map(holding ? m : []).set(id, on));
         hv?.hold();
@@ -72,6 +76,8 @@ export function useListActions<X = never>(table: string, act: Acts, hv?: Hold) {
     shown: (id: string, done: boolean) => (holding ? (picked.get(id) ?? done) : done),
     async del(id: string) {
       if (isRo(id)) return g.block();
+      // 删除：音效甲 + 震一下（R-471），在 await 之前、手势里同步调
+      fx('delete');
       hv?.release();
       const r = await act.remove(id, true);
       if (r === 'ok') g.show({ kind: 'undo', id });

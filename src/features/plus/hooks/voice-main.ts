@@ -5,6 +5,7 @@
 // • 运行日志：quick submit len=（只记字数）、quick record out=
 import { clock } from '../../../platform/clock.ts';
 import { isTauri } from '../../../platform/env.ts';
+import { setFxMicBusy } from '../../../platform/fx-api.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { writeAssistDraft } from '../data/type-draft.ts';
 import { createVoiceSession } from '../data/voice-session.ts';
@@ -13,6 +14,8 @@ import { setAssistRecorder, toAssist } from './assist-open.ts';
 export const mainVoice = createVoiceSession({ onAsk: (ask, raw, aiUsed, from) => toAssist({ ask, raw, aiUsed, from: from === 'quick' ? 'quick' : 'voice', day: null }) });
 // 结果层的“改成记下”走这一份控制器（assist-open.ts 不 import 这里，见那边的说明）
 setAssistRecorder((raw, from, mode, day) => mainVoice.record(raw, from, mode, day));
+// 录着（准备中、录音、手机自带识别收音）时操作音效一律不出声、不碰 audioSession（R-471，platform/feedback.ts）
+setFxMicBusy(() => mainVoice.view().capturing);
 
 /**
  * exe 的全局快速记录框（quick-add 窗口）交上来的一句（架构 5.14 第 1 点；0.18 M2 那个窗口不连服务器，现在只有 Rust 转发、没有自己的判断）：

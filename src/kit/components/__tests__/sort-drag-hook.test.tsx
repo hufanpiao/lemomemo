@@ -71,7 +71,8 @@ const ptr = (el: Element, type: string, y: number, x = 100, id = 5) =>
   });
 
 function Page({ ids, onDrop, log, leaving = false }: { ids: string[]; onDrop: (d: SortDrop) => void; log: (l: string) => void; leaving?: boolean }) {
-  const sd = useSortDrag({ tag: 't', axis: 'y', onDrop, log });
+  // 音效和震动（R-471）记进同一串，好按先后断言
+  const sd = useSortDrag({ tag: 't', axis: 'y', onDrop, log, fx: (k) => log(`fx ${k}`) });
   return (
     <div data-testid="wrap">
       <SortBox sd={sd}>
@@ -185,6 +186,8 @@ describe('放下、取消、卸下（R-461 2.4、2.5）', () => {
     await ptr(document.body, 'pointerup', 52);
     expect(s.drops).toEqual([{ id: 'c', beforeId: 'a', afterId: 'b' }]);
     expect(s.logs).toContain('sort t drop i=2 to=1 n=3');
+    // 拿起只震、放到新位置响一下震一下（R-471），各一次
+    expect(s.logs.filter((l) => l.startsWith('fx '))).toEqual(['fx lift', 'fx drop']);
     expect(s.float()?.querySelector('[data-up]')).toBeNull();
     await settled();
     expect(s.float()).toBeNull();
@@ -199,6 +202,8 @@ describe('放下、取消、卸下（R-461 2.4、2.5）', () => {
     await ptr(span, 'pointerup', 125);
     expect(s.drops).toEqual([]);
     expect(s.logs).toContain('sort t drop same');
+    // 落回原位：只有拿起那一下震，放下不响（R-471）
+    expect(s.logs.filter((l) => l.startsWith('fx '))).toEqual(['fx lift']);
     await settled();
     expect(s.float()).toBeNull();
   });
@@ -215,6 +220,7 @@ describe('放下、取消、卸下（R-461 2.4、2.5）', () => {
     expect(s.logs).toContain('sort t cancel why=esc');
     await settled();
     expect(s.drops).toEqual([]);
+    expect(s.logs.filter((l) => l.startsWith('fx '))).toEqual(['fx lift']);
     expect(s.float()).toBeNull();
     expect(document.documentElement.hasAttribute('data-sort-dragging')).toBe(false);
   });

@@ -9,12 +9,13 @@ import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
 import refine from '../../../kit/components/Refine.module.css';
 import { buildInfo } from '../../../platform/env.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
-import { SettingsCard, SettingsEntryRow } from '../../../kit/components/Settings/Settings.tsx';
+import { SettingsCard, SettingsEntryRow, SettingsSwitchRow } from '../../../kit/components/Settings/Settings.tsx';
 import { cardsOf, type SettingsCardId, type SettingsSectionId } from '../hooks/useSettingsPage.ts';
 import type { ExportState } from '../hooks/useExport.ts';
 import { hotkeyLabel, type QuickAddHotkey } from '../hooks/useQuickAddHotkey.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
 import { useNotesViewSetting } from '../hooks/useNotesViewSetting.ts';
+import { useFxSetting } from '../hooks/useFxSetting.ts';
 import type { DevicesState } from '../hooks/useDevices.ts';
 import { deviceName } from './DevicesSection.tsx';
 import { LanguageSection } from './LanguageSection.tsx';
@@ -36,7 +37,23 @@ type HomeProps = {
   footer: ReactNode;
 };
 
-const CARD_TITLE = { account: 'settings.account.title', main: 'settings.card.main', trash: 'settings.trash.title', more: 'settings.card.more' } as const;
+/** “声音和触感”一行（R-471）：开关，读写在 hooks/useFxSetting.ts */
+function FxRow() {
+  const t = useSettingsT();
+  const fx = useFxSetting();
+  return (
+    <SettingsSwitchRow
+      rowId="fx"
+      label={t('settings.fx.title', {})}
+      checked={fx.on}
+      onChange={(v) => void fx.set(v)}
+      error={fx.error ? t('settings.fx.err', {}) : null}
+      testId="settings-fx"
+    />
+  );
+}
+
+const CARD_TITLE ={ account: 'settings.account.title', main: 'settings.card.main', trash: 'settings.trash.title', more: 'settings.card.more' } as const;
 
 export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, onOpen, footer }: HomeProps) {
   const t = useSettingsT();
@@ -98,6 +115,8 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
         valueTestId="settings-notes-view-summary"
       />
     ),
+    // 声音和触感（R-471）：操作音效和震动的总开关，默认开；存 settings 的 ui.fx（各设备同步）
+    fx: <FxRow />,
     // 待办“完成 7 天后自动删除”（负责人 11-15 方案）：开关整行由 todos 功能懒加载（键和默认值在那边一处），没到之前这一行不画
     todos: <QuietBoundary name="todo-settings"><Suspense fallback={null}><TodoSettings /></Suspense></QuietBoundary>,
     // 日历（R-320）、提醒与通知（REMIND-wiring）：行名和整行由本页画，值由各自的功能懒加载（M4：行一开始就能点）；

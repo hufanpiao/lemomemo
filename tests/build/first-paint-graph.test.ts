@@ -86,6 +86,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/platform/auth-loss-log.ts': 'R-382：main.tsx 只在本机有 lemo.authloss（上次会话丢了留下的原因码，少见）时才下载、上传后删键；平时不下载',
   'src/core/auth-loss.ts': 'R-382：会话丢了要定结局时（core/auth-loss-lazy.ts）才下载，平时不下载',
   'src/core/device-reg.ts': '首屏画完以后 startAfterPaint 才下载（FA-6 ③，app/after-paint.ts）',
+  'src/platform/feedback.ts': 'R-471 操作音效和震动的实现：main.tsx 在 afterAppPainted 里才下载；首屏只带 fx-api.ts 那个转发',
   'src/platform/account-status.ts': '首屏画完以后 after-paint 才取（账号状态探测）；告知页的 consent-exit.ts 也静态引它，但那一块只在要显示告知页时才下载（首屏瘦身 C，11-17）',
   'src/platform/sync-net.ts': '同上，首屏画完以后才下载',
   'src/app/sync-wiring.ts': '同上，首屏画完以后才下载',
