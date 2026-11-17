@@ -2,7 +2,6 @@
 // 没豁免、豁免过期、读不出编号的一律拦下；不联网、不起子进程
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-// @ts-expect-error 纯 JS 的 CI 脚本，没有类型声明
 import { blocked, highOf, ignoresOf } from '../../build/ci/npm_audit_gate.mjs';
 
 const report = {
