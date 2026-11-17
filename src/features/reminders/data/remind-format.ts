@@ -2,8 +2,8 @@
 // • 日程：“15 分钟后开始”（< 60 分钟）、“15:30 开始”、“已经开始”
 // • 待办：“今天 17:00 截止”“今天截止”“11月5日截止”“已过截止”“没有截止日期”
 // • 错过的提醒每行：“今天 09:00 · 日程”（day、time、kind）
-import { addDays, diffDays, hm24, msAt, parseDate, parseHm, todayOf, weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
-import { DAY_MINUTES, endMinOn, placeEvent, spanRowOf } from '../../../../shared/logic/calendar/event-span.ts';
+import { addDays, DAY_MINUTES, diffDays, msAt, parseDate, parseHm, todayOf, weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { placeEvent, spanRowOf, untilMsg, type SpanMsg } from '../../../../shared/logic/calendar/event-span.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { hhmm } from '../../../../shared/logic/notify-text.ts';
 import { startAtOf } from '../../../../shared/logic/remind-actions.ts';
@@ -32,11 +32,12 @@ function annivWhen(r: Reminder, now: number, tz: Tz): WhenMsg {
   return { key: 'remind.when.annivIn', params: { n } };
 }
 
-/** 日程的开始时刻（全天按 remind.default_time） */
+/** 日程的开始时刻：有时刻的按 event-span.ts 的 placeEvent（坏时区按设备时区、坏时刻为 null，同日历、今天页）；全天按 remind.default_time */
 export function eventStart(r: Reminder, tz: Tz, defaultTime?: string): number | null {
-  const date = str(r.row['date']);
-  if (date === null) return null;
-  return startAtOf({ date, time: str(r.row['time']), tz: str(r.row['tz']) }, tz, defaultTime);
+  const row = spanRowOf(r.row);
+  const p = row && placeEvent(row, tz);
+  if (!row || !p) return null;
+  return p.allDay ? startAtOf({ date: row.date, time: null, tz: null }, tz, defaultTime) : p.startMs;
 }
 
 export function whenMsg(r: Reminder, now: number, tz: Tz, defaultTime?: string): WhenMsg {
@@ -130,15 +131,11 @@ export function wdKey(date: DateStr): WdKey {
 export const timeOf = hhmm;
 
 /**
- * 全屏提醒页副标题的“到 16:30”：结束在开始那天（按 event-span.ts 的 placeEvent，午夜正好结束的也算开始那天、写“到 24:00”）；
- * 跨天的（R-444）带上最后一天“到 11月20日 16:30”；全天、行坏了为 null
+ * 全屏提醒页副标题的“至 16:30”：词条同日清单（公共词典 span.*，event-span.ts 的 untilMsg）。结束在开始那天（午夜正好结束的也算开始那天、写“至 24:00”）；
+ * 跨天的（R-444）带上最后一天“至 11月20日 16:30”；全天、行坏了为 null
  */
-export function endMsg(r: Reminder, tz: Tz): { key: 'remind.full.until'; params: { time: string } } | { key: 'remind.full.untilDate'; params: { m: number; d: number; time: string } } | null {
+export function endMsg(r: Reminder, tz: Tz): SpanMsg | null {
   const row = spanRowOf(r.row);
   const p = row && placeEvent(row, tz);
-  if (!p || p.allDay) return null;
-  const time = hm24(endMinOn(p.endMs, p.lastDate, tz));
-  if (p.date === p.lastDate) return { key: 'remind.full.until', params: { time } };
-  const { m, d } = parseDate(p.lastDate);
-  return { key: 'remind.full.untilDate', params: { m, d, time } };
+  return p && !p.allDay ? untilMsg(p, tz) : null;
 }

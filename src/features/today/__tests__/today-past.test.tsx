@@ -11,7 +11,11 @@ vi.mock('../../reminders/index.ts', () => ({ MissedReminders: () => null, Unsync
 vi.mock('../ui/NowCard.tsx', () => ({ NowCard: () => <section data-testid="fake-now" /> }));
 
 const NOW = 1_000_000;
-const ev = (id: string, title: string, time: string | null, end: number | null) => ({ id, title, time, end, origin: null });
+const ev = (id: string, title: string, time: string | null, end: number | null) => ({
+  id, title, time, end, origin: null,
+  // 只占一天（今天页按 place 写行首：全天写“全天”，有时刻写开始时刻）
+  place: time === null ? { allDay: true as const, date: '2026-11-14', lastDate: '2026-11-14' } : { allDay: false as const, date: '2026-11-14', lastDate: '2026-11-14', startMs: 0, endMs: 0, startMin: 0 },
+});
 const td = (id: string, title: string, done: boolean) => ({ id, title, dueTime: null, done });
 const state = {
   events: [ev('e1', 'SignPlex 字幕校对', '10:30', NOW - 1), ev('e2', '团建', null, null), ev('e3', 'NEOX 横版对片', '13:00', NOW + 60_000)],

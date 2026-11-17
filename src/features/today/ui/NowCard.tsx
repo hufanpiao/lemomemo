@@ -14,7 +14,8 @@ import refine from '../../../kit/components/Refine.module.css';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { NowCard as Card, NowSeg, NowState } from '../hooks/today-types.ts';
-import { durText, useCheerText, useLocale, useTodayT } from '../hooks/useTodayT.ts';
+import { fmtDur } from '../../../../shared/i18n/fmt.ts';
+import { useCheerText, useLocale, useTodayT } from '../hooks/useTodayT.ts';
 import styles from './NowCard.module.css';
 
 type T = ReturnType<typeof useTodayT>;
@@ -99,7 +100,7 @@ export function NowCard({ card, today }: { card: Card; today: DateStr }) {
         <span className={styles.nowText}>{show(t('now.now', { t: num(card.nowText) }))}</span>
         {card.left !== null ? (
           <span className={styles.left} data-testid="now-left">
-            {show(live ? t('now.left', { d: num(durText(card.left, locale)) }) : t('now.in', { d: num(durText(card.left, locale)) }))}
+            {show(live ? t('now.left', { d: num(fmtDur(card.left, locale)) }) : t('now.in', { d: num(fmtDur(card.left, locale)) }))}
           </span>
         ) : null}
       </p>
@@ -117,11 +118,11 @@ export function NowCard({ card, today }: { card: Card; today: DateStr }) {
         <p className={styles.sub} data-testid="now-also">
           {'more' in card.also
             ? show(t('now.alsoMore', { n: num(card.also.more) }))
-            : show(t('now.also', { title: card.also.title, end: num(card.also.end), d: num(durText(card.also.left, locale)) }))}
+            : show(t('now.also', { title: card.also.title, end: num(card.also.end), d: num(fmtDur(card.also.left, locale)) }))}
         </p>
       ) : null}
       {live && card.next && card.foot === null ? (
-        <span className={styles.srOnly}>{t('now.hint', { t: card.next.time, title: card.next.title, d: durText(card.next.inMin, locale) })}</span>
+        <span className={styles.srOnly}>{t('now.hint', { t: card.next.time, title: card.next.title, d: fmtDur(card.next.inMin, locale) })}</span>
       ) : null}
       <div className={`${styles.ruler} ${card.ruler.lanes === 2 ? styles.two : ''}`} aria-hidden="true" data-testid="now-ruler" data-lanes={card.ruler.lanes} style={{ '--lh': `${lh}px` } as CSSProperties}>
         {card.ruler.trk.map((k) => (
@@ -141,7 +142,7 @@ export function NowCard({ card, today }: { card: Card; today: DateStr }) {
       </div>
       {card.foot?.kind === 'next' ? (
         <p className={styles.sub} data-testid="now-hint">
-          {show(t('now.hint', { t: num(card.foot.time), title: card.foot.title, d: num(durText(card.foot.inMin, locale)) }))}
+          {show(t('now.hint', { t: num(card.foot.time), title: card.foot.title, d: num(fmtDur(card.foot.inMin, locale)) }))}
         </p>
       ) : card.foot?.kind === 'tomorrow' ? (
         <p className={styles.sub} data-testid="now-tomorrow">

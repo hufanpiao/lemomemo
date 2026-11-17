@@ -51,6 +51,8 @@ export interface DayEntry {
   readonly createdAt: number;
   /** 跨天的日程（R-444）：这一条是哪一天的那一段（cont 同 Cont）、开始和最后一天；只占一天的没有 */
   readonly span?: { readonly cont: Cont; readonly date: DateStr; readonly lastDate: DateStr };
+  /** 日程放在哪几天、几点（placeEvent 的结果；日清单 spanTextOn、周视图切段直接用）；待办没有 */
+  readonly place?: EventPlacement;
 }
 
 /** 排序时的先后：有时刻的日程 0、全天日程 1、待办 2（check_backend F7：方括号里的键要追得到字面量，查表改用 switch） */
@@ -87,6 +89,7 @@ export function eventEntry(ev: CalEvent, p: EventPlacement, day: DateStr = p.dat
     startMs: p.allDay ? null : p.startMs,
     endMs: p.allDay ? null : p.endMs,
     createdAt: ev.created_at,
+    place: p,
     ...(cont === undefined ? {} : { span: { cont, date: p.date, lastDate: p.lastDate } }),
   };
 }

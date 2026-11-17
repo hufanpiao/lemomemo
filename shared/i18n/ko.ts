@@ -65,6 +65,10 @@ export const ko = {
   'fmt.wd.4': '목', // R-106 B1 第一遍已审（10-31）
   'fmt.wd.5': '금', // R-106 B1 第一遍已审（10-31）
   'fmt.wd.6': '토', // R-106 B1 第一遍已审（10-31）
+  'fmt.dur.d': '{n}일', // REVIEW(ko) R-444
+  'fmt.dur.h': '{n}시간', // 同视觉稿 kDur（原 today dur.h）
+  'fmt.dur.m': '{n}분', // 同视觉稿 kDur（原 today dur.m）
+  'fmt.dur.mTail': '{n}분', // 同视觉稿 kDur（原 today dur.hm 的后半）
   'update.syncPaused': '동기화를 잠시 멈췄어요. 조금 뒤에 다시 열어 주세요', // R-106 B1 第一遍已审（10-31），按审校意见 K-08 改过：一句里两个“잠시”；同 zh：探测说账号正常但 5 分钟内已重新载入过，同步暂停（10-30）
   'update.stalled': '새 버전이 아직 준비되지 않았어요 · 잠시 후 다시 시도해 주세요', // R-106 B1 第一遍已审（10-31）；同 zh：查到新版本但 30 秒内没接管（BANNER-sugg ⑤，10-30）
   'exit.incomplete.title': '로그아웃이 끝나지 않았어요', // REVIEW(ko)；同 zh：exe 里退出时本机会话没删掉（A-1）
@@ -75,6 +79,7 @@ export const ko = {
   'exit.unavailable.title': '이 컴퓨터의 로그인 정보를 읽지 못했어요', // REVIEW(ko)；同 zh：installDesktopSession 失败（代码审查建议 4）
   'exit.unavailable.body': '레모를 다시 열어 주세요. 그래도 안 되면 컴퓨터를 다시 시작한 뒤 시도해 주세요.', // REVIEW(ko)
   'exit.unavailable.reopen': '다시 열기', // REVIEW(ko)
+  'span.allDay': '종일', // 原 cal.allDay、list.allDay 合并（REVIEW(ko)）
   'span.ongoing': '계속', // REVIEW(ko) R-444（原 cal.day.ongoing、list.ongoing 合并）
   'span.until': '{t}까지', // REVIEW(ko) R-444（原 cal.day.until、list.until 合并）
   'span.untilDate': '{m}월 {d}일 {t}까지', // REVIEW(ko) R-444

@@ -94,7 +94,6 @@ export const viewZh = {
   'cal.a11y.workday': '{name}（补班）',
   'cal.a11y.overdue': '有逾期的待办',
   'cal.a11y.selected': '已选中',
-  'cal.allDay': '全天',
   'cal.todoMark': '待办：{title}',
   'cal.grid': '{y}年{m}月月历',
   'cal.weekGrid': '{from} 起的一周',

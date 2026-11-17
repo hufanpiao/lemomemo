@@ -61,7 +61,7 @@ export interface Logic<Item extends ItemLike> {
     { items: Item[]; hints: { bad_day: { month: number; day: number } | null } };
   confidence(r: { items: Item[] }): 'sure' | 'unsure';
   checkParseOutput(raw: unknown, ctx: CheckCtx): CheckResult<{ items: Item[] }>;
-  /** 只做记下（record.v5；_shared/ai/parse-core.ts 的 recordWithAI，B4b-3 起和 ai-parse 的 parseWithAI 分开） */
+  /** 只做记下（record.v6；_shared/ai/parse-core.ts 的 recordWithAI，B4b-3 起和 ai-parse 的 parseWithAI 分开） */
   recordWithAI(input: ParseInput, provider: AIProvider): Promise<ParseOk<{ items: Item[] }> | ParseFail>;
   captureRow(item: Item, ctx: {
     id: string; batchId: string; now: number; today: string; tz: string; source: 'chat'; rawText: string; origin: 'ai' | 'rule';

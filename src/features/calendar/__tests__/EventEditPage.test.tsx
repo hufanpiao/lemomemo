@@ -138,6 +138,20 @@ describe('结束日期、时刻（R-444 跨天日程）', () => {
     expect(events().get(ID)).toMatchObject({ date: '2026-11-06', time: '15:00', remind_min: 15 });
   });
 
+  it('结束日期早于开始：按开始那天算，日期框下面写一行提示；下一次改结束就清掉（第二轮评审建议 5）', async () => {
+    const b = await boot();
+    await b.outbox?.applyServer('events', [{ row: serverEvent() }]);
+    open(`#/event/${ID}`);
+    const tip = '结束不能早于开始，已按开始那天算';
+    expect(screen.queryByText(tip)).toBeNull();
+    await commitText('event-edit-end-date', '2026-11-04');
+    expect(screen.getByText(tip)).toBeTruthy();
+    expect(events().get(ID)?.['duration_min']).toBe(60);
+    await commitText('event-edit-end-date', '2026-11-07');
+    await waitFor(() => expect(events().get(ID)?.['duration_min']).toBe(1440 + 60));
+    expect(screen.queryByText(tip)).toBeNull();
+  });
+
   it('全天：结束只有日期；选到 3 天后记成 4 × 1440，改开始日期时整段跟着挪', async () => {
     const b = await boot();
     await b.outbox?.applyServer('events', [{ row: serverEvent({ time: null, tz: null, remind_min: null, remind_days: 0 }) }]);

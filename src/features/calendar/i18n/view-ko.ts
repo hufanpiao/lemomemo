@@ -87,7 +87,6 @@ export const viewKo = {
   'cal.a11y.workday': '{name}(대체 근무)', // REVIEW(ko)
   'cal.a11y.overdue': '기한 지난 할 일 있음', // REVIEW(ko)
   'cal.a11y.selected': '선택됨', // REVIEW(ko)
-  'cal.allDay': '종일', // REVIEW(ko)
   'cal.todoMark': '할 일: {title}', // REVIEW(ko)
   'cal.grid': '{y}년 {m}월 달력', // REVIEW(ko)
   'cal.weekGrid': '{from}부터 한 주', // REVIEW(ko)

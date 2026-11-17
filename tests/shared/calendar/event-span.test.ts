@@ -9,10 +9,12 @@ import {
   dayOfSpan,
   eventDurationMin,
   overlapsDays,
+  ownTzOf,
   placeEvent,
   spanDaysIn,
   spanRowOf,
   spanTextOn,
+  untilMsg,
 } from '../../../shared/logic/calendar/event-span.ts';
 import { buildMonth } from '../../../shared/logic/calendar/month-grid.ts';
 import { buildWeek } from '../../../shared/logic/calendar/week-view.ts';
@@ -86,19 +88,31 @@ describe('event-span：数据做法（duration_min，最多 31 天）', () => {
 
   it('spanTextOn：开始那天写开始时刻 + “至哪天几点”；中间“持续”；最后一天“至 HH:MM”；全天写第几天', () => {
     const start = msAt('2026-11-18', 9 * 60, SEOUL);
-    const t = { date: '2026-11-18', lastDate: '2026-11-20', endMs: start + (2 * DAY + 9 * 60) * 60_000 };
+    const t = { allDay: false as const, date: '2026-11-18', lastDate: '2026-11-20', startMs: start, startMin: 9 * 60, endMs: start + (2 * DAY + 9 * 60) * 60_000 };
     const until = { key: 'span.untilDate', params: { m: 11, d: 20, t: '18:00' } };
     expect(spanTextOn(t, '2026-11-18', SEOUL)).toEqual({ lead: 'start', endMin: DAY, meta: until });
     expect(spanTextOn(t, '2026-11-19', SEOUL)).toEqual({ lead: { key: 'span.ongoing', params: {} }, endMin: DAY, meta: until });
     expect(spanTextOn(t, '2026-11-20', SEOUL)).toEqual({ lead: { key: 'span.until', params: { t: '18:00' } }, endMin: 18 * 60, meta: null });
-    expect(spanTextOn({ date: '2026-11-18', lastDate: '2026-11-18', endMs: start + 60 * 60_000 }, '2026-11-18', SEOUL)).toEqual({ lead: 'start', endMin: 600, meta: null });
+    expect(spanTextOn({ ...t, lastDate: '2026-11-18', endMs: start + 60 * 60_000 }, '2026-11-18', SEOUL)).toEqual({ lead: 'start', endMin: 600, meta: null });
     // 最后一天正好在午夜结束（结束前一刻在 11-19）：写“至 11月19日 24:00”
-    const mid = { date: '2026-11-18', lastDate: '2026-11-19', endMs: msAt('2026-11-20', 0, SEOUL) };
+    const mid = { ...t, lastDate: '2026-11-19', endMs: msAt('2026-11-20', 0, SEOUL) };
     expect(spanTextOn(mid, '2026-11-18', SEOUL).meta).toEqual({ key: 'span.untilDate', params: { m: 11, d: 19, t: '24:00' } });
     expect(spanTextOn(mid, '2026-11-19', SEOUL).lead).toEqual({ key: 'span.until', params: { t: '24:00' } });
-    const a = { date: '2026-11-18', lastDate: '2026-11-20', endMs: null };
-    expect(spanTextOn(a, '2026-11-19', SEOUL)).toEqual({ lead: 'allDay', endMin: null, meta: { key: 'span.dayOf', params: { i: 2, n: 3 } } });
+    const a = { allDay: true as const, date: '2026-11-18', lastDate: '2026-11-20' };
+    expect(spanTextOn(a, '2026-11-19', SEOUL)).toEqual({ lead: { key: 'span.allDay', params: {} }, endMin: null, meta: { key: 'span.dayOf', params: { i: 2, n: 3 } } });
     expect(spanTextOn({ ...a, lastDate: '2026-11-18' }, '2026-11-18', SEOUL).meta).toBeNull();
+  });
+
+  it('untilMsg：同一天“至 HH:MM”，结束在后面某天带日期（全屏提醒页、日清单共用）', () => {
+    const s = msAt('2026-11-18', 15 * 60, SEOUL);
+    expect(untilMsg({ date: '2026-11-18', lastDate: '2026-11-18', endMs: s + 90 * 60_000 }, SEOUL)).toEqual({ key: 'span.until', params: { t: '16:30' } });
+    expect(untilMsg({ date: '2026-11-18', lastDate: '2026-11-20', endMs: msAt('2026-11-20', 18 * 60, SEOUL) }, SEOUL)).toEqual({ key: 'span.untilDate', params: { m: 11, d: 20, t: '18:00' } });
+  });
+
+  it('ownTzOf：有效的日程时区照用，空的、无效的用设备时区（placeEvent、编辑页、今天页共用）', () => {
+    expect(ownTzOf('America/New_York', SEOUL)).toBe('America/New_York');
+    expect(ownTzOf(null, SEOUL)).toBe(SEOUL);
+    expect(ownTzOf('Mars/Base', SEOUL)).toBe(SEOUL);
   });
 });
 

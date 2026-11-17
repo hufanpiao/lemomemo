@@ -83,7 +83,7 @@ export function EventEditor({ id, onCreated }: { id: string; onCreated(id: strin
             <TextInput type="time" className={NUM} aria-label={t('event.edit.startTime', {})} value={form.time} disabled={off} onCommit={(v) => v !== '' && change({ time: v })} data-testid="event-edit-start" />
           ) : null}
         </Field>
-        <Field label={t('event.edit.end', {})} htmlFor="event-end-date">
+        <Field label={t('event.edit.end', {})} htmlFor="event-end-date" hint={ed.endFixed ? t('event.edit.endFixed', {}) : undefined}>
           <TextInput
             id="event-end-date"
             type="date"

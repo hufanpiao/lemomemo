@@ -5,11 +5,11 @@
 // 纯 TS
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { CalEvent, CalItems, CalTodo } from '../../../../shared/logic/calendar/cal-items.ts';
+import { spanRowOf } from '../../../../shared/logic/calendar/event-span.ts';
 
 export type Row = Readonly<{ id: string } & Record<string, unknown>>;
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const strOrNull = (v: unknown): string | null => (typeof v === 'string' ? v : null);
@@ -17,19 +17,16 @@ const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.
 const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const isDate = (v: unknown): v is DateStr => typeof v === 'string' && DATE.test(v);
 
+/** 日期、时刻、时区、时长照原样交给 event-span.ts 的 placeEvent（spanRowOf 只管类型）：坏日期、坏时刻不显示，坏时区按设备时区，坏时长按 1 小时，和今天页、提醒同一套 */
 function eventOf(r: Row): CalEvent | null {
-  if (typeof r.id !== 'string' || !isDate(r['date'])) return null;
-  const time = typeof r['time'] === 'string' && HM.test(r['time']) ? r['time'] : null;
+  const span = spanRowOf(r);
+  if (typeof r.id !== 'string' || span === null) return null;
   return {
     id: r.id,
     title: str(r['title']),
     short: strOrNull(r['short']),
     project: str(r['project']),
-    date: r['date'],
-    time,
-    // 时区缺失或无效时，纯逻辑（placeEvent）按设备时区的时刻照样显示
-    tz: strOrNull(r['tz']),
-    duration_min: Math.max(0, Math.trunc(num(r['duration_min'], 0))),
+    ...span,
     created_at: num(r['created_at'], 0),
     deleted_at: numOrNull(r['deleted_at']),
     undone: r['undone'] === true,

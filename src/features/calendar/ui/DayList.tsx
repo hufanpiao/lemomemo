@@ -18,7 +18,7 @@
 // • 电脑版详情抽屉（R-130）：行按钮带 data-open（抽屉关上时找回这一行），抽屉里开着的那条 aria-current（kit List 的左边柠檬黄一道，同今天页）
 import { Suspense } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
-import { minOfDay, weekdayOf } from '../../../../shared/core/date.ts';
+import { hm24, minOfDay, weekdayOf } from '../../../../shared/core/date.ts';
 import type { CalItems, DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
 import { spanTextOn, type SpanText } from '../../../../shared/logic/calendar/event-span.ts';
 import { dayEntries } from '../../../../shared/logic/calendar/month-grid.ts';
@@ -31,7 +31,7 @@ import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import type { Huangli } from '../hooks/useHuangli.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, hm, weekdayKey } from './cal-ui.ts';
+import { colorClass, weekdayKey } from './cal-ui.ts';
 import { HuangliCard, HuangliHold } from './HuangliCard.tsx';
 
 function titleOf(items: CalItems, e: DayEntry): string {
@@ -45,8 +45,7 @@ function titleOf(items: CalItems, e: DayEntry): string {
  * 中间整天写“持续”；最后一天写“至 18:00”。全天的跨天日程照写“全天”，标题下面“第 2/3 天”
  */
 function spanOf(e: DayEntry, date: DateStr, tz: string): SpanText | null {
-  if (e.kind === 'todo') return null;
-  return spanTextOn({ date: e.span?.date ?? date, lastDate: e.span?.lastDate ?? date, endMs: e.kind === 'timed' ? e.endMs : null }, date, tz);
+  return e.place ? spanTextOn(e.place, date, tz) : null;
 }
 
 /** 行尾的“未同步”小标记（没有时整格不画，见 .dayUnsynced:empty） */
@@ -107,11 +106,10 @@ export function DayList({
   const timeOf = (e: DayEntry, s: SpanText | null): string => {
     if (s === null) {
       const due = dueMins.get(e.itemId);
-      return due === undefined ? t('cal.day.todo', {}) : hm(due);
+      return due === undefined ? t('cal.day.todo', {}) : hm24(due);
     }
-    if (s.lead === 'allDay') return t('cal.allDay', {});
     if (s.lead !== 'start') return spanT(s.lead);
-    return e.startMs === null ? '' : hm(minOfDay(e.startMs, tz));
+    return e.startMs === null ? '' : hm24(minOfDay(e.startMs, tz));
   };
   /** 跨天日程标题下面那行小字（R-444） */
   const metaOf = (s: SpanText | null): string | null => (s === null || s.meta === null ? null : spanT(s.meta));

@@ -9,22 +9,19 @@
 // • 电脑（layout 'desk'，时间轴纵向，相当于 minBlockPx = 0）：按真实时长画，重叠的并排分列，块带 column、columns。
 // • 待办（和前端 A 对过的接口）：规则和月历一样（todoDate：删掉的、撤销的、已完成的、没有截止日的不放，截止日是浮动日期不换算），
 //   手机放进当天的 todos（kind 'todo'，泳道上画空心圆），电脑并进 allDay 那一行（排在全天日程后面）。纯函数。
-import type { DateStr } from '../../core/date.ts';
+import { DAY_MINUTES, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import type { ProjectColor } from '../project-color.ts';
 import {
   assertTz,
+  collectEntries,
   compareEntries,
-  eventEntry,
-  liveEventsNear,
-  todoDate,
-  todoEntry,
   type CalEvent,
   type CalTodo,
   type DayEntry,
 } from './cal-items.ts';
 import { weekDates } from './cal-nav.ts';
-import { DAY_MINUTES, dayOfSpan, endMinOn, EVENT_SPAN_MAX_DAYS, spanDaysIn, type Cont } from './event-span.ts';
+import { dayOfSpan, endMinOn, type Cont } from './event-span.ts';
 
 /** 一天里的一段（跨午夜的日程切开以后各段分别算；被切的哪一边看 entry.span.cont） */
 interface Segment {
@@ -119,6 +116,7 @@ interface DayBuckets {
   readonly todos: Map<DateStr, DayEntry[]>;
 }
 
+/** 这一周每天的事项按种类分开：月历、日清单同一份 collectEntries（每天一条、已排好），有时刻的按那一天切成段 */
 function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets {
   const allDay = new Map<DateStr, DayEntry[]>(dates.map((d) => [d, []]));
   const timed = new Map<DateStr, Segment[]>(dates.map((d) => [d, []]));
@@ -126,22 +124,16 @@ function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets
   const first = dates[0];
   const last = dates[dates.length - 1];
   if (first === undefined || last === undefined) return { allDay, timed, todos };
-  // 预筛（代码审查 A）：除了换算时区可能差的天数，前面再多留 31 天（R-444 最长跨度）——前几天开始、跨进这一周的那几段也要算
-  for (const [ev, p] of liveEventsNear(items.events, first, last, tz, EVENT_SPAN_MAX_DAYS)) {
-    if (p.allDay) {
-      // 跨天的全天日程：占的每一天都放一条（带 span，电脑全天行按它画直边）
-      for (const d of spanDaysIn(p, first, last)) allDay.get(d)?.push(eventEntry(ev, p, d));
-      continue;
+  for (const [d, entries] of collectEntries(items, first, last, tz)) {
+    for (const e of entries) {
+      if (e.kind === 'todo') todos.get(d)?.push(e);
+      else if (e.place === undefined || e.place.allDay) allDay.get(d)?.push(e);
+      else {
+        // 开始那天从开始时刻起、其余从 0:00 起；结束不在这一天的到 24:00
+        const startMin = d === e.place.date ? e.place.startMin : 0;
+        timed.get(d)?.push({ entry: e, startMin, endMin: Math.max(startMin, endMinOn(e.place.endMs, d, tz)) });
+      }
     }
-    // 有时刻的按午夜切段：每一天一段（同 collectEntries 的 spanDaysIn），开始那天从开始时刻起、其余从 0:00 起，结束不在这一天的到 24:00
-    for (const d of spanDaysIn(p, first, last)) {
-      const startMin = d === p.date ? p.startMin : 0;
-      timed.get(d)?.push({ entry: eventEntry(ev, p, d), startMin, endMin: Math.max(startMin, endMinOn(p.endMs, d, tz)) });
-    }
-  }
-  for (const td of items.todos) {
-    const d = todoDate(td);
-    if (d !== null) todos.get(d)?.push(todoEntry(td));
   }
   return { allDay, timed, todos };
 }

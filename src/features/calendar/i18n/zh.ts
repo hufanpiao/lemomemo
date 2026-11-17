@@ -12,6 +12,8 @@ export const zh = {
   'event.edit.allDay': '全天',
   'event.edit.start': '开始',
   'event.edit.end': '结束',
+  // R-444：选的结束日期早于开始日期，已按开始那天算
+  'event.edit.endFixed': '结束不能早于开始，已按开始那天算',
   'event.edit.tz': '时区',
   'event.edit.tzLocal': '按这个时区的时间；在你这里是 {date} {time}',
   'event.edit.remind': '提醒',

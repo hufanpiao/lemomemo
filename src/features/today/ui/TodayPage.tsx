@@ -218,7 +218,6 @@ export default function TodayPage() {
   // 日程行、待办行：“今天的安排”里照常画，展开“已过去”时过去的那几行也用它（key 不变，打勾挪进挪出“已过去”时行走 AppearList 的离开、进场）
   // 跨天的日程（R-444）：前几天开始的行首写“持续”/“至 18:00”，没到最后一天的标题下面写“至 11月20日 18:00”，跨天的全天日程写“第 2/3 天”（同日清单）
   const evLead = (o: (typeof v.events)[number], s: ReturnType<typeof eventSpanText>): string => {
-    if (s.lead === 'allDay') return t('list.allDay', {});
     if (s.lead !== 'start') return spanT(s.lead);
     return o.time ?? '';
   };

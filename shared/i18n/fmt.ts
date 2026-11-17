@@ -1,6 +1,6 @@
 // 日期和时间格式（架构 2.4 第 2 条）：中文“10月25日 周日”，韩文“10월 25일 (일)”
 // 格式模板放在词典里（fmt.*），这里只拼数字；不用 Intl 的本地化输出，保证 Node 和 Deno 结果一字不差
-import { parseDate, weekdayOf, type DateStr } from '../core/date.ts';
+import { DAY_MINUTES, parseDate, weekdayOf, type DateStr } from '../core/date.ts';
 import { wallTime, type Tz } from '../core/tz.ts';
 import { t, type Locale } from './i18n.ts';
 
@@ -20,6 +20,22 @@ export function fmtDay(dateStr: DateStr, locale: Locale, style: DayStyle): strin
   const { m, d } = parseDate(dateStr);
   if (style === 'monthDay') return t('fmt.monthDay', { m, d }, locale);
   return t('fmt.monthDayWeek', { m, d, w: weekdayName(weekdayOf(dateStr), locale) }, locale);
+}
+
+/**
+ * 时长（分钟）：按天、小时、分钟写，为 0 的那段不写——“13 分钟”“2 小时”“1 小时 13 分”“3 天”“2 天 9 小时 5 分”（视觉稿 kDur 加上“天”这一段，R-444）。
+ * 今天页“现在”卡、同步冲突对话框共用这一份；负数、小数按四舍五入、截到 0
+ */
+export function fmtDur(min: number, locale: Locale): string {
+  const v = Math.max(0, Math.round(min));
+  const d = Math.floor(v / DAY_MINUTES);
+  const h = Math.floor((v % DAY_MINUTES) / 60);
+  const m = v % 60;
+  const parts: string[] = [];
+  if (d) parts.push(t('fmt.dur.d', { n: d }, locale));
+  if (h) parts.push(t('fmt.dur.h', { n: h }, locale));
+  if (m || parts.length === 0) parts.push(t(parts.length ? 'fmt.dur.mTail' : 'fmt.dur.m', { n: m }, locale));
+  return parts.join(' ');
 }
 
 /** 时刻 'HH:MM'（24 小时制） */

@@ -4,7 +4,7 @@
 // • 时区只让选 Intl 支持的（D7）：不在表里的不写、状态报 rejected（S5）
 // • 全天 ↔ 有时刻（S3）：切成全天前记住原来的时刻、时区、提醒，同一页里切回来时恢复（误点一下不丢“纽约 15:00”）；
 //   没记过的（一开始就是全天）切回来用 9:00、本机时区。切成全天保留的是日程自己时区里的日期，不是“在你这里”的日期（两者可能差一天）
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { addDays, todayOf } from '../../../../shared/core/date.ts';
 import { EVENT_SPAN_MAX_DAYS } from '../../../../shared/logic/calendar/event-span.ts';
 import { deviceTz } from '../../../core/current-tz.ts';
@@ -33,8 +33,10 @@ export interface EventEdit extends EditRecord<EventForm> {
   endDate: string;
   /** 改结束日期、时刻（R-444，可跨多天，最多 31 天）：只给一样时另一样沿用现在的；全天只看 date */
   setEnd(p: { date?: string; time?: string }): void;
-  /** 结束日期最晚能选到哪天：开始 + 30 天（共 31 天；有时刻的再晚就超时长上限、被截短，干脆不让选）；没日期为 undefined */
+  /** 结束日期最晚能选到哪天：开始 + 30 天（共 31 天；有时刻的再晚就超时长上限，干脆不让选）；没日期为 undefined */
   endDateMax: string | undefined;
+  /** 刚选的结束日期早于开始日期、已按开始那天算（日期框下面写一行提示）；下一次改结束就清掉 */
+  endFixed: boolean;
   tzList: readonly string[];
   /** 和本机时区不同时：在本机时区是哪天几点 */
   local: { date: string; time: string } | null;
@@ -81,17 +83,19 @@ export function useEventEdit(id: string, onCreated?: (id: string) => void): Even
       }
       if (form.time !== null) return;
       const b = before.current;
-      const dur = b && b.allDayDur === form.duration_min ? b.duration_min : timedDurationOf(form.duration_min);
-      const durPatch = dur === form.duration_min ? {} : { duration_min: dur };
-      change(b ? { time: b.time, tz: b.tz, remind_min: b.remind_min, ...durPatch } : { time: DEFAULT_START, ...durPatch });
+      const timed = b ? { time: b.time, tz: b.tz, remind_min: b.remind_min } : { time: DEFAULT_START };
+      const dur = b && b.allDayDur === form.duration_min ? b.duration_min : timedDurationOf(normalize({ ...form, ...timed }, deviceTz()), form.duration_min, deviceTz());
+      change({ ...timed, ...(dur === form.duration_min ? {} : { duration_min: dur }) });
     },
     [form, change],
   );
   const endAt = endAtOf(form, deviceTz());
+  const [endFixed, setEndFixed] = useState(false);
   const setEnd = useCallback(
     (p: { date?: string; time?: string }) => {
       const date = p.date ?? endAt?.date ?? form.date;
       if (date === '' || form.date === '') return;
+      setEndFixed(p.date !== undefined && p.date < form.date);
       if (form.time === null) {
         change({ duration_min: allDayDurationTo(form.date, date) });
         return;
@@ -109,6 +113,7 @@ export function useEventEdit(id: string, onCreated?: (id: string) => void): Even
     end: endAt?.time ?? null,
     endDate: endAt?.date ?? allDayLastOf(form),
     endDateMax: form.date === '' ? undefined : addDays(form.date, EVENT_SPAN_MAX_DAYS - 1),
+    endFixed,
     setEnd,
     tzList,
     local: localOf(form, deviceTz()),

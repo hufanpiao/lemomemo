@@ -5,13 +5,14 @@
 // • 顶部“全天”行：全天日程和当天截止的待办（○ 标题），点了打开编辑页（电脑版详情抽屉，R-130：页面的 onOpen 决定；按钮带 data-open、开着的那条 aria-current）
 // • 时间格：范围同手机（按当周事项自动伸缩，ui/week-axis.ts）；重叠的并排分列（buildWeek layout 'desk' 的 column / columns）；
 //   今天有现在线，画在日程块下面（DOM 里排在前面），不压字（设计复审 N2）
-import { weekdayOf } from '../../../../shared/core/date.ts';
+import { hm24, weekdayOf } from '../../../../shared/core/date.ts';
 import { weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
 import type { DeskDay } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
 import { useRoT } from '../../../kit/hooks/useRoT.ts';
+import { useT } from '../../../kit/hooks/useT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, dayKind, dayKindClass, hm, holText, itemShort, itemTitle, labelInName, namedHolidays, weekdayKey } from './cal-ui.ts';
+import { colorClass, dayKind, dayKindClass, holText, itemShort, itemTitle, labelInName, namedHolidays, weekdayKey } from './cal-ui.ts';
 import type { HourRange } from './week-axis.ts';
 import type { WeekProps } from './WeekView.tsx';
 
@@ -24,6 +25,7 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
   const open = p.onOpen ?? ((kind: 'event' | 'todo', id: string) => void navigate(kind, id));
   // 只读行（FA-2 审查第 2 条）：块太小放不下“要新版本”字样，改成斜纹底（data-readonly），读屏名字后接“要更新到新版本才能修改”
   const tRo = useRoT();
+  const tc = useT();
   const isRo = p.isRo ?? (() => false);
   const cur = (id: string) => (p.openId === id ? ('true' as const) : undefined);
   const roLabel = (ro: boolean, label: string): string => (ro ? tRo('ro.named', { label }) : label);
@@ -57,7 +59,7 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
           </button>
         );
       })}
-      <div className={styles.dAllLab}>{t('cal.allDay', {})}</div>
+      <div className={styles.dAllLab}>{tc('span.allDay', {})}</div>
       {dates.map((date, i) => {
         const ad = p.desk?.[i]?.allDay;
         return (
@@ -75,7 +77,7 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
                   type="button"
                   className={styles.dAllItem}
                   onClick={() => open(which, id)}
-                  aria-label={roLabel(ro, kind === 'todo' ? t('cal.todoMark', { title }) : `${t('cal.allDay', {})} ${title}`)}
+                  aria-label={roLabel(ro, kind === 'todo' ? t('cal.todoMark', { title }) : `${tc('span.allDay', {})} ${title}`)}
                   data-readonly={ro ? '' : undefined}
                   data-open={id}
                   aria-current={cur(id)}
@@ -109,7 +111,7 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
             const ro = isRo('event', b.itemId);
             const title = itemTitle(items, 'timed', b.itemId) || b.short;
             // 块上只画简称：简称和标题不一样（“交报” / “交报告”）时名字先念简称（WCAG 2.5.3，cal-ui.ts labelInName）
-            const name = labelInName(title === b.short ? [] : [b.short], [t('cal.a11y.block', { title, start: hm(b.startMin), end: hm(b.endMin) })], t('cal.a11y.sep', {}));
+            const name = labelInName(title === b.short ? [] : [b.short], [t('cal.a11y.block', { title, start: hm24(b.startMin), end: hm24(b.endMin) })], t('cal.a11y.sep', {}));
             return (
               <button
                 key={`${b.itemId}-${b.startMin}`}

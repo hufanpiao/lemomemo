@@ -39,15 +39,15 @@ describe('TC-B2-29：本机用 remindAtOf 现算', () => {
     expect(tags).toEqual([at(DAY, '15:15'), at(DAY, '15:15'), at(DAY, '15:15')]);
     const one = reminderOf('event', ev(1), now, SEOUL);
     const three = reminderOf('event', ev(1, { duration_min: 2 * 1440 + 60 }), now, SEOUL);
-    expect(one && endMsg(one, SEOUL)).toEqual({ key: 'remind.full.until', params: { time: '16:30' } });
-    expect(three && endMsg(three, SEOUL)).toEqual({ key: 'remind.full.untilDate', params: { m: 11, d: 5, time: '16:30' } });
+    expect(one && endMsg(one, SEOUL)).toEqual({ key: 'span.until', params: { t: '16:30' } });
+    expect(three && endMsg(three, SEOUL)).toEqual({ key: 'span.untilDate', params: { m: 11, d: 5, t: '16:30' } });
   });
   it('endMsg 和日历同一套判断（评审第 5 条）：正好在午夜结束的算开始那天、写“到 24:00”；跨过午夜的带日子；全天为 null', () => {
     const now = at(DAY, '09:00');
     const mid = reminderOf('event', ev(1, { duration_min: 8 * 60 + 30 }), now, SEOUL); // 15:30 → 24:00
     const over = reminderOf('event', ev(1, { duration_min: 9 * 60 }), now, SEOUL); // 15:30 → 次日 00:30
-    expect(mid && endMsg(mid, SEOUL)).toEqual({ key: 'remind.full.until', params: { time: '24:00' } });
-    expect(over && endMsg(over, SEOUL)).toMatchObject({ key: 'remind.full.untilDate', params: { time: '00:30' } });
+    expect(mid && endMsg(mid, SEOUL)).toEqual({ key: 'span.until', params: { t: '24:00' } });
+    expect(over && endMsg(over, SEOUL)).toMatchObject({ key: 'span.untilDate', params: { t: '00:30' } });
     expect(endMsg({ ...(mid as NonNullable<typeof mid>), row: { ...ev(1), time: null } }, SEOUL)).toBeNull();
   });
   it('离线新建（本机还没有 remind_at 这一列）：走新建的回落；同步回来以后按“其余重算”', () => {

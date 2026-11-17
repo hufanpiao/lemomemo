@@ -11,6 +11,7 @@ import type { EventRemindRow } from '../../../../shared/logic/remind.ts';
 const ID = '00000000-0000-4000-8000-000000000002';
 const SEOUL = 'Asia/Seoul';
 const SH = 'Asia/Shanghai';
+const NY = 'America/New_York';
 const base = (over: Partial<EventForm> = {}): EventForm => ({ ...emptyForm('2026-11-05', SEOUL), title: '客户反馈会', ...over });
 
 describe('normalize：全天 / 有时刻', () => {
@@ -33,7 +34,8 @@ describe('时长、结束日期和时刻（R-444 跨天）', () => {
     const f = base({ time: '09:00', tz: SEOUL });
     expect(durationTo(f, '2026-11-07', '18:00', SH)).toBe(2 * 1440 + 9 * 60);
     expect(durationTo(f, '2026-11-01', '10:00', SH)).toBe(60);
-    expect(durationTo(f, '2027-01-01', '09:00', SH)).toBe(31 * 1440);
+    // 第二轮评审建议 4：超过上限（31 天）不悄悄截短，原样返回，由写入校验拒掉、编辑页提示
+    expect(durationTo(f, '2027-01-01', '09:00', SH)).toBe(57 * 1440);
   });
 
   it('夏令时那天按墙上时间算（评审第 3 条）：洛杉矶 3-08 拨快 1 小时', () => {
@@ -69,16 +71,25 @@ describe('时长、结束日期和时刻（R-444 跨天）', () => {
 
   it('全天 ↔ 有时刻切换：不超过一天的算一天、时长不动；超过一天的按占几天记；切回有时刻到最后一天同一时刻再过 1 小时', () => {
     expect(allDayDurationOf(base({ time: '09:00', duration_min: 60 }), SH)).toBe(60);
-    // 评审第 2 条：23:00 开始 90 分钟、22:00 开始 1440 分钟都只是一天，不变成 2880
-    expect(allDayDurationOf(base({ time: '23:00', duration_min: 90 }), SH)).toBe(90);
-    expect(allDayDurationOf(base({ time: '22:00', duration_min: 1440 }), SH)).toBe(1440);
+    // 评审第 2 条：23:00 开始 90 分钟、22:00 开始 1440 分钟都只是一天，不变成 2880；第二轮建议 2：一天一律记 allDayDuration(1)（默认 60）
+    expect(allDayDurationOf(base({ time: '23:00', duration_min: 90 }), SH)).toBe(60);
+    expect(allDayDurationOf(base({ time: '22:00', duration_min: 1440 }), SH)).toBe(60);
+    expect(allDayDurationOf(base({ time: null, duration_min: 3 * 1440 }), SH)).toBe(3 * 1440);
     expect(allDayDurationOf(base({ time: '22:00', duration_min: 1500 }), SH)).toBe(2 * 1440);
     expect(allDayDurationOf(base({ time: '09:00', duration_min: 2 * 1440 + 540 }), SH)).toBe(3 * 1440);
-    expect(timedDurationOf(60)).toBe(60);
+    const nine = base({ time: '09:00' });
+    expect(timedDurationOf(nine, 60, SH)).toBe(60);
     // 评审第 1 条：只占一天的（含旧的全天行 1440）一律回默认 1 小时
-    expect(timedDurationOf(1440)).toBe(60);
-    expect(timedDurationOf(90)).toBe(60);
-    expect(timedDurationOf(3 * 1440)).toBe(2 * 1440 + 60);
+    expect(timedDurationOf(nine, 1440, SH)).toBe(60);
+    expect(timedDurationOf(nine, 90, SH)).toBe(60);
+    expect(timedDurationOf(nine, 3 * 1440, SH)).toBe(2 * 1440 + 60);
+  });
+
+  it('全天 → 有时刻按墙上时间算（第二轮建议 1）：纽约 11-01 夏令时结束那天多 1 小时，结束照样落在最后一天 10:00', () => {
+    const f = base({ date: '2026-10-31', time: '09:00', tz: NY });
+    const dur = timedDurationOf(f, 3 * 1440, NY);
+    expect(dur).toBe(2 * 1440 + 60 + 60);
+    expect(endAtOf({ ...f, duration_min: dur }, NY)).toEqual({ date: '2026-11-02', time: '10:00' });
   });
 
   it('formOf：超过 1 天的时长照原值读出来（原来超过 1440 会变回 60）；超过 31 天的坏值按 60', () => {

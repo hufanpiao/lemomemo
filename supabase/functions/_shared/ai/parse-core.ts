@@ -3,12 +3,12 @@
 // 这样 Vitest 和 tsc 能直接测它（tests/edge/ai-parse-with-ai.test.ts 注入真的 shared 版本）；函数和评测用的绑定在 parse-with-ai.ts。
 // 做的事：去控制字符、转义 </data>、截 2000 字 → 拼提示词 → 调 provider → 校验 → 返回校验后的结果和原始输出（评测两份都存）。
 // 不做的事：不查 AI 同意、不计次数和限流、不看“本机有把握就不调 AI”、不读写数据库（quota 只作为 reason 返回，ai_state 由调用方写）。
-// 三个入口（B4b-3）：parseWithAI（ai-parse，parse.v6，意图加记下）、voiceWithAI（ai-voice，voice.v6）、
-//   recordWithAI（claude-intake、评测测试集 ①，record.v5，只做记下：AI 判成别的意图当 schema 拒收，recordOnly）。
+// 三个入口（B4b-3）：parseWithAI（ai-parse，parse.v7，意图加记下）、voiceWithAI（ai-voice，voice.v7）、
+//   recordWithAI（claude-intake、评测测试集 ①，record.v6，只做记下：AI 判成别的意图当 schema 拒收，recordOnly）。
 import { PROMPT_VERSION, TASK_PARAMS, PARSE_TIMEOUT_MS, VOICE_TIMEOUT_MS } from './params.ts';
-import { DEFAULT_DAY_RULE, RECORD_V5 } from './prompts/record.v5.ts';
-import { PARSE_V6 } from './prompts/parse.v6.ts';
-import { VOICE_V6 } from './prompts/voice.v6.ts';
+import { DEFAULT_DAY_RULE, RECORD_V6 } from './prompts/record.v6.ts';
+import { PARSE_V7 } from './prompts/parse.v7.ts';
+import { VOICE_V7 } from './prompts/voice.v7.ts';
 import type { AIProvider, AiResult, QuotaKind } from './provider.ts';
 import { generateRetry503 } from './retry.ts';
 
@@ -142,7 +142,7 @@ const STR = { type: 'STRING' };
 const NSTR = { type: 'STRING', nullable: true };
 
 /** Gemini responseSchema（OpenAPI 子集）：kind 的枚举只放这个人能用的类型；没有 anniv 时整个 anniv 键不出现。
- *  这一份只有记下的键、不放 intent：record.v5（recordWithAI）直接用；parse.v6、voice.v6 经 plusSchema 加意图的键 */
+ *  这一份只有记下的键、不放 intent：record.v6（recordWithAI）直接用；parse.v7、voice.v7 经 plusSchema 加意图的键 */
 export function responseSchema(features: readonly AiKindLike[], voice: boolean): Record<string, unknown> {
   const props: Record<string, unknown> = {
     kind: { type: 'STRING', enum: [...features] },
@@ -204,7 +204,7 @@ const INTENT_PROPS: Record<string, unknown> = {
   to: { type: 'OBJECT', nullable: true, properties: { date: NDATE, time: NSTR }, required: ['date', 'time'] },
 };
 
-/** parse.v6、voice.v6 的 responseSchema：记下那一份（responseSchema）加意图的几个键 */
+/** parse.v7、voice.v7 的 responseSchema：记下那一份（responseSchema）加意图的几个键 */
 export function plusSchema(features: readonly AiKindLike[], voice: boolean): Record<string, unknown> {
   const base = responseSchema(features, voice) as { properties: Record<string, unknown>; required: string[] };
   return {
@@ -263,19 +263,19 @@ export function makeParseWithAI<Item, I extends IntentLike = IntentLike>(checker
     return { ok: true, value: v.value, raw: r.json, prompt: version, ...bad };
   }
 
-  /** 文字的“＋”：ai-parse（parse.v6，意图加记下） */
+  /** 文字的“＋”：ai-parse（parse.v7，意图加记下） */
   function parseWithAI(input: ParseInput, provider: AIProvider): Promise<ParseOk<Checked<Item, I>> | ParseFail> {
-    return text(PARSE_V6, plusSchema(input.features, false), PROMPT_VERSION.parse, input, provider, (raw, ctx) => checkers.checkParseOutput(raw, ctx));
+    return text(PARSE_V7, plusSchema(input.features, false), PROMPT_VERSION.parse, input, provider, (raw, ctx) => checkers.checkParseOutput(raw, ctx));
   }
 
-  /** 文字、只做记下：claude-intake、评测测试集 ①（record.v5，schema 里没有 intent） */
+  /** 文字、只做记下：claude-intake、评测测试集 ①（record.v6，schema 里没有 intent） */
   function recordWithAI(input: ParseInput, provider: AIProvider): Promise<ParseOk<{ items: Item[] }> | ParseFail> {
-    return text(RECORD_V5, responseSchema(input.features, false), PROMPT_VERSION.record, input, provider, (raw, ctx) => recordOnly(checkers.checkParseOutput(raw, ctx)));
+    return text(RECORD_V6, responseSchema(input.features, false), PROMPT_VERSION.record, input, provider, (raw, ctx) => recordOnly(checkers.checkParseOutput(raw, ctx)));
   }
 
-  /** 录音：ai-voice（voice.v6，一次完成转写、意图和拆分；C 路不做评测，R-167） */
+  /** 录音：ai-voice（voice.v7，一次完成转写、意图和拆分；C 路不做评测，R-167） */
   async function voiceWithAI(input: VoiceInput, provider: AIProvider): Promise<ParseOk<Checked<Item, I> & { transcript: string }> | ParseFail> {
-    const fp = fillPrompt(VOICE_V6, input, checkers.checkDefaultDay, checkers.projectCategories);
+    const fp = fillPrompt(VOICE_V7, input, checkers.checkDefaultDay, checkers.projectCategories);
     const bad = fp.badDefaultDay ? ({ badDefaultDay: true } as const) : {};
     // 11-11：Gemini 回 503 重试一次，两次合计不超过 VOICE_TIMEOUT_MS（retry.ts；B3 iPhone 实测 40 次里 4 次 503）
     const { result: r, retried } = await generateRetry503(provider, {

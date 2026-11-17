@@ -11,9 +11,14 @@
 -- 锁：整个迁移在一个事务里，drop constraint 一开始就拿 events 的 ACCESS EXCLUSIVE 锁、持有到提交，“先 not valid 再 validate”在同一事务里省不了锁，
 --   所以直接一步 add check（放宽上限，已有行都合格，扫一遍 events 很快：每人几千行）。5 秒拿不到锁就整个迁移回滚，等长事务结束再推。
 -- 上线顺序：本迁移先上，再发前端和 edge function（claude-intake 的 capture-map 会写超过 1440 的全天时长）；反过来新客户端写的跨天日程会被库拒。
--- 旧版客户端（本迁移之后还没升级的）的行为，已知、接受：
---   • 旧版今天页：时长超过 1440 的按 1 小时显示；旧版日历按它自己的规则显示，跨天的那几天不一定都画出来；
---   • 旧版编辑页打开跨天日程、改一下结束时刻，会按“当天结束时刻 − 开始”重算时长写回，跨天日程被截短成一天以内（升级后照常）。
+--   已核对 .github/workflows/deploy-preview.yml：同一个 deploy 任务里依次是 db push → functions deploy → pages deploy，迁移失败后面两步不跑（生产库已停，不走 publish.ps1）。
+-- 旧版客户端（本迁移之后还没升级的）的行为，已知、接受（按 R-444 之前的代码核过）：
+--   • 旧版今天页：时长不在 1～1440 的按 1 小时显示；全天日程只在开始那天；
+--   • 旧版日历：月格只在开始那天；日清单只多出第二天的续段；周视图有时刻的最多切 3 段；全天日程只在开始那天；
+--   • 旧版编辑页：读到超过 1440 的时长当 1 小时显示结束时刻；只改结束时刻会按“结束 − 开始”（1～1440）写回，跨天日程被截短到一天以内；改别的列不动时长。
+-- 回滚（要连前端一起退回 R-444 之前的版本，不然新前端写的跨天日程会被拒）：先把超出旧上限的行改回——
+--   update public.events set duration_min = case when time is null then 60 else 1440 end where duration_min > 1440;
+--   再 drop constraint events_duration_min_check、add check (duration_min between 1 and 1440)。改回的行丢掉跨天信息（全天回成一天、有时刻的截到 24 小时）。
 set local lock_timeout = '5s';
 
 alter table public.events drop constraint events_duration_min_check;

@@ -1,7 +1,7 @@
 // ai-voice（架构第 6 节函数表 ai-voice 行、5.11、第 7 节“语音”；B3 任务单 S8、S12、BE-4，M3 X-Projects，Q2 服务器包 intent）。
 // 顺序：方法（只收 POST）→ JWT → Content-Type 白名单（先去参数再比，不在 4 种里回 415、不调 Gemini；S1、TC-B3-65 起新增用例）
 //   → 请求头 X-Now、X-TZ、X-Locale、X-Scope、X-Projects、X-Default-Day（日历页选中的那天，R6；不合格回 400）→ 边读边计数读请求体（≤ logic.maxAudio，超了中断回 413，不只看 Content-Length）
-//   → 共用的门（_shared/ai/gate.ts）→ voiceWithAI（voice.v6，B4b-3 起一次完成转写和意图判断；Gemini 15 秒超时；回 503 时服务器端重试一次、两次合计仍不超过 15 秒，_shared/ai/retry.ts）
+//   → 共用的门（_shared/ai/gate.ts）→ voiceWithAI（voice.v7，B4b-3 起一次完成转写和意图判断；Gemini 15 秒超时；回 503 时服务器端重试一次、两次合计仍不超过 15 秒，_shared/ai/retry.ts）
 //   → 成功按意图回 {intent: 'record', confidence, transcript, items, quota_left} / {intent: search|summarize, confidence, transcript, query, quota_left} /
 //   {intent: cancel|reschedule|complete, confidence, transcript, target, to, quota_left}（同 ai-parse，不多扣次数）；
 //   失败退回预扣、回 {ai_failed, reason}（客户端留着录音，可以重试或再说一次；每分钟限额的 reason 回 error，gate.ts 的 clientReason）。

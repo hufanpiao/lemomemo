@@ -118,13 +118,16 @@ describe('captureRow 待办整行钉住（todos 加列只改 shared/logic/todo-r
   });
 });
 
-describe('日程时长（R-444 评审第 8 条：提示词不改，全天日程的时长在 captureRow 规整一次）', () => {
+describe('日程时长（R-444：提示词 record.v6 写明全天跨天 = 天数 × 1440，captureRow 再兜底规整一次）', () => {
   const dur = (over: Partial<CaptureItem>): unknown => {
     const r = captureRow(item({ kind: 'event', date: '2026-11-03' as CaptureItem['date'], ...over }), ctx());
     return r?.table === 'events' ? r.row.duration_min : undefined;
   };
   it('全天：≤ 1440（含 AI 给的 180 分钟、没给）算一天记默认 60；多天按天数 × 1440，零头往上取', () => {
     expect([null, 180, 1440, 3 * 1440, 2000].map((d) => dur({ time: null, duration_min: d }))).toEqual([60, 60, 60, 3 * 1440, 2 * 1440]);
+  });
+  it('AI 照 record.v6 口径给的全天跨天时长原样保留：2 天 2880、3 天 4320', () => {
+    expect([2880, 4320].map((d) => dur({ time: null, duration_min: d }))).toEqual([2880, 4320]);
   });
   it('有时刻：原样（没给按 60）', () => {
     expect([null, 90, 3 * 1440].map((d) => dur({ time: '09:00', duration_min: d }))).toEqual([60, 90, 3 * 1440]);

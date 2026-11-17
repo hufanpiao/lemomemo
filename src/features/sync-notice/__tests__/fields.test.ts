@@ -54,12 +54,20 @@ describe('字段描述', () => {
     expect(describeConflict('todos', ['note'], { note: '' }, 'ko-KR', ko)).toEqual([{ field: '메모', value: '(비어 있음)' }]);
   });
 
-  it('日程时长按天、小时、分钟写（R-444 评审第 9 条），为 0 的那段不写；坏值写“（已改过）”', () => {
-    const d = (v: unknown, loc: 'zh-CN' | 'ko-KR' = 'zh-CN') => describeConflict('events', ['duration_min'], { duration_min: v }, loc, loc === 'zh-CN' ? zh : ko)[0]?.value;
-    expect([45, 60, 90, 3 * 1440, 2 * 1440 + 9 * 60 + 5].map((v) => d(v))).toEqual(['45 分钟', '1 小时', '1 小时 30 分钟', '3 天', '2 天 9 小时 5 分钟']);
+  it('日程时长：有时刻的按天、小时、分钟写（shared/i18n/fmt.ts 的 fmtDur，同今天页），为 0 的那段不写；坏值写“（已改过）”', () => {
+    const d = (v: unknown, loc: 'zh-CN' | 'ko-KR' = 'zh-CN') =>
+      describeConflict('events', ['duration_min'], { duration_min: v, time: '09:00' }, loc, loc === 'zh-CN' ? zh : ko)[0]?.value;
+    expect([45, 60, 90, 3 * 1440, 2 * 1440 + 9 * 60 + 5].map((v) => d(v))).toEqual(['45 分钟', '1 小时', '1 小时 30 分', '3 天', '2 天 9 小时 5 分']);
     expect(d(1500, 'ko-KR')).toBe('1일 1시간');
-    expect(describeConflict('events', ['duration_min'], { duration_min: 90 }, 'zh-CN', zh)[0]?.field).toBe('时长');
+    expect(describeConflict('events', ['duration_min'], { duration_min: 90, time: '09:00' }, 'zh-CN', zh)[0]?.field).toBe('时长');
     expect([0, 1.5, 'x'].map((v) => d(v))).toEqual(['（已改过）', '（已改过）', '（已改过）']);
+  });
+
+  it('日程时长：全天的（time 为 null）写占几天，60、1440 都是“1 天”；拿不到 time 的不写这一列（第二轮评审必改 4）', () => {
+    const d = (v: number) => describeConflict('events', ['duration_min'], { duration_min: v, time: null }, 'zh-CN', zh)[0]?.value;
+    expect([60, 1440, 3 * 1440].map(d)).toEqual(['1 天', '1 天', '3 天']);
+    expect(describeConflict('events', ['duration_min'], { duration_min: 90 }, 'zh-CN', zh)).toEqual([]);
+    expect(describeConflict('events', ['duration_min'], null, 'zh-CN', zh)).toEqual([]);
   });
 
   it('长文本原样给（两行加“…”由样式截）；hidden 的列不写', () => {

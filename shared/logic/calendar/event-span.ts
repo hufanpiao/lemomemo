@@ -7,7 +7,7 @@
 //   全天日程按“天数 × 1440”记跨几天，≤ 1440 都算一天（旧行、默认的 60 都是一天），只占一天的写 EVENT_DURATION_DEFAULT（allDayDuration）
 // 段的写法同周视图的 Cont：'end' = 尾部接着下一天（第一天）、'start' = 头部从前一天接过来（最后一天）、'both' = 中间整天
 // 不带 zod（首屏的今天页、日历用；shared/schema/rows.ts 从这里转出上限给校验用，同 sort-key.ts 的做法）。纯函数，“设备当前时区”由调用方传进来
-import { addDays, diffDays, hm24, minOfDay, msAt, parseDate, parseHm, todayOf, type DateStr } from '../../core/date.ts';
+import { addDays, DAY_MINUTES, diffDays, hm24, minOfDay, msAt, parseDate, parseHm, todayOf, type DateStr } from '../../core/date.ts';
 import { isValidTz, type Tz } from '../../core/tz.ts';
 
 /**
@@ -15,7 +15,6 @@ import { isValidTz, type Tz } from '../../core/tz.ts';
  * 和迁移 20261117120000_events_duration_span.sql 的 events_duration_min_check（1～44640）一致
  */
 export const EVENT_SPAN_MAX_DAYS = 31;
-export const DAY_MINUTES = 1440;
 export const EVENT_DURATION_MAX = EVENT_SPAN_MAX_DAYS * DAY_MINUTES;
 /** 默认时长（新建、没说时长、坏值回落、只占一天的全天日程）：1 小时 */
 export const EVENT_DURATION_DEFAULT = 60;
@@ -56,7 +55,7 @@ export function eventDurationMin(durationMin: number): number {
 
 /** 全天日程跨几天：≤ 1440（含坏值回落的默认值）算一天，多出来的按整天往上取 */
 export function allDaySpanDays(durationMin: number): number {
-  return Math.ceil(Math.max(eventDurationMin(durationMin), 1) / DAY_MINUTES);
+  return Math.ceil(eventDurationMin(durationMin) / DAY_MINUTES);
 }
 
 /** 全天日程跨 days 天时存的时长：一天写默认值，多天写“天数 × 1440”（1～31 天） */
@@ -71,6 +70,11 @@ export function spanRowOf(r: Readonly<Record<string, unknown>>): SpanRow | null 
   const date = s(r['date']);
   if (date === null) return null;
   return { date, time: s(r['time']), tz: s(r['tz']), duration_min: typeof r['duration_min'] === 'number' ? r['duration_min'] : NaN };
+}
+
+/** 日程按哪个时区算开始时刻：自己的 tz 有效就用它，缺失或无效（TZ-invalid-b2）按 device。placeEvent、编辑页、今天页的“原时区几点”共用 */
+export function ownTzOf(tz: string | null, device: Tz): Tz {
+  return tz !== null && isValidTz(tz) ? tz : device;
 }
 
 function okDate(s: string): boolean {
@@ -88,7 +92,7 @@ export function placeEvent(ev: SpanRow, tz: Tz): EventPlacement | null {
   if (ev.time === null) return { allDay: true, date: ev.date, lastDate: addDays(ev.date, allDaySpanDays(ev.duration_min) - 1) };
   let startMs: number;
   try {
-    startMs = msAt(ev.date, parseHm(ev.time), ev.tz !== null && isValidTz(ev.tz) ? ev.tz : tz);
+    startMs = msAt(ev.date, parseHm(ev.time), ownTzOf(ev.tz, tz));
   } catch {
     return null;
   }
@@ -128,36 +132,42 @@ export function endMinOn(endMs: number, day: DateStr, tz: Tz): number {
   return todayOf(endMs, tz) === day ? minOfDay(endMs, tz) : DAY_MINUTES;
 }
 
-/** 跨天日程的几句话：词条键 + 参数（键在 shared/i18n/span-zh.ts、span-ko.ts，日清单、今天页共用一套） */
+/** 跨天日程的几句话：词条键 + 参数（键在公共词典 shared/i18n/zh.ts、ko.ts 的 span.*，src/kit/hooks/useSpanT.ts 翻译；日清单、今天页、全屏提醒页共用一套） */
 export type SpanMsg =
-  | { readonly key: 'span.ongoing'; readonly params: Record<string, never> }
+  | { readonly key: 'span.allDay' | 'span.ongoing'; readonly params: Record<string, never> }
   | { readonly key: 'span.until'; readonly params: { readonly t: string } }
   | { readonly key: 'span.untilDate'; readonly params: { readonly m: number; readonly d: number; readonly t: string } }
   | { readonly key: 'span.dayOf'; readonly params: { readonly i: number; readonly n: number } };
 
 /**
  * 日程在某一天的写法（日清单、今天页共用）：
- * • lead：行首那一格。'start' 由调用方写开始时刻；'allDay' 写“全天”；跨天的后几天是 SpanMsg（中间整天“持续”，最后一天“至 18:00”）
+ * • lead：行首那一格。'start' 由调用方写开始时刻；其余是 SpanMsg：全天日程“全天”，跨天的后几天中间整天“持续”、最后一天“至 18:00”
  * • meta：标题后面的小字。有时刻、还没到最后一天的“至 11月20日 18:00”；跨天的全天日程“第 2/3 天”；只占一天的 null
  * • endMin：这一天里第几分钟结束（还接着下一天的是 1440）；全天日程为 null（行首按它上“已过去”的颜色）
  */
 export interface SpanText {
-  readonly lead: 'start' | 'allDay' | SpanMsg;
+  readonly lead: 'start' | SpanMsg;
   readonly endMin: number | null;
   readonly meta: SpanMsg | null;
 }
 
-/** endMs 为 null 当全天日程 */
-export function spanTextOn(s: DaySpan & { readonly endMs: number | null }, day: DateStr, tz: Tz): SpanText {
-  if (s.endMs === null) {
+/** 某一段的结束：同一天“至 18:00”、结束在后面某天“至 11月20日 18:00”（全屏提醒页副标题、日清单标题下的小字共用） */
+export function untilMsg(s: DaySpan & { readonly endMs: number }, tz: Tz): SpanMsg {
+  const t = hm24(endMinOn(s.endMs, s.lastDate, tz));
+  if (s.date === s.lastDate) return { key: 'span.until', params: { t } };
+  const { m, d } = parseDate(s.lastDate);
+  return { key: 'span.untilDate', params: { m, d, t } };
+}
+
+/** 日程（placeEvent 的结果）在 day 这一天怎么写 */
+export function spanTextOn(s: EventPlacement, day: DateStr, tz: Tz): SpanText {
+  if (s.allDay) {
     const of = dayOfSpan(s, day);
-    return { lead: 'allDay', endMin: null, meta: of ? { key: 'span.dayOf', params: { i: of.index, n: of.days } } : null };
+    return { lead: { key: 'span.allDay', params: {} }, endMin: null, meta: of ? { key: 'span.dayOf', params: { i: of.index, n: of.days } } : null };
   }
   const cont = contOn(s, day);
   const endMin = endMinOn(s.endMs, day, tz);
   if (cont === undefined) return { lead: 'start', endMin, meta: null };
   if (cont === 'start') return { lead: { key: 'span.until', params: { t: hm24(endMin) } }, endMin, meta: null };
-  const { m, d } = parseDate(s.lastDate);
-  const meta: SpanMsg = { key: 'span.untilDate', params: { m, d, t: hm24(endMinOn(s.endMs, s.lastDate, tz)) } };
-  return { lead: cont === 'both' ? { key: 'span.ongoing', params: {} } : 'start', endMin, meta };
+  return { lead: cont === 'both' ? { key: 'span.ongoing', params: {} } : 'start', endMin, meta: untilMsg(s, tz) };
 }

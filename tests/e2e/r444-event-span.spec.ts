@@ -82,4 +82,20 @@ test.describe('R-444 跨天日程', () => {
     // 有时刻的结束日期上限也是开始 + 30 天（评审第 4 条）
     await expect(page.getByTestId('event-edit-end-date')).toHaveAttribute('max', '2026-12-18');
   });
+
+  test('今天页：多天的有时刻日程不占“现在”大卡（负责人 11-17），只在今天的清单里；大卡给真正的下一件', async ({ page }) => {
+    const EXPO_ID = '0e2e0000-0000-4000-8000-000000444003';
+    const SHOP_ID = '0e2e0000-0000-4000-8000-000000444004';
+    const EXPO = { ...base, id: EXPO_ID, title: '展会', date: '2026-11-18', time: '09:00', tz: TZ, duration_min: 2 * 1440 + 540 };
+    const SHOP = { ...base, id: SHOP_ID, title: '逛街', date: '2026-11-19', time: '15:30', tz: TZ, duration_min: 60 };
+    await page.clock.setFixedTime(new Date('2026-11-19T14:17:00+09:00'));
+    await page.goto('/app/#/today');
+    const card = page.getByTestId('now-card');
+    await card.waitFor({ timeout: 30000 });
+    await idbPut(page, [['events', cached(EXPO)], ['events', cached(SHOP)]]);
+    await page.reload();
+    await expect(page.getByTestId(`today-event-${EXPO_ID}`)).toContainText('持续', { timeout: 20_000 });
+    await expect(card).toContainText('逛街');
+    await expect(card).not.toContainText('展会');
+  });
 });

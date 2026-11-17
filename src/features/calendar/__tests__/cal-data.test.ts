@@ -1,5 +1,6 @@
 // 本机行 → 月历输入（B2 FA-3）：坏行跳过、缺列给默认值，删除 / 撤销原样带给纯逻辑
 import { describe, expect, it } from 'vitest';
+import { placeEvent } from '../../../../shared/logic/calendar/event-span.ts';
 import { calItemsOf, todoDueMinutes } from '../data/cal-data.ts';
 
 describe('calItemsOf', () => {
@@ -14,7 +15,7 @@ describe('calItemsOf', () => {
     expect(r.todos[0]).toMatchObject({ id: 't1', due: '2026-11-06', done: false, deleted_at: null, undone: true });
   });
 
-  it('没有日期的日程跳过；时刻、时长、标题坏了给安全的默认值；待办截止日坏了当没有', () => {
+  it('没有日期的日程跳过；时刻、时长原样交给 placeEvent（坏时刻统一不显示，同提醒、今天页）；标题坏了给空串；待办截止日坏了当没有', () => {
     const r = calItemsOf(
       [
         { id: 'bad', title: 'x' },
@@ -23,7 +24,9 @@ describe('calItemsOf', () => {
       [{ id: 't2', due: '11/06', done: 'yes' }],
     );
     expect(r.events.map((e) => e.id)).toEqual(['e2']);
-    expect(r.events[0]).toMatchObject({ title: '', time: null, tz: null, duration_min: 0, created_at: 0, deleted_at: null });
+    expect(r.events[0]).toMatchObject({ title: '', time: '25:00', tz: null, duration_min: -3, created_at: 0, deleted_at: null });
+    // 第二轮评审必改 1：不再自己把坏时刻改成全天；placeEvent 放不下就不显示
+    expect(placeEvent(r.events[0]!, 'Asia/Seoul')).toBeNull();
     expect(r.todos[0]).toMatchObject({ due: null, done: false, title: '' });
   });
 });
