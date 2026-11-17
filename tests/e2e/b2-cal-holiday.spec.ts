@@ -1,7 +1,7 @@
 // 月历节假日（R-432，负责人 11-15“照参考图做”）在真浏览器里量（chromium、webkit，不要后端；节假日用 dist 里真的 holidays/cn/2026.json）：
 // • 国庆连休只在 10-01 写节日名（柠檬黄字色 --hol-name），10-02～10-07 照常写农历，七天都画斜纹；10-10 补班：右上角“班”标 + 那一行“国庆节”
 // • “班”标不和“今天”圆底叠在一起、整个落在格子里、靠右、字不溢出：手机 393 宽、窄屏 320 宽，中文“班”和韩文“근무”都量；
-//   放得下时和日期数字同一行，320 宽的“근무”放不下，折到下一行（CalendarPage.module.css .cellTop）
+//   放得下时和日期数字同一行，320 宽的“근무”放不下，折到下一行（cal-common.module.css .numMonth）
 //   （R-432 评审第 2、3 条：320 宽时“今天”圆底和“班”标叠在一起；韩文“근무”在 15 px 圆里装不下）
 import type { Page } from '@playwright/test';
 import { cached, idbPut } from './idb.ts';

@@ -18,19 +18,22 @@
 //   连续放假只在第一天写节日名，后面几天照写农历（namedHolidays），读屏照旧念节日名（holA11y）
 // • 量宽：用回调 ref 量第一条轨道，翻周后轨道换了新元素会重新挂 ResizeObserver（代码审查 M1）
 // • 读屏：泳道按钮的名字先按显示顺序念看得见的字（“周一 19 十七 出差 2/3 周会 +1”，WCAG 2.5.3，cal-ui.ts labelInName），
-//   再接“10月19日，今天，节日，共 3 项，有逾期的待办”（星期前面已经念过，不再重复）。
-//   共几项、有没有逾期按电脑排布那一份（rangeOf 本来就算了，不按宽度，量到宽度之前也对）
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
+//   再接“10月19日，今天，节日，共 3 项，有逾期的待办”（星期前面已经念过，不再重复；打头几段和月格同一份 cal-ui.ts dayA11y）。
+//   共几项、有没有逾期、时间轴范围都按这一周每天的事项（collectEntries，和月历、日清单同一份）算，不按宽度，量到宽度之前也对；
+//   手机上不再为了这几个数整周排一遍电脑布局（11-17 日历整块评审第 4 条），电脑布局只在 DeskWeek 里排
+import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { addDays, weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
-import { todoDate, type CalItems } from '../../../../shared/logic/calendar/cal-items.ts';
+import { assertTz, collectEntries, type CalItems, type DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
 import { dayOfSpan } from '../../../../shared/logic/calendar/event-span.ts';
 import type { HolidayMark } from '../../../../shared/logic/calendar/holidays.ts';
-import { buildWeek, type DeskDay, type PhoneDay } from '../../../../shared/logic/calendar/month-grid.ts';
+import { buildWeek, segmentOn, type DayOf, type PhoneDay } from '../../../../shared/logic/calendar/month-grid.ts';
 import { axisFrac, axisTicks, phoneScale, weekHourRange, type HourRange } from './week-axis.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
-import styles from './CalendarPage.module.css';
-import { colorClass, contClass, dateA11y, dayKind, dayKindClass, dayLines, holA11y, labelInName, namedHolidays, ofText, weekdayKey, weekendClass } from './cal-ui.ts';
+import common from './cal-common.module.css';
+import styles from './WeekView.module.css';
+import { colorClass, contClass, dayA11y, dayKind, dayKindClass, dayLines, labelInName, namedHolidays, ofText, weekdayKey, weekendClass } from './cal-ui.ts';
+import { DayNum } from './DayNum.tsx';
 import { DeskWeek } from './DeskWeek.tsx';
 
 /** 色块最短长度（px，5.12：约 28 px，视觉稿 --wmin） */
@@ -40,31 +43,77 @@ const TODO_STEP_PX = 10;
 /** 没有截止时刻的待办画在轨道末端往里多少（px）：空心圆 9 px 宽、居中，往里 8 不出轨道 */
 const TODO_END_INSET_PX = 8;
 
-/** 色块左右内边距（.wev padding 6 + 4）再留 2 px 余量：量出来的字宽加上它就是写得下完整标题的色块宽 */
-const BLOCK_PAD_PX = 12;
+/** 色块左右内边距（.allDay / .wev 的 padding-left / padding-right）和跨天“2/3”前面的空隙（.wevOf 的 padding-left）：
+ *  量字宽和画色块用同一个数，只写在这里，由 PhoneWeek 写进 --wev-pl / --wev-pr / --wev-of-gap 给 WeekView.module.css 读（11-17 日历整块评审） */
+const WEV_PL_PX = 6;
+const WEV_PR_PX = 4;
+const OF_GAP_PX = 4;
+/** 左右内边距再留 2 px 余量：量出来的字宽加上它就是写得下完整标题的色块宽 */
+const BLOCK_PAD_PX = WEV_PL_PX + WEV_PR_PX + 2;
+const WEV_VARS = { '--wev-pl': `${WEV_PL_PX}px`, '--wev-pr': `${WEV_PR_PX}px`, '--wev-of-gap': `${OF_GAP_PX}px` } as CSSProperties;
 
 /**
- * 量完整标题要多宽（负责人 11-17“周历上显示全部文字”）：按轨道里色块的实际字体（.wev 的字号 --fs-11、字体跟页面走）用 canvas measureText，
- * 同一个标题只量一次。没有 OffscreenCanvas 的环境（jsdom 单测）返回 undefined，buildWeek 按原来的规则排
+ * 量过的字宽（px，不含内边距）：键是“字体 | 语言 | 字”，换了字体（切语言 :lang(ko)、换字体设置、换皮肤）不会拿到旧字体量的结果；
+ * 网页字体加载完一批（document.fonts 的 loadingdone）整个清空，之前按后备字体量的作废（11-17 日历整块评审第 2 条）
  */
-function useTextPx(el: HTMLElement | null): ((text: string) => number) | undefined {
+const textCache = new Map<string, number>();
+
+/**
+ * 量字的环境：“语言~第几代”。<html> 的 lang 变了换语言部分；data-skin、data-font 变了，或者网页字体加载完一批（同时清空 textCache），代数加一。
+ * 进缓存键，也让 useTextPx 重新取一次计算后的字体
+ */
+function useFontEnv(): string {
+  const [n, setN] = useState(0);
+  const [lang, setLang] = useState(() => document.documentElement.lang);
+  useEffect(() => {
+    const bump = (): void => {
+      setLang(document.documentElement.lang);
+      setN((x) => x + 1);
+    };
+    const onFonts = (): void => {
+      textCache.clear();
+      bump();
+    };
+    const mo = typeof MutationObserver === 'function' ? new MutationObserver(bump) : null;
+    mo?.observe(document.documentElement, { attributes: true, attributeFilter: ['lang', 'data-skin', 'data-font'] });
+    // jsdom 没有 document.fonts
+    const fonts = 'fonts' in document ? document.fonts : undefined;
+    fonts?.addEventListener('loadingdone', onFonts);
+    return () => {
+      mo?.disconnect();
+      fonts?.removeEventListener('loadingdone', onFonts);
+    };
+  }, []);
+  return `${lang}~${n}`;
+}
+
+/**
+ * 量完整标题要多宽（负责人 11-17“周历上显示全部文字”）：按轨道里色块的实际字体用 canvas measureText——标题是 .wev 的字号 --fs-11、字体跟页面走；
+ * 跨天的这一段右端还有“2/3”（.wevOf：等宽字 --f-mono、--fs-10，前面空 OF_GAP_PX），一起算进去（11-17 日历整块评审第 1 条，原来只量标题，完整标题照样被截）。
+ * 没有 OffscreenCanvas 的环境（jsdom 单测）返回 undefined，buildWeek 按原来的规则排
+ */
+function useTextPx(el: HTMLElement | null): ((title: string, of?: DayOf) => number) | undefined {
+  const env = useFontEnv();
   return useMemo(() => {
     if (el === null || typeof OffscreenCanvas !== 'function') return undefined;
     const ctx = new OffscreenCanvas(1, 1).getContext('2d');
     if (ctx === null) return undefined;
     const cs = getComputedStyle(el);
-    const size = cs.getPropertyValue('--fs-11').trim() || '11px';
-    ctx.font = `${size} ${cs.fontFamily}`;
-    const cache = new Map<string, number>();
-    return (text: string): number => {
-      let px = cache.get(text);
+    const v = (name: string, fallback: string): string => cs.getPropertyValue(name).trim() || fallback;
+    const titleFont = `${v('--fs-11', '11px')} ${cs.fontFamily}`;
+    const ofFont = `${v('--fs-10', '10px')} ${v('--f-mono', 'monospace')}`;
+    const measure = (font: string, text: string): number => {
+      const k = `${font}|${env}|${text}`;
+      let px = textCache.get(k);
       if (px === undefined) {
-        px = Math.ceil(ctx.measureText(text).width) + BLOCK_PAD_PX;
-        cache.set(text, px);
+        ctx.font = font;
+        px = ctx.measureText(text).width;
+        textCache.set(k, px);
       }
       return px;
     };
-  }, [el]);
+    return (title: string, of?: DayOf): number => Math.ceil(measure(titleFont, title) + (of ? OF_GAP_PX + measure(ofFont, ofText(of)) : 0)) + BLOCK_PAD_PX;
+  }, [el, env]);
 }
 
 /** 量一条轨道的宽度：回调 ref，换了元素（翻周后 key 变了）就重新挂 ResizeObserver；也把元素交出来给 useTextPx 取字体 */
@@ -107,24 +156,28 @@ export interface WeekProps {
   openId?: string | null | undefined;
 }
 
-/** 这一周所有有时刻的日程段（按设备时区切好）和待办截止时刻 → 时间轴范围 */
-function rangeOf(start: DateStr, items: CalItems, tz: string, dueMins: ReadonlyMap<string, number>): { range: HourRange; desk: DeskDay[] | null } {
-  let desk: DeskDay[] | null = null;
+/**
+ * 这一周每天的事项（collectEntries：月历、日清单同一份；删掉的、已完成的待办本来就不在里面，也不撑宽时间轴，代码复审 N5）
+ * 和时间轴范围（有时刻的日程按设备时区切好的段 segmentOn、待办截止时刻）。设备时区坏了时一件都没有
+ */
+function weekOf(start: DateStr, items: CalItems, tz: string, dueMins: ReadonlyMap<string, number>): { range: HourRange; byDay: ReadonlyMap<DateStr, readonly DayEntry[]> } {
+  let byDay = new Map<DateStr, DayEntry[]>();
   try {
-    desk = buildWeek(start, items, { layout: 'desk', tz });
+    assertTz(tz);
+    byDay = collectEntries(items, start, addDays(start, 6), tz);
   } catch {
-    desk = null;
+    byDay = new Map();
   }
   const spans: [number, number][] = [];
-  for (const d of desk ?? []) for (const b of d.blocks) spans.push([b.startMin, b.endMin]);
-  const dates = new Set(weekDates(start));
-  for (const td of items.todos) {
-    const due = dueMins.get(td.id);
-    // 删掉的、已完成的待办不画，也不撑宽时间轴（todoDate 对它们给 null；代码复审 N5）
-    const d = todoDate(td);
-    if (due !== undefined && d !== null && dates.has(d)) spans.push([due, due]);
+  for (const [d, list] of byDay) {
+    for (const e of list) {
+      const seg = segmentOn(e, d, tz);
+      const due = e.kind === 'todo' ? dueMins.get(e.itemId) : undefined;
+      if (seg) spans.push([seg.startMin, seg.endMin]);
+      else if (due !== undefined) spans.push([due, due]);
+    }
   }
-  return { range: weekHourRange(spans), desk };
+  return { range: weekHourRange(spans), byDay };
 }
 
 /** 这一天有没有逾期没做完的待办：日子已过，或者是今天、截止时刻已过 */
@@ -143,7 +196,7 @@ function hasOverdue(date: DateStr, todoIds: readonly string[], today: DateStr, n
 function Lane({
   date,
   day,
-  desk,
+  entries,
   w,
   range,
   p,
@@ -151,8 +204,8 @@ function Lane({
 }: {
   date: DateStr;
   day: PhoneDay | null;
-  /** 同一天的电脑排布（件数、待办；不按宽度，量到宽度之前也有） */
-  desk: DeskDay | undefined;
+  /** 这一天的全部事项（件数、待办；不按宽度，量到宽度之前也有） */
+  entries: readonly DayEntry[];
   w: number;
   range: HourRange;
   p: WeekProps;
@@ -163,8 +216,8 @@ function Lane({
   const kind = dayKind(hol);
   const isToday = date === today;
   const sel = p.selected === date;
-  const total = desk ? desk.allDay.count + desk.blocks.length : 0;
-  const todoIds = desk?.allDay.entries.filter((e) => e.kind === 'todo').map((e) => e.itemId) ?? [];
+  const total = entries.length;
+  const todoIds = entries.filter((e) => e.kind === 'todo').map((e) => e.itemId);
   const overdue = hasOverdue(date, todoIds, today, nowMin, dueMins);
   // 和月格同一套（cal-ui.ts dayLines）：补班的“班”放进数字旁的小圆标，那一行写节日名；连休只在第一天写节日名，后几天照常写农历或节气
   const { badge, line: sub } = dayLines(kind, namedHolidays(date, hol, p.holidays), p.lunarOf?.(date) ?? '', t);
@@ -191,9 +244,7 @@ function Lane({
   const a11y = labelInName(
     shown,
     [
-      dateA11y(date, t),
-      ...(isToday ? [t('cal.a11y.todayMark', {})] : []),
-      ...hol.map((h) => holA11y(h, t)),
+      ...dayA11y(date, hol, isToday, t),
       total === 0 ? t('cal.a11y.none', {}) : t('cal.a11y.total', { n: total }),
       ...(overdue ? [t('cal.a11y.overdue', {})] : []),
     ],
@@ -201,24 +252,14 @@ function Lane({
   );
   // 同一处的待办依次往左错开：按位置分桶数
   const seen = new Map<number, number>();
-  const cls = [styles.lane, weekendClass(weekdayOf(date)), dayKindClass(kind), isToday ? styles.today : '', sel ? styles.sel : ''].filter(Boolean).join(' ');
+  const cls = [styles.lane, weekendClass(weekdayOf(date)), dayKindClass(kind), isToday ? common.today : '', sel ? common.sel : ''].filter(Boolean).join(' ');
   return (
     <li className={cls} data-date={date}>
       <button type="button" className={styles.laneBtn} aria-pressed={sel} aria-label={a11y} onClick={() => p.onSelect(date)}>
         <span className={styles.laneWd} aria-hidden="true">
-          {/* 几段字之间的 {' '}：laneWd、laneNum 是 flex，laneBtn 是 grid，轨道里全是绝对定位，空格都不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}
+          {/* 几段字之间的 {' '}：laneWd、DayNum 外层是 flex，laneBtn 是 grid，轨道里全是绝对定位，空格都不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}
           <small>{wd}</small>{' '}
-          <span className={styles.laneNum}>
-            <b className={styles.dayNum}>{Number(date.slice(8))}</b>
-            {badge !== '' ? (
-              <>
-                {' '}
-                <span className={styles.ban} data-testid="cal-ban">
-                  {badge}
-                </span>
-              </>
-            ) : null}
-          </span>{' '}
+          <DayNum date={date} badge={badge} look="lane" />{' '}
           <small className={styles.laneSub}>{sub}</small>
         </span>{' '}
         <span className={first ? `${styles.trk} ${styles.trkAll}` : styles.trk} ref={trackRef ?? undefined} aria-hidden="true">
@@ -283,7 +324,7 @@ function Lane({
   );
 }
 
-function PhoneWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | null }) {
+function PhoneWeek(p: WeekProps & { range: HourRange; byDay: ReadonlyMap<DateStr, readonly DayEntry[]> }) {
   const [trackRef, w, trackEl] = useTrackWidth();
   const textPx = useTextPx(trackEl);
   const { start, items, tz, range } = p;
@@ -301,7 +342,7 @@ function PhoneWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | null }) 
   }, [start, items, tz, w, range, textPx]);
   const dates = weekDates(start);
   return (
-    <section aria-label={p.label} data-testid="cal-week" data-layout="phone" data-range={`${range.h0}-${range.h1}`} className={`${styles.card} ${styles.pweek}`}>
+    <section aria-label={p.label} data-testid="cal-week" data-layout="phone" data-range={`${range.h0}-${range.h1}`} className={`${common.card} ${styles.pweek}`} style={WEV_VARS}>
       <div className={styles.wrul} aria-hidden="true">
         {axisTicks(range).map((h) => (
           <span key={h} style={{ left: `${axisFrac(h * 60, range) * 100}%` }}>
@@ -311,7 +352,7 @@ function PhoneWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | null }) 
       </div>
       <ol className={styles.lanes}>
         {dates.map((date, i) => (
-          <Lane key={date} date={date} day={days[i] ?? null} desk={p.desk?.[i]} w={w} range={range} p={p} trackRef={i === 0 ? trackRef : null} />
+          <Lane key={date} date={date} day={days[i] ?? null} entries={p.byDay.get(date) ?? []} w={w} range={range} p={p} trackRef={i === 0 ? trackRef : null} />
         ))}
       </ol>
     </section>
@@ -320,6 +361,6 @@ function PhoneWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | null }) 
 
 export function WeekView(p: WeekProps) {
   const { start, items, tz, dueMins } = p;
-  const { range, desk } = useMemo(() => rangeOf(start, items, tz, dueMins), [start, items, tz, dueMins]);
-  return p.wide ? <DeskWeek {...p} range={range} desk={desk} /> : <PhoneWeek {...p} range={range} desk={desk} />;
+  const { range, byDay } = useMemo(() => weekOf(start, items, tz, dueMins), [start, items, tz, dueMins]);
+  return p.wide ? <DeskWeek {...p} range={range} /> : <PhoneWeek {...p} range={range} byDay={byDay} />;
 }

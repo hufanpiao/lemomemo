@@ -11,7 +11,7 @@ import { MAX_YEAR, MIN_YEAR, type YearMonth } from '../../../../shared/logic/cal
 import chip from '../../../kit/components/Chip.module.css';
 import { Popover } from '../../../kit/components/Popover.tsx';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
-import styles from './CalendarPage.module.css';
+import styles from './MonthPicker.module.css';
 
 const YEARS = Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i);
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);

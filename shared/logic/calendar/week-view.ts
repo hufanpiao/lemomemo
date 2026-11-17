@@ -43,8 +43,11 @@ interface BlockBase {
   readonly endMin: number;
   readonly cont?: Cont;
   /** 跨天的日程这一段是第几天、共几天（R-445 周视图续条右端写“2/3”）；只占一天的没有 */
-  readonly dayOf?: { readonly index: number; readonly days: number };
+  readonly dayOf?: DayOf;
 }
+
+/** 跨天日程某一段是第几天、共几天（event-span.ts dayOfSpan 的结果） */
+export type DayOf = { readonly index: number; readonly days: number };
 
 export interface PhoneBlock extends BlockBase {
   readonly startPx: number;
@@ -109,10 +112,11 @@ export interface PhoneWeekOpts {
   readonly endPx?: number;
   /**
    * 写下完整标题要多宽（px，含色块左右内边距）：界面按色块实际字体量（WeekView 用 canvas measureText，结果缓存）。
-   * 传了时色块宽 = max(按时长的宽, minBlockPx, textPx(标题))，从开始时刻起画、写到轨道末端为止（负责人 11-17“周历上显示全部文字，
+   * 跨天的这一段还带 of（第几天、共几天）：色块右端要写“2/3”，界面把这几个字（等宽小字、前面的空隙）也算进去（11-17 日历整块评审第 1 条）。
+   * 传了时色块宽 = max(按时长的宽, minBlockPx, textPx(标题, of))，从开始时刻起画、写到轨道末端为止（负责人 11-17“周历上显示全部文字，
    * 时间以开始时间为准，结束时间对不上也没关系”）；撑开后撞上的照样进第二排或 more。不传（服务器一侧、单测）按原来的规则
    */
-  readonly textPx?: (text: string) => number;
+  readonly textPx?: (title: string, of?: DayOf) => number;
 }
 
 export interface DeskWeekOpts {
@@ -142,16 +146,23 @@ function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets
   if (first === undefined || last === undefined) return { allDay, timed, todos };
   for (const [d, entries] of collectEntries(items, first, last, tz)) {
     for (const e of entries) {
+      const seg = segmentOn(e, d, tz);
       if (e.kind === 'todo') todos.get(d)?.push(e);
-      else if (e.place === undefined || e.place.allDay) allDay.get(d)?.push(e);
-      else {
-        // 开始那天从开始时刻起、其余从 0:00 起；结束不在这一天的到 24:00
-        const startMin = d === e.place.date ? e.place.startMin : 0;
-        timed.get(d)?.push({ entry: e, day: d, startMin, endMin: Math.max(startMin, endMinOn(e.place.endMs, d, tz)) });
-      }
+      else if (seg === null) allDay.get(d)?.push(e);
+      else timed.get(d)?.push({ entry: e, day: d, ...seg });
     }
   }
   return { allDay, timed, todos };
+}
+
+/**
+ * 有时刻的日程在 d 这一天占第几分钟到第几分钟（开始那天从开始时刻起、其余从 0:00 起；结束不在这一天的到 24:00）；全天日程、待办 null。
+ * buildWeek 切段和周视图算时间轴范围（WeekView rangeOf，11-17 日历整块评审第 4 条：手机上不再为了范围整周排一遍电脑布局）共用
+ */
+export function segmentOn(e: DayEntry, d: DateStr, tz: Tz): { startMin: number; endMin: number } | null {
+  if (e.kind === 'todo' || e.place === undefined || e.place.allDay) return null;
+  const startMin = d === e.place.date ? e.place.startMin : 0;
+  return { startMin, endMin: Math.max(startMin, endMinOn(e.place.endMs, d, tz)) };
 }
 
 function allDayOf(entries: DayEntry[]): AllDay {
@@ -165,9 +176,14 @@ function compareSegments(a: Segment, b: Segment): number {
   return a.startMin - b.startMin || compareEntries(a.entry, b.entry);
 }
 
+/** 这一段是跨天日程的第几天（只占一天的 undefined） */
+function ofSeg(s: Segment): DayOf | undefined {
+  return s.entry.span === undefined ? undefined : dayOfSpan(s.entry.span, s.day);
+}
+
 function base(s: Segment): BlockBase {
   const span = s.entry.span;
-  const of = span === undefined ? undefined : dayOfSpan(span, s.day);
+  const of = ofSeg(s);
   return {
     itemId: s.entry.itemId,
     colorIndex: s.entry.colorIndex,
@@ -211,12 +227,12 @@ function layoutPhone(
   minPx: number,
   dayPx: number,
   end: number = dayPx,
-  textPx?: (text: string) => number,
+  textPx?: (title: string, of?: DayOf) => number,
 ): { blocks: PhoneBlock[]; groups: PhoneGroup[] } {
   const scale = dayPx / DAY_MINUTES;
   const placed = segs.map((s) => {
     let startPx = s.startMin * scale;
-    const want = Math.max((s.endMin - s.startMin) * scale, minPx, textPx ? textPx(s.entry.title) : 0);
+    const want = Math.max((s.endMin - s.startMin) * scale, minPx, textPx ? textPx(s.entry.title, ofSeg(s)) : 0);
     let widthPx = Math.min(want, end - startPx);
     if (widthPx < minPx) {
       startPx = Math.max(0, end - minPx);

@@ -1,0 +1,149 @@
+/* 选中那天的清单和黄历卡（DayList.tsx、HuangliCard.tsx；11-17 日历整块评审从 CalendarPage.module.css 拆出）。
+   项目色竖线 .c0～.c6 在 cal-common.module.css，DayList 先引那一份。
+   R-436 丙批照视觉稿（日清单标题在面板外、行在白面板里）和待办页分组的写法：
+   • 标题“11月12日 周四 · 农历…”和右边“6 项”是面板上方的小字分组名，挂 kit Form 的 groupLabelClass（第三层灰、等宽字加字距，同待办页 .group .h2）；
+     这里只管左右排开和间距，写成两级选择器，不靠两份样式表的先后压过 .groupLabel 的 margin
+   • 面板（黄历卡 + 行）是 kit List 的 .panel（白底、--r-lg）；左右留白加大到 16（同待办页 .roomy），行高 52（行高留白加大）
+   • 行首时刻右对齐、按状态上色（.dayTime） */
+.dayList {
+  margin-top: 12px;
+}
+
+.dayList .dayListHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 14px 8px;
+}
+
+.dayList > .dayPanel {
+  padding: 2px 16px;
+}
+
+.dayListRows > li {
+  min-height: 52px;
+}
+
+/* 行首时刻（R-436“日期时刻等宽数字按状态上色、右对齐”）：等宽字在 kit .lead；这里靠右排、宽度齐一格。
+   状态：已经过去的日程（那天已过、或今天已结束）第三层灰；过了截止还没完成的待办红字（红色只表示逾期）；其余照 .lead 的次要色 */
+.dayListRows .dayTime {
+  justify-content: flex-end;
+  min-width: 48px;
+}
+
+.dayTime[data-tone='past'] {
+  color: var(--text-3);
+}
+
+.dayTime[data-tone='late'] {
+  color: var(--danger-text);
+}
+
+/* 黄历卡（R-431，HuangliCard.tsx）：面板里最上面、行上面，下面一条分隔线隔开行（.hl + .dayListRows）。
+   宜忌被截断时盖一层铺满整卡的透明按钮 .hlHit（点了展开 / 收起）；加载中的占位（HuangliHold）用同一套版面 */
+.hl {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+}
+
+.hl + .dayListRows {
+  border-top: 1px solid var(--line);
+}
+
+.hlHit {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.hlDate {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  min-width: 68px;
+}
+
+.hlDay {
+  font-size: var(--fs-28);
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+/* “丙午年 · 十月”：小字标签，第三层灰加字距（R-436 小字标签） */
+.hlYear {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.hlRows {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hlRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--fs-13);
+  line-height: 20px;
+}
+
+.hlTag {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: var(--fs-12);
+  font-weight: 600;
+}
+
+.hlYi {
+  background: var(--yi-bg);
+  color: var(--yi-fg);
+}
+
+.hlJi {
+  background: var(--ji-bg);
+  color: var(--ji-fg);
+}
+
+/* 收起：每行一行、末尾省略号；展开（点卡片）显示全部 */
+.hlItems {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hlOpen .hlItems {
+  white-space: normal;
+}
+
+/* 日程竖线 4 宽、左右各让 3，占 10 宽（B2-UI-a U4-2）；颜色是 cal-common 的项目色。
+   原来这里还有一套待办空心小圆 .dayMkTodo（连同 7 条 .dayMkTodo.cN），已经没有组件在用，11-17 整块评审删掉 */
+.dayMk {
+  flex: none;
+  width: 4px;
+  height: 20px;
+  margin: 0 3px;
+  border-radius: 2px;
+}
