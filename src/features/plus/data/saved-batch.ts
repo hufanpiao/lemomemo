@@ -13,6 +13,9 @@
 // • “该不该提醒今天的次数用完了”在这一批第一次有条目存成的那一刻定、记一笔（一天只提醒一次）；确认行没选就关掉不再补（第 12 条）
 // • 打字条和按住录音共用这一份（FA-3 第二轮第 5 条）：存（save）、存完往哪走（land）、确认行（choose）、撤销、合并、关掉；
 //   两边只给自己的状态机、收尾和失败提示（flow）。录音那份由控制器持有（切页重挂提示条还在，第 11 条），打字条每次挂载一份
+// • AI 后台整理完换掉先存的（R-456 replace）：和合并同一个 swap（先存新的一批、存成了再撤原来的、没存上原样留着），也走同一把锁。
+//   先存那一刻 mark() 记下这一批和改动号（rev）；之后用户动过这一批（撤销、逐条撤、合并、确认行选或关、点了“修改”touch、新的一句、新的一次按住）
+//   改动号就变了，不替换。只关掉提示条（自己点 × 或 8 秒到了）不算动过：替换以后提示条带着“AI 已整理”重新出来，撤销照样能用
 // 纯 TS：不准 import React（A1）
 import { createStore } from 'zustand/vanilla';
 import type { DateStr } from '../../../../shared/core/date.ts';
@@ -53,6 +56,25 @@ export interface Batch {
   /** 确认行有一条没选就关掉了（没存）：这一批不全，合并会把没存的那条的原话也带进去，所以不给合并（复查 N4） */
   partial?: true;
   last: BatchLast;
+  /** AI 后台整理换掉了先存的（R-456）：提示条加一句“AI 已整理” */
+  byAi?: true;
+}
+
+/** 先存那一刻记下的（R-456）：这一批、当时的改动号 */
+export interface BatchMark {
+  batch: Batch;
+  rev: number;
+}
+
+/** AI 后台整理的结果：replaced 换了；same 和先存的一样；not_saved 新的没存上（先存的原样留着）；skip_* 没换（为什么） */
+export type ReplaceOut = 'replaced' | 'same' | 'not_saved' | 'skip_touched' | 'skip_confirm' | 'skip_busy';
+
+/** 两次拆出来的算不算一样（R-456）：条数、每条的类型、日子、截止、时刻、时长都一样（标题措辞不同不算） */
+export function sameItems(a: readonly AiItem[], b: readonly AiItem[]): boolean {
+  return a.length === b.length && a.every((x, i) => {
+    const y = b[i];
+    return y !== undefined && x.kind === y.kind && x.date === y.date && x.due === y.due && x.time === y.time && x.duration_min === y.duration_min;
+  });
 }
 
 const NO_HINTS: ParseHints = { recur: false, arrange: false, bad_day: null };
@@ -109,7 +131,7 @@ export function noticeOf({ batch, quotaDue }: BatchState): BatchNotice | null {
   const lines = noticeLines({
     status: batch.plan.status, titles: batch.entries.map((e) => e.ref.title), hints: batch.plan.hints, remind: batch.remind,
     quotaNoticeDue: quotaDue, resetClock: quotaResetClock(clock.now(), currentTz()),
-    mergeFailed: last === 'merge_failed', undoFailed: failedOf(batch), mergeLeft: merged?.mergeLeft ?? 0,
+    mergeFailed: last === 'merge_failed', undoFailed: failedOf(batch), mergeLeft: merged?.mergeLeft ?? 0, aiTidied: batch.byAi === true,
     annivKept: batch.entries.some((e) => e.undoTried && isAnniv(e.ref)) || merged?.annivLeft === true,
   });
   return { lines, entries: batch.entries, merge: canMerge(batch), alt: batch.plan.alt ?? null, raw: batch.raw };
@@ -143,6 +165,8 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
   let gen = 0;
   /** 写库的操作进行中的那一代（choose、undo、undoOne、merge 共用）：同一代再点不理；换了代的新提示条照常能点（复查 N2） */
   let busyGen = -1;
+  /** 改动号（R-456）：用户动过这一批就加 1；AI 后台整理回来对不上就不替换 */
+  let rev = 0;
 
   const once = async <T = void>(op: string, run: (g: number) => Promise<T>): Promise<T | undefined> => {
     const g = gen;
@@ -194,6 +218,22 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     };
   };
 
+  /** 先存新的一批（plan、raw、items），存成了再撤 old 的几条（合并、AI 整理替换共用）：没存上返回 null，原来的几条不动。
+   *  新的存成了就一定撤旧的（不撤就重了），撤不掉的交回 left */
+  const swap = async (old: Batch, plan: TypePlan, raw: string, items: AiItem[], e: SaveEnv): Promise<{ batch: Batch; left: SavedRef[] } | null> => {
+    const base: Batch = { batchId: null, entries: [], plan, raw, remind: false, stored: 0, last: null, ...(old.source ? { source: old.source } : {}) };
+    const r = await store(base, items, e);
+    if (r.out !== 'ok' || !r.batch) return null;
+    const left = await undoRefs(old.entries.map((x) => x.ref), e.now, writer);
+    if (left.length > 0) rlog(`${tag} swap undo_left=${left.length}`);
+    return { batch: r.batch, left };
+  };
+  /** 撤不掉的几条：不留在新的提示条上，指路句的条数、纪念日（R-405） */
+  const leftOf = (left: readonly SavedRef[]): BatchLast => {
+    const anniv = left.filter(isAnniv).length;
+    return { mergeLeft: left.length - anniv, annivLeft: anniv > 0 };
+  };
+
   /** 存完往哪走：问 → 确认行；好 → 调用方收尾（额度提示存成那一刻已经定了）；别的交给调用方的失败提示 */
   const land = (out: SaveOutcome | 'ask', plan: TypePlan): void => {
     if (out === 'ask') return flow.go({ type: 'need_confirm' });
@@ -208,6 +248,7 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     async save(plan: TypePlan, raw: string): Promise<SaveOutcome | 'ask'> {
       if (plan.items.length === 0) return 'nothing';
       gen += 1;
+      rev += 1;
       const { ready, ask } = splitConfirm(plan.items);
       const t0 = performance.now();
       const r = await store({ batchId: null, entries: [], plan, raw, remind: false, stored: 0, last: null, ...(source ? { source } : {}) }, ready, env());
@@ -220,6 +261,7 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     /** 确认行选了（确认行只在调用方 confirming 时画）：加进同一批；问完了收尾 */
     choose: (c: 'past' | 'next'): Promise<void> =>
       once('choose', async (g) => {
+        rev += 1;
         const { batch, ask } = get();
         const first = ask[0];
         if (!batch || !first) return;
@@ -236,6 +278,7 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     /** 确认行没选就关掉：不再问，回到 idle；返回关掉之前的这一批（调用方决定原话怎么办） */
     dismiss(): BatchState {
       const was = get();
+      rev += 1;
       put(was.batch ? { ask: [], batch: { ...was.batch, partial: true } } : { ask: [] });
       flow.go({ type: 'cancel' });
       return was;
@@ -243,6 +286,7 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     /** 逐条撤销：撤成了拿掉；没撤成（纪念日、写不进去）那一条留着、标上，提示条说一句 */
     undoOne: (id: string): Promise<void> =>
       once('undo_one', async (g) => {
+        rev += 1;
         const hit = get().batch?.entries.find((e) => e.ref.id === id);
         if (!hit) return;
         const left = await undoRefs([hit.ref], clock.now(), writer);
@@ -253,6 +297,7 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     /** 撤整批；返回 true = 全撤掉了（提示条“改成搜索”只在这时换成查找）；连点被锁挡下是 undefined */
     undo: (): Promise<boolean | undefined> =>
       once('undo_all', async (g) => {
+        rev += 1;
         const batch = get().batch;
         if (batch) {
           const refs = batch.entries.map((e) => e.ref);
@@ -269,27 +314,46 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     /** 拆错了，合并成一条：没存上原来的几条不动，提示条自己加一句（不把原话填回输入条，免得再记一遍） */
     merge: (): Promise<void> =>
       once('merge', async (g) => {
+        rev += 1;
         const batch = get().batch;
         const one = batch && canMerge(batch) ? mergeItems(batch.entries.map((e) => e.item), batch.raw) : null;
         if (!batch || !one) return;
-        const e = env();
         const plan: TypePlan = { ...batch.plan, status: 'saved', items: [one], hints: NO_HINTS, quotaLeft: null, aiReason: null };
-        const base: Batch = { batchId: null, entries: [], plan, raw: batch.raw, remind: false, stored: 0, last: null, ...(batch.source ? { source: batch.source } : {}) };
-        const r = await store(base, [one], e);
-        rlog(`${tag} merge out=${r.out} n=${batch.entries.length}`);
-        if (r.out !== 'ok' || !r.batch) {
+        const r = await swap(batch, plan, batch.raw, [one], env());
+        rlog(`${tag} merge out=${r ? 'ok' : 'not_saved'} n=${batch.entries.length}`);
+        if (!r) {
           const now = stale(g, 'merge') ? null : get().batch;
           if (now) put({ batch: { ...now, last: 'merge_failed' } });
           return;
         }
-        // 新的存成了再撤原来的：代号变了也照样撤（新的一条已经在库里，不撤就重了），只是不写回提示条
-        const refs = batch.entries.map((x) => x.ref);
-        const left = await undoRefs(refs, e.now, writer);
-        if (left.length > 0) rlog(`${tag} merge undo_left=${left.length}`);
+        // 代号变了也照样撤了（swap 里），只是不写回提示条
         if (stale(g, 'merge')) return;
-        const anniv = left.filter(isAnniv).length;
-        put({ batch: { ...r.batch, last: { mergeLeft: left.length - anniv, annivLeft: anniv > 0 } } });
+        put({ batch: { ...r.batch, last: leftOf(r.left) } });
       }),
+    /** 先存那一刻记下这一批（R-456：AI 后台整理回来时拿它比、拿它撤）；还没有记下的为 null */
+    mark(): BatchMark | null {
+      const batch = get().batch;
+      return batch ? { batch, rev } : null;
+    },
+    /** 用户点了某一条的“修改”（R-456）：算动过这一批，AI 整理回来不再替换 */
+    touch(): void {
+      rev += 1;
+    },
+    /** AI 后台整理完（R-456）：和先存的不一样就换（swap：先存 AI 的、存成了再撤先存的，没存上原样留着）。
+     *  动过这一批、确认行还在问、AI 的结果里有要问的过去月日：不换。换了以后提示条带“AI 已整理”（关掉了的重新出来） */
+    async replace(m: BatchMark, plan: TypePlan, raw: string): Promise<ReplaceOut> {
+      if (m.rev !== rev) return 'skip_touched';
+      if (get().ask.length > 0 || plan.items.some((it) => it.confirm !== null)) return 'skip_confirm';
+      if (sameItems(m.batch.entries.map((e) => e.item), plan.items)) return 'same';
+      const out = await once<ReplaceOut>('replace', async (g) => {
+        const r = await swap(m.batch, plan, raw, plan.items, env());
+        if (!r) return 'not_saved';
+        if (stale(g, 'replace')) return 'replaced';
+        put({ batch: { ...r.batch, byAi: true, last: r.left.length > 0 ? leftOf(r.left) : null } });
+        return 'replaced';
+      });
+      return out ?? 'skip_busy';
+    },
     closeNotice(): void {
       gen += 1;
       put({ batch: null });
@@ -298,6 +362,7 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     /** 新的一次按住：上一批的提示条、确认行收起 */
     fresh(): void {
       gen += 1;
+      rev += 1;
       put({ batch: null, ask: [] });
     },
   };

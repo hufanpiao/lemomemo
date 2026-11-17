@@ -5,8 +5,10 @@
 // • 锁定后：标题“已锁定，松开手也在录”，去掉两个区和话筒，底部“取消 / 记下”两颗 52px 按钮；Esc 等于“取消”
 // • 手机自带识别（额度用完、网络慢、没开 AI、“再说一次”）：标题下多一行原因（线框 RECFB），说明文字换成“这次只听中文…”
 // • 计时、声波每帧（motion 的 eachFrame，A25）直接写 DOM（textContent、CSSOM transform；CSP 不准内联 style 属性），不走 React 状态：录着时面板不跟着每帧重渲染
+// • 边说边出字（R-456，部分取代上面“只有声波和计时，不出文字”）：录音这一路的手机自带识别认出了字，计时上方一个大文字框，
+//   深色底浅色字（令牌 --img-badge-bg / --img-badge-fg，两套皮肤、深浅色都是深底白字），字往后追加、框里滚到最新一行；没认出字不出这个框
 // • 进出：<Appear kind="scrim" / "sheet">（--dur-sheet + --ease-drawer；减少动态效果只淡入淡出，17.4）
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { useLayer } from '../../../kit/hooks/useLayer.ts';
 import { Appear, eachFrame } from '../../../motion/components.ts';
@@ -32,8 +34,16 @@ export function RecordPanel({ v }: { v: VoiceState }) {
   const clock = useRef<HTMLElement>(null);
   const max = useRef<HTMLSpanElement>(null);
   const wave = useRef<HTMLDivElement>(null);
+  const said = useRef<HTMLDivElement>(null);
   const live = useRef(v);
   live.current = v;
+  const text = show && !speech ? v.live : '';
+
+  // 边说边出字：字多了框里滚到最新一行
+  useLayoutEffect(() => {
+    const el = said.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [text]);
 
   // 锁定录音时是层栈里的一层（kit/hooks/layers.ts）：Esc 只在它是栈顶时丢掉这段录音
   useLayer(show && v.locked, { name: 'rec-lock', onEsc: () => v.discard(), back: () => [] });
@@ -85,6 +95,11 @@ export function RecordPanel({ v }: { v: VoiceState }) {
       </Appear>
       <Appear kind="sheet" show={show} className={styles.dock}>
         <section className={styles.sheet} data-locked={v.locked ? '' : undefined} aria-label={t('plus.rec.label', {})} data-testid="rec-panel" data-status={v.status}>
+          {text === '' ? null : (
+            <div ref={said} className={styles.said} aria-label={t('plus.rec.live', {})} data-testid="rec-live">
+              {text}
+            </div>
+          )}
           <div className={styles.hdr}>
             <span>
               <span className={styles.dot} aria-hidden="true" />

@@ -1,18 +1,18 @@
 // 手机自带识别这一路的生命周期（data/voice-speech.ts；B3 FA-3）：按下先开、按满接手、接手前已开始 / 已结束要补上、
-// 没按满关掉、只有接手的那次报结果、60 秒封顶
+// 没按满关掉、只有接手的那次报结果、60 秒封顶；录音这一路要中途的字（R-456 host.text）：接手前认出的补上、只报接手的那次
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SpeechEnd } from '../../../platform/speech.ts';
 import { REC_MAX_MS } from '../data/record-logic.ts';
 import { createSpeechRoute, type SpeechHost } from '../data/voice-speech.ts';
 
 const fx = vi.hoisted(() => ({
-  runs: [] as { lang: string; start(): void; end(r: unknown): void; stopped: boolean; cancelled: boolean }[],
+  runs: [] as { lang: string; start(): void; end(r: unknown): void; text?: ((t: string) => void) | undefined; stopped: boolean; cancelled: boolean }[],
   supported: true,
 }));
 vi.mock('../../../platform/speech.ts', () => ({
   speechSupported: () => fx.supported,
-  startSpeech: (lang: string, h: { onStart(): void; onEnd(r: unknown): void }) => {
-    const run = { lang, start: () => h.onStart(), end: (r: unknown) => h.onEnd(r), stopped: false, cancelled: false };
+  startSpeech: (lang: string, h: { onStart(): void; onEnd(r: unknown): void; onText?(t: string): void }) => {
+    const run = { lang, start: () => h.onStart(), end: (r: unknown) => h.onEnd(r), text: h.onText, stopped: false, cancelled: false };
     fx.runs.push(run);
     return {
       ok: true,
@@ -99,6 +99,30 @@ describe('手机自带识别这一路', () => {
     expect(fx.runs.every((r) => r.cancelled)).toBe(true);
     fx.runs[0]?.end({ ok: true, text: 'x' });
     expect(calls).toEqual([]);
+  });
+
+  it('不要中途的字（手机自带识别那一路）：不向识别要 onText', () => {
+    const { route } = host();
+    route.take('zh-CN');
+    expect(fx.runs[0]?.text).toBeUndefined();
+  });
+
+  it('要中途的字（R-456 录音这一路）：接手前认出的接手时补上，之后逐次报；先开又关掉的不报', () => {
+    const said: string[] = [];
+    const route = createSpeechRoute({ started: () => undefined, ended: () => undefined, cap: () => undefined, text: (t) => void said.push(t) }, () => 1000);
+    route.prime('zh-CN');
+    fx.runs[0]?.text?.('买');
+    expect(said, '没接手不报').toEqual([]);
+    route.take('zh-CN');
+    expect(said).toEqual(['买']);
+    fx.runs[0]?.start();
+    expect(route.listening()).toBe(true);
+    fx.runs[0]?.text?.('买牛奶');
+    expect(said).toEqual(['买', '买牛奶']);
+    route.prime('zh-CN');
+    fx.runs[1]?.text?.('别的');
+    route.drop();
+    expect(said).toEqual(['买', '买牛奶']);
   });
 
   it('开始收音满 60 秒：报 cap', () => {

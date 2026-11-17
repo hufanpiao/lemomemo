@@ -3,13 +3,14 @@
 // 全部撤销、逐条撤销时那一条留在提示条上，合并成功后不留（R-405）
 // 附加句的条数按这一批现算（撤过没撤成的标 undoTried）；会写库的操作共用一把锁，fresh / closeNotice 换代号后之前的不写回；
 // 单条撤成过不再给合并；合并后的新提示条不带原来的提示；额度提示在存成那一刻定（整块评审第 1～4、12 条）
+// AI 后台整理换掉先存的（R-456 replace）：和合并同一个先存新、再撤旧；一样不换、动过不换、新的没存上原样留着
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import type { WriteResult } from '../../../core/write.ts';
 import type { Writer } from '../data/capture-save.ts';
 import { QUOTA_NOTICE_KEY } from '../data/quota.ts';
 import type { TypePlan } from '../data/type-flow.ts';
-import { createBatchBox, createSavedBatch, noticeOf, type Batch, type BatchEntry } from '../data/saved-batch.ts';
+import { createBatchBox, createSavedBatch, noticeOf, sameItems, type Batch, type BatchEntry } from '../data/saved-batch.ts';
 
 const OK: WriteResult = { ok: true, item: null };
 const FAIL: WriteResult = { ok: false, reason: 'local_unavailable' };
@@ -322,5 +323,45 @@ describe('确认行连点（第二轮复查续第 2 条）', () => {
     await Promise.all([first, second]);
     expect(writer.insert).toHaveBeenCalledTimes(1);
     expect(flow.go).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AI 后台整理换掉先存的（R-456）', () => {
+  const ai = (items: AiItem[]): TypePlan => ({ ...PLAN, origin: 'ai', items });
+  it('sameItems：只比条数、类型、日子、截止、时刻、时长，标题措辞不同算一样', () => {
+    expect(sameItems([todo('买牛奶')], [todo('买点牛奶')])).toBe(true);
+    expect(sameItems([todo('买牛奶')], [todo('买牛奶'), todo('开会')])).toBe(false);
+    expect(sameItems([todo('开会')], [{ ...todo('开会'), kind: 'event', date: '2026-11-03', time: '15:00' } as AiItem])).toBe(false);
+  });
+
+  it('新的没存上：先存的原样留着（不撤），返回 not_saved', async () => {
+    const { writer, b, ids } = setup([t1]);
+    const m = b.mark();
+    if (!m) throw new Error('没有这一批');
+    writer.insert.mockResolvedValue(FAIL);
+    expect(await b.replace(m, ai([todo('买牛奶'), todo('开会')]), '买牛奶开会')).toBe('not_saved');
+    expect(writer.patch).not.toHaveBeenCalled();
+    expect(ids()).toEqual(['t1']);
+  });
+
+  it('点过“修改”（touch）：不换；AI 的结果里有要问的过去月日：不换', async () => {
+    const { writer, b } = setup([t1]);
+    const m = b.mark();
+    if (!m) throw new Error('没有这一批');
+    const confirm = { ...todo('交房租'), confirm: { past: '2026-10-30', next: '2027-10-30' } } as AiItem;
+    expect(await b.replace(m, ai([confirm]), '交房租')).toBe('skip_confirm');
+    b.touch();
+    expect(await b.replace(m, ai([todo('买牛奶'), todo('开会')]), '买牛奶开会')).toBe('skip_touched');
+    expect(writer.insert).not.toHaveBeenCalled();
+  });
+
+  it('换成了：提示条是 AI 那一批，带“AI 已整理”；原来的撤不掉的指路句照合并的规矩', async () => {
+    const { b, keys, notice, patchFail } = setup([t1]);
+    const m = b.mark();
+    if (!m) throw new Error('没有这一批');
+    patchFail.add('t1');
+    expect(await b.replace(m, ai([todo('买牛奶'), todo('开会')]), '买牛奶开会')).toBe('replaced');
+    expect(notice()?.entries.map((e) => e.ref.title)).toEqual(['买牛奶', '开会']);
+    expect(keys()).toEqual(['plus.notice.savedN', 'plus.notice.aiTidied', 'plus.notice.mergeLeft']);
   });
 });
