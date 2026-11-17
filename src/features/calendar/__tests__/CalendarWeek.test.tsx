@@ -84,7 +84,7 @@ describe('周视图（手机排布）', () => {
     expect(window.location.hash).toBe('#/cal/week/2026-11-12');
     expect(week.getAttribute('data-range')).toBe('8-22');
     expect(week.querySelectorAll('li[data-date]')).toHaveLength(7);
-    const block = await within(week).findByText('客户');
+    const block = (await within(week).findByText('客户')).closest('[data-item]') as HTMLElement;
     expect(block.style.left).toBe(`${(TRACK * 4) / 14}px`);
     expect(block.className).toContain(styles.wev);
   });
@@ -109,16 +109,16 @@ describe('周视图（手机排布）', () => {
     expect(screen.getAllByTestId('cal-now')).toHaveLength(1);
   });
 
-  it('待办画成空心圆、不算进色块；右边写当天共几项，有逾期待办加“逾”，读屏写“有逾期的待办”', () => {
+  it('待办画成空心圆、不算进色块；泳道右边不再写件数和“逾”（R-445 周视图 A 定稿没有这一列），读屏照旧写共几项、“有逾期的待办”', () => {
     data.todos = [todo('t1', { due: '2026-11-04' }), todo('t2', { due: '2026-11-06', due_time: '15:00' })];
     open('#/cal/week/2026-11-02');
     const l4 = lane('2026-11-04') as HTMLElement;
     expect(l4.querySelector('[data-todo="t1"]')?.className).toContain(styles.wtd);
-    expect(l4.querySelector(`.${styles.tdn ?? 'x'}`)?.textContent).toBe('1 逾');
+    expect(l4.textContent).not.toContain('逾');
     expect(within(l4).getByRole('button').getAttribute('aria-label')).toContain('有逾期的待办');
     const l6 = lane('2026-11-06') as HTMLElement;
     expect((l6.querySelector('[data-todo="t2"]') as HTMLElement).style.left).toBe(`${(TRACK * 7) / 14}px`);
-    expect(l6.querySelector(`.${styles.tdn ?? 'x'}`)?.textContent).toBe('1');
+    expect(within(l6).getByRole('button').getAttribute('aria-label')).toContain('共 1 件');
   });
 
   it('点一条泳道：选中那天（aria-pressed），下面清单列出当天全部；点清单一行打开编辑页（设计审查 M7）', async () => {

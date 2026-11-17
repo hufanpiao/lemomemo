@@ -1,17 +1,20 @@
 // 周视图（B2 FA-3，架构 5.12 第 2 点、0.51、R-101～R-110；定稿线框 s2、皮肤视觉稿 .wlane / .dwkv）
 // • 时间轴范围按当周事项自动伸缩（负责人 11-04）：默认 8～22 点，有更早、更晚的事扩到那个整点（data/week-axis.ts）
-// • 手机（窄屏）：一天一条泳道（58 高），左边“周一 / 19 / 农历或节日”和“全天 N”小标签，中间横向时间轴，右边当天共几项（有逾期待办加“逾”）
+// • 手机（窄屏）：R-445 周视图 A“时间轴泳道”（负责人 11-17 选定，定稿图 定稿_周视图A_浅.png），套已定月格的样式：
+//   一天一条泳道（--cal-lane-h 高），左边“周一 / 19 / 农历或节日”，右边横向时间轴（定稿没有原来右边“当天共几项、逾”那一列，读屏照旧念）
+//   – 周六周日淡底加灰字、放假斜纹、补班点阵加数字旁“班”标、今天淡黄小框、选中数字深色小方块：和月格同一套类（.wkend .holiday .workday .today .sel .dayNum）
 //   – 顶部刻度数字、每 2 小时一条刻度线；今天那条泳道上一条竖线是“现在”
-//   – 日程色块：底色项目块色、左侧 2 px 深色竖线、--on-p 字、9.5 px 简称（R-104、R-107、R-109、R-110 的排布交给前端 B 的 buildWeek）
+//   – 全天日程画成轨道顶上一整条（跨天的每天都画；续条字淡一档 --on-p-2、右端写“2/3”；当天还有别的全天日程再写“+N”），有它时时刻块往下让一排
+//   – 日程色块：底色项目块色、左侧 2 px 深色竖线、--on-p 字（R-104、R-107、R-109、R-110 的排布交给前端 B 的 buildWeek）；跨天的续段同样字淡一档、右端写“2/3”
 //   – 待办：泳道上的空心圆（有截止时刻画在那个时刻，没有的画在末端；同一处几个依次往左错开），不占上下两排、不算进“+N”
-//   – 整条泳道是一个按钮：点了选中那一天（灰底 + 墨色圈），下面的清单列出当天全部日程和待办；色块、“+N”不单独接点按
+//   – 整条泳道是一个按钮：点了选中那一天（数字深色小方块），下面的清单列出当天全部日程和待办；色块、“+N”不单独接点按
 //     （色块挨得近、高度不到 44，设计审查 M7 的做法：先选天、再在清单里点具体哪一条）
 // • 电脑（宽屏）：7 列时间格（纵向时间轴，每小时 40 px），表头星期、日期、农历，顶部“全天”行放全天日程和当天截止的待办（○ 标题）；
 //   重叠的并排分列（buildWeek layout 'desk' 的 column / columns）；色块点了打开编辑页；点表头选中那一天
 // • 节假日（R-432）：放假、补班的泳道（电脑是表头和那一列）和月格同一套斜纹（cal-ui.ts dayKind / dayKindClass）；
 //   连续放假只在第一天写节日名，后面几天照写农历（namedHolidays），读屏照旧念节日名（holA11y）
 // • 量宽：用回调 ref 量第一条轨道，翻周后轨道换了新元素会重新挂 ResizeObserver（代码审查 M1）
-// • 读屏：泳道按钮的名字先按显示顺序念看得见的字（“周一 19 十七 会议 +1 3 逾”，WCAG 2.5.3，cal-ui.ts labelInName），
+// • 读屏：泳道按钮的名字先按显示顺序念看得见的字（“周一 19 十七 出差 2/3 会议 +1”，WCAG 2.5.3，cal-ui.ts labelInName），
 //   再接“10月19日，今天，节日，共 3 项，有逾期的待办”（星期前面已经念过，不再重复）；完整标题在下面的清单里
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
@@ -22,11 +25,9 @@ import { buildWeek, dayEntries, type DeskDay, type PhoneDay } from '../../../../
 import { projectColorIndex, type ProjectColor } from '../../../../shared/logic/project-color.ts';
 import { axisFrac, axisTicks, phoneScale, weekHourRange, type HourRange } from './week-axis.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
-import refine from '../../../kit/components/Refine.module.css';
 import styles from './CalendarPage.module.css';
-import { colorClass, dayKind, dayKindClass, holA11y, holText, itemShort, labelInName, namedHolidays, weekdayKey } from './cal-ui.ts';
+import { colorClass, dayKind, dayKindClass, dayLines, holA11y, itemShort, labelInName, namedHolidays, weekdayKey, weekendClass } from './cal-ui.ts';
 import { DeskWeek } from './DeskWeek.tsx';
-import { useT } from '../../../kit/hooks/useT.ts';
 
 /** 色块最短长度（px，5.12：约 28 px，视觉稿 --wmin） */
 export const MIN_BLOCK_PX = 28;
@@ -135,25 +136,37 @@ function Lane({
   trackRef: ((el: HTMLElement | null) => void) | null;
 }) {
   const { t, items, today, nowMin, dueMins } = p;
-  const tc = useT();
   const hol = p.holidays.get(date) ?? [];
-  const [named] = namedHolidays(date, hol, p.holidays);
+  const kind = dayKind(hol);
   const isToday = date === today;
   const sel = p.selected === date;
   const total = dayTotal(date, items, p.tz);
   const todoIds = day?.todos.map((e) => e.itemId) ?? [];
   const overdue = hasOverdue(date, todoIds, today, nowMin, dueMins);
-  // 连休只在第一天写节日名，后几天照常写农历或节气（和月格同一条规则，cal-ui.ts namedHolidays）
-  const sub = named ? holText(named, t('cal.workday', {}), { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) }) : (p.lunarOf?.(date) ?? '');
+  // 和月格同一套（cal-ui.ts dayLines）：补班的“班”放进数字旁的小圆标，那一行写节日名；连休只在第一天写节日名，后几天照常写农历或节气
+  const { badge, line: sub } = dayLines(kind, namedHolidays(date, hol, p.holidays), p.lunarOf?.(date) ?? '', t);
   const shift = w > 0 ? phoneScale(w, range).shiftPx : 0;
   const allDay = day?.allDay;
   const allDayIds = allDay?.itemIds.filter((_, i) => allDay.kinds[i] !== 'todo') ?? [];
   const allDayFirst = allDayIds[0];
+  const allDayOf = allDay?.dayOf[0];
   const wd = t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) });
-  const allDayText = allDayFirst === undefined ? '' : allDayIds.length === 1 ? itemShort(items, 'allDay', allDayFirst) : `${tc('span.allDay', {})} ${allDayIds.length}`;
+  const allDayText = allDayFirst === undefined ? '' : itemShort(items, 'allDay', allDayFirst);
+  // 全天条右端：跨天的写“2/3”，当天还有别的全天日程写“+N”
+  const allDayEnd = [allDayOf ? `${allDayOf.index}/${allDayOf.days}` : '', allDayIds.length > 1 ? t('cal.more', { n: allDayIds.length - 1 }) : ''].filter(Boolean).join(' ');
   const moreTexts = day?.groups.filter((g) => g.more > 0).map((g) => t('cal.more', { n: g.more })) ?? [];
-  // 看得见的字，和下面画的顺序一致：星期、日期数字、农历或节日、全天标签、色块简称、“+N”、当天件数、“逾”
-  const shown = [wd, String(Number(date.slice(8))), sub, allDayText, ...(day?.blocks.map((b) => b.short) ?? []), ...moreTexts, String(total), overdue ? t('cal.overdue', {}) : ''];
+  // 看得见的字，和下面画的顺序一致：星期、日期数字、“班”、农历或节日、全天条、色块简称、“+N”
+  const shown = [
+    wd,
+    String(Number(date.slice(8))),
+    badge,
+    sub,
+    allDayText,
+    allDayEnd,
+    ...(day?.blocks.flatMap((b) => [b.short, b.dayOf ? `${b.dayOf.index}/${b.dayOf.days}` : '']) ?? []),
+    ...moreTexts,
+  ];
+  // 当天共几项、有没有逾期不再画在泳道右边（R-445 周视图 A 定稿没有这一列），读屏照旧念
   const a11y = labelInName(
     shown,
     [
@@ -167,28 +180,50 @@ function Lane({
   );
   // 同一处的待办依次往左错开：按位置分桶数
   const seen = new Map<number, number>();
+  const cls = [styles.lane, weekendClass(weekdayOf(date)), dayKindClass(kind), isToday ? styles.today : '', sel ? styles.sel : ''].filter(Boolean).join(' ');
   return (
-    <li className={[styles.lane, sel ? styles.laneSel : '', dayKindClass(dayKind(hol))].filter(Boolean).join(' ')} data-date={date}>
+    <li className={cls} data-date={date}>
       <button type="button" className={styles.laneBtn} aria-pressed={sel} aria-label={a11y} onClick={() => p.onSelect(date)}>
         <span className={styles.laneWd} aria-hidden="true">
-          {/* 几段字之间的 {' '}：laneWd、tdn 是 flex，laneBtn 是 grid，轨道里全是绝对定位，空格都不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}
+          {/* 几段字之间的 {' '}：laneWd、laneNum 是 flex，laneBtn 是 grid，轨道里全是绝对定位，空格都不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}
           <small>{wd}</small>{' '}
-          <b className={isToday ? styles.laneToday : undefined}>{Number(date.slice(8))}</b>{' '}
+          <span className={styles.laneNum}>
+            <b className={styles.dayNum}>{Number(date.slice(8))}</b>
+            {badge !== '' ? (
+              <>
+                {' '}
+                <span className={styles.ban} data-testid="cal-ban">
+                  {badge}
+                </span>
+              </>
+            ) : null}
+          </span>{' '}
           <small className={styles.laneSub}>{sub}</small>
-          {allDayFirst !== undefined ? (
-            <>
-              {' '}
-              <span className={`${styles.allDay} ${colorClass(colorOfAllDay(items, allDayFirst))}`}>{allDayText}</span>
-            </>
-          ) : null}
         </span>{' '}
-        <span className={styles.trk} ref={trackRef ?? undefined} aria-hidden="true">
+        <span className={allDayFirst !== undefined ? `${styles.trk} ${styles.trkAll}` : styles.trk} ref={trackRef ?? undefined} aria-hidden="true">
           {axisTicks(range).map((h) => (
             <i key={h} className={styles.tick} style={{ left: `${axisFrac(h * 60, range) * 100}%` }} />
           ))}
           {/* 现在线排在日程块前面：画在块下面，不压块上的字（设计复审 N2） */}
           {isToday && nowMin >= range.h0 * 60 && nowMin <= range.h1 * 60 ? (
             <i className={styles.wnow} style={{ left: `${axisFrac(nowMin, range) * 100}%` }} data-testid="cal-now" />
+          ) : null}
+          {allDayFirst !== undefined ? (
+            <>
+              {' '}
+              <span
+                className={[styles.allDay, colorClass(colorOfAllDay(items, allDayFirst)), allDayOf && allDayOf.index > 1 ? styles.barCont : ''].filter(Boolean).join(' ')}
+                data-item={allDayFirst}
+              >
+                <span className={styles.wevTx}>{allDayText}</span>
+                {allDayEnd !== '' ? (
+                  <>
+                    {' '}
+                    <span className={styles.wevOf}>{allDayEnd}</span>
+                  </>
+                ) : null}
+              </span>
+            </>
           ) : null}
           {day?.blocks.map((b) => (
             <Fragment key={`${b.itemId}-${b.startMin}`}>
@@ -198,7 +233,7 @@ function Lane({
                   styles.wev,
                   colorClass(b.colorIndex),
                   b.rows === 2 ? (b.row === 1 ? styles.r1 : styles.r0) : '',
-                  b.cont === 'start' || b.cont === 'both' ? styles.contStart : '',
+                  b.cont === 'start' || b.cont === 'both' ? `${styles.contStart} ${styles.barCont}` : '',
                   b.cont === 'end' || b.cont === 'both' ? styles.contEnd : '',
                 ]
                   .filter(Boolean)
@@ -206,7 +241,13 @@ function Lane({
                 style={{ left: b.startPx - shift, width: b.widthPx }}
                 data-item={b.itemId}
               >
-                {b.short}
+                <span className={styles.wevTx}>{b.short}</span>
+                {b.dayOf ? (
+                  <>
+                    {' '}
+                    <span className={styles.wevOf}>{`${b.dayOf.index}/${b.dayOf.days}`}</span>
+                  </>
+                ) : null}
               </span>
             </Fragment>
           ))}
@@ -228,11 +269,6 @@ function Lane({
             seen.set(k, n + 1);
             return <i key={e.itemId} className={`${styles.wtd} ${colorClass(e.colorIndex)}`} style={{ left: at - n * TODO_STEP_PX }} data-todo={e.itemId} />;
           })}
-        </span>{' '}
-        <span className={styles.tdn} aria-hidden="true">
-          <span className={refine.num}>{total}</span>
-          {overdue ? ' ' : null}
-          {overdue ? <em>{t('cal.overdue', {})}</em> : null}
         </span>
       </button>
     </li>

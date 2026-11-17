@@ -708,39 +708,6 @@
       "source": "B2 FA-4 设计审查 M6、M7（提醒设置的开关、移除按钮）"
     },
     {
-      "id": "today-ring-panel",
-      "what": "月格今天的墨色细圈 / 格子底",
-      "fg": "--today-ring",
-      "bg": "--panel",
-      "kind": "nontext",
-      "themes": [
-        "simple-light"
-      ],
-      "source": "设计复审 N7（11-04）；R-132 简洁·浅色今天是透明底墨色细圈；月格 .today .dayNum、周视图 .laneToday"
-    },
-    {
-      "id": "today-ring-panel-2",
-      "what": "月格今天的墨色细圈 / 选中那天的底",
-      "fg": "--today-ring",
-      "bg": "--panel-2",
-      "kind": "nontext",
-      "themes": [
-        "simple-light"
-      ],
-      "source": "设计复审 N7（11-04）；R-132 简洁·浅色今天是透明底墨色细圈；月格 .today .dayNum、周视图 .laneToday"
-    },
-    {
-      "id": "today-ring-hol-bg",
-      "what": "月格今天的墨色细圈 / 放假灰底",
-      "fg": "--today-ring",
-      "bg": "--hol-bg",
-      "kind": "nontext",
-      "themes": [
-        "simple-light"
-      ],
-      "source": "设计复审 N7（11-04）；R-132 简洁·浅色今天是透明底墨色细圈；月格 .today .dayNum、周视图 .laneToday"
-    },
-    {
       "id": "hol-name-panel",
       "what": "月历：放假的节日名 / 格子底",
       "fg": "--hol-name",
@@ -784,15 +751,15 @@
       "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
     },
     {
-      "id": "hol-stripe-name-sel",
-      "what": "放假斜纹从字底下穿过：节日名 / 斜纹叠在选中底上（最差像素）",
+      "id": "hol-stripe-name-wkend",
+      "what": "放假斜纹从字底下穿过：节日名 / 叠在周末淡底上（最差像素）",
       "fg": "--hol-name",
       "bg": [
         "--hol-stripe",
-        "--panel-2"
+        "--cal-wkend"
       ],
       "kind": "text",
-      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
     },
     {
       "id": "hol-stripe-text2",
@@ -806,15 +773,15 @@
       "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
     },
     {
-      "id": "hol-stripe-text2-sel",
-      "what": "放假斜纹从字底下穿过：次要文字 / 斜纹叠在选中底上",
+      "id": "hol-stripe-text2-wkend",
+      "what": "放假斜纹从字底下穿过：次要文字 / 叠在周末淡底上",
       "fg": "--text-2",
       "bg": [
         "--hol-stripe",
-        "--panel-2"
+        "--cal-wkend"
       ],
       "kind": "text",
-      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
     },
     {
       "id": "hol-stripe-text",
@@ -828,15 +795,15 @@
       "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
     },
     {
-      "id": "hol-stripe-text-sel",
-      "what": "放假斜纹从字底下穿过：日期数字（正文色）/ 斜纹叠在选中底上",
+      "id": "hol-stripe-text-wkend",
+      "what": "放假斜纹从字底下穿过：日期数字（正文色）/ 叠在周末淡底上",
       "fg": "--text",
       "bg": [
         "--hol-stripe",
-        "--panel-2"
+        "--cal-wkend"
       ],
       "kind": "text",
-      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
     },
     {
       "id": "work-stripe-text2",
@@ -850,15 +817,15 @@
       "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
     },
     {
-      "id": "work-stripe-text2-sel",
-      "what": "补班斜纹从字底下穿过：次要文字 / 斜纹叠在选中底上",
+      "id": "work-stripe-text2-wkend",
+      "what": "补班斜纹从字底下穿过：次要文字 / 叠在周末淡底上",
       "fg": "--text-2",
       "bg": [
         "--work-stripe",
-        "--panel-2"
+        "--cal-wkend"
       ],
       "kind": "text",
-      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
     },
     {
       "id": "work-stripe-text",
@@ -872,28 +839,23 @@
       "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
     },
     {
-      "id": "work-stripe-text-sel",
-      "what": "补班斜纹从字底下穿过：日期数字（正文色）/ 斜纹叠在选中底上",
+      "id": "work-stripe-text-wkend",
+      "what": "补班斜纹从字底下穿过：日期数字（正文色）/ 叠在周末淡底上",
       "fg": "--text",
       "bg": [
         "--work-stripe",
-        "--panel-2"
+        "--cal-wkend"
       ],
       "kind": "text",
-      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
     },
     {
       "id": "today-fg-bg",
-      "what": "今天的日期数字 / 今天圆底（简洁·浅色是透明底墨圈，不查）",
+      "what": "今天的日期数字 / 今天淡黄小框（R-445，四套皮肤一样）",
       "fg": "--today-fg",
       "bg": "--today-bg",
       "kind": "text",
-      "themes": [
-        "simple-dark",
-        "glass-light",
-        "glass-dark"
-      ],
-      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
     },
     {
       "id": "focus-bg",
@@ -956,6 +918,38 @@
         "--bg"
       ],
       "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）。over 的前提：宽屏 #root 左边让出 110px（GlassBar.module.css :global(#root):has(.bar)），侧栏（左 16、宽 78）后面只有 body 的 --bg"
+    },
+    {
+      "id": "cal-sel",
+      "what": "选中那天的日期数字 / 深色小方块",
+      "fg": "--cal-sel-fg",
+      "bg": "--cal-sel-bg",
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "cal-wkend-fg",
+      "what": "周末的日期数字和农历（灰字）/ 周末淡底",
+      "fg": "--cal-wkend-fg",
+      "bg": "--cal-wkend",
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "cal-text2-wkend",
+      "what": "次要文字（农历、节气）/ 周末淡底",
+      "fg": "--text-2",
+      "bg": "--cal-wkend",
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "cal-holname-wkend",
+      "what": "放假的节日名 / 周末淡底",
+      "fg": "--hol-name",
+      "bg": "--cal-wkend",
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
     }
   ],
   "accepted": [

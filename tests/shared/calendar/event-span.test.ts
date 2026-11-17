@@ -150,6 +150,38 @@ describe('月历、单日清单：跨天的日程它占的每一天都有', () =
   });
 });
 
+describe('月格：跨天画成一整条（R-445“一整条色块”）', () => {
+  const opts = { tz: SEOUL, today: '2026-11-17', weekStart: 1 as const, maxMarks: 2 };
+  const at = (cells: ReturnType<typeof buildMonth>, d: string) => cells.find((c) => c.date === d)?.marks ?? [];
+
+  it('同一周里只有段头那一格画（cols 写占几格），别的格子同一排空着；跨到下一周另起一段、before 标出是续条', () => {
+    const events = [
+      ev({ id: 'trip', date: '2026-11-18', duration_min: 3 * DAY }),
+      ev({ id: 'wk', date: '2026-11-21', duration_min: 3 * DAY }),
+      timed('one', '2026-11-19', '10:00', SEOUL, 60),
+    ];
+    const cells = buildMonth({ y: 2026, m: 11 }, { events, todos: [] }, opts);
+    expect(at(cells, '2026-11-18')).toEqual([expect.objectContaining({ itemId: 'trip', slot: 0, bar: { head: true, cols: 3, before: false, after: false } })]);
+    expect(at(cells, '2026-11-19').map((m) => [m.itemId, m.slot, m.bar?.head])).toEqual([['trip', 0, false], ['one', 1, undefined]]);
+    expect(at(cells, '2026-11-21')).toEqual([expect.objectContaining({ itemId: 'wk', slot: 0, bar: { head: true, cols: 2, before: false, after: true } })]);
+    expect(at(cells, '2026-11-23')).toEqual([expect.objectContaining({ itemId: 'wk', slot: 0, bar: { head: true, cols: 1, before: true, after: false } })]);
+  });
+
+  it('先排跨天的（开始早的、跨得长的在上），单日的填空着的排；排不下的每一格都记进 more', () => {
+    const events = [
+      ev({ id: 'short', date: '2026-11-18', duration_min: 2 * DAY, created_at: 1 }),
+      ev({ id: 'long', date: '2026-11-18', duration_min: 3 * DAY, created_at: 2 }),
+      ev({ id: 'late', date: '2026-11-19', duration_min: 2 * DAY }),
+      timed('one', '2026-11-20', '10:00', SEOUL, 60),
+    ];
+    const cells = buildMonth({ y: 2026, m: 11 }, { events, todos: [] }, opts);
+    expect(at(cells, '2026-11-18').map((m) => [m.itemId, m.slot])).toEqual([['long', 0], ['short', 1]]);
+    // late 在 19 号两排都占着，排不下：19、20 两格各记一件；20 号第二排空着，给单日的 one
+    expect(at(cells, '2026-11-20').map((m) => [m.itemId, m.slot])).toEqual([['long', 0], ['one', 1]]);
+    expect(['2026-11-19', '2026-11-20'].map((d) => cells.find((c) => c.date === d)?.more)).toEqual([1, 1]);
+  });
+});
+
 describe('周视图：全天行每天一条、时间块按天切段', () => {
   const WEEK = '2026-11-16'; // 周一
 
@@ -165,6 +197,8 @@ describe('周视图：全天行每天一条、时间块按天切段', () => {
       ['2026-11-19', 0, DAY, 'both'],
       ['2026-11-20', 0, 1080, 'start'],
     ]);
+    // R-445：续条右端写“2/3”
+    expect(days.flatMap((d) => d.blocks.map((b) => b.dayOf))).toEqual([{ index: 1, days: 3 }, { index: 2, days: 3 }, { index: 3, days: 3 }]);
   });
 
   it('每一段的 cont 和 entry 的 span.cont 一致（评审第 14 条）；正好在午夜结束的不多出 0 长的一段', () => {

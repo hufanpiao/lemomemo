@@ -54,7 +54,7 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
             data-date={date}
           >
             <span>{t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) })}</span>
-            <b className={date === today ? styles.laneToday : undefined}>{Number(date.slice(8))}</b>
+            <b className={date === today ? styles.todayNum : undefined}>{Number(date.slice(8))}</b>
             <small>{sub}</small>
           </button>
         );

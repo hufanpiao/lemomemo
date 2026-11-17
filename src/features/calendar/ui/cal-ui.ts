@@ -133,6 +133,31 @@ export function holText(
   return base === '' ? workday : `${workday}·${base}`;
 }
 
+/** 一天看得见的那几段字（月格、手机周泳道共用，画格子和读屏名字用同一份）：右上角 / 数字旁“班”标、那一行（节假日 > fallback）、第二个节日名、那一行是不是放假的节日名 */
+export interface DayLines {
+  readonly badge: string;
+  readonly line: string;
+  readonly hol2: string;
+  readonly offName: boolean;
+}
+
+/**
+ * 只写 named 里的（连休后几天不写节日名，见 namedHolidays）；补班日（当天只有补班）的“班”放进小圆标，
+ * 那一行和第二个名字都只写去掉补班尾巴的节日名。fallback：没有要写的节日时那一行写什么（节气或农历）
+ */
+export function dayLines(kind: HolidayKind | null, named: readonly HolidayMark[], fallback: string, t: CalViewT): DayLines {
+  const sub = { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) };
+  const [first, second] = named;
+  const badge = kind === 'work' ? t('cal.workday', {}) : '';
+  const text = (h: HolidayMark): string => (badge === '' ? holText(h, t('cal.workday', {}), sub) : stripWorkdayTail(h.name));
+  return { badge, line: first ? text(first) : fallback, hol2: second ? text(second) : '', offName: first?.kind === 'off' };
+}
+
+/** 周六、周日（0 = 周日）：月格、周泳道“周末淡底加灰字”（R-445） */
+export function weekendClass(weekday: number): string {
+  return weekday === 0 || weekday === 6 ? (styles.wkend ?? '') : '';
+}
+
 /**
  * 窄处（手机月格、手机泳道）的节日短写（负责人 11-04 定 L1）：名字以 full 开头的（韩国补休日“대체공휴일(개천절)”）显示成 short（“대체휴일”），括号部分去掉。
  * 数据文件保留官方全称；日清单、电脑周表头、读屏文字照旧用全称。full / short 是数据语言（韩国节假日文件只有韩文名），放在词条 cal.subHolFull / cal.subHolShort

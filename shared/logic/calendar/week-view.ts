@@ -26,6 +26,8 @@ import { dayOfSpan, endMinOn, type Cont } from './event-span.ts';
 /** 一天里的一段（跨午夜的日程切开以后各段分别算；被切的哪一边看 entry.span.cont） */
 interface Segment {
   readonly entry: DayEntry;
+  /** 哪一天的那一段 */
+  readonly day: DateStr;
   readonly startMin: number;
   readonly endMin: number;
 }
@@ -38,6 +40,8 @@ interface BlockBase {
   readonly startMin: number;
   readonly endMin: number;
   readonly cont?: Cont;
+  /** 跨天的日程这一段是第几天、共几天（R-445 周视图续条右端写“2/3”）；只占一天的没有 */
+  readonly dayOf?: { readonly index: number; readonly days: number };
 }
 
 export interface PhoneBlock extends BlockBase {
@@ -67,7 +71,7 @@ export interface AllDay {
   readonly itemIds: readonly string[];
   /** 和 itemIds 一一对应：'allDay' 是全天日程（events 表），'todo' 是待办（todos 表，画空心圆）。代码审查 S9 */
   readonly kinds: readonly DayEntry['kind'][];
-  /** 和 itemIds 一一对应：跨天的全天日程这一天是第几天、共几天（R-444，界面在标题后面写“(2/3)”；跨天连条的画法等负责人定了图再做）；只占一天的、待办为 undefined */
+  /** 和 itemIds 一一对应：跨天的全天日程这一天是第几天、共几天（R-444；R-445 手机周泳道画成顶上一整条、右端写“2/3”）；只占一天的、待办为 undefined */
   readonly dayOf: readonly ({ readonly index: number; readonly days: number } | undefined)[];
 }
 
@@ -131,7 +135,7 @@ function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets
       else {
         // 开始那天从开始时刻起、其余从 0:00 起；结束不在这一天的到 24:00
         const startMin = d === e.place.date ? e.place.startMin : 0;
-        timed.get(d)?.push({ entry: e, startMin, endMin: Math.max(startMin, endMinOn(e.place.endMs, d, tz)) });
+        timed.get(d)?.push({ entry: e, day: d, startMin, endMin: Math.max(startMin, endMinOn(e.place.endMs, d, tz)) });
       }
     }
   }
@@ -156,13 +160,16 @@ function compareSegments(a: Segment, b: Segment): number {
 }
 
 function base(s: Segment): BlockBase {
+  const span = s.entry.span;
+  const of = span === undefined ? undefined : dayOfSpan(span, s.day);
   return {
     itemId: s.entry.itemId,
     colorIndex: s.entry.colorIndex,
     short: s.entry.short,
     startMin: s.startMin,
     endMin: s.endMin,
-    ...(s.entry.span === undefined ? {} : { cont: s.entry.span.cont }),
+    ...(span === undefined ? {} : { cont: span.cont }),
+    ...(of === undefined ? {} : { dayOf: of }),
   };
 }
 

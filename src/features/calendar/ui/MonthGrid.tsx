@@ -1,11 +1,14 @@
-// 月格（B2 FA-3，架构 5.12 第 2 点、R-98、R-100、R-104、R-105；定稿线框 s3、皮肤视觉稿 .mv-c）：6×7 格，格子由前端 B 的 buildMonth 算好，这里只画
-// • 每格三层：日期数字（今天：简洁·浅色是墨色细圈、其余皮肤是柠檬黄底，令牌 --today-bg/--today-ring，R-132）；
+// 月格（B2 FA-3，架构 5.12 第 2 点、R-98、R-100、R-104、R-105；R-445 负责人 11-17 逐项选定的样式，定稿图 柠檬记APP-本机资料\设计方案6-11-17_日历月周\定稿）：
+// 6×7 格，格子由前端 B 的 buildMonth 算好，这里只画
+// • 圆角小格块、格与格之间 4pt 缝（令牌 --cal-gap、--cal-cell-r）；周六周日淡底加灰字（--cal-wkend、--cal-wkend-fg）；补位格半透明、字淡（--cal-out）
+// • 每格三层：日期数字（今天：淡黄色小框 --today-*，R-445 改 R-132；选中那天：数字深色小方块 --cal-sel-*，取代原来整格的框）；
 //   一行文字（节假日 > 节气 > 农历），纪念日在这行后面加菱形（柠檬黄填充 + 正文色边，深色模式自动浅色边，R-105）；
 //   “两国都显示”时另一国的节日名小一号写在第二行（R-97，放不下省略）；
-//   下面是事项标签：底色是项目块色 --pN，左侧 2 px 深色竖线 --pNs，字 --on-p，9.5 px（R-104 有意例外，不要改）；多出来写“+N”
-// • 放假格子画柠檬黄细斜虚线（--hol-stripe），节日名用柠檬黄系（--hol-name）；调休补班格子画中性色细斜虚线（--work-stripe），
-//   右上角“班”小圆标（韩文“근무”放得下的胶囊），那一行只写节日名（“班”已在圆标里）；周末不另上颜色
-//   （负责人 11-15“照参考图做”，取代设计审查 M4 的纯灰底）。斜纹类和手机泳道、电脑周视图共用（cal-ui.ts dayKind / dayKindClass）
+//   下面是事项标签：底色是项目块色 --pN，左侧 2 px 深色竖线 --pNs，字 --on-p，9.5 px（R-104 有意例外，不要改）；按排（slot）画，多出来写“+N”
+// • 跨天日程（R-444，R-445 选“一整条色块”）：同一周里画成一整条（段头那一格的标签按 --cols 加宽，伸进右边几格；pointer-events 不接点按），
+//   跨到下一周另起一段、开头再写一次名字、字淡一档（--on-p-2），不画左侧深色竖线
+// • 放假格子画柠檬黄细斜虚线（--hol-stripe），节日名用柠檬黄系（--hol-name）；调休补班格子画小圆点阵（--work-stripe，R-445 选“② 小圆点阵”），
+//   右上角“班”小圆标（韩文“근무”放得下的胶囊），那一行只写节日名（“班”已在圆标里）。斜纹类和手机泳道、电脑周视图共用（cal-ui.ts dayKind / dayKindClass）
 // • 连续放假只在第一天写节日名，后面几天照常写节气或农历（cal-ui.ts namedHolidays）；读屏名字照旧念出这天属于哪个节假日
 // • 读屏：每格是一个按钮，名字先按显示顺序念格子里看得见的字（日期数字、那一行、第二个节日名、事项简称、“+N”，WCAG 2.5.3），
 //   再接“日期、星期几、今天、节假日、节气、农历（完整写法）、共几件、按项目汇总的件数、另有几件未显示、有纪念日”（cal-ui.ts labelInName）
@@ -15,44 +18,48 @@
 import { Fragment, type CSSProperties, type Ref } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { WeekStart } from '../../../../shared/logic/calendar/cal-nav.ts';
-import type { HolidayKind, HolidayMark } from '../../../../shared/logic/calendar/holidays.ts';
-import type { MonthCell } from '../../../../shared/logic/calendar/month-grid.ts';
+import type { HolidayMark } from '../../../../shared/logic/calendar/holidays.ts';
+import type { MonthCell, MonthMark } from '../../../../shared/logic/calendar/month-grid.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, dayKind, dayKindClass, holA11y, holText, labelInName, namedHolidays, stripWorkdayTail, weekdayKey } from './cal-ui.ts';
+import { colorClass, dayKind, dayKindClass, dayLines, holA11y, labelInName, namedHolidays, weekdayKey, weekendClass, type DayLines } from './cal-ui.ts';
 
-/** 一格里看得见的字（右上角“班”圆标、那一行：节假日 > 节气 > 农历、第二个节日名）和那一行是不是放假的节日名 */
-interface CellLines {
-  readonly badge: string;
-  readonly line: string;
-  readonly hol2: string;
-  readonly offName: boolean;
+/** 这一格里画出来的标签：单日的、跨天色块的段头（段里别的格子只空出那一排） */
+const drawn = (mk: MonthMark): boolean => mk.bar === undefined || mk.bar.head;
+
+/** 一条标签：跨天的段头按格数加宽（--cols），续条（头是从前面接过来的）字淡一档、不画左侧深色竖线 */
+function Mark({ mk }: { mk: MonthMark }) {
+  const bar = mk.bar;
+  const cls = [styles.mark, colorClass(mk.colorIndex), bar ? styles.bar : '', bar?.before ? styles.barCont : ''].filter(Boolean).join(' ');
+  return (
+    <span className={cls} style={bar ? ({ '--cols': bar.cols } as CSSProperties) : undefined} aria-hidden="true" data-item={mk.itemId}>
+      {mk.short}
+    </span>
+  );
 }
 
-/**
- * 画格子和读屏名字共用，两边永远一致。kind 由调用方算一次（dayKind）传进来。
- * 只写 named 里的（连休后几天不写节日名，见 namedHolidays）；补班日（当天只有补班）的“班”放进圆标，
- * 那一行和第二个名字都只写去掉补班尾巴的节日名
- */
-function cellLines(c: MonthCell, kind: HolidayKind | null, named: readonly HolidayMark[], t: CalViewT): CellLines {
-  const sub = { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) };
-  const [first, second] = named;
-  const badge = kind === 'work' ? t('cal.workday', {}) : '';
-  const text = (h: HolidayMark): string => (badge === '' ? holText(h, t('cal.workday', {}), sub) : stripWorkdayTail(h.name));
-  return {
-    badge,
-    line: first ? text(first) : (c.solarTerm ?? c.lunar ?? ''),
-    hol2: second ? text(second) : '',
-    offName: first?.kind === 'off',
-  };
+/** 按排画：前面空着的排（被左边的跨天色块占着、或这一排没东西）垫一格同高的空位，后面的标签才对得上同一排 */
+function Marks({ marks }: { marks: readonly MonthMark[] }) {
+  let next = 0;
+  return marks.map((mk) => {
+    const gap = mk.slot - next;
+    next = mk.slot + 1;
+    const pad = Array.from({ length: Math.max(0, gap) }, (_, i) => <span key={`gap-${mk.slot}-${i}`} className={styles.markGap} aria-hidden="true" />);
+    return (
+      <Fragment key={mk.itemId}>
+        {pad}{' '}
+        {drawn(mk) ? <Mark mk={mk} /> : <span className={styles.markGap} aria-hidden="true" />}
+      </Fragment>
+    );
+  });
 }
 
-/** 一格的读屏名字（lines 是 cellLines 的结果，和画出来的同一份） */
-function labelOf(c: MonthCell, t: CalViewT, lines: CellLines, lunarSay?: (date: DateStr) => string | undefined): string {
+/** 一格的读屏名字（lines 是 cal-ui.ts dayLines 的结果，和画出来的同一份） */
+function labelOf(c: MonthCell, t: CalViewT, lines: DayLines, lunarSay?: (date: DateStr) => string | undefined): string {
   const [, m = '1', d = '1'] = c.date.split('-');
   const { badge, line, hol2 } = lines;
   // 看得见的字，和下面画的顺序一致
-  const shown = [String(Number(d)), badge, line, hol2, ...c.marks.map((mk) => mk.short), c.more > 0 ? t('cal.more', { n: c.more }) : ''];
+  const shown = [String(Number(d)), badge, line, hol2, ...c.marks.filter(drawn).map((mk) => mk.short), c.more > 0 ? t('cal.more', { n: c.more }) : ''];
   const parts = [t('cal.a11y.date', { m: Number(m), d: Number(d) }), t('cal.wdFull', { wd: t(weekdayKey(c.weekday), {}) })];
   if (c.isToday) parts.push(t('cal.a11y.todayMark', {}));
   // 连休后几天格子里不写节日名，读屏照旧念出这天属于哪个节假日
@@ -72,6 +79,7 @@ function labelOf(c: MonthCell, t: CalViewT, lines: CellLines, lunarSay?: (date: 
 
 function Cell({
   c,
+  weekStart,
   holidays,
   t,
   selected,
@@ -81,6 +89,7 @@ function Cell({
   hidden,
 }: {
   c: MonthCell;
+  weekStart: WeekStart;
   /** 全部节假日（看前一天是不是同一个假期，namedHolidays） */
   holidays: ReadonlyMap<DateStr, readonly HolidayMark[]>;
   t: CalViewT;
@@ -93,9 +102,17 @@ function Cell({
   hidden: boolean;
 }) {
   const kind = dayKind(c.holidays);
-  const lines = cellLines(c, kind, namedHolidays(c.date, c.holidays, holidays), t);
+  const lines = dayLines(kind, namedHolidays(c.date, c.holidays, holidays), c.solarTerm ?? c.lunar ?? '', t);
   const { badge, line, hol2 } = lines;
-  const cls = [styles.cell, c.inMonth ? '' : styles.out, c.isToday ? styles.today : '', dayKindClass(kind), selected ? styles.sel : ''].filter(Boolean).join(' ');
+  const cls = [styles.cell, weekendClass(c.weekday), c.inMonth ? '' : styles.out, c.isToday ? styles.today : '', dayKindClass(kind), selected ? styles.sel : '']
+    .filter(Boolean)
+    .join(' ');
+  // 有跨天色块的段头：这一格压在右边几格上面（色块伸进右边的格子里）；越靠左的越在上（色块只往右伸）
+  const col = (c.weekday + 7 - weekStart) % 7;
+  const style: CSSProperties = {
+    ...(c.marks.some((mk) => mk.bar?.head === true && mk.bar.cols > 1) ? { zIndex: 8 - col } : {}),
+    ...(fade < 1 ? { opacity: fade } : {}),
+  };
   return (
     <button
       type="button"
@@ -105,7 +122,7 @@ function Cell({
       onClick={() => onSelect(c.date)}
       data-date={c.date}
       inert={hidden}
-      style={fade < 1 ? { opacity: fade } : undefined}
+      style={Object.keys(style).length > 0 ? style : undefined}
     >
       {/* 第一行：日期数字 + 补班标（标靠右；格子窄、放不下时折到下一行靠右，不压“今天”圆底） */}
       <span className={styles.cellTop} aria-hidden="true">
@@ -133,14 +150,8 @@ function Cell({
           </span>
         </>
       ) : null}
-      {c.marks.map((mk) => (
-        <Fragment key={mk.itemId}>
-          {' '}
-          <span className={`${styles.mark} ${colorClass(mk.colorIndex)}`} aria-hidden="true">
-            {mk.short}
-          </span>
-        </Fragment>
-      ))}
+      {c.marks.length > 0 ? ' ' : null}
+      <Marks marks={c.marks} />
       {c.more > 0 ? (
         <>
           {' '}
@@ -193,6 +204,8 @@ export function MonthGrid({
           </span>
         ))}
       </div>
+      {/* 收起时格子整片上移、从星期行底下穿过：星期行不垫底色（定稿图是透明的），由这一层把移出去的部分裁掉 */}
+      <div className={styles.gridClip}>
       <div className={styles.grid} ref={gridRef} id={gridId} style={gridStyle}>
         {cells.map((c, i) => {
           const other = fold !== undefined && Math.floor(i / 7) !== fold.row;
@@ -200,6 +213,7 @@ export function MonthGrid({
             <Cell
               key={c.date}
               c={c}
+              weekStart={weekStart}
               holidays={holidays}
               t={t}
               selected={c.date === selected}
@@ -210,6 +224,7 @@ export function MonthGrid({
             />
           );
         })}
+      </div>
       </div>
     </section>
   );
