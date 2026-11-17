@@ -12,7 +12,7 @@
 import { addDays, fmtHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { firstOfMonth, lastOfMonth, monthOf, startOfWeek } from '../../../../shared/logic/calendar/cal-nav.ts';
-import { placeEvent, type CalEvent } from '../../../../shared/logic/calendar/cal-items.ts';
+import { placeEvent, spanRowOf } from '../../../../shared/logic/calendar/event-span.ts';
 import { isShownFile } from '../../../../shared/logic/files/shown-file.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
@@ -71,7 +71,8 @@ export function buildIndex(src: FindSources, tz: Tz): FindItem[] {
     if (!isLiveRow(r)) continue;
     const title = str(r['title']);
     // 日子、时刻按 4.6 换算到设备时区（B4b-3：时间类查找“下周的日程”按换算后的那天算）；格式坏了的照原值
-    const p = placeEvent(r as unknown as CalEvent, tz);
+    const row = spanRowOf(r);
+    const p = row && placeEvent(row, tz);
     out.push({ ...base, kind: 'event', id: r.id, title, fields: [title, str(r['location']), str(r['note']), str(r['raw_text'])],
       date: p?.date ?? dateStr(r['date']), lastDate: p && p.lastDate !== p.date ? p.lastDate : null,
       time: p ? (p.allDay ? null : fmtHm(p.startMin)) : typeof r['time'] === 'string' ? r['time'] : null, extra: str(r['location']) });

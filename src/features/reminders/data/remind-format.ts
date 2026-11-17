@@ -2,7 +2,8 @@
 // • 日程：“15 分钟后开始”（< 60 分钟）、“15:30 开始”、“已经开始”
 // • 待办：“今天 17:00 截止”“今天截止”“11月5日截止”“已过截止”“没有截止日期”
 // • 错过的提醒每行：“今天 09:00 · 日程”（day、time、kind）
-import { addDays, diffDays, msAt, parseDate, parseHm, todayOf, weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { addDays, diffDays, hm24, msAt, parseDate, parseHm, todayOf, weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { DAY_MINUTES, endMinOn, placeEvent, spanRowOf } from '../../../../shared/logic/calendar/event-span.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { hhmm } from '../../../../shared/logic/notify-text.ts';
 import { startAtOf } from '../../../../shared/logic/remind-actions.ts';
@@ -71,18 +72,16 @@ export type RelMsg =
   | { key: 'remind.rel.startedNow'; params: Record<string, never> }
   | WhenMsg;
 
-const DAY_MIN = 24 * 60;
-
 /** 还有 min 分钟（≥ 1）：分钟、小时（零头分钟写上，整点不写）、天（满 24 小时按整天往下取） */
 function ahead(min: number, k: 'start' | 'due'): RelMsg {
   if (min < 60) return { key: k === 'start' ? 'remind.rel.startInMin' : 'remind.rel.dueInMin', params: { n: min } };
-  if (min < DAY_MIN) {
+  if (min < DAY_MINUTES) {
     const h = Math.floor(min / 60);
     const m = min % 60;
     if (m === 0) return { key: k === 'start' ? 'remind.rel.startInH' : 'remind.rel.dueInH', params: { h } };
     return { key: k === 'start' ? 'remind.rel.startInHM' : 'remind.rel.dueInHM', params: { h, m } };
   }
-  return { key: k === 'start' ? 'remind.rel.startInD' : 'remind.rel.dueInD', params: { n: Math.floor(min / DAY_MIN) } };
+  return { key: k === 'start' ? 'remind.rel.startInD' : 'remind.rel.dueInD', params: { n: Math.floor(min / DAY_MINUTES) } };
 }
 
 export function relMsg(r: Reminder, now: number, tz: Tz, defaultTime?: string): RelMsg {
@@ -94,9 +93,9 @@ export function relMsg(r: Reminder, now: number, tz: Tz, defaultTime?: string): 
     const past = Math.floor((now - s) / 60_000);
     if (past < 1) return { key: 'remind.rel.startedNow', params: {} };
     if (past < 60) return { key: 'remind.rel.startedMin', params: { n: past } };
-    if (past < DAY_MIN) return { key: 'remind.rel.startedH', params: { h: Math.floor(past / 60) } };
+    if (past < DAY_MINUTES) return { key: 'remind.rel.startedH', params: { h: Math.floor(past / 60) } };
     // 满 24 小时按整天往下取（代码复审 N3：不写“已经开始 25 小时”）
-    return { key: 'remind.rel.startedD', params: { n: Math.floor(past / DAY_MIN) } };
+    return { key: 'remind.rel.startedD', params: { n: Math.floor(past / DAY_MINUTES) } };
   }
   const due = str(r.row['due']);
   const dueTime = str(r.row['due_time']);
@@ -130,23 +129,16 @@ export function wdKey(date: DateStr): WdKey {
 /** 时刻在 tz 的 HH:MM */
 export const timeOf = hhmm;
 
-/** 日程的结束时刻（“到 16:30”）；全天、没时长为 null */
-export function eventEnd(r: Reminder, tz: Tz): number | null {
-  const date = str(r.row['date']);
-  const time = str(r.row['time']);
-  const dur = typeof r.row['duration_min'] === 'number' ? r.row['duration_min'] : 0;
-  if (date === null || time === null || dur <= 0) return null;
-  return startAtOf({ date, time, tz: str(r.row['tz']) }, tz) + dur * 60_000;
-}
-
-/** 全屏提醒页副标题的“到 16:30”；结束和开始不在同一天（R-444 跨天日程）带上日子“到 11月20日 16:30”；没有结束时刻为 null */
+/**
+ * 全屏提醒页副标题的“到 16:30”：结束在开始那天（按 event-span.ts 的 placeEvent，午夜正好结束的也算开始那天、写“到 24:00”）；
+ * 跨天的（R-444）带上最后一天“到 11月20日 16:30”；全天、行坏了为 null
+ */
 export function endMsg(r: Reminder, tz: Tz): { key: 'remind.full.until'; params: { time: string } } | { key: 'remind.full.untilDate'; params: { m: number; d: number; time: string } } | null {
-  const end = eventEnd(r, tz);
-  const start = eventStart(r, tz);
-  if (end === null) return null;
-  const time = hhmm(end, tz);
-  const endDay = todayOf(end, tz);
-  if (start !== null && todayOf(start, tz) === endDay) return { key: 'remind.full.until', params: { time } };
-  const { m, d } = parseDate(endDay);
+  const row = spanRowOf(r.row);
+  const p = row && placeEvent(row, tz);
+  if (!p || p.allDay) return null;
+  const time = hm24(endMinOn(p.endMs, p.lastDate, tz));
+  if (p.date === p.lastDate) return { key: 'remind.full.until', params: { time } };
+  const { m, d } = parseDate(p.lastDate);
   return { key: 'remind.full.untilDate', params: { m, d, time } };
 }

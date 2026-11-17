@@ -306,15 +306,21 @@ describe('跨天日程（R-444）', () => {
     const r = ev({ duration_min: 3 * 1440 });
     expect(['2026-11-04', DAY, '2026-11-06', '2026-11-07', '2026-11-08'].map((d) => eventsOn([r], d, SEOUL).length)).toEqual([0, 1, 1, 1, 0]);
     const o = eventsOn([r], '2026-11-06', SEOUL)[0];
-    expect(o && eventSpanText(o, '2026-11-06', SEOUL)).toEqual({ lead: 'allDay', endMin: null, meta: { kind: 'dayOf', index: 2, days: 3 } });
+    expect(o && eventSpanText(o, '2026-11-06', SEOUL)).toEqual({ lead: 'allDay', endMin: null, meta: { key: 'span.dayOf', params: { i: 2, n: 3 } } });
   });
 
   it('有时刻 09:00 起 50 小时：中间那天写“持续”，最后一天写“至 11:00”；超过 31 天的坏值按 1 小时', () => {
     const r = ev({ time: '09:00', tz: SEOUL, duration_min: 50 * 60 });
     expect([DAY, '2026-11-06', '2026-11-07', '2026-11-08'].map((d) => eventsOn([r], d, SEOUL).length)).toEqual([1, 1, 1, 0]);
     const lead = (d: string) => { const o = eventsOn([r], d, SEOUL)[0]; return o && eventSpanText(o, d, SEOUL).lead; };
-    expect([DAY, '2026-11-06', '2026-11-07'].map(lead)).toEqual(['start', 'ongoing', 'until']);
+    expect([DAY, '2026-11-06', '2026-11-07'].map(lead)).toEqual(['start', { key: 'span.ongoing', params: {} }, { key: 'span.until', params: { t: '11:00' } }]);
     expect(eventOcc(ev({ time: '09:00', tz: SEOUL, duration_min: 31 * 1440 + 1 }), SEOUL)?.end).toBe(at('10:00'));
+  });
+
+  it('回落规则和日历同一套（评审第 13 条）：时区名无效按当前时区照样显示（原来今天页不显示、日历照显示）；时刻坏了不显示；时长 0 按 1 小时', () => {
+    expect(eventOcc(ev({ time: '09:00', tz: 'Foo/Bar' }), SEOUL)).toMatchObject({ date: DAY, time: '09:00', start: at('09:00'), origin: null });
+    expect(eventOcc(ev({ time: '9点', tz: SEOUL }), SEOUL)).toBeNull();
+    expect(eventOcc(ev({ time: '09:00', tz: SEOUL, duration_min: 0 }), SEOUL)?.end).toBe(at('10:00'));
   });
 
   it('“现在”卡：前天开始、此刻还没完的算进行中；已经结束的、明天才结束的今天开始的不重复', () => {

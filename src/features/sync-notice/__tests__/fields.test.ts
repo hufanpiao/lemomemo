@@ -54,6 +54,14 @@ describe('字段描述', () => {
     expect(describeConflict('todos', ['note'], { note: '' }, 'ko-KR', ko)).toEqual([{ field: '메모', value: '(비어 있음)' }]);
   });
 
+  it('日程时长按天、小时、分钟写（R-444 评审第 9 条），为 0 的那段不写；坏值写“（已改过）”', () => {
+    const d = (v: unknown, loc: 'zh-CN' | 'ko-KR' = 'zh-CN') => describeConflict('events', ['duration_min'], { duration_min: v }, loc, loc === 'zh-CN' ? zh : ko)[0]?.value;
+    expect([45, 60, 90, 3 * 1440, 2 * 1440 + 9 * 60 + 5].map((v) => d(v))).toEqual(['45 分钟', '1 小时', '1 小时 30 分钟', '3 天', '2 天 9 小时 5 分钟']);
+    expect(d(1500, 'ko-KR')).toBe('1일 1시간');
+    expect(describeConflict('events', ['duration_min'], { duration_min: 90 }, 'zh-CN', zh)[0]?.field).toBe('时长');
+    expect([0, 1.5, 'x'].map((v) => d(v))).toEqual(['（已改过）', '（已改过）', '（已改过）']);
+  });
+
   it('长文本原样给（两行加“…”由样式截）；hidden 的列不写', () => {
     const long = '很长'.repeat(200);
     expect(describeConflict('notes', ['body', 'updated_at', 'category_seen'], { body: long }, 'zh-CN', zh)).toEqual([{ field: '正文', value: long }]);

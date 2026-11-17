@@ -1,8 +1,19 @@
 // R-444 跨天日程：shared/logic/calendar/event-span.ts，以及月历（buildMonth）、单日清单（dayEntries）、周视图（buildWeek）都认跨天
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../shared/core/date.ts';
-import { dayEntries, placeEvent } from '../../../shared/logic/calendar/cal-items.ts';
-import { allDaySpanDays, contOn, spanDaysIn, spanTextOn, timedDurationMin } from '../../../shared/logic/calendar/event-span.ts';
+import { dayEntries } from '../../../shared/logic/calendar/cal-items.ts';
+import {
+  allDayDuration,
+  allDaySpanDays,
+  contOn,
+  dayOfSpan,
+  eventDurationMin,
+  overlapsDays,
+  placeEvent,
+  spanDaysIn,
+  spanRowOf,
+  spanTextOn,
+} from '../../../shared/logic/calendar/event-span.ts';
 import { buildMonth } from '../../../shared/logic/calendar/month-grid.ts';
 import { buildWeek } from '../../../shared/logic/calendar/week-view.ts';
 import { EVENT_DURATION_MAX, eventsWrite } from '../../../shared/schema/rows.ts';
@@ -13,12 +24,22 @@ const SH = 'Asia/Shanghai';
 const DAY = 1440;
 
 describe('event-span：数据做法（duration_min，最多 31 天）', () => {
-  it('全天日程：≤ 1440 都算一天（旧行、默认 60），多出来的按整天往上取，最多 31 天', () => {
-    expect([60, 1440, 1441, 2 * DAY, 3 * DAY, 40 * DAY, Number.NaN].map(allDaySpanDays)).toEqual([1, 1, 2, 2, 3, 31, 1]);
+  it('全天日程：≤ 1440 都算一天（旧行、默认 60），多出来的按整天往上取，最多 31 天；超上限的坏值同有时刻的，按默认值（一天）', () => {
+    expect([60, 1440, 1441, 2 * DAY, 3 * DAY, 31 * DAY, 40 * DAY, Number.NaN].map(allDaySpanDays)).toEqual([1, 1, 2, 2, 3, 31, 1, 1]);
   });
 
-  it('有时刻的日程：坏值按 0，超过 31 天截到上限', () => {
-    expect([90, -5, Number.NaN, EVENT_DURATION_MAX + 1].map(timedDurationMin)).toEqual([90, 0, 0, EVENT_DURATION_MAX]);
+  it('时长回落只有一套：1～31 天的整数照用，坏值、0、超上限一律按 1 小时', () => {
+    expect([90, EVENT_DURATION_MAX, -5, 0, 1.5, Number.NaN, EVENT_DURATION_MAX + 1].map(eventDurationMin)).toEqual([90, EVENT_DURATION_MAX, 60, 60, 60, 60, 60]);
+  });
+
+  it('allDayDuration：只占一天的写默认 1 小时（不写 1440），多天写“天数 × 1440”，截到 1～31 天', () => {
+    expect([1, 0, -3, 2, 3, 31, 40].map(allDayDuration)).toEqual([60, 60, 60, 2 * DAY, 3 * DAY, 31 * DAY, 31 * DAY]);
+  });
+
+  it('spanRowOf：本机缓存的行（类型没保证）→ SpanRow；没有日期为 null，空串当 null，时长不是数当坏值', () => {
+    expect(spanRowOf({ date: '2026-11-18', time: '09:00', tz: SEOUL, duration_min: 90 })).toEqual({ date: '2026-11-18', time: '09:00', tz: SEOUL, duration_min: 90 });
+    expect(spanRowOf({ date: '2026-11-18', time: '', tz: 3, duration_min: '90' })).toMatchObject({ time: null, tz: null, duration_min: Number.NaN });
+    expect(spanRowOf({ date: null })).toBeNull();
   });
 
   it('zod：1～44640 合格，0、44641 不合格（同库约束 events_duration_min_check）', () => {
@@ -34,7 +55,25 @@ describe('event-span：数据做法（duration_min，最多 31 天）', () => {
     expect(placeEvent(ev({ id: 'a', date: '2026-11-18', duration_min: 3 * DAY }), SEOUL)).toEqual({ allDay: true, date: '2026-11-18', lastDate: '2026-11-20' });
     expect(placeEvent(timed('b', '2026-11-18', '09:00', SEOUL, 2 * DAY + 9 * 60), SEOUL)).toMatchObject({ date: '2026-11-18', lastDate: '2026-11-20' });
     expect(placeEvent(timed('c', '2026-11-18', '22:00', SEOUL, 120), SEOUL)).toMatchObject({ lastDate: '2026-11-18' });
-    expect(placeEvent(timed('d', '2026-11-18', '22:00', SEOUL, 0), SEOUL)).toMatchObject({ lastDate: '2026-11-18' });
+    expect(placeEvent(timed('d', '2026-11-18', '23:00', SEOUL, 60), SEOUL)).toMatchObject({ lastDate: '2026-11-18' });
+  });
+
+  it('placeEvent 回落规则：坏日期、坏时刻为 null；坏时区按设备时区；坏时长（0、超上限）按 1 小时', () => {
+    expect(placeEvent(ev({ id: 'a', date: '2026-02-30' }), SEOUL)).toBeNull();
+    expect(placeEvent(timed('b', '2026-11-18', '25:00', SEOUL), SEOUL)).toBeNull();
+    expect(placeEvent(timed('c', '2026-11-18', '09:00', 'Foo/Bar'), SEOUL)).toMatchObject({ date: '2026-11-18', startMin: 540 });
+    const z = placeEvent(timed('d', '2026-11-18', '22:00', SEOUL, 0), SEOUL);
+    const big = placeEvent(timed('e', '2026-11-18', '22:00', SEOUL, EVENT_DURATION_MAX + 1), SEOUL);
+    expect(z && !z.allDay && (z.endMs - z.startMs) / 60_000).toBe(60);
+    expect(big && !big.allDay && (big.endMs - big.startMs) / 60_000).toBe(60);
+  });
+
+  it('dayOfSpan、overlapsDays：第几天共几天（只占一天的 undefined）；和范围有没有交叠', () => {
+    const s = { date: '2026-11-18', lastDate: '2026-11-20' };
+    expect(['2026-11-18', '2026-11-20'].map((d) => dayOfSpan(s, d))).toEqual([{ index: 1, days: 3 }, { index: 3, days: 3 }]);
+    expect(dayOfSpan({ date: '2026-11-18', lastDate: '2026-11-18' }, '2026-11-18')).toBeUndefined();
+    const ranges: [string, string][] = [['2026-11-19', '2026-11-19'], ['2026-11-20', '2026-11-30'], ['2026-11-01', '2026-11-18'], ['2026-11-21', '2026-11-30'], ['2026-11-01', '2026-11-17']];
+    expect(ranges.map(([f, t]) => overlapsDays(s, f, t))).toEqual([true, true, true, false, false]);
   });
 
   it('contOn、spanDaysIn：第一天 end、中间 both、最后一天 start；只占一天的 undefined', () => {
@@ -48,12 +87,17 @@ describe('event-span：数据做法（duration_min，最多 31 天）', () => {
   it('spanTextOn：开始那天写开始时刻 + “至哪天几点”；中间“持续”；最后一天“至 HH:MM”；全天写第几天', () => {
     const start = msAt('2026-11-18', 9 * 60, SEOUL);
     const t = { date: '2026-11-18', lastDate: '2026-11-20', endMs: start + (2 * DAY + 9 * 60) * 60_000 };
-    expect(spanTextOn(t, '2026-11-18', SEOUL)).toEqual({ lead: 'start', endMin: DAY, meta: { kind: 'untilDate', date: '2026-11-20', endMin: 18 * 60 } });
-    expect(spanTextOn(t, '2026-11-19', SEOUL)).toEqual({ lead: 'ongoing', endMin: DAY, meta: { kind: 'untilDate', date: '2026-11-20', endMin: 18 * 60 } });
-    expect(spanTextOn(t, '2026-11-20', SEOUL)).toEqual({ lead: 'until', endMin: 18 * 60, meta: null });
+    const until = { key: 'span.untilDate', params: { m: 11, d: 20, t: '18:00' } };
+    expect(spanTextOn(t, '2026-11-18', SEOUL)).toEqual({ lead: 'start', endMin: DAY, meta: until });
+    expect(spanTextOn(t, '2026-11-19', SEOUL)).toEqual({ lead: { key: 'span.ongoing', params: {} }, endMin: DAY, meta: until });
+    expect(spanTextOn(t, '2026-11-20', SEOUL)).toEqual({ lead: { key: 'span.until', params: { t: '18:00' } }, endMin: 18 * 60, meta: null });
     expect(spanTextOn({ date: '2026-11-18', lastDate: '2026-11-18', endMs: start + 60 * 60_000 }, '2026-11-18', SEOUL)).toEqual({ lead: 'start', endMin: 600, meta: null });
+    // 最后一天正好在午夜结束（结束前一刻在 11-19）：写“至 11月19日 24:00”
+    const mid = { date: '2026-11-18', lastDate: '2026-11-19', endMs: msAt('2026-11-20', 0, SEOUL) };
+    expect(spanTextOn(mid, '2026-11-18', SEOUL).meta).toEqual({ key: 'span.untilDate', params: { m: 11, d: 19, t: '24:00' } });
+    expect(spanTextOn(mid, '2026-11-19', SEOUL).lead).toEqual({ key: 'span.until', params: { t: '24:00' } });
     const a = { date: '2026-11-18', lastDate: '2026-11-20', endMs: null };
-    expect(spanTextOn(a, '2026-11-19', SEOUL)).toEqual({ lead: 'allDay', endMin: null, meta: { kind: 'dayOf', index: 2, days: 3 } });
+    expect(spanTextOn(a, '2026-11-19', SEOUL)).toEqual({ lead: 'allDay', endMin: null, meta: { key: 'span.dayOf', params: { i: 2, n: 3 } } });
     expect(spanTextOn({ ...a, lastDate: '2026-11-18' }, '2026-11-18', SEOUL).meta).toBeNull();
   });
 });
@@ -106,6 +150,24 @@ describe('周视图：全天行每天一条、时间块按天切段', () => {
       ['2026-11-18', 540, DAY, 'end'],
       ['2026-11-19', 0, DAY, 'both'],
       ['2026-11-20', 0, 1080, 'start'],
+    ]);
+  });
+
+  it('每一段的 cont 和 entry 的 span.cont 一致（评审第 14 条）；正好在午夜结束的不多出 0 长的一段', () => {
+    const days = buildWeek(WEEK, { events: [timed('m', '2026-11-18', '20:00', SEOUL, 28 * 60)], todos: [] }, { layout: 'desk', tz: SEOUL });
+    expect(days.flatMap((d) => d.blocks.map((b) => [d.date, b.startMin, b.endMin, b.cont]))).toEqual([
+      ['2026-11-18', 1200, DAY, 'end'],
+      ['2026-11-19', 0, DAY, 'start'],
+    ]);
+  });
+
+  it('夏令时那天也按墙上时间切：洛杉矶 3-07 20:00 起 24 小时，3-08 只有 23 小时，结束在 3-08 21:00', () => {
+    const LA = 'America/Los_Angeles';
+    const items = { events: [timed('d', '2026-03-07', '20:00', LA, DAY)], todos: [] };
+    const cut = (w: string) => buildWeek(w, items, { layout: 'desk', tz: LA }).flatMap((d) => d.blocks.map((b) => [d.date, b.startMin, b.endMin, b.cont]));
+    expect(cut('2026-03-02')).toEqual([
+      ['2026-03-07', 1200, DAY, 'end'],
+      ['2026-03-08', 0, 21 * 60, 'start'],
     ]);
   });
 

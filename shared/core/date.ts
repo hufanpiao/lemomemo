@@ -104,3 +104,8 @@ export function parseHm(hm: string): number {
 export function fmtHm(min: number): string {
   return `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}`;
 }
+
+/** 当天第几分钟 → 'HH:MM'，四舍五入、截到 0～1440，到当天末尾的写 '24:00'（日历色块、跨天日程“至 24:00”共用这一份） */
+export function hm24(min: number): string {
+  return fmtHm(Math.max(0, Math.min(1440, Math.round(min))));
+}

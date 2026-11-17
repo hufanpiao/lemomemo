@@ -9,7 +9,7 @@
 // • 电脑（layout 'desk'，时间轴纵向，相当于 minBlockPx = 0）：按真实时长画，重叠的并排分列，块带 column、columns。
 // • 待办（和前端 A 对过的接口）：规则和月历一样（todoDate：删掉的、撤销的、已完成的、没有截止日的不放，截止日是浮动日期不换算），
 //   手机放进当天的 todos（kind 'todo'，泳道上画空心圆），电脑并进 allDay 那一行（排在全天日程后面）。纯函数。
-import { addDays, diffDays, minOfDay, msAt, todayOf, type DateStr } from '../../core/date.ts';
+import type { DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import type { ProjectColor } from '../project-color.ts';
 import {
@@ -24,19 +24,13 @@ import {
   type DayEntry,
 } from './cal-items.ts';
 import { weekDates } from './cal-nav.ts';
-import { EVENT_SPAN_MAX_DAYS, spanDaysIn, type Cont } from './event-span.ts';
+import { DAY_MINUTES, dayOfSpan, endMinOn, EVENT_SPAN_MAX_DAYS, spanDaysIn, type Cont } from './event-span.ts';
 
-const DAY_MIN = 1440;
-
-/** 被午夜切开的一边（类型定义挪到 cal-items.ts，跨天的全天日程也用；这里转出保持原来的引用路径） */
-export type { Cont } from './event-span.ts';
-
-/** 一天里的一段（跨午夜的日程切开以后各段分别算） */
+/** 一天里的一段（跨午夜的日程切开以后各段分别算；被切的哪一边看 entry.span.cont） */
 interface Segment {
   readonly entry: DayEntry;
   readonly startMin: number;
   readonly endMin: number;
-  readonly cont?: Cont;
 }
 
 interface BlockBase {
@@ -119,35 +113,6 @@ export interface WeekItems {
   readonly todos: readonly CalTodo[];
 }
 
-function contOf(i: number, n: number): Cont | undefined {
-  if (n <= 1) return undefined;
-  if (i === 0) return 'end';
-  if (i === n - 1) return 'start';
-  return 'both';
-}
-
-/** 有时刻的日程按设备时区在午夜切段，返回 [日期, 段] */
-function splitAtMidnight(entry: DayEntry, date: DateStr, startMs: number, endMs: number, tz: Tz): [DateStr, Segment][] {
-  const parts: [DateStr, number, number][] = [];
-  let day = date;
-  let from = startMs;
-  // 跨天的日程（R-444）最长 31 天，换算时区再多出一天；上限 EVENT_SPAN_MAX_DAYS + 2 段只是防御
-  while (from < endMs && parts.length < EVENT_SPAN_MAX_DAYS + 2) {
-    const next = addDays(day, 1);
-    const dayEnd = msAt(next, 0, tz);
-    const to = Math.min(endMs, dayEnd);
-    const startMin = parts.length === 0 ? minOfDay(from, tz) : 0;
-    const endMin = to === dayEnd ? DAY_MIN : Math.max(startMin, minOfDay(to, tz));
-    parts.push([day, startMin, endMin]);
-    day = next;
-    from = dayEnd;
-  }
-  return parts.map(([d, startMin, endMin], i) => {
-    const cont = contOf(i, parts.length);
-    return [d, { entry, startMin, endMin, ...(cont === undefined ? {} : { cont }) }];
-  });
-}
-
 interface DayBuckets {
   readonly allDay: Map<DateStr, DayEntry[]>;
   readonly timed: Map<DateStr, Segment[]>;
@@ -168,9 +133,11 @@ function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets
       for (const d of spanDaysIn(p, first, last)) allDay.get(d)?.push(eventEntry(ev, p, d));
       continue;
     }
-    if (p.lastDate < first) continue;
-    const entry = eventEntry(ev, p);
-    for (const [d, seg] of splitAtMidnight(entry, todayOf(p.startMs, tz), p.startMs, p.endMs, tz)) timed.get(d)?.push(seg);
+    // 有时刻的按午夜切段：每一天一段（同 collectEntries 的 spanDaysIn），开始那天从开始时刻起、其余从 0:00 起，结束不在这一天的到 24:00
+    for (const d of spanDaysIn(p, first, last)) {
+      const startMin = d === p.date ? p.startMin : 0;
+      timed.get(d)?.push({ entry: eventEntry(ev, p, d), startMin, endMin: Math.max(startMin, endMinOn(p.endMs, d, tz)) });
+    }
   }
   for (const td of items.todos) {
     const d = todoDate(td);
@@ -187,7 +154,7 @@ function allDayOf(entries: DayEntry[], date: DateStr): AllDay {
     short: only ? only.short : null,
     itemIds: sorted.map((e) => e.itemId),
     kinds: sorted.map((e) => e.kind),
-    dayOf: sorted.map((e) => (e.span ? { index: diffDays(e.span.date, date) + 1, days: diffDays(e.span.date, e.span.lastDate) + 1 } : undefined)),
+    dayOf: sorted.map((e) => (e.span ? dayOfSpan(e.span, date) : undefined)),
   };
 }
 
@@ -203,7 +170,7 @@ function base(s: Segment): BlockBase {
     short: s.entry.short,
     startMin: s.startMin,
     endMin: s.endMin,
-    ...(s.cont === undefined ? {} : { cont: s.cont }),
+    ...(s.entry.span === undefined ? {} : { cont: s.entry.span.cont }),
   };
 }
 
@@ -230,7 +197,7 @@ function clusters<T>(sorted: readonly T[], startOf: (x: T) => number, endOf: (x:
 
 /** 手机：按显示区间分组、上下两排（R-109、R-110） */
 function layoutPhone(segs: readonly Segment[], minPx: number, dayPx: number): { blocks: PhoneBlock[]; groups: PhoneGroup[] } {
-  const scale = dayPx / DAY_MIN;
+  const scale = dayPx / DAY_MINUTES;
   const placed = segs.map((s) => {
     let startPx = s.startMin * scale;
     let widthPx = Math.max((s.endMin - s.startMin) * scale, minPx);

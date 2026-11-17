@@ -33,12 +33,16 @@ export const syncNoticeZh = {
   'sn.v.sameDay': '当天',
   'sn.v.dayEarlier': '前一天',
   'sn.v.sep': '、',
+  // 时长按天、小时、分钟写（R-444），各段用空格连：“2 天 3 小时”
+  'sn.v.durD': '{n} 天',
+  'sn.v.durH': '{n} 小时',
+  'sn.v.durM': '{n} 分钟',
   // 字段名（同各编辑页）
   'sn.f.title': '标题',
   'sn.f.date': '日期',
   'sn.f.time': '开始',
   'sn.f.tz': '时区',
-  'sn.f.duration': '时长（分钟）',
+  'sn.f.duration': '时长',
   'sn.f.location': '地点 / 链接',
   'sn.f.project': '项目',
   'sn.f.note': '备注',

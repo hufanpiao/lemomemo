@@ -50,10 +50,6 @@ export const viewKo = {
   'cal.day.count': '{n}건', // REVIEW(ko)
   'cal.day.empty': '이날은 일정이 없어요', // REVIEW(ko)
   'cal.day.todo': '할 일', // REVIEW(ko)
-  'cal.day.until': '{t}까지', // REVIEW(ko)
-  'cal.day.ongoing': '계속', // REVIEW(ko) R-444
-  'cal.day.untilDate': '{m}월 {d}일 {t}까지', // REVIEW(ko) R-444
-  'cal.day.dayOf': '{i}/{n}일째', // REVIEW(ko) R-444
   // 黄历卡只在中文界面出（R-431、R-318），韩文这几条备着
   'cal.hl.year': '{gz}년 · {m}', // REVIEW(ko)
   'cal.hl.yi': '의', // REVIEW(ko)

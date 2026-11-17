@@ -75,5 +75,9 @@ export const ko = {
   'exit.unavailable.title': '이 컴퓨터의 로그인 정보를 읽지 못했어요', // REVIEW(ko)；同 zh：installDesktopSession 失败（代码审查建议 4）
   'exit.unavailable.body': '레모를 다시 열어 주세요. 그래도 안 되면 컴퓨터를 다시 시작한 뒤 시도해 주세요.', // REVIEW(ko)
   'exit.unavailable.reopen': '다시 열기', // REVIEW(ko)
+  'span.ongoing': '계속', // REVIEW(ko) R-444（原 cal.day.ongoing、list.ongoing 合并）
+  'span.until': '{t}까지', // REVIEW(ko) R-444（原 cal.day.until、list.until 合并）
+  'span.untilDate': '{m}월 {d}일 {t}까지', // REVIEW(ko) R-444
+  'span.dayOf': '{i}/{n}일째', // REVIEW(ko) R-444
   // 时区的通俗说法（tz.*）11-05 挪到 shared/i18n/tz-zh.ts、tz-ko.ts：只有登录页的恢复页和邮件用，不进主 App 首屏的公共词典
 } as const satisfies Record<SharedMsgKey, string>;

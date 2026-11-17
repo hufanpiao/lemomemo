@@ -67,10 +67,7 @@ import { NowCard } from './NowCard.tsx';
 import styles from './TodayPage.module.css';
 import type { TodaySel } from './TodayDesk.tsx';
 import type { TodayRoProps } from './TodayToasts.tsx';
-import { fmtHm } from '../../../../shared/core/date.ts';
-
-/** 当天第几分钟 → HH:MM，到当天末尾的写 24:00（跨天日程“至 24:00”，R-444） */
-const hm24 = (min: number): string => (min >= 24 * 60 ? '24:00' : fmtHm(min));
+import { useSpanT } from '../../../kit/hooks/useSpanT.ts';
 
 // 页底提示条、顶部重复事项横幅、只读行的行尾标记和打勾圆圈：同一个按需下载的文件，按 part 画哪一块；
 // 懒加载写在功能入口 ../index.ts（预载名单和主包共用，首屏预算 150 KB，FA-2 返工）
@@ -142,6 +139,7 @@ const AnnivLine = lazy(() => import('./AnnivLine.tsx'));
 
 export default function TodayPage() {
   const t = useTodayT();
+  const spanT = useSpanT();
   const locale = useLocale();
   const d = useToday();
   /** 引擎 armed 或出错（含 App 的看门狗：迟迟不 armed 也算出错）才挂“错过的提醒”（REMIND-shown-persist 修订 1 P2） */
@@ -214,16 +212,10 @@ export default function TodayPage() {
   // 跨天的日程（R-444）：前几天开始的行首写“持续”/“至 18:00”，没到最后一天的标题下面写“至 11月20日 18:00”，跨天的全天日程写“第 2/3 天”（同日清单）
   const evLead = (o: (typeof v.events)[number], s: ReturnType<typeof eventSpanText>): string => {
     if (s.lead === 'allDay') return t('list.allDay', {});
-    if (s.lead === 'ongoing') return t('list.ongoing', {});
-    if (s.lead === 'until') return t('list.until', { t: hm24(s.endMin ?? 24 * 60) });
+    if (s.lead !== 'start') return spanT(s.lead);
     return o.time ?? '';
   };
-  const evMeta = (s: ReturnType<typeof eventSpanText>): string | null => {
-    if (s.meta === null) return null;
-    if (s.meta.kind === 'dayOf') return t('list.dayOf', { i: s.meta.index, n: s.meta.days });
-    const [, m = '1', dd = '1'] = s.meta.date.split('-');
-    return t('list.untilDate', { m: Number(m), d: Number(dd), t: hm24(s.meta.endMin) });
-  };
+  const evMeta = (s: ReturnType<typeof eventSpanText>): string | null => (s.meta === null ? null : spanT(s.meta));
   const evRow = (o: (typeof v.events)[number]) => {
     const s = eventSpanText(o, d.today, d.tz);
     const meta = evMeta(s);

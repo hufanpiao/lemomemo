@@ -79,5 +79,7 @@ test.describe('R-444 跨天日程', () => {
     await page.goto(`/app/#/event/${LATE_ID}`);
     await expect(page.getByTestId('event-edit-end-date')).toHaveValue('2026-11-19', { timeout: 20_000 });
     await expect(page.getByTestId('event-edit-end')).toHaveValue('01:00');
+    // 有时刻的结束日期上限也是开始 + 30 天（评审第 4 条）
+    await expect(page.getByTestId('event-edit-end-date')).toHaveAttribute('max', '2026-12-18');
   });
 });

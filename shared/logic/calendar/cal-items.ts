@@ -2,17 +2,16 @@
 // • 固定时刻（有 time 的日程）：按记录时的 events.tz 定出绝对时刻，再换算到设备当前时区，按换算后的日期和时刻放；
 // • 浮动（全天日程、待办截止日）：日期原样，不换算。
 // 纯函数：“设备当前时区”由调用方传进来（A15：和哪天有关的一律带 tz）。
-import { addDays, msAt, parseDate, parseHm, todayOf, minOfDay, type DateStr } from '../../core/date.ts';
+import { addDays, parseDate, type DateStr } from '../../core/date.ts';
 import { isValidTz, type Tz } from '../../core/tz.ts';
 import type { EventWrite, TodoWrite } from '../../schema/rows.ts';
-import { allDaySpanDays, contOn, EVENT_SPAN_MAX_DAYS, spanDaysIn, timedDurationMin, timedLastDate, type Cont } from './event-span.ts';
+import { contOn, EVENT_SPAN_MAX_DAYS, placeEvent, spanDaysIn, type Cont, type EventPlacement } from './event-span.ts';
 import { normalizeProject, projectColorIndex, type ProjectColor } from '../project-color.ts';
 import { isLiveRow, type Tombstone } from '../live-row.ts';
 import { displayShort } from '../short.ts';
 
 // 项目色挪到 shared/logic/project-color.ts（前端 A 会审 ①），这里转出保持原来的引用路径能用
 export { PROJECT_COLORS, projectColorIndex, type ProjectColor } from '../project-color.ts';
-export type { Cont } from './event-span.ts';
 
 /** 月历、周视图用到的日程列，加上删除、撤销两列（live-row.ts 的 Tombstone，可以没有；本机缓存里的行直接传进来即可） */
 export type CalEvent = Readonly<Pick<EventWrite, 'id' | 'title' | 'short' | 'project' | 'date' | 'time' | 'tz' | 'duration_min' | 'created_at'>> &
@@ -35,64 +34,6 @@ export const TZ_SPILL_DAYS = 2;
 /** 设备时区无效时抛 bad_tz（代码审查 C）：在入口挡住，别等到第一条有时刻的日程才抛 RangeError */
 export function assertTz(tz: Tz): void {
   if (!isValidTz(tz)) throw new Error(`bad_tz:${tz}`);
-}
-
-/** 日程放在设备时区的哪一天、几点 */
-export type EventPlacement =
-  | {
-      readonly allDay: true;
-      readonly date: DateStr;
-      /** 最后一天（含；只占一天时等于 date，R-444） */
-      readonly lastDate: DateStr;
-    }
-  | {
-      readonly allDay: false;
-      /** 换算到设备时区后的开始日期 */
-      readonly date: DateStr;
-      /** 设备时区里结束前那一刻落在哪天（结束正好在午夜算前一天；只占一天时等于 date，R-444） */
-      readonly lastDate: DateStr;
-      /** 开始、结束的绝对时刻（毫秒） */
-      readonly startMs: number;
-      readonly endMs: number;
-      /** 设备时区里开始是当天第几分钟 */
-      readonly startMin: number;
-    };
-
-function isDateStr(s: string): boolean {
-  try {
-    parseDate(s);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * 日程按 4.6 放进设备时区 tz 的哪一天。
- * • 日期或时刻格式坏了（正常不会有，schema 挡着）返回 null，调用方跳过这一条，不让整月算不出来；
- * • events.tz 不是有效的时区名（TZ-invalid-b2：数据库挡不住 `Foo/Bar`）或缺失时，当作设备时区的时刻，照样显示。
- */
-export function placeEvent(ev: CalEvent, tz: Tz): EventPlacement | null {
-  if (!isDateStr(ev.date)) return null;
-  if (ev.time === null) return { allDay: true, date: ev.date, lastDate: addDays(ev.date, allDaySpanDays(ev.duration_min) - 1) };
-  let min: number;
-  try {
-    min = parseHm(ev.time);
-  } catch {
-    return null;
-  }
-  const srcTz = ev.tz !== null && isValidTz(ev.tz) ? ev.tz : tz;
-  const startMs = msAt(ev.date, min, srcTz);
-  const endMs = startMs + timedDurationMin(ev.duration_min) * 60_000;
-  const date = todayOf(startMs, tz);
-  return {
-    allDay: false,
-    date,
-    lastDate: timedLastDate(startMs, endMs, tz),
-    startMs,
-    endMs,
-    startMin: minOfDay(startMs, tz),
-  };
 }
 
 /** 月历一天里的一件事（排好序、取好简称和颜色） */

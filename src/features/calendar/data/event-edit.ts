@@ -8,8 +8,17 @@
 // 纯 TS：不准 import React（A1）
 import { addDays, diffDays, fmtHm, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { isValidTz, type Tz } from '../../../../shared/core/tz.ts';
-import { allDaySpanDays, timedDurationMin, timedLastDate } from '../../../../shared/logic/calendar/event-span.ts';
-import { EVENT_DURATION_MAX, EVENT_SPAN_MAX_DAYS, trimItemTitle } from '../../../../shared/schema/rows.ts';
+import {
+  allDayDuration,
+  allDaySpanDays,
+  DAY_MINUTES,
+  EVENT_DURATION_DEFAULT,
+  EVENT_DURATION_MAX,
+  eventDurationMin,
+  placeEvent,
+  type EventPlacement,
+} from '../../../../shared/logic/calendar/event-span.ts';
+import { trimItemTitle } from '../../../../shared/schema/rows.ts';
 import { ALL_DAY_LIVE_UNTIL, remindAtOf } from '../../../../shared/logic/remind.ts';
 import { remindLive, rowRemindPending } from '../../../core/remind-flag.ts';
 
@@ -34,17 +43,16 @@ export interface EventForm {
 export const REMIND_MIN_OPTIONS: readonly EventForm['remind_min'][] = [null, 0, 15, 30, 60, 1440];
 /** 新建有时刻的日程时默认提前 15 分钟（定稿线框 s13“日程默认提前 15 分钟”；设置项接上以前先用出厂值） */
 export const DEFAULT_REMIND_MIN = 15;
-export const DEFAULT_DURATION_MIN = 60;
+export const DEFAULT_DURATION_MIN = EVENT_DURATION_DEFAULT;
 export { ITEM_TITLE_MAX, PROJECT_MAX, ITEM_NOTE_MAX as NOTE_MAX } from '../../../../shared/schema/rows.ts';
 export const LOCATION_MAX = 200;
 
-const DAY_MIN = 1440;
 const str = (v: unknown, d = ''): string => (typeof v === 'string' ? v : d);
 const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 const remindMin = (v: unknown): EventForm['remind_min'] =>
   v === 0 || v === 15 || v === 30 || v === 60 || v === 1440 ? v : null;
 const remindDays = (v: unknown): 0 | 1 | null => (v === 0 || v === 1 ? v : null);
-const duration = (v: unknown): number => (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= EVENT_DURATION_MAX ? v : DEFAULT_DURATION_MIN);
+const duration = (v: unknown): number => eventDurationMin(typeof v === 'number' ? v : Number.NaN);
 
 /** 集合里的一行 → 表单 */
 export function formOf(row: Readonly<Record<string, unknown>>): EventForm {
@@ -80,27 +88,45 @@ export function normalize(next: EventForm, device: Tz): EventForm {
 // ---------- 结束日期、时刻（R-444 跨天日程；数据做法见 shared/logic/calendar/event-span.ts 文件头） ----------
 
 const clampDur = (d: number): number => Math.min(EVENT_DURATION_MAX, Math.max(1, d));
-const startMsOf = (f: EventForm, tz: Tz): number => msAt(f.date, parseHm(f.time ?? '00:00'), tz);
+/** 日程自己的时区（没有或无效按 device，同 placeEvent 的回落） */
+const ownTz = (f: EventForm, device: Tz): Tz => (f.tz !== null && isValidTz(f.tz) ? f.tz : device);
 
-/** 有时刻的日程：结束在哪天几点（按日程自己的时区，没有时区按 device）；全天、没日期为 null */
+/** 有时刻的日程按它自己的时区放（event-span.ts 的 placeEvent）；全天、日期时刻坏了、时区算不出来为 null */
+function ownPlace(form: EventForm, device: Tz): { p: Extract<EventPlacement, { allDay: false }>; tz: Tz } | null {
+  if (form.time === null) return null;
+  try {
+    const tz = ownTz(form, device);
+    const p = placeEvent(form, tz);
+    return p && !p.allDay ? { p, tz } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 有时刻的日程：结束在哪天几点（按日程自己的时区）；全天、没日期、算不出来为 null */
 export function endAtOf(form: EventForm, device: Tz): { date: DateStr; time: string } | null {
-  if (form.time === null || form.date === '') return null;
-  const tz = form.tz ?? device;
-  const end = startMsOf(form, tz) + timedDurationMin(form.duration_min) * 60_000;
-  return { date: todayOf(end, tz), time: fmtHm(minOfDay(end, tz)) };
+  const o = ownPlace(form, device);
+  return o ? { date: todayOf(o.p.endMs, o.tz), time: fmtHm(minOfDay(o.p.endMs, o.tz)) } : null;
 }
 
 /**
  * 有时刻的日程选了结束日期、时刻 → 时长（分钟，1～31 天）。
- * 结束日期早于开始日期的按开始那天；结束日期是开始那天、时刻又不晚于开始的，照旧当作跨到第二天（只改时刻时和原来一样）
+ * 结束日期早于开始日期的按开始那天；结束日期是开始那天、时刻又不晚于开始的，照旧当作跨到第二天（只改时刻时和原来一样）。
+ * 都按墙上时间换成时刻再相减（第二天也用 msAt 算），夏令时那天不差 1 小时
  */
 export function durationTo(form: EventForm, endDate: DateStr, endTime: string, device: Tz): number {
   if (form.time === null) return form.duration_min;
-  const tz = form.tz ?? device;
-  const day = endDate < form.date ? form.date : endDate;
-  let d = Math.round((msAt(day, parseHm(endTime), tz) - startMsOf(form, tz)) / 60_000);
-  if (d <= 0 && day === form.date) d += DAY_MIN;
-  return clampDur(d);
+  try {
+    const tz = ownTz(form, device);
+    const start = msAt(form.date, parseHm(form.time), tz);
+    const day = endDate < form.date ? form.date : endDate;
+    const endMin = parseHm(endTime);
+    let end = msAt(day, endMin, tz);
+    if (end <= start && day === form.date) end = msAt(addDays(day, 1), endMin, tz);
+    return clampDur(Math.round((end - start) / 60_000));
+  } catch {
+    return form.duration_min;
+  }
 }
 
 /** 全天日程的最后一天（含） */
@@ -108,26 +134,25 @@ export function allDayLastOf(form: EventForm): DateStr {
   return form.date === '' ? '' : addDays(form.date, allDaySpanDays(form.duration_min) - 1);
 }
 
-/** 全天日程选了最后一天 → 时长（天数 × 1440，1～31 天；早于开始日期的按一天） */
+/** 全天日程选了最后一天 → 时长（event-span.ts 的 allDayDuration：只选一天写默认 1 小时，多天写“天数 × 1440”；早于开始日期的按一天） */
 export function allDayDurationTo(date: DateStr, lastDate: DateStr): number {
-  const days = Math.min(EVENT_SPAN_MAX_DAYS, Math.max(1, diffDays(date, lastDate) + 1));
-  return days * DAY_MIN;
+  return allDayDuration(diffDays(date, lastDate) + 1);
 }
 
-/** 有时刻 → 全天：跨了几天就记几天（只占一天的时长不动，免得只切一下开关也多写一列） */
+/**
+ * 有时刻 → 全天：时长不超过一天的都算一天、时长不动（免得只切一下开关也多写一列；23:00 开始 90 分钟的也是一天）；
+ * 超过一天的按它占了几天记（天数 × 1440）
+ */
 export function allDayDurationOf(form: EventForm, device: Tz): number {
-  if (form.time === null || form.date === '') return form.duration_min;
-  const tz = form.tz ?? device;
-  const start = startMsOf(form, tz);
-  const days = diffDays(form.date, timedLastDate(start, start + timedDurationMin(form.duration_min) * 60_000, tz)) + 1;
-  return days > 1 ? allDayDurationTo(form.date, addDays(form.date, days - 1)) : form.duration_min;
+  if (eventDurationMin(form.duration_min) <= DAY_MINUTES) return form.duration_min;
+  const o = ownPlace(form, device);
+  return o ? allDayDuration(diffDays(o.p.date, o.p.lastDate) + 1) : form.duration_min;
 }
 
-/** 全天 → 有时刻（没记着切走前的时长时）：跨几天的到最后一天同一时刻再过 1 小时；只占一天的超过 1 天就回默认 1 小时 */
+/** 全天 → 有时刻（没记着切走前的时长时）：跨几天的到最后一天同一时刻再过 1 小时；只占一天的（含旧的 1440）一律回默认 1 小时 */
 export function timedDurationOf(allDayDur: number): number {
   const days = allDaySpanDays(allDayDur);
-  if (days > 1) return (days - 1) * DAY_MIN + DEFAULT_DURATION_MIN;
-  return allDayDur >= 1 && allDayDur <= DAY_MIN ? allDayDur : DEFAULT_DURATION_MIN;
+  return days > 1 ? (days - 1) * DAY_MINUTES + DEFAULT_DURATION_MIN : DEFAULT_DURATION_MIN;
 }
 
 /** 可选的时区：Intl 支持的全部，加上原来存的值（不在表里也列出），去重排序 */

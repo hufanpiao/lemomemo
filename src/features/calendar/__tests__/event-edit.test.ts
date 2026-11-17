@@ -36,6 +36,13 @@ describe('时长、结束日期和时刻（R-444 跨天）', () => {
     expect(durationTo(f, '2027-01-01', '09:00', SH)).toBe(31 * 1440);
   });
 
+  it('夏令时那天按墙上时间算（评审第 3 条）：洛杉矶 3-08 拨快 1 小时', () => {
+    const LA = 'America/Los_Angeles';
+    // 3-08 01:00 开始、结束时刻选 00:30（不晚于开始，算到第二天）：真实只过了 22.5 小时，原来 −30 + 1440 = 1410 多算 1 小时
+    expect(durationTo(base({ date: '2026-03-08', time: '01:00', tz: LA }), '2026-03-08', '00:30', LA)).toBe(22 * 60 + 30);
+    expect(durationTo(base({ date: '2026-03-07', time: '09:00', tz: LA }), '2026-03-08', '09:00', LA)).toBe(23 * 60);
+  });
+
   it('endAtOf：结束在日程自己时区的哪天几点（跨午夜、跨多天）；全天为 null', () => {
     expect(endAtOf(base({ time: '23:30', duration_min: 90 }), SH)).toEqual({ date: '2026-11-06', time: '01:00' });
     expect(endAtOf(base({ time: '15:30', duration_min: 60 }), SH)).toEqual({ date: '2026-11-05', time: '16:30' });
@@ -43,19 +50,34 @@ describe('时长、结束日期和时刻（R-444 跨天）', () => {
     expect(endAtOf(base({ time: null }), SH)).toBeNull();
   });
 
+  it('endAtOf 出错返回 null、不抛（评审第 10 条）：日期坏了、时刻坏了、时区算不出来', () => {
+    expect(endAtOf(base({ date: '' }), SH)).toBeNull();
+    expect(endAtOf(base({ time: '9点' }), SH)).toBeNull();
+    expect(() => endAtOf(base({ tz: null }), 'Bad/Zone')).not.toThrow();
+    expect(endAtOf(base({ tz: null }), 'Bad/Zone')).toBeNull();
+  });
+
   it('全天：最后一天 ↔ 天数 × 1440；旧行（60）是一天；最多 31 天', () => {
     expect(allDayLastOf(base({ time: null, duration_min: 60 }))).toBe('2026-11-05');
     expect(allDayLastOf(base({ time: null, duration_min: 3 * 1440 }))).toBe('2026-11-07');
     expect(allDayDurationTo('2026-11-05', '2026-11-07')).toBe(3 * 1440);
-    expect(allDayDurationTo('2026-11-05', '2026-11-01')).toBe(1440);
+    // 只选一天写默认 1 小时，不写 1440（评审第 1 条）
+    expect(allDayDurationTo('2026-11-05', '2026-11-05')).toBe(60);
+    expect(allDayDurationTo('2026-11-05', '2026-11-01')).toBe(60);
     expect(allDayDurationTo('2026-11-05', '2027-03-01')).toBe(31 * 1440);
   });
 
-  it('全天 ↔ 有时刻切换：跨几天就记几天；只占一天的时长不动；切回有时刻到最后一天同一时刻再过 1 小时', () => {
+  it('全天 ↔ 有时刻切换：不超过一天的算一天、时长不动；超过一天的按占几天记；切回有时刻到最后一天同一时刻再过 1 小时', () => {
     expect(allDayDurationOf(base({ time: '09:00', duration_min: 60 }), SH)).toBe(60);
-    expect(allDayDurationOf(base({ time: '22:00', duration_min: 1440 }), SH)).toBe(2 * 1440);
+    // 评审第 2 条：23:00 开始 90 分钟、22:00 开始 1440 分钟都只是一天，不变成 2880
+    expect(allDayDurationOf(base({ time: '23:00', duration_min: 90 }), SH)).toBe(90);
+    expect(allDayDurationOf(base({ time: '22:00', duration_min: 1440 }), SH)).toBe(1440);
+    expect(allDayDurationOf(base({ time: '22:00', duration_min: 1500 }), SH)).toBe(2 * 1440);
+    expect(allDayDurationOf(base({ time: '09:00', duration_min: 2 * 1440 + 540 }), SH)).toBe(3 * 1440);
     expect(timedDurationOf(60)).toBe(60);
-    expect(timedDurationOf(1440)).toBe(1440);
+    // 评审第 1 条：只占一天的（含旧的全天行 1440）一律回默认 1 小时
+    expect(timedDurationOf(1440)).toBe(60);
+    expect(timedDurationOf(90)).toBe(60);
     expect(timedDurationOf(3 * 1440)).toBe(2 * 1440 + 60);
   });
 

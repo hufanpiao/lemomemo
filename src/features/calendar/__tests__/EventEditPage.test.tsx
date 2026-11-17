@@ -128,7 +128,7 @@ describe('结束日期、时刻（R-444 跨天日程）', () => {
     const endDate = screen.getByTestId('event-edit-end-date') as HTMLInputElement;
     expect(endDate.value).toBe('2026-11-06');
     expect(endDate.min).toBe('2026-11-06');
-    expect(endDate.max).toBe('2026-12-07');
+    expect(endDate.max).toBe('2026-12-06'); // 有时刻的也是开始 + 30 天（评审第 4 条）
     expect((screen.getByTestId('event-edit-end') as HTMLInputElement).value).toBe('16:00');
     await commitText('event-edit-end-date', '2026-11-08');
     await waitFor(() => expect(events().get(ID)?.['duration_min']).toBe(2 * 1440 + 60));

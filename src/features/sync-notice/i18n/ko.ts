@@ -34,11 +34,14 @@ export const syncNoticeKo = {
   'sn.v.sameDay': '당일', // REVIEW(ko)
   'sn.v.dayEarlier': '하루 전', // REVIEW(ko)
   'sn.v.sep': ', ', // REVIEW(ko)
+  'sn.v.durD': '{n}일', // REVIEW(ko) R-444
+  'sn.v.durH': '{n}시간', // REVIEW(ko) R-444
+  'sn.v.durM': '{n}분', // REVIEW(ko) R-444
   'sn.f.title': '제목', // REVIEW(ko)
   'sn.f.date': '날짜', // REVIEW(ko)
   'sn.f.time': '시작', // REVIEW(ko)
   'sn.f.tz': '시간대', // REVIEW(ko)
-  'sn.f.duration': '소요 시간(분)', // REVIEW(ko)
+  'sn.f.duration': '소요 시간', // REVIEW(ko) R-444 去掉“(분)”，值按일/시간/분 写
   'sn.f.location': '장소 / 링크', // REVIEW(ko)
   'sn.f.project': '프로젝트', // REVIEW(ko)
   'sn.f.note': '메모', // REVIEW(ko)

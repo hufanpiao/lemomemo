@@ -85,5 +85,11 @@ export const zh = {
   'exit.unavailable.title': '读不到这台电脑上的登录信息',
   'exit.unavailable.body': '请重新打开柠檬记。还不行的话，重启电脑后再试。',
   'exit.unavailable.reopen': '重新打开',
+  // 跨天日程（R-444）在某一天的写法：日历日清单、今天页共用这一套（event-span.ts 的 spanTextOn 给键和参数，kit/hooks/useSpanT.ts 翻译）。
+  // 中间整天行首“持续”；最后一天行首“至 18:00”；没到最后一天的标题下面“至 11月20日 18:00”；跨天的全天日程“第 2/3 天”
+  'span.ongoing': '持续',
+  'span.until': '至 {t}',
+  'span.untilDate': '至 {m}月{d}日 {t}',
+  'span.dayOf': '第 {i}/{n} 天',
   // 时区的通俗说法（tz.*）11-05 挪到 shared/i18n/tz-zh.ts、tz-ko.ts：只有登录页的恢复页和邮件用，不进主 App 首屏的公共词典
 } as const;

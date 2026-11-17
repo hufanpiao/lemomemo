@@ -18,7 +18,7 @@
 // • 电脑版详情抽屉（R-130）：行按钮带 data-open（抽屉关上时找回这一行），抽屉里开着的那条 aria-current（kit List 的左边柠檬黄一道，同今天页）
 import { Suspense } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
-import { minOfDay, parseDate, weekdayOf } from '../../../../shared/core/date.ts';
+import { minOfDay, weekdayOf } from '../../../../shared/core/date.ts';
 import type { CalItems, DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
 import { spanTextOn, type SpanText } from '../../../../shared/logic/calendar/event-span.ts';
 import { dayEntries } from '../../../../shared/logic/calendar/month-grid.ts';
@@ -26,6 +26,7 @@ import { navigate } from '../../../app/router.ts';
 import { groupLabelClass } from '../../../kit/components/Form.tsx';
 import list from '../../../kit/components/List.module.css';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyRow.tsx';
+import { useSpanT } from '../../../kit/hooks/useSpanT.ts';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import type { Huangli } from '../hooks/useHuangli.ts';
@@ -47,8 +48,6 @@ function spanOf(e: DayEntry, date: DateStr, tz: string): SpanText | null {
   if (e.kind === 'todo') return null;
   return spanTextOn({ date: e.span?.date ?? date, lastDate: e.span?.lastDate ?? date, endMs: e.kind === 'timed' ? e.endMs : null }, date, tz);
 }
-
-const hm24 = (min: number): string => (min >= 24 * 60 ? '24:00' : hm(min));
 
 /** 行尾的“未同步”小标记（没有时整格不画，见 .dayUnsynced:empty） */
 function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
@@ -104,23 +103,18 @@ export function DayList({
   const total = entries.length;
   const [, m = '1', d = '1'] = date.split('-');
   const head = t('cal.day.title', { m: Number(m), d: Number(d), wd: t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) }) });
+  const spanT = useSpanT();
   const timeOf = (e: DayEntry, s: SpanText | null): string => {
     if (s === null) {
       const due = dueMins.get(e.itemId);
       return due === undefined ? t('cal.day.todo', {}) : hm(due);
     }
     if (s.lead === 'allDay') return t('cal.allDay', {});
-    if (s.lead === 'ongoing') return t('cal.day.ongoing', {});
-    if (s.lead === 'until') return t('cal.day.until', { t: hm24(s.endMin ?? 24 * 60) });
+    if (s.lead !== 'start') return spanT(s.lead);
     return e.startMs === null ? '' : hm(minOfDay(e.startMs, tz));
   };
   /** 跨天日程标题下面那行小字（R-444） */
-  const metaOf = (s: SpanText | null): string | null => {
-    if (s === null || s.meta === null) return null;
-    if (s.meta.kind === 'dayOf') return t('cal.day.dayOf', { i: s.meta.index, n: s.meta.days });
-    const { m: em, d: ed } = parseDate(s.meta.date);
-    return t('cal.day.untilDate', { m: em, d: ed, t: hm24(s.meta.endMin) });
-  };
+  const metaOf = (s: SpanText | null): string | null => (s === null || s.meta === null ? null : spanT(s.meta));
   /** 过去了：那天整天已过，或者就是今天、endMin（日程结束 / 待办截止）已经到了；没有 endMin 的今天不算 */
   const passed = (endMin: number | null | undefined): boolean =>
     today !== undefined && (date < today || (date === today && nowMin !== undefined && typeof endMin === 'number' && endMin <= nowMin));

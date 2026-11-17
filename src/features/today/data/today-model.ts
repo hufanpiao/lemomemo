@@ -7,9 +7,9 @@
 // • 时间窗 kWin：照视觉稿 kWin() 逐条移植（分钟，相对今天 0 点；跨到明天的事项可以 > 1440）
 // • 没赶上：没完成、截止日早于今天的待办（逾 N 天）；今天有截止时刻、已经过了的也算（逾 0 天，界面写“已过 17:00”）。
 //   “逾期”规则和读待办行只在 shared/logic/todo-row.ts（isLate、todoOf，和待办页共用）
-import { addDays, diffDays, fmtHm, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
-import type { Tz } from '../../../../shared/core/tz.ts';
-import { allDaySpanDays, coversDay, EVENT_DURATION_MAX, spanTextOn, timedLastDate, type SpanText } from '../../../../shared/logic/calendar/event-span.ts';
+import { addDays, diffDays, fmtHm, minOfDay, msAt, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { isValidTz, type Tz } from '../../../../shared/core/tz.ts';
+import { coversDay, placeEvent, spanRowOf, spanTextOn, type SpanText } from '../../../../shared/logic/calendar/event-span.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { projectColorIndex, type ProjectColor } from '../../../../shared/logic/project-color.ts';
 import { isLate, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
@@ -20,8 +20,6 @@ import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
 export type Row = Readonly<{ id: string } & Record<string, unknown>>;
 
 const MIN = 60_000;
-const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -44,29 +42,18 @@ export interface EventOcc {
   origin: { tz: Tz; time: string } | null;
 }
 
-/** 一条日程换算到当前时区；字段坏了返回 null（不显示，不抛） */
+/** 一条日程换算到当前时区；字段坏了返回 null（不显示，不抛）。放在哪几天、回落规则同日历（event-span.ts 的 placeEvent） */
 export function eventOcc(r: Row, current: Tz): EventOcc | null {
-  const date = str(r['date']);
-  if (!DATE.test(date)) return null;
-  const base = { kind: 'event' as const, id: r.id, title: str(r['title']), project: str(r['project']) };
-  const time = r['time'];
-  if (typeof time !== 'string' || !HM.test(time)) {
-    const days = allDaySpanDays(typeof r['duration_min'] === 'number' ? r['duration_min'] : 0);
-    return { ...base, date, lastDate: addDays(date, days - 1), allDay: true, start: null, end: null, time: null, origin: null };
-  }
-  const tz = typeof r['tz'] === 'string' && r['tz'] !== '' ? r['tz'] : current;
-  let start: number;
-  try {
-    start = msAt(date, parseHm(time), tz);
-  } catch {
-    return null;
-  }
-  // R-444：跨天的日程最长 31 天（event-span.ts）；坏值照旧按 1 小时
-  const dur = typeof r['duration_min'] === 'number' && r['duration_min'] >= 1 && r['duration_min'] <= EVENT_DURATION_MAX ? r['duration_min'] : 60;
-  const end = start + dur * MIN;
-  const localTime = fmtHm(minOfDay(start, current));
-  const origin = tz !== current && localTime !== time ? { tz, time } : null;
-  return { ...base, date: todayOf(start, current), lastDate: timedLastDate(start, end, current), allDay: false, start, end, time: localTime, origin };
+  const row = spanRowOf(r);
+  const p = row && placeEvent(row, current);
+  if (!row || !p) return null;
+  const base = { kind: 'event' as const, id: r.id, title: str(r['title']), project: str(r['project']), date: p.date, lastDate: p.lastDate };
+  if (p.allDay) return { ...base, allDay: true, start: null, end: null, time: null, origin: null };
+  const time = fmtHm(p.startMin);
+  // 和记录时的时区不同：带上那里的墙上时间（时区无效的已按当前时区放，不带）
+  const tz = row.tz !== null && row.tz !== current && isValidTz(row.tz) ? row.tz : null;
+  const origin = tz !== null && row.time !== null && time !== row.time ? { tz, time: row.time } : null;
+  return { ...base, allDay: false, start: p.startMs, end: p.endMs, time, origin };
 }
 
 /** 某一天的日程（R-444：跨天的它占的每一天都算，含前几天开始、今天还没完的）：全天的在前，有时刻的按开始先后 */

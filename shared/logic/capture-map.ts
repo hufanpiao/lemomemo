@@ -13,14 +13,13 @@
 import type { DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
 import { ITEM_NOTE_MAX, ITEM_TITLE_MAX, PROJECT_MAX, RAW_TEXT_MAX } from '../schema/rows.ts';
+import { allDayDuration, allDaySpanDays, EVENT_DURATION_DEFAULT } from './calendar/event-span.ts';
 import { DEFAULT_REMIND_BEFORE_MIN } from './remind.ts';
 import { cutGraphemes } from './short.ts';
 import { todoRowOf, type NewTodoRow } from './todo-row.ts';
 
 /** 有时刻的日程默认提前几分钟提醒（同 event-edit.ts 的 DEFAULT_REMIND_MIN） */
 export const EVENT_REMIND_MIN_DEFAULT = 15;
-/** 日程默认时长（同 event-edit.ts 的 DEFAULT_DURATION_MIN） */
-export const EVENT_DURATION_DEFAULT = 60;
 /** 纪念日名字最长（anniversaries.name 的约束） */
 export const ANNIV_NAME_MAX = 60;
 
@@ -122,11 +121,14 @@ export function captureRow(item: CaptureItem, ctx: CaptureCtx): CaptureRow | nul
   switch (item.kind) {
     case 'event': {
       const time = item.time;
+      // 全天日程的时长按天记（R-444，event-span.ts 文件头）：AI 给全天日程的 duration_min 可能是“180 分钟”这类，规整成一天（默认值）或“天数 × 1440”；
+      // 提示词不改（评审第 8 条），规整只在这一处，客户端保存和 claude-intake 写库都过这里
+      const dur = item.duration_min ?? EVENT_DURATION_DEFAULT;
       return {
         table: 'events',
         row: {
           id: ctx.id, title, date: item.date ?? ctx.today, time, tz: time === null ? null : ctx.tz,
-          duration_min: item.duration_min ?? EVENT_DURATION_DEFAULT, project, note, source: ctx.source, raw_text: raw, location: '',
+          duration_min: time === null ? allDayDuration(allDaySpanDays(dur)) : dur, project, note, source: ctx.source, raw_text: raw, location: '',
           ...shortOf(item, ctx), push_show_title: null, batch_id: ctx.batchId,
           remind_min: time === null ? null : EVENT_REMIND_MIN_DEFAULT, remind_days: null,
           notified_for: null, snooze_at: null, created_at: ctx.now, updated_at: ctx.now,

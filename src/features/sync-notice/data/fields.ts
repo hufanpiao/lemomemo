@@ -11,7 +11,7 @@ import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import type { NoticeTable } from './notice-tables.ts';
 
-type Fmt = 'text' | 'date' | 'hm' | 'bool' | 'num' | 'mins' | 'days' | 'offsets' | 'list' | 'changed';
+type Fmt = 'text' | 'date' | 'hm' | 'bool' | 'num' | 'mins' | 'days' | 'dur' | 'offsets' | 'list' | 'changed';
 /** 字段名词条（sn.f.*，都不带占位符；__tests__/fields.test.ts 查每个都在词典里） */
 type LabelKey = `sn.f.${string}`;
 export type FieldSpec = { label: LabelKey; fmt: Fmt } | 'hidden';
@@ -28,7 +28,7 @@ export const FIELDS: Readonly<Record<NoticeTable, Readonly<Record<string, FieldS
   events: {
     ...META, ...REMIND_META,
     title: f('sn.f.title', 'text'), date: f('sn.f.date', 'date'), time: f('sn.f.time', 'hm'), tz: f('sn.f.tz', 'text'),
-    duration_min: f('sn.f.duration', 'num'), project: f('sn.f.project', 'text'), note: f('sn.f.note', 'text'),
+    duration_min: f('sn.f.duration', 'dur'), project: f('sn.f.project', 'text'), note: f('sn.f.note', 'text'),
     raw_text: f('sn.f.raw', 'text'), location: f('sn.f.location', 'text'), short: H, short_by: H,
     remind_min: f('sn.f.remind', 'mins'), remind_days: f('sn.f.remindDays', 'days'),
   },
@@ -84,6 +84,17 @@ function days(v: unknown, tr: FieldT): string {
   return tr(v === 0 ? 'sn.v.sameDay' : 'sn.v.dayEarlier', {});
 }
 
+/** 时长（分钟，≥ 1）：按天、小时、分钟写，为 0 的那一段不写（R-444 跨天日程最长 31 天，“44640”看不懂；全天的跨天日程正好写成“3 天”） */
+function dur(v: unknown, tr: FieldT): string {
+  need(typeof v === 'number' && Number.isInteger(v) && v >= 1);
+  const parts: [number, 'sn.v.durD' | 'sn.v.durH' | 'sn.v.durM'][] = [
+    [Math.floor(v / 1440), 'sn.v.durD'],
+    [Math.floor((v % 1440) / 60), 'sn.v.durH'],
+    [v % 60, 'sn.v.durM'],
+  ];
+  return parts.filter(([n]) => n > 0).map(([n, k]) => tr(k, { n })).join(' ');
+}
+
 const isStrList = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
 const isDayList = (v: unknown): v is number[] => Array.isArray(v) && v.every((x) => typeof x === 'number' && Number.isInteger(x) && x >= 0);
 
@@ -109,6 +120,8 @@ function value(fmt: Fmt, v: unknown, loc: Locale, tr: FieldT): string {
     case 'num':
       need(typeof v === 'number' && Number.isFinite(v));
       return String(v);
+    case 'dur':
+      return dur(v, tr);
     case 'list':
       need(isStrList(v));
       return v.length === 0 ? tr('sn.v.empty', {}) : v.join(sep);

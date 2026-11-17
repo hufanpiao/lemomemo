@@ -8,10 +8,13 @@
 -- 本迁移做的事：events_duration_min_check 从 between 1 and 1440 换成 between 1 and 44640。
 -- 不用改的：apply_patch（20261116090000 最新一版）、intake_insert 只按列名白名单放行，数值范围靠表约束，duration_min 早就在白名单里；
 --   提醒（remind_at、enqueue_remind）只看 date、time、tz、remind_min、remind_days，和时长无关；touch()、RLS、列级授权都不动。
--- 放宽约束不会让已有行不合格；仍按“先 not valid 加、再 validate”的写法（同 20261115100000），validate 只拿 share update exclusive 锁，不挡读写。
--- 改 events 的约束要拿锁：5 秒拿不到就整个迁移回滚，等长事务结束再推。
+-- 锁：整个迁移在一个事务里，drop constraint 一开始就拿 events 的 ACCESS EXCLUSIVE 锁、持有到提交，“先 not valid 再 validate”在同一事务里省不了锁，
+--   所以直接一步 add check（放宽上限，已有行都合格，扫一遍 events 很快：每人几千行）。5 秒拿不到锁就整个迁移回滚，等长事务结束再推。
+-- 上线顺序：本迁移先上，再发前端和 edge function（claude-intake 的 capture-map 会写超过 1440 的全天时长）；反过来新客户端写的跨天日程会被库拒。
+-- 旧版客户端（本迁移之后还没升级的）的行为，已知、接受：
+--   • 旧版今天页：时长超过 1440 的按 1 小时显示；旧版日历按它自己的规则显示，跨天的那几天不一定都画出来；
+--   • 旧版编辑页打开跨天日程、改一下结束时刻，会按“当天结束时刻 − 开始”重算时长写回，跨天日程被截短成一天以内（升级后照常）。
 set local lock_timeout = '5s';
 
 alter table public.events drop constraint events_duration_min_check;
-alter table public.events add constraint events_duration_min_check check (duration_min between 1 and 44640) not valid;
-alter table public.events validate constraint events_duration_min_check;
+alter table public.events add constraint events_duration_min_check check (duration_min between 1 and 44640);

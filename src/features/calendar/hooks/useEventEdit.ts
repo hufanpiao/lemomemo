@@ -33,7 +33,7 @@ export interface EventEdit extends EditRecord<EventForm> {
   endDate: string;
   /** 改结束日期、时刻（R-444，可跨多天，最多 31 天）：只给一样时另一样沿用现在的；全天只看 date */
   setEnd(p: { date?: string; time?: string }): void;
-  /** 结束日期最晚能选到哪天（全天：开始 + 30 天，共 31 天；有时刻：开始 + 31 天）；没日期为 undefined */
+  /** 结束日期最晚能选到哪天：开始 + 30 天（共 31 天；有时刻的再晚就超时长上限、被截短，干脆不让选）；没日期为 undefined */
   endDateMax: string | undefined;
   tzList: readonly string[];
   /** 和本机时区不同时：在本机时区是哪天几点 */
@@ -108,7 +108,7 @@ export function useEventEdit(id: string, onCreated?: (id: string) => void): Even
     setAllDay,
     end: endAt?.time ?? null,
     endDate: endAt?.date ?? allDayLastOf(form),
-    endDateMax: form.date === '' ? undefined : addDays(form.date, form.time === null ? EVENT_SPAN_MAX_DAYS - 1 : EVENT_SPAN_MAX_DAYS),
+    endDateMax: form.date === '' ? undefined : addDays(form.date, EVENT_SPAN_MAX_DAYS - 1),
     setEnd,
     tzList,
     local: localOf(form, deviceTz()),

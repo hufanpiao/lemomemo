@@ -34,11 +34,7 @@ export const zh = {
   'prio.mid': '中',
   'prio.low': '低',
   'list.origin': '（{zone} {t}）',
-  // 跨天日程（R-444，同日历日清单 cal.day.*）：中间整天“持续”、最后一天“至 18:00”、没到最后一天的标题下面“至 11月20日 18:00”、全天的“第 2/3 天”
-  'list.ongoing': '持续',
-  'list.until': '至 {t}',
-  'list.untilDate': '至 {m}月{d}日 {t}',
-  'list.dayOf': '第 {i}/{n} 天',
+  // 跨天日程（R-444）的“持续”“至 18:00”“第 2/3 天”在公共词典 span.*，和日历日清单共用
   'list.done': '完成',
   'list.undoDone': '标成没完成',
   'list.delete': '删除',
