@@ -115,6 +115,7 @@ function matchers(actual: unknown, negate: boolean, label?: string) {
         typeof actual === 'string' ? actual.includes(e as string) : (actual as unknown[]).some((x) => Object.is(x, e)),
         `to contain ${show(e)}`,
       ),
+    toContainEqual: (e: unknown) => check((actual as unknown[]).some((x) => same(x, e)), `to contain equal ${show(e)}`),
     toMatch: (re: RegExp) => check(re.test(actual as string), `to match ${re}`),
     toThrow: (msg?: string | RegExp) => {
       let threw = false;

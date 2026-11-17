@@ -7,7 +7,9 @@ import { ko } from '../../shared/i18n/ko.ts';
 import { zh } from '../../shared/i18n/zh.ts';
 import { provideSharedDict } from '../../shared/i18n/i18n.ts';
 
-// fmt 查网页按语言懒加载的公共词典（sharedT）：这里也测韩文，把韩文那份放进去（公共准备默认只放中文）
+// fmt 查网页按语言懒加载的公共词典（sharedT）：中韩两份都显式放进去。
+// vitest 的公共准备（tests/fakes/shared-dicts-setup.ts）只放中文，Deno 下（deno task test）不读那个文件，不放中文就会查到韩文（ci 93d6b30f 数据库测试第 32 步）
+provideSharedDict('zh-CN', zh);
 provideSharedDict('ko-KR', ko);
 
 describe('词典', () => {
