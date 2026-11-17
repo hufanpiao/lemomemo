@@ -5,6 +5,8 @@
 // （src/features/settings/__tests__/），真登录的两台设备（TC-B1-18、77～79）要 /sb 接本地 Supabase，归 QA 的 S-B1 用例。
 // 合卡以后首页是三张卡（账号；常用：语言、日历、提醒（倾斜高光 R-373 已删除）；更多：数据、电脑、关于），设备列表和注销入口在账号二级页，导出在数据二级页
 import type { Page } from '@playwright/test';
+import { ko as sharedKo } from '../../shared/i18n/ko.ts';
+import { zh as sharedZh } from '../../shared/i18n/zh.ts';
 import { expect, test } from './session-fixture.ts';
 
 const SETTINGS = '/app/#/settings';
@@ -108,6 +110,54 @@ test.describe('设置页骨架', () => {
     await expect(settingsMain(page)).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
     expect(await pressedLocale(page)).toBe('zh');
+  });
+
+  // 首屏瘦身 D（11-17）：公共词典只下载当前语言那一份（platform/doc-locale.ts 的 loadSharedDict）；点“한국어”后先等韩文那份，
+  // 下载完以前界面、页面标题照旧是中文，页面上不出现词条键名；到了才一起换成韩文。挡住 SW（不然请求不经 page.route），把韩文那份卡住再放行
+  test.describe('公共词典按语言懒加载', () => {
+    test.use({ serviceWorkers: 'block' });
+
+    test('冷启动只下载中文那份；切换期间照旧中文、不出键名；韩文那份到了才换', async ({ page }) => {
+      const keys = Object.keys(sharedZh);
+      const keysOnPage = async (): Promise<string[]> => {
+        const text = await page.locator('body').innerText();
+        return keys.filter((k) => text.includes(k));
+      };
+      const dicts: string[] = [];
+      page.on('request', (r) => {
+        const m = /\/assets\/(zh|ko)-[\w-]+\.js$/.exec(new URL(r.url()).pathname);
+        if (m?.[1]) dicts.push(m[1]);
+      });
+      let release = (): void => undefined;
+      const held = new Promise<void>((r) => (release = r));
+      await page.route(/\/assets\/ko-[\w-]+\.js$/, async (route) => {
+        await held;
+        await route.continue();
+      });
+
+      await page.goto(SETTINGS);
+      await expect(settingsMain(page)).toBeVisible();
+      expect(dicts).toEqual(['zh']);
+      expect(await page.title()).toBe(sharedZh['app.name']);
+
+      await page.getByRole('button', { name: '한국어' }).click();
+      await expect.poll(() => dicts).toEqual(['zh', 'ko']);
+      // 韩文那份卡着：还是中文、没有键名
+      await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+      expect(await pressedLocale(page)).toBe('zh');
+      expect(await page.title()).toBe(sharedZh['app.name']);
+      expect(await keysOnPage()).toEqual([]);
+
+      release();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'ko-KR');
+      expect(await pressedLocale(page)).toBe('ko');
+      expect(await page.title()).toBe(sharedKo['app.name']);
+      expect(await keysOnPage()).toEqual([]);
+      // 换回中文：那份已经有了，当场换，不再下载
+      await page.getByRole('button', { name: '中文' }).click();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+      expect(dicts).toEqual(['zh', 'ko']);
+    });
   });
 
   // R-276（负责人 10-30）：单行行整行高 44；按钮（.btn）看得见 38，点击区由 ::after 扩到 44——

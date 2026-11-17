@@ -92,6 +92,8 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify('1970-01-01T00:00:00.000Z'),
   },
   test: {
+    // 公共词典两份先放进 sharedT（网页按语言懒加载，单测不走入口；首屏瘦身 D 11-17）
+    setupFiles: ['tests/fakes/shared-dicts-setup.ts'],
     projects: [
       {
         extends: true,

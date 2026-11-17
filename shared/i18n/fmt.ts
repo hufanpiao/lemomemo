@@ -1,8 +1,9 @@
 // 日期和时间格式（架构 2.4 第 2 条）：中文“10月25日 周日”，韩文“10월 25일 (일)”
 // 格式模板放在词典里（fmt.*），这里只拼数字；不用 Intl 的本地化输出，保证 Node 和 Deno 结果一字不差
+// 查的是网页按语言懒加载的那份公共词典（i18n.ts 的 sharedT，首屏瘦身 D 11-17）；服务器现在不用这份文件，要用时先 provideSharedDict 两份
 import { DAY_MINUTES, parseDate, weekdayOf, type DateStr } from '../core/date.ts';
 import { wallTime, type Tz } from '../core/tz.ts';
-import { t, type Locale } from './i18n.ts';
+import { sharedT as t, type Locale } from './i18n.ts';
 
 export type DayStyle = 'monthDay' | 'monthDayWeek';
 

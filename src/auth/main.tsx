@@ -13,7 +13,7 @@ import '../styles/base.css';
 import { LOCALE_STORAGE_KEY, pickLocale } from '../../shared/i18n/pick-locale.ts';
 import { AuthPage } from '../features/auth/index.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
-import { applyDocLocale } from '../platform/doc-locale.ts';
+import { applyDocLocale, loadSharedDict } from '../platform/doc-locale.ts';
 import { buildInfo } from '../platform/env.ts';
 import { installDesktopSession } from '../platform/session-store.ts';
 // 皮肤、深浅色跟这台设备上次用的（ADR-008；登录页没有账号设置可读，模块一引入就按本机缓存 pv-look 套上）：四种组合都有 --login-bg（皮肤视觉稿令牌表）
@@ -29,7 +29,8 @@ function savedLocale(): string | null {
 }
 const locale = pickLocale(savedLocale(), navigator.languages) === 'ko' ? 'ko-KR' : 'zh-CN';
 uiStore.getState().setLocale(locale);
-applyDocLocale(locale);
+// 公共词典只下载这一种语言（首屏瘦身 D，11-17，platform/doc-locale.ts）：页面标题、渲染都等它；下载失败照样渲染（标题、文字退回另一份或键名）
+const dictReady = (loadSharedDict(locale) ?? Promise.resolve()).catch(() => undefined).then(() => applyDocLocale(locale));
 
 const el = document.getElementById('root');
 if (!el) throw new Error('root_missing');
@@ -43,6 +44,6 @@ const page = (
 );
 
 // exe 的登录小窗口：会话写进凭据管理器（F5-2 / N1），渲染（读会话、建 supabase 客户端）之前先 preload 好；网页版直接渲染
-void installDesktopSession().finally(() => {
+void Promise.all([installDesktopSession().catch(() => undefined), dictReady]).finally(() => {
   createRoot(root).render(import.meta.env.DEV ? <StrictMode>{page}</StrictMode> : page);
 });

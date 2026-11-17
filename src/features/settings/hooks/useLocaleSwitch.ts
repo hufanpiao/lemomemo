@@ -4,7 +4,7 @@
 import { useCallback, useState } from 'react';
 import { toUiLocale, type Locale } from '../../../../shared/i18n/pick-locale.ts';
 import { uiStore, useUi } from '../../../kit/state/ui-store.ts';
-import { applyDocLocale } from '../../../platform/doc-locale.ts';
+import { applyDocLocale, loadSharedDict } from '../../../platform/doc-locale.ts';
 import { updateCachedLocale, writeLocalLocale } from '../data/local.ts';
 import type { SettingsApi } from '../data/settings-api.ts';
 
@@ -32,6 +32,18 @@ export function useLocaleSwitch(
   const choose = useCallback(
     async (locale: Locale) => {
       if (locale === current) return;
+      // 公共词典只下载了当前语言那一份（首屏瘦身 D，11-17）：先等新语言那份下载好再换，换之前一直显示原来的语言，不出空白和键名；
+      // 已经下载过就当场换。下载失败（离线又没有缓存）不换，提示一句没保存上
+      const dict = loadSharedDict(toUiLocale(locale));
+      if (dict) {
+        setSync('saving');
+        try {
+          await dict;
+        } catch {
+          setSync('failed');
+          return;
+        }
+      }
       applyLocale(locale);
       setSync('saving');
       const r = await api.saveLocale(toUiLocale(locale));

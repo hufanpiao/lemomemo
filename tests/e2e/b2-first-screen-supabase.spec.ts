@@ -24,7 +24,8 @@ type Hits = { profiles: number; notice: number; bearer: boolean; apikey: boolean
 /** 这一次的构建带了 supabase 地址（快读组 playwright.fastread.config.ts 强制设好，worker 继承）：必须走快读，不许退回“没配地址、直接放行”（安全复审 L8 ①） */
 const EXPECT_FAST = Boolean(process.env['VITE_PUBLIC_SUPABASE_URL']);
 
-async function prepare(page: Page, baseURL: string | undefined): Promise<{ hits: Hits }> {
+/** seen：profiles.consent_policy_ver 答什么（默认 V = 已同意当前版本；null 是新用户，比 V 旧是要看“隐私说明更新了”） */
+async function prepare(page: Page, baseURL: string | undefined, seen: string | null = V): Promise<{ hits: Hits }> {
   if (!baseURL) throw new Error('playwright.config 没给 baseURL');
   await seedFakeSession(page.context(), baseURL, { jwt: true });
   await page.context().addInitScript(() => {
@@ -54,7 +55,7 @@ async function prepare(page: Page, baseURL: string | undefined): Promise<{ hits:
     if (new URL(route.request().url()).searchParams.get('select') !== 'consent_policy_ver') return route.fallback();
     hits.profiles += 1;
     check(route.request());
-    await route.fulfill({ json: [{ consent_policy_ver: V }] });
+    await route.fulfill({ json: [{ consent_policy_ver: seen }] });
   });
   await page.route('**/rest/v1/app_config?**', async (route) => {
     if (new URL(route.request().url()).searchParams.get('select') !== 'notice') return route.fallback();
@@ -120,4 +121,33 @@ test('冷启动今天页：supabase-js 那一块在今天页画出来以后才�
   } else {
     expect(hits.notice).toBe(0);
   }
+});
+
+// 首屏瘦身 C（11-17）：告知页的容器 ConsentRoute（里面带告知页、离开设备、账号状态、多标签页通知、写 AI 开关）只在要显示告知页时才下载；
+// 已经同意过的人冷启动不下载它。新用户（first）、同意版本过期（updated）照旧先显示那一屏。只在快读组跑（要有 supabase 地址才问得到告知状态）
+test.describe('告知页那一块按需下载（首屏瘦身 C）', () => {
+  test.skip(!EXPECT_FAST, '默认构建没配 supabase 地址，关口直接放行，问不到告知状态');
+  const consentChunk = (urls: string[]): string[] => urls.filter((u) => /\/assets\/ConsentRoute-[\w-]+\.js$/.test(new URL(u).pathname));
+
+  for (const [name, seen, step] of [['新用户', null, 'consent'], ['同意版本过期', '2026-01-01', 'policy-update']] as const) {
+    test(`${name}：先显示告知页（data-step=${step}），告知页那一块这时才下载`, async ({ page, baseURL }) => {
+      await prepare(page, baseURL, seen);
+      const urls: string[] = [];
+      page.on('request', (r) => urls.push(r.url()));
+      await page.goto('/app/#/today');
+      await expect(page.locator(`[data-step="${step}"]`)).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId('today')).toHaveCount(0);
+      expect(consentChunk(urls)).toHaveLength(1);
+    });
+  }
+
+  test('已经同意过：今天页照常出来，告知页那一块一直不下载', async ({ page, baseURL }) => {
+    await prepare(page, baseURL);
+    const urls: string[] = [];
+    page.on('request', (r) => urls.push(r.url()));
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 });
+    await page.waitForTimeout(1000);
+    expect(consentChunk(urls)).toEqual([]);
+  });
 });

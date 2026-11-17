@@ -154,8 +154,9 @@ describe('blocked 第一次为 true 时才定界面语言（BANNER-sugg ③）',
     const src = readFileSync('src/app/main.tsx', 'utf8');
     const hook = /onUpgradeCenter: \(u\) => \{([\s\S]*?)\n {4}\},/.exec(src)?.[1] ?? '';
     expect(hook).toContain('onFirstBlocked');
-    expect(hook).toMatch(/localeFromBoot \? undefined : applyLocale\(\{ profile: null \}\)/);
+    expect(hook).toMatch(/localeFromBoot \? undefined : applyLocale\(pickUiLocale\(\{ profile: null \}\)\)/);
     expect(hook.replace(/onFirstBlocked[\s\S]*$/, '')).not.toContain('applyLocale');
-    expect(src).toMatch(/applyLocale\(boot\);\n {2}localeFromBoot = true;/);
+    // 按 boot 定语言：先等那份公共词典（首屏瘦身 D）再套用，紧接着记下已经按 boot 定过
+    expect(src).toMatch(/const uiLocale = pickUiLocale\(boot\);\n {2}await waitSharedDict\(uiLocale\);\n {2}applyLocale\(uiLocale\);\n {2}localeFromBoot = true;/);
   });
 });

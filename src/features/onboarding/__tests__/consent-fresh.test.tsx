@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { consentStale, setConsentStale } from '../../../kit/state/consent-fresh.ts';
 import type * as Session from '../../../platform/session.ts';
 import type { ConsentApi, NoticeState, Result } from '../data/consent-api.ts';
-import { useConsentHandlers, useNoticeState, type ConsentWiringDeps } from '../hooks/useConsentWiring.ts';
+import { useConsentHandlers, type ConsentWiringDeps } from '../hooks/useConsentHandlers.ts';
+import { useNoticeState } from '../hooks/useConsentWiring.ts';
 
 vi.mock('../../../platform/session.ts', async (orig) => ({ ...(await orig<typeof Session>()), readSessionId: () => SID }));
 const SID = 'sid-t';

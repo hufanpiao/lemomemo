@@ -73,6 +73,8 @@ const ALLOWED_IMPORTS = [
   '../../shared/local-db.ts',
   '../../shared/i18n/i18n.ts',
   '../../shared/i18n/pick-locale.ts',
+  // 公共词典的 t（两份静态带上；11-17 首屏瘦身 D 从 i18n.ts 拆出，只引 i18n.ts 和两份词典）
+  '../../shared/i18n/t-static.ts',
   // 按钮常量（不 import 任何东西，下面有一条钉住）；notify-text.ts 不准引（会带进时区、日期代码）
   '../../shared/logic/notify-actions.ts',
   '../../shared/logic/remind-route.ts',

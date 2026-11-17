@@ -86,7 +86,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/platform/auth-loss-log.ts': 'R-382：main.tsx 只在本机有 lemo.authloss（上次会话丢了留下的原因码，少见）时才下载、上传后删键；平时不下载',
   'src/core/auth-loss.ts': 'R-382：会话丢了要定结局时（core/auth-loss-lazy.ts）才下载，平时不下载',
   'src/core/device-reg.ts': '首屏画完以后 startAfterPaint 才下载（FA-6 ③，app/after-paint.ts）',
-  'src/platform/account-status.ts': '告知页关口的 consent-exit.ts 静态引用了它，本来就在首屏（体积已算进页面时钟）；after-paint 里这次 import() 只是取引用，不再发请求（第四轮审查 L-d）',
+  'src/platform/account-status.ts': '首屏画完以后 after-paint 才取（账号状态探测）；告知页的 consent-exit.ts 也静态引它，但那一块只在要显示告知页时才下载（首屏瘦身 C，11-17）',
   'src/platform/sync-net.ts': '同上，首屏画完以后才下载',
   'src/app/sync-wiring.ts': '同上，首屏画完以后才下载',
   'shared/schema/rows.ts': 'loadRowSchemas：首屏画完以后 loadAfterPaint 预加载，写入时才等（FA-6 ③）',
@@ -187,7 +187,8 @@ describe('首屏动态入口名单和源码对得上（③ 审查 M3 第三轮�
     const { FIRST_PAINT_DYNAMIC } = (await import('../../build/check_first_paint_chunks.mjs')) as { FIRST_PAINT_DYNAMIC: string[] };
     const r = classifyDynamics(FIRST_PAINT_DYNAMIC);
     expect(r.unclassified, '这些 import() 没归类：首屏期间会下载的加进 build/check_first_paint_chunks.mjs 的 FIRST_PAINT_DYNAMIC，不会的加进 NOT_FIRST_PAINT 并写原因').toEqual([]);
-    expect(r.first, 'FIRST_PAINT_DYNAMIC 里有从首屏推不到的').toEqual(FIRST_PAINT_DYNAMIC.map((k) => `src/${k}`).sort());
+    // 键相对 src/（shared 里的带 ../），换成相对仓库根再比
+    expect(r.first, 'FIRST_PAINT_DYNAMIC 里有从首屏推不到的').toEqual(FIRST_PAINT_DYNAMIC.map((k) => rel(resolve(ROOT, 'src', k))).sort());
     expect(r.not, 'NOT_FIRST_PAINT 里有已经不存在的').toEqual(Object.keys(NOT_FIRST_PAINT).sort());
   });
 });

@@ -6,11 +6,13 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import type { ConsentApi, NoticeState, Result } from '../data/consent-api.ts';
-import type { ConsentWiringDeps } from '../hooks/useConsentWiring.ts';
+import type { ConsentWiringDeps } from '../hooks/useConsentHandlers.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
 import ConsentGate from '../ui/ConsentGate.tsx';
 import ConsentPage from '../ui/ConsentPage.tsx';
+// 关口懒加载的是告知页容器 ConsentRoute（首屏瘦身 C）：先引一次，lazy 在同一个 act 里就能解析
+import '../ui/ConsentRoute.tsx';
 
 /** results：record 依次返回的结果（用完以后一直回最后一个；不给就一直成功） */
 function fakeApi(notice: NoticeState = 'updated', results: Result[] = [{ ok: true, value: undefined }]) {

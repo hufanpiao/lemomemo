@@ -11,14 +11,15 @@
 // • 告知页本身（ConsentPage）懒加载（B2 FA-6 首屏体积 ④）：已经同意过的人（绝大多数冷启动）不下载它；
 //   要显示时才加载，加载中什么也不画（和等 noticeState 时一样）；分包加载失败归 main.tsx 包着关口的错误边界，照旧放行画 App
 // • App 不画在关口里面（CONSENT-sugg ③）：main.tsx 的错误边界只包关口，关口出错或分包加载失败时放行画 App，App 自己出错不归它管（src/app/root.tsx）
+// • 回调那一套（离开设备、账号状态、多标签页通知、写 ai.enabled，hooks/useConsentHandlers.ts）也跟着告知页的容器 ConsentRoute 一起懒加载（首屏瘦身 C，11-17）：
+//   关口自己只问 noticeState，已经同意过的人首屏不下载它们
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { parseHash, replaceRoute } from '../../../app/router.ts';
 import type { ConsentApi } from '../hooks/useConsent.ts';
-import {
-  CONSENT_GATE_MS, defaultConsentWiringDeps, useConsentApi, useConsentHandlers, useNoticeState, type ConsentWiringDeps,
-} from '../hooks/useConsentWiring.ts';
+import type { ConsentWiringDeps } from '../hooks/useConsentHandlers.ts';
+import { CONSENT_GATE_MS, useConsentApi, useNoticeState } from '../hooks/useConsentWiring.ts';
 
-const ConsentPage = lazy(() => import('./ConsentPage.tsx'));
+const ConsentRoute = lazy(() => import('./ConsentRoute.tsx'));
 
 export interface ConsentGateProps {
   /** 放行：该画 App 了（只调一次） */
@@ -35,7 +36,7 @@ export interface ConsentGateProps {
 }
 
 export default function ConsentGate({
-  onPass, api: injected, wiring = defaultConsentWiringDeps, limitMs = CONSENT_GATE_MS, startedAt, onStart,
+  onPass, api: injected, wiring, limitMs = CONSENT_GATE_MS, startedAt, onStart,
 }: ConsentGateProps) {
   const shared = useConsentApi();
   const api = injected ?? shared;
@@ -49,7 +50,6 @@ export default function ConsentGate({
     if (parseHash(window.location.hash).name === 'onboarding') void replaceRoute('today');
     setDone(true);
   }, []);
-  const handlers = useConsentHandlers(finish, wiring);
   const showConsent = (notice === 'first' || notice === 'updated') && !done;
   const pass = notice !== 'pending' && !showConsent;
   useEffect(() => {
@@ -57,7 +57,7 @@ export default function ConsentGate({
   }, [pass, onPass]);
   return showConsent ? (
     <Suspense fallback={null}>
-      <ConsentPage api={api} variant={notice === 'updated' ? 'updated' : 'first'} {...handlers} />
+      <ConsentRoute api={api} {...(wiring ? { wiring } : {})} variant={notice === 'updated' ? 'updated' : 'first'} onFinish={finish} />
     </Suspense>
   ) : null;
 }
