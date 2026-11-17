@@ -1,7 +1,7 @@
 // 待办子任务的界面（R-350 方案 5.1～5.5、6.1、6.2；TC-R350-01～09、14 的界面部分）：
-// 列表页卡片（摊开的勾选清单、分段进度条、收起/展开、只读拦下、勾完最后一项自动完成 + 撤销条）、今天页一行进度、编辑页“子任务”区。
+// 列表页卡片（摊开的勾选清单、分段进度条、收起/展开、只读拦下、勾完最后一项自动完成 + 撤销条）、今天页的就地展开（InlineSubtasks，R-442）、编辑页“子任务”区。
 // 写入层（core/edit-save.ts）用替身记下每一笔，规则本身在 todo-items.test.ts
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearAllCollections, collection, readonlyIds } from '../../../core/store.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
@@ -18,7 +18,7 @@ vi.mock('../../../platform/run-log-api.ts', async (orig) => ({ ...(await orig<ob
 vi.mock('../../reminders/index.ts', () => ({ UnsyncedRemindMark: () => null }));
 
 const { default: TodosPage } = await import('../ui/TodosPage.tsx');
-const { default: TodaySubtasks } = await import('../ui/TodaySubtasks.tsx');
+const { default: InlineSubtasks } = await import('../ui/InlineSubtasks.tsx');
 const { default: SubtaskEditor } = await import('../ui/SubtaskEditor.tsx');
 const { resetCollapsedForTest } = await import('../hooks/useSubtasks.ts');
 
@@ -97,6 +97,21 @@ describe('列表页卡片（5.1、5.4、6.2）', () => {
     expect(save.calls[1]?.slice(0, 4)).toEqual(['patch', 'todos', 't1', expect.objectContaining({ done: false })]);
   });
 
+  it('R-442 待办页不能拖动：行上没有拖动标记、没有 6 个点；按住 0.5 秒不拿起、不写、日志里没有 sort', async () => {
+    render(<TodosPage />);
+    const row = await screen.findByTestId('todos-row-t1');
+    expect(row.hasAttribute('data-sort-id')).toBe(false);
+    expect(document.querySelector('[data-sort-id], [data-sort-group]')).toBeNull();
+    const title = within(row).getByText('买菜');
+    fireEvent.pointerDown(title, { pointerId: 1, button: 0, clientX: 100, clientY: 100, pointerType: 'touch', isPrimary: true });
+    await act(() => new Promise((r) => setTimeout(r, 500)));
+    fireEvent.pointerMove(title, { pointerId: 1, clientX: 100, clientY: 160, pointerType: 'touch', isPrimary: true });
+    fireEvent.pointerUp(title, { pointerId: 1, clientX: 100, clientY: 160, pointerType: 'touch', isPrimary: true });
+    expect(document.querySelector('[data-sort-lifted]')).toBeNull();
+    expect(logs.filter((l) => l.startsWith('sort '))).toEqual([]);
+    expect(save.calls).toHaveLength(0);
+  });
+
   it('只读的子任务：勾了拦下出“要新版本”，不写', async () => {
     readonlyIds('todo_items').set([{ id: 'b', ro: true }]);
     render(<TodosPage />);
@@ -106,20 +121,58 @@ describe('列表页卡片（5.1、5.4、6.2）', () => {
   });
 });
 
-describe('今天页一行进度（5.2，Q5）', () => {
-  it('有子任务：“1/3”加细进度条；没有子任务：什么都不画', () => {
+describe('今天页的就地展开（InlineSubtasks，R-442）', () => {
+  const props = (over: Partial<Parameters<typeof InlineSubtasks>[0]> = {}) => ({
+    prefix: 'today', id: 't1', title: '买菜', readOnly: false, onBlock: vi.fn(), onOpen: vi.fn(), onPlan: vi.fn(), onResult: vi.fn(), ...over,
+  });
+
+  it('默认收起：只露进度条和“1/3 · 展开”（aria-expanded=false）；点了就地展开、再点收起；运行日志只记页名和项数；没有子任务什么都不画', () => {
     const { container } = render(
       <>
-        <TodaySubtasks id="t1" />
-        <TodaySubtasks id="t2" />
+        <InlineSubtasks {...props()} />
+        <InlineSubtasks {...props({ id: 't2', title: '回邮件' })} />
       </>,
     );
-    const row = screen.getByTestId('today-subs-t1');
-    // 看得见的“1/3”不进读屏；读屏读一句视觉隐藏的文字（这一行在今天页的按钮里，按钮里不放 progressbar）
-    expect(row.querySelector('[aria-hidden="true"]')?.textContent).toBe('1/3');
-    expect(row.textContent).toContain('子任务已完成 1 项，共 3 项');
-    expect(row.querySelector('[role="progressbar"]')).toBeNull();
+    const fold = screen.getByTestId('today-fold-t1');
+    expect(fold.textContent).toBe('1/3 · 展开');
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    const list = document.getElementById(fold.getAttribute('aria-controls') ?? '');
+    expect(list?.hidden).toBe(true);
+    fireEvent.click(fold);
+    expect(fold.getAttribute('aria-expanded')).toBe('true');
+    expect(fold.getAttribute('aria-label')).toBe('收起「买菜」的子任务');
+    expect(list?.hidden).toBe(false);
+    expect(logs).toContain('subs today open n=3');
+    expect(logs.join(' ')).not.toContain('买菜');
+    fireEvent.click(fold);
+    expect(list?.hidden).toBe(true);
+    expect(logs).toContain('subs today close n=3');
     expect(container.querySelectorAll('[data-testid^="today-subs-"]')).toHaveLength(1);
+  });
+
+  it('展开后勾一项：写子任务（和待办页同一份写入）；勾上最后一项：先报 plan=true，写完回 auto=true、带撤销和文案，撤销时刚勾的那项和主待办一起撤回', async () => {
+    collection('todo_items').upsert([item('b', 't1', 2, true)]);
+    const p = props();
+    render(<InlineSubtasks {...p} />);
+    fireEvent.click(screen.getByTestId('today-fold-t1'));
+    fireEvent.click(screen.getByTestId('today-sub-c'));
+    expect(p.onPlan).toHaveBeenCalledWith(true);
+    await waitFor(() => expect(p.onResult).toHaveBeenCalledTimes(1));
+    const r = vi.mocked(p.onResult).mock.calls[0]?.[0] as { res: string; auto: boolean; plan: boolean; message: string; undo(): Promise<string> };
+    expect([r.res, r.auto, r.plan, r.message]).toEqual(['ok', true, true, '全部完成，已完成这条待办']);
+    expect(save.calls.map((c) => c.slice(0, 3))).toEqual([['patch', 'todo_items', 'c'], ['patch', 'todos', 't1']]);
+    save.calls = [];
+    await act(() => r.undo());
+    expect(save.calls.map((c) => c.slice(0, 3))).toEqual([['patch', 'todo_items', 'c'], ['patch', 'todos', 't1']]);
+  });
+
+  it('主待办只读：勾子任务交给页面 onBlock，不写', () => {
+    const p = props({ readOnly: true });
+    render(<InlineSubtasks {...p} />);
+    fireEvent.click(screen.getByTestId('today-fold-t1'));
+    fireEvent.click(screen.getByTestId('today-sub-b'));
+    expect(p.onBlock).toHaveBeenCalled();
+    expect(save.calls).toHaveLength(0);
   });
 });
 

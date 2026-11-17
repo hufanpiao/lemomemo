@@ -29,9 +29,6 @@ export const listZh = {
   'list.deleted': '已删除',
   'list.undo': '撤销',
   'list.doneToast': '已完成',
-  // 长按拖动排序（R-429）：组内换序“已移动 · 撤销”，跨组放下改截止日期“已改到 X · 撤销”（X 是组名：今天、明天、11月18日 周三）
-  'list.moved': '已移动',
-  'list.movedTo': '已改到 {g}',
   'list.err.save': '没保存上，稍后再试一次',
   'list.err.readonly': '这条要新版本才能修改',
   // 设置首页“完成 7 天后自动删除”（负责人 11-15 方案；ui/TodoSettings.tsx）

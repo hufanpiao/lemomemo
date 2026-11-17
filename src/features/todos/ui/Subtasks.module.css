@@ -1,4 +1,4 @@
-/* 待办子任务（R-350 方案 5.1～5.3、6.2）：列表卡片里摊开的勾选清单、分段进度条、收起按钮；今天页一行进度；编辑页“子任务”区。只用令牌（A11）
+/* 待办子任务（R-350 方案 5.1～5.3、6.2）：列表卡片里摊开的勾选清单、分段进度条、收起按钮；待办页、今天页就地展开的卡片（R-442）；编辑页“子任务”区。只用令牌（A11）
    • 勾子任务一天上百次：不播动画——kit CheckCircle 传 still（SubtaskCard、SubtaskEditor），进度段直接变色
    • 方框比主待办小一号（--check-size: 18px，R-433 同样是圆角方框），点击区照样 44 × 44（kit CheckCircle 的外扩区）
    • 进度段（R-436 确认图第 7 条）：没勾的是暗灰实心细条 --step-off，勾上的填强调色；段的颜色只是装饰，几项勾了由后面的“2/4”文字和 progressbar 的 aria-valuenow 说
@@ -17,10 +17,6 @@
   height: 3px;   /* R-436 第 7 条：从 6 细到 3；今天页的短条（.short）同一个粗细 */
 }
 
-.short {
-  flex: 0 1 96px;
-}
-
 .seg {
   flex: 1 1 0;
   min-width: 2px;
@@ -37,6 +33,13 @@
   flex: 1 0 100%;
   min-width: 0;
   padding: 0 0 4px calc(var(--hit) + 10px);
+}
+
+/* 今天页（R-442）：卡片直接放在 kit 的行（.row / .swRow，flex 不折行）里，宿主行有卡片时折行、卡片落到下一行
+   （待办页另有 .hasSubs，效果相同）。只在这一包加载后生效：卡片本来也是这时才出现 */
+:has(> .card) {
+  flex-wrap: wrap;
+  row-gap: 0;
 }
 
 .items {
@@ -113,28 +116,6 @@
   font-family: var(--f-mono);
   font-size: var(--fs-11);
   text-align: right;
-}
-
-/* ---------- 今天页的一行：已勾/总数 + 细进度条，不摊开（Q5） ---------- */
-.today {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  margin-top: 4px;
-  color: var(--text-2);
-  font-family: var(--f-mono);   /* “2/4”等宽数字（R-436 第二批，同待办页卡片右下的“2/4 · 收起”） */
-  font-size: var(--fs-12);
-}
-
-/* 今天页：这一行在待办按钮里面，读屏读按钮名字，进度用一句文字（按钮里不放 progressbar） */
-.sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
 
 /* ---------- 编辑页“子任务”区 ---------- */

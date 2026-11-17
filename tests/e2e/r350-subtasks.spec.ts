@@ -1,6 +1,7 @@
 // R-350 待办子任务（方案 5.1～5.6；TC-R350-01～05、12 的界面部分）：不要后端，直接往本机库 planner-v4 写好待办和子任务再重新载入
 // • 列表页：副行“1/3”、摊开的勾选清单、分段进度条；勾一项写进 outbox（本机库 view 跟着变）；收起以后重新载入还是收起（每台设备各记各的）
-// • 今天页：待办行下面一行“1/3”和细进度条（按需下载那一包，下完才出现）
+// • 今天页（R-442）：待办行下面进度条和“1/3 · 展开”（按需下载那一包，下完才出现），默认收起；点了就地展开、勾一项写进 outbox，
+//   勾完最后一项主待办自动完成、出“全部完成 · 撤销”，撤销以后主待办回到“今天的安排”；运行日志 subs today open n=3
 // • 编辑页：“子任务”区列出各项，回车加一项写进 outbox
 // • 启动清孤儿（5.6 第 1 条）：主待办在本机已经没有的子任务，重新载入后本机库里删掉
 // • 环境变量 R350_SHOTS 指一个本机文件夹时（只在 Chromium），顺手截列表页、今天页、编辑页三张图给人看，不进仓库
@@ -41,17 +42,32 @@ const outboxOf = async (page: Page) =>
   (await readAll<{ table: string; id: string; op: string }>(page, 'outbox')).map((i) => ({ table: i.table, id: i.id, op: i.op }));
 
 test.describe('R-350 待办子任务', () => {
-  test('今天页一行进度；启动清掉孤儿子任务', async ({ page, browserName }) => {
+  test('今天页就地展开子任务、勾选、勾完自动完成和撤销；启动清掉孤儿子任务', async ({ page, browserName }) => {
     await seed(page);
-    const row = page.getByTestId(`today-subs-${T1}`);
-    await expect(row).toBeVisible({ timeout: 15000 });
-    await expect(row).toContainText('1/3');
-    // 这一行在今天页待办的按钮里：读屏读一句视觉隐藏的文字，按钮里不放 progressbar
-    await expect(row).toContainText('子任务已完成 1 项，共 3 项');
-    await expect(row.getByRole('progressbar')).toHaveCount(0);
+    const fold = page.getByTestId(`today-fold-${T1}`);
+    await expect(fold).toBeVisible({ timeout: 15000 });
+    await expect(fold).toHaveText('1/3 · 展开');
+    await expect(fold).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('today-sub-b')).toBeHidden();
     await expect(page.getByTestId('today-subs-t2')).toHaveCount(0);
     expect((await itemIds(page)).sort()).toEqual(['a', 'b', 'c']);
+    // 点按区不小于 44
+    expect((await fold.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await fold.click();
+    await expect(fold).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByTestId('today-sub-b')).toBeVisible();
     if (SHOTS && browserName === 'chromium') await page.screenshot({ path: `${SHOTS}/today.png` });
+    await page.getByTestId('today-sub-b').click();
+    await expect(page.getByTestId(`today-bar-${T1}`)).toHaveAttribute('aria-valuenow', '2');
+    await expect.poll(() => outboxOf(page)).toContainEqual({ table: 'todo_items', id: 'b', op: 'patch' });
+    // 勾完最后一项：主待办自动完成，出“全部完成 · 撤销”；撤销以后两件一起回来
+    await page.getByTestId('today-sub-c').click();
+    const toast = page.getByTestId('today-auto-toast');
+    await expect(toast).toContainText('全部完成');
+    await expect.poll(() => outboxOf(page)).toContainEqual({ table: 'todos', id: T1, op: 'patch' });
+    await toast.getByRole('button').click();
+    await expect(page.getByTestId(`today-done-${T1}`)).not.toBeChecked();
+    expect((await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).includes('subs today open n=3')).toBe(true);
   });
 
   test('列表页：卡片、勾一项写进 outbox、收起后重新载入还是收起', async ({ page, browserName }) => {

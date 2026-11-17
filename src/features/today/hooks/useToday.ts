@@ -34,8 +34,9 @@ export function useToday() {
       events: evToday,
       // “现在”卡另算一份：昨天没结束的带时刻日程（跨零点）也算进去，明天第一件写在“都结束了”的卡底
       card: nowCard(nowEvents(events, now, tz, locale), now, tz, today, tomorrow[0] ?? null),
-      late: lateTodos(todos, now, tz, locale),
-      todos: todayTodos(todos, now, tz, locale),
+      // 待办之间按 H → M → L（R-442，和待办页同一个 compareTodos）；日程照旧按时刻
+      late: lateTodos(todos, now, tz),
+      todos: todayTodos(todos, now, tz),
     };
   }, [events, todos, now, tz, today, locale]);
 

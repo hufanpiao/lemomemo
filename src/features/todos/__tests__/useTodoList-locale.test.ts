@@ -30,13 +30,12 @@ beforeEach(() => {
 afterEach(() => act(() => uiStore.getState().setLocale('zh-CN')));
 
 describe('useTodoList 按当前语言排（X10、X11）', () => {
-  it('分组里同一截止时刻按标题；项目筛选条条数一样按项目名', () => {
+  // 分组里不再按标题排（R-442：H/M/L → 截止时刻 → 创建时间，和语言无关），这里只守筛选条的项目名；组内先后在 todo-list.test.ts
+  it('项目筛选条条数一样按项目名', () => {
     data.todos = [td('t1', '北京', { project: '北京' }), td('t2', '가나', { project: '가나' })];
     for (const [loc, want] of [['zh-CN', ZH], ['ko-KR', KO]] as const) {
       act(() => uiStore.getState().setLocale(loc));
       const { result, unmount } = renderHook(() => useTodoList());
-      const items = result.current.groups.flatMap((g) => g.items.map((i) => i.todo.title));
-      expect(items, `${loc} 分组`).toEqual(want);
       expect(result.current.projects.map((p) => p.project), `${loc} 项目`).toEqual(want);
       unmount();
     }
