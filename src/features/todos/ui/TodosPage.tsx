@@ -54,16 +54,13 @@ import { AppearItem, AppearList, Pressable } from '../../../motion/components.ts
 import { useListT, useTodoList, type DueTag, type Group } from '../hooks/useTodoList.ts';
 import { useLinger } from '../../../kit/components/useDoneFlow.ts';
 import { useTodoRows } from '../../../kit/components/useTodoRows.ts';
-import { TodoRow, type TodoRowIds } from '../../../kit/components/TodoRow.tsx';
+import { TodoRow } from '../../../kit/components/TodoRow.tsx';
 import { setCollapsed, setDoneOpen, useCollapsed, useDoneOpen } from '../hooks/useSubtasks.ts';
-import { TODO_PARTS, useRowWords } from './row-parts.tsx';
+import { TODO_PARTS } from './row-parts.tsx';
 import { PullSearch } from '../../smart-search/index.ts';
 import styles from './TodosPage.module.css';
 import chip from '../../../kit/components/Chip.module.css';
 import refine from '../../../kit/components/Refine.module.css';
-
-/** 行里各处的测试 id 前缀（kit TodoRow） */
-const IDS: TodoRowIds = { row: 'todos-row', done: 'todos-done', prio: 'todos-prio', stage: 'todos-stage', ro: 'todos-ro', subs: 'todos' };
 
 export default function TodosPage() {
   const t = useListT();
@@ -73,7 +70,7 @@ export default function TodosPage() {
   const l = useTodoList(lg.ids);
   // 行的动作（日历日清单、今天页同一份，kit/components/useTodoRows.ts）：改回未完成时先留住按下之前的分组 --dur-ui；只读行统一拦下；
   // 撤销条、出错条在 r.a.g 里（kit 的 useListActions）；打勾、勾完子任务自动完成的停留、收起、“已完成 · 撤销”在 r.flow
-  const r = useTodoRows(l.groups, lg, l, 'todos', useRowWords(), TODO_PARTS);
+  const r = useTodoRows(l.groups, lg, l, 'todos', TODO_PARTS);
   const { a } = r;
   const { isRo, del } = a;
   const open = (id: string) => (isRo(id) ? a.g.block() : void navigate('todo', id));
@@ -148,7 +145,7 @@ export default function TodosPage() {
                     r={r}
                     todo={todo}
                     progress={l.subs.get(todo.id)}
-                    ids={IDS}
+                    tid="todos"
                     onOpen={() => open(todo.id)}
                     mark={(text) => <PullHit pull={pull} text={text} />}
                     collapsed={isCollapsed(todo.id, todo.done)}

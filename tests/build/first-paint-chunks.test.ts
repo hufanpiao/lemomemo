@@ -158,6 +158,7 @@ describe('接线', () => {
     for (const k of FIRST_PAINT_DYNAMIC as string[]) expect(existsSync(join(ROOT, 'src', k)), k).toBe(true);
     expect(readFileSync(join(ROOT, 'src/features/today/index.ts'), 'utf8')).toContain("name: 'today', Page: lazy(() => import('./ui/TodayPage.tsx'))");
     expect(readFileSync(join(ROOT, 'src/features/onboarding/index.ts'), 'utf8')).toContain("export const ConsentGate = lazy(() => import('./ui/ConsentGate.tsx'));");
-    expect(readFileSync(join(ROOT, 'src/features/onboarding/ui/ConsentGate.tsx'), 'utf8')).toContain("lazy(() => import('./ConsentRoute.tsx'))");
+    // 告知页容器：关口用同一个加载器给 lazy 和“剩余时限”计时（独立评审 11-17 第 14 条）
+    expect(readFileSync(join(ROOT, 'src/features/onboarding/ui/ConsentGate.tsx'), 'utf8')).toContain("const loadRoute = () => import('./ConsentRoute.tsx');");
   });
 });

@@ -9,7 +9,7 @@
 //   新出来就把别的 solo 条都收起（后出的顶掉前一条）——刚做的那一下能撤销最要紧；
 //   'yield'：电脑版布局的“布局已保存”，新出来只收起别的 yield 条；已经有 keep 条开着时让路、自己直接收起（布局还能从“⋯”恢复默认）。
 //   冲突提示卡这类本来就和撤销条并存的不带 solo
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { TOAST_MS } from '../../../shared/logic/toast.ts';
 import styles from './UndoToast.module.css';
 
@@ -35,10 +35,12 @@ export interface UndoToastProps {
   more?: { label: string; onClick(): void } | undefined;
   /** 同一时间只留一条（见文件头） */
   solo?: UndoSolo | undefined;
+  /** 挂到“撤销”按钮上（kit useDoneFlow 收完最后一行时把焦点移到这里；独立评审 11-17 第 12 条：不再按测试 id 找） */
+  undoRef?: Ref<HTMLButtonElement> | undefined;
   'data-testid'?: string;
 }
 
-export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST_MS, role = 'status', more, solo, 'data-testid': testId }: UndoToastProps) {
+export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST_MS, role = 'status', more, solo, undoRef, 'data-testid': testId }: UndoToastProps) {
   const [paused, setPaused] = useState(false);
   /** 第几轮计时：暂停后移开重新计 ms，倒计时色带跟着从满格重来（key 换了就重播动画） */
   const [round, setRound] = useState(0);
@@ -105,7 +107,7 @@ export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST
       )}
       <span className={styles.msg}>{message}</span>
       {onUndo && undoLabel ? (
-        <button type="button" className={styles.undo} onClick={act(onUndo)} data-testid={testId ? `${testId}-undo` : undefined}>
+        <button type="button" ref={undoRef} className={styles.undo} onClick={act(onUndo)} data-testid={testId ? `${testId}-undo` : undefined}>
           {undoLabel}
         </button>
       ) : null}

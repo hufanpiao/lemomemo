@@ -18,22 +18,14 @@ import { CheckCircle, partStage } from './CheckCircle.tsx';
 import list from './List.module.css';
 import { PrioCycle, PrioDot } from './Priority.tsx';
 
-/** 行里各处的测试 id 前缀（后面接 -<id>）；subs 是子任务卡片的前缀（todos、cal、today） */
-export interface TodoRowIds {
-  row: string;
-  done: string;
-  prio: string;
-  stage: string;
-  ro: string;
-  subs: string;
-}
-
 export interface TodoRowProps {
   r: TodoRows;
   todo: Readonly<{ id: string; title: string; priority: Priority; done: boolean }>;
   /** 子任务做了几项、共几项（有子任务才给）：方框的进度、副行的“大半 · 3/4”、下面的卡片都按它 */
   progress: Readonly<{ done: number; total: number }> | undefined;
-  ids: TodoRowIds;
+  /** 测试 id 前缀（todos、cal、today；独立评审 11-17 第 11 条，原来三页各写六个字段）：行 `<tid>-row-<id>`、方框 `-done-`、H/M/L `-prio-`、
+   *  副行进度 `-stage-`、只读标记 `-ro-`，子任务卡片直接用 tid */
+  tid: string;
   onOpen(): void;
   /** 子任务卡片收起没有：待办页给（每台设备各记各的），别的页不给 */
   collapsed?: boolean | undefined;
@@ -48,14 +40,14 @@ export interface TodoRowProps {
   wrap?: ((face: ReactNode) => ReactNode) | undefined;
 }
 
-export function TodoRow({ r, todo, progress, ids, onOpen, collapsed, onCollapse, meta, main, mark, wrap }: TodoRowProps) {
+export function TodoRow({ r, todo, progress, tid, onOpen, collapsed, onCollapse, meta, main, mark, wrap }: TodoRowProps) {
   const { words, parts, a, flow } = r;
   const id = todo.id;
   const ro = a.isRo(id);
   const checked = flow.shown(id, todo.done);
   const stage = progress ? partStage(progress.done, progress.total) : 0;
   // 只读行的方框换成页面给的只读部件（读屏名字后接“要更新到新版本才能修改”），别的都一样
-  const box = { checked, label: checked ? words.undoDone : words.done, progress, onChange: (v: boolean) => flow.check(id, v), testId: `${ids.done}-${id}` };
+  const box = { checked, label: checked ? words.undoDone : words.done, progress, onChange: (v: boolean) => flow.check(id, v), testId: `${tid}-done-${id}` };
   const face = (
     <div className={list.swRow}>
       <span className={list.lead}>
@@ -82,7 +74,7 @@ export function TodoRow({ r, todo, progress, ids, onOpen, collapsed, onCollapse,
           </span>
           {meta(
             progress ? (
-              <span className={list.stage} aria-hidden="true" data-testid={`${ids.stage}-${id}`}>
+              <span className={list.stage} aria-hidden="true" data-testid={`${tid}-stage-${id}`}>
                 {stage === 1 || stage === 2 ? (
                   <span className={list.pill} data-stage={stage}>
                     <span className={list.bars}>
@@ -99,7 +91,7 @@ export function TodoRow({ r, todo, progress, ids, onOpen, collapsed, onCollapse,
             checked,
           )}
         </span>
-        {ro ? <parts.Ro part="mark" testId={`${ids.ro}-${id}`} /> : null}
+        {ro ? <parts.Ro part="mark" testId={`${tid}-ro-${id}`} /> : null}
         {/* 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */}
         <span className={list.unsynced}>
           <parts.Mark id={id} />
@@ -107,11 +99,11 @@ export function TodoRow({ r, todo, progress, ids, onOpen, collapsed, onCollapse,
       </button>
       {/* 行尾 H / M / L（T-A）：在行按钮外面（按钮里不能套按钮）；勾上那一下藏起来（kit List 的 .prio） */}
       <span className={list.prio}>
-        <PrioCycle p={todo.priority} label={r.prioLabel(todo.priority)} onChange={(p) => r.prio(id, p)} testId={`${ids.prio}-${id}`} />
+        <PrioCycle p={todo.priority} label={r.prioLabel(todo.priority)} onChange={(p) => r.prio(id, p)} testId={`${tid}-prio-${id}`} />
       </span>
       {progress ? (
         <parts.Subs
-          prefix={ids.subs}
+          prefix={tid}
           id={id}
           title={todo.title}
           readOnly={ro}
@@ -134,7 +126,7 @@ export function TodoRow({ r, todo, progress, ids, onOpen, collapsed, onCollapse,
       data-readonly={ro ? '' : undefined}
       data-row={r.prefix}
       data-row-id={id}
-      data-testid={`${ids.row}-${id}`}
+      data-testid={`${tid}-row-${id}`}
     >
       <div className={list.foldBody}>{wrap ? wrap(face) : face}</div>
     </AppearItem>

@@ -8,11 +8,10 @@ import '../styles/tokens.css';
 import '../styles/skins/simple.css';
 import '../styles/skins/glass.css';
 import '../styles/base.css';
-import { fromUiLocale, LOCALE_STORAGE_KEY, pickLocale, toUiLocale, type UiLocale as Locale } from '../../shared/i18n/pick-locale.ts';
 import { watchAccount } from '../core/account.ts';
 import { defaultExitDeps, exitOnSessionLoss, REAUTH_GRACE_MS, type ExitDeps } from '../core/device-exit.ts';
 import { hasAuthLoss, readReauth } from '../platform/auth-loss-store.ts';
-import { coldStart, type BootResult } from '../core/boot.ts';
+import { coldStart } from '../core/boot.ts';
 import { collection } from '../core/store.ts';
 import { waitLook } from './look-wait.ts';
 import type { LookRow } from '../platform/look.ts';
@@ -45,33 +44,11 @@ import { goHref } from './router.ts';
 import { logQueueCleaner, logSink, outboxLog } from './log-channel.ts';
 import { GATE_LIMIT_MS, startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
 import { AFTER_PAINT_NOTICE_AT, lazyLogUploader, loadAfterPaint, startAfterPaint, type AfterPaint } from './after-paint.ts';
-import { applyDocLocale, loadSharedDict } from '../platform/doc-locale.ts';
+import { applyUiLocale, bootLocale, ensureSharedDict } from '../platform/doc-locale.ts';
+import type { UiLocale } from '../../shared/i18n/pick-locale.ts';
 
-/** 界面语言（16.4）：缓存的 profiles.ui_locale → 本机选过的（pv-locale）→ 设备语言 → 中文；规则同 src/auth/main.tsx，多一层缓存的 profile */
-function pickUiLocale(boot: Pick<BootResult, 'profile'>): Locale {
-  const cachedUi = boot.profile?.['ui_locale'];
-  let savedLocal: string | null = null;
-  try {
-    savedLocal = localStorage.getItem(LOCALE_STORAGE_KEY);
-  } catch {
-    savedLocal = null;
-  }
-  return toUiLocale(pickLocale(fromUiLocale(typeof cachedUi === 'string' ? cachedUi : null) ?? savedLocal, navigator.languages));
-}
-
-/** 套用界面语言：调用前这种语言的公共词典已经等过（loadSharedDict） */
-function applyLocale(uiLocale: Locale): void {
-  uiStore.getState().setLocale(uiLocale);
-  applyDocLocale(uiLocale);
-}
-
-/**
- * 等这种语言的公共词典下载好（首屏瘦身 D，11-17：只下载当前语言那一份，platform/doc-locale.ts）；已经有了不等。
- * 下载失败照样往下走（不挡启动；sharedT 用另一份，两份都没有显示键名），记一行运行日志
- */
-async function waitSharedDict(locale: Locale): Promise<void> {
-  await loadSharedDict(locale)?.catch(() => rlog(`i18n err=load locale=${locale}`));
-}
+/** 用上界面语言（platform/doc-locale.ts：ui-store、<html lang>、页面标题） */
+const applyLocale = (ui: UiLocale): void => applyUiLocale(ui, uiStore.getState());
 
 // 诊断启动件（运行日志，platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量整块摇掉；启动画面收起不等它
 // diag：运行日志接上以后的诊断启动件（启动失败时经它记一行再跳登录页，见文件末尾）；正式版是 undefined
@@ -107,14 +84,24 @@ async function installNativeBridge(): Promise<void> {
 const AFTER_PAINT_BANNER_ID = 'after-paint-failed';
 
 async function start(): Promise<void> {
-  // 最先装桥：下面没登录时的 goToAuth（openAuth）、渲染、boot 都要用 exe 的那一份。
-  // 同时下载按本机选过的语言、设备语言定的那份公共词典（profile 还没读）：下面的整屏提示、退出屏画出来之前就有字
-  await Promise.all([installNativeBridge(), waitSharedDict(pickUiLocale({ profile: null }))]);
+  // 公共词典（首屏瘦身 D）：按本机选过的语言、设备语言定的那份这里只发起下载、不等（独立评审 11-17 第 1 条：原来串在装桥、读会话、coldStart 前面，多一段串行往返）；
+  // 只在第一次画东西之前等它：退出屏（下面两处）、render 之前。下载失败改下另一种，再失败也放行（platform/doc-locale.ts）；
+  // 升级被挡住的整屏提示（coldStart 期间）不等：它的词条在启动兜底里，词典到了 useT 订阅着会重画
+  const firstLocale = bootLocale();
+  const firstDict = ensureSharedDict(firstLocale, rlog);
+  /** 第一次画东西之前：等那份词典、用上本机定的语言 */
+  const readyToPaint = async (): Promise<void> => {
+    await firstDict;
+    applyLocale(firstLocale);
+  };
+  // 最先装桥：下面没登录时的 goToAuth（openAuth）、渲染、boot 都要用 exe 的那一份
+  await installNativeBridge();
   // exe：会话改存凭据管理器（F5-2 / N1）。在第一次读会话、建 supabase 客户端之前 preload 好；
   // 登录小窗口写好会话后（auth:done）整页重新载入，不在原来的界面树上刷新（FA2-3）。网页版什么也不做
   const installed = await installDesktopSession(reloadPage);
   if (isTauri() && !installed) {
     // 读不到凭据管理器（代码审查建议 4）：不往下走（登录了也接不上），提示重新打开
+    await readyToPaint();
     void hideSplash();
     mountExitScreen('unavailable');
     return;
@@ -123,6 +110,7 @@ async function start(): Promise<void> {
   // 只有主窗口记“待删除”标记（登录小窗口不记，安全复审建议 ①）
   enableDropMark();
   if (!(await settleDropAtStartup())) {
+    await readyToPaint();
     void hideSplash();
     mountExitScreen('incomplete');
     return;
@@ -189,14 +177,12 @@ async function start(): Promise<void> {
     // 这时 profile 还没读出来：blocked 第一次为 true、整屏提示画出来之前才按本机选过的语言和设备语言定一次界面语言（BANNER-sugg ③；
     // 没被挡住就不定，下面 applyLocale(boot) 按缓存的 profile 定；已经按 profile 定过就不再覆盖）
     onUpgradeCenter: (u) => {
-      watchCacheBlocked(u, { onFirstBlocked: () => (localeFromBoot ? undefined : applyLocale(pickUiLocale({ profile: null }))) });
+      watchCacheBlocked(u, { onFirstBlocked: () => (localeFromBoot ? undefined : applyLocale(firstLocale)) });
     },
   });
-  // 缓存的 profile 定的语言和上面先下载的不一样（少见：换了设备、本机没选过）：先等那份词典再套用，不出键名
-  const uiLocale = pickUiLocale(boot);
-  await waitSharedDict(uiLocale);
-  applyLocale(uiLocale);
-  localeFromBoot = true;
+  // 缓存的 profile 定的语言和上面先发起的不一样（少见：换了设备、本机没选过）：那份现在也发起下载；两份一起在 render 之前等（下面 dictReady）
+  const uiLocale = bootLocale(boot.profile?.['ui_locale']);
+  const dictReady = uiLocale === firstLocale ? firstDict : Promise.all([firstDict, ensureSharedDict(uiLocale, rlog)]);
   // unavailable 照样渲染 App（只联网用）；version_too_new 只渲染整屏提示（下面），不挂功能入口
   mountFeatures(boot.flags);
 
@@ -235,7 +221,10 @@ async function start(): Promise<void> {
   });
   // 最外层兜底（K6-sugg3 ⑥）：App 顶层出错不白屏，显示静态的“出错了 · 刷新”
   const guarded = withCrashFallback(root, reloadPage);
-  await waitLook(look);
+  // 第一次画 App 之前：等皮肤（最多 600 毫秒）和公共词典，用上 profile 定的语言（之后升级被挡也不再按“没有 profile”覆盖）
+  await Promise.all([waitLook(look), dictReady]);
+  applyLocale(uiLocale);
+  localeFromBoot = true;
   createRoot(el).render(import.meta.env.DEV ? <StrictMode>{guarded}</StrictMode> : guarded);
   // 首屏时限从 render 起算（FA-6 推迟启动审查 L1）：告知页关口最多空白 GATE_LIMIT_MS（5 秒）后一定会画出页面，
   // 时限取它再加 1 秒，关口慢时同步也不会在关口还空白时先起、和告知页分包抢下载；一直不画功能页的整屏提示、

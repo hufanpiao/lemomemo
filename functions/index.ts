@@ -3,7 +3,7 @@
 // 依次：cookie lemo_lang → 搜索引擎直接给 200 中文版（x-default）→ Accept-Language → 默认中文。
 // `/zh/`、`/ko/` 是固定网址，由 Pages 直接给静态文件，永不自动跳转。
 
-import { localeFromCookieHeader, parseAcceptLanguage, pickLocale, type Locale } from '../shared/i18n/pick-locale.ts';
+import { localeFromCookieHeader, parseAcceptLanguage, pickLocale, type LangCode } from '../shared/i18n/pick-locale.ts';
 import { applySiteSecurityHeaders } from './_lib/security-headers.ts';
 
 /** 爬虫和链接预览：不跳转，直接拿到中文版内容（16.4 第 3 条） */
@@ -29,7 +29,7 @@ function baseHeaders(): Headers {
   return h;
 }
 
-function redirectTo(url: URL, locale: Locale): Response {
+function redirectTo(url: URL, locale: LangCode): Response {
   const h = baseHeaders();
   const target = new URL(`/${locale}/`, url);
   target.search = url.search; // 带着 utm 一类查询串走

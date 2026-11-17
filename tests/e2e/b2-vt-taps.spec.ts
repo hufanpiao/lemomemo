@@ -97,7 +97,7 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
     await idbPut(page, [['todos', cached(row)]]);
     await page.goto('/app/#/today');
     await page.reload();
-    await expect(page.getByTestId('today-todo-t3')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('today-row-t3')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
     await expect(page.locator('[data-testid="today"] [data-state="entering"]')).toHaveCount(0);
     await page.waitForTimeout(400);
@@ -133,7 +133,7 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
     expect(Number(hit.split('@')[1]), '定时器拖过了吞点按窗口').toBeLessThan(100);
     await finishAll(page);
     await page.waitForTimeout(300);
-    await expect(page.getByTestId('today-todo-t3')).toBeVisible();
+    await expect(page.getByTestId('today-row-t3')).toBeVisible();
     await expect(page.getByTestId('today-done-t3')).not.toBeChecked();
     await expect(page.getByTestId('today-past')).toHaveCount(0);
 

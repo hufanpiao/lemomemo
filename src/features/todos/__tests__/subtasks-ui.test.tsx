@@ -202,8 +202,8 @@ describe('日历日清单的待办组（DayTodos，R-443）', () => {
     render(<DayTodos date={D} today={D} nowMin={10 * 60} onOpen={vi.fn()} />);
     const g = await screen.findByTestId('cal-todos');
     expect(g.querySelector('h2')?.textContent).toBe('待办 · 4');
-    const ids = [...g.querySelectorAll('[data-testid^="cal-todo-"]')].map((x) => x.getAttribute('data-testid')).filter((x) => !x?.startsWith('cal-todo-time-'));
-    expect(ids).toEqual(['cal-todo-h2', 'cal-todo-h1', 'cal-todo-m1', 'cal-todo-l1']);
+    const ids = [...g.querySelectorAll('[data-testid^="cal-row-"]')].map((x) => x.getAttribute('data-testid'));
+    expect(ids).toEqual(['cal-row-h2', 'cal-row-h1', 'cal-row-m1', 'cal-row-l1']);
     expect(screen.queryByTestId('cal-todo-time-h1')).toBeNull();
     expect(screen.getByTestId('cal-todo-time-h2').getAttribute('data-tone')).toBe('late');
     expect(screen.getByTestId('cal-todo-time-m1').getAttribute('data-tone')).toBeNull();
@@ -218,7 +218,7 @@ describe('日历日清单的待办组（DayTodos，R-443）', () => {
     fireEvent.click(await screen.findByTestId('cal-done-h1'));
     await waitFor(() => expect(save.calls.some((c) => c[1] === 'todos' && c[2] === 'h1')).toBe(true));
     expect((await screen.findByTestId('cal-todos-done-toast')).textContent).toContain('已完成');
-    expect(screen.getByTestId('cal-todo-h1')).toBeTruthy();
+    expect(screen.getByTestId('cal-row-h1')).toBeTruthy();
     save.calls = [];
     fireEvent.click(screen.getByText('撤销'));
     await waitFor(() => expect(save.calls.some((c) => c[1] === 'todos' && c[2] === 'h1')).toBe(true));

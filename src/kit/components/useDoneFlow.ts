@@ -95,10 +95,6 @@ interface Run {
   timer: number;
 }
 
-/** 本页“已完成 · 撤销”条上的“撤销”（ListToasts 给的测试 id：打勾的 <prefix>-done-toast、自动完成的 <prefix>-auto-toast） */
-const toastUndo = (prefix: string): HTMLElement | null =>
-  document.querySelector<HTMLElement>(`[data-testid="${prefix}-done-toast-undo"], [data-testid="${prefix}-auto-toast-undo"]`);
-
 /**
  * 开始收起这一行时：焦点在行里就移到下一行的方框（行在 kit/components/TodoRow.tsx 打 data-row、data-row-id），回 false；
  * 没有下一行回 true（由调用方等撤销条画出来再移过去）；焦点不在行里回 false
@@ -123,11 +119,12 @@ export function useDoneFlow(a: Acts, lg: Linger, hold: () => void, text: { done:
   const runs = useRef(new Map<string, Run>());
   /** 勾子任务会自动完成时 plan 记进 linger 的代号（result 按它拿掉） */
   const plans = useRef(new Map<string, number>());
-  /** 要等撤销条画出来再把焦点移过去 */
+  /** 要等撤销条画出来再把焦点移过去；undoRef 经 useTodoRows 的 toasts 交给 ListToasts，挂在“已完成 · 撤销”条的“撤销”上（独立评审 11-17 第 12 条：不再按测试 id 找） */
   const focusToast = useRef(false);
+  const undoRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!focusToast.current) return;
-    const b = toastUndo(prefix);
+    const b = undoRef.current;
     if (!b) return;
     focusToast.current = false;
     b.focus();
@@ -188,6 +185,8 @@ export function useDoneFlow(a: Acts, lg: Linger, hold: () => void, text: { done:
   };
   return {
     out,
+    /** 交给 ListToasts 的 undoRef */
+    undoRef,
     /** 方框画成什么：留在原位的那几条按 linger，其余照 kit useListActions 的 shown（改回未完成时留着的期间按刚点成什么） */
     shown: (id: string, done: boolean): boolean => lg.shownOf(id) ?? a.shown(id, done),
     /** 打勾；收起之前把方框自己点回去 = 撤销（撤销条是它的就一起收起）；只读行 tick 里拦下 */

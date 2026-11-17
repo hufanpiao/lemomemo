@@ -21,7 +21,7 @@ async function seed(page: Page): Promise<void> {
   await idbPut(page, [{ ...base, id: 'd1', title: '买牛奶', due: today() }, { ...base, id: 'd2', title: '写周报', due: today() }].map((r) => ['todos', cached(r)] as const));
   await page.goto('/app/#/today');
   await page.reload();
-  await page.getByTestId('today-todo-d1').waitFor({ timeout: 30000 });
+  await page.getByTestId('today-row-d1').waitFor({ timeout: 30000 });
   await expect(page.locator('[data-testid="today"] [data-state="entering"]')).toHaveCount(0);
 }
 
@@ -34,18 +34,18 @@ test.describe('今天页待办左滑删除', () => {
     const del = page.getByTestId('today-swipe-del-d1');
     await expect(del).toHaveText('删除');
     await del.click();
-    await expect(page.getByTestId('today-todo-d1')).toHaveCount(0);
+    await expect(page.getByTestId('today-row-d1')).toHaveCount(0);
     await expect(page.getByTestId('today-toast')).toBeVisible();
     await expect.poll(() => outboxOf(page)).toContain('todos:d1:patch');
     await page.getByTestId('today-toast').getByRole('button').first().click();
-    await expect(page.getByTestId('today-todo-d1')).toBeVisible();
+    await expect(page.getByTestId('today-row-d1')).toBeVisible();
   });
 
   test('一口气拉过大半行：松手直接删，别的行不动', async ({ page }) => {
     await seed(page);
     await swipeRow(page, 'today-swipe-d1');
-    await expect(page.getByTestId('today-todo-d1')).toHaveCount(0);
+    await expect(page.getByTestId('today-row-d1')).toHaveCount(0);
     await expect(page.getByTestId('today-toast')).toBeVisible();
-    await expect(page.getByTestId('today-todo-d2')).toBeVisible();
+    await expect(page.getByTestId('today-row-d2')).toBeVisible();
   });
 });

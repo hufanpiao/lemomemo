@@ -25,10 +25,12 @@ import { readSessionId } from '../session.ts';
 import { pinAuth, pinSession } from './pin-session.ts';
 import { getSupabase } from './client.ts';
 import { claimParams } from './claim-params.ts';
-import { REFRESH_MARGIN_MS, REQUEST_TIMEOUT_MS, timeoutSignal, toFailure, toSessionCheck } from './sync-errors.ts';
+import { REQUEST_TIMEOUT_MS, timeoutSignal, toFailure, toSessionCheck } from './sync-errors.ts';
+// 令牌刷新提前量只在 refresh-margin.ts 一处，用到的地方都直接引它（独立评审 11-17 第 13 条：不再两层转出）
+import { REFRESH_MARGIN_MS } from './refresh-margin.ts';
 import { withTimeout } from '../exit-basics.ts';
 
-export { REFRESH_MARGIN_MS, REQUEST_TIMEOUT_MS, timeoutSignal, toFailure, toSessionCheck } from './sync-errors.ts';
+export { REQUEST_TIMEOUT_MS, timeoutSignal, toFailure, toSessionCheck } from './sync-errors.ts';
 
 /** 这个实现提供的方法（和 core/sync/types.ts 的 SyncTransport 形状一致；TS 结构类型，app 层直接交给 createSync） */
 export interface SupabaseSyncTransport {

@@ -48,7 +48,7 @@ test.describe('R-354：动画实现到了以后换上（K2、K9）', () => {
     await seed(page);
     await page.goto('/app/');
     await page.reload();
-    await page.getByTestId('today-todo-t3').waitFor({ timeout: 30000 });
+    await page.getByTestId('today-row-t3').waitFor({ timeout: 30000 });
     expect(await page.evaluate(() => document.documentElement.getAttribute('data-motion')), '拦住期间不该到').toBeNull();
     await page.getByTestId('today-done-t3').focus();
     expect(await focused(page)).toBe('today-done-t3');
@@ -62,8 +62,8 @@ test.describe('R-354：动画实现到了以后换上（K2、K9）', () => {
     await page.waitForTimeout(600);
     // 行尾 × 去掉以后（负责人 11-15，R-428）改左滑一口气拉到底直接删
     await swipeRow(page, 'today-swipe-t2');
-    await expect(page.locator('[data-testid="today-todo-t2"][data-state="leaving"], [data-state="leaving"] [data-testid="today-todo-t2"]').first(), '换上以后删行要有退场').toBeAttached({ timeout: 2000 });
-    await expect(page.getByTestId('today-todo-t2')).toHaveCount(0, { timeout: 3000 });
+    await expect(page.locator('[data-testid="today-row-t2"][data-state="leaving"], [data-state="leaving"] [data-testid="today-row-t2"]').first(), '换上以后删行要有退场').toBeAttached({ timeout: 2000 });
+    await expect(page.getByTestId('today-row-t2')).toHaveCount(0, { timeout: 3000 });
   });
 
   test('整页提醒冷启动：动画实现没到时照常显示，没有停在透明里的 [data-appear]', async ({ page }) => {

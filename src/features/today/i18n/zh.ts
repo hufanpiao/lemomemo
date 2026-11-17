@@ -24,24 +24,12 @@ export const zh = {
   'list.empty': '今天没有安排',
   'list.due': '{t} 截止',
   'list.dueDay': '今天截止',
-  // 待办行右边 H / M / L 的读屏名字（R-434，同待办页）
-  'prio': '优先级：{p}，按一下换成{next}',
-  'prio.high': '高',
-  'prio.mid': '中',
-  'prio.low': '低',
   'list.origin': '（{zone} {t}）',
   // 跨天日程（R-444）的“持续”“至 18:00”“第 2/3 天”在公共词典 span.*，和日历日清单共用
-  'list.done': '完成',
-  'list.undoDone': '标成没完成',
+  // 待办行的方框、H / M / L、“起步 / 大半”、撤销条和出错条在 kit 的待办行词典（shared/i18n/todo-row-zh.ts，独立评审 11-17 第 9、10 条）
   'list.delete': '删除',
   // 已过去折成一行（线框 s1 时间河“▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓”）：items 是“时刻 标题”“标题 ✓”用“ · ”连起来
   'list.past': '已过去 {n} 件：{items}',
-  'toast.deleted': '已删除',
-  'toast.undo': '撤销',
-  // 11-17 今天页待办行换成 kit TodoRow（同待办页）：打勾完成的撤销条、副行“起步 / 大半”小标签（同待办页词典 list.doneToast、items.stage.*）
-  'toast.done': '已完成',
-  'stage.1': '起步',
-  'stage.2': '大半',
   'err.save': '没保存上，稍后再试一次',
   'err.readonly': '这条要新版本才能修改',
   // 麦克风被拒时今天页常驻一行（B3 S23；定稿线框“麦克风被拒绝”卡原文）

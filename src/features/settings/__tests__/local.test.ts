@@ -30,7 +30,9 @@ vi.mock('../../../core/account.ts', () => ({
   bootWipeSteps: (b: unknown) => (boot.stepsOf.push(b), { wipe: boot.wipe, deleteDb: boot.deleteDb }),
 }));
 
-const { defaultSignOutHereDeps, readLocalLocale, updateCachedLocale, writeLocalLocale } = await import('../data/local.ts');
+const { defaultSignOutHereDeps, updateCachedLocale, writeLocalLocale } = await import('../data/local.ts');
+// 写进去的语言由入口按 platform/doc-locale.ts 的 bootLocale 读回来（读 pv-locale 只有那一份）
+const { bootLocale } = await import('../../../platform/doc-locale.ts');
 
 /** 假 IndexedDB：只记 deleteDatabase 删了哪个库，马上成功 */
 function fakeIdb() {
@@ -64,12 +66,14 @@ describe('语言记在本机', () => {
     writeLocalLocale('ko', localStorage, doc);
     expect(localStorage.getItem('pv-locale')).toBe('ko');
     expect(doc.cookie).toBe('lemo_lang=ko; Path=/; Max-Age=31536000; SameSite=Lax');
-    expect(readLocalLocale()).toBe('ko');
+    expect(bootLocale()).toBe('ko-KR');
   });
 
-  it('读到不认识的值当没选过；存储不能用（隐私模式）时不报错', () => {
+  it('读到不认识的值当没选过（按设备语言）；存储不能用（隐私模式）时写也不报错', () => {
     localStorage.setItem('pv-locale', 'ko-KR');
-    expect(readLocalLocale()).toBeNull();
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-US']);
+    expect(bootLocale()).toBe('zh-CN');
+    vi.restoreAllMocks();
     const broken = {
       getItem: () => {
         throw new Error('SecurityError');
@@ -78,7 +82,6 @@ describe('语言记在本机', () => {
         throw new Error('QuotaExceededError');
       },
     } as unknown as Storage;
-    expect(readLocalLocale(broken)).toBeNull();
     expect(() => writeLocalLocale('zh', broken, { cookie: '' })).not.toThrow();
   });
 });

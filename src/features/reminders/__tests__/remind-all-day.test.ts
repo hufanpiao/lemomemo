@@ -3,9 +3,14 @@
 // 函数只认传进来的 tz 和 now（三个进程时区各跑一遍结果一样）
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
+import { provideSharedDict } from '../../../../shared/i18n/i18n.ts';
+import { ko } from '../../../../shared/i18n/ko.ts';
 import { remindAtOf } from '../../../../shared/logic/remind.ts';
 import { localDue, localText, shouldCloseShown, shownKey, staleShown } from '../data/local-notify.ts';
 import { allReminders, missed, modeOf, occurrenceKey, ringing, upcoming, type Rang, type Row } from '../data/reminder-model.ts';
+
+// 本机通知文案查公共词典（sharedT）：这里也测韩文，把韩文那份放进去（公共准备默认只放中文）
+provideSharedDict('ko-KR', ko);
 
 const SEOUL = 'Asia/Seoul';
 const LA = 'America/Los_Angeles';

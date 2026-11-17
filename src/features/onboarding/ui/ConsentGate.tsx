@@ -19,7 +19,8 @@ import type { ConsentApi } from '../hooks/useConsent.ts';
 import type { ConsentWiringDeps } from '../hooks/useConsentHandlers.ts';
 import { CONSENT_GATE_MS, useConsentApi, useNoticeState } from '../hooks/useConsentWiring.ts';
 
-const ConsentRoute = lazy(() => import('./ConsentRoute.tsx'));
+const loadRoute = () => import('./ConsentRoute.tsx');
+const ConsentRoute = lazy(loadRoute);
 
 export interface ConsentGateProps {
   /** 放行：该画 App 了（只调一次） */
@@ -50,7 +51,23 @@ export default function ConsentGate({
     if (parseHash(window.location.hash).name === 'onboarding') void replaceRoute('today');
     setDone(true);
   }, []);
-  const showConsent = (notice === 'first' || notice === 'updated') && !done;
+  // 告知页分包也受关口的时限管（独立评审 11-17 第 14 条：原来挂住了会一直空白）：从同一个起点算剩下的时间，到点还没加载好就放行，
+  // 和 noticeState 超时一样（下次打开再问）；已经加载好、显示出来的告知页不会被打断
+  const [t0] = useState(() => startedAt ?? Date.now());
+  const [routeLate, setRouteLate] = useState(false);
+  const wantConsent = (notice === 'first' || notice === 'updated') && !done;
+  useEffect(() => {
+    if (!wantConsent) return;
+    let loaded = false;
+    void loadRoute().then(() => {
+      loaded = true;
+    }, () => undefined);
+    const timer = setTimeout(() => {
+      if (!loaded) setRouteLate(true);
+    }, Math.max(0, limitMs - (Date.now() - t0)));
+    return () => clearTimeout(timer);
+  }, [wantConsent, limitMs, t0]);
+  const showConsent = wantConsent && !routeLate;
   const pass = notice !== 'pending' && !showConsent;
   useEffect(() => {
     if (pass) onPass();

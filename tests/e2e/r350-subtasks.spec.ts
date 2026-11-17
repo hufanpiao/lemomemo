@@ -36,7 +36,7 @@ async function seed(page: Page): Promise<void> {
     ['todo_items', { id: 'x1', server: null, view: it('x1', 't-gone', '孤儿', 1, false) }],
   ]);
   await page.reload();
-  await page.getByTestId(`today-todo-${T1}`).waitFor({ timeout: 30000 });
+  await page.getByTestId(`today-row-${T1}`).waitFor({ timeout: 30000 });
 }
 
 const itemIds = async (page: Page) => (await readAll<{ id: string }>(page, 'todo_items')).map((r) => r.id);
@@ -96,10 +96,10 @@ test.describe('R-350 待办子任务', () => {
     await page.getByTestId('cal-done-t2').click();
     await expect(page.getByTestId('cal-todos-done-toast')).toContainText('已完成');
     await expect.poll(() => outboxOf(page)).toContainEqual({ table: 'todos', id: 't2', op: 'patch' });
-    await expect(page.getByTestId('cal-todo-t2')).toHaveCount(0);
+    await expect(page.getByTestId('cal-row-t2')).toHaveCount(0);
     await page.getByTestId('cal-todos-done-toast').getByRole('button').click();
     await expect(page.getByTestId('cal-done-t2')).not.toBeChecked();
-    await expect(page.getByTestId('cal-todo-t2')).toBeVisible();
+    await expect(page.getByTestId('cal-row-t2')).toBeVisible();
   });
 
   test('列表页：卡片、勾一项写进 outbox、收起后重新载入还是收起', async ({ page, browserName }) => {

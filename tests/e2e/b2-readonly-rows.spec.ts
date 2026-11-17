@@ -39,7 +39,7 @@ async function seed(page: Page): Promise<void> {
     ['todos', cached(td('t-ok', '买牛奶', {}))],
   ]);
   await page.reload();
-  await page.getByTestId('today-todo-t-ok').waitFor({ timeout: 30000 });
+  await page.getByTestId('today-row-t-ok').waitFor({ timeout: 30000 });
 }
 
 /** 换页：整页重新载入后再等 ready（不走切页的 View Transition，免得切页动画期间的点按被吞，那是 UI4-B1-C2，不归这里） */
@@ -68,7 +68,7 @@ test.describe('只读行（FA-2）', () => {
     await expect(page.getByTestId('today-ro-e-ro')).toBeVisible();
     await expect(page.getByTestId('today-ro-t-ok')).toHaveCount(0);
 
-    await page.getByTestId('today-todo-t-ro').getByRole('button', { name: /每天吃药/ }).click();
+    await page.getByTestId('today-row-t-ro').getByRole('button', { name: /每天吃药/ }).click();
     await expect(page).toHaveURL(/#\/today$/);
     await expect(page.getByTestId('today-ro-toast')).toContainText('这条要新版本才能修改');
     await page.getByTestId('today-done-t-ro').click({ force: true });
@@ -79,10 +79,10 @@ test.describe('只读行（FA-2）', () => {
     await swipeRow(page, 'today-swipe-t-ro', 0.4);
     await page.waitForTimeout(300);
     await expect(page.getByTestId('today-swipe-t-ro')).not.toHaveAttribute('data-swipe', 'open');
-    await expect(page.getByTestId('today-todo-t-ro')).toBeVisible();
+    await expect(page.getByTestId('today-row-t-ro')).toBeVisible();
     expect(await stateOf(page)).toEqual({ done: false, outbox: 0 });
 
-    await page.getByTestId('today-todo-t-ok').getByRole('button', { name: /买牛奶/ }).click();
+    await page.getByTestId('today-row-t-ok').getByRole('button', { name: /买牛奶/ }).click();
     // 可写的照常打开：手机宽度进编辑页；电脑宽度（Desktop Chrome 1280）电脑版换上以后在详情抽屉里编辑（B6 返工），换上之前照手机进编辑页
     await expect.poll(async () => /#\/todo\/t-ok$/.test(page.url()) || (await page.getByTestId('today-drawer').getByTestId('todo-edit').count()) > 0).toBe(true);
   });

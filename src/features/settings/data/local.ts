@@ -2,7 +2,7 @@
 // 不变量：wipe 先占住“忙”（退出期间不 reload），再走 core/account.ts 的 bootWipeSteps（清库，闸在 beginExit 设；deleteDb 先关本页连接再按库名删），
 // 和会话没了、被移除那几条出口是同一份（第三方审查前端-4、后端-3）；pendingCount 必须在 wipe 之前调
 // 会话不认、本机没有会话不经这里：useSettingsPage 交给 core/device-exit.ts 的 exitDevice
-import { LANG_COOKIE, LOCALE_STORAGE_KEY, asLocale, type Locale, type UiLocale } from '../../../../shared/i18n/pick-locale.ts';
+import { LANG_COOKIE, LOCALE_STORAGE_KEY, type LangCode, type UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { bootWipeSteps } from '../../../core/account.ts';
 import { beginExit } from '../../../core/device-exit.ts';
 import { applyFreshConfig, getBoot, localUnsentCount } from '../../../core/boot.ts';
@@ -10,17 +10,8 @@ import { goToAuth, readSessionUserId } from '../../../platform/session.ts';
 import { defaultExitSteps, type ExitSteps } from '../../../platform/sign-out.ts';
 import { deleteLocalDb } from '../../../platform/exit-basics.ts';
 
-/** 本机记的语言；没记过、读不到（隐私模式）为 null */
-export function readLocalLocale(storage?: Storage): Locale | null {
-  try {
-    return asLocale((storage ?? localStorage).getItem(LOCALE_STORAGE_KEY));
-  } catch {
-    return null;
-  }
-}
-
-/** 记住本机的语言选择（写不进也不报错：这次照样切换，只是刷新后按设备语言） */
-export function writeLocalLocale(locale: Locale, storage?: Storage, doc: Pick<Document, 'cookie'> = document): void {
+/** 记住本机的语言选择（写不进也不报错：这次照样切换，只是刷新后按设备语言）；读回来定语言只在 platform/doc-locale.ts 的 bootLocale */
+export function writeLocalLocale(locale: LangCode, storage?: Storage, doc: Pick<Document, 'cookie'> = document): void {
   try {
     (storage ?? localStorage).setItem(LOCALE_STORAGE_KEY, locale);
   } catch {

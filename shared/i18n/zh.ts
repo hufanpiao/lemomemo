@@ -1,8 +1,11 @@
 // 公共词典·中文（架构 2.4）：服务器也要用的词条（推送文案、错误码、公共按钮）和日期格式
 // 键名按“页面.用途”，参数写成 {name}。只在某个功能界面上用的词条放 src/features/<功能>/i18n/
 // as const：值保留字面量类型，t() 才能按占位符推导参数
+// App 名、退出屏、出错屏、升级整屏提示的词条在 boot-zh.ts（两种语言的整份词典都没下载到时的兜底，只写那一份），这里展开
+import { bootZh } from './boot-zh.ts';
+
 export const zh = {
-  'app.name': '柠檬记',
+  ...bootZh,
   // B0 占位页上的设置入口（PLACEHOLDER-settings-link，B2 换真页面时去掉）；和 settings.title 同词，kit 用不了功能的词典所以放这里
   'app.settings': '设置',
   // FA-7 底栏（负责人 11-05：4 个页签，随手记点了显示“即将推出”；“＋”按页新建日程或待办）
@@ -27,20 +30,9 @@ export const zh = {
   'update.required': '需要更新才能继续同步 · 你记下的内容都还在本机',
   'update.available': '柠檬记有新版本',
   'update.reopen': '重新打开',
-  'update.tooNew.title': '本机数据是新版本写的，请更新 App',
-  'update.tooNew.body': '这台设备上的数据由更新版本的柠檬记写入，当前版本读不了。更新以后就能接着用，你的内容都还在本机。',
-  'update.tooNew.update': '去更新',
-  'update.tooNew.refresh': '刷新',
-  'update.updating': '正在更新…',
-  'update.failedReopen': '更新失败 · 联网后再试，不行就完全关闭柠檬记再打开',
-  'update.stillOld': '已是最新版本，请稍后再试',
   'update.update': '更新',
   'update.queued': '有 {n} 条等更新后同步 · 内容还在本机',
   'update.newVersion': '有新版本',
-  'update.blocked.title': '请关掉其他打开的柠檬记窗口或标签页',
-  'update.blocked.body': '别的窗口或标签页还在用旧版本，关掉以后这里会自动接着打开。你的内容都还在本机。',
-  'app.crashed.title': '哎呀，卡住了',
-  'app.crashed.refresh': '刷新一下',
   'remind.push.event': '{time} {title}',
   // 全天日程不写时刻（R-333）：前一天提醒“明天 · 名称”，当天提醒“今天 · 名称”
   'remind.push.allDayToday': '今天 · {title}',
@@ -78,18 +70,7 @@ export const zh = {
   'fmt.dur.mTail': '{n} 分',
   // 主 App 收到 account_disabled、探测说账号正常，但 5 分钟内已重新载入过一次：同步暂停（app/sync-wiring.ts 限次，10-30 复审建议）；按钮沿用 update.reopen
   'update.syncPaused': '同步暂停，请稍后重新打开',
-  // 查到了新版本但 30 秒内没装好、接管（BANNER-sugg ⑤）：不重新载入，提示稍后再试（core/upgrade.ts 的 stalled）
-  'update.stalled': '新版本还没装好 · 请稍后再试',
   // 只读行（FA-2）的词条全在 ro-zh.ts、ro-ko.ts（不进首屏）
-  // exe 里退出时本机会话没删掉（安全审查 A-1，app/ExitIncompleteScreen.tsx）；读取登录信息失败（代码审查建议 4）
-  'exit.incomplete.title': '退出没完成',
-  'exit.incomplete.body': '这台电脑上的登录信息没删掉，点“重试”再删一次。删掉以前不会回到已登录的界面。',
-  'exit.incomplete.retry': '重试',
-  'exit.incomplete.busy': '正在删除…',
-  'exit.incomplete.failed': '还是没删掉，请稍后再试，或重新打开柠檬记',
-  'exit.unavailable.title': '读不到这台电脑上的登录信息',
-  'exit.unavailable.body': '请重新打开柠檬记。还不行的话，重启电脑后再试。',
-  'exit.unavailable.reopen': '重新打开',
   // 日程在某一天的写法（R-444）：“全天”和跨天的几句，日历日清单和周视图、今天页、全屏提醒页共用这一套（event-span.ts 的 spanTextOn 给键和参数，kit/hooks/useSpanT.ts 翻译）。
   // 中间整天行首“持续”；最后一天行首“至 18:00”；没到最后一天的标题下面“至 11月20日 18:00”；跨天的全天日程“第 2/3 天”
   'span.allDay': '全天',

@@ -3,6 +3,7 @@
 // 随手记列表页状态也走 useListActions，但条自己画（NotesPage.tsx）：它的出错条和插图提示贴在底部输入行上面、跟着输入行上移，插图提示还带“最近删除”入口，
 // 和这里贴底的出错条位置、内容都不同，并进来得给本组件加开关，所以没并
 // 不进首屏：今天页经 TodayToasts.tsx 按需下载，待办页整页懒加载
+import type { Ref } from 'react';
 import type { ReadonlyGuard } from '../hooks/useReadonly.ts';
 import type { ListToast } from '../hooks/useListActions.ts';
 import styles from './ListToasts.module.css';
@@ -26,11 +27,13 @@ export interface ListToastsProps<X = never> {
   /** 测试 id 前缀：today、todos（today-toast、today-error、today-ro-toast） */
   prefix: string;
   extra?: ((x: X) => ExtraUndo) | undefined;
+  /** 挂到页面另加那条撤销条的“撤销”按钮上（kit useDoneFlow 收完最后一行时把焦点移过去） */
+  undoRef?: Ref<HTMLButtonElement> | undefined;
 }
 
 const isList = (x: unknown): x is ListToast => x !== null && typeof x === 'object' && 'kind' in x && (x.kind === 'undo' || x.kind === 'error');
 
-export function ListToasts<X = never>({ g, onUndo, text, prefix, extra }: ListToastsProps<X>) {
+export function ListToasts<X = never>({ g, onUndo, text, prefix, extra, undoRef }: ListToastsProps<X>) {
   const cur = g.toast;
   const toast = isList(cur) ? cur : null;
   // 撤销条只有一种画法：删除的“已删除 · 撤销”，或页面另加的那一条（solo keep：后出的顶掉前一条，同一时间只留一条）
@@ -51,6 +54,7 @@ export function ListToasts<X = never>({ g, onUndo, text, prefix, extra }: ListTo
           onClose={() => g.dismiss(cur as ListToast | X)}
           ms={undo.ms}
           solo="keep"
+          undoRef={toast ? undefined : undoRef}
           data-testid={undo.testId}
         />
       ) : toast?.kind === 'error' ? (

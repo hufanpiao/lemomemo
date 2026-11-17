@@ -4,8 +4,6 @@
 import type { SendFailure, SessionCheck } from '../../../shared/schema/sync.ts';
 
 export const REQUEST_TIMEOUT_MS = 20_000;
-/** 令牌还剩这么多就先刷新再发（TC-B1-82 ①）：常量在 refresh-margin.ts（告知页关口在首屏只要它，不带这份文件） */
-export { REFRESH_MARGIN_MS } from './refresh-margin.ts';
 
 /** 刷新令牌回这些码（code 或 message 里包含）：会话已不在，要查 session_fate 再定（R-382 4.1a；TC-B1-88 ④⑤） */
 const CHECK_AUTH_CODES = ['session_not_found', 'refresh_token_not_found'];

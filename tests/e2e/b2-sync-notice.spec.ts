@@ -56,7 +56,7 @@ test.describe('K8 gone 卡', () => {
     await expect(page.getByTestId('todos-row-g1')).toContainText('交周报（改）');
     await expect.poll(() => outboxOf(page)).toEqual([{ state: 'pending', error: null }]);
     await page.goto('/app/#/today');
-    await expect(page.getByTestId('today-todo-g1')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('today-row-g1')).toBeVisible({ timeout: 15000 });
   });
 
   test('不用了：卡收起，这一行留在“最近删除”，outbox 里这条记录的项都没了', async ({ page }) => {

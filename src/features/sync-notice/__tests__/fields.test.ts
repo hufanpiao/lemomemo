@@ -5,6 +5,11 @@ import { describeConflict, FIELDS } from '../data/fields.ts';
 import { NOTICE_TABLES } from '../data/notice-tables.ts';
 import { tSn, type SnKey } from '../hooks/useSnT.ts';
 import { syncNoticeZh } from '../i18n/zh.ts';
+import { provideSharedDict } from '../../../../shared/i18n/i18n.ts';
+import { ko as sharedKo } from '../../../../shared/i18n/ko.ts';
+
+// 时长写法查公共词典（shared/i18n/fmt.ts 的 fmtDur → sharedT）：这里也测韩文，把韩文那份放进去（公共准备默认只放中文）
+provideSharedDict('ko-KR', sharedKo);
 
 const zh = (k: string, p: Readonly<Record<string, string | number>>) => tSn(k as SnKey, p as never, 'zh-CN');
 const ko = (k: string, p: Readonly<Record<string, string | number>>) => tSn(k as SnKey, p as never, 'ko-KR');

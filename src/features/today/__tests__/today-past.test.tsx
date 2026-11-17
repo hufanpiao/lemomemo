@@ -51,8 +51,8 @@ describe('今天页“已过去”折成一行', () => {
     expect(fold.getAttribute('aria-expanded')).toBe('false');
     // 收起时：过去的那两行不在列表里，进行中 / 全天 / 没做完的照常
     expect(screen.queryByTestId('today-event-e1')).toBeNull();
-    expect(screen.queryByTestId('today-todo-t2')).toBeNull();
-    for (const id of ['today-event-e2', 'today-event-e3', 'today-todo-t1']) expect(screen.getByTestId(id)).toBeTruthy();
+    expect(screen.queryByTestId('today-row-t2')).toBeNull();
+    for (const id of ['today-event-e2', 'today-event-e3', 'today-row-t1']) expect(screen.getByTestId(id)).toBeTruthy();
     // 这一行在列表上面
     expect(Boolean(fold.compareDocumentPosition(screen.getByTestId('today-event-e2')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
 
@@ -61,7 +61,7 @@ describe('今天页“已过去”折成一行', () => {
     });
     expect(fold.getAttribute('aria-expanded')).toBe('true');
     const rows = [...list.querySelectorAll('li[data-testid]')].map((li) => li.getAttribute('data-testid'));
-    expect(rows.slice(0, 2)).toEqual(['today-event-e1', 'today-todo-t2']);
+    expect(rows.slice(0, 2)).toEqual(['today-event-e1', 'today-row-t2']);
 
     await act(async () => {
       fireEvent.click(fold);

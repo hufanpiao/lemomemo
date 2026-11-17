@@ -5,6 +5,10 @@ import { createT, fill, placeholdersOf } from '../../shared/i18n/i18n.ts';
 import { t } from '../../shared/i18n/t-static.ts';
 import { ko } from '../../shared/i18n/ko.ts';
 import { zh } from '../../shared/i18n/zh.ts';
+import { provideSharedDict } from '../../shared/i18n/i18n.ts';
+
+// fmt 查网页按语言懒加载的公共词典（sharedT）：这里也测韩文，把韩文那份放进去（公共准备默认只放中文）
+provideSharedDict('ko-KR', ko);
 
 describe('词典', () => {
   it('中韩两边的键完全一致', () => {

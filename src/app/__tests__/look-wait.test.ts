@@ -41,9 +41,9 @@ describe('waitLook', () => {
 });
 
 describe('main.tsx 渲染前用的是 waitLook', () => {
-  it('await waitLook(look)，没有直接 await look', () => {
+  it('等的是 waitLook(look)（和公共词典一起等，独立评审 11-17 第 1 条），没有直接 await look', () => {
     const main = readFileSync('src/app/main.tsx', 'utf8').replace(/\/\/.*$/gm, '');
-    expect(main).toMatch(/await waitLook\(look\);/);
+    expect(main).toMatch(/await Promise\.all\(\[waitLook\(look\), dictReady\]\);/);
     expect(main).not.toMatch(/await look\b/);
   });
 });

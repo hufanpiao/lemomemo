@@ -89,8 +89,11 @@ def a20_exempt(rel, head):
     """head()：读文件开头（只有可能用文件头豁免的目录才读）"""
     # 公共词典；tz-zh、tz-ko 是 11-05 从公共词典拆出的时区词典（只给登录页恢复页、邮件用，不进主 App 首屏），逐个登记
     # ro-zh、ro-ko 是 11-06 拆出的只读行词典（FA-2，只给按需下载的只读行部件用，不进首屏）；edit-zh、edit-ko 是三个编辑页共用的词典（11-11）；desk-zh、desk-ko 是电脑版布局词典（B6，只给按需下载的 DeskLayout 用）
+    # boot-zh、boot-ko 是 11-17 从公共词典拆出的启动兜底（App 名、退出屏、出错屏、升级整屏提示；两份整份词典都没下载到时照样有字）
+    # todo-row-zh、todo-row-ko 是 kit 待办行（TodoRow、useTodoRows）自己的词典（11-17，原来今天页、待办页各一份）
     if rel in ("shared/i18n/zh.ts", "shared/i18n/ko.ts", "shared/i18n/tz-zh.ts", "shared/i18n/tz-ko.ts", "shared/i18n/ro-zh.ts", "shared/i18n/ro-ko.ts",
-               "shared/i18n/edit-zh.ts", "shared/i18n/edit-ko.ts", "shared/i18n/desk-zh.ts", "shared/i18n/desk-ko.ts"):
+               "shared/i18n/edit-zh.ts", "shared/i18n/edit-ko.ts", "shared/i18n/desk-zh.ts", "shared/i18n/desk-ko.ts",
+               "shared/i18n/boot-zh.ts", "shared/i18n/boot-ko.ts", "shared/i18n/todo-row-zh.ts", "shared/i18n/todo-row-ko.ts"):
         return True
     if re.match(r"src/features/[^/]+/i18n/[^/]+\.ts$", rel):
         return True

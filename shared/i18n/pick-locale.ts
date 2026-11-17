@@ -1,9 +1,12 @@
 // 界面语言的选择规则（架构 16.4，R-75）。首页的 Pages Function、App、注册页共用这一份。
 // 纯函数：不碰 DOM、cookie、localStorage，调用方把读到的值传进来。
+// 两种写法只在这里定义（独立评审 11-17 第 6、7 条：原来 i18n.ts 和这里各有一个同名 Locale）：
+// • UiLocale 'zh-CN' / 'ko-KR'：界面语言，t()、ui-store、profiles.ui_locale 都用它（shared/i18n/i18n.ts 的 Locale 就是它）；
+// • LangCode 'zh' / 'ko'：短代码，只给 pv-locale、cookie lemo_lang、首页 Pages Function 用。两者互转只经 toUiLocale / fromUiLocale
 
-export type Locale = 'zh' | 'ko';
+export type LangCode = 'zh' | 'ko';
 
-export const DEFAULT_LOCALE: Locale = 'zh';
+export const DEFAULT_LOCALE: LangCode = 'zh';
 
 /** 首页手动切换语言时写的 cookie 名（16.4） */
 export const LANG_COOKIE = 'lemo_lang';
@@ -12,28 +15,30 @@ export const LANG_COOKIE = 'lemo_lang';
 export const LOCALE_STORAGE_KEY = 'pv-locale';
 
 /** 只认精确的 'zh' / 'ko'，别的一律当没选过 */
-export function asLocale(v: string | null | undefined): Locale | null {
+export function asLocale(v: string | null | undefined): LangCode | null {
   return v === 'zh' || v === 'ko' ? v : null;
 }
 
 /** profiles.ui_locale 存的值（0001 的 check 约束只许这两个） */
 export type UiLocale = 'zh-CN' | 'ko-KR';
 
-const TO_UI: Readonly<Record<Locale, UiLocale>> = { zh: 'zh-CN', ko: 'ko-KR' };
+const TO_UI: Readonly<Record<LangCode, UiLocale>> = { zh: 'zh-CN', ko: 'ko-KR' };
 
 /**
  * profiles.ui_locale → pickLocale 认的 'zh' / 'ko'（架构 0.31 第 12 条）。
  * ui_locale 存的是 'zh-CN' / 'ko-KR'，直接传给 pickLocale 会被当成“没选过”，所以先转。
  * 只认这两个精确值；别的（null、''、'zh'、大小写不同）返回 null，App 接着按 pv-locale → cookie → navigator.languages 往下取。
  */
-export function fromUiLocale(v: string | null | undefined): Locale | null {
+export function fromUiLocale(v: UiLocale): LangCode;
+export function fromUiLocale(v: string | null | undefined): LangCode | null;
+export function fromUiLocale(v: string | null | undefined): LangCode | null {
   if (v === 'zh-CN') return 'zh';
   if (v === 'ko-KR') return 'ko';
   return null;
 }
 
 /** 'zh' / 'ko' → 写回 profiles.ui_locale 的值（架构 0.31 第 12 条） */
-export function toUiLocale(locale: Locale): UiLocale {
+export function toUiLocale(locale: LangCode): UiLocale {
   return TO_UI[locale];
 }
 
@@ -43,7 +48,7 @@ export function toUiLocale(locale: Locale): UiLocale {
  * 2. 否则按设备语言列表从前往后，第一个以 ko 或 zh 开头的：ko → 韩文，zh → 中文；
  * 3. 都没有，默认中文。
  */
-export function pickLocale(saved: string | null | undefined, langs: readonly string[]): Locale {
+export function pickLocale(saved: string | null | undefined, langs: readonly string[]): LangCode {
   const s = asLocale(saved);
   if (s) return s;
   for (const raw of langs) {
@@ -80,7 +85,7 @@ export function parseAcceptLanguage(header: string | null | undefined): string[]
 }
 
 /** 从 Cookie 请求头里取 lemo_lang；取不到或值不对返回 null */
-export function localeFromCookieHeader(cookie: string | null | undefined): Locale | null {
+export function localeFromCookieHeader(cookie: string | null | undefined): LangCode | null {
   if (!cookie) return null;
   for (const part of cookie.split(';')) {
     const eq = part.indexOf('=');

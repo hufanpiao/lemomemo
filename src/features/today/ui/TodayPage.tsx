@@ -52,12 +52,12 @@ import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { CheckCircle } from '../../../kit/components/CheckCircle.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import type { ReadonlyPartProps } from '../../../kit/components/ReadonlyMark.tsx';
-import { TodoRow, type TodoRowIds } from '../../../kit/components/TodoRow.tsx';
+import { TodoRow } from '../../../kit/components/TodoRow.tsx';
 import type { SwipeRowProps } from '../../../kit/components/SwipeRow.tsx';
 import type TodaySwipe from './TodaySwipe.tsx';
 import { useLinger } from '../../../kit/components/useDoneFlow.ts';
 import { useDrawerSel } from '../../../kit/hooks/useListActions.ts';
-import { useTodoRows, type SubsPartProps, type TodoRowParts, type TodoRowWords } from '../../../kit/components/useTodoRows.ts';
+import { useTodoRows, type SubsPartProps, type TodoRowParts } from '../../../kit/components/useTodoRows.ts';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
@@ -156,8 +156,6 @@ function RoPart(p: ReadonlyPartProps) {
 
 /** kit TodoRow 的三个部件：子任务卡片、行尾未同步小标记（都首屏画完才挂）、只读标记和方框（按需下载） */
 const PARTS: TodoRowParts = { Subs, Mark: RowMark, Ro: RoPart };
-/** 待办行里各处的测试 id 前缀（kit TodoRow） */
-const IDS: TodoRowIds = { row: 'today-todo', done: 'today-done', prio: 'today-prio', stage: 'today-stage', ro: 'today-ro', subs: 'today' };
 
 /** 纪念日一行（B5）：有纪念日、开关开着才下载 */
 const AnnivLine = lazy(() => import('./AnnivLine.tsx'));
@@ -172,18 +170,9 @@ export default function TodayPage() {
   /** 引擎 armed 或出错（含 App 的看门狗：迟迟不 armed 也算出错）才挂“错过的提醒”（REMIND-shown-persist 修订 1 P2） */
   const missedOn = useRemindQueue((s) => s.armedSince !== null || s.remindDown);
   // 待办行的动作（待办页、日历日清单同一份，kit/components/useTodoRows.ts）：改回未完成时先留住按下之前的两张列表 --dur-ui（没赶上 → 今天的安排）；
-  // 只读行统一拦下；撤销条、出错条在 r.a.g 里；打勾、勾完子任务自动完成的停留、收起、“已完成 · 撤销”在 r.flow
-  const words: TodoRowWords = {
-    done: t('list.done', {}),
-    undoDone: t('list.undoDone', {}),
-    doneToast: t('toast.done', {}),
-    prio: (p) => t(`prio.${p}`, {}),
-    prioLine: (v) => t('prio', v),
-    stage: (n) => t(n === 1 ? 'stage.1' : 'stage.2', {}),
-    toasts: { deleted: t('toast.deleted', {}), undo: t('toast.undo', {}), error: t('err.save', {}), readonly: t('err.readonly', {}) },
-  };
+  // 只读行统一拦下；撤销条、出错条在 r.a.g 里；打勾、勾完子任务自动完成的停留、收起、“已完成 · 撤销”在 r.flow；词条是 kit 自己的（useTodoRowWords）
   const writes = { toggleDone: d.toggleDone, remove: (id: string, deleted: boolean) => d.remove('todos', id, deleted), setPriority: d.setPriority };
-  const r = useTodoRows({ late: d.late, events: d.events, todos: d.todos }, lg, writes, 'today', words, PARTS);
+  const r = useTodoRows({ late: d.late, events: d.events, todos: d.todos }, lg, writes, 'today', PARTS);
   const v = r.view;
   const { g, del } = r.a;
   const anniv = useAnnivAny();
@@ -213,7 +202,7 @@ export default function TodayPage() {
       r={r}
       todo={td}
       progress={d.subs.get(td.id)}
-      ids={IDS}
+      tid="today"
       onOpen={() => open({ kind: 'todo', id: td.id })}
       main={{ kind: 'todo', open: td.id, current: ds.sel?.id === td.id, testId: `today-open-${td.id}` }}
       meta={meta}

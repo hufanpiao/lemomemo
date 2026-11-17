@@ -1,6 +1,6 @@
 // 中韩切换和“改语言后刷新”（TC-B1-19；架构 2.4 第 4 条、16.4）
 // • 点“한국어”：设置页全部文字立刻换成韩文词典、<html lang> 换成 ko-KR、本机记下 pv-locale 和 lemo_lang、账号写 ko-KR
-// • 刷新：新的一页 ui-store 从中文起步，入口按“pv-locale → 设备语言 → 中文”（pickLocale，和 src/auth/main.tsx 同一条规则）定语言，
+// • 刷新：新的一页 ui-store 从中文起步，入口按“pv-locale → 设备语言 → 中文”（platform/doc-locale.ts 的 bootLocale，两个入口共用）定语言，
 //   结果仍是韩文；设备语言是中文也一样（手动选过的优先）
 // 韩文词典换成“[ko]+中文”：真韩文还没翻（TODO(ko)），这样才分得出文字是不是真的跟着换了
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -8,9 +8,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { placeholdersOf } from '../../../../shared/i18n/i18n.ts';
-import { pickLocale, toUiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
-import { readLocalLocale } from '../data/local.ts';
+import type * as DocLocale from '../../../platform/doc-locale.ts';
 import type { SettingsApi } from '../data/settings-api.ts';
 import { applyLocale } from '../hooks/useLocaleSwitch.ts';
 import type { SignOutHereDeps } from '../hooks/useSessionExit.ts';
@@ -23,6 +22,24 @@ vi.mock('../i18n/ko.ts', async () => {
   // 语言名两边一样（“中文”“한국어”），其余加 [ko] 前缀
   return { ko: Object.fromEntries(Object.entries(z).map(([k, v]) => [k, k === 'settings.lang.zh' || k === 'settings.lang.ko' ? v : `[ko]${v}`])) };
 });
+
+// 公共词典的下载（platform/doc-locale.ts 的 loadSharedDict）：默认真下载；切换时下载失败、下载中又点的用例换成手动控制的
+const dict = vi.hoisted(() => ({ load: null as null | ((l: string) => Promise<void> | null) }));
+vi.mock('../../../platform/doc-locale.ts', async (orig) => {
+  const real = await orig<typeof DocLocale>();
+  return { ...real, loadSharedDict: (l: 'zh-CN' | 'ko-KR') => (dict.load ? dict.load(l) : real.loadSharedDict(l)) };
+});
+const { applyUiLocale, bootLocale } = await import('../../../platform/doc-locale.ts');
+
+/** 手动控制的一次下载：resolve / reject 由用例决定 */
+function manualLoad() {
+  let settle: { ok(): void; fail(): void } = { ok: () => undefined, fail: () => undefined };
+  const p = new Promise<void>((res, rej) => {
+    settle = { ok: () => res(), fail: () => rej(new Error('chunk_load_failed')) };
+  });
+  dict.load = () => p;
+  return settle;
+}
 
 const ok = { ok: true as const, value: undefined };
 
@@ -51,13 +68,19 @@ const exit: SignOutHereDeps = {
   goToAuth: vi.fn(),
 };
 
-/** 模拟一次页面载入：ui-store 回到默认中文，再按入口的规则定语言（同 src/auth/main.tsx） */
+/** 模拟一次页面载入：ui-store 回到默认中文，再按入口的规则定语言、用上（两个入口共用的 platform/doc-locale.ts） */
 function bootLikeEntry(deviceLangs: readonly string[]): void {
   uiStore.getState().setLocale('zh-CN');
   document.documentElement.lang = '';
-  const locale = pickLocale(readLocalLocale(), deviceLangs);
-  uiStore.getState().setLocale(toUiLocale(locale));
-  document.documentElement.lang = toUiLocale(locale);
+  vi.spyOn(navigator, 'languages', 'get').mockReturnValue(deviceLangs);
+  applyUiLocale(bootLocale(), uiStore.getState());
+}
+
+/** 点语言按钮（按钮名是当前语言词典里的那一条） */
+async function tap(name: string): Promise<void> {
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name }));
+  });
 }
 
 async function renderPage(api = fakeApi()) {
@@ -79,19 +102,22 @@ function pressed(): string | null {
 beforeEach(() => {
   localStorage.clear();
   document.cookie = 'lemo_lang=; Max-Age=0; Path=/';
+  dict.load = null;
   bootLikeEntry(['zh-CN']);
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe('中韩切换', () => {
   it('点“한국어”：整页文字跟着变、<html lang> 变 ko-KR、本机记下、账号写 ko-KR', async () => {
     const api = await renderPage();
     expect(title()).toBe(zh['settings.title']);
     expect(pressed()).toBe('zh');
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: zh['settings.lang.ko'] }));
-    });
-    expect(title()).toBe(`[ko]${zh['settings.title']}`);
+    await tap(zh['settings.lang.ko']);
+    // 公共准备只放了中文：先等韩文那份公共词典下载好才换
+    await waitFor(() => expect(title()).toBe(`[ko]${zh['settings.title']}`));
     expect(screen.getByRole('button', { name: `[ko]${zh['settings.account.signOut']}` })).toBeTruthy();
     // 页面上不再剩中文词典的原文（除了两个语言名）
     const main = document.querySelector('main[data-feature="settings"]')?.textContent ?? '';
@@ -114,21 +140,55 @@ describe('中韩切换', () => {
 
   it('账号写不进（断网）：界面照样换成韩文，只提示一句', async () => {
     await renderPage(fakeApi({ saveLocale: vi.fn(async () => ({ ok: false as const, error: 'offline' as const })) }));
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: zh['settings.lang.ko'] }));
-    });
-    expect(title()).toBe(`[ko]${zh['settings.title']}`);
+    await tap(zh['settings.lang.ko']);
+    await waitFor(() => expect(title()).toBe(`[ko]${zh['settings.title']}`));
     expect((await screen.findByText(`[ko]${zh['settings.lang.syncFailed']}`)).getAttribute('role')).toBe('status');
     expect(exit.wipe).not.toHaveBeenCalled();
+  });
+});
+
+describe('切换时公共词典的下载（首屏瘦身 D；独立评审 11-17 第 3、4 条）', () => {
+  it('韩文那份下载失败：不换语言、不写账号，提示没保存上', async () => {
+    const load = manualLoad();
+    const api = await renderPage();
+    await tap(zh['settings.lang.ko']);
+    await act(async () => load.fail());
+    expect(title()).toBe(zh['settings.title']);
+    expect(pressed()).toBe('zh');
+    expect(document.documentElement.lang).toBe('zh-CN');
+    expect(api.saveLocale).not.toHaveBeenCalled();
+    expect((await screen.findByText(zh['settings.lang.syncFailed'])).getAttribute('role')).toBe('status');
+  });
+
+  it('下载中点回中文：那一次作废，下载回来也不换、不写账号', async () => {
+    const load = manualLoad();
+    const api = await renderPage();
+    await tap(zh['settings.lang.ko']);
+    await tap(zh['settings.lang.zh']);
+    await act(async () => load.ok());
+    expect(title()).toBe(zh['settings.title']);
+    expect(pressed()).toBe('zh');
+    expect(api.saveLocale).not.toHaveBeenCalled();
+    expect(screen.queryByText(zh['settings.lang.syncFailed'])).toBeNull();
+  });
+
+  it('下载中连点两次“한국어”：只换一次、只写一次账号', async () => {
+    const load = manualLoad();
+    const api = await renderPage();
+    await tap(zh['settings.lang.ko']);
+    await tap(zh['settings.lang.ko']);
+    await act(async () => load.ok());
+    await waitFor(() => expect(title()).toBe(`[ko]${zh['settings.title']}`));
+    expect(api.saveLocale).toHaveBeenCalledTimes(1);
+    expect(api.saveLocale).toHaveBeenCalledWith('ko-KR');
   });
 });
 
 describe('改语言后刷新（TC-B1-19“刷新后保持”）', () => {
   it('换成韩文后刷新：仍是韩文（设备语言是中文也一样）', async () => {
     await renderPage();
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: zh['settings.lang.ko'] }));
-    });
+    await tap(zh['settings.lang.ko']);
+    await waitFor(() => expect(localStorage.getItem('pv-locale')).toBe('ko'));
     cleanup();
 
     bootLikeEntry(['zh-CN', 'en-US']);

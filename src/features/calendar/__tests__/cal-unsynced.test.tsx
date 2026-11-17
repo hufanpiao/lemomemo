@@ -73,6 +73,11 @@ const rowOf = (title: string): HTMLElement => {
   if (!r) throw new Error(`没有“${title}”这一行`);
   return r;
 };
+/**
+ * 等日清单里的待办组画出这一行：待办组是懒加载的（todos/index.ts 的 DayTodos = lazy(import('./ui/day-todos.ts'))，日历测试按边界规则引不到它先预热），
+ * vitest 全量 8 线程满载时那一块 1 秒内常常下载不完（11-17 全量偶发 2 条“没有‘待办x’这一行”），所以这里单独多等一会儿
+ */
+const todoRowReady = (title: string): Promise<HTMLElement> => waitFor(() => rowOf(title), { timeout: 10_000 });
 
 beforeEach(() => {
   uiStore.getState().setLocale('zh-CN');
@@ -96,6 +101,7 @@ describe('日清单行尾“未同步”小标记', () => {
   it('只标没同步上的那几条（日程按 events、待办按 todos 对），其余行不标；行的读屏名带上“未同步”', async () => {
     box.recs = new Set(['events:e2', 'todos:t1']);
     open('#/calendar');
+    await todoRowReady('待办t1');
     await waitFor(() => expect(screen.getAllByTestId('remind-unsynced-mark')).toHaveLength(2));
     expect(within(rowOf('日程e2')).getByTestId('remind-unsynced-mark').textContent).toBe('未同步');
     expect(within(rowOf('待办t1')).getByTestId('remind-unsynced-mark')).toBeTruthy();
@@ -111,8 +117,8 @@ describe('日清单行尾“未同步”小标记', () => {
     data.events = [ev('e1')];
     box.recs = new Set(['events:x']);
     open('#/calendar');
-    // R-446 起月格简称取 4 个字，“待办x”在月格和日清单里各出现一次
-    await screen.findAllByText('待办x');
+    // R-446 起月格简称取 4 个字，“待办x”在月格和日清单里各出现一次：等的是日清单里那一行
+    await todoRowReady('待办x');
     // 等懒加载的组件出来（另一条以 events 为准的同样不会标）
     await act(async () => {
       box.set(['events:x', 'events:e1']);

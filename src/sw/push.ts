@@ -24,7 +24,7 @@
 //   title、body 超过 TEXT_MAX（300）字时截断（末尾补 …），不整条拒收（代码审查 S1）；服务器 notify-text 截到各 ≤ 300 字、整份 JSON ≤ 3071 字节（架构 5.3，0.53）
 // 整页提醒的地址（reminderUrl）、tag 只写在 shared/logic/remind-route.ts（架构 0.53），和 platform 的 openReminder 是同一份
 import { t } from '../../shared/i18n/t-static.ts';
-import { pickLocale } from '../../shared/i18n/pick-locale.ts';
+import { pickLocale, toUiLocale, type UiLocale } from '../../shared/i18n/pick-locale.ts';
 import { isSnoozeMin, type SwPendingAction } from '../../shared/local-db.ts';
 import { reminderTag, reminderUrl, type ReminderKind } from '../../shared/logic/remind-route.ts';
 import { actionsOf, buttonsOf, type RemindButtons } from './push-actions.ts';
@@ -133,8 +133,8 @@ export function parsePushPayload(raw: unknown): PushPayload | null {
 export const notificationTag = reminderTag;
 
 /** 本机的界面语言（SW 读不到 localStorage 里选过的语言：按浏览器语言走 pickLocale，和首页没选过语言时同一条规则） */
-function localeOf(languages: readonly string[]): 'zh-CN' | 'ko-KR' {
-  return pickLocale(null, languages) === 'ko' ? 'ko-KR' : 'zh-CN';
+function localeOf(languages: readonly string[]): UiLocale {
+  return toUiLocale(pickLocale(null, languages));
 }
 
 /** 兜底标题：只写 App 名（公共词典 app.name，A20 不准写死中文） */

@@ -20,16 +20,13 @@ import list from '../../../kit/components/List.module.css';
 import { ListToasts } from '../../../kit/components/ListToasts.tsx';
 import refine from '../../../kit/components/Refine.module.css';
 import { AppearItem, AppearList } from '../../../motion/components.ts';
-import { TodoRow, type TodoRowIds } from '../../../kit/components/TodoRow.tsx';
+import { TodoRow } from '../../../kit/components/TodoRow.tsx';
 import { useLinger } from '../../../kit/components/useDoneFlow.ts';
 import { useTodoRows } from '../../../kit/components/useTodoRows.ts';
 import { useDayTodos, useListT } from '../hooks/useTodoList.ts';
 import { useSubProgress } from '../hooks/useSubtasks.ts';
 import s from './DayTodos.module.css';
-import { TODO_PARTS, useRowWords } from './row-parts.tsx';
-
-/** 行里各处的测试 id 前缀（kit TodoRow） */
-const IDS: TodoRowIds = { row: 'cal-todo', done: 'cal-done', prio: 'cal-prio', stage: 'cal-stage', ro: 'cal-ro', subs: 'cal' };
+import { TODO_PARTS } from './row-parts.tsx';
 
 export interface DayTodosProps {
   date: DateStr;
@@ -47,7 +44,7 @@ export default function DayTodos({ date, today, nowMin, onOpen, openId = null }:
   const lg = useLinger();
   const w = useDayTodos(date, lg.ids);
   // 行的动作（待办页、今天页同一份，kit/components/useTodoRows.ts）：打勾、勾完子任务的停留、收起、撤销条，换档，只读拦截，出错条
-  const r = useTodoRows(w.todos, lg, w, 'cal-todos', useRowWords(), TODO_PARTS);
+  const r = useTodoRows(w.todos, lg, w, 'cal-todos', TODO_PARTS);
   const subs = useSubProgress();
   /** 过了截止、还没完成（R-436 红字）：那天已过，或者就是今天、截止时刻已到 */
   const late = (done: boolean, dueTime: string | null): boolean =>
@@ -73,7 +70,7 @@ export default function DayTodos({ date, today, nowMin, onOpen, openId = null }:
                     r={r}
                     todo={td}
                     progress={subs.get(td.id)}
-                    ids={IDS}
+                    tid="cal"
                     onOpen={() => onOpen('todo', td.id)}
                     // 点标题交给日历页（手机进编辑页，电脑开详情抽屉，R-130）；data-open 给日历页认行，抽屉开着的那条 aria-current
                     main={{ kind: 'todo', open: td.id, current: openId === td.id, testId: `cal-day-row-${td.id}` }}

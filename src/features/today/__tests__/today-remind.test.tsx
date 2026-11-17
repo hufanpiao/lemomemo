@@ -136,7 +136,7 @@ describe('引擎挂上以后', () => {
     const { container } = render(<TodayPage />);
     const evRows = [...container.querySelectorAll<HTMLElement>('[data-testid^="today-event-"]')];
     // “今天的安排”里的待办行；“没赶上”里的不左滑（同原来；11-17 起两组都是 kit TodoRow，行的测试 id 一样）
-    const tdRows = [...container.querySelectorAll<HTMLElement>('[data-testid="today-list"] [data-testid^="today-todo-"]')];
+    const tdRows = [...container.querySelectorAll<HTMLElement>('[data-testid="today-list"] [data-testid^="today-row-"]')];
     expect(evRows.length).toBeGreaterThan(0);
     expect(tdRows.length).toBeGreaterThan(0);
     for (const row of evRows) {
@@ -144,7 +144,7 @@ describe('引擎挂上以后', () => {
       expect(row.querySelector('[data-testid^="today-del-"]')).toBeNull();
     }
     for (const row of tdRows) {
-      const id = (row.dataset['testid'] ?? '').replace('today-todo-', '');
+      const id = (row.dataset['testid'] ?? '').replace('today-row-', '');
       expect(row.querySelector(`[data-testid="today-swipe-${id}"]`)).not.toBeNull();
       expect(row.querySelector(`[data-testid="today-del-${id}"]`)).toBeNull();
       expect(row.querySelector(`[data-testid="today-swipe-del-${id}"]`)?.closest('[inert]')).not.toBeNull();

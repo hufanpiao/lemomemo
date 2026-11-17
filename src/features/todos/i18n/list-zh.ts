@@ -18,21 +18,13 @@ export const listZh = {
   'list.due.tomorrow': '明天',
   // 标题下面一行等宽小字（R-436 第 2 条）：“11月15日 周日 · 1 / 10 完成”
   'list.sub': '{date} · {done} / {total} 完成',
-  // 行右边 H / M / L（R-434）：读屏名字；编辑页的“优先级”三档在 zh.ts
-  'list.prio': '优先级：{p}，按一下换成{next}',
-  'list.prio.high': '高',
-  'list.prio.mid': '中',
-  'list.prio.low': '低',
-  'list.done': '完成',
-  'list.undoDone': '标成没完成',
+  // 待办行的方框、行右边 H / M / L、副行“起步 / 大半”、撤销条和出错条在 kit 的待办行词典（shared/i18n/todo-row-zh.ts，独立评审 11-17 第 9、10 条）；
+  // 编辑页的“优先级”三档在 zh.ts；下面的“撤销”“没保存上”是子任务编辑区、设置页自己用的
   'list.delete': '删除',
-  'list.deleted': '已删除',
   'list.undo': '撤销',
-  'list.doneToast': '已完成',
   // 日历日清单的待办组组头“● 待办 · 3”（R-443）
   'list.dayTodos': '待办',
   'list.err.save': '没保存上，稍后再试一次',
-  'list.err.readonly': '这条要新版本才能修改',
   // 设置首页“完成 7 天后自动删除”（负责人 11-15 方案；ui/TodoSettings.tsx）
   'settings.autodel': '完成 7 天后自动删除',
   // R-350 子任务（方案 5.1、5.5、6.2、6.5）：列表卡片只能勾、看进度、收起；加删改在编辑页
@@ -43,9 +35,6 @@ export const listZh = {
   'items.collapse.a11y': '收起「{title}」的子任务',
   'items.expand.a11y': '展开「{title}」的子任务',
   'items.autoDone': '全部完成，已完成这条待办',
-  // 待办页副行的进度标签（负责人 11-17 选 T-A“起步、大半”标签）：不到一半起步、一半及以上大半（kit CheckCircle 的 partStage）
-  'items.stage.1': '起步',
-  'items.stage.2': '大半',
   // 编辑页“子任务”区（SubtaskEditor 在待办列表页那一包里，只用这一本词典，免得和编辑页共用词典多拆出一个分包）
   'items.title': '子任务',
   'items.add': '添加子任务',
