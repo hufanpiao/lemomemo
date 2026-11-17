@@ -18,6 +18,49 @@
   box-shadow: var(--shadow-2);
   backdrop-filter: blur(6px) saturate(var(--float-sat));
   font-size: var(--fs-14);
+  overflow: hidden;   /* 倒计时色带跟着圆角裁 */
+}
+
+/* 倒计时色带（R-450）：贴底 3px 柠檬黄，从左边固定、往左缩；只动 transform，不占高度（--undo-h 不变）。
+   时长由组件按 ms 写在 style 上；线性走——它表示剩下多少时间，不是装饰动效，系统“减弱动态效果”打开时（:root[data-rm='1']）不缩短、改成原地由实变淡，照样看得出剩多少时间，没有位移 */
+.bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent);
+  transform-origin: left center;
+  animation-name: undo-count;
+  animation-timing-function: var(--ease-linear);
+  animation-fill-mode: forwards;
+  pointer-events: none;
+}
+
+:global(:root[data-rm='1']) .bar {
+  transform: none;
+  animation-name: undo-fade;
+}
+
+
+@keyframes undo-fade {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.15;
+  }
+}
+
+@keyframes undo-count {
+  from {
+    transform: scaleX(1);
+  }
+
+  to {
+    transform: scaleX(0);
+  }
 }
 
 :global(:root[data-rt='1']) .toast {
