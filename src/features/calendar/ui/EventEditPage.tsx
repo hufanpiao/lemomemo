@@ -4,12 +4,18 @@
 // • 地点 / 链接：输入框下面用 kit 的 LocationText 显示，能过 safeHref 的才是可点的链接（SAFE-link-real）
 // • 只读行、删除和撤销：和待办编辑页同一套（kit 的 useEditRecord、EditShell）
 // • R-436 第二批（照纪念日编辑页）：时间、详情两组上面各一个小字分组名（kit GroupLabel）；底部整宽删除行写全“删除这个日程”
+// • R-436 丙批：日期、开始、结束三个框里的数字换等宽字（kit .input 加本页 EventEditPage.module.css 的 .num）
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
+import formCss from '../../../kit/components/Form.module.css';
 import { Check, Field, FormGroup, GroupLabel, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
 import { LocationText } from '../../../kit/components/LocationText.tsx';
 import { useCalendarT, type CalendarMsgKey } from '../hooks/useCalendarT.ts';
 import { ITEM_TITLE_MAX, LOCATION_MAX, NOTE_MAX, PROJECT_MAX, REMIND_MIN_OPTIONS, useEventEdit, type EventForm } from '../hooks/useEventEdit.ts';
+import s from './EventEditPage.module.css';
+
+/** 日期、时刻框：kit 输入框 + 等宽数字 */
+const NUM = `${formCss.input} ${s.num}`;
 
 /** 不带参数的那些键（t 的第二个参数要能写成 {}） */
 type PlainKey = Exclude<CalendarMsgKey, 'event.edit.tzLocal'>;
@@ -58,7 +64,7 @@ export function EventEditor({ id, onCreated }: { id: string; onCreated(id: strin
       <GroupLabel>{t('event.edit.groupTime', {})}</GroupLabel>
       <FormGroup>
         <Field label={t('event.edit.date', {})} htmlFor="event-date">
-          <TextInput id="event-date" type="date" value={form.date} disabled={off} onCommit={(v) => v !== '' && change({ date: v })} data-testid="event-edit-date" />
+          <TextInput id="event-date" type="date" className={NUM} value={form.date} disabled={off} onCommit={(v) => v !== '' && change({ date: v })} data-testid="event-edit-date" />
           <Check
             label={t('event.edit.allDay', {})}
             checked={form.time === null}
@@ -71,9 +77,10 @@ export function EventEditor({ id, onCreated }: { id: string; onCreated(id: strin
         {form.time !== null ? (
           <>
             <Field label={t('event.edit.start', {})} htmlFor="event-start">
-              <TextInput id="event-start" type="time" value={form.time} disabled={off} onCommit={(v) => v !== '' && change({ time: v })} data-testid="event-edit-start" />
+              <TextInput id="event-start" type="time" className={NUM} value={form.time} disabled={off} onCommit={(v) => v !== '' && change({ time: v })} data-testid="event-edit-start" />
               <TextInput
                 type="time"
+                className={NUM}
                 aria-label={t('event.edit.end', {})}
                 value={ed.end ?? ''}
                 disabled={off}

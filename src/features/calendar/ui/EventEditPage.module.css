@@ -1,0 +1,6 @@
+/* 日程编辑页自己的一点样式（R-436 丙批）；表单外观全在 kit 的 Form.module.css，这里不重写。
+   .num：日期、开始、结束三个框里的数字换等宽字（R-436“日期、时刻用等宽数字”）。挂在 kit .input 后面一起用（TextInput 的 className），
+   写成 input.num 压过 .input 的 font: inherit，不靠两份样式表的先后 */
+input.num {
+  font-family: var(--f-mono);
+}
