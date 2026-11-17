@@ -40,7 +40,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
+
+  /* R-455“看起来很拥挤”：分段和筛选胶囊之间 10 → 12 */
+  margin-bottom: 12px;
 }
 
 /* 页顶“周 / 月 / 纪念日”（kit ModeSeg look="slide"，同日历页 .calnav 那一条）：slide 外观各段 flex: 1（按 0 起分），放在宽度随内容的页顶里会被
@@ -50,12 +52,13 @@
 }
 
 /* 筛选胶囊、提醒天数胶囊：用 kit 的 Chip.module.css（高 30、无描边浅底，和待办页筛选同一份，负责人 11-16“胶囊太大了！参考现在的待办页”）；
-   这里只管排布。kit 胶囊自带上下 7 外边距撑出 44 点击区，所以行距给 0、整排上下各收 7 */
+   这里只管排布。kit 胶囊自带上下 7 外边距撑出 44 点击区，所以行距给 0、整排上下各收 7。
+   R-455：胶囊和下面“最近的一个”大卡之间看得见的空隙 12 → 16（下边距 5 → 9） */
 .chips {
   display: flex;
   flex-wrap: wrap;
   column-gap: 8px;
-  margin: 5px 0;
+  margin: 5px 0 9px;
 }
 
 /* “最近的一个”大卡（R-132 方案 C） */
@@ -64,10 +67,12 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 4px;
   width: 100%;
-  margin-bottom: 12px;
-  padding: 14px 16px 16px;
+
+  /* R-455：大卡和列表卡之间 12 → 16，卡内边距 14/16/16 → 18/18/20，各行之间 2 → 4 */
+  margin-bottom: 16px;
+  padding: 18px 18px 20px;
   border: 0;
   border-radius: var(--r-lg);
   background: var(--panel);
@@ -87,8 +92,8 @@
 /* 头像钉在右上角，跨标签和大号天数两行（视觉稿 anniv），不把天数往下挤 */
 .nearAv {
   position: absolute;
-  top: 14px;
-  right: 16px;
+  top: 18px;
+  right: 18px;
 }
 
 .nearTag {
@@ -143,16 +148,16 @@
   font-size: var(--fs-13);
 }
 
-/* 列表一行 64px（视觉稿 anniv：36px 头像、名字和副行两行）。kit 的 List.module.css 也给 .row 写了 min-height，
+/* 列表一行（视觉稿 anniv：36px 头像、名字和副行两行；原 64，R-455 嫌挤加到 72）。kit 的 List.module.css 也给 .row 写了 min-height，
    两份 CSS 谁后插进页面不一定，所以带上列表的类、优先级高一级 */
 .rows .row {
-  min-height: 64px;
+  min-height: 72px;
 }
 
 /* 列表面板左右 14、上下 2（视觉稿 anniv .lst）：行面（SwipeRow 的不透明 .face）离开圆角，首尾两行的方角不再从 20 圆角里戳出来；
    两级选择器压过 kit .list 的 padding（两份样式表先后不定） */
 .page .rows {
-  padding: 2px 14px;
+  padding: 4px 16px;
 }
 
 .name {
@@ -179,12 +184,13 @@
   font-size: var(--fs-11);
 }
 
-/* 头像和名字之间 10（视觉稿 annrow gap），副行 12 号（视觉稿 .t2） */
+/* 头像和名字之间 10（视觉稿 annrow gap），副行 12 号（视觉稿 .t2）；R-455：头像、文字、右边天数之间 10 → 12，名字和副行之间隔 3 */
 .rows .main {
-  gap: 10px;
+  gap: 12px;
 }
 
 .rows .meta {
+  margin-top: 3px;
   font-size: var(--fs-12);
 }
 
@@ -246,6 +252,9 @@
   /* R-436 第 1 条“去掉顶部空白”：层本身已经让出了安全区（上面的 inset），里面 EditShell 的 .page 再按 --safe-top 让一次就空出一大块；
      层里把 --safe-top 归零（同 base.css 有版本横幅时的写法），EditShell 只留自己的 16 */
   --safe-top: 0px;
+
+  /* R-455“看起来很拥挤”：层里表单各行（kit Form 的 .field）上下内边距 6 → 10 */
+  --field-py: 10px;
 }
 
 @keyframes anniv-sheet-in {
@@ -280,7 +289,7 @@
 
 /* 年月日滚轮那一块（kit 的 WheelPanel）的上下间距 */
 .wheels {
-  margin: 4px 0 6px;
+  margin: 8px 0 12px;
 }
 
 /* 选中行的框（R-436 丁批“粗黑框改轻”）：kit Wheel.module.css .panel::before 是 1.5px 正文色描边，在浅灰面板上像一道粗黑框；
@@ -296,8 +305,11 @@
 .nameRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
+
+  /* R-455：和上面的“名字（点圆圈加头像…）”标签隔开，下面离分隔线也留一点 */
+  margin: 6px 0 4px;
 }
 
 .nameRow > :last-child {
@@ -357,6 +369,9 @@
   align-items: center;
   gap: 4px 10px;
   min-height: var(--hit);
+
+  /* R-455：和下面“提醒”一行之间留出空隙（上面离滚轮的距离在 .wheels 下边距） */
+  margin-bottom: 6px;
 }
 
 .hint {
@@ -367,7 +382,7 @@
 
 /* 新建页卡片下面一行灰字“下一次：…”（编辑页在顶部主卡里，R-436） */
 .nextLine {
-  margin: -4px 4px 12px;
+  margin: 4px 4px 12px;
   color: var(--text-2);
   font-size: var(--fs-13);
 }

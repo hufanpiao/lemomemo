@@ -83,7 +83,9 @@
   align-items: center;
   gap: 4px 12px;
   min-height: var(--hit);
-  padding: 6px 0;
+
+  /* 上下内边距默认 6；--field-py 留给要更透气的页面在外层设（R-455 纪念日编辑层设 10），不设时和原来一样 */
+  padding: var(--field-py, 6px) 0;
 
   /* R-436：分隔线细到半像素（2×、3× 屏上是一条发丝线，1× 屏浏览器按 1px 画）；卡片左右各留 14，线从文字起点开始 */
   border-bottom: 0.5px solid var(--line);

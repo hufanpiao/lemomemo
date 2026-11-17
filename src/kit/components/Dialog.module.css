@@ -30,6 +30,18 @@
   background: var(--sheet-bg);
   box-shadow: var(--shadow-2);
   color: var(--text);
+
+  /* R-455：磨砂玻璃皮肤的 --sheet-bg 是 80%（深色 84%）半透明白，原来没有背景模糊，后面的字原样透上来、和弹层内容叠在一起。
+     照视觉稿 .glass 和 RecordPanel、DetailDrawer 的做法补上背景模糊；简洁皮肤 --glass-blur 是 0、--sheet-bg 本来就是实色，看起来不变 */
+
+  /* avoid-ai-design-ignore: 负责人指定磨砂玻璃皮肤（R-06），弹层的玻璃底色要带模糊才成立 */
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+
+/* 减少透明效果（data-rt：开关、系统设置、隐私记页挂着时）：实色、不模糊（同 RecordPanel、DetailDrawer） */
+:global(:root[data-rt='1']) .content {
+  background: var(--glass-solid);
+  backdrop-filter: none;
 }
 
 .title {
