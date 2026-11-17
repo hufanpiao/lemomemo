@@ -292,20 +292,43 @@
   text-align: center;
 }
 
-/* 今天页顶部“错过 N 条提醒 ›”（线框 MISSROW，设计 M3）：1.5px 墨色描边、铃铛、粗体 */
+/* 今天页顶部“错过 N 条提醒 · 查看 ›”（R-453 负责人 11-17 选 B 无框浅底胶囊）：去掉原来 1.5px 墨色描边，
+   半透明浅底 + 一根和分隔线同色的细边，整条圆成胶囊；铃铛右上角一个小红点表示“有没看的”，文字常规字重，“查看 ›”降一档灰 */
 .missRow {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
   min-height: var(--hit);
-  padding: 0 14px;
-  border: 1.5px solid var(--ink);
-  border-radius: var(--r-lg);
-  background: var(--panel);
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--glass-bg);
   color: var(--text);
   font: inherit;
   text-align: left;
+}
+
+.missOpen {
+  flex: none;
+  color: var(--text-2);
+}
+
+.bellDot {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.bellDot::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rec-dot);
 }
 
 .grow {
