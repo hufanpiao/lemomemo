@@ -1,7 +1,8 @@
 // 两个 Playwright 配置的 globalTimeout（接手清单 E2E-webkit-hang，需求记录 R-267 D2）：整轮跑超过这么久，Playwright 自己收尾退出，
 // 不会一直挂着（10-30 真后端组 webkit 卡住、8789、9198、9199 被残留进程占着就是这么来的）。
 // • E2E_GLOBAL_TIMEOUT_MS 覆盖：纯十进制毫秒数，60 秒～60 分钟；没设或空字符串用各配置的默认值；不合格抛错
-// • 默认：无后端组 20 分钟（CI 的 e2e 任务 timeout-minutes 是 30，要比它短，Playwright 先收尾、报告能留下来）；
+// • 默认：无后端组 35 分钟（CI 的 e2e 任务 timeout-minutes 是 50，要比它短，Playwright 先收尾、报告能留下来；
+//   11-18 用例涨到 700 多条，CI 两个 worker 跑满 20 分钟被掐断、74 条没跑，run 44168443536）；
 //   真后端组只跑 chromium 15 分钟，E2E_REAL_WEBKIT=1 多跑 webkit 时 30 分钟
 // 本机另有 tools/e2e/run-watchdog.mjs 管“连续很久没输出”（npm run e2e、npm run e2e:real 套着它）。
 export const GLOBAL_TIMEOUT_ENV = 'E2E_GLOBAL_TIMEOUT_MS';
@@ -9,7 +10,7 @@ export const GLOBAL_TIMEOUT_MIN_MS = 60_000;
 export const GLOBAL_TIMEOUT_MAX_MS = 60 * 60_000;
 
 /** 无后端组（playwright.config.ts）的默认值 */
-export const NO_BACKEND_GLOBAL_TIMEOUT_MS = 20 * 60_000;
+export const NO_BACKEND_GLOBAL_TIMEOUT_MS = 35 * 60_000;
 /** 真后端组只跑 chromium 时的默认值 */
 export const REAL_GLOBAL_TIMEOUT_MS = 15 * 60_000;
 /** 真后端组 E2E_REAL_WEBKIT=1 时的默认值 */

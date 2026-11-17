@@ -297,7 +297,10 @@ test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1�
   // 打勾（负责人 11-17 分镜；主持人 11-17 复审必改 A）：勾上后停 720 ms，再原地收起 100 ms（data-out；负责人 11-17 参考视频“整行快速收起”），收完离开原组。
   // 离开的那一份在收起时已经淡到 0，N1 那套“离开那一项看得清的帧”量不到东西，所以打勾单独量收起这一段：
   // 从打上 data-out 起逐帧记 [距 data-out 毫秒, 这一行的高（还在原组时）, 下一行的 top（含 layout 的 transform）, 离开那一份行面的不透明度（自身连同祖先）]
-  test('N1 打勾：收起时这一行高度单调降到约 0、下一行单调上移，卸载前后下一行不跳；离开的那一份看不见', async ({ page }) => {
+  test('N1 打勾：收起时这一行高度单调降到约 0、下一行单调上移，卸载前后下一行不跳；离开的那一份看不见', async ({ page, browserName }) => {
+    // CI 的 webkit 跳过（chromium、本机 webkit 照跑）：收起只有 --dur-collapse 100 ms，CI 的 Linux webkit 没有 GPU，在关模糊名单里也一样
+    // 两帧之间仍隔 120～170 ms，三次重做都只取到 2 帧（11-18 run 44168443536：0:56.0 13:40.9 180:-），这条量不出东西
+    test.skip(browserName === 'webkit' && process.env.CI === 'true', 'CI webkit 两帧间隔比 100 ms 收起还长，逐帧断言量不到');
     type F = [number, number | null, number | null, number | null];
     let frames: F[] = [];
     for (let i = 0; i < GHOST_TRIES && frames.filter((f) => f[1] !== null).length < 3; i += 1) {

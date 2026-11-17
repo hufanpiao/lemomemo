@@ -269,8 +269,8 @@ describe('globalTimeout（tests/e2e/global-timeout.ts）', () => {
     for (const v of ['15m', '9e5', ' 60000', '-60000']) expect(() => globalTimeoutMs({ [GLOBAL_TIMEOUT_ENV]: v }, 1), v).toThrow('纯十进制');
   });
 
-  it('默认值：无后端组 20 分钟且短于 CI e2e 任务的 timeout-minutes；真后端组 15 分钟，E2E_REAL_WEBKIT=1 时 30 分钟', () => {
-    expect(NO_BACKEND_GLOBAL_TIMEOUT_MS).toBe(20 * 60_000);
+  it('默认值：无后端组 35 分钟且短于 CI e2e 任务的 timeout-minutes；真后端组 15 分钟，E2E_REAL_WEBKIT=1 时 30 分钟', () => {
+    expect(NO_BACKEND_GLOBAL_TIMEOUT_MS).toBe(35 * 60_000);
     expect(REAL_GLOBAL_TIMEOUT_MS).toBe(15 * 60_000);
     expect(REAL_WEBKIT_GLOBAL_TIMEOUT_MS).toBe(30 * 60_000);
     expect(realGroupDefaultTimeoutMs({})).toBe(REAL_GLOBAL_TIMEOUT_MS);
@@ -305,7 +305,7 @@ describe('两个配置真加载出来的超时设置', () => {
   }
 
   it('无后端组：默认 20 分钟；E2E_GLOBAL_TIMEOUT_MS 覆盖生效', async () => {
-    expect((await load('playwright.config.ts', { [GLOBAL_TIMEOUT_ENV]: '' })).globalTimeout).toBe(20 * 60_000);
+    expect((await load('playwright.config.ts', { [GLOBAL_TIMEOUT_ENV]: '' })).globalTimeout).toBe(35 * 60_000);
     expect((await load('playwright.config.ts', { [GLOBAL_TIMEOUT_ENV]: '120000' })).globalTimeout).toBe(120_000);
   });
 

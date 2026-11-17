@@ -362,7 +362,7 @@ jobs:
   e2e:
     name: 端到端（Playwright，带 CSP）
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 50
     permissions:
       contents: read
     # 跑在 Playwright 官方镜像里，浏览器和系统依赖都在镜像里，不再 apt 装（11-06 main 69659c1、探针第八、九轮都卡在 apt 装依赖、被取消）。

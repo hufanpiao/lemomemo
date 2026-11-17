@@ -4,7 +4,7 @@
 // 和真后端组（playwright.real.config.ts）能同时跑（接手清单 E2E-parallel，R-267 D1）：假后端默认 9199、9198（真后端组 9197、9196），
 // 产物 dist/web（真后端组 dist/web-real；设了 LEMO_WEB_OUT 按 build_web 同一条规则改，构建和 wrangler 用同一个目录），
 // wrangler 本地状态 .wrangler/state-e2e、调试端口 9230（真后端组 state-e2e-real、9231）
-// globalTimeout 默认 20 分钟，E2E_GLOBAL_TIMEOUT_MS 可改（tests/e2e/global-timeout.ts，E2E-webkit-hang）
+// globalTimeout 默认 35 分钟（11-18 从 20 分钟调上来），E2E_GLOBAL_TIMEOUT_MS 可改（tests/e2e/global-timeout.ts，E2E-webkit-hang）
 import { defineConfig } from '@playwright/test';
 import { reuseServers } from './tools/e2e/reuse-servers.mjs';
 import { DESKTOP_AND_PHONE, FASTREAD_ONLY_SPECS, e2eConfig } from './tests/e2e/e2e-config.ts';

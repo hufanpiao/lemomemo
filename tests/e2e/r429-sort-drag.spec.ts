@@ -248,8 +248,9 @@ test.describe('长按拖动排序（R-429、R-461）', () => {
 
     await record(page);
     await hold(page, row('n4'));
-    await page.waitForTimeout(300);
-    // ⑤ 6 个点在行尾“⋯”那一格
+    // ⑤ 6 个点在行尾“⋯”那一格。“⋯”淡出、6 个点淡入是 --dur-ui（220 ms）的过渡：等它走完再量，不写死等 300 ms
+    // （11-18 CI webkit 掉帧，等了 300 ms 读到的还是起点值 1 / 0，run 44168443536）
+    await expect.poll(async () => { const v = await gripLook(page); return v.moreOpacity < 0.05 && v.gripOpacity > 0.95; }, { timeout: 3000 }).toBe(true);
     const g = await gripLook(page);
     expect(g.dots).toBe(6);
     expect(g.overlap).toBeGreaterThanOrEqual(0.8);

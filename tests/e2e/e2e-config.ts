@@ -58,7 +58,7 @@ export interface E2eGroup {
   env?: Record<string, string>;
   /** CI 上 html 报告的目录，默认 playwright-report */
   report?: string;
-  /** globalTimeout 的默认值（E2E_GLOBAL_TIMEOUT_MS 可改），默认无后端组的 20 分钟 */
+  /** globalTimeout 的默认值（E2E_GLOBAL_TIMEOUT_MS 可改），默认无后端组的 35 分钟（11-18 从 20 分钟调上来） */
   timeoutMs?: number;
   /** 挂产物指纹核对（tests/e2e/dist-fingerprint.ts，只读本进程的 LEMO_WEB_OUT），默认挂；真后端组的产物目录只传给子进程，不挂 */
   fingerprint?: boolean;
