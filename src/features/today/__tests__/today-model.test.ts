@@ -112,11 +112,11 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
     expect(c).toMatchObject({ nowText: '14:17', left: 13 });
   });
 
-  it('占不占大卡的边界：跨零点 1439 分钟（23:30 到次日 23:29）占，1440 分钟（10:00 到次日 10:00）不占', () => {
+  it('占不占大卡的边界：跨零点 1439 分钟（23:30 到次日 23:29）占，1440 分钟（10:00 到次日 10:00）不占、按全天日程算', () => {
     const short = ev({ title: '长班', date: '2026-11-04', time: '23:30', tz: SEOUL, duration_min: 1439 });
     expect(nowCard(nowEvents([short], at('14:17'), SEOUL), at('14:17'), SEOUL)).toMatchObject({ state: 'live', title: '长班' });
     const full = ev({ title: '值班', date: '2026-11-04', time: '10:00', tz: SEOUL, duration_min: 1440 });
-    expect(nowCard(nowEvents([full], at('09:00'), SEOUL), at('09:00'), SEOUL).state).toBe('empty');
+    expect(nowCard(nowEvents([full], at('09:00'), SEOUL), at('09:00'), SEOUL)).toMatchObject({ state: 'allday', allDay: { title: '值班', n: 1 } });
   });
 
   it('多天的有时刻日程不占大卡（负责人 11-17）：不进 cur、不当 c0，大卡给真正的下一件；今天只有这类日程时按没有带时刻的日程算', () => {
@@ -128,9 +128,10 @@ describe('“现在”卡六种状态（模型给数、界面查表）', () => {
     expect(c.ruler.segs.map((s) => s.id)).not.toContain(trip.id);
     // 列表照样有它（“今天的安排”里写第几天）
     expect(day([trip, shop]).map((o) => o.id)).toContain(trip.id);
-    // 今天只有多天日程：不算“进行中”，也不算“都结束了”
-    expect(nowCard(day([trip]), at('14:17'), SEOUL).state).toBe('empty');
-    expect(nowCard(day([trip, ev({ title: '休假', time: null })]), at('14:17'), SEOUL).state).toBe('allday');
+    // 今天只有多天日程：不算“进行中”，按全天日程走 allday、标题写它（第三轮复审必改 1：不写“今天没有日程”）
+    expect(nowCard(day([trip]), at('14:17'), SEOUL)).toMatchObject({ state: 'allday', liveN: 0, allDay: { title: '出差', n: 1 } });
+    // 同时有真正的全天日程：按 allday 原规则取第一条（真正的全天日程排前面），条数两条都算
+    expect(nowCard(day([trip, ev({ title: '休假', time: null })]), at('14:17'), SEOUL)).toMatchObject({ state: 'allday', allDay: { title: '休假', n: 2 } });
   });
 
   it('② idle：下一件在时间尺里，标题“开始时刻 标题”、1 小时 13 分后；卡底不重复写', () => {
@@ -349,6 +350,6 @@ describe('跨天日程（R-444）', () => {
     const late = ev({ time: '23:00', tz: SEOUL, duration_min: 120 });                             // 11-05 23:00 → 11-06 01:00
     const ids = nowEvents([long, over, late], at('10:00'), SEOUL).map((o) => o.id);
     expect(ids).toEqual([long.id, late.id]);
-    expect(nowCard(nowEvents([long], at('10:00'), SEOUL), at('10:00'), SEOUL).state).toBe('empty');
+    expect(nowCard(nowEvents([long], at('10:00'), SEOUL), at('10:00'), SEOUL).state).toBe('allday');
   });
 });

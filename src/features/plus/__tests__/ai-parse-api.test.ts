@@ -9,7 +9,7 @@ const NOW = Date.UTC(2026, 10, 2, 1, 0);
 const CTX: TypeCtx = { now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: [], day: null };
 const ON = { online: true, aiOn: true, quotaOut: false };
 const URL_ = 'https://sb.test/functions/v1/ai-parse';
-const REQ: AiParseReq = { text: '买牛奶', now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: [], scope: 'main' };
+const REQ: AiParseReq = { text: '买牛奶', now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: [], scope: 'main', span: 1 };
 
 const item = (over: Partial<AiItem> = {}): AiItem => ({
   kind: 'todo', title: 'AI title', date: null, time: null, duration_min: null, due: '2026-11-05', important: false,

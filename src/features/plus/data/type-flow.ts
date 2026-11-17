@@ -61,6 +61,8 @@ export interface AiReqCtx {
   scope: 'main';
   /** 日历页选中的那天（R6；已过 checkDefaultDay）；别的页不传 */
   default_day?: DateStr;
+  /** R-444：这一版能存跨天日程（时长到 31 天）。服务器见到它才回超过 1440 的时长，旧版不带、时长被规整到 1440 以内（录音走请求头 X-Span） */
+  span: 1;
 }
 
 /** ai-parse 的请求体 */
@@ -68,7 +70,7 @@ export type AiParseReq = AiReqCtx & { text: string };
 
 /** 不带选中日子的请求上下文（录音不带日子，FA-3）：项目名规整 */
 export function baseReqCtx(ctx: Pick<TypeCtx, 'now' | 'tz' | 'locale' | 'projects'>): AiReqCtx {
-  return { now: ctx.now, tz: ctx.tz, locale: ctx.locale, projects: normProjects(ctx.projects), scope: 'main' };
+  return { now: ctx.now, tz: ctx.tz, locale: ctx.locale, projects: normProjects(ctx.projects), scope: 'main', span: 1 };
 }
 
 /** 拼请求上下文：项目名规整、选中的日子过 checkDefaultDay；日子超出后端认的范围返回 bad_default_day（发了也是 400） */

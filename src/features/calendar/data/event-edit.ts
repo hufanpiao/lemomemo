@@ -86,13 +86,10 @@ export function normalize(next: EventForm, device: Tz): EventForm {
 /** 有时刻的日程按它自己的时区放（event-span.ts 的 placeEvent、ownTzOf）；全天、日期时刻坏了、时区算不出来为 null */
 function ownPlace(form: EventForm, device: Tz): { p: Extract<EventPlacement, { allDay: false }>; tz: Tz } | null {
   if (form.time === null) return null;
-  try {
-    const tz = ownTzOf(form.tz, device);
-    const p = placeEvent(form, tz);
-    return p && !p.allDay ? { p, tz } : null;
-  } catch {
-    return null;
-  }
+  // placeEvent 对坏日期、坏时刻返回 null 不抛，ownTzOf 只给有效时区，不用再包 try（第三轮复审建议 3）
+  const tz = ownTzOf(form.tz, device);
+  const p = placeEvent(form, tz);
+  return p && !p.allDay ? { p, tz } : null;
 }
 
 /** 有时刻的日程：结束在哪天几点（按日程自己的时区）；全天、没日期、算不出来为 null */
@@ -105,7 +102,8 @@ export function endAtOf(form: EventForm, device: Tz): { date: DateStr; time: str
  * 有时刻的日程选了结束日期、时刻 → 时长（分钟）。
  * 结束日期早于开始日期的按开始那天（界面另写一行提示）；结束日期是开始那天、时刻又不晚于开始的，照旧当作跨到第二天（只改时刻时和原来一样）。
  * 都按墙上时间换成时刻再相减（第二天也用 msAt 算），夏令时那天不差 1 小时。
- * 超过上限（31 天）的不悄悄截短，原样返回，由写入的校验拒掉、编辑页状态行提示（useEditRecord 的 rejected）；算不出来的返回原来的时长
+ * 超过上限（31 天）的不悄悄截短，原样返回，由写入的校验拒掉、编辑页状态行提示（useEditRecord 的 rejected）；算不出来的返回原来的时长。
+ * 和全天的不同（event-span.ts 的 allDayDuration 截到 31 天）：这里的时长对应用户选的结束时刻，截短就悄悄改了用户的选择，所以拒收不截
  */
 export function durationTo(form: EventForm, endDate: DateStr, endTime: string, device: Tz): number {
   if (form.time === null) return form.duration_min;
@@ -144,12 +142,15 @@ export function allDayDurationOf(form: EventForm, device: Tz): number {
 
 /**
  * 全天 → 有时刻（没记着切走前的时长时；form 已经是切过去的有时刻表单）：跨几天的结束在最后一天同一时刻再过 1 小时，
+ * 但最晚到最后一天的 24:00（23:30 开始的不落到第 N+1 天，第三轮复审建议 2）；
  * 按墙上时间算（durationTo，夏令时那几天不差 1 小时）；只占一天的（含旧的 1440）一律回默认 1 小时
  */
 export function timedDurationOf(form: EventForm, allDayDur: number, device: Tz): number {
   const days = allDaySpanDays(allDayDur);
   if (days <= 1 || form.time === null) return EVENT_DURATION_DEFAULT;
-  return durationTo(form, addDays(form.date, days - 1), form.time, device) + EVENT_DURATION_DEFAULT;
+  const last = addDays(form.date, days - 1);
+  const toMidnight = durationTo(form, addDays(last, 1), '00:00', device);
+  return Math.min(durationTo(form, last, form.time, device) + EVENT_DURATION_DEFAULT, toMidnight);
 }
 
 /** 可选的时区：Intl 支持的全部，加上原来存的值（不在表里也列出），去重排序 */

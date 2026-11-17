@@ -12,7 +12,7 @@ const NOW = Date.UTC(2026, 10, 2, 1, 0);
 const URL_ = 'https://sb.test/functions/v1/ai-voice';
 const clip = (bytes = 3): Blob => new Blob([new Uint8Array(bytes)], { type: 'audio/mp4' });
 const req = (over: Partial<AiVoiceReq> = {}): AiVoiceReq => ({
-  audio: clip(), mime: 'audio/mp4', now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: [], scope: 'main', ...over,
+  audio: clip(), mime: 'audio/mp4', now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: [], scope: 'main', span: 1, ...over,
 });
 const item = (over: Partial<AiItem> = {}): AiItem => ({
   kind: 'todo', title: 'AI title', date: null, time: null, duration_min: null, due: '2026-11-05', important: false,
@@ -49,7 +49,7 @@ describe('请求', () => {
     expect(init?.method).toBe('POST');
     expect(init?.headers).toEqual({
       authorization: 'Bearer jwt-1', apikey: 'anon-1', 'content-type': 'audio/mp4',
-      'x-now': String(NOW), 'x-tz': 'Asia/Seoul', 'x-locale': 'ko', 'x-scope': 'main',
+      'x-now': String(NOW), 'x-tz': 'Asia/Seoul', 'x-locale': 'ko', 'x-scope': 'main', 'x-span': '1',
     });
     expect(init?.body).toBe(audio);
     expect(init?.signal).toBe(ac.signal);

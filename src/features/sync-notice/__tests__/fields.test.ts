@@ -63,11 +63,11 @@ describe('字段描述', () => {
     expect([0, 1.5, 'x'].map((v) => d(v))).toEqual(['（已改过）', '（已改过）', '（已改过）']);
   });
 
-  it('日程时长：全天的（time 为 null）写占几天，60、1440 都是“1 天”；拿不到 time 的不写这一列（第二轮评审必改 4）', () => {
+  it('日程时长：全天的（time 为 null）写占几天，60、1440 都是“1 天”；拿不到 old 或 time 的写“（已改过）”（第三轮复审必改 2）', () => {
     const d = (v: number) => describeConflict('events', ['duration_min'], { duration_min: v, time: null }, 'zh-CN', zh)[0]?.value;
     expect([60, 1440, 3 * 1440].map(d)).toEqual(['1 天', '1 天', '3 天']);
-    expect(describeConflict('events', ['duration_min'], { duration_min: 90 }, 'zh-CN', zh)).toEqual([]);
-    expect(describeConflict('events', ['duration_min'], null, 'zh-CN', zh)).toEqual([]);
+    expect(describeConflict('events', ['duration_min'], { duration_min: 90 }, 'zh-CN', zh)).toEqual([{ field: '时长', value: '（已改过）' }]);
+    expect(describeConflict('events', ['duration_min'], null, 'zh-CN', zh)).toEqual([{ field: '时长', value: '（已改过）' }]);
   });
 
   it('长文本原样给（两行加“…”由样式截）；hidden 的列不写', () => {

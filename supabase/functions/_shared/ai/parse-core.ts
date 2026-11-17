@@ -222,13 +222,29 @@ export function recordOnly<Item, I extends IntentLike>(v: CheckResult<Checked<It
   return isRecord(v.value) ? { ok: true, value: { items: v.value.items } } : { ok: false, invalid_reasons: ['schema'], issues: [] };
 }
 
+/** R-444 以前的客户端能存的最长时长（旧 events 约束 1～1440 分钟）。本文件是纯逻辑、不引 shared，同 shared/core/date.ts 的 DAY_MINUTES */
+export const LEGACY_DURATION_MAX = 1440;
+
+/**
+ * 旧版客户端（请求没带 span: 1 / X-Span: 1）收到的一条：时长超过 1440 的规整成 1440——跨天的全天日程记成一天、有时刻的截到 24 小时，
+ * 旧版本机校验和写库都过得去，这句话一条都不丢（第三轮复审必改 3 方案 a）；新版客户端原样给
+ */
+function legacyItem(it: unknown): unknown {
+  if (typeof it !== 'object' || it === null) return it;
+  const d = (it as { duration_min?: unknown }).duration_min;
+  return typeof d === 'number' && d > LEGACY_DURATION_MAX ? { ...it, duration_min: LEGACY_DURATION_MAX } : it;
+}
+
 /**
  * ai-parse、ai-voice 成功时的响应体（shared/schema/ai.ts 的 recordResponse、intent.ts 的 queryResponse / targetResponse）：
  * 校验结果（录音的带 transcript）去掉 fixed（规整过没有，只给评测计数，不回给客户端），加 quota_left。
+ * span：请求带了 R-444 的标记（能存跨天日程）；没带的是旧版客户端，items 的时长按 legacyItem 规整
  */
-export function plusBody<Item, I extends IntentLike>(v: Checked<Item, I>, quotaLeft: number): Record<string, unknown> {
+export function plusBody<Item, I extends IntentLike>(v: Checked<Item, I>, quotaLeft: number, span: boolean): Record<string, unknown> {
   const { fixed: _fixed, ...rest } = v as Checked<Item, I> & { fixed?: boolean };
-  return { ...rest, quota_left: quotaLeft };
+  const items = (rest as { items?: unknown }).items;
+  const fit = !span && Array.isArray(items) ? { items: items.map(legacyItem) } : {};
+  return { ...rest, ...fit, quota_left: quotaLeft };
 }
 
 function dataParts(text: string, projects: readonly string[]): string {

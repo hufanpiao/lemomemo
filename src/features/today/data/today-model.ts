@@ -217,9 +217,11 @@ export function nowCard(events: readonly EventOcc[], now: number, current: Tz, t
   const hmOf = (ms: number) => fmtHm(minOfDay(ms, current));
 
   // 负责人 11-17：多天的有时刻日程（lastDate ≠ date 且时长满 24 小时，R-444）不占大卡——不进 cur、不当 c0，也不算下一件，只在“今天的安排”列表里写“第 2/3 天 · 至 …”；
-  // 跨零点但不满 24 小时的（23:30 到 01:00 的夜班）照常占大卡（主持人 11-17 定）。大卡照旧给真正的下一件；今天只有多天日程时按没有带时刻的日程算（allday / empty）
-  const timed = events.filter((o): o is TimedOcc => isTimed(o) && !(o.lastDate !== o.date && o.end - o.start >= DAY_MINUTES * 60_000));
-  const allDays = events.filter((o) => o.allDay);
+  // 跨零点但不满 24 小时的（23:30 到 01:00 的夜班）照常占大卡（主持人 11-17 定）。大卡照旧给真正的下一件；
+  // 算 state 时多天日程当全天日程（第三轮复审必改 1）：今天只有它时走 allday、标题写它，不写“今天没有日程”；同时有真正的全天日程时排在后面，按 allday 原规则取第一条
+  const multi = (o: EventOcc): o is TimedOcc => isTimed(o) && o.lastDate !== o.date && o.end - o.start >= DAY_MINUTES * MIN;
+  const timed = events.filter((o): o is TimedOcc => isTimed(o) && !multi(o));
+  const allDays = [...events.filter((o) => o.allDay), ...events.filter(multi)];
   const cur = timed.filter((o) => o.start <= now && now < o.end).sort((a, b) => a.end - b.end);
   const next = timed.filter((o) => o.start > now).sort((a, b) => a.start - b.start)[0] ?? null;
   const nowM = off(now);

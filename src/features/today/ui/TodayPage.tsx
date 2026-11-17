@@ -226,18 +226,18 @@ export default function TodayPage() {
     const s = eventSpanText(o, d.today, d.tz);
     const meta = evMeta(s);
     return (
-    <AppearItem key={`e:${o.id}`} className={list.row} data-readonly={g.isRo('event', o.id) ? '' : undefined} data-testid={`today-event-${o.id}`}>
-      <span className={list.lead}>{evLead(o, s)}</span>
-      <button type="button" className={list.main} onClick={() => open({ kind: 'event', id: o.id })} data-open={o.id} aria-current={cur(o.id)}>
-        <span className={list.text}>
-          <span className={list.title}>{o.title}</span>
-          {meta !== null ? <span className={list.meta} data-testid={`today-span-${o.id}`}>{meta}</span> : null}
-          {o.origin ? <span className={list.meta}>{t('list.origin', { zone: zoneName(o.origin.tz, locale), t: o.origin.time })}</span> : null}
-        </span>
-        {g.isRo('event', o.id) ? <Ro part="mark" testId={`today-ro-${o.id}`} /> : null}
-        <RowMark table="events" id={o.id} />
-      </button>
-    </AppearItem>
+      <AppearItem key={`e:${o.id}`} className={list.row} data-readonly={g.isRo('event', o.id) ? '' : undefined} data-testid={`today-event-${o.id}`}>
+        <span className={list.lead}>{evLead(o, s)}</span>
+        <button type="button" className={list.main} onClick={() => open({ kind: 'event', id: o.id })} data-open={o.id} aria-current={cur(o.id)}>
+          <span className={list.text}>
+            <span className={list.title}>{o.title}</span>
+            {meta !== null ? <span className={list.meta} data-testid={`today-span-${o.id}`}>{meta}</span> : null}
+            {o.origin ? <span className={list.meta}>{t('list.origin', { zone: zoneName(o.origin.tz, locale), t: o.origin.time })}</span> : null}
+          </span>
+          {g.isRo('event', o.id) ? <Ro part="mark" testId={`today-ro-${o.id}`} /> : null}
+          <RowMark table="events" id={o.id} />
+        </button>
+      </AppearItem>
     );
   };
   const tdRow = (td: (typeof v.todos)[number]) => {

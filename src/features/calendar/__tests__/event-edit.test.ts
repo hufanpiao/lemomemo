@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { eventsWrite } from '../../../../shared/schema/rows.ts';
+import { placeEvent } from '../../../../shared/logic/calendar/event-span.ts';
 import {
   allDayDurationOf, allDayDurationTo, allDayLastOf, durationTo, emptyForm, endAtOf, EVENT_TIMING_COLS, timedDurationOf, formOf, hasRemind, localOf, newEventRow, normalize, patchOf, prevRemindAtOf, tzAllowed, tzChoices,
   type EventForm,
@@ -83,6 +84,11 @@ describe('时长、结束日期和时刻（R-444 跨天）', () => {
     expect(timedDurationOf(nine, 1440, SH)).toBe(60);
     expect(timedDurationOf(nine, 90, SH)).toBe(60);
     expect(timedDurationOf(nine, 3 * 1440, SH)).toBe(2 * 1440 + 60);
+    // 第三轮复审建议 2：23:30 开始、3 天：最后一天同一时刻再过 1 小时会落到第 4 天，截到第 3 天的 24:00
+    const late = base({ time: '23:30' });
+    const d = timedDurationOf(late, 3 * 1440, SH);
+    expect(d).toBe(2 * 1440 + 30);
+    expect(placeEvent({ ...late, duration_min: d }, SH)).toMatchObject({ date: '2026-11-05', lastDate: '2026-11-07' });
   });
 
   it('全天 → 有时刻按墙上时间算（第二轮建议 1）：纽约 11-01 夏令时结束那天多 1 小时，结束照样落在最后一天 10:00', () => {

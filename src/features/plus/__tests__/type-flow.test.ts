@@ -40,7 +40,7 @@ describe('aiReqCtx：打字、录音共用的请求上下文（项目名、选�
   it('项目名规整（去空白、去重、最多 30 个）；没选日子不带 default_day', () => {
     const many = Array.from({ length: 35 }, (_v, i) => `P${i}`);
     expect(aiReqCtx({ ...CTX, projects: [' NEOX ', 'NEOX', '', ...many] })).toEqual({
-      now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: ['NEOX', ...many.slice(0, 29)], scope: 'main',
+      now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: ['NEOX', ...many.slice(0, 29)], scope: 'main', span: 1,
     });
   });
   it('选中的日子在范围里带上；超出后端认的范围返回 bad_default_day', () => {
@@ -54,7 +54,7 @@ describe('没把握', () => {
     const call = stub(record([item()], 12));
     const p = await planTyped('买牛奶', { ...CTX, projects: ['SignPlex', ''] }, ON, call);
     expect(call).toHaveBeenCalledTimes(1);
-    expect(call.mock.calls[0]?.[0]).toEqual({ text: '买牛奶', now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: ['SignPlex'], scope: 'main' });
+    expect(call.mock.calls[0]?.[0]).toEqual({ text: '买牛奶', now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: ['SignPlex'], scope: 'main', span: 1 });
     expect(p).toMatchObject({ status: 'saved', origin: 'ai', quotaLeft: 12 });
     expect(p.items[0]?.title).toBe('AI title');
   });
@@ -149,7 +149,7 @@ describe('服务器回 {fallback, error}（每分钟限额）：不记 quota_out
 });
 
 describe('askAi：6 秒超时，只在网络错误时自动重试 1 次', () => {
-  const REQ = { text: 'x', now: NOW, tz: 'Asia/Seoul', locale: 'zh' as const, projects: [], scope: 'main' as const };
+  const REQ = { text: 'x', now: NOW, tz: 'Asia/Seoul', locale: 'zh' as const, projects: [], scope: 'main' as const, span: 1 as const };
 
   it('网络错误：重试 1 次，第二次成了就用', async () => {
     const call = vi.fn<CallAi>().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(record([item()]));

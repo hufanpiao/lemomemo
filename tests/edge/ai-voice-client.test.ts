@@ -42,7 +42,7 @@ function wired(o: GateOpts = {}) {
 }
 
 const req = (over: Partial<AiVoiceReq> = {}): AiVoiceReq => ({
-  audio: new Blob([new Uint8Array(1234)]), mime: 'audio/mp4', now: NOW, tz: 'Asia/Seoul', locale: 'ko', projects: ['NEOX 宣传片', '사이드'], scope: 'main', ...over,
+  audio: new Blob([new Uint8Array(1234)]), mime: 'audio/mp4', now: NOW, tz: 'Asia/Seoul', locale: 'ko', projects: ['NEOX 宣传片', '사이드'], scope: 'main', span: 1, ...over,
 });
 const live = (): AbortSignal => new AbortController().signal;
 

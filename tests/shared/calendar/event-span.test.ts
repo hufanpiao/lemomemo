@@ -73,7 +73,7 @@ describe('event-span：数据做法（duration_min，最多 31 天）', () => {
   it('dayOfSpan、overlapsDays：第几天共几天（只占一天的 undefined）；和范围有没有交叠', () => {
     const s = { date: '2026-11-18', lastDate: '2026-11-20' };
     expect(['2026-11-18', '2026-11-20'].map((d) => dayOfSpan(s, d))).toEqual([{ index: 1, days: 3 }, { index: 3, days: 3 }]);
-    expect(dayOfSpan({ date: '2026-11-18', lastDate: '2026-11-18' }, '2026-11-18')).toBeUndefined();
+    expect(dayOfSpan({ date: '2026-11-18', lastDate: '2026-11-18' }, '2026-11-18')).toBe(undefined);
     const ranges: [string, string][] = [['2026-11-19', '2026-11-19'], ['2026-11-20', '2026-11-30'], ['2026-11-01', '2026-11-18'], ['2026-11-21', '2026-11-30'], ['2026-11-01', '2026-11-17']];
     expect(ranges.map(([f, t]) => overlapsDays(s, f, t))).toEqual([true, true, true, false, false]);
   });
@@ -81,7 +81,7 @@ describe('event-span：数据做法（duration_min，最多 31 天）', () => {
   it('contOn、spanDaysIn：第一天 end、中间 both、最后一天 start；只占一天的 undefined', () => {
     const s = { date: '2026-11-18', lastDate: '2026-11-20' };
     expect(['2026-11-18', '2026-11-19', '2026-11-20'].map((d) => contOn(s, d))).toEqual(['end', 'both', 'start']);
-    expect(contOn({ date: '2026-11-18', lastDate: '2026-11-18' }, '2026-11-18')).toBeUndefined();
+    expect(contOn({ date: '2026-11-18', lastDate: '2026-11-18' }, '2026-11-18')).toBe(undefined);
     expect(spanDaysIn(s, '2026-11-19', '2026-11-30')).toEqual(['2026-11-19', '2026-11-20']);
     expect(spanDaysIn(s, '2026-11-21', '2026-11-30')).toEqual([]);
   });

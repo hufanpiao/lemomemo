@@ -87,7 +87,7 @@ function days(v: unknown, tr: FieldT): string {
 
 /**
  * 日程时长（R-444，“44640”看不懂）：有时刻的按天、小时、分钟写（shared/i18n/fmt.ts 的 fmtDur，同今天页）；
- * 全天的（time 为 null）按占几天写（event-span.ts 的 allDaySpanDays：60、1440 都是“1 天”）。看不到 time 的行在 describeConflict 里不写这一列
+ * 全天的（time 为 null）按占几天写（event-span.ts 的 allDaySpanDays：60、1440 都是“1 天”）。看不到 time 的行在 describeConflict 里写“（已改过）”（不猜全天还是有时刻）
  */
 function dur(v: unknown, time: unknown, loc: Locale): string {
   need(typeof v === 'number' && Number.isInteger(v) && v >= 1);
@@ -154,11 +154,11 @@ export function describeConflict(
       continue;
     }
     if (s === 'hidden') continue;
-    // 时长要看是不是全天（time）才知道怎么写：拿不到 time 的不写这一列，免得把全天的“60”写成“1 小时”
-    if (s.fmt === 'dur' && !(old && Object.hasOwn(old, 'time'))) continue;
+    // 时长要看是不是全天（time）才知道怎么写：拿不到 old 或 old 里没有 time 的写“（已改过）”（同函数头的约定），免得把全天的“60”写成“1 小时”
+    const known = old !== null && Object.hasOwn(old, col) && (s.fmt !== 'dur' || Object.hasOwn(old, 'time'));
     let v: string;
     try {
-      v = old && Object.hasOwn(old, col) ? value(s.fmt, old[col], loc, tr, old) : tr('sn.changed', {});
+      v = old && known ? value(s.fmt, old[col], loc, tr, old) : tr('sn.changed', {});
     } catch {
       v = tr('sn.changed', {});
     }

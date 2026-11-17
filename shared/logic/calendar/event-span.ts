@@ -58,7 +58,12 @@ export function allDaySpanDays(durationMin: number): number {
   return Math.ceil(eventDurationMin(durationMin) / DAY_MINUTES);
 }
 
-/** 全天日程跨 days 天时存的时长：一天写默认值，多天写“天数 × 1440”（1～31 天） */
+/**
+ * 全天日程跨 days 天时存的时长：一天写默认值，多天写“天数 × 1440”（1～31 天）。
+ * 超过 31 天的悄悄截到 31 天，和有时刻的（event-edit.ts 的 durationTo 原样返回、写入校验拒收）口径不同，是有意的：
+ * 全天只有“最后一天”一个量，编辑页日期框 max 已限在 31 天，到这里还超的只会是 AI 或坏值，截短照样存下这条；
+ * 有时刻的时长是用户选的结束日期加时刻直接算出来的，截短等于悄悄改掉用户选的结束时刻，所以宁可拒收、提示
+ */
 export function allDayDuration(days: number): number {
   const n = Math.min(EVENT_SPAN_MAX_DAYS, Math.max(1, Math.trunc(days)));
   return n === 1 ? EVENT_DURATION_DEFAULT : n * DAY_MINUTES;

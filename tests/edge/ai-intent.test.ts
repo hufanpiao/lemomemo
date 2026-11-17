@@ -122,12 +122,12 @@ describe('提示词 v4 和 plusSchema', () => {
     const v = checkParseOutput({ ...SEARCH, query: { ...SEARCH.query, range: { from: '2026-11-08', to: '2026-11-02' } } }, { now: NOW, tz: 'Asia/Seoul', features: ['event'] });
     if (!v.ok) throw new Error('expected ok');
     expect(v.value).toHaveProperty('fixed', true);
-    const body = plusBody(v.value, 7);
+    const body = plusBody(v.value, 7, true);
     expect(body).not.toHaveProperty('fixed');
     expect(queryResponse.safeParse(body).success).toBe(true);
     const vv = checkVoiceOutput({ transcript: 'x', ...RESCHED }, { now: NOW, tz: 'Asia/Seoul', features: ['event'] });
     if (!vv.ok) throw new Error('expected ok');
-    expect(targetResponse.safeParse(plusBody(vv.value, 0)).success).toBe(true);
+    expect(targetResponse.safeParse(plusBody(vv.value, 0, true)).success).toBe(true);
   });
 });
 

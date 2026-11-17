@@ -353,6 +353,8 @@ export const aiParseRequest = z.object({
   projects: z.array(z.unknown()).max(200).optional(),
   scope: z.enum(['main', 'vault']).optional(),
   default_day: z.string().max(16).optional(),
+  /** R-444 起的客户端带 1：能存跨天日程（duration_min 到 44640）；没带的是旧版，服务器把时长规整到 1440 以内（parse-core.ts 的 plusBody） */
+  span: z.literal(1).optional(),
 });
 
 /** 默认日子（R6：ai-parse 请求体 default_day、ai-voice 请求头 X-Default-Day）：不传回 null；

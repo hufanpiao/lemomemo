@@ -20,7 +20,7 @@ export type AuthResult = SharedAuthResult;
 
 /** shared/schema/ai.ts 里入参相关的几个函数（index.ts 从 _shared/gen/ 注入，单测注入真的 shared） */
 export interface Logic<Item, I extends IntentLike = IntentLike> {
-  parseRequest(body: unknown): { ok: true; value: { text: string; now: number; tz: string; locale?: string | undefined; projects?: unknown[] | undefined; scope?: 'main' | 'vault' | undefined; default_day?: string | undefined } } | { ok: false };
+  parseRequest(body: unknown): { ok: true; value: { text: string; now: number; tz: string; locale?: string | undefined; projects?: unknown[] | undefined; scope?: 'main' | 'vault' | undefined; default_day?: string | undefined; span?: 1 | undefined } } | { ok: false };
   normLocale(v: unknown): 'zh' | 'ko';
   normProjects(v: unknown): string[];
   isValidTz(tz: string): boolean;
@@ -71,5 +71,5 @@ export async function handle<Item, I extends IntentLike = IntentLike>(req: Reque
     await settleFailure(deps, gate, userId, 'ai-parse', r);
     return json(200, { fallback: true, reason: clientReason(r) });   // 每分钟限额回 error，客户端不记“今天用完”
   }
-  return json(200, plusBody(r.value, gate.quotaLeft));
+  return json(200, plusBody(r.value, gate.quotaLeft, body.span === 1));   // 没带 span 的旧版客户端时长规整到 1440 以内（R-444）
 }

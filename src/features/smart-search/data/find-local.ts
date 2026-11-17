@@ -12,7 +12,7 @@
 import { addDays, fmtHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { firstOfMonth, lastOfMonth, monthOf, startOfWeek } from '../../../../shared/logic/calendar/cal-nav.ts';
-import { placeEvent, spanRowOf } from '../../../../shared/logic/calendar/event-span.ts';
+import { overlapsDays, placeEvent, spanRowOf } from '../../../../shared/logic/calendar/event-span.ts';
 import { isShownFile } from '../../../../shared/logic/files/shown-file.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
@@ -188,7 +188,9 @@ function snippetFor(it: FindItem, q: string): string | null {
 
 /** 条目的日子和 from～to 有没有交叠（from 为 null = 截止到 to）：跨天的日程（R-444）按 date～lastDate 算，前几天开始、跨进范围的也算；没有日子的不算 */
 export function overlaps(it: Pick<FindItem, 'date' | 'lastDate'>, from: DateStr | null, to: DateStr): boolean {
-  return it.date !== null && it.date <= to && (from === null || (it.lastDate ?? it.date) >= from);
+  if (it.date === null) return false;
+  // 交叠的判断只用 event-span.ts 的 overlapsDays 一份；这里只管空值：没有 lastDate 的按一天，没有 from 的只看开始不晚于 to（第三轮复审建议 4）
+  return from === null ? it.date <= to : overlapsDays({ date: it.date, lastDate: it.lastDate ?? it.date }, from, to);
 }
 
 /** 按时间筛选（range 为 null 原样）：没有日子的不出 */
