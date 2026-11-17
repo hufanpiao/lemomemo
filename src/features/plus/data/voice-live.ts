@@ -1,5 +1,8 @@
 // 录音这一路的边说边出字、先存、AI 后台整理（R-456，部分取代 R-62“录音时不边说边出字、松手等 Gemini 回来才存”）。voice-rec.ts 调
-// • 识别：按下那一下先开手机自带识别（prime，要在手势里），开录音器时接手（take），和手机自带识别那一路同一套生命周期（voice-speech 的 createSpeechRoute）；
+// • 识别：录音器开起来（start 事件到了）以后才开（take），和手机自带识别那一路同一套生命周期（voice-speech 的 createSpeechRoute）；
+//   R-470：原来按下那一下就先开识别，iPhone 主屏幕版第二次起识别 22 ms 就占住麦克风，录音器随后拿到的流全是 0，识别也认不出字，两边都废；
+//   录音器先拿到麦克风、识别后加入时两边都正常（第一次的日志）。识别这样开已不在按下的手势里：开不起来（not-allowed 等）只丢边说边出字，录音照原来上传
+//   录音器开不起来（不是被拒）时也开识别顶上，接着听（那时没人占麦克风）。
 //   认出的字（已定稿 + 没定稿）放进 view 的 live 给面板画，识别交出结局、回到没按时清空。这一次作废（取消、太短、切页）时跟着关（attempt 的 abort，只挂一次）
 // • 松手前识别自己结束了（iOS、安卓说话停顿后常这样）而手指还按着：自动重开一次，新认出的字接在后面；
 //   重开失败、或者重开后又提前结束：这一次算“断过”（broken），有录音就不先存，整段上传等 AI（不丢后半句）
@@ -12,7 +15,7 @@
 //   没录音时一条都拆不出来：当场交 ai-parse 整理再存（同手机自带识别那一路），不出“录音没开起来”
 // • 后台整理期间不占升级中心的 busy（已经存下了，被重新载入打断只丢一次整理），只在换的那一下（先存新、再撤旧，几十毫秒）占住，免得换到一半记重了；
 //   也不随切页取消（这一次已经存完、代号已经收了）
-// • 运行日志（只记字数、字节数、毫秒、原因，不记内容）：voice live take=接手没有；voice live restart n= ok=；voice live not_started；
+// • 运行日志（只记字数、字节数、毫秒、原因，不记内容）：voice live take=开起来没有 after=rec|rec_fail ms=（识别排在录音器之后开、隔了多久；识别自己开不起来的错误码 platform/speech.ts 记 speech fail code=）；voice live restart n= ok=；voice live not_started；
 //   voice live saved out= n= ai=0|1 ms=（从松手算）；voice live ai skip why=（没存成，不整理）；
 //   voice live ai via=voice|parse out=same|replaced|not_saved|skip_touched|skip_late|skip_*|failed_* ms=
 // 纯 TS：不准 import React（A1）
@@ -135,13 +138,10 @@ export function createLiveRoute(c: VoiceCore, account: (res: VoiceResult) => voi
   };
 
   return {
-    /** 按下那一下先开（要在手势里） */
-    prime: () => route.prime(lang()),
-    /** 只关先开、还没接手的那次 */
-    drop: () => route.drop(),
     cancel,
-    /** 开录音器时接手按下时先开的那次；接手了才挂“这一次作废时一起关” */
-    take(a: Attempt): void {
+    /** 开识别（录音器开起来以后，或录音器开不起来时顶上）；开起来了才挂“这一次作废时一起关”。
+     *  after：日志里记识别排在什么之后开（rec = 录音器 start 事件之后，rec_fail = 录音器开不起来之后）、离开录音器那一步多少毫秒（R-470） */
+    take(a: Attempt, after: 'rec' | 'rec_fail', ms: number): void {
       const on = route.take(lang());
       live = on ? { a, said: '', restarts: 0, broken: false, stopping: false, got: null, wake: null } : null;
       if (on) {
@@ -153,12 +153,10 @@ export function createLiveRoute(c: VoiceCore, account: (res: VoiceResult) => voi
           { once: true },
         );
       }
-      rlog(`voice live take=${on ? 1 : 0}`);
+      rlog(`voice live take=${on ? 1 : 0} after=${after} ms=${Math.round(ms)}`);
     },
     /** 这一次接手了识别 */
     on: (a: Attempt): boolean => live?.a === a,
-    /** 这一次的识别已经开始收音、还没结束（录音器开不起来时靠它接着听） */
-    listening: (a: Attempt): boolean => live?.a === a && route.listening(),
     /** 松手：停止收音（结局经 heard 拿）。还没开始收音的直接关掉；重开的那次还没开始收音，交出前几段 */
     stop(a: Attempt): void {
       const l = live;

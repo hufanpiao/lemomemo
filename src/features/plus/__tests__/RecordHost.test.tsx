@@ -656,7 +656,7 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     fx.quotaOut = true;
     await holdDown();
     expect(fx.starts, '按下时额度没用完：录音').toBe(1);
-    // 按下那一下只开了录音这一路边说边出字的识别（R-456），没在 setTimeout 里开手机自带识别那一路
+    // 只开了录音这一路边说边出字的识别（录音器开起来以后，R-470），没开手机自带识别那一路
     expect(fx.speech.map((r) => r.live)).toEqual([true]);
     expect(logged(/^voice hold start .* route=rec$/)).toBe(true);
   });
@@ -693,7 +693,7 @@ describe('边说边出字、先存、AI 后台整理（R-456）', () => {
     expect(live?.view().status).toBe('saved');
     await waitFor(() => expect(call, '后台照样上传同一段录音').toHaveBeenCalledTimes(1));
     expect(fx.busy, '后台整理期间不占 busy').toEqual([]);
-    expect(logged(/^voice live take=1$/)).toBe(true);
+    expect(logged(/^voice live take=1 after=rec ms=\d+$/)).toBe(true);
     expect(logged(/^voice live end speech=ok len=3 rec=ok bytes=2000$/)).toBe(true);
     expect(logged(/^voice live saved out=ok n=1 ai=0 ms=\d+$/)).toBe(true);
     expect(log.some((l) => l.includes('买牛奶')), '不记说的内容').toBe(false);
@@ -860,12 +860,60 @@ describe('边说边出字、先存、AI 后台整理（R-456）', () => {
     expect(call).not.toHaveBeenCalled();
     expect(writer.insert).toHaveBeenCalledTimes(1);
   });
-  it('只点一下“＋”（没按满 350 ms）：按下时先开的识别被关掉', async () => {
+  it('只点一下“＋”（没按满 350 ms）：录音这一路按下时不开识别，什么都没开', async () => {
     setup();
     act(() => hold.onStart(ptr()));
     await sleep(40);
+    expect(fx.speech, '按下那一下没开识别（R-470）').toEqual([]);
     await release();
-    expect(fx.speech.map((r) => [r.live, r.cancelled])).toEqual([[true, true]]);
+    await sleep(HOLD_MS);
+    expect(fx.speech).toEqual([]);
+    expect(fx.starts).toBe(0);
+  });
+
+  // R-470（负责人 11-17：“有时候说话语音不识别，那个说话时的波动条也不动”“第一次语音输入正常，之后就不行”）：
+  // iPhone 主屏幕版上识别先占了麦克风，录音器随后拿到的流全是 0。改成录音器开起来以后才开识别
+  it('先录音、后识别：录音器还没开起来（等 getUserMedia）时识别没开；录音器开起来以后才开，日志 take=1 after=rec', async () => {
+    fx.startHang = true;
+    fx.liveSay = '买牛奶';
+    const { writer } = setup({ call: held().call });
+    await holdDown();
+    expect(fx.starts, '录音器在开').toBe(1);
+    expect(fx.speech, '录音器没开起来之前识别不开').toEqual([]);
+    await act(async () => fx.startOpen?.());
+    await waitFor(() => expect(fx.speech.map((r) => r.live)).toEqual([true]));
+    expect((await screen.findByTestId('rec-panel')).dataset['status']).toBe('recording');
+    const take = log.findIndex((l) => /^voice live take=1 after=rec ms=\d+$/.test(l));
+    const rec = log.findIndex((l) => /^voice preparing->recording /.test(l));
+    expect(rec, '先进录音中').toBeGreaterThanOrEqual(0);
+    expect(take, '再开识别').toBeGreaterThan(rec);
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    expect(ins(writer, 0).title).toBe('买牛奶');
+  });
+
+  it('录音器开起来以后识别开不起来（不在手势里那种）：只丢边说边出字，录音照原来上传、等 AI 再存', async () => {
+    fx.liveRefuse = true;
+    const { writer, call } = setup();
+    await holdDown();
+    expect((await screen.findByTestId('rec-panel')).dataset['status']).toBe('recording');
+    expect(logged(/^voice live take=0 after=rec ms=\d+$/)).toBe(true);
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(ins(writer, 0).title).toBe('买猫砂');
+    expect(logged(/^voice live end speech=off len=0 rec=ok bytes=2000$/)).toBe(true);
+  });
+
+  it('录音器开起来以后识别报 not-allowed（denied）：不出“麦克风被拒”卡，录音照原来上传', async () => {
+    fx.liveFail = 'denied';
+    const { writer, call } = setup();
+    await holdDown();
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(live?.view().card, '不出说明卡').toBeNull();
+    expect(logged(/^voice live end speech=denied len=0 rec=ok bytes=2000$/)).toBe(true);
   });
 
   it('松手前识别自己结束了、手指还按着：自动重开一次，新认出的字接在后面，先存整句；日志 restart n=1 ok=1', async () => {
