@@ -34,6 +34,8 @@
 //   删掉和全局 :focus-visible 一样的 .me:focus-visible。窄屏底栏、“＋”的规则一行没动；视觉锁定基准都是手机宽度，不受影响。
 // • 11-17 负责人：“点进去的时候有瞬间的灰框，奇丑无比”（真机图灰框是随手记行按钮 .lmain 的大小，是 iOS 默认点按高亮），提交 3a066c28：
 //   base.css 在 html 上加 -webkit-tap-highlight-color: transparent，只关系统按下时画的灰框；底栏、“＋”的规则一行没动，静止画面不变，:focus-visible 照旧。
+// • 11-17 负责人：“滑动的时候右边的灰色滑动条可以去掉吗”，本提交：base.css 加 @media (pointer: coarse) 里 html 的 scrollbar-width: none 和 ::-webkit-scrollbar 隐藏；
+//   只藏触屏上整页的滚动条，底栏、“＋”的规则一行没动。
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -42,13 +44,13 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、3a066c28（点按灰框）、GlassBar.module.css 又在 R-436 侧栏精致化按上面的更新记录换过 */
+/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、3a066c28（点按灰框）、11-17 触屏滚动条、GlassBar.module.css 又在 R-436 侧栏精致化按上面的更新记录换过 */
 const PINNED: Record<string, string> = {
   'src/kit/components/GlassBar/GlassBar.module.css': '9272755e89c97f451123ae01801cbb2f026ad6e8fce3246fab1c5df541fa07cd',
   'src/kit/components/GlassBar/GlassBarFx.tsx': '2cd1d04f069b8e10829389ca87e8b647678ba4c0057c1fb42dc777e342d75b0c',
   'src/kit/components/GlassBar/GlassBarFx.module.css': '3a7f59ede916fe65267888adbf53c60f622ba0e56d5c2b079d9665ad01b8dca3',
   'src/motion/glass-ghost.ts': '6211d651c7439b5aa35d8f755f33327b71213e68aa6c26e404b503ea25da701a',
-  'src/styles/base.css': '8022712ac9b118684e6b54994533532e0973d7fb02c2ec81b76db7af4f45e0d2',
+  'src/styles/base.css': '439234caccd7d7612bf186653a5eba21ac150e7f08454926af280d8bc99dedc3',
 };
 
 const sha256 = (rel: string): string => createHash('sha256').update(readFileSync(join(ROOT, rel))).digest('hex');

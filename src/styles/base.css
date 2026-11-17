@@ -15,6 +15,19 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* 滑动时右边的灰色滚动条（负责人 11-17“滑动的时候右边的灰色滑动条可以去掉吗”）：只在触屏上藏掉整页的滚动条，滚动照旧；
+   电脑上用鼠标时留着（要靠它看位置、拖动）。scrollbar-width 给 Safari 18.2+ / Firefox，::-webkit-scrollbar 给更早的 WebKit */
+@media (pointer: coarse) {
+  html {
+    scrollbar-width: none;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* App 页面不许整页双指缩放、双击放大（负责人 11-11“今天，代办跟随手记为啥可以用双指扩大整个画面”；viewport 的 user-scalable=no iOS 不认，
    iOS 上真正拦住的是 platform/viewport.ts 的 blockPageZoom）。只认 App 入口页（src/index.html 的 <html data-app>）：
    登录页（src/auth/index.html）也引这份 CSS，照样能缩放（kb-zoom 代码审 M1，主持人定登录页不禁）。
