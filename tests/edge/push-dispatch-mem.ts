@@ -4,7 +4,7 @@
 // 推送服务用测试开发的替身 tests/fakes/push-service.ts（进程内 fake.fetch）；造数据按“少量设备、每台多条”（替身复核 N1）。
 import { msAt, parseHm } from '../../shared/core/date.ts';
 import { isValidTz } from '../../shared/core/tz.ts';
-import { t } from '../../shared/i18n/i18n.ts';
+import { t } from '../../shared/i18n/t-static.ts';
 import { notifyText } from '../../shared/logic/notify-text.ts';
 import { allDayTimeOf, dndDeferUntil, REMIND_RULES_VER, remindAtOf, sameRemindDay } from '../../shared/logic/remind.ts';
 import { startAtOf } from '../../shared/logic/remind-actions.ts';

@@ -1,7 +1,8 @@
 // shared/i18n（架构 2.4）：中韩词典键一致、占位符一致；t() 填参数；fmt 不依赖 Intl 的本地化输出
 import { describe, expect, it } from 'vitest';
 import { fmtDate, fmtDay, fmtDur, fmtTime, weekdayName } from '../../shared/i18n/fmt.ts';
-import { createT, fill, placeholdersOf, t } from '../../shared/i18n/i18n.ts';
+import { createT, fill, placeholdersOf } from '../../shared/i18n/i18n.ts';
+import { t } from '../../shared/i18n/t-static.ts';
 import { ko } from '../../shared/i18n/ko.ts';
 import { zh } from '../../shared/i18n/zh.ts';
 

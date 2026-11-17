@@ -19,8 +19,8 @@ function base(): Manifest {
     '_jsx-runtime-a.js': { file: 'assets/jsx-runtime-a.js', name: 'jsx-runtime' },
     'features/today/ui/TodayPage.tsx': { file: 'assets/TodayPage-a.js', src: 'features/today/ui/TodayPage.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js', '_components-a.js'] },
     '_components-a.js': { file: 'assets/components-a.js', name: 'components' },
-    'features/onboarding/ui/ConsentGate.tsx': { file: 'assets/ConsentGate-a.js', src: 'features/onboarding/ui/ConsentGate.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'], dynamicImports: ['features/onboarding/ui/ConsentPage.tsx'] },
-    'features/onboarding/ui/ConsentPage.tsx': { file: 'assets/ConsentPage-a.js', src: 'features/onboarding/ui/ConsentPage.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
+    'features/onboarding/ui/ConsentGate.tsx': { file: 'assets/ConsentGate-a.js', src: 'features/onboarding/ui/ConsentGate.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'], dynamicImports: ['features/onboarding/ui/ConsentRoute.tsx'] },
+    'features/onboarding/ui/ConsentRoute.tsx': { file: 'assets/ConsentRoute-a.js', src: 'features/onboarding/ui/ConsentRoute.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
     // 今天页里的提醒部件（③ 审查第三轮：MissedReminders 漏登过；11-05 起 MissedReminders 等引擎 armed 才挂、不在首屏，留在名单里只会更严）
     'features/reminders/ui/MissedReminders.tsx': { file: 'assets/MissedReminders-a.js', src: 'features/reminders/ui/MissedReminders.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
     'features/reminders/ui/UnsyncedRemind.tsx': { file: 'assets/UnsyncedRemind-a.js', src: 'features/reminders/ui/UnsyncedRemind.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
@@ -31,6 +31,9 @@ function base(): Manifest {
     // “现在”卡浅色卡的暖心句（今天页挂上按当前语言下载一份，不引别的块）
     'features/today/i18n/cheer-zh.ts': { file: 'assets/cheer-zh-a.js', src: 'features/today/i18n/cheer-zh.ts', isDynamicEntry: true },
     'features/today/i18n/cheer-ko.ts': { file: 'assets/cheer-ko-a.js', src: 'features/today/i18n/cheer-ko.ts', isDynamicEntry: true },
+    // 公共词典（首屏瘦身 D：入口渲染前按当前语言下载一份；shared 在 vite root 外，键带 ../）
+    '../shared/i18n/zh.ts': { file: 'assets/zh-a.js', src: '../shared/i18n/zh.ts', isDynamicEntry: true },
+    '../shared/i18n/ko.ts': { file: 'assets/ko-a.js', src: '../shared/i18n/ko.ts', isDynamicEntry: true },
     '_rows-a.js': { file: 'assets/rows-a.js', name: 'rows', isDynamicEntry: true, imports: ['_zod-jitless-a.js'] },
     '_zod-jitless-a.js': { file: 'assets/zod-jitless-a.js', name: 'zod-jitless' },
     'style.css': { file: 'assets/style-a.css', src: 'style.css' },
@@ -83,7 +86,7 @@ describe('首屏块里不许有 zod（按构建产物，FA-6 ③ M3）', () => {
   it('告知页（关口懒加载的那一层）静态引 shared/schema 的块：拦住', () => {
     const m = base();
     m['_schema-a.js'] = { file: 'assets/x-a.js', name: 'x', src: '../shared/schema/settings.ts' };
-    m['features/onboarding/ui/ConsentPage.tsx']?.imports?.push('_schema-a.js');
+    m['features/onboarding/ui/ConsentRoute.tsx']?.imports?.push('_schema-a.js');
     expect(checkFirstPaint(m, text())).toHaveLength(1);
   });
 
@@ -155,6 +158,6 @@ describe('接线', () => {
     for (const k of FIRST_PAINT_DYNAMIC as string[]) expect(existsSync(join(ROOT, 'src', k)), k).toBe(true);
     expect(readFileSync(join(ROOT, 'src/features/today/index.ts'), 'utf8')).toContain("name: 'today', Page: lazy(() => import('./ui/TodayPage.tsx'))");
     expect(readFileSync(join(ROOT, 'src/features/onboarding/index.ts'), 'utf8')).toContain("export const ConsentGate = lazy(() => import('./ui/ConsentGate.tsx'));");
-    expect(readFileSync(join(ROOT, 'src/features/onboarding/ui/ConsentGate.tsx'), 'utf8')).toContain("lazy(() => import('./ConsentPage.tsx'))");
+    expect(readFileSync(join(ROOT, 'src/features/onboarding/ui/ConsentGate.tsx'), 'utf8')).toContain("lazy(() => import('./ConsentRoute.tsx'))");
   });
 });

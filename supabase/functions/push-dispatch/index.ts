@@ -9,7 +9,7 @@ import { timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { msAt, parseHm } from '../_shared/gen/core/date.ts';
 import { isValidTz } from '../_shared/gen/core/tz.ts';
-import { t } from '../_shared/gen/i18n/i18n.ts';
+import { t } from '../_shared/gen/i18n/t-static.ts';
 import { notifyText } from '../_shared/gen/logic/notify-text.ts';
 import { allDayTimeOf, dndDeferUntil, REMIND_RULES_VER, remindAtOf, sameRemindDay } from '../_shared/gen/logic/remind.ts';
 import { startAtOf } from '../_shared/gen/logic/remind-actions.ts';

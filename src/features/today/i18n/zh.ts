@@ -38,6 +38,10 @@ export const zh = {
   'list.past': '已过去 {n} 件：{items}',
   'toast.deleted': '已删除',
   'toast.undo': '撤销',
+  // 11-17 今天页待办行换成 kit TodoRow（同待办页）：打勾完成的撤销条、副行“起步 / 大半”小标签（同待办页词典 list.doneToast、items.stage.*）
+  'toast.done': '已完成',
+  'stage.1': '起步',
+  'stage.2': '大半',
   'err.save': '没保存上，稍后再试一次',
   'err.readonly': '这条要新版本才能修改',
   // 麦克风被拒时今天页常驻一行（B3 S23；定稿线框“麦克风被拒绝”卡原文）

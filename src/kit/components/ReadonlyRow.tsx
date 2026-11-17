@@ -4,16 +4,14 @@
 //   “更新”做什么由调用方给（功能里调 platform 的 requestAppUpdate；kit 不碰 platform）
 // • ReadonlyToast：点这一行、打勾、删除被拦下以后的提示条“这条要新版本才能修改 · 更新”（kit 的 UndoToast；状态在 useReadonlyGuard）。
 //   role="alert"：每次拦下都新挂一条，新挂的 status 区域 iOS VoiceOver 常常不读；alert 新挂上就读（FA-2 审查第 1 条）
-// • RoCheckCircle：打勾圆圈，只读时读屏名字后接“要更新到新版本才能修改”（FA-2 审查第 5 条）；词条在 ro 词典、不进首屏，
-//   所以拼名字放这里、不放 CheckCircle（今天页的只读行按需下载它，11-06）
+// • RoCheckCircle（只读时读屏名字后接“要更新到新版本才能修改”）11-17 挪到 ./ReadonlyMark.tsx（kit TodoRow 在今天页首屏只带那一小份）
 import type { ReadonlyGuard } from '../hooks/useReadonly.ts';
 import { useRepeatPending } from '../hooks/useRepeatPending.ts';
 import { useRoT } from '../hooks/useRoT.ts';
-import { CheckCircle, type CheckCircleProps } from './CheckCircle.tsx';
 import { UndoToast } from './UndoToast.tsx';
 import styles from './ReadonlyRow.module.css';
 
-export { ReadonlyMark } from './ReadonlyMark.tsx';
+export { ReadonlyMark, RoCheckCircle } from './ReadonlyMark.tsx';
 
 export function RepeatBanner({ onUpdate, testId }: { onUpdate(): void; testId?: string }) {
   const t = useRoT();
@@ -37,9 +35,4 @@ export function ReadonlyToast<T>({ guard, message, testId }: { guard: ReadonlyGu
   return (
     <UndoToast key={at} role="alert" message={message} undoLabel={t('ro.update', {})} onUndo={guard.update} onClose={() => guard.close(at)} data-testid={testId} />
   );
-}
-
-export function RoCheckCircle(p: CheckCircleProps) {
-  const t = useRoT();
-  return <CheckCircle {...p} label={p.readOnly ? t('ro.named', { label: p.label }) : p.label} />;
 }

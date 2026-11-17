@@ -9,7 +9,7 @@
 //   只写“15:00 有 1 项日程”这类说法、不带截止时刻（TC-B2-78）；source = chat 加“来自 Claude ·”
 // • 打开 App 时关掉已处理的系统通知（iPhone 不发 resolve，5.3）：shouldCloseShown 判断某个 tag 是不是已处理
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { t as sharedT, type Locale } from '../../../../shared/i18n/i18n.ts';
+import { sharedT, type Locale } from '../../../../shared/i18n/i18n.ts';
 import { notifyText, type NotifyMsg } from '../../../../shared/logic/notify-text.ts';
 import { startAtOf } from '../../../../shared/logic/remind-actions.ts';
 import { todayOf } from '../../../../shared/core/date.ts';

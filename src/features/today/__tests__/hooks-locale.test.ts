@@ -36,7 +36,7 @@ describe('useToday 按当前语言排（X12）', () => {
   it('今天的日程', () => {
     for (const [loc, want] of [['zh-CN', ZH], ['ko-KR', KO]] as const) {
       act(() => uiStore.getState().setLocale(loc));
-      const { result, unmount } = renderHook(() => useToday());
+      const { result, unmount } = renderHook(() => useToday(new Set()));
       expect(result.current.events.map((o) => o.title), `${loc} 日程`).toEqual(want);
       unmount();
     }

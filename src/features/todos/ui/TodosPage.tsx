@@ -15,12 +15,14 @@
 // • 已完成组折叠（负责人 11-15“完成的待办怎么隐藏比较好”，已选方案）：列表最下面只留一行“已完成 N ›”（按钮，aria-expanded），点开展开、再点收起；
 //   默认收起，展开没有记在本机 meta 的 ui.todo_done_open（hooks/useSubtasks.ts 的 useDoneOpen，每台设备各记各的）。
 // • 勾完的那一秒（负责人 11-17 定的勾选特效分镜，取代 11-15 的“留在原位约 3 秒”）：打勾完成、勾完最后一个子任务自动完成走同一条路——
-//   按下方框缩 0.92、勾上填充回弹加一圈小点、标题从左往右划线、整行变淡（kit CheckCircle、kit List 的 .fold）→ 停到 700ms → 这一行 280ms 收起、
-//   页底同时升起“已完成 · 撤销”（kit UndoToast，8 秒柠檬黄倒计时色带，R-450）→ 归进“已完成”组；减弱动态效果时只变淡、不收高度。
-//   计时在 hooks/useDoneFlow.ts（日历日清单的待办组同一份，R-443），分组时怎么留在原位在 data/todo-list.ts 的 linger
+//   11-17 负责人“动效太轻了，根本反应不过来”后照参考视频重排成一条时间线（时刻、时长全在动效令牌“勾选完成时间线”一段）：
+//   按下方框缩到 0.8、行尾 HML 藏起、标题变灰 → 放大过头到 1.3 再回落、外圈小点炸开（kit CheckCircle）→ 删除线从左往右画（kit List 的 .strike）
+//   → 停到 800ms → 这一行 100ms 收起、页底同时升起“已完成 · 撤销”（kit UndoToast，8 秒柠檬黄倒计时色带，R-450）→ 归进“已完成”组；
+//   减弱动态效果时没有缩放、炸开，删除线直接画好、不收高度只淡出。计时在 kit/components/useDoneFlow.ts（日历日清单、今天页同一份），
+//   分组时怎么留在原位在 data/todo-list.ts 的 linger
 // • T-A 行细节（负责人 11-17 选 T-A）：有子任务的方框里按做到几成从下往上填、画小脸（kit CheckCircle 的 progress），副行最前面“起步 / 大半”小标签
-//   和等宽“1/3”（SubtaskBar.tsx 的 SubStage）；行尾 H / M / L 三格并排（kit PrioCycle，推翻 R-434 的单格；点哪格设哪档、键盘读屏换下一档）；
-//   完成的待办、子任务都变淡加删除线。一行画在 TodoRow.tsx、动作在 hooks/useTodoRowActions.ts（日历日清单同一份），这里只给副行和左滑删除
+//   和等宽“1/3”；行尾 H / M / L 三格并排（kit PrioCycle，推翻 R-434 的单格；点哪格设哪档、键盘读屏换下一档）；
+//   完成的待办灰字加删除线。一行画在 kit TodoRow、动作在 kit/components/useTodoRows.ts（日历日清单、今天页同一份；词条和部件在 row-parts.tsx），这里只给副行和左滑删除
 // • 子任务（R-350 方案 5.1、5.4、5.5）：有子任务的待办，行下面摊开勾选清单、底部分段进度条、右下“已勾/总数 · 收起 / 展开”
 //   （T-A 起“收起 / 展开”在左下、进度条在行底；InlineSubtasks → SubtaskCard，今天页、日历日清单同一个；收起状态每台设备各记各的，未完成默认展开、已完成默认收起）。列表页只能勾，加删改在编辑页（Q10）。
 //   勾子任务：主待办只读或这一项只读 → 拦下出“要新版本”；勾上最后一项 → 主待办自动完成，和打勾一样留在原位、出撤销条
@@ -50,27 +52,28 @@ import { PullHit, PullSlot } from '../../../kit/components/PullSlot.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable } from '../../../motion/components.ts';
 import { useListT, useTodoList, type DueTag, type Group } from '../hooks/useTodoList.ts';
-import { useLinger } from '../hooks/useDoneFlow.ts';
-import { useTodoRowActions } from '../hooks/useTodoRowActions.ts';
+import { useLinger } from '../../../kit/components/useDoneFlow.ts';
+import { useTodoRows } from '../../../kit/components/useTodoRows.ts';
+import { TodoRow, type TodoRowIds } from '../../../kit/components/TodoRow.tsx';
 import { setCollapsed, setDoneOpen, useCollapsed, useDoneOpen } from '../hooks/useSubtasks.ts';
-import { TodoRow, type TodoRowIds } from './TodoRow.tsx';
+import { TODO_PARTS, useRowWords } from './row-parts.tsx';
 import { PullSearch } from '../../smart-search/index.ts';
 import styles from './TodosPage.module.css';
 import chip from '../../../kit/components/Chip.module.css';
 import refine from '../../../kit/components/Refine.module.css';
 
-/** 行里各处的测试 id 前缀（ui/TodoRow.tsx） */
+/** 行里各处的测试 id 前缀（kit TodoRow） */
 const IDS: TodoRowIds = { row: 'todos-row', done: 'todos-done', prio: 'todos-prio', stage: 'todos-stage', ro: 'todos-ro', subs: 'todos' };
 
 export default function TodosPage() {
   const t = useListT();
   const locale = useUi((s) => s.locale);
-  // 勾完先留在原位的那几条（hooks/useDoneFlow.ts）：分组时按它们没完成时的组留着
+  // 勾完先留在原位的那几条（kit/components/useDoneFlow.ts）：分组时按它们没完成时的组留着
   const lg = useLinger();
   const l = useTodoList(lg.ids);
-  // 行的动作（日历日清单同一份，hooks/useTodoRowActions.ts）：改回未完成时先留住按下之前的分组 --dur-ui；只读行统一拦下；
+  // 行的动作（日历日清单、今天页同一份，kit/components/useTodoRows.ts）：改回未完成时先留住按下之前的分组 --dur-ui；只读行统一拦下；
   // 撤销条、出错条在 r.a.g 里（kit 的 useListActions）；打勾、勾完子任务自动完成的停留、收起、“已完成 · 撤销”在 r.flow
-  const r = useTodoRowActions(l.groups, lg, l, 'todos');
+  const r = useTodoRows(l.groups, lg, l, 'todos', useRowWords(), TODO_PARTS);
   const { a } = r;
   const { isRo, del } = a;
   const open = (id: string) => (isRo(id) ? a.g.block() : void navigate('todo', id));
@@ -138,14 +141,13 @@ export default function TodosPage() {
             {g.key === 'done' && !doneOpen && !pull.searching ? null : (
             <AppearList as="ul" className={`${list.list} ${list.roomy}${g.key === 'late' ? ` ${list.late}` : ''}`}>
               {g.items.map(({ todo, tag }) => {
-                const subs = l.subs.get(todo.id);
                 const due = dueText(tag);
                 return (
                   <TodoRow
                     key={todo.id}
                     r={r}
                     todo={todo}
-                    subs={subs}
+                    progress={l.subs.get(todo.id)}
                     ids={IDS}
                     onOpen={() => open(todo.id)}
                     mark={(text) => <PullHit pull={pull} text={text} />}

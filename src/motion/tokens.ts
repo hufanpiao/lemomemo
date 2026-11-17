@@ -9,10 +9,23 @@ export const dur = {
   press: 0.12,
   /** --dur-ui 220ms：提示条、勾选、淡入淡出、列表增删 */
   ui: 0.22,
-  /** --dur-burst 300ms：亲手勾上待办时方框外一圈小火花（负责人 11-17 勾选特效分镜，kit CheckCircle） */
+  // —— 勾选完成时间线（负责人 11-17 原话“动效太轻了，根本反应不过来”加参考视频 点击特效.mp4 逐帧量；从勾上那一刻算起）——
+  // 0 按下缩小 → donePop 放大过头再回落（kit CheckCircle）→ doneBurstAt 起外圈小点炸开 burst → doneStrikeAt 起删除线从左往右画 strike
+  //（kit List 的 .strike）→ donePop 播完再停 doneRest → 开始收起 collapse（kit List 的 .fold；kit/components/useDoneFlow.ts 只排“donePop + doneRest”和 collapse 两个计时）
+  /** --dur-done-pop 400ms：方框从按下的 0.8 放大过头到约 1.3、回落到约 1.1、再回 1.0 */
+  donePop: 0.4,
+  /** --dur-done-burst-at 130ms：外圈小点开始炸开的时刻 */
+  doneBurstAt: 0.13,
+  /** --dur-burst 300ms：外圈小点炸开、扩散变淡 */
   burst: 0.3,
-  /** --dur-collapse 280ms：勾完的待办行收起（同一分镜，kit List 的 .fold；features/todos/hooks/useDoneFlow.ts 按它计时） */
-  collapse: 0.28,
+  /** --dur-done-strike-at 170ms：删除线开始画的时刻 */
+  doneStrikeAt: 0.17,
+  /** --dur-strike 130ms：删除线从左往右画满 */
+  strike: 0.13,
+  /** --dur-done-rest 400ms：方框回到 1.0 以后停住多久再收起（勾上到开始收起 = donePop + doneRest = 800ms） */
+  doneRest: 0.4,
+  /** --dur-collapse 100ms：这一行收起（11-17 从 280ms 改，参考视频整行约 100ms 快速收起） */
+  collapse: 0.1,
   /** --dur-sheet 380ms：弹层、录音面板、页面切换 */
   sheet: 0.38,
   /** --dur-drop 0.55s：底栏液滴（R-155，唯一超过 400ms 的例外） */
@@ -77,7 +90,12 @@ export const cssVarOf = {
   dur: {
     press: '--dur-press',
     ui: '--dur-ui',
+    donePop: '--dur-done-pop',
+    doneBurstAt: '--dur-done-burst-at',
     burst: '--dur-burst',
+    doneStrikeAt: '--dur-done-strike-at',
+    strike: '--dur-strike',
+    doneRest: '--dur-done-rest',
     collapse: '--dur-collapse',
     sheet: '--dur-sheet',
     drop: '--dur-drop',

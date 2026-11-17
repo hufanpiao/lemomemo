@@ -4,7 +4,7 @@
 // • 过期：截止日早于今天，或今天的截止时刻已过（界面标红：“逾 N 天”“已过 17:00”）；规则和读一行都在 shared/logic/todo-row.ts（和今天页共用）
 // • 项目筛选只在待办页（架构 5.9“项目筛选”）：project 为 null 是“全部”
 // • linger（负责人 11-15“完成的待办怎么隐藏”；审查 11-15 第 4 条改成集合）：刚勾完、还在原位停留和收起的那几条，照没完成时的截止分组留在原位，
-//   收完（负责人 11-17 勾选特效分镜：停 700ms、收起 280ms）才归进“已完成”组（谁在 linger 里由 hooks/useDoneFlow.ts 管）
+//   收完（勾选完成时间线：停到 --dur-done-pop + --dur-done-rest、收起 --dur-collapse）才归进“已完成”组（谁在 linger 里由 kit/components/useDoneFlow.ts 管）
 // • 组内先后（R-442，取代 R-429 的拖动排序）：没完成的各组按 shared/logic/todo-row.ts 的 compareTodos（高 → 中 → 低，同档按截止时刻、
 //   没时刻的在后，再按创建时间；今天页、日历日清单同一个函数）；“已完成”组照旧按完成时刻（最近完成的在前）
 import { addDays, diffDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';

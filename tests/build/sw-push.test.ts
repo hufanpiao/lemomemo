@@ -5,7 +5,7 @@
 //   显示前核对 owner（B2 安全审查 FE-1：没有库、没有 owner、不一致只显示 App 名，不建库）、解不开时按浏览器语言显示 App 名、
 //   点通知打开整页提醒（有窗口就聚焦跳转；data 校验不过只打开 /app/，FE-3）、点“推迟”按 K-sw-seal 写 pending_actions
 import { describe, expect, it, vi } from 'vitest';
-import { t } from '../../shared/i18n/i18n.ts';
+import { t } from '../../shared/i18n/t-static.ts';
 import { buildPayload, VAULT_PUSH_EVENTS as SERVER_VAULT_EVENTS, type PayloadInput } from '../../supabase/functions/_shared/push/payload.ts';
 import { VAULT_PUSH_EVENTS, vaultPushT } from '../../src/sw/push-vault-data.ts';
 import { claimCache } from '../../src/core/account.ts';

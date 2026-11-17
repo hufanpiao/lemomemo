@@ -160,13 +160,6 @@
   white-space: nowrap;
 }
 
-/* 做完的行（今天页“已过去”等）：灰字加删除线。待办页、日清单的待办行（.fold）用 :not 排除在外（划线要从左往右画，见下面 .fold 一段），
-   不靠两条规则谁写在后面决胜；包一层 :where 只是把权重压回和 .title 一样，免得后面 .fold 那几条按 no-descending-specificity 得挪到前面来 */
-:where(.row[data-done]:not(.fold)) .title {
-  color: var(--text-2);
-  text-decoration: line-through;
-}
-
 .meta {
   color: var(--text-2);
   font-size: var(--fs-12-5);
@@ -216,17 +209,99 @@
   color: var(--text);
 }
 
-/* .fold：勾完的那一秒（负责人 11-17 定的勾选特效分镜；计时在 features/todos/hooks/useDoneFlow.ts）：待办页、日历日清单的待办行（R-443）
-   都由 features/todos/ui/TodoRow.tsx 画：li.row.fold 里只放一层 .foldBody（这一格 grid 才收得动），.foldBody 里是行面（.swRow，待办页外面再套 SwipeRow）。
-   “完成了没有”只看行（li）上的 data-done；唯一的例外是标题文字外面那层 .strike 自己也带 data-done——划线要从左往右画（背景线的 background-size 过渡），
+/* ---------- 待办行（kit TodoRow：待办页、日历日清单、今天页三处同一个）---------- */
+
+/* 副行最前面“起步 · 1/3”（11-17 从 features/todos 的 Subtasks.module.css 挪来）：小标签是淡柠檬黄胶囊（同勾上的方框底色），三格小图标亮几格看档；“1/3”等宽。
+   负责人 11-17 17:31“这个字大小改成上面‘5/13 完成’这个大小，就是整体在小一圈”：字号跟副行（.fold .meta，--fs-11），
+   胶囊不另设字号；小柱、内边距、间距按 11 / 12 ≈ 0.9 一起缩；和后面的“3/4”按文字基线对齐（不按盒子居中） */
+.stage {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 0 7px 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--check-on-bg);
+  color: var(--check-on-fg);
+}
+
+.bars {
+  display: inline-flex;
+  align-self: center;
+  align-items: flex-end;
+  gap: 1px;
+  height: 9px;
+}
+
+.bars > i {
+  width: 2.5px;
+  border-radius: 1px;
+  background: currentcolor;
+  opacity: 0.35;
+}
+
+.bars > i:nth-child(1) {
+  height: 4.5px;
+  opacity: 1;
+}
+
+.bars > i:nth-child(2) {
+  height: 6.5px;
+}
+
+.bars > i:nth-child(3) {
+  height: 9px;
+}
+
+.pill[data-stage='2'] .bars > i:nth-child(2) {
+  opacity: 1;
+}
+
+.frac {
+  font-family: var(--f-mono);
+  color: var(--text-2);
+}
+
+/* 标题和副行之间、副行和展开的子任务卡片之间留出空（负责人 11-17“这个间距太挤了”：两处原来几乎贴着）。
+   只在待办行这一处写，三页同一份；卡片和副行之间的那一段在 features/todos 的 Subtasks.module.css 的 .items（卡片自己的上外边距） */
+.fold .text {
+  gap: 4px;
+}
+
+/* 待办行的副行整行（“工作 · 今天”“11/22”，带子任务的“大半 · 3/4 · 今天”）和页头“11月17日 周二 · 5 / 13 完成”（kit Refine.module.css 的 .sub）同一档
+   --fs-11（负责人 11-17 17:31，原来是 .meta 的 --fs-12-5、胶囊 --fs-12）；只改待办行（.fold），日程行、随手记等别的列表照旧 */
+.fold .meta {
+  font-size: var(--fs-11);
+}
+
+/* 行尾 H / M / L 外面那层：勾上那一下立刻藏起来（参考视频第 1 帧行尾 HML 立刻消失），位置留着、标题不跟着挪；藏起来也不进 Tab 顺序 */
+.prio {
+  display: flex;
+  flex: none;
+}
+
+.fold[data-done] .prio {
+  visibility: hidden;
+}
+
+/* .fold：勾完的那一秒（勾选完成时间线，负责人 11-17 原话“动效太轻了，根本反应不过来”加参考视频；时刻、时长全在动效令牌“勾选完成时间线”一段，
+   计时在 kit/components/useDoneFlow.ts）。kit TodoRow 画：li.row.fold 里只放一层 .foldBody（这一格 grid 才收得动），.foldBody 里是行面（.swRow，外面可能再套 SwipeRow）。
+   “完成了没有”只看行（li）上的 data-done；唯一的例外是删除线那条 .line 自己也带 data-done——它要从左往右画，
    会动的属性状态得写在元素自身上（样式规则 lemo/reduced-motion-override）
-   • 已完成：行面变淡 0.5（待办页、日清单共用这一份，原来两页各写一份；今天页“已过去”里做完的那几条还是 TodayPage.module.css 自己那条，
-     今天页跟上 T-A 是后续），--dur-ui 过渡；标题字色转 --text-2；
-     标题划线是一条 1px 背景线（text-decoration 不能过渡），本来就勾上的直接画好、不播
-   • 这一行收起（第 ④ 段）：li 是一格的 grid，data-out 时这一格从 1fr 收到 0fr（280ms · --ease-drawer），下面的行跟着上来，不逐帧改 height；
+   • 按下、放大过头、炸开在 kit CheckCircle；这里管：标题当场变灰（不过渡，参考第 1 帧）、行尾 HML 当场藏、
+     --dur-done-strike-at 起删除线 --dur-strike 从左往右画满（.strike 里那条 .line 的 scaleX，只动 transform、在合成线程上跑：
+     11-17 逐帧查过，原来的 background-size 过渡要主线程每帧重画，webkit 第一次勾时点下后约 200ms 没出帧，等出帧时线已经画了一半）；
+     本来就勾上的直接画好、不播（过渡只在 data-done 变化时播）
+   • 原来行面整体变淡 0.5 去掉（11-17）：方框在放大、炸开时被一起压暗，特效看着就“轻”；做完的认灰字加删除线，同参考视频
+   • 这一行收起：li 是一格的 grid，data-out 时这一格从 1fr 收到 0fr（--dur-collapse 100ms · --ease-drawer），下面的行跟着上来，不逐帧改 height；
      .foldBody 同时淡出，用写在它自己身上的 opacity 过渡：可以打断（收起途中撤销会原路淡回），也不碰 li——li 的淡入淡出（删除离场、撤销进场）
      是 Motion 逐帧写行内 opacity，li 上常挂 opacity 过渡会把每一帧拖慢（webkit 删除离场残影一直不透明，e2e b2-motion-list N1 抓到过）
-   • 减弱动态效果：划线直接到位、变淡不过渡；不收高度，只淡出 --dur-ui 的一半（110ms，useDoneFlow 的 DONE_OUT_RM_MS） */
+   • 减弱动态效果：删除线直接画好；不收高度，只用同样的 --dur-collapse 淡出 */
 .fold {
   display: grid;
   grid-template-rows: 1fr;
@@ -257,33 +332,33 @@
   opacity: 0;
 }
 
-.fold .swRow {
-  transition: opacity var(--dur-ui) var(--ease-out);
-}
-
-.fold[data-done] .swRow {
-  opacity: 0.5;
-}
-
-.row.fold .title {
-  transition: color var(--dur-ui) var(--ease-out);
-}
-
 .row.fold[data-done] .title {
   color: var(--text-2);
 }
 
-/* 划线只画在标题文字上（.strike 包着文字，不含前面的优先级彩点；11-17 截图里线从彩点穿过去） */
+/* 删除线只画在标题文字上（.strike 包着文字，不含前面的优先级彩点；11-17 截图里线从彩点穿过去）；从左往右长：只在变成 data-done 时等 --dur-done-strike-at 再画，
+   取消勾时直接收回（过渡按目标状态取 delay） */
 .strike {
-  background-image: linear-gradient(currentcolor, currentcolor);
-  background-position: 0 55%;
-  background-repeat: no-repeat;
-  background-size: 0 1px;
-  transition: background-size var(--dur-ui) var(--ease-out);
+  position: relative;
 }
 
-.strike[data-done] {
-  background-size: 100% 1px;
+.line {
+  position: absolute;
+  top: 55%;
+  right: 0;
+  left: 0;
+  height: 1.5px;
+  margin-top: -0.75px;
+  background: currentcolor;
+  pointer-events: none;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--dur-strike) var(--ease-out);
+}
+
+.line[data-done] {
+  transform: scaleX(1);
+  transition-delay: var(--dur-done-strike-at);
 }
 
 :global(:root[data-rm='1']) .fold {
@@ -296,30 +371,16 @@
   min-height: var(--fold-min, var(--hit));
 }
 
-:global(:root[data-rm='1']) .foldBody {
-  transition-duration: calc(var(--dur-ui) / 2);
-  transition-timing-function: var(--ease-out);
-}
-
 /* 规则要求写回 .fold 自己的最小高度；格子不收，行面最小高度和行一样，排版不变 */
 :global(:root[data-rm='1']) .fold[data-out] > .foldBody {
   min-height: var(--fold-min, var(--hit));
 }
 
-:global(:root[data-rm='1']) .fold .swRow {
+/* 减弱动态效果：删除线不画出来，直接到位 */
+:global(:root[data-rm='1']) .line {
   transition: none;
 }
 
-:global(:root[data-rm='1']) .row.fold .title {
-  transition: none;
-}
-
-:global(:root[data-rm='1']) .strike {
-  transition: none;
-}
-
-/* 减弱动态效果：不画背景线，直接用删除线（到位、不画出来） */
-:global(:root[data-rm='1']) .strike[data-done] {
-  background-size: 0 1px;
-  text-decoration: line-through;
+:global(:root[data-rm='1']) .line[data-done] {
+  transform: none;
 }

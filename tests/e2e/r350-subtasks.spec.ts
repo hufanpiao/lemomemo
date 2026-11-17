@@ -1,6 +1,6 @@
 // R-350 待办子任务（方案 5.1～5.6；TC-R350-01～05、12 的界面部分）：不要后端，直接往本机库 planner-v4 写好待办和子任务再重新载入
 // • 列表页：副行“1/3”、摊开的勾选清单、分段进度条；勾一项写进 outbox（本机库 view 跟着变）；收起以后重新载入还是收起（每台设备各记各的）
-// • 今天页（R-442）：待办行下面进度条和“1/3 · 展开”（按需下载那一包，下完才出现），默认收起；点了就地展开、勾一项写进 outbox，
+// • 今天页（R-442）：待办行和待办页同一个 kit TodoRow（11-17）：副行“起步 · 1/3”、下面进度条和“展开”（按需下载那一包，下完才出现），默认收起；点了就地展开、勾一项写进 outbox，
 //   勾完最后一项主待办自动完成、出“全部完成 · 撤销”，撤销以后主待办回到“今天的安排”；运行日志 subs today open n=3
 // • 日历日清单（R-443）：日程后面单独一组“待办 · N”，方框就地完成、出“已完成 · 撤销”；有子任务的就地展开、勾选；
 //   行和待办页同一套 T-A（负责人 11-17 选 T-A）：副行“起步 · 1/3”、行尾 H / M / L 三格，勾上停一下、收起、从这一天拿掉，撤销放回来
@@ -48,7 +48,9 @@ test.describe('R-350 待办子任务', () => {
     await seed(page);
     const fold = page.getByTestId(`today-fold-${T1}`);
     await expect(fold).toBeVisible({ timeout: 15000 });
-    await expect(fold).toHaveText('1/3 · 展开');
+    // 11-17 起今天页的待办行也是 kit TodoRow（负责人“今天页待办带子任务的跟其他页面不一样”）：“1/3”和“起步”在副行，收起按钮只写“展开”
+    await expect(fold).toHaveText('展开');
+    await expect(page.getByTestId(`today-stage-${T1}`)).toHaveText('起步1/3');
     await expect(fold).toHaveAttribute('aria-expanded', 'false');
     await expect(page.getByTestId('today-sub-b')).toBeHidden();
     await expect(page.getByTestId('today-subs-t2')).toHaveCount(0);

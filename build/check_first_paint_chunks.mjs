@@ -24,7 +24,8 @@ import { readManifest, staticClosure } from './vite_manifest.mjs';
 export const FIRST_PAINT_DYNAMIC = [
   'features/today/ui/TodayPage.tsx',
   'features/onboarding/ui/ConsentGate.tsx',
-  'features/onboarding/ui/ConsentPage.tsx',
+  // 告知页的容器（路由和关口共用，里面带告知页和四个回调，首屏瘦身 C 11-17）：新用户、隐私说明更新时才下载
+  'features/onboarding/ui/ConsentRoute.tsx',
   'features/reminders/ui/MissedReminders.tsx',
   'features/reminders/ui/UnsyncedRemind.tsx',
   'features/reminders/ui/UnsyncedRemindMark.tsx',
@@ -35,6 +36,9 @@ export const FIRST_PAINT_DYNAMIC = [
   // “现在”卡浅色卡的暖心句（R-421 前后，11-14 d42e3781）：今天没日程或下一件还远时，今天页挂上就按当前语言下载一份，照样不许带 zod、农历
   'features/today/i18n/cheer-zh.ts',
   'features/today/i18n/cheer-ko.ts',
+  // 公共词典（首屏瘦身 D，11-17）：入口渲染之前按当前语言下载一份（platform/doc-locale.ts 的 loadSharedDict）；shared 在 vite 的 root 外面，键带 ../
+  '../shared/i18n/zh.ts',
+  '../shared/i18n/ko.ts',
 ];
 
 /** manifest 键、src、name、file 里出现这些就是禁区的块：zod、zod-jitless、shared/schema、shared/manifests；

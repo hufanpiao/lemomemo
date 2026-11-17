@@ -2,7 +2,7 @@
 // 不看进程时区（test:tz 三个时区各跑一遍、Deno 也跑）
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../shared/core/date.ts';
-import { t } from '../../shared/i18n/i18n.ts';
+import { t } from '../../shared/i18n/t-static.ts';
 import { actionsFor, hhmm, NOTIFY_ACTIONS, notifyText, SNOOZE_MIN, type NotifyInput } from '../../shared/logic/notify-text.ts';
 
 const SEOUL = 'Asia/Seoul';
