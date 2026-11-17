@@ -1,5 +1,5 @@
 // 待办行上的两个 kit 小部件（主持人 11-17 评审）：
-// • PrioCycle：手指、鼠标点在哪一格就设成哪一档；键盘、读屏按下去（click 的 detail 为 0）照旧换下一档
+// • PrioCycle：手指、鼠标点在哪一格就设成哪一档（点当前那一档什么都不做）；键盘、读屏按下去（click 的 detail 为 0）照旧换下一档
 // • CheckCircle：子任务做到几成的档（partStage）——全做完、主待办没勾时是 3，方框满填、不画脸；勾上那一圈小点播完就拿掉，不重播
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -18,13 +18,13 @@ describe('PrioCycle 点格设档', () => {
     return { btn, onChange };
   };
 
-  it('点在第一格设成高、第三格设成低（不按轮换）；点到外扩区按横向位置算', () => {
+  it('点在第一格设成高、第三格设成低（不按轮换）；点到外扩区按横向位置算；点当前那一档（中）不回调、不写库', () => {
     const { btn, onChange } = setup();
     fireEvent.click(btn, { detail: 1, clientX: 105 });
     fireEvent.click(btn, { detail: 1, clientX: 155 });
     fireEvent.click(btn, { detail: 1, clientX: 130 });
     fireEvent.click(btn, { detail: 1, clientX: 170 });
-    expect(onChange.mock.calls.map((c) => c[0])).toEqual(['high', 'low', 'mid', 'low']);
+    expect(onChange.mock.calls.map((c) => c[0])).toEqual(['high', 'low', 'low']);
   });
 
   it('键盘、读屏（detail 为 0）照旧换下一档：中 → 低', () => {

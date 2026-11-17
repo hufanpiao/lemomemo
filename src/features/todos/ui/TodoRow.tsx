@@ -101,6 +101,7 @@ export function TodoRow({ r, todo, subs, ids, onOpen, collapsed, onCollapse, met
           id={id}
           title={todo.title}
           readOnly={ro}
+          done={todo.done}
           collapsed={collapsed}
           counted
           onCollapse={onCollapse}

@@ -127,7 +127,7 @@ describe('列表页卡片（5.1、5.4、6.2）', () => {
 
 describe('今天页、日历的就地展开（InlineSubtasks，R-442）', () => {
   const props = (over: Partial<Parameters<typeof InlineSubtasks>[0]> = {}) => ({
-    prefix: 'today', id: 't1', title: '买菜', readOnly: false, onBlock: vi.fn(), onOpen: vi.fn(), onPlan: vi.fn(), onResult: vi.fn(), ...over,
+    prefix: 'today', id: 't1', title: '买菜', done: false, readOnly: false, onBlock: vi.fn(), onOpen: vi.fn(), onPlan: vi.fn(), onResult: vi.fn(), ...over,
   });
 
   it('默认收起：只露进度条和“1/3 · 展开”（aria-expanded=false）；点了就地展开、再点收起；运行日志只记页名和项数；没有子任务什么都不画', () => {

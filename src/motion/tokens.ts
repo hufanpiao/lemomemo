@@ -13,8 +13,6 @@ export const dur = {
   burst: 0.3,
   /** --dur-collapse 280ms：勾完的待办行收起（同一分镜，kit List 的 .fold；features/todos/hooks/useDoneFlow.ts 按它计时） */
   collapse: 0.28,
-  /** --dur-done-hold 700ms：勾上一条待办以后停在原位多久才开始收起、升起撤销条（同一分镜第 ③ 段；只给 useDoneFlow 计时） */
-  doneHold: 0.7,
   /** --dur-sheet 380ms：弹层、录音面板、页面切换 */
   sheet: 0.38,
   /** --dur-drop 0.55s：底栏液滴（R-155，唯一超过 400ms 的例外） */
@@ -81,7 +79,6 @@ export const cssVarOf = {
     ui: '--dur-ui',
     burst: '--dur-burst',
     collapse: '--dur-collapse',
-    doneHold: '--dur-done-hold',
     sheet: '--dur-sheet',
     drop: '--dur-drop',
     glass: '--dur-glass',

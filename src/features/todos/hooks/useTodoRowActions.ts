@@ -5,9 +5,10 @@
 // • prio：H / M / L 换档（kit PrioCycle 点哪格设哪档、键盘读屏换下一档），只读行拦下出“要新版本”，写入结果照打勾一样报（出错条）
 import type { ActionResult } from '../../../core/action-result.ts';
 import type { ListToastsProps } from '../../../kit/components/ListToasts.tsx';
+import { prioLabel, prioSet } from '../../../kit/components/Priority.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { useHoldView } from '../../../motion/components.ts';
-import { nextPriority, type Priority } from '../../../../shared/logic/todo-row.ts';
+import type { Priority } from '../../../../shared/logic/todo-row.ts';
 import { useDoneFlow, type DoneToast, type Linger } from './useDoneFlow.ts';
 import { useListT } from './useTodoList.ts';
 
@@ -38,9 +39,9 @@ export function useTodoRowActions<T>(view: T, lg: Linger, w: TodoWrites, prefix:
     view: hv.view,
     a,
     flow,
-    prio: (id: string, p: Priority) => (a.isRo(id) ? a.g.block() : void w.setPriority(id, p).then(a.report)),
-    /** 读屏名字：“优先级：中，按一下换成低” */
-    prioLabel: (p: Priority) => t('list.prio', { p: prioName(p), next: prioName(nextPriority(p)) }),
+    prio: (id: string, p: Priority) => prioSet(a.isRo(id), () => a.g.block(), () => w.setPriority(id, p), a.report),
+    /** 读屏名字：“优先级：中，按一下换成低”（kit prioLabel，今天页同一份） */
+    prioLabel: (p: Priority) => prioLabel(p, prioName, (v) => t('list.prio', v)),
     /** 页底提示条（kit ListToasts）的全部参数 */
     toasts,
   };

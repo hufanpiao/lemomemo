@@ -10,6 +10,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { actionResult, type ActionResult } from '../../../core/action-result.ts';
 import { getBoot } from '../../../core/boot.ts';
+import { collection } from '../../../core/store.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -44,20 +45,28 @@ export interface SubTickResult {
   message: string;
 }
 
-/** 一条待办的子任务和勾选写入（见文件头）：items 没有子任务时为 undefined */
-export function useTodoSubtasks(todoId: string) {
-  const r = useCollection<Row>('todos').find((x) => x.id === todoId);
+/**
+ * 一条待办的子任务和勾选写入（见文件头）：items 没有子任务时为 undefined。
+ * 主待办完成没有由调用方给（行上本来就有，主持人 11-17 复审第 6 条：原来每一行各订阅整张 todos 表再查找）；
+ * 写的时候才从集合快照里取主待办那一行（不订阅，写入函数本来也按快照里最新的那份判断）
+ */
+export function useTodoSubtasks(todoId: string, todoDone: boolean) {
   const items = useSubtaskGroups().get(todoId);
+  const rowNow = (): Row | undefined => collection<Row>('todos').getSnapshot().find((x) => x.id === todoId);
   return {
     items,
     /** 勾这一项会不会顺带改主待办（true 完成、false 改回未完成、null 不动）：会改的话页面先留住列表再挪 */
-    planAuto: (itemId: string, on: boolean): boolean | null => (r && items ? autoTodo(r['done'] === true, items, itemId, on) : null),
+    planAuto: (itemId: string, on: boolean): boolean | null => (items ? autoTodo(todoDone, items, itemId, on) : null),
     async tick(itemId: string, on: boolean): Promise<{ res: ActionResult; auto: boolean | null }> {
+      const r = rowNow();
       if (!r || !items) return { res: 'failed', auto: null };
       const x = await tickSubtask(r, items, itemId, on, clock.now(), currentTz());
       return { res: actionResult(x.out), auto: x.auto };
     },
-    undoAuto: async (itemId: string): Promise<ActionResult> => (r ? actionResult(await undoAutoDone(r, itemId, clock.now(), currentTz())) : 'failed'),
+    undoAuto: async (itemId: string): Promise<ActionResult> => {
+      const r = rowNow();
+      return r ? actionResult(await undoAutoDone(r, itemId, clock.now(), currentTz())) : 'failed';
+    },
   };
 }
 

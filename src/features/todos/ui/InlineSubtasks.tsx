@@ -21,6 +21,8 @@ export interface InlineSubtasksProps {
   title: string;
   /** 主待办只读 */
   readOnly: boolean;
+  /** 主待办现在完成了没有（数据里的值，行上本来就有；算勾这一项会不会顺带改主待办） */
+  done: boolean;
   /** 测试 id 前缀、日志里的页名：todos、today、cal */
   prefix: string;
   /** 待办页给（收起状态每台设备各记各的，hooks/useSubtasks.ts 的 useCollapsed）；不给就只记在这一行挂着期间，默认收起 */
@@ -36,7 +38,7 @@ export interface InlineSubtasksProps {
 
 export default function InlineSubtasks(p: InlineSubtasksProps) {
   const t = useListT();
-  const s = useTodoSubtasks(p.id);
+  const s = useTodoSubtasks(p.id, p.done);
   const roSubs = useReadonlyIds('todo_items');
   const [own, setOwn] = useState(true);
   const items = s.items;

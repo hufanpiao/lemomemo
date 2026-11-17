@@ -46,8 +46,8 @@ import refine from '../../../kit/components/Refine.module.css';
 import form from '../../../kit/components/Form.module.css';
 import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
-import { PrioCycle, PrioDot } from '../../../kit/components/Priority.tsx';
-import { nextPriority, type Priority } from '../../../../shared/logic/todo-row.ts';
+import { PrioCycle, PrioDot, prioLabel, prioSet } from '../../../kit/components/Priority.tsx';
+import type { Priority } from '../../../../shared/logic/todo-row.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import type { SwipeRowProps } from '../../../kit/components/SwipeRow.tsx';
 import type TodaySwipe from './TodaySwipe.tsx';
@@ -179,16 +179,23 @@ export default function TodayPage() {
     return del(id);
   };
   const [pastOpen, setPastOpen] = useState(false);
-  /** 待办行右边 H / M / L（R-434，同待办页）：只读行拦下出“要新版本”；写入结果照打勾一样报 */
-  const prio = (id: string, p: Priority) => (g.isRo('todo', id) ? g.block() : void d.setPriority(id, p).then(a.report));
-  const prioBox = (id: string, p: Priority) => <PrioCycle p={p} label={t('prio', { p: t(`prio.${p}`, {}), next: t(`prio.${nextPriority(p)}`, {}) })} onChange={(x) => prio(id, x)} testId={`today-prio-${id}`} />;
+  /** 待办行右边 H / M / L（R-434，同待办页）：换档、读屏名字用 kit 的 prioSet、prioLabel（待办页、日清单同一份） */
+  const prioBox = (id: string, p: Priority) => (
+    <PrioCycle
+      p={p}
+      label={prioLabel(p, (q) => t(`prio.${q}`, {}), (v) => t('prio', v))}
+      onChange={(x) => prioSet(g.isRo('todo', id), () => g.block(), () => d.setPriority(id, x), a.report)}
+      testId={`today-prio-${id}`}
+    />
+  );
   // 子任务就地展开（R-442）：会改动主待办时先留住两张列表 --dur-ui；勾完最后一项自动完成，页底出“全部完成 · 撤销”（撤销调回来的 undo，Q1）
   const seq = useRef(0);
-  const subsOf = (id: string, title: string) => (
+  const subsOf = (id: string, title: string, done: boolean) => (
     <Subs
       prefix="today"
       id={id}
       title={title}
+      done={done}
       readOnly={g.isRo('todo', id)}
       onBlock={() => g.block()}
       onOpen={() => open({ kind: 'todo', id })}
@@ -229,7 +236,7 @@ export default function TodayPage() {
               <RowMark table="todos" id={todo.id} />
             </button>
             {prioBox(todo.id, todo.priority)}
-            {subsOf(todo.id, todo.title)}
+            {subsOf(todo.id, todo.title, false)}
           </AppearItem>
         ))}
       </AppearList>
@@ -286,7 +293,7 @@ export default function TodayPage() {
               <RowMark table="todos" id={td.id} />
             </button>
             {prioBox(td.id, td.priority)}
-            {subsOf(td.id, td.title)}
+            {subsOf(td.id, td.title, td.done)}
           </div>
         </SwipeDel>
       </AppearItem>

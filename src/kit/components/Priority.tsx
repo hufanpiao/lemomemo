@@ -34,9 +34,22 @@ export function cellAt(e: { detail: number; clientX: number; currentTarget: Elem
   return PRIORITIES[Math.min(PRIORITIES.length - 1, Math.max(0, i))] ?? null;
 }
 
+/** 读屏名字（待办页、日清单、今天页同一种拼法，主持人 11-17 复审第 4 条）：name 给每一档的名字，line 是词条“优先级：{p}，按一下换成{next}” */
+export function prioLabel(p: Priority, name: (q: Priority) => string, line: (v: { p: string; next: string }) => string): string {
+  return line({ p: name(p), next: name(nextPriority(p)) });
+}
+
+/** 换档（三处同一份）：只读行拦下出“要新版本”；写入结果照打勾一样报（出错条） */
+export function prioSet<R>(ro: boolean, block: () => void, write: () => Promise<R>, report: (r: R) => void): void {
+  if (ro) return block();
+  void write().then(report);
+}
+
 export function PrioCycle({ p, label, onChange, testId }: PrioCycleProps) {
+  // 点的是当前已选的那一档：什么都不做、不写库（主持人 11-17 复审第 7 条）
+  const pick = (next: Priority) => (next === p ? undefined : onChange(next));
   return (
-    <button type="button" className={styles.tri} data-p={p} aria-label={label} onClick={(e) => onChange(cellAt(e) ?? nextPriority(p))} data-testid={testId}>
+    <button type="button" className={styles.tri} data-p={p} aria-label={label} onClick={(e) => pick(cellAt(e) ?? nextPriority(p))} data-testid={testId}>
       {PRIORITIES.map((q) => (
         <span key={q} className={styles.cell} data-p={q} data-on={q === p ? '' : undefined} aria-hidden="true">
           {LETTER[q]}
