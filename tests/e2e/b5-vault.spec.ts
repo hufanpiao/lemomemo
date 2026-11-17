@@ -188,7 +188,8 @@ async function setupAndUnlock(page: Page, browserName: string): Promise<void> {
   // 线框 s9 FIRSTPW：整页（nav:false，底栏被盖住），顶栏“‹ 随手记 … 取消”
   await expect(page.getByTestId('vault-setup-back')).toBeVisible();
   await expect(page.getByTestId('vault-setup-cancel')).toBeVisible();
-  expect(await page.evaluate(() => !!document.elementFromPoint(innerWidth / 2, innerHeight - 30)?.closest('[data-testid="vault-setup-page"]'))).toBe(true);
+  // 轮询：整屏页滑入时 CI 上 webkit 慢，取点太早会点到下面那层（11-17 ci 偶发 false，重试通过）
+  await expect.poll(() => page.evaluate(() => !!document.elementFromPoint(innerWidth / 2, innerHeight - 30)?.closest('[data-testid="vault-setup-page"]'))).toBe(true);
   await phoneShots(page, '02-设密码', browserName);
   await typePin(page, 'vault-setup-pad', PIN);
   await expect(page.getByTestId('vault-setup')).toHaveAttribute('data-step', '2');

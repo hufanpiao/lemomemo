@@ -259,7 +259,8 @@ test.describe('设置页骨架', () => {
     const pressed = await look();
     expect(pressed.state).toBe('pressed');
     expect(pressed.transform).toBe('none');
-    expect(Number(pressed.opacity)).toBeLessThan(1);
+    // 变淡用轮询：CI 上 webkit 负载高时 200ms 还没出过渡的第一帧（11-17 ci 读到 pressed 但 opacity 仍是 1，重试通过）
+    await expect.poll(async () => Number((await look()).opacity)).toBeLessThan(1);
     expect(Math.abs(pressed.x - before.x)).toBeLessThan(0.5);
     await row.dispatchEvent('pointerup');
     await expect.poll(async () => (await look()).opacity).toBe('1');
