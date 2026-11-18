@@ -56,7 +56,7 @@ async function swNavigate(page: Page, url: string): Promise<void> {
   expect(new URL(page.url()).hash).toBe(url.slice('/app/'.length));
 }
 
-test('① 停在日历某一周时推送打开整页提醒：返回回到原来那一周，再返回回到今天', async ({ page }) => {
+test('① 停在日历某一周时推送打开整页提醒：返回回到原来那一周；日历下面没有今天（主页面互切不压历史，负责人 11-18）', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-11-12T12:00:00+09:00'));
   await openControlled(page);
   await tab(page, 'calendar').click();
@@ -77,10 +77,10 @@ test('① 停在日历某一周时推送打开整页提醒：返回回到原来�
   await expect(page).toHaveURL(new RegExp(`${weekHash.replace(/[/#]/g, '\\$&')}$`));
   await expect(page.getByTestId('cal-week')).toBeVisible();
   await expect(page.getByTestId('remind-full')).toHaveCount(0);
-  // 日历里点“周”、翻页都是原地换：再退一步直接回今天
+  // 日历里点“周”、翻页都是原地换；今天 → 日历也不压历史（负责人 11-18：系统左边缘返回会抢在横滑切页前面），
+  // 所以再退一步就出了 App（落回进 App 之前那一页），不会回到今天
   await page.goBack();
-  await expect(page).toHaveURL(/#\/today$/);
-  await expect(page.locator('main[data-feature="today"]')).toBeVisible();
+  await expect(page).not.toHaveURL(/#\/today$/);
 });
 
 test('② 停在待办时推送打开整页提醒：点“‹”关闭，原地换成今天、不新压', async ({ page }) => {

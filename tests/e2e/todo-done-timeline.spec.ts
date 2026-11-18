@@ -82,11 +82,14 @@ async function record(page: Page, id: string): Promise<Rec> {
       return c;
     };
     (window as Window & { __rec?: Rec }).__rec = rec;
+    // 方框回弹 11-18 起拆成 scale 属性（0.45 → 1.22）乘 transform（1 → 0.96/1.22 …）两段动画（CheckCircle.module.css .pop），看到的大小是两者相乘
     const scaleOf = (el: Element): number => {
-      const t = getComputedStyle(el).transform;
-      if (t === 'none') return 1;
+      const cs = getComputedStyle(el);
+      const sp = cs.scale === 'none' || cs.scale === '' ? 1 : Number(cs.scale.split(' ')[0]);
+      const t = cs.transform;
+      if (t === 'none') return sp;
       const m = /matrix\(([^,]+),\s*([^,]+)/.exec(t);
-      return m ? Math.hypot(Number(m[1]), Number(m[2])) : Number.NaN;
+      return m ? Math.hypot(Number(m[1]), Number(m[2])) * sp : Number.NaN;
     };
     /** 停住 el 自己的动画（不带子元素），拨时间取样，再拨回原处接着播；没有动画就只取当前值一格 */
     const sample = (el: Element): S[] => {

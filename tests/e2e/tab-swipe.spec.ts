@@ -1,6 +1,7 @@
 // 四个主页面从屏幕左右两边往里划切页签（负责人 11-18：“在今天，日历，待办，随手记的主页面时左滑，右滑可以互相切换页面”；
 // “4个页面切换只在退回到主页面时来回切”：二级页不切；“划到最左（今天）或最右（随手记）就循环”；“切页的触发区域只在左右两边就行”）。src/app/tab-swipe.ts。
 // Chromium 用 CDP 发真的触摸（浏览器自己按顺序派 pointer 和 touch 事件，验证 data-hdrag 在 touchstart 之前就打上了）；
+// 方向（负责人 11-18“今天页左滑切到日历，再左滑切到待办……一直循环”，负责人说的“左滑”是从左边起手往右划）：左边带往右划去下一个，右边带往左划去上一个。
 // WebKit 没有 CDP，按真机的顺序（pointerdown 先、touchstart 后）在页面里派一遍
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
@@ -53,15 +54,16 @@ async function ready(page: Page, url: string): Promise<void> {
   await page.waitForTimeout(500);
 }
 
-test('右边往左划：今天 → 日历 → 待办 → 随手记 → 今天（循环）；左边往右划：今天 → 随手记 → 待办；中间划不切', async ({ page, browserName }) => {
+test('左边往右划：今天 → 日历 → 待办 → 随手记 → 今天（循环）；右边往左划：今天 → 随手记 → 待办；中间划不切；主页面互切不压历史', async ({ page, browserName }) => {
   await ready(page, '/app/#/today');
+  const len0 = await page.evaluate(() => history.length);
   for (const r of ['calendar', 'todos', 'notes', 'today']) {
-    await swipe(page, browserName, R, 300, -160);
+    await swipe(page, browserName, L, 300, 160);
     await at(page, r);
     await page.waitForTimeout(700);
   }
   for (const r of ['notes', 'todos']) {
-    await swipe(page, browserName, L, 300, 160);
+    await swipe(page, browserName, R, 300, -160);
     await at(page, r);
     await page.waitForTimeout(700);
   }
@@ -72,9 +74,11 @@ test('右边往左划：今天 → 日历 → 待办 → 随手记 → 今天（
   await swipe(page, browserName, R, 300, 5);
   await page.waitForTimeout(400);
   await at(page, 'todos');
+  // 主页面互切一条历史都不压（负责人 11-18：系统左边缘返回会抢在切页前面把页面退回今天，preview.416 t=26.38→26.43）
+  expect(await page.evaluate(() => history.length)).toBe(len0);
 });
 
-test('月历中间划是翻月、不切页；月历右边起手是切页；设置页不切', async ({ page, browserName }) => {
+test('月历中间划是翻月、不切页；月历右边起手往左划切去上一个（今天）；设置页不切', async ({ page, browserName }) => {
   await ready(page, '/app/#/calendar');
   const grid = await page.getByTestId('cal-pager').boundingBox();
   if (!grid) throw new Error('找不到月历');
@@ -84,7 +88,7 @@ test('月历中间划是翻月、不切页；月历右边起手是切页；设�
   await expect(page, '还在日历（翻月是 #/cal/month/…），没切去待办').toHaveURL(/#\/cal/);
   await expect(page.getByTestId('cal-title'), '翻到了下个月').not.toHaveText(month ?? '');
   await swipe(page, browserName, R, grid.y + 120, -160);
-  await at(page, 'todos');
+  await at(page, 'today');
   await page.goto('/app/#/settings');
   await page.locator('main').first().waitFor();
   await page.waitForTimeout(500);
