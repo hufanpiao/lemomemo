@@ -1,10 +1,11 @@
-// 四个页签互切（负责人 11-06 方案 B 不起 View Transition；11-18 选切页方案 B 按底栏顺序左右滑入）：新页 main opacity 0→1、从那一边 8% 滑到位，
-// 旧页快照反方向移 4% 并淡出；连点取消上一次；减少动态效果时不动；
+// 四个页签互切（负责人 11-06 方案 B 不起 View Transition；11-18“底部导航切页动画直接套用日历的切页动画，做成一模一样的动效”）：
+// 和日历翻月同一份原地模糊淡换（blur-swap.ts）——新页从模糊 4px、透明到清晰，旧页快照模糊到 4px、前 2/3 淡没，880ms、--ease-out；连点取消上一次；减少动态效果时不动；
 // 换页后 FADE_GUARD_MS 内吞掉 main 里的点按（代码审查方案 B M8）；等分包时走了整页过渡、同页内切换就停掉（M9）。
 // 11-18 独立评审后整块重写（src/motion/page-swap.ts）：平移换成像素（H1）、快照先藏后显（M2）、连点快照从上一页此刻的样子起（M1）、
 // 长成放完先收打字条再还原层级（H2）
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, GROW_HOLD, SLIDE_IN_PCT, SLIDE_OUT_PCT, cancelFade, fadeSwap, growSwap, loadPageSwap, transition } from '../index.ts';
+import { blurSwapIn, blurSwapInFilter, blurSwapOut, blurSwapTiming } from '../blur-swap.ts';
+import { FADE_GUARD_MS, FADE_WAIT_MS, GROW_HOLD, cancelFade, fadeSwap, growSwap, loadPageSwap, transition } from '../index.ts';
 import { bezierCss, dur, ease } from '../tokens.ts';
 
 /** 换页（像 React：只换掉自己的 main，别人放进来的节点——快照、打字条——不动）；name 为 null 时只拿掉 main：新页分包还没到 */
@@ -15,8 +16,6 @@ const setPage = (name: string | null): void => {
   m.dataset.feature = name;
   document.body.append(m);
 };
-/** 平移的像素值（jsdom 里 main 宽 0，按视口宽算；同 page-swap.ts 保留两位小数） */
-const tx = (pct: number): string => `translateX(${Math.round(((window.innerWidth * pct) / 100) * 100) / 100}px)`;
 /** 等 MutationObserver 回调跑完 */
 const flush = async (): Promise<void> => {
   await Promise.resolve();
@@ -70,7 +69,7 @@ afterEach(() => {
 
 
 describe('fadeSwap', () => {
-  it('同步换页、不起 View Transition；新页 main 用 --dur-tab（200ms）、--ease-out 从 0 淡到 1、从右边 8%（按 main 宽度换成像素）滑到位，跳过第一帧（不画整页透明的一帧）', async () => {
+  it('同步换页、不起 View Transition；新页 main 和日历翻月同一份关键帧（模糊 4px、透明 → 清晰），880ms、--ease-out，不平移', async () => {
     const vt = vi.fn();
     (document as { startViewTransition?: unknown }).startViewTransition = vt;
     const update = vi.fn(() => {
@@ -81,12 +80,12 @@ describe('fadeSwap', () => {
     expect(vt).not.toHaveBeenCalled();
     expect(anims).toHaveLength(1);
     expect(anims[0]?.el).toBe(document.querySelector('main'));
-    expect(SLIDE_IN_PCT).toBe(8);
-    expect(anims[0]?.frames).toEqual([{ opacity: 0, transform: tx(8) }, { opacity: 1, transform: 'none' }]);
-    expect(dur.tab).toBe(0.2);
-    expect(anims[0]?.opts.duration).toBe(dur.tab * 1000);
-    expect(anims[0]?.currentTime, '跳过 opacity 0 的第一帧').toBe(FADE_SKIP_MS);
-    expect(anims[0]?.opts.easing).toBe(`cubic-bezier(${ease.out.join(',')})`);
+    expect(anims[0]?.frames).toEqual(blurSwapIn(false));
+    expect(anims[0]?.frames).toEqual([{ opacity: 0, filter: 'blur(4px)' }, { opacity: 1, filter: 'blur(0px)' }]);
+    expect(anims[0]?.opts).toEqual(blurSwapTiming(false));
+    expect(anims[0]?.opts.duration).toBe(dur.ui * 1000 * 4);
+    expect(anims[0]?.opts.easing).toBe(bezierCss(ease.out));
+    expect(anims[0]?.currentTime, '和日历一样从头播').toBe(0);
     anims[0]?.finish();
     await expect(p).resolves.toBeUndefined();
   });
@@ -106,19 +105,18 @@ describe('fadeSwap', () => {
     await expect(p2).resolves.toBeUndefined();
   });
 
-  it('可打断：上一次走到 60% 时又点了左边的页签，新页从 opacity 0.6、左边 3.2% 接着走、用剩下 40% 的时长，不跳第一帧；快照从上一页此刻的样子起（M1）', () => {
+  it('连点：和日历一样新页从头播；快照从上一页此刻的透明度起，不先跳回全亮（M1）', () => {
     fadeSwap(() => setPage('today'));
-    (anims[0] as unknown as { effect: unknown }).effect = { getComputedTiming: () => ({ progress: 0.6 }) };
-    fadeSwap(() => setPage('notes'), -1);
+    const today = document.querySelector('main') as HTMLElement;
+    today.style.opacity = '0.6';
+    fadeSwap(() => setPage('notes'));
     expect(anims[0]?.cancel).toHaveBeenCalledTimes(1);
-    expect(anims[1]?.frames).toEqual([{ opacity: 0.6, transform: tx(-3.2) }, { opacity: 1, transform: 'none' }]);
-    expect(anims[1]?.opts.duration).toBeCloseTo(dur.tab * 1000 * 0.4, 6);
-    expect(anims[1]?.currentTime).toBe(0);
-    // today 那页还在右边 3.2%、透明度 0.6 的位置：快照从这里起往右再移 4%，不是先跳回全亮原位
-    expect(anims[2]?.frames).toEqual([{ opacity: 0.6, transform: tx(3.2) }, { opacity: 0, transform: tx(3.2 + 4) }]);
+    expect(anims[1]?.frames).toEqual(blurSwapIn(false));
+    expect(anims[1]?.opts.duration).toBe(blurSwapTiming(false).duration);
+    expect(anims[2]?.frames).toEqual(blurSwapOut(false, 0, 0.6));
   });
 
-  it('main 里有 position: fixed 的元素（随手记贴底输入行）：淡入加在 main，平移只加在不含 fixed 的子树上，fixed 的原地不动', () => {
+  it('main 里有 position: fixed 的元素（随手记贴底输入行）：淡入加在 main，模糊只加在不含 fixed 的子树上（filter 会让 fixed 后代改按祖先定位）', () => {
     const el = (tag: string, id: string, ...kids: Element[]): HTMLElement => {
       const e = Object.assign(document.createElement(tag), { id });
       e.append(...kids);
@@ -132,13 +130,12 @@ describe('fadeSwap', () => {
     expect(anims[0]?.frames).toEqual([{ opacity: 0 }, { opacity: 1 }]);
     const moved = anims.slice(1).map((a) => a.el.id);
     expect(moved).toEqual(['h', 'list', 'tip']);
-    // 各子树宽窄不一，走的是同一个像素距离（代码审查 H1：百分比按各自宽度算会错开）
-    for (const a of anims.slice(1)) expect(a.frames).toEqual([{ transform: tx(8) }, { transform: 'none' }]);
+    for (const a of anims.slice(1)) expect(a.frames).toEqual(blurSwapInFilter());
     cancelFade();
     expect(anims.every((a) => a.cancel.mock.calls.length === 1)).toBe(true);
   });
 
-  it('旧页快照：换页前拷一份旧 main 盖在新页那一层，往反方向移 4% 并淡出；去掉 id、data-testid，读屏不念、不接点按；放完拿掉', async () => {
+  it('旧页快照：换页前拷一份旧 main 盖在新页那一层，和日历一样模糊到 4px、前 2/3 淡没；去掉 id、data-testid，读屏不念、不接点按；放完拿掉', async () => {
     setPage('today');
     const old = document.querySelector('main') as HTMLElement;
     old.append(Object.assign(document.createElement('h1'), { id: 'ttl', textContent: '今天' }));
@@ -156,11 +153,11 @@ describe('fadeSwap', () => {
     old.append(tinted, svg, box, text, sel);
     const setAttr = vi.spyOn(Element.prototype, 'setAttributeNS');
     old.dataset.testid = 'today';
-    const p = fadeSwap(() => setPage('calendar'), 1);
+    const p = fadeSwap(() => setPage('calendar'));
     const ghost = anims[1]?.el as HTMLElement;
     expect(anims).toHaveLength(2);
-    expect(SLIDE_OUT_PCT).toBe(4);
-    expect(anims[1]?.frames).toEqual([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: tx(-4) }]);
+    expect(anims[1]?.frames).toEqual(blurSwapOut(false));
+    expect(anims[1]?.frames[1]).toEqual({ opacity: 0, filter: `blur(${(4 * 2) / 3}px)`, transform: 'translateX(0px)', offset: 2 / 3 });
     expect(anims[1]?.opts).toEqual({ ...anims[0]?.opts, fill: 'forwards' });
     expect(ghost.style.visibility, '新页出来了，快照显示').toBe('');
     expect((ghost.querySelector('input') as HTMLInputElement).checked).toBe(true);
@@ -189,18 +186,11 @@ describe('fadeSwap', () => {
     expect(ghost.isConnected, '放完拿掉').toBe(false);
   });
 
-  it('往左点（dir -1）：新页从左边 8% 进，旧页往右移 4%', () => {
-    setPage('notes');
-    fadeSwap(() => setPage('today'), -1);
-    expect(anims[0]?.frames).toEqual([{ opacity: 0, transform: tx(-8) }, { opacity: 1, transform: 'none' }]);
-    expect(anims[1]?.frames).toEqual([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: tx(4) }]);
-  });
-
   it('连点时上一次的旧页快照立即拿掉，屏上最多一份', () => {
     setPage('today');
-    fadeSwap(() => setPage('calendar'), 1);
+    fadeSwap(() => setPage('calendar'));
     const g1 = anims[1]?.el as HTMLElement;
-    fadeSwap(() => setPage('todos'), 1);
+    fadeSwap(() => setPage('todos'));
     expect(g1.isConnected).toBe(false);
     expect(document.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1);
     cancelFade();
@@ -210,7 +200,7 @@ describe('fadeSwap', () => {
   it('减少动态效果：不留旧页快照', async () => {
     document.documentElement.setAttribute('data-rm', '1');
     setPage('today');
-    await fadeSwap(() => setPage('calendar'), 1);
+    await fadeSwap(() => setPage('calendar'));
     expect(anims).toHaveLength(0);
     expect(document.querySelectorAll('[aria-hidden="true"]')).toHaveLength(0);
   });

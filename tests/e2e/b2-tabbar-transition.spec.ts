@@ -226,8 +226,8 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
       const after = rows.slice(1).filter((r) => r.op >= 0);
       // 淡入放完以后整页不透明（慢机器上采样窗口里可能还没放完，所以等动画结束再查，不看采样最后一帧）
       await expect.poll(() => page.evaluate(() => { const m = document.querySelector('main'); return m && m.getAnimations().length === 0 ? Number(getComputedStyle(m).opacity) : -1; }), { timeout: 5000 }).toBe(1);
-      // 没有空白帧：淡入跳过 opacity 0 的第一帧（motion FADE_SKIP_MS），点完以后每一帧新页都看得见
-      expect(after.every((r) => r.op > 0.1), `${name}：有整页透明的一帧 ${JSON.stringify(after.map((r) => r.op))}`).toBe(true);
+      // 没有空白帧：新页和日历一样从透明起，那几帧旧页快照还盖着（快照前 2/3 才淡没）；新页还几乎透明时必须有快照
+      expect(after.every((r) => r.op > 0.1 || r.ghosts >= 1), `${name}：有整页透明、也没有旧页快照的一帧 ${JSON.stringify(after.map((r) => [r.op, r.ghosts]))}`).toBe(true);
       // 逐帧看新页自己（最后那个 main 元素）：只亮不暗——新页先实心露一帧、再从透明淡入（“先实心再透明”）在这里抓
       const pgLast = rows.at(-1)?.pg ?? 0;
       const own = rows.filter((r) => r.pg === pgLast && r.op >= 0).map((r) => r.op);
@@ -237,7 +237,7 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
       const fade = probe.fade;
       expect(fade, `${name}：新页没有淡入动画（新页 main 点后 ${probe.mainAt} ms 出现，淡入 ${probe.fadeAt0} ms 建好；-1 是没有）`).not.toBeNull();
       const fz = fade ?? [];
-      expect(fz.every((v, k) => v > 0 && v <= 1 && (k === 0 || v >= (fz[k - 1] ?? 0) - 0.001)), `${name}：淡入不是从透明到不透明 ${JSON.stringify(fz)}`).toBe(true);
+      expect(fz.every((v, k) => v >= 0 && v <= 1 && (k === 0 || v >= (fz[k - 1] ?? 0) - 0.001)), `${name}：淡入不是从透明到不透明 ${JSON.stringify(fz)}`).toBe(true);
       expect(fz.filter((v) => v > 0.05 && v < 0.95).length, `${name}：淡入中间值太少 ${JSON.stringify(fz)}`).toBeGreaterThanOrEqual(3);
       expect(fz[0] ?? 1, `${name}：淡入一开始就几乎不透明 ${JSON.stringify(fz)}`).toBeLessThan(0.95);
       expect((fz.at(-1) ?? 0) - (fz[0] ?? 0), `${name}：淡入前后几乎没变 ${JSON.stringify(fz)}`).toBeGreaterThan(0.1);
@@ -406,7 +406,8 @@ test.describe('底栏：页签互切按底栏顺序左右滑入（负责人 11-1
         const el = e.target as Element;
         return {
           main: el === m,
-          frames: e.getKeyframes().map((k) => [k['opacity'] ?? null, k['transform'] ?? null]),
+          frames: e.getKeyframes().map((k) => [k['opacity'] ?? null, k['filter'] ?? null, k['transform'] ?? null, k.offset ?? null]),
+          easing: String(e.getTiming().easing),
           dur: Number(e.getTiming().duration),
           fixedInside: hasFixed(el),
         };
@@ -420,7 +421,21 @@ test.describe('底栏：页签互切按底栏顺序左右滑入（负责人 11-1
       };
     }, tab);
 
-  test('往右点新页从右边 8% 滑进、往左点从左边；新页 opacity 0→1；旧页反方向移 4% 并淡出；200ms；随手记贴底输入行（fixed）不跟着动；减少动态效果时直接换', async ({ page }) => {
+  /** 点日历的“›”，读这一次翻月的两段动画（旧的一页副本、新的一页）：底栏切页要和它一模一样 */
+  const calFlip = (page: Page) =>
+    page.evaluate(() => {
+      document.querySelector<HTMLElement>('[data-testid="cal-next"]')?.click();
+      const all = document.getAnimations().filter((a) => !(a instanceof CSSTransition) && a.effect instanceof KeyframeEffect);
+      const read = (a: Animation) => {
+        const e = a.effect as KeyframeEffect;
+        return { frames: e.getKeyframes().map((k) => [k['opacity'] ?? null, k['filter'] ?? null, k['transform'] ?? null, k.offset ?? null]), dur: Number(e.getTiming().duration), easing: String(e.getTiming().easing) };
+      };
+      const ghost = all.find((a) => ((a.effect as KeyframeEffect).target as Element).getAttribute('aria-hidden') === 'true');
+      const inn = all.find((a) => a !== ghost);
+      return { ghost: ghost ? read(ghost) : null, inn: inn ? read(inn) : null };
+    });
+
+  test('页签互切和日历翻月一模一样（负责人 11-18“底部导航切页动画直接套用日历的切页动画”）：新页、旧页快照的关键帧、时长、曲线都和日历的相同；不平移；fixed 元素不被模糊的祖先带偏；减少动态效果时直接换', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     // 分包先都到：头一次进某页时分包晚到，动画会等新页出来才建
@@ -429,39 +444,44 @@ test.describe('底栏：页签互切按底栏顺序左右滑入（负责人 11-1
       await expect(page.locator(sel)).toBeVisible({ timeout: 10_000 });
       await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => !(a instanceof CSSTransition)).length), { timeout: 5000 }).toBe(0);
     }
-    // 底栏顺序：今天、日历、待办、随手记。今天 → 待办、待办 → 随手记往右；随手记 → 日历往左
-    for (const [tab, dir] of [['todos', 1], ['notes', 1], ['calendar', -1]] as const) {
+    const idle = () => expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => !(a instanceof CSSTransition)).length), { timeout: 5000 }).toBe(0);
+    // 先量日历翻月本身（基准）
+    await page.getByTestId('tabbar').locator('a[data-tab="calendar"]').click();
+    await expect(page.locator('main[data-feature="calendar"]')).toBeVisible();
+    await idle();
+    const cal = await calFlip(page);
+    expect(cal.ghost, `日历翻月没有旧页副本动画 ${JSON.stringify(cal)}`).not.toBeNull();
+    expect(cal.inn).not.toBeNull();
+    expect(cal.ghost?.dur).toBe(880);
+    await idle();
+    for (const tab of ['todos', 'notes', 'calendar'] as const) {
       const r = await clickAndRead(page, tab);
       expect(r, `${tab}：点完新页还没出来`).not.toBeNull();
       const list = r?.page ?? [];
       const fade = list.find((a) => a.main && a.frames[0]?.[0] !== null);
       expect(fade, `${tab}：main 上没有淡入 ${JSON.stringify(list)}`).toBeDefined();
-      expect(Number(fade?.frames[0]?.[0])).toBe(0);
-      expect(Number(fade?.frames.at(-1)?.[0])).toBe(1);
-      expect(fade?.dur).toBe(200);
-      const slide = list.filter((a) => a.frames[0]?.[1] !== null);
-      expect(slide.length, `${tab}：新页没有平移 ${JSON.stringify(list)}`).toBeGreaterThan(0);
-      // 平移按新页 main 的宽度换成像素，main 自己和各子树走同一个距离（代码审查 H1：原来写百分比，按各自宽度算、宽窄不一的子树会错开）
-      const px = (pct: number): string => `translateX(${Math.round((r?.w ?? 0) * pct) / 100}px)`;
-      for (const s of slide) {
-        expect(s.frames[0]?.[1]).toBe(px(8 * dir));
-        expect(s.frames.at(-1)?.[1]).toBe('none');
-        expect(s.dur).toBe(200);
-        // 平移的元素里不能有 fixed 的（祖先带 transform 会让它改按祖先定位、错位）
-        expect(s.fixedInside, `${tab}：平移的元素里有 fixed 元素`).toBe(false);
+      // 新页：透明度和模糊同日历新的一页（随手记有 fixed 贴底行：模糊拆到不含 fixed 的子树上，main 上只剩透明度）
+      expect(fade?.frames.map((f) => f[0])).toEqual(cal.inn?.frames.map((f) => f[0]));
+      expect(fade?.dur).toBe(cal.inn?.dur);
+      expect(fade?.easing).toBe(cal.inn?.easing);
+      const blurred = list.filter((a) => a.frames[0]?.[1] !== null);
+      expect(blurred.length, `${tab}：新页没有模糊 ${JSON.stringify(list)}`).toBeGreaterThan(0);
+      for (const b of blurred) {
+        expect(b.frames.map((f) => f[1])).toEqual(cal.inn?.frames.map((f) => f[1]));
+        expect(b.dur).toBe(cal.inn?.dur);
+        expect(b.fixedInside, `${tab}：加模糊的元素里有 fixed 元素`).toBe(false);
       }
-      // 旧页快照：一份，从原位不透明往反方向移 4% 并淡出，同样 200ms
+      expect(list.every((a) => a.frames.every((f) => f[2] === null || f[2] === 'none')), `${tab}：新页有平移 ${JSON.stringify(list)}`).toBe(true);
+      // 旧页快照：一份，关键帧（透明度、模糊、位移、2/3 处的那一帧）、时长、曲线和日历旧的一页副本完全相同
       expect(r?.ghosts, `${tab}：旧页快照不是一份`).toBe(1);
       expect(r?.ghost, `${tab}：旧页快照没有动画`).toHaveLength(1);
-      expect(r?.ghost[0]?.frames.map(([o, t]) => [Number(o), t])).toEqual([
-        [1, 'none'],
-        [0, px(-4 * dir)],
-      ]);
-      expect(r?.ghost[0]?.dur).toBe(200);
-      await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => !(a instanceof CSSTransition)).length), { timeout: 5000 }).toBe(0);
+      expect(r?.ghost[0]?.frames).toEqual(cal.ghost?.frames);
+      expect(r?.ghost[0]?.dur).toBe(cal.ghost?.dur);
+      expect(r?.ghost[0]?.easing).toBe(cal.ghost?.easing);
+      await idle();
       expect(await page.evaluate(() => document.querySelectorAll('[data-tab-ghost]').length), `${tab}：放完旧页快照没拿掉`).toBe(0);
       if (tab === 'notes') {
-        // 随手记页真有贴底输入行这种 fixed 元素（不然上面“不跟着动”测了个空）
+        // 随手记页真有贴底输入行这种 fixed 元素（不然上面“不被带偏”测了个空）
         expect(await page.evaluate(() => [...(document.querySelector('main')?.querySelectorAll('*') ?? [])].some((x) => getComputedStyle(x).position === 'fixed'))).toBe(true);
       }
     }

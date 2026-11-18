@@ -83,7 +83,7 @@ export function transition(update: () => void): Promise<void> {
 
 // 页签互切、“详细”长成的实现在 ./page-swap.ts（11-18 独立评审后整块重写），首屏画完以后才下载（11-18 ci 首屏预算 151.7 KB 超线后挪出）：
 // main.tsx 和动画实现同一时机调 loadPageSwap；到之前换页直接换、不播（冷启动不到一秒就点页签才碰得到），“详细”直接进新建页
-export { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, GROW_HOLD, SLIDE_IN_PCT, SLIDE_OUT_PCT, pageVisible, shownMain, waitDom } from './page-shown.ts';
+export { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, GROW_HOLD, pageVisible, shownMain, waitDom } from './page-shown.ts';
 type PageSwap = typeof PageSwapModule;
 let swapImpl: PageSwap | null = null;
 let swapLoad: Promise<void> | null = null;
@@ -99,9 +99,9 @@ export function loadPageSwap(): Promise<void> {
   );
   return swapLoad;
 }
-/** 页签互切：按底栏顺序左右滑入（实现没到时直接换） */
-export function fadeSwap(update: () => void, dir: 1 | -1 = 1): Promise<void> {
-  if (swapImpl) return swapImpl.fadeSwap(update, dir);
+/** 页签互切：和日历翻月同一份原地模糊淡换（实现没到时直接换） */
+export function fadeSwap(update: () => void): Promise<void> {
+  if (swapImpl) return swapImpl.fadeSwap(update);
   void loadPageSwap();
   update();
   return Promise.resolve();

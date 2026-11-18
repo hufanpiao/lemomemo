@@ -1,5 +1,5 @@
 // 四个页签之间互切不走 View Transition（负责人 11-06 方案 B）：navigate、底栏 <a href> 的 hashchange 都走 fadeSwap，
-// 并带上往哪边滑（11-18 选切页方案 B：往右边的页签 1，往左 -1）；别的切页照旧 transition
+// 不分方向（11-18 负责人“底部导航切页动画直接套用日历的切页动画”：原地模糊淡换，原来的左右滑入删掉）；别的切页照旧 transition
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
@@ -7,8 +7,7 @@ const m = vi.hoisted(() => ({
     update();
     return Promise.resolve();
   }),
-  fadeSwap: vi.fn((update: () => void, dir?: 1 | -1) => {
-    void dir;
+  fadeSwap: vi.fn((update: () => void) => {
     update();
     return Promise.resolve();
   }),
@@ -37,15 +36,14 @@ afterEach(() => {
 });
 
 describe('页签互切：fadeSwap，不起 View Transition', () => {
-  it('navigate / replaceRoute 在两个页签之间：fadeSwap，带上往哪边滑', async () => {
+  it('navigate / replaceRoute 在两个页签之间：fadeSwap（不分方向，只传换页那一步）', async () => {
     await navigate('todos');
     expect(m.fadeSwap).toHaveBeenCalledTimes(1);
     expect(m.transition).not.toHaveBeenCalled();
     await replaceRoute('calendar');
     expect(m.fadeSwap).toHaveBeenCalledTimes(2);
     expect(window.location.hash).toBe('#/calendar');
-    // 今天 → 待办往右（1），待办 → 日历往左（-1）
-    expect(m.fadeSwap.mock.calls.map((c) => c[1])).toEqual([1, -1]);
+    expect(m.fadeSwap.mock.calls.every((c) => c.length === 1)).toBe(true);
   });
 
   it('同一页里新压一条（纪念日列表 → 编辑层、月历 → 周视图）：不起任何过渡，照样压一条历史（整块评审第 20 条：pushInPage 并进 navigate）', async () => {

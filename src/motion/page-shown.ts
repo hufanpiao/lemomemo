@@ -12,10 +12,6 @@ export const FADE_SKIP_MS = 1000 / 60;
  * 新页第一帧约 17 ms 才画出来，再加人眼看清的最短时间，取 100 ms；底栏不在 main 里，连点页签不受影响
  */
 export const FADE_GUARD_MS = 100;
-/** 页签互切新页从侧边多远滑进来（新页 main 宽度的百分比，换成像素后所有平移的元素用同一个值） */
-export const SLIDE_IN_PCT = 8;
-/** 旧页（快照）往反方向移多远并淡出（同上） */
-export const SLIDE_OUT_PCT = 4;
 /** “详细”长成的前多少（比例）新建页内容不露、打字条淡完 */
 export const GROW_HOLD = 0.35;
 /**

@@ -103,7 +103,7 @@ export function commit(change?: () => void, anim: Anim = 'vt'): Promise<void> {
     update();
     return Promise.resolve();
   }
-  if (anim === 'slide-r' || anim === 'slide-l') return fadeSwap(update, anim === 'slide-r' ? 1 : -1);
+  if (anim === 'slide-r' || anim === 'slide-l') return fadeSwap(update);
   return transition(update);
 }
 

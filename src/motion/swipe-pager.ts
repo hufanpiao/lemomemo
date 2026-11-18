@@ -11,15 +11,15 @@
 import { useRef } from 'react';
 import { copyNode } from './copy-node.ts';
 import { useHDrag, type HDrag } from './hdrag.ts';
-import { bezierCss, CAL_FLIP_SLOW_RATIO, dur, ease } from './tokens.ts';
+import { BLUR_SWAP_PX, blurSwapIn, blurSwapOut, blurSwapTiming } from './blur-swap.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
 
 export const TRIGGER_PX = 60;
 /** 跟手：手指横移的几倍、最多几像素（方案页 C：0.15、16） */
 export const FOLLOW_RATE = 0.15;
 export const FOLLOW_MAX_PX = 16;
-/** 旧的一页淡出时模糊到几像素（方案页 C） */
-export const FLIP_BLUR_PX = 4;
+/** 旧的一页淡出时模糊到几像素（方案页 C；关键帧在 blur-swap.ts，底栏切页共用） */
+export const FLIP_BLUR_PX = BLUR_SWAP_PX;
 
 /** 松手时翻不翻：-1 上一页，1 下一页，0 不翻 */
 export function swipeResult(dx: number): -1 | 0 | 1 {
@@ -34,7 +34,7 @@ export function followX(x: number): number {
 
 /** 翻页时长（ms）：减少动态效果时只留 --dur-ui 的淡入淡出 */
 export function flipMs(reduced: boolean): number {
-  return dur.ui * 1000 * (reduced ? 1 : CAL_FLIP_SLOW_RATIO);
+  return blurSwapTiming(reduced).duration;
 }
 
 export type FlipVia = 'swipe' | 'btn';
@@ -109,19 +109,9 @@ export function useSwipePager(onPage: (dir: -1 | 1, via: FlipVia) => boolean, lo
     d.place(0, false);
     if (!el || !ghost) return true;
     const rm = reducedRef.current;
-    const timing: KeyframeAnimationOptions = { duration: flipMs(rm), easing: bezierCss(ease.out) };
-    const blur = (px: number): string => `blur(${px}px)`;
-    const out = ghost.animate(
-      rm
-        ? [{ opacity: 1 }, { opacity: 0 }]
-        : [
-            { opacity: 1, filter: blur(0), transform: `translateX(${x}px)` },
-            { opacity: 0, filter: blur((FLIP_BLUR_PX * 2) / 3), transform: `translateX(${x / 3}px)`, offset: 2 / 3 },
-            { opacity: 0, filter: blur(FLIP_BLUR_PX), transform: 'translateX(0px)' },
-          ],
-      { ...timing, fill: 'forwards' },
-    );
-    const inn = el.animate(rm ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 0, filter: blur(FLIP_BLUR_PX) }, { opacity: 1, filter: blur(0) }], timing);
+    const timing: KeyframeAnimationOptions = blurSwapTiming(rm);
+    const out = ghost.animate(blurSwapOut(rm, x), { ...timing, fill: 'forwards' });
+    const inn = el.animate(blurSwapIn(rm), timing);
     const mine = { ghost, anims: [out, inn] };
     live.current = mine;
     const done = (): void => {

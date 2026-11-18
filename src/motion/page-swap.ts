@@ -1,11 +1,12 @@
 // 页面切换的两种动法（11-18 独立评审后从 index.ts 拆出来整块重写，不再在原代码上叠补丁）：
-// • fadeSwap：底栏四个页签互切，按底栏顺序左右滑入（负责人 11-18“之前的B方案”，11-17 方案页 B）
+// • fadeSwap：底栏四个页签互切，和日历翻月同一份原地模糊淡换（blur-swap.ts；负责人 11-18“做成一模一样的动效”）
 // • growSwap：打字条点“详细”，那张卡长成新建页（负责人 11-18“用A整页成长方案”）
 // 首屏画完以后才下载（motion/index.ts 的 loadPageSwap，main.tsx 和动画实现同一时机；11-18 ci 首屏预算 151.7 KB 超线后挪出首屏）；
 // 首屏要用的常量和“新页显示出来没有”的判断在 ./page-shown.ts。
 // 两种共用：旧页快照（makeGhost）、等新页出来（waitDom）、换页后吞点按（guardTaps）、一份“正在播”的状态（cur）和一个收尾（endSwap）
 import { copyNode } from './copy-node.ts';
-import { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, GROW_HOLD, SLIDE_IN_PCT, SLIDE_OUT_PCT, pageVisible, shownMain, waitDom } from './page-shown.ts';
+import { blurSwapIn, blurSwapInFilter, blurSwapOut, blurSwapTiming } from './blur-swap.ts';
+import { FADE_GUARD_MS, FADE_WAIT_MS, GROW_HOLD, pageVisible, shownMain, waitDom } from './page-shown.ts';
 import { prefersReducedMotion } from './reduced.ts';
 import { swallowNextClick } from './swallow-click.ts';
 import { bezierCss, dur, ease } from './tokens.ts';
@@ -224,13 +225,6 @@ function track(s: Swap, a: Animation): Animation {
   return a;
 }
 
-/** 正在播的页签互切走到哪了（0～1，已按曲线算好）；没在播、或在播的是长成，为 0。连点时下一页从这里接着走（可打断） */
-function progressOf(s: Swap | null): number {
-  if (s?.kind !== 'slide') return 0;
-  const p = s.anims[0]?.effect?.getComputedTiming().progress;
-  return typeof p === 'number' && p > 0 && p < 1 ? p : 0;
-}
-
 /**
  * 停掉页面切换（代码审查方案 B M9）：换页后吞点按的窗口、还在等新页的那次（连快照一起拿掉）；anim 为 true 时连正在播的也停（还原成静止的新页）。
  * transition() 开头调（整页过渡要截的是完整的旧画面）；路由同页内切换调 cancelFade(false)：只停等待，不打断正在播的
@@ -347,28 +341,22 @@ function swap(
 
 /**
  * 四个页签之间互切（负责人 11-06 选方案 B：不起 View Transition，底栏、“＋”、液滴、顶部模糊一直是真元素、一直实时模糊，WebKit bug 302256）。
- * 动法（负责人 11-18 选 11-17 方案页 B）：dir 为 1（往右边的页签点）新页从右边滑进，-1 从左边；
- * 新页 opacity 0→1、平移 SLIDE_IN_PCT→0；旧页快照同时往反方向移 SLIDE_OUT_PCT 并淡出；--dur-tab 200ms、--ease-out。
- * 平移按新页 main 的宽度换成像素，main 自己和各子树（见 shiftTargets）走一样的距离（代码审查 H1：百分比按各自宽度算，宽窄不一的子树会错开）。
- * 连点（可打断）：上一次还没放完时，新页从上一次此刻的进度接着走、用剩下的时长；快照从上一页此刻的样子起
+ * 动法（负责人 11-18“底部导航切页动画直接套用日历的切页动画，做成一模一样的动效”）：和日历翻月同一份原地模糊淡换（blur-swap.ts）——
+ * 旧页快照模糊到 4px、前 2/3 淡没，新页从模糊到清晰淡入，880 ms、--ease-out；不分方向、不平移。
+ * 原来的“按底栏顺序左右滑入”（11-17 方案页 B）整段删掉。
+ * 连点：和日历一样每次从头播；快照从上一页此刻的透明度起，不闪回全亮
  */
-export function fadeSwap(update: () => void, dir: 1 | -1 = 1): Promise<void> {
-  const from = progressOf(cur);
+export function fadeSwap(update: () => void): Promise<void> {
   return swap('slide', update, (el, s) => {
-    const w = el.getBoundingClientRect().width || window.innerWidth;
-    const inX = (w * SLIDE_IN_PCT * dir) / 100;
-    const x0 = (1 - from) * inX;
-    const opts = { duration: dur.tab * 1000 * (1 - from), easing: bezierCss(ease.out) };
+    const opts = blurSwapTiming(false);
+    // 模糊加在不含 fixed 元素的子树上（filter 同 transform，会让 fixed 后代改按祖先定位），透明度加在 main 上
     const targets = shiftTargets(el);
     const whole = targets.length === 1 && targets[0] === el;
-    const lead = track(s, el.animate(whole ? [{ opacity: from, transform: px(x0) }, { opacity: 1, transform: 'none' }] : [{ opacity: from }, { opacity: 1 }], opts));
-    if (!whole) for (const t of targets) track(s, t.animate([{ transform: px(x0) }, { transform: 'none' }], opts));
+    const lead = track(s, el.animate(blurSwapIn(false, whole), opts));
+    if (!whole) for (const t of targets) track(s, t.animate(blurSwapInFilter(), opts));
     const g = s.ghost?.box;
-    if (g) {
-      const { x: gx, opacity: go } = s.start;
-      // fill: forwards：放完到拿掉之间停在透明，不回到不透明露一帧旧页（11-18 逐帧对照 200ms 那帧实测）
-      track(s, g.animate([{ opacity: go, transform: px(gx) }, { opacity: 0, transform: px(gx - (w * SLIDE_OUT_PCT * dir) / 100) }], { ...opts, fill: 'forwards' }));
-    }
+    // fill: forwards：放完到拿掉之间停在透明，不回到不透明露一帧旧页（11-18 逐帧对照实测）；连点时从上一页此刻的透明度起
+    if (g) track(s, g.animate(blurSwapOut(false, 0, s.start.opacity), { ...opts, fill: 'forwards' }));
     // 钉住的（头像）：新页里也有就先藏着、副本原地不动，收尾时换回新页自己的；新页里没有就让副本跟快照一起淡出
     const pins = s.ghost?.pins;
     if (pins && s.ghost) {
@@ -378,13 +366,10 @@ export function fadeSwap(update: () => void, dir: 1 | -1 = 1): Promise<void> {
       s.ghost.held = mine;
       if (mine.length === 0) track(s, pins.animate([{ opacity: s.start.opacity }, { opacity: 0 }], { ...opts, fill: 'forwards' }));
     }
-    // 从头起播时跳过第一帧：从 0 起播时画出来的第一帧新页整页透明（11-06 chromium 逐帧实测）；接着上一次走的不用跳
-    if (from === 0) for (const a of s.anims) a.currentTime = FADE_SKIP_MS;
-    // 此刻的平移：这一段是从 x0 走到 0（复审第 6 条：不是 at(q)）；有 fixed 元素时各子树走的也是这个值
+    // 原地换、不平移；连点时下一次的快照从新页此刻的透明度起（不是全亮，代码审查 M1）
     s.look = () => {
-      const p = lead.effect?.getComputedTiming().progress;
-      const q = typeof p === 'number' ? p : 1;
-      return { x: (1 - q) * x0, opacity: from + (1 - from) * q };
+      const o = Number.parseFloat(getComputedStyle(el).opacity);
+      return { x: 0, opacity: lead.playState === 'finished' || Number.isNaN(o) ? 1 : o };
     };
   });
 }
