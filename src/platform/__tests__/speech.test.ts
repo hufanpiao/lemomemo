@@ -2,7 +2,7 @@
 // 钉住：同步启动（在用户手势里）、按界面语言、实时出字、结束和错误的归类、取消后不再回调、运行日志不带识别出的字
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RL_SLOT } from '../run-log-api.ts';
-import { SPEECH_STOP_WAIT_MS, speechSupported, startSpeech, type SpeechEnd } from '../speech.ts';
+import { liveSpeechOn, setLiveSpeechOn, SPEECH_STOP_WAIT_MS, speechSupported, startSpeech, type SpeechEnd } from '../speech.ts';
 
 class FakeRecognition {
   static made: FakeRecognition[] = [];
@@ -232,5 +232,21 @@ describe('运行日志：开始、结束、失败各一行，不记识别出的�
     c.session.cancel();
     expect(lines.at(-1)).toBe('speech fail reason=cancelled ms=0');
     expect(lines.join('\n')).not.toContain('开会');
+  });
+});
+
+describe('诊断开关 liveSpeechOn（负责人 11-18“说话没有波动”）', () => {
+  it('默认开；关掉存 lemo-live-speech-off=1，打开删掉；存储读写抛错时当开着、不抛', () => {
+    localStorage.clear();
+    expect(liveSpeechOn()).toBe(true);
+    setLiveSpeechOn(false);
+    expect(localStorage.getItem('lemo-live-speech-off')).toBe('1');
+    expect(liveSpeechOn()).toBe(false);
+    setLiveSpeechOn(true);
+    expect(localStorage.getItem('lemo-live-speech-off')).toBeNull();
+    const bad = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); }, removeItem: () => { throw new Error('x'); } } as unknown as Storage;
+    expect(liveSpeechOn(bad)).toBe(true);
+    expect(() => setLiveSpeechOn(false, bad)).not.toThrow();
+    localStorage.clear();
   });
 });

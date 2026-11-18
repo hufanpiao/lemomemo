@@ -25,6 +25,11 @@ export function __forgetGlassBarFxForTest(): void {
   loadedFx = null;
 }
 
+/** 手指点页签：按下到抬起挪动不超过这么多（px）才算点，抬手就换页 */
+export const TAP_SLOP_PX = 10;
+/** 抬手换过页以后这么久（ms）以内同一个页签上来的 click 是跟着那一下的，不再换一次 */
+export const TOUCH_CLICK_MS = 1000;
+
 /** 去掉 data-fade 前在 --dur-ui 之外多等的余量 */
 export const FADE_SLACK_MS = 100;
 /** --dur-ui（tokens.css，如 220ms / .22s）换成毫秒；读不到按 220 */
@@ -67,6 +72,17 @@ export function GlassBar({ active, add, later = (fn) => fn() }: GlassBarProps) {
   // 路由换了（点过去到了，或者后退、别处跳走）就作废：不然后退回原页时又会按旧的“点到哪页”画
   if (want !== null && want.from !== active) setWant(null);
   const shown = want !== null && want.from === active ? want.to : active;
+  /** 换页签：液滴先往那边走（setWant），再交给 navigateTab 按层级记历史 */
+  const go = (name: TabName): void => {
+    setWant({ from: active, to: name });
+    navigateTab(name);
+  };
+  // 手指点页签抬手就换（负责人 11-18 录屏“切页有点反应慢”；运行日志 up a 6.27 → click a 6.49、up 3636.70 → click 3636.94：
+  // iPhone 上页签抬手以后 click 要再等 220～240 ms，页面里的按钮和“＋”是抬手当下就来）。不等 click 的时机：
+  // 同一根手指在同一个页签上按下、抬起、没挪出 TAP_SLOP_PX，抬手那一刻就换页；随后迟到的那个 click 只拦默认跳转、不再换一次。
+  // 鼠标、键盘、读屏照旧走 click
+  const touchDown = useRef<{ name: TabName; id: number; x: number; y: number } | null>(null);
+  const touchWent = useRef<{ name: TabName; t: number } | null>(null);
   const i = TABS.indexOf(shown);
   // 液滴位置用 CSSOM 写（style.setProperty）：不走 React 的 style 属性，CSP 的 style-src-attr 不放行内联 style（webkit 实测会报）
   const dropEl = useRef<HTMLSpanElement>(null);
@@ -139,12 +155,28 @@ export function GlassBar({ active, add, later = (fn) => fn() }: GlassBarProps) {
             href={hrefOf(name)}
             aria-current={name === active ? 'page' : undefined}
             data-tab={name}
+            onPointerDown={(e) => {
+              touchDown.current = e.pointerType === 'touch' && e.isPrimary ? { name, id: e.pointerId, x: e.clientX, y: e.clientY } : null;
+            }}
+            onPointerUp={(e) => {
+              const d = touchDown.current;
+              touchDown.current = null;
+              if (!d || d.name !== name || d.id !== e.pointerId || Math.hypot(e.clientX - d.x, e.clientY - d.y) > TAP_SLOP_PX) return;
+              touchWent.current = { name, t: performance.now() };
+              go(name);
+            }}
+            onPointerCancel={() => {
+              touchDown.current = null;
+            }}
             onClick={(e) => {
               // 新标签页打开（按着修饰键、中键）不算换页，照浏览器默认；普通点击按层级记历史（R-372）：不让链接自己压一条，
               // 交给 navigateTab（今天 → 别的页签压一条，页签之间原地换，回今天能退就退）
               if (!plainClick(e)) return;
-              setWant({ from: active, to: name });
-              navigateTab(name);
+              // 抬手时已经换过（上面 onPointerUp）：这是跟着来的那个 click，只拦默认跳转
+              const w = touchWent.current;
+              touchWent.current = null;
+              if (w && w.name === name && performance.now() - w.t < TOUCH_CLICK_MS) return;
+              go(name);
             }}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">

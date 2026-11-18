@@ -69,7 +69,7 @@ describe('关于页的诊断信息', () => {
     tapVersion(DIAG_TAPS);
     await screen.findByTestId('settings-about-diag');
     const box = screen.getByTestId('settings-vh-probe');
-    expect([...box.querySelectorAll('button')].map((b) => b.dataset['testid'])).toEqual(['vh-gapfix', 'vh-haptic', 'vh-rl-send', 'vh-rl-copy', 'vh-rl-clear']);
+    expect([...box.querySelectorAll('button')].map((b) => b.dataset['testid'])).toEqual(['vh-gapfix', 'vh-haptic', 'vh-live-speech', 'vh-rl-send', 'vh-rl-copy', 'vh-rl-clear']);
   });
 
   it('Gap fix 开关默认 ON，点一下关掉用来对照（存本机 lemo-gapfix-off）、再点回 ON（R-371 11-11 默认开；日志在全局运行日志里）', async () => {
@@ -87,6 +87,37 @@ describe('关于页的诊断信息', () => {
     fireEvent.click(gf);
     expect(gf.textContent).toBe('Gap fix: ON');
     expect(localStorage.getItem('lemo-gapfix-off')).toBeNull();
+    localStorage.clear();
+  });
+
+  it('Live speech 开关默认 ON，点成 OFF 存本机 lemo-live-speech-off（录音时不开边说边出字，负责人 11-18“说话没有波动”对照用），再点回 ON', async () => {
+    localStorage.clear();
+    render(<AboutSection />);
+    tapVersion(DIAG_TAPS);
+    await screen.findByTestId('settings-about-diag');
+    const ls = screen.getByTestId('vh-live-speech');
+    expect(ls.textContent).toBe('Live speech: ON');
+    fireEvent.click(ls);
+    expect(ls.textContent).toBe('Live speech: OFF (compare)');
+    expect(ls.getAttribute('aria-pressed')).toBe('false');
+    expect(localStorage.getItem('lemo-live-speech-off')).toBe('1');
+    fireEvent.click(ls);
+    expect(ls.textContent).toBe('Live speech: ON');
+    expect(localStorage.getItem('lemo-live-speech-off')).toBeNull();
+    localStorage.clear();
+  });
+
+  it('Finger switch 是看得见的系统开关（带 switch 属性），手指点了记运行日志 probe finger switch on=（负责人 11-18“震动没反应”对照用）', async () => {
+    localStorage.clear();
+    render(<AboutSection />);
+    tapVersion(DIAG_TAPS);
+    await screen.findByTestId('settings-about-diag');
+    const sw = screen.getByTestId('vh-finger-switch') as HTMLInputElement;
+    expect(sw.type).toBe('checkbox');
+    expect(sw.hasAttribute('switch')).toBe(true);
+    expect(sw.closest('label')?.textContent).toContain('Finger switch');
+    fireEvent.click(sw);
+    expect(sw.checked).toBe(true);
     localStorage.clear();
   });
 });

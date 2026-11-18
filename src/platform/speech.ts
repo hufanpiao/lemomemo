@@ -11,6 +11,27 @@ import { rlog } from './run-log-api.ts';
 /** stop() 以后等 end 事件最长多久（FA-3 整块评审第 2 条） */
 export const SPEECH_STOP_WAIT_MS = 3000;
 
+/**
+ * 诊断开关（负责人 11-18 录屏“说话没有波动”）：关掉录音那一路的边说边出字（voice-live 不开识别），只留录音器，
+ * 用来在真机上分清第二次起录音器全是 0 是不是识别抢了麦克风。设置 → 诊断区按钮切换，存 localStorage，读不到当开着
+ */
+const LIVE_OFF_KEY = 'lemo-live-speech-off';
+export function liveSpeechOn(store: Storage = localStorage): boolean {
+  try {
+    return store.getItem(LIVE_OFF_KEY) !== '1';
+  } catch {
+    return true;
+  }
+}
+export function setLiveSpeechOn(on: boolean, store: Storage = localStorage): void {
+  try {
+    if (on) store.removeItem(LIVE_OFF_KEY);
+    else store.setItem(LIVE_OFF_KEY, '1');
+  } catch {
+    /* 存不了：照旧开着 */
+  }
+}
+
 export type SpeechFail = 'denied' | 'network' | 'error' | 'timeout';
 export type SpeechEnd = { ok: true; text: string } | { ok: false; fail: SpeechFail };
 

@@ -110,6 +110,8 @@ vi.mock('../data/voice-flow.ts', async (orig) => {
 vi.mock('../data/quota.ts', async (orig) => ({ ...(await orig<typeof Quota>()), quotaOutToday: async () => fx.quotaOut }));
 vi.mock('../../../platform/speech.ts', () => ({
   speechSupported: () => true,
+  // 诊断开关照真的读本机（关掉的那条用例设 lemo-live-speech-off）
+  liveSpeechOn: () => localStorage.getItem('lemo-live-speech-off') !== '1',
   startSpeech: (lang: string, h: { onStart(): void; onEnd(r: unknown): void; onText?(t: string): void }) => {
     // 要中途文字的是录音这一路边说边出字的那个（R-456），不要的是手机自带识别那一路
     const live = h.onText !== undefined;
@@ -698,6 +700,23 @@ describe('边说边出字、先存、AI 后台整理（R-456）', () => {
     expect(logged(/^voice live saved out=ok n=1 ai=0 ms=\d+$/)).toBe(true);
     expect(log.some((l) => l.includes('买牛奶')), '不记说的内容').toBe(false);
     await act(async () => ai.box.open({ ...VOICE_OK, transcript: '买牛奶', items: [{ ...ITEM, title: '买牛奶' }] }));
+  });
+
+  it('诊断开关 Live speech 关着（lemo-live-speech-off=1）：录音这一路不开识别，日志 take=0 off=diag，松手整段上传等 AI（负责人 11-18 对照用）', async () => {
+    localStorage.setItem('lemo-live-speech-off', '1');
+    try {
+      const ai = held();
+      const { call } = setup({ call: ai.call });
+      const before = fx.speech.length;
+      await holdDown();
+      expect(fx.speech.length, '没开识别').toBe(before);
+      expect(logged(/^voice live take=0 after=rec ms=\d+ off=diag$/)).toBe(true);
+      await release();
+      await waitFor(() => expect(call, '整段上传').toHaveBeenCalledTimes(1));
+      await act(async () => ai.box.open({ ...VOICE_OK, transcript: '买牛奶', items: [{ ...ITEM, title: '买牛奶' }] }));
+    } finally {
+      localStorage.removeItem('lemo-live-speech-off');
+    }
   });
 
   it('AI 回来和先存的一样：什么都不做（不再写、不撤），日志 out=same', async () => {

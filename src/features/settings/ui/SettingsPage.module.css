@@ -127,6 +127,16 @@ h3.gt {
   flex-wrap: wrap;
 }
 
+/* 诊断区手指点的系统开关（VhProbe 的 Finger switch）：开关和字竖直居中，整块够手指点 */
+.probeSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
 /* 导出中断后的“继续”“取消”（0.47 续 ④ 第 4 点）：跟着上面的说明左对齐，不是弹窗底部那种靠右 */
 .exportActions {
   display: flex;

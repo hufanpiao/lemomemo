@@ -4,10 +4,16 @@
 // • Gap fix（R-371，platform/vh-gapfix.ts，iOS 主屏幕版默认开）：开关是“关掉用来对照”——默认 ON，点成 OFF 存本机，下次冷启动起不做（再点回 ON 恢复默认）；
 //   每一步的日志在全局运行日志里（gapfix 开头的行）
 // • Test haptic（R-471）：同一排，点一下震一下，按钮上写震动走的哪条路（switch：iOS 18 系统开关；vibrate：navigator.vibrate；none：都没有）
+// • Live speech（负责人 11-18 录屏“说话没有波动”，platform/speech.ts 的 liveSpeechOn）：默认 ON，点成 OFF 录音时不开边说边出字的识别、只留录音器，
+//   用来真机对照第二次起录音器全是 0 是不是识别抢麦克风（日志 voice live take=0 … off=diag）
+// • Finger switch（负责人 11-18“震动没反应”）：一个看得见的 iOS 系统开关 <input type="checkbox" switch>，让人用手指点：
+//   手指点都不震 = 系统触感反馈关着或这台机器不支持，代码改不了；手指点震、Test haptic 不震 = 代点的写法不对。改变时记 probe finger switch on=
 // • 全局运行日志（platform/run-log.ts，非正式版一直在记）：“Send run log”一键发送、“Copy run log”整段复制、“Clear run log”清空
 import { useState } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { tryHaptic, type HapticPath } from '../../../platform/feedback.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
+import { liveSpeechOn, setLiveSpeechOn } from '../../../platform/speech.ts';
 import { gapFixOn, setGapFixOn } from '../../../platform/vh-gapfix.ts';
 import { clearRunLog, readRunLog } from '../../../platform/run-log.ts';
 import { useRunLogSend, type RunLogSendState } from '../hooks/useRunLogSend.ts';
@@ -31,10 +37,16 @@ export const GF_LABEL_OFF = 'Gap fix: OFF (compare)';
 /** 试震动（R-471，platform/feedback.ts 的 tryHaptic；不看“声音和触感”开关）：按过以后写 Haptic: switch / vibrate / none */
 export const HAP_TRY = 'Test haptic';
 export const HAP_DONE = 'Haptic: ';
+/** 录音时边说边出字的诊断开关（关掉用来对照） */
+export const LS_LABEL_ON = 'Live speech: ON';
+export const LS_LABEL_OFF = 'Live speech: OFF (compare)';
+/** 手指点的系统开关 */
+export const FS_LABEL = 'Finger switch';
 
 export function VhProbe() {
   const [gf, setGf] = useState(() => gapFixOn());
   const [hap, setHap] = useState<HapticPath | null>(null);
+  const [ls, setLs] = useState(() => liveSpeechOn());
   const [rlCopied, setRlCopied] = useState<'' | 'ok' | 'fail'>('');
   const rlSend = useRunLogSend();
   /** 整段复制（按的时候重新读本机，记着的时候也拿最新的） */
@@ -66,6 +78,29 @@ export function VhProbe() {
         <FormButton size="compact" data-testid="vh-haptic" onClick={() => setHap(tryHaptic())}>
           {hap === null ? HAP_TRY : `${HAP_DONE}${hap}`}
         </FormButton>
+      </div>
+      <div className={`${styles.actions} ${styles.probeActions}`}>
+        <FormButton
+          size="compact"
+          aria-pressed={ls}
+          data-testid="vh-live-speech"
+          onClick={() => {
+            setLiveSpeechOn(!ls);
+            setLs(liveSpeechOn());
+          }}
+        >
+          {ls ? LS_LABEL_ON : LS_LABEL_OFF}
+        </FormButton>
+        {/* switch 属性 React 不认识，挂上以后用 ref 补；不受控，只为让手指点一下看震不震 */}
+        <label className={styles.probeSwitch}>
+          <input
+            type="checkbox"
+            data-testid="vh-finger-switch"
+            ref={(el) => el?.setAttribute('switch', '')}
+            onChange={(e) => rlog(`probe finger switch on=${e.currentTarget.checked ? 1 : 0}`)}
+          />
+          {FS_LABEL}
+        </label>
       </div>
       <div className={`${styles.actions} ${styles.probeActions}`}>
         <FormButton size="compact" data-testid="vh-rl-send" disabled={rlSend.state === 'busy'} onClick={rlSend.send}>

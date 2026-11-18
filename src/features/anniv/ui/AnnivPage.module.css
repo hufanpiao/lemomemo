@@ -4,7 +4,9 @@
 .page {
   max-width: 720px;
   margin: 0 auto;
-  padding: max(var(--safe-top), 12px) 16px var(--tabbar-pad);
+
+  /* 顶上至少 16px，和今天、待办、随手记、日历一样：页签互切时右上角头像钉在原处，各页头像得在同一位置（负责人 11-18“切页的时候头像抖动”） */
+  padding: max(var(--safe-top), 16px) 16px var(--tabbar-pad);
   color: var(--text);
 }
 

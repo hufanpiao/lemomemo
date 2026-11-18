@@ -55,12 +55,15 @@ import { useListT, useTodoList, type DueTag, type Group } from '../hooks/useTodo
 import { useLinger } from '../../../kit/components/useDoneFlow.ts';
 import { useTodoRows } from '../../../kit/components/useTodoRows.ts';
 import { TodoRow } from '../../../kit/components/TodoRow.tsx';
-import { setCollapsed, setDoneOpen, useCollapsed, useDoneOpen } from '../hooks/useSubtasks.ts';
+import { preloadFold, setCollapsed, setDoneOpen, useCollapsed, useDoneOpen, useFoldReady } from '../hooks/useSubtasks.ts';
 import { TODO_PARTS } from './row-parts.tsx';
 import { PullSearch } from '../../smart-search/index.ts';
 import styles from './TodosPage.module.css';
 import chip from '../../../kit/components/Chip.module.css';
 import refine from '../../../kit/components/Refine.module.css';
+
+// 这一包一执行（冷启动后台预加载时，R-478）就去读子任务收起状态，第一次进待办时已经读好（负责人 11-18“下面的一部分待办飞上来”）
+preloadFold();
 
 export default function TodosPage() {
   const t = useListT();
@@ -87,6 +90,8 @@ export default function TodosPage() {
   const isCollapsed = useCollapsed();
   const fold = (id: string, v: boolean) => setCollapsed(id, v, l.ids);   // 全部待办的 id（不按项目筛选，免得剔掉别的项目点过的）
   const doneOpen = useDoneOpen();
+  // 收起状态读好以前列表不画：不先按默认摊开子任务、再缩回去让下面的行飞上来
+  const foldReady = useFoldReady();
 
   const { groupTitle, dueText } = labelsOf(t, locale);
 
@@ -118,8 +123,8 @@ export default function TodosPage() {
         </div>
       ) : null}
 
-      {r.view.length === 0 && !pull.searching ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
-      <AppearList as="div">
+      {foldReady && r.view.length === 0 && !pull.searching ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
+      {foldReady && <AppearList as="div">
         {view.map((g) => (
           <AppearItem
             as="section"
@@ -183,7 +188,7 @@ export default function TodosPage() {
             )}
           </AppearItem>
         ))}
-      </AppearList>
+      </AppearList>}
       </PullSlot>
 
       {/* 页底提示条只这一处（kit ListToasts）：删除的撤销条、出错条、只读提示条，加上打勾、自动完成的“已完成 · 撤销”（r.flow.undoOf） */}

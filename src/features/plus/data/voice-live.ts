@@ -22,7 +22,7 @@
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import { getBoot } from '../../../core/boot.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import type { SpeechEnd } from '../../../platform/speech.ts';
+import { liveSpeechOn, type SpeechEnd } from '../../../platform/speech.ts';
 import type { BatchMark, ReplaceOut } from './saved-batch.ts';
 import { baseReqCtx, planText, type TypeCtx, type TypePlan } from './type-flow.ts';
 import { sendVoice, toUpload, voiceFinal, type VoiceClip, type VoiceResult } from './voice-flow.ts';
@@ -142,7 +142,9 @@ export function createLiveRoute(c: VoiceCore, account: (res: VoiceResult) => voi
     /** 开识别（录音器开起来以后，或录音器开不起来时顶上）；开起来了才挂“这一次作废时一起关”。
      *  after：日志里记识别排在什么之后开（rec = 录音器 start 事件之后，rec_fail = 录音器开不起来之后）、离开录音器那一步多少毫秒（R-470） */
     take(a: Attempt, after: 'rec' | 'rec_fail', ms: number): void {
-      const on = route.take(lang());
+      // 诊断开关关着（设置诊断区 Live speech: OFF）就不开识别，只留录音器，日志带 off=diag
+      const diagOff = !liveSpeechOn();
+      const on = !diagOff && route.take(lang());
       live = on ? { a, said: '', restarts: 0, broken: false, stopping: false, got: null, wake: null } : null;
       if (on) {
         a.ac.signal.addEventListener(
@@ -153,7 +155,7 @@ export function createLiveRoute(c: VoiceCore, account: (res: VoiceResult) => voi
           { once: true },
         );
       }
-      rlog(`voice live take=${on ? 1 : 0} after=${after} ms=${Math.round(ms)}`);
+      rlog(`voice live take=${on ? 1 : 0} after=${after} ms=${Math.round(ms)}${diagOff ? ' off=diag' : ''}`);
     },
     /** 这一次接手了识别 */
     on: (a: Attempt): boolean => live?.a === a,

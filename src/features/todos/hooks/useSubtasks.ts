@@ -106,8 +106,17 @@ export const COLLAPSED_MAX = 500;
 interface FoldState {
   collapsed: Readonly<Record<string, boolean>>;
   doneOpen: boolean | null;
+  /** 本机那份读过了没有（读到、读不到、还没启动好按默认画，都算读过）：待办页等它再画列表（负责人 11-18 录屏“冷启动第一次进待办的时候下面的一部分待办飞上来”：
+   *  原来先按默认“未完成展开”画、几毫秒后读到“已收起”再缩回，下面的行跟着播挪位动画） */
+  ready: boolean;
 }
-let state: FoldState = { collapsed: {}, doneOpen: null };
+let state: FoldState = { collapsed: {}, doneOpen: null, ready: false };
+/** 标成读过了（按默认画）：只在第一次变的时候通知 */
+const markReady = (): void => {
+  if (state.ready) return;
+  state = { ...state, ready: true };
+  emit();
+};
 let loading: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 const emit = (): void => listeners.forEach((l) => l());
@@ -127,7 +136,8 @@ function load(): Promise<void> {
     try {
       const c = openCache();
       if (!c) {
-        loading = null;   // 还没启动好：下次进待办页再读
+        loading = null;   // 还没启动好：先按默认画，下次进待办页再读
+        markReady();
         return;
       }
       const [v, open] = await Promise.all([c.getMeta(META_KEY), c.getMeta(DONE_OPEN_KEY)]);
@@ -135,10 +145,12 @@ function load(): Promise<void> {
       state = {
         collapsed: v && typeof v === 'object' ? { ...v, ...state.collapsed } : state.collapsed,
         doneOpen: state.doneOpen ?? (typeof open === 'boolean' ? open : null),
+        ready: true,
       };
       emit();
     } catch {
       loading = null;   // 读不到先按默认（meta 可重建），下次再试
+      markReady();
     }
   })();
   return loading;
@@ -162,7 +174,7 @@ export function setDoneOpen(open: boolean): void {
 
 /** 测试用：清掉模块里的状态 */
 export function resetCollapsedForTest(): void {
-  state = { collapsed: {}, doneOpen: null };
+  state = { collapsed: {}, doneOpen: null, ready: false };
   loading = null;
 }
 
@@ -178,6 +190,16 @@ function useFoldState(): FoldState {
 export function useCollapsed(): (id: string, done: boolean) => boolean {
   const s = useFoldState();
   return (id, done) => s.collapsed[id] ?? done;
+}
+
+/** 提前读本机那份（待办页代码一下载、执行就调：冷启动后台预加载时已经读好，R-478） */
+export function preloadFold(): void {
+  void load();
+}
+
+/** 本机那份读过了没有：待办页读好以前不画列表，免得先按默认摊开、再缩回 */
+export function useFoldReady(): boolean {
+  return useFoldState().ready;
 }
 
 /** 待办页“已完成”组展开没有（没点过默认收起） */
