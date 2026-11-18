@@ -22,6 +22,8 @@
 // • 运行日志 log 必传（同 Mist：kit 不直接引 platform，调用方传 platform 的 rlog；必传就不会有哪一处忘了接，R-420 审查第 8 条）：
 //   按下、定方向、松手、取消各记一行，松手记按下到松手的毫秒数（ms=），不记内容
 // • 只渲染和手势，不碰数据：操作做什么由调用方给 onClick
+// • 震动（R-471）：每个操作按钮里藏一个真系统开关（TapSwitch），手指点“删除”时 iOS 才出触感；onClick 里没调该震的 fx 的按钮点了不震。
+//   拉到底直删不是点按（没有 click），iOS 上不震
 //
 // 谁负责收起别的行（一次只露一行；审查 11-15 第 10 条记成表，代码不动）：
 //   | 地方                          | 管什么                                                                                         |
@@ -33,6 +35,7 @@ import { useEffect, useRef, useState, type ElementType, type ReactNode } from 'r
 import { useHDrag } from '../../motion/gestures.ts';
 import { useLayer } from '../hooks/useLayer.ts';
 import styles from './SwipeRow.module.css';
+import { TapSwitch } from './TapSwitch.tsx';
 
 export interface SwipeAction {
   key: string;
@@ -215,6 +218,7 @@ export function SwipeRow({ actions, children, as: Tag = 'div', className, disabl
             data-testid={a.testId}
           >
             {a.label}
+            <TapSwitch />
           </button>
         ))}
       </div>

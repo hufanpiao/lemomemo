@@ -5,6 +5,8 @@
 // • 方框和 checkbox 都跟 checked 走。使用方（TodosPage、TodayPage）传的是界面上该显示的值（点下去当下就是“刚点的值”、
 //   留住那一拍里是留住的值，useHoldView 的 shown），所以填满动画不等保存回来，读屏读到的也和看到的一致（代码审查 FA5-CR A3：删掉了没人用的 shown 参数）
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { eachFrame } from '../../motion/components.ts';
+import { takeBuzz } from '../hooks/tapBuzz.ts';
 import styles from './CheckCircle.module.css';
 
 export interface CheckCircleProps {
@@ -69,20 +71,41 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
   const inputRef = useRef<HTMLInputElement>(null);
   const labelRef = useRef<HTMLLabelElement>(null);
   const swallowUntil = useRef(0);
+  const checkedNow = useRef(checked);
+  checkedNow.current = checked;
   const apply = (v: boolean): void => {
     if (v && !still && !readOnly) setPop((n) => n + 1);
     onChange(v);
   };
   // 手指抬起就切换（负责人 11-18“待办点击完成还是会有点完延迟或者不执行”）：运行日志 preview.405 里 131 次轻点，pointerup 都是当下到，
   // click 却有四十多次晚 0.2～0.26 秒、二十次两下快点只来一个（iOS 等着认双击）。所以触摸、笔在按下点 10 px 以内抬起时这里直接切换，
-  // 之后 800 ms 内系统补发的 click 在 label 上拦掉（不然会再切回去）；鼠标、键盘（空格）照旧走 input 自己的 click → onChange
+  // 之后 800 ms 内系统补发的 click 在 label 上拦掉（不然会再切回去）；鼠标、键盘（空格）照旧走 input 自己的 click → onChange。
+  // 震动（负责人 11-18 iOS 26.6 真机：只有手指真点到 <input type="checkbox" switch> 才震）：这个 checkbox 带 switch 属性
+  // （appearance: none，外观照旧是方框；role 写死 checkbox，读屏照旧读“复选框”）。补发的那次 click：抬手时调过该震的 fx（勾上完成，
+  // fx-api.ts 的 takeBuzz）就只拦冒泡、放它真的切一下开关出触感，再在画下一帧前把勾选状态按 React 的值放回去；不该震（取消勾选、只读拦下、
+  // “声音和触感”关着）照旧 preventDefault。系统没补发 click（iOS 两下快点只来一个）的那一下就不震
   useEffect(() => {
     const lb = labelRef.current;
     if (!lb) return undefined;
+    inputRef.current?.setAttribute('switch', '');
     const onClick = (ev: MouseEvent): void => {
       if (performance.now() >= swallowUntil.current) return;
-      ev.preventDefault();
       ev.stopPropagation();
+      const input = inputRef.current;
+      if (!input) return void ev.preventDefault();
+      // 点在外扩区（target 是 label）：该震就让 label 照常转一下给 checkbox（转来的那次在下面定），不该震整个拦掉
+      if (ev.target !== input) {
+        if (!takeBuzz(true)) ev.preventDefault();
+        return;
+      }
+      if (!takeBuzz()) return void ev.preventDefault();
+      // 该震：放这次 click 真的切开关（iOS 这才给触感）。上面已经不让它冒到根上，React 不会再切一次；
+      // 开关被系统切成了反的，画下一帧之前按 React 现在的值放回去（不画出来）
+      // 只跑一帧（eachFrame 从 motion/components.ts 出，TodoRow 本来就引它，首屏不多出块）
+      const stop = eachFrame(() => {
+        stop();
+        input.checked = checkedNow.current;
+      });
     };
     lb.addEventListener('click', onClick, true);
     return () => lb.removeEventListener('click', onClick, true);
@@ -117,8 +140,11 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
           if (e.target === e.currentTarget) setPop(0);
         }}
       >
+        {/* 带了 switch 属性以后系统按“开关”读，role 写死 checkbox 让读屏照旧（lint 只看 type，不知道 switch 会改隐含角色） */}
+        {/* eslint-disable-next-line jsx-a11y/no-redundant-roles -- 见上一行 */}
         <input
           type="checkbox"
+          role="checkbox"
           className={styles.check}
           checked={checked}
           aria-label={label}

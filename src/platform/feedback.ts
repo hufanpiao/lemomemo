@@ -6,11 +6,13 @@
 // • 声音：整个 app 只建一个 AudioContext，一直复用；最后一个音放完 AUDIO_RESTORE_MS 后 suspend（不出声、不占音频），开始录音时才 close（见 scheduleIdle、releaseFxAudio）；总音量 0.5，过 5kHz 低通去掉刺耳的高频。每个音起音 4ms、指数衰减
 // • 静音键打开也出声：有 navigator.audioSession（iOS 17+）就在要播之前设成 'playback'，播完 AUDIO_RESTORE_MS 后改回原来的类型（不常驻，免得影响之后的录音）
 // • 正在录音、语音输入进行中（fx-api.ts 的 setFxMicBusy 注入的判断，plus 的 voice-main.ts 接 mainVoice 的 capturing）：一律不出声、不碰 audioSession、不建 AudioContext，免得和麦克风抢音频
-// • 震动：有 navigator.vibrate（Android 等）用它震 HAPTIC_MS；没有但支持 <input type="checkbox" switch>（iOS 18 起）就点一下藏起来的那个开关的 label，
-//   系统给一下轻触反馈——只有在用户手势里同步调才震（点按、松手里调；长按计时器、touchmove 里调不保证震，只能真机看）；都没有为 none
+// • 震动：有 navigator.vibrate（Android 等）用它震 HAPTIC_MS；没有但支持 <input type="checkbox" switch>（iOS 18 起）为 switch：
+//   iOS 只在手指真点到系统开关时给触感（负责人 11-18 iOS 26.6 真机：脚本代点一律不震），所以这里不动手，只返回“该震”，
+//   由手指下的真开关放这一下 click 切过去出触感（fx-api.ts 的 takeBuzz；kit 的 TapSwitch、CheckCircle）。
+//   长按拿起（lift）、拖动放下（drop）、下拉过门槛（pull）不是一次点按、没有 click，iOS 上震不了；都没有为 none
 // • 开关：settings 的 ui.fx（设置“声音和触感”，默认开；值为 false 才关），startFx 拿 main.tsx 传进来的 settings 集合，每次调时现读；关着时不响不震
 // • 运行日志：fx <种类> hap=switch|vibrate|none snd=1|0|mic|off（off：开关关着；mic：录音中不出声），同一种类 LOG_GAP_MS 内只记一行，不记内容
-import { setFxImpl, type FxKind } from './fx-api.ts';
+import { markBuzz, setFxImpl, type FxKind } from './fx-api.ts';
 import { rlog } from './run-log-api.ts';
 
 export type { FxKind };
@@ -71,48 +73,17 @@ export function hapticPath(): HapticPath {
 }
 
 /**
- * 点一下系统开关借它的轻触反馈（iOS 18 起）。照社区里真机能震的写法（ios-haptics）：每次新建一个 display:none 的开关挂进 <head>、
- * 点它的 label、马上拿掉。原来一直挂着同一个、用透明加裁剪藏在 body 里，preview.402 真机日志走到了 hap=switch 却不震（负责人 11-18“显示switch，没有震”）
+ * 震一下（在用户手势里同步调）；返回走的哪条路。
+ * • vibrate：这里直接震
+ * • switch（iOS 18 起）：这里什么都不做——触感由手指点到的那个真开关出（fx-api.ts 的 takeBuzz，kit 的 TapSwitch、CheckCircle）。
+ *   负责人 11-18 iOS 26.6 真机：代点开关（head / body / input 三种写法、点 label 点 input）全都不震，只有手指点 Finger switch 震，代点写法已删
  */
-/**
- * 代点系统开关的几种写法（负责人 11-18 iOS 26.6.2 主屏幕版“有声音没震动”，诊断区 Haptic A / B / C 三个按钮各试一种，真机挑出能震的那种以后只留它）：
- * • head：上面那种（display:none 挂 <head>、点 label）——现在默认用的
- * • body：挂进 <body>、看得见的位置（1px、几乎透明，不是 display:none），点 label
- * • input：同 body，但直接点 <input>，不经 label
- */
-export type SwitchWay = 'head' | 'body' | 'input';
-export const SWITCH_WAYS: readonly SwitchWay[] = ['head', 'body', 'input'];
-
-function switchClick(way: SwitchWay = 'head'): void {
-  const label = document.createElement('label');
-  label.setAttribute('aria-hidden', 'true');
-  const input = document.createElement('input');
-  input.type = 'checkbox';
-  input.setAttribute('switch', '');
-  label.append(input);
-  if (way === 'head') {
-    label.style.display = 'none';
-    document.head.append(label);
-  } else {
-    label.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0.01;overflow:hidden;pointer-events:none';
-    document.body.append(label);
-  }
-  try {
-    if (way === 'input') input.click();
-    else label.click();
-  } finally {
-    label.remove();
-  }
-}
-
-/** 震一下（必须在用户手势里同步调）；返回走的哪条路。way：代点开关的写法（只有诊断区按钮传） */
-export function haptic(way?: SwitchWay): HapticPath {
+export function haptic(): HapticPath {
   const path = hapticPath();
   try {
     if (path === 'vibrate') navigator.vibrate(HAPTIC_MS);
-    else if (path === 'switch') switchClick(way);
   } catch {
-    // 不让震、页面还没 body：不要紧
+    // 不让震：不要紧
   }
   return path;
 }
@@ -245,10 +216,16 @@ function logFx(kind: FxKind, hap: HapticPath | '-', snd: string): void {
   rlog(`fx ${kind} hap=${hap} snd=${snd}`);
 }
 
-/** 这个操作的音效和震动（在手势里同步调；业务代码经 fx-api.ts 调）；开关关着时什么都不做 */
-export function fx(kind: FxKind, busy: () => boolean = micBusy): void {
+/**
+ * 这个操作的音效和震动（在手势里同步调；业务代码经 fx-api.ts 调）；开关关着时什么都不做。
+ * 返回 true = 走系统开关那条路、该震：fx-api 记下，手指下的真开关收到这一下的 click 时才放它切（见 fx-api.ts 的 takeBuzz）
+ */
+export function fx(kind: FxKind, busy: () => boolean = micBusy): boolean {
   micBusy = busy;
-  if (!fxOnOf(rowsOf?.() ?? [])) return void logFx(kind, '-', 'off');
+  if (!fxOnOf(rowsOf?.() ?? [])) {
+    logFx(kind, '-', 'off');
+    return false;
+  }
   const hap = haptic();
   const tones = FX_SOUND[kind];
   let snd = '0';
@@ -263,12 +240,17 @@ export function fx(kind: FxKind, busy: () => boolean = micBusy): void {
     }
   }
   logFx(kind, hap, snd);
+  return hap === 'switch';
 }
 
-/** 设置诊断区“试震动”：不看开关，直接震一下，返回走的哪条路（真机上看主屏幕版到底震不震） */
-export function tryHaptic(way?: SwitchWay): HapticPath {
-  const hap = haptic(way);
-  rlog(`fx try hap=${hap}${way ? ` way=${way}` : ''}`);
+/**
+ * 设置诊断区“试震动”：不看开关，直接震一下，返回走的哪条路（真机上看主屏幕版到底震不震）。
+ * iOS 上由按钮里的 TapSwitch 出触感（和左滑“删除”同一套），这里 markBuzz 放它切
+ */
+export function tryHaptic(): HapticPath {
+  const hap = haptic();
+  if (hap === 'switch') markBuzz();
+  rlog(`fx try hap=${hap}`);
   return hap;
 }
 
