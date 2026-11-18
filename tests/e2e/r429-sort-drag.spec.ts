@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { cached, idbPut, idbRead, notesViewCached } from './idb.ts';
 import { runLog } from './fake-media.ts';
-import { waitPreloaded } from './page-helpers.ts';
+import { expectLift, installScrub, waitPreloaded, watchLift } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -247,8 +247,11 @@ test.describe('长按拖动排序（R-429、R-461）', () => {
     expect(['', 'rgba(0, 0, 0, 0)']).toContain(hl);
     const logBefore = (await runLog(page)).length;
 
+    await installScrub(page);
+    const lift = watchLift(page);
     await record(page);
     await hold(page, row('n4'));
+    await expectLift(lift);
     // ⑤ 6 个点在行尾“⋯”那一格。“⋯”淡出、6 个点淡入是 --dur-ui（220 ms）的过渡：等它走完再量，不写死等 300 ms
     // （11-18 CI webkit 掉帧，等了 300 ms 读到的还是起点值 1 / 0，run 44168443536）
     await expect.poll(async () => { const v = await gripLook(page); return v.moreOpacity < 0.05 && v.gripOpacity > 0.95; }, { timeout: 3000 }).toBe(true);
@@ -270,9 +273,7 @@ test.describe('长按拖动排序（R-429、R-461）', () => {
 
     const fr = await frames(page);
     const lifted = fr.filter((x) => x.float);
-    // ① 拿起有过渡：浮层第一帧还没放大，之后放大到 1.04。
-    // “第一帧还没放大”在 CI 的 webkit 上不量：两帧隔 120～170 ms，第一帧取到时 --dur-ui 的放大已经播完（11-18 run 44204492953 三帧都是 1.04）；chromium、本机 webkit 照量
-    if (!(browserName === 'webkit' && process.env.CI === 'true')) expect(scaleOf(lifted[0]?.card ?? ''), JSON.stringify(lifted.slice(0, 3).map((x) => x.card))).toBeLessThan(1.02);
+    // ① 拿起有过渡：拿起那一刻还没放大（上面 expectLift 按过渡进度量，不靠帧率，#129），之后放大到 1.04
     expect(Math.max(...lifted.map((x) => scaleOf(x.card)))).toBeGreaterThan(1.035);
     // ② 被越过的两行先让位（transform 非零）、最后归零
     for (const id of ['n2', 'n3']) {

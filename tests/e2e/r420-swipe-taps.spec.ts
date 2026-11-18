@@ -13,7 +13,7 @@ import { writeFileSync } from 'node:fs';
 import type { Locator, Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { FOLLOW_MAX_PX } from '../../src/motion/swipe-pager.ts';
-import { waitPreloaded } from './page-helpers.ts';
+import { installScrub, waitPreloaded } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use({ trace: 'off', loggedIn: true, viewport: { width: 390, height: 844 }, hasTouch: true, timezoneId: 'Asia/Seoul', locale: 'zh-CN' });
@@ -24,7 +24,8 @@ test.afterAll(({ browserName }) => {
   if (FRAMES_OUT && Object.keys(frameLog).length > 0) writeFileSync(`${FRAMES_OUT}-${browserName}.json`, JSON.stringify(frameLog, null, 1));
 });
 
-type Act = { kind: 'next' } | { kind: 'swipe'; dx: number };
+/** still：翻不动（没有淡换），只逐帧看滑回原位 */
+type Act = { kind: 'next' } | { kind: 'swipe'; dx: number; still?: boolean };
 
 /** 每帧：新的一页的横移（px，取整）、透明度（两位小数）、副本的透明度（没有副本 null）、离第一帧的毫秒数；diag 第一帧时的诊断 */
 type Frames = { x: number[]; op: number[]; ghost: (number | null)[]; ms: number[]; diag: string };
@@ -37,45 +38,77 @@ async function framesAfter(page: Page, act: Act): Promise<Frames> {
       // 快到终点时是 -0.3 这类小数，取整得 -0，归成 0
       return m === 'none' ? 0 : Math.round(new DOMMatrixReadOnly(m).m41) || 0;
     };
-    if (a.kind === 'next') {
-      document.querySelector<HTMLElement>('[data-testid="cal-next"]')?.click();
-    } else {
-      const r = el.getBoundingClientRect();
-      const y = r.top + 120;
-      const x0 = r.left + r.width / 2 + (a.dx < 0 ? 80 : -80);
-      const fire = (type: string, x: number): void =>
-        void el.dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true, cancelable: true }));
-      fire('pointerdown', x0);
-      for (let i = 1; i <= 5; i++) fire('pointermove', x0 + (a.dx * i) / 5);
-      // 跟手画一帧再松手（真手指松手前总有几帧在跟手）
-      await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
-      fire('pointerup', x0 + a.dx);
-    }
-    const x: number[] = [];
-    const op: number[] = [];
-    const ghost: (number | null)[] = [];
-    const ms: number[] = [];
-    let diag = '';
-    let t0: number | undefined;
     const ghostEl = (): HTMLElement | null => {
       const g = el.previousElementSibling;
       return g instanceof HTMLElement && g.getAttribute('aria-hidden') === 'true' ? g : null;
     };
     const opOf = (e: Element): number => Math.round(Number(getComputedStyle(e).opacity) * 100) / 100;
+    const x: number[] = [];
+    const op: number[] = [];
+    const ghost: (number | null)[] = [];
+    const ms: number[] = [];
+    // 翻页淡换（JS 动画）按进度暂停拨点量，不靠帧率（#129：ci a424c819 webkit 第一帧就晚了 584 ms，淡换已经放完）
+    const scrub = window.__lemoScrub;
+    if (!scrub) throw new Error('没装 installScrub');
+    let fire: (type: string, x: number) => void = () => undefined;
+    let x0 = 0;
+    if (a.kind === 'swipe') {
+      const r = el.getBoundingClientRect();
+      const y = r.top + 120;
+      x0 = r.left + r.width / 2 + (a.dx < 0 ? 80 : -80);
+      fire = (type: string, cx: number): void =>
+        void el.dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: cx, clientY: y, bubbles: true, cancelable: true }));
+      fire('pointerdown', x0);
+      for (let i = 1; i <= 5; i++) fire('pointermove', x0 + (a.dx * i) / 5);
+      // 跟手画一帧再松手（真手指松手前总有几帧在跟手）
+      await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    }
+    const go = (): void => {
+      if (a.kind === 'next') document.querySelector<HTMLElement>('[data-testid="cal-next"]')?.click();
+      else fire('pointerup', x0 + a.dx);
+    };
+    let diag = '';
+    if (a.kind === 'swipe' && a.still) go();
+    else {
+      const res = await scrub({
+        trigger: go,
+        match: (e) => e === el,
+        at: [0.02, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 0.95],
+        read: () => {
+          const g = ghostEl();
+          return { x: tx(), op: opOf(el), ghost: g ? opOf(g) : null };
+        },
+      });
+      if (res.err) throw new Error(res.err);
+      diag = `淡换 ${Math.round(res.total)} ms，按进度拨点 ${res.rows.length} 个`;
+      for (const [i, r] of res.rows.entries()) {
+        x.push(r.x);
+        op.push(r.op);
+        ghost.push(r.ghost);
+        ms.push(Math.round([0.02, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 0.95][i]! * res.total));
+      }
+    }
+    let t0: number | undefined;
+    const base = ms.at(-1) ?? 0;
+    const scrubbed = x.length > 0;
     await new Promise<void>((res) => {
       const tick = (now: number): void => {
         const g = ghostEl();
-        if (x.length === 0) {
+        if (x.length === 0 && diag === '') {
           diag = [`connected=${el.isConnected}`, `ghost=${g !== null}`, `anims=${el.getAnimations().length}`, `rm=${document.documentElement.dataset['rm'] ?? '-'}`].join(' ');
         }
-        x.push(tx());
-        op.push(opOf(el));
-        ghost.push(g ? opOf(g) : null);
         t0 ??= now;
-        ms.push(Math.round(now - t0));
-        // 至少 16 帧，并且采到副本撤掉、新的一页不透明、回到原位为止（最多 6 秒）
-        const rest = g === null && op.at(-1) === 1 && x.at(-1) === 0;
-        if ((x.length < 16 || !rest) && now - t0 < 6000) requestAnimationFrame(tick);
+        const rest = g === null && opOf(el) === 1 && tx() === 0;
+        // 拨过进度的（scrubbed）：半路已经量完，放回去以后动画从头接着放，这里只等它放完记最后一帧；
+        // 翻不动的：逐帧记，至少 16 帧，并且采到副本撤掉、新的一页不透明、回到原位为止（最多 6 秒）
+        if (!scrubbed || rest || now - t0 >= 6000) {
+          x.push(tx());
+          op.push(opOf(el));
+          ghost.push(g ? opOf(g) : null);
+          ms.push(base + Math.round(now - t0));
+        }
+        const more = scrubbed ? !rest : x.length < 16 || !rest;
+        if (more && now - t0 < 6000) requestAnimationFrame(tick);
         else res();
       };
       requestAnimationFrame(tick);
@@ -92,6 +125,7 @@ async function openMonth(page: Page, ym: string): Promise<void> {
   await page.goto(`/app/#/cal/month/${ym}`);
   await expect(page.getByTestId('cal-pager')).toBeVisible({ timeout: 30_000 });
   await waitPreloaded(page); // 冷启动后台预加载三页跑完再量（page-helpers.ts 头注释）
+  await installScrub(page);
   await page.evaluate((d) => document.documentElement.style.setProperty('--dur-ui', d), SLOW_DUR);
   // 换页后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/index.ts 的 guardTaps）
   await page.waitForTimeout(FADE_GUARD_MS + 200);
@@ -127,7 +161,7 @@ test.describe('月历翻页逐帧（R-420 审查第 1、2 条）', () => {
 
   test('翻不动（2100 年 12 月再往后）：松手只滑回原位，不从右边整页滑进来、不淡换', async ({ page }) => {
     await openMonth(page, '2100-12');
-    const fr = await framesAfter(page, { kind: 'swipe', dx: -100 });
+    const fr = await framesAfter(page, { kind: 'swipe', dx: -100, still: true });
     const f = fr.x;
     frameLog['2100-12 左滑 100（翻不动）'] = f;
     for (const [i, x] of f.entries()) expect(x, `第 ${i} 帧不在右边`).toBeLessThanOrEqual(0);

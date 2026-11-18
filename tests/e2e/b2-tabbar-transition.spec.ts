@@ -241,35 +241,14 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
       expect(fz.filter((v) => v > 0.05 && v < 0.95).length, `${name}：淡入中间值太少 ${JSON.stringify(fz)}`).toBeGreaterThanOrEqual(3);
       expect(fz[0] ?? 1, `${name}：淡入一开始就几乎不透明 ${JSON.stringify(fz)}`).toBeLessThan(0.95);
       expect((fz.at(-1) ?? 0) - (fz[0] ?? 0), `${name}：淡入前后几乎没变 ${JSON.stringify(fz)}`).toBeGreaterThan(0.1);
-      // 液滴连续滑：位置从过渡真正开始（running 且 currentTime > 0）以后的帧算起；每帧走的不超过总路程的一半（没有瞬移）；
-      // --ease-drop 带一点回弹，允许冲过终点再回来，但不超过总路程的 15%，也不先往反方向走
+      // 液滴连续滑只按过渡进度抽查（下面 probe.drop，不靠帧率）：原来另有一遍逐帧量（过渡开始以后的帧、落在过渡进行中的帧、每帧走多远），
+      // CI 的 WebKit 一帧几百毫秒，整段 0.55 s 落在两帧之间就挂（ci a424c819“没看到液滴的过渡在跑”）；那遍查的方向、越界、瞬移，按进度这遍都查（#129）
       const x0 = rows[0]?.x ?? 0;
-      // 过渡在跑的帧：逐帧看到 running 且 currentTime > 0，或者是过渡开始（transitionrun）以后的帧（帧很稀时逐帧可能一帧都抓不到）
-      const runTl = probe.runTl;
-      expect(runTl, `${name}：没看到液滴的过渡开始`).not.toBeNull();
-      const k0 = rows.findIndex((r) => r.run || (runTl !== null && r.tl > runTl));
-      expect(k0, `${name}：没看到液滴的过渡在跑`).toBeGreaterThan(0);
-      // 至少有一帧落在过渡进行中（R-372 复审建议）：逐帧看到在跑，或者那一帧的时刻在过渡开始到结束之间；
-      // 帧稀到整段过渡都落在两次采样之间时，逐帧那几条（没有瞬移、不越界、起步方向）就只看到起点和终点，测不到中段，这里拦下
-      const dur = probe.dropDur;
-      expect(dur, `${name}：没拿到液滴过渡的时长`).toBeGreaterThan(0);
-      const inMid = rows.some((r) => r.run || (runTl !== null && r.tl > runTl && r.tl < runTl + dur));
-      expect(inMid, `${name}：没有一帧落在液滴过渡进行中 ${JSON.stringify(rows.map((r) => Math.round(r.tl - (runTl ?? 0))))}（时长 ${dur}）`).toBe(true);
-      const moving = rows.slice(k0);
-      const xs = [x0, ...moving.map((r) => Math.round(r.x * 10) / 10)];
-      const ts = [rows[0]?.tl ?? 0, ...moving.map((r) => r.tl)];
-      const x1 = xs.at(-1) ?? 0;
+      const x1 = rows.at(-1)?.x ?? 0;
       const total = Math.abs(x1 - x0);
       expect(total, `${name}：液滴没动`).toBeGreaterThan(40);
       const lo = Math.min(x0, x1) - total * 0.15;
       const hi = Math.max(x0, x1) + total * 0.15;
-      expect(xs.every((x) => x >= lo && x <= hi), `${name}：液滴跑出了起点到终点之间 ${JSON.stringify(xs)}`).toBe(true);
-      // 起步方向看第一个真正挪动的位置（液滴偶尔晚一帧起步，前几帧都还在起点；原来取第 3 帧会判成 0，11-06 偶发、7e197ea CI）
-      const first = xs.find((x) => Math.abs(x - x0) > 0.5) ?? x0;
-      expect(Math.sign(first - x0) === Math.sign(x1 - x0), `${name}：液滴先往反方向走 ${JSON.stringify(xs)}`).toBe(true);
-      // 按每帧实际时长折算成 60Hz 一帧走多少（并发跑、CI 慢机器会丢帧，一次隔 50 ms 以上，不算瞬移）
-      const steps = xs.slice(1).map((x, k) => ((x - (xs[k] ?? 0)) * 16.7) / Math.max(16.7, (ts[k + 1] ?? 0) - (ts[k] ?? 0)));
-      expect(Math.max(...steps.map(Math.abs)), `${name}：液滴一帧跳了太远 ${JSON.stringify(xs)}`).toBeLessThan(total / 2);
       // 中途位置（按过渡进度抽查 6 个点，不靠帧率）：至少 5 个不同的位置、都在起点到终点之间（含 15% 回弹）、
       // 前半段一路朝终点走（不先往反方向、不原地不动），第一个点离终点还远（没有瞬移）
       const dz = probe.drop;

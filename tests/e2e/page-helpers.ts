@@ -180,3 +180,134 @@ export async function waitPreloaded(page: Page): Promise<void> {
     )
     .toBe(true);
 }
+
+/** 页面里的“暂停拨进度”（installScrub 挂到 window.__lemoScrub）：给 scrub 用的参数 */
+export interface ScrubOpts<T> {
+  /** 触发动画的那一下（同步做完，或最后一步同步做完的异步函数） */
+  trigger: () => void | Promise<void>;
+  /** 认哪个元素上建的 WAAPI 动画（第一个匹配的就是领头的，进度按它算） */
+  match: (el: Element) => boolean;
+  /** 按领头动画的进度（0～1）拨到这些点读值 */
+  at: readonly number[];
+  read: () => T;
+  /** 最多等多久（ms）还没起动画就报错 */
+  waitMs?: number;
+}
+export interface ScrubResult<T> {
+  rows: T[];
+  /** 领头动画的时长（ms） */
+  total: number;
+  err: string;
+}
+declare global {
+  interface Window {
+    __lemoScrub?: <T>(o: ScrubOpts<T>) => Promise<ScrubResult<T>>;
+  }
+}
+
+/**
+ * 逐帧量动画不靠帧率（#129：CI 的 WebKit 软件渲染一帧几百毫秒，0.2～0.9 秒的动画整段落在两帧之间、一帧都量不到）：
+ * 包住 Element.prototype.animate，trigger 里领头的那个动画一建好，就在同一个任务的微任务里（还没出帧）把页面上全部动画暂停，
+ * 按领头动画的进度拨到 at 各点调 read（别的动画保持和领头的相对时间差，CSS 过渡、CSS 动画也一样拨），读完拨回原处、原来在放的接着放。
+ * 拨的期间不出帧，看不到拨过去的样子；动画只被往后推了读值花的那一点时间，起止值、曲线、时长都不变。
+ * 用法：页面打开后 installScrub(page) 一次，再 page.evaluate(() => window.__lemoScrub!({...}))
+ */
+export async function installScrub(page: Page): Promise<void> {
+  const define = (): void => {
+    window.__lemoScrub = <T,>(o: ScrubOpts<T>): Promise<ScrubResult<T>> =>
+      new Promise((done) => {
+        const orig = Element.prototype.animate;
+        let lead: Animation | null = null;
+        // CSS 过渡、CSS 动画不走 animate()：属性、节点一变（MutationObserver 在出帧前的微任务里回调），就取 document.getAnimations()
+        // （这个调用会先把样式算完，过渡当场建好），认 effect.target 匹配的那一个
+        const mo = new MutationObserver(() => {
+          if (lead) return;
+          const a = document.getAnimations().find((x) => {
+            const t = (x.effect as KeyframeEffect | null)?.target;
+            return x.playState !== 'finished' && t instanceof Element && o.match(t);
+          });
+          if (a) begin(a);
+        });
+        const restore = (): void => {
+          Element.prototype.animate = orig;
+          mo.disconnect();
+        };
+        const timer = setTimeout(() => {
+          restore();
+          done({ rows: [], total: 0, err: `${o.waitMs ?? 3000} ms 内没起要量的动画` });
+        }, o.waitMs ?? 3000);
+        mo.observe(document, { subtree: true, attributes: true, childList: true });
+        Element.prototype.animate = function (this: Element, ...args: Parameters<Element['animate']>) {
+          const a = orig.apply(this, args);
+          if (lead === null && o.match(this)) begin(a);
+          return a;
+        };
+        function begin(a: Animation): void {
+          if (lead) return;
+          {
+            lead = a;
+            queueMicrotask(() => {
+              restore();
+              clearTimeout(timer);
+              const m = a;
+              const total = Number(m.effect?.getComputedTiming().endTime ?? 0);
+              const m0 = Number(m.currentTime ?? 0);
+              const all = document.getAnimations().filter((x) => x.playState !== 'finished');
+              const keep = all.map((x) => ({ x, t: x.currentTime, run: x.playState === 'running', d: Number(x.currentTime ?? 0) - m0 }));
+              for (const k of keep) k.x.pause();
+              const rows: T[] = [];
+              try {
+                for (const p of o.at) {
+                  for (const k of keep) k.x.currentTime = Math.max(0, p * total + k.d);
+                  rows.push(o.read());
+                }
+              } finally {
+                for (const k of keep) {
+                  k.x.currentTime = k.t;
+                  if (k.run) k.x.play();
+                }
+              }
+              done({ rows, total, err: '' });
+            });
+          }
+        }
+        void Promise.resolve(o.trigger()).catch((e: unknown) => {
+          restore();
+          clearTimeout(timer);
+          done({ rows: [], total: 0, err: `trigger 出错：${String(e)}` });
+        });
+      });
+  };
+  await page.addInitScript(define);
+  await page.evaluate(define);
+}
+
+/**
+ * 拖动拿起那一下的放大（kit SortDrag：浮层里层 .card 先原样画一帧、再打 data-up，CSS 过渡放大到 1.04）：一打 data-up，就按过渡进度读 0、0.5 两点的放大倍数
+ * （installScrub，不靠帧率；#129：原来取浮层头一帧，CI 的 webkit 两帧隔 120～170 ms，头一帧取到时已经放大完，只好在 CI webkit 不量）。
+ * 先 installScrub(page)；在拿起以前调，拿起以后交给 expectLift
+ */
+export function watchLift(page: Page): Promise<ScrubResult<number>> {
+  return page.evaluate(() =>
+    window.__lemoScrub!({
+      trigger: () => undefined,
+      match: (e) => e.hasAttribute('data-up'),
+      at: [0, 0.5],
+      read: () => {
+        const c = document.querySelector('[data-up]');
+        const tf = c ? getComputedStyle(c).transform : '';
+        return tf.startsWith('matrix(') ? Number(tf.slice(7).split(',')[0]) : 1;
+      },
+      waitMs: 5000,
+    }),
+  );
+}
+
+/** 拿起有过渡：拿起那一刻还没放大，过渡走到一半已经在放大 */
+export async function expectLift(lift: Promise<ScrubResult<number>>): Promise<void> {
+  const r = await lift;
+  expect(r.err).toBe('');
+  const [s0 = 0, s1 = 0] = r.rows;
+  expect(s0, `拿起那一刻已经放大了：${r.rows.join('、')}`).toBeLessThan(1.02);
+  expect(s1, `拿起的放大没有过渡：${r.rows.join('、')}`).toBeGreaterThan(s0 + 0.005);
+}
