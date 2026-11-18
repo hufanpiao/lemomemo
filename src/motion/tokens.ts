@@ -37,8 +37,10 @@ export const dur = {
   collapse: 0.1,
   /** --dur-sheet 380ms：弹层、录音面板、页面切换 */
   sheet: 0.38,
-  /** --dur-tab 300ms：底栏四个页签互切，新页淡入上移（R-471，负责人 11-17“用淡入上移效果，300毫秒”；motion 的 fadeSwap） */
-  tab: 0.3,
+  /** --dur-tab 200ms：底栏四个页签互切，按底栏顺序左右滑入（负责人 11-18 选切页方案 B，取代 R-471 的淡入上移 300ms；motion 的 fadeSwap） */
+  tab: 0.2,
+  /** --dur-grow 280ms：打字条点“详细”，那张卡长成新建页（负责人 11-18 选 A；motion 的 growSwap） */
+  grow: 0.28,
   /** --dur-drop 0.55s：底栏液滴（R-155，唯一超过 400ms 的例外） */
   drop: 0.55,
   /** --dur-glass 0.3s：液态玻璃深浅切换 */
@@ -120,6 +122,7 @@ export const cssVarOf = {
     collapse: '--dur-collapse',
     sheet: '--dur-sheet',
     tab: '--dur-tab',
+    grow: '--dur-grow',
     drop: '--dur-drop',
     glass: '--dur-glass',
     dropPress: '--dur-drop-press',

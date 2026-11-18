@@ -16,6 +16,7 @@ upgrade.setSwReady();
 const state = vi.hoisted(() => ({ routes: [] as unknown[], off: new Set<string>() }));
 vi.mock('../../core/boot.ts', () => ({ getBoot: () => ({ upgrade, outbox: null }) }));
 vi.mock('../features.ts', () => ({
+  preloadPages: () => Promise.resolve(),
   get featureRoutes() {
     return state.routes;
   },

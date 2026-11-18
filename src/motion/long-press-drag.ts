@@ -1,7 +1,7 @@
-// 长按拿起、拖着走的底层（R-429 拖动排序，主持人 11-15 定：kit 手写一份长按拖动，不用 dnd-kit；现在只有随手记页（隐私记页同一个组件）在用；
+// 长按拿起、拖着走的底层（R-429 拖动排序，主持人 11-15 定：kit 手写一份长按拖动，不用 dnd-kit；随手记页（隐私记页同一个组件）和待办子任务（列表卡片、编辑页把手，R-476）在用；
 // 电脑版布局拖面板 DeskLayout 用的是 dnd-kit，两套各管各的，不混用）。经 gestures.ts 出口给 kit 的 useSortDrag 用，不进首屏的 main 块。
 // 这里只管手势，不管“落在哪”和数据：
-// • 按住 LIFT_MS（0.4 秒）没动才拿起；没到时间先走过 SLOP_PX（同左滑的起滑距离）就放手不管，交给左滑（kit SwipeRow）或页面滚动
+// • 按住 LIFT_MS（0.4 秒）没动才拿起（调用方的 now 认的那一下——按在拖动把手上——不等时间，手指挪过 GRIP_PX 就拿起，轻点不拿，R-476）；没到时间先走过 SLOP_PX（同左滑的起滑距离）就放手不管，交给左滑（kit SwipeRow）或页面滚动
 // • 挂在整张列表的外框元素上（一页一个；调用方用回调 ref 交元素，电脑版换挂、断点切换时外框换了就重挂），按下落在哪一行由调用方的 pick 认（行上的 data 标记）；左边缘 20 px 以内起手让给系统返回（同 hdrag.ts）
 // • 拿起那一刻：
 //   – 给按下的那个元素补发一次 pointercancel（只给这一个指针）：左滑行（hdrag.ts）按“浏览器收走了这次触摸”收尾，不会再把后面的移动当成横滑；
@@ -28,6 +28,8 @@ import { swallowNextClick } from './swallow-click.ts';
 export const LIFT_MS = 400;
 /** 手指离滚动区上、下边缘多近开始自动滚（px）；下边缘多留一截给底栏和随手记的输入行 */
 export const EDGE_SCROLL_PX = { top: 72, bottom: 140 } as const;
+/** 按在拖动把手上时手指挪多远就拿起（px）：轻点一下把手不拿起、不震（R-476 评审第 8 条：当场拿起太急） */
+export const GRIP_PX = 3;
 /** 自动滚每帧最多滚多少（px） */
 const SCROLL_MAX_PX = 14;
 
@@ -39,6 +41,8 @@ export interface Point {
 export interface LongPressDragOptions {
   /** 按下落在哪一行（target 往上找调用方的标记）；回 null 这一下不管 */
   pick(target: Element): HTMLElement | null;
+  /** 按在拖动把手上（R-476 待办编辑页子任务）：不用等 LIFT_MS，手指一挪（GRIP_PX）就拿起；不给就都要按住够久 */
+  now?(target: Element): boolean;
   /** 按住够久了：回 false 不拿（例如这一行正露着左滑按钮） */
   lift(row: HTMLElement, at: Point): boolean;
   /** 拿起以后手指的视口坐标（每次指针动、每帧自动滚之后） */
@@ -54,7 +58,9 @@ interface Press {
   y0: number;
   target: Element;
   row: HTMLElement;
-  timer: ReturnType<typeof setTimeout>;
+  /** 按在拖动把手上（调用方的 now）：不等 LIFT_MS，手指挪过 GRIP_PX 就拿起 */
+  grip: boolean;
+  timer: ReturnType<typeof setTimeout> | undefined;
 }
 
 /** 外框往上第一个能竖着滚的祖先；没有就是整页 */
@@ -179,13 +185,18 @@ export function useLongPressDrag(box: HTMLElement | null, opts: LongPressDragOpt
       if (inEdge(e.clientX) || !(e.target instanceof Element)) return;
       const row = o.current.pick(e.target);
       if (!row) return;
-      press = { id: e.pointerId, type: e.pointerType, x0: e.clientX, y0: e.clientY, target: e.target, row, timer: setTimeout(lift, LIFT_MS) };
+      const grip = o.current.now?.(e.target) === true;
+      press = { id: e.pointerId, type: e.pointerType, x0: e.clientX, y0: e.clientY, target: e.target, row, grip, timer: grip ? undefined : setTimeout(lift, LIFT_MS) };
       guard(true);
     };
     // 外框捕获阶段：按住期间看动没动、抬没抬；拿起以后这个指针的事件只拦下（真正的处理在下面 window 上）
     const onMove = (e: PointerEvent): void => {
       if (ours(e)) return void e.stopPropagation();
-      if (press && e.pointerId === press.id && Math.hypot(e.clientX - press.x0, e.clientY - press.y0) >= SLOP_PX) clearPress();
+      if (!press || e.pointerId !== press.id) return;
+      const d = Math.hypot(e.clientX - press.x0, e.clientY - press.y0);
+      if (press.grip) {
+        if (d >= GRIP_PX) lift();
+      } else if (d >= SLOP_PX) clearPress();
     };
     const onUp = (e: PointerEvent): void => {
       if (ours(e)) return void e.stopPropagation();

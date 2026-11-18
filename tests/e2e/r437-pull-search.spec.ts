@@ -10,6 +10,7 @@
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
+import { notesViewRows } from './idb.ts';
 import { afterPageFade, SHOT_DIR } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
@@ -54,7 +55,8 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<void
       { id: NT2, ...c, ...note, title: '书单', body: '下个月读完三本' },
       { id: VN, ...c, ...note, title: '拉面秘方', body: '隐私记', is_private: true },
     ],
-    settings: [{ id: id(30), ...c, key: 'ai.enabled', value: true }],
+    // 随手记页找的是瀑布流卡片：两类设备明确写 masonry（负责人 11-18 首装默认改列表）
+    settings: [{ id: id(30), ...c, key: 'ai.enabled', value: true }, ...notesViewRows('masonry', c)],
   };
   await fakeRest(page, { user: USER, tables, profile: { consent_ai_at: at } });
   await page.route(/\/sb\/functions\/v1\/note-search/, (route) => route.fulfill({ json: { hits: [] } }));

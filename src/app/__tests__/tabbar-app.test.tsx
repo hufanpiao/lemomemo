@@ -11,6 +11,7 @@ const upgrade = createUpgradeCenter({
 let loadPage: () => Promise<{ default: ComponentType }> = () => Promise.resolve({ default: () => <main data-feature="today">今天</main> });
 vi.mock('../../core/boot.ts', () => ({ getBoot: () => ({ upgrade, outbox: null }), subscribeProfile: () => () => undefined }));
 vi.mock('../features.ts', () => ({
+  preloadPages: () => Promise.resolve(),
   featureRoutes: [{ name: 'today', Page: lazy(() => loadPage()) }],
   offRoutes: new Set(),
 }));

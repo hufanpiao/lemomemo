@@ -9,6 +9,21 @@ export const DB = 'planner-v4';
 /** 服务器已确认过的一行：{ id, server: row, view: row } */
 export const cached = (row: Record<string, unknown>): Record<string, unknown> => ({ id: row['id'], server: row, view: row });
 
+/**
+ * 随手记显示方式两行（notes.view@mobile、notes.view@desktop，两类设备都写）：负责人 11-18 首装默认改列表（原来是瀑布流），
+ * 测瀑布流卡片（notes-card-*、notes-mason）的用例要明确写 masonry。extra 给假服务器补公共列（user_id、synced_at 等）；
+ * 灌本机库用 notesViewCached
+ */
+export const notesViewRows = (v: 'list' | 'masonry', extra: Record<string, unknown> = {}): Record<string, unknown>[] =>
+  (['mobile', 'desktop'] as const).map((d, i) => ({ ...extra, id: `0e2e0000-0000-4000-8000-00000004619${i}`, key: `notes.view@${d}`, value: v, deleted_at: null, undone: false, rev: 1 }));
+export const notesViewCached = (v: 'list' | 'masonry'): [string, Record<string, unknown>][] =>
+  notesViewRows(v).map((r) => ['settings', cached(r)]);
+/** 本机库写上显示方式两行再刷新（页面要先打开过、库已建好）：空库起步、又要看瀑布流卡片的用例用 */
+export async function seedNotesView(page: Page, v: 'list' | 'masonry'): Promise<void> {
+  await idbPut(page, notesViewCached(v));
+  await page.reload();
+}
+
 /** 往本机库原样写几行（[仓名, 一行]），一个 readwrite 事务；不刷新 */
 export async function idbPut(page: Page, rows: readonly (readonly [string, unknown])[]): Promise<void> {
   await page.evaluate(

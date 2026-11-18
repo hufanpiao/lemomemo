@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import type { Page, Route } from '@playwright/test';
 import JSZip from 'jszip';
 import { fakeRest } from './fake-rest.ts';
+import { notesViewRows } from './idb.ts';
 import { jpeg, stableBox, swipeDiag, touchSwipe } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { runLog as readRunLog } from './fake-media.ts';
@@ -61,7 +62,9 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
   if (!baseURL) throw new Error('没有 baseURL');
   await seedFakeSession(page.context(), baseURL, { jwt: true });
   const category = { id: CAT, user_id: UID, name: '健康', color: null, sort: 1, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, created_at: 1, updated_at: 1, rev: 1, synced_at: '2026-10-29T00:00:00.000Z' };
-  await fakeRest(page, { user: UID, tables: { notes: [], settings: [], categories: [category] }, store: {} });
+  // 随手记显示方式两类设备明确写 masonry（负责人 11-18 首装默认改列表）：“移到隐私记”那条找的是瀑布流卡片，要列表的用例（listRow）再去设置里改
+  const view = notesViewRows('masonry', { user_id: UID, created_at: 1, updated_at: 1, synced_at: '2026-10-29T00:00:00.000Z' });
+  await fakeRest(page, { user: UID, tables: { notes: [], settings: view, categories: [category] }, store: {} });
 
   const fv: FakeVault = { calls: [], notes: new Map(), files: [], expireNextSave: false, offline: false, images: [] };
   const PPTX = await pptx();

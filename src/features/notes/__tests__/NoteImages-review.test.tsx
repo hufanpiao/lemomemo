@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ServerRow } from '../../../core/cache.ts';
 import { collection } from '../../../core/store.ts';
 import { setMissingRecheckMsForTest } from '../hooks/useNoteImages.ts';
-import { boot, jpg, open, pick, sendNext, serverImage, serverNote, setupImageTests, uid, wire, type Row } from './note-images-kit.tsx';
+import { boot, jpg, open, pick, sendNext, serverImage, serverNote, setupImageTests, uid, VIEW_DESKTOP_ID, viewSetting, wire, type Row } from './note-images-kit.tsx';
 
 setupImageTests();
 
@@ -72,7 +72,7 @@ describe('视觉验收必改（列表缩略图、封面标出错）和“还没�
     await act(async () => {
       await b.outbox?.applyServer('notes', [{ row: serverNote(1) }, { row: serverNote(2) }]);
       await b.outbox?.applyServer('note_images', [{ row: serverImage(uid(71), uid(1)) }]);
-      await b.outbox?.applyServer('settings', [{ row: { id: uid(900), key: 'notes.view@desktop', value: 'list', deleted_at: null, undone: false, rev: 1 } as ServerRow }]);
+      await b.outbox?.applyServer('settings', [{ row: viewSetting(VIEW_DESKTOP_ID, 'notes.view@desktop', 'list') }]);
     });
     wire();
     open();

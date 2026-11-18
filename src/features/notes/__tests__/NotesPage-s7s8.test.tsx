@@ -12,7 +12,7 @@ import { write } from '../../../core/write.ts';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import { useNoteList } from '../hooks/useNoteList.ts';
 import { useConvertFlow } from '../ui/NotesActions.tsx';
-import { boot, NOW, open, serverImage, serverNote, setupImageTests, uid, wire, type Row } from './note-images-kit.tsx';
+import { boot, NOW, open, serverImage, serverNote, setupImageTests, uid, VIEW_DESKTOP_ID, viewSetting, wire, type Row } from './note-images-kit.tsx';
 
 setupImageTests();
 
@@ -205,7 +205,7 @@ describe('转成待办 / 日程（S8，R-414）', () => {
         { row: { ...serverNote(2), converted_to: [] } as ServerRow },
         { row: serverNote(3) },
       ]);
-      await b.outbox?.applyServer('settings', [{ row: serverSetting(uid(900), 'notes.view@desktop', 'list') }]);
+      await b.outbox?.applyServer('settings', [{ row: viewSetting(VIEW_DESKTOP_ID, 'notes.view@desktop', 'list') }]);
     });
     wire();
     open();

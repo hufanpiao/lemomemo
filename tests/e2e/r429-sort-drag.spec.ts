@@ -17,7 +17,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
-import { cached, idbPut, idbRead } from './idb.ts';
+import { cached, idbPut, idbRead, notesViewCached } from './idb.ts';
 import { runLog } from './fake-media.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
@@ -38,7 +38,6 @@ const cats = [
   ['categories', cached({ id: CAT_A, name: '生活', color: 'p4', sort: 1, created_by: 'user', merged_into: null, deleted_at: null, undone: false, rev: 1 })],
   ['categories', cached({ id: CAT_B, name: '工作灵感', color: 'p2', sort: 2, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, rev: 1 })],
 ] as const;
-const view = (v: 'list' | 'masonry') => ['mobile', 'desktop'].map((d, i) => ['settings', cached({ id: `0e2e0000-0000-4000-8000-00000004619${i}`, key: `notes.view@${d}`, value: v, deleted_at: null, undone: false, rev: 1 })] as const);
 /** 四条（n1 最新）：带分类、AI、摘要，截图也用它 */
 const NOTES = [
   note('n1', '首尔林银杏黄了\n周末带相机去拍', 60_000, CAT_A, true),
@@ -53,7 +52,7 @@ const outboxOf = async (page: Page) =>
 async function seed(page: Page, v: 'list' | 'masonry'): Promise<void> {
   await page.goto('/app/#/notes');
   await page.getByTestId('notes').waitFor({ timeout: 30000 });
-  await idbPut(page, [...cats, ...view(v), ...NOTES.map((r) => ['notes', cached(r)] as const)]);
+  await idbPut(page, [...cats, ...notesViewCached(v), ...NOTES.map((r) => ['notes', cached(r)] as const)]);
   await page.reload();
   await page.getByTestId('notes').waitFor({ timeout: 30000 });
   // 等动画实现换上（让位靠它的 layout 动画）

@@ -103,11 +103,13 @@ describe('列表页卡片（5.1、5.4、6.2）', () => {
     expect(save.calls[1]?.slice(0, 4)).toEqual(['patch', 'todos', 't1', expect.objectContaining({ done: false })]);
   });
 
-  it('R-442 待办页不能拖动：行上没有拖动标记、没有 6 个点；按住 0.5 秒不拿起、不写、日志里没有 sort', async () => {
+  it('R-442 待办页的待办行不能拖动：行上没有拖动标记、没有 6 个点；按住 0.5 秒不拿起、不写、日志里没有 sort', async () => {
     render(<TodosPage />);
     const row = await screen.findByTestId('todos-row-t1');
     expect(row.hasAttribute('data-sort-id')).toBe(false);
-    expect(document.querySelector('[data-sort-id], [data-sort-group]')).toBeNull();
+    // 能拖的只有卡片里的子任务（R-476），待办行本身不能拖
+    expect([...document.querySelectorAll('[data-sort-id]')].filter((e) => !e.closest('[data-subcard]'))).toEqual([]);
+    expect(document.querySelector('[data-sort-group]')).toBeNull();
     const title = within(row).getByText('买菜');
     fireEvent.pointerDown(title, { pointerId: 1, button: 0, clientX: 100, clientY: 100, pointerType: 'touch', isPrimary: true });
     await act(() => new Promise((r) => setTimeout(r, 500)));
@@ -116,6 +118,23 @@ describe('列表页卡片（5.1、5.4、6.2）', () => {
     expect(document.querySelector('[data-sort-held], [data-testid="sort-float"]')).toBeNull();
     expect(logs.filter((l) => l.startsWith('sort '))).toEqual([]);
     expect(save.calls).toHaveLength(0);
+  });
+
+  it('R-476 卡片里的子任务能拖：按住 0.4 秒拿起（随手记同一套 useSortDrag）；只读的那一项不能拖', async () => {
+    readonlyIds('todo_items').set([{ id: 'b', ro: true }]);
+    render(<TodosPage />);
+    const a = (await screen.findByTestId('todos-sub-a')).closest('[data-sort-id]');
+    const b = screen.getByTestId('todos-sub-b').closest('[data-sort-id]');
+    expect(a?.getAttribute('data-sort-id')).toBe('a');
+    expect(a?.hasAttribute('data-sort-off')).toBe(false);
+    expect(b?.hasAttribute('data-sort-off'), '只读的不能拖').toBe(true);
+    const text = within(a as HTMLElement).getByText(/./, { selector: 'button[aria-hidden="true"]' });
+    fireEvent.pointerDown(text, { pointerId: 1, button: 0, clientX: 100, clientY: 100, pointerType: 'touch', isPrimary: true });
+    await act(() => new Promise((r) => setTimeout(r, 500)));
+    expect(document.querySelector('[data-sort-held]')?.getAttribute('data-sort-id')).toBe('a');
+    fireEvent.pointerUp(text, { pointerId: 1, clientX: 100, clientY: 100, pointerType: 'touch', isPrimary: true });
+    await act(() => new Promise((r) => setTimeout(r, 0)));
+    expect(save.calls, '原地放下不写').toHaveLength(0);
   });
 
   it('只读的子任务：勾了拦下出“要新版本”，不写', async () => {
@@ -242,10 +261,10 @@ const rowOf = (id: string) => collection('todos').get(id) as unknown as Readonly
 describe('编辑页“子任务”区（5.3、6.1）', () => {
   const t1 = () => rowOf('t1');
 
-  it('新建页还没保存：添加框禁用，提示“写上标题才能加子任务”', () => {
+  it('新建页还没保存：添加框禁用，提示“写好标题就能拆步骤啦”', () => {
     render(<SubtaskEditor todoId={null} todo={undefined} off={false} />);
     expect((screen.getByTestId('todo-sub-add') as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getByTestId('todo-sub-hint').textContent).toBe('写上标题才能加子任务');
+    expect(screen.getByTestId('todo-sub-hint').textContent).toBe('写好标题就能拆步骤啦');
   });
 
   it('回车加一项（去掉首尾空白、空的不加）；粘贴多行按行拆成多项', async () => {

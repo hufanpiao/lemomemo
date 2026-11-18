@@ -19,6 +19,12 @@ export const USER = '00000000-0000-4000-8000-0000000000aa';
 export const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 export type Row = { id: string } & Record<string, unknown>;
 
+/** 显示方式那两行的 id：boot 写成瀑布流，要列表的用例用同一个 id 再写一行盖掉 */
+export const VIEW_MOBILE_ID = uid(898);
+export const VIEW_DESKTOP_ID = uid(899);
+export const viewSetting = (id: string, key: string, value: 'masonry' | 'list'): ServerRow =>
+  ({ id, key, value, deleted_at: null, undone: false, rev: 1 }) as ServerRow;
+
 export async function boot() {
   const { factory } = fakeIndexedDB();
   const b = await coldStart({
@@ -26,6 +32,11 @@ export async function boot() {
     upgradeDeps: { reload: vi.fn(), swUpdate: () => Promise.resolve('no_update' as const), attempt: { get: () => null, set: () => undefined } },
   });
   b.profile = { ...(b.profile ?? {}), current_tz: 'Asia/Seoul' } as NonNullable<typeof b.profile>;
+  // 这几份测试点的、看的都是瀑布流卡片（插图封面、“⋯”菜单）：两类设备明确设 masonry（负责人 11-18 首装默认改列表）
+  await b.outbox?.applyServer('settings', [
+    { row: viewSetting(VIEW_MOBILE_ID, 'notes.view@mobile', 'masonry') },
+    { row: viewSetting(VIEW_DESKTOP_ID, 'notes.view@desktop', 'masonry') },
+  ]);
   return b;
 }
 export const serverNote = (n: number): ServerRow =>

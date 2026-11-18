@@ -9,6 +9,7 @@
 // • 两个皮肤都用（负责人 11-05 ④）
 import { useEffect, useLayoutEffect, useRef, useState, type ComponentType, type PointerEvent } from 'react';
 import { hrefOf, navigateTab, plainClick } from '../../../app/router.ts';
+import { TAB_ORDER as TABS, type TabName } from './tabs.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { MQ_SIDEBAR, useMedia } from '../../hooks/useMedia.ts';
 import { useT } from '../../hooks/useT.ts';
@@ -34,8 +35,7 @@ function durUiMs(): number {
   return v.endsWith('ms') ? n : n * 1000;
 }
 
-export type TabName = 'today' | 'calendar' | 'todos' | 'notes';
-const TABS: readonly TabName[] = ['today', 'calendar', 'todos', 'notes'];
+export type { TabName };
 // 图标照试验页（今天 ◎、日历 ▦、待办 ✓、随手记 ✎），24 格、描边 2
 const ICONS: Record<TabName, string> = {
   today: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm0 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2z',

@@ -33,12 +33,12 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('设置 › 日历', () => {
-  it('没选过：中文界面亮“只显示中国”和“周一”，不写任何东西', () => {
+  it('没选过：中文界面亮“只显示中国”和“周日”（负责人 11-18 首装默认周日），不写任何东西', () => {
     render(<CalendarSettings />);
     expect(radio('cn').checked).toBe(true);
     expect(radio('kr').checked).toBe(false);
-    expect(ws(1).getAttribute('aria-pressed')).toBe('true');
-    expect(ws(0).getAttribute('aria-pressed')).toBe('false');
+    expect(ws(0).getAttribute('aria-pressed')).toBe('true');
+    expect(ws(1).getAttribute('aria-pressed')).toBe('false');
     expect(insert).not.toHaveBeenCalled();
   });
 

@@ -216,7 +216,9 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
       startAt = now();
       clearTimeout(timer);
       timer = setTimeout(stopNow, o.maxMs);
-      rlog(`rec start mime=${bareMime(rec.mimeType) || '?'} gum_ms=${gumMs} start_ms=${Math.round(startAt - calledAt)}`);
+      // session：iOS 音频会话此刻的类型（负责人 11-18“语音输入第一次以后输入不上去”，操作音效会临时改成 playback）；没有这个接口不记
+      const session = (navigator as Navigator & { audioSession?: { type?: string } }).audioSession?.type;
+      rlog(`rec start mime=${bareMime(rec.mimeType) || '?'} gum_ms=${gumMs} start_ms=${Math.round(startAt - calledAt)}${session ? ` session=${session}` : ''}`);
       started({
         ok: true,
         rec: {

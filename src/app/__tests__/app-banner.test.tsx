@@ -17,6 +17,7 @@ function Boom(): never {
 
 vi.mock('../../core/boot.ts', () => ({ getBoot: () => ({ upgrade, outbox: null }) }));
 vi.mock('../features.ts', () => ({
+  preloadPages: () => Promise.resolve(),
   featureRoutes: [{ name: 'today', Page: lazy(() => loadPage()) }],
   offRoutes: new Set(),
 }));

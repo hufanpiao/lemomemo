@@ -3,7 +3,8 @@
 import { lazy } from 'react';
 
 export const routes = [
-  { name: 'notes', Page: lazy(() => import('./ui/NotesRoot.tsx')) },
+  // preload：冷启动首屏画完后 App 在后台先下载真页面 NotesPage（外壳 NotesRoot 很小；负责人 11-18，app/features.ts 的 preloadPages）
+  { name: 'notes', Page: lazy(() => import('./ui/NotesRoot.tsx')), preload: () => import('./ui/NotesPage.tsx') },
   // 随手记编辑器（B4 S2）：#/note/<id>、#/note/new（不在底栏页签里，不显示底栏）
   // 两条路由都只指向很小的外壳 NotesRoot.tsx（B4 首屏额度，见那个文件），NotesPage.tsx 按路由名分给列表或编辑器
   { name: 'note', Page: lazy(() => import('./ui/NotesRoot.tsx')) },

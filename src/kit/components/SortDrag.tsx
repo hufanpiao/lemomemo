@@ -1,5 +1,6 @@
 // 长按拖动排序（kit；R-429 起，R-461 负责人 11-17 整块重写：动效 C“让位加倾斜”、6 个点摆法 1“拿起时‘⋯’换成 6 个点”）。
-// 现在只有随手记页在用（隐私记页是同一个 NotesPage 组件；待办页 11-17 起不拖，R-442）。不用 dnd-kit（电脑版布局拖面板 DeskLayout 是 dnd-kit 的，两套不混用）。
+// 随手记页在用（隐私记页是同一个 NotesPage 组件；待办页的待办 11-17 起不拖，R-442）；子任务排序也用它（R-476：编辑页按把手当场拿起、
+// 列表卡片里按住 0.4 秒，todos 的 SubtaskEditor、SubtaskCard）。不用 dnd-kit（电脑版布局拖面板 DeskLayout 是 dnd-kit 的，两套不混用）。
 // 一套流程：拖动中列表就按“预览顺序”画（拿着的那一条在落点处留一个看不见的占位），浮层只跟手；松手时页面已经是新顺序，浮层落到占位、撤掉。
 // 不等列表重画、不量浮层、不画横线（11-16、11-17 五次修补里四次是“浮层追列表”的时序问题，这套做法把这件事整个拿掉了）。
 // 用法（页面只多 preview 一行）：
@@ -48,6 +49,8 @@ export interface SortDragOptions {
   log(line: string): void;
   /** 拿起、放下的音效和震动（platform/fx-api.ts 的 fx，R-471；kit 组件引不到 platform，同 log 由页面传）；不传不响不震 */
   fx?(kind: 'lift' | 'drop'): void;
+  /** 拖动把手的选择器（R-476 待办编辑页子任务）：给了就只认按在把手上的，按下当场拿起；不给就按住整行 0.4 秒拿起 */
+  grip?: string;
 }
 
 export interface SortDrag {
@@ -223,11 +226,16 @@ export function useSortDrag(opts: SortDragOptions): SortDrag {
   useEffect(() => () => drainAll(cur, gone), []);
 
   useLongPressDrag(boxEl, {
+    // 有把手时 pick 只认按在把手上的，认到了就是把手（评审第 13 条：不再重复找一遍）
+    now: () => o.current.grip !== undefined,
     pick(target) {
+      const grip = o.current.grip;
+      if (grip !== undefined && target.closest(grip) === null) return null;
       const row = target.closest<HTMLElement>('[data-sort-id]');
       if (!row || !boxEl?.contains(row) || 'sortOff' in row.dataset || row.dataset['state'] === 'leaving') return null;
-      // 左滑露着按钮的那一行不拿（先收起左滑；kit SwipeRow 露着时外框打 data-swipe="open"）
-      return row.querySelector('[data-swipe="open"]') || row.matches('[data-swipe="open"]') ? null : row;
+      // 左滑露着按钮的那一行不拿（先收起左滑；kit SwipeRow 露着时外框打 data-swipe="open"）。上下都查（评审高②）：
+      // 随手记的行把左滑包在里面，待办子任务这一行却在左滑的那一行里面（待办行露着删除按钮时它的子任务也不能拖）
+      return row.querySelector('[data-swipe="open"]') || row.closest('[data-swipe="open"]') ? null : row;
     },
     lift(row, at) {
       const box = boxEl;

@@ -25,6 +25,8 @@ export interface FeatureRoute {
   Page: LazyExoticComponent<ComponentType>;
   /** 和另一条路由是同一个页面（如 'cal' → 'calendar'）：App 挂那一条的 Page、错误边界用那一条的名字做 key，互相跳不重新挂载 */
   samePageAs?: RouteName;
+  /** 冷启动首屏画完后在后台先下载这一页（只有日历、待办、随手记三个页签页写，负责人 11-18“冷启动后马上后台自动加载这3个页面…减少等待”） */
+  preload?: () => Promise<unknown>;
 }
 
 interface FeatureEntry {
@@ -61,6 +63,19 @@ export function offRoutesFor(flags: ReadonlySet<string> | null): ReadonlySet<Rou
 export let featureRoutes: readonly FeatureRoute[] = routesFor(null);
 /** 当前因开关关着没挂的路由名 */
 export let offRoutes: ReadonlySet<RouteName> = new Set();
+
+/**
+ * 后台先下载挂上的、写了 preload 的页（App 在首屏画完、浏览器空闲以后调一次）：一页一页来，不和别的下载抢；失败不要紧（点进去时照常下载）。
+ * 运行日志 preload <页> ms=<用时> ok=1|0
+ */
+export async function preloadPages(log: (line: string) => void, now: () => number): Promise<void> {
+  for (const r of featureRoutes) {
+    if (!r.preload) continue;
+    const t0 = now();
+    const ok = await r.preload().then(() => 1, () => 0);
+    log(`preload ${r.name} ms=${Math.round(now() - t0)} ok=${ok}`);
+  }
+}
 
 /** 渲染前调一次（离线也按上次缓存的 config、profile 挂，TC-B1-50）；联网刷新开关以后重新载入时再算 */
 export function mountFeatures(flags: ReadonlySet<string> | null): void {

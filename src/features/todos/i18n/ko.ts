@@ -7,7 +7,7 @@ export const ko = {
   'todo.edit.newKind': '새 할 일', // REVIEW(ko)
   'todo.edit.back': '뒤로', // REVIEW(ko)
   'todo.edit.titleLabel': '제목', // REVIEW(ko)
-  'todo.edit.titlePh': '무엇을 할까요', // REVIEW(ko)
+  'todo.edit.titlePh': '예: 주말에 고양이 모래 사기', // REVIEW(ko)
   'todo.edit.done': '완료 (체크한 뒤에도 계속 고칠 수 있어요)', // REVIEW(ko)
   'todo.edit.doneShort': '완료', // REVIEW(ko) FA-2 只读编辑页：不写“체크한 뒤에도 계속 고칠 수 있어요”
   'todo.edit.priority': '우선순위', // REVIEW(ko)
@@ -34,8 +34,8 @@ export const ko = {
   'todo.edit.remindPast': '이 알림 시각은 이미 지나서 알려 드리지 않아요', // REVIEW(ko) R-375
   'todo.edit.project': '프로젝트', // REVIEW(ko)
   'todo.edit.note': '메모', // REVIEW(ko)
-  'todo.edit.projectPh': '예: 회사, 집', // REVIEW(ko) G11 占位
-  'todo.edit.notePh': '덧붙일 내용 (선택)', // REVIEW(ko) G11 占位
+  'todo.edit.projectPh': '회사, 집… 마음대로 나눠요', // REVIEW(ko) G11 占位
+  'todo.edit.notePh': '더 적고 싶으면 여기에', // REVIEW(ko) G11 占位
   'todo.edit.raw': '원래 한 말', // REVIEW(ko)
   'todo.edit.groupTime': '시간', // REVIEW(ko)
   'todo.edit.groupDetail': '자세히', // REVIEW(ko)

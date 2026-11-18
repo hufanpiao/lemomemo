@@ -1,4 +1,5 @@
-// 四个页签之间互切不走 View Transition（负责人 11-06 方案 B）：navigate、底栏 <a href> 的 hashchange 都走 fadeSwap；别的切页照旧 transition
+// 四个页签之间互切不走 View Transition（负责人 11-06 方案 B）：navigate、底栏 <a href> 的 hashchange 都走 fadeSwap，
+// 并带上往哪边滑（11-18 选切页方案 B：往右边的页签 1，往左 -1）；别的切页照旧 transition
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
@@ -6,8 +7,8 @@ const m = vi.hoisted(() => ({
     update();
     return Promise.resolve();
   }),
-  fadeSwap: vi.fn((update: () => void, pick: () => Element | null) => {
-    void pick;
+  fadeSwap: vi.fn((update: () => void, dir?: 1 | -1) => {
+    void dir;
     update();
     return Promise.resolve();
   }),
@@ -18,7 +19,7 @@ vi.mock('../../motion/index.ts', () => m);
 const { navigate, replaceRoute, setSamePage, setTabSwitch, useRoute } = await import('../router.ts');
 const { renderHook } = await import('@testing-library/react');
 
-const TABS = new Set(['today', 'calendar', 'cal', 'todos', 'notes']);
+const { tabDir } = await import('../tab-of.ts');
 const tabOf = (n: string): string => (n === 'cal' ? 'calendar' : n);
 
 beforeEach(() => {
@@ -26,27 +27,25 @@ beforeEach(() => {
   m.transition.mockClear();
   m.fadeSwap.mockClear();
   m.cancelFade.mockClear();
-  setTabSwitch((a, b) => TABS.has(a.name) && TABS.has(b.name) && tabOf(a.name) !== tabOf(b.name));
+  // 和 App 用同一个方向判断（tab-of.ts 的 tabDir），不另抄一份（代码审查 D3）
+  setTabSwitch((a, b) => tabDir(a.name, b.name));
   setSamePage((a, b) => tabOf(a.name) === 'calendar' && tabOf(b.name) === 'calendar');
 });
 afterEach(() => {
-  setTabSwitch(() => false);
+  setTabSwitch(() => 0);
   setSamePage(() => false);
 });
 
 describe('页签互切：fadeSwap，不起 View Transition', () => {
-  it('navigate / replaceRoute 在两个页签之间：fadeSwap；拿的是新页的 main', async () => {
+  it('navigate / replaceRoute 在两个页签之间：fadeSwap，带上往哪边滑', async () => {
     await navigate('todos');
     expect(m.fadeSwap).toHaveBeenCalledTimes(1);
     expect(m.transition).not.toHaveBeenCalled();
-    const main = document.createElement('main');
-    document.body.append(main);
-    const pick = m.fadeSwap.mock.calls[0]?.[1];
-    expect(pick?.()).toBe(main);
-    main.remove();
     await replaceRoute('calendar');
     expect(m.fadeSwap).toHaveBeenCalledTimes(2);
     expect(window.location.hash).toBe('#/calendar');
+    // 今天 → 待办往右（1），待办 → 日历往左（-1）
+    expect(m.fadeSwap.mock.calls.map((c) => c[1])).toEqual([1, -1]);
   });
 
   it('同一页里新压一条（纪念日列表 → 编辑层、月历 → 周视图）：不起任何过渡，照样压一条历史（整块评审第 20 条：pushInPage 并进 navigate）', async () => {

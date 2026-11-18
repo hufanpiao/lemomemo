@@ -15,6 +15,7 @@ vi.mock('../UpdateBanner.tsx', async (importOriginal) => {
 });
 vi.mock('../../core/boot.ts', () => ({ getBoot: () => ({ upgrade, outbox: null }) }));
 vi.mock('../features.ts', () => ({
+  preloadPages: () => Promise.resolve(),
   featureRoutes: [{ name: 'today', Page: () => <main data-testid="page">page</main> }],
   offRoutes: new Set(),
 }));

@@ -28,12 +28,14 @@ import { JS_ERROR_ACT } from '../platform/env.ts';
 import { logEvent } from '../../shared/core/log-bus.ts';
 import { afterAppPainted, isAppPainted, pageShown, whenPage } from '../platform/root-paint.ts';
 import { whenIdle } from '../platform/session.ts';
+import { rlog } from '../platform/run-log-api.ts';
 import { reloadPage } from '../platform/sw-register.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { bannerKind } from './banner-kind.ts';
-import { featureRoutes, offRoutes, type FeatureRoute } from './features.ts';
+import { featureRoutes, offRoutes, preloadPages, type FeatureRoute } from './features.ts';
 import { goHref, hrefOf, navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from './router.ts';
-import { tabBarFor } from './tab-of.ts';
+import { FADE_WAIT_MS, growSwap, shownMain, waitDom } from '../motion/index.ts';
+import { tabBarFor, tabDir } from './tab-of.ts';
 import { PlusSlot, plusHold, preloadPlus } from './plus-slot.tsx';
 import type { DateStr } from '../../shared/core/date.ts';
 import { calendarSel, notesInput, setNewItemDay, setNewItemTitle } from '../kit/state/new-item.ts';
@@ -44,29 +46,9 @@ const devRoutes: readonly FeatureRoute[] = import.meta.env.MODE === 'production'
   ? []
   : [{ name: 'dev-csp', Page: lazy(() => import('./dev/CspLab.tsx')) }];
 
-/** 页面的 <main> 显示出来就调 fn（已经显示就当场调）；分包没到时看着 body 等，最多 PAGE_WAIT_MS 也调；返回取消 */
-const PAGE_WAIT_MS = 1500;
+/** 页面的 <main> 显示出来就调 fn（已经显示就当场调）；分包没到时看着 body 等，最多 FADE_WAIT_MS 也调（同换页动画等新页的那个数）；返回取消 */
 function whenPageShown(fn: () => void): () => void {
-  const shown = (): boolean => [...document.querySelectorAll('main')].some((m) => m.getClientRects().length > 0);
-  if (shown()) {
-    fn();
-    return () => undefined;
-  }
-  const stop = (): void => {
-    mo.disconnect();
-    clearTimeout(timer);
-  };
-  const mo = new MutationObserver(() => {
-    if (!shown()) return;
-    stop();
-    fn();
-  });
-  const timer = setTimeout(() => {
-    stop();
-    fn();
-  }, PAGE_WAIT_MS);
-  mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'hidden'] });
-  return stop;
+  return waitDom(() => shownMain() !== null, FADE_WAIT_MS, fn);
 }
 
 function ErrorView() {
@@ -119,7 +101,9 @@ function TabBar({ route }: { route: RouteName }) {
   useEffect(() => afterAppPainted(() => void preloadPlus()), []);
   // 换页就收起（去改某一条、展开编辑也是换页）。等新页面的 <main> 真的显示出来再收（负责人 11-18 录屏：点“详细”闪一帧原页面）：
   // 新页分包没到时 Suspense 把旧页藏起来、新页还没出来，这时先收打字条，屏幕上就是一段空白或原页面；分包已到时当场就收，和原来一样
-  useEffect(() => whenPageShown(() => setPlus(null)), [route]);
+  // 打字条“详细”正在长成新建页（负责人 11-18 选 A）：长完由 expand 收，这里不收
+  const growing = useRef(false);
+  useEffect(() => whenPageShown(() => !growing.current && setPlus(null)), [route]);
   const bar = tabBarFor(route);
   // 日历页：带上日历上选中的那天（日历页登记的 calendarSel，kit/state/new-item.ts）
   const open = (): void => {
@@ -150,10 +134,25 @@ function TabBar({ route }: { route: RouteName }) {
   const expand = (text: string, day: DateStr | null): void => {
     setNewItemTitle(text);
     setNewItemDay(day);
-    // 直接换页、不起整页过渡（负责人 11-18 录屏：点“详细”时第 104 帧先露出一帧清晰全亮的原页面再淡出）：
-    // 原来先收打字条再起过渡，过渡截的旧画面只能是没模糊的原页面（WebKit 过渡截图本来也不画 backdrop-filter，bug 302256）。
-    // 现在不在这里收：换页后由上面的 whenPageShown 等新建页出来再收，打字条一直盖到新页面接上
-    void goHref(hrefOf(add, 'new'), 'none');
+    // 不起整页过渡（负责人 11-18 录屏：点“详细”时第 104 帧先露出一帧清晰全亮的原页面再淡出；过渡截的旧画面只能是没模糊的原页面，
+    // WebKit 过渡截图本来也不画 backdrop-filter，bug 302256）。打字条那张卡长成新建页（负责人 11-18“用A整页成长方案”，motion 的 growSwap）：
+    // 旧页快照垫在模糊层下面，打字条淡出，长完再收打字条和模糊层
+    // 正在长的时候再点“详细”不重来（代码审查 M4）
+    if (growing.current) return;
+    const card = document.querySelector<HTMLElement>('[data-testid="type-bar"]');
+    const href = hrefOf(add, 'new');
+    if (!card) {
+      void goHref(href, 'none');
+      return;
+    }
+    growing.current = true;
+    const radius = parseFloat(getComputedStyle(card).borderTopLeftRadius) || 0;
+    // 长完（或被打断）收打字条和模糊层；新建页的临时层级由 growSwap 等打字条卸掉以后再还原，中间不露一帧被模糊层盖住的新建页（代码审查 H2）
+    const landed = (): void => {
+      growing.current = false;
+      setPlus(null);
+    };
+    void growSwap(() => void goHref(href, 'none'), card.getBoundingClientRect(), radius, card, landed);
   };
   const edit = (table: string, id: string): void => {
     const to = EDIT_OF[table];
@@ -293,12 +292,9 @@ const pageOf = (name: RouteName): RouteName => allRoutes.find((r) => r.name === 
 // 别的同名路由（#/event/1 → #/event/2）照旧是换页，不算（router.ts setSamePage，代码复审 R2）
 const grouped = new Set(allRoutes.flatMap((r) => (r.samePageAs === undefined ? [] : [r.samePageAs])));
 setSamePage((a, b) => grouped.has(pageOf(a.name)) && pageOf(a.name) === pageOf(b.name));
-// 四个页签之间互切（两头都有底栏、页签不同）：不起 View Transition，新页淡入，底栏一直实时模糊（router.ts setTabSwitch；负责人 11-06 方案 B）
-setTabSwitch((a, b) => {
-  const x = tabBarFor(a.name);
-  const y = tabBarFor(b.name);
-  return x !== null && y !== null && x.tab !== y.tab;
-});
+// 四个页签之间互切（两头都有底栏、页签不同）：不起 View Transition，底栏一直实时模糊（router.ts setTabSwitch；负责人 11-06 方案 B）；
+// 按底栏从左到右的顺序给方向，新页从那一边滑进来（负责人 11-18 选切页方案 B）
+setTabSwitch((a, b) => tabDir(a.name, b.name));
 
 export function App() {
   const route = useRoute();
@@ -333,6 +329,14 @@ export function App() {
       stopOwn();
     };
   }, [remindReady, armRemind, needOwnPage]);
+  // 冷启动：和提醒同一个时机（首屏画完、浏览器空闲，最晚硬上限）后台先下载日历、待办、随手记三页（负责人 11-18“不用点进去的时候再加载，减少等待”）；
+  // 只排一次等空闲，不另起一套判断
+  const preloaded = useRef(false);
+  useEffect(() => {
+    if (!remindReady || preloaded.current) return;
+    preloaded.current = true;
+    void preloadPages(rlog, () => performance.now());
+  }, [remindReady]);
   const all = allRoutes;
   const found = all.find((r) => r.name === route.name);
   // samePageAs：#/calendar 和 #/cal/... 是同一个页面，挂同一个组件、错误边界用同一个 key，

@@ -59,7 +59,7 @@ export function useCalendar(params: readonly string[]) {
   const tz = currentTz();
   const today = todayOf(now, tz);
   const setting = useCalSettingValues();
-  const weekStart = resolveWeekStart(setting.weekStart, locale);
+  const weekStart = resolveWeekStart(setting.weekStart);
   // 窗口够宽（电脑档）时每格 4 个标签，手机 2 个（5.12、R-100）
   const wide = useMedia(MQ_CAL_WIDE);
 

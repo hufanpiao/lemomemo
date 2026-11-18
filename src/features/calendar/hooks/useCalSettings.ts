@@ -31,7 +31,7 @@ export function useCalSettings(newId: () => string = () => crypto.randomUUID()) 
 
   return {
     holidays: holidayChoice(settingValue(rows, KEY_HOLIDAYS), locale),
-    weekStart: resolveWeekStart(settingValue(rows, KEY_WEEK_START), locale),
+    weekStart: resolveWeekStart(settingValue(rows, KEY_WEEK_START)),
     error,
     /** 点了哪个就存哪个——点亮着的那个（没选过、跟界面语言亮的）也存，从此固定（R-97，代码审查 L5，和“每周第一天”一致） */
     setHolidays: (v: HolidaySetting) => save(KEY_HOLIDAYS, v),

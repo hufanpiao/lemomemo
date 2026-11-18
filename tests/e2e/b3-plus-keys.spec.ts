@@ -8,6 +8,7 @@ import type { Page } from '@playwright/test';
 import { waitVoiceHost } from './fake-media.ts';
 import { expect, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
+import { seedNotesView } from './idb.ts';
 
 // 失败时带运行日志、控制台错误（B4b-3 返工第三条）
 logOnFail(test);
@@ -132,6 +133,10 @@ test.describe('贴底浮条按钮第一下点得动（Q-25）', () => {
   test('随手记：输入框聚焦着点“记下”，按下时焦点还在输入框；松开记下这一条，记下以后输入框失焦（R-416）', async ({ page }) => {
     await page.goto('/app/#/notes');
     const input = page.getByTestId('notes-input');
+    await expect(input).toBeVisible({ timeout: 20_000 });
+    // 下面看的是瀑布流卡片：两类设备明确写 masonry（负责人 11-18 首装默认改列表）
+    await seedNotesView(page, 'masonry');
+    await expect(page.getByTestId('notes')).toHaveAttribute('data-view', 'masonry', { timeout: 20_000 });
     await input.click();
     await input.fill('首尔林银杏黄了');
     await expect(input).toBeFocused();

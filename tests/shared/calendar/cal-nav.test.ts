@@ -8,6 +8,7 @@ import {
   parseWeekParam,
   resolveMonthParam,
   resolveWeekParam,
+  DEFAULT_WEEK_START,
   resolveWeekStart,
   shiftMonth,
   shiftWeek,
@@ -18,18 +19,12 @@ import {
 } from '../../../shared/logic/calendar/cal-nav.ts';
 
 describe('周起始日', () => {
-  it('设置了 0–6 就按设置，没设或不认识按界面语言（中文周一、韩文周日）', () => {
-    expect(resolveWeekStart(0, 'zh-CN')).toBe(0);
-    expect(resolveWeekStart(1, 'ko-KR')).toBe(1);
+  it('设置了 0、1 就按设置；没设或不认识（含 2–6）一律周日（负责人 11-18 首装默认“每周第一天：周日”，不再按界面语言分）', () => {
+    expect(DEFAULT_WEEK_START).toBe(0);
+    expect(resolveWeekStart(0)).toBe(0);
+    expect(resolveWeekStart(1)).toBe(1);
     // 只认 0、1：2–6 回落到默认（代码审查 11-04）
-    expect(resolveWeekStart(6, 'zh-CN')).toBe(1);
-    expect(resolveWeekStart(2, 'ko-KR')).toBe(0);
-    expect(resolveWeekStart(5, 'zh-CN')).toBe(1);
-    expect(resolveWeekStart(undefined, 'zh-CN')).toBe(1);
-    expect(resolveWeekStart(null, 'ko-KR')).toBe(0);
-    expect(resolveWeekStart(7, 'zh-CN')).toBe(1);
-    expect(resolveWeekStart('1', 'ko-KR')).toBe(0);
-    expect(resolveWeekStart(1.5, 'ko-KR')).toBe(0);
+    for (const v of [6, 2, 5, undefined, null, 7, '1', 1.5]) expect(resolveWeekStart(v)).toBe(0);
   });
 
   it('startOfWeek：2026-11-04（周三）周一起始 → 11-02，周日起始 → 11-01，周六起始 → 10-31', () => {

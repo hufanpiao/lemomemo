@@ -61,14 +61,14 @@ afterEach(() => {
 });
 
 describe('月视图', () => {
-  it('#/calendar：本月 42 格，周一起始；今天高亮；“今天”在本月时 aria-disabled（焦点不丢，不用 disabled）', () => {
+  it('#/calendar：本月 42 格，没设过时周日起始（负责人 11-18 首装默认）；今天高亮；“今天”在本月时 aria-disabled（焦点不丢，不用 disabled）', () => {
     open('#/calendar');
     expect(screen.getByTestId('cal-title').getAttribute('aria-label')).toContain('2026年11月');
     // 甲方案（负责人 11-18）：大字只写“11月”，下一行“2026年 · 本月 N 项”
     expect(screen.getByTestId('cal-title').textContent).toBe('11月');
     expect(screen.getByTestId('cal-sub').textContent).toMatch(/^2026年 · 本月 \d+ 项$/);
     expect(document.querySelectorAll('[data-testid="cal-month"] button[data-date]')).toHaveLength(42);
-    expect(document.querySelector('[data-testid="cal-month"] button[data-date]')?.getAttribute('data-date')).toBe('2026-10-26');
+    expect(document.querySelector('[data-testid="cal-month"] button[data-date]')?.getAttribute('data-date')).toBe('2026-11-01');
     expect(cell('2026-11-05')?.className).toContain(styles.today);
     const tdy = screen.getByTestId('cal-today') as HTMLButtonElement;
     expect(tdy.disabled).toBe(false);

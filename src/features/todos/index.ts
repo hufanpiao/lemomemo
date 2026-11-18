@@ -3,7 +3,8 @@
 import { lazy } from 'react';
 
 export const routes = [
-  { name: 'todos', Page: lazy(() => import('./ui/TodosPage.tsx')) },
+  // preload：冷启动首屏画完后 App 在后台先下载（负责人 11-18，app/features.ts 的 preloadPages）
+  { name: 'todos', Page: lazy(() => import('./ui/TodosPage.tsx')), preload: () => import('./ui/TodosPage.tsx') },
   // 待办编辑页（B2 FA-2）：#/todo/<id>、#/todo/new
   { name: 'todo', Page: lazy(() => import('./ui/TodoEditPage.tsx')) },
 ] as const;

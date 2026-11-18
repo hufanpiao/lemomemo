@@ -37,10 +37,10 @@ export const listZh = {
   'items.autoDone': '全部完成，已完成这条待办',
   // 编辑页“子任务”区（SubtaskEditor 在待办列表页那一包里，只用这一本词典，免得和编辑页共用词典多拆出一个分包）
   'items.title': '子任务',
-  'items.add': '添加子任务',
+  'items.add': '拆成小步骤',
   'items.itemLabel': '子任务「{title}」',
   'items.max': '最多 {n} 项',
-  'items.needTitle': '写上标题才能加子任务',
+  'items.needTitle': '写好标题就能拆步骤啦',
   'items.delete': '删除「{title}」',
   'items.deleted': '已删除子任务',
   'items.move': '拖动排序「{title}」，也可以按 Alt + 上下方向键',

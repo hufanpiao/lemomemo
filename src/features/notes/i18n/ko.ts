@@ -22,7 +22,7 @@ export const ko = {
   'notes.deleted': '삭제했어요', // REVIEW(ko)
   'notes.undo': '실행 취소', // REVIEW(ko)
   'notes.err.save': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
-  'notes.input': '이어서 한 줄 적기…', // REVIEW(ko)
+  'notes.input': '떠오른 걸 한 줄 적기…', // REVIEW(ko)
   'notes.inputLabel': '메모 한 줄 적기', // REVIEW(ko)
   'notes.add': '적기', // REVIEW(ko)
   'notes.files': '첨부파일 {n}', // REVIEW(ko)

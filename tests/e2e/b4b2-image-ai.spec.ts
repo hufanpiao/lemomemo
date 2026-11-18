@@ -45,8 +45,9 @@ async function fakeServer(page: Page, baseURL: string | undefined, ai: boolean, 
     ],
     settings: [
       { id: '0e2e0000-0000-4000-8000-0000000b4c30', ...c, key: 'ai.enabled', value: ai },
-      // 随手记页用列表方式（默认是瀑布流），只有量列表行的那一条要
-      ...(list ? [{ id: '0e2e0000-0000-4000-8000-0000000b4c31', ...c, key: 'notes.view@mobile', value: 'list' }] : []),
+      // 随手记显示方式两类设备都明确写（负责人 11-18 首装默认改列表）：量列表行的那一条手机写 list，其余看瀑布流卡片
+      { id: '0e2e0000-0000-4000-8000-0000000b4c31', ...c, key: 'notes.view@mobile', value: list ? 'list' : 'masonry' },
+      { id: '0e2e0000-0000-4000-8000-0000000b4c32', ...c, key: 'notes.view@desktop', value: 'masonry' },
     ],
   };
   await fakeRest(page, { user: USER, tables, profile: { consent_ai_at: at } });

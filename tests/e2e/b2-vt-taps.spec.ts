@@ -2,6 +2,7 @@
 // 页签互切不再起 View Transition，新页一换上就是真元素，只是 main 在做 opacity 0→1。
 // 换页后 FADE_GUARD_MS（100 ms，按挂钟）以内落在 main 里的点按吞掉（代码审查方案 B M8：沿用主持人 11-05“过渡开始很短时间内的点按算点在旧画面上”）；
 // 过了这一段，点按直接落在新页面的真元素上。
+// 负责人 11-18 选切页方案 B（按底栏顺序左右滑入）以后，滑入途中元素还没到最终位置：一律按点下那一刻屏上看得到的位置点（手指点的是看到的地方）
 // 办法：点页签时在页面里记下时刻（capture 监听），把 main 的淡入动画暂停在指定时刻，等挂钟过了窗口再用 page.mouse 按真实坐标点；
 // 窗口以内的那一下在页面里用定时器按坐标发 pointerdown、click（page.mouse 的往返本身就要几十毫秒，赶不上 10 ms）
 import type { Page } from '@playwright/test';
@@ -56,28 +57,32 @@ test.describe('页签互切淡入进行中点页面内容（FA-7 R6、L17，方�
   // 浏览器时区和造数据用的首尔一致：本机不在首尔时，跨零点那一小时“今天”对不上（11-06 23 点实测挂）
 test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, height: 812 } });
 
-  // 目标：今天页右上角的头像（进设置的链接）。从待办点“今天”，淡入中按头像的真实坐标点
+  /** 元素此刻在屏上的中心（滑入途中暂停时就是暂停那一刻的位置） */
+  const centreNow = async (page: Page, id: string) => {
+    const b = await page.getByTestId(id).boundingBox();
+    expect(b, id).not.toBeNull();
+    return { x: (b?.x ?? 0) + (b?.width ?? 0) / 2, y: (b?.y ?? 0) + (b?.height ?? 0) / 2 };
+  };
+  // 目标：今天页右上角的头像（进设置的链接）。从待办点“今天”，切换中按头像此刻的真实坐标点
   const setup = async (page: Page) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
-    const box = await page.getByTestId('today-settings').boundingBox();
-    expect(box).not.toBeNull();
     await tab(page, 'todos').click();
     await expect(page.getByTestId('todos')).toBeVisible();
     await finishAll(page);
-    return { x: (box?.x ?? 0) + (box?.width ?? 0) / 2, y: (box?.y ?? 0) + (box?.height ?? 0) / 2 };
   };
 
-  test('换页 100 ms 以后、淡入还在进行（停在 10、80、200 ms 处）点新页面上的链接：直接点到（进设置），没有 View Transition', async ({ page }) => {
-    const at = await setup(page);
-    for (const ms of [10, 80, 200]) {
+  test('换页 100 ms 以后、淡入还在进行（停在 10、80、150 ms 处；--dur-tab 11-18 起 200ms）点新页面上的链接：直接点到（进设置），没有 View Transition', async ({ page }) => {
+    await setup(page);
+    for (const ms of [10, 80, 150]) {
       await markTab(page);
       await tab(page, 'today').click();
       const op = await holdAt(page, ms);
       expect(op, `${ms} ms：起了 View Transition`).not.toBe('vt');
       expect(typeof op === 'number' && op < 1, `${ms} ms：没等到淡入`).toBe(true);
       await sinceTab(page, 130);
+      const at = await centreNow(page, 'today-settings');
       await page.mouse.click(at.x, at.y);
       await expect(page).toHaveURL(/#\/settings$/, { timeout: 3000 });
       await page.goto('/app/#/todos');
@@ -106,19 +111,23 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
       expect(b, id).not.toBeNull();
       return { x: (b?.x ?? 0) + (b?.width ?? 0) / 2, y: (b?.y ?? 0) + (b?.height ?? 0) / 2 };
     };
-    const del = await centre('today-done-t3');
+    await centre('today-done-t3');
 
     // 10 ms：页面里点页签、10 ms 后按打勾圆圈的坐标发 pointerdown、click（和真手指一样按坐标找元素）
     await tab(page, 'todos').click();
     await expect(page.getByTestId('todos')).toBeVisible();
     await finishAll(page);
     const hit = await page.evaluate(
-      ({ x, y }) =>
+      () =>
         new Promise<string>((res) => {
           const t = document.querySelector<HTMLElement>('[data-testid="tabbar"] a[data-tab="today"]');
           t?.click();
           const t0 = performance.now();
           setTimeout(() => {
+            // 按打勾圆圈此刻（滑入途中）在屏上的位置点
+            const r = document.querySelector('[data-testid="today-done-t3"]')?.getBoundingClientRect();
+            const x = (r?.left ?? 0) + (r?.width ?? 0) / 2;
+            const y = (r?.top ?? 0) + (r?.height ?? 0) / 2;
             const el = document.elementFromPoint(x, y);
             const o = { bubbles: true, cancelable: true, clientX: x, clientY: y };
             el?.dispatchEvent(new PointerEvent('pointerdown', o));
@@ -127,7 +136,6 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
             res(`${el?.closest('[data-testid]')?.getAttribute('data-testid') ?? '-'}@${Math.round(performance.now() - t0)}`);
           }, 10);
         }),
-      del,
     );
     expect(hit, '10 ms 时坐标上应是新页的打勾圆圈').toMatch(/^today-done-t3@\d+$/);
     expect(Number(hit.split('@')[1]), '定时器拖过了吞点按窗口').toBeLessThan(100);
@@ -146,6 +154,7 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
     const op = await holdAt(page, 120);
     expect(op).not.toBe('vt');
     await sinceTab(page, 200);
+    const del = await centreNow(page, 'today-done-t3');
     await page.mouse.click(del.x, del.y);
     await finishAll(page);
     await expect(page.getByTestId('today-past')).toContainText('买牛奶');

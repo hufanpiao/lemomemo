@@ -3,7 +3,7 @@
 // • 定稿（方案页 D:\claude code\柠檬记APP-本机资料\设计方案\2026-11-17_切页与音效\方案.html 的合成参数）：
 //   done 勾完成待办：甲（上行双音 784→1175Hz，共约 130ms）+ 震；lift 拖起一行：只震；drop 拖动放下：甲（正弦 300→180Hz，80ms）+ 震；
 //   pull 下拉露出搜索框：只震（过门槛那一下）；delete 删除：甲（正弦 620→310Hz，120ms）+ 震。切底栏不响不震（不调这里）
-// • 声音：一个 AudioContext 懒创建、一直复用；总音量 0.5，过 5kHz 低通去掉刺耳的高频。每个音起音 4ms、指数衰减
+// • 声音：AudioContext 要播时才建，连着播就复用，最后一个音放完 AUDIO_RESTORE_MS 后关掉（常驻会让之后的录音全是静音，见 scheduleClose）；总音量 0.5，过 5kHz 低通去掉刺耳的高频。每个音起音 4ms、指数衰减
 // • 静音键打开也出声：有 navigator.audioSession（iOS 17+）就在要播之前设成 'playback'，播完 AUDIO_RESTORE_MS 后改回原来的类型（不常驻，免得影响之后的录音）
 // • 正在录音、语音输入进行中（fx-api.ts 的 setFxMicBusy 注入的判断，plus 的 voice-main.ts 接 mainVoice 的 capturing）：一律不出声、不碰 audioSession、不建 AudioContext，免得和麦克风抢音频
 // • 震动：有 navigator.vibrate（Android 等）用它震 HAPTIC_MS；没有但支持 <input type="checkbox" switch>（iOS 18 起）就点一下藏起来的那个开关的 label，
@@ -63,7 +63,6 @@ let rowsOf: (() => readonly FxRow[]) | null = null;
 let micBusy: () => boolean = () => false;
 
 // —— 震动 ——
-let hapLabel: HTMLLabelElement | null = null;
 
 export function hapticPath(): HapticPath {
   if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') return 'vibrate';
@@ -71,20 +70,24 @@ export function hapticPath(): HapticPath {
   return 'none';
 }
 
-/** 藏起来的系统开关（只靠 label.click() 触发轻触反馈；读屏不念、Tab 不到） */
-function switchLabel(): HTMLLabelElement {
-  if (hapLabel?.isConnected) return hapLabel;
+/**
+ * 点一下系统开关借它的轻触反馈（iOS 18 起）。照社区里真机能震的写法（ios-haptics）：每次新建一个 display:none 的开关挂进 <head>、
+ * 点它的 label、马上拿掉。原来一直挂着同一个、用透明加裁剪藏在 body 里，preview.402 真机日志走到了 hap=switch 却不震（负责人 11-18“显示switch，没有震”）
+ */
+function switchClick(): void {
   const label = document.createElement('label');
   label.setAttribute('aria-hidden', 'true');
-  label.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);opacity:0;pointer-events:none';
+  label.style.display = 'none';
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.setAttribute('switch', '');
-  input.tabIndex = -1;
   label.append(input);
-  document.body.append(label);
-  hapLabel = label;
-  return label;
+  document.head.append(label);
+  try {
+    label.click();
+  } finally {
+    label.remove();
+  }
 }
 
 /** 震一下（必须在用户手势里同步调）；返回走的哪条路 */
@@ -92,7 +95,7 @@ export function haptic(): HapticPath {
   const path = hapticPath();
   try {
     if (path === 'vibrate') navigator.vibrate(HAPTIC_MS);
-    else if (path === 'switch') switchLabel().click();
+    else if (path === 'switch') switchClick();
   } catch {
     // 不让震、页面还没 body：不要紧
   }
@@ -107,6 +110,23 @@ let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let restoreTimer: ReturnType<typeof setTimeout> | undefined;
 let restoreTo: string | null = null;
+let closeTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * 播完就关掉 AudioContext，不常驻（负责人 11-18“语音输入第一次以后输入不上去”）：preview 真机日志 t=1994.88 删除音效第一次建了它，
+ * 之后 2002、2010、2038 三次录音都是 level max=0.00、bytes=0，约一分钟后才恢复；之前只震不响（lift snd=0）、没建过它时录音正常。
+ * 一直开着的放音上下文占着 iOS 的音频会话，麦克风录进来全是静音
+ */
+function scheduleClose(afterSec: number): void {
+  clearTimeout(closeTimer);
+  closeTimer = setTimeout(() => {
+    const c = ctx;
+    ctx = null;
+    master = null;
+    void c?.close().catch(() => undefined);
+    rlog('fx audio close');
+  }, afterSec * 1000 + AUDIO_RESTORE_MS);
+}
 
 function audio(): AudioContext | null {
   if (!ctx) {
@@ -152,6 +172,7 @@ function play(tones: readonly Tone[]): boolean {
   playbackSession();
   const c = audio();
   if (!c || !master) return false;
+  scheduleClose(Math.max(...tones.map((t) => (t.at ?? 0) + t.len)) + 0.05);
   for (const t of tones) {
     const at = c.currentTime + 0.005 + (t.at ?? 0);
     const o = c.createOscillator();
@@ -218,8 +239,7 @@ export function resetFxForTest(): void {
   setFxImpl(null);
   ctx = null;
   master = null;
-  hapLabel?.remove();
-  hapLabel = null;
+  clearTimeout(closeTimer);
   rowsOf = null;
   micBusy = () => false;
   clearTimeout(restoreTimer);

@@ -38,7 +38,7 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0, wai
       // 液滴每次现查：首屏后部分晚到时（冷启动的头一两遍）液滴元素会换一个，开头查一次会盯着已经摘掉的旧元素
       const dropEl = (): HTMLElement | null | undefined => nav?.querySelector<HTMLElement>('[class*="_drop_"]');
       const add = document.querySelector<HTMLElement>('[data-testid="tabbar-add"]');
-      const rows: { t: number; tl: number; vt: number; mains: number; op: number; x: number; fx: string; addFx: string; dataVt: boolean; run: boolean; pg: number }[] = [];
+      const rows: { t: number; tl: number; vt: number; mains: number; ghosts: number; op: number; x: number; fx: string; addFx: string; dataVt: boolean; run: boolean; pg: number }[] = [];
       // runTl：液滴这次过渡开始（transitionrun）那一刻的动画时钟；之后的帧就是过渡已经在跑的帧（CI 无 GPU 的 WebKit 开着模糊只有个位数帧率，
       // 整段过渡可能落在两次采样之间，逐帧的 run 一帧都抓不到；按事件时刻认，不靠帧率）
       // dropDur：液滴这次过渡的时长（ms），和 runTl 一起算“过渡进行中”那一段
@@ -145,6 +145,7 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0, wai
           tl: Number(document.timeline.currentTime ?? performance.now()),
           vt: document.getAnimations().filter((x) => String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition')).length,
           mains: document.querySelectorAll('main').length,
+          ghosts: document.querySelectorAll('[data-tab-ghost]').length,
           op: main ? Number(getComputedStyle(main).opacity) : -1,
           x: drop ? drop.getBoundingClientRect().x : NaN,
           fx: nav ? getComputedStyle(nav).backdropFilter : '',
@@ -196,7 +197,7 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
   // 手机宽度的底栏：chromium 项目默认 1280 宽，那里是电脑版侧栏（D5，见 b2-sidebar.spec.ts）
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 } });
 
-  test('页签互切不起 View Transition；新页淡入、两页不同时在屏上；底栏一直实时模糊；液滴连续滑', async ({ page }) => {
+  test('页签互切不起 View Transition；新页淡入、页面上只有一个 main、旧页快照最多一份；底栏一直实时模糊；液滴连续滑', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 }); // 首屏后部分到了（实时模糊接管）
@@ -211,9 +212,12 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
     for (const [name, testid] of [['todos', 'todos'], ['calendar', 'cal'], ['today', 'today']] as const) {
       const { rows, probe } = await sampleAfterClick(page, name, 700, 0, true);
       await expect(page.locator(testid === 'cal' ? 'main[data-feature="calendar"]' : `[data-testid="${testid}"]`)).toBeVisible();
-      // 逐帧都要满足的（帧再稀也照查）：不起 View Transition、两页不同时在屏上（叠字）、底栏和“＋”一直实时模糊、没有整页透明的一帧、最后不透明
+      // 逐帧都要满足的（帧再稀也照查）：不起 View Transition、页面上只有一个 main（旧页快照不是 main，pick 和 e2e 找得到真页面）、
+      // 旧页快照最多一份（负责人 11-18 选切页方案 B：旧页反方向移出时和新页短暂重叠，这是 B 本身的样子）、底栏和“＋”一直实时模糊、没有整页透明的一帧、最后不透明
       expect(rows.every((r) => r.vt === 0 && !r.dataVt), `${name}：起了 View Transition`).toBe(true);
-      expect(rows.every((r) => r.mains <= 1), `${name}：两页同时在屏上`).toBe(true);
+      expect(rows.every((r) => r.mains <= 1), `${name}：页面上有两个 main`).toBe(true);
+      expect(rows.every((r) => r.ghosts <= 1), `${name}：旧页快照叠了不止一份`).toBe(true);
+      await expect.poll(() => page.evaluate(() => document.querySelectorAll('[data-tab-ghost]').length), { timeout: 5000 }).toBe(0);
       // 底栏和“＋”一直带 backdrop-filter（不进快照，实时模糊）；随手记没有“＋”
       expect(rows.every((r) => r.fx.includes('blur(')), `${name}：底栏某一帧没有 backdrop-filter ${JSON.stringify(rows.map((r) => r.fx))}`).toBe(true);
       expect(rows.every((r) => r.addFx === 'none-add' || r.addFx.includes('blur(')), `${name}：“＋”某一帧没有 backdrop-filter`).toBe(true);
@@ -406,64 +410,82 @@ test.describe('底栏：进出没有底栏的页照旧 View Transition（代码�
   });
 });
 
-test.describe('底栏：页签互切淡入上移（R-471，负责人 11-17“用淡入上移效果，300毫秒”）', () => {
+test.describe('底栏：页签互切按底栏顺序左右滑入（负责人 11-18“底部导航栏的切换动画我想换一个方向滑入，之前的B方案”，取代 R-471 的淡入上移）', () => {
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 } });
 
-  /** 点页签（同一个任务里）读新页 main 和它里面的动画：谁在动、关键帧、时长，动的元素和它里面有没有 position: fixed 的 */
+  /** 点页签（同一个任务里）读新页 main 里的动画和旧页快照的动画：谁在动、关键帧、时长，动的元素里有没有 position: fixed 的 */
   const clickAndRead = (page: Page, tab: string) =>
     page.evaluate((t) => {
       document.querySelector<HTMLElement>(`[data-testid="tabbar"] a[data-tab="${t}"]`)?.click();
       const m = document.querySelector('main');
       if (!m) return null;
       const hasFixed = (el: Element): boolean => [el, ...el.querySelectorAll('*')].some((x) => getComputedStyle(x).position === 'fixed');
-      return document
-        .getAnimations()
-        .filter((a) => !(a instanceof CSSTransition) && a.effect instanceof KeyframeEffect && a.effect.target instanceof Element && m.contains(a.effect.target))
-        .map((a) => {
-          const e = a.effect as KeyframeEffect;
-          const el = e.target as Element;
-          return {
-            main: el === m,
-            frames: e.getKeyframes().map((k) => [k['opacity'] ?? null, k['transform'] ?? null]),
-            dur: Number(e.getTiming().duration),
-            fixedInside: hasFixed(el),
-          };
-        });
+      const read = (a: Animation) => {
+        const e = a.effect as KeyframeEffect;
+        const el = e.target as Element;
+        return {
+          main: el === m,
+          frames: e.getKeyframes().map((k) => [k['opacity'] ?? null, k['transform'] ?? null]),
+          dur: Number(e.getTiming().duration),
+          fixedInside: hasFixed(el),
+        };
+      };
+      const all = document.getAnimations().filter((a) => !(a instanceof CSSTransition) && a.effect instanceof KeyframeEffect && a.effect.target instanceof Element);
+      return {
+        page: all.filter((a) => m.contains((a.effect as KeyframeEffect).target as Element)).map(read),
+        ghost: all.filter((a) => ((a.effect as KeyframeEffect).target as Element).hasAttribute('data-tab-ghost')).map(read),
+        ghosts: document.querySelectorAll('[data-tab-ghost]').length,
+        w: m.getBoundingClientRect().width,
+      };
     }, tab);
 
-  test('新页 opacity 0→1、从下方 16px 上移到位，300ms；随手记贴底输入行（fixed）不跟着上移；减少动态效果时直接换', async ({ page }) => {
+  test('往右点新页从右边 8% 滑进、往左点从左边；新页 opacity 0→1；旧页反方向移 4% 并淡出；200ms；随手记贴底输入行（fixed）不跟着动；减少动态效果时直接换', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
-    // 分包先都到：头一次进某页时分包晚到，淡入会等新页出来才建
-    for (const [tab, id] of [['todos', 'todos'], ['notes', 'notes'], ['today', 'today']] as const) {
+    // 分包先都到：头一次进某页时分包晚到，动画会等新页出来才建
+    for (const [tab, sel] of [['todos', '[data-testid="todos"]'], ['notes', '[data-testid="notes"]'], ['calendar', 'main[data-feature="calendar"]'], ['today', '[data-testid="today"]']] as const) {
       await page.getByTestId('tabbar').locator(`a[data-tab="${tab}"]`).click();
-      await expect(page.getByTestId(id)).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator(sel)).toBeVisible({ timeout: 10_000 });
       await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => !(a instanceof CSSTransition)).length), { timeout: 5000 }).toBe(0);
     }
-    for (const tab of ['todos', 'notes']) {
-      const anims = await clickAndRead(page, tab);
-      expect(anims, `${tab}：点完新页还没出来`).not.toBeNull();
-      const list = anims ?? [];
+    // 底栏顺序：今天、日历、待办、随手记。今天 → 待办、待办 → 随手记往右；随手记 → 日历往左
+    for (const [tab, dir] of [['todos', 1], ['notes', 1], ['calendar', -1]] as const) {
+      const r = await clickAndRead(page, tab);
+      expect(r, `${tab}：点完新页还没出来`).not.toBeNull();
+      const list = r?.page ?? [];
       const fade = list.find((a) => a.main && a.frames[0]?.[0] !== null);
       expect(fade, `${tab}：main 上没有淡入 ${JSON.stringify(list)}`).toBeDefined();
       expect(Number(fade?.frames[0]?.[0])).toBe(0);
       expect(Number(fade?.frames.at(-1)?.[0])).toBe(1);
-      expect(fade?.dur).toBe(300);
-      const rise = list.filter((a) => a.frames[0]?.[1] !== null);
-      expect(rise.length, `${tab}：没有上移 ${JSON.stringify(list)}`).toBeGreaterThan(0);
-      for (const r of rise) {
-        expect(r.frames[0]?.[1]).toBe('translateY(16px)');
-        expect(r.frames.at(-1)?.[1]).toBe('none');
-        expect(r.dur).toBe(300);
-        // 上移的元素里不能有 fixed 的（祖先带 transform 会让它改按祖先定位、错位）
-        expect(r.fixedInside, `${tab}：上移的元素里有 fixed 元素`).toBe(false);
+      expect(fade?.dur).toBe(200);
+      const slide = list.filter((a) => a.frames[0]?.[1] !== null);
+      expect(slide.length, `${tab}：新页没有平移 ${JSON.stringify(list)}`).toBeGreaterThan(0);
+      // 平移按新页 main 的宽度换成像素，main 自己和各子树走同一个距离（代码审查 H1：原来写百分比，按各自宽度算、宽窄不一的子树会错开）
+      const px = (pct: number): string => `translateX(${Math.round((r?.w ?? 0) * pct) / 100}px)`;
+      for (const s of slide) {
+        expect(s.frames[0]?.[1]).toBe(px(8 * dir));
+        expect(s.frames.at(-1)?.[1]).toBe('none');
+        expect(s.dur).toBe(200);
+        // 平移的元素里不能有 fixed 的（祖先带 transform 会让它改按祖先定位、错位）
+        expect(s.fixedInside, `${tab}：平移的元素里有 fixed 元素`).toBe(false);
       }
+      // 旧页快照：一份，从原位不透明往反方向移 4% 并淡出，同样 200ms
+      expect(r?.ghosts, `${tab}：旧页快照不是一份`).toBe(1);
+      expect(r?.ghost, `${tab}：旧页快照没有动画`).toHaveLength(1);
+      expect(r?.ghost[0]?.frames.map(([o, t]) => [Number(o), t])).toEqual([
+        [1, 'none'],
+        [0, px(-4 * dir)],
+      ]);
+      expect(r?.ghost[0]?.dur).toBe(200);
       await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => !(a instanceof CSSTransition)).length), { timeout: 5000 }).toBe(0);
+      expect(await page.evaluate(() => document.querySelectorAll('[data-tab-ghost]').length), `${tab}：放完旧页快照没拿掉`).toBe(0);
+      if (tab === 'notes') {
+        // 随手记页真有贴底输入行这种 fixed 元素（不然上面“不跟着动”测了个空）
+        expect(await page.evaluate(() => [...(document.querySelector('main')?.querySelectorAll('*') ?? [])].some((x) => getComputedStyle(x).position === 'fixed'))).toBe(true);
+      }
     }
-    // 随手记页真有贴底输入行这种 fixed 元素（不然上一条“不跟着上移”测了个空）
-    expect(await page.evaluate(() => [...(document.querySelector('main')?.querySelectorAll('*') ?? [])].some((x) => getComputedStyle(x).position === 'fixed'))).toBe(true);
     await page.evaluate(() => document.documentElement.setAttribute('data-rm', '1'));
-    expect(await clickAndRead(page, 'todos')).toEqual([]);
+    expect(await clickAndRead(page, 'todos')).toMatchObject({ page: [], ghost: [], ghosts: 0 });
     await page.evaluate(() => document.documentElement.removeAttribute('data-rm'));
   });
 });

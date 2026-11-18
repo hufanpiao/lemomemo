@@ -18,6 +18,7 @@ import JSZip from 'jszip';
 import { utils, write } from 'xlsx';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
+import { notesViewRows } from './idb.ts';
 import { shot, SHOT_DIR } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
@@ -102,7 +103,8 @@ async function serverRows(bytes: Bytes, pptThumb: Buffer): Promise<Record<string
     await file(F_XLSX, 'xlsx', '费用明细.xlsx', xlsxBytes(), 'ok', 2),
     await file(F_PPTX, 'pptx', '韩国生活分享.pptx', await pptxBytes(pptThumb), 'ok', 3),
   ];
-  return { notes: [note], note_files: files, settings: [] };
+  // 随手记页先看瀑布流卡片、再去设置改成列表：两类设备明确写 masonry（负责人 11-18 首装默认改列表）
+  return { notes: [note], note_files: files, settings: notesViewRows('masonry', common) };
 }
 
 type Fake = { asked: string[]; puts: { path: string; body: Buffer | null }[]; checks: unknown[]; rows: Map<string, Record<string, unknown>> };

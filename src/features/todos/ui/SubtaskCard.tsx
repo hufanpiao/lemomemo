@@ -1,12 +1,18 @@
 // 待办卡片里的子任务（待办页；今天页、日历日清单经 InlineSubtasks.tsx 用同一个，R-442、R-443）（R-350 方案 5.1、5.4、6.2；负责人 11-07 定“简单勾选清单”）：摊开的勾选清单 + 左下“收起 / 展开” + 行底整宽分段进度条
 // • 负责人 11-17 选 T-A：子任务勾上变淡加删除线（推翻 R-350 方案 5.1 的“只变淡”）；“收起 / 展开”挪到左下；进度条挪到行底、占满整行
 //   （“起步 · 1/3”在宿主行的副行里（kit TodoRow，三页同一个；11-17 今天页也换上以后按钮只写“收起 / 展开”，不再有带“1/3”的那一种）
-// • 列表页只能勾，不能加删改排序（Q10）；点子任务的字和点主标题一样进编辑页（那个按钮不进 Tab、读屏不读，读屏走勾选框，名字就是子任务标题）
+// • 列表页能勾、能拖动排序（R-476 负责人 11-18“在这里子代办也可以拖动”，推翻 R-350 Q10 的“列表页不能排序”）：按住一项 0.4 秒拿起，
+//   随手记同一套 kit useSortDrag（浮层、让位、放下、震动一样）；只读的那一项不能拖；不能加删改（Q10）。
+//   点子任务的字和点主标题一样进编辑页（那个按钮不进 Tab、读屏不读，读屏走勾选框，名字就是子任务标题）
 // • 勾下去当下就按“刚点的值”画（不等保存回来，同主待办的 shown），集合跟上以后丢掉
 // • 主待办只读（或这一项只读）：圆圈变淡，点了由页面拦下出“这条要新版本才能修改 · 更新”
 // • 不播动画：圆圈去掉过渡、进度段直接变色（Subtasks.module.css 的 .subs）；收起、展开直接切换
 import { useId } from 'react';
 import { RoCheckCircle } from '../../../kit/components/ReadonlyRow.tsx';
+import { SortBox, sortRowClass, useSortDrag, type SortDrop } from '../../../kit/components/SortDrag.tsx';
+import { AppearItem, AppearList } from '../../../motion/components.ts';
+import { fx } from '../../../platform/fx-api.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { useListT } from '../hooks/useTodoList.ts';
 import { usePicked, type Subtask } from '../hooks/useSubtasks.ts';
 import { SubtaskBar } from './SubtaskBar.tsx';
@@ -23,6 +29,8 @@ export interface SubtaskCardProps {
   onTick(itemId: string, on: boolean): void;
   onOpen(): void;
   readOnly(itemId: string): boolean;
+  /** 拖动排序放下（InlineSubtasks 用随手记同一套 kit useSortDropFlow：只读拦下、出错整批撤回、失败出提示）；不给就不能拖 */
+  onDrop?(d: SortDrop): void;
 }
 
 export function SubtaskCard(p: SubtaskCardProps) {
@@ -32,11 +40,16 @@ export function SubtaskCard(p: SubtaskCardProps) {
   const done = p.items.filter(shown).length;
   const total = p.items.length;
   const px = p.prefix ?? 'todos';
+  const drop = p.onDrop;
+  const sd = useSortDrag({ tag: `subs-${px}`, axis: 'y', onDrop: (d) => drop?.(d), log: rlog, fx });
+  const list = sd.preview(p.items, (x) => x.id);
   return (
     <div className={`${s.subs} ${s.card}`} data-subcard="" data-testid={`${px}-subs-${p.todoId}`}>
-      <ul id={listId} className={s.items} hidden={p.collapsed}>
-        {p.items.map((i) => (
-          <li key={i.id} className={s.item} data-done={shown(i) ? '' : undefined}>
+      <div id={listId} hidden={p.collapsed}>
+        <SortBox sd={sd}>
+          <AppearList className={s.items}>
+        {list.map((i) => (
+          <AppearItem key={i.id} className={`${s.item} ${sortRowClass}`} {...sd.attrs(i.id, !drop || p.readOnly(i.id))} data-done={shown(i) ? '' : undefined}>
             <RoCheckCircle
               still
               readOnly={p.readOnly(i.id)}
@@ -51,9 +64,11 @@ export function SubtaskCard(p: SubtaskCardProps) {
             <button type="button" className={s.itemText} tabIndex={-1} aria-hidden="true" onClick={p.onOpen}>
               {i.title}
             </button>
-          </li>
+          </AppearItem>
         ))}
-      </ul>
+          </AppearList>
+        </SortBox>
+      </div>
       <button
         type="button"
         className={s.toggle}

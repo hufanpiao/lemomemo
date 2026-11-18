@@ -15,7 +15,7 @@ import { currentTz } from '../../../core/current-tz.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { clock } from '../../../platform/clock.ts';
 import { subProgress } from '../../../../shared/logic/todo-row.ts';
-import { autoTodo, groupSubtasks, ITEMS_TABLE, tickSubtask, undoAutoDone, type Subtask } from '../data/todo-items.ts';
+import { autoTodo, groupSubtasks, ITEMS_TABLE, moveSubtask, tickSubtask, undoAutoDone, type Subtask } from '../data/todo-items.ts';
 import type { Row } from '../data/todo-list.ts';
 
 export type { Subtask } from '../data/todo-items.ts';
@@ -73,6 +73,8 @@ export function useTodoSubtasks(todoId: string, todoDone: boolean) {
       const x = await tickSubtask(r, items, itemId, on, clock.now(), currentTz());
       return { res: actionResult(x.out), auto: x.auto };
     },
+    /** 列表卡片拖动排序放下（R-476）：按新顺序写 sort，编辑页同一个 moveSubtask */
+    move: async (from: number, to: number): Promise<ActionResult> => (items ? actionResult(await moveSubtask(items, from, to, clock.now())) : 'failed'),
     undoAuto: async (itemId: string): Promise<ActionResult> => {
       const r = rowNow();
       return r ? actionResult(await undoAutoDone(r, itemId, clock.now(), currentTz())) : 'failed';

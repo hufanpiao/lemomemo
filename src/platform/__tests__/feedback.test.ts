@@ -14,6 +14,7 @@ interface Osc {
 }
 let oscs: Osc[] = [];
 let ctxMade = 0;
+let ctxClosed = 0;
 
 class FakeAudioContext {
   currentTime = 0;
@@ -23,6 +24,10 @@ class FakeAudioContext {
     ctxMade += 1;
   }
   resume = vi.fn(() => Promise.resolve());
+  close = vi.fn(() => {
+    ctxClosed += 1;
+    return Promise.resolve();
+  });
   createGain() {
     return { gain: { value: 1, setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }, connect: vi.fn() };
   }
@@ -52,6 +57,7 @@ beforeEach(() => {
   logs.length = 0;
   oscs = [];
   ctxMade = 0;
+  ctxClosed = 0;
   rows = [];
   g.AudioContext = FakeAudioContext;
   nav.vibrate = vi.fn(() => true);
@@ -115,11 +121,19 @@ describe('定稿的音和震', () => {
     expect(logs).toEqual(['fx lift hap=vibrate snd=0', 'fx pull hap=vibrate snd=0']);
   });
 
-  it('AudioContext 只建一个、一直复用', () => {
+  it('连着播复用同一个 AudioContext；最后一个音放完 AUDIO_RESTORE_MS 后关掉，下次再建（常驻会让之后的录音全是静音，11-18 真机日志）', () => {
+    vi.useFakeTimers();
     api.fx('done');
     api.fx('drop');
     api.fx('delete');
     expect(ctxMade).toBe(1);
+    vi.advanceTimersByTime(120 + 50 + AUDIO_RESTORE_MS - 10);
+    expect(ctxClosed).toBe(0);
+    vi.advanceTimersByTime(20);
+    expect(ctxClosed).toBe(1);
+    expect(logs).toContain('fx audio close');
+    api.fx('done');
+    expect(ctxMade).toBe(2);
   });
 });
 
@@ -167,18 +181,27 @@ describe('静音键打开也出声（audioSession）', () => {
 });
 
 describe('降级', () => {
-  it('没有 navigator.vibrate、支持 <input switch>（iOS 18）：点藏起来的系统开关的 label', () => {
+  it('没有 navigator.vibrate、支持 <input switch>（iOS 18）：每次新建一个 display:none 的开关挂进 head、点它的 label、马上拿掉（ios-haptics 的真机写法）', () => {
     delete nav.vibrate;
     proto.switch = false;
     expect(hapticPath()).toBe('switch');
+    const clicked: HTMLInputElement[] = [];
+    const seen = (e: Event): void => {
+      const t = e.target;
+      if (t instanceof HTMLInputElement && t.hasAttribute('switch')) {
+        clicked.push(t);
+        expect(t.closest('label')?.style.display).toBe('none');
+        expect(t.closest('head'), '挂在 head 里').not.toBeNull();
+      }
+    };
+    document.addEventListener('click', seen, true);
     api.fx('lift');
-    const input = document.querySelector<HTMLInputElement>('label[aria-hidden="true"] > input[type="checkbox"][switch]');
-    expect(input, '藏起来的系统开关挂上了').not.toBeNull();
-    expect(input?.checked, 'label.click() 点到了开关').toBe(true);
-    expect(input?.tabIndex).toBe(-1);
     api.fx('pull');
-    expect(input?.checked).toBe(false);
-    expect(document.querySelectorAll('input[switch]')).toHaveLength(1);
+    document.removeEventListener('click', seen, true);
+    expect(clicked, '每次点到的是新开关').toHaveLength(2);
+    expect(clicked[0]).not.toBe(clicked[1]);
+    expect(clicked[0]?.checked, 'label.click() 点到了开关').toBe(true);
+    expect(document.querySelectorAll('input[switch]'), '点完就拿掉').toHaveLength(0);
     expect(logs).toEqual(['fx lift hap=switch snd=0', 'fx pull hap=switch snd=0']);
   });
 
@@ -208,7 +231,7 @@ describe('运行日志、fx-api、试震动', () => {
     expect(logs).toEqual(['fx done hap=vibrate snd=1', 'fx drop hap=vibrate snd=1']);
     vi.advanceTimersByTime(LOG_GAP_MS);
     api.fx('done');
-    expect(logs).toHaveLength(3);
+    expect(logs.filter((l) => l !== 'fx audio close')).toHaveLength(3);
   });
 
   it('fx-api：实现还没装上时调 fx 什么都不做', () => {

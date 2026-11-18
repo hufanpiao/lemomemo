@@ -64,7 +64,8 @@ beforeEach(() => {
     ev('2', { title: '周会', date: '2026-11-06', time: '10:00' }),
   ];
   data.todos = [todo('1', { title: '交报告' })];
-  data.settings = [];
+  // 这组按周一起始写的排版（负责人 11-18 首装默认改成周日，这里明确设周一，测的不是默认值）
+  data.settings = [{ id: 'ws1', key: 'cal.week_start', value: 1, deleted_at: null, undone: false }];
   resetHolidayCacheForTest();
   resetLunarForTest(lazyLib('lunar', async () => realLunar));
 });

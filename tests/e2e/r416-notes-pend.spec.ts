@@ -7,6 +7,7 @@
 // 键盘弹起时小图跟着输入行贴在键盘上（iOS 合成）这里测不了，只能 iPhone 看
 import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
+import { seedNotesView } from './idb.ts';
 import { jpeg } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
@@ -37,6 +38,13 @@ const thumbs = async (page: Page) => {
 for (const size of SIZES) {
   test.describe(`随手记输入行（R-416）· ${size.name}`, () => {
     test.use({ loggedIn: true, viewport: size.viewport, hasTouch: size.hasTouch, timezoneId: 'Asia/Seoul' });
+    // “选了图不新建”数的是瀑布流卡片：两类设备明确写 masonry（负责人 11-18 首装默认改列表；列表下卡片数恒为 0，这条就白测了）
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/app/#/notes');
+      await expect(page.getByTestId('notes-input')).toBeVisible({ timeout: 20_000 });
+      await seedNotesView(page, 'masonry');
+      await expect(page.getByTestId('notes')).toHaveAttribute('data-view', 'masonry', { timeout: 20_000 });
+    });
 
     test('回车记下后输入框失焦、模糊层没了、字清空', async ({ page }) => {
       await page.goto('/app/#/notes');

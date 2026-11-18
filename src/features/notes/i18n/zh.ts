@@ -1,5 +1,5 @@
 // 功能 notes 的词典·中文（架构 2.4）：随手记页、编辑器（B4 S1、S2）
-// 文案照定稿线框 s7、s8 和皮肤视觉稿（空状态“想到什么就记一句”、输入行“接着记一句…”、“刚记下”）
+// 文案照定稿线框 s7、s8 和皮肤视觉稿（空状态“想到什么就记一句”、输入行“接着记一句…”（负责人 11-18 改成“想到什么，记一句…”）、“刚记下”）
 export const zh = {
   'notes.title': '随手记',
   'notes.sub': '{date} · 共 {n} 条', // R-436：标题下一行等宽小字（同待办页 list.sub）
@@ -20,7 +20,7 @@ export const zh = {
   'notes.deleted': '已删除',
   'notes.undo': '撤销',
   'notes.err.save': '没保存上，稍后再试一次',
-  'notes.input': '接着记一句…',
+  'notes.input': '想到什么，记一句…',
   'notes.inputLabel': '记一句随手记',
   'notes.add': '记下',
   'notes.files': '附件 {n}',

@@ -5,7 +5,7 @@ export const zh = {
   'event.edit.newKind': '新建日程',
   'event.edit.back': '返回',
   'event.edit.titleLabel': '标题',
-  'event.edit.titlePh': '什么事',
+  'event.edit.titlePh': '比如：周五和小林吃饭',
   // R-444：开始、结束各一行“日期 + 时刻”，行名“开始”“结束”，时刻框的读屏名
   'event.edit.startTime': '开始时刻',
   'event.edit.endTime': '结束时刻',
@@ -29,9 +29,9 @@ export const zh = {
   'event.edit.location': '地点 / 链接',
   'event.edit.project': '项目',
   'event.edit.note': '备注',
-  'event.edit.locationPh': '地址或会议链接',
-  'event.edit.projectPh': '比如：工作、家里',
-  'event.edit.notePh': '补充说明（可不填）',
+  'event.edit.locationPh': '在哪儿，或贴个会议链接',
+  'event.edit.projectPh': '工作、家里…随你分',
+  'event.edit.notePh': '想多写几句也行',
   'event.edit.raw': '原话',
   // R-436 第二批（同纪念日编辑页）：表单分组小字、底部整宽删除行
   'event.edit.groupTime': '时间',

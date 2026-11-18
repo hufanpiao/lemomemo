@@ -11,7 +11,7 @@
 // 设置 › 提醒与通知 同样是二级页（REMIND-wiring；定稿线框 s13、sR7）：首页一行“提醒与通知 … 通知已打开 ›”，点进 #/settings/remind；
 // 二级页最上面“未来 7 天的提醒 ›”再进一层 #/settings/remind/upcoming，顶栏“‹ 提醒与通知”退回上一层；“提醒里写什么 ›”“免打扰 ›”
 // 同样点进去再改（R-347 照线框 sR7）：#/settings/remind/show-title、#/settings/remind/dnd。正文都由 reminders 功能懒加载提供
-// 设置 › 随手记显示方式（#/settings/notes-view，B4 S1、R-78）同日历：首页一行“随手记显示方式 … 瀑布流 ›”，下面一行小字“只对本类设备生效”，正文在本功能的 NotesViewSection.tsx（读写规则和随手记页共用 shared/logic/notes/view-setting.ts）
+// 设置 › 随手记显示方式（#/settings/notes-view，B4 S1、R-78）同日历：首页一行“随手记显示方式 … 列表 ›”（负责人 11-18 首装默认改列表，稿子原写瀑布流），下面一行小字“只对本类设备生效”，正文在本功能的 NotesViewSection.tsx（读写规则在 hooks/useNotesViewSetting.ts，键名和默认值同随手记页的 hooks/useNotesView.ts）
 // 设置 › 皮肤（#/settings/skin，ADR-008）同随手记显示方式：首页一行“简洁 · 白天 / 夜间跟着手机 ›”加两个开关，正文在本功能的 SkinSection.tsx；
 // 设置 › 字体（#/settings/font，架构 5.9c）同样：首页一行“字体 › 系统字体（默认）”，正文在 FontSection.tsx
 // 设置 › 语音与 AI（#/settings/ai）、在 Claude 聊天里记事（#/settings/claude）同日历（B3 FA-4）：正文由 plus 功能懒加载提供

@@ -1,7 +1,7 @@
 // 电脑版布局 e2e（B6）共用的东西：视口和会话设置、打开今天页、鼠标拖块、读本机库里存下的布局、截图、往本机库种随手记和今天的日程 / 待办 / 纪念日。
 // b6-desk-layout.spec.ts、b6-desk-today.spec.ts 共用；today-now-cheer.spec.ts 借用 DESK_USE。截图、写本机库用 page-helpers.ts、idb.ts 的
 import type { Locator, Page } from '@playwright/test';
-import { cached, idbPut, idbRead } from './idb.ts';
+import { cached, idbPut, idbRead, notesViewCached } from './idb.ts';
 import { afterPageFade } from './page-helpers.ts';
 import { expect, FAKE_USER_ID } from './session-fixture.ts';
 import { HINT_HELD } from './visual/visual-helpers.ts';
@@ -64,7 +64,8 @@ export async function seedNotes(page: Page): Promise<void> {
     ['延南洞那家面包店周一休息，下次周二去', 1],
   ];
   const now = NOW_MS;
-  const rows: [string, unknown][] = [['drafts', HINT_HELD]];
+  // 用到它的用例点的是瀑布流卡片（notes-card-*）：两类设备明确写 masonry（负责人 11-18 首装默认改列表）
+  const rows: [string, unknown][] = [['drafts', HINT_HELD], ...notesViewCached('masonry')];
   cats.forEach((c, i) => {
     const row = { ...c, sort: i + 1, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, rev: 1 };
     rows.push(['categories', { id: c.id, server: row, view: row }]);

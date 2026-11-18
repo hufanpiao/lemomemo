@@ -11,7 +11,7 @@
 // 截图：设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截（WebKit 截图会往页面插 <style>、被 CSP 记成违规，见 r416-notes-pend.spec.ts 文件头）；断言两种浏览器都跑
 import type { Page } from '@playwright/test';
 import { jpeg, shot } from './page-helpers.ts';
-import { cached, idbPut } from './idb.ts';
+import { cached, idbPut, seedNotesView } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use({ trace: 'off', loggedIn: true, viewport: { width: 390, height: 844 }, hasTouch: true, timezoneId: 'Asia/Seoul' });
@@ -34,6 +34,9 @@ test.describe('S8 随手记转成待办 / 日程', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/app/#/notes');
     await expect(page.getByTestId('notes-input')).toBeVisible({ timeout: 20_000 });
+    // 下面找的是瀑布流卡片：两类设备明确写 masonry（负责人 11-18 首装默认改列表）
+    await seedNotesView(page, 'masonry');
+    await expect(page.getByTestId('notes')).toHaveAttribute('data-view', 'masonry', { timeout: 20_000 });
   });
 
   test('不带图的转成待办：原条进最近删除、待办页有这一条', async ({ page, browserName }) => {

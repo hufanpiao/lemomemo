@@ -1,4 +1,4 @@
-// 设置 › 随手记显示方式（B4 S1；R-53、R-78；TC-B4-01 设置一半）：首页一行“随手记显示方式 … 瀑布流 ›”和下面的小字“只对本类设备生效”；
+// 设置 › 随手记显示方式（B4 S1；R-53、R-78；TC-B4-01 设置一半）：首页一行“随手记显示方式 … 列表 ›”（负责人 11-18 首装默认改列表，稿子原写瀑布流）和下面的小字“只对本类设备生效”；
 // 二级页 #/settings/notes-view 两个选项；切换后记住，只写这台设备类型的键（电脑写 notes.view@desktop、手机写 notes.view@mobile，另一个不动）
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -34,20 +34,21 @@ afterEach(() => {
 });
 
 describe('二级页', () => {
-  it('电脑：默认亮“瀑布流”，说明“只对电脑生效”；点“列表”写 notes.view@desktop = list，不写 @mobile；再点“瀑布流”改回', async () => {
+  it('电脑：默认亮“列表”（负责人 11-18 首装默认改列表，原来是瀑布流），说明“只对电脑生效”；点“瀑布流”写 notes.view@desktop = masonry，不写 @mobile；再点“列表”改回', async () => {
     await boot();
     render(<NotesViewSection />);
-    expect((screen.getByTestId('settings-notes-view-masonry') as HTMLInputElement).checked).toBe(true);
-    expect(screen.getByTestId('settings-notes-view').textContent).toContain('只对电脑生效，手机另外设');
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('settings-notes-view-list'));
-    });
-    await waitFor(() => expect(settings().getSnapshot().map((r) => [r.key, r.value])).toEqual([['notes.view@desktop', 'list']]));
     expect((screen.getByTestId('settings-notes-view-list') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId('settings-notes-view-masonry') as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByTestId('settings-notes-view').textContent).toContain('只对电脑生效，手机另外设');
     await act(async () => {
       fireEvent.click(screen.getByTestId('settings-notes-view-masonry'));
     });
     await waitFor(() => expect(settings().getSnapshot().map((r) => [r.key, r.value])).toEqual([['notes.view@desktop', 'masonry']]));
+    expect((screen.getByTestId('settings-notes-view-masonry') as HTMLInputElement).checked).toBe(true);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('settings-notes-view-list'));
+    });
+    await waitFor(() => expect(settings().getSnapshot().map((r) => [r.key, r.value])).toEqual([['notes.view@desktop', 'list']]));
   });
 
   it('手机（触屏）：说明“只对手机生效”，写 notes.view@mobile', async () => {
@@ -66,9 +67,9 @@ describe('首页一行', () => {
   beforeEach(() => window.history.replaceState(null, '', '#/settings'));
   afterEach(() => window.history.replaceState(null, '', '#/settings'));
 
-  it('“随手记显示方式 … 瀑布流 · 只对本类设备生效 ›”一行（稿子第 997 行）；点进 #/settings/notes-view，标题是“随手记显示方式”', async () => {
+  it('“随手记显示方式 … 列表 · 只对本类设备生效 ›”一行（稿子第 997 行；负责人 11-18 首装默认改列表，没设过显示“列表”）；点进 #/settings/notes-view，标题是“随手记显示方式”', async () => {
     await renderPage();
-    expect(screen.getByTestId('settings-notes-view-summary').textContent).toBe('瀑布流 · 只对本类设备生效');
+    expect(screen.getByTestId('settings-notes-view-summary').textContent).toBe('列表 · 只对本类设备生效');
     const row = screen.getByTestId('settings-notes-view-entry').closest('li');
     expect(row?.textContent).toContain('随手记显示方式');
     expect(row?.textContent).not.toContain('只对电脑生效');

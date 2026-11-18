@@ -65,7 +65,8 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', FakeRO);
   data.events = [];
   data.todos = [];
-  data.settings = [];
+  // 这组按周一起始写的排版（负责人 11-18 首装默认改成周日，这里明确设周一，测的不是默认值）
+  data.settings = [{ id: 'ws1', key: 'cal.week_start', value: 1, deleted_at: null, undone: false }];
   fetchStatus.mockReset();
   fetchStatus.mockResolvedValue({ kind: 'missing' });
   resetHolidayCacheForTest();

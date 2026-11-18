@@ -3,7 +3,8 @@
 import { lazy } from 'react';
 
 export const routes = [
-  { name: 'calendar', Page: lazy(() => import('./ui/CalendarPage.tsx')) },
+  // preload：冷启动首屏画完后 App 在后台先下载（负责人 11-18“冷启动后马上后台自动加载这3个页面”，app/features.ts 的 preloadPages）
+  { name: 'calendar', Page: lazy(() => import('./ui/CalendarPage.tsx')), preload: () => import('./ui/CalendarPage.tsx') },
   // 月历、周视图（B2 FA-3）：#/cal/month/<年-月>、#/cal/week/<日期>，和 #/calendar 同一个页面。
   // samePageAs：App 挂 'calendar' 那条的组件、错误边界用同一个 key，两者互相跳时不重新挂载、焦点不丢（代码审查 M7）；
   // 这里的 Page 只是占位，不会被渲染（A27 不许 index.ts 导出变量引用，所以不能两条共用一个 lazy 变量）

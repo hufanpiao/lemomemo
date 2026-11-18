@@ -104,7 +104,7 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
     skin: <SkinHomeRows onOpen={() => onOpen('skin')} />,
     // 字体（架构 5.9c；定稿线框 s13“字体 › 系统字体（默认）”）：点进 #/settings/font
     font: <FontHomeRow onOpen={() => onOpen('font')} />,
-    // 随手记显示方式（B4 S1，R-78；定稿线框第 997 行、皮肤视觉稿第 1368 行）：一行写完“瀑布流 · 只对本类设备生效 ›”（稿子第 997 行）；手机、电脑各自的说明在二级页
+    // 随手记显示方式（B4 S1，R-78；定稿线框第 997 行、皮肤视觉稿第 1368 行）：一行写完“瀑布流 · 只对本类设备生效 ›”（稿子第 997 行；负责人 11-18 首装默认改列表，没设过时显示“列表”）；手机、电脑各自的说明在二级页
     notesView: (
       <SettingsEntryRow
         rowId="notesView"

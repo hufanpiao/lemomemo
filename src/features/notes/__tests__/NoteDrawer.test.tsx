@@ -21,6 +21,8 @@ async function boot() {
     upgradeDeps: { reload: vi.fn(), swUpdate: () => Promise.resolve('no_update' as const), attempt: { get: () => null, set: () => undefined } },
   });
   b.profile = { ...(b.profile ?? {}), current_tz: 'Asia/Seoul' } as NonNullable<typeof b.profile>;
+  // 这里点的是瀑布流卡片：电脑明确设 masonry（负责人 11-18 首装默认改列表）；要列表的用例再写同 id 的行盖掉
+  await b.outbox?.applyServer('settings', [{ row: serverSetting('notes.view@desktop', 'masonry') }]);
   return b;
 }
 

@@ -34,7 +34,8 @@ const raw = (n: number, over: Record<string, unknown> = {}) => ({
   created_at: msAt('2026-11-10', 9 * 60 + n, 'Asia/Seoul'), updated_at: 1, rev: 2, user_id: 'A', synced_at: '2026-11-10T00:00:00Z', ...over,
 });
 
-async function boot(view?: 'list') {
+// 显示方式两类设备都明确写上（负责人 11-18 首装默认改列表后，测瀑布流的要明确设 masonry）；不传就是瀑布流
+async function boot(view: 'masonry' | 'list' = 'masonry') {
   const { factory } = fakeIndexedDB();
   const b = await coldStart({
     userId: 'A', appVersion: '4.0.0', cacheOptions: { factory }, listen426: false, clearCacheStorage: () => Promise.resolve(),
@@ -44,10 +45,8 @@ async function boot(view?: 'list') {
   // 第 1 条只读（宽容读取认不出它的值时就是这样交给 applyServer 的），第 2 条正常
   await act(async () => {
     await b.outbox?.applyServer('notes', [{ row: raw(1) as ServerRow, ro: true }, { row: raw(2) as ServerRow }]);
-    if (view) {
-      const s = { id: uid(900), key: 'notes.view@mobile', value: view, deleted_at: null, undone: false, rev: 1 } as ServerRow;
-      await b.outbox?.applyServer('settings', [{ row: s }]);
-    }
+    const s = (id: string, key: string) => ({ id, key, value: view, deleted_at: null, undone: false, rev: 1 }) as ServerRow;
+    await b.outbox?.applyServer('settings', [{ row: s(uid(900), 'notes.view@mobile') }, { row: s(uid(901), 'notes.view@desktop') }]);
   });
   return b;
 }
@@ -79,7 +78,7 @@ describe('列表：只读标记，点开、删除统一拦下（TC-B4-09）', ()
     it(`${view === 'list' ? '列表' : '瀑布流'}：只读那条标“要新版本”（读屏读整句），正常那条不标；点开不进编辑器、出提示条`, async () => {
       // 列表视图按设备类型记（notes.view@mobile）：模拟成手机
       if (view === 'list') vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(pointer: coarse)', media: q, addEventListener() {}, removeEventListener() {} }));
-      await boot(view === 'list' ? 'list' : undefined);
+      await boot(view);
       open();
       const mark = await screen.findByTestId(`notes-ro-${RO}`);
       expect(mark.textContent).toContain('要新版本');

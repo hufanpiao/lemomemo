@@ -1,4 +1,4 @@
-// 随手记页（B4 S1、S2；TC-B4-01 页面一半；定稿线框 s7）：默认瀑布流、页面上没有切换；按本类设备的设置换成列表；空状态；
+// 随手记页（B4 S1、S2；TC-B4-01 页面一半；定稿线框 s7）：默认列表（负责人 11-18 首装默认改列表）、页面上没有切换；按本类设备的设置换显示方式；空状态；
 // 底部输入行记一句（insert 不带 ai_status）、“刚记下”；“AI”小标；“⋯”删除进“最近删除”和撤销；分类胶囊筛选
 // 用真实的冷启动（假 IndexedDB）：写入经 write.* 进 outbox，再从集合读回来（同待办编辑页的测试）
 import { readFileSync } from 'node:fs';
@@ -19,13 +19,21 @@ const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0'
 type Row = { id: string } & Record<string, unknown>;
 const notes = () => collection<Row>('notes');
 
-async function boot() {
+// 本文件多数用例测瀑布流卡片：boot 默认给两类设备都写上 notes.view = masonry（负责人 11-18 首装默认改列表后，瀑布流要明确设）。
+// id 和下面 serverSetting 一样（@mobile 用 uid(900)、@desktop 用 uid(901)），用例里再写同 id 的行就盖掉它。测默认的传 null 不写
+async function boot(view: 'masonry' | null = 'masonry') {
   const { factory } = fakeIndexedDB();
   const b = await coldStart({
     userId: 'A', appVersion: '4.0.0', cacheOptions: { factory }, listen426: false, clearCacheStorage: () => Promise.resolve(),
     upgradeDeps: { reload: vi.fn(), swUpdate: () => Promise.resolve('no_update' as const), attempt: { get: () => null, set: () => undefined } },
   });
   b.profile = { ...(b.profile ?? {}), current_tz: 'Asia/Seoul' } as NonNullable<typeof b.profile>;
+  if (view !== null) {
+    await b.outbox?.applyServer('settings', [
+      { row: { id: uid(900), key: 'notes.view@mobile', value: view, deleted_at: null, undone: false, rev: 1 } as ServerRow },
+      { row: { id: uid(901), key: 'notes.view@desktop', value: view, deleted_at: null, undone: false, rev: 1 } as ServerRow },
+    ]);
+  }
   return b;
 }
 
@@ -57,10 +65,10 @@ afterEach(() => {
 });
 
 describe('两种显示（R-78，TC-B4-01 页面一半）', () => {
-  it('默认瀑布流；页面上没有“列表 / 瀑布流”切换；空状态“想到什么就记一句”', async () => {
-    await boot();
+  it('没设过显示方式默认列表（负责人 11-18 首装默认改列表，原来是瀑布流）；页面上没有“列表 / 瀑布流”切换；空状态“想到什么就记一句”', async () => {
+    await boot(null);
     open();
-    expect(screen.getByTestId('notes').getAttribute('data-view')).toBe('masonry');
+    expect(screen.getByTestId('notes').getAttribute('data-view')).toBe('list');
     expect(screen.getByTestId('notes-empty').textContent).toBe('想到什么就记一句');
     expect(screen.queryByRole('button', { name: /列表|瀑布流/ })).toBeNull();
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('随手记');

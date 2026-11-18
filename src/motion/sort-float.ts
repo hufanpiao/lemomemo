@@ -9,6 +9,7 @@
 // • 减少动态效果（reduced.ts）：照样跟手（直接操作），不倾斜、横向不跟、落下直接到位；放大由 CSS（:root[data-rm="1"]）去掉
 // • 拿起到撤掉期间不让列表换动画实现（swap-guard 的 holdBegin）：换实现会把整个列表子树重挂一次
 // 帧循环用 ./frame-loop.ts（A25：requestAnimationFrame 只写在 src/motion）
+import { copyNode } from './copy-node.ts';
 import { eachFrame } from './frame-loop.ts';
 import type { Point } from './long-press-drag.ts';
 import { prefersReducedMotion } from './reduced.ts';
@@ -76,13 +77,10 @@ class Spring {
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
-/** 复制这一行：去掉 id、data-testid、拖动标记和 Motion 写在行上的位移、透明度，整份 inert、读屏不念 */
+/** 复制这一行：去掉 id、data-testid（copyNode）、拖动标记和 Motion 写在行上的位移、透明度，整份 inert、读屏不念 */
 function cloneRow(row: HTMLElement): HTMLElement {
-  const c = row.cloneNode(true) as HTMLElement;
-  for (const el of [c, ...c.querySelectorAll<HTMLElement>('[data-testid], [id]')]) {
-    el.removeAttribute('data-testid');
-    el.removeAttribute('id');
-  }
+  // motion 共用的 copyNode（评审第 6 条：原来 cloneNode(true) 连 style 属性一起抄、被 CSP 拦）
+  const c = copyNode(row);
   for (const k of Object.keys(c.dataset)) if (k.startsWith('sort')) delete c.dataset[k];
   c.style.margin = '0';
   c.style.transform = '';

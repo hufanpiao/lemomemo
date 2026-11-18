@@ -5,7 +5,7 @@ export const zh = {
   'todo.edit.newKind': '新建待办',
   'todo.edit.back': '返回',
   'todo.edit.titleLabel': '标题',
-  'todo.edit.titlePh': '要做什么',
+  'todo.edit.titlePh': '比如：周末买猫砂',
   'todo.edit.done': '已完成（打勾后也能继续改）',
   // 只读行的编辑页（FA-2）：改不了，不写“打勾后也能继续改”
   'todo.edit.doneShort': '已完成',
@@ -33,8 +33,8 @@ export const zh = {
   'todo.edit.remindPast': '这个提醒时刻已经过了，不会再提醒',
   'todo.edit.project': '项目',
   'todo.edit.note': '备注',
-  'todo.edit.projectPh': '比如：工作、家里',
-  'todo.edit.notePh': '补充说明（可不填）',
+  'todo.edit.projectPh': '工作、家里…随你分',
+  'todo.edit.notePh': '想多写几句也行',
   'todo.edit.raw': '原话',
   // R-436 第二批（同纪念日、日程编辑页）：表单分组小字、底部整宽删除行
   'todo.edit.groupTime': '时间',

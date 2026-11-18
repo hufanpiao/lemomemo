@@ -4,15 +4,21 @@
 // • 每项一行：拖动把手 + 勾选框 + 可直接改的标题 + 删除 ×；最底下“添加子任务”：回车加一项、焦点留在框里接着加；粘贴多行按行拆成多项
 // • 改标题失焦即存；清空后失焦不保存、恢复原来的字（不当删除）
 // • 删除：软删、不进“最近删除”（Q7），页底出“已删除子任务 · 撤销”（同删除撤销条的 UndoToast，8 秒）
-// • 排序：拖左边把手（手机、电脑一样；把手上 touch-action: none，不触发页面滚动）；拖动中按 Esc 放回原位。键盘：聚焦把手按 Alt + ↑ / ↓；
+// • 排序（R-476 负责人 11-18“待办子任务拖动时效果也要跟随手记拖动一样的动效”）：随手记同一套 kit useSortDrag——按住左边把手一挪就拿起（不用等 0.4 秒；轻点不拿起、不震）
+//   （手机、电脑一样；把手上 touch-action: none，不触发页面滚动），浮层放大加阴影、跟手倾斜，其他项弹簧让位，放下落到占位；拖动中按 Esc 放回原位。
+//   拿起震一下，放到新位置响一声加震（R-471）。键盘：聚焦把手按 Alt + ↑ / ↓；
 //   读屏：每行还有“上移 / 下移”两个按钮，平时不占位、聚焦时才出现；到头了用 aria-disabled 不用 disabled（挪到第一位时焦点不丢）
-// • 新建页标题还没保存（主待办还没建）：整块灰掉，提示“写上标题才能加子任务”；只读、已删除（off）：只看不改，不出添加行、把手和 ×
-// • 不播动画：圆圈去掉过渡（Subtasks.module.css 的 .subs）；拖动只画放下位置的一条线
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+// • 新建页标题还没保存（主待办还没建）：整块灰掉，提示“写好标题就能拆步骤啦”（负责人 11-18 选）；只读、已删除（off）：只看不改，不出添加行、把手和 ×
+// • 圆圈去掉过渡（Subtasks.module.css 的 .subs）；增删、让位走 motion 的 AppearList（同随手记）
+import { useState, type KeyboardEvent } from 'react';
 import { CheckCircle } from '../../../kit/components/CheckCircle.tsx';
 import { enterCommits, FormGroup, groupLabelClass, TextInput } from '../../../kit/components/Form.tsx';
+import { SortBox, sortRowClass, useSortDrag } from '../../../kit/components/SortDrag.tsx';
+import { useSortDropFlow } from '../../../kit/hooks/useSortDropFlow.ts';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
-import { useLayer } from '../../../kit/hooks/useLayer.ts';
+import { AppearItem, AppearList } from '../../../motion/components.ts';
+import { fx } from '../../../platform/fx-api.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { ITEMS_MAX, TODO_ITEM_TITLE_MAX, useSubtaskEditor } from '../hooks/useSubtaskEditor.ts';
 import type { Subtask } from '../hooks/useSubtasks.ts';
 import { useListT } from '../hooks/useTodoList.ts';
@@ -28,58 +34,32 @@ export interface SubtaskEditorProps {
   off: boolean;
 }
 
-/** 拖动中：from 是拖的那一项，to 是放下后的位置 */
-interface Drag {
-  from: number;
-  to: number;
-}
+/** 拖动把手（按住一挪就拿起，不用等；轻点不拿起） */
+const GRIP = '[data-sort-grip]';
 
 export default function SubtaskEditor({ todoId, todo, off }: SubtaskEditorProps) {
   const t = useListT();
   const ed = useSubtaskEditor(todoId, todo, off);
   const { items, toast } = ed;
   const [add, setAdd] = useState('');
-  const [drag, setDrag] = useState<Drag | null>(null);
-  const rows = useRef<(HTMLLIElement | null)[]>([]);
-
-  // 拖动：按指针所在位置找放下的位置（按各行原来的中线），松手才写
-  const slotAt = (y: number, from: number): number => {
-    let slot = items.length;
-    for (let k = 0; k < items.length; k++) {
-      const r = rows.current[k]?.getBoundingClientRect();
-      if (r && y < r.top + r.height / 2) {
-        slot = k;
-        break;
-      }
-    }
-    return slot > from ? slot - 1 : slot;
-  };
-  const dragOf = (i: number): RowDrag => ({
-    onPointerDown(e) {
-      e.currentTarget.setPointerCapture(e.pointerId);
-      setDrag({ from: i, to: i });
+  // 放下走随手记同一套 kit useSortDropFlow（评审第 5 条）；写和出错提示在 ed.move 里（同上移、下移按钮），这里不再撤回、不再报
+  const dropped = useSortDropFlow<null>({
+    tag: 'subs-edit',
+    log: rlog,
+    ro: () => off,
+    block: () => undefined,
+    order: () => items.map((x) => x.id),
+    move: (m) => {
+      const from = items.findIndex((x) => x.id === m.id);
+      if (from >= 0 && from !== m.index) ed.move(from, m.index);
+      return Promise.resolve(null);
     },
-    onPointerMove(e) {
-      if (!drag) return;
-      const to = slotAt(e.clientY, drag.from);
-      if (to !== drag.to) setDrag({ ...drag, to });
-    },
-    onPointerUp() {
-      if (!drag) return;
-      setDrag(null);
-      ed.move(drag.from, drag.to);
-    },
-    onPointerCancel: () => setDrag(null),
-    onKeyDown(e) {
-      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-        e.preventDefault();
-        ed.move(i, e.key === 'ArrowUp' ? i - 1 : i + 1);
-      }
-    },
+    undo: () => Promise.resolve('ok'),
+    report: () => undefined,
+    moved: () => undefined,
   });
-
-  // 拖动中是层栈里的一层（kit/hooks/layers.ts）：Esc 只在它是栈顶时放弃这次拖动，不连着关编辑页外面的抽屉
-  useLayer(drag !== null, { name: 'subtask-drag', onEsc: () => setDrag(null), back: () => [] });
+  const sd = useSortDrag({ tag: 'subs-edit', axis: 'y', grip: GRIP, onDrop: dropped, log: rlog, fx });
+  const shownItems = sd.preview(items, (x) => x.id);
 
   const done = items.filter(ed.shown).length;
   const total = items.length;
@@ -96,28 +76,28 @@ export default function SubtaskEditor({ todoId, todo, off }: SubtaskEditorProps)
             </>
           ) : null}
         </div>
-        <ul className={s.editList}>
-          {items.map((it, i) => (
-            <EditRow
-              key={it.id}
-              it={it}
-              done={ed.shown(it)}
-              first={i === 0}
-              last={i === items.length - 1}
-              off={ed.rowOff(it.id)}
-              dragging={drag?.from === i}
-              over={drag !== null && drag.to === i && drag.from !== i ? (drag.to > drag.from ? 'after' : 'before') : undefined}
-              rowRef={(el) => {
-                rows.current[i] = el;
-              }}
-              drag={dragOf(i)}
-              onTick={(v) => ed.tick(it.id, v)}
-              onRename={(v) => ed.rename(it.id, v)}
-              onDelete={() => ed.remove(it.id)}
-              onMove={(d) => ed.move(i, i + d)}
-            />
-          ))}
-        </ul>
+        <SortBox sd={sd}>
+          <AppearList className={s.editList}>
+            {shownItems.map((it) => {
+              const i = items.indexOf(it);
+              return (
+                <EditRow
+                  key={it.id}
+                  it={it}
+                  done={ed.shown(it)}
+                  first={i === 0}
+                  last={i === items.length - 1}
+                  off={ed.rowOff(it.id)}
+                  sort={sd.attrs(it.id, ed.rowOff(it.id))}
+                  onTick={(v) => ed.tick(it.id, v)}
+                  onRename={(v) => ed.rename(it.id, v)}
+                  onDelete={() => ed.remove(it.id)}
+                  onMove={(d) => ed.move(i, i + d)}
+                />
+              );
+            })}
+          </AppearList>
+        </SortBox>
         {off ? null : (
           <div className={s.addRow}>
             <input
@@ -166,53 +146,38 @@ export default function SubtaskEditor({ todoId, todo, off }: SubtaskEditorProps)
   );
 }
 
-interface RowDrag {
-  onPointerDown(e: PointerEvent<HTMLButtonElement>): void;
-  onPointerMove(e: PointerEvent<HTMLButtonElement>): void;
-  onPointerUp(): void;
-  onPointerCancel(): void;
-  onKeyDown(e: KeyboardEvent<HTMLButtonElement>): void;
-}
-
 interface EditRowProps {
   it: Subtask;
   done: boolean;
   first: boolean;
   last: boolean;
   off: boolean;
-  dragging: boolean;
-  /** 放下以后排在这一行的前面还是后面（拖动中才有；画一条线） */
-  over: 'before' | 'after' | undefined;
-  rowRef(el: HTMLLIElement | null): void;
-  drag: RowDrag;
+  /** 拖动标记（kit SortDrag 的 attrs） */
+  sort: Record<`data-${string}`, string | undefined>;
   onTick(v: boolean): void;
   onRename(v: string): void;
   onDelete(): void;
   onMove(d: -1 | 1): void;
 }
 
-function EditRow({ it, done, first, last, off, dragging, over, rowRef, drag, onTick, onRename, onDelete, onMove }: EditRowProps) {
+function EditRow({ it, done, first, last, off, sort, onTick, onRename, onDelete, onMove }: EditRowProps) {
   const t = useListT();
   const title = { title: it.title };
+  // 键盘挪位置：聚焦把手按 Alt + ↑ / ↓
+  const key = (e: KeyboardEvent<HTMLButtonElement>): void => {
+    if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    onMove(e.key === 'ArrowUp' ? -1 : 1);
+  };
   return (
-    <li
-      ref={rowRef}
-      className={s.editRow}
-      data-done={done ? '' : undefined}
-      data-dragging={dragging ? '' : undefined}
-      data-over={over}
-      data-testid={`todo-sub-${it.id}`}
-    >
+    <AppearItem className={`${s.editRow} ${sortRowClass}`} {...sort} data-done={done ? '' : undefined} data-testid={`todo-sub-${it.id}`}>
       {off ? null : (
         <button
           type="button"
           className={s.handle}
           aria-label={t('items.move', title)}
-          onPointerDown={drag.onPointerDown}
-          onPointerMove={drag.onPointerMove}
-          onPointerUp={drag.onPointerUp}
-          onPointerCancel={drag.onPointerCancel}
-          onKeyDown={drag.onKeyDown}
+          onKeyDown={key}
+          data-sort-grip=""
           data-testid={`todo-sub-handle-${it.id}`}
         >
           <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
@@ -248,6 +213,6 @@ function EditRow({ it, done, first, last, off, dragging, over, rowRef, drag, onT
           </button>
         </>
       )}
-    </li>
+    </AppearItem>
   );
 }

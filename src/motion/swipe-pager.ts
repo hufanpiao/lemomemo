@@ -9,6 +9,7 @@
 // • 键盘 ← →、“今天”、年月选择不经这里（页面直接切换，不加动效）
 // • 不认鼠标（hdrag 的 mouse: false）：电脑上用按钮和键盘翻页；元素要配 CSS touch-action: pan-y，竖向滚动仍是原生的
 import { useRef } from 'react';
+import { copyNode } from './copy-node.ts';
 import { useHDrag, type HDrag } from './hdrag.ts';
 import { bezierCss, CAL_FLIP_SLOW_RATIO, dur, ease } from './tokens.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
@@ -50,8 +51,8 @@ const STRIP = ['id', 'data-testid', 'data-date', 'data-item', 'data-todo', 'data
 
 /** 把 el 拍一份静态副本，绝对定位叠在它原来的位置上（同一个 offsetParent），从 x 处起 */
 function snapshot(el: HTMLElement, x: number): HTMLElement {
-  const g = el.cloneNode(true) as HTMLElement;
-  for (const n of [g, ...g.querySelectorAll<HTMLElement>(STRIP.map((a) => `[${a}]`).join(','))]) for (const a of STRIP) n.removeAttribute(a);
+  // motion 共用的 copyNode（评审第 6 条：原来 cloneNode(true) 连 style 属性一起抄、被 CSP 拦）
+  const g = copyNode(el, { strip: STRIP });
   g.setAttribute('aria-hidden', 'true');
   g.inert = true;
   delete g.dataset['snap'];

@@ -3,7 +3,6 @@
 // “今天”按钮该不该变灰。全是纯日期运算（只用 shared/core/date 的 Date.UTC 运算，不碰本地时区）；
 // “今天”由调用方用 todayOf(clock.now(), tz) 算好传进来。hash 本身的拆分归 app/router.ts，这里只管参数那一段。
 import { addDays, daysIn, fmtDateStr, parseDate, weekdayOf, type DateStr } from '../../core/date.ts';
-import type { UiLocale } from '../../i18n/pick-locale.ts';
 
 /** 一周从星期几开始：0 = 周日 … 6 = 周六（和 weekdayOf 一致） */
 export type WeekStart = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -18,25 +17,17 @@ export interface YearMonth {
 export const MIN_YEAR = 1900;
 export const MAX_YEAR = 2100;
 
-/** 没设 cal.week_start 时按界面语言取的默认值：中文周一起始，韩文周日起始（两地日历的常见摆法；待负责人确认） */
-function defaultWeekStart(locale: UiLocale): WeekStart {
-  // check_backend F7：方括号里的键要追得到字面量，查表改用 switch
-  switch (locale) {
-    case 'zh-CN':
-      return 1;
-    case 'ko-KR':
-      return 0;
-  }
-}
+/** 没设 cal.week_start 时的默认值：周日起始，中文、韩文一样（负责人 11-18 首装默认“每周第一天：周日”；原来中文周一、韩文周日） */
+export const DEFAULT_WEEK_START: WeekStart = 0;
 
 // 只认周日（0）、周一（1）：界面上只有这两个选项；周二到周五起始时标题按“第一天 + 3 天”算月份，会算出 1899-12 或 2101-01（代码审查 11-04）
 function isWeekStart(v: unknown): v is WeekStart {
   return v === 0 || v === 1;
 }
 
-/** 设置 cal.week_start 的值是 0 或 1 就用它，没设、不认识（含 2–6）时按界面语言取默认 */
-export function resolveWeekStart(setting: unknown, locale: UiLocale): WeekStart {
-  return isWeekStart(setting) ? setting : defaultWeekStart(locale);
+/** 设置 cal.week_start 的值是 0 或 1 就用它，没设、不认识（含 2–6）时用 DEFAULT_WEEK_START */
+export function resolveWeekStart(setting: unknown): WeekStart {
+  return isWeekStart(setting) ? setting : DEFAULT_WEEK_START;
 }
 
 /** date 所在那一周的第一天（按周起始日规整） */

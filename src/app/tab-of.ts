@@ -4,7 +4,7 @@
 //   记下的就是随手记（App.tsx 调随手记页往 kit/state/new-item.ts 的 notesInput 登记的聚焦，不开打字条）
 // • 隐私记页（B5 D14）归随手记页签；“＋”同样调 notesInput.focus，隐私记页登记的是“打开隐私记的新建页”
 // • 纪念日页（负责人 11-14 22:17：“纪念日页面的新建按钮去掉，在纪念日页面按+默认新建纪念日”）：归日历页签，“＋”直接进纪念日新建页，不开打字条
-import type { TabName } from '../kit/components/GlassBar/GlassBar.tsx';
+import { TAB_ORDER, type TabName } from '../kit/components/GlassBar/tabs.ts';
 import type { RouteName } from './router.ts';
 
 export interface TabBarFor {
@@ -22,4 +22,15 @@ const ADD_OF_ROUTE: Partial<Record<RouteName, TabBarFor['add']>> = { anniv: 'ann
 export function tabBarFor(route: RouteName): TabBarFor | null {
   const tab = TAB_OF[route];
   return tab ? { tab, add: ADD_OF_ROUTE[route] ?? ADD_OF[tab], hold: route !== 'vault' && route !== 'anniv' } : null;
+}
+
+/**
+ * 两个路由之间是不是页签互切、往哪边（router.ts setTabSwitch 用；负责人 11-18 选切页方案 B“按底栏顺序左右滑入”）：
+ * 两头都有底栏、页签不同才算；往底栏右边的页签走为 1（新页从右边进），往左为 -1；别的为 0
+ */
+export function tabDir(a: RouteName, b: RouteName): -1 | 0 | 1 {
+  const x = tabBarFor(a);
+  const y = tabBarFor(b);
+  if (x === null || y === null || x.tab === y.tab) return 0;
+  return TAB_ORDER.indexOf(y.tab) > TAB_ORDER.indexOf(x.tab) ? 1 : -1;
 }

@@ -86,8 +86,11 @@ function notifyAll(): void {
   for (const l of [...listeners]) l();
 }
 
-/** 切页怎么动：vt 整页 View Transition；fade 四个页签互切，不起 View Transition、新页淡入（motion 的 fadeSwap）；none 直接画 */
-export type Anim = 'vt' | 'fade' | 'none';
+/**
+ * 切页怎么动：vt 整页 View Transition；slide-r / slide-l 四个页签互切，不起 View Transition、按底栏顺序左右滑入
+ * （slide-r 往右边的页签走、新页从右边进；motion 的 fadeSwap，负责人 11-18 选 B）；none 直接画
+ */
+export type Anim = 'vt' | 'slide-r' | 'slide-l' | 'none';
 
 /** 改地址（可选）并同步把新页面画完；按 anim 包一层动画 */
 export function commit(change?: () => void, anim: Anim = 'vt'): Promise<void> {
@@ -100,17 +103,17 @@ export function commit(change?: () => void, anim: Anim = 'vt'): Promise<void> {
     update();
     return Promise.resolve();
   }
-  if (anim === 'fade') return fadeSwap(update, () => document.querySelector('main'));
+  if (anim === 'slide-r' || anim === 'slide-l') return fadeSwap(update, anim === 'slide-r' ? 1 : -1);
   return transition(update);
 }
 
-// 两个路由是不是“四个页签之间互切”（App 按 tab-of.ts 设：两头都有底栏、页签不同）。负责人 11-06 选方案 B：
+// 两个路由是不是“四个页签之间互切”、往哪边（App 按 tab-of.ts 设：两头都有底栏、页签不同；1 往右边的页签，-1 往左，0 不是页签互切）。负责人 11-06 选方案 B：
 // 页签互切不走 View Transition，底栏、液滴、顶部模糊一直实时模糊（WebKit 过渡期间不画 backdrop-filter，bug 302256）；
 // 别的切页（进编辑页、设置……）照旧 View Transition。路由器不认识底栏，所以由 App 注入
-let tabSwitch: (a: Route, b: Route) => boolean = () => false;
+let tabSwitch: (a: Route, b: Route) => -1 | 0 | 1 = () => 0;
 
 /** App 启动时调一次；测试里可以换 */
-export function setTabSwitch(fn: (a: Route, b: Route) => boolean): void {
+export function setTabSwitch(fn: (a: Route, b: Route) => -1 | 0 | 1): void {
   tabSwitch = fn;
 }
 
@@ -125,14 +128,16 @@ export function setSamePage(fn: (a: Route, b: Route) => boolean): void {
 }
 
 /**
- * 从 from 换到 to 起哪种过渡：同一页（samePageAs，例如纪念日列表 → 盖在上面的编辑层）不起过渡；页签互切淡入；别的整页过渡。
+ * 从 from 换到 to 起哪种过渡：同一页（samePageAs，例如纪念日列表 → 盖在上面的编辑层）不起过渡；页签互切左右滑入；别的整页过渡。
  * 同一页不起过渡（整块评审第 20 条，原来另有一份 pushInPage）：编辑层自己从底部滑上来，再叠整页淡入淡出是两层动画；
  * 而且编辑层挂上时锁滚动，过渡途中文档从能滚变成不能滚，WebKit 会整页崩（B5 e2e 实测）
  */
 function animOf(from: string, to: string): Anim {
   const a = parseHash(from);
   const b = parseHash(to);
-  return samePage(a, b) ? 'none' : tabSwitch(a, b) ? 'fade' : 'vt';
+  if (samePage(a, b)) return 'none';
+  const dir = tabSwitch(a, b);
+  return dir === 1 ? 'slide-r' : dir === -1 ? 'slide-l' : 'vt';
 }
 /** 从当前地址去 href（navigate、replaceRoute、navigateSub 用；浏览器前进后退的 hashchange 走同一个 animOf） */
 export const animTo = (href: string): Anim => animOf(window.location.hash, href);

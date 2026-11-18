@@ -20,6 +20,12 @@
   user-select: none;
 }
 
+/* 行里能打字的框照常选字（评审第 11 条：待办编辑页子任务的标题框继承了上面的 none，iOS 上选不了字）；拖动中整页那条带 !important，照样压住 */
+.row :is(input, textarea, [contenteditable='true']) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .row[data-sort-held] {
   visibility: hidden;
 }
