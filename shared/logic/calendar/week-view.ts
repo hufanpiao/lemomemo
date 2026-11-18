@@ -4,11 +4,11 @@
 // • 有时刻的日程按设备时区换算，跨午夜、跨多天的（R-444，最长 31 天）按午夜切段，各归各天，cont 标出被切的一边（'end' = 尾部被切，
 //   'start' = 头部被切，'both' = 两头都被切，中间整天那几段），界面在被切的一端画成直边；
 // • 手机（layout 'phone'，时间轴横向）：色块长度取 max(按时长算的长度, minBlockPx, 写下完整标题的宽 textPx)，超出轨道末端的截到末端，
-//   截完不够最小长度的右端对齐末端、往左补足（负责人 11-17“周历上显示全部文字，时间以开始时间为准”）；显示区间有交叠的归一组，组内上排空着放上排（row 0），
-//   否则下排空着放下排（row 1），两排都占着的不画、记进这一组的 more；组里有两排时 rows = 2，否则 1；
+//   截完不够最小长度的右端对齐末端、往左补足（负责人 11-17“周历上显示全部文字，时间以开始时间为准”）；
+//   按开始排好依次放进第一排空着的（row 0、1、2…，不设上限、不收成“+N”，负责人 11-18“周历目的就是将全部日程都能一眼看清楚”“+2的日程跟代办也都显示出来”）；
 // • 电脑（layout 'desk'，时间轴纵向，相当于 minBlockPx = 0）：按真实时长画，重叠的并排分列，块带 column、columns。
 // • 待办（和前端 A 对过的接口）：规则和月历一样（todoDate：删掉的、撤销的、已完成的、没有截止日的不放，截止日是浮动日期不换算），
-//   手机放进当天的 todos（kind 'todo'，泳道上画空心圆），电脑并进 allDay 那一行（排在全天日程后面）。纯函数。
+//   手机放进当天的 todos（“○ 标题”小条：有截止时刻的和时刻块一起排，没有的在时刻那几排下面从左往右排），电脑并进 allDay 那一行（排在全天日程后面）。纯函数。
 import { DAY_MINUTES, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import type { ProjectColor } from '../project-color.ts';
@@ -49,19 +49,19 @@ interface BlockBase {
 /** 跨天日程某一段是第几天、共几天（event-span.ts dayOfSpan 的结果） */
 export type DayOf = { readonly index: number; readonly days: number };
 
+/** 手机上的时刻块：row 是时刻那几排里的第几排（0 起，不设上限，负责人 11-18“周历目的就是将全部日程都能一眼看清楚”） */
 export interface PhoneBlock extends BlockBase {
   readonly startPx: number;
   readonly widthPx: number;
-  readonly row: 0 | 1;
-  readonly rows: 1 | 2;
+  readonly row: number;
 }
 
-/** 手机上的一组（显示区间连着交叠的块）；more > 0 时在 moreAtPx 处写“+N” */
-export interface PhoneGroup {
-  readonly moreAtPx: number;
-  readonly more: number;
-  /** 没画出来的那几件（more 件）的 itemId，按开始时刻排；点“+N”时界面可以直接列出来 */
-  readonly hiddenIds: readonly string[];
+/** 手机上的待办小条（“○ 标题”）：有截止时刻的和时刻块一起排在 row 那一排的截止时刻处；没有的在时刻那几排下面从左往右排 */
+export interface PhoneTodo {
+  readonly entry: DayEntry;
+  readonly startPx: number;
+  readonly widthPx: number;
+  readonly row: number;
 }
 
 export interface DeskBlock extends BlockBase {
@@ -83,10 +83,11 @@ export interface AllDay {
 export interface PhoneDay {
   readonly date: DateStr;
   readonly allDay: AllDay;
-  /** 截止日是这一天的待办（kind 'todo'，按 compareEntries 排）；泳道上画空心圆 */
-  readonly todos: readonly DayEntry[];
+  /** 截止日是这一天的待办小条（按 compareEntries 排） */
+  readonly todos: readonly PhoneTodo[];
   readonly blocks: readonly PhoneBlock[];
-  readonly groups: readonly PhoneGroup[];
+  /** 时刻块和待办一共占几排（全天日程另算，每件一排，见 allDay.entries） */
+  readonly rows: number;
 }
 
 export interface DeskDay {
@@ -110,13 +111,19 @@ export interface PhoneWeekOpts {
    * 轨道右端在这一天坐标里的位置（px，0:00 在 0）：时间轴只显示到 22 点这类时，色块撑开后写到这里为止。不传就是 dayPx（24:00）
    */
   readonly endPx?: number;
+  /** 轨道左端在这一天坐标里的位置（px）：时间轴从 8 点起时没有截止时刻的待办从这里往右排。不传是 0 */
+  readonly startPx?: number;
   /**
    * 写下完整标题要多宽（px，含色块左右内边距）：界面按色块实际字体量（WeekView 用 canvas measureText，结果缓存）。
    * 跨天的这一段还带 of（第几天、共几天）：色块右端要写“2/3”，界面把这几个字（等宽小字、前面的空隙）也算进去（11-17 日历整块评审第 1 条）。
    * 传了时色块宽 = max(按时长的宽, minBlockPx, textPx(标题, of))，从开始时刻起画、写到轨道末端为止（负责人 11-17“周历上显示全部文字，
-   * 时间以开始时间为准，结束时间对不上也没关系”）；撑开后撞上的照样进第二排或 more。不传（服务器一侧、单测）按原来的规则
+   * 时间以开始时间为准，结束时间对不上也没关系”）；撑开后撞上的往下一排放。不传（服务器一侧、单测）按原来的规则
    */
   readonly textPx?: (title: string, of?: DayOf) => number;
+  /** 待办截止时刻（当天第几分钟；没有截止时刻的给 undefined）：小条从这里起画。不传就全按没有截止时刻排 */
+  readonly dueMin?: (todoId: string) => number | undefined;
+  /** 待办小条要多宽（px，含圆圈和内边距）；不传按 minBlockPx */
+  readonly todoPx?: (title: string) => number;
 }
 
 export interface DeskWeekOpts {
@@ -129,6 +136,9 @@ export interface WeekItems {
   readonly events: readonly CalEvent[];
   readonly todos: readonly CalTodo[];
 }
+
+/** 没有截止时刻的待办小条之间的空隙（px） */
+const TODO_GAP_PX = 6;
 
 interface DayBuckets {
   readonly allDay: Map<DateStr, DayEntry[]>;
@@ -217,54 +227,72 @@ function clusters<T>(sorted: readonly T[], startOf: (x: T) => number, endOf: (x:
   return out;
 }
 
+/** 放进第一排右端不超过 start 的那一排（都占着就新开一排）；ends 是各排最后一件的右端，就地更新 */
+function firstFree(ends: number[], start: number, right: number): number {
+  for (let k = 0; k < ends.length; k++) {
+    if ((ends[k] ?? Infinity) <= start) {
+      ends[k] = right;
+      return k;
+    }
+  }
+  ends.push(right);
+  return ends.length - 1;
+}
+
 /**
- * 手机：按显示区间分组、上下两排（R-109、R-110）。
- * 色块从开始时刻起画，想要的宽 = max(按时长的宽, minPx, 写下完整标题的宽)，写到轨道末端（end）为止；
- * 剩下不到 minPx 时右端对齐末端、往左补足（原来的兜底）。撑开后的宽度直接拿去分组、排两排，撞上的进第二排或 more，不叠在一起
+ * 手机：时刻块从开始时刻起画，想要的宽 = max(按时长的宽, minPx, 写下完整标题的宽)，写到轨道末端（end）为止；
+ * 剩下不到 minPx 时右端对齐末端、往左补足（原来的兜底）。
+ * 排法（负责人 11-18“周历目的就是将全部日程都能一眼看清楚”，原来最多两排、多的收成“+N”，整块换成这一种）：
+ * 时刻块和有截止时刻的待办按起点排好，依次放进第一排空着的，不设上限；没有截止时刻的待办在这些排下面从左往右排，放不下换下一排
  */
 function layoutPhone(
   segs: readonly Segment[],
-  minPx: number,
-  dayPx: number,
-  end: number = dayPx,
-  textPx?: (title: string, of?: DayOf) => number,
-): { blocks: PhoneBlock[]; groups: PhoneGroup[] } {
+  todos: readonly DayEntry[],
+  o: { minPx: number; dayPx: number; start: number; end: number; textPx?: ((title: string, of?: DayOf) => number) | undefined; dueMin?: ((id: string) => number | undefined) | undefined; todoPx?: ((title: string) => number) | undefined },
+): { blocks: PhoneBlock[]; todos: PhoneTodo[]; rows: number } {
+  const { minPx, dayPx, start, end } = o;
   const scale = dayPx / DAY_MINUTES;
-  const placed = segs.map((s) => {
-    let startPx = s.startMin * scale;
-    const want = Math.max((s.endMin - s.startMin) * scale, minPx, textPx ? textPx(s.entry.title, ofSeg(s)) : 0);
-    let widthPx = Math.min(want, end - startPx);
-    if (widthPx < minPx) {
-      startPx = Math.max(0, end - minPx);
-      widthPx = end - startPx;
-    }
-    return { s, startPx, widthPx };
-  });
-  const blocks: PhoneBlock[] = [];
-  const groups: PhoneGroup[] = [];
-  for (const members of clusters(placed, (p) => p.startPx, (p) => p.startPx + p.widthPx)) {
-    // 两排各自最后一块的右端（不用数组下标，F7）
-    let row0End = -Infinity;
-    let row1End = -Infinity;
-    const visible: { p: (typeof placed)[number]; row: 0 | 1 }[] = [];
-    const hiddenIds: string[] = [];
-    for (const p of members) {
-      const right = p.startPx + p.widthPx;
-      if (p.startPx >= row0End) {
-        row0End = right;
-        visible.push({ p, row: 0 });
-      } else if (p.startPx >= row1End) {
-        row1End = right;
-        visible.push({ p, row: 1 });
-      } else {
-        hiddenIds.push(p.s.entry.itemId);
-      }
-    }
-    const rows: 1 | 2 = visible.some((v) => v.row === 1) ? 2 : 1;
-    for (const { p, row } of visible) blocks.push({ ...base(p.s), startPx: p.startPx, widthPx: p.widthPx, row, rows });
-    groups.push({ moreAtPx: Math.max(...visible.map((v) => v.p.startPx + v.p.widthPx)), more: hiddenIds.length, hiddenIds });
+  // 从 at 起画、想要 want 宽：写到末端为止，不够最小长度的右端对齐末端往左补足
+  const fit = (at: number, want: number): { startPx: number; widthPx: number } => {
+    const w = Math.min(want, end - at);
+    return w < minPx ? { startPx: Math.max(0, end - minPx), widthPx: Math.min(minPx, end) } : { startPx: at, widthPx: w };
+  };
+  const todoW = (e: DayEntry): number => Math.max(minPx, o.todoPx ? o.todoPx(e.title) : 0);
+  type Item = { startPx: number; widthPx: number; seg?: Segment; todo?: DayEntry };
+  const timed: Item[] = segs.map((s) => ({
+    seg: s,
+    ...fit(s.startMin * scale, Math.max((s.endMin - s.startMin) * scale, minPx, o.textPx ? o.textPx(s.entry.title, ofSeg(s)) : 0)),
+  }));
+  const loose: DayEntry[] = [];
+  for (const e of todos) {
+    const due = o.dueMin?.(e.itemId);
+    if (due === undefined) loose.push(e);
+    else timed.push({ todo: e, ...fit(due * scale, todoW(e)) });
   }
-  return { blocks, groups };
+  // 起点先后；同一起点时刻块在前（segs、todos 各自已排好，sort 是稳定的）
+  timed.sort((a, b) => a.startPx - b.startPx);
+  const ends: number[] = [];
+  const blocks: PhoneBlock[] = [];
+  const out: PhoneTodo[] = [];
+  for (const it of timed) {
+    const row = firstFree(ends, it.startPx, it.startPx + it.widthPx);
+    if (it.seg) blocks.push({ ...base(it.seg), startPx: it.startPx, widthPx: it.widthPx, row });
+    else if (it.todo) out.push({ entry: it.todo, startPx: it.startPx, widthPx: it.widthPx, row });
+  }
+  // 没有截止时刻的：接在时刻那几排下面，一排从左往右排满再换下一排（小条之间留 TODO_GAP_PX）
+  let row = ends.length - 1;
+  let x = Infinity;
+  for (const e of loose) {
+    const w = Math.min(todoW(e), end - start);
+    if (x + w > end) {
+      row++;
+      x = start;
+    }
+    out.push({ entry: e, startPx: x, widthPx: w, row });
+    x += w + TODO_GAP_PX;
+  }
+  out.sort((a, b) => compareEntries(a.entry, b.entry));
+  return { blocks, todos: out, rows: row + 1 };
 }
 
 /** 电脑：按真实时长，重叠的并排分列；同一簇（连着重叠的）共用 columns */
@@ -312,8 +340,15 @@ export function buildWeek(weekStart: DateStr, items: WeekItems, opts: PhoneWeekO
     return dates.map((date) => ({
       date,
       allDay: allDayOf(b.allDay.get(date) ?? []),
-      todos: todosOf(date).sort(compareEntries),
-      ...layoutPhone(segsOf(date), opts.minBlockPx, opts.dayPx, Math.min(opts.endPx ?? opts.dayPx, opts.dayPx), opts.textPx),
+      ...layoutPhone(segsOf(date), todosOf(date).sort(compareEntries), {
+        minPx: opts.minBlockPx,
+        dayPx: opts.dayPx,
+        start: Math.max(0, opts.startPx ?? 0),
+        end: Math.min(opts.endPx ?? opts.dayPx, opts.dayPx),
+        textPx: opts.textPx,
+        dueMin: opts.dueMin,
+        todoPx: opts.todoPx,
+      }),
     }));
   }
   // 电脑：待办并进全天那一行（compareEntries 把待办排在全天日程后面）

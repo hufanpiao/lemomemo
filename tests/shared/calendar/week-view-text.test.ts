@@ -28,19 +28,19 @@ describe('手机色块写完整标题：按字宽撑开', () => {
     expect(d.blocks.map((b) => b.widthPx)).toEqual([120]);
   });
 
-  it('撑开后撞上后一块：后一块进第二排，不叠在一起；再撞上的进 more', () => {
+  it('撑开后撞上后一块：后一块进第二排，不叠在一起；再撞上的进第三排（负责人 11-18 全部显示，不再收成“+N”）', () => {
     const events = [
       timed('a', DAY, '09:00', SEOUL, 30, { title: '坐高铁去釜山出差' }), // 540～632
       timed('b', DAY, '10:00', SEOUL, 30, { title: '周会' }), // 600 起，撞上 a
-      timed('c', DAY, '10:10', SEOUL, 30, { title: '交报告' }), // 610 起，两排都占着
+      timed('c', DAY, '10:10', SEOUL, 30, { title: '交报告' }), // 610 起，前两排都占着
       timed('d', DAY, '12:00', SEOUL, 30, { title: '午饭' }), // 720 起，不撞
     ];
     const d = dayOf(buildWeek(WEEK, { todos: [], events }, wide));
-    expect(d.blocks.map((b) => [b.itemId, b.row, b.rows])).toEqual([['a', 0, 2], ['b', 1, 2], ['d', 0, 1]]);
-    expect(d.groups.map((g) => [g.more, g.hiddenIds])).toEqual([[1, ['c']], [0, []]]);
+    expect(d.blocks.map((b) => [b.itemId, b.row])).toEqual([['a', 0], ['b', 1], ['c', 2], ['d', 0]]);
+    expect(d.rows).toBe(3);
     // 同一排的块左右不交叠
-    for (const r of [0, 1] as const) {
-      const xs = d.blocks.filter((b) => b.row === r && b.rows === 2).sort((x, y) => x.startPx - y.startPx);
+    for (const r of [0, 1, 2]) {
+      const xs = d.blocks.filter((b) => b.row === r).sort((x, y) => x.startPx - y.startPx);
       for (let i = 1; i < xs.length; i++) expect((xs.at(i)?.startPx ?? 0) >= (xs.at(i - 1)?.startPx ?? 0) + (xs.at(i - 1)?.widthPx ?? 0)).toBe(true);
     }
   });

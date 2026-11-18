@@ -4,13 +4,14 @@
 //   一天一条泳道（--cal-lane-h 高），左边“周一 / 19 / 农历或节日”，右边横向时间轴（定稿没有原来右边“当天共几项、逾”那一列，读屏照旧念）
 //   – 周六周日淡底加灰字、放假斜纹、补班点阵加数字旁“班”标、今天淡黄小框、选中数字深色小方块：和月格同一套类（.wkend .holiday .workday .today .sel .dayNum）
 //   – 顶部刻度数字、每 2 小时一条刻度线；今天那条泳道上一条竖线是“现在”
-//   – 全天日程画成轨道顶上一整条（跨天的每天都画，右端写“2/3”；当天还有别的全天日程再写“+N”），有它时时刻块往下让一排（CSS .trkAll 换 --trk-top）
+//   – 全部直接画出来，不收成“+N”（负责人 11-18“周历目的就是将全部日程都能一眼看清楚”“+2的日程跟代办也都显示出来”）：轨道里一排一排往下堆，
+//     全天日程每件一整条占一排，时刻块和待办接着往下（buildWeek 排号 row），排多了泳道变高（WeekView.module.css .trk）
 //   – 日程色块：底色项目块色、左侧 2 px 深色竖线、--on-p 字（R-104、R-107、R-109、R-110 的排布交给前端 B 的 buildWeek）；跨天的同样右端写“2/3”
 //   – 色块和全天条写完整标题，不写简称（负责人 11-17“周历上显示全部文字，时间以开始时间为准，结束时间对不上也没关系”）：
-//     色块从开始时刻起画，宽度按 useTextPx 量的字宽撑开、写到轨道末端为止，再放不下才省略号（.wevTx）；撑开后撞上的进第二排或“+N”
+//     色块从开始时刻起画，宽度按 useTextPx 量的字宽撑开、写到轨道末端为止，再放不下才省略号（.wevTx）；撑开后撞上的往下一排放
 //   – 跨天的续条（全天条、时刻块）：被切开的一端画直角，头从前一天接过来的不画左侧深色竖线（cal-ui.ts contClass，和月格同一套；字色不变，对比度照 --on-p）
-//   – 待办：泳道上的空心圆（有截止时刻画在那个时刻，没有的画在末端；同一处几个依次往左错开），不占上下两排、不算进“+N”
-//   – 整条泳道是一个按钮：点了选中那一天（数字深色小方块），下面的清单列出当天全部日程和待办；色块、“+N”不单独接点按
+//   – 待办：“○ 标题”小条（圆圈边色是项目色），有截止时刻的和时刻块一起排在那个时刻，没有的在最下面从左往右排
+//   – 整条泳道是一个按钮：点了选中那一天（数字深色小方块），下面的清单列出当天全部日程和待办；色块、待办小条不单独接点按
 //     （色块挨得近、高度不到 44，设计审查 M7 的做法：先选天、再在清单里点具体哪一条）
 // • 电脑（宽屏）：7 列时间格（纵向时间轴，每小时 40 px），表头星期、日期、农历，顶部“全天”行放全天日程和当天截止的待办（○ 标题）；
 //   重叠的并排分列（buildWeek layout 'desk' 的 column / columns）；色块点了打开编辑页；点表头选中那一天
@@ -38,10 +39,8 @@ import { DeskWeek } from './DeskWeek.tsx';
 
 /** 色块最短长度（px，5.12：约 28 px，视觉稿 --wmin） */
 export const MIN_BLOCK_PX = 28;
-/** 同一处几个待办空心圆依次往左错开多少 */
-const TODO_STEP_PX = 10;
-/** 没有截止时刻的待办画在轨道末端往里多少（px）：空心圆 9 px 宽、居中，往里 8 不出轨道 */
-const TODO_END_INSET_PX = 8;
+/** 待办小条前面圆圈占的宽（圆 8 + 和字之间 4，.wtodo::before） */
+const TODO_RING_PX = 12;
 
 /** 色块左右内边距（.allDay / .wev 的 padding-left / padding-right）和跨天“2/3”前面的空隙（.wevOf 的 padding-left）：
  *  量字宽和画色块用同一个数，只写在这里，由 PhoneWeek 写进 --wev-pl / --wev-pr / --wev-of-gap 给 WeekView.module.css 读（11-17 日历整块评审） */
@@ -90,14 +89,15 @@ function useFontEnv(): string {
 /**
  * 量完整标题要多宽（负责人 11-17“周历上显示全部文字”）：按轨道里色块的实际字体用 canvas measureText——标题是 .wev 的字号 --fs-11、字体跟页面走；
  * 跨天的这一段右端还有“2/3”（.wevOf：等宽字 --f-mono、--fs-10，前面空 OF_GAP_PX），一起算进去（11-17 日历整块评审第 1 条，原来只量标题，完整标题照样被截）。
- * 没有 OffscreenCanvas 的环境（jsdom 单测）返回 undefined，buildWeek 按原来的规则排
+ * 没有 OffscreenCanvas 时（旧版 iOS Safari、Windows 上的 Playwright WebKit：11-18 截图标题全被截成“客..”）改用普通 <canvas> 量；
+ * 两样都拿不到 2D 上下文的环境（jsdom 单测）返回 undefined，buildWeek 按原来的规则排
  */
 function useTextPx(el: HTMLElement | null): ((title: string, of?: DayOf) => number) | undefined {
   const env = useFontEnv();
   return useMemo(() => {
-    if (el === null || typeof OffscreenCanvas !== 'function') return undefined;
-    const ctx = new OffscreenCanvas(1, 1).getContext('2d');
-    if (ctx === null) return undefined;
+    if (el === null) return undefined;
+    const ctx = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(1, 1).getContext('2d') : document.createElement('canvas').getContext('2d');
+    if (!ctx) return undefined;
     const cs = getComputedStyle(el);
     const v = (name: string, fallback: string): string => cs.getPropertyValue(name).trim() || fallback;
     const titleFont = `${v('--fs-11', '11px')} ${cs.fontFamily}`;
@@ -222,23 +222,19 @@ function Lane({
   // 和月格同一套（cal-ui.ts dayLines）：补班的“班”放进数字旁的小圆标，那一行写节日名；连休只在第一天写节日名，后几天照常写农历或节气
   const { badge, line: sub } = dayLines(kind, namedHolidays(date, hol, p.holidays), p.lunarOf?.(date) ?? '', t);
   const shift = w > 0 ? phoneScale(w, range).shiftPx : 0;
-  // 手机排布里全天这一行只有全天日程（待办另放在 todos）：画第一件
+  // 全天日程每件一排（负责人 11-18“这个+2的全天内容在下面都列出来”）；手机排布里全天这一组只有全天日程（待办另放在 todos）
   const allDay = day?.allDay.entries ?? [];
-  const first = allDay[0];
   const wd = t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) });
-  // 全天条右端：跨天的写“2/3”，当天还有别的全天日程写“+N”
-  const allDayEnd = [ofText(first?.span && dayOfSpan(first.span, date)), allDay.length > 1 ? t('cal.more', { n: allDay.length - 1 }) : ''].filter(Boolean).join(' ');
-  const moreTexts = day?.groups.filter((g) => g.more > 0).map((g) => t('cal.more', { n: g.more })) ?? [];
-  // 看得见的字，和下面画的顺序一致：星期、日期数字、“班”、农历或节日、全天条、色块简称、“+N”
+  const endOf = (e: DayEntry): string => ofText(e.span && dayOfSpan(e.span, date));
+  // 看得见的字，和下面画的顺序一致：星期、日期数字、“班”、农历或节日、全天条、时刻块、待办
   const shown = [
     wd,
     String(Number(date.slice(8))),
     badge,
     sub,
-    first?.title ?? '',
-    allDayEnd,
+    ...allDay.flatMap((e) => [e.title, endOf(e)]),
     ...(day?.blocks.flatMap((b) => [b.title, ofText(b.dayOf)]) ?? []),
-    ...moreTexts,
+    ...(day?.todos.map((x) => x.entry.title) ?? []),
   ];
   // 当天共几项、有没有逾期不再画在泳道右边（R-445 周视图 A 定稿没有这一列），读屏照旧念
   const a11y = labelInName(
@@ -250,9 +246,11 @@ function Lane({
     ],
     t('cal.a11y.sep', {}),
   );
-  // 同一处的待办依次往左错开：按位置分桶数
-  const seen = new Map<number, number>();
   const cls = [styles.lane, weekendClass(weekdayOf(date)), dayKindClass(kind), isToday ? common.today : '', sel ? common.sel : ''].filter(Boolean).join(' ');
+  // 轨道里一排一排往下堆：全天日程占前 nAll 排，时刻块和待办接着往下（排号 r），轨道高度、上下居中都由 WeekView.module.css 按排数算
+  const nAll = allDay.length;
+  const trkVars = { '--n': nAll + (day?.rows ?? 0) } as CSSProperties;
+  const at = (r: number, left?: number, width?: number): CSSProperties => ({ '--r': r, ...(left === undefined ? {} : { left, width }) }) as CSSProperties;
   return (
     <li className={cls} data-date={date}>
       <button type="button" className={styles.laneBtn} aria-pressed={sel} aria-label={a11y} onClick={() => p.onSelect(date)}>
@@ -262,34 +260,30 @@ function Lane({
           <DayNum date={date} badge={badge} look="lane" />{' '}
           <small className={styles.laneSub}>{sub}</small>
         </span>{' '}
-        <span className={first ? `${styles.trk} ${styles.trkAll}` : styles.trk} ref={trackRef ?? undefined} aria-hidden="true">
+        <span className={styles.trk} style={trkVars} ref={trackRef ?? undefined} aria-hidden="true">
           {/* 轨道里不画整点竖线（负责人 11-17：“周历的竖向分割线去掉”）；整点只在顶上刻度尺 .wrul 写数字 */}
           {/* 现在线排在日程块前面：画在块下面，不压块上的字（设计复审 N2） */}
           {isToday && nowMin >= range.h0 * 60 && nowMin <= range.h1 * 60 ? (
             <i className={styles.wnow} style={{ left: `${axisFrac(nowMin, range) * 100}%` }} data-testid="cal-now" />
           ) : null}
-          {first ? (
-            <>
+          {allDay.map((e, i) => (
+            <Fragment key={`all-${e.itemId}`}>
               {' '}
-              <span className={[styles.allDay, colorClass(first.colorIndex), contClass(first.span?.cont)].filter(Boolean).join(' ')} data-item={first.itemId}>
-                <span className={styles.wevTx}>{first.title}</span>
-                {allDayEnd !== '' ? (
+              <span className={[styles.allDay, colorClass(e.colorIndex), contClass(e.span?.cont)].filter(Boolean).join(' ')} style={at(i)} data-item={e.itemId}>
+                <span className={styles.wevTx}>{e.title}</span>
+                {endOf(e) !== '' ? (
                   <>
                     {' '}
-                    <span className={styles.wevOf}>{allDayEnd}</span>
+                    <span className={styles.wevOf}>{endOf(e)}</span>
                   </>
                 ) : null}
               </span>
-            </>
-          ) : null}
+            </Fragment>
+          ))}
           {day?.blocks.map((b) => (
             <Fragment key={`${b.itemId}-${b.startMin}`}>
               {' '}
-              <span
-                className={[styles.wev, colorClass(b.colorIndex), b.rows === 2 ? (b.row === 1 ? styles.r1 : styles.r0) : '', contClass(b.cont)].filter(Boolean).join(' ')}
-                style={{ left: b.startPx - shift, width: b.widthPx }}
-                data-item={b.itemId}
-              >
+              <span className={[styles.wev, colorClass(b.colorIndex), contClass(b.cont)].filter(Boolean).join(' ')} style={at(nAll + b.row, b.startPx - shift, b.widthPx)} data-item={b.itemId}>
                 <span className={styles.wevTx}>{b.title}</span>
                 {b.dayOf ? (
                   <>
@@ -300,24 +294,15 @@ function Lane({
               </span>
             </Fragment>
           ))}
-          {day?.groups
-            .filter((g) => g.more > 0)
-            .map((g) => (
-              <Fragment key={`more-${g.hiddenIds.join(',')}`}>
-                {' '}
-                <span className={styles.wmore} style={{ left: g.moreAtPx - shift }}>
-                  {t('cal.more', { n: g.more })}
-                </span>
-              </Fragment>
-            ))}
-          {day?.todos.map((e) => {
-            const due = dueMins.get(e.itemId);
-            const at = due === undefined ? w - TODO_END_INSET_PX : axisFrac(due, range) * w;
-            const k = Math.round(at);
-            const n = seen.get(k) ?? 0;
-            seen.set(k, n + 1);
-            return <i key={e.itemId} className={`${styles.wtd} ${colorClass(e.colorIndex)}`} style={{ left: at - n * TODO_STEP_PX }} data-todo={e.itemId} />;
-          })}
+          {/* 待办（负责人 11-18“+2的日程跟代办也都显示出来”）：原来只画空心圆，改成“○ 标题”小条；有截止时刻的在那个时刻，没有的在下面从左往右排 */}
+          {day?.todos.map((x) => (
+            <Fragment key={x.entry.itemId}>
+              {' '}
+              <span className={`${styles.wtodo} ${colorClass(x.entry.colorIndex)}`} style={at(nAll + x.row, x.startPx - shift, x.widthPx)} data-todo={x.entry.itemId}>
+                <span className={styles.wevTx}>{x.entry.title}</span>
+              </span>
+            </Fragment>
+          ))}
         </span>
       </button>
     </li>
@@ -335,11 +320,22 @@ function PhoneWeek(p: WeekProps & { range: HourRange; byDay: ReadonlyMap<DateStr
     try {
       const { dayPx, shiftPx } = phoneScale(w, range);
       // 色块写完整标题、写到轨道右端为止（endPx = 显示范围的末端，时间轴只到 22 点时不出轨道）
-      return buildWeek(start, items, { layout: 'phone', tz, minBlockPx: MIN_BLOCK_PX, dayPx, endPx: shiftPx + w, ...(textPx ? { textPx } : {}) });
+      // 待办：有截止时刻的从那个时刻起画；小条宽 = 标题字宽 + 圆圈（没量到字宽时按最短长度）
+      const dueMin = (id: string): number | undefined => p.dueMins.get(id);
+      return buildWeek(start, items, {
+        layout: 'phone',
+        tz,
+        minBlockPx: MIN_BLOCK_PX,
+        dayPx,
+        startPx: shiftPx,
+        endPx: shiftPx + w,
+        dueMin,
+        ...(textPx ? { textPx, todoPx: (title: string) => textPx(title) + TODO_RING_PX } : {}),
+      });
     } catch {
       return dates.map(() => null);
     }
-  }, [start, items, tz, w, range, textPx]);
+  }, [start, items, tz, w, range, textPx, p.dueMins]);
   const dates = weekDates(start);
   return (
     <section aria-label={p.label} data-testid="cal-week" data-layout="phone" data-range={`${range.h0}-${range.h1}`} className={`${common.card} ${styles.pweek}`} style={WEV_VARS}>

@@ -109,11 +109,12 @@ describe('周视图（手机排布）', () => {
     expect(screen.getAllByTestId('cal-now')).toHaveLength(1);
   });
 
-  it('待办画成空心圆、不算进色块；泳道右边不再写件数和“逾”（R-445 周视图 A 定稿没有这一列），读屏照旧写共几项、“有逾期的待办”', () => {
+  it('待办画成“○ 标题”小条（负责人 11-18“+2的日程跟代办也都显示出来”）、不算进色块；泳道右边不再写件数和“逾”（R-445 周视图 A 定稿没有这一列），读屏照旧写共几项、“有逾期的待办”', () => {
     data.todos = [todo('t1', { due: '2026-11-04' }), todo('t2', { due: '2026-11-06', due_time: '15:00' })];
     open('#/cal/week/2026-11-02');
     const l4 = lane('2026-11-04') as HTMLElement;
-    expect(l4.querySelector('[data-todo="t1"]')?.className).toContain(styles.wtd);
+    expect(l4.querySelector('[data-todo="t1"]')?.className).toContain(styles.wtodo);
+    expect(l4.querySelector('[data-todo="t1"]')?.textContent).toBe('待办t1');
     expect(l4.textContent).not.toContain('逾');
     expect(within(l4).getByRole('button').getAttribute('aria-label')).toContain('有逾期的待办');
     const l6 = lane('2026-11-06') as HTMLElement;

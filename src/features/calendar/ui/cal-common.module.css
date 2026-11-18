@@ -2,7 +2,7 @@
    月格（MonthGrid.module.css）、手机周泳道（WeekView.module.css）、电脑周表（DeskWeek.module.css）、日清单（DayList.module.css）都用到的这几样——
    卡片 .card、项目色 .c0～.c6、跨天续条 .contStart / .contEnd、一天的状态（周末 .wkend、补位 .out、放假 .holiday、补班 .workday、今天 .today、选中 .sel）、
    日期数字和“班”标（DayNum.tsx）、读屏隐藏 .srOnly。
-   ⚠ 引入顺序：各组件先引这一份、再引自己那一份（import 写在前面），自己那份同优先级的规则排在后面、压得过这里（如 .wtd 盖掉项目色的底色和竖线）。
+   ⚠ 引入顺序：各组件先引这一份、再引自己那一份（import 写在前面），自己那份同优先级的规则排在后面、压得过这里（如 .wtodo 盖掉项目色的底色和竖线）。
    跨文件不写组合选择器：状态类只在这里设变量，各组件的部件读变量（--day-bg 格子底、--day-dim-fg 周末和补位的灰字、--day-out-dim 补位格色块变淡、
    --cont-l / --cont-r 跨天续条被切开那一端的圆角），所以不靠文件先后。
    项目色 1–6：块底色 --pN、左侧深色竖线 --ps（= --pNs）、字 --on-p（设计审查 H1）；0 = 没有项目（--panel-2 底、--text-2 竖线、--text 字）。
@@ -15,7 +15,7 @@
   overflow: hidden;
 }
 
-/* ───────── 项目色（视觉稿 .lgtag / .wev）：每个 .cN 只定一次竖线色 --ps，底色、竖线、周泳道待办空心圆的边（WeekView .wtd）都读它 ───────── */
+/* ───────── 项目色（视觉稿 .lgtag / .wev）：每个 .cN 只定一次竖线色 --ps，底色、竖线、周泳道待办小条圆圈的边（WeekView .wtodo）都读它 ───────── */
 .c0,
 .c1,
 .c2,

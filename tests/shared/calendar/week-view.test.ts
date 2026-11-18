@@ -30,23 +30,24 @@ describe('手机布局（R-109、R-110）', () => {
   it('10 分钟的事项显示长度不小于 28 px，从自己的开始时刻画起；带简称', () => {
     const d = dayOf(buildWeek(WEEK, { todos: [], events: [timed('a', '2026-10-20', '09:00', SEOUL, 10, { title: '校对稿件' })] }, phone), '2026-10-20');
     expect(d.blocks).toEqual([
-      { itemId: 'a', colorIndex: 0, short: '校对稿件', title: '校对稿件', startMin: 540, endMin: 550, startPx: 540, widthPx: 28, row: 0, rows: 1 },
+      { itemId: 'a', colorIndex: 0, short: '校对稿件', title: '校对稿件', startMin: 540, endMin: 550, startPx: 540, widthPx: 28, row: 0 },
     ]);
-    expect(d.groups).toEqual([{ moreAtPx: 568, more: 0, hiddenIds: [] }]);
+    expect(d.rows).toBe(1);
   });
 
-  it('相隔 5 分钟的两件短事项：一个 row 0、一个 row 1，rows 都是 2，startPx 各自对位', () => {
+  it('相隔 5 分钟的两件短事项：一个 row 0、一个 row 1，这一天共 2 排，startPx 各自对位', () => {
     const d = dayOf(
       buildWeek(WEEK, { todos: [], events: [timed('a', '2026-10-20', '09:00', SEOUL, 10), timed('b', '2026-10-20', '09:05', SEOUL, 10)] }, phone),
       '2026-10-20',
     );
-    expect(d.blocks.map((b) => [b.itemId, b.startPx, b.row, b.rows])).toEqual([
-      ['a', 540, 0, 2],
-      ['b', 545, 1, 2],
+    expect(d.blocks.map((b) => [b.itemId, b.startPx, b.row])).toEqual([
+      ['a', 540, 0],
+      ['b', 545, 1],
     ]);
+    expect(d.rows).toBe(2);
   });
 
-  it('三件同时段的短事项：第 3 件不画，这一组 more = 1，“+N”写在最后一个可见块右边', () => {
+  it('三件同时段的短事项：全部画出来，第 3 件放第三排（负责人 11-18“周历目的就是将全部日程都能一眼看清楚”，不再收成“+N”）', () => {
     const d = dayOf(
       buildWeek(
         WEEK,
@@ -62,8 +63,12 @@ describe('手机布局（R-109、R-110）', () => {
       ),
       '2026-10-20',
     );
-    expect(d.blocks.map((b) => b.itemId)).toEqual(['a', 'b']);
-    expect(d.groups).toEqual([{ moreAtPx: 542 + 28, more: 1, hiddenIds: ['c'] }]);
+    expect(d.blocks.map((b) => [b.itemId, b.row])).toEqual([
+      ['a', 0],
+      ['b', 1],
+      ['c', 2],
+    ]);
+    expect(d.rows).toBe(3);
   });
 
   it('上排空出来以后第 3 件放回上排（不是一律不画）', () => {
@@ -83,15 +88,15 @@ describe('手机布局（R-109、R-110）', () => {
       '2026-10-20',
     );
     // a [540,568]、b [560,620] 交叠 → b 下排；c 从 570 开始，上排 568 已空 → 上排
-    expect(d.blocks.map((b) => [b.itemId, b.row, b.rows])).toEqual([
-      ['a', 0, 2],
-      ['b', 1, 2],
-      ['c', 0, 2],
+    expect(d.blocks.map((b) => [b.itemId, b.row])).toEqual([
+      ['a', 0],
+      ['b', 1],
+      ['c', 0],
     ]);
-    expect(d.groups).toEqual([{ moreAtPx: 620, more: 0, hiddenIds: [] }]);
+    expect(d.rows).toBe(2);
   });
 
-  it('没有重叠的块 rows = 1，各成一组；首尾正好相接不算重叠', () => {
+  it('没有重叠的块都在第一排；首尾正好相接不算重叠', () => {
     const d = dayOf(
       buildWeek(
         WEEK,
@@ -100,12 +105,12 @@ describe('手机布局（R-109、R-110）', () => {
       ),
       '2026-10-20',
     );
-    expect(d.blocks.map((b) => [b.itemId, b.row, b.rows])).toEqual([
-      ['a', 0, 1],
-      ['b', 0, 1],
-      ['c', 0, 1],
+    expect(d.blocks.map((b) => [b.itemId, b.row])).toEqual([
+      ['a', 0],
+      ['b', 0],
+      ['c', 0],
     ]);
-    expect(d.groups).toHaveLength(3);
+    expect(d.rows).toBe(1);
   });
 
   it('全天事项不进时间轴，计入“全天 N”；N = 1 时带简称', () => {
@@ -121,7 +126,7 @@ describe('手机布局（R-109、R-110）', () => {
       },
       phone,
     );
-    expect({ ...dayOf(days, '2026-10-21'), allDay: ad(dayOf(days, '2026-10-21').allDay) }).toEqual({ date: '2026-10-21', allDay: { count: 1, short: '회의준비', ids: ['x'], kinds: ['allDay'] }, todos: [], blocks: [], groups: [] });
+    expect({ ...dayOf(days, '2026-10-21'), allDay: ad(dayOf(days, '2026-10-21').allDay) }).toEqual({ date: '2026-10-21', allDay: { count: 1, short: '회의준비', ids: ['x'], kinds: ['allDay'] }, todos: [], blocks: [], rows: 0 });
     expect(ad(dayOf(days, '2026-10-22').allDay)).toEqual({ count: 2, short: null, ids: ['z', 'y'], kinds: ['allDay', 'allDay'] });
     expect(dayOf(days, '2026-10-20').allDay.count).toBe(0);
   });
@@ -256,15 +261,15 @@ describe('待办（和前端 A 对过的接口：手机 todos、电脑并进全�
   it('手机：截止日那天的 todos，kind 为 todo、按创建时间排；全天和时间轴不含待办', () => {
     const days = buildWeek(WEEK, { events, todos }, phone);
     const d = dayOf(days, '2026-10-20');
-    expect(d.todos.map((e) => [e.itemId, e.kind])).toEqual([
+    expect(d.todos.map((x) => [x.entry.itemId, x.entry.kind])).toEqual([
       ['t0', 'todo'],
       ['t1', 'todo'],
     ]);
-    expect(d.todos[0]?.project).toBe('工作');
+    expect(d.todos[0]?.entry.project).toBe('工作');
     expect(d.allDay.entries.map((e) => e.itemId)).toEqual(['all']);
     expect(d.blocks.map((b) => b.itemId)).toEqual(['tm']);
-    expect(dayOf(days, '2026-10-25').todos.map((e) => e.itemId)).toEqual(['sun']);
-    expect(days.flatMap((x) => x.todos.map((e) => e.itemId))).not.toContain('out');
+    expect(dayOf(days, '2026-10-25').todos.map((x) => x.entry.itemId)).toEqual(['sun']);
+    expect(days.flatMap((x) => x.todos.map((y) => y.entry.itemId))).not.toContain('out');
   });
 
   it('电脑：待办并进全天那一行，排在全天日程后面', () => {
@@ -285,13 +290,36 @@ describe('待办（和前端 A 对过的接口：手机 todos、电脑并进全�
     const days = buildWeek(WEEK, items, phone);
     for (const d of days) {
       const fromMonth = dayEntries(d.date, items, SEOUL).filter((e) => e.kind === 'todo');
-      expect(d.todos).toEqual(fromMonth);
+      expect(d.todos.map((x) => x.entry)).toEqual(fromMonth);
     }
   });
 
   it('待办截止日是浮动日期，换设备时区也不挪天', () => {
     const d = dayOf(buildWeek(WEEK, { events: [], todos }, { ...phone, tz: LA }), '2026-10-20');
-    expect(d.todos.map((e) => e.itemId)).toEqual(['t0', 't1']);
+    expect(d.todos.map((x) => x.entry.itemId)).toEqual(['t0', 't1']);
+  });
+
+  it('手机：待办排成小条（负责人 11-18“+2的日程跟代办也都显示出来”）：有截止时刻的和时刻块一起排在那个时刻，没有的在时刻那几排下面从左往右排、放不下换排', () => {
+    const items = {
+      events: [timed('tm', '2026-10-20', '09:00', SEOUL, 60)],
+      todos: [
+        todo({ id: 'a', due: '2026-10-20', created_at: 1 }),
+        todo({ id: 'b', due: '2026-10-20', created_at: 2 }),
+        todo({ id: 'c', due: '2026-10-20', created_at: 3 }),
+        todo({ id: 'at9', due: '2026-10-20', created_at: 4 }),
+      ],
+    };
+    // 轨道从 8 点（480）到 22 点（1320），待办小条各 300 宽：一排放两条（480～780、786～1086），第三条换排
+    const opts = { ...phone, startPx: 480, endPx: 1320, dueMin: (id: string) => (id === 'at9' ? 570 : undefined), todoPx: () => 300 };
+    const d = dayOf(buildWeek(WEEK, items, opts), '2026-10-20');
+    expect(d.blocks.map((b) => [b.itemId, b.row])).toEqual([['tm', 0]]);
+    expect(d.todos.map((x) => [x.entry.itemId, x.startPx, x.widthPx, x.row])).toEqual([
+      ['a', 480, 300, 2],
+      ['b', 786, 300, 2],
+      ['c', 480, 300, 3],
+      ['at9', 570, 300, 1],
+    ]);
+    expect(d.rows).toBe(4);
   });
 });
 
@@ -305,7 +333,7 @@ describe('删除、撤销的判断（前端 A 会审：和月历同一条 isLive
     };
     const p = dayOf(buildWeek(WEEK, items, phone), '2026-10-20');
     expect(p.blocks.map((b) => b.itemId)).toEqual(['fresh']);
-    expect(p.todos.map((e) => e.itemId)).toEqual(['td']);
+    expect(p.todos.map((x) => x.entry.itemId)).toEqual(['td']);
     const d = dayOf(buildWeek(WEEK, items, desk), '2026-10-20');
     expect(d.blocks.map((b) => b.itemId)).toEqual(['fresh']);
     expect(d.allDay.entries.map((e) => e.itemId)).toEqual(['td']);

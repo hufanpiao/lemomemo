@@ -77,43 +77,35 @@
   text-overflow: ellipsis;
 }
 
-/* 轨道里上下怎么排，全从 --cal-bar-h-lane（全天条高 16；R-472 月格条压到 13 用的是 --cal-bar-h，泳道不跟着变）和排间缝 --row-gap 推出来：
-   • 全天条在顶上，离上沿一道缝（4～20）；单排时刻块高 --blk-h = 条高 + 一道缝（20）；
-   • 上下两排时各高 --blk2-h（两块加中间半道缝正好等于两个单排块：19），上排离上沿 --two-top：没有全天条时一道缝（4），有时让出全天条再加一道缝（24）；
-   • 单排时刻块离上沿 --trk-top：定稿实测值 16 / 27（有全天条），和条高、缝没有固定关系，照实测写；
-   待办空心圆竖直对着单排时刻块的中线 */
+/* 轨道里一排一排往下堆（负责人 11-18“周历目的就是将全部日程都能一眼看清楚”：原来最多两排、多的收成“+N”，整块换成这一种）：
+   • 每排高 --slot = 条高 --cal-bar-h-lane（16）+ 排间缝 --row-gap；全天日程占前几排，时刻块和待办接着往下，元素上的 --r 是第几排；
+   • 轨道高至少是原来泳道的高（--cal-lane-h 减上下内边距），排多了往下长、整条泳道跟着变高；
+   • 排数少时整叠上下居中（--off） */
 .trk {
   --row-gap: 4px;
-  --blk-h: calc(var(--cal-bar-h-lane) + var(--row-gap));
-  --blk2-gap: calc(var(--row-gap) / 2);
-  --blk2-h: calc(var(--blk-h) - var(--blk2-gap) / 2);
-  --trk-top: 16px;
-  --two-top: var(--row-gap);
+  --slot: calc(var(--cal-bar-h-lane) + var(--row-gap));
+  --base-h: calc(var(--cal-lane-h) - 2 * var(--lane-py));
+  --stack-h: calc(var(--n, 0) * var(--slot));
+  --off: max(var(--row-gap), (var(--base-h) - var(--stack-h)) / 2);
 
   position: relative;
-  height: calc(var(--cal-lane-h) - 2 * var(--lane-py));
+  height: max(var(--base-h), var(--stack-h) + 2 * var(--row-gap));
 }
 
-.trkAll {
-  --trk-top: 27px;
-  --two-top: calc(2 * var(--row-gap) + var(--cal-bar-h-lane));
-}
-
-/* 全天日程：轨道顶上一整条（R-445 周视图 A；跨天的每天都画，右端写“2/3”，被切开的一端见 cal-common .contStart / .contEnd） */
-.allDay {
+/* 全天日程整条、时刻块、待办小条：都按排号 --r 往下放，高度同条高 */
+.allDay,
+.wev,
+.wtodo {
   position: absolute;
-  top: var(--row-gap);
-  right: 0;
-  left: 0;
+  top: calc(var(--off) + var(--r, 0) * var(--slot) + var(--row-gap) / 2);
   height: var(--cal-bar-h-lane);
   line-height: var(--cal-bar-h-lane);
 }
 
-.wev {
-  position: absolute;
-  top: var(--trk-top);
-  height: var(--blk-h);
-  line-height: var(--blk-h);
+/* 全天日程：轨道里一整条（R-445 周视图 A；跨天的每天都画，右端写“2/3”，被切开的一端见 cal-common .contStart / .contEnd） */
+.allDay {
+  right: 0;
+  left: 0;
 }
 
 /* 圆角和月格色块 .mark 同一套：读 cal-common 的 --cont-l / --cont-r，跨天续条被切开的那一端直角（负责人 11-18 弹窗定“续上的那端改直角”） */
@@ -125,21 +117,6 @@
   border-radius: var(--cont-l, 3px) var(--cont-r, 3px) var(--cont-r, 3px) var(--cont-l, 3px);
   font-size: var(--fs-11);
   white-space: nowrap;
-}
-
-/* 上下两排 */
-.r0,
-.r1 {
-  height: var(--blk2-h);
-  line-height: var(--blk2-h);
-}
-
-.r0 {
-  top: var(--two-top);
-}
-
-.r1 {
-  top: calc(var(--two-top) + var(--blk2-h) + var(--blk2-gap));
 }
 
 .wevTx {
@@ -158,26 +135,29 @@
   font-size: var(--fs-10);
 }
 
-/* “+2”：等宽数字，同月格 .more（R-436） */
-.wmore {
-  position: absolute;
-  bottom: -2px;
-  color: var(--text-2);
-  font-family: var(--f-mono);
-  font-size: var(--fs-9-5);
+/* 待办小条“○ 标题”（负责人 11-18“+2的日程跟代办也都显示出来”，原来只画空心圆）：不填项目底色，和日程色块分开；
+   圆圈边色取项目竖线色 --ps（cal-common .c0～.c6 设），项目色类的底色和竖线由这里盖掉（同优先级，这份排在后面） */
+.wtodo {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  overflow: hidden;
+  padding: 0 var(--wev-pr) 0 2px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  box-shadow: none;
+  color: var(--text);
+  font-size: var(--fs-11);
+  white-space: nowrap;
 }
 
-/* 待办空心圆：边色取项目竖线色 --ps（cal-common .c0～.c6 设）；项目色类的底色和竖线由这里盖掉（同优先级，这份排在后面） */
-.wtd {
-  position: absolute;
-  top: calc(var(--trk-top) + var(--blk-h) / 2);
-  width: 9px;
-  height: 9px;
-  margin: -5px 0 0 -5px;
+.wtodo::before {
+  flex: none;
+  width: 8px;
+  height: 8px;
   border: 1.5px solid var(--ps, var(--text-2));
   border-radius: var(--r-pill);
-  background: var(--panel);
-  box-shadow: none;
+  content: '';
 }
 
 /* 现在线 */
