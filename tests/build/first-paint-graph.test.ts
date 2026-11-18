@@ -98,6 +98,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/platform/look.ts': '皮肤、深浅色（ADR-008，B6 皮肤 11-13）：其实首屏期间就下载（main.tsx 入口第一行懒加载，按本机缓存套到 <html> 上）；它和登录页、设置页共用一块，manifest 键带哈希（_look-<哈希>.js），进不了 FIRST_PAINT_DYNAMIC。这一块只有它自己（不引 shared 以外的东西，没有 zod、农历、动画库），下载量由 e2e b2-first-screen-budget.spec.ts 按页面时钟算进 150 KB',
   'src/platform/diag-boot.ts': '非正式版诊断启动件（11-11 启动链路整改收成这一个入口）：只在非正式版冷启动时下载，正式构建整块摇掉（check_no_probe 兜底）；只起运行日志（启动画面颜色诊断、冷启动时间线 11-12 视口清理删掉）',
   'src/platform/vh-gapfix.ts': 'R-371 冷启动高度校正的后两次触发（等底栏挂上、键盘真收了）：只在 iOS 主屏幕版冷启动时下载（判断和早试在首屏的 vh-gapfix-gate.ts）；电脑、安卓、浏览器里打开都不下载',
+  'src/features/vault/preload.ts': '隐私记后台预加载（11-19“隐私记感觉没变快”）：首屏画完、空闲时 app/features.ts 的 preloadPages 才下载，首屏期间不下载',
   'src/features/vault/ui/VaultParts.tsx': 'B5 隐私记给别的功能用的几块（随手记入口行、移到隐私记、设置 › 隐私记）：随手记页、设置页挂上以后才下载，和那两页一样不在首屏的静态闭包里',
   'src/features/notes/ui/NotesSurface.tsx': 'B5 隐私记页用的随手记整套界面（notes/index.ts 的 lazy 出口）：只在隐私记解锁后挂，首屏不下载',
   'src/core/todo-done.ts': '今天页打勾第一次点时才下载（useToday，11-15 首屏 150.3 KB 超线后挪出；今天页出现之前用不到）',
