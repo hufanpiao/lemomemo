@@ -12,18 +12,20 @@ import { FAKE_USER_ID, expect, test } from './session-fixture.ts';
 const bar = (page: Page) => page.getByTestId('tabbar');
 const tab = (page: Page, name: string) => bar(page).locator(`a[data-tab="${name}"]`);
 
-/** 等新页 main 的淡入出来，暂停在 at 毫秒处；返回暂停时的不透明度（没等到是 -1）。同时确认没有 View Transition */
+/** 等新页 main 里的切页淡入出来（11-19 头像整块重写起，有头像的页淡入加在 main 里不含头像的那几块上，不在 main 自己身上，page-swap.ts 的 fadeTargets），
+ *  暂停在 at 毫秒处；返回暂停时的不透明度（没等到是 -1）。同时确认没有 View Transition */
 const holdAt = (page: Page, at: number) =>
   page
     .waitForFunction(
       (ms) => {
         if (document.getAnimations().some((x) => String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition'))) return 'vt';
-        const a = document.querySelector('main')?.getAnimations() ?? [];
+        const a = document.querySelector('main')?.getAnimations({ subtree: true }) ?? [];
         for (const x of a) {
           x.pause();
           x.currentTime = ms;
         }
-        return a.length > 0 ? Number(getComputedStyle(document.querySelector('main') as Element).opacity) : null;
+        const el = (a[0]?.effect as KeyframeEffect | null)?.target;
+        return a.length > 0 && el ? Number(getComputedStyle(el).opacity) : null;
       },
       at,
       { timeout: 2000, polling: 4 },
@@ -50,7 +52,7 @@ const sinceTab = (page: Page, ms: number) =>
   }, ms);
 const finishAll = (page: Page) =>
   page.evaluate(() => {
-    for (const x of document.querySelector('main')?.getAnimations() ?? []) x.finish();
+    for (const x of document.querySelector('main')?.getAnimations({ subtree: true }) ?? []) x.finish();
   });
 
 test.describe('页签互切淡入进行中点页面内容（FA-7 R6、L17，方案 B）', () => {

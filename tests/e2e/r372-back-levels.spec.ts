@@ -1,5 +1,6 @@
 // R-372（负责人 11-10“整体往左滑应该是返回上一个层级，不是返回上一个操作啊！！”）：真浏览器里点底栏、翻月、进设置，
-// 再真后退（page.goBack，和 iPhone 左边缘侧滑同一条历史）。① 其他页签左滑回今天；② 日历里翻月算同一层；设置“‹ 今天”退一步不新压
+// 再真后退（page.goBack，和 iPhone 左边缘侧滑同一条历史）。① 四个主页面互切一律原地换、不压历史（负责人 11-18 推翻原来的“其他页签左滑回今天”：
+// “之前左滑是回到主页，4个页面切换只在退回到主页面时来回切”）；② 日历里翻月算同一层；设置“‹ 今天”退一步不新压
 // K6 起 /app/ 没有会话就跳 /app/auth/：整个文件用 session-fixture 写假会话
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
@@ -14,29 +15,23 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('main[data-feature="today"]')).toBeVisible();
 });
 
-test('今天 → 日历 → 待办 → 随手记：只压一条，后退一步回今天', async ({ page }) => {
+test('今天 → 日历 → 待办 → 随手记 → 今天：一条都不压（负责人 11-18 主页面互切不压历史）', async ({ page }) => {
   const base = await len(page);
-  for (const name of ['calendar', 'todos', 'notes']) {
+  for (const name of ['calendar', 'todos', 'notes', 'today']) {
     await tab(page, name).click();
     await expect(page).toHaveURL(new RegExp(`#/${name}$`));
     await expect(tab(page, name)).toHaveAttribute('aria-current', 'page');
+    expect(await len(page), name).toBe(base);
   }
-  expect(await len(page)).toBe(base + 1);
-  await page.goBack();
-  await expect(page).toHaveURL(/#\/today$/);
-  await expect(page.locator('main[data-feature="today"]')).toBeVisible();
 });
 
-test('日历翻 3 个月：后退一步回今天', async ({ page }) => {
+test('今天 → 日历 → 翻 3 个月：一条都不压（翻月同一层、页签互切原地换）', async ({ page }) => {
   const base = await len(page);
   await tab(page, 'calendar').click();
   await expect(page.getByTestId('cal-next')).toBeVisible();
   for (let i = 0; i < 3; i++) await page.getByTestId('cal-next').click();
   await expect(page).toHaveURL(/#\/cal\/month\//);
-  expect(await len(page)).toBe(base + 1);
-  await page.goBack();
-  await expect(page).toHaveURL(/#\/today$/);
-  await expect(page.locator('main[data-feature="today"]')).toBeVisible();
+  expect(await len(page)).toBe(base);
 });
 
 test.describe('头像进设置', () => {

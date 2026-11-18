@@ -9,7 +9,7 @@ import '../styles/skins/simple.css';
 import '../styles/skins/glass.css';
 import '../styles/base.css';
 import { watchAccount } from '../core/account.ts';
-import { defaultExitDeps, exitOnSessionLoss, REAUTH_GRACE_MS, type ExitDeps } from '../core/device-exit.ts';
+import type * as DeviceExit from '../core/device-exit.ts';
 import { hasAuthLoss, readReauth } from '../platform/auth-loss-store.ts';
 import { coldStart } from '../core/boot.ts';
 import { collection } from '../core/store.ts';
@@ -191,13 +191,14 @@ async function start(): Promise<void> {
   // 换账号监听在 render 之前挂（K6 复审 N4）：挂上时同步再比一次会话，coldStart 期间已经换了账号或退出就不渲染，直接走换账号流程
   // 会话没了（本页 SIGNED_OUT、别的标签页退出）走退出出口 core/device-exit.ts：清库时关掉连接后按库名删库（不留库文件，各出口都这样）；
   // 这两路原来就不广播 reset（别的标签页各自收得到 storage 事件）
-  const lossExit: ExitDeps = {
-    ...defaultExitDeps,
+  // 退出出口本体会话真没了才下载（11-19 首屏超 150 KB 挪出首屏）：本来就要等 REAUTH_GRACE_MS（1 秒）再判断，多等这一下下载不改结果
+  const lossExit = (m: typeof DeviceExit): DeviceExit.ExitDeps => ({
+    ...m.defaultExitDeps,
     getBoot: () => boot,
     clearLogs,
     broadcastReset: () => undefined,
     log: logEvent,
-  };
+  });
   watchAccount(boot, {
     clearCacheStorage,
     onAuthUser,
@@ -206,7 +207,8 @@ async function start(): Promise<void> {
     // 本页收到 SIGNED_OUT：判断会话归谁的同一刻就删本机会话，回登录页前只在会话还是那一个时再删（K6-signedout-sugg2 ①）
     takeSession: () => takeLocalSession(),
     // R-382：别的标签页删了会话，等它写好 lemo.reauth 再判断是登录过期还是退出了
-    onSessionLost: (loss) => exitOnSessionLoss(loss, lossExit, REAUTH_GRACE_MS),
+    // 下载失败（离线又没缓存到这一块）：会话已经没了，直接回登录页
+    onSessionLost: (loss) => void import('../core/device-exit.ts').then((m) => m.exitOnSessionLoss(loss, lossExit(m), m.REAUTH_GRACE_MS)).catch(() => goToAuth()),
     // 清库失败（onFailed 不填）同样重新载入：冷启动会在读写任何东西之前再清一次，再失败就降级成 unavailable、不渲染缓存
     // 不删本机会话：会话是各标签页共用的，删了会把别的标签页刚登录的新账号也登出
     onSwitched: reloadPage,
