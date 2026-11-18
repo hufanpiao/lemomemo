@@ -18,8 +18,12 @@ export interface CheckCircleProps {
    * 由 ReadonlyMark.tsx 的 RoCheckCircle 拼进 label：那句词条不进首屏（首屏预算 150 KB，11-06），这里只用传进来的 label
    */
   readOnly?: boolean;
-  /** 不播勾选动效（子任务一天勾上百次，R-350）：直接到位；样式在 CheckCircle.module.css 的 .face[data-still] */
-  still?: boolean;
+  /**
+   * 子任务那一档（负责人 11-18“代办子任务点击完成时也加一个动效，用乙2（新）”，推翻 R-350 的“子任务不播动画”）：
+   * 按下、回弹同主待办，小点换成 10 个淡点（更小、扩得近）、没有细正圆；样式在 CheckCircle.module.css 的 .sparkSoft。
+   * 勾上一直是亮柠檬黄底、深色勾（同 data-fresh；负责人 11-18“乙2（新）那个动效有暗黄吗？”：子任务勾完留在原地，没有暗黄）
+   */
+  soft?: boolean;
   /**
    * 子任务做到几成（负责人 11-17 选 T-A“方框里用小表情表示子任务做到几成”）：没勾上、done 大于 0 时方框从下往上按比例填淡柠檬黄，
    * 中间一张“小脸”——不到一半一个点（起步）、一半及以上两个点（大半）；子任务全做完、主待办还没勾（编辑页改过、别处同步来的）时
@@ -43,15 +47,17 @@ export function partStage(done: number, total: number): 0 | 1 | 2 | 3 {
 
 /** 勾上那一下长出来的一圈小点（勾选完成时间线第 ③ 段，负责人 11-18 定稿乙4）：14 个，每 360/14 度一个 */
 const SPARKS = Array.from({ length: 14 }, (_, i) => (360 / 14) * i);
+/** 子任务（soft，乙2）：10 个淡点 */
+const SPARKS_SOFT = Array.from({ length: 10 }, (_, i) => (360 / 10) * i);
 
 /** 抬手离按下点不超过这么远才算轻点（再远是在滑列表、拖行） */
 const TAP_SLOP_PX = 10;
 /** 抬手切换以后这么久之内系统补发的 click 不再切换：日志里补发最晚 0.26 s，留足余量；人有意的第二下自己有 pointerup，不受影响 */
 const CLICK_SWALLOW_MS = 800;
 
-export function CheckCircle({ checked, label, onChange, testId, readOnly = false, still = false, progress, fresh = false }: CheckCircleProps) {
+export function CheckCircle({ checked, label, onChange, testId, readOnly = false, soft = false, progress, fresh = false }: CheckCircleProps) {
   const state = checked ? 'on' : 'off';
-  // 回弹（画面层 .face 上的 .pop）、一圈小点和细正圆只在用户亲手勾上的那一下开始（key 换一次重播一次）；挂载时已经勾上的、只读拦下的、子任务（still）都不开始。
+  // 回弹（画面层 .face 上的 .pop）、一圈小点和细正圆只在用户亲手勾上的那一下开始（key 换一次重播一次）；挂载时已经勾上的、只读拦下的都不开始。
   // 清零有两处，不靠“动画一定会播完”：画面层自己的回弹播完（--dur-done-pop 420ms，比小点 --dur-done-spark-at + --dur-spark = 410ms、
   // 细正圆 345ms 都晚，是最后结束的）；方框变回没勾上（点回去、撤销、写入失败照数据退回，不管动画播完没有）。
   // 所以减弱动态效果时（CSS 里这几段都是 animation: none，animationend 永远不来——独立评审提过“清不掉、之后会重播”）
@@ -70,7 +76,7 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
   const labelRef = useRef<HTMLLabelElement>(null);
   const swallowUntil = useRef(0);
   const apply = (v: boolean): void => {
-    if (v && !still && !readOnly) setPop((n) => n + 1);
+    if (v && !readOnly) setPop((n) => n + 1);
     onChange(v);
   };
   // 手指抬起就切换（负责人 11-18“待办点击完成还是会有点完延迟或者不执行”）：运行日志 preview.405 里 131 次轻点，pointerup 都是当下到，
@@ -107,12 +113,11 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
     window.addEventListener('pointercancel', off, true);
   };
   return (
-    <label ref={labelRef} className={styles.checkBox} data-fresh={fresh && checked ? '' : undefined} onPointerDown={press}>
+    <label ref={labelRef} className={styles.checkBox} data-fresh={(fresh || soft) && checked ? '' : undefined} onPointerDown={press}>
       {/* 画面层：按下缩放、回弹缩这一层，外层 label 的 44 点击区不缩（11-18 点不中，见 CheckCircle.module.css 的 .face） */}
       <span
         ref={faceRef}
         className={popping ? `${styles.face} ${styles.pop}` : styles.face}
-        data-still={still || undefined}
         onAnimationEnd={(e) => {
           if (e.target === e.currentTarget) setPop(0);
         }}
@@ -134,9 +139,9 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
         <span className={styles.tick} data-state={state} aria-hidden="true" />
         {popping ? (
           <span key={pop} className={styles.burst} aria-hidden="true">
-            <b className={styles.ring} />
-            {SPARKS.map((a) => (
-              <i key={a} style={{ '--a': `${a}deg` } as CSSProperties} />
+            {soft ? null : <b className={styles.ring} />}
+            {(soft ? SPARKS_SOFT : SPARKS).map((a) => (
+              <i key={a} className={soft ? styles.sparkSoft : styles.spark} style={{ '--a': `${a}deg` } as CSSProperties} />
             ))}
           </span>
         ) : null}

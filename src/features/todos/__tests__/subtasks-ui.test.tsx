@@ -17,6 +17,8 @@ vi.mock('../../../core/edit-save.ts', async (orig) => ({
 const logs = vi.hoisted(() => [] as string[]);
 vi.mock('../../../platform/run-log-api.ts', async (orig) => ({ ...(await orig<object>()), rlog: (m: string) => void logs.push(m) }));
 vi.mock('../../reminders/index.ts', () => ({ UnsyncedRemindMark: () => null }));
+const fxs = vi.hoisted(() => [] as string[]);
+vi.mock('../../../platform/fx-api.ts', () => ({ fx: (k: string) => void fxs.push(k) }));
 
 const { default: TodosPage } = await import('../ui/TodosPage.tsx');
 const { default: InlineSubtasks } = await import('../ui/InlineSubtasks.tsx');
@@ -128,7 +130,7 @@ describe('列表页卡片（5.1、5.4、6.2）', () => {
     expect(a?.getAttribute('data-sort-id')).toBe('a');
     expect(a?.hasAttribute('data-sort-off')).toBe(false);
     expect(b?.hasAttribute('data-sort-off'), '只读的不能拖').toBe(true);
-    const text = within(a as HTMLElement).getByText(/./, { selector: 'button[aria-hidden="true"]' });
+    const text = (a as HTMLElement).querySelector('button[aria-hidden="true"]') as HTMLElement;
     fireEvent.pointerDown(text, { pointerId: 1, button: 0, clientX: 100, clientY: 100, pointerType: 'touch', isPrimary: true });
     await act(() => new Promise((r) => setTimeout(r, 500)));
     expect(document.querySelector('[data-sort-held]')?.getAttribute('data-sort-id')).toBe('a');
@@ -191,11 +193,26 @@ describe('今天页、日历的就地展开（InlineSubtasks，R-442）', () => 
     expect(save.calls.map((c) => c.slice(0, 3))).toEqual([['patch', 'todo_items', 'c'], ['patch', 'todos', 't1']]);
   });
 
+  it('勾上子任务（负责人 11-18“声音震动跟正常待办一样”“用乙2（新）”）：调 fx(done)，方框播 10 个淡点、没有细圆线；取消勾选不响', () => {
+    fxs.length = 0;
+    render(<InlineSubtasks {...props()} />);
+    fireEvent.click(screen.getByTestId('today-fold-t1'));
+    fireEvent.click(screen.getByTestId('today-sub-c'));
+    expect(fxs).toEqual(['done']);
+    const box = screen.getByTestId('today-sub-c').closest('label')!;
+    expect(box.querySelectorAll('i')).toHaveLength(10);
+    expect(box.querySelector('b')).toBeNull();
+    fireEvent.click(screen.getByTestId('today-sub-c'));
+    expect(fxs).toEqual(['done']);
+  });
+
   it('主待办只读：勾子任务交给页面 onBlock，不写', () => {
+    fxs.length = 0;
     const p = props({ readOnly: true });
     render(<InlineSubtasks {...p} />);
     fireEvent.click(screen.getByTestId('today-fold-t1'));
     fireEvent.click(screen.getByTestId('today-sub-b'));
+    expect(fxs).toEqual([]);
     expect(p.onBlock).toHaveBeenCalled();
     expect(save.calls).toHaveLength(0);
   });

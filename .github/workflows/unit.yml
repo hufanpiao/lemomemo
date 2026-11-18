@@ -113,6 +113,12 @@ jobs:
           git fetch --no-tags --filter=blob:none --unshallow origin || true
           python -I build/check_rewrite.py --range "$RANGE"
 
+      # 负责人 11-18“提交时硬拦加上”：改到动效、外观文件，提交说明要带“参考对照：”“参考外改动：”（本机 .githooks/commit-msg 同一条规则）
+      - name: 动效外观改动要有参考对照
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+        run: python -I build/check_reference.py --range "$RANGE"
+
       - name: 设计令牌
         run: python -I build/tokens.py --check
 

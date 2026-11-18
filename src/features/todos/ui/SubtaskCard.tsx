@@ -6,8 +6,10 @@
 //   点子任务的字和点主标题一样进编辑页（那个按钮不进 Tab、读屏不读，读屏走勾选框，名字就是子任务标题）
 // • 勾下去当下就按“刚点的值”画（不等保存回来，同主待办的 shown），集合跟上以后丢掉
 // • 主待办只读（或这一项只读）：圆圈变淡，点了由页面拦下出“这条要新版本才能修改 · 更新”
-// • 不播动画：圆圈去掉过渡、进度段直接变色（Subtasks.module.css 的 .subs）；收起、展开直接切换
+// • 勾上的动效（负责人 11-18“代办子任务点击完成时也加一个动效，用乙2（新）”“声音震动跟正常待办一样”）：方框传 soft（按下、回弹同主待办，10 个淡点、没有细圆线），
+//   声音震动由 InlineSubtasks 的 tick 调 fx('done')；进度段直接变色、收起展开直接切换照旧
 import { useId } from 'react';
+import listCss from '../../../kit/components/List.module.css';
 import { RoCheckCircle } from '../../../kit/components/ReadonlyRow.tsx';
 import { SortBox, sortRowClass, useSortDrag, type SortDrop } from '../../../kit/components/SortDrag.tsx';
 import { AppearItem, AppearList } from '../../../motion/components.ts';
@@ -51,7 +53,7 @@ export function SubtaskCard(p: SubtaskCardProps) {
         {list.map((i) => (
           <AppearItem key={i.id} className={`${s.item} ${sortRowClass}`} {...sd.attrs(i.id, !drop || p.readOnly(i.id))} data-done={shown(i) ? '' : undefined}>
             <RoCheckCircle
-              still
+              soft
               readOnly={p.readOnly(i.id)}
               checked={shown(i)}
               label={i.title}
@@ -62,7 +64,11 @@ export function SubtaskCard(p: SubtaskCardProps) {
               testId={`${px}-sub-${i.id}`}
             />
             <button type="button" className={s.itemText} tabIndex={-1} aria-hidden="true" onClick={p.onOpen}>
-              {i.title}
+              {/* 删除线照乙2 从左往右画（同主待办 kit TodoRow 的 .strike / .line：勾上当下起 --dur-strike 画满，取消直接收回） */}
+              <span className={listCss.strike}>
+                {i.title}
+                <span className={listCss.line} data-done={shown(i) ? '' : undefined} />
+              </span>
             </button>
           </AppearItem>
         ))}

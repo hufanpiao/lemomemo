@@ -190,7 +190,19 @@ function EditRow({ it, done, first, last, off, sort, onTick, onRename, onDelete,
           </svg>
         </button>
       )}
-      <CheckCircle still checked={done} label={it.title} readOnly={off} onChange={(v) => (off ? undefined : onTick(v))} testId={`todo-sub-done-${it.id}`} />
+      {/* 编辑页的子任务勾上也一样：乙2 动效（soft）+ 音效甲 + 震（负责人 11-18“代办子任务点击完成时也加一个动效，用乙2（新）”“声音震动跟正常待办一样”） */}
+      <CheckCircle
+        soft
+        checked={done}
+        label={it.title}
+        readOnly={off}
+        onChange={(v) => {
+          if (off) return;
+          if (v) fx('done');
+          onTick(v);
+        }}
+        testId={`todo-sub-done-${it.id}`}
+      />
       <TextInput
         className={s.editInput}
         aria-label={t('items.itemLabel', title)}

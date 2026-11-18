@@ -1,5 +1,5 @@
 /* 待办子任务（R-350 方案 5.1～5.3、6.2）：列表卡片里摊开的勾选清单、分段进度条、收起按钮；待办页、今天页、日历日清单就地展开的卡片（R-442、R-443）；编辑页“子任务”区。只用令牌（A11）
-   • 勾子任务一天上百次：不播动画——kit CheckCircle 传 still（SubtaskCard、SubtaskEditor），进度段直接变色
+   • 勾子任务（负责人 11-18 推翻 R-350 的“不播动画”，“用乙2（新）”）：kit CheckCircle 传 soft（SubtaskCard、SubtaskEditor），进度段直接变色
    • 方框比主待办小一号（--check-size: 18px，R-433 同样是圆角方框），点击区照样 44 × 44（kit CheckCircle 的外扩区）
    • 进度段（R-436 确认图第 7 条）：没勾的是暗灰实心细条 --step-off，勾上的填强调色；段的颜色只是装饰，几项勾了由后面的“2/4”文字和 progressbar 的 aria-valuenow 说
    • 勾上的子任务：方框是 kit CheckCircle 的勾上样子（--check-on-bg、--check-on-fg，同已完成的待办），文字淡出成 --text-3、加删除线
@@ -76,6 +76,9 @@
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  /* 勾上、取消时标题颜色渐变（对照页乙2 的 .title：color 150ms ease；11-18 逐帧对照两种引擎量到 app 原来是当下直接变灰） */
+  transition: color var(--dur-sub-text) var(--ease-sub-text);
 }
 
 .itemText::after {
@@ -84,10 +87,9 @@
   inset: -5px 0;
 }
 
-/* 已勾的标题淡出加删除线（负责人 11-17 选 T-A、改划线；原来方案 5.1 只淡出） */
+/* 已勾的标题变灰加删除线（负责人 11-17 选 T-A、改划线；原来方案 5.1 只淡出）。删除线 11-18 起照乙2 从左往右画：SubtaskCard 里 kit List.module.css 的 .strike / .line，不再用 text-decoration */
 .item[data-done] .itemText {
   color: var(--text-3);
-  text-decoration: line-through;
 }
 
 @media (hover: hover) {

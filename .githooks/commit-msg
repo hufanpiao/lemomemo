@@ -3,4 +3,6 @@
 # 不要用 --no-verify 绕过：先想清楚能不能整块重写，把结论写进提交说明。
 py=python
 command -v python >/dev/null 2>&1 || py=python3
-exec "$py" -I build/check_rewrite.py --commit-msg "$1"
+"$py" -I build/check_rewrite.py --commit-msg "$1" || exit 1
+# 改到动效、外观文件，提交说明要带“参考对照：”“参考外改动：”两行（负责人 11-18“提交时硬拦加上”，build/check_reference.py；CI 同一条再查）
+exec "$py" -I build/check_reference.py --commit-msg "$1"

@@ -111,3 +111,24 @@ describe('CheckCircle 子任务进度和小点', () => {
     expect(document.querySelector('label')!.hasAttribute('data-fresh')).toBe(false);
   });
 });
+
+describe('勾选回弹拆两段相乘', () => {
+  it('scale 段用 --ease-done-pop-in、transform 段用 --ease-done-pop；check-pop 关键帧里不写曲线（11-18：关键帧里 var() 曲线浏览器不认）；两段乘起来 0.45 → 1.22 → 0.96 → 1.02 → 1', async () => {
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync('src/kit/components/CheckCircle.module.css', 'utf8');
+    expect(css).toMatch(/check-pop-up var\(--dur-done-pop\) var\(--ease-done-pop-in\),\s*check-pop var\(--dur-done-pop\) var\(--ease-done-pop\);/);
+    const body = (name: string): string => {
+      const at = css.indexOf(`@keyframes ${name} {`);
+      return at < 0 ? '' : css.slice(at, css.indexOf('\n}', at));
+    };
+    const up = body('check-pop-up');
+    const pop = body('check-pop');
+    expect(pop).not.toMatch(/animation-timing-function/);
+    expect(up).toMatch(/0% \{\s*scale: 0\.45;/);
+    expect(up).toMatch(/38%,\s*100% \{\s*scale: 1\.22;/);
+    const t = [...pop.matchAll(/(\d+)% \{\s*transform: scale\(([\d.]+)\)/g)].map(([, at, v]) => [Number(at), Number(v)] as const);
+    const want: Record<number, number> = { 38: 1.22, 64: 0.96, 84: 1.02, 100: 1 };
+    for (const [at, v] of t) if (at in want) expect(v * 1.22, `${at}%`).toBeCloseTo(want[at]!, 3);
+    expect(t.map(([at]) => at)).toEqual([38, 64, 84, 100]);
+  });
+});

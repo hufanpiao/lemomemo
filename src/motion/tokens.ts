@@ -23,6 +23,12 @@ export const dur = {
   doneSparkAt: 0.03,
   /** --dur-spark 380ms：小点往外飘、变暗到消失 */
   spark: 0.38,
+  /** --dur-sub-spark-at 110ms：子任务（乙2）10 个淡点开始往外扩的时刻 */
+  subSparkAt: 0.11,
+  /** --dur-sub-spark 320ms：子任务（乙2）淡点扩开、淡掉 */
+  subSpark: 0.32,
+  /** --dur-sub-text 150ms：子任务（乙2）勾上时标题渐变成第三层文字色 */
+  subText: 0.15,
   /** --dur-done-ring-at 175ms：细正圆出现的时刻 */
   doneRingAt: 0.175,
   /** --dur-ring 170ms：细正圆边扩边淡 */
@@ -89,6 +95,8 @@ export const ease = {
   donePopIn: [0.2, 0.9, 0.3, 1],
   /** --ease-done-pop：方框回弹后面几段（1.22 → 0.96 → 1.02 → 1） */
   donePop: [0.45, 0, 0.55, 1],
+  /** --ease-sub-text：子任务（乙2）标题变灰，等于 CSS 的 ease */
+  subText: [0.25, 0.1, 0.25, 1],
   /** --ease-done-ring-in：细正圆出现那一段（0 → 12%） */
   doneRingIn: [0.2, 0.6, 0.35, 1],
 } as const satisfies Record<string, Bezier>;
@@ -114,6 +122,9 @@ export const cssVarOf = {
     doneFade: '--dur-done-fade',
     doneSparkAt: '--dur-done-spark-at',
     spark: '--dur-spark',
+    subSparkAt: '--dur-sub-spark-at',
+    subSpark: '--dur-sub-spark',
+    subText: '--dur-sub-text',
     doneRingAt: '--dur-done-ring-at',
     ring: '--dur-ring',
     doneStrikeAt: '--dur-done-strike-at',
@@ -146,6 +157,7 @@ export const cssVarOf = {
     linear: '--ease-linear',
     donePopIn: '--ease-done-pop-in',
     donePop: '--ease-done-pop',
+    subText: '--ease-sub-text',
     doneRingIn: '--ease-done-ring-in',
   },
 } as const satisfies { dur: Record<keyof typeof dur, string>; ease: Record<keyof typeof ease, string> };

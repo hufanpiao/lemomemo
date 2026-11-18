@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { useSortDropFlow } from '../../../kit/hooks/useSortDropFlow.ts';
+import { fx } from '../../../platform/fx-api.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { useListT } from '../hooks/useTodoList.ts';
 import { useTodoSubtasks, type SubTickResult } from '../hooks/useSubtasks.ts';
@@ -62,6 +63,8 @@ export default function InlineSubtasks(p: InlineSubtasksProps) {
   if (!items?.length) return null;
   const tick = (itemId: string, on: boolean) => {
     if (ro(itemId)) return p.onBlock();
+    // 勾上：音效甲 + 震一下，同主待办（负责人 11-18“声音震动跟正常待办一样”；在点按里同步调，iOS 才出系统触感）；取消勾选不响
+    if (on) fx('done');
     const plan = s.planAuto(itemId, on);
     p.onPlan?.(plan);
     void s.tick(itemId, on).then(({ res, auto }) => p.onResult({ plan, res, auto, undo: () => s.undoAuto(itemId), message: t('items.autoDone', {}) }));
