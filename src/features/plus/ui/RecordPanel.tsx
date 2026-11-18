@@ -38,7 +38,8 @@ export function RecordPanel({ v }: { v: VoiceState }) {
   const said = useRef<HTMLDivElement>(null);
   const live = useRef(v);
   live.current = v;
-  const text = show && !speech ? v.live : '';
+  // 认出了字就出框，不分哪种原因走的识别（11-19：额度用完、网慢、没开 AI、再说一次这几种识别认出了字，原来被 !speech 挡掉不出框）
+  const text = show ? v.live : '';
 
   // 边说边出字：字多了框里滚到最新一行
   useLayoutEffect(() => {

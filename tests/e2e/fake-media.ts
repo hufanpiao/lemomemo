@@ -112,3 +112,87 @@ export async function holdUntilRecording(page: Page): Promise<{ x: number; y: nu
 export async function expectMicClosed(page: Page, streams = 1): Promise<void> {
   await expect.poll(() => micCounts(page), { timeout: 5_000, message: '开了几次麦克风、关了几次轨道' }).toEqual({ streams, stops: streams });
 }
+
+/**
+ * 假的系统识别（webkitSpeechRecognition / SpeechRecognition），照 iOS WebKit 的事件顺序：start() 后 start、audiostart；
+ * 测试里调 window.__fakeSay(全文) 发一次没定稿的 result（第一次前补 speechstart）；stop() 后发定稿的 result、再发 end；abort() 发 error aborted、end。
+ * window.__fakeSpeech 记开过几次（made）、现在还在听的有几个（open）
+ */
+export async function fakeSpeech(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const st = { made: 0, open: 0 };
+    Object.defineProperty(window, '__fakeSpeech', { configurable: true, value: st });
+    type Ev = ((ev: unknown) => void) | null;
+    /** 还在听的（__fakeSay 发给最后开的那一个） */
+    const open = new Set<{ say(t: string): void }>();
+    class FakeRec {
+      lang = '';
+      interimResults = false;
+      continuous = false;
+      onstart: Ev = null;
+      onresult: Ev = null;
+      onerror: Ev = null;
+      onend: Ev = null;
+      onaudiostart: Ev = null;
+      onspeechstart: Ev = null;
+      said = '';
+      spoke = false;
+      live = false;
+      start(): void {
+        st.made += 1;
+        st.open += 1;
+        this.live = true;
+        open.add(this);
+        setTimeout(() => {
+          this.onstart?.({});
+          this.onaudiostart?.({});
+        }, 30);
+      }
+      emit(text: string, final: boolean): void {
+        const res = Object.assign([{ transcript: text, confidence: 0.9 }], { isFinal: final });
+        this.onresult?.({ resultIndex: 0, results: [res] });
+      }
+      say(text: string): void {
+        if (!this.live) return;
+        if (!this.spoke) {
+          this.spoke = true;
+          this.onspeechstart?.({});
+        }
+        this.said = text;
+        this.emit(text, false);
+      }
+      close(): void {
+        if (!this.live) return;
+        this.live = false;
+        st.open -= 1;
+        open.delete(this);
+        this.onend?.({});
+      }
+      stop(): void {
+        setTimeout(() => {
+          if (this.live && this.said !== '') this.emit(this.said, true);
+          this.close();
+        }, 40);
+      }
+      abort(): void {
+        setTimeout(() => {
+          if (this.live) this.onerror?.({ error: 'aborted' });
+          this.close();
+        }, 10);
+      }
+    }
+    Object.defineProperty(window, '__fakeSay', { configurable: true, value: (t: string) => [...open].at(-1)?.say(t) });
+    Object.defineProperty(window, 'webkitSpeechRecognition', { configurable: true, value: FakeRec });
+    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: FakeRec });
+  });
+}
+
+/** 假识别现在“说”一句（到现在为止的全文） */
+export async function fakeSay(page: Page, text: string): Promise<void> {
+  await page.evaluate((t) => (window as unknown as { __fakeSay(t: string): void }).__fakeSay(t), text);
+}
+
+/** 假识别开过几次、还有几个在听 */
+export async function speechCounts(page: Page): Promise<{ made: number; open: number }> {
+  return page.evaluate(() => ({ ...(window as unknown as { __fakeSpeech: { made: number; open: number } }).__fakeSpeech }));
+}

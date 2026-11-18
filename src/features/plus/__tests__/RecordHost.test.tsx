@@ -111,7 +111,7 @@ vi.mock('../data/quota.ts', async (orig) => ({ ...(await orig<typeof Quota>()), 
 vi.mock('../../../platform/speech.ts', () => ({
   speechSupported: () => true,
   // 诊断开关照真的读本机（关掉的那条用例设 lemo-live-speech-off）
-  liveSpeechOn: () => localStorage.getItem('lemo-live-speech-off') !== '1',
+  liveSpeechOn: () => sessionStorage.getItem('lemo-live-speech-off') !== '1',
   startSpeech: (lang: string, h: { onStart(): void; onEnd(r: unknown): void; onText?(t: string): void }) => {
     // 要中途文字的是录音这一路边说边出字的那个（R-456），不要的是手机自带识别那一路
     const live = h.onText !== undefined;
@@ -215,7 +215,7 @@ beforeEach(() => {
   document.body.append(fab);
   log = [];
   // 11-18 起有系统识别就主走识别（why=live）；录音那一路的用例默认关掉诊断开关 Live speech，只测录音上传。识别主路的用例在自己那一组里删掉这个开关
-  localStorage.setItem('lemo-live-speech-off', '1');
+  sessionStorage.setItem('lemo-live-speech-off', '1');
   (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => log.push(l) };
   // 失败时把这条用例的运行日志打出来（先看日志定根因）
   onTestFailed(() => console.log(['运行日志：', ...log].join('\n')));
@@ -228,7 +228,7 @@ afterEach(() => {
   collection('settings').clear();
   setConsentStale(false, null);
   localStorage.removeItem(MIC_PERM_KEY);
-  localStorage.removeItem('lemo-live-speech-off');
+  sessionStorage.removeItem('lemo-live-speech-off');
   remindQueue.setState({ holds: [] });
   delete (globalThis as Record<string, unknown>)[RL_SLOT];
   vi.restoreAllMocks();
@@ -603,6 +603,18 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     expect(writer.insert).not.toHaveBeenCalled();
   });
 
+  it('额度用完走识别（why=quota）：认出的字一样实时出框（11-19：原来只有 why=live 出框）', async () => {
+    fx.quotaOut = true;
+    setup();
+    await sleep(10);
+    await holdDown();
+    expect(logged(/^voice speech why=quota$/)).toBe(true);
+    await act(async () => fx.speech.at(-1)?.text('买牛'));
+    expect(screen.getByTestId('rec-live').textContent).toBe('买牛');
+    expect(logged(/^voice speech text1 len=2 status=listening$/)).toBe(true);
+    await release();
+  });
+
   it('“重试”连点两下：只送一次', async () => {
     let n = 0;
     const { call, writer } = setup({
@@ -641,7 +653,7 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     expect(fx.starts, '按下时额度没用完：录音').toBe(1);
     // 录音这一路不再同时开识别（11-18 改成有系统识别就只走识别；这里诊断开关关着，只用录音）
     expect(fx.speech.filter((r) => !r.cancelled)).toEqual([]);
-    expect(logged(/^voice hold start .* route=rec$/)).toBe(true);
+    expect(logged(/^voice hold start .* route=rec ls=off broken=0 sup=1$/)).toBe(true);
   });
 });
 
@@ -658,7 +670,7 @@ describe('识别主路：边说边出字、先存、AI 后台整理', () => {
     return { box, call };
   };
   // 11-18 起这一组走识别主路（why=live）：有系统识别就只开识别、边说边出字，松手先存、AI 后台整理
-  beforeEach(() => localStorage.removeItem('lemo-live-speech-off'));
+  beforeEach(() => sessionStorage.removeItem('lemo-live-speech-off'));
 
   /** 识别主路的 AI 整理走 ai-parse（callAi）：先卡住，测试里放开 */
   const heldAi = () => {
@@ -671,7 +683,7 @@ describe('识别主路：边说边出字、先存、AI 后台整理', () => {
     const ai = heldAi();
     const { writer, call } = setup({ callAi: ai.callAi });
     await holdDown();
-    expect(logged(/^voice hold start .* route=live$/)).toBe(true);
+    expect(logged(/^voice hold start .* route=live ls=on broken=0 sup=1$/)).toBe(true);
     expect(fx.starts, '不开录音器').toBe(0);
     const run = fx.speech.at(-1);
     await act(async () => run?.text('买牛'));
@@ -705,7 +717,7 @@ describe('识别主路：边说边出字、先存、AI 后台整理', () => {
   });
 
   it('诊断开关 Live speech 关着（lemo-live-speech-off=1）：只用录音，不开识别，日志 take=0 off=diag，松手整段上传等 AI（负责人 11-18 对照用）', async () => {
-    localStorage.setItem('lemo-live-speech-off', '1');
+    sessionStorage.setItem('lemo-live-speech-off', '1');
     const ai = held();
     const { call } = setup({ call: ai.call });
     await holdDown();

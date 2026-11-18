@@ -320,7 +320,10 @@ export function createVoiceSession(io: VoiceIo = {}) {
       c.closeNote();
       const mic = lastMicResult();
       const online = d().online();
-      rlog(`voice hold start online=${online ? 1 : 0} mic=${mic} route=${picked ?? 'rec'}`);
+      // 11-19 观察点：走录音（route=rec）时是哪一条挡住了识别——ls 诊断开关 Live speech、broken 这次打开期间识别报过错、sup 有没有系统识别
+      rlog(
+        `voice hold start online=${online ? 1 : 0} mic=${mic} route=${picked ?? 'rec'} ls=${liveSpeechOn() ? 'on' : 'off'} broken=${liveBroken ? 1 : 0} sup=${speechSupported() ? 1 : 0}`,
+      );
       if (picked === null || !online || mic !== 'granted') speech.drop();
       if (!online) show('offline');
       else if (mic !== 'granted') {
