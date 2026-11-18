@@ -8,10 +8,11 @@
 //   用来真机对照两条路（日志 voice hold start route=rec）
 // • Finger switch（负责人 11-18“震动没反应”）：一个看得见的 iOS 系统开关 <input type="checkbox" switch>，让人用手指点：
 //   手指点都不震 = 系统触感反馈关着或这台机器不支持，代码改不了；手指点震、Test haptic 不震 = 代点的写法不对。改变时记 probe finger switch on=
+// • Haptic A / B / C（负责人 11-18 iOS 26.6.2）：代点开关的三种写法各一个（feedback.ts 的 SwitchWay：head / body / input），真机挑出能震的那种以后只留它
 // • 全局运行日志（platform/run-log.ts，非正式版一直在记）：“Send run log”一键发送、“Copy run log”整段复制、“Clear run log”清空
 import { useState } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
-import { tryHaptic, type HapticPath } from '../../../platform/feedback.ts';
+import { SWITCH_WAYS, tryHaptic, type HapticPath, type SwitchWay } from '../../../platform/feedback.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { liveSpeechOn, setLiveSpeechOn } from '../../../platform/speech.ts';
 import { gapFixOn, setGapFixOn } from '../../../platform/vh-gapfix.ts';
@@ -42,10 +43,13 @@ export const LS_LABEL_ON = 'Live speech: ON';
 export const LS_LABEL_OFF = 'Live speech: OFF (compare)';
 /** 手指点的系统开关 */
 export const FS_LABEL = 'Finger switch';
+/** 代点开关三种写法（A head / B body / C input，platform/feedback.ts 的 SwitchWay） */
+export const HAP_WAY = 'Haptic ';
 
 export function VhProbe() {
   const [gf, setGf] = useState(() => gapFixOn());
   const [hap, setHap] = useState<HapticPath | null>(null);
+  const [ways, setWays] = useState<Partial<Record<SwitchWay, HapticPath>>>({});
   const [ls, setLs] = useState(() => liveSpeechOn());
   const [rlCopied, setRlCopied] = useState<'' | 'ok' | 'fail'>('');
   const rlSend = useRunLogSend();
@@ -101,6 +105,14 @@ export function VhProbe() {
           />
           {FS_LABEL}
         </label>
+      </div>
+      {/* 代点开关的三种写法各一个（负责人 11-18 iOS 26.6.2“有声音没震动”）：按了以后按钮上写走的哪条路，日志 fx try hap= way= */}
+      <div className={`${styles.actions} ${styles.probeActions}`}>
+        {SWITCH_WAYS.map((w, i) => (
+          <FormButton key={w} size="compact" data-testid={`vh-haptic-${w}`} onClick={() => setWays((m) => ({ ...m, [w]: tryHaptic(w) }))}>
+            {`${HAP_WAY}${'ABC'[i] ?? ''}${ways[w] ? `: ${ways[w]}` : ''}`}
+          </FormButton>
+        ))}
       </div>
       <div className={`${styles.actions} ${styles.probeActions}`}>
         <FormButton size="compact" data-testid="vh-rl-send" disabled={rlSend.state === 'busy'} onClick={rlSend.send}>

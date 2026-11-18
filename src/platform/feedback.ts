@@ -74,28 +74,43 @@ export function hapticPath(): HapticPath {
  * 点一下系统开关借它的轻触反馈（iOS 18 起）。照社区里真机能震的写法（ios-haptics）：每次新建一个 display:none 的开关挂进 <head>、
  * 点它的 label、马上拿掉。原来一直挂着同一个、用透明加裁剪藏在 body 里，preview.402 真机日志走到了 hap=switch 却不震（负责人 11-18“显示switch，没有震”）
  */
-function switchClick(): void {
+/**
+ * 代点系统开关的几种写法（负责人 11-18 iOS 26.6.2 主屏幕版“有声音没震动”，诊断区 Haptic A / B / C 三个按钮各试一种，真机挑出能震的那种以后只留它）：
+ * • head：上面那种（display:none 挂 <head>、点 label）——现在默认用的
+ * • body：挂进 <body>、看得见的位置（1px、几乎透明，不是 display:none），点 label
+ * • input：同 body，但直接点 <input>，不经 label
+ */
+export type SwitchWay = 'head' | 'body' | 'input';
+export const SWITCH_WAYS: readonly SwitchWay[] = ['head', 'body', 'input'];
+
+function switchClick(way: SwitchWay = 'head'): void {
   const label = document.createElement('label');
   label.setAttribute('aria-hidden', 'true');
-  label.style.display = 'none';
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.setAttribute('switch', '');
   label.append(input);
-  document.head.append(label);
+  if (way === 'head') {
+    label.style.display = 'none';
+    document.head.append(label);
+  } else {
+    label.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0.01;overflow:hidden;pointer-events:none';
+    document.body.append(label);
+  }
   try {
-    label.click();
+    if (way === 'input') input.click();
+    else label.click();
   } finally {
     label.remove();
   }
 }
 
-/** 震一下（必须在用户手势里同步调）；返回走的哪条路 */
-export function haptic(): HapticPath {
+/** 震一下（必须在用户手势里同步调）；返回走的哪条路。way：代点开关的写法（只有诊断区按钮传） */
+export function haptic(way?: SwitchWay): HapticPath {
   const path = hapticPath();
   try {
     if (path === 'vibrate') navigator.vibrate(HAPTIC_MS);
-    else if (path === 'switch') switchClick();
+    else if (path === 'switch') switchClick(way);
   } catch {
     // 不让震、页面还没 body：不要紧
   }
@@ -251,9 +266,9 @@ export function fx(kind: FxKind, busy: () => boolean = micBusy): void {
 }
 
 /** 设置诊断区“试震动”：不看开关，直接震一下，返回走的哪条路（真机上看主屏幕版到底震不震） */
-export function tryHaptic(): HapticPath {
-  const hap = haptic();
-  rlog(`fx try hap=${hap}`);
+export function tryHaptic(way?: SwitchWay): HapticPath {
+  const hap = haptic(way);
+  rlog(`fx try hap=${hap}${way ? ` way=${way}` : ''}`);
   return hap;
 }
 

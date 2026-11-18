@@ -6,6 +6,8 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { remindQueue, setRemindArmed, setRemindDown } from '../../kit/state/remind-queue.ts';
 import { remindArmWatchdog } from '../App.tsx';
+// 横滑切页在首屏画完以后才懒加载（App.tsx）：慢机器上测试收尾以后才去下，环境已拆掉报 EnvironmentTeardownError（CI 778139cf unit 洛杉矶）；这里不测它，换成空的
+vi.mock('../tab-swipe.ts', () => ({ installTabSwipeOnce: () => undefined }));
 
 // 挂整个 App：全量跑、机器忙时默认 5 秒不够
 vi.setConfig({ testTimeout: 15_000 });

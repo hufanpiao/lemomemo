@@ -20,6 +20,7 @@ import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { notesInput } from '../../../kit/state/new-item.ts';
 import { NotesSurface } from '../../notes/index.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultPresence, useVaultStatus } from '../hooks/useVault.ts';
 import { useVaultNoteSource } from '../hooks/vault-note-source.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
@@ -76,6 +77,11 @@ export default function VaultPage() {
     if (unlocked && !state.listed) void s.list();
   }, [s, unlocked, state.listed]);
   const surface = unlocked && state.listed && sub !== 'trash';
+  // 负责人 11-18“隐私记感觉没变快”：页面挂上、每次换状态（锁着 → 解锁 → 列表到了 → 内容画出）各记一行，日志里量点锁行到看见内容每一步多久
+  const stage = `${state.phase}${state.waiting ? '+wait' : ''} listed=${state.listed ? 1 : 0} surface=${surface ? 1 : 0}`;
+  useEffect(() => {
+    rlog(`vault page ${stage}`);
+  }, [stage]);
   let body;
   if (state.phase === 'loading') body = <p className={styles.empty}>{t('vault.loading', {})}</p>;
   else if (state.phase === 'offline' || state.phase === 'error')

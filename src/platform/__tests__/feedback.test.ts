@@ -233,6 +233,30 @@ describe('降级', () => {
     expect(logs).toEqual(['fx lift hap=switch snd=0', 'fx pull hap=switch snd=0']);
   });
 
+  it.each([
+    ['head', 'head', 'none'],
+    ['body', 'body', ''],
+    ['input', 'body', ''],
+  ] as const)('诊断区代点写法 %s：开关挂在 %s（display=%s），点到开关、点完拿掉，日志带 way=（负责人 11-18 iOS 26.6.2 挑写法）', (way, where, display) => {
+    delete nav.vibrate;
+    proto.switch = false;
+    let hit: HTMLInputElement | null = null;
+    const seen = (e: Event): void => {
+      const t = e.target;
+      if (t instanceof HTMLInputElement && t.hasAttribute('switch')) {
+        hit = t;
+        expect(t.closest(where), `挂在 ${where} 里`).not.toBeNull();
+        expect(t.closest('label')?.style.display).toBe(display);
+      }
+    };
+    document.addEventListener('click', seen, true);
+    expect(tryHaptic(way)).toBe('switch');
+    document.removeEventListener('click', seen, true);
+    expect((hit as HTMLInputElement | null)?.checked, '点到了开关').toBe(true);
+    expect(document.querySelectorAll('input[switch]'), '点完就拿掉').toHaveLength(0);
+    expect(logs).toContain(`fx try hap=switch way=${way}`);
+  });
+
   it('两样都没有：hap=none，不报错', () => {
     delete nav.vibrate;
     expect(hapticPath()).toBe('none');
