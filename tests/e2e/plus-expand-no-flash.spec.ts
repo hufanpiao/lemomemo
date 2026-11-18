@@ -74,36 +74,24 @@ test.describe('展开编辑不闪原页面', () => {
   }
 
   // 负责人 11-18 录屏“输入框第一次展开的时候会卡一下”：新建页分包要到点“展开编辑”才下载，这段时间画面停在打字条和模糊层上（录屏第 49～59 帧）。
-  // 现在“＋”打开打字条时先下载（app/features.ts 的 warmRoute）：分包慢 600ms，打开 1 秒后再展开，新建页照样当场出来
-  test('今天：新建页分包慢，第一次展开也不等分包', async ({ page }) => {
-    await page.route(/EventEditPage[^/]*\.js$/, async (r) => {
-      await new Promise((res) => setTimeout(res, 600));
-      await r.continue();
+  // 现在“＋”打开打字条时先下载（app/features.ts 的 warmRoute）：点“＋”以后、点“展开编辑”以前，新建页分包已经下完
+  test('今天：新建页分包在打开打字条时就下完，不等到点“展开编辑”', async ({ page }) => {
+    const got: { url: string; at: number }[] = [];
+    page.on('requestfinished', (r) => {
+      if (/EventEditPage[^/]*\.js$/.test(r.url())) got.push({ url: r.url(), at: Date.now() });
     });
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
+    const opened = Date.now();
     await page.getByTestId('tabbar-add').click();
     await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 10_000 });
-    await page.waitForTimeout(1000);
-    await page.evaluate(() => {
-      const w = window as unknown as { __shown: number; __t0: number };
-      w.__shown = -1;
-      w.__t0 = 0;
-      const tick = (): void => {
-        if (w.__t0 && document.querySelector('[data-testid="event-edit-title"]')?.getClientRects().length) {
-          w.__shown = performance.now() - w.__t0;
-          return;
-        }
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-      document.addEventListener('click', () => (w.__t0 = performance.now()), { capture: true, once: true });
-    });
+    await expect.poll(() => got.length, { message: '打开打字条后新建页分包没先下载' }).toBeGreaterThan(0);
+    const expandAt = Date.now();
     await page.getByTestId('type-bar').getByRole('button', { name: '展开编辑' }).click();
     await expect(page).toHaveURL(/#\/event\/new$/);
-    await expect.poll(() => page.evaluate(() => (window as unknown as { __shown: number }).__shown)).toBeGreaterThanOrEqual(0);
-    const ms = await page.evaluate(() => (window as unknown as { __shown: number }).__shown);
-    expect(ms, `点“展开编辑”到新建页出来 ${Math.round(ms)}ms（分包慢 600ms，没先下载就会超过 600）`).toBeLessThan(400);
+    await expect(page.getByTestId('event-edit-title')).toBeVisible();
+    expect(got[0]?.at ?? 0).toBeGreaterThanOrEqual(opened);
+    expect(got[0]?.at ?? Infinity).toBeLessThanOrEqual(expandAt);
   });
 
   // 负责人 11-18 录屏“展开以后左滑退出的时候会闪一下简约输入框”：iPhone 侧滑返回时底下那页画的是压新历史那一刻拍的截图，
