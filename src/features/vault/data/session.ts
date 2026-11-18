@@ -29,6 +29,7 @@
 //   vault-image 只验不续，令牌过期（vault_locked）时先 {renew} 再试一次（renew 也被拒就上锁）；取图失败不缓存（M6）
 // • 文档附件（B4b-1，vault-file）：同 vault-image 只验不续（withImageToken）；成功放了微软预览的临时明文副本时记下，上锁时先发 ms_preview_end（keepalive）。
 //   审查第 4 条：服务器的 ms_preview_end 只验 JWT（令牌过期也删得掉），令牌有才带；没发成（断网、JWT 过期）记下，下次解锁后补发一次（endOwed）
+// • 进隐私记少等往返（11-19“隐私记感觉没变快”）：status 在途去重（同 list）；解锁卡一出来 prepareFace 先要 Face ID 挑战，点按钮直接弹系统 Face ID
 // • 不碰 core/cache、outbox、log（A18）
 import { z } from 'zod';
 import {
@@ -93,10 +94,20 @@ export interface VaultSessionDeps {
 /** 离开的原因：离开 App、离开隐私记页 */
 export type LeaveWhy = 'app' | 'page';
 
-/** 同时取几张图（列表封面只取看得见的，这里再限一道并发） */
-export const IMG_SLOTS = 2;
+/**
+ * 同时取几张图（列表封面只取看得见的，这里再限一道并发）。11-19 由 2 改 4（负责人“隐私记感觉没变快”：真机每张缩略图 0.87～1.42 秒，
+ * 两张一批串着取，首屏 6 张要三批）；vault-image 每人每分钟 30 次，首屏一批 4 张远够不着，限流了照旧退避
+ */
+export const IMG_SLOTS = 4;
+
+/**
+ * Face ID 解锁的挑战提前要好（prepareFace，解锁卡一出来就要）：点按钮时直接弹系统 Face ID，不再先等一次 vault 往返（真机约 0.6 秒）。
+ * 挑战只能用一次、服务器 2 分钟过期（WEBAUTHN_CHALLENGE_TTL_S），这里只认要来不满 60 秒的；挑战本身不是秘密，不算明文
+ */
+export const FACE_OPT_MAX_AGE_MS = 60_000;
 
 export type VaultSession = ReturnType<typeof createVaultSession>;
+type FaceOpt = VaultResult<z.infer<typeof webauthnOptionsResponse>>;
 
 export function createVaultSession(d: VaultSessionDeps) {
   const now = d.now ?? (() => Date.now());
@@ -126,6 +137,9 @@ export function createVaultSession(d: VaultSessionDeps) {
   let msLive = false;
   /** 发过 ms_preview_end、还没确认成了：解锁后补发一次 */
   let endOwed = false;
+  /** prepareFace 提前要的解锁挑战（at：本机开始要的时刻） */
+  let faceOpt: { at: number; p: Promise<FaceOpt> } | null = null;
+  const options = (purpose: 'register' | 'unlock'): Promise<FaceOpt> => d.api.call({ action: 'webauthn_options', purpose }, null, webauthnOptionsResponse);
   const listeners = new Set<() => void>();
   const store = createVaultStore();
   const queue = createVaultQueue({
@@ -302,8 +316,33 @@ export function createVaultSession(d: VaultSessionDeps) {
     return r;
   }
 
-  async function refreshStatus(): Promise<VaultResult<VaultStatus>> {
+  /**
+   * 查状态：已经在查就等那一次（同 list()；真机 preview.416 入口行和隐私记页各发一次 status，1326ms、581ms 两条并排在飞）。
+   * App 首屏画完空闲时 warmVault 先查一次（hooks/useVault.ts，quiet），顺带把 vault 函数叫醒。
+   * quiet：失败了不动界面状态（还是 loading、没有 status，入口行、隐私记页挂上时照常再查）；不是 quiet 的赶上一次 quiet 的、它又失败了，当场再查一次
+   */
+  let statusing: { quiet: boolean; p: Promise<VaultResult<VaultStatus>> } | null = null;
+  function refreshStatus(o: { quiet?: boolean } = {}): Promise<VaultResult<VaultStatus>> {
+    const quiet = o.quiet === true;
+    if (statusing) {
+      const cur = statusing;
+      return cur.quiet && !quiet ? cur.p.then((r) => (r.ok ? r : refreshStatus())) : cur.p;
+    }
+    const mine = {
+      quiet,
+      p: statusOnce(quiet).finally(() => {
+        if (statusing === mine) statusing = null;
+      }),
+    };
+    statusing = mine;
+    return mine.p;
+  }
+  async function statusOnce(quiet: boolean): Promise<VaultResult<VaultStatus>> {
     const r = await d.api.call({ action: 'status' }, null, vaultStatusResponse);
+    if (!r.ok && quiet) {
+      rlog(`vault status warm fail ${r.code}`);
+      return r;
+    }
     if (!r.ok) {
       if (r.code === 'offline') set({ phase: state.phase === 'unlocked' ? 'unlocked' : 'offline', lastError: 'offline' });
       else {
@@ -330,6 +369,7 @@ export function createVaultSession(d: VaultSessionDeps) {
       return r;
     }
     takeToken(r.value);
+    faceOpt = null;   // 已经解锁：提前要的挑战不再用（服务器到期自己清）
     // 在隐私记页上解锁时请求带了 with_list，响应里就有整张列表（11-18“隐私记每次进去都很慢”：原来解锁 0.88s 后再串行 list 0.61s）；
     // 和 phase 一起置 listed，VaultPage 不再另发一次 list（日志 108.66 同时两次 list 就是它）
     const notes = onPage ? r.value.notes : undefined;
@@ -440,8 +480,26 @@ export function createVaultSession(d: VaultSessionDeps) {
       if (r.ok) set({ status: state.status ? { ...state.status, lastResetAt: now(), webauthn: 0 } : null });
       return r;
     },
-    async webauthnOptions(purpose: 'register' | 'unlock') {
-      return d.api.call({ action: 'webauthn_options', purpose }, null, webauthnOptionsResponse);
+    /** unlock：有 prepareFace 提前要好、不满 FACE_OPT_MAX_AGE_MS 的挑战就用它（只用一次，拿走就清）；提前要的没成就当场再要 */
+    async webauthnOptions(purpose: 'register' | 'unlock'): Promise<FaceOpt> {
+      const pre = purpose === 'unlock' && faceOpt && now() - faceOpt.at < FACE_OPT_MAX_AGE_MS ? faceOpt.p : null;
+      if (purpose === 'unlock') faceOpt = null;
+      if (pre) {
+        const r = await pre;
+        if (r.ok) return r;
+      }
+      return options(purpose);
+    },
+    /** 解锁卡出来、能用 Face ID 时调：后台先要一个解锁挑战；手里已经有不满 FACE_OPT_MAX_AGE_MS 的（含在飞的）就不再要 */
+    prepareFace(): void {
+      if (faceOpt && now() - faceOpt.at < FACE_OPT_MAX_AGE_MS) return;
+      const p = options('unlock');
+      const mine = { at: now(), p };
+      faceOpt = mine;
+      void p.then((r) => {
+        rlog(`vault face prefetch ${r.ok ? 'ok' : r.code}`);
+        if (!r.ok && faceOpt === mine) faceOpt = null;
+      });
     },
     async unlockWebauthn(assertion: { id: string; client_data_json: string; authenticator_data: string; signature: string }) {
       return afterUnlock(() => d.api.call({ action: 'unlock_webauthn', assertion, ...withList() }, null, vaultUnlockResponse));

@@ -74,6 +74,11 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
     esc.current = cancel;
   });
 
+  // 卡上有 Face ID 按钮就先要好解锁挑战（11-19“隐私记感觉没变快”）：点了直接弹系统 Face ID，不先等 webauthn_options 往返；没认出要再点时也先要好
+  useEffect(() => {
+    if (canFace && mode === 'card' && !busy) s.prepareFace();
+  }, [s, canFace, mode, busy, faceFails]);
+
   const face = async (): Promise<void> => {
     setBusy(true);
     const r = await wa.unlock();
