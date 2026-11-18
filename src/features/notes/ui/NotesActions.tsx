@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
+import { TapSwitch } from '../../../kit/components/TapSwitch.tsx';
 import type { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -89,6 +90,8 @@ export function MoreMenu({ id, caps, ro, open, onOpenChange, onDelete, long, onC
       {/* 只读行的“删除”变淡、aria-disabled，点了照样由 del 拦下出提示条（同待办页的 ×） */}
       <Pressable className={row.menuItem} aria-disabled={ro || undefined} onClick={onDelete} data-testid={`notes-del-${id}`} data-no-proxy="">
         {t('notes.delete', {})}
+        {/* 藏着的真系统开关：手指点“删除”iOS 才震（R-471，kit TapSwitch） */}
+        <TapSwitch />
       </Pressable>
     </Popover>
   );

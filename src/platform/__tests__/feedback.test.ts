@@ -209,52 +209,48 @@ describe('静音键打开也出声（audioSession）', () => {
 });
 
 describe('降级', () => {
-  it('没有 navigator.vibrate、支持 <input switch>（iOS 18）：每次新建一个 display:none 的开关挂进 head、点它的 label、马上拿掉（ios-haptics 的真机写法）', () => {
+  it('没有 navigator.vibrate、支持 <input switch>（iOS 18）：不代点任何开关（11-18 iOS 26.6 真机代点不震），只记下“该震”交给手指下的真开关（takeBuzz）', () => {
     delete nav.vibrate;
     proto.switch = false;
     expect(hapticPath()).toBe('switch');
-    const clicked: HTMLInputElement[] = [];
-    const seen = (e: Event): void => {
-      const t = e.target;
-      if (t instanceof HTMLInputElement && t.hasAttribute('switch')) {
-        clicked.push(t);
-        expect(t.closest('label')?.style.display).toBe('none');
-        expect(t.closest('head'), '挂在 head 里').not.toBeNull();
-      }
-    };
+    const clicked: Event[] = [];
+    const seen = (e: Event): void => void clicked.push(e);
     document.addEventListener('click', seen, true);
-    api.fx('lift');
-    api.fx('pull');
+    api.fx('done');
     document.removeEventListener('click', seen, true);
-    expect(clicked, '每次点到的是新开关').toHaveLength(2);
-    expect(clicked[0]).not.toBe(clicked[1]);
-    expect(clicked[0]?.checked, 'label.click() 点到了开关').toBe(true);
-    expect(document.querySelectorAll('input[switch]'), '点完就拿掉').toHaveLength(0);
-    expect(logs).toEqual(['fx lift hap=switch snd=0', 'fx pull hap=switch snd=0']);
+    expect(clicked, '不代点').toHaveLength(0);
+    expect(document.querySelectorAll('input[switch]')).toHaveLength(0);
+    expect(api.takeBuzz(), '这一下该震').toBe(true);
+    expect(api.takeBuzz(), '问完就清掉，一下只放一次').toBe(false);
+    api.fx('lift');
+    expect(api.takeBuzz(true), 'keep：问了不清').toBe(true);
+    expect(api.takeBuzz()).toBe(true);
+    expect(logs).toEqual(['fx done hap=switch snd=1', 'fx lift hap=switch snd=0']);
   });
 
-  it.each([
-    ['head', 'head', 'none'],
-    ['body', 'body', ''],
-    ['input', 'body', ''],
-  ] as const)('诊断区代点写法 %s：开关挂在 %s（display=%s），点到开关、点完拿掉，日志带 way=（负责人 11-18 iOS 26.6.2 挑写法）', (way, where, display) => {
+  it('该震的记号过了 BUZZ_MS 就不算；“声音和触感”关着、走 vibrate 的不记', () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValue(10_000);
     delete nav.vibrate;
     proto.switch = false;
-    let hit: HTMLInputElement | null = null;
-    const seen = (e: Event): void => {
-      const t = e.target;
-      if (t instanceof HTMLInputElement && t.hasAttribute('switch')) {
-        hit = t;
-        expect(t.closest(where), `挂在 ${where} 里`).not.toBeNull();
-        expect(t.closest('label')?.style.display).toBe(display);
-      }
-    };
-    document.addEventListener('click', seen, true);
-    expect(tryHaptic(way)).toBe('switch');
-    document.removeEventListener('click', seen, true);
-    expect((hit as HTMLInputElement | null)?.checked, '点到了开关').toBe(true);
-    expect(document.querySelectorAll('input[switch]'), '点完就拿掉').toHaveLength(0);
-    expect(logs).toContain(`fx try hap=switch way=${way}`);
+    api.fx('done');
+    now.mockReturnValue(10_000 + api.BUZZ_MS + 1);
+    expect(api.takeBuzz()).toBe(false);
+    now.mockRestore();
+    rows = [{ id: '1', key: 'ui.fx', value: false }];
+    api.fx('done');
+    expect(api.takeBuzz(), '关着').toBe(false);
+    rows = [];
+    nav.vibrate = vi.fn(() => true);
+    api.fx('done');
+    expect(api.takeBuzz(), 'vibrate 已经自己震了').toBe(false);
+  });
+
+  it('诊断区试震动在 iOS 上也只记“该震”，由按钮里的 TapSwitch 出触感', () => {
+    delete nav.vibrate;
+    proto.switch = false;
+    expect(tryHaptic()).toBe('switch');
+    expect(api.takeBuzz()).toBe(true);
+    expect(logs).toContain('fx try hap=switch');
   });
 
   it('两样都没有：hap=none，不报错', () => {

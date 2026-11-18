@@ -22,6 +22,15 @@
   transition: box-shadow var(--dur-ui) var(--ease-out);
 }
 
+/* checkbox 带了 switch 属性（iOS 只在手指点到系统开关时震，R-471）：iOS 18 起 appearance: none 的开关里有 ::track、::thumb 两个伪元素，
+   藏起来，外观照旧只有上面这个方框（不认识这两个伪元素的浏览器整条忽略，不影响） */
+/* stylelint-disable selector-pseudo-element-no-unknown -- WebKit 的开关伪元素 */
+.check::track,
+.check::thumb {
+  visibility: hidden;
+}
+/* stylelint-enable selector-pseudo-element-no-unknown */
+
 /* 勾上以后边和填充同色（R-436 第 7、8 条：暗黄底 + 黄勾，没有亮黄的一圈）；checkbox 叠在填充块上面（z-index 1），边色要跟着换。
    边色和填充块一起过渡（上面 .check 的 transition）；聚焦框用全局 :focus-visible（base.css），这里不另写 */
 .check:checked {
