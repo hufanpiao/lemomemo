@@ -53,6 +53,10 @@ interface Rec {
   pop: { dots: number; ring: boolean; burstShown: boolean; fillAccent: boolean; tickOnAccent: boolean } | null;
   /** 拿掉 .pop 的时刻（距 pointerdown，毫秒） */
   popEndAt: number | null;
+  /** 离开原组那一刻离场那一份的高度（剩得多，下一行就会跳） */
+  lastH: number | null;
+  /** 诊断：.pop 还在时最后一次看到的方框动画（名字:状态:currentTime），.pop 拿不掉时看是哪一段没播完（11-18 CI webkit） */
+  popAnims: string | null;
 }
 
 /**
@@ -67,7 +71,7 @@ async function record(page: Page, id: string): Promise<Rec> {
   await page.evaluate((id) => {
     const END_MS = 800;
     const STEP_MS = 5;
-    const rec: Rec = { line: null, box: null, outAt: null, goneAt: null, boxAtOut: null, pop: null, popEndAt: null };
+    const rec: Rec = { line: null, box: null, outAt: null, goneAt: null, boxAtOut: null, pop: null, popEndAt: null, lastH: null, popAnims: null };
     /** 一个颜色令牌算出来的 rgb（拿一个临时元素套上再读，和计算后的颜色同一种写法） */
     const colorOf = (v: string): string => {
       const probe = document.createElement('i');
@@ -127,11 +131,17 @@ async function record(page: Page, id: string): Promise<Rec> {
         rec.box = sample(box);
       }
       if (rec.box && rec.popEndAt === null && box && !/pop/.test(box.className)) rec.popEndAt = performance.now() - t0;
+      if (rec.box && rec.popEndAt === null && box) rec.popAnims = box.getAnimations().map((a) => `${(a as CSSAnimation).animationName ?? '?'}:${a.playState}:${Math.round(Number(a.currentTime ?? -1))}`).join(',') || '无';
       if (rec.outAt === null && row?.hasAttribute('data-out')) {
         rec.outAt = performance.now() - t0;
         rec.boxAtOut = box ? scaleOf(box) : null;
       }
-      if (rec.goneAt === null && seen && !row) rec.goneAt = performance.now() - t0;
+      if (rec.goneAt === null && seen && !row) {
+        rec.goneAt = performance.now() - t0;
+        // 离开原组那一刻，离场那一份（data-state="leaving"）还占多高：剩得多，离场播完时下一行就会一下子跳上来
+        const ghost = document.querySelector(`[data-row-id="${id}"][data-state="leaving"]`);
+        rec.lastH = ghost ? ghost.getBoundingClientRect().height : 0;
+      }
     };
     new MutationObserver(look).observe(document.body, { subtree: true, childList: true, attributes: true });
     document.addEventListener(
@@ -150,7 +160,7 @@ async function record(page: Page, id: string): Promise<Rec> {
 
 const curve = (s: S[] | null): string => (s ?? []).filter(([t], i, all) => t % 20 === 0 || i === all.length - 1).map(([t, v]) => `${t.toFixed(0)}:${v.toFixed(2)}`).join(' ');
 const show = (r: Rec): string =>
-  `删除线 ${curve(r.line)} ｜ 方框 ${curve(r.box)} ｜ data-out ${r.outAt?.toFixed(0) ?? '-'} ms（方框 ${r.boxAtOut?.toFixed(2) ?? '-'}）、离开 ${r.goneAt?.toFixed(0) ?? '-'} ms`;
+  `删除线 ${curve(r.line)} ｜ 方框 ${curve(r.box)} ｜ data-out ${r.outAt?.toFixed(0) ?? '-'} ms（方框 ${r.boxAtOut?.toFixed(2) ?? '-'}）、离开 ${r.goneAt?.toFixed(0) ?? '-'} ms（离开前剩 ${r.lastH?.toFixed(1) ?? '-'}px）`;
 
 test.describe('待办勾选完成时间线', () => {
   test('删除线勾上当下起画、90 ms 内画满；方框 0.45 起回弹到约 1.22 再落回 1；14 个小点、亮柠檬黄；约 720 ms 后收起、收进“已完成”是暗黄', async ({ page }) => {
@@ -179,13 +189,15 @@ test.describe('待办勾选完成时间线', () => {
     expect(boxes.at(-1)!, `方框最后没回到 1：${trace}`).toBeLessThan(1.02);
     // ③ 勾上那一刻：14 个小点、一圈细正圆；这一行还在原位，方框亮柠檬黄、勾号 --on-accent；回弹播完才拿掉
     expect(r.pop, `没播勾选特效：${trace}`).toEqual({ dots: 14, ring: true, burstShown: true, fillAccent: true, tickOnAccent: true });
-    expect(r.popEndAt, `.pop 一直没拿掉：${trace}`).not.toBeNull();
+    expect(r.popEndAt, `.pop 一直没拿掉（最后看到的方框动画 ${r.popAnims}）：${trace}`).not.toBeNull();
     expect(r.popEndAt!, `.pop 回弹没播完就拿掉了：${trace}`).toBeGreaterThanOrEqual(400);
     // ④ 勾上后约 720 ms 才打上 data-out；打上以后 100 ms（--dur-collapse）加 3 帧余量内离开原组；打上 data-out 那一刻方框已经回到 1
     expect(r.outAt, `没开始收起：${trace}`).not.toBeNull();
     expect(r.outAt!, `收起开始得太早（定稿 720 ms）：${trace}`).toBeGreaterThanOrEqual(700);
     expect(r.goneAt, `没收完：${trace}`).not.toBeNull();
-    expect(r.goneAt! - r.outAt!, `收起太慢：${trace}`).toBeLessThanOrEqual(100 + 3 * 34);
+    // 11-18 起 useDoneFlow 到点时这一行还没收完会等收起过渡播完（最多再等 500 ms），离开时剩下的高度必须约 0，下一行不跳
+    expect(r.lastH, `离开原组时这一行还没收完（下一行会跳）：剩 ${r.lastH}px；${trace}`).toBeLessThanOrEqual(2);
+    expect(r.goneAt! - r.outAt!, `收起太慢：${trace}`).toBeLessThanOrEqual(100 + 500 + 3 * 34);
     expect(r.boxAtOut!, `收起前方框没回到 1：${trace}`).toBeLessThan(1.02);
     // ⑤ 收进“已完成”组（展开看）以后照旧暗黄：填充块是 --check-on-bg，不是亮色、没有 data-fresh
     await page.getByTestId('todos-done-fold').click();

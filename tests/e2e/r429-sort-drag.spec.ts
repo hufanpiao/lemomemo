@@ -269,8 +269,9 @@ test.describe('长按拖动排序（R-429、R-461）', () => {
 
     const fr = await frames(page);
     const lifted = fr.filter((x) => x.float);
-    // ① 拿起有过渡：浮层第一帧还没放大，之后放大到 1.04
-    expect(scaleOf(lifted[0]?.card ?? ''), JSON.stringify(lifted.slice(0, 3).map((x) => x.card))).toBeLessThan(1.02);
+    // ① 拿起有过渡：浮层第一帧还没放大，之后放大到 1.04。
+    // “第一帧还没放大”在 CI 的 webkit 上不量：两帧隔 120～170 ms，第一帧取到时 --dur-ui 的放大已经播完（11-18 run 44204492953 三帧都是 1.04）；chromium、本机 webkit 照量
+    if (!(browserName === 'webkit' && process.env.CI === 'true')) expect(scaleOf(lifted[0]?.card ?? ''), JSON.stringify(lifted.slice(0, 3).map((x) => x.card))).toBeLessThan(1.02);
     expect(Math.max(...lifted.map((x) => scaleOf(x.card)))).toBeGreaterThan(1.035);
     // ② 被越过的两行先让位（transform 非零）、最后归零
     for (const id of ['n2', 'n3']) {
