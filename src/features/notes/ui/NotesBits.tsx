@@ -88,28 +88,66 @@ const same = (text: string): ReactNode => text;
 
 /** 列表行中间的字：标题 + 时间；“● 摘要 · 分类”（+ AI 小标、附件、没保存上，什么都没有时不画这一行）；只读行再在下面单独一行标“要新版本”。
  *  mark：标题、摘要的字怎么画（下拉搜索就地筛时给命中的字加短下划线，kit PullHit；不给原样） */
-export function RowText({ it, time, ai, ro, failed, mark = same }: { it: NoteItem; time: string; ai: ReactNode; ro: ReactNode; failed: boolean; mark?: (text: string) => ReactNode }) {
+export function RowText({
+  it,
+  time,
+  ai,
+  ro,
+  failed,
+  mark = same,
+  thumb = null,
+}: {
+  it: NoteItem;
+  time: string;
+  ai: ReactNode;
+  ro: ReactNode;
+  failed: boolean;
+  mark?: (text: string) => ReactNode;
+  /** 缩略图（有图的行）：放在日期正下方（负责人 11-18），排版见 NoteRow.module.css 的 .withThumb */
+  thumb?: ReactNode;
+}) {
   const sub = [it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ');
   const line2 = sub !== '' || it.categoryColor !== null || ai !== null || it.files > 0 || failed;
+  const title = (
+    <span className={row.t1}>
+      {it.converted ? <ConvMark id={it.id} /> : null}
+      {mark(it.title)}
+    </span>
+  );
+  const second = line2 ? (
+    <span className={row.t2}>
+      <Dot color={it.categoryColor} />
+      <span className={row.t2txt}>{mark(sub)}</span>
+      {ai}
+      <FilesMark n={it.files} />
+      <SyncMark id={it.id} failed={failed} />
+    </span>
+  ) : null;
+  const tm = <span className={row.tm}>{time}</span>;
+  if (thumb) {
+    // 有图的行（负责人 11-18“日期放到图片上面”“前面的标题跟字要在中间”）：左边标题、摘要整块上下居中；右边日期在缩略图正上方
+    return (
+      <span className={`${row.ltext} ${row.withThumb}`}>
+        <span className={row.tcol}>
+          {title}
+          {second}
+          {ro}
+        </span>
+        <span className={row.side}>
+          {tm}
+          {thumb}
+        </span>
+      </span>
+    );
+  }
   return (
     <span className={row.ltext}>
       {/* R-463 列表一：标题占满一行，时间小号淡色字贴右；第二行“● 摘要 · 分类 AI” */}
       <span className={row.l1}>
-        <span className={row.t1}>
-          {it.converted ? <ConvMark id={it.id} /> : null}
-          {mark(it.title)}
-        </span>
-        <span className={row.tm}>{time}</span>
+        {title}
+        {tm}
       </span>
-      {line2 ? (
-        <span className={row.t2}>
-          <Dot color={it.categoryColor} />
-          <span className={row.t2txt}>{mark(sub)}</span>
-          {ai}
-          <FilesMark n={it.files} />
-          <SyncMark id={it.id} failed={failed} />
-        </span>
-      ) : null}
+      {second}
       {ro}
     </span>
   );

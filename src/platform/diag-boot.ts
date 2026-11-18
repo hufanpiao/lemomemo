@@ -28,7 +28,12 @@ export function logBootFailed(e: unknown): void {
   rlog(`boot start_failed ${(e instanceof Error ? e.name : typeof e).slice(0, 40)} -> auth`);
 }
 
-export function startDiagBoot(store: Storage = localStorage, idle: (fn: () => void) => void = whenIdle): void {
-  startRunLog(window, { store });
+/** frame：下一帧回调，main.tsx 传 motion 的 nextFrame（平台层不能引 motion），给运行日志量切回前台出帧的时间 */
+export function startDiagBoot({
+  store = localStorage,
+  idle = whenIdle,
+  frame,
+}: { store?: Storage; idle?: (fn: () => void) => void; frame?: (cb: () => void) => void } = {}): void {
+  startRunLog(window, frame ? { store, frame } : { store });
   idle(() => dropStaleKeys(store));
 }

@@ -5,7 +5,7 @@
    边色 --check-edge：深色照参考图原色 #69645C（卡片底 2.7:1，负责人定照原样，build/contrast-pairs.json 的 accepted）；
    打勾时填充块从中间一个小圆长成圆角方块、淡入，盖满方框，勾号随之淡入；取消原路退回
    边长可以由使用方在外层设 --check-size 改（默认 24px，点击区照样 44 × 44；R-350 子任务、查找结果用小一号 18px）；
-   上下外边距 --check-margin（默认让方框在 44 高里居中）也由使用方在外层设；不播勾选动效用组件的 still（label 上 data-still，子任务用）；
+   上下外边距 --check-margin（默认让方框在 44 高里居中）也由使用方在外层设；不播勾选动效用组件的 still（画面层 .face 上 data-still，子任务用）；
    圆角按边长比例（24 → 9px，18 → 6.75px），小一号的不会显得更圆。组件名、类名沿用 CheckCircle（见 CheckCircle.tsx 文件头） */
 
 /* checkbox 叠在 label 外扩区（.checkBox::after）上面：点圆圈点到的是 checkbox 本身，点外扩区才经 label 转给它（不然 ::after 盖住 checkbox） */
@@ -34,20 +34,32 @@
   position: relative;
   display: grid;
   flex: none;
-  place-items: center;
   width: var(--check-size, 24px);
   height: var(--check-size, 24px);
   margin: var(--check-margin, calc((var(--hit) - var(--check-size, 24px)) / 2)) 0;
+}
+
+/* 画面层（11-18 负责人“点击代办有时候不能一次点中”，运行日志 2736、2877 行按下抬起都在方框上却没有 click）：
+   按下缩放、勾上回弹都缩这一层，不缩外层 label。原来缩的是 label，44 × 44 的外扩区（::after）跟着缩到约 20，
+   iOS 在抬手时按缩小后的位置判定点中没有，手指偏一点就吞掉或晚 0.25 秒才补发。现在外扩区永远 44，画面照旧缩到 0.45 */
+.face {
+  position: relative;
+  z-index: 1; /* 叠在外扩区 ::after 上面：点方框本身点到的是 checkbox；按下时 .face 有 transform、自成层叠上下文，不写这条 checkbox 会被 ::after 盖住 */
+  display: grid;
+  grid-area: 1 / 1;
+  place-items: center;
+  width: 100%;
+  height: 100%;
   transition: transform var(--dur-press) var(--ease-press);
 }
 
 /* 只读行（FA-2）：方框变淡，表示打不了勾（点了由使用方出“要新版本”提示条）；跟着 checkbox 的 aria-disabled，不另挂属性（首屏预算，11-06） */
-.checkBox:has(> [aria-disabled='true']) {
+.checkBox:has([aria-disabled='true']) {
   opacity: var(--disabled-dim);
 }
 
 /* 点击区外扩到 44 × 44（B2-UI-a U4-4，A8 核实原来只有 22 × 22）：.checkBox 是包着 checkbox 的 label，点到外扩区等于点 checkbox；方框本身大小不变。
-   四边各往外伸（44 − 边长）/ 2，方框比 44 大时不伸；不用 transform 居中：按下时整个 .checkBox 在缩放（transform 过渡），外扩区跟着它走就行 */
+   四边各往外伸（44 − 边长）/ 2，方框比 44 大时不伸；外扩区挂在不缩放的 label 上，按下时缩的是里面的 .face，点击区始终 44 */
 .checkBox::after {
   content: '';
   position: absolute;
@@ -56,15 +68,18 @@
 
 /* —— 勾选完成时间线（负责人 11-18 定稿：对照页第 11 版“乙4”，本机资料 设计方案/2026-11-18_完成动效/对照页源文件.html 的 data-v="d"）——
    时刻、时长全在动效令牌“勾选完成时间线”一段；时间从勾上那一刻算：
-   ① 按下：没勾上的方框缩到 0.45（已勾上的按下仍是 0.8），--dur-press · --ease-press；缩的是外层 label，点在 44 的外扩区上也一样缩；子任务（still）不缩
-   ② 亲手勾上（组件给 label 加 .pop）：0.45 → 1.22 → 0.96 → 1.02 → 1，共 --dur-done-pop，分段曲线 --ease-done-pop-in、--ease-done-pop；
+   ① 按下：没勾上的方框缩到 0.45（已勾上的按下仍是 0.8），--dur-press · --ease-press；缩的是里面的 .face（外层 label 和 44 的外扩区不缩，见上面 .face），点在外扩区上也一样缩；子任务（still）不缩
+   ② 亲手勾上（组件给 .face 加 .pop）：0.45 → 1.22 → 0.96 → 1.02 → 1，共 --dur-done-pop，分段曲线 --ease-done-pop-in、--ease-done-pop；
       填充块同时从小圆（0.3 倍、圆角 50%）长成圆角方块（--dur-done-fill，淡入 --dur-done-fade）
    ③ --dur-done-spark-at 起 14 个小点贴着方块边长出来、往外飘、逐帧变暗（--dur-spark）
    ④ --dur-done-ring-at 起方块外一圈细正圆边扩边淡（--dur-ring），始终比小点暗、比小点先消失
    颜色（负责人选“乙”，R-436 改）：这一行刚勾上、还在原位时（label 上 data-fresh，组件的 fresh），填充、边是亮柠檬黄 --accent、勾号 --on-accent；
    收进“已完成”以后、挂载时就勾上的，照旧 --check-on-bg / --check-on-fg（亮色那几条写在文件最后，按选择器特异性排）。
    删除线、行收起在 kit List.module.css 的 .strike、.fold。已勾上的按下 0.8 写在减弱动态效果一段后面（同样是特异性顺序） */
-.checkBox:active {
+
+/* 按下：组件在外层 label 的 pointerdown 时给 .face 打 data-press（按在 44 外扩区上也算），松手、取消时去掉；.face:active 是按在方框正中、没有脚本时的同一效果 */
+.face:active,
+.face[data-press] {
   transform: scale(0.45);
 }
 
@@ -339,19 +354,22 @@
   transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
 }
 
-:global(:root[data-rm="1"]) .checkBox {
+:global(:root[data-rm="1"]) .face {
   transition: none;
 }
 
-:global(:root[data-rm="1"]) .checkBox:active {
+:global(:root[data-rm="1"]) .face:active,
+:global(:root[data-rm="1"]) .face[data-press] {
   transform: none;
 }
 
-.checkBox:has(> .check:checked):active {
+.face:has(> .check:checked):active,
+.face[data-press]:has(> .check:checked) {
   transform: scale(0.8);
 }
 
-:global(:root[data-rm="1"]) .checkBox:has(> .check:checked):active {
+:global(:root[data-rm="1"]) .face:has(> .check:checked):active,
+:global(:root[data-rm="1"]) .face[data-press]:has(> .check:checked) {
   transform: none;
 }
 
@@ -376,24 +394,25 @@
 }
 
 /* still（子任务一天勾上百次，R-350）：边色、填充块、勾号都不过渡，直接到位；按下不缩（勾上没勾上都一样） */
-.checkBox[data-still] > * {
+.face[data-still],
+.face[data-still] > * {
   transition: none;
 }
 
-.checkBox[data-still]:active,
-.checkBox[data-still]:has(> .check:checked):active {
+.face[data-still]:active,
+.face[data-still][data-press] {
   transform: none;
 }
 
 /* 亮色（这一行刚勾上、还在原位，label 上 data-fresh）：边、填充亮柠檬黄，勾号深色；只换颜色，不动形状和时长 */
-.checkBox[data-fresh] > .check:checked {
+.checkBox[data-fresh] .check:checked {
   box-shadow: inset 0 0 0 1.75px var(--accent);
 }
 
-.checkBox[data-fresh] > .fill {
+.checkBox[data-fresh] .fill {
   background: var(--accent);
 }
 
-.checkBox[data-fresh] > .tick {
+.checkBox[data-fresh] .tick {
   border-color: var(--on-accent);
 }

@@ -91,6 +91,30 @@
   min-width: 0;
 }
 
+/* 有缩略图的行（负责人 11-18“有附件的将日期放到图片上面，不要左边突出来”，弹窗选“日期在图片正上方”）：
+   不再给缩略图单开一栏（那样日期被挤到图左边、比别的行靠左），改成文字块里左右两块——
+   左边“标题 + 摘要”整块上下居中（负责人“前面的标题跟字要在中间”）；右边日期在缩略图正上方、右对齐，日期右边和没图的行对齐 */
+.withThumb {
+  flex-direction: row;
+  gap: 10px;
+  align-items: center;
+}
+
+.tcol {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
 .t2txt:empty {
   display: none;
 }

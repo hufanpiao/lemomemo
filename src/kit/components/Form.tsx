@@ -316,9 +316,11 @@ export function Check({
     <label className={styles.check} htmlFor={id}>
       {look === 'circle' ? (
         <span className={`${cc.checkBox} ${styles.circleBox}`}>
-          {input}
-          <span className={cc.fill} data-state={state} aria-hidden="true" />
-          <span className={cc.tick} data-state={state} aria-hidden="true" />
+          <span className={cc.face}>
+            {input}
+            <span className={cc.fill} data-state={state} aria-hidden="true" />
+            <span className={cc.tick} data-state={state} aria-hidden="true" />
+          </span>
         </span>
       ) : (
         input

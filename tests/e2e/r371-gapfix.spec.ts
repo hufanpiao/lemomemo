@@ -122,9 +122,10 @@ const shot = async (page: Page, name: string): Promise<Buffer> => {
 test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () => {
   test.use({ loggedIn: true, viewport: { width: 440, height: 895 }, timezoneId: 'Asia/Seoul' });
 
-  // R-472（11-17 月格方案乙，格高 90 → 78、整月矮 90）以后，6 行月格的日历页在 895 高时也正好一屏，不再是“只有日历页能滚”：
-  // 原来这里断言日历页比视口高（负责人“只有切到日历才回落”那次的版面事实），现在改成四页都不超过一屏。Gap fix 自己放垫块让文档变得能滚，不靠日历页
-  test('根据：895 高时日历、今天、待办、随手记都不超过一屏（R-472 起日历页也是一屏）', async ({ page }) => {
+  // R-472 当时以为 6 行月格在 895 高时正好一屏，其实是 subgrid 下 .cell 的最矮格高没生效、格子被压到 42 量出来的。
+  // 11-18 负责人“日历所有月份按照第一张图固定，不要随意缩小”：格高真按 78 以后，日历页（月格 + 下面的日清单）本来就比一屏高、能往下滚，
+  // 和负责人第一张图（11 月）一致。所以这里只断言今天、待办、随手记三页不超过一屏；日历页只断言它确实能滚（版面事实）。Gap fix 自己放垫块让文档变得能滚，不靠日历页
+  test('根据：895 高时今天、待办、随手记都不超过一屏；日历页月格按 78 格高、比一屏高', async ({ page }) => {
     await launch(page, { on: false, screenH: 956, top: 61 });
     const docH = async (name: string): Promise<number> => {
       await page.goto(`/app/#/${name}`);
@@ -134,7 +135,8 @@ test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () =>
     };
     const rest = await restH(page, 895);
     // 正好是不撑开时的高（电脑 895；触屏 896，只多 base.css 那 1px）
-    for (const name of ['calendar', 'today', 'todos', 'notes']) expect(await docH(name), name).toBe(rest);
+    for (const name of ['today', 'todos', 'notes']) expect(await docH(name), name).toBe(rest);
+    expect(await docH('calendar'), 'calendar').toBeGreaterThan(rest);
   });
 
   test('默认开着：底栏挂上后放垫块，今天页文档比视口高、底栏不动、垫块看不见也点不到；1.5 秒撤掉，记 no-change；稳定后和关着时逐像素一样', async ({ page }) => {

@@ -53,7 +53,8 @@ describe('CheckCircle 子任务进度和小点', () => {
       for (const type of ['animationend', 'webkitAnimationEnd']) el.dispatchEvent(new Event(type, { bubbles: true }));
     });
   const box = (checked: boolean, fresh?: boolean) => <CheckCircle checked={checked} label="完成" onChange={() => undefined} testId="c" fresh={fresh} />;
-  const label = () => document.querySelector('label') as HTMLLabelElement;
+  /** 画面层（label 里的 .face）：.pop 挂在这一层，回弹的 animationend 也在这一层（11-18 点击区不缩以后） */
+  const face = () => document.querySelector('label > span') as HTMLElement;
   /** 和页面一样：点了当场就按“刚点的值”画（TodoRow 经 useDoneFlow 同一拍改 checked）；set 是“照数据改”（撤销、写入失败退回） */
   let set: (v: boolean) => void = () => undefined;
   function Live() {
@@ -65,48 +66,48 @@ describe('CheckCircle 子任务进度和小点', () => {
   it('亲手勾上（负责人 11-18 定稿乙4）：回弹、14 个小点（每 360/14 度一个）和细正圆；小点、细正圆先播完不清，方框自己的回弹播完（最后结束）才拿掉', () => {
     render(<Live />);
     fireEvent.click(screen.getByTestId('c'));
-    const burst = document.querySelector('label > span:last-child') as Element;
+    const burst = document.querySelector('label > span > span:last-child') as Element;
     const dots = [...burst.querySelectorAll<HTMLElement>('i')];
     expect(dots).toHaveLength(14);
     expect(Number.parseFloat(dots[1]!.style.getPropertyValue('--a'))).toBeCloseTo(360 / 14, 6);
     expect(burst.querySelector('b')).not.toBeNull();
-    expect(label().className).toMatch(/pop/);
+    expect(face().className).toMatch(/pop/);
     animEnd(dots[13]!);
     animEnd(burst.querySelector('b')!);
-    expect(label().className).toMatch(/pop/);
-    animEnd(label());
+    expect(face().className).toMatch(/pop/);
+    animEnd(face());
     expect(document.querySelectorAll('label i')).toHaveLength(0);
-    expect(label().className).not.toMatch(/pop/);
+    expect(face().className).not.toMatch(/pop/);
   });
 
   it('减弱动态效果（动画不播、animationend 一直不来）：撤销以后照数据再显示成勾上，不重播', () => {
     render(<Live />);
     fireEvent.click(screen.getByTestId('c'));
-    expect(label().className).toMatch(/pop/);
+    expect(face().className).toMatch(/pop/);
     // 不发 animationend：停留期间、收起以后一直勾着，.pop 留着（CSS 里是 animation: none、小点 display: none，什么都不画）
     act(() => set(false));
-    expect(label().className).not.toMatch(/pop/);
+    expect(face().className).not.toMatch(/pop/);
     act(() => set(true));
-    expect(label().className).not.toMatch(/pop/);
+    expect(face().className).not.toMatch(/pop/);
     expect(document.querySelectorAll('label i')).toHaveLength(0);
   });
 
   it('动画没播完就变回没勾上（撤销、写入失败照数据退回）：清零；之后照数据再显示成勾上不重播', () => {
     render(<Live />);
     fireEvent.click(screen.getByTestId('c'));
-    expect(label().className).toMatch(/pop/);
+    expect(face().className).toMatch(/pop/);
     act(() => set(false));
     act(() => set(true));
-    expect(label().className).not.toMatch(/pop/);
+    expect(face().className).not.toMatch(/pop/);
     expect(document.querySelectorAll('label i')).toHaveLength(0);
   });
 
   it('亮色（fresh）：勾上而且使用方说还在原位才打 data-fresh；没勾上、不给 fresh 都不打', () => {
     const { rerender } = render(box(true, true));
-    expect(label().hasAttribute('data-fresh')).toBe(true);
+    expect(document.querySelector('label')!.hasAttribute('data-fresh')).toBe(true);
     rerender(box(true));
-    expect(label().hasAttribute('data-fresh')).toBe(false);
+    expect(document.querySelector('label')!.hasAttribute('data-fresh')).toBe(false);
     rerender(box(false, true));
-    expect(label().hasAttribute('data-fresh')).toBe(false);
+    expect(document.querySelector('label')!.hasAttribute('data-fresh')).toBe(false);
   });
 });

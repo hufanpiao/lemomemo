@@ -2,7 +2,7 @@
 // 11-18 定稿对照页第 11 版“乙4”，本机资料 设计方案/2026-11-18_完成动效/对照页源文件.html 的 data-v="d"）。
 // 不要后端：直接往本机库 planner-v4 写好待办和子任务再重新载入，在待办页勾一条，删除线、方框的动画停住后按 5 ms 一格拨时间取样（不靠帧率，见 record 的注释）：
 // • 删除线（kit TodoRow 标题里的 .line，scaleX）勾上当下（--dur-done-strike-at 0）从 0 起、单调长到 1，--dur-strike（90 ms）加一格余量内画满
-// • 方框（kit CheckCircle 的 .checkBox）从按下的 0.45 起回弹，峰值约 1.22（不低于 1.2），中间落回 1 以下（约 0.96），最后回到 1
+// • 方框（kit CheckCircle 的画面层 .face；外层 label 和 44 点击区不缩）从按下的 0.45 起回弹，峰值约 1.22（不低于 1.2），中间落回 1 以下（约 0.96），最后回到 1
 // • 勾上那一刻：14 个小点和一圈细正圆；方框亮柠檬黄（--accent）、勾号 --on-accent；回弹播完拿掉 .pop 和小点
 // • 勾上后约 720 ms（--dur-done-pop + --dur-done-rest）才打上 data-out；打上以后这一行在 --dur-collapse（100 ms）加两帧余量内收完、离开原组；
 //   收进“已完成”组以后方框照旧暗黄（--check-on-bg），不是亮色
@@ -116,7 +116,7 @@ async function record(page: Page, id: string): Promise<Rec> {
       const row = document.querySelector(`[data-row-id="${id}"]:not([data-state="leaving"])`);
       if (row) seen = true;
       const line = row?.querySelector('[class*="line"][aria-hidden]');
-      const box = row?.querySelector('label[class*="checkBox"]');
+      const box = row?.querySelector('label[class*="checkBox"] > span[class*="face"]');
       if (!rec.line && line?.hasAttribute('data-done')) rec.line = sample(line);
       if (!rec.box && box && /pop/.test(box.className)) {
         const fill = box.querySelector('[class*="fill"]');
@@ -214,6 +214,37 @@ test.describe('待办勾选完成时间线', () => {
       return { fresh: label?.hasAttribute('data-fresh') ?? null, fill: fill ? getComputedStyle(fill).backgroundColor === want : null };
     });
     expect(dark, `收进“已完成”以后方框不是暗黄：${trace}`).toEqual({ fresh: false, fill: true });
+  });
+
+  // 负责人 11-18“点击代办有时候不能一次点中结束，要点几下才能完成掉”：运行日志 2736、2877 行按下抬起都在方框上，却没有 click。
+  // 原来按下缩的是外层 label，44 的点击区跟着缩到约 20，iOS 抬手时按缩小后的位置判定。现在只缩画面层，点击区不缩
+  test('按住方框时画面缩到 0.45，点击区仍是 44：离中心 18 px 处照样点得中', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', ':active 只在 Chromium 的鼠标按下时可靠生效');
+    await seed(page);
+    const input = page.getByTestId('todos-done-t3');
+    const box = await input.boundingBox();
+    if (!box) throw new Error('找不到方框');
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.move(cx + 18, cy + 18);
+    await page.mouse.down();
+    await page.waitForTimeout(400);
+    const during = await page.evaluate(
+      ([x, y, id]) => {
+        const inp = document.querySelector(`[data-testid="${id}"]`);
+        const label = inp?.closest('label');
+        const face = inp?.parentElement;
+        const hit = document.elementFromPoint(x, y);
+        const m = face ? new DOMMatrix(getComputedStyle(face).transform) : null;
+        return { inLabel: !!(label && hit && label.contains(hit)), faceScale: m ? m.a : null, labelT: label ? getComputedStyle(label).transform : null };
+      },
+      [cx + 18, cy + 18, 'todos-done-t3'] as const,
+    );
+    expect(during.faceScale).toBeCloseTo(0.45, 2);
+    expect(during.labelT).toBe('none');
+    expect(during.inLabel).toBe(true);
+    await page.mouse.up();
+    await expect(input).toBeChecked();
   });
 
   test('减弱动态效果：方框不缩放、删除线直接画满（没有中间帧）', async ({ page }) => {

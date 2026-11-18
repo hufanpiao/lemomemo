@@ -116,6 +116,8 @@ export interface RunLogOptions {
   store?: Storage;
   now?: () => number;
   version?: string;
+  /** 下一帧回调（由 app 层注入 motion 的 nextFrame；平台层按分层规则不能引 motion，A25 也不许这里直接调帧接口）；不给就不记切回前台的帧计时 */
+  frame?: (cb: () => void) => void;
 }
 
 /** 开始记；返回停止函数 */
@@ -281,7 +283,34 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     // add 自己会补 route 行；这里只等画面稳下来再拍一次
     settleSnap('route');
   };
-  const onVis = (): void => snap(`visibility=${doc.visibilityState}`);
+  const onVis = (): void => {
+    snap(`visibility=${doc.visibilityState}`);
+    if (doc.visibilityState !== 'visible') return;
+    // 切回前台白屏很久（负责人 11-18 截图 10:30；日志只看到页面一直在、没重开，看不出卡在哪）：
+    // 记回来以后第 1、2 帧离 visibilitychange 多久、0 ms 计时器多久才轮到，和当时页面上有几层背景模糊（backdrop-filter）。
+    // 帧来得晚 = 主线程或合成器卡着；帧很快但用户看见白 = 系统在重画图层（层越多越慢）
+    // 帧回调由调用方注入（opts.frame，app 层传 motion 的 nextFrame）：这里只量“回来以后第几毫秒出帧”，不做动画
+    const frame = opts.frame;
+    if (!frame) return;
+    const t0 = performance.now();
+    let tm = -1;
+    setTimeout(() => {
+      tm = performance.now() - t0;
+    }, 0);
+    frame(() => {
+      const f1 = performance.now() - t0;
+      frame(() => {
+        const f2 = performance.now() - t0;
+        let blur = 0;
+        for (const el of doc.querySelectorAll<HTMLElement>('body *')) {
+          const cs = getComputedStyle(el);
+          const bf = cs.backdropFilter || cs.getPropertyValue('-webkit-backdrop-filter');
+          if (bf !== '' && bf !== 'none') blur++;
+        }
+        add(`vis-frames raf1=${Math.round(f1)} raf2=${Math.round(f2)} timer0=${Math.round(tm)} blur=${blur} els=${doc.getElementsByTagName('*').length}`);
+      });
+    });
+  };
   const onPageShow = (e: PageTransitionEvent): void => snap(`pageshow persisted=${e.persisted}`);
   // 离开页面（location.replace 去登录页、刷新、关标签页）：攒着没存的当场存，不等 300ms（启动失败那一行，第三方审查前端第 3 条）
   const onPageHide = (): void => {

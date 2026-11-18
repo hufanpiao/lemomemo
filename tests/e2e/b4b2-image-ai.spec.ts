@@ -22,7 +22,7 @@ const [PEND, FAIL, OFF, DONE] = [img(1), img(2), img(3), img(4)];
 
 type Fake = { retries: unknown[] };
 
-async function fakeServer(page: Page, baseURL: string | undefined, ai: boolean): Promise<Fake> {
+async function fakeServer(page: Page, baseURL: string | undefined, ai: boolean, list = false): Promise<Fake> {
   if (!baseURL) throw new Error('没有 baseURL');
   await seedFakeSession(page.context(), baseURL, { jwt: true });
   const bytes = new Map<string, Buffer>();
@@ -43,7 +43,11 @@ async function fakeServer(page: Page, baseURL: string | undefined, ai: boolean):
       await image(OFF, 120, { ai_status: 'skip', skip_reason: 'consent' }),
       await image(DONE, 260, { ai_status: 'done', ai_desc: '一本护照的首页，蓝色封面，有照片和姓名栏', ai_tags: ['证件', '신분증', '护照', '여권'] }, [600, 1800]),
     ],
-    settings: [{ id: '0e2e0000-0000-4000-8000-0000000b4c30', ...c, key: 'ai.enabled', value: ai }],
+    settings: [
+      { id: '0e2e0000-0000-4000-8000-0000000b4c30', ...c, key: 'ai.enabled', value: ai },
+      // 随手记页用列表方式（默认是瀑布流），只有量列表行的那一条要
+      ...(list ? [{ id: '0e2e0000-0000-4000-8000-0000000b4c31', ...c, key: 'notes.view@mobile', value: 'list' }] : []),
+    ],
   };
   await fakeRest(page, { user: USER, tables, profile: { consent_ai_at: at } });
   const fake: Fake = { retries: [] };
@@ -186,4 +190,29 @@ test('看图浮层（电脑）：同一个组件，底部描述和标签；Esc �
   // Esc 只关看图浮层，编辑器（抽屉）还在
   await expect(page.getByTestId(`note-image-${DONE}`)).toBeVisible();
   await expect(page.getByTestId(`note-image-open-${DONE}`)).toBeFocused();
+});
+
+// 负责人 11-18“有附件的将日期放到图片上面，不要左边突出来”（弹窗选“日期在图片正上方”）：列表里带图的行，
+// 日期右边和缩略图右边对齐（和没图的行的日期同一条线），缩略图整个在日期下面
+test('随手记列表带图的行：日期在缩略图正上方、右边对齐', async ({ page, baseURL }) => {
+  await fakeServer(page, baseURL, true, true);
+  await page.goto('/app/#/notes');
+  const thumb = page.getByTestId(`notes-thumb-${NOTE}`);
+  await expect(thumb).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(FADE_GUARD_MS); // 行的进场淡入走完再量
+  const tm = page.getByTestId(`notes-row-${NOTE}`).locator('[class^="_tm_"]').first();
+  if (process.env['LEMO_SHOT_DIR']) await page.screenshot({ path: `${process.env['LEMO_SHOT_DIR']}/notes-thumb-date-${test.info().project.name}.png` });
+  const a = await tm.boundingBox();
+  const b = await thumb.boundingBox();
+  if (!a || !b) throw new Error('量不到日期或缩略图');
+  expect(Math.abs(a.x + a.width - (b.x + b.width))).toBeLessThanOrEqual(1);
+  expect(b.y).toBeGreaterThanOrEqual(a.y + a.height);
+  // 负责人“前面的标题跟字要在中间”：左边标题 + 摘要整块的上下中线和右边“日期 + 缩略图”的中线对齐（差 ≤ 2px）
+  const mid = await page.getByTestId(`notes-row-${NOTE}`).evaluate((r) => {
+    const box = (sel: string) => r.querySelector(sel)?.getBoundingClientRect();
+    const l = box('[class^="_tcol_"]');
+    const s = box('[class^="_side_"]');
+    return l && s ? Math.abs(l.top + l.height / 2 - (s.top + s.height / 2)) : 99;
+  });
+  expect(mid).toBeLessThanOrEqual(2);
 });

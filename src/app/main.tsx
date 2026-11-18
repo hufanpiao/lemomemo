@@ -52,7 +52,7 @@ const applyLocale = (ui: UiLocale): void => applyUiLocale(ui, uiStore.getState()
 
 // 诊断启动件（运行日志，platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量整块摇掉；启动画面收起不等它
 // diag：运行日志接上以后的诊断启动件（启动失败时经它记一行再跳登录页，见文件末尾）；正式版是 undefined
-const diag = import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot(), m)).catch(() => undefined) : undefined;
+const diag = import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot({ frame: nextFrame }), m)).catch(() => undefined) : undefined;
 // 启动画面最晚 5 秒收起：从入口模块开始执行算起（关口、冷启动、分包加载哪一步卡住都不再盖着）
 hideSplashAfter(hideSplash);
 // 皮肤、深浅色（ADR-008）：入口一开始就懒加载 platform/look.ts（不进首屏），它一加载就按本机缓存套到 <html> 上，再盯住 settings 集合（coldStart 灌好、同步回来都重新套）；

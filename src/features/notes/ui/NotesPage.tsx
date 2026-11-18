@@ -249,8 +249,15 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
       >
         <div className={styles.swRow}>
         <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
-          <RowText it={it} time={rowTime(it)} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} failed={failed.has(it.id)} mark={mark} />
-          {it.cover ? <ListThumb img={it.cover} /> : null}
+          <RowText
+            it={it}
+            time={rowTime(it)}
+            ai={aiMark(it)}
+            ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />}
+            failed={failed.has(it.id)}
+            mark={mark}
+            thumb={it.cover ? <ListThumb img={it.cover} /> : null}
+          />
         </button>
         <SortEnd>{more(it)}</SortEnd>
         </div>

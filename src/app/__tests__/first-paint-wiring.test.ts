@@ -186,6 +186,6 @@ describe('main.tsx：启动失败先记运行日志再回登录页', () => {
     expect(go).toBeGreaterThan(log);
   });
   it('diag 就是非正式版下载诊断启动件的那一个 Promise（正式版是 undefined，不下载、不等）', () => {
-    once(main, "const diag = import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot(), m))");
+    once(main, "const diag = import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot({ frame: nextFrame }), m))");
   });
 });

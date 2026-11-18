@@ -121,6 +121,25 @@ describe('全局运行日志', () => {
     expect(log).toMatch(/app typebar stored out=ok/);
   });
 
+  it('切回前台（负责人 11-18 白屏很久）：用注入的帧回调记 vis-frames（第 1、2 帧、0ms 计时器、模糊图层数）；不注入就不记', () => {
+    vi.useFakeTimers();
+    const cbs: Array<() => void> = [];
+    const stop = startRunLog(window, { version: 't', frame: (cb) => void cbs.push(cb) });
+    document.dispatchEvent(new Event('visibilitychange'));
+    vi.advanceTimersByTime(0);
+    cbs.shift()?.();
+    cbs.shift()?.();
+    window.dispatchEvent(new Event('pagehide'));
+    stop();
+    expect(readRunLog()).toMatch(/vis-frames raf1=\d+ raf2=\d+ timer0=\d+ blur=0 els=\d+/);
+    localStorage.clear();
+    const stop2 = startRunLog(window, { version: 't' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('pagehide'));
+    stop2();
+    expect(readRunLog()).not.toMatch(/vis-frames/);
+  });
+
   it('离开页面（pagehide，例如启动失败跳登录页的 location.replace）当场存盘，不等 300ms（第三方审查前端第 3 条）', () => {
     vi.useFakeTimers();
     const stop = startRunLog(window, { version: 't' });

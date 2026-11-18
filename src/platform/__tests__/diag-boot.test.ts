@@ -22,7 +22,7 @@ describe('startDiagBoot', () => {
     for (const k of STALE_KEYS) localStorage.setItem(k, 'old');
     localStorage.setItem('lemo-gapfix-off', '1');
     let later: (() => void) | null = null;
-    startDiagBoot(localStorage, (fn) => (later = fn));
+    startDiagBoot({ idle: (fn) => (later = fn) });
     expect(localStorage.getItem('lemo-gapfix-out'), '没到空闲不清').toBe('old');
     (later as unknown as () => void)();
     for (const k of STALE_KEYS) expect(localStorage.getItem(k)).toBeNull();
@@ -31,7 +31,7 @@ describe('startDiagBoot', () => {
   });
 
   it('启动失败那一行（logBootFailed）：只有错误名和固定说明；离开页面（pagehide）当场存进运行日志（第三方审查前端第 3 条）', () => {
-    startDiagBoot(localStorage, () => undefined);
+    startDiagBoot({ idle: () => undefined });
     const e = new TypeError('含用户内容的说明');
     logBootFailed(e);
     logBootFailed('不是 Error');
@@ -50,7 +50,7 @@ describe('startDiagBoot', () => {
 
 /** main.tsx 里这一行原样（下面“接线”核对 main.tsx 里确实是这样写的） */
 // 第三方审查前端第 3 条（11-14）起留下这个 Promise（diag），启动失败时经它的 logBootFailed 记一行再跳登录页
-const DIAG = "const diag = import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot(), m)).catch(() => undefined) : undefined;";
+const DIAG = "const diag = import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot({ frame: nextFrame }), m)).catch(() => undefined) : undefined;";
 
 describe('接线', () => {
   const main = readFileSync(resolve(import.meta.dirname, '../../app/main.tsx'), 'utf8');
