@@ -131,7 +131,8 @@ describe('全局运行日志', () => {
     cbs.shift()?.();
     window.dispatchEvent(new Event('pagehide'));
     stop();
-    expect(readRunLog()).toMatch(/vis-frames raf1=\d+ raf2=\d+ timer0=\d+ blur=0 els=\d+/);
+    expect(readRunLog()).toMatch(/vis-frames raf1=\d+ raf2=\d+ timer0=\d+ blur=0 els=\d+ mid=\S+ op=\S+/);
+    expect(readRunLog()).toMatch(/=== start .* nav=\S+ ua=/);
     localStorage.clear();
     const stop2 = startRunLog(window, { version: 't' });
     document.dispatchEvent(new Event('visibilitychange'));

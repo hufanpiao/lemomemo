@@ -4,7 +4,7 @@
 // • 读屏和点按都是下面那个真的 checkbox；叠在上面的填充块、勾号只是画（aria-hidden、不接点按）
 // • 方框和 checkbox 都跟 checked 走。使用方（TodosPage、TodayPage）传的是界面上该显示的值（点下去当下就是“刚点的值”、
 //   留住那一拍里是留住的值，useHoldView 的 shown），所以填满动画不等保存回来，读屏读到的也和看到的一致（代码审查 FA5-CR A3：删掉了没人用的 shown 参数）
-import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import styles from './CheckCircle.module.css';
 
 export interface CheckCircleProps {
@@ -44,6 +44,11 @@ export function partStage(done: number, total: number): 0 | 1 | 2 | 3 {
 /** 勾上那一下长出来的一圈小点（勾选完成时间线第 ③ 段，负责人 11-18 定稿乙4）：14 个，每 360/14 度一个 */
 const SPARKS = Array.from({ length: 14 }, (_, i) => (360 / 14) * i);
 
+/** 抬手离按下点不超过这么远才算轻点（再远是在滑列表、拖行） */
+const TAP_SLOP_PX = 10;
+/** 抬手切换以后这么久之内系统补发的 click 不再切换：日志里补发最晚 0.26 s，留足余量；人有意的第二下自己有 pointerup，不受影响 */
+const CLICK_SWALLOW_MS = 800;
+
 export function CheckCircle({ checked, label, onChange, testId, readOnly = false, still = false, progress, fresh = false }: CheckCircleProps) {
   const state = checked ? 'on' : 'off';
   // 回弹（画面层 .face 上的 .pop）、一圈小点和细正圆只在用户亲手勾上的那一下开始（key 换一次重播一次）；挂载时已经勾上的、只读拦下的、子任务（still）都不开始。
@@ -61,20 +66,48 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
   // 不用 .checkBox:active 缩 .face：lint 的 lemo/reduced-motion-override 要求状态写在缩放的元素自己身上；
   // 松手听 window：左滑行的手势可能把指针捕获到行面上，label 收不到 pointerup。直接改 DOM 属性，不走 React 重画
   const faceRef = useRef<HTMLSpanElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const labelRef = useRef<HTMLLabelElement>(null);
+  const swallowUntil = useRef(0);
+  const apply = (v: boolean): void => {
+    if (v && !still && !readOnly) setPop((n) => n + 1);
+    onChange(v);
+  };
+  // 手指抬起就切换（负责人 11-18“待办点击完成还是会有点完延迟或者不执行”）：运行日志 preview.405 里 131 次轻点，pointerup 都是当下到，
+  // click 却有四十多次晚 0.2～0.26 秒、二十次两下快点只来一个（iOS 等着认双击）。所以触摸、笔在按下点 10 px 以内抬起时这里直接切换，
+  // 之后 800 ms 内系统补发的 click 在 label 上拦掉（不然会再切回去）；鼠标、键盘（空格）照旧走 input 自己的 click → onChange
+  useEffect(() => {
+    const lb = labelRef.current;
+    if (!lb) return undefined;
+    const onClick = (ev: MouseEvent): void => {
+      if (performance.now() >= swallowUntil.current) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+    };
+    lb.addEventListener('click', onClick, true);
+    return () => lb.removeEventListener('click', onClick, true);
+  }, []);
   const press = (e: ReactPointerEvent): void => {
     const el = faceRef.current;
     if (!el || (e.pointerType === 'mouse' && e.button !== 0)) return;
     el.setAttribute('data-press', '');
-    const off = (): void => {
+    const { pointerId, pointerType, clientX: x0, clientY: y0 } = e;
+    const off = (ev: PointerEvent): void => {
+      if (ev.pointerId !== pointerId) return;
       el.removeAttribute('data-press');
       window.removeEventListener('pointerup', off, true);
       window.removeEventListener('pointercancel', off, true);
+      const input = inputRef.current;
+      if (pointerType === 'mouse' || ev.type !== 'pointerup' || !input) return;
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > TAP_SLOP_PX) return;
+      swallowUntil.current = performance.now() + CLICK_SWALLOW_MS;
+      apply(!input.checked);
     };
     window.addEventListener('pointerup', off, true);
     window.addEventListener('pointercancel', off, true);
   };
   return (
-    <label className={styles.checkBox} data-fresh={fresh && checked ? '' : undefined} onPointerDown={press}>
+    <label ref={labelRef} className={styles.checkBox} data-fresh={fresh && checked ? '' : undefined} onPointerDown={press}>
       {/* 画面层：按下缩放、回弹缩这一层，外层 label 的 44 点击区不缩（11-18 点不中，见 CheckCircle.module.css 的 .face） */}
       <span
         ref={faceRef}
@@ -90,10 +123,8 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
           checked={checked}
           aria-label={label}
           aria-disabled={readOnly || undefined}
-          onChange={(e) => {
-            if (e.target.checked && !still && !readOnly) setPop((n) => n + 1);
-            onChange(e.target.checked);
-          }}
+          ref={inputRef}
+          onChange={(e) => apply(e.target.checked)}
           data-testid={testId}
         />
         {stage ? (

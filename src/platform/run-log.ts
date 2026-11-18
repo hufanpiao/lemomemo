@@ -121,6 +121,12 @@ export interface RunLogOptions {
 }
 
 /** 开始记；返回停止函数 */
+/** 这次打开是怎么来的（navigate 新开、reload 被重新加载——iOS 在后台杀掉页面进程再回来也是这一种、back_forward）；拿不到写 - */
+function navType(win: Window): string {
+  const e = win.performance?.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming | undefined;
+  return e?.type ?? '-';
+}
+
 export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () => void {
   const store = opts.store ?? localStorage;
   const now = opts.now ?? (() => Date.now());
@@ -169,7 +175,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const nav = win.navigator as Navigator & { standalone?: boolean };
   const standalone = isStandalone(nav, (q) => win.matchMedia?.(q).matches === true);
   push(
-    `=== start ${new Date(t0).toISOString()} v=${opts.version ?? `${buildInfo.version}@${buildInfo.commit}`} screen=${win.screen.width}x${win.screen.height} dpr=${win.devicePixelRatio} standalone=${standalone} tap-hl=${win.getComputedStyle(doc.documentElement).getPropertyValue('-webkit-tap-highlight-color') || '-'} route=${win.location.hash || '/'} ua=${nav.userAgent.slice(0, 160)}`,
+    `=== start ${new Date(t0).toISOString()} v=${opts.version ?? `${buildInfo.version}@${buildInfo.commit}`} screen=${win.screen.width}x${win.screen.height} dpr=${win.devicePixelRatio} standalone=${standalone} tap-hl=${win.getComputedStyle(doc.documentElement).getPropertyValue('-webkit-tap-highlight-color') || '-'} route=${win.location.hash || '/'} nav=${navType(win)} ua=${nav.userAgent.slice(0, 160)}`,
   );
   save();
 
@@ -307,7 +313,13 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
           const bf = cs.backdropFilter || cs.getPropertyValue('-webkit-backdrop-filter');
           if (bf !== '' && bf !== 'none') blur++;
         }
-        add(`vis-frames raf1=${Math.round(f1)} raf2=${Math.round(f2)} timer0=${Math.round(tm)} blur=${blur} els=${doc.getElementsByTagName('*').length}`);
+        // 负责人 11-18 12:33 又白一次：帧 40 ms 就到、页面 407 个元素，还是看不出白在哪一层。再记屏幕正中那一点是谁（白屏时是不是盖了东西）、
+        // 根元素和 body 的不透明度、页面有没有被系统重新加载（start 行的 nav=）
+        const mid = typeof doc.elementFromPoint === 'function' ? doc.elementFromPoint(win.innerWidth / 2, win.innerHeight / 2) : null;
+        const op = `${getComputedStyle(doc.documentElement).opacity}/${doc.body ? getComputedStyle(doc.body).opacity : '-'}`;
+        add(
+          `vis-frames raf1=${Math.round(f1)} raf2=${Math.round(f2)} timer0=${Math.round(tm)} blur=${blur} els=${doc.getElementsByTagName('*').length} mid=${describeEl(mid)} op=${op}`,
+        );
       });
     });
   };
