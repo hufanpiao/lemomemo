@@ -48,7 +48,8 @@ test('今天 → 待办 → 日历 → 随手记 → 今天：切页全程头像
           }, 2000);
           Element.prototype.animate = function (this: Element, ...args: Parameters<Element['animate']>) {
             const a = orig.apply(this, args);
-            if (!queued && this.matches('main')) {
+            // 新页的淡入加在 main 或 main 里的子树上（头像所在的那一支不加，page-swap.ts 的 fadeTargets）
+            if (!queued && this.closest('main')) {
               queued = true;
               queueMicrotask(() => {
                 Element.prototype.animate = orig;
@@ -98,7 +99,8 @@ test('今天 → 待办 → 日历 → 随手记 → 今天：切页全程头像
 
 // 负责人 11-18 录屏：自己的图片头像切页时空约 0.83 秒（= 切页时长 0.88 秒）。副本里新建的 <img> 要重新加载、解码，iPhone 上整段切页都空着；
 // 改成已解码的小图当场画进画布（motion/copy-node.ts paintSmall）。这里塞一张品红色 blob 图片当头像，切页动画一建好就暂停，
-// 看副本里是画布、不是 <img>，而且画布中间那一点就是品红色（像素当场就有，不等加载）
+// 看副本里是画布、不是 <img>，而且画布中间那一点就是品红色（像素当场就有，不等加载）。
+// 11-19 起副本只管新页出来之前那一段（新页一出来就拿掉），所以在副本插进页面的那一刻量
 test('图片头像：切页时钉住的副本是画好的画布，当场就有像素', async ({ page }) => {
   await page.goto('/app/#/today');
   await page.waitForFunction(() => document.documentElement.getAttribute('data-motion') === 'ready', undefined, { timeout: 30_000 });
@@ -122,26 +124,74 @@ test('图片头像：切页时钉住的副本是画好的画布，当场就有�
     () =>
       new Promise<{ canvas: number; img: number; rgb: number[] }>((done) => {
         const link = [...document.querySelectorAll<HTMLAnchorElement>('[data-testid="tabbar"] a')].find((a) => a.textContent?.includes('待办'));
-        const orig = Element.prototype.animate;
-        Element.prototype.animate = function (this: Element, ...args: Parameters<Element['animate']>) {
-          const a = orig.apply(this, args);
-          if (this.matches('main')) {
-            Element.prototype.animate = orig;
-            queueMicrotask(() => {
-              for (const x of document.getAnimations()) x.pause();
-              const box = document.querySelector('[data-tab-pin]');
-              const cv = box?.querySelector('canvas') ?? null;
-              const px = cv?.getContext('2d')?.getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data;
-              done({ canvas: box?.querySelectorAll('canvas').length ?? 0, img: box?.querySelectorAll('img').length ?? 0, rgb: px ? [px[0] ?? 0, px[1] ?? 0, px[2] ?? 0] : [] });
-              for (const x of document.getAnimations()) x.play();
-            });
-          }
-          return a;
-        };
+        const mo = new MutationObserver((recs) => {
+          const box = recs.flatMap((r) => [...r.addedNodes]).find((n): n is Element => n instanceof Element && n.hasAttribute('data-tab-pin'));
+          if (!box) return;
+          mo.disconnect();
+          const cv = box.querySelector('canvas');
+          const px = cv?.getContext('2d')?.getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data;
+          done({ canvas: box.querySelectorAll('canvas').length, img: box.querySelectorAll('img').length, rgb: px ? [px[0] ?? 0, px[1] ?? 0, px[2] ?? 0] : [] });
+        });
+        mo.observe(document.body, { childList: true });
         link?.click();
       }),
   );
   expect(got.canvas, '副本里是画布').toBe(1);
   expect(got.img, '副本里没有要重新加载的 <img>').toBe(0);
   expect(got.rgb, '画布中间是头像的品红色').toEqual([255, 0, 255]);
+});
+
+// 负责人 11-19“头像怎么也还是会消失”：上一次切页还在播（880 ms）就又点了别的页签。原来新页的头像整段切页透明（opacity: 0）、由副本代画，
+// 连点时下一次的副本抄到了这条透明，整段切页头像没了（11-19 实时逐帧：第二下之后约 1.2 秒看得见的头像为 0 个）；
+// 还在等新页时又切，拷的是藏着的旧页（宽 0），头像跑到左边 x 44。
+// 这里真的连点（不暂停动画），每 8 ms 量一次画面上看得见的头像（不用 requestAnimationFrame：本机 WebKit 后台标签会停帧几十秒）：
+// 从点第一下到停住后再多 1 秒，每次都正好一个、全亮、在原处
+test('连点切页：上一次没播完就切下一页，每一帧头像都在', async ({ page }) => {
+  await page.goto('/app/#/today');
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-motion') === 'ready', undefined, { timeout: 30_000 });
+  await waitPreloaded(page);
+  for (const [first, second] of [
+    ['待办', '日历'],
+    ['随手记', '今天'],
+  ] as const) {
+    const bad = await page.evaluate(
+      ([first, second]) =>
+        new Promise<string[]>((done) => {
+          const tab = (name: string) => [...document.querySelectorAll<HTMLAnchorElement>('[data-testid="tabbar"] a')].find((a) => a.textContent?.includes(name));
+          const visible = (): { x: number; y: number; op: number }[] =>
+            [...document.querySelectorAll<HTMLElement>('[data-swap-pin]')].flatMap((el) => {
+              if (getComputedStyle(el).visibility !== 'visible') return [];
+              let op = 1;
+              for (let e: Element | null = el; e; e = e.parentElement) op *= Number(getComputedStyle(e).opacity);
+              const r = el.getBoundingClientRect();
+              return r.width === 0 || op < 0.02 ? [] : [{ x: r.x, y: r.y, op }];
+            });
+          const was = visible()[0];
+          if (!was) return done(['点之前没有头像']);
+          const out: string[] = [];
+          const t0 = performance.now();
+          let clicked = false;
+          let still = 0;
+          const tick = (): void => {
+            const now = performance.now();
+            const v = visible();
+            const one = v[0];
+            if (v.length !== 1 || !one || one.op < 0.99 || Math.abs(one.x - was.x) > 0.5 || Math.abs(one.y - was.y) > 0.5) out.push(`${Math.round(now - t0)}ms ${JSON.stringify(v)}`);
+            // 第二下在第一次切页正在播的时候点（快照还在、淡入还没完）
+            if (!clicked && now - t0 >= 250 && document.querySelector('[data-tab-ghost]')) {
+              clicked = true;
+              tab(second)?.click();
+            }
+            if (clicked && still === 0 && !document.querySelector('[data-tab-ghost],[data-tab-pin]')) still = now;
+            if (still > 0 && now - still > 1000) return done(out);
+            if (now - t0 > 15_000) return done([...out, `15 秒没停住（第二下${clicked ? '已' : '没'}点）`]);
+            setTimeout(tick, 8);
+          };
+          tab(first)?.click();
+          setTimeout(tick, 8);
+        }),
+      [first, second] as const,
+    );
+    expect(bad, `${first} → ${second} 连点：头像不在、不止一个、不全亮或移位的帧`).toEqual([]);
+  }
 });

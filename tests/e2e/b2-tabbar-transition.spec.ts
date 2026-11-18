@@ -1,5 +1,5 @@
 // 液态玻璃底栏在切页时的样子和点按（B2 FA-7；负责人 11-06 选方案 B，B2-动效审查-切页先出后入.md 第四批）；别的底栏用例见 b2-tabbar.spec.ts。
-// • 四个页签之间互切不起 View Transition：新页直接换上，main 做一次 opacity 0→1；底栏、“＋”、液滴一直是真元素、一直实时模糊，液滴连续滑、能被下一次点按打断
+// • 四个页签之间互切不起 View Transition：新页直接换上，做一次 opacity 0→1（11-19 起加在 main 里不含右上角头像的子树上，头像一直全亮）；底栏、“＋”、液滴一直是真元素、一直实时模糊，液滴连续滑、能被下一次点按打断
 // • 进出没有底栏的页（今天 → 编辑页）照旧 View Transition：圆角和阴影画在快照自己身上，组上没有阴影，只有一边有底栏时不剩空阴影壳（代码审查 M5）
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
@@ -69,12 +69,25 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0, wai
         if (wasRunning) a.play();
         return out;
       };
+      /** 是不是切页淡入（透明度 + 模糊一起，blur-swap.ts 的 blurSwapIn）：页面自己的出场动画（Appear）不算 */
+      const isFade = (x: Animation): boolean => {
+        const k0 = x.effect instanceof KeyframeEffect ? x.effect.getKeyframes()[0] : undefined;
+        return !(x instanceof CSSTransition) && !(x instanceof CSSAnimation) && k0?.['opacity'] !== undefined && String(k0?.['filter'] ?? '').startsWith('blur(');
+      };
+      /** main 里的切页淡入（main 自己或里面头一个） */
+      const fadeOf = (m: Element): Animation | undefined => m.getAnimations({ subtree: true }).find((x) => isFade(x) && x.playState !== 'finished');
+      /** 新页此刻看上去的不透明度：main 自己的乘上正在淡入的那一块的（淡入不在 main 上时） */
+      const opOf = (m: Element): number => {
+        const t = (fadeOf(m)?.effect as KeyframeEffect | null | undefined)?.target;
+        return Number(getComputedStyle(m).opacity) * (t && t !== m ? Number(getComputedStyle(t).opacity) : 1);
+      };
       const proto = Element.prototype;
       const origAnimate = proto.animate;
       const patched = function (this: Element, ...args: Parameters<Element['animate']>) {
         const a = origAnimate.apply(this, args);
         const el = (a.effect as KeyframeEffect | null)?.target;
-        if (probe.fade === null && el?.tagName === 'MAIN') {
+        // 新页淡入加在 main 或 main 里不含头像的子树上（page-swap.ts 的 fadeTargets）：认 main 里头一个建的
+        if (probe.fade === null && el?.closest('main') && isFade(a)) {
           if (probe.fadeAt0 < 0) probe.fadeAt0 = Math.round(performance.now() - tClick);
           // 等调用方把起点拨好（fadeSwap 跳过第一帧）再抽查
           queueMicrotask(() => {
@@ -87,10 +100,11 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0, wai
       /** 新页 main 上已经有淡入（点按同一个任务里）就按进度抽查一次；起点已由 fadeSwap 拨好，直接读 */
       const scanFade = (): void => {
         const m = document.querySelector('main');
-        const a = m?.getAnimations().find((x) => (x.effect as KeyframeEffect | null)?.target === m && !(x instanceof CSSTransition));
-        if (probe.fade === null && m && m !== before && a) {
+        const a = m ? fadeOf(m) : undefined;
+        const el = (a?.effect as KeyframeEffect | null | undefined)?.target;
+        if (probe.fade === null && m && m !== before && a && el) {
           if (probe.fadeAt0 < 0) probe.fadeAt0 = Math.round(performance.now() - tClick);
-          probe.fade = scan(a, () => Number(getComputedStyle(m).opacity), fadeAt, true);
+          probe.fade = scan(a, () => Number(getComputedStyle(el).opacity), fadeAt, true);
         }
       };
       /** 液滴的过渡有了就按进度抽查一次（只做一次） */
@@ -147,7 +161,7 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0, wai
           vt: document.getAnimations().filter((x) => String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition')).length,
           mains: document.querySelectorAll('main').length,
           ghosts: document.querySelectorAll('[data-tab-ghost]').length,
-          op: main ? Number(getComputedStyle(main).opacity) : -1,
+          op: main ? opOf(main) : -1,
           x: drop ? drop.getBoundingClientRect().x : NaN,
           fx: nav ? getComputedStyle(nav).backdropFilter : '',
           addFx: add ? getComputedStyle(add).backdropFilter : 'none-add',
@@ -208,7 +222,7 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
     for (const [name, testid] of [['todos', 'todos'], ['calendar', 'cal'], ['today', 'today']] as const) {
       await page.getByTestId('tabbar').locator(`a[data-tab="${name}"]`).click();
       await expect(page.locator(testid === 'cal' ? 'main[data-feature="calendar"]' : `[data-testid="${testid}"]`)).toBeVisible({ timeout: 10_000 });
-      await expect.poll(() => page.evaluate(() => document.querySelector('main')?.getAnimations().length ?? -1), { timeout: 5000 }).toBe(0);
+      await expect.poll(() => page.evaluate(() => document.querySelector('main')?.getAnimations({ subtree: true }).filter((x) => !(x instanceof CSSTransition) && !(x instanceof CSSAnimation) && x.playState !== 'finished').length ?? -1), { timeout: 5000 }).toBe(0);
     }
     await page.waitForTimeout(400);
     for (const [name, testid] of [['todos', 'todos'], ['calendar', 'cal'], ['today', 'today']] as const) {
@@ -225,7 +239,7 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
       expect(rows.every((r) => r.addFx === 'none-add' || r.addFx.includes('blur(')), `${name}：“＋”某一帧没有 backdrop-filter`).toBe(true);
       const after = rows.slice(1).filter((r) => r.op >= 0);
       // 淡入放完以后整页不透明（慢机器上采样窗口里可能还没放完，所以等动画结束再查，不看采样最后一帧）
-      await expect.poll(() => page.evaluate(() => { const m = document.querySelector('main'); return m && m.getAnimations().length === 0 ? Number(getComputedStyle(m).opacity) : -1; }), { timeout: 5000 }).toBe(1);
+      await expect.poll(() => page.evaluate(() => { const m = document.querySelector('main'); return m && m.getAnimations({ subtree: true }).every((x) => x instanceof CSSTransition || x instanceof CSSAnimation || x.playState === 'finished') ? Number(getComputedStyle(m).opacity) : -1; }), { timeout: 5000 }).toBe(1);
       // 没有空白帧：新页和日历一样从透明起，那几帧旧页快照还盖着（快照前 2/3 才淡没）；新页还几乎透明时必须有快照
       expect(after.every((r) => r.op > 0.1 || r.ghosts >= 1), `${name}：有整页透明、也没有旧页快照的一帧 ${JSON.stringify(after.map((r) => [r.op, r.ghosts]))}`).toBe(true);
       // 逐帧看新页自己（最后那个 main 元素）：只亮不暗——新页先实心露一帧、再从透明淡入（“先实心再透明”）在这里抓
@@ -279,8 +293,8 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
     const jump = Math.max(...second.slice(1).map((r, k) => (Math.abs(r.x - (second[k]?.x ?? 0)) * 16.7) / Math.max(16.7, r.tl - (second[k]?.tl ?? 0))));
     expect(jump, `打断时液滴跳了 ${JSON.stringify(second.slice(0, 6).map((r) => [Math.round(r.tl - (second[0]?.tl ?? 0)), Math.round(r.x)]))}`).toBeLessThan(25);
     expect(second.every((r) => r.vt === 0)).toBe(true);
-    await expect.poll(() => page.evaluate(() => { const m = document.querySelector('main'); return m && m.getAnimations().length === 0 ? Number(getComputedStyle(m).opacity) : -1; }), { timeout: 5000 }).toBe(1);
-    expect(await page.evaluate(() => document.querySelector('main')?.getAnimations().length ?? -1)).toBe(0);
+    await expect.poll(() => page.evaluate(() => { const m = document.querySelector('main'); return m && m.getAnimations({ subtree: true }).every((x) => x instanceof CSSTransition || x instanceof CSSAnimation || x.playState === 'finished') ? Number(getComputedStyle(m).opacity) : -1; }), { timeout: 5000 }).toBe(1);
+    expect(await page.evaluate(() => document.querySelector('main')?.getAnimations({ subtree: true }).filter((x) => !(x instanceof CSSTransition) && !(x instanceof CSSAnimation) && x.playState !== 'finished').length ?? -1)).toBe(0);
   });
 
   test('减少动态效果：页签互切直接换页，main 不做动画', async ({ page }) => {
@@ -406,6 +420,7 @@ test.describe('底栏：页签互切按底栏顺序左右滑入（负责人 11-1
         const el = e.target as Element;
         return {
           main: el === m,
+          pin: el.matches('[data-swap-pin]') || el.querySelector('[data-swap-pin]') !== null,
           frames: e.getKeyframes().map((k) => [k['opacity'] ?? null, k['filter'] ?? null, k['transform'] ?? null, k.offset ?? null]),
           easing: String(e.getTiming().easing),
           dur: Number(e.getTiming().duration),
@@ -458,9 +473,11 @@ test.describe('底栏：页签互切按底栏顺序左右滑入（负责人 11-1
       const r = await clickAndRead(page, tab);
       expect(r, `${tab}：点完新页还没出来`).not.toBeNull();
       const list = r?.page ?? [];
-      const fade = list.find((a) => a.main && a.frames[0]?.[0] !== null);
-      expect(fade, `${tab}：main 上没有淡入 ${JSON.stringify(list)}`).toBeDefined();
-      // 新页：透明度和模糊同日历新的一页（随手记有 fixed 贴底行：模糊拆到不含 fixed 的子树上，main 上只剩透明度）
+      const fade = list.find((a) => a.frames[0]?.[0] !== null && a.frames[0]?.[1] !== null);
+      expect(fade, `${tab}：新页没有淡入 ${JSON.stringify(list)}`).toBeDefined();
+      // 右上角头像（data-swap-pin）不跟着淡入：动的元素里没有它，它和祖先也不动（负责人 11-19“头像怎么也还是会消失”，page-swap.ts 的 fadeTargets）
+      expect(list.some((a) => a.pin), `${tab}：头像跟着新页淡入了 ${JSON.stringify(list)}`).toBe(false);
+      // 新页：透明度和模糊同日历新的一页（淡入加在不含头像、不含 fixed 元素的子树上；fixed 贴底行自己只淡入、不模糊）
       expect(fade?.frames.map((f) => f[0])).toEqual(cal.inn?.frames.map((f) => f[0]));
       expect(fade?.dur).toBe(cal.inn?.dur);
       expect(fade?.easing).toBe(cal.inn?.easing);

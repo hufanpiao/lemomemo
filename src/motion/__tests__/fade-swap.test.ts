@@ -4,7 +4,7 @@
 // 11-18 独立评审后整块重写（src/motion/page-swap.ts）：平移换成像素（H1）、快照先藏后显（M2）、连点快照从上一页此刻的样子起（M1）、
 // 长成放完先收打字条再还原层级（H2）
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { blurSwapIn, blurSwapInFilter, blurSwapOut, blurSwapTiming } from '../blur-swap.ts';
+import { blurSwapIn, blurSwapOut, blurSwapTiming } from '../blur-swap.ts';
 import { FADE_GUARD_MS, FADE_WAIT_MS, GROW_HOLD, cancelFade, fadeSwap, growSwap, loadPageSwap, transition } from '../index.ts';
 import { bezierCss, dur, ease } from '../tokens.ts';
 
@@ -15,6 +15,12 @@ const setPage = (name: string | null): void => {
   const m = document.createElement('main');
   m.dataset.feature = name;
   document.body.append(m);
+};
+/** 带 id 的元素 */
+const el = (tag: string, id: string, ...kids: Element[]): HTMLElement => {
+  const e = Object.assign(document.createElement(tag), { id });
+  e.append(...kids);
+  return e;
 };
 /** 等 MutationObserver 回调跑完 */
 const flush = async (): Promise<void> => {
@@ -116,23 +122,92 @@ describe('fadeSwap', () => {
     expect(anims[2]?.frames).toEqual(blurSwapOut(false, 0, 0.6));
   });
 
-  it('main 里有 position: fixed 的元素（随手记贴底输入行）：淡入加在 main，模糊只加在不含 fixed 的子树上（filter 会让 fixed 后代改按祖先定位）', () => {
-    const el = (tag: string, id: string, ...kids: Element[]): HTMLElement => {
-      const e = Object.assign(document.createElement(tag), { id });
-      e.append(...kids);
-      return e;
-    };
+  it('main 里有 position: fixed 的元素（随手记贴底输入行）：淡入和模糊只加在不含 fixed 的子树上（filter 会让 fixed 后代改按祖先定位），fixed 的自己只淡入', () => {
     const inrow = el('div', 'inrow');
     inrow.style.position = 'fixed';
     fadeSwap(() => document.body.replaceChildren(el('main', 'm', el('header', 'h'), el('div', 'wrap', el('ul', 'list'), el('div', 'dock', inrow, el('span', 'tip'))))));
-    const main = document.querySelector('main');
-    expect(anims[0]?.el).toBe(main);
-    expect(anims[0]?.frames).toEqual([{ opacity: 0 }, { opacity: 1 }]);
-    const moved = anims.slice(1).map((a) => a.el.id);
-    expect(moved).toEqual(['h', 'list', 'tip']);
-    for (const a of anims.slice(1)) expect(a.frames).toEqual(blurSwapInFilter());
+    expect(anims.map((a) => a.el.id)).toEqual(['h', 'list', 'tip', 'inrow']);
+    for (const a of anims.slice(0, 3)) expect(a.frames).toEqual(blurSwapIn(false));
+    expect(anims[3]?.frames).toEqual([{ opacity: 0 }, { opacity: 1 }]);
     cancelFade();
     expect(anims.every((a) => a.cancel.mock.calls.length === 1)).toBe(true);
+  });
+
+  describe('右上角头像（data-swap-pin；负责人 11-18“头像怎么也还是会消失”）', () => {
+    /** 一页：标题行里左边标题、右边头像，下面一块内容；头像有大小（jsdom 不排版，按打了属性的算 44 宽） */
+    const page = (name: string): HTMLElement => {
+      const me = el('a', `me-${name}`);
+      me.setAttribute('data-swap-pin', '');
+      const m = el('main', `m-${name}`, el('div', `head-${name}`, el('h1', `t-${name}`), me), el('section', `body-${name}`));
+      m.dataset.feature = name;
+      return m;
+    };
+    const realBox = Element.prototype.getBoundingClientRect;
+    beforeEach(() => {
+      Element.prototype.getBoundingClientRect = function (this: Element) {
+        return this.hasAttribute('data-swap-pin') && this.isConnected ? new DOMRect(370, 16, 44, 44) : new DOMRect();
+      };
+    });
+    afterEach(() => {
+      Element.prototype.getBoundingClientRect = realBox;
+    });
+    const pinBox = (): Element | null => document.querySelector('[data-tab-pin]');
+
+    it('新页的头像是真元素、从头到尾全亮：它和它的祖先都不加动画、不加内联透明度；淡入只加在不含它的子树上', () => {
+      document.body.replaceChildren(page('today'));
+      fadeSwap(() => document.querySelector('main')?.replaceWith(page('todos')));
+      const moved = anims.filter((a) => !a.el.closest('[data-tab-ghost]') && !a.el.hasAttribute('data-tab-ghost')).map((a) => a.el.id);
+      expect(moved).toEqual(['t-todos', 'body-todos']);
+      const me = document.getElementById('me-todos') as HTMLElement;
+      expect(me.style.opacity).toBe('');
+      expect(anims.some((a) => a.el === me || a.el.contains(me))).toBe(false);
+    });
+
+    it('钉住的副本只管新页出来之前那一段：新页出来、有自己的头像，副本当场拿掉', async () => {
+      document.body.replaceChildren(page('today'));
+      fadeSwap(() => setPage(null));
+      await flush();
+      expect(pinBox(), '等新页时副本钉在原处').not.toBeNull();
+      document.body.append(page('todos'));
+      await flush();
+      expect(pinBox(), '新页出来就拿掉副本').toBeNull();
+    });
+
+    it('连点（上一次还在播就又切）：下一次的副本照样全亮，不会抄到透明（原来抄到新页头像的 opacity: 0，整段切页头像没了）', () => {
+      document.body.replaceChildren(page('today'));
+      fadeSwap(() => document.querySelector('main')?.replaceWith(page('todos')));
+      fadeSwap(() => setPage(null));
+      const copy = pinBox()?.querySelector('[data-swap-pin]') as HTMLElement | null;
+      expect(copy).not.toBeNull();
+      expect(copy?.style.opacity).toBe('');
+      expect(getComputedStyle(pinBox() as Element).visibility).not.toBe('hidden');
+    });
+
+    it('还在等新页（旧页被藏着）时又切：接着用上一次的快照和钉住的头像，不去拷藏着的旧页（量不出位置，头像会跑到左边）', async () => {
+      document.body.replaceChildren(page('today'));
+      fadeSwap(() => ((document.querySelector('main') as HTMLElement).style.display = 'none'));
+      await flush();
+      const ghost = document.querySelector('[data-tab-ghost]');
+      const box = pinBox();
+      expect(box).not.toBeNull();
+      fadeSwap(() => undefined);
+      await flush();
+      expect(document.querySelectorAll('[data-tab-ghost]')).toHaveLength(1);
+      expect(document.querySelector('[data-tab-ghost]')).toBe(ghost);
+      expect(pinBox()).toBe(box);
+      document.querySelector('main')?.remove();
+      document.body.append(page('notes'));
+      await flush();
+      expect(pinBox(), '新页出来就拿掉副本').toBeNull();
+    });
+
+    it('新页里没有头像（电脑版藏了）：副本跟着快照一起淡出', () => {
+      document.body.replaceChildren(page('today'));
+      fadeSwap(() => setPage('settings'));
+      const box = pinBox();
+      expect(box).not.toBeNull();
+      expect(anims.find((a) => a.el === box)?.frames).toEqual([{ opacity: 1 }, { opacity: 0 }]);
+    });
   });
 
   it('旧页快照：换页前拷一份旧 main 盖在新页那一层，和日历一样模糊到 4px、前 2/3 淡没；去掉 id、data-testid，读屏不念、不接点按；放完拿掉', async () => {
