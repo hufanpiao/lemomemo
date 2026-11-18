@@ -27,6 +27,8 @@ export interface FeatureRoute {
   samePageAs?: RouteName;
   /** 冷启动首屏画完后在后台先下载这一页（日历、待办、随手记三个页签页，负责人 11-18“冷启动后马上后台自动加载这3个页面…减少等待”；设置页，负责人 11-18“把设置页也一起缓存一下”） */
   preload?: () => Promise<unknown>;
+  /** “＋”打开打字条时先下载这一页（“展开编辑”要进的日程、待办新建页；warmRoute） */
+  warm?: () => Promise<unknown>;
 }
 
 interface FeatureEntry {
@@ -75,6 +77,19 @@ export async function preloadPages(log: (line: string) => void, now: () => numbe
     const ok = await r.preload().then(() => 1, () => 0);
     log(`preload ${r.name} ms=${Math.round(now() - t0)} ok=${ok}`);
   }
+}
+
+/**
+ * “＋”打开打字条时先下载“展开编辑”要进的新建页（负责人 11-18 录屏：第一次点“展开编辑”卡约 0.4 秒——新建页分包还没到，
+ * 这段时间画面停在打字条和模糊层上，分包到了才开始长成）。已经下载过的当场就好；失败不要紧（展开时照常下载）。
+ * 运行日志 warm <页> ms=<用时> ok=1|0
+ */
+export async function warmRoute(name: RouteName, log: (line: string) => void, now: () => number): Promise<void> {
+  const warm = featureRoutes.find((r) => r.name === name)?.warm;
+  if (!warm) return;
+  const t0 = now();
+  const ok = await warm().then(() => 1, () => 0);
+  log(`warm ${name} ms=${Math.round(now() - t0)} ok=${ok}`);
 }
 
 /** 渲染前调一次（离线也按上次缓存的 config、profile 挂，TC-B1-50）；联网刷新开关以后重新载入时再算 */

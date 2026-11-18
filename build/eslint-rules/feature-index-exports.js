@@ -8,7 +8,8 @@
 //   smart-search 的 loadFindOpen（B4b-2：打字条判成查找后要打开查找面板，拿的是一个函数不是组件，lazy 包不了）；
 //   todos 的 loadTodoAutoDel（负责人 11-15：启动后扫一遍完成满 7 天的待办自动删除，同样是函数）；
 //   today 的 loadTodaySwipe（R-428：待办行左滑首屏画完、页里没焦点时才换上，同 loadTodayDesk；lazy 换上时行内容重挂会丢焦点）
-// • 路由登记里的 preload（负责人 11-18：冷启动后后台先把日历、待办、随手记三页下载好）：任何功能都能写，只能是 () => import('./…')
+// • 路由登记里的 preload（负责人 11-18：冷启动后后台先把日历、待办、随手记三页下载好）：任何功能都能写，只能是 () => import('./…')；
+//   warm 同理（负责人 11-18 录屏第一次“展开编辑”卡一下：“＋”打开打字条时先下载日程、待办新建页，app/features.ts 的 warmRoute）
 const INNER = /^\.\/(ui|hooks|data|i18n)(\/|$)/;
 const MANIFEST = /^\.\/data\.manifest(\.ts)?$/;
 /** 受控例外：导出名 → 唯一能导出它的功能 */
@@ -87,7 +88,7 @@ export default {
             if (p.type !== 'Property' || p.computed) return false;
             const key = p.key.type === 'Identifier' ? p.key.name : String(p.key.value);
             if (Object.hasOwn(LOADERS, key)) return checkLoader(key, p.value, p);
-            if (key === 'preload') return isLazyImportArrow(p.value);
+            if (key === 'preload' || key === 'warm') return isLazyImportArrow(p.value);
             return checkValue(p.value, name);
           });
         case 'CallExpression':

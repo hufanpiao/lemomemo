@@ -213,7 +213,8 @@ export function navigate(name: RouteName, ...params: string[]): Promise<void> {
 export function goHref(href: string, anim: Anim = animTo(href)): Promise<void> {
   if (window.location.hash === href) return Promise.resolve();
   return commit(() => {
-    window.history.pushState(stateFor(1), '', href);
+    // 打字条开着时垫的那一条（lemoType，features/plus 的 type-entry.ts）：换掉它、不再压，“＋”下面那条历史的截图还是打开前的样子
+    window.history[stateOf('lemoType') ? 'replaceState' : 'pushState'](stateFor(1), '', href);
     noteEntry();
   }, anim);
 }
