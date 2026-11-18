@@ -38,6 +38,8 @@ export interface SubDone {
 export const HOLD_MS = Math.round((dur.donePop + dur.doneRest) * 1000);
 /** 这一行收起的时长（--dur-collapse，同 kit List.module.css 的 .fold；减弱动态效果时是同样长的淡出） */
 export const OUT_MS = Math.round(dur.collapse * 1000);
+/** 到了 OUT_MS 这一行还没收完时，最多再等收起过渡多久（兜底：transitionend 没来也照样挪走） */
+const COLLAPSE_LATE_MS = 500;
 
 /** 留在原位的一条：shown 是方框画成什么（null：照数据画，勾子任务等自动完成的写入时），gen 是这一轮的代号 */
 type Stay = Readonly<{ shown: boolean | null; gen: number }>;
@@ -160,12 +162,33 @@ export function useDoneFlow(a: Acts, lg: Linger, hold: () => void, text: { done:
       setOutOf(id, true);
       seq.current += 1;
       cur.current.a.g.show({ kind: 'done', id, undo, message, n: seq.current });
-      run.timer = window.setTimeout(() => {
+      const drop = () => {
         if (!live()) return;
         // 两件同一拍：这一行离开原来的组（离场那一份还带着 data-out），在“已完成”组里重新出现时不带
         runs.current.delete(id);
         setOutOf(id, false);
         cur.current.lg.drop(id, run.gen);
+      };
+      run.timer = window.setTimeout(() => {
+        if (!live()) return;
+        // 到点时这一行还没收完（机器卡、收起过渡落后于计时器）就等过渡播完再挪走，最多再等 COLLAPSE_LATE_MS：
+        // 带着没收完的高度挪走，离场那一份会把这截高度留到离场播完，下一行最后跳一下（11-18 CI run 44168443536 逐帧取样：剩 40px，约 240ms 后下一行一下子上移 41px）
+        const li = document.querySelector<HTMLElement>(`[data-row="${prefix}"][data-row-id="${id}"]`);
+        if (!li || li.getBoundingClientRect().height <= 1) return drop();
+        const onEnd = (e: TransitionEvent) => {
+          if (e.target !== li && e.target !== li.firstElementChild) return;
+          // 收到约 0 才算播完；减弱动态效果（根上 data-rm="1"）不收高度、只有行面淡出，淡完就算
+          const rm = document.documentElement.dataset['rm'] === '1';
+          if (li.getBoundingClientRect().height > 1 && !(rm && e.propertyName === 'opacity')) return;
+          li.removeEventListener('transitionend', onEnd);
+          clearTimeout(run.timer);
+          drop();
+        };
+        li.addEventListener('transitionend', onEnd);
+        run.timer = window.setTimeout(() => {
+          li.removeEventListener('transitionend', onEnd);
+          drop();
+        }, COLLAPSE_LATE_MS);
       }, OUT_MS);
     };
     run.timer = window.setTimeout(() => {
