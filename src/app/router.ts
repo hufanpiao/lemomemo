@@ -205,12 +205,12 @@ export function navigate(name: RouteName, ...params: string[]): Promise<void> {
  * 深度 + 1、记这次载入的编号，关掉整页提醒时 canGoBack 为真、退一步回原页（R-372 代码审 M1）。
  * replaceRoute、replaceInPage 不并进来：分开写 gzip 后反而小几个字节（首屏额度）
  */
-export function goHref(href: string): Promise<void> {
+export function goHref(href: string, anim: Anim = animTo(href)): Promise<void> {
   if (window.location.hash === href) return Promise.resolve();
   return commit(() => {
     window.history.pushState(stateFor(1), '', href);
     noteEntry();
-  }, animTo(href));
+  }, anim);
 }
 
 

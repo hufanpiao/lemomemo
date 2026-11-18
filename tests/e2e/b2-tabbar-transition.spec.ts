@@ -344,9 +344,8 @@ test.describe('底栏：进出没有底栏的页照旧 View Transition（代码�
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
-    // B3 M4 起“＋”点一下打开打字条，“展开编辑”才换到新建日程页
-    await page.getByTestId('tabbar-add').click();
-    await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 10_000 });
+    // 11-18 起打字条“展开编辑”直接换页、不起整页过渡（负责人录屏：闪一帧原页面；plus-expand-no-flash.spec.ts）。
+    // 这条只测“一边有底栏的整页过渡”，改用地址栏换到新建日程（hashchange 照旧起 View Transition）
     // 诊断（11-16：CI webkit 自 b6832069 起连挂“没等到切页过渡”，本机和 CI 同款镜像都复现不了）：记下 startViewTransition 调没调、
     // ready / finished 什么时候结束（被跳过时 ready 会 reject）、点击后每帧的时间。只在这条没等到过渡时打进失败信息，下次 CI 挂了按它定根因
     await page.evaluate(() => {
@@ -375,7 +374,9 @@ test.describe('底栏：进出没有底栏的页照旧 View Transition（代码�
       };
       requestAnimationFrame(tick);
     });
-    await page.getByTestId('type-bar').getByRole('button', { name: '展开编辑' }).click({ noWaitAfter: true });
+    await page.evaluate(() => {
+      window.location.hash = '#/event/new';
+    });
     const s = await holdAndRead(page).catch(() => null);
     const diag = s ? '' : await page.evaluate(() => (window as unknown as { __vtdiag?: string[] }).__vtdiag?.join(' | ') ?? '无');
     expect(s, `没等到切页过渡；诊断：${diag}`).not.toBeNull();

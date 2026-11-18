@@ -32,7 +32,7 @@ import { reloadPage } from '../platform/sw-register.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { bannerKind } from './banner-kind.ts';
 import { featureRoutes, offRoutes, type FeatureRoute } from './features.ts';
-import { navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from './router.ts';
+import { goHref, hrefOf, navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from './router.ts';
 import { tabBarFor } from './tab-of.ts';
 import { PlusSlot, plusHold, preloadPlus } from './plus-slot.tsx';
 import type { DateStr } from '../../shared/core/date.ts';
@@ -43,6 +43,31 @@ import { calendarSel, notesInput, setNewItemDay, setNewItemTitle } from '../kit/
 const devRoutes: readonly FeatureRoute[] = import.meta.env.MODE === 'production'
   ? []
   : [{ name: 'dev-csp', Page: lazy(() => import('./dev/CspLab.tsx')) }];
+
+/** 页面的 <main> 显示出来就调 fn（已经显示就当场调）；分包没到时看着 body 等，最多 PAGE_WAIT_MS 也调；返回取消 */
+const PAGE_WAIT_MS = 1500;
+function whenPageShown(fn: () => void): () => void {
+  const shown = (): boolean => [...document.querySelectorAll('main')].some((m) => m.getClientRects().length > 0);
+  if (shown()) {
+    fn();
+    return () => undefined;
+  }
+  const stop = (): void => {
+    mo.disconnect();
+    clearTimeout(timer);
+  };
+  const mo = new MutationObserver(() => {
+    if (!shown()) return;
+    stop();
+    fn();
+  });
+  const timer = setTimeout(() => {
+    stop();
+    fn();
+  }, PAGE_WAIT_MS);
+  mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'hidden'] });
+  return stop;
+}
 
 function ErrorView() {
   const t = useT();
@@ -92,8 +117,9 @@ function TabBar({ route }: { route: RouteName }) {
   const [plus, setPlus] = useState<{ day: DateStr | null; n: number } | null>(null);
   const opens = useRef(0);
   useEffect(() => afterAppPainted(() => void preloadPlus()), []);
-  // 换页就收起（去改某一条、展开编辑也是换页）
-  useEffect(() => setPlus(null), [route]);
+  // 换页就收起（去改某一条、展开编辑也是换页）。等新页面的 <main> 真的显示出来再收（负责人 11-18 录屏：点“详细”闪一帧原页面）：
+  // 新页分包没到时 Suspense 把旧页藏起来、新页还没出来，这时先收打字条，屏幕上就是一段空白或原页面；分包已到时当场就收，和原来一样
+  useEffect(() => whenPageShown(() => setPlus(null)), [route]);
   const bar = tabBarFor(route);
   // 日历页：带上日历上选中的那天（日历页登记的 calendarSel，kit/state/new-item.ts）
   const open = (): void => {
@@ -110,15 +136,24 @@ function TabBar({ route }: { route: RouteName }) {
     opens.current += 1;
     setPlus({ day: bar?.tab === 'calendar' ? (calendarSel.day?.() ?? null) : null, n: opens.current });
   };
-  if (!bar || !paged) return null;
-  const { tab, add, hold } = bar;
+  // 展开编辑换到没有底栏的新建页：打字条挂在这里，原来随底栏一起当场卸掉（e2e 逐帧：换路由那一帧起 16～18 帧既没打字条、也没新建页）。
+  // 打字条还开着就沿用上一页的底栏设置只留打字条，等 whenPageShown 收起；底栏本身照旧不画
+  const lastBar = useRef(bar);
+  useEffect(() => {
+    if (bar) lastBar.current = bar;
+  });
+  const shownBar = bar ?? (plus ? lastBar.current : null);
+  if (!shownBar || !paged) return null;
+  const { tab, add, hold } = shownBar;
   if (add === null) return <GlassBar active={tab} later={afterAppPainted} />;
   // 展开成完整新建页：打的字和那天带过去（kit/state/new-item.ts，新建页挂上以后取走）
   const expand = (text: string, day: DateStr | null): void => {
     setNewItemTitle(text);
     setNewItemDay(day);
-    setPlus(null);
-    void navigate(add, 'new');
+    // 直接换页、不起整页过渡（负责人 11-18 录屏：点“详细”时第 104 帧先露出一帧清晰全亮的原页面再淡出）：
+    // 原来先收打字条再起过渡，过渡截的旧画面只能是没模糊的原页面（WebKit 过渡截图本来也不画 backdrop-filter，bug 302256）。
+    // 现在不在这里收：换页后由上面的 whenPageShown 等新建页出来再收，打字条一直盖到新页面接上
+    void goHref(hrefOf(add, 'new'), 'none');
   };
   const edit = (table: string, id: string): void => {
     const to = EDIT_OF[table];
@@ -127,7 +162,7 @@ function TabBar({ route }: { route: RouteName }) {
   return (
     <>
       {/* 隐私记页（B5 D14）、纪念日页：按住“＋”不录音（录下的会进普通随手记、日程），点一下只打开各自的新建页 */}
-      <GlassBar active={tab} later={afterAppPainted} add={{ label: t('nav.add', {}), onClick: open, ...(hold ? { hold: plusHold } : {}) }} />
+      {bar ? <GlassBar active={tab} later={afterAppPainted} add={{ label: t('nav.add', {}), onClick: open, ...(hold ? { hold: plusHold } : {}) }} /> : null}
       <PlusSlot hold={hold} open={plus !== null} day={plus?.day ?? null} opened={plus?.n} onExpand={expand} onEdit={edit} onOpen={open} onClose={() => setPlus(null)} />
     </>
   );
