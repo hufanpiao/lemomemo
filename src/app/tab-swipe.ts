@@ -64,7 +64,8 @@ export function installTabSwipeOnce(): void {
 /** 挂到 document 上；返回取消（测试用） */
 export function installTabSwipe(doc: Document = document): () => void {
   const win = doc.defaultView;
-  let s: { side: 'l' | 'r'; x: number; y: number; t: number; hash: string; why: string | null } | null = null;
+  // st：按下时那一条历史的 state 对象。打字条垫的那一条和原页同一个地址，系统侧滑退掉它时 hash 不变，只有 state 对象换了（独立评审 11-19 高 2）
+  let s: { side: 'l' | 'r'; x: number; y: number; t: number; hash: string; st: unknown; why: string | null } | null = null;
   const down = (e: TouchEvent): void => {
     const p = e.touches[0];
     const side = p ? sideOf(p.clientX, win?.innerWidth ?? 0) : null;
@@ -73,7 +74,7 @@ export function installTabSwipe(doc: Document = document): () => void {
       return;
     }
     const target = e.target instanceof Element ? e.target : null;
-    s = { side, x: p.clientX, y: p.clientY, t: performance.now(), hash: win?.location.hash ?? '', why: blockedAt(target, doc) };
+    s = { side, x: p.clientX, y: p.clientY, t: performance.now(), hash: win?.location.hash ?? '', st: win?.history.state, why: blockedAt(target, doc) };
   };
   const up = (e: TouchEvent): void => {
     const d = s;
@@ -86,7 +87,7 @@ export function installTabSwipe(doc: Document = document): () => void {
     const ms = Math.round(performance.now() - d.t);
     const hash = win?.location.hash ?? '';
     const route = parseHash(hash).name;
-    const why = d.why ?? (hash !== d.hash ? 'moved' : mainTab(route) === null ? 'route' : null);
+    const why = d.why ?? (hash !== d.hash || win?.history.state !== d.st ? 'moved' : mainTab(route) === null ? 'route' : null);
     const to = why === null ? swipeTarget(route, d.side, dx, dy, ms) : null;
     rlog(`tabswipe side=${d.side} dx=${Math.round(dx)} dy=${Math.round(dy)} ms=${ms} ${to !== null ? `to=${to}` : `skip=${why ?? 'shape'}`}`);
     if (to === null) return;

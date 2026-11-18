@@ -1,6 +1,6 @@
 // 设置二级页、三级页的“从上一层点进来的”记号（提醒接线代码审查 H1、M1，复审第二轮 N1、L7）：navigateSub、isSubEntry、backOrReplace。
 // 从 router.ts 挪出来、不进首屏（R-372 首屏额度）：只有设置页、+ 设置、关于、告知页这些懒加载的页面用；历史的 state、深度、编号仍由 router.ts 管
-import { animTo, canGoBack, commit, depthNow, entryAt, goBack, hrefOf, noteEntry, replaceRoute, stateFor, stateOf, type RouteName } from './router.ts';
+import { animTo, canGoBack, commit, depthNow, entryAt, goBack, hrefOf, noteEntry, onPad, padMark, replaceRoute, stateFor, stateOf, type RouteName } from './router.ts';
 
 // “这一条历史是从上一层点进来的”（设置的二级页、三级页；提醒接线代码审查 H1、M1）：记在那条历史自己的 history.state 上，
 // 浏览器前进后退、刷新、去别的页再回来都跟着那条历史走；页面里点“‹ 返回”时看它决定退一步（goBack）还是原地换成上一层（replaceRoute）。
@@ -80,13 +80,13 @@ export function backOrReplace(name: RouteName, ...params: string[]): void {
 }
 
 // 打字条开着时垫的那一条历史（features/plus 的 hooks/type-entry.ts；负责人 11-18“展开以后左滑退出的时候会闪一下简约输入框”）：
-// 同一地址、深度和载入编号照旧，多一个 lemoType。router.ts 的 goHref 从这一条出发时换掉它、不再压（键名在那边直接写字面量，首屏额度）
+// 同一地址、深度和载入编号照旧，多一个 lemoType（值是这次载入的编号，router.ts 的 padMark、onPad）。goHref 从这一条出发时换掉它、不再压，navigateTab 先退掉它再换
 const TYPE = 'lemoType';
 /** 当前这条是不是打字条垫的那一条 */
-export const onTypeEntry = (): boolean => stateOf(TYPE) === 1;
+export const onTypeEntry = onPad;
 /** 垫一条（已经在这一条上就不动） */
 export function pushTypeEntry(): void {
   if (onTypeEntry()) return;
-  window.history.pushState(stateFor(0, { [TYPE]: 1 }), '', window.location.href);
+  window.history.pushState(stateFor(0, { [TYPE]: padMark() }), '', window.location.href);
   noteEntry();
 }

@@ -108,6 +108,14 @@ describe('installTabSwipe：真的划一下', () => {
     swipe(SIDE_PX + 1, SIDE_PX + 150);
     expect(nav.to).toEqual([]);
   });
+  it('抬手前同一地址的历史换了一条（系统侧滑退掉打字条垫的那一条，hash 不变）：判 moved 不切（独立评审 11-19 高 2）', () => {
+    window.location.hash = '#/today';
+    const t = byId('blank');
+    touch('touchstart', 10, 200, t);
+    window.history.replaceState({ other: 1 }, '', window.location.href);
+    touch('touchend', 150, 205, t, true);
+    expect(nav.to).toEqual([]);
+  });
   it('设置页上划不切', () => {
     window.location.hash = '#/settings';
     swipe(W - 10, W - 150);

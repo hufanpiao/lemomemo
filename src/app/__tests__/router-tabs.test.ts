@@ -4,7 +4,8 @@
 // 设置“‹ 今天”按层级退回（backTo），不新压一条；iOS 恢复后（编号对不上）不退到 App 外
 import { cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { backTo, canGoBack, navigate, navigateTab, resetLoadForTest, useRoute } from '../router.ts';
+import { backTo, canGoBack, navigate, navigateTab, onPad, resetLoadForTest, useRoute } from '../router.ts';
+import { pushTypeEntry } from '../router-sub.ts';
 import { replaceInPage } from '../router-levels.ts';
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
@@ -32,6 +33,26 @@ describe('① 底栏页签：今天是根', () => {
       expect(window.history.length, t).toBe(base);
       expect(canGoBack(), t).toBe(false);
     }
+  });
+
+  it('打字条开着（当前是它垫的那一条）点页签：先退掉那一条再原地换，历史条数和打开打字条之前一样（独立评审 11-19 高 1）', async () => {
+    renderHook(() => useRoute());
+    pushTypeEntry();
+    expect(onPad()).toBe(true);
+    const back = vi.spyOn(window.history, 'back');
+    const push = vi.spyOn(window.history, 'pushState');
+    navigateTab('notes');
+    expect(back).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(window.location.hash).toBe('#/notes'));
+    await flush();
+    expect(push).not.toHaveBeenCalled();
+    expect(onPad()).toBe(false);
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it('上一次载入（刷新、iOS 恢复前）留下的垫的那条不算：值不是这次的编号', () => {
+    window.history.replaceState({ lemoType: 1 }, '', '#/today');
+    expect(onPad()).toBe(false);
   });
 
   it('点当前页签不动', async () => {

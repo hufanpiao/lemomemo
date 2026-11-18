@@ -223,9 +223,11 @@ describe('降级', () => {
     expect(api.takeBuzz(), '这一下该震').toBe(true);
     expect(api.takeBuzz(), '问完就清掉，一下只放一次').toBe(false);
     api.fx('lift');
+    expect(api.takeBuzz(), '长按、拖动、下拉没有 click，不记（独立评审 11-19：拖完马上取消勾选不该震）').toBe(false);
+    api.fx('delete');
     expect(api.takeBuzz(true), 'keep：问了不清').toBe(true);
     expect(api.takeBuzz()).toBe(true);
-    expect(logs).toEqual(['fx done hap=switch snd=1', 'fx lift hap=switch snd=0']);
+    expect(logs).toEqual(['fx done hap=switch snd=1', 'fx lift hap=switch snd=0', 'fx delete hap=switch snd=1']);
   });
 
   it('该震的记号过了 BUZZ_MS 就不算；“声音和触感”关着、走 vibrate 的不记', () => {

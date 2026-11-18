@@ -81,6 +81,9 @@ let doc = Math.random();
 export function stateFor(step: 0 | 1, extra?: Record<string, unknown>): Record<string, unknown> {
   return { lemoDoc: step ? doc : stateOf('lemoDoc'), lemoDepth: depthNow() + step, ...extra };
 }
+/** 打字条垫的那一条（features/plus 的 type-entry.ts、router-sub.ts 的 pushTypeEntry）：lemoType 记这次载入的编号，刷新、iOS 恢复后留下的旧那条不算（独立评审 11-19 中 3） */
+export const padMark = (): number => doc;
+export const onPad = (): boolean => stateOf('lemoType') === doc;
 
 function notifyAll(): void {
   for (const l of [...listeners]) l();
@@ -214,7 +217,7 @@ export function goHref(href: string, anim: Anim = animTo(href)): Promise<void> {
   if (window.location.hash === href) return Promise.resolve();
   return commit(() => {
     // 打字条开着时垫的那一条（lemoType，features/plus 的 type-entry.ts）：换掉它、不再压，“＋”下面那条历史的截图还是打开前的样子
-    window.history[stateOf('lemoType') ? 'replaceState' : 'pushState'](stateFor(1), '', href);
+    window.history[onPad() ? 'replaceState' : 'pushState'](stateFor(1), '', href);
     noteEntry();
   }, anim);
 }
@@ -297,6 +300,13 @@ const MAIN_TABS: ReadonlySet<RouteName> = new Set<RouteName>(['today', 'calendar
  * 设置（右上头像）照旧：从今天进压一条，从别的页签进原地换
  */
 export function navigateTab(name: RouteName): void {
+  // 打字条开着（当前是它垫的那一条，同一地址多一个 lemoType）：先退掉那一条（打字条跟着收起，type-entry.ts 的 onPop），回到原页那一条再换，
+  // 不然原地换只换掉垫的那条、原页还压在下面，页签互切多出一条历史（独立评审 11-19 高 1）
+  if (onPad()) {
+    window.addEventListener('popstate', () => navigateTab(name), { once: true });
+    goBack();
+    return;
+  }
   if (MAIN_TABS.has(name)) void replaceRoute(name);
   else void (parseHash(window.location.hash).name === 'today' ? navigate : replaceRoute)(name);
 }

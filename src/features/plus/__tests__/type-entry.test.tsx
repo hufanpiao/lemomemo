@@ -4,7 +4,7 @@
 import { StrictMode } from 'react';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { goHref, stateOf } from '../../../app/router.ts';
+import { goHref, padMark, stateOf } from '../../../app/router.ts';
 import { useTypeEntry } from '../hooks/type-entry.ts';
 
 function Bar({ open, onBack }: { open: boolean; onBack: () => void }) {
@@ -29,7 +29,7 @@ describe('useTypeEntry', () => {
   it('打开时压一条同地址的历史，深度和载入编号照抄、多一个 lemoType', () => {
     render(<Bar open onBack={vi.fn()} />);
     expect(window.location.hash).toBe('#/today');
-    expect(window.history.state).toEqual({ lemoDepth: 1, lemoDoc: 7, lemoType: 1 });
+    expect(window.history.state).toEqual({ lemoDepth: 1, lemoDoc: 7, lemoType: padMark() });
   });
 
   it('收起时退掉这一条，不当成用户返回', async () => {
@@ -58,7 +58,7 @@ describe('useTypeEntry', () => {
       </StrictMode>,
     );
     await settle();
-    expect(stateOf('lemoType')).toBe(1);
+    expect(stateOf('lemoType')).toBe(padMark());
     window.history.back();
     await settle();
     expect(window.history.state).toEqual({ lemoDepth: 1, lemoDoc: 7 });

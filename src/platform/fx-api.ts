@@ -46,5 +46,7 @@ export function setFxMicBusy(fn: () => boolean): void {
 
 /** 这个操作的音效和震动（在手势里同步调） */
 export function fx(kind: FxKind): void {
-  if (impl?.(kind, micBusy)) markBuzz();
+  // 只有点一下的两种（勾完成、点“删除”）会有手指下的开关来问；长按、拖动、下拉没有 click，记了会被 0.8 秒内别的点按借走
+  // （拖完马上取消勾选也震，独立评审 11-19 中）
+  if (impl?.(kind, micBusy) && (kind === 'done' || kind === 'delete')) markBuzz();
 }
