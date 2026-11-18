@@ -1,7 +1,7 @@
 // 动效模块的对外接口（架构 17.2 第 4 点）：只有这里能用 motion/react、element.animate、
 // document.startViewTransition、requestAnimationFrame（A25）
 // B0 是骨架：接口定下来，具体手感在 B1（按下回弹、页面切换）、B2（弹层、列表）、B3（提示条、录音面板）里调
-import { cancelFade } from './page-swap.ts';
+import type * as PageSwapModule from './page-swap.ts';
 import { prefersReducedMotion } from './reduced.ts';
 import { reportDuplicateVtNames } from './vt.ts';
 
@@ -81,8 +81,43 @@ export function transition(update: () => void): Promise<void> {
   return vt.finished.then(done, done);
 }
 
-// 页签互切、“详细”长成在 ./page-swap.ts（11-18 独立评审后整块重写）
-export { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, GROW_HOLD, SLIDE_IN_PCT, SLIDE_OUT_PCT, cancelFade, fadeSwap, growSwap, pageVisible, shownMain, waitDom } from './page-swap.ts';
+// 页签互切、“详细”长成的实现在 ./page-swap.ts（11-18 独立评审后整块重写），首屏画完以后才下载（11-18 ci 首屏预算 151.7 KB 超线后挪出）：
+// main.tsx 和动画实现同一时机调 loadPageSwap；到之前换页直接换、不播（冷启动不到一秒就点页签才碰得到），“详细”直接进新建页
+export { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, GROW_HOLD, SLIDE_IN_PCT, SLIDE_OUT_PCT, pageVisible, shownMain, waitDom } from './page-shown.ts';
+type PageSwap = typeof PageSwapModule;
+let swapImpl: PageSwap | null = null;
+let swapLoad: Promise<void> | null = null;
+/** 下载换页动画实现；失败不抛，下次换页再试 */
+export function loadPageSwap(): Promise<void> {
+  swapLoad ??= import('./page-swap.ts').then(
+    (m) => {
+      swapImpl = m;
+    },
+    () => {
+      swapLoad = null;
+    },
+  );
+  return swapLoad;
+}
+/** 页签互切：按底栏顺序左右滑入（实现没到时直接换） */
+export function fadeSwap(update: () => void, dir: 1 | -1 = 1): Promise<void> {
+  if (swapImpl) return swapImpl.fadeSwap(update, dir);
+  void loadPageSwap();
+  update();
+  return Promise.resolve();
+}
+/** 打字条“详细”那张卡长成新建页（实现没到时直接进新建页、当场收尾） */
+export function growSwap(update: () => void, from: DOMRect, radius: number, card: Element | null, landed: () => void): Promise<void> {
+  if (swapImpl) return swapImpl.growSwap(update, from, radius, card, landed);
+  void loadPageSwap();
+  update();
+  landed();
+  return Promise.resolve();
+}
+/** 停掉正在播的换页（没在播、实现没到时什么都不做） */
+export function cancelFade(anim = true): void {
+  swapImpl?.cancelFade(anim);
+}
 
 /** 下一帧执行（给以后的帧循环用，例如液态玻璃副本，0.27 第 5 点） */
 export function nextFrame(cb: () => void): () => void {

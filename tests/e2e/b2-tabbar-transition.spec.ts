@@ -4,6 +4,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
+import { waitPreloaded } from './page-helpers.ts';
 
 // 失败时带运行日志、控制台错误（B4b-3 返工第三条）
 logOnFail(test);
@@ -201,6 +202,7 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 }); // 首屏后部分到了（实时模糊接管）
+    await waitPreloaded(page); // 冷启动后台预加载三页跑完再量（page-helpers.ts 头注释）
     // 先把三个页签各进一遍，分包都到了再量：头一次进某页时分包晚到，fadeSwap 最多等 FADE_WAIT_MS（1500）就不放淡入、直接换上
     // （产品就是这么设计的；11-10 镜像负载重的一遍，日历的新页点后 1788 ms 才出来），那样这条查不到淡入。这里要查的是淡入本身，不是分包快慢
     for (const [name, testid] of [['todos', 'todos'], ['calendar', 'cal'], ['today', 'today']] as const) {

@@ -34,7 +34,7 @@ import { enableDropMark, installDesktopSession } from '../platform/session-store
 import { hideSplash, hideSplashAfter } from '../platform/splash.ts';
 import { afterAppPainted, appPainted, startAppPaintLimit, watchRoot, whenContent } from '../platform/root-paint.ts';
 import { markInsetPainted, watchInsetBottom } from '../platform/inset-watch.ts';
-import { loadMotionFeatures, nextFrame } from '../motion/index.ts';
+import { loadMotionFeatures, loadPageSwap, nextFrame } from '../motion/index.ts';
 import { registerSw, reloadPage, upgradeLogCountStore } from '../platform/sw-register.ts';
 import { mountExitScreen, watchExitIncomplete } from './exit-screen.tsx';
 import { mountFeatures } from './features.ts';
@@ -337,6 +337,8 @@ async function start(): Promise<void> {
   // 动画实现和功能包（R-354，主持人 11-07 定）：首屏画完以后立刻下载，排在首屏后那批代码后面（方案 K8）；
   // 到了以后门面在安全的时机换成动画实现（src/motion/features.ts）。失败不抛，门面照常显示、只是没有动画
   void loadMotionFeatures();
+  // 换页动画（页签左右滑入、“详细”长成）同一时机下载（11-18 挪出首屏）
+  void loadPageSwap();
 }
 
 /** 启动失败时最多等运行日志接上多久再跳登录页（诊断启动件下载卡住也不多等） */

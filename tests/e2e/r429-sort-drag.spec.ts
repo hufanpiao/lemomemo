@@ -19,6 +19,7 @@ import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { cached, idbPut, idbRead, notesViewCached } from './idb.ts';
 import { runLog } from './fake-media.ts';
+import { waitPreloaded } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -57,6 +58,7 @@ async function seed(page: Page, v: 'list' | 'masonry'): Promise<void> {
   await page.getByTestId('notes').waitFor({ timeout: 30000 });
   // 等动画实现换上（让位靠它的 layout 动画）
   await page.waitForFunction(() => document.documentElement.getAttribute('data-motion') === 'ready', undefined, { timeout: 30_000 });
+  await waitPreloaded(page); // 冷启动后台预加载三页跑完再量（page-helpers.ts 头注释）
   // 隐私记入口行是另下载的小块，载入后才出现、把整列往下推一行（页面原有的载入后跳动）：等它出来、第一行位置连着 300ms 不变再开始
   await page.getByTestId('vault-lockrow').waitFor({ timeout: 30000 });
   await expect.poll(() => page.evaluate(async () => {

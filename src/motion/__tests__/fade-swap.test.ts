@@ -3,8 +3,8 @@
 // 换页后 FADE_GUARD_MS 内吞掉 main 里的点按（代码审查方案 B M8）；等分包时走了整页过渡、同页内切换就停掉（M9）。
 // 11-18 独立评审后整块重写（src/motion/page-swap.ts）：平移换成像素（H1）、快照先藏后显（M2）、连点快照从上一页此刻的样子起（M1）、
 // 长成放完先收打字条再还原层级（H2）
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, GROW_HOLD, SLIDE_IN_PCT, SLIDE_OUT_PCT, cancelFade, fadeSwap, growSwap, transition } from '../index.ts';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, GROW_HOLD, SLIDE_IN_PCT, SLIDE_OUT_PCT, cancelFade, fadeSwap, growSwap, loadPageSwap, transition } from '../index.ts';
 import { bezierCss, dur, ease } from '../tokens.ts';
 
 /** 换页（像 React：只换掉自己的 main，别人放进来的节点——快照、打字条——不动）；name 为 null 时只拿掉 main：新页分包还没到 */
@@ -34,6 +34,9 @@ interface FakeAnim {
 }
 let anims: FakeAnim[] = [];
 const realRects = Element.prototype.getClientRects;
+
+// 换页动画实现首屏画完以后才下载（index.ts 的 loadPageSwap）：这里测的是到了以后的样子，先等它到
+beforeAll(() => loadPageSwap());
 
 beforeEach(() => {
   anims = [];

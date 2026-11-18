@@ -1,77 +1,20 @@
 // 页面切换的两种动法（11-18 独立评审后从 index.ts 拆出来整块重写，不再在原代码上叠补丁）：
 // • fadeSwap：底栏四个页签互切，按底栏顺序左右滑入（负责人 11-18“之前的B方案”，11-17 方案页 B）
 // • growSwap：打字条点“详细”，那张卡长成新建页（负责人 11-18“用A整页成长方案”）
+// 首屏画完以后才下载（motion/index.ts 的 loadPageSwap，main.tsx 和动画实现同一时机；11-18 ci 首屏预算 151.7 KB 超线后挪出首屏）；
+// 首屏要用的常量和“新页显示出来没有”的判断在 ./page-shown.ts。
 // 两种共用：旧页快照（makeGhost）、等新页出来（waitDom）、换页后吞点按（guardTaps）、一份“正在播”的状态（cur）和一个收尾（endSwap）
 import { copyNode } from './copy-node.ts';
+import { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, GROW_HOLD, SLIDE_IN_PCT, SLIDE_OUT_PCT, pageVisible, shownMain, waitDom } from './page-shown.ts';
 import { prefersReducedMotion } from './reduced.ts';
 import { swallowNextClick } from './swallow-click.ts';
 import { bezierCss, dur, ease } from './tokens.ts';
 
-/** 新页分包还没到（页面的 Suspense 先什么都不画）时，最多等多久让它出来；过了就不动画了（App 等页面显示出来也用这个数） */
-export const FADE_WAIT_MS = 1500;
-/** 新页从第几毫秒起播（一帧，60Hz）：不画 opacity 0 的那一帧 */
-export const FADE_SKIP_MS = 1000 / 60;
-/**
- * 换页后这么久以内落在 main 里的点按吞掉（代码审查方案 B M8；沿用主持人 11-05 的规则“过渡开始很短时间内的点按算点在旧画面上”）：
- * 旧页在点页签那一刻就卸掉了，手指顺手再点一下原来那页的位置，人还没看清新页，会直接点中新页同一位置的删除 ×、勾选圈。
- * 新页第一帧约 17 ms 才画出来，再加人眼看清的最短时间，取 100 ms；底栏不在 main 里，连点页签不受影响
- */
-export const FADE_GUARD_MS = 100;
-/** 页签互切新页从侧边多远滑进来（新页 main 宽度的百分比，换成像素后所有平移的元素用同一个值） */
-export const SLIDE_IN_PCT = 8;
-/** 旧页（快照）往反方向移多远并淡出（同上） */
-export const SLIDE_OUT_PCT = 4;
-/** “详细”长成的前多少（比例）新建页内容不露、打字条淡完 */
-export const GROW_HOLD = 0.35;
 /** 页面底色（同 base.css 的 body::after）：长成时新建页 main 和遮罩画这个，长出来的是一整张页面 */
 const PAGE_BG = 'var(--scr-bg, var(--bg))';
 
 const noop = (): void => undefined;
 const px = (x: number): string => (x === 0 ? 'none' : `translateX(${Math.round(x * 100) / 100}px)`);
-
-/**
- * 这个元素此刻画在页面上没有（还在文档里、没被 display: none 藏起来）。新页分包没到时 Suspense 用内联 display: none 藏旧页、
- * 旧页仍在文档里（React 19 + flushSync，App 的注释和第二次复审第 1 条），只看 isConnected 判断不出来。
- * 换页动画等新页、显示旧页快照，App 等页面显示出来收打字条，都用这一个判断（这类事只在这里判断，架构约定 10.1；首屏画好没有另归 platform/root-paint.ts）
- */
-export function pageVisible(el: Element | null): boolean {
-  return el !== null && el.isConnected && el.getClientRects().length > 0;
-}
-
-/** 页面上第一个显示着的 <main>（真页面；快照外壳不是 main） */
-export function shownMain(): HTMLElement | null {
-  for (const m of document.querySelectorAll('main')) if (pageVisible(m)) return m;
-  return null;
-}
-
-/**
- * 看着 body 等 test() 成立就调 hit(true)；已经成立就当场调；ms 内一直不成立调 hit(false)。返回停止（停了不再调 hit）。
- * 页签互切、“详细”长成等新页，App 等页面显示出来收打字条，都用这一个
- */
-export function waitDom(test: () => boolean, ms: number, hit: (ok: boolean) => void): () => void {
-  if (test()) {
-    hit(true);
-    return noop;
-  }
-  let live = true;
-  const stop = (): void => {
-    if (!live) return;
-    live = false;
-    mo.disconnect();
-    clearTimeout(timer);
-  };
-  const mo = new MutationObserver(() => {
-    if (!test()) return;
-    stop();
-    hit(true);
-  });
-  const timer = setTimeout(() => {
-    stop();
-    hit(false);
-  }, ms);
-  mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'hidden'] });
-  return stop;
-}
 
 /**
  * 在 document 上用 capture 吞掉 ms 以内落在 main 里的 pointerdown、click；返回摘掉监听的函数。

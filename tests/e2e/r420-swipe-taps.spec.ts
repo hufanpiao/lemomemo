@@ -13,6 +13,7 @@ import { writeFileSync } from 'node:fs';
 import type { Locator, Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { FOLLOW_MAX_PX } from '../../src/motion/swipe-pager.ts';
+import { waitPreloaded } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use({ trace: 'off', loggedIn: true, viewport: { width: 390, height: 844 }, hasTouch: true, timezoneId: 'Asia/Seoul', locale: 'zh-CN' });
@@ -90,6 +91,7 @@ const SLOW_DUR = '1500ms';
 async function openMonth(page: Page, ym: string): Promise<void> {
   await page.goto(`/app/#/cal/month/${ym}`);
   await expect(page.getByTestId('cal-pager')).toBeVisible({ timeout: 30_000 });
+  await waitPreloaded(page); // 冷启动后台预加载三页跑完再量（page-helpers.ts 头注释）
   await page.evaluate((d) => document.documentElement.style.setProperty('--dur-ui', d), SLOW_DUR);
   // 换页后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/index.ts 的 guardTaps）
   await page.waitForTimeout(FADE_GUARD_MS + 200);

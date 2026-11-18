@@ -107,6 +107,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/features/plus/ui/TypeBar.tsx': '“＋”点一下打开的打字条：首屏画完以后 afterAppPainted 才预先下载（app/plus-slot.tsx），没下载好就点显示“准备中”（B3 Q4）；同一块里的 Preload（小气泡、按住“＋”录音那一套，B3 FA-3）下载好以后才挂',
   'src/features/todos/data/todo-autodel.ts': '完成 7 天后自动删除（负责人 11-15）：同步引擎第一次拉取成功以后才下载（main.tsx 经 wireSync 的 onFirstPull，审查 11-15 第 1 条），首屏期间不下载',
   'src/features/notes/ui/NotesPage.tsx': 'R-478 冷启动预加载：App 在首屏画完、浏览器空闲（和提醒同一时机）以后才下载（notes/index.ts 的 preload）',
+  'src/motion/page-swap.ts': '页签左右滑入、“详细”长成的动画实现：main.tsx 首屏画完以后和动画实现同一时机下载（motion/index.ts 的 loadPageSwap，11-18 首屏 151.7 KB 超线后挪出），没到时换页直接换',
   'src/features/todos/ui/TodoSettings.tsx': '设置首页“完成 7 天后自动删除”那一行：设置页里用',
   'src/features/todos/ui/day-todos.ts':'R-443 日历日清单的待办组：只在日历页挂（日历不在首屏），挂上才下载（在待办列表页那一包里）',
   'src/features/todos/ui/inline-subs.ts':'R-442 今天页待办行就地展开子任务：今天页的 Subs 等首屏画完（afterAppPainted）才挂，挂上才下载（在待办列表页那一包里）',

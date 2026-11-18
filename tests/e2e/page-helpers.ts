@@ -159,3 +159,24 @@ export async function swipeDiag(page: Page, at: { x: number; y: number }, rowTes
     [at.x, at.y, rowTestId, listTestId] as const,
   );
 }
+
+/**
+ * 等冷启动预加载三页跑完（R-478：首屏画完、空闲以后后台下载并执行日历、待办、随手记三页，运行日志 preload <页>，随手记最后一页）。
+ * 逐帧量动画的用例先等它：CI 的 WebKit 软件渲染一帧本来就要几百毫秒，再叠上三页分包的执行，第一帧拖到 1 秒、整段动画在一帧里播完
+ * （ci 05ec494e：r420 翻月第一帧 1035 ms、b2-tabbar-transition 液滴没采到在跑；本机 chromium 降速 8 倍实测最长帧 233 ms 对 150 ms）
+ */
+export async function waitPreloaded(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          // 运行日志存在 localStorage、重新载入后旧行还在：只看这一次载入（最后一行 boot 之后）记的
+          const ls = (localStorage.getItem('lemo-run-log') ?? '').split('\n');
+          let i = ls.length - 1;
+          while (i >= 0 && !/^t=\S+ boot /.test(ls[i] ?? '')) i--;
+          return i >= 0 && ls.slice(i).some((l) => l.includes(' preload notes '));
+        }),
+      { timeout: 20_000 },
+    )
+    .toBe(true);
+}
