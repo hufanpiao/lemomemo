@@ -76,6 +76,16 @@ export function vaultSession(): VaultSession {
   return session;
 }
 
+/**
+ * App 首屏画完、空闲时调一次（vault/index.ts 的 preload，app/features.ts 的 preloadPages）：还没查过状态就先查（11-19“隐私记感觉没变快”：
+ * 真机第一次进隐私记 status 要 1.3 秒，函数冷启动也在里面）。只查状态、不碰令牌和明文
+ */
+export function warmVault(): void {
+  const s = vaultSession();
+  // quiet：没查成（刚开机还没网、服务忙）不改界面状态，入口行、隐私记页挂上时照常再查
+  if (s.get().status === null) void s.refreshStatus({ quiet: true });
+}
+
 export function installVaultSession(s: VaultSession | null): void {
   session = s;
 }

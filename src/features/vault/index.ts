@@ -2,7 +2,14 @@
 // 首屏体积：这个文件经 app/features.ts 进首屏，所以只放 lazy；给别的功能用的几块并成一个导出（VaultParts 按 part 分发），只多一个 lazy
 import { lazy } from 'react';
 
-export const routes = [{ name: 'vault', Page: lazy(() => import('./ui/VaultPage.tsx')) }] as const;
+// preload（11-19“隐私记感觉没变快”）：首屏画完空闲时先下载隐私记页，再查一次隐私记状态（./preload.ts）
+export const routes = [
+  {
+    name: 'vault',
+    Page: lazy(() => import('./ui/VaultPage.tsx')),
+    preload: () => import('./preload.ts'),
+  },
+] as const;
 
 /**
  * 随手记列表顶部的入口行、“移到隐私记”、设置 › 隐私记（ui/VaultParts.tsx）。
