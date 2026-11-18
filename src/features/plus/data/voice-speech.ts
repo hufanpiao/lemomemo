@@ -199,6 +199,8 @@ export function createSpeechPath(c: VoiceCore, quick: QuickSave, onLiveFail: () 
       },
       text(t) {
         if (!mine || c.current() !== mine) return;
+        // 11-19 观察点：这一次第一回把认出的字交给面板（面板开着才画），和 platform 的 speech result1 对着看断在哪一层
+        if (textAt === -Infinity) rlog(`voice speech text1 len=${[...t.trim()].length} status=${c.view().status}`);
         textAt = now();
         c.set({ live: joinSaid(lang(), prev, t) });
       },

@@ -204,17 +204,20 @@ describe('错误和取消', () => {
 });
 
 describe('运行日志：开始、结束、失败各一行，不记识别出的字', () => {
-  it('开始 + 结束：语言、字数、段数、毫秒', () => {
+  it('开始 + 第一次来字 + 结束：语言、字数、段数、result 事件次数、毫秒', () => {
     let t = 0;
     const r = startSpeech('zh-CN', { onEnd: vi.fn() }, () => t);
     if (!r.ok) throw new Error(r.fail);
     const rec = FakeRecognition.made[0];
     t = 150;
     rec?.onstart?.();
+    t = 900;
+    rec?.result([['明天下午', false]]);
+    t = 1500;
     rec?.result([['明天下午', true], ['三点开会', true]]);
     t = 4150;
     rec?.onend?.();
-    expect(lines).toEqual(['speech start lang=zh-CN ms=150', 'speech end len=8 results=2 ms=4150']);
+    expect(lines).toEqual(['speech start lang=zh-CN ms=150', 'speech result1 len=4 ms=900', 'speech end len=8 results=2 ev=2 ms=4150']);
     expect(lines.join('\n')).not.toContain('开会');
   });
 
@@ -236,17 +239,26 @@ describe('运行日志：开始、结束、失败各一行，不记识别出的�
 });
 
 describe('诊断开关 liveSpeechOn（负责人 11-18“说话没有波动”）', () => {
-  it('默认开；关掉存 lemo-live-speech-off=1，打开删掉；存储读写抛错时当开着、不抛', () => {
-    localStorage.clear();
+  it('默认开；关掉存 sessionStorage 的 lemo-live-speech-off=1（只管这次打开），打开删掉；存储读写抛错时当开着、不抛', () => {
+    sessionStorage.clear();
     expect(liveSpeechOn()).toBe(true);
     setLiveSpeechOn(false);
-    expect(localStorage.getItem('lemo-live-speech-off')).toBe('1');
+    expect(sessionStorage.getItem('lemo-live-speech-off')).toBe('1');
+    expect(localStorage.getItem('lemo-live-speech-off'), '不再存 localStorage').toBeNull();
     expect(liveSpeechOn()).toBe(false);
     setLiveSpeechOn(true);
-    expect(localStorage.getItem('lemo-live-speech-off')).toBeNull();
+    expect(sessionStorage.getItem('lemo-live-speech-off')).toBeNull();
+    sessionStorage.clear();
     const bad = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); }, removeItem: () => { throw new Error('x'); } } as unknown as Storage;
     expect(liveSpeechOn(bad)).toBe(true);
     expect(() => setLiveSpeechOn(false, bad)).not.toThrow();
     localStorage.clear();
+  });
+
+  it('11-18 存在 localStorage 里的 OFF 不再算数：读的时候当开着，顺手清掉（负责人“语音输入正常，但是不出字”）', () => {
+    sessionStorage.clear();
+    localStorage.setItem('lemo-live-speech-off', '1');
+    expect(liveSpeechOn()).toBe(true);
+    expect(localStorage.getItem('lemo-live-speech-off')).toBeNull();
   });
 });

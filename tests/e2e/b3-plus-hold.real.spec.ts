@@ -17,7 +17,7 @@ test.use({ hasTouch: true, viewport: { width: 390, height: 844 }, timezoneId: 'A
 async function consentAndTodos(page: Page, email: string): Promise<void> {
   await fakeMedia(page, { mime: 'audio/mp4' });
   // 11-18 起有系统识别就走识别那一路（Chromium 有 webkitSpeechRecognition）：这里测录音上传，用诊断开关 Live speech: OFF 固定走录音
-  await page.addInitScript(() => localStorage.setItem('lemo-live-speech-off', '1'));
+  await page.addInitScript(() => sessionStorage.setItem('lemo-live-speech-off', '1'));
   await loginViaOtp(page, email);
   await page.goto('/app/');
   const consent = page.locator(CONSENT);

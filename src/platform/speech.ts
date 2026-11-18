@@ -13,17 +13,27 @@ export const SPEECH_STOP_WAIT_MS = 3000;
 
 /**
  * 诊断开关（负责人 11-18 录屏“说话没有波动”）：关掉 = 不走系统识别那一路，只用录音上传（真机对比用）。
- * 设置 → 诊断区按钮切换，存 localStorage，读不到当开着
+ * 设置 → 诊断区按钮切换，读不到当开着。
+ * 11-19 起只存 sessionStorage（只管这次打开 app，杀掉重开回到 ON）：原来存 localStorage，对比时关掉以后一直关着，
+ * 有系统识别也悄悄只走录音、不出字（负责人 11-18：“语音输入正常，但是不出字”）；以前存在 localStorage 的那一份读的时候顺手清掉
  */
 const LIVE_OFF_KEY = 'lemo-live-speech-off';
-export function liveSpeechOn(store: Storage = localStorage): boolean {
+const dropOld = (): void => {
+  try {
+    localStorage.removeItem(LIVE_OFF_KEY);
+  } catch {
+    /* 清不了：本来也不再读它 */
+  }
+};
+export function liveSpeechOn(store: Storage = sessionStorage): boolean {
+  dropOld();
   try {
     return store.getItem(LIVE_OFF_KEY) !== '1';
   } catch {
     return true;
   }
 }
-export function setLiveSpeechOn(on: boolean, store: Storage = localStorage): void {
+export function setLiveSpeechOn(on: boolean, store: Storage = sessionStorage): void {
   try {
     if (on) store.removeItem(LIVE_OFF_KEY);
     else store.setItem(LIVE_OFF_KEY, '1');
@@ -93,6 +103,8 @@ export function startSpeech(
   const since = (): string => `ms=${Math.round(now() - t0)}`;
   let text = '';
   let segments = 0;
+  /** 收到几次 result 事件（11-19 观察点：识别起来了、到底有没有回过字，end 那一行带 ev=；第一次来字另记一行 speech result1） */
+  let events = 0;
   let begun = false;
   let done = false;
   let wait: ReturnType<typeof setTimeout> | undefined;
@@ -120,6 +132,8 @@ export function startSpeech(
       for (let i = 0; i < ev.results.length; i++) all += ev.results[i]?.[0]?.transcript ?? '';
       text = all;
       segments = ev.results.length;
+      events += 1;
+      if (events === 1) rlog(`speech result1 len=${[...all.trim()].length} ${since()}`);
       h.onText?.(all);
     };
     // 诊断（负责人 11-17：“有时候说话语音不识别，那个说话时的波动条也不动”）：系统识别什么时候开始收到声音、听出有人说话
@@ -136,7 +150,7 @@ export function startSpeech(
     r.onend = () => {
       if (done) return;
       const said = text.trim();
-      rlog(`speech end len=${[...said].length} results=${segments} ${since()}`);
+      rlog(`speech end len=${[...said].length} results=${segments} ev=${events} ${since()}`);
       end({ ok: true, text: said });
     };
     r.start();

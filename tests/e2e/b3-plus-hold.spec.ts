@@ -10,9 +10,9 @@
 // 所以这里看到上传那一步为止，用 App 自己的运行日志断言；“上传没成 → 重试 → 记下”用 page.route 有意给失败、成功，放在真后端组
 // （b3-plus-hold.real.spec.ts）；ai-voice 返回以后的各种结局在单测（RecordHost.test.tsx）
 // AI 要开着才走录音：页面打开后往本机库 settings 写一行 ai.enabled = true（和 visual-helpers 的 seedTodos 同一个写法），再重新打开
-// 手机自带识别（Web Speech）在 Chromium 无头里不能用，那一路只有单测；系统长按菜单、真麦克风、音量波形只能真机看
+// 手机自带识别（Web Speech）在 Chromium 无头里不能用：识别主路换成假识别（fakeSpeech）跑最后一组；系统长按菜单、真麦克风、真识别、音量波形只能真机看
 import type { Page } from '@playwright/test';
-import { center, count, expectMicClosed, fakeMedia, holdUntilRecording, runLog, waitVoiceHost } from './fake-media.ts';
+import { center, count, expectMicClosed, fakeMedia, fakeSay, fakeSpeech, holdUntilRecording, micCounts, runLog, speechCounts, waitVoiceHost } from './fake-media.ts';
 import { cached, idbPut } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
@@ -44,7 +44,7 @@ test.describe('按住“＋”录音（B3 FA-3）', () => {
   test.beforeEach(async ({ page }) => {
     await fakeMedia(page, { mime: 'audio/mp4' });
     // 11-18 起有系统识别就走识别那一路（Chromium 有 webkitSpeechRecognition）：这一组测录音上传，用诊断开关 Live speech: OFF 固定走录音
-    await page.addInitScript(() => localStorage.setItem('lemo-live-speech-off', '1'));
+    await page.addInitScript(() => sessionStorage.setItem('lemo-live-speech-off', '1'));
   });
   // 失败时把运行日志最后 80 行打出来：先看日志定根因
   test('按住 350 ms 出录音面板（录着）；松手交出录音上传：3000 字节、audio/mp4', async ({ page }) => {
@@ -111,5 +111,48 @@ test.describe('按住“＋”录音（B3 FA-3）', () => {
     expect(count(await runLog(page), 'voice idle->preparing'), '没开录').toBe(0);
     await expectMicClosed(page, 0);
     await context.setOffline(false);
+  });
+});
+
+// 识别主路（11-18 起有系统识别就只走它；负责人 11-18“语音输入正常，但是不出字”）：Chromium 无头的真识别用不了，换成照 iOS WebKit 事件顺序的假识别（fake-media.ts 的 fakeSpeech），
+// 从 platform/speech.ts 往上整条链真跑：按住 → 边说边出字（面板字框）→ 松手先存出“已记下”；连说两次，第二次照样出字（负责人 11-17、11-18：“第一次出字，第二次开始不出字”）。
+// 真机上系统识别给不给字只能真机看
+test.describe('按住“＋”说话：系统识别边说边出字', () => {
+  test.use({ loggedIn: true, hasTouch: true, viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul', permissions: ['microphone'] });
+  test.skip(({ browserName }) => browserName !== 'chromium', '假识别只在 Chromium 跑（和上一组同样的手势条件）');
+
+  test.beforeEach(async ({ page }) => {
+    await fakeMedia(page, { mime: 'audio/mp4' });
+    await fakeSpeech(page);
+  });
+
+  test('连说两次：每次按住都边说边出字，松手先存出“已记下”，不开录音器；识别用完都关掉', async ({ page }) => {
+    await openWithAi(page);
+    for (const [part, all] of [
+      ['买牛', '买牛奶'],
+      ['明天', '明天下午三点开会'],
+    ] as const) {
+      const before = count(await runLog(page), 'voice live saved out=ok');
+      const at = await center(page, 'tabbar-add');
+      await page.mouse.move(at.x, at.y);
+      await page.mouse.down();
+      await expect(page.getByTestId('rec-panel')).toHaveAttribute('data-status', 'listening');
+      await fakeSay(page, part);
+      await expect(page.getByTestId('rec-live')).toHaveText(part);
+      await fakeSay(page, all);
+      await expect(page.getByTestId('rec-live')).toHaveText(all);
+      await page.mouse.up();
+      await expect(page.getByTestId('rec-panel')).toHaveCount(0);
+      await expect.poll(async () => count(await runLog(page), 'voice live saved out=ok')).toBe(before + 1);
+      await expect(page.getByTestId('type-notice')).toContainText('已记下');
+      await expect.poll(() => speechCounts(page), { message: '识别都关掉了' }).toMatchObject({ open: 0 });
+    }
+    const log = await runLog(page);
+    expect(count(log, 'route=live ls=on broken=0 sup=1'), '两次都走识别').toBe(2);
+    expect(count(log, 'speech result1 len='), '两次都收到了字').toBe(2);
+    expect(count(log, 'voice speech text1 len='), '两次都交给了面板').toBe(2);
+    expect(count(log, 'voice upload start'), '不传录音').toBe(0);
+    expect((await micCounts(page)).streams, '不开录音器').toBe(0);
+    expect(log.some((l) => l.includes('牛奶') || l.includes('开会')), '日志不记说的内容').toBe(false);
   });
 });
