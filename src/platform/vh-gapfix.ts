@@ -8,7 +8,7 @@
 import { isStandalone, opensKeyboard } from './env.ts';
 import { BAR_SELECTOR, rlog } from './run-log-api.ts';
 import { watchKeyboardClosed } from './viewport.ts';
-import { earlyGap, fixHeight, gapState, insetTop, OFF_KEY, skipReason, type EarlyGap, type FixEnd, type Frame } from './vh-gapfix-gate.ts';
+import { earlyGap, fixHeight, gapFixOn, gapState, insetTop, skipReason, type EarlyGap, type FixEnd, type Frame } from './vh-gapfix-gate.ts';
 
 /** 放了垫块这么久 innerHeight 还没变：补一次滚动 */
 export const SCROLL_AT_MS = 600;
@@ -21,23 +21,8 @@ export const TOP_RETRY_FRAMES = 4;
 /** 等底栏挂上（今天页画出来）最多这么久 */
 export const WAIT_BAR_MS = 5000;
 
-/** 诊断页开关：默认开；关掉（存 OFF_KEY）用来对照。读不到本机存储时当开着（和 gapFixWanted 一致） */
-export function gapFixOn(store: Storage = localStorage): boolean {
-  try {
-    return store.getItem(OFF_KEY) !== '1';
-  } catch {
-    return true;
-  }
-}
-
-export function setGapFixOn(on: boolean, store: Storage = localStorage): void {
-  try {
-    if (on) store.removeItem(OFF_KEY);
-    else store.setItem(OFF_KEY, '1');
-  } catch {
-    // 本机存储用不了：关不掉，诊断页照样显示 ON
-  }
-}
+/** 诊断页开关：搬到 vh-gapfix-gate.ts（设置页预加载不再顺带下载这一块），这里转出口给原来的调用方 */
+export { gapFixOn, setGapFixOn } from './vh-gapfix-gate.ts';
 
 export interface GapFixDeps {
   readonly win?: Window;

@@ -18,10 +18,26 @@ export type Frame = (cb: () => void) => unknown;
 /** 这次冷启动要不要做：iOS（iPhone、iPad）、主屏幕版、诊断页没关掉。读不到本机存储时照默认做 */
 export function gapFixWanted(nav: NavLike = navigator, media?: (q: string) => boolean, store?: Storage): boolean {
   if (!isAppleMobile(nav) || !isStandalone(nav, media)) return false;
+  return gapFixOn(store);
+}
+
+/** 诊断页开关：默认开；关掉（存 OFF_KEY）用来对照。读不到本机存储时当开着。
+ *  放这份轻的（首屏）不放 vh-gapfix.ts：设置页诊断区要读写它，而设置页冷启动后台预加载（413），放那份会把 Gap fix 整块顺带下载（e2e r371 守“关着不下载”） */
+export function gapFixOn(store?: Storage): boolean {
   try {
     return (store ?? localStorage).getItem(OFF_KEY) !== '1';
   } catch {
     return true;
+  }
+}
+
+export function setGapFixOn(on: boolean, store?: Storage): void {
+  try {
+    const s = store ?? localStorage;
+    if (on) s.removeItem(OFF_KEY);
+    else s.setItem(OFF_KEY, '1');
+  } catch {
+    // 本机存储用不了：关不掉，诊断页照样显示 ON
   }
 }
 

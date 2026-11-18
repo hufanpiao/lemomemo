@@ -15,7 +15,7 @@ import { FormButton } from '../../../kit/components/Form.tsx';
 import { SWITCH_WAYS, tryHaptic, type HapticPath, type SwitchWay } from '../../../platform/feedback.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { liveSpeechOn, setLiveSpeechOn } from '../../../platform/speech.ts';
-import { gapFixOn, setGapFixOn } from '../../../platform/vh-gapfix.ts';
+import { gapFixOn, setGapFixOn } from '../../../platform/vh-gapfix-gate.ts';
 import { clearRunLog, readRunLog } from '../../../platform/run-log.ts';
 import { useRunLogSend, type RunLogSendState } from '../hooks/useRunLogSend.ts';
 import styles from './SettingsPage.module.css';
