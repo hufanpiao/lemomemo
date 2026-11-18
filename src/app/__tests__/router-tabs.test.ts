@@ -1,5 +1,5 @@
 // 按层级记历史（R-372，负责人 11-10“整体往左滑应该是返回上一个层级，不是返回上一个操作啊！！”）：
-// ① 底栏四个页签今天是根：今天 → 别的页签压一条，别的页签之间原地换，回今天能退就退；在今天页左滑不动
+// ① 底栏四个页签之间一律原地换，不压历史（负责人 11-18 推翻原来的“今天 → 别的页签压一条、左滑回今天”：系统左边缘返回会抢走横滑切页）
 // ② 日历里翻月、切月/周、“今天”、选年月、点某天进周视图算同一层（replaceInPage，不记步数）
 // 设置“‹ 今天”按层级退回（backTo），不新压一条；iOS 恢复后（编号对不上）不退到 App 外
 import { cleanup, renderHook } from '@testing-library/react';
@@ -8,11 +8,6 @@ import { backTo, canGoBack, navigate, navigateTab, resetLoadForTest, useRoute } 
 import { replaceInPage } from '../router-levels.ts';
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
-async function back(): Promise<void> {
-  window.history.back();
-  await vi.waitFor(() => new Promise((r) => setTimeout(r, 10)));
-  await flush();
-}
 
 let base = 0;
 beforeEach(() => {
@@ -27,36 +22,16 @@ afterEach(() => {
 });
 
 describe('① 底栏页签：今天是根', () => {
-  it('今天 → 日历 → 待办 → 随手记：只压一条；后退一步回今天', async () => {
+  it('今天 → 日历 → 待办 → 随手记 → 今天：一条都不压，始终没有 App 里的上一页（负责人 11-18 推翻 R-372 ①）', async () => {
+    // 原来今天 → 别的页签压一条：到了别的页从左边往里划，iPhone 系统左边缘返回先退回今天，横滑切页只在今天和随手记之间来回（preview.416 日志 t=12.99 to=todos、t=13.07 route #/today）
     renderHook(() => useRoute());
-    navigateTab('calendar');
-    await flush();
-    navigateTab('todos');
-    await flush();
-    navigateTab('notes');
-    await flush();
-    expect(window.location.hash).toBe('#/notes');
-    expect(window.history.length).toBe(base + 1);
-    await back();
-    expect(window.location.hash).toBe('#/today');
-  });
-
-  it('回到今天以后没有 App 里的上一页（今天页左滑不动，不出 App）；再去别的页签也只压一条', async () => {
-    renderHook(() => useRoute());
-    navigateTab('todos');
-    await flush();
-    navigateTab('calendar');
-    await flush();
-    navigateTab('today'); // 上一条就是今天：退一步，不新压
-    await vi.waitFor(() => expect(window.location.hash).toBe('#/today'));
-    await flush();
-    expect(window.history.length).toBe(base + 1);
-    expect(canGoBack()).toBe(false);
-    navigateTab('notes');
-    await flush();
-    expect(window.history.length).toBe(base + 1); // 截掉前进的那条，再压一条
-    await back();
-    expect(window.location.hash).toBe('#/today');
+    for (const t of ['calendar', 'todos', 'notes', 'today'] as const) {
+      navigateTab(t);
+      await vi.waitFor(() => expect(window.location.hash).toBe(`#/${t}`));
+      await flush();
+      expect(window.history.length, t).toBe(base);
+      expect(canGoBack(), t).toBe(false);
+    }
   });
 
   it('点当前页签不动', async () => {
@@ -90,19 +65,17 @@ describe('① 底栏页签：今天是根', () => {
 });
 
 describe('② 日历内部算同一层', () => {
-  it('今天 → 日历 → 翻 3 个月、进周视图：后退一步回今天', async () => {
+  it('今天 → 日历 → 翻 3 个月、进周视图：一条都不压', async () => {
     renderHook(() => useRoute());
     navigateTab('calendar');
     await flush();
     for (const m of ['2026-12', '2027-01', '2027-02']) await replaceInPage('cal', 'month', m);
     await replaceInPage('cal', 'week', '2027-02-10');
-    expect(window.history.length).toBe(base + 1);
-    expect(canGoBack()).toBe(true); // 原地换沿用编号：日历里点“今天”页签照样退一步
-    await back();
-    expect(window.location.hash).toBe('#/today');
+    expect(window.history.length).toBe(base);
+    expect(canGoBack()).toBe(false);
   });
 
-  it('从日历翻过的月点“今天”页签：退一步回今天，不新压', async () => {
+  it('从日历翻过的月点“今天”页签：原地换，不压', async () => {
     renderHook(() => useRoute());
     navigateTab('calendar');
     await flush();
@@ -111,7 +84,7 @@ describe('② 日历内部算同一层', () => {
     navigateTab('today');
     await vi.waitFor(() => expect(window.location.hash).toBe('#/today'));
     expect(push).not.toHaveBeenCalled();
-    expect(window.history.length).toBe(base + 1);
+    expect(window.history.length).toBe(base);
   });
 });
 

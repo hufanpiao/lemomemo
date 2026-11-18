@@ -285,12 +285,18 @@ export function plainClick(e: Pick<MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey
   return true;
 }
 
+/** 四个主页面（底栏页签）：它们之间互切一律原地换 */
+const MAIN_TABS: ReadonlySet<RouteName> = new Set<RouteName>(['today', 'calendar', 'todos', 'notes']);
+
 /**
- * 底栏页签（R-372 ①“其他页左滑回今天”）：今天是根。今天 → 别的页签压一条（左滑回今天）；别的页签之间原地换；
- * 回今天按 backTo（上一条就是今天就退一步，否则原地换）。在今天页左滑不动：今天下面不再叠别的页签
+ * 底栏页签、左右两边横滑切页（app/tab-swipe.ts）：四个主页面之间一律原地换，不压历史。
+ * 负责人 11-18 推翻 R-372 ①“其他页左滑回今天”：“之前左滑是回到主页，4个页面切换只在退回到主页面时来回切”
+ * “我左滑切页怎么只在今天跟随手记之间来回切啊？！不是一个个切过去吗？？”——原来今天 → 别的页签压一条历史，
+ * 到了别的页从左边往里划，iPhone 系统的左边缘返回先退回今天，横滑切页被跳过（skip=moved），只在今天和随手记之间来回。
+ * 设置（右上头像）照旧：从今天进压一条，从别的页签进原地换
  */
 export function navigateTab(name: RouteName): void {
-  if (name === 'today') backTo(name);
+  if (MAIN_TABS.has(name)) void replaceRoute(name);
   else void (parseHash(window.location.hash).name === 'today' ? navigate : replaceRoute)(name);
 }
 

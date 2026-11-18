@@ -1,10 +1,12 @@
 // 四个主页面（今天、日历含翻过月、待办、随手记）从屏幕左右两边往里划切页签。负责人 11-18：
 // “在今天，日历，待办，随手记的主页面时左滑，右滑可以互相切换页面”；“之前左滑是回到主页，4个页面切换只在退回到主页面时来回切”（二级页不管）；
 // “划到最左（今天）或最右（随手记）就循环”；“切页的触发区域只在左右两边就行”。
-// • 只认左右两条切页带（motion 的 sideOf，各 SIDE_PX 宽）里起手的：右边那条往左划去底栏右边那个页签，左边那条往右划去左边那个；两头循环。
+// • 只认左右两条切页带（motion 的 sideOf，各 SIDE_PX 宽）里起手的：左边那条往右划去下一个（今天 → 日历 → 待办 → 随手记 → 今天），右边那条往左划去上一个；两头循环。
+//   负责人 11-18“今天页左滑切到日历，再左滑切到待办，再左滑切到随手记，再左滑切到今天，这样一直循环！”——负责人说的“左滑”是从左边起手往右划
+//   （同负责人说的“之前左滑是回到主页”，即 iPhone 左边缘返回；preview.416 日志里负责人的横滑全是 side=l dx>0）；第一版把方向做反了，左边起手去了上一个。
 //   列表行左滑、月历翻月在这两条带里起手都不响应（hdrag.ts），所以不会一划两用；中间区域划动一律不切。
 // • 也不切：起手在输入框、底栏和“＋”上，弹层和菜单开着，焦点在输入框里（键盘弹着），两根手指，抬手前地址已经变了（系统侧滑返回先走了）。
-// • 只听 touch，被动（不 preventDefault、不抓指针、不跟手）：竖着滚照常。抬手时判：往里横移 ≥ SWIPE_MIN_PX、横移 ≥ 竖移 2 倍、按下到抬手 ≤ SWIPE_MAX_MS。
+// • 只听 touch，被动（不 preventDefault、不抓指针、不跟手）：竖着滚照常。抬手时判：往里横移 ≥ SWIPE_MIN_PX、横移 ≥ 竖移 SWIPE_SLOPE 倍、按下到抬手 ≤ SWIPE_MAX_MS。
 // • 换页走 navigateTab，和点底栏同一条路（同一个切页动效、同一套历史）；页签互切是原地模糊换页（motion/blur-swap.ts），不分左右，循环那一下也不会反着走。
 // 运行日志：tabswipe side= dx= dy= ms= 之后是 to=页签 或 skip=原因（只记手势，不记内容）；中间区域起手、横移不到 SWIPE_MIN_PX 的不记
 import { TAB_ORDER, type TabName } from '../kit/components/GlassBar/tabs.ts';
@@ -14,21 +16,26 @@ import { navigateTab, parseHash } from './router.ts';
 
 export const SWIPE_MIN_PX = 60;
 export const SWIPE_MAX_MS = 500;
+/**
+ * 横移至少是竖移的几倍才算横滑：原来 2 倍，preview.416 运行日志里负责人从左边往右划，被判太斜（skip=shape）的
+ * dx=103 dy=60、120/62、92/50、78/40、118/60、85/44、74/37、106/59，比例都在 1.69～1.80；放到 1.25 倍这些都算数
+ */
+export const SWIPE_SLOPE = 1.25;
 
 /** 四个主页面各是哪个页签；日历翻过月（#/cal/month/…）还是日历主页面。纪念日、隐私记这些归页签的二级页不算 */
 const MAIN: Record<string, TabName> = { today: 'today', calendar: 'calendar', cal: 'calendar', todos: 'todos', notes: 'notes' };
 export const mainTab = (route: string): TabName | null => MAIN[route] ?? null;
 
 /**
- * 这一下划完该去哪个页签（纯函数）：side 是起手的那条带。右边那条只认往左划（去下一个），左边那条只认往右划（去上一个），两头循环；
+ * 这一下划完该去哪个页签（纯函数）：side 是起手的那条带。左边那条只认往右划（去下一个），右边那条只认往左划（去上一个），两头循环；
  * 不在四个主页面、方向不对、太短、太斜、太慢都回 null
  */
 export function swipeTarget(route: string, side: 'l' | 'r', dx: number, dy: number, ms: number): TabName | null {
   const tab = mainTab(route);
   if (tab === null) return null;
-  if ((side === 'r' ? -dx : dx) < SWIPE_MIN_PX || Math.abs(dx) < 2 * Math.abs(dy) || ms > SWIPE_MAX_MS) return null;
+  if ((side === 'r' ? -dx : dx) < SWIPE_MIN_PX || Math.abs(dx) < SWIPE_SLOPE * Math.abs(dy) || ms > SWIPE_MAX_MS) return null;
   const n = TAB_ORDER.length;
-  return TAB_ORDER[(TAB_ORDER.indexOf(tab) + (side === 'r' ? 1 : -1) + n) % n] ?? null;
+  return TAB_ORDER[(TAB_ORDER.indexOf(tab) + (side === 'l' ? 1 : -1) + n) % n] ?? null;
 }
 
 const INPUT = 'input,textarea,select,[contenteditable]:not([contenteditable="false"])';

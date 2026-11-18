@@ -9,12 +9,13 @@ import { SIDE_PX } from '../../motion/gestures.ts';
 import { blockedAt, installTabSwipe, swipeTarget, SWIPE_MAX_MS, SWIPE_MIN_PX } from '../tab-swipe.ts';
 
 describe('swipeTarget：划完去哪个页签', () => {
-  it('右边那条往左划去下一个，左边那条往右划去上一个；两头循环', () => {
-    expect(swipeTarget('today', 'r', -80, 0, 200)).toBe('calendar');
-    expect(swipeTarget('calendar', 'r', -80, 0, 200)).toBe('todos');
-    expect(swipeTarget('notes', 'r', -80, 0, 200), '随手记往下一个回到今天').toBe('today');
-    expect(swipeTarget('todos', 'l', 80, 0, 200)).toBe('calendar');
-    expect(swipeTarget('today', 'l', 80, 0, 200), '今天往上一个到随手记').toBe('notes');
+  it('左边那条往右划（负责人说的“左滑”）去下一个：今天 → 日历 → 待办 → 随手记 → 今天；右边那条往左划去上一个', () => {
+    expect(swipeTarget('today', 'l', 80, 0, 200)).toBe('calendar');
+    expect(swipeTarget('calendar', 'l', 80, 0, 200)).toBe('todos');
+    expect(swipeTarget('todos', 'l', 80, 0, 200)).toBe('notes');
+    expect(swipeTarget('notes', 'l', 80, 0, 200), '随手记往下一个回到今天').toBe('today');
+    expect(swipeTarget('todos', 'r', -80, 0, 200)).toBe('calendar');
+    expect(swipeTarget('today', 'r', -80, 0, 200), '今天往上一个到随手记').toBe('notes');
   });
   it('方向不对（右边那条往右划、左边那条往左划）不切', () => {
     expect(swipeTarget('today', 'r', 80, 0, 200)).toBeNull();
@@ -22,13 +23,13 @@ describe('swipeTarget：划完去哪个页签', () => {
   });
   it('二级页（编辑、设置、纪念日、隐私记）不切；日历翻过月（cal）还是日历主页面', () => {
     for (const r of ['edit', 'settings', 'anniv', 'vault']) expect(swipeTarget(r, 'r', -80, 0, 200)).toBeNull();
-    expect(swipeTarget('cal', 'r', -80, 0, 200)).toBe('todos');
-    expect(swipeTarget('cal', 'l', 80, 0, 200)).toBe('today');
+    expect(swipeTarget('cal', 'l', 80, 0, 200)).toBe('todos');
+    expect(swipeTarget('cal', 'r', -80, 0, 200)).toBe('today');
   });
   it('太短、太斜、太慢都不切', () => {
     expect(swipeTarget('today', 'r', -(SWIPE_MIN_PX - 1), 0, 200)).toBeNull();
-    expect(swipeTarget('today', 'r', -80, 41, 200)).toBeNull();
-    expect(swipeTarget('today', 'r', -80, 40, 200)).toBe('calendar');
+    expect(swipeTarget('today', 'r', -80, 65, 200), '横移不到竖移 1.25 倍').toBeNull();
+    expect(swipeTarget('today', 'l', 103, 60, 200), '416 日志里被拒的那一下').toBe('calendar');
     expect(swipeTarget('today', 'r', -80, 0, SWIPE_MAX_MS + 1)).toBeNull();
   });
 });
@@ -94,11 +95,11 @@ describe('installTabSwipe：真的划一下', () => {
     window.location.hash = '';
     document.body.replaceChildren();
   });
-  it('右边那条往左划：今天 → 日历；左边那条往右划：今天 → 随手记（循环）', () => {
+  it('左边那条往右划：今天 → 日历；右边那条往左划：今天 → 随手记（循环）', () => {
     window.location.hash = '#/today';
-    swipe(W - 10, W - 150);
-    expect(nav.to).toEqual(['calendar']);
     swipe(10, 150);
+    expect(nav.to).toEqual(['calendar']);
+    swipe(W - 10, W - 150);
     expect(nav.to).toEqual(['calendar', 'notes']);
   });
   it(`中间区域（离两边 ${SIDE_PX} px 以外）起手不切`, () => {

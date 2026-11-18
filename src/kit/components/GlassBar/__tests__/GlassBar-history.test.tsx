@@ -1,8 +1,8 @@
-// 底栏页签按层级记历史（R-372 ①，负责人选“其他页左滑回今天”）：点页签不让 <a href> 自己压历史，交给 navigateTab；
-// 今天 → 别的页签压一条，别的页签之间原地换，点“今天”退一步。按着修饰键（新标签页打开）照浏览器默认，不拦
+// 底栏页签的历史（负责人 11-18 推翻 R-372 ①：系统左边缘返回会抢在横滑切页前面）：点页签不让 <a href> 自己压历史，交给 navigateTab；
+// 四个主页面之间一律原地换、一条都不压，没有 App 里的上一页。按着修饰键（新标签页打开）照浏览器默认，不拦
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetLoadForTest, useRoute } from '../../../../app/router.ts';
+import { canGoBack, resetLoadForTest, useRoute } from '../../../../app/router.ts';
 import { GlassBar } from '../GlassBar.tsx';
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
@@ -21,18 +21,19 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe('GlassBar：页签按层级记历史（R-372）', () => {
-  it('今天 → 日历 → 待办 → 随手记只压一条；点“今天”退一步回今天', async () => {
+describe('GlassBar：页签互切不压历史（负责人 11-18）', () => {
+  it('今天 → 日历 → 待办 → 随手记 → 今天：一条都不压', async () => {
     render(<Bar />);
     for (const name of ['日历', '待办', '随手记']) {
       fireEvent.click(screen.getByRole('link', { name }));
       await flush();
     }
     expect(window.location.hash).toBe('#/notes');
-    expect(window.history.length).toBe(base + 1);
+    expect(window.history.length).toBe(base);
     fireEvent.click(screen.getByRole('link', { name: '今天' }));
     await vi.waitFor(() => expect(window.location.hash).toBe('#/today'));
-    expect(window.history.length).toBe(base + 1);
+    expect(window.history.length).toBe(base);
+    expect(canGoBack()).toBe(false);
   });
 
   it('普通点击拦下链接默认跳转；按着修饰键点不拦（新标签页打开照常）', () => {
@@ -54,11 +55,11 @@ describe('GlassBar：页签按层级记历史（R-372）', () => {
     fireEvent.pointerDown(a, { ...touch, clientX: 100, clientY: 880 });
     fireEvent.pointerUp(a, { ...touch, clientX: 102, clientY: 881 });
     await vi.waitFor(() => expect(window.location.hash).toBe('#/calendar'));
-    expect(window.history.length).toBe(base + 1);
+    expect(window.history.length).toBe(base);
     expect(fireEvent.click(a), '跟着来的 click 照样拦默认跳转').toBe(false);
     await flush();
     expect(window.location.hash).toBe('#/calendar');
-    expect(window.history.length, '没多压一条').toBe(base + 1);
+    expect(window.history.length, '没压历史').toBe(base);
     // 挪了 30px（滑过去的）：抬手不换，等 click（这里不发 click）
     const b = screen.getByRole('link', { name: '待办' });
     fireEvent.pointerDown(b, { ...touch, clientX: 200, clientY: 880 });

@@ -1,4 +1,4 @@
-// 在 App 里打开整页提醒再关掉，回到原来那一页（R-372 代码审 M1，负责人选 ①“其他页左滑回今天”）：
+// 在 App 里打开整页提醒再关掉，回到原来那一页（R-372 代码审 M1；负责人 11-18 推翻 ①：四个主页面互切一律原地换、不压历史）：
 // 横幅、错过的提醒都走 ui/open-reminder.ts：网页版在 /app/ 里走路由压一条带本次编号的历史，关掉时退一步；
 // 不再直接改 location.hash（压的历史不带编号，关掉时只能原地换成今天，今天下面留着打开前那一页，在今天左滑又回到那一页）。
 // 路由、桥都用真的；本机集合、写入、时钟、键盘的替身和 RemindViews.test.tsx 同一套
@@ -89,28 +89,29 @@ describe('打开整页提醒再关掉：回到原来那一页（R-372 代码审 
     nowMs = at('15:16');
   });
 
-  it('日历点横幅进整页提醒，关掉回到日历；日历还能左滑回今天', async () => {
+  it('日历点横幅进整页提醒，关掉回到日历；日历下面没有今天（主页面互切不压历史，负责人 11-18）', async () => {
     render(<RouteProbe />);
     navigateTab('calendar');
     await flush();
     await openReminder('event', E1, at('15:15'));
     expect(window.location.hash).toBe(`#/remind/event/${E1}?due=${at('15:15')}`);
-    expect(window.history.length).toBe(base + 2);
+    expect(window.history.length).toBe(base + 1);
     render(<FullReminderPage />);
-    fireEvent.click(screen.getByTestId('remind-full-back'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('remind-full-back'));
+    });
     await vi.waitFor(() => expect(window.location.hash).toBe('#/calendar'));
-    expect(canGoBack()).toBe(true);
-    window.history.back();
-    await vi.waitFor(() => expect(window.location.hash).toBe('#/today'));
+    await flush();
+    expect(canGoBack()).toBe(false);
   });
 
   it('今天点进整页提醒，关掉回今天；今天下面没有日历（在今天左滑不会退到日历）', async () => {
     render(<RouteProbe />);
     navigateTab('calendar');
     await flush();
-    navigateTab('today'); // 退一步回今天，日历成了“前进”那一条
+    navigateTab('today'); // 主页面互切原地换
     await vi.waitFor(() => expect(window.location.hash).toBe('#/today'));
-    await openReminder('event', E1, at('15:15')); // 截掉“前进”的日历，压一条整页提醒
+    await openReminder('event', E1, at('15:15')); // 压一条整页提醒
     expect(window.history.length).toBe(base + 1);
     render(<FullReminderPage />);
     await act(async () => {
