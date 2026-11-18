@@ -26,9 +26,11 @@
 //   不换页，在右边的详情抽屉里编辑（CalDrawer.tsx，外壳是 kit 的 DetailDrawer；开着哪一条由 kit useListActions.ts 的 useDrawerSel 管，同今天页）。
 //   只读行照旧先拦下；窗口变窄、抽屉画出错时清掉、退回进编辑页。打开时运行日志记一行“cal drawer open kind= view=”（不记标题）。
 //   页顶 h1 带 tabIndex=-1：抽屉里删了这一条、关上时那一行已经不在，焦点退到这里（DetailDrawer 的 rowOf），不掉到 body
-import { Suspense, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { DateStr } from '../../../../shared/core/date.ts';
+import { addDays, daysIn, fmtDateStr, type DateStr } from '../../../../shared/core/date.ts';
+import { countEntries } from '../../../../shared/logic/calendar/cal-items.ts';
+import refine from '../../../kit/components/Refine.module.css';
 import { monthOf, weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
 import { navigate, replaceRoute, useRoute } from '../../../app/router.ts';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
@@ -139,6 +141,18 @@ export default function CalendarPage() {
   const [picked, setPicked] = useState<DateStr | null>(null);
   const month = model.view.mode === 'month';
   const title = month ? t('cal.title', { y: model.header.y, m: model.header.m }) : weekTitleText(model.view.start, t);
+  // 顶部大字只写“11月”；读屏念完整年月（周视图再接“11月16日–22日”），看得见的“11月”包含在里面（WCAG 2.5.3）
+  const titleA11y = month ? title : `${t('cal.title', { y: model.header.y, m: model.header.m })} ${title}`;
+  const [from, to] = month
+    ? [fmtDateStr(model.header.y, model.header.m, 1), fmtDateStr(model.header.y, model.header.m, daysIn(model.header.y, model.header.m))]
+    : [model.view.start, addDays(model.view.start, 6)];
+  const count = useMemo(() => {
+    try {
+      return countEntries(model.items, from, to, model.tz);
+    } catch {
+      return 0;
+    }
+  }, [model.items, from, to, model.tz]);
   // 只读行（FA-2）：打开一条之前先看是不是只读，是就出提示条、不进编辑页
   const ro = useCalGuard(model.view.mode);
   /** 抽屉里开着的那一条（行按钮 aria-current；data-open 给抽屉关上时找回焦点用） */
@@ -217,14 +231,20 @@ export default function CalendarPage() {
           onPick={cal.pick}
           onToday={goToday}
           trigger={
-            <button type="button" className={styles.pill} data-testid="cal-title">
-              <span>{title}</span>
-              <span className={styles.pillChev} aria-hidden="true" />
+            <button type="button" className={styles.titleBtn} aria-label={titleA11y} data-testid="cal-title">
+              <span className={`${refine.title} ${styles.titleTx}`}>
+                {t('cal.titleBig', { m: model.header.m })}
+                <span className={styles.pillChev} aria-hidden="true" />
+              </span>
             </button>
           }
         />
         <MeLink testId="cal-settings" />
       </div>
+      {/* 甲方案（负责人 11-18）下一行等宽小字：年份和这一页共几项，同待办页 todos-sub */}
+      <p className={refine.sub} data-testid="cal-sub">
+        {month ? t('cal.titleSub', { y: model.header.y, n: count }) : t('cal.titleSubW', { range: title, n: count })}
+      </p>
       <PullSlot
         pull={pull}
         keyLabel={t('cal.pullKey', {})}

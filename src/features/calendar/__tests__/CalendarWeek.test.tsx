@@ -165,7 +165,7 @@ describe('周视图（手机排布）', () => {
       fireEvent.click(screen.getByTestId('cal-mode-week'));
     });
     expect(window.location.hash).toBe('#/cal/week/2026-11-02');
-    expect(screen.getByTestId('cal-title').textContent).toContain('11月2日–8日');
+    expect(screen.getByTestId('cal-title').getAttribute('aria-label')).toContain('11月2日–8日');
     const anniv = screen.getByTestId('cal-mode-anniv');
     expect(anniv.getAttribute('aria-disabled')).toBeNull();
     expect(anniv.getAttribute('aria-pressed')).toBe('false');

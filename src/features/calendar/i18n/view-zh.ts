@@ -14,6 +14,10 @@ export const viewZh = {
   'cal.prevWeek': '上一周',
   'cal.nextWeek': '下一周',
   'cal.title': '{y}年{m}月',
+  // 顶部页标题（负责人 11-18 选甲方案：和今天、待办、随手记同一种大标题）：大字月份，下一行等宽小字年份和这一页共几项
+  'cal.titleBig': '{m}月',
+  'cal.titleSub': '{y}年 · 本月 {n} 项',
+  'cal.titleSubW': '{range} · 本周 {n} 项',
   // 周视图标题胶囊（线框 s2“10月19日–25日 ⌄”）：同月、跨月、跨年三种写法
   'cal.weekTitle': '{m1}月{d1}日–{d2}日',
   'cal.weekTitleM': '{m1}月{d1}日–{m2}月{d2}日',

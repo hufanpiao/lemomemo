@@ -172,6 +172,14 @@ export function collectEntries(items: CalItems, from: DateStr, to: DateStr, tz: 
   return out;
 }
 
+/** from～to（含两头）一共几件事（日历顶部“本月 N 项”“本周 N 项”，负责人 11-18 选甲方案）：跨天的日程只算一件；口径同 collectEntries */
+export function countEntries(items: CalItems, from: DateStr, to: DateStr, tz: Tz): number {
+  assertTz(tz);
+  const ids = new Set<string>();
+  for (const list of collectEntries(items, from, to, tz).values()) for (const e of list) ids.add(`${e.kind}:${e.itemId}`);
+  return ids.size;
+}
+
 /** 某一天有哪几件事（删掉的、已完成的待办不算；按 compareEntries 排）。点开某天的列表、读屏全文用 */
 export function dayEntries(date: DateStr, items: CalItems, tz: Tz): DayEntry[] {
   parseDate(date);

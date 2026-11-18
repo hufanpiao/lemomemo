@@ -21,36 +21,37 @@
   align-items: center;
   justify-content: space-between;
   min-height: var(--hit);
-  margin-bottom: 6px;
 }
 
-/* 标题胶囊（R-101“白底圆角、细描边”，这两点不动）。R-436 丙批改轻：看得见 36 高、字 15（原来 44 高、17 号，压过下面的分段）、
-   细描边是 1px 内描边（不占版面）、不再加阴影；点击区照样 44（::after 外扩，同 .nb，见下面合在一起的那条）；年月数字等宽 */
-.pill {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0 12px 0 14px;
+/* 顶部年月（负责人 11-18“最上面的2026年11月有点扎眼”，方案页选甲）：不再是白底胶囊，和今天、待办、随手记同一种页标题——
+   大字“11月”加柠檬黄短下划线（kit Refine.module.css .title），下一行等宽小字“2026年 · 本月 N 项”（.sub，写在 .top 外面）；
+   整块照样是选年月面板的按钮，去掉按钮自带的底色和边框；点击区不小于 44（看得见的字本来就比 44 高） */
+.titleBtn {
+  display: block;
+  min-height: var(--hit);
+  padding: 0;
   border: 0;
-  border-radius: var(--r-pill);
-  background: var(--panel);
-  box-shadow: inset 0 0 0 1px var(--line);
+  background: none;
   color: var(--text);
-  font-size: var(--fs-15);
-  font-weight: 600;
+  font: inherit;
   font-variant-numeric: tabular-nums;
+  text-align: left;
   cursor: pointer;
 }
 
+.titleTx {
+  display: block;
+}
+
 .pillChev {
-  /* 下拉箭头用两条边画（“⌄”在部分中文字体里像字母 v） */
+  /* 下拉箭头用两条边画（“⌄”在部分中文字体里像字母 v）；跟在大字“11月”后面，淡色，和大字中线对齐（甲方案） */
+  display: inline-block;
   width: 7px;
   height: 7px;
-  margin: -4px 2px 0;
-  border-right: 1.5px solid var(--text-2);
-  border-bottom: 1.5px solid var(--text-2);
+  margin: 0 0 0 10px;
+  border-right: 1.5px solid var(--text-3);
+  border-bottom: 1.5px solid var(--text-3);
+  vertical-align: 0.3em;
   transform: rotate(45deg);
 }
 
@@ -106,7 +107,6 @@
 
 /* 标题胶囊、‹ 今天 › 的点按区各 44 px（看得见的比 44 小，伸出去的部分用伪元素补，R-101）：以按钮中心外扩到至少 44 × 44（同 ModeSeg.module.css 的 .segBtn::after），
    不随按钮自身大小变（原来写 inset: -6px，按钮实际 30 高时只扩到 42，B2-UI-a V5 量出来）。11-17 整块评审把原来两份一样的写法合成这一条 */
-.pill::after,
 .nb::after,
 .tdy::after {
   content: '';
