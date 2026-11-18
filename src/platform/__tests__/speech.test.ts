@@ -139,7 +139,7 @@ describe('出字和结束', () => {
 describe('错误和取消', () => {
   it.each([
     ['not-allowed', 'denied'],
-    ['service-not-allowed', 'denied'],
+    ['service-not-allowed', 'error'],
     ['network', 'network'],
     ['audio-capture', 'error'],
     ['language-not-supported', 'error'],

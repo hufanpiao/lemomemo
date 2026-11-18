@@ -5,7 +5,7 @@
 // • 锁定后：标题“已锁定，松开手也在录”，去掉两个区和话筒，底部“取消 / 记下”两颗 52px 按钮；Esc 等于“取消”
 // • 手机自带识别（额度用完、网络慢、没开 AI、“再说一次”）：标题下多一行原因（线框 RECFB），说明文字换成“这次只听中文…”
 // • 计时、声波每帧（motion 的 eachFrame，A25）直接写 DOM（textContent、CSSOM transform；CSP 不准内联 style 属性），不走 React 状态：录着时面板不跟着每帧重渲染
-// • 边说边出字（R-456，部分取代上面“只有声波和计时，不出文字”）：录音这一路的手机自带识别认出了字，计时上方一个大文字框，
+// • 边说边出字（R-456，部分取代上面“只有声波和计时，不出文字”）：手机自带识别那一路认出了字，计时上方一个大文字框，
 //   深色底浅色字（令牌 --img-badge-bg / --img-badge-fg，两套皮肤、深浅色都是深底白字），字往后追加、框里滚到最新一行；没认出字不出这个框
 // • 进出：<Appear kind="scrim" / "sheet">（--dur-sheet + --ease-drawer；减少动态效果只淡入淡出，17.4）
 import { useEffect, useLayoutEffect, useRef } from 'react';
@@ -30,7 +30,8 @@ export function RecordPanel({ v }: { v: VoiceState }) {
   const { lang, other } = useLangNames();
   const show = v.capturing;
   const prep = v.status === 'preparing';
-  const speech = v.path === 'speech';
+  // 识别主路（why=live，11-18 起有系统识别就走它）和录音一样：边说边出字、标题副标题用录音的；只有额度、网慢、没开 AI、再说一次才用识别的说明
+  const speech = v.path === 'speech' && v.why !== 'live';
   const clock = useRef<HTMLElement>(null);
   const max = useRef<HTMLSpanElement>(null);
   const wave = useRef<HTMLDivElement>(null);

@@ -37,9 +37,46 @@ function placeholder(n: Element): HTMLElement {
   return p;
 }
 
+/** 画成画布的小图上限（CSS px，头像这一类）：大图（随手记配图）照旧抄成 <img>，免得换页时一次画很多大画布 */
+const SMALL_IMG_PX = 160;
+
+/**
+ * 已经解码好的小图当场画进同样大小的画布（按 object-fit 的 cover / 拉伸画）。负责人 11-18 录屏：切页时右上角头像空约 0.83 秒，
+ * 和切页时长 0.88 秒一样长——新建的 <img> 要重新加载、解码，iPhone 上整段切页都空着，钉住的副本等于没有；画布一出来就有像素。
+ * 没解码好、太大、画不了的回 null，照旧抄成 <img>
+ */
+function paintSmall(n: HTMLImageElement, skip: ReadonlySet<string>): HTMLCanvasElement | null {
+  const r = n.getBoundingClientRect();
+  if (!n.complete || n.naturalWidth === 0 || r.width === 0 || r.height === 0 || r.width > SMALL_IMG_PX || r.height > SMALL_IMG_PX) return null;
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const c = document.createElement('canvas');
+  c.width = Math.round(r.width * dpr);
+  c.height = Math.round(r.height * dpr);
+  const g = c.getContext('2d');
+  if (!g) return null;
+  const cover = getComputedStyle(n).objectFit === 'cover';
+  const s = cover ? Math.max(c.width / n.naturalWidth, c.height / n.naturalHeight) : 0;
+  const sw = cover ? c.width / s : n.naturalWidth;
+  const sh = cover ? c.height / s : n.naturalHeight;
+  try {
+    g.drawImage(n, (n.naturalWidth - sw) / 2, (n.naturalHeight - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+  } catch {
+    return null;
+  }
+  copyAttrs(n, c, new Set([...skip, 'src', 'srcset', 'alt', 'loading', 'decoding']));
+  c.style.setProperty('width', `${r.width}px`);
+  c.style.setProperty('height', `${r.height}px`);
+  c.setAttribute('aria-hidden', 'true');
+  return c;
+}
+
 function copy(n: Node, skip: ReadonlySet<string>, o: CopyOptions, tag?: string): Node {
   if (!(n instanceof Element)) return n.cloneNode(false);
   if (HEAVY.has(n.localName)) return placeholder(n);
+  if (n instanceof HTMLImageElement) {
+    const c = paintSmall(n, skip);
+    if (c) return c;
+  }
   const el = tag ? document.createElement(tag) : document.createElementNS(n.namespaceURI, n.localName);
   copyAttrs(n, el, skip);
   for (const c of n.childNodes) el.append(copy(c, skip, o));

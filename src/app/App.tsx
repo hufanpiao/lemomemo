@@ -99,6 +99,14 @@ function TabBar({ route }: { route: RouteName }) {
   const [plus, setPlus] = useState<{ day: DateStr | null; n: number } | null>(null);
   const opens = useRef(0);
   useEffect(() => afterAppPainted(() => void preloadPlus()), []);
+  // 页签互切时右上角头像钉住的副本里是画布还是图片（负责人 11-18 录屏切页头像空约 0.83 秒；motion/copy-node.ts 已解码的小图画成画布）：
+  // 真机日志对得上 swap pin canvas=1 img=0 就是走了画布
+  useEffect(() => {
+    const box = document.querySelector('[data-tab-pin]');
+    if (box) rlog(`swap pin canvas=${box.querySelectorAll('canvas').length} img=${box.querySelectorAll('img').length}`);
+  }, [route]);
+  // 四个主页面从左右两边往里划切页签（负责人 11-18，tab-swipe.ts）：首屏画完以后再下载、挂一次
+  useEffect(() => afterAppPainted(() => void import('./tab-swipe.ts').then((m) => m.installTabSwipeOnce())), []);
   // 换页就收起（去改某一条、展开编辑也是换页）。等新页面的 <main> 真的显示出来再收（负责人 11-18 录屏：点“详细”闪一帧原页面）：
   // 新页分包没到时 Suspense 把旧页藏起来、新页还没出来，这时先收打字条，屏幕上就是一段空白或原页面；分包已到时当场就收，和原来一样
   // 打字条“详细”正在长成新建页（负责人 11-18 选 A）：长完由 expand 收，这里不收

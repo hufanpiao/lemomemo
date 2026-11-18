@@ -2,9 +2,9 @@
 // 录音上传 voice-rec.ts、手机自带识别 voice-speech.ts 都拿这里的内核（VoiceCore）。纯 TS 闭包工厂，hooks/useVoice.ts 只订阅 view() 和 batch.box
 // • 选路（按下的那一下定，满 350 ms 照用；之后额度刷新了也不改路，那时已不在手势里）：
 //   离线 → 提示“没网，语音用不了，请用键盘”；麦克风没允许过 → 说明卡，被拒 → “麦克风没有打开”卡；
-//   开着 AI、今天有次数、网络不慢 → 录音 → 松手上传 ai-voice；额度用完、没开 AI / 没同意、10 分钟内网络原因失败 2 次 → 手机自带识别
-// • 录音这一路同时开手机自带识别边说边出字（R-456，部分取代 R-62“录音时不边说边出字”）：录音器开起来以后才开（R-470，不再按下就先开），
-//   松手识别出了字就先按本机规则存、AI 在后台整理（voice-rec.ts、voice-live.ts）；识别没开起来、没出字就照原来松手上传、等 AI 回来再存
+//   11-18 起有系统识别（iPhone）就走手机自带识别：边说边出字，松手先按本机规则存、AI 在后台整理（voice-speech.ts、voice-live.ts）；
+//   没有识别、诊断开关关着、识别开不起来（同步开不起来当场退回录音；异步报错的这次打开 app 期间改走录音）→ 录音 → 松手上传 ai-voice（voice-rec.ts）。
+//   录音和识别不同时开（两路抢麦，日志第二次起都是 0）
 // • 状态、锁定、手指所在区、说明卡、提示一起经 capture-state 的 viewStep 走，不合法的组合拦下
 // • 每次录音一个代号（attempt），从开录到存完都有效：丢掉、取消让它作废；每个 await 之后先看“还是不是当前这次”，
 //   不是就不发请求、不写库（运行日志 voice attempt N stale at=哪一步）
@@ -24,7 +24,7 @@ import { isTauri } from '../../../platform/env.ts';
 import { lastMicResult } from '../../../platform/perm-mic.ts';
 import { requestMic, type ActiveRecorder } from '../../../platform/recorder.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { speechSupported } from '../../../platform/speech.ts';
+import { liveSpeechOn, speechSupported } from '../../../platform/speech.ts';
 import { callAiParse } from './ai-parse-api.ts';
 import { callAiVoice, type CallVoice } from './ai-voice-api.ts';
 import type { SaveOutcome, Writer } from './capture-save.ts';
@@ -39,11 +39,13 @@ import type { AssistAsk } from '../../../../shared/logic/parse/assist.ts';
 import { planText, recordLocal, type CallAi, type TypeCtx, type TypePlan } from './type-flow.ts';
 import type { VoiceNote } from './voice-flow.ts';
 import { createRecRoute } from './voice-rec.ts';
+import { createQuickSave } from './voice-live.ts';
 import { createSpeechPath } from './voice-speech.ts';
 import { onlineNow } from '../../../platform/online.ts';
 
-/** 手机自带识别为什么顶上来：quota 额度用完；net 网络慢；off 没开 AI / 没同意；again 用户点了“再说一次” */
-export type SpeechWhy = 'quota' | 'net' | 'off' | 'again';
+/** 走手机自带识别的原因（面板上那一行）：live 有系统识别就只走这一路（11-18 负责人同意“只用系统识别、每次新建、失败才录音上传”）；
+ *  quota 额度用完；net 网络慢；off 没开 AI / 没同意；again 用户点了“再说一次” */
+export type SpeechWhy = 'quota' | 'net' | 'off' | 'again' | 'live';
 
 /** 界面要画的全部状态（一个对象，变了整个换掉） */
 export interface VoiceView extends CaptureView<VoiceNote> {
@@ -51,7 +53,7 @@ export interface VoiceView extends CaptureView<VoiceNote> {
   why: SpeechWhy | null;
   /** 刚交出去的录音几秒（提示条“N 秒录音”） */
   secs: number;
-  /** 录音这一路边说边出字（R-456）：手机自带识别到现在为止认出的全文；没开、还没认出字是空串 */
+  /** 边说边出字：手机自带识别到现在为止认出的全文；录音这一路、还没认出字是空串 */
   live: string;
 }
 
@@ -214,9 +216,9 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
     end,
     alive,
     current: () => cur,
-    /** 存这一次：开始写库以后一定落地（负责人定：已开始写库的照常存完），写完不再看这一次还是不是当前的 */
     askOut,
-    /** 返回存的结果：'asked' 交给了结果层，'stale' 这一次已作废没存 */
+    /** 存这一次：开始写库以后一定落地（负责人定：已开始写库的照常存完），写完不再看这一次还是不是当前的。
+     *  返回存的结果：'asked' 交给了结果层，'stale' 这一次已作废没存 */
     async savePlan(a: Attempt, p: TypePlan, raw: string): Promise<SaveOutcome | 'ask' | 'asked' | 'stale'> {
       // 手机自带识别走 planText：判成别的意图的在这里分流（录音那一路在 voice-rec 的 voiceFinal 里分）
       if (p.ask) {
@@ -249,7 +251,11 @@ export function createVoiceSession(io: VoiceIo = {}) {
   const c = createCore(io, () => finish(), () => rec.forget());
   const { d, go, show, toIdle, batch } = c;
   const rec = createRecRoute(c);
-  const speech = createSpeechPath(c);
+  /** 这次打开 app 期间系统识别异步报过错（iOS 关了 Siri 和听写等，start 之后才回 service-not-allowed）：之后改走录音（语音整块评审第 1 条） */
+  let liveBroken = false;
+  const speech = createSpeechPath(c, createQuickSave(c), () => {
+    liveBroken = true;
+  });
   /** 按下那一下选的路（null = 录音）：满 350 ms 照用 */
   let picked: SpeechWhy | null = null;
   const exe = isTauri();
@@ -261,6 +267,9 @@ export function createVoiceSession(io: VoiceIo = {}) {
     if (speechByNet(rec.net(), clock.now())) return 'net';
     if (!d().aiOn()) return 'off';
     if (c.quotaOut()) return 'quota';
+    // 有系统识别（iPhone）就只走识别这一路、边说边出字，说完交 AI 整理；录音和识别不再同时开（11-18 日志：两路抢麦，第二次起都是 0）。
+    // 设置诊断区 Live speech 关掉 = 只用录音上传（对比用）
+    if (!exe && !liveBroken && liveSpeechOn() && speechSupported()) return 'live';
     return null;
   };
   const idleOrFinal = (): boolean => c.view().status === 'idle' || isFinal(c.view().status);
@@ -298,7 +307,7 @@ export function createVoiceSession(io: VoiceIo = {}) {
       picked = speechWhy();
       refreshQuota();
       // 手机自带识别那一路要在手势里 start()：就在按下的这一下里开，没按满 350 ms 再关掉。
-      // 录音这一路不在这里开识别（R-470）：等录音器拿到麦克风以后才开（voice-rec.ts），先开识别 iPhone 上录音器拿到的流全是 0
+      // 有系统识别时每点一下“＋”（包括只想打开打字条的轻点）都会先开一次、没按满就关（语音整块评审第 6 条，接受：不在手势里开 iOS 不让开）
       if (picked !== null && !exe && lastMicResult() === 'granted' && d().online() && speechSupported() && idleOrFinal()) speech.prime();
     },
     start() {
@@ -317,8 +326,9 @@ export function createVoiceSession(io: VoiceIo = {}) {
       else if (mic !== 'granted') {
         rlog(`voice card ${mic === 'denied' ? 'denied' : 'ask'}`);
         card(mic === 'denied' ? 'denied' : 'ask');
-      } else if (picked !== null) speech.begin(picked, false);
-      else void rec.begin();
+      } else if (picked === null) void rec.begin();
+      // 识别开不起来：live 这一路退回录音上传，别的（额度、网慢、没开 AI）照原来提示
+      else if (!speech.begin(picked, false) && picked === 'live') void rec.begin();
       return true;
     },
     zone(z: HoldZone) {
@@ -387,7 +397,8 @@ export function createVoiceSession(io: VoiceIo = {}) {
       batch.dismiss();
     },
     elapsed: () => (c.view().path === 'rec' ? rec.elapsed() : speech.elapsed()),
-    level: () => (c.view().path === 'rec' ? rec.level() : -1),
+    // 识别这一路没有音量：声波跟着认出的字跳（每来一次新字跳一下再落回，不是真实音量）
+    level: () => (c.view().path === 'rec' ? rec.level() : speech.level()),
     /** RecordHost 挂上：重读一次额度；返回卸载（切页）时调的：录着、上传、还没写库的整理算取消（待定 24），已经在写库的照常存完 */
     attach() {
       refreshQuota();
@@ -400,7 +411,6 @@ export function createVoiceSession(io: VoiceIo = {}) {
     },
     /** 当前这次作废、手机识别关掉、计时器清掉、busy 放开（测试用完一份调） */
     dispose() {
-      // 录音这一路的识别跟着这一次作废（c.stop 里 drop → abort）一起关
       c.stop();
       speech.cancel();
     },

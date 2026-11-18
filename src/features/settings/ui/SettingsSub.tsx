@@ -120,7 +120,7 @@ export function useFocusBackToEntry(view: SettingsView): void {
     const tryFocus = (): void => {
       if (!focusIsFree()) return;
       const el = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
-      if (el) el.focus({ preventScroll: home });
+      if (el) quietFocus(el, home);
       else if (tries++ < 20) timer = setTimeout(tryFocus, 50);
     };
     tryFocus();
@@ -128,6 +128,25 @@ export function useFocusBackToEntry(view: SettingsView): void {
       if (timer !== null) clearTimeout(timer);
     };
   }, [view]);
+}
+
+/** 上一次操作是手指 / 鼠标（不是键盘）：放回焦点时不画焦点框 */
+let byPointer = true;
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', () => (byPointer = true), { capture: true, passive: true });
+  document.addEventListener('keydown', () => (byPointer = false), { capture: true, passive: true });
+}
+
+/**
+ * 把焦点放回入口那一行。负责人 11-18 截图：手指点返回以后“日历”那一行套了个白框——iOS Safari 把程序放的焦点也算 :focus-visible。
+ * 焦点照放（读屏接着读），手指操作时这一行带 data-quiet-focus 不画框（SettingsPage.module.css），失焦就摘掉；键盘操作照旧画框
+ */
+function quietFocus(el: HTMLElement, preventScroll: boolean): void {
+  if (byPointer) {
+    el.setAttribute('data-quiet-focus', '');
+    el.addEventListener('blur', () => el.removeAttribute('data-quiet-focus'), { once: true });
+  }
+  el.focus({ preventScroll, ...(byPointer ? { focusVisible: false } : {}) } as FocusOptions);
 }
 
 /** 焦点还没被用户挪走：在 body 上（子页刚卸掉），或在页面标题上（SubView 进来时放的） */

@@ -12,8 +12,8 @@ import { rlog } from './run-log-api.ts';
 export const SPEECH_STOP_WAIT_MS = 3000;
 
 /**
- * 诊断开关（负责人 11-18 录屏“说话没有波动”）：关掉录音那一路的边说边出字（voice-live 不开识别），只留录音器，
- * 用来在真机上分清第二次起录音器全是 0 是不是识别抢了麦克风。设置 → 诊断区按钮切换，存 localStorage，读不到当开着
+ * 诊断开关（负责人 11-18 录屏“说话没有波动”）：关掉 = 不走系统识别那一路，只用录音上传（真机对比用）。
+ * 设置 → 诊断区按钮切换，存 localStorage，读不到当开着
  */
 const LIVE_OFF_KEY = 'lemo-live-speech-off';
 export function liveSpeechOn(store: Storage = localStorage): boolean {
@@ -74,7 +74,8 @@ function recognitionCtor(): (new () => Recognition) | null {
 
 export const speechSupported = (): boolean => recognitionCtor() !== null;
 
-const FAIL_OF: Readonly<Record<string, SpeechFail>> = { 'not-allowed': 'denied', 'service-not-allowed': 'denied', network: 'network' };
+// service-not-allowed 是系统不给用识别（iOS 关了 Siri 和听写等），麦克风是允许的：算 error，不出“麦克风没有打开”卡（语音整块评审第 1 条）
+const FAIL_OF: Readonly<Record<string, SpeechFail>> = { 'not-allowed': 'denied', network: 'network' };
 /** 不算失败的错误码：没听到声音（按空串结束）、被中止（等 end 事件收尾） */
 const NOT_A_FAILURE: readonly string[] = ['no-speech', 'aborted'];
 

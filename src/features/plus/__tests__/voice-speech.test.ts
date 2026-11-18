@@ -1,5 +1,5 @@
 // 手机自带识别这一路的生命周期（data/voice-speech.ts；B3 FA-3）：按下先开、按满接手、接手前已开始 / 已结束要补上、
-// 没按满关掉、只有接手的那次报结果、60 秒封顶；录音这一路要中途的字（R-456 host.text）：接手前认出的补上、只报接手的那次
+// 没按满关掉、只有接手的那次报结果、60 秒封顶；中途的字：接手前认出的补上、只报接手的那次；重开（cont）整段计时和 60 秒接着算
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SpeechEnd } from '../../../platform/speech.ts';
 import { REC_MAX_MS } from '../data/record-logic.ts';
@@ -35,6 +35,7 @@ function host() {
     started: () => void calls.push('started'),
     ended: (r: SpeechEnd) => void calls.push(`ended ${r.ok ? r.text : r.fail}`),
     cap: () => void calls.push('cap'),
+    text: () => undefined,
   };
   return { calls, route: createSpeechRoute(h, () => 1000) };
 }
@@ -101,13 +102,7 @@ describe('手机自带识别这一路', () => {
     expect(calls).toEqual([]);
   });
 
-  it('不要中途的字（手机自带识别那一路）：不向识别要 onText', () => {
-    const { route } = host();
-    route.take('zh-CN');
-    expect(fx.runs[0]?.text).toBeUndefined();
-  });
-
-  it('要中途的字（R-456 录音这一路）：接手前认出的接手时补上，之后逐次报；先开又关掉的不报', () => {
+  it('中途的字：接手前认出的接手时补上，之后逐次报；先开又关掉的不报', () => {
     const said: string[] = [];
     const route = createSpeechRoute({ started: () => undefined, ended: () => undefined, cap: () => undefined, text: (t) => void said.push(t) }, () => 1000);
     route.prime('zh-CN');
@@ -116,7 +111,6 @@ describe('手机自带识别这一路', () => {
     route.take('zh-CN');
     expect(said).toEqual(['买']);
     fx.runs[0]?.start();
-    expect(route.listening()).toBe(true);
     fx.runs[0]?.text?.('买牛奶');
     expect(said).toEqual(['买', '买牛奶']);
     route.prime('zh-CN');
@@ -134,5 +128,28 @@ describe('手机自带识别这一路', () => {
     expect(calls).toEqual(['started']);
     vi.advanceTimersByTime(1);
     expect(calls).toEqual(['started', 'cap']);
+  });
+
+  it('手指还按着的重开（take cont）：整段计时和 60 秒上限接着算，不从 0 重来（语音整块评审第 5 条）；done 停表', () => {
+    vi.useFakeTimers();
+    let t = 1000;
+    const calls: string[] = [];
+    const route = createSpeechRoute({ started: () => undefined, ended: () => undefined, cap: () => void calls.push('cap'), text: () => undefined }, () => t);
+    route.take('zh-CN');
+    fx.runs[0]?.start();
+    t += 20_000;
+    vi.advanceTimersByTime(20_000);
+    route.take('zh-CN', true);
+    fx.runs[1]?.start();
+    expect(route.elapsed()).toBe(20_000);
+    t += 40_000;
+    vi.advanceTimersByTime(REC_MAX_MS - 20_000);
+    expect(calls, '整段满 60 秒').toEqual(['cap']);
+    route.take('zh-CN');
+    expect(route.elapsed(), '新开一段从 0 算').toBe(0);
+    fx.runs[2]?.start();
+    route.done();
+    vi.advanceTimersByTime(REC_MAX_MS);
+    expect(calls, 'done 以后不再报').toEqual(['cap']);
   });
 });

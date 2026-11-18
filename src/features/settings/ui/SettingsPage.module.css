@@ -248,3 +248,9 @@ input.input {
 }
 
 /* 头像旁边那句说明、失败提示用 kit 的行内灰字、报错（Settings.tsx 的 settingsMetaClass、settingsErrorClass），这里不另写 */
+
+/* 退回上一层时程序把焦点放回入口那一行（SettingsSub.tsx 的 quietFocus）：手指操作的那一次不画框（负责人 11-18 截图“这个框是什么东西”），键盘照旧。
+   放这里不放 base.css：base.css 由底栏守门锁着（tests/build/glassbar-scope-guard.test.ts） */
+.page :global([data-quiet-focus]):focus-visible {
+  outline: none;
+}

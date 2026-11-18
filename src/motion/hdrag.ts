@@ -1,7 +1,7 @@
 // 横向拖动的底层（R-420 审查第 4 条“横滑手势两套”合成这一套）：月历翻页（swipe-pager.ts）和 kit 左滑行（SwipeRow）共用，
 // 两处只留“松手以后怎么办”。这里管：
 // • 锁方向：先走过 SLOP_PX，横向比竖向多才锁成横滑（抓住指针、自己跟手）；先竖着走就整段交给页面滚动（元素要配 CSS touch-action: pan-y）
-// • 左边缘避让：从屏幕左边缘 EDGE_PX（20 px，架构 5.12）以内起手的不管，让给 iPhone 侧滑返回（两处一律避让）
+// • 边缘避让：从屏幕左边缘 EDGE_PX（20 px，架构 5.12）以内起手的不管，让给 iPhone 侧滑返回；左右两条切页带 SIDE_PX（32 px，负责人 11-18）以内起手的也不管，让给四个主页面切页签
 // • 鼠标：mouse 参数区分。列表行（SwipeRow）传 true：电脑上也能拿鼠标拖开（行里同样有“⋯”菜单，留着不碍事）；
 //   月历翻页传 false：电脑上用 ‹ › 按钮和键盘 ← → 翻，鼠标在格子上拖来拖去多半是想选字、点格子，不当翻页
 // • 跟手只直接写 DOM 的 transform（place），不经 React state：跟手的每个 pointermove 都不让用它的页面重画（审查第 3 条）
@@ -30,6 +30,15 @@ export function lockOf(dx: number, dy: number): Axis {
 /** 起手点在不在屏幕左边缘的系统手势区里 */
 export function inEdge(x: number): boolean {
   return x < EDGE_PX;
+}
+
+/** 屏幕左右两条切页带（px）：负责人 11-18“切页的触发区域只在左右两边就行”，这两条带里起手的横滑归四个主页面切页签（app/tab-swipe.ts），
+ *  列表行左滑、月历翻月在这里起手都不管，免得一划两用 */
+export const SIDE_PX = 32;
+
+/** 起手点在哪条切页带里：'l' 左边、'r' 右边、null 都不在。w 是视口宽（默认 window.innerWidth） */
+export function sideOf(x: number, w: number = window.innerWidth): 'l' | 'r' | null {
+  return x < SIDE_PX ? 'l' : x > w - SIDE_PX ? 'r' : null;
 }
 
 export interface HDragEnd {
@@ -123,9 +132,10 @@ export function useHDrag(opts: HDragOptions): HDrag {
             if (o.current.mouse) log('down skip=button');
             return;
           }
-          if (inEdge(e.clientX)) {
+          // 左右两条切页带（含左边缘的系统返回区）里起手的不管：左边让给系统返回和切页、右边让给切页
+          if (sideOf(e.clientX) !== null) {
             t = null;
-            log('down skip=edge');
+            log(`down skip=${inEdge(e.clientX) ? 'edge' : 'side'}`);
             return;
           }
           const base = o.current.start(e);

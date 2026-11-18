@@ -280,7 +280,7 @@ describe('L1：退回上一层以后焦点回到进来时点的那一行', () =>
     expect(again).not.toBe(entry);
     const i = focus.mock.contexts.lastIndexOf(again);
     expect(i).toBeGreaterThanOrEqual(0);
-    expect(focus.mock.calls[i]?.[0]).toEqual({ preventScroll: true });
+    expect(focus.mock.calls[i]?.[0]).toMatchObject({ preventScroll: true });
     Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
   });
 

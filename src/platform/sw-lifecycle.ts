@@ -2,6 +2,7 @@
 // navigator.serviceWorker 只准出现在 platform（A13）；exe（Tauri 窗口）里不注册，判断读 env.ts 的 isTauri
 import { isTauri } from './env.ts';
 import type { Lifecycle } from './net.ts';
+import { rlog } from './run-log-api.ts';
 import { SW_SCOPE, SW_UPDATE_WAIT_MS, SW_URL, type SwUpdateResult } from './sw-register.ts';
 
 /** 注册 SW，等真实结果（不设超时，Q-23）：exe 里、不支持回 null；注册失败照样抛出，由 sw-register.ts 的 registerSw 记下错误名。
@@ -59,8 +60,8 @@ export function watchServiceWorkerUpdate(reg: ServiceWorkerRegistration, onReady
   };
 }
 
-/** 切到前台时主动查新版本的最短间隔（架构师 10-30 第 5 点：满 1 小时才查） */
-export const SW_FOREGROUND_CHECK_MS = 60 * 60 * 1000;
+/** 切到前台时主动查新版本的最短间隔（架构师 10-30 第 5 点原定 1 小时；负责人 11-18 问“怎么没有更新提示”，改成 5 分钟） */
+export const SW_FOREGROUND_CHECK_MS = 5 * 60 * 1000;
 
 export interface ForegroundCheckDeps {
   /** platform/net.ts 的 browserLifecycle（切到前台：和“切到前台时比较最低版本”同一个时机，visibilitychange） */
@@ -86,10 +87,17 @@ export function checkSwOnForeground(reg: ServiceWorkerRegistration, d: Foregroun
       last = t;
       return;
     }
-    if (t - last < interval) return;
+    if (t - last < interval) {
+      rlog(`sw check skip ago=${Math.round((t - last) / 1000)}s`);
+      return;
+    }
     last = t;
-    // 查失败（断网、服务器错）不影响使用，下一次满间隔再查
-    void reg.update().catch(() => undefined);
+    // 查失败（断网、服务器错）不影响使用，下一次满间隔再查；查完记下查到了什么（新版本在装 / 在等 / 没有）
+    rlog('sw check');
+    void reg.update().then(
+      () => rlog(`sw check done installing=${reg.installing ? 1 : 0} waiting=${reg.waiting ? 1 : 0}`),
+      (e: unknown) => rlog(`sw check fail ${e instanceof Error ? e.name : 'err'}`),
+    );
   });
 }
 

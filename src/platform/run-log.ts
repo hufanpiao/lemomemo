@@ -160,15 +160,39 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     if (saveTimer === undefined) saveTimer = setTimeout(save, 300);
   };
   // 换页：路由用 pushState、replaceState 换地址不触发 hashchange（router.ts 按 0.31 第 3 条不能引日志），
-  // 所以每记一行前先看地址变没变，变了先补一行 route（11-14 b5-vault 点返回后空白，日志里看不出去了哪页）
+  // 11-14 起每记一行前先看地址变没变（b5-vault 点返回后空白，日志里看不出去了哪页）；11-18 起换地址当下就记（见 noteRoute）
   let lastHash = win.location.hash;
-  const add = (s: string): void => {
+  /** 地址变了就记一行 route。换地址的当下就记（下面拦 pushState、replaceState，加 popstate、hashchange）：
+   *  原来只在记下一条日志时顺手补，route 行的时刻其实是“下一条日志的时刻”，负责人 11-18 隐私记日志里点锁行到进页面量成 1.27 秒，其实是下一次点按的时刻。
+   *  add 里照旧先查一次，兜住别的换地址办法 */
+  const noteRoute = (): void => {
     const h = win.location.hash;
-    if (h !== lastHash) {
-      lastHash = h;
-      push(`${stamp(now())} route ${h || '/'}`);
-    }
+    if (h === lastHash) return;
+    lastHash = h;
+    push(`${stamp(now())} route ${h || '/'}`);
+  };
+  const add = (s: string): void => {
+    noteRoute();
     push(`${stamp(now())} ${s}`);
+  };
+  const hist = win.history as History | undefined;
+  const origPush = hist?.pushState;
+  const origReplace = hist?.replaceState;
+  if (hist && origPush && origReplace) {
+    hist.pushState = function (this: History, ...a: Parameters<History['pushState']>) {
+      origPush.apply(this, a);
+      noteRoute();
+    };
+    hist.replaceState = function (this: History, ...a: Parameters<History['replaceState']>) {
+      origReplace.apply(this, a);
+      noteRoute();
+    };
+  }
+  const unhookHistory = (): void => {
+    if (hist && origPush && origReplace) {
+      hist.pushState = origPush;
+      hist.replaceState = origReplace;
+    }
   };
   const doc = win.document;
   const root = doc.documentElement;
@@ -286,7 +310,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   };
   const onSubmit = (e: Event): void => add(`submit ${describeEl(e.target)} by=${describeEl((e as SubmitEvent).submitter)}`);
   const onHash = (): void => {
-    // add 自己会补 route 行；这里只等画面稳下来再拍一次
+    noteRoute();
     settleSnap('route');
   };
   const onVis = (): void => {
@@ -378,6 +402,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     [doc, 'contextmenu', onMenu, true],
     [doc, 'selectionchange', onSelChange, undefined],
     [win, 'hashchange', onHash, undefined],
+    [win, 'popstate', noteRoute, undefined],
     [doc, 'visibilitychange', onVis, undefined],
     [win, 'pageshow', onPageShow, undefined],
     [win, 'pagehide', onPageHide, undefined],
@@ -390,6 +415,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   return () => {
     mo?.disconnect();
     unhook();
+    unhookHistory();
     slot.sink = undefined;
     for (const [t, type, fn, o] of ons) t?.removeEventListener(type, fn as EventListener, o);
     clearTimeout(vvTimer);

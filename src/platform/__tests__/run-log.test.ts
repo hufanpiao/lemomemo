@@ -121,6 +121,28 @@ describe('全局运行日志', () => {
     expect(log).toMatch(/app typebar stored out=ok/);
   });
 
+  it('换页（pushState、replaceState）当下就记 route，时刻是换地址那一刻，不是下一条日志的时刻；停止后还原 history（11-18 隐私记 1.27 秒读错）', () => {
+    vi.useFakeTimers();
+    const origPush = history.pushState;
+    history.replaceState(null, '', '#/today');
+    const stop = startRunLog(window, { version: 't' });
+    vi.advanceTimersByTime(1000);
+    history.pushState(null, '', '#/vault');
+    vi.advanceTimersByTime(2000);
+    rlog('later');
+    history.replaceState(null, '', '#/vault/x');
+    window.dispatchEvent(new Event('pagehide'));
+    stop();
+    expect(history.pushState).toBe(origPush);
+    const lines = readRunLog().split('\n');
+    const t = (re: RegExp) => Number(/t=([\d.]+)/.exec(lines.find((l) => re.test(l)) ?? '')?.[1]);
+    expect(t(/ route #\/vault$/)).toBeCloseTo(1, 1);
+    expect(t(/app later/)).toBeCloseTo(3, 1);
+    expect(lines.some((l) => / route #\/vault\/x$/.test(l))).toBe(true);
+    expect(lines.filter((l) => / route #\/vault$/.test(l))).toHaveLength(1);
+    history.replaceState(null, '', '#/');
+  });
+
   it('切回前台（负责人 11-18 白屏很久）：用注入的帧回调记 vis-frames（第 1、2 帧、0ms 计时器、模糊图层数）；不注入就不记', () => {
     vi.useFakeTimers();
     const cbs: Array<() => void> = [];

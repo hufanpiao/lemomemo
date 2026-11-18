@@ -43,6 +43,8 @@ test.describe('按住“＋”录音（B3 FA-3）', () => {
 
   test.beforeEach(async ({ page }) => {
     await fakeMedia(page, { mime: 'audio/mp4' });
+    // 11-18 起有系统识别就走识别那一路（Chromium 有 webkitSpeechRecognition）：这一组测录音上传，用诊断开关 Live speech: OFF 固定走录音
+    await page.addInitScript(() => localStorage.setItem('lemo-live-speech-off', '1'));
   });
   // 失败时把运行日志最后 80 行打出来：先看日志定根因
   test('按住 350 ms 出录音面板（录着）；松手交出录音上传：3000 字节、audio/mp4', async ({ page }) => {

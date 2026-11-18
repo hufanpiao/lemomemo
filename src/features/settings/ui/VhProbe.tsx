@@ -4,8 +4,8 @@
 // • Gap fix（R-371，platform/vh-gapfix.ts，iOS 主屏幕版默认开）：开关是“关掉用来对照”——默认 ON，点成 OFF 存本机，下次冷启动起不做（再点回 ON 恢复默认）；
 //   每一步的日志在全局运行日志里（gapfix 开头的行）
 // • Test haptic（R-471）：同一排，点一下震一下，按钮上写震动走的哪条路（switch：iOS 18 系统开关；vibrate：navigator.vibrate；none：都没有）
-// • Live speech（负责人 11-18 录屏“说话没有波动”，platform/speech.ts 的 liveSpeechOn）：默认 ON，点成 OFF 录音时不开边说边出字的识别、只留录音器，
-//   用来真机对照第二次起录音器全是 0 是不是识别抢麦克风（日志 voice live take=0 … off=diag）
+// • Live speech（负责人 11-18 录屏“说话没有波动”，platform/speech.ts 的 liveSpeechOn）：默认 ON，点成 OFF 不走系统识别那一路、只用录音上传，
+//   用来真机对照两条路（日志 voice hold start route=rec）
 // • Finger switch（负责人 11-18“震动没反应”）：一个看得见的 iOS 系统开关 <input type="checkbox" switch>，让人用手指点：
 //   手指点都不震 = 系统触感反馈关着或这台机器不支持，代码改不了；手指点震、Test haptic 不震 = 代点的写法不对。改变时记 probe finger switch on=
 // • 全局运行日志（platform/run-log.ts，非正式版一直在记）：“Send run log”一键发送、“Copy run log”整段复制、“Clear run log”清空

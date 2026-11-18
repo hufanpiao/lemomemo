@@ -95,3 +95,53 @@ test('今天 → 待办 → 日历 → 随手记 → 今天：切页全程头像
     expect(Math.abs((end?.y ?? 0) - was.y), `${tab} 放完位置`).toBeLessThanOrEqual(0.5);
   }
 });
+
+// 负责人 11-18 录屏：自己的图片头像切页时空约 0.83 秒（= 切页时长 0.88 秒）。副本里新建的 <img> 要重新加载、解码，iPhone 上整段切页都空着；
+// 改成已解码的小图当场画进画布（motion/copy-node.ts paintSmall）。这里塞一张品红色 blob 图片当头像，切页动画一建好就暂停，
+// 看副本里是画布、不是 <img>，而且画布中间那一点就是品红色（像素当场就有，不等加载）
+test('图片头像：切页时钉住的副本是画好的画布，当场就有像素', async ({ page }) => {
+  await page.goto('/app/#/today');
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-motion') === 'ready', undefined, { timeout: 30_000 });
+  await waitPreloaded(page);
+  await page.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d');
+    if (!g) throw new Error('没有 2d');
+    g.fillStyle = '#ff00ff';
+    g.fillRect(0, 0, 64, 64);
+    const b = await new Promise<Blob>((ok, no) => c.toBlob((x) => (x ? ok(x) : no(new Error('toBlob'))), 'image/png'));
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(b);
+    await img.decode();
+    const host = document.querySelector('main [data-swap-pin] span');
+    if (!host) throw new Error('没有头像');
+    host.append(img);
+  });
+  const got = await page.evaluate(
+    () =>
+      new Promise<{ canvas: number; img: number; rgb: number[] }>((done) => {
+        const link = [...document.querySelectorAll<HTMLAnchorElement>('[data-testid="tabbar"] a')].find((a) => a.textContent?.includes('待办'));
+        const orig = Element.prototype.animate;
+        Element.prototype.animate = function (this: Element, ...args: Parameters<Element['animate']>) {
+          const a = orig.apply(this, args);
+          if (this.matches('main')) {
+            Element.prototype.animate = orig;
+            queueMicrotask(() => {
+              for (const x of document.getAnimations()) x.pause();
+              const box = document.querySelector('[data-tab-pin]');
+              const cv = box?.querySelector('canvas') ?? null;
+              const px = cv?.getContext('2d')?.getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data;
+              done({ canvas: box?.querySelectorAll('canvas').length ?? 0, img: box?.querySelectorAll('img').length ?? 0, rgb: px ? [px[0] ?? 0, px[1] ?? 0, px[2] ?? 0] : [] });
+              for (const x of document.getAnimations()) x.play();
+            });
+          }
+          return a;
+        };
+        link?.click();
+      }),
+  );
+  expect(got.canvas, '副本里是画布').toBe(1);
+  expect(got.img, '副本里没有要重新加载的 <img>').toBe(0);
+  expect(got.rgb, '画布中间是头像的品红色').toEqual([255, 0, 255]);
+});
