@@ -32,7 +32,7 @@ import { rlog } from '../platform/run-log-api.ts';
 import { reloadPage } from '../platform/sw-register.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { bannerKind } from './banner-kind.ts';
-import { featureRoutes, offRoutes, preloadPages, type FeatureRoute } from './features.ts';
+import { featureRoutes, offRoutes, preloadPages, warmRoute, type FeatureRoute } from './features.ts';
 import { goHref, hrefOf, navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from './router.ts';
 import { FADE_WAIT_MS, growSwap, shownMain, waitDom } from '../motion/index.ts';
 import { tabBarFor, tabDir } from './tab-of.ts';
@@ -126,6 +126,8 @@ function TabBar({ route }: { route: RouteName }) {
       return;
     }
     opens.current += 1;
+    // “展开编辑”要进的新建页先下载（features.ts 的 warmRoute；负责人 11-18 录屏第一次展开卡约 0.4 秒）
+    if (bar?.add) void warmRoute(bar.add, rlog, () => performance.now());
     setPlus({ day: bar?.tab === 'calendar' ? (calendarSel.day?.() ?? null) : null, n: opens.current });
   };
   // 展开编辑换到没有底栏的新建页：打字条挂在这里，原来随底栏一起当场卸掉（e2e 逐帧：换路由那一帧起 16～18 帧既没打字条、也没新建页）。

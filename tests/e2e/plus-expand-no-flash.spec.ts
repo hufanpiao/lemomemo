@@ -72,4 +72,83 @@ test.describe('展开编辑不闪原页面', () => {
       await expect.poll(() => page.evaluate(() => document.querySelector('main')?.getAttribute('style') ?? '')).toBe('');
     });
   }
+
+  // 负责人 11-18 录屏“输入框第一次展开的时候会卡一下”：新建页分包要到点“展开编辑”才下载，这段时间画面停在打字条和模糊层上（录屏第 49～59 帧）。
+  // 现在“＋”打开打字条时先下载（app/features.ts 的 warmRoute）：分包慢 600ms，打开 1 秒后再展开，新建页照样当场出来
+  test('今天：新建页分包慢，第一次展开也不等分包', async ({ page }) => {
+    await page.route(/EventEditPage[^/]*\.js$/, async (r) => {
+      await new Promise((res) => setTimeout(res, 600));
+      await r.continue();
+    });
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible();
+    await page.getByTestId('tabbar-add').click();
+    await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const w = window as unknown as { __shown: number; __t0: number };
+      w.__shown = -1;
+      w.__t0 = 0;
+      const tick = (): void => {
+        if (w.__t0 && document.querySelector('[data-testid="event-edit-title"]')?.getClientRects().length) {
+          w.__shown = performance.now() - w.__t0;
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      document.addEventListener('click', () => (w.__t0 = performance.now()), { capture: true, once: true });
+    });
+    await page.getByTestId('type-bar').getByRole('button', { name: '展开编辑' }).click();
+    await expect(page).toHaveURL(/#\/event\/new$/);
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __shown: number }).__shown)).toBeGreaterThanOrEqual(0);
+    const ms = await page.evaluate(() => (window as unknown as { __shown: number }).__shown);
+    expect(ms, `点“展开编辑”到新建页出来 ${Math.round(ms)}ms（分包慢 600ms，没先下载就会超过 600）`).toBeLessThan(400);
+  });
+
+  // 负责人 11-18 录屏“展开以后左滑退出的时候会闪一下简约输入框”：iPhone 侧滑返回时底下那页画的是压新历史那一刻拍的截图，
+  // 原来展开编辑从原页面直接压，拍到的是打字条和模糊层还盖着的画面。现在：压历史只发生在打字条画出来之前（hooks/type-entry.ts），
+  // 展开编辑是换掉那一条；退回来正好回到原页面那一条，打字条收起
+  test('今天：压历史时打字条还没画出来过一帧，展开编辑只换不压，退回今天打字条不在', async ({ page }) => {
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible();
+    // 截图拍的是已经上屏的画面：记压历史那一刻，从点“＋”起画过几帧、那几帧里打字条在不在（DOM 里已有但还没画出来的不算）
+    await page.evaluate(() => {
+      const w = window as unknown as { __h: { op: string; url: string; frames: number; painted: boolean }[] };
+      w.__h = [];
+      let frames = 0;
+      let click = -1;
+      let painted = false;
+      const tick = (): void => {
+        frames++;
+        if (click >= 0 && document.querySelector('[data-testid="type-bar"]')) painted = true;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      document.addEventListener('pointerdown', () => (click = frames), { capture: true, once: true });
+      for (const op of ['pushState', 'replaceState'] as const) {
+        const orig = history[op].bind(history);
+        history[op] = (s: unknown, u: string, url?: string | URL | null) => {
+          w.__h.push({ op, url: String(url), frames: click < 0 ? -1 : frames - click, painted });
+          orig(s, u, url);
+        };
+      }
+    });
+    await page.getByTestId('tabbar-add').click();
+    await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId('type-bar').getByRole('button', { name: '展开编辑' }).click();
+    await expect(page).toHaveURL(/#\/event\/new$/);
+    await expect(page.getByTestId('type-bar')).toHaveCount(0);
+    const h = await page.evaluate(() => (window as unknown as { __h: { op: string; url: string; frames: number; painted: boolean }[] }).__h);
+    // 只压过一次：按下“＋”以后、打字条画出来的第一帧之前（打字条和模糊层没上过屏）；进新建页是换掉那一条
+    const pushes = h.filter((x) => x.op === 'pushState');
+    expect(pushes.map((x) => x.painted)).toEqual([false]);
+    expect(pushes[0]?.frames).toBeGreaterThanOrEqual(0);
+    expect(h.filter((x) => x.url.endsWith('#/event/new')).map((x) => x.op)).toEqual(['replaceState']);
+    await page.goBack();
+    await expect(page.getByTestId('today')).toBeVisible();
+    await expect(page).toHaveURL(/#\/today$/);
+    await expect(page.getByTestId('type-bar')).toHaveCount(0);
+    await expect(page.getByTestId('type-mist')).toHaveCount(0);
+  });
 });

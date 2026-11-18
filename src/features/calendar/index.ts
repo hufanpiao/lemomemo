@@ -10,7 +10,8 @@ export const routes = [
   // 这里的 Page 只是占位，不会被渲染（A27 不许 index.ts 导出变量引用，所以不能两条共用一个 lazy 变量）
   { name: 'cal', Page: lazy(() => import('./ui/CalendarPage.tsx')), samePageAs: 'calendar' },
   // 日程编辑页（B2 FA-2）：#/event/<id>、#/event/new
-  { name: 'event', Page: lazy(() => import('./ui/EventEditPage.tsx')) },
+  // warm：“＋”打开打字条时先下载（“展开编辑”要进的新建页；负责人 11-18 录屏第一次展开卡约 0.4 秒等这一包，app/features.ts 的 warmRoute）
+  { name: 'event', Page: lazy(() => import('./ui/EventEditPage.tsx')), warm: () => import('./ui/EventEditPage.tsx') },
 ] as const;
 
 /** 设置 › 日历（B2 FA-3 第二段；R-320 二级页 #/settings/calendar）：节假日三选一、每周第一天；设置页懒加载它（顶栏和返回由设置页画） */

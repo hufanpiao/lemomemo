@@ -6,7 +6,8 @@ export const routes = [
   // preload：冷启动首屏画完后 App 在后台先下载（负责人 11-18，app/features.ts 的 preloadPages）
   { name: 'todos', Page: lazy(() => import('./ui/TodosPage.tsx')), preload: () => import('./ui/TodosPage.tsx') },
   // 待办编辑页（B2 FA-2）：#/todo/<id>、#/todo/new
-  { name: 'todo', Page: lazy(() => import('./ui/TodoEditPage.tsx')) },
+  // warm：“＋”打开打字条时先下载（“展开编辑”要进的新建页，app/features.ts 的 warmRoute）
+  { name: 'todo', Page: lazy(() => import('./ui/TodoEditPage.tsx')), warm: () => import('./ui/TodoEditPage.tsx') },
 ] as const;
 
 /** 今天页待办行就地展开、收起、勾选子任务（R-442；props 见 ui/InlineSubtasks.tsx）；没有子任务时什么都不画。在待办列表页那一包里（不另拆分包） */

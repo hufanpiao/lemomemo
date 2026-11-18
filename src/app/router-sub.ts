@@ -78,3 +78,15 @@ export function backOrReplace(name: RouteName, ...params: string[]): void {
   window.addEventListener('popstate', fix, { once: true });
   goBack();
 }
+
+// 打字条开着时垫的那一条历史（features/plus 的 hooks/type-entry.ts；负责人 11-18“展开以后左滑退出的时候会闪一下简约输入框”）：
+// 同一地址、深度和载入编号照旧，多一个 lemoType。router.ts 的 goHref 从这一条出发时换掉它、不再压（键名在那边直接写字面量，首屏额度）
+const TYPE = 'lemoType';
+/** 当前这条是不是打字条垫的那一条 */
+export const onTypeEntry = (): boolean => stateOf(TYPE) === 1;
+/** 垫一条（已经在这一条上就不动） */
+export function pushTypeEntry(): void {
+  if (onTypeEntry()) return;
+  window.history.pushState(stateFor(0, { [TYPE]: 1 }), '', window.location.href);
+  noteEntry();
+}
