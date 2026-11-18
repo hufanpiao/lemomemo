@@ -33,7 +33,7 @@ const CASES: [Skin, Theme][] = [
   ['simple', 'dark'],
   ['glass', 'dark'],
 ];
-const SKIN_ZH: Record<Skin, string> = { simple: '简洁', glass: '磨砂玻璃' };
+const SKIN_ZH: Record<Skin, string> = { simple: '简洁', glass: '磨砂玻璃' }; // 只是测试名标签（基准截图按测试名存），皮肤显示名 11-18 已改“柠檬黄”，这里不跟着改
 const THEME_ZH: Record<Theme, string> = { light: '浅色', dark: '深色' };
 
 /** 参照图的数据：20 条“NEOX 竖版 4K 导出 第N条”，都是今天截止、没有时刻 */

@@ -105,7 +105,7 @@ export const ko = {
   'settings.delete.back': '계정', // 合卡以后注销页退回账号二级页（SETTINGS-merge-cards），照 settings.account.title（R-106 B1 第一遍已审）
   'settings.skin.title': '테마', // 皮肤视觉稿韩文设置首页
   'settings.skin.simple': '심플',
-  'settings.skin.glass': '유리',
+  'settings.skin.glass': '레몬 옐로', // 负责人 11-18：皮肤名改成“柠檬黄”
   'settings.skin.value': '{skin} · {theme}', // TODO(ko) 只有占位和分隔点，不用翻
   'settings.skin.themeTitle': '다크 모드', // REVIEW(ko)
   'settings.skin.themeSystemValue.mobile': '다크 모드는 시스템 따르기',

@@ -3,7 +3,7 @@
 // • 定稿（方案页 D:\claude code\柠檬记APP-本机资料\设计方案\2026-11-17_切页与音效\方案.html 的合成参数）：
 //   done 勾完成待办：甲（上行双音 784→1175Hz，共约 130ms）+ 震；lift 拖起一行：只震；drop 拖动放下：甲（正弦 300→180Hz，80ms）+ 震；
 //   pull 下拉露出搜索框：只震（过门槛那一下）；delete 删除：甲（正弦 620→310Hz，120ms）+ 震。切底栏不响不震（不调这里）
-// • 声音：AudioContext 要播时才建，连着播就复用，最后一个音放完 AUDIO_RESTORE_MS 后关掉（常驻会让之后的录音全是静音，见 scheduleClose）；总音量 0.5，过 5kHz 低通去掉刺耳的高频。每个音起音 4ms、指数衰减
+// • 声音：整个 app 只建一个 AudioContext，一直复用；最后一个音放完 AUDIO_RESTORE_MS 后 suspend（不出声、不占音频），开始录音时才 close（见 scheduleIdle、releaseFxAudio）；总音量 0.5，过 5kHz 低通去掉刺耳的高频。每个音起音 4ms、指数衰减
 // • 静音键打开也出声：有 navigator.audioSession（iOS 17+）就在要播之前设成 'playback'，播完 AUDIO_RESTORE_MS 后改回原来的类型（不常驻，免得影响之后的录音）
 // • 正在录音、语音输入进行中（fx-api.ts 的 setFxMicBusy 注入的判断，plus 的 voice-main.ts 接 mainVoice 的 capturing）：一律不出声、不碰 audioSession、不建 AudioContext，免得和麦克风抢音频
 // • 震动：有 navigator.vibrate（Android 等）用它震 HAPTIC_MS；没有但支持 <input type="checkbox" switch>（iOS 18 起）就点一下藏起来的那个开关的 label，
@@ -111,21 +111,37 @@ let master: GainNode | null = null;
 let restoreTimer: ReturnType<typeof setTimeout> | undefined;
 let restoreTo: string | null = null;
 let closeTimer: ReturnType<typeof setTimeout> | undefined;
+/** 建过几次 AudioContext（诊断用：负责人 11-18“子任务拖动放下最多只有 3 次提示音”，看是不是第 N 次起建不出来或起不来） */
+let made = 0;
 
 /**
- * 播完就关掉 AudioContext，不常驻（负责人 11-18“语音输入第一次以后输入不上去”）：preview 真机日志 t=1994.88 删除音效第一次建了它，
- * 之后 2002、2010、2038 三次录音都是 level max=0.00、bytes=0，约一分钟后才恢复；之前只震不响（lift snd=0）、没建过它时录音正常。
- * 一直开着的放音上下文占着 iOS 的音频会话，麦克风录进来全是静音
+ * 播完让 AudioContext 歇着（suspend），不关、不重建（负责人 11-18“子任务拖动放下最多只有 3 次提示音”）：
+ * 原来每次播完就 close、下次再 new，真机日志 277.95～295 每次放下都是 snd=1 + 0.5s 后 fx audio close，只有前 3 次响——
+ * iOS 一页里新建的 AudioContext 多了就不出声。改成一个实例反复 resume / suspend。
+ * 原来要关掉的理由（11-18“语音输入第一次以后输入不上去”：一直 running 的放音上下文占着音频会话，麦克风录进来全是静音）
+ * 由 releaseFxAudio 管：开始收音时彻底 close，下一次出声再建（一次录音最多多建一个）
  */
-function scheduleClose(afterSec: number): void {
+function scheduleIdle(afterSec: number): void {
   clearTimeout(closeTimer);
   closeTimer = setTimeout(() => {
     const c = ctx;
-    ctx = null;
-    master = null;
-    void c?.close().catch(() => undefined);
-    rlog('fx audio close');
+    if (!c || c.state !== 'running') return;
+    void c.suspend().then(
+      () => rlog(`fx audio idle n=${made}`),
+      () => undefined,
+    );
   }, afterSec * 1000 + AUDIO_RESTORE_MS);
+}
+
+/** 开始收音（录音、手机自带识别）时调：彻底关掉放音上下文，让出音频会话（fx-api.ts 的 releaseFxAudio，plus 的 voice-main.ts 接） */
+export function releaseAudio(): void {
+  clearTimeout(closeTimer);
+  const c = ctx;
+  if (!c) return;
+  ctx = null;
+  master = null;
+  void c.close().catch(() => undefined);
+  rlog('fx audio close');
 }
 
 function audio(): AudioContext | null {
@@ -133,7 +149,14 @@ function audio(): AudioContext | null {
     const g = globalThis as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
     const AC = g.AudioContext ?? g.webkitAudioContext;
     if (!AC) return null;
-    ctx = new AC();
+    try {
+      ctx = new AC();
+    } catch (e) {
+      rlog(`fx audio new fail n=${made + 1} err=${e instanceof Error ? e.name : 'unknown'}`);
+      return null;
+    }
+    made++;
+    rlog(`fx audio new n=${made} state=${ctx.state}`);
     master = ctx.createGain();
     master.gain.value = 0.5;
     const lp = ctx.createBiquadFilter();
@@ -142,7 +165,13 @@ function audio(): AudioContext | null {
     master.connect(lp);
     lp.connect(ctx.destination);
   }
-  if (ctx.state !== 'running') void ctx.resume().catch(() => undefined);
+  if (ctx.state !== 'running') {
+    const c = ctx;
+    void c.resume().then(
+      () => rlog(`fx audio resume n=${made} state=${c.state}`),
+      (e: unknown) => rlog(`fx audio resume fail n=${made} err=${e instanceof Error ? e.name : 'unknown'}`),
+    );
+  }
   return ctx;
 }
 
@@ -172,7 +201,7 @@ function play(tones: readonly Tone[]): boolean {
   playbackSession();
   const c = audio();
   if (!c || !master) return false;
-  scheduleClose(Math.max(...tones.map((t) => (t.at ?? 0) + t.len)) + 0.05);
+  scheduleIdle(Math.max(...tones.map((t) => (t.at ?? 0) + t.len)) + 0.05);
   for (const t of tones) {
     const at = c.currentTime + 0.005 + (t.at ?? 0);
     const o = c.createOscillator();
@@ -231,7 +260,7 @@ export function tryHaptic(): HapticPath {
 /** 首屏画完后 main.tsx 调：接上 settings 集合（同 watchLook 的 collection('settings')），把实现交给 fx-api */
 export function startFx(c: { getSnapshot(): readonly FxRow[] }): void {
   rowsOf = () => c.getSnapshot();
-  setFxImpl(fx);
+  setFxImpl(fx, releaseAudio);
 }
 
 /** 测试用：清掉懒建的东西 */

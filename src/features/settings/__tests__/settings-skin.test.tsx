@@ -39,7 +39,7 @@ describe('二级页', () => {
     await boot();
     render(<SkinSection />);
     expect((screen.getByTestId('settings-skin-glass') as HTMLInputElement).checked).toBe(true);
-    expect(screen.getAllByRole('radio', { name: /磨砂玻璃|简洁/ }).map((r) => r.getAttribute('data-testid'))).toEqual(['settings-skin-glass', 'settings-skin-simple']);
+    expect(screen.getAllByRole('radio', { name: /柠檬黄|简洁/ }).map((r) => r.getAttribute('data-testid'))).toEqual(['settings-skin-glass', 'settings-skin-simple']);
     expect((screen.getByTestId('settings-theme-system') as HTMLInputElement).checked).toBe(true);
     expect(screen.getByTestId('settings-skin').textContent).toContain('跟着电脑');
     await act(async () => {
@@ -68,7 +68,7 @@ describe('首页', () => {
 
   it('“皮肤 … 磨砂玻璃 · 白天 / 夜间跟着电脑 ›”（默认磨砂玻璃，负责人 11-14）在界面语言之后、字体之前的卡 2；点进 #/settings/skin，标题“皮肤”', async () => {
     await renderPage();
-    expect(screen.getByTestId('settings-skin-summary').textContent).toBe('磨砂玻璃 · 白天 / 夜间跟着电脑');
+    expect(screen.getByTestId('settings-skin-summary').textContent).toBe('柠檬黄 · 白天 / 夜间跟着电脑');
     await act(async () => {
       fireEvent.click(screen.getByTestId('settings-skin-entry'));
     });

@@ -80,11 +80,12 @@ export const vaultRequest = z.discriminatedUnion('action', [
   // 只要 JWT
   z.object({ action: z.literal('status') }),
   z.object({ action: z.literal('setup'), pin }),
-  z.object({ action: z.literal('unlock'), pin }),
+  // with_list（11-18 负责人“隐私记每次进去都很慢”）：在隐私记页上解锁时带上，成功的响应顺带回整张列表（同 list），省掉解锁后再拉一次的往返
+  z.object({ action: z.literal('unlock'), pin, with_list: z.literal(true).optional() }),
   z.object({ action: z.literal('reset'), new_pin: pin }),
   z.object({ action: z.literal('webauthn_options'), purpose: z.enum(['register', 'unlock']) }),
   z.object({ action: z.literal('unlock_webauthn'), assertion: z.object({
-    id: b64u, client_data_json: b64u, authenticator_data: b64u, signature: b64u }) }),
+    id: b64u, client_data_json: b64u, authenticator_data: b64u, signature: b64u }), with_list: z.literal(true).optional() }),
   // 下面都要 x-vault-token
   z.object({ action: z.literal('change_pin'), old_pin: pin, new_pin: pin }),
   z.object({ action: z.literal('webauthn_register'), pin, label: z.string().max(WEBAUTHN_LABEL_MAX),
@@ -148,6 +149,8 @@ export const vaultNote = z.object({
 export type VaultNote = z.infer<typeof vaultNote>;
 export type VaultNoteImage = z.infer<typeof vaultNoteImage>;
 export const vaultListResponse = z.object({ ok: z.literal(true), notes: z.array(vaultNote), ...tok });
+/** unlock、unlock_webauthn 的成功响应：带了 with_list 就多一项 notes（同 list）；旧服务器不回 */
+export const vaultUnlockResponse = z.object({ ok: z.literal(true), notes: z.array(vaultNote).optional(), ...tok });
 
 /** save、delete、undelete、import、export、remove_credential、webauthn_register 的成功响应 */
 export const vaultOkResponse = z.object({ ok: z.literal(true), ...tok });

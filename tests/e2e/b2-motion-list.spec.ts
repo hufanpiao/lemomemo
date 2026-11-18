@@ -228,7 +228,7 @@ const GHOST_TRIES = 3;
 
 /**
  * 让 Motion 的动画全跟着假时钟走（#129：CI 的 webkit 一帧一两百毫秒，离开那一项淡出的一百来毫秒落在两帧之间，三次都取不到看得清的帧）：
- * • Motion 只在 Element.prototype 自己带 animate 时把透明度交给 WAAPI（浏览器的钟，假时钟管不到；motion-dom supports/waapi.mjs），
+ * • Motion 只在 Element.prototype 自己带 animate 时把 opacity 交给 WAAPI（浏览器的钟，假时钟管不到；motion-dom supports/waapi.mjs），
  *   把 animate 挪到 HTMLElement、SVGElement 的原型上（页面里照样能调），Motion 就全走 JS 帧循环；
  * • page.clock 接管 requestAnimationFrame 和 performance.now（Motion 的帧循环取的就是这两个），停住以后由 runFor 一步 16 ms 推帧，
  *   每一帧都是 Motion 先算、取样器后读，帧率由测试定、和机器忙不忙无关

@@ -25,7 +25,7 @@ export interface FeatureRoute {
   Page: LazyExoticComponent<ComponentType>;
   /** 和另一条路由是同一个页面（如 'cal' → 'calendar'）：App 挂那一条的 Page、错误边界用那一条的名字做 key，互相跳不重新挂载 */
   samePageAs?: RouteName;
-  /** 冷启动首屏画完后在后台先下载这一页（只有日历、待办、随手记三个页签页写，负责人 11-18“冷启动后马上后台自动加载这3个页面…减少等待”） */
+  /** 冷启动首屏画完后在后台先下载这一页（日历、待办、随手记三个页签页，负责人 11-18“冷启动后马上后台自动加载这3个页面…减少等待”；设置页，负责人 11-18“把设置页也一起缓存一下”） */
   preload?: () => Promise<unknown>;
 }
 

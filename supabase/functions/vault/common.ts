@@ -16,10 +16,10 @@ export interface ImageAdd { id: Uuid; bytes: number; width: number | null; heigh
 export type VaultReq =
   | { action: 'status' }
   | { action: 'setup'; pin: string }
-  | { action: 'unlock'; pin: string }
+  | { action: 'unlock'; pin: string; with_list?: true | undefined }
   | { action: 'reset'; new_pin: string }
   | { action: 'webauthn_options'; purpose: 'register' | 'unlock' }
-  | { action: 'unlock_webauthn'; assertion: { id: string; client_data_json: string; authenticator_data: string; signature: string } }
+  | { action: 'unlock_webauthn'; assertion: { id: string; client_data_json: string; authenticator_data: string; signature: string }; with_list?: true | undefined }
   | { action: 'change_pin'; old_pin: string; new_pin: string }
   | { action: 'webauthn_register'; pin: string; label: string; attestation: { id: string; client_data_json: string; attestation_object: string } }
   | { action: 'list_credentials' }

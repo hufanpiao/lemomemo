@@ -3,7 +3,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const logs: string[] = [];
-vi.mock('../run-log-api.ts', () => ({ rlog: (l: string) => logs.push(l) }));
+/** 建上下文、恢复的诊断行（fx audio new / resume）另收在 audioLogs，logs 只留音效那一行和 fx audio close */
+const audioLogs: string[] = [];
+vi.mock('../run-log-api.ts', () => ({ rlog: (l: string) => (/^fx audio (new|resume|idle)/.test(l) ? audioLogs : logs).push(l) }));
 
 const { AUDIO_RESTORE_MS, FX_KEY, HAPTIC_MS, LOG_GAP_MS, fx, fxOnOf, hapticPath, resetFxForTest, startFx, tryHaptic } = await import('../feedback.ts');
 const api = await import('../fx-api.ts');
@@ -15,6 +17,7 @@ interface Osc {
 let oscs: Osc[] = [];
 let ctxMade = 0;
 let ctxClosed = 0;
+let ctxSuspended = 0;
 
 class FakeAudioContext {
   currentTime = 0;
@@ -23,7 +26,15 @@ class FakeAudioContext {
   constructor() {
     ctxMade += 1;
   }
-  resume = vi.fn(() => Promise.resolve());
+  resume = vi.fn(() => {
+    this.state = 'running';
+    return Promise.resolve();
+  });
+  suspend = vi.fn(() => {
+    this.state = 'suspended';
+    ctxSuspended += 1;
+    return Promise.resolve();
+  });
   close = vi.fn(() => {
     ctxClosed += 1;
     return Promise.resolve();
@@ -55,9 +66,11 @@ const settings = { getSnapshot: () => rows };
 
 beforeEach(() => {
   logs.length = 0;
+  audioLogs.length = 0;
   oscs = [];
   ctxMade = 0;
   ctxClosed = 0;
+  ctxSuspended = 0;
   rows = [];
   g.AudioContext = FakeAudioContext;
   nav.vibrate = vi.fn(() => true);
@@ -101,6 +114,8 @@ describe('定稿的音和震', () => {
     expect(HAPTIC_MS).toBe(12);
     expect(oscs.map((o) => o.freq[0])).toEqual([784, 1175]);
     expect(logs).toEqual(['fx done hap=vibrate snd=1']);
+    // 诊断（11-18“放下最多只有 3 次提示音”）：记第几次建的、建出来什么状态
+    expect(audioLogs[0]).toMatch(/^fx audio new n=\d+ state=/);
   });
 
   it('拖动放下：正弦 300→180Hz；删除：620→310Hz', () => {
@@ -121,18 +136,31 @@ describe('定稿的音和震', () => {
     expect(logs).toEqual(['fx lift hap=vibrate snd=0', 'fx pull hap=vibrate snd=0']);
   });
 
-  it('连着播复用同一个 AudioContext；最后一个音放完 AUDIO_RESTORE_MS 后关掉，下次再建（常驻会让之后的录音全是静音，11-18 真机日志）', () => {
+  it('整个 app 只建一个 AudioContext：放完 AUDIO_RESTORE_MS 后 suspend 不关，下次 resume 接着用（11-18“放下最多只有 3 次提示音”：原来每次 close 再 new）', async () => {
     vi.useFakeTimers();
     api.fx('done');
     api.fx('drop');
     api.fx('delete');
     expect(ctxMade).toBe(1);
     vi.advanceTimersByTime(120 + 50 + AUDIO_RESTORE_MS - 10);
-    expect(ctxClosed).toBe(0);
+    expect(ctxSuspended).toBe(0);
     vi.advanceTimersByTime(20);
+    expect(ctxSuspended).toBe(1);
+    expect(ctxClosed).toBe(0);
+    for (let i = 0; i < 6; i++) {
+      api.fx('drop');
+      vi.advanceTimersByTime(2000);
+    }
+    expect(ctxMade, '放下 6 次还是同一个').toBe(1);
+    expect(ctxClosed).toBe(0);
+  });
+
+  it('开始收音时 releaseFxAudio 彻底关掉（录音不再全是静音），之后出声再建一个', () => {
+    api.fx('drop');
+    api.releaseFxAudio();
     expect(ctxClosed).toBe(1);
     expect(logs).toContain('fx audio close');
-    api.fx('done');
+    api.fx('drop');
     expect(ctxMade).toBe(2);
   });
 });

@@ -15,6 +15,23 @@ const save = (id: string, extra: Record<string, unknown> = {}) => ({ action: 'sa
 
 async function token(w: World) { return (await signVaultToken(SECRET, A, w.db.s.vault.get(A)?.pin_epoch ?? 0, w.db.ms)).token; }
 
+describe('unlock 带 with_list（11-18“隐私记每次进去都很慢”）', () => {
+  it('带了：成功的响应顺带回整张列表（同 list）；不带不回；密码错不回', async () => {
+    const w = world();
+    const tok = await unlocked(w);
+    await call(w, save(N1), { token: tok });
+    const withList = await call(w, { action: 'unlock', pin: '1234', with_list: true });
+    expect(withList.status).toBe(200);
+    expect(withList.body.vault_token).toBeTruthy();
+    expect(withList.body.notes).toEqual((await call(w, { action: 'list' }, { token: tok })).body.notes);
+    expect((withList.body.notes as unknown[]).length).toBe(1);
+    expect((await call(w, { action: 'unlock', pin: '1234' })).body.notes).toBeUndefined();
+    const wrong = await call(w, { action: 'unlock', pin: '0000', with_list: true });
+    expect(wrong.status).not.toBe(200);
+    expect(wrong.body.notes).toBeUndefined();
+  });
+});
+
 describe('save、list（加密存、解密读）', () => {
   it('新建、改；库里只有密文、title/body 为空；list 解开；同 id 的普通随手记不让覆盖', async () => {
     const w = world();

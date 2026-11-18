@@ -4,11 +4,18 @@
 export type FxKind = 'done' | 'lift' | 'drop' | 'pull' | 'delete';
 
 let impl: ((kind: FxKind, micBusy: () => boolean) => void) | null = null;
+let release: (() => void) | null = null;
 let micBusy: () => boolean = () => false;
 
-/** feedback.ts 下载好以后交过来 */
-export function setFxImpl(f: ((kind: FxKind, micBusy: () => boolean) => void) | null): void {
+/** feedback.ts 下载好以后交过来（rel：关掉放音上下文、让出音频会话） */
+export function setFxImpl(f: ((kind: FxKind, micBusy: () => boolean) => void) | null, rel: (() => void) | null = null): void {
   impl = f;
+  release = rel;
+}
+
+/** 开始收音时调（plus 的 voice-main.ts）：放音上下文平时只 suspend 不关，收音前彻底关掉，免得麦克风录进来全是静音（11-18 真机日志） */
+export function releaseFxAudio(): void {
+  release?.();
 }
 
 /** 录音、语音输入进行中的判断（plus 的 voice-main.ts 注入）：录着时一律不出声 */

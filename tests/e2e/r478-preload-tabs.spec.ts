@@ -6,15 +6,15 @@ import { expect, test } from './session-fixture.ts';
 
 test.use({ loggedIn: true, viewport: { width: 430, height: 932 }, locale: 'zh-CN' });
 
-test('冷启动不点任何页：三页在后台下载好，点日历时不再下载', async ({ page }) => {
+test('冷启动不点任何页：三个页签页和设置页在后台下载好，点日历时不再下载', async ({ page }) => {
   const urls: string[] = [];
   page.on('request', (r) => urls.push(r.url()));
   await page.goto('/app/#/today');
   await page.waitForFunction(() => document.documentElement.getAttribute('data-motion') === 'ready', undefined, { timeout: 30_000 });
   await expect
-    .poll(async () => (await runLog(page)).filter((l) => / preload (calendar|todos|notes) ms=\d+ ok=1/.test(l)).length, { timeout: 20_000 })
-    .toBe(3);
-  for (const name of ['CalendarPage', 'TodosPage', 'NotesPage']) expect(urls.some((u) => u.includes(name)), `${name} 没在后台下载`).toBe(true);
+    .poll(async () => (await runLog(page)).filter((l) => / preload (calendar|todos|notes|settings) ms=\d+ ok=1/.test(l)).length, { timeout: 20_000 })
+    .toBe(4);
+  for (const name of ['CalendarPage', 'TodosPage', 'NotesPage', 'SettingsPage']) expect(urls.some((u) => u.includes(name)), `${name} 没在后台下载`).toBe(true);
   const before = urls.filter((u) => u.includes('CalendarPage')).length;
   await page.getByRole('link', { name: /日历/ }).first().click();
   await page.locator('main[data-feature="calendar"]').waitFor({ timeout: 10_000 });

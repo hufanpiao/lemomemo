@@ -118,7 +118,7 @@ export const zh = {
   // 设置 › 日历 二级页的顶栏标题（R-320；正文由 calendar 功能提供，和它词典里的 cal.set.title 同一个词）
   'settings.skin.title': '皮肤', // 定稿线框 s13、皮肤视觉稿设置首页第 1368 行
   'settings.skin.simple': '简洁',
-  'settings.skin.glass': '磨砂玻璃',
+  'settings.skin.glass': '柠檬黄', // 负责人 11-18 13:42：“下一个版本把磨砂玻璃名称改成柠檬黄”（皮肤代号仍是 glass）
   'settings.skin.value': '{skin} · {theme}',
   'settings.skin.themeTitle': '白天 / 夜间', // R-06 三选一
   'settings.skin.themeSystemValue.mobile': '白天 / 夜间跟着手机',

@@ -78,9 +78,20 @@ async function checkToken(c: Ctx, t: VaultTx, lock: boolean): Promise<Tok | Resp
 /** 要令牌的动作成功了：没给新 epoch 的沿用当前的，最早解锁时刻沿用令牌里的 */
 const renewed = (res: Res, tok: Tok): Res => (res instanceof Response ? res : { ...res, epoch: res.epoch ?? tok.epoch, firstAt: tok.firstAt });
 
+/**
+ * 解锁成功又带了 with_list（11-18“隐私记每次进去都很慢”）：另开一个事务照 list 拉整张列表并进同一个响应，客户端不用拿到令牌再发一次 list。
+ * 和“解锁后马上用新令牌 list”拿到的东西一样，不多给；解锁失败（Response）原样回
+ */
+async function withList(c: Ctx, r: VaultReq, res: Res): Promise<Res> {
+  if (res instanceof Response || res.epoch === null) return res;
+  if ((r.action !== 'unlock' && r.action !== 'unlock_webauthn') || r.with_list !== true) return res;
+  const listed = await c.deps.tx(c.userId, (t) => list(c, t));
+  return { ...res, body: { ...res.body, ...listed.body } };
+}
+
 async function dispatch(c: Ctx, r: VaultReq): Promise<Res> {
   const opened = openAction(c, r);
-  if (opened) return opened;
+  if (opened) return withList(c, r, await opened);
   if (r.action === 'import' || r.action === 'export') {
     const tok = await c.deps.tx(c.userId, (t) => checkToken(c, t, false));
     if (tok instanceof Response) return tok;

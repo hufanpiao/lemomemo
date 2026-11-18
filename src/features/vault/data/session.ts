@@ -32,7 +32,7 @@
 // • 不碰 core/cache、outbox、log（A18）
 import { z } from 'zod';
 import {
-  vaultCredentialsResponse, vaultListResponse, vaultOkResponse, vaultPurgeResponse, vaultStatusResponse, vaultTokenResponse,
+  vaultCredentialsResponse, vaultListResponse, vaultOkResponse, vaultPurgeResponse, vaultStatusResponse, vaultTokenResponse, vaultUnlockResponse,
   webauthnOptionsResponse, type VaultRequest,
 } from '../../../../shared/schema/vault.ts';
 import { vaultFileListResponse, vaultFileOkResponse, vaultFilePreviewResponse, vaultFileUploadResponse, type VaultFileMeta } from '../../../../shared/schema/vault-file.ts';
@@ -322,7 +322,7 @@ export function createVaultSession(d: VaultSessionDeps) {
   }
 
   /** 解锁类请求（setup、unlock、reset、Face ID）：半路上锁就丢掉签来的令牌，不进已解锁 */
-  async function afterUnlock(send: () => Promise<VaultResult<z.infer<typeof vaultTokenResponse>>>): Promise<VaultResult<true>> {
+  async function afterUnlock(send: () => Promise<VaultResult<z.infer<typeof vaultUnlockResponse>>>): Promise<VaultResult<true>> {
     const r = await guarded(send);
     if (dropped(r)) return r as VaultFail;
     if (!r.ok) {
@@ -330,21 +330,37 @@ export function createVaultSession(d: VaultSessionDeps) {
       return r;
     }
     takeToken(r.value);
+    // 在隐私记页上解锁时请求带了 with_list，响应里就有整张列表（11-18“隐私记每次进去都很慢”：原来解锁 0.88s 后再串行 list 0.61s）；
+    // 和 phase 一起置 listed，VaultPage 不再另发一次 list（日志 108.66 同时两次 list 就是它）
+    const notes = onPage ? r.value.notes : undefined;
+    if (notes) store.load(notes);
     const st = state.status ? { ...state.status, set: true } : { set: true, lastResetAt: null, webauthn: 0 };
-    set({ phase: 'unlocked', status: st, relocked: false, waiting: false, left: null, lockedUntil: null, lastError: null });
+    set({ phase: 'unlocked', status: st, relocked: false, waiting: false, left: null, lockedUntil: null, lastError: null, ...(notes ? { listed: true } : {}) });
+    if (notes) queue.overlay();
+    rlog(`vault unlocked with_list=${notes ? notes.length : '-'}`);
     if (endOwed) endPreview('resend');
     // 不在隐私记页上解锁的（移进隐私记弹的解锁卡）：这一刻起就算离开了隐私记页；也不拉列表（进隐私记页时再拉，M3）
     if (!onPage) away.set('page', now());
     arm();
-    const listed: VaultResult<true> = onPage ? await list() : { ok: true, value: true };
+    const listed: VaultResult<true> = onPage && !notes ? await list() : { ok: true, value: true };
     // 列表没拉成也接着发：队列里是整行，发出去无害；下次拉列表时再盖回仓库
     if (state.phase === 'unlocked') queue.resume();
     return listed.ok ? { ok: true, value: true } : listed;
   }
 
-  /** 拉明文列表；锁着（没令牌）就不拉 */
-  async function list(): Promise<VaultResult<true>> {
-    if (!token) return { ok: true, value: true };
+  /** 在隐私记页上解锁：请求顺带要列表（服务器回在 notes 里，afterUnlock 直接装进仓库） */
+  const withList = (): { with_list?: true } => (onPage ? { with_list: true } : {});
+
+  /** 拉明文列表；锁着（没令牌）就不拉；已经在拉就等那一次（不同时发两次） */
+  let listing: Promise<VaultResult<true>> | null = null;
+  function list(): Promise<VaultResult<true>> {
+    if (!token) return Promise.resolve({ ok: true, value: true });
+    listing ??= listOnce().finally(() => {
+      listing = null;
+    });
+    return listing;
+  }
+  async function listOnce(): Promise<VaultResult<true>> {
     const r = await run({ action: 'list' }, vaultListResponse);
     if (!r.ok) return r;
     store.load(r.value.notes);
@@ -418,7 +434,7 @@ export function createVaultSession(d: VaultSessionDeps) {
       lock({}, 'cancel');
     },
     setup: (pin: string): Promise<VaultResult<true>> => afterUnlock(() => d.api.call({ action: 'setup', pin }, null, vaultTokenResponse)),
-    unlock: (pin: string): Promise<VaultResult<true>> => afterUnlock(() => d.api.call({ action: 'unlock', pin }, null, vaultTokenResponse)),
+    unlock: (pin: string): Promise<VaultResult<true>> => afterUnlock(() => d.api.call({ action: 'unlock', pin, ...withList() }, null, vaultUnlockResponse)),
     async reset(newPin: string): Promise<VaultResult<true>> {
       const r = await afterUnlock(() => d.api.call({ action: 'reset', new_pin: newPin }, null, vaultTokenResponse));
       if (r.ok) set({ status: state.status ? { ...state.status, lastResetAt: now(), webauthn: 0 } : null });
@@ -428,7 +444,7 @@ export function createVaultSession(d: VaultSessionDeps) {
       return d.api.call({ action: 'webauthn_options', purpose }, null, webauthnOptionsResponse);
     },
     async unlockWebauthn(assertion: { id: string; client_data_json: string; authenticator_data: string; signature: string }) {
-      return afterUnlock(() => d.api.call({ action: 'unlock_webauthn', assertion }, null, vaultTokenResponse));
+      return afterUnlock(() => d.api.call({ action: 'unlock_webauthn', assertion, ...withList() }, null, vaultUnlockResponse));
     },
     async registerWebauthn(pin: string, label: string, attestation: { id: string; client_data_json: string; attestation_object: string }) {
       const r = await run({ action: 'webauthn_register', pin, label, attestation }, vaultOkResponse);

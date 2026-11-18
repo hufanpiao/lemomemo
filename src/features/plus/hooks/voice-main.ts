@@ -5,7 +5,7 @@
 // • 运行日志：quick submit len=（只记字数）、quick record out=
 import { clock } from '../../../platform/clock.ts';
 import { isTauri } from '../../../platform/env.ts';
-import { setFxMicBusy } from '../../../platform/fx-api.ts';
+import { releaseFxAudio, setFxMicBusy } from '../../../platform/fx-api.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { writeAssistDraft } from '../data/type-draft.ts';
 import { createVoiceSession } from '../data/voice-session.ts';
@@ -16,6 +16,13 @@ export const mainVoice = createVoiceSession({ onAsk: (ask, raw, aiUsed, from) =>
 setAssistRecorder((raw, from, mode, day) => mainVoice.record(raw, from, mode, day));
 // 录着（准备中、录音、手机自带识别收音）时操作音效一律不出声、不碰 audioSession（R-471，platform/feedback.ts）
 setFxMicBusy(() => mainVoice.view().capturing);
+// 一开始收音就关掉操作音效的放音上下文（它平时只 suspend 不关，platform/feedback.ts scheduleIdle）
+let wasCapturing = false;
+mainVoice.subscribe(() => {
+  const now = mainVoice.view().capturing;
+  if (now && !wasCapturing) releaseFxAudio();
+  wasCapturing = now;
+});
 
 /**
  * exe 的全局快速记录框（quick-add 窗口）交上来的一句（架构 5.14 第 1 点；0.18 M2 那个窗口不连服务器，现在只有 Rust 转发、没有自己的判断）：
