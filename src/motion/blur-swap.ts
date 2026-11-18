@@ -26,16 +26,11 @@ export function blurSwapOut(reduced: boolean, x = 0, opacity = 1): Keyframe[] {
   ];
 }
 
-/** 新的一页的关键帧；withFilter 为 false 时只要透明度（模糊另加在别的元素上，见 blurSwapInFilter） */
+/** 新的一页的关键帧；withFilter 为 false 时只要透明度（加在 position: fixed 的元素自己身上：不模糊，同原来） */
 export function blurSwapIn(reduced: boolean, withFilter = true): Keyframe[] {
   if (reduced || !withFilter) return [{ opacity: 0 }, { opacity: 1 }];
   return [
     { opacity: 0, filter: blur(BLUR_SWAP_PX) },
     { opacity: 1, filter: blur(0) },
   ];
-}
-
-/** 新的一页只要模糊那一半（加在不含 position: fixed 元素的子树上：filter 会让 fixed 后代改按它定位） */
-export function blurSwapInFilter(): Keyframe[] {
-  return [{ filter: blur(BLUR_SWAP_PX) }, { filter: blur(0) }];
 }

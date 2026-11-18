@@ -5,7 +5,7 @@
 // 首屏要用的常量和“新页显示出来没有”的判断在 ./page-shown.ts。
 // 两种共用：旧页快照（makeGhost）、等新页出来（waitDom）、换页后吞点按（guardTaps）、一份“正在播”的状态（cur）和一个收尾（endSwap）
 import { copyNode } from './copy-node.ts';
-import { blurSwapIn, blurSwapInFilter, blurSwapOut, blurSwapTiming } from './blur-swap.ts';
+import { blurSwapIn, blurSwapOut, blurSwapTiming } from './blur-swap.ts';
 import { FADE_GUARD_MS, FADE_WAIT_MS, GROW_HOLD, pageVisible, shownMain, waitDom } from './page-shown.ts';
 import { prefersReducedMotion } from './reduced.ts';
 import { swallowNextClick } from './swallow-click.ts';
@@ -74,27 +74,27 @@ function guardAgain(): void {
 }
 
 /**
- * 页签互切时钉在原处不动的元素（负责人 11-18 录屏“切页的时候头像抖动”：右上角设置头像 MeLink 四页在同一处，
- * 原来新页和旧页快照各带一个、往两边滑，两三帧里叠出左右错开的两个头像）。打了这个属性的元素：
- * 旧页快照里的藏掉，另拍一份静态副本钉在原处（不跟快照滑、不跟快照淡出）；新页里同一种的那个滑动期间透明（照样能点），收尾时露出来、副本拿掉。
- * 新页里没有（电脑版藏了头像）时，副本跟着快照一起淡出
+ * 页签互切时钉在原处不动的元素（负责人 11-18 录屏“切页的时候头像抖动”“头像怎么也还是会消失”：右上角设置头像 MeLink 四页在同一处）。
+ * 11-19 整块重写（原来新页的头像整段切页透明、由副本代画、收尾再交接；连点时下一次的副本抄到了那条透明，整段切页头像没了）：
+ * • 新页里的头像从头到尾是真元素、全亮：淡入的透明度和模糊只加在不含它的子树上（fadeTargets），它自己不动、不藏、不交接；
+ * • 旧页快照里的藏掉，另拍一份静态副本钉在原处，只管新页出来之前那一段（等分包、Suspense 把旧页藏起来）；新页出来那一刻拿掉；
+ * • 新页里没有（电脑版藏了头像）时，副本跟着快照一起淡出
  */
 const SWAP_PIN = 'data-swap-pin';
 const PIN_SEL = `[${SWAP_PIN}]`;
+const shownPins = (root: Element): HTMLElement[] => [...root.querySelectorAll<HTMLElement>(PIN_SEL)].filter((e) => e.getBoundingClientRect().width > 0);
 
 interface Ghost {
   box: HTMLElement;
   /** 钉住不动的那几个的副本（一层视口大小的 fixed 框，排在快照后面）；旧页里没有就是 null */
   pins: HTMLElement | null;
-  /** 新页里滑动期间藏起来的那几个，收尾时露出来 */
-  held: HTMLElement[];
   /** 显示出来（换页前先藏着放好，旧页一卸掉就显示，不露空白），并抄回滚动位置 */
   show: () => void;
 }
 
 /** 钉住的副本：按各自此刻在屏幕上的位置摆；摆不出来（没有大小）的不要 */
 function makePins(main: Element): HTMLElement | null {
-  const els = [...main.querySelectorAll(PIN_SEL)].filter((e) => e.getBoundingClientRect().width > 0);
+  const els = shownPins(main);
   if (els.length === 0) return null;
   const box = document.createElement('div');
   box.setAttribute('aria-hidden', 'true');
@@ -147,33 +147,40 @@ function makeGhost(main: Element, pin: boolean): Ghost | null {
         c.scrollLeft = left;
       }
     };
-    return { box, pins, held: [], show };
+    return { box, pins, show };
   } catch {
     return null;
   }
 }
 
 /**
- * 平移加在哪些元素上：main 里没有 position: fixed 的元素时就是 main 自己；有的话（随手记贴底的输入行、页底提示条），
- * 祖先带 transform 会让它们改按祖先定位、过渡期间错位，所以只给“不含 fixed 元素的最大子树”加平移，fixed 的那几个原地不动（同底栏）。
- * 透明度照样加在 main 上：opacity 不改 fixed 元素的定位
+ * 新页淡入加在哪些元素上。main 里没有 position: fixed 的元素、也没有钉住的头像时就是 main 自己（parts = [main]）；
+ * 有的话只加在“不含它们的最大子树”上（parts：透明度 + 模糊）：
+ * • fixed 的（随手记贴底的输入行、页底提示条）：祖先带 filter 会让它们改按祖先定位、过渡期间错位，只给它们自己加透明度（fixed）；
+ * • 钉住的头像：祖先带透明度它就跟着淡，所以它和祖先都不加，从头到尾全亮（见 SWAP_PIN）
  */
-function shiftTargets(main: Element): Element[] {
+function fadeTargets(main: Element, pins: readonly Element[]): { parts: Element[]; fixed: Element[] } {
+  const isFixed = (el: Element): boolean => getComputedStyle(el).position === 'fixed';
+  const keep = new Set<Element>(pins);
   const tainted = new Set<Element>();
-  for (const el of main.querySelectorAll('*')) {
-    if (getComputedStyle(el).position !== 'fixed') continue;
+  const mark = (el: Element): void => {
     for (let e: Element | null = el; e !== null && e !== main; e = e.parentElement) tainted.add(e);
-  }
-  if (tainted.size === 0) return [main];
-  const out: Element[] = [];
+  };
+  for (const el of main.querySelectorAll('*')) if (isFixed(el)) mark(el);
+  for (const el of pins) mark(el);
+  if (tainted.size === 0) return { parts: [main], fixed: [] };
+  const parts: Element[] = [];
+  const fixed: Element[] = [];
   const walk = (el: Element): void => {
     for (const c of el.children) {
-      if (!tainted.has(c)) out.push(c);
-      else if (getComputedStyle(c).position !== 'fixed') walk(c);
+      if (keep.has(c)) continue;
+      if (!tainted.has(c)) parts.push(c);
+      else if (isFixed(c)) fixed.push(c);
+      else walk(c);
     }
   };
   walk(main);
-  return out;
+  return { parts, fixed };
 }
 
 interface Look {
@@ -213,7 +220,6 @@ function endSwap(s: Swap): void {
     for (const a of s.anims) a.cancel();
     s.ghost?.box.remove();
     s.ghost?.pins?.remove();
-    for (const e of s.ghost?.held ?? []) e.style.removeProperty('opacity');
     s.resolve();
   }
 }
@@ -260,14 +266,20 @@ function swap(
     onEnd();
     return Promise.resolve();
   }
-  // 显示着的页找不到时（连点、上一次的新页分包还没到）就是那个被 Suspense 藏着的旧页：拷它（去掉 display），画面上本来就是它的快照（复审第 2 条）
-  const before = shownMain() ?? document.querySelector('main');
+  // 显示着的页找不到时（连点、上一次的新页分包还没到）就是那个被 Suspense 藏着的旧页（复审第 2 条）
+  const shown = shownMain();
+  const before = shown ?? document.querySelector('main');
   const reduced = prefersReducedMotion();
-  const ghost = before && !reduced ? makeGhost(before, kind === 'slide') : null;
-  // 上一次页签互切放完以前：快照从它此刻的样子起，不是全亮（代码审查 M1）
-  const start = cur?.kind === 'slide' && cur.anims.length ? cur.look() : STILL;
+  // 上一次页签互切还在等新页（画面上是它的快照和钉住的头像）时又切：接着用那一份，不重拷。
+  // 藏着的旧页量不出位置（宽 0），拷出来整页挤成一条、头像跑到左边（11-19 连点实时逐帧：x 370 → 44），钉住的头像也拍不出来
+  const prev = !reduced && shown === null && kind === 'slide' && cur?.kind === 'slide' && cur.anims.length === 0 ? cur : null;
+  const kept = prev?.ghost ?? null;
+  if (prev) prev.ghost = null;
+  const ghost = kept ?? (before && !reduced ? makeGhost(before, kind === 'slide') : null);
+  // 上一次页签互切放完以前：快照从它此刻的样子起，不是全亮（代码审查 M1）；接着用的那一份照旧
+  const start = prev ? prev.start : cur?.kind === 'slide' && cur.anims.length ? cur.look() : STILL;
   cancelFade();
-  if (ghost) {
+  if (ghost && !kept) {
     ghost.box.style.opacity = String(start.opacity);
     ghost.box.style.transform = px(start.x);
     // 挂在 body 下装整个 app 的那一层前面（评审高①）：插在旧页 main 旁边时，隐私记页 main 外还包着一层（data-testid="vault"），
@@ -349,27 +361,24 @@ function swap(
 export function fadeSwap(update: () => void): Promise<void> {
   return swap('slide', update, (el, s) => {
     const opts = blurSwapTiming(false);
-    // 模糊加在不含 fixed 元素的子树上（filter 同 transform，会让 fixed 后代改按祖先定位），透明度加在 main 上
-    const targets = shiftTargets(el);
-    const whole = targets.length === 1 && targets[0] === el;
-    const lead = track(s, el.animate(blurSwapIn(false, whole), opts));
-    if (!whole) for (const t of targets) track(s, t.animate(blurSwapInFilter(), opts));
+    // 新页自己的头像（钉住的）不淡入、一直全亮；透明度和模糊加在不含它、不含 fixed 元素的子树上（fadeTargets）
+    const mine = shownPins(el);
+    const { parts, fixed } = fadeTargets(el, mine);
+    for (const t of parts) track(s, t.animate(blurSwapIn(false), opts));
+    for (const t of fixed) track(s, t.animate(blurSwapIn(false, false), opts));
+    const lead = s.anims[0];
     const g = s.ghost?.box;
     // fill: forwards：放完到拿掉之间停在透明，不回到不透明露一帧旧页（11-18 逐帧对照实测）；连点时从上一页此刻的透明度起
     if (g) track(s, g.animate(blurSwapOut(false, 0, s.start.opacity), { ...opts, fill: 'forwards' }));
-    // 钉住的（头像）：新页里也有就先藏着、副本原地不动，收尾时换回新页自己的；新页里没有就让副本跟快照一起淡出
+    // 钉住的副本：新页里有自己的（真元素、全亮）就当场拿掉；新页里没有（电脑版）就跟快照一起淡出
     const pins = s.ghost?.pins;
-    if (pins && s.ghost) {
-      const mine = [...el.querySelectorAll<HTMLElement>(PIN_SEL)].filter((e) => e.getBoundingClientRect().width > 0);
-      // 用透明度藏、不用 visibility：滑动那 200ms 里点头像照样进设置（b2-vt-taps：换页 10、80、150 ms 点新页上的链接要点到）
-      for (const e of mine) e.style.setProperty('opacity', '0');
-      s.ghost.held = mine;
-      if (mine.length === 0) track(s, pins.animate([{ opacity: s.start.opacity }, { opacity: 0 }], { ...opts, fill: 'forwards' }));
-    }
+    if (pins && mine.length > 0) pins.remove();
+    else if (pins) track(s, pins.animate([{ opacity: s.start.opacity }, { opacity: 0 }], { ...opts, fill: 'forwards' }));
     // 原地换、不平移；连点时下一次的快照从新页此刻的透明度起（不是全亮，代码审查 M1）
+    const fader = parts[0] ?? fixed[0] ?? null;
     s.look = () => {
-      const o = Number.parseFloat(getComputedStyle(el).opacity);
-      return { x: 0, opacity: lead.playState === 'finished' || Number.isNaN(o) ? 1 : o };
+      const o = fader ? Number.parseFloat(getComputedStyle(fader).opacity) : Number.NaN;
+      return { x: 0, opacity: !lead || lead.playState === 'finished' || Number.isNaN(o) ? 1 : o };
     };
   });
 }
