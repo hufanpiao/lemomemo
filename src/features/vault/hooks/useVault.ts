@@ -1,6 +1,6 @@
 // 隐私记会话的钩子（B5 FA-1）：整个 App 一份会话（data/session.ts），页面、随手记里的入口行和“移到隐私记”、设置 › 隐私记共用
 // • 会话第一次用到时才建（vault 块懒加载，不进首屏）；同时挂上离开、回来的监听（S6）：
-//   - visibilitychange → hidden、pagehide、blur：**同步**给 <html> 加 data-vault-shield="1"（LockShield 立刻盖上，不做动效，S21），记下离开时刻
+//   - visibilitychange → hidden、pagehide、blur（刚点了选文件框、系统弹菜单那次 blur 除外）：**同步**给 <html> 加 data-vault-shield="1"（LockShield 立刻盖上，不做动效，S21），记下离开时刻
 //   - visibilitychange → visible、pageshow、focus：离开满 vault.autolock_min 分钟就上锁；然后去掉遮罩（锁上了就露出解锁卡）
 // • 离开隐私记页（负责人 11-15“离开隐私记页 1 分钟不自动上锁”）：useVaultPresence 在页面挂上、卸下时报给会话（原因 'page'），会话自己计时
 // • 自动上锁的分钟数读本机 settings 的 vault.autolock_min（默认 1；只认 1～60 的整数）；读到就报给会话
@@ -38,25 +38,38 @@ export function setShield(on: boolean, root: HTMLElement = document.documentElem
 /** 离开、回来的监听（导出给测试：注入会话、时钟、目标） */
 export function watchLeave(s: VaultSession, target: Window & typeof globalThis = window, now: () => number = () => Date.now()): () => void {
   const doc = target.document;
+  // 点了选文件的框（隐私记输入行的图片、附件）：iOS 弹出“照片图库 / 拍照 / 选取文件”时窗口失焦，页面还在前台。
+  // 这一次 blur 不算离开（负责人 11-20 截图：点图片图标整页被遮罩盖住，只剩图标和菜单）；真切到后台照旧由 visibilitychange、pagehide 盖上
+  let picking = false;
+  const onClick = (e: Event): void => {
+    const t = e.target as { tagName?: string; type?: string } | null;
+    if (t?.tagName === 'INPUT' && t.type === 'file') picking = true;
+  };
   const leave = (): void => {
     setShield(true, doc.documentElement);
     s.hide(now());
   };
+  const blur = (): void => {
+    if (!picking) leave();
+  };
   const back = (): void => {
     if (doc.visibilityState === 'hidden') return;
+    picking = false;
     s.show(now());
     setShield(false, doc.documentElement);
   };
   const vis = (): void => (doc.visibilityState === 'hidden' ? leave() : back());
+  doc.addEventListener('click', onClick, true);
   doc.addEventListener('visibilitychange', vis);
   target.addEventListener('pagehide', leave);
-  target.addEventListener('blur', leave);
+  target.addEventListener('blur', blur);
   target.addEventListener('pageshow', back);
   target.addEventListener('focus', back);
   return () => {
+    doc.removeEventListener('click', onClick, true);
     doc.removeEventListener('visibilitychange', vis);
     target.removeEventListener('pagehide', leave);
-    target.removeEventListener('blur', leave);
+    target.removeEventListener('blur', blur);
     target.removeEventListener('pageshow', back);
     target.removeEventListener('focus', back);
   };

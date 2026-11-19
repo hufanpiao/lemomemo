@@ -233,6 +233,33 @@ describe('TC-B5-44：离开时同步盖多任务遮罩', () => {
     stop();
   });
 
+  it('点了选文件框后那次 blur 不盖（负责人 11-20：点图片图标整页被盖住）；回来以后再 blur 照旧盖；选文件时真切后台照旧盖', async () => {
+    await openUnlocked();
+    const stop = watchLeave(s, window, () => 0);
+    const input = document.createElement('input');
+    input.type = 'file';
+    document.body.append(input);
+    input.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    window.dispatchEvent(new Event('blur'));
+    expect(document.documentElement.hasAttribute(SHIELD_ATTR)).toBe(false);
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    window.dispatchEvent(new Event('blur'));
+    expect(document.documentElement.getAttribute(SHIELD_ATTR)).toBe('1');
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    input.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    window.dispatchEvent(new Event('pagehide'));
+    expect(document.documentElement.getAttribute(SHIELD_ATTR)).toBe('1');
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    input.remove();
+    stop();
+  });
+
   it('59 秒回来：遮罩去掉、仍解锁；61 秒回来：上锁、露出解锁卡', async () => {
     await openUnlocked();
     let now = 0;
