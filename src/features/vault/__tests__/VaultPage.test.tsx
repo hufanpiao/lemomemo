@@ -115,25 +115,19 @@ describe('解锁、上锁', () => {
     expect(screen.queryByTestId('vault-notes')).toBeNull();
   });
 
-  it('负责人 11-19“解锁后用乙”：#/vault 是首页（最新几条、“全部 N ›”）；点“全部”进 #/vault/c/all 的列表，顶上“‹ 隐私记”回首页', async () => {
+  it('负责人 11-19 晚“隐私记里面做成跟随手记一样”：#/vault 解锁后直接是随手记那份列表（有分类胶囊、没有宫格首页），顶上“‹ 随手记”回随手记', async () => {
     await openUnlocked();
-    const home = await screen.findByTestId('vault-home');
-    expect(home.textContent).toContain('体检报告');
-    expect(screen.queryByTestId(`notes-more-${NID}`)).toBeNull();
-    for (const tile of home.querySelectorAll('[data-testid^="vault-home-cat-"]')) expect(tile.textContent).toMatch(/\d/);
-    fireEvent.click(screen.getByTestId('vault-home-all'));
-    await waitFor(() => expect(window.location.hash).toBe('#/vault/c/all'));
     expect(await screen.findByTestId(`notes-more-${NID}`)).toBeTruthy();
+    expect(screen.getByTestId('notes-filter')).toBeTruthy();
     expect(screen.queryByTestId('vault-home')).toBeNull();
-    fireEvent.click(screen.getByTestId('vault-back-home'));
-    await waitFor(() => expect(window.location.hash).toBe('#/vault'));
-    expect(await screen.findByTestId('vault-home')).toBeTruthy();
+    expect(screen.queryByTestId('vault-back-home')).toBeNull();
+    expect(screen.getByTestId('vault-back')).toBeTruthy();
   });
 
-  it('负责人 11-19 选“做‘＋ 新分类’”：宫格最后一格“＋ 新分类”，起名建好进这一类的列表（空的也留着这一类、胶囊写 0）；同名不再建', async () => {
+  it('分类胶囊“＋ 新分类”：起名建好筛到这一类（#/vault/c/<id>，空的也留着这一类、胶囊写 0）；同名不再建', async () => {
     cats.rows = [];
     await openUnlocked();
-    fireEvent.click(await screen.findByTestId('vault-home-newcat'));
+    fireEvent.click(await screen.findByTestId('notes-filter-new'));
     const ok = await screen.findByTestId('cat-new-ok');
     expect(ok.hasAttribute('disabled')).toBe(true);
     const input = screen.getByTestId('cat-new-name');
@@ -155,12 +149,10 @@ describe('解锁、上锁', () => {
     await openUnlocked();
     await waitFor(() => expect(window.location.hash).toBe('#/vault/c/all'));
     expect(await screen.findByTestId(`notes-more-${NID}`)).toBeTruthy();
-    expect(screen.getByTestId('vault-back-home')).toBeTruthy();
+    expect(screen.getByTestId('vault-back')).toBeTruthy();
   });
 
   it('随手记那一份“⋯”：移出隐私记走 exportNote；删除立刻从列表拿掉、进隐私记自己的最近删除（后台发 delete）', async () => {
-    // 解锁后的首页是宫格（负责人 11-19“解锁后用乙”），列表在 #/vault/c/<分类>
-    window.location.hash = '#/vault/c/all';
     await openUnlocked();
     const out = vi.spyOn(s, 'exportNote').mockResolvedValue({ ok: true, value: { ok: true, vault_token: 't', expires_at: 0 } });
     fireEvent.click(screen.getByTestId(`notes-more-${NID}`));
@@ -607,18 +599,5 @@ describe('批 2 第 3 条：移出隐私记没成，提示是自己那一条（�
     fireEvent.click(await screen.findByTestId(`notes-from-vault-${NID}`));
     expect((await screen.findByTestId('notes-moveout-tip')).textContent).toBe('没移出去，稍后再试一次');
     expect(screen.queryByTestId('notes-conv-tip')).toBeNull();
-  });
-});
-
-describe('首页分类格的小图标（负责人 11-19“按分类名配图标”，只用方案乙的三个）', () => {
-  it('健康 ♥、证件 ▤、账号 ✱；中韩都认；配不上的不画图标', async () => {
-    const { tileGlyph } = await import('../hooks/tile-glyph-data.ts');
-    expect(tileGlyph('健康')).toBe('♥');
-    expect(tileGlyph('体检报告')).toBe('♥');
-    expect(tileGlyph('证件')).toBe('▤');
-    expect(tileGlyph('여권')).toBe('▤');
-    expect(tileGlyph('账号提示')).toBe('✱');
-    expect(tileGlyph('비밀번호')).toBe('✱');
-    expect(tileGlyph('旅行')).toBeNull();
   });
 });

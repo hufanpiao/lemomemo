@@ -77,7 +77,7 @@ import { PullSearch } from '../../smart-search/index.ts';
 import { VaultParts } from '../../vault/index.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import { useMergeHint } from '../hooks/useMergeHint.ts';
-import { useNoteList, type CategoryCount, type CategoryCtl, type NoteItem } from '../hooks/useNoteList.ts';
+import { useNoteList, type CategoryCtl, type NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
 import { isUndo, mergeUndo, moveUndo, undoTipOf, useNotesToast } from '../hooks/useNotesToast.ts';
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
@@ -110,32 +110,11 @@ export default function NotesPage() {
   return useRoute().name === 'note' ? <NoteEditPage /> : <NotesList />;
 }
 
-/** 列表区换成“首页”时交给 home 的东西（隐私记首页宫格，负责人 11-19“解锁后用乙”）：分类计数、总条数、条目、日期文字、点开一条 */
-export interface NotesHomeApi {
-  counts: readonly CategoryCount[];
-  total: number;
-  /** 全部条目（只去掉移走的；“最近”按记下的时间由 home 自己挑，不受排序方式影响） */
-  items: readonly NoteItem[];
-  /** 今天 / 昨天 / 11月13日 */
-  day: (it: NoteItem) => string;
-  open: (id: string) => void;
-  /** 行上的同步标记（隐私记“没保存上”，同列表行、卡片那一个） */
-  mark: (it: NoteItem) => ReactNode;
-  /** 一条都没有时那一句（来源给的，同列表空态） */
-  empty: string;
-  /** 打开“新分类”弹窗（隐私记“＋ 新分类”）：建好、同名已有都进那一类 */
-  addCategory(): void;
-  /** 打开改名、删除弹窗（隐私记长按分类格，负责人 11-19“长按分类格可以改名、删除”） */
-  editCategory(c: CategoryCount): void;
-  /** 拖进分类（“最近”拖到分类格）：认不认这一条、放下；同列表拖到胶囊那一份 */
-  into: { ok(id: string): boolean; drop(id: string, target: string): void };
-}
-
 /**
- * head：顶上替换大标题的一块；home：给了就在手机排法里用它替换分类胶囊和列表区（顶部提示、输入行、撤销条照旧），电脑版不管；
+ * head：顶上替换大标题的一块；
  * cat：外面管的分类筛选（隐私记 #/vault/c/<id>，见 useNoteList）
  */
-export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode, catName: string | null) => ReactNode) | undefined; home?: ((api: NotesHomeApi) => ReactNode) | undefined; cat?: CategoryCtl | undefined }) {
+export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: string | null) => ReactNode) | undefined; cat?: CategoryCtl | undefined }) {
   const t = useNotesT();
   const src = useNoteSource();
   const { caps } = src;
@@ -263,9 +242,9 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode, catN
     report,
     moved: (m) => guard.show(moveUndo(m.switched, () => void l.undoMove(m).then(report))),
   });
-  // 拖进分类（负责人 11-19“里面的记录可以拖进分类里面”“只能拖没分类的”）：列表拖到分类胶囊；隐私记首页“最近”拖到分类格经 home 的 into 用同一份
+  // 拖进分类（负责人 11-19“里面的记录可以拖进分类里面”“只能拖没分类的”）：列表拖到分类胶囊
   const into = {
-    // 没筛分类时（首页“最近”、全部）这一条在 items 里；筛着某一类时没分类的不在 items、在 loose 里（导入弹窗列的就是它们）
+    // 没筛分类时（全部）这一条在 items 里；筛着某一类时没分类的不在 items、在 loose 里（导入弹窗列的就是它们）
     ok: (id: string) => !isRo(id) && (l.items.find((x) => x.id === id) ?? l.loose.find((x) => x.id === id))?.categoryId === null,
     drop: (id: string, cid: string) => void l.moveInto([id], cid).then((r) => (r.failed ? report('failed') : undefined)),
   };
@@ -440,25 +419,7 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode, catN
           </p>
         </>
       )}
-      {home ? (
-        <>
-          {tips}
-          {home({
-            addCategory: cd.add,
-            into,
-            editCategory: cd.edit,
-            counts: l.counts,
-            total: l.total,
-            items: l.items.filter(shown),
-            day: dayText,
-            open,
-            mark: (it) => <SyncMark id={it.id} failed={failed.has(it.id)} />,
-            empty: src.text?.empty ?? t('notes.empty', {}),
-          })}
-        </>
-      ) : (
-        listPart(filterChips)
-      )}
+      {listPart(filterChips)}
       {mist}
       {dock}
     </>

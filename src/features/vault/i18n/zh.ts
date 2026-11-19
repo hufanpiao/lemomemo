@@ -25,14 +25,6 @@ export const zh = {
   'vault.setup.bindGo': '去设置',
   'vault.autolock': '离开隐私记或 App {n} 分钟后自动重新上锁，设置里可改',
 
-  'vault.home.cats': '分类', // 首页宫格（负责人 11-19“解锁后用乙”），读屏用
-  'vault.home.tile': '{n} 条 · {day}',
-  'vault.home.tileNoDay': '{n} 条',
-  'vault.home.tileLabel': '{name}，{sub}', // 分类格的读屏名字
-  'vault.home.newCat': '＋ 新分类',
-  'vault.home.recent': '最近',
-  'vault.home.all': '全部 {n}',
-  'vault.home.back': '隐私记',
   'vault.locked.title': '隐私记已上锁',
   'vault.locked.count': '里面有 {n} 条',
   'vault.locked.countShort': '· {n} 条', // R-452 V2 上锁条标题后面

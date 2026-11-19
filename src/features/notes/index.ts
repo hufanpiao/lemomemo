@@ -15,11 +15,10 @@ export const routes = [
 export const TodayNotes = lazy(() => import('./ui/TodayNotes.tsx'));
 
 /** 随手记的整套界面（列表、编辑器、电脑分栏、插图、看图页），数据来源由调用方给（B5 隐私记重写 11-15：隐私记页用它）。
- *  props: { source: NoteSource; editing: boolean（画编辑器还是列表）; head?: 列表页顶上替换大标题的一块; home?: 手机排法里换掉胶囊和列表的首页; cat?: 外面管的分类筛选 } */
+ *  props: { source: NoteSource; editing: boolean（画编辑器还是列表）; head?: 列表页顶上替换大标题的一块; cat?: 外面管的分类筛选 } */
 export const NotesSurface = lazy(() => import('./ui/NotesSurface.tsx'));
 
 export type {
   ImageSrc, ImgNotice, InsertResult, NoteAttachmentsProps, NoteImage, NoteImagesApi, NoteRows, NoteSource, NoteSourceText, NoteSync, PendingImage,
 } from './hooks/note-source.ts';
-export type { CategoryCtl, NotesHomeApi } from './ui/NotesSurface.tsx';
-export type { CategoryCount, NoteItem } from './hooks/useNoteList.ts';
+export type { CategoryCtl } from './ui/NotesSurface.tsx';

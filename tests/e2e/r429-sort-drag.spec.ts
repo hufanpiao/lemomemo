@@ -339,8 +339,12 @@ test.describe('长按拖动排序（R-429、R-461）', () => {
     const row = (id: string) => page.getByTestId(`notes-row-${id}`);
     await row('n1').waitFor({ timeout: 30000 });
     await page.evaluate(() => {
+      // R-485 起 App 页全局不选字（长按选不出字），这里给这一行临时放开，造一个“拿起前已有选区”（输入框里的选区等仍可能有）
+      const sub = document.querySelector('[data-testid="notes-sub"]') as HTMLElement;
+      sub.style.setProperty('-webkit-user-select', 'text');
+      sub.style.setProperty('user-select', 'text');
       const r = document.createRange();
-      r.selectNodeContents(document.querySelector('[data-testid="notes-sub"]') as Node);
+      r.selectNodeContents(sub);
       getSelection()?.removeAllRanges();
       getSelection()?.addRange(r);
     });

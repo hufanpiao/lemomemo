@@ -225,7 +225,7 @@ export interface CategoryDialogs {
   dialogs: ReactNode;
 }
 
-/** 随手记列表挂一份，分类那一排（CatChips）、隐私记首页宫格都经它开弹窗（隐私记不直接引 notes 的界面组件，经 NotesHomeApi 拿 add、edit） */
+/** 随手记列表挂一份，分类那一排（CatChips）经它开新建、改名、删除弹窗（随手记、隐私记两个来源同一份） */
 export function useCategoryDialogs(l: List): CategoryDialogs {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<EditingCategory | null>(null);
