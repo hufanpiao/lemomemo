@@ -252,6 +252,15 @@ export function replaceRoute(name: RouteName, ...params: string[]): Promise<void
 
 
 /**
+ * 只把当前这条历史原地换成别的地址，不画页面：只在 popstate 的处理里用（这时路由还没画新页面，紧跟着的 hashchange 读到的已经是换过的地址，
+ * 直接画它、不经过原来那一页）。tab-swipe 用：系统“前进”带回二级页时当下换成设置（负责人 11-19 晚“右滑进入设置的时候会闪之前的待办页”）
+ */
+export function swapRouteBeforePaint(name: RouteName, ...params: string[]): void {
+  window.history.replaceState(stateFor(0), '', hrefOf(name, ...params));
+  noteEntry();
+}
+
+/**
  * 退回上一条历史（和 iPhone 左边缘侧滑、浏览器后退同一条路）：页内子页（设置 › 注销账号）的“‹ 返回”用它，
  * 不再 push 一条“设置”，免得历史里叠出“设置、注销、设置”，侧滑又滑回注销页
  */

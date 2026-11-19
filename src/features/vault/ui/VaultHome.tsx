@@ -38,7 +38,8 @@ export function VaultHome({ api }: { api: NotesHomeApi }) {
   const t = useVaultT();
 
   const latest = latestByCat(api.items);
-  const recent = [...api.items].sort((a, b) => b.createdAt - a.createdAt).slice(0, 3);
+  // “最近”列全部记录、从新到旧（负责人 11-19 晚“隐私记只能记录3条”→选“首页只显示 3 条，改成全显示”；原方案乙只摆 3 条）
+  const recent = [...api.items].sort((a, b) => b.createdAt - a.createdAt);
   const sd = useSortDrag({ tag: 'vault-home', axis: 'y', sort: false, onDrop: () => undefined, log: rlog, fx, into: api.into });
   const pick = (cid: string | null): void => {
     rlog(`vault home pick=${cid === null ? 'all' : 'cat'}`);

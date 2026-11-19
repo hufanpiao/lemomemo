@@ -20,3 +20,20 @@ test('冷启动不点任何页：三个页签页和设置页在后台下载好�
   await page.locator('main[data-feature="calendar"]').waitFor({ timeout: 10_000 });
   expect(urls.filter((u) => u.includes('CalendarPage')).length, '点进日历又下载了一次').toBe(before);
 });
+
+// 负责人 11-19 晚录屏“冷启动进入待办的时候也很卡”：冷启动后第一次点开一条待办黑约 0.75 秒（第二次秒开）——编辑页那一包没进后台预加载。
+// 日程、待办两个编辑页也在后台下载好；之后打开待办编辑页不再下载
+test('冷启动后台也下载好日程、待办编辑页：打开待办编辑页时不再下载', async ({ page }) => {
+  const urls: string[] = [];
+  page.on('request', (r) => urls.push(r.url()));
+  await page.goto('/app/#/todos');
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-motion') === 'ready', undefined, { timeout: 30_000 });
+  await expect
+    .poll(async () => (await runLog(page)).filter((l) => / preload (todo|event) ms=\d+ ok=1/.test(l)).length, { timeout: 20_000 })
+    .toBe(2);
+  for (const name of ['TodoEditPage', 'EventEditPage']) expect(urls.some((u) => u.includes(name)), `${name} 没在后台下载`).toBe(true);
+  const before = urls.filter((u) => u.includes('TodoEditPage')).length;
+  await page.evaluate(() => (location.hash = '#/todo/new'));
+  await page.getByTestId('todo-edit-title').waitFor({ timeout: 10_000 });
+  expect(urls.filter((u) => u.includes('TodoEditPage')).length, '打开待办编辑页又下载了一次').toBe(before);
+});

@@ -14,7 +14,7 @@
 import { TAB_ORDER, type TabName } from '../kit/components/GlassBar/tabs.ts';
 import { sideOf } from '../motion/gestures.ts';
 import { rlog } from '../platform/run-log-api.ts';
-import { canGoBack, goBack, navigate, navigateTab, parseHash, replaceRoute } from './router.ts';
+import { canGoBack, goBack, navigate, navigateTab, parseHash, replaceRoute, swapRouteBeforePaint } from './router.ts';
 
 export const SWIPE_MIN_PX = 60;
 export const SWIPE_MAX_MS = 500;
@@ -127,7 +127,12 @@ export function installTabSwipe(doc: Document = document): () => void {
     const now = parseHash(win?.location.hash ?? '');
     const at = now.name === 'settings' && now.params.length === 0;
     rlog(`tabswipe side=r to=settings fwd=1 how=${how} cancel=${cancelled ? 1 : 0} at=${at ? 1 : 0} ms=${Math.round(performance.now() - d.t)}`);
-    if (!at) void replaceRoute('settings');
+    if (at) return true;
+    // popstate 这条路：这个监听挂在捕获阶段，比路由早；路由要等紧跟着的 hashchange 才画页面。在这一刻同步把地址换成设置，
+    // 路由读到的已经是设置，直接画设置——那条待办一帧都不画、也不再起一次换页淡入淡出
+    // （负责人 11-19 晚录屏：前进带回待办编辑页先停约 0.4 秒、变暗再出设置。系统前进手势自己滑进来那约 0.1 秒是系统存的旧截图，网页管不到）
+    if (how === 'pop') swapRouteBeforePaint('settings');
+    else void replaceRoute('settings');
     return true;
   };
   const onPop = (): void => {

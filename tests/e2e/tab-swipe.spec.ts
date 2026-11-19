@@ -139,12 +139,28 @@ for (const ended of ['cancel', 'end'] as const) {
       location.hash = '#/settings/calendar';
     });
     await at(page, 'settings/calendar');
+    // 那个二级页独有的小标题（设置首页没有 h2“节假日”；下面查“前进”途中它一帧都没画出来过）
+    const sub = page.locator('main[data-feature="settings"] h2').first();
+    await expect(sub).toBeVisible();
+    const subTitle = (await sub.textContent())?.trim() ?? '';
+    expect(subTitle).not.toBe('');
     await page.goBack();
     await at(page, 'todos');
     await page.waitForTimeout(700);
+    // 负责人 11-19 晚录屏“右滑进设置的时候会闪之前的待办页”：从这一刻起每次 DOM 变化都记下页面上的 h1、h2，前进途中不许出现二级页的标题
+    await page.evaluate(() => {
+      const w = window as unknown as { seenH1: string[] };
+      w.seenH1 = [];
+      new MutationObserver(() => {
+        for (const h of document.querySelectorAll('h1,h2')) w.seenH1.push((h.textContent ?? '').trim());
+      }).observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
     await edgeForward(page, ended);
     await at(page, 'settings');
     await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(new RegExp(`tabswipe side=r to=settings fwd=1 how=${ended === 'cancel' ? 'pop cancel=1' : '(pop|up) cancel=0'} at=0`));
+    // popstate 当下就换成设置（how=pop）的，二级页一帧都不画；抬手才知道（how=up，地址早已变）的那种照旧先画再换
+    const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+    if (/fwd=1 how=pop/.test(log)) expect(await page.evaluate(() => (window as unknown as { seenH1: string[] }).seenH1)).not.toContain(subTitle);
     // 原地换的：再退一步回到待办页（不是退回那个二级页、也没多压一层）
     await page.goBack();
     await at(page, 'todos');

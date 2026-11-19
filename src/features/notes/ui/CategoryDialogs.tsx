@@ -29,6 +29,8 @@ function NameInput({ value, max, label, onChange, testId }: { value: string; max
       onChange={(e) => onChange(cut(e.target.value, max))}
       placeholder={t('notes.cat.placeholder', { n: max })}
       aria-label={label}
+      // 不让 iOS 当成填联系人的框（负责人 11-19 晚截图：键盘上出“自动填充联系人”；占位字里的“名字”也一起去掉）
+      autoComplete="off"
       enterKeyHint="done"
       data-testid={testId}
     />

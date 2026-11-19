@@ -11,7 +11,8 @@ export const routes = [
   { name: 'cal', Page: lazy(() => import('./ui/CalendarPage.tsx')), samePageAs: 'calendar' },
   // 日程编辑页（B2 FA-2）：#/event/<id>、#/event/new
   // warm：“＋”打开打字条时先下载（“展开编辑”要进的新建页；负责人 11-18 录屏第一次展开卡约 0.4 秒等这一包，app/features.ts 的 warmRoute）
-  { name: 'event', Page: lazy(() => import('./ui/EventEditPage.tsx')), warm: () => import('./ui/EventEditPage.tsx') },
+  // 编辑页也在冷启动后后台先下载（同待办编辑页，负责人 11-19 晚“冷启动进入待办的时候也很卡”，从日历点开一条日程是同一个等法）
+  { name: 'event', Page: lazy(() => import('./ui/EventEditPage.tsx')), preload: () => import('./ui/EventEditPage.tsx'), warm: () => import('./ui/EventEditPage.tsx') },
 ] as const;
 
 /** 设置 › 日历（B2 FA-3 第二段；R-320 二级页 #/settings/calendar）：节假日三选一、每周第一天；设置页懒加载它（顶栏和返回由设置页画） */

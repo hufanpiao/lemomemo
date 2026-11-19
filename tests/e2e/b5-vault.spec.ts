@@ -814,6 +814,31 @@ test('空隐私记首页：一句空态 + “＋ 新分类”，不出“最近�
   await expect(page.getByTestId('vault-home-all')).toHaveCount(0);
 });
 
+// 负责人 11-19 晚“隐私记只能记录3条”→选“首页只显示 3 条，改成全显示”：首页“最近”列全部、从新到旧，最旧的一条滑到底能点到（不被底部输入行盖住）
+test('隐私记首页“最近”列全部记录：记 5 条首页 5 条都在、最新在上，最旧那条滚到底能点开', async ({ page, baseURL, browserName }) => {
+  await fakeServer(page, baseURL);
+  if (browserName === 'chromium') await page.setViewportSize({ width: 393, height: 852 });
+  await setupAndUnlock(page, browserName);
+  const vault = page.getByTestId('vault-notes');
+  const names = ['第一条', '第二条', '第三条', '第四条', '第五条'];
+  for (const t of names) {
+    await vault.getByTestId('notes-input').fill(t);
+    await vault.getByTestId('notes-add').click();
+    await expect(vault).toContainText(t);
+  }
+  await page.evaluate(() => (location.hash = '#/vault'));
+  await expect(page.locator('html')).not.toHaveAttribute('data-vt', /.*/);
+  const rows = page.locator('[data-testid^="vault-home-note-"]');
+  await expect(rows).toHaveCount(5);
+  await expect(rows.first()).toContainText('第五条');
+  const oldest = rows.last();
+  await expect(oldest).toContainText('第一条');
+  await oldest.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() => oldest.evaluate((el) => { const r = el.getBoundingClientRect(); const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !!hit && el.contains(hit); }))
+    .toBe(true);
+});
+
 // 负责人 11-19“里面的记录可以拖进分类里面，也可以在分类里倒入没分类的记录”（“两种都要”“只能拖没分类的”“勾选多条”）
 test('隐私记分类：首页“最近”拖到分类格归进那一类；分类列表里“导入没分类的 N 条”勾选导入；都发 save', async ({ page, baseURL, browserName }) => {
   const fv = await fakeServer(page, baseURL);

@@ -135,6 +135,36 @@ test('随手记分类：“＋ 新分类”、长按改名删除；隐私记的�
   expect(opts).not.toContain('密码');
 });
 
+// 负责人 11-19 晚截图：点“＋ 新分类”键盘起来，起名弹窗被压在键盘下面、键盘上出“自动填充联系人”。
+// 弹窗底边跟着 --kb（platform/viewport.ts 写的键盘高度）抬到键盘上面；起名框 autocomplete=off、占位字不带“名字”
+test('起名弹窗：键盘弹着时整块在键盘上面；起名框不让 iOS 当成填联系人的框', async ({ page }) => {
+  await page.goto('/app/#/notes');
+  await page.getByTestId('notes').waitFor({ timeout: 30_000 });
+  await page.getByTestId('notes-filter-new').click();
+  const name = page.getByTestId('cat-new-name');
+  await expect(name).toBeVisible();
+  await expect(name).toHaveAttribute('autocomplete', 'off');
+  expect(await name.getAttribute('placeholder')).not.toContain('名字');
+  const KB = 336;
+  await page.evaluate((k) => {
+    const r = document.documentElement;
+    r.setAttribute('data-kbo', '1');
+    r.style.setProperty('--kb', `${k}px`);
+  }, KB);
+  const dialog = page.getByRole('dialog');
+  await expect
+    .poll(async () => {
+      const b = await dialog.boundingBox();
+      const h = await page.evaluate(() => window.innerHeight);
+      return b ? Math.round(b.y + b.height) <= h - KB : false;
+    })
+    .toBe(true);
+  // 输入框、“建好”按钮都在键盘上面
+  const ok = await page.getByTestId('cat-new-ok').boundingBox();
+  const h = await page.evaluate(() => window.innerHeight);
+  expect((ok?.y ?? h) + (ok?.height ?? 0)).toBeLessThanOrEqual(h - KB);
+});
+
 test('分类里导入没分类的记录：勾选多条点“导入 N 条”，归进这一类、“导入”行跟着变', async ({ page }) => {
   const L1 = '0e2e0000-0000-4000-8000-000000043801';
   const L2 = '0e2e0000-0000-4000-8000-000000043802';

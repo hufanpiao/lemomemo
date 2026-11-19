@@ -120,7 +120,7 @@ export const ko = {
   'notes.sync.stale': '다른 곳에서 방금 바뀐 메모라 옮기지 않았어요', // REVIEW(ko) R-429
   'notes.cat.new': '＋ 새 분류', // REVIEW(ko)
   'notes.cat.newTitle': '새 분류', // REVIEW(ko)
-  'notes.cat.placeholder': '이름을 지어 주세요. 최대 {n}자', // REVIEW(ko)
+  'notes.cat.placeholder': '최대 {n}자', // REVIEW(ko)
   'notes.cat.create': '만들기', // REVIEW(ko)
   'notes.cat.createFail': '만들지 못했어요. 다시 해 주세요', // REVIEW(ko)
   'notes.cat.editTitle': '분류 “{name}”', // REVIEW(ko)

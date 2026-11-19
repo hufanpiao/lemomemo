@@ -146,7 +146,10 @@ describe('installTabSwipe：真的划一下', () => {
     touch('touchcancel', W - 30, 200, t, true);
     window.history.pushState({ lemoDepth: 1 }, '', '#/todo/x');
     window.dispatchEvent(new PopStateEvent('popstate'));
-    expect(nav.to).toEqual(['replace:settings']);
+    // 负责人 11-19 晚录屏“闪之前的待办页”：popstate 当下同步换地址（路由随后的 hashchange 直接画设置），不走 replaceRoute 的先画再换
+    expect(nav.to).toEqual([]);
+    expect(window.location.hash).toBe('#/settings');
+    expect(window.history.state).toMatchObject({ lemoDepth: 1 });
     // 左边那条起手、或者起手在详情页：来了 popstate 也不管
     nav.to = [];
     window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');

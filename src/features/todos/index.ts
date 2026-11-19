@@ -7,7 +7,8 @@ export const routes = [
   { name: 'todos', Page: lazy(() => import('./ui/TodosPage.tsx')), preload: () => import('./ui/TodosPage.tsx') },
   // 待办编辑页（B2 FA-2）：#/todo/<id>、#/todo/new
   // warm：“＋”打开打字条时先下载（“展开编辑”要进的新建页，app/features.ts 的 warmRoute）
-  { name: 'todo', Page: lazy(() => import('./ui/TodoEditPage.tsx')), warm: () => import('./ui/TodoEditPage.tsx') },
+  // 编辑页也在冷启动后后台先下载（负责人 11-19 晚录屏“冷启动进入待办的时候也很卡”：冷启动后第一次点开一条待办要现下载这一块，黑约 0.75 秒）
+  { name: 'todo', Page: lazy(() => import('./ui/TodoEditPage.tsx')), preload: () => import('./ui/TodoEditPage.tsx'), warm: () => import('./ui/TodoEditPage.tsx') },
 ] as const;
 
 /** 今天页待办行就地展开、收起、勾选子任务（R-442；props 见 ui/InlineSubtasks.tsx）；没有子任务时什么都不画。在待办列表页那一包里（不另拆分包） */

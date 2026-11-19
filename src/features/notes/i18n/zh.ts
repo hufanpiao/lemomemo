@@ -126,7 +126,7 @@ export const zh = {
   // 分类：新建、改名、删除（负责人 11-19：隐私记“新建分类”“长按分类格可以改名、删除，删分类时里面的记录不删，变回没分类”；随手记“其他可以自己编辑分类，可以创建分类”）
   'notes.cat.new': '＋ 新分类',
   'notes.cat.newTitle': '新分类',
-  'notes.cat.placeholder': '起个名字，最多 {n} 个字',
+  'notes.cat.placeholder': '最多 {n} 个字',
   'notes.cat.create': '建好',
   'notes.cat.createFail': '没建上，再试一次',
   'notes.cat.editTitle': '分类“{name}”',
