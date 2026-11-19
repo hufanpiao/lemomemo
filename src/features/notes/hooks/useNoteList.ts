@@ -69,7 +69,7 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID(), cat
   }, [cats, fixCycles]);
   // 活着的空分类也在里面（写 0）：刚建好的、删掉最后一条的都留着这一类（独立评审 11-19 低 23）
   const counts = useMemo(() => categoryCounts(rows, cats, locale), [rows, cats, locale]);
-  // 筛的分类没了（最后一条删掉、分类被合并）：回到“全部”
+  // 筛的分类没了（分类被删、被合并；空分类会留着、写 0）：回到“全部”
   const active = category !== null && counts.some((c) => c.id === category) ? category : null;
   // 外面管的：地址里的分类已经没了，地址也改回“全部”，不让地址写着某一类、页面却是全部（独立评审 11-19 中 2）
   const stale = cat !== undefined && category !== null && active === null;
@@ -148,7 +148,7 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID(), cat
     if (m.switched) void settings.save(src.orderKey, 'time');
     return applyNoteSort(io, m.writes, true);
   };
-  /** 新建分类（隐私记首页“＋ 新分类”；随手记、隐私记各一套分类，按数据来源分）：同名的回已有那个 */
+  /** 新建分类（分类胶囊“＋ 新分类”；随手记、隐私记各一套分类，按数据来源分）：同名的回已有那个 */
   const vaultCats = src.kind === 'vault';
   const newCategory = useCallback((name: string) => createCategory(name, vaultCats), [vaultCats]);
   return { items, byDay, dayOf, order, counts, category: active, setCategory, add, remove, discard, convert, tooLong, move, undoMove, newCategory, renameCategory, deleteCategory, loose, moveInto, total: aliveCount(rows), now, tz };

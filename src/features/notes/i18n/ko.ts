@@ -95,7 +95,6 @@ export const ko = {
   'notes.conv.dlg.okTodo': '할 일 1개로 바꾸기', // REVIEW(ko)
   'notes.conv.dlg.okEvent': '일정 1개로 바꾸기', // REVIEW(ko)
   'note.edit.kind': '메모', // REVIEW(ko)
-  'note.edit.newKind': '새 메모', // REVIEW(ko)
   'note.edit.back': '메모', // REVIEW(ko)
   'note.edit.titleLabel': '제목', // REVIEW(ko)
   'note.edit.titlePh': '제목 (안 써도 돼요)', // REVIEW(ko)

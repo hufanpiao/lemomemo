@@ -98,7 +98,6 @@ export const zh = {
   'notes.conv.dlg.okTodo': '转成 1 条待办',
   'notes.conv.dlg.okEvent': '转成 1 条日程',
   'note.edit.kind': '随手记',
-  'note.edit.newKind': '新随手记',
   'note.edit.back': '随手记',
   'note.edit.titleLabel': '标题',
   'note.edit.titlePh': '标题（可以不写）',

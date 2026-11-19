@@ -130,7 +130,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
   const ds = useDrawerSel<{ id: string }>(!!loaded);
   const Desk = ds.on ? loaded : null;
   const l = useNoteList(undefined, cat);
-  // 分类弹窗（新建、改名删除）挂一份：分类那一排、隐私记首页宫格都经它开
+  // 分类弹窗（新建、改名删除）挂一份：分类那一排经它开
   const cd = useCategoryDialogs(l);
   const a = useListActions<PageTip>('notes', { remove: l.remove, useRo: src.useReadonly });
   const { g: guard, g: { toast }, isRo, report } = a;
@@ -196,9 +196,9 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
   /** 组名、卡片日期共用：今天 / 昨天写字，再早按 style 写日期（组名“11月13日”，卡片“11/13”） */
   const dayWord = (kind: string, date: string, style: 'monthDay' | 'num'): string =>
     kind === 'today' ? t('notes.g.today', {}) : kind === 'yesterday' ? t('notes.g.yesterday', {}) : fmtDay(date, locale, style);
-  /** 一条记录的日期文字（今天 / 昨天 / 11月13日）：导入弹窗、隐私记首页“最近”共用 */
   /** 正筛着的分类名（没筛为 null）：交给 head，隐私记分类列表顶栏写它（第三方实测 11-19 问题 6；按这一套分类算的，不串到另一套，独立评审 11-19 中 4） */
   const catName = l.counts.find((c) => c.id === l.category)?.name ?? null;
+  /** 一条记录的日期文字（今天 / 昨天 / 11月13日）：导入弹窗用 */
   const dayText = (it: NoteItem): string => dayWord(l.dayOf(it.createdAt), it.date, 'monthDay');
   /** 列表行标题右边：刚记下 / 时刻（分组时）/ 今天 11:40、昨天 21:15、10月21日（自己排时） */
   const rowTime = (it: NoteItem): string => {

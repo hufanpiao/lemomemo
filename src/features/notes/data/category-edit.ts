@@ -2,7 +2,7 @@
 // 随手记、隐私记各一套（categories.vault），这里只按 id 改，查重名只在同一套里查。
 // • 改名：去首尾空白、1～12 个字；同一套里名字被占着（不分大小写、没删的都算，含已合并、已撤销的，不算自己）不改，回 'dup'；和原名一样回 'ok' 不写
 // • 删除：只写 deleted_at（软删除，经 outbox）。里面的记录一条都不改：category_id 还指着这个分类，
-//   core/categories.ts 的 categoryResolver 遇到删了的分类回 null，列表、编辑页、宫格就都当没分类（隐私记的记录在密文之外，改它要逐条重新加密，不必）
+//   core/categories.ts 的 categoryResolver 遇到删了的分类回 null，列表、编辑页、分类胶囊就都当没分类（隐私记的记录在密文之外，改它要逐条重新加密，不必）
 // • 运行日志：notes category rename|delete <结果码>（不记分类名）
 // 纯 TS，不准 React（A1）
 import { isLiveCategory } from '../../../../shared/logic/live-row.ts';
