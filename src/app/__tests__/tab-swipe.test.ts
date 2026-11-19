@@ -123,6 +123,22 @@ describe('installTabSwipe：真的划一下', () => {
     touch('touchend', 150, 205, t, true);
     expect(nav.to).toEqual([]);
   });
+  it('负责人 11-19：从待办详情退回待办页后右边往左划，系统“前进”先把页面带回那条待办——先退回、退回以后再进设置', () => {
+    window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
+    const t = byId('blank');
+    touch('touchstart', W - 10, 200, t);
+    window.history.pushState({ lemoDepth: 1 }, '', '#/todo/x');
+    touch('touchend', W - 150, 205, t, true);
+    expect(nav.to).toEqual(['goBack']);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    expect(nav.to).toEqual(['goBack', 'push:settings']);
+    // 起手在详情页（不是主页面）、地址变了：照旧判 moved，不动
+    window.history.replaceState({ lemoDepth: 1 }, '', '#/todo/y');
+    touch('touchstart', W - 10, 200, t);
+    window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
+    touch('touchend', W - 150, 205, t, true);
+    expect(nav.to).toEqual(['goBack', 'push:settings']);
+  });
   it('设置首页：右边往左划不动；左边往右划退回（有上一页退一步，没有就原地换回今天、不退出 App）；设置子页都不管', () => {
     window.location.hash = '#/settings';
     swipe(W - 10, W - 150);

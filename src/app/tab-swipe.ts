@@ -94,6 +94,16 @@ export function installTabSwipe(doc: Document = document): () => void {
     const dy = p.clientY - d.y;
     const ms = Math.round(performance.now() - d.t);
     const hash = win?.location.hash ?? '';
+    // 负责人 11-19“在待办页点击某个待办，左滑退出以后回到待办页面再右滑的话不进入设置，而是回到之前的某的待办”：
+    // 从详情页侧滑退回来以后历史里还留着“前进”那一条，iPhone 右边缘往左划是系统的“前进”手势，抢在这里之前把页面带回了那条待办（原来判 moved 不管）。
+    // 右边缘起手的系统手势只有“前进”（返回在左边缘），所以主页面右边那条起手、抬手时地址已变、这一划本该进设置，就是被前进抢走了：
+    // 先退回原页，退回以后再进设置（压一条新历史，“前进”那条随之清掉）
+    if (d.why === null && d.side === 'r' && hash !== d.hash && swipeTarget(parseHash(d.hash).name, 'r', dx, dy, ms) === 'settings') {
+      rlog(`tabswipe side=r dx=${Math.round(dx)} dy=${Math.round(dy)} ms=${ms} to=settings fwd=1`);
+      win?.addEventListener('popstate', () => void navigate('settings'), { once: true });
+      goBack();
+      return;
+    }
     const r = parseHash(hash);
     const route = r.name === 'settings' && r.params.length > 0 ? 'settings-sub' : r.name;
     const why = d.why ?? (hash !== d.hash || win?.history.state !== d.st ? 'moved' : mainTab(route) === null && route !== 'settings' ? 'route' : null);
