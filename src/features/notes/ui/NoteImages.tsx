@@ -43,21 +43,25 @@ export function ImgMsgLine({ msg, className }: { msg: { key: ImgMsgKey; trash: b
   );
 }
 
-/** 藏起来的选图框：pick() 点开，选了一张就回调（同一张再选也触发：选完清空 value） */
-function useFilePick(onFile: (f: File) => void, camera: boolean, testId: string): [ReactNode, () => void] {
+/** 藏起来的选图框：pick() 点开，选了就按选的顺序一张张回调，上一张的回调（可能是插图的 Promise）完了再交下一张，顺序不乱
+ *  （同一张再选也触发：选完清空 value）。“图片”一次可选多张（R-490，负责人 11-20“随手记跟隐私记选照片的时候一次可以选多张”）；拍照、“重新插入”一次一张 */
+function useFilePick(onFile: (f: File) => unknown, mode: 'many' | 'one' | 'camera', testId: string): [ReactNode, () => void] {
   const ref = useRef<HTMLInputElement>(null);
   const input = (
     <input
       ref={ref}
       type="file"
       accept="image/*"
-      capture={camera ? 'environment' : undefined}
+      multiple={mode === 'many'}
+      capture={mode === 'camera' ? 'environment' : undefined}
       hidden
       tabIndex={-1}
       onChange={(e) => {
-        const f = e.target.files?.[0];
+        const fs = [...(e.target.files ?? [])];
         e.target.value = '';
-        if (f) onFile(f);
+        // 回调是同步的（输入行挂小图）就当场一张张交，选完马上点“记下”也带得上；回调回了 Promise（编辑器插图）才排在它后面
+        let last: unknown;
+        for (const f of fs) last = last instanceof Promise ? last.then(() => onFile(f)) : onFile(f);
       }}
       data-testid={testId}
     />
@@ -66,10 +70,10 @@ function useFilePick(onFile: (f: File) => void, camera: boolean, testId: string)
 }
 
 /** “图片”“拍照”两个按钮；className 给按钮（输入行沿用 .img 的 40 × 40 灰圆）；不给时是编辑器里的 kit 胶囊（Chip.module.css .chip，R-436 丁批，不再照抄一份胶囊样式） */
-export function PickButtons({ onFile, disabled, className, idPrefix, camera = true }: { onFile(f: File): void; disabled?: boolean; className?: string | undefined; idPrefix: string; camera?: boolean }) {
+export function PickButtons({ onFile, disabled, className, idPrefix, camera = true }: { onFile(f: File): unknown; disabled?: boolean; className?: string | undefined; idPrefix: string; camera?: boolean }) {
   const t = useNotesT();
-  const [pickInput, pick] = useFilePick(onFile, false, `${idPrefix}-img-input`);
-  const [camInput, cam] = useFilePick(onFile, true, `${idPrefix}-camera-input`);
+  const [pickInput, pick] = useFilePick(onFile, 'many', `${idPrefix}-img-input`);
+  const [camInput, cam] = useFilePick(onFile, 'camera', `${idPrefix}-camera-input`);
   const cls = className ?? chip.chip;
   return (
     <>
@@ -272,7 +276,7 @@ function EditorImages({ im, noteId, disabled, onMessage }: { im: NoteImagesApi; 
         </ul>
       ) : null}
       <div className={styles.picks}>
-        <PickButtons onFile={(f) => void insert(f)} disabled={disabled || noteId === null} idPrefix="note-edit" />
+        <PickButtons onFile={insert}disabled={disabled || noteId === null} idPrefix="note-edit" />
       </div>
       {view ? <NoteImageView items={im.items} open={view} onClose={() => setView(null)} /> : null}
     </div>
@@ -289,7 +293,7 @@ function OneImage(p: { img: NoteImage; n: number; pending: PendingImage | null; 
       setBusy(false);
       if (ok) p.onRemove();
     });
-  }, false, `note-image-reinsert-input-${p.img.id}`);
+  }, 'one', `note-image-reinsert-input-${p.img.id}`);
   const bad = failKey(src);
   const failed = bad !== null;
   const uploading = p.pending !== null && p.pending.state !== 'failed';

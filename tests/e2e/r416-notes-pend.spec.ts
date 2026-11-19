@@ -67,8 +67,11 @@ for (const size of SIZES) {
       if (!size.hasTouch) await expect(page.getByTestId('desk')).toBeVisible();
       const cards = await page.locator('[data-testid^="notes-card-"]').count();
       const pickInput = page.getByTestId('notes-img-input');
-      await pickInput.setInputFiles({ name: 'a.jpg', mimeType: 'image/jpeg', buffer: await jpeg(page, { hue: 20, box: true }) });
-      await pickInput.setInputFiles({ name: 'b.jpg', mimeType: 'image/jpeg', buffer: await jpeg(page, { hue: 200, box: true }) });
+      // 一次选两张（R-490：选图框可多选）
+      await pickInput.setInputFiles([
+        { name: 'a.jpg', mimeType: 'image/jpeg', buffer: await jpeg(page, { hue: 20, box: true }) },
+        { name: 'b.jpg', mimeType: 'image/jpeg', buffer: await jpeg(page, { hue: 200, box: true }) },
+      ]);
       const pend = page.getByTestId('notes-pend');
       await expect(pend.locator('li')).toHaveCount(2);
       await expect(pend.locator('img').first()).toHaveJSProperty('complete', true);

@@ -25,12 +25,27 @@ describe('选图按钮（主持人定 3；视觉验收必改 4）', () => {
     expect(screen.queryByTestId('notes-camera-input')).toBeNull();
     expect(screen.getByTestId('notes-img-input').getAttribute('accept')).toBe('image/*');
     expect(screen.getByTestId('notes-img-input').hasAttribute('capture')).toBe(false);
+    // 一次可选多张（R-490）
+    expect(screen.getByTestId('notes-img-input').hasAttribute('multiple')).toBe(true);
     v.unmount();
     open(`#/note/${uid(1)}`);
     expect(screen.getByTestId('note-edit-img').getAttribute('aria-label')).toBe('图片');
     expect(screen.getByTestId('note-edit-camera').getAttribute('aria-label')).toBe('拍照');
     expect(screen.getByTestId('note-edit-camera-input').getAttribute('accept')).toBe('image/*');
     expect(screen.getByTestId('note-edit-camera-input').getAttribute('capture')).toBe('environment');
+    expect(screen.getByTestId('note-edit-img-input').hasAttribute('multiple')).toBe(true);
+    expect(screen.getByTestId('note-edit-camera-input').hasAttribute('multiple')).toBe(false);
+  });
+
+  it('一次选三张（R-490，负责人 11-20“一次可以选多张”）：输入行挂三张待记下的小图，按选的顺序', async () => {
+    await boot();
+    wire();
+    open();
+    const fs = ['a.jpg', 'b.jpg', 'c.jpg'].map((n) => new File([new Uint8Array(4)], n, { type: 'image/jpeg' }));
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('notes-img-input'), { target: { files: fs } });
+    });
+    await waitFor(() => expect(screen.getByTestId('notes-pend').querySelectorAll('li')).toHaveLength(3));
   });
 
   it('选了图先挂成待记下的小图、不新建（R-416）；点“记下”：新建一条随手记（正文是输入框里的字）、写 note_images 行（deps 指向随手记）；确认前不传，确认后依次传原图和 .t.webp；卡片顶部出图', async () => {
