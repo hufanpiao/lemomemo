@@ -153,7 +153,8 @@ function EditCategoryDialog(p: {
     else setMsg('fail');
   };
   return (
-    <Dialog open={cat !== null} onOpenChange={(o) => (o ? undefined : close())} title={t('notes.cat.editTitle', { name: cat?.name ?? '' })}>
+    // 改名、删除写入中不许关，同新建弹窗（独立评审 11-20 第 17 条：原来只拦了新建，关了以后结果回来照样提示失败或再关一次）
+    <Dialog open={cat !== null} onOpenChange={(o) => (o || busy ? undefined : close())} title={t('notes.cat.editTitle', { name: cat?.name ?? '' })}>
       {ask && cat ? (
         <div className={styles.body}>
           <p className={styles.ask} data-testid="cat-edit-ask">
