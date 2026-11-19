@@ -21,7 +21,7 @@ vi.mock('../hooks/useToday.ts', () => ({
     events: [{ id: 'e1', title: '每周例会', time: '10:00', origin: null, place: { allDay: false as const, date: '2026-11-14', lastDate: '2026-11-14', startMs: 0, endMs: 0, startMin: 0 } }, { id: 'e2', title: '看牙', time: '15:00', origin: null, place: { allDay: false as const, date: '2026-11-14', lastDate: '2026-11-14', startMs: 0, endMs: 0, startMin: 0 } }],
     todos: [{ id: 't1', title: '每天吃药', dueTime: null, done: false }],
     subs: new Map(),
-    toggleDone, remove,
+    writes: { toggleDone, remove, setPriority: async () => 'ok' as const },
   }),
 }));
 

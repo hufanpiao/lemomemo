@@ -12,7 +12,7 @@
 //   动作和完成时序也同一份（kit/components/useTodoRows.ts、useDoneFlow.ts）：打勾 → 放大过头、炸开、划线（勾选完成时间线）→ 留在原位停到 --dur-done-pop + --dur-done-rest
 //  （useLinger 留住，data/today-model.ts 按 linger 照没完成排）→ 这一行收起、页底升起“已完成 · 撤销”→ 归进“已过去”；
 //   改回未完成时先留住按下之前的两张列表 --dur-ui 再挪回去。日程行照旧（AppearItem），第一次画不播
-// • 提醒的几块（REMIND-wiring；reminders 的 index.ts 懒加载；外面包 kit 的 QuietBoundary，分包下不来时那一块不画、不把整页换成出错页）：
+// • 提醒的几块（REMIND-wiring；reminders 的 index.ts 懒加载；外面包 kit 的 Later（QuietBoundary + Suspense，按需下载的块全页同一个写法），分包下不来时那一块不画、不把整页换成出错页）：
 //   ① 日期下面、“现在”卡上面：“错过 N 条提醒 · 查看 ›”（MissedReminders，线框 MISSROW）。等提醒引擎 armed（读完本机“响过”的记录、
 //      算出第一份快照，kit 的 armedSince）才挂，分包也那时才下载、不进首屏（REMIND-shown-persist 方案修订 1 P2，主持人 11-05 定，改掉 J1 的“一打开就挂”）：
 //      - 只算这次打开（armedSince）之前到点的和响过的，打开后刚到点的那条留给横幅，
@@ -24,7 +24,7 @@
 //   ② 再下面：“未同步，提醒可能不响”（UnsyncedRemindHint），浅灰条同日历页（R-346）；外面是常驻的 role="status" 空容器，内容后填进去读屏才播报，
 //      没内容时不占位（.notice 里没有 p）；麦克风被拒时同一个容器里再出一行（MicDeniedNote，B3 S23、Q-22）
 //   ③ 每行行尾“未同步”小标记（UnsyncedRemindMark，在行按钮里、标题和副行的右边；没有时那一格不画）
-//   ②③ 只看本机待同步队列、和引擎无关，不等引擎（M1）；但等首屏画完（usePainted）才挂、才下载，不算进首屏预算（11-17 ci 首屏 150.0 KB 超线）
+//   ②③ 只看本机待同步队列、和引擎无关，不等引擎（M1）；但等首屏画完（Later 的 afterPaint，kit/hooks/usePainted.ts）才挂、才下载，不算进首屏预算（11-17 ci 首屏 150.0 KB 超线）
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记、圆圈变淡；点这一行、打勾统一拦下（左滑滑不开），
 //   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）。
 // • 待办子任务（R-442 负责人“今天页可以展开待办的子任务”，取代 R-350 Q5 的只显示进度）：有子任务的待办行下面一行进度条和“展开 / 收起”，
@@ -40,7 +40,7 @@
 // • 电脑版（B6，5.9b；有侧栏的宽度）：交给按需下载的 TodayDesk 排成可拖动的块；提示、“现在”卡、没赶上、今天的安排合成一块时间河
 //   （块标题“今天的安排”，里面不再画这个小标题；B6 返工 11-14）。页顶日期行固定不动：日期后面加农历（TodayDesk 的 Lunar），下面是纪念日胶囊（同手机的 AnnivLine）。
 //   点一行不换页，在详情抽屉里编辑（选中哪一条由 kit 的 useDrawerSel（在 useListActions.ts）管，同随手记页；窗口变窄、电脑版卸下或画出错时清掉；“今天记的”里的随手记也开在这个抽屉里，同样先判只读）。电脑版分包没到、下不来时照手机的排法画
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, useMemo, useRef, useState, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
@@ -50,7 +50,7 @@ import form from '../../../kit/components/Form.module.css';
 import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { CheckCircle } from '../../../kit/components/CheckCircle.tsx';
-import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
+import { Later, QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import type { ReadonlyPartProps } from '../../../kit/components/ReadonlyMark.tsx';
 import { TodoRow } from '../../../kit/components/TodoRow.tsx';
 import type { SwipeRowProps } from '../../../kit/components/SwipeRow.tsx';
@@ -63,7 +63,7 @@ import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { afterAppPainted, isAppPainted } from '../../../platform/root-paint.ts';
+import { afterAppPainted } from '../../../platform/root-paint.ts';
 import { AppearItem, AppearList, useSwapWhenSafe } from '../../../motion/components.ts';
 import { eventSpanText, splitPast, useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
@@ -85,40 +85,21 @@ import { useSpanT } from '../../../kit/hooks/useSpanT.ts';
 //（e2e b2-readonly-rows:56 本机加压挂过）。写在这里由今天页的块发起，预加载表照常列它的 JS（已在今天页闭包里的去掉），一层并发下完
 const TodayRo = lazy(() => import('./TodayToasts.tsx'));
 
-/** 分包下不来时那一块不画（QuietBoundary），不把整页换成出错页 */
+/** 分包下不来时那一块不画（kit Later），不把整页换成出错页 */
 function Ro(p: TodayRoProps) {
   return (
-    <QuietBoundary name="today-ro">
-      <Suspense fallback={null}>
-        <TodayRo {...p} />
-      </Suspense>
-    </QuietBoundary>
+    <Later name="today-ro">
+      <TodayRo {...p} />
+    </Later>
   );
-}
-
-/** 首屏画完了没有（root-paint 的 afterAppPainted）：按需下载的部件等它为真才挂，不算进首屏预算 */
-function usePainted(): boolean {
-  const [on, setOn] = useState(isAppPainted);
-  useEffect(() => {
-    if (on) return;
-    let live = true;
-    afterAppPainted(() => live && setOn(true));
-    return () => {
-      live = false;
-    };
-  }, [on]);
-  return on;
 }
 
 /** 待办的子任务卡片（R-442，就地展开、勾选；kit TodoRow 的部件）：首屏画完以后才挂、才下载那一包（不算进首屏），没有子任务、分包下不来时不画 */
 function Subs(p: SubsPartProps) {
-  if (!usePainted()) return null;
   return (
-    <QuietBoundary name="todo-subs">
-      <Suspense fallback={null}>
-        <InlineSubtasks {...p} />
-      </Suspense>
-    </QuietBoundary>
+    <Later name="todo-subs" afterPaint>
+      <InlineSubtasks {...p} />
+    </Later>
   );
 }
 
@@ -131,13 +112,10 @@ function SwipeDel({ Impl, ...p }: SwipeRowProps & { 'data-testid': string; Impl:
 /** 行尾“未同步”小标记（放进 .unsynced 那一格；没有时那一格是空的，CSS 里 :empty 不画）。
  *  首屏画完以后才挂、才下载那一包（同 Subs；11-17 ci 首屏预算 150.0 KB 超线，这一包和提示条一起约 2.2 KB 挪出首屏） */
 function RowMark({ table = 'todos', id }: { table?: 'events' | 'todos'; id: string }) {
-  if (!usePainted()) return null;
   return (
-    <QuietBoundary name="unsynced-mark">
-      <Suspense fallback={null}>
-        <UnsyncedRemindMark table={table} id={id} />
-      </Suspense>
-    </QuietBoundary>
+    <Later name="unsynced-mark" afterPaint>
+      <UnsyncedRemindMark table={table} id={id} />
+    </Later>
   );
 }
 
@@ -146,11 +124,9 @@ function RoPart(p: ReadonlyPartProps) {
   if (p.part === 'mark') return <Ro {...p} />;
   const { part: _, ...c } = p;
   return (
-    <QuietBoundary name="today-ro" fallback={<CheckCircle {...c} />}>
-      <Suspense fallback={<CheckCircle {...c} />}>
-        <TodayRo {...p} />
-      </Suspense>
-    </QuietBoundary>
+    <Later name="today-ro" fallback={<CheckCircle {...c} />}>
+      <TodayRo {...p} />
+    </Later>
   );
 }
 
@@ -171,8 +147,7 @@ export default function TodayPage() {
   const missedOn = useRemindQueue((s) => s.armedSince !== null || s.remindDown);
   // 待办行的动作（待办页、日历日清单同一份，kit/components/useTodoRows.ts）：改回未完成时先留住按下之前的两张列表 --dur-ui（没赶上 → 今天的安排）；
   // 只读行统一拦下；撤销条、出错条在 r.a.g 里；打勾、勾完子任务自动完成的停留、收起、“已完成 · 撤销”在 r.flow；词条是 kit 自己的（useTodoRowWords）
-  const writes = { toggleDone: d.toggleDone, remove: (id: string, deleted: boolean) => d.remove('todos', id, deleted), setPriority: d.setPriority };
-  const r = useTodoRows({ late: d.late, events: d.events, todos: d.todos }, lg, writes, 'today', PARTS);
+  const r = useTodoRows({ late: d.late, events: d.events, todos: d.todos }, lg, d.writes, 'today', PARTS);
   const v = r.view;
   const { g, del } = r.a;
   const anniv = useAnnivAny();
@@ -328,11 +303,9 @@ export default function TodayPage() {
     </AppearItem>
   );
   const annivLine = anniv ? (
-    <QuietBoundary name="anniv-line">
-      <Suspense fallback={null}>
-        <AnnivLine today={d.today} />
-      </Suspense>
-    </QuietBoundary>
+    <Later name="anniv-line">
+      <AnnivLine today={d.today} />
+    </Later>
   ) : null;
   /** 手机的一列和电脑的时间河块是同一份：提示、“现在”卡、没赶上、今天的安排；手机在提示下面多一行纪念日（电脑放在日期行下面），
    *  电脑的“今天的安排”标题由块标题画（这里不画小标题） */
@@ -394,29 +367,22 @@ export default function TodayPage() {
 /** 页顶的几条提示：错过的提醒（引擎 armed 或出错以后才挂，晚到时高度展开，GrowIn）、只读行横幅、未同步和麦克风提示 */
 function TopNotices({ missedOn, repeat }: { missedOn: boolean; repeat: ReactNode }) {
   // “未同步”提示条首屏画完以后才挂（同 RowMark），不算进首屏预算；常驻的 role="status" 容器照旧一开始就在
-  const painted = usePainted();
   return (
     <>
       {/* 外面包一层：有“错过 N 条提醒”那一行时下面留 8px（和日历页 .unsynced 同一个值；设计复审 今天页待办 M1），没有时不占位；没有登录会话时不挂 */}
       {missedOn ? (
         <GrowIn testId="today-missed">
-          <QuietBoundary name="missed">
-            <Suspense fallback={null}>
-              <MissedReminders />
-            </Suspense>
-          </QuietBoundary>
+          <Later name="missed">
+            <MissedReminders />
+          </Later>
         </GrowIn>
       ) : null}
       {/* 有只读行才下载横幅（条数在横幅里数，N 为 0 不画） */}
       {repeat}
       <div className={styles.notice} role="status" data-testid="today-notice">
-        {painted ? (
-          <QuietBoundary name="unsynced-hint">
-            <Suspense fallback={null}>
-              <UnsyncedRemindHint />
-            </Suspense>
-          </QuietBoundary>
-        ) : null}
+        <Later name="unsynced-hint" afterPaint>
+          <UnsyncedRemindHint />
+        </Later>
         <QuietBoundary name="mic-denied">
           <MicDeniedNote />
         </QuietBoundary>

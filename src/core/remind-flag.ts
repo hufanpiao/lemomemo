@@ -1,5 +1,5 @@
-// 待办写入的 remind 标记（outbox 据此整条提前发；B2 代码审查 S2、S14～S16）：编辑页（todos/data/todo-edit.ts）、今天页（today/data/today-actions.ts）、
-// 待办页（todos/data/todo-actions.ts）三处共用这一份（S15：功能之间不能互相 import，A27，规则只在这里改；日程的编辑页、今天页也用 remindLive、rowRemindPending）。纯函数，不碰库
+// 待办写入的 remind 标记（outbox 据此整条提前发；B2 代码审查 S2、S14～S16）：编辑页（todos/data/todo-edit.ts）、“最近删除”页（today/data/today-actions.ts）、
+// 待办删除（core/todo-writes.ts，三页和自动删除共用）、打勾（core/todo-done.ts）共用这一份（S15：功能之间不能互相 import，A27，规则只在这里改；日程的编辑页、今天页也用 remindLive、rowRemindPending）。纯函数，不碰库
 // • 改之后：用 shared/logic/remind.ts 的 remindAtOf 现算（和服务器同一份），算得出、且不早于 now − 宽限才算会响（S16：改个备注不该让很久以前的逾期待办整条提前发）
 // • 改之前：这一行没删，且下面任何一个不早于 now − 宽限，就算“还会响”，撤掉它的写入要尽快上服务器：
 //   ① 按字段、传它自己的 remind_at 重算出来的时刻（S2）；② 服务器上的 remind_at（S14：按过“稍后”时，它是还没到的稍后时刻，按字段重算算不出来）；

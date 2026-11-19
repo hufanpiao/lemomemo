@@ -1,19 +1,15 @@
 // 待办列表页的 hook（B2 FA-2）：分组、项目筛选（只在这一页，不写 settings，架构 5.9）、打勾、删除和撤销
 // R-350：每条待办的子任务做了几项（subs，页面据此画方框进度、副行“大半 3/4”、挂子任务卡片）；勾子任务、撤销“自动完成”在 ui/InlineSubtasks.tsx（经 useSubtasks.ts 的 subtaskOps，三页同一份）
 // R-442：待办页不再长按拖动（R-429 的待办部分作废），组内只按优先级排（data/todo-list.ts）
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { currentTz } from '../../../core/current-tz.ts';
-import { actionResult, type ActionResult } from '../../../core/action-result.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
+import { useTodoWrites } from '../../../kit/hooks/useTodoWrites.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { clock } from '../../../platform/clock.ts';
-import { setTodoDeleted } from '../data/todo-actions.ts';
-import { doneToggler } from '../../../core/todo-done.ts';
-import { setTodoPriority } from '../../../core/todo-priority.ts';
 import { todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
-import { compareTodos, todoOf, type Priority } from '../../../../shared/logic/todo-row.ts';
+import { compareTodos, lingerView, todoOf } from '../../../../shared/logic/todo-row.ts';
 import { groupTodos, projectCounts, type Row } from '../data/todo-list.ts';
 import { listKo } from '../i18n/list-ko.ts';
 import { listZh } from '../i18n/list-zh.ts';
@@ -54,37 +50,14 @@ export function useTodoList(linger: ReadonlySet<string> = NONE) {
   return { today: todayOf(now, tz), count, setPriority, groups, projects, project: active, setProject, toggleDone, remove, ids, subs };
 }
 
-/** 日历日清单的待办组（R-443，ui/DayTodos.tsx）：截止日是这一天、没删、没完成的待办（同月历的 todoDate），完成了还留在原位的（linger）照列；
- *  组内按 compareTodos（R-442）；带上打勾、删除的写入 */
+/** 日历日清单的待办组（R-443，ui/DayTodos.tsx）：截止日是这一天、没删、没完成的待办（同月历的 todoDate），完成了还留在原位的照列（lingerView，三页同一个口径）；
+ *  组内按 compareTodos（R-442）；带上打勾、删除的写入（kit/hooks/useTodoWrites.ts，三页同一份） */
 export function useDayTodos(date: DateStr, linger: ReadonlySet<string>) {
   const rows = useCollection<Row>('todos');
   const todos = useMemo(
-    () => rows.filter(isLiveRow).map(todoOf).filter((x) => x.due === date && (!x.done || linger.has(x.id))).sort(compareTodos),
+    () => rows.filter(isLiveRow).map(todoOf).filter((x) => x.due === date && !lingerView(x, linger).done).sort(compareTodos),
     [rows, date, linger],
   );
   return { todos, ...useTodoWrites(rows) };
 }
 
-/** 打勾、删除、换优先级的写入（待办页、日历日清单的待办组共用，R-443）：打勾时刚点过的再点回去按撤销写回原来的 done_at（core/todo-done.ts，评审第 15 条），挂着期间记着 */
-export function useTodoWrites(rows: readonly Row[]) {
-  const [toggle] = useState(() => doneToggler());
-  const toggleDone = useCallback(
-    async (id: string, done: boolean): Promise<ActionResult> => {
-      const r = rows.find((x) => x.id === id);
-      if (!r) return 'failed';
-      return actionResult(await toggle(r, done, clock.now(), currentTz()));
-    },
-    [rows, toggle],
-  );
-  const remove = useCallback(
-    async (id: string, deleted: boolean): Promise<ActionResult> => {
-      const r = rows.find((x) => x.id === id);
-      if (!r) return 'failed';
-      return actionResult(await setTodoDeleted(r, deleted, clock.now(), currentTz()));
-    },
-    [rows],
-  );
-  /** 行右边 H / M / L 换档（R-434，core/todo-priority.ts，今天页同一份；点哪格设哪档在 kit PrioCycle） */
-  const setPriority = async (id: string, p: Priority): Promise<ActionResult> => actionResult(await setTodoPriority(id, p, clock.now()));
-  return { toggleDone, remove, setPriority };
-}

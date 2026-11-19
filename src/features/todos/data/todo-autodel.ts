@@ -3,7 +3,7 @@
 //   它的子任务（todo_items，含已删的）updated_at 也都 ≤ done_at（完成后改过子任务也算动过）。只读行（core 的 readonlyIds）跳过
 // • 什么时候扫：每次打开 App，同步引擎第一次整轮拉取成功以后扫一遍（app/main.tsx 经 wireSync 的 onFirstPull、功能入口 index.ts 的 loadTodoAutoDel 按需下载这一份；
 //   审查 11-15 第 1 条：本机数据先跟上服务器，别的设备完成后改过的不会按旧的 updated_at 误删）；离线、拉取失败这次不扫，下次打开再扫
-// • 怎么写：和列表上手动删除同一个函数（./todo-actions.ts 的 setTodoDeleted → core/edit-save 的 saveDeleted → write，进 outbox），所有设备跟着同步；服务器、数据库不改
+// • 怎么写：和列表上手动删除同一个函数（core/todo-writes.ts 的 setTodoDeleted → core/edit-save 的 saveDeleted → write，进 outbox），所有设备跟着同步；服务器、数据库不改
 // • 开关：settings 键 todo.autodel（默认开；设置页“完成 7 天后自动删除”，ui/TodoSettings.tsx）；值为 false 才不删
 // • 运行日志每次扫都记一行，只记条数、不记标题：开关关着 todo autodel off；扫完 todo autodel scan=本机待办条数 due=该删几条 n=删成几条；
 //   出错 todo autodel err=run（这里接住）、err=load（下载这一份失败，app/main.tsx 记）
@@ -13,11 +13,11 @@ import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { numOr } from '../../../../shared/logic/todo-row.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { settingValue, type SettingRow } from '../../../core/setting-read.ts';
+import { setTodoDeleted } from '../../../core/todo-writes.ts';
 import { collection, readonlyIds } from '../../../core/store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { ITEMS_TABLE } from './todo-items.ts';
-import { setTodoDeleted } from './todo-actions.ts';
 import type { Row } from './todo-list.ts';
 
 export const AUTODEL_KEY = 'todo.autodel';

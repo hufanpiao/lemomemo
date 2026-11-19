@@ -11,7 +11,7 @@
 // • 排法、拖动、收起、保存都在 kit 的 DeskLayout；这里只给块的标题和内容
 // • 键盘（线框 s1“J / K 上下 · E 完成 · Enter 编辑”）：J / K 在今天页各行之间移焦点，E 勾选焦点所在的待办，Enter 是按钮自带的打开
 //   （焦点在输入框里时单字母键不生效，kit 的 useKeys）
-import { Suspense, useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { fmtDay, weekdayName } from '../../../../shared/i18n/fmt.ts';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { LAYOUT_V, type DeskLayoutValue } from '../../../../shared/schema/layout.ts';
@@ -20,7 +20,7 @@ import DeskLayout from '../../../kit/components/DeskLayout/DeskLayout.tsx';
 import { DetailDrawer } from '../../../kit/components/DetailDrawer.tsx';
 import { AnnivAvatarSlot } from '../../../kit/components/AnnivAvatar.tsx';
 import list from '../../../kit/components/List.module.css';
-import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
+import { Later } from '../../../kit/components/QuietBoundary.tsx';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { makeUseT } from '../../../kit/hooks/useT.ts';
 import { isTauri } from '../../../platform/env.ts';
@@ -83,11 +83,9 @@ export default function TodayDesk({ today, river, sel, onOpen, onClose }: TodayD
       title: t('desk.notesN', { n: notesN }),
       go: { label: t('desk.goNotes', {}), onClick: () => void navigate('notes') },
       body: (
-        <QuietBoundary name="today-notes">
-          <Suspense fallback={null}>
-            <TodayNotes part="list" onCount={setNotesN} onOpen={(id) => onOpen({ kind: 'note', id })} selected={sel?.kind === 'note' ? sel.id : null} />
-          </Suspense>
-        </QuietBoundary>
+        <Later name="today-notes">
+          <TodayNotes part="list" onCount={setNotesN} onOpen={(id) => onOpen({ kind: 'note', id })} selected={sel?.kind === 'note' ? sel.id : null} />
+        </Later>
       ),
     },
     keys: { title: t('desk.keysTitle', {}), body: <p className={styles.tip}>{t(isTauri() ? 'desk.tipExe' : 'desk.tipWeb', {})}</p> },
@@ -115,11 +113,7 @@ export function Lunar({ today }: { today: DateStr }) {
 function TodayDrawer({ sel, side, handle, onClose }: { sel: TodaySel; side: 'left' | 'right'; handle: ReactNode; onClose(): void }) {
   const t = useTodayDeskT();
   const Editor = sel.kind === 'todo' ? TodoDrawerEditor : EventDrawerEditor;
-  const body = (x: ReactNode) => (
-    <QuietBoundary name="today-drawer">
-      <Suspense fallback={null}>{x}</Suspense>
-    </QuietBoundary>
-  );
+  const body = (x: ReactNode) => <Later name="today-drawer">{x}</Later>;
   return sel.kind === 'note' ? (
     body(<TodayNotes part="drawer" id={sel.id} side={side} handle={handle} onClose={onClose} />)
   ) : (

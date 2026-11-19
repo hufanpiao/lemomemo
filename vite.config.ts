@@ -51,6 +51,8 @@ export const LAZY_GROUPS = {
     'src/core/setting-patch.ts',
     'src/core/setting-write.ts',
     'src/kit/hooks/useSettingWriter.ts',
+    // 待办行的写入（今天页、待办页、日历日清单同一份，独立评审 11-18 二-1）：只依赖本组和首屏块，三份写入代码点了才下载；单独成块首屏多一个文件
+    'src/kit/hooks/useTodoWrites.ts',
   ],
 } as const satisfies Record<string, readonly string[]>;
 const pathRe = (mods: readonly string[]): RegExp => new RegExp(`[\\\\/](${mods.map((m) => m.replace(/[.]/g, '\\.').replace(/\//g, '[\\\\/]')).join('|')})$`);

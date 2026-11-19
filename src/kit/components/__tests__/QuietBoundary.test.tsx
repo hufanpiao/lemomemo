@@ -58,8 +58,9 @@ describe('QuietBoundary', () => {
     const { readFileSync, readdirSync } = await import('node:fs');
     const { join } = await import('node:path');
     const root = join(import.meta.dirname, '../../../');
-    const files = (readdirSync(root, { recursive: true }) as string[]).filter((f) => /\.tsx$/.test(f) && !/__tests__/.test(f));
-    const names = files.flatMap((f) => [...readFileSync(join(root, f), 'utf8').matchAll(/<QuietBoundary[^>]*\sname=("[^"]*"|\{[^}]*\}|\S+?)[\s/>]/g)].map((m) => m[1] ?? ''));
+    // kit 的 Later（也在 QuietBoundary.tsx）把 name 原样交给 QuietBoundary：定义它们的这个文件不算，用 Later 的各处照同一个约定查（独立评审 11-18 二-3）
+    const files = (readdirSync(root, { recursive: true }) as string[]).filter((f) => /\.tsx$/.test(f) && !/__tests__/.test(f) && !/kit[\\/]components[\\/]QuietBoundary\.tsx$/.test(f));
+    const names = files.flatMap((f) => [...readFileSync(join(root, f), 'utf8').matchAll(/<(?:QuietBoundary|Later)[^>]*\sname=("[^"]*"|\{[^}]*\}|\S+?)[\s/>]/g)].map((m) => m[1] ?? ''));
     expect(names.length).toBeGreaterThanOrEqual(5);
     for (const raw of names) {
       expect(raw, '写成字符串常量 name="…"，扫得到').toMatch(/^"[^"]*"$/);

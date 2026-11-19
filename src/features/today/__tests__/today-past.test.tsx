@@ -26,7 +26,7 @@ vi.mock('../hooks/useToday.ts', () => ({
     today: '2026-11-05', tz: 'Asia/Seoul', now: NOW, card: null, tomorrowFirst: null, late: [],
     events: state.events, todos: state.todos,
     subs: new Map(),
-    toggleDone: async () => 'ok' as const, remove: async () => 'ok' as const,
+    writes: { toggleDone: async () => 'ok' as const, remove: async () => 'ok' as const, setPriority: async () => 'ok' as const },
   }),
 }));
 

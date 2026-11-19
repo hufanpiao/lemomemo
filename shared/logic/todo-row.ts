@@ -6,7 +6,8 @@
 // 日历日清单的待办组（features/todos/ui/DayTodos.tsx）都经它
 // 子任务一行属于哪条待办（subOwner）、每条待办的子任务做了几项（subProgress）也在这里（11-17）：待办那一包的 todo-items.ts 读子任务、
 // 今天页首屏画方框进度和“大半 3/4”都经它（今天页引不到待办那一包）
-// 读数字列的 numOr 也在这里（审查 11-15 第 8 条：待办几处各写一份 num 合成这一个）：core/todo-done.ts、待办的 todo-actions、todo-autodel、todo-items、todo-list 共用
+// 读数字列的 numOr 也在这里（审查 11-15 第 8 条：待办几处各写一份 num 合成这一个）：core/todo-done.ts、core/todo-writes.ts、待办的 todo-autodel、todo-items、todo-list 共用
+// 刚勾完还留在原位的照没完成算（lingerView）也只有这一份（独立评审 11-18 二-2）
 import { diffDays, msAt, parseHm, todayOf, type DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
 import { isLiveRow } from './live-row.ts';
@@ -79,6 +80,14 @@ export function isLate(t: Pick<TodoFields, 'done' | 'due' | 'dueTime'>, now: num
   if (t.done || !t.due) return false;
   const d = diffDays(t.due, todayOf(now, tz));
   return d > 0 || (d === 0 && t.dueTime !== null && msAt(t.due, parseHm(t.dueTime), tz) <= now);
+}
+
+/** 刚勾完、还留在原位的（linger：kit/components/useDoneFlow.ts 的 useLinger 管谁在里面）照没完成算，收起以后才算做完。
+ *  分组、逾期、排序、“已过去”一律拿它返回的那一份判断（今天页 today-model.ts、待办页 todo-list.ts、日历日清单 useDayTodos 同一个口径，
+ *  独立评审 11-18 二-2：原来五处各写一份、今天页“今天的安排”漏了，今天截止已过时刻的刚勾完两组都出现）；
+ *  画行、计数照旧用原来那一份（方框、划线按 done 画，计数“1 / 10 完成”算勾上的） */
+export function lingerView<T extends Pick<TodoFields, 'id' | 'done'>>(t: T, linger: ReadonlySet<string>): T {
+  return t.done && linger.has(t.id) ? { ...t, done: false } : t;
 }
 
 /** 子任务表（todo_items）的一行属于哪条待办：删了、撤销了、没有 todo_id 的返回 null */

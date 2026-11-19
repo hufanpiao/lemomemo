@@ -34,7 +34,11 @@ vi.mock('../../../kit/hooks/useCollection.ts', () => ({
 }));
 // 保存由测试决定什么时候“回来”：按点的先后排队，finish() 让最早的那一次回来；outcome 不是 saved 时算没写进去（不改数据）
 const pending: (() => void)[] = [];
-const finish = () => pending.shift()?.();
+// 写入代码第一次点时才下载（kit/hooks/useTodoWrites.ts）：保存在点下以后隔几个微任务才排进来，先等它排进来再让它回来
+const finish = async () => {
+  for (let i = 0; i < 50 && pending.length === 0; i++) await Promise.resolve();
+  pending.shift()?.();
+};
 let outcome = 'saved';
 const patch = (id: string, p: Record<string, unknown>) => put(db.rows.map((r) => (r.id === id ? { ...r, ...p } : r)));
 vi.mock('../../../core/todo-done.ts', () => ({
@@ -46,7 +50,9 @@ vi.mock('../../../core/todo-done.ts', () => ({
       });
     }),
 }));
-vi.mock('../data/todo-actions.ts', () => ({
+// todo-writes.ts 也转出打勾（上面替身过的 todo-done.ts）、换优先级：保留原模块的其他出口，只换删除
+vi.mock('../../../core/todo-writes.ts', async (orig) => ({
+  ...(await orig<object>()),
   setTodoDeleted: async (r: Row, deleted: boolean) => {
     patch(r.id, { deleted_at: deleted ? 1 : null });
     return 'saved';
@@ -54,6 +60,8 @@ vi.mock('../data/todo-actions.ts', () => ({
 }));
 
 const { default: TodosPage } = await import('../ui/TodosPage.tsx');
+// 写入那一包先下好（页面里是第一次点才下载）：点下以后只隔几个微任务就排进保存队列，finish() 等得到
+await import('../../../core/todo-writes.ts');
 const { HOLD_MS: DONE_HOLD_MS, OUT_MS: DONE_OUT_MS } = await import('../../../kit/components/useDoneFlow.ts');
 
 beforeEach(() => {

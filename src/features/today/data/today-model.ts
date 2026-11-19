@@ -12,7 +12,7 @@ import type { Tz } from '../../../../shared/core/tz.ts';
 import { coversDay, ownTzOf, placeEvent, spanRowOf, spanTextOn, type EventPlacement, type SpanText } from '../../../../shared/logic/calendar/event-span.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { projectColorIndex, type ProjectColor } from '../../../../shared/logic/project-color.ts';
-import { compareTodos, isLate, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
+import { compareTodos, isLate, lingerView, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 // 同一时刻按标题排：按当前语言、数字按数值（和待办页共用，shared/i18n/title-compare.ts）
 import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
@@ -287,29 +287,29 @@ export interface Late {
 }
 
 /** 没赶上：没完成，截止日早于今天，或今天的截止时刻已过；先后按 compareTodos（R-442：H → M → L，同档截止早的在前，再按创建时间）；
- *  keep 里的（刚勾完、还留在原位的，kit/components/useDoneFlow.ts 的 linger）照没完成算，收起以前留在这一组 */
+ *  keep 里的（刚勾完、还留在原位的）照没完成算（shared/logic/todo-row.ts 的 lingerView），收起以前留在这一组 */
 export function lateTodos(rows: readonly Row[], now: number, current: Tz, keep: ReadonlySet<string> = NONE): Late[] {
   const today = todayOf(now, current);
   const out: Late[] = [];
   for (const r of rows) {
     if (!isLiveRow(r)) continue;
     const t = todoOcc(r);
-    if (t.due && isLate(keep.has(t.id) ? { ...t, done: false } : t, now, current)) out.push({ todo: t, days: diffDays(t.due, today) });
+    if (t.due && isLate(lingerView(t, keep), now, current)) out.push({ todo: t, days: diffDays(t.due, today) });
   }
   return out.sort((a, b) => compareTodos(a.todo, b.todo));
 }
 
 /** 今天截止、还没过的待办（过了的进“没赶上”）：没完成的在前（做完的收进“已过去”），其余按 compareTodos（R-442：H → M → L，同档按截止时刻、没时刻的在后，再按创建时间）；
- *  keep 里的（刚勾完、还留在原位的，kit/components/useDoneFlow.ts 的 linger）照没完成排 */
+ *  keep 里的（刚勾完、还留在原位的）照没完成排、照没完成判断过没过时刻（lingerView，和 lateTodos 同一个口径：已过时刻的只在“没赶上”） */
 export function todayTodos(rows: readonly Row[], now: number, current: Tz, keep: ReadonlySet<string> = NONE): TodoOcc[] {
   const today = todayOf(now, current);
   const out: TodoOcc[] = [];
   for (const r of rows) {
     if (!isLiveRow(r)) continue;
     const t = todoOcc(r);
-    if (t.due === today && !isLate(t, now, current)) out.push(t);
+    if (t.due === today && !isLate(lingerView(t, keep), now, current)) out.push(t);
   }
-  const done = (t: TodoOcc): number => Number(t.done && !keep.has(t.id));
+  const done = (t: TodoOcc): number => Number(lingerView(t, keep).done);
   return out.sort((a, b) => done(a) - done(b) || compareTodos(a, b));
 }
 
@@ -325,7 +325,7 @@ export function splitPast<E extends Pick<EventOcc, 'end'>, T extends Pick<TodoOc
   keep: ReadonlySet<string> = NONE,
 ): { pastEvents: E[]; pastTodos: T[]; events: E[]; todos: T[] } {
   const ended = (o: E): boolean => o.end !== null && o.end <= now;
-  const past = (t: T): boolean => t.done && !keep.has(t.id);
+  const past = (t: T): boolean => lingerView(t, keep).done;
   return {
     pastEvents: events.filter(ended),
     pastTodos: todos.filter(past),
