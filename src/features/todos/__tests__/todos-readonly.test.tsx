@@ -11,7 +11,7 @@ vi.mock('../../../platform/native-bridge.ts', async (orig) => ({ ...(await orig<
 const setDone = vi.fn(async () => 'saved' as const);
 const setDeleted = vi.fn(async () => 'saved' as const);
 vi.mock('../../../core/todo-done.ts', async (orig) => ({ ...(await orig<object>()), doneToggler: () => () => setDone() }));
-vi.mock('../../../core/todo-delete.ts', async (orig) => ({ ...(await orig<object>()), setTodoDeleted: () => setDeleted() }));
+vi.mock('../../../core/todo-writes.ts', async (orig) => ({ ...(await orig<object>()), setTodoDeleted: () => setDeleted() }));
 
 const { default: TodosPage } = await import('../ui/TodosPage.tsx');
 

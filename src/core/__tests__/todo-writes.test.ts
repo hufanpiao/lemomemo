@@ -1,7 +1,7 @@
-// 待办打勾、删除的 remind 标记（删除在 core/todo-delete.ts，三页和自动删除共用；代码审查 S2、补审改法 ④）
+// 待办打勾、删除的 remind 标记（删除在 core/todo-writes.ts，三页和自动删除共用；代码审查 S2、补审改法 ④）
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../shared/core/date.ts';
-import { remindAfterDelete } from '../todo-delete.ts';
+import { remindAfterDelete } from '../todo-writes.ts';
 import { todoDonePatch } from '../todo-done.ts';
 
 /** 打勾的标记规则在 core/todo-done.ts（评审第 15 条：所有入口共用），这里照旧钉住 */

@@ -50,7 +50,9 @@ vi.mock('../../../core/todo-done.ts', () => ({
       });
     }),
 }));
-vi.mock('../../../core/todo-delete.ts', () => ({
+// todo-writes.ts 也转出打勾（上面替身过的 todo-done.ts）、换优先级：保留原模块的其他出口，只换删除
+vi.mock('../../../core/todo-writes.ts', async (orig) => ({
+  ...(await orig<object>()),
   setTodoDeleted: async (r: Row, deleted: boolean) => {
     patch(r.id, { deleted_at: deleted ? 1 : null });
     return 'saved';
@@ -58,6 +60,8 @@ vi.mock('../../../core/todo-delete.ts', () => ({
 }));
 
 const { default: TodosPage } = await import('../ui/TodosPage.tsx');
+// 写入那一包先下好（页面里是第一次点才下载）：点下以后只隔几个微任务就排进保存队列，finish() 等得到
+await import('../../../core/todo-writes.ts');
 const { HOLD_MS: DONE_HOLD_MS, OUT_MS: DONE_OUT_MS } = await import('../../../kit/components/useDoneFlow.ts');
 
 beforeEach(() => {
