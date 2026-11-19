@@ -48,7 +48,7 @@ export interface NotificationCtor {
 
 export interface DesktopDeps {
   readonly invoke: Invoke;
-  /** 在主窗口里打开整页提醒的地址：走路由压一条带本次编号的历史（R-372 代码审 M1），关掉时退一步回原页 */
+  /** 在主窗口里打开整页提醒的地址：走路由把原页压进返回栈（R-487），关掉时退一步回原页 */
   readonly go: (hash: string) => unknown;
   readonly Notification: NotificationCtor | undefined;
 }
@@ -77,8 +77,8 @@ export function desktopBridge(deps: DesktopDeps = defaultDeps()): NativeBridge {
     } catch {
       // 拉不到前台也照样切到整页提醒（窗口本来就在前台时 main_show 失败不影响）
     }
-    // exe 的主窗口固定是 /app/index.html：只换 hash，走路由压一条带本次编号的历史（不直接改 location.hash：那样压的历史不带编号，
-    // 关掉整页提醒时 canGoBack 为假只能原地换成今天，今天下面留着打开前那一页，R-372 代码审 M1）
+    // exe 的主窗口固定是 /app/index.html：只换 hash，走路由把原页压进返回栈（不直接改 location.hash：那样浏览器自己压一条历史、
+    // 返回栈也丢了，关掉整页提醒时只能原地换成今天，R-487）
     deps.go(reminderHash(kind, id, dueAt));
   }
 
@@ -361,8 +361,8 @@ export async function onAuthDone(
 }
 
 /**
- * exe 启动时调一次（main.tsx）；不在 Tauri 里时什么也不做。go：在主窗口里换 hash 的办法，main.tsx 传路由的 goHref（压一条带本次编号的历史，
- * 关掉整页提醒时退一步回原页，R-372 代码审 M1）；platform 不许引用 app（架构边界），所以由调用方注入，不传时直接改 hash
+ * exe 启动时调一次（main.tsx）；不在 Tauri 里时什么也不做。go：在主窗口里换 hash 的办法，main.tsx 传路由的 goHref（原页压进返回栈，
+ * 关掉整页提醒时退一步回原页，R-487）；platform 不许引用 app（架构边界），所以由调用方注入，不传时直接改 hash
  */
 export function installDesktopBridge(go?: (hash: string) => unknown): boolean {
   let deps: DesktopDeps;

@@ -6,7 +6,7 @@
 // 其余分组（皮肤、提醒与通知、语音与 AI、隐私记、时区……）由各功能在后面的批次按表里的位置接进来。
 // “退出登录”不是分组：页面最底下单独一行，永远在所有分组之后。
 // 注销账号是本页里的另一屏，有自己的地址 #/settings/delete（负责人 10-30：注销页左滑应该回设置、不是回今天）：
-// 点入口 push 一条历史，侧滑、浏览器后退、左上角“‹ 返回”都退回设置；离开本机的提示框两屏都在。
+// 点入口把设置压进返回栈（R-487），左边往右划、左上角“‹ 返回”都退回设置；离开本机的提示框两屏都在。
 // 设置 › 日历 也是二级页（R-320，定稿线框）：首页只放一行“日历 … 农历 · 节假日：中国 ›”，点进 #/settings/calendar，返回同注销页
 // 设置 › 提醒与通知 同样是二级页（REMIND-wiring；定稿线框 s13、sR7）：首页一行“提醒与通知 … 通知已打开 ›”，点进 #/settings/remind；
 // 二级页最上面“未来 7 天的提醒 ›”再进一层 #/settings/remind/upcoming，顶栏“‹ 提醒与通知”退回上一层；“提醒里写什么 ›”“免打扰 ›”
@@ -127,9 +127,8 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   const recent = useRecentExport(recentExports, exportTick);
   const [ask, setAsk] = useState<Ask>(null);
   const view = viewOf(useRoute().params);
-  /** 子页从上一层点进去时用 navigateSub 压历史，那条历史自己的 history.state 记着“是点进来的”
-   *  （提醒接线代码审查 H1、M1：不记在本组件里，去编辑页再回来、前进后退、刷新以后都还对）。
-   *  返回时有这个记号就退一步（和侧滑同一条路）；没有（直接打开 #/settings/delete 等、被 replace 过）就原地换成上一层，不多压一条 */
+  /** 子页从上一层点进去时用 navigateSub 把上一层压进返回栈（R-487；栈在 history.state 里，去编辑页再回来、刷新以后都还对）。
+   *  返回时栈顶就是上一层就退一步（和左边往右划同一条路）；不是（直接打开 #/settings/delete 等、被原地换过）就原地换成上一层，不多压 */
   const openSub = (name: SubName): void => {
     if (view === 'home') rememberHomeScroll();
     const l = leafOf(name);
@@ -138,7 +137,7 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   const leaf = leafOf(view);
   const backFromSub = (): void => {
     if (view === 'home') return;
-    // 点进来的退一步，直接打开的原地换成上一层；上一条后来被换掉了（复审第二轮 N1）也回到上一层、不跳层（见 router 的 backOrReplace）
+    // 点进来的退一步，直接打开的原地换成上一层，不跳层（见 router-sub 的 backOrReplace）
     const up = parentOf(view);
     if (up === 'home') backOrReplace('settings');
     else backOrReplace('settings', up);

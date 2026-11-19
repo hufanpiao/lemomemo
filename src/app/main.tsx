@@ -74,7 +74,7 @@ async function installNativeBridge(): Promise<void> {
   if (!isTauri()) return;
   try {
     const { installDesktopBridge } = await import('../platform/desktop.ts');
-    installDesktopBridge(goHref); // 点 exe 通知打开整页提醒走路由压带编号的历史（R-372 代码审 M1）
+    installDesktopBridge(goHref); // 点 exe 通知打开整页提醒走路由，原页压进返回栈（R-487）
   } catch {
     // 分包加载失败：留着网页版的桥（照常能用，只是 exe 专有的几件退回网页做法）
   }

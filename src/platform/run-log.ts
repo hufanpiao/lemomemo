@@ -162,14 +162,27 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   // 换页：路由用 pushState、replaceState 换地址不触发 hashchange（router.ts 按 0.31 第 3 条不能引日志），
   // 11-14 起每记一行前先看地址变没变（b5-vault 点返回后空白，日志里看不出去了哪页）；11-18 起换地址当下就记（见 noteRoute）
   let lastHash = win.location.hash;
+  /** 返回栈深度（router.ts 的 history.state.lemoStack，R-487）：只记个数，不记地址 */
+  const depth = (): number => {
+    const st: unknown = win.history.state;
+    const s = typeof st === 'object' && st !== null ? (st as Record<string, unknown>)['lemoStack'] : undefined;
+    return Array.isArray(s) ? s.length : 0;
+  };
+  let lastDepth = depth();
   /** 地址变了就记一行 route。换地址的当下就记（下面拦 pushState、replaceState，加 popstate、hashchange）：
    *  原来只在记下一条日志时顺手补，route 行的时刻其实是“下一条日志的时刻”，负责人 11-18 隐私记日志里点锁行到进页面量成 1.27 秒，其实是下一次点按的时刻。
-   *  add 里照旧先查一次，兜住别的换地址办法 */
+   *  add 里照旧先查一次，兜住别的换地址办法。返回栈深度变了另记一行 stack depth=N hist=浏览器历史条数（应该一直是 1，R-487） */
   const noteRoute = (): void => {
     const h = win.location.hash;
-    if (h === lastHash) return;
-    lastHash = h;
-    push(`${stamp(now())} route ${h || '/'}`);
+    const d = depth();
+    if (h !== lastHash) {
+      lastHash = h;
+      push(`${stamp(now())} route ${h || '/'}`);
+    }
+    if (d !== lastDepth) {
+      lastDepth = d;
+      push(`${stamp(now())} stack depth=${d} hist=${win.history.length}`);
+    }
   };
   const add = (s: string): void => {
     noteRoute();

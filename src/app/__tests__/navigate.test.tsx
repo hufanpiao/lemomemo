@@ -1,8 +1,9 @@
 // UI-4 M-2（架构 17.2 第 3 点）：navigate() 在 View Transition 的回调里同步把新页面画完（flushSync），
-// 浏览器前进 / 后退（hashchange）走同一条路。TC-B1-51：支持 View Transitions 时切页、不支持时直接切换（无报错），两条路都在这里。用假的 startViewTransition 抓住回调，回调一返回就看 DOM
+// 别的办法换地址（hashchange）走同一条路。TC-B1-51：支持 View Transitions 时切页、不支持时直接切换（无报错），两条路都在这里。用假的 startViewTransition 抓住回调，回调一返回就看 DOM
+// R-487：iPhone 侧滑返回的 hasUAVisualTransition 判断删了（浏览器历史只有一条，系统侧滑没东西可退），原来那组用例一起删
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { navigate, useRoute } from '../router.ts';
+import { goBack, navigate, stackOf, useRoute } from '../router.ts';
 
 function Where() {
   const r = useRoute();
@@ -37,21 +38,37 @@ afterEach(() => {
 });
 
 describe('navigate：新页面在 View Transition 的回调里画完（M-2）', () => {
-  it('回调返回时 DOM 已经是新路由；地址也改了、留了一条历史', async () => {
+  it('回调返回时 DOM 已经是新路由；地址也改了，原页压进返回栈、浏览器历史不多一条（R-487）', async () => {
     render(<Where />);
     expect(screen.getByTestId('where').textContent).toBe('today');
     const { spy, seen } = fakeVt();
     const before = history.length;
     await act(async () => {
-      await navigate('notes', 'abc');
+      await navigate('note', 'abc');
     });
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(seen).toEqual(['notes/abc']);
-    expect(location.hash).toBe('#/notes/abc');
-    expect(history.length).toBe(before + 1);
+    expect(seen).toEqual(['note/abc']);
+    expect(location.hash).toBe('#/note/abc');
+    expect(stackOf()).toEqual(['#/today']);
+    expect(history.length).toBe(before);
   });
 
-  it('浏览器前进 / 后退（hashchange）也包进 View Transition，回调里画完', async () => {
+  it('goBack 走同一套：回调里画完上一页', async () => {
+    render(<Where />);
+    await act(async () => {
+      await navigate('note', 'abc');
+    });
+    const { spy, seen } = fakeVt();
+    await act(async () => {
+      goBack();
+      await Promise.resolve();
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual(['today']);
+    expect(stackOf()).toEqual([]);
+  });
+
+  it('别的办法换地址（hashchange）也包进 View Transition，回调里画完', async () => {
     render(<Where />);
     const { spy, seen } = fakeVt();
     await act(async () => {
@@ -85,70 +102,6 @@ describe('navigate：新页面在 View Transition 的回调里画完（M-2）', 
       void navigate('settings');
     });
     expect(screen.getByTestId('where').textContent).toBe('settings');
-  });
-});
-
-/** 派一个带 hasUAVisualTransition 的 popstate（jsdom 的 PopStateEvent 没有这个属性，手动挂上） */
-function popState(ua: boolean | undefined): void {
-  const e = new PopStateEvent('popstate', { state: null });
-  if (ua !== undefined) Object.defineProperty(e, 'hasUAVisualTransition', { value: ua });
-  window.dispatchEvent(e);
-}
-
-describe('iPhone 侧滑返回不叠两次动画（UI-4 第二轮 N-1）', () => {
-  it('popstate.hasUAVisualTransition 为 true：紧接着的 hashchange 不起 View Transition，直接画完', async () => {
-    render(<Where />);
-    const { spy } = fakeVt();
-    await act(async () => {
-      history.replaceState(null, '', '#/calendar');
-      popState(true);
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
-      await Promise.resolve();
-    });
-    expect(spy).not.toHaveBeenCalled();
-    expect(screen.getByTestId('where').textContent).toBe('calendar');
-  });
-
-  it('标记只管紧接着的这一次：下一次普通后退照常起 View Transition', async () => {
-    render(<Where />);
-    const { spy, seen } = fakeVt();
-    await act(async () => {
-      history.replaceState(null, '', '#/calendar');
-      popState(true);
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
-      history.replaceState(null, '', '#/todos');
-      popState(false);
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
-      await Promise.resolve();
-    });
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(seen).toEqual(['todos']);
-  });
-
-  it('侧滑 popstate 后没有 hashchange（两条历史 hash 相同）：之后点链接、navigate 到别页照常起动画', async () => {
-    render(<Where />);
-    const { spy, seen } = fakeVt();
-    await act(async () => {
-      popState(true); // 地址还是 #/today，没有 hashchange
-      history.pushState(null, '', '#/calendar'); // 相当于点链接：地址变了再来 hashchange
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
-      await navigate('todos');
-    });
-    expect(spy).toHaveBeenCalledTimes(2);
-    expect(seen).toEqual(['calendar', 'todos']);
-  });
-
-  it('hasUAVisualTransition 为 false 或没有这个属性（老浏览器）：照常起 View Transition', async () => {
-    render(<Where />);
-    const { spy, seen } = fakeVt();
-    await act(async () => {
-      history.replaceState(null, '', '#/calendar');
-      popState(undefined);
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
-      await Promise.resolve();
-    });
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(seen).toEqual(['calendar']);
   });
 });
 

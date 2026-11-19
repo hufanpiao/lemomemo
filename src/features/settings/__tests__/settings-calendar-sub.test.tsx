@@ -2,6 +2,7 @@
 // 韩文词典换成“[ko]+中文”，同原文件
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { goBack } from '../../../app/router.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { zh } from '../i18n/zh.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';
@@ -64,11 +65,11 @@ describe('设置 › 日历 二级页（R-320、R-321）', () => {
     expect(screen.getByTestId('settings-signout')).toBeTruthy();
   });
 
-  it('侧滑 / 浏览器后退（history.back）也回设置首页', async () => {
+  it('左边往右划（goBack，R-487）也回设置首页', async () => {
     await renderPage();
     await openCal();
     await act(async () => {
-      window.history.back();
+      goBack();
     });
     await waitFor(() => expect(screen.queryByTestId('settings-calendar')).toBeNull());
     expect(window.location.hash).toBe('#/settings');

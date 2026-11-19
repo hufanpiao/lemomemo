@@ -95,30 +95,20 @@ test.describe('展开编辑不闪原页面', () => {
     expect(got[0]?.at ?? Infinity).toBeLessThanOrEqual(expandAt);
   });
 
-  // 负责人 11-18 录屏“展开以后左滑退出的时候会闪一下简约输入框”：iPhone 侧滑返回时底下那页画的是压新历史那一刻拍的截图，
-  // 原来展开编辑从原页面直接压，拍到的是打字条和模糊层还盖着的画面。现在：压历史只发生在打字条画出来之前（hooks/type-entry.ts），
-  // 展开编辑是换掉那一条；退回来正好回到原页面那一条，打字条收起
-  test('今天：压历史时打字条还没画出来过一帧，展开编辑只换不压，退回今天打字条不在', async ({ page }) => {
+  // 负责人 11-18 录屏“展开以后左滑退出的时候会闪一下简约输入框”：iPhone 侧滑返回时底下那页画的是压新历史那一刻拍的截图。
+  // R-487 起 App 一次 pushState 都不调（浏览器历史只有一条，系统侧滑没东西可退、没有截图可放），原来打字条垫的那一条历史删了：
+  // 打开打字条、展开编辑、页面里返回，全程只有 replaceState；返回回到今天，打字条和模糊层都不在
+  test('今天：打开打字条、展开编辑、返回今天，全程不压历史；退回今天打字条不在', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
-    // 截图拍的是已经上屏的画面：记压历史那一刻，从点“＋”起画过几帧、那几帧里打字条在不在（DOM 里已有但还没画出来的不算）
+    const len = await page.evaluate(() => history.length);
     await page.evaluate(() => {
-      const w = window as unknown as { __h: { op: string; url: string; frames: number; painted: boolean }[] };
+      const w = window as unknown as { __h: { op: string; url: string }[] };
       w.__h = [];
-      let frames = 0;
-      let click = -1;
-      let painted = false;
-      const tick = (): void => {
-        frames++;
-        if (click >= 0 && document.querySelector('[data-testid="type-bar"]')) painted = true;
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-      document.addEventListener('pointerdown', () => (click = frames), { capture: true, once: true });
       for (const op of ['pushState', 'replaceState'] as const) {
         const orig = history[op].bind(history);
         history[op] = (s: unknown, u: string, url?: string | URL | null) => {
-          w.__h.push({ op, url: String(url), frames: click < 0 ? -1 : frames - click, painted });
+          w.__h.push({ op, url: String(url) });
           orig(s, u, url);
         };
       }
@@ -128,16 +118,14 @@ test.describe('展开编辑不闪原页面', () => {
     await page.getByTestId('type-bar').getByRole('button', { name: '展开编辑' }).click();
     await expect(page).toHaveURL(/#\/event\/new$/);
     await expect(page.getByTestId('type-bar')).toHaveCount(0);
-    const h = await page.evaluate(() => (window as unknown as { __h: { op: string; url: string; frames: number; painted: boolean }[] }).__h);
-    // 只压过一次：按下“＋”以后、打字条画出来的第一帧之前（打字条和模糊层没上过屏）；进新建页是换掉那一条
-    const pushes = h.filter((x) => x.op === 'pushState');
-    expect(pushes.map((x) => x.painted)).toEqual([false]);
-    expect(pushes[0]?.frames).toBeGreaterThanOrEqual(0);
-    expect(h.filter((x) => x.url.endsWith('#/event/new')).map((x) => x.op)).toEqual(['replaceState']);
-    await page.goBack();
+    await page.getByTestId('edit-back').click();
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page).toHaveURL(/#\/today$/);
     await expect(page.getByTestId('type-bar')).toHaveCount(0);
     await expect(page.getByTestId('type-mist')).toHaveCount(0);
+    const h = await page.evaluate(() => (window as unknown as { __h: { op: string; url: string }[] }).__h);
+    expect(h.filter((x) => x.op === 'pushState')).toEqual([]);
+    expect(h.filter((x) => x.url.endsWith('#/event/new')).map((x) => x.op)).toEqual(['replaceState']);
+    expect(await page.evaluate(() => history.length)).toBe(len);
   });
 });

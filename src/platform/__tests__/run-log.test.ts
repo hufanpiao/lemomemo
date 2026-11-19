@@ -143,6 +143,19 @@ describe('全局运行日志', () => {
     history.replaceState(null, '', '#/');
   });
 
+  it('返回栈深度变了记一行 stack depth=N hist=N（R-487）：只记个数，不记栈里的地址', () => {
+    history.replaceState(null, '', '#/todos');
+    const stop = startRunLog(window, { version: 't' });
+    history.replaceState({ lemoStack: ['#/todos'] }, '', '#/todo/x');
+    history.replaceState({ lemoStack: [] }, '', '#/todos');
+    window.dispatchEvent(new Event('pagehide'));
+    stop();
+    const lines = readRunLog().split('\n');
+    expect(lines.filter((l) => / stack depth=\d+ hist=\d+$/.test(l)).map((l) => /depth=(\d+)/.exec(l)?.[1])).toEqual(['1', '0']);
+    expect(lines.filter((l) => /stack/.test(l)).some((l) => l.includes('#/'))).toBe(false);
+    history.replaceState(null, '', '#/');
+  });
+
   it('切回前台（负责人 11-18 白屏很久）：用注入的帧回调记 vis-frames（第 1、2 帧、0ms 计时器、模糊图层数）；不注入就不记', () => {
     vi.useFakeTimers();
     const cbs: Array<() => void> = [];

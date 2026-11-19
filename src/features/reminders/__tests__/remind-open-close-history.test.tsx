@@ -1,13 +1,13 @@
 // 在 App 里打开整页提醒再关掉，回到原来那一页（R-372 代码审 M1；负责人 11-18 推翻 ①：四个主页面互切一律原地换、不压历史）：
-// 横幅、错过的提醒都走 ui/open-reminder.ts：网页版在 /app/ 里走路由压一条带本次编号的历史，关掉时退一步；
-// 不再直接改 location.hash（压的历史不带编号，关掉时只能原地换成今天，今天下面留着打开前那一页，在今天左滑又回到那一页）。
+// 横幅、错过的提醒都走 ui/open-reminder.ts：网页版在 /app/ 里走路由把原页压进返回栈（R-487，浏览器历史不多一条），关掉时退一步；
+// 不再直接改 location.hash（浏览器自己压一条、返回栈也丢了，关掉时只能原地换成今天）。
 // 路由、桥都用真的；本机集合、写入、时钟、键盘的替身和 RemindViews.test.tsx 同一套
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { remindQueue, resetRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
-import { canGoBack, navigateTab, resetLoadForTest, useRoute } from '../../../app/router.ts';
+import { canGoBack, navigateTab, useRoute } from '../../../app/router.ts';
 import { openReminder } from '../ui/open-reminder.ts';
 const EMPTY_RECS = vi.hoisted((): ReadonlySet<string> => new Set());
 
@@ -83,7 +83,6 @@ let base = 0;
 
 describe('打开整页提醒再关掉：回到原来那一页（R-372 代码审 M1）', () => {
   beforeEach(() => {
-    resetLoadForTest();
     window.history.pushState(null, '', '/app/#/today'); // 进 App 的第一页；push 截掉别的用例留下的“前进”历史
     base = window.history.length;
     nowMs = at('15:16');
@@ -95,7 +94,7 @@ describe('打开整页提醒再关掉：回到原来那一页（R-372 代码审 
     await flush();
     await openReminder('event', E1, at('15:15'));
     expect(window.location.hash).toBe(`#/remind/event/${E1}?due=${at('15:15')}`);
-    expect(window.history.length).toBe(base + 1);
+    expect(window.history.length).toBe(base);
     render(<FullReminderPage />);
     await act(async () => {
       fireEvent.click(screen.getByTestId('remind-full-back'));
@@ -112,7 +111,7 @@ describe('打开整页提醒再关掉：回到原来那一页（R-372 代码审 
     navigateTab('today'); // 主页面互切原地换
     await vi.waitFor(() => expect(window.location.hash).toBe('#/today'));
     await openReminder('event', E1, at('15:15')); // 压一条整页提醒
-    expect(window.history.length).toBe(base + 1);
+    expect(window.history.length).toBe(base);
     render(<FullReminderPage />);
     await act(async () => {
       fireEvent.click(screen.getByTestId('remind-full-back'));
@@ -120,6 +119,6 @@ describe('打开整页提醒再关掉：回到原来那一页（R-372 代码审 
     await vi.waitFor(() => expect(window.location.hash).toBe('#/today'));
     await flush();
     expect(canGoBack()).toBe(false); // 今天是根：没有 App 里的上一页
-    expect(window.history.length).toBe(base + 1);
+    expect(window.history.length).toBe(base);
   });
 });
