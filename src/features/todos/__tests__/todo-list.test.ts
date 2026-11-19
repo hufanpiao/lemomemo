@@ -58,6 +58,14 @@ describe('分组', () => {
     expect(groupTodos(rows, NOW, TZ).map((x) => x.key)).toEqual(['done']);
   });
 
+  it('linger：过期的勾上以后停留期间还在“过期”组、标签照旧是过期（负责人 11-19 录屏：原来当场换进截止那天的组，乙4 播到一半没了；同今天页 lateTodos）', () => {
+    const rows = [td({ id: 'x', title: 'x', done: true, done_at: 2, due: '2026-11-03' }), td({ id: 'w', title: 'w', due: '2026-11-03' })];
+    const g = groupTodos(rows, NOW, TZ, null, new Set(['x']));
+    expect(g.map((x) => [x.key, x.items.map((i) => i.todo.id)])).toEqual([['late', ['w', 'x']]]);
+    expect(g[0]?.items.find((i) => i.todo.id === 'x')?.tag.kind).toBe('late');
+    expect(g[0]?.items.find((i) => i.todo.id === 'x')?.todo.done).toBe(true);
+  });
+
   it('组内：同档按截止时刻（没时刻的在后）', () => {
     const rows = [td({ due: '2026-11-05', title: 'a' }), td({ due: '2026-11-05', due_time: '18:00', title: 'b' }), td({ due: '2026-11-05', due_time: '15:00', title: 'c' })];
     expect(groupTodos(rows, NOW, TZ)[0]?.items.map((i) => i.todo.title)).toEqual(['c', 'b', 'a']);

@@ -68,7 +68,9 @@ export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: s
     if (!isLiveRow(r)) continue;
     const t = itemOf(r);
     if (project !== null && t.project !== project) continue;
-    const tag = dueTagOf(t, now, tz);
+    // 刚勾完、还在原位停留的照没完成算截止标签（同今天页 today-model.ts 的 lateTodos）：不然勾上那一下就不算过期了，
+    // 当场从“过期”组换进它截止那天的组，方框跟着拆了重画、乙4 播到一半没了（负责人 11-19 录屏，待办页过期组）
+    const tag = dueTagOf(linger.has(t.id) ? { ...t, done: false } : t, now, tz);
     if (t.done && !linger.has(t.id)) put('done', null, t, tag);
     else if (tag.kind === 'late') put('late', null, t, tag);
     else if (tag.kind === 'today') put('today', null, t, tag);
