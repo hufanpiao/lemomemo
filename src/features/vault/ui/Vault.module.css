@@ -656,6 +656,17 @@
   cursor: pointer;
 }
 
+/* “＋ 新分类”（方案乙 .tile.add）：透明底、虚线框、次要色，字居中 */
+.tileAdd {
+  align-items: center;
+  justify-content: center;
+
+  /* 方案乙 .tile.add 的虚线是 #E4E2DB；--line（#EEEDE7）压在磨砂玻璃的渐变底上几乎看不见，用最接近的 --inp-line（#DEDDD6） */
+  border: 1px dashed var(--inp-line);
+  background: transparent;
+  color: var(--text-3);
+}
+
 .tile:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;

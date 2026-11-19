@@ -77,7 +77,7 @@ import { PullSearch } from '../../smart-search/index.ts';
 import { VaultParts } from '../../vault/index.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import { useMergeHint } from '../hooks/useMergeHint.ts';
-import { useNoteList, type CategoryCount, type CategoryCtl, type NoteItem } from '../hooks/useNoteList.ts';
+import { CATEGORY_NAME_MAX, useNoteList, type CategoryCount, type CategoryCtl, type NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
 import { isUndo, mergeUndo, moveUndo, undoTipOf, useNotesToast } from '../hooks/useNotesToast.ts';
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
@@ -120,6 +120,10 @@ export interface NotesHomeApi {
   mark: (it: NoteItem) => ReactNode;
   /** 一条都没有时那一句（来源给的，同列表空态） */
   empty: string;
+  /** 新建分类（隐私记“＋ 新分类”）：同名回已有那个 */
+  newCategory: ReturnType<typeof useNoteList>['newCategory'];
+  /** 分类名最多几个字 */
+  nameMax: number;
 }
 
 /**
@@ -428,6 +432,8 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => R
         <>
           {tips}
           {home({
+            newCategory: l.newCategory,
+            nameMax: CATEGORY_NAME_MAX,
             counts: l.counts,
             total: l.total,
             items: l.items.filter(shown),

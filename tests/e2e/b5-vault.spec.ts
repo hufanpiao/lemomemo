@@ -184,6 +184,12 @@ async function phoneShots(page: Page, name: string, browserName: string): Promis
   await page.waitForTimeout(150);
 }
 
+/** 截图前等页面上的动画（换页过渡、弹层滑入）都播完 */
+async function settle(page: Page): Promise<void> {
+  await page.evaluate(() => Promise.all(document.getAnimations().map((x) => x.finished.catch(() => null))));
+  await page.waitForTimeout(200);
+}
+
 /** 设好密码、已解锁、列表空 */
 async function setupAndUnlock(page: Page, browserName: string): Promise<void> {
   await page.goto('/app/#/vault');
@@ -675,4 +681,46 @@ test('负责人“离开隐私记页 1 分钟不自动上锁”：换到随手�
   await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault autolock why=page/);
   await lockrow.click();
   await expect(page.getByTestId('vault-unlock-card')).toBeVisible({ timeout: 15_000 });
+});
+
+test('负责人 11-19 选“做‘＋ 新分类’”：手机首页宫格最后一格“＋ 新分类”，起名建好进这一类的空列表，地址留在这一类', async ({ page, baseURL, browserName }) => {
+  const fv = await fakeServer(page, baseURL);
+  await oneNote(page, fv, browserName, '没分类的一条');
+  // chromium 项目平时是桌面宽，换成手机尺寸（首页宫格是手机版）；webkit 项目本来就是 iPhone 15 设备参数，不改尺寸：
+  // 移动模拟下中途 setViewportSize 改高，布局视口不跟着变（clientHeight 仍是 659），贴底弹层落在下面点不到（11-19 查到，真机没有这回事）
+  if (browserName === 'chromium') await page.setViewportSize({ width: 393, height: 852 });
+  await page.goto('/app/#/vault');
+  const add = page.getByTestId('vault-home-newcat');
+  await expect(add).toBeVisible({ timeout: 15_000 });
+  await expect(add).toHaveText('＋ 新分类');
+  if (SHOTS && browserName === 'chromium') {
+    await settle(page);
+    await page.screenshot({ path: `${SHOTS}/light/13-新分类格.png` });
+  }
+  await add.click();
+  const name = page.getByTestId('vault-newcat-name');
+  await expect(name).toBeVisible();
+  await name.fill('旅行');
+  if (SHOTS && browserName === 'chromium') {
+    await settle(page);
+    await page.screenshot({ path: `${SHOTS}/light/14-新分类起名.png` });
+  }
+  // 弹层贴底的按钮要真点得到（按钮中心落在它自己身上，不是被别的层挡住、裁掉）
+  // 滑入播完以后（等动画都停）再看按钮中心落在谁身上
+  const hit = () => page.getByTestId('vault-newcat-ok').evaluate(async (b) => {
+    await Promise.all(document.getAnimations().map((x) => x.finished.catch(() => null)));
+    const r = b.getBoundingClientRect();
+    return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+  });
+  await expect.poll(hit, { message: '贴底弹层的“建好”按钮点得到', timeout: 5_000 }).toBe(true);
+  await page.getByTestId('vault-newcat-ok').click();
+  await expect(page).toHaveURL(/#\/vault\/c\/[0-9a-f-]{36}$/, { timeout: 10_000 });
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(/#\/vault\/c\/[0-9a-f-]{36}$/);
+  await expect(page.getByTestId('vault-notes')).toContainText('旅行');
+  if (SHOTS && browserName === 'chromium') {
+    await settle(page);
+    await page.screenshot({ path: `${SHOTS}/light/15-新分类列表.png` });
+  }
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/notes category new ok/);
 });

@@ -19,6 +19,8 @@ import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { fixCategoryCycles } from '../data/category-merge-store.ts';
+import { createCategory } from '../data/category-new.ts';
+export { CATEGORY_NAME_MAX } from '../data/category-new.ts';
 import { ruleCategory } from '../data/classify.ts';
 import { convertNote, type ConvertResult } from '../data/note-convert.ts';
 import { BODY_MAX, newNoteRow } from '../data/note-edit.ts';
@@ -63,7 +65,14 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID(), cat
   useEffect(() => {
     if (fixCycles) void fixCategoryCycles(cats);
   }, [cats, fixCycles]);
-  const counts = useMemo(() => categoryCounts(rows, cats, locale), [rows, cats, locale]);
+  const counts = useMemo(() => {
+    const all = categoryCounts(rows, cats, locale);
+    // 外面管的筛着一个活着、但还一条都没有的分类（隐私记“＋ 新分类”刚建好进来、或者删掉了这一类最后一条）：照样留着这一类、胶囊写 0
+    // （独立评审 11-19 低 23：原来回“全部”还把地址换掉，撤销以后筛选回不来）
+    const name = cat?.value ? categoryNames(cats).get(cat.value) : undefined;
+    if (!cat?.value || name === undefined || all.some((c) => c.id === cat.value)) return all;
+    return [...all, { id: cat.value, name, color: null, count: 0 }];
+  }, [rows, cats, locale, cat?.value]);
   // 筛的分类没了（最后一条删掉、分类被合并）：回到“全部”
   const active = category !== null && counts.some((c) => c.id === category) ? category : null;
   // 外面管的：地址里的分类已经没了，地址也改回“全部”，不让地址写着某一类、页面却是全部（独立评审 11-19 中 2）
@@ -136,5 +145,7 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID(), cat
     if (m.switched) void settings.save(src.orderKey, 'time');
     return applyNoteSort(io, m.writes, true);
   };
-  return { items, byDay, dayOf, order, counts, category: active, setCategory, add, remove, discard, convert, tooLong, move, undoMove, total: aliveCount(rows), now, tz };
+  /** 新建分类（隐私记首页“＋ 新分类”；随手记、隐私记共用分类）：同名的回已有那个 */
+  const newCategory = createCategory;
+  return { items, byDay, dayOf, order, counts, category: active, setCategory, add, remove, discard, convert, tooLong, move, undoMove, newCategory, total: aliveCount(rows), now, tz };
 }

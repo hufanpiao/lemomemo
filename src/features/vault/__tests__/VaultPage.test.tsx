@@ -15,7 +15,18 @@ import { useKeys } from '../../../kit/hooks/layers.ts';
 import type * as Enc from '../../../platform/image-encode.ts';
 import { fakeApi, make, NID, note, TOK } from './session-fakes.ts';
 
-vi.mock('../../../kit/hooks/useCollection.ts', () => ({ useCollection: () => [] }));
+// 分类集合可由用例填（“＋ 新分类”）；别的集合一律空
+const cats = vi.hoisted(() => ({ rows: [] as { id: string; name: string }[] }));
+vi.mock('../../../kit/hooks/useCollection.ts', () => ({ useCollection: (t: string) => (t === 'categories' ? cats.rows : []) }));
+vi.mock('../../notes/data/category-new.ts', async (orig) => ({
+  ...(await orig<object>()),
+  createCategory: vi.fn(async (name: string) => {
+    const had = cats.rows.find((c) => c.name === name.trim());
+    if (had) return { result: 'ok', id: had.id, existed: true };
+    cats.rows = [...cats.rows, { id: 'new-cat', name: name.trim() }];
+    return { result: 'ok', id: 'new-cat', existed: false };
+  }),
+}));
 // 插图：jsdom 没有画布，压图换成桩（压成了一张 10×6 的图）
 vi.mock('../../../platform/image-encode.ts', async (orig) => ({
   ...(await orig<typeof Enc>()),
@@ -116,6 +127,24 @@ describe('解锁、上锁', () => {
     fireEvent.click(screen.getByTestId('vault-back-home'));
     await waitFor(() => expect(window.location.hash).toBe('#/vault'));
     expect(await screen.findByTestId('vault-home')).toBeTruthy();
+  });
+
+  it('负责人 11-19 选“做‘＋ 新分类’”：宫格最后一格“＋ 新分类”，起名建好进这一类的列表（空的也留着这一类、胶囊写 0）；同名不再建', async () => {
+    cats.rows = [];
+    await openUnlocked();
+    fireEvent.click(await screen.findByTestId('vault-home-newcat'));
+    const ok = await screen.findByTestId('vault-newcat-ok');
+    expect(ok.hasAttribute('disabled')).toBe(true);
+    const input = screen.getByTestId('vault-newcat-name');
+    expect(input.getAttribute('maxlength')).toBe('12');
+    fireEvent.change(input, { target: { value: ' 旅行 ' } });
+    fireEvent.click(ok);
+    await waitFor(() => expect(window.location.hash).toBe('#/vault/c/new-cat'));
+    // 一条都没有的新分类：地址不被换回 all，列表里这一类的胶囊在、写 0
+    await new Promise((r) => setTimeout(r, 50));
+    expect(window.location.hash).toBe('#/vault/c/new-cat');
+    expect(screen.getByTestId('vault-notes').textContent).toContain('旅行');
+    cats.rows = [];
   });
 
   it('独立评审 11-19 中 2：地址就是筛选——#/vault/c/<已经没了的分类> 解锁后原地换成 #/vault/c/all，列表是全部', async () => {
