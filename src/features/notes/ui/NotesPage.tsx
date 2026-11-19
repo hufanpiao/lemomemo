@@ -153,7 +153,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
 
   const selId = ds.sel?.id;
   const open = (id: string) => (isRo(id) ? guard.block() : ds.open({ id }, () => void navigate(src.route.edit, id)));
-  const pull = usePullReveal('notes', src.kind !== 'vault');
+  const pull = usePullReveal('notes', src.caps.search);
   const pullRef = pull.ref;
   // main 同时给电脑版换挂（useSwapWhenSafe 读 page）和下拉搜索（pull.ref）
   const mainRef = useCallback((el: HTMLElement | null) => {
@@ -404,7 +404,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
   const phone = (
     <>
       {head ? (
-        head(<TrashLink />, catName)
+        head(src.caps.trashLink ? <TrashLink /> : null, catName)
       ) : (
         <>
           {/* 大标题 + 短粗下划线、标题下一行等宽小字（今天的日期 · 共几条），同待办页（R-436，kit Refine.module.css） */}
@@ -426,7 +426,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
   );
 
   return (
-    <main ref={mainRef} className={styles.page} data-feature={src.kind === 'vault' ? 'vault' : 'notes'} data-testid={src.kind === 'vault' ? 'vault-notes' : 'notes'} data-view={view}>
+    <main ref={mainRef} className={styles.page} data-feature={src.kind} data-testid={src.kind === 'vault' ? 'vault-notes' : 'notes'} data-view={view}>
       {/* 电脑版（B6，ui/NotesDesk.tsx）：分类一栏 + 列表一栏；电脑版没换上或画出错时照手机的排法画 */}
       {Desk ? (
         <QuietBoundary name="notes-desk" fallback={phone} onFail={ds.fail}>
@@ -435,7 +435,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
             page={src.desk}
             title={src.text?.title}
             srH1={!head}
-            titleEnd={src.kind === 'vault' ? <TrashLink /> : undefined}
+            titleEnd={src.caps.trashLink ? <TrashLink /> : undefined}
             cats={{ total: l.total, counts: l.counts, category: l.category, set: l.setCategory, add: cd.add, edit: cd.edit }}
             list={
               <>

@@ -19,7 +19,7 @@ const NO_SYNC: NoteSync = { failed: new Set(), dropped: 0, stale: 0, retry: () =
 
 export const notesSource: NoteSource = {
   kind: 'notes',
-  caps: { ai: true, convert: true, merge: true, lockrow: true, moveIn: true, moveOut: false, filesMark: true },
+  caps: { ai: true, convert: true, merge: true, lockrow: true, moveIn: true, moveOut: false, filesMark: true, search: true, trashLink: false },
   route: { list: 'notes', edit: 'note' },
   desk: 'notes',
   orderKey: 'notes.order',

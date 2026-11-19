@@ -198,7 +198,7 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
 
   return {
     kind: 'vault',
-    caps: { ai: false, convert: false, merge: false, lockrow: false, moveIn: false, moveOut: true, filesMark: false },
+    caps: { ai: false, convert: false, merge: false, lockrow: false, moveIn: false, moveOut: true, filesMark: false, search: false, trashLink: true },
     route: { list: 'vault', edit: 'vault' },
     desk: 'vault',
     orderKey: 'vault.order',

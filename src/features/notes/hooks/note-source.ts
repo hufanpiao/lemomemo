@@ -4,7 +4,8 @@
 //   今天页的抽屉、查找面板这些没包 Provider 的地方照旧走普通来源
 // • 隐私记的来源在 vault 功能里（vault/hooks/vault-note-source.ts，satisfies 这里的 NoteSource），经 notes/index.ts 的 NotesSurface 传进来；
 //   类型经 notes/index.ts 的 export type 给出去（A27）
-// • caps：两种来源界面上不一样的地方只按这几个开关分，不按 kind 到处判断
+// • caps：两种来源界面上不一样的地方只按这几个开关分，不按 kind 到处判断；kind 只用来认“是哪一份数据”
+//   （用哪一套分类 useCategoryRows / useNoteList、页面的 data-feature 和 testid），不拿来开关界面（独立评审 11-20 第 1 条）
 // • 放在 hooks 不放 data：类型里有 React 组件（附件区），data 层不准 import React（A1）
 import type { OrderKey } from '../../../../shared/logic/sort-key.ts';
 import { createContext, useContext, type ComponentType, type RefObject } from 'react';
@@ -34,6 +35,10 @@ export interface NoteCaps {
   moveOut: boolean;
   /** 列表、卡片上的“附件 N” */
   filesMark: boolean;
+  /** 列表下拉出搜索框 */
+  search: boolean;
+  /** 列表顶上（手机顶栏、电脑标题右边）放“最近删除”入口；随手记的入口在设置里 */
+  trashLink: boolean;
 }
 
 /** 列表要的几张表（行的形状同本机集合：notes、note_images、note_files） */
