@@ -298,8 +298,6 @@ test.describe('长按拖动排序（R-429、R-461）', () => {
     const dragging = smp.filter((x) => x.float && x.up);
     expect(dragging.length).toBeGreaterThan(10);
     expect(dragging.filter((x) => x.sel > 0 || !x.drag)).toEqual([]);
-    // 松手 1.5 秒后标记已清：同样看定时器那一路的最后一次（CI WebKit 逐帧那一路最后一帧可能还是松手前的，ci a937acd4 第 300 行）
-    expect(smp.at(-1)?.drag).toBe(false);
     // ③ 松手以后：这一行只要看得见，浮层已经撤掉、位置就是最终位置
     // 从原行藏起来那一帧起看（拿起那一帧浮层刚挂上、原行下一次渲染才藏，两者完全重合）
     const seen = fr.slice(fr.findIndex((x) => x.float && !x.rows['n4']?.seen)).filter((x) => x.rows['n4']?.seen);
@@ -307,6 +305,8 @@ test.describe('长按拖动排序（R-429、R-461）', () => {
     expect(seen.filter((x) => x.float || Math.abs((x.rows['n4']?.top ?? 0) - final) > 1), JSON.stringify(seen.slice(0, 20).map((x) => [Math.round(x.t), x.float, x.rows['n4']?.top]))).toEqual([]);
     // 日志：拿起、换位、放下、收尾；拖动期间没有选区
     await expect.poll(async () => (await runLog(page)).slice(logBefore).some((l) => / sort notes settle moved=1 /.test(l))).toBe(true);
+    // 整页标记在落下收尾（settle）那一刻撤：等到 settle 再查。不按“松手后 1.5 秒”查——CI WebKit 一秒几帧，落下动画那时还没播完（ci 0b06750c 第 302 行）
+    expect(await page.evaluate(() => document.documentElement.hasAttribute('data-sort-dragging'))).toBe(false);
     const lines = (await runLog(page)).slice(logBefore);
     expect(lines.some((l) => / sort notes lift i=3 n=4 view=list sel=0 us=none/.test(l)), lines.filter((l) => l.includes('sort')).join('\n')).toBe(true);
     expect(lines.filter((l) => / sort notes over i=/.test(l)).length).toBeGreaterThanOrEqual(1);
