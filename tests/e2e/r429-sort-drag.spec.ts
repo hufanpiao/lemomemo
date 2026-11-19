@@ -101,8 +101,20 @@ function record(page: Page, ms = 20_000): Promise<void> {
       if (performance.now() - t0 < dur) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
+    // “全程不选字”另用 16 ms 定时器采样（__recT）：CI 的 WebKit 渲染慢，整段拖动 rAF 只来 3 帧（#129，ci c4b44d99 第 285 行 Received 3），
+    // 采样次数不能跟帧率挂钩；这一路只记选区和拖动标记，量位置、过渡的仍用上面逐帧的 __rec
+    const wt = window as unknown as { __recT: unknown[] };
+    wt.__recT = [];
+    const iv = setInterval(() => {
+      const card = document.querySelector<HTMLElement>('[data-testid="sort-float"]')?.firstElementChild;
+      wt.__recT.push({ float: !!card, up: !!card?.hasAttribute('data-up'), sel: (getSelection()?.toString() ?? '').length, drag: document.documentElement.hasAttribute('data-sort-dragging') });
+      if (performance.now() - t0 >= dur) clearInterval(iv);
+    }, 16);
   }, ms);
 }
+/** 定时器那一路的采样（只有选区和拖动标记） */
+const samples = (page: Page): Promise<Pick<Frame, 'float' | 'up' | 'sel' | 'drag'>[]> =>
+  page.evaluate(() => (window as unknown as { __recT: Pick<Frame, 'float' | 'up' | 'sel' | 'drag'>[] }).__recT);
 const frames = (page: Page): Promise<Frame[]> => page.evaluate(() => (window as unknown as { __rec: Frame[] }).__rec);
 /** transform 的放大倍数（none 为 1） */
 const scaleOf = (tf: string): number => (tf.startsWith('matrix(') ? Number(tf.slice(7).split(',')[0]) : 1);
@@ -281,8 +293,9 @@ test.describe('长按拖动排序（R-429、R-461）', () => {
       expect(moved(fr.at(-1)?.rows[id]?.tf ?? 'none'), `${id} 最后没归零`).toBe(false);
     }
     // ⑥ 拖动全程选区为空、整页有标记
-    const dragging = fr.filter((x) => x.float && x.up);
-    expect(dragging.length).toBeGreaterThan(5);
+    // 用定时器那一路采样数（16 ms 一次，不跟 CI WebKit 的帧率走）：拖动 1 秒以上，正常 60 次上下，留足余量要多于 10 次
+    const dragging = (await samples(page)).filter((x) => x.float && x.up);
+    expect(dragging.length).toBeGreaterThan(10);
     expect(dragging.filter((x) => x.sel > 0 || !x.drag)).toEqual([]);
     expect(fr.at(-1)?.drag).toBe(false);
     // ③ 松手以后：这一行只要看得见，浮层已经撤掉、位置就是最终位置
