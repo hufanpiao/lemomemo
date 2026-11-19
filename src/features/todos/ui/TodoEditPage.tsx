@@ -14,10 +14,10 @@
 // • R-436 丙批：截止日期、截止时刻、提醒时刻框里的数字换等宽字（kit .input 加本页 TodoEditPage.module.css 的 .num）；
 //   “清掉”从 44 高的整块按钮换成 kit 的小胶囊（Chip.module.css，高 30、点击区照样 44；R-436“胶囊统一”）
 //   截止日期、截止时刻还空着时挂 .empty，不露浏览器的“yyyy/mm/dd”“--:--”骨架（聚焦后照常显示）
-import { lazy, Suspense } from 'react';
+import { lazy } from 'react';
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import chip from '../../../kit/components/Chip.module.css';
-import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
+import { Later } from '../../../kit/components/QuietBoundary.tsx';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
 import { PrioSeg } from '../../../kit/components/Priority.tsx';
 import formCss from '../../../kit/components/Form.module.css';
@@ -88,11 +88,9 @@ export function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string
         </Field>
       </FormGroup>
 
-      <QuietBoundary name="todo-subs">
-        <Suspense fallback={null}>
-          <SubtaskEditor todoId={!ed.isNew && typeof ed.row?.id === 'string' ? ed.row.id : null} todo={ed.row} off={off} />
-        </Suspense>
-      </QuietBoundary>
+      <Later name="todo-subs">
+        <SubtaskEditor todoId={!ed.isNew && typeof ed.row?.id === 'string' ? ed.row.id : null} todo={ed.row} off={off} />
+      </Later>
 
       {/* R-436 第二批（照纪念日、日程编辑页）：时间、详情两组上面各一个小字分组名 */}
       <GroupLabel>{t('todo.edit.groupTime', {})}</GroupLabel>

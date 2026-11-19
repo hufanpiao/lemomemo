@@ -10,7 +10,7 @@
 import { addDays, diffDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
-import { compareTodos, isLate, numOr, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
+import { compareTodos, isLate, lingerView, numOr, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 // 项目名比较（筛选条条数一样时）：按当前语言、数字按数值
 import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
@@ -68,10 +68,11 @@ export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: s
     if (!isLiveRow(r)) continue;
     const t = itemOf(r);
     if (project !== null && t.project !== project) continue;
-    // 刚勾完、还在原位停留的照没完成算截止标签（同今天页 today-model.ts 的 lateTodos）：不然勾上那一下就不算过期了，
+    // 刚勾完、还在原位停留的照没完成算组和截止标签（shared/logic/todo-row.ts 的 lingerView，三页同一个口径）：不然勾上那一下就不算过期了，
     // 当场从“过期”组换进它截止那天的组，方框跟着拆了重画、乙4 播到一半没了（负责人 11-19 录屏，待办页过期组）
-    const tag = dueTagOf(linger.has(t.id) ? { ...t, done: false } : t, now, tz);
-    if (t.done && !linger.has(t.id)) put('done', null, t, tag);
+    const s = lingerView(t, linger);
+    const tag = dueTagOf(s, now, tz);
+    if (s.done) put('done', null, t, tag);
     else if (tag.kind === 'late') put('late', null, t, tag);
     else if (tag.kind === 'today') put('today', null, t, tag);
     else if (tag.kind === 'tomorrow') put('tomorrow', null, t, tag);

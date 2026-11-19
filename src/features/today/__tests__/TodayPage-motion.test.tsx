@@ -21,13 +21,16 @@ vi.mock('../hooks/useToday.ts', () => ({
     return {
       today: '2026-11-05', tz: 'Asia/Seoul', now: 0, card: null, tomorrowFirst: null, late: late.length || !linger.has('a') ? late : [lateRow], events: [], todos: [],
       subs: new Map(),
-      toggleDone: () => new Promise((ok) => {
-        finish = () => {
-          set([]);
-          ok('ok');
-        };
-      }),
-      remove: async () => 'ok',
+      writes: {
+        toggleDone: () => new Promise((ok) => {
+          finish = () => {
+            set([]);
+            ok('ok');
+          };
+        }),
+        remove: async () => 'ok',
+        setPriority: async () => 'ok',
+      },
     };
   },
 }));

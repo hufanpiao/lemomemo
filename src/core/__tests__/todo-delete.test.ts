@@ -1,8 +1,8 @@
-// 待办列表上打勾、删除的 remind 标记（data/todo-actions.ts；代码审查 S2、补审改法 ④）
+// 待办打勾、删除的 remind 标记（删除在 core/todo-delete.ts，三页和自动删除共用；代码审查 S2、补审改法 ④）
 import { describe, expect, it } from 'vitest';
-import { msAt } from '../../../../shared/core/date.ts';
-import { remindAfterDelete } from '../data/todo-actions.ts';
-import { todoDonePatch } from '../../../core/todo-done.ts';
+import { msAt } from '../../../shared/core/date.ts';
+import { remindAfterDelete } from '../todo-delete.ts';
+import { todoDonePatch } from '../todo-done.ts';
 
 /** 打勾的标记规则在 core/todo-done.ts（评审第 15 条：所有入口共用），这里照旧钉住 */
 const remindAfterDone = (...a: Parameters<typeof todoDonePatch>): boolean => todoDonePatch(...a).remind;

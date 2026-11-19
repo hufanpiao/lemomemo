@@ -326,6 +326,28 @@ describe('已过去（线框 s1“已过去的折叠成一行”）：结束了�
   });
 });
 
+describe('刚勾完、还留在原位的（linger）：没赶上、今天的安排、已过去同一个口径（shared/logic/todo-row.ts 的 lingerView）', () => {
+  it('今天截止、时刻已过的刚勾完：只留在“没赶上”，不同时出现在“今天的安排”', () => {
+    const r = td({ id: 'x', due: DAY, due_time: '09:00', done: true });
+    const keep = new Set(['x']);
+    expect(lateTodos([r], at('10:00'), SEOUL, keep).map((l) => l.todo.id)).toEqual(['x']);
+    expect(todayTodos([r], at('10:00'), SEOUL, keep)).toEqual([]);
+    // 收起以后（不在 linger 里）：照做完算，进“今天的安排”再归进“已过去”
+    expect(lateTodos([r], at('10:00'), SEOUL)).toEqual([]);
+    expect(todayTodos([r], at('10:00'), SEOUL).map((t) => t.id)).toEqual(['x']);
+  });
+
+  it('今天截止、还没到时刻的刚勾完：留在“今天的安排”原来的位置、不算已过去', () => {
+    const a = td({ id: 'a', due: DAY, due_time: '12:00', done: true, priority: 'H' });
+    const b = td({ id: 'b', due: DAY, due_time: '13:00' });
+    const keep = new Set(['a']);
+    const tds = todayTodos([b, a], at('10:00'), SEOUL, keep);
+    expect(tds.map((t) => t.id)).toEqual(['a', 'b']);
+    expect(splitPast([], tds, at('10:00'), keep).pastTodos).toEqual([]);
+    expect(splitPast([], tds, at('10:00')).pastTodos.map((t) => t.id)).toEqual(['a']);
+  });
+});
+
 describe('跨天日程（R-444）', () => {
   it('全天 3 天：开始那天到最后一天都在今天的清单里，第 2 天写“第 2/3 天”', () => {
     const r = ev({ duration_min: 3 * 1440 });

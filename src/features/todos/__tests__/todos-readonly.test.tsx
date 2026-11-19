@@ -11,7 +11,7 @@ vi.mock('../../../platform/native-bridge.ts', async (orig) => ({ ...(await orig<
 const setDone = vi.fn(async () => 'saved' as const);
 const setDeleted = vi.fn(async () => 'saved' as const);
 vi.mock('../../../core/todo-done.ts', async (orig) => ({ ...(await orig<object>()), doneToggler: () => () => setDone() }));
-vi.mock('../data/todo-actions.ts', async (orig) => ({ ...(await orig<object>()), setTodoDeleted: () => setDeleted() }));
+vi.mock('../../../core/todo-delete.ts', async (orig) => ({ ...(await orig<object>()), setTodoDeleted: () => setDeleted() }));
 
 const { default: TodosPage } = await import('../ui/TodosPage.tsx');
 
@@ -114,7 +114,8 @@ describe('待办列表的只读行', () => {
     await act(async () => {
       fireEvent.click(screen.getByTestId('todos-swipe-del-ok1'), { detail: 1 });
     });
-    expect(setDeleted).toHaveBeenCalledTimes(1);
+    // 删除的写入代码第一次点时才下载（kit/hooks/useTodoWrites.ts），隔几个微任务才调到
+    await vi.waitFor(() => expect(setDeleted).toHaveBeenCalledTimes(1));
     vi.restoreAllMocks();
   });
 

@@ -15,7 +15,7 @@ vi.mock('../ui/NowCard.tsx', () => ({ NowCard: () => <section data-testid="fake-
 vi.mock('../hooks/useToday.ts', () => ({
   useToday: () => ({
     today: '2026-11-05', tz: 'Asia/Seoul', now: 0, card: null, tomorrowFirst: null,
-    late: [], events: [], todos: [], toggleDone: async () => 'ok', remove: async () => 'ok',
+    late: [], events: [], todos: [], writes: { toggleDone: async () => 'ok', remove: async () => 'ok', setPriority: async () => 'ok' },
   }),
 }));
 
