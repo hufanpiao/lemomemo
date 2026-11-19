@@ -37,6 +37,8 @@ function focusMain(e: Event, root: HTMLElement | null): void {
 
 /** 遮罩把 Esc 交给里面的解锁卡（卡片挂上时登记自己的 cancel） */
 const EscCtx = createContext<{ current: (() => void) | null }>({ current: null });
+// 解锁卡在磨砂遮罩（对话框）里：对话框的名字已经是隐藏标题“隐私记已上锁”（RD.Title），卡片上那行同样的字对读屏藏起来，不念两遍（独立评审 11-19 高 6）
+const InDialog = createContext(false);
 
 /** 锁定倒计时：每秒刷新一次，到点回 0 */
 function useLeft(until: number | null): number {
@@ -57,6 +59,7 @@ function useLeft(until: number | null): number {
  */
 export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backLabel, center = false }: { onCancel?(): void; onForgot(): void; testId?: string; backLabel?: string; center?: boolean }) {
   const t = useVaultT();
+  const inDialog = useContext(InDialog);
   const dur = useDuration();
   const errText = useErrText();
   const { state, s } = useVault();
@@ -150,7 +153,9 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
         {relock}
         <div className={styles.cardHead}>
           <LockIcon />
-          <h2 className={styles.cardTitle}>{t('vault.locked.title', {})}</h2>
+          <h2 className={styles.cardTitle} aria-hidden={inDialog || undefined}>
+            {t('vault.locked.title', {})}
+          </h2>
           <span className={styles.cardSub}><NumIn text={t('vault.locked.countShort', { n: count })} num={String(count)} /></span>
           {/* “取消”是右上角的文字按钮（不描边、次要色、点击区 44） */}
           <button type="button" className={styles.cardCancel} onClick={cancel} data-testid={`${testId}-cancel`}>
@@ -269,7 +274,9 @@ export function UnlockOverlay({ open, children, testId = 'vault-scrim' }: { open
         >
           <RD.Title className={styles.sr}>{t('vault.locked.title', {})}</RD.Title>
           <EscCtx.Provider value={esc}>
-            <PadLayer.Provider value={layer}>{children}</PadLayer.Provider>
+            <InDialog.Provider value={true}>
+              <PadLayer.Provider value={layer}>{children}</PadLayer.Provider>
+            </InDialog.Provider>
           </EscCtx.Provider>
         </div>
       </RD.Content>
