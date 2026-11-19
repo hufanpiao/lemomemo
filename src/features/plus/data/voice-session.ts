@@ -306,9 +306,8 @@ export function createVoiceSession(io: VoiceIo = {}) {
     down() {
       picked = speechWhy();
       refreshQuota();
-      // 手机自带识别那一路要在手势里 start()：就在按下的这一下里开，没按满 350 ms 再关掉。
-      // 有系统识别时每点一下“＋”（包括只想打开打字条的轻点）都会先开一次、没按满就关（语音整块评审第 6 条，接受：不在手势里开 iOS 不让开）
-      if (picked !== null && !exe && lastMicResult() === 'granted' && d().online() && speechSupported() && idleOrFinal()) speech.prime();
+      // 按下不开识别、不碰麦克风（负责人 11-19“点按+也会调用麦克风，麦克风只有长按的时候才调用”）：按满 350 ms 由 start() 当场开。
+      // start() 在 hold-input.ts 按下时排的 350 ms 计时器里调，WebKit 把手势带进 1 秒内的计时器；万一开不起来，start() 里 live 这一路退回录音上传
     },
     start() {
       if (exe || !idleOrFinal() || c.view().card !== null) {

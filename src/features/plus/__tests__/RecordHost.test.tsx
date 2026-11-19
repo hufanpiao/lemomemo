@@ -678,6 +678,19 @@ describe('识别主路：边说边出字、先存、AI 后台整理', () => {
     return { box: h.box, callAi: h.call as unknown as CallAi };
   };
 
+  it('轻点“＋”（不满 350 ms）：手机自带识别一次都不开、不碰麦克风（负责人 11-19“点按+也会调用麦克风，麦克风只有长按的时候才调用”）；按满才开', async () => {
+    setup();
+    act(() => hold.onStart(ptr()));
+    await sleep(100);
+    expect(fx.speech, '按下的这一下不先开识别').toEqual([]);
+    await release();
+    await sleep(HOLD_MS);
+    expect(fx.speech).toEqual([]);
+    expect(fx.starts).toBe(0);
+    await holdDown();
+    expect(fx.speech.filter((r) => !r.cancelled), '按满 350 ms 当场开一次').toHaveLength(1);
+  });
+
   it('按住时面板上实时出字（深底大框在计时上方）；松手不等 AI 当场按本机规则存，出“已记下”、不转圈、busy 放开；不开录音器、不传录音', async () => {
     fx.liveSay = '买牛奶';
     const ai = heldAi();
