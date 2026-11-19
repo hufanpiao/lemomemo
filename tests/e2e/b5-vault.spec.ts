@@ -240,6 +240,17 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   await expect(page.locator('body')).not.toContainText('血压 120/80');
   await expect(page.locator('body')).not.toContainText('体检报告');
   await phoneShots(page, '03-解锁卡', browserName);
+  // 锁着时底栏没被盖住、没被设成 inert，点得到（11-19 独立评审高 3：原来是透明的全屏模态遮罩，看得见点不动）
+  const bar = page.getByTestId('tabbar');
+  if (await bar.isVisible()) {
+    const box = await bar.boundingBox();
+    expect(box).not.toBeNull();
+    const hit = await page.evaluate(({ x, y }) => {
+      const el = document.elementFromPoint(x, y);
+      return !!el?.closest('[data-testid="tabbar"]') && !el.closest('[inert]');
+    }, { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 });
+    expect(hit).toBe(true);
+  }
   await page.getByTestId('vault-unlock-pin').click();
   await expect(page.getByTestId('vault-unlock-pinview')).toBeVisible();
 
@@ -544,9 +555,10 @@ test('审查第 3 条：设密码时开了 Face ID、绑定没成：密码照样
   await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault bind fail /);
 
   await page.getByTestId('vault-lock-now').click();
-  const dlg = page.getByRole('dialog');
-  await expect(dlg).toBeVisible();
-  await expect(dlg).toHaveAccessibleName(/.+/);
+  // 隐私记页锁着是一整页（不是遮罩，11-19 独立评审高 1～3）：有“隐私记已上锁”标题，底栏不被盖住
+  await expect(page.getByTestId('vault-locked')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: '隐私记已上锁' })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="vault-unlock-card"]'))).toBe(true);
   await page.keyboard.press('Tab');
   await phoneShots(page, '12-解锁卡键盘焦点', browserName);

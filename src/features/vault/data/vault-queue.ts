@@ -415,7 +415,9 @@ export function createVaultQueue(d: QueueDeps) {
           // 锁着时记下的改动：合并到拉来的那一行；服务器上已经没有这一条（别处永久删了）就丢掉
           const base = d.store.get(j.id);
           if (!base) {
+            // 等在 flush 上的（移到隐私记）也要回个结果，不能直接删掉不管（独立评审 11-19 高 8）
             jobs.delete(j.id);
+            finish(j, false);
             continue;
           }
           j.row = { ...base, ...j.row };

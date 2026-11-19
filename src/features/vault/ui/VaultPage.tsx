@@ -1,9 +1,9 @@
 // 隐私记页面（B5 S5、S6、S9；定稿线框 s9 PRIVLIST；代定 D14）：#/vault（首页）、#/vault/c/<分类 id|all>（列表）、#/vault/new、#/vault/<id>（编辑）、#/vault/trash（自己的“最近删除”）
 // • 负责人 11-19“隐私记这个页面太空了”→“锁着用甲，解锁后用乙”：首页是分类宫格 + 最近 3 条（./VaultHome.tsx），点一格进那一类的列表；
-//   锁着时解锁卡整页居中（Unlock.tsx 的 center），页面自己的顶栏这时不画（卡片自带）
+//   锁着时这一页就是 Unlock.tsx 的 LockedPage（解锁卡整页居中、自带顶栏；不是遮罩，底栏照常能点）
 // • 列表、编辑器、电脑分栏、插图、看图页是随手记那一份（notes 的 NotesSurface + hooks/vault-note-source.ts 的隐私记来源；B5 隐私记重写 11-15，
 //   主持人定稿“隐私记页面按照随手记的样子全部重写”）：停笔自动存、读写只碰内存仓库，后台队列去发；“最近删除”是 ./VaultTrash.tsx
-// • 状态：查状态中 → 断网（要联网才能打开，TC-B5-33）/ 没设过密码（设密码）/ 锁着（磨砂遮罩 + 解锁卡）/ 已解锁（内容）
+// • 状态：查状态中 → 断网（要联网才能打开，TC-B5-33）/ 没设过密码（设密码）/ 锁着（锁着页；令牌过期等解锁 waiting 时 phase 也是 locked，同一页）/ 已解锁（内容）
 // • 已解锁：顶栏“‹ 随手记 | 🔒 隐私记 | 立即锁上”，下面一条“已解锁 · 离开隐私记或 App 1 分钟自动锁上…”；Ctrl+L 立即上锁
 // • 底栏照常（随手记页签），“＋”只在隐私记里新记（D14）：列表页由随手记的输入行自己登记 notesInput（新记的进隐私记来源）；
 //   编辑页、最近删除没有输入行，这里往 kit/state/new-item.ts 的 notesInput 登记成打开隐私记的新建页
@@ -28,7 +28,7 @@ import { useVaultNoteSource } from '../hooks/vault-note-source.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import { LockIcon } from './Pin.tsx';
 import { SetupPin } from './SetupPin.tsx';
-import { UnlockOverlay, UnlockPanel } from './Unlock.tsx';
+import { LockedPage, UnlockPanel } from './Unlock.tsx';
 import { VaultHome } from './VaultHome.tsx';
 import { VaultTrash } from './VaultTrash.tsx';
 import styles from './Vault.module.css';
@@ -76,7 +76,9 @@ export default function VaultPage() {
 
   const leave = () => backTo('notes');
   const forgot = () => void navigate('settings', 'vault', 'reset');
-  const unlocked = state.phase === 'unlocked' && !state.waiting;
+  // waiting 只在上锁时置上（session.ts 的 lock），解锁就清掉：已解锁不会同时在等解锁
+  const unlocked = state.phase === 'unlocked';
+  const locked = state.phase === 'locked';
   // 页外解锁的、移进过新的一条的：进到页上才拉列表（M3）；拉失败不重试（依赖不变，不会循环）
   useEffect(() => {
     if (unlocked && !state.listed) void s.list();
@@ -106,20 +108,21 @@ export default function VaultPage() {
 
   return (
     <div data-testid="vault" data-phase={state.phase}>
-      {surface ? (
+      {locked ? null : surface ? (
         <Suspense fallback={null}>
           <VaultSurface editing={Boolean(sub) && !inList} inList={inList} cat={cat} />
         </Suspense>
       ) : (
-        <main className={state.phase === 'locked' ? `${styles.page} ${styles.pageBare}` : styles.page} data-feature="vault">
-          {/* 编辑页、最近删除自己有顶栏；列表（c/…）还没拉到时照旧画顶栏（独立评审 11-19 低 11） */}
-          {state.phase !== 'unset' && state.phase !== 'locked' && !(unlocked && sub && !inList) ? <VaultTop unlocked={unlocked} inList={inList} /> : null}
+        <main className={styles.page} data-feature="vault">
+          {/* 设密码、编辑页、最近删除自己有顶栏；列表（c/…）还没拉到时照旧画顶栏（独立评审 11-19 低 11） */}
+          {state.phase !== 'unset' && !(unlocked && sub && !inList) ? <VaultTop unlocked={unlocked} inList={inList} /> : null}
           {body}
         </main>
       )}
-      <UnlockOverlay open={state.phase === 'locked' || state.waiting} center={state.phase === 'locked'}>
-        <UnlockPanel onCancel={leave} onForgot={forgot} />
-      </UnlockOverlay>
+      {/* 解锁后同一块淡出（S21），这时上面已经换成内容 */}
+      <LockedPage open={locked}>
+        <UnlockPanel center onCancel={leave} onForgot={forgot} />
+      </LockedPage>
       {bindFail ? (
         <UndoToast
           message={t('vault.setup.bindFail', { method: bindFail })}

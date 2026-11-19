@@ -157,17 +157,19 @@ describe('解锁、上锁', () => {
     s = session();
     installVaultSession(s);
     render(<VaultPage />);
-    const scrim = await screen.findByTestId('vault-scrim');
+    // 隐私记页锁着是 LockedPage（不是遮罩，11-19 独立评审高 1）：淡出同一套
+    const scrim = await screen.findByTestId('vault-locked');
     expect(scrim.hasAttribute('data-leaving')).toBe(false);
     await act(async () => {
       await s.unlock('1234');
     });
-    expect(screen.getByTestId('vault-scrim').getAttribute('data-leaving')).toBe('true');
-    await waitFor(() => expect(screen.queryByTestId('vault-scrim')).toBeNull(), { timeout: 2000 });
+    expect(screen.getByTestId('vault-locked').getAttribute('data-leaving')).toBe('true');
+    await waitFor(() => expect(screen.queryByTestId('vault-locked')).toBeNull(), { timeout: 2000 });
     act(() => s.lock());
-    expect(screen.getByTestId('vault-scrim').hasAttribute('data-leaving')).toBe(false);
+    expect(screen.getByTestId('vault-locked').hasAttribute('data-leaving')).toBe(false);
     const css = readFileSync(join(import.meta.dirname, '../ui/Vault.module.css'), 'utf8');
     expect(css).toMatch(/\.scrim \{[^}]*transition: opacity var\(--dur-ui\)/);
+    expect(css).toMatch(/\.lockOut \{[^}]*transition: opacity var\(--dur-ui\)/);
     expect(css).not.toMatch(/\.shield \{[^}]*transition/);
     expect(css).not.toMatch(/@keyframes/);
   });
@@ -502,19 +504,20 @@ describe('B5 隐私记重写：停笔自动存、读写只碰内存仓库', () =
   });
 });
 
-describe('审查第 6 条：解锁遮罩是有名字的模态对话框，焦点移进去、圈在里面', () => {
-  it('锁着：role=dialog 的名字是“隐私记已上锁”；焦点在遮罩里；遮罩外的内容对读屏隐藏', async () => {
+describe('审查第 6 条（11-19 改）：隐私记页锁着是一整页（不是遮罩），有标题、焦点在主按钮上', () => {
+  it('锁着：一个 h1“隐私记”、h2“隐私记已上锁”；不是对话框；焦点在“输入密码”；Esc 回随手记', async () => {
     s = session();
     installVaultSession(s);
     render(<VaultPage />);
-    await screen.findByTestId('vault-unlock-card');
-    const dlg = await screen.findByRole('dialog', { name: '隐私记已上锁' });
-    expect(dlg.getAttribute('aria-modal')).toBe('true');
-    await waitFor(() => expect(dlg.contains(document.activeElement)).toBe(true));
-    // 锁着整屏居中（负责人 11-19“锁着用甲”）：页面顶栏不画，返回在遮罩里
+    const page = await screen.findByTestId('vault-locked');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['隐私记']);
+    expect(screen.getByRole('heading', { level: 2, name: '隐私记已上锁' })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('vault-unlock-pin')));
+    // 页面自己的顶栏不画，返回在锁着页里
     expect(screen.queryByTestId('vault-back')).toBeNull();
-    expect(dlg.contains(screen.getByTestId('vault-unlock-cancel'))).toBe(true);
-    // Esc 照旧是“取消”（Radix 接住后交给卡片的 cancel）：回随手记
+    expect(page.contains(screen.getByTestId('vault-unlock-cancel'))).toBe(true);
+    // Esc 照旧是“取消”（层栈接住后交给卡片的 cancel）：回随手记
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     await waitFor(() => expect(window.location.hash).toBe('#/notes'));
   });

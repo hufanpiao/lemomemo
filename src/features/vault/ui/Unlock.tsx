@@ -4,12 +4,13 @@
 //   Face ID 按钮只在这台设备能用（exe、不支持的环境不显示）、绑定过、没有“别处改过密码”（relock）时出现（S4、TC-B5-47 ②）
 // • 隐私记页锁着（center，负责人 11-19“锁着用甲”，方案 柠檬记APP-本机资料/设计方案/2026-11-19_隐私记改善/方案.html 甲）：不是贴底的一条，
 //   整页居中：自带顶栏“‹ 随手记 | 🔒 隐私记”、柠檬黄圆底大锁、“隐私记已上锁”“里面有 N 条”，下面竖排“输入密码”（主按钮）、“用 Face ID 解锁”（次按钮）；
-//   遮罩透明不模糊（锁着时页面底下没有内容），返回走顶栏“‹ 随手记”（同取消）。移到隐私记、设置里那两处等解锁（waiting）照旧是贴底的一条
+//   这一页不是遮罩（LockedPage 照常排在页面里，底栏能点；11-19 独立评审高 1～3：原来是透明的全屏模态遮罩，底栏看得见点不动），返回走顶栏“‹ 随手记”（同取消）。
+//   移到隐私记、设置里那两处等解锁（waiting）照旧是磨砂遮罩里贴底的一条（UnlockOverlay）
 // • 用不了 Face ID（没绑定、设备不支持、relock）时卡片只有“输入密码”“取消”（线框 s9 说明：“就只显示‘输入密码’”），点了再进密码页
 // • 点“输入密码”换成密码键盘；Face ID 连续两次没认出来自动换成密码键盘（D18），标题下写“Face ID 没认出来，请输入密码”
 // • 密码页是整页：顶栏“‹ 随手记 … 取消”；输错写“密码不对，还能再试 N 次”、锁定中写倒计时，都在圆点下面、键盘上面（PWERR），键盘不能按
 // • “Ctrl + L 立即上锁 · Esc 取消”只在电脑版（侧栏宽度）显示
-// • 解锁成功：遮罩淡出 --dur-ui 后卸掉（S21，唯一的动效）；锁上时直接盖上、不做动效
+// • 解锁成功：锁着页、遮罩淡出 --dur-ui 后卸掉（S21，唯一的动效）；锁上时直接盖上、不做动效
 // • 读屏和焦点（审查第 6 条）：遮罩是 Radix Dialog 的模态 Content（同 kit Dialog、smart-search 的 FindPanel；不用 Overlay，CSP 拦它的内联 style），
 //   名字是隐藏标题“隐私记已上锁”（aria-labelledby 由 Radix 接），挂上时焦点移到卡里第一个按钮、Tab 圈在遮罩里，遮罩外的内容对读屏隐藏。
 //   Esc 由 kit 层栈接住（锁屏是栈顶时），经 EscCtx 交给卡片的“取消”（和按钮同一个 cancel）；点遮罩空白处不关
@@ -36,8 +37,6 @@ function focusMain(e: Event, root: HTMLElement | null): void {
 
 /** 遮罩把 Esc 交给里面的解锁卡（卡片挂上时登记自己的 cancel） */
 const EscCtx = createContext<{ current: (() => void) | null }>({ current: null });
-/** 这一次锁屏是不是居中那种：外层在打开那一刻定下，淡出时不跟着状态变（独立评审 11-19 高 1：解锁后 phase 立刻变，淡出那 400ms 会闪出贴底卡和磨砂） */
-const CenterCtx = createContext(false);
 
 /** 锁定倒计时：每秒刷新一次，到点回 0 */
 function useLeft(until: number | null): number {
@@ -56,8 +55,7 @@ function useLeft(until: number | null): number {
  * onCancel：取消以后还要做的事（隐私记页回随手记）；可以不给。
  * 有请求等着解锁（waiting）时，取消一律先作废它们（会话的 cancelWait：原请求回失败、后台队列整个丢掉并记个数），三处用法不再各自调（审查第 1 条）
  */
-export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backLabel }: { onCancel?(): void; onForgot(): void; testId?: string; backLabel?: string }) {
-  const center = useContext(CenterCtx);
+export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backLabel, center = false }: { onCancel?(): void; onForgot(): void; testId?: string; backLabel?: string; center?: boolean }) {
   const t = useVaultT();
   const dur = useDuration();
   const errText = useErrText();
@@ -129,10 +127,7 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
               <rect x="5" y="10.5" width="14" height="10" rx="2.5" />
             </svg>
           </span>
-          {/* 对话框的名字就是这一句（不再另画一个读屏用的标题，免得念两遍） */}
-          <RD.Title asChild>
-            <h2 className={styles.centerTitle}>{t('vault.locked.title', {})}</h2>
-          </RD.Title>
+          <h2 className={styles.centerTitle}>{t('vault.locked.title', {})}</h2>
           <p className={styles.centerSub}><NumIn text={t('vault.locked.count', { n: count })} num={String(count)} /></p>
           {faceFails > 0 ? <p className={styles.cardMsg} role="status">{t('vault.unlock.notRecognized', { method })}</p> : null}
           <div className={styles.centerBtns}>
@@ -207,16 +202,8 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
   );
 }
 
-/**
- * 磨砂遮罩里放解锁卡。open 变 false（解锁成功）时淡出 --dur-ui 再卸掉（S21）；open 变 true 时直接出现。
- * 淡出用 transitionend 收尾，另设 400 ms 兜底（减少动态效果、没有 transition 时不会卡住）
- */
-export function UnlockOverlay({ open, children, testId = 'vault-scrim', center = false }: { open: boolean; children: ReactNode; testId?: string; center?: boolean }) {
-  // 开着时跟着 center 走（渲染时就换，不晚一帧）；关上淡出时停在关之前那一种
-  const [c, setC] = useState(center);
-  if (open && c !== center) setC(center);
-  const t = useVaultT();
-  const esc = useRef<(() => void) | null>(null);
+/** 解锁成功时淡出 --dur-ui 再卸掉（S21）；打开时直接出现。用 transitionend 收尾（done），另设 400 ms 兜底（减少动态效果时不会卡住） */
+function useFadeOut(open: boolean): [shown: boolean, done: () => void] {
   const [shown, setShown] = useState(open);
   useEffect(() => {
     if (open) {
@@ -226,30 +213,64 @@ export function UnlockOverlay({ open, children, testId = 'vault-scrim', center =
     const id = setTimeout(() => setShown(false), 400);
     return () => clearTimeout(id);
   }, [open]);
-  // 锁屏开着是层栈里的模态层（kit/hooks/layers.ts）：Esc 只在它是栈顶时交给里面的退路（esc）；页面的快捷键（Ctrl+K、Ctrl+N、页面上别的密码键盘）收不到，
-  // 里面密码键盘的数字键登记在这一层上（PadLayer）；不锁滚动（keepScroll：取消时直接换页，见 layers.ts）；焦点 Radix 圈住，不由层栈还
+  return [open || shown, () => setShown(false)];
+}
+
+/** 锁屏在层栈里是模态层（kit/hooks/layers.ts）：Esc 只在它是栈顶时交给里面的退路（esc）；页面的快捷键（Ctrl+K、Ctrl+N、页面上别的密码键盘）收不到，
+ *  里面密码键盘的数字键登记在这一层上（PadLayer）；不锁滚动（keepScroll：取消时直接换页，见 layers.ts）；焦点不由层栈还 */
+function useLockLayer(open: boolean, name: string, root: { current: HTMLElement | null }, esc: { current: (() => void) | null }) {
+  return useLayer(open, { name, modal: true, keepScroll: true, el: () => root.current, onEsc: () => esc.current?.(), back: () => [] });
+}
+
+/**
+ * 隐私记页锁着（负责人 11-19“锁着用甲”）：解锁卡就是这一页，照常排在页面里（不是遮罩：底栏照常能点，返回走顶栏“‹ 随手记”）。
+ * 解锁成功后同一块淡出（S21）：淡出那一下盖在刚画出来的内容上、不接点击。Esc、数字键照旧走层栈（同遮罩）
+ */
+export function LockedPage({ open, children }: { open: boolean; children: ReactNode }) {
+  const esc = useRef<(() => void) | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const [shown, done] = useFadeOut(open);
+  const layer = useLockLayer(open, 'unlock', root, esc);
+  // 锁上那一刻焦点给主按钮（同遮罩的 focusMain）：键盘用户不用先 Tab 过“‹ 随手记”
+  useEffect(() => {
+    if (open) root.current?.querySelector<HTMLElement>('[data-unlock-main]')?.focus();
+  }, [open]);
+  if (!shown) return null;
+  return (
+    <div ref={root} className={open ? styles.lockPage : `${styles.lockPage} ${styles.lockOut}`} data-testid="vault-locked" data-leaving={open ? undefined : true} onTransitionEnd={() => !open && done()}>
+      <EscCtx.Provider value={esc}>
+        <PadLayer.Provider value={layer}>{children}</PadLayer.Provider>
+      </EscCtx.Provider>
+    </div>
+  );
+}
+
+/** 磨砂遮罩里放解锁卡（移到隐私记、设置 › 隐私记里令牌过期等解锁时）。淡出同 LockedPage */
+export function UnlockOverlay({ open, children, testId = 'vault-scrim' }: { open: boolean; children: ReactNode; testId?: string }) {
+  const t = useVaultT();
+  const esc = useRef<(() => void) | null>(null);
   const scrim = useRef<HTMLDivElement>(null);
-  const layer = useLayer(open, { name: 'unlock', modal: true, keepScroll: true, el: () => scrim.current, onEsc: () => esc.current?.(), back: () => [] });
-  if (!open && !shown) return null;
+  const [shown, done] = useFadeOut(open);
+  const layer = useLockLayer(open, 'unlock', scrim, esc);
+  if (!shown) return null;
   const leaving = !open;
   return (
-    <RD.Root open={open} onOpenChange={(o) => (o || !open ? undefined : esc.current?.())}>
-      {/* 打开时焦点落到主按钮（Face ID，没有就“输入密码”），不落到标题行右边的“取消”（R-452 V2 把“取消”挪到了第一行，DOM 里排第一） */}
+    <RD.Root open={open}>
+      {/* 打开时焦点落到主按钮（Face ID，没有就“输入密码”），不落到标题行右边的“取消”（R-452 V2 把“取消”挪到了第一行，DOM 里排第一）；
+          Esc 由层栈在捕获阶段接住交给 esc，Radix 自己的 Esc 那条路走不到（独立评审 11-19 低 19：原来的 onOpenChange 是死代码） */}
       <RD.Content asChild forceMount aria-describedby={undefined} onOpenAutoFocus={(e) => focusMain(e, scrim.current)} onPointerDownOutside={prevent} onFocusOutside={prevent} onInteractOutside={prevent} onCloseAutoFocus={prevent}>
         <div
           ref={scrim}
-          className={[styles.scrim, c && styles.scrimCenter, leaving && styles.scrimOut].filter(Boolean).join(' ')}
+          className={leaving ? `${styles.scrim} ${styles.scrimOut}` : styles.scrim}
           data-testid={testId}
           data-leaving={leaving || undefined}
-          onTransitionEnd={() => leaving && setShown(false)}
+          onTransitionEnd={() => leaving && done()}
           aria-modal="true"
         >
-          {c ? null : <RD.Title className={styles.sr}>{t('vault.locked.title', {})}</RD.Title>}
-          <CenterCtx.Provider value={c}>
-            <EscCtx.Provider value={esc}>
-              <PadLayer.Provider value={layer}>{children}</PadLayer.Provider>
-            </EscCtx.Provider>
-          </CenterCtx.Provider>
+          <RD.Title className={styles.sr}>{t('vault.locked.title', {})}</RD.Title>
+          <EscCtx.Provider value={esc}>
+            <PadLayer.Provider value={layer}>{children}</PadLayer.Provider>
+          </EscCtx.Provider>
         </div>
       </RD.Content>
     </RD.Root>

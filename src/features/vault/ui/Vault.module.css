@@ -534,19 +534,30 @@
   text-align: center;
 }
 
-/* ===== 锁着（隐私记页，负责人 11-19“锁着用甲”）：遮罩透明不模糊，整页居中一块；顶栏同 .top（页面自己的顶栏这时不画） ===== */
-.scrimCenter {
-  align-items: stretch;
+/* ===== 锁着（隐私记页，负责人 11-19“锁着用甲”）：Unlock.tsx 的 LockedPage，照常排在页面里（不是遮罩），整页居中一块；顶栏同 .top ===== */
+.lockPage {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
   padding: max(var(--safe-top), 16px) 16px calc(var(--tabbar-pad) + 24px);
+
+  /* 透出 App 的皮肤底色（同方案甲对照图）；淡出时也不加底（同原来透明遮罩的淡出） */
   background: transparent;
-  backdrop-filter: none;
+  color: var(--text);
 }
 
-:global(:root[data-rt='1']) .scrimCenter {
-  background: transparent;
+/* 解锁成功的那一下（S21）：盖在刚画出来的内容上淡出、不接点击；关掉动态效果时直接卸（Unlock.tsx 有 400ms 兜底） */
+.lockOut {
+  position: fixed;
+  z-index: var(--z-dialog);
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-ui) var(--ease-standard);
 }
 
 .center {
+  flex: 1;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -590,10 +601,6 @@
 }
 
 /* 锁着（居中锁屏，方案甲）：页面不铺实底，露出和解锁后同一层背景 */
-.pageBare {
-  background: transparent;
-}
-
 .centerTitle {
   margin: 0;
   font-size: var(--fs-19);
