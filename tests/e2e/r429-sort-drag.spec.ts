@@ -294,10 +294,12 @@ test.describe('长按拖动排序（R-429、R-461）', () => {
     }
     // ⑥ 拖动全程选区为空、整页有标记
     // 用定时器那一路采样数（16 ms 一次，不跟 CI WebKit 的帧率走）：拖动 1 秒以上，正常 60 次上下，留足余量要多于 10 次
-    const dragging = (await samples(page)).filter((x) => x.float && x.up);
+    const smp = await samples(page);
+    const dragging = smp.filter((x) => x.float && x.up);
     expect(dragging.length).toBeGreaterThan(10);
     expect(dragging.filter((x) => x.sel > 0 || !x.drag)).toEqual([]);
-    expect(fr.at(-1)?.drag).toBe(false);
+    // 松手 1.5 秒后标记已清：同样看定时器那一路的最后一次（CI WebKit 逐帧那一路最后一帧可能还是松手前的，ci a937acd4 第 300 行）
+    expect(smp.at(-1)?.drag).toBe(false);
     // ③ 松手以后：这一行只要看得见，浮层已经撤掉、位置就是最终位置
     // 从原行藏起来那一帧起看（拿起那一帧浮层刚挂上、原行下一次渲染才藏，两者完全重合）
     const seen = fr.slice(fr.findIndex((x) => x.float && !x.rows['n4']?.seen)).filter((x) => x.rows['n4']?.seen);
