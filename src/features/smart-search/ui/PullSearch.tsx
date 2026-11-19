@@ -67,7 +67,7 @@ function Head({ pull, scope, found, done, onOpen }: PullSearchProps) {
 
   return (
     <section aria-label={t('pull.label', {})} data-testid="pull-search">
-      <div className={styles.bar} role="search">
+      <div className={styles.bar} role="search" data-via={pull.via ?? undefined}>
         <span className={styles.glass} aria-hidden="true" />
         <input
           ref={input}

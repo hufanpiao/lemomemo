@@ -1,4 +1,50 @@
-/* 下拉搜索的挂法（R-437，PullSlot.tsx）。只用令牌（A11）；没有动效 */
+/* 下拉搜索的挂法（R-437，PullSlot.tsx）。只用令牌（A11）；动效只有占位框跟手长出、松手缩回（R-488） */
+
+/* 跟手的占位框（R-488，负责人 11-20 选“跟手拉出：拉多少露多少”）：高度、透明度由 usePullReveal 拉的时候直接写 --pull-g、--pull-o；
+   拉的时候（data-drag）不加过渡、指到哪长到哪；松手没过半缩回走 --dur-ui、--ease-out。最高 = 搜索框 36 + 下边距 8 = 44（PULL_H），
+   过半松手换成真的搜索框（PullSearch .bar，同样的外形） */
+.ghost {
+  height: var(--pull-g, 0);
+  overflow: hidden;
+  opacity: var(--pull-o, 0);
+  transition:
+    height var(--dur-ui) var(--ease-out),
+    opacity var(--dur-ui) var(--ease-out);
+}
+
+.ghost[data-drag] {
+  transition: none;
+}
+
+/* 减少动态效果：松手缩回不滑，只淡出（拉的时候照样跟手，手指在动、不是自己动） */
+:global(:root[data-rm="1"]) .ghost {
+  transition: opacity var(--dur-ui) var(--ease-out);
+}
+
+/* 搜索框那一块还在下载时的满高占位（PullSlot 的 Suspense fallback） */
+.ghostFull {
+  height: calc(var(--pull-h) + 8px);
+}
+
+/* 外形和 smart-search 的 PullSearch.module.css .bar 是同一条（高、线、底色、圆角），改一处两处一起改 */
+.ghostBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--pull-h);
+  padding: 0 12px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-sm);
+  background: var(--inp-bg);
+  color: var(--text-3);
+  font-size: var(--fs-14);
+}
+
+.ghostGlass {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
 
 /* 包本页列表的那一层：不参与排版；打了字时 hidden，整块不画（列表不卸） */
 .keep {

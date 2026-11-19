@@ -1,13 +1,13 @@
 // 下拉露出搜索框（R-437；kit/hooks/usePullReveal.ts + kit/components/PullSlot.tsx）：
-// • 手势：滚到顶往下拉过阈值才露出；横着拉、不在顶上、按在 data-nopull / fixed / 真能滚的元素里、页面外都不算
+// • 手势（R-488）：滚到顶往下拉，占位框跟手长出，松手过半才露出；横着拉、不在顶上、按在 data-nopull / fixed / 真能滚的元素里、页面外都不算
 // • 滚轮：到顶后先断开 WHEEL_GAP_MS 才累计（惯性冲到顶的那一串不算）；按着 Ctrl、横向为主的不算
 // • 键盘：“搜索本页”平时在、露出后不画，点了 via=key；收起后焦点回到它
 // • 就地筛（R-447）：默认列表留着、foot 打了字才挂，shows / markQ 跟着 setFound；inPlace=false（日历）打了字列表只藏不卸
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PullSlot } from '../../components/PullSlot.tsx';
-import { PULL_OPEN_PX, usePullReveal, WHEEL_GAP_MS, WHEEL_OPEN_PX } from '../usePullReveal.ts';
+import { PULL_FOLLOW, PULL_H, PULL_OPEN_PX, SETTLE_MS, usePullReveal, WHEEL_GAP_MS, WHEEL_OPEN_PX } from '../usePullReveal.ts';
 
 const fx = vi.hoisted(() => ({ logs: [] as string[] }));
 vi.mock('../../../platform/run-log-api.ts', async (orig) => ({ ...(await orig<object>()), rlog: (l: string) => fx.logs.push(l) }));
@@ -66,11 +66,14 @@ function Host({ enabled = true, inPlace = true }: { enabled?: boolean; inPlace?:
 const state = () => screen.getByTestId('state').textContent;
 let scrollY = 0;
 let now = 1000;
+const scrollBy = vi.fn();
 function drag(el: HTMLElement, dx: number, dy: number) {
   fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 100 }] });
   fireEvent.touchMove(el, { touches: [{ clientX: 100 + dx / 2, clientY: 100 + dy / 2 }] });
   fireEvent.touchMove(el, { touches: [{ clientX: 100 + dx, clientY: 100 + dy }] });
   fireEvent.touchEnd(el, { touches: [] });
+  // 松手过半：占位框先补满 SETTLE_MS 再换真框
+  act(() => vi.advanceTimersByTime(SETTLE_MS));
 }
 function wheel(el: HTMLElement, init: WheelEventInit, after = 20) {
   now += after;
@@ -86,11 +89,15 @@ beforeEach(() => {
   scrollY = 0;
   now = 1000;
   Object.defineProperty(window, 'scrollY', { configurable: true, get: () => scrollY });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   vi.spyOn(performance, 'now').mockImplementation(() => now);
+  scrollBy.mockClear();
+  window.scrollBy = scrollBy as unknown as typeof window.scrollBy;
   fx.logs.length = 0;
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -128,6 +135,66 @@ describe('usePullReveal 手势', () => {
     expect(state()).toBe('closed');
     // 只许有“没拉到”的距离记录，不许露出
     expect(fx.logs.filter((s) => !s.startsWith('pull short '))).toEqual([]);
+  });
+
+  // R-488（负责人 11-20 选“跟手拉出：拉多少露多少，过半松手展开，不到一半缩回”）
+  it('占位框跟手长出（手指 × PULL_FOLLOW，最多 PULL_H），拉着时不打开、松手过半才打开；不到一半缩回 0', () => {
+    render(<Host />);
+    const el = screen.getByTestId('in');
+    const ghost = () => screen.getByTestId('pull-ghost');
+    fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 100 }] });
+    fireEvent.touchMove(el, { touches: [{ clientX: 100, clientY: 120 }] });
+    expect(ghost().style.getPropertyValue('--pull-g')).toBe(`${20 * PULL_FOLLOW}px`);
+    expect(ghost().hasAttribute('data-drag')).toBe(true);
+    fireEvent.touchMove(el, { touches: [{ clientX: 100, clientY: 400 }] });
+    expect(ghost().style.getPropertyValue('--pull-g')).toBe(`${PULL_H}px`);
+    expect(ghost().style.getPropertyValue('--pull-o')).toBe('1');
+    expect(state()).toBe('closed');
+    // 拉回去一点再松手：只看松手那一刻长了多少
+    fireEvent.touchMove(el, { touches: [{ clientX: 100, clientY: 110 }] });
+    fireEvent.touchEnd(el, { touches: [] });
+    expect(state()).toBe('closed');
+    expect(ghost().style.getPropertyValue('--pull-g')).toBe('0px');
+    expect(ghost().hasAttribute('data-drag')).toBe(false);
+    // 过半松手：占位框先补满到 PULL_H，SETTLE_MS 以后才换真框（整块评审第 2 条）
+    fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 100 }] });
+    fireEvent.touchMove(el, { touches: [{ clientX: 100, clientY: 100 + PULL_OPEN_PX }] });
+    fireEvent.touchEnd(el, { touches: [] });
+    expect(ghost().style.getPropertyValue('--pull-g')).toBe(`${PULL_H}px`);
+    expect(state()).toBe('closed');
+    act(() => vi.advanceTimersByTime(SETTLE_MS));
+    expect(state()).toBe('open touch');
+    expect(screen.queryByTestId('pull-ghost')).toBeNull();
+  });
+
+  it('拉满了（框已长到 PULL_H）松手当场换真框，不等', () => {
+    render(<Host />);
+    const el = screen.getByTestId('in');
+    fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 100 }] });
+    fireEvent.touchMove(el, { touches: [{ clientX: 100, clientY: 300 }] });
+    fireEvent.touchEnd(el, { touches: [] });
+    expect(state()).toBe('open touch');
+  });
+
+  it('露出了、没打字：页面往上滚走超过 PULL_H 自己收起，焦点不跳；打了字就不收', () => {
+    render(<Host />);
+    drag(screen.getByTestId('in'), 0, PULL_OPEN_PX);
+    expect(state()).toBe('open touch');
+    scrollY = PULL_H;
+    fireEvent.scroll(window);
+    expect(state()).toBe('open touch');
+    scrollY = PULL_H + 1;
+    fireEvent.scroll(window);
+    expect(state()).toBe('closed');
+    expect(document.activeElement).not.toBe(screen.getByTestId('pull-key'));
+    // 抽走的那 PULL_H 同一帧补回去，手指下的内容不跳（整块评审第 3 条）
+    expect(scrollBy).toHaveBeenCalledWith(0, -PULL_H);
+    scrollY = 0;
+    drag(screen.getByTestId('in'), 0, PULL_OPEN_PX);
+    fireEvent.change(screen.getByTestId('q'), { target: { value: '牛奶' } });
+    scrollY = 300;
+    fireEvent.scroll(window);
+    expect(state()).toBe('open touch');
   });
 
   it('overflow-y:auto 但内容不够高（不能滚）的框照样算页面本身', () => {

@@ -32,6 +32,14 @@
   }
 }
 
+/* 手指拉开的（via=touch）：占位框已经长满看得见了，换成真框时不再淡入、下滑一次（R-488 整块评审第 2 条） */
+@starting-style {
+  .bar[data-via="touch"] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 :global(:root[data-rm="1"]) .bar {
   transition: opacity var(--dur-ui) var(--ease-out);
 }

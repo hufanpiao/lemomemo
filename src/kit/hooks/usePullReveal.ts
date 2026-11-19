@@ -1,6 +1,9 @@
 // 下拉露出搜索框（R-437；同 iPhone 备忘录）：随手记、待办、日历三页共用这一个 hook，挂法见 kit/components/PullSlot.tsx，搜索框和结果在 smart-search 的 PullSearch
-// • 手机：页面滚到顶（window.scrollY ≤ 0）时按下，再往下拉过 PULL_OPEN_PX、竖着拉为主（横向不超过竖向一半）就露出。
-//   用 touch 事件（passive）：滚到顶以后往下拉，浏览器自己接手回弹，pointer 事件会被 pointercancel 掉，touch 事件照常来
+// • 手机（R-488 重写，负责人 11-20“在顶部的时候往下拉页面不动，只出搜索框”，弹窗选“跟手拉出”）：页面滚到顶（window.scrollY ≤ 0）时按下、
+//   竖着往下拉（横向不超过竖向一半）：页面本身不动（platform/top-lock.ts 拦下回弹），标题下面一条占位框（PullSlot 的 ghost，ghostRef）
+//   跟着手指长出来，长出 = 手指移动 × PULL_FOLLOW，最多 PULL_H；松手时长过一半就露出真的搜索框，不到一半缩回去。
+//   原来靠 iOS 回弹、手指走够 200 才露出、拉的过程中看不见（R-437 / 11-17 三次调门槛），整段换掉。
+//   用 touch 事件（passive；拦回弹的是 top-lock 那一份非被动监听）：pointer 事件会被 pointercancel 掉，touch 事件照常来
 // • 电脑：滚到顶以后滚轮继续往上滚，累计过 WHEEL_OPEN_PX 就露出。防误触（R-437 评审第 2 条）：
 //   按着 Ctrl（触控板双指缩放）、横向为主的不算；滚到顶以后要先断开一段（两次滚轮隔 WHEEL_GAP_MS 以上，惯性流结束）才开始累计，
 //   所以从下面一路滚上来、惯性冲到顶的那一串不会打开
@@ -15,21 +18,27 @@
 // • 就地筛（R-447，负责人 11-17 选 S-B“原列表筛选”）：搜索框那一块（smart-search 的 PullSearch）按本页记录算出命中的 id，setFound 交回这里；
 //   页面照原来的分组和行画，只画 shows(id) 为真的，标题用 PullSlot 的 PullHit 给命中的字加短下划线（markQ 是算出这一批命中用的那个查询）。
 //   还没算出来（那一块还在下载）时 found 为 null，什么都不藏
-// • 手机拉过 PULL_OPEN_PX 那一下震一下、不响（R-471，platform/feedback.ts 的 fx('pull')）
+// • 手机松手展开那一下震一下、不响（R-471，platform/feedback.ts 的 fx('pull')）
+// • 露出了、还没打字，页面往上滚走（scrollY 超过 PULL_H）就自己收起（R-488 弹窗选“没打字就自动收”；输入框正聚焦着不收）
 // • 运行日志：pull open <页> via=touch|wheel|key、pull close <页>（不记打的字）
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { queryTerms } from '../../../shared/logic/search.ts';
 import { fx } from '../../platform/fx-api.ts';
 import { rlog } from '../../platform/run-log-api.ts';
+import { atTop, pullsDown, scrollsY } from '../../platform/top-lock.ts';
 
-/** 手指往下拉多少露出（px，量的是手指移动，不是画面位移）。原来 64；11-17 第一次改 110；
- *  负责人 11-17 晚又发截图“搜索框还是一拉就出来，改成拉到图片这么多的时候才出来”：iOS 橡皮筋让画面只跟手指走一半左右，
- *  截图里画面拉开约 90pt，对应手指约 200 */
-export const PULL_OPEN_PX = 200;
+/** 占位框长满的高度（px）：和真的搜索框一样高（PullSearch.module.css 的 .bar：--pull-h 36 + 下边距 8） */
+export const PULL_H = 44;
+/** 占位框跟手的比例：手指走 1，框长 0.6（带一点阻力，轻轻一碰不会露出一大截） */
+export const PULL_FOLLOW = 0.6;
+/** 手指往下走多少（px）松手就展开：框长过一半 */
+export const PULL_OPEN_PX = Math.ceil(PULL_H / 2 / PULL_FOLLOW);
 /** 滚轮在顶上继续往上滚多少露出（px） */
 export const WHEEL_OPEN_PX = 120;
 /** 两次滚轮隔这么久算断开（惯性流结束），从头累计 */
 export const WHEEL_GAP_MS = 250;
+/** 松手过半：占位框先补满到 PULL_H（同 --dur-ui 的过渡）再换成真的搜索框，换的那一下不跳（整块评审第 2 条） */
+export const SETTLE_MS = 220;
 /** 滚轮按行滚时一行算多少 px */
 const LINE_PX = 16;
 
@@ -64,12 +73,9 @@ export interface PullReveal {
   ref(el: HTMLElement | null): void;
   /** 挂在“搜索本页”按钮上 */
   keyRef: RefObject<HTMLButtonElement | null>;
+  /** 挂在跟手长出来的占位框上（PullSlot 画；hook 直接改它的 --pull-g，拉的过程不经 React 渲染） */
+  ghostRef: RefObject<HTMLDivElement | null>;
 }
-
-const atTop = (): boolean => window.scrollY <= 0;
-
-const scrolls = (el: Element, cs: CSSStyleDeclaration): boolean =>
-  (cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight;
 
 /** 按在页面本身（见文件头）：在 region 里，往上到 region 之前没有能滚的、fixed 的、[data-nopull] 的 */
 export function pullable(region: HTMLElement | null, t: EventTarget | null): boolean {
@@ -77,7 +83,7 @@ export function pullable(region: HTMLElement | null, t: EventTarget | null): boo
   for (let el: Element | null = t; el !== null && el !== region; el = el.parentElement) {
     if (el.hasAttribute('data-nopull')) return false;
     const cs = getComputedStyle(el);
-    if (cs.position === 'fixed' || scrolls(el, cs)) return false;
+    if (cs.position === 'fixed' || scrollsY(el, cs)) return false;
   }
   return true;
 }
@@ -89,6 +95,7 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
   const [found, setFound] = useState<PullFound | null>(null);
   const region = useRef<HTMLElement | null>(null);
   const keyRef = useRef<HTMLButtonElement | null>(null);
+  const ghostRef = useRef<HTMLDivElement | null>(null);
   const ref = useCallback((el: HTMLElement | null) => {
     region.current = el;
   }, []);
@@ -126,33 +133,54 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
     let last = -Infinity;
     let armed = false;
     let maxDy = 0;
+    let settle: ReturnType<typeof setTimeout> | undefined;
     const onStart = (e: TouchEvent): void => {
       maxDy = 0;
       const p = e.touches[0];
       start = e.touches.length === 1 && p && atTop() && pullable(region.current, e.target) ? { x: p.clientX, y: p.clientY } : null;
     };
+    /** 占位框长出多少（px）；drag 时跟手不过渡，松手缩回时过渡 */
+    const grow = (h: number, drag: boolean): void => {
+      const g = ghostRef.current;
+      if (!g) return;
+      g.style.setProperty('--pull-g', `${h}px`);
+      g.style.setProperty('--pull-o', String(h / PULL_H));
+      g.toggleAttribute('data-drag', drag);
+    };
+    let h = 0;
     const onMove = (e: TouchEvent): void => {
       const p = e.touches[0];
       if (!start || !p) return;
-      if (!atTop()) {
-        start = null;
-        return;
-      }
       const dy = p.clientY - start.y;
-      if (dy >= PULL_OPEN_PX && Math.abs(p.clientX - start.x) * 2 < dy) {
+      // 不在顶上了、横着拉为主：这一下不是下拉搜索，占位框收回
+      if (!atTop() || (dy > 0 && !pullsDown(p.clientX - start.x, dy))) {
         start = null;
-        // 过了拉出的那条线：只震不响（R-471）。滚轮、键盘打开不震
-        fx('pull');
-        reveal('touch');
+        h = 0;
+        grow(0, false);
         return;
       }
       if (dy > maxDy) maxDy = dy;
+      h = Math.min(PULL_H, Math.max(0, dy) * PULL_FOLLOW);
+      grow(h, true);
     };
     const onEnd = (): void => {
-      // 没拉到门槛就松手：记下最远拉了多少，下次调门槛按日志里的数，不靠估
-      if (start && maxDy >= 24) rlog(`pull short ${tag} dy=${Math.round(maxDy)}`);
+      const ok = start !== null && h >= PULL_H / 2;
+      // 没拉到一半就松手：记下最远拉了多少，下次调门槛按日志里的数，不靠估
+      if (start && !ok && maxDy >= 24) rlog(`pull short ${tag} dy=${Math.round(maxDy)}`);
       start = null;
       maxDy = 0;
+      if (!ok) {
+        h = 0;
+        grow(0, false);
+        return;
+      }
+      // 松手展开：只震不响（R-471）。滚轮、键盘打开不震。先补满再换（减少动态效果时高度不过渡，直接换）
+      fx('pull');
+      const full = h >= PULL_H || document.documentElement.dataset.rm === '1';
+      h = 0;
+      grow(PULL_H, false);
+      if (full) reveal('touch');
+      else settle = setTimeout(() => reveal('touch'), SETTLE_MS);
     };
     const onWheel = (e: WheelEvent): void => {
       const now = performance.now();
@@ -187,6 +215,7 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
     window.addEventListener('touchcancel', onEnd, o);
     window.addEventListener('wheel', onWheel, o);
     return () => {
+      clearTimeout(settle);
       window.removeEventListener('touchstart', onStart);
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
@@ -197,7 +226,30 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
 
   // 和查找同一个判断（queryTerms）：只打了标点、空白时没有可查的词，不算在搜，页面照常显示（R-447 评审第 3 条）
   const searching = queryTerms(q).length > 0;
+
+  // 自动收起抽走了列表上面 PULL_H 高的一块：同一帧把页面往回挪同样多，手指下的内容不跳（iOS Safari 没有滚动锚定，整块评审第 3 条）
+  const shift = useRef(false);
+  useLayoutEffect(() => {
+    if (open || !shift.current) return;
+    shift.current = false;
+    window.scrollBy(0, -PULL_H);
+  }, [open]);
+
+  // 没打字就自动收（R-488）：露着、没在搜、输入框没聚焦时，页面往上滚走超过 PULL_H 就收起；焦点不还给“搜索本页”（不是用户点的收起）
+  useEffect(() => {
+    if (!open || searching) return undefined;
+    const onScroll = (): void => {
+      if (window.scrollY <= PULL_H) return;
+      const a = document.activeElement;
+      if (a instanceof HTMLInputElement && region.current?.contains(a)) return;
+      close();
+      refocus.current = false;
+      shift.current = true;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [open, searching, close]);
   const live = searching ? found : null;
   const shows = useCallback((id: string) => live === null || live.ids.has(id), [live]);
-  return { enabled, open, via, q, setQ, searching, found: live, setFound, shows, markQ: live?.q ?? '', reveal, close, ref, keyRef };
+  return { enabled, open, via, q, setQ, searching, found: live, setFound, shows, markQ: live?.q ?? '', reveal, close, ref, keyRef, ghostRef };
 }

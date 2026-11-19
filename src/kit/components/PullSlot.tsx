@@ -27,10 +27,21 @@ interface PullSlotProps {
   children: ReactNode;
 }
 
-const part = (node: ReactNode) => (
+const part = (node: ReactNode, fallback: ReactNode = null) => (
   <QuietBoundary name="pull-search">
-    <Suspense fallback={null}>{node}</Suspense>
+    <Suspense fallback={fallback}>{node}</Suspense>
   </QuietBoundary>
+);
+
+/** 占位框里那一条：外形同 PullSearch 的 .bar（放大镜 + 灰字） */
+const GhostBar = ({ label }: { label: string }) => (
+  <div className={styles.ghostBar}>
+    <svg className={styles.ghostGlass} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5 14 14" />
+    </svg>
+    <span>{label}</span>
+  </div>
 );
 
 export function PullSlot({ pull, keyLabel, search, inPlace = true, children }: PullSlotProps) {
@@ -41,7 +52,20 @@ export function PullSlot({ pull, keyLabel, search, inPlace = true, children }: P
           {keyLabel}
         </button>
       ) : null}
-      {pull.open ? part(search('head')) : null}
+      {pull.enabled && !pull.open ? (
+        <div ref={pull.ghostRef} className={styles.ghost} aria-hidden="true" data-testid="pull-ghost">
+          <GhostBar label={keyLabel} />
+        </div>
+      ) : null}
+      {/* 搜索框那一块露出时才下载：下载好之前占位框满高留着，不先缩回再跳下来（整块评审第 1 条） */}
+      {pull.open
+        ? part(
+            search('head'),
+            <div className={styles.ghostFull} aria-hidden="true">
+              <GhostBar label={keyLabel} />
+            </div>,
+          )
+        : null}
       <div className={styles.keep} hidden={!inPlace && pull.searching} data-testid="pull-keep">
         {children}
       </div>

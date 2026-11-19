@@ -73,7 +73,7 @@ async function openPage(page: Page, hash: string, testId: string, ready: string)
 }
 
 /** 在页面里从 (x, 120) 往下拉 dy（只带 touches 坐标的 touch 事件，见文件头） */
-// 默认拉 240：要过 src/kit/hooks/usePullReveal.ts 的 PULL_OPEN_PX（11-18 是 200）。原来写 160，门槛提到 200 后 ci 快读组 6 条露不出搜索框
+// 默认拉 240：远过 src/kit/hooks/usePullReveal.ts 的 PULL_OPEN_PX（R-488 起占位框过半就开，约 37px）
 async function pullDown(page: Page, testId: string, dy = 240): Promise<void> {
   await page.evaluate(({ sel, dy }) => {
     const el = document.querySelector(`[data-testid="${sel}"]`) ?? document.body;
@@ -102,10 +102,27 @@ test.describe('R-437 下拉搜索：手机', () => {
   test('随手记：下拉露出 → 原列表按标题 / 正文 / 分类就地筛、隐私记不出 → “用 AI 按意思找”打开查找面板 → 取消收起；日志不带打的字', async ({ page, baseURL }) => {
     await fakeServer(page, baseURL);
     await openPage(page, 'notes', 'notes', `notes-card-${NT}`);
-    // 往下拉得不够不露出：轻轻一拉（90px，原来的阈值 64 会露出）不出（负责人 11-17）
-    await pullDown(page, 'notes', 90);
-    await page.waitForTimeout(300);
+    // R-488（负责人 11-20“在顶部的时候往下拉页面不动，只出搜索框”，选“跟手拉出”）：拉着的时候页面本身不动（top-lock 拦下 touchmove 默认）、
+    // 标题下面的占位框跟手长出；拉得不够（30px → 框长 18，不到 44 的一半）松手缩回、不露出搜索框
+    const mid = await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="notes"]') as HTMLElement;
+      const fire = (type: string, y: number | null): boolean => {
+        const ev = new Event(type, { bubbles: true, cancelable: true });
+        Object.defineProperty(ev, 'touches', { value: y === null ? [] : [{ clientX: 200, clientY: y }] });
+        el.dispatchEvent(ev);
+        return ev.defaultPrevented;
+      };
+      fire('touchstart', 120);
+      const blocked = fire('touchmove', 150);
+      const g = document.querySelector('[data-testid="pull-ghost"]') as HTMLElement;
+      const h = g.getBoundingClientRect().height;
+      fire('touchend', null);
+      return { blocked, h: Math.round(h), y: window.scrollY };
+    });
+    expect(mid).toEqual({ blocked: true, h: 18, y: 0 });
+    await page.waitForTimeout(400);
     await expect(page.getByTestId('pull-search')).toHaveCount(0);
+    expect(await page.getByTestId('pull-ghost').evaluate((g) => Math.round(g.getBoundingClientRect().height))).toBe(0);
     await search(page, 'notes', '拉面');
     await expect(page.getByTestId('pull-input')).toHaveAttribute('placeholder', '搜索随手记');
     // 原列表就地筛：命中的卡片还是原来那张，命中的字有下划线；没命中的不画；隐私记不出；不另出结果列表
