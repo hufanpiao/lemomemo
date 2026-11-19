@@ -1,4 +1,5 @@
 // 输入时盖住整页的液态模糊玻璃（R-399 打字条后面、R-401 随手记输入行后面共用这一份；样式在 Mist.module.css）
+// • 盖着时拦下拖动（touchmove）和滚轮（wheel），后面的页面不动（负责人 11-20）
 // • 只接手指和鼠标的点（onTap，用 click：一次点按的最后一个事件，处理时这一层还在，卸掉以后不会落到后面看不清的按钮上，不点穿）；
 //   键盘用各自输入框的 Esc / Tab 离开，所以这一层不进读屏
 // • 画出来记一行 `<tag> mist on fx=…`、卸掉记一行 `<tag> mist off`（运行日志，只记状态和实际生效的滤镜；fx=none 表示走了半透明纯色的后备）
@@ -24,5 +25,18 @@ export function Mist({ onTap, tag, log, testId, className }: MistProps) {
     log(`${tag} mist on fx=${cs?.getPropertyValue('backdrop-filter') || cs?.getPropertyValue('-webkit-backdrop-filter') || 'none'}`);
     return () => log(`${tag} mist off`);
   }, [tag, log]);
+  // 盖着时后面的页面拖不动、滚不动（负责人 11-20“输入框出来的时候背景还可以拖动，改成输入框出来以后背景没法动”）：
+  // 手指在这一层上拖（touchmove）、电脑滚轮（wheel）都拦下默认；要非被动监听，React 的 onTouchMove 给不了。点按照旧走 onClick
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const stop = (e: Event): void => e.preventDefault();
+    el.addEventListener('touchmove', stop, { passive: false });
+    el.addEventListener('wheel', stop, { passive: false });
+    return () => {
+      el.removeEventListener('touchmove', stop);
+      el.removeEventListener('wheel', stop);
+    };
+  }, []);
   return <div ref={ref} className={className ? `${styles.mist} ${className}` : styles.mist} onClick={onTap} aria-hidden="true" data-testid={testId} />;
 }

@@ -8,6 +8,10 @@
   position: fixed;
   inset: 0 0 calc(0px - var(--vh-gap, 0px));
   z-index: var(--z-mist);
+
+  /* 盖着时后面的页面拖不动（负责人 11-20）；Mist.tsx 另外拦 touchmove、wheel */
+  touch-action: none;
+  overscroll-behavior: contain;
   background: var(--g-tint);
 
   /* avoid-ai-design-ignore: K3 负责人 11-11 指定输入时后面整页液态模糊玻璃（R-399、R-401） */

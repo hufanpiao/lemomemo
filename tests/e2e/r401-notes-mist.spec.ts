@@ -53,5 +53,40 @@ for (const size of SIZES) {
       expect(await page.evaluate(() => (window as unknown as { __behind?: number }).__behind ?? 0)).toBe(0);
       await expect(page).toHaveURL(/#\/notes$/);
     });
+
+    // R-491（负责人 11-20“输入框出来的时候背景还可以拖动，改成输入框出来以后背景没法动”）：模糊层上的拖动、滚轮都滚不动后面的页面
+    test('模糊层盖着时后面的页面拖不动、滚不动', async ({ page, browserName }) => {
+      await page.goto('/app/#/notes');
+      const input = page.getByTestId('notes-input');
+      await expect(input).toBeVisible({ timeout: 20_000 });
+      await page.evaluate(() => {
+        const tall = document.createElement('div');
+        tall.style.height = '3000px';
+        document.querySelector('[data-testid="notes"]')?.append(tall);
+      });
+      await input.click();
+      const mist = page.getByTestId('notes-mist');
+      await expect(mist).toBeVisible();
+      const y0 = await page.evaluate(() => window.scrollY);
+      // 模糊层上的 touchmove、wheel 都被拦下默认（真机手指拖页面不滚只能 iPhone 看）
+      const prevented = await page.evaluate(() => {
+        const m = document.querySelector('[data-testid="notes-mist"]') as HTMLElement;
+        return ['touchmove', 'wheel'].map((t) => {
+          const e = new Event(t, { bubbles: true, cancelable: true });
+          m.dispatchEvent(e);
+          return e.defaultPrevented;
+        });
+      });
+      expect(prevented).toEqual([true, true]);
+      expect(await mist.evaluate((m) => getComputedStyle(m).touchAction)).toBe('none');
+      // 真滚轮：只有电脑 chromium 能发（playwright 的 webkit 是手机版，不支持滚轮）
+      if (!size.hasTouch && browserName === 'chromium') {
+        await page.mouse.move(400, 300);
+        await page.mouse.wheel(0, 600);
+        await page.waitForTimeout(300);
+        expect(await page.evaluate(() => window.scrollY)).toBe(y0);
+      }
+      await expect(input).toBeFocused();
+    });
   });
 }
