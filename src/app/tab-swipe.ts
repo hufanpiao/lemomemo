@@ -69,6 +69,9 @@ export function installTabSwipeOnce(): void {
   installTabSwipe();
 }
 
+/** 右边那条按下以后多久之内来的“前进”算是被系统手势抢走的 */
+const FWD_MS = 3000;
+
 /** 挂到 document 上；返回取消（测试用） */
 export function installTabSwipe(doc: Document = document): () => void {
   const win = doc.defaultView;
@@ -82,6 +85,7 @@ export function installTabSwipe(doc: Document = document): () => void {
       return;
     }
     const target = e.target instanceof Element ? e.target : null;
+    cancelled = false;
     s = { side, x: p.clientX, y: p.clientY, t: performance.now(), hash: win?.location.hash ?? '', st: win?.history.state, why: blockedAt(target, doc) };
   };
   const up = (e: TouchEvent): void => {
@@ -94,16 +98,8 @@ export function installTabSwipe(doc: Document = document): () => void {
     const dy = p.clientY - d.y;
     const ms = Math.round(performance.now() - d.t);
     const hash = win?.location.hash ?? '';
-    // 负责人 11-19“在待办页点击某个待办，左滑退出以后回到待办页面再右滑的话不进入设置，而是回到之前的某的待办”：
-    // 从详情页侧滑退回来以后历史里还留着“前进”那一条，iPhone 右边缘往左划是系统的“前进”手势，抢在这里之前把页面带回了那条待办（原来判 moved 不管）。
-    // 右边缘起手的系统手势只有“前进”（返回在左边缘），所以主页面右边那条起手、抬手时地址已变、这一划本该进设置，就是被前进抢走了：
-    // 先退回原页，退回以后再进设置（压一条新历史，“前进”那条随之清掉）
-    if (d.why === null && d.side === 'r' && hash !== d.hash && swipeTarget(parseHash(d.hash).name, 'r', dx, dy, ms) === 'settings') {
-      rlog(`tabswipe side=r dx=${Math.round(dx)} dy=${Math.round(dy)} ms=${ms} to=settings fwd=1`);
-      win?.addEventListener('popstate', () => void navigate('settings'), { once: true });
-      goBack();
-      return;
-    }
+    // 被系统“前进”抢走、抬手照样送来（地址已变）：同 popstate 那条路（见 onPop）
+    if (d.side === 'r' && hash !== d.hash && fwdTaken(d, 'up')) return;
     const r = parseHash(hash);
     const route = r.name === 'settings' && r.params.length > 0 ? 'settings-sub' : r.name;
     const why = d.why ?? (hash !== d.hash || win?.history.state !== d.st ? 'moved' : mainTab(route) === null && route !== 'settings' ? 'route' : null);
@@ -117,14 +113,37 @@ export function installTabSwipe(doc: Document = document): () => void {
       else void replaceRoute('today');
     } else navigateTab(to);
   };
-  const drop = (): void => {
+  // 负责人 11-19“在待办页点击某个待办，左滑退出以后回到待办页面再右滑的话不进入设置，而是回到之前的某的待办”（又 11-19 下午：修完还是进待办编辑）：
+  // 从详情页侧滑退回来以后历史里还留着“前进”那一条，iPhone 右边缘往左划是系统的“前进”手势，会把页面带回那条待办。
+  // iPhone 把这一下交给网页有两种：抬手照送（地址已变），或者直接 touchcancel、根本没有抬手（第一版 843cd4f1 只管了前一种，所以没修好）。
+  // 所以不靠抬手：主页面右边那条按下以后 3 秒内来了一次 popstate、地址变了，就是被“前进”抢走的——先退回原页，退回以后再进设置
+  // （压一条新历史，“前进”那条随之清掉）。日志记 how=up|pop、cancel=0|1，真机上看 iPhone 实际是哪一种
+  let cancelled = false;
+  const fwdTaken = (d: NonNullable<typeof s>, how: 'up' | 'pop'): boolean => {
+    if (d.why !== null || d.side !== 'r' || mainTab(parseHash(d.hash).name) === null) return false;
     s = null;
+    rlog(`tabswipe side=r to=settings fwd=1 how=${how} cancel=${cancelled ? 1 : 0} ms=${Math.round(performance.now() - d.t)}`);
+    // 等下一次 popstate（退回）再进设置；从 popstate 里调用时，挂在这次派发之后（不让这一次 popstate 就触发它）
+    queueMicrotask(() => win?.addEventListener('popstate', () => void navigate('settings'), { once: true }));
+    goBack();
+    return true;
+  };
+  const onPop = (): void => {
+    const d = s;
+    if (!d || performance.now() - d.t > FWD_MS || (win?.location.hash ?? '') === d.hash) return;
+    fwdTaken(d, 'pop');
+  };
+  // 触摸取消：按下那一条留着（系统手势接管时 iPhone 会先取消触摸，popstate 晚一点才来），下一次按下或 3 秒后作废
+  const drop = (): void => {
+    cancelled = true;
   };
   const o = { passive: true, capture: true } as const;
   doc.addEventListener('touchstart', down, o);
   doc.addEventListener('touchend', up, o);
   doc.addEventListener('touchcancel', drop, o);
+  win?.addEventListener('popstate', onPop, true);
   return () => {
+    win?.removeEventListener('popstate', onPop, true);
     doc.removeEventListener('touchstart', down, o);
     doc.removeEventListener('touchend', up, o);
     doc.removeEventListener('touchcancel', drop, o);

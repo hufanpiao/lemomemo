@@ -106,3 +106,44 @@ test('月历中间划是翻月、不切页；翻过月的月历右边起手往�
   await swipe(page, browserName, L, 300, 160);
   await at(page, 'today');
 });
+
+/** 右边那条按下以后，系统“前进”手势接管：浏览器前进一步，iPhone 再送 touchcancel（ended=cancel）或照常送 touchend（ended=end） */
+async function edgeForward(page: Page, ended: 'cancel' | 'end'): Promise<void> {
+  await page.evaluate(
+    async ([x, ended]) => {
+      const t = document.elementFromPoint(x, 300);
+      if (!t) throw new Error('起点没有元素');
+      const tch = (type: string, cx: number, done: boolean): void => {
+        const e = new Event(type, { bubbles: true, cancelable: true });
+        const p = { clientX: cx, clientY: 300 };
+        Object.defineProperty(e, 'touches', { value: done ? [] : [p] });
+        Object.defineProperty(e, 'changedTouches', { value: [p] });
+        t.dispatchEvent(e);
+      };
+      tch('touchstart', x, false);
+      if (ended === 'cancel') tch('touchcancel', x - 20, true);
+      await new Promise<void>((r) => {
+        window.addEventListener('popstate', () => r(), { once: true });
+        history.forward();
+      });
+      if (ended === 'end') tch('touchend', x - 160, true);
+    },
+    [R, ended] as const,
+  );
+}
+
+for (const ended of ['cancel', 'end'] as const) {
+  test(`负责人 11-19：从二级页退回主页面后右边往左划，系统“前进”抢先把页面带回二级页——退回再进设置（iPhone 送 ${ended === 'cancel' ? 'touchcancel、没有抬手' : '抬手'}）`, async ({ page }) => {
+    await ready(page, '/app/#/todos');
+    await page.evaluate(() => {
+      location.hash = '#/settings/calendar';
+    });
+    await at(page, 'settings/calendar');
+    await page.goBack();
+    await at(page, 'todos');
+    await page.waitForTimeout(700);
+    await edgeForward(page, ended);
+    await at(page, 'settings');
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(new RegExp(`tabswipe side=r to=settings fwd=1 how=${ended === 'cancel' ? 'pop cancel=1' : '(pop|up)'}`));
+  });
+}
