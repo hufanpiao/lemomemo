@@ -81,7 +81,7 @@
    ② 亲手勾上（组件给 .face 加 .pop）：0.45 → 1.22 → 0.96 → 1.02 → 1，共 --dur-done-pop，分段曲线 --ease-done-pop-in、--ease-done-pop；
       填充块同时从小圆（0.3 倍、圆角 50%）长成圆角方块（--dur-done-fill，淡入 --dur-done-fade）
    ③ --dur-done-spark-at 起 14 个小点贴着方块边长出来、往外飘、逐帧变暗（--dur-spark）
-   ④ --dur-done-ring-at 起方块外一圈细正圆边扩边淡（--dur-ring），始终比小点暗、比小点先消失
+   ④ --dur-done-ring-at 起方块外一圈细正圆先长出来（--dur-ring-in），--dur-done-ring-out-at 起边扩边淡（--dur-ring），始终比小点暗、比小点先消失
    颜色（负责人选“乙”，R-436 改）：这一行刚勾上、还在原位时（label 上 data-fresh，组件的 fresh），填充、边是亮柠檬黄 --accent、勾号 --on-accent；
    收进“已完成”以后、挂载时就勾上的，照旧 --check-on-bg / --check-on-fg（亮色那几条写在文件最后，按选择器特异性排）。
    删除线、行收起在 kit List.module.css 的 .strike、.fold。已勾上的按下 0.8 写在减弱动态效果一段后面（同样是特异性顺序） */
@@ -241,32 +241,42 @@
   border: 0.7px solid var(--check-ring);
   border-radius: 50%;
   opacity: 0;
-  animation: check-ring var(--dur-ring) var(--ease-linear) var(--dur-done-ring-at) both;
+
+  /* 两段（11-19）：出现那一段（0 → 12%）走 --ease-done-ring-in，后面直线。不在 @keyframes 里写 animation-timing-function: var(…)：
+     WebKit 不认关键帧里的 var()、退成直线，逐帧对照 180ms 圆圈 0.25（对照页乙4 0.60）；stylelint 又不许写死曲线，所以拆成两段，
+     缓动、时长都在元素上取令牌（两段合计 --dur-ring-in + --dur-ring = 170ms 同对照页）。后一段不往前填（fill forwards），前一段播的时候不盖住它 */
+  animation:
+    check-ring-in var(--dur-ring-in) var(--ease-done-ring-in) var(--dur-done-ring-at) both,
+    check-ring var(--dur-ring) var(--ease-linear) var(--dur-done-ring-out-at) forwards;
+}
+
+/* 圆圈两段：check-ring-in 是对照页乙4 的 0 → 12%，check-ring 是 12% → 100%（百分比按后一段 150 / 170 折算：45% → 37.5%、75% → 71.6%） */
+@keyframes check-ring-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.2);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1.36);
+  }
 }
 
 @keyframes check-ring {
   0% {
-    opacity: 0;
-    transform: scale(1.2);
-    animation-timing-function: var(--ease-done-ring-in);
-  }
-
-  12% {
     opacity: 1;
     transform: scale(1.36);
-    animation-timing-function: var(--ease-linear);
   }
 
-  45% {
+  37.5% {
     opacity: 0.6;
     transform: scale(1.72);
-    animation-timing-function: var(--ease-linear);
   }
 
-  75% {
+  71.6% {
     opacity: 0.2;
     transform: scale(1.88);
-    animation-timing-function: var(--ease-linear);
   }
 
   100% {

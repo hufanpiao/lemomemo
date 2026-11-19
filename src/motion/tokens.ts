@@ -31,8 +31,12 @@ export const dur = {
   subText: 0.15,
   /** --dur-done-ring-at 175ms：细正圆出现的时刻 */
   doneRingAt: 0.175,
-  /** --dur-ring 170ms：细正圆边扩边淡 */
-  ring: 0.17,
+  /** --dur-ring-in 20ms：细正圆出现那一段（对照页 0 → 12%，11-19 拆两段：WebKit 不认关键帧里的 var() 缓动） */
+  ringIn: 0.02,
+  /** --dur-done-ring-out-at 195ms：细正圆后一段开始的时刻（doneRingAt + ringIn） */
+  doneRingOutAt: 0.195,
+  /** --dur-ring 150ms：细正圆后一段边扩边淡（两段合计 170ms 同对照页） */
+  ring: 0.15,
   /** --dur-done-strike-at 0ms：删除线开始画的时刻（勾上当下） */
   doneStrikeAt: 0,
   /** --dur-strike 90ms：删除线从左往右画满 */
@@ -126,6 +130,8 @@ export const cssVarOf = {
     subSpark: '--dur-sub-spark',
     subText: '--dur-sub-text',
     doneRingAt: '--dur-done-ring-at',
+    ringIn: '--dur-ring-in',
+    doneRingOutAt: '--dur-done-ring-out-at',
     ring: '--dur-ring',
     doneStrikeAt: '--dur-done-strike-at',
     strike: '--dur-strike',
