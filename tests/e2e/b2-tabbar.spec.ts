@@ -298,7 +298,8 @@ test.describe('底栏（FA-7）', () => {
       });
       mo.observe(document.body, { childList: true, subtree: true });
     });
-    await page.goBack();
+    // 浏览器历史只有一条（R-487）：用页面里的“‹ 返回”退回今天
+    await page.getByTestId('edit-back').click();
     await expect(page.getByTestId('today')).toBeVisible();
     await expect.poll(() => page.evaluate(() => (window as unknown as { zzRemount: { rows: unknown[] } }).zzRemount.rows.length), { timeout: 5000 }).toBe(20);
     const rec = await page.evaluate(() => (window as unknown as { zzRemount: { atMount: boolean | null; rows: { band: boolean; op: number; edgeOp: number; fades: number }[] } }).zzRemount);

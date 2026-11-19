@@ -1,4 +1,4 @@
-// 四个主页面从屏幕左右两边往里划（负责人 11-18：只在左右两边触发、两头循环、二级页不切；11-19：右边往左划进设置，设置首页左边往右划退回）
+// 左右两条切页带里的横划：四个主页面切页签、右边往左划进设置（负责人 11-18、11-19）；别的页左边往右划是 App 自己的返回（R-487）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as Router from '../router.ts';
 
@@ -13,9 +13,10 @@ vi.mock('../router.ts', async (orig) => ({
 }));
 
 import { SIDE_PX } from '../../motion/gestures.ts';
-import { blockedAt, installTabSwipe, swipeTarget, SWIPE_MAX_MS, SWIPE_MIN_PX } from '../tab-swipe.ts';
+import { parseHash } from '../router.ts';
+import { blockedAt, installTabSwipe, isEdgeBack, parentOf, swipeTarget, SWIPE_MAX_MS, SWIPE_MIN_PX } from '../tab-swipe.ts';
 
-describe('swipeTarget：划完去哪个页签', () => {
+describe('swipeTarget：主页面上划完去哪', () => {
   it('左边那条往右划（负责人说的“左滑”）去下一个：今天 → 日历 → 待办 → 随手记 → 今天；右边那条往左划进设置', () => {
     expect(swipeTarget('today', 'l', 80, 0, 200)).toBe('calendar');
     expect(swipeTarget('calendar', 'l', 80, 0, 200)).toBe('todos');
@@ -27,10 +28,8 @@ describe('swipeTarget：划完去哪个页签', () => {
     expect(swipeTarget('today', 'r', 80, 0, 200)).toBeNull();
     expect(swipeTarget('today', 'l', -80, 0, 200)).toBeNull();
   });
-  it('二级页（编辑、设置、纪念日、隐私记）不切；日历翻过月（cal）还是日历主页面', () => {
-    for (const r of ['edit', 'settings', 'settings-sub', 'anniv', 'vault']) expect(swipeTarget(r, 'r', -80, 0, 200)).toBeNull();
-    for (const r of ['edit', 'settings-sub', 'anniv', 'vault']) expect(swipeTarget(r, 'l', 80, 0, 200)).toBeNull();
-    expect(swipeTarget('settings', 'l', 80, 0, 200), '设置首页左边往右划退回').toBe('back');
+  it('不是主页面不切；日历翻过月（cal）还是日历主页面', () => {
+    for (const r of ['todo', 'settings', 'anniv', 'vault']) expect(swipeTarget(r, 'l', 80, 0, 200)).toBeNull();
     expect(swipeTarget('cal', 'l', 80, 0, 200)).toBe('todos');
   });
   it('太短、太斜、太慢都不切', () => {
@@ -38,6 +37,26 @@ describe('swipeTarget：划完去哪个页签', () => {
     expect(swipeTarget('today', 'r', -80, 65, 200), '横移不到竖移 1.25 倍').toBeNull();
     expect(swipeTarget('today', 'l', 103, 60, 200), '416 日志里被拒的那一下').toBe('calendar');
     expect(swipeTarget('today', 'r', -80, 0, SWIPE_MAX_MS + 1)).toBeNull();
+  });
+});
+
+describe('别的页的返回（R-487）', () => {
+  it('isEdgeBack：只认左边那条往右划，够长、够横，不限时长', () => {
+    expect(isEdgeBack('l', SWIPE_MIN_PX, 0)).toBe(true);
+    expect(isEdgeBack('l', SWIPE_MIN_PX - 1, 0)).toBe(false);
+    expect(isEdgeBack('l', 80, 65)).toBe(false);
+    expect(isEdgeBack('r', -80, 0)).toBe(false);
+  });
+  it('parentOf：直接打开时回父级', () => {
+    const p = (h: string): string | null => parentOf(parseHash(h));
+    expect(p('#/todo/x')).toBe('todos');
+    expect(p('#/event/x')).toBe('calendar');
+    expect(p('#/note/x')).toBe('notes');
+    expect(p('#/vault')).toBe('notes');
+    expect(p('#/settings/remind/dnd')).toBe('settings');
+    expect(p('#/settings')).toBe('today');
+    expect(p('#/remind/todo/x')).toBe('today');
+    expect(p('#/anniv')).toBeNull();
   });
 });
 
@@ -62,7 +81,7 @@ const byId = (id: string): HTMLElement => {
   return e;
 };
 
-describe('blockedAt：切页带里起手、但不切的地方', () => {
+describe('blockedAt：主页面上切页带里起手、但不切的地方', () => {
   afterEach(() => document.body.replaceChildren());
   it('输入框、底栏、弹层开着、焦点在输入框都不切；别处能切', () => {
     page();
@@ -87,13 +106,14 @@ describe('installTabSwipe：真的划一下', () => {
     Object.defineProperty(e, 'changedTouches', { value: [p] });
     target.dispatchEvent(e);
   };
-  const swipe = (x0: number, x1: number): void => {
-    const t = byId('blank');
+  const swipe = (x0: number, x1: number, id = 'blank'): void => {
+    const t = byId(id);
     touch('touchstart', x0, 200, t);
     touch('touchend', x1, 205, t, true);
   };
   beforeEach(() => {
     nav.to = [];
+    nav.back = false;
     page();
     off = installTabSwipe(document);
   });
@@ -102,7 +122,7 @@ describe('installTabSwipe：真的划一下', () => {
     window.location.hash = '';
     document.body.replaceChildren();
   });
-  it('左边那条往右划：今天 → 日历；右边那条往左划：压一条历史进设置', () => {
+  it('左边那条往右划：今天 → 日历；右边那条往左划进设置（压进返回栈）', () => {
     window.location.hash = '#/today';
     swipe(10, 150);
     expect(nav.to).toEqual(['calendar']);
@@ -115,69 +135,42 @@ describe('installTabSwipe：真的划一下', () => {
     swipe(SIDE_PX + 1, SIDE_PX + 150);
     expect(nav.to).toEqual([]);
   });
-  it('抬手前同一地址的历史换了一条（系统侧滑退掉打字条垫的那一条，hash 不变）：判 moved 不切（独立评审 11-19 高 2）', () => {
+  it('主页面上从输入框起手不切', () => {
+    window.location.hash = '#/today';
+    swipe(10, 150, 'in');
+    expect(nav.to).toEqual([]);
+  });
+  it('抬手前地址变了：判 moved 不动', () => {
     window.location.hash = '#/today';
     const t = byId('blank');
     touch('touchstart', 10, 200, t);
-    window.history.replaceState({ other: 1 }, '', window.location.href);
+    window.history.replaceState(null, '', '#/todos');
     touch('touchend', 150, 205, t, true);
     expect(nav.to).toEqual([]);
   });
-  it('负责人 11-19：从待办详情退回待办页后右边往左划，系统“前进”先把页面带回那条待办——把这一条原地换成设置（不退回、不再等 popstate）', () => {
-    window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
-    const t = byId('blank');
-    touch('touchstart', W - 10, 200, t);
-    window.history.pushState({ lemoDepth: 1 }, '', '#/todo/x');
-    touch('touchend', W - 150, 205, t, true);
-    expect(nav.to).toEqual(['replace:settings']);
-    window.dispatchEvent(new PopStateEvent('popstate'));
-    expect(nav.to).toEqual(['replace:settings']);
-    // 起手在详情页（不是主页面）、地址变了：照旧判 moved，不动
-    window.history.replaceState({ lemoDepth: 1 }, '', '#/todo/y');
-    touch('touchstart', W - 10, 200, t);
-    window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
-    touch('touchend', W - 150, 205, t, true);
-    expect(nav.to).toEqual(['replace:settings']);
+  it('编辑页左边往右划：有上一页退一步，没有回父级；从输入框起手、焦点在输入框里、慢慢划都算', () => {
+    window.location.hash = '#/todo/x';
+    nav.back = true;
+    vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(SWIPE_MAX_MS * 4);
+    swipe(10, 150, 'in');
+    vi.restoreAllMocks();
+    nav.back = false;
+    (byId('in') as HTMLInputElement).focus();
+    swipe(10, 150);
+    expect(nav.to).toEqual(['goBack', 'replace:todos']);
   });
-  it('负责人 11-19 下午“修完还是进待办编辑”：iPhone 把系统“前进”当触摸取消、根本没有抬手——按下以后来了 popstate 就把这一条换成设置', () => {
-    window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
+  it('编辑页：右边往左划、太短、太斜不动；弹层开着不动', () => {
+    window.location.hash = '#/todo/x';
+    swipe(W - 10, W - 150);
+    swipe(10, 10 + SWIPE_MIN_PX - 1);
     const t = byId('blank');
-    touch('touchstart', W - 10, 200, t);
-    touch('touchcancel', W - 30, 200, t, true);
-    window.history.pushState({ lemoDepth: 1 }, '', '#/todo/x');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-    // 负责人 11-19 晚录屏“闪之前的待办页”：popstate 当下同步换地址（路由随后的 hashchange 直接画设置），不走 replaceRoute 的先画再换
-    expect(nav.to).toEqual([]);
-    expect(window.location.hash).toBe('#/settings');
-    expect(window.history.state).toMatchObject({ lemoDepth: 1 });
-    // 左边那条起手、或者起手在详情页：来了 popstate 也不管
-    nav.to = [];
-    window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
     touch('touchstart', 10, 200, t);
-    window.history.pushState({ lemoDepth: 1 }, '', '#/todo/x');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-    touch('touchstart', W - 10, 200, t);
-    window.history.pushState({ lemoDepth: 2 }, '', '#/todo/y');
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    touch('touchend', 90, 300, t, true);
+    page(true);
+    swipe(10, 150);
     expect(nav.to).toEqual([]);
   });
-  it('负责人 11-19 傍晚“设置页自动闪退”：系统“前进”带回来的本来就是设置首页（之前从设置退回来过）——照收，不退回、不换', () => {
-    window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
-    const t = byId('blank');
-    touch('touchstart', W - 10, 200, t);
-    touch('touchcancel', W - 30, 200, t, true);
-    window.history.pushState({ lemoDepth: 1 }, '', '#/settings');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-    expect(nav.to).toEqual([]);
-    expect(window.location.hash).toBe('#/settings');
-    // 抬手照送的那一种也一样
-    window.history.replaceState({ lemoDepth: 0 }, '', '#/notes');
-    touch('touchstart', W - 10, 200, t);
-    window.history.pushState({ lemoDepth: 1 }, '', '#/settings');
-    touch('touchend', W - 150, 205, t, true);
-    expect(nav.to).toEqual([]);
-  });
-  it('设置首页：右边往左划不动；左边往右划退回（有上一页退一步，没有就原地换回今天、不退出 App）；设置子页都不管', () => {
+  it('设置首页：右边往左划不动；左边往右划退回（有上一页退一步，没有就回今天）；设置子页没栈时回设置首页', () => {
     window.location.hash = '#/settings';
     swipe(W - 10, W - 150);
     expect(nav.to).toEqual([]);
@@ -188,7 +181,11 @@ describe('installTabSwipe：真的划一下', () => {
     expect(nav.to).toEqual(['goBack', 'replace:today']);
     window.location.hash = '#/settings/calendar';
     swipe(10, 150);
-    swipe(W - 10, W - 150);
-    expect(nav.to).toEqual(['goBack', 'replace:today']);
+    expect(nav.to).toEqual(['goBack', 'replace:today', 'replace:settings']);
+  });
+  it('没有父级的页（纪念日）栈空时不动', () => {
+    window.location.hash = '#/anniv';
+    swipe(10, 150);
+    expect(nav.to).toEqual([]);
   });
 });

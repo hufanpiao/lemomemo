@@ -1,10 +1,11 @@
 // 设置子页的低问题（提醒接线代码复审第二轮 N1、N2）：
-// N1 直接打开提醒二级页 → 未来 7 天 → 侧滑 → “‹ 设置” → 前进 → “‹ 提醒与通知”，要回到二级页（不跳到首页、不叠历史）；
+// N1 直接打开提醒二级页 → 未来 7 天 → 左边往右划 → “‹ 设置”，要回到首页（不跳层、不叠历史；R-487 返回栈）；
 // N2 焦点放回入口：入口晚出来要接着找（R6），等的时候用户已经把焦点挪走就不抢回来；三层页之间直接换要重新挂载（R14，key）。
 // 提醒二级页的正文换成“晚 200 ms 才出来”的包装（真组件照常渲染），模拟懒加载慢的时候
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useEffect, useState, type ComponentType } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { goBack, stackOf } from '../../../app/router.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { fakeApi, fakeExit, now } from './fakes.tsx';
 
@@ -55,25 +56,21 @@ const move = async (fn: () => void, to: string): Promise<void> => {
   await hashIs(to);
 };
 
-describe('N1：上一条被换掉以后点返回不跳层', () => {
-  it('直接打开二级页 → 未来 7 天 → 侧滑 → “‹ 设置” → 前进 → “‹ 提醒与通知”：回到二级页，再返回是首页，再侧滑离开设置', async () => {
-    window.history.pushState({ lemoDepth: 1 }, '', '#/settings/remind');
+describe('N1：直接打开的二级页返回不跳层（R-487 起没有“前进”，原来“侧滑再前进”那一步删了）', () => {
+  it('直接打开二级页 → 未来 7 天 → 左边往右划 → “‹ 设置”：回到首页，栈是空的、浏览器历史一条不多', async () => {
+    window.history.replaceState(null, '', '#/settings/remind');
+    const len = window.history.length;
+    const push = vi.spyOn(window.history, 'pushState');
     mount();
     await click('remind-open-upcoming');
     await hashIs('#/settings/remind/upcoming');
-    await move(() => window.history.back(), '#/settings/remind');
+    expect(stackOf()).toEqual(['#/settings/remind']);
+    await move(() => goBack(), '#/settings/remind');
     await click('settings-remind-back');
     await hashIs('#/settings');
-    await move(() => window.history.forward(), '#/settings/remind/upcoming');
-    const push = vi.spyOn(window.history, 'pushState');
-    await click('settings-remind-up-back');
-    await hashIs('#/settings/remind');
-    expect(await screen.findByTestId('settings-remind-back', {}, { timeout: 10_000 })).toBeTruthy();
+    expect(stackOf()).toEqual([]);
     expect(push).not.toHaveBeenCalled();
-    await click('settings-remind-back');
-    await hashIs('#/settings');
-    // 历史里没有叠出两条“设置”：再侧滑一下就离开设置
-    await move(() => window.history.back(), '#/today');
+    expect(window.history.length).toBe(len);
   });
 });
 

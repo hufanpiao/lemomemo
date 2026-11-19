@@ -10,7 +10,7 @@ import { currentTz } from '../../../core/current-tz.ts';
 import { clearAllCollections, collection } from '../../../core/store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
-import { navigate, resetLoadForTest } from '../../../app/router.ts';
+import { navigate } from '../../../app/router.ts';
 import { pendingNewDate } from '../hooks/new-date.ts';
 import { setNewItemDay } from '../../../kit/state/new-item.ts';
 import EventEditPage from '../ui/EventEditPage.tsx';
@@ -270,9 +270,8 @@ describe('只读行（0.27①“只读显示”，FA-2 视觉验收第 2 条）'
 });
 
 describe('‹ 返回（iOS 主屏幕版恢复后退出 App，代码审查 M1）', () => {
-  it('恢复后只剩编辑页这一条（state 带深度 1 和上一次载入的编号）：原地换成今天，不调用 history.back()', async () => {
+  it('直接打开（推送、旧版留下的 state，没有返回栈）：原地换成今天，不调用 history.back()', async () => {
     await boot();
-    resetLoadForTest(); // 恢复 = 重新载入了一次
     window.history.replaceState({ lemoDepth: 1, lemoDoc: 'old-load' }, '', `/app/#/event/${ID}`);
     render(<EventEditPage />);
     const b = vi.spyOn(window.history, 'back');
@@ -283,14 +282,17 @@ describe('‹ 返回（iOS 主屏幕版恢复后退出 App，代码审查 M1）'
     expect(window.location.hash).toBe('#/today');
   });
 
-  it('App 里从今天页点进来的：照旧退一步', async () => {
+  it('App 里从月历点进来的：退回那一页（返回栈，R-487），不调用 history.back()', async () => {
     await boot();
-    window.history.replaceState(null, '', '/app/#/today');
+    window.history.replaceState(null, '', '/app/#/cal/month/2026-12');
     await navigate('event', ID);
     render(<EventEditPage />);
-    const b = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
-    fireEvent.click(screen.getByTestId('edit-back'));
-    expect(b).toHaveBeenCalledTimes(1);
+    const b = vi.spyOn(window.history, 'back');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('edit-back'));
+    });
+    expect(b).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('#/cal/month/2026-12');
   });
 });
 

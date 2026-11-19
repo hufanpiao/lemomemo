@@ -4,6 +4,7 @@
 // 不引 reminders 的词典（别的功能只能 import 它的 index.ts）：要和它同词的地方直接写出期望的文字
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { goBack } from '../../../app/router.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { zh } from '../i18n/zh.ts';
@@ -92,8 +93,8 @@ describe('设置 › 提醒与通知 二级页（线框 sR7 左图）', () => {
     expect(await screen.findByTestId('settings-remind-entry', {}, LAZY)).toBeTruthy();
     expect(screen.getByTestId('settings-signout')).toBeTruthy();
     expect(screen.queryByTestId('settings-reminders')).toBeNull();
-    // 点进去压了一条，退一步后再进还是在同一位置：长度只比进来前多 1（前进那条）
-    expect(window.history.length).toBe(before + 1);
+    // 点进去、退回来，浏览器历史一条都不多（R-487：返回栈在 history.state 里，没有“前进”那条）
+    expect(window.history.length).toBe(before);
   });
 
   it('直接打开 #/settings/remind：“‹ 设置”原地换成设置首页、不多压一条历史', async () => {
@@ -136,17 +137,17 @@ describe('设置 › 提醒与通知 › 未来 7 天的提醒（线框 sR7 右�
     expect(await screen.findByTestId('settings-remind-entry', {}, LAZY)).toBeTruthy();
   });
 
-  it('侧滑 / 浏览器后退（history.back）也一层一层退', async () => {
+  it('左边往右划（goBack，R-487）也一层一层退', async () => {
     await renderPage();
     await openRemind();
     await openUpcoming();
     await act(async () => {
-      window.history.back();
+      goBack();
     });
     await waitFor(() => expect(window.location.hash).toBe('#/settings/remind'));
     expect(await screen.findByTestId('settings-reminders', {}, LAZY)).toBeTruthy();
     await act(async () => {
-      window.history.back();
+      goBack();
     });
     await waitFor(() => expect(window.location.hash).toBe('#/settings'));
     expect(await screen.findByTestId('settings-remind-entry', {}, LAZY)).toBeTruthy();
@@ -171,7 +172,7 @@ describe('设置 › 提醒与通知 › 未来 7 天的提醒（线框 sR7 右�
     await screen.findByTestId('settings-reminders', {}, LAZY);
     await openUpcoming();
     await act(async () => {
-      window.history.back();
+      goBack();
     });
     await waitFor(() => expect(window.location.hash).toBe('#/settings/remind'));
     await screen.findByTestId('settings-reminders', {}, LAZY);
@@ -185,11 +186,11 @@ describe('设置 › 提醒与通知 › 未来 7 天的提醒（线框 sR7 右�
     await openRemind();
     await openUpcoming();
     await act(async () => {
-      window.history.back();
+      goBack();
     });
     await waitFor(() => expect(window.location.hash).toBe('#/settings/remind'));
     await act(async () => {
-      window.history.back();
+      goBack();
     });
     await waitFor(() => expect(window.location.hash).toBe('#/settings'));
     await screen.findByTestId('settings-remind-entry', {}, LAZY);
@@ -200,7 +201,7 @@ describe('设置 › 提醒与通知 › 未来 7 天的提醒（线框 sR7 右�
     });
     await waitFor(() => expect(h1Text()).toBe(zh['settings.remind.upcoming']));
     const before = window.history.length;
-    // jsdom 的历史在同一文件里是累积的，后退可能碰巧落到别的 #/settings/remind：直接看有没有调 history.back
+    // 换过来时 state 是 null（没有返回栈）：返回只能原地换，不能调 history.back
     const back = vi.spyOn(window.history, 'back');
     await click(screen.getByTestId('settings-remind-up-back'));
     await waitFor(() => expect(window.location.hash).toBe('#/settings/remind'));

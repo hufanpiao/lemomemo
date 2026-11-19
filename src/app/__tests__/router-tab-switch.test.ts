@@ -46,7 +46,7 @@ describe('页签互切：fadeSwap，不起 View Transition', () => {
     expect(m.fadeSwap.mock.calls.every((c) => c.length === 1)).toBe(true);
   });
 
-  it('同一页里新压一条（纪念日列表 → 编辑层、月历 → 周视图）：不起任何过渡，照样压一条历史（整块评审第 20 条：pushInPage 并进 navigate）', async () => {
+  it('同一页里新进一层（纪念日列表 → 编辑层、月历 → 周视图）：不起任何过渡，浏览器历史不多一条（整块评审第 20 条；R-487）', async () => {
     await navigate('calendar');
     m.fadeSwap.mockClear();
     const len = window.history.length;
@@ -54,7 +54,7 @@ describe('页签互切：fadeSwap，不起 View Transition', () => {
     expect(m.transition).not.toHaveBeenCalled();
     expect(m.fadeSwap).not.toHaveBeenCalled();
     expect(window.location.hash).toBe('#/cal/week/2026-12-07');
-    expect(window.history.length).toBe(len + 1);
+    expect(window.history.length).toBe(len);
   });
 
   it('页签和别的页之间（进编辑页、设置）：照旧 View Transition', async () => {

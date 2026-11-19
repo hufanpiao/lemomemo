@@ -2,7 +2,7 @@
 // 四个主页面之间一律原地换、一条都不压，没有 App 里的上一页。按着修饰键（新标签页打开）照浏览器默认，不拦
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { canGoBack, resetLoadForTest, useRoute } from '../../../../app/router.ts';
+import { canGoBack, useRoute } from '../../../../app/router.ts';
 import { GlassBar } from '../GlassBar.tsx';
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
@@ -15,7 +15,6 @@ function Bar() {
 
 let base = 0;
 beforeEach(() => {
-  resetLoadForTest();
   window.history.pushState(null, '', '#/today'); // 截掉别的用例留下的“前进”历史
   base = window.history.length;
 });

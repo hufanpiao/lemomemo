@@ -1,8 +1,8 @@
 // 只有懒加载的页面才用的几个路由函数，从 router.ts 挪出来、不进首屏（R-372 首屏额度）：
 // 日历的 replaceInPage（日历内部一律原地换，R-372 ②）、编辑页的路由槽位 useEditRoute（三个编辑页的唯一出口，架构 10.1）、子页的返回 backOr。
-// 历史的 state、深度、编号仍由 router.ts 管
+// 返回栈仍由 router.ts 管（writeEntry 原地写地址时栈照旧带着）
 import { useCallback, useReducer, useRef } from 'react';
-import { canGoBack, commit, goBack, hrefOf, noteEntry, parseHash, replaceRoute, stateFor, useRoute, type RouteName } from './router.ts';
+import { canGoBack, commit, goBack, hrefOf, parseHash, replaceRoute, useRoute, writeEntry, type RouteName } from './router.ts';
 
 
 /**
@@ -13,16 +13,12 @@ import { canGoBack, commit, goBack, hrefOf, noteEntry, parseHash, replaceRoute, 
 export function replaceInPage(name: RouteName, ...params: string[]): Promise<void> {
   const href = hrefOf(name, ...params);
   if (window.location.hash === href) return Promise.resolve();
-  return commit(() => {
-    window.history.replaceState(stateFor(0), '', href);
-    noteEntry();
-  }, 'none');
+  return commit(() => writeEntry(href), 'none');
 }
 
-/** 只改地址、不重画（新建保存后把 #/todo/new 换成这一条的 id，代码审查 S7）；深度不变 */
+/** 只改地址、不重画（新建保存后把 #/todo/new 换成这一条的 id，代码审查 S7）；返回栈不变 */
 export function replaceAddress(name: RouteName, ...params: string[]): void {
-  window.history.replaceState(stateFor(0), '', hrefOf(name, ...params));
-  noteEntry();
+  writeEntry(hrefOf(name, ...params));
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -60,7 +56,7 @@ export function useEditRoute(name: 'todo' | 'event' | 'note' | 'anniv' | 'vault'
   return { id, key, onCreated };
 }
 
-/** 子页的“‹ 返回”：直接打开的（推送、书签、刷新）没有上一页，原地换成 fallback */
+/** 子页的“‹ 返回”：返回栈里有上一页就退一步；直接打开的（推送、书签）没有，原地换成 fallback */
 export function backOr(fallback: RouteName): void {
   if (canGoBack()) goBack();
   else void replaceRoute(fallback);

@@ -1,6 +1,6 @@
 // hash 路由（架构 2.0）：/app/#/notes/abc
 import { describe, expect, it } from 'vitest';
-import { canGoBack, DEFAULT_ROUTE, hrefOf, navigate, parseHash, replaceRoute, ROUTE_NAMES } from '../router.ts';
+import { canGoBack, DEFAULT_ROUTE, hrefOf, navigate, parseHash, replaceRoute, ROUTE_NAMES, stackOf } from '../router.ts';
 import { replaceAddress } from '../router-levels.ts';
 import { featureRoutes } from '../features.ts';
 
@@ -29,29 +29,41 @@ describe('router', () => {
   });
 });
 
-describe('canGoBack（代码审查 S11）、replaceAddress（S7）', () => {
-  it('进 App 的第一页没有上一页（哪怕 history.length > 1）；navigate 压一条后有；replaceRoute 不改深度', async () => {
+describe('canGoBack（返回栈不空，R-487）、replaceAddress（S7）', () => {
+  it('进 App 的第一页没有上一页（哪怕 history.length > 1）；navigate 进二级页后有；replaceRoute 不动栈；浏览器历史一条都不多', async () => {
     window.history.replaceState(null, '', '/app/#/today');
     window.history.pushState(null, '', '/app/#/today');
-    expect(window.history.length).toBeGreaterThan(1);
+    const len = window.history.length;
+    expect(len).toBeGreaterThan(1);
     expect(canGoBack()).toBe(false);
-    await navigate('todos');
+    await navigate('todo', 'new');
     expect(canGoBack()).toBe(true);
+    expect(stackOf()).toEqual(['#/today']);
     await replaceRoute('settings');
     expect(canGoBack()).toBe(true);
     expect(window.location.hash).toBe('#/settings');
+    await navigate('todos'); // 主页面是根：到了就清空
+    expect(canGoBack()).toBe(false);
+    expect(window.history.length).toBe(len);
   });
 
-  it('replaceAddress：只换地址、不压历史、深度不变', async () => {
+  it('replaceAddress：只换地址、不压历史、栈不变', async () => {
     window.history.replaceState(null, '', '/app/#/today');
     await navigate('todo', 'new');
     const len = window.history.length;
     replaceAddress('todo', '00000000-0000-4000-8000-000000000001');
     expect(window.location.hash).toBe('#/todo/00000000-0000-4000-8000-000000000001');
     expect(window.history.length).toBe(len);
-    expect(canGoBack()).toBe(true);
+    expect(stackOf()).toEqual(['#/today']);
     window.history.replaceState(null, '', '/app/#/today');
     replaceAddress('todos');
+    expect(canGoBack()).toBe(false);
+  });
+
+  it('栈里混了不是地址的东西、或根本不是数组：当没有', () => {
+    window.history.replaceState({ lemoStack: ['#/todos', 3, 'http://x', null] }, '', '/app/#/todo/x');
+    expect(stackOf()).toEqual(['#/todos']);
+    window.history.replaceState({ lemoStack: '#/todos' }, '', '/app/#/todo/x');
     expect(canGoBack()).toBe(false);
   });
 });

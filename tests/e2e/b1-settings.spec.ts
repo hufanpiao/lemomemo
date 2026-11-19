@@ -235,8 +235,9 @@ test.describe('设置页骨架', () => {
   });
 
   // 负责人 10-30（iPhone 主屏幕版）：“注销账号点进去后左滑应该是回到设置里面的页面，而不是主页”。
-  // 注销页有自己的地址 #/settings/delete；合卡以后从账号二级页点进去，左滑一层一层退：注销 → 账号 → 设置 → 今天
-  test('今天 → 设置 → 账号 → 注销账号：一层一层后退回今天；注销页“‹ 账号”同样回账号二级页、不多压一条历史', async ({ page }) => {
+  // 注销页有自己的地址 #/settings/delete；合卡以后从账号二级页点进去，一层一层退：注销 → 账号 → 设置 → 今天。
+  // R-487 起浏览器历史只有一条：退一步走页面里的“‹ 返回”（和左边往右划同一个 goBack），全程 history.length 不变
+  test('今天 → 设置 → 账号 → 注销账号：一层一层退回今天，浏览器历史一条不多', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.locator('main[data-feature="today"]')).toBeVisible();
     // 从界面点进去（接手清单 NAV-today-no-settings；负责人 11-05 ①：设置入口是今天页右上角头像，B2 FA-7）；
@@ -250,29 +251,22 @@ test.describe('设置页骨架', () => {
     await expect(page.getByTestId('settings-delete')).toBeVisible();
     await expect(page).toHaveURL(/#\/settings\/delete$/);
 
-    await page.goBack();
+    const len = await page.evaluate(() => history.length);
+    const depth = (): Promise<number> => page.evaluate(() => ((history.state as { lemoStack?: unknown[] } | null)?.lemoStack ?? []).length);
+    expect(await depth()).toBe(3);
+    await page.getByTestId('settings-delete-back').click();
     await expect(page).toHaveURL(/#\/settings\/account$/);
     await expect(page.getByTestId('settings-delete')).toHaveCount(0);
     await expect(page.getByTestId('settings-delete-entry')).toBeVisible();
-    await page.goBack();
+    expect(await depth()).toBe(2);
+    await page.getByTestId('settings-account-back').click();
     await expect(page).toHaveURL(/#\/settings$/);
-    await page.goBack();
+    expect(await depth()).toBe(1);
+    await settingsMain(page).locator('header a[href="#/today"]').click();
     await expect(page).toHaveURL(/#\/today$/);
     await expect(page.locator('main[data-feature="today"]')).toBeVisible();
-
-    // 左上角“‹ 账号”：退回账号二级页；之后再后退两次就是今天（说明返回没有 push 新的一条）
-    await page.goForward();
-    await page.goForward();
-    await expect(page).toHaveURL(/#\/settings\/account$/);
-    await page.getByTestId('settings-delete-entry').click();
-    await expect(page.getByTestId('settings-delete')).toBeVisible();
-    await page.getByTestId('settings-delete-back').click();
-    await expect(page).toHaveURL(/#\/settings\/account$/);
-    await expect(page.getByTestId('settings-delete-entry')).toBeVisible();
-    await page.goBack();
-    await expect(page).toHaveURL(/#\/settings$/);
-    await page.goBack();
-    await expect(page).toHaveURL(/#\/today$/);
+    expect(await depth()).toBe(0);
+    expect(await page.evaluate(() => history.length)).toBe(len);
   });
 
   // 负责人 10-31（iPhone 主屏幕版）：“点击注销账号跟回退到设置页，注销账号 4 个字都会跳一下”“界面语言 4 个字也不用特意加粗”。

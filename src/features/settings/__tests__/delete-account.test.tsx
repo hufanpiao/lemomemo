@@ -2,6 +2,7 @@
 // 中文、韩文界面都用真词典（确认词“注销”“탈퇴”要跟着语言变）
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { goBack } from '../../../app/router.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
@@ -54,12 +55,12 @@ describe('注销账号（设置 › 账号 › 注销账号）', () => {
     expect(window.location.hash).toBe('#/settings/account');
   });
 
-  it('注销页有自己的地址（负责人 10-30“注销页左滑应该回设置”）：点入口 push #/settings/delete，侧滑（history.back）回账号二级页（合卡以后注销入口在那里）', async () => {
+  it('注销页有自己的地址（负责人 10-30“注销页左滑应该回设置”）：点入口进 #/settings/delete，左边往右划（goBack，R-487）回账号二级页（合卡以后注销入口在那里）', async () => {
     setup();
     await openDelete();
     expect(window.location.hash).toBe('#/settings/delete');
     await act(async () => {
-      window.history.back();
+      goBack();
     });
     await waitFor(() => expect(screen.queryByTestId('settings-delete')).toBeNull());
     expect(window.location.hash).toBe('#/settings/account');

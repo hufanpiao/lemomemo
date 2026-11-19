@@ -52,7 +52,6 @@ import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, keepFieldFocus } from '../../../platform/viewport.ts';
 import { usePlusT } from '../hooks/usePlusT.ts';
-import { useTypeEntry } from '../hooks/type-entry.ts';
 import { useTypeBar, type CallAi, type HandOff, type TypeBarState, type Writer } from '../hooks/useTypeBar.ts';
 import { ConfirmRow } from './ConfirmRow.tsx';
 import { SavedNotice } from './SavedNotice.tsx';
@@ -73,9 +72,8 @@ const unsettled = (s: TypeBarState): boolean => s.text.trim() !== '' || s.asking
 
 /** 打字条收起的由来（settle 的 reason，运行日志 typebar settle reason=…）：
  *  button 点“收起”、esc、swipe 下滑把手、blank 没打字点空白、saved 记下后自动收起、find 回车查找、asked 判成别的意图交给结果层
- *  （这两种由 useTypeBar 的 handOff 经 onAsked 交来）、expand “展开编辑”、route 换页（App 直接卸掉打字条）、
- *  back 侧滑返回或浏览器后退退掉了打字条垫的那条历史（hooks/type-entry.ts） */
-export type SettleReason = 'button' | 'esc' | 'swipe' | 'blank' | 'saved' | HandOff | 'expand' | 'route' | 'back';
+ *  （这两种由 useTypeBar 的 handOff 经 onAsked 交来）、expand “展开编辑”、route 换页（App 直接卸掉打字条） */
+export type SettleReason = 'button' | 'esc' | 'swipe' | 'blank' | 'saved' | HandOff | 'expand' | 'route';
 
 /** 提示条跟着打字条顶端走：量打字条高度写进外壳的 --type-lift；收起了就清掉（回到底栏上方） */
 function useLift(bar: RefObject<HTMLFormElement | null>, folded: boolean): RefObject<HTMLDivElement | null> {
@@ -267,8 +265,6 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
   // 打字条画着（没收起）就是层栈里的一层（kit/hooks/layers.ts，非模态）：Esc 只在它是栈顶时收起，外面的详情抽屉不跟着关（独立评审第 1 条）；
   // 焦点不由层栈还（收起时 settle 自己收键盘）
   useLayer(!folded, { name: 'typebar', onEsc: () => settle('esc'), back: () => [] });
-  // 打字条画着时历史里垫一条（hooks/type-entry.ts）：iPhone 侧滑回“＋”所在那页时，系统截图是打开打字条之前的样子，不再闪打字条
-  useTypeEntry(!folded, () => settle('back'));
   const grip = useGripClose(() => settle('swipe'));
 
   const first = s.preview[0];
