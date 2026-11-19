@@ -326,6 +326,12 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     noteRoute();
     settleSnap('route');
   };
+  // 浏览器历史前进、后退（App 自己从不压历史，只有 iOS 系统边缘手势在退旧记录时才有）：记一行，带历史条数（应该是 1；
+  // 负责人 11-20 录屏右滑进设置先滑进一张旧截图、再淡一次，就是系统手势在走多出来的历史，按它查多出来的那条哪来的）
+  const onPop = (): void => {
+    push(`${stamp(now())} popstate hist=${win.history.length}`);
+    noteRoute();
+  };
   const onVis = (): void => {
     snap(`visibility=${doc.visibilityState}`);
     if (doc.visibilityState !== 'visible') return;
@@ -415,7 +421,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     [doc, 'contextmenu', onMenu, true],
     [doc, 'selectionchange', onSelChange, undefined],
     [win, 'hashchange', onHash, undefined],
-    [win, 'popstate', noteRoute, undefined],
+    [win, 'popstate', onPop, undefined],
     [doc, 'visibilitychange', onVis, undefined],
     [win, 'pageshow', onPageShow, undefined],
     [win, 'pagehide', onPageHide, undefined],

@@ -85,4 +85,22 @@ describe('页签互切：fadeSwap，不起 View Transition', () => {
     expect(m.fadeSwap).toHaveBeenCalledTimes(1);
     unmount();
   });
+
+  it('浏览器历史前进后退（iOS 系统边缘手势已经自己播了截图）紧跟的 hashchange：直接画，不再补整页过渡、不淡入（负责人 11-20“右滑进设置页会跳一下画面”）', () => {
+    // 手机（没有悬停）才跳过：jsdom 没有 matchMedia，临时装一个
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(hover: none)' }));
+    const { result, unmount } = renderHook(() => useRoute());
+    window.history.replaceState(null, '', '/app/#/settings');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: 'http://x/app/#/todos', newURL: 'http://x/app/#/settings' }));
+    expect(m.transition).not.toHaveBeenCalled();
+    expect(m.fadeSwap).not.toHaveBeenCalled();
+    expect(result.current.name).toBe('settings');
+    // 只管紧跟的那一次：之后普通换地址照旧起过渡
+    window.history.replaceState(null, '', '/app/#/event/new');
+    window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: 'http://x/app/#/settings', newURL: 'http://x/app/#/event/new' }));
+    expect(m.transition).toHaveBeenCalledTimes(1);
+    unmount();
+    vi.unstubAllGlobals();
+  });
 });

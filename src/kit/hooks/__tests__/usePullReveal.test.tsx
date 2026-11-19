@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PullSlot } from '../../components/PullSlot.tsx';
-import { PULL_FOLLOW, PULL_H, PULL_OPEN_PX, SETTLE_MS, usePullReveal, WHEEL_GAP_MS, WHEEL_OPEN_PX } from '../usePullReveal.ts';
+import { PULL_FOLLOW, PULL_H, PULL_OPEN_PX, SETTLE_MS, STILL_MS, usePullReveal, WHEEL_GAP_MS, WHEEL_OPEN_PX } from '../usePullReveal.ts';
 
 const fx = vi.hoisted(() => ({ logs: [] as string[] }));
 vi.mock('../../../platform/run-log-api.ts', async (orig) => ({ ...(await orig<object>()), rlog: (l: string) => fx.logs.push(l) }));
@@ -176,15 +176,27 @@ describe('usePullReveal 手势', () => {
     expect(state()).toBe('open touch');
   });
 
-  it('露出了、没打字：页面往上滚走超过 PULL_H 自己收起，焦点不跳；打了字就不收', () => {
+  it('露出了、没打字：页面往上滚，搜索框按滚动量慢慢淡出；滚走 PULL_H、滚动停下 STILL_MS 才收起，焦点不跳；打了字就不收（负责人 11-20“慢慢收进去”）', () => {
     render(<Host />);
     drag(screen.getByTestId('in'), 0, PULL_OPEN_PX);
     expect(state()).toBe('open touch');
+    const head = (): HTMLElement => screen.getByTestId('pull-head');
+    scrollY = PULL_H / 2;
+    fireEvent.scroll(window);
+    expect(head().style.opacity).toBe('0.5');
     scrollY = PULL_H;
     fireEvent.scroll(window);
+    expect(head().style.opacity).toBe('0');
+    act(() => vi.advanceTimersByTime(STILL_MS));
+    // 正好 PULL_H：还算露着的范围，不收
     expect(state()).toBe('open touch');
     scrollY = PULL_H + 1;
     fireEvent.scroll(window);
+    // 还在滚（没停够 STILL_MS）：不卸，不在惯性滚动途中挪页面
+    act(() => vi.advanceTimersByTime(STILL_MS - 1));
+    expect(state()).toBe('open touch');
+    expect(scrollBy).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
     expect(state()).toBe('closed');
     expect(document.activeElement).not.toBe(screen.getByTestId('pull-key'));
     // 抽走的那 PULL_H 同一帧补回去，手指下的内容不跳（整块评审第 3 条）

@@ -19,7 +19,8 @@
 //   页面照原来的分组和行画，只画 shows(id) 为真的，标题用 PullSlot 的 PullHit 给命中的字加短下划线（markQ 是算出这一批命中用的那个查询）。
 //   还没算出来（那一块还在下载）时 found 为 null，什么都不藏
 // • 手机松手展开那一下震一下、不响（R-471，platform/feedback.ts 的 fx('pull')）
-// • 露出了、还没打字，页面往上滚走（scrollY 超过 PULL_H）就自己收起（R-488 弹窗选“没打字就自动收”；输入框正聚焦着不收）
+// • 露出了、还没打字，页面往上滚，搜索框跟着页面往上走、按滚动量慢慢淡出（headRef），滚走 PULL_H、滚动停下以后卸掉（R-488 弹窗选“没打字就自动收”；
+//   负责人 11-20“慢慢收进去，而不是一下子收进去”；输入框正聚焦着不收）
 // • 运行日志：pull open <页> via=touch|wheel|key、pull close <页>（不记打的字）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { queryTerms } from '../../../shared/logic/search.ts';
@@ -39,6 +40,8 @@ export const WHEEL_OPEN_PX = 120;
 export const WHEEL_GAP_MS = 250;
 /** 松手过半：占位框先补满到 PULL_H（同 --dur-ui 的过渡）再换成真的搜索框，换的那一下不跳（整块评审第 2 条） */
 export const SETTLE_MS = 220;
+/** 露着的搜索框滚走以后，滚动停了多久（ms）才真的卸掉：惯性滚动途中不挪页面 */
+export const STILL_MS = 160;
 /** 滚轮按行滚时一行算多少 px */
 const LINE_PX = 16;
 
@@ -75,6 +78,8 @@ export interface PullReveal {
   keyRef: RefObject<HTMLButtonElement | null>;
   /** 挂在跟手长出来的占位框上（PullSlot 画；hook 直接改它的 --pull-g，拉的过程不经 React 渲染） */
   ghostRef: RefObject<HTMLDivElement | null>;
+  /** 挂在露出的搜索框那一层上（PullSlot 画；页面往上滚时 hook 直接改它的透明度、缩放，慢慢收） */
+  headRef: RefObject<HTMLDivElement | null>;
 }
 
 /** 按在页面本身（见文件头）：在 region 里，往上到 region 之前没有能滚的、fixed 的、[data-nopull] 的 */
@@ -96,6 +101,7 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
   const region = useRef<HTMLElement | null>(null);
   const keyRef = useRef<HTMLButtonElement | null>(null);
   const ghostRef = useRef<HTMLDivElement | null>(null);
+  const headRef = useRef<HTMLDivElement | null>(null);
   const ref = useCallback((el: HTMLElement | null) => {
     region.current = el;
   }, []);
@@ -227,6 +233,19 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
   // 和查找同一个判断（queryTerms）：只打了标点、空白时没有可查的词，不算在搜，页面照常显示（R-447 评审第 3 条）
   const searching = queryTerms(q).length > 0;
 
+  // 没打字就自动收（R-488；负责人 11-20 要慢慢收）：见 useAutoCollapse。焦点不还给“搜索本页”（不是用户点的收起）
+  const drop = useCallback(() => {
+    close();
+    refocus.current = false;
+  }, [close]);
+  useAutoCollapse(open, searching, region, headRef, drop);
+  const live = searching ? found : null;
+  const shows = useCallback((id: string) => live === null || live.ids.has(id), [live]);
+  return { enabled, open, via, q, setQ, searching, found: live, setFound, shows, markQ: live?.q ?? '', reveal, close, ref, keyRef, ghostRef, headRef };
+}
+
+/** 露着、没打字时页面往上滚：搜索框跟着慢慢收，滚走停下以后 drop() 卸掉，同一帧把页面往回挪（见下面两段） */
+function useAutoCollapse(open: boolean, searching: boolean, region: RefObject<HTMLElement | null>, headRef: RefObject<HTMLDivElement | null>, drop: () => void): void {
   // 自动收起抽走了列表上面 PULL_H 高的一块：同一帧把页面往回挪同样多，手指下的内容不跳（iOS Safari 没有滚动锚定，整块评审第 3 条）
   const shift = useRef(false);
   useLayoutEffect(() => {
@@ -235,21 +254,39 @@ export function usePullReveal(tag: string, enabled = true): PullReveal {
     window.scrollBy(0, -PULL_H);
   }, [open]);
 
-  // 没打字就自动收（R-488）：露着、没在搜、输入框没聚焦时，页面往上滚走超过 PULL_H 就收起；焦点不还给“搜索本页”（不是用户点的收起）
+  // 没打字就自动收（R-488）：露着、没在搜、输入框没聚焦时，页面往上滚，搜索框跟着滚动量慢慢收（负责人 11-20
+  // “拉出来的搜索框页面往下拉的过程中慢慢收进去，而不是一下子收进去”）：滚 0～PULL_H，headRef 那一层跟着页面往上走、透明度 1→0，
+  // 滚过 PULL_H 时已经收完看不见；等滚动停了（STILL_MS 没有新的 scroll）才真的卸掉、把页面往回挪 PULL_H。
+  // 原来滚过 PULL_H 当场卸掉 + scrollBy：iOS 惯性滚动途中挪页面，看着就是“一下子没了”还顿一下。
+  // 焦点不还给“搜索本页”（不是用户点的收起）
   useEffect(() => {
     if (!open || searching) return undefined;
-    const onScroll = (): void => {
-      if (window.scrollY <= PULL_H) return;
+    const box = region.current;
+    const head = headRef.current;
+    // 直接写在搜索框那一层自己身上（不经页面根节点上的变量，免得滚一下整页的子元素都重算样式）
+    const set = (k: number): void => {
+      if (head) head.style.opacity = k > 0 ? String(1 - k) : '';
+    };
+    let still: ReturnType<typeof setTimeout> | undefined;
+    const focused = (): boolean => {
       const a = document.activeElement;
-      if (a instanceof HTMLInputElement && region.current?.contains(a)) return;
-      close();
-      refocus.current = false;
+      return a instanceof HTMLInputElement && box?.contains(a) === true;
+    };
+    const settle = (): void => {
+      if (window.scrollY <= PULL_H || focused()) return;
       shift.current = true;
+      drop();
+    };
+    const onScroll = (): void => {
+      set(focused() ? 0 : Math.min(1, Math.max(0, window.scrollY / PULL_H)));
+      clearTimeout(still);
+      still = setTimeout(settle, STILL_MS);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [open, searching, close]);
-  const live = searching ? found : null;
-  const shows = useCallback((id: string) => live === null || live.ids.has(id), [live]);
-  return { enabled, open, via, q, setQ, searching, found: live, setFound, shows, markQ: live?.q ?? '', reveal, close, ref, keyRef, ghostRef };
+    return () => {
+      clearTimeout(still);
+      window.removeEventListener('scroll', onScroll);
+      set(0);
+    };
+  }, [open, searching, drop, region, headRef]);
 }

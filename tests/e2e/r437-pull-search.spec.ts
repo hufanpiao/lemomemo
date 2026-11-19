@@ -195,6 +195,30 @@ test.describe('R-437 下拉搜索：手机', () => {
     await page.getByTestId(`pull-row-${EV}`).click();
     await expect(page).toHaveURL(new RegExp(`#/event/${EV}`));
   });
+
+  test('露出没打字、页面往上滚：搜索框跟着滚动量慢慢淡出，滚走停下以后才收起（负责人 11-20“慢慢收进去”）', async ({ page, baseURL }) => {
+    await fakeServer(page, baseURL);
+    await openPage(page, 'todos', 'todos', `todos-row-${TD}`);
+    // 列表短、页面滚不动：页面底下垫一块高的，让它能往上滚
+    await page.evaluate(() => {
+      const pad = document.createElement('div');
+      pad.style.height = '3000px';
+      document.body.append(pad);
+    });
+    await pullDown(page, 'todos');
+    await expect(page.getByTestId('pull-input')).toBeVisible({ timeout: 10_000 });
+    const opacity = () => page.getByTestId('pull-head').evaluate((el) => Number(getComputedStyle(el).opacity));
+    await page.evaluate(() => window.scrollTo(0, 22));
+    expect(await page.evaluate(() => window.scrollY)).toBe(22);
+    await expect.poll(opacity).toBeLessThan(0.75);
+    expect(await opacity()).toBeGreaterThan(0.25);
+    // 滚过 PULL_H：已经全透明，停下以后才卸掉
+    await page.evaluate(() => window.scrollTo(0, 300));
+    expect(await page.evaluate(() => window.scrollY)).toBe(300);
+    await expect.poll(opacity).toBe(0);
+    await expect(page.getByTestId('pull-search')).toHaveCount(0, { timeout: 5_000 });
+    await expect.poll(() => runLog(page), { timeout: 10_000 }).toMatch(/pull close todos/);
+  });
 });
 
 test.describe('R-437 下拉搜索：键盘', () => {

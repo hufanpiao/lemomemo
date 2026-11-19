@@ -58,14 +58,17 @@ export function PullSlot({ pull, keyLabel, search, inPlace = true, children }: P
         </div>
       ) : null}
       {/* 搜索框那一块露出时才下载：下载好之前占位框满高留着，不先缩回再跳下来（整块评审第 1 条） */}
-      {pull.open
-        ? part(
+      {/* 包一层 headRef：没打字时页面往上滚，usePullReveal 直接改这一层的透明度，搜索框跟着慢慢收（负责人 11-20） */}
+      {pull.open ? (
+        <div ref={pull.headRef} data-testid="pull-head">
+          {part(
             search('head'),
             <div className={styles.ghostFull} aria-hidden="true">
               <GhostBar label={keyLabel} />
             </div>,
-          )
-        : null}
+          )}
+        </div>
+      ) : null}
       <div className={styles.keep} hidden={!inPlace && pull.searching} data-testid="pull-keep">
         {children}
       </div>

@@ -148,9 +148,21 @@ function oldHashOf(e: Event): string | null {
   return i < 0 ? '' : old.slice(i);
 }
 
+// 浏览器历史前进、后退（popstate）后紧跟的那次 hashchange：iOS 系统边缘手势已经自己播完一张截图滑进来（App 从不压历史，
+// 只有更早版本、推送打开留下的旧记录才走到这里）。再起一次整页淡出淡入，画面就是“滑进来 → 旧页闪回 → 变黑 → 再淡入”
+// （负责人 11-20 录屏“右滑进设置页会跳一下画面”），所以这一下直接画新页、不再补动画
+const POP_MS = 500;
+let poppedAt = -Infinity;
+function onPopState(): void {
+  // 只在手机上（没有悬停的设备：iOS、安卓边缘手势自己播动画）；电脑浏览器点后退没有系统动画，照旧起整页过渡
+  if (window.matchMedia?.('(hover: none)').matches) poppedAt = performance.now();
+}
+
 function onHashChange(e: Event): void {
   const old = oldHashOf(e);
-  void commit(undefined, old === null ? 'vt' : animOf(old, window.location.hash));
+  const popped = performance.now() - poppedAt < POP_MS;
+  poppedAt = -Infinity;
+  void commit(undefined, popped ? 'none' : old === null ? 'vt' : animOf(old, window.location.hash));
 }
 
 /** 全局兜底：没人接手的 <a href="#/…"> 普通点击，浏览器默认会压一条历史（又留出“前进”），拦下交给 goHref；新标签页打开照常 */
@@ -163,6 +175,7 @@ function onLinkClick(e: MouseEvent): void {
 
 function subscribe(cb: () => void): () => void {
   if (listeners.size === 0) {
+    window.addEventListener('popstate', onPopState);
     window.addEventListener('hashchange', onHashChange);
     document.addEventListener('click', onLinkClick);
   }
@@ -170,6 +183,7 @@ function subscribe(cb: () => void): () => void {
   return () => {
     listeners.delete(cb);
     if (listeners.size === 0) {
+      window.removeEventListener('popstate', onPopState);
       window.removeEventListener('hashchange', onHashChange);
       document.removeEventListener('click', onLinkClick);
     }

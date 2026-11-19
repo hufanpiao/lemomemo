@@ -1,7 +1,8 @@
 // 所有页面顶部固定（R-488，负责人 11-20“所有页面顶部固定，在顶部的时候往下拉页面不动，只出搜索框”；弹窗选“只关顶部”）：
-// • 整页滚到顶（atTop）时手指往下拉（pullsDown：竖着为主）：这一整下 touchmove 都拦下默认，iOS 不再把整页往下拽出回弹
-// • 一下手势只在第一次 touchmove 定一次（iOS 第一下没拦，原生滚动就接手了，后面再拦也拦不住）：
-//   斜着、横着为主、往上推、不在顶上、按在里面一块还能往上滚（竖）或能横着滚（分类胶囊行）的框里：这一下整段放行（底部回弹保留）
+// • 整页滚到顶（atTop）时，除了明显往上推（pushesUp：竖着为主、往上，页面往下滚），这一整下 touchmove 都拦下默认，
+//   iOS 不再把整页往下拽出回弹（竖拉、斜拉、边缘横划换页都算；11-20 负责人“翻页的时候页面不要跳”）
+// • 一下手势只在第一次有位移的 touchmove 定一次（iOS 第一下没拦，原生滚动就接手了，后面再拦也拦不住）：
+//   往上推、不在顶上、按在里面一块还能往上滚（竖）或能横着滚（分类胶囊行）的框里：这一下整段放行（底部回弹保留）
 // • 下拉搜索（kit/hooks/usePullReveal.ts）听同一串 touch 事件、自己算露出多少，判断“在不在顶上、是不是往下拉、框能不能滚”
 //   用这里导出的同一份（整块评审第 5 条：原来两处各写一份、横竖门槛不一样，斜着拉时页面锁住、搜索框又不出）
 // • 运行日志：在顶上往下拉的那一下记 toplock block / pass inner / pass uncancelable（11-20 真机截图页面还被拽下来，补的）
@@ -13,6 +14,9 @@ export const atTop = (): boolean => window.scrollY <= 0;
 
 /** 从按下到现在的位移算不算“往下拉”：往下、横向不超过竖向一半 */
 export const pullsDown = (dx: number, dy: number): boolean => dy > 0 && Math.abs(dx) * 2 < dy;
+
+/** 明显往上推（竖着为主、往上）：页面要正常往下滚，顶部锁不拦 */
+const pushesUp = (dx: number, dy: number): boolean => dy < 0 && Math.abs(dy) > Math.abs(dx);
 
 /** 这一块竖着真能滚（overflow-y auto / scroll，内容比框高） */
 export const scrollsY = (el: Element, cs: CSSStyleDeclaration = getComputedStyle(el)): boolean =>
@@ -48,11 +52,17 @@ export function installTopLock(): () => void {
     const p = e.touches[0];
     if (!start || !p || e.touches.length !== 1) return;
     if (lock === null) {
-      const down = atTop() && pullsDown(p.clientX - start.x, p.clientY - start.y);
-      const inner = down && innerScrolls(start.t);
-      lock = down && e.cancelable && !inner;
-      // 运行日志（只记“在顶上往下拉”的那一下怎么定的，真机还弹时按它定根因）：拦了 / 事件不让拦 / 交给里面能滚的框
-      if (down) rlog(`toplock ${lock ? 'block' : inner ? 'pass inner' : 'pass uncancelable'} y=${Math.round(window.scrollY)}`);
+      const dx = p.clientX - start.x;
+      const dy = p.clientY - start.y;
+      if (dx === 0 && dy === 0) return;
+      // 在顶上：除了明显往上推（页面往下滚，照常放行），都拦下默认。11-20 444 日志：边缘右滑换页（dx=112 dy=40）、
+      // 第一下只有 1～2px 斜着的竖拉，旧规则（必须竖着往下）都放行，iOS 把整页往下拽 20～45px，换页时画面先坠再回位。
+      // 换页（tab-swipe.ts）、行左滑、下拉搜索都只听 touch 自己算，抬手才判，不靠默认滚动，拦了不受影响
+      const top = atTop() && !pushesUp(dx, dy);
+      const inner = top && innerScrolls(start.t);
+      lock = top && e.cancelable && !inner;
+      // 运行日志：在顶上、不是往上推的那一下怎么定的（拦了 / 事件不让拦 / 交给里面能滚的框），带第一下的位移
+      if (top) rlog(`toplock ${lock ? 'block' : inner ? 'pass inner' : 'pass uncancelable'} dx=${Math.round(dx)} dy=${Math.round(dy)} y=${Math.round(window.scrollY)}`);
     }
     if (lock && e.cancelable) e.preventDefault();
   };

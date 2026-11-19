@@ -50,7 +50,11 @@ test('真后退（page.goBack）：只起一个 View Transition，回调里已�
   await expect(page.locator('main[data-feature="today"]')).toBeVisible();
 
   const vt = await page.evaluate(() => window.__vt);
-  if (vt?.supported) {
+  const touch = await page.evaluate(() => matchMedia('(hover: none)').matches);
+  if (touch) {
+    // 手机：系统边缘手势已经自己播了截图滑进来，不再补整页过渡（负责人 11-20“右滑进设置页会跳一下画面”，router.ts onPopState）
+    expect(vt?.calls).toBe(0);
+  } else if (vt?.supported) {
     expect(vt.calls).toBe(1);
     expect(vt.seen).toEqual(['today']);
   } else {
