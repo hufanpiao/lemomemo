@@ -90,7 +90,8 @@ test.describe('展开编辑不闪原页面', () => {
     await page.getByTestId('type-bar').getByRole('button', { name: '展开编辑' }).click();
     await expect(page).toHaveURL(/#\/event\/new$/);
     await expect(page.getByTestId('event-edit-title')).toBeVisible();
-    expect(got[0]?.at ?? 0).toBeGreaterThanOrEqual(opened);
+    // R-484（11-19 晚）起冷启动后台就预加载编辑页，可能在点“＋”之前就下完：只要求点“展开编辑”以前下好
+    void opened;
     expect(got[0]?.at ?? Infinity).toBeLessThanOrEqual(expandAt);
   });
 

@@ -67,6 +67,8 @@ h3.gt {
   font-size: var(--fs-12-5);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- iOS Safari 只认带前缀的写法；全局关了选字（base.css），这里要让人复制 */
+  -webkit-user-select: text;
   user-select: text;
 }
 

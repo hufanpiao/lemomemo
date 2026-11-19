@@ -39,8 +39,6 @@
   font-family: var(--f-num);
   white-space: nowrap;
   cursor: pointer;
-  -webkit-user-select: none;
-  user-select: none;
 }
 
 .item[data-on] {

@@ -79,8 +79,6 @@
   box-shadow: var(--shadow-2), inset 0 0 0 1.5px var(--accent);
   backdrop-filter: blur(6px) saturate(var(--float-sat));
   touch-action: pan-x;
-  -webkit-user-select: none;
-  user-select: none;
 }
 
 /* 往上拖没到 30px 松手：回位走 --dur-ui（跟手时不加过渡，设计 N2）；减少动态效果时直接回位 */

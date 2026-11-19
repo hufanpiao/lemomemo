@@ -90,3 +90,36 @@ test('App 页 html 的 touch-action 是 pan-x pan-y；登录页是 auto、viewpo
     await ctx.close();
   }
 });
+
+// 负责人 11-19 晚截图“app空白页长按都不要这种选中”（隐私记首页长按空白处选中一大片、弹出拷贝条）：src/styles/base.css 全局关掉选字和系统长按菜单，
+// 只有输入框、多行框照常能选。这里读算出来的样式，并用“全选”看空白处的文字选不上、输入框里的字选得上
+test('App 页长按不选字：正文和空白处选不上、不出系统菜单；输入框照常能选', async ({ page }) => {
+  await seed(page);
+  await page.goto('/app/#/notes');
+  await page.getByTestId('notes-input').waitFor();
+  const r = await page.evaluate(() => {
+    const cs = (el: Element | null) => (el ? getComputedStyle(el) : null);
+    const get = (s: CSSStyleDeclaration | null, k: string) => (s ? s.getPropertyValue(k) : 'missing');
+    const body = cs(document.body);
+    const h1 = cs(document.querySelector('main h1, main h2, main p'));
+    const input = cs(document.querySelector('[data-testid="notes-input"]'));
+    // 模拟长按选中：对整页 selectAll，看选中的文字里有没有页面正文
+    window.getSelection()?.selectAllChildren(document.body);
+    const picked = (window.getSelection()?.toString() ?? '').trim().length;
+    window.getSelection()?.removeAllRanges();
+    return {
+      body: get(body, 'user-select') || get(body, '-webkit-user-select'),
+      callout: get(body, '-webkit-touch-callout'),
+      text: get(h1, 'user-select') || get(h1, '-webkit-user-select'),
+      input: get(input, 'user-select') || get(input, '-webkit-user-select'),
+      picked,
+    };
+  });
+  expect(r.body).toBe('none');
+  // user-select 不继承：Chromium 把子元素算成 none，WebKit 读出 auto（父级 none 时一样选不上），真正的判据是下面 picked=0
+  expect(['none', 'auto']).toContain(r.text);
+  expect(r.input).toBe('text');
+  expect(r.picked).toBe(0);
+  // 浏览器不认 -webkit-touch-callout（Chromium）时读出来是空的，只在认的引擎（WebKit）里核
+  if (r.callout !== '') expect(r.callout).toBe('none');
+});

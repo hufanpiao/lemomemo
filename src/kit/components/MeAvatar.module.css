@@ -45,8 +45,6 @@
   height: calc(100% - 8px);
   border-radius: 50%;
   object-fit: cover;
-  -webkit-user-select: none;
-  user-select: none;
 }
 
 /* 设置 › 账号顶部的大头像：外框 68px（圆 60px，同样内缩 4px；R-454 方案 C 头像放进第一组，圆 60），名字首字、人形跟着放大 */

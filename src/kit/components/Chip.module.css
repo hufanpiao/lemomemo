@@ -49,10 +49,3 @@
   font-size: var(--fs-11);
   opacity: 0.7;
 }
-
-/* 能长按出菜单的按钮（kit/hooks/useLongPress 返回的 data-long-press：分类胶囊、电脑版分类项、隐私记首页分类格）：
-   iPhone 长按不出系统菜单和放大镜、不选字，不和改名删除弹窗抢手势（独立评审 11-19 中 11） */
-:global([data-long-press]) {
-  -webkit-touch-callout: none;
-  user-select: none;
-}
