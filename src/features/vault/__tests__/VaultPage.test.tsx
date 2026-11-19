@@ -577,7 +577,7 @@ describe('批 2 第 3 条：移出隐私记没成，提示是自己那一条（�
 
 describe('首页分类格的小图标（负责人 11-19“按分类名配图标”，只用方案乙的三个）', () => {
   it('健康 ♥、证件 ▤、账号 ✱；中韩都认；配不上的不画图标', async () => {
-    const { tileGlyph } = await import('../ui/VaultHome.tsx');
+    const { tileGlyph } = await import('../hooks/tile-glyph-data.ts');
     expect(tileGlyph('健康')).toBe('♥');
     expect(tileGlyph('体检报告')).toBe('♥');
     expect(tileGlyph('证件')).toBe('▤');
