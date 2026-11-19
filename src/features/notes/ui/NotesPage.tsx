@@ -77,7 +77,7 @@ import { PullSearch } from '../../smart-search/index.ts';
 import { VaultParts } from '../../vault/index.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import { useMergeHint } from '../hooks/useMergeHint.ts';
-import { useNoteList, type NoteItem } from '../hooks/useNoteList.ts';
+import { useNoteList, type CategoryCount, type CategoryCtl, type NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
 import { isUndo, mergeUndo, moveUndo, undoTipOf, useNotesToast } from '../hooks/useNotesToast.ts';
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
@@ -107,7 +107,26 @@ export default function NotesPage() {
   return useRoute().name === 'note' ? <NoteEditPage /> : <NotesList />;
 }
 
-export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) | undefined }) {
+/** 列表区换成“首页”时交给 home 的东西（隐私记首页宫格，负责人 11-19“解锁后用乙”）：分类计数、总条数、条目、日期文字、点开一条 */
+export interface NotesHomeApi {
+  counts: readonly CategoryCount[];
+  total: number;
+  /** 全部条目（只去掉移走的；“最近”按记下的时间由 home 自己挑，不受排序方式影响） */
+  items: readonly NoteItem[];
+  /** 今天 / 昨天 / 11月13日 */
+  day: (it: NoteItem) => string;
+  open: (id: string) => void;
+  /** 行上的同步标记（隐私记“没保存上”，同列表行、卡片那一个） */
+  mark: (it: NoteItem) => ReactNode;
+  /** 一条都没有时那一句（来源给的，同列表空态） */
+  empty: string;
+}
+
+/**
+ * head：顶上替换大标题的一块；home：给了就在手机排法里用它替换分类胶囊和列表区（顶部提示、输入行、撤销条照旧），电脑版不管；
+ * cat：外面管的分类筛选（隐私记 #/vault/c/<id>，见 useNoteList）
+ */
+export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => ReactNode) | undefined; home?: ((api: NotesHomeApi) => ReactNode) | undefined; cat?: CategoryCtl | undefined }) {
   const t = useNotesT();
   const src = useNoteSource();
   const { caps } = src;
@@ -122,7 +141,7 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
   const loaded = useSwapWhenSafe(useMedia(MQ_SIDEBAR), page, loadNotesDesk, now, opensKeyboard);
   const ds = useDrawerSel<{ id: string }>(!!loaded);
   const Desk = ds.on ? loaded : null;
-  const l = useNoteList();
+  const l = useNoteList(undefined, cat);
   const a = useListActions<PageTip>('notes', { remove: l.remove, useRo: src.useReadonly });
   const { g: guard, g: { toast }, isRo, report } = a;
   // 撤销条还在的那一对，提示条先不出（R-415 复查 B4）
@@ -325,8 +344,8 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
 
     </>
   );
-  // 隐私记入口行、合并提示、空态、瀑布流或列表：手机直接画在页上，电脑放进 list 块
-  const body = (
+  // 顶部提示（隐私记入口行、同步提示、合并提示）和列表区（空态、瀑布流或列表）：手机直接画在页上，电脑放进 list 块；首页只换列表区
+  const tips = (
     <>
       {/* 隐私记入口行（B5 S5，线框 s7 LOCKROW：分类胶囊下面、合并提示上面；两种显示方式都有）；隐私记页里不出 */}
       {caps.lockrow ? (
@@ -340,7 +359,11 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
       <SyncStale />
 
       {merge ? <MergeBar hint={merge} onResult={report} onMerged={(h) => guard.show(mergeUndo(h.key, () => void h.undo().then(report)))} /> : null}
-
+    </>
+  );
+  const body = (
+    <>
+      {tips}
       {l.items.length === 0 && !pull.searching ? (
         <p className={list.empty} data-testid="notes-empty">
           {src.text?.empty ?? t('notes.empty', {})}
@@ -401,7 +424,22 @@ export function NotesList({ head }: { head?: ((trash: ReactNode) => ReactNode) |
           </p>
         </>
       )}
-      {listPart(filterChips)}
+      {home ? (
+        <>
+          {tips}
+          {home({
+            counts: l.counts,
+            total: l.total,
+            items: l.items.filter(shown),
+            day: (it) => dayWord(l.dayOf(it.createdAt), it.date, 'monthDay'),
+            open,
+            mark: (it) => <SyncMark id={it.id} failed={failed.has(it.id)} />,
+            empty: src.text?.empty ?? t('notes.empty', {}),
+          })}
+        </>
+      ) : (
+        listPart(filterChips)
+      )}
       {mist}
       {dock}
     </>

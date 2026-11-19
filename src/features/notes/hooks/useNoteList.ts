@@ -28,7 +28,7 @@ import { orderOf } from '../../../../shared/logic/sort-key.ts';
 import { applyNoteSort, planNoteDrop, type NoteKeyWrite } from '../data/note-sort.ts';
 import { useNoteSource } from './note-source.ts';
 
-export type { NoteGroup, NoteItem, NoteOrder } from '../data/note-list.ts';
+export type { CategoryCount, NoteGroup, NoteItem, NoteOrder } from '../data/note-list.ts';
 
 /** 一次拖动放下写了什么（撤销照它写回）；switched：这一次顺手从按时间切到了自己排 */
 export interface NoteMove {
@@ -39,13 +39,22 @@ export type { ActionResult, ConvertKind, ConvertResult };
 /** 写入结果换界面码只经 core 这一份（页面的转换流程也用） */
 export { actionResult };
 
-export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
+/** 外面管的分类筛选（隐私记列表 #/vault/c/<id>：地址就是筛选，点胶囊改地址；负责人 11-19“解锁后用乙”，独立评审 11-19 中 2） */
+export interface CategoryCtl {
+  value: string | null;
+  set: (id: string | null) => void;
+}
+
+/** cat：给了就由外面管筛哪个分类（并且在筛着的分类里记一句就记进这一类）；不给是这一页自己记着、不写 settings */
+export function useNoteList(newId: () => string = () => crypto.randomUUID(), cat?: CategoryCtl) {
   const src = useNoteSource();
   const { notes: rows, images: pics, files } = src.useRows();
   const cats = useCollection<Row>('categories');
   const io = src.editIo;
   const locale = useUi((s) => s.locale);
-  const [category, setCategory] = useState<string | null>(null);
+  const [own, setOwn] = useState<string | null>(null);
+  const category = cat ? cat.value : own;
+  const setCategory = cat ? cat.set : setOwn;
   // 每分钟重算一次（过了半夜“今天”变“昨天”）
   const now = useMinuteNow();
   const tz = currentTz();
@@ -57,6 +66,11 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   const counts = useMemo(() => categoryCounts(rows, cats, locale), [rows, cats, locale]);
   // 筛的分类没了（最后一条删掉、分类被合并）：回到“全部”
   const active = category !== null && counts.some((c) => c.id === category) ? category : null;
+  // 外面管的：地址里的分类已经没了，地址也改回“全部”，不让地址写着某一类、页面却是全部（独立评审 11-19 中 2）
+  const stale = cat !== undefined && category !== null && active === null;
+  useEffect(() => {
+    if (stale) cat.set(null);
+  }, [stale, cat]);
   const settings = useSettingWriter();
   const order = orderOf(settingValue(settings.rows, src.orderKey));
   const items = useMemo(() => noteItems(rows, cats, tz, active, pics, files, order), [rows, cats, tz, active, pics, files, order]);
@@ -65,6 +79,7 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   /** 卡片、行上的时间写“今天 / 昨天”还是日期 */
   const dayOf = useCallback((at: number) => dayKind(at, now, tz), [now, tz]);
 
+  const fixedCat = cat ? active : null;
   /** 底部输入行记下一句：正文就是这句话，标题空着（列表里取正文第一行当标题）；成功回新条目的 id */
   const add = useCallback(
     async (text: string, allowEmpty = false): Promise<{ result: ActionResult; id: string | null }> => {
@@ -72,12 +87,13 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
       if (body === '' && !allowEmpty) return { result: 'silent', id: null };
       const id = newId();
       const names = categoryNames(cats);
-      const cat = ruleCategory({ title: '', body }, [...names].map(([cid, name]) => ({ id: cid, name })));
+      // 外面管筛选、正筛着某一类（隐私记 #/vault/c/<id>）：记进这一类，记完不会当场从列表里消失（独立评审 11-19 中 5）；否则按本机规则分
+      const into = fixedCat ?? ruleCategory({ title: '', body }, [...names].map(([cid, name]) => ({ id: cid, name })));
       const t = clock.now();
-      const r = actionResult(await io.insert('notes', newNoteRow(id, { title: '', body, category_id: null }, t, cat), false));
+      const r = actionResult(await io.insert('notes', newNoteRow(id, { title: '', body, category_id: null }, t, into), false));
       return { result: r, id: r === 'ok' ? id : null };
     },
-    [cats, newId, io],
+    [cats, newId, io, fixedCat],
   );
   const remove = useCallback(
     async (id: string, deleted: boolean): Promise<ActionResult> => {

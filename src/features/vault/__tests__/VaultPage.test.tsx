@@ -76,8 +76,8 @@ describe('解锁、上锁', () => {
     render(<VaultPage />);
     const card = await screen.findByTestId('vault-unlock-card');
     expect(screen.queryByTestId('vault-unlock-face')).toBeNull();
-    // 负责人 11-17 选 V2：“取消”挪到标题行右边（DOM 里排第一），打开时焦点仍落在主按钮“输入密码”上
-    expect([...card.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['取消', '输入密码']);
+    // 负责人 11-19“锁着用甲”：锁屏居中，顶栏“‹ 随手记”（DOM 里排第一）代替原来的“取消”，打开时焦点仍落在主按钮“输入密码”上
+    expect([...card.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['‹ 随手记', '输入密码']);
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('vault-unlock-pin')));
     expect(screen.queryByTestId('vault-unlock-pinview')).toBeNull();
     fireEvent.click(screen.getByTestId('vault-unlock-pin'));
@@ -103,7 +103,32 @@ describe('解锁、上锁', () => {
     expect(screen.queryByTestId('vault-notes')).toBeNull();
   });
 
+  it('负责人 11-19“解锁后用乙”：#/vault 是首页（最新几条、“全部 N ›”）；点“全部”进 #/vault/c/all 的列表，顶上“‹ 隐私记”回首页', async () => {
+    await openUnlocked();
+    const home = await screen.findByTestId('vault-home');
+    expect(home.textContent).toContain('体检报告');
+    expect(screen.queryByTestId(`notes-more-${NID}`)).toBeNull();
+    for (const tile of home.querySelectorAll('[data-testid^="vault-home-cat-"]')) expect(tile.textContent).toMatch(/\d/);
+    fireEvent.click(screen.getByTestId('vault-home-all'));
+    await waitFor(() => expect(window.location.hash).toBe('#/vault/c/all'));
+    expect(await screen.findByTestId(`notes-more-${NID}`)).toBeTruthy();
+    expect(screen.queryByTestId('vault-home')).toBeNull();
+    fireEvent.click(screen.getByTestId('vault-back-home'));
+    await waitFor(() => expect(window.location.hash).toBe('#/vault'));
+    expect(await screen.findByTestId('vault-home')).toBeTruthy();
+  });
+
+  it('独立评审 11-19 中 2：地址就是筛选——#/vault/c/<已经没了的分类> 解锁后原地换成 #/vault/c/all，列表是全部', async () => {
+    window.location.hash = '#/vault/c/gone-cat';
+    await openUnlocked();
+    await waitFor(() => expect(window.location.hash).toBe('#/vault/c/all'));
+    expect(await screen.findByTestId(`notes-more-${NID}`)).toBeTruthy();
+    expect(screen.getByTestId('vault-back-home')).toBeTruthy();
+  });
+
   it('随手记那一份“⋯”：移出隐私记走 exportNote；删除立刻从列表拿掉、进隐私记自己的最近删除（后台发 delete）', async () => {
+    // 解锁后的首页是宫格（负责人 11-19“解锁后用乙”），列表在 #/vault/c/<分类>
+    window.location.hash = '#/vault/c/all';
     await openUnlocked();
     const out = vi.spyOn(s, 'exportNote').mockResolvedValue({ ok: true, value: { ok: true, vault_token: 't', expires_at: 0 } });
     fireEvent.click(screen.getByTestId(`notes-more-${NID}`));
@@ -458,6 +483,7 @@ describe('B5 隐私记重写：停笔自动存、读写只碰内存仓库', () =
     const pic = { id: GONE, has_thumb: true, width: 10, height: 6, bytes: 3, deleted_at: null };
     const m = make({ list: () => ({ ok: true, notes: [note({ images: [pic] })], vault_token: TOK, expires_at: 9e12 }) });
     installVaultSession(m.s);
+    window.location.hash = '#/vault/c/all';
     render(<VaultPage />);
     await act(async () => {
       await m.s.refreshStatus();
@@ -485,7 +511,9 @@ describe('审查第 6 条：解锁遮罩是有名字的模态对话框，焦点�
     const dlg = await screen.findByRole('dialog', { name: '隐私记已上锁' });
     expect(dlg.getAttribute('aria-modal')).toBe('true');
     await waitFor(() => expect(dlg.contains(document.activeElement)).toBe(true));
-    expect(screen.getByTestId('vault-back').closest('[aria-hidden="true"]')).not.toBeNull();
+    // 锁着整屏居中（负责人 11-19“锁着用甲”）：页面顶栏不画，返回在遮罩里
+    expect(screen.queryByTestId('vault-back')).toBeNull();
+    expect(dlg.contains(screen.getByTestId('vault-unlock-cancel'))).toBe(true);
     // Esc 照旧是“取消”（Radix 接住后交给卡片的 cancel）：回随手记
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     await waitFor(() => expect(window.location.hash).toBe('#/notes'));
@@ -537,6 +565,7 @@ describe('随手记页的入口行（lockrow）不写条数（负责人 11-15：
 
 describe('批 2 第 3 条：移出隐私记没成，提示是自己那一条（不借转换结果的 notes-conv-tip）', () => {
   it('export 被拒：输入行上面出“没移出去，稍后再试一次”，testid 是 notes-moveout-tip', async () => {
+    window.location.hash = '#/vault/c/all';
     await openUnlocked({ exportFail: true });
     fireEvent.pointerDown(screen.getByTestId(`notes-more-${NID}`), { button: 0, ctrlKey: false });
     fireEvent.click(screen.getByTestId(`notes-more-${NID}`));

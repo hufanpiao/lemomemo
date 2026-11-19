@@ -200,8 +200,8 @@ async function setupAndUnlock(page: Page, browserName: string): Promise<void> {
   await expect(vaultEmpty(page)).toBeVisible({ timeout: 15_000 });
 }
 
-/** 解锁后隐私记列表空着（随手记那一份列表的空态，在隐私记页里） */
-const vaultEmpty = (page: Page) => page.getByTestId('vault-notes').getByTestId('notes-empty');
+/** 解锁后隐私记空着：手机排法是首页（负责人 11-19“解锁后用乙”）一条都没有时的那一句；电脑排法不画首页，照旧是列表的空态 */
+const vaultEmpty = (page: Page) => page.getByTestId('vault-notes').getByTestId(/^(vault-home-empty|notes-empty)$/);
 
 /** 编辑页（随手记那一份）写一段、离开输入框：停笔自动存 */
 async function write(page: Page, testId: 'note-edit-title' | 'note-edit-body', text: string): Promise<void> {
@@ -252,6 +252,7 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   await typePin(page, 'vault-unlock-pad', PIN);
   await expect(list).toContainText('体检报告', { timeout: 15_000 });
   await expect(list).toContainText('妈妈生日惊喜');
+  await phoneShots(page, '08-解锁后首页', browserName);
   // 11-14 整块评审第 1、14 条：密码键盘的点按在运行日志里只记 masked（没有 testid、坐标）；隐私记状态迁移记了，标题、正文没进日志
   const runLog = (): Promise<string> => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
   await expect.poll(runLog).toMatch(/app vault state unlocked/);
@@ -291,6 +292,12 @@ test('隐私记页长按拖动：最下面一条拖到最上面，顺序照放�
     await vault.getByTestId('notes-input').fill(t);
     await vault.getByTestId('notes-add').click();
     await expect(vault).toContainText(t);
+  }
+  // 手机排法解锁后是首页（负责人 11-19“解锁后用乙”），拖动排序在“全部”列表里
+  if (await page.getByTestId('vault-home-all').isVisible()) {
+    await page.getByTestId('vault-home-all').click();
+    // 进列表是一次换页过渡：放完（<html> 摘掉 data-vt）再按，过渡里按下去点中的是 html（运行日志 down html），拿不起来
+    await expect(page.locator('html')).not.toHaveAttribute('data-vt', /.*/);
   }
   const rows = vault.locator('[data-sort-id]:not([data-state="leaving"])');
   await expect(rows).toHaveCount(3);

@@ -533,3 +533,225 @@
   padding: 16px;
   text-align: center;
 }
+
+/* ===== 锁着（隐私记页，负责人 11-19“锁着用甲”）：遮罩透明不模糊，整页居中一块；顶栏同 .top（页面自己的顶栏这时不画） ===== */
+.scrimCenter {
+  align-items: stretch;
+  padding: max(var(--safe-top), 16px) 16px calc(var(--tabbar-pad) + 24px);
+  background: transparent;
+  backdrop-filter: none;
+}
+
+:global(:root[data-rt='1']) .scrimCenter {
+  background: transparent;
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.centerBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+/* 大锁：浅柠檬黄圆底（同“今天”日期圈的底色令牌），锁是正文色 */
+.bigLock {
+  display: grid;
+  width: 96px;
+  height: 96px;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: var(--today-bg);
+  place-items: center;
+}
+
+.bigLockIc {
+  width: 44px;
+  height: 44px;
+  fill: none;
+  stroke: var(--text);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.bigLockIc rect {
+  fill: var(--accent);
+}
+
+/* 锁着（居中锁屏，方案甲）：页面不铺实底，露出和解锁后同一层背景 */
+.pageBare {
+  background: transparent;
+}
+
+.centerTitle {
+  margin: 0;
+  font-size: var(--fs-19);
+  font-weight: 700;
+}
+
+.centerSub {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 两颗按钮竖排、等宽：上“输入密码”（主按钮）、下“用 Face ID 解锁” */
+.centerBtns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(280px, 100%);
+  margin-top: 20px;
+}
+
+/* ===== 解锁后首页（负责人 11-19“解锁后用乙”）：分类两列宫格 + “最近”3 条；点一格进 #/vault/c/<分类> 的列表 ===== */
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 92px;
+  padding: 12px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 分类色的小方块（--dot 由组件按分类色给，同随手记胶囊的色点 CatDot；没有颜色时用柠檬黄浅底） */
+.tileDot {
+  width: 22px;
+  height: 22px;
+  margin-bottom: 8px;
+  border-radius: 7px;
+  background: var(--dot, var(--today-bg));
+}
+
+.tileName {
+  font-size: var(--fs-15);
+  font-weight: 600;
+}
+
+.tileSub,
+.recentDay {
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.homeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--hit);
+  margin-top: 4px;
+}
+
+.homeLabel {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-weight: 600;
+}
+
+.allLink {
+  min-height: var(--hit);
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+.recentList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recent:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.recentHead {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.recentTitle {
+  overflow: hidden;
+  font-size: var(--fs-15);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentSum {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}

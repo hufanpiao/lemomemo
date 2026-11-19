@@ -2,6 +2,9 @@
 // • 卡片（R-452 V2，负责人 11-17 选“kenotex 风”，图 设计方案/2026-11-17_打字条与隐私记/v-v2-card-*）：贴在底栏上方的一条，
 //   第一行“🔒 隐私记已上锁 · N 条 …… 取消”，第二行“用 Face ID 解锁”“输入密码”并排；自动上锁说明从卡上拿掉（解锁后提示行、设置 › 隐私记“自动上锁”都有）
 //   Face ID 按钮只在这台设备能用（exe、不支持的环境不显示）、绑定过、没有“别处改过密码”（relock）时出现（S4、TC-B5-47 ②）
+// • 隐私记页锁着（center，负责人 11-19“锁着用甲”，方案 柠檬记APP-本机资料/设计方案/2026-11-19_隐私记改善/方案.html 甲）：不是贴底的一条，
+//   整页居中：自带顶栏“‹ 随手记 | 🔒 隐私记”、柠檬黄圆底大锁、“隐私记已上锁”“里面有 N 条”，下面竖排“输入密码”（主按钮）、“用 Face ID 解锁”（次按钮）；
+//   遮罩透明不模糊（锁着时页面底下没有内容），返回走顶栏“‹ 随手记”（同取消）。移到隐私记、设置里那两处等解锁（waiting）照旧是贴底的一条
 // • 用不了 Face ID（没绑定、设备不支持、relock）时卡片只有“输入密码”“取消”（线框 s9 说明：“就只显示‘输入密码’”），点了再进密码页
 // • 点“输入密码”换成密码键盘；Face ID 连续两次没认出来自动换成密码键盘（D18），标题下写“Face ID 没认出来，请输入密码”
 // • 密码页是整页：顶栏“‹ 随手记 … 取消”；输错写“密码不对，还能再试 N 次”、锁定中写倒计时，都在圆点下面、键盘上面（PWERR），键盘不能按
@@ -12,6 +15,7 @@
 //   Esc 由 kit 层栈接住（锁屏是栈顶时），经 EscCtx 交给卡片的“取消”（和按钮同一个 cancel）；点遮罩空白处不关
 import * as RD from '@radix-ui/react-dialog';
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
@@ -32,6 +36,8 @@ function focusMain(e: Event, root: HTMLElement | null): void {
 
 /** 遮罩把 Esc 交给里面的解锁卡（卡片挂上时登记自己的 cancel） */
 const EscCtx = createContext<{ current: (() => void) | null }>({ current: null });
+/** 这一次锁屏是不是居中那种：外层在打开那一刻定下，淡出时不跟着状态变（独立评审 11-19 高 1：解锁后 phase 立刻变，淡出那 400ms 会闪出贴底卡和磨砂） */
+const CenterCtx = createContext(false);
 
 /** 锁定倒计时：每秒刷新一次，到点回 0 */
 function useLeft(until: number | null): number {
@@ -51,6 +57,7 @@ function useLeft(until: number | null): number {
  * 有请求等着解锁（waiting）时，取消一律先作废它们（会话的 cancelWait：原请求回失败、后台队列整个丢掉并记个数），三处用法不再各自调（审查第 1 条）
  */
 export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backLabel }: { onCancel?(): void; onForgot(): void; testId?: string; backLabel?: string }) {
+  const center = useContext(CenterCtx);
   const t = useVaultT();
   const dur = useDuration();
   const errText = useErrText();
@@ -102,6 +109,46 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
 
   // 密码锁定期间照样给 Face ID（服务器锁定期也放行 WebAuthn：生物识别本身就是更强的验证，vault/webauthn.ts 的 unlockWebauthn）；
   // 连续两次没认出照旧换成密码键盘（D18），那时键盘显示倒计时
+  if (mode === 'card' && center) {
+    return (
+      <div className={styles.center} data-testid={`${testId}-card`} data-layout="center">
+        <header className={styles.top}>
+          <BackLink label={backLabel ?? t('vault.back', {})} onBack={cancel} testId={`${testId}-cancel`} />
+          <h1 className={styles.h1}>
+            <LockIcon />
+            {t('vault.title', {})}
+          </h1>
+          <span />
+        </header>
+        <div className={styles.centerBody}>
+          {relock}
+          {/* 方案甲：描边的锁、锁身填主色（对照图 柠檬记APP-本机资料/设计方案/2026-11-19_隐私记改善/对照_方案vs实现_2026-11-19.png） */}
+          <span className={styles.bigLock}>
+            <svg className={styles.bigLockIc} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+              <rect x="5" y="10.5" width="14" height="10" rx="2.5" />
+            </svg>
+          </span>
+          {/* 对话框的名字就是这一句（不再另画一个读屏用的标题，免得念两遍） */}
+          <RD.Title asChild>
+            <h2 className={styles.centerTitle}>{t('vault.locked.title', {})}</h2>
+          </RD.Title>
+          <p className={styles.centerSub}><NumIn text={t('vault.locked.count', { n: count })} num={String(count)} /></p>
+          {faceFails > 0 ? <p className={styles.cardMsg} role="status">{t('vault.unlock.notRecognized', { method })}</p> : null}
+          <div className={styles.centerBtns}>
+            <FormButton variant="primary" size="row" strong block onClick={() => setMode('pin')} data-testid={`${testId}-pin`} data-unlock-main="">
+              {t('vault.unlock.pin', {})}
+            </FormButton>
+            {canFace ? (
+              <FormButton size="row" block disabled={busy} onClick={() => void face()} data-testid={`${testId}-face`}>
+                {t('vault.unlock.with', { method })}
+              </FormButton>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (mode === 'card') {
     return (
       <div className={styles.card} data-testid={`${testId}-card`}>
@@ -164,7 +211,10 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock', backL
  * 磨砂遮罩里放解锁卡。open 变 false（解锁成功）时淡出 --dur-ui 再卸掉（S21）；open 变 true 时直接出现。
  * 淡出用 transitionend 收尾，另设 400 ms 兜底（减少动态效果、没有 transition 时不会卡住）
  */
-export function UnlockOverlay({ open, children, testId = 'vault-scrim' }: { open: boolean; children: ReactNode; testId?: string }) {
+export function UnlockOverlay({ open, children, testId = 'vault-scrim', center = false }: { open: boolean; children: ReactNode; testId?: string; center?: boolean }) {
+  // 开着时跟着 center 走（渲染时就换，不晚一帧）；关上淡出时停在关之前那一种
+  const [c, setC] = useState(center);
+  if (open && c !== center) setC(center);
   const t = useVaultT();
   const esc = useRef<(() => void) | null>(null);
   const [shown, setShown] = useState(open);
@@ -188,16 +238,18 @@ export function UnlockOverlay({ open, children, testId = 'vault-scrim' }: { open
       <RD.Content asChild forceMount aria-describedby={undefined} onOpenAutoFocus={(e) => focusMain(e, scrim.current)} onPointerDownOutside={prevent} onFocusOutside={prevent} onInteractOutside={prevent} onCloseAutoFocus={prevent}>
         <div
           ref={scrim}
-          className={leaving ? `${styles.scrim} ${styles.scrimOut}` : styles.scrim}
+          className={[styles.scrim, c && styles.scrimCenter, leaving && styles.scrimOut].filter(Boolean).join(' ')}
           data-testid={testId}
           data-leaving={leaving || undefined}
           onTransitionEnd={() => leaving && setShown(false)}
           aria-modal="true"
         >
-          <RD.Title className={styles.sr}>{t('vault.locked.title', {})}</RD.Title>
-          <EscCtx.Provider value={esc}>
-            <PadLayer.Provider value={layer}>{children}</PadLayer.Provider>
-          </EscCtx.Provider>
+          {c ? null : <RD.Title className={styles.sr}>{t('vault.locked.title', {})}</RD.Title>}
+          <CenterCtx.Provider value={c}>
+            <EscCtx.Provider value={esc}>
+              <PadLayer.Provider value={layer}>{children}</PadLayer.Provider>
+            </EscCtx.Provider>
+          </CenterCtx.Provider>
         </div>
       </RD.Content>
     </RD.Root>

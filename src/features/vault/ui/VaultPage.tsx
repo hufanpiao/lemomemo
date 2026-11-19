@@ -1,4 +1,6 @@
-// 隐私记页面（B5 S5、S6、S9；定稿线框 s9 PRIVLIST；代定 D14）：#/vault（列表）、#/vault/new、#/vault/<id>（编辑）、#/vault/trash（自己的“最近删除”）
+// 隐私记页面（B5 S5、S6、S9；定稿线框 s9 PRIVLIST；代定 D14）：#/vault（首页）、#/vault/c/<分类 id|all>（列表）、#/vault/new、#/vault/<id>（编辑）、#/vault/trash（自己的“最近删除”）
+// • 负责人 11-19“隐私记这个页面太空了”→“锁着用甲，解锁后用乙”：首页是分类宫格 + 最近 3 条（./VaultHome.tsx），点一格进那一类的列表；
+//   锁着时解锁卡整页居中（Unlock.tsx 的 center），页面自己的顶栏这时不画（卡片自带）
 // • 列表、编辑器、电脑分栏、插图、看图页是随手记那一份（notes 的 NotesSurface + hooks/vault-note-source.ts 的隐私记来源；B5 隐私记重写 11-15，
 //   主持人定稿“隐私记页面按照随手记的样子全部重写”）：停笔自动存、读写只碰内存仓库，后台队列去发；“最近删除”是 ./VaultTrash.tsx
 // • 状态：查状态中 → 断网（要联网才能打开，TC-B5-33）/ 没设过密码（设密码）/ 锁着（磨砂遮罩 + 解锁卡）/ 已解锁（内容）
@@ -10,8 +12,8 @@
 // • 不建液态玻璃副本、底栏和“＋”实色：挂着时经 platform/look.ts 的 holdReducedTransparency 让 <html data-rt="1">（同“减少透明效果”，
 //   motion/glass-ghost.ts 和 GlassBar 都认它），离开时放开、按设置和系统设置重算（TC-B5-12；hooks/useVault.ts 的 useSolidBars）
 // • 多任务遮罩 LockShield 一直挂在页面上（平时 visibility: hidden），离开时由 hooks/useVault.ts 同步盖上
-import { Suspense, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
-import { backTo, navigate, useRoute } from '../../../app/router.ts';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
+import { backTo, navigate, replaceRoute, useRoute } from '../../../app/router.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
 import chip from '../../../kit/components/Chip.module.css';
@@ -19,7 +21,7 @@ import { NumIn } from '../../../kit/components/NumIn.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useKeys } from '../../../kit/hooks/layers.ts';
 import { notesInput } from '../../../kit/state/new-item.ts';
-import { NotesSurface } from '../../notes/index.ts';
+import { NotesSurface, type CategoryCtl } from '../../notes/index.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultPresence, useVaultStatus } from '../hooks/useVault.ts';
 import { useVaultNoteSource } from '../hooks/vault-note-source.ts';
@@ -27,6 +29,7 @@ import { useVaultT } from '../hooks/useVaultT.ts';
 import { LockIcon } from './Pin.tsx';
 import { SetupPin } from './SetupPin.tsx';
 import { UnlockOverlay, UnlockPanel } from './Unlock.tsx';
+import { VaultHome } from './VaultHome.tsx';
 import { VaultTrash } from './VaultTrash.tsx';
 import styles from './Vault.module.css';
 
@@ -44,7 +47,9 @@ export default function VaultPage() {
   const state = useVaultStatus();
   const { s } = useVault();
   const errText = useErrText();
-  const [sub = ''] = useRoute().params;
+  const [sub = '', cat = 'all'] = useRoute().params;
+  /** 列表（首页点进来的某一类、全部） */
+  const inList = sub === 'c';
   /** 设密码时 Face ID 没绑上（审查第 3 条）：绑定方式的叫法；null = 不提示 */
   const [bindFail, setBindFail] = useState<string | null>(null);
   useSolidBars();
@@ -57,12 +62,12 @@ export default function VaultPage() {
     },
   });
   useLayoutEffect(() => {
-    if (!sub) return undefined;
+    if (!sub || inList) return undefined;
     notesInput.focus = () => void navigate('vault', 'new');
     return () => {
       notesInput.focus = undefined;
     };
-  }, [sub]);
+  }, [sub, inList]);
   useEffect(() => {
     const again = (): void => s.queue.retryAll();
     window.addEventListener('online', again);
@@ -103,15 +108,16 @@ export default function VaultPage() {
     <div data-testid="vault" data-phase={state.phase}>
       {surface ? (
         <Suspense fallback={null}>
-          <VaultSurface editing={Boolean(sub)} />
+          <VaultSurface editing={Boolean(sub) && !inList} inList={inList} cat={cat} />
         </Suspense>
       ) : (
-        <main className={styles.page} data-feature="vault">
-          {state.phase !== 'unset' && !(unlocked && sub) ? <VaultTop unlocked={unlocked} /> : null}
+        <main className={state.phase === 'locked' ? `${styles.page} ${styles.pageBare}` : styles.page} data-feature="vault">
+          {/* 编辑页、最近删除自己有顶栏；列表（c/…）还没拉到时照旧画顶栏（独立评审 11-19 低 11） */}
+          {state.phase !== 'unset' && state.phase !== 'locked' && !(unlocked && sub && !inList) ? <VaultTop unlocked={unlocked} inList={inList} /> : null}
           {body}
         </main>
       )}
-      <UnlockOverlay open={state.phase === 'locked' || state.waiting}>
+      <UnlockOverlay open={state.phase === 'locked' || state.waiting} center={state.phase === 'locked'}>
         <UnlockPanel onCancel={leave} onForgot={forgot} />
       </UnlockOverlay>
       {bindFail ? (
@@ -129,13 +135,17 @@ export default function VaultPage() {
   );
 }
 
-/** 顶栏“‹ 随手记 | 🔒 隐私记 | 立即锁上” */
-function VaultTop({ unlocked, trash = null }: { unlocked: boolean; trash?: ReactNode }) {
+/** 顶栏“‹ 随手记 | 🔒 隐私记 | 立即锁上”；inList（某一类的列表）时左边是“‹ 隐私记”、退回首页 */
+function VaultTop({ unlocked, trash = null, inList = false }: { unlocked: boolean; trash?: ReactNode; inList?: boolean }) {
   const t = useVaultT();
   const { s } = useVault();
   return (
     <header className={styles.top}>
-      <BackLink label={t('vault.back', {})} onBack={() => backTo('notes')} testId="vault-back" />
+      {inList ? (
+        <BackLink label={t('vault.home.back', {})} onBack={() => backTo('vault')} testId="vault-back-home" />
+      ) : (
+        <BackLink label={t('vault.back', {})} onBack={() => backTo('notes')} testId="vault-back" />
+      )}
       <h1 className={styles.h1}>
         <LockIcon />
         {t('vault.title', {})}
@@ -153,19 +163,30 @@ function VaultTop({ unlocked, trash = null }: { unlocked: boolean; trash?: React
   );
 }
 
-/** 解锁后：随手记的整套界面换成隐私记来源；列表页顶上是隐私记的顶栏、提示（下面的“最近删除”入口是随手记列表那一份，按来源去 #/vault/trash） */
-function VaultSurface({ editing }: { editing: boolean }) {
+/** 解锁后：随手记的整套界面换成隐私记来源；列表页顶上是隐私记的顶栏、提示（下面的“最近删除”入口是随手记列表那一份，按来源去 #/vault/trash）；
+ *  #/vault 是首页（宫格 + 最近，home），#/vault/c/<分类|all> 是列表：地址就是筛选，点胶囊原地换地址，分类没了换回 all（独立评审 11-19 中 2） */
+function VaultSurface({ editing, inList, cat }: { editing: boolean; inList: boolean; cat: string }) {
   const source = useVaultNoteSource();
-  return <NotesSurface source={source} editing={editing} head={(trash) => <VaultHead trash={trash} />} />;
+  const ctl = useMemo<CategoryCtl>(() => ({ value: cat === 'all' ? null : cat, set: (id) => void replaceRoute('vault', 'c', id ?? 'all') }), [cat]);
+  return (
+    <NotesSurface
+      key={inList ? 'list' : 'home'}
+      source={source}
+      editing={editing}
+      head={(trash) => <VaultHead trash={trash} inList={inList} />}
+      home={inList ? undefined : (api) => <VaultHome api={api} />}
+      cat={inList ? ctl : undefined}
+    />
+  );
 }
 
 /** trash：随手记列表给的“最近删除”图标（R-438，手机版放进顶栏右边、“立即锁上”左边；电脑版是 null） */
-function VaultHead({ trash }: { trash: ReactNode }) {
+function VaultHead({ trash, inList }: { trash: ReactNode; inList: boolean }) {
   const t = useVaultT();
   const min = useAutolockMin();
   return (
     <div>
-      <VaultTop unlocked trash={trash} />
+      <VaultTop unlocked trash={trash} inList={inList} />
       {/* R-452 V2（负责人 11-17 选）：去掉底色，顶栏下一行灰色小字，前面一个开锁小图标；文案改成“这里记的只进隐私记” */}
       <p className={styles.hint} data-testid="vault-hint">
         <svg className={styles.hintIc} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
