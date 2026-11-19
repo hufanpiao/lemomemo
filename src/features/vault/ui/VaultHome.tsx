@@ -4,6 +4,7 @@
 // • 一条都没有：只写一句来源给的空态（同列表那一句；底部输入行、“＋”照旧）
 // • 只在手机排法里画（随手记列表的 home 参数）；电脑版左栏本来就是分类，照旧
 // • 方案里的“＋ 新分类”那一格没做：隐私记没有新建分类的入口（分类跟着记录走）
+// • 格里的小图标（负责人 11-19 选“按分类名配图标”）：只用方案乙里的三个——健康 ♥、证件 ▤、账号 ✱，按名字里的词配；对不上的只画色块
 // 运行日志：vault home pick=<all|cat>（只记点了哪一种，不记分类名）
 import type { CSSProperties } from 'react';
 import { navigate } from '../../../app/router.ts';
@@ -12,6 +13,16 @@ import type { NoteItem, NotesHomeApi } from '../../notes/index.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import styles from './Vault.module.css';
+
+const GLYPHS: readonly (readonly [RegExp, string])[] = [
+  [/健康|体检|医|病|药|건강|병원|검진|약/, '♥'],
+  [/证件|护照|身份证|签证|驾照|증명|여권|신분증|비자|면허/, '▤'],
+  [/账号|帐号|账户|密码|계정|비밀번호|아이디/, '✱'],
+];
+/** 分类名配哪个小图标；配不上回 null（只画色块） */
+export function tileGlyph(name: string): string | null {
+  return GLYPHS.find(([re]) => re.test(name))?.[1] ?? null;
+}
 
 /** 每个分类最新一条（按记下的时间） */
 function latestByCat(items: readonly NoteItem[]): Map<string, NoteItem> {
@@ -49,7 +60,9 @@ export function VaultHome({ api }: { api: NotesHomeApi }) {
             return (
               <li key={c.id}>
                 <button type="button" className={styles.tile} onClick={() => pick(c.id)} aria-label={`${c.name}，${sub}`} data-testid={`vault-home-cat-${c.id}`}>
-                  <span className={styles.tileDot} style={c.color ? ({ '--dot': c.color } as CSSProperties) : undefined} aria-hidden="true" />
+                  <span className={styles.tileDot} style={c.color ? ({ '--dot': c.color } as CSSProperties) : undefined} aria-hidden="true">
+                    {tileGlyph(c.name)}
+                  </span>
                   <span className={styles.tileName}>{c.name}</span>
                   <span className={styles.tileSub}>
                     <NumIn text={sub} num={String(c.count)} />

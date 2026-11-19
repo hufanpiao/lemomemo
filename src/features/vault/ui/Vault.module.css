@@ -656,11 +656,16 @@
 
 /* 分类色的小方块（--dot 由组件按分类色给，同随手记胶囊的色点 CatDot；没有颜色时用柠檬黄浅底） */
 .tileDot {
+  display: grid;
   width: 22px;
   height: 22px;
   margin-bottom: 8px;
   border-radius: 7px;
   background: var(--dot, var(--today-bg));
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+  place-items: center;
 }
 
 .tileName {
