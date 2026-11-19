@@ -4,7 +4,9 @@
 //   斜着、横着为主、往上推、不在顶上、按在里面一块还能往上滚（竖）或能横着滚（分类胶囊行）的框里：这一下整段放行（底部回弹保留）
 // • 下拉搜索（kit/hooks/usePullReveal.ts）听同一串 touch 事件、自己算露出多少，判断“在不在顶上、是不是往下拉、框能不能滚”
 //   用这里导出的同一份（整块评审第 5 条：原来两处各写一份、横竖门槛不一样，斜着拉时页面锁住、搜索框又不出）
+// • 运行日志：在顶上往下拉的那一下记 toplock block / pass inner / pass uncancelable（11-20 真机截图页面还被拽下来，补的）
 // • 一个窗口装一次（app/main.tsx 启动时）；非被动监听，React 的 onTouchMove 给不了
+import { rlog } from './run-log-api.ts';
 
 /** 整页滚到顶了 */
 export const atTop = (): boolean => window.scrollY <= 0;
@@ -46,7 +48,11 @@ export function installTopLock(): () => void {
     const p = e.touches[0];
     if (!start || !p || e.touches.length !== 1) return;
     if (lock === null) {
-      lock = e.cancelable && atTop() && pullsDown(p.clientX - start.x, p.clientY - start.y) && !innerScrolls(start.t);
+      const down = atTop() && pullsDown(p.clientX - start.x, p.clientY - start.y);
+      const inner = down && innerScrolls(start.t);
+      lock = down && e.cancelable && !inner;
+      // 运行日志（只记“在顶上往下拉”的那一下怎么定的，真机还弹时按它定根因）：拦了 / 事件不让拦 / 交给里面能滚的框
+      if (down) rlog(`toplock ${lock ? 'block' : inner ? 'pass inner' : 'pass uncancelable'} y=${Math.round(window.scrollY)}`);
     }
     if (lock && e.cancelable) e.preventDefault();
   };

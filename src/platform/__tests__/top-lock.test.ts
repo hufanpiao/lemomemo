@@ -1,7 +1,10 @@
 // 所有页面顶部固定（R-488，platform/top-lock.ts）：页顶往下拉拦下默认（iOS 不回弹）；往上推、斜着横着、不在顶上、
 // 按在里面竖着还能往上滚或能横着滚的框里都放行；一下手势只在第一次 touchmove 定一次。真机回弹拦没拦住这里测不了，只能 iPhone 看
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installTopLock, pullsDown } from '../top-lock.ts';
+
+const logs = vi.hoisted(() => [] as string[]);
+vi.mock('../run-log-api.ts', async (orig) => ({ ...(await orig<object>()), rlog: (l: string) => logs.push(l) }));
 
 let scrollY = 0;
 let off: () => void = () => undefined;
@@ -31,6 +34,7 @@ const box = (style: Partial<CSSStyleDeclaration>, size: Record<string, number>):
 
 beforeEach(() => {
   scrollY = 0;
+  logs.length = 0;
   Object.defineProperty(window, 'scrollY', { configurable: true, get: () => scrollY });
   off = installTopLock();
 });
@@ -68,6 +72,15 @@ describe('installTopLock', () => {
     expect(pull(v.firstChild as Element, [0, 30])).toEqual([true]);
     const h = box({ overflowX: 'auto' }, { scrollWidth: 800, clientWidth: 300 });
     expect(pull(h.firstChild as Element, [2, 3])).toEqual([false]);
+  });
+
+  it('运行日志：只记在顶上往下拉的那一下怎么定的（拦了 / 交给里面的框），别的手势不记', () => {
+    pull(document.body, [0, 30], [0, 40]);
+    pull(document.body, [0, -30]);
+    const v = box({ overflowY: 'auto' }, { scrollHeight: 500, clientHeight: 100 });
+    v.scrollTop = 50;
+    pull(v.firstChild as Element, [0, 30]);
+    expect(logs).toEqual(['toplock block y=0', 'toplock pass inner y=0']);
   });
 
   it('装两次只生效一份；卸掉以后不再拦', () => {
