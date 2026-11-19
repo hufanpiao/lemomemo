@@ -1,30 +1,37 @@
-// 四个主页面从屏幕左右两边往里划切页签（负责人 11-18：只在左右两边触发、两头循环、二级页不切）
+// 四个主页面从屏幕左右两边往里划（负责人 11-18：只在左右两边触发、两头循环、二级页不切；11-19：右边往左划进设置，设置首页左边往右划退回）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as Router from '../router.ts';
 
-const nav = vi.hoisted(() => ({ to: [] as string[] }));
-vi.mock('../router.ts', async (orig) => ({ ...(await orig<typeof Router>()), navigateTab: (n: string) => nav.to.push(n) }));
+const nav = vi.hoisted(() => ({ to: [] as string[], back: false }));
+vi.mock('../router.ts', async (orig) => ({
+  ...(await orig<typeof Router>()),
+  navigateTab: (n: string) => nav.to.push(n),
+  navigate: (n: string) => nav.to.push(`push:${n}`),
+  replaceRoute: (n: string) => nav.to.push(`replace:${n}`),
+  goBack: () => nav.to.push('goBack'),
+  canGoBack: () => nav.back,
+}));
 
 import { SIDE_PX } from '../../motion/gestures.ts';
 import { blockedAt, installTabSwipe, swipeTarget, SWIPE_MAX_MS, SWIPE_MIN_PX } from '../tab-swipe.ts';
 
 describe('swipeTarget：划完去哪个页签', () => {
-  it('左边那条往右划（负责人说的“左滑”）去下一个：今天 → 日历 → 待办 → 随手记 → 今天；右边那条往左划去上一个', () => {
+  it('左边那条往右划（负责人说的“左滑”）去下一个：今天 → 日历 → 待办 → 随手记 → 今天；右边那条往左划进设置', () => {
     expect(swipeTarget('today', 'l', 80, 0, 200)).toBe('calendar');
     expect(swipeTarget('calendar', 'l', 80, 0, 200)).toBe('todos');
     expect(swipeTarget('todos', 'l', 80, 0, 200)).toBe('notes');
     expect(swipeTarget('notes', 'l', 80, 0, 200), '随手记往下一个回到今天').toBe('today');
-    expect(swipeTarget('todos', 'r', -80, 0, 200)).toBe('calendar');
-    expect(swipeTarget('today', 'r', -80, 0, 200), '今天往上一个到随手记').toBe('notes');
+    for (const r of ['today', 'calendar', 'cal', 'todos', 'notes']) expect(swipeTarget(r, 'r', -80, 0, 200), `${r} 右边往左划进设置（负责人 11-19）`).toBe('settings');
   });
   it('方向不对（右边那条往右划、左边那条往左划）不切', () => {
     expect(swipeTarget('today', 'r', 80, 0, 200)).toBeNull();
     expect(swipeTarget('today', 'l', -80, 0, 200)).toBeNull();
   });
   it('二级页（编辑、设置、纪念日、隐私记）不切；日历翻过月（cal）还是日历主页面', () => {
-    for (const r of ['edit', 'settings', 'anniv', 'vault']) expect(swipeTarget(r, 'r', -80, 0, 200)).toBeNull();
+    for (const r of ['edit', 'settings', 'settings-sub', 'anniv', 'vault']) expect(swipeTarget(r, 'r', -80, 0, 200)).toBeNull();
+    for (const r of ['edit', 'settings-sub', 'anniv', 'vault']) expect(swipeTarget(r, 'l', 80, 0, 200)).toBeNull();
+    expect(swipeTarget('settings', 'l', 80, 0, 200), '设置首页左边往右划退回').toBe('back');
     expect(swipeTarget('cal', 'l', 80, 0, 200)).toBe('todos');
-    expect(swipeTarget('cal', 'r', -80, 0, 200)).toBe('today');
   });
   it('太短、太斜、太慢都不切', () => {
     expect(swipeTarget('today', 'r', -(SWIPE_MIN_PX - 1), 0, 200)).toBeNull();
@@ -95,12 +102,12 @@ describe('installTabSwipe：真的划一下', () => {
     window.location.hash = '';
     document.body.replaceChildren();
   });
-  it('左边那条往右划：今天 → 日历；右边那条往左划：今天 → 随手记（循环）', () => {
+  it('左边那条往右划：今天 → 日历；右边那条往左划：压一条历史进设置', () => {
     window.location.hash = '#/today';
     swipe(10, 150);
     expect(nav.to).toEqual(['calendar']);
     swipe(W - 10, W - 150);
-    expect(nav.to).toEqual(['calendar', 'notes']);
+    expect(nav.to).toEqual(['calendar', 'push:settings']);
   });
   it(`中间区域（离两边 ${SIDE_PX} px 以外）起手不切`, () => {
     window.location.hash = '#/today';
@@ -116,9 +123,18 @@ describe('installTabSwipe：真的划一下', () => {
     touch('touchend', 150, 205, t, true);
     expect(nav.to).toEqual([]);
   });
-  it('设置页上划不切', () => {
+  it('设置首页：右边往左划不动；左边往右划退回（有上一页退一步，没有就原地换回今天、不退出 App）；设置子页都不管', () => {
     window.location.hash = '#/settings';
     swipe(W - 10, W - 150);
     expect(nav.to).toEqual([]);
+    nav.back = true;
+    swipe(10, 150);
+    nav.back = false;
+    swipe(10, 150);
+    expect(nav.to).toEqual(['goBack', 'replace:today']);
+    window.location.hash = '#/settings/calendar';
+    swipe(10, 150);
+    swipe(W - 10, W - 150);
+    expect(nav.to).toEqual(['goBack', 'replace:today']);
   });
 });
