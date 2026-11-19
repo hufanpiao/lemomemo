@@ -192,13 +192,16 @@ export function groupByDay(items: readonly NoteItem[], now: number, tz: Tz): Not
   return out;
 }
 
-/** 分类胶囊：有条目的分类和条数（隐私记、删了的不算） */
+/**
+ * 分类胶囊、隐私记宫格：这一套里每个活着的分类和条数（删了的条目不算）。一条都没有的也列、写 0、排在后面——
+ * 负责人 11-19 隐私记“新建分类，然后里面的记录可以拖进分类里面，也可以在分类里倒入没分类的记录”、随手记“可以创建分类”：建好的空分类要看得见才能往里放
+ */
 export function categoryCounts(rows: readonly Row[], categories: readonly Row[], locale: string): CategoryCount[] {
   const names = categoryNames(categories);
   const target = categoryResolver(categories);
   const colors = categoryColors(categories);
   const sortOf = new Map(categories.map((c) => [c.id, num(c['sort'])]));
-  const n = new Map<string, number>();
+  const n = new Map<string, number>([...names.keys()].map((id) => [id, 0]));
   for (const r of rows) {
     const cid = alive(r) ? target(r['category_id']) : null;
     if (cid !== null) n.set(cid, (n.get(cid) ?? 0) + 1);

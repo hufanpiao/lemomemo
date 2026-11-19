@@ -58,7 +58,7 @@ export function makeStore(admin: ClassifyAdmin): ClassifyStore {
       return out;
     },
     async categories(userId) {
-      const d = must(await tbl(admin, 'categories').select('id, name, sort, deleted_at, undone, merged_into').eq('user_id', userId), 'categories');
+      const d = must(await tbl(admin, 'categories').select('id, name, sort, deleted_at, undone, merged_into').eq('user_id', userId).eq('vault', false), 'categories');   // 只看随手记的分类（隐私记自己一套，20261119120000）
       const out: Category[] = [];
       for (const r of Array.isArray(d) ? d : []) {
         if (!isObj(r) || !str(r['id']) || !str(r['name'])) continue;

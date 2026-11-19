@@ -7,7 +7,6 @@
 //   服务器不会把自己的上一次修改当成别人改的、不生成冲突副本（TC-B4-14，见 __tests__/NoteEditPage.test.tsx 的“连续打字不生成冲突副本”两条）
 // • 读写经 ./note-source.ts 的来源（useEditRecord 的 io；B5 隐私记重写 11-15）：普通随手记进 outbox，隐私记进它的内存仓库和发送队列
 import { useCallback, useEffect, useRef } from 'react';
-import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useEditRecord, type EditRecord } from '../../../kit/hooks/useEditRecord.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -17,6 +16,7 @@ import { ruleCategory } from '../data/classify.ts';
 import { aiMarkKept, contentOf, emptyForm, formOf, newNoteRow, patchOf, type NoteForm } from '../data/note-edit.ts';
 import { categoryNames } from '../../../core/categories.ts';
 import { categoryColor, dayKind, showsAi, type Row } from '../data/note-list.ts';
+import { useCategoryRows } from './useCategoryRows.ts';
 import { useNoteSource } from './note-source.ts';
 
 export type { NoteForm } from '../data/note-edit.ts';
@@ -40,17 +40,20 @@ export function useNoteEdit(
   id: string,
   onCreated?: (id: string) => void,
 ): EditRecord<NoteForm> & { change(p: Partial<NoteForm>): void; categories: CategoryOption[]; ai: boolean; when: NoteWhen | null } {
-  const cats = useCollection<Row>('categories');
+  const cats = useCategoryRows();
   const colorOf = new Map(cats.map((c) => [c.id, categoryColor(c['color'])]));
   const options = [...categoryNames(cats)].map(([cid, name]) => ({ id: cid, name, color: colorOf.get(cid) ?? null }));
   const optRef = useRef(options);
   optRef.current = options;
+  // 记录里的分类只按这一套解析（独立评审 11-19 中 3：原来按全部分类解析，指着另一套分类的记录列表里是“没分类”、编辑页表单里却带着那个 id，保存时原样写回）
+  const catsRef = useRef(cats);
+  catsRef.current = cats;
   const { editIo: io } = useNoteSource();
   const rec = useEditRecord<NoteForm>({
     io,
     table: 'notes',
     id,
-    formOf,
+    formOf: (r) => formOf(r, catsRef.current),
     emptyForm,
     titleOf: contentOf,
     patchOf,

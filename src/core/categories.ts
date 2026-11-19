@@ -11,6 +11,12 @@ export type Row = { readonly id: string } & Readonly<Record<string, unknown>>;
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
+/** 隐私记自己的分类（categories.vault = true，迁移 20261119120000；负责人 11-19“隐私记自己一套”）；旧行没有这一列的算随手记的 */
+export const isVaultCategory = (c: Row): boolean => c['vault'] === true;
+
+/** 只留一套分类：vault = true 隐私记的，false 随手记的。列表、编辑页、新建分类、合并提示都只看自己这一套 */
+export const categoriesOf = (categories: readonly Row[], vault: boolean): Row[] => categories.filter((c) => isVaultCategory(c) === vault);
+
 /** 本机集合里的分类行 → shared 的 CategoryRow（名字、sort 取不到当空串、0；其余列原样带着，isLiveCategory 照看）：合并提示、成环取舍共用这一份 */
 export const categoryRow = (c: Row): CategoryRow & Row => ({ ...c, name: str(c['name']), sort: num(c['sort']) });
 

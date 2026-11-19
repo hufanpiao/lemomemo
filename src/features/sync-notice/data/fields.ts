@@ -42,7 +42,7 @@ export const FIELDS: Readonly<Record<NoticeTable, Readonly<Record<string, FieldS
     remind_before_min: f('sn.f.remindBefore', 'mins'),
   },
   categories: {
-    id: H, deleted_at: H, undone: H, created_by: H, merged_into: H, sort: H,
+    id: H, deleted_at: H, undone: H, created_by: H, merged_into: H, sort: H, vault: H,
     name: f('sn.f.name', 'text'), color: f('sn.f.color', 'changed'),
   },
   notes: {

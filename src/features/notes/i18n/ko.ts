@@ -118,4 +118,21 @@ export const ko = {
   'notes.sync.dropped': '저장하지 못한 변경 {n}건이 있어요', // REVIEW(ko) B5 隐私记重写
   'notes.sync.ok': '확인', // REVIEW(ko) B5 隐私记重写
   'notes.sync.stale': '다른 곳에서 방금 바뀐 메모라 옮기지 않았어요', // REVIEW(ko) R-429
+  'notes.cat.new': '＋ 새 분류', // REVIEW(ko)
+  'notes.cat.newTitle': '새 분류', // REVIEW(ko)
+  'notes.cat.placeholder': '이름을 지어 주세요. 최대 {n}자', // REVIEW(ko)
+  'notes.cat.create': '만들기', // REVIEW(ko)
+  'notes.cat.createFail': '만들지 못했어요. 다시 해 주세요', // REVIEW(ko)
+  'notes.cat.editTitle': '분류 “{name}”', // REVIEW(ko)
+  'notes.cat.rename': '바꾸기', // REVIEW(ko)
+  'notes.cat.dup': '같은 이름의 분류가 이미 있어요', // REVIEW(ko)
+  'notes.cat.editFail': '바꾸지 못했어요. 다시 해 주세요', // REVIEW(ko)
+  'notes.cat.delete': '이 분류 삭제', // REVIEW(ko)
+  'notes.cat.deleteAsk': '“{name}”을(를) 삭제할까요? 안의 기록 {n}개는 지워지지 않고 미분류가 돼요', // REVIEW(ko)
+  'notes.cat.deleteOk': '삭제', // REVIEW(ko)
+  'notes.cat.cancel': '취소', // REVIEW(ko)
+  'notes.import.open': '미분류 {n}개 가져오기', // REVIEW(ko)
+  'notes.import.title': '“{name}”(으)로 가져오기', // REVIEW(ko)
+  'notes.import.ok': '{n}개 가져오기', // REVIEW(ko)
+  'notes.import.fail': '{n}개를 가져오지 못했어요. 다시 해 주세요', // REVIEW(ko)
 } as const satisfies Record<keyof typeof zh, string>;

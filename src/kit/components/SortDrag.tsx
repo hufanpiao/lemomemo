@@ -19,6 +19,9 @@
 // • 收尾：浮层停稳（弹簧停、--dur-ui 过完）→ 预览顺序清空、占位显出来，同一次提交画到屏幕前撤浮层、去掉 html 标记（不出空帧）。卸载中途直接撤
 // • 运行日志（只记数字和类型，不记文字）：sort <页> lift i= n= view=list|mason sel=（拿起前选区长度）us=（行上 computed 的 -webkit-user-select）、
 //   over i=（每次换位一行）、drop i= to= n= / drop same / cancel why=、settle moved= ms=（松手到撤掉）same=（撤掉那一刻页面顺序和预览顺序一致没有，0 就是数据还没跟上、会跳一下）
+// • 拖进别处（负责人 11-19 隐私记“里面的记录可以拖进分类里面”，“两种都要”：列表拖到分类胶囊、首页“最近”拖到分类格）：给了 into，
+//   手指落在带 data-drop-into="<目标 id>" 的元素上、into.ok 认拿着的这一条（只认没分类的），就不换位、那个元素打 data-drop-over（高亮），
+//   松手交 into.drop(id, 目标 id)、预览顺序还原、浮层落回原位；sort: false 只认拖进去、不换位（首页“最近”三条）。运行日志 into over / drop into
 // • 震动和音效（R-471，页面传进来的 fx，即 platform/fx-api.ts）：拿起 fx('lift') 只震；放到新位置 fx('drop') 音效甲 + 震；落回原位、取消不响
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { SortSpring } from '../../motion/components.ts';
@@ -51,6 +54,10 @@ export interface SortDragOptions {
   fx?(kind: 'lift' | 'drop'): void;
   /** 拖动把手的选择器（R-476 待办编辑页子任务）：给了就只认按在把手上的，按下当场拿起；不给就按住整行 0.4 秒拿起 */
   grip?: string;
+  /** 拖进别处（见文件头）：ok 认不认这一条，drop 放下 */
+  into?: { ok(id: string): boolean; drop(id: string, target: string): void };
+  /** false：只认拖进别处、不换位；不给照常换位 */
+  sort?: boolean;
 }
 
 export interface SortDrag {
@@ -144,10 +151,22 @@ interface Lift {
   t0: number;
   /** 浮层中心最近一次的视口位置（还没跟过手时为 null） */
   c: Point | null;
+  /** 上一次换位之前的顺序、换位时浮层中心是哪一个位置对象（见 reorder 的来回判断） */
+  prev?: readonly string[];
+  at?: Point | null;
+  /** 手指此刻落在的拖进目标（data-drop-into），没有为 null */
+  over?: HTMLElement | null;
+}
+
+/** 离开拖进目标：去掉高亮 */
+function outOf(l: Lift): void {
+  l.over?.removeAttribute('data-drop-over');
+  l.over = null;
 }
 
 /** 撤掉这一次：浮层、整页标记 */
 function teardown(l: Lift): void {
+  outOf(l);
   l.float.remove();
   delete html()['sortDragging'];
 }
@@ -192,7 +211,7 @@ export function useSortDrag(opts: SortDragOptions): SortDrag {
   const drain = (): void => drainAll(cur, gone);
   /** 按浮层中心此刻在哪换预览顺序。列表还没按上一次换位画出来就先不算：等那一次提交后由下面的 layout effect 再算（手指停住也不丢最后一步） */
   const reorder = (l: Lift): void => {
-    if (!l.c || l.landing) return;
+    if (!l.c || l.landing || l.over || o.current.sort === false) return;
     const els = liveRows(l.box);
     const ids = els.map(idOfRow);
     if (!same(ids, l.order)) {
@@ -204,9 +223,30 @@ export function useSortDrag(opts: SortDragOptions): SortDrag {
     const rows = els.map((e) => ({ id: idOfRow(e), ...layoutPos(e, l.box), width: e.offsetWidth, height: e.offsetHeight }));
     const next = overOrder(l.order, l.id, rows, { x: l.c.x - b.left, y: l.c.y - b.top }, o.current.axis);
     if (!next) return;
+    // 手指没动、却要换回上一次换位之前的顺序：不换。瀑布流（按天分组的两列卡片）里两张高矮不同的卡换了位，
+    // 浮层中心又落回原来那张上，画完再算就换回去、再画完又换过来，layout effect 里无限 setView，整页崩（React #185；
+    // 第三方实测 11-19：隐私记“全部”列表长按第 2 张往上拖，日志 over i=1 / over i=2 来回 53 次）。手指一动（l.c 换成新的位置对象）照常算
+    if (l.prev && l.at === l.c && same(next, l.prev)) return;
+    l.prev = l.order;
+    l.at = l.c;
     l.order = next;
     setView({ held: l.id, order: next });
     log(`over i=${next.indexOf(l.id)}`);
+  };
+
+  /** 手指（视口坐标）落在哪个拖进目标上：换了就挪高亮；回在不在目标上 */
+  const overInto = (l: Lift, at: Point): boolean => {
+    const into = o.current.into;
+    const hit = into?.ok(l.id) ? (document.elementFromPoint(at.x, at.y)?.closest<HTMLElement>('[data-drop-into]') ?? null) : null;
+    if (hit !== (l.over ?? null)) {
+      outOf(l);
+      if (hit) {
+        hit.setAttribute('data-drop-over', '');
+        l.over = hit;
+        log('into over');
+      }
+    }
+    return hit !== null;
   };
 
   // 预览顺序每画出来一次：照最近的手指位置再算一次（见 reorder）
@@ -261,11 +301,23 @@ export function useSortDrag(opts: SortDragOptions): SortDrag {
       const l = cur.current;
       if (!l || l.landing) return;
       l.c = l.float.follow(at);
-      reorder(l);
+      if (!overInto(l, at)) reorder(l);
     },
     drop() {
       const l = cur.current;
       if (!l || l.landing) return;
+      const target = l.over?.dataset['dropInto'];
+      if (target) {
+        outOf(l);
+        log('drop into');
+        o.current.fx?.('drop');
+        o.current.into?.drop(l.id, target);
+        if (!same(l.order, l.start)) {
+          l.order = l.start;
+          setView({ held: l.id, order: l.start });
+        }
+        return land(l);
+      }
       if (same(l.order, l.start)) log('drop same');
       else {
         const i = l.order.indexOf(l.id);
@@ -280,6 +332,7 @@ export function useSortDrag(opts: SortDragOptions): SortDrag {
       const l = cur.current;
       if (!l) return;
       log(`cancel why=${why}`);
+      outOf(l);
       if (why === 'unmount') return drain();
       l.order = l.start;
       setView({ held: l.id, order: l.start });

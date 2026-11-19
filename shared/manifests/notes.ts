@@ -7,8 +7,8 @@ export const notes = defineManifest({
   owner: 'feature',
   tables: [
     { name: 'categories', schema: 'public', sync: true, realtime: true, localCache: 'plain',
-      clientWritable: ['id', 'name', 'color', 'sort', 'created_by', 'merged_into', ...SOFT_DELETE_COLS],
-      insertOnly: ['id'], updateOnly: [...SOFT_DELETE_COLS],
+      clientWritable: ['id', 'name', 'color', 'sort', 'created_by', 'merged_into', 'vault', ...SOFT_DELETE_COLS],
+      insertOnly: ['id', 'vault'], updateOnly: [...SOFT_DELETE_COLS],   // vault：隐私记自己一套分类（20261119120000），建好不改
       softDelete: true, backup: 'json', export: 'json', onAccountDelete: 'cascade', userLookup: BY_USER,
       systemCols: [], noConflict: ['sort'] },
     { name: 'notes', schema: 'public', sync: true, realtime: true, localCache: 'plain',

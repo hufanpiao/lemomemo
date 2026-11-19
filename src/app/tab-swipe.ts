@@ -116,16 +116,18 @@ export function installTabSwipe(doc: Document = document): () => void {
   // 负责人 11-19“在待办页点击某个待办，左滑退出以后回到待办页面再右滑的话不进入设置，而是回到之前的某的待办”（又 11-19 下午：修完还是进待办编辑）：
   // 从详情页侧滑退回来以后历史里还留着“前进”那一条，iPhone 右边缘往左划是系统的“前进”手势，会把页面带回那条待办。
   // iPhone 把这一下交给网页有两种：抬手照送（地址已变），或者直接 touchcancel、根本没有抬手（第一版 843cd4f1 只管了前一种，所以没修好）。
-  // 所以不靠抬手：主页面右边那条按下以后 3 秒内来了一次 popstate、地址变了，就是被“前进”抢走的——先退回原页，退回以后再进设置
-  // （压一条新历史，“前进”那条随之清掉）。日志记 how=up|pop、cancel=0|1，真机上看 iPhone 实际是哪一种
+  // 所以不靠抬手：主页面右边那条按下以后 3 秒内来了一次 popstate、地址变了，就是被“前进”抢走的——
+  // 系统带回来的就是设置首页（之前从设置退回来过）：照收，什么都不做；带回别的页（那条待办）：把这一条原地换成设置。
+  // （负责人 11-19 傍晚“设置页自动闪退”：前一版先退回、等下一次 popstate 再压设置，前进那条本来就是设置时也退回去，设置一闪就没了；
+  //   两步跳转中间还会闪一下那条待办。改成只换一次，不退回、不再等 popstate。）日志记 how=up|pop、cancel=0|1、at=1（本来就是设置）
   let cancelled = false;
   const fwdTaken = (d: NonNullable<typeof s>, how: 'up' | 'pop'): boolean => {
     if (d.why !== null || d.side !== 'r' || mainTab(parseHash(d.hash).name) === null) return false;
     s = null;
-    rlog(`tabswipe side=r to=settings fwd=1 how=${how} cancel=${cancelled ? 1 : 0} ms=${Math.round(performance.now() - d.t)}`);
-    // 等下一次 popstate（退回）再进设置；从 popstate 里调用时，挂在这次派发之后（不让这一次 popstate 就触发它）
-    queueMicrotask(() => win?.addEventListener('popstate', () => void navigate('settings'), { once: true }));
-    goBack();
+    const now = parseHash(win?.location.hash ?? '');
+    const at = now.name === 'settings' && now.params.length === 0;
+    rlog(`tabswipe side=r to=settings fwd=1 how=${how} cancel=${cancelled ? 1 : 0} at=${at ? 1 : 0} ms=${Math.round(performance.now() - d.t)}`);
+    if (!at) void replaceRoute('settings');
     return true;
   };
   const onPop = (): void => {

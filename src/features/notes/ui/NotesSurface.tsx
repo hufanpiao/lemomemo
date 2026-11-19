@@ -14,7 +14,7 @@ export type { CategoryCtl, NotesHomeApi };
 export interface NotesSurfaceProps {
   source: NoteSource;
   editing: boolean;
-  head?: ((trash: ReactNode) => ReactNode) | undefined;
+  head?: ((trash: ReactNode, catName: string | null) => ReactNode) | undefined;
   home?: ((api: NotesHomeApi) => ReactNode) | undefined;
   cat?: CategoryCtl | undefined;
 }

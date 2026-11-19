@@ -30,10 +30,6 @@ export const zh = {
   'vault.home.tileNoDay': '{n} 条',
   'vault.home.tileLabel': '{name}，{sub}', // 分类格的读屏名字
   'vault.home.newCat': '＋ 新分类',
-  'vault.newCat.title': '新分类',
-  'vault.newCat.placeholder': '起个名字，最多 {n} 个字',
-  'vault.newCat.ok': '建好',
-  'vault.newCat.fail': '没建上，再试一次',
   'vault.home.recent': '最近',
   'vault.home.all': '全部 {n}',
   'vault.home.back': '隐私记',

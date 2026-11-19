@@ -10,6 +10,8 @@ import { LAYOUT_V, type DeskLayoutValue } from '../../../../shared/schema/layout
 import chip from '../../../kit/components/Chip.module.css';
 import DeskLayout from '../../../kit/components/DeskLayout/DeskLayout.tsx';
 import { Pressable } from '../../../motion/components.ts';
+import { useLongPress } from '../../../kit/hooks/useLongPress.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
 import { Dot } from './CatDot.tsx';
 import styles from './NotesPage.module.css';
@@ -30,6 +32,10 @@ export interface DeskCats {
   counts: readonly { id: string; name: string; color: string | null; count: number }[];
   category: string | null;
   set(id: string | null): void;
+  /** 打开“新分类”（列表页挂的那一份弹窗，useCategoryDialogs） */
+  add(): void;
+  /** 长按 / 右键某个分类：打开改名、删除 */
+  edit(c: { id: string; name: string; color: string | null; count: number }): void;
 }
 
 export interface NotesDeskProps {
@@ -65,25 +71,50 @@ export default function NotesDesk({ page, title, titleEnd, srH1, cats, list, dra
   );
 }
 
-/** 竖排分类（线框 s7 左栏）：名字在左、条数在右；testid 和手机胶囊一样（e2e 共用）。
+type DeskCat = DeskCats['counts'][number];
+
+/** 竖排分类的一项（负责人 11-19“其他可以自己编辑分类，可以创建分类”，同手机分类胶囊 CatChips）：点了筛这一类；长按、右键出改名删除；
+ *  也是拖进目标（data-drop-into）：列表里没分类的那一条长按拖上来松手，归进这一类 */
+function DeskCatItem({ c, on, set, edit }: { c: DeskCat; on: boolean; set(id: string): void; edit(c: DeskCat): void }) {
+  const hold = useLongPress(() => {
+    rlog('notes cat hold');
+    edit(c);
+  });
+  return (
+    <Pressable
+      {...hold}
+      className={on ? chip.chipOn : `${chip.chip} ${styles.catItem}`}
+      aria-pressed={on}
+      onClick={() => set(c.id)}
+      data-drop-into={c.id}
+      data-testid={`notes-filter-${c.id}`}
+    >
+      <Dot color={c.color} big />
+      <span className={styles.catLabel}>{c.name}</span>
+      <span className={chip.chipN}>{c.count}</span>
+    </Pressable>
+  );
+}
+
+/** 竖排分类（线框 s7 左栏）：名字在左、条数在右；testid 和手机胶囊一样（e2e 共用）。最后一项“＋ 新分类”。
  *  R-436：外观是 kit 的 Chip.module.css（高 30 的胶囊、条数等宽淡色 .chipN，同待办页筛选；负责人 11-16“胶囊太大了！参考现在的待办页”），
  *  选中的就是 kit .chipOn；没选中的去掉浅底（竖排一列全是灰胶囊太重），悬停再出 */
 function CatList({ cats }: { cats: DeskCats }) {
   const t = useNotesT();
-  const item = (id: string | null, name: string, n: number, color: string | null, testId: string) => {
-    const on = cats.category === id;
-    return (
-      <Pressable key={testId} className={on ? chip.chipOn : `${chip.chip} ${styles.catItem}`} aria-pressed={on} onClick={() => cats.set(id)} data-testid={testId}>
-        <Dot color={color} big />
-        <span className={styles.catLabel}>{name}</span>
-        <span className={chip.chipN}>{n}</span>
-      </Pressable>
-    );
-  };
+  const allOn = cats.category === null;
   return (
     <div className={styles.cats} role="group" aria-label={t('notes.filter', {})} data-testid="notes-filter">
-      {item(null, t('notes.allName', {}), cats.total, null, 'notes-filter-all')}
-      {cats.counts.map((c) => item(c.id, c.name, c.count, c.color, `notes-filter-${c.id}`))}
+      <Pressable className={allOn ? chip.chipOn : `${chip.chip} ${styles.catItem}`} aria-pressed={allOn} onClick={() => cats.set(null)} data-testid="notes-filter-all">
+        <Dot color={null} big />
+        <span className={styles.catLabel}>{t('notes.allName', {})}</span>
+        <span className={chip.chipN}>{cats.total}</span>
+      </Pressable>
+      {cats.counts.map((c) => (
+        <DeskCatItem key={c.id} c={c} on={cats.category === c.id} set={cats.set} edit={cats.edit} />
+      ))}
+      <Pressable className={`${chip.chip} ${styles.catItem}`} onClick={cats.add} data-testid="notes-filter-new">
+        {t('notes.cat.new', {})}
+      </Pressable>
       <p className={styles.aiHint}>{t('notes.aiHint', {})}</p>
     </div>
   );

@@ -86,8 +86,11 @@
   font-size: var(--fs-11);
 }
 
+/* z-index：kit 胶囊的 ::after（外扩点击区）是定位元素、排在下拉后面，会盖住下拉，点上去不弹选项（负责人 11-19“目前随手记没办法改分类”）；
+   下拉自己就上下外扩 7，叠到它上面点击区不变 */
 .select {
   position: absolute;
+  z-index: 1;
   inset: -7px 0;
   width: 100%;
   opacity: 0;

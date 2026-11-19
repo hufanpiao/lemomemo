@@ -77,7 +77,7 @@ import { PullSearch } from '../../smart-search/index.ts';
 import { VaultParts } from '../../vault/index.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import { useMergeHint } from '../hooks/useMergeHint.ts';
-import { CATEGORY_NAME_MAX, useNoteList, type CategoryCount, type CategoryCtl, type NoteItem } from '../hooks/useNoteList.ts';
+import { useNoteList, type CategoryCount, type CategoryCtl, type NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
 import { isUndo, mergeUndo, moveUndo, undoTipOf, useNotesToast } from '../hooks/useNotesToast.ts';
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
@@ -86,7 +86,10 @@ import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
 import { ConvertAsk, MoveAsk, MergeBar, MoreMenu, needsAsk, swipeActs, useConvertFlow, type PageTip } from './NotesActions.tsx';
 import { Dot } from './CatDot.tsx';
-import { AiMark, Chip, ConvMark, DockTip, FilesMark, RoMark, RowText, SyncDropped, SyncMark, SyncStale, TrashLink, UndoBar } from './NotesBits.tsx';
+import { CatChips } from './CatChips.tsx';
+import { useCategoryDialogs } from './CategoryDialogs.tsx';
+import { ImportLoose } from './ImportLoose.tsx';
+import { AiMark, ConvMark, DockTip, FilesMark, RoMark, RowText, SyncDropped, SyncMark, SyncStale, TrashLink, UndoBar } from './NotesBits.tsx';
 import { InputRow, useInputDraft } from './NotesInputRow.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import styles from './NotesPage.module.css';
@@ -120,17 +123,19 @@ export interface NotesHomeApi {
   mark: (it: NoteItem) => ReactNode;
   /** 一条都没有时那一句（来源给的，同列表空态） */
   empty: string;
-  /** 新建分类（隐私记“＋ 新分类”）：同名回已有那个 */
-  newCategory: ReturnType<typeof useNoteList>['newCategory'];
-  /** 分类名最多几个字 */
-  nameMax: number;
+  /** 打开“新分类”弹窗（隐私记“＋ 新分类”）：建好、同名已有都进那一类 */
+  addCategory(): void;
+  /** 打开改名、删除弹窗（隐私记长按分类格，负责人 11-19“长按分类格可以改名、删除”） */
+  editCategory(c: CategoryCount): void;
+  /** 拖进分类（“最近”拖到分类格）：认不认这一条、放下；同列表拖到胶囊那一份 */
+  into: { ok(id: string): boolean; drop(id: string, target: string): void };
 }
 
 /**
  * head：顶上替换大标题的一块；home：给了就在手机排法里用它替换分类胶囊和列表区（顶部提示、输入行、撤销条照旧），电脑版不管；
  * cat：外面管的分类筛选（隐私记 #/vault/c/<id>，见 useNoteList）
  */
-export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => ReactNode) | undefined; home?: ((api: NotesHomeApi) => ReactNode) | undefined; cat?: CategoryCtl | undefined }) {
+export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode, catName: string | null) => ReactNode) | undefined; home?: ((api: NotesHomeApi) => ReactNode) | undefined; cat?: CategoryCtl | undefined }) {
   const t = useNotesT();
   const src = useNoteSource();
   const { caps } = src;
@@ -146,6 +151,8 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => R
   const ds = useDrawerSel<{ id: string }>(!!loaded);
   const Desk = ds.on ? loaded : null;
   const l = useNoteList(undefined, cat);
+  // 分类弹窗（新建、改名删除）挂一份：分类那一排、隐私记首页宫格都经它开
+  const cd = useCategoryDialogs(l);
   const a = useListActions<PageTip>('notes', { remove: l.remove, useRo: src.useReadonly });
   const { g: guard, g: { toast }, isRo, report } = a;
   // 撤销条还在的那一对，提示条先不出（R-415 复查 B4）
@@ -210,6 +217,10 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => R
   /** 组名、卡片日期共用：今天 / 昨天写字，再早按 style 写日期（组名“11月13日”，卡片“11/13”） */
   const dayWord = (kind: string, date: string, style: 'monthDay' | 'num'): string =>
     kind === 'today' ? t('notes.g.today', {}) : kind === 'yesterday' ? t('notes.g.yesterday', {}) : fmtDay(date, locale, style);
+  /** 一条记录的日期文字（今天 / 昨天 / 11月13日）：导入弹窗、隐私记首页“最近”共用 */
+  /** 正筛着的分类名（没筛为 null）：交给 head，隐私记分类列表顶栏写它（第三方实测 11-19 问题 6；按这一套分类算的，不串到另一套，独立评审 11-19 中 4） */
+  const catName = l.counts.find((c) => c.id === l.category)?.name ?? null;
+  const dayText = (it: NoteItem): string => dayWord(l.dayOf(it.createdAt), it.date, 'monthDay');
   /** 列表行标题右边：刚记下 / 时刻（分组时）/ 今天 11:40、昨天 21:15、10月21日（自己排时） */
   const rowTime = (it: NoteItem): string => {
     if (it.id === just) return t('notes.just', {});
@@ -252,7 +263,13 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => R
     report,
     moved: (m) => guard.show(moveUndo(m.switched, () => void l.undoMove(m).then(report))),
   });
-  const sd = useSortDrag({ tag: src.kind, axis: view === 'masonry' ? 'xy' : 'y', onDrop: dropped, log: rlog, fx });
+  // 拖进分类（负责人 11-19“里面的记录可以拖进分类里面”“只能拖没分类的”）：列表拖到分类胶囊；隐私记首页“最近”拖到分类格经 home 的 into 用同一份
+  const into = {
+    // 没筛分类时（首页“最近”、全部）这一条在 items 里；筛着某一类时没分类的不在 items、在 loose 里（导入弹窗列的就是它们）
+    ok: (id: string) => !isRo(id) && (l.items.find((x) => x.id === id) ?? l.loose.find((x) => x.id === id))?.categoryId === null,
+    drop: (id: string, cid: string) => void l.moveInto([id], cid).then((r) => (r.failed ? report('failed') : undefined)),
+  };
+  const sd = useSortDrag({ tag: src.kind, axis: view === 'masonry' ? 'xy' : 'y', onDrop: dropped, log: rlog, fx, into });
   /** 能拖的行、卡片上的标记（整页一串；只读、下拉搜索筛着时不能拖） */
   const sortAttrs = (it: NoteItem) => sd.attrs(it.id, isRo(it.id) || pull.searching);
   // 页面上画的这一串：移走的、下拉搜索没命中的不画；拖动中按预览顺序（拿着的那一条在落点处占位）
@@ -335,17 +352,12 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => R
     );
   const listTestId = view === 'masonry' ? 'notes-mason' : 'notes-list';
 
+  // 筛着某一类时“导入没分类的 N 条”：手机在分类胶囊下面，电脑在列表块顶上
+  const importRow = <ImportLoose key={l.category ?? ''} l={l} day={dayText} can={into.ok} />;
   const filterChips = (
     <>
-      {l.counts.length ? (
-        <div className={styles.filter} role="group" aria-label={t('notes.filter', {})} data-testid="notes-filter">
-          <Chip on={l.category === null} onClick={() => l.setCategory(null)} label={t('notes.all', { n: l.total })} n={l.total} color={null} testId="notes-filter-all" />
-          {l.counts.map((c) => (
-            <Chip key={c.id} on={l.category === c.id} onClick={() => l.setCategory(c.id)} label={`${c.name} ${c.count}`} n={c.count} color={c.color} testId={`notes-filter-${c.id}`} />
-          ))}
-        </div>
-      ) : null}
-
+      <CatChips l={l} cd={cd} className={styles.filter} />
+      {importRow}
     </>
   );
   // 顶部提示（隐私记入口行、同步提示、合并提示）和列表区（空态、瀑布流或列表）：手机直接画在页上，电脑放进 list 块；首页只换列表区
@@ -413,7 +425,7 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => R
   const phone = (
     <>
       {head ? (
-        head(<TrashLink />)
+        head(<TrashLink />, catName)
       ) : (
         <>
           {/* 大标题 + 短粗下划线、标题下一行等宽小字（今天的日期 · 共几条），同待办页（R-436，kit Refine.module.css） */}
@@ -432,12 +444,13 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => R
         <>
           {tips}
           {home({
-            newCategory: l.newCategory,
-            nameMax: CATEGORY_NAME_MAX,
+            addCategory: cd.add,
+            into,
+            editCategory: cd.edit,
             counts: l.counts,
             total: l.total,
             items: l.items.filter(shown),
-            day: (it) => dayWord(l.dayOf(it.createdAt), it.date, 'monthDay'),
+            day: dayText,
             open,
             mark: (it) => <SyncMark id={it.id} failed={failed.has(it.id)} />,
             empty: src.text?.empty ?? t('notes.empty', {}),
@@ -462,11 +475,11 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => R
             title={src.text?.title}
             srH1={!head}
             titleEnd={src.kind === 'vault' ? <TrashLink /> : undefined}
-            cats={{ total: l.total, counts: l.counts, category: l.category, set: l.setCategory }}
+            cats={{ total: l.total, counts: l.counts, category: l.category, set: l.setCategory, add: cd.add, edit: cd.edit }}
             list={
               <>
-                {head?.(null)}
-                {listPart(null)}
+                {head?.(null, catName)}
+                {listPart(importRow)}
                 {dock}
               </>
             }
@@ -476,6 +489,7 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => R
       ) : (
         phone
       )}
+      {cd.dialogs}
       {moving !== null ? (
         <QuietBoundary name="vault-move">
           <Suspense fallback={null}>

@@ -10,6 +10,7 @@ import row from '../../../kit/components/NoteRow.module.css';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyRow.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { TrashLink as KitTrashLink } from '../../../kit/components/TrashLink.tsx';
+import type { LongPressProps } from '../../../kit/hooks/useLongPress.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import type { NoteItem } from '../hooks/useNoteList.ts';
@@ -176,9 +177,11 @@ export function DockTip({ toast }: { toast: { kind: 'error' } | Exclude<PageTip,
 
 /** 分类筛选胶囊（R-436，照待办页 518f49a0）：kit 的 Chip.module.css（高 30、无描边浅底，负责人 11-16“胶囊太大了！参考现在的待办页”）；
  *  色点 8px（视觉稿 .chip .d）；条数只给数字等宽淡色（kit .chipN），词条照旧整句（“全部 {n}”） */
-export function Chip({ on, onClick, label, n, color, testId }: { on: boolean; onClick(): void; label: string; n: number; color: string | null; testId: string }) {
+/** hold：长按出分类菜单（改名、删除，负责人 11-19“其他可以自己编辑分类”；kit useLongPress） */
+/** drop：给了就是拖进目标（kit SortDrag 的 data-drop-into，值是分类 id） */
+export function Chip({ on, onClick, label, n, color, testId, hold, drop }: { on: boolean; onClick(): void; label: string; n: number; color: string | null; testId: string; hold?: LongPressProps; drop?: string }) {
   return (
-    <Pressable className={on ? chip.chipOn : chip.chip} aria-pressed={on} onClick={onClick} data-testid={testId}>
+    <Pressable {...hold} className={on ? chip.chipOn : chip.chip} aria-pressed={on} onClick={onClick} data-drop-into={drop} data-testid={testId}>
       <Dot color={color} big />
       <NumIn text={label} num={String(n)} className={chip.chipN} />
     </Pressable>

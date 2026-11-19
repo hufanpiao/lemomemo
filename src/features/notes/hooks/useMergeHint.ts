@@ -13,7 +13,7 @@ import type { ActionResult } from '../../../core/action-result.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
 import { dismissMerge, mergeAction, mergeCategories, openMergePairs, undoMerge, type MergePair } from '../data/category-merge-store.ts';
-import { categoryRow, type Row } from '../../../core/categories.ts';
+import { categoriesOf, categoryRow, type Row } from '../../../core/categories.ts';
 
 export interface MergeHint {
   /** 这一对的标识（两个分类 id 排好序，不分方向）：撤销条记着它，撤销条在时这一对不出 */
@@ -32,7 +32,9 @@ const EMPTY: ReadonlySet<string> = new Set();
 
 /** shown：页面当前撤销条对应的那一对（没有撤销条为 null）；on=false（来源不支持合并分类，caps.merge）就不算、一直回 null */
 export function useMergeHint(shown: string | null, on = true): MergeHint | null {
-  const cats = useCollection<Row>('categories');
+  // 合并提示只在随手记（隐私记 caps.merge = false），只看随手记那一套
+  const all = useCollection<Row>('categories');
+  const cats = useMemo(() => categoriesOf(all, false), [all]);
   const { rows: settings, writer } = useSettingWriter();
   const [undoing, setUndoing] = useState(EMPTY);
   const pair: MergePair | undefined = useMemo(

@@ -138,8 +138,9 @@ export default function VaultPage() {
   );
 }
 
-/** 顶栏“‹ 随手记 | 🔒 隐私记 | 立即锁上”；inList（某一类的列表）时左边是“‹ 隐私记”、退回首页 */
-function VaultTop({ unlocked, trash = null, inList = false }: { unlocked: boolean; trash?: ReactNode; inList?: boolean }) {
+/** 顶栏“‹ 随手记 | 🔒 隐私记 | 立即锁上”；inList（某一类的列表）时左边是“‹ 隐私记”、退回首页；
+ *  name：筛着某一类时中间写分类名（第三方实测 11-19 问题 6，08-健康列表.png：进了“健康”顶上还写“隐私记”，看不出在哪一类），“全部”照旧写“隐私记” */
+function VaultTop({ unlocked, trash = null, inList = false, name = null }: { unlocked: boolean; trash?: ReactNode; inList?: boolean; name?: string | null }) {
   const t = useVaultT();
   const { s } = useVault();
   return (
@@ -151,7 +152,7 @@ function VaultTop({ unlocked, trash = null, inList = false }: { unlocked: boolea
       )}
       <h1 className={styles.h1}>
         <LockIcon />
-        {t('vault.title', {})}
+        <span className={styles.h1Text}>{name ?? t('vault.title', {})}</span>
       </h1>
       <span className={styles.topEnd}>
         {trash}
@@ -170,26 +171,33 @@ function VaultTop({ unlocked, trash = null, inList = false }: { unlocked: boolea
  *  #/vault 是首页（宫格 + 最近，home），#/vault/c/<分类|all> 是列表：地址就是筛选，点胶囊原地换地址，分类没了换回 all（独立评审 11-19 中 2） */
 function VaultSurface({ editing, inList, cat }: { editing: boolean; inList: boolean; cat: string }) {
   const source = useVaultNoteSource();
-  const ctl = useMemo<CategoryCtl>(() => ({ value: cat === 'all' ? null : cat, set: (id) => void replaceRoute('vault', 'c', id ?? 'all') }), [cat]);
+  // 列表：原地换地址；首页（筛的是全部）：设成某一类 = 压一条 #/vault/c/<id> 进那一类的列表（同点格子；“＋ 新分类”建好也走这里）
+  const ctl = useMemo<CategoryCtl>(
+    () =>
+      inList
+        ? { value: cat === 'all' ? null : cat, set: (id) => void replaceRoute('vault', 'c', id ?? 'all') }
+        : { value: null, set: (id) => void (id === null ? undefined : navigate('vault', 'c', id)) },
+    [cat, inList],
+  );
   return (
     <NotesSurface
       key={inList ? 'list' : 'home'}
       source={source}
       editing={editing}
-      head={(trash) => <VaultHead trash={trash} inList={inList} />}
+      head={(trash, name) => <VaultHead trash={trash} inList={inList} name={inList ? name : null} />}
       home={inList ? undefined : (api) => <VaultHome api={api} />}
-      cat={inList ? ctl : undefined}
+      cat={ctl}
     />
   );
 }
 
 /** trash：随手记列表给的“最近删除”图标（R-438，手机版放进顶栏右边、“立即锁上”左边；电脑版是 null） */
-function VaultHead({ trash, inList }: { trash: ReactNode; inList: boolean }) {
+function VaultHead({ trash, inList, name }: { trash: ReactNode; inList: boolean; name: string | null }) {
   const t = useVaultT();
   const min = useAutolockMin();
   return (
     <div>
-      <VaultTop unlocked trash={trash} inList={inList} />
+      <VaultTop unlocked trash={trash} inList={inList} name={name} />
       {/* R-452 V2（负责人 11-17 选）：去掉底色，顶栏下一行灰色小字，前面一个开锁小图标；文案改成“这里记的只进隐私记” */}
       <p className={styles.hint} data-testid="vault-hint">
         <svg className={styles.hintIc} viewBox="0 0 24 24" aria-hidden="true" focusable="false">

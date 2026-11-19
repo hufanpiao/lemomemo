@@ -12,7 +12,13 @@
 
 .top {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+
+  /* 中间一栏能缩：筛着某一类时写分类名（最多 12 个字），放不下就省略，不把两边挤出屏幕 */
+  grid-template-columns: 1fr minmax(0, max-content) 1fr;
+
+  /* 两边（“‹ 隐私记”、“立即锁上”）不折行：挤的时候缩中间、不把左边挤成竖排 */
+  white-space: nowrap;
+  column-gap: 8px;
   align-items: center;
   min-height: var(--hit);
   margin-bottom: 8px;
@@ -22,9 +28,16 @@
   display: inline-flex;
   gap: 6px;
   align-items: center;
+  min-width: 0;
   margin: 0;
   font-size: var(--fs-17);
   font-weight: 700;
+}
+
+.h1Text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topEnd {
@@ -119,6 +132,13 @@
   color: var(--text-2);
   font-size: var(--fs-14);
   text-align: center;
+}
+
+/* 首页一条都没有时那一句：左对齐、和宫格同一条左边线（第三方实测 11-19 问题 6：首页居中、分类列表左对齐，两处不一致；App 空态一律左对齐，U6） */
+.homeEmpty {
+  margin: 8px 0 16px;
+  color: var(--text-2);
+  font-size: var(--fs-14);
 }
 
 /* ===== 设密码、输密码（.pdots、.kpad） =====

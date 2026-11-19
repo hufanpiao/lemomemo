@@ -935,11 +935,13 @@ export const manifestSnapshot: readonly Manifest[] = [
           "sort",
           "created_by",
           "merged_into",
+          "vault",
           "deleted_at",
           "undone"
         ],
         "insertOnly": [
-          "id"
+          "id",
+          "vault"
         ],
         "updateOnly": [
           "deleted_at",

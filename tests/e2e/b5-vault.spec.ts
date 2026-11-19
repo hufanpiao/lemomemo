@@ -61,7 +61,7 @@ const UPLOAD_ORDER = [
 async function fakeServer(page: Page, baseURL: string | undefined): Promise<FakeVault> {
   if (!baseURL) throw new Error('没有 baseURL');
   await seedFakeSession(page.context(), baseURL, { jwt: true });
-  const category = { id: CAT, user_id: UID, name: '健康', color: null, sort: 1, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, created_at: 1, updated_at: 1, rev: 1, synced_at: '2026-10-29T00:00:00.000Z' };
+  const category = { id: CAT, user_id: UID, name: '健康', color: null, sort: 1, created_by: 'user', merged_into: null, vault: true, deleted_at: null, undone: false, created_at: 1, updated_at: 1, rev: 1, synced_at: '2026-10-29T00:00:00.000Z' };
   // 随手记显示方式两类设备明确写 masonry（负责人 11-18 首装默认改列表）：“移到隐私记”那条找的是瀑布流卡片，要列表的用例（listRow）再去设置里改
   const view = notesViewRows('masonry', { user_id: UID, created_at: 1, updated_at: 1, synced_at: '2026-10-29T00:00:00.000Z' });
   await fakeRest(page, { user: UID, tables: { notes: [], settings: view, categories: [category] }, store: {} });
@@ -345,6 +345,43 @@ test('隐私记页长按拖动：最下面一条拖到最上面，顺序照放�
   const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
   expect(log).toMatch(/ sort \w+ drop i=2 to=0 n=3/);
   for (const secret of ['隐私一', '隐私二', '隐私三']) expect(log).not.toContain(secret);
+});
+
+// 第三方实测 11-19 问题 1：按天分组的卡片（两列瀑布流、卡片高矮不同）里长按第 2 张往上拖到第 1 张上停住，
+// 换位以后浮层中心又落回原来那张，A ↔ B 无限来回（日志 over i=1 / over i=2 刷 53 次），React #185 整页崩成“出了点问题”
+test('第三方实测问题 1：卡片高矮不同时拖到别的卡上停住，不来回换位、不崩', async ({ page, baseURL, browserName }) => {
+  await fakeServer(page, baseURL);
+  await setupAndUnlock(page, browserName);
+  const vault = page.getByTestId('vault-notes');
+  const texts = ['没有分类的一句话', '邮箱密码提示\n小时候的狗名字', '牙科复诊\n左下第二颗，3 个月后再看', '护照到期\n2029 年 3 月，提前半年换', '体检报告\n血压 120/80'];
+  for (const t of texts) {
+    await vault.getByTestId('notes-input').fill(t);
+    await vault.getByTestId('notes-add').click();
+  }
+  if (await page.getByTestId('vault-home-all').isVisible()) {
+    await page.getByTestId('vault-home-all').click();
+    await expect(page.locator('html')).not.toHaveAttribute('data-vt', /.*/);
+  }
+  const rows = vault.locator('[data-sort-id]:not([data-state="leaving"])');
+  await expect(rows).toHaveCount(5);
+  const from = await stableBox(rows.nth(1));
+  const to = await stableBox(rows.nth(0));
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(550);
+  await expect(vault.locator('[data-sort-held]')).toHaveCount(1);
+  // 拿着在第 1 张卡的几个位置各停一下（落在卡的哪里会不会来回，跟卡片高矮有关，几个点都试）
+  for (const [fx, fy] of [[0.5, 0.5], [0.5, 0.2], [0.5, 0.8], [0.2, 0.5], [0.8, 0.5]] as const) {
+    await page.mouse.move(to.x + to.width * fx, to.y + to.height * fy, { steps: 8 });
+    // 手指停住：来回换位会在这段时间里刷满
+    await page.waitForTimeout(300);
+  }
+  const overs = (await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).split('\n').filter((x) => / sort \w+ over i=/.test(x));
+  await page.mouse.up();
+  await page.waitForTimeout(600);
+  expect(overs.length, overs.slice(-10).join('\n')).toBeLessThan(8);
+  await expect(page.locator('body')).not.toContainText('出了点问题');
+  await expect(rows).toHaveCount(5);
 });
 
 test('离开时同步盖多任务遮罩，不到 1 分钟回来自动去掉、仍解锁', async ({ page, baseURL, browserName }) => {
@@ -698,7 +735,7 @@ test('负责人 11-19 选“做‘＋ 新分类’”：手机首页宫格最后
     await page.screenshot({ path: `${SHOTS}/light/13-新分类格.png` });
   }
   await add.click();
-  const name = page.getByTestId('vault-newcat-name');
+  const name = page.getByTestId('cat-new-name');
   await expect(name).toBeVisible();
   await name.fill('旅行');
   if (SHOTS && browserName === 'chromium') {
@@ -707,13 +744,13 @@ test('负责人 11-19 选“做‘＋ 新分类’”：手机首页宫格最后
   }
   // 弹层贴底的按钮要真点得到（按钮中心落在它自己身上，不是被别的层挡住、裁掉）
   // 滑入播完以后（等动画都停）再看按钮中心落在谁身上
-  const hit = () => page.getByTestId('vault-newcat-ok').evaluate(async (b) => {
+  const hit = () => page.getByTestId('cat-new-ok').evaluate(async (b) => {
     await Promise.all(document.getAnimations().map((x) => x.finished.catch(() => null)));
     const r = b.getBoundingClientRect();
     return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
   });
   await expect.poll(hit, { message: '贴底弹层的“建好”按钮点得到', timeout: 5_000 }).toBe(true);
-  await page.getByTestId('vault-newcat-ok').click();
+  await page.getByTestId('cat-new-ok').click();
   await expect(page).toHaveURL(/#\/vault\/c\/[0-9a-f-]{36}$/, { timeout: 10_000 });
   await page.waitForTimeout(500);
   await expect(page).toHaveURL(/#\/vault\/c\/[0-9a-f-]{36}$/);
@@ -723,4 +760,132 @@ test('负责人 11-19 选“做‘＋ 新分类’”：手机首页宫格最后
     await page.screenshot({ path: `${SHOTS}/light/15-新分类列表.png` });
   }
   await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/notes category new ok/);
+
+  // 负责人 11-19“长按分类格可以改名、删除，删分类时里面的记录不删，变回没分类”：回首页，空分类也有格（写 0 条，第三方实测问题 3）
+  await page.goto('/app/#/vault');
+  const tile = page.locator('[data-testid^="vault-home-cat-"]', { hasText: '旅行' });
+  await expect(tile).toContainText('0 条');
+  // 换页过渡放完（<html> 摘掉 data-vt）再按，过渡里按下去点中的是 html（运行日志 down html）
+  await expect(page.locator('html')).not.toHaveAttribute('data-vt', /.*/);
+  const hold = async () => {
+    const b = await stableBox(tile);
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(650);
+    await page.mouse.up();
+  };
+  await hold();
+  // 长按不进这一类（吃掉了抬手那一下点按）
+  await expect(page).toHaveURL(/#\/vault$/);
+  const rename = page.getByTestId('cat-edit-name');
+  await expect(rename).toHaveValue('旅行');
+  await rename.fill('出行');
+  await page.getByTestId('cat-edit-ok').click();
+  await expect(page.locator('[data-testid^="vault-home-cat-"]', { hasText: '出行' })).toBeVisible();
+  const moved = page.locator('[data-testid^="vault-home-cat-"]', { hasText: '出行' });
+  // 改名弹窗退场放完再按（遮罩还在时按下去落在遮罩上，不是格子）
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect.poll(() => moved.evaluate((el) => { const r = el.getBoundingClientRect(); const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !!hit && el.contains(hit); })).toBe(true);
+  const b2 = await stableBox(moved);
+  await page.mouse.move(b2.x + b2.width / 2, b2.y + b2.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(650);
+  await page.mouse.up();
+  await page.getByTestId('cat-edit-delete').click();
+  await expect(page.getByTestId('cat-edit-ask')).toContainText('变回没分类');
+  await page.getByTestId('cat-edit-delete-ok').click();
+  await expect(page.locator('[data-testid^="vault-home-cat-"]', { hasText: '出行' })).toHaveCount(0);
+  // 记录一条不少（“全部 1 ›”）
+  await expect(page.getByTestId('vault-home-all')).toContainText('1');
+  // 写入回来才记结果：等日志出现
+  const runLog = () => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  await expect.poll(runLog).toMatch(/notes category rename ok/);
+  await expect.poll(runLog).toMatch(/notes category delete ok/);
+  expect(await runLog()).not.toMatch(/旅行|出行/);
+});
+
+// 第三方实测 11-19 问题 4：一条记录都没有时也出宫格和“＋ 新分类”（新用户能先建分类）
+test('空隐私记首页：一句空态 + “＋ 新分类”，不出“最近”', async ({ page, baseURL, browserName }) => {
+  await fakeServer(page, baseURL);
+  if (browserName === 'chromium') await page.setViewportSize({ width: 393, height: 852 });
+  await setupAndUnlock(page, browserName);
+  await expect(page.getByTestId('vault-home-empty')).toBeVisible();
+  await expect(page.getByTestId('vault-home-newcat')).toBeVisible();
+  await expect(page.getByTestId('vault-home-all')).toHaveCount(0);
+});
+
+// 负责人 11-19“里面的记录可以拖进分类里面，也可以在分类里倒入没分类的记录”（“两种都要”“只能拖没分类的”“勾选多条”）
+test('隐私记分类：首页“最近”拖到分类格归进那一类；分类列表里“导入没分类的 N 条”勾选导入；都发 save', async ({ page, baseURL, browserName }) => {
+  const fv = await fakeServer(page, baseURL);
+  if (browserName === 'chromium') await page.setViewportSize({ width: 393, height: 852 });
+  await setupAndUnlock(page, browserName);
+  const vault = page.getByTestId('vault-notes');
+  // 换地址只改 hash（不重新载入：webkit 里 goto 会整页重载，回到同意页、隐私记也锁上）
+  const toHome = () => page.evaluate(() => (location.hash = '#/vault'));
+  for (const t of ['散一', '散二']) {
+    await vault.getByTestId('notes-input').fill(t);
+    await vault.getByTestId('notes-add').click();
+    await expect(vault).toContainText(t);
+  }
+  // 建两个分类：建好进那一类的列表，再回首页
+  for (const n of ['证件', '旅行']) {
+    await toHome();
+    await expect(page.locator('html')).not.toHaveAttribute('data-vt', /.*/);
+    await page.getByTestId('vault-home-newcat').click();
+    await page.getByTestId('cat-new-name').fill(n);
+    await page.getByTestId('cat-new-ok').click();
+    await expect(page).toHaveURL(/#\/vault\/c\/[0-9a-f-]{36}$/, { timeout: 10_000 });
+  }
+  // 此刻在“旅行”列表：导入行写着 2 条没分类的
+  await expect(page.locator('html')).not.toHaveAttribute('data-vt', /.*/);
+  await expect(vault.getByTestId('notes-import-open')).toContainText('导入没分类的 2 条');
+
+  // 回首页，把“最近”里的“散一”拖到“证件”格上
+  await toHome();
+  await expect(page.locator('html')).not.toHaveAttribute('data-vt', /.*/);
+  const tile = page.locator('[data-testid^="vault-home-cat-"]', { hasText: '证件' });
+  await expect(tile).toContainText('0 条');
+  const card = page.locator('[data-testid^="vault-home-note-"]', { hasText: '散一' });
+  // 换页过渡放完再按：hash 一改过渡是异步开始的，先查 data-vt 可能查在它打上之前（日志 down html）；等卡片中心落在卡片自己身上
+  await expect.poll(() => card.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return !document.documentElement.hasAttribute('data-vt') && el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+  })).toBe(true);
+  const a = await stableBox(card);
+  const b = await stableBox(tile);
+  const savesBefore = saved(fv).length;
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(550);
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 14 });
+  await page.waitForTimeout(150);
+  const tail = (await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).split(String.fromCharCode(10)).filter((x) => / sort | down | swipe /.test(x)).slice(-12).join(String.fromCharCode(10));
+  await expect(tile, tail).toHaveAttribute('data-drop-over', '');
+  await page.mouse.up();
+  await expect(tile).toContainText('1 条');
+  // 拖完不进编辑页（松手那一下点按吃掉了）
+  await expect(page).toHaveURL(/#\/vault$/);
+  await expect.poll(() => saved(fv).length).toBeGreaterThan(savesBefore);
+
+  // 进“旅行”：导入行剩 1 条，勾上导入
+  await page.locator('[data-testid^="vault-home-cat-"]', { hasText: '旅行' }).click();
+  await expect(page.locator('html')).not.toHaveAttribute('data-vt', /.*/);
+  // 第三方实测问题 6：分类列表顶栏写分类名
+  await expect(page.locator('h1').filter({ hasText: '旅行' })).toBeVisible();
+  const open = vault.getByTestId('notes-import-open');
+  await expect(open).toContainText('导入没分类的 1 条');
+  await open.click();
+  const list = page.getByTestId('notes-import-list');
+  await expect(list).toContainText('散二');
+  await list.locator('input[type="checkbox"]').first().check();
+  const before2 = saved(fv).length;
+  await page.getByTestId('notes-import-ok').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(open).toHaveCount(0);
+  await expect(vault).toContainText('散二');
+  await expect.poll(() => saved(fv).length).toBeGreaterThan(before2);
+  const runLog = () => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  await expect.poll(runLog).toMatch(/sort vault-home drop into/);
+  await expect.poll(runLog).toMatch(/notes category into n=1 ok=1 fail=0/);
+  for (const secret of ['散一', '散二', '证件', '旅行']) expect(await runLog()).not.toContain(secret);
 });

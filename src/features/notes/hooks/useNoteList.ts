@@ -12,22 +12,24 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { convertTooLong, type ConvertKind } from '../../../../shared/logic/notes/note-convert.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { actionResult, type ActionResult } from '../../../core/action-result.ts';
-import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
 import { settingValue } from '../../../core/setting-read.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { fixCategoryCycles } from '../data/category-merge-store.ts';
+import { deleteCategory, renameCategory } from '../data/category-edit.ts';
 import { createCategory } from '../data/category-new.ts';
+import { moveIntoCategory } from '../data/note-category.ts';
 export { CATEGORY_NAME_MAX } from '../data/category-new.ts';
 import { ruleCategory } from '../data/classify.ts';
 import { convertNote, type ConvertResult } from '../data/note-convert.ts';
 import { BODY_MAX, newNoteRow } from '../data/note-edit.ts';
 import { categoryNames } from '../../../core/categories.ts';
-import { aliveCount, categoryCounts, dayKind, fileCounts, groupByDay, imagesByNote, noteItems, type NoteItem, type Row } from '../data/note-list.ts';
+import { aliveCount, categoryCounts, dayKind, fileCounts, groupByDay, imagesByNote, noteItems, type NoteItem } from '../data/note-list.ts';
 import { orderOf } from '../../../../shared/logic/sort-key.ts';
 import { applyNoteSort, planNoteDrop, type NoteKeyWrite } from '../data/note-sort.ts';
+import { useCategoryRows } from './useCategoryRows.ts';
 import { useNoteSource } from './note-source.ts';
 
 export type { CategoryCount, NoteGroup, NoteItem, NoteOrder } from '../data/note-list.ts';
@@ -51,7 +53,7 @@ export interface CategoryCtl {
 export function useNoteList(newId: () => string = () => crypto.randomUUID(), cat?: CategoryCtl) {
   const src = useNoteSource();
   const { notes: rows, images: pics, files } = src.useRows();
-  const cats = useCollection<Row>('categories');
+  const cats = useCategoryRows();
   const io = src.editIo;
   const locale = useUi((s) => s.locale);
   const [own, setOwn] = useState<string | null>(null);
@@ -65,14 +67,8 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID(), cat
   useEffect(() => {
     if (fixCycles) void fixCategoryCycles(cats);
   }, [cats, fixCycles]);
-  const counts = useMemo(() => {
-    const all = categoryCounts(rows, cats, locale);
-    // 外面管的筛着一个活着、但还一条都没有的分类（隐私记“＋ 新分类”刚建好进来、或者删掉了这一类最后一条）：照样留着这一类、胶囊写 0
-    // （独立评审 11-19 低 23：原来回“全部”还把地址换掉，撤销以后筛选回不来）
-    const name = cat?.value ? categoryNames(cats).get(cat.value) : undefined;
-    if (!cat?.value || name === undefined || all.some((c) => c.id === cat.value)) return all;
-    return [...all, { id: cat.value, name, color: null, count: 0 }];
-  }, [rows, cats, locale, cat?.value]);
+  // 活着的空分类也在里面（写 0）：刚建好的、删掉最后一条的都留着这一类（独立评审 11-19 低 23）
+  const counts = useMemo(() => categoryCounts(rows, cats, locale), [rows, cats, locale]);
   // 筛的分类没了（最后一条删掉、分类被合并）：回到“全部”
   const active = category !== null && counts.some((c) => c.id === category) ? category : null;
   // 外面管的：地址里的分类已经没了，地址也改回“全部”，不让地址写着某一类、页面却是全部（独立评审 11-19 中 2）
@@ -83,6 +79,13 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID(), cat
   const settings = useSettingWriter();
   const order = orderOf(settingValue(settings.rows, src.orderKey));
   const items = useMemo(() => noteItems(rows, cats, tz, active, pics, files, order), [rows, cats, tz, active, pics, files, order]);
+  /** 没分类的条目（筛着某一类时“导入”弹窗列它们；负责人 11-19“在分类里倒入没分类的记录”“勾选多条”）；没筛分类时不算 */
+  const loose = useMemo(
+    () => (active === null ? [] : noteItems(rows, cats, tz, null, pics, files, order).filter((it) => it.categoryId === null)),
+    [rows, cats, tz, active, pics, files, order],
+  );
+  /** 几条记录归进某个分类（导入、拖进分类共用）：经来源的写入口子逐条写 */
+  const moveInto = useCallback((ids: readonly string[], cid: string) => moveIntoCategory(io, ids, cid), [io]);
   /** 按天分组（按时间排时的列表、瀑布流）：页面按它此刻画的顺序调（拖动中是预览顺序，R-461） */
   const byDay = useCallback((shown: readonly NoteItem[]) => groupByDay(shown, now, tz), [now, tz]);
   /** 卡片、行上的时间写“今天 / 昨天”还是日期 */
@@ -145,7 +148,8 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID(), cat
     if (m.switched) void settings.save(src.orderKey, 'time');
     return applyNoteSort(io, m.writes, true);
   };
-  /** 新建分类（隐私记首页“＋ 新分类”；随手记、隐私记共用分类）：同名的回已有那个 */
-  const newCategory = createCategory;
-  return { items, byDay, dayOf, order, counts, category: active, setCategory, add, remove, discard, convert, tooLong, move, undoMove, newCategory, total: aliveCount(rows), now, tz };
+  /** 新建分类（隐私记首页“＋ 新分类”；随手记、隐私记各一套分类，按数据来源分）：同名的回已有那个 */
+  const vaultCats = src.kind === 'vault';
+  const newCategory = useCallback((name: string) => createCategory(name, vaultCats), [vaultCats]);
+  return { items, byDay, dayOf, order, counts, category: active, setCategory, add, remove, discard, convert, tooLong, move, undoMove, newCategory, renameCategory, deleteCategory, loose, moveInto, total: aliveCount(rows), now, tz };
 }

@@ -16,14 +16,15 @@ import type * as Enc from '../../../platform/image-encode.ts';
 import { fakeApi, make, NID, note, TOK } from './session-fakes.ts';
 
 // 分类集合可由用例填（“＋ 新分类”）；别的集合一律空
-const cats = vi.hoisted(() => ({ rows: [] as { id: string; name: string }[] }));
+const cats = vi.hoisted(() => ({ rows: [] as { id: string; name: string; vault?: boolean }[] }));
 vi.mock('../../../kit/hooks/useCollection.ts', () => ({ useCollection: (t: string) => (t === 'categories' ? cats.rows : []) }));
 vi.mock('../../notes/data/category-new.ts', async (orig) => ({
   ...(await orig<object>()),
-  createCategory: vi.fn(async (name: string) => {
-    const had = cats.rows.find((c) => c.name === name.trim());
+  // 隐私记、随手记各一套（categories.vault）：照真函数只在同一套里查重名、新建带 vault
+  createCategory: vi.fn(async (name: string, vault: boolean) => {
+    const had = cats.rows.find((c) => c.name === name.trim() && (c.vault === true) === vault);
     if (had) return { result: 'ok', id: had.id, existed: true };
-    cats.rows = [...cats.rows, { id: 'new-cat', name: name.trim() }];
+    cats.rows = [...cats.rows, { id: 'new-cat', name: name.trim(), vault }];
     return { result: 'ok', id: 'new-cat', existed: false };
   }),
 }));
@@ -133,10 +134,12 @@ describe('解锁、上锁', () => {
     cats.rows = [];
     await openUnlocked();
     fireEvent.click(await screen.findByTestId('vault-home-newcat'));
-    const ok = await screen.findByTestId('vault-newcat-ok');
+    const ok = await screen.findByTestId('cat-new-ok');
     expect(ok.hasAttribute('disabled')).toBe(true);
-    const input = screen.getByTestId('vault-newcat-name');
-    expect(input.getAttribute('maxlength')).toBe('12');
+    const input = screen.getByTestId('cat-new-name');
+    // 按字截到 12 个（emoji 也算一个；第三方实测 11-19 问题 5：原来 maxLength 按 UTF-16，emoji 只能输 6 个）
+    fireEvent.change(input, { target: { value: '😀😀😀😀😀😀😀😀😀😀😀😀😀😀' } });
+    expect([...(input as HTMLInputElement).value]).toHaveLength(12);
     fireEvent.change(input, { target: { value: ' 旅行 ' } });
     fireEvent.click(ok);
     await waitFor(() => expect(window.location.hash).toBe('#/vault/c/new-cat'));

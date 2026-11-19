@@ -638,14 +638,14 @@ isOneToOne: false
                   ]
                 },"categories": {
                   Row: {
-                    "color": string | null,"created_by": string,"deleted_at": number | null,"fv": NonNullable<Json>,"id": string,"merged_into": string | null,"name": string,"rev": number,"sort": number,"synced_at": string,"undone": boolean,"user_id": string
+                    "color": string | null,"created_by": string,"deleted_at": number | null,"fv": NonNullable<Json>,"id": string,"merged_into": string | null,"name": string,"rev": number,"sort": number,"synced_at": string,"undone": boolean,"user_id": string,"vault": boolean
                   }
                   ComputedFields: never
                   Insert: {
-                    "color"?: string | null,"created_by"?: string,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id": string,"merged_into"?: string | null,"name": string,"rev"?: number,"sort"?: number,"synced_at"?: string,"undone"?: boolean,"user_id"?: string
+                    "color"?: string | null,"created_by"?: string,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id": string,"merged_into"?: string | null,"name": string,"rev"?: number,"sort"?: number,"synced_at"?: string,"undone"?: boolean,"user_id"?: string,"vault"?: boolean
                   }
                   Update: {
-                    "color"?: string | null,"created_by"?: string,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id"?: string,"merged_into"?: string | null,"name"?: string,"rev"?: number,"sort"?: number,"synced_at"?: string,"undone"?: boolean,"user_id"?: string
+                    "color"?: string | null,"created_by"?: string,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id"?: string,"merged_into"?: string | null,"name"?: string,"rev"?: number,"sort"?: number,"synced_at"?: string,"undone"?: boolean,"user_id"?: string,"vault"?: boolean
                   }
                   Relationships: [
                     

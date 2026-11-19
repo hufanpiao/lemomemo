@@ -64,6 +64,16 @@ test('随手记页：分类栏是 kit 胶囊；抽屉圆角 24、背景模糊，
     return g && c ? c.getBoundingClientRect().left - g.getBoundingClientRect().right : Number.NaN;
   });
   expect(gap).toBeGreaterThanOrEqual(0);
+  // 负责人 11-19“目前随手记没办法改分类”：kit 胶囊外扩点击区的 ::after 盖住了原生下拉，手指点到的是胶囊不是下拉。
+  // 这里按命中测试量：胶囊正中、上下外扩区里各点一下，最上面那个元素必须是分类下拉（selectOption 直接改值，测不出被盖住）
+  const hits = await page.evaluate(() => {
+    const c = document.querySelector('[data-testid="note-edit-chip"]');
+    if (!c) return [];
+    const r = c.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    return [r.top + r.height / 2, r.top - 4, r.bottom + 4].map((y) => document.elementFromPoint(x, y)?.getAttribute('data-testid') ?? '');
+  });
+  expect(hits).toEqual(['note-edit-category', 'note-edit-category', 'note-edit-category']);
 });
 
 test('今天页：小块标题等宽小字；待办抽屉类型名 14px 常规、和换边把手同一行；侧栏页签字重', async ({ page }) => {

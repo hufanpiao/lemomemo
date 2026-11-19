@@ -133,7 +133,7 @@ async function edgeForward(page: Page, ended: 'cancel' | 'end'): Promise<void> {
 }
 
 for (const ended of ['cancel', 'end'] as const) {
-  test(`负责人 11-19：从二级页退回主页面后右边往左划，系统“前进”抢先把页面带回二级页——退回再进设置（iPhone 送 ${ended === 'cancel' ? 'touchcancel、没有抬手' : '抬手'}）`, async ({ page }) => {
+  test(`负责人 11-19：从二级页退回主页面后右边往左划，系统“前进”抢先把页面带回二级页——原地换成设置（iPhone 送 ${ended === 'cancel' ? 'touchcancel、没有抬手' : '抬手'}）`, async ({ page }) => {
     await ready(page, '/app/#/todos');
     await page.evaluate(() => {
       location.hash = '#/settings/calendar';
@@ -144,6 +144,26 @@ for (const ended of ['cancel', 'end'] as const) {
     await page.waitForTimeout(700);
     await edgeForward(page, ended);
     await at(page, 'settings');
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(new RegExp(`tabswipe side=r to=settings fwd=1 how=${ended === 'cancel' ? 'pop cancel=1' : '(pop|up)'}`));
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(new RegExp(`tabswipe side=r to=settings fwd=1 how=${ended === 'cancel' ? 'pop cancel=1' : '(pop|up) cancel=0'} at=0`));
+    // 原地换的：再退一步回到待办页（不是退回那个二级页、也没多压一层）
+    await page.goBack();
+    await at(page, 'todos');
+  });
+
+  // 负责人 11-19 傍晚“设置页自动闪退”（录屏 5d9ca61a）：从设置退回主页面后右边往左划，系统“前进”带回来的本来就是设置首页——照收，停在设置不再退回
+  test(`负责人 11-19：“前进”带回来的就是设置首页时停在设置、不闪退（iPhone 送 ${ended === 'cancel' ? 'touchcancel' : '抬手'}）`, async ({ page }) => {
+    await ready(page, '/app/#/todos');
+    await page.evaluate(() => {
+      location.hash = '#/settings';
+    });
+    await at(page, 'settings');
+    await page.goBack();
+    await at(page, 'todos');
+    await page.waitForTimeout(700);
+    await edgeForward(page, ended);
+    await at(page, 'settings');
+    await page.waitForTimeout(1200);
+    await at(page, 'settings');
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/tabswipe side=r to=settings fwd=1 how=\w+ cancel=\d at=1/);
   });
 }

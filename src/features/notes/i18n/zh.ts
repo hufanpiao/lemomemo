@@ -123,4 +123,23 @@ export const zh = {
   'notes.sync.dropped': '有 {n} 处改动没来得及保存',
   'notes.sync.ok': '知道了',
   'notes.sync.stale': '这条刚在别处改过，没有移动',
+  // 分类：新建、改名、删除（负责人 11-19：隐私记“新建分类”“长按分类格可以改名、删除，删分类时里面的记录不删，变回没分类”；随手记“其他可以自己编辑分类，可以创建分类”）
+  'notes.cat.new': '＋ 新分类',
+  'notes.cat.newTitle': '新分类',
+  'notes.cat.placeholder': '起个名字，最多 {n} 个字',
+  'notes.cat.create': '建好',
+  'notes.cat.createFail': '没建上，再试一次',
+  'notes.cat.editTitle': '分类“{name}”',
+  'notes.cat.rename': '改好',
+  'notes.cat.dup': '已经有叫这个的分类了',
+  'notes.cat.editFail': '没改上，再试一次',
+  'notes.cat.delete': '删除这个分类',
+  'notes.cat.deleteAsk': '删除“{name}”？里面的 {n} 条记录不删，变回没分类',
+  'notes.cat.deleteOk': '删除',
+  'notes.cat.cancel': '取消',
+  // 分类里导入没分类的记录（负责人 11-19“也可以在分类里倒入没分类的记录”；问“导入怎么选”答“勾选多条”）
+  'notes.import.open': '导入没分类的 {n} 条',
+  'notes.import.title': '导入到“{name}”',
+  'notes.import.ok': '导入 {n} 条',
+  'notes.import.fail': '有 {n} 条没导入，再试一次',
 } as const;

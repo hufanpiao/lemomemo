@@ -123,34 +123,30 @@ describe('installTabSwipe：真的划一下', () => {
     touch('touchend', 150, 205, t, true);
     expect(nav.to).toEqual([]);
   });
-  it('负责人 11-19：从待办详情退回待办页后右边往左划，系统“前进”先把页面带回那条待办——先退回、退回以后再进设置', async () => {
+  it('负责人 11-19：从待办详情退回待办页后右边往左划，系统“前进”先把页面带回那条待办——把这一条原地换成设置（不退回、不再等 popstate）', () => {
     window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
     const t = byId('blank');
     touch('touchstart', W - 10, 200, t);
     window.history.pushState({ lemoDepth: 1 }, '', '#/todo/x');
     touch('touchend', W - 150, 205, t, true);
-    expect(nav.to).toEqual(['goBack']);
-    await Promise.resolve();
+    expect(nav.to).toEqual(['replace:settings']);
     window.dispatchEvent(new PopStateEvent('popstate'));
-    expect(nav.to).toEqual(['goBack', 'push:settings']);
+    expect(nav.to).toEqual(['replace:settings']);
     // 起手在详情页（不是主页面）、地址变了：照旧判 moved，不动
     window.history.replaceState({ lemoDepth: 1 }, '', '#/todo/y');
     touch('touchstart', W - 10, 200, t);
     window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
     touch('touchend', W - 150, 205, t, true);
-    expect(nav.to).toEqual(['goBack', 'push:settings']);
+    expect(nav.to).toEqual(['replace:settings']);
   });
-  it('负责人 11-19 下午“修完还是进待办编辑”：iPhone 把系统“前进”当触摸取消、根本没有抬手——按下以后来了 popstate 就退回再进设置', async () => {
+  it('负责人 11-19 下午“修完还是进待办编辑”：iPhone 把系统“前进”当触摸取消、根本没有抬手——按下以后来了 popstate 就把这一条换成设置', () => {
     window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
     const t = byId('blank');
     touch('touchstart', W - 10, 200, t);
     touch('touchcancel', W - 30, 200, t, true);
     window.history.pushState({ lemoDepth: 1 }, '', '#/todo/x');
     window.dispatchEvent(new PopStateEvent('popstate'));
-    expect(nav.to).toEqual(['goBack']);
-    await Promise.resolve();
-    window.dispatchEvent(new PopStateEvent('popstate'));
-    expect(nav.to).toEqual(['goBack', 'push:settings']);
+    expect(nav.to).toEqual(['replace:settings']);
     // 左边那条起手、或者起手在详情页：来了 popstate 也不管
     nav.to = [];
     window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
@@ -160,6 +156,22 @@ describe('installTabSwipe：真的划一下', () => {
     touch('touchstart', W - 10, 200, t);
     window.history.pushState({ lemoDepth: 2 }, '', '#/todo/y');
     window.dispatchEvent(new PopStateEvent('popstate'));
+    expect(nav.to).toEqual([]);
+  });
+  it('负责人 11-19 傍晚“设置页自动闪退”：系统“前进”带回来的本来就是设置首页（之前从设置退回来过）——照收，不退回、不换', () => {
+    window.history.replaceState({ lemoDepth: 0 }, '', '#/todos');
+    const t = byId('blank');
+    touch('touchstart', W - 10, 200, t);
+    touch('touchcancel', W - 30, 200, t, true);
+    window.history.pushState({ lemoDepth: 1 }, '', '#/settings');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    expect(nav.to).toEqual([]);
+    expect(window.location.hash).toBe('#/settings');
+    // 抬手照送的那一种也一样
+    window.history.replaceState({ lemoDepth: 0 }, '', '#/notes');
+    touch('touchstart', W - 10, 200, t);
+    window.history.pushState({ lemoDepth: 1 }, '', '#/settings');
+    touch('touchend', W - 150, 205, t, true);
     expect(nav.to).toEqual([]);
   });
   it('设置首页：右边往左划不动；左边往右划退回（有上一页退一步，没有就原地换回今天、不退出 App）；设置子页都不管', () => {

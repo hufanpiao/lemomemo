@@ -75,3 +75,137 @@ test('分类胶囊高 30、无描边，条数等宽；标题下等宽小字；�
   const head = page.locator('[data-testid^="notes-g-"]').first().getByRole('heading');
   await expect(head).toHaveText(/^今天\s*2$/);
 });
+
+// 负责人 11-19“其他可以自己编辑分类，可以创建分类”“随手记记录完的点进去可以自己指定分类”；隐私记的分类“隐私记自己一套”：
+// 分类那一排最后“＋ 新分类”（建好就筛到这一类、空的写 0）；长按胶囊改名、删除（删了回“全部”，记录还在）；隐私记的分类这里看不到，编辑页下拉也没有
+test('随手记分类：“＋ 新分类”、长按改名删除；隐私记的分类不出现', async ({ page }) => {
+  const VCAT = '0e2e0000-0000-4000-8000-00000000c437';
+  await page.goto('/app/#/notes');
+  await page.getByTestId('notes').waitFor({ timeout: 30_000 });
+  await idbPut(page, [
+    ['categories', cached({ id: CAT, name: '工作灵感', color: 'p4', sort: 1, created_by: 'ai', merged_into: null, deleted_at: null, undone: false, rev: 1 })],
+    ['categories', cached({ id: VCAT, name: '密码', color: null, sort: 1, created_by: 'user', merged_into: null, vault: true, deleted_at: null, undone: false, rev: 1 })],
+    ...[note('0e2e0000-0000-4000-8000-000000043701', '第一条'), note('0e2e0000-0000-4000-8000-000000043702', '第二条')].map((r) => ['notes', cached(r)] as const),
+  ]);
+  await page.reload();
+  const filter = page.getByTestId('notes-filter');
+  await expect(page.getByTestId(`notes-filter-${CAT}`)).toHaveText(/^工作灵感\s*2$/, { timeout: 30_000 });
+  await expect(filter).not.toContainText('密码');
+
+  await page.getByTestId('notes-filter-new').click();
+  await page.getByTestId('cat-new-name').fill('读书');
+  await page.getByTestId('cat-new-ok').click();
+  const reading = filter.locator('[data-testid^="notes-filter-"]', { hasText: '读书' });
+  await expect(reading).toHaveText(/^读书\s*0$/);
+  await expect(reading).toHaveAttribute('aria-pressed', 'true');
+
+  const hold = async (testId: string) => {
+    // 上一个弹窗关完（层退掉）再按：关的过程中按下去按到的是 html（运行日志 down html）
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const b = await page.getByTestId(testId).boundingBox();
+    if (!b) throw new Error('没找到');
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(650);
+    await page.mouse.up();
+    const tail = (await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).split(String.fromCharCode(10)).slice(-10).join(String.fromCharCode(10));
+    await expect(page.getByTestId('cat-edit-name'), tail).toBeVisible();
+  };
+  await hold(`notes-filter-${CAT}`);
+  await page.getByTestId('cat-edit-name').fill('工作');
+  await page.getByTestId('cat-edit-ok').click();
+  await expect(page.getByTestId(`notes-filter-${CAT}`)).toHaveText(/^工作\s*2$/);
+  // 长按不算点：筛的还是“读书”
+  await expect(reading).toHaveAttribute('aria-pressed', 'true');
+
+  const rid = (await reading.getAttribute('data-testid')) ?? '';
+  await hold(rid);
+  await page.getByTestId('cat-edit-delete').click();
+  await page.getByTestId('cat-edit-delete-ok').click();
+  await expect(page.getByTestId(rid)).toHaveCount(0);
+  await expect(page.getByTestId('notes-filter-all')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('notes-filter-all')).toHaveText(/^全部\s*2$/);
+
+  // 编辑页下拉只有随手记的分类（隐私记的“密码”不在）；在下拉里改分类照样能改
+  await page.getByText('第一条', { exact: true }).first().click();
+  const sel = page.getByTestId('note-edit-category');
+  await expect(sel).toBeVisible();
+  const opts = await sel.locator('option').allTextContents();
+  expect(opts).toContain('工作');
+  expect(opts).not.toContain('密码');
+});
+
+test('分类里导入没分类的记录：勾选多条点“导入 N 条”，归进这一类、“导入”行跟着变', async ({ page }) => {
+  const L1 = '0e2e0000-0000-4000-8000-000000043801';
+  const L2 = '0e2e0000-0000-4000-8000-000000043802';
+  const L3 = '0e2e0000-0000-4000-8000-000000043803';
+  await page.goto('/app/#/notes');
+  await page.getByTestId('notes').waitFor({ timeout: 30_000 });
+  await idbPut(page, [
+    ['categories', cached({ id: CAT, name: '工作灵感', color: 'p4', sort: 1, created_by: 'user', merged_into: null, deleted_at: null, undone: false, rev: 1 })],
+    ['notes', cached(note('0e2e0000-0000-4000-8000-000000043800', '已有一条'))],
+    ...[note(L1, '散的一'), note(L2, '散的二'), note(L3, '散的三')].map((r) => ['notes', cached({ ...r, category_id: null, category_source: null })] as const),
+  ]);
+  await page.reload();
+  // 筛“全部”时没有导入行
+  await expect(page.getByTestId(`notes-filter-${CAT}`)).toHaveText(/^工作灵感\s*1$/, { timeout: 30_000 });
+  await expect(page.getByTestId('notes-import-open')).toHaveCount(0);
+
+  await page.getByTestId(`notes-filter-${CAT}`).click();
+  const open = page.getByTestId('notes-import-open');
+  await expect(open).toContainText('导入没分类的 3 条');
+  await open.click();
+  await expect(page.getByTestId('notes-import-list').locator('li')).toHaveCount(3);
+  await expect(page.getByTestId('notes-import-ok')).toBeDisabled();
+  await page.getByTestId(`notes-import-${L1}`).check();
+  await page.getByTestId(`notes-import-${L3}`).check();
+  await expect(page.getByTestId('notes-import-ok')).toHaveText('导入 2 条');
+  await page.getByTestId('notes-import-ok').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByTestId(`notes-filter-${CAT}`)).toHaveText(/^工作灵感\s*3$/);
+  await expect(open).toContainText('导入没分类的 1 条');
+  await expect(page.getByText('散的一', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('散的二', { exact: true })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toContain('notes category into n=2 ok=2 fail=0');
+});
+
+test('拖进分类：没分类的那一条长按拖到分类胶囊上松手，归进这一类；已有分类的拖上去不认', async ({ page }) => {
+  const L1 = '0e2e0000-0000-4000-8000-000000043901';
+  const HAS = '0e2e0000-0000-4000-8000-000000043900';
+  await page.goto('/app/#/notes');
+  await page.getByTestId('notes').waitFor({ timeout: 30_000 });
+  await idbPut(page, [
+    ['categories', cached({ id: CAT, name: '工作灵感', color: 'p4', sort: 1, created_by: 'user', merged_into: null, deleted_at: null, undone: false, rev: 1 })],
+    ['notes', cached(note(HAS, '有分类的'))],
+    ['notes', cached({ ...note(L1, '散的那条'), category_id: null, category_source: null })],
+  ]);
+  await page.reload();
+  const chip = page.getByTestId(`notes-filter-${CAT}`);
+  await expect(chip).toHaveText(/^工作灵感\s*1$/, { timeout: 30_000 });
+  const drag = async (rowText: string) => {
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const r = await page.getByText(rowText, { exact: true }).first().boundingBox();
+    const c = await chip.boundingBox();
+    if (!r || !c) throw new Error('没找到');
+    await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(600);
+    const to = { x: c.x + c.width / 2, y: c.y + c.height / 2 };
+    for (let k = 1; k <= 12; k++) await page.mouse.move(r.x + r.width / 2 + ((to.x - r.x - r.width / 2) * k) / 12, r.y + r.height / 2 + ((to.y - r.y - r.height / 2) * k) / 12);
+    await page.waitForTimeout(100);
+    return chip.getAttribute('data-drop-over');
+  };
+  // 已有分类的：手指落在胶囊上也不高亮、松手不改
+  expect(await drag('有分类的')).toBeNull();
+  await page.mouse.up();
+  await expect(chip).toHaveText(/^工作灵感\s*1$/);
+  // 没分类的：落在胶囊上高亮，松手归进这一类
+  expect(await drag('散的那条')).toBe('');
+  await page.mouse.up();
+  await expect(chip).toHaveText(/^工作灵感\s*2$/);
+  await expect(chip).not.toHaveAttribute('data-drop-over');
+  // 运行日志按批写进 localStorage：等它写到
+  const log = () => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  await expect.poll(log).toContain('drop into');
+  await expect.poll(log).toContain('notes category into n=1 ok=1 fail=0');
+});
