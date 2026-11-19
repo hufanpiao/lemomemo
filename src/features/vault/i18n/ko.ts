@@ -29,6 +29,8 @@ export const ko = {
 
   'vault.home.cats': '분류', // REVIEW(ko)
   'vault.home.tile': '{n}개 · {day}', // REVIEW(ko)
+  'vault.home.tileNoDay': '{n}개', // REVIEW(ko)
+  'vault.home.tileLabel': '{name}, {sub}', // REVIEW(ko)
   'vault.home.recent': '최근', // REVIEW(ko)
   'vault.home.all': '전체 {n}', // REVIEW(ko)
   'vault.home.back': '비밀 메모', // REVIEW(ko)

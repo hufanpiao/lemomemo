@@ -232,6 +232,8 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   const list = page.getByTestId('vault-notes');
   await expect(list).toContainText('体检报告');
   await phoneShots(page, '06-解锁后的列表', browserName);
+  // 电脑版、手机版都只有一个 h1“隐私记”（独立评审 11-19 高 5：电脑版原来读屏 h1 和顶栏 h1 各一个）
+  await expect(page.getByRole('heading', { level: 1, name: '隐私记' })).toHaveCount(1);
 
   await page.getByTestId('vault-lock-now').click();
   // 线框 s9 UNLOCKOV：用不了 Face ID 时卡片只有“输入密码”“取消”，点了再进密码页

@@ -454,6 +454,7 @@ export function NotesList({ head, home, cat }: { head?: ((trash: ReactNode) => R
           <Desk.default
             page={src.desk}
             title={src.text?.title}
+            srH1={!head}
             titleEnd={src.kind === 'vault' ? <TrashLink /> : undefined}
             cats={{ total: l.total, counts: l.counts, category: l.category, set: l.setCategory }}
             list={

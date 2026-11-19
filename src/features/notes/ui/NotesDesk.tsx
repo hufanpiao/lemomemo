@@ -40,12 +40,14 @@ export interface NotesDeskProps {
   cats: DeskCats;
   /** 分类栏标题右边的小图标（“最近删除”垃圾桶，R-438 第 2 组丙） */
   titleEnd: ReactNode;
+  /** 画读屏用的 h1；来源自己带顶栏（隐私记的 VaultTop 有 h1）时 false，免得两个同名 h1（独立评审 11-19 高 5） */
+  srH1: boolean;
   /** list 块的内容（NotesPage 画好的） */
   list: ReactNode;
   drawer: ((side: 'left' | 'right', handle: ReactNode) => ReactNode) | undefined;
 }
 
-export default function NotesDesk({ page, title, titleEnd, cats, list, drawer }: NotesDeskProps) {
+export default function NotesDesk({ page, title, titleEnd, srH1, cats, list, drawer }: NotesDeskProps) {
   const t = useNotesT();
   const cur = cats.counts.find((c) => c.id === cats.category);
   const name = title ?? t('notes.title', {});
@@ -57,7 +59,7 @@ export default function NotesDesk({ page, title, titleEnd, cats, list, drawer }:
   return (
     <>
       {/* 页面主标题：电脑版看得见的是“随手记”块标题，读屏仍要一个 h1 */}
-      <h1 className={styles.sr}>{name}</h1>
+      {srH1 ? <h1 className={styles.sr}>{name}</h1> : null}
       <DeskLayout page={page} def={NOTES_DEFAULT} panels={panels} drawer={drawer} />
     </>
   );

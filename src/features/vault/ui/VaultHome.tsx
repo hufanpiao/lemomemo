@@ -47,10 +47,10 @@ export function VaultHome({ api }: { api: NotesHomeApi }) {
         <ul className={styles.grid} aria-label={t('vault.home.cats', {})}>
           {api.counts.map((c) => {
             const last = latest.get(c.id);
-            const sub = t('vault.home.tile', { n: c.count, day: last ? api.day(last) : '' });
+            const sub = last ? t('vault.home.tile', { n: c.count, day: api.day(last) }) : t('vault.home.tileNoDay', { n: c.count });
             return (
               <li key={c.id}>
-                <button type="button" className={styles.tile} onClick={() => pick(c.id)} aria-label={`${c.name}，${sub}`} data-testid={`vault-home-cat-${c.id}`}>
+                <button type="button" className={styles.tile} onClick={() => pick(c.id)} aria-label={t('vault.home.tileLabel', { name: c.name, sub })} data-testid={`vault-home-cat-${c.id}`}>
                   <span className={styles.tileDot} style={c.color ? ({ '--dot': c.color } as CSSProperties) : undefined} aria-hidden="true">
                     {tileGlyph(c.name)}
                   </span>

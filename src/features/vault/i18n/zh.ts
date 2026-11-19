@@ -27,6 +27,8 @@ export const zh = {
 
   'vault.home.cats': '分类', // 首页宫格（负责人 11-19“解锁后用乙”），读屏用
   'vault.home.tile': '{n} 条 · {day}',
+  'vault.home.tileNoDay': '{n} 条',
+  'vault.home.tileLabel': '{name}，{sub}', // 分类格的读屏名字
   'vault.home.recent': '最近',
   'vault.home.all': '全部 {n}',
   'vault.home.back': '隐私记',
