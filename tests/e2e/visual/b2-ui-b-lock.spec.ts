@@ -30,6 +30,8 @@
 //     只留元素本身和页面底色；元素自身样式不动、阈值仍 0。随手记顶部 62pt 两张、底栏锁定（fixed 定位、位置不随内容变）不变
 //   • 11-17 账号-注销入口-light/dark.png（linux）：R-454（负责人 11-17 选方案 C，iOS 分组表）“注销账号”单独一组、字居中、不带 ›；
 //     行高仍 44（expectRow44）、危险色仍 --danger-text；“重试”两张不变
+//   • 11-19 随手记-顶部62pt-light/dark.png（linux）：R-479（负责人 11-19“其他可以自己编辑分类，可以创建分类”）没有分类时分类那一排也显示
+//     “全部 0 ＋ 新分类”，“隐私”一段随之下移；标题、日期、头像逐像素不变（镜像里比对过差异图，只有这一排和下移的部分）
 import type { Page } from '@playwright/test';
 import { FIXED_NOW, SAFE_TOP, expect, frames, still, test } from './visual-helpers.ts';
 
