@@ -213,7 +213,6 @@ export const zh = {
   'settings.about.title': '关于',
   'settings.about.version': '版本', // 设置 › 关于 卡片里“版本 4.0.0”（设计评审 M-1，11-06），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
   'settings.about.lunarCredit': '农历及节气数据：香港天文台',
-  'settings.about.probe': '录音探测（试验）', // 只在非正式版的关于页显示（B3 FA-0，11-10）；和 voice-probe 同一个 PR 删
   // R-384 设置 › 账号顶部的头像（更换、去掉；裁剪框文案照纪念日头像 anniv.crop.*）
   'settings.avatar.label': '头像',
   'settings.avatar.change': '更换头像',

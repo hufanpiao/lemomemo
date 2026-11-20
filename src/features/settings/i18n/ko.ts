@@ -200,7 +200,6 @@ export const ko = {
   'settings.about.title': '정보', // REVIEW(ko)；设置 › 关于（R-306 注明农历出处）
   'settings.about.version': '버전', // 设置 › 关于“버전 4.0.0”（设计评审 M-1，11-06），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
   'settings.about.lunarCredit': '음력 및 절기 데이터: 홍콩 천문대', // REVIEW(ko)
-  'settings.about.probe': '녹음 테스트(실험)', // REVIEW(ko)；只在非正式版的关于页显示（B3 FA-0，11-10）；和 voice-probe 同一个 PR 删
   // R-384 设置 › 账号顶部的头像（裁剪框照 anniv.crop.*）
   'settings.avatar.label': '프로필 사진', // REVIEW(ko)
   'settings.avatar.change': '사진 바꾸기', // REVIEW(ko)
