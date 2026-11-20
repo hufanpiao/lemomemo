@@ -46,12 +46,12 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、3a066c28（点按灰框）、11-17 触屏滚动条、11-17 输入框不画黑框、GlassBar.module.css 又在 R-436 侧栏精致化按上面的更新记录换过 */
+/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、3a066c28（点按灰框）、11-17 触屏滚动条、11-17 输入框不画黑框、GlassBar.module.css 又在 R-436 侧栏精致化、GlassBarFx.tsx 和 glass-ghost.ts 又在 11-20 删帧循环按上面的更新记录换过 */
 const PINNED: Record<string, string> = {
   'src/kit/components/GlassBar/GlassBar.module.css': '33893fbe7a2f4d119e6168919b88134d3c994774266b6472b096b03c43768378',
-  'src/kit/components/GlassBar/GlassBarFx.tsx': '2cd1d04f069b8e10829389ca87e8b647678ba4c0057c1fb42dc777e342d75b0c',
+  'src/kit/components/GlassBar/GlassBarFx.tsx': '4092cc80b411034406e8d1abb589a5957621accacbb5170577b36ea3ed010adb',
   'src/kit/components/GlassBar/GlassBarFx.module.css': 'baf8e2d17344a43abddf9ab873e5f4d46345a42b50522e911a2a1ea638dfde19',
-  'src/motion/glass-ghost.ts': '13364a6e6f0eafe5c1b68346ba53e175b76bd08d317c8e4dc599af549ad5c76e',
+  'src/motion/glass-ghost.ts': 'edf1ee3cded12098eafa67681deeab6fe7ebbe1874ea14e5bf450befccbef87c',
   'src/styles/base.css': 'f24550ebfdf2c7ed1ea6e141645796f0377e08dd74cbb9bb9ab3eaab25c65008',
 };
 
@@ -66,6 +66,10 @@ const sha256 = (rel: string): string => createHash('sha256').update(readFileSync
 // • 11-20 隐私记整块收拾第 7 条（主持人派单：data-rt 只表示系统“减少透明效果”，隐私记强制实色另写 data-solid），本提交：
 //   GlassBar.module.css、GlassBarFx.module.css、base.css 里的 :root[data-rt='1'] 换成 :root:is([data-rt='1'], [data-solid='1'])（优先级不变），
 //   glass-ghost.ts 的 reducedTransparency 认 data-rt 或 data-solid、监听这两个属性。两个属性里任一个为 1 时和原来 data-rt=1 一样，外观不变。
+// • 11-20 全 app 改善报告第四节（负责人 11-20 弹窗选了性能几条，含“底栏玻璃引擎只剩空转的帧循环，删掉”），本提交：
+//   glass-ghost.ts 的 startGlass（帧循环、poke）换成 markGlass（下载到时打一次 data-glass，data-rt、data-solid 变了再改）；
+//   GlassBarFx.tsx 去掉 glass ref 和两处 poke，液滴不再打 data-glass（样式里只有 .bar、.fab 认它）。三个 CSS 文件一行没动；
+//   外观不变：Chromium 430×932 DPR 3 今天页两皮肤两主题整屏、底栏区各 4 张，加视觉锁定 tabbar-lock 4 张，改前改后 0 像素差。
 describe('B3 Q3 守门第 4 条：底栏外观文件不许改（R-352 ④）', () => {
   it('src/motion/glass-*.ts 正好是钉住的那几个：不许多、不许少', () => {
     const now = readdirSync(join(ROOT, 'src/motion'))

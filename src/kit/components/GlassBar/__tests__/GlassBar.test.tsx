@@ -8,8 +8,8 @@ import { ko } from '../../../../../shared/i18n/ko.ts';
 import { __forgetGlassBarFxForTest, FADE_SLACK_MS, GlassBar } from '../GlassBar.tsx';
 import styles from '../GlassBar.module.css';
 
-// 首屏后部分（GlassBarFx）里的副本引擎另有测试（motion/__tests__/glass-ghost.test.ts）；这里用替身（jsdom 没有 IntersectionObserver）
-vi.mock('../../../../motion/glass-ghost.ts', () => ({ startGlass: () => ({ stop: () => undefined, poke: () => undefined }), playGel: () => true, forgetTilt: () => undefined }));
+// 首屏后部分（GlassBarFx）里的玻璃标记另有测试（motion/__tests__/glass-ghost.test.ts）；这里用替身
+vi.mock('../../../../motion/glass-ghost.ts', () => ({ markGlass: () => () => undefined, playGel: () => true, forgetTilt: () => undefined }));
 // 页签名查公共词典（useT → sharedT）：这里也测韩文页签，把韩文那份放进去（公共准备默认只放中文）
 provideSharedDict('ko-KR', ko);
 

@@ -30,7 +30,7 @@ vi.mock('../../platform/viewport.ts', () => ({
 }));
 
 // 底栏首屏后部分（GlassBarFx）里的副本引擎：这里不跑真的（jsdom 没有 IntersectionObserver）
-vi.mock('../../motion/glass-ghost.ts', () => ({ startGlass: () => ({ stop: () => undefined, poke: () => undefined }), playGel: () => true, forgetTilt: () => undefined }));
+vi.mock('../../motion/glass-ghost.ts', () => ({ markGlass: () => () => undefined, playGel: () => true, forgetTilt: () => undefined }));
 
 beforeEach(() => {
   window.location.hash = '#/today';

@@ -235,7 +235,7 @@ test.describe('底栏（FA-7）', () => {
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
     await expect(bar(page).locator('[class*="jellyJs"]')).toHaveCount(1);
-    // 等副本引擎（glass-ghost）到了再点：它到了才由 WAAPI 放（gelFx 先装上，startGlass 随后给底栏挂 data-glass，关掉前一直在）。
+    // 等副本引擎（glass-ghost）到了再点：它到了才由 WAAPI 放（gelFx 先装上，markGlass 随后给底栏挂 data-glass，关掉前一直在）。
     // 只等实色带不够：11-10 镜像里负载重的一遍，副本引擎 5 秒还没到，两次都走了 CSS 后备，不是这条要测的路径
     await expect(bar(page)).toHaveAttribute('data-glass', 'copy', { timeout: 10_000 });
     // 在点“待办”的同一个任务里读（点击冒泡到 window 时，页签的点按已经同步换完路由、放了果冻）。

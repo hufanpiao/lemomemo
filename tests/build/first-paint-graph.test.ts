@@ -152,7 +152,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/features/todos/ui/todo-drawer.ts': '电脑版今天页详情抽屉里的待办编辑器（B6 返工）：在电脑版今天页点了一条待办才下载（待办编辑页那一包）；手机宽度点一行是换页，不经这里',
   'src/features/calendar/ui/event-drawer.ts': '电脑版今天页详情抽屉里的日程编辑器（B6 返工）：在电脑版今天页点了一条日程才下载（日程编辑页那一包）；手机宽度点一行是换页，不经这里',
   'src/kit/components/GlassBar/GlassBarFx.tsx':
-    '液态玻璃底栏的首屏后部分：模糊带、果冻、按住放大；首屏画完以后 afterAppPainted 才下载，挂上以后再 import() 内容副本、自动深浅、帧循环（motion/glass-ghost.ts）（B2 FA-7，主持人 11-05 首屏 ③；没下载到时外壳用 backdrop-filter 后备）',
+    '液态玻璃底栏的首屏后部分：模糊带、果冻、按住放大；首屏画完以后 afterAppPainted 才下载，挂上以后再 import() 玻璃标记（motion/glass-ghost.ts）（B2 FA-7，主持人 11-05 首屏 ③；没下载到时外壳用 backdrop-filter 后备）',
 };
 
 /** 从入口出发推首屏会碰到的 import()：返回已归类为首屏的、归类为非首屏的、没归类的（带出处） */
@@ -277,7 +277,7 @@ describe('液态玻璃的副本引擎、帧循环不进首屏（B2 FA-7，底栏
   });
 
   it('拦得住变异：GlassBar.tsx 改成静态引 glass-ghost.ts', () => {
-    const read = withPatch(BAR, (s) => `import { startGlass as _g } from '../../../motion/glass-ghost.ts';\nvoid _g;\n${s}`);
+    const read = withPatch(BAR, (s) => `import { markGlass as _g } from '../../../motion/glass-ghost.ts';\nvoid _g;\n${s}`);
     expect(reach(ENTRY, read).prev.has(GHOST)).toBe(true);
   });
 });
