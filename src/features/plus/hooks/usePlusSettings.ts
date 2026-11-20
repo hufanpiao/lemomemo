@@ -14,6 +14,7 @@ import { settingValue, type SettingRow } from '../../../core/setting-read.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { clock } from '../../../platform/clock.ts';
 import { isTauri } from '../../../platform/env.ts';
+import { browserLifecycle } from '../../../platform/net.ts';
 import { micPermission, type MicState } from '../../../platform/perm-mic.ts';
 import { readAiUsage, type AiUsage, type UsageDeps } from '../data/ai-usage-api.ts';
 import { createLink, disconnectAll, linkStateOf, listLinks, type LinkDeps, type LinkErr, type LinkState, type NewCode } from '../data/claude-link-api.ts';
@@ -91,13 +92,9 @@ export function useClaudeLink(deps?: LinkDeps): ClaudeLink {
   }, [load]);
 
   // 安全审 3：页面切到后台就清掉明文码（只显示这一次，切回来也不再显示）
-  useEffect(() => {
-    const onVis = (): void => {
-      if (document.visibilityState === 'hidden') setCode(null);
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, []);
+  useEffect(() => browserLifecycle.onVisibility((visible) => {
+    if (!visible) setCode(null);
+  }), []);
 
   // 代码审 S2：busy 是 state，要等重渲染才灰掉；用 ref 防手快连点发出两次
   const running = useRef(false);

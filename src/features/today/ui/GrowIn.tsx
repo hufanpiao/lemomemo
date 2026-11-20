@@ -8,6 +8,7 @@
 // • 高度还没到位（在等、在变）时裁掉溢出（overflow: hidden），不盖到下面；到位以后放开（data-settled），里面按钮的焦点框不被裁
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { prefersReducedMotion } from '../../../motion/index.ts';
+import { browserLifecycle } from '../../../platform/net.ts';
 import styles from './TodayPage.module.css';
 
 /** 抬手以后静下来多久才动 */
@@ -28,7 +29,7 @@ function listenPointer(): void {
   // 按着时切走窗口、切到后台：抬起可能收不到，计数会一直卡在“按着”、这一块永远不动；切走时清零
   const reset = (): void => void (pointer.down = 0);
   window.addEventListener('blur', reset);
-  document.addEventListener('visibilitychange', reset);
+  browserLifecycle.onVisibility(reset);
 }
 /** 还要等多久才能动（0 = 现在就能动）；按着时每 100 ms 再看一次 */
 function waitLeft(): number {

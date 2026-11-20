@@ -20,6 +20,7 @@ import { pruneCollapsed, remindQueue, removeRinging, resetRemindQueue, setRemind
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { closeLocalReminder, showLocalReminder } from '../../../platform/native-bridge.ts';
+import { browserLifecycle } from '../../../platform/net.ts';
 import { closeHandledNotifications } from '../../../platform/notifications.ts';
 import { isKeyboardOpen, watchKeyboard } from '../../../platform/viewport.ts';
 import { todayOf } from '../../../../shared/core/date.ts';
@@ -164,14 +165,13 @@ export function useRemindEngine(sinceAt?: number): Pick<ReturnType<typeof useRem
     if (armed) flushSeen();
   }, [armed, now, flushSeen]);
   useEffect(() => {
-    const onHide = (): void => {
-      if (document.visibilityState === 'hidden') flushSeen();
-    };
     addEventListener('pagehide', flushSeen);
-    document.addEventListener('visibilitychange', onHide);
+    const offVis = browserLifecycle.onVisibility((visible) => {
+      if (!visible) flushSeen();
+    });
     return () => {
       removeEventListener('pagehide', flushSeen);
-      document.removeEventListener('visibilitychange', onHide);
+      offVis();
     };
   }, [flushSeen]);
   // 只在本机了结的“知道了”：那条改动发出去以后，提醒时刻没变的补写一次（第三轮 L10）
@@ -310,12 +310,10 @@ export function useRemindEngine(sinceAt?: number): Pick<ReturnType<typeof useRem
       const { list: l, known: k, tz: z } = latest.current;
       void closeHandledNotifications((t) => shouldCloseShown(t, l, k.has(`${t.kind}:${t.id}`), z));
     };
-    const onVis = (): void => {
-      if (document.visibilityState === 'visible') run();
-    };
     run();
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
+    return browserLifecycle.onVisibility((visible) => {
+      if (visible) run();
+    });
   }, [ready]);
   // 交给 RemindHost 画横幅、按钮条（11-20 全 app 改善报告第四节：原来它自己再算一遍，每分钟全量算两次）
   return { list, tz, prefs };

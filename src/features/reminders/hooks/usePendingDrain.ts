@@ -7,6 +7,7 @@
 // 同时只跑一份，跑的时候又触发了，跑完再跑一次。出错只记运行日志（错误类型），按键留着下次再转
 import { useEffect, useRef } from 'react';
 import { clock } from '../../../platform/clock.ts';
+import { browserLifecycle } from '../../../platform/net.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { drainNotifyActions, type FindReminder } from '../data/remind-pending.ts';
 import type { Reminder } from '../data/reminder-model.ts';
@@ -51,16 +52,15 @@ export function usePendingDrain(list: readonly Reminder[], known: ReadonlySet<st
   }, [ready, list]);
   useEffect(() => {
     if (!ready) return;
-    const onVis = (): void => {
-      if (document.visibilityState === 'visible') run.current?.();
-    };
     const onHash = (): void => {
       if (window.location.hash.startsWith('#/remind/')) run.current?.();
     };
-    document.addEventListener('visibilitychange', onVis);
+    const offVis = browserLifecycle.onVisibility((visible) => {
+      if (visible) run.current?.();
+    });
     window.addEventListener('hashchange', onHash);
     return () => {
-      document.removeEventListener('visibilitychange', onVis);
+      offVis();
       window.removeEventListener('hashchange', onHash);
     };
   }, [ready]);
