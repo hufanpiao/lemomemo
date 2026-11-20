@@ -8,7 +8,7 @@
 // • 附件区：attachments 的 VaultAttachments + 会话的 vault-file 方法（fileApiOf）；服务器上还没有这一条（新建还没存上）时不挂
 // • caps：没有 AI、转待办、合并分类、入口行、移进、附件个数；有“移出隐私记”；只读集合一直是空的
 // • 运行日志只记动作、结果码、大小，不记标题、正文、图片 id
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react';
 import { createElement, Suspense } from 'react';
 import { uuidv7 } from '../../../core/uuidv7.ts';
 import type { EditIo } from '../../../kit/hooks/useEditRecord.ts';
@@ -282,12 +282,12 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
   };
 }
 
-/** 隐私记页用的来源（会话一份、文案换语言时重建） */
-export function useVaultNoteSource(): NoteSource {
+/** 隐私记页用的来源（会话一份、文案换语言时重建）；backMark：编辑页返回旁的小锁（界面层给，hooks 不引 ui），传模块级常量 */
+export function useVaultNoteSource(backMark: ReactNode = null): NoteSource {
   const t = useVaultT();
   const { s } = useVault();
   const title = t('vault.title', {});
   const empty = t('vault.empty', {});
   const trash = t('vault.trash', {});
-  return useMemo(() => createVaultNoteSource(s, { title, empty, back: title, trash }), [s, title, empty, trash]);
+  return useMemo(() => createVaultNoteSource(s, { title, empty, back: title, backMark, trash }), [s, title, empty, trash, backMark]);
 }

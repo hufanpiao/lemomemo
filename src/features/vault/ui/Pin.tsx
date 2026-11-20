@@ -30,12 +30,26 @@ export function LockIcon({ big = false }: { big?: boolean }) {
   );
 }
 
-/** 线框小锁 14px：隐私记记录页返回“‹ 🔒 隐私记”（记录页美化方向 A 方案图的 IC.lock：锁身 14 × 9.5 圆角 2、锁环半径 4，描边 2） */
-export function LockLineIcon() {
+/**
+ * 线框锁（描边 2、圆头，跟文字色；样式 Vault.module.css 的 .lineIc 一份）：
+ * • kind="closed"：关着的锁，隐私记记录页返回“‹ 🔒 隐私记”（记录页美化方向 A 方案图的 IC.lock：锁身 14 × 9.5 圆角 2、锁环半径 4），size 14
+ * • kind="open"：开着的锁（锁环右边翘起），隐私记列表顶栏下“这里记的只进隐私记”那一行（R-452 V2），size 12
+ * 实心锁 LockIcon、解锁页的大锁（锁身填主色）外观不同，另外画
+ */
+export function LineLock({ kind, size }: { kind: 'closed' | 'open'; size: number }) {
   return (
-    <svg className={styles.lockLine} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect x="5" y="11" width="14" height="9.5" rx="2" />
-      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    <svg className={styles.lineIc} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      {kind === 'closed' ? (
+        <>
+          <rect x="5" y="11" width="14" height="9.5" rx="2" />
+          <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+        </>
+      ) : (
+        <>
+          <rect x="5" y="11" width="14" height="10" rx="2" />
+          <path d="M8 11V8a4 4 0 0 1 7.6-1.7" />
+        </>
+      )}
     </svg>
   );
 }

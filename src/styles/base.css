@@ -126,6 +126,12 @@ html[data-app] {
   :root[data-kbo] {
     --dock-bottom: var(--kb, 0px);
   }
+
+  /* 这一页没有底栏（<html data-nobar>，App 的 TabBar 按 app/tab-of.ts 写；编辑页、设置……）：浮条离底 安全区 + 6（记录页美化方向 A 的底部工具条），
+     不再悬在底栏的位置；键盘、--vh-gap 照上面的公式。宽屏本来就没有底栏（24），不跟着变 */
+  :root[data-nobar] {
+    --dock-lift: 6px;
+  }
 }
 
 /* 同步提示卡显示着（<html data-sn-card>，SyncNoticeHost 写 --sn-h = 卡的实际高度）：页底留白至少让到卡上沿再加 8px，

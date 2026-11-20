@@ -55,14 +55,13 @@
   color: var(--text);
 }
 
-/* 线框小锁（Pin.tsx 的 LockLineIcon，隐私记记录页返回旁，记录页美化方向 A）：14px，描边跟文字色 */
-.lockLine {
+/* 线框锁（Pin.tsx 的 LineLock：记录页返回旁的关锁 14、列表提示行的开锁 12，大小由组件给）：描边 2、圆头，跟文字色 */
+.lineIc {
   flex: none;
-  width: 14px;
-  height: 14px;
   fill: none;
-  stroke: currentColor;
+  stroke: currentcolor;
   stroke-width: 2;
+  stroke-linecap: round;
 }
 
 .lockicBig {
@@ -82,16 +81,6 @@
   color: var(--text-3);
   font-size: var(--fs-12);
   line-height: 1.5;
-}
-
-.hintIc {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 2;
-  stroke-linecap: round;
 }
 
 /* 解锁后的列表、编辑器是随手记那一份（notes 的 NotesSurface，11-15 隐私记重写）；“最近删除”的外框用 kit 的 NoteRow.module.css 的 .lst，行用下面的 .row */

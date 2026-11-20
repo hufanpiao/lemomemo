@@ -7,7 +7,7 @@
 // • “⋯”菜单：现在只有“删除”（软删，页内出“已删除”和“撤销”，ADR-006，进“最近删除”）；“移到隐私记 / 转成…”是 B5、S8 的活
 // • 保存状态：常驻 role="status" 给读屏播报；平时看不见（稿子上没有），没保存上、只读这些坏状态才显示出来
 // • 记录页美化方向 A（负责人 11-20“记录页美化方案用A”，方案页 柠檬记APP-本机资料/方案/记录页美化-2026-11-20）：手机整页的标题、细线、正文、图、附件
-//   装进一张撑到页底的纸张卡片；“图片”“拍照”和“文档请在电脑上加…”在底部浮动工具条；“⋯”36 圆形浅底；隐私记返回带小锁（VaultPage 经 backMark 给）。
+//   装进一张撑到页底的纸张卡片；“图片”“拍照”和“文档请在电脑上加…”在底部浮动工具条；“⋯”36 圆形浅底；隐私记返回带小锁（来源的 text.backMark 给）。
 //   电脑抽屉照旧（没有卡片和工具条，“图片”“拍照”在图下面）
 // • 插图（S3，NOTE_ED）：正文下面一张张 16:10 的图（ui/NoteImages.tsx）；插入、上传失败的提示出在保存状态下面，
 //   空间满了的带“最近删除”入口。电脑抽屉里上传失败的提示由随手记页出（不出两遍）；只读行（off）时“图片”“拍照”和图上的按钮一起禁用
@@ -19,6 +19,7 @@
 //   “⋯”里多一项“移出隐私记”；后台没保存上时状态行下面出“没保存上 · 重试”（NotesBits 的 SyncLine）
 import { Suspense, useCallback, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
+import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { DrawerClose, useInDrawer } from '../../../kit/components/DetailDrawer.tsx';
 import { DeletedNotice, ReadonlyNotice, useEditStatus, useEditT } from '../../../kit/components/EditNotices.tsx';
 import { TextArea } from '../../../kit/components/Form.tsx';
@@ -33,7 +34,6 @@ import { useNotesT } from '../hooks/useNotesT.ts';
 import chip from '../../../kit/components/Chip.module.css';
 import { AttPhoneHint } from '../../attachments/index.ts';
 import styles from './NoteEditPage.module.css';
-import imgStyles from './NoteImages.module.css';
 import { EditorImageList, EditorPicks, useEditorImages, type EditorImgs } from './NoteImages.tsx';
 import { SyncLine } from './NotesBits.tsx';
 
@@ -41,15 +41,15 @@ const NONE = '';
 /** 正文停笔多久存一次 */
 export const BODY_IDLE_MS = 800;
 
-/** 手机整页编辑器（#/note/<id>、#/note/new；隐私记 #/vault/<id>、#/vault/new）；backMark：“‹”和返回文字中间的小图标（隐私记页给小锁） */
-export default function NoteEditPage({ backMark }: { backMark?: ReactNode }) {
+/** 手机整页编辑器（#/note/<id>、#/note/new；隐私记 #/vault/<id>、#/vault/new） */
+export default function NoteEditPage() {
   // 新建保存后地址换成这一条的 id，编辑器不重挂（同待办编辑页）
   const { id, key, onCreated } = useEditRoute(useNoteSource().route.edit);
-  return <NoteEditor key={key} id={id} onCreated={onCreated} backMark={backMark} />;
+  return <NoteEditor key={key} id={id} onCreated={onCreated} />;
 }
 
 /** 整页和电脑详情抽屉共用；在不在抽屉里看 kit 的 useInDrawer（抽屉给的是关抽屉的函数，“×”用） */
-export function NoteEditor({ id, onCreated, backMark }: { id: string; onCreated?(id: string): void; backMark?: ReactNode }) {
+export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: string): void }) {
   const close = useInDrawer();
   const drawer = close !== null;
   // 编辑器挂着期间占住升级中心的 busy：不出版本横幅、不自动重新载入（同 kit EditShell）；抽屉里由 DetailDrawer 按焦点占（B6 独立评审第 12 条）
@@ -81,17 +81,13 @@ export function NoteEditor({ id, onCreated, backMark }: { id: string; onCreated?
   const head: ReactNode = (
     <>
       <div className={styles.top}>
-        {drawer ? null : (
-          <Pressable className={styles.back} onClick={back} data-testid="edit-back">
-            {backMark ? <>{'‹ '}{backMark}{backText}</> : `‹ ${backText}`}
-          </Pressable>
-        )}
+        {drawer ? null : <BackLink label={backText} mark={text?.backMark} onBack={back} testId="edit-back" />}
         <CatChip
           value={form.category_id}
           options={ed.categories}
           ai={ed.ai}
           disabled={off}
-          muted={readonly}
+          muted={off}
           drawer={drawer}
           onChange={(v) => change({ category_id: v })}
         />
@@ -108,7 +104,7 @@ export function NoteEditor({ id, onCreated, backMark }: { id: string; onCreated?
           }
         >
           <Pressable
-            className={styles.menuItem}
+            className={`${styles.menuItem} ${styles.danger}`}
             onClick={() => {
               setMenu(false);
               void ed.setDeleted(true);
@@ -123,6 +119,7 @@ export function NoteEditor({ id, onCreated, backMark }: { id: string; onCreated?
               className={styles.menuItem}
               onClick={() => {
                 setMenu(false);
+                setOutFail(false);
                 void moveOut(noteId).then((r) => (r === 'ok' ? (close ?? back)() : setOutFail(r === 'failed')));
               }}
               data-testid="note-edit-move-out"
@@ -174,7 +171,7 @@ export function NoteEditor({ id, onCreated, backMark }: { id: string; onCreated?
       <TextArea
         autoGrow
         idleMs={BODY_IDLE_MS}
-        className={styles.body}
+        className={img.im.items.length ? `${styles.body} ${styles.bodyShort}` : styles.body}
         value={form.body}
         maxLength={BODY_MAX}
         disabled={off}
@@ -186,7 +183,7 @@ export function NoteEditor({ id, onCreated, backMark }: { id: string; onCreated?
       <EditorImageList ed={img} disabled={off} msgClass={styles.notice} picks={drawer} />
       {/* 附件（B4b-1，线框 sAtt）：懒加载，插图区下面；拖进来、粘贴进来的图片照插图插进这一条 */}
       <Suspense fallback={null}>
-        <Attachments noteId={noteId} disabled={off || ed.deleted} onImages={onImages} />
+        <Attachments noteId={noteId} disabled={off} onImages={onImages} />
       </Suspense>
     </>
   );
@@ -211,9 +208,9 @@ export function NoteEditor({ id, onCreated, backMark }: { id: string; onCreated?
 function EditDock({ img, disabled }: { img: EditorImgs; disabled: boolean }) {
   return (
     <div className={styles.dock} data-testid="note-edit-dock">
-      <EditorPicks ed={img} disabled={disabled} className={imgStyles.tb} />
+      <EditorPicks ed={img} disabled={disabled} className={styles.tb} />
       <Suspense fallback={null}>
-        <AttPhoneHint className={styles.dockHint} />
+        <AttPhoneHint hint className={styles.dockHint} />
       </Suspense>
     </div>
   );

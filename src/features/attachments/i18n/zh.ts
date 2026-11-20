@@ -5,7 +5,9 @@ export const zh = {
   'att.list': '附件',
   'att.add': '加附件',
   'att.addOffline': '加附件需要联网',
-  'att.phoneOnly': '文档请在电脑上加。手机上可以看、预览、下载。',
+  // 手机提示分两句，编辑页底部工具条上分两行显示（记录页美化方向 A）
+  'att.phoneOnly1': '文档请在电脑上加。',
+  'att.phoneOnly2': '手机上可以看、预览、下载。',
   'att.more': '{name} 的更多操作',
   'att.preview': '预览',
   'att.download': '下载',

@@ -69,7 +69,7 @@ function useFilePick(onFile: (f: File) => unknown, mode: 'many' | 'one' | 'camer
   return [input, () => ref.current?.click()];
 }
 
-/** “图片”“拍照”两个按钮；className 给按钮（输入行沿用 .img 的 40 × 40 灰圆，只有图标；编辑页底部工具条的 labeled 带字）；
+/** “图片”“拍照”两个按钮；className 给按钮（输入行沿用 .img 的 40 × 40 灰圆，只有图标；编辑页底部工具条的 labeled 带字）；只有图标时才加 aria-label（带字的读屏直接读字）；
  *  不给时是电脑抽屉里的 kit 胶囊（Chip.module.css .chip，R-436 丁批，不再照抄一份胶囊样式） */
 export function PickButtons({ onFile, disabled, className, labeled = !className, idPrefix, camera = true }: { onFile(f: File): unknown; disabled?: boolean; className?: string | undefined; labeled?: boolean; idPrefix: string; camera?: boolean }) {
   const t = useNotesT();
@@ -78,12 +78,12 @@ export function PickButtons({ onFile, disabled, className, labeled = !className,
   const cls = className ?? chip.chip;
   return (
     <>
-      <Pressable type="button" className={cls} onClick={pick} disabled={disabled} aria-label={t('notes.img', {})} data-testid={`${idPrefix}-img`}>
+      <Pressable type="button" className={cls} onClick={pick} disabled={disabled} {...(labeled ? {} : { 'aria-label': t('notes.img', {}) })} data-testid={`${idPrefix}-img`}>
         <ImgIcon />
         {labeled ? <span>{t('notes.img', {})}</span> : null}
       </Pressable>
       {camera ? (
-        <Pressable type="button" className={cls} onClick={cam} disabled={disabled} aria-label={t('notes.camera', {})} data-testid={`${idPrefix}-camera`}>
+        <Pressable type="button" className={cls} onClick={cam} disabled={disabled} {...(labeled ? {} : { 'aria-label': t('notes.camera', {}) })} data-testid={`${idPrefix}-camera`}>
           <CameraIcon />
           {labeled ? <span>{t('notes.camera', {})}</span> : null}
         </Pressable>
@@ -266,7 +266,7 @@ export function EditorImageList({ ed, disabled, msgClass, picks }: { ed: EditorI
   return (
     <>
       {ed.msg ? <ImgMsgLine className={msgClass} msg={ed.msg} /> : null}
-      <div className={styles.box} data-testid="note-images" data-images={im.items.length ? '1' : '0'}>
+      <div className={styles.box} data-testid="note-images">
         {im.items.length ? (
           <ul className={styles.list} aria-label={t('notes.img.list', {})}>
             {im.items.map(({ img, pending }, i) => (

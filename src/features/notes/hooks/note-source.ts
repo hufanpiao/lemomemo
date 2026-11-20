@@ -8,7 +8,7 @@
 //   （用哪一套分类 useCategoryRows / useNoteList、页面的 data-feature 和 testid），不拿来开关界面（独立评审 11-20 第 1 条）
 // • 放在 hooks 不放 data：类型里有 React 组件（附件区），data 层不准 import React（A1）
 import type { OrderKey } from '../../../../shared/logic/sort-key.ts';
-import { createContext, useContext, type ComponentType, type RefObject } from 'react';
+import { createContext, useContext, type ComponentType, type ReactNode, type RefObject } from 'react';
 import type { ActionResult } from '../../../core/action-result.ts';
 import type { SaveOutcome } from '../../../core/edit-save.ts';
 import type { EditIo } from '../../../kit/hooks/useEditRecord.ts';
@@ -84,6 +84,8 @@ export interface NoteSourceText {
   empty: string;
   /** 编辑页左上角“‹ …” */
   back: string;
+  /** 返回里“‹”和文字中间的小图标（隐私记给线框小锁，记录页美化方向 A）；没有就不给 */
+  backMark?: ReactNode;
   /** 列表上方“最近删除”入口的字 */
   trash: string;
 }

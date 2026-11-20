@@ -162,36 +162,6 @@
   height: 16px;
 }
 
-/* 手机编辑页底部工具条里的“图片”“拍照”（记录页美化方向 A，负责人 11-20 选定）：透明底、图标 18 + 14px 字，点按区高 44；
-   工具条本身在 NoteEditPage.module.css .dock。两个按钮之间不加间距，第二个右边让出 6 再接竖线 */
-.tb {
-  display: inline-flex;
-  flex: none;
-  gap: 6px;
-  align-items: center;
-  height: var(--hit);
-  padding: 0 12px;
-  border: 0;
-  border-radius: 22px;
-  background: none;
-  color: var(--text);
-  font-size: var(--fs-14);
-}
-
-.tb + .tb {
-  margin-right: 6px;
-}
-
-.tb .ic {
-  width: 18px;
-  height: 18px;
-}
-
-/* 新建还没存上、只读行时按不了：和 kit 胶囊禁用一样变淡 */
-.tb:disabled {
-  opacity: var(--disabled-dim);
-}
-
 /* 输入行上待记下的图（R-416）：在输入行正上方的外框里（NotesPage.module.css .above，位置跟着输入行），横排、放不下就换一行（往上长）。
    不横滑：overflow 会把小图的阴影切成硬边灰框（11-13 e2e 截图看出）。小图 56 × 56，右上角“×”看得见 24、点按区 44 整块落在小图里面（不被圆角裁掉） */
 .pend {

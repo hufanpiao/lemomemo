@@ -17,6 +17,13 @@
   cursor: pointer;
 }
 
+/* 带小图标（mark）：“‹”、图标、文字横排，各隔 4（记录页美化方向 A 的 .back） */
+.marked {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
 .back::after {
   content: '';
   position: absolute;

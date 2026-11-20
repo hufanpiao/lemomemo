@@ -17,10 +17,10 @@ export const NoteAttachments = lazy(() => import('./ui/NoteAttachments.tsx'));
 export const VaultAttachments = lazy(() => import('./ui/VaultAttachments.tsx'));
 
 /**
- * 手机、窄窗口的“文档请在电脑上加。手机上可以看、预览、下载。”（第一句后换行，电脑布局不出东西）：随手记、隐私记手机编辑页底部工具条右侧挂（记录页美化方向 A）。
- * props: { className?: 外观由挂它的地方给 }
+ * 手机、窄窗口的“文档请在电脑上加。/ 手机上可以看、预览、下载。”（两行，电脑布局不出东西）：随手记、隐私记手机编辑页底部工具条右侧挂（记录页美化方向 A）。
+ * 和 NoteAttachments 是同一个懒加载块（同一个模块，带 hint 时只画提示），不另占分包。props: { hint: true; className: 外观由挂它的地方给 }
  */
-export const AttPhoneHint = lazy(() => import('./ui/AttPhoneHint.tsx'));
+export const AttPhoneHint = lazy(() => import('./ui/NoteAttachments.tsx'));
 
 /**
  * 随手记编辑器里一张图下面的识别状态（B4b-2 识图，线框 sAIst 第二屏）：识图中 / 没识别 +“重新识别” / 没交给 AI +“去打开”；识别好了不出东西。

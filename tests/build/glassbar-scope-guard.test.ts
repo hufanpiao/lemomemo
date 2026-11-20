@@ -52,7 +52,7 @@ const PINNED: Record<string, string> = {
   'src/kit/components/GlassBar/GlassBarFx.tsx': '2cd1d04f069b8e10829389ca87e8b647678ba4c0057c1fb42dc777e342d75b0c',
   'src/kit/components/GlassBar/GlassBarFx.module.css': '3a7f59ede916fe65267888adbf53c60f622ba0e56d5c2b079d9665ad01b8dca3',
   'src/motion/glass-ghost.ts': '6211d651c7439b5aa35d8f755f33327b71213e68aa6c26e404b503ea25da701a',
-  'src/styles/base.css': 'bb669b2146c1ef4d625856d74b4bc99c2e7445a75e3de6a51e46dfac6d45142f',
+  'src/styles/base.css': 'd69706cdf45135da8e0039b3c19f626c05b72478beb614f010ee8e6319949656',
 };
 
 const sha256 = (rel: string): string => createHash('sha256').update(readFileSync(join(ROOT, rel))).digest('hex');
@@ -61,6 +61,8 @@ const sha256 = (rel: string): string => createHash('sha256').update(readFileSync
 //   底栏、“＋”的规则一行没动，静止画面不变（原来 8 个组件各写一份 user-select:none，统一以后删掉）。
 // • 11-20 负责人：“所有点击进入下一页……画面都黑一下”，弹窗选“新页从右滑进盖住”，本提交：base.css 整页过渡由先淡出再淡入改成推入、推出（lemo-push-*、lemo-pop-*），
 //   只有一边有底栏或“＋”时，它们的快照跟着自己那一页滑（进页旧那份边退边淡、返回新那份 60% 后淡入）；底栏、“＋”元素本身的规则一行没动，静止画面不变。
+// • 11-20 记录页美化方向 A（负责人 11-20“记录页美化方案用A”；独立评审第 1 条，主持人核过）：base.css 在窄屏加 :root[data-nobar] 把 --dock-lift 设成 6px，
+//   没有底栏的页（App 按 tab-of.ts 写 data-nobar）贴底浮条落到离底 安全区 + 6；底栏、“＋”元素本身的规则一行没动，有底栏的页静止画面不变。
 describe('B3 Q3 守门第 4 条：底栏外观文件不许改（R-352 ④）', () => {
   it('src/motion/glass-*.ts 正好是钉住的那几个：不许多、不许少', () => {
     const now = readdirSync(join(ROOT, 'src/motion'))

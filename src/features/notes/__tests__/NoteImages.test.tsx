@@ -29,8 +29,11 @@ describe('选图按钮（主持人定 3；视觉验收必改 4）', () => {
     expect(screen.getByTestId('notes-img-input').hasAttribute('multiple')).toBe(true);
     v.unmount();
     open(`#/note/${uid(1)}`);
-    expect(screen.getByTestId('note-edit-img').getAttribute('aria-label')).toBe('图片');
-    expect(screen.getByTestId('note-edit-camera').getAttribute('aria-label')).toBe('拍照');
+    // 编辑器里的带字（记录页美化方向 A 底部工具条）：读屏直接读字，不另加 aria-label（独立评审第 13 条）
+    expect(screen.getByTestId('note-edit-img').hasAttribute('aria-label')).toBe(false);
+    expect(screen.getByTestId('note-edit-img').textContent).toBe('图片');
+    expect(screen.getByTestId('note-edit-camera').hasAttribute('aria-label')).toBe(false);
+    expect(screen.getByTestId('note-edit-camera').textContent).toBe('拍照');
     expect(screen.getByTestId('note-edit-camera-input').getAttribute('accept')).toBe('image/*');
     expect(screen.getByTestId('note-edit-camera-input').getAttribute('capture')).toBe('environment');
     expect(screen.getByTestId('note-edit-img-input').hasAttribute('multiple')).toBe(true);

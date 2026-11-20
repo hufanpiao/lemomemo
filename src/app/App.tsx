@@ -16,7 +16,7 @@
 //   冷启动慢过 15 秒长兜底），就另外等 App 自己的页面 <main> 出现，再等空闲。理由：只写注释的话，提醒分包会和今天页分包抢下载，
 //   今天页还没画出来时到点的按钮条可能先出现在空白屏上（启动画面早已收起）；改在 App 里等 root-paint 的 whenPage，不动首屏判断和告知页，
 //   同步、supabase-js 的时机不变。页面一直不出来照样有 5 秒硬上限
-import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { getBoot, type BootResult } from '../core/boot.ts';
 import { RemindHost } from '../features/reminders/index.ts';
 import { GlassBar } from '../kit/components/GlassBar/GlassBar.tsx';
@@ -143,6 +143,11 @@ function TabBar({ route, sub }: { route: RouteName; sub: string }) {
     if (bar) lastBar.current = bar;
   });
   const shownBar = bar ?? (plus ? lastBar.current : null);
+  // 这一页底下没有底栏（编辑页、设置……）：根节点标 data-nobar，贴底浮条（--dock-bottom）由 base.css 落到离底 安全区 + 6，不再悬在底栏的位置
+  const nobar = shownBar === null;
+  useLayoutEffect(() => {
+    document.documentElement.toggleAttribute('data-nobar', nobar);
+  }, [nobar]);
   if (!shownBar || !paged) return null;
   const { tab, add, hold } = shownBar;
   if (add === null) return <GlassBar active={tab} later={afterAppPainted} />;

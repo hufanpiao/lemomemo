@@ -1,13 +1,14 @@
 // 隐私记页面（B5 S5、S6、S9；定稿线框 s9 PRIVLIST；代定 D14）：#/vault（首页）、#/vault/c/<分类 id|all>（列表）、#/vault/new、#/vault/<id>（编辑）、#/vault/trash（自己的“最近删除”）
 // • 负责人 11-19 晚“隐私记里面做成跟随手记一样，现在的有点鸡肋”（弹窗选“去掉宫格，整页照随手记”“分类自己一套”“锁着保留甲”）：
 //   解锁后 #/vault 就是随手记那一页（输入行、分类胶囊、整条列表、拖到胶囊归类），原来的分类宫格首页删掉；#/vault/c/<分类> 是筛着某一类，点胶囊原地换地址；
-//   锁着时这一页就是 Unlock.tsx 的 LockedPage（解锁卡整页居中、自带顶栏；不是遮罩，底栏照常能点）
+//   锁着时这一页就是 Unlock.tsx 的 LockedPage（解锁卡整页居中、自带顶栏；不是遮罩）：列表、最近删除的地址上底栏照常能点；
+//   记录页（#/vault/new、#/vault/<id>）照方案 A 没有底栏，锁着时点顶栏的取消离开
 // • 列表、编辑器、电脑分栏、插图、看图页是随手记那一份（notes 的 NotesSurface + hooks/vault-note-source.ts 的隐私记来源；B5 隐私记重写 11-15，
 //   主持人定稿“隐私记页面按照随手记的样子全部重写”）：停笔自动存、读写只碰内存仓库，后台队列去发；“最近删除”是 ./VaultTrash.tsx
 // • 状态：查状态中 → 断网（要联网才能打开，TC-B5-33）/ 没设过密码（设密码）/ 锁着（锁着页；令牌过期等解锁 waiting 时 phase 也是 locked，同一页）/ 已解锁（内容）
 // • 已解锁：顶栏“‹ 随手记 | 🔒 隐私记 | 立即锁上”，下面一条“已解锁 · 离开隐私记或 App 1 分钟自动锁上…”；Ctrl+L 立即上锁
-// • 底栏照常（随手记页签），“＋”只在隐私记里新记（D14）：列表页由随手记的输入行自己登记 notesInput（新记的进隐私记来源）；
-//   编辑页、最近删除没有输入行，这里往 kit/state/new-item.ts 的 notesInput 登记成打开隐私记的新建页
+// • 底栏（随手记页签）在列表和最近删除上照常，记录页没有（app/tab-of.ts）；“＋”只在隐私记里新记（D14）：列表页由随手记的输入行自己登记 notesInput（新记的进隐私记来源）；
+//   最近删除没有输入行，这里往 kit/state/new-item.ts 的 notesInput 登记成打开隐私记的新建页
 // • 网络回来（online）：没保存上的再发一次
 // • 挂上、卸下报给会话（useVaultPresence）：离开隐私记页满自动上锁时长就锁（负责人 11-15“离开隐私记页 1 分钟不自动上锁”）
 // • 不建液态玻璃副本、底栏和“＋”实色：挂着时经 platform/look.ts 的 holdReducedTransparency 让 <html data-rt="1">（同“减少透明效果”，
@@ -28,7 +29,7 @@ import { rlog } from '../../../platform/run-log-api.ts';
 import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultPresence, useVaultStatus } from '../hooks/useVault.ts';
 import { useVaultNoteSource } from '../hooks/vault-note-source.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
-import { LockIcon, LockLineIcon } from './Pin.tsx';
+import { LineLock, LockIcon } from './Pin.tsx';
 import { SetupPin } from './SetupPin.tsx';
 import { LockedPage, UnlockPanel } from './Unlock.tsx';
 import { VaultTrash } from './VaultTrash.tsx';
@@ -63,12 +64,12 @@ export default function VaultPage() {
     },
   });
   useLayoutEffect(() => {
-    if (!sub || inList) return undefined;
+    if (sub !== 'trash') return undefined;
     notesInput.focus = () => void navigate('vault', 'new');
     return () => {
       notesInput.focus = undefined;
     };
-  }, [sub, inList]);
+  }, [sub]);
   useEffect(() => {
     const again = (): void => s.queue.retryAll();
     window.addEventListener('online', again);
@@ -164,14 +165,17 @@ function VaultTop({ unlocked, trash = null, name = null }: { unlocked: boolean; 
   );
 }
 
+/** 记录页返回“‹ 🔒 隐私记”的线框小锁（记录页美化方向 A），经来源的 text.backMark 给编辑页 */
+const BACK_LOCK = <LineLock kind="closed" size={14} />;
+
 /** 解锁后：随手记的整套界面换成隐私记来源（负责人 11-19 晚“做成跟随手记一样”）；列表页顶上是隐私记的顶栏、提示（下面的“最近删除”入口是随手记列表那一份，按来源去 #/vault/trash）；
  *  地址就是筛选：#/vault 是全部，点胶囊原地换成 #/vault/c/<分类|all>，分类没了换回 all（独立评审 11-19 中 2） */
 function VaultSurface({ editing, cat }: { editing: boolean; cat: string }) {
-  const source = useVaultNoteSource();
+  const source = useVaultNoteSource(BACK_LOCK);
   // 换筛选是同一页里换参数（同随手记点胶囊）：不播换页过渡。原来用 replaceRoute 带 View Transition，删掉正筛着的分类时地址换回 all 的过渡和弹窗退场撞上，
   // WebKit 页面直接崩（e2e“隐私记照随手记”稳定复现；先切回全部再删就不崩）
   const ctl = useMemo<CategoryCtl>(() => ({ value: cat === 'all' ? null : cat, set: (id) => void replaceInPage('vault', 'c', id ?? 'all') }), [cat]);
-  return <NotesSurface source={source} editing={editing} head={(trash, name) => <VaultHead trash={trash} name={name} />} cat={ctl} backMark={<LockLineIcon />} />;
+  return <NotesSurface source={source} editing={editing} head={(trash, name) => <VaultHead trash={trash} name={name} />} cat={ctl} />;
 }
 
 /** trash：随手记列表给的“最近删除”图标（R-438，手机版放进顶栏右边、“立即锁上”左边；电脑版是 null） */
@@ -183,10 +187,7 @@ function VaultHead({ trash, name }: { trash: ReactNode; name: string | null }) {
       <VaultTop unlocked trash={trash} name={name} />
       {/* R-452 V2（负责人 11-17 选）：去掉底色，顶栏下一行灰色小字，前面一个开锁小图标；文案改成“这里记的只进隐私记” */}
       <p className={styles.hint} data-testid="vault-hint">
-        <svg className={styles.hintIc} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <rect x="5" y="11" width="14" height="10" rx="2" />
-          <path d="M8 11V8a4 4 0 0 1 7.6-1.7" />
-        </svg>
+        <LineLock kind="open" size={12} />
         <span><NumIn text={t('vault.unlockedHint', { n: min })} num={String(min)} /></span>
       </p>
     </div>
