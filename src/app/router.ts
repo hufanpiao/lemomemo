@@ -37,6 +37,48 @@ export interface Route {
 
 export const DEFAULT_ROUTE: Route = { name: 'today', params: [] };
 
+// ───────── 路由层级表（全 app 改善报告第三节第 6 块，11-20）─────────
+// 每个路由一行：显示底栏时归哪个页签、“＋”新建什么；是不是主页面；直接打开时左边缘往右划回哪一层。
+// 都从这一张推出来、别处不再另写：清不清返回栈（writeEntry）、底栏和页签互切方向（tab-of.ts 的 tabBarFor、tabDir）、
+// 横滑（tab-swipe.ts：主页面切页签、别的页回父级）。加页面只加一行；Record 要写全，漏一行类型检查就报
+// （原来散在 ROOTS、MAIN_TABS、MAIN、PARENT、TAB_OF、ADD_OF 等六处，纪念日漏登记过一处“左右滑都不响应”）
+/** 底栏四个页签（顺序在 kit 的 GlassBar/tabs.ts） */
+export type TabName = 'today' | 'calendar' | 'todos' | 'notes';
+export interface Level {
+  /** 显示底栏：选中哪个页签、“＋”新建什么；subs：只有路径第一段是这几个时才显示（隐私记的记录页不显示）；hold: false 不能按住“＋”说话 */
+  bar?: { tab: TabName; add: 'event' | 'todo' | 'note' | 'anniv'; subs?: readonly string[]; hold?: false };
+  /** 主页面（页签的根，要有 bar）：能左右划切页签、右边往左划进设置，到这里清空返回栈。'bare' 只算不带参数的（纪念日列表算，编辑层不算） */
+  main?: 'any' | 'bare';
+  /** 不是主页面、返回栈空（直接打开）时左边缘往右划回哪一层；不写的不动 */
+  up?: RouteName | ((params: readonly string[]) => RouteName);
+}
+export const LEVELS: Record<RouteName, Level> = {
+  today: { bar: { tab: 'today', add: 'event' }, main: 'any' },
+  calendar: { bar: { tab: 'calendar', add: 'event' }, main: 'any' },
+  cal: { bar: { tab: 'calendar', add: 'event' }, main: 'any' },
+  todos: { bar: { tab: 'todos', add: 'todo' }, main: 'any' },
+  notes: { bar: { tab: 'notes', add: 'note' }, main: 'any' },
+  // 纪念日（负责人 11-14“按+默认新建纪念日”、11-20“纪念日页面没办法左滑跟右滑”）：列表是日历页签的主页面，编辑层 #/anniv/<id> 栈空回列表
+  anniv: { bar: { tab: 'calendar', add: 'anniv', hold: false }, main: 'bare', up: 'anniv' },
+  // 隐私记（B5 D14）归随手记页签；记录页 #/vault/new、#/vault/<id> 不显示底栏（11-20 记录页方向 A）；按住不录音（录下的会进普通随手记）
+  vault: { bar: { tab: 'notes', add: 'note', subs: ['', 'c', 'trash'], hold: false }, up: 'notes' },
+  todo: { up: 'todos' },
+  event: { up: 'calendar' },
+  note: { up: 'notes' },
+  remind: { up: 'today' },
+  // 设置子页回设置首页，设置首页回今天
+  settings: { up: (p) => (p.length > 0 ? 'settings' : 'today') },
+  trash: {},
+  onboarding: {},
+  'dev-csp': {},
+};
+
+/** 这一页是哪个页签的主页面（能左右划切页签、右边往左划进设置、到这里清空返回栈）；不是主页面回 null */
+export function mainTabOf(r: Route): TabName | null {
+  const l = LEVELS[r.name];
+  return l.main === 'any' || (l.main === 'bare' && r.params.length === 0) ? (l.bar?.tab ?? null) : null;
+}
+
 const isRouteName = (s: string): s is RouteName => (ROUTE_NAMES as readonly string[]).includes(s);
 
 /** '#/notes/abc' → {name: 'notes', params: ['abc']}；认不出来的回今天页 */
@@ -64,9 +106,8 @@ const listeners = new Set<() => void>();
 // App 从不调 pushState，浏览器历史永远只有一条：iOS 主屏幕版只要历史里留着“前进”那一条，右边缘往左划就被系统抢去播旧截图
 // （负责人运行日志 t=7.50 down x=431 → 7.53 pointercancel → 7.60 route #/todo，网页挡不住），所以干脆不给它留。
 // 上一页记在这一条历史自己的 history.state.lemoStack 里（地址数组，上一页在最后）：刷新、iOS 恢复后都还在。
-// 进页面（goHref）把当前地址压进栈、原地换；返回（goBack）弹出栈顶、原地换回去；到四个主页面（含翻过月的日历）一律清空，主页面是根
+// 进页面（goHref）把当前地址压进栈、原地换；返回（goBack）弹出栈顶、原地换回去；到主页面（LEVELS 的 main：四个页签页、翻过月的日历、纪念日列表）一律清空，主页面是根
 const KEY = 'lemoStack';
-const ROOTS: ReadonlySet<string> = new Set(['today', 'calendar', 'cal', 'todos', 'notes']);
 
 /** 当前这条历史记的返回栈（上一页在最后）；不是数组、混了别的东西都当没有 */
 export function stackOf(): string[] {
@@ -77,7 +118,7 @@ export function stackOf(): string[] {
 
 /** 原地写地址和返回栈（App 里换地址的唯一出口；最多记 50 层） */
 export function writeEntry(href: string, stack: readonly string[] = stackOf()): void {
-  window.history.replaceState({ [KEY]: ROOTS.has(parseHash(href).name) ? [] : stack.slice(-50) }, '', href);
+  window.history.replaceState({ [KEY]: mainTabOf(parseHash(href)) ? [] : stack.slice(-50) }, '', href);
 }
 
 function notifyAll(): void {
@@ -263,15 +304,12 @@ export function plainClick(e: Pick<MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey
   return true;
 }
 
-/** 四个主页面（底栏页签）：它们之间互切一律原地换 */
-const MAIN_TABS: ReadonlySet<RouteName> = new Set<RouteName>(['today', 'calendar', 'todos', 'notes']);
-
 /**
  * 底栏页签、左右两边横滑切页（app/tab-swipe.ts）：四个主页面之间一律原地换，不压栈（主页面是根，到了就清空栈）。
  * 负责人 11-18 推翻 R-372 ①“其他页左滑回今天”：“之前左滑是回到主页，4个页面切换只在退回到主页面时来回切”。
  * 设置（右上头像）照旧：从今天进压栈，从别的页签进原地换
  */
-export function navigateTab(name: RouteName): void {
-  if (MAIN_TABS.has(name)) void replaceRoute(name);
+export function navigateTab(name: TabName | 'settings'): void {
+  if (name !== 'settings') void replaceRoute(name);
   else void (parseHash(window.location.hash).name === 'today' ? navigate : replaceRoute)(name);
 }

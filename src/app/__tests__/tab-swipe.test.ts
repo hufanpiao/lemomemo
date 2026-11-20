@@ -14,8 +14,8 @@ vi.mock('../router.ts', async (orig) => ({
 }));
 
 import { SIDE_PX } from '../../motion/gestures.ts';
-import { parseHash } from '../router.ts';
-import { blockedAt, installTabSwipe, isEdgeBack, mainTabOf, parentOf, swipeTarget, SWIPE_MAX_MS, SWIPE_MIN_PX } from '../tab-swipe.ts';
+import { mainTabOf, parseHash } from '../router.ts';
+import { blockedAt, installTabSwipe, isEdgeBack, parentOf, swipeTarget, SWIPE_MAX_MS, SWIPE_MIN_PX } from '../tab-swipe.ts';
 
 describe('swipeTarget：主页面上划完去哪', () => {
   it('左边那条往右划（负责人说的“左滑”）去下一个：今天 → 日历 → 待办 → 随手记 → 今天；右边那条往左划进设置', () => {
@@ -23,15 +23,15 @@ describe('swipeTarget：主页面上划完去哪', () => {
     expect(swipeTarget('calendar', 'l', 80, 0, 200)).toBe('todos');
     expect(swipeTarget('todos', 'l', 80, 0, 200)).toBe('notes');
     expect(swipeTarget('notes', 'l', 80, 0, 200), '随手记往下一个回到今天').toBe('today');
-    for (const r of ['today', 'calendar', 'cal', 'todos', 'notes']) expect(swipeTarget(r, 'r', -80, 0, 200), `${r} 右边往左划进设置（负责人 11-19）`).toBe('settings');
+    for (const r of ['today', 'calendar', 'todos', 'notes'] as const) expect(swipeTarget(r, 'r', -80, 0, 200), `${r} 右边往左划进设置（负责人 11-19）`).toBe('settings');
   });
   it('方向不对（右边那条往右划、左边那条往左划）不切', () => {
     expect(swipeTarget('today', 'r', 80, 0, 200)).toBeNull();
     expect(swipeTarget('today', 'l', -80, 0, 200)).toBeNull();
   });
-  it('不是主页面不切；日历翻过月（cal）还是日历主页面', () => {
-    for (const r of ['todo', 'settings', 'anniv', 'vault']) expect(swipeTarget(r, 'l', 80, 0, 200)).toBeNull();
-    expect(swipeTarget('cal', 'l', 80, 0, 200)).toBe('todos');
+  it('不是主页面不切（mainTabOf 回 null，installTabSwipe 走返回）；日历翻过月（cal）还是日历主页面', () => {
+    for (const h of ['#/todo/x', '#/settings', '#/anniv/a1', '#/vault']) expect(mainTabOf(parseHash(h)), h).toBeNull();
+    expect(mainTabOf(parseHash('#/cal/month/2026-11'))).toBe('calendar');
   });
   it('太短、太斜、太慢都不切', () => {
     expect(swipeTarget('today', 'r', -(SWIPE_MIN_PX - 1), 0, 200)).toBeNull();

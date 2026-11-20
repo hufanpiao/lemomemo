@@ -10,10 +10,10 @@
 //   可以从输入框上起手、焦点在输入框里也算（编辑页几乎总有焦点），不限时长；仍要横移 ≥ SWIPE_MIN_PX、够横；弹层开着不响应。
 // • 列表行左滑、月历翻月在这两条带里起手都不响应（hdrag.ts），所以不会一划两用；中间区域划动一律不管。
 // 运行日志：tabswipe side= dx= dy= ms= 之后是 to=页签|settings|back|up:父级 或 skip=原因（只记手势，不记内容）；中间区域起手、横移不到 SWIPE_MIN_PX 的不记
-import { TAB_ORDER, type TabName } from '../kit/components/GlassBar/tabs.ts';
+import { TAB_ORDER } from '../kit/components/GlassBar/tabs.ts';
 import { sideOf } from '../motion/gestures.ts';
 import { rlog } from '../platform/run-log-api.ts';
-import { canGoBack, goBack, navigate, navigateTab, parseHash, upTo, type Route, type RouteName } from './router.ts';
+import { canGoBack, goBack, LEVELS, mainTabOf, navigate, navigateTab, parseHash, upTo, type Route, type RouteName, type TabName } from './router.ts';
 
 // 页面顶部固定（R-488）和横划切页同是整页的触摸手势、同一时机装：App.tsx 从这一块一起拿，首屏 main 里少一个 import()（11-20 首屏预算）
 export { installTopLock } from '../platform/top-lock.ts';
@@ -26,26 +26,17 @@ export const SWIPE_MAX_MS = 500;
  */
 export const SWIPE_SLOPE = 1.25;
 
-/** 四个主页面各是哪个页签；日历翻过月（#/cal/month/…）还是日历主页面。纪念日、隐私记这些归页签的二级页不算 */
-const MAIN: Record<string, TabName> = { today: 'today', calendar: 'calendar', cal: 'calendar', todos: 'todos', notes: 'notes' };
-export const mainTab = (route: string): TabName | null => MAIN[route] ?? null;
-/**
- * 这一页算不算主页面（能左右划切页签、右边往左划进设置）：纪念日列表（#/anniv）显示底栏、归日历页签（tab-of.ts），也算；
- * 纪念日编辑层是同一个地址名带 id（#/anniv/<id>），不算，走返回（负责人 11-20“纪念日页面没办法左滑跟右滑”：原来 MAIN 里漏了纪念日，两边划都被跳过）
- */
-export const mainTabOf = (r: Route): TabName | null => (r.name === 'anniv' ? (r.params.length > 0 ? null : 'calendar') : mainTab(r.name));
+// 哪页是主页面（mainTabOf）、别的页回哪一层（parentOf）都照 router.ts 的路由层级表 LEVELS（日历翻过月、纪念日列表也是主页面；纪念日编辑层不是）
 
 /** 主页面上这一下划完做什么：去哪个页签、进设置 */
 export type SwipeMove = TabName | 'settings';
 
 /**
- * 主页面上这一下划完该去哪（纯函数）：side 是起手的那条带。左边那条只认往右划（去下一个），右边那条只认往左划（进设置）；
- * 不在四个主页面、方向不对、太短、太斜、太慢都回 null
+ * 主页面上这一下划完该去哪（纯函数）：tab 是这个主页面的页签（mainTabOf），side 是起手的那条带。左边那条只认往右划（去下一个），右边那条只认往左划（进设置）；
+ * 方向不对、太短、太斜、太慢都回 null
  */
-export function swipeTarget(route: string, side: 'l' | 'r', dx: number, dy: number, ms: number): SwipeMove | null {
+export function swipeTarget(tab: TabName, side: 'l' | 'r', dx: number, dy: number, ms: number): SwipeMove | null {
   if ((side === 'r' ? -dx : dx) < SWIPE_MIN_PX || Math.abs(dx) < SWIPE_SLOPE * Math.abs(dy) || ms > SWIPE_MAX_MS) return null;
-  const tab = mainTab(route);
-  if (tab === null) return null;
   if (side === 'r') return 'settings';
   return TAB_ORDER[(TAB_ORDER.indexOf(tab) + 1) % TAB_ORDER.length] ?? null;
 }
@@ -53,12 +44,11 @@ export function swipeTarget(route: string, side: 'l' | 'r', dx: number, dy: numb
 /** 别的页左边那条往右划算不算返回（R-487）：够长、够横，不限时长 */
 export const isEdgeBack = (side: 'l' | 'r', dx: number, dy: number): boolean => side === 'l' && dx >= SWIPE_MIN_PX && Math.abs(dx) >= SWIPE_SLOPE * Math.abs(dy);
 
-const PARENT: Partial<Record<RouteName, RouteName>> = { todo: 'todos', event: 'calendar', note: 'notes', vault: 'notes', remind: 'today' };
-/** 直接打开（返回栈空）时左边缘往右划回哪一页：设置子页回设置首页，设置首页回今天；没写的（最近删除……）不动 */
+/** 直接打开（返回栈空）时左边缘往右划回哪一页（LEVELS 的 up）：主页面是根、没有；没写的（最近删除……）不动 */
 export function parentOf(r: Route): RouteName | null {
-  if (r.name === 'settings') return r.params.length > 0 ? 'settings' : 'today';
-  if (r.name === 'anniv') return r.params.length > 0 ? 'anniv' : null; // 纪念日编辑层回列表；列表本身是主页面，不走这里
-  return PARENT[r.name] ?? null;
+  const up = LEVELS[r.name].up;
+  if (up === undefined || mainTabOf(r) !== null) return null;
+  return typeof up === 'function' ? up(r.params) : up;
 }
 
 const INPUT = 'input,textarea,select,[contenteditable]:not([contenteditable="false"])';
