@@ -209,6 +209,25 @@ describe('usePullReveal 手势', () => {
     expect(state()).toBe('open touch');
   });
 
+  it('页面已经滚走、那次 scroll 事件还没派发时，停稳计时到点不卸：等 scroll 事件来了淡到 0、再停稳才收（11-20 e2e webkit 慢帧下 0.5 直接卸掉）', () => {
+    render(<Host />);
+    drag(screen.getByTestId('in'), 0, PULL_OPEN_PX);
+    const head = (): HTMLElement => screen.getByTestId('pull-head');
+    scrollY = PULL_H / 2;
+    fireEvent.scroll(window);
+    expect(head().style.opacity).toBe('0.5');
+    // 滚到 300，但 scroll 事件要等下一帧，这期间上一次的停稳计时先到点
+    scrollY = 300;
+    act(() => vi.advanceTimersByTime(STILL_MS));
+    expect(state()).toBe('open touch');
+    expect(scrollBy).not.toHaveBeenCalled();
+    fireEvent.scroll(window);
+    expect(head().style.opacity).toBe('0');
+    act(() => vi.advanceTimersByTime(STILL_MS));
+    expect(state()).toBe('closed');
+    expect(scrollBy).toHaveBeenCalledWith(0, -PULL_H);
+  });
+
   it('overflow-y:auto 但内容不够高（不能滚）的框照样算页面本身', () => {
     render(<Host />);
     drag(screen.getByTestId('in-box'), 0, PULL_OPEN_PX + 4);
