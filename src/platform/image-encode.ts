@@ -19,9 +19,9 @@
 //   失败在哪一步（decode / load / px / enc）和错误名
 //   （只记 e.name，不记 message 和图片内容）。这里不写日志，由上传器把它和压图结果记成一行（image-uploader.ts）
 // • 依赖可注入（测试里 jsdom 没有 canvas）
-// 纯 TS：不准 import React（A1）
+// 纯 TS：不准 import React（A1）。也不引 env.ts（模块顶层读 import.meta.env）：e2e b4-image-encode 用 esbuild 把这份单独打成 IIFE 注入空白页，
+// 那里没有 import.meta.env，一引就在加载时抛错、整包导出全没了（11-21 低风险清理 f5004670 引了它，b4 两条全挂）
 import type { Tz } from '../../shared/core/tz.ts';
-import { errName as nameOfErr } from './env.ts';
 import { loadWebpWasm, NO_WASM, type RawPixels, type WebpEncode } from './webp-wasm.ts';
 import { EXIF_SCAN_BYTES, jpegTakenAt } from './image-exif.ts';
 
@@ -146,8 +146,8 @@ class Stop {
 }
 /** 错误名：只认对象上像标识符的 name（Error、DOMException、WebAssembly.CompileError 都是），别的一律 Unknown（不把 message、文件名之类带进日志） */
 function errName(e: unknown): string {
-  const name = nameOfErr(e);
-  return /^[A-Za-z][A-Za-z0-9]{0,39}$/.test(name) ? name : 'Unknown';
+  const name: unknown = typeof e === 'object' && e !== null ? (e as { name?: unknown }).name : undefined;
+  return typeof name === 'string' && /^[A-Za-z][A-Za-z0-9]{0,39}$/.test(name) ? name : 'Unknown';
 }
 const MIME_RE = /^[a-z]+\/[a-z0-9.+-]{1,40}$/;
 
