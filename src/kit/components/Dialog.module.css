@@ -20,7 +20,16 @@
   padding: 0 16px 16px;
 }
 
+/* backdrop="mist"（Dialog.tsx）：位置、层级照 .scrim，材质换成 Mist.module.css 的 .glass（输入时那层液态模糊）；
+   不写底色，免得和 .glass 的底色同权重抢。后面的页面不拖动由层栈的滚动锁管，和遮罩一样 */
+.mist {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+}
+
 /* 关闭途中（<Appear> 打 data-state="leaving"）：退出动画播完、卸载之前不接点按 */
+.mist[data-state="leaving"],
 .scrim[data-state="leaving"],
 .dock[data-state="leaving"] {
   pointer-events: none;

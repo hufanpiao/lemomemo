@@ -165,6 +165,35 @@ test('起名弹窗：键盘弹着时整块在键盘上面；起名框不让 iOS 
   expect((ok?.y ?? h) + (ok?.height ?? 0)).toBeLessThanOrEqual(h - KB);
 });
 
+// 负责人 11-20 截图（隐私记点“＋ 新分类”）：“这个背景色也弄成透明模糊，跟隐私记记录的输入框一样的背景模糊”“随手记也是一样”，选“后面整页模糊、卡片不变”：
+// 弹窗后面那层是输入时同一层液态模糊（kit Mist 的材质，16px），压在页面上面、弹窗卡片下面；隐私记页强制实色（data-rt="1"）时照样模糊
+test('新分类弹窗：后面整页是 16px 液态模糊，隐私记强制实色时也一样', async ({ page }) => {
+  await page.goto('/app/#/notes');
+  await page.getByTestId('notes').waitFor({ timeout: 30_000 });
+  await page.getByTestId('notes-filter-new').click();
+  await expect(page.getByTestId('cat-new-name')).toBeVisible();
+  const back = () =>
+    page.evaluate(() => {
+      // webkit 的不带前缀写法读出来是 none，要连带前缀的一起看
+      const fx = (e: Element) => `${getComputedStyle(e).backdropFilter} ${getComputedStyle(e).getPropertyValue('-webkit-backdrop-filter')}`;
+      const el = [...document.querySelectorAll<HTMLElement>('body *')].find((e) => /blur\(16px\)/.test(fx(e)));
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      const card = document.querySelector('[role="dialog"]');
+      const r = el.getBoundingClientRect();
+      return { pos: cs.position, full: r.width >= innerWidth && r.height >= innerHeight, z: Number(cs.zIndex), cardZ: Number(getComputedStyle(card!.parentElement!).zIndex), before: el.compareDocumentPosition(card!) & Node.DOCUMENT_POSITION_FOLLOWING, opacity: Number(cs.opacity) };
+    });
+  await expect.poll(async () => (await back())?.opacity ?? 0).toBe(1);
+  const b = await back();
+  expect(b?.pos).toBe('fixed');
+  expect(b?.full).toBe(true);
+  // 和弹窗同一层、在 DOM 里排在卡片前面：卡片画在它上面
+  expect(b?.z).toBe(b?.cardZ);
+  expect(b?.before).toBeTruthy();
+  await page.evaluate(() => document.documentElement.setAttribute('data-rt', '1'));
+  expect(await back(), '隐私记强制实色时后面那层也得是模糊').not.toBeNull();
+});
+
 test('分类里导入没分类的记录：勾选多条点“导入 N 条”，归进这一类、“导入”行跟着变', async ({ page }) => {
   const L1 = '0e2e0000-0000-4000-8000-000000043801';
   const L2 = '0e2e0000-0000-4000-8000-000000043802';

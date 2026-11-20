@@ -17,6 +17,7 @@ import { useRef, type ReactNode } from 'react';
 import { Appear } from '../../motion/components.ts';
 import { canFocus, giveBack, useLayer } from '../hooks/useLayer.ts';
 import styles from './Dialog.module.css';
+import mist from './Mist.module.css';
 
 export interface DialogProps {
   open: boolean;
@@ -32,9 +33,12 @@ export interface DialogProps {
   center?: boolean;
   /** 标题同一行右边放的东西（纪念日提醒弹层的“恢复默认”，视觉稿 annedit）。不传时渲染结果和原来一样 */
   aside?: ReactNode;
+  /** 后面那一层：不传是浅灰遮罩；'mist' 换成输入时那层液态模糊玻璃（材质直接用 Mist.module.css 的 .glass，不另写一份；进出场照旧 <Appear>）。
+      负责人 11-20 截图点“＋ 新分类”：“这个背景色也弄成透明模糊，跟隐私记记录的输入框一样的背景模糊”“随手记也是一样”，选“后面整页模糊、卡片不变”。目前只有新分类弹窗传 */
+  backdrop?: 'mist';
 }
 
-export function Dialog({ open, onOpenChange, title, description, children, returnFocus, lead, center, aside }: DialogProps) {
+export function Dialog({ open, onOpenChange, title, description, children, returnFocus, lead, center, aside, backdrop }: DialogProps) {
   const content = useRef<HTMLDivElement>(null);
   const layer = useLayer(open, {
     name: 'dialog',
@@ -54,7 +58,7 @@ export function Dialog({ open, onOpenChange, title, description, children, retur
   return (
     <RD.Root open={open} onOpenChange={onOpenChange}>
       <RD.Portal forceMount>
-        <Appear kind="scrim" show={open} className={styles.scrim}>
+        <Appear kind="scrim" show={open} className={backdrop === 'mist' ? `${mist.glass} ${styles.mist}` : styles.scrim}>
           {null}
         </Appear>
         <Appear kind="sheet" show={open} className={styles.dock}>

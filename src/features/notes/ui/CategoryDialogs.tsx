@@ -71,7 +71,8 @@ function NewCategoryDialog(p: { open: boolean; onClose(): void; create(name: str
   };
   return (
     // 建的过程中不许关（独立评审 11-19 中 10：关了以后结果回来照样跳进新分类）
-    <Dialog open={p.open} onOpenChange={(o) => (o || busy ? undefined : close())} title={t('notes.cat.newTitle', {})}>
+    // 后面整页换成输入时那层液态模糊（负责人 11-20：“这个背景色也弄成透明模糊，跟隐私记记录的输入框一样”“随手记也是一样”，选后面整页模糊、卡片不变）
+    <Dialog open={p.open} onOpenChange={(o) => (o || busy ? undefined : close())} title={t('notes.cat.newTitle', {})} backdrop="mist">
       <form
         className={styles.body}
         onSubmit={(e) => {

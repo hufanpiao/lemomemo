@@ -38,5 +38,6 @@ export function Mist({ onTap, tag, log, testId, className }: MistProps) {
       el.removeEventListener('wheel', stop);
     };
   }, []);
-  return <div ref={ref} className={className ? `${styles.mist} ${className}` : styles.mist} onClick={onTap} aria-hidden="true" data-testid={testId} />;
+  const cls = `${styles.glass} ${styles.mist}`;
+  return <div ref={ref} className={className ? `${cls} ${className}` : cls} onClick={onTap} aria-hidden="true" data-testid={testId} />;
 }
