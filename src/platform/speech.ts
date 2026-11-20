@@ -6,6 +6,7 @@
 // • 运行日志只记语言、字数、段数、毫秒、错误码，不记识别出的字
 import type { Locale } from '../../shared/i18n/i18n.ts';
 import { errTag } from './err-tag.ts';
+import { safeSet } from './local-store.ts';
 import { rlog } from './run-log-api.ts';
 
 /** stop() 以后等 end 事件最长多久（FA-3 整块评审第 2 条） */
@@ -18,13 +19,8 @@ export const SPEECH_STOP_WAIT_MS = 3000;
  * 有系统识别也悄悄只走录音、不出字（负责人 11-18：“语音输入正常，但是不出字”）；以前存在 localStorage 的那一份读的时候顺手清掉
  */
 const LIVE_OFF_KEY = 'lemo-live-speech-off';
-const dropOld = (): void => {
-  try {
-    localStorage.removeItem(LIVE_OFF_KEY);
-  } catch {
-    /* 清不了：本来也不再读它 */
-  }
-};
+/* 清不了：本来也不再读它 */
+const dropOld = (): void => void safeSet(LIVE_OFF_KEY, null);
 export function liveSpeechOn(store: Storage = sessionStorage): boolean {
   dropOld();
   try {

@@ -4,6 +4,7 @@
 // • 附件预览浮层读写、设置 › 数据 改或清掉（改回“先问”）。放 core：两个功能都要用，功能之间不互相引内部文件
 // 纯 TS：不准 import React（A1）
 import { MS_VAULT_PREF_KEY } from '../platform/exit-basics.ts';
+import { safeGet, safeSet } from '../platform/local-store.ts';
 
 export type MsScope = 'note' | 'vault';
 export type MsPref = 'yes' | 'no';
@@ -12,20 +13,11 @@ export type MsPref = 'yes' | 'no';
 export const MS_PREF_KEYS: Readonly<Record<MsScope, string>> = { note: 'att.ms_preview', vault: MS_VAULT_PREF_KEY };
 
 export function readMsPref(scope: MsScope): MsPref | null {
-  try {
-    const v = localStorage.getItem(MS_PREF_KEYS[scope]);
-    return v === 'yes' || v === 'no' ? v : null;
-  } catch {
-    return null;
-  }
+  const v = safeGet(MS_PREF_KEYS[scope]);
+  return v === 'yes' || v === 'no' ? v : null;
 }
 
 /** null = 清掉（下次再问） */
 export function writeMsPref(scope: MsScope, v: MsPref | null): void {
-  try {
-    if (v === null) localStorage.removeItem(MS_PREF_KEYS[scope]);
-    else localStorage.setItem(MS_PREF_KEYS[scope], v);
-  } catch {
-    // 记不下就下次再问
-  }
+  safeSet(MS_PREF_KEYS[scope], v);   // 记不下就下次再问
 }

@@ -17,6 +17,7 @@
 //   去下载、套上（首屏不带），换回系统字体时同样交给它拿掉；认不出的 id 按系统字体。分包下载不了：记下失败、下次再套时重试
 // • 运行日志（main.tsx 经 watchLook 注入 logEvent，同 push-disconnect.ts）：皮肤、深浅色、两个减少效果（系统设置）变了记 look_apply；字体记 font_load。不记用户输入的文字
 import { LOOK_CACHE_KEY } from './exit-basics.ts';
+import { safeGet, safeSet } from './local-store.ts';
 
 /** 设置 › 皮肤里的先后顺序：默认的磨砂玻璃放第一个（负责人 11-14；视觉稿没画皮肤子页的选项顺序） */
 export const SKINS = ['glass', 'simple'] as const;
@@ -133,11 +134,8 @@ export function applyLook(look: Look): void {
   }
   const same = current !== null && JSON.stringify(current) === JSON.stringify(look);
   current = look;
-  try {
-    localStorage.setItem(LOOK_CACHE_KEY, JSON.stringify({ ...look, v: 2 }));
-  } catch {
-    // 写不进（隐私模式、配额满）：这次照样生效，只是下次启动先按默认
-  }
+  // 写不进（隐私模式、配额满）：这次照样生效，只是下次启动先按默认
+  safeSet(LOOK_CACHE_KEY, JSON.stringify({ ...look, v: 2 }));
   if (!same) paint();
 }
 
@@ -172,8 +170,5 @@ export function watchLook(c: { getSnapshot(): readonly LookRow[]; subscribe(l: (
 // 主 App 懒加载本模块的那一刻就按缓存套上（登录页同样静态引入后马上套）
 applyLook(cachedLook());
 // 换回系统字体以后还有没清的字体缓存（platform/fonts.ts 的 pv-font-gc）：交给 fonts.ts 到点清掉（系统字体平时不加载它）
-try {
-  if (font === 'system' && /"at":[1-9]/.test(localStorage.getItem('pv-font-gc') ?? '')) void import('./fonts.ts').then((m) => m.applyFont('system'), () => undefined);
-} catch {
-  // 读不到本机存储：不清
-}
+// 读不到本机存储：不清
+if (font === 'system' && /"at":[1-9]/.test(safeGet('pv-font-gc') ?? '')) void import('./fonts.ts').then((m) => m.applyFont('system'), () => undefined);
