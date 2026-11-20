@@ -340,5 +340,37 @@ describe('补间中被取消：画面和状态一致', () => {
     expect(cell('2026-11-12')?.style.opacity).toBe('');
     expect(cell('2026-11-12')?.style.transform).toBe('');
   });
+
+  it('收起途中的诊断（todo_drift）只在开始动、停稳两刻各量一次，不再每帧都量（11-20 改善报告第四节）；运行日志那一行照旧', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    let now = 0;
+    const q: FrameRequestCallback[] = [];
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => q.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', () => q.splice(0));
+    const slot = ((globalThis as unknown as Record<string, { q: Array<[number, string]> }>)['__lemoRunLog'] ??= { q: [] });
+    slot.q = [];
+    open('#/cal/month/2026-11');
+    const day = screen.getByTestId('cal-month').parentElement?.querySelector('[data-testid="cal-todos"]')?.parentElement ?? null;
+    const reads = vi.spyOn(Element.prototype, 'getBoundingClientRect');
+    let frames = 0;
+    fireEvent.click(screen.getByTestId('cal-fold'));
+    act(() => {
+      for (let n = 0; q.length > 0 && n < 2000; n++) {
+        now += 16;
+        frames += 1;
+        q.shift()?.(now);
+        vi.advanceTimersByTime(0); // 原来每帧排一个 0ms 任务去量，这里一起推
+      }
+    });
+    const line = slot.q.map(([, l]) => l).find((l) => l.startsWith('cal fold open→folded via=tap'));
+    expect(frames).toBeGreaterThan(10);
+    expect(line).toMatch(/todo_drift=\d+ todo_tf=\d+\/[0-2]$/);
+    // 量待办组和日清单的读数：每次量 2 个，最多两次（没有待办组时一次也不量），和帧数无关
+    const sampled = reads.mock.contexts.filter((el) => el instanceof Element && (el.matches('[data-testid="cal-todos"]') || el === day)).length;
+    expect(sampled).toBeLessThanOrEqual(4);
+    reads.mockRestore();
+    vi.useRealTimers();
+  });
 });
 

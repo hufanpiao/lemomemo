@@ -14,6 +14,7 @@
 // 隐私：不记用户输入的任何文字、不记网址参数；按钮只记 data-testid / aria-label / id
 import { buildInfo, isStandalone } from './env.ts';
 import { RL_SLOT } from './run-log-api.ts';
+import { deepDiagOn } from './diag-deep.ts';
 import { createRunLogWriter } from './run-log-store.ts';
 import { createLayoutProbe, describeEl, isMasked, RL_MASK_ATTR } from './run-log-layout.ts';
 import { KBO_ATTR } from './viewport-geom.ts';
@@ -145,6 +146,25 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     return Array.isArray(s) ? s.length : 0;
   };
   let lastDepth = depth();
+  /** 两帧以后（新页画完）再跑；没注入帧回调时用 0 ms 计时器 */
+  const afterFrames = (fn: () => void): void => {
+    const frame = opts.frame;
+    if (frame) frame(() => frame(fn));
+    else setTimeout(fn, 0);
+  };
+  /**
+   * 页签互切时右上角头像（负责人 11-18“头像怎么也还是会消失”，motion/page-swap.ts 的 data-swap-pin）：换页画完时记一行状态。
+   * • box=1：新页还没出来、钉住的副本还在（canvas/img 是副本里画布还是图片）；box=0：新页已经出来、副本拿掉了
+   * • op：新页自己那个头像算上祖先的透明度（11-19 起新页头像不淡入，应一直是 1；小于 1 就是又被淡入带着走了）
+   * 原来在 App.tsx 每次换页都逐层算不透明度（正式版也算）；11-20 挪到这里，只在深度诊断打开时算（diag-deep.ts），行的写法不变
+   */
+  const swapPin = (): void => {
+    const box = doc.querySelector('[data-tab-pin]');
+    const me = doc.querySelector('main [data-swap-pin]');
+    let op = me ? 1 : 0;
+    for (let e = me; e; e = e.parentElement) op *= Number(getComputedStyle(e).opacity) || 0;
+    if (box || me) add(`app swap pin box=${box ? 1 : 0} canvas=${box?.querySelectorAll('canvas').length ?? 0} img=${box?.querySelectorAll('img').length ?? 0} op=${op.toFixed(2)}`);
+  };
   /** 地址变了就记一行 route。换地址的当下就记（下面拦 pushState、replaceState，加 popstate、hashchange）：
    *  原来只在记下一条日志时顺手补，route 行的时刻其实是“下一条日志的时刻”，负责人 11-18 隐私记日志里点锁行到进页面量成 1.27 秒，其实是下一次点按的时刻。
    *  add 里照旧先查一次，兜住别的换地址办法。返回栈深度变了另记一行 stack depth=N hist=浏览器历史条数（应该一直是 1，R-487） */
@@ -154,6 +174,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     if (h !== lastHash) {
       lastHash = h;
       push(`${stamp(now())} route ${h || '/'}`);
+      if (deepDiagOn()) afterFrames(swapPin);
     }
     if (d !== lastDepth) {
       lastDepth = d;
@@ -327,11 +348,15 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
       const f1 = performance.now() - t0;
       frame(() => {
         const f2 = performance.now() - t0;
-        let blur = 0;
-        for (const el of doc.querySelectorAll<HTMLElement>('body *')) {
-          const cs = getComputedStyle(el);
-          const bf = cs.backdropFilter || cs.getPropertyValue('-webkit-backdrop-filter');
-          if (bf !== '' && bf !== 'none') blur++;
+        // 数模糊层要对全页几百个元素逐个算样式（桌面实测每次 0.14～1.1 ms，正好压在切回前台这一刻）：只在深度诊断打开时数，关着写 blur=-（11-20 改善报告第四节）
+        let blur: number | '-' = '-';
+        if (deepDiagOn()) {
+          blur = 0;
+          for (const el of doc.querySelectorAll<HTMLElement>('body *')) {
+            const cs = getComputedStyle(el);
+            const bf = cs.backdropFilter || cs.getPropertyValue('-webkit-backdrop-filter');
+            if (bf !== '' && bf !== 'none') blur++;
+          }
         }
         // 负责人 11-18 12:33 又白一次：帧 40 ms 就到、页面 407 个元素，还是看不出白在哪一层。再记屏幕正中那一点是谁（白屏时是不是盖了东西）、
         // 根元素和 body 的不透明度、页面有没有被系统重新加载（start 行的 nav=）

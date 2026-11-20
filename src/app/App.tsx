@@ -100,16 +100,7 @@ function TabBar({ route, sub }: { route: RouteName; sub: string }) {
   const [plus, setPlus] = useState<{ day: DateStr | null; n: number } | null>(null);
   const opens = useRef(0);
   useEffect(() => afterAppPainted(() => void preloadPlus()), []);
-  // 页签互切时右上角头像（负责人 11-18“头像怎么也还是会消失”，motion/page-swap.ts 的 data-swap-pin）：换页画完时记一行状态
-  // • box=1：新页还没出来、钉住的副本还在（canvas/img 是副本里画布还是图片）；box=0：新页已经出来、副本拿掉了
-  // • op：新页自己那个头像算上祖先的透明度（11-19 起新页头像不淡入，应一直是 1；小于 1 就是又被淡入带着走了）
-  useEffect(() => {
-    const box = document.querySelector('[data-tab-pin]');
-    const me = document.querySelector('main [data-swap-pin]');
-    let op = me ? 1 : 0;
-    for (let e = me; e; e = e.parentElement) op *= Number(getComputedStyle(e).opacity) || 0;
-    if (box || me) rlog(`swap pin box=${box ? 1 : 0} canvas=${box?.querySelectorAll('canvas').length ?? 0} img=${box?.querySelectorAll('img').length ?? 0} op=${op.toFixed(2)}`);
-  }, [route]);
+  // 页签互切时右上角头像的诊断（swap pin 行）11-20 挪到运行日志 platform/run-log.ts，只在深度诊断打开时算（platform/diag-deep.ts）
   // 四个主页面从左右两边往里划切页签（负责人 11-18，tab-swipe.ts）：首屏画完以后再下载、挂一次
   // 所有页面顶部固定（R-488，platform/top-lock.ts）跟着同一块下载、同时装上：原来 main.tsx 静态引它，ci 309ff11c 起首屏超 150 KB；画完以前那一下不锁，影响可以忽略
   useEffect(() => afterAppPainted(() => void import('./tab-swipe.ts').then((m) => (m.installTabSwipeOnce(), m.installTopLock()))), []);

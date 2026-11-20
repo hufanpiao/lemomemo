@@ -7,6 +7,8 @@
 //   vibrate：navigator.vibrate；none：都没有）
 // • Live speech（负责人 11-18 录屏“说话没有波动”，platform/speech.ts 的 liveSpeechOn）：默认 ON，点成 OFF 不走系统识别那一路、只用录音上传，
 //   用来真机对照两条路（日志 voice hold start route=rec）
+// • Deep diag（11-20 改善报告第四节，platform/diag-deep.ts）：默认 OFF，点成 ON 以后运行日志多记切回前台的模糊层数（vis-frames blur=）
+//   和每次换页的头像状态（swap pin）；这两项开销大，原来一直在算。同 Live speech 只管这次打开 app
 // • Finger switch（负责人 11-18“震动没反应”）：一个看得见的 iOS 系统开关 <input type="checkbox" switch>，让人用手指点：
 //   手指点都不震 = 系统触感反馈关着或这台机器不支持，代码改不了；手指点震、Test haptic 不震 = TapSwitch 那套没接对。改变时记 probe finger switch on=
 //   （11-18 iOS 26.6 真机：Finger switch 震，Haptic A / B / C 三种代点写法都不震——代点写法和这三个按钮已删）
@@ -16,6 +18,7 @@ import { FormButton } from '../../../kit/components/Form.tsx';
 import { TapSwitch } from '../../../kit/components/TapSwitch.tsx';
 import { tryHaptic, type HapticPath } from '../../../platform/feedback.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
+import { deepDiagOn, setDeepDiagOn } from '../../../platform/diag-deep.ts';
 import { liveSpeechOn, setLiveSpeechOn } from '../../../platform/speech.ts';
 import { gapFixOn, setGapFixOn } from '../../../platform/vh-gapfix-gate.ts';
 import { clearRunLog, readRunLog } from '../../../platform/run-log.ts';
@@ -45,11 +48,15 @@ export const LS_LABEL_ON = 'Live speech: ON';
 export const LS_LABEL_OFF = 'Live speech: OFF (compare)';
 /** 手指点的系统开关 */
 export const FS_LABEL = 'Finger switch';
+/** 深度诊断（platform/diag-deep.ts）：默认关，打开后运行日志多记回前台模糊层数、换页头像状态（开销大，只在查这两个问题时开） */
+export const DD_LABEL_ON = 'Deep diag: ON';
+export const DD_LABEL_OFF = 'Deep diag: OFF';
 
 export function VhProbe() {
   const [gf, setGf] = useState(() => gapFixOn());
   const [hap, setHap] = useState<HapticPath | null>(null);
   const [ls, setLs] = useState(() => liveSpeechOn());
+  const [deep, setDeep] = useState(() => deepDiagOn());
   const [rlCopied, setRlCopied] = useState<'' | 'ok' | 'fail'>('');
   const rlSend = useRunLogSend();
   /** 整段复制（按的时候重新读本机，记着的时候也拿最新的） */
@@ -94,6 +101,17 @@ export function VhProbe() {
           }}
         >
           {ls ? LS_LABEL_ON : LS_LABEL_OFF}
+        </FormButton>
+        <FormButton
+          size="compact"
+          aria-pressed={deep}
+          data-testid="vh-deep-diag"
+          onClick={() => {
+            setDeepDiagOn(!deep);
+            setDeep(deepDiagOn());
+          }}
+        >
+          {deep ? DD_LABEL_ON : DD_LABEL_OFF}
         </FormButton>
         {/* switch 属性 React 不认识，挂上以后用 ref 补；不受控，只为让手指点一下看震不震 */}
         <label className={styles.probeSwitch}>
