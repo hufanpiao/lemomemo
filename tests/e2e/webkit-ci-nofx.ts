@@ -31,6 +31,9 @@ export const WEBKIT_CI_NOFX: Readonly<Record<string, readonly string[]>> = {
     'M2 撤销恢复：新行看得见的每一帧都不和别的行、组标题重叠',
   ],
   'b2-tabbar.spec.ts': ['切页过程中底栏一直看得见；液滴点下去就走，不等页面（设计动效评审 D1）'],
+  // 11-20 加：收起要出帧才走得动，和上面 N1 打勾同一件事（离开原组时剩的高度，下一行跳不跳）；CI 7555dd5a、62fe80f0 连挂“剩 56px”。
+  // 这条只量时间线和高度，方框颜色拆到同文件“亮柠檬黄”那条、照常开模糊
+  'todo-done-timeline.spec.ts': ['删除线勾上当下起画、90 ms 内画满；方框 0.45 起回弹到约 1.22 再落回 1；14 个小点；约 720 ms 后收起、离开原组时已经收完'],
 };
 
 /** 关模糊的样式（用构造样式表 + adoptedStyleSheets 挂上，不受 CSP style-src 限制） */

@@ -49,8 +49,8 @@ interface Rec {
   outAt: number | null;
   goneAt: number | null;
   boxAtOut: number | null;
-  /** 打上 .pop 那一刻：小点几个、有没有细正圆，填充块、勾号的颜色和 --accent、--on-accent 是否一样 */
-  pop: { dots: number; ring: boolean; burstShown: boolean; fillAccent: boolean; tickOnAccent: boolean } | null;
+  /** 打上 .pop 那一刻：小点几个、有没有细正圆、看不看得见（方框颜色在“亮柠檬黄”那条另记） */
+  pop: { dots: number; ring: boolean; burstShown: boolean } | null;
   /** 拿掉 .pop 的时刻（距 pointerdown，毫秒） */
   popEndAt: number | null;
   /** 离开原组那一刻离场那一份的高度（剩得多，下一行就会跳） */
@@ -72,15 +72,6 @@ async function record(page: Page, id: string): Promise<Rec> {
     const END_MS = 800;
     const STEP_MS = 5;
     const rec: Rec = { line: null, box: null, outAt: null, goneAt: null, boxAtOut: null, pop: null, popEndAt: null, lastH: null, popAnims: null };
-    /** 一个颜色令牌算出来的 rgb（拿一个临时元素套上再读，和计算后的颜色同一种写法） */
-    const colorOf = (v: string): string => {
-      const probe = document.createElement('i');
-      probe.style.color = `var(${v})`;
-      document.body.append(probe);
-      const c = getComputedStyle(probe).color;
-      probe.remove();
-      return c;
-    };
     (window as Window & { __rec?: Rec }).__rec = rec;
     // 方框回弹 11-18 起拆成 scale 属性（0.45 → 1.22）乘 transform（1 → 0.96/1.22 …）两段动画（CheckCircle.module.css .pop），看到的大小是两者相乘
     const scaleOf = (el: Element): number => {
@@ -122,14 +113,10 @@ async function record(page: Page, id: string): Promise<Rec> {
       const box = row?.querySelector('label[class*="checkBox"] > span[class*="face"]');
       if (!rec.line && line?.hasAttribute('data-done')) rec.line = sample(line);
       if (!rec.box && box && /pop/.test(box.className)) {
-        const fill = box.querySelector('[class*="fill"]');
-        const tick = box.querySelector('[class*="tick"]');
         rec.pop = {
           dots: box.querySelectorAll('i').length,
           ring: Boolean(box.querySelector('b')),
           burstShown: [...box.querySelectorAll('span[aria-hidden]')].some((s) => s.querySelector('i') && getComputedStyle(s).display !== 'none'),
-          fillAccent: fill ? getComputedStyle(fill).backgroundColor === colorOf('--accent') : false,
-          tickOnAccent: tick ? getComputedStyle(tick).borderRightColor === colorOf('--on-accent') : false,
         };
         rec.box = sample(box);
       }
@@ -165,8 +152,42 @@ const curve = (s: S[] | null): string => (s ?? []).filter(([t], i, all) => t % 2
 const show = (r: Rec): string =>
   `删除线 ${curve(r.line)} ｜ 方框 ${curve(r.box)} ｜ data-out ${r.outAt?.toFixed(0) ?? '-'} ms（方框 ${r.boxAtOut?.toFixed(2) ?? '-'}）、离开 ${r.goneAt?.toFixed(0) ?? '-'} ms（离开前剩 ${r.lastH?.toFixed(1) ?? '-'}px）`;
 
+/** 勾 id 那一行：打上 .pop 那一刻填充块是不是 --accent、勾号是不是 --on-accent（MutationObserver 记，不靠帧） */
+async function popColors(page: Page, id: string): Promise<{ fillAccent: boolean; tickOnAccent: boolean } | null> {
+  await page.evaluate((id) => {
+    /** 一个颜色令牌算出来的 rgb（拿一个临时元素套上再读，和计算后的颜色同一种写法） */
+    const colorOf = (v: string): string => {
+      const probe = document.createElement('i');
+      probe.style.color = `var(${v})`;
+      document.body.append(probe);
+      const c = getComputedStyle(probe).color;
+      probe.remove();
+      return c;
+    };
+    const w = window as Window & { __pc?: { fillAccent: boolean; tickOnAccent: boolean } };
+    const mo = new MutationObserver(() => {
+      const box = document.querySelector(`[data-row-id="${id}"] label[class*="checkBox"] > span[class*="face"]`);
+      if (w.__pc || !box || !/pop/.test(box.className)) return;
+      const fill = box.querySelector('[class*="fill"]');
+      const tick = box.querySelector('[class*="tick"]');
+      w.__pc = {
+        fillAccent: fill ? getComputedStyle(fill).backgroundColor === colorOf('--accent') : false,
+        tickOnAccent: tick ? getComputedStyle(tick).borderRightColor === colorOf('--on-accent') : false,
+      };
+      mo.disconnect();
+    });
+    mo.observe(document.body, { subtree: true, childList: true, attributes: true });
+  }, id);
+  await page.getByTestId(`todos-done-${id}`).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __pc?: unknown }).__pc ?? null), { timeout: 5000 }).not.toBeNull();
+  return page.evaluate(() => (window as Window & { __pc?: { fillAccent: boolean; tickOnAccent: boolean } }).__pc ?? null);
+}
+
 test.describe('待办勾选完成时间线', () => {
-  test('删除线勾上当下起画、90 ms 内画满；方框 0.45 起回弹到约 1.22 再落回 1；14 个小点、亮柠檬黄；约 720 ms 后收起、收进“已完成”是暗黄', async ({ page }) => {
+  // 这一条在 CI 的 webkit 上关模糊（在 CI webkit 关模糊名单里）：收起要浏览器出帧才走得动（WebKit 打上 data-out 后至少两次画面更新才收完），
+  // CI webkit 开着模糊静止待办页约 1 fps，useDoneFlow 最多等 600 ms 就带着整行 56px 挪走（11-20 本机每帧压 650 ms 复现：
+  // data-out 后 600 ms 里只出了一帧、行高一直 56，transitionstart 在挪走以后才来）。颜色（亮柠檬黄、暗黄）在下面那条照常开模糊验
+  test('删除线勾上当下起画、90 ms 内画满；方框 0.45 起回弹到约 1.22 再落回 1；14 个小点；约 720 ms 后收起、离开原组时已经收完', async ({ page }) => {
     await seed(page);
     const r = await record(page, 't2');
     const trace = show(r);
@@ -190,8 +211,8 @@ test.describe('待办勾选完成时间线', () => {
     expect(Math.max(...boxes), `方框回弹冲过头太多：${trace}`).toBeLessThan(1.25);
     expect(Math.min(...box.filter(([t]) => t > 200).map(([, v]) => v)), `方框峰值以后没落回 1 以下再弹：${trace}`).toBeLessThan(0.98);
     expect(boxes.at(-1)!, `方框最后没回到 1：${trace}`).toBeLessThan(1.02);
-    // ③ 勾上那一刻：14 个小点、一圈细正圆；这一行还在原位，方框亮柠檬黄、勾号 --on-accent；回弹播完才拿掉
-    expect(r.pop, `没播勾选特效：${trace}`).toEqual({ dots: 14, ring: true, burstShown: true, fillAccent: true, tickOnAccent: true });
+    // ③ 勾上那一刻：14 个小点、一圈细正圆（方框亮柠檬黄、勾号 --on-accent 在下一条验）；回弹播完才拿掉
+    expect(r.pop, `没播勾选特效：${trace}`).toEqual({ dots: 14, ring: true, burstShown: true });
     expect(r.popEndAt, `.pop 一直没拿掉（最后看到的方框动画 ${r.popAnims}）：${trace}`).not.toBeNull();
     expect(r.popEndAt!, `.pop 回弹没播完就拿掉了：${trace}`).toBeGreaterThanOrEqual(400);
     // ④ 勾上后约 720 ms 才打上 data-out；打上以后 100 ms（--dur-collapse）加 3 帧余量内离开原组；打上 data-out 那一刻方框已经回到 1
@@ -202,7 +223,14 @@ test.describe('待办勾选完成时间线', () => {
     expect(r.lastH, `离开原组时这一行还没收完（下一行会跳）：剩 ${r.lastH}px；${trace}`).toBeLessThanOrEqual(2);
     expect(r.goneAt! - r.outAt!, `收起太慢：${trace}`).toBeLessThanOrEqual(100 + 500 + 3 * 34);
     expect(r.boxAtOut!, `收起前方框没回到 1：${trace}`).toBeLessThan(1.02);
+  });
+
+  test('勾上那一刻方框亮柠檬黄、勾号 --on-accent；收进“已完成”以后照旧暗黄', async ({ page }) => {
+    await seed(page);
+    const pc = await popColors(page, 't2');
+    expect(pc, '勾上那一刻方框不是亮柠檬黄、勾号不是 --on-accent').toEqual({ fillAccent: true, tickOnAccent: true });
     // ⑤ 收进“已完成”组（展开看）以后照旧暗黄：填充块是 --check-on-bg，不是亮色、没有 data-fresh
+    await expect(page.getByTestId('todos-g-nodate').locator('[data-row-id="t2"]')).toHaveCount(0, { timeout: 10_000 });
     await page.getByTestId('todos-done-fold').click();
     const done = page.getByTestId('todos-g-done').locator('[data-row-id="t2"]');
     await expect(done).toBeVisible();
@@ -216,7 +244,7 @@ test.describe('待办勾选完成时间线', () => {
       const fill = label?.querySelector('[class*="fill"]');
       return { fresh: label?.hasAttribute('data-fresh') ?? null, fill: fill ? getComputedStyle(fill).backgroundColor === want : null };
     });
-    expect(dark, `收进“已完成”以后方框不是暗黄：${trace}`).toEqual({ fresh: false, fill: true });
+    expect(dark, '收进“已完成”以后方框不是暗黄').toEqual({ fresh: false, fill: true });
   });
 
   // 负责人 11-18“点击代办有时候不能一次点中结束，要点几下才能完成掉”：运行日志 2736、2877 行按下抬起都在方框上，却没有 click。

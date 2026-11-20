@@ -207,7 +207,18 @@ test.describe('R-437 下拉搜索：手机', () => {
     });
     await pullDown(page, 'todos');
     await expect(page.getByTestId('pull-input')).toBeVisible({ timeout: 10_000 });
-    const opacity = () => page.getByTestId('pull-head').evaluate((el) => Number(getComputedStyle(el).opacity));
+    // 透明度在页面里记（不拿 locator 隔一阵去读）：淡到 0 以后停稳 STILL_MS 就卸掉，CI webkit 一帧 150～400 ms 时，隔 100、250、500 ms 去读
+    // 会整段错过“已经是 0、还没卸”那一下，卸掉以后 locator 一直等、只剩上一次读到的 0.5（11-20 CI 7555dd5a）。
+    // 每次 scroll 事件记一次（排在页面自己的监听后面，读到的是它刚写的），卸掉以后停在卸掉前最后一次：没淡到 0 就卸掉照样失败
+    await page.getByTestId('pull-head').evaluate((head) => {
+      const w = window as Window & { __pullOp?: number };
+      const read = (): void => {
+        if (head.isConnected) w.__pullOp = Number(getComputedStyle(head).opacity);
+      };
+      read();
+      window.addEventListener('scroll', read, { passive: true });
+    });
+    const opacity = () => page.evaluate(() => (window as Window & { __pullOp?: number }).__pullOp);
     await page.evaluate(() => window.scrollTo(0, 22));
     expect(await page.evaluate(() => window.scrollY)).toBe(22);
     await expect.poll(opacity).toBeLessThan(0.75);

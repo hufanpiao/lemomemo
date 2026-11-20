@@ -268,17 +268,23 @@ function useAutoCollapse(open: boolean, searching: boolean, region: RefObject<HT
       if (head) head.style.opacity = k > 0 ? String(1 - k) : '';
     };
     let still: ReturnType<typeof setTimeout> | undefined;
+    /** 上一次 onScroll 处理过（按它淡过）的位置 */
+    let seen = window.scrollY;
     const focused = (): boolean => {
       const a = document.activeElement;
       return a instanceof HTMLInputElement && box?.contains(a) === true;
     };
+    // 只认 onScroll 处理过的位置：页面已经滚了、那次 scroll 事件还没派发（它要等下一帧）时，计时到点读到的 scrollY 是新的、
+    // 搜索框却还停在上一次的透明度，照新位置卸掉就是半透明一下子没了（11-20 e2e webkit 每帧 400ms 复现：0.5 直接卸掉）。
+    // 对不上就不动，那次 scroll 事件来了会按新位置淡完、重新计时
     const settle = (): void => {
-      if (window.scrollY <= PULL_H || focused()) return;
+      if (window.scrollY !== seen || seen <= PULL_H || focused()) return;
       shift.current = true;
       drop();
     };
     const onScroll = (): void => {
-      set(focused() ? 0 : Math.min(1, Math.max(0, window.scrollY / PULL_H)));
+      seen = window.scrollY;
+      set(focused() ? 0 : Math.min(1, Math.max(0, seen / PULL_H)));
       clearTimeout(still);
       still = setTimeout(settle, STILL_MS);
     };
