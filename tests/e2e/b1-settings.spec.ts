@@ -7,7 +7,7 @@
 import type { Page } from '@playwright/test';
 import { ko as sharedKo } from '../../shared/i18n/ko.ts';
 import { zh as sharedZh } from '../../shared/i18n/zh.ts';
-import { waitPreloaded } from './page-helpers.ts';
+import { afterPageFade, waitPreloaded } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 const SETTINGS = '/app/#/settings';
@@ -289,6 +289,9 @@ test.describe('设置页骨架', () => {
     await page.goto(ACCOUNT);
     const row = page.getByTestId('settings-delete-entry');
     await expect(row).toBeVisible();
+    // 设置 → 账号是推页（#288 起走 page-swap，负责人 11-20“新页从右滑进盖住”）：新页挂上后 FADE_GUARD_MS 以内落在 main 里的按下按设计吞掉，
+    // 不等就按，pointerdown 被吞、一直是 idle（chromium 上稳定复现）。等淡入放完再按
+    await afterPageFade(page);
     const headName = () => page.locator('main[data-feature="settings"] header').evaluate((el) => getComputedStyle(el).viewTransitionName);
     expect(await headName()).toBe('none');
 
