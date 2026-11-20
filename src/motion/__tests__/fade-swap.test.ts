@@ -489,19 +489,18 @@ describe('换页后吞点按（代码审查方案 B M8）', () => {
 });
 
 describe('等分包时走了别的导航（代码审查方案 B M9）', () => {
-  it('等的时候走了 transition()：View Transition 换上来的页不再淡入', async () => {
-    (document as { startViewTransition?: unknown }).startViewTransition = (cb: () => void) => {
-      cb();
-      return { finished: Promise.resolve() };
-    };
+  it('等的时候走了 transition()：整页推页换上来的页不再淡入', async () => {
+    const fade = (): FakeAnim[] => anims.filter((a) => JSON.stringify(a.frames) === JSON.stringify(blurSwapIn(false)));
     setPage('today');
     void fadeSwap(() => undefined); // 分包没到，旧页还在
-    await transition(() => setPage('edit'));
+    const p = transition(() => setPage('edit'));
+    for (const a of anims) a.finish();
+    await p;
     await Promise.resolve();
-    expect(anims).toHaveLength(0);
+    expect(fade()).toHaveLength(0);
     setPage('todos'); // 分包这时才到也不淡
     await Promise.resolve();
-    expect(anims).toHaveLength(0);
+    expect(fade()).toHaveLength(0);
   });
 
   it('等的时候同页内切换（cancelFade(false)）：后来换上来的不淡；正在播的淡入不打断', async () => {

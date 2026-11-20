@@ -16,7 +16,7 @@ const ring = (page: Page) =>
 test('手指点进“日历”再点返回：焦点回到那一行，但不画焦点框', async ({ page }) => {
   await page.goto('/app/#/settings');
   await page.getByTestId('settings-cal-entry').tap();
-  // 等整页过渡播完再点：新页画出来之前屏幕停在旧页上，这时手指的点按会被吞掉（motion/index.ts untilPageReady）
+  // 等整页过渡播完再点：新页画出来之前屏幕停在旧页上，这时手指的点按会被吞掉（motion/page-swap.ts holdScreen）
   await page.locator('html:not([data-vt])').waitFor({ state: 'attached' });
   await page.getByTestId('settings-cal-back').tap();
   await expect.poll(async () => (await ring(page)).focused, { timeout: 5000 }).toBe(true);

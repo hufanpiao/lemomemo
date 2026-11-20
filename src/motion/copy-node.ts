@@ -77,7 +77,10 @@ function copy(n: Node, skip: ReadonlySet<string>, o: CopyOptions, tag?: string):
     const c = paintSmall(n, skip);
     if (c) return c;
   }
-  const el = tag ? document.createElement(tag) : document.createElementNS(n.namespaceURI, n.localName);
+  // HTML 元素照 React DOM 的建法走 createElement（WebKit 每建一个 <select> 内核都报一条 style-src-attr 误报，e2e csp-fixture 只认这条路上的；
+  // 页面没有样式被拦，见 csp-fixture.ts 文件头），SVG 这类别的命名空间才用 createElementNS
+  const html = n.namespaceURI === 'http://www.w3.org/1999/xhtml';
+  const el = tag ? document.createElement(tag) : html ? document.createElement(n.localName) : document.createElementNS(n.namespaceURI, n.localName);
   copyAttrs(n, el, skip);
   for (const c of n.childNodes) el.append(copy(c, skip, o));
   if (n instanceof HTMLInputElement && el instanceof HTMLInputElement) {

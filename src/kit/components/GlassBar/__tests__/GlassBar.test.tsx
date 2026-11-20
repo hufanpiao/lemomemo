@@ -134,7 +134,9 @@ describe('GlassBar', () => {
     expect(drop().dataset['state']).toBeUndefined();
   });
 
-  it('切页过渡中落在 <html> 上的点按：按坐标替底栏的页签或“＋”点一下（设计复审二 R4）；点在别处、目标不是 <html> 不管', async () => {
+  // 原来的 R4、R6 按坐标代点（View Transition 的伪元素层盖住整屏、点按落在 <html> 上）11-20 随 View Transition 一起删掉：
+  // 过渡中底栏、页面都是真元素，点按直接落在它们身上；这里钉住不再有代点，免得落在 <html> 上的点按被替点到底栏
+  it('点在 <html> 上不替底栏的页签、“＋”代点（11-20 起切页不用 View Transition）', async () => {
     const onAdd = vi.fn();
     render(<GlassBar active="today" add={{ label: '新建日程', onClick: onAdd }} />);
     await ready();
@@ -150,13 +152,9 @@ describe('GlassBar', () => {
     });
     const html = document.documentElement;
     fireEvent.click(html, { clientX: 170, clientY: 720 });
-    expect(clicked).toEqual(['todos']);
     fireEvent.click(html, { clientX: 320, clientY: 720 });
-    expect(onAdd).toHaveBeenCalledTimes(1);
-    fireEvent.click(html, { clientX: 20, clientY: 100 }); // 不在底栏上
-    fireEvent.click(document.body, { clientX: 170, clientY: 720 }); // 目标不是 <html>：正常点按，不代点
-    expect(clicked).toEqual(['todos']);
-    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(clicked).toEqual([]);
+    expect(onAdd).not.toHaveBeenCalled();
   });
 
   it('点页签：液滴马上往那边走，不等路由（D1）；路由到了照路由；后退回原页不按旧的点击画；按着修饰键点不算', () => {
@@ -268,7 +266,7 @@ describe('GlassBar', () => {
     expect(screen.getByTestId('tabbar-edge').getAttribute('data-add')).toBe('0');
   });
 
-  it('样式：液滴只动 translate、scale（时长、曲线用令牌），减少动态效果（data-rm）关掉；减少透明效果（data-rt）换实色；切页名字登记过', async () => {
+  it('样式：液滴只动 translate、scale（时长、曲线用令牌），减少动态效果（data-rm）关掉；减少透明效果（data-rt）换实色；不起切页名字', async () => {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     const css = readFileSync(join(import.meta.dirname, '../GlassBar.module.css'), 'utf8');
@@ -284,7 +282,7 @@ describe('GlassBar', () => {
     expect(fxCss).toMatch(/:global\(:root\[data-rm='1'\]\) \.jelly \{\s*animation: none;/);
     expect(css).toMatch(/:global\(:root:is\(\[data-rt='1'\], \[data-solid='1'\]\)\) \.barTint \{\s*background: var\(--glass-solid\);/);
     expect(css).toMatch(/\.drop\[data-state='press'\] \{\s*scale: 1\.12;/);
-    // 11-06 真机 9d40848：过渡中不再换实色（负责人不接受“先不透明再变透明”），没有 ::after 遮罩；快照组裁圆角见 view-transition-css.test.ts
+    // 11-06 真机 9d40848：过渡中不再换实色（负责人不接受“先不透明再变透明”），没有 ::after 遮罩
     expect(css).not.toMatch(/::after \{[^}]*--glass-solid|active-view-transition|data-vt/);
     const fx2 = fxCss.replace(/\/\*[\s\S]*?\*\//g, '');
     // 底部实色带（11-06 夜负责人“这个不要动”）：从底栏底边（离屏幕底 8px）往上 --band-fade 起，一直铺到屏幕底（含安全区）；上沿 --band-fade 一段透明→--bg，往下不透明；只有颜色、不模糊
@@ -300,7 +298,7 @@ describe('GlassBar', () => {
     // 11-06 底栏透明度排查：副本档直接模糊背后的真实画面（--g-live-fx，3px）；没有 0.5px 外圈；后备 8px；阴影两层
     expect(css).toMatch(/\.bar\[data-glass='copy'\],\s*\.fab\[data-glass='copy'\] \{\s*backdrop-filter: var\(--g-live-fx\);/);
     expect(css).toMatch(/\.bar\[data-glass='copy'\] \.barTint \{\s*background: var\(--g-tint\);\s*\}/);
-    // 带 view-transition-name 的 .bar、.fab 是背景根：模糊只能写在它们自己身上，里面的着色层、液滴一律不写 backdrop-filter（第二轮根因 2）
+    // .bar、.fab 自己带 backdrop-filter，是背景根：模糊只能写在它们自己身上，里面的着色层、液滴一律不写 backdrop-filter（第二轮根因 2）
     expect(css).not.toMatch(/\.(glass|barTint|fabTint|adTint|pill)\b[^{]*\{[^}]*backdrop-filter: (?!none)/);
     expect(css).not.toContain('data-glass-layer'); // 11-06 起副本引擎不再建副本层（GLASS-copy-unused），样式里也不用再藏它
     expect(css).not.toContain('var(--rim-shade)');
@@ -314,7 +312,7 @@ describe('GlassBar', () => {
     expect(css).not.toMatch(/\.fab:focus-visible[^{]*\{[^}]*box-shadow/);
     // 减少透明效果（data-rt）：选中液滴换 --g-pill-solid 加描边（D2），只一条
     expect(css.match(/background: var\(--g-pill-solid\);\s*box-shadow: inset 0 0 0 1\.5px var\(--g-pill-edge\);/g)?.length).toBe(1);
-    const { VT_FIXED } = await import('../../../../motion/vt.ts');
-    expect(Object.values(VT_FIXED)).toEqual(expect.arrayContaining(['tabbar', 'tabbar-add']));
+    // 11-20 起切页不用 View Transition：底栏、“＋”不起 view-transition-name，过渡里也是真元素、实时模糊（motion/page-swap.ts）
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toContain('view-transition');
   });
 });

@@ -27,12 +27,23 @@ const sameSpot = (a: HintSpot | null, b: HintSpot | null): boolean => a === b ||
 /** 电脑宽度：“＋”在左边侧栏里，不出气泡（见文件头） */
 const isDesk = (): boolean => typeof window.matchMedia === 'function' && window.matchMedia(MQ_SIDEBAR).matches;
 
+/** 元素自己的 translate（整页推页时“＋”跟着页面横移，motion/page-swap.ts）：量位置时扣掉，按停住以后的位置放气泡 */
+function shiftOf(cs: CSSStyleDeclaration): [number, number] {
+  const t = cs.translate || 'none';
+  if (t === 'none') return [0, 0];
+  const [x = '0', y = '0'] = t.split(' ');
+  return [parseFloat(x) || 0, parseFloat(y) || 0];
+}
+
 /** “＋”的位置 → 气泡放哪；看不见时 null */
 export function spotOf(fab: Element | null, vw: number, vh: number): HintSpot | null {
-  if (!fab || getComputedStyle(fab).visibility === 'hidden') return null;
+  if (!fab) return null;
+  const cs = getComputedStyle(fab);
+  if (cs.visibility === 'hidden') return null;
   const r = fab.getBoundingClientRect();
   if (r.width === 0 || r.height === 0) return null;
-  return { side: 'above', right: Math.round(vw - r.right), bottom: Math.round(vh - r.top + 10) };
+  const [dx, dy] = shiftOf(cs);
+  return { side: 'above', right: Math.round(vw - r.right + dx), bottom: Math.round(vh - r.top + dy + 10) };
 }
 
 export function usePlusHint(enabled: boolean = PLUS_HINT_ENABLED, exe: boolean = isTauri()): HintSpot | null {

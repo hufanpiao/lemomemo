@@ -10,9 +10,9 @@
   transition: transform var(--dur-press) var(--ease-out);
 }
 
-/* 切页前瞬间复位（C3）：motion 的 transition() 起 View Transition 之前给页面上所有 Pressable 打 data-snap，
-   去掉过渡、立刻回到原大小，旧画面不会截到“还缩着 / 正在弹回”的按钮（36319a2 查到的根因）；
-   回调里新页面画之前摘掉。写在 pressed 之后：同优先级，后写的赢 */
+/* 切页前瞬间复位（C3）：motion 的 transition() 拷旧页快照之前给页面上所有 Pressable 打 data-snap，
+   去掉过渡、立刻回到原大小，旧页快照不会拷到“还缩着 / 正在弹回”的按钮（36319a2 查到的根因）；
+   拷完、新页面画之前摘掉。写在 pressed 之后：同优先级，后写的赢 */
 .pressable[data-snap] {
   transform: none;
   transition: none;

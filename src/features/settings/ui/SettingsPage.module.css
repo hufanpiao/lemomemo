@@ -16,7 +16,7 @@
   min-height: 0;
 }
 
-/* 设置和注销账号两屏的顶栏：不单独起 view-transition-name，切页时跟着整页一起滑（负责人 11-20 选“新页从右滑进盖住”） */
+/* 设置和注销账号两屏的顶栏：在 main 里，切页时跟着整页一起滑（负责人 11-20 选“新页从右滑进盖住”，motion/page-swap.ts） */
 .top {
   display: grid;
   grid-template-columns: 1fr auto 1fr;

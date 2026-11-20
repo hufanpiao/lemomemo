@@ -1,6 +1,7 @@
 // 液态玻璃底栏在切页时的样子和点按（B2 FA-7；负责人 11-06 选方案 B，B2-动效审查-切页先出后入.md 第四批）；别的底栏用例见 b2-tabbar.spec.ts。
 // • 四个页签之间互切不起 View Transition：新页直接换上，做一次 opacity 0→1（11-19 起加在 main 里不含右上角头像的子树上，头像一直全亮）；底栏、“＋”、液滴一直是真元素、一直实时模糊，液滴连续滑、能被下一次点按打断
-// • 进出没有底栏的页（今天 → 编辑页）照旧 View Transition：圆角和阴影画在快照自己身上，组上没有阴影，只有一边有底栏时不剩空阴影壳（代码审查 M5）
+// • 进出没有底栏的页（今天 → 编辑页）：11-20 起整页推页不用 View Transition（motion/page-swap.ts），底栏、“＋”全程是真元素、实时模糊
+//   （进页时旧页那份是挂 body 下的真 DOM 副本，圆角阴影跟着它一起淡，不剩空壳；返回时真底栏 60% 后淡入）
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
@@ -309,102 +310,137 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
   });
 });
 
-test.describe('底栏：进出没有底栏的页照旧 View Transition（代码审查 M5）', () => {
+// 负责人 11-20：“进入2级页后退出的时候底部导航栏会模糊一下”“底栏不是固定死了吗？为啥切页回来的时候还要用快照”。
+// 原来进出没有底栏的页走 View Transition，底栏在过渡里是一张截图（拍不到后面的内容），放完真底栏露出来、模糊突然出现；
+// 11-20 起改走 motion/page-swap.ts 的整页推页：底栏、“＋”全程是真元素（进页时旧页那份是直接挂 body 下的真 DOM 副本），一直实时模糊
+test.describe('底栏：进出没有底栏的页（整页推页），底栏、“＋”全程真元素实时模糊', () => {
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 } });
 
-  /** 等切页过渡出来、停在中途，读底栏几个伪元素的计算样式 */
-  const holdAndRead = (page: Page) =>
+  /**
+   * 等整页推页的动画出来（关键帧里带 vw 的平移，<html data-vt> 在），全部暂停在 at（0～1，占时长的比例）处，读底栏、“＋”：
+   * 是真元素还是副本、在不在旧页副本里、不透明度、backdrop-filter（webkit 连带前缀的一起读）、圆角、阴影、visibility
+   */
+  const holdAndRead = (page: Page, at: number) =>
     page
       .waitForFunction(
-        () => {
-          const vt = document.getAnimations().filter((x) => String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition'));
-          for (const x of vt) {
+        (p) => {
+          if (!document.documentElement.hasAttribute('data-vt')) return null;
+          const slides = document.getAnimations().filter(
+            (x) => x.effect instanceof KeyframeEffect && x.effect.getKeyframes().some((k) => String(k['translate'] ?? '').includes('vw')),
+          );
+          if (slides.length === 0) return null;
+          for (const x of slides) {
             x.pause();
-            x.currentTime = 120;
+            x.currentTime = Number(x.effect?.getComputedTiming().duration ?? 0) * p;
           }
-          if (vt.length === 0) return null;
-          const cs = (p: string) => getComputedStyle(document.documentElement, p);
-          const pick = (p: string) => ({ shadow: cs(p).boxShadow, radius: cs(p).borderRadius, overflow: cs(p).overflow, opacity: cs(p).opacity });
-          return { group: pick('::view-transition-group(tabbar)'), old: pick('::view-transition-old(tabbar)'), addGroup: pick('::view-transition-group(tabbar-add)'), addOld: pick('::view-transition-old(tabbar-add)') };
+          const look = (el: HTMLElement | null) => {
+            if (!el) return null;
+            const cs = getComputedStyle(el);
+            const wk = (cs as unknown as Record<string, string>)['webkitBackdropFilter'] ?? '';
+            return {
+              copy: el.hasAttribute('data-swap-bar-copy'),
+              inGhost: el.closest('[data-tab-ghost]') !== null,
+              opacity: Number(cs.opacity),
+              fx: `${cs.backdropFilter} ${wk}`,
+              radius: cs.borderRadius,
+              shadow: cs.boxShadow,
+              visibility: cs.visibility,
+            };
+          };
+          const one = (real: string, copy: string) => document.querySelector<HTMLElement>(copy) ?? document.querySelector<HTMLElement>(real);
+          return {
+            bar: look(one('[data-testid="tabbar"]', 'body > nav[data-swap-bar-copy]')),
+            add: look(one('[data-testid="tabbar-add"]', 'body > button[data-swap-bar-copy]')),
+          };
         },
-        undefined,
-        // 等过渡开始放宽到 10 秒：cb2bac25 的 CI webkit 诊断“帧 278 | 帧 3379 | … | 调用 3407”——点下去后主线程整卡 3 秒
-        // （无 GPU、backdrop-filter 软件合成，见 CI webkit 关模糊名单文件的头注释），startViewTransition 3.4 秒才调到，原来 2 秒等不到。
-        // 切页过渡用例按规定不进关模糊名单（e2e-webkit-nofx.test.ts 禁 transition 文件名），所以只放宽等待；一出现过渡照旧当场暂停在 120 ms 读样式，断言不变
+        at,
+        // 等过渡开始放宽到 10 秒：CI 的 webkit 无 GPU、backdrop-filter 软件合成，点下去后主线程会整卡 3 秒（cb2bac25 诊断）；
+        // 切页过渡用例按规定不进关模糊名单（e2e-webkit-nofx.test.ts 禁 transition 文件名），所以只放宽等待；一出现过渡当场暂停读样式
         { timeout: 10_000, polling: 4 },
       )
       .then((h) => h.jsonValue());
   const finishAll = (page: Page) =>
     page.evaluate(() => {
-      for (const x of document.getAnimations()) if (String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition')) x.finish();
+      for (const x of document.getAnimations()) if (x.effect instanceof KeyframeEffect && x.effect.getKeyframes().some((k) => String(k['translate'] ?? '').includes('vw'))) x.finish();
     });
-
-  test('今天 → 新建日程（只有旧的一边有底栏）：组上没有阴影，旧快照自己裁圆角、补阴影', async ({ page }) => {
-    await page.goto('/app/#/today');
-    await expect(page.getByTestId('today')).toBeVisible();
-    await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
-    // 11-18 起打字条“展开编辑”直接换页、不起整页过渡（负责人录屏：闪一帧原页面；plus-expand-no-flash.spec.ts）。
-    // 这条只测“一边有底栏的整页过渡”，改用地址栏换到新建日程（hashchange 照旧起 View Transition）
-    // 诊断（11-16：CI webkit 自 b6832069 起连挂“没等到切页过渡”，本机和 CI 同款镜像都复现不了）：记下 startViewTransition 调没调、
-    // ready / finished 什么时候结束（被跳过时 ready 会 reject）、点击后每帧的时间。只在这条没等到过渡时打进失败信息，下次 CI 挂了按它定根因
-    await page.evaluate(() => {
-      const w = window as unknown as { __vtdiag: string[] };
-      const t0 = performance.now();
-      const at = () => Math.round(performance.now() - t0);
-      w.__vtdiag = [];
-      const d = document as unknown as { startViewTransition?: (cb: () => void) => { ready: Promise<void>; finished: Promise<void> } };
-      const orig = d.startViewTransition?.bind(document);
-      if (!orig) w.__vtdiag.push('没有 startViewTransition');
-      else
-        d.startViewTransition = (cb) => {
-          w.__vtdiag.push(`调用 ${at()}`);
-          const vt = orig(cb);
-          vt.ready.then(() => w.__vtdiag.push(`ready ${at()}`), (e: unknown) => w.__vtdiag.push(`ready 拒绝 ${at()} ${String(e).slice(0, 80)}`));
-          vt.finished.then(() => w.__vtdiag.push(`finished ${at()}`), () => w.__vtdiag.push(`finished 拒绝 ${at()}`));
-          return vt;
-        };
-      let n = 0;
-      const tick = () => {
-        n++;
-        if (n <= 40) {
-          w.__vtdiag.push(`帧 ${at()}`);
-          requestAnimationFrame(tick);
-        }
-      };
-      requestAnimationFrame(tick);
-    });
-    // 换地址只发 hashchange、不发 popstate：location.hash 赋值在触屏 WebKit 里同时发 popstate，router 会当成系统边缘返回手势、直接换不起过渡（029310e1 右滑不闪），这条就测不到了
-    await page.evaluate(() => {
-      const from = window.location.href;
-      history.replaceState(history.state, '', '#/event/new');
-      window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: from, newURL: window.location.href }));
-    });
-    const s = await holdAndRead(page).catch(() => null);
-    const diag = s ? '' : await page.evaluate(() => (window as unknown as { __vtdiag?: string[] }).__vtdiag?.join(' | ') ?? '无');
-    expect(s, `没等到切页过渡；诊断：${diag}`).not.toBeNull();
-    expect(s?.group.shadow, '组上有阴影（只有一边有底栏时会剩空壳）').toBe('none');
-    expect(s?.addGroup.shadow).toBe('none');
-    expect(s?.old.shadow).not.toBe('none');
-    expect(s?.old.overflow).toBe('clip');
-    expect(s?.old.radius).not.toBe('0px');
-    expect(s?.addOld.radius).toBe('50%');
-    await finishAll(page);
-    await expect(page).toHaveURL(/#\/event\/new$/);
-  });
-
-  test('键盘弹着（根节点 data-kbhide）时底栏不进快照：没有 view-transition-name，不会画出空阴影壳', async ({ page }) => {
+  /** 打开今天页并等推页动画实现到（motion/index.ts：首屏画完才下载 page-swap，到之前换页直接换、不播；机器忙时冷启动后第一下会碰上） */
+  const openToday = async (page: Page) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-add')).toBeVisible();
-    const names = await page.evaluate(() => {
-      const els = [...document.querySelectorAll<HTMLElement>('[data-testid="tabbar"],[data-testid="tabbar-add"]')];
-      document.documentElement.setAttribute('data-kbhide', '1');
-      const v = els.map((el) => getComputedStyle(el).viewTransitionName);
-      document.documentElement.removeAttribute('data-kbhide');
-      return { hidden: v, shown: els.map((el) => getComputedStyle(el).viewTransitionName) };
-    });
-    expect(names.hidden).toEqual(['none', 'none']);
-    expect(names.shown).toEqual(['tabbar', 'tabbar-add']);
+    await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
+    await waitPreloaded(page);
+  };
+  /** 换地址只发 hashchange、不发 popstate：location.hash 赋值在触屏 WebKit 里同时发 popstate，router 会当成系统边缘返回手势、直接换不起过渡（029310e1 右滑不闪） */
+  const goHash = (page: Page, hash: string) =>
+    page.evaluate((h) => {
+      const from = window.location.href;
+      history.replaceState(history.state, '', h);
+      window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: from, newURL: window.location.href }));
+    }, hash);
+  /** 静止时底栏、“＋”的圆角和阴影（副本要和它一样） */
+  const still = (page: Page) =>
+    page.evaluate(() =>
+      ['[data-testid="tabbar"]', '[data-testid="tabbar-add"]'].map((s) => {
+        const cs = getComputedStyle(document.querySelector(s) as Element);
+        return { radius: cs.borderRadius, shadow: cs.boxShadow };
+      }),
+    );
+
+  test('今天 → 新建日程（只有旧的一边有底栏）：中途底栏、“＋”是挂在 body 下的真 DOM 副本，带模糊，圆角阴影和静止时一样（不剩空壳）', async ({ page }) => {
+    await openToday(page);
+    const rest = await still(page);
+    // 11-18 起打字条“展开编辑”直接换页、不起整页过渡（plus-expand-no-flash.spec.ts）；这条测“一边有底栏的整页推页”，用地址换到新建日程
+    await goHash(page, '#/event/new');
+    // 0.2：进页时底栏副本前 40% 边退边淡完（原 lemo-push-old-fade），这里还看得见
+    const s = await holdAndRead(page, 0.2).catch(() => null);
+    expect(s, '没等到整页推页').not.toBeNull();
+    for (const [k, v] of [['底栏', s?.bar], ['“＋”', s?.add]] as const) {
+      expect(v?.copy, `${k}：旧页那份是直接挂 body 下的真 DOM 副本`).toBe(true);
+      expect(v?.inGhost, `${k}：不在旧页快照外框里（外框里取不到外面的页面，模糊不起来）`).toBe(false);
+      expect(v?.fx, `${k}：副本带 backdrop-filter 实时模糊`).toContain('blur(');
+      expect(v?.opacity, `${k}：正在淡出`).toBeGreaterThan(0);
+      expect(v?.opacity).toBeLessThan(1);
+    }
+    expect([s?.bar?.radius, s?.add?.radius], '圆角和静止时一样').toEqual(rest.map((r) => r.radius));
+    expect([s?.bar?.shadow, s?.add?.shadow], '阴影和静止时一样（跟着副本一起淡，不剩空壳）').toEqual(rest.map((r) => r.shadow));
+    await finishAll(page);
+    await expect(page).toHaveURL(/#\/event\/new$/);
+    await expect(page.locator('[data-swap-bar-copy]'), '放完副本拿掉').toHaveCount(0);
+  });
+
+  // 负责人 11-20 原话那一步：从二级页返回。过渡快放完（85%）时底栏是真元素、计算出来的 backdrop-filter 带 blur，
+  // 放完不会再“模糊一下”（原来这时还是截图，放完真底栏露出来模糊才出现）
+  test('新建日程 ‹ 返回 → 今天：返回到 85% 时底栏、“＋”是真元素，backdrop-filter 带 blur（webkit 连带前缀的一起看）', async ({ page }) => {
+    await openToday(page);
+    await goHash(page, '#/event/new');
+    await expect(page.getByTestId('edit-back')).toBeVisible();
+    await expect(page.locator('html')).not.toHaveAttribute('data-vt', /.*/, { timeout: 5000 });
+    await page.getByTestId('edit-back').click();
+    const s = await holdAndRead(page, 0.85).catch(() => null);
+    expect(s, '没等到整页推页').not.toBeNull();
+    for (const [k, v] of [['底栏', s?.bar], ['“＋”', s?.add]] as const) {
+      expect(v?.copy, `${k}：是真元素，不是副本`).toBe(false);
+      expect(v?.inGhost, `${k}：不在旧页快照里`).toBe(false);
+      expect(v?.fx, `${k}：计算出来的 backdrop-filter 带 blur`).toContain('blur(');
+      // 原 lemo-pop-new-fade：60% 以后才淡入，85% 时已经看得见
+      expect(v?.opacity, `${k}：正在淡入`).toBeGreaterThan(0.3);
+      expect(v?.visibility).toBe('visible');
+    }
+    await finishAll(page);
+    await expect(page.getByTestId('today')).toBeVisible();
+    await expect(page.locator('html')).not.toHaveAttribute('data-vt', /.*/);
+  });
+
+  test('键盘弹着（根节点 data-kbhide）时进二级页：底栏、“＋”的副本跟真底栏一样藏着，不画出空壳', async ({ page }) => {
+    await openToday(page);
+    await page.evaluate(() => document.documentElement.setAttribute('data-kbhide', '1'));
+    await goHash(page, '#/event/new');
+    const s = await holdAndRead(page, 0.2).catch(() => null);
+    expect(s, '没等到整页推页').not.toBeNull();
+    expect([s?.bar?.visibility, s?.add?.visibility]).toEqual(['hidden', 'hidden']);
+    await finishAll(page);
+    await page.evaluate(() => document.documentElement.removeAttribute('data-kbhide'));
   });
 });
 

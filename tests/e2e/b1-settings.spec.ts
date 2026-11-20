@@ -7,6 +7,7 @@
 import type { Page } from '@playwright/test';
 import { ko as sharedKo } from '../../shared/i18n/ko.ts';
 import { zh as sharedZh } from '../../shared/i18n/zh.ts';
+import { waitPreloaded } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 const SETTINGS = '/app/#/settings';
@@ -315,34 +316,41 @@ test.describe('设置页骨架', () => {
     expect(await headName()).toBe('none');
   });
 
-  // 负责人 11-20：“所有点击进入下一页……画面都黑一下”，选“新页从右滑进盖住”（base.css lemo-push-* / lemo-pop-*）。
-  // 过渡中途两页都看得见、不再有整屏只剩底色的一帧；返回反方向。只跑 chromium：Playwright 的 Windows 版 webkit 过渡期间不画起名元素的新图
+  // 负责人 11-20：“所有点击进入下一页……画面都黑一下”，选“新页从右滑进盖住”（关键帧原来在 base.css lemo-push-* / lemo-pop-*，
+  // 11-20 起整页推页不用 View Transition，数值原样搬进 motion/page-swap.ts，旧页是真 DOM 副本 [data-tab-ghost]、新页是真 main）。
+  // 过渡中途两页都看得见、不再有整屏只剩底色的一帧；返回反方向
   test('账号 → 注销账号：新页从右滑进盖住、旧页往左退，中途不黑；“‹ 返回”反过来滑出（负责人 11-20）', async ({ page, browserName }, info) => {
-    test.skip(browserName !== 'chromium', 'webkit（Windows）过渡期间不画起名元素的新图');
     await page.goto(ACCOUNT);
-    await expect(page.getByTestId('settings-delete-entry')).toBeVisible();
-    /** 点 testId，等整页 root 两份动画出来就全部暂停，回 { 伪元素 → 动画名 } */
+    await expect(page.getByTestId('settings-delete-entry')).toBeVisible({ timeout: 10_000 });
+    // 推页动画实现首屏画完才下载，到之前换页直接换、不播（motion/index.ts）：等冷启动预加载跑完，它早就到了
+    await waitPreloaded(page);
+    /** 点 testId，等整页推页的动画（关键帧里带 vw 的平移）出来就全部暂停，回旧页副本、新页的平移关键帧 */
     const start = (id: string) =>
       page.evaluate(async (tid) => {
         document.querySelector<HTMLElement>(`[data-testid="${tid}"]`)?.click();
-        const vt = () => document.getAnimations().filter((a) => String((a.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition-'));
-        const root = () => vt().filter((a) => String((a.effect as KeyframeEffect).pseudoElement).endsWith('(root)'));
-        for (let i = 0; i < 120 && root().length < 2; i++) await new Promise((r) => requestAnimationFrame(r));
+        const slides = () =>
+          document.getAnimations().filter((a) => a.effect instanceof KeyframeEffect && a.effect.getKeyframes().some((k) => String(k['translate'] ?? '').includes('vw')));
+        const of = (sel: string) => slides().find((a) => ((a.effect as KeyframeEffect).target as Element | null)?.closest(sel) != null);
+        for (let i = 0; i < 120 && !(of('[data-tab-ghost]') && of('main')); i++) await new Promise((r) => requestAnimationFrame(r));
         for (const a of document.getAnimations()) a.pause();
-        return Object.fromEntries(vt().map((a) => [String((a.effect as KeyframeEffect).pseudoElement), (a as CSSAnimation).animationName]));
+        const kf = (a: Animation | undefined) => ((a?.effect as KeyframeEffect | undefined)?.getKeyframes() ?? []).map((k) => String(k['translate'] ?? ''));
+        return { old: kf(of('[data-tab-ghost]')), now: kf(of('main')) };
       }, id);
     const at = (ms: number) =>
       page.evaluate(async (t) => {
         for (const a of document.getAnimations()) a.currentTime = t;
         await new Promise((r) => requestAnimationFrame(r));
-        const tx = (pe: string) => new DOMMatrix(getComputedStyle(document.documentElement, pe).transform).m41;
-        return { old: tx('::view-transition-old(root)'), now: tx('::view-transition-new(root)'), w: innerWidth };
+        const tx = (el: Element | null) => (el ? parseFloat(getComputedStyle(el).translate) || 0 : NaN);
+        const main = document.querySelector('main');
+        const part = [main, ...(main?.querySelectorAll('*') ?? [])].find((e) => e && e.getAnimations().length > 0) ?? null;
+        return { old: tx(document.querySelector('[data-tab-ghost]')), now: tx(part), w: innerWidth };
       }, ms);
-    const shot = async (name: string) => page.screenshot({ path: info.outputPath(`${name}.png`) });
+    // 截图只在 chromium 留：webkit 截图时 Playwright 往页面插 <style>，被本站 CSP（style-src-elem）拦（11-20 实测，caret: 'initial' 也照插）
+    const shot = async (name: string) => void (browserName === 'chromium' && (await page.screenshot({ path: info.outputPath(`${name}.png`) })));
 
     const go = await start('settings-delete-entry');
-    expect(go['::view-transition-old(root)']).toBe('lemo-push-old');
-    expect(go['::view-transition-new(root)']).toBe('lemo-push-new');
+    expect(go.old, '旧页往左退 30vw（原 lemo-push-old）').toEqual(['0px', '-30vw']);
+    expect(go.now, '新页从 100vw 滑进来（原 lemo-push-new）').toEqual(['100vw', '0px']);
     const mid = await at(150);
     // 新页还没盖满、旧页往左退了一点：两页同时在屏上（原来 150ms 两页都透明，整屏只剩底色）
     expect(mid.now).toBeGreaterThan(0);
@@ -357,8 +365,8 @@ test.describe('设置页骨架', () => {
     await expect(page.getByTestId('settings-delete')).toBeVisible();
 
     const back = await start('settings-delete-back');
-    expect(back['::view-transition-old(root)']).toBe('lemo-pop-old');
-    expect(back['::view-transition-new(root)']).toBe('lemo-pop-new');
+    expect(back.old, '旧页往右滑出（原 lemo-pop-old）').toEqual(['0px', '100vw']);
+    expect(back.now, '上一页从 -30vw 回来（原 lemo-pop-new）').toEqual(['-30vw', '0px']);
     const mid2 = await at(150);
     // 旧页往右滑出、上一页从左边回来
     expect(mid2.old).toBeGreaterThan(0);
