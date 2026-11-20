@@ -1,15 +1,21 @@
-// 离线写入队列的“发送结果”两步：ack（确认后推进、更新本机的 server 副本）和 fail（五类失败 + 被移除）。outbox.ts 用
+// 离线写入队列的“发送结果”两步：ack（确认后推进、更新本机的 server 副本）和 fail（五类失败 + 被移除）。outbox.ts 用（按需下载，见 outbox.ts 的 loadSendCode）
 // 纯 TS：不准 import React 和任何功能（A1）
 import { mergeWithServerResets } from '../../shared/logic/server-reset.ts';
 import type { Cache, CachedRow, ServerRow } from './cache.ts';
 import { META, OUTBOX } from './cache-schema.ts';
 import type { CacheTx } from './cache.ts';
 import { advanceAfterAck, backoffMs, classifyFailure, isTryLater, MAX_OWN_REVS, tryLaterBackoffMs } from './outbox-logic.ts';
-import { notify, rewriteRow } from './outbox-rows.ts';
+import type { notify, rewriteRow } from './outbox-rows.ts';
 import type { AckResult, FailureKind, OutboxEvent, OutboxItem, OutboxOptions, SentFailure } from './outbox-types.ts';
 
 /** createOutbox 里各步共用的东西 */
 export interface Ctx {
+  /**
+   * outbox-rows.ts 的两个函数，由 outbox.ts 放进来（11-21 首屏瘦身）：这个文件首屏画完才下载（随 outbox-new-item.ts 那块，见那里的说明），
+   * 它要是自己静态引 outbox-rows.ts（→ store.ts），Rolldown 会把 store.ts 从首屏入口块拆成单独一块，首屏多一个文件、反而更大
+   */
+  notify: typeof notify;
+  rewriteRow: typeof rewriteRow;
   cache: Cache;
   opts: OutboxOptions;
   appVersion: string;
@@ -99,9 +105,9 @@ export async function ackImpl(ctx: Ctx, opId: string, ack: AckResult): Promise<v
     const base: CachedRow = { id, server: nextServer, view: row?.view ?? null };
     if (row?.ro) base.ro = true;
     if (own.length) base.own_revs = own;
-    view = await rewriteRow(t, table, id, base);
+    view = await ctx.rewriteRow(t, table, id, base);
   });
-  notify(table, [{ id, view }]);
+  ctx.notify(table, [{ id, view }]);
   await ctx.refresh();
 }
 
@@ -175,11 +181,11 @@ export async function failImpl(ctx: Ctx, opId: string, failure: SentFailure): Pr
       failed = { ...cur, state: 'failed', error: code };
       await t.put(OUTBOX, failed);
     }
-    view = await rewriteRow(t, table, id, await t.get<CachedRow>(table, id));
+    view = await ctx.rewriteRow(t, table, id, await t.get<CachedRow>(table, id));
   });
   const item: OutboxItem | null = before;
   if (!item) return kind;
-  notify(table, [{ id, view }]);
+  ctx.notify(table, [{ id, view }]);
   await ctx.refresh();
   ctx.emit(kind === 'drop' || !failed ? { type: 'rejected', item, code } : { type: 'error', item: failed, code });
   return kind;

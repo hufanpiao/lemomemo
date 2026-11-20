@@ -17,11 +17,19 @@
 import { buildInfo } from '../platform/env.ts';
 import type { Cache, CachedRow, CacheTx, ServerRow } from './cache.ts';
 import { OUTBOX } from './cache-schema.ts';
-import { bySeq, canRetryUnsynced, loadRowSchemas, OutboxCodeUnavailableError, OutboxRejectError, recKey, sendOrder, validateWrite } from './outbox-logic.ts';
+import { bySeq, canRetryUnsynced, loadOnceRetrying, loadRowSchemas, OutboxCodeUnavailableError, OutboxRejectError, recKey, sendOrder, validateWrite } from './outbox-logic.ts';
 import { migrateOutboxItem, OUTBOX_V, outboxMigrations } from './outbox-migrations.ts';
 import type { EnqueueAlso, EnqueueInput, Outbox, OutboxBootReport, OutboxEvent, OutboxItem, OutboxStatus, OutboxOptions } from './outbox-types.ts';
 import { applyServerRows, cancelDependents, notify, rewriteRow } from './outbox-rows.ts';
-import { ackImpl, failImpl, type Ctx } from './outbox-send.ts';
+import type { Ctx } from './outbox-send.ts';
+
+/**
+ * ack、fail 两步（outbox-send.ts，连同 shared/logic/server-reset.ts）首屏画完再下载（11-21 首屏瘦身）：只有同步引擎（core/sync/send.ts）发完请求才调，
+ * 同步引擎本身就是首屏画完才下载的；app/after-paint.ts 的 loadAfterPaint 把它和同步那批代码一起下载，任何一个失败整体重试，
+ * 所以同步引擎起来时它已经在内存里，这里的 import() 当场就有。只加载一次，失败的那次照样失败，下次再试（同 loadRowSchemas）。
+ * 经 outbox-new-item.ts 转出、不直接 import('./outbox-send.ts')：原因见那里；outbox-send.ts 要的 notify、rewriteRow 由下面的 ctx 给
+ */
+export const loadSendCode = loadOnceRetrying(() => import('./outbox-new-item.ts'));
 
 export * from './outbox-logic.ts';
 export * from './outbox-types.ts';
@@ -194,6 +202,8 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
 
   let suspended = false;
   const ctx: Ctx = {
+    notify,
+    rewriteRow,
     isSuspended: () => suspended,
     suspend: (on = true) => {
       suspended = on;
@@ -227,8 +237,8 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
         return item;
       });
     },
-    ack: (opId, ack) => ackImpl(ctx, opId, ack),
-    fail: (opId, failure) => failImpl(ctx, opId, failure),
+    ack: async (opId, ack) => (await loadSendCode()).ackImpl(ctx, opId, ack),
+    fail: async (opId, failure) => (await loadSendCode()).failImpl(ctx, opId, failure),
     async discard(opId) {
       if (suspended) return;
       const item = await getItem(opId);

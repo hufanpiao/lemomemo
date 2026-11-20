@@ -5,6 +5,7 @@
 // 每次下载前、回来后都过换账号闸；连续失败几次出“同步暂停 · 重新打开”。严格校验的 rows 也在这里预加载（M2、L1：第一次写入不用等下载）。
 import type { createDeviceRegistrar } from '../core/device-reg.ts';
 import { loadRowSchemas } from '../core/outbox-logic.ts';
+import { loadSendCode } from '../core/outbox.ts';
 import type { Lifecycle } from '../platform/net.ts';
 import type { LogUpload } from '../core/log/queue.ts';
 import type { probeAccountForExit } from '../platform/account-status.ts';
@@ -18,7 +19,10 @@ export interface AfterPaint {
   probeAccountForExit: typeof probeAccountForExit;
 }
 
-/** 四个分包并行下载，顺带预加载入队严格校验要的 rows（③ 审查 M2、L1）；任何一个失败就整体失败（startAfterPaint 重试） */
+/**
+ * 四个分包并行下载，顺带预加载入队严格校验要的 rows（③ 审查 M2、L1）和 outbox 的 ack、fail（core/outbox.ts 的 loadSendCode，11-21 首屏瘦身：
+ * 只有同步引擎调它们，和同步引擎一起到，同步起来以后不会因为下载失败确认不了）；任何一个失败就整体失败（startAfterPaint 重试）
+ */
 export async function loadAfterPaint(): Promise<AfterPaint> {
   const [net, dev, wiring, status] = await Promise.all([
     import('../platform/sync-net.ts'),
@@ -26,6 +30,7 @@ export async function loadAfterPaint(): Promise<AfterPaint> {
     import('./sync-wiring.ts'),
     import('../platform/account-status.ts'),
     loadRowSchemas(),
+    loadSendCode(),
   ]);
   return {
     createSupabaseTransport: net.createSupabaseTransport,
