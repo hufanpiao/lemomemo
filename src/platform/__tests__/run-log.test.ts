@@ -179,7 +179,7 @@ describe('全局运行日志', () => {
     expect(readRunLog()).not.toMatch(/vis-frames/);
   });
 
-  it('深度诊断（diag-deep.ts，默认关）：开着时切回前台数模糊层、换页画完记 swap pin；关着时这两项一次 getComputedStyle 都不调', () => {
+  it('深度诊断（diag-deep.ts，默认关）：开着时切回前台数模糊层、换页画完记 swap pin（按需下载 diag-swap-pin.ts）；关着时这两项一次 getComputedStyle 都不调', async () => {
     vi.useFakeTimers();
     const blurred = document.createElement('div');
     blurred.style.setProperty('backdrop-filter', 'blur(8px)');
@@ -188,7 +188,7 @@ describe('全局运行日志', () => {
     pin.setAttribute('data-swap-pin', '');
     main.append(pin);
     document.body.append(blurred, main);
-    const run = (): string => {
+    const run = async (): Promise<string> => {
       localStorage.clear();
       const cbs: Array<() => void> = [];
       const stop = startRunLog(window, { version: 't', frame: (cb) => void cbs.push(cb) });
@@ -196,6 +196,7 @@ describe('全局运行日志', () => {
       document.dispatchEvent(new Event('visibilitychange'));
       while (cbs.length) cbs.shift()?.();
       history.pushState(null, '', '#/calendar');
+      await vi.dynamicImportSettled(); // 深度诊断开着时等 diag-swap-pin.ts 下载到
       while (cbs.length) cbs.shift()?.();
       const calls = gcs.mock.calls.length;
       gcs.mockRestore();
@@ -203,13 +204,13 @@ describe('全局运行日志', () => {
       history.replaceState(null, '', '#/');
       return `${readRunLog()}\ncalls=${calls}`;
     };
-    const off = run();
+    const off = await run();
     expect(off).toMatch(/vis-frames .* blur=- /);
     expect(off).not.toMatch(/swap pin/);
     expect(off).toMatch(/calls=2$/); // 只剩根元素、body 的不透明度两次
     setDeepDiagOn(true);
     try {
-      const on = run();
+      const on = await run();
       expect(on).toMatch(/vis-frames .* blur=1 /);
       expect(on).toMatch(/app swap pin box=0 canvas=0 img=0 op=1\.00/);
     } finally {

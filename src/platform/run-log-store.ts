@@ -31,25 +31,31 @@ function chunkSeqs(store: Storage): number[] {
   return out.sort((a, b) => a - b);
 }
 
-/** 全部行（旧格式没迁移的也读）；读不了当没有 */
-function loadLines(store: Storage): { chunks: Array<{ seq: number; lines: string[] }>; old: string[] } {
-  const chunks: Array<{ seq: number; lines: string[] }> = [];
-  for (const seq of chunkSeqs(store)) {
-    try {
-      const v = store.getItem(chunkKey(seq));
-      if (v) chunks.push({ seq, lines: v.split('\n') });
-    } catch {
-      // 这一段读不了就跳过
-    }
-  }
-  let old: string[] = [];
+/** 读一个键按行拆开；没有、读不了当空 */
+function linesOf(store: Storage, k: string): string[] {
   try {
-    const v = store.getItem(OLD_KEY);
-    if (v) old = v.split('\n');
+    const v = store.getItem(k);
+    return v ? v.split('\n') : [];
   } catch {
-    old = [];
+    return [];
   }
-  return { chunks, old };
+}
+
+/** 删一个键；删不掉就算了（下次再删） */
+function del(store: Storage, k: string): void {
+  try {
+    store.removeItem(k);
+  } catch {
+    // 删不掉就算了
+  }
+}
+
+/** 全部行（旧格式没迁移的也读）；读不了的段跳过 */
+function loadLines(store: Storage): { chunks: Array<{ seq: number; lines: string[] }>; old: string[] } {
+  const chunks = chunkSeqs(store)
+    .map((seq) => ({ seq, lines: linesOf(store, chunkKey(seq)) }))
+    .filter((c) => c.lines.length);
+  return { chunks, old: linesOf(store, OLD_KEY) };
 }
 
 export function readRunLog(store: Storage = localStorage): string {
@@ -59,13 +65,7 @@ export function readRunLog(store: Storage = localStorage): string {
 }
 
 export function clearRunLog(store: Storage = localStorage): void {
-  for (const k of [OLD_KEY, ...chunkSeqs(store).map(chunkKey)]) {
-    try {
-      store.removeItem(k);
-    } catch {
-      // 清不掉就算了
-    }
-  }
+  for (const k of [OLD_KEY, ...chunkSeqs(store).map(chunkKey)]) del(store, k);
 }
 
 export interface RunLogWriter {
@@ -94,7 +94,8 @@ export function createRunLogWriter(store: Storage): RunLogWriter {
     }
   };
   /** 最新一段已经写满并且存过：下一行起新的一段。只在存完以后换段，每次存都只写一个键（换段那次不用两段一起写） */
-  let roll = (chunks.at(-1)?.lines.length ?? 0) >= CHUNK_LINES;
+  const full = (): boolean => (chunks.at(-1)?.lines.length ?? 0) >= CHUNK_LINES;
+  let roll = full();
   const push = (line: string): void => {
     let tail = chunks.at(-1);
     if (!tail || roll) {
@@ -110,7 +111,7 @@ export function createRunLogWriter(store: Storage): RunLogWriter {
   // 旧格式（一个键整份）：按段放进来，第一次 save 时写好、删旧键（只有升级后第一次启动走这里）
   for (const l of old.length > MAX_LINES ? old.slice(-MAX_LINES) : old) {
     push(l);
-    roll = (chunks.at(-1)?.lines.length ?? 0) >= CHUNK_LINES;
+    roll = full();
   }
 
   const write = (seq: number): boolean => {
@@ -123,13 +124,7 @@ export function createRunLogWriter(store: Storage): RunLogWriter {
       return false;
     }
   };
-  const remove = (k: string): void => {
-    try {
-      store.removeItem(k);
-    } catch {
-      // 删不掉：下次再删
-    }
-  };
+  const remove = (k: string): void => del(store, k);
   const save = (): void => {
     for (const seq of [...dirty].sort((a, b) => a - b)) {
       // 存不下（满了）：先丢最旧的整段再试，只剩最新一段还存不下就丢它的一半旧行（原来是整份丢一半）
@@ -151,7 +146,7 @@ export function createRunLogWriter(store: Storage): RunLogWriter {
       dirty.delete(seq);
     }
     for (const seq of drop.splice(0)) remove(chunkKey(seq));
-    roll = (chunks.at(-1)?.lines.length ?? 0) >= CHUNK_LINES;
+    roll = full();
     if (migrate) {
       migrate = false;
       remove(OLD_KEY);
