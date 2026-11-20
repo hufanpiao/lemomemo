@@ -1,5 +1,5 @@
 // 全局运行日志（负责人 11-11“以后所有的bug看log能不能解决”“要做就给我做详细的log”；只进非正式版，正式构建由 main.tsx 的 MODE 常量摇掉）
-// 一直开着、不靠试验开关，本机环形保存（OUT_KEY，最多 MAX_LINES 行，跨冷启动保留），诊断页“Copy run log”整段复制。记这些：
+// 一直开着、不靠试验开关，本机分段保存（run-log-store.ts，最多 MAX_LINES 行，跨冷启动保留），诊断页“Copy run log”整段复制。记这些：
 // • 开头：时间、版本@提交、屏幕、dpr、是否主屏幕版、路由、UA
 // • 视口：每次 visualViewport resize/scroll、window resize/scroll（同一帧合并）：innerHeight、可视区高度和偏移、缩放（不是 1 时才记）、scrollY、data-kbo、--kb、--vh-gap、
 //   焦点元素，以及版面快照（底栏、“＋”、模糊带、打字条、随手记输入行、撤销条、焦点输入框和它所在浮层：相对可视区的上沿~下沿、高度、是否藏着）
@@ -14,11 +14,13 @@
 // 隐私：不记用户输入的任何文字、不记网址参数；按钮只记 data-testid / aria-label / id
 import { buildInfo, isStandalone } from './env.ts';
 import { RL_SLOT } from './run-log-api.ts';
+import { createRunLogWriter } from './run-log-store.ts';
 import { createLayoutProbe, describeEl, isMasked, RL_MASK_ATTR } from './run-log-layout.ts';
 import { KBO_ATTR } from './viewport-geom.ts';
 
-export const OUT_KEY = 'lemo-run-log';
-export const MAX_LINES = 3000;
+export { clearRunLog, MAX_LINES, readRunLog } from './run-log-store.ts';
+/** 有新行后多久存一次（只写最新一段以后每次很小，节奏不放长：崩溃时 300ms 以前的行都已经在本机） */
+const SAVE_MS = 300;
 /** 视口事件合并 */
 const VV_GAP_MS = 16;
 /** 焦点、路由变化后多久再拍一次版面 */
@@ -27,22 +29,6 @@ const SETTLE_SNAP_MS = 400;
 export const KB_CHECK_MS = 1500;
 
 type Slot = { q: Array<[number, string]>; sink?: ((line: string) => void) | undefined };
-
-export function readRunLog(store: Storage = localStorage): string {
-  try {
-    return store.getItem(OUT_KEY) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-export function clearRunLog(store: Storage = localStorage): void {
-  try {
-    store.removeItem(OUT_KEY);
-  } catch {
-    // 清不掉就算了
-  }
-}
 
 /** 输入框的状态：值的长度、选区、只读/禁用（不含文字）；input、textarea 都记，只读的也记（会不会弹键盘看 env.ts 的 opensKeyboard） */
 function fieldState(el: unknown): string {
@@ -131,33 +117,23 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const store = opts.store ?? localStorage;
   const now = opts.now ?? (() => Date.now());
   const t0 = now();
-  let lines: string[] = [];
-  try {
-    const old = store.getItem(OUT_KEY);
-    if (old) lines = old.split('\n');
-  } catch {
-    lines = [];
-  }
+  // 分段存（run-log-store.ts）：每次只写最新那一段；节奏不变，有新行后 SAVE_MS 存一次，离开页面、切到后台当场存
+  const out = createRunLogWriter(store);
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   const save = (): void => {
     saveTimer = undefined;
-    try {
-      store.setItem(OUT_KEY, lines.join('\n'));
-    } catch {
-      // 存不下：丢一半旧的再试一次
-      lines.splice(0, Math.floor(lines.length / 2));
-      try {
-        store.setItem(OUT_KEY, lines.join('\n'));
-      } catch {
-        // 算了
-      }
-    }
+    out.save();
+  };
+  /** 攒着没存的当场存 */
+  const flush = (): void => {
+    if (saveTimer === undefined) return;
+    clearTimeout(saveTimer);
+    save();
   };
   const stamp = (ms: number): string => `t=${((ms - t0) / 1000).toFixed(2)}`;
   const push = (line: string): void => {
-    lines.push(line);
-    if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
-    if (saveTimer === undefined) saveTimer = setTimeout(save, 300);
+    out.push(line);
+    if (saveTimer === undefined) saveTimer = setTimeout(save, SAVE_MS);
   };
   // 换页：路由用 pushState、replaceState 换地址不触发 hashchange（router.ts 按 0.31 第 3 条不能引日志），
   // 11-14 起每记一行前先看地址变没变（b5-vault 点返回后空白，日志里看不出去了哪页）；11-18 起换地址当下就记（见 noteRoute）
@@ -334,7 +310,8 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   };
   const onVis = (): void => {
     snap(`visibility=${doc.visibilityState}`);
-    if (doc.visibilityState !== 'visible') return;
+    // 切到后台：当场存（iOS 切走以后很快冻结页面，300ms 的计时器可能等不到，被系统杀掉时最后几行就没了）
+    if (doc.visibilityState !== 'visible') return flush();
     // 切回前台白屏很久（负责人 11-18 截图 10:30；日志只看到页面一直在、没重开，看不出卡在哪）：
     // 记回来以后第 1、2 帧离 visibilitychange 多久、0 ms 计时器多久才轮到，和当时页面上有几层背景模糊（backdrop-filter）。
     // 帧来得晚 = 主线程或合成器卡着；帧很快但用户看见白 = 系统在重画图层（层越多越慢）
@@ -368,11 +345,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   };
   const onPageShow = (e: PageTransitionEvent): void => snap(`pageshow persisted=${e.persisted}`);
   // 离开页面（location.replace 去登录页、刷新、关标签页）：攒着没存的当场存，不等 300ms（启动失败那一行，第三方审查前端第 3 条）
-  const onPageHide = (): void => {
-    if (saveTimer === undefined) return;
-    clearTimeout(saveTimer);
-    save();
-  };
+  const onPageHide = flush;
   const onErr = (e: ErrorEvent): void => add(`error ${String(e.message).slice(0, 300)} @${String(e.filename).split('/').pop()}:${e.lineno}:${e.colno}`);
   const onRej = (e: PromiseRejectionEvent): void => {
     const r = e.reason as { name?: string; message?: string; stack?: string } | undefined;

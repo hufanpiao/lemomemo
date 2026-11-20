@@ -1,6 +1,25 @@
 // e2e 用例共用的页面小工具（第三方审查 CI-14、CI-15）：评审截图、等换页淡入放完、等位置停稳、触摸左滑、左滑失败时的诊断
 import { expect, type Locator, type Page } from '@playwright/test';
 
+/**
+ * App 运行日志全文，在页面里跑：page.evaluate(readRunLogInPage)。11-20 起日志分段存（src/platform/run-log-store.ts：
+ * 每段一个键 lemo-run-log.c<序号>），按序号拼起来；不要再直接读 localStorage 的 lemo-run-log（那个键已经不写了，
+ * tests/build/run-log-readers.test.ts 拦）。函数里不引任何外面的东西，Playwright 才能原样传进页面
+ */
+export function readRunLogInPage(): string {
+  const segs: number[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const m = /^lemo-run-log\.c(\d+)$/.exec(localStorage.key(i) ?? '');
+    if (m) segs.push(Number(m[1]));
+  }
+  return segs
+    .sort((a, b) => a - b)
+    .map((n) => localStorage.getItem(`lemo-run-log.c${n}`) ?? '')
+    .join('\n');
+}
+/** 同上，写成表达式字符串：给 waitForFunction 和别的页面函数里拼着用 */
+export const RUN_LOG_EXPR = `(${readRunLogInPage.toString()})()`;
+
 /** 设了 LEMO_SHOT_DIR 才截评审图（只在 Chromium 上截，不进仓库） */
 export const SHOT_DIR = process.env['LEMO_SHOT_DIR'];
 
@@ -135,10 +154,11 @@ export async function swipeRow(page: Page, rowTestId: string, frac = 0.8): Promi
  */
 export async function swipeDiag(page: Page, at: { x: number; y: number }, rowTestId: string, listTestId: string): Promise<string> {
   await page
-    .waitForFunction(() => (localStorage.getItem('lemo-run-log') ?? '').includes('swipe up'), undefined, { timeout: 2000 })
+    .waitForFunction(`${RUN_LOG_EXPR}.includes('swipe up')`, undefined, { timeout: 2000 })
     .catch(() => undefined);
+  const text = await page.evaluate(readRunLogInPage);
   return page.evaluate(
-    ([px, py, rid, lid]) => {
+    ([px, py, rid, lid, all]) => {
       const el = document.elementFromPoint(Number(px), Number(py));
       const top = el ? `${el.tagName.toLowerCase()}#${el.closest('[data-testid]')?.getAttribute('data-testid') ?? '-'}` : 'none';
       const chain: string[] = [];
@@ -148,7 +168,7 @@ export async function swipeDiag(page: Page, at: { x: number; y: number }, rowTes
       const layers = [...(document.querySelector(`[data-testid="${String(lid)}"]`)?.querySelectorAll('[data-state]') ?? [])]
         .map((g) => `${g.getAttribute('data-testid') ?? g.tagName.toLowerCase()}=${g.getAttribute('data-state') ?? '-'} op=${getComputedStyle(g).opacity}`)
         .join(',');
-      const log = (localStorage.getItem('lemo-run-log') ?? '').split('\n');
+      const log = String(all).split('\n');
       return [
         `列表里各层状态：${layers}`,
         `起点最上层：${top}；往上：${chain.join(' < ')}`,
@@ -156,7 +176,7 @@ export async function swipeDiag(page: Page, at: { x: number; y: number }, rowTes
         `运行日志最后 30 行：${log.slice(-30).join(' | ')}`,
       ].join(' | ');
     },
-    [at.x, at.y, rowTestId, listTestId] as const,
+    [at.x, at.y, rowTestId, listTestId, text] as const,
   );
 }
 
@@ -169,9 +189,9 @@ export async function waitPreloaded(page: Page): Promise<void> {
   await expect
     .poll(
       () =>
-        page.evaluate(() => {
+        page.evaluate(readRunLogInPage).then((text) => {
           // 运行日志存在 localStorage、重新载入后旧行还在：只看这一次载入（最后一行 boot 之后）记的
-          const ls = (localStorage.getItem('lemo-run-log') ?? '').split('\n');
+          const ls = text.split('\n');
           let i = ls.length - 1;
           while (i >= 0 && !/^t=\S+ boot /.test(ls[i] ?? '')) i--;
           return i >= 0 && ls.slice(i).some((l) => l.includes(' preload notes '));

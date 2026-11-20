@@ -1,6 +1,7 @@
 // 全局运行日志（负责人 11-11“以后所有的bug看log能不能解决”“要做就给我做详细的log”，platform/run-log.ts）
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { KB_CHECK_MS, MAX_LINES, OUT_KEY, readRunLog, startRunLog } from '../run-log.ts';
+import { KB_CHECK_MS, MAX_LINES, readRunLog, startRunLog } from '../run-log.ts';
+import { OLD_KEY } from '../run-log-store.ts';
 import { describeEl } from '../run-log-layout.ts';
 import { rlog, RL_SLOT } from '../run-log-api.ts';
 
@@ -219,8 +220,8 @@ describe('全局运行日志', () => {
     spy.mockRestore();
   });
 
-  it('跨冷启动保留旧日志，超过 MAX_LINES 丢最旧的', () => {
-    localStorage.setItem(OUT_KEY, Array.from({ length: MAX_LINES + 50 }, (_, i) => `old${i}`).join('\n'));
+  it('跨冷启动保留旧日志（含 11-20 以前一个键整份存的），超过 MAX_LINES 丢最旧的', () => {
+    localStorage.setItem(OLD_KEY, Array.from({ length: MAX_LINES + 50 }, (_, i) => `old${i}`).join('\n'));
     startRunLog(window, { version: 'v2' })();
     const lines = readRunLog().split('\n');
     expect(lines.length).toBeLessThanOrEqual(MAX_LINES);

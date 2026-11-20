@@ -7,6 +7,7 @@
 import type { Page } from '@playwright/test';
 import { fakeRest, type FakeRest } from './fake-rest.ts';
 import { idbRead } from './idb.ts';
+import { readRunLogInPage } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
 
@@ -21,7 +22,7 @@ const NEW = id(2);
 const EDITED = id(3);
 const DAY = 86400000;
 
-const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+const runLog = (page: Page) => page.evaluate(readRunLogInPage);
 const viewOf = async (page: Page, rid: string) => (await idbRead<{ view: { deleted_at: unknown } }>(page, 'todos', 'get', rid))?.view;
 
 /** autodel：服务器上 settings 的 todo.autodel（不给就没有这一行，默认开）；rev 越大越新，③ 联网后改回 true 用 rev 2 */

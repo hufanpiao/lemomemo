@@ -13,7 +13,7 @@ import { writeFileSync } from 'node:fs';
 import type { Page, Request } from '@playwright/test';
 import { exifApp1, hasAscii, isWebpFile, riffChunks, WEBP_IMAGE_CHUNKS, withExif } from '../../src/features/notes/__tests__/exif-sample.ts';
 import { fakeRest } from './fake-rest.ts';
-import { jpeg } from './page-helpers.ts';
+import { jpeg, readRunLogInPage } from './page-helpers.ts';
 import { expect, FAKE_USER_ID, seedFakeSession, test } from './session-fixture.ts';
 
 test.skip(({ browserName }) => browserName !== 'chromium', '改的是 Chromium 的 canvas 导出（WebKit 原生行为只能真机看）；SW、断网在 chromium 跑一次');
@@ -67,7 +67,7 @@ async function newNote(page: Page): Promise<void> {
   await expect(page.getByTestId('note-edit-img')).toBeEnabled({ timeout: 15_000 });
 }
 
-const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+const runLog = (page: Page) => page.evaluate(readRunLogInPage);
 
 // 失败时把运行日志附进报告（先看日志再定根因）
 test.afterEach(async ({ page }, info) => {

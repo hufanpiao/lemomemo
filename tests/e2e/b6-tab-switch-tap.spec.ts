@@ -6,6 +6,7 @@
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { cached, idbPut } from './idb.ts';
+import { readRunLogInPage } from './page-helpers.ts';
 import { FAKE_USER_ID, expect, test } from './session-fixture.ts';
 
 test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', locale: 'zh-CN', viewport: { width: 390, height: 844 } });
@@ -30,7 +31,7 @@ async function seed(page: Page): Promise<void> {
   await page.getByTestId('todos-row-n1').waitFor({ timeout: 30000 });
 }
 
-const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+const runLog = (page: Page) => page.evaluate(readRunLogInPage);
 
 // 点的是打勾圈（负责人 11-15 待办去掉行尾 ×、删除改左滑以后，行上一点就生效的就是打勾）：打勾也出撤销条
 test('随手记 → 待办：窗口以内点打勾被吞、日志记 prevented-later；过了窗口再点真勾上、出撤销条', async ({ page }) => {

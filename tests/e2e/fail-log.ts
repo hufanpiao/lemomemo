@@ -1,10 +1,11 @@
 // 用例失败时把现场带进报告（B4b-3 返工第三条：默认组首次运行 18 条白屏没抓到日志；“所有 bug 先看日志”）：
-// • 运行日志最后 40 行（localStorage lemo-run-log，platform/run-log.ts；本身不记用户原话）
+// • 运行日志最后 40 行（本机分段存，platform/run-log-store.ts，经 page-helpers.ts 的 readRunLogInPage 读；本身不记用户原话）
 // • 控制台 error、页面未捕获的报错（pageerror）、失败的请求（只记去掉查询串的地址和原因）
 // • 失败那一刻还没回来的请求、最慢的几个请求（发出时刻、耗时；冷启动白屏时看卡在哪个文件上）
 // • 失败那一刻的地址、#root 里有没有东西（白屏时一眼看出是没挂上还是挂上了没内容）
 // 只在失败时附件（fail-log）并打到标准输出；通过的用例什么都不留。各 spec 在顶层调一次 logOnFail(test)
 import type { Page, Request } from '@playwright/test';
+import { readRunLogInPage } from './page-helpers.ts';
 import type { test as base } from './session-fixture.ts';
 
 const TAIL = 40;
@@ -50,11 +51,13 @@ export function logOnFail(t: typeof base): void {
   t.afterEach(async ({ page }, info) => {
     if (info.status === info.expectedStatus) return;
     const state = await page
-      .evaluate((n) => {
-        const root = document.getElementById('root');
-        const log = (localStorage.getItem('lemo-run-log') ?? '').split('\n').slice(-n).join('\n');
-        return `url=${location.pathname}${location.hash} ready=${document.readyState} root=${root ? root.childElementCount : 'none'} bodyText=${document.body.innerText.length}\n${log}`;
-      }, TAIL)
+      .evaluate(readRunLogInPage)
+      .then((all) =>
+        page.evaluate((log) => {
+          const root = document.getElementById('root');
+          return `url=${location.pathname}${location.hash} ready=${document.readyState} root=${root ? root.childElementCount : 'none'} bodyText=${document.body.innerText.length}\n${log}`;
+        }, all.split('\n').slice(-TAIL).join('\n')),
+      )
       .catch((e: unknown) => `(读不到页面：${String(e).slice(0, CUT)})`);
     const errs = seen.get(page) ?? [];
     const body = `== 页面状态和运行日志最后 ${TAIL} 行 ==\n${state}\n\n== 控制台错误、页面报错、失败请求（${errs.length} 条）==\n${errs.join('\n') || '（无）'}\n\n${net.get(page)?.() ?? ''}`;

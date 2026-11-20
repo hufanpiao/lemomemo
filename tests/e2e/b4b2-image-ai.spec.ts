@@ -9,7 +9,7 @@ import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
-import { jpeg, shot } from './page-helpers.ts';
+import { jpeg, readRunLogInPage, shot } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
 test.setTimeout(90_000);
@@ -75,7 +75,7 @@ async function openNote(page: Page): Promise<void> {
   await page.waitForTimeout(FADE_GUARD_MS);
 }
 
-const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+const runLog = (page: Page) => page.evaluate(readRunLogInPage);
 
 // 失败时把运行日志附进报告（先看日志再定根因）
 test.afterEach(async ({ page }, info) => {

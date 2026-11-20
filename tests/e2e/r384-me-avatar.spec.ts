@@ -12,7 +12,7 @@ import { writeFileSync } from 'node:fs';
 import type { Page, Request } from '@playwright/test';
 import { isWebpFile } from '../../src/features/notes/__tests__/exif-sample.ts';
 import { fakeRest, POLICY_VER } from './fake-rest.ts';
-import { jpeg, SHOT_DIR } from './page-helpers.ts';
+import { jpeg, readRunLogInPage, SHOT_DIR } from './page-helpers.ts';
 import { expect, FAKE_USER_ID, seedFakeSession, test } from './session-fixture.ts';
 
 test.setTimeout(90_000);
@@ -80,7 +80,7 @@ async function fakeServer(page: Page, baseURL: string | undefined, profile: Reco
   return fake;
 }
 
-const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+const runLog = (page: Page) => page.evaluate(readRunLogInPage);
 const face = (page: Page) => page.getByTestId('settings-me-avatar-face');
 
 async function openAccount(page: Page): Promise<void> {

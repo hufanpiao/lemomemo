@@ -5,6 +5,7 @@
 // 拉取成功以后删、开关关着不删、离线启动不删再联网删：快读组 todo-autodel-pull.spec.ts
 import type { Page } from '@playwright/test';
 import { cached, idbPut, idbRead } from './idb.ts';
+import { readRunLogInPage } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -26,7 +27,7 @@ test('同步没拉成功（没有后端）：完成满 7 天的也不删，日�
   await expect(page.getByTestId('todos-done-fold')).toContainText('已完成 1', { timeout: 30000 });
   await page.waitForTimeout(3000);
   expect((await outboxOf(page)).filter((x) => x.startsWith('todos:'))).toEqual([]);
-  expect(await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).not.toContain('todo autodel');
+  expect(await page.evaluate(readRunLogInPage)).not.toContain('todo autodel');
   await page.goto('/app/#/trash');
   await page.getByTestId('trash').waitFor({ timeout: 30000 });
   await expect(page.getByTestId('trash-row-old')).toHaveCount(0);

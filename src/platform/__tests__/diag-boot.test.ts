@@ -6,15 +6,15 @@ import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PROBE_MARKERS } from '../../../build/check_no_probe.mjs';
 import { dropStaleKeys, logBootFailed, STALE_KEYS, startDiagBoot } from '../diag-boot.ts';
-import { OUT_KEY as RUN_LOG_KEY } from '../run-log.ts';
+import { readRunLog } from '../run-log.ts';
 
 beforeEach(() => localStorage.clear());
 
 describe('startDiagBoot', () => {
   it('运行日志一直开；不跑 Gap fix', () => {
     startDiagBoot();
-    expect(localStorage.getItem(RUN_LOG_KEY) ?? '').not.toBe('');
-    expect(localStorage.getItem(RUN_LOG_KEY)).not.toMatch(/gapfix/);
+    expect(readRunLog()).not.toBe('');
+    expect(readRunLog()).not.toMatch(/gapfix/);
   });
 
   it('R-409：空闲时才清掉两个旧键 lemo-gapfix-out、lemo-sp-color，别的键不动', () => {
@@ -27,7 +27,7 @@ describe('startDiagBoot', () => {
     (later as unknown as () => void)();
     for (const k of STALE_KEYS) expect(localStorage.getItem(k)).toBeNull();
     expect(localStorage.getItem('lemo-gapfix-off')).toBe('1');
-    expect(localStorage.getItem(RUN_LOG_KEY) ?? '').not.toBe('');
+    expect(readRunLog()).not.toBe('');
   });
 
   it('启动失败那一行（logBootFailed）：只有错误名和固定说明；离开页面（pagehide）当场存进运行日志（第三方审查前端第 3 条）', () => {
@@ -36,7 +36,7 @@ describe('startDiagBoot', () => {
     logBootFailed(e);
     logBootFailed('不是 Error');
     window.dispatchEvent(new Event('pagehide'));
-    const log = localStorage.getItem(RUN_LOG_KEY) ?? '';
+    const log = readRunLog();
     expect(log).toMatch(/app boot start_failed TypeError -> auth$/m);
     expect(log).toMatch(/app boot start_failed string -> auth$/m);
     expect(log).not.toContain('含用户内容');
