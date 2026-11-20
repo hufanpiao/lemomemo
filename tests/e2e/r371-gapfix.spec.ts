@@ -68,7 +68,9 @@ async function expectOffInert(page: Page, gapReqs: readonly string[]): Promise<v
   expect(gapReqs, '没下载 vh-gapfix').toEqual([]);
   await expect.poll(() => page.evaluate(readRunLogInPage), { timeout: 5000 }).toContain('=== start');
   await expect(page.locator('#lemo-gapfix-pad')).toHaveCount(0);
-  expect(await log(page)).toBe('');
+  // 总开关（lemo-gapfix-off）只停放垫块那三套（early、bar、kb）；第四套 css（贴底元素补 --vh-gap，viewport.ts）一直不归它管、照旧生效，
+  // fdf2e50e 起它的值一变就记一行 gapfix css set=…（负责人 11-20 选“手机上对照一次”，四套都要能在日志里看出来）。所以除了这一行，gapfix 的行一条都不许有
+  expect((await log(page)).split('\n').filter((l) => l !== '' && !l.includes(' app gapfix css ')).join('\n')).toBe('');
 }
 
 /** 启动的淡入都放完：启动画面撤了、安全区放行、实色带不透明 */
