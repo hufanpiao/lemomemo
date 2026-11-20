@@ -84,6 +84,21 @@ describe('头像仓', () => {
     expect(sign).toHaveBeenCalledTimes(2);
   });
 
+  it('改善报告 11-20 二-4：签名过期（取字节回 resign）重签一次再取，拿到图；重签后还过期才算取不到、下次再取', async () => {
+    fakeCaches();
+    fetchBlob.mockResolvedValueOnce({ ok: false, kind: 'resign', code: 'expired', status: 403 });
+    const s = await store();
+    expect(await s.load(s.path('a'))).toBe('blob:1');
+    expect(sign).toHaveBeenCalledTimes(2);
+    expect(sign.mock.calls[1]?.[0]).toEqual([{ bucket: 'images', path: 'u1/t/a.webp', purpose: 'view' }]);
+
+    live = new Set(['a', 'b']);
+    fetchBlob.mockResolvedValueOnce({ ok: false, kind: 'resign', code: 'expired', status: 403 }).mockResolvedValueOnce({ ok: false, kind: 'resign', code: 'bad_signature', status: 403 });
+    expect(await s.load(s.path('b'))).toBeNull();
+    expect(sign).toHaveBeenCalledTimes(4);
+    expect(await s.load(s.path('b'))).toBe('blob:2');
+  });
+
   it('第 5 条：取的时候换了头像（id 不在 live 了），取回来的不留、不存', async () => {
     const { all } = fakeCaches();
     let release: (v: unknown) => void = () => undefined;

@@ -8,6 +8,7 @@
 // • 不带 zod，本身也只按需加载（纪念日经 features/anniv/data/avatar-view.ts，我的头像经 core/me-avatar.ts）
 import { appPainted } from '../platform/root-paint.ts';
 import { AVATAR_CACHE_MAX, dropCachedAvatar, readCachedAvatar, type AvatarCacheSpec } from './avatar-cache.ts';
+import { createBlobUrls } from './blob-urls.ts';
 import type * as ViewNs from './avatar-view.ts';
 
 export interface AvatarStoreSpec<P extends unknown[]> extends AvatarCacheSpec {
@@ -37,39 +38,18 @@ const idOfPath = (path: string): string => path.slice(path.lastIndexOf('/') + 1,
 const view = (): Promise<typeof ViewNs> => import('./avatar-view.ts');
 
 export function createAvatarStore<P extends unknown[]>(s: AvatarStoreSpec<P>): AvatarStore<P> {
-  const done = new Map<string, string>();
-  const inflight = new Map<string, Promise<string | null>>();
   const subs = new Set<() => void>();
   let watching = false;
   const ping = (): void => {
     for (const fn of [...subs]) fn();
   };
-
-  function keep(avatarId: string, url: string): void {
-    const old = done.get(avatarId);
-    if (old !== undefined && old !== url) URL.revokeObjectURL(old);
-    done.delete(avatarId);
-    done.set(avatarId, url);
-    for (const [k, u] of done) {
-      if (done.size <= AVATAR_CACHE_MAX) break;
-      done.delete(k);
-      URL.revokeObjectURL(u);
-    }
-    ping();
-  }
+  // avatar_id → blob: 地址：和随手记插图同一份地址表（core/blob-urls.ts；超上限 revoke 最早的，有增减就通知订阅者）
+  const urls = createBlobUrls({ max: AVATAR_CACHE_MAX, onChange: ping });
+  const keep = urls.keep;
 
   /** 不在 live 里的 avatar_id revoke、删缓存 */
   function prune(): void {
-    const live = s.live();
-    let gone = false;
-    for (const [k, u] of done) {
-      if (live.has(k)) continue;
-      done.delete(k);
-      URL.revokeObjectURL(u);
-      dropCachedAvatar(s, k);
-      gone = true;
-    }
-    if (gone) ping();
+    for (const k of urls.prune(s.live())) dropCachedAvatar(s, k);
   }
 
   /** live 变了就 prune（订阅一次） */
@@ -90,22 +70,17 @@ export function createAvatarStore<P extends unknown[]>(s: AvatarStoreSpec<P>): A
     keep(id, URL.createObjectURL(blob));
     const b = blob;
     if (hit === null) void view().then((v) => v.writeCachedAvatar(s, id, b, s.live()));
-    return done.get(id) ?? null;
+    return urls.peek(id);
   }
 
   return {
     path: s.path,
-    peek: (avatarId) => done.get(avatarId) ?? null,
+    peek: urls.peek,
     load: (path) => {
       watch();
       const id = idOfPath(path);
-      const hit = done.get(id);
-      if (hit) return Promise.resolve(hit);
-      const going = inflight.get(id);
-      if (going) return going;
-      const p = get(id, path).finally(() => inflight.delete(id));
-      inflight.set(id, p);
-      return p;
+      const hit = urls.peek(id);
+      return hit ? Promise.resolve(hit) : urls.once(id, () => get(id, path));
     },
     seed: (avatarId, blob) => {
       watch();
