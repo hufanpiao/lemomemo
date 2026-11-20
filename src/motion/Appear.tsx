@@ -79,6 +79,7 @@ export function useEnter<T extends Element>(kind: EnterKind, also?: { current: T
       el.animate([{ ...(prefersReducedMotion() ? p.reducedFrom : p.from), offset: 0 }], {
         duration: p.transition.duration * 1000,
         easing: bezierCss(p.transition.ease),
+        fill: p.fill,
       });
     },
     [also],

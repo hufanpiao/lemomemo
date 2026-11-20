@@ -77,18 +77,24 @@ export interface EnterPreset {
   /** 减少动态效果时的起点 */
   reducedFrom: { opacity: number };
   transition: { readonly duration: number; readonly ease: readonly [number, number, number, number] };
+  /**
+   * 播完以后留不留终点（同原 CSS 的 animation-fill-mode）：原来写了 both 的这里也写 both。
+   * 不能省：带 both 时播完 transform 停在单位矩阵（不是 none），它会给里面 position: fixed 的子元素当定位参照——
+   * 纪念日编辑层里的提醒弹窗（RemindSheet 的 Dialog）、抽屉里的固定层靠它框在层里；省掉就铺满整个窗口（11-21 逐帧对照发现）
+   */
+  fill: 'both' | 'none';
 }
 
 export const enters: Record<EnterKind, EnterPreset> = {
   // 撤销条从下方 12px 升起并淡入（负责人 11-17 勾选特效分镜第 ⑤ 段，所有撤销条一起；原 UndoToast.module.css undo-rise）。
   // 用独立的 translate 属性、不用 transform：打字条（TypeBar .noticeSlot）拿 transform 把撤销条抬到打字条上面，
   // 动 transform 会在动画期间盖掉抬升量（位移变成 12 + lift）；translate 和 transform 分开叠加，互不干扰
-  lift: { from: { opacity: 0, translate: '0 12px' }, reducedFrom: { opacity: 0 }, transition: tr.ui },
+  lift: { from: { opacity: 0, translate: '0 12px' }, reducedFrom: { opacity: 0 }, transition: tr.ui, fill: 'none' },
   // 纪念日编辑层从底部滑上来（原 AnnivPage.module.css anniv-sheet-in；同上面 sheet 的进场，但不带退场）
-  sheetUp: { from: { transform: 'translateY(100%)' }, reducedFrom: { opacity: 0 }, transition: tr.sheet },
+  sheetUp: { from: { transform: 'translateY(100%)' }, reducedFrom: { opacity: 0 }, transition: tr.sheet, fill: 'both' },
   // 电脑版详情抽屉从右边（换到左边时从左边）滑进来 24px 并淡入（R-376 最基本的滑入；原 DetailDrawer.module.css drawer-in）
-  drawerRight: { from: { opacity: 0, transform: 'translateX(24px)' }, reducedFrom: { opacity: 0 }, transition: tr.ui },
-  drawerLeft: { from: { opacity: 0, transform: 'translateX(-24px)' }, reducedFrom: { opacity: 0 }, transition: tr.ui },
+  drawerRight: { from: { opacity: 0, transform: 'translateX(24px)' }, reducedFrom: { opacity: 0 }, transition: tr.ui, fill: 'both' },
+  drawerLeft: { from: { opacity: 0, transform: 'translateX(-24px)' }, reducedFrom: { opacity: 0 }, transition: tr.ui, fill: 'both' },
   // 输入时那层液态模糊只淡入、不动位置，110ms（--dur-ui 的一半，不超过 200ms）；减少动态效果时也一样（原 Mist.module.css mist-in）
-  mist: { from: { opacity: 0 }, reducedFrom: { opacity: 0 }, transition: { duration: tr.ui.duration / 2, ease: tr.ui.ease } },
+  mist: { from: { opacity: 0 }, reducedFrom: { opacity: 0 }, transition: { duration: tr.ui.duration / 2, ease: tr.ui.ease }, fill: 'both' },
 };
