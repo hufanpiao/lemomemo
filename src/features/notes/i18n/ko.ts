@@ -20,7 +20,7 @@ export const ko = {
   'notes.menu': '이 메모', // REVIEW(ko)
   'notes.delete': '삭제', // REVIEW(ko)
   'notes.deleted': '삭제했어요', // REVIEW(ko)
-  'notes.undo': '실행 취소', // REVIEW(ko)
+  'notes.undo': '되돌리기', // REVIEW(ko) 负责人 11-20 定“撤销”统一 되돌리기
   'notes.err.save': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
   'notes.input': '떠오른 걸 한 줄 적기…', // REVIEW(ko)
   'notes.inputLabel': '메모 한 줄 적기', // REVIEW(ko)

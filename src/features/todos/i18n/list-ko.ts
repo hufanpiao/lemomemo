@@ -18,7 +18,7 @@ export const listKo: Readonly<Record<keyof typeof listZh, string>> = {
   'list.due.tomorrow': '내일', // REVIEW(ko)
   'list.sub': '{date} · {done} / {total} 완료', // REVIEW(ko)
   'list.delete': '삭제', // REVIEW(ko)
-  'list.undo': '실행 취소', // REVIEW(ko)
+  'list.undo': '되돌리기', // REVIEW(ko) 负责人 11-20 定“撤销”统一 되돌리기
   'list.dayTodos': '할 일', // REVIEW(ko)
   'list.err.save': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
   'settings.autodel': '완료 7일 후 자동 삭제', // REVIEW(ko)
