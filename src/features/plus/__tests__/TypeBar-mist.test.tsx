@@ -90,10 +90,10 @@ describe('.mist 的样式（源码文字：只核真浏览器里模拟不了的�
     for (const above of ['inrow', 'bar-fx', 'bar', 'toast']) expect(z('notes-mist')).toBeLessThan(z(above));
   });
 
-  it('减少透明效果（系统设置、data-rt）和不认 backdrop-filter（两种写法都不认）：不模糊、不画高光，退成半透明纯色 --g-tint-fb', () => {
+  it('减少透明效果（只看系统设置 data-rt-sys；隐私记强制实色的 data-rt 不管这一层，负责人 11-20）和不认 backdrop-filter（两种写法都不认）：不模糊、不画高光，退成半透明纯色 --g-tint-fb', () => {
     const fallback = String.raw`\.mist \{\s*background: var\(--g-tint-fb\);`;
-    expect(css).toMatch(new RegExp(String.raw`:global\(:root\[data-rt='1'\]\) ${fallback}\s*backdrop-filter: none;`));
-    expect(css).toMatch(/:global\(:root\[data-rt='1'\]\) \.mist::after \{\s*display: none;/);
+    expect(css).toMatch(new RegExp(String.raw`:global\(:root\[data-rt-sys='1'\]\) ${fallback}\s*backdrop-filter: none;`));
+    expect(css).toMatch(/:global\(:root\[data-rt-sys='1'\]\) \.mist::after \{\s*display: none;/);
     expect(css).toMatch(new RegExp(String.raw`@supports not \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\) \{\s*${fallback}\s*\}\s*\.mist::after \{\s*display: none;`));
   });
 });

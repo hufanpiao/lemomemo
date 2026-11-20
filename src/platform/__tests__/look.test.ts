@@ -130,14 +130,27 @@ describe('减少透明、减少动态：只看系统设置（只有这一处判�
     stubSystem(false, true, true);
     await load();
     expect(html().dataset['rt']).toBe('1');
+    expect(html().dataset['rtSys']).toBe('1');
     expect(html().dataset['rm']).toBe('1');
     mqs.rt.matches = false;
     mqs.rt.fire();
     expect(html().dataset['rt']).toBeUndefined();
+    expect(html().dataset['rtSys']).toBeUndefined();
     expect(html().dataset['rm']).toBe('1');
     mqs.rm.matches = false;
     mqs.rm.fire();
     expect(html().dataset['rm']).toBeUndefined();
+  });
+
+  it('隐私记强制实色（TC-B5-12）：只写 data-rt、不写 data-rt-sys（输入时的模糊层照随手记模糊，负责人 11-20）；放开后都没有', async () => {
+    stubSystem(false, false, false);
+    const m = await load();
+    const release = m.holdReducedTransparency();
+    expect(html().dataset['rt']).toBe('1');
+    expect(html().dataset['rtSys']).toBeUndefined();
+    release();
+    expect(html().dataset['rt']).toBeUndefined();
+    expect(html().dataset['rtSys']).toBeUndefined();
   });
 
   it('旧账号存过 ui.reduce_transparency / ui.reduce_motion = true：不再生效，系统没设置就不写', async () => {

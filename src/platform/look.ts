@@ -73,10 +73,17 @@ const sys: Record<'dark' | 'rt' | 'rm', MediaQueryList | null> = { dark: null, r
 let solidHolds = 0;
 const rtNow = (): boolean => sys.rt?.matches === true || solidHolds > 0;
 
+/**
+ * data-rt：减少透明（系统设置或隐私记强制实色），底栏、“＋”、玻璃副本看它。
+ * data-rt-sys：只有系统真开了“减少透明效果”才写；输入时的模糊层（kit Mist）只看它——Mist 是纯 CSS 模糊、不复制页面内容，
+ * 不在 TC-B5-12“不建副本”的范围里，隐私记里照随手记一样模糊（负责人 11-20“隐私记的输入框背景透明度做成跟随手记一样”）
+ */
 function paintRt(): void {
   const r = document.documentElement;
   if (rtNow()) r.dataset['rt'] = '1';
   else delete r.dataset['rt'];
+  if (sys.rt?.matches === true) r.dataset['rtSys'] = '1';
+  else delete r.dataset['rtSys'];
 }
 
 /**
@@ -103,8 +110,7 @@ function paint(): void {
   const rm = sys.rm?.matches === true;
   r.dataset['skin'] = current.skin;
   r.dataset['theme'] = theme;
-  if (rt) r.dataset['rt'] = '1';
-  else delete r.dataset['rt'];
+  paintRt();
   if (rm) r.dataset['rm'] = '1';
   else delete r.dataset['rm'];
   const desc = `skin=${current.skin} theme=${current.theme}>${theme} rt=${solidHolds > 0 ? 'hold' : rt ? 'sys' : 'off'} rm=${rm ? 'sys' : 'off'}`;
