@@ -21,7 +21,7 @@ describe('等底栏后那次', () => {
     f.flush();
     expect(pad()).toBeNull();
     expect(f.size).toBe(0);
-    expect(readGapFixLog()).toMatch(/changed 895->896 by-pad pad-removed inner=896/);
+    expect(readGapFixLog()).toMatch(/changed 895->896 by-pad pad-removed gap-after=60 inner=896/);
   });
 
   it('垫块在时点“＋”弹键盘（聚焦 + innerHeight 压到 542）：当帧撤掉垫块，之后不滚', () => {
@@ -41,7 +41,7 @@ describe('等底栏后那次', () => {
     f.flush(5);
     expect(by).not.toHaveBeenCalled();
     expect(to).not.toHaveBeenCalled();
-    expect(readGapFixLog()).toMatch(/changed 895->542 by-pad pad-removed inner=542/);
+    expect(readGapFixLog()).toMatch(/changed 895->542 by-pad pad-removed gap-after=414 inner=542/);
   });
 
   it(`垫块在时聚焦了输入框、innerHeight 还没变：到 ${SCROLL_AT_MS}ms 不补滚，记 scroll-skipped editing；到点照样撤`, () => {
@@ -142,7 +142,7 @@ describe('收键盘那次', () => {
     setInner(896);
     f.flush();
     expect(pad()).toBeNull();
-    expect(readGapFixLog()).toMatch(/kb changed 895->896 by-pad pad-removed inner=896/);
+    expect(readGapFixLog()).toMatch(/kb changed 895->896 by-pad pad-removed gap-after=60 inner=896/);
   });
 
   it('收键盘那次垫块在时又点“＋”弹键盘（聚焦 + 542）：当帧撤掉垫块，之后不滚', () => {
@@ -160,7 +160,7 @@ describe('收键盘那次', () => {
     f.flush(5);
     expect(by).not.toHaveBeenCalled();
     expect(to).not.toHaveBeenCalled();
-    expect(readGapFixLog()).toMatch(/kb changed 895->542 by-pad pad-removed inner=542/);
+    expect(readGapFixLog()).toMatch(/kb changed 895->542 by-pad pad-removed gap-after=414 inner=542/);
   });
 
   it(`收键盘那次垫块在时聚焦了输入框、innerHeight 还没变：到 ${SCROLL_AT_MS}ms 不补滚，记 kb scroll-skipped editing`, () => {

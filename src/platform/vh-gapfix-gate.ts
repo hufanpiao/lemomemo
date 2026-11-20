@@ -21,21 +21,30 @@ export function gapFixWanted(nav: NavLike = navigator, media?: (q: string) => bo
   return gapFixOn(store);
 }
 
-/** 诊断页开关：默认开；关掉（存 OFF_KEY）用来对照。读不到本机存储时当开着。
+/**
+ * 治“少一截”的四套，各自能在诊断页单独关掉对照（11-20 负责人选“手机上对照一次”定留哪一套）：early 早试垫块、bar 等底栏后那次、
+ * kb 收键盘后那次（vh-gapfix.ts）、css 贴底元素补 --vh-gap（viewport.ts）。关掉存 `${OFF_KEY}-${part}` = '1'，下次冷启动起生效
+ */
+export type GapPart = 'early' | 'bar' | 'kb' | 'css';
+/** 四套的顺序（诊断页排按钮、gapfix start 行记 sw= 都按它） */
+export const GAP_PARTS: readonly GapPart[] = ['early', 'bar', 'kb', 'css'];
+
+/** 诊断页开关：默认开；关掉（存 OFF_KEY，带 part 是只关那一套）用来对照。读不到本机存储时当开着。
  *  放这份轻的（首屏）不放 vh-gapfix.ts：设置页诊断区要读写它，而设置页冷启动后台预加载（413），放那份会把 Gap fix 整块顺带下载（e2e r371 守“关着不下载”） */
-export function gapFixOn(store?: Storage): boolean {
+export function gapFixOn(store?: Storage, part?: GapPart): boolean {
   try {
-    return (store ?? localStorage).getItem(OFF_KEY) !== '1';
+    return (store ?? localStorage).getItem(part ? `${OFF_KEY}-${part}` : OFF_KEY) !== '1';
   } catch {
     return true;
   }
 }
 
-export function setGapFixOn(on: boolean, store?: Storage): void {
+export function setGapFixOn(on: boolean, store?: Storage, part?: GapPart): void {
   try {
     const s = store ?? localStorage;
-    if (on) s.removeItem(OFF_KEY);
-    else s.setItem(OFF_KEY, '1');
+    const k = part ? `${OFF_KEY}-${part}` : OFF_KEY;
+    if (on) s.removeItem(k);
+    else s.setItem(k, '1');
   } catch {
     // 本机存储用不了：关不掉，诊断页照样显示 ON
   }
@@ -160,7 +169,8 @@ export function startEarlyGapFix(
   const tail = ` gap=${s.full - s.inner} top=${s.top}`;
   const e: EarlyGap = { at: Math.round(now()), done: false, what: '' };
   early = e;
-  const why = skipReason(s);
+  // 诊断页单独关了早试（GapPart early）：照样量、记下本来要补的 gap，只是不放垫块
+  const why = skipReason(s) ?? (gapFixOn(undefined, 'early') ? null : 'part-off');
   if (why !== null) {
     e.done = true;
     e.what = `skip ${why}${tail}`;
@@ -168,7 +178,7 @@ export function startEarlyGapFix(
   }
   const done = (how: FixEnd, h: number, after: number): void => {
     e.done = true;
-    e.what = `${how === 'changed' ? `changed ${s.inner}->${h}` : `no-change inner=${h}`} after=${after}ms${tail}`;
+    e.what = `${how === 'changed' ? `changed ${s.inner}->${h}` : `no-change inner=${h}`} after=${after}ms${tail} gap-after=${fullHeight(win) - h}`;
   };
   fixHeight({ win, frame, now, giveUpMs: EARLY_GIVE_UP_MS, done }, s.full - s.inner);
   return e;
