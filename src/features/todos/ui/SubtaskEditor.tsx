@@ -135,6 +135,8 @@ export default function SubtaskEditor({ todoId, todo, off }: SubtaskEditorProps)
           undoLabel={t('list.undo', {})}
           onUndo={() => ed.undo(toast)}
           onClose={() => ed.closeToast(toast)}
+          // 删除类撤销条：和“＋”的“已记下”等撤销条同一时间只留一条（kit UndoToast 文件头 solo；改善报告 11-20 二-1）
+          solo="keep"
           data-testid={`todo-sub-${toast.kind}-toast`}
         />
       ) : toast ? (

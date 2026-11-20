@@ -131,6 +131,22 @@ describe('查找面板', () => {
     expect(fx.logs.join('\n')).toContain('find pick kind=event');
   });
 
+  it('改善报告 11-20 二-2：输入法组字时按回车是选字，不打开结果（Safari 那一下 isComposing 为假、keyCode 229；Chrome isComposing 为真）；组字完再按才打开', () => {
+    seed();
+    const onClose = vi.fn();
+    render(<FindPanel query="" from="plus" onClose={onClose} />);
+    typeQ('牙医');
+    const input = screen.getByTestId('find-input');
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 13, isComposing: true });
+    fireEvent.keyDown(input, { key: 'ArrowDown', keyCode: 229 });
+    expect(fx.nav).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 13 });
+    expect(fx.nav).toHaveBeenCalledWith('event', id(1));
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it('类型胶囊只出有结果的类型，点了只看这一类', () => {
     seed(false);
     render(<FindPanel query="牙" from="plus" onClose={vi.fn()} />);

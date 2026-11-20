@@ -23,6 +23,7 @@
 import { useEffect, useRef } from 'react';
 import { opensKeyboard } from '../../platform/env.ts';
 import { rlog } from '../../platform/run-log-api.ts';
+import { composing } from './ime.ts';
 
 export interface LayerSpec {
   /** 运行日志里的名字 */
@@ -62,8 +63,6 @@ let watch: MutationObserver | null = null;
 const regs: { map: { current: KeyMap }; owner: LayerHandle | null }[] = [];
 let wired = false;
 
-/** 输入法组字中：WebKit 组字时按的键 isComposing 可能是 false、keyCode 是 229 */
-export const composing = (e: KeyboardEvent): boolean => e.isComposing || e.keyCode === 229;
 
 /** 焦点（事件目标）在不在这一层的根里 */
 const inside = (l: Layer, t: EventTarget | null): boolean => t instanceof Node && (l.get().el?.()?.contains(t) ?? false);

@@ -82,8 +82,11 @@ async function thumbPng(page: Page, type: 'image/png' | 'image/jpeg' = 'image/pn
 
 type Bytes = Map<string, Buffer>;
 
-/** 服务器上的行：一条随手记、5 个附件（PDF 2 页带缩略图、xlsm 只能下载、docx 还在检查、xlsx 2 张表、pptx 3 页） */
-async function serverRows(bytes: Bytes, pptThumb: Buffer): Promise<Record<string, Record<string, unknown>[]>> {
+/** 第二条随手记（没有附件）：只有“两个撤销条不叠”那条用例要，先删它出页底撤销条 */
+const NOTE2 = '0e2e0000-0000-4000-8000-0000000b4b02';
+
+/** 服务器上的行：一条随手记、5 个附件（PDF 2 页带缩略图、xlsm 只能下载、docx 还在检查、xlsx 2 张表、pptx 3 页）；second 再加一条没附件的 */
+async function serverRows(bytes: Bytes, pptThumb: Buffer, second = false): Promise<Record<string, Record<string, unknown>[]>> {
   const now = Date.now();
   const at = new Date(now).toISOString();
   const common = { user_id: USER, created_at: now, updated_at: now, deleted_at: null, undone: false, rev: 1, synced_at: at };
@@ -104,17 +107,18 @@ async function serverRows(bytes: Bytes, pptThumb: Buffer): Promise<Record<string
     await file(F_PPTX, 'pptx', '韩国生活分享.pptx', await pptxBytes(pptThumb), 'ok', 3),
   ];
   // 随手记页先看瀑布流卡片、再去设置改成列表：两类设备明确写 masonry（负责人 11-18 首装默认改列表）
-  return { notes: [note], note_files: files, settings: notesViewRows('masonry', common) };
+  const notes = second ? [note, { ...note, id: NOTE2, title: '周末买菜', body: '鸡蛋、葱。' }] : [note];
+  return { notes, note_files: files, settings: notesViewRows('masonry', common) };
 }
 
 type Fake = { asked: string[]; puts: { path: string; body: Buffer | null }[]; checks: unknown[]; rows: Map<string, Record<string, unknown>> };
 
 /** 假会话 + /sb（随手记、附件、设置三张表：GET 回行、POST 新建回 201、PATCH 改了回新 rev）+ file-check 回 ok（顺手把行改成 ok）+ 假签名、假取字节、假上传 */
-async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake> {
+async function fakeServer(page: Page, baseURL: string | undefined, second = false): Promise<Fake> {
   if (!baseURL) throw new Error('没有 baseURL');
   await seedFakeSession(page.context(), baseURL, { jwt: true });
   const bytes: Bytes = new Map();
-  const saved = await serverRows(bytes, await thumbPng(page, 'image/jpeg'));
+  const saved = await serverRows(bytes, await thumbPng(page, 'image/jpeg'), second);
   bytes.set(`/files/v1/o/files/${USER}/${NOTE}/${F_PDF}.t.webp`, await thumbPng(page));
   const rest = await fakeRest(page, { user: USER, tables: saved, store: { defaults: { check_status: 'pending' }, patch: true } });
   const fake: Fake = { asked: [], puts: [], checks: [], rows: rest.tables.get('note_files') ?? new Map() };
@@ -342,6 +346,36 @@ test.describe('B4b-1 附件：电脑', () => {
     await expect(row).toBeVisible({ timeout: 15_000 });
     await expect(row.getByTestId('notes-files-mark')).toHaveText('附件 5');
     await shot(page, browserName, 'notes-list');
+  });
+
+  // 改善报告 11-20 二-1：抽屉里附件区的撤销条要和页底随手记的撤销条“同时只出一条”（kit UndoToast solo="keep"，后出的顶掉前一条）
+  test('电脑抽屉：删了一条随手记、再删附件，页底和附件区的撤销条只剩后出的一条', async ({ page, baseURL }) => {
+    await fakeServer(page, baseURL, true);
+    await page.goto('/app/#/notes');
+    const card = page.getByTestId(`notes-card-${NOTE}`);
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    // 先开一次抽屉等附件列表读好（下面要在页底撤销条 5 秒内删掉附件）
+    await card.locator('button').first().click();
+    await expect(page.getByTestId(`note-file-${F_XLSM}`)).toBeVisible({ timeout: 15_000 });
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('note-files')).toHaveCount(0);
+
+    await page.getByTestId(`notes-more-${NOTE2}`).click();
+    await page.getByTestId(`notes-del-${NOTE2}`).click();
+    await expect(page.getByTestId('notes-toast')).toBeVisible();
+    const t0 = Date.now();
+    await card.locator('button').first().click();
+    await page.getByTestId(`note-file-more-${F_XLSM}`).click();
+    // 点删除前页底撤销条还开着（5 秒没到）：不是自己到时收起的
+    await expect(page.getByTestId('notes-toast')).toBeVisible();
+    await page.getByTestId(`note-file-delete-${F_XLSM}`).click();
+    await expect(page.getByTestId('note-files-undo')).toContainText('已删除');
+    // 附件撤销条出来后隔 300ms 数一次（solo 在 effect 里收起别的条，WebKit 要晚一拍）；不用会自己重试的 toHaveCount：
+    // 等上 5 秒页底那条自己到时也会没，验不出叠没叠，所以还要核数的时候页底那条离出来不到 4 秒
+    await page.waitForTimeout(300);
+    const shown = await page.evaluate(() => [...document.querySelectorAll('[data-undo-toast]')].map((el) => el.getAttribute('data-testid')));
+    expect(Date.now() - t0, '页底撤销条（5 秒）还没到时').toBeLessThan(4000);
+    expect(shown, '同时只有附件区这一条撤销条').toEqual(['note-files-undo']);
   });
 
   test('设置 › 数据：PPT 预览两行，选了记在本机，改回“先问”就清掉', async ({ page, baseURL, browserName }) => {

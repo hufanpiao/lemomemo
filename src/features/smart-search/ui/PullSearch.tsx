@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { queryTerms } from '../../../../shared/logic/search.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
+import { composing } from '../../../kit/hooks/ime.ts';
 import type { PullReveal } from '../../../kit/hooks/usePullReveal.ts';
 import { pullHitClass, type PullPart } from '../../../kit/components/PullSlot.tsx';
 import { NumIn } from '../../../kit/components/NumIn.tsx';
@@ -80,7 +81,8 @@ function Head({ pull, scope, found, done, onOpen }: PullSearchProps) {
           aria-label={t(`pull.ph.${scope}`, {})}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key !== 'Escape') return;
+            // 组字中的 Esc 是撤掉候选，不收起（判断只在 kit/hooks/ime.ts 一份）
+            if (e.key !== 'Escape' || composing(e.nativeEvent)) return;
             e.preventDefault();
             close();
           }}

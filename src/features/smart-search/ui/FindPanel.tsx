@@ -21,6 +21,7 @@ import { openAssist, type AssistReq, type FindFrom } from '../hooks/find-open.ts
 import chip from '../../../kit/components/Chip.module.css';
 import form from '../../../kit/components/Form.module.css';
 import { NumIn } from '../../../kit/components/NumIn.tsx';
+import { composing } from '../../../kit/hooks/ime.ts';
 import { prevent, useLayer } from '../../../kit/hooks/useLayer.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -108,7 +109,8 @@ export default function FindPanel({ query, from, assist = null, onClose }: FindP
   };
   const kinds = FIND_KINDS.filter((k) => f.counts[k] > 0 || f.kind === k);
   const onKey = (e: KeyboardEvent<HTMLInputElement>): void => {
-    if (e.nativeEvent.isComposing) return;
+    // 组字中的回车是选字、方向键是挑候选（Safari 那一下 isComposing 为假、keyCode 229，判断只在 kit/hooks/ime.ts 一份）
+    if (composing(e.nativeEvent)) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       const n = visible.length;

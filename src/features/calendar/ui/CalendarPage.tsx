@@ -301,7 +301,8 @@ export default function CalendarPage() {
             today={model.today}
             nowMin={model.nowMin}
             holidays={model.holidays}
-            dueMins={model.dueMins}
+            dueMin={model.dueMin}
+            anyLate={model.anyLate}
             lunarOf={lunarShort}
             wide={model.wide}
             selected={sel}

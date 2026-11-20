@@ -6,6 +6,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearAllCollections, collection, readonlyIds } from '../../../core/store.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
+import { currentTz } from '../../../core/current-tz.ts';
+import { clock } from '../../../platform/clock.ts';
+import { msAt } from '../../../../shared/core/date.ts';
 
 const save = vi.hoisted(() => ({ calls: [] as unknown[][] }));
 vi.mock('../../../core/edit-save.ts', async (orig) => ({
@@ -25,6 +28,7 @@ const { default: InlineSubtasks } = await import('../ui/InlineSubtasks.tsx');
 const { default: DayTodos } = await import('../ui/DayTodos.tsx');
 const { default: SubtaskEditor } = await import('../ui/SubtaskEditor.tsx');
 const { resetCollapsedForTest } = await import('../hooks/useSubtasks.ts');
+const { UndoToast } = await import('../../../kit/components/UndoToast.tsx');
 
 const todo = (id: string, title: string, over: Record<string, unknown> = {}) => ({
   id, title, done: false, important: false, project: '', due: null, due_time: null, deleted_at: null, ...over,
@@ -232,10 +236,18 @@ describe('日历日清单的待办组（DayTodos，R-443）', () => {
     ]);
     collection('todo_items').upsert([item('s1', 'm1', 1), item('s2', 'm1', 2)]);
   };
+  // “现在”从这一天 10:00 起照常往前走（current_tz；测试里没有 profile 就是设备时区）：08:00、09:00 截止的已过、12:00 的没到。
+  // 不钉死成一个值：勾选完成的停留、收起按 clock 计时，钉死了收不起来
+  let spy: { mockRestore(): void } | null = null;
+  beforeEach(() => {
+    const off = msAt(D, 10 * 60, currentTz()) - Date.now();
+    spy = vi.spyOn(clock, 'now').mockImplementation(() => Date.now() + off);
+  });
+  afterEach(() => spy?.mockRestore());
 
   it('组头“待办 · 4”，只列这一天没完成的；组内 H → M → L、同档有时刻的在前；有时刻才出第二行，过了截止的红字', async () => {
     seed();
-    render(<DayTodos date={D} today={D} nowMin={10 * 60} onOpen={vi.fn()} />);
+    render(<DayTodos date={D} onOpen={vi.fn()} />);
     const g = await screen.findByTestId('cal-todos');
     expect(g.querySelector('h2')?.textContent).toBe('待办 · 4');
     const ids = [...g.querySelectorAll('[data-testid^="cal-row-"]')].map((x) => x.getAttribute('data-testid'));
@@ -250,7 +262,7 @@ describe('日历日清单的待办组（DayTodos，R-443）', () => {
   it('点方框就地完成：写 done，留在原位、出“已完成 · 撤销”；点撤销写回；点标题交给 onOpen', async () => {
     seed();
     const onOpen = vi.fn();
-    render(<DayTodos date={D} today={D} nowMin={10 * 60} onOpen={onOpen} />);
+    render(<DayTodos date={D} onOpen={onOpen} />);
     fireEvent.click(await screen.findByTestId('cal-done-h1'));
     await waitFor(() => expect(save.calls.some((c) => c[1] === 'todos' && c[2] === 'h1')).toBe(true));
     expect((await screen.findByTestId('cal-todos-done-toast')).textContent).toContain('已完成');
@@ -322,6 +334,21 @@ describe('编辑页“子任务”区（5.3、6.1）', () => {
     expect(save.calls[0]?.slice(0, 3)).toEqual(['deleted', 'todo_items', 'b']);
     fireEvent.click(screen.getByText('撤销'));
     await waitFor(() => expect(save.calls).toHaveLength(2));
+  });
+
+  it('改善报告 11-20 二-1：子任务的删除撤销条和别的撤销条同一时间只留一条，后出的顶掉前一条（前一条照常 onClose、不撤销）', async () => {
+    const before = vi.fn();
+    const undo = vi.fn();
+    render(
+      <>
+        <UndoToast message="已记下" undoLabel="撤销" onUndo={undo} onClose={before} solo="keep" data-testid="before" />
+        <SubtaskEditor todoId="t1" todo={t1()} off={false} />
+      </>,
+    );
+    fireEvent.click(screen.getByTestId('todo-sub-del-b'));
+    await screen.findByTestId('todo-sub-deleted-toast');
+    expect(before).toHaveBeenCalledTimes(1);
+    expect(undo).not.toHaveBeenCalled();
   });
 
   it('键盘排序：把手上 Alt + ↓ 挪一位（写排序键）；只读（off）时没有添加行、把手和 ×', () => {

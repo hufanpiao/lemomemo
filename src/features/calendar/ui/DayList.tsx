@@ -180,7 +180,7 @@ export function DayList({
           这一天没有待办时也挂着：刚勾完最后一条时它要留在原位、出撤销条 */}
       <QuietBoundary name="cal-day-todos">
         <Suspense fallback={null}>
-          <DayTodos date={date} today={today} nowMin={nowMin} onOpen={onOpen} openId={openId} />
+          <DayTodos date={date} onOpen={onOpen} openId={openId} />
         </Suspense>
       </QuietBoundary>
     </section>

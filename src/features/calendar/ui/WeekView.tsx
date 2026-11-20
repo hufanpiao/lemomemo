@@ -140,7 +140,10 @@ export interface WeekProps {
   today: DateStr;
   nowMin: number;
   holidays: ReadonlyMap<DateStr, readonly HolidayMark[]>;
-  dueMins: ReadonlyMap<string, number>;
+  /** 待办截止时刻是当天第几分钟（useCalendar 给，读行和待办页同一份 todoOf）；没有截止时刻的 undefined */
+  dueMin: (todoId: string) => number | undefined;
+  /** 这几条待办里有没有逾期没做完的（useCalendar 给，和待办页同一个 isLate） */
+  anyLate: (todoIds: readonly string[]) => boolean;
   /** 中文界面的农历短写法 / 节气（没有时 undefined） */
   lunarOf?: ((date: DateStr) => string | undefined) | undefined;
   wide: boolean;
@@ -160,7 +163,7 @@ export interface WeekProps {
  * 这一周每天的事项（collectEntries：月历、日清单同一份；删掉的、已完成的待办本来就不在里面，也不撑宽时间轴，代码复审 N5）
  * 和时间轴范围（有时刻的日程按设备时区切好的段 segmentOn、待办截止时刻）。设备时区坏了时一件都没有
  */
-function weekOf(start: DateStr, items: CalItems, tz: string, dueMins: ReadonlyMap<string, number>): { range: HourRange; byDay: ReadonlyMap<DateStr, readonly DayEntry[]> } {
+function weekOf(start: DateStr, items: CalItems, tz: string, dueMin: (todoId: string) => number | undefined): { range: HourRange; byDay: ReadonlyMap<DateStr, readonly DayEntry[]> } {
   let byDay = new Map<DateStr, DayEntry[]>();
   try {
     assertTz(tz);
@@ -172,23 +175,12 @@ function weekOf(start: DateStr, items: CalItems, tz: string, dueMins: ReadonlyMa
   for (const [d, list] of byDay) {
     for (const e of list) {
       const seg = segmentOn(e, d, tz);
-      const due = e.kind === 'todo' ? dueMins.get(e.itemId) : undefined;
+      const due = e.kind === 'todo' ? dueMin(e.itemId) : undefined;
       if (seg) spans.push([seg.startMin, seg.endMin]);
       else if (due !== undefined) spans.push([due, due]);
     }
   }
   return { range: weekHourRange(spans), byDay };
-}
-
-/** 这一天有没有逾期没做完的待办：日子已过，或者是今天、截止时刻已过 */
-function hasOverdue(date: DateStr, todoIds: readonly string[], today: DateStr, nowMin: number, dueMins: ReadonlyMap<string, number>): boolean {
-  if (todoIds.length === 0) return false;
-  if (date < today) return true;
-  if (date > today) return false;
-  return todoIds.some((id) => {
-    const due = dueMins.get(id);
-    return due !== undefined && due <= nowMin;
-  });
 }
 
 // ───────── 手机：泳道 ─────────
@@ -211,14 +203,15 @@ function Lane({
   p: WeekProps;
   trackRef: ((el: HTMLElement | null) => void) | null;
 }) {
-  const { t, today, nowMin, dueMins } = p;
+  const { t, today, nowMin } = p;
   const hol = p.holidays.get(date) ?? [];
   const kind = dayKind(hol);
   const isToday = date === today;
   const sel = p.selected === date;
   const total = entries.length;
   const todoIds = entries.filter((e) => e.kind === 'todo').map((e) => e.itemId);
-  const overdue = hasOverdue(date, todoIds, today, nowMin, dueMins);
+  // 这一天有没有逾期没做完的待办：逐条用待办页同一个 isLate（useCalendar 的 anyLate）
+  const overdue = p.anyLate(todoIds);
   // 和月格同一套（cal-ui.ts dayLines）：补班的“班”放进数字旁的小圆标，那一行写节日名；连休只在第一天写节日名，后几天照常写农历或节气
   const { badge, line: sub } = dayLines(kind, namedHolidays(date, hol, p.holidays), p.lunarOf?.(date) ?? '', t);
   const shift = w > 0 ? phoneScale(w, range).shiftPx : 0;
@@ -312,7 +305,7 @@ function Lane({
 function PhoneWeek(p: WeekProps & { range: HourRange; byDay: ReadonlyMap<DateStr, readonly DayEntry[]> }) {
   const [trackRef, w, trackEl] = useTrackWidth();
   const textPx = useTextPx(trackEl);
-  const { start, items, tz, range } = p;
+  const { start, items, tz, range, dueMin } = p;
   const days = useMemo<(PhoneDay | null)[]>(() => {
     const dates = weekDates(start);
     // 还没量到宽度（第一次画）：先画空的七条泳道，量到以后再排色块
@@ -321,7 +314,6 @@ function PhoneWeek(p: WeekProps & { range: HourRange; byDay: ReadonlyMap<DateStr
       const { dayPx, shiftPx } = phoneScale(w, range);
       // 色块写完整标题、写到轨道右端为止（endPx = 显示范围的末端，时间轴只到 22 点时不出轨道）
       // 待办：有截止时刻的从那个时刻起画；小条宽 = 标题字宽 + 圆圈（没量到字宽时按最短长度）
-      const dueMin = (id: string): number | undefined => p.dueMins.get(id);
       return buildWeek(start, items, {
         layout: 'phone',
         tz,
@@ -335,7 +327,7 @@ function PhoneWeek(p: WeekProps & { range: HourRange; byDay: ReadonlyMap<DateStr
     } catch {
       return dates.map(() => null);
     }
-  }, [start, items, tz, w, range, textPx, p.dueMins]);
+  }, [start, items, tz, w, range, textPx, dueMin]);
   const dates = weekDates(start);
   return (
     <section aria-label={p.label} data-testid="cal-week" data-layout="phone" data-range={`${range.h0}-${range.h1}`} className={`${common.card} ${styles.pweek}`} style={WEV_VARS}>
@@ -356,7 +348,7 @@ function PhoneWeek(p: WeekProps & { range: HourRange; byDay: ReadonlyMap<DateStr
 }
 
 export function WeekView(p: WeekProps) {
-  const { start, items, tz, dueMins } = p;
-  const { range, byDay } = useMemo(() => weekOf(start, items, tz, dueMins), [start, items, tz, dueMins]);
+  const { start, items, tz, dueMin } = p;
+  const { range, byDay } = useMemo(() => weekOf(start, items, tz, dueMin), [start, items, tz, dueMin]);
   return p.wide ? <DeskWeek {...p} range={range} /> : <PhoneWeek {...p} range={range} byDay={byDay} />;
 }

@@ -1,7 +1,7 @@
 // 本机行 → 月历输入（B2 FA-3）：坏行跳过、缺列给默认值，删除 / 撤销原样带给纯逻辑
 import { describe, expect, it } from 'vitest';
 import { placeEvent } from '../../../../shared/logic/calendar/event-span.ts';
-import { calItemsOf, todoDueMinutes } from '../data/cal-data.ts';
+import { calItemsOf } from '../data/cal-data.ts';
 
 describe('calItemsOf', () => {
   it('合法的日程、待办逐列取；删除、撤销原样带过去', () => {
@@ -31,21 +31,5 @@ describe('calItemsOf', () => {
     // 第二轮评审必改 1：不再自己把坏时刻改成全天；placeEvent 放不下就不显示
     expect(placeEvent(r.events[0]!, 'Asia/Seoul')).toBeNull();
     expect(r.todos[0]).toMatchObject({ due: null, done: false, title: '' });
-  });
-});
-
-describe('todoDueMinutes', () => {
-  it('“HH:MM” → 当天第几分钟；没有、格式不对的不进表', () => {
-    const m = todoDueMinutes([
-      { id: 'a', due_time: '09:30' },
-      { id: 'b', due_time: '23:59:00' },
-      { id: 'c', due_time: null },
-      { id: 'd', due_time: '24:00' },
-      { id: 'e', due_time: '7:00' },
-    ]);
-    expect([...m]).toEqual([
-      ['a', 570],
-      ['b', 1439],
-    ]);
   });
 });

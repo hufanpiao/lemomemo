@@ -9,7 +9,7 @@ import { useTodoWrites } from '../../../kit/hooks/useTodoWrites.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
-import { compareTodos, lingerView, todoOf } from '../../../../shared/logic/todo-row.ts';
+import { compareTodos, isLate, lingerView, todoOf, type TodoFields } from '../../../../shared/logic/todo-row.ts';
 import { groupTodos, projectCounts, type Row } from '../data/todo-list.ts';
 import { listKo } from '../i18n/list-ko.ts';
 import { listZh } from '../i18n/list-zh.ts';
@@ -58,6 +58,9 @@ export function useDayTodos(date: DateStr, linger: ReadonlySet<string>) {
     () => rows.filter(isLiveRow).map(todoOf).filter((x) => x.due === date && !lingerView(x, linger).done).sort(compareTodos),
     [rows, date, linger],
   );
-  return { todos, ...useTodoWrites(rows) };
+  // 过了截止的红字：和待办页同一个 isLate、同一个时钟和时区（每分钟一次、current_tz；改善报告 11-20 二-3）
+  const now = useMinuteNow();
+  const late = (t: TodoFields, checked: boolean): boolean => isLate({ ...t, done: checked }, now, currentTz());
+  return { todos, late, ...useTodoWrites(rows) };
 }
 
