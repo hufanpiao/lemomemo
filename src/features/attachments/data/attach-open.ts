@@ -161,7 +161,3 @@ export async function msViewerUrl(f: FileRef): Promise<string | null> {
 
 /** 微软 embed 地址（普通附件的 ms 签名链接、隐私记的 vault-preview 签名链接都拼成这样） */
 export const msEmbedOf = (src: string): string => `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(src)}`;
-
-export function clearMemForTest(): void {
-  mem.clear();
-}

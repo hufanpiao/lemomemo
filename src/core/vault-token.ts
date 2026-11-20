@@ -6,22 +6,12 @@ export const VAULT_TOKEN_HEADER = 'x-vault-token';
 const SKEW_MS = 5_000;
 
 let held: { token: string; expiresAt: number } | null = null;
-const listeners = new Set<() => void>();
 
 export function setVaultToken(token: string | null, expiresAt = 0): void {
   held = token ? { token, expiresAt } : null;
-  for (const fn of [...listeners]) fn();
 }
 
 export function vaultToken(now: number = Date.now()): string | null {
   if (!held || held.expiresAt - SKEW_MS <= now) return null;
   return held.token;
-}
-
-/** 令牌换了、丢了时回调（导出页据此决定要不要提示先解锁）；返回取消函数 */
-export function onVaultToken(fn: () => void): () => void {
-  listeners.add(fn);
-  return () => {
-    listeners.delete(fn);
-  };
 }

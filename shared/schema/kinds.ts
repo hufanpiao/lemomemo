@@ -31,5 +31,3 @@ export type VectorKind = z.infer<typeof vectorKind>;
 
 /** kind → 管它的功能开关（app_config.features 的键）；AI 输出按 featureOn 过滤时用 */
 export const KIND_FLAG: Readonly<Record<string, string>> = Object.fromEntries(kinds.map((k) => [k.kind, k.flag]));
-/** kind → 表 */
-export const KIND_TABLE: Readonly<Record<string, string>> = Object.fromEntries(kinds.map((k) => [k.kind, k.table]));

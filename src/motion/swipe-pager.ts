@@ -11,15 +11,13 @@
 import { useRef } from 'react';
 import { copyNode } from './copy-node.ts';
 import { useHDrag, type HDrag } from './hdrag.ts';
-import { BLUR_SWAP_PX, blurSwapIn, blurSwapOut, blurSwapTiming } from './blur-swap.ts';
+import { blurSwapIn, blurSwapOut, blurSwapTiming } from './blur-swap.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
 
 export const TRIGGER_PX = 60;
 /** 跟手：手指横移的几倍、最多几像素（方案页 C：0.15、16） */
 export const FOLLOW_RATE = 0.15;
 export const FOLLOW_MAX_PX = 16;
-/** 旧的一页淡出时模糊到几像素（方案页 C；关键帧在 blur-swap.ts，底栏切页共用） */
-export const FLIP_BLUR_PX = BLUR_SWAP_PX;
 
 /** 松手时翻不翻：-1 上一页，1 下一页，0 不翻 */
 export function swipeResult(dx: number): -1 | 0 | 1 {

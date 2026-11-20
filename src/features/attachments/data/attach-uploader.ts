@@ -228,6 +228,3 @@ export function attUploader(): AttUploader {
   shared ??= createAttUploader(defaultAttDeps());
   return shared;
 }
-export function resetAttUploaderForTest(u: AttUploader | null = null): void {
-  shared = u;
-}

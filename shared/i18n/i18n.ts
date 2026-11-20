@@ -14,7 +14,6 @@ import type { zh } from './zh.ts';
 
 /** 界面语言：就是 pick-locale.ts 的 UiLocale（同一个类型，只是在词典这边叫 Locale） */
 export type Locale = UiLocale;
-export const LOCALES: readonly Locale[] = ['zh-CN', 'ko-KR'];
 
 export type SharedDict = typeof zh;
 export type SharedMsgKey = keyof SharedDict;

@@ -160,7 +160,5 @@ export function useCalendar(params: readonly string[]) {
     pick: (ym: YearMonth) => go(pickMonth(view, ym, weekStart)),
     /** 键盘 ← →（原地换，R-372） */
     keyShift,
-    /** 点月格里的某一天：跳到那一天所在的周视图 */
-    openWeekOf: (date: DateStr) => void replaceInPage('cal', 'week', date),
   };
 }

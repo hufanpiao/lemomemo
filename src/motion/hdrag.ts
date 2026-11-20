@@ -81,8 +81,6 @@ export interface HDrag {
   };
   /** 画到 x（0 是原位）；snap 为 true 时带过渡（CSS 认 data-snap） */
   place(x: number, snap: boolean): void;
-  /** 先直接放到 x、再带过渡滑回 0（翻页的新一页从那一侧滑进来）：中间强制算一次样式，过渡从 x 起播，不等下一帧 */
-  slideFrom(x: number): void;
   /** 吞掉随后落在这块上的那一下 click */
   swallow(): void;
 }
@@ -166,14 +164,6 @@ export function useHDrag(opts: HDragOptions): HDrag {
         onPointerCancel: (e) => finish(e, true),
       },
       place,
-      slideFrom(x) {
-        const el = ref.current;
-        if (!el) return;
-        place(x, false);
-        // 强制算一次样式：浏览器记下“现在在 x”，下面改成 0 时过渡才从 x 起播（审查第 2 条，原来隔一帧再改，起播前停一帧）
-        void getComputedStyle(el).transform;
-        place(0, true);
-      },
       swallow,
     };
   }

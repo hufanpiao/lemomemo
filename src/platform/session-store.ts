@@ -133,11 +133,6 @@ export function setSessionBackend(store: SessionBackendStore, view: Storage): vo
   backend = { store, view };
 }
 
-/** 现在是不是 exe 的会话存储 */
-export function hasSessionBackend(): boolean {
-  return backend !== null;
-}
-
 /** 测试用 */
 export function resetSessionBackendForTest(): void {
   backend = null;
