@@ -1,7 +1,7 @@
 // 底栏显示在哪些页、选中哪个页签、“＋”新建什么（B2 FA-7；代码审查 L1）
 import { describe, expect, it } from 'vitest';
 import { ROUTE_NAMES } from '../router.ts';
-import { tabBarFor } from '../tab-of.ts';
+import { tabBarFor, tabDir } from '../tab-of.ts';
 
 describe('tabBarFor', () => {
   it('四页：今天、日历、待办、随手记；“＋”今天和日历新建日程、待办新建待办、随手记聚焦输入行', () => {
@@ -20,6 +20,20 @@ describe('tabBarFor', () => {
 
   it('隐私记页归随手记页签，“＋”同随手记（B5 D14）', () => {
     expect(tabBarFor('vault')).toEqual({ tab: 'notes', add: 'note', hold: false }); // 按住不录音（录下的会进普通随手记）
+    // 列表筛分类、最近删除照常有底栏
+    expect(tabBarFor('vault', 'c')).toEqual({ tab: 'notes', add: 'note', hold: false });
+    expect(tabBarFor('vault', 'trash')).toEqual({ tab: 'notes', add: 'note', hold: false });
+  });
+
+  it('隐私记记录页（新建、编辑）不出底栏，和随手记编辑页一样（11-20 记录页方向 A）', () => {
+    expect(tabBarFor('vault', 'new')).toBeNull();
+    expect(tabBarFor('vault', 'n-123')).toBeNull();
+    expect(tabBarFor('note', 'n-123')).toBeNull();
+  });
+
+  it('隐私记记录页和别的页签之间不算页签互切（没有底栏）；隐私记列表到今天页照旧往左', () => {
+    expect(tabDir({ name: 'vault', params: ['n-1'] }, { name: 'today', params: [] })).toBe(0);
+    expect(tabDir({ name: 'vault', params: [] }, { name: 'today', params: [] })).toBe(-1);
   });
 
   it('别的页一律没有底栏（编辑、设置、提醒、回收站……）', () => {

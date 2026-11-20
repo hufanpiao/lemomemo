@@ -30,6 +30,16 @@ export function LockIcon({ big = false }: { big?: boolean }) {
   );
 }
 
+/** 线框小锁 14px：隐私记记录页返回“‹ 🔒 隐私记”（记录页美化方向 A 方案图的 IC.lock：锁身 14 × 9.5 圆角 2、锁环半径 4，描边 2） */
+export function LockLineIcon() {
+  return (
+    <svg className={styles.lockLine} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="5" y="11" width="14" height="9.5" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'gap', '0', 'del'] as const;
 /** 数字键的位置序号（testid 用）：按出现顺序 0～9 */
 const DIGIT_SLOT = new Map(KEYS.filter((k) => /^\d$/.test(k)).map((k, i) => [k, i]));

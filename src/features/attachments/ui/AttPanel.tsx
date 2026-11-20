@@ -3,7 +3,7 @@
 // • 头一行“附件 N · 共 X MB”；每项：类型标记（PDF / W / X / P；电脑上有首页缩略图的换成缩略图）、文件名、
 //   大小（PDF、PPT 写“· N 页”，Excel 写“· N 张表”）· 状态（准备上传 / 上传中 / 正在检查… / 没能加上）、“⋯”
 // • 谁能加（R-114 D-3）：只有电脑布局（MQ_SIDEBAR，按窗口宽度、不按设备）显示“加附件”，能多选、拖进窗口、粘贴；
-//   手机和窄窗口只写一句“文档请在电脑上加”。离线时“加附件”变灰，下面写“加附件需要联网”
+//   手机和窄窗口只写一句“文档请在电脑上加”（记录页美化方向 A 起由编辑页底部工具条挂 ./AttPhoneHint.tsx，附件区自己不再写）。离线时“加附件”变灰，下面写“加附件需要联网”
 // • 加附件时挂一个隐藏的预览沙箱（usePrep）抽页数、文字、首页缩略图，随文件一起传（5.13 第 2 点 ④）
 // • 拖进来、粘贴进来的图片不进附件：交给 onImages（编辑器照插图处理并自己出失败提示，线框 DDRAG“图片照插图处理”）
 // • “⋯”：电脑 预览 / 下载 / 删除；手机 预览 / 下载 / 用其他 App 打开（手机没有删除，线框 sAtt 第二张；浏览器分享不了文件时不出最后一项）。
@@ -168,13 +168,7 @@ export function AttPanel({ src, items, noteId, disabled, onImages }: AttPanelPro
         </>
       ) : null}
       {!online && anyFile ? <p className={styles.note}>{t('att.offlineNote', {})}</p> : null}
-      {desk ? (
-        <AddButton disabled={!canAdd || !online} offline={!online && canAdd} onFiles={(f) => void add(f)} />
-      ) : (
-        <p className={styles.note} data-testid="note-files-phone">
-          {t('att.phoneOnly', {})}
-        </p>
-      )}
+      {desk ? <AddButton disabled={!canAdd || !online} offline={!online && canAdd} onFiles={(f) => void add(f)} /> : null}
       {drag > 0 ? <DropVeil n={drag} vault={vault} /> : null}
       {/* 抽预览材料的隐藏沙箱：没有来源、看不见、不进读屏（hidden 也能跑，prep 画缩略图用 intent:'print'） */}
       {canAdd ? <iframe ref={prep.ref} hidden src="/app/preview" sandbox="allow-scripts" title={t('att.pv.frame', {})} data-testid="note-files-prep" /> : null}
