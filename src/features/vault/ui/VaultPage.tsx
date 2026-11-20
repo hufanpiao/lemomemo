@@ -28,7 +28,7 @@ import { rlog } from '../../../platform/run-log-api.ts';
 import { useAutolockMin, useErrText, useSolidBars, useVault, useVaultPresence, useVaultStatus } from '../hooks/useVault.ts';
 import { useVaultNoteSource } from '../hooks/vault-note-source.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
-import { LockIcon } from './Pin.tsx';
+import { LockIcon, LockLineIcon } from './Pin.tsx';
 import { SetupPin } from './SetupPin.tsx';
 import { LockedPage, UnlockPanel } from './Unlock.tsx';
 import { VaultTrash } from './VaultTrash.tsx';
@@ -171,7 +171,7 @@ function VaultSurface({ editing, cat }: { editing: boolean; cat: string }) {
   // 换筛选是同一页里换参数（同随手记点胶囊）：不播换页过渡。原来用 replaceRoute 带 View Transition，删掉正筛着的分类时地址换回 all 的过渡和弹窗退场撞上，
   // WebKit 页面直接崩（e2e“隐私记照随手记”稳定复现；先切回全部再删就不崩）
   const ctl = useMemo<CategoryCtl>(() => ({ value: cat === 'all' ? null : cat, set: (id) => void replaceInPage('vault', 'c', id ?? 'all') }), [cat]);
-  return <NotesSurface source={source} editing={editing} head={(trash, name) => <VaultHead trash={trash} name={name} />} cat={ctl} backMark={<LockIcon />} tabbar />;
+  return <NotesSurface source={source} editing={editing} head={(trash, name) => <VaultHead trash={trash} name={name} />} cat={ctl} backMark={<LockLineIcon />} />;
 }
 
 /** trash：随手记列表给的“最近删除”图标（R-438，手机版放进顶栏右边、“立即锁上”左边；电脑版是 null） */

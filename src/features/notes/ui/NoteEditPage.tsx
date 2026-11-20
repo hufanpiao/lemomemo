@@ -41,16 +41,15 @@ const NONE = '';
 /** 正文停笔多久存一次 */
 export const BODY_IDLE_MS = 800;
 
-/** 手机整页编辑器（#/note/<id>、#/note/new；隐私记 #/vault/<id>、#/vault/new）；backMark：“‹”和返回文字中间的小图标（隐私记页给小锁）；
- *  tabbar：这一页底下照常有底栏（隐私记页），底部工具条抬到底栏上面 */
-export default function NoteEditPage({ backMark, tabbar = false }: { backMark?: ReactNode; tabbar?: boolean }) {
+/** 手机整页编辑器（#/note/<id>、#/note/new；隐私记 #/vault/<id>、#/vault/new）；backMark：“‹”和返回文字中间的小图标（隐私记页给小锁） */
+export default function NoteEditPage({ backMark }: { backMark?: ReactNode }) {
   // 新建保存后地址换成这一条的 id，编辑器不重挂（同待办编辑页）
   const { id, key, onCreated } = useEditRoute(useNoteSource().route.edit);
-  return <NoteEditor key={key} id={id} onCreated={onCreated} backMark={backMark} tabbar={tabbar} />;
+  return <NoteEditor key={key} id={id} onCreated={onCreated} backMark={backMark} />;
 }
 
 /** 整页和电脑详情抽屉共用；在不在抽屉里看 kit 的 useInDrawer（抽屉给的是关抽屉的函数，“×”用） */
-export function NoteEditor({ id, onCreated, backMark, tabbar = false }: { id: string; onCreated?(id: string): void; backMark?: ReactNode; tabbar?: boolean }) {
+export function NoteEditor({ id, onCreated, backMark }: { id: string; onCreated?(id: string): void; backMark?: ReactNode }) {
   const close = useInDrawer();
   const drawer = close !== null;
   // 编辑器挂着期间占住升级中心的 busy：不出版本横幅、不自动重新载入（同 kit EditShell）；抽屉里由 DetailDrawer 按焦点占（B6 独立评审第 12 条）
@@ -197,7 +196,7 @@ export function NoteEditor({ id, onCreated, backMark, tabbar = false }: { id: st
       {paper}
     </section>
   ) : (
-    <main className={styles.page} data-feature="notes" data-tabbar={tabbar || undefined} data-testid="note-edit">
+    <main className={styles.page} data-feature="notes" data-testid="note-edit">
       {head}
       {/* 记录页美化方向 A（负责人 11-20 选定）：标题、细线、正文、图、附件装进一张卡片，撑到页底；“图片”“拍照”和文档提示在底部浮动工具条 */}
       <div className={styles.sheet} data-testid="note-edit-sheet">

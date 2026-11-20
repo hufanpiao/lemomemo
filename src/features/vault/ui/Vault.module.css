@@ -55,6 +55,16 @@
   color: var(--text);
 }
 
+/* 线框小锁（Pin.tsx 的 LockLineIcon，隐私记记录页返回旁，记录页美化方向 A）：14px，描边跟文字色 */
+.lockLine {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
 .lockicBig {
   display: block;
   width: 44px;

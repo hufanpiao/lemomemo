@@ -68,7 +68,7 @@ function ErrorView() {
  * 在页面的 Suspense 外面（设计动效评审 D1）：切到分包没到的页时页面被藏起来，底栏不跟着藏、液滴照样滑。
  * 冷启动和页面一起出：第一个页面（main）出现以前不画，出现以后就一直画（不靠和页面共用 Suspense）
  */
-function TabBar({ route }: { route: RouteName }) {
+function TabBar({ route, sub }: { route: RouteName; sub: string }) {
   const t = useT();
   const [paged, setPaged] = useState(pageShown);
   useEffect(() => (paged ? undefined : whenPage(() => setPaged(true))), [paged]);
@@ -117,7 +117,7 @@ function TabBar({ route }: { route: RouteName }) {
   // 打字条“详细”正在长成新建页（负责人 11-18 选 A）：长完由 expand 收，这里不收
   const growing = useRef(false);
   useEffect(() => whenPageShown(() => !growing.current && setPlus(null)), [route]);
-  const bar = tabBarFor(route);
+  const bar = tabBarFor(route, sub);
   // 日历页：带上日历上选中的那天（日历页登记的 calendarSel，kit/state/new-item.ts）
   const open = (): void => {
     // 随手记页（R-380，线框“低 1”）：“＋”直接把光标放进页面底部的输入行，不开打字条（随手记页登记的原地聚焦，台账 Q-8）
@@ -309,7 +309,7 @@ const grouped = new Set(allRoutes.flatMap((r) => (r.samePageAs === undefined ? [
 setSamePage((a, b) => grouped.has(pageOf(a.name)) && pageOf(a.name) === pageOf(b.name));
 // 四个页签之间互切（两头都有底栏、页签不同）：不起 View Transition，底栏一直实时模糊（router.ts setTabSwitch；负责人 11-06 方案 B）；
 // 按底栏从左到右的顺序给方向，新页从那一边滑进来（负责人 11-18 选切页方案 B）
-setTabSwitch((a, b) => tabDir(a.name, b.name));
+setTabSwitch(tabDir);
 
 export function App() {
   const route = useRoute();
@@ -376,7 +376,7 @@ export function App() {
       {/* 底栏不和页面同一个 Suspense（D1）：自己一个错误边界、一个 Suspense；出错只是不画底栏 */}
       <ErrorBoundary fallback={null}>
         <Suspense fallback={null}>
-          <TabBar route={route.name} />
+          <TabBar route={route.name} sub={route.params[0] ?? ''} />
         </Suspense>
       </ErrorBoundary>
       <Reminders route={route.name} ready={remindReady} />

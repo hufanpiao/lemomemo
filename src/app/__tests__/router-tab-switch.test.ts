@@ -27,7 +27,7 @@ beforeEach(() => {
   m.fadeSwap.mockClear();
   m.cancelFade.mockClear();
   // 和 App 用同一个方向判断（tab-of.ts 的 tabDir），不另抄一份（代码审查 D3）
-  setTabSwitch((a, b) => tabDir(a.name, b.name));
+  setTabSwitch(tabDir);
   setSamePage((a, b) => tabOf(a.name) === 'calendar' && tabOf(b.name) === 'calendar');
 });
 afterEach(() => {
