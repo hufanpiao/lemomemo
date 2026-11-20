@@ -3,23 +3,19 @@
 // • resubscribe_failed：提示“推送需要重新打开，点一下”（R-282 ③）
 // • not_supported：提示“这个浏览器的推送服务暂不支持”
 // 只放内存，不落盘；app/main.tsx 启动认领完调 setPushOutcome，设置页在点按里重新认领后也调
+import { createSignal } from '../../shared/core/signal.ts';
 import type { EnsurePushOutcome } from './push-claim.ts';
 
 let current: EnsurePushOutcome | null = null;
-const listeners = new Set<() => void>();
+const listeners = createSignal();
 
 export function setPushOutcome(o: EnsurePushOutcome | null): void {
   current = o;
-  for (const l of [...listeners]) l();
+  listeners.emit();
 }
 
 export function getPushOutcome(): EnsurePushOutcome | null {
   return current;
 }
 
-export function subscribePushOutcome(fn: () => void): () => void {
-  listeners.add(fn);
-  return () => {
-    listeners.delete(fn);
-  };
-}
+export const subscribePushOutcome = listeners.subscribe;

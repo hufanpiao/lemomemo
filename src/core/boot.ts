@@ -2,6 +2,7 @@
 // 步骤：开本机库（VersionError 整屏提示、不删库）→ 换账号清空（core/account.ts）→ view 灌进集合 → 整理离线队列 → 读缓存的 config、profile 算功能开关 → 判断是否挡同步
 // 不变量：开库之后任何一步抛错都关库、清内存集合，按 unavailable 返回；coldStart 本身不抛
 // 纯 TS：不准 import React 和任何功能（A1）。各步细节见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
+import { createSignal } from '../../shared/core/signal.ts';
 import { featureOn } from '../../shared/logic/flags.ts';
 import { SCHEMA_V } from './schema-version.ts';
 import { buildInfo } from '../platform/env.ts';
@@ -163,13 +164,10 @@ export function getBoot(): BootResult | null {
 }
 
 /** profiles 本人那一行换了（applyFreshConfig 收到新的 profile）时通知：kit 的 useMeAvatar、useMeInitial 跟着重画（R-384） */
-const profileSubs = new Set<() => void>();
+const profileSubs = createSignal();
 
 /** 订阅“profile 变了”；返回退订 */
-export function subscribeProfile(fn: () => void): () => void {
-  profileSubs.add(fn);
-  return () => void profileSubs.delete(fn);
-}
+export const subscribeProfile = profileSubs.subscribe;
 
 /** 本机改 profile 的次数（设置里换头像、改语言调 applyFreshConfig 不带 since）：同步轮在本机改之前发出的拉取结果整份丢掉（R-384 整块评审第 3 条） */
 let localProfileEdits = 0;
@@ -430,7 +428,7 @@ export async function applyFreshConfig(
   if (fresh.profile && (fresh.since ?? ++localProfileEdits) === localProfileEdits) {
     boot.profile = fresh.profile;
     // 先通知再写 meta：界面换头像、名字不等本机库（库关着、写不进也照样换）
-    for (const fn of [...profileSubs]) fn();
+    profileSubs.emit();
     if (boot.cache && !boot.cache.isClosed()) await boot.cache.setMeta('profile', fresh.profile);
   }
   boot.flags = enabledFlags(boot.config, boot.profile, appVersion);

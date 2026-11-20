@@ -14,6 +14,7 @@
 // 类型和接口在 outbox-types.ts，纯函数在 outbox-logic.ts，这里一并转出
 // 隐私记的明文不进这里（A18）
 // 纯 TS：不准 import React 和任何功能（A1）
+import { createSignal } from '../../shared/core/signal.ts';
 import { buildInfo } from '../platform/env.ts';
 import type { Cache, CachedRow, CacheTx, ServerRow } from './cache.ts';
 import { OUTBOX } from './cache-schema.ts';
@@ -175,8 +176,8 @@ export const outboxCtx = new WeakMap<Outbox, Ctx>();
 
 export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
   let status: OutboxStatus = { pending: 0, failed: 0, paused: null, remindRecs: EMPTY_SET, retryRecs: EMPTY_SET };
-  const listeners = new Set<() => void>();
-  const eventListeners = new Set<(e: OutboxEvent) => void>();
+  const listeners = createSignal();
+  const eventListeners = createSignal<[OutboxEvent]>();
 
   const refresh = async (): Promise<void> => {
     const items = await cache.tx([OUTBOX], 'readonly', (t) => t.getAll<OutboxItem>(OUTBOX));
@@ -197,7 +198,7 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
       sameSet(status.retryRecs, retry);
     if (same) return;
     status = { pending: active.length, failed: items.length - active.length, paused, remindRecs: remind.size ? remind : EMPTY_SET, retryRecs: retry.size ? retry : EMPTY_SET };
-    for (const l of [...listeners]) l();
+    listeners.emit();
   };
 
   let suspended = false;
@@ -215,9 +216,7 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
     newOpId: opts.newOpId ?? (() => crypto.randomUUID()),
     currentV: opts.currentV ?? OUTBOX_V,
     refresh,
-    emit: (e) => {
-      for (const l of [...eventListeners]) l(e);
-    },
+    emit: eventListeners.emit,
   };
   const list = (): Promise<OutboxItem[]> => cache.tx([OUTBOX], 'readonly', async (t) => (await t.getAll<OutboxItem>(OUTBOX)).sort(bySeq));
   const getItem = (opId: string): Promise<OutboxItem | undefined> => cache.tx([OUTBOX], 'readonly', (t) => t.get<OutboxItem>(OUTBOX, opId));
@@ -322,18 +321,8 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
     },
     list,
     getStatus: () => status,
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    onEvent(fn) {
-      eventListeners.add(fn);
-      return () => {
-        eventListeners.delete(fn);
-      };
-    },
+    subscribe: listeners.subscribe,
+    onEvent: eventListeners.subscribe,
     refresh,
     suspend: ctx.suspend,
     isSuspended: ctx.isSuspended,

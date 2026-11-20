@@ -9,6 +9,7 @@
 // • PPT：ms_preview 让服务器放一份临时明文副本（5 分钟），交给微软；结束（关预览、卸下附件区）调 msPreviewEnd，会话自己记有没有副本在（msLive），不重复发
 // • 运行日志只记动作和结果码，不记文件名、内容
 // 纯 TS：不准 import React（A1）
+import { createSignal } from '../../../../shared/core/signal.ts';
 import type { RejectReason } from '../../../../shared/schema/attachments.ts';
 import type { VaultFileItem, VaultFileMeta } from '../../../../shared/schema/vault-file.ts';
 import { uuidv7 } from '../../../core/uuidv7.ts';
@@ -97,8 +98,8 @@ type Retry = { meta: VaultFileMeta; file: Blob; thumb: Blob | null };
 /** 一个附件区一份（noteId 固定）；dispose 时丢掉内存里的明文、结束微软预览 */
 export function createVaultAtt(api: VaultFileApi, noteId: string, deps: VaultAttDeps = defaults) {
   let snap: VaultAttSnapshot = { loaded: false, failed: false, files: [], pending: [] };
-  const subs = new Set<() => void>();
-  const notices = new Set<(n: AttNotice) => void>();
+  const subs = createSignal();
+  const notices = createSignal<[AttNotice]>();
   const mem = memCache();
   const retries = new Map<string, Retry>();
   /** 传的途中被去掉的（传回来不进列表；服务器收下了就再删） */
@@ -110,7 +111,7 @@ export function createVaultAtt(api: VaultFileApi, noteId: string, deps: VaultAtt
   const put = (p: Partial<VaultAttSnapshot>): void => {
     if (dead) return;
     snap = { ...snap, ...p };
-    for (const fn of [...subs]) fn();
+    subs.emit();
   };
   const setPending = (id: string, patch: Partial<PendingFile> | null): void => {
     const rest = snap.pending.filter((x) => x.id !== id);
@@ -118,7 +119,7 @@ export function createVaultAtt(api: VaultFileApi, noteId: string, deps: VaultAtt
     put({ pending: patch === null || !old ? rest : snap.pending.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
   };
   const notify = (key: AttFailKey, name: string): void => {
-    for (const fn of [...notices]) fn({ key, noteId, name });
+    notices.emit({ key, noteId, name });
   };
   const sortIn = (files: readonly NoteFile[], f: NoteFile): NoteFile[] => [...files.filter((x) => x.id !== f.id), f].sort(byId);
 
@@ -242,12 +243,7 @@ export function createVaultAtt(api: VaultFileApi, noteId: string, deps: VaultAtt
       const r = await api.get(f.id, 'thumb');
       return r.ok ? r.blob : null;
     },
-    onNotice(fn) {
-      notices.add(fn);
-      return () => {
-        notices.delete(fn);
-      };
-    },
+    onNotice: notices.subscribe,
   };
 
   return {
@@ -255,12 +251,7 @@ export function createVaultAtt(api: VaultFileApi, noteId: string, deps: VaultAtt
     /** 读列表；失败后“重试”也调它 */
     load,
     get: (): VaultAttSnapshot => snap,
-    subscribe(fn: () => void): () => void {
-      subs.add(fn);
-      return () => {
-        subs.delete(fn);
-      };
-    },
+    subscribe: subs.subscribe,
     /** 附件区卸下：丢掉明文、结束微软预览、不再通知（还在传的照样传完：服务器那份留着，下次 list 能看到） */
     dispose(): void {
       source.msEnd();

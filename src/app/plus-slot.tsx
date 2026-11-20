@@ -11,6 +11,7 @@
 //   按住“＋”：App 把 plusHold 交给 GlassBar（只转 pointer 事件，GlassBar 不因此重渲染），下载好以后转到同一块里的 hold，之前按住只当点一下
 import { useEffect, useState, useSyncExternalStore, type PointerEvent } from 'react';
 import type { DateStr } from '../../shared/core/date.ts';
+import { createSignal } from '../../shared/core/signal.ts';
 import { loadTypeBar } from '../features/plus/index.ts';
 import type { PlusHold } from '../kit/components/GlassBar/GlassBar.tsx';
 import { useT } from '../kit/hooks/useT.ts';
@@ -38,10 +39,7 @@ let mod: Mod | undefined;
  *  用 Proxy 一行转四个口子（onStart、onMove、onEnd、onCancel）：首屏只剩约 90 B 额度，逐个写要多几十字节 */
 export const plusHold = new Proxy({} as PlusHold, { get: (_, k: keyof PlusHold) => (e: PointerEvent) => mod?.hold[k](e) });
 let loading = false;
-const subs = new Set<() => void>();
-const emit = (): void => {
-  for (const fn of [...subs]) fn();
-};
+const subs = createSignal();
 
 /** 下载打字条那一块（重复调没关系）；下好了记住这一块（组件本身、手势），通知重画 */
 function load(): void {
@@ -50,7 +48,7 @@ function load(): void {
   loadTypeBar().then(
     (m) => {
       mod = m;
-      emit();
+      subs.emit();
     },
     () => undefined, // 下载失败：一直是“准备中”（文件头）
   );
@@ -59,12 +57,6 @@ function load(): void {
 /** 开始预先下载打字条（首屏画完以后调；重复调没关系） */
 export const preloadPlus = load;
 
-const subscribe = (fn: () => void): (() => void) => {
-  subs.add(fn);
-  return () => {
-    subs.delete(fn);
-  };
-};
 const loaded = (): Mod | undefined => mod;
 
 /** 只给测试用 */
@@ -84,7 +76,7 @@ export function PlusSlot(
   },
 ) {
   const { open, onOpen, hold = true, ...rest } = props;
-  const m = useSyncExternalStore(subscribe, loaded, loaded);
+  const m = useSyncExternalStore(subs.subscribe, loaded, loaded);
   useEffect(() => {
     if (open) load();
   }, [open]);

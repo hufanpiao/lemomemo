@@ -2,6 +2,7 @@
 // • openFind(q, from)：打字条“看起来是要查找”回车、Ctrl+K
 // • openAssist(a)：“＋”判成查找、总结、取消、改期、完成以后（打字、录音、quick-add），或提示条上的“改成搜索”“也帮你找了一下”（架构 5.14 第 2～4、7 点）。
 //   内容类查找（没有时间范围）直接是查找面板，页脚多“改成记下”“总结一下”；时间类、总结、取消改期完成是结果层（ui/AssistPanel）
+import { createSignal } from '../../../../shared/core/signal.ts';
 import type { AssistAsk } from '../../../../shared/logic/parse/assist.ts';
 
 /** pull：下拉搜索结果底下的“用 AI 按意思找”（R-437，ui/PullSearch.tsx） */
@@ -35,10 +36,8 @@ export interface FindOpen {
 
 let cur: FindOpen | null = null;
 let seq = 0;
-const subs = new Set<() => void>();
-const emit = (): void => {
-  for (const fn of [...subs]) fn();
-};
+const subs = createSignal();
+const emit = (): void => subs.emit();
 
 export function openFind(q: string, from: FindFrom): void {
   seq += 1;
@@ -64,9 +63,4 @@ export function closeFind(): void {
 }
 
 export const findOpenSnapshot = (): FindOpen | null => cur;
-export function subscribeFindOpen(fn: () => void): () => void {
-  subs.add(fn);
-  return () => {
-    subs.delete(fn);
-  };
-}
+export const subscribeFindOpen = subs.subscribe;

@@ -2,20 +2,15 @@
 // 模块级一份订阅（独立评审 11-18 二-3：原来今天页每一行的行尾标记各带一个 effect、各向 root-paint 登记一个回调）：
 // 没画完时，订阅的从 0 个变成 1 个才向 root-paint 登记一次，画完时通知所有订阅的；画完以后谁来读都是 true
 import { useSyncExternalStore } from 'react';
+import { createSignal } from '../../../shared/core/signal.ts';
 import { afterAppPainted, isAppPainted } from '../../platform/root-paint.ts';
 
-const subs = new Set<() => void>();
-
-const flush = (): void => {
-  for (const f of [...subs]) f();
-};
+const subs = createSignal();
 
 function subscribe(cb: () => void): () => void {
-  subs.add(cb);
-  if (subs.size === 1 && !isAppPainted()) afterAppPainted(flush);
-  return () => {
-    subs.delete(cb);
-  };
+  const off = subs.subscribe(cb);
+  if (subs.size === 1 && !isAppPainted()) afterAppPainted(subs.emit);
+  return off;
 }
 
 export function usePainted(): boolean {

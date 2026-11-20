@@ -14,6 +14,7 @@
 // motion/react 只被 ./motion-impl.tsx 那一块用到：首屏闭包里出现 motion 的特征串由 build/check_first_paint_chunks.mjs 的 MOTION_MARKS 拦；
 // 这里对 motion/react 和 motion-impl 都只有类型引用
 import type { FeatureBundle } from 'motion/react';
+import { createSignal } from '../../shared/core/signal.ts';
 import type * as MotionImplModule from './motion-impl.tsx';
 
 type Loader = () => Promise<FeatureBundle>;
@@ -23,7 +24,7 @@ export type MotionImpl = typeof MotionImplModule;
 let bundle: FeatureBundle | null = null;
 let impl: MotionImpl | null = null;
 let pending: Promise<FeatureBundle> | null = null;
-const subs = new Set<() => void>();
+const subs = createSignal();
 
 /** 功能包到了的标记：<html data-motion="ready">（FA-6 ② 审查 L5）。e2e 等它再等两帧，不靠资源加载记录加固定 300 ms；
  *  各个 LazyMotion 拿到包是在这之后的那轮 then 里，所以 e2e 要再等帧，不能看到标记就当已经装上 */
@@ -39,7 +40,7 @@ export function loadMotionFeatures(): Promise<FeatureBundle> {
       bundle = mod.default;
       impl = mod;
       markMotionReady();
-      for (const fn of [...subs]) fn();
+      subs.emit();
       return bundle;
     },
     () => {
@@ -66,12 +67,7 @@ export function motionImpl(): MotionImpl | null {
 }
 
 /** 动画实现到了时通知（只通知一次：到了以后不会再变） */
-export function subscribeMotionImpl(fn: () => void): () => void {
-  subs.add(fn);
-  return () => {
-    subs.delete(fn);
-  };
-}
+export const subscribeMotionImpl = subs.subscribe;
 
 /** 只给测试用：回到“还没下载”的状态 */
 export function resetMotionFeaturesForTest(): void {

@@ -2,6 +2,7 @@
 // 每个集合一份快照：一个集合变了，只通知订阅它的组件（2.6 渲染性能）
 // B0 只有内存版骨架；B1 接上 IndexedDB（core/cache）、outbox 和同步后，写入从那里进来
 // 纯 TS：不准 import React 和任何功能（A1）
+import { createSignal } from '../../shared/core/signal.ts';
 
 export interface Row {
   id: string;
@@ -26,21 +27,16 @@ export interface Collection<T extends Row> {
 
 export function createCollection<T extends Row>(): Collection<T> {
   const byId = new Map<string, T>();
-  const listeners = new Set<Listener>();
+  const listeners = createSignal();
   let snapshot: readonly T[] = [];
 
   const commit = (): void => {
     snapshot = [...byId.values()];
-    for (const l of [...listeners]) l();
+    listeners.emit();
   };
 
   return {
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    subscribe: listeners.subscribe,
     getSnapshot: () => snapshot,
     get: (id) => byId.get(id),
     upsert(rows) {

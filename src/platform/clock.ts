@@ -6,6 +6,8 @@
 // • 偏差超过 5 分钟：isClockWrong() 为 true，设置 › 关于 显示“手机时间不准”
 // • 喂样本：platform/http.ts 的 appFetch 收到 /sb/ 的响应时调 observeResponse(url, res.headers.get('Date'))（接线见接手清单 K8-clock）；
 //   跨域时 Date 要在 Access-Control-Expose-Headers 里（架构 5.10），读不到就是 null，跳过
+import { createSignal } from '../../shared/core/signal.ts';
+
 export const CLOCK_SAMPLES = 5;
 /** 偏差小于这个当 0 */
 export const CLOCK_IGNORE_MS = 2_000;
@@ -50,7 +52,7 @@ export interface Clock {
 export function createClock(localNow: () => number = () => Date.now()): Clock {
   let samples: number[] = [];
   let off = 0;
-  const listeners = new Set<() => void>();
+  const listeners = createSignal();
   const c: Clock = {
     record(dateHeader, localMs) {
       if (!dateHeader) return;
@@ -60,7 +62,7 @@ export function createClock(localNow: () => number = () => Date.now()): Clock {
       const next = offsetOf(samples);
       if (next === off) return;
       off = next;
-      for (const l of [...listeners]) l();
+      listeners.emit();
     },
     observeResponse(url, dateHeader) {
       if (isSbUrl(url)) c.record(dateHeader);
@@ -68,12 +70,7 @@ export function createClock(localNow: () => number = () => Date.now()): Clock {
     offset: () => off,
     now: () => localNow() + off,
     isClockWrong: () => Math.abs(off) > CLOCK_WRONG_MS,
-    subscribe(fn) {
-      listeners.add(fn);
-      return () => {
-        listeners.delete(fn);
-      };
-    },
+    subscribe: listeners.subscribe,
     reset() {
       samples = [];
       off = 0;

@@ -27,6 +27,7 @@
 //      没有标记的残留会话（只有 supabase-js 删失败、又没有兜底删）在下次启动刷新令牌失败时，走“被移除”流程删掉
 // • 关着失败（fail closed）：exe 里没装上（分包加载失败、Rust 不在）时，同步读一律读不到、supabase-js 用本页内存——宁可登录不上，
 //   也不退回 localStorage（F5-2：exe 的会话不落 WebView2 的 localStorage）
+import { createSignal } from '../../shared/core/signal.ts';
 import type * as Desktop from './desktop.ts';
 import { isTauri } from './env.ts';
 import { withTimeout } from './exit-basics.ts';
@@ -57,7 +58,7 @@ export const DROP_MARK_KEY = 'lemo.session-drop-pending';
 let roundFailed = false;
 /** 上一轮删除失败了（标记还留着） */
 let lastRoundFailed = false;
-const dropListeners = new Set<() => void>();
+const dropListeners = createSignal();
 /** 显式退出里还没回来的删除（标记的一轮）、其中有没有失败的 */
 const dropping = new Set<Promise<void>>();
 let dropFailed = false;
@@ -99,7 +100,7 @@ export function clearDropMark(): void {
 }
 
 function notifyDrop(): void {
-  for (const f of [...dropListeners]) f();
+  dropListeners.emit();
 }
 
 /**
@@ -125,10 +126,7 @@ export function exitIncompleteShown(): boolean {
 }
 
 /** 订阅 sessionDropState 的变化（每轮删除结束、撤掉标记时通知），返回退订 */
-export function subscribeSessionDrop(fn: () => void): () => void {
-  dropListeners.add(fn);
-  return () => dropListeners.delete(fn);
-}
+export const subscribeSessionDrop = dropListeners.subscribe;
 
 /** exe：换上凭据管理器那一份（view 是 desktop.ts 的 sessionStorageView(store)） */
 export function setSessionBackend(store: SessionBackendStore, view: Storage): void {
