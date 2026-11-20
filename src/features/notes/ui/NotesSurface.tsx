@@ -16,8 +16,12 @@ export interface NotesSurfaceProps {
   editing: boolean;
   head?: ((trash: ReactNode, catName: string | null) => ReactNode) | undefined;
   cat?: CategoryCtl | undefined;
+  /** 编辑页“‹”和返回文字中间的小图标（隐私记页给小锁，记录页美化方向 A） */
+  backMark?: ReactNode;
+  /** 编辑页底下照常有底栏（隐私记页，app/tab-of.ts 归随手记页签）：编辑页底部工具条抬到底栏上面 */
+  tabbar?: boolean;
 }
 
-export default function NotesSurface({ source, editing, head, cat }: NotesSurfaceProps) {
-  return <NoteSourceProvider value={source}>{editing ? <NoteEditPage /> : <NotesList head={head} cat={cat} />}</NoteSourceProvider>;
+export default function NotesSurface({ source, editing, head, cat, backMark, tabbar = false }: NotesSurfaceProps) {
+  return <NoteSourceProvider value={source}>{editing ? <NoteEditPage backMark={backMark} tabbar={tabbar} /> : <NotesList head={head} cat={cat} />}</NoteSourceProvider>;
 }

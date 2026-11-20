@@ -17,6 +17,12 @@ export const NoteAttachments = lazy(() => import('./ui/NoteAttachments.tsx'));
 export const VaultAttachments = lazy(() => import('./ui/VaultAttachments.tsx'));
 
 /**
+ * 手机、窄窗口的“文档请在电脑上加。手机上可以看、预览、下载。”（第一句后换行，电脑布局不出东西）：随手记、隐私记手机编辑页底部工具条右侧挂（记录页美化方向 A）。
+ * props: { className?: 外观由挂它的地方给 }
+ */
+export const AttPhoneHint = lazy(() => import('./ui/AttPhoneHint.tsx'));
+
+/**
  * 随手记编辑器里一张图下面的识别状态（B4b-2 识图，线框 sAIst 第二屏）：识图中 / 没识别 +“重新识别” / 没交给 AI +“去打开”；识别好了不出东西。
  * props: { id: note_images 的 id }；上传中、没传上的图不挂。行是同步下来的，隐私记的图、删了的、没有可显示状态的不出东西
  */

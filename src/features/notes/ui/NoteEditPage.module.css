@@ -1,11 +1,88 @@
 /* 随手记编辑器：只用令牌（A11）。手机整页照线框 s8（顶栏“‹ 随手记 ｜ 分类胶囊 ｜ ⋯ ｜ 完成”，24px 粗体标题，正文 15px、行高 1.7）；
-   电脑抽屉照皮肤视觉稿 DK.mason / NOTE_ED（右边浮起的圆角面板，--b-drawer） */
+   电脑抽屉照皮肤视觉稿 DK.mason / NOTE_ED（右边浮起的圆角面板，--b-drawer）。
+   手机整页照记录页美化方向 A（负责人 11-20 选定）：上下排开，卡片撑到页底；底部留出工具条那一截（离底 6 + 高 60 + 余 18 = 84），
+   最后一行字、最后一张图能滚到工具条上面 */
 .page {
+  display: flex;
+  flex-direction: column;
   max-width: 640px;
   min-height: 100dvh;
   margin: 0 auto;
-  padding: max(var(--safe-top), 12px) 16px 40px;
+  padding: max(var(--safe-top), 12px) 16px calc(var(--inset-bottom) + 84px);
   color: var(--text);
+}
+
+/* 纸张卡片：圆角 20，左右比页面边距各多出 4（离屏幕边 12），毛玻璃 --glass-bg + --b-tile-shadow */
+.sheet {
+  flex: 1;
+  margin: 8px -4px 0;
+  padding: 20px 18px 24px;
+  border-radius: var(--r-lg);
+  background: var(--glass-bg);
+  box-shadow: var(--b-tile-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+
+/* 标题和正文之间的细线 */
+.hr {
+  height: 1px;
+  margin: 14px 0;
+  border: 0;
+  background: var(--line);
+}
+
+/* 底部浮动工具条：“图片”“拍照”+ 右侧两行文档提示；离底 安全区 + 6，键盘弹着时贴键盘上沿（--kb，浏览器里是键盘高、主屏幕版是 0）。
+   和随手记输入行同一层（--z-inrow），撤销条、菜单在它上面 */
+.dock {
+  position: fixed;
+  right: 12px;
+  bottom: max(calc(var(--inset-bottom) + 6px), var(--kb, 0px));
+  left: 12px;
+  z-index: var(--z-inrow);
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  max-width: 616px;
+  height: 60px;
+  margin: 0 auto;
+  padding: 0 14px 0 8px;
+  border-radius: 30px;
+  background: var(--float-bg);
+  box-shadow: var(--g-bar-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+
+/* 底下照常有底栏的编辑页（隐私记页，app/tab-of.ts 归随手记页签；方案图上没画底栏，底栏不动）：工具条照贴底浮条的公式 --dock-bottom
+   抬到底栏上面（键盘弹着时同样贴键盘上沿），页底留白 = 底栏留白 + 工具条 66 */
+.page[data-tabbar] {
+  padding-bottom: calc(var(--tabbar-pad) + 66px);
+}
+
+.page[data-tabbar] .dock {
+  bottom: var(--dock-bottom);
+}
+
+.dockHint {
+  flex: 1;
+  min-width: 0;
+  padding-left: 12px;
+  border-left: 1px solid var(--rim-shade);
+  color: var(--text-2);
+  font-size: var(--fs-11-5);
+  line-height: 1.4;
+}
+
+/* 减少透明效果、隐私记页挂着（<html data-rt="1">，platform/look.ts）：卡片换 --panel 白底加 --line 描边，工具条换 --glass-solid，都不模糊 */
+:global(:root[data-rt='1']) .sheet {
+  background: var(--panel);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line);
+  backdrop-filter: none;
+}
+
+:global(:root[data-rt='1']) .dock {
+  background: var(--glass-solid);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: none;
 }
 
 .inDrawer {
@@ -26,14 +103,27 @@
   padding-left: var(--drawer-lead, 0);
 }
 
+.page > .top {
+  padding: 0 2px;
+}
+
 .back {
+  display: inline-flex;
   flex: none;
+  gap: 4px;
+  align-items: center;
   min-height: var(--hit);
   padding: 0 4px 0 0;
   border: 0;
   background: none;
   color: var(--text);
   font-size: var(--fs-14);
+}
+
+/* 隐私记“‹ 🔒 隐私记”的小锁（隐私记顶栏那个锁图标，记录页美化方向 A）：14 × 14 */
+.back svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* 分类胶囊（s8“工作灵感 AI ▾”）：外观是 kit Chip.module.css 的 .chip（高 30、无描边浅底，R-436）；这里只让它能缩（名字省略）。
@@ -115,6 +205,21 @@
 
 .more:disabled {
   color: var(--text-2);
+}
+
+/* 手机整页的“⋯”：36 圆形浅底（记录页美化方向 A，和分类胶囊同一种 --panel-2）；点按区用 ::after 外扩到 44 */
+.page .more {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--panel-2);
+}
+
+.page .more::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
 }
 
 .menu {
@@ -214,6 +319,12 @@
 
 .body:focus {
   outline: none;
+}
+
+/* 卡片里：标题贴卡片上内边距，正文接在细线下面（间距由细线的上下 14 给） */
+.sheet .title,
+.sheet .body {
+  margin-top: 0;
 }
 
 /* 有图（插图 S3）：正文最少两行，图紧跟在正文后面（NOTE_ED：正文下面上边距 14 就是图） */

@@ -4,7 +4,7 @@
 //   传好了的下面挂识别状态（attachments 的 ImageAiStatus，懒加载；B4b-2 识图，线框 sAIst）；点传好了的图打开看图页（NoteImageView）
 //   （重新插入：图还在内存里就再传一次；不在了——页面关过——就重新选一张，插进来后删掉旧的这张）
 // • 选图（PickButtons）：“图片”（文件选择框，只收 image/*）和“拍照”（同上加 capture="environment"，手机直接开后摄像头）并排；
-//   编辑器里两个都放；输入行只放“图片”一个（视觉稿第 1491 行、线框 COMPOSER“输入行插图按钮不变”，视觉验收必改 4）。input 藏起来、由按钮点开，点按区照 44
+//   编辑器里两个都放（记录页美化方向 A，负责人 11-20 选定：手机整页在底部浮动工具条里，电脑抽屉照旧在图下面）；输入行只放“图片”一个（视觉稿第 1491 行、线框 COMPOSER“输入行插图按钮不变”，视觉验收必改 4）。input 藏起来、由按钮点开，点按区照 44
 // • 提示文案（imgMessage）：插入失败（HEIC 先转 JPG、打不开、存不上……）、上传失败、写行被拒，都写进 i18n
 // • 输入行选图（useAddImage；R-416：选了先挂成待记下的小图 PendingPics，点“记下”才存）、编辑器插图区连同提示（EditorImageBlock）也在这里，随手记页、编辑页不超行数上限
 // • 动效：只用 Pressable 的按下反馈（R-376）
@@ -16,7 +16,7 @@ import { BlobImg, CameraIcon, failKey, ImgIcon } from './ImgParts.tsx';
 import { TrashLink } from '../../../kit/components/TrashLink.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { useNoteSource, type NoteImagesApi } from '../hooks/note-source.ts';
+import { useNoteSource } from '../hooks/note-source.ts';
 import { useImageNotices, type ImgFailKey, type ImgNotice, type InsertResult, type NoteImage, type PendingImage } from '../hooks/useNoteImages.ts';
 import type { ActionResult } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
@@ -69,8 +69,9 @@ function useFilePick(onFile: (f: File) => unknown, mode: 'many' | 'one' | 'camer
   return [input, () => ref.current?.click()];
 }
 
-/** “图片”“拍照”两个按钮；className 给按钮（输入行沿用 .img 的 40 × 40 灰圆）；不给时是编辑器里的 kit 胶囊（Chip.module.css .chip，R-436 丁批，不再照抄一份胶囊样式） */
-export function PickButtons({ onFile, disabled, className, idPrefix, camera = true }: { onFile(f: File): unknown; disabled?: boolean; className?: string | undefined; idPrefix: string; camera?: boolean }) {
+/** “图片”“拍照”两个按钮；className 给按钮（输入行沿用 .img 的 40 × 40 灰圆，只有图标；编辑页底部工具条的 labeled 带字）；
+ *  不给时是电脑抽屉里的 kit 胶囊（Chip.module.css .chip，R-436 丁批，不再照抄一份胶囊样式） */
+export function PickButtons({ onFile, disabled, className, labeled = !className, idPrefix, camera = true }: { onFile(f: File): unknown; disabled?: boolean; className?: string | undefined; labeled?: boolean; idPrefix: string; camera?: boolean }) {
   const t = useNotesT();
   const [pickInput, pick] = useFilePick(onFile, 'many', `${idPrefix}-img-input`);
   const [camInput, cam] = useFilePick(onFile, 'camera', `${idPrefix}-camera-input`);
@@ -79,12 +80,12 @@ export function PickButtons({ onFile, disabled, className, idPrefix, camera = tr
     <>
       <Pressable type="button" className={cls} onClick={pick} disabled={disabled} aria-label={t('notes.img', {})} data-testid={`${idPrefix}-img`}>
         <ImgIcon />
-        {className ? null : <span>{t('notes.img', {})}</span>}
+        {labeled ? <span>{t('notes.img', {})}</span> : null}
       </Pressable>
       {camera ? (
         <Pressable type="button" className={cls} onClick={cam} disabled={disabled} aria-label={t('notes.camera', {})} data-testid={`${idPrefix}-camera`}>
           <CameraIcon />
-          {className ? null : <span>{t('notes.camera', {})}</span>}
+          {labeled ? <span>{t('notes.camera', {})}</span> : null}
         </Pressable>
       ) : null}
       {pickInput}
@@ -222,23 +223,23 @@ function PendPic({ file, label, onRemove, testId }: { file: File; label: string;
   );
 }
 
-/**
- * 编辑器里的插图区：提示（保存状态下面）+ 图 + “图片”“拍照”。上传器的提示全页共用，只认这一条随手记的图；电脑抽屉里的由随手记页出（不出两遍）。
- * dropRef：附件区拖进来、粘贴进来的图片经它插入，插不进去时和点“图片”选的一样出提示（B4b-1 整改 D6：原来静默失败）
- */
-export function EditorImageBlock({ noteId, drawer, disabled, msgClass, dropRef }: { noteId: string | null; drawer: boolean; disabled: boolean; msgClass: string | undefined; dropRef?: MutableRefObject<((f: File) => void) | null> }) {
+/** 编辑器插图区的状态（编辑页订一次，图列表和“图片”“拍照”共用；L5：这一条的图只订一次）：上传器的提示全页共用，只认这一条随手记的图，
+ *  电脑抽屉里的由随手记页出（不出两遍）。dropRef：附件区拖进来、粘贴进来的图片经它插入，插不进去时和点“图片”选的一样出提示（B4b-1 整改 D6） */
+export function useEditorImages(noteId: string | null, drawer: boolean, dropRef?: MutableRefObject<((f: File) => void) | null>) {
   const [msg, setMsg] = useState<ImgMsg | null>(null);
   const src = useNoteSource();
-  // 这一条的图只订一次，交给下面的 EditorImages（L5：不各订一份）
   const im = src.useImages(noteId);
-  const { insert } = im;
+  const put = im.insert;
+  /** 插一张，插不进去出提示；回插没插成（“重新插入”成了才删旧的那张） */
+  const insert = useCallback(async (f: File): Promise<boolean> => {
+    const r = await put(f);
+    const k = insertMessage(r);
+    if (k) setMsg({ key: k, trash: false });
+    return r.ok;
+  }, [put]);
   useEffect(() => {
     if (!dropRef) return undefined;
-    dropRef.current = (f: File) =>
-      void insert(f).then((r) => {
-        const k = insertMessage(r);
-        if (k) setMsg({ key: k, trash: false });
-      });
+    dropRef.current = (f: File) => void insert(f);
     return () => {
       dropRef.current = null;
     };
@@ -247,39 +248,40 @@ export function EditorImageBlock({ noteId, drawer, disabled, msgClass, dropRef }
     if (!drawer && n.noteId === noteId) setMsg({ key: failMessage(n.key), trash: n.key === 'quota' });
   }, [drawer, noteId]);
   useImageNotices(src, onNotice);
-  return (
-    <>
-      {msg ? <ImgMsgLine className={msgClass} msg={msg} /> : null}
-      <EditorImages im={im} noteId={noteId} disabled={disabled} onMessage={(key) => setMsg({ key, trash: false })} />
-    </>
-  );
+  return { im, msg, insert, noteId };
+}
+export type EditorImgs = ReturnType<typeof useEditorImages>;
+
+/** 编辑器里的“图片”“拍照”：手机整页放在底部工具条里（className 给按钮，带字）；电脑抽屉里是图下面一行 kit 胶囊（EditorImageList 的 picks） */
+export function EditorPicks({ ed, disabled, className }: { ed: EditorImgs; disabled: boolean; className?: string | undefined }) {
+  return <PickButtons onFile={ed.insert} disabled={disabled || ed.noteId === null} className={className} labeled idPrefix="note-edit" />;
 }
 
-/** 编辑器、抽屉里的图（正文下面）+ “图片”“拍照”；im 是 EditorImageBlock 订的那一份；message 把失败提示交给编辑器显示 */
-function EditorImages({ im, noteId, disabled, onMessage }: { im: NoteImagesApi; noteId: string | null; disabled: boolean; onMessage(k: ImgMsgKey): void }) {
+/** 编辑器、抽屉里的插图提示 + 图（正文下面）；picks：图下面带一行“图片”“拍照”（电脑抽屉；手机整页的在底部工具条） */
+export function EditorImageList({ ed, disabled, msgClass, picks }: { ed: EditorImgs; disabled: boolean; msgClass: string | undefined; picks: boolean }) {
   const t = useNotesT();
   const src = useNoteSource();
   const [view, setView] = useState<ViewOpen | null>(null);
-  const insert = async (f: File): Promise<boolean> => {
-    const r = await im.insert(f);
-    const k = insertMessage(r);
-    if (k) onMessage(k);
-    return r.ok;
-  };
+  const { im } = ed;
   return (
-    <div className={styles.box} data-testid="note-images" data-images={im.items.length ? '1' : '0'}>
-      {im.items.length ? (
-        <ul className={styles.list} aria-label={t('notes.img.list', {})}>
-          {im.items.map(({ img, pending }, i) => (
-            <OneImage key={img.id} img={img} n={i + 1} pending={pending} disabled={disabled} ai={src.caps.ai} onRemove={() => void im.remove(img.id)} onRetry={() => im.retry(img.id)} onReplace={insert} onOpen={(from) => setView({ id: img.id, from })} />
-          ))}
-        </ul>
-      ) : null}
-      <div className={styles.picks}>
-        <PickButtons onFile={insert}disabled={disabled || noteId === null} idPrefix="note-edit" />
+    <>
+      {ed.msg ? <ImgMsgLine className={msgClass} msg={ed.msg} /> : null}
+      <div className={styles.box} data-testid="note-images" data-images={im.items.length ? '1' : '0'}>
+        {im.items.length ? (
+          <ul className={styles.list} aria-label={t('notes.img.list', {})}>
+            {im.items.map(({ img, pending }, i) => (
+              <OneImage key={img.id} img={img} n={i + 1} pending={pending} disabled={disabled} ai={src.caps.ai} onRemove={() => void im.remove(img.id)} onRetry={() => im.retry(img.id)} onReplace={ed.insert} onOpen={(from) => setView({ id: img.id, from })} />
+            ))}
+          </ul>
+        ) : null}
+        {picks ? (
+          <div className={styles.picks}>
+            <EditorPicks ed={ed} disabled={disabled} />
+          </div>
+        ) : null}
+        {view ? <NoteImageView items={im.items} open={view} onClose={() => setView(null)} /> : null}
       </div>
-      {view ? <NoteImageView items={im.items} open={view} onClose={() => setView(null)} /> : null}
-    </div>
+    </>
   );
 }
 
