@@ -161,7 +161,7 @@ export function useDoneFlow(a: Acts, lg: Linger, hold: () => void, text: { done:
       if (passFocus(prefix, id)) focusToast.current = true;
       setOutOf(id, true);
       seq.current += 1;
-      cur.current.a.g.show({ kind: 'done', id, undo, message, n: seq.current });
+      cur.current.a.g.show({ kind: 'done', id, undo, message, n: seq.current }, null);
       const drop = () => {
         if (!live()) return;
         // 两件同一拍：这一行离开原来的组（离场那一份还带着 data-out），在“已完成”组里重新出现时不带

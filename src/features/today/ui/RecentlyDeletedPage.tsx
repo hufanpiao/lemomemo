@@ -1,5 +1,5 @@
 // “最近删除”页（B2 FA-2；ADR-006；TC-B2-03 前两步；B4 S2 加随手记）：日程、待办和随手记，最近删的在前，每条写“N 天后清理”和“恢复”
-// • 恢复后出“已恢复”提示（2 秒，role=status）；写不进去出提示条
+// • 恢复后出“已恢复”提示（TOAST_MS 5 秒，role=status）；写不进去出提示条
 // • 永久删除、全部清空（B4 S9，TC-B4-17，0.29 续第 121 条⑧）：每行“永久删除”、右上角“全部清空”，都先弹确认（kit 的 ConfirmDialog），
 //   只走 RPC purge_deleted（hooks/useTrashPurge.ts、data/trash-purge-api.ts）；离线时两个按钮灰掉、页上写“要联网”，点了没反应、不进 outbox。
 //   没有定稿视觉稿（线框、皮肤视觉稿里都没画这两个按钮）：沿用本页“恢复”胶囊和设置页确认弹层的样子；按 R-376 不加动效，左滑、长按菜单留到 UI 细修
@@ -18,7 +18,7 @@ import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import chip from '../../../kit/components/Chip.module.css';
 import list from '../../../kit/components/List.module.css';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyMark.tsx';
-import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
+import { useExpire, useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { useTodayT } from '../hooks/useTodayT.ts';
 import { useTrashT } from '../hooks/useTrashT.ts';
@@ -55,11 +55,8 @@ export default function RecentlyDeletedPage() {
   // 全部清空跳过了只读行：结果提示后面接“另有 N 项要新版本才能删除，留在列表里”（增量复审 11-11 必改），这时“已清空”也不自动收起
   const roTail = notice?.kind === 'purge' && roN > 0 && (notice.m === 'cleared' || notice.m === 'partial' || notice.m === 'not_synced') ? t('trash.ro.tail', { n: roN }) : '';
   const fleeting = notice !== null && roTail === '' && (notice.kind === 'restore' ? notice.r === 'ok' : notice.m === 'purged' || notice.m === 'cleared' || notice.m === 'syncing');
-  useEffect(() => {
-    if (!fleeting) return undefined;
-    const id = setTimeout(() => setNotice(null), 2000);
-    return () => clearTimeout(id);
-  }, [fleeting, notice]);
+  // 成功的提示 TOAST_MS 后收起（kit 的 useExpire，负责人 11-20 统一，原来这里 2 秒）；出错的、带只读尾巴的留着
+  useExpire(fleeting ? notice : null, () => setNotice(null));
   /** 只读行点了“恢复”“永久删除”：提示“这条要新版本才能修改”，不写、不调 RPC；返回 true 表示拦下了（两个按钮共用） */
   const stopReadonly = (table: string, id: string): boolean => {
     if (!isRo(table, id)) return false;

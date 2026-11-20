@@ -14,7 +14,7 @@ import { UNDO_TOAST_MS } from '../../../kit/components/UndoToast.tsx';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import { undoMerge } from '../data/category-merge-store.ts';
 import type { MergeHint } from '../hooks/useMergeHint.ts';
-import { isUndo, mergeUndo, undoTipOf, useNotesToast } from '../hooks/useNotesToast.ts';
+import { isUndo, mergeUndo, noteBarUp, undoTipOf } from '../hooks/useNotesToast.ts';
 import { boot, open, sendNext, serverNote, setupImageTests, uid, wire, type Row } from './note-images-kit.tsx';
 
 /** 连点、计时两条用的桩：不为 null 时页面拿它当提示条 */
@@ -343,20 +343,12 @@ describe('提示条写入期间锁住、撤销条按时收起（提示条换成�
   });
 });
 
-describe('撤销条的类型和收起（useNotesToast）', () => {
-  it('合并的、删除的撤销条都不被 4 秒收起、输入行让上去；转换结果照旧 4 秒收；画的那一份统一成 UndoTip', () => {
-    vi.useFakeTimers();
-    const g = (toast: { kind: string; id?: string; key?: string } | null) => ({ toast, toastAt: null, dismiss: vi.fn(), show: vi.fn(), block: vi.fn() });
+describe('撤销条的类型和输入行上移（useNotesToast.ts）', () => {
+  it('撤销条、只读提示条出着时输入行让上去，转换结果不让；画的那一份统一成 UndoTip（几秒收起在 kit 的 useReadonlyGuard，见 kit 的 useReadonly-expire 测试）', () => {
+    const g = (toast: { kind: string; id?: string; key?: string } | null, toastAt: number | null = null) => ({ toast, toastAt });
     const undo = vi.fn();
     const tip = mergeUndo('a|b', undo);
-    const merge = g(tip);
-    const up = renderHook(() => useNotesToast(merge as never)).result.current;
-    const conv = g({ kind: 'conv', key: 'notes.conv.left' });
-    renderHook(() => useNotesToast(conv as never));
-    vi.advanceTimersByTime(5000);
-    expect(up).toBe(true);
-    expect(merge.dismiss).not.toHaveBeenCalled();
-    expect(conv.dismiss).toHaveBeenCalledTimes(1);
+    expect([noteBarUp(g(tip) as never), noteBarUp(g({ kind: 'conv', key: 'notes.conv.left' }) as never), noteBarUp(g(null, 1) as never)]).toEqual([true, false, true]);
     expect([isUndo({ kind: 'undo', id: 'x' }), isUndo(tip), isUndo({ kind: 'error' }), isUndo(null)]).toEqual([true, true, false, false]);
     // 删除的（kit 的 {kind: 'undo', id}）补上文案和撤销；合并的原样就是；两次合并 key 不同（重新计时）
     const del = vi.fn();
@@ -365,6 +357,5 @@ describe('撤销条的类型和收起（useNotesToast）', () => {
     expect([d.msgKey, d.testId, del.mock.calls]).toEqual(['notes.deleted', 'notes-toast', [['n1']]]);
     expect([undoTipOf(tip, del).msgKey, undoTipOf(tip, del).testId]).toEqual(['notes.merge.done', 'notes-merge-toast']);
     expect(mergeUndo('a|b', undo).key).not.toBe(tip.key);
-    vi.useRealTimers();
   });
 });

@@ -79,7 +79,7 @@ import { useNoteSource } from '../hooks/note-source.ts';
 import { useMergeHint } from '../hooks/useMergeHint.ts';
 import { useNoteList, type CategoryCtl, type NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
-import { isUndo, mergeUndo, moveUndo, undoTipOf, useNotesToast } from '../hooks/useNotesToast.ts';
+import { isUndo, mergeUndo, moveUndo, noteBarUp, undoTipOf } from '../hooks/useNotesToast.ts';
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
@@ -136,7 +136,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
   const { g: guard, g: { toast }, isRo, report } = a;
   // 撤销条还在的那一对，提示条先不出（R-415 复查 B4）
   const merge = useMergeHint(toast?.kind === 'mergeUndo' ? toast.pair : null, caps.merge);
-  const up = useNotesToast(guard);
+  const up = noteBarUp(guard);
   const bar = isUndo(toast) ? { tip: undoTipOf(toast, a.undo), close: () => guard.dismiss(toast) } : null;
   // 输入框有焦点时画模糊层（R-401）；点模糊层让输入框失焦
   const field = useRef<HTMLInputElement>(null);
@@ -240,7 +240,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
     move: (m) => l.move(l.items.filter(shown), m.id, m.index),
     undo: l.undoMove,
     report,
-    moved: (m) => guard.show(moveUndo(m.switched, () => void l.undoMove(m).then(report))),
+    moved: (m) => guard.show(moveUndo(m.switched, () => void l.undoMove(m).then(report)), null),
   });
   // 拖进分类（负责人 11-19“里面的记录可以拖进分类里面”“只能拖没分类的”）：列表拖到分类胶囊
   const into = {
@@ -353,7 +353,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
       <SyncDropped />
       <SyncStale />
 
-      {merge ? <MergeBar hint={merge} onResult={report} onMerged={(h) => guard.show(mergeUndo(h.key, () => void h.undo().then(report)))} /> : null}
+      {merge ? <MergeBar hint={merge} onResult={report} onMerged={(h) => guard.show(mergeUndo(h.key, () => void h.undo().then(report)), null)} /> : null}
     </>
   );
   const body = (
