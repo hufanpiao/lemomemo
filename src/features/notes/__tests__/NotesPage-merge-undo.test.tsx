@@ -4,7 +4,7 @@
 // 合并、撤销写库抛异常都接住出错条；提示条写入期间两个按钮禁用（连点只算一下）。
 // 运行日志：notes merge category|undo|dismiss <结果码> merge=<id> keep=<id>（合并那行带 why=ai|rule），不记分类名
 // 用真实冷启动（假 IndexedDB），插图显示层、上传器换成桩（note-images-kit.tsx）；连点、计时两条把提示条换成桩（不碰 IndexedDB，好用假时钟）
-import { act, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ServerRow } from '../../../core/cache.ts';
 import { getBoot } from '../../../core/boot.ts';
