@@ -84,7 +84,7 @@ import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
-import { ConvertAsk, MoveAsk, MergeBar, MoreMenu, needsAsk, swipeActs, useConvertFlow, type PageTip } from './NotesActions.tsx';
+import { MergeBar, MoreMenu, swipeActs, useNoteActs, type PageTip } from './NotesActions.tsx';
 import { Dot } from './CatDot.tsx';
 import { CatChips } from './CatChips.tsx';
 import { useCategoryDialogs } from './CategoryDialogs.tsx';
@@ -145,11 +145,9 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
   const [typing, setTyping] = useState(false);
   const [menu, setMenu] = useState<string | null>(null);
   const [just, setJust] = useState<string | null>(null);
-  // 移到隐私记（B5 S7）：正在移的那一条（vault 的 VaultParts move 管解锁和出错提示）；移好的先在本页藏起来，等同步把它改成隐私记行
-  const [moving, setMoving] = useState<string | null>(null);
-  /** 带附件、插图的先问一次再移（B4b-1，线框 sAtt 最后一张“这条随手记和它的 N 个附件、M 张图会一起加密放进隐私记”） */
-  const [askMove, setAskMove] = useState<NoteItem | null>(null);
+  // 移到隐私记（B5 S7）、转成待办 / 日程（R-414）：NotesActions 的 useNoteActs（编辑页“⋯”同一套）；移好的先在本页藏起来，等同步把它改成隐私记行
   const [moved, setMoved] = useState<ReadonlySet<string>>(() => new Set());
+  const acts = useNoteActs(l.convert, a, (id) => setMoved((s) => new Set(s).add(id)));
 
   const selId = ds.sel?.id;
   const open = (id: string) => (isRo(id) ? guard.block() : ds.open({ id }, () => void navigate(src.route.edit, id)));
@@ -167,10 +165,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
   };
   const toVault = (id: string) => {
     setMenu(null);
-    const it = l.items.find((x) => x.id === id);
-    if (isRo(id)) guard.block();
-    else if (it && needsAsk(it)) setAskMove(it);
-    else setMoving(id);
+    acts.toVault(l.items.find((x) => x.id === id) ?? { id, images: 0, files: 0 });
   };
   const shown = (it: NoteItem) => !moved.has(it.id);
   // 画不画：移走的不画；下拉搜索就地筛时只画命中的（R-447）。拖动排序的整串仍按 shown 算（筛着时不能拖）
@@ -183,7 +178,6 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
     void src.moveOut(id).then((r) => (r === 'failed' ? guard.show({ kind: 'moveOut' }) : report(r)));
   };
   const addImage = useAddImage(l, setJust, report, (m) => guard.show({ kind: 'img', ...m }));
-  const conv = useConvertFlow(l.convert, a);
   const add = async (text: string): Promise<boolean> => {
     const { result, id } = await l.add(text);
     if (result === 'ok') setJust(id);
@@ -222,7 +216,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
       long={menu === it.id && l.tooLong(it.id)}
       onConvert={(kind) => {
         setMenu(null);
-        conv.start(it, kind);
+        acts.convert(it, kind);
       }}
       onMove={() => toVault(it.id)}
       onMoveOut={() => moveOut(it.id)}
@@ -264,7 +258,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
         data-testid={`notes-swipe-${it.id}`}
         look="compact"
         log={rlog}
-        actions={swipeActs(t, caps, it.id, { todo: () => conv.start(it, 'todo'), vault: () => toVault(it.id), out: () => moveOut(it.id), del: () => del(it.id) })}
+        actions={swipeActs(t, caps, it.id, { todo: () => acts.convert(it, 'todo'), vault: () => toVault(it.id), out: () => moveOut(it.id), del: () => del(it.id) })}
       >
         <div className={styles.swRow}>
         <button type="button" className={row.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} data-open={it.id} aria-current={selId === it.id ? 'true' : undefined}>
@@ -451,32 +445,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
         phone
       )}
       {cd.dialogs}
-      {moving !== null ? (
-        <QuietBoundary name="vault-move">
-          <Suspense fallback={null}>
-            <VaultParts
-              part="move"
-              noteId={moving}
-              onDone={(ok) => {
-                if (ok) setMoved((s) => new Set(s).add(moving));
-                setMoving(null);
-              }}
-            />
-          </Suspense>
-        </QuietBoundary>
-      ) : null}
-      {conv.ask ? <ConvertAsk ask={conv.ask} onOk={conv.confirm} onCancel={conv.cancel} /> : null}
-      {askMove ? (
-        <MoveAsk
-          files={askMove.files}
-          images={askMove.images}
-          onOk={() => {
-            setMoving(askMove.id);
-            setAskMove(null);
-          }}
-          onCancel={() => setAskMove(null)}
-        />
-      ) : null}
+      {acts.dialogs}
 
       {bar ? <UndoBar key={bar.tip.key} tip={bar.tip} onClose={bar.close} /> : null}
       <ReadonlyToast guard={guard} message={tEdit('edit.st.readonly', {})} testId="notes-ro-toast" />

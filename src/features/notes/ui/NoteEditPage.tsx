@@ -4,7 +4,9 @@
 // • 电脑（≥ 900px）：不换页，从随手记页右边滑出详情抽屉（NoteDrawer，DK.mason），侧栏和列表留着；顶栏“[● 分类 AI ▾] ｜ ⋯ ｜ ×”，Esc 也关
 // • 分类：胶囊里是原生下拉（透明盖在胶囊上，读屏和键盘照常用）“不分类 / 各分类”；改了写 category_source = 'manual'，之后 AI 不再动（S2）。
 //   AI 分的、还没看过的胶囊里标“AI”，打开就算看过（category_seen 置为已看，hooks/useNoteEdit.ts）
-// • “⋯”菜单：现在只有“删除”（软删，页内出“已删除”和“撤销”，ADR-006，进“最近删除”）；“移到隐私记 / 转成…”是 B5、S8 的活
+// • “⋯”菜单：和列表页同一份 MoreMenu（NotesActions.tsx，负责人 11-20 补齐）：转成待办 / 转成日程 / 移到隐私记 / 删除（隐私记来源换成“移出隐私记”）。
+//   转换、移进隐私记走同一个 useNoteActs（只读拦下、带图和附件先问、移进由 vault 的 VaultParts move 管）；转换结果出在提示行（同列表页那几句），
+//   移进、移出成了就离开这一页（抽屉关上，整页退回列表）。删除是软删，页内出“已删除”和“撤销”（ADR-006，进“最近删除”）
 // • 保存状态：常驻 role="status" 给读屏播报；平时看不见（稿子上没有），没保存上、只读这些坏状态才显示出来
 // • 记录页美化方向 A（负责人 11-20“记录页美化方案用A”，方案页 柠檬记APP-本机资料/方案/记录页美化-2026-11-20）：手机整页的标题、细线、正文、图、附件
 //   装进一张撑到页底的纸张卡片；“图片”“拍照”和“文档请在电脑上加…”在底部浮动工具条；“⋯”36 圆形浅底；隐私记返回带小锁（来源的 text.backMark 给）。
@@ -21,23 +23,25 @@ import { Suspense, useCallback, useRef, useState, type CSSProperties, type React
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { DrawerClose, useInDrawer } from '../../../kit/components/DetailDrawer.tsx';
-import { DeletedNotice, ReadonlyNotice, useEditStatus, useEditT } from '../../../kit/components/EditNotices.tsx';
+import { DeletedNotice, ReadonlyNotice, useEditStatus } from '../../../kit/components/EditNotices.tsx';
 import { TextArea } from '../../../kit/components/Form.tsx';
-import { Popover } from '../../../kit/components/Popover.tsx';
 import { useHoldBusy } from '../../../kit/hooks/useHoldBusy.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
-import { Pressable } from '../../../motion/components.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import { BODY_MAX, TITLE_MAX, useNoteEdit, type CategoryOption } from '../hooks/useNoteEdit.ts';
-import { useNotesT } from '../hooks/useNotesT.ts';
+import { useNoteConvert, type ActionResult } from '../hooks/useNoteList.ts';
+import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
 import chip from '../../../kit/components/Chip.module.css';
 import { AttPhoneHint } from '../../attachments/index.ts';
 import styles from './NoteEditPage.module.css';
 import { EditorImageList, EditorPicks, useEditorImages, type EditorImgs } from './NoteImages.tsx';
+import { MoreMenu, useNoteActs, type ConvTip } from './NotesActions.tsx';
 import { SyncLine } from './NotesBits.tsx';
 
 const NONE = '';
+/** 编辑页提示行里菜单动作的结果：转换结果（列表页同几句）或出错 */
+type EditTip = ConvTip | { kind: 'err'; key: Extract<NotesMsgKey, 'notes.err.moveOut' | 'notes.err.save' | 'notes.img.err.readonly'> };
 /** 正文停笔多久存一次 */
 export const BODY_IDLE_MS = 800;
 
@@ -58,10 +62,11 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
   const { Attachments, caps, route, text, moveOut } = useNoteSource();
   // 直接打开的（书签、刷新）没有上一页：退回列表页
   const back = (): void => backOr(route.list);
-  const [outFail, setOutFail] = useState(false);
+  /** 这一条离开随手记了（移出、移进隐私记）：抽屉关上，整页退回列表 */
+  const leave = (): void => (close ?? back)();
   const ed = useNoteEdit(id, onCreated);
-  const tEdit = useEditT();
   const { form, change, readonly, off } = ed;
+  const { tip, setTip, acts, tooLong, sizes } = useEditMenu(readonly, leave);
   const st = useEditStatus(ed.status, { empty: t('note.edit.st.empty', {}), rejected: t('note.edit.st.rejected', {}) });
   const [menu, setMenu] = useState(false);
   const locale = useUi((s) => s.locale);
@@ -91,44 +96,36 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
           drawer={drawer}
           onChange={(v) => change({ category_id: v })}
         />
-        <Popover
+        {/* “⋯”：和列表页同一份 MoreMenu、同一套转换 / 移进隐私记流程（负责人 11-20 补齐“转成待办”“移到隐私记”）；按来源的 caps 出项 */}
+        <MoreMenu
+          id={noteId ?? ''}
+          caps={caps}
+          ro={readonly}
           open={menu}
           onOpenChange={setMenu}
-          label={t('notes.menu', {})}
-          align="end"
-          className={styles.menu}
-          trigger={
-            <button type="button" className={styles.more} aria-label={t('notes.more', {})} disabled={!ed.row || ed.deleted || readonly} data-testid="note-edit-more">
-              ⋯
-            </button>
-          }
-        >
-          <Pressable
-            className={`${styles.menuItem} ${styles.danger}`}
-            onClick={() => {
-              setMenu(false);
-              void ed.setDeleted(true);
-            }}
-            data-testid="note-edit-delete"
-            data-no-proxy=""
-          >
-            {tEdit('edit.delete', {})}
-          </Pressable>
-          {caps.moveOut && noteId ? (
-            <Pressable
-              className={styles.menuItem}
-              onClick={() => {
-                setMenu(false);
-                setOutFail(false);
-                void moveOut(noteId).then((r) => (r === 'ok' ? (close ?? back)() : setOutFail(r === 'failed')));
-              }}
-              data-testid="note-edit-move-out"
-              data-no-proxy=""
-            >
-              {t('notes.fromVault', {})}
-            </Pressable>
-          ) : null}
-        </Popover>
+          long={menu && noteId !== null && tooLong(noteId)}
+          onDelete={() => {
+            setMenu(false);
+            void ed.setDeleted(true);
+          }}
+          onConvert={(kind) => {
+            setMenu(false);
+            setTip(null);
+            if (noteId) acts.convert({ id: noteId, ...sizes(noteId) }, kind);
+          }}
+          onMove={() => {
+            setMenu(false);
+            if (noteId) acts.toVault({ id: noteId, ...sizes(noteId) });
+          }}
+          onMoveOut={() => {
+            setMenu(false);
+            setTip(null);
+            if (noteId) void moveOut(noteId).then((r) => (r === 'ok' ? leave() : r === 'failed' ? setTip({ kind: 'err', key: 'notes.err.moveOut' }) : undefined));
+          }}
+          tid={(p) => `note-edit-${p}`}
+          triggerClass={styles.more}
+          disabled={!ed.row || ed.deleted || readonly}
+        />
         {close ? <DrawerClose label={t('note.edit.close', {})} onClick={close} testId="note-edit-close" /> : null}
       </div>
       {meta ? <p className={styles.meta} data-testid="note-edit-meta">{meta}</p> : null}
@@ -136,9 +133,10 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
         {readonly ? '' : st.text}
       </p>
       <SyncLine id={noteId} className={styles.notice} />
-      {outFail ? (
-        <p className={styles.notice} role="alert" data-testid="note-edit-out-fail">
-          {t('notes.err.moveOut', {})}
+      {/* 菜单动作的结果：转换的“已转成…”（同列表页那几句）、移出隐私记没成、没保存上 */}
+      {tip ? (
+        <p className={styles.notice} role={tip.kind === 'err' ? 'alert' : 'status'} data-testid={tip.kind === 'err' ? 'note-edit-act-err' : 'note-edit-conv'}>
+          {t(tip.key, {})}
         </p>
       ) : null}
       {/* 只读：和“已删除 · 撤销”同一种提示行，一句话加“更新”（同待办编辑页） */}
@@ -191,6 +189,7 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
     <section className={styles.inDrawer} data-testid="note-edit">
       {head}
       {paper}
+      {acts.dialogs}
     </section>
   ) : (
     <main className={styles.page} data-feature="notes" data-testid="note-edit">
@@ -200,8 +199,18 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
         {paper}
       </div>
       <EditDock img={img} disabled={off} />
+      {acts.dialogs}
     </main>
   );
+}
+
+/** “⋯”菜单的转换、移进隐私记：和列表页同一套（NotesActions 的 useNoteActs）；结果出在编辑页的提示行（tip），不出页底提示条 */
+function useEditMenu(readonly: boolean, leave: () => void) {
+  const [tip, setTip] = useState<EditTip | null>(null);
+  const { convert, tooLong, sizes } = useNoteConvert();
+  const report = (r: ActionResult): void => setTip(r === 'failed' ? { kind: 'err', key: 'notes.err.save' } : r === 'readonly' ? { kind: 'err', key: 'notes.img.err.readonly' } : null);
+  const acts = useNoteActs(convert, { isRo: () => readonly, report, g: { show: setTip, block: () => undefined } }, leave);
+  return { tip, setTip, acts, tooLong, sizes };
 }
 
 /** 手机整页底部浮动工具条（记录页美化方向 A）：“图片”“拍照”+ 右侧文档提示（attachments 懒加载，电脑布局不出） */

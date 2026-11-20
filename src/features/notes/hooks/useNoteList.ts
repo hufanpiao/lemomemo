@@ -118,7 +118,34 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID(), cat
   /** 撤销刚新建的一条（undone，界面和“最近删除”都不显示）：输入行插图时，图片行没写成，不留一条空随手记 */
   const discard = useCallback(async (id: string): Promise<ActionResult> => actionResult(await src.discard(id)), [src]);
 
-  /** 转成待办 / 日程：keep 是弹窗问时定下的保留原条，和转换那一刻带图取或（不会说“保留”却删了原条）；结果带上 kept 给提示条用 */
+  const { convert, tooLong } = useNoteConvert();
+  /** 拖动放下（R-429）：shown 是页面上这一串（显示顺序）；没什么要写回 null */
+  const move = async (shown: readonly NoteItem[], id: string, index: number): Promise<{ res: ActionResult; plan: NoteMove } | null> => {
+    const switched = order !== 'manual';
+    const writes = planNoteDrop(shown, id, index, clock.now(), switched);
+    if (writes.length === 0) return null;
+    if (switched) void settings.save(src.orderKey, 'manual');
+    return { res: await applyNoteSort(io, writes, false), plan: { writes, switched } };
+  };
+  const undoMove = async (m: NoteMove): Promise<ActionResult> => {
+    if (m.switched) void settings.save(src.orderKey, 'time');
+    return applyNoteSort(io, m.writes, true);
+  };
+  /** 新建分类（分类胶囊“＋ 新分类”；随手记、隐私记各一套分类，按数据来源分）：同名的回已有那个 */
+  const vaultCats = src.kind === 'vault';
+  const newCategory = useCallback((name: string) => createCategory(name, vaultCats), [vaultCats]);
+  return { items, byDay, dayOf, order, counts, category: active, setCategory, add, remove, discard, convert, tooLong, move, undoMove, newCategory, renameCategory, deleteCategory, loose, moveInto, total: aliveCount(rows), now, tz };
+}
+
+/**
+ * 转成待办 / 日程（R-414）和“备注放不下”：列表页（useNoteList）、编辑页“⋯”菜单共用这一份（负责人 11-20 编辑页菜单补齐）
+ * • convert：keep 是弹窗问时定下的保留原条，和转换那一刻带图取或（不会说“保留”却删了原条）；结果带上 kept 给提示条用
+ * • sizes(id)：这一条带几张图、几个附件（带了的转换、移进隐私记先问一次，NotesActions 的 needsAsk）
+ */
+export function useNoteConvert() {
+  const src = useNoteSource();
+  const { notes: rows, images: pics, files } = src.useRows();
+  const tz = currentTz();
   const convert = useCallback(
     async (id: string, kind: ConvertKind, keep: boolean): Promise<ConvertResult & { kept: boolean }> => {
       const n = rows.find((x) => x.id === id);
@@ -136,20 +163,6 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID(), cat
     const n = rows.find((x) => x.id === id);
     return n !== undefined && convertTooLong({ title: n['title'], body: n['body'] });
   }, [rows]);
-  /** 拖动放下（R-429）：shown 是页面上这一串（显示顺序）；没什么要写回 null */
-  const move = async (shown: readonly NoteItem[], id: string, index: number): Promise<{ res: ActionResult; plan: NoteMove } | null> => {
-    const switched = order !== 'manual';
-    const writes = planNoteDrop(shown, id, index, clock.now(), switched);
-    if (writes.length === 0) return null;
-    if (switched) void settings.save(src.orderKey, 'manual');
-    return { res: await applyNoteSort(io, writes, false), plan: { writes, switched } };
-  };
-  const undoMove = async (m: NoteMove): Promise<ActionResult> => {
-    if (m.switched) void settings.save(src.orderKey, 'time');
-    return applyNoteSort(io, m.writes, true);
-  };
-  /** 新建分类（分类胶囊“＋ 新分类”；随手记、隐私记各一套分类，按数据来源分）：同名的回已有那个 */
-  const vaultCats = src.kind === 'vault';
-  const newCategory = useCallback((name: string) => createCategory(name, vaultCats), [vaultCats]);
-  return { items, byDay, dayOf, order, counts, category: active, setCategory, add, remove, discard, convert, tooLong, move, undoMove, newCategory, renameCategory, deleteCategory, loose, moveInto, total: aliveCount(rows), now, tz };
+  const sizes = (id: string) => ({ images: imagesByNote(pics).get(id)?.length ?? 0, files: fileCounts(files).get(id) ?? 0 });
+  return { convert, tooLong, sizes };
 }
