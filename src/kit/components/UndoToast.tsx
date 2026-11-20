@@ -9,8 +9,10 @@
 //   新出来就把别的 solo 条都收起（后出的顶掉前一条）——刚做的那一下能撤销最要紧；
 //   'yield'：电脑版布局的“布局已保存”，新出来只收起别的 yield 条；已经有 keep 条开着时让路、自己直接收起（布局还能从“⋯”恢复默认）。
 //   冲突提示卡这类本来就和撤销条并存的不带 solo
+// • 出现时从下方 12px 升起并淡入（motion 的 useEnter('lift')，数值和为什么只动 translate 见 motion/presets.ts 的 enters）；收起直接卸载、没有退场
 import { useEffect, useRef, useState, type Ref } from 'react';
 import { TOAST_MS } from '../../../shared/logic/toast.ts';
+import { useEnter } from '../../motion/components.ts';
 import styles from './UndoToast.module.css';
 
 /** 提示条默认停多久：唯一一份在 shared/logic/toast.ts（R-460，5 秒） */
@@ -42,6 +44,7 @@ export interface UndoToastProps {
 
 export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST_MS, role = 'status', more, solo, undoRef, 'data-testid': testId }: UndoToastProps) {
   const [paused, setPaused] = useState(false);
+  const rise = useEnter<HTMLDivElement>('lift');
   /** 第几轮计时：暂停后移开重新计 ms，倒计时色带跟着从满格重来（key 换了就重播动画） */
   const [round, setRound] = useState(0);
   const pause = (on: boolean) => () => {
@@ -91,7 +94,8 @@ export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST
 
   return (
     <div
-      className={`${styles.toast} ${styles.rise}`}
+      ref={rise}
+      className={styles.toast}
       data-undo-toast=""
       role={role}
       data-testid={testId}

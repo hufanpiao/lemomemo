@@ -10,7 +10,7 @@ import { LAYOUT_V, type DeskLayoutValue } from '../../../../shared/schema/layout
 import chip from '../../../kit/components/Chip.module.css';
 import DeskLayout from '../../../kit/components/DeskLayout/DeskLayout.tsx';
 import { Pressable } from '../../../motion/components.ts';
-import { useLongPress } from '../../../kit/hooks/useLongPress.ts';
+import { useLongPress } from '../../../motion/gestures.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
 import { Dot } from './CatDot.tsx';

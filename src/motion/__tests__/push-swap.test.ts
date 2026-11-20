@@ -193,7 +193,7 @@ describe('等新页画完再动', () => {
     await p;
   });
 
-  it('main 在、页面级懒加载块还没到（data-page-pending）：接着等；标记一去掉就动；等的时候手指点按吞掉，键盘 click（detail 0）不吞', async () => {
+  it('main 在、页面级懒加载块还没到（data-page-pending）：接着等；标记一去掉就动；等的时候手指点按吞掉，键盘 click（前面有 keydown）不吞', async () => {
     page('today');
     const p = transition(() => page('sub', { pending: true }));
     const btn = document.createElement('button');
@@ -204,6 +204,9 @@ describe('等新页画完再动', () => {
     expect(anims).toHaveLength(0);
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
     expect(hit, '等的时候手指、鼠标的点按吞掉').not.toHaveBeenCalled();
+    // 认键盘只看 keydown（swallow-click.ts）：页面里派发、detail 0 但前面没有 keydown 的（e2e 模拟手指）照样吞
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    expect(hit, '没有 keydown 的 detail 0 click 也吞').not.toHaveBeenCalled();
     // 真键盘：先有 keydown，再有 detail 0 的 click
     btn.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));

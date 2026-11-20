@@ -11,6 +11,7 @@
 import { useRef, useState } from 'react';
 import { collapseRinging, useRemindQueue, visibleEntry } from '../../../kit/state/remind-queue.ts';
 import { Appear } from '../../../motion/components.ts';
+import { swallowNextClick } from '../../../motion/index.ts';
 import { clock } from '../../../platform/clock.ts';
 import { openReminder } from './open-reminder.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
@@ -64,21 +65,16 @@ function Banner({ r, queued, tz, defaultTime }: { r: Reminder; queued: number; t
         startY.current = null;
         setDragging(false);
         setDy(0);
-        if (y0 !== null && y0 - e.clientY > SWIPE_UP_PX) {
-          dragged.current = true;
-          collapseRinging(r.tag);
-        }
+        const swiped = y0 !== null && y0 - e.clientY > SWIPE_UP_PX;
+        // 滑动成立：随后补来的那一下 click 吞掉（motion 的 swallowNextClick，只吞落在横幅里的），不会顺手打开整页提醒
+        if (swiped || dragged.current) swallowNextClick({ within: e.currentTarget });
+        dragged.current = false;
+        if (swiped) collapseRinging(r.tag);
       }}
       onPointerCancel={() => {
         startY.current = null;
         setDragging(false);
         setDy(0);
-      }}
-      onClickCapture={(e) => {
-        if (!dragged.current) return;
-        dragged.current = false;
-        e.preventDefault();
-        e.stopPropagation();
       }}
     >
       <div className={styles.bannerRow}>

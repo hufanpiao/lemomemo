@@ -15,6 +15,7 @@
 // • 只读行（D1：韩国阴历、认不出的值）：EditShell 顶部出“要新版本”，输入全禁用
 import * as RD from '@radix-ui/react-dialog';
 import { useRef, useState } from 'react';
+import { useEnter } from '../../../motion/components.ts';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { AnnivKind } from '../../../../shared/logic/anniv/next-date.ts';
 import { backOr } from '../../../app/router-levels.ts';
@@ -151,6 +152,8 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
   const rec = { ...ed, readonly };
 
   const box = useRef<HTMLDivElement>(null);
+  // 层从底部滑上来，减少动态效果时只淡入（motion 的 useEnter('sheetUp')，数值在 motion/presets.ts 的 enters）；关掉直接卸载
+  const enter = useEnter('sheetUp', box);
   const shell = useRef<HTMLDivElement>(null);
   // 编辑层是层栈里的一层（模态，kit/hooks/layers.ts）：Esc（只在它是栈顶时，提醒弹层、删除确认开着时先关那些）走 done，锁滚动、后面的列表 inert；
   // 关掉以后焦点不由层栈还，和原来一样由页面接手
@@ -183,7 +186,7 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
           {/* 遮罩：Radix modal 开着时层外不接点按（body 的 pointer-events: none），点遮罩由 Radix 认成“点在层外”走 onOpenChange 关 */}
           <div className={styles.scrim} aria-hidden="true" />
           <RD.Content
-            ref={box}
+            ref={enter}
             className={styles.sheet}
             aria-modal="true"
             aria-label={kind}

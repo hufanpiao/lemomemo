@@ -10,6 +10,7 @@
 //   抽屉在电脑上可能开一整天，一直占着新版本永远不出（B6 独立评审第 12 条）；里面的编辑器在抽屉模式下自己不占（EditShell、NoteEditor）
 // • 在不在抽屉里只有一种判断：useInDrawer()（抽屉往里传 onClose；不在抽屉里是 null）。编辑器靠它决定画“×”还是“‹ 返回”、占不占 busy
 import { createContext, useContext, useEffect, useRef, useState, type FocusEvent, type ReactNode } from 'react';
+import { useEnter } from '../../motion/components.ts';
 import { useLayer } from '../hooks/useLayer.ts';
 import { useHoldBusy } from '../hooks/useHoldBusy.ts';
 import styles from './DetailDrawer.module.css';
@@ -38,6 +39,8 @@ export interface DetailDrawerProps {
 
 export function DetailDrawer({ id, label, onClose, side, handle, initial, 'data-testid': testId, children }: DetailDrawerProps) {
   const box = useRef<HTMLElement>(null);
+  // 进场：从右边（换到左边时从左边）滑进来 24px 并淡入，减少动态效果时只淡入（motion 的 useEnter，数值在 motion/presets.ts 的 enters）；关上直接卸载
+  const enter = useEnter(side === 'left' ? 'drawerLeft' : 'drawerRight', box);
   const [inside, setInside] = useState(false);
   useHoldBusy('editing', inside);
   /** 焦点去了抽屉外面（radix 浮层挂在 body 下，算抽屉里） */
@@ -83,7 +86,7 @@ export function DetailDrawer({ id, label, onClose, side, handle, initial, 'data-
   });
   return (
     <aside
-      ref={box}
+      ref={enter}
       className={styles.drawer}
       data-side={side === 'left' ? 'left' : undefined}
       tabIndex={-1}

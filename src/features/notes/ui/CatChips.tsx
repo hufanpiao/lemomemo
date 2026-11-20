@@ -4,7 +4,7 @@
 // • 哪一套分类由 useNoteList 按数据来源分（隐私记只列、只建隐私记的）
 // • 每个分类胶囊也是拖进目标（data-drop-into）：列表里没分类的那一条长按拖到胶囊上松手，归进这一类（负责人 11-19“里面的记录可以拖进分类里面”）
 // 运行日志：notes cat hold（长按出菜单）；新建、改名、删除的结果由 data 层记
-import { useLongPress } from '../../../kit/hooks/useLongPress.ts';
+import { useLongPress } from '../../../motion/gestures.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { CategoryCount, useNoteList } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';

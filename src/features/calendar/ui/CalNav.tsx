@@ -99,7 +99,6 @@ export function FoldHandle({ t, collapsed, controls, drag }: { t: CalViewT; coll
       onPointerMove={drag.onPointerMove}
       onPointerUp={drag.onPointerUp}
       onPointerCancel={drag.onPointerCancel}
-      onClickCapture={drag.onClickCapture}
       onClick={drag.toggle}
       data-testid="cal-fold"
     >

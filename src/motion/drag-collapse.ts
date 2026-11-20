@@ -10,8 +10,10 @@
 // • 横向先动的不算（让给左右翻页）；从屏幕左边 20 px 起手的不接（让给系统返回）
 // • 减少动态效果：不跟手，松手按拖的方向和距离直接切换，没有补间
 // • 键盘、读屏：拖动柄本身是按钮，点一下（回车、空格）就切换，页面调 toggle（同样有补间、减少动态效果时直接切）
+// • 拖过以后补来的那一下点击吞掉（swallow-click.ts 的 swallowNextClick，只吞落在拖动柄里的；新的按下、键盘作废），免得松手又当成点了按钮
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { inEdge, SLOP_PX } from './hdrag.ts';
+import { swallowNextClick } from './swallow-click.ts';
 import { SPRING_DAMPING_RATIO, SPRING_MASS, SPRING_STIFFNESS, type Bezier } from './tokens.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
 
@@ -50,7 +52,10 @@ export function bezierAt(b: Bezier, x: number): number {
   return at(y1, y2, t);
 }
 
-type PtrLike = Pick<React.PointerEvent<HTMLElement>, 'pointerId' | 'isPrimary' | 'clientX' | 'clientY' | 'timeStamp'>;
+type PtrLike = Pick<React.PointerEvent<HTMLElement>, 'pointerId' | 'isPrimary' | 'clientX' | 'clientY' | 'timeStamp'> & {
+  /** 挂手势的那个元素：拖完松手，随后补来的那一下 click 只吞落在它里面的（swallowNextClick 的 within） */
+  currentTarget?: EventTarget | null;
+};
 
 interface Track {
   id: number;
@@ -76,8 +81,6 @@ export interface DragCollapse {
   onPointerMove(e: PtrLike): void;
   onPointerUp(e: PtrLike): void;
   onPointerCancel(): void;
-  /** 拖过以后吞掉那一下点击（免得松手又当成点了按钮） */
-  onClickCapture(e: React.MouseEvent<HTMLElement>): void;
   /** 键盘、读屏、点按：切换 */
   toggle(): void;
 }
@@ -133,7 +136,6 @@ export function useDragCollapse(collapsed: boolean, onChange: (collapsed: boolea
   const [rest, setRest] = useState<0 | 1>(collapsed ? 1 : 0);
   const track = useRef<Track | null>(null);
   const raf = useRef<number | null>(null);
-  const swallow = useRef(false);
   const cb = useRef(onChange);
   cb.current = onChange;
   const range = useRef(rangeOf);
@@ -205,7 +207,6 @@ export function useDragCollapse(collapsed: boolean, onChange: (collapsed: boolea
 
   const onPointerDown = useCallback(
     (e: PtrLike) => {
-      swallow.current = false;
       if (!e.isPrimary || inEdge(e.clientX)) return;
       stop();
       track.current = { id: e.pointerId, x: e.clientX, y: e.clientY, from: pRef.current, range: -1, lock: 'none', lastY: e.clientY, lastT: e.timeStamp, vy: 0 };
@@ -241,7 +242,7 @@ export function useDragCollapse(collapsed: boolean, onChange: (collapsed: boolea
         if (t) animateTo(collapsedRef.current ? 1 : 0);
         return;
       }
-      swallow.current = true;
+      if (e.currentTarget instanceof Node) swallowNextClick({ within: e.currentTarget });
       const now = dragProgress(t.from, e.clientY - t.y, t.range);
       const to = snapTarget(now, t.vy);
       why.current = { via: 'drag', from: collapsedRef.current ? 1 : 0, t0: performance.now() };
@@ -258,13 +259,6 @@ export function useDragCollapse(collapsed: boolean, onChange: (collapsed: boolea
     animateTo(collapsedRef.current ? 1 : 0);
   }, [animateTo]);
 
-  const onClickCapture = useCallback((e: React.MouseEvent<HTMLElement>) => {
-    if (!swallow.current) return;
-    swallow.current = false;
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
   const toggle = useCallback(() => {
     why.current = { via: 'tap', from: collapsedRef.current ? 1 : 0, t0: performance.now() };
     cb.current(!collapsedRef.current);
@@ -280,7 +274,6 @@ export function useDragCollapse(collapsed: boolean, onChange: (collapsed: boolea
     onPointerMove,
     onPointerUp,
     onPointerCancel,
-    onClickCapture,
     toggle,
   };
 }

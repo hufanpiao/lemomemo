@@ -1,5 +1,5 @@
 // 动效模块的 React 组件（架构 17.2 第 4 点）。函数接口见 ./index.ts
-export { Appear } from './Appear.tsx';
+export { Appear, useEnter } from './Appear.tsx';
 export { Pressable } from './Pressable.tsx';
 export { SharedLayout } from './SharedLayout.tsx';
 export { Celebrate } from './Celebrate.tsx';
@@ -13,3 +13,6 @@ export { useHoldView } from './useHoldView.ts';
 export { useSwapWhenSafe } from './swap-guard.ts';
 // 每帧跑一次的循环（B3 FA-3 录音面板的计时、声波；不从 index.ts 出，理由见 frame-loop.ts）
 export { eachFrame } from './frame-loop.ts';
+// 一段时间内吞点按（kit CheckCircle 抬手切换以后吞系统补发的 click；同样不从 index.ts 出：CheckCircle 引 index.ts 会多拆出一个首屏块）
+export { guardWindow } from './swallow-click.ts';
+export { CHECK_CLICK_SWALLOW_MS } from './tokens.ts';

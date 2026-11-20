@@ -10,12 +10,8 @@ export const PAGE_SELECTOR = 'main';
 export const FADE_WAIT_MS = 1500;
 /** 新页从第几毫秒起播（一帧，60Hz）：不画 opacity 0 的那一帧 */
 export const FADE_SKIP_MS = 1000 / 60;
-/**
- * 换页后这么久以内落在 main 里的点按吞掉（代码审查方案 B M8；沿用主持人 11-05 的规则“过渡开始很短时间内的点按算点在旧画面上”）：
- * 旧页在点页签那一刻就卸掉了，手指顺手再点一下原来那页的位置，人还没看清新页，会直接点中新页同一位置的删除 ×、勾选圈。
- * 新页第一帧约 17 ms 才画出来，再加人眼看清的最短时间，取 100 ms；底栏不在 main 里，连点页签不受影响
- */
-export const FADE_GUARD_MS = 100;
+/** 换页后吞点按的窗口：定义和理由在 tokens.ts（吞点按的毫秒数都在那一处），这里照旧导出给 index.ts 和测试 */
+export { FADE_GUARD_MS } from './tokens.ts';
 /** “详细”长成的前多少（比例）新建页内容不露、打字条淡完 */
 export const GROW_HOLD = 0.35;
 /**

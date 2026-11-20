@@ -109,10 +109,17 @@ describe('useDragCollapse', () => {
     const { result } = renderHook(() => useDragCollapse(false, () => undefined, () => 200));
     act(() => result.current.onPointerDown(ptr(300, 0)));
     act(() => result.current.onPointerMove(ptr(250, 1000)));
-    act(() => result.current.onPointerUp(ptr(250, 2000)));
-    const e = { preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as React.MouseEvent<HTMLElement>;
-    result.current.onClickCapture(e);
-    expect(e.preventDefault).toHaveBeenCalled();
+    const grip = document.createElement('button');
+    const other = document.createElement('button');
+    document.body.append(grip, other);
+    act(() => result.current.onPointerUp({ ...ptr(250, 2000), currentTarget: grip }));
+    // 落在别处的照常（不吞、也不作废）；拖动柄上补来的那一下吞掉，只吞一下
+    const click = (el: Element): boolean => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+    expect(click(other)).toBe(true);
+    expect(click(grip)).toBe(false);
+    expect(click(grip)).toBe(true);
+    grip.remove();
+    other.remove();
   });
 
   it('键盘、读屏、点按：toggle 调回调（取反）', () => {
