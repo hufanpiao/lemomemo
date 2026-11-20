@@ -1,6 +1,6 @@
 // 首屏画完以后才起的那些事（B2 FA-6 ①；推迟启动代码审查 M1、M2、L1）的接线，按源码文字核对
 // （main.tsx 一 import 就会启动整个 App，写法同 splash-release.test.tsx）：
-// • watchRoot(el, nextFrame)（platform/root-paint.ts，首屏画完检测的唯一出口）在 render 之前、读会话之前挂上；render 之后马上 startAppPaintLimit（时限从 render 起算）
+// • watchFirstPaint(nextFrame)（app/first-paint.ts 接首屏画完，标志在 platform/root-paint.ts）在 render 之前、读会话之前挂上；render 之后马上 startAppPaintLimit（时限从 render 起算）
 // • await appPainted() 在 render 之后、同步 / 设备登记 / 推送认领 / SW 注册之前；紧跟着换账号检查 stillOwner（boot.switching 或本机会话换了人，L6；设 null 推送认领上下文再 return），
 //   startAfterPaint 下载前后用的是同一个 stillOwner
 // • expectPushClaimContext() 在 render 之前（推迟期间的点按认领先等上下文，L3）
@@ -29,8 +29,8 @@ describe('main.tsx：首屏画完以后才起同步、设备登记、推送认�
   const render = once(main, 'createRoot(el).render(');
   const wait = once(main, 'await appPainted();');
 
-  it('watchRoot(el, nextFrame) 在 render 之前、读会话之前挂上', () => {
-    const watch = once(main, 'watchRoot(el, nextFrame);');
+  it('watchFirstPaint(nextFrame) 在 render 之前、读会话之前挂上', () => {
+    const watch = once(main, 'watchFirstPaint(nextFrame);');
     expect(watch).toBeLessThan(main.indexOf('const userId = readSessionUserId();'));
     expect(watch).toBeLessThan(render);
   });

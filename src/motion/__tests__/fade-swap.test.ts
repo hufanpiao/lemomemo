@@ -38,7 +38,6 @@ interface FakeAnim {
   finish(): void;
 }
 let anims: FakeAnim[] = [];
-const realRects = Element.prototype.getClientRects;
 
 // 换页动画实现首屏画完以后才下载（index.ts 的 loadPageSwap）：这里测的是到了以后的样子，先等它到
 beforeAll(() => loadPageSwap());
@@ -56,11 +55,7 @@ beforeEach(() => {
     anims.push(a);
     return a as unknown as Animation;
   } as unknown as Element['animate'];
-  // jsdom 不排版、getClientRects 一律为空：按“在文档里、自己和祖先都没有内联 display: none”算显示着（同浏览器里 Suspense 藏旧页的样子）
-  Element.prototype.getClientRects = function (this: Element) {
-    const hidden = !this.isConnected || this.closest('[style*="display: none"]') !== null;
-    return (hidden ? [] : [new DOMRect()]) as unknown as DOMRectList;
-  };
+  // “显示着”的口径：jsdom 里由 tests/fakes/jsdom-layout-setup.ts 补（同浏览器里 Suspense 藏旧页的样子）
   document.body.replaceChildren();
   document.documentElement.removeAttribute('data-rm');
 });
@@ -69,7 +64,6 @@ afterEach(() => {
   cancelFade();
   vi.useRealTimers();
   delete (Element.prototype as { animate?: unknown }).animate;
-  Element.prototype.getClientRects = realRects;
   delete (document as { startViewTransition?: unknown }).startViewTransition;
 });
 

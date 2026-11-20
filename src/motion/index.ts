@@ -33,7 +33,8 @@ export function transition(update: () => void, back = false): Promise<void> {
 
 // 页签互切、“详细”长成的实现在 ./page-swap.ts（11-18 独立评审后整块重写），首屏画完以后才下载（11-18 ci 首屏预算 151.7 KB 超线后挪出）：
 // main.tsx 和动画实现同一时机调 loadPageSwap；到之前换页直接换、不播（冷启动不到一秒就点页签才碰得到），“详细”直接进新建页
-export { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, GROW_HOLD, pageVisible, shownMain, waitDom } from './page-shown.ts';
+// 整个 app 唯一的 DOM 等待器和“页面出来”口径（显示着的 <main>）也在 ./page-shown.ts，留在首屏
+export { FADE_GUARD_MS, FADE_SKIP_MS, FADE_WAIT_MS, GROW_HOLD, PAGE_SELECTOR, waitDom, whenMainShown } from './page-shown.ts';
 type PageSwap = typeof PageSwapModule;
 let swapImpl: PageSwap | null = null;
 let swapLoad: Promise<void> | null = null;

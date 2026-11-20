@@ -3,11 +3,13 @@
 import { act, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createUpgradeCenter } from '../../core/upgrade.ts';
-import { resetRootPaintForTest, watchRoot } from '../../platform/root-paint.ts';
 
 const hideSplash = vi.fn(() => Promise.resolve());
 vi.mock('../../platform/splash.ts', () => ({ hideSplash: () => hideSplash() }));
-vi.mock('../../motion/index.ts', () => ({ nextFrame: (fn: () => void) => (fn(), () => undefined) }));
+vi.mock('../../motion/index.ts', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  nextFrame: (fn: () => void) => (fn(), () => undefined),
+}));
 
 afterEach(() => {
   cleanup();
@@ -59,17 +61,15 @@ describe('blocked 解除后等 #root 画出东西再卸（BANNER-sugg ①）', (
     const q: (() => void)[] = [];
     return { frame: (cb: () => void) => (q.push(cb), () => void q.splice(q.indexOf(cb), 1)), flush: () => q.splice(0).forEach((f) => f()) };
   }
-  /** 照 main.tsx：#root 在 coldStart 之前就交给 root-paint 盯着 */
+  /** 照 index.html：页面里有 #root（等的是它画出东西） */
   function appRoot(): HTMLElement {
     const el = document.createElement('div');
     el.id = 'root';
     document.body.appendChild(el);
-    watchRoot(el, () => () => undefined, 600_000);
     return el;
   }
   afterEach(() => {
     vi.useRealTimers();
-    resetRootPaintForTest();
     document.getElementById('root')?.remove();
   });
 

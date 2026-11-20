@@ -1,6 +1,6 @@
 // 入口（架构 2.2、4.1）：装 exe 桥 → 读本机会话（没登录删库去登录页）→ coldStart → 定界面语言 → 挂功能入口 → 挂换账号监听 → 过告知页关口渲染 → 启动同步
 // 不变量：换账号、会话没了的监听在 render 之前挂、挂上马上再比一次；会话没了交 core/device-exit.ts 的 exitOnSessionLoss
-// 不变量：告知页关口读失败、超时、懒加载失败都不挡进 App；启动画面最多盖 5 秒、#root 第一次画出东西（root-paint.ts 的 whenContent）的下一帧收起，进退出屏时直接收；StrictMode 只在开发版开
+// 不变量：告知页关口读失败、超时、懒加载失败都不挡进 App；启动画面最多盖 5 秒、#root 第一次画出东西（first-paint.ts 的 whenContent）的下一帧收起，进退出屏时直接收；StrictMode 只在开发版开
 // 每一步的理由见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -32,7 +32,8 @@ import {
 import { settleDropAtStartup } from '../platform/session-drop.ts';
 import { enableDropMark, installDesktopSession } from '../platform/session-store.ts';
 import { hideSplash, hideSplashAfter } from '../platform/splash.ts';
-import { afterAppPainted, appPainted, startAppPaintLimit, watchRoot, whenContent } from '../platform/root-paint.ts';
+import { afterAppPainted, appPainted, startAppPaintLimit } from '../platform/root-paint.ts';
+import { watchFirstPaint, whenContent } from './first-paint.ts';
 import { markInsetPainted, watchInsetBottom } from '../platform/inset-watch.ts';
 import { loadMotionFeatures, loadPageSwap, nextFrame } from '../motion/index.ts';
 import { registerSw, reloadPage, upgradeLogCountStore } from '../platform/sw-register.ts';
@@ -117,11 +118,11 @@ async function start(): Promise<void> {
   }
   const el = document.getElementById('root');
   if (!el) throw new Error('root_missing');
-  // #root 画没画出东西只看 root-paint.ts：这里挂上，并开始算首屏画完（第一个页面出来再过一帧；同步、设备登记、SW 注册都排在它后面，
+  // 首屏画完从这里开始算（first-paint.ts：第一个显示出来的页面出来再过一帧；同步、设备登记、SW 注册都排在它后面，
   // supabase-js 不和页面分包抢下载，B2 FA-6 ①）。这里只有 15 秒长兜底，正式的时限在 render 之后才开始算（见下面 startAppPaintLimit）
-  watchRoot(el, nextFrame);
+  watchFirstPaint(nextFrame);
   // 告知页关口还在问服务器时 #root 是空的，启动画面继续盖着；一画出东西就在下一帧收起
-  whenContent(() => void nextFrame(() => void hideSplash()));
+  whenContent(el, () => void nextFrame(() => void hideSplash()));
   // 底部安全区“稳定”从首屏画完起算（G10，底栏跟着第一个页面出来）
   afterAppPainted(markInsetPainted);
   // 操作音效和震动（R-471）：实现首屏画完才下载（首屏净增额度），接上 settings 的“声音和触感”开关 ui.fx；下载失败只是不响不震

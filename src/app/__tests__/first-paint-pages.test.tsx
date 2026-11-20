@@ -1,5 +1,5 @@
 // FIRSTPAINT-nofeature（提醒挂载统一审查 F1）：首屏判断的选择器放宽成 'main' 以后，根是不带 data-feature 的 <main> 的页面也算画完
-// • EditShell（编辑页）、FullReminderPage（整页提醒，冷启动最常见的入口）真渲染出来，根能被 APP_PAGE_SELECTOR 认出
+// • EditShell（编辑页）、FullReminderPage（整页提醒，冷启动最常见的入口）真渲染出来，根能被 PAGE_SELECTOR 认出
 // • 扫源码：不带 data-feature 的 <main> 只许出现在登记过的页面里，新增的要先想清楚它是不是页面（不是页面就别用 main，会提前触发“画完”）
 // App 外壳里不能有常驻 <main> 的运行时检查在 first-paint-shell.test.tsx（那边不能带这里的提醒替身）
 import { cleanup, render, screen } from '@testing-library/react';
@@ -7,7 +7,7 @@ import { Suspense } from 'react';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { APP_PAGE_SELECTOR } from '../../platform/root-paint.ts';
+import { PAGE_SELECTOR } from '../../motion/index.ts';
 // 横滑切页在首屏画完以后才懒加载（App.tsx）：慢机器上测试收尾以后才去下，环境已拆掉报 EnvironmentTeardownError（CI 778139cf unit 洛杉矶）；这里不测它，换成空的
 vi.mock('../tab-swipe.ts', () => ({ installTabSwipeOnce: () => undefined, installTopLock: () => undefined }));
 // outbox 状态替身的空集合（UNSYNCED-retryRecs-required）：每次返回同一个对象，useSyncExternalStore 的快照才稳定
@@ -42,7 +42,7 @@ describe('根是不带 data-feature 的 <main> 的页面也算画完', { timeout
         <p>正文</p>
       </EditShell>,
     );
-    const page = container.querySelector(APP_PAGE_SELECTOR);
+    const page = container.querySelector(PAGE_SELECTOR);
     expect(page).not.toBeNull();
     expect(page?.parentElement).toBe(container);
     expect(page?.hasAttribute('data-feature')).toBe(false);
@@ -56,7 +56,7 @@ describe('根是不带 data-feature 的 <main> 的页面也算画完', { timeout
       </Suspense>,
     );
     await screen.findByTestId('remind-full', {}, { timeout: 10_000 });
-    const page = container.querySelector(APP_PAGE_SELECTOR);
+    const page = container.querySelector(PAGE_SELECTOR);
     expect(page).not.toBeNull();
     expect(page?.parentElement).toBe(container);
     expect(page?.getAttribute('data-testid')).toBe('remind-full');
@@ -64,7 +64,7 @@ describe('根是不带 data-feature 的 <main> 的页面也算画完', { timeout
 });
 
 const SRC = resolve(import.meta.dirname, '..', '..');
-/** 根是不带 data-feature 的 <main> 的页面（登记在这里，root-paint.ts 文件头同步写着） */
+/** 根是不带 data-feature 的 <main> 的页面（登记在这里，motion/page-shown.ts 的 PAGE_SELECTOR 同步写着） */
 const PAGES_WITHOUT_FEATURE = ['app/dev/CspLab.tsx', 'features/reminders/ui/FullReminderPage.tsx', 'kit/components/EditShell.tsx'];
 
 /**
