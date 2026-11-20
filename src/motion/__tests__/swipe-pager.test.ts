@@ -4,15 +4,15 @@
 // 真浏览器里的淡换（副本叠在原位淡出、新的一页淡入）由 e2e 在 chromium、webkit 上看
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EDGE_PX, inEdge, lockOf, SLOP_PX } from '../hdrag.ts';
-import { dur } from '../tokens.ts';
+import { EDGE_PX, inEdge, lockOf } from '../hdrag.ts';
+import { dur, TAP_SLOP_PX } from '../tokens.ts';
 import { flipMs, FOLLOW_MAX_PX, followX, swipeResult, TRIGGER_PX, useSwipePager } from '../swipe-pager.ts';
 
 describe('swipe-pager 判断', () => {
   it('数字照架构 5.12：左边缘 20 px、横移 60 px；起滑距离 10 px（和左滑行同一个）', () => {
     expect(EDGE_PX).toBe(20);
     expect(TRIGGER_PX).toBe(60);
-    expect(SLOP_PX).toBe(10);
+    expect(TAP_SLOP_PX).toBe(10);
   });
 
   it('动得太少不锁；横向大于竖向才算横滑，否则算竖滑（交给滚动）', () => {

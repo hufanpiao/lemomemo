@@ -50,7 +50,6 @@ function fixedOutside(main: Element): HTMLElement[] {
 const PAGE_BG = 'var(--scr-bg, var(--bg))';
 
 const noop = (): void => undefined;
-const px = (x: number): string => (x === 0 ? 'none' : `translateX(${Math.round(x * 100) / 100}px)`);
 
 /**
  * 吞掉 ms 以内落在 main 里的 pointerdown、click（swallow-click.ts 的 guardWindow，document 捕获阶段）；返回摘掉监听的函数。
@@ -212,13 +211,12 @@ function fadeTargets(main: Element, pins: readonly Element[]): { parts: Element[
 }
 
 interface Look {
-  x: number;
   opacity: number;
 }
-const STILL: Look = { x: 0, opacity: 1 };
+const STILL: Look = { opacity: 1 };
 
-/** slide 页签互切；grow “详细”长成；push 点进下一页；pop 返回 */
-type Kind = 'slide' | 'grow' | 'push' | 'pop';
+/** fade 页签互切；grow “详细”长成；push 点进下一页；pop 返回 */
+type Kind = 'fade' | 'grow' | 'push' | 'pop';
 
 /** 一次换页的全部状态：取消、放完、等不到新页、出错都走 endSwap，只收一次尾 */
 interface Swap {
@@ -228,7 +226,7 @@ interface Swap {
   extra: Element[];
   /** 第一个是领头的那个（读进度、等它放完） */
   anims: Animation[];
-  /** 新页此刻的平移（px）和透明度；连点时下一次的快照从这里起 */
+  /** 新页此刻的透明度；连点时下一次的快照从这里起 */
   look: () => Look;
   /** 这次的快照从什么样子起（上一次没放完时是上一页此刻的样子，代码审查 M1） */
   start: Look;
@@ -306,18 +304,17 @@ function swap(
   const reduced = prefersReducedMotion();
   // 上一次页签互切还在等新页（画面上是它的快照和钉住的头像）时又切：接着用那一份，不重拷。
   // 藏着的旧页量不出位置（宽 0），拷出来整页挤成一条、头像跑到左边（11-19 连点实时逐帧：x 370 → 44），钉住的头像也拍不出来
-  const prev = !reduced && shown === null && kind === 'slide' && cur?.kind === 'slide' && cur.anims.length === 0 ? cur : null;
+  const prev = !reduced && shown === null && kind === 'fade' && cur?.kind === 'fade' && cur.anims.length === 0 ? cur : null;
   const kept = prev?.ghost ?? null;
   if (prev) prev.ghost = null;
-  const ghost = kept ?? (before && !reduced ? makeGhost(before, kind === 'slide', kind === 'push' || kind === 'pop') : null);
-  // 上一次页签互切放完以前：快照从它此刻的样子起，不是全亮（代码审查 M1）；接着用的那一份照旧
-  const start = prev ? prev.start : cur?.kind === 'slide' && cur.anims.length ? cur.look() : STILL;
+  const ghost = kept ?? (before && !reduced ? makeGhost(before, kind === 'fade', kind === 'push' || kind === 'pop') : null);
+  // 上一次页签互切放完以前：快照从它此刻的透明度起，不是全亮（代码审查 M1）；接着用的那一份照旧
+  const start = prev ? prev.start : cur?.kind === 'fade' && cur.anims.length ? cur.look() : STILL;
   cancelFade();
   // 装整个 app 的那一层（body 下面那一个）
   const app = before?.closest<HTMLElement>('body > *') ?? before;
   if (ghost && !kept) {
     ghost.box.style.opacity = String(start.opacity);
-    ghost.box.style.transform = px(start.x);
     // 挂在 body 下装整个 app 的那一层前面（评审高①）：插在旧页 main 旁边时，隐私记页 main 外还包着一层（data-testid="vault"），
     // Suspense 藏的是那一层，快照跟着被藏、露出白屏。这一层 Suspense 藏不到；层级同原来：页面里定位的元素、底栏照样盖在它上面。
     // 返回（pop）滑走的是旧页、要压在回来的那页上面：挂在 app 后面（层级见 slidePage）
@@ -328,26 +325,7 @@ function swap(
     // 旧页底栏的副本放在最后，按自己的 --z-bar 盖在两页上面
     document.body.append(...ghost.bars);
   }
-  try {
-    update();
-  } catch (e) {
-    ghost?.box.remove();
-    ghost?.pins?.remove();
-    for (const b of ghost?.bars ?? []) b.remove();
-    onEnd();
-    throw e;
-  }
-  guardAgain();
-  if (reduced) {
-    onEnd();
-    return Promise.resolve();
-  }
-  const page = kind === 'push' || kind === 'pop';
-  // 整页推页等新页画完的这段（最多 PAGE_WAIT_MS）：屏幕停在旧页上——快照当场显示，换上来的新页先藏着（app 那一层透明度 0，
-  // 不用 visibility：键盘焦点留得住），点按吞掉（看得见的是旧页，实际会点中新页同一位置的按钮；独立评审 11-20 第 1 条），
-  // 键盘回车、空格触发的 click（detail 为 0）不吞（吞了键盘返回失灵，e2e settings-quiet-focus）。开始动（go）、收尾时放开
-  const release = page ? holdScreen(app) : noop;
-  if (page) ghost?.show();
+  let release = noop;
   const s: Swap = {
     kind, ghost, extra: [], anims: [], look: () => STILL, start, stopWait: noop, resolve: noop, done: false,
     onEnd: () => {
@@ -356,6 +334,25 @@ function swap(
     },
   };
   const done = new Promise<void>((r) => (s.resolve = r));
+  // update 抛错、减少动态效果：同样走 endSwap 收尾（拿掉快照、调 onEnd）。update 期间 cur 还是 null（上面 cancelFade 过），
+  // 换页途中再调 cancelFade 停不到这一次；update 完了才登记成 cur
+  try {
+    update();
+  } catch (e) {
+    endSwap(s);
+    throw e;
+  }
+  guardAgain();
+  if (reduced) {
+    endSwap(s);
+    return done;
+  }
+  const page = kind === 'push' || kind === 'pop';
+  // 整页推页等新页画完的这段（最多 PAGE_WAIT_MS）：屏幕停在旧页上——快照当场显示，换上来的新页先藏着（app 那一层透明度 0，
+  // 不用 visibility：键盘焦点留得住），点按吞掉（看得见的是旧页，实际会点中新页同一位置的按钮；独立评审 11-20 第 1 条），
+  // 键盘回车、空格触发的 click 不吞（认法同 swallow-click.ts：前面有 keydown 的才是键盘；吞了键盘返回失灵，e2e settings-quiet-focus）。开始动（go）、收尾时放开
+  if (page) release = holdScreen(app);
+  if (page) ghost?.show();
   cur = s;
   const end = (): void => endSwap(s);
   // 整页推页：新页就是此刻显示着的 main（设置几层之间可能还是同一个 main 元素）；页签互切、长成：要换上来的新 main
@@ -421,7 +418,7 @@ function swap(
  * 连点：和日历一样每次从头播；快照从上一页此刻的透明度起，不闪回全亮
  */
 export function fadeSwap(update: () => void): Promise<void> {
-  return swap('slide', update, (el, s) => {
+  return swap('fade', update, (el, s) => {
     const opts = blurSwapTiming(false);
     // 新页自己的头像（钉住的）不淡入、一直全亮；透明度和模糊加在不含它、不含 fixed 元素的子树上（fadeTargets）
     const mine = shownPins(el);
@@ -440,7 +437,7 @@ export function fadeSwap(update: () => void): Promise<void> {
     const fader = parts[0] ?? fixed[0] ?? null;
     s.look = () => {
       const o = fader ? Number.parseFloat(getComputedStyle(fader).opacity) : Number.NaN;
-      return { x: 0, opacity: !lead || lead.playState === 'finished' || Number.isNaN(o) ? 1 : o };
+      return { opacity: !lead || lead.playState === 'finished' || Number.isNaN(o) ? 1 : o };
     };
   });
 }

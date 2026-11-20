@@ -3,7 +3,7 @@
 // 进场最小从 scale(0.95) 开始，不从 0 开始（17.3）
 import { tr } from './tokens.ts';
 
-export type AppearKind = 'toast' | 'sheet' | 'row' | 'page' | 'scrim' | 'popover';
+export type AppearKind = 'toast' | 'sheet' | 'page' | 'scrim' | 'popover';
 
 export interface Preset {
   initial: { opacity: number; transform: string };
@@ -31,13 +31,6 @@ export const presets: Record<AppearKind, Preset> = {
     exit: { opacity: 1, transform: 'translateY(100%) scale(1)' },
     transition: tr.sheet,
     exitTransition: tr.sheetExit,
-    reduced: { opacity: 0 },
-  },
-  row: {
-    initial: { opacity: 0, transform: 'translateY(4px) scale(1)' },
-    animate: { opacity: 1, transform: 'translateY(0px) scale(1)' },
-    exit: { opacity: 0, transform: 'translateY(0px) scale(1)' },
-    transition: tr.ui,
     reduced: { opacity: 0 },
   },
   // 弹层的背景遮罩（17.1“背景遮罩淡入”；UI-4 L-2，B2）：只淡入淡出，不动位置
@@ -79,8 +72,9 @@ export interface EnterPreset {
   transition: { readonly duration: number; readonly ease: readonly [number, number, number, number] };
   /**
    * 播完以后留不留终点（同原 CSS 的 animation-fill-mode）：原来写了 both 的这里也写 both。
-   * 不能省：带 both 时播完 transform 停在单位矩阵（不是 none），它会给里面 position: fixed 的子元素当定位参照——
-   * 纪念日编辑层里的提醒弹窗（RemindSheet 的 Dialog）、抽屉里的固定层靠它框在层里；省掉就铺满整个窗口（11-21 逐帧对照发现）
+   * 为什么照搬：带 both 时播完 transform 停在单位矩阵（不是 none），单位矩阵会给里面 position: fixed 的子元素当定位参照。
+   * 11-21 核过：纪念日编辑层、抽屉里眼下没有 fixed 子元素（提醒弹窗挂在层外面），改前和省掉 both 画面逐像素相同；
+   * 照搬是为了播完以后的状态和原来一字不差，以后有人往层里放 fixed 的东西也不会因为这里悄悄变样
    */
   fill: 'both' | 'none';
 }

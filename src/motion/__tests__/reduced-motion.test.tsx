@@ -133,7 +133,7 @@ describe('组件跟着同一套判断（只开设置里的开关、系统没开�
 });
 
 describe('Appear 减少动态效果时交给 Motion 的参数', () => {
-  for (const kind of ['toast', 'sheet', 'row', 'page'] as const) {
+  for (const kind of ['toast', 'sheet', 'page'] as const) {
     it(`${kind}：起始和退出都是透明度 0、没有 transform，时长是预设的一半；关时照预设（对照）`, () => {
       const on = appearMotion(kind, true);
       expect(on.initial).toEqual({ opacity: 0 });
@@ -157,7 +157,7 @@ describe('Appear 减少动态效果时交给 Motion 的参数', () => {
     expect(ratio).toBeLessThanOrEqual(0.7);
     expect(sheet.exit.transition.ease).toEqual(sheet.transition.ease);
     expect((sheet.exit as { transform?: string }).transform).toBe('translateY(100%) scale(1)');
-    for (const k of ['scrim', 'toast', 'row'] as const) expect(appearMotion(k, false).exit.transition).toEqual(presets[k].transition);
+    for (const k of ['scrim', 'toast'] as const) expect(appearMotion(k, false).exit.transition).toEqual(presets[k].transition);
   });
 
   it('渲染出来的起始透明度是 0（data-rm="1"）', () => {

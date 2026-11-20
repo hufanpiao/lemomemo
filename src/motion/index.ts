@@ -4,7 +4,7 @@
 import type * as PageSwapModule from './page-swap.ts';
 import { prefersReducedMotion } from './reduced.ts';
 
-// React 组件（Appear、Pressable、SharedLayout、Celebrate）在 ./components.ts：
+// React 组件（Appear、Pressable、SharedLayout）在 ./components.ts：
 // 分开导出，免得只用函数的地方（例如 router 的 transition）把 motion/react 带进首屏（2.6）
 // 吞掉手势后补来的那一下 click（换页守卫、翻页、kit 左滑行、按住“＋”共用这一个；时限在 tokens.ts 的 TAP_SWALLOW_MS）
 export { swallowNextClick, type SwallowClickOptions } from './swallow-click.ts';
@@ -70,7 +70,7 @@ export function cancelFade(anim = true): void {
   swapImpl?.cancelFade(anim);
 }
 
-/** 下一帧执行（给以后的帧循环用，例如液态玻璃副本，0.27 第 5 点） */
+/** 下一帧执行（启动时的等帧、关启动画面、同步提示条；平台层的运行日志、视口修正经 app 层注入它）。每帧跑的循环在 ./frame-loop.ts 的 eachFrame */
 export function nextFrame(cb: () => void): () => void {
   const id = requestAnimationFrame(cb);
   return () => cancelAnimationFrame(id);

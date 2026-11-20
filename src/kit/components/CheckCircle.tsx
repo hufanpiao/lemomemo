@@ -5,7 +5,7 @@
 // • 方框和 checkbox 都跟 checked 走。使用方（TodosPage、TodayPage）传的是界面上该显示的值（点下去当下就是“刚点的值”、
 //   留住那一拍里是留住的值，useHoldView 的 shown），所以填满动画不等保存回来，读屏读到的也和看到的一致（代码审查 FA5-CR A3：删掉了没人用的 shown 参数）
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
-import { CHECK_CLICK_SWALLOW_MS, eachFrame, guardWindow } from '../../motion/components.ts';
+import { CHECK_CLICK_SWALLOW_MS, eachFrame, guardWindow, TAP_SLOP_PX } from '../../motion/components.ts';
 import { takeBuzz } from '../hooks/tapBuzz.ts';
 import styles from './CheckCircle.module.css';
 
@@ -51,9 +51,6 @@ export function partStage(done: number, total: number): 0 | 1 | 2 | 3 {
 const SPARKS = Array.from({ length: 14 }, (_, i) => (360 / 14) * i);
 /** 子任务（soft，乙2）：10 个淡点 */
 const SPARKS_SOFT = Array.from({ length: 10 }, (_, i) => (360 / 10) * i);
-
-/** 抬手离按下点不超过这么远才算轻点（再远是在滑列表、拖行） */
-const TAP_SLOP_PX = 10;
 
 export function CheckCircle({ checked, label, onChange, testId, readOnly = false, soft = false, progress, fresh = false }: CheckCircleProps) {
   const state = checked ? 'on' : 'off';

@@ -2,7 +2,6 @@
 export { Appear, useEnter } from './Appear.tsx';
 export { Pressable } from './Pressable.tsx';
 export { SharedLayout } from './SharedLayout.tsx';
-export { Celebrate } from './Celebrate.tsx';
 export { useReducedMotionPref } from './useReducedMotionPref.ts';
 export { AppearList, AppearItem } from './AppearList.tsx';
 // 拖动排序期间列表让位用弹簧（R-461，kit 的 SortBox 包）
@@ -15,4 +14,4 @@ export { useSwapWhenSafe } from './swap-guard.ts';
 export { eachFrame } from './frame-loop.ts';
 // 一段时间内吞点按（kit CheckCircle 抬手切换以后吞系统补发的 click；同样不从 index.ts 出：CheckCircle 引 index.ts 会多拆出一个首屏块）
 export { guardWindow } from './swallow-click.ts';
-export { CHECK_CLICK_SWALLOW_MS } from './tokens.ts';
+export { CHECK_CLICK_SWALLOW_MS, TAP_SLOP_PX } from './tokens.ts';

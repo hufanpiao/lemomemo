@@ -145,6 +145,14 @@ describe('guardWindow', () => {
     expect(ev(inner, 'click'), '按过键盘以后又按下了手指：这一下是手指的').toBe(false);
   });
 
+  it("keyboard: 'keydown' 而 types 里没有 pointerdown：按过一次键以后再用手指点，那一下照样吞；pointerdown 本身不吞", () => {
+    const { inner } = setup();
+    guardWindow({ ms: null, types: ['click'], keyboard: 'keydown' });
+    inner.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(ev(inner, 'pointerdown'), 'pointerdown 只用来作废键盘标记').toBe(true);
+    expect(ev(inner, 'click'), '按过键盘以后又按下了手指：这一下是手指的').toBe(false);
+  });
+
   it('不给 keyboard：键盘的 click 也吞', () => {
     const { inner } = setup();
     guardWindow({ ms: 100, types: ['click'] });

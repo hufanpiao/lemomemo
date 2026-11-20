@@ -25,7 +25,7 @@ afterEach(async () => {
 const outer = (c: HTMLElement, kind: AppearKind) => c.querySelector<HTMLElement>(`[data-appear="${kind}"]`);
 
 describe('Appear 播完清掉 transform', () => {
-  for (const kind of ['toast', 'sheet', 'popover', 'page', 'scrim', 'row'] as const) {
+  for (const kind of ['toast', 'sheet', 'popover', 'page', 'scrim'] as const) {
     it(`${kind}：进场播完后外层 transform 是 none（fixed 子元素按视口定位）`, async () => {
       const { container } = render(
         <Appear kind={kind} show>
@@ -49,7 +49,7 @@ describe('Appear 播完清掉 transform', () => {
   });
 
   it('参数：进场目标带 transitionEnd transform none；停稳后的退场是“原位 → 退场终点”两段关键帧，时长曲线不变', () => {
-    for (const kind of ['toast', 'sheet', 'popover', 'page', 'scrim', 'row'] as const) {
+    for (const kind of ['toast', 'sheet', 'popover', 'page', 'scrim'] as const) {
       const p = presets[kind];
       const before = appearMotion(kind, false);
       const after = appearMotion(kind, false, true);

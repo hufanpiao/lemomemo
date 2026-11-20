@@ -12,9 +12,9 @@
 // • 键盘、读屏：拖动柄本身是按钮，点一下（回车、空格）就切换，页面调 toggle（同样有补间、减少动态效果时直接切）
 // • 拖过以后补来的那一下点击吞掉（swallow-click.ts 的 swallowNextClick，只吞落在拖动柄里的；新的按下、键盘作废），免得松手又当成点了按钮
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { inEdge, SLOP_PX } from './hdrag.ts';
+import { inEdge } from './hdrag.ts';
 import { swallowNextClick } from './swallow-click.ts';
-import { SPRING_DAMPING_RATIO, SPRING_MASS, SPRING_STIFFNESS, type Bezier } from './tokens.ts';
+import { SPRING_DAMPING_RATIO, SPRING_MASS, SPRING_STIFFNESS, TAP_SLOP_PX, type Bezier } from './tokens.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
 
 /** 过了这个比例就收起（不过就弹回） */
@@ -221,7 +221,7 @@ export function useDragCollapse(collapsed: boolean, onChange: (collapsed: boolea
       if (!t || t.id !== e.pointerId) return;
       const dx = e.clientX - t.x;
       const dy = e.clientY - t.y;
-      if (t.lock === 'none' && Math.max(Math.abs(dx), Math.abs(dy)) >= SLOP_PX) t.lock = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x';
+      if (t.lock === 'none' && Math.max(Math.abs(dx), Math.abs(dy)) >= TAP_SLOP_PX) t.lock = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x';
       if (t.lock !== 'y') return;
       if (t.range < 0) t.range = range.current();
       const dt = e.timeStamp - t.lastT;
