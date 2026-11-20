@@ -48,11 +48,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 /** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、3a066c28（点按灰框）、11-17 触屏滚动条、11-17 输入框不画黑框、GlassBar.module.css 又在 R-436 侧栏精致化按上面的更新记录换过 */
 const PINNED: Record<string, string> = {
-  'src/kit/components/GlassBar/GlassBar.module.css': '9272755e89c97f451123ae01801cbb2f026ad6e8fce3246fab1c5df541fa07cd',
+  'src/kit/components/GlassBar/GlassBar.module.css': '33893fbe7a2f4d119e6168919b88134d3c994774266b6472b096b03c43768378',
   'src/kit/components/GlassBar/GlassBarFx.tsx': '2cd1d04f069b8e10829389ca87e8b647678ba4c0057c1fb42dc777e342d75b0c',
-  'src/kit/components/GlassBar/GlassBarFx.module.css': '3a7f59ede916fe65267888adbf53c60f622ba0e56d5c2b079d9665ad01b8dca3',
-  'src/motion/glass-ghost.ts': '6211d651c7439b5aa35d8f755f33327b71213e68aa6c26e404b503ea25da701a',
-  'src/styles/base.css': 'd69706cdf45135da8e0039b3c19f626c05b72478beb614f010ee8e6319949656',
+  'src/kit/components/GlassBar/GlassBarFx.module.css': 'baf8e2d17344a43abddf9ab873e5f4d46345a42b50522e911a2a1ea638dfde19',
+  'src/motion/glass-ghost.ts': '13364a6e6f0eafe5c1b68346ba53e175b76bd08d317c8e4dc599af549ad5c76e',
+  'src/styles/base.css': 'f24550ebfdf2c7ed1ea6e141645796f0377e08dd74cbb9bb9ab3eaab25c65008',
 };
 
 const sha256 = (rel: string): string => createHash('sha256').update(readFileSync(join(ROOT, rel))).digest('hex');
@@ -63,6 +63,9 @@ const sha256 = (rel: string): string => createHash('sha256').update(readFileSync
 //   只有一边有底栏或“＋”时，它们的快照跟着自己那一页滑（进页旧那份边退边淡、返回新那份 60% 后淡入）；底栏、“＋”元素本身的规则一行没动，静止画面不变。
 // • 11-20 记录页美化方向 A（负责人 11-20“记录页美化方案用A”；独立评审第 1 条，主持人核过）：base.css 在窄屏加 :root[data-nobar] 把 --dock-lift 设成 6px，
 //   没有底栏的页（App 按 tab-of.ts 写 data-nobar）贴底浮条落到离底 安全区 + 6；底栏、“＋”元素本身的规则一行没动，有底栏的页静止画面不变。
+// • 11-20 隐私记整块收拾第 7 条（主持人派单：data-rt 只表示系统“减少透明效果”，隐私记强制实色另写 data-solid），本提交：
+//   GlassBar.module.css、GlassBarFx.module.css、base.css 里的 :root[data-rt='1'] 换成 :root:is([data-rt='1'], [data-solid='1'])（优先级不变），
+//   glass-ghost.ts 的 reducedTransparency 认 data-rt 或 data-solid、监听这两个属性。两个属性里任一个为 1 时和原来 data-rt=1 一样，外观不变。
 describe('B3 Q3 守门第 4 条：底栏外观文件不许改（R-352 ④）', () => {
   it('src/motion/glass-*.ts 正好是钉住的那几个：不许多、不许少', () => {
     const now = readdirSync(join(ROOT, 'src/motion'))

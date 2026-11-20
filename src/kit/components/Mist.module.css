@@ -37,16 +37,16 @@
   }
 }
 
-/* 减少透明效果（系统设置或 data-rt="1"，和底栏 GlassBar 同一套）、或浏览器不认 backdrop-filter（带不带前缀都不认）：不模糊、不画高光，退成一层半透明纯色（玻璃的后备着色 --g-tint-fb） */
+/* 减少透明效果、或浏览器不认 backdrop-filter（带不带前缀都不认）：不模糊、不画高光，退成一层半透明纯色（玻璃的后备着色 --g-tint-fb） */
 
-/* 只看系统的“减少透明效果”（data-rt-sys，platform/look.ts）：隐私记页强制实色的 data-rt 只管底栏、“＋”和玻璃副本，
+/* 只看系统的“减少透明效果”（data-rt，platform/look.ts）：隐私记页强制实色的 data-solid 只管底栏、“＋”和玻璃副本，
    这一层是纯 CSS 模糊、不复制页面内容，隐私记里照随手记一样模糊（负责人 11-20） */
-:global(:root[data-rt-sys='1']) .mist {
+:global(:root[data-rt='1']) .mist {
   background: var(--g-tint-fb);
   backdrop-filter: none;
 }
 
-:global(:root[data-rt-sys='1']) .mist::after {
+:global(:root[data-rt='1']) .mist::after {
   display: none;
 }
 

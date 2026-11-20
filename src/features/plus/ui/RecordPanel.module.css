@@ -41,12 +41,12 @@
   pointer-events: auto;
 }
 
-:global(:root[data-rt='1']) .scrim,
-:global(:root[data-rt='1']) .sheet {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .scrim,
+:global(:root:is([data-rt='1'], [data-solid='1'])) .sheet {
   backdrop-filter: none;
 }
 
-:global(:root[data-rt='1']) .sheet {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .sheet {
   background: var(--glass-solid);
 }
 
@@ -230,7 +230,7 @@
   font-size: var(--fs-14);
 }
 
-:global(:root[data-rt='1']) .note {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .note {
   background: var(--float-solid);
   backdrop-filter: none;
 }

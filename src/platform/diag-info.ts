@@ -98,7 +98,7 @@ export async function collectDiag(win: Window = window): Promise<string[]> {
     // 启动时间线（G10）：底部安全区、innerHeight 每次变化的时刻，和什么时候淡入底栏
     safe(() => insetTimelineLine(), 'launch: ?'),
     `media: reduced-transparency=${mm('(prefers-reduced-transparency: reduce)')} reduced-motion=${mm('(prefers-reduced-motion: reduce)')}`,
-    `html: data-rt=${root.dataset['rt'] ?? '-'} data-rm=${root.dataset['rm'] ?? '-'} data-font=${root.dataset['font'] ?? '-'} data-skin=${root.dataset['skin'] ?? '-'} data-theme=${root.dataset['theme'] ?? '-'} data-glass=${root.dataset['glass'] ?? '-'}`,
+    `html: data-rt=${root.dataset['rt'] ?? '-'} data-solid=${root.dataset['solid'] ?? '-'} data-rm=${root.dataset['rm'] ?? '-'} data-font=${root.dataset['font'] ?? '-'} data-skin=${root.dataset['skin'] ?? '-'} data-theme=${root.dataset['theme'] ?? '-'} data-glass=${root.dataset['glass'] ?? '-'}`,
     `font: ${safe(fontLine, 'font: ?')}`,
     `bar.data-glass=${bar?.getAttribute('data-glass') ?? '-'}`,
     styleLine('.bar', bar, null, GLASS_KEYS, win),

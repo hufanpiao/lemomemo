@@ -481,7 +481,7 @@
   text-decoration: underline;
 }
 
-:global(:root[data-rt='1']) .error {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .error {
   background: var(--float-solid);
   backdrop-filter: none;
 }

@@ -21,11 +21,7 @@ import type {
 import type { VaultFail } from '../data/vault-api.ts';
 import type { VaultSession } from '../data/session.ts';
 import { imageRowOf, type Row, type StoreSnap, type UploadState } from '../data/vault-store.ts';
-
-export { str } from '../data/vault-store.ts';
 import { useVault, useVaultStore, vaultSession } from './useVault.ts';
-
-export { useVaultStore } from './useVault.ts';
 import { useVaultT } from './useVaultT.ts';
 
 const EMPTY_IDS: ReadonlySet<string> = new Set();
@@ -119,6 +115,14 @@ function noteRowFrom(row: Record<string, unknown> & { id: string }): Row {
   };
 }
 
+/** 附件区（模块级组件，会话经参数传入）：服务器上还没有这一条（新建、第一次 save 还没成）时 vault-file 会回 not_found，先不挂 */
+function VaultFiles({ noteId, disabled, s }: NoteAttachmentsProps & { s: VaultSession }) {
+  const snap = useVaultStore();
+  const api = useMemo(() => fileApiOf(s), [s]);
+  if (noteId === null || snap.fresh.has(noteId)) return null;
+  return createElement(Suspense, { fallback: null }, createElement(VaultAttachments, { noteId, api, disabled }));
+}
+
 export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): NoteSource {
   const { store, queue } = s;
   /** 锁着（等解锁、已上锁）不写：仓库已经清了，写进去的会留着明文 */
@@ -161,13 +165,8 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
       s.touch();
       return 'saved';
     },
-    async setDeleted(_table, id, deleted, now) {
-      if (!writable()) return 'rejected';
-      const r = store.patch(id, { deleted_at: deleted ? now : null, updated_at: now });
-      if (!r) return 'rejected';
-      queue.deleted(r, deleted);
-      return 'saved';
-    },
+    // 会话的 setDeleted（最近删除页的恢复也调它）：锁着不写，写了顺手 touch()
+    setDeleted: async (_table, id, deleted, now) => (s.setDeleted(id, deleted, now) ? 'saved' : 'rejected'),
   };
 
   /** 插一张图：压图 → 图片行、本机那一份 → 队列；note 是函数时压成了才新建 */
@@ -186,14 +185,6 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
     store.putImage(imageRowOf(noteId, { id, has_thumb: enc.thumb !== null, width: enc.width, height: enc.height, bytes: enc.full.size, deleted_at: null }));
     queue.addImage(row, { id, full: enc.full, thumb: enc.thumb, width: enc.width, height: enc.height });
     return { ok: true, id };
-  }
-
-  function VaultFiles({ noteId, disabled }: NoteAttachmentsProps) {
-    const snap = useVaultStore();
-    const api = useMemo(() => fileApiOf(s), []);
-    // 服务器上还没有这一条（新建、第一次 save 还没成）：vault-file 会回 not_found，先不挂
-    if (noteId === null || snap.fresh.has(noteId)) return null;
-    return createElement(Suspense, { fallback: null }, createElement(VaultAttachments, { noteId, api, disabled }));
   }
 
   return {
@@ -270,7 +261,7 @@ export function createVaultNoteSource(s: VaultSession, text: NoteSourceText): No
     },
     insertImage: insert,
     onNotice: () => () => undefined,
-    Attachments: VaultFiles,
+    Attachments: (p: NoteAttachmentsProps) => createElement(VaultFiles, { ...p, s }),
     async moveOut(id) {
       const r = await s.exportNote(id);
       return r.ok ? 'ok' : 'failed';

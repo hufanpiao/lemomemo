@@ -1,13 +1,18 @@
 /* 隐私记页面（B5 S5、S6、S21；定稿线框 s9、s7 LOCKROW、s13 SETDETAIL；皮肤视觉稿 .pdots、.kpad、.scrim.lite、.card-ov、.lockrow）：只用令牌（A11）
-   • 不建液态玻璃副本：页面挂着时 <html data-rt="1">（同“减少透明效果”），底栏和“＋”实色（TC-B5-12）
+   • 不建液态玻璃副本：页面挂着时 <html data-solid="1">（底栏、“＋”等按“减少透明效果”同一套画实色，TC-B5-12）
    • 动效只有一条（S21、R-376）：解锁卡淡出 --dur-ui；上锁、多任务遮罩直接盖，不做动效 */
-.page {
-  max-width: 560px;
+
+/* 隐私记的整页（列表还没到、断网、最近删除的 .page，锁着的 .lockPage）：满屏高、顶上让开安全区、底下让开底栏，一处写 */
+.page,
+.lockPage {
   min-height: 100dvh;
-  margin: 0 auto;
   padding: max(var(--safe-top), 16px) 16px calc(var(--tabbar-pad) + 24px);
-  background: var(--bg);
   color: var(--text);
+}
+
+.page {
+  margin: 0 auto;
+  background: var(--bg);
 }
 
 .top {
@@ -104,12 +109,7 @@
   min-width: 0;
   min-height: 60px;
   justify-content: center;
-  padding: 0;
-  border: 0;
-  background: none;
   color: var(--text);
-  font: inherit;
-  text-align: left;
 }
 
 .rowTitle {
@@ -157,7 +157,6 @@
 
 .pinPage > .pin,
 .pinPage > .top {
-  max-width: 560px;
   margin-right: auto;
   margin-left: auto;
 }
@@ -258,8 +257,7 @@
   font-size: var(--fs-15);
 }
 
-.key:disabled,
-.key[aria-disabled='true'] {
+.key:disabled {
   color: var(--text-2);
   opacity: 0.5;
 }
@@ -272,6 +270,11 @@
   width: 100%;
   max-width: 340px;
   margin-top: 22px;
+}
+
+/* 设密码页键盘下面那块（NewPinSteps 的 footer）：离键盘 42（原来另套一层 .pin 的上内边距 20 + 22，去掉那层后照旧） */
+.pinFootLow {
+  margin-top: 42px;
 }
 
 .toggle {
@@ -338,8 +341,8 @@
   white-space: nowrap;
 }
 
-/* 减少透明效果（data-rt="1"，系统设置也合进这一个属性；隐私记页挂着时一直是 1）：不模糊，退成玻璃的后备着色（同 kit Mist.module.css） */
-:global(:root[data-rt='1']) .scrim {
+/* 减少透明效果（data-rt，系统设置）或隐私记页强制实色（data-solid）：不模糊，退成玻璃的后备着色（同 kit Mist.module.css） */
+:global(:root:is([data-rt='1'], [data-solid='1'])) .scrim {
   background: var(--g-tint-fb);
   backdrop-filter: none;
 }
@@ -348,7 +351,6 @@
    整宽一条、圆角 --r-lg、0.5px 细描边；两行（标题行 44 + 按钮行 44），约 110 高 */
 .card {
   width: 100%;
-  max-width: 560px;
   padding: 6px 12px 12px 16px;
   border-radius: var(--r-lg);
   background: var(--panel);
@@ -551,12 +553,9 @@
 .lockPage {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
-  padding: max(var(--safe-top), 16px) 16px calc(var(--tabbar-pad) + 24px);
 
   /* 透出 App 的皮肤底色（同方案甲对照图）；淡出时也不加底（同原来透明遮罩的淡出） */
   background: transparent;
-  color: var(--text);
 }
 
 /* 解锁成功的那一下（S21）：盖在刚画出来的内容上淡出、不接点击；关掉动态效果时直接卸（Unlock.tsx 有 400ms 兜底） */
@@ -574,7 +573,6 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 560px;
   margin: 0 auto;
 }
 
@@ -633,4 +631,13 @@
   gap: 10px;
   width: min(280px, 100%);
   margin-top: 20px;
+}
+
+/* 隐私记各块的最大宽度一处写（列表页、密码整页的顶栏和内容、贴底解锁条、锁着页居中那块）；放在最后，不和上面各块的选择器比先后 */
+.page,
+.pinPage > .pin,
+.pinPage > .top,
+.card,
+.center {
+  max-width: 560px;
 }

@@ -10,9 +10,10 @@ import { currentTz } from '../../../core/current-tz.ts';
 import { settingValue, type SettingRow } from '../../../core/setting-read.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
+import { collection } from '../../../core/store.ts';
 import { holdReducedTransparency } from '../../../platform/look.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
-import { createVaultApi } from '../data/vault-api.ts';
+import { createVaultApi, type VaultResult } from '../data/vault-api.ts';
 import { createVaultSession, type VaultSession, type VaultState } from '../data/session.ts';
 import { countVault, type LocalNoteRow, type StoreSnap } from '../data/vault-store.ts';
 import { vaultErrorAction, type VaultCode } from '../data/vault-errors.ts';
@@ -22,6 +23,8 @@ export const AUTOLOCK_KEY = 'vault.autolock_min';
 export const AUTOLOCK_DEFAULT = 1;
 export const AUTOLOCK_CHOICES = [1, 5, 15] as const;
 export const SHIELD_ATTR = 'data-vault-shield';
+/** 点了选文件的框以后，等这么久还没等到 blur 就不再放过（watchLeave） */
+export const PICK_MS = 500;
 
 export function autolockOf(v: unknown): number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 60 ? v : AUTOLOCK_DEFAULT;
@@ -39,34 +42,50 @@ export function setShield(on: boolean, root: HTMLElement = document.documentElem
 export function watchLeave(s: VaultSession, target: Window & typeof globalThis = window, now: () => number = () => Date.now()): () => void {
   const doc = target.document;
   // 点了选文件的框（隐私记输入行的图片、附件）：iOS 弹出“照片图库 / 拍照 / 选取文件”时窗口失焦，页面还在前台。
-  // 这一次 blur 不算离开（负责人 11-20 截图：点图片图标整页被遮罩盖住，只剩图标和菜单）；真切到后台照旧由 visibilitychange、pagehide 盖上
+  // 紧接着的那一次 blur 不算离开（负责人 11-20 截图：点图片图标整页被遮罩盖住，只剩图标和菜单）；真切到后台照旧由 visibilitychange、pagehide 盖上。
+  // 只放过一次：放过了、选完（change）、取消（cancel）、回来，或点完 PICK_MS 还没等到 blur，都复位，之后真正的 blur 照常盖遮罩、开始计时
   let picking = false;
+  let pickTimer: number | undefined;
+  const endPick = (): void => {
+    picking = false;
+    if (pickTimer !== undefined) target.clearTimeout(pickTimer);
+    pickTimer = undefined;
+  };
   const onClick = (e: Event): void => {
     const t = e.target as { tagName?: string; type?: string } | null;
-    if (t?.tagName === 'INPUT' && t.type === 'file') picking = true;
+    if (t?.tagName !== 'INPUT' || t.type !== 'file') return;
+    endPick();
+    picking = true;
+    pickTimer = target.setTimeout(endPick, PICK_MS);
   };
   const leave = (): void => {
     setShield(true, doc.documentElement);
     s.hide(now());
   };
   const blur = (): void => {
-    if (!picking) leave();
+    if (!picking) return leave();
+    endPick();
   };
   const back = (): void => {
     if (doc.visibilityState === 'hidden') return;
-    picking = false;
+    endPick();
     s.show(now());
     setShield(false, doc.documentElement);
   };
   const vis = (): void => (doc.visibilityState === 'hidden' ? leave() : back());
   doc.addEventListener('click', onClick, true);
+  doc.addEventListener('change', endPick, true);
+  doc.addEventListener('cancel', endPick, true);
   doc.addEventListener('visibilitychange', vis);
   target.addEventListener('pagehide', leave);
   target.addEventListener('blur', blur);
   target.addEventListener('pageshow', back);
   target.addEventListener('focus', back);
   return () => {
+    endPick();
     doc.removeEventListener('click', onClick, true);
+    doc.removeEventListener('change', endPick, true);
+    doc.removeEventListener('cancel', endPick, true);
     doc.removeEventListener('visibilitychange', vis);
     target.removeEventListener('pagehide', leave);
     target.removeEventListener('blur', blur);
@@ -75,15 +94,24 @@ export function watchLeave(s: VaultSession, target: Window & typeof globalThis =
   };
 }
 
-/** 隐私记页挂着时底栏和“＋”实色（TC-B5-12）：走 platform/look.ts 的同一个 data-rt 判断，卸掉时放开 */
+/** 隐私记页挂着时底栏和“＋”实色（TC-B5-12）：platform/look.ts 写 <html data-solid="1">，卸掉时放开 */
 export function useSolidBars(): void {
   useLayoutEffect(() => holdReducedTransparency(), []);
+}
+
+/** 自动上锁分钟数：订一次本机 settings 的 vault.autolock_min，变了报给会话（会话里只这一份，M2；界面经 useAutolockMin 读会话状态）；返回取消函数 */
+export function watchAutolock(s: VaultSession): () => void {
+  const c = collection<SettingRow>('settings');
+  const apply = (): void => s.setAutolock(autolockOf(settingValue(c.getSnapshot(), AUTOLOCK_KEY)));
+  apply();
+  return c.subscribe(apply);
 }
 
 /** 整个 App 一份会话；测试可以先 installVaultSession 换成桩 */
 export function vaultSession(): VaultSession {
   if (!session) {
     session = createVaultSession({ api: createVaultApi(getSupabase) });
+    watchAutolock(session);
     if (typeof window !== 'undefined') watchLeave(session);
   }
   return session;
@@ -109,22 +137,14 @@ export function useVault(): { state: VaultState; s: VaultSession } {
   return { state, s };
 }
 
-/**
- * 读自动上锁分钟数，报给会话（会话里只这一份，M2）。layout effect：同一组件里排在后面的 show / check 读到的已经是设置里的值
- */
+/** 自动上锁分钟数（只读会话状态；设置由 watchAutolock 在会话建好时订一次） */
 export function useAutolockMin(): number {
-  const rows = useCollection<SettingRow>('settings');
-  const min = autolockOf(settingValue(rows, AUTOLOCK_KEY));
-  useLayoutEffect(() => {
-    vaultSession().setAutolock(min);
-  }, [min]);
-  return min;
+  return useVault().state.autoMin;
 }
 
 /** 隐私记页挂着（离开隐私记页满时长就锁，原因 'page'）：挂上报 show、卸下报 hide */
 export function useVaultPresence(): void {
   const { s } = useVault();
-  useAutolockMin();
   useLayoutEffect(() => {
     // 时刻用会话自己的钟（测试注入的时钟和离开时记的是同一个）
     s.show(undefined, 'page');
@@ -135,7 +155,6 @@ export function useVaultPresence(): void {
 /** 读隐私记状态的入口（入口行、查找行）挂上时先 check 一次：离开隐私记页满时长的这时就锁上，不显示“已解锁” */
 export function useVaultChecked(): void {
   const { s } = useVault();
-  useAutolockMin();
   useLayoutEffect(() => {
     s.check();
   }, [s]);
@@ -158,7 +177,7 @@ export function useVaultCount(): number {
   return countVault(rows, state.listed, snap);
 }
 
-/** 第一次打开时查一次状态（设没设过、是不是锁定中、绑了几个 Face ID） */
+/** 第一次打开时查一次状态（设没设过、是不是锁定中、绑了几个 Face ID）；隐私记页、设置、入口行、查找行都用这一份 */
 export function useVaultStatus(): VaultState {
   const { state, s } = useVault();
   useEffect(() => {
@@ -170,11 +189,28 @@ export function useVaultStatus(): VaultState {
 }
 
 export type { VaultCode } from '../data/vault-errors.ts';
+// ui 层不直接引 data 层（boundaries）：要用的这几个由这里转出一份（全仓库只这一处转出）
+export type { VaultResult } from '../data/vault-api.ts';
+export { str } from '../data/vault-store.ts';
 
 /** 失败码 → 一句提示（落法见 data/vault-errors.ts 的穷尽 switch） */
 export function useErrText(): (code: VaultCode | null) => string {
   const t = useVaultT();
   return (code) => (code ? t(vaultErrorAction(code).msg, {}) : '');
+}
+
+/**
+ * 密码键盘下面那一行（解锁、设密码、改密码共用，原来三处各自过滤错误码）：只看这一次动作回的结果，不读会话里共用的 lastError。
+ * 成了、没结果、上锁类（vault_locked 已经弹解锁卡、vault_relock 卡上另有一行提示）都是空；输错写还能试几次；别的照落法表的文案
+ */
+export function useFailText(): (r: VaultResult<unknown> | null) => string {
+  const t = useVaultT();
+  const errText = useErrText();
+  return (r) => {
+    if (!r || r.ok || r.code === 'vault_locked' || r.code === 'vault_relock') return '';
+    if (r.code === 'pin_wrong' && r.left !== undefined) return t('vault.unlock.left', { n: r.left });
+    return errText(r.code);
+  };
 }
 
 /** 时刻 → “11月14日 21:05”（按 profiles.current_tz；设置 › 隐私记“上次重设”用） */

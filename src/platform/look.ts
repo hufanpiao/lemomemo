@@ -2,9 +2,9 @@
 // 取值和默认值，写到 <html> 上，并在这台设备缓存一份（pv-look）。
 // • 皮肤 ui.skin：'glass'（磨砂玻璃，默认；负责人 11-14“默认皮肤要磨砂玻璃，设置里面简洁可选”）| 'simple'（简洁）；深浅色 ui.theme：'system'（跟着手机 / 电脑，默认）| 'light' | 'dark'
 // • 减少透明效果、减少动态效果只有这一处判断（皮肤整块评审第 1、6 条）：data-rt="1" = 系统设置了 prefers-reduced-transparency: reduce
-//   （或隐私记页要求实色），data-rm 同理看 prefers-reduced-motion。系统设置变了跟着改。设置里原来的两个开关（R-84、R-93）
+//   （只表示系统设置；隐私记页要求实色另写 data-solid="1"，见 holdReducedTransparency），data-rm 同理看 prefers-reduced-motion。系统设置变了跟着改。设置里原来的两个开关（R-84、R-93）
 //   11-14 负责人要求去掉（“设置里面减少透明效果跟减少动态效果都去掉，不要这个功能”），旧账号存过的 ui.reduce_transparency、ui.reduce_motion 不再读
-//   CSS 只认 :root[data-rt='1']、:root[data-rm='1']，motion/reduced.ts、glass-ghost.ts 只看属性；全仓库只有启动画面 splash.css 自己看媒体查询
+//   CSS 只认 :root[data-rt='1']（要实色的地方写 :root:is([data-rt='1'], [data-solid='1'])）、:root[data-rm='1']，motion/reduced.ts、glass-ghost.ts 只看属性；全仓库只有启动画面 splash.css 自己看媒体查询
 //   （它要在本模块加载前生效）。tests/arch/no-reduced-media.test.ts 守着
 // • 按账号存（数据字典 settings 键清单；架构 5.9c 第 4 点“和皮肤 ui.skin、主题 ui.theme 一样按账号存”）
 // • 跟随系统：按 prefers-color-scheme 算出 light / dark 写进 data-theme（皮肤变量只有 light、dark 两组，build/tokens.py 生成），系统切换时跟着改；
@@ -69,50 +69,42 @@ let painted = '';
 let font = 'system';
 const sys: Record<'dark' | 'rt' | 'rm', MediaQueryList | null> = { dark: null, rt: null, rm: null };
 
-/** 页面要求强制实色（隐私记页挂着时，B5 TC-B5-12）：计数，> 0 时 data-rt 一直是 1 */
+/** 页面要求强制实色（隐私记页挂着时，B5 TC-B5-12）：计数，> 0 时 data-solid 是 1 */
 let solidHolds = 0;
-const rtNow = (): boolean => sys.rt?.matches === true || solidHolds > 0;
+
+const flag = (r: HTMLElement, k: 'rt' | 'rm' | 'solid', on: boolean): void => {
+  if (on) r.dataset[k] = '1';
+  else delete r.dataset[k];
+};
 
 /**
- * data-rt：减少透明（系统设置或隐私记强制实色），底栏、“＋”、玻璃副本看它。
- * data-rt-sys：只有系统真开了“减少透明效果”才写；输入时的模糊层（kit Mist）只看它——Mist 是纯 CSS 模糊、不复制页面内容，
- * 不在 TC-B5-12“不建副本”的范围里，隐私记里照随手记一样模糊（负责人 11-20“隐私记的输入框背景透明度做成跟随手记一样”）
- */
-function paintRt(): void {
-  const r = document.documentElement;
-  if (rtNow()) r.dataset['rt'] = '1';
-  else delete r.dataset['rt'];
-  if (sys.rt?.matches === true) r.dataset['rtSys'] = '1';
-  else delete r.dataset['rtSys'];
-}
-
-/**
- * 隐私记页（B5 TC-B5-12）：挂着时底栏和“＋”用实色、不建液态玻璃副本，做法同“减少透明效果”。
- * 走本模块的同一个判断（不另写 data-rt），重画时不会被冲掉；返回的函数放开（多次调用只算一次），之后按系统设置重算
+ * 隐私记页（B5 TC-B5-12）：挂着时底栏和“＋”用实色、不建液态玻璃副本。写 data-solid（不碰 data-rt：data-rt 只表示系统的“减少透明效果”）；
+ * 底栏、“＋”、玻璃副本等认 data-rt 或 data-solid 任一个，输入时的模糊层（kit Mist）只认 data-rt（负责人 11-20“隐私记的输入框背景透明度做成跟随手记一样”）。
+ * 走 paint（运行日志记 rt=hold），重画时不会被冲掉；返回的函数放开（多次调用只算一次）
  */
 export function holdReducedTransparency(): () => void {
   solidHolds += 1;
-  paintRt();
+  paint();
   let done = false;
   return () => {
     if (done) return;
     done = true;
     solidHolds -= 1;
-    paintRt();
+    paint();
   };
 }
 
 function paint(): void {
-  if (!current) return;
   const r = document.documentElement;
-  const theme = current.theme === 'system' ? (sys.dark?.matches ? 'dark' : 'light') : current.theme;
-  const rt = rtNow();
+  const rt = sys.rt?.matches === true;
   const rm = sys.rm?.matches === true;
+  flag(r, 'rt', rt);
+  flag(r, 'solid', solidHolds > 0);
+  flag(r, 'rm', rm);
+  if (!current) return;
+  const theme = current.theme === 'system' ? (sys.dark?.matches ? 'dark' : 'light') : current.theme;
   r.dataset['skin'] = current.skin;
   r.dataset['theme'] = theme;
-  paintRt();
-  if (rm) r.dataset['rm'] = '1';
-  else delete r.dataset['rm'];
   const desc = `skin=${current.skin} theme=${current.theme}>${theme} rt=${solidHolds > 0 ? 'hold' : rt ? 'sys' : 'off'} rm=${rm ? 'sys' : 'off'}`;
   if (desc !== painted) log?.('look_apply', { code: desc });
   painted = desc;

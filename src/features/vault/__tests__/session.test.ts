@@ -54,6 +54,19 @@ describe('解锁、上锁', () => {
     expect(m2.s.get()).toMatchObject({ lockedUntil: 1_000_000 + 30_000, left: 0, lastError: 'pin_locked' });
   });
 
+  it('隐私记整块收拾 11-20 高 2：lastError 不跨动作留着——上锁、status 成功都清掉', async () => {
+    const m = make({ unlock: () => ({ ok: false, code: 'pin_wrong', left: 3 }) });
+    await m.s.refreshStatus();
+    await m.s.unlock('0000');
+    expect(m.s.get().lastError).toBe('pin_wrong');
+    m.s.lock();
+    expect(m.s.get().lastError).toBeNull();
+    await m.s.unlock('0000');
+    expect(m.s.get().lastError).toBe('pin_wrong');
+    await m.s.refreshStatus();
+    expect(m.s.get().lastError).toBeNull();
+  });
+
   it('审查第 5 条：status 的锁定倒计时按服务器给的相对秒数算，不拿服务器绝对时刻比本机时钟（本机慢了一小时也对）', async () => {
     const m = make({ status: () => ({ ...statusSet, locked_until: 1_000_000 + 3_600_000 + 45_000, retry_after_s: 45 }) });
     await m.s.refreshStatus();

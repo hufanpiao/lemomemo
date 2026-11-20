@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RENEW_AFTER_MS } from '../data/session.ts';
 import { noteRowOf } from '../data/vault-store.ts';
-import { held, IMG, listOk, make, note, queueDelete, statusSet, TOK2, tokenOk, unlocked } from './session-fakes.ts';
+import { held, IMG, listOk, make, NID, note, queueDelete, statusSet, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 describe('S1：请求在路上时上锁，回来的结果整个丢掉', () => {
   it('list 在路上时 Ctrl+L：回来后不收令牌、不写明文', async () => {
@@ -111,6 +111,16 @@ describe('M2：编辑时续期（touch）', () => {
     await new Promise((r) => setTimeout(r, 0));
     s.touch();
     expect(renews()).toBe(1);
+  });
+
+  it('隐私记整块收拾 11-20 第 18 条：setDeleted（删除、恢复）也算一次编辑，满 5 分钟照样续期；锁着时不改、回 false', async () => {
+    const { s, calls, clock } = await unlocked();
+    clock.ms += RENEW_AFTER_MS;
+    expect(s.setDeleted(NID, true)).toBe(true);
+    expect(s.store.get(NID)?.['deleted_at']).not.toBeNull();
+    expect(calls.filter((c) => c.action === 'renew')).toHaveLength(1);
+    s.lock();
+    expect(s.setDeleted(NID, false)).toBe(false);
   });
 
   it('锁着时 touch 什么也不做', async () => {

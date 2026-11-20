@@ -95,13 +95,13 @@
 }
 
 /* 减少透明效果、隐私记页挂着（<html data-rt="1">，platform/look.ts）：卡片换 --panel 白底加 --line 描边，工具条换 --glass-solid，都不模糊 */
-:global(:root[data-rt='1']) .sheet {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .sheet {
   background: var(--panel);
   box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line);
   backdrop-filter: none;
 }
 
-:global(:root[data-rt='1']) .dock {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .dock {
   background: var(--glass-solid);
   box-shadow: var(--shadow-2);
   backdrop-filter: none;

@@ -256,10 +256,10 @@ body::before {
   view-transition-name: top-blur-2;
 }
 
-/* 减少透明效果：不模糊，只留底色渐变（实色渐变）；电脑版侧栏（≥ 900px）不加模糊带 */
+/* 减少透明效果（data-rt）、隐私记页强制实色（data-solid）：不模糊，只留底色渐变（实色渐变）；电脑版侧栏（≥ 900px）不加模糊带 */
 
-:root[data-rt='1'] .lemo-top-8,
-:root[data-rt='1'] .lemo-top-2 {
+:root:is([data-rt='1'], [data-solid='1']) .lemo-top-8,
+:root:is([data-rt='1'], [data-solid='1']) .lemo-top-2 {
   display: none;
 }
 

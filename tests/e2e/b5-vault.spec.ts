@@ -2,7 +2,7 @@
 // • 设密码两次 → 解锁 → 新建（停笔自动存）→ 列表有它 → 立即锁上 → 内容没了、出密码键盘 → 输错提示“还能再试 N 次” → 正确解锁
 // • B5 隐私记重写（11-15）：解锁后是随手记那一份界面（列表、编辑器、插图、看图页）+ 隐私记来源；读写只碰内存仓库、后台队列去发。
 //   负责人报的三个问题各有一条：插图后点开出看图页；断网改了界面即时、网络回来补发；离开隐私记页 59 秒不锁、61 秒锁
-// • 隐私记页挂着时 <html data-rt="1">（底栏、“＋”实色，TC-B5-12），离开回随手记页去掉
+// • 隐私记页挂着时 <html data-solid="1">（底栏、“＋”实色，TC-B5-12；data-rt 只表示系统设置），离开回随手记页去掉
 // • 离开（blur）同步盖多任务遮罩（TC-B5-44），回来（focus，不到 1 分钟）去掉
 // • 随手记“⋯”菜单、列表方式左滑两种方式“移到隐私记”：发 vault {action: import, note_id}，这一条在随手记页藏起来
 // • 文档附件（B4b-1，vault-file）：电脑上在隐私记里加（multipart 交给函数加密）、列表写页数、预览中文 PDF、PPT 的卡多一句“会先解密再交给微软”、
@@ -226,7 +226,8 @@ test.afterEach(async ({ page }, info) => {
 test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 → 解锁；页面挂着时底栏实色', async ({ page, baseURL, browserName }) => {
   const fv = await fakeServer(page, baseURL);
   await setupAndUnlock(page, browserName);
-  await expect(page.locator('html')).toHaveAttribute('data-rt', '1');
+  await expect(page.locator('html')).toHaveAttribute('data-solid', '1');
+  await expect(page.locator('html'), 'data-rt 只表示系统的“减少透明效果”').not.toHaveAttribute('data-rt', '1');
 
   await page.goto('/app/#/vault/new');
   await write(page, 'note-edit-title', '体检报告');
@@ -285,7 +286,7 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   // 11-14 快读组两次红（chromium、webkit 各一次），重复 24 遍复现 3 次：trace 里每个分包 0.6～0.8 秒，点返回 5 秒后还有 11 个没到，
   // 运行日志 sw register ok 8767ms 正好在这批请求发出时。同第 228 行等解锁列表，给到 15 秒
   await expect(page.getByTestId('notes')).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('html')).not.toHaveAttribute('data-rt', '1');
+  await expect(page.locator('html')).not.toHaveAttribute('data-solid', '1');
   await phoneShots(page, '01-入口行', browserName);
 });
 

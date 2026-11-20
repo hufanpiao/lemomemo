@@ -5,19 +5,19 @@
 // • 修改密码：输现在的密码 → 新密码两次 → vault {change_pin}（要令牌，锁着先解锁）
 // • 忘记密码：走 S3（ResetFlow.tsx）；#/settings/vault/reset 直接打开这一步（解锁卡的“忘记密码？”）
 // • 上次重设时间（last_reset_at）
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { navigate, useRoute } from '../../../app/router.ts';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import { SettingsCard, SettingsEntryRow, SettingsInfoRow, SettingsSwitchRow } from '../../../kit/components/Settings/Settings.tsx';
 import { SettingsChoiceCard } from '../../../kit/components/Settings/SettingsRows.tsx';
 import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
-import { AUTOLOCK_CHOICES, AUTOLOCK_KEY, useAutolockMin, useErrText, useFmtAt, useVault, useVaultStatus } from '../hooks/useVault.ts';
+import { AUTOLOCK_CHOICES, AUTOLOCK_KEY, useAutolockMin, useErrText, useFailText, useFmtAt, useVault, useVaultStatus } from '../hooks/useVault.ts';
 import { useWebauthn } from '../hooks/useVaultAuth.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import { PinPad } from './Pin.tsx';
 import { ResetFlow } from './ResetFlow.tsx';
 import { NewPinSteps } from './SetupPin.tsx';
-import { UnlockOverlay, UnlockPanel } from './Unlock.tsx';
+import { LockLayer, UnlockPanel } from './Unlock.tsx';
 import styles from './Vault.module.css';
 
 type View = 'main' | 'autolock' | 'change' | 'reset' | 'bind' | 'devices';
@@ -25,18 +25,31 @@ type View = 'main' | 'autolock' | 'change' | 'reset' | 'bind' | 'devices';
 export function VaultSettings() {
   const t = useVaultT();
   const state = useVaultStatus();
+  // 子页跟着地址走：#/settings/vault/reset 直接打开重设（解锁卡的“忘记密码？”），地址换回来回到首页
+  const reset = useRoute().params[1] === 'reset';
+  const [view, setView] = useState<View>(reset ? 'reset' : 'main');
+  useLayoutEffect(() => {
+    setView(reset ? 'reset' : 'main');
+  }, [reset]);
+  return (
+    <>
+      <SettingsView view={view} setView={setView} />
+      {/* 令牌过期等解锁（改密码、绑定、设备页的请求被拒）：遮罩只在最外层挂一份 */}
+      <LockLayer variant="overlay" open={state.waiting} testId="vault-set-scrim">
+        <UnlockPanel onForgot={() => setView('reset')} testId="vault-set-unlock" backLabel={t('vault.title', {})} />
+      </LockLayer>
+    </>
+  );
+}
+
+function SettingsView({ view, setView }: { view: View; setView(v: View): void }) {
+  const t = useVaultT();
+  const { state } = useVault();
   const wa = useWebauthn();
   const min = useAutolockMin();
   const fmtAt = useFmtAt();
-  const [view, setView] = useState<View>(useRoute().params[1] === 'reset' ? 'reset' : 'main');
   const method = wa.label;
   const back = () => setView('main');
-
-  const waiting = (
-    <UnlockOverlay open={state.waiting} testId="vault-set-scrim">
-      <UnlockPanel onForgot={() => setView('reset')} testId="vault-set-unlock" backLabel={t('vault.title', {})} />
-    </UnlockOverlay>
-  );
 
   if (view === 'reset') return <ResetFlow onDone={back} />;
   if (state.status === null) return <p className={styles.empty}>{state.phase === 'offline' ? t('vault.offline', {}) : t('vault.loading', {})}</p>;
@@ -47,27 +60,9 @@ export function VaultSettings() {
       </SettingsCard>
     );
   if (view === 'autolock') return <Autolock onDone={back} />;
-  if (view === 'change')
-    return (
-      <>
-        <ChangePin onDone={back} />
-        {waiting}
-      </>
-    );
-  if (view === 'bind')
-    return (
-      <>
-        <BindFace method={method} onDone={back} />
-        {waiting}
-      </>
-    );
-  if (view === 'devices')
-    return (
-      <>
-        <Devices method={method} onDone={back} />
-        {waiting}
-      </>
-    );
+  if (view === 'change') return <ChangePin onDone={back} />;
+  if (view === 'bind') return <BindFace method={method} onDone={back} />;
+  if (view === 'devices') return <Devices method={method} onDone={back} />;
 
   const last = state.status.lastResetAt;
   return (
@@ -117,7 +112,7 @@ function Autolock({ onDone }: { onDone(): void }) {
 
 function ChangePin({ onDone }: { onDone(): void }) {
   const t = useVaultT();
-  const errText = useErrText();
+  const failText = useFailText();
   const { s } = useVault();
   const [old, setOld] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -157,8 +152,8 @@ function ChangePin({ onDone }: { onDone(): void }) {
             setOld(null);
             setOk(true);
           } else {
-            // 读这次响应里的 left（不读 state.left：回调里的 state 是点下去那次渲染的快照）
-            setErr(r.code === 'pin_wrong' && r.left !== undefined ? t('vault.unlock.left', { n: r.left }) : errText(r.code));
+            // 读这次响应里的 left（不读 state.left：回调里的 state 是点下去那次渲染的快照）；文案同解锁、设密码（useFailText 一处）
+            setErr(failText(r));
             setOld(null);
           }
         });

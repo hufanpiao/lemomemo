@@ -1,4 +1,4 @@
-// 隐私记页面（ui/VaultPage.tsx）：TC-B5-11（上锁后 DOM 里不留明文）、TC-B5-12（挂着时 <html data-rt="1">，卸掉还原；GlassBar 不碰隐私记）、
+// 隐私记页面（ui/VaultPage.tsx）：TC-B5-11（上锁后 DOM 里不留明文）、TC-B5-12（挂着时 <html data-solid="1">，卸掉还原；GlassBar 不碰隐私记）、
 // TC-B5-13（解锁卡淡出 --dur-ui，上锁、多任务遮罩直接盖）、TC-B5-44（三个离开事件同步盖遮罩，59 秒回来去掉、61 秒上锁）、
 // TC-B5-33（断网进不去）、TC-B5-48 ②（解锁后看得到自己的“最近删除”，永久删除要确认）
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { VaultRequest } from '../../../../shared/schema/vault.ts';
 import { createVaultSession, type VaultSession } from '../data/session.ts';
-import { installVaultSession, SHIELD_ATTR, watchLeave } from '../hooks/useVault.ts';
+import { installVaultSession, PICK_MS, SHIELD_ATTR, watchLeave } from '../hooks/useVault.ts';
 import VaultPage from '../ui/VaultPage.tsx';
 import VaultParts from '../ui/VaultParts.tsx';
 import { applyLook } from '../../../platform/look.ts';
@@ -37,13 +37,15 @@ vi.mock('../../../platform/image-encode.ts', async (orig) => ({
 const GONE = '22222222-2222-4222-8222-222222222222';
 const SECRET = note().body;
 
-function session(o: { offline?: boolean; purge?: () => void; exportFail?: boolean } = {}): VaultSession {
+const LISTED = { ok: true, notes: [note(), note({ id: GONE, title: '旧的', body: '删掉的', deleted_at: 5 })], vault_token: TOK, expires_at: 9e12 };
+
+function session(o: { offline?: boolean; purge?: () => void; exportFail?: boolean; list?: () => unknown } = {}): VaultSession {
   const reply = (req: VaultRequest): unknown => {
     switch (req.action) {
       case 'status':
         return o.offline ? { ok: false, code: 'offline' } : { ok: true, set: true, locked_until: null, retry_after_s: null, last_reset_at: null, webauthn: 0 };
       case 'list':
-        return { ok: true, notes: [note(), note({ id: GONE, title: '旧的', body: '删掉的', deleted_at: 5 })], vault_token: TOK, expires_at: 9e12 };
+        return o.list ? o.list() : LISTED;
       case 'purge':
         o.purge?.();
         return { ok: true, purged: 1, vault_token: TOK, expires_at: 9e12 };
@@ -62,6 +64,7 @@ let s: VaultSession;
 beforeEach(() => {
   window.location.hash = '#/vault';
   document.documentElement.removeAttribute('data-rt');
+  document.documentElement.removeAttribute('data-solid');
   document.documentElement.removeAttribute(SHIELD_ATTR);
 });
 afterEach(() => {
@@ -94,6 +97,9 @@ describe('解锁、上锁', () => {
     expect(screen.queryByTestId('vault-unlock-pinview')).toBeNull();
     fireEvent.click(screen.getByTestId('vault-unlock-pin'));
     const view = await screen.findByTestId('vault-unlock-pinview');
+    // 隐私记整块收拾 11-20 中 6：换到密码页，焦点放到标题（读屏先念“输入密码”，不留在已经没了的按钮上）
+    await waitFor(() => expect(document.activeElement?.hasAttribute('data-unlock-main')).toBe(true));
+    expect(document.activeElement?.tagName).toBe('H2');
     expect(screen.getByTestId('vault-unlock-back').textContent).toContain('随手记');
     expect(screen.getByTestId('vault-unlock-cancel').textContent).toBe('取消');
     const pad = screen.getByTestId('vault-unlock-pad');
@@ -200,18 +206,19 @@ describe('解锁、上锁', () => {
 });
 
 describe('TC-B5-12：底栏实色、不建副本', () => {
-  it('页面挂着时 <html data-rt="1">，中途皮肤重画也不被冲掉；卸掉后按系统设置重算（系统没设置就拿掉）', async () => {
+  it('页面挂着时 <html data-solid="1">（系统“减少透明效果”的 data-rt 不动），中途皮肤重画也不被冲掉；卸掉后拿掉', async () => {
     s = session();
     installVaultSession(s);
     const base = { skin: 'glass', theme: 'light', font: 'system' } as const;
     applyLook(base);
-    expect(document.documentElement.hasAttribute('data-rt')).toBe(false);
+    expect(document.documentElement.hasAttribute('data-solid')).toBe(false);
     const r = render(<VaultPage />);
-    expect(document.documentElement.getAttribute('data-rt')).toBe('1');
-    applyLook({ ...base, theme: 'dark' });
-    expect(document.documentElement.getAttribute('data-rt')).toBe('1');
-    r.unmount();
+    expect(document.documentElement.getAttribute('data-solid')).toBe('1');
     expect(document.documentElement.hasAttribute('data-rt')).toBe(false);
+    applyLook({ ...base, theme: 'dark' });
+    expect(document.documentElement.getAttribute('data-solid')).toBe('1');
+    r.unmount();
+    expect(document.documentElement.hasAttribute('data-solid')).toBe(false);
   });
 
   it('GlassBar 不 import 隐私记、不持有隐私记数据', () => {
@@ -260,6 +267,32 @@ describe('TC-B5-44：离开时同步盖多任务遮罩', () => {
     stop();
   });
 
+  it.each(['change', 'cancel', '定时器'] as const)('隐私记整块收拾 11-20 高 3：点了选文件框、没等到 blur 就 %s——放过的那一次作废，之后的 blur 照常盖遮罩、开始计时', async (how) => {
+    await openUnlocked();
+    let now = 0;
+    const stop = watchLeave(s, window, () => now);
+    const input = document.createElement('input');
+    input.type = 'file';
+    document.body.append(input);
+    vi.useFakeTimers();
+    try {
+      input.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      if (how === '定时器') vi.advanceTimersByTime(PICK_MS);
+      else input.dispatchEvent(new Event(how, { bubbles: how === 'change' }));
+    } finally {
+      vi.useRealTimers();
+    }
+    window.dispatchEvent(new Event('blur'));
+    expect(document.documentElement.getAttribute(SHIELD_ATTR)).toBe('1');
+    now = 61_000;
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    expect(s.get().phase).toBe('locked');
+    input.remove();
+    stop();
+  });
+
   it('59 秒回来：遮罩去掉、仍解锁；61 秒回来：上锁、露出解锁卡', async () => {
     await openUnlocked();
     let now = 0;
@@ -293,6 +326,61 @@ describe('TC-B5-33：断网', () => {
     await screen.findByTestId('vault-offline');
     expect(screen.queryByTestId('vault-unlock-card')).toBeNull();
     expect(screen.getByTestId('vault-retry')).toBeTruthy();
+  });
+});
+
+describe('隐私记整块收拾 11-20 高 1：已解锁、列表还没到（记录页、列表页、最近删除都等它）', () => {
+  /** 解锁时列表拉不下来：第一次 list 按 first 回，之后照常 */
+  async function unlockWithList(hash: string, first: () => unknown) {
+    let n = 0;
+    s = session({ list: () => (++n === 1 ? first() : LISTED) });
+    installVaultSession(s);
+    window.location.hash = hash;
+    render(<VaultPage />);
+    await screen.findByTestId('vault-unlock-card');
+    await act(async () => {
+      void s.unlock('1234');
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  }
+
+  it('记录页：列表还没到时不空白——有隐私记顶栏和“加载中”；到了才出编辑页', async () => {
+    let done: (v: unknown) => void = () => undefined;
+    await unlockWithList(`#/vault/${NID}`, () => new Promise((r) => (done = r)));
+    expect(s.get().phase).toBe('unlocked');
+    expect(screen.getByTestId('vault-list-loading').textContent).not.toBe('');
+    expect(screen.getByTestId('vault-back')).toBeTruthy();
+    expect(screen.queryByTestId('note-edit-body')).toBeNull();
+    await act(async () => {
+      done(LISTED);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(await screen.findByTestId('note-edit-body', {}, { timeout: 5000 })).toBeTruthy();
+    expect(screen.queryByTestId('vault-list-loading')).toBeNull();
+  });
+
+  it('列表页：拉列表失败写出错和“重试”（顶栏照画），点重试再拉一次、列出', async () => {
+    await unlockWithList('#/vault', () => ({ ok: false, code: 'unknown' }));
+    const fail = await screen.findByTestId('vault-list-fail');
+    expect(fail.querySelector('[role="alert"]')?.textContent).not.toBe('');
+    expect(screen.getByTestId('vault-back')).toBeTruthy();
+    expect(screen.getByTestId('vault-lock-now')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('vault-list-retry'));
+    // 随手记那一套是懒加载：单跑这几条时第一次画要多等一会
+    expect((await screen.findByTestId('vault-notes', {}, { timeout: 5000 })).textContent).toContain('体检报告');
+    expect(screen.queryByTestId('vault-list-fail')).toBeNull();
+  });
+
+  it('最近删除：列表没到不画（没有空的“最近删除”页），到了才列出删掉的那条', async () => {
+    let done: (v: unknown) => void = () => undefined;
+    await unlockWithList('#/vault/trash', () => new Promise((r) => (done = r)));
+    expect(screen.getByTestId('vault-list-loading')).toBeTruthy();
+    expect(screen.queryByTestId(`vault-trash-row-${GONE}`)).toBeNull();
+    await act(async () => {
+      done(LISTED);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(await screen.findByTestId(`vault-trash-row-${GONE}`)).toBeTruthy();
   });
 });
 

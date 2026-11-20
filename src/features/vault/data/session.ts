@@ -27,7 +27,7 @@
 // • 取图（image）：同时最多 2 张（IMG_SLOTS），限流、服务忙、断网（kind retry）退避 2 秒、5 秒、15 秒再取；本机刚插的图 seedImage 直接放进图片表，不再取
 // • 续期（M2）：编辑页有输入时调 touch()，拿到令牌满 5 分钟就发一次 {renew}（按本机拿到令牌的时刻算，不受两边时钟差影响）；
 //   vault-image 只验不续，令牌过期（vault_locked）时先 {renew} 再试一次（renew 也被拒就上锁）；取图失败不缓存（M6）
-// • 文档附件（B4b-1，vault-file）：同 vault-image 只验不续（withImageToken）；成功放了微软预览的临时明文副本时记下，上锁时先发 ms_preview_end（keepalive）。
+// • 文档附件（B4b-1，vault-file）：同 vault-image 只验不续（withShortToken）；成功放了微软预览的临时明文副本时记下，上锁时先发 ms_preview_end（keepalive）。
 //   审查第 4 条：服务器的 ms_preview_end 只验 JWT（令牌过期也删得掉），令牌有才带；没发成（断网、JWT 过期）记下，下次解锁后补发一次（endOwed）
 // • 进隐私记少等往返（11-19“隐私记感觉没变快”）：status 在途去重（同 list）；解锁卡一出来 prepareFace 先要 Face ID 挑战，点按钮直接弹系统 Face ID
 // • 不碰 core/cache、outbox、log（A18）
@@ -65,12 +65,14 @@ export interface VaultState {
   left: number | null;
   /** 正在锁定：到这个时刻（毫秒）才能再试 */
   lockedUntil: number | null;
-  /** 最近一次失败的码（界面挑文案） */
+  /** 最近一次失败的码（运行日志、查状态失败的那一页用；上锁、查状态成功时清掉。各个动作的提示读动作自己回的结果，不读这里） */
   lastError: VaultCode | null;
+  /** 自动上锁分钟数（设置里的 vault.autolock_min，会话建好时由 hooks/useVault.ts 订一次报进来；界面只读这里） */
+  autoMin: number;
 }
 
 const INIT: VaultState = {
-  phase: 'loading', status: null, listed: false, relocked: false, waiting: false, left: null, lockedUntil: null, lastError: null,
+  phase: 'loading', status: null, listed: false, relocked: false, waiting: false, left: null, lockedUntil: null, lastError: null, autoMin: 1,
 };
 
 const tokenShape = z.object({ vault_token: z.string(), expires_at: z.number() });
@@ -126,8 +128,6 @@ export function createVaultSession(d: VaultSessionDeps) {
   const away = new Map<LeaveWhy, number>();
   /** 隐私记页挂着 */
   let onPage = false;
-  /** 自动上锁分钟数（设置里的 vault.autolock_min，hooks/useVault.ts 的 useAutolockMin 报进来） */
-  let autoMin = 1;
   let timer: ReturnType<typeof setTimeout> | null = null;
   /** 每上锁一次加 1：上锁以后才回来的结果据此当 STALE */
   let epoch = 0;
@@ -147,11 +147,8 @@ export function createVaultSession(d: VaultSessionDeps) {
     save: (req) => run({ action: 'save', ...req }, vaultOkResponse),
     setDeleted: (id, del) => run({ action: del ? 'delete' : 'undelete', id }, vaultOkResponse),
     async upload(noteId, imageId, part, blob) {
-      const r = await withImageToken((tok) => d.api.imageUpload({ note_id: noteId, image_id: imageId, part }, blob, tok));
-      if (!r.ok && !dropped(r)) {
-        const kind = vaultErrorAction(r.code).kind;
-        if (kind === 'relock' || kind === 'revoked') onFail(r);
-      }
+      const r = await withShortToken((tok) => d.api.imageUpload({ note_id: noteId, image_id: imageId, part }, blob, tok));
+      failIfLockKind(r);
       return r;
     },
     seed: (imageId, full, thumb) => seedImage(imageId, full, thumb),
@@ -231,7 +228,8 @@ export function createVaultSession(d: VaultSessionDeps) {
       away.clear();
     }
     const set_ = state.status?.set ?? true;
-    set({ phase: set_ ? 'locked' : 'unset', listed: false, waiting: drop === null, ...patch });
+    // 旧的错误码一并清掉（patch 里带的是这次上锁的原因）：密码页不再显示上锁前别的动作留下的错误
+    set({ phase: set_ ? 'locked' : 'unset', listed: false, waiting: drop === null, lastError: null, ...patch });
     arm();
   }
 
@@ -270,6 +268,13 @@ export function createVaultSession(d: VaultSessionDeps) {
     }
   }
 
+  /** 只验不续的调用（vault-image、vault-file）失败时：只有“密码在别处改了”“设备被移除”要落（上锁）；别的失败（没找到、服务忙）原样交回，不改界面状态 */
+  function failIfLockKind(r: VaultResult<unknown>): void {
+    if (r.ok || dropped(r)) return;
+    const kind = vaultErrorAction(r.code).kind;
+    if (kind === 'relock' || kind === 'revoked') onFail(r);
+  }
+
   /** 发出去、回来时还是同一段解锁期才算数（第 8 条）：中间上过锁（哪一种都算）→ STALE */
   async function guarded<T>(send: () => Promise<VaultResult<T>>): Promise<VaultResult<T>> {
     const e = epoch;
@@ -297,7 +302,7 @@ export function createVaultSession(d: VaultSessionDeps) {
    * vault-image 只验不续期：令牌过期（vault_locked）时先 renew 再试一次（renew 也被拒：run 已经上锁）。
    * 半路上锁回 STALE；别的失败原样回，由调用方决定落不落（renew 自己的失败 run 已经落过）
    */
-  async function withImageToken<T>(send: (tok: string) => Promise<VaultResult<T>>): Promise<VaultResult<T>> {
+  async function withShortToken<T>(send: (tok: string) => Promise<VaultResult<T>>): Promise<VaultResult<T>> {
     const go = (): Promise<VaultResult<T>> => (token ? send(token) : Promise.resolve({ ok: false, code: 'vault_locked' } as VaultFail));
     const r = await guarded(go);
     if (dropped(r) || r.ok || r.code !== 'vault_locked') return r;
@@ -308,11 +313,8 @@ export function createVaultSession(d: VaultSessionDeps) {
 
   /** vault-file 的一次调用：只验不续（同 vault-image）；relock、revoked 一类要落 */
   async function fileOp<T>(send: (tok: string) => Promise<VaultResult<T>>): Promise<VaultResult<T>> {
-    const r = await withImageToken(send);
-    if (!r.ok && !dropped(r)) {
-      const kind = vaultErrorAction(r.code).kind;
-      if (kind === 'relock' || kind === 'revoked') onFail(r);
-    }
+    const r = await withShortToken(send);
+    failIfLockKind(r);
     return r;
   }
 
@@ -356,7 +358,7 @@ export function createVaultSession(d: VaultSessionDeps) {
     // 倒计时按服务器给的还剩几秒、从本机现在算（审查第 5 条：原来拿服务器的绝对时刻比本机时钟，两边差几分钟倒计时就错）
     const retry = r.value.retry_after_s;
     if (retry) rlog(`vault status locked retry=${retry}`);
-    set({ status, phase, lockedUntil: retry ? now() + retry * 1000 : null });
+    set({ status, phase, lockedUntil: retry ? now() + retry * 1000 : null, lastError: null });
     return { ok: true, value: status };
   }
 
@@ -424,7 +426,7 @@ export function createVaultSession(d: VaultSessionDeps) {
     if (timer !== null) clearTimeout(timer);
     timer = null;
     if (!live() || away.size === 0) return;
-    const due = Math.min(...away.values()) + minMs(autoMin) - now();
+    const due = Math.min(...away.values()) + minMs(state.autoMin) - now();
     timer = setTimeout(() => {
       timer = null;
       check();
@@ -439,13 +441,22 @@ export function createVaultSession(d: VaultSessionDeps) {
       return false;
     }
     for (const [why, t] of away) {
-      if (at - t >= minMs(autoMin)) {
+      if (at - t >= minMs(state.autoMin)) {
         autolock(why);
         return true;
       }
     }
     arm();
     return false;
+  }
+
+  /** 编辑页有输入时调（M2：一直在写的人保存时令牌不会已过期）；锁着、正在续、拿到令牌还不满 5 分钟都不动 */
+  function touch(): void {
+    if (!token || renewing || now() - tokenAt < RENEW_AFTER_MS) return;
+    renewing = true;
+    void renew().then(() => {
+      renewing = false;
+    });
   }
 
   /** 本机刚插的图（原图、缩略图）放进图片表：显示直接用，不再经 vault-image 取（上锁时一起撤销） */
@@ -521,13 +532,17 @@ export function createVaultSession(d: VaultSessionDeps) {
       if (r.ok && state.status) set({ status: { ...state.status, webauthn: 0 } });
       return r;
     },
-    /** 编辑页有输入时调（M2：一直在写的人保存时令牌不会已过期）；锁着、正在续、拿到令牌还不满 5 分钟都不动 */
-    touch(): void {
-      if (!token || renewing || now() - tokenAt < RENEW_AFTER_MS) return;
-      renewing = true;
-      void renew().then(() => {
-        renewing = false;
-      });
+    touch,
+    /**
+     * 删进、恢复出隐私记的“最近删除”（列表、编辑器经来源的 editIo，最近删除页直接调）：只改仓库、交给后台队列去发；锁着（仓库已清）不写，回 false
+     */
+    setDeleted(id: string, deleted: boolean, at: number = now()): boolean {
+      if (!token || state.phase !== 'unlocked') return false;
+      const r = store.patch(id, { deleted_at: deleted ? at : null, updated_at: at });
+      if (!r) return false;
+      queue.deleted(r, deleted);
+      touch();
+      return true;
     },
     list,
     /** 会话持有的内存仓库、后台发送队列（界面经 hooks/vault-note-source.ts 读写） */
@@ -582,19 +597,18 @@ export function createVaultSession(d: VaultSessionDeps) {
       if (!token) return Promise.resolve(null);
       const e = epoch;
       const p = (async () => {
-        let r = await imgSlot(() => withImageToken((tok) => d.api.imageGet(imageId, part, tok)));
+        let r = await imgSlot(() => withShortToken((tok) => d.api.imageGet(imageId, part, tok)));
         for (const ms of QUEUE_BACKOFF) {
           if (r.ok || dropped(r) || vaultErrorAction(r.code).kind !== 'retry') break;
           rlog(`vault image ${part} wait ${r.code}`);
           await sleep(ms);
           if (epoch !== e) return null;
-          r = await imgSlot(() => withImageToken((tok) => d.api.imageGet(imageId, part, tok)));
+          r = await imgSlot(() => withShortToken((tok) => d.api.imageGet(imageId, part, tok)));
         }
         if (!r.ok) {
-          // 只有“密码在别处改了”“设备被移除”要落（上锁）；没找到、服务忙只是这张图不显示，不改界面状态
-          const kind = dropped(r) ? null : vaultErrorAction(r.code).kind;
-          if (kind) rlog(`vault image ${part} fail ${r.code}`);
-          if (kind === 'relock' || kind === 'revoked') onFail(r);
+          // 没找到、服务忙只是这张图不显示
+          if (!dropped(r)) rlog(`vault image ${part} fail ${r.code}`);
+          failIfLockKind(r);
           return null;
         }
         // 取图期间上过锁：字节丢掉，不造地址（L2：上锁时已经撤过一遍，这里再造的就留在内存里了）
@@ -632,12 +646,12 @@ export function createVaultSession(d: VaultSessionDeps) {
       remove: (id: string) => fileOp((tok) => d.api.fileCall({ action: 'remove', id }, tok, vaultFileOkResponse)),
       restore: (id: string) => fileOp((tok) => d.api.fileCall({ action: 'restore', id }, tok, vaultFileOkResponse)),
       // 发之前就记 msLive：请求在飞时上锁（回 STALE），服务器可能已经放了临时明文副本，上锁时也要发 end（多发一次无害）。
-      // 回来后再记一次：在飞时预览已经关了（end 先发了、msLive 落回 false），服务器随后才放的副本，调用方回来再 end 一次时要真发出去
+      // 回来后按结果定：成了才记 true（在飞时预览已经关了、end 先发了，服务器随后才放的副本，调用方回来再 end 一次时要真发出去）；
+      // 服务器回了错误码就没放副本，记 false。上锁作废的（STALE）不动：上锁时已经发过 end、令牌也没了
       async msPreview(id: string) {
         msLive = true;
         const r = await fileOp((tok) => d.api.fileCall({ action: 'ms_preview', id }, tok, vaultFilePreviewResponse));
-        // 上锁作废的（vault_locked）不再记：上锁时已经发过 end、令牌也没了
-        if (r.ok || r.code !== 'vault_locked') msLive = true;
+        if (!dropped(r)) msLive = r.ok;
         return r;
       },
       msPreviewEnd(): void {
@@ -658,7 +672,7 @@ export function createVaultSession(d: VaultSessionDeps) {
       if (why === 'page') onPage = true;
       const h = away.get(why);
       away.delete(why);
-      if (live() && h !== undefined && at - h >= minMs(autoMin)) {
+      if (live() && h !== undefined && at - h >= minMs(state.autoMin)) {
         autolock(why);
         return true;
       }
@@ -667,7 +681,7 @@ export function createVaultSession(d: VaultSessionDeps) {
     check,
     /** 设置里的自动上锁分钟数变了 */
     setAutolock(min: number): void {
-      autoMin = min;
+      if (min !== state.autoMin) set({ autoMin: min });
       arm();
     },
   };
