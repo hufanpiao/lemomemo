@@ -27,7 +27,6 @@ import { DeletedNotice, ReadonlyNotice, useEditStatus } from '../../../kit/compo
 import { TextArea } from '../../../kit/components/Form.tsx';
 import { useHoldBusy } from '../../../kit/hooks/useHoldBusy.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { useNoteSource } from '../hooks/note-source.ts';
 import { BODY_MAX, TITLE_MAX, useNoteEdit, type CategoryOption } from '../hooks/useNoteEdit.ts';
 import { useNoteConvert, type ActionResult } from '../hooks/useNoteList.ts';
@@ -38,6 +37,7 @@ import styles from './NoteEditPage.module.css';
 import { EditorImageList, EditorPicks, useEditorImages, type EditorImgs } from './NoteImages.tsx';
 import { MoreMenu, useNoteActs, type ConvTip } from './NotesActions.tsx';
 import { SyncLine } from './NotesBits.tsx';
+import { noteAtText } from './note-time.ts';
 
 const NONE = '';
 /** 编辑页提示行里菜单动作的结果：转换结果（列表页同几句）或出错 */
@@ -80,7 +80,7 @@ export function NoteEditor({ id, onCreated }: { id: string; onCreated?(id: strin
 
   // 电脑抽屉顶行“随手记 · 分类 · 时间”（视觉稿 NOTE_ED：“随手记 · 韩国生活 · 今天 11:40”）
   const w = drawer ? ed.when : null;
-  const when = !w ? '' : w.kind === 'day' ? fmtDay(w.date, locale, 'monthDay') : t(w.kind === 'today' ? 'notes.at.today' : 'notes.at.yesterday', { t: w.hm });
+  const when = !w ? '' : noteAtText(t, locale, w.kind, w.hm, w.date);
   const meta = w ? [t('note.edit.kind', {}), ed.categories.find((c) => c.id === form.category_id)?.name, when].filter(Boolean).join(' · ') : null;
 
   const head: ReactNode = (

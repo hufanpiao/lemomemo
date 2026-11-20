@@ -91,6 +91,7 @@ import { useCategoryDialogs } from './CategoryDialogs.tsx';
 import { ImportLoose } from './ImportLoose.tsx';
 import { AiMark, ConvMark, DockTip, FilesMark, RoMark, RowText, SyncDropped, SyncMark, SyncStale, TrashLink, UndoBar } from './NotesBits.tsx';
 import { InputRow, useInputDraft } from './NotesInputRow.tsx';
+import { noteAtText } from './note-time.ts';
 import row from '../../../kit/components/NoteRow.module.css';
 import styles from './NotesPage.module.css';
 
@@ -199,8 +200,7 @@ export function NotesList({ head, cat }: { head?: ((trash: ReactNode, catName: s
     if (it.id === just) return t('notes.just', {});
     const hm = fmtTime(it.createdAt, l.tz);
     if (!manual) return hm;
-    const g = l.dayOf(it.createdAt);
-    return g === 'today' ? t('notes.at.today', { t: hm }) : g === 'yesterday' ? t('notes.at.yesterday', { t: hm }) : fmtDay(it.date, locale, 'monthDay');
+    return noteAtText(t, locale, l.dayOf(it.createdAt), hm, it.date);
   };
   /** 卡片底行的日期：刚记下 / 分组时不写（null）/ 今天、昨天、11/13（自己排时，窄卡只写短的） */
   const cardDay = (it: NoteItem): string | null => (it.id === just ? t('notes.just', {}) : manual ? dayWord(l.dayOf(it.createdAt), it.date, 'num') : null);

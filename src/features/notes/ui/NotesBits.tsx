@@ -45,34 +45,31 @@ export function SyncLine({ id, className }: { id: string | null; className: stri
   );
 }
 
-/** 解锁后页面上一句“有 N 处改动没来得及保存”（上一段解锁期没发完就上锁丢掉的，只报个数、不带内容）；点“知道了”收起 */
-export function SyncDropped() {
+/** 页面上一句提示 + “知道了”（SyncDropped、SyncStale 共用：两句只差文案、点了收哪一种、testid，“知道了”的 testid 是 testId + -ok） */
+function AckTip({ text, onOk, testId }: { text: string; onOk: () => void; testId: string }) {
   const t = useNotesT();
-  const sync = useNoteSource().useSync();
-  if (sync.dropped === 0) return null;
   return (
-    <p className={styles.error} role="alert" data-testid="notes-sync-dropped">
-      {t('notes.sync.dropped', { n: sync.dropped })}
-      <Pressable type="button" className={styles.tipLink} onClick={sync.ack} data-testid="notes-sync-dropped-ok">
+    <p className={styles.error} role="alert" data-testid={testId}>
+      {text}
+      <Pressable type="button" className={styles.tipLink} onClick={onOk} data-testid={`${testId}-ok`}>
         {t('notes.sync.ok', {})}
       </Pressable>
     </p>
   );
 }
 
+/** 解锁后页面上一句“有 N 处改动没来得及保存”（上一段解锁期没发完就上锁丢掉的，只报个数、不带内容）；点“知道了”收起 */
+export function SyncDropped() {
+  const t = useNotesT();
+  const sync = useNoteSource().useSync();
+  return sync.dropped === 0 ? null : <AckTip text={t('notes.sync.dropped', { n: sync.dropped })} onOk={sync.ack} testId="notes-sync-dropped" />;
+}
+
 /** 隐私记拖动后服务器回 stale（R-429）：“这条刚在别处改过，没有移动”；点“知道了”收起 */
 export function SyncStale() {
   const t = useNotesT();
   const sync = useNoteSource().useSync();
-  if (sync.stale === 0) return null;
-  return (
-    <p className={styles.error} role="alert" data-testid="notes-sync-stale">
-      {t('notes.sync.stale', {})}
-      <Pressable type="button" className={styles.tipLink} onClick={sync.ackStale} data-testid="notes-sync-stale-ok">
-        {t('notes.sync.ok', {})}
-      </Pressable>
-    </p>
-  );
+  return sync.stale === 0 ? null : <AckTip text={t('notes.sync.stale', {})} onOk={sync.ackStale} testId="notes-sync-stale" />;
 }
 
 /** “附件 N”（B4b-1，线框 sAtt 第三张 ATB：列表行尾、瀑布流卡片底部）；没附件不画 */
