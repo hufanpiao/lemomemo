@@ -42,6 +42,8 @@ export const LAZY_GROUPS = {
     'shared/core/date.ts',
     'shared/core/tz.ts',
     'shared/logic/live-row.ts',
+    // 读列值的 str、strOrNull（11-21 低风险清理把二十来份收成一份）：不依赖任何模块；单独成块时每个懒加载入口的预加载表都多列一个文件名，首屏 +11 B
+    'shared/core/field.ts',
     'src/core/current-tz.ts',
     'src/kit/hooks/useCollection.ts',
     'src/core/write.ts',

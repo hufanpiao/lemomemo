@@ -6,6 +6,7 @@
 // • 排序：生日、纪念日、倒数日合在一起按“还有几天”从近到远（同一天按名字），只读行排最后；已过去的倒数日单独一组（折叠），最近过去的在前
 // • 筛选：全部 / 生日 / 纪念日 / 倒数日；数字只数没过去的（视觉稿“全部 6”不含已过去的 2 条）
 import type { DateStr } from '../../../../shared/core/date.ts';
+import { str } from '../../../../shared/core/field.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import type { AnnivKind, AnnivRec, AnnivState } from '../../../../shared/logic/anniv/next-date.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
@@ -37,7 +38,6 @@ export interface AnnivList {
   readonly counts: Readonly<Record<AnnivFilter, number>>;
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** 一行 → 列表项（roIds：同步层标了只读的 id） */
 export function itemOf(row: Row, today: DateStr, tz: Tz, roIds: ReadonlySet<string> = new Set()): AnnivItem {

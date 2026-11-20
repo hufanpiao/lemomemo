@@ -21,6 +21,7 @@
 // • 依赖可注入（测试里 jsdom 没有 canvas）
 // 纯 TS：不准 import React（A1）
 import type { Tz } from '../../shared/core/tz.ts';
+import { errName as nameOfErr } from './env.ts';
 import { loadWebpWasm, NO_WASM, type RawPixels, type WebpEncode } from './webp-wasm.ts';
 import { EXIF_SCAN_BYTES, jpegTakenAt } from './image-exif.ts';
 
@@ -145,8 +146,8 @@ class Stop {
 }
 /** 错误名：只认对象上像标识符的 name（Error、DOMException、WebAssembly.CompileError 都是），别的一律 Unknown（不把 message、文件名之类带进日志） */
 function errName(e: unknown): string {
-  const name: unknown = typeof e === 'object' && e !== null ? (e as { name?: unknown }).name : undefined;
-  return typeof name === 'string' && /^[A-Za-z][A-Za-z0-9]{0,39}$/.test(name) ? name : 'Unknown';
+  const name = nameOfErr(e);
+  return /^[A-Za-z][A-Za-z0-9]{0,39}$/.test(name) ? name : 'Unknown';
 }
 const MIME_RE = /^[a-z]+\/[a-z0-9.+-]{1,40}$/;
 

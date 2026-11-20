@@ -3,6 +3,7 @@
 // • pages：PDF、PPT 页数，Excel 表数（线框 sAtt“1.2 MB · 4 页”“40 KB · 2 张表”）；has_thumb：电脑上列表显示首页缩略图
 // • 按 id 排（UUID v7，按加入先后）
 // 纯 TS：不准 import React（A1）
+import { str } from '../../../../shared/core/field.ts';
 import { isShownFile } from '../../../../shared/logic/files/shown-file.ts';
 import type { FileRef } from './attach-open.ts';
 
@@ -17,7 +18,6 @@ export interface NoteFile extends FileRef {
   hasThumb: boolean;
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 function toFile(r: Row): NoteFile | null {
   if (!isShownFile(r)) return null;

@@ -8,6 +8,7 @@
 // • 文案和服务器同一规则（5.3 第 4 步，0.53）：notify-text 生成键，按界面语言翻；条目 push_show_title ?? 设置 remind.show_title ?? true 为假时
 //   只写“15:00 有 1 项日程”这类说法、不带截止时刻（TC-B2-78）；source = chat 加“来自 Claude ·”
 // • 打开 App 时关掉已处理的系统通知（iPhone 不发 resolve，5.3）：shouldCloseShown 判断某个 tag 是不是已处理
+import { strOrNull as str } from '../../../../shared/core/field.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { sharedT, type Locale } from '../../../../shared/i18n/i18n.ts';
 import { notifyText, type NotifyMsg } from '../../../../shared/logic/notify-text.ts';
@@ -57,7 +58,6 @@ export function showTitleFor(r: Reminder, settingShowTitle: boolean): boolean {
   return typeof v === 'boolean' ? v : settingShowTitle;
 }
 
-const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 /** 通知上显示的时刻：日程是开始时刻，待办是这一次提醒的时刻（notify-text 的 timeMs） */
 export function timeMsOf(r: Reminder, tz: Tz, defaultTime?: string): number {

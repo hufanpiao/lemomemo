@@ -3,6 +3,7 @@
 // • 待办删除的 remind 标记在 core/todo-writes.ts（这里 todos 那一支也调它，不另写）
 // • 删除是软删（deleted_at = now，进“最近删除”，ADR-006）；撤销和恢复把 deleted_at 改回 null；都算 remind 标记（补审改法 ④）
 // • “最近删除”的列表在 trash.ts（B4 拆出，不进首屏）；永久删除、全部清空在 B4 S9（0.29 续第 121 条⑧）
+import { strOrNull as str } from '../../../../shared/core/field.ts';
 import { ALL_DAY_LIVE_UNTIL, remindAtOf } from '../../../../shared/logic/remind.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { saveDeleted, type SaveOutcome } from '../../../core/edit-save.ts';
@@ -10,7 +11,6 @@ import { remindLive, rowRemindPending } from '../../../core/remind-flag.ts';
 import { remindAfterDelete } from '../../../core/todo-writes.ts';
 import type { Row } from './today-model.ts';
 
-const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
 const isDel = (v: unknown): boolean => v !== null && v !== undefined;
 

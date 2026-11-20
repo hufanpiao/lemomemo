@@ -15,6 +15,7 @@
 // • revoked、signed_out 带着这次请求用的会话的 session_id（sid；接手清单 K6-sugg4 ①）：发请求前记下（getSession 拿到的令牌里读；
 //   getSession 本身出错时用调它之前同步读的本机会话），随错误带回。回包前别的标签页可能已用同一账号写进新会话，
 //   离开本机时只删这个 sid 的会话（clearLocalSessionIf），不在回包那一刻读本机会话、删“现在那个”
+import { str } from '../../../../shared/core/field.ts';
 import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { readSessionId } from '../../../platform/session.ts';
 import { budgetLeft, logoutReplaced, sessionReplaced, type PriorSession } from '../../../platform/sign-out.ts';
@@ -97,7 +98,6 @@ interface ErrLike {
   message?: unknown;
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 const REVOKED_AUTH_CODES = ['session_not_found', 'refresh_token_not_found', 'refresh_token_already_used', 'session_expired'];
 /** fetch 本身失败（断网、DNS、被拦）的几种说法：Chrome、Safari、Firefox */
