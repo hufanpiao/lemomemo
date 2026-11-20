@@ -13,9 +13,8 @@ import { collapseRinging, useRemindQueue, visibleEntry } from '../../../kit/stat
 import { Appear } from '../../../motion/components.ts';
 import { clock } from '../../../platform/clock.ts';
 import { openReminder } from './open-reminder.ts';
-import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { findReminder, timeOf, whenMsg, type Reminder } from '../hooks/remind-view.ts';
-import { actionsOf, useReminderList, useRemindEngine, useRemindActions } from '../hooks/useReminders.ts';
+import { actionsOf, useRemindEngine, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
 import { pcClass } from './pc-class.ts';
 import { RemindButtons } from './RemindButtons.tsx';
@@ -122,10 +121,9 @@ function Banner({ r, queued, tz, defaultTime }: { r: Reminder; queued: number; t
 }
 
 export default function RemindHost({ route, since }: { route?: string | undefined; since?: number | undefined }) {
-  useRemindEngine(since);
+  // 横幅、按钮条用引擎算好的那份（11-20 全 app 改善报告第四节：原来这里又算一遍，每分钟全量算两次）
+  const { list, tz, prefs } = useRemindEngine(since);
   const t = useRemindT();
-  const now = useMinuteNow();
-  const { list, tz, prefs } = useReminderList(now);
   const entry = useRemindQueue(visibleEntry);
   const queued = useRemindQueue((s) => s.entries.length);
   const note = useRemindQueue((s) => s.snoozeNote);
