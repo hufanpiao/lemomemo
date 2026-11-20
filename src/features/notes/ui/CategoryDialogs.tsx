@@ -155,7 +155,8 @@ function EditCategoryDialog(p: {
   };
   return (
     // 改名、删除写入中不许关，同新建弹窗（独立评审 11-20 第 17 条：原来只拦了新建，关了以后结果回来照样提示失败或再关一次）
-    <Dialog open={cat !== null} onOpenChange={(o) => (o || busy ? undefined : close())} title={t('notes.cat.editTitle', { name: cat?.name ?? '' })}>
+    // 后面整页同新建弹窗一样液态模糊（负责人 11-20 选“改名弹窗也改成模糊”）
+    <Dialog open={cat !== null} onOpenChange={(o) => (o || busy ? undefined : close())} title={t('notes.cat.editTitle', { name: cat?.name ?? '' })} backdrop="mist">
       {ask && cat ? (
         <div className={styles.body}>
           <p className={styles.ask} data-testid="cat-edit-ask">
