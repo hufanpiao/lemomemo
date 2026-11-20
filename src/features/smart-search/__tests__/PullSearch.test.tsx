@@ -173,6 +173,18 @@ describe('下拉搜索', () => {
     expect(fx.logs.slice(0, 2)).toEqual(['pull open test via=key', 'pull close test']);
   });
 
+  it('改善报告 11-20 二-2：输入法组字时按 Esc 是撤掉候选，不收起（Safari keyCode 229、Chrome isComposing）；组字完再按才收起', () => {
+    render(<Host scope="note" />);
+    fireEvent.click(screen.getByTestId('pull-key'));
+    typeQ('가');
+    const input = screen.getByTestId('pull-input');
+    fireEvent.keyDown(input, { key: 'Escape', keyCode: 229 });
+    fireEvent.keyDown(input, { key: 'Escape', keyCode: 27, isComposing: true });
+    expect(screen.getByTestId('pull-search')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'Escape', keyCode: 27 });
+    expect(screen.queryByTestId('pull-search')).toBeNull();
+  });
+
   it('下拉打开的不抢焦点（手指还按着，弹键盘会顶乱页面）', () => {
     render(<Host scope="note" />);
     fireEvent.click(screen.getByText('open'));

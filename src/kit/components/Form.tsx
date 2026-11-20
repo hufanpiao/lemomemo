@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ComponentProps, type ReactNode } from 'react';
 import { hrefOf, navigate, plainClick, type RouteName } from '../../app/router.ts';
 import { Pressable } from '../../motion/components.ts';
+import { composing } from '../hooks/ime.ts';
 import cc from './CheckCircle.module.css';
 import styles from './Form.module.css';
 
@@ -182,9 +183,9 @@ export function useCommitDraft(value: string, onCommit: (v: string) => void, { a
   return { draft, flush, bind };
 }
 
-/** 回车是不是“提交”：中文、韩文输入法组字时的回车是选字（Safari 那一下 isComposing 为假、keyCode 229），这时失焦会丢掉还没上屏的字（Q-21） */
-export function enterCommits(e: { key: string; keyCode: number; nativeEvent: { isComposing: boolean } }): boolean {
-  return e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229;
+/** 回车是不是“提交”：中文、韩文输入法组字时的回车是选字（判断只在 kit/hooks/ime.ts 一份），这时失焦会丢掉还没上屏的字（Q-21） */
+export function enterCommits(e: { key: string; nativeEvent: { isComposing: boolean; keyCode: number } }): boolean {
+  return e.key === 'Enter' && !composing(e.nativeEvent);
 }
 
 /** 日期框：年份 ≥ 1900 才算定了（代码审查 S6：逐位敲年份时 0002-、0020-、0202- 都是合法日期，不能各写一次）；空串 = 清掉 */
