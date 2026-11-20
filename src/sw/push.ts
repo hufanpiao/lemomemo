@@ -62,6 +62,7 @@ export interface NotificationData extends ItemRef {
 }
 
 const KINDS: ReadonlySet<string> = new Set(['event', 'todo', 'anniv']);
+/** SW 只准引白名单里的模块（tests/build/sw-no-user-data.test.ts，K-sw-seal），不引 shared/core/uuid.ts，这里自己留一份（只认小写，同 isUuid 默认） */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** 通知标题、正文的上限（字数，按 Unicode 字符计）；超了截断 */
 export const TEXT_MAX = 300;

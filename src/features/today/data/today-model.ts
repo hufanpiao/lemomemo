@@ -8,6 +8,7 @@
 // • 没赶上：没完成、截止日早于今天的待办（逾 N 天）；今天有截止时刻、已经过了的也算（逾 0 天，界面写“已过 17:00”）。
 //   “逾期”规则和读待办行只在 shared/logic/todo-row.ts（isLate、todoOf，和待办页共用）
 import { addDays, DAY_MINUTES, diffDays, fmtHm, minOfDay, msAt, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { str } from '../../../../shared/core/field.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { coversDay, ownTzOf, placeEvent, spanRowOf, spanTextOn, type EventPlacement, type SpanText } from '../../../../shared/logic/calendar/event-span.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
@@ -24,7 +25,6 @@ const NONE: ReadonlySet<string> = new Set();
 
 const MIN = 60_000;
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 export interface EventOcc {
   kind: 'event';

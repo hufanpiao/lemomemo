@@ -5,6 +5,7 @@
 // • 取不到不记：下一次通知（profile 变了、仓里地址有增减）照样再取（整块评审第 4 条）
 // • 没头像、还在取、取不到都回 null（MeAvatar 画名字首字，没名字画通用人像）
 import { useSyncExternalStore } from 'react';
+import { createSignal } from '../../../shared/core/signal.ts';
 import type { AvatarStore } from '../../core/avatar-store.ts';
 import { getBoot, subscribeProfile } from '../../core/boot.ts';
 import { meAvatarId } from '../../core/cache.ts';
@@ -14,7 +15,7 @@ import { rlog } from '../../platform/run-log-api.ts';
 let store: AvatarStore<[string, string]> | null = null;
 let started = false;
 const offs: (() => void)[] = [];
-const subs = new Set<() => void>();
+const subs = createSignal();
 
 /** 现在的头像仓里还没有就去取 */
 function want(): void {
@@ -27,11 +28,11 @@ function want(): void {
 
 function ping(): void {
   want();
-  for (const fn of [...subs]) fn();
+  subs.emit();
 }
 
 function subscribe(fn: () => void): () => void {
-  subs.add(fn);
+  const off = subs.subscribe(fn);
   if (!started) {
     started = true;
     appPainted()
@@ -43,7 +44,7 @@ function subscribe(fn: () => void): () => void {
       })
       .catch(() => rlog('me avatar-store failed'));
   }
-  return () => void subs.delete(fn);
+  return off;
 }
 
 const snapshot = (): string | null => {

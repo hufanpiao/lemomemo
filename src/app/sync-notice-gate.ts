@@ -20,6 +20,7 @@ import type { Sync } from '../core/sync/engine.ts';
 import type { SyncLog } from '../core/sync/types.ts';
 import { SyncNoticeHost, type SyncNoticeHostProps } from '../features/sync-notice/index.ts';
 import { JS_ERROR_ACT, jsErrorCode } from '../platform/env.ts';
+import { browserLifecycle } from '../platform/net.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { createNoticeStore, forkSuffixOf, type NoticeStoreDeps, type Row } from './sync-notice-store.ts';
 
@@ -107,9 +108,9 @@ export function startSyncNotices(
     if (boot.switching) stop();
     return stopped;
   };
-  const onVisible = (): void => {
+  const onVisible = (visible: boolean): void => {
     try {
-      if (document.visibilityState === 'visible' && !check()) void store.readGone();
+      if (visible && !check()) void store.readGone();
     } catch (e) {
       onError(e);
     }
@@ -135,9 +136,8 @@ export function startSyncNotices(
     outbox.subscribe(safe(() => {
       if (!check()) void store.readGone();
     })),
-    () => document.removeEventListener('visibilitychange', onVisible),
+    browserLifecycle.onVisibility(onVisible),
   );
-  document.addEventListener('visibilitychange', onVisible);
   void store.readGone();
   return stop;
 }

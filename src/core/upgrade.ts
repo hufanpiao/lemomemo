@@ -19,6 +19,7 @@
 //   按的时候只剩作废令牌就当场载入；按的时候还有正常令牌，等它们最后一个释放时载入（原来这种情况回 idle、要再按一次，和前一种不一致）。
 //   等着的时候正常令牌不是被释放、而是到 30 分钟作废的：不算持有方放手，照旧回到 idle、下次按直接载入（持有方可能还在编辑、录音）
 // 纯 TS：不准 import React 和任何功能（A1）
+import { createSignal } from '../../shared/core/signal.ts';
 import { parseVersion, versionAtLeast } from '../../shared/core/version.ts';
 import type { SwUpdateResult } from '../platform/sw-register.ts';
 
@@ -176,7 +177,7 @@ function lowerThan(app: string, min: string): boolean {
 export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
   const log = limitedLog(deps);
   let state: UpgradeState = { syncBlocked: null, cache: 'ok', blocked: false, update: 'idle', busy: false, swReady: false, swDismissed: false };
-  const listeners = new Set<() => void>();
+  const listeners = createSignal();
   const busy = new Map<number, BusyReason>();
   /** 每个令牌的兜底计时器 */
   const busyTimers = new Map<number, ReturnType<typeof setTimeout>>();
@@ -200,17 +201,12 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
     const changed = (Object.keys(patch) as (keyof UpgradeState)[]).some((k) => JSON.stringify(next[k]) !== JSON.stringify(state[k]));
     if (!changed) return;
     state = next;
-    for (const l of [...listeners]) l();
+    listeners.emit();
   };
 
   return {
     getState: () => state,
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    subscribe: listeners.subscribe,
     reportUpgradeRequired(min, source = '426') {
       // 426 一律挡：服务器说了算（min 拿不到也挡）
       const cur = state.syncBlocked;

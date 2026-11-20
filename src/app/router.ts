@@ -2,6 +2,7 @@
 // 页面超过约 15 个或要嵌套数据加载时，换成 React Router 的 hash 模式，改动只在这一个文件
 import { useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
+import { createSignal } from '../../shared/core/signal.ts';
 import { cancelFade, fadeSwap, transition } from '../motion/index.ts';
 
 export const ROUTE_NAMES = [
@@ -100,7 +101,7 @@ export function hrefOf(name: RouteName, ...params: string[]): string {
 // 回调里同步改地址并 flushSync 通知，回调一返回新页面就已经画完（换页动画先拷好旧页，再调回调）。
 // 别的办法换了地址（hashchange）走同一条路；一次切换只起一次换页动画（监听器集中在这里）
 
-const listeners = new Set<() => void>();
+const listeners = createSignal();
 
 // ───────── 返回栈（R-487，负责人 11-19“右滑重写”）─────────
 // App 从不调 pushState，浏览器历史永远只有一条：iOS 主屏幕版只要历史里留着“前进”那一条，右边缘往左划就被系统抢去播旧截图
@@ -121,9 +122,7 @@ export function writeEntry(href: string, stack: readonly string[] = stackOf()): 
   window.history.replaceState({ [KEY]: mainTabOf(parseHash(href)) ? [] : stack.slice(-50) }, '', href);
 }
 
-function notifyAll(): void {
-  for (const l of [...listeners]) l();
-}
+const notifyAll = listeners.emit;
 
 /**
  * 切页怎么动：push 整页推页（新页从右滑进盖住）；pop 返回方向的整页推页（旧页往右滑出），两种都是 motion 的 transition（11-20 起不用 View Transition）；
@@ -221,9 +220,9 @@ function subscribe(cb: () => void): () => void {
     window.addEventListener('hashchange', onHashChange);
     document.addEventListener('click', onLinkClick);
   }
-  listeners.add(cb);
+  const off = listeners.subscribe(cb);
   return () => {
-    listeners.delete(cb);
+    off();
     if (listeners.size === 0) {
       window.removeEventListener('popstate', onPopState);
       window.removeEventListener('hashchange', onHashChange);

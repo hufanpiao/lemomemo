@@ -2,10 +2,10 @@
 // today-actions.ts 跟着今天页进首屏，这份只有“最近删除”页用，单独一个文件就跟着那一页的分包走）
 // • deleted_at 不为空、undone 不为 true、删了不到 30 天的日程、待办和随手记（隐私记不在这里，R-193），最近删的在前
 // 纯 TS：不准 import React（A1）
+import { strOrNull as str } from '../../../../shared/core/field.ts';
 import type { Row } from './today-model.ts';
 import type { TrashTable } from './today-actions.ts';
 
-const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 export const TRASH_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 

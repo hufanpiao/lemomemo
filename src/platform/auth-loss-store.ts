@@ -6,6 +6,7 @@
 //   不进日志、不进错误上报（本文件不带日志通道；单测钉住日志通道收不到它的 session_id）。
 //   有效：v 为 1、user_id 是 uuid、session_id 是 uuid 或 null、at 在 30 天以内、且不比本机时间晚 1 天以上（防写个未来时间“永久保留”）
 // • 存储不可用：写记号返回 false，调用方退回原来的做法（清库）并记 auth_loss_store_failed
+import { isUuid } from '../../shared/core/uuid.ts';
 
 export const REAUTH_KEY = 'lemo.reauth';
 /** 原因码的键（内容和规则在 auth-loss-log.ts，那边有一份同值的，测试断言一致；删键放这里，退出、登录页“清除”不必带上哈希那一份） */
@@ -14,8 +15,6 @@ export const AUTH_LOSS_KEY = 'lemo.authloss';
 export const REAUTH_TTL_MS = 30 * 24 * 3600_000;
 /** 时间在未来超过这么多就当无效（0.60 复审建议 6） */
 export const FUTURE_SKEW_MS = 24 * 3600_000;
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** 记号记下的原因：已停用 / 登录过期 */
 export type ReauthReason = 'disabled' | 'expired';
@@ -45,9 +44,9 @@ export function readReauth(now: number = Date.now(), storage?: Storage): Reauth 
     const raw = store(storage).getItem(REAUTH_KEY);
     if (raw === null) return null;
     const o = JSON.parse(raw) as Partial<Record<keyof Reauth, unknown>> | null;
-    if (!o || o.v !== 1 || typeof o.user_id !== 'string' || !UUID_RE.test(o.user_id)) return null;
+    if (!o || o.v !== 1 || !isUuid(o.user_id, true)) return null;
     const sid = o.session_id;
-    if (sid !== null && !(typeof sid === 'string' && UUID_RE.test(sid))) return null;
+    if (sid !== null && !isUuid(sid, true)) return null;
     if (!freshAt(o.at, now)) return null;
     return { v: 1, user_id: o.user_id, session_id: sid, at: o.at, reason: o.reason === 'disabled' ? 'disabled' : 'expired' };
   } catch {
@@ -59,7 +58,7 @@ export function readReauth(now: number = Date.now(), storage?: Storage): Reauth 
 export function writeReauth(
   userId: string, sessionId: string | null, now: number = Date.now(), storage?: Storage, reason: ReauthReason = 'expired',
 ): boolean {
-  if (!UUID_RE.test(userId) || (sessionId !== null && !UUID_RE.test(sessionId))) return false;
+  if (!isUuid(userId, true) || (sessionId !== null && !isUuid(sessionId, true))) return false;
   try {
     const s = store(storage);
     const old = readReauth(now, s);

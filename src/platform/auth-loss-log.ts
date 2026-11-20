@@ -2,6 +2,7 @@
 // 不变量：最多 AUTH_LOSS_MAX 条、每条 30 天，只存 {uid_h, path, code, status, fate, at, app}；uid_h 加 install_id 盐，不存明文 user_id；被动清库不删
 // 不变量：pairHash 和迁移里的 private.session_pair_hash 同一口径；不 import 首屏模块（install_id 由调用方传），同值常量由 auth-loss-store.test.ts 断言一致
 // 为什么不引首屏模块见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
+import { isUuid } from '../../shared/core/uuid.ts';
 import { buildInfo } from './env.ts';
 
 export const AUTH_LOSS_KEY = 'lemo.authloss';
@@ -25,7 +26,6 @@ export function clearAuthLoss(storage?: Storage): void {
   }
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PATHS = ['sdk', 'sync', 'outbox', 'files', 'settings', 'consent'] as const;
 const FATES = ['expired', 'revoked', 'unknown', 'unchecked'] as const;
 
@@ -66,13 +66,13 @@ async function sha256Hex(text: string): Promise<string | null> {
 
 /** session_fate 的参数：两个 uuid 都要合法，按小写拼；算不出为 null（调用方按“查不了”） */
 export async function pairHash(sessionId: string, userId: string): Promise<string | null> {
-  if (!UUID_RE.test(sessionId) || !UUID_RE.test(userId)) return null;
+  if (!isUuid(sessionId, true) || !isUuid(userId, true)) return null;
   return sha256Hex(`${sessionId.toLowerCase()}:${userId.toLowerCase()}`);
 }
 
 /** uid_h：sha256(install_id ':' user_id) 前 16 位；install_id 读不到为 null（不记） */
 export async function uidHash(userId: string, installId: string | null): Promise<string | null> {
-  if (!installId || !UUID_RE.test(userId)) return null;
+  if (!installId || !isUuid(userId, true)) return null;
   const h = await sha256Hex(`${installId}:${userId.toLowerCase()}`);
   return h ? h.slice(0, 16) : null;
 }

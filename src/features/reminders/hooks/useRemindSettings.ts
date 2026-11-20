@@ -4,6 +4,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
 import { showLocalTestNotification, type LocalTestResult } from '../../../platform/native-bridge.ts';
+import { browserLifecycle } from '../../../platform/net.ts';
 import { getPushOutcome, subscribePushOutcome } from '../../../platform/push-status.ts';
 import { claimNow, enableNotifications, localInstallId, permState, pushNoticeOf, removeHolder, type PermState, type RemoveHolderResult } from '../data/push-setup.ts';
 import { sendTestPush, type PushTestResult } from '../data/push-test.ts';
@@ -16,13 +17,9 @@ import {
 /** 通知权限（回到前台时重读：用户可能去系统设置里改了） */
 export function usePermState(): [PermState, (p: PermState) => void] {
   const [p, setP] = useState<PermState>(() => permState());
-  useEffect(() => {
-    const onVis = (): void => {
-      if (document.visibilityState === 'visible') setP(permState());
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, []);
+  useEffect(() => browserLifecycle.onVisibility((visible) => {
+    if (visible) setP(permState());
+  }), []);
   return [p, setP];
 }
 

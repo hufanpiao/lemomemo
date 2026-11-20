@@ -8,6 +8,7 @@
 // • 错误只认码：plpgsql 的 raise exception '<码>' 在 message 里（session_revoked、not_found……），PostgREST 的在 code 里；
 //   status 0 或 fetch 失败当断网；426 的响应体 {code: upgrade_required, min} 原样带出 min
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { str } from '../../../shared/core/field.ts';
 import type {
   ConfigRows,
   NetResult,
@@ -50,7 +51,6 @@ export interface SupabaseSyncTransport {
 }
 
 const ID_CHUNK = 100;
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** PostgREST 的 or() 里的值加双引号（timestamptz 带 + 和 :） */
 const q = (v: string): string => `"${v.replace(/["\\]/g, '')}"`;

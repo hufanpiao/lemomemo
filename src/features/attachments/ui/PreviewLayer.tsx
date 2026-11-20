@@ -15,6 +15,7 @@ import { createPortal } from 'react-dom';
 import chip from '../../../kit/components/Chip.module.css';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
+import { browserLifecycle } from '../../../platform/net.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { parseFromFrame, ZOOM_MAX, ZOOM_MIN, type FrameWay, type FromFrame, type ToFrame } from '../../../../shared/logic/files/preview-protocol.ts';
 import { DOC_TYPES } from '../../../../shared/manifests/attachments.ts';
@@ -101,13 +102,9 @@ export default function PreviewLayer({ src, file, desk, onClose, onDownload, onS
   useEffect(() => () => src.msEnd(), [src]);
 
   // 页面隐藏（切走、锁屏）：隐私记的临时明文副本立即删（微软那边已经取走的照常显示，再试一次会重新放一份）
-  useEffect(() => {
-    const vis = (): void => {
-      if (document.visibilityState === 'hidden') src.msEnd();
-    };
-    document.addEventListener('visibilitychange', vis);
-    return () => document.removeEventListener('visibilitychange', vis);
-  }, [src]);
+  useEffect(() => browserLifecycle.onVisibility((visible) => {
+    if (!visible) src.msEnd();
+  }), [src]);
 
   const answer = (yes: boolean): void => {
     writeMsPref(src.scope, yes ? 'yes' : 'no');

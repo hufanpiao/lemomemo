@@ -9,12 +9,12 @@
 // 读数字列的 numOr 也在这里（审查 11-15 第 8 条：待办几处各写一份 num 合成这一个）：core/todo-done.ts、core/todo-writes.ts、待办的 todo-autodel、todo-items、todo-list 共用
 // 刚勾完还留在原位的照没完成算（lingerView）也只有这一份（独立评审 11-18 二-2）
 import { diffDays, msAt, parseHm, todayOf, type DateStr } from '../core/date.ts';
+import { str } from '../core/field.ts';
 import type { Tz } from '../core/tz.ts';
 import { isLiveRow } from './live-row.ts';
 
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** 优先级三档（R-434，迁移 20261115100000_todos_priority.sql 的 todos_priority_in）：高、中、低；新建默认中 */
 export const PRIORITIES = ['high', 'mid', 'low'] as const;

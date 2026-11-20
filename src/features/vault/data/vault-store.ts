@@ -10,6 +10,8 @@
 //   隐私记的写入只走 vault 函数、不进本机 notes 集合（session.ts、vault-queue.ts 不碰 core/cache），本机集合要等同步拉回来才有那一行；
 //   刚记的、刚移进来的、还在后台队列里的，锁上后原来数不到，卡片写“里面有 0 条”（R-436 丁批审查）
 // • 不碰 core/cache、outbox、log（A18）；纯 TS，不准 import React（A1）
+import { str } from '../../../../shared/core/field.ts';
+import { createSignal } from '../../../../shared/core/signal.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import type { VaultNote } from '../../../../shared/schema/vault.ts';
 
@@ -49,7 +51,7 @@ export function countVault(local: readonly LocalNoteRow[], listed: boolean, snap
 }
 
 /** 行里的字符串字段（不是字符串就当空；队列发 save、回收站显示标题共用这一份） */
-export const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+export { str };
 
 /** 隐私记的一条 → 随手记集合那种行 */
 export function noteRowOf(n: VaultNote): Row {
@@ -76,11 +78,11 @@ export function createVaultStore() {
   /** 拉过全量列表（load）：上锁时 notes 就是全部，known 整个换成它；没拉过只把仓库里有的并进去 */
   let loaded = false;
   let snap: StoreSnap | null = null;
-  const listeners = new Set<() => void>();
+  const listeners = createSignal();
 
   const changed = (): void => {
     snap = null;
-    for (const fn of [...listeners]) fn();
+    listeners.emit();
   };
   /** 集合里加、减一个 id（没变回原来那个） */
   const toggled = (set: ReadonlySet<string>, id: string, on: boolean): ReadonlySet<string> => {
@@ -96,12 +98,7 @@ export function createVaultStore() {
       snap ??= { notes: [...notes.values()], images: [...images.values()], failed, uploads, fresh, dropped, stale, known };
       return snap;
     },
-    subscribe(fn: () => void): () => void {
-      listeners.add(fn);
-      return () => {
-        listeners.delete(fn);
-      };
-    },
+    subscribe: listeners.subscribe,
     /** 解锁后的全量列表（替换掉原来的） */
     load(list: readonly VaultNote[]): void {
       notes = new Map(list.map((n) => [n.id, noteRowOf(n)]));

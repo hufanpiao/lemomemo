@@ -12,6 +12,7 @@
 // • 会话键存在哪由 session-store.ts 定（网页版 localStorage，exe 是凭据管理器，F5-2 / N1）：会话的读和删都经 sessionStore()；
 //   “自己退出”的标记、退出原因不是会话，照旧在 localStorage
 // 只读 user.id、user.email 和令牌 payload 里的 session_id（sessionIdOfToken），不校验、不记录、不打印令牌
+import { isUuid } from '../../shared/core/uuid.ts';
 import { buildInfo, isTauri } from './env.ts';
 import { readExitNotice, setExitNotice, type ExitNotice } from './exit-notice.ts';
 import { afterAppPainted } from './root-paint.ts';
@@ -22,7 +23,6 @@ import { getSupabase, onClientReady } from './supabase/client.ts';
 import { recentRefreshFailure, setRefreshSessionReader, type RefreshFailure } from './supabase/refresh-failure.ts';
 
 const KEY_RE = /^sb-.+-auth-token$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** supabase-js 默认的会话键；supabaseUrl 读不出主机名时返回 null（再按格式找） */
 export function sessionStorageKey(supabaseUrl: string = buildInfo.supabaseUrl): string | null {
@@ -52,7 +52,7 @@ export function userIdOfSession(raw: string | null): string | null {
   try {
     const o = JSON.parse(raw) as { user?: { id?: unknown } } | null;
     const id = o?.user?.id;
-    return typeof id === 'string' && UUID_RE.test(id) ? id : null;
+    return isUuid(id, true) ? id : null;
   } catch {
     return null;
   }

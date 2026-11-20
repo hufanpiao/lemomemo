@@ -6,6 +6,7 @@
 // • 本机库还没准备好（例如还在登录页）：返回 null、不记这次结果，调用方下次再查（S23 代码审建议 3）
 // • 读写失败（库正在关）同上：返回 null、不记结果，调用方下次再查（S23 复审 R1），不抛错
 // 纯 TS：不准 import React（A1）
+import { createSignal } from '../../../../shared/core/signal.ts';
 import type { Cache } from '../../../core/cache.ts';
 import { getBoot } from '../../../core/boot.ts';
 
@@ -33,7 +34,7 @@ function dataOf(v: unknown): HintData {
 let counted: Promise<boolean | null> | null = null;
 /** 这次启动里按住过（markPlusHeld 一调就是 true）：气泡当场收起 */
 let heldNow = false;
-const heldWatchers = new Set<() => void>();
+const heldWatchers = createSignal();
 
 /** 这次启动要不要出气泡；第一次查成功时把打开次数 +1（同一次启动再调返回同一个结果）。
  *  本机库还没准备好、读写出错时都返回 null、不记结果，调用方下次再查 */
@@ -68,18 +69,13 @@ export function plusHeldNow(): boolean {
 }
 
 /** 按住过一次时通知（usePlusHint 收起气泡）；返回退订 */
-export function watchPlusHeld(fn: () => void): () => void {
-  heldWatchers.add(fn);
-  return () => {
-    heldWatchers.delete(fn);
-  };
-}
+export const watchPlusHeld = heldWatchers.subscribe;
 
 /** 按住“＋”说过一次话（FA-3 调）：气泡当场收起，以后也不再出 */
 export async function markPlusHeld(now: number, c?: DraftStore | null): Promise<void> {
   if (!heldNow) {
     heldNow = true;
-    for (const fn of [...heldWatchers]) fn();
+    heldWatchers.emit();
   }
   const cache = cacheOf(c);
   if (!cache) return;

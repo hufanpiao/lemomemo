@@ -3,6 +3,7 @@
 // • 待办：“今天 17:00 截止”“今天截止”“11月5日截止”“已过截止”“没有截止日期”
 // • 错过的提醒每行：“今天 09:00 · 日程”（day、time、kind）
 import { addDays, DAY_MINUTES, diffDays, msAt, parseDate, parseHm, todayOf, weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { strOrNull as str } from '../../../../shared/core/field.ts';
 import { placeEvent, spanRowOf, untilMsg, type SpanMsg } from '../../../../shared/logic/calendar/event-span.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { hhmm } from '../../../../shared/logic/notify-text.ts';
@@ -21,7 +22,6 @@ export type WhenMsg =
   | { key: 'remind.when.annivToday' | 'remind.when.annivTomorrow' | 'remind.when.annivPast'; params: Record<string, never> }
   | { key: 'remind.when.annivIn'; params: { n: number } };
 
-const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 /** 纪念日（B5 S15）：“今天就是 / 明天 / 7 天后”（按这次提醒对应的那一次纪念日 annivDate；过了写“已经过了”） */
 function annivWhen(r: Reminder, now: number, tz: Tz): WhenMsg {

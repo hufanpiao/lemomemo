@@ -18,6 +18,7 @@
 // 纪念日（anniversaries，B5 S15）：remind_at 由调用方传进来的 annivAt 现算（shared/logic/anniv/next-date.ts 的 annivRemindFrom，
 //   它带农历表，hooks/remind-list.ts 按需加载后传入；还没加载好时纪念日先不算提醒）；标题取 name；不分全天、不看 remind_min
 import { addDays, msAt, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { strOrNull as str } from '../../../../shared/core/field.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { ALL_DAY_EVE_TIME, allDayRemindDay, allDayTimeOf, applyDnd, DEFAULT_REMIND_TIME, remindAtOf, sameRemindDay, type Dnd } from '../../../../shared/logic/remind.ts';
@@ -55,7 +56,6 @@ export interface Reminder {
   readonly annivDate?: DateStr;
 }
 
-const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /**

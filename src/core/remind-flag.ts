@@ -5,6 +5,7 @@
 //   ① 按字段、传它自己的 remind_at 重算出来的时刻（S2）；② 服务器上的 remind_at（S14：按过“稍后”时，它是还没到的稍后时刻，按字段重算算不出来）；
 //   ③ snooze_at（S14，同上）
 // • 宽限 2 分钟：push-dispatch 每分钟跑一次，刚过的提醒可能还没推，这时撤掉它的写入也要尽快送到（“≥ now − 2 分钟”）
+import { strOrNull as str } from '../../shared/core/field.ts';
 import type { Tz } from '../../shared/core/tz.ts';
 import { remindAtOf, type TodoRemindRow } from '../../shared/logic/remind.ts';
 
@@ -12,7 +13,6 @@ export const REMIND_PENDING_GRACE_MS = 2 * 60 * 1000;
 
 type RowLike = Readonly<Record<string, unknown>>;
 
-const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
 const isDel = (v: unknown): boolean => v !== null && v !== undefined;
 /** 这个提醒时刻还算不算会响：不早于 now − 宽限（日程、待办都用） */

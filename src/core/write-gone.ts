@@ -6,6 +6,7 @@
 // • 恢复后带不带提醒（M7）：恢复就是把删掉的行放回来，按恢复后的整行用 shared 的 remindAtOf 现算（规则同各编辑页：core/remind-flag.ts），
 //   算得出、且不早于 now − 2 分钟，或者服务器上的 remind_at、snooze_at 还会响，就带上；只有待办、日程有提醒
 // 纯 TS：不准 import React 和任何功能（A1）
+import { strOrNull as str } from '../../shared/core/field.ts';
 import { ALL_DAY_LIVE_UNTIL, remindAtOf } from '../../shared/logic/remind.ts';
 import type { Tz } from '../../shared/core/tz.ts';
 import { getBoot } from './boot.ts';
@@ -25,7 +26,6 @@ type RowLike = Readonly<Record<string, unknown>>;
 
 /** 待办里改了这些列，remindAtOf 的 prevRemindAt 就不传（同 todos/data/todo-edit.ts 的 TODO_TIMING_COLS；功能之间不互相 import，这里各写一份） */
 const TODO_TIMING_COLS: readonly string[] = ['due', 'due_time', 'remind_before_min'];
-const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
 
 /**

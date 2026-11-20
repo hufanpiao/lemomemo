@@ -2,6 +2,7 @@
 // 日历的 replaceInPage（日历内部一律原地换，R-372 ②）、编辑页的路由槽位 useEditRoute（三个编辑页的唯一出口，架构 10.1）、子页的返回 backOr。
 // 返回栈仍由 router.ts 管（writeEntry 原地写地址时栈照旧带着）
 import { useCallback, useReducer, useRef } from 'react';
+import { isUuid } from '../../shared/core/uuid.ts';
 import { canGoBack, commit, goBack, hrefOf, parseHash, upTo, useRoute, writeEntry, type RouteName } from './router.ts';
 
 
@@ -21,7 +22,6 @@ export function replaceAddress(name: RouteName, ...params: string[]): void {
   writeEntry(hrefOf(name, ...params));
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 let newSeq = 0;
 
 /**
@@ -31,7 +31,7 @@ let newSeq = 0;
  */
 export function useEditRoute(name: 'todo' | 'event' | 'note' | 'anniv' | 'vault'): { id: string; key: string; onCreated(id: string): void } {
   const raw = useRoute().params[0] ?? 'new';
-  const id = raw === 'new' || UUID.test(raw) ? raw : 'missing';
+  const id = raw === 'new' || isUuid(raw) ? raw : 'missing';
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const slot = useRef<{ id: string; key: string; created: string | null } | null>(null);
   if (slot.current === null || (id !== slot.current.id && id !== slot.current.created)) {

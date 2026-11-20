@@ -4,6 +4,7 @@
 // • 删除、撤销不在这里筛：交给纯逻辑的 isLiveRow（deleted_at、undone 原样带过去）
 // 纯 TS
 import { parseHm, type DateStr } from '../../../../shared/core/date.ts';
+import { str } from '../../../../shared/core/field.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import type { CalEvent, CalItems, CalTodo } from '../../../../shared/logic/calendar/cal-items.ts';
 import { spanRowOf } from '../../../../shared/logic/calendar/event-span.ts';
@@ -13,7 +14,6 @@ export type Row = Readonly<{ id: string } & Record<string, unknown>>;
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const strOrNull = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);

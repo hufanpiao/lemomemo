@@ -14,6 +14,7 @@ import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { afterAppPainted } from '../../../platform/root-paint.ts';
+import { whenIdle } from '../../../platform/session.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { missed, useRangView, useReminderList } from '../hooks/remind-list.ts';
 import { useRemindRowT } from '../hooks/useRemindRowT.ts';
@@ -42,13 +43,6 @@ function sheetForOpen(): LazyExoticComponent<ComponentType<MissedSheetProps>> {
     lazySheet = lazy(loadSheet);
   }
   return lazySheet;
-}
-
-/** 浏览器空闲时执行（requestIdleCallback 最多等 2 秒；没有时 300 ms 后） */
-function whenIdle(fn: () => void): void {
-  const w = globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
-  if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(fn, { timeout: 2000 });
-  else setTimeout(fn, 300);
 }
 
 export default function MissedReminders() {

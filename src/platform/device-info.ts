@@ -6,10 +6,9 @@
 //   report_tz 的“手机优先”按 platform = 'ios' 认手机（4.6）；Tauri 窗口记 tauri；其余记 web。windows 现在不用
 // • withLock：登记设备行时跨标签页互斥（navigator.locks，名字 'lemo-device-reg:<user_id>'）；没有 locks 时直接跑
 //   （core/device-reg.ts 另外在生成新 id 前重读一次 meta 兜底）
+import { isUuid } from '../../shared/core/uuid.ts';
 import { isAppleMobile, isTauri, type NavLike } from './env.ts';
 import type { LocksLike } from './tab-leader.ts';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const INSTALL_ID_KEY = 'lemo.install_id';
 
@@ -20,7 +19,7 @@ export function readInstallId(storage?: Storage, gen: () => string = () => crypt
   try {
     const s = storage ?? localStorage;
     const v = s.getItem(INSTALL_ID_KEY);
-    if (v && UUID_RE.test(v)) return v.toLowerCase();
+    if (isUuid(v, true)) return v.toLowerCase();
     const id = gen();
     s.setItem(INSTALL_ID_KEY, id);
     return s.getItem(INSTALL_ID_KEY) === id ? id : null;   // 写进去又读不出来（配额、隐私模式）：不用

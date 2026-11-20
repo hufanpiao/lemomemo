@@ -1,6 +1,7 @@
 // 同步网络一侧的错误码映射和超时（从 sync-transport.ts 拆出来，那份文件回到 300 行以内；sync-transport 原样转出这些名字，引用方不用改）
 // • toFailure：supabase-js 的 { error, status } → SendFailure（只认码，服务器原文不带出来）；toSessionCheck：刷新令牌的错误 → SessionCheck
 // • timeoutSignal：每个请求 20 秒超时（同步是串行的，挂住的请求不能把后面的都卡住）；整段超时用 platform/exit-basics.ts 的 withTimeout（全仓只有那一份）
+import { str } from '../../../shared/core/field.ts';
 import type { SendFailure, SessionCheck } from '../../../shared/schema/sync.ts';
 
 export const REQUEST_TIMEOUT_MS = 20_000;
@@ -12,7 +13,6 @@ const REVOKED_403 = 'session_revoked';
 const FETCH_FAILED = /failed to fetch|load failed|networkerror|network request failed|network error|fetcherror|aborterror|timeout/i;
 const TOKEN = /^[a-z][a-z0-9_]*$/;
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** supabase-js 的 { error, status } → SendFailure（单独导出测） */
 export function toFailure(error: unknown, status: number | undefined): SendFailure {

@@ -4,6 +4,7 @@
 // • 不带引擎、本机通知、写服务器、弹层这些：那些在 useReminders.ts，首屏用不到
 // useReminders.ts 原样转出这里的导出，别处照旧从 useReminders 引
 import { useMemo, useSyncExternalStore } from 'react';
+import { createSignal } from '../../../../shared/core/signal.ts';
 import { allDayTimeOf } from '../../../../shared/logic/remind.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { annivLib } from '../../../core/anniv-lib.ts';
@@ -48,15 +49,12 @@ export function useRemindPrefs() {
 // 只记 tag 在这里，横幅、错过的提醒、本机通知都当它已处理；引擎卸载（退出登录、换账号）时清空。新的那一次 tag 不同，照常响。
 // 外部存储：每次变化整个换一个新的只读 Set（第三轮 L12），useSyncExternalStore 取到的就是 useMemo 的依赖
 let sessionAcked: ReadonlySet<string> = new Set();
-const sessionAckedSubs = new Set<() => void>();
-function subscribeSessionAcked(fn: () => void): () => void {
-  sessionAckedSubs.add(fn);
-  return () => sessionAckedSubs.delete(fn);
-}
+const sessionAckedSubs = createSignal();
+const subscribeSessionAcked = sessionAckedSubs.subscribe;
 const getSessionAcked = (): ReadonlySet<string> => sessionAcked;
 function setSessionAcked(next: ReadonlySet<string>): void {
   sessionAcked = next;
-  for (const f of [...sessionAckedSubs]) f();
+  sessionAckedSubs.emit();
 }
 export function ackLocally(tag: string): void {
   setSessionAcked(new Set([...sessionAcked, tag]));
@@ -113,10 +111,10 @@ const rangStore = new Map<string, RangRec>();
 let pushed: ReadonlyMap<string, RangRec> = new Map();
 let dirty = new Map<string, RangRec>();
 let view: ReadonlyMap<string, RangRec> = new Map();
-const rangSubs = new Set<() => void>();
+const rangSubs = createSignal();
 function republish(): void {
   view = new Map([...pushed, ...rangStore]);
-  for (const f of [...rangSubs]) f();
+  rangSubs.emit();
 }
 /** 引擎用：记一次“响过”（同一个 occurrenceKey 只记第一次；local = 本机弹过系统通知，只会从 false 变 true）。有新的返回 true */
 export function recordRang(key: string, rang: Rang, local = false): boolean {
@@ -162,10 +160,7 @@ export function clearRang(): void {
 export function rangSnapshot(): RangMap {
   return view;
 }
-const subscribeRang = (fn: () => void): (() => void) => {
-  rangSubs.add(fn);
-  return () => rangSubs.delete(fn);
-};
+const subscribeRang = rangSubs.subscribe;
 /** 同上，变了重新渲染（“错过的提醒”用） */
 export function useRangView(): RangMap {
   return useSyncExternalStore(subscribeRang, rangSnapshot, rangSnapshot);

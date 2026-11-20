@@ -15,6 +15,7 @@ import { cacheMigrations, DB_VERSION, cacheErrKind, runUpgrade, type CacheMigrat
 import { cacheStores, DRAFTS, META, VAULT_DRAFTS, type StoreDef } from './cache-schema.ts';
 import { withTimeout } from '../platform/exit-basics.ts';
 import { LOCAL_DB_NAME } from '../../shared/local-db.ts';
+import { createSignal } from '../../shared/core/signal.ts';
 
 /** 同步表的一行（服务器形状；K7 宽容读取负责把网络数据变成它） */
 export type ServerRow = Readonly<Record<string, unknown>> & { readonly id: string };
@@ -265,14 +266,14 @@ function wrap(db: IDBDatabase, name: string, version: number, stores: readonly S
   let state: 'open' | 'closing' | 'closed' = 'open';
   let sealed = false;
   const beforeClose = new Set<() => Promise<void> | void>();
-  const closedListeners = new Set<(r: CacheCloseReason) => void>();
+  const closedListeners = createSignal<[CacheCloseReason]>();
   const draftStores = new Set([DRAFTS, VAULT_DRAFTS]);
 
   const finishClose = (reason: CacheCloseReason): void => {
     if (state === 'closed') return;
     state = 'closed';
     db.close();
-    for (const l of [...closedListeners]) l(reason);
+    closedListeners.emit(reason);
   };
 
   db.onclose = () => finishClose('lost');
@@ -385,12 +386,7 @@ function wrap(db: IDBDatabase, name: string, version: number, stores: readonly S
         beforeClose.delete(fn);
       };
     },
-    onClosed(fn) {
-      closedListeners.add(fn);
-      return () => {
-        closedListeners.delete(fn);
-      };
-    },
+    onClosed: closedListeners.subscribe,
     close: () => finishClose('closed'),
   };
 }

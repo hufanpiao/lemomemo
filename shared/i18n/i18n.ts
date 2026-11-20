@@ -6,6 +6,7 @@
 //   下载好了经 provideSharedDict 放进来并通知订阅者（kit 的 useT 用 useSyncExternalStore 订阅，晚到时用到它的组件跟着重画）；
 //   两份都没下载到时，App 名、退出屏、出错屏、升级整屏提示照样有字（启动兜底），别的词条才回键名
 // 这份文件只许 import type 整份词典：一静态引 zh.ts、ko.ts，两份就都进了网页首屏
+import { createSignal } from '../core/signal.ts';
 import { bootKo } from './boot-ko.ts';
 import { bootZh } from './boot-zh.ts';
 import type { UiLocale } from './pick-locale.ts';
@@ -13,7 +14,6 @@ import type { zh } from './zh.ts';
 
 /** 界面语言：就是 pick-locale.ts 的 UiLocale（同一个类型，只是在词典这边叫 Locale） */
 export type Locale = UiLocale;
-export const LOCALES: readonly Locale[] = ['zh-CN', 'ko-KR'];
 
 export type SharedDict = typeof zh;
 export type SharedMsgKey = keyof SharedDict;
@@ -67,21 +67,16 @@ export function createT<D extends Dict>(dicts: { zh?: D; ko?: Readonly<Record<ke
 
 /** 网页里已经下载好的公共词典。每放进一份就换一个新对象（useSyncExternalStore 的快照按引用比较） */
 let loadedShared: Readonly<{ zh?: SharedDict; ko?: Readonly<Record<SharedMsgKey, string>> }> = {};
-const listeners = new Set<() => void>();
+const listeners = createSignal();
 
 /** 放进一份下载好的公共词典（src/platform/doc-locale.ts 的 loadSharedDict、测试的公共准备），并通知订阅者 */
 export function provideSharedDict(locale: Locale, dict: Readonly<Record<SharedMsgKey, string>>): void {
   loadedShared = locale === 'ko-KR' ? { ...loadedShared, ko: dict } : { ...loadedShared, zh: dict as SharedDict };
-  for (const fn of [...listeners]) fn();
+  listeners.emit();
 }
 
-/** 订阅“又下载好了一份公共词典”（kit 的 useT） */
-export function subscribeSharedDict(fn: () => void): () => void {
-  listeners.add(fn);
-  return () => {
-    listeners.delete(fn);
-  };
-}
+/** 订阅“又下载好了一份公共词典”（kit 的 useT）；返回退订函数 */
+export const subscribeSharedDict = listeners.subscribe;
 
 /** 现在下载好的公共词典（useSyncExternalStore 的快照：没变就是同一个对象） */
 export function sharedDictSnapshot(): object {
@@ -96,7 +91,7 @@ export function hasSharedDict(locale: Locale): boolean {
 /** 测试用：清掉已经下载好的公共词典（测“一份都没有”“只有一份”） */
 export function resetSharedDictsForTest(): void {
   loadedShared = {};
-  for (const fn of [...listeners]) fn();
+  listeners.emit();
 }
 
 /**

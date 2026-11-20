@@ -9,6 +9,7 @@
 //   “没有闰月的年份按同号平月过”，不给选项
 // • remind 标记（整条提前发，4.2）：改之后算得出、还没过的提醒（next-date 的 annivNextAt，按出厂默认算就够判断“会不会响”），
 //   或者改之前服务器上的 remind_at / snooze_at 还会响（core 的 rowRemindPending）
+import { str } from '../../../../shared/core/field.ts';
 import { ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME } from '../../../../shared/logic/anniv/keys.ts';
 import { daysIn, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
@@ -43,7 +44,6 @@ export interface AnnivForm {
 type RowLike = Readonly<Record<string, unknown>>;
 
 const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** 提前天数数组 ↔ 表单里的字符串：去重、只留 0～60 的整数、从大到小、最多 4 个；一个都没有回 null */
 /**

@@ -4,6 +4,7 @@
 // 记“这份是当前账号读来的”，退出、换账号时 clearAllCollections 把它清空，这里收到通知就丢掉内存、下次重新读（同 readonlyIds 借集合）。
 // 什么时候记：打开了一条结果（用户真的找到了要的东西），不是每打一个字都记。日志不记查询文字（A23），只在 meta 里存原文，和本机缓存里的标题同一级别。
 // 写法同 todos/hooks/useSubtasks.ts 的收起状态（模块里一份、订阅、读写失败不提示）。纯 TS：不准 import React（A1）
+import { createSignal } from '../../../../shared/core/signal.ts';
 import { getBoot } from '../../../core/boot.ts';
 import { collection } from '../../../core/store.ts';
 
@@ -12,10 +13,8 @@ const META_KEY = 'ui.find_recent';
 
 let recent: readonly string[] = [];
 let loading: Promise<void> | null = null;
-const subs = new Set<() => void>();
-const emit = (): void => {
-  for (const fn of [...subs]) fn();
-};
+const subs = createSignal();
+const emit = (): void => subs.emit();
 const owned = collection<{ id: string }>('ui:find_recent');
 const own = (): void => {
   if (owned.getSnapshot().length === 0) owned.upsert([{ id: 'mine' }]);
@@ -73,12 +72,7 @@ export function addRecent(q: string): void {
 }
 
 export const recentSnapshot = (): readonly string[] => recent;
-export function subscribeRecent(fn: () => void): () => void {
-  subs.add(fn);
-  return () => {
-    subs.delete(fn);
-  };
-}
+export const subscribeRecent = subs.subscribe;
 
 /** 测试用 */
 export function resetRecentForTest(): void {

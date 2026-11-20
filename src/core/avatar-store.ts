@@ -6,6 +6,7 @@
 // • 取不到不记，下次再 load 照样再取；取回来时这个 avatar_id 已经不在 live 里（取的时候换了头像）不留、不存（整块评审第 5 条）
 // • 地址有增减就通知 subscribe 的订阅者（kit 的 useMeAvatar 跟着重画）
 // • 不带 zod，本身也只按需加载（纪念日经 features/anniv/data/avatar-view.ts，我的头像经 core/me-avatar.ts）
+import { createSignal } from '../../shared/core/signal.ts';
 import { appPainted } from '../platform/root-paint.ts';
 import { AVATAR_CACHE_MAX, dropCachedAvatar, readCachedAvatar, type AvatarCacheSpec } from './avatar-cache.ts';
 import { createBlobUrls } from './blob-urls.ts';
@@ -38,11 +39,9 @@ const idOfPath = (path: string): string => path.slice(path.lastIndexOf('/') + 1,
 const view = (): Promise<typeof ViewNs> => import('./avatar-view.ts');
 
 export function createAvatarStore<P extends unknown[]>(s: AvatarStoreSpec<P>): AvatarStore<P> {
-  const subs = new Set<() => void>();
+  const subs = createSignal();
   let watching = false;
-  const ping = (): void => {
-    for (const fn of [...subs]) fn();
-  };
+  const ping = subs.emit;
   // avatar_id → blob: 地址：和随手记插图同一份地址表（core/blob-urls.ts；超上限 revoke 最早的，有增减就通知订阅者）
   const urls = createBlobUrls({ max: AVATAR_CACHE_MAX, onChange: ping });
   const keep = urls.keep;
@@ -89,8 +88,7 @@ export function createAvatarStore<P extends unknown[]>(s: AvatarStoreSpec<P>): A
     },
     subscribe: (fn) => {
       watch();
-      subs.add(fn);
-      return () => void subs.delete(fn);
+      return subs.subscribe(fn);
     },
     prune,
   };

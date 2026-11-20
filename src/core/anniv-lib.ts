@@ -60,8 +60,5 @@ export const HUANGLI_LIB: LazyLib<HuangliLib> = lazyLib('huangli', () => import(
 /** 加载推算和农历一次；失败了下次再调会重试 */
 export const loadAnnivLib = ANNIV_LIB.load;
 
-/** 推算和农历加载好了没有 */
-export const annivLibReady = ANNIV_LIB.ready;
-
 /** 已加载的推算和农历；还没加载好就调是程序错 */
 export const annivLib = ANNIV_LIB.get;

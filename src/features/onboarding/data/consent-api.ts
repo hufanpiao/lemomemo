@@ -14,6 +14,7 @@
 // • revoked、disabled 带着这次请求用的会话的 session_id（sid；接手清单 K6-sugg4 ①）：record 一开头（发请求前）同步读本机会话的 session_id，
 //   随错误带回；离开本机时只删这个会话（consent-exit.ts），回包前别的标签页写进来的新会话不删
 import { readSessionId } from '../../../platform/session.ts';
+import { str } from '../../../../shared/core/field.ts';
 import { withTimeout } from '../../../platform/exit-basics.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 
@@ -76,7 +77,6 @@ interface ErrLike {
   message?: unknown;
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const FETCH_FAILED = /failed to fetch|load failed|networkerror|network request failed|network error/i;
 
 /** supabase-js 的 PostgrestError、AuthError、抛出的异常 → 界面的错误 */

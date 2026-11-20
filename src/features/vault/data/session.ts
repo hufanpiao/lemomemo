@@ -36,6 +36,7 @@ import {
   vaultCredentialsResponse, vaultListResponse, vaultOkResponse, vaultPurgeResponse, vaultStatusResponse, vaultTokenResponse, vaultUnlockResponse,
   webauthnOptionsResponse, type VaultRequest,
 } from '../../../../shared/schema/vault.ts';
+import { createSignal } from '../../../../shared/core/signal.ts';
 import { vaultFileListResponse, vaultFileOkResponse, vaultFilePreviewResponse, vaultFileUploadResponse, type VaultFileMeta } from '../../../../shared/schema/vault-file.ts';
 import { setVaultToken } from '../../../core/vault-token.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -140,7 +141,7 @@ export function createVaultSession(d: VaultSessionDeps) {
   /** prepareFace 提前要的解锁挑战（at：本机开始要的时刻） */
   let faceOpt: { at: number; p: Promise<FaceOpt> } | null = null;
   const options = (purpose: 'register' | 'unlock'): Promise<FaceOpt> => d.api.call({ action: 'webauthn_options', purpose }, null, webauthnOptionsResponse);
-  const listeners = new Set<() => void>();
+  const listeners = createSignal();
   const store = createVaultStore();
   const queue = createVaultQueue({
     store,
@@ -164,7 +165,7 @@ export function createVaultSession(d: VaultSessionDeps) {
     if (was.phase !== state.phase || was.waiting !== state.waiting || was.relocked !== state.relocked) {
       rlog(`vault state ${state.phase}${state.waiting ? ' waiting' : ''}${state.relocked ? ' relock' : ''}${state.lastError ? ` err=${state.lastError}` : ''}`);
     }
-    for (const fn of [...listeners]) fn();
+    listeners.emit();
   };
 
   const takeToken = (v: unknown): void => {
@@ -470,12 +471,7 @@ export function createVaultSession(d: VaultSessionDeps) {
 
   return {
     get: (): VaultState => state,
-    subscribe(fn: () => void): () => void {
-      listeners.add(fn);
-      return () => {
-        listeners.delete(fn);
-      };
-    },
+    subscribe: listeners.subscribe,
     hasToken: (): boolean => token !== null,
     refreshStatus,
     lock: (): void => lock({}, 'lock'),

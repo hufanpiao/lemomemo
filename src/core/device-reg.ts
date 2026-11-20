@@ -18,6 +18,7 @@
 // • 只在主页（拿到同步锁的页面）调；另外整段包在 deps.lock 里（navigator.locks 'lemo-device-reg:<user_id>'，K4 审查 4），
 //   主页交接的空档里两个页面也不会各插一行；没有 locks 时，生成新 id 之前再读一次 meta 兜底
 // 纯 TS：不准 import React 和任何功能（A1）；不准直接联网（A12：网络经注入的 transport）
+import { strOrNull as str } from '../../shared/core/field.ts';
 import { compareVersions, parseVersion } from '../../shared/core/version.ts';
 import type { Cache, DeviceMeta } from './cache.ts';
 import type { NetResult, SyncLog, SyncTransport } from './sync/types.ts';
@@ -59,7 +60,6 @@ export interface DeviceRegistrar {
   invalidate(id: string): Promise<void>;
 }
 
-const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 /** 服务器上本会话、没软删除的那一行的 id；没有为 null；拉取失败为 undefined（失败交给 onFail 记日志） */
 async function lookupRow(

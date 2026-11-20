@@ -1,5 +1,6 @@
 // 同步引擎对外的样子（engine.ts 用）：Sync 接口、状态和事件的订阅（createHub）、本机库不可用时的空引擎（inertSync）
 // 纯 TS：不准 import React 和任何功能（A1）
+import { createSignal } from '../../../shared/core/signal.ts';
 import type { SyncEvent, SyncState } from './types.ts';
 
 export interface Sync {
@@ -49,27 +50,19 @@ export interface Hub extends Pick<Sync, 'getState' | 'subscribe' | 'onEvent'> {
 /** 同步状态和事件的订阅（界面的“正在同步…”、冲突提示）；状态不变时引用不变 */
 export function createHub(): Hub {
   let state: SyncState = { syncing: false, realtime: 'down', lastPullAt: null, stopped: false };
-  const listeners = new Set<() => void>();
-  const eventListeners = new Set<(e: SyncEvent) => void>();
-  const add = <T>(set: Set<T>, x: T): (() => void) => {
-    set.add(x);
-    return () => {
-      set.delete(x);
-    };
-  };
+  const listeners = createSignal();
+  const eventListeners = createSignal<[SyncEvent]>();
   const setState = (patch: Partial<SyncState>): void => {
     if ((Object.keys(patch) as (keyof SyncState)[]).every((k) => patch[k] === state[k])) return;
     state = { ...state, ...patch };
-    for (const l of [...listeners]) l();
+    listeners.emit();
   };
   return {
     getState: () => state,
-    subscribe: (l) => add(listeners, l),
-    onEvent: (fn) => add(eventListeners, fn),
+    subscribe: listeners.subscribe,
+    onEvent: eventListeners.subscribe,
     setState,
-    emit(e) {
-      for (const l of [...eventListeners]) l(e);
-    },
+    emit: eventListeners.emit,
     async busy(task) {
       setState({ syncing: true });
       try {
