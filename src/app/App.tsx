@@ -2,20 +2,8 @@
 // • 提醒（B2 FA-4，REMIND-wiring）：RemindHost 挂一份（横幅、按钮条、提醒引擎），在页面的 Suspense 和错误边界外面、自己一个 Suspense，
 //   提醒的分包没到、出错都不影响页面；key 用登录会话的 user_id（L8）：换账号就整个重新挂载，
 //   引擎卸载时清掉模块级的“本次打开响过的”“本次会话只在本机处理过的”，不把上个账号的带过来。没登录（测试里没启动）不挂
-// • 首屏减重 ⑥：首屏画完以后、浏览器空闲时才挂 RemindHost（约 14 KB 提醒代码不在首屏路径上）；冷启动就是整页提醒（点系统通知进来）时立刻挂。
-//   “首屏画完”和同步、supabase-js 用同一套判断：platform/root-paint.ts 的 afterAppPainted（REMIND-arm-firstpaint，原来 App 自己放在
-//   页面 Suspense 里的 ArmReminders 去掉了）。root-paint 的“画完”= 第一个页面 <main> 出现再过一帧；它自己的兜底
-//   （render 后 startAppPaintLimit、挂上起 15 秒长兜底）到了也算画完。入口没挂 watchRoot 时（测试、别的入口）当场算画完。
-//   since（从哪一刻起到点的进横幅）在 App 第一次渲染时记下，打开到挂上之间到点的照样响，只是晚响这一会儿：
-//   首屏画完 + whenIdle（requestIdleCallback 最多 2 秒，没有时 300 ms）+ 下载 RemindHost 分包；后台标签页的定时器还会被节流。
-//   提醒自己的硬上限 REMIND_MAX_WAIT_MS 保留（5 秒，从 App 第一次渲染算起，和 root-paint 的兜底谁先到算谁）：比 root-paint 告知页关口那段
-//   （render 后 5 + 1 秒）更早，页面一直不出来（分包挂着、整屏提示）也最晚这时挂上
-//   （这时页面可能还是空白，到点的横幅会先画出来、启动画面随之收起；比一直不响好，接线审查⑥ L3 接受的取舍）
-// • 告知页之后（REMIND-arm-low L1）：告知页 ConsentPage 的根也是 <main>，用户点完同意 App 才第一次渲染，这时 root-paint 早已算画完。
-//   做法二选一里选了“只认 App 挂上以后出现的功能页”：App 第一次渲染时 root-paint 已经算画完（告知页之后；入口没挂 watchRoot；
-//   冷启动慢过 15 秒长兜底），就另外等 App 自己的页面 <main> 出现，再等空闲。理由：只写注释的话，提醒分包会和今天页分包抢下载，
-//   今天页还没画出来时到点的按钮条可能先出现在空白屏上（启动画面早已收起）；改在 App 里等 root-paint 的 whenPage，不动首屏判断和告知页，
-//   同步、supabase-js 的时机不变。页面一直不出来照样有 5 秒硬上限
+// • 首屏减重 ⑥：RemindHost（约 14 KB）和冷启动预加载三页等 useAfterFirstPage（首屏画完、App 自己的页面显示着、浏览器空闲，最晚 5 秒）；
+//   冷启动就是整页提醒（点系统通知进来）时立刻挂。since 在 App 第一次渲染时记下，打开到挂上之间到点的照样响，只是晚响这一会儿
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { getBoot, type BootResult } from '../core/boot.ts';
 import { RemindHost } from '../features/reminders/index.ts';
@@ -26,7 +14,7 @@ import { remindQueue, setRemindDown } from '../kit/state/remind-queue.ts';
 import { clock } from '../platform/clock.ts';
 import { JS_ERROR_ACT } from '../platform/env.ts';
 import { logEvent } from '../../shared/core/log-bus.ts';
-import { afterAppPainted, isAppPainted, pageShown, whenPage } from '../platform/root-paint.ts';
+import { afterAppPainted } from '../platform/root-paint.ts';
 import { whenIdle } from '../platform/session.ts';
 import { rlog } from '../platform/run-log-api.ts';
 import { reloadPage } from '../platform/sw-register.ts';
@@ -34,7 +22,7 @@ import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { bannerKind } from './banner-kind.ts';
 import { featureRoutes, offRoutes, preloadPages, warmRoute, type FeatureRoute } from './features.ts';
 import { goHref, hrefOf, navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from './router.ts';
-import { FADE_WAIT_MS, growSwap, shownMain, waitDom } from '../motion/index.ts';
+import { FADE_WAIT_MS, growSwap, whenMainShown } from '../motion/index.ts';
 import { PagePending } from '../kit/components/PagePending.tsx';
 import { tabBarFor, tabDir } from './tab-of.ts';
 import { PlusSlot, plusHold, preloadPlus } from './plus-slot.tsx';
@@ -46,11 +34,6 @@ import { calendarSel, notesInput, setNewItemDay, setNewItemTitle } from '../kit/
 const devRoutes: readonly FeatureRoute[] = import.meta.env.MODE === 'production'
   ? []
   : [{ name: 'dev-csp', Page: lazy(() => import('./dev/CspLab.tsx')) }];
-
-/** 页面的 <main> 显示出来就调 fn（已经显示就当场调）；分包没到时看着 body 等，最多 FADE_WAIT_MS 也调（同换页动画等新页的那个数）；返回取消 */
-function whenPageShown(fn: () => void): () => void {
-  return waitDom(() => shownMain() !== null, FADE_WAIT_MS, fn);
-}
 
 function ErrorView() {
   const t = useT();
@@ -66,12 +49,12 @@ function ErrorView() {
 /**
  * 底栏（B2 FA-7）：显示在哪些页、选中哪个、“＋”新建什么见 tab-of.ts。
  * 在页面的 Suspense 外面（设计动效评审 D1）：切到分包没到的页时页面被藏起来，底栏不跟着藏、液滴照样滑。
- * 冷启动和页面一起出：第一个页面（main）出现以前不画，出现以后就一直画（不靠和页面共用 Suspense）
+ * 冷启动和页面一起出：App 自己的第一个页面（显示着的 main）出现以前不画，出现以后就一直画（不靠和页面共用 Suspense）
  */
 function TabBar({ route, sub }: { route: RouteName; sub: string }) {
   const t = useT();
-  const [paged, setPaged] = useState(pageShown);
-  useEffect(() => (paged ? undefined : whenPage(() => setPaged(true))), [paged]);
+  const [paged, setPaged] = useState(false);
+  useEffect(() => (paged ? undefined : whenMainShown(() => setPaged(true))), [paged]);
   // 视口监听（platform/viewport.ts，不在首屏，首屏画完以后再下载）：写根节点的 --kb、data-kbo、--vh-gap、data-kbhide，
   // 键盘弹着时底栏和“＋”按 data-kbhide 由样式藏起（FA-7 第 3 项）；同一个分包里顺带拦 iOS 整页双指缩放
   useEffect(() => {
@@ -117,7 +100,8 @@ function TabBar({ route, sub }: { route: RouteName; sub: string }) {
   // 新页分包没到时 Suspense 把旧页藏起来、新页还没出来，这时先收打字条，屏幕上就是一段空白或原页面；分包已到时当场就收，和原来一样
   // 打字条“详细”正在长成新建页（负责人 11-18 选 A）：长完由 expand 收，这里不收
   const growing = useRef(false);
-  useEffect(() => whenPageShown(() => !growing.current && setPlus(null)), [route]);
+  // 分包没到时最多等 FADE_WAIT_MS（同换页动画等新页的那个数）也收
+  useEffect(() => whenMainShown(() => !growing.current && setPlus(null), FADE_WAIT_MS), [route]);
   const bar = tabBarFor(route, sub);
   // 日历页：带上日历上选中的那天（日历页登记的 calendarSel，kit/state/new-item.ts）
   const open = (): void => {
@@ -137,7 +121,7 @@ function TabBar({ route, sub }: { route: RouteName; sub: string }) {
     setPlus({ day: bar?.tab === 'calendar' ? (calendarSel.day?.() ?? null) : null, n: opens.current });
   };
   // 展开编辑换到没有底栏的新建页：打字条挂在这里，原来随底栏一起当场卸掉（e2e 逐帧：换路由那一帧起 16～18 帧既没打字条、也没新建页）。
-  // 打字条还开着就沿用上一页的底栏设置只留打字条，等 whenPageShown 收起；底栏本身照旧不画
+  // 打字条还开着就沿用上一页的底栏设置只留打字条，等新页显示出来收起；底栏本身照旧不画
   const lastBar = useRef(bar);
   useEffect(() => {
     if (bar) lastBar.current = bar;
@@ -306,6 +290,32 @@ export const remindMaxWait = {
   stop: (id: ReturnType<typeof setTimeout>): void => clearTimeout(id),
 };
 
+/**
+ * 首屏画完（root-paint）、App 自己的页面显示着（告知页之后 root-paint 早已算画完，要等 App 自己的页，REMIND-arm-low L1）、
+ * 浏览器空闲（whenIdle）以后为真；页面一直不出来（分包挂着）最晚 REMIND_MAX_WAIT_MS 也为真（这时页面可能还空白、到点的横幅先画出来，
+ * 比一直不响好，接线审查⑥ L3）。now 为真当场为真；为真以后不再变回。依赖里没有路由：换页不重新计时（接线审查⑥ N1）
+ */
+function useAfterFirstPage(now: boolean): boolean {
+  const [ready, setReady] = useState(now);
+  useEffect(() => {
+    if (ready) return;
+    // afterAppPainted、whenIdle 没有取消：live 挡住卸载以后的回调（REMIND-arm-low L3）
+    let live = true;
+    const go = (): void => void (live && setReady(true));
+    const cap = remindMaxWait.start(go);
+    let stopPage = (): void => undefined;
+    afterAppPainted(() => {
+      if (live) stopPage = whenMainShown(() => whenIdle(go));
+    });
+    return () => {
+      live = false;
+      remindMaxWait.stop(cap);
+      stopPage();
+    };
+  }, [ready]);
+  return ready;
+}
+
 const allRoutes: readonly FeatureRoute[] = [...featureRoutes, ...devRoutes];
 /** 页面归属：samePageAs 指向的那条，没写就是自己 */
 const pageOf = (name: RouteName): RouteName => allRoutes.find((r) => r.name === name)?.samePageAs ?? name;
@@ -319,39 +329,9 @@ setTabSwitch(tabDir);
 
 export function App() {
   const route = useRoute();
-  // 提醒什么时候挂（首屏减重 ⑥）：冷启动就是整页提醒时立刻挂；否则等首屏画完（root-paint）、浏览器空闲。挂上以后不再收回
-  const [remindReady, setRemindReady] = useState(() => route.name === 'remind');
-  const [armRemind] = useState(() => () => setRemindReady(true));
-  // App 第一次渲染时 root-paint 已经算画完（告知页之后等，见头注释 L1）：还要等 App 自己的功能页出现
-  const [needOwnPage] = useState(isAppPainted);
-  // 硬上限：页面一直不提交（分包挂着不成功也不失败）也最晚 REMIND_MAX_WAIT_MS 挂上
-  useEffect(() => {
-    if (remindReady) return;
-    // 依赖里没有路由：换页不重新计时（接线审查⑥ N1）
-    const t = remindMaxWait.start(armRemind);
-    return () => remindMaxWait.stop(t);
-  }, [remindReady, armRemind]);
-  // 首屏画完再等空闲（REMIND-arm-firstpaint）：afterAppPainted、whenIdle 都没有取消，用 cancelled 挡住卸载、已经挂上以后的回调
-  // （REMIND-arm-low L3 有测试守着）；等 App 自己的功能页那一段（L1）可以取消，卸载时一起停掉
-  useEffect(() => {
-    if (remindReady) return;
-    let cancelled = false;
-    let stopOwn = (): void => undefined;
-    afterAppPainted(() => {
-      if (cancelled) return;
-      const idle = (): void => whenIdle(() => {
-        if (!cancelled) armRemind();
-      });
-      if (needOwnPage) stopOwn = whenPage(idle);
-      else idle();
-    });
-    return () => {
-      cancelled = true;
-      stopOwn();
-    };
-  }, [remindReady, armRemind, needOwnPage]);
-  // 冷启动：和提醒同一个时机（首屏画完、浏览器空闲，最晚硬上限）后台先下载日历、待办、随手记三页（负责人 11-18“不用点进去的时候再加载，减少等待”）；
-  // 只排一次等空闲，不另起一套判断
+  // 提醒什么时候挂（首屏减重 ⑥）：冷启动就是整页提醒时立刻挂。挂上以后不再收回
+  const remindReady = useAfterFirstPage(route.name === 'remind');
+  // 冷启动：和提醒同一个时机后台先下载日历、待办、随手记三页（负责人 11-18“不用点进去的时候再加载，减少等待”）；不另起一套判断
   const preloaded = useRef(false);
   useEffect(() => {
     if (!remindReady || preloaded.current) return;

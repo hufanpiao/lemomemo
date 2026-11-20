@@ -68,7 +68,7 @@ describe('接线', () => {
 
   it('5 秒兜底和 #root 画出东西这两处直接收启动画面，不等诊断', () => {
     expect(code).toMatch(/^hideSplashAfter\(hideSplash\);$/m);
-    expect(code).toContain('whenContent(() => void nextFrame(() => void hideSplash()));');
+    expect(code).toContain('whenContent(el, () => void nextFrame(() => void hideSplash()));');
     // #root 画出东西那一处，加上 start() 里冷启动就进退出屏的两处（还没挂 #root）
     expect(code.match(/hideSplash\(\)/g)?.length).toBe(3);
   });

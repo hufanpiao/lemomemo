@@ -6,7 +6,7 @@
 //   分包还没加载好、关口还没挂上时由这里到点放行；关口挂上（onStart）以后由关口按剩下的时间自己计（startedAt + limitMs），
 //   已经显示了告知页就不再被这里的计时打断。这段空白由启动画面盖住（R-251、R-254，index.html 的 #lemo-splash）；
 //   启动画面只是把空白换成画面，不封顶等待时间，封顶仍靠这里的计时
-// • 启动画面的收起：画进 #root 的（告知页、App、整屏提示、崩溃兜底页）都只靠 main.tsx 经 root-paint.ts 的 whenContent——#root 里真画出东西的下一帧才收
+// • 启动画面的收起：画进 #root 的（告知页、App、整屏提示、崩溃兜底页）都只靠 main.tsx 经 first-paint.ts 的 whenContent——#root 里真画出东西的下一帧才收
 //   （App 的页面懒加载，分包没到时 #root 是空的，R-251 要盖住的正是这段）；只有另挂在 body 下的“库被挡住”整屏提示旁边放 SplashRelease。最晚 5 秒见 main.tsx
 // • 离线：直接画 App（关口问不了服务器，读失败本来也放行）
 // • 最外层（withCrashFallback，K6-sugg3 ⑥）：main.tsx 渲染的根整个包一层错误边界，App 顶层出错显示静态的“哎呀，卡住了 · 刷新”，不白屏
@@ -25,7 +25,7 @@ import { CacheTooNewFallback } from './CacheTooNewFallback.tsx';
 import type { CacheTooNewScreen as TooNewScreen } from './CacheTooNewScreen.tsx';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { nextFrame } from '../motion/index.ts';
-import { whenContent } from '../platform/root-paint.ts';
+import { whenContent } from './first-paint.ts';
 import { hideSplash } from '../platform/splash.ts';
 import { SW_REGISTER_WAIT_MS } from '../platform/sw-register.ts';
 
@@ -117,7 +117,7 @@ export interface WatchBlockedOptions {
  * （文案见 update.blocked.title）。这时 coldStart 还在等库打开，#root 还没 createRoot，所以另挂一个容器（body 下的
  * #lemo-blocked）和它自己的根；画出来的下一帧收起启动画面（SplashRelease）。
  * blocked 变回 false（库打开了）以后不马上卸（BANNER-sugg ①：启动画面已经收起，马上卸会空白一小段）：
- * 等 #root 画出东西（root-paint.ts 的 whenContent）的下一帧再卸、删容器；最多等 BLOCKED_RELEASE_MAX_MS。等的时候又 blocked 了就接着显示。
+ * 等 #root 画出东西（first-paint.ts 的 whenContent）的下一帧再卸、删容器；最多等 BLOCKED_RELEASE_MAX_MS。等的时候又 blocked 了就接着显示。
  * main.tsx 经 coldStart 的 onUpgradeCenter 调；返回取消订阅（同时马上卸掉）
  */
 export function watchCacheBlocked(upgrade: UpgradeCenter, opts: WatchBlockedOptions = {}): () => void {
@@ -144,16 +144,16 @@ export function watchCacheBlocked(upgrade: UpgradeCenter, opts: WatchBlockedOpti
     if (cancelRelease) return;
     let cancelFrame: (() => void) | null = null;
     let stopWait = (): void => undefined;
-    const timer = setTimeout(unmount, maxMs);
     // 先登记取消：#root 已有内容、帧又是同步的时候，下面当场就会 unmount
     cancelRelease = () => {
-      clearTimeout(timer);
       stopWait();
       cancelFrame?.();
     };
-    stopWait = whenContent(() => {
-      cancelFrame = frame(unmount);
-    });
+    // 没有 #root（测试）时看 body
+    stopWait = whenContent(doc.getElementById('root') ?? doc.body, (ok) => {
+      if (ok) cancelFrame = frame(unmount);
+      else unmount();
+    }, maxMs);
   };
   const sync = (): void => {
     const blocked = upgrade.getState().blocked;

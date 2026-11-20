@@ -1,9 +1,9 @@
-// 启动画面的收起接线（R-251、R-254；main.tsx 的 hideSplashAfter、经 root-paint.ts 的 whenContent 收起，两处都直接收、不等诊断启动件）：
+// 启动画面的收起接线（R-251、R-254；main.tsx 的 hideSplashAfter、经 first-paint.ts 的 whenContent 收起，两处都直接收、不等诊断启动件）：
 // • 关口还在问（什么都不画）：启动画面继续盖着
 // • 关口放行、离线画 App：App 的页面还在懒加载（Suspense fallback 为 null，#root 是空的）时不收，页面画出来以后才收（复查必改）
 // • 崩溃兜底页 AppCrashFallback、整屏提示（version_too_new）画进 #root：也收起，不盖在上面
 // • main.tsx 里确实接了 5 秒兜底和 #root 首次绘制
-// 按 main.tsx 的做法挂：render 的容器当 #root，先 watchRoot + whenContent；App 换成“懒加载页面”的桩，nextFrame 换成立即执行
+// 按 main.tsx 的做法挂：render 的容器当 #root，先 watchFirstPaint + whenContent；App 换成“懒加载页面”的桩，nextFrame 换成立即执行
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -59,7 +59,8 @@ vi.mock('../../features/onboarding/index.ts', async () => {
   return { ConsentGate };
 });
 
-vi.mock('../../motion/index.ts', () => ({
+vi.mock('../../motion/index.ts', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   nextFrame: (cb: () => void) => {
     cb();
     return () => undefined;
@@ -68,7 +69,8 @@ vi.mock('../../motion/index.ts', () => ({
 
 import { GatedApp, startRoot, withCrashFallback } from '../root.tsx';
 import { hideSplash, SPLASH_ID } from '../../platform/splash.ts';
-import { resetRootPaintForTest, watchRoot, whenContent } from '../../platform/root-paint.ts';
+import { resetRootPaintForTest } from '../../platform/root-paint.ts';
+import { watchFirstPaint, whenContent } from '../first-paint.ts';
 
 const splash = () => document.getElementById(SPLASH_ID);
 const leaving = () => splash()?.classList.contains('is-leaving') === true;
@@ -77,12 +79,12 @@ const now = (cb: () => void) => {
   return () => undefined;
 };
 
-/** 照 main.tsx：#root 先挂 watchRoot、whenContent 收启动画面，再渲染 */
+/** 照 main.tsx：先挂 watchFirstPaint、whenContent(#root) 收启动画面，再渲染 */
 function mount(ui: React.ReactElement) {
   const root = document.createElement('div');
   document.body.appendChild(root);
-  watchRoot(root, now);
-  whenContent(() => void now(() => void hideSplash()));
+  watchFirstPaint(now);
+  whenContent(root, () => void now(() => void hideSplash()));
   return render(ui, { container: root });
 }
 
@@ -166,9 +168,9 @@ describe('main.tsx 的接线（按源码文字核对，main.tsx 一 import 就�
     expect(main).toMatch(/^hideSplashAfter\(hideSplash\);$/m);
     expect(main.indexOf('hideSplashAfter(hideSplash);')).toBeLessThan(main.indexOf('async function start('));
   });
-  it('#root 第一次画出东西的下一帧收起：在 render 之前、watchRoot 之后挂上，用 motion 的 nextFrame', () => {
-    const at = main.indexOf('whenContent(() => void nextFrame(() => void hideSplash()));');
-    expect(at).toBeGreaterThan(main.indexOf('watchRoot(el, nextFrame);'));
+  it('#root 第一次画出东西的下一帧收起：在 render 之前、watchFirstPaint 之后挂上，用 motion 的 nextFrame', () => {
+    const at = main.indexOf('whenContent(el, () => void nextFrame(() => void hideSplash()));');
+    expect(at).toBeGreaterThan(main.indexOf('watchFirstPaint(nextFrame);'));
     expect(at).toBeLessThan(main.indexOf('createRoot(el).render('));
   });
 });

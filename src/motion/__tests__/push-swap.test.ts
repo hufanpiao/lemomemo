@@ -19,7 +19,6 @@ interface FakeAnim {
   finish(): void;
 }
 let anims: FakeAnim[] = [];
-const realRects = Element.prototype.getClientRects;
 const DRAWER = bezierCss(ease.drawer);
 
 /** 页面：body > #root > main（+ 底栏 nav、“＋”按钮，都打 data-swap-bar） */
@@ -59,11 +58,7 @@ beforeEach(() => {
     anims.push(a);
     return a as unknown as Animation;
   } as unknown as Element['animate'];
-  // jsdom 不排版：在文档里、自己和祖先都没有内联 display: none 就算显示着
-  Element.prototype.getClientRects = function (this: Element) {
-    const hidden = !this.isConnected || this.closest('[style*="display: none"]') !== null;
-    return (hidden ? [] : [new DOMRect()]) as unknown as DOMRectList;
-  };
+  // “显示着”的口径：jsdom 里由 tests/fakes/jsdom-layout-setup.ts 补（在文档里、自己和祖先都没有内联 display: none）
   document.body.replaceChildren();
   root = Object.assign(document.createElement('div'), { id: 'root' });
   document.body.append(root);
@@ -74,7 +69,6 @@ afterEach(() => {
   cancelFade();
   vi.useRealTimers();
   delete (Element.prototype as { animate?: unknown }).animate;
-  Element.prototype.getClientRects = realRects;
 });
 
 const on = (el: Element | null | undefined): FakeAnim | undefined => anims.find((a) => a.el === el);

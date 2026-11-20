@@ -194,17 +194,23 @@ describe('App 挂提醒', () => {
     await screen.findByTestId('fake-host', {}, { timeout: 10_000 });
   });
 
-  it('REMIND-arm-firstpaint：root-paint 自己的时限（render 后 startAppPaintLimit）到了也算画完，排等空闲、空闲后挂', async () => {
+  it('REMIND-arm-firstpaint：root-paint 自己的时限（render 后 startAppPaintLimit）到了算画完，但还要等 App 的页面显示出来才排等空闲（页面一直不出来靠 5 秒硬上限）', async () => {
     st.userId = 'user-a';
     setTodayPage('pending');
     render(<App />);
     startAppPaintLimit(20);
+    await act(async () => {
+      await new Promise<void>((r) => setTimeout(r, 40));
+    });
     await settle();
+    expect(idleQ).toHaveLength(0);
+    await act(async () => {
+      st.releasePage();
+    });
+    await screen.findByRole('main', {}, { timeout: 10_000 });
     await waitFor(() => expect(idleQ).toHaveLength(1), { timeout: 10_000 });
-    // 页面还是没出来，那一帧也没排
-    expect(screen.queryByRole('main')).toBeNull();
+    // 时限已经算画完了，不用再等那一帧
     expect(frameQ).toHaveLength(0);
-    expect(screen.queryByTestId('fake-host')).toBeNull();
     runIdle();
     await screen.findByTestId('fake-host', {}, { timeout: 10_000 });
   });

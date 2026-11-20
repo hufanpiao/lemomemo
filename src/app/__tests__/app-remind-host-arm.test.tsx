@@ -1,4 +1,4 @@
-// App 挂提醒（续）：REMIND-arm-low L1（入口没挂 watchRoot、告知页之后要等 App 自己的功能页）、L3（卸载后不再排等空闲，拦 Y4）；
+// App 挂提醒（续）：REMIND-arm-low L1（入口没挂首屏判断、告知页之后要等 App 自己的功能页）、L3（卸载后不再排等空闲，拦 Y4）；
 // 接线审查⑥ L3 硬上限 REMIND_MAX_WAIT_MS（页面一直不提交也挂上、空闲先到取消定时器、切页不重新计时）
 // 替身和复位在 app-remind-host-fixture.tsx（必须第一个 import）
 import { App, CAP_ID, REMIND_MAX_WAIT_MS, capQ, frameQ, idleQ, life, pageThenIdle, resetRootPaintForTest, runCap, runFrame, runIdle, setTodayPage, settle, st, stopWatch, stopped } from './app-remind-host-fixture.tsx';
@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.setConfig({ testTimeout: 15_000 });
 
 describe('App 挂提醒：告知页之后、卸载、硬上限（REMIND-arm-low、接线审查⑥ L3）', () => {
-  it('REMIND-arm-firstpaint / arm-low L1：入口没挂 watchRoot（测试、别的入口）时当场算画完，但还要等 App 自己的功能页出来才排等空闲', async () => {
+  it('REMIND-arm-firstpaint / arm-low L1：入口没挂 watchFirstPaint（测试、别的入口）时当场算画完，但还要等 App 自己的功能页出来才排等空闲', async () => {
     stopWatch();
     resetRootPaintForTest();
     st.userId = 'user-a';

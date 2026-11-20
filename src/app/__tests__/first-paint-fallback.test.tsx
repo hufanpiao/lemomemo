@@ -1,10 +1,12 @@
 // FIRSTPAINT-nofeature 的 App 部分（前端 B 11-04 把 ErrorView、FeatureOffView 的根改成 main[data-feature="error"] / main[data-feature="off"]）：
-// 冷启动落在出错页、功能关掉页时，首屏判断（watchRoot）照常在页面出来后一帧算画完，不用等 15 秒长兜底
+// 冷启动落在出错页、功能关掉页时，首屏判断（watchFirstPaint）照常在页面出来后一帧算画完，不用等 15 秒长兜底
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { lazy, type ComponentType, type ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createUpgradeCenter } from '../../core/upgrade.ts';
-import { afterAppPainted, APP_PAGE_SELECTOR, resetRootPaintForTest, watchRoot } from '../../platform/root-paint.ts';
+import { PAGE_SELECTOR } from '../../motion/index.ts';
+import { afterAppPainted, resetRootPaintForTest } from '../../platform/root-paint.ts';
+import { watchFirstPaint } from '../first-paint.ts';
 // 横滑切页在首屏画完以后才懒加载（App.tsx）：慢机器上测试收尾以后才去下，环境已拆掉报 EnvironmentTeardownError（CI 778139cf unit 洛杉矶）；这里不测它，换成空的
 vi.mock('../tab-swipe.ts', () => ({ installTabSwipeOnce: () => undefined, installTopLock: () => undefined }));
 
@@ -44,7 +46,7 @@ async function renderWatched(before?: () => Promise<void>): Promise<{ frames: ((
   let painted = false;
   const root = document.createElement('div');
   document.body.append(root);
-  watchRoot(root, (fn) => {
+  watchFirstPaint((fn) => {
     frames.push(fn);
     return () => undefined;
   }, 600_000);
@@ -65,7 +67,7 @@ describe('出错页、功能关掉页也算画完（FIRSTPAINT-nofeature）', ()
     state.off = new Set();
     const { frames, painted } = await renderWatched();
     const err = await screen.findByTestId('app-error', {}, { timeout: 10_000 });
-    expect(err.closest(APP_PAGE_SELECTOR)?.getAttribute('data-feature')).toBe('error');
+    expect(err.closest(PAGE_SELECTOR)?.getAttribute('data-feature')).toBe('error');
     await waitFor(() => expect(frames).toHaveLength(1));
     expect(painted()).toBe(false);
     act(() => frames[0]?.());
@@ -77,7 +79,7 @@ describe('出错页、功能关掉页也算画完（FIRSTPAINT-nofeature）', ()
     state.off = new Set(['today']);
     const { frames, painted } = await renderWatched();
     const off = await screen.findByTestId('feature-off', {}, { timeout: 10_000 });
-    expect(off.closest(APP_PAGE_SELECTOR)?.getAttribute('data-feature')).toBe('off');
+    expect(off.closest(PAGE_SELECTOR)?.getAttribute('data-feature')).toBe('off');
     await waitFor(() => expect(frames).toHaveLength(1));
     expect(painted()).toBe(false);
     act(() => frames[0]?.());
@@ -103,12 +105,12 @@ describe('外壳状态：顶部横幅亮着（同步暂停 + 有新版本）', (
     });
     // 前半段只确认首屏判断没被提前触发：横幅和页面在同一个 Suspense 里，分包没到时横幅也不在，这一段测不到横幅里有没有 main
     // （首屏判断放宽与推送认领核对复审 新 L3）。横幅里有没有 main 靠后半段“到了以后只有页面自己那一个”拦
-    expect(root.querySelectorAll(APP_PAGE_SELECTOR)).toHaveLength(0);
+    expect(root.querySelectorAll(PAGE_SELECTOR)).toHaveLength(0);
     expect(frames).toHaveLength(0);
     await act(async () => release({ default: Today }));
     await screen.findByTestId('update-banner', {}, { timeout: 10_000 });
-    expect(root.querySelectorAll(APP_PAGE_SELECTOR)).toHaveLength(1);
-    expect(root.querySelector(APP_PAGE_SELECTOR)?.getAttribute('data-feature')).toBe('today');
+    expect(root.querySelectorAll(PAGE_SELECTOR)).toHaveLength(1);
+    expect(root.querySelector(PAGE_SELECTOR)?.getAttribute('data-feature')).toBe('today');
     await waitFor(() => expect(frames).toHaveLength(1));
   });
 });
