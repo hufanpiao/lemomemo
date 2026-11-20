@@ -9,6 +9,7 @@
 // • 列名来自网络（不可信）：一律 own 查找（Map / Object.hasOwn），结果行用 Object.fromEntries 建；
 //   Object.prototype 上有的名字（__proto__、constructor、toString……）当不认识的列丢掉
 // 纯 TS：不准 import React 和任何功能（A1）
+import { isUuid } from '../../../shared/core/uuid.ts';
 import { readColsOf, requiredColsOf, roIfPresentOf, UNKNOWN, type EnumValue, type ReadCol } from '../../../shared/schema/rows-read.ts';
 import type { ServerRow } from '../cache.ts';
 import { allTables, type Manifest, type ManifestTable } from '../manifest.ts';
@@ -32,8 +33,6 @@ export interface VaultFlag {
 const COL = '[a-z_][a-z0-9_]*';
 const BOOL_FLAG = new RegExp(`^(${COL})$`);
 const EQ_FLAG = new RegExp(`^(${COL}) = '([^']*)'$`);
-/** logs.item_id、待补拉的 id 都是 uuid 列（数据字典 4.6）：不是这个形状的 id 一律当没有 id */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** 日志的长度上限（logs 表的列不放长串） */
 export const LOG_MAX_FIELDS = 20;
@@ -172,7 +171,8 @@ function dropRow(
 export function readRow(reader: TableReader, raw: unknown): RowOutcome {
   if (!isRecord(raw)) return { ok: false, id: null, code: 'not_object', cols: [] };
   const id = ownGet(raw, 'id');
-  if (typeof id !== 'string' || !UUID_RE.test(id)) return { ok: false, id: null, code: 'no_id', cols: ['id'] };
+  // logs.item_id、待补拉的 id 都是 uuid 列（数据字典 4.6）：不是这个形状的 id 一律当没有 id（大小写都认）
+  if (!isUuid(id, true)) return { ok: false, id: null, code: 'no_id', cols: ['id'] };
 
   // 先按隐私记白名单删列，再校验：隐私记行不认识的明文列连看都不看
   let verdict: VaultVerdict = 'plain';

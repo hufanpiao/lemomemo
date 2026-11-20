@@ -18,6 +18,7 @@
 //   下次换账号启动时由 clearOtherLogQueues 清掉，或同一账号再登录时照常传上去
 // 纯 TS：不准 import React 和任何功能（A1）；网络、localStorage 经注入（A12、A13）；行和结果的类型在 shared
 import type { LogRow, LogUploadResult } from '../../../shared/core/log-row.ts';
+import { isUuid } from '../../../shared/core/uuid.ts';
 
 export type { LogRow, LogUploadResult };
 
@@ -31,8 +32,6 @@ export const LOG_T_SKEW_MS = 86_400_000;
 export const LOG_MAX_RETRIES = 5;
 /** 带 item_id 的 act（数据字典 4.6：outbox_vault_shell_drop、row_unknown 记记录 id，只是 uuid、不含内容；别的 act 一律不带） */
 export const ITEM_ID_ACTS: ReadonlySet<string> = new Set(['outbox_vault_shell_drop', 'row_unknown']);
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** 通道交来的一条日志 */
 export interface LogRecord {
@@ -127,7 +126,7 @@ export function toLogRow(r: LogRecord, now: number): LogRow {
   const fields = clampFields(r.fields);
   if (coll) row.coll = coll;
   if (code) row.code = code;
-  if (r.itemId && ITEM_ID_ACTS.has(r.act) && UUID_RE.test(r.itemId)) row.item_id = r.itemId;
+  if (r.itemId && ITEM_ID_ACTS.has(r.act) && isUuid(r.itemId, true)) row.item_id = r.itemId;
   if (fields) row.fields = fields;
   return row;
 }

@@ -23,6 +23,7 @@
 //   title、body、按键文字里的控制字符（C0、DEL、C1、双向控制符和方向标记、行段分隔符、U+FEFF）换成空格（BE-2 安全审查，见 CONTROL_CHARS）；
 //   title、body 超过 TEXT_MAX（300）字时截断（末尾补 …），不整条拒收（代码审查 S1）；服务器 notify-text 截到各 ≤ 300 字、整份 JSON ≤ 3071 字节（架构 5.3，0.53）
 // 整页提醒的地址（reminderUrl）、tag 只写在 shared/logic/remind-route.ts（架构 0.53），和 platform 的 openReminder 是同一份
+import { isUuid } from '../../shared/core/uuid.ts';
 import { t } from '../../shared/i18n/t-static.ts';
 import { pickLocale, toUiLocale, type UiLocale } from '../../shared/i18n/pick-locale.ts';
 import { isSnoozeMin, type SwPendingAction } from '../../shared/local-db.ts';
@@ -62,7 +63,6 @@ export interface NotificationData extends ItemRef {
 }
 
 const KINDS: ReadonlySet<string> = new Set(['event', 'todo', 'anniv']);
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** 通知标题、正文的上限（字数，按 Unicode 字符计）；超了截断 */
 export const TEXT_MAX = 300;
 /** 负载解不开时那条通知的 tag */
@@ -82,7 +82,6 @@ const TABLE_OF: Record<ReminderKind, SwPendingAction['row_table']> = {
   anniv: 'anniversaries',
 };
 
-const isUuid = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
 const isDueAt = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0;
 const isKind = (v: unknown): v is ReminderKind => typeof v === 'string' && KINDS.has(v);
 
