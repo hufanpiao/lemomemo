@@ -13,7 +13,7 @@ export const todoRowKo = {
   'row.stage.2': '절반 넘음', // REVIEW(ko)
   'row.doneToast': '완료했어요', // REVIEW(ko)
   'row.deleted': '삭제했어요', // REVIEW(ko)
-  'row.undo': '실행 취소', // REVIEW(ko)
+  'row.undo': '되돌리기', // REVIEW(ko) 负责人 11-20 定“撤销”统一 되돌리기
   'row.err.save': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
   'row.err.readonly': '새 버전으로 업데이트해야 수정할 수 있어요', // REVIEW(ko)
 } satisfies Record<TodoRowMsgKey, string>;

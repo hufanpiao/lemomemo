@@ -62,7 +62,7 @@ export const ko = {
   'find.m.ok.tomorrow': '내일로 미뤘어요', // REVIEW(ko)
   'find.m.ok.del': '삭제했어요', // REVIEW(ko)
   'find.m.fail': '바꾸지 못했어요. 목록에서 다시 해 주세요', // REVIEW(ko)
-  'find.undo': '실행 취소', // REVIEW(ko)
+  'find.undo': '되돌리기', // REVIEW(ko) 负责人 11-20 定“撤销”统一 되돌리기
   'as.understand': '이렇게 이해했어요: {x}', // REVIEW(ko)
   'as.and': '·', // REVIEW(ko)
   'as.k.event': '일정', // REVIEW(ko)
@@ -119,7 +119,7 @@ export const ko = {
   'as.t.okN.reschedule': '{to}(으)로 {n}개 변경했어요', // REVIEW(ko)
   'as.t.okN.complete': '{n}개 완료했어요', // REVIEW(ko)
   'as.t.failed': '{n}개는 바꾸지 못했어요', // REVIEW(ko)
-  'as.undone': '실행 취소했어요', // REVIEW(ko)
+  'as.undone': '되돌렸어요', // REVIEW(ko) 负责人 11-20 定“撤销”统一 되돌리기（和 plus.notice.undone 同一句）
   'as.peek.query': '같이 찾아봤어요: {n}개 ›', // REVIEW(ko)
   'as.peek.cancel': '취소하려는 건가요? {n}개 찾았어요 ›', // REVIEW(ko)
   'as.peek.reschedule': '일정을 바꾸려는 건가요? {n}개 찾았어요 ›', // REVIEW(ko)

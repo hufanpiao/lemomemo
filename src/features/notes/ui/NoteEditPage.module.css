@@ -225,27 +225,7 @@
   inset: -4px;
 }
 
-.menu {
-  padding: 6px;
-}
-
-.menuItem {
-  display: block;
-  min-width: 120px;
-  min-height: var(--hit);
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--text);
-  font-size: var(--fs-14);
-  text-align: left;
-}
-
-/* “删除”红字；“移出隐私记”照正文色 */
-.danger {
-  color: var(--danger-text);
-}
+/* “⋯”弹出的菜单和菜单项：和列表页同一份（kit NoteRow.module.css 的 menu、menuItem，负责人 11-20 编辑页菜单补齐） */
 
 /* 电脑抽屉顶行“随手记 · 分类 · 时间”（NOTE_ED：12.5px、次要色） */
 .meta {

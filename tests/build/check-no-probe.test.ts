@@ -1,5 +1,5 @@
 // 正式产物里不能有 R-68 探测页和 voice-probe（B3 Q1 ⑧）：check_no_probe.mjs 搜得到、搜不到（构建脚本接上了由 build-web.test.ts 核）；
-// 探测页只从试验页懒加载、平台层文件只被探测页引用（正式版没有试验页，整块摇掉）
+// 探测页本身 11-20 已删（负责人定），标记留着防回来；试验页只在非正式版挂（正式版整块摇掉）
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
@@ -38,7 +38,7 @@ describe('findProbe', () => {
 describe('接线', () => {
   // 正式构建（release-build.yml 的 npm run build -- --mode production）里由 build_web.mjs 调它：build-web.test.ts 按行为核（production 才查、查整个输出目录）
 
-  it('探测页只经试验页懒加载，平台层探测文件只被探测页引用', () => {
+  it('R-68 录音探测页已删（负责人 11-20），源码里没人再引探测页和平台层探测文件；试验页只在非正式版挂', () => {
     const src = join(root, 'src');
     const walk = (d: string, out: string[] = []): string[] => {
       for (const n of readdirSync(d)) {
@@ -53,9 +53,7 @@ describe('接线', () => {
         .filter((f) => needle.test(readFileSync(f, 'utf8')))
         .map((f) => relative(root, f).replace(/\\/g, '/'))
         .sort();
-    expect(users(/from '[^']*voice-probe\.ts'/)).toEqual(['src/app/dev/VoiceProbe.tsx']);
-    expect(users(/VoiceProbe\.tsx'/)).toEqual(['src/app/dev/CspLab.tsx']);
-    expect(readFileSync(join(src, 'app/dev/CspLab.tsx'), 'utf8')).toContain("import.meta.env.MODE === 'production' ? null : lazy(() => import('./VoiceProbe.tsx'))");
+    expect(users(/voice-probe\.ts'|VoiceProbe\.tsx'/)).toEqual([]);
     // 试验页本身只在非正式版里挂，而且用构建期常量（正式构建整块删掉；运行时的 isProduction 删不掉）
     expect(readFileSync(join(src, 'app/App.tsx'), 'utf8')).toMatch(/const devRoutes: readonly FeatureRoute\[\] = import\.meta\.env\.MODE === 'production'\s*\?\s*\[\]/);
   });

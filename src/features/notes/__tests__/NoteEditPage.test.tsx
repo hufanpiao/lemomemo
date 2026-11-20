@@ -159,7 +159,7 @@ describe('编辑', () => {
       fireEvent.click(await screen.findByTestId('note-edit-more'));
     });
     await act(async () => {
-      fireEvent.click(await screen.findByTestId('note-edit-delete'));
+      fireEvent.click(await screen.findByTestId('note-edit-del'));
     });
     await waitFor(() => expect(notes().getSnapshot()[0]?.['deleted_at']).toBe(NOW));
     expect(screen.getByTestId('edit-notice').textContent).toContain('已删除');

@@ -5,14 +5,11 @@
 // 11-10 R-371：诊断开着且不是正式版时，下面挂 VhProbe（非正式版诊断按钮：Gap fix 对照开关、运行日志）；正式构建靠 MODE 常量摇掉，build/check_no_probe.mjs 的 PROBE_MARKERS 登记了 vh-probe 兜底
 // 诊断开着时 <html> 带 data-diag="1"：顶部显示红、蓝两个小色条（base.css .lemo-probe，真机验证顶部回弹），离开设置页也留着，再连点 5 下或重开 App 才没
 // 版本那一行仍是只显示的行（不是按钮、不进读屏的可操作列表），点按在外层用监听接住
-// 录音探测入口（B3 FA-0，11-10）：主屏幕版没有地址栏、Safari 网页版又不能登录，负责人进不了 #/dev-csp/voice，
-//   只在非正式版的卡片里多一行“录音探测（试验）”；用构建期常量 import.meta.env.MODE 挡（同 App.tsx 挂试验页），正式构建整块删掉。
-// 诊断按钮（VhProbe.tsx）：诊断开着时在诊断文字下面，同样只在非正式版里有
-//   录音探测的文案在词条 settings.about.probe（A20 不准在组件里写汉字；正式版里只剩词典里这一句、没有这一行）；testid 带 check_no_probe.mjs 的标记 csp-lab，正式产物里残留就失败。和 voice-probe 同一个 PR 删
+// 诊断按钮（VhProbe.tsx）：诊断开着时在诊断文字下面，只在非正式版里有（用构建期常量 import.meta.env.MODE 挡，正式构建整块删掉）
+// （非正式版原来还有一行“录音探测（试验）”进 R-68 探测页，一次性，负责人 11-20 定删）
 import { useEffect, useRef, useState } from 'react';
-import { navigateSub } from '../../../app/router-sub.ts';
 import refine from '../../../kit/components/Refine.module.css';
-import { SettingsCard, SettingsEntryRow, SettingsInfoRow, settingsNoteClass } from '../../../kit/components/Settings/Settings.tsx';
+import { SettingsCard, SettingsInfoRow, settingsNoteClass } from '../../../kit/components/Settings/Settings.tsx';
 import { collectDiag } from '../../../platform/diag-info.ts';
 import { buildInfo } from '../../../platform/env.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
@@ -66,9 +63,6 @@ export function AboutSection() {
     <div data-section="about" ref={box}>
       <SettingsCard title={t('settings.about.title', {})} testId="settings-about-card">
         <SettingsInfoRow label={t('settings.about.version', {})} value={<span className={refine.num}>{buildInfo.version}</span>} testId="settings-about-version" valueTestId="settings-about-version-value" />
-        {import.meta.env.MODE !== 'production' && (
-          <SettingsEntryRow label={t('settings.about.probe', {})} onOpen={() => void navigateSub('dev-csp', 'voice')} testId="csp-lab-entry" />
-        )}
       </SettingsCard>
       <p className={settingsNoteClass} data-testid="settings-lunar-credit">
         {t('settings.about.lunarCredit', {})}

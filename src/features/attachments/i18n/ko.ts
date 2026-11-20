@@ -16,7 +16,7 @@ export const ko = {
   'att.openWith': '다른 앱으로 열기', // REVIEW(ko)
   'att.delete': '삭제', // REVIEW(ko)
   'att.deleted': '“{name}” 삭제됨', // REVIEW(ko)
-  'att.undo': '실행 취소', // REVIEW(ko)
+  'att.undo': '되돌리기', // REVIEW(ko) 负责人 11-20 定“撤销”统一 되돌리기
   'att.pages': '{n}쪽', // REVIEW(ko)
   'att.sheets': '시트 {n}개', // REVIEW(ko)
   'att.st.writing': '업로드 준비 중…', // REVIEW(ko)

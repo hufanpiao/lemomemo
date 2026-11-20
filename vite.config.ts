@@ -63,6 +63,8 @@ export const LAZY_GROUPS = {
     'src/kit/hooks/useSpanT.ts',
     'src/platform/perm-mic.ts',
     'src/kit/hooks/useReadonly.ts',
+    // useReadonly 的出错条时长 TOAST_MS（11-20 出错条统一 5 秒）：只有一个常量，跟它同一块
+    'shared/logic/toast.ts',
   ],
 } as const satisfies Record<string, readonly string[]>;
 const pathRe = (mods: readonly string[]): RegExp => new RegExp(`[\\\\/](${mods.map((m) => m.replace(/[.]/g, '\\.').replace(/\//g, '[\\\\/]')).join('|')})$`);

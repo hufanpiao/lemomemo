@@ -1,10 +1,8 @@
 // 随手记页提示条里自己的两样（B4）：删除撤销、只读拦截、出错条走 kit 的 useListActions（提示条状态在它的 g 里），这里只管
-// • 插图提示（S3）、转换结果（R-414）、出错条 4 秒后自己收起；空间满了、带“最近删除”入口的插图提示留 5 秒，来得及点
-// • 撤销条（删除的、合并分类的，R-415 ③）由 kit 的 UndoToast 自己计 5 秒，这里不收；isUndo 是“哪些算撤销条”的唯一口径，
+// • 插图提示（S3）、转换结果（R-414）、出错条：kit 的 g.show 默认 TOAST_MS 后自己收起（负责人 11-20 统一，原来这里另计 4 秒）
+// • 撤销条（删除的、合并分类的、拖动的）由 kit 的 UndoToast 自己计时，show 时传 null；isUndo 是“哪些算撤销条”的唯一口径，
 //   画成什么、点了做什么统一成一份 UndoTip（undoTipOf），页面的 UndoBar 只管画
-// • 返回值 up：撤销条或只读提示条出着，底部输入行往上让一格
-import { useEffect } from 'react';
-import { UNDO_TOAST_MS } from '../../../kit/components/UndoToast.tsx';
+// • noteBarUp：撤销条或只读提示条出着，底部输入行往上让一格
 import type { ListToast } from '../../../kit/hooks/useListActions.ts';
 import type { ReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import type { NotesMsgKey } from './useNotesT.ts';
@@ -39,13 +37,7 @@ export function isUndo<T extends { kind: string }>(t: T | null): t is Extract<T,
 export const undoTipOf = (t: DeleteUndo | MergeUndo | MoveUndo, undoDelete: (id: string) => void): UndoTip =>
   t.kind === 'undo' ? { key: `undo:${t.id}`, msgKey: 'notes.deleted', testId: 'notes-toast', undo: () => undoDelete(t.id) } : t;
 
-export function useNotesToast<X extends { kind: string; trash?: boolean }>(g: ReadonlyGuard<ListToast | X>): boolean {
-  const { toast } = g;
-  useEffect(() => {
-    if (toast === null || isUndo(toast)) return undefined;
-    const id = setTimeout(() => g.dismiss(toast), 'trash' in toast && toast.trash === true ? UNDO_TOAST_MS : 4000);
-    return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- g 每次重画都是新对象（useReadonlyGuard 不包 useCallback），放进去会让计时每画一次就重来；dismiss 只按 toast 收，用哪一次的都一样
-  }, [toast]);
-  return isUndo(toast) || g.toastAt !== null;
+/** 撤销条或只读提示条出着：底部输入行往上让一格 */
+export function noteBarUp<X extends { kind: string }>(g: ReadonlyGuard<ListToast | X>): boolean {
+  return isUndo(g.toast) || g.toastAt !== null;
 }

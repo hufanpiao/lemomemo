@@ -80,7 +80,7 @@ export function useListActions<X = never>(table: string, act: Acts, hv?: Hold) {
       fx('delete');
       hv?.release();
       const r = await act.remove(id, true);
-      if (r === 'ok') g.show({ kind: 'undo', id });
+      if (r === 'ok') g.show({ kind: 'undo', id }, null);
       else report(r);
     },
     undo: (id: string) => void act.remove(id, false).then(report),

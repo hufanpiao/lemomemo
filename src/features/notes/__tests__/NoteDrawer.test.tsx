@@ -164,7 +164,7 @@ describe('电脑详情抽屉', () => {
     await act(async () => {
       fireEvent.click(within(drawer).getByTestId('note-edit-more'));
     });
-    await screen.findByTestId('note-edit-delete');
+    await screen.findByTestId('note-edit-del');
     await esc();
     expect(screen.queryByTestId('note-drawer')).not.toBeNull();
   });

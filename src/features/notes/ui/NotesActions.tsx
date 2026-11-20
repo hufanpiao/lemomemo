@@ -1,20 +1,22 @@
 // 随手记页的“⋯”菜单、合并分类提示条、转成待办 / 日程的流程和确认窗（从 NotesPage.tsx 拆出来，R-413、R-414 11-13）
 // • 菜单：转成待办 / 转成日程 / 移到隐私记（B5 S7）/ 删除；只读行变淡、点了由页面拦下。
+//   编辑页顶栏的“⋯”也是这一份 MoreMenu，转换、移进隐私记走同一个 useNoteActs（负责人 11-20 编辑页菜单补齐，原来编辑页另写一份只有删除、移出）
 //   隐私记来源（B5 隐私记重写 11-15）按 caps 去掉转换、移进，换成“移出隐私记”；左滑的几个按钮同一套（swipeActs）
 // • 提示条（R-413，线框 MERGE）：“‘读书’和‘书单’两个分类很像，合成一个吗？ 合并 / 不用”
 // • 转换（R-414）的规则见 shared/logic/notes/note-convert.ts 文件头；结果出在输入行上面
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
+import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { TapSwitch } from '../../../kit/components/TapSwitch.tsx';
-import type { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
+import { VaultParts } from '../../vault/index.ts';
 import type { MergeHint } from '../hooks/useMergeHint.ts';
 import type { MergeUndo, MoveUndo } from '../hooks/useNotesToast.ts';
 import type { NoteCaps } from '../hooks/note-source.ts';
-import { actionResult, type ActionResult, type ConvertKind, type NoteItem, type useNoteList } from '../hooks/useNoteList.ts';
+import { actionResult, type ActionResult, type ConvertKind, type useNoteList } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
 import type { ImgMsgKey } from './NoteImages.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
@@ -42,8 +44,14 @@ function whatText(t: ReturnType<typeof useNotesT>, scope: 'conv' | 'move', files
  * “⋯”菜单：看得见 24px，点按区 ::after 扩到 44。转成待办 / 转成日程（R-414）、移到隐私记（B5 S7，线框 s7 菜单）在“删除”上面。
  * long：备注放不下，两项变淡（aria-disabled）、下面写原因，点了不动；只读行的两项也变淡，点了由页面拦下
  */
-export function MoreMenu({ id, caps, ro, open, onOpenChange, onDelete, long, onConvert, onMove, onMoveOut }: {
+export function MoreMenu({ id, caps, ro, open, onOpenChange, onDelete, long, onConvert, onMove, onMoveOut, tid = (p) => `notes-${p}-${id}`, triggerClass = row.more, disabled }: {
   id: string; caps: NoteCaps; ro: boolean; open: boolean; onOpenChange(o: boolean): void; onDelete(): void; long: boolean; onConvert(kind: ConvertKind): void; onMove(): void; onMoveOut(): void;
+  /** 测试 id：列表页 notes-<项>-<id>，编辑页 note-edit-<项>（项：more、to-todo、to-event、conv-long、to-vault、from-vault、del） */
+  tid?: (part: string) => string;
+  /** “⋯”按钮的样子：列表页 24px，编辑页顶栏 36 圆形浅底；菜单本身同一份（kit NoteRow.module.css） */
+  triggerClass?: string | undefined;
+  /** 编辑页：还没载入、已删除、只读时整个按钮灰掉 */
+  disabled?: boolean;
 }) {
   const t = useNotesT();
   const conv = (kind: ConvertKind) => (
@@ -51,7 +59,7 @@ export function MoreMenu({ id, caps, ro, open, onOpenChange, onDelete, long, onC
       className={`${row.menuItem} ${row.menuPlain}`}
       aria-disabled={ro || long || undefined}
       onClick={() => (long ? undefined : onConvert(kind))}
-      data-testid={`notes-to-${kind}-${id}`}
+      data-testid={tid(`to-${kind}`)}
       data-no-proxy=""
     >
       {t(kind === 'todo' ? 'notes.conv.todo' : 'notes.conv.event', {})}
@@ -65,7 +73,7 @@ export function MoreMenu({ id, caps, ro, open, onOpenChange, onDelete, long, onC
       align="end"
       className={row.menu}
       trigger={
-        <button type="button" className={row.more} aria-label={t('notes.more', {})} data-testid={`notes-more-${id}`}>
+        <button type="button" className={triggerClass} aria-label={t('notes.more', {})} disabled={disabled} data-testid={tid('more')}>
           ⋯
         </button>
       }
@@ -73,22 +81,22 @@ export function MoreMenu({ id, caps, ro, open, onOpenChange, onDelete, long, onC
       {caps.convert ? conv('todo') : null}
       {caps.convert ? conv('event') : null}
       {caps.convert && long ? (
-        <p className={row.menuNote} data-testid={`notes-conv-long-${id}`}>
+        <p className={row.menuNote} data-testid={tid('conv-long')}>
           {t('notes.conv.long', {})}
         </p>
       ) : null}
       {caps.moveIn ? (
-        <Pressable className={`${row.menuItem} ${row.menuPlain}`} aria-disabled={ro || undefined} onClick={onMove} data-testid={`notes-to-vault-${id}`} data-no-proxy="">
+        <Pressable className={`${row.menuItem} ${row.menuPlain}`} aria-disabled={ro || undefined} onClick={onMove} data-testid={tid('to-vault')} data-no-proxy="">
           {t('notes.toVault', {})}
         </Pressable>
       ) : null}
       {caps.moveOut ? (
-        <Pressable className={`${row.menuItem} ${row.menuPlain}`} onClick={onMoveOut} data-testid={`notes-from-vault-${id}`} data-no-proxy="">
+        <Pressable className={`${row.menuItem} ${row.menuPlain}`} onClick={onMoveOut} data-testid={tid('from-vault')} data-no-proxy="">
           {t('notes.fromVault', {})}
         </Pressable>
       ) : null}
       {/* 只读行的“删除”变淡、aria-disabled，点了照样由 del 拦下出提示条（同待办页的 ×） */}
-      <Pressable className={row.menuItem} aria-disabled={ro || undefined} onClick={onDelete} data-testid={`notes-del-${id}`} data-no-proxy="">
+      <Pressable className={row.menuItem} aria-disabled={ro || undefined} onClick={onDelete} data-testid={tid('del')} data-no-proxy="">
         {t('notes.delete', {})}
         {/* 藏着的真系统开关：手指点“删除”iOS 才震（R-471，kit TapSwitch） */}
         <TapSwitch />
@@ -141,7 +149,7 @@ export function MergeBar({ hint, onResult, onMerged }: { hint: MergeHint; onResu
  * 转成待办 / 日程的流程（R-414）：只读行拦下；带插图、带附件的先问（B4b-1 起算上附件，线框 sAtt 最后一张）（ask 不为空时页面画确认窗，问了就定下保留原条），其余直接转；结果出在输入行上面：
  * “已转成…”、“先别再转”（left）、没有字或太长“转不了”；正在转（busy）、已经没了、切换账号中不提示；其余（含抛异常）走出错条 / 只读提示
  */
-export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a: ReturnType<typeof useListActions<PageTip>>) {
+export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a: NoteActHost) {
   const [ask, setAsk] = useState<ConvAsk | null>(null);
   const go = async (id: string, kind: ConvertKind, keep: boolean) => {
     setAsk(null);
@@ -154,7 +162,7 @@ export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a
   };
   return {
     ask,
-    start(it: NoteItem, kind: ConvertKind) {
+    start(it: NoteSize, kind: ConvertKind) {
       if (a.isRo(it.id)) a.g.block();
       else if (needsAsk(it)) setAsk({ id: it.id, kind, images: it.images, files: it.files });
       else void go(it.id, kind, false);
@@ -164,6 +172,64 @@ export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a
       if (ask) void go(ask.id, ask.kind, true);
     },
     cancel: () => setAsk(null),
+  };
+}
+
+/** 转换、移进隐私记只看这一条的 id 和带几张图、几个附件（列表的 NoteItem 本来就有；编辑页用 useNoteConvert 的 sizes） */
+export type NoteSize = { id: string; images: number; files: number };
+
+/** 转换、移进隐私记流程要用的那几样：列表页给 kit useListActions 的结果，编辑页给自己的一份（结果出在编辑页的提示行） */
+export interface NoteActHost {
+  isRo(id: string): boolean;
+  report(r: ActionResult): void;
+  g: { show(t: ConvTip): void; block(): void };
+}
+
+/**
+ * 转成待办 / 日程、移到隐私记的整套（列表页和编辑页“⋯”菜单共用一份，负责人 11-20 编辑页菜单补齐）：只读拦下；带插图、附件的先问；
+ * 移进隐私记走 vault 的 VaultParts move（解锁、重试一次、带附件不能移），移好了调 onMoved；dialogs 是确认窗和移动层，页面画在自己的根上
+ */
+export function useNoteActs(run: ReturnType<typeof useNoteList>['convert'], host: NoteActHost, onMoved: (id: string) => void) {
+  const conv = useConvertFlow(run, host);
+  const [askMove, setAskMove] = useState<NoteSize | null>(null);
+  const [moving, setMoving] = useState<string | null>(null);
+  return {
+    convert: conv.start,
+    toVault(it: NoteSize) {
+      if (host.isRo(it.id)) host.g.block();
+      else if (needsAsk(it)) setAskMove(it);
+      else setMoving(it.id);
+    },
+    dialogs: (
+      <>
+        {moving !== null ? (
+          <QuietBoundary name="vault-move">
+            <Suspense fallback={null}>
+              <VaultParts
+                part="move"
+                noteId={moving}
+                onDone={(ok) => {
+                  if (ok) onMoved(moving);
+                  setMoving(null);
+                }}
+              />
+            </Suspense>
+          </QuietBoundary>
+        ) : null}
+        {conv.ask ? <ConvertAsk ask={conv.ask} onOk={conv.confirm} onCancel={conv.cancel} /> : null}
+        {askMove ? (
+          <MoveAsk
+            files={askMove.files}
+            images={askMove.images}
+            onOk={() => {
+              setMoving(askMove.id);
+              setAskMove(null);
+            }}
+            onCancel={() => setAskMove(null)}
+          />
+        ) : null}
+      </>
+    ),
   };
 }
 
