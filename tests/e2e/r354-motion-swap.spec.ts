@@ -50,8 +50,14 @@ test.describe('R-354：动画实现到了以后换上（K2、K9）', () => {
     await page.reload();
     await page.getByTestId('today-row-t3').waitFor({ timeout: 30000 });
     expect(await page.evaluate(() => document.documentElement.getAttribute('data-motion')), '拦住期间不该到').toBeNull();
-    await page.getByTestId('today-done-t3').focus();
-    expect(await focused(page)).toBe('today-done-t3');
+    // 冷启动时行刚画出来可能还会重画一次（数据到齐），重画会把刚放上的焦点带走：放上以后等它稳住再往下（11-20 改前版本 54b1721e 同样 6 次挂 1 次）
+    await expect
+      .poll(async () => {
+        await page.getByTestId('today-done-t3').focus();
+        await page.waitForTimeout(100);
+        return focused(page);
+      }, { timeout: 5000 })
+      .toBe('today-done-t3');
     hold = false;
     release();
     await ready(page);
