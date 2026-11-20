@@ -251,8 +251,8 @@ describe('GlassBar', () => {
     // 着色：子元素叠一半 --bg（不用 color-mix，A11）
     expect(fxCss).toMatch(/\.edgeTint \{\s*position: absolute;\s*inset: 0;\s*background: var\(--bg\);\s*opacity: 0\.5;/);
     expect(edge).toMatch(/backdrop-filter: blur\(3px\);/);
-    // 减少透明效果（data-rt，含系统设置）：和实色带的渐隐一样不要；减少动态效果：不淡入；宽屏侧栏、键盘弹着、启动等安全区
-    expect(fxCss).toMatch(/:global\(:root\[data-rt='1'\]\) \.edge \{\s*display: none;/);
+    // 减少透明效果（data-rt，系统设置）或隐私记页强制实色（data-solid）：和实色带的渐隐一样不要；减少动态效果：不淡入；宽屏侧栏、键盘弹着、启动等安全区
+    expect(fxCss).toMatch(/:global\(:root:is\(\[data-rt='1'\], \[data-solid='1'\]\)\) \.edge \{\s*display: none;/);
     expect(fxCss).toMatch(/:global\(:root\[data-rm='1'\]\) \.band,\s*:global\(:root\[data-rm='1'\]\) \.edge \{\s*transition: none;/);
     expect(fxCss).toMatch(/@media \(width >= 900px\) \{[^@]*\.edge \{\s*display: none;/);
     expect(fxCss).toMatch(/:global\(:root\[data-kbhide\]\) \.band,\s*:global\(:root\[data-kbhide\]\) \.edge \{\s*visibility: hidden;/);
@@ -276,13 +276,13 @@ describe('GlassBar', () => {
     expect(css).toContain('transition: translate var(--dur-drop) var(--ease-drop), scale var(--dur-drop-press) var(--ease-press);');
     expect(fxCss).toContain('animation: gel var(--dur-drop) var(--ease-gel);');
     // 减少透明效果：带子照样在，而且是硬边实色（渐隐那段也不要）
-    expect(fxCss).toMatch(/:global\(:root\[data-rt='1'\]\) \.band \{\s*background: linear-gradient\(to bottom, transparent var\(--band-fade\), var\(--bg\) var\(--band-fade\)\);/);
+    expect(fxCss).toMatch(/:global\(:root:is\(\[data-rt='1'\], \[data-solid='1'\]\)\) \.band \{\s*background: linear-gradient\(to bottom, transparent var\(--band-fade\), var\(--bg\) var\(--band-fade\)\);/);
     // 系统设置由 platform/look.ts 并进 data-rt / data-rm（皮肤整块评审 11-14 第 1、6 条），这里不另写媒体查询
     for (const f of [css, fxCss]) expect(f).not.toContain('prefers-reduced');
         expect(fxCss).toMatch(/@media \(width >= 900px\) \{\s*\.band \{\s*display: none;/);
     expect(css).not.toMatch(/\.band|\.jelly \{|@keyframes gel/); // 外壳的样式里没有首屏后部分的类
     expect(fxCss).toMatch(/:global\(:root\[data-rm='1'\]\) \.jelly \{\s*animation: none;/);
-    expect(css).toMatch(/:global\(:root\[data-rt='1'\]\) \.barTint \{\s*background: var\(--glass-solid\);/);
+    expect(css).toMatch(/:global\(:root:is\(\[data-rt='1'\], \[data-solid='1'\]\)\) \.barTint \{\s*background: var\(--glass-solid\);/);
     expect(css).toMatch(/\.drop\[data-state='press'\] \{\s*scale: 1\.12;/);
     // 11-06 真机 9d40848：过渡中不再换实色（负责人不接受“先不透明再变透明”），没有 ::after 遮罩；快照组裁圆角见 view-transition-css.test.ts
     expect(css).not.toMatch(/::after \{[^}]*--glass-solid|active-view-transition|data-vt/);

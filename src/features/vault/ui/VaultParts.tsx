@@ -12,11 +12,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { navigate } from '../../../app/router.ts';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
-import { useErrText, useVault, useVaultChecked, type VaultCode } from '../hooks/useVault.ts';
+import { useErrText, useVault, useVaultChecked, useVaultStatus, type VaultCode } from '../hooks/useVault.ts';
 import { useWebauthn } from '../hooks/useVaultAuth.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import { LockIcon } from './Pin.tsx';
-import { UnlockOverlay, UnlockPanel } from './Unlock.tsx';
+import { LockLayer, UnlockPanel } from './Unlock.tsx';
 import { VaultSettings } from './VaultSettings.tsx';
 import styles from './Vault.module.css';
 
@@ -47,11 +47,8 @@ function unlockedAgain(s: ReturnType<typeof useVault>['s']): Promise<boolean> {
 /** onGo：跳去隐私记前先关掉查找面板（面板是模态框，不关会盖在隐私记页上） */
 function FindRow({ onGo }: { onGo?: (() => void) | undefined }) {
   const t = useVaultT();
-  const { state, s } = useVault();
+  const state = useVaultStatus();
   useVaultChecked();
-  useEffect(() => {
-    if (state.status === null && state.phase === 'loading') void s.refreshStatus();
-  }, [s, state.status, state.phase]);
   if (state.status?.set !== true) return null;
   return (
     <button type="button" className={styles.findrow} onClick={() => {
@@ -67,12 +64,9 @@ function FindRow({ onGo }: { onGo?: (() => void) | undefined }) {
 
 function LockRow() {
   const t = useVaultT();
-  const { state, s } = useVault();
+  const state = useVaultStatus();
   useVaultChecked();
   const wa = useWebauthn();
-  useEffect(() => {
-    if (state.status === null && state.phase === 'loading') void s.refreshStatus();
-  }, [s, state.status, state.phase]);
   const unset = state.status?.set === false;
   const unlocked = state.phase === 'unlocked';
   const sub = unset ? '' : t(unlocked ? 'vault.lockrow.unlocked' : 'vault.lockrow.locked', {});
@@ -134,9 +128,9 @@ function MoveToVault({ noteId, onDone }: { noteId: string; onDone(moved: boolean
 
   return (
     <>
-      <UnlockOverlay open={state.waiting} testId="vault-move-scrim">
+      <LockLayer variant="overlay" open={state.waiting} testId="vault-move-scrim">
         <UnlockPanel onForgot={() => void navigate('settings', 'vault', 'reset')} testId="vault-move-unlock" />
-      </UnlockOverlay>
+      </LockLayer>
       <ConfirmDialog
         open={err !== null}
         title={t('vault.move', {})}

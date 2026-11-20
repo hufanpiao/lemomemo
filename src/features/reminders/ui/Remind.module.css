@@ -133,9 +133,9 @@
   text-align: center;
 }
 
-:global(:root[data-rt='1']) .banner,
-:global(:root[data-rt='1']) .bar,
-:global(:root[data-rt='1']) .note {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .banner,
+:global(:root:is([data-rt='1'], [data-solid='1'])) .bar,
+:global(:root:is([data-rt='1'], [data-solid='1'])) .note {
   background: var(--float-solid);
   backdrop-filter: none;
 }

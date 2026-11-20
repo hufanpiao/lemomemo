@@ -203,20 +203,20 @@
 
 /* 减少透明效果：实色，不模糊，没有模糊带；选中液滴换 --step-off 一档加 --g-pill-edge 描边，和栏底拉开（设计动效评审 D2） */
 
-:global(:root[data-rt='1']) .bar,
-:global(:root[data-rt='1']) .fab {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .bar,
+:global(:root:is([data-rt='1'], [data-solid='1'])) .fab {
   backdrop-filter: none;
 }
 
-:global(:root[data-rt='1']) .barTint {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .barTint {
   background: var(--glass-solid);
 }
 
-:global(:root[data-rt='1']) .fabTint {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .fabTint {
   background: var(--fab-bg);
 }
 
-:global(:root[data-rt='1']) .pill {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .pill {
   background: var(--g-pill-solid);
   box-shadow: inset 0 0 0 1.5px var(--g-pill-edge);
 }
@@ -375,7 +375,7 @@
 /* 减少透明效果：侧栏实色 */
 
 @media (width >= 900px) {
-  :global(:root[data-rt='1']) .bar {
+  :global(:root:is([data-rt='1'], [data-solid='1'])) .bar {
     background: var(--glass-solid);
     backdrop-filter: none;
   }

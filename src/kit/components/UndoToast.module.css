@@ -87,7 +87,7 @@
   }
 }
 
-:global(:root[data-rt='1']) .toast {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .toast {
   background: var(--float-solid);
   backdrop-filter: none;
 }

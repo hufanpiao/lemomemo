@@ -166,7 +166,7 @@ test('起名弹窗：键盘弹着时整块在键盘上面；起名框不让 iOS 
 });
 
 // 负责人 11-20 截图（隐私记点“＋ 新分类”）：“这个背景色也弄成透明模糊，跟隐私记记录的输入框一样的背景模糊”“随手记也是一样”，选“后面整页模糊、卡片不变”：
-// 弹窗后面那层是输入时同一层液态模糊（kit Mist 的材质，16px），压在页面上面、弹窗卡片下面；隐私记页强制实色（data-rt="1"）时照样模糊
+// 弹窗后面那层是输入时同一层液态模糊（kit Mist 的材质，16px），压在页面上面、弹窗卡片下面；隐私记页强制实色（data-solid="1"）时照样模糊
 test('新分类弹窗：后面整页是 16px 液态模糊，隐私记强制实色时也一样', async ({ page }) => {
   await page.goto('/app/#/notes');
   await page.getByTestId('notes').waitFor({ timeout: 30_000 });
@@ -190,7 +190,7 @@ test('新分类弹窗：后面整页是 16px 液态模糊，隐私记强制实�
   // 和弹窗同一层、在 DOM 里排在卡片前面：卡片画在它上面
   expect(b?.z).toBe(b?.cardZ);
   expect(b?.before).toBeTruthy();
-  await page.evaluate(() => document.documentElement.setAttribute('data-rt', '1'));
+  await page.evaluate(() => document.documentElement.setAttribute('data-solid', '1'));
   expect(await back(), '隐私记强制实色时后面那层也得是模糊').not.toBeNull();
 });
 

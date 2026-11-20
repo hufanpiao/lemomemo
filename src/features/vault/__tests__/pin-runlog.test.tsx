@@ -76,6 +76,12 @@ describe('只做 4 位', () => {
     for (const k of ['4', '3', '2', '1']) fireEvent.keyDown(window, { key: k });
     expect(onSubmit).toHaveBeenLastCalledWith('4321');
   });
+
+  it('隐私记整块收拾 11-20 低 15：忙着或锁定倒计时（disabled）时 ⌫ 和数字键一样 disabled', () => {
+    render(<PinPad testId="pp" msgTestId="pp-err" onSubmit={vi.fn()} disabled />);
+    expect(screen.getByTestId('pp-del').hasAttribute('disabled')).toBe(true);
+    expect(screen.getByTestId('pp-key-0').hasAttribute('disabled')).toBe(true);
+  });
 });
 
 describe('快速连按不丢位（负责人 11-15“输入的比较快就识别不到”；运行日志 2436、2438 行：第二下只有 pointercancel、没有 click）', () => {

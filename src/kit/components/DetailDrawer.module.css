@@ -56,7 +56,7 @@
 }
 
 /* 减少透明效果（data-rt）：实色、不模糊（同 TypeBar、RecordPanel） */
-:global(:root[data-rt='1']) .drawer {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .drawer {
   background-color: var(--float-solid);
   backdrop-filter: none;
 }

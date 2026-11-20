@@ -15,7 +15,7 @@
 }
 
 /* 减少透明效果（data-rt：开关、系统设置、隐私记页挂着时）：实色、不模糊（同 Dialog） */
-:global(:root[data-rt='1']) .content {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .content {
   background: var(--glass-solid);
   backdrop-filter: none;
 }

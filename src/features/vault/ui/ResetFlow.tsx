@@ -31,7 +31,25 @@ export function ResetFlow({ onDone }: { onDone(): void }) {
         {t('vault.reset.noEmail', {})}
       </p>
     );
-  if (r.step === 'pin') return <NewPinSteps title={t('vault.reset.new', {})} sub="" busy={r.busy} error={err} testId="vault-reset-pin" onDone={(p) => void r.setPin(p)} />;
+  // 设新密码这一步也能取消（同别的几步：键盘下面一颗“取消”）
+  if (r.step === 'pin')
+    return (
+      <NewPinSteps
+        title={t('vault.reset.new', {})}
+        sub=""
+        busy={r.busy}
+        error={err}
+        testId="vault-reset-pin"
+        onDone={(p) => void r.setPin(p)}
+        footer={
+          <div className={styles.pinFoot}>
+            <FormButton variant="ghost" onClick={onDone} data-testid="vault-reset-cancel">
+              {t('vault.cancel', {})}
+            </FormButton>
+          </div>
+        }
+      />
+    );
   if (r.step === 'done')
     return (
       <div className={styles.flow} data-testid="vault-reset-done">

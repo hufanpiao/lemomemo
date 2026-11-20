@@ -1,7 +1,7 @@
 /* 输入时盖住整页的液态模糊玻璃（Mist.tsx）。R-399：负责人 11-11“按+出现的输入框之外的后面背景全做成液态模糊玻璃”，11-12 看三档对照图定中档 16px；
    R-401：负责人 11-13“随手记点输入框背景也要模糊”，同一份。
    分两块：.glass 只是材质（Mist 和 Dialog backdrop="mist" 共用，负责人 11-20“新分类”弹窗后面也要这层）；.mist 是 Mist 这一层自己的位置、层级、拖不动和淡入。
-   Dialog 只拿 .glass：位置、层级用它自己的 .scrim，进出场交给 <Appear>，不和这里的淡入两套一起管透明度 */
+   Dialog 只拿 .glass：位置、层级用它自己的 Dialog.module.css .mist，进出场交给 <Appear>，不和这里的淡入两套一起管透明度 */
 
 /* 材质照底栏的液态玻璃（kit GlassBar.module.css 的 .bar）：着色 --g-tint、饱和度 1.8、斜上方一片光（--g-sheen-img 乘 --g-sheen）；模糊 16px */
 .glass {
@@ -21,14 +21,14 @@
 
 /* 减少透明效果、或浏览器不认 backdrop-filter（带不带前缀都不认）：不模糊、不画高光，退成一层半透明纯色（玻璃的后备着色 --g-tint-fb） */
 
-/* 只看系统的“减少透明效果”（data-rt-sys，platform/look.ts）：隐私记页强制实色的 data-rt 只管底栏、“＋”和玻璃副本，
+/* 只看系统的“减少透明效果”（data-rt，platform/look.ts）：隐私记页强制实色的 data-solid 只管底栏、“＋”和玻璃副本，
    这一层是纯 CSS 模糊、不复制页面内容，隐私记里照随手记一样模糊（负责人 11-20） */
-:global(:root[data-rt-sys='1']) .glass {
+:global(:root[data-rt='1']) .glass {
   background: var(--g-tint-fb);
   backdrop-filter: none;
 }
 
-:global(:root[data-rt-sys='1']) .glass::after {
+:global(:root[data-rt='1']) .glass::after {
   display: none;
 }
 

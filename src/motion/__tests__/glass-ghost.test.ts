@@ -30,6 +30,7 @@ describe('startGlass', () => {
     vi.unstubAllGlobals();
     document.body.replaceChildren();
     document.documentElement.removeAttribute('data-rt');
+    document.documentElement.removeAttribute('data-solid');
     frames = [];
   });
 
@@ -71,6 +72,18 @@ describe('startGlass', () => {
     await Promise.resolve();
     runFrames();
     expect(nav.dataset['glass']).toBeUndefined();
+    g.stop();
+  });
+
+  it('隐私记页强制实色（:root[data-solid="1"]）：同减少透明效果，不写 data-glass；放开后恢复', async () => {
+    document.documentElement.dataset['solid'] = '1';
+    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }] });
+    runFrames();
+    expect(nav.dataset['glass']).toBeUndefined();
+    document.documentElement.removeAttribute('data-solid');
+    await Promise.resolve();
+    runFrames();
+    expect(nav.dataset['glass']).toBe('copy');
     g.stop();
   });
 

@@ -9,8 +9,9 @@
 // • 不进运行日志（11-14 隐私记评审第 1 条）：外层带 data-rl-mask，run-log 只记 masked、不记坐标；数字键的 testid 用位置序号 key-0～key-9
 //   （按出现顺序：1～9 是 key-0～key-8，0 是 key-9），不带数字本身
 // • 提示行（输错、锁定倒计时、两次不一样）在圆点下面、键盘上面（线框 s9 PWERR）
-// • PinTop：设密码、输密码整页的顶栏“‹ 随手记 … 取消”（线框 s9 FIRSTPW、PWERR：“右上角‘取消’随时退出”）
-import { createContext, useContext, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+// • VaultTop：隐私记各页的顶栏（一份）；PinTop：设密码、输密码整页的顶栏“‹ 随手记 … 取消”（线框 s9 FIRSTPW、PWERR：“右上角‘取消’随时退出”），也是 VaultTop
+// • 忙着（busy）或锁定倒计时时整个键盘不能按，⌫ 也一样
+import { createContext, useContext, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { useKeys, type LayerHandle } from '../../../kit/hooks/layers.ts';
 import { useVaultT } from '../hooks/useVaultT.ts';
@@ -34,7 +35,7 @@ export function LockIcon({ big = false }: { big?: boolean }) {
  * 线框锁（描边 2、圆头，跟文字色；样式 Vault.module.css 的 .lineIc 一份）：
  * • kind="closed"：关着的锁，隐私记记录页返回“‹ 🔒 隐私记”（记录页美化方向 A 方案图的 IC.lock：锁身 14 × 9.5 圆角 2、锁环半径 4），size 14
  * • kind="open"：开着的锁（锁环右边翘起），隐私记列表顶栏下“这里记的只进隐私记”那一行（R-452 V2），size 12
- * 实心锁 LockIcon、解锁页的大锁（锁身填主色）外观不同，另外画
+ * 实心锁 LockIcon、解锁页的大锁（LockBadge，锁身填主色）外观不同，另外画
  */
 export function LineLock({ kind, size }: { kind: 'closed' | 'open'; size: number }) {
   return (
@@ -54,21 +55,62 @@ export function LineLock({ kind, size }: { kind: 'closed' | 'open'; size: number
   );
 }
 
+/** 锁着页（方案甲）的大锁：柠檬黄圆底、描边的锁、锁身填主色（对照图 柠檬记APP-本机资料/设计方案/2026-11-19_隐私记改善/对照_方案vs实现_2026-11-19.png） */
+export function LockBadge() {
+  return (
+    <span className={styles.bigLock}>
+      <svg className={styles.bigLockIc} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+        <rect x="5" y="10.5" width="14" height="10" rx="2.5" />
+      </svg>
+    </span>
+  );
+}
+
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'gap', '0', 'del'] as const;
 /** 数字键的位置序号（testid 用）：按出现顺序 0～9 */
 const DIGIT_SLOT = new Map(KEYS.filter((k) => /^\d$/.test(k)).map((k, i) => [k, i]));
 
-/** 整页顶栏：左“‹ 随手记”（或调用方给的文字），右“取消”；两个都是退出 */
+/**
+ * 隐私记的顶栏（列表、锁着页、密码整页、最近删除共用一份，原来四处各写一套）：左边返回，中间标题（lock：前面带实心小锁；level：标题级别），右边 end。
+ * title、end 不给时那一格放空的 span，三栏照样对齐
+ */
+export function VaultTop({ back, title = null, lock = false, level = 1, end = null }: {
+  back: { label: string; onBack(): void; testId: string };
+  title?: ReactNode;
+  lock?: boolean;
+  level?: 1 | 2;
+  end?: ReactNode;
+}) {
+  const H = level === 1 ? 'h1' : 'h2';
+  return (
+    <header className={styles.top}>
+      <BackLink label={back.label} onBack={back.onBack} testId={back.testId} />
+      {title === null ? (
+        <span />
+      ) : (
+        <H className={styles.h1}>
+          {lock ? <LockIcon /> : null}
+          {title}
+        </H>
+      )}
+      {end ?? <span />}
+    </header>
+  );
+}
+
+/** 设密码、输密码整页的顶栏：左“‹ 随手记”（或调用方给的文字），右“取消”；两个都是退出 */
 export function PinTop({ backLabel, onCancel, testId }: { backLabel?: string | undefined; onCancel(): void; testId: string }) {
   const t = useVaultT();
   return (
-    <header className={styles.top}>
-      <BackLink label={backLabel ?? t('vault.back', {})} onBack={onCancel} testId={`${testId}-back`} />
-      <span />
-      <button type="button" className={styles.topCancel} onClick={onCancel} data-testid={`${testId}-cancel`}>
-        {t('vault.cancel', {})}
-      </button>
-    </header>
+    <VaultTop
+      back={{ label: backLabel ?? t('vault.back', {}), onBack: onCancel, testId: `${testId}-back` }}
+      end={
+        <button type="button" className={styles.topCancel} onClick={onCancel} data-testid={`${testId}-cancel`}>
+          {t('vault.cancel', {})}
+        </button>
+      }
+    />
   );
 }
 
@@ -119,7 +161,7 @@ export function PinPad({ onSubmit, disabled = false, testId, msg = '', msgTestId
           k === 'gap' ? (
             <span key={k} aria-hidden="true" />
           ) : k === 'del' ? (
-            <button key={k} type="button" className={`${styles.key} ${styles.keyText}`} aria-label={t('vault.pad.del', {})} onPointerDown={down('del')} onClick={kbd('del')} data-testid={`${testId}-del`}>
+            <button key={k} type="button" className={`${styles.key} ${styles.keyText}`} aria-label={t('vault.pad.del', {})} onPointerDown={down('del')} onClick={kbd('del')} disabled={disabled} data-testid={`${testId}-del`}>
               ⌫
             </button>
           ) : (

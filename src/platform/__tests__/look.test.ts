@@ -66,6 +66,7 @@ beforeEach(() => {
   html().dataset['theme'] = 'light';
   delete html().dataset['rt'];
   delete html().dataset['rm'];
+  delete html().dataset['solid'];
   stubSystem(false);
 });
 afterEach(() => {
@@ -130,27 +131,38 @@ describe('减少透明、减少动态：只看系统设置（只有这一处判�
     stubSystem(false, true, true);
     await load();
     expect(html().dataset['rt']).toBe('1');
-    expect(html().dataset['rtSys']).toBe('1');
+    expect(html().dataset['solid']).toBeUndefined();
     expect(html().dataset['rm']).toBe('1');
     mqs.rt.matches = false;
     mqs.rt.fire();
     expect(html().dataset['rt']).toBeUndefined();
-    expect(html().dataset['rtSys']).toBeUndefined();
     expect(html().dataset['rm']).toBe('1');
     mqs.rm.matches = false;
     mqs.rm.fire();
     expect(html().dataset['rm']).toBeUndefined();
   });
 
-  it('隐私记强制实色（TC-B5-12）：只写 data-rt、不写 data-rt-sys（输入时的模糊层照随手记模糊，负责人 11-20）；放开后都没有', async () => {
+  it('隐私记强制实色（TC-B5-12）：只写 data-solid、不碰 data-rt（data-rt 只表示系统设置，输入时的模糊层照随手记模糊，负责人 11-20）；放开后没有；重画不冲掉；日志记 rt=hold', async () => {
     stubSystem(false, false, false);
     const m = await load();
+    const log = vi.fn();
+    m.watchLook(fakeCollection(), log);
     const release = m.holdReducedTransparency();
-    expect(html().dataset['rt']).toBe('1');
-    expect(html().dataset['rtSys']).toBeUndefined();
-    release();
+    expect(html().dataset['solid']).toBe('1');
     expect(html().dataset['rt']).toBeUndefined();
-    expect(html().dataset['rtSys']).toBeUndefined();
+    expect(log).toHaveBeenLastCalledWith('look_apply', { code: expect.stringContaining('rt=hold') as string });
+    m.applyLook({ skin: 'simple', theme: 'dark', font: 'system' });
+    expect(html().dataset['solid']).toBe('1');
+    // 系统也开了“减少透明效果”：两个属性各管各的
+    mqs.rt.matches = true;
+    mqs.rt.fire();
+    expect(html().dataset['rt']).toBe('1');
+    expect(html().dataset['solid']).toBe('1');
+    release();
+    release();
+    expect(html().dataset['solid']).toBeUndefined();
+    expect(html().dataset['rt']).toBe('1');
+    expect(log).toHaveBeenLastCalledWith('look_apply', { code: expect.stringContaining('rt=sys') as string });
   });
 
   it('旧账号存过 ui.reduce_transparency / ui.reduce_motion = true：不再生效，系统没设置就不写', async () => {

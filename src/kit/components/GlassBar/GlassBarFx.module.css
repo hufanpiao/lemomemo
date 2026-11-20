@@ -115,11 +115,11 @@
 
 /* 减少透明效果：渐隐那一段不要，从“＋”底边起直接是 --bg；上沿外渐隐（.edge）也不要 */
 
-:global(:root[data-rt='1']) .edge {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .edge {
   display: none;
 }
 
-:global(:root[data-rt='1']) .band {
+:global(:root:is([data-rt='1'], [data-solid='1'])) .band {
   background: linear-gradient(to bottom, transparent var(--band-fade), var(--bg) var(--band-fade));
 }
 
