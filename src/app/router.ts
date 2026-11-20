@@ -127,9 +127,9 @@ function notifyAll(): void {
 
 /**
  * 切页怎么动：push 整页推页（新页从右滑进盖住）；pop 返回方向的整页推页（旧页往右滑出），两种都是 motion 的 transition（11-20 起不用 View Transition）；
- * slide-r / slide-l 四个页签互切（motion 的 fadeSwap，原地模糊淡换，不分方向）；none 直接画
+ * fade 四个页签互切（motion 的 fadeSwap，原地模糊淡换，不分方向）；none 直接画
  */
-export type Anim = 'push' | 'pop' | 'slide-r' | 'slide-l' | 'none';
+export type Anim = 'push' | 'pop' | 'fade' | 'none';
 
 /** 改地址（可选）并同步把新页面画完；按 anim 包一层动画 */
 export function commit(change?: () => void, anim: Anim = 'push'): Promise<void> {
@@ -142,7 +142,7 @@ export function commit(change?: () => void, anim: Anim = 'push'): Promise<void> 
     update();
     return Promise.resolve();
   }
-  if (anim === 'slide-r' || anim === 'slide-l') return fadeSwap(update);
+  if (anim === 'fade') return fadeSwap(update);
   return transition(update, anim === 'pop');
 }
 
@@ -167,7 +167,7 @@ export function setSamePage(fn: (a: Route, b: Route) => boolean): void {
 }
 
 /**
- * 从 from 换到 to 起哪种过渡：同一页（samePageAs，例如纪念日列表 → 盖在上面的编辑层）不起过渡；页签互切左右滑入；别的整页过渡。
+ * 从 from 换到 to 起哪种过渡：同一页（samePageAs，例如纪念日列表 → 盖在上面的编辑层）不起过渡；页签互切原地淡换；别的整页过渡。
  * 同一页不起过渡（整块评审第 20 条，原来另有一份 pushInPage）：编辑层自己从底部滑上来，再叠整页淡入淡出是两层动画；
  * 而且编辑层挂上时锁滚动，过渡途中文档从能滚变成不能滚，WebKit 会整页崩（B5 e2e 实测）
  */
@@ -175,8 +175,7 @@ function animOf(from: string, to: string): Anim {
   const a = parseHash(from);
   const b = parseHash(to);
   if (samePage(a, b)) return 'none';
-  const dir = tabSwitch(a, b);
-  return dir === 1 ? 'slide-r' : dir === -1 ? 'slide-l' : 'push';
+  return tabSwitch(a, b) === 0 ? 'push' : 'fade';
 }
 /** 从当前地址去 href（goHref、replaceRoute、goBack 用；别的办法换地址的 hashchange 走同一个 animOf） */
 export const animTo = (href: string): Anim => animOf(window.location.hash, href);

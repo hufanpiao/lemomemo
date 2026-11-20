@@ -75,7 +75,7 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
     await finishAll(page);
   };
 
-  test('换页 100 ms 以后、淡入还在进行（停在 10、80、150 ms 处；--dur-tab 11-18 起 200ms）点新页面上的链接：直接点到（进设置），没有 View Transition', async ({ page }) => {
+  test('换页 100 ms 以后、淡入还在进行（停在 10、80、150 ms 处；页签互切的淡换同日历翻月，blur-swap.ts）点新页面上的链接：直接点到（进设置），没有 View Transition', async ({ page }) => {
     await setup(page);
     for (const ms of [10, 80, 150]) {
       await markTab(page);

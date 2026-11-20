@@ -1,7 +1,7 @@
 // 长按拿起、拖着走的底层（R-429 拖动排序，主持人 11-15 定：kit 手写一份长按拖动，不用 dnd-kit；随手记页（隐私记页同一个组件）和待办子任务（列表卡片、编辑页把手，R-476）在用；
 // 电脑版布局拖面板 DeskLayout 用的是 dnd-kit，两套各管各的，不混用）。经 gestures.ts 出口给 kit 的 useSortDrag 用，不进首屏的 main 块。
 // 这里只管手势，不管“落在哪”和数据：
-// • 按住 LIFT_MS（0.4 秒）没动才拿起（调用方的 now 认的那一下——按在拖动把手上——不等时间，手指挪过 GRIP_PX 就拿起，轻点不拿，R-476）；没到时间先走过 SLOP_PX（同左滑的起滑距离）就放手不管，交给左滑（kit SwipeRow）或页面滚动
+// • 按住 LIFT_MS（0.4 秒）没动才拿起（调用方的 now 认的那一下——按在拖动把手上——不等时间，手指挪过 GRIP_PX 就拿起，轻点不拿，R-476）；没到时间先走过 TAP_SLOP_PX（同左滑的起滑距离）就放手不管，交给左滑（kit SwipeRow）或页面滚动
 // • 挂在整张列表的外框元素上（一页一个；调用方用回调 ref 交元素，电脑版换挂、断点切换时外框换了就重挂），按下落在哪一行由调用方的 pick 认（行上的 data 标记）；左边缘 20 px 以内起手让给系统返回（同 hdrag.ts）
 // • 拿起那一刻：
 //   – 给按下的那个元素补发一次 pointercancel（只给这一个指针）：左滑行（hdrag.ts）按“浏览器收走了这次触摸”收尾，不会再把后面的移动当成横滑；
@@ -21,8 +21,9 @@
 // 纯 TS + React 的 useRef / useEffect，不带 motion/react；自动滚动的帧循环用 ./frame-loop.ts 的 eachFrame（A25：帧循环只写在 src/motion）
 import { useEffect, useRef } from 'react';
 import { eachFrame } from './frame-loop.ts';
-import { inEdge, SLOP_PX } from './hdrag.ts';
+import { inEdge } from './hdrag.ts';
 import { swallowNextClick } from './swallow-click.ts';
+import { TAP_SLOP_PX } from './tokens.ts';
 
 /** 按住多久拿起（毫秒；R-429 原文“长按 0.4 秒没动才拿起”） */
 export const LIFT_MS = 400;
@@ -196,7 +197,7 @@ export function useLongPressDrag(box: HTMLElement | null, opts: LongPressDragOpt
       const d = Math.hypot(e.clientX - press.x0, e.clientY - press.y0);
       if (press.grip) {
         if (d >= GRIP_PX) lift();
-      } else if (d >= SLOP_PX) clearPress();
+      } else if (d >= TAP_SLOP_PX) clearPress();
     };
     const onUp = (e: PointerEvent): void => {
       if (ours(e)) return void e.stopPropagation();

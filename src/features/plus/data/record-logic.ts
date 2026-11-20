@@ -25,7 +25,7 @@ export const UPLOAD_MAX_MS = 22_000;
 export const BLOB_KEEP_MS = 120_000;
 export const AUTO_RETRY_MAX = 1;
 export const HOLD_MS = 350;
-/** 按下后、判定前挪动超过这个（px）就既不算点也不算按住（是在滑动） */
+/** 按下后、判定前挪动超过这个（px）就既不算点也不算按住（是在滑动）。同 motion/tokens.ts 的 TAP_SLOP_PX：功能的 data 层不准引 motion，改一处要两处一起改 */
 export const HOLD_SLOP_PX = 10;
 
 /** 上传的总超时（毫秒） */

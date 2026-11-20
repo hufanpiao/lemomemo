@@ -52,7 +52,7 @@ describe('M5：减少动态效果的订阅是单例', () => {
     const { unmount } = render(
       <>
         {Array.from({ length: 20 }, (_, i) => (
-          <Appear key={i} kind="row" show>
+          <Appear key={i} kind="toast" show>
             <span>{i}</span>
           </Appear>
         ))}

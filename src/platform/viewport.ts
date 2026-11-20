@@ -231,7 +231,7 @@ export function focusInPlace(el: Field | null, via: string): void {
   rlog(`focus in-place via=${via} h=${h} y=${Math.round(typeof window === 'undefined' ? 0 : window.scrollY)}`);
 }
 
-/** 按下到抬起挪动不到这么多（px）才算“点”（打字条点空白处 Q-10 也用这个） */
+/** 按下到抬起挪动不到这么多（px）才算“点”（打字条点空白处 Q-10 也用这个）。同 motion/tokens.ts 的 TAP_SLOP_PX：platform 只准引 shared、platform，引不到那里，改一处要两处一起改 */
 export const TAP_SLOP_PX = 10;
 /** 按住这么久（ms）以上算长按，不拦（iOS 长按出放大镜、选字） */
 export const TAP_HOLD_MS = 500;

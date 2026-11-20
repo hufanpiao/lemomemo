@@ -1,6 +1,6 @@
 // 横向拖动的底层（R-420 审查第 4 条“横滑手势两套”合成这一套）：月历翻页（swipe-pager.ts）和 kit 左滑行（SwipeRow）共用，
 // 两处只留“松手以后怎么办”。这里管：
-// • 锁方向：先走过 SLOP_PX，横向比竖向多才锁成横滑（抓住指针、自己跟手）；先竖着走就整段交给页面滚动（元素要配 CSS touch-action: pan-y）
+// • 锁方向：先走过 TAP_SLOP_PX（tokens.ts），横向比竖向多才锁成横滑（抓住指针、自己跟手）；先竖着走就整段交给页面滚动（元素要配 CSS touch-action: pan-y）
 // • 边缘避让：从屏幕左边缘 EDGE_PX（20 px，架构 5.12）以内起手的不管，让给 iPhone 侧滑返回；左右两条切页带 SIDE_PX（32 px，负责人 11-18）以内起手的也不管，让给四个主页面切页签
 // • 鼠标：mouse 参数区分。列表行（SwipeRow）传 true：电脑上也能拿鼠标拖开（行里同样有“⋯”菜单，留着不碍事）；
 //   月历翻页传 false：电脑上用 ‹ › 按钮和键盘 ← → 翻，鼠标在格子上拖来拖去多半是想选字、点格子，不当翻页
@@ -11,19 +11,18 @@
 // 纯 TS + React 的 useRef，不带 motion/react；经 gestures.ts 出口用，不进首屏的 main 块
 import { useRef, type PointerEvent as RPointerEvent, type RefObject } from 'react';
 import { swallowNextClick } from './swallow-click.ts';
+import { TAP_SLOP_PX } from './tokens.ts';
 
 /** 左边缘的系统返回手势区（px，架构 5.12） */
 export const EDGE_PX = 20;
-/** 起滑距离（px）：先走过这么多才判断横竖；翻页、左滑行同一个值（审查第 4 条，原来 10 和 8） */
-export const SLOP_PX = 10;
 
 export type Axis = 'none' | 'h' | 'v';
 
-/** 按目前的位移判断锁成哪个方向（纯函数）：没走够 SLOP_PX 不锁；横向大于竖向是横滑，否则竖滑 */
+/** 按目前的位移判断锁成哪个方向（纯函数）：没走够 TAP_SLOP_PX（起滑距离，翻页、左滑行同一个值）不锁；横向大于竖向是横滑，否则竖滑 */
 export function lockOf(dx: number, dy: number): Axis {
   const ax = Math.abs(dx);
   const ay = Math.abs(dy);
-  if (Math.max(ax, ay) < SLOP_PX) return 'none';
+  if (Math.max(ax, ay) < TAP_SLOP_PX) return 'none';
   return ax > ay ? 'h' : 'v';
 }
 

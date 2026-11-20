@@ -47,8 +47,6 @@ export const dur = {
   collapse: 0.1,
   /** --dur-sheet 380ms：弹层、录音面板、页面切换 */
   sheet: 0.38,
-  /** --dur-tab 200ms：底栏四个页签互切，按底栏顺序左右滑入（负责人 11-18 选切页方案 B，取代 R-471 的淡入上移 300ms；motion 的 fadeSwap） */
-  tab: 0.2,
   /** --dur-grow 280ms：打字条点“详细”，那张卡长成新建页（负责人 11-18 选 A；motion 的 growSwap） */
   grow: 0.28,
   /** --dur-drop 0.55s：底栏液滴（R-155，唯一超过 400ms 的例外） */
@@ -138,7 +136,6 @@ export const cssVarOf = {
     doneRest: '--dur-done-rest',
     collapse: '--dur-collapse',
     sheet: '--dur-sheet',
-    tab: '--dur-tab',
     grow: '--dur-grow',
     drop: '--dur-drop',
     glass: '--dur-glass',
@@ -204,12 +201,18 @@ export const FADE_GUARD_MS = 100;
  * 人有意的第二下自己有 pointerup、照样切换，不受影响。比 FADE_GUARD_MS 长，因为这里吞的只有补发的 click
  */
 export const CHECK_CLICK_SWALLOW_MS = 800;
+/**
+ * 轻点和拖动的分界（px）：按下到抬手（或到这一刻）挪动不超过它算轻点，再远是在滑、在拖。
+ * 引用它的：kit CheckCircle（抬手切换）、hdrag.ts（锁方向的起滑距离，drag-collapse、long-press-drag 经它）。
+ * 同样是 10、但按分层引不到这里的，各自留一份并注明“同 tokens.ts TAP_SLOP_PX”：platform/viewport.ts（platform 只准引 shared、platform）、
+ * features/plus/data/record-logic.ts 的 HOLD_SLOP_PX（功能的 data 层不准引 motion）；kit GlassBar（首屏文件，人工核）。
+ * long-press.ts 用 8，比这里小，见那里的注释
+ */
+export const TAP_SLOP_PX = 10;
 // 整页推页等新页那段（page-swap.ts holdScreen）不另设毫秒数：从换页吞到新页画完，最长就是 page-swap.ts 的 PAGE_WAIT_MS（300 ms）
 
 /** 现成的 Motion transition（组件里直接用这些，不自己拼） */
 export const tr = {
-  // 同上：只给“按住液滴鼓起”留着，不要拿来做按下回弹（11-05）
-  press: { duration: dur.press, ease: ease.press },
   ui: { duration: dur.ui, ease: ease.out },
   sheet: { duration: dur.sheet, ease: ease.drawer },
   /** 弹层退场：同一条抽屉曲线，时长是进场的 SHEET_EXIT_RATIO 倍 */

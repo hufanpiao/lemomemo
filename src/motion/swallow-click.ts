@@ -63,7 +63,8 @@ export interface GuardWindowOptions {
   /** 只吞落在哪里的：给节点就看 contains；给函数就从事件找（找不到返回 null 就不吞）；不给是落在哪儿都吞 */
   within?: Node | ((e: Event) => Node | null) | null;
   /**
-   * 'keydown'：窗口里按过键盘，紧跟着的那一下 click 放过（键盘的 click 前面一定有 keydown；新的一次按下把这个标记作废）。
+   * 'keydown'：窗口里按过键盘，紧跟着的那一下 click 放过（键盘的 click 前面一定有 keydown；新的一次按下把这个标记作废，
+   * types 里没有 pointerdown 时也另听 pointerdown，只用来作废标记、不吞）。
    * 不给：键盘的 click 也照样吞（勾选圈：抬手切换以后 800 ms 内来的 click 都是系统补发的，不分键盘）
    */
   keyboard?: 'keydown';
@@ -84,16 +85,21 @@ export function guardWindow({ ms, types, on = document, within = null, keyboard,
   const t0 = performance.now();
   let keyed = false;
   let dead = false;
+  // 范围统一成一个函数：落在范围里返回交给 eat 的节点（不限范围时是 null），不在范围里返回 undefined（不吞）
+  const hitOf = (e: Event): Node | null | undefined =>
+    typeof within === 'function' ? (within(e) ?? undefined) : within === null || (e.target instanceof Node && within.contains(e.target)) ? within : undefined;
+  // 认键盘时 pointerdown 一律要听（作废 keyed 标记）；不在 types 里的只作废、不吞
+  const listen: readonly GuardEvent[] = keyboard && !types.includes('pointerdown') ? [...types, 'pointerdown'] : types;
   const onEvent = (e: Event): void => {
     if (ms !== null && performance.now() - t0 >= ms) return void stop();
     if (keyboard && e.type === 'pointerdown') keyed = false;
+    if (!types.includes(e.type as GuardEvent)) return;
     if (keyboard && e.type === 'click' && keyed) {
       keyed = false;
       return;
     }
-    const hit = typeof within === 'function' ? within(e) : within;
-    if (within !== null && (hit === null || (typeof within !== 'function' && !(e.target instanceof Node && within.contains(e.target))))) return;
-    eat(e, hit);
+    const hit = hitOf(e);
+    if (hit !== undefined) eat(e, hit);
   };
   const onKey = (): void => {
     keyed = true;
@@ -103,10 +109,10 @@ export function guardWindow({ ms, types, on = document, within = null, keyboard,
     if (dead) return;
     dead = true;
     clearTimeout(timer);
-    for (const t of types) on.removeEventListener(t, onEvent, true);
+    for (const t of listen) on.removeEventListener(t, onEvent, true);
     if (keyboard) on.removeEventListener('keydown', onKey, true);
   };
-  for (const t of types) on.addEventListener(t, onEvent, true);
+  for (const t of listen) on.addEventListener(t, onEvent, true);
   if (keyboard) on.addEventListener('keydown', onKey, true);
   return stop;
 }

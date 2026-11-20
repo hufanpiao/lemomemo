@@ -13,6 +13,7 @@ import { useEffect, useRef, type MouseEvent, type PointerEvent } from 'react';
 import { LIFT_MS } from './long-press-drag.ts';
 import { swallowNextClick } from './swallow-click.ts';
 
+// 比 tokens.ts 的 TAP_SLOP_PX（10）小：为什么是 8 没查到原因（11-19 abf31916 新建 kit/hooks/useLongPress.ts 时就是 8，没写理由；11-21 原样挪来），待定；没定之前不改数，手感不变
 const SLOP_PX = 8;
 
 export interface LongPressProps {
