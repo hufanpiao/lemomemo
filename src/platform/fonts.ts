@@ -11,8 +11,6 @@
 // • 缓存清理（5.9c）：换字体（含换回系统字体）一天以后，删掉 lemo-fonts 里不属于当前字体的文件（pv-font-gc 记换的时刻）
 // • 运行日志 font_load（look.ts 传进来的 log）：开始、完成、失败各一行，itemId 是字体 id，code 写阶段、错误码、耗时、进度
 // • 状态给设置页用：fontState.get / subscribe（useSyncExternalStore）
-import { safeSet } from './local-store.ts';
-
 const INDEX_URL = '/app/fonts-index.json';
 const LINK_ID = 'lemo-font';
 const CACHE = 'lemo-fonts';
@@ -84,8 +82,12 @@ function local<T>(key: string): T | null {
   }
 }
 function keep(key: string, v: unknown): void {
-  // 隐私模式写不进：只是下次冷启动不走快路、缓存不清
-  safeSet(key, v === null ? null : JSON.stringify(v));
+  try {
+    if (v === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(v));
+  } catch {
+    // 隐私模式写不进：只是下次冷启动不走快路、缓存不清
+  }
 }
 
 async function fetchChecked(p: { url: string; sha256: string }, signal: AbortSignal): Promise<void> {
