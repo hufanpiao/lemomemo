@@ -77,15 +77,13 @@
   display: grid;
 }
 
+/* 记录页方案 A（负责人 11-20 选 A）：第一张离正文 6、图与图之间 12 */
 .list {
   display: grid;
-  margin: 0;
+  gap: 12px;
+  margin: 6px 0 0;
   padding: 0;
   list-style: none;
-}
-
-.item {
-  margin-top: 14px;
 }
 
 .frame {

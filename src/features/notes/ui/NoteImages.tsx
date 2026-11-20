@@ -300,7 +300,7 @@ function OneImage(p: { img: NoteImage; n: number; pending: PendingImage | null; 
   const failed = bad !== null;
   const uploading = p.pending !== null && p.pending.state !== 'failed';
   return (
-    <li className={styles.item} data-testid={`note-image-${p.img.id}`} data-state={failed ? 'failed' : uploading ? 'uploading' : 'done'}>
+    <li data-testid={`note-image-${p.img.id}`} data-state={failed ? 'failed' : uploading ? 'uploading' : 'done'}>
       <span className={styles.frame}>
         {src.url ? <BlobImg url={src.url} alt={t('notes.img.alt', {})} /> : null}
         {failed || uploading ? null : <button type="button" className={styles.open} onClick={(e) => p.onOpen(e.currentTarget)} aria-label={t('notes.img.view', { n: p.n })} data-testid={`note-image-open-${p.img.id}`} />}
