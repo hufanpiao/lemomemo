@@ -4,6 +4,7 @@
 // • 电脑宽屏（≥ 900）：四页都藏掉（设置入口在侧栏）。
 // • LEMO_R381_SHOTS 指一个目录时（只在 chromium 上）：四页浅色、深色各截一张整屏图，给主持人对照（不进仓库）
 import type { Page } from '@playwright/test';
+import { stableBox } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 const PAGES = [
@@ -33,9 +34,8 @@ test('手机 375 宽：四页右上角都有设置头像，大小、右边距一
     await expect(me).toBeVisible();
     await expect(me).toHaveAttribute('href', /#\/settings$/);
     await expect(me).toHaveAccessibleName('设置');
-    const b = await me.boundingBox();
-    expect(b, id).not.toBeNull();
-    if (b) boxes[route] = b;
+    // 量停稳以后的框：从设置页换回来是整页滑动（#288 起走 page-swap），滑到一半量，头像还在屏幕外（chromium 上读到右边距 -319）
+    boxes[route] = await stableBox(me);
     await me.click();
     await page.locator('[data-testid^="settings-card-"]').first().waitFor({ timeout: 10_000 });
   }
