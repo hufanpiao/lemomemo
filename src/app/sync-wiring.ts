@@ -14,6 +14,7 @@ import type { SyncState, SyncTransport } from '../core/sync/types.ts';
 import { browserLifecycle, onUserActivity, type Lifecycle } from '../platform/net.ts';
 import { exitNoticeOf, isSelfSignOut, readExitNotice, type ExitNotice } from '../platform/session.ts';
 import { startSyncNotices } from './sync-notice-gate.ts';
+import { createDisabledGate, type DisabledGate } from '../core/account-leave.ts';
 import { createInsertDeniedCheck, type InsertDeniedCheck } from './insert-denied.ts';
 import { canProbe, currentSid, noLocalSession, noteExitFromOtherTab, probeThenLeave, type SyncDisabledDeps } from './sync-disabled.ts';
 import { markReauthDisabled } from '../platform/auth-loss-store.ts';
@@ -96,11 +97,11 @@ function exitDepsOf(boot: BootResult, deps: WireSyncDeps, post: (m: SyncMessage)
   };
 }
 
-/** Q-15：新建回 42501 的停用探测（见文件头）；能探测时才有。knownProbe 给 probeThenLeave 沿用探出的结果、不再探第二次 */
-function insertDeniedOf(deps: WireSyncDeps): { denied: InsertDeniedCheck | null; deps: WireSyncDeps } {
-  if (!canProbe(deps) || !deps.probeAccount || !deps.readSession) return { denied: null, deps };
-  const denied = createInsertDeniedCheck({ probe: deps.probeAccount, readSession: deps.readSession, ...(deps.now ? { now: deps.now } : {}) });
-  return { denied, deps: { ...deps, knownProbe: (sid) => denied.take(sid) } };
+/** 停用探测的闸（core/account-leave.ts，这套接线一个）和 Q-15 新建回 42501 的探测（见文件头，和退出共用这个闸）；能探测时才有 */
+function disabledGateOf(deps: WireSyncDeps): { gate: DisabledGate; denied: InsertDeniedCheck } | null {
+  if (!canProbe(deps) || !deps.probeAccount || !deps.readSession) return null;
+  const gate = createDisabledGate({ probe: deps.probeAccount, readSession: deps.readSession, ...(deps.now ? { now: deps.now } : {}) });
+  return { gate, denied: createInsertDeniedCheck(gate, deps.now) };
 }
 
 const IDLE: SyncState = { syncing: false, realtime: 'down', lastPullAt: null, stopped: false };
@@ -137,14 +138,9 @@ function createFacade(current: () => Sync | null, close: () => Promise<void>) {
 
 /** 接上同步（按选主启动）；不该接时返回 null */
 export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
-  const q15 = insertDeniedOf(deps);
-  return wireWith(boot, q15.deps, q15.denied);
-}
-
-/** wireSync 的主体；denied 见 insertDeniedOf */
-function wireWith(boot: BootResult, deps: WireSyncDeps, denied: InsertDeniedCheck | null): Sync | null {
   const { cache, outbox } = boot;
   if (boot.status !== 'ready' || boot.switching || !cache || !outbox) return null;
+  const probing = disabledGateOf(deps);
   void askPersistStorage();   // 本机库里有没上传的写入：申请持久存储（不弹东西，结果记运行日志）
   const life = deps.lifecycle ?? browserLifecycle;
   /** 这类事件已经在处理（退出、探测中、限次暂停） */
@@ -163,7 +159,7 @@ function wireWith(boot: BootResult, deps: WireSyncDeps, denied: InsertDeniedChec
       return leave((deps.isSelfSignOut ?? (() => isSelfSignOut()))() ? 'followed' : 'expired', null, path);
     }
     // 限次触发时让出同步主页（这一页的闸关着，占着锁别的标签页就都不同步了）
-    if (code === 'account_disabled' && canProbe(deps)) return void probeThenLeave(boot, deps, sid, (r, s) => leave(r, s, path), yieldLeader);
+    if (code === 'account_disabled' && probing) return void probeThenLeave(boot, deps, probing.gate, sid, (r, s) => leave(r, s, path), yieldLeader);
     leave(exitNoticeOf(code), sid, path, code);
   };
   outbox.onEvent((e) => {
@@ -190,7 +186,7 @@ function wireWith(boot: BootResult, deps: WireSyncDeps, denied: InsertDeniedChec
       transport: deps.transport,
       onRemoved: (code, sid) => onRemoved(code, sid, 'sync'),
       onChanged: (colls) => leader?.post({ type: 'changed', colls }),
-      ...(deps.log ? { log: deps.log } : {}), ...(denied ? { insertDenied: denied.check } : {}),
+      ...(deps.log ? { log: deps.log } : {}), ...(probing ? { insertDenied: probing.denied } : {}),
     });
     current = sync;
     const detach = f.attach(sync);

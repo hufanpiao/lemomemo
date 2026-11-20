@@ -1,12 +1,16 @@
 // 设置页（B1 K9 骨架）的总 hook：把接口、离开本机、设备列表、中韩切换、导出和注销（R-256 ②⑤）、换头像（R-384）接在一起
 // 测试经 deps 换掉接口、清本机和跳转、时钟
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
+import { getBoot } from '../../../core/boot.ts';
+import type { ProbedExit } from '../../../platform/account-status.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { saveFile } from '../../../platform/save-file.ts';
 import { readSessionEmail } from '../../../platform/session.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { createAccountApi, EXPORT_MIME, type AccountApi, type ExportFile } from '../data/account-api.ts';
-import { createFollowSignOut, createLeaveAccount, defaultAccountLeaveDeps, type DisabledLeaveDeps, type LeaveAccount, leaveForDisabled } from '../../../core/account-leave.ts';
+import {
+  createDisabledGate, createFollowSignOut, createLeaveAccount, defaultAccountLeaveDeps, exitForAccountDisabled, type DisabledGateDeps, type LeaveAccount,
+} from '../../../core/account-leave.ts';
 import { createRecentExportsApi, type RecentExportsApi } from '../data/recent-exports.ts';
 import { defaultSignOutHereDeps, readLocalDeviceId } from '../data/local.ts';
 import { createSettingsApi, type SettingsApi } from '../data/settings-api.ts';
@@ -46,8 +50,8 @@ export interface SettingsDeps {
   exitTimeoutMs?: number;
   /** 设置 › 账号标题下的当前登录邮箱（R-275；默认 platform/session.ts 的 readSessionEmail，只读本机会话、不联网；读不到为 null，这一行不显示） */
   readEmail?: () => string | null;
-  /** 测试用：换掉 account_disabled 的探测（默认 platform/account-status.ts 的 exitForDisabled） */
-  resolveDisabled?: DisabledLeaveDeps['resolve'];
+  /** 测试用：换掉 account_disabled 的探测（默认 platform/account-status.ts 的 probeForSid）；要传稳定的函数 */
+  resolveDisabled?: DisabledGateDeps['resolve'];
 }
 
 export function useSettingsPage(deps: SettingsDeps = {}) {
@@ -72,27 +76,16 @@ export function useSettingsPage(deps: SettingsDeps = {}) {
     rlog('settings session_lost kind=signed_out');
     follow();
   }, [follow]);
-  // settings-api 的 account_disabled（RLS 一路，分不清停用和冷静期）：先探测再定（R-256 ③；探测不出按 disabled_unsure）
-  // 设备列表和改语言共用这一个：探测中（probing）再来的不再探测（第六轮审查建议 ③，同一时刻只探测一次）；
-  // 探测说账号正常（没离开）就放开，下次再遇到可以再探测；离开了就一直挡着。
-  // onStay：探测说账号正常时通知调用方改显示通用错误（不说停用或冷静期）；探测中再来的也排进去，一起通知
-  const probing = useRef(false);
-  const stays = useRef<(() => void)[]>([]);
+  // account_disabled（设备列表、改语言、换头像、导出、注销）：先探测再定（core/account-leave.ts 的 exitForAccountDisabled，和主 App 同一个入口）。
+  // 这一页一个闸：同一时刻只探测一次，探测中再来的合用那一次；探测说账号正常（active）就各自调 onStay 改显示通用错误、放开，下次再遇到可以再探；
+  // 离开了就一直挡着。探测说会话已失效（removed）走 onRevoked（同别的出口）
+  const gate = useMemo(() => createDisabledGate(deps.resolveDisabled ? { resolve: deps.resolveDisabled } : {}), [deps.resolveDisabled]);
   const onDisabled = useCallback(
     (sid: string | null, onStay?: () => void) => {
-      if (onStay) stays.current.push(onStay);
-      if (probing.current) return;
-      probing.current = true;
-      const d = { leave, onRevoked, ...(deps.resolveDisabled ? { resolve: deps.resolveDisabled } : {}) };
-      const stay = (): void => {
-        probing.current = false;
-        const fns = stays.current;
-        stays.current = [];
-        fns.forEach((f) => f());
-      };
-      void leaveForDisabled(sid, d).then((left) => (left ? undefined : stay()), stay);
+      const go = (r: ProbedExit, s: string | null): Promise<void> | void => (r === 'removed' ? onRevoked(s) : leave(r, s));
+      void exitForAccountDisabled(sid, { gate, getBoot, leave: go }).then((r) => (r === 'active' ? onStay?.() : undefined), () => onStay?.());
     },
-    [leave, onRevoked, deps.resolveDisabled],
+    [gate, leave, onRevoked],
   );
   const devices = useDevices({
     api,
@@ -112,11 +105,11 @@ export function useSettingsPage(deps: SettingsDeps = {}) {
       leave,
       onRevoked,
       onSignedOut,
-      ...(deps.resolveDisabled ? { resolveDisabled: deps.resolveDisabled } : {}),
+      onDisabled,
       readDeviceId: deps.readDeviceId ?? readLocalDeviceId,
       save: deps.saveExport ?? ((f: ExportFile) => saveFile(f.blob, f.name, EXPORT_MIME)),
     }),
-    [accountApi, leave, onRevoked, onSignedOut, deps.resolveDisabled, deps.readDeviceId, deps.saveExport],
+    [accountApi, leave, onRevoked, onSignedOut, onDisabled, deps.readDeviceId, deps.saveExport],
   );
   const recentExports = useMemo(
     () => deps.recentExports ?? createRecentExportsApi(getSupabase, deps.now ? { now: deps.now } : {}),

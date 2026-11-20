@@ -19,6 +19,7 @@ import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { readSessionId } from '../../../platform/session.ts';
 import { budgetLeft, logoutReplaced, sessionReplaced, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
+import { errParts, isOfflineErr, isRevokedErr, isTryLaterErr } from '../../../platform/supabase/error-kind.ts';
 import type { DeviceRow } from './devices.ts';
 import { sessionIdOfToken } from './devices.ts';
 import { withTimeout } from '../../../platform/exit-basics.ts';
@@ -90,37 +91,19 @@ export interface SettingsApi {
   saveAvatar(avatarId: string | null, avatarBytes: number | null): Promise<Result>;
 }
 
-interface ErrLike {
-  name?: unknown;
-  code?: unknown;
-  status?: unknown;
-  message?: unknown;
-}
-
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-
-const REVOKED_AUTH_CODES = ['session_not_found', 'refresh_token_not_found', 'refresh_token_already_used', 'session_expired'];
-/** fetch 本身失败（断网、DNS、被拦）的几种说法：Chrome、Safari、Firefox */
-const FETCH_FAILED = /failed to fetch|load failed|networkerror|network request failed|network error/i;
-
-/** supabase-js 的 PostgrestError、AuthError、抛出的异常 → 界面的错误 */
+/** supabase-js 的 PostgrestError、AuthError、抛出的异常 → 界面的错误（会话失效、服务器忙、断网的认法共用 platform/supabase/error-kind.ts） */
 export function mapSettingsError(e: unknown): SettingsErr {
-  if (typeof e !== 'object' || e === null) return 'unknown';
-  const x = e as ErrLike;
-  const code = str(x.code);
-  const msg = str(x.message);
-  const name = str(x.name);
-  const status = typeof x.status === 'number' ? x.status : -1;
-  // PostgREST 把 raise exception 'session_revoked' 变成 400 + message（0.38 第 7 条）
-  if (/\bsession_revoked\b|\bunauthorized\b/.test(msg) || code === 'session_revoked' || code === 'unauthorized') return 'revoked';
-  if (REVOKED_AUTH_CODES.includes(code) || status === 401) return 'revoked';
-  if (name === 'AuthSessionMissingError') return 'signed_out';
+  const p = errParts(e);
+  if (!p) return 'unknown';
+  const { code, msg } = p;
+  if (isRevokedErr(p)) return 'revoked';
+  if (p.name === 'AuthSessionMissingError') return 'signed_out';
   if (/\baccount_disabled\b/.test(msg) || code === 'account_disabled') return 'account_disabled';
   if (/\bis_current_device\b/.test(msg)) return 'is_current_device';
   if (/\bdevice_not_found\b/.test(msg)) return 'device_not_found';
   if (/\bquota_exceeded\b/.test(msg)) return 'quota_exceeded';
-  if (/\btry_later\b/.test(msg) || code === 'try_later' || status === 503) return 'try_later';
-  if (name === 'AuthRetryableFetchError' || status === 0 || FETCH_FAILED.test(msg)) return 'offline';
+  if (isTryLaterErr(p)) return 'try_later';
+  if (isOfflineErr(p)) return 'offline';
   return 'unknown';
 }
 

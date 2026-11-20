@@ -120,12 +120,13 @@ export function probeAccountForExit(o: ProbeOpts = {}): Promise<AccountProbe> {
 }
 
 /**
- * 主 App 收到含糊的 account_disabled（RLS 一路的 is_active() 对停用、冷静期都回它）后探测的结果 → 怎么办（R-256 ③ 后续）：
+ * 收到含糊的 account_disabled（RLS 一路的 is_active() 对停用、冷静期都回它）后探测的结果 → 怎么办（R-256 ③ 后续）：
  * - pending_deletion → 按冷静期退出（登录页 auth.exit.pendingDeletion，登录后能恢复）
- * - disabled → 按停用退出（auth.exit.disabled）
- * - unknown（断网、超时）→ 保守按停用流程清本机（服务器已经明确说了不让用），但登录页的提示用不确定的说法 disabled_unsure
- * - signed_out（错误码 unauthorized、session_revoked；不带码的 401 算 unknown）→ 按被移除退出（auth.exit.removed）
- * - active（刚好恢复了）→ 'active'：不清本机，重新同步（sync-wiring 限 5 分钟一次）
+ * - disabled → 按停用退出（auth.exit.disabled）：只退出、不清本机库（R-382）
+ * - unknown（断网、超时、拿不到令牌）→ 也按 disabled（账号退出链路收口 11-20：原来主 App、设置页、告知页、文件按 disabled_unsure 清本机库，
+ *   导出、注销一路按 disabled 只退出；统一成不丢没上传改动的那种）
+ * - signed_out（错误码 unauthorized、session_revoked；不带码的 401 算 unknown）→ 按被移除退出（auth.exit.removed，先查 session_fate 才清库）
+ * - active（刚好恢复了）→ 'active'：不离开，由调用方决定（主 App 限 5 分钟重新载入一次，设置页、告知页提示通用错误）
  */
 /** 探测能给出的退出原因：不含 expired（那是本机没会话时 sync-wiring 自己定的，R-263） */
 export type ProbedExit = Exclude<ExitNotice, 'expired'>;
@@ -136,12 +137,10 @@ export function exitAfterProbe(s: AccountProbe): ProbedExit | 'active' {
       return 'removed';
     case 'pending_deletion':
       return 'pending_deletion';
-    case 'disabled':
-      return 'disabled';
     case 'active':
       return 'active';
     default:
-      return 'disabled_unsure';
+      return 'disabled';
   }
 }
 
@@ -150,20 +149,21 @@ export interface DisabledExitOptions {
   readSession?: () => { sid: string | null; token: string | null };
   /** 探测（默认 probeAccountForExit） */
   probe?: (token: string) => Promise<AccountProbe>;
-  /**
-   * 探测不出（unknown）时用哪个退出原因：默认 disabled_unsure（RLS 一路的 account_disabled 分不清停用和冷静期）；
-   * 码本来就精确的地方（account 函数一路，经 requireActiveUser）传 'disabled'
-   */
-  fallback?: ProbedExit;
 }
 
 /**
- * 收到 account_disabled 后先探测再定退出原因（R-256 ③；sync-wiring、同意页、设置页、platform/files.ts 共用这一份，口径一致）：
- * - 只用被拒那次请求所用会话（sid）的令牌去查；本机会话已不是它（别的标签页换了人）或读不到令牌时不查，按 unknown
- * - 结果按 exitAfterProbe：pending_deletion / disabled / removed（signed_out）/ unknown → fallback / 'active'（刚好恢复了，不清本机）
- * 永远 resolve
+ * 探测 + 定退出原因（probeForSid + exitAfterProbe）。只剩文件上传一路（platform/files.ts 的 accountExitOf，经 core/row-sync.ts）直接用、没有单飞：
+ * 那两个文件属附件功能、11-20 收口时有人在改，没动；以后改成走 core/account-leave.ts 的闸后删掉这个
  */
 export async function exitForDisabled(sid: string | null, o: DisabledExitOptions = {}): Promise<ProbedExit | 'active'> {
+  return exitAfterProbe(await probeForSid(sid, o));
+}
+
+/**
+ * 收到 account_disabled 后的探测（R-256 ③；core/account-leave.ts 的 createDisabledGate 调它，结果由 exitAfterProbe 定退出原因）：
+ * 只用被拒那次请求所用会话（sid）的令牌去查；本机会话已不是它（别的标签页换了人）、sid 为 null、读不到令牌时不查，按 unknown。永远 resolve
+ */
+export async function probeForSid(sid: string | null, o: DisabledExitOptions = {}): Promise<AccountProbe> {
   let now: { sid: string | null; token: string | null } = { sid: null, token: null };
   try {
     now = (o.readSession ?? (() => ({ sid: readSessionId(), token: readSessionAccessToken() })))();
@@ -171,14 +171,10 @@ export async function exitForDisabled(sid: string | null, o: DisabledExitOptions
     // 存储不可用：拿不到令牌，按 unknown
   }
   const token = sid !== null && now.sid === sid ? now.token : null;
-  let status: AccountProbe = { kind: 'unknown' };
-  if (token) {
-    try {
-      status = await (o.probe ?? ((t: string) => probeAccountForExit({ token: t })))(token);
-    } catch {
-      status = { kind: 'unknown' };
-    }
+  if (!token) return { kind: 'unknown' };
+  try {
+    return await (o.probe ?? ((t: string) => probeAccountForExit({ token: t })))(token);
+  } catch {
+    return { kind: 'unknown' };
   }
-  const r = exitAfterProbe(status);
-  return status.kind === 'unknown' && o.fallback ? o.fallback : r;
 }

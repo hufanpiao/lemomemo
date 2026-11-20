@@ -1,12 +1,13 @@
 // 告知页收到 account_disabled 先探测再定（R-256 ③、DISABLED-probe-later ①；consent-exit.ts 文件头）：
 // record_consent 一路按 is_active() 判断，停用和冷静期都回 account_disabled；探测（platform/account-status.ts 的 exitForDisabled）以后
-// pending_deletion → 冷静期提示；disabled → 已停用；removed（signed_out）→ 被移除；unknown → disabled_unsure；active → 不离开、留在告知页
+// pending_deletion → 冷静期提示；disabled → 已停用；removed（signed_out）→ 被移除；unknown → 也按 disabled（11-20 收口）；active → 不离开、留在告知页
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BootResult } from '../../../core/boot.ts';
 import type { ExitNotice } from '../../../platform/session.ts';
+import { probeOf } from '../../../core/__tests__/disabled-probe-fakes.ts';
 import { defaultLeaveDeps, leaveThisDevice, resetLeaveForTest, type LeaveDeps } from '../data/consent-exit.ts';
 
-function deps(answer: () => Promise<ExitNotice | 'active'>, boot: Partial<BootResult> | null = { switching: false, userId: 'U1' }) {
+function deps(answer: () => Promise<Parameters<typeof probeOf>[0]>, boot: Partial<BootResult> | null = { switching: false, userId: 'U1' }) {
   const order: string[] = [];
   const d: LeaveDeps = {
     getBoot: () => boot as BootResult | null,
@@ -21,7 +22,7 @@ function deps(answer: () => Promise<ExitNotice | 'active'>, boot: Partial<BootRe
     resolveAuthLoss: vi.fn(async () => 'removed' as const),
     clearLogs: vi.fn(() => undefined),
     broadcastReset: vi.fn(),
-    resolveDisabled: vi.fn(answer),
+    resolveDisabled: vi.fn(async (_sid: string | null) => probeOf(await answer())),
   };
   return { d, order };
 }
@@ -29,9 +30,9 @@ function deps(answer: () => Promise<ExitNotice | 'active'>, boot: Partial<BootRe
 afterEach(resetLeaveForTest);
 
 describe('告知页 account_disabled：先探测再定退出原因', () => {
-  for (const notice of ['pending_deletion', 'disabled', 'removed', 'disabled_unsure'] as const) {
-    it(`探测结果 ${notice}：按它清本机、记原因、回登录页；探测用被拒那次的 sid`, async () => {
-      const { d, order } = deps(async () => notice);
+  for (const [answer, notice] of [['pending_deletion', 'pending_deletion'], ['disabled', 'disabled'], ['removed', 'removed'], ['unknown', 'disabled']] as const) {
+    it(`探测结果 ${answer}：按 ${notice} 清本机、记原因、回登录页；探测用被拒那次的 sid`, async () => {
+      const { d, order } = deps(async () => answer);
       await leaveThisDevice('account_disabled', 's1', d);
       expect(d.resolveDisabled).toHaveBeenCalledWith('s1');
       // 冷静期不删会话（R-262），清库、记原因、回登录页照旧
@@ -42,7 +43,7 @@ describe('告知页 account_disabled：先探测再定退出原因', () => {
   }
 
   it('探测完以前不删会话、不清本机（探测要用这个会话的令牌）', async () => {
-    let answer = (_r: ExitNotice | 'active'): void => undefined;
+    let answer = (_r: Parameters<typeof probeOf>[0]): void => undefined;
     const { d, order } = deps(() => new Promise((r) => (answer = r)));
     const p = leaveThisDevice('account_disabled', 's1', d);
     await Promise.resolve();
@@ -63,7 +64,7 @@ describe('告知页 account_disabled：先探测再定退出原因', () => {
 
   it('探测期间别的退出流程接手了（switching）：什么也不做', async () => {
     const boot = { switching: false, userId: 'U1' };
-    let answer = (_r: ExitNotice | 'active'): void => undefined;
+    let answer = (_r: Parameters<typeof probeOf>[0]): void => undefined;
     const { d, order } = deps(() => new Promise((r) => (answer = r)), boot);
     const p = leaveThisDevice('account_disabled', 's1', d);
     boot.switching = true;
@@ -79,13 +80,13 @@ describe('告知页 account_disabled：先探测再定退出原因', () => {
     expect(d.goToAuth).toHaveBeenCalledWith('removed', 's1');
   });
 
-  it('不给 resolveDisabled 时用 exitForDisabled：本机没有会话（拿不到令牌）→ 不探测，按 disabled_unsure', async () => {
+  it('不给 resolveDisabled 时用 probeForSid：本机没有会话（拿不到令牌）→ 不探测，按 disabled', async () => {
     const { d } = deps(async () => 'disabled');
     delete d.resolveDisabled;
     sessionStorage.clear();
     localStorage.clear();
     await leaveThisDevice('account_disabled', 's1', d);
-    expect(d.goToAuth).toHaveBeenCalledWith('disabled_unsure', 's1');
+    expect(d.goToAuth).toHaveBeenCalledWith('disabled', 's1');
   });
 });
 
@@ -107,7 +108,7 @@ describe('探测回 signed_out 也先查 session_fate（架构 4.1a 第 1 点；
 
 describe('探测期间再点一次（防重复，11-11 返修 ④）', () => {
   it('第一次还在探测时，第二次 account_disabled、session_revoked 都不再探测、不再离开', async () => {
-    let answer = (_r: ExitNotice | 'active'): void => undefined;
+    let answer = (_r: Parameters<typeof probeOf>[0]): void => undefined;
     const { d } = deps(() => new Promise((r) => (answer = r)));
     const first = leaveThisDevice('account_disabled', 's1', d);
     expect(await leaveThisDevice('account_disabled', 's1', d)).toBe(true);
@@ -136,7 +137,7 @@ describe('sid 读不出（null）时删会话（第八轮必改 1：不另认同
 });
 
 describe('离开前广播带原因的 reset（SESS-1030-sugg ①，和设置页、sync-wiring 一致）', () => {
-  function withPosts(answer: () => Promise<ExitNotice | 'active'>, boot: Partial<BootResult> | null = { switching: false, userId: 'U1' }) {
+  function withPosts(answer: () => Promise<Parameters<typeof probeOf>[0]>, boot: Partial<BootResult> | null = { switching: false, userId: 'U1' }) {
     const x = deps(answer, boot);
     x.d.broadcastReset = vi.fn((userId: string, e?: { notice: ExitNotice; sid: string | null }) => {
       x.order.push(e ? `post:${userId}:${e.notice}:${e.sid ?? 'null'}` : `post:${userId}`);

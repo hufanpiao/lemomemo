@@ -1,11 +1,13 @@
 // 主 App 收到 account_disabled 以后怎么办、别的标签页发来的退出原因怎么记（由 app/sync-wiring.ts 调，不单独接线）
-// 不变量：先用被拒那次的 sid 探测（platform/account-status.ts 的 exitForDisabled），探测期间不删会话；结局交 core/device-exit.ts（signed_out 也先查 session_fate）
-// 不变量：sid 为 null、本机也没有会话时不探测，按 expired 只退出；active 的重新载入 5 分钟内只一次，第二次让出主页、顶部提示同步暂停
+// 不变量：探测、退出交 core/account-leave.ts 的 exitForAccountDisabled（和设置页、告知页、文件上传同一个入口），这里只管账号其实正常（active）时：
+//   重新载入 5 分钟内只一次，第二次让出主页、顶部提示同步暂停
+// 不变量：sid 为 null、本机也没有会话时不探测，按 expired 只退出（sync-wiring 判）
 // 不变量：reset 带的原因只在 sid 对得上（不带 sid 时本页也没有会话）才记
 // 详细说明见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
+import { exitForAccountDisabled, type DisabledGate } from '../core/account-leave.ts';
 import type { BootResult } from '../core/boot.ts';
 import type { SyncLog } from '../core/sync/types.ts';
-import { exitAfterProbe, exitForDisabled, type AccountProbe } from '../platform/account-status.ts';
+import type { AccountProbe, ProbedExit } from '../platform/account-status.ts';
 import { isExitNotice, type ExitNotice } from '../platform/session.ts';
 import type { SyncMessage } from '../platform/tab-leader.ts';
 
@@ -18,12 +20,7 @@ export interface SyncDisabledDeps {
    * 和 readSession、reload 三个都给了才探测；不给就照旧直接按停用退出
    */
   probeAccount?: (token: string) => Promise<AccountProbe>;
-  /**
-   * 这个 sid 刚探测过、已知账号不可用（Q-15：新建回 42501 时 app/insert-denied.ts 探的）：给出结果就沿用、不再探第二次，
-   * 免得第二次回 unknown 落成 disabled_unsure 清本机（R-382）。sync-wiring 接，不给照常探测
-   */
-  knownProbe?: (sid: string | null) => AccountProbe | null;
-  /** 本机会话的 user_id（platform/session.ts 的 readSessionUserId）：sid 为 null 时据此分“没有会话”（按 removed）和“读不出 sid”（照旧探测） */
+  /** 本机会话的 user_id（platform/session.ts 的 readSessionUserId）：sid 为 null 时据此分“没有会话”（按 expired）和“读不出 sid”（照旧探测） */
   readUserId?: () => string | null;
   /** 本机会话现在的 session_id 和 access token（platform/session.ts 的 readSessionId、readSessionAccessToken；只放内存） */
   readSession?: () => { sid: string | null; token: string | null };
@@ -79,29 +76,18 @@ export function noLocalSession(deps: SyncDisabledDeps, sid: string | null): bool
 export const canProbe = (deps: SyncDisabledDeps): boolean => Boolean(deps.probeAccount && deps.readSession && deps.reload);
 
 /**
- * 先探测再决定（见文件头）。sid：被拒那次请求发出前本机会话的 session_id；null = 发请求时没有读得出的会话。
- * leave：按退出原因清本机、回登录页（sync-wiring 的那一套）；yieldLeader：让出同步主页。探测期间别的退出流程接手了（boot.switching）就不再处理
+ * 先探测再决定（core/account-leave.ts 的 exitForAccountDisabled）；active 时闸保持关着，5 分钟内头一次、并且记得下时刻才重新载入，
+ * 否则记 disabled_probe_active_loop、让出同步主页（yieldLeader）、顶部提示同步暂停
  */
 export async function probeThenLeave(
   boot: BootResult,
   deps: SyncDisabledDeps,
+  gate: DisabledGate,
   sid: string | null,
-  leave: (notice: ExitNotice, dead: string | null) => void,
+  leave: (notice: ProbedExit, dead: string | null) => void,
   yieldLeader: () => void,
 ): Promise<void> {
-  let now: { sid: string | null; token: string | null } = { sid: null, token: null };
-  try {
-    now = deps.readSession?.() ?? now;
-  } catch {
-    // 存储不可用：拿不到令牌，按 unknown
-  }
-  // 本机会话已不是被拒那一个（别的标签页换了人）：exitForDisabled 不拿别人的令牌去查
-  const probe = deps.probeAccount;
-  const known = deps.knownProbe?.(sid) ?? null;
-  const r = known ? exitAfterProbe(known) : await exitForDisabled(sid, { readSession: () => now, ...(probe ? { probe } : {}) });
-  if (boot.switching) return;
-  if (r !== 'active') return leave(r, sid);
-  // 闸保持关着；只有 5 分钟内头一次、并且记得下时刻才重新载入
+  if ((await exitForAccountDisabled(sid, { gate, getBoot: () => boot, leave })) !== 'active') return;
   if (mayReloadForActive(deps)) return void deps.reload?.();
   deps.log?.('disabled_probe_active_loop');
   yieldLeader();

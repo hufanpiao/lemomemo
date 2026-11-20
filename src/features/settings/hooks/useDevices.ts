@@ -3,9 +3,10 @@
 // revoked 交给 onRevoked（清空本机、提示“被移除”后回登录页）；本机没有会话交给 onSignedOut（提示“已退出登录”）；
 // 两者都带上那次请求用的会话的 session_id（接手清单 K6-sugg4 ①：离开本机时只删它）
 // account_disabled（RLS 一路，分不清停用和冷静期）交给 onDisabled 先探测再定（R-256 ③，useSettingsPage 接 core/account-leave.ts 的
-// leaveForDisabled）。探测期间不显示“已停用”（还不知道是不是）：离开时页面跳走；探测说账号正常（active）就显示通用的
+// exitForAccountDisabled；分发用 core/loss-dispatch.ts）。探测期间不显示“已停用”（还不知道是不是）：离开时页面跳走；探测说账号正常（active）就显示通用的
 // “出了点问题，请稍后再试”（unknown），不说停用或冷静期（PROBE / DISABLED-probe-later 遗留，10-30）
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { dispatchLoss } from '../../../core/loss-dispatch.ts';
 import { sortDevices, toDeviceView, toSessionInfo, type DeviceView, type Orphans } from '../data/devices.ts';
 import type { Failure, SettingsApi, SettingsErr } from '../data/settings-api.ts';
 
@@ -46,16 +47,10 @@ export function useDevices({ api, onRevoked, onSignedOut, onDisabled, signOutHer
    * account_disabled 交给 onDisabled 先探测：探测说账号正常时 show('unknown')（见文件头）
    */
   const lost = useCallback(
-    (f: Failure, show: (e: SettingsErr) => void): boolean => {
-      if (f.error === 'revoked') onRevoked(f.sid);
-      else if (f.error === 'signed_out') onSignedOut(f.sid);
-      else if (f.error === 'account_disabled' && onDisabled) {
-        onDisabled(f.sid, () => {
-          if (alive.current) show('unknown');
-        });
-      } else return false;
-      return true;
-    },
+    (f: Failure, show: (e: SettingsErr) => void): boolean =>
+      dispatchLoss(f, { onRevoked, onSignedOut, ...(onDisabled ? { onDisabled } : {}) }, () => {
+        if (alive.current) show('unknown');
+      }),
     [onRevoked, onSignedOut, onDisabled],
   );
 
