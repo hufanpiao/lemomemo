@@ -249,7 +249,8 @@
   padding-bottom: calc(var(--inset-bottom, 0px) + 24px);
   border-radius: var(--r-xl) var(--r-xl) 0 0;
   background: var(--bg);
-  animation: anniv-sheet-in var(--dur-sheet) var(--ease-drawer) both;
+
+  /* 从底部滑上来（减少动态效果时只淡入）：AnnivEditor.tsx 的 useEnter('sheetUp') 播，这里不写关键帧 */
 
   /* R-436 第 1 条“去掉顶部空白”：层本身已经让出了安全区（上面的 inset），里面 EditShell 的 .page 再按 --safe-top 让一次就空出一大块；
      层里把 --safe-top 归零（同 base.css 有版本横幅时的写法），EditShell 只留自己的 16 */
@@ -257,23 +258,6 @@
 
   /* R-455“看起来很拥挤”：层里表单各行（kit Form 的 .field）上下内边距 6 → 10 */
   --field-py: 10px;
-}
-
-@keyframes anniv-sheet-in {
-  from {
-    transform: translateY(100%);
-  }
-}
-
-@keyframes anniv-sheet-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-/* 减少动态效果（data-rm：设置里的开关或系统设置，platform/look.ts 统一写）：只淡入 */
-:global(:root[data-rm="1"]) .sheet {
-  animation-name: anniv-sheet-fade;
 }
 
 @media (width >= 900px) {

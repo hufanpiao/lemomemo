@@ -64,3 +64,31 @@ export const presets: Record<AppearKind, Preset> = {
     reduced: { opacity: 0 },
   },
 };
+
+/**
+ * 只有进场、没有退场的几种（Appear.tsx 的 useEnter；改善报告第三节第 4 块从各组件自己写的 CSS 关键帧收过来，数值照原样）：
+ * 关掉时直接卸载、不播退场（要不要补退场等负责人定）。from 是起点，终点就是元素自己的样式（同 CSS 只写 from 的关键帧）；
+ * 减少动态效果时只淡入、时长不减半（和原来的 CSS 一样，不同于上面 Appear 的减半）
+ */
+export type EnterKind = 'lift' | 'sheetUp' | 'drawerRight' | 'drawerLeft' | 'mist';
+
+export interface EnterPreset {
+  from: Record<string, string | number>;
+  /** 减少动态效果时的起点 */
+  reducedFrom: { opacity: number };
+  transition: { readonly duration: number; readonly ease: readonly [number, number, number, number] };
+}
+
+export const enters: Record<EnterKind, EnterPreset> = {
+  // 撤销条从下方 12px 升起并淡入（负责人 11-17 勾选特效分镜第 ⑤ 段，所有撤销条一起；原 UndoToast.module.css undo-rise）。
+  // 用独立的 translate 属性、不用 transform：打字条（TypeBar .noticeSlot）拿 transform 把撤销条抬到打字条上面，
+  // 动 transform 会在动画期间盖掉抬升量（位移变成 12 + lift）；translate 和 transform 分开叠加，互不干扰
+  lift: { from: { opacity: 0, translate: '0 12px' }, reducedFrom: { opacity: 0 }, transition: tr.ui },
+  // 纪念日编辑层从底部滑上来（原 AnnivPage.module.css anniv-sheet-in；同上面 sheet 的进场，但不带退场）
+  sheetUp: { from: { transform: 'translateY(100%)' }, reducedFrom: { opacity: 0 }, transition: tr.sheet },
+  // 电脑版详情抽屉从右边（换到左边时从左边）滑进来 24px 并淡入（R-376 最基本的滑入；原 DetailDrawer.module.css drawer-in）
+  drawerRight: { from: { opacity: 0, transform: 'translateX(24px)' }, reducedFrom: { opacity: 0 }, transition: tr.ui },
+  drawerLeft: { from: { opacity: 0, transform: 'translateX(-24px)' }, reducedFrom: { opacity: 0 }, transition: tr.ui },
+  // 输入时那层液态模糊只淡入、不动位置，110ms（--dur-ui 的一半，不超过 200ms）；减少动态效果时也一样（原 Mist.module.css mist-in）
+  mist: { from: { opacity: 0 }, reducedFrom: { opacity: 0 }, transition: { duration: tr.ui.duration / 2, ease: tr.ui.ease } },
+};

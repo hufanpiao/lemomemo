@@ -10,6 +10,8 @@ export { flipMs, useSwipePager, type SwipePager } from './swipe-pager.ts';
 export { useDragCollapse, type DragCollapse } from './drag-collapse.ts';
 // 长按拿起、拖着走（R-429 拖动排序；kit 的 useSortDrag 用，现在只有随手记页（隐私记页同一个组件）在用）
 export { LIFT_MS, useLongPressDrag, type LongPressDragOptions, type Point } from './long-press-drag.ts';
+// 长按出菜单（随手记分类胶囊、电脑版分类项、隐私记分类格；11-21 从 kit/hooks 挪来：吞点按用 swallowNextClick、时长用 LIFT_MS）
+export { useLongPress, type LongPressProps } from './long-press.ts';
 // 拖动排序手里拿着的浮层（R-461：放大、跟手、倾斜、弹簧落下，见 sort-float.ts）
 export { liftFloat, type SortFloat, type SortFloatOptions } from './sort-float.ts';
 // 电脑版布局拖面板的位移过渡（B6，5.9b；只给 kit/components/DeskLayout 用，跟着电脑版布局的块走）

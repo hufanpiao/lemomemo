@@ -184,12 +184,27 @@ export const CAL_FLIP_SLOW_RATIO = 4;
 export const LIST_LAYOUT_LAG_RATIO = 0.15;
 export const LIST_LAYOUT_LAG = dur.ui * LIST_LAYOUT_LAG_RATIO;
 
+// —— 吞点按的毫秒数（原语在 swallow-click.ts；改善报告第三节第 4 块收到这一处）。三个数管的事不一样，所以不合成一个：
 /**
  * 吞掉“补来的那一下 click”最多等多久（毫秒；swallow-click.ts 的 swallowNextClick 的默认时限）。
  * 只管“一直没等到 click 时监听挂多久”：新的一次按下、pointercancel 一律作废，所以取一个能盖住几处的值就够
  * （R-420 审查第 12 条合成一个：原来翻页、左滑行 600，按住“＋”800，换页守卫晚到的那一下 1000，取最大的 1000）
  */
 export const TAP_SWALLOW_MS = 1000;
+/**
+ * 换页后这么久以内落在 main 里的点按吞掉（page-swap.ts guardTaps 的窗口；代码审查方案 B M8；沿用主持人 11-05 的规则“过渡开始很短时间内的点按算点在旧画面上”）：
+ * 旧页在点页签那一刻就卸掉了，手指顺手再点一下原来那页的位置，人还没看清新页，会直接点中新页同一位置的删除 ×、勾选圈。
+ * 新页第一帧约 17 ms 才画出来，再加人眼看清的最短时间，取 100 ms；底栏不在 main 里，连点页签不受影响。
+ * 这是“人有意的新点按也吞”的窗口，所以要短；上面 TAP_SWALLOW_MS 只吞浏览器补发的那一下，可以长
+ */
+export const FADE_GUARD_MS = 100;
+/**
+ * 勾选圈手指抬起就切换以后，这么久以内系统补发到 label 上的 click 不再切换（kit CheckCircle）：运行日志里补发最晚 0.26 s，留足余量。
+ * 不用 swallowNextClick（只吞一下、新的按下就作废）：iOS 两下快点时补发的 click 可能晚到第二次按下之后，所以是“一段时间内都吞”；
+ * 人有意的第二下自己有 pointerup、照样切换，不受影响。比 FADE_GUARD_MS 长，因为这里吞的只有补发的 click
+ */
+export const CHECK_CLICK_SWALLOW_MS = 800;
+// 整页推页等新页那段（page-swap.ts holdScreen）不另设毫秒数：从换页吞到新页画完，最长就是 page-swap.ts 的 PAGE_WAIT_MS（300 ms）
 
 /** 现成的 Motion transition（组件里直接用这些，不自己拼） */
 export const tr = {

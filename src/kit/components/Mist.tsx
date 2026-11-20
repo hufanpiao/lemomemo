@@ -5,6 +5,7 @@
 // • 画出来记一行 `<tag> mist on fx=…`、卸掉记一行 `<tag> mist off`（运行日志，只记状态和实际生效的滤镜；fx=none 表示走了半透明纯色的后备）
 // • 层级默认 --z-mist（在底栏渐隐层、底栏下面）；调用方要压在别的东西下面时，在 className 里把 --z-mist 设成另一个层级令牌（例：随手记设成 --z-notes-mist，在输入行下面）
 import { useEffect, useRef } from 'react';
+import { useEnter } from '../../motion/components.ts';
 import styles from './Mist.module.css';
 
 export interface MistProps {
@@ -20,6 +21,8 @@ export interface MistProps {
 
 export function Mist({ onTap, tag, log, testId, className }: MistProps) {
   const ref = useRef<HTMLDivElement>(null);
+  // 出现只淡入、不动位置（motion 的 useEnter('mist')，110ms，数值在 motion/presets.ts 的 enters）；消失不留退场
+  const enter = useEnter('mist', ref);
   useEffect(() => {
     const cs = ref.current ? getComputedStyle(ref.current) : null;
     log(`${tag} mist on fx=${cs?.getPropertyValue('backdrop-filter') || cs?.getPropertyValue('-webkit-backdrop-filter') || 'none'}`);
@@ -39,5 +42,5 @@ export function Mist({ onTap, tag, log, testId, className }: MistProps) {
     };
   }, []);
   const cls = `${styles.glass} ${styles.mist}`;
-  return <div ref={ref} className={className ? `${cls} ${className}` : cls} onClick={onTap} aria-hidden="true" data-testid={testId} />;
+  return <div ref={enter} className={className ? `${cls} ${className}` : cls} onClick={onTap} aria-hidden="true" data-testid={testId} />;
 }

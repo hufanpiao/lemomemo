@@ -11,7 +11,7 @@ import { copyNode } from './copy-node.ts';
 import { blurSwapIn, blurSwapOut, blurSwapTiming } from './blur-swap.ts';
 import { FADE_GUARD_MS, FADE_WAIT_MS, GROW_HOLD, pageVisible, shownMain, waitDom } from './page-shown.ts';
 import { prefersReducedMotion } from './reduced.ts';
-import { swallowNextClick } from './swallow-click.ts';
+import { guardWindow, swallowNextClick } from './swallow-click.ts';
 import { bezierCss, dur, ease } from './tokens.ts';
 
 /** 整页推页最多等新页画完多久再动（屏幕这段时间停在旧页上，太长像卡住） */
@@ -53,50 +53,26 @@ const noop = (): void => undefined;
 const px = (x: number): string => (x === 0 ? 'none' : `translateX(${Math.round(x * 100) / 100}px)`);
 
 /**
- * 在 document 上用 capture 吞掉 ms 以内落在 main 里的 pointerdown、click；返回摘掉监听的函数。
+ * 吞掉 ms 以内落在 main 里的 pointerdown、click（swallow-click.ts 的 guardWindow，document 捕获阶段）；返回摘掉监听的函数。
  * 窗口里吞掉了 pointerdown 时，跟着的那次 click 晚到窗口外也吞：交给 swallowNextClick（最多等 TAP_SWALLOW_MS，从按下算；
- * 新的一次按下、被吞的按下变成滚动就不再等，代码审查 S12）。吞用 stopImmediatePropagation；
+ * 新的一次按下、被吞的按下变成滚动就不再等，代码审查 S12）；窗口到了只摘窗口本身，晚到的那一下还由 late 等着。吞用 stopImmediatePropagation；
  * 键盘的 click（窗口里先有 keydown）不是手指点在旧画面上，不吞（R-420 审查第 13 条）
  */
-function guardTaps(doc: Document, ms: number): () => void {
-  const t0 = performance.now();
+function guardTaps(ms: number): () => void {
   let late: (() => void) | null = null;
-  let keyed = false;
-  const mainOf = (e: Event): Element | null => (e.target instanceof Element ? e.target.closest('main') : null);
-  const eat = (e: Event): void => {
-    e.preventDefault();
-    e.stopImmediatePropagation();
-  };
-  const down = (e: Event): void => {
-    if (performance.now() - t0 >= ms) return void stop();
-    const main = mainOf(e);
-    if (!main) return;
-    eat(e);
-    late?.();
-    late = swallowNextClick({ within: main });
-  };
-  const click = (e: Event): void => {
-    if (performance.now() - t0 >= ms) return void stop();
-    if (keyed) keyed = false;
-    else if (mainOf(e)) eat(e);
-  };
-  const key = (): void => {
-    keyed = true;
-  };
-  const timer = setTimeout(() => stop(), ms);
-  let dead = false;
-  /** 窗口到了：只摘窗口本身的监听，晚到的那一下还由 late 等着 */
-  const stop = (): void => {
-    if (dead) return;
-    dead = true;
-    clearTimeout(timer);
-    doc.removeEventListener('pointerdown', down, true);
-    doc.removeEventListener('click', click, true);
-    doc.removeEventListener('keydown', key, true);
-  };
-  doc.addEventListener('pointerdown', down, true);
-  doc.addEventListener('click', click, true);
-  doc.addEventListener('keydown', key, true);
+  const stop = guardWindow({
+    ms,
+    types: ['pointerdown', 'click'],
+    keyboard: 'keydown',
+    within: (e) => (e.target instanceof Element ? e.target.closest('main') : null),
+    eat: (e, main) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.type !== 'pointerdown') return;
+      late?.();
+      late = swallowNextClick({ within: main });
+    },
+  });
   return () => {
     stop();
     late?.();
@@ -105,7 +81,7 @@ function guardTaps(doc: Document, ms: number): () => void {
 let guardStop: (() => void) | null = null;
 function guardAgain(): void {
   guardStop?.();
-  guardStop = guardTaps(document, FADE_GUARD_MS);
+  guardStop = guardTaps(FADE_GUARD_MS);
 }
 
 /**
@@ -528,22 +504,18 @@ export function growSwap(update: () => void, from: DOMRect, radius: number, card
   );
 }
 
-/** 整页推页等新页那段：藏起换上来的新页（app 那一层透明度 0）、吞手指点按；返回放开的函数（只放一次） */
+/**
+ * 整页推页等新页那段：藏起换上来的新页（app 那一层透明度 0）、吞手指点按（guardWindow，一直吞到放开）；返回放开的函数（只放一次）。
+ * 键盘回车、空格触发的 click（前面有 keydown）不吞：键盘不存在“点在看得见的旧页上”，吞了会让键盘返回失灵（e2e settings-quiet-focus）
+ */
 function holdScreen(app: HTMLElement | null): () => void {
-  const eat = (e: Event): void => {
-    // 键盘回车、空格触发的 click（detail 为 0）不吞：键盘不存在“点在看得见的旧页上”，吞了会让键盘返回失灵（e2e settings-quiet-focus）
-    if (e.type === 'click' && (e as MouseEvent).detail === 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-  };
-  const types = ['pointerdown', 'pointerup', 'click'] as const;
-  for (const t of types) document.addEventListener(t, eat, true);
+  const free = guardWindow({ ms: null, types: ['pointerdown', 'pointerup', 'click'], keyboard: 'keydown' });
   app?.style.setProperty('opacity', '0');
   let live = true;
   return () => {
     if (!live) return;
     live = false;
-    for (const t of types) document.removeEventListener(t, eat, true);
+    free();
     app?.style.removeProperty('opacity');
   };
 }
