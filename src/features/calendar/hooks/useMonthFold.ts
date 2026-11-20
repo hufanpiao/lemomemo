@@ -10,13 +10,12 @@
 //   旧写法每一帧都把进度放进 React state、整页重画，日清单的位移写在 style 上，列表里 Motion 的 layout 每一帧都以为待办组位置变了、
 //   自己补一段平移，于是总比日程行慢一拍。现在动画途中不重画，Motion 不量；起止两次重画前后画面一样，量出来也没变化
 // • 位置在“开始动”那一次（换成 ② 排布以后、画出来以前，useLayoutEffect）现量：各行相对月格的位置和高度，没有任何 transform
-// • 运行日志：停稳时“cal fold open→folded via=drag|tap ms= todo_drift= todo_tf=”（useFoldSync 逐帧量待办组跟没跟上日清单）
+// • 运行日志：停稳时“cal fold open→folded via=drag|tap ms= todo_drift= todo_tf=”（useFoldSync 在开始动、停稳两刻量待办组跟没跟上日清单）
 // • 收起后翻的是周：选中的那天前后挪 7 天，跨月时换月（useCalendar 的 pick，同一页内直接切换、不起整页过渡）；1900–2100 以外翻不动
 // • “今天”按钮收起时：今天就在锚点那一行才算“在本周”（灰）
 import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from 'react';
 import { addDays, type DateStr } from '../../../../shared/core/date.ts';
 import { MAX_YEAR, MIN_YEAR, monthOf } from '../../../../shared/logic/calendar/cal-nav.ts';
-import { eachFrame } from '../../../motion/components.ts';
 import { useDragCollapse } from '../../../motion/gestures.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { useCalendar } from './useCalendar.ts';
@@ -87,9 +86,11 @@ function paintFold(grid: HTMLElement, day: HTMLElement | null, g: FoldGeo, a: nu
 }
 
 /**
- * 收起、展开途中日清单里各块是不是同一帧一起走（R-457 负责人真机“收缩放大下面的待办跟不上节奏”）：
- * 每一帧量待办组（cal-todos）相对日清单那一块的位置，和起手那一帧比，记下最大偏差（todo_drift，px）；
- * 再数有几帧待办组自己身上带着 transform（todo_tf=带的帧数/总帧数：Motion 的 layout 动画补位置时会写它）。只记位置和帧数，不记内容
+ * 收起、展开时日清单里各块是不是一起走（R-457 负责人真机“收缩放大下面的待办跟不上节奏”）：
+ * 量待办组（cal-todos）相对日清单那一块的位置，停稳那一刻和开始动那一刻比，记下偏差（todo_drift，px）；
+ * 再数这两次里有几次待办组自己身上带着 transform（todo_tf=带的次数/量的次数：Motion 的 layout 动画补位置时会写它）。只记位置和次数，不记内容
+ * 11-20 起只在开始动、停稳这两刻各量一次（全 app 改善报告第四节）：原来动画途中每一帧都量（每帧两次强制排版，正好在最怕掉帧的时候）；
+ * R-457 根因改掉以后（动画途中不重画）待办组跟日清单是同一个 transform 带着走，首尾一比就看得出跟没跟上
  */
 interface FoldSync {
   base: number;
@@ -98,28 +99,32 @@ interface FoldSync {
   n: number;
 }
 const newSync = (): FoldSync => ({ base: Number.NaN, drift: 0, tf: 0, n: 0 });
-const syncText = (s: FoldSync): string => `todo_drift=${Math.round(s.drift)} todo_tf=${s.tf}/${s.n}`;
 const TODOS_SEL = '[data-testid="cal-todos"]';
+
+/** 量一次（开始动、停稳各调一次） */
+function sampleSync(s: FoldSync, d: HTMLElement | null): void {
+  const g = d?.querySelector<HTMLElement>(TODOS_SEL);
+  if (!d || !g) return;
+  const off = g.getBoundingClientRect().top - d.getBoundingClientRect().top;
+  if (Number.isNaN(s.base)) s.base = off;
+  s.drift = Math.max(s.drift, Math.abs(off - s.base));
+  const tf = g.style.transform;
+  if (tf !== '' && tf !== 'none') s.tf += 1;
+  s.n += 1;
+}
+/** 停稳那一刻（拖动收起的 log 回调里，这一帧刚按最终进度画完）再量一次，拼进运行日志那一行 */
+const syncText = (s: FoldSync, d: HTMLElement | null): string => {
+  sampleSync(s, d);
+  return `todo_drift=${Math.round(s.drift)} todo_tf=${s.tf}/${s.n}`;
+};
 
 function useFoldSync(moving: boolean, dayRef: RefObject<HTMLDivElement | null>, sync: MutableRefObject<FoldSync>): void {
   useEffect(() => {
     if (!moving) return;
+    // 开始动那一刻（换成六行排布、按此刻进度画好以后）量起点
     const s = newSync();
     sync.current = s;
-    // 在这一帧所有帧回调（弹簧、Motion）写完以后量：帧回调里排一个任务，它在这一帧画完以后才跑
-    const sample = (): void => {
-      const d = dayRef.current;
-      const g = d?.querySelector<HTMLElement>(TODOS_SEL);
-      if (d && g) {
-        const off = g.getBoundingClientRect().top - d.getBoundingClientRect().top;
-        if (Number.isNaN(s.base)) s.base = off;
-        s.drift = Math.max(s.drift, Math.abs(off - s.base));
-        const tf = g.style.transform;
-        if (tf !== '' && tf !== 'none') s.tf += 1;
-        s.n += 1;
-      }
-    };
-    return eachFrame(() => void setTimeout(sample, 0));
+    sampleSync(s, dayRef.current);
   }, [moving, dayRef, sync]);
 }
 
@@ -152,7 +157,7 @@ export function useMonthFold(cal: Cal, selected: DateStr | null, setPicked: Disp
   const sync = useRef<FoldSync>(newSync());
   const drag = useDragCollapse(collapsed, setCollapsed, () => geo.current.full - (geo.current.rows[rowRef.current]?.h ?? 0), {
     onFrame: paint,
-    log: (line) => rlog(`cal ${line} ${syncText(sync.current)}`),
+    log: (line) => rlog(`cal ${line} ${syncText(sync.current, dayRef.current)}`),
   });
   useFoldSync(drag.moving, dayRef, sync);
   /** 停在收起：真的只排锚点那一行（见文件头 ①） */

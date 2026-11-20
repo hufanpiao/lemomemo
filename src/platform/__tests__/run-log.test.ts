@@ -1,6 +1,8 @@
 // 全局运行日志（负责人 11-11“以后所有的bug看log能不能解决”“要做就给我做详细的log”，platform/run-log.ts）
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { KB_CHECK_MS, MAX_LINES, OUT_KEY, readRunLog, startRunLog } from '../run-log.ts';
+import { KB_CHECK_MS, MAX_LINES, readRunLog, startRunLog } from '../run-log.ts';
+import { OLD_KEY } from '../run-log-store.ts';
+import { deepDiagOn, setDeepDiagOn } from '../diag-deep.ts';
 import { describeEl } from '../run-log-layout.ts';
 import { rlog, RL_SLOT } from '../run-log-api.ts';
 
@@ -166,7 +168,8 @@ describe('全局运行日志', () => {
     cbs.shift()?.();
     window.dispatchEvent(new Event('pagehide'));
     stop();
-    expect(readRunLog()).toMatch(/vis-frames raf1=\d+ raf2=\d+ timer0=\d+ blur=0 els=\d+ mid=\S+ op=\S+/);
+    // 深度诊断关着（默认）：不逐个算样式数模糊层，写 blur=-
+    expect(readRunLog()).toMatch(/vis-frames raf1=\d+ raf2=\d+ timer0=\d+ blur=- els=\d+ mid=\S+ op=\S+/);
     expect(readRunLog()).toMatch(/=== start .* nav=\S+ ua=/);
     localStorage.clear();
     const stop2 = startRunLog(window, { version: 't' });
@@ -174,6 +177,47 @@ describe('全局运行日志', () => {
     window.dispatchEvent(new Event('pagehide'));
     stop2();
     expect(readRunLog()).not.toMatch(/vis-frames/);
+  });
+
+  it('深度诊断（diag-deep.ts，默认关）：开着时切回前台数模糊层、换页画完记 swap pin（按需下载 diag-deep-probe.ts）；关着时这两项一次 getComputedStyle 都不调', async () => {
+    vi.useFakeTimers();
+    const blurred = document.createElement('div');
+    blurred.style.setProperty('backdrop-filter', 'blur(8px)');
+    const main = document.createElement('main');
+    const pin = document.createElement('span');
+    pin.setAttribute('data-swap-pin', '');
+    main.append(pin);
+    document.body.append(blurred, main);
+    const run = async (): Promise<string> => {
+      localStorage.clear();
+      const cbs: Array<() => void> = [];
+      const stop = startRunLog(window, { version: 't', frame: (cb) => void cbs.push(cb) });
+      const gcs = vi.spyOn(window, 'getComputedStyle');
+      document.dispatchEvent(new Event('visibilitychange'));
+      while (cbs.length) cbs.shift()?.();
+      await vi.dynamicImportSettled(); // 深度诊断开着时等 diag-deep-probe.ts 下载到
+      history.pushState(null, '', '#/calendar');
+      await vi.dynamicImportSettled();
+      while (cbs.length) cbs.shift()?.();
+      const calls = gcs.mock.calls.length;
+      gcs.mockRestore();
+      stop();
+      history.replaceState(null, '', '#/');
+      return `${readRunLog()}\ncalls=${calls}`;
+    };
+    const off = await run();
+    expect(off).toMatch(/vis-frames .* blur=- /);
+    expect(off).not.toMatch(/swap pin/);
+    expect(off).toMatch(/calls=2$/); // 只剩根元素、body 的不透明度两次
+    setDeepDiagOn(true);
+    try {
+      const on = await run();
+      expect(on).toMatch(/vis-frames .* blur=1 /);
+      expect(on).toMatch(/app swap pin box=0 canvas=0 img=0 op=1\.00/);
+    } finally {
+      setDeepDiagOn(false);
+    }
+    expect(deepDiagOn()).toBe(false);
   });
 
   it('离开页面（pagehide，例如启动失败跳登录页的 location.replace）当场存盘，不等 300ms（第三方审查前端第 3 条）', () => {
@@ -219,8 +263,8 @@ describe('全局运行日志', () => {
     spy.mockRestore();
   });
 
-  it('跨冷启动保留旧日志，超过 MAX_LINES 丢最旧的', () => {
-    localStorage.setItem(OUT_KEY, Array.from({ length: MAX_LINES + 50 }, (_, i) => `old${i}`).join('\n'));
+  it('跨冷启动保留旧日志（含 11-20 以前一个键整份存的），超过 MAX_LINES 丢最旧的', () => {
+    localStorage.setItem(OLD_KEY, Array.from({ length: MAX_LINES + 50 }, (_, i) => `old${i}`).join('\n'));
     startRunLog(window, { version: 'v2' })();
     const lines = readRunLog().split('\n');
     expect(lines.length).toBeLessThanOrEqual(MAX_LINES);

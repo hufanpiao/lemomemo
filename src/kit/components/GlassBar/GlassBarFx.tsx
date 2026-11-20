@@ -1,7 +1,7 @@
 // 液态玻璃底栏的“首屏后”部分（B2 FA-7；主持人 11-05 首屏选 ③）：外壳 GlassBar.tsx 首屏画完以后才下载这个文件
 // • 底部实色带（11-06 负责人真机 69659c1“底部导航栏透明又没了！！ 这个不要动！”）：实色 --bg 只铺在底栏底边以下到屏幕底，往上 --band-fade 渐隐；底栏和“＋”后面不垫实色，照样透出模糊的内容（GlassBarFx.module.css）；上沿外再加 --edge-fade 渐隐（.edge，负责人 11-06 选 B12），底栏、“＋”的形状挖掉；• 按住当前选中的页签放大（D3，data-state=press）
 // • 自动深浅（深色玻璃层 .adTint、data-ad）11-06 取消（主持人方案甲，当时的理由是底栏后面是实色；实色带改回只铺底栏以下以后，负责人 11-06 定不恢复）
-// • 玻璃标记、帧循环（motion/glass-ghost.ts）：这个文件挂上以后再 import()（0.31 第 6 条：motion 以外不准静态引它）
+// • 玻璃标记（motion/glass-ghost.ts 的 markGlass，11-20 起不再跑帧循环）：这个文件挂上以后再 import()（0.31 第 6 条：motion 以外不准静态引它）
 // • 切页过渡期间的点按（原来的 R4、R6 按坐标代点）11-20 删掉：进出二级页不再用 View Transition（motion/page-swap.ts 的 transition），
 //   过渡中点按直接落在真元素上，不用再替它点
 // • 实色带、上沿渐隐是 main 外面的 fixed 层：整页推页时 motion/page-swap.ts 把它们当成页面的一部分，跟着自己那一页一起滑
@@ -33,16 +33,14 @@ export interface GlassBarFxProps {
 }
 
 export function GlassBarFx({ nav, drop, gel, i, hasAdd, wide, fadeIn = false }: GlassBarFxProps) {
-  const glass = useRef<{ poke(ms?: number): void } | null>(null);
   const gelFx = useRef<((el: HTMLElement) => boolean) | null>(null);
   useEffect(() => {
     const n = nav.current;
     const d = drop.current;
     if (!n || !d) return undefined;
-    // 按住当前选中的页签才放大（D3）；按哪儿都让副本跟一会儿
+    // 按住当前选中的页签才放大（D3）
     const down = (e: PointerEvent): void => {
       if (e.target instanceof Element && e.target.closest('[aria-current]')) d.dataset['state'] = 'press';
-      glass.current?.poke(400);
     };
     const up = (): void => {
       delete d.dataset['state'];
@@ -58,16 +56,11 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, wide, fadeIn = false }: 
         if (off) return;
         gelFx.current = m.playGel;
         const plus = plusOf(n);
-        const g = m.startGlass({
-          pieces: [{ el: n, fx: 'copy' }, { el: d, fx: 'drop' }, ...(hasAdd && plus ? [{ el: plus, fx: 'copy' as const }] : [])],
-        });
-        glass.current = g;
-        stop = g.stop;
+        stop = m.markGlass([n, ...(hasAdd && plus ? [plus] : [])]);
       })
-      .catch(() => undefined); // 下不来（离线）或浏览器缺 IntersectionObserver 之类：不开副本，用后备材质
+      .catch(() => undefined); // 下不来（离线）：不打玻璃标记，用后备材质
     return () => {
       off = true;
-      glass.current = null;
       stop();
       up();
       n.removeEventListener('pointerdown', down);
@@ -79,7 +72,6 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, wide, fadeIn = false }: 
   useLayoutEffect(() => {
     if (last.current === i) return;
     last.current = i;
-    glass.current?.poke(700);
     const el = gel.current;
     const css = fx.jelly ?? '';
     if (!el || gelFx.current?.(el)) return;

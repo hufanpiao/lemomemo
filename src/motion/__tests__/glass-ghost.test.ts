@@ -1,102 +1,85 @@
-// 液态玻璃的玻璃标记、帧循环（B2 FA-7，motion/glass-ghost.ts；11-06 起不再建内容副本 GLASS-copy-unused；自动深浅 11-06 取消，底栏后实色）
+// 液态玻璃的玻璃标记（B2 FA-7，motion/glass-ghost.ts；11-06 起不再建内容副本 GLASS-copy-unused；自动深浅 11-06 取消，底栏后实色；11-20 删掉帧循环）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { forgetTilt, playGel, startGlass } from '../glass-ghost.ts';
+import { forgetTilt, markGlass, playGel } from '../glass-ghost.ts';
 
-let frames: FrameRequestCallback[] = [];
-const runFrames = (n = 3): void => {
-  for (let k = 0; k < n; k++) {
-    const fs = frames;
-    frames = [];
-    for (const f of fs) f(performance.now());
-  }
+/** MutationObserver 回调是微任务：等它跑完 */
+const flush = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
 };
 
-describe('startGlass', () => {
+describe('markGlass', () => {
   let nav: HTMLElement;
+  let raf: ReturnType<typeof vi.fn>;
   beforeEach(() => {
-    vi.stubGlobal('requestAnimationFrame', (f: FrameRequestCallback) => {
-      frames.push(f);
-      return frames.length;
-    });
-    vi.stubGlobal('cancelAnimationFrame', () => undefined);
-    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    raf = vi.fn(() => 1);
+    vi.stubGlobal('requestAnimationFrame', raf);
     nav = document.createElement('nav');
     const main = document.createElement('main');
     main.append('交报告');
     document.body.replaceChildren(main, nav);
   });
   afterEach(() => {
-    vi.restoreAllMocks(); // performance.now 的 spy 每条用例后还原（代码审查 p1 S2）
     vi.unstubAllGlobals();
     document.body.replaceChildren();
     document.documentElement.removeAttribute('data-rt');
     document.documentElement.removeAttribute('data-solid');
-    frames = [];
   });
 
-  it('开着时玻璃块写 data-glass="copy"，不往玻璃块里放任何东西（11-06 起不建副本层）；停掉时摘掉', () => {
-    const drop = document.createElement('span');
-    nav.append(drop);
-    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }, { el: drop, fx: 'drop' }] });
-    runFrames();
+  it('一调就给玻璃块写 data-glass="copy"，不往玻璃块里放任何东西（11-06 起不建副本层）；停掉时摘掉', () => {
+    const plus = document.createElement('button');
+    document.body.append(plus);
+    const stop = markGlass([nav, plus]);
     expect(nav.dataset['glass']).toBe('copy');
-    expect(drop.dataset['glass']).toBe('copy');
-    expect(nav.children.length).toBe(1); // 只有原来的液滴
-    expect(drop.children.length).toBe(0);
+    expect(plus.dataset['glass']).toBe('copy');
+    expect(nav.children.length).toBe(0);
     expect(document.body.textContent?.match(/交报告/g)?.length).toBe(1); // 页面内容没被复制
-    g.stop();
+    expect(nav.hasAttribute('data-ad')).toBe(false); // 自动深浅取消（11-06）
+    stop();
     expect(nav.dataset['glass']).toBeUndefined();
-    expect(drop.dataset['glass']).toBeUndefined();
+    expect(plus.dataset['glass']).toBeUndefined();
   });
 
-  it('自动深浅取消（11-06 底栏后实色）：引擎从不写 data-ad', () => {
-    const dark = document.createElement('section');
-    dark.style.backgroundColor = 'rgb(30, 31, 36)';
-    document.querySelector('main')?.append(dark);
-    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }] });
-    runFrames();
-    expect(nav.hasAttribute('data-ad')).toBe(false);
-    g.stop();
+  it('不排任何一帧（11-20 删掉帧循环：原来启动 18 帧、按一下底栏 24 帧、换页签 42 帧白跑）', async () => {
+    const stop = markGlass([nav]);
+    document.documentElement.dataset['rt'] = '1';
+    await flush();
+    dispatchEvent(new Event('scroll'));
+    expect(raf).not.toHaveBeenCalled();
+    stop();
   });
 
   it('减少透明效果（:root[data-rt="1"]）：不写 data-glass；中途打开、关掉都跟着变', async () => {
     document.documentElement.dataset['rt'] = '1';
-    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }] });
-    runFrames();
+    const stop = markGlass([nav]);
     expect(nav.dataset['glass']).toBeUndefined();
     document.documentElement.removeAttribute('data-rt');
-    await Promise.resolve();
-    runFrames();
+    await flush();
     expect(nav.dataset['glass']).toBe('copy');
     document.documentElement.dataset['rt'] = '1';
-    await Promise.resolve();
-    runFrames();
+    await flush();
     expect(nav.dataset['glass']).toBeUndefined();
-    g.stop();
+    stop();
   });
 
   it('隐私记页强制实色（:root[data-solid="1"]）：同减少透明效果，不写 data-glass；放开后恢复', async () => {
     document.documentElement.dataset['solid'] = '1';
-    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }] });
-    runFrames();
+    const stop = markGlass([nav]);
     expect(nav.dataset['glass']).toBeUndefined();
     document.documentElement.removeAttribute('data-solid');
-    await Promise.resolve();
-    runFrames();
+    await flush();
     expect(nav.dataset['glass']).toBe('copy');
-    g.stop();
+    stop();
   });
 
-  it('帧循环只在有事时跑：一次 poke 跑完就停（没有一直排着下一帧）；滚动不再叫醒它', () => {
-    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }] });
-    vi.spyOn(performance, 'now').mockReturnValue(1e9);
-    runFrames(1);
-    expect(frames.length).toBe(0);
-    dispatchEvent(new Event('scroll'));
-    expect(frames.length).toBe(0);
-    g.poke();
-    expect(frames.length).toBe(1);
-    g.stop();
+  it('停掉以后不再跟着变', async () => {
+    const stop = markGlass([nav]);
+    stop();
+    document.documentElement.dataset['rt'] = '1';
+    await flush();
+    document.documentElement.removeAttribute('data-rt');
+    await flush();
+    expect(nav.dataset['glass']).toBeUndefined();
   });
 });
 

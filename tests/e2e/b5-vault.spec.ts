@@ -15,7 +15,7 @@ import type { Locator, Page, Route } from '@playwright/test';
 import JSZip from 'jszip';
 import { fakeRest } from './fake-rest.ts';
 import { notesViewRows } from './idb.ts';
-import { jpeg, stableBox, swipeDiag, touchSwipe } from './page-helpers.ts';
+import { jpeg, readRunLogInPage, stableBox, swipeDiag, touchSwipe } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { runLog as readRunLog } from './fake-media.ts';
 
@@ -220,7 +220,7 @@ const saved = (fv: FakeVault) => fv.calls.filter((c) => c.action === 'save');
 
 test.afterEach(async ({ page }, info) => {
   if (info.status === info.expectedStatus) return;
-  await info.attach('运行日志', { body: await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '').catch((e: unknown) => String(e)), contentType: 'text/plain' });
+  await info.attach('运行日志', { body: await page.evaluate(readRunLogInPage).catch((e: unknown) => String(e)), contentType: 'text/plain' });
 });
 
 test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 → 解锁；页面挂着时底栏实色', async ({ page, baseURL, browserName }) => {
@@ -274,7 +274,7 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   await expect(list).toContainText('妈妈生日惊喜');
   await phoneShots(page, '08-解锁后首页', browserName);
   // 11-14 整块评审第 1、14 条：密码键盘的点按在运行日志里只记 masked（没有 testid、坐标）；隐私记状态迁移记了，标题、正文没进日志
-  const runLog = (): Promise<string> => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  const runLog = (): Promise<string> => page.evaluate(readRunLogInPage);
   await expect.poll(runLog).toMatch(/app vault state unlocked/);
   const log = await runLog();
   expect(log).toMatch(/(down|click) masked/);
@@ -333,11 +333,11 @@ test('隐私记页长按拖动：最下面一条拖到最上面，顺序照放�
   await page.waitForTimeout(450);
   await page.mouse.up();
   await page.waitForTimeout(800);
-  const sortLines = (await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).split('\n').filter((x) => / sort | down | vault /.test(x)).slice(-20).join('\n');
+  const sortLines = (await page.evaluate(readRunLogInPage)).split('\n').filter((x) => / sort | down | vault /.test(x)).slice(-20).join('\n');
   await expect.poll(order, sortLines).toEqual(['隐私一', '隐私三', '隐私二']);
   await expect(page.getByTestId('sort-float')).toHaveCount(0);
   await expect.poll(() => saved(fv).length).toBeGreaterThan(savesBefore);
-  const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  const log = await page.evaluate(readRunLogInPage);
   expect(log).toMatch(/ sort \w+ drop i=2 to=0 n=3/);
   for (const secret of ['隐私一', '隐私二', '隐私三']) expect(log).not.toContain(secret);
 });
@@ -367,7 +367,7 @@ test('第三方实测问题 1：卡片高矮不同时拖到别的卡上停住，
     // 手指停住：来回换位会在这段时间里刷满
     await page.waitForTimeout(300);
   }
-  const overs = (await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).split('\n').filter((x) => / sort \w+ over i=/.test(x));
+  const overs = (await page.evaluate(readRunLogInPage)).split('\n').filter((x) => / sort \w+ over i=/.test(x));
   await page.mouse.up();
   await page.waitForTimeout(600);
   expect(overs.length, overs.slice(-10).join('\n')).toBeLessThan(8);
@@ -540,7 +540,7 @@ test('隐私记里的文档附件（B4b-1）：电脑上加（加密）、写页
   await expect(page.getByTestId('vault-unlock-card')).toBeVisible();
   await expect(page.getByTestId('note-files')).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText('体检报告.pdf');
-  const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  const log = await page.evaluate(readRunLogInPage);
   expect(log).toMatch(/vatt upload ok/);
   expect(log).not.toContain('体检报告');
 });
@@ -561,7 +561,7 @@ test('审查第 1 条：保存时令牌过期 → 解锁卡点取消 → 再解�
   await typePin(page, 'vault-unlock-pad', PIN);
   await expect(vaultEmpty(page)).toBeVisible({ timeout: 15_000 });
   // 先等运行日志记下“取消了解锁”、队列丢了 1 条（取消等同主动上锁，不会再补发，M1），再数保存次数
-  const runLog = (): Promise<string> => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  const runLog = (): Promise<string> => page.evaluate(readRunLogInPage);
   await expect.poll(runLog).toMatch(/vault wait cancel/);
   await expect.poll(runLog).toMatch(/vault queue drop n=1 why=cancel/);
   expect(saved(fv)).toHaveLength(1);
@@ -588,7 +588,7 @@ test('审查第 3 条：设密码时开了 Face ID、绑定没成：密码照样
   await expect(toast).toBeVisible();
   await expect(toast).toHaveAttribute('role', 'alert');
   await phoneShots(page, '11-绑定失败提示', browserName);
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault bind fail /);
+  await expect.poll(() => page.evaluate(readRunLogInPage)).toMatch(/vault bind fail /);
 
   await page.getByTestId('vault-lock-now').click();
   // 隐私记页锁着是一整页（不是遮罩，11-19 独立评审高 1～3）：有“隐私记已上锁”标题，底栏不被盖住
@@ -625,7 +625,7 @@ test('负责人“插图打不开”：隐私记里插一张图，立刻显示�
   await page.getByTestId(`note-image-open-${imgId}`).click();
   await expect(page.getByTestId(`img-view-pic-${imgId}`)).toBeVisible({ timeout: 15_000 });
   await phoneShots(page, '13-隐私记看图', browserName);
-  const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  const log = await page.evaluate(readRunLogInPage);
   expect(log).toMatch(/vault img encode ok/);
   expect(log).not.toContain(imgId);
   expect(log).not.toContain('带图的一条');
@@ -644,7 +644,7 @@ test('负责人“读写慢”：断网时改了界面立刻就是新的，网�
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect.poll(() => saved(fv).at(-1)?.body['body'], { timeout: 30_000 }).toBe('断网时改的');
   await expect(page.locator('[data-testid^="notes-sync-failed-"]')).toHaveCount(0);
-  const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  const log = await page.evaluate(readRunLogInPage);
   expect(log).toMatch(/vault queue fail offline/);
   expect(log).not.toContain('断网时改的');
 });
@@ -706,7 +706,7 @@ test('负责人“离开隐私记页 1 分钟不自动上锁”：换到随手�
   await expect(lockrow).toContainText('已解锁', { timeout: 15_000 });
   await page.clock.fastForward(61_000);
   await expect(lockrow).toContainText('已上锁');
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toMatch(/vault autolock why=page/);
+  await expect.poll(() => page.evaluate(readRunLogInPage)).toMatch(/vault autolock why=page/);
   await lockrow.click();
   await expect(page.getByTestId('vault-unlock-card')).toBeVisible({ timeout: 15_000 });
 });
@@ -757,7 +757,7 @@ test('隐私记照随手记：解锁后 #/vault 就是列表（输入行、分�
   await expect(page).toHaveURL(/#\/vault\/c\/[0-9a-f-]{36}$/);
   await expect(catChip(page, '旅行')).toContainText('0');
   await expect(page.locator('h1').filter({ hasText: '旅行' })).toBeVisible();
-  const runLog = () => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  const runLog = () => page.evaluate(readRunLogInPage);
   await expect.poll(runLog).toMatch(/notes category new ok/);
 
   // 长按胶囊改名
@@ -851,7 +851,7 @@ test('隐私记分类：列表里拖到分类胶囊归进那一类；筛着某�
   await page.waitForTimeout(600);
   await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 14 });
   await page.waitForTimeout(150);
-  const tail = (await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).split(String.fromCharCode(10)).filter((x) => / sort | down | swipe /.test(x)).slice(-12).join(String.fromCharCode(10));
+  const tail = (await page.evaluate(readRunLogInPage)).split(String.fromCharCode(10)).filter((x) => / sort | down | swipe /.test(x)).slice(-12).join(String.fromCharCode(10));
   await expect(chip, tail).toHaveAttribute('data-drop-over', '');
   await page.mouse.up();
   await expect(chip).toContainText('1');
@@ -873,7 +873,7 @@ test('隐私记分类：列表里拖到分类胶囊归进那一类；筛着某�
   await expect(open).toHaveCount(0);
   await expect(vault).toContainText('散二');
   await expect.poll(() => saved(fv).length).toBeGreaterThan(before2);
-  const runLog = () => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  const runLog = () => page.evaluate(readRunLogInPage);
   await expect.poll(runLog).toMatch(/drop into/);
   await expect.poll(runLog).toMatch(/notes category into n=1 ok=1 fail=0/);
   for (const secret of ['散一', '散二', '证件', '旅行']) expect(await runLog()).not.toContain(secret);

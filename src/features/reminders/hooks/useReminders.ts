@@ -109,7 +109,7 @@ export function actionsOf(
  * App 等首屏画完、浏览器空闲才挂 RemindHost（首屏减重 ⑥），挂得比打开晚；since 由 App 在第一次渲染时记下传进来，
  * 打开到挂上之间到点的照样响（只是晚响这么一会儿）。没传时用挂载的时刻（测试、单独挂）
  */
-export function useRemindEngine(sinceAt?: number): void {
+export function useRemindEngine(sinceAt?: number): Pick<ReturnType<typeof useReminderList>, 'list' | 'tz' | 'prefs'> {
   const now = useMinuteNow();
   const { list, tz, prefs, known } = useReminderList(now);
   // 通知上按的“推迟 / 完成”（SW 记在 pending_actions）：本机行灌好、行变了、回到前台、打开整页提醒时转进 outbox（usePendingDrain.ts）
@@ -317,6 +317,8 @@ export function useRemindEngine(sinceAt?: number): void {
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [ready]);
+  // 交给 RemindHost 画横幅、按钮条（11-20 全 app 改善报告第四节：原来它自己再算一遍，每分钟全量算两次）
+  return { list, tz, prefs };
 }
 
 export type { ActResult };

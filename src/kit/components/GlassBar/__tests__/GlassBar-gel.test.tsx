@@ -8,9 +8,9 @@ import fxStyles from '../GlassBarFx.module.css';
 const fx = vi.hoisted(() => ({ ok: true, started: 0, calls: [] as HTMLElement[] }));
 vi.mock('../../../../motion/glass-ghost.ts', () => ({
   forgetTilt: () => undefined,
-  startGlass: () => {
+  markGlass: () => {
     fx.started += 1;
-    return { stop: () => undefined, poke: () => undefined };
+    return () => undefined;
   },
   playGel: (el: HTMLElement) => {
     fx.calls.push(el);
@@ -26,7 +26,7 @@ afterEach(() => {
   fx.started = 0;
 });
 const jelly = (): Element | null => document.querySelector(`.${styles.drop} > span`);
-/** 首屏后部分挂上（模糊带出现），而且它再 import() 的副本引擎也到了（startGlass 调过） */
+/** 首屏后部分挂上（模糊带出现），而且它再 import() 的副本引擎也到了（markGlass 调过） */
 const ready = async (): Promise<void> => {
   await waitFor(() => expect(screen.getByTestId('tabbar-band')).toBeTruthy());
   await waitFor(() => expect(fx.started).toBe(1));

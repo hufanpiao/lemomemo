@@ -8,6 +8,7 @@
 // chromium、webkit 两个项目都跑：webkit 下全程（含放垫块、撤垫块）不许有 CSP 违规；“逐像素一样”在 webkit 改比版面指纹（见 shot）；触屏上文档高多 base.css 的 1px（见 restH）
 import { mkdirSync } from 'node:fs';
 import type { Page } from '@playwright/test';
+import { readRunLogInPage } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 const SHOTS = process.env['R371_SHOTS'] ?? 'test-results/r371-gapfix';
@@ -30,7 +31,7 @@ async function launch(page: Page, o: { on: boolean; screenH: number; top: number
     try {
       if (a.on) localStorage.removeItem('lemo-gapfix-off');
       else localStorage.setItem('lemo-gapfix-off', '1');
-      localStorage.removeItem('lemo-run-log');
+      for (const k of Object.keys(localStorage)) if (k.startsWith('lemo-run-log')) localStorage.removeItem(k); // 运行日志分段存（lemo-run-log.c<序号>），各段都清
     } catch {
       // 不会走到
     }
@@ -65,7 +66,7 @@ async function launch(page: Page, o: { on: boolean; screenH: number; top: number
 async function expectOffInert(page: Page, gapReqs: readonly string[]): Promise<void> {
   expect(await page.evaluate(() => (window as unknown as { __padSeen: boolean }).__padSeen), '垫块没出现过').toBe(false);
   expect(gapReqs, '没下载 vh-gapfix').toEqual([]);
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? ''), { timeout: 5000 }).toContain('=== start');
+  await expect.poll(() => page.evaluate(readRunLogInPage), { timeout: 5000 }).toContain('=== start');
   await expect(page.locator('#lemo-gapfix-pad')).toHaveCount(0);
   expect(await log(page)).toBe('');
 }
@@ -85,9 +86,9 @@ async function settle(page: Page): Promise<void> {
 /** 不撑开时的文档高：触屏（hover: none，webkit 项目是 iPhone 15）上 base.css 的 html { min-height: calc(100% + 1px) }（CI-webkit-crash 11-04）
  *  让文档永远比视口高 1px，电脑上不加——所以触屏上今天页本来就能滚 1px（和真机 scrollBy 1px 滚到 y=1 对得上） */
 const restH = (page: Page, vh: number): Promise<number> => page.evaluate((h) => (matchMedia('(hover: none)').matches ? h + 1 : h), vh);
-/** Gap fix 的日志：经 rlog 进全局运行日志（lemo-run-log，运行日志隔 300ms 存一次），只取 gapfix 那几行 */
+/** Gap fix 的日志：经 rlog 进全局运行日志（分段存在 lemo-run-log.c<序号>，运行日志隔 300ms 存一次），只取 gapfix 那几行 */
 const log = (page: Page): Promise<string> =>
-  page.evaluate(() => (localStorage.getItem('lemo-run-log') ?? '').split('\n').filter((l) => l.includes(' app gapfix ')).join('\n'));
+  page.evaluate(readRunLogInPage).then((t) => t.split('\n').filter((l) => l.includes(' app gapfix ')).join('\n'));
 /** “逐像素一样”的比对材料：chromium 截图；webkit 改比版面指纹（底栏、实色带、“＋”、main 的位置大小，实色带透明度，文档高，滚动位置）。
  *  webkit 上 Playwright 每截一次图都往页面插 <style>body {}</style>（inPagePrepareForScreenshots，关不掉，见 visual/visual-helpers.ts），
  *  被 App 的 CSP 拦成 style-src-elem 违规，csp-fixture 判失败——那是测试工具自己的；不截图，App 自己在 webkit 下的 CSP 违规照样由 csp-fixture 判 */

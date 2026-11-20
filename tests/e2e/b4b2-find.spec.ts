@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
-import { shot } from './page-helpers.ts';
+import { readRunLogInPage, shot } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
 
@@ -64,7 +64,7 @@ async function fakeServer(page: Page, baseURL: string | undefined, o: Opts = {})
   return fake;
 }
 
-const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+const runLog = (page: Page) => page.evaluate(readRunLogInPage);
 const rows = (page: Page) => page.getByTestId('find-row');
 
 async function openToday(page: Page): Promise<void> {

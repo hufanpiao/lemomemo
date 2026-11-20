@@ -8,7 +8,7 @@ import { __forgetGlassBarFxForTest, GlassBar } from '../GlassBar.tsx';
 // forgetTilt 记下调用：宽屏不开引擎也要删以前的倾斜高光开关（R-373）；它本身删没删掉在 motion/__tests__/glass-ghost.test.ts 测
 const forget = vi.hoisted(() => ({ calls: 0 }));
 vi.mock('../../../../motion/glass-ghost.ts', () => ({
-  startGlass: () => ({ stop: () => undefined, poke: () => undefined }),
+  markGlass: () => () => undefined,
   playGel: () => true,
   forgetTilt: () => {
     forget.calls += 1;

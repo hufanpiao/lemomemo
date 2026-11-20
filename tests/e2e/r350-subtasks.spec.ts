@@ -9,6 +9,7 @@
 // • 环境变量 R350_SHOTS 指一个本机文件夹时（只在 Chromium），顺手截列表页、今天页、编辑页三张图给人看，不进仓库
 import type { Page } from '@playwright/test';
 import { cached, idbPut, idbRead } from './idb.ts';
+import { readRunLogInPage } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -71,7 +72,7 @@ test.describe('R-350 待办子任务', () => {
     await expect.poll(() => outboxOf(page)).toContainEqual({ table: 'todos', id: T1, op: 'patch' });
     await toast.getByRole('button').click();
     await expect(page.getByTestId(`today-done-${T1}`)).not.toBeChecked();
-    expect((await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).includes('subs today open n=3')).toBe(true);
+    expect((await page.evaluate(readRunLogInPage)).includes('subs today open n=3')).toBe(true);
   });
 
   test('日历日清单：待办单独一组，方框就地完成、撤销；子任务就地展开、勾选', async ({ page }) => {

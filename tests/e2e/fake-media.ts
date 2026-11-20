@@ -7,6 +7,7 @@
 // • 单测用的是 src/platform/__tests__/recorder-fake.ts，这里是给真浏览器的同一套行为
 // • 顺带放按住“＋”两组用例（b3-plus-hold.spec.ts 假后端、b3-plus-hold.real.spec.ts 真后端）共用的几步：读运行日志、按住到开录
 import { expect, type Page } from '@playwright/test';
+import { readRunLogInPage } from './page-helpers.ts';
 
 export interface FakeMediaOpts {
   /** 每段录音多少字节（默认 3000） */
@@ -82,9 +83,9 @@ export function voiceOk(title: string, quotaLeft = 49): Record<string, unknown> 
   };
 }
 
-/** App 的运行日志（每行“t=… app …”；localStorage lemo-run-log，platform/run-log.ts） */
+/** App 的运行日志（每行“t=… app …”；本机分段存，platform/run-log-store.ts，经 page-helpers.ts 的 readRunLogInPage 读） */
 export async function runLog(page: Page): Promise<string[]> {
-  return page.evaluate(() => (localStorage.getItem('lemo-run-log') ?? '').split('\n'));
+  return (await page.evaluate(readRunLogInPage)).split('\n');
 }
 export const count = (lines: string[], s: string): number => lines.filter((l) => l.includes(s)).length;
 

@@ -46,12 +46,12 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、3a066c28（点按灰框）、11-17 触屏滚动条、11-17 输入框不画黑框、GlassBar.module.css 又在 R-436 侧栏精致化、11-20 整页推页去掉 View Transition 按上面的更新记录换过 */
+/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、3a066c28（点按灰框）、11-17 触屏滚动条、11-17 输入框不画黑框、GlassBar.module.css 又在 R-436 侧栏精致化、11-20 整页推页去掉 View Transition、GlassBarFx.tsx 和 glass-ghost.ts 又在 11-20 删帧循环按上面的更新记录换过 */
 const PINNED: Record<string, string> = {
   'src/kit/components/GlassBar/GlassBar.module.css': '2bc5634fe03c3461375490121e128cc6ea4298d27d1e5ba8427e158625391fff',
-  'src/kit/components/GlassBar/GlassBarFx.tsx': '9305496b50bbc1e7ccca6bbc78f415de87e402eda1a3fd39eda5c8d5c7534604',
+  'src/kit/components/GlassBar/GlassBarFx.tsx': '0dffef14a02e0884cb46471ed576525638d1b20f09a3e82a8611999b3b1d07a2',
   'src/kit/components/GlassBar/GlassBarFx.module.css': 'baf8e2d17344a43abddf9ab873e5f4d46345a42b50522e911a2a1ea638dfde19',
-  'src/motion/glass-ghost.ts': '13364a6e6f0eafe5c1b68346ba53e175b76bd08d317c8e4dc599af549ad5c76e',
+  'src/motion/glass-ghost.ts': 'edf1ee3cded12098eafa67681deeab6fe7ebbe1874ea14e5bf450befccbef87c',
   'src/styles/base.css': 'fe67ee1273183a9e2ba3436f9603ed08b566a9bd8f264efe02a6433621e1c05c',
 };
 
@@ -71,6 +71,11 @@ const sha256 = (rel: string): string => createHash('sha256').update(readFileSync
 //   GlassBarFx.tsx 删 R4/R6 按坐标代点（View Transition 伪元素层盖整屏时才需要）；base.css 删整段 ::view-transition 规则、lemo-push/pop 关键帧（数值原样搬进 page-swap.ts）、
 //   顶部两层模糊的 view-transition-name。底栏、“＋”的外观规则一行没动：今天页静止截图改前改后底栏区域像素最大差 0（对照图在本机资料 截图/底栏真元素切页-2026-11-20）。
 // • 11-20 主持人合并上面两条：两边改的是不同的行（选择器换 data-solid / 删 view-transition），合并后五个文件的哈希按合并结果重算。
+// • 11-20 全 app 改善报告第四节（负责人 11-20 弹窗选了性能几条，含“底栏玻璃引擎只剩空转的帧循环，删掉”），本提交：
+//   glass-ghost.ts 的 startGlass（帧循环、poke）换成 markGlass（下载到时打一次 data-glass，data-rt、data-solid 变了再改）；
+//   GlassBarFx.tsx 去掉 glass ref 和两处 poke，液滴不再打 data-glass（样式里只有 .bar、.fab 认它）。三个 CSS 文件一行没动；
+//   外观不变：Chromium 430×932 DPR 3 今天页两皮肤两主题整屏、底栏区各 4 张，加视觉锁定 tabbar-lock 4 张，改前改后 0 像素差。
+// • 11-21 主持人合并上面两条（性能分支基线早于整页推页）：GlassBarFx.tsx 两边删的是不同的段（R4/R6 代点 / glass ref 和 poke），文件头注释合成一份；三个 CSS 和 base.css 跟整页推页那一版一字不差，只重算 GlassBarFx.tsx、glass-ghost.ts 两个哈希。
 describe('B3 Q3 守门第 4 条：底栏外观文件不许改（R-352 ④）', () => {
   it('src/motion/glass-*.ts 正好是钉住的那几个：不许多、不许少', () => {
     const now = readdirSync(join(ROOT, 'src/motion'))

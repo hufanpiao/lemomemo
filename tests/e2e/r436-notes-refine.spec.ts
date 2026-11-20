@@ -5,6 +5,7 @@
 // • 分类胶囊用 kit 的 Chip（负责人 11-16“胶囊太大了！参考现在的待办页”）：高 30、没有描边；条数是等宽字
 // • 标题下一行等宽小字“日期 · 共 N 条”；列表方式的分组名右边等宽条数
 import { cached, idbPut } from './idb.ts';
+import { readRunLogInPage } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -108,7 +109,7 @@ test('随手记分类：“＋ 新分类”、长按改名删除；隐私记的�
     await page.mouse.down();
     await page.waitForTimeout(650);
     await page.mouse.up();
-    const tail = (await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).split(String.fromCharCode(10)).slice(-10).join(String.fromCharCode(10));
+    const tail = (await page.evaluate(readRunLogInPage)).split(String.fromCharCode(10)).slice(-10).join(String.fromCharCode(10));
     await expect(page.getByTestId('cat-edit-name'), tail).toBeVisible();
   };
   await hold(`notes-filter-${CAT}`);
@@ -225,7 +226,7 @@ test('分类里导入没分类的记录：勾选多条点“导入 N 条”，�
   await expect(open).toContainText('导入没分类的 1 条');
   await expect(page.getByText('散的一', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('散的二', { exact: true })).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '')).toContain('notes category into n=2 ok=2 fail=0');
+  await expect.poll(() => page.evaluate(readRunLogInPage)).toContain('notes category into n=2 ok=2 fail=0');
 });
 
 test('拖进分类：没分类的那一条长按拖到分类胶囊上松手，归进这一类；已有分类的拖上去不认', async ({ page }) => {
@@ -264,7 +265,7 @@ test('拖进分类：没分类的那一条长按拖到分类胶囊上松手，�
   await expect(chip).toHaveText(/^工作灵感\s*2$/);
   await expect(chip).not.toHaveAttribute('data-drop-over');
   // 运行日志按批写进 localStorage：等它写到
-  const log = () => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  const log = () => page.evaluate(readRunLogInPage);
   await expect.poll(log).toContain('drop into');
   await expect.poll(log).toContain('notes category into n=1 ok=1 fail=0');
 });

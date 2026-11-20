@@ -11,7 +11,7 @@ import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
 import { notesViewRows } from './idb.ts';
-import { afterPageFade, SHOT_DIR } from './page-helpers.ts';
+import { afterPageFade, readRunLogInPage, SHOT_DIR } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
 
@@ -62,7 +62,7 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<void
   await page.route(/\/sb\/functions\/v1\/note-search/, (route) => route.fulfill({ json: { hits: [] } }));
 }
 
-const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+const runLog = (page: Page) => page.evaluate(readRunLogInPage);
 
 async function openPage(page: Page, hash: string, testId: string, ready: string): Promise<void> {
   await page.goto(`/app/#/${hash}`);

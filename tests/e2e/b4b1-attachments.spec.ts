@@ -19,7 +19,7 @@ import { utils, write } from 'xlsx';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
 import { notesViewRows } from './idb.ts';
-import { shot, SHOT_DIR } from './page-helpers.ts';
+import { readRunLogInPage, shot, SHOT_DIR } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
 test.setTimeout(120_000);
@@ -163,7 +163,7 @@ async function openNote(page: Page): Promise<void> {
   await page.waitForTimeout(FADE_GUARD_MS);
 }
 
-const runLog = (page: Page) => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+const runLog = (page: Page) => page.evaluate(readRunLogInPage);
 const pvFrame = (page: Page) => page.frameLocator('[data-testid="att-pv-frame"]');
 
 // 失败时把运行日志附进报告（先看日志再定根因）

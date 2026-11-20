@@ -8,7 +8,7 @@
 // WebKit 没有 CDP，按真机的顺序（pointerdown 先、touchstart 后）在页面里派一遍
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
-import { waitPreloaded } from './page-helpers.ts';
+import { readRunLogInPage, waitPreloaded } from './page-helpers.ts';
 
 test.use({ loggedIn: true, viewport: { width: 430, height: 932 }, locale: 'zh-CN', hasTouch: true });
 
@@ -150,7 +150,7 @@ test('负责人 11-19：待办 → 待办编辑 → 左边往右划回待办 →
   await page.waitForTimeout(1000);
   expect(await page.evaluate(() => (window as unknown as { seenEdit: number }).seenEdit), '进设置途中画出过编辑页').toBe(0);
   expect(await len(page)).toBe(len0);
-  const log = await page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  const log = await page.evaluate(readRunLogInPage);
   expect(log).toMatch(/tabswipe side=l .*to=back/);
   expect(log).toMatch(/tabswipe side=r .*to=settings/);
   expect(log).toMatch(/stack depth=1 hist=\d+/);

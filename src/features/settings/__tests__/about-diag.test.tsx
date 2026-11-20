@@ -1,7 +1,9 @@
 // 设置 › 关于：3 秒内连点“版本”5 下显示诊断信息、再连点 5 下收起；点得慢、点别处不算（11-06，主屏幕版真机排查）
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deepDiagOn } from '../../../platform/diag-deep.ts';
 import { AboutSection, DIAG_TAPS, DIAG_WINDOW_MS } from '../ui/AboutSection.tsx';
+import { DD_LABEL_OFF, DD_LABEL_ON } from '../ui/VhProbe.tsx';
 
 const tapVersion = (n: number) => {
   for (let k = 0; k < n; k++) fireEvent.click(screen.getByTestId('settings-about-version-value'));
@@ -69,7 +71,23 @@ describe('关于页的诊断信息', () => {
     tapVersion(DIAG_TAPS);
     await screen.findByTestId('settings-about-diag');
     const box = screen.getByTestId('settings-vh-probe');
-    expect([...box.querySelectorAll('button')].map((b) => b.dataset['testid'])).toEqual(['vh-gapfix', 'vh-haptic', 'vh-gap-early', 'vh-gap-bar', 'vh-gap-kb', 'vh-gap-css', 'vh-live-speech','vh-rl-send', 'vh-rl-copy', 'vh-rl-clear']);
+    expect([...box.querySelectorAll('button')].map((b) => b.dataset['testid'])).toEqual(['vh-gapfix', 'vh-haptic', 'vh-gap-early', 'vh-gap-bar', 'vh-gap-kb', 'vh-gap-css', 'vh-live-speech', 'vh-deep-diag', 'vh-rl-send', 'vh-rl-copy', 'vh-rl-clear']);
+  });
+
+  it('深度诊断开关默认 OFF，点一下 ON（只存这次打开 sessionStorage）、再点回 OFF（11-20 改善报告第四节，platform/diag-deep.ts）', async () => {
+    sessionStorage.clear();
+    render(<AboutSection />);
+    tapVersion(DIAG_TAPS);
+    const btn = await screen.findByTestId('vh-deep-diag');
+    expect(btn.textContent).toBe(DD_LABEL_OFF);
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(btn);
+    expect(btn.textContent).toBe(DD_LABEL_ON);
+    expect(deepDiagOn()).toBe(true);
+    expect(localStorage.getItem('lemo-diag-deep')).toBeNull();
+    fireEvent.click(btn);
+    expect(btn.textContent).toBe(DD_LABEL_OFF);
+    expect(deepDiagOn()).toBe(false);
   });
 
   it('Gap fix 开关默认 ON，点一下关掉用来对照（存本机 lemo-gapfix-off）、再点回 ON（R-371 11-11 默认开；日志在全局运行日志里）', async () => {

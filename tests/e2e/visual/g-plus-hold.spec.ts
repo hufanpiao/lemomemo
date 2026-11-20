@@ -16,6 +16,7 @@
 // 只跑 playwright.visual.config.ts 的 chromium-plus-hold 项目（Chromium 才画 backdrop-filter，和底栏锁定同一种截法）。
 import type { Page } from '@playwright/test';
 import { fakeMedia } from '../fake-media.ts';
+import { readRunLogInPage } from '../page-helpers.ts';
 import { cached, idbPut } from '../idb.ts';
 import { applyTheme, expect, frames, freeze, seedTodos, settle, still, test } from './visual-helpers.ts';
 
@@ -78,7 +79,7 @@ async function aiOn(page: Page): Promise<void> {
 /** 录音那一套挂上了（这次启动的运行日志里有“voice host ready”）：之后按住才有人接手 */
 async function recReady(page: Page): Promise<void> {
   await expect
-    .poll(() => page.evaluate(() => (localStorage.getItem('lemo-run-log') ?? '').split('=== start').at(-1)?.includes('voice host ready') ?? false), { timeout: 15_000 })
+    .poll(() => page.evaluate(readRunLogInPage).then((t) => t.split('=== start').at(-1)?.includes('voice host ready') ?? false), { timeout: 15_000 })
     .toBe(true);
 }
 
