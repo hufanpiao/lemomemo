@@ -179,7 +179,7 @@ describe('全局运行日志', () => {
     expect(readRunLog()).not.toMatch(/vis-frames/);
   });
 
-  it('深度诊断（diag-deep.ts，默认关）：开着时切回前台数模糊层、换页画完记 swap pin（按需下载 diag-swap-pin.ts）；关着时这两项一次 getComputedStyle 都不调', async () => {
+  it('深度诊断（diag-deep.ts，默认关）：开着时切回前台数模糊层、换页画完记 swap pin（按需下载 diag-deep-probe.ts）；关着时这两项一次 getComputedStyle 都不调', async () => {
     vi.useFakeTimers();
     const blurred = document.createElement('div');
     blurred.style.setProperty('backdrop-filter', 'blur(8px)');
@@ -195,8 +195,9 @@ describe('全局运行日志', () => {
       const gcs = vi.spyOn(window, 'getComputedStyle');
       document.dispatchEvent(new Event('visibilitychange'));
       while (cbs.length) cbs.shift()?.();
+      await vi.dynamicImportSettled(); // 深度诊断开着时等 diag-deep-probe.ts 下载到
       history.pushState(null, '', '#/calendar');
-      await vi.dynamicImportSettled(); // 深度诊断开着时等 diag-swap-pin.ts 下载到
+      await vi.dynamicImportSettled();
       while (cbs.length) cbs.shift()?.();
       const calls = gcs.mock.calls.length;
       gcs.mockRestore();

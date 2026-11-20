@@ -155,8 +155,8 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     if (h !== lastHash) {
       lastHash = h;
       push(`${stamp(now())} route ${h || '/'}`);
-      // 换页头像诊断（原来 App.tsx 每次换页都算）：只在深度诊断打开时下载 diag-swap-pin.ts，下载到后等两帧记 swap pin 行
-      if (deepDiagOn()) void import('./diag-swap-pin.ts').then((m) => m.noteSwapPin(doc, add, opts.frame)).catch(() => undefined);
+      // 换页头像诊断（原来 App.tsx 每次换页都算）：只在深度诊断打开时下载 diag-deep-probe.ts，下载到后等两帧记 swap pin 行
+      if (deepDiagOn()) void import('./diag-deep-probe.ts').then((m) => m.noteSwapPin(doc, add, opts.frame)).catch(() => undefined);
     }
     if (d !== lastDepth) {
       lastDepth = d;
@@ -330,23 +330,15 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
       const f1 = performance.now() - t0;
       frame(() => {
         const f2 = performance.now() - t0;
-        // 数模糊层要对全页几百个元素逐个算样式（桌面实测每次 0.14～1.1 ms，正好压在切回前台这一刻）：只在深度诊断打开时数，关着写 blur=-（11-20 改善报告第四节）
-        let blur: number | '-' = '-';
-        if (deepDiagOn()) {
-          blur = 0;
-          for (const el of doc.querySelectorAll<HTMLElement>('body *')) {
-            const cs = getComputedStyle(el);
-            const bf = cs.backdropFilter || cs.getPropertyValue('-webkit-backdrop-filter');
-            if (bf !== '' && bf !== 'none') blur++;
-          }
-        }
         // 负责人 11-18 12:33 又白一次：帧 40 ms 就到、页面 407 个元素，还是看不出白在哪一层。再记屏幕正中那一点是谁（白屏时是不是盖了东西）、
         // 根元素和 body 的不透明度、页面有没有被系统重新加载（start 行的 nav=）
         const mid = typeof doc.elementFromPoint === 'function' ? doc.elementFromPoint(win.innerWidth / 2, win.innerHeight / 2) : null;
         const op = `${getComputedStyle(doc.documentElement).opacity}/${doc.body ? getComputedStyle(doc.body).opacity : '-'}`;
-        add(
-          `vis-frames raf1=${Math.round(f1)} raf2=${Math.round(f2)} timer0=${Math.round(tm)} blur=${blur} els=${doc.getElementsByTagName('*').length} mid=${describeEl(mid)} op=${op}`,
-        );
+        const line = (blur: number | string): void =>
+          add(`vis-frames raf1=${Math.round(f1)} raf2=${Math.round(f2)} timer0=${Math.round(tm)} blur=${blur} els=${doc.getElementsByTagName('*').length} mid=${describeEl(mid)} op=${op}`);
+        // 数模糊层要对全页几百个元素逐个算样式（桌面实测每次 0.14～1.1 ms，正好压在切回前台这一刻）：只在深度诊断打开时下载 diag-deep-probe.ts 再数，关着写 blur=-（11-20 改善报告第四节）
+        if (deepDiagOn()) void import('./diag-deep-probe.ts').then((m) => line(m.countBlur(doc)), () => line('-'));
+        else line('-');
       });
     });
   };
