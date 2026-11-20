@@ -1,7 +1,7 @@
 // 液态玻璃底栏（B2 FA-7；负责人 11-05 ①～④；接手清单 NAV-today-no-settings、UI4-B1-C2）：
 // 今天、日历、待办、随手记四页都有底栏，点页签换页、选中项跟着走；“＋”点一下打开打字条（B3 M4，原来是按页新建），打字条“展开编辑”按页进新建页
 // （今天、日历→日程，待办→待办）；随手记页（B4）也显示“＋”，名字同样是“打字记一条”（R-380：在这一页把光标放进输入行）；
-// 今天页右上角头像进设置；切页动画期间点按不被吞（::view-transition 不接点按）；底栏切页时不跟着淡入淡出
+// 今天页右上角头像进设置；切页动画期间点按不被吞（11-20 起切页不用 View Transition，过渡中点按直接落在真元素上）；底栏切页时不跟着淡入淡出
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
@@ -114,19 +114,21 @@ test.describe('底栏（FA-7）', () => {
   test('切页动画期间点按不被吞（UI4-B1-C2）：点日历后马上点待办，落在待办', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
-    // 规则本身在不在：读已加载的样式表（不往页面里插样式，CSP 不放行）
-    const pe = await page.evaluate(() =>
+    // 11-20 起切页不用 View Transition（不再有盖整屏、接走点按的伪元素层）：读已加载的样式表（不往页面里插样式，CSP 不放行），一条 ::view-transition 规则都没有
+    const vt = await page.evaluate(() =>
       [...document.styleSheets].some((s) => {
         try {
-          return [...s.cssRules].some((r) => /::view-transition\s*\{[^}]*pointer-events:\s*none/.test(r.cssText));
+          return [...s.cssRules].some((r) => r.cssText.includes('::view-transition'));
         } catch {
           return false;
         }
       }),
     );
-    expect(pe, '::view-transition { pointer-events: none } 在样式表里').toBe(true);
+    expect(vt, '样式表里没有 ::view-transition 规则').toBe(false);
     await tab(page, 'calendar').click();
-    await tab(page, 'todos').click({ timeout: 2000 });
+    // 5 秒：CI 的 webkit 开着模糊一秒只出 1～3 帧，Playwright 等元素“稳定”要连着两帧位置不变，2 秒常常不够（偶发挂在这里）。
+    // 防的“被盖住、点按被吞”不靠这个时限：被吞的话 URL 不会变成 #/todos，下面照样挂
+    await tab(page, 'todos').click({ timeout: 5000 });
     await expect(page).toHaveURL(/#\/todos$/);
     await expect(page.getByTestId('todos')).toBeVisible();
   });
@@ -307,13 +309,15 @@ test.describe('底栏（FA-7）', () => {
     expect(rec.rows.every((r) => r.band && r.op === 1 && r.edgeOp === 1 && r.fades === 0), `重挂后实色带、渐隐层不是一直不透明 ${JSON.stringify(rec.rows)}`).toBe(true);
   });
 
-  test('底栏样式：固定在底部、有切页名字 tabbar；页签触控区够高', async ({ page }) => {
+  // 11-20 起切页不用 View Transition：底栏不再起切页名字（起了名就会被截成快照），换成 page-swap 认底栏的标记 data-swap-bar
+  test('底栏样式：固定在底部、不起切页名字、带 page-swap 的底栏标记；页签触控区够高', async ({ page }) => {
     await page.goto('/app/#/today');
     const box = await bar(page).boundingBox();
     const vh = page.viewportSize()?.height ?? 0;
     expect(box).not.toBeNull();
     expect((box?.y ?? 0) + (box?.height ?? 0)).toBeGreaterThan(vh - 120);
-    expect(await bar(page).evaluate((el) => getComputedStyle(el).viewTransitionName)).toBe('tabbar');
+    expect(await bar(page).evaluate((el) => getComputedStyle(el).viewTransitionName ?? 'none')).toBe('none');
+    await expect(bar(page)).toHaveAttribute('data-swap-bar', '');
     const t = await tab(page, 'today').boundingBox();
     expect(t?.height ?? 0).toBeGreaterThanOrEqual(44);
   });

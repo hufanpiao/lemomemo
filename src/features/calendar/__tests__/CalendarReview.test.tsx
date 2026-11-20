@@ -80,7 +80,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   delete document.documentElement.dataset.rm;
-  delete (document as { startViewTransition?: unknown }).startViewTransition;
 });
 
 /** 选中那天清单的行（ul 里的按钮；标题行下面的黄历卡也是按钮，R-431，不算） */

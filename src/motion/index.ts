@@ -1,12 +1,11 @@
 // 动效模块的对外接口（架构 17.2 第 4 点）：只有这里能用 motion/react、element.animate、
-// document.startViewTransition、requestAnimationFrame（A25）
+// document.startViewTransition、requestAnimationFrame（A25；11-20 起切页不再用 View Transition，见 ./page-swap.ts）
 // B0 是骨架：接口定下来，具体手感在 B1（按下回弹、页面切换）、B2（弹层、列表）、B3（提示条、录音面板）里调
 import type * as PageSwapModule from './page-swap.ts';
 import { prefersReducedMotion } from './reduced.ts';
 
 // React 组件（Appear、Pressable、SharedLayout、Celebrate）在 ./components.ts：
 // 分开导出，免得只用函数的地方（例如 router 的 transition）把 motion/react 带进首屏（2.6）
-export { vtName } from './vt.ts';
 // 吞掉手势后补来的那一下 click（换页守卫、翻页、kit 左滑行、按住“＋”共用这一个；时限在 tokens.ts 的 TAP_SWALLOW_MS）
 export { swallowNextClick, type SwallowClickOptions } from './swallow-click.ts';
 export { TAP_SWALLOW_MS } from './tokens.ts';
@@ -19,7 +18,8 @@ export type { AppearKind } from './presets.ts';
 
 /**
  * 页面切换（17.2 第 3 点）：进页新页从右边滑进来盖住旧页，back 为真（返回上一页、回上一层）反过来（负责人 11-20 选“新页从右滑进盖住”）。
- * 实现在 ./page-vt.ts，跟换页动画实现同一块、首屏画完才下载（11-20 ci 首屏预算超线后挪出）；没到时直接换页、不播（冷启动不到一秒就点进下一页才碰得到）
+ * 实现在 ./page-swap.ts（和页签互切同一套引擎，底栏全程是真元素；11-20 起不再用 View Transition），首屏画完才下载；
+ * 没到时直接换页、不播（冷启动不到一秒就点进下一页才碰得到）
  */
 export function transition(update: () => void, back = false): Promise<void> {
   // 页签互切的淡入还在等分包时走了整页过渡（点了“＋”、头像）：先停掉，不然后面换上来的编辑页、设置页会被当成新页再淡入一次（代码审查方案 B M9）

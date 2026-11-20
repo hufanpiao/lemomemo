@@ -1,34 +1,36 @@
-// UI-4 M-2（架构 17.2 第 3 点）：navigate() 在 View Transition 的回调里同步把新页面画完（flushSync），
-// 别的办法换地址（hashchange）走同一条路。TC-B1-51：支持 View Transitions 时切页、不支持时直接切换（无报错），两条路都在这里。用假的 startViewTransition 抓住回调，回调一返回就看 DOM
+// UI-4 M-2（架构 17.2 第 3 点）：navigate() 在整页切换（motion 的 transition）的回调里同步把新页面画完（flushSync），
+// 别的办法换地址（hashchange）走同一条路。TC-B1-51：有切页动画时切页、没有时直接切换（无报错），两条路都在这里。
+// 11-20 起整页切换不用 View Transition（motion/page-swap.ts）：这里把 motion 的 transition 换成替身抓住回调，回调一返回就看 DOM（动画本身在 motion/__tests__/push-swap.test.ts）
 // R-487：iPhone 侧滑返回的 hasUAVisualTransition 判断删了（浏览器历史只有一条，系统侧滑没东西可退），原来那组用例一起删
 import { act, cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadPageSwap } from '../../motion/index.ts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as Motion from '../../motion/index.ts';
 import { goBack, navigate, stackOf, useRoute } from '../router.ts';
 
-// 整页过渡的实现首屏画完才下载（motion/page-vt.ts，11-20 挪出首屏）：真机由 main.tsx 调 loadPageSwap，这里先下好
-beforeAll(() => loadPageSwap());
+const fake = vi.hoisted(() => ({ on: false, spy: null as null | ((update: () => void, back?: boolean) => Promise<void>) }));
+vi.mock('../../motion/index.ts', async (orig) => {
+  const m = await orig<typeof Motion>();
+  return { ...m, transition: (update: () => void, back?: boolean) => (fake.on && fake.spy ? fake.spy(update, back) : m.transition(update, back)) };
+});
 
 function Where() {
   const r = useRoute();
   return <p data-testid="where">{[r.name, ...r.params].join('/')}</p>;
 }
 
-// 假的 startViewTransition 挂在 document 上（jsdom 没有这个 API）；测完删掉
-type FakeVt = (cb: () => void) => { finished: Promise<void> };
-const doc = document as unknown as { startViewTransition?: FakeVt };
-
-/** 假的 View Transitions：记下回调，由测试决定什么时候“截完旧画面”再调；调完立刻记下当时的 DOM */
+/** 替身：记下回调，调完立刻记下当时的 DOM（回调一返回就该已经是新页面）和方向 */
 function fakeVt() {
   const seen: string[] = [];
-  const spy = vi.fn((cb: () => void) => {
-    cb();
-    // 回调一返回浏览器就截“新画面”：这时 DOM 必须已经是新页面
+  const backs: boolean[] = [];
+  const spy = vi.fn((update: () => void, back = false) => {
+    update();
     seen.push(screen.getByTestId('where').textContent ?? '');
-    return { finished: Promise.resolve() };
+    backs.push(back);
+    return Promise.resolve();
   });
-  doc.startViewTransition = spy;
-  return { spy, seen };
+  fake.spy = spy;
+  fake.on = true;
+  return { spy, seen, backs };
 }
 
 beforeEach(() => {
@@ -37,11 +39,11 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  delete doc.startViewTransition;
+  fake.on = false;
   history.replaceState(null, '', '#');
 });
 
-describe('navigate：新页面在 View Transition 的回调里画完（M-2）', () => {
+describe('navigate：新页面在整页切换的回调里画完（M-2）', () => {
   it('回调返回时 DOM 已经是新路由；地址也改了，原页压进返回栈、浏览器历史不多一条（R-487）', async () => {
     render(<Where />);
     expect(screen.getByTestId('where').textContent).toBe('today');
@@ -62,17 +64,18 @@ describe('navigate：新页面在 View Transition 的回调里画完（M-2）', 
     await act(async () => {
       await navigate('note', 'abc');
     });
-    const { spy, seen } = fakeVt();
+    const { spy, seen, backs } = fakeVt();
     await act(async () => {
       goBack();
       await Promise.resolve();
     });
     expect(spy).toHaveBeenCalledTimes(1);
     expect(seen).toEqual(['today']);
+    expect(backs, '返回方向').toEqual([true]);
     expect(stackOf()).toEqual([]);
   });
 
-  it('别的办法换地址（hashchange）也包进 View Transition，回调里画完', async () => {
+  it('别的办法换地址（hashchange）也包进整页切换，回调里画完', async () => {
     render(<Where />);
     const { spy, seen } = fakeVt();
     await act(async () => {
@@ -84,7 +87,7 @@ describe('navigate：新页面在 View Transition 的回调里画完（M-2）', 
     expect(seen).toEqual(['calendar']);
   });
 
-  it('多个组件订阅路由：一次切换只起一个 View Transition', async () => {
+  it('多个组件订阅路由：一次切换只起一次整页切换', async () => {
     render(
       <>
         <Where />
@@ -100,7 +103,7 @@ describe('navigate：新页面在 View Transition 的回调里画完（M-2）', 
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('不支持 View Transitions：直接切换，同样同步画完', async () => {
+  it('没有切页动画（实现没到、jsdom）：直接切换，同样同步画完', async () => {
     render(<Where />);
     act(() => {
       void navigate('settings');
@@ -110,7 +113,7 @@ describe('navigate：新页面在 View Transition 的回调里画完（M-2）', 
 });
 
 describe('跳到当前页不起空 transition（UI-4 第二轮 N-2）', () => {
-  it('地址没变：不调 startViewTransition、不加历史', async () => {
+  it('地址没变：不起整页切换、不加历史', async () => {
     render(<Where />);
     const { spy } = fakeVt();
     const before = history.length;

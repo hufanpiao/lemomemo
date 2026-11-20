@@ -1,7 +1,8 @@
 // UI-4 B1 动效确认 C3（X-3）：切页前所有 Pressable 瞬间复位（motion 的 transition() 打 data-snap），
-// 浏览器截旧画面时没有缩着、正在弹回的按钮；进了 View Transition 的回调就摘掉。
-// （C2“过渡期间点按不被吞”B2 试过 ::view-transition { pointer-events: none; }：Chromium、WebKit 过渡期间命中的一律是 <html>，
-//  加了也一样，没有效果，已撤掉；怎么处理待负责人定，见前端 A 第 8 行回报）
+// 拷旧页副本时没有缩着、正在弹回的按钮；换新页之前真页面上的摘掉。
+// 11-20 起整页推页不用 View Transition（motion/page-swap.ts）：旧页是一份真 DOM 副本，副本里的 data-snap 整段留着
+// （副本抄了 data-state，摘了按下的按钮会缩回 0.97），所以这里看副本挂上那一刻：副本里的都带 data-snap、算出来没有缩放，真页面上的已摘掉
+import { waitPreloaded } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 // 合卡以后（SETTINGS-merge-cards）注销入口在账号二级页
@@ -9,39 +10,40 @@ const SETTINGS = '/app/#/settings/account';
 
 test.use({ loggedIn: true });
 
-test('起过渡那一刻页面上的 Pressable 都带 data-snap（瞬间复位、不截到缩着的按钮），过渡回调里已摘掉（C3）', async ({ page }) => {
+test('旧页副本里的 Pressable 都带 data-snap、没有缩着（瞬间复位），真页面上的换页前已摘掉（C3）', async ({ page }) => {
   await page.goto(SETTINGS);
-  await expect(page.getByTestId('settings-delete-entry')).toBeVisible();
-  const supported = await page.evaluate(() => 'startViewTransition' in document);
-  test.skip(!supported, '这个浏览器不支持 View Transitions');
+  await expect(page.getByTestId('settings-delete-entry')).toBeVisible({ timeout: 10_000 });
+  // 推页动画实现首屏画完才下载，到之前换页直接换、不拷副本（motion/index.ts）：等冷启动预加载跑完，它早就到了
+  await waitPreloaded(page);
 
   const seen = await page.evaluate(async () => {
-    const d = document as unknown as { startViewTransition: (cb: () => void) => { finished: Promise<void> } };
-    const orig = d.startViewTransition.bind(d);
-    const rec = { atStart: { pressables: 0, snapped: 0, scaled: 0 }, inCallback: -1 };
-    d.startViewTransition = (cb) => {
-      const ps = [...document.querySelectorAll<HTMLElement>('[data-pressable]')];
-      rec.atStart.pressables = ps.length;
-      rec.atStart.snapped = ps.filter((p) => p.hasAttribute('data-snap')).length;
-      // 计算样式：带 data-snap 的立刻是原大小（不等过渡）
-      rec.atStart.scaled = ps.filter((p) => getComputedStyle(p).transform !== 'none').length;
-      // cb 是 motion 的回调：先摘 data-snap、再画新页面；它返回后数一下（新页面上的 Pressable 也不带）
-      return orig(() => {
-        cb();
-        rec.inCallback = document.querySelectorAll('[data-snap]').length;
-      });
-    };
+    const rec = { copies: -1, snapped: 0, pressed: 0, scaled: 0, real: -1 };
+    const mo = new MutationObserver(() => {
+      const g = document.querySelector('[data-tab-ghost]');
+      if (!g || rec.copies >= 0) return;
+      const ps = [...g.querySelectorAll<HTMLElement>('[data-pressable]')];
+      rec.copies = ps.length;
+      rec.snapped = ps.filter((p) => p.hasAttribute('data-snap')).length;
+      rec.pressed = ps.filter((p) => p.getAttribute('data-state') === 'pressed').length;
+      // 计算样式：带 data-snap 的立刻是原大小（不等过渡），按着的那个也是
+      rec.scaled = ps.filter((p) => getComputedStyle(p).transform !== 'none').length;
+      rec.real = [...document.querySelectorAll('[data-snap]')].filter((e) => !e.closest('[data-tab-ghost], [data-swap-bar-copy]')).length;
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
     const entry = document.querySelector<HTMLElement>('[data-testid="settings-delete-entry"]');
     entry?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     await new Promise((r) => setTimeout(r, 60));
-    entry?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    // 还按着就点（pointerup 前的 click）：副本拷到的是按下状态的按钮
     entry?.click();
-    for (let i = 0; i < 60 && rec.inCallback < 0; i++) await new Promise((r) => requestAnimationFrame(r));
+    entry?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    // 按时间等、不按帧数等：CI 的 webkit 开着模糊一秒只出 1～3 帧，数 60 帧会拖过用例超时（副本是同步挂上的，正常一下就到）
+    for (const t0 = performance.now(); rec.copies < 0 && performance.now() - t0 < 5000; ) await new Promise((r) => setTimeout(r, 20));
+    mo.disconnect();
     return rec;
   });
-  expect(seen.atStart.pressables).toBeGreaterThan(0);
-  expect(seen.atStart.snapped).toBe(seen.atStart.pressables);
-  expect(seen.atStart.scaled).toBe(0);
-  expect(seen.inCallback).toBe(0);
+  expect(seen.copies).toBeGreaterThan(0);
+  expect(seen.snapped).toBe(seen.copies);
+  expect(seen.scaled).toBe(0);
+  expect(seen.real, '真页面上的换页前已摘掉').toBe(0);
   await expect(page.getByTestId('settings-delete')).toBeVisible();
 });

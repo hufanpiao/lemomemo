@@ -1,8 +1,15 @@
 // 设置子页的进出（提醒接线代码审查 H1、M1，复审 L7；R-487 起按返回栈）：navigateSub 把上一层压进栈，backOrReplace 栈顶是上一层就退一步、否则原地换；
-// 快速连点同一个入口只压一层。页面切换包在 View Transition 里，jsdom 没有 startViewTransition（直接同步画），L7 这里用替身把回调推迟到手动放行
+// 快速连点同一个入口只压一层。页面切换包在整页切换（motion 的 transition）里，jsdom 里直接同步画；L7 这里用替身把回调推迟到手动放行
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as Motion from '../../motion/index.ts';
 import { canGoBack, goBack, stackOf } from '../router.ts';
 import { backOrReplace, navigateSub } from '../router-sub.ts';
+
+const fake = vi.hoisted(() => ({ spy: null as null | ((update: () => void) => Promise<void>) }));
+vi.mock('../../motion/index.ts', async (orig) => {
+  const m = await orig<typeof Motion>();
+  return { ...m, transition: (update: () => void, back?: boolean) => (fake.spy ? fake.spy(update) : m.transition(update, back)) };
+});
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
@@ -11,7 +18,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
-  delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
+  fake.spy = null;
 });
 
 describe('backOrReplace：按栈顶回上一层', () => {
@@ -74,15 +81,15 @@ describe('L7：快速连点同一个入口只压一层', () => {
   let queued: (() => void)[] = [];
   beforeEach(() => {
     queued = [];
-    // 替身：回调先排着，release() 才执行（真浏览器里要等截完旧画面）
-    (document as unknown as { startViewTransition?: unknown }).startViewTransition = (cb: () => void) => {
+    // 替身：回调先排着，release() 才执行（模拟换页回调还没跑完时又点了一下）
+    fake.spy = (cb: () => void) => {
       let done!: () => void;
       const finished = new Promise<void>((r) => (done = r));
       queued.push(() => {
         cb();
         done();
       });
-      return { finished };
+      return finished;
     };
     window.history.replaceState({ lemoStack: ['#/today'] }, '', '#/settings');
   });

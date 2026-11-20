@@ -1,8 +1,9 @@
 /* 液态玻璃底栏外壳（B2 FA-7）：尺寸、位置、材质参数照 皮肤-v4/液态玻璃-真机试验.html；颜色只引皮肤令牌（A11），
    透明度类的数字令牌（--g-sheen）用单独一层的 opacity 套上；内侧柔光用 --g-glow-c，阴影用 --g-bar-shadow（11-06 底栏排查 A 类照视觉稿补齐）。
    材质分两档：首屏后备（--g-tint-fb + backdrop-filter）；减少透明效果（系统设置或 data-rt="1"）时实色。
-   backdrop-filter 写在 .bar、.fab 自己身上，不写在里面的着色层：它们带 view-transition-name，按 Filter Effects 2 的 backdrop root 规则
+   backdrop-filter 写在 .bar、.fab 自己身上，不写在里面的着色层：按 Filter Effects 2 的 backdrop root 规则，带 backdrop-filter 的 .bar
    自己就是子元素的“背景根”，子元素的 backdrop-filter 只能看到 .bar 里面（什么都没有），等于没模糊（11-06 底栏透明度排查第二轮根因 2）。
+   不起 view-transition-name（11-20 起切页不用 View Transition，底栏全程是真元素，motion/page-swap.ts）。
    内容副本那一档按需下载后接管（另做）。
    bottom 减去 --vh-gap（台账 Q-13“导航给我焊死在下面”，platform/viewport.ts 写）：iOS 主屏幕版布局视口少了顶部安全区那段时补到屏幕最底，平时是 0 */
 .bar,
@@ -15,7 +16,6 @@
 
   /* avoid-ai-design-ignore: K3 负责人指定液态玻璃（底栏、“＋”的毛玻璃，B2 FA-7） */
   backdrop-filter: blur(8px) saturate(1.8);
-  view-transition-name: tabbar;
   transition: opacity var(--dur-ui) var(--ease-out);
 }
 
@@ -45,7 +45,6 @@
 
   /* 4px 底色间隔圈 + 1px --step-off 细灰边（R-117；设计动效评审 L4） */
   box-shadow: 0 0 0 4px var(--bg), 0 0 0 5px var(--step-off), var(--g-bar-shadow);
-  view-transition-name: tabbar-add;
 }
 
 @media (width >= 481px) {
@@ -251,9 +250,6 @@
   :global(:root[data-kbhide]) .bar,
   :global(:root[data-kbhide]) .fab {
     visibility: hidden;
-
-    /* 藏着时不进切页快照：快照上补的圆角阴影（base.css）会画在空快照上，剩一个空阴影壳（代码审查 M5） */
-    view-transition-name: none;
   }
 }
 

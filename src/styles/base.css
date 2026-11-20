@@ -214,8 +214,8 @@ body::before {
    所以只用两层，底部那条是 3 层）：8px 管状态栏那一段，2px 管往下的过渡段。不挡点按。
    R-349 起（black-translucent）页面铺到状态栏下面，带子从 y=0 开始、高“安全区 + --top-fade”，盖住状态栏区（负责人 11-06“顶部最上面开始做模糊”）。
    两层是入口页里的两个静态 div（src/index.html、src/auth/index.html 的 .lemo-top-8、.lemo-top-2），不是伪元素（动效复审 M5）：
-   伪元素属于整页快照，切页时跟着旧页淡掉，顶部会闪一下；真元素起具名 view-transition-name、过渡里 animation: none，一直画着。
-   模糊写在具名元素自己身上（具名元素是背景根，子元素的 backdrop-filter 看不到外面，同 GlassBar.module.css 文件头）。
+   原来切页用 View Transition 时，伪元素属于整页快照、会跟着旧页淡掉；11-20 起切页不再用 View Transition（motion/page-swap.ts），
+   两层是真元素、切页时原地不动一直画着，不再起 view-transition-name。模糊写在两层自己身上。
    层级 1，和底色条 body::before 一样，在它后面画、压在它上面；弹层（70）、版本横幅（50）、整屏提示（100）、启动画面都在它上面，这是有意的（代码审查 L11）：
    弹层自己的遮罩 --scrim 铺满整屏、带模糊，盖住状态栏区时不需要这条带子再模糊一次；启动画面第一帧要和 iOS 启动图一模一样，带子不能糊到它上面。
    .lemo-top-2 另有备用底色 --status-tint（负责人 11-06 要求默认关闭：先按纯模糊上真机看白字，看过再决定开不开） */
@@ -246,14 +246,12 @@ body::before {
   /* avoid-ai-design-ignore: K3 负责人 11-06 指定顶部和底部一样的渐变模糊 */
   backdrop-filter: blur(8px);
   mask: linear-gradient(to bottom, var(--bg) calc(var(--inset-top) * 0.5), transparent calc(var(--inset-top) + var(--top-fade) * 0.5));
-  view-transition-name: top-blur-8;
 }
 
 .lemo-top-2 {
   background: var(--status-tint);
   backdrop-filter: blur(2px); /* avoid-ai-design-ignore: K3 负责人 11-06 指定顶部和底部一样的渐变模糊 */
   mask: linear-gradient(to bottom, var(--bg) var(--inset-top), transparent 100%);
-  view-transition-name: top-blur-2;
 }
 
 /* 减少透明效果：不模糊，只留底色渐变（实色渐变）；电脑版侧栏（≥ 900px）不加模糊带 */
@@ -325,222 +323,17 @@ html.scroll-locked body {
 /* 触屏上文档始终比视口高 1px、一直可以滚动（CI-webkit-crash，11-04）：整页 View Transition 播放期间，文档从“不到一屏、不能滚”
    变成“超过一屏、能滚”（注销页 → 设置首页；今天页 → 第一次进日历，月历分包在过渡途中挂进来），webkit 整个页面崩溃（Page crashed）。
    二分（5e0eaf2 对 4805049）：旧页面本来就能滚、或新页面不超一屏都不崩；这条规则让“能不能滚”在换页前后不变。
-   1px 的滚动量手指感觉不到（iPhone 本来就有回弹）；电脑上（有悬停的设备）不加，免得短页面也常显滚动条 */
+   1px 的滚动量手指感觉不到（iPhone 本来就有回弹）；电脑上（有悬停的设备）不加，免得短页面也常显滚动条。
+   11-20 起切页不再用 View Transition（motion/page-swap.ts），崩溃的前提没了；这条先留着（静止页面的滚动手感跟着它），要删先在 webkit 真机上核 */
 @media (hover: none) {
   html {
     min-height: calc(100% + 1px);
   }
 }
 
-/* 页面切换（17.2 第 1、3 点，17.3；负责人 11-20 选“新页从右滑进盖住”）：点进下一页，新页从右边滑进来盖住旧页、旧页往左退 30%；
-   返回（motion 的 transition 打 <html data-vt-back>）反过来，旧页往右滑出、露出下面往回移的上一页。全程两页都看得见，不再黑一下
-   （原来先淡出再淡入：旧页前 40% 淡完、新页 35% 以后才淡入，中间露出底色，深色下就是“画面黑一下”）。
-   时长 --dur-sheet、曲线 --ease-drawer（iOS 推页的曲线）；进页 lemo-push-*、返回 lemo-pop-*。顶栏不再单独起名（原来 page-head 为了淡入淡出时
-   新旧标题不叠），跟着整页一起截、一起滑，新页能盖住旧页的顶栏。不叠加混合（默认 plus-lighter 会让两页重叠处发亮）。
-   减少动态效果时 motion 的 transition() 直接切换、不起 View Transition；CSS 这边另有覆盖（本段最后）兜底 */
-::view-transition-old(root),
-::view-transition-new(root) {
-  mix-blend-mode: normal;
-}
-
-/* 切页动画期间点按不被吞（接手清单 UI4-B1-C2）：View Transition 的伪元素层盖在页面上面，默认会接住点按；
-   让它不接，点按落到底下已经换好的新页面（底栏切页上线前要有，B2 FA-7） */
-::view-transition {
-  pointer-events: none;
-}
-
-/* 底栏和“＋”（view-transition-name: tabbar、tabbar-add，B2 FA-7）：切页时不跟着整页淡入淡出、不滑位置。
-   新旧两份都不放动画；画哪一份见下面一段。不能把旧的那份藏掉、只靠新的那份显示：webkit 过渡期间不画新的那份，
-   整条底栏和“＋”会消失到过渡结束（设计复审一 R1） */
-::view-transition-group(tabbar),
-::view-transition-group(tabbar-add),
-::view-transition-group(top-blur-8),
-::view-transition-group(top-blur-2),
-::view-transition-old(tabbar),
-::view-transition-old(tabbar-add),
-::view-transition-old(top-blur-8),
-::view-transition-old(top-blur-2),
-::view-transition-new(tabbar),
-::view-transition-new(tabbar-add),
-::view-transition-new(top-blur-8),
-::view-transition-new(top-blur-2) {
-  animation: none;
-
-  /* 画着的旧那份正好盖在真底栏上：webkit 过渡期间点它会被这层接住（不按 ::view-transition 的 pointer-events 走），明写不接 */
-  pointer-events: none;
-}
-
-/* 底栏和“＋”在 View Transition 里的样子。负责人 11-06 选方案 B 以后，四个页签互切不走 View Transition（router.ts setTabSwitch、motion fadeSwap，
-   底栏一直是真元素、一直实时模糊）；还会走到这里的是进出没有底栏的页（今天 ↔ 编辑页、设置……），只有一边有底栏或“＋”。
-   · 圆角裁切和阴影写在快照自己身上（::view-transition-old，和只有新那份时的 ::view-transition-new:only-child），不写在组上：
-     组上的阴影在只有一边有底栏、那一份又不画的时候会剩一个空阴影壳（代码审查 M5）。快照是替换元素，overflow: clip + border-radius 直接裁它：
-     iOS 把带 backdrop-filter 的元素按直角矩形截，圆角外露出灰块（70d94f5 残影），裁掉就没了；元素自己的阴影被一起裁掉，在快照上补同一组。
-   · 两边都有时只画旧的那份（新的 opacity 0）：两份叠着时液滴叠成一团（70d94f5 残影第 3 条），webkit 过渡期间也不画新的那份（设计复审一 R1）。
-     现在只有页签互切会两边都有，已经不走这里；留着防以后别的入口。
-   · 键盘弹着时底栏 visibility: hidden，GlassBar.module.css 同时去掉 view-transition-name，不然空快照上还会画出阴影 */
-::view-transition-new(tabbar),
-::view-transition-new(tabbar-add) {
-  opacity: 0;
-}
-
-::view-transition-old(tabbar),
-::view-transition-new(tabbar):only-child {
-  overflow: clip;
-  border-radius: var(--r-pill);
-  box-shadow: var(--g-bar-shadow);
-}
-
-::view-transition-old(tabbar-add),
-::view-transition-new(tabbar-add):only-child {
-  overflow: clip;
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px var(--bg), 0 0 0 5px var(--step-off), var(--g-bar-shadow);
-}
-
-/* 只有一边有底栏或“＋”时（今天 ↔ 新建日程、设置……）跟着自己那一页滑（动效审查方案 B V1：原来新旧都是 animation: none，
-   进新建页时旧那份压在新页上停满整段过渡、最后一帧整条消失）：旧那份跟旧页一起退、新那份（返回时）跟上一页一起回来。
-   整页和单边底栏同一时长、曲线（独立评审 11-20 第 7 条：原来写了三遍） */
-::view-transition-old(root),
-::view-transition-new(root),
-::view-transition-old(tabbar):only-child,
-::view-transition-old(tabbar-add):only-child,
-::view-transition-new(tabbar):only-child,
-::view-transition-new(tabbar-add):only-child {
-  animation-duration: var(--dur-sheet);
-  animation-timing-function: var(--ease-drawer);
-}
-
-::view-transition-new(tabbar):only-child,
-::view-transition-new(tabbar-add):only-child {
-  opacity: 1;
-}
-
-/* 进页、返回两套关键帧名。返回那套带 :root[data-vt-back]，优先级（0,2,1 起）高过进页那套（0,0,1 起），不靠先后 */
-::view-transition-old(root) {
-  animation-name: lemo-push-old;
-}
-
-/* 只有旧页有底栏、“＋”（进编辑页、设置）：底栏单独一层画在整页上面，新页盖不住它，跟着旧页往左退的同时前 40% 淡完 */
-::view-transition-old(tabbar):only-child,
-::view-transition-old(tabbar-add):only-child {
-  animation-name: lemo-push-old-fade;
-}
-
-::view-transition-new(root),
-::view-transition-new(tabbar):only-child,
-::view-transition-new(tabbar-add):only-child {
-  animation-name: lemo-push-new;
-}
-
-/* 返回时滑走的是旧页，它要压在上一页上面 */
-:root[data-vt-back]::view-transition-old(root) {
-  z-index: 1;
-  animation-name: lemo-pop-old;
-}
-
-:root[data-vt-back]::view-transition-old(tabbar):only-child,
-:root[data-vt-back]::view-transition-old(tabbar-add):only-child {
-  animation-name: lemo-pop-old;
-}
-
-:root[data-vt-back]::view-transition-new(root) {
-  animation-name: lemo-pop-new;
-}
-
-/* 返回到有底栏的页：回来的底栏同样画在正滑走的那页上面，60% 以后才淡入 */
-:root[data-vt-back]::view-transition-new(tabbar):only-child,
-:root[data-vt-back]::view-transition-new(tabbar-add):only-child {
-  animation-name: lemo-pop-new-fade;
-}
-
-/* 减少动态效果（17.2 第 5 点）：motion 的 transition() 本来就不起 View Transition；CSS 兜底写在 <html> 自己身上
-   （伪元素挂在 <html> 上，:root[data-rm="1"] 后面不能带空格，带空格永远匹配不上；独立评审 11-20 第 3 条，lemo/reduced-motion-override 认这种写法） */
-:root[data-rm="1"]::view-transition-old(root),
-:root[data-rm="1"]::view-transition-new(root),
-:root[data-rm="1"]::view-transition-old(tabbar):only-child,
-:root[data-rm="1"]::view-transition-old(tabbar-add):only-child,
-:root[data-rm="1"]::view-transition-new(tabbar):only-child,
-:root[data-rm="1"]::view-transition-new(tabbar-add):only-child,
-:root[data-rm="1"][data-vt-back]::view-transition-old(root),
-:root[data-rm="1"][data-vt-back]::view-transition-new(root),
-:root[data-rm="1"][data-vt-back]::view-transition-old(tabbar):only-child,
-:root[data-rm="1"][data-vt-back]::view-transition-old(tabbar-add):only-child,
-:root[data-rm="1"][data-vt-back]::view-transition-new(tabbar):only-child,
-:root[data-rm="1"][data-vt-back]::view-transition-new(tabbar-add):only-child {
-  animation: none;
-}
-
-/* 规范把具名元素的 backdrop-filter 抄到它的 ::view-transition-group 上（Chromium 照做）：组没有圆角、不跟着淡，
-   快照淡掉以后底栏和“＋”的位置会剩两块直角的毛玻璃方块（11-06 V1 逐帧，chromium）。组上不要模糊，快照淡到哪儿就是哪儿 */
-::view-transition-group(tabbar),
-::view-transition-group(tabbar-add) {
-  backdrop-filter: none;
-}
-
-/* 电脑版侧栏：圆角 28、阴影 --b-rail-shadow（GlassBar.module.css 同一断点） */
-@media (width >= 900px) {
-  ::view-transition-old(tabbar),
-  ::view-transition-new(tabbar):only-child {
-    border-radius: var(--r-xl);
-    box-shadow: var(--b-rail-shadow);
-  }
-}
-
-/* 具名共享元素的组（列表那一条 ↔ 详情标题这类，位置和大小的移动）接令牌（接手清单 M4 剩余，第一个具名共享元素上线前）：
-   不用浏览器默认的 0.25s ease */
-::view-transition-group(*) {
-  animation-duration: var(--dur-sheet);
-  animation-timing-function: var(--ease-standard);
-}
-
-/* 整页推进：旧页往左退 30%，新页从右边整屏宽滑进来盖住。用 vw 不用 %：顶栏、底栏是单独起名的一层，% 按它自己的宽算，
-   会和整页滑的距离不一样（11-20 电脑宽屏截图顶栏标题挤在一起） */
-@keyframes lemo-push-old {
-  to {
-    transform: translateX(-30vw);
-  }
-}
-
-@keyframes lemo-push-new {
-  from {
-    transform: translateX(100vw);
-  }
-}
-
-/* 整页返回：旧页往右整页宽滑出，上一页从左边 30% 回到原位 */
-@keyframes lemo-pop-old {
-  to {
-    transform: translateX(100vw);
-  }
-}
-
-@keyframes lemo-pop-new {
-  from {
-    transform: translateX(-30vw);
-  }
-}
-
-@keyframes lemo-push-old-fade {
-  40% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 0;
-    transform: translateX(-30vw);
-  }
-}
-
-@keyframes lemo-pop-new-fade {
-  0% {
-    opacity: 0;
-    transform: translateX(-30vw);
-  }
-
-  60% {
-    opacity: 0;
-  }
-}
+/* 页面切换（进下一页、返回、页签互切、“详细”长成）11-20 起全部由 motion/page-swap.ts 用 WAAPI 做，不再用浏览器的 View Transition：
+   过渡里底栏、“＋”是截图、拍不到后面的内容，过渡一结束真底栏露出来模糊突然出现（负责人 11-20 录屏）。
+   进页、返回的关键帧（原来这里的 lemo-push-*、lemo-pop-*）原样搬到 page-swap.ts 的 slidePage */
 
 :focus-visible {
   outline: 2px solid var(--focus);

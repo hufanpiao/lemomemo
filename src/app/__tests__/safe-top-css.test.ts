@@ -127,15 +127,15 @@ describe('顶部安全区底色条', () => {
     expect(base.match(/\n\s*display: block;/g)?.length, '色条只在诊断时显示').toBe(1);
   });
 
-  // 动效复审 M5（11-06）：伪元素属于整页快照，切页时跟着旧页淡掉、顶部闪一下；两层改成入口页里的具名真元素，过渡里不放动画
-  it('两层模糊是入口页的具名真元素，过渡里 animation: none；没有灰色衬底 html::after，备用底色 --status-tint 默认透明', () => {
+  // 动效复审 M5（11-06）：伪元素属于整页快照，切页时跟着旧页淡掉、顶部闪一下；两层改成入口页里的真元素。
+  // 11-20 起切页不用 View Transition（motion/page-swap.ts 只动 #root 里的页面）：两层在 #root 外面，切页时原地不动、一直画着，不再起 view-transition-name
+  it('两层模糊是入口页 #root 外面的真元素，切页时原地不动；没有灰色衬底 html::after，备用底色 --status-tint 默认透明', () => {
     for (const f of ['src/index.html', 'src/auth/index.html']) {
       const h = readFileSync(f, 'utf8');
       expect(h, f).toMatch(/<div class="lemo-top" aria-hidden="true">\s*<div class="lemo-top-8"><\/div>\s*<div class="lemo-top-2"><\/div>/);
+      expect(h.indexOf('<div class="lemo-top"'), f).toBeLessThan(h.indexOf('<div id="root">'));
     }
-    expect(block(base, '.lemo-top-8')).toMatch(/view-transition-name: top-blur-8;/);
-    expect(base).toMatch(/view-transition-name: top-blur-2;/);
-    for (const k of ['group', 'old', 'new']) for (const n of ['top-blur-8', 'top-blur-2']) expect(base).toContain(`::view-transition-${k}(${n})`);
+    expect(base.replace(/\/\*[\s\S]*?\*\//g, '')).not.toContain('view-transition');
     expect(base).not.toMatch(/html::after|status-scrim/);
     for (const n of ['glass', 'simple']) {
       const skin = readFileSync(`src/styles/skins/${n}.css`, 'utf8');

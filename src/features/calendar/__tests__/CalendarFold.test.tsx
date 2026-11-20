@@ -2,11 +2,11 @@
 // 手机选择器遮罩（设计复审 N1）、年列单个 Tab 停靠点（代码复审 N3）、周视图提示缩短（设计复审 N5）。其余复审项见 CalendarReview.test.tsx
 // 集合、节假日文件用替身；“今天”固定在 2026-11-05（周四）09:00；界面语言中文（周一起始）
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { navigate } from '../../../app/router.ts';
-import { loadPageSwap } from '../../../motion/index.ts';
 import { flipMs } from '../../../motion/gestures.ts';
+import type * as Motion from '../../../motion/index.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -20,6 +20,12 @@ vi.mock('../../../kit/hooks/useCollection.ts', () => ({
 }));
 const fetchStatus = vi.fn(async (_p: string): Promise<AppJson> => ({ kind: 'missing' }));
 vi.mock('../../../platform/app-static.ts', () => ({ fetchAppJsonStatus: (p: string) => fetchStatus(p) }));
+// 整页切换（motion 的 transition，11-20 起不用 View Transition）换成替身：“换页面才起整页切换”那条数调了几次，回调照常同步执行
+const fake = vi.hoisted(() => ({ spy: null as null | ((update: () => void) => Promise<void>) }));
+vi.mock('../../../motion/index.ts', async (orig) => {
+  const m = await orig<typeof Motion>();
+  return { ...m, transition: (update: () => void, back?: boolean) => (fake.spy ? fake.spy(update) : m.transition(update, back)) };
+});
 
 const { default: CalendarPage } = await import('../ui/CalendarPage.tsx');
 const { resetHolidayCacheForTest } = await import('../hooks/useHolidays.ts');
@@ -59,8 +65,6 @@ class FakeRO {
   unobserve(): void {}
 }
 
-// 整页过渡的实现首屏画完才下载（motion/page-vt.ts，11-20 挪出首屏）：“换页面才调 startViewTransition”那条要它先到
-beforeAll(() => loadPageSwap());
 
 beforeEach(() => {
   uiStore.getState().setLocale('zh-CN');
@@ -82,7 +86,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   delete document.documentElement.dataset.rm;
-  delete (document as { startViewTransition?: unknown }).startViewTransition;
+  fake.spy = null;
 });
 
 describe('上拖收起（线框 s3、R-326）', () => {
@@ -175,13 +179,12 @@ describe('上拖收起（线框 s3、R-326）', () => {
 });
 
 describe('翻页动画（架构 5.12，代码复审 N1）', () => {
-  it('同一页内翻页不起 View Transition：‹ ›、← →、“今天”、年月选择、切周 / 月、收起后跨月都不调 startViewTransition；换页面才调', async () => {
-    // 和真的一样：回调返回的 promise（transition 等新页画完、期间吞点按）完了 finished 才完；不等的话吞点按的监听会漏到下一条用例
-    const vt = vi.fn((cb: () => unknown) => {
-      const done = Promise.resolve(cb()).then(() => undefined);
-      return { finished: done, ready: Promise.resolve(), updateCallbackDone: done };
+  it('同一页内翻页不起整页切换：‹ ›、← →、“今天”、年月选择、切周 / 月、收起后跨月都不调 transition；换页面才调', async () => {
+    const vt = vi.fn((cb: () => void) => {
+      cb();
+      return Promise.resolve();
     });
-    (document as { startViewTransition?: unknown }).startViewTransition = vt;
+    fake.spy = vt;
     open('#/cal/month/2026-11');
     await act(async () => {
       fireEvent.click(screen.getByTestId('cal-next'));
@@ -215,7 +218,7 @@ describe('翻页动画（架构 5.12，代码复审 N1）', () => {
       });
     }
     expect(vt).not.toHaveBeenCalled();
-    // 对照：换到别的页面照常起 View Transition（证明替身生效）
+    // 对照：换到别的页面照常起整页切换（证明替身生效）
     await act(async () => {
       await navigate('settings');
     });

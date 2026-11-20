@@ -78,7 +78,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   delete document.documentElement.dataset.rm;
-  delete (document as { startViewTransition?: unknown }).startViewTransition;
 });
 
 /** 格子里看得见的字：文本节点按 DOM 顺序直接连起来、空白并成一个（axe label-content-name-mismatch 也这样取：几段之间没有空格就会粘成一个词） */

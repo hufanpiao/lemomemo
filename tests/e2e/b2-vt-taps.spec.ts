@@ -164,28 +164,31 @@ test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, hei
   });
 });
 
-// 从设置回今天走的是整页 View Transition（只有一边有底栏）：GlassBar 在过渡回调里重新挂上，GlassBarFx 第二次是缓存、几毫秒就挂好，
-// 过渡中它是在的（代码审查方案 B：R6 删掉后又恢复）。webkit 过渡期间点按都算到 <html> 上；过渡开始 50 ms 以后点页面内容要能点到（R6 代点）
+// 从设置回今天走的是整页推页（只有一边有底栏）：GlassBar 在换页时重新挂上，GlassBarFx 第二次是缓存、几毫秒就挂好，过渡中它是在的。
+// 11-20 起整页推页不用 View Transition（motion/page-swap.ts）：过渡中页面、底栏都是真元素，点按直接落在它们身上，原来的 R6 按坐标代点删了
+/** 把这次整页推页的动画（关键帧里带 vw 的平移，WAAPI）暂停在 at 毫秒处；返回暂停了几个 */
 const vtHoldAt = (page: Page, at: number) =>
   page
     .waitForFunction(
       (ms) => {
-        const vt = document.getAnimations().filter((x) => String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition'));
+        const vt = document.getAnimations().filter(
+          (x) => x.effect instanceof KeyframeEffect && x.effect.getKeyframes().some((k) => String(k['translate'] ?? '').includes('vw')),
+        );
         for (const x of vt) {
           x.pause();
           x.currentTime = ms;
         }
-        return vt.length;
+        return document.documentElement.hasAttribute('data-vt') ? vt.length : 0;
       },
       at,
       { timeout: 2000, polling: 4 },
     )
     .then((h) => h.jsonValue());
 
-test.describe('从设置回今天的过渡中点页面内容（R6 恢复）', () => {
+test.describe('从设置回今天的过渡中点页面内容', () => {
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 } });
 
-  test('过渡停在 200 ms 处点今天页的头像：替它点到（进设置）', async ({ page }) => {
+  test('过渡停在 200 ms 处点今天页的头像：直接点到真元素（进设置）', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
@@ -199,6 +202,9 @@ test.describe('从设置回今天的过渡中点页面内容（R6 恢复）', ()
     expect(await vtHoldAt(page, 200), '没等到切页过渡').toBeGreaterThan(0);
     // 过渡中 GlassBarFx 已经挂上（底栏的实色带在）
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 1000 });
+    // 动画拨到了 200 ms，真实时间才过去几十毫秒：换页后 FADE_GUARD_MS（100 ms）以内落在 main 里的点按按 M8 吞掉（page-swap guardTaps，
+    // 手指多半是冲着旧画面按的），所以真等过这 100 ms 再点，和真机过渡放到 200 ms 时点一样
+    await page.waitForTimeout(150);
     await page.mouse.click(at.x, at.y);
     await expect(page).toHaveURL(/#\/settings$/, { timeout: 3000 });
   });

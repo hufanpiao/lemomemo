@@ -46,13 +46,13 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、3a066c28（点按灰框）、11-17 触屏滚动条、11-17 输入框不画黑框、GlassBar.module.css 又在 R-436 侧栏精致化按上面的更新记录换过 */
+/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、3a066c28（点按灰框）、11-17 触屏滚动条、11-17 输入框不画黑框、GlassBar.module.css 又在 R-436 侧栏精致化、11-20 整页推页去掉 View Transition 按上面的更新记录换过 */
 const PINNED: Record<string, string> = {
-  'src/kit/components/GlassBar/GlassBar.module.css': '9272755e89c97f451123ae01801cbb2f026ad6e8fce3246fab1c5df541fa07cd',
-  'src/kit/components/GlassBar/GlassBarFx.tsx': '2cd1d04f069b8e10829389ca87e8b647678ba4c0057c1fb42dc777e342d75b0c',
+  'src/kit/components/GlassBar/GlassBar.module.css': '0cf51fff9038fd4de157d9d411e877722a91c732ad9cdc79b31560b31af236e4',
+  'src/kit/components/GlassBar/GlassBarFx.tsx': '9305496b50bbc1e7ccca6bbc78f415de87e402eda1a3fd39eda5c8d5c7534604',
   'src/kit/components/GlassBar/GlassBarFx.module.css': '3a7f59ede916fe65267888adbf53c60f622ba0e56d5c2b079d9665ad01b8dca3',
   'src/motion/glass-ghost.ts': '6211d651c7439b5aa35d8f755f33327b71213e68aa6c26e404b503ea25da701a',
-  'src/styles/base.css': 'd69706cdf45135da8e0039b3c19f626c05b72478beb614f010ee8e6319949656',
+  'src/styles/base.css': 'eb786b0e7c981ba6ff97dcace6f3023ae68fa3b11db630d4806af32997328d7d',
 };
 
 const sha256 = (rel: string): string => createHash('sha256').update(readFileSync(join(ROOT, rel))).digest('hex');
@@ -63,6 +63,10 @@ const sha256 = (rel: string): string => createHash('sha256').update(readFileSync
 //   只有一边有底栏或“＋”时，它们的快照跟着自己那一页滑（进页旧那份边退边淡、返回新那份 60% 后淡入）；底栏、“＋”元素本身的规则一行没动，静止画面不变。
 // • 11-20 记录页美化方向 A（负责人 11-20“记录页美化方案用A”；独立评审第 1 条，主持人核过）：base.css 在窄屏加 :root[data-nobar] 把 --dock-lift 设成 6px，
 //   没有底栏的页（App 按 tab-of.ts 写 data-nobar）贴底浮条落到离底 安全区 + 6；底栏、“＋”元素本身的规则一行没动，有底栏的页静止画面不变。
+// • 11-20 负责人：“进入2级页后退出的时候底部导航栏会模糊一下”“底栏不是固定死了吗？为啥切页回来的时候还要用快照”，本提交：进出二级页不再用 View Transition，
+//   改走 motion/page-swap.ts 的整页推页（底栏、“＋”全程是真元素、实时模糊）。GlassBar.module.css 删 .bar/.fab 的 view-transition-name 和键盘弹着时的 view-transition-name: none；
+//   GlassBarFx.tsx 删 R4/R6 按坐标代点（View Transition 伪元素层盖整屏时才需要）；base.css 删整段 ::view-transition 规则、lemo-push/pop 关键帧（数值原样搬进 page-swap.ts）、
+//   顶部两层模糊的 view-transition-name。底栏、“＋”的外观规则一行没动：今天页静止截图改前改后底栏区域像素最大差 0（对照图在本机资料 截图/底栏真元素切页-2026-11-20）。
 describe('B3 Q3 守门第 4 条：底栏外观文件不许改（R-352 ④）', () => {
   it('src/motion/glass-*.ts 正好是钉住的那几个：不许多、不许少', () => {
     const now = readdirSync(join(ROOT, 'src/motion'))

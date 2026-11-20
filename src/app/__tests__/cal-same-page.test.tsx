@@ -4,8 +4,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App.tsx';
 import { featureRoutes } from '../features.ts';
 import { FADE_GUARD_MS } from '../../motion/index.ts';
+import type * as Motion from '../../motion/index.ts';
 // 横滑切页在首屏画完以后才懒加载（App.tsx）：慢机器上测试收尾以后才去下，环境已拆掉报 EnvironmentTeardownError（CI 778139cf unit 洛杉矶）；这里不测它，换成空的
 vi.mock('../tab-swipe.ts', () => ({ installTabSwipeOnce: () => undefined, installTopLock: () => undefined }));
+// 整页切换（motion 的 transition，11-20 起不用 View Transition）换成替身：只数调了几次，回调照常同步执行
+const fake = vi.hoisted(() => ({ spy: null as null | ((update: () => void) => Promise<void>) }));
+vi.mock('../../motion/index.ts', async (orig) => {
+  const m = await orig<typeof Motion>();
+  return { ...m, transition: (update: () => void, back?: boolean) => (fake.spy ? fake.spy(update) : m.transition(update, back)) };
+});
 
 // 整个 App 挂载、页面懒加载：全量三个时区同时跑、机器忙时会拖过默认 5 秒（c8b5596 的 CI unit 就是这样超时的），
 // 这个文件单独放宽到 15 秒，等页面出现的上限 10 秒；单跑仍在 3 秒内
@@ -39,19 +46,18 @@ describe('月历两条路由同一个页面', () => {
   });
 });
 
-// 代码复审 R2（架构 5.12 页内切换不用 View Transition）：浏览器在同一页里前进 / 后退也直接画
+// 代码复审 R2（架构 5.12 页内切换不起整页切换）：浏览器在同一页里前进 / 后退也直接画
 describe('同一页里浏览器前进 / 后退不播整页动画', () => {
-  const doc = document as unknown as { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
   afterEach(() => {
-    delete doc.startViewTransition;
+    fake.spy = null;
   });
 
   async function back(from: string, to: string) {
     const spy = vi.fn((cb: () => void) => {
       cb();
-      return { finished: Promise.resolve() };
+      return Promise.resolve();
     });
-    doc.startViewTransition = spy;
+    fake.spy = spy;
     window.history.replaceState(null, '', `/app/${to}`);
     await act(async () => {
       window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: `http://x/app/${from}`, newURL: `http://x/app/${to}` }));
@@ -59,7 +65,7 @@ describe('同一页里浏览器前进 / 后退不播整页动画', () => {
     return spy;
   }
 
-  it('#/cal/month/2026-11 后退到 #/cal/month/2026-10、#/cal/... 回到 #/calendar：不起 View Transition', async () => {
+  it('#/cal/month/2026-11 后退到 #/cal/month/2026-10、#/cal/... 回到 #/calendar：不起整页推页', async () => {
     window.history.replaceState(null, '', '/app/#/cal/month/2026-11');
     render(<App />);
     await screen.findByTestId('calendar-page', {}, { timeout: 10_000 });
@@ -68,7 +74,7 @@ describe('同一页里浏览器前进 / 后退不播整页动画', () => {
     expect(window.location.hash).toBe('#/calendar');
   });
 
-  it('四个页签之间互切（#/today → #/calendar、#/cal/... → #/todos）：不起 View Transition（负责人 11-06 方案 B，main 淡入）', async () => {
+  it('四个页签之间互切（#/today → #/calendar、#/cal/... → #/todos）：不起整页推页（负责人 11-06 方案 B，main 淡入）', async () => {
     window.history.replaceState(null, '', '/app/#/today');
     render(<App />);
     expect((await back('#/today', '#/calendar')).mock.calls).toHaveLength(0);

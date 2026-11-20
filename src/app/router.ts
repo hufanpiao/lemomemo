@@ -54,9 +54,9 @@ export function hrefOf(name: RouteName, ...params: string[]): string {
 }
 
 // ───────── 路由状态和页面切换（17.2 第 3 点；UI-4 M-2）─────────
-// React 读的是 location.hash，但只在我们通知时才重画：页面切换包在 motion.transition()（View Transitions）里，
-// 回调里同步改地址并 flushSync 通知，回调一返回新页面就已经画完，浏览器截“新画面”不会截到旧页面。
-// 别的办法换了地址（hashchange）走同一条路；一次切换只起一个 View Transition（监听器集中在这里）
+// React 读的是 location.hash，但只在我们通知时才重画：页面切换包在 motion 的换页动画里（transition、fadeSwap），
+// 回调里同步改地址并 flushSync 通知，回调一返回新页面就已经画完（换页动画先拷好旧页，再调回调）。
+// 别的办法换了地址（hashchange）走同一条路；一次切换只起一次换页动画（监听器集中在这里）
 
 const listeners = new Set<() => void>();
 
@@ -85,13 +85,13 @@ function notifyAll(): void {
 }
 
 /**
- * 切页怎么动：vt 整页 View Transition（新页从右滑进盖住）；vt-back 返回方向的整页过渡（旧页往右滑出）；slide-r / slide-l 四个页签互切，不起 View Transition、按底栏顺序左右滑入
- * （slide-r 往右边的页签走、新页从右边进；motion 的 fadeSwap，负责人 11-18 选 B）；none 直接画
+ * 切页怎么动：push 整页推页（新页从右滑进盖住）；pop 返回方向的整页推页（旧页往右滑出），两种都是 motion 的 transition（11-20 起不用 View Transition）；
+ * slide-r / slide-l 四个页签互切（motion 的 fadeSwap，原地模糊淡换，不分方向）；none 直接画
  */
-export type Anim = 'vt' | 'vt-back' | 'slide-r' | 'slide-l' | 'none';
+export type Anim = 'push' | 'pop' | 'slide-r' | 'slide-l' | 'none';
 
 /** 改地址（可选）并同步把新页面画完；按 anim 包一层动画 */
-export function commit(change?: () => void, anim: Anim = 'vt'): Promise<void> {
+export function commit(change?: () => void, anim: Anim = 'push'): Promise<void> {
   const update = (): void => {
     change?.();
     flushSync(notifyAll);
@@ -102,12 +102,12 @@ export function commit(change?: () => void, anim: Anim = 'vt'): Promise<void> {
     return Promise.resolve();
   }
   if (anim === 'slide-r' || anim === 'slide-l') return fadeSwap(update);
-  return transition(update, anim === 'vt-back');
+  return transition(update, anim === 'pop');
 }
 
 // 两个路由是不是“四个页签之间互切”、往哪边（App 按 tab-of.ts 设：两头都有底栏、页签不同；1 往右边的页签，-1 往左，0 不是页签互切）。负责人 11-06 选方案 B：
-// 页签互切不走 View Transition，底栏、液滴、顶部模糊一直实时模糊（WebKit 过渡期间不画 backdrop-filter，bug 302256）；
-// 别的切页（进编辑页、设置……）照旧 View Transition。路由器不认识底栏，所以由 App 注入
+// 页签互切不走整页推页，原地模糊淡换；别的切页（进编辑页、设置……）整页推页。两种都不用 View Transition（11-20 起），
+// 底栏、液滴、顶部模糊一直是真元素、一直实时模糊（WebKit 过渡期间不画 backdrop-filter，bug 302256）。路由器不认识底栏，所以由 App 注入
 let tabSwitch: (a: Route, b: Route) => -1 | 0 | 1 = () => 0;
 
 /** App 启动时调一次；测试里可以换 */
@@ -116,7 +116,7 @@ export function setTabSwitch(fn: (a: Route, b: Route) => -1 | 0 | 1): void {
 }
 
 // 两个路由是不是同一个页面（App 按登记表的 samePageAs 设，例如 #/calendar 和 #/cal/...）。
-// 架构 5.12：页内切换不用 View Transition。同一页里换地址（月历上个月 ↔ 下个月）也直接画，
+// 架构 5.12：页内切换不起整页推页。同一页里换地址（月历上个月 ↔ 下个月）也直接画，
 // 不播 380ms 的整页淡入淡出（代码复审 R2）；路由器本身不认识功能登记表，所以由 App 注入
 let samePage: (a: Route, b: Route) => boolean = () => false;
 
@@ -135,12 +135,12 @@ function animOf(from: string, to: string): Anim {
   const b = parseHash(to);
   if (samePage(a, b)) return 'none';
   const dir = tabSwitch(a, b);
-  return dir === 1 ? 'slide-r' : dir === -1 ? 'slide-l' : 'vt';
+  return dir === 1 ? 'slide-r' : dir === -1 ? 'slide-l' : 'push';
 }
 /** 从当前地址去 href（goHref、replaceRoute、goBack 用；别的办法换地址的 hashchange 走同一个 animOf） */
 export const animTo = (href: string): Anim => animOf(window.location.hash, href);
 /** 返回方向：整页过渡换成往回滑（页签互切、同页不变） */
-const backAnim = (a: Anim): Anim => (a === 'vt' ? 'vt-back' : a);
+const backAnim = (a: Anim): Anim => (a === 'push' ? 'pop' : a);
 
 /** hashchange 的 oldURL 里的 hash；没有（老浏览器、测试里手工派的事件）时返回 null，照常起动画 */
 function oldHashOf(e: Event): string | null {
@@ -164,7 +164,7 @@ function onHashChange(e: Event): void {
   const old = oldHashOf(e);
   const popped = performance.now() - poppedAt < POP_MS;
   poppedAt = -Infinity;
-  void commit(undefined, popped ? 'none' : old === null ? 'vt' : animOf(old, window.location.hash));
+  void commit(undefined, popped ? 'none' : old === null ? 'push' : animOf(old, window.location.hash));
 }
 
 /** 全局兜底：没人接手的 <a href="#/…"> 普通点击，浏览器默认会压一条历史（又留出“前进”），拦下交给 goHref；新标签页打开照常 */
@@ -201,7 +201,7 @@ export function useRoute(): Route {
 }
 
 /**
- * 跳到某个路由；页面切换包在 View Transitions 里（17.2 第 3 点）。
+ * 跳到某个路由；页面切换包在换页动画里（17.2 第 3 点）。
  * 原地换地址、当前地址压进返回栈（不触发 hashchange，不会重复切换），再 flushSync 让 React 在回调里画完新页面。
  * 已经在这一页（地址没变）就直接返回：不起空 transition（UI-4 第二轮 N-2）
  */

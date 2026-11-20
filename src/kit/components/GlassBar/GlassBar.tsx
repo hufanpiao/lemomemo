@@ -124,7 +124,7 @@ export function GlassBar({ active, add, later = (fn) => fn() }: GlassBarProps) {
   }, []);
   const fab = add && (
     <Pressable
-      type="button" className={styles.fab} aria-label={add.label} onClick={add.onClick} data-testid="tabbar-add"
+      type="button" className={styles.fab} aria-label={add.label} onClick={add.onClick} data-testid="tabbar-add" data-swap-bar=""
       onPointerDown={add.hold?.onStart} onPointerMove={add.hold?.onMove} onPointerUp={add.hold?.onEnd} onPointerCancel={add.hold?.onCancel}
     >
       <span className={`${styles.glass} ${styles.fabTint}`} aria-hidden="true" />
@@ -140,6 +140,7 @@ export function GlassBar({ active, add, later = (fn) => fn() }: GlassBarProps) {
         className={styles.bar}
         aria-label={t('nav.label', {})}
         data-testid="tabbar"
+        data-swap-bar=""
         ref={navEl}
       >
         <span className={`${styles.glass} ${styles.barTint}`} aria-hidden="true" />
