@@ -176,3 +176,14 @@ test('直接打开的待办编辑页（没有返回栈）：左边往右划回�
   await swipe(page, browserName, L, 400, 160);
   await at(page, 'todos');
 });
+
+// 负责人 11-20：“纪念日页面没办法左滑跟右滑”——纪念日列表显示底栏、归日历页签，原来主页面表里漏了它，两边划都被跳过（日志 skip=root / skip=shape）
+test('纪念日列表：左边往右划去待办；右边往左划进设置', async ({ page, browserName }) => {
+  await ready(page, '/app/#/anniv');
+  await swipe(page, browserName, L, 400, 160);
+  await at(page, 'todos');
+  await page.goto('about:blank');
+  await ready(page, '/app/#/anniv');
+  await swipe(page, browserName, R, 400, -160);
+  await at(page, 'settings');
+});

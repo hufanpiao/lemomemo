@@ -8,13 +8,14 @@ vi.mock('../router.ts', async (orig) => ({
   navigateTab: (n: string) => nav.to.push(n),
   navigate: (n: string) => nav.to.push(`push:${n}`),
   replaceRoute: (n: string) => nav.to.push(`replace:${n}`),
+  upTo: (n: string) => nav.to.push(`up:${n}`),
   goBack: () => nav.to.push('goBack'),
   canGoBack: () => nav.back,
 }));
 
 import { SIDE_PX } from '../../motion/gestures.ts';
 import { parseHash } from '../router.ts';
-import { blockedAt, installTabSwipe, isEdgeBack, parentOf, swipeTarget, SWIPE_MAX_MS, SWIPE_MIN_PX } from '../tab-swipe.ts';
+import { blockedAt, installTabSwipe, isEdgeBack, mainTabOf, parentOf, swipeTarget, SWIPE_MAX_MS, SWIPE_MIN_PX } from '../tab-swipe.ts';
 
 describe('swipeTarget：主页面上划完去哪', () => {
   it('左边那条往右划（负责人说的“左滑”）去下一个：今天 → 日历 → 待办 → 随手记 → 今天；右边那条往左划进设置', () => {
@@ -56,7 +57,8 @@ describe('别的页的返回（R-487）', () => {
     expect(p('#/settings/remind/dnd')).toBe('settings');
     expect(p('#/settings')).toBe('today');
     expect(p('#/remind/todo/x')).toBe('today');
-    expect(p('#/anniv')).toBeNull();
+    expect(p('#/anniv'), '纪念日列表是主页面，不走回父级').toBeNull();
+    expect(p('#/anniv/a1'), '纪念日编辑层栈空回列表').toBe('anniv');
   });
 });
 
@@ -157,7 +159,7 @@ describe('installTabSwipe：真的划一下', () => {
     nav.back = false;
     (byId('in') as HTMLInputElement).focus();
     swipe(10, 150);
-    expect(nav.to).toEqual(['goBack', 'replace:todos']);
+    expect(nav.to).toEqual(['goBack', 'up:todos']);
   });
   it('编辑页：右边往左划、太短、太斜不动；弹层开着不动', () => {
     window.location.hash = '#/todo/x';
@@ -178,14 +180,21 @@ describe('installTabSwipe：真的划一下', () => {
     swipe(10, 150);
     nav.back = false;
     swipe(10, 150);
-    expect(nav.to).toEqual(['goBack', 'replace:today']);
+    expect(nav.to).toEqual(['goBack', 'up:today']);
     window.location.hash = '#/settings/calendar';
     swipe(10, 150);
-    expect(nav.to).toEqual(['goBack', 'replace:today', 'replace:settings']);
+    expect(nav.to).toEqual(['goBack', 'up:today', 'up:settings']);
   });
-  it('没有父级的页（纪念日）栈空时不动', () => {
+  it('纪念日列表算日历页签的主页面：左边往右划去待办、右边往左划进设置；编辑层栈空回列表（负责人 11-20“纪念日页面没办法左滑跟右滑”）', () => {
+    expect(mainTabOf(parseHash('#/anniv'))).toBe('calendar');
+    expect(mainTabOf(parseHash('#/anniv/a1'))).toBeNull();
     window.location.hash = '#/anniv';
     swipe(10, 150);
-    expect(nav.to).toEqual([]);
+    expect(nav.to).toEqual(['todos']);
+    swipe(innerWidth - 10, innerWidth - 150);
+    expect(nav.to).toEqual(['todos', 'push:settings']);
+    window.location.hash = '#/anniv/a1';
+    swipe(10, 150);
+    expect(nav.to).toEqual(['todos', 'push:settings', 'up:anniv']);
   });
 });

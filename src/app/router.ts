@@ -85,10 +85,10 @@ function notifyAll(): void {
 }
 
 /**
- * 切页怎么动：vt 整页 View Transition；slide-r / slide-l 四个页签互切，不起 View Transition、按底栏顺序左右滑入
+ * 切页怎么动：vt 整页 View Transition（新页从右滑进盖住）；vt-back 返回方向的整页过渡（旧页往右滑出）；slide-r / slide-l 四个页签互切，不起 View Transition、按底栏顺序左右滑入
  * （slide-r 往右边的页签走、新页从右边进；motion 的 fadeSwap，负责人 11-18 选 B）；none 直接画
  */
-export type Anim = 'vt' | 'slide-r' | 'slide-l' | 'none';
+export type Anim = 'vt' | 'vt-back' | 'slide-r' | 'slide-l' | 'none';
 
 /** 改地址（可选）并同步把新页面画完；按 anim 包一层动画 */
 export function commit(change?: () => void, anim: Anim = 'vt'): Promise<void> {
@@ -102,7 +102,7 @@ export function commit(change?: () => void, anim: Anim = 'vt'): Promise<void> {
     return Promise.resolve();
   }
   if (anim === 'slide-r' || anim === 'slide-l') return fadeSwap(update);
-  return transition(update);
+  return transition(update, anim === 'vt-back');
 }
 
 // 两个路由是不是“四个页签之间互切”、往哪边（App 按 tab-of.ts 设：两头都有底栏、页签不同；1 往右边的页签，-1 往左，0 不是页签互切）。负责人 11-06 选方案 B：
@@ -139,6 +139,8 @@ function animOf(from: string, to: string): Anim {
 }
 /** 从当前地址去 href（goHref、replaceRoute、goBack 用；别的办法换地址的 hashchange 走同一个 animOf） */
 export const animTo = (href: string): Anim => animOf(window.location.hash, href);
+/** 返回方向：整页过渡换成往回滑（页签互切、同页不变） */
+const backAnim = (a: Anim): Anim => (a === 'vt' ? 'vt-back' : a);
 
 /** hashchange 的 oldURL 里的 hash；没有（老浏览器、测试里手工派的事件）时返回 null，照常起动画 */
 function oldHashOf(e: Event): string | null {
@@ -201,7 +203,7 @@ export function useRoute(): Route {
 /**
  * 跳到某个路由；页面切换包在 View Transitions 里（17.2 第 3 点）。
  * 原地换地址、当前地址压进返回栈（不触发 hashchange，不会重复切换），再 flushSync 让 React 在回调里画完新页面。
- * 已经在这一页（地址没变）就直接返回：不起空 transition，免得切换期间约 0.25 秒点按被吞掉（UI-4 第二轮 N-2）
+ * 已经在这一页（地址没变）就直接返回：不起空 transition（UI-4 第二轮 N-2）
  */
 export function navigate(name: RouteName, ...params: string[]): Promise<void> {
   return goHref(hrefOf(name, ...params));
@@ -224,6 +226,13 @@ export function replaceRoute(name: RouteName, ...params: string[]): Promise<void
   return commit(() => writeEntry(href), animTo(href));
 }
 
+/** 同 replaceRoute，但按“回上一层”的方向滑（直接打开的子页点返回、左边缘往右划回父级：没有返回栈，原地换成上一层） */
+export function upTo(name: RouteName, ...params: string[]): Promise<void> {
+  const href = hrefOf(name, ...params);
+  if (window.location.hash === href) return Promise.resolve();
+  return commit(() => writeEntry(href), backAnim(animTo(href)));
+}
+
 /**
  * 退回返回栈里的上一页（“‹ 返回”、二级页左边缘往右划、设置页左边往右划）：弹出栈顶、原地换回去，和进来时同一套换页动画；栈空什么都不做。
  * 栈在调用的这一刻就读好：过渡回调晚执行，快速连点两下写的是同一个结果，不会退两层
@@ -231,7 +240,7 @@ export function replaceRoute(name: RouteName, ...params: string[]): Promise<void
 export function goBack(): void {
   const stack = stackOf();
   const prev = stack.pop();
-  if (prev !== undefined) void commit(() => writeEntry(prev, stack), animTo(prev));
+  if (prev !== undefined) void commit(() => writeEntry(prev, stack), backAnim(animTo(prev)));
 }
 
 /** 有没有“App 里的上一页”：返回栈不空。直接打开（推送、书签）的页没有，返回时原地换成上一层，不会退出 App */
@@ -244,7 +253,7 @@ export function backTo(name: RouteName): void {
   const s = stackOf();
   const prev = s[s.length - 1];
   if (prev !== undefined && parseHash(prev).name === name) goBack();
-  else void replaceRoute(name);
+  else void upTo(name);
 }
 
 /** 链接的普通点击（不是按着修饰键、中键开新标签页）：拦下浏览器默认跳转、回 true，由调用方交给路由；新标签页打开照常、回 false */

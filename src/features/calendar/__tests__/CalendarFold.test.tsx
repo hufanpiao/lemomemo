@@ -172,9 +172,10 @@ describe('上拖收起（线框 s3、R-326）', () => {
 
 describe('翻页动画（架构 5.12，代码复审 N1）', () => {
   it('同一页内翻页不起 View Transition：‹ ›、← →、“今天”、年月选择、切周 / 月、收起后跨月都不调 startViewTransition；换页面才调', async () => {
-    const vt = vi.fn((cb: () => void) => {
-      cb();
-      return { finished: Promise.resolve(), ready: Promise.resolve(), updateCallbackDone: Promise.resolve() };
+    // 和真的一样：回调返回的 promise（transition 等新页画完、期间吞点按）完了 finished 才完；不等的话吞点按的监听会漏到下一条用例
+    const vt = vi.fn((cb: () => unknown) => {
+      const done = Promise.resolve(cb()).then(() => undefined);
+      return { finished: done, ready: Promise.resolve(), updateCallbackDone: done };
     });
     (document as { startViewTransition?: unknown }).startViewTransition = vt;
     open('#/cal/month/2026-11');

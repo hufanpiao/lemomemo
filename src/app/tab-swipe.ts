@@ -13,7 +13,7 @@
 import { TAB_ORDER, type TabName } from '../kit/components/GlassBar/tabs.ts';
 import { sideOf } from '../motion/gestures.ts';
 import { rlog } from '../platform/run-log-api.ts';
-import { canGoBack, goBack, navigate, navigateTab, parseHash, replaceRoute, type Route, type RouteName } from './router.ts';
+import { canGoBack, goBack, navigate, navigateTab, parseHash, upTo, type Route, type RouteName } from './router.ts';
 
 export const SWIPE_MIN_PX = 60;
 export const SWIPE_MAX_MS = 500;
@@ -26,6 +26,11 @@ export const SWIPE_SLOPE = 1.25;
 /** 四个主页面各是哪个页签；日历翻过月（#/cal/month/…）还是日历主页面。纪念日、隐私记这些归页签的二级页不算 */
 const MAIN: Record<string, TabName> = { today: 'today', calendar: 'calendar', cal: 'calendar', todos: 'todos', notes: 'notes' };
 export const mainTab = (route: string): TabName | null => MAIN[route] ?? null;
+/**
+ * 这一页算不算主页面（能左右划切页签、右边往左划进设置）：纪念日列表（#/anniv）显示底栏、归日历页签（tab-of.ts），也算；
+ * 纪念日编辑层是同一个地址名带 id（#/anniv/<id>），不算，走返回（负责人 11-20“纪念日页面没办法左滑跟右滑”：原来 MAIN 里漏了纪念日，两边划都被跳过）
+ */
+export const mainTabOf = (r: Route): TabName | null => (r.name === 'anniv' ? (r.params.length > 0 ? null : 'calendar') : mainTab(r.name));
 
 /** 主页面上这一下划完做什么：去哪个页签、进设置 */
 export type SwipeMove = TabName | 'settings';
@@ -46,9 +51,10 @@ export function swipeTarget(route: string, side: 'l' | 'r', dx: number, dy: numb
 export const isEdgeBack = (side: 'l' | 'r', dx: number, dy: number): boolean => side === 'l' && dx >= SWIPE_MIN_PX && Math.abs(dx) >= SWIPE_SLOPE * Math.abs(dy);
 
 const PARENT: Partial<Record<RouteName, RouteName>> = { todo: 'todos', event: 'calendar', note: 'notes', vault: 'notes', remind: 'today' };
-/** 直接打开（返回栈空）时左边缘往右划回哪一页：设置子页回设置首页，设置首页回今天；没写的（纪念日、最近删除……）不动 */
+/** 直接打开（返回栈空）时左边缘往右划回哪一页：设置子页回设置首页，设置首页回今天；没写的（最近删除……）不动 */
 export function parentOf(r: Route): RouteName | null {
   if (r.name === 'settings') return r.params.length > 0 ? 'settings' : 'today';
+  if (r.name === 'anniv') return r.params.length > 0 ? 'anniv' : null; // 纪念日编辑层回列表；列表本身是主页面，不走这里
   return PARENT[r.name] ?? null;
 }
 
@@ -103,7 +109,8 @@ export function installTabSwipe(doc: Document = document): () => void {
     const r = parseHash(hash);
     const log = (what: string): void => rlog(`tabswipe side=${d.side} dx=${Math.round(dx)} dy=${Math.round(dy)} ms=${ms} ${what}`);
     if (hash !== d.hash) return log('skip=moved');
-    if (mainTab(r.name) === null) {
+    const main = mainTabOf(r);
+    if (main === null) {
       // 别的页：App 自己的返回
       if (d.layer) return log('skip=layer');
       if (!isEdgeBack(d.side, dx, dy)) return log('skip=shape');
@@ -114,10 +121,10 @@ export function installTabSwipe(doc: Document = document): () => void {
       }
       const to = parentOf(r);
       log(to === null ? 'skip=root' : `to=up:${to}`);
-      if (to !== null) void replaceRoute(to);
+      if (to !== null) void upTo(to);
       return;
     }
-    const to = d.why === null ? swipeTarget(r.name, d.side, dx, dy, ms) : null;
+    const to = d.why === null ? swipeTarget(main, d.side, dx, dy, ms) : null;
     log(to !== null ? `to=${to}` : `skip=${d.why ?? 'shape'}`);
     if (to === 'settings') void navigate('settings');
     else if (to !== null) navigateTab(to);

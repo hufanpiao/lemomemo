@@ -271,7 +271,7 @@ test.describe('设置页骨架', () => {
 
   // 负责人 10-31（iPhone 主屏幕版）：“点击注销账号跟回退到设置页，注销账号 4 个字都会跳一下”“界面语言 4 个字也不用特意加粗”。
   // 原因和改法见 src/features/settings/__tests__/settings-jump-css.test.ts 头注释；这里在真浏览器里量计算后的样式
-  test('“注销账号”那一行按下不缩放、字不挪，只变淡；设置和注销页的顶栏都叫 page-head；“界面语言”和同页其他行同一字重', async ({ page }) => {
+  test('“注销账号”那一行按下不缩放、字不挪，只变淡；设置和注销页的顶栏都不单独起过渡名（跟整页一起滑）；“界面语言”和同页其他行同一字重', async ({ page }) => {
     await page.goto(SETTINGS);
     await expect(page.getByTestId('settings-lang')).toBeVisible();
     const weights = await page.evaluate(() => {
@@ -289,7 +289,7 @@ test.describe('设置页骨架', () => {
     const row = page.getByTestId('settings-delete-entry');
     await expect(row).toBeVisible();
     const headName = () => page.locator('main[data-feature="settings"] header').evaluate((el) => getComputedStyle(el).viewTransitionName);
-    expect(await headName()).toBe('page-head');
+    expect(await headName()).toBe('none');
 
     const look = () =>
       row.evaluate((b) => ({
@@ -312,46 +312,57 @@ test.describe('设置页骨架', () => {
 
     await row.click();
     await expect(page.getByTestId('settings-delete')).toBeVisible();
-    expect(await headName()).toBe('page-head');
+    expect(await headName()).toBe('none');
   });
 
-  // 同一条反馈：顶栏 page-head 在过渡中途真的“先出后入”。只跑 chromium：Playwright 的 Windows 版 webkit 过渡期间不画单独起名元素的新图
-  // （和本项目无关的最小页面也一样），截出来是空的，判断不了；真机 Safari 由负责人目测
-  test('账号 → 注销账号的过渡中途：顶栏旧标题、新标题不会同时看得见；新标题在过渡里画出来了；顶栏的组不滑位置', async ({ page, browserName }) => {
+  // 负责人 11-20：“所有点击进入下一页……画面都黑一下”，选“新页从右滑进盖住”（base.css lemo-push-* / lemo-pop-*）。
+  // 过渡中途两页都看得见、不再有整屏只剩底色的一帧；返回反方向。只跑 chromium：Playwright 的 Windows 版 webkit 过渡期间不画起名元素的新图
+  test('账号 → 注销账号：新页从右滑进盖住、旧页往左退，中途不黑；“‹ 返回”反过来滑出（负责人 11-20）', async ({ page, browserName }, info) => {
     test.skip(browserName !== 'chromium', 'webkit（Windows）过渡期间不画起名元素的新图');
     await page.goto(ACCOUNT);
     await expect(page.getByTestId('settings-delete-entry')).toBeVisible();
-    // 页面里点下去，等到 page-head 的动画出现就把整段过渡全部暂停（之后按时间点拨动）
-    const names = await page.evaluate(async () => {
-      document.querySelector<HTMLElement>('[data-testid="settings-delete-entry"]')?.click();
-      const pageHead = () => document.getAnimations().filter((a) => String((a.effect as KeyframeEffect | null)?.pseudoElement ?? '').includes('page-head'));
-      for (let i = 0; i < 120 && pageHead().length < 2; i++) await new Promise((r) => requestAnimationFrame(r));
-      for (const a of document.getAnimations()) a.pause();
-      return pageHead().map((a) => `${(a.effect as KeyframeEffect).pseudoElement ?? ''} ${(a as CSSAnimation).animationName}`);
-    });
-    expect(names.sort()).toEqual(['::view-transition-new(page-head) lemo-head-in', '::view-transition-old(page-head) lemo-head-out']);
-
+    /** 点 testId，等整页 root 两份动画出来就全部暂停，回 { 伪元素 → 动画名 } */
+    const start = (id: string) =>
+      page.evaluate(async (tid) => {
+        document.querySelector<HTMLElement>(`[data-testid="${tid}"]`)?.click();
+        const vt = () => document.getAnimations().filter((a) => String((a.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition-'));
+        const root = () => vt().filter((a) => String((a.effect as KeyframeEffect).pseudoElement).endsWith('(root)'));
+        for (let i = 0; i < 120 && root().length < 2; i++) await new Promise((r) => requestAnimationFrame(r));
+        for (const a of document.getAnimations()) a.pause();
+        return Object.fromEntries(vt().map((a) => [String((a.effect as KeyframeEffect).pseudoElement), (a as CSSAnimation).animationName]));
+      }, id);
     const at = (ms: number) =>
       page.evaluate(async (t) => {
         for (const a of document.getAnimations()) a.currentTime = t;
         await new Promise((r) => requestAnimationFrame(r));
-        const op = (pe: string) => Number(getComputedStyle(document.documentElement, pe).opacity);
-        return { old: op('::view-transition-old(page-head)'), now: op('::view-transition-new(page-head)') };
+        const tx = (pe: string) => new DOMMatrix(getComputedStyle(document.documentElement, pe).transform).m41;
+        return { old: tx('::view-transition-old(root)'), now: tx('::view-transition-new(root)'), w: innerWidth };
       }, ms);
-    // 只截顶栏自己的框：起了名的元素不在 root 的截图里，这块在 root 两边都只是页面底色，变的只有顶栏自己
-    const box = await page.locator('main[data-feature="settings"] header').boundingBox();
-    expect(box).not.toBeNull();
-    const header = box ?? { x: 0, y: 0, width: 1, height: 1 };
-    for (const ms of [0, 40, 80, 120, 150, 152, 160, 200, 260, 320, 379]) {
-      const o = await at(ms);
-      expect(Math.min(o.old, o.now), `${ms}ms：旧 ${o.old}、新 ${o.now}，不能两个都看得见`).toBeLessThan(0.02);
-    }
-    // 截图：152ms 两边都透明，顶栏一片空；370ms 新标题差不多全显，截出来和空的那帧不一样（真的画出来了）
-    await at(152);
-    const blank = await page.screenshot({ clip: header });
-    await at(370);
-    const drawn = await page.screenshot({ clip: header });
-    expect(drawn.equals(blank)).toBe(false);
-    expect((await at(370)).now).toBeGreaterThan(0.95);
+    const shot = async (name: string) => page.screenshot({ path: info.outputPath(`${name}.png`) });
+
+    const go = await start('settings-delete-entry');
+    expect(go['::view-transition-old(root)']).toBe('lemo-push-old');
+    expect(go['::view-transition-new(root)']).toBe('lemo-push-new');
+    const mid = await at(150);
+    // 新页还没盖满、旧页往左退了一点：两页同时在屏上（原来 150ms 两页都透明，整屏只剩底色）
+    expect(mid.now).toBeGreaterThan(0);
+    expect(mid.now).toBeLessThan(mid.w);
+    expect(mid.old).toBeLessThan(0);
+    expect(mid.old).toBeGreaterThan(-mid.w * 0.3 - 1);
+    await shot('进页-150ms');
+    expect((await at(379)).now).toBeLessThan(2);
+    await page.evaluate(() => {
+      for (const a of document.getAnimations()) a.finish();
+    });
+    await expect(page.getByTestId('settings-delete')).toBeVisible();
+
+    const back = await start('settings-delete-back');
+    expect(back['::view-transition-old(root)']).toBe('lemo-pop-old');
+    expect(back['::view-transition-new(root)']).toBe('lemo-pop-new');
+    const mid2 = await at(150);
+    // 旧页往右滑出、上一页从左边回来
+    expect(mid2.old).toBeGreaterThan(0);
+    expect(mid2.now).toBeLessThan(0);
+    await shot('返回-150ms');
   });
 });

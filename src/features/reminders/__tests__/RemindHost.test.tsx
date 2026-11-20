@@ -58,6 +58,7 @@ vi.mock('../../../app/router.ts', () => ({
   navigate: (...a: unknown[]) => navigate(...a),
   replaceRoute: (...a: unknown[]) => navigate(...a),
   backTo: (...a: unknown[]) => void navigate(...a),
+  upTo: (...a: unknown[]) => navigate(...a),
 }));
 let remindRecs: ReadonlySet<string> = new Set();
 vi.mock('../../../core/boot.ts', () => ({

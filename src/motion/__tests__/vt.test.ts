@@ -46,16 +46,104 @@ describe('重名检查', () => {
     expect(findDuplicateVtNames(document)).toEqual([n]);
   });
 
-  it('开发版：切页回调里新页面画完就查，重名在控制台报错；不重名不报', async () => {
+  it('开发版：切页回调里等新页画完就查，重名在控制台报错；不重名不报', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    (document as { startViewTransition?: unknown }).startViewTransition = (cb: () => void) => {
-      cb();
-      return { finished: Promise.resolve() };
-    };
+    // 新页已经显示（等新页那一步当场放行）；重名查在等完以后，所以 finished 要等回调返回的 promise
+    const main = document.createElement('main');
+    vi.spyOn(main, 'getClientRects').mockReturnValue([{}] as unknown as DOMRectList);
+    document.body.append(main);
+    (document as { startViewTransition?: unknown }).startViewTransition = (cb: () => Promise<void>) => ({ finished: cb() });
     await transition(() => add('i', { name: 'vt-plus' }));
     expect(err).not.toHaveBeenCalled();
     await transition(() => add('b', { name: 'vt-plus' }));
     expect(err).toHaveBeenCalledWith('[vt] duplicate view-transition-name: vt-plus');
+  });
+});
+
+// 负责人 11-20 录屏“设置进入待办最近删除页的时候顶部闪一下”：懒加载的页第一次渲染先挂起一拍，过渡不等就截到空页
+describe('transition()：等新页的 <main> 显示出来再截新图', () => {
+  it('回调返回的 promise 等到 main 显示出来才完成；一直不出来最多等 VT_WAIT_MS', async () => {
+    vi.useFakeTimers();
+    let ret: Promise<void> | undefined;
+    (document as { startViewTransition?: unknown }).startViewTransition = (cb: () => Promise<void> | undefined) => {
+      ret = cb();
+      return { finished: Promise.resolve() };
+    };
+    const { VT_WAIT_MS } = await import('../index.ts');
+    let ok = false;
+    void transition(() => undefined);
+    void ret?.then(() => (ok = true));
+    await vi.advanceTimersByTimeAsync(VT_WAIT_MS - 10);
+    expect(ok, '新页没出来：还在等').toBe(false);
+    const main = document.createElement('main');
+    vi.spyOn(main, 'getClientRects').mockReturnValue([{}] as unknown as DOMRectList);
+    document.body.append(main);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(ok, 'main 一显示出来就截').toBe(true);
+
+    ok = false;
+    main.remove();
+    void transition(() => undefined);
+    void ret?.then(() => (ok = true));
+    await vi.advanceTimersByTimeAsync(VT_WAIT_MS);
+    expect(ok, '一直不出来：VT_WAIT_MS 后照常播').toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('main 在、但页面级懒加载块还没到（PagePending 的 data-page-pending 还在）：接着等；标记一去掉就截；等的时候点按吞掉', async () => {
+    vi.useFakeTimers();
+    let ret: Promise<void> | undefined;
+    (document as { startViewTransition?: unknown }).startViewTransition = (cb: () => Promise<void> | undefined) => {
+      ret = cb();
+      return { finished: Promise.resolve() };
+    };
+    const main = document.createElement('main');
+    vi.spyOn(main, 'getClientRects').mockReturnValue([{}] as unknown as DOMRectList);
+    const mark = document.createElement('i');
+    mark.setAttribute('data-page-pending', '');
+    main.append(mark);
+    document.body.append(main);
+    const btn = document.createElement('button');
+    const hit = vi.fn();
+    btn.addEventListener('click', hit);
+    main.append(btn);
+    let ok = false;
+    void transition(() => undefined);
+    void ret?.then(() => (ok = true));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(ok, '设置二级页这类：外层 main 在、里面还空着，不放行').toBe(false);
+    btn.click();
+    expect(hit, '等的时候点按吞掉').not.toHaveBeenCalled();
+    mark.remove();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(ok).toBe(true);
+    btn.click();
+    expect(hit, '截完以后点按照常').toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+});
+
+// 负责人 11-20 选“新页从右滑进盖住”：返回时 <html data-vt-back>，base.css 把滑入滑出换成反方向；过渡完就去掉，下次进页照常
+describe('transition(update, back)：返回方向的标记', () => {
+  it('back=true 时整段过渡带 data-vt-back，播完去掉；back 不传不带', async () => {
+    let seen: boolean[] = [];
+    let done: () => void = () => undefined;
+    (document as { startViewTransition?: unknown }).startViewTransition = (cb: () => void) => {
+      cb();
+      seen.push(document.documentElement.hasAttribute('data-vt-back'));
+      return { finished: new Promise<void>((r) => (done = r)) };
+    };
+    const p = transition(() => undefined, true);
+    expect(seen).toEqual([true]);
+    expect(document.documentElement.hasAttribute('data-vt-back')).toBe(true);
+    done();
+    await p;
+    expect(document.documentElement.hasAttribute('data-vt-back')).toBe(false);
+    seen = [];
+    const q = transition(() => undefined);
+    expect(seen).toEqual([false]);
+    done();
+    await q;
   });
 });
 

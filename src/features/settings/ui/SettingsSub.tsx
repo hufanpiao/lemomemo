@@ -3,6 +3,7 @@
 // 提醒与通知下面还有一层 #/settings/remind/upcoming、show-title、dnd（R-347 照线框 sR7）
 import { Component, Suspense, useEffect, useRef, type ReactNode } from 'react';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
+import { PagePending } from '../../../kit/components/PagePending.tsx';
 import { RemindDnd, RemindShowTitle, RemindUpcoming } from '../../reminders/index.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
 import styles from './SettingsPage.module.css';
@@ -25,7 +26,7 @@ class SubLoadBoundary extends Component<{ children: ReactNode; text: string }, {
 }
 
 /**
- * 设置的二级页：顶栏由本页画（和注销页同一个 .top，整个 src 只有这一处起 page-head 名，切页时标题先出后入），
+ * 设置的二级页：顶栏由本页画（和注销页同一个 .top，切页时跟着整页一起滑），
  * 正文懒加载的放在 Suspense 里；进来时焦点放到标题上（同注销页）
  */
 export function SubView({ back, title, backId, onBack, children }: { back: string; title: string; backId: string; onBack(): void; children: ReactNode }) {
@@ -41,7 +42,7 @@ export function SubView({ back, title, backId, onBack, children }: { back: strin
         </h1>
       </header>
       <SubLoadBoundary text={t('settings.sub.failed', {})}>
-        <Suspense fallback={null}>{children}</Suspense>
+        <Suspense fallback={<PagePending />}>{children}</Suspense>
       </SubLoadBoundary>
     </>
   );

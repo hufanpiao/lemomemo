@@ -1,5 +1,5 @@
 // 页面切换的 View Transitions 接令牌（架构 17.2 第 1、3 点，17.3；UI-4 L-3，B1）：
-// base.css 里 ::view-transition-old/new(root) 用 --dur-sheet + --ease-standard，不是浏览器默认的 0.25s ease；
+// base.css 里 ::view-transition-old/new(root) 用 --dur-sheet + --ease-drawer（11-20 起滑动推页），不是浏览器默认的 0.25s ease；
 // 减少动态效果时 transition() 直接切换、不起 View Transition（所以 CSS 这一侧不用再写覆盖）；TC-B1-51 的两条路见 navigate.test.tsx
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,68 +24,58 @@ function declsOf(sel: string): Map<string, string> {
 
 describe('View Transitions 接令牌（UI-4 L-3）', () => {
   for (const sel of ['::view-transition-old(root)', '::view-transition-new(root)']) {
-    it(`${sel}：时长 --dur-sheet，曲线 --ease-standard`, () => {
+    it(`${sel}：时长 --dur-sheet，曲线 --ease-drawer（iOS 推页），不叠加混合`, () => {
       const d = declsOf(sel);
       expect(d.get('animation-duration')).toBe('var(--dur-sheet)');
-      expect(d.get('animation-timing-function')).toBe('var(--ease-standard)');
+      expect(d.get('animation-timing-function')).toBe('var(--ease-drawer)');
+      expect(d.get('mix-blend-mode')).toBe('normal');
     });
   }
 });
 
-// 负责人 10-31（iPhone 主屏幕版）：设置 ↔ 注销账号切换时“注销账号”四个字跳一下——整页交叉淡入淡出时，居中的旧标题“设置”叠在新标题中间。
-// 顶栏单独起名 page-head（SettingsPage.module.css 的 .top）：两边都有顶栏时先淡出、再淡入；只有一边有（今天 ↔ 设置）时和整页同步
-// 负责人 11-06（iPhone 主屏幕版 70d94f5）：今天 -> 日历 交叉淡入时旧页的字半透明叠在新页上。整页也先出后入，任何一帧只有一页的字
-describe('整页 root：先出后入，不叠字', () => {
-  it('旧页 lemo-head-out、新页 lemo-head-in', () => {
-    expect(declsOf('::view-transition-old(root)').get('animation-name')).toBe('lemo-head-out');
-    expect(declsOf('::view-transition-new(root)').get('animation-name')).toBe('lemo-head-in');
-  });
-});
-
-describe('页面顶栏 page-head：两边都有时先出后入，不叠在一起', () => {
-  /** @keyframes name 里每个关键帧选择器 → opacity */
-  function frames(name: string): Map<string, string> {
-    const at = css.indexOf(`@keyframes ${name} {`);
-    expect(at, `有 @keyframes ${name}`).toBeGreaterThanOrEqual(0);
-    const body = css.slice(at, css.indexOf('}\n}', at) + 3);
-    const out = new Map<string, string>();
-    for (const m of body.matchAll(/([\w%,\s]+)\{\s*opacity:\s*([\d.]+);\s*\}/g)) {
-      for (const k of (m[1] ?? '').split(',')) out.set(k.trim(), m[2] ?? '');
-    }
-    return out;
+/** @keyframes name 里每个关键帧选择器 → 声明 */
+function frames(name: string): Map<string, string> {
+  const at = css.indexOf(`@keyframes ${name} {`);
+  expect(at, `有 @keyframes ${name}`).toBeGreaterThanOrEqual(0);
+  const body = css.slice(at, css.indexOf('}\n}', at) + 3);
+  const out = new Map<string, string>();
+  for (const m of body.matchAll(/([\w%,\s]+)\{([^{}]*)\}/g)) {
+    for (const k of (m[1] ?? '').split(',')) out.set(k.trim(), (m[2] ?? '').replace(/\s+/g, ' ').trim());
   }
+  return out;
+}
 
-  it('时长、曲线和整页一样（--dur-sheet、--ease-standard，A24 只准令牌）；不写 delay，先后靠关键帧', () => {
-    for (const sel of ['::view-transition-old(page-head)', '::view-transition-new(page-head)']) {
-      const d = declsOf(sel);
-      expect(d.get('animation-duration'), sel).toBe('var(--dur-sheet)');
-      expect(d.get('animation-timing-function'), sel).toBe('var(--ease-standard)');
-      expect(d.has('animation-delay'), sel).toBe(false);
+// 负责人 11-20：“所有点击进入下一页，比如待办编辑，比如设置页，比如设置里面的2级页面的时候画面都黑一下”，选“新页从右滑进盖住”。
+// 原来先出后入（旧页前 40% 淡完、新页 35% 以后才淡入），中间两页都看不见，露出底色
+describe('整页 root：进页新页从右滑进盖住，返回反过来；任何一帧都有页面在屏上', () => {
+  it('进页：旧页 lemo-push-old 往左退 30vw，新页 lemo-push-new 从 100vw 滑进来；不再淡（没有 opacity）', () => {
+    expect(declsOf('::view-transition-old(root)').get('animation-name')).toBe('lemo-push-old');
+    expect(declsOf('::view-transition-new(root)').get('animation-name')).toBe('lemo-push-new');
+    expect(Object.fromEntries(frames('lemo-push-old'))).toEqual({ to: 'transform: translateX(-30vw);' });
+    expect(Object.fromEntries(frames('lemo-push-new'))).toEqual({ from: 'transform: translateX(100vw);' });
+  });
+
+  it('返回（<html data-vt-back>）：旧页 lemo-pop-old 往右滑出、压在上一页上面，上一页 lemo-pop-new 从 -30vw 回来', () => {
+    expect(declsOf(':root[data-vt-back]::view-transition-old(root)').get('animation-name')).toBe('lemo-pop-old');
+    expect(declsOf(':root[data-vt-back]::view-transition-old(root)').get('z-index')).toBe('1');
+    expect(declsOf(':root[data-vt-back]::view-transition-new(root)').get('animation-name')).toBe('lemo-pop-new');
+    expect(Object.fromEntries(frames('lemo-pop-old'))).toEqual({ to: 'transform: translateX(100vw);' });
+    expect(Object.fromEntries(frames('lemo-pop-new'))).toEqual({ from: 'transform: translateX(-30vw);' });
+  });
+
+  it('旧的先出后入关键帧、顶栏单独起名 page-head 都删了（顶栏跟整页一起截、一起滑，新页才盖得住旧顶栏）', () => {
+    expect(css).not.toMatch(/lemo-head-(in|out)/);
+    expect(css).not.toContain('page-head');
+  });
+
+  it('减少动态效果：覆盖写在 <html> 自己身上（不带空格）、进页返回都有、写 animation: none；带空格的后代写法永远匹配不上，不许出现（独立评审 11-20 第 3 条）', () => {
+    for (const sel of ['::view-transition-old(root)', '::view-transition-new(root)', '[data-vt-back]::view-transition-old(root)', '[data-vt-back]::view-transition-new(tabbar):only-child']) {
+      expect(declsOf(`:root[data-rm="1"]${sel}`).get('animation'), sel).toBe('none');
     }
+    expect(css).not.toMatch(/:root\[data-rm="1"\]\s+(::view-transition|:root)/);
   });
 
-  it('两边都有：旧的 lemo-head-out 前 40% 淡完，新的 lemo-head-in 35% 以后才淡入（35～40% 旧的只剩不到 0.5%，看不出叠字）', () => {
-    expect(declsOf('::view-transition-old(page-head)').get('animation-name')).toBe('lemo-head-out');
-    expect(declsOf('::view-transition-new(page-head)').get('animation-name')).toBe('lemo-head-in');
-    const out = frames('lemo-head-out');
-    const inn = frames('lemo-head-in');
-    expect(Object.fromEntries(out)).toEqual({ '0%': '1', '40%': '0', '100%': '0' });
-    expect(Object.fromEntries(inn)).toEqual({ '100%': '1' });
-    // 动效审查 M1、S4（11-06）：新的 35% 起淡入，这一段用 --ease-out（两页都空从约 66 ms 降到约 36 ms）；锁住百分比和段内缓动
-    expect(css).toMatch(/@keyframes lemo-head-in \{\s*0%,\s*35% \{\s*opacity: 0;\s*animation-timing-function: var\(--ease-out\);\s*\}\s*100% \{\s*opacity: 1;\s*\}\s*\}/);
-    expect(css).toMatch(/@keyframes lemo-head-out \{\s*0% \{\s*opacity: 1;\s*\}\s*40%,\s*100% \{\s*opacity: 0;\s*\}\s*\}/);
-  });
-
-  it('只有一边有顶栏（今天 ↔ 设置）：也先出后入，没有 :only-child 的整段淡入淡出（11-06 代码审查 M4：整页改先出后入后，留着会让顶栏叠在整页上）', () => {
-    expect(css).not.toMatch(/page-head\):only-child/);
-    expect(css).not.toMatch(/@keyframes lemo-fade-(in|out)/);
-  });
-
-  it('顶栏的组不滑位置（animation: none）：往下滚过再进注销页时新旧顶栏位置不同，默认 0.25s 滑过去会再动一下', () => {
-    expect(declsOf('::view-transition-group(page-head)').get('animation')).toBe('none');
-  });
-
-  it('不用 :not(:only-child)：Chromium 不认，整条规则会被丢掉、退回叠着淡入淡出', () => {
+  it('不用 :not(:only-child)：Chromium 不认，整条规则会被丢掉', () => {
     expect(css).not.toContain(':not(:only-child)');
   });
 });
@@ -141,13 +131,10 @@ describe('transition()：减少动态效果时不起 View Transition', () => {
 
 // 接手清单 M4 剩余：::view-transition-group(*) 接令牌（第一个具名共享元素上线前）
 describe('具名共享元素的组接令牌（M4）', () => {
-  it('::view-transition-group(*)：--dur-sheet + --ease-standard；page-head 的组仍是 animation: none', () => {
+  it('::view-transition-group(*)：--dur-sheet + --ease-standard', () => {
     const d = declsOf('::view-transition-group(*)');
     expect(d.get('animation-duration')).toBe('var(--dur-sheet)');
     expect(d.get('animation-timing-function')).toBe('var(--ease-standard)');
-    expect(declsOf('::view-transition-group(page-head)').get('animation')).toBe('none');
-    // page-head 的规则写在 (*) 后面：就算哪个浏览器把两者算成同一优先级，后写的也赢
-    expect(css.indexOf('::view-transition-group(page-head)')).toBeGreaterThan(css.indexOf('::view-transition-group(*)'));
   });
 });
 
@@ -290,10 +277,17 @@ describe('底栏和“＋”的快照：圆角和阴影画在快照自己身上�
     expect(declsOf('::view-transition-old(tabbar)').has('opacity')).toBe(false);
   });
 
-  it('只有一边有底栏（进出新建页、设置）：跟着整页先出后入（动效审查方案 B V1），两边都有时照旧 animation: none', () => {
+  it('只有一边有底栏（进出新建页、设置）：跟着自己那一页滑；画在整页上面盖不住的那两种边滑边淡；两边都有时照旧 animation: none', () => {
     for (const n of ['tabbar', 'tabbar-add']) {
-      expect(declsOf(`::view-transition-old(${n}):only-child`).get('animation')).toBe('lemo-head-out var(--dur-sheet) var(--ease-standard)');
-      expect(declsOf(`::view-transition-new(${n}):only-child`).get('animation')).toBe('lemo-head-in var(--dur-sheet) var(--ease-standard)');
+      const oldOnly = declsOf(`::view-transition-old(${n}):only-child`);
+      // 进页：旧页的底栏跟着往左退、前 40% 淡完（新页盖不住它）
+      expect(oldOnly.get('animation-name')).toBe('lemo-push-old-fade');
+      expect(oldOnly.get('animation-duration')).toBe('var(--dur-sheet)');
+      expect(oldOnly.get('animation-timing-function')).toBe('var(--ease-drawer)');
+      expect(declsOf(`::view-transition-new(${n}):only-child`).get('animation-name')).toBe('lemo-push-new');
+      // 返回：滑走那页的底栏跟着滑出；回来那页的底栏 60% 以后才淡入（画在滑走那页上面）
+      expect(declsOf(`:root[data-vt-back]::view-transition-old(${n}):only-child`).get('animation-name')).toBe('lemo-pop-old');
+      expect(declsOf(`:root[data-vt-back]::view-transition-new(${n}):only-child`).get('animation-name')).toBe('lemo-pop-new-fade');
       expect(declsOf(`::view-transition-old(${n})`).get('animation')).toBe('none');
       // 组上不留抄过来的模糊：快照淡掉后不剩直角毛玻璃方块
       expect(declsOf(`::view-transition-group(${n})`).get('backdrop-filter')).toBe('none');

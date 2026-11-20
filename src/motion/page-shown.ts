@@ -57,3 +57,14 @@ export function waitDom(test: () => boolean, ms: number, hit: (ok: boolean) => v
   mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'hidden'] });
   return stop;
 }
+
+/**
+ * 页面级懒加载块还没出来时，它的 Suspense 占位上打的标记（kit 的 PagePending 画一个隐藏的 <i data-page-pending>）。
+ * App 的页面那层、设置二级页那层用它（独立评审 11-20 第 2 条：设置二级页外层 main 先在、里面一层懒加载还空着，只看 main 会当场放行）
+ */
+export const PENDING_ATTR = 'data-page-pending';
+
+/** 新页真的画出来了：有显示着的 <main>，页面级的懒加载块也都到了 */
+export function pageReady(): boolean {
+  return shownMain() !== null && document.querySelector(`[${PENDING_ATTR}]`) === null;
+}

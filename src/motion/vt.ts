@@ -1,6 +1,6 @@
 // View Transitions 的名字统一在这里（架构 17.2 第 3 点）：
 // • 动态名字：vtName() 生成 vt-item-<id> 这类，写在内联 style 上
-// • 固定名字（页面骨架，如设置和注销两屏的顶栏）：写在 CSS Modules 里，名字必须登记在 VT_FIXED（UI4-B1-low X-5）；
+// • 固定名字（页面骨架，如底栏、“＋”、顶部模糊带）：写在 CSS Modules 里，名字必须登记在 VT_FIXED（UI4-B1-low X-5）；
 //   CSS 里出现没登记的 view-transition-name，tests/arch 的 vt-names 测试会报错
 // 同一时刻页面上不能有两个同名元素：开发版每次切页画完新页面后检查，重名就在控制台报错（reportDuplicateVtNames，motion/index.ts 调）
 
@@ -11,8 +11,6 @@ export function vtName(kind: 'item' | 'plus' | 'nav', id = ''): string {
 
 /** 写在 CSS 里的固定名字（CSS 里直接写这些字面值；base.css 的 ::view-transition-*(名字) 也只准用这些） */
 export const VT_FIXED = {
-  /** 设置、注销账号、设置 › 日历几屏的顶栏（SettingsPage.module.css .top）：切换时先出后入（base.css） */
-  pageHead: 'page-head',
   /** 底栏和“＋”（B2 FA-7，GlassBar.module.css）：切页时不跟着淡入淡出，直接用新的（base.css） */
   tabbar: 'tabbar',
   tabbarAdd: 'tabbar-add',

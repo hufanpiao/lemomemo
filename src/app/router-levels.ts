@@ -2,7 +2,7 @@
 // 日历的 replaceInPage（日历内部一律原地换，R-372 ②）、编辑页的路由槽位 useEditRoute（三个编辑页的唯一出口，架构 10.1）、子页的返回 backOr。
 // 返回栈仍由 router.ts 管（writeEntry 原地写地址时栈照旧带着）
 import { useCallback, useReducer, useRef } from 'react';
-import { canGoBack, commit, goBack, hrefOf, parseHash, replaceRoute, useRoute, writeEntry, type RouteName } from './router.ts';
+import { canGoBack, commit, goBack, hrefOf, parseHash, upTo, useRoute, writeEntry, type RouteName } from './router.ts';
 
 
 /**
@@ -59,5 +59,5 @@ export function useEditRoute(name: 'todo' | 'event' | 'note' | 'anniv' | 'vault'
 /** 子页的“‹ 返回”：返回栈里有上一页就退一步；直接打开的（推送、书签）没有，原地换成 fallback */
 export function backOr(fallback: RouteName): void {
   if (canGoBack()) goBack();
-  else void replaceRoute(fallback);
+  else void upTo(fallback);
 }

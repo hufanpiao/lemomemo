@@ -23,9 +23,9 @@ describe('warmRoute', () => {
 });
 
 describe('preloadPages', () => {
-  it('写了 preload 的正好是日历、待办、随手记三个页签页、设置页、隐私记，和日程、待办两个编辑页', () => {
+  it('写了 preload 的正好是日历、待办、随手记三个页签页、设置页、隐私记、最近删除（11-20 第一次点进来不空着滑进来），和日程、待办两个编辑页', () => {
     mountFeatures(null);
-    expect(featureRoutes.filter((r) => r.preload).map((r) => r.name).sort()).toEqual(['calendar', 'event', 'notes', 'settings', 'todo', 'todos', 'vault']);
+    expect(featureRoutes.filter((r) => r.preload).map((r) => r.name).sort()).toEqual(['calendar', 'event', 'notes', 'settings', 'todo', 'todos', 'trash', 'vault']);
   });
 
   it('一页一页下载、每页记一行运行日志；某页失败照样往下走，不抛', async () => {
@@ -43,12 +43,12 @@ describe('preloadPages', () => {
     await preloadPages((l) => logs.push(l), () => 0);
     expect(order).toEqual(featureRoutes.filter((r) => r.preload).map((r) => r.name));
     expect(logs).toContain('preload todos ms=0 ok=0');
-    expect(logs.filter((l) => l.endsWith('ok=1'))).toHaveLength(6);
+    expect(logs.filter((l) => l.endsWith('ok=1'))).toHaveLength(7);
   });
 
   it('功能开关关着（没挂上）的页不下载', () => {
     mountFeatures(new Set(['event']));
-    expect(featureRoutes.filter((r) => r.preload).map((r) => r.name)).toEqual(['calendar', 'event', 'vault', 'settings']);
+    expect(featureRoutes.filter((r) => r.preload).map((r) => r.name)).toEqual(['trash', 'calendar', 'event', 'vault', 'settings']);
     mountFeatures(null);
   });
 });

@@ -35,6 +35,7 @@ import { bannerKind } from './banner-kind.ts';
 import { featureRoutes, offRoutes, preloadPages, warmRoute, type FeatureRoute } from './features.ts';
 import { goHref, hrefOf, navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from './router.ts';
 import { FADE_WAIT_MS, growSwap, shownMain, waitDom } from '../motion/index.ts';
+import { PagePending } from '../kit/components/PagePending.tsx';
 import { tabBarFor, tabDir } from './tab-of.ts';
 import { PlusSlot, plusHold, preloadPlus } from './plus-slot.tsx';
 import type { DateStr } from '../../shared/core/date.ts';
@@ -364,7 +365,7 @@ export function App() {
   // 横幅在页面的错误边界外面（架构师 10-30 第 6 点）：页面出错显示 ErrorView 时横幅还在；横幅自己出错只是不画横幅
   return (
     <>
-      <Suspense fallback={null}>
+      <Suspense fallback={<PagePending />}>
         <ErrorBoundary fallback={null}>
           <Banner />
         </ErrorBoundary>

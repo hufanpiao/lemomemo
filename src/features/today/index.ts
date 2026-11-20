@@ -4,8 +4,9 @@ import { lazy } from 'react';
 
 export const routes = [
   { name: 'today', Page: lazy(() => import('./ui/TodayPage.tsx')) },
-  // “最近删除”（日程、待办；ADR-006）
-  { name: 'trash', Page: lazy(() => import('./ui/RecentlyDeletedPage.tsx')) },
+  // “最近删除”（日程、待办；ADR-006）。preload：开 App 后先下载（app/features.ts 的 preloadPages）——负责人 11-20 录屏“设置进入待办最近删除页的时候顶部闪一下”：
+  // 没预加载时第一次点进来分包还没到，新页先空着滑进来、内容后弹出
+  { name: 'trash', Page: lazy(() => import('./ui/RecentlyDeletedPage.tsx')), preload: () => import('./ui/RecentlyDeletedPage.tsx') },
 ] as const;
 
 /** 设置首页“最近删除”一组（R-441）两行右边的条数（ui/TrashCount.tsx，和“最近删除”页同一个数法）；设置页自己画行，值晚到也不挡点 */

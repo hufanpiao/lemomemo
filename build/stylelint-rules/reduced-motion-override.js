@@ -39,6 +39,8 @@ const messages = ruleMessages(ruleName, {
     `17.2 第 5 点（UI-4 L-1）：“${sel}”的 transition / animation 动到transform，同一文件里缺有效的 :global(:root[data-rm="1"]) ${sel} { … } 覆盖（${HOW}）`,
   overrideMoves: (sel) =>
     `17.2 第 5 点（UI-4 L-1）：减少动态效果的覆盖“${sel}”里还在动 transform，只能留 opacity 或写 none`,
+  deadRoot: (sel) =>
+    `17.2 第 5 点（UI-4 L-1）：“${sel}”挂在 <html> 自己身上，覆盖要写成 :root[data-rm="1"]${sel.startsWith(':root') ? sel.slice(5) : sel}（不带空格）；带空格的后代写法永远匹配不上`,
   layer: (sel) =>
     `17.2 第 5 点（UI-4 L-1）：减少动态效果的覆盖“${sel}”不准写进 @layer（层里的声明会输给层外的原声明）`,
   stateRm: (sel, prop) =>
@@ -62,6 +64,22 @@ const AUTO_INITIAL = /^(width|height|min-width|min-height|block-size|inline-size
 const hasEscape = (decl) => decl.prop.includes('\\') || decl.value.includes('\\');
 const TRANSFORM_PROP = /^(transform|translate|scale|rotate)$/i;
 const RM_PREFIX = /^(?::global\(\s*:root\[data-rm=["']1["']\]\s*\)|:root\[data-rm=["']1["']\])\s+/;
+// 整页 View Transition 的伪元素挂在 <html> 自己身上：覆盖得写在同一个元素上（:root[data-rm="1"]::view-transition-old(root)、
+// :root[data-rm="1"][data-vt-back]::view-transition-old(root)），带空格的后代写法永远匹配不上（独立评审 11-20 第 3 条）
+const RM_ROOT = /^:root\[data-rm=["']1["']\](?=::|\[)/;
+/** data-rm 覆盖选择器 → { base: 它覆盖的原选择器, dead: 带空格写在 <html> 自己的伪元素、:root 前面，匹配不上 }；不是覆盖返回 null */
+function rmBaseOf(sel) {
+  const t = sel.trim();
+  if (RM_PREFIX.test(t)) {
+    const base = norm(t.replace(RM_PREFIX, ''));
+    return { base, dead: /^(::view-transition|:root)/.test(base) };
+  }
+  if (RM_ROOT.test(t)) {
+    const rest = t.replace(RM_ROOT, '');
+    return { base: norm(rest.startsWith('::') ? rest : `:root${rest}`), dead: false };
+  }
+  return null;
+}
 // transition / animation 简写里不是属性名、不是 keyframes 名字的关键字
 const CSS_WIDE = new Set(['initial', 'inherit', 'unset', 'revert', 'revert-layer']);
 const KEYWORDS = new Set([
@@ -227,8 +245,10 @@ const ruleFunction = (primary) => (root, result) => {
       (a) => a.name.toLowerCase() === 'media' && /prefers-reduced-motion\s*:\s*reduce/i.test(a.params) && !/(?<![\w-])not(?![\w-])/i.test(a.params),
     );
     if (reducedMedia) return;
-    const rmBases = sels.filter((s) => RM_PREFIX.test(s)).map((s) => norm(s.replace(RM_PREFIX, '')));
-    if (rmBases.length > 0) {
+    const rms = sels.map(rmBaseOf).filter((x) => x !== null);
+    for (const x of rms) if (x.dead) report({ message: messages.deadRoot(x.base), node: rule, result, ruleName });
+    const rmBases = rms.filter((x) => !x.dead).map((x) => x.base);
+    if (rms.length > 0) {
       if (ats.some((a) => a.name.toLowerCase() === 'layer')) {
         report({ message: messages.layer(sels.join(', ')), node: rule, result, ruleName });
         return;

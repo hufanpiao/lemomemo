@@ -33,10 +33,9 @@ function allCss(dir: string): string[] {
 }
 
 describe('设置 ↔ 注销账号切换时“注销账号”不跳（负责人 10-31）', () => {
-  it('顶栏 .top 起名 page-head；整个 src 只有这一处起这个名（一屏里只能有一个，设置和注销页不同时出现）', () => {
-    expect(block(css, '.top')).toMatch(/view-transition-name: page-head;/);
-    const owners = allCss('src').filter((s) => /view-transition-name:\s*page-head/.test(s));
-    expect(owners).toHaveLength(1);
+  it('顶栏 .top 不再单独起过渡名（负责人 11-20 选“新页从右滑进盖住”：顶栏跟整页一起滑，单独起名会浮在新页上盖不住）', () => {
+    expect(block(css, '.top')).not.toMatch(/view-transition-name/);
+    expect(allCss('src').some((s) => /view-transition-name:\s*page-head/.test(s))).toBe(false);
   });
 
   it('两屏的顶栏都用 .top（设置页和注销页）', () => {

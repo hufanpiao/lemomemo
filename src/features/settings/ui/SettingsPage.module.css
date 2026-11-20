@@ -16,14 +16,13 @@
   min-height: 0;
 }
 
-/* 设置和注销账号两屏的顶栏：同一个 view-transition-name，切换时先淡出再淡入（base.css 的 page-head），标题不叠在一起 */
+/* 设置和注销账号两屏的顶栏：不单独起 view-transition-name，切页时跟着整页一起滑（负责人 11-20 选“新页从右滑进盖住”） */
 .top {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   min-height: var(--hit);
   margin-bottom: 8px;
-  view-transition-name: page-head;
 }
 
 .title {

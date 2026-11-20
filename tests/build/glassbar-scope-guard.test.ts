@@ -52,13 +52,15 @@ const PINNED: Record<string, string> = {
   'src/kit/components/GlassBar/GlassBarFx.tsx': '2cd1d04f069b8e10829389ca87e8b647678ba4c0057c1fb42dc777e342d75b0c',
   'src/kit/components/GlassBar/GlassBarFx.module.css': '3a7f59ede916fe65267888adbf53c60f622ba0e56d5c2b079d9665ad01b8dca3',
   'src/motion/glass-ghost.ts': '6211d651c7439b5aa35d8f755f33327b71213e68aa6c26e404b503ea25da701a',
-  'src/styles/base.css': '1458588782a7baf9314bf7d4aa72f2ea1024179553b5110b9231bc4a4e900215',
+  'src/styles/base.css': 'bb669b2146c1ef4d625856d74b4bc99c2e7445a75e3de6a51e46dfac6d45142f',
 };
 
 const sha256 = (rel: string): string => createHash('sha256').update(readFileSync(join(ROOT, rel))).digest('hex');
 
 // • 11-19 晚负责人（隐私记首页长按选中截图）：“app空白页长按都不要这种选中”，本提交：base.css 加 :where(html[data-app] body) 关长按选字和系统拷贝菜单，输入框、可编辑区放开；
 //   底栏、“＋”的规则一行没动，静止画面不变（原来 8 个组件各写一份 user-select:none，统一以后删掉）。
+// • 11-20 负责人：“所有点击进入下一页……画面都黑一下”，弹窗选“新页从右滑进盖住”，本提交：base.css 整页过渡由先淡出再淡入改成推入、推出（lemo-push-*、lemo-pop-*），
+//   只有一边有底栏或“＋”时，它们的快照跟着自己那一页滑（进页旧那份边退边淡、返回新那份 60% 后淡入）；底栏、“＋”元素本身的规则一行没动，静止画面不变。
 describe('B3 Q3 守门第 4 条：底栏外观文件不许改（R-352 ④）', () => {
   it('src/motion/glass-*.ts 正好是钉住的那几个：不许多、不许少', () => {
     const now = readdirSync(join(ROOT, 'src/motion'))

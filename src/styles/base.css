@@ -326,25 +326,15 @@ html.scroll-locked body {
   }
 }
 
-/* 页面切换（17.2 第 1、3 点，17.3；UI-4 L-3）：View Transitions 整页交叉淡入淡出接令牌，
-   不用浏览器默认的 0.25s ease。--ease-standard 只留给页面切换。
-   减少动态效果时 motion 的 transition() 直接切换、不起 View Transition，走不到这里 */
+/* 页面切换（17.2 第 1、3 点，17.3；负责人 11-20 选“新页从右滑进盖住”）：点进下一页，新页从右边滑进来盖住旧页、旧页往左退 30%；
+   返回（motion 的 transition 打 <html data-vt-back>）反过来，旧页往右滑出、露出下面往回移的上一页。全程两页都看得见，不再黑一下
+   （原来先淡出再淡入：旧页前 40% 淡完、新页 35% 以后才淡入，中间露出底色，深色下就是“画面黑一下”）。
+   时长 --dur-sheet、曲线 --ease-drawer（iOS 推页的曲线）；进页 lemo-push-*、返回 lemo-pop-*。顶栏不再单独起名（原来 page-head 为了淡入淡出时
+   新旧标题不叠），跟着整页一起截、一起滑，新页能盖住旧页的顶栏。不叠加混合（默认 plus-lighter 会让两页重叠处发亮）。
+   减少动态效果时 motion 的 transition() 直接切换、不起 View Transition；CSS 这边另有覆盖（本段最后）兜底 */
 ::view-transition-old(root),
-::view-transition-new(root),
-::view-transition-old(page-head),
-::view-transition-new(page-head) {
-  animation-duration: var(--dur-sheet);
-  animation-timing-function: var(--ease-standard);
-}
-
-/* 整页不交叉叠着淡（负责人 11-06 iPhone 主屏幕版 70d94f5“切页过渡残影”）：同时半透明叠着时，旧页的“11月6日 周五”“今天没有日程”压在新页上。
-   改成和 page-head 一样先出后入：旧页前 40% 淡完，新页 35% 以后才淡入（35～40% 旧页只剩不到 0.5%），任何一帧只看得到一页的字 */
-::view-transition-old(root) {
-  animation-name: lemo-head-out;
-}
-
 ::view-transition-new(root) {
-  animation-name: lemo-head-in;
+  mix-blend-mode: normal;
 }
 
 /* 切页动画期间点按不被吞（接手清单 UI4-B1-C2）：View Transition 的伪元素层盖在页面上面，默认会接住点按；
@@ -401,18 +391,77 @@ html.scroll-locked body {
   box-shadow: 0 0 0 4px var(--bg), 0 0 0 5px var(--step-off), var(--g-bar-shadow);
 }
 
-/* 只有一边有底栏或“＋”时（今天 ↔ 新建日程、设置……）跟着整页先出后入（动效审查方案 B V1）：原来新旧都是 animation: none，
-   进新建页时旧那份压在新页上停满整段过渡、最后一帧整条消失。现在旧那份用整页的 lemo-head-out 前 40% 淡完，
-   新那份（返回时）用 lemo-head-in 35% 以后淡入；时长、曲线和整页 root 一样 */
+/* 只有一边有底栏或“＋”时（今天 ↔ 新建日程、设置……）跟着自己那一页滑（动效审查方案 B V1：原来新旧都是 animation: none，
+   进新建页时旧那份压在新页上停满整段过渡、最后一帧整条消失）：旧那份跟旧页一起退、新那份（返回时）跟上一页一起回来。
+   整页和单边底栏同一时长、曲线（独立评审 11-20 第 7 条：原来写了三遍） */
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-old(tabbar):only-child,
+::view-transition-old(tabbar-add):only-child,
+::view-transition-new(tabbar):only-child,
+::view-transition-new(tabbar-add):only-child {
+  animation-duration: var(--dur-sheet);
+  animation-timing-function: var(--ease-drawer);
+}
+
 ::view-transition-new(tabbar):only-child,
 ::view-transition-new(tabbar-add):only-child {
   opacity: 1;
-  animation: lemo-head-in var(--dur-sheet) var(--ease-standard);
 }
 
+/* 进页、返回两套关键帧名。返回那套带 :root[data-vt-back]，优先级（0,2,1 起）高过进页那套（0,0,1 起），不靠先后 */
+::view-transition-old(root) {
+  animation-name: lemo-push-old;
+}
+
+/* 只有旧页有底栏、“＋”（进编辑页、设置）：底栏单独一层画在整页上面，新页盖不住它，跟着旧页往左退的同时前 40% 淡完 */
 ::view-transition-old(tabbar):only-child,
 ::view-transition-old(tabbar-add):only-child {
-  animation: lemo-head-out var(--dur-sheet) var(--ease-standard);
+  animation-name: lemo-push-old-fade;
+}
+
+::view-transition-new(root),
+::view-transition-new(tabbar):only-child,
+::view-transition-new(tabbar-add):only-child {
+  animation-name: lemo-push-new;
+}
+
+/* 返回时滑走的是旧页，它要压在上一页上面 */
+:root[data-vt-back]::view-transition-old(root) {
+  z-index: 1;
+  animation-name: lemo-pop-old;
+}
+
+:root[data-vt-back]::view-transition-old(tabbar):only-child,
+:root[data-vt-back]::view-transition-old(tabbar-add):only-child {
+  animation-name: lemo-pop-old;
+}
+
+:root[data-vt-back]::view-transition-new(root) {
+  animation-name: lemo-pop-new;
+}
+
+/* 返回到有底栏的页：回来的底栏同样画在正滑走的那页上面，60% 以后才淡入 */
+:root[data-vt-back]::view-transition-new(tabbar):only-child,
+:root[data-vt-back]::view-transition-new(tabbar-add):only-child {
+  animation-name: lemo-pop-new-fade;
+}
+
+/* 减少动态效果（17.2 第 5 点）：motion 的 transition() 本来就不起 View Transition；CSS 兜底写在 <html> 自己身上
+   （伪元素挂在 <html> 上，:root[data-rm="1"] 后面不能带空格，带空格永远匹配不上；独立评审 11-20 第 3 条，lemo/reduced-motion-override 认这种写法） */
+:root[data-rm="1"]::view-transition-old(root),
+:root[data-rm="1"]::view-transition-new(root),
+:root[data-rm="1"]::view-transition-old(tabbar):only-child,
+:root[data-rm="1"]::view-transition-old(tabbar-add):only-child,
+:root[data-rm="1"]::view-transition-new(tabbar):only-child,
+:root[data-rm="1"]::view-transition-new(tabbar-add):only-child,
+:root[data-rm="1"][data-vt-back]::view-transition-old(root),
+:root[data-rm="1"][data-vt-back]::view-transition-new(root),
+:root[data-rm="1"][data-vt-back]::view-transition-old(tabbar):only-child,
+:root[data-rm="1"][data-vt-back]::view-transition-old(tabbar-add):only-child,
+:root[data-rm="1"][data-vt-back]::view-transition-new(tabbar):only-child,
+:root[data-rm="1"][data-vt-back]::view-transition-new(tabbar-add):only-child {
+  animation: none;
 }
 
 /* 规范把具名元素的 backdrop-filter 抄到它的 ::view-transition-group 上（Chromium 照做）：组没有圆角、不跟着淡，
@@ -432,52 +481,58 @@ html.scroll-locked body {
 }
 
 /* 具名共享元素的组（列表那一条 ↔ 详情标题这类，位置和大小的移动）接令牌（接手清单 M4 剩余，第一个具名共享元素上线前）：
-   不用浏览器默认的 0.25s ease。page-head 的组下面单独写 animation: none（具名的比 * 优先） */
+   不用浏览器默认的 0.25s ease */
 ::view-transition-group(*) {
   animation-duration: var(--dur-sheet);
   animation-timing-function: var(--ease-standard);
 }
 
-/* 页面顶栏（view-transition-name: page-head，目前是设置和注销账号两屏）：切换前后都有顶栏时先淡出、再淡入，不同时叠着。
-   同时叠着的话，居中的旧标题“设置”会压在新标题“注销账号”中间，看着像这四个字跳了一下（负责人 10-31 iPhone 主屏幕版实测）。
-   时长和整页一样是 --dur-sheet（A24 只准用令牌），先后靠关键帧的百分比：旧的前 40% 淡完，新的 40% 以后才淡入。
-   只有一边有顶栏（今天 ↔ 设置）时也一样先出后入：整页 root 11-06 起也是先出后入，原来为了和整页交叉淡同步写的 :only-child 整段淡入淡出删掉了（代码审查 M4：留着会让顶栏叠在整页上） */
-
-/* 顶栏的组不滑位置（浏览器默认 0.25s ease 从旧位置移到新位置）：设置页往下滚过再进注销页，新旧顶栏位置不同，会再“动一下”；只淡入淡出 */
-::view-transition-group(page-head) {
-  animation: none;
+/* 整页推进：旧页往左退 30%，新页从右边整屏宽滑进来盖住。用 vw 不用 %：顶栏、底栏是单独起名的一层，% 按它自己的宽算，
+   会和整页滑的距离不一样（11-20 电脑宽屏截图顶栏标题挤在一起） */
+@keyframes lemo-push-old {
+  to {
+    transform: translateX(-30vw);
+  }
 }
 
-::view-transition-old(page-head) {
-  animation-name: lemo-head-out;
+@keyframes lemo-push-new {
+  from {
+    transform: translateX(100vw);
+  }
 }
 
-::view-transition-new(page-head) {
-  animation-name: lemo-head-in;
+/* 整页返回：旧页往右整页宽滑出，上一页从左边 30% 回到原位 */
+@keyframes lemo-pop-old {
+  to {
+    transform: translateX(100vw);
+  }
 }
 
-@keyframes lemo-head-out {
+@keyframes lemo-pop-new {
+  from {
+    transform: translateX(-30vw);
+  }
+}
+
+@keyframes lemo-push-old-fade {
+  40% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(-30vw);
+  }
+}
+
+@keyframes lemo-pop-new-fade {
   0% {
-    opacity: 1;
-  }
-
-  40%,
-  100% {
     opacity: 0;
+    transform: translateX(-30vw);
   }
-}
 
-/* 新的那份 35% 起淡入、这一段用 --ease-out（动效审查 M1）：原来 40% 起、整段 --ease-standard，两页都空约 66 ms（4 帧），读着像闪白；
-   现在空白约 36 ms。35～40% 之间旧页还剩不到 0.5%，字看不出来，不会重新叠字。整页 root 和 page-head 共用这一组 */
-@keyframes lemo-head-in {
-  0%,
-  35% {
+  60% {
     opacity: 0;
-    animation-timing-function: var(--ease-out);
-  }
-
-  100% {
-    opacity: 1;
   }
 }
 
