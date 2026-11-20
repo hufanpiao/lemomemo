@@ -9,7 +9,7 @@ import { join, relative, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { APP_PAGE_SELECTOR } from '../../platform/root-paint.ts';
 // 横滑切页在首屏画完以后才懒加载（App.tsx）：慢机器上测试收尾以后才去下，环境已拆掉报 EnvironmentTeardownError（CI 778139cf unit 洛杉矶）；这里不测它，换成空的
-vi.mock('../tab-swipe.ts', () => ({ installTabSwipeOnce: () => undefined }));
+vi.mock('../tab-swipe.ts', () => ({ installTabSwipeOnce: () => undefined, installTopLock: () => undefined }));
 // outbox 状态替身的空集合（UNSYNCED-retryRecs-required）：每次返回同一个对象，useSyncExternalStore 的快照才稳定
 const EMPTY_RECS = vi.hoisted((): ReadonlySet<string> => new Set());
 

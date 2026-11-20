@@ -15,6 +15,9 @@ import { sideOf } from '../motion/gestures.ts';
 import { rlog } from '../platform/run-log-api.ts';
 import { canGoBack, goBack, navigate, navigateTab, parseHash, upTo, type Route, type RouteName } from './router.ts';
 
+// 页面顶部固定（R-488）和横划切页同是整页的触摸手势、同一时机装：App.tsx 从这一块一起拿，首屏 main 里少一个 import()（11-20 首屏预算）
+export { installTopLock } from '../platform/top-lock.ts';
+
 export const SWIPE_MIN_PX = 60;
 export const SWIPE_MAX_MS = 500;
 /**

@@ -11,6 +11,9 @@ import { prefersReducedMotion } from './reduced.ts';
 import { swallowNextClick } from './swallow-click.ts';
 import { bezierCss, dur, ease } from './tokens.ts';
 
+// 整页 View Transition（点进下一页、返回）的实现也跟着这一块下载，不进首屏（11-20 首屏预算超线后从 index.ts 挪到 ./page-vt.ts）
+export { transition, VT_WAIT_MS } from './page-vt.ts';
+
 /** 页面底色（同 base.css 的 body::after）：长成时新建页 main 和遮罩画这个，长出来的是一整张页面 */
 const PAGE_BG = 'var(--scr-bg, var(--bg))';
 

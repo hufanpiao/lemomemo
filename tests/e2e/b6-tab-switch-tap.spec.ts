@@ -55,7 +55,10 @@ test('随手记 → 待办：窗口以内点打勾被吞、日志记 prevented-l
           },
           { once: true },
         );
-        window.location.hash = '#/todos';
+        // 只发 hashchange、不发 popstate：location.hash 赋值在触屏 WebKit 里同时发 popstate，router 当成系统边缘返回手势、直接换不装吞点按（029310e1 右滑不闪）
+        const from = window.location.href;
+        history.replaceState(history.state, '', '#/todos');
+        window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: from, newURL: window.location.href }));
       }),
   );
   expect(at, '新页出来得太晚，已经过了吞点按的窗口').toBeLessThan(FADE_GUARD_MS);

@@ -2,8 +2,12 @@
 // 别的办法换地址（hashchange）走同一条路。TC-B1-51：支持 View Transitions 时切页、不支持时直接切换（无报错），两条路都在这里。用假的 startViewTransition 抓住回调，回调一返回就看 DOM
 // R-487：iPhone 侧滑返回的 hasUAVisualTransition 判断删了（浏览器历史只有一条，系统侧滑没东西可退），原来那组用例一起删
 import { act, cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadPageSwap } from '../../motion/index.ts';
 import { goBack, navigate, stackOf, useRoute } from '../router.ts';
+
+// 整页过渡的实现首屏画完才下载（motion/page-vt.ts，11-20 挪出首屏）：真机由 main.tsx 调 loadPageSwap，这里先下好
+beforeAll(() => loadPageSwap());
 
 function Where() {
   const r = useRoute();

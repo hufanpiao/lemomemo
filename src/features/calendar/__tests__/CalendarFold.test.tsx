@@ -2,9 +2,10 @@
 // 手机选择器遮罩（设计复审 N1）、年列单个 Tab 停靠点（代码复审 N3）、周视图提示缩短（设计复审 N5）。其余复审项见 CalendarReview.test.tsx
 // 集合、节假日文件用替身；“今天”固定在 2026-11-05（周四）09:00；界面语言中文（周一起始）
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { navigate } from '../../../app/router.ts';
+import { loadPageSwap } from '../../../motion/index.ts';
 import { flipMs } from '../../../motion/gestures.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
@@ -57,6 +58,9 @@ class FakeRO {
   disconnect(): void {}
   unobserve(): void {}
 }
+
+// 整页过渡的实现首屏画完才下载（motion/page-vt.ts，11-20 挪出首屏）：“换页面才调 startViewTransition”那条要它先到
+beforeAll(() => loadPageSwap());
 
 beforeEach(() => {
   uiStore.getState().setLocale('zh-CN');

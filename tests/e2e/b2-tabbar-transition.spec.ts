@@ -373,8 +373,11 @@ test.describe('底栏：进出没有底栏的页照旧 View Transition（代码�
       };
       requestAnimationFrame(tick);
     });
+    // 换地址只发 hashchange、不发 popstate：location.hash 赋值在触屏 WebKit 里同时发 popstate，router 会当成系统边缘返回手势、直接换不起过渡（029310e1 右滑不闪），这条就测不到了
     await page.evaluate(() => {
-      window.location.hash = '#/event/new';
+      const from = window.location.href;
+      history.replaceState(history.state, '', '#/event/new');
+      window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: from, newURL: window.location.href }));
     });
     const s = await holdAndRead(page).catch(() => null);
     const diag = s ? '' : await page.evaluate(() => (window as unknown as { __vtdiag?: string[] }).__vtdiag?.join(' | ') ?? '无');

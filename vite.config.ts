@@ -54,6 +54,16 @@ export const LAZY_GROUPS = {
     // 待办行的写入（今天页、待办页、日历日清单同一份，独立评审 11-18 二-1）：只依赖本组和首屏块，三份写入代码点了才下载；单独成块首屏多一个文件
     'src/kit/hooks/useTodoWrites.ts',
   ],
+  // today-small（11-20 首屏又压线 150.0 KB）：今天页首屏要画的几个零点几 KB 的小模块（首屏闭包里的、静态引到组外的不能放，lazy-common-chunk.test.ts 守），Rolldown 按“被哪些懒加载页用到”各拆成一块，
+  // 每块都多一份文件头和预加载表下标；合成一块。都是今天页本来就下载的，只是少几个文件；别的页用到其中一份时多下这一块里其余几百字节
+  'today-small': [
+    'src/platform/fx-api.ts',
+    'src/kit/hooks/useMinuteNow.ts',
+    'src/kit/hooks/anniv-on.ts',
+    'src/kit/hooks/useSpanT.ts',
+    'src/platform/perm-mic.ts',
+    'src/kit/hooks/useReadonly.ts',
+  ],
 } as const satisfies Record<string, readonly string[]>;
 const pathRe = (mods: readonly string[]): RegExp => new RegExp(`[\\\\/](${mods.map((m) => m.replace(/[.]/g, '\\.').replace(/\//g, '[\\\\/]')).join('|')})$`);
 const LAZY_GROUP_RES = Object.entries(LAZY_GROUPS).map(([name, mods]) => ({ name, re: pathRe(mods) }));

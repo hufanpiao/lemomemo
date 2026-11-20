@@ -34,7 +34,6 @@ import { enableDropMark, installDesktopSession } from '../platform/session-store
 import { hideSplash, hideSplashAfter } from '../platform/splash.ts';
 import { afterAppPainted, appPainted, startAppPaintLimit, watchRoot, whenContent } from '../platform/root-paint.ts';
 import { markInsetPainted, watchInsetBottom } from '../platform/inset-watch.ts';
-import { installTopLock } from '../platform/top-lock.ts';
 import { loadMotionFeatures, loadPageSwap, nextFrame } from '../motion/index.ts';
 import { registerSw, reloadPage, upgradeLogCountStore } from '../platform/sw-register.ts';
 import { mountExitScreen, watchExitIncomplete } from './exit-screen.tsx';
@@ -62,8 +61,6 @@ hideSplashAfter(hideSplash);
 const look = import('../platform/look.ts').then((m) => m.watchLook(collection<LookRow & { id: string }>('settings'), logEvent), () => undefined);
 // 底部安全区（G10）：iOS 主屏幕版冷启动时先 0 后 34，稳定前底栏、“＋”、实色带不显示，稳定了淡入；首屏画完后最多藏 1.5 秒（platform/inset-watch.ts）
 watchInsetBottom();
-// 所有页面顶部固定（R-488）：滚到顶再往下拉，整页不回弹（platform/top-lock.ts；下拉搜索自己跟手露出）
-installTopLock();
 // R-371 Gap fix（底栏偏高修复，11-11 起默认开、正式版也做）：只在 iOS 主屏幕版冷启动时下载 platform/vh-gapfix.ts 做一次（判断见 vh-gapfix-gate.ts，
 // 诊断页可以关掉对照）；等帧传 motion 的 nextFrame（A25）
 // 台账 Q-2：先在这里同步早试一次（启动画面还盖着，不等下载、不等底栏），不成再由 vh-gapfix.ts 等底栏挂上后照原样补一次

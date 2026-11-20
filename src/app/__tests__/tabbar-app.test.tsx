@@ -5,7 +5,7 @@ import { lazy, type ComponentType } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createUpgradeCenter } from '../../core/upgrade.ts';
 // 横滑切页在首屏画完以后才懒加载（App.tsx）：慢机器上测试收尾以后才去下，环境已拆掉报 EnvironmentTeardownError（CI 778139cf unit 洛杉矶）；这里不测它，换成空的
-vi.mock('../tab-swipe.ts', () => ({ installTabSwipeOnce: () => undefined }));
+vi.mock('../tab-swipe.ts', () => ({ installTabSwipeOnce: () => undefined, installTopLock: () => undefined }));
 
 const upgrade = createUpgradeCenter({
   appVersion: '4.0.0', reload: vi.fn(), swUpdate: vi.fn(() => Promise.resolve('no_update' as const)), attempt: { get: () => null, set: () => undefined },

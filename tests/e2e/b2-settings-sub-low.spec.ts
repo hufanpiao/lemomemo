@@ -24,6 +24,8 @@ test.describe('设置子页返回（复审第二轮 N1、L7）', () => {
     await page.getByTestId('remind-open-upcoming').click({ timeout: 30000 });
     await expect(page).toHaveURL(/#\/settings\/remind\/upcoming$/);
     expect(await stack(page)).toEqual(['#/settings/remind']);
+    // 等整页过渡播完再点：新页画出来之前屏幕停在旧页上，这时的点按会被吞掉（motion/index.ts untilPageReady）
+    await page.locator('html:not([data-vt])').waitFor({ state: 'attached' });
     await page.getByTestId('settings-remind-up-back').click();
     await expect(page).toHaveURL(/#\/settings\/remind$/);
     await expect(page.getByTestId('settings-reminders')).toBeVisible();

@@ -5,7 +5,7 @@ import { App } from '../App.tsx';
 import { featureRoutes } from '../features.ts';
 import { FADE_GUARD_MS } from '../../motion/index.ts';
 // 横滑切页在首屏画完以后才懒加载（App.tsx）：慢机器上测试收尾以后才去下，环境已拆掉报 EnvironmentTeardownError（CI 778139cf unit 洛杉矶）；这里不测它，换成空的
-vi.mock('../tab-swipe.ts', () => ({ installTabSwipeOnce: () => undefined }));
+vi.mock('../tab-swipe.ts', () => ({ installTabSwipeOnce: () => undefined, installTopLock: () => undefined }));
 
 // 整个 App 挂载、页面懒加载：全量三个时区同时跑、机器忙时会拖过默认 5 秒（c8b5596 的 CI unit 就是这样超时的），
 // 这个文件单独放宽到 15 秒，等页面出现的上限 10 秒；单跑仍在 3 秒内

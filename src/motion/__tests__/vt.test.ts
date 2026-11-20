@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { transition } from '../index.ts';
+import { transition, VT_WAIT_MS } from '../page-vt.ts';
 import { findDuplicateVtNames, VT_FIXED, vtName } from '../vt.ts';
 
 afterEach(() => {
@@ -69,7 +69,6 @@ describe('transition()：等新页的 <main> 显示出来再截新图', () => {
       ret = cb();
       return { finished: Promise.resolve() };
     };
-    const { VT_WAIT_MS } = await import('../index.ts');
     let ok = false;
     void transition(() => undefined);
     void ret?.then(() => (ok = true));
@@ -112,8 +111,11 @@ describe('transition()：等新页的 <main> 显示出来再截新图', () => {
     void ret?.then(() => (ok = true));
     await vi.advanceTimersByTimeAsync(50);
     expect(ok, '设置二级页这类：外层 main 在、里面还空着，不放行').toBe(false);
-    btn.click();
-    expect(hit, '等的时候点按吞掉').not.toHaveBeenCalled();
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    expect(hit, '等的时候手指、鼠标的点按吞掉').not.toHaveBeenCalled();
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    expect(hit, '键盘回车触发的 click（detail 0）不吞').toHaveBeenCalledTimes(1);
+    hit.mockClear();
     mark.remove();
     await vi.advanceTimersByTimeAsync(1);
     expect(ok).toBe(true);

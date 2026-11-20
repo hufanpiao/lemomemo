@@ -2,9 +2,7 @@
 // document.startViewTransition、requestAnimationFrame（A25）
 // B0 是骨架：接口定下来，具体手感在 B1（按下回弹、页面切换）、B2（弹层、列表）、B3（提示条、录音面板）里调
 import type * as PageSwapModule from './page-swap.ts';
-import { pageReady, waitDom } from './page-shown.ts';
 import { prefersReducedMotion } from './reduced.ts';
-import { reportDuplicateVtNames } from './vt.ts';
 
 // React 组件（Appear、Pressable、SharedLayout、Celebrate）在 ./components.ts：
 // 分开导出，免得只用函数的地方（例如 router 的 transition）把 motion/react 带进首屏（2.6）
@@ -19,109 +17,18 @@ export { prefersReducedMotion, subscribeReducedMotion } from './reduced.ts';
 export type { AppearKind } from './presets.ts';
 // 跟手手势（useSwipePager、useDragCollapse）在 ./gestures.ts：不从这里再导出，免得被首屏的 main 块带上（11-05 主持人定，首屏体积）
 
-interface VtDocument {
-  startViewTransition?: (cb: () => void) => { finished: Promise<void> };
-}
-
-/** Pressable 在 DOM 上的标记（Pressable.tsx 写 data-pressable；data-snap 的样式在 Pressable.module.css） */
-const PRESSABLE_SEL = '[data-pressable]';
-const SNAP_ATTR = 'data-snap';
-
-/** 切页前把页面上所有 Pressable 瞬间复位（UI-4 B1 动效确认 C3 / X-3）：
- * 点完按钮马上切页时，按钮还缩着或正在弹回，浏览器截旧画面会截到这一刻、淡出时定格（36319a2 查到的根因）。
- * 统一在这里处理，不再每个按钮局部改：打 data-snap 去掉过渡、回到原大小，旧画面截的是复位后的样子；
- * View Transition 的回调里（旧画面已经截完、新页面画之前）摘掉 */
-function snapPressables(doc: Document, on: boolean): void {
-  for (const el of doc.querySelectorAll(on ? PRESSABLE_SEL : `[${SNAP_ATTR}]`)) {
-    if (on) el.setAttribute(SNAP_ATTR, '');
-    else el.removeAttribute(SNAP_ATTR);
-  }
-}
-
 /**
- * 过渡期间给 <html> 打 data-vt（11-06 代码审查 S4）：iOS 18.0～18.1 有 startViewTransition 但不认 :active-view-transition，
- * 要按“正在过渡”写的样式或测试认这个属性。原来底栏“过渡中换实色”的 CSS 用它，11-06 实色已经去掉（负责人真机 9d40848），
- * 页签互切也不再起 View Transition（fadeSwap 不打这个属性）；现在只有整页 View Transition 时打，CSS 不用它、测试和 e2e 读它。
- * 返回方向 data-vt-back 跟着它的计数一起摘（最后一个过渡结束才摘），删这个计数会连方向一起删坏。
- * 旧画面在调用 startViewTransition 之后才截，所以要在调用之前打上；新过渡打断旧过渡时，旧的 finished 先结束，用计数，最后一个结束才摘
- */
-let vtOpen = 0;
-function markVt(doc: Document, on: boolean): void {
-  vtOpen = Math.max(0, vtOpen + (on ? 1 : -1));
-  if (vtOpen > 0) doc.documentElement.setAttribute('data-vt', '');
-  else {
-    doc.documentElement.removeAttribute('data-vt');
-    doc.documentElement.removeAttribute(VT_BACK_ATTR);
-  }
-}
-/** 整页过渡往回走（返回）：base.css 按它把滑入滑出换成反方向 */
-const VT_BACK_ATTR = 'data-vt-back';
-/** 整页过渡最多等新页显示出来多久再截新图（屏幕这段时间停在旧页上，太长像卡住） */
-export const VT_WAIT_MS = 300;
-
-/**
- * 页面切换：支持 View Transitions 就包一层，不支持或减少动态效果时直接执行（17.2 第 3 点）。
- * 进页新页从右边滑进来盖住旧页、旧页往左退一点；back 为真（返回上一页、回上一层）反过来，旧页往右滑出、露出下面的上一页
- * （负责人 11-20 选“新页从右滑进盖住”，原来先淡出再淡入中间黑一下）。方向打在 <html data-vt-back> 上，base.css 按它换关键帧
+ * 页面切换（17.2 第 3 点）：进页新页从右边滑进来盖住旧页，back 为真（返回上一页、回上一层）反过来（负责人 11-20 选“新页从右滑进盖住”）。
+ * 实现在 ./page-vt.ts，跟换页动画实现同一块、首屏画完才下载（11-20 ci 首屏预算超线后挪出）；没到时直接换页、不播（冷启动不到一秒就点进下一页才碰得到）
  */
 export function transition(update: () => void, back = false): Promise<void> {
   // 页签互切的淡入还在等分包时走了整页过渡（点了“＋”、头像）：先停掉，不然后面换上来的编辑页、设置页会被当成新页再淡入一次（代码审查方案 B M9）
   cancelFade();
-  const doc = typeof document === 'undefined' ? undefined : (document as Document & VtDocument);
-  if (!doc?.startViewTransition || prefersReducedMotion()) {
-    update();
-    return Promise.resolve();
-  }
-  // 这次过渡的序号：被下一次打断以后，这次的回调不再摘下一次打的 data-snap（独立评审 11-20 第 10 条）
-  const my = ++vtSeq;
-  const html = doc.documentElement;
-  const wasBack = html.hasAttribute(VT_BACK_ATTR);
-  snapPressables(doc, true);
-  html.toggleAttribute(VT_BACK_ATTR, back);
-  markVt(doc, true);
-  let vt: { finished: Promise<void> };
-  try {
-    vt = doc.startViewTransition(() => {
-      if (my === vtSeq) snapPressables(doc, false);
-      update();
-      return untilPageReady(doc).then(() => {
-        // 开发版：新页面画完就查 view-transition-name 重名（17.2 第 3 点；X-5 改成读计算样式，CSS Modules 起的名字也查得到）
-        if (import.meta.env.DEV) reportDuplicateVtNames(doc);
-      });
-    });
-  } catch {
-    // startViewTransition 同步抛错（个别实现、以后加的包装；代码审查 S2）：摘掉标记、直接画新页面，
-    // 不然 data-snap 一直留着，所有 Pressable 都没了按下反馈；方向还原成前一个还在播的过渡的（独立评审 11-20 第 9 条）
-    snapPressables(doc, false);
-    html.toggleAttribute(VT_BACK_ATTR, wasBack);
-    markVt(doc, false);
-    update();
-    return Promise.resolve();
-  }
-  const done = (): void => markVt(doc, false);
-  return vt.finished.then(done, done);
-}
-let vtSeq = 0;
-
-/**
- * 等新页真的画出来再截新图（负责人 11-20 录屏“设置进入待办最近删除页的时候顶部闪一下”）：懒加载的页第一次渲染哪怕分包已经下好
- * 也先挂起一拍，不等的话新页先空着滑进来、内容后弹出。判断看 page-shown.ts 的 pageReady（main 显示出来、页面级懒加载块也到了）。
- * 等的时候屏幕停在旧页上、DOM 已经是新页，这段时间的点按吞掉（不然点在看得见的旧页上、实际点中新页同一位置的按钮；独立评审 11-20 第 1 条）；
- * 最多 VT_WAIT_MS，过了照常播
- */
-function untilPageReady(doc: Document): Promise<void> {
-  return new Promise<void>((done) => {
-    const eat = (e: Event): void => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    const types = ['pointerdown', 'pointerup', 'click'] as const;
-    for (const t of types) doc.addEventListener(t, eat, true);
-    waitDom(pageReady, VT_WAIT_MS, () => {
-      for (const t of types) doc.removeEventListener(t, eat, true);
-      done();
-    });
-  });
+  // 减少动态效果在门面先判（直接换页，不用等实现）：顺带让 reduced.ts 留在首屏 main 块里，不被拆成单独一个小块（11-20 首屏预算实测多 0.3 KB）
+  if (swapImpl && !prefersReducedMotion()) return swapImpl.transition(update, back);
+  void loadPageSwap();
+  update();
+  return Promise.resolve();
 }
 
 // 页签互切、“详细”长成的实现在 ./page-swap.ts（11-18 独立评审后整块重写），首屏画完以后才下载（11-18 ci 首屏预算 151.7 KB 超线后挪出）：

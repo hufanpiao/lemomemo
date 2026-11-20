@@ -111,7 +111,8 @@ function TabBar({ route }: { route: RouteName }) {
     if (box || me) rlog(`swap pin box=${box ? 1 : 0} canvas=${box?.querySelectorAll('canvas').length ?? 0} img=${box?.querySelectorAll('img').length ?? 0} op=${op.toFixed(2)}`);
   }, [route]);
   // 四个主页面从左右两边往里划切页签（负责人 11-18，tab-swipe.ts）：首屏画完以后再下载、挂一次
-  useEffect(() => afterAppPainted(() => void import('./tab-swipe.ts').then((m) => m.installTabSwipeOnce())), []);
+  // 所有页面顶部固定（R-488，platform/top-lock.ts）跟着同一块下载、同时装上：原来 main.tsx 静态引它，ci 309ff11c 起首屏超 150 KB；画完以前那一下不锁，影响可以忽略
+  useEffect(() => afterAppPainted(() => void import('./tab-swipe.ts').then((m) => (m.installTabSwipeOnce(), m.installTopLock()))), []);
   // 换页就收起（去改某一条、展开编辑也是换页）。等新页面的 <main> 真的显示出来再收（负责人 11-18 录屏：点“详细”闪一帧原页面）：
   // 新页分包没到时 Suspense 把旧页藏起来、新页还没出来，这时先收打字条，屏幕上就是一段空白或原页面；分包已到时当场就收，和原来一样
   // 打字条“详细”正在长成新建页（负责人 11-18 选 A）：长完由 expand 收，这里不收
