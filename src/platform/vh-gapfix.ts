@@ -4,11 +4,13 @@
 // 不变量：输入框聚焦着（键盘要弹、正弹、iOS 在定光标）不放新垫块、不补滚（台账 Q-8、Q-24 那两个真机问题都在这段时间）；
 // 键盘那次手指按着或页面被滚过也不补滚。同一时刻只做一次：做着时来的“键盘收了”这次不接，viewport.ts 保持上膛，下一次视口事件静下来再报。
 // 顶部安全区读到 0（冷启动先 0 后 61）：冷启动那次隔帧重读，一直 0 就不做；收键盘那次不重读、直接不做。
+// 诊断页能单独关掉①（bar）、②（kb）对照（vh-gapfix-gate.ts 的 GapPart）：关了照样量、记 skip part-off gap=…（整体开关关掉记的是 skip off），不放垫块；撤垫块那行记 gap-after（整屏 − innerHeight）。
 // 每一步经 run-log-api.ts 的 rlog 记一行 gapfix …（进全局运行日志，诊断页“Copy run log”一起复制；正式构建 rlog 是空的）。requestAnimationFrame 只许 src/motion 用（A25），等帧的函数由调用方传
 import { isStandalone, opensKeyboard } from './env.ts';
 import { BAR_SELECTOR, rlog } from './run-log-api.ts';
 import { watchKeyboardClosed } from './viewport.ts';
-import { earlyGap, fixHeight, gapFixOn, gapState, insetTop, skipReason, type EarlyGap, type FixEnd, type Frame } from './vh-gapfix-gate.ts';
+import { earlyGap, fixHeight, GAP_PARTS, gapFixOn, gapState, insetTop, skipReason, type EarlyGap, type FixEnd, type Frame } from './vh-gapfix-gate.ts';
+import { fullHeight } from './viewport-screen.ts';
 
 /** 放了垫块这么久 innerHeight 还没变：补一次滚动 */
 export const SCROLL_AT_MS = 600;
@@ -52,7 +54,9 @@ export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
   const readTop = (): number => (typeof deps.top === 'function' ? deps.top() : (deps.top ?? insetTop(doc)));
   const log = deps.log ?? rlog;
   const t0 = now();
-  log(`gapfix start nav=${Math.round(win.performance.now())}ms screen=${win.screen.width}x${win.screen.height}`);
+  // sw=：四套各自的诊断开关，按 GAP_PARTS 的顺序（early bar kb css）四位数字，1 开 0 关（不写名字：别的用例按 /kb/、/early/ 认行）
+  const sw = GAP_PARTS.map((k) => (gapFixOn(store, k) ? 1 : 0)).join('');
+  log(`gapfix start nav=${Math.round(win.performance.now())}ms screen=${win.screen.width}x${win.screen.height} sw=${sw}`);
   const row = (what: string): void => {
     const bar = doc.querySelector(BAR_SELECTOR);
     log(`gapfix +${now() - t0}ms ${what} inner=${win.innerHeight} bar=${bar ? Math.round(bar.getBoundingClientRect().bottom) : '-'}`);
@@ -110,6 +114,8 @@ export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
       row(`top-reread tries=${topTries} after=${now() - topT0}ms top=${s.top}${s.top === 0 ? ' still-0' : ''}`);
       topTries = 0;
     }
+    // 诊断页单独关了这一套（GapPart bar / kb）：照样量，记下本来要补的 gap，不放垫块
+    if (why === null && !gapFixOn(store, p === '' ? 'bar' : 'kb')) why = `part-off gap=${s.full - s.inner}`;
     if (why !== null) {
       row(`${p}skip ${why} top=${s.top}`);
       idle();
@@ -148,7 +154,7 @@ export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
       finished = true;
       if (scrolled) backIfOurs();
       const what = how === 'changed' ? `changed ${inner0}->${h}${scrolled ? ' after-scroll' : ' by-pad'}` : how === 'stopped' ? 'stopped' : 'no-change';
-      row(`${p}${what} pad-removed`);
+      row(`${p}${what} pad-removed gap-after=${fullHeight(win) - h}`);
       idle();
     };
     stopRun = fixHeight({ win, frame, now, giveUpMs: GIVE_UP_MS, anyChange: true, tick, done }, s.full - s.inner);

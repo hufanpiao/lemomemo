@@ -69,7 +69,7 @@ describe('关于页的诊断信息', () => {
     tapVersion(DIAG_TAPS);
     await screen.findByTestId('settings-about-diag');
     const box = screen.getByTestId('settings-vh-probe');
-    expect([...box.querySelectorAll('button')].map((b) => b.dataset['testid'])).toEqual(['vh-gapfix', 'vh-haptic', 'vh-live-speech', 'vh-rl-send', 'vh-rl-copy', 'vh-rl-clear']);
+    expect([...box.querySelectorAll('button')].map((b) => b.dataset['testid'])).toEqual(['vh-gapfix', 'vh-haptic', 'vh-gap-early', 'vh-gap-bar', 'vh-gap-kb', 'vh-gap-css', 'vh-live-speech','vh-rl-send', 'vh-rl-copy', 'vh-rl-clear']);
   });
 
   it('Gap fix 开关默认 ON，点一下关掉用来对照（存本机 lemo-gapfix-off）、再点回 ON（R-371 11-11 默认开；日志在全局运行日志里）', async () => {
@@ -87,6 +87,27 @@ describe('关于页的诊断信息', () => {
     fireEvent.click(gf);
     expect(gf.textContent).toBe('Gap fix: ON');
     expect(localStorage.getItem('lemo-gapfix-off')).toBeNull();
+    localStorage.clear();
+  });
+
+  it('四套各自的开关（Gap early / bar / kb / css）默认 ON，点一下只把那一套存成 lemo-gapfix-off-<名>、不碰整体开关和别的三套，再点回 ON 删掉', async () => {
+    localStorage.clear();
+    render(<AboutSection />);
+    tapVersion(DIAG_TAPS);
+    await screen.findByTestId('settings-about-diag');
+    for (const part of ['early', 'bar', 'kb', 'css']) {
+      const b = screen.getByTestId(`vh-gap-${part}`);
+      expect(b.textContent).toBe(`Gap ${part}: ON`);
+      expect(b.getAttribute('aria-pressed')).toBe('true');
+      fireEvent.click(b);
+      expect(b.textContent).toBe(`Gap ${part}: OFF (compare)`);
+      expect(b.getAttribute('aria-pressed')).toBe('false');
+      expect(Object.keys(localStorage)).toEqual([`lemo-gapfix-off-${part}`]);
+      expect(screen.getByTestId('vh-gapfix').textContent).toBe('Gap fix: ON');
+      fireEvent.click(b);
+      expect(b.textContent).toBe(`Gap ${part}: ON`);
+      expect(localStorage.length).toBe(0);
+    }
     localStorage.clear();
   });
 

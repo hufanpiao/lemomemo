@@ -24,7 +24,7 @@ describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956
     expect(pad()).toBeNull();
     const log = readGapFixLog();
     expect(log).toMatch(/kb pad gap=61 top=61/);
-    expect(log).toMatch(/kb changed 895->956 by-pad pad-removed inner=956/);
+    expect(log).toMatch(/kb changed 895->956 by-pad pad-removed gap-after=0 inner=956/);
     expect(f.size).toBe(0);
   });
 

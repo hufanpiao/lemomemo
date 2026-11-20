@@ -2,6 +2,7 @@
 // --kb（键盘压住布局视口的高度）、data-kbo（键盘弹着，浮条贴键盘）、--vh-gap（布局视口少一截，贴底元素补到屏幕底）、data-kbhide（底栏、“＋”藏起）。
 // 不变量：data-kbhide = data-kbo 或“收起后暂缓”（主屏幕版 iPhone 键盘刚收、布局视口还没回到整屏，最多 HOLD_MS），watchKeyboard 报的开关和它一致；
 // 键盘真收了（静了 KB_SETTLE_MS、没在输入）通知 watchKeyboardClosed（冷启动高度校正再做一次）；回调都没接（正在做）就保持上膛，下一次视口事件静下来再报。
+// --vh-gap 是治“少一截”四套里的 css 那套：诊断页能单独关掉对照（vh-gapfix-gate.ts 的 GapPart，开始监听时读一次），关了照样量、不写根节点；量出的值一变记 gapfix css …。
 // 没有 visualViewport 的环境什么都不做。
 // 另有 blockPageZoom：拦 iOS 整页双指缩放（iOS 不认 viewport 的 user-scalable=no，只有 gesture* 事件 preventDefault 停得住）；
 // focusInPlace、inPlaceTouchStart / inPlaceTouchEnd：贴底浮条（position: fixed）里的输入框原地聚焦（台账 Q-8）。
@@ -16,6 +17,7 @@
 // 只拦 mousedown（失焦是 mousedown 的默认动作）：拦 touchstart，iOS 连 click 都不发；拦 pointerdown 管不到失焦。要收键盘的按钮（打字条“收起”）自己 blur
 import { isIPhone, isStandalone, opensKeyboard } from './env.ts';
 import { rlog } from './run-log-api.ts';
+import { gapFixOn } from './vh-gapfix-gate.ts';
 import { BAR_HIDE_ATTR, fullHeight, GAP_MAX_PX, GAP_VAR, KB_VAR, KBO_ATTR, TOL_PX, viewportGeom, type Geom } from './viewport-geom.ts';
 
 /** 收起后暂缓最多这么久（冷启动高度校正补回整屏实测 0.33 秒） */
@@ -46,6 +48,8 @@ export interface ViewportEnv {
   readonly phone?: () => boolean;
   /** 现在的毫秒数（暂缓计时；不传用单调时钟，系统时间往回调不影响） */
   readonly now?: () => number;
+  /** 写不写 --vh-gap（不传：诊断页开关 css，vh-gapfix-gate.ts 的 gapFixOn，开始监听时读一次） */
+  readonly cssGap?: () => boolean;
 }
 
 type Listener = (open: boolean, heightPx: number) => void;
@@ -61,6 +65,9 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
   const fullOf = env.full ?? (() => (typeof window === 'undefined' ? 0 : fullHeight(window)));
   const phoneOf = env.phone ?? (() => isIPhone());
   const nowOf = env.now ?? (() => performance.now());
+  const cssGapOf = env.cssGap ?? (() => gapFixOn(undefined, 'css'));
+  /** 这次监听写不写 --vh-gap（start 时读开关） */
+  let cssGap = true;
   const listeners = new Set<Listener>();
   /** 返回 false 是这次没接 */
   const closers = new Set<() => boolean>();
@@ -71,6 +78,7 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
   let reported = false;
   let kbVar = 0;
   let kboVar = false;
+  /** 上次量出的那截（css 开着时就是写到根节点的值；关着时只记、不写） */
   let gapVar = 0;
   /** 暂缓到什么时候（0 = 不在暂缓） */
   let holdUntil = 0;
@@ -110,7 +118,9 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
     if (!g) return;
     if (g.gap !== gapVar) {
       gapVar = g.gap;
-      setVar(GAP_VAR, g.gap);
+      if (cssGap) setVar(GAP_VAR, g.gap);
+      // 第四套（贴底元素往下补）生效 / 撤掉的时刻；关着记 off would=（本来要补多少）。short 是这时布局视口比整屏少多少
+      rlog(`gapfix css ${cssGap ? 'set' : 'off would'}=${g.gap} short=${g.short}`);
     }
     if (g.kb > 0) holdUntil = 0;
     else if (height > 0 && g.squeeze) holdUntil = nowOf() + HOLD_MS;
@@ -142,6 +152,7 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
   const start = (): void => {
     vv = vvOf();
     if (!vv) return;
+    cssGap = cssGapOf();
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
     doc = docOf();

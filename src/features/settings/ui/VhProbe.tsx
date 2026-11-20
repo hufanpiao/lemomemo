@@ -3,6 +3,8 @@
 // 启动画面颜色诊断（台账 Q-2）、键盘上方输入辅助条诊断（台账 Q-11），Gap fix 的日志并进全局运行日志。现在两排：
 // • Gap fix（R-371，platform/vh-gapfix.ts，iOS 主屏幕版默认开）：开关是“关掉用来对照”——默认 ON，点成 OFF 存本机，下次冷启动起不做（再点回 ON 恢复默认）；
 //   每一步的日志在全局运行日志里（gapfix 开头的行）
+// • Gap early / bar / kb / css（11-20 负责人选“手机上对照一次”）：治“少一截”的四套各自单独关掉对照（vh-gapfix-gate.ts 的 GapPart），默认 ON、点成 OFF 存本机，
+//   下次冷启动起只停那一套；日志 gapfix start 行的 sw= 按 early bar kb css 记四位（1 开 0 关），各套生效时记量到的 gap 和生效后的 gap-after（对照步骤在本机资料 评审/2026-11-20_视口对照步骤.md）
 // • Test haptic（R-471）：同一排，点一下震一下，按钮上写震动走的哪条路（switch：iOS 18 系统开关，触感由按钮里的 TapSwitch 出，和左滑“删除”同一套；
 //   vibrate：navigator.vibrate；none：都没有）
 // • Live speech（负责人 11-18 录屏“说话没有波动”，platform/speech.ts 的 liveSpeechOn）：默认 ON，点成 OFF 不走系统识别那一路、只用录音上传，
@@ -17,7 +19,7 @@ import { TapSwitch } from '../../../kit/components/TapSwitch.tsx';
 import { tryHaptic, type HapticPath } from '../../../platform/feedback.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { liveSpeechOn, setLiveSpeechOn } from '../../../platform/speech.ts';
-import { gapFixOn, setGapFixOn } from '../../../platform/vh-gapfix-gate.ts';
+import { GAP_PARTS, gapFixOn, setGapFixOn, type GapPart } from '../../../platform/vh-gapfix-gate.ts';
 import { clearRunLog, readRunLog } from '../../../platform/run-log.ts';
 import { useRunLogSend, type RunLogSendState } from '../hooks/useRunLogSend.ts';
 import styles from './SettingsPage.module.css';
@@ -37,6 +39,8 @@ export const RL_SEND_LABEL: Record<Exclude<RunLogSendState, ''>, string> = {
 };
 export const GF_LABEL_ON = 'Gap fix: ON';
 export const GF_LABEL_OFF = 'Gap fix: OFF (compare)';
+/** 四套各自的开关（按 GAP_PARTS 的顺序排一排） */
+export const gapPartLabel = (part: GapPart, on: boolean): string => `Gap ${part}: ${on ? 'ON' : 'OFF (compare)'}`;
 /** 试震动（R-471，platform/feedback.ts 的 tryHaptic；不看“声音和触感”开关）：按过以后写 Haptic: switch / vibrate / none */
 export const HAP_TRY = 'Test haptic';
 export const HAP_DONE = 'Haptic: ';
@@ -45,6 +49,24 @@ export const LS_LABEL_ON = 'Live speech: ON';
 export const LS_LABEL_OFF = 'Live speech: OFF (compare)';
 /** 手指点的系统开关 */
 export const FS_LABEL = 'Finger switch';
+
+/** 一套的开关：点一下翻转、存本机，按钮上照存下的值写 */
+function GapPartButton({ part }: { readonly part: GapPart }) {
+  const [on, setOn] = useState(() => gapFixOn(undefined, part));
+  return (
+    <FormButton
+      size="compact"
+      aria-pressed={on}
+      data-testid={`vh-gap-${part}`}
+      onClick={() => {
+        setGapFixOn(!on, undefined, part);
+        setOn(gapFixOn(undefined, part));
+      }}
+    >
+      {gapPartLabel(part, on)}
+    </FormButton>
+  );
+}
 
 export function VhProbe() {
   const [gf, setGf] = useState(() => gapFixOn());
@@ -82,6 +104,11 @@ export function VhProbe() {
           {hap === null ? HAP_TRY : `${HAP_DONE}${hap}`}
           <TapSwitch />
         </FormButton>
+      </div>
+      <div className={`${styles.actions} ${styles.probeActions}`}>
+        {GAP_PARTS.map((p) => (
+          <GapPartButton key={p} part={p} />
+        ))}
       </div>
       <div className={`${styles.actions} ${styles.probeActions}`}>
         <FormButton

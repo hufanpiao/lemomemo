@@ -92,7 +92,7 @@ describe('startGapFix', () => {
     expect(pad()).toBeNull();
     const log = readGapFixLog();
     expect(log).toMatch(/pad gap=61 top=61/);
-    expect(log).toMatch(/changed 895->956 by-pad pad-removed inner=956/);
+    expect(log).toMatch(/changed 895->956 by-pad pad-removed gap-after=0 inner=956/);
   });
 
   it(`${SCROLL_AT_MS}ms 还没变：滚 1px、下一帧滚回；到 ${GIVE_UP_MS}ms 撤掉垫块、记 no-change`, () => {
