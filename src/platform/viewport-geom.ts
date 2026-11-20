@@ -4,22 +4,13 @@
 // 不变量：iOS 主屏幕版 iPhone 弹键盘时布局视口本身被压矮（可视区算法量出 0），只有这时按“在输入 + 比整屏矮出一个键盘”判；
 // iPad 不算（台前调度、分屏、接实体键盘时窗口本来就比整屏矮得多）
 
-import { GAP_MAX_PX, TOL_PX } from './viewport-screen.ts';
+import { GAP_MAX_PX, SCALE_EPS, TOL_PX } from './viewport-screen.ts';
 
-export { fullHeight, GAP_MAX_PX, isLandscape, TOL_PX } from './viewport-screen.ts';
-
-/** viewport.ts 写到根节点的四样（停止监听时一起拿掉）：--vh-gap 冷启动少的高度、--kb 键盘压住的高度、data-kbo 手机上键盘弹着、data-kbhide 底栏藏起。
- *  名字放在这里、不放 viewport.ts：运行日志（run-log-layout.ts）要读，不静态引 viewport.ts；也不放首屏的 run-log-api.ts（放那里首屏多 44 B） */
-export const GAP_VAR = '--vh-gap';
-export const KB_VAR = '--kb';
-export const KBO_ATTR = 'data-kbo';
-/** 底栏、“＋”、实色带、渐隐层藏起（kit GlassBar 的样式按它藏） */
-export const BAR_HIDE_ATTR = 'data-kbhide';
+// 根节点四样的名字（GAP_VAR 等）和 SCALE_EPS 写在 viewport-screen.ts（11-21 首屏瘦身：运行日志首屏前就下载，原来为这几个常量多下载本文件一整块），这里照样转出
+export { BAR_HIDE_ATTR, fullHeight, GAP_MAX_PX, GAP_VAR, isLandscape, KB_VAR, KBO_ATTR, SCALE_EPS, TOL_PX } from './viewport-screen.ts';
 
 /** 高度差比这少不算键盘（地址栏伸缩只有几十 px） */
 export const KB_MIN_PX = 120;
-/** 可视区缩放和 1 差这么多以内算没缩放（运行日志判“缩放了才记 scale=”也用它） */
-export const SCALE_EPS = 0.01;
 
 /** 键盘压在布局视口上的高度（px）：布局视口高 − 可视区高 − 可视区顶端偏移，不到 KB_MIN_PX 当 0 */
 export function keyboardHeight(innerHeight: number, vvHeight: number, vvOffsetTop: number): number {

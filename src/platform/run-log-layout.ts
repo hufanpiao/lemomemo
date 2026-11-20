@@ -1,12 +1,12 @@
 // 全局运行日志的版面快照和键盘检查（从 run-log.ts 按职责拆出：这里只读屏幕上的位置和根节点标记，不挂事件、不存日志；只进非正式版）
-// • root：根节点的 data-kbo、--kb、--vh-gap（名字引 viewport-geom.ts 的常量，和 viewport.ts 写的同一份）
-// • vvState：innerHeight、可视区高度和偏移、缩放（偏离 1 超过 viewport-geom.ts 的 SCALE_EPS 才记）、scrollY、root、焦点元素
+// • root：根节点的 data-kbo、--kb、--vh-gap（名字引 viewport-screen.ts 的常量，和 viewport.ts 写的同一份；引首屏块里的这份，运行日志不为它多下载 viewport-geom.ts）
+// • vvState：innerHeight、可视区高度和偏移、缩放（偏离 1 超过 viewport-screen.ts 的 SCALE_EPS 才记）、scrollY、root、焦点元素
 // • layout：LAYOUT_TARGETS 各元素，以及焦点输入框和它所在浮层：相对可视区的上沿~下沿、高度、是否藏着
 // • kbcheck（台账 Q-8）：焦点进来时 markFocus 记下滚动位置和可视区偏移，停稳后一行结论：系统滚没滚页面、浮条贴没贴键盘
 // 隐私：元素只记标签、type、data-testid / aria-label / id，不记内容文字
 import { opensKeyboard } from './env.ts';
 import { BAR_SELECTOR } from './run-log-api.ts';
-import { GAP_VAR, KB_VAR, KBO_ATTR, SCALE_EPS } from './viewport-geom.ts';
+import { GAP_VAR, KB_VAR, KBO_ATTR, SCALE_EPS } from './viewport-screen.ts';
 
 /** 版面快照要看的元素 */
 export const LAYOUT_TARGETS: ReadonlyArray<readonly [string, string]> = [

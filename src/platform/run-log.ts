@@ -17,7 +17,7 @@ import { RL_SLOT } from './run-log-api.ts';
 import { deepDiagOn } from './diag-deep.ts';
 import { createRunLogWriter } from './run-log-store.ts';
 import { createLayoutProbe, describeEl, isMasked, RL_MASK_ATTR } from './run-log-layout.ts';
-import { KBO_ATTR } from './viewport-geom.ts';
+import { KBO_ATTR } from './viewport-screen.ts';
 
 export { clearRunLog, MAX_LINES, readRunLog } from './run-log-store.ts';
 /** 有新行后多久存一次（只写最新一段以后每次很小，节奏不放长：崩溃时 300ms 以前的行都已经在本机） */

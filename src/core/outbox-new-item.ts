@@ -8,6 +8,13 @@ import { PARENT_OF, recKey } from './outbox-logic.ts';
 import type { Ctx } from './outbox-send.ts';
 import type { EnqueueInput, OutboxItem, RecRef } from './outbox-types.ts';
 
+/**
+ * outbox 的 ack、fail（outbox-send.ts）也放进这一块（11-21 首屏瘦身，outbox.ts 的 loadSendCode 经这里下载）：不单独 import('./outbox-send.ts')，
+ * 是因为首屏入口里每多一个动态入口，Rolldown 就把它和首屏共用的 outbox-logic.ts、store.ts 拆出入口块（实测首屏多两个文件、反而大 91 B）；
+ * 挂在这个本来就有的懒加载块上分块不变
+ */
+export { ackImpl, failImpl } from './outbox-send.ts';
+
 function depsOf(input: EnqueueInput): RecRef[] {
   if (input.deps?.length) return input.deps.map((d) => ({ table: d.table, id: d.id }));
   const parent = input.op === 'insert' && Object.hasOwn(PARENT_OF, input.table) ? PARENT_OF[input.table] : undefined;
