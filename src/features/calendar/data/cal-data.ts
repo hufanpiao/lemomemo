@@ -3,9 +3,11 @@
 //   连 id 或日期都没有的行直接跳过，免得一条坏行让整个月历画不出来
 // • 删除、撤销不在这里筛：交给纯逻辑的 isLiveRow（deleted_at、undone 原样带过去）
 // 纯 TS
-import type { DateStr } from '../../../../shared/core/date.ts';
+import { parseHm, type DateStr } from '../../../../shared/core/date.ts';
+import type { Tz } from '../../../../shared/core/tz.ts';
 import type { CalEvent, CalItems, CalTodo } from '../../../../shared/logic/calendar/cal-items.ts';
 import { spanRowOf } from '../../../../shared/logic/calendar/event-span.ts';
+import { isLate, todoOf as todoFields, type TodoFields } from '../../../../shared/logic/todo-row.ts';
 
 export type Row = Readonly<{ id: string } & Record<string, unknown>>;
 
@@ -68,17 +70,22 @@ export function calItemsOf(events: readonly Row[], todos: readonly Row[]): CalIt
 }
 
 /**
- * 待办的截止时刻（todos.due_time，“HH:MM” → 当天第几分钟）：周视图把空心圆画在那个时刻（架构 5.12 0.51、设计审查 M2）。
- * CalTodo（前端 B 的纯逻辑类型）没有这一列，这里单独给一张表；没有 due_time、格式不对的不进表（画在泳道末端）
+ * 待办 id → 读好的待办（shared/logic/todo-row.ts 的 todoOf，待办页、今天页同一份：截止日不是 YYYY-MM-DD、截止时刻不是 HH:MM 的当没有，
+ * 没截止日时截止时刻也当没有）。CalTodo（前端 B 的纯逻辑类型）没有截止时刻，周视图的空心圆画在哪（架构 5.12 0.51、设计审查 M2）、
+ * 这一天有没有逾期都从这一张表读，不再自己写正则、自己比“当天第几分钟”（改善报告 11-20 二-3）
  */
-export function todoDueMinutes(todos: readonly Row[]): ReadonlyMap<string, number> {
-  const out = new Map<string, number>();
-  for (const r of todos) {
-    const v = r['due_time'];
-    if (typeof r.id !== 'string' || typeof v !== 'string') continue;
-    const m = /^([01]\d|2[0-3]):([0-5]\d)/.exec(v);
-    if (m) out.set(r.id, Number(m[1]) * 60 + Number(m[2]));
-  }
-  return out;
+export function calTodoFields(todos: readonly Row[]): ReadonlyMap<string, TodoFields> {
+  return new Map(todos.map((r) => [r.id, todoFields(r)]));
+}
+
+/** 截止时刻是当天第几分钟；没有截止时刻的 undefined（周视图画在泳道末端） */
+export const dueMinOf = (t: TodoFields | undefined): number | undefined => (t?.dueTime ? parseHm(t.dueTime) : undefined);
+
+/** 这几条待办里有没有逾期没做完的：逐条用待办页同一个 isLate（截止日已过，或今天截止、到了截止那一分钟起） */
+export function anyLate(ids: readonly string[], todos: ReadonlyMap<string, TodoFields>, now: number, tz: Tz): boolean {
+  return ids.some((id) => {
+    const t = todos.get(id);
+    return t !== undefined && isLate(t, now, tz);
+  });
 }
 

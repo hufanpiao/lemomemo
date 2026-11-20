@@ -4,7 +4,7 @@
 // • 每条一行，和待办页同一套 T-A 行（负责人 11-17 选 T-A，主持人 11-17 转来“日清单待办行和 T-A 风格对齐”）：
 //   左边 kit 圆角方框勾选框（R-433；有子任务的方框里按做到几成从下往上填、画小脸，kit CheckCircle 的 progress），
 //   中间两行——标题（正文色，前面优先级彩点）、副行（有子任务的最前面“起步 / 大半”标签和等宽“1/3”，kit TodoRow 画；
-//   再是截止时刻，等宽、次要色，过了截止没完成的红字，R-436；两样都没有不出第二行），行尾 H / M / L 三格并排（kit PrioCycle，点哪格设哪档）。
+//   再是截止时刻，等宽、次要色，过了截止没完成的红字（R-436；和待办页同一个 shared/logic/todo-row.ts 的 isLate，经 useDayTodos 的 late）；两样都没有不出第二行），行尾 H / M / L 三格并排（kit PrioCycle，点哪格设哪档）。
 //   完成的灰字加删除线。不再有“待办”行首标签，时刻不放在左边时刻列。一行画在 kit TodoRow、动作在 kit/components/useTodoRows.ts（待办页、今天页同一份），这里只给副行和行按钮属性
 // • 点标题照旧交给日历页的 onOpen（手机进编辑页，电脑开详情抽屉，R-130；只读行在那里拦下）；行按钮带 data-open、抽屉开着的那条 aria-current
 // • 打勾就地完成：写入和待办页、今天页同一份（kit/hooks/useTodoWrites.ts，经 hooks/useTodoList.ts 的 useDayTodos）；勾选特效和待办页同一条时间线（kit/components/useDoneFlow.ts、动效令牌“勾选完成时间线”）：
@@ -14,7 +14,7 @@
 // • 哪些待办算这一天：截止日是这一天、没删、没完成（同月历的 todoDate）；完成了还留在原位的照画
 // • 在待办列表页那一包里（经 day-todos.ts 懒加载，日历页不多带这一块的代码）
 import { useId } from 'react';
-import { parseHm, type DateStr } from '../../../../shared/core/date.ts';
+import type { DateStr } from '../../../../shared/core/date.ts';
 import { groupLabelClass } from '../../../kit/components/Form.tsx';
 import list from '../../../kit/components/List.module.css';
 import { ListToasts } from '../../../kit/components/ListToasts.tsx';
@@ -30,15 +30,12 @@ import { TODO_PARTS } from './row-parts.tsx';
 
 export interface DayTodosProps {
   date: DateStr;
-  /** 今天、现在是当天第几分钟（设备时区）：给了才把过了截止的时刻标红 */
-  today?: DateStr | undefined;
-  nowMin?: number | undefined;
   onOpen(kind: 'todo', id: string): void;
   /** 电脑版详情抽屉里开着的那一条（R-130） */
   openId?: string | null | undefined;
 }
 
-export default function DayTodos({ date, today, nowMin, onOpen, openId = null }: DayTodosProps) {
+export default function DayTodos({ date, onOpen, openId = null }: DayTodosProps) {
   const headId = useId();
   const t = useListT();
   const lg = useLinger();
@@ -46,9 +43,6 @@ export default function DayTodos({ date, today, nowMin, onOpen, openId = null }:
   // 行的动作（待办页、今天页同一份，kit/components/useTodoRows.ts）：打勾、勾完子任务的停留、收起、撤销条，换档，只读拦截，出错条
   const r = useTodoRows(w.todos, lg, w, 'cal-todos', TODO_PARTS);
   const subs = useSubProgress();
-  /** 过了截止、还没完成（R-436 红字）：那天已过，或者就是今天、截止时刻已到 */
-  const late = (done: boolean, dueTime: string | null): boolean =>
-    !done && today !== undefined && (date < today || (date === today && dueTime !== null && nowMin !== undefined && parseHm(dueTime) <= nowMin));
 
   return (
     <>
@@ -81,7 +75,7 @@ export default function DayTodos({ date, today, nowMin, onOpen, openId = null }:
                           {stage}
                           {stage && td.dueTime ? ' · ' : null}
                           {td.dueTime ? (
-                            <span className={s.time} data-tone={late(checked, td.dueTime) ? 'late' : undefined} data-testid={`cal-todo-time-${td.id}`}>
+                            <span className={s.time} data-tone={w.late(td, checked) ? 'late' : undefined} data-testid={`cal-todo-time-${td.id}`}>
                               {td.dueTime}
                             </span>
                           ) : null}

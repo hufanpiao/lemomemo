@@ -20,7 +20,7 @@ import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { MQ_CAL_WIDE, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { calItemsOf, todoDueMinutes, type Row } from '../data/cal-data.ts';
+import { anyLate, calItemsOf, calTodoFields, dueMinOf, type Row } from '../data/cal-data.ts';
 import { headerMonth, isCurrent, paramsOf, pickMonth, resolveView, shiftView, switchMode, todayView, type CalView } from '../data/cal-route.ts';
 import { useAnnivDates } from './useAnnivDates.ts';
 import { useCalSettingValues } from './useCalSettings.ts';
@@ -41,8 +41,10 @@ export interface CalendarModel {
   readonly holidays: ReturnType<typeof useHolidays>['marks'];
   /** 要显示的节假日文件有没拉到的（离线）：页面提示“联网后显示节假日”（5.12 第 1 点） */
   readonly holidaysOffline: boolean;
-  /** 待办 id → 截止时刻（当天第几分钟）；没有截止时刻的不在表里 */
-  readonly dueMins: ReadonlyMap<string, number>;
+  /** 待办的截止时刻是当天第几分钟，没有截止时刻的 undefined（周视图的空心圆画在哪）。读行用待办页同一份 todoOf（cal-data.ts 的 calTodoFields） */
+  readonly dueMin: (todoId: string) => number | undefined;
+  /** 这几条待办里有没有逾期没做完的（周视图那一天标“逾”）：逐条用待办页同一个 isLate，现在按毫秒比（改善报告 11-20 二-3） */
+  readonly anyLate: (todoIds: readonly string[]) => boolean;
   /** 现在是当天第几分钟（设备当前时区；周视图的“现在”竖线） */
   readonly nowMin: number;
   /** 上一页、下一页还翻得动吗（1900-01 / 2100-12 到头时 false，代码审查 L3） */
@@ -74,7 +76,9 @@ export function useCalendar(params: readonly string[]) {
   const events = useCollection<Row>('events');
   const todos = useCollection<Row>('todos');
   const items = useMemo(() => calItemsOf(events, todos), [events, todos]);
-  const dueMins = useMemo(() => todoDueMinutes(todos), [todos]);
+  const todoFields = useMemo(() => calTodoFields(todos), [todos]);
+  const dueMin = useCallback((id: string) => dueMinOf(todoFields.get(id)), [todoFields]);
+  const lateAny = useCallback((ids: readonly string[]) => anyLate(ids, todoFields, now, tz), [todoFields, now, tz]);
 
   const header = headerMonth(view);
   const countryKey = holidayCountries(setting.holidays, locale).join(',');
@@ -135,7 +139,8 @@ export function useCalendar(params: readonly string[]) {
     items,
     holidays,
     holidaysOffline: hol.offline,
-    dueMins,
+    dueMin,
+    anyLate: lateAny,
     nowMin: minOfDay(now, tz),
     canPrev: shiftView(view, -1) !== null,
     canNext: shiftView(view, 1) !== null,
