@@ -25,6 +25,7 @@ const { default: InlineSubtasks } = await import('../ui/InlineSubtasks.tsx');
 const { default: DayTodos } = await import('../ui/DayTodos.tsx');
 const { default: SubtaskEditor } = await import('../ui/SubtaskEditor.tsx');
 const { resetCollapsedForTest } = await import('../hooks/useSubtasks.ts');
+const { UndoToast } = await import('../../../kit/components/UndoToast.tsx');
 
 const todo = (id: string, title: string, over: Record<string, unknown> = {}) => ({
   id, title, done: false, important: false, project: '', due: null, due_time: null, deleted_at: null, ...over,
@@ -322,6 +323,21 @@ describe('编辑页“子任务”区（5.3、6.1）', () => {
     expect(save.calls[0]?.slice(0, 3)).toEqual(['deleted', 'todo_items', 'b']);
     fireEvent.click(screen.getByText('撤销'));
     await waitFor(() => expect(save.calls).toHaveLength(2));
+  });
+
+  it('改善报告 11-20 二-1：子任务的删除撤销条和别的撤销条同一时间只留一条，后出的顶掉前一条（前一条照常 onClose、不撤销）', async () => {
+    const before = vi.fn();
+    const undo = vi.fn();
+    render(
+      <>
+        <UndoToast message="已记下" undoLabel="撤销" onUndo={undo} onClose={before} solo="keep" data-testid="before" />
+        <SubtaskEditor todoId="t1" todo={t1()} off={false} />
+      </>,
+    );
+    fireEvent.click(screen.getByTestId('todo-sub-del-b'));
+    await screen.findByTestId('todo-sub-deleted-toast');
+    expect(before).toHaveBeenCalledTimes(1);
+    expect(undo).not.toHaveBeenCalled();
   });
 
   it('键盘排序：把手上 Alt + ↓ 挪一位（写排序键）；只读（off）时没有添加行、把手和 ×', () => {

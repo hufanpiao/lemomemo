@@ -181,6 +181,8 @@ export function AttPanel({ src, items, noteId, disabled, onImages }: AttPanelPro
           undoLabel={t('att.undo', {})}
           onUndo={() => void Promise.all(undo.ids.map((id) => (undo.added ? src.remove(id) : src.undoRemove(id))))}
           onClose={() => setUndo(null)}
+          // 删除类撤销条：和页底随手记的撤销条同一时间只留一条，后出的顶掉前一条（kit UndoToast 文件头 solo；改善报告 11-20 二-1）
+          solo="keep"
           data-testid="note-files-undo"
         />
       ) : null}
