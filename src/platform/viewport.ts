@@ -261,27 +261,8 @@ function trackFocus(el: Field, retried: boolean): void {
   };
   // iOS 收掉键盘时只发 blur、不发 focusout，焦点（activeElement）还留在输入框上（463 日志 t=151.48 blur、act=1）：
   // React 的 onBlur 认 focusout，模糊层就不关。下一拍焦点还在就是这种假失焦，替它真 blur 一次（focusout 照常发，模糊层关）
-  // 试验（11-21 负责人选“再查一轮”）：假 blur 那一刻键盘还在屏幕上（464 日志 blur 19.31、bar-hide=0 19.37），当场先真 blur 再聚焦，
-  // 看 iOS 认不认“换焦点”把键盘留住；每次聚焦只试一次，700ms 后键盘不在就照上面真 blur。结果记日志（kb rescue …）
-  let rescued = false;
-  let selfBlur = false;
+  // 当场重聚焦留不住键盘（465 日志：5.66 重聚焦、6.36 键盘仍没回来；选图菜单的 cancel 5.67 才到，系统收尾时收的键盘），不再试
   const onBlur = (): void => {
-    if (selfBlur) return;
-    if (!rescued && el.ownerDocument.activeElement === el) {
-      rescued = true;
-      rlog(`kb rescue try up=${+isKeyboardUp()}`);
-      selfBlur = true;
-      el.blur();
-      selfBlur = false;
-      el.focus({ preventScroll: true });
-      setTimeout(() => {
-        if (stopped) return;
-        const kept = el.ownerDocument.activeElement === el && isKeyboardUp();
-        rlog(`kb rescue ${kept ? 'kept' : 'lost'} act=${+(el.ownerDocument.activeElement === el)}`);
-        if (!kept && el.ownerDocument.activeElement === el) el.blur();
-      }, 700);
-      return;
-    }
     setTimeout(() => {
       if (stopped) return;
       if (el.ownerDocument.activeElement !== el) return stop();
