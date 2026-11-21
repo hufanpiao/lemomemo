@@ -3,7 +3,6 @@
 import { todoRowKo } from '../../../shared/i18n/todo-row-ko.ts';
 import { todoRowZh } from '../../../shared/i18n/todo-row-zh.ts';
 import type { Priority } from '../../../shared/logic/todo-row.ts';
-import type { DoneToast } from './useDoneFlow.ts';
 import type { ListToastsProps } from './ListToasts.tsx';
 import { makeUseT } from '../hooks/useT.ts';
 
@@ -23,7 +22,11 @@ export interface TodoRowWords {
   /** 副行“起步 / 大半”小标签 */
   stage(s: 1 | 2): string;
   /** 页底提示条 */
-  toasts: ListToastsProps<DoneToast>['text'];
+  toasts: ListToastsProps['text'];
+  /** 过期行尾“推迟”按钮的字、读屏名字“推迟到明天：标题”，推迟以后撤销条的文案 */
+  later: string;
+  laterLabel(title: string): string;
+  laterToast: string;
 }
 
 export function useTodoRowWords(): TodoRowWords {
@@ -35,6 +38,9 @@ export function useTodoRowWords(): TodoRowWords {
     prio: (p) => t(`row.prio.${p}`, {}),
     prioLine: (v) => t('row.prio', v),
     stage: (s) => t(s === 1 ? 'row.stage.1' : 'row.stage.2', {}),
+    later: t('row.later', {}),
+    laterLabel: (title) => t('row.later.label', { title }),
+    laterToast: t('row.later.toast', {}),
     toasts: { deleted: t('row.deleted', {}), undo: t('row.undo', {}), error: t('row.err.save', {}), readonly: t('row.err.readonly', {}) },
   };
 }

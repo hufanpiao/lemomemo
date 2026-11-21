@@ -171,7 +171,7 @@ export default function TodayPage() {
   };
   const [pastOpen, setPastOpen] = useState(false);
   /** 一条待办行（kit TodoRow）：两张列表只差副行和左滑；点标题同日程行（只读拦下，电脑版开抽屉）；data-open、aria-current 给抽屉认行 */
-  const todoRow = (td: (typeof v.todos)[number], key: string, meta: (stage: ReactNode) => ReactNode, swipeable: boolean) => (
+  const todoRow = (td: (typeof v.todos)[number], key: string, meta: (stage: ReactNode) => ReactNode, swipeable: boolean, late = false) => (
     <TodoRow
       key={key}
       r={r}
@@ -181,6 +181,7 @@ export default function TodayPage() {
       onOpen={() => open({ kind: 'todo', id: td.id })}
       main={{ kind: 'todo', open: td.id, current: ds.sel?.id === td.id, testId: `today-open-${td.id}` }}
       meta={meta}
+      late={late}
       // 左滑删除（负责人 11-15 去掉行尾 ×，同待办页）：露出“删除”点了删，一口气拉过大半行直接删；只读行不能滑；“没赶上”里不滑（同原来）
       wrap={
         swipeable
@@ -231,6 +232,8 @@ export default function TodayPage() {
               </span>
             ),
             false,
+            // “没赶上”都是过期没做完的（today-model 按 isLate 挑）：行尾出“推迟”
+            true,
           ),
         )}
       </AppearList>

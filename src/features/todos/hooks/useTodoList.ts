@@ -43,11 +43,11 @@ export function useTodoList(linger: ReadonlySet<string> = NONE) {
     return { total: items.length, done: items.filter((x) => x.todo.done).length, all: rows.filter(isLiveRow).length };
   }, [groups, rows]);
 
-  const { toggleDone, remove, setPriority } = useTodoWrites(rows);
+  const { toggleDone, remove, setPriority, postpone } = useTodoWrites(rows);
   const subs = useSubProgress();
 
   const ids = useMemo(() => new Set(rows.map((r) => r.id)), [rows]);
-  return { today: todayOf(now, tz), count, setPriority, groups, projects, project: active, setProject, toggleDone, remove, ids, subs };
+  return { today: todayOf(now, tz), count, setPriority, postpone, groups, projects, project: active, setProject, toggleDone, remove, ids, subs };
 }
 
 /** 日历日清单的待办组（R-443，ui/DayTodos.tsx）：截止日是这一天、没删、没完成的待办（同月历的 todoDate），完成了还留在原位的照列（lingerView，三页同一个口径）；

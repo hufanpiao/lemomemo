@@ -25,6 +25,8 @@ import type { ExtraUndo } from './ListToasts.tsx';
 
 /** 完成以后的撤销条：undo 是自动完成的撤销（打勾完成是 null，撤销 = 再点一下方框），message 是文案，n 每出一条加一（换一条重新计时） */
 export type DoneToast = { kind: 'done'; id: string; undo: (() => Promise<ActionResult>) | null; message: string; n: number };
+/** 推迟到明天以后的撤销条（kit useTodoRows 的 later 出、它自己画）：和完成的撤销条同一个位置，这里只为类型放在一起 */
+export type LaterToast = { kind: 'later'; id: string; undo: () => Promise<ActionResult>; n: number };
 
 /** 勾一项子任务写完以后（子任务卡片的 onResult；字段同 features/todos 的 SubTickResult）：auto 为 true 是主待办跟着自动完成了 */
 export interface SubDone {
@@ -82,7 +84,7 @@ export type Linger = ReturnType<typeof useLinger>;
 
 /** kit useListActions 回来的那几样（页面的 a） */
 interface Acts {
-  g: ReadonlyGuard<ListToast | DoneToast>;
+  g: ReadonlyGuard<ListToast | DoneToast | LaterToast>;
   isRo(id: string): boolean;
   tick(id: string, on: boolean, keep?: boolean): Promise<ActionResult>;
   shown(id: string, done: boolean): boolean;

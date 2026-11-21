@@ -5,14 +5,17 @@
 // • 调用顺序：页面先 useLinger（列表要按 linger.ids 留住刚勾的那几条），拿到列表数据 view 再交给这里（useHoldView 留住的就是 view）
 // • 打勾、删除、撤销、只读拦截、出错条在 kit useListActions；勾完的停留、收起、撤销条在 useDoneFlow
 // • prio：H / M / L 换档（kit PrioCycle 点哪格设哪档、键盘读屏换下一档），只读行拦下出“要新版本”，写入结果照打勾一样报（出错条）
-import type { ComponentType } from 'react';
+// • later：过期没做完的行尾“推迟”（负责人 11-21）：截止日改成明天，写成了页底出“已推迟到明天 · 撤销”（和完成的撤销条同一个位置、同时只一条），
+//   撤销把原来的截止日写回去；只读行拦下出“要新版本”，没写进去照打勾一样报（出错条）
+import { useRef, type ComponentType } from 'react';
 import type { ListToastsProps } from './ListToasts.tsx';
 import type { ReadonlyPartProps } from './ReadonlyMark.tsx';
 import { prioLabel, prioSet } from './Priority.tsx';
 import { useListActions, type ActionResult } from '../hooks/useListActions.ts';
 import { useHoldView } from '../../motion/components.ts';
 import type { Priority } from '../../../shared/logic/todo-row.ts';
-import { useDoneFlow, type DoneToast, type Linger, type SubDone } from './useDoneFlow.ts';
+import { useDoneFlow, type DoneToast, type LaterToast, type Linger, type SubDone } from './useDoneFlow.ts';
+import type { Postponed } from '../hooks/useTodoWrites.ts';
 import { useTodoRowWords } from './useTodoRowWords.ts';
 
 /** 这一行要的三样写入 */
@@ -20,7 +23,12 @@ export interface TodoWrites {
   toggleDone(id: string, done: boolean): Promise<ActionResult>;
   remove(id: string, deleted: boolean): Promise<ActionResult>;
   setPriority(id: string, p: Priority): Promise<ActionResult>;
+  /** 推迟到明天（kit/hooks/useTodoWrites.ts） */
+  postpone(id: string): Promise<Postponed>;
 }
+
+/** 页底撤销条的两种（完成、推迟），同一个位置 */
+export type RowToast = DoneToast | LaterToast;
 
 /** 子任务卡片（features/todos 的 InlineSubtasks；今天页另包一层首屏画完才挂）要的参数 */
 export interface SubsPartProps {
@@ -49,9 +57,14 @@ export interface TodoRowParts {
 export function useTodoRows<T>(view: T, lg: Linger, w: TodoWrites, prefix: string, parts: TodoRowParts) {
   const words = useTodoRowWords();
   const hv = useHoldView(view);
-  const a = useListActions<DoneToast>('todos', { toggle: w.toggleDone, remove: w.remove }, hv);
+  const a = useListActions<RowToast>('todos', { toggle: w.toggleDone, remove: w.remove }, hv);
   const flow = useDoneFlow(a, lg, hv.hold, { done: words.doneToast }, prefix);
-  const toasts: ListToastsProps<DoneToast> = { g: a.g, onUndo: a.undo, text: words.toasts, prefix, extra: flow.undoOf, undoRef: flow.undoRef };
+  const seq = useRef(0);
+  const extra = (x: RowToast) =>
+    x.kind === 'done'
+      ? flow.undoOf(x)
+      : { key: `later:${x.n}`, message: words.laterToast, onUndo: () => void x.undo().then(a.report), testId: `${prefix}-later-toast` };
+  const toasts: ListToastsProps<RowToast> = { g: a.g, onUndo: a.undo, text: words.toasts, prefix, extra, undoRef: flow.undoRef };
   return {
     words,
     parts,
@@ -61,6 +74,15 @@ export function useTodoRows<T>(view: T, lg: Linger, w: TodoWrites, prefix: strin
     a,
     flow,
     prio: (id: string, p: Priority) => prioSet(a.isRo(id), () => a.g.block(), () => w.setPriority(id, p), a.report),
+    /** 推迟到明天（见文件头 later） */
+    later(id: string) {
+      if (a.isRo(id)) return a.g.block();
+      void w.postpone(id).then(({ res, undo }) => {
+        if (!undo) return a.report(res);
+        seq.current += 1;
+        a.g.show({ kind: 'later', id, undo, n: seq.current }, null);
+      });
+    },
     /** 读屏名字：“优先级：中，按一下换成低”（kit prioLabel） */
     prioLabel: (p: Priority) => prioLabel(p, words.prio, words.prioLine),
     /** 页底提示条（kit ListToasts）的全部参数 */
