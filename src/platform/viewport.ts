@@ -259,6 +259,7 @@ function watchFilePicker(doc: DocLike | null): () => void {
   doc.addEventListener('cancel', onClose, true);
   doc.addEventListener('change', onClose, true);
   return () => {
+    pickerOpen = false;
     doc.removeEventListener('click', onOpen, true);
     doc.removeEventListener('cancel', onClose, true);
     doc.removeEventListener('change', onClose, true);
@@ -269,24 +270,32 @@ function watchFilePicker(doc: DocLike | null): () => void {
 const AFTER_PICKER_MS = 120;
 /** 点按里排好的几个检查时刻（ms）：都在 1 秒内，WebKit 把点按的手势带进 1 秒内的定时器，聚焦才弹得出键盘；最后一个不管菜单关没关都聚焦 */
 const DEFER_AT_MS = [200, 350, 500, 650, 800, 950] as const;
+/** 正在等菜单关的输入框（等着时再点只拦默认，不再排一遍） */
+const waiting = new WeakSet<Field>();
 function deferFocus(el: Field): void {
+  if (waiting.has(el)) return;
+  waiting.add(el);
   const t0 = monoNow();
-  let done = false;
   rlog('focus wait picker');
-  for (const [i, at] of DEFER_AT_MS.entries()) {
+  const timers = DEFER_AT_MS.map((at, i) =>
     setTimeout(() => {
-      if (done || !el.isConnected) return;
       const closed = !pickerOpen;
-      if (!(closed && monoNow() - pickerClosedAt >= AFTER_PICKER_MS) && i < DEFER_AT_MS.length - 1) return;
-      done = true;
+      const last = i === DEFER_AT_MS.length - 1;
+      if (el.isConnected && !last && !(closed && monoNow() - pickerClosedAt >= AFTER_PICKER_MS)) return;
+      timers.forEach(clearTimeout);
+      waiting.delete(el);
+      if (!el.isConnected) return;
       focusInPlace(el, 'after-picker');
-      const end = el.value.length;
-      el.setSelectionRange(end, end);
+      caretToEnd(el);
       rlog(`focus after-picker wait=${Math.round(monoNow() - t0)} closed=${+closed}`);
-      setTimeout(() => rlog(`focus after-picker kb up=${+isKeyboardUp()} act=${+(el.ownerDocument.activeElement === el)}`), 700);
-    }, at);
-  }
+      setTimeout(() => el.isConnected && rlog(`focus after-picker kb up=${+isKeyboardUp()} act=${+(el.ownerDocument.activeElement === el)}`), 700);
+    }, at),
+  );
 }
+const caretToEnd = (el: Field): void => {
+  const end = el.value.length;
+  el.setSelectionRange(end, end);
+};
 
 type Field = HTMLInputElement | HTMLTextAreaElement;
 
@@ -299,7 +308,7 @@ export function focusInPlace(el: Field | null, via: string): void {
   const h = el.offsetHeight;
   el.focus({ preventScroll: true });
   rlog(`focus in-place via=${via} h=${h} y=${Math.round(typeof window === 'undefined' ? 0 : window.scrollY)}`);
-  trackFocus(el, via === 'refocus');
+  if (isIPhone()) trackFocus(el, via === 'refocus');
 }
 
 /**
@@ -326,7 +335,8 @@ function trackFocus(el: Field, retried: boolean): void {
   // 当场重聚焦留不住键盘（465 日志：5.66 重聚焦、6.36 键盘仍没回来；选图菜单的 cancel 5.67 才到，系统收尾时收的键盘），不再试
   const onBlur = (): void => {
     setTimeout(() => {
-      if (stopped) return;
+      // 切走 App、拉通知中心也只发 blur、焦点留着：那不是收键盘，回来焦点照旧
+      if (stopped || el.ownerDocument.visibilityState !== 'visible') return;
       if (el.ownerDocument.activeElement !== el) return stop();
       rlog('kb dropped keep-focus → blur');
       el.blur();
@@ -378,14 +388,13 @@ export function inPlaceTouchEnd(e: InPlaceTouch): void {
   if (focused && (!isIPhone() || isKeyboardUp() || !track || track.retried)) return;
   if (Math.hypot(p.clientX - from.x, p.clientY - from.y) >= TAP_SLOP_PX || e.timeStamp - from.t >= TAP_HOLD_MS) return;
   e.preventDefault();
-  if (!focused && pickerPending()) return deferFocus(el);
+  if (!focused && isIPhone() && pickerPending()) return deferFocus(el);
   if (focused) {
     track?.stop();
     el.blur();
   }
   focusInPlace(el, focused ? 'refocus' : 'tap');
-  const end = el.value.length;
-  el.setSelectionRange(end, end);
+  caretToEnd(el);
 }
 
 /**

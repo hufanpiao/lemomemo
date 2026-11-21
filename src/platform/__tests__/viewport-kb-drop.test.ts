@@ -65,6 +65,7 @@ describe('焦点在、键盘不在（11-21 附件取消后输入框下坠）', (
   };
 
   it('假失焦（只发 blur、焦点还在）：下一拍替它真 blur，focusout 照发（模糊层关）', async () => {
+    asIPhone();
     const el = mkInput();
     focusInPlace(el, 'tap');
     let out = 0;
@@ -74,6 +75,22 @@ describe('焦点在、键盘不在（11-21 附件取消后输入框下坠）', (
     await new Promise((r) => setTimeout(r, 5));
     expect(document.activeElement).not.toBe(el);
     expect(out).toBe(1);
+  });
+
+  it('切走 App（页面不可见）时的 blur 不算假失焦：焦点留着；不是 iPhone 也不盯', async () => {
+    asIPhone();
+    const el = mkInput();
+    focusInPlace(el, 'tap');
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    phantomBlur(el);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(document.activeElement).toBe(el);
+    vi.restoreAllMocks();
+    const b = mkInput();
+    focusInPlace(b, 'tap');
+    phantomBlur(b);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(document.activeElement).toBe(b);
   });
 
   it('真失焦（焦点已经走了）：不再盯，之后同一个输入框普通聚焦、假 blur 都不动它', async () => {
@@ -147,23 +164,50 @@ describe('焦点在、键盘不在（11-21 附件取消后输入框下坠）', (
     return f;
   };
 
-  it('选图菜单还开着时点输入框：先不聚焦，cancel 到了再等一拍才原地聚焦，光标放末尾', () => {
+  it('选图菜单还开着时点输入框：先不聚焦，cancel 到了再等一拍才原地聚焦，光标放末尾；等着时再点只聚焦一次', () => {
+    asIPhone();
     vi.useFakeTimers();
     const el = mkInput('买牛奶');
     const f = openPicker();
     const up = tap(el);
     expect(up.prevented).toBe(true);
     expect(document.activeElement).not.toBe(el);
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    expect(tap(el).prevented).toBe(true);
     vi.advanceTimersByTime(300);
     expect(document.activeElement).not.toBe(el);
     f.dispatchEvent(new Event('cancel', { bubbles: true }));
     vi.advanceTimersByTime(400);
     expect(document.activeElement).toBe(el);
     expect([el.selectionStart, el.selectionEnd]).toEqual([3, 3]);
+    vi.advanceTimersByTime(1000);
+    expect(focus).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('不是 iPhone：选图菜单开着点输入框照常当场聚焦', () => {
+    const el = mkInput();
+    const f = openPicker();
+    tap(el);
+    expect(document.activeElement).toBe(el);
+    f.dispatchEvent(new Event('cancel', { bubbles: true }));
+  });
+
+  it('等菜单时输入框被卸掉：不再聚焦', () => {
+    asIPhone();
+    vi.useFakeTimers();
+    const el = mkInput();
+    const f = openPicker();
+    tap(el);
+    el.remove();
+    vi.advanceTimersByTime(1000);
+    expect(document.activeElement).not.toBe(el);
+    f.dispatchEvent(new Event('cancel', { bubbles: true }));
     vi.useRealTimers();
   });
 
   it('选图菜单一直没等到 cancel / change：最后一个时刻（1 秒内）照样聚焦；菜单关了以后再点照常当场聚焦', () => {
+    asIPhone();
     vi.useFakeTimers();
     const el = mkInput();
     const f = openPicker();
