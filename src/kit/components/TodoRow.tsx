@@ -103,10 +103,13 @@ export function TodoRow({ r, todo, progress, tid, onOpen, collapsed, onCollapse,
           <parts.Mark id={id} />
         </span>
       </button>
-      {/* 行尾 H / M / L（T-A）：在行按钮外面（按钮里不能套按钮）；勾上那一下藏起来（kit List 的 .prio） */}
-      <span className={list.prio}>
-        <PrioCycle p={todo.priority} label={r.prioLabel(todo.priority)} onChange={(p) => r.prio(id, p)} testId={`${tid}-prio-${id}`} />
-      </span>
+      {/* 行尾 H / M / L（T-A）：在行按钮外面（按钮里不能套按钮）；勾上那一下藏起来（kit List 的 .prio）。
+          过期没做完的只出“推迟”、不出 H / M / L，推迟以后不再过期，H / M / L 自然回来（负责人 11-21“过期的项目不显示HML，只有推迟，推迟完了回复HML”） */}
+      {late && !checked ? null : (
+        <span className={list.prio}>
+          <PrioCycle p={todo.priority} label={r.prioLabel(todo.priority)} onChange={(p) => r.prio(id, p)} testId={`${tid}-prio-${id}`} />
+        </span>
+      )}
       {late && !checked ? (
         <button
           type="button"

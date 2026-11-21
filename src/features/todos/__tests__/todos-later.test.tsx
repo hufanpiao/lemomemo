@@ -56,6 +56,16 @@ describe('过期待办的“推迟”', () => {
     expect(screen.queryByTestId('todos-later-done1')).toBeNull();
   });
 
+  it('过期没做完的行只出“推迟”、不出 H / M / L；推迟以后 H / M / L 回来（负责人 11-21）', async () => {
+    render(<TodosPage />);
+    await screen.findByTestId('todos-later-late1');
+    expect(screen.queryByTestId('todos-prio-late1')).toBeNull();
+    expect(screen.getByTestId('todos-prio-soon1')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('todos-later-late1'));
+    await vi.waitFor(() => expect(screen.queryByTestId('todos-later-late1')).toBeNull());
+    expect(screen.getByTestId('todos-prio-late1')).toBeTruthy();
+  });
+
   it('按一下：截止日改成明天，不进编辑页；行不再过期、按钮消失；出“已推迟到明天 · 撤销”，撤销写回原来的截止日', async () => {
     render(<TodosPage />);
     fireEvent.click(await screen.findByTestId('todos-later-late1'));

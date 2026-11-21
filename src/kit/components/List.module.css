@@ -290,21 +290,21 @@
 }
 
 /* 过期没做完的行尾“推迟”（负责人 11-21，照参考图：回转时钟 + “推迟”，细描边、面板底的小圆角块；kit TodoRow 画，勾上时不画）：
-   只用皮肤令牌；看得见 24 高，点击区上下外扩到 44（tests/e2e/hit-target.spec.ts 的口径，同 H / M / L 的 .tri） */
+   只用皮肤令牌；看得见 20 高、10 号字（负责人 11-21 选“B 小两号”），点击区上下外扩到 44（tests/e2e/hit-target.spec.ts 的口径，同 H / M / L 的 .tri） */
 .later {
   position: relative;
   display: inline-flex;
   flex: none;
-  gap: 4px;
+  gap: 3px;
   align-items: center;
-  height: 24px;
-  padding: 0 8px;
+  height: 20px;
+  padding: 0 6px;
   border: 1px solid var(--inp-line);
-  border-radius: 7px;
+  border-radius: 6px;
   background: var(--panel);
   color: var(--text);
   font: inherit;
-  font-size: var(--fs-12);
+  font-size: var(--fs-10);
   line-height: 1;
   white-space: nowrap;
 }
@@ -312,12 +312,12 @@
 .later::after {
   content: '';
   position: absolute;
-  inset: -11px -2px;
+  inset: -13px -2px;
 }
 
 .laterIcon {
-  width: 13px;
-  height: 13px;
+  width: 10px;
+  height: 10px;
   fill: none;
   stroke: currentcolor;
   stroke-linecap: round;
