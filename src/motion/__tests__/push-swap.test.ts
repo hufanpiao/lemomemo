@@ -126,19 +126,18 @@ describe('底栏和“＋”', () => {
     for (const c of copies) expect(c.isConnected).toBe(false);
   });
 
-  it('返回到有底栏的页：真底栏从 -30vw 跟着回来、60% 以后才淡入（lemo-pop-new-fade）', async () => {
+  // 负责人 11-21 录屏“进入2级页以后退出来的时候底部导航不要闪”（11-20“底栏不是固定死了吗”）：原来的 lemo-pop-new-fade（前 60% 透明）删掉
+  it('返回到有底栏的页：真底栏、“＋”不加动画、原地一直显示；旧页快照这一段压在底栏上面滑走', async () => {
     page('edit');
     const p = transition(() => page('today', { bar: true }), true);
-    for (const b of root.querySelectorAll('[data-swap-bar]')) {
-      const f = on(b)?.frames ?? [];
-      expect(f.map((k) => [k.offset, k.opacity, k.translate ?? null])).toEqual([
-        [0, 0, '-30vw'],
-        [0.6, 0, null],
-        [1, 1, '0px'],
-      ]);
-    }
+    const bars = root.querySelectorAll('[data-swap-bar]');
+    expect(bars.length).toBeGreaterThan(0);
+    for (const b of bars) expect(on(b)).toBeUndefined();
+    const ghost = document.querySelector<HTMLElement>('[data-tab-ghost]');
+    expect(ghost?.style.zIndex).toBe('calc(var(--z-bar) + 1)');
     finishAll();
     await p;
+    expect(document.querySelector('[data-tab-ghost]')).toBeNull();
   });
 
   it('两边都有底栏：底栏原地不动，副本当场拿掉', async () => {

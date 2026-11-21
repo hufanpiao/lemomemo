@@ -556,12 +556,6 @@ const pushOldFade = (o: number): Keyframe[] => [
   { offset: 0.4, opacity: 0, easing: DRAWER },
   { offset: 1, opacity: 0, translate: '-30vw' },
 ];
-/** 返回到有底栏的页：底栏跟着上一页从左边 30vw 回来，60% 以后才淡入（lemo-pop-new-fade） */
-const popNewFade = (o: number): Keyframe[] => [
-  { offset: 0, opacity: 0, translate: '-30vw', easing: DRAWER },
-  { offset: 0.6, opacity: 0, easing: DRAWER },
-  { offset: 1, opacity: o, translate: '0px' },
-];
 /** 返回时压到滑走的旧页下面：动画期间 z-index 取 auto（随手记输入行、底栏实色带这类带层级的 fixed 层），放完自动还原 */
 const under = (f: Keyframe[]): Keyframe[] => f.map((k) => ({ ...k, zIndex: 'auto' }));
 const opacityOf = (el: Element): number => {
@@ -574,7 +568,7 @@ const opacityOf = (el: Element): number => {
  * 进页：新页从右边整屏宽滑进来盖住旧页，旧页往左退 30vw；返回反过来：旧页往右整屏宽滑出，露出下面从左边 30vw 回来的上一页。
  * 层级（从下往上）：
  * • 进页：旧页快照（外框画页面底色，抄进了实色带、上沿渐隐）→ 新页底色层 → 新页 → 旧页底栏副本（--z-bar，前 40% 淡完）；
- * • 返回：上一页（带层级的 fixed 层动画期间降成 auto）→ 旧页快照（挂在 app 后面）→ 真底栏（--z-bar，60% 以后淡入）。
+ * • 返回：上一页（带层级的 fixed 层动画期间降成 auto）→ 真底栏（--z-bar，原地不动、一直显示）→ 旧页快照（挂在 app 后面，返回期间层级提到底栏上面）。
  * 底栏、“＋”从头到尾是真元素或真 DOM 副本，backdrop-filter 一直实时模糊；两页都有底栏时真底栏原地不动（副本拿掉）。
  * 顶部状态栏底色条、顶部模糊带（层级 1、在 app 外面）原地不动、一直盖在最上面
  */
@@ -625,7 +619,12 @@ function slidePage(el: HTMLElement, s: Swap, back: boolean): void {
     for (const c of copies) c.remove();
     return;
   }
-  for (const b of real) run(b, back ? popNewFade(opacityOf(b)) : inn);
+  if (back) {
+    // 返回到有底栏的页：真底栏、“＋”不加任何动画，从第一帧起就在原位、一直清楚（负责人 11-20“底栏不是固定死了吗”、11-21 录屏“退出来的时候底部导航不要闪”）。
+    // 原来照搬 lemo-pop-new-fade（前 60% 透明、后 40% 淡入）：底栏层级在快照上面，只能先藏着，录屏逐帧是“空 10 帧再一下冒出来”。
+    // 现在把旧页快照这一段提到底栏上面（同原来 View Transition 时整张旧页盖在最上面）：旧页往右滑走，露出一直在原处的底栏；收尾时快照整个拿掉
+    if (g && real.length > 0) for (const e of [g.box, g.pins]) e?.style.setProperty('z-index', 'calc(var(--z-bar) + 1)');
+  } else for (const b of real) run(b, inn);
   for (const c of copies) run(c, back ? slide('0px', '100vw') : pushOldFade(opacityOf(c)));
 }
 

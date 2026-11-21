@@ -1,7 +1,7 @@
 // 液态玻璃底栏在切页时的样子和点按（B2 FA-7；负责人 11-06 选方案 B，B2-动效审查-切页先出后入.md 第四批）；别的底栏用例见 b2-tabbar.spec.ts。
 // • 四个页签之间互切不起 View Transition：新页直接换上，做一次 opacity 0→1（11-19 起加在 main 里不含右上角头像的子树上，头像一直全亮）；底栏、“＋”、液滴一直是真元素、一直实时模糊，液滴连续滑、能被下一次点按打断
 // • 进出没有底栏的页（今天 → 编辑页）：11-20 起整页推页不用 View Transition（motion/page-swap.ts），底栏、“＋”全程是真元素、实时模糊
-//   （进页时旧页那份是挂 body 下的真 DOM 副本，圆角阴影跟着它一起淡，不剩空壳；返回时真底栏 60% 后淡入）
+//   （进页时旧页那份是挂 body 下的真 DOM 副本，圆角阴影跟着它一起淡，不剩空壳；返回时真底栏原地一直全亮，11-21 起不再淡入）
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
@@ -423,8 +423,8 @@ test.describe('底栏：进出没有底栏的页（整页推页），底栏、�
       expect(v?.copy, `${k}：是真元素，不是副本`).toBe(false);
       expect(v?.inGhost, `${k}：不在旧页快照里`).toBe(false);
       expect(v?.fx, `${k}：计算出来的 backdrop-filter 带 blur`).toContain('blur(');
-      // 原 lemo-pop-new-fade：60% 以后才淡入，85% 时已经看得见
-      expect(v?.opacity, `${k}：正在淡入`).toBeGreaterThan(0.3);
+      // 负责人 11-21“退出来的时候底部导航不要闪”：返回时底栏不淡入、一直全亮（原 lemo-pop-new-fade 删掉）
+      expect(v?.opacity, `${k}：一直全亮`).toBeGreaterThan(0.99);
       expect(v?.visibility).toBe('visible');
     }
     await finishAll(page);
