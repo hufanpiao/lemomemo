@@ -193,6 +193,22 @@ describe('焦点在、键盘不在（11-21 附件取消后输入框下坠）', (
     f.dispatchEvent(new Event('cancel', { bubbles: true }));
   });
 
+  it('选图的 input 没等到 cancel 就卸掉了：当菜单已关，点输入框当场聚焦；click 被拦了默认的不算打开', () => {
+    asIPhone();
+    const el = mkInput();
+    openPicker().remove();
+    tap(el);
+    expect(document.activeElement).toBe(el);
+    el.blur();
+    const f = document.createElement('input');
+    f.type = 'file';
+    f.addEventListener('click', (e) => e.preventDefault());
+    document.body.append(f);
+    f.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    tap(el);
+    expect(document.activeElement).toBe(el);
+  });
+
   it('等菜单时输入框被卸掉：不再聚焦', () => {
     asIPhone();
     vi.useFakeTimers();

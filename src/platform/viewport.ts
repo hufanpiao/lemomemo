@@ -19,6 +19,7 @@
 // 只拦 mousedown（失焦是 mousedown 的默认动作）：拦 touchstart，iOS 连 click 都不发；拦 pointerdown 管不到失焦。要收键盘的按钮（打字条“收起”）自己 blur
 import { isIPhone, isStandalone, opensKeyboard } from './env.ts';
 import { rlog } from './run-log-api.ts';
+import { monoNow, pickerClosedFor, pickerPending, watchFilePicker } from './file-picker.ts';
 import { gapFixOn } from './vh-gapfix-gate.ts';
 import { BAR_HIDE_ATTR, fullHeight, GAP_MAX_PX, GAP_VAR, KB_VAR, KBO_ATTR, TOL_PX, viewportGeom, type Geom } from './viewport-geom.ts';
 
@@ -66,7 +67,7 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
   const editingOf = env.editing ?? (() => typeof document !== 'undefined' && opensKeyboard(document.activeElement));
   const fullOf = env.full ?? (() => (typeof window === 'undefined' ? 0 : fullHeight(window)));
   const phoneOf = env.phone ?? (() => isIPhone());
-  const nowOf = env.now ?? (() => performance.now());
+  const nowOf = env.now ?? monoNow;
   const cssGapOf = env.cssGap ?? (() => gapFixOn(undefined, 'css'));
   /** 这次监听写不写 --vh-gap（start 时读开关） */
   let cssGap = true;
@@ -228,44 +229,6 @@ export function startViewport(): () => void {
   return () => stops.forEach((f) => f());
 }
 
-/**
- * 原生选图菜单开着（点了 input[type=file]，cancel / change 还没到）。465 日志：取消菜单后马上点输入框，点在 5.35、cancel 5.67 才到，
- * 系统收菜单那一刻把键盘收回（5.66），这之前聚焦的都留不住。所以菜单开着时点输入框先不聚焦，等 cancel / change 到了再聚焦（deferFocus）
- */
-let pickerOpen = false;
-let pickerOpenAt = 0;
-let pickerClosedAt = 0;
-const PICKER_STALE_MS = 60_000; // 点开以后这么久还没等到 cancel / change，就当菜单已经关了（老系统没有 cancel 事件）
-const isFileInput = (t: EventTarget | null): boolean => t instanceof HTMLInputElement && t.type === 'file';
-const monoNow = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
-function pickerPending(now = monoNow()): boolean {
-  return pickerOpen && now - pickerOpenAt < PICKER_STALE_MS;
-}
-function watchFilePicker(doc: DocLike | null): () => void {
-  if (!doc) return () => undefined;
-  const onOpen = (e: Event): void => {
-    if (!isFileInput(e.target)) return;
-    pickerOpen = true;
-    pickerOpenAt = monoNow();
-    rlog('file picker open');
-  };
-  const onClose = (e: Event): void => {
-    if (!isFileInput(e.target) || !pickerPending()) return;
-    pickerOpen = false;
-    pickerClosedAt = monoNow();
-    rlog(`file picker ${e.type}`);
-  };
-  doc.addEventListener('click', onOpen, true);
-  doc.addEventListener('cancel', onClose, true);
-  doc.addEventListener('change', onClose, true);
-  return () => {
-    pickerOpen = false;
-    doc.removeEventListener('click', onOpen, true);
-    doc.removeEventListener('cancel', onClose, true);
-    doc.removeEventListener('change', onClose, true);
-  };
-}
-
 /** 菜单关了以后再等这么久才聚焦（465 日志：cancel 5.67 后 5.72 键盘收完） */
 const AFTER_PICKER_MS = 120;
 /** 点按里排好的几个检查时刻（ms）：都在 1 秒内，WebKit 把点按的手势带进 1 秒内的定时器，聚焦才弹得出键盘；最后一个不管菜单关没关都聚焦 */
@@ -279,9 +242,10 @@ function deferFocus(el: Field): void {
   rlog('focus wait picker');
   const timers = DEFER_AT_MS.map((at, i) =>
     setTimeout(() => {
-      const closed = !pickerOpen;
+      const since = pickerClosedFor();
+      const closed = since >= 0;
       const last = i === DEFER_AT_MS.length - 1;
-      if (el.isConnected && !last && !(closed && monoNow() - pickerClosedAt >= AFTER_PICKER_MS)) return;
+      if (el.isConnected && !last && !(closed && since >= AFTER_PICKER_MS)) return;
       timers.forEach(clearTimeout);
       waiting.delete(el);
       if (!el.isConnected) return;
