@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin, type Rolldown } from 'vite';
 import { buildVersion, webOutDir } from './build/assemble_web.mjs';
 import { FIRST_PAINT_DYNAMIC } from './build/check_first_paint_chunks.mjs';
+import { staticClosure } from './build/vite_manifest.mjs';
 
 const root = import.meta.dirname;
 /**
@@ -94,27 +95,16 @@ function buildCommit(): string {
 /**
  * 动态 import 的预加载表去重（B2-UI-b 任务单 V2：首屏增量 ≤ 0）。Vite 给每个动态 import 写的预加载表（__vite__mapDeps）是目标块的整个静态闭包，
  * 发起 import 的那一块（宿主）自己静态引过的块也照列，比如 main 里几十个懒加载每个都列一遍 jsx-runtime、native-bridge。
- * （以后开了 chunk import map，bundle 的键和预加载表里的文件名会换成另一套，bundle[hostId] 找不到、闭包也对不上，去重会悄悄失效；
- * 失效方向是安全的：表原样全列，只是 main 块变回长的，check_size 的首屏净增会看到。）宿主在跑，这些块早就加载完了；
+ * （以后开了 chunk import map，bundle 的键和预加载表里的文件名会换成另一套：bundle[hostId] 找不到时去重不做、表原样全列，只是 main 块变回长的，
+ * check_size 的首屏净增会看到；宿主找得到、它的 imports 却不在 bundle 里时 staticClosure 抛错、构建直接停，不悄悄少算。）宿主在跑，这些块早就加载完了；
  * 运行时的预加载助手对页面里已有的 <link> 和加载过的地址本来也跳过，列了也白列，只让 main 块的表变长。
  * 这里只去掉“宿主静态闭包里的 JS”：CSS 不经过 resolveDependencies（Vite 自己把 CSS 拆出来照旧全列），html 宿主（index.html 的 modulepreload 链接）不动。
+ * 闭包用 build/vite_manifest.mjs 的 staticClosure（11-14 遗留③：原来这里另写一份按产物图走的，和构建后检查那份合成一份；产物图的块和 manifest 一样是“键 → { imports }”，资源没有 imports）。
  * tests/build/preload-dedupe.test.ts 守着规则；build/check_preload.mjs（check_size 每次构建后调）拿真实产物逐个懒加载核对
  */
-export function staticClosure(bundle: Rolldown.OutputBundle, fileName: string): Set<string> {
-  const seen = new Set<string>();
-  const visit = (f: string): void => {
-    if (seen.has(f)) return;
-    seen.add(f);
-    const c = bundle[f];
-    if (c?.type === 'chunk') for (const i of c.imports) visit(i);
-  };
-  visit(fileName);
-  return seen;
-}
-
 export function dropHostLoaded(bundle: Rolldown.OutputBundle | undefined, deps: string[], hostId: string, hostType: 'html' | 'js'): string[] {
   if (hostType !== 'js' || !bundle?.[hostId]) return deps;
-  const loaded = staticClosure(bundle, hostId);
+  const loaded = new Set(staticClosure(bundle, [hostId]));
   return deps.filter((d) => !loaded.has(d));
 }
 

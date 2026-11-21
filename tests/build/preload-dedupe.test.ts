@@ -3,7 +3,8 @@
 // vite.config.ts 真的把它挂在 build.modulePreload.resolveDependencies 上、产物图插件在 generateBundle 最前面
 import type { Rolldown } from 'vite';
 import { describe, expect, it } from 'vitest';
-import config, { dropHostLoaded, preloadDeps, staticClosure } from '../../vite.config.ts';
+import { staticClosure } from '../../build/vite_manifest.mjs';
+import config, { dropHostLoaded, preloadDeps } from '../../vite.config.ts';
 
 /** 造一份只有 imports 的产物图；asset 用来确认不会被当成块往下走 */
 function bundleOf(graph: Record<string, string[]>): Rolldown.OutputBundle {
@@ -23,8 +24,8 @@ const bundle = bundleOf({
 });
 
 describe('预加载表去重', () => {
-  it('宿主静态闭包含间接引的块', () => {
-    expect([...staticClosure(bundle, 'assets/main.js')].sort()).toEqual(
+  it('宿主静态闭包含间接引的块（dropHostLoaded 用 build/vite_manifest.mjs 那一份，产物图直接认）', () => {
+    expect(staticClosure(bundle, ['assets/main.js']).sort()).toEqual(
       ['assets/jsx-runtime.js', 'assets/log-store.js', 'assets/main.js', 'assets/native-bridge.js'].sort(),
     );
   });
