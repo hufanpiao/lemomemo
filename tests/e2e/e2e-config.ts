@@ -74,7 +74,8 @@ export function e2eConfig(g: E2eGroup): PlaywrightTestConfig {
   const ci = process.env.CI === 'true';
   const out = g.out ?? webOut();
   const bindings = g.bindings ?? (g.fake ? e2eBindings(g.fake) : {});
-  const reporter: ReporterDescription[] = [['list'], ['html', { open: 'never', outputFolder: g.report ?? 'playwright-report' }], ['./tests/e2e/flaky-summary.ts']];
+  // github：失败的用例写成 Actions 标注（check-runs annotations 公开可读），不用登录下载报告产物也能知道 CI 上挂的是哪一条
+  const reporter: ReporterDescription[] = [['list'], ['github'], ['html', { open: 'never', outputFolder: g.report ?? 'playwright-report' }], ['./tests/e2e/flaky-summary.ts']];
   const wrangler = {
     command: `${g.build ?? 'npm run build -- --mode e2e'} && npx wrangler pages dev ${out} --ip 127.0.0.1 --port ${g.port} --compatibility-date 2026-10-01 --persist-to ${g.state} --inspector-port ${g.inspector} ${flags(bindings)}`,
     url: `http://127.0.0.1:${g.port}/app/`,
