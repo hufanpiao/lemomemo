@@ -64,15 +64,37 @@ describe('焦点在、键盘不在（11-21 附件取消后输入框下坠）', (
     el.dispatchEvent(new FocusEvent('blur'));
   };
 
-  it('原地聚焦过、iOS 收键盘只发 blur 焦点还在（假失焦）：下一拍替它真 blur，focusout 照常发', async () => {
+  it('假失焦第一次：当场真 blur 再聚焦（试着留住键盘）；700ms 后键盘还在就留着', () => {
+    vi.useFakeTimers();
     const el = mkInput();
     focusInPlace(el, 'tap');
     let out = 0;
     el.addEventListener('focusout', () => (out += 1));
     phantomBlur(el);
-    expect(document.activeElement).toBe(el);
-    await vi.waitFor(() => expect(document.activeElement).not.toBe(el));
     expect(out).toBe(1);
+    expect(document.activeElement).toBe(el);
+    setKb(300);
+    vi.advanceTimersByTime(700);
+    expect(document.activeElement).toBe(el);
+    vi.useRealTimers();
+  });
+
+  it('假失焦第一次、重聚焦后键盘没回来：700ms 后真 blur（focusout 照发，模糊层关）；同一次聚焦再来假失焦直接真 blur', () => {
+    vi.useFakeTimers();
+    const el = mkInput();
+    focusInPlace(el, 'tap');
+    phantomBlur(el);
+    vi.advanceTimersByTime(700);
+    expect(document.activeElement).not.toBe(el);
+    const b = mkInput();
+    focusInPlace(b, 'tap');
+    setKb(300);
+    phantomBlur(b);
+    vi.advanceTimersByTime(700);
+    phantomBlur(b);
+    vi.advanceTimersByTime(1);
+    expect(document.activeElement).not.toBe(b);
+    vi.useRealTimers();
   });
 
   it('真失焦（焦点已经走了）：不再盯，之后同一个输入框普通聚焦、假 blur 都不动它', async () => {
