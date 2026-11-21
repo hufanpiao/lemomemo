@@ -252,21 +252,30 @@ const tracks = new WeakMap<Field, FocusTrack>();
 function trackFocus(el: Field, retried: boolean): void {
   if (tracks.has(el) || typeof document === 'undefined') return;
   let seen = false;
-  const done = (): void => {
+  let last: boolean | null = null;
+  const done = (why: string): void => {
+    rlog(`kb track done why=${why}`);
     off();
-    el.removeEventListener('blur', done);
+    el.removeEventListener('blur', onBlur);
     tracks.delete(el);
   };
+  const onBlur = (): void => done('blur');
   const off = watchKeyboard((open) => {
-    if (!el.isConnected) done();
+    // 11-21 preview.462 真机两处都没生效、日志看不出卡在哪：每次键盘开关记一行这次焦点的状态
+    if (open !== last) {
+      last = open;
+      rlog(`kb track open=${+open} seen=${+seen} vis=${document.visibilityState} act=${+(el.ownerDocument.activeElement === el)} conn=${+el.isConnected}`);
+    }
+    if (!el.isConnected) done('gone');
     else if (open) seen = true;
     else if (seen && document.visibilityState === 'visible' && el.ownerDocument.activeElement === el) {
       rlog('kb dropped keep-focus → blur');
       el.blur();
     }
   });
-  el.addEventListener('blur', done);
+  el.addEventListener('blur', onBlur);
   tracks.set(el, { retried });
+  rlog(`kb track start retried=${+retried}`);
 }
 
 /** 按下到抬起挪动不到这么多（px）才算“点”（打字条点空白处 Q-10 也用这个）。同 motion/tokens.ts 的 TAP_SLOP_PX：platform 只准引 shared、platform，引不到那里，改一处要两处一起改 */
@@ -302,10 +311,12 @@ export function inPlaceTouchEnd(e: InPlaceTouch): void {
   const from = el ? touchFrom.get(el) : undefined;
   if (el) touchFrom.delete(el);
   const p = e.changedTouches[0];
+  const focused = el?.ownerDocument.activeElement === el;
+  const track = el ? tracks.get(el) : undefined;
+  // 已聚焦时的一下点记一行判断用到的每一样（11-21 preview.462 真机没走重聚焦，日志看不出卡在哪）
+  if (el && focused) rlog(`tap focused from=${+!!from} cancel=${+e.cancelable} phone=${+isIPhone()} up=${+isKeyboardUp()} track=${track ? (track.retried ? 'retried' : 1) : 0}`);
   if (!el || !from || !p || !e.cancelable) return;
   // 已聚焦：照原生（放光标）；例外是 iPhone 上原地聚焦后键盘一直没弹（trackFocus），重聚焦一次，不然系统为露出输入框滚页面（11-21 日志 vv top=413 y=541）
-  const focused = el.ownerDocument.activeElement === el;
-  const track = tracks.get(el);
   if (focused && (!isIPhone() || isKeyboardUp() || !track || track.retried)) return;
   if (Math.hypot(p.clientX - from.x, p.clientY - from.y) >= TAP_SLOP_PX || e.timeStamp - from.t >= TAP_HOLD_MS) return;
   e.preventDefault();
