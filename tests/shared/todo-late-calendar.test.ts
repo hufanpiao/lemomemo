@@ -56,6 +56,6 @@ describe('周视图截止时刻（dueMinOf）和待办页读到的同一个', ()
       row({ id: 'g', due_time: '09:00' }),
     ]);
     expect(['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => dueMinOf(m.get(id)))).toEqual([570, 1439, undefined, undefined, undefined, undefined, undefined]);
-    expect(dueMinOf(undefined)).toBeUndefined();
+    expect(dueMinOf(undefined)).toBe(undefined);
   });
 });
