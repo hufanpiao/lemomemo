@@ -11,7 +11,7 @@
 // （WebKit _zoomToFocusRect：iPhone 文字框 forceScroll，不做“看得见就不滚”的判断），滚过以后固定容器里的光标和画面差出一截
 // （WebKit bug 176896、300690），只有 focus({ preventScroll: true }) 让它整个跳过（_zoomToRevealFocusedElement 第一句）。
 // 取舍（负责人 11-12 preview.278 真机看过，没有异议）：输入框没聚焦时手指点一下，光标一律放到末尾，不是手指点的位置；已经聚焦着点，照原生行为。
-// 例外（11-21，trackFocus）：原地聚焦过的输入框键盘弹起过又被系统收掉、焦点还在，就替它 blur；iPhone 上原地聚焦后键盘一直没弹，点一下重聚焦一次。
+// 例外（11-21，trackFocus）：原地聚焦过的输入框，iOS 收键盘只发 blur、焦点还留着（假失焦），就替它真 blur；iPhone 上原地聚焦后键盘一直没弹，点一下重聚焦一次。
 // 拖动（挪了 TAP_SLOP_PX 以上）、长按（按住 TAP_HOLD_MS 以上）不拦，照原生行为。页面里普通的输入框（编辑页等）照旧要系统滚出来，不用这些。
 // keepFieldFocus：贴底浮条的 form 一律挂 onMouseDown={keepFieldFocus}（台账 Q-25）。浮条里按下的不是输入框本身（按钮等），拦掉 mousedown 的默认，
 // 输入框不失焦：iOS 手指抬起后先派发 mousedown、让输入框失焦（键盘开始收、浮条往下挪），再派发 click，click 就落到浮条下面的空白处，按钮第一下点不动。
@@ -241,41 +241,36 @@ export function focusInPlace(el: Field | null, via: string): void {
 }
 
 /**
- * 原地聚焦后这一次焦点的键盘状态（文件头“例外（11-21）”，两处都只看这一份）：负责人录屏——取消原生选图菜单后一秒内点输入框，
- * iOS 弹完键盘 0.1～0.4 秒又收掉、不发 focusout。键盘弹起过又收掉、焦点还在：替它 blur（模糊层跟着关；后台切走不动，回来 iOS 自己弹回）；
- * 键盘一直没弹出来：inPlaceTouchEnd 重聚焦一次（retried），再不弹就照原生（iPhone 接实体键盘本来就不弹，最多跳一次光标）。焦点走了、输入框卸掉就不再盯
+ * 原地聚焦后这一次焦点（文件头“例外（11-21）”，两处都只看这一份）：负责人录屏——取消原生选图菜单后一秒内点输入框，
+ * iOS 弹完键盘 0.1～0.4 秒又收掉，只发 blur、不发 focusout、焦点还留着：替它真 blur（模糊层跟着关）；
+ * 键盘一直没弹出来：inPlaceTouchEnd 重聚焦一次（retried），再不弹就照原生（iPhone 接实体键盘本来就不弹，最多跳一次光标）。焦点真走了就不再盯
  */
 interface FocusTrack {
-  retried: boolean;
+  readonly retried: boolean;
+  /** 不再盯（重聚焦前先停，免得自己的 blur 被当成假失焦） */
+  readonly stop: () => void;
 }
 const tracks = new WeakMap<Field, FocusTrack>();
 function trackFocus(el: Field, retried: boolean): void {
-  if (tracks.has(el) || typeof document === 'undefined') return;
-  let seen = false;
-  let last: boolean | null = null;
-  const done = (why: string): void => {
-    rlog(`kb track done why=${why}`);
-    off();
+  if (tracks.has(el)) return;
+  let stopped = false;
+  const stop = (): void => {
+    stopped = true;
     el.removeEventListener('blur', onBlur);
     tracks.delete(el);
   };
-  const onBlur = (): void => done('blur');
-  const off = watchKeyboard((open) => {
-    // 11-21 preview.462 真机两处都没生效、日志看不出卡在哪：每次键盘开关记一行这次焦点的状态
-    if (open !== last) {
-      last = open;
-      rlog(`kb track open=${+open} seen=${+seen} vis=${document.visibilityState} act=${+(el.ownerDocument.activeElement === el)} conn=${+el.isConnected}`);
-    }
-    if (!el.isConnected) done('gone');
-    else if (open) seen = true;
-    else if (seen && document.visibilityState === 'visible' && el.ownerDocument.activeElement === el) {
+  // iOS 收掉键盘时只发 blur、不发 focusout，焦点（activeElement）还留在输入框上（463 日志 t=151.48 blur、act=1）：
+  // React 的 onBlur 认 focusout，模糊层就不关。下一拍焦点还在就是这种假失焦，替它真 blur 一次（focusout 照常发，模糊层关）
+  const onBlur = (): void => {
+    setTimeout(() => {
+      if (stopped) return;
+      if (el.ownerDocument.activeElement !== el) return stop();
       rlog('kb dropped keep-focus → blur');
       el.blur();
-    }
-  });
+    }, 0);
+  };
   el.addEventListener('blur', onBlur);
-  tracks.set(el, { retried });
-  rlog(`kb track start retried=${+retried}`);
+  tracks.set(el, { retried, stop });
 }
 
 /** 按下到抬起挪动不到这么多（px）才算“点”（打字条点空白处 Q-10 也用这个）。同 motion/tokens.ts 的 TAP_SLOP_PX：platform 只准引 shared、platform，引不到那里，改一处要两处一起改 */
@@ -313,14 +308,17 @@ export function inPlaceTouchEnd(e: InPlaceTouch): void {
   const p = e.changedTouches[0];
   const focused = el?.ownerDocument.activeElement === el;
   const track = el ? tracks.get(el) : undefined;
-  // 已聚焦时的一下点记一行判断用到的每一样（11-21 preview.462 真机没走重聚焦，日志看不出卡在哪）
+  // 已聚焦时的一下点记一行判断用到的每一样（11-21 输入框下坠排查）
   if (el && focused) rlog(`tap focused from=${+!!from} cancel=${+e.cancelable} phone=${+isIPhone()} up=${+isKeyboardUp()} track=${track ? (track.retried ? 'retried' : 1) : 0}`);
   if (!el || !from || !p || !e.cancelable) return;
   // 已聚焦：照原生（放光标）；例外是 iPhone 上原地聚焦后键盘一直没弹（trackFocus），重聚焦一次，不然系统为露出输入框滚页面（11-21 日志 vv top=413 y=541）
   if (focused && (!isIPhone() || isKeyboardUp() || !track || track.retried)) return;
   if (Math.hypot(p.clientX - from.x, p.clientY - from.y) >= TAP_SLOP_PX || e.timeStamp - from.t >= TAP_HOLD_MS) return;
   e.preventDefault();
-  if (focused) el.blur();
+  if (focused) {
+    track?.stop();
+    el.blur();
+  }
   focusInPlace(el, focused ? 'refocus' : 'tap');
   const end = el.value.length;
   el.setSelectionRange(end, end);

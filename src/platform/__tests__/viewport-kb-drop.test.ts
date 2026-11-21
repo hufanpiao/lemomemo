@@ -1,7 +1,7 @@
 // 焦点在、键盘却不在（platform/viewport.ts 文件头“例外（11-21）”）：负责人录屏——取消原生选图菜单后一秒内点随手记输入框，
 // iOS 弹完键盘 0.1～0.4 秒又自己收掉、不发 focusout，模糊层一直开着；再点一下系统为露出输入框把页面滚上去（日志 vv top=413 y=541）。
-// • 原地聚焦过的输入框，键盘弹起过又收掉、焦点还在：替它 blur（后台切走不动）
-// • iPhone 上已聚焦、键盘不在的一下点：按没聚焦处理（拦默认、原地聚焦、光标放末尾）；键盘弹着照原生
+// • 463 日志定根因：iOS 收键盘只发 blur、不发 focusout，焦点还留着（React onBlur 认 focusout，模糊层不关）——原地聚焦过的输入框下一拍替它真 blur
+// • iPhone 上原地聚焦后键盘一直没弹的一下点：重聚焦一次（拦默认、光标放末尾）；键盘弹着、重试过、不是原地聚焦来的照原生
 // 单独一个文件：共用的键盘监听第一次订阅时读 visualViewport，要先装好假的
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, isKeyboardUp, startViewport, type InPlaceTouch } from '../viewport.ts';
@@ -59,42 +59,39 @@ describe('焦点在、键盘不在（11-21 附件取消后输入框下坠）', (
     vi.restoreAllMocks();
   });
 
-  it('原地聚焦过、键盘弹起又被系统收掉：替它 blur', () => {
+  /** iOS 收键盘：只派发 blur，焦点还留在输入框上（不发 focusout） */
+  const phantomBlur = (el: HTMLElement): void => {
+    el.dispatchEvent(new FocusEvent('blur'));
+  };
+
+  it('原地聚焦过、iOS 收键盘只发 blur 焦点还在（假失焦）：下一拍替它真 blur，focusout 照常发', async () => {
     const el = mkInput();
     focusInPlace(el, 'tap');
-    setKb(300);
-    expect(isKeyboardUp()).toBe(true);
+    let out = 0;
+    el.addEventListener('focusout', () => (out += 1));
+    phantomBlur(el);
     expect(document.activeElement).toBe(el);
-    setKb(0);
-    expect(isKeyboardUp()).toBe(false);
-    expect(document.activeElement).not.toBe(el);
+    await vi.waitFor(() => expect(document.activeElement).not.toBe(el));
+    expect(out).toBe(1);
   });
 
-  it('键盘还没弹起过（聚焦后视口还没变）：不 blur', () => {
+  it('真失焦（焦点已经走了）：不再盯，之后同一个输入框普通聚焦、假 blur 都不动它', async () => {
     const el = mkInput();
     focusInPlace(el, 'tap');
-    setKb(0);
+    el.blur();
+    await new Promise((r) => setTimeout(r, 5));
+    el.focus();
+    phantomBlur(el);
+    await new Promise((r) => setTimeout(r, 5));
     expect(document.activeElement).toBe(el);
   });
 
-  it('后台切走（不可见）时键盘收掉：不 blur，回来系统自己弹回键盘', () => {
+  it('没经过原地聚焦的输入框：假 blur 不管', async () => {
     const el = mkInput();
-    focusInPlace(el, 'tap');
-    setKb(300);
-    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
-    setKb(0);
+    el.focus();
+    phantomBlur(el);
+    await new Promise((r) => setTimeout(r, 5));
     expect(document.activeElement).toBe(el);
-  });
-
-  it('自己 blur 以后不再盯：下一次键盘起落不碰别的输入框', () => {
-    const a = mkInput();
-    const b = mkInput();
-    focusInPlace(a, 'tap');
-    a.blur();
-    b.focus();
-    setKb(300);
-    setKb(0);
-    expect(document.activeElement).toBe(b);
   });
 
   const asIPhone = (): void => {
@@ -115,13 +112,12 @@ describe('焦点在、键盘不在（11-21 附件取消后输入框下坠）', (
     expect(tap(el).prevented).toBe(false);
   });
 
-  it('键盘弹起又被系统收掉以后：已 blur，下一下点是没聚焦的点，照原地聚焦', () => {
+  it('重聚焦自己发的 blur 不当成假失焦：重聚焦后焦点留着', async () => {
     asIPhone();
     const el = mkInput();
     focusInPlace(el, 'tap');
-    setKb(300);
-    setKb(0);
     expect(tap(el).prevented).toBe(true);
+    await new Promise((r) => setTimeout(r, 5));
     expect(document.activeElement).toBe(el);
   });
 
@@ -130,6 +126,7 @@ describe('焦点在、键盘不在（11-21 附件取消后输入框下坠）', (
     const el = mkInput();
     focusInPlace(el, 'tap');
     setKb(300);
+    expect(isKeyboardUp()).toBe(true);
     expect(tap(el).prevented).toBe(false);
   });
 
@@ -144,18 +141,5 @@ describe('焦点在、键盘不在（11-21 附件取消后输入框下坠）', (
     const el = mkInput();
     focusInPlace(el, 'tap');
     expect(tap(el).prevented).toBe(false);
-  });
-
-  it('焦点还在时输入框被卸掉：下一次键盘事件就不再盯（不泄漏）', () => {
-    const el = mkInput();
-    focusInPlace(el, 'tap');
-    el.remove();
-    setKb(300);
-    const again = mkInput();
-    document.body.append(el);
-    el.focus();
-    setKb(0);
-    expect(document.activeElement).toBe(el);
-    again.remove();
   });
 });
