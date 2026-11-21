@@ -167,6 +167,40 @@ describe('SwipeRow', () => {
     expect(onOpenB).toHaveBeenCalledTimes(1);
   });
 
+  // 11-14 遗留①：hdrag 在左右切页带里、鼠标右键时不接这一下（不进 start），“按下就收起”原来写在 start 里，露着的行收不起来
+  it.each([
+    ['左边缘 20 px 内按露着这一行', 'a', { clientX: 10 }],
+    ['左边缘 20 px 内按另一行', 'b', { clientX: 10 }],
+    ['右边切页带里按露着这一行', 'a', { clientX: window.innerWidth - 5 }],
+    ['鼠标右键按露着这一行', 'a', { clientX: 150, button: 2, pointerType: 'mouse' }],
+    ['鼠标右键按另一行', 'b', { clientX: 150, button: 2, pointerType: 'mouse' }],
+  ] as const)('露着时 hdrag 不接的按下也收起：%s；补来的 click 吞掉、不进编辑', (_, at, o) => {
+    const onOpen = vi.fn();
+    const lines: string[] = [];
+    render(
+      <>
+        {row('a', vi.fn(), vi.fn(), onOpen, (l) => lines.push(l))}
+        {row('b', vi.fn(), vi.fn(), onOpen)}
+      </>,
+    );
+    swipe(face('a'), -100);
+    const el = screen.getByTestId(`${at}-main`);
+    fireEvent.pointerDown(el, { pointerId: 3, isPrimary: true, clientY: 20, button: 0, pointerType: 'touch', ...o });
+    expect(screen.getByTestId('a').getAttribute('data-swipe')).toBeNull();
+    expect(face('a').style.transform).toBe('');
+    if (at === 'a') expect(lines.some((l) => l.startsWith('swipe down close=untaken'))).toBe(true);
+    fireEvent.click(el, { detail: 1 });
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('收着时在切页带里按下、点：照常进编辑（不吞）', () => {
+    const onOpen = vi.fn();
+    render(row('a', vi.fn(), vi.fn(), onOpen));
+    fireEvent.pointerDown(screen.getByTestId('a-main'), { pointerId: 3, isPrimary: true, clientX: 10, clientY: 20, button: 0, pointerType: 'touch' });
+    fireEvent.click(screen.getByTestId('a-main'), { detail: 1 });
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
   it('滑开后焦点在操作按钮上按 Esc：收起，焦点交还给行面的主按钮（不掉回 body）', () => {
     render(row('a'));
     swipe(face('a'), -100);

@@ -1,7 +1,7 @@
 // 左滑露出操作的列表行（kit，B5 视觉稿 anniv“左滑露出编辑 / 删除”；纪念日、随手记列表方式、待办列表（负责人 11-15 去掉 ×）都用这一个；
 // 随手记原来自己有一份 NoteSwipe.tsx，审查“左滑行两套”删掉、并到这里）
 // • 手势底层是 motion 的 useHDrag（和月历翻页同一套，R-420 审查第 4 条）：横向先走过起滑距离且比竖向多才算“滑”（抓住指针、直接写 transform 跟手）；
-//   竖着先走就放手不管，行面写 touch-action: pan-y，竖着滚列表交给浏览器；左边缘 20 px 以内起手让给系统返回；电脑上鼠标也能拖（mouse: true）
+//   竖着先走就放手不管，行面写 touch-action: pan-y，竖着滚列表交给浏览器；左右两条切页带（含左边缘 20 px 系统返回区）里起手不起滑；电脑上鼠标左键也能拖（mouse: true）
 // • 松手：拉过操作区一半就停在“露出”，否则收回；滑过之后紧跟的那一下 click 吞掉（不进编辑）
 // • 拉到底直接做（full，可选；负责人 11-15 待办“露按钮 + 拉到底直删”，照 iOS 邮件整行滑删）：给了 full（某个动作的 key）时可以拉过操作区一直拉到整行；
 //   松手时拉过整行 FULL_RATIO（大半行）就整行滑走、当场做这个动作（日志 swipe full），不用再点按钮；没过就照上面停在“露出”或收回。
@@ -27,11 +27,11 @@
 //
 // 谁负责收起别的行（一次只露一行；审查 11-15 第 10 条记成表，代码不动）：
 //   | 地方                          | 管什么                                                                                         |
-//   | start（这一行行面上的按下）    | 别的行露着、按在这一行行面上：先收起那一行，这一下补来的 click 吞掉（不打开这一行），接着横滑照常   |
-//   | document 捕获监听（露着时挂）  | 按在所有行面、这一行操作按钮以外的地方（页面别处、顶栏、底栏）：收起这一行；落在行面上的交给 start    |
+//   | onFaceDown（行面上的每一下按下，在 hdrag 过滤之前） | 别的行露着：先收起那一行，吞掉这一下 click（不打开这一行），接着横滑照常；这一行露着、hdrag 不接（切页带里、鼠标右键）：收起这一行 |
+//   | document 捕获监听（露着时挂）  | 按在所有行面、这一行操作按钮以外的地方（页面别处、顶栏、底栏）：收起这一行；落在行面上的交给 onFaceDown |
 //   | useLayer（露着时算一层）       | 按 Esc、层栈要收起（它是栈顶时）：收起这一行；焦点由 closeNow 交还行面，层栈不另还                  |
 //   另外这一行自己露出时（open 变 true 的 effect）会先收起模块里记着的上一条（openRow），保证同一时间只有一条
-import { useEffect, useRef, useState, type ElementType, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ElementType, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { useHDrag } from '../../motion/gestures.ts';
 import { useLayer } from '../hooks/useLayer.ts';
 import styles from './SwipeRow.module.css';
@@ -100,16 +100,14 @@ export function SwipeRow({ actions, children, as: Tag = 'div', className, disabl
   /** 收起这一行（内容每次渲染更新）；me 是它固定身份的外壳，记在 openRow 里比“是不是这一行” */
   const closeNow = useRef(() => {});
   const me = useRef(() => closeNow.current()).current;
+  /** 这一下按下 hdrag 接没接（进了 start）：左右切页带、鼠标右键 hdrag 在 start 之前就不管了 */
+  const taken = useRef(false);
   const drag = useHDrag({
     mouse: true,
     tag: 'swipe',
     log,
     start: (e) => {
-      // 一行露着时按在另一行上：先收起那一行，这一下补来的 click 吞掉（不打开这一行；接着横滑照常）
-      if (openRow && openRow !== me) {
-        openRow();
-        drag.swallow();
-      }
+      taken.current = true;
       if (disabled) {
         log('swipe down skip=disabled');
         return null;
@@ -162,6 +160,26 @@ export function SwipeRow({ actions, children, as: Tag = 'div', className, disabl
     },
   });
 
+  /**
+   * 行面上的每一下按下都先到这里（hdrag 过滤之前），“按下就收起”只在这一处，不放进拖动的 start
+   * （放在 start 里时，切页带里起手、鼠标右键按下都到不了 start，露着的行收不起来：11-14 遗留①）：
+   * • 别的行露着：先收起那一行，这一下补来的 click 吞掉（不打开这一行；接着横滑照常）
+   * • 这一行露着、这一下 hdrag 不接：当点一下行面，收起、吞掉 click；hdrag 接了的照旧（可以直接拖回去，松手时 tapCloses 收）
+   */
+  const onFaceDown = (e: RPointerEvent<HTMLDivElement>): void => {
+    if (openRow && openRow !== me) {
+      openRow();
+      drag.swallow();
+    }
+    taken.current = false;
+    drag.bind.onPointerDown(e);
+    if (e.isPrimary && !taken.current && openNow.current) {
+      log(`swipe down close=untaken type=${e.pointerType} button=${e.button}`);
+      drag.swallow();
+      me();
+    }
+  };
+
   closeNow.current = () => {
     const a = acts.current;
     // 焦点在操作按钮上：交还给行面的主按钮（按钮马上要 inert）
@@ -198,7 +216,7 @@ export function SwipeRow({ actions, children, as: Tag = 'div', className, disabl
         className={styles.face}
         data-swipe-face=""
         ref={drag.bind.ref}
-        onPointerDown={drag.bind.onPointerDown}
+        onPointerDown={onFaceDown}
         onPointerMove={drag.bind.onPointerMove}
         onPointerUp={drag.bind.onPointerUp}
         onPointerCancel={drag.bind.onPointerCancel}
