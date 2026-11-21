@@ -40,6 +40,9 @@ export function releaseFxAudio(): void {
 }
 
 /** 录音、语音输入进行中的判断（plus 的 voice-main.ts 注入）：录着时一律不出声 */
+/** 这一刻在录音吗（feedback.ts 的 warmAudio 先建声音前看） */
+export const fxMicBusy = (): boolean => micBusy();
+
 export function setFxMicBusy(fn: () => boolean): void {
   micBusy = fn;
 }

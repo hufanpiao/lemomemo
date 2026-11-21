@@ -7,7 +7,7 @@ const logs: string[] = [];
 const audioLogs: string[] = [];
 vi.mock('../run-log-api.ts', () => ({ rlog: (l: string) => (/^fx audio (new|resume|idle)/.test(l) ? audioLogs : logs).push(l) }));
 
-const { AUDIO_RESTORE_MS, FX_KEY, HAPTIC_MS, LOG_GAP_MS, fx, fxOnOf, hapticPath, resetFxForTest, startFx, tryHaptic } = await import('../feedback.ts');
+const { AUDIO_RESTORE_MS, FX_KEY, HAPTIC_MS, LOG_GAP_MS, WARM_AFTER_MS, fx, fxOnOf, hapticPath, resetFxForTest, startFx, tryHaptic } = await import('../feedback.ts');
 const api = await import('../fx-api.ts');
 
 interface Osc {
@@ -104,6 +104,30 @@ describe('开关（settings 的 ui.fx）', () => {
     expect(nav.vibrate).not.toHaveBeenCalled();
     expect(ctxMade).toBe(0);
     expect(logs).toEqual(['fx done hap=- snd=off']);
+  });
+});
+
+describe('冷启动先建声音（11-21“冷启动后第一次勾待办完成很卡”）', () => {
+  const restart = (): void => {
+    vi.useFakeTimers();
+    resetFxForTest();
+    startFx(settings);
+  };
+  it('startFx 后过一会儿先建好上下文（不 resume），第一次勾完成手势里不再新建；开关关着、正在录音不先建', () => {
+    restart();
+    expect(ctxMade).toBe(0);
+    vi.advanceTimersByTime(WARM_AFTER_MS);
+    expect(audioLogs[0]).toMatch(/^fx audio new n=\d+ state=\w+ by=warm ms=\d+$/);
+    api.fx('done');
+    expect([ctxMade, oscs.length]).toEqual([1, 2]);
+    rows = [{ id: '1', key: 'ui.fx', value: false }];
+    restart();
+    vi.advanceTimersByTime(WARM_AFTER_MS);
+    rows = [];
+    api.setFxMicBusy(() => true);
+    restart();
+    vi.advanceTimersByTime(WARM_AFTER_MS);
+    expect(ctxMade).toBe(1);
   });
 });
 

@@ -12,7 +12,7 @@
 //   长按拿起（lift）、拖动放下（drop）、下拉过门槛（pull）不是一次点按、没有 click，iOS 上震不了；都没有为 none
 // • 开关：settings 的 ui.fx（设置“声音和触感”，默认开；值为 false 才关），startFx 拿 main.tsx 传进来的 settings 集合，每次调时现读；关着时不响不震
 // • 运行日志：fx <种类> hap=switch|vibrate|none snd=1|0|mic|off（off：开关关着；mic：录音中不出声），同一种类 LOG_GAP_MS 内只记一行，不记内容
-import { markBuzz, setFxImpl, type FxKind } from './fx-api.ts';
+import { fxMicBusy, markBuzz, setFxImpl, type FxKind } from './fx-api.ts';
 import { rlog } from './run-log-api.ts';
 
 export type { FxKind };
@@ -130,27 +130,43 @@ export function releaseAudio(): void {
   rlog('fx audio close');
 }
 
-function audio(): AudioContext | null {
-  if (!ctx) {
-    const g = globalThis as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
-    const AC = g.AudioContext ?? g.webkitAudioContext;
-    if (!AC) return null;
-    try {
-      ctx = new AC();
-    } catch (e) {
-      rlog(`fx audio new fail n=${made + 1} err=${e instanceof Error ? e.name : 'unknown'}`);
-      return null;
-    }
-    made++;
-    rlog(`fx audio new n=${made} state=${ctx.state}`);
-    master = ctx.createGain();
-    master.gain.value = 0.5;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 5000;
-    master.connect(lp);
-    lp.connect(ctx.destination);
+/**
+ * 建 AudioContext 和总音量、低通（不 resume）；建过了直接返回。
+ * 负责人 11-21“冷启动后第一次勾待办完成很卡”：467 日志 4.43 按下 → 4.48 fx audio new → 4.82 fx done，这一下按压拖成 402ms（别的点按 60～100ms）——
+ * 第一次在手势里建上下文、接到 destination，WebKit 同步起音频通道，卡主线程约 0.35 秒。所以首屏画完后趁空闲先建好（见 warmAudio），手势里只 resume 和出声
+ */
+function makeAudio(why: 'warm' | 'play'): AudioContext | null {
+  if (ctx) return ctx;
+  const g = globalThis as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+  const AC = g.AudioContext ?? g.webkitAudioContext;
+  if (!AC) return null;
+  const t0 = performance.now();
+  try {
+    ctx = new AC();
+  } catch (e) {
+    rlog(`fx audio new fail n=${made + 1} err=${e instanceof Error ? e.name : 'unknown'}`);
+    return null;
   }
+  made++;
+  master = ctx.createGain();
+  master.gain.value = 0.5;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 5000;
+  master.connect(lp);
+  lp.connect(ctx.destination);
+  rlog(`fx audio new n=${made} state=${ctx.state} by=${why} ms=${Math.round(performance.now() - t0)}`);
+  return ctx;
+}
+
+/** 首屏画完后空闲时先建好上下文（不出声、不 resume，和放完音 suspend 以后一样）；开关关着、正在录音、已经建过都不建 */
+export function warmAudio(): void {
+  if (ctx || fxMicBusy() || !fxOnOf(rowsOf?.() ?? [])) return;
+  makeAudio('warm');
+}
+
+function audio(): AudioContext | null {
+  if (!makeAudio('play') || !ctx) return null;
   if (ctx.state !== 'running') {
     const c = ctx;
     void c.resume().then(
@@ -209,12 +225,15 @@ function play(tones: readonly Tone[]): boolean {
 // —— 对外 ——
 const lastLog = new Map<FxKind, number>();
 
-function logFx(kind: FxKind, hap: HapticPath | '-', snd: string): void {
+/** ms：这次 fx 在手势里同步占了多久（≥ SLOW_FX_MS 才记，看第一次勾完成还卡不卡） */
+function logFx(kind: FxKind, hap: HapticPath | '-', snd: string, ms = 0): void {
   const now = Date.now();
   if (now - (lastLog.get(kind) ?? -Infinity) < LOG_GAP_MS) return;
   lastLog.set(kind, now);
-  rlog(`fx ${kind} hap=${hap} snd=${snd}`);
+  rlog(`fx ${kind} hap=${hap} snd=${snd}${ms >= SLOW_FX_MS ? ` ms=${Math.round(ms)}` : ''}`);
 }
+/** fx 同步耗时超过多少 ms 记进日志 */
+const SLOW_FX_MS = 30;
 
 /**
  * 这个操作的音效和震动（在手势里同步调；业务代码经 fx-api.ts 调）；开关关着时什么都不做。
@@ -226,6 +245,7 @@ export function fx(kind: FxKind, busy: () => boolean = micBusy): boolean {
     logFx(kind, '-', 'off');
     return false;
   }
+  const t0 = performance.now();
   const hap = haptic();
   const tones = FX_SOUND[kind];
   let snd = '0';
@@ -239,7 +259,7 @@ export function fx(kind: FxKind, busy: () => boolean = micBusy): boolean {
       }
     }
   }
-  logFx(kind, hap, snd);
+  logFx(kind, hap, snd, performance.now() - t0);
   return hap === 'switch';
 }
 
@@ -254,15 +274,22 @@ export function tryHaptic(): HapticPath {
   return hap;
 }
 
-/** 首屏画完后 main.tsx 调：接上 settings 集合（同 watchLook 的 collection('settings')），把实现交给 fx-api */
+/** 首屏画完后 main.tsx 调：接上 settings 集合（同 watchLook 的 collection('settings')），把实现交给 fx-api，空闲时先建好声音（warmAudio） */
 export function startFx(c: { getSnapshot(): readonly FxRow[] }): void {
   rowsOf = () => c.getSnapshot();
   setFxImpl(fx, releaseAudio);
+  clearTimeout(warmTimer);
+  // 不用 requestIdleCallback：iOS Safari 没有；画完以后再等一会儿，避开冷启动头几下点按
+  warmTimer = setTimeout(warmAudio, WARM_AFTER_MS);
 }
+/** startFx 以后多久先建声音（ms） */
+export const WARM_AFTER_MS = 300;
+let warmTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** 测试用：清掉懒建的东西 */
 export function resetFxForTest(): void {
   setFxImpl(null);
+  clearTimeout(warmTimer);
   ctx = null;
   master = null;
   clearTimeout(closeTimer);
