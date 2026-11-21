@@ -374,6 +374,10 @@ test.describe('B4b-1 附件：电脑', () => {
         }
         for (const id of seen) if (!now.has(id) && !(`${id}-` in log)) log[`${id}-`] = performance.now();
       }).observe(document.body, { childList: true, subtree: true });
+      // 点附件“删除”的时刻：页底那条在这以后拿掉，才是被这次删除顶掉的
+      document.addEventListener('click', (e) => {
+        if ((e.target as Element | null)?.closest?.('[data-testid^="note-file-delete-"]')) log['del-click'] = performance.now();
+      }, true);
     });
     await page.getByTestId(`notes-more-${NOTE2}`).click();
     await page.getByTestId(`notes-del-${NOTE2}`).click();
@@ -384,11 +388,12 @@ test.describe('B4b-1 附件：电脑', () => {
     await expect(page.getByTestId('notes-toast')).toBeVisible();
     await page.getByTestId(`note-file-delete-${F_XLSM}`).click();
     await expect(page.getByTestId('note-files-undo')).toContainText('已删除');
-    // 页底那条要被顶掉：拿掉的时刻在附件撤销条挂上以后、离它自己 5 秒到时还早（不是到时自己收的）
+    // 页底那条要被顶掉：拿掉的时刻在点附件“删除”以后、离它自己 5 秒到时还早（不是到时自己收的）。
+    // 不要求晚于附件撤销条挂上：删除要等写完才出附件那条，CI 上页底那条先拿掉 22ms～1.1s，同一时刻两条不会都在（负责人原话只要“只剩后出的一条”）
     await expect(page.getByTestId('notes-toast')).toHaveCount(0);
     const log = await page.evaluate(() => (window as unknown as { __toastLog: Record<string, number> }).__toastLog);
-    const [up, gone, files] = [log['notes-toast+'], log['notes-toast-'], log['note-files-undo+']];
-    expect(gone, '页底撤销条在附件撤销条出来以后才拿掉').toBeGreaterThanOrEqual(files ?? Infinity);
+    const [up, gone, del] = [log['notes-toast+'], log['notes-toast-'], log['del-click']];
+    expect(gone, '页底撤销条在点附件删除以后才拿掉').toBeGreaterThanOrEqual(del ?? Infinity);
     expect((gone ?? Infinity) - (up ?? 0), '页底撤销条是被顶掉的，不是 5 秒到时自己收的').toBeLessThan(4600);
     const shown = await page.evaluate(() => [...document.querySelectorAll('[data-undo-toast]')].map((el) => el.getAttribute('data-testid')));
     expect(shown, '同时只有附件区这一条撤销条').toEqual(['note-files-undo']);
