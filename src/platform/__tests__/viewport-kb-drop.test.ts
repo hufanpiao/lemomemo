@@ -138,6 +138,47 @@ describe('焦点在、键盘不在（11-21 附件取消后输入框下坠）', (
     expect(tap(el).prevented).toBe(false);
   });
 
+  /** 点开原生选图菜单（隐藏的 input[type=file]） */
+  const openPicker = (): HTMLInputElement => {
+    const f = document.createElement('input');
+    f.type = 'file';
+    document.body.append(f);
+    f.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return f;
+  };
+
+  it('选图菜单还开着时点输入框：先不聚焦，cancel 到了再等一拍才原地聚焦，光标放末尾', () => {
+    vi.useFakeTimers();
+    const el = mkInput('买牛奶');
+    const f = openPicker();
+    const up = tap(el);
+    expect(up.prevented).toBe(true);
+    expect(document.activeElement).not.toBe(el);
+    vi.advanceTimersByTime(300);
+    expect(document.activeElement).not.toBe(el);
+    f.dispatchEvent(new Event('cancel', { bubbles: true }));
+    vi.advanceTimersByTime(400);
+    expect(document.activeElement).toBe(el);
+    expect([el.selectionStart, el.selectionEnd]).toEqual([3, 3]);
+    vi.useRealTimers();
+  });
+
+  it('选图菜单一直没等到 cancel / change：最后一个时刻（1 秒内）照样聚焦；菜单关了以后再点照常当场聚焦', () => {
+    vi.useFakeTimers();
+    const el = mkInput();
+    const f = openPicker();
+    tap(el);
+    vi.advanceTimersByTime(900);
+    expect(document.activeElement).not.toBe(el);
+    vi.advanceTimersByTime(100);
+    expect(document.activeElement).toBe(el);
+    el.blur();
+    f.dispatchEvent(new Event('change', { bubbles: true }));
+    tap(el);
+    expect(document.activeElement).toBe(el);
+    vi.useRealTimers();
+  });
+
   it('不是 iPhone：已聚焦照原生', () => {
     const el = mkInput();
     focusInPlace(el, 'tap');

@@ -66,14 +66,6 @@ function useFilePick(onFile: (f: File) => unknown, mode: 'many' | 'one' | 'camer
       data-testid={testId}
     />
   );
-  // 11-21 输入框下坠排查：记选图菜单关掉的时刻（取消发 cancel、选了发 change），和 iOS 收回键盘的时刻对照
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const onCancel = (): void => rlog('file picker cancel');
-    el.addEventListener('cancel', onCancel);
-    return () => el.removeEventListener('cancel', onCancel);
-  }, []);
   return [input, () => ref.current?.click()];
 }
 
