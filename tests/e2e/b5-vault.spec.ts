@@ -15,7 +15,7 @@ import type { Locator, Page, Route } from '@playwright/test';
 import JSZip from 'jszip';
 import { fakeRest } from './fake-rest.ts';
 import { notesViewRows } from './idb.ts';
-import { jpeg, readRunLogInPage, stableBox, swipeDiag, touchSwipe } from './page-helpers.ts';
+import { afterPageFade, jpeg, readRunLogInPage, stableBox, swipeDiag, touchSwipe } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { runLog as readRunLog } from './fake-media.ts';
 
@@ -553,6 +553,9 @@ test('审查第 1 条：保存时令牌过期 → 解锁卡点取消 → 再解�
   await write(page, 'note-edit-title', '取消以后不该存的');
   await expect(page.getByTestId('vault-unlock-card')).toBeVisible();
   expect(saved(fv)).toHaveLength(1);
+  // 进 #/vault/new 是整页推页（#288 起走 page-swap）：解锁卡在推页还没放完时就出来，这时（新页挂上 FADE_GUARD_MS 以内）的按下按设计吞掉；
+  // 运行日志实测点“取消”离推页开始才 0.1 秒、记 prevented-later。等淡入放完再按（同 b1-settings 注销行）
+  await afterPageFade(page);
   await page.getByTestId('vault-unlock-cancel').click();
   // 桌面宽度下随手记页先挂分栏（desk，按需加载），几个 worker 并发时会超过默认 5 秒
   await expect(page.getByTestId('notes')).toBeVisible({ timeout: 15_000 });

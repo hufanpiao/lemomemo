@@ -284,11 +284,13 @@ export function LockLayer({ variant, open, children, testId }: { variant: 'page'
       </InDialog.Provider>
     </EscCtx.Provider>
   );
+  // 锁着页就是这一页本身，用 <main>（每页一个 main 是全 app 的约定：切页按它认“新页出来了”，motion/page-shown.ts PAGE_SELECTOR）。
+  // 11-21 负责人截图“点隐私记变成这样”：原来是 div，从随手记推进来认不到新页，随手记的快照叠着留满 30 秒、点按一直被吞
   if (page)
     return (
-      <div ref={root} className={leaving ? `${styles.lockPage} ${styles.lockOut}` : styles.lockPage} data-testid={testId ?? 'vault-locked'} data-leaving={leaving || undefined} onTransitionEnd={() => leaving && done()}>
+      <main ref={root} className={leaving ? `${styles.lockPage} ${styles.lockOut}` : styles.lockPage} data-testid={testId ?? 'vault-locked'} data-leaving={leaving || undefined} onTransitionEnd={() => leaving && done()}>
         {inner}
-      </div>
+      </main>
     );
   return (
     <RD.Root open={open}>
