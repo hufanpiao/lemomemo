@@ -347,7 +347,8 @@ describe('编辑页“子任务”区（5.3、6.1）', () => {
     );
     fireEvent.click(screen.getByTestId('todo-sub-del-b'));
     await screen.findByTestId('todo-sub-deleted-toast');
-    expect(before).toHaveBeenCalledTimes(1);
+    // 撤销条是删除的保存回来以后才挂上的（不在 act 里），“收起别的 solo 条”在它的 effect 里，可能比 findBy 晚一拍：等它跑完再数（CI 642b0d46 单测挂过 0 次）
+    await waitFor(() => expect(before).toHaveBeenCalledTimes(1));
     expect(undo).not.toHaveBeenCalled();
   });
 
