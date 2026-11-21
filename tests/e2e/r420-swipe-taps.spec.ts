@@ -11,9 +11,9 @@
 // 逐帧数据设了 LEMO_FRAMES_OUT 就写成 JSON（只给审查记录用），断言不靠它
 import { writeFileSync } from 'node:fs';
 import type { Locator, Page } from '@playwright/test';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { FOLLOW_MAX_PX } from '../../src/motion/swipe-pager.ts';
-import { installScrub, waitPreloaded } from './page-helpers.ts';
+import { cached, idbPut } from './idb.ts';
+import { afterPageFade, installScrub, waitPreloaded } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use({ trace: 'off', loggedIn: true, viewport: { width: 390, height: 844 }, hasTouch: true, timezoneId: 'Asia/Seoul', locale: 'zh-CN' });
@@ -127,8 +127,8 @@ async function openMonth(page: Page, ym: string): Promise<void> {
   await waitPreloaded(page); // 冷启动后台预加载三页跑完再量（page-helpers.ts 头注释）
   await installScrub(page);
   await page.evaluate((d) => document.documentElement.style.setProperty('--dur-ui', d), SLOW_DUR);
-  // 换页后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/index.ts 的 guardTaps）
-  await page.waitForTimeout(FADE_GUARD_MS + 200);
+  // 换页后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/page-swap.ts 的 guardTaps）：等换页、进场动画放完（不按毫秒睡）
+  await afterPageFade(page);
 }
 
 /** 原地淡换：第一帧副本叠着、新的一页没完全显出来；新的一页一路不变淡、副本一路不变实，至少 1 帧半路；横移不超过跟手那一小段；最后副本撤掉、不透明 */
@@ -174,7 +174,7 @@ test.describe('月历翻页逐帧（R-420 审查第 1、2 条）', () => {
 const ROW_A = '0e2e0000-0000-4000-8000-0000000c4201';
 const ROW_B = '0e2e0000-0000-4000-8000-0000000c4202';
 
-/** 本机库 anniversaries 仓写两行（同 b5-anniv.spec.ts 的写法）：A 在前（10 天后）、B 在后（20 天后） */
+/** 本机库 anniversaries 仓写两行（idb.ts 的 idbPut，同 b5-anniv.spec.ts）：A 在前（10 天后）、B 在后（20 天后） */
 async function seedTwo(page: Page): Promise<void> {
   const now = Date.now();
   const day = (n: number): { m: number; d: number; date: string } => {
@@ -189,24 +189,7 @@ async function seedTwo(page: Page): Promise<void> {
     { ...base, id: ROW_A, name: '甲', month: a.m, day: a.d, next_date: a.date },
     { ...base, id: ROW_B, name: '乙', month: b.m, day: b.d, next_date: b.date },
   ];
-  await page.evaluate(
-    (rs) =>
-      new Promise<void>((resolve, reject) => {
-        const req = indexedDB.open('planner-v4');
-        req.onerror = () => reject(new Error(String(req.error)));
-        req.onsuccess = () => {
-          const db = req.result;
-          const tx = db.transaction(['anniversaries'], 'readwrite');
-          for (const r of rs) tx.objectStore('anniversaries').put({ id: r.id, server: r, view: r });
-          tx.oncomplete = () => {
-            db.close();
-            resolve();
-          };
-          tx.onerror = () => reject(new Error(String(tx.error)));
-        };
-      }),
-    rows,
-  );
+  await idbPut(page, rows.map((r) => ['anniversaries', cached(r)] as const));
 }
 
 /** 鼠标在行上往左拖 dx（同 b5-anniv.spec.ts 的 swipeLeft；列表行电脑上认鼠标） */
@@ -243,7 +226,7 @@ test.describe('左滑行（R-420 审查第 6、7、12 条）', () => {
     await seedTwo(page);
     await page.reload();
     await expect(page.getByTestId('anniv-list').getByTestId('anniv-row')).toHaveCount(2, { timeout: 30_000 });
-    await page.waitForTimeout(FADE_GUARD_MS + 200);
+    await afterPageFade(page);
   });
 
   test('一行露着时点另一行：第一下只收起，不打开；再点一下才打开', async ({ page }) => {

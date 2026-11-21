@@ -4,12 +4,12 @@
 //   ③ 键盘拖动：把手上空格拿起、← 挪到左栏、空格放下，每一步 aria-live 有播报；axe（WCAG 2.1 A/AA）无 serious、critical
 //   ④ 1099px 宽排成一列（同一棵树，各栏竖着叠、块不重挂）、不能拖；回到 1280 恢复分栏
 //   ⑤ 随手记页：分类一栏（点了筛选）+ 列表一栏；点卡片开抽屉，点抽屉顶上的把手换到左边，关了再开还在左边
-// 点按前等 FADE_GUARD_MS（页面分包挂上后这段时间里落在 main 里的点按按设计吞掉，见 b5-anniv.spec.ts）
+// 点按前等换页、进场动画放完（page-helpers.ts 的 afterPageFade：换页后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉）
 // 共用的打开、拖动、读本机库、种数据在 b6-desk-helpers.ts；今天页抽屉、标题跳转、撤销条、“＋”气泡和评审截图在 b6-desk-today.spec.ts
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { DESK_USE, drag, inCol, openToday, seedNotes, stored } from './b6-desk-helpers.ts';
+import { afterPageFade } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use(DESK_USE);
@@ -28,7 +28,7 @@ test.describe('B6 电脑版布局：今天页', () => {
     await expect.poll(() => stored(page, 'today'), { timeout: 10_000 }).toMatch(/"cols":\[\{"w":[\d.]+,"panels":\[[^\]]*"week"/);
     await page.reload();
     await expect(inCol(page, 0, 'week')).toBeVisible({ timeout: 20_000 });
-    await page.waitForTimeout(FADE_GUARD_MS);
+    await afterPageFade(page);
 
     // 刷新后提示条没了：再拖一次（拖回右栏）再撤销，回到左栏
     await drag(page, page.getByTestId('desk-handle-week'), page.getByTestId('desk-panel-notes-today'));
@@ -143,7 +143,7 @@ test.describe('B6 电脑版布局：随手记页', () => {
     await expect(page.getByTestId('desk-panel-list')).toBeVisible({ timeout: 20_000 });
     await seedNotes(page);
     await expect(page.getByTestId('desk-panel-cats').getByTestId('notes-filter-all')).toContainText('6', { timeout: 20_000 });
-    await page.waitForTimeout(FADE_GUARD_MS);
+    await afterPageFade(page);
 
     await page.getByTestId('notes-filter-0e2e0000-0000-4000-8000-0000000006a3').click();
     await expect(page.locator('[data-testid^="notes-card-"]')).toHaveCount(1);
@@ -175,7 +175,7 @@ test.describe('B6 电脑版布局：随手记页', () => {
     await expect(page.getByTestId('desk-fold-cats')).toHaveCount(1);
     await page.reload();
     await expect(page.locator('[data-testid^="notes-card-"]', { hasText: '牛奶' })).toBeVisible({ timeout: 20_000 });
-    await page.waitForTimeout(FADE_GUARD_MS);
+    await afterPageFade(page);
     await page.locator('[data-testid^="notes-card-"]', { hasText: '牛奶' }).locator('button').first().click();
     await expect(page.getByTestId('note-drawer')).toHaveAttribute('data-side', 'left');
   });
@@ -183,7 +183,7 @@ test.describe('B6 电脑版布局：随手记页', () => {
   test('⑥ 窗口宽窄跨过 900px（电脑版和手机排法互换、输入行重挂）：打的字不丢、不留模糊层', async ({ page }) => {
     await page.goto('/app/#/notes');
     await expect(page.getByTestId('desk')).toBeVisible({ timeout: 20_000 });
-    await page.waitForTimeout(FADE_GUARD_MS);
+    await afterPageFade(page);
     await page.getByTestId('notes-input').click();
     await page.keyboard.type('换排法');
     await page.setViewportSize({ width: 800, height: 820 });

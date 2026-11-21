@@ -10,9 +10,8 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { Page } from '@playwright/test';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
-import { readRunLogInPage, shot } from './page-helpers.ts';
+import { afterPageFade, readRunLogInPage, shot } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { logOnFail } from './fail-log.ts';
 
@@ -70,7 +69,7 @@ const rows = (page: Page) => page.getByTestId('find-row');
 async function openToday(page: Page): Promise<void> {
   await page.goto('/app/#/today');
   await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 });
-  await page.waitForTimeout(FADE_GUARD_MS);
+  await afterPageFade(page);
 }
 
 /** Ctrl+K：查找那一块在首屏画完以后才下载，没好之前按了不响应，按到面板出来为止 */

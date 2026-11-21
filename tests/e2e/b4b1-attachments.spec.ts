@@ -16,10 +16,9 @@ import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import JSZip from 'jszip';
 import { utils, write } from 'xlsx';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
 import { notesViewRows } from './idb.ts';
-import { readRunLogInPage, shot, SHOT_DIR } from './page-helpers.ts';
+import { afterPageFade, readRunLogInPage, shot, SHOT_DIR } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
 test.setTimeout(120_000);
@@ -160,7 +159,7 @@ async function openNote(page: Page): Promise<void> {
   await expect(page.getByTestId('note-files')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId(`note-file-${F_PDF}`)).toBeVisible();
   await expect(page.getByTestId('note-edit-title'), '编辑器能编辑（这条行已读好、不是只读）').toBeEnabled();
-  await page.waitForTimeout(FADE_GUARD_MS);
+  await afterPageFade(page);
 }
 
 const runLog = (page: Page) => page.evaluate(readRunLogInPage);
