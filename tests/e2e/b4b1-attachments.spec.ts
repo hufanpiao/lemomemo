@@ -382,19 +382,21 @@ test.describe('B4b-1 附件：电脑', () => {
     await page.getByTestId(`notes-more-${NOTE2}`).click();
     await page.getByTestId(`notes-del-${NOTE2}`).click();
     await expect(page.getByTestId('notes-toast')).toBeVisible();
+    // 页底撤销条 5 秒到时：CI webkit 上开抽屉加点菜单就超过 5 秒、到时自己收了（cfe2dc2e 的 ci）。
+    // 给它派一次 mouseover，按 kit UndoToast 的悬停暂停停住计时（真鼠标没在它上面，不会有 mouseout 解除），只剩“被顶掉”这一种收法
+    await page.getByTestId('notes-toast').dispatchEvent('mouseover');
     await card.locator('button').first().click();
     await page.getByTestId(`note-file-more-${F_XLSM}`).click();
     // 点删除前页底撤销条还开着（5 秒没到）：不是自己到时收起的
     await expect(page.getByTestId('notes-toast')).toBeVisible();
     await page.getByTestId(`note-file-delete-${F_XLSM}`).click();
     await expect(page.getByTestId('note-files-undo')).toContainText('已删除');
-    // 页底那条要被顶掉：拿掉的时刻在点附件“删除”以后、离它自己 5 秒到时还早（不是到时自己收的）。
-    // 不要求晚于附件撤销条挂上：删除要等写完才出附件那条，CI 上页底那条先拿掉 22ms～1.1s，同一时刻两条不会都在（负责人原话只要“只剩后出的一条”）
+    // 页底那条要被顶掉：计时停着，拿掉只能是附件撤销条挂上时顶掉的；时刻在点附件“删除”以后
     await expect(page.getByTestId('notes-toast')).toHaveCount(0);
     const log = await page.evaluate(() => (window as unknown as { __toastLog: Record<string, number> }).__toastLog);
-    const [up, gone, del] = [log['notes-toast+'], log['notes-toast-'], log['del-click']];
+    const [gone, del] = [log['notes-toast-'], log['del-click']];
     expect(gone, '页底撤销条在点附件删除以后才拿掉').toBeGreaterThanOrEqual(del ?? Infinity);
-    expect((gone ?? Infinity) - (up ?? 0), '页底撤销条是被顶掉的，不是 5 秒到时自己收的').toBeLessThan(4600);
+    expect(gone, '页底撤销条在附件撤销条挂上那一刻被顶掉').toBeGreaterThanOrEqual((log['note-files-undo+'] ?? Infinity) - 50);
     const shown = await page.evaluate(() => [...document.querySelectorAll('[data-undo-toast]')].map((el) => el.getAttribute('data-testid')));
     expect(shown, '同时只有附件区这一条撤销条').toEqual(['note-files-undo']);
   });

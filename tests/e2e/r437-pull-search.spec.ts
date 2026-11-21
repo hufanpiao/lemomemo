@@ -120,9 +120,9 @@ test.describe('R-437 下拉搜索：手机', () => {
       return { blocked, h: Math.round(h), y: window.scrollY };
     });
     expect(mid).toEqual({ blocked: true, h: 18, y: 0 });
-    await page.waitForTimeout(400);
+    // 等缩回到 0（CI webkit 慢帧下 400ms 还剩 18，cfe2dc2e 的 ci），不固定等
+    await expect.poll(() => page.getByTestId('pull-ghost').evaluate((g) => Math.round(g.getBoundingClientRect().height))).toBe(0);
     await expect(page.getByTestId('pull-search')).toHaveCount(0);
-    expect(await page.getByTestId('pull-ghost').evaluate((g) => Math.round(g.getBoundingClientRect().height))).toBe(0);
     await search(page, 'notes', '拉面');
     await expect(page.getByTestId('pull-input')).toHaveAttribute('placeholder', '搜索随手记');
     // 原列表就地筛：命中的卡片还是原来那张，命中的字有下划线；没命中的不画；隐私记不出；不另出结果列表
