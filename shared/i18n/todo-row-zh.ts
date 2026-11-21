@@ -13,6 +13,10 @@ export const todoRowZh = {
   // 副行“起步 / 大半”小标签
   'row.stage.1': '起步',
   'row.stage.2': '大半',
+  // 过期没做完的行尾“推迟”（负责人 11-21）：按钮字、读屏名字、推迟以后的撤销条
+  'row.later': '推迟',
+  'row.later.label': '推迟到明天：{title}',
+  'row.later.toast': '已推迟到明天',
   // 页底提示条：打勾完成的撤销条、删除的撤销条、出错条
   'row.doneToast': '已完成',
   'row.deleted': '已删除',

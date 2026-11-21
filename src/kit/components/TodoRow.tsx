@@ -9,6 +9,9 @@
 //   （样式规则 lemo/reduced-motion-override），这是“data-done 只打在行上”的唯一例外；字色认行上的
 // • 副行最前面“起步 / 大半”小标签和等宽“1/3”（stage）：分档同 kit CheckCircle 的 partStage；一项没做时只有“0/3”，全做完、主待办还没勾时只有“3/3”；
 //   标签只是画给眼睛看的（aria-hidden），读屏由子任务卡片里的 progressbar 说
+// • 过期没做完的（late，页面按 shared/logic/todo-row.ts 的 isLate 给：待办页过期组、今天页“没赶上”；日历不给）行尾 H / M / L 后面一个“推迟”小按钮
+//   （负责人 11-21“没赶上的加一个推迟按钮，按一下把时间推迟到明天”，照他给的参考图：回转时钟图标 + “推迟”，细描边）：按一下 r.later（截止日改成明天、出撤销条），
+//   在行按钮外面（不进编辑页），按下不往行面传（不起左滑）；刚勾上还在原位时不画；读屏名字“推迟到明天：标题”
 // • data-row（前缀）、data-row-id：kit/components/useDoneFlow.ts 收完这一行前找下一行的方框、把焦点移过去
 import type { ReactNode } from 'react';
 import type { TodoRows } from './useTodoRows.ts';
@@ -38,9 +41,11 @@ export interface TodoRowProps {
   mark?: ((text: string) => ReactNode) | undefined;
   /** 行面外面再包一层（待办页、今天页的左滑删除） */
   wrap?: ((face: ReactNode) => ReactNode) | undefined;
+  /** 过期没做完（页面按 isLate 给）：行尾出“推迟”按钮 */
+  late?: boolean | undefined;
 }
 
-export function TodoRow({ r, todo, progress, tid, onOpen, collapsed, onCollapse, meta, main, mark, wrap }: TodoRowProps) {
+export function TodoRow({ r, todo, progress, tid, onOpen, collapsed, onCollapse, meta, main, mark, wrap, late }: TodoRowProps) {
   const { words, parts, a, flow } = r;
   const id = todo.id;
   const ro = a.isRo(id);
@@ -102,6 +107,20 @@ export function TodoRow({ r, todo, progress, tid, onOpen, collapsed, onCollapse,
       <span className={list.prio}>
         <PrioCycle p={todo.priority} label={r.prioLabel(todo.priority)} onChange={(p) => r.prio(id, p)} testId={`${tid}-prio-${id}`} />
       </span>
+      {late && !checked ? (
+        <button
+          type="button"
+          className={list.later}
+          onClick={() => r.later(id)}
+          // 按下不传给行面：不起左滑（SwipeRow 在行面上接按下）
+          onPointerDown={(e) => e.stopPropagation()}
+          aria-label={words.laterLabel(todo.title)}
+          data-testid={`${tid}-later-${id}`}
+        >
+          <LaterIcon />
+          {words.later}
+        </button>
+      ) : null}
       {progress ? (
         <parts.Subs
           prefix={tid}
@@ -131,5 +150,14 @@ export function TodoRow({ r, todo, progress, tid, onOpen, collapsed, onCollapse,
     >
       <div className={list.foldBody}>{wrap ? wrap(face) : face}</div>
     </AppearItem>
+  );
+}
+
+/** 回转时钟（参考图“推迟”前面的图标）：逆时针箭头绕一圈 + 时针分针，线条用字色 */
+function LaterIcon() {
+  return (
+    <svg className={list.laterIcon} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 12a9 9 0 1 0 2.64-6.36L3 8.27M3 3.5v4.77h4.77M12 7.5V12l3 2" />
+    </svg>
   );
 }

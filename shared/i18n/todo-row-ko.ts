@@ -11,6 +11,9 @@ export const todoRowKo = {
   'row.prio.low': '낮음', // REVIEW(ko)
   'row.stage.1': '시작', // REVIEW(ko)
   'row.stage.2': '절반 넘음', // REVIEW(ko)
+  'row.later': '미루기', // REVIEW(ko)
+  'row.later.label': '내일로 미루기: {title}', // REVIEW(ko)
+  'row.later.toast': '내일로 미뤘어요', // REVIEW(ko)
   'row.doneToast': '완료했어요', // REVIEW(ko)
   'row.deleted': '삭제했어요', // REVIEW(ko)
   'row.undo': '되돌리기', // REVIEW(ko) 负责人 11-20 定“撤销”统一 되돌리기

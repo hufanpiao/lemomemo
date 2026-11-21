@@ -152,6 +152,7 @@ export default function TodosPage() {
                     progress={l.subs.get(todo.id)}
                     tid="todos"
                     onOpen={() => open(todo.id)}
+                    late={tag.kind === 'late'}
                     mark={(text) => <PullHit pull={pull} text={text} />}
                     collapsed={isCollapsed(todo.id, todo.done)}
                     onCollapse={(v) => fold(todo.id, v)}

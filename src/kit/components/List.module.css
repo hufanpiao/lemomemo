@@ -289,6 +289,42 @@
   visibility: hidden;
 }
 
+/* 过期没做完的行尾“推迟”（负责人 11-21，照参考图：回转时钟 + “推迟”，细描边、面板底的小圆角块；kit TodoRow 画，勾上时不画）：
+   只用皮肤令牌；看得见 24 高，点击区上下外扩到 44（tests/e2e/hit-target.spec.ts 的口径，同 H / M / L 的 .tri） */
+.later {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--inp-line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-12);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.later::after {
+  content: '';
+  position: absolute;
+  inset: -11px -2px;
+}
+
+.laterIcon {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 /* .fold：勾完的那一秒（勾选完成时间线，负责人 11-17 原话“动效太轻了，根本反应不过来”加参考视频；时刻、时长全在动效令牌“勾选完成时间线”一段，
    计时在 kit/components/useDoneFlow.ts）。kit TodoRow 画：li.row.fold 里只放一层 .foldBody（这一格 grid 才收得动），.foldBody 里是行面（.swRow，外面可能再套 SwipeRow）。
    “完成了没有”只看行（li）上的 data-done；唯一的例外是删除线那条 .line 自己也带 data-done——它要从左往右画，
