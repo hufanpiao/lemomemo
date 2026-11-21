@@ -7,12 +7,14 @@
 //   ③ 一行露着时点另一行（审查第 7 条）：第一下只收起露着的那行，不打开点到的那行；再点一下才打开
 //   ④ 滑开后焦点在操作按钮上按 Esc 收起（审查第 6 条）：焦点交还给行面的主按钮，不掉回 body
 //   ⑤ 左滑完马上在行面按 Enter（审查第 12 条）：键盘的 click（detail 为 0）不当成滑完补来的那一下，照常打开
+//   ⑥ 一行露着时在左边切页带里点行面、鼠标右键按另一行（11-14 遗留①）：都收起，点的那一下不打开
 // 手指横滑用页面里派发的 PointerEvent（pointerType touch）：webkit 没有 CDP 触摸，月历翻页又不认鼠标；
 // 逐帧数据设了 LEMO_FRAMES_OUT 就写成 JSON（只给审查记录用），断言不靠它
 import { writeFileSync } from 'node:fs';
 import type { Locator, Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { FOLLOW_MAX_PX } from '../../src/motion/swipe-pager.ts';
+import { SIDE_PX } from '../../src/motion/gestures.ts';
 import { installScrub, waitPreloaded } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
@@ -267,6 +269,37 @@ test.describe('左滑行（R-420 审查第 6、7、12 条）', () => {
     await expect(rows.nth(0)).not.toHaveAttribute('data-swipe', 'open');
     const onMain = await rows.nth(0).evaluate((li) => document.activeElement !== null && document.activeElement === li.firstElementChild?.querySelector('button'));
     expect(onMain, '焦点在行面的主按钮上').toBe(true);
+  });
+
+  // 11-14 遗留①：hdrag 在左右切页带里（含左边缘 20 px）、鼠标右键时不接这一下，原来“按下就收起”在拖动的 start 里，露着的行收不起来
+  test('一行露着时，在左边缘切页带里点行面、鼠标右键按行面：都收起，点的那一下不打开', async ({ page }) => {
+    const rows = page.getByTestId('anniv-list').getByTestId('anniv-row');
+    await mouseSwipe(page, rows.nth(0), -130);
+    await expect(rows.nth(0)).toHaveAttribute('data-swipe', 'open');
+    // 露着的行面往左移开，伸进了屏幕左边的切页带（外框 clip-path 左边多留 16 px）：从屏幕左边往右找第一个落在它行面上的点，要在左边缘 20 px 以内
+    const at = await rows.nth(0).evaluate((li, side) => {
+      const r = li.getBoundingClientRect();
+      const y = r.top + r.height / 2;
+      for (let x = 1; x < side; x++) if (li.firstElementChild?.contains(document.elementFromPoint(x, y))) return { x, y };
+      return null;
+    }, SIDE_PX);
+    expect(at, '露着这一行的行面伸进了左边切页带').not.toBeNull();
+    if (!at) return;
+    expect(at.x, '点的位置在左边缘 20 px 以内').toBeLessThan(20);
+    await page.mouse.click(at.x, at.y);
+    await expect(rows.nth(0)).not.toHaveAttribute('data-swipe', 'open');
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(/#\/anniv$/);
+
+    await mouseSwipe(page, rows.nth(0), -130);
+    await expect(rows.nth(0)).toHaveAttribute('data-swipe', 'open');
+    const b = await rows.nth(1).boundingBox();
+    if (!b) throw new Error('no box');
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down({ button: 'right' });
+    await page.mouse.up({ button: 'right' });
+    await expect(rows.nth(0)).not.toHaveAttribute('data-swipe', 'open');
+    await expect(page).toHaveURL(/#\/anniv$/);
   });
 
   test('手指左滑一点（收回）后马上在行面按 Enter：照常打开（键盘的 click 不吞）', async ({ page }) => {
