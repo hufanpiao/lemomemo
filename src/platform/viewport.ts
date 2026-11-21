@@ -11,6 +11,7 @@
 // （WebKit _zoomToFocusRect：iPhone 文字框 forceScroll，不做“看得见就不滚”的判断），滚过以后固定容器里的光标和画面差出一截
 // （WebKit bug 176896、300690），只有 focus({ preventScroll: true }) 让它整个跳过（_zoomToRevealFocusedElement 第一句）。
 // 取舍（负责人 11-12 preview.278 真机看过，没有异议）：输入框没聚焦时手指点一下，光标一律放到末尾，不是手指点的位置；已经聚焦着点，照原生行为。
+// 例外（11-21，trackFocus）：原地聚焦过的输入框键盘弹起过又被系统收掉、焦点还在，就替它 blur；iPhone 上原地聚焦后键盘一直没弹，点一下重聚焦一次。
 // 拖动（挪了 TAP_SLOP_PX 以上）、长按（按住 TAP_HOLD_MS 以上）不拦，照原生行为。页面里普通的输入框（编辑页等）照旧要系统滚出来，不用这些。
 // keepFieldFocus：贴底浮条的 form 一律挂 onMouseDown={keepFieldFocus}（台账 Q-25）。浮条里按下的不是输入框本身（按钮等），拦掉 mousedown 的默认，
 // 输入框不失焦：iOS 手指抬起后先派发 mousedown、让输入框失焦（键盘开始收、浮条往下挪），再派发 click，click 就落到浮条下面的空白处，按钮第一下点不动。
@@ -190,6 +191,8 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
   return {
     /** 现在键盘是不是弹着（含收起后暂缓） */
     isOpen: (): boolean => reported,
+    /** 键盘这一刻真弹着（data-kbo，不含收起后暂缓） */
+    isUp: (): boolean => kboVar,
     /** 键盘弹起 / 收起时通知（fn(open, heightPx)）；返回取消函数 */
     watch: (fn: Listener): (() => void) => subscribe(listeners, fn),
     /** 键盘真收了时通知（fn 返回 false 是这次没接，保持上膛等下一次视口事件）；返回取消函数 */
@@ -206,6 +209,11 @@ export function watchKeyboard(fn: Listener): () => void {
 
 export function isKeyboardOpen(): boolean {
   return shared.isOpen();
+}
+
+/** 键盘这一刻真弹着（不含收起后暂缓） */
+export function isKeyboardUp(): boolean {
+  return shared.isUp();
 }
 
 /** 键盘真收了时通知（冷启动高度校正用；fn 返回 false 是这次没接）；返回取消函数 */
@@ -229,6 +237,36 @@ export function focusInPlace(el: Field | null, via: string): void {
   const h = el.offsetHeight;
   el.focus({ preventScroll: true });
   rlog(`focus in-place via=${via} h=${h} y=${Math.round(typeof window === 'undefined' ? 0 : window.scrollY)}`);
+  trackFocus(el, via === 'refocus');
+}
+
+/**
+ * 原地聚焦后这一次焦点的键盘状态（文件头“例外（11-21）”，两处都只看这一份）：负责人录屏——取消原生选图菜单后一秒内点输入框，
+ * iOS 弹完键盘 0.1～0.4 秒又收掉、不发 focusout。键盘弹起过又收掉、焦点还在：替它 blur（模糊层跟着关；后台切走不动，回来 iOS 自己弹回）；
+ * 键盘一直没弹出来：inPlaceTouchEnd 重聚焦一次（retried），再不弹就照原生（iPhone 接实体键盘本来就不弹，最多跳一次光标）。焦点走了、输入框卸掉就不再盯
+ */
+interface FocusTrack {
+  retried: boolean;
+}
+const tracks = new WeakMap<Field, FocusTrack>();
+function trackFocus(el: Field, retried: boolean): void {
+  if (tracks.has(el) || typeof document === 'undefined') return;
+  let seen = false;
+  const done = (): void => {
+    off();
+    el.removeEventListener('blur', done);
+    tracks.delete(el);
+  };
+  const off = watchKeyboard((open) => {
+    if (!el.isConnected) done();
+    else if (open) seen = true;
+    else if (seen && document.visibilityState === 'visible' && el.ownerDocument.activeElement === el) {
+      rlog('kb dropped keep-focus → blur');
+      el.blur();
+    }
+  });
+  el.addEventListener('blur', done);
+  tracks.set(el, { retried });
 }
 
 /** 按下到抬起挪动不到这么多（px）才算“点”（打字条点空白处 Q-10 也用这个）。同 motion/tokens.ts 的 TAP_SLOP_PX：platform 只准引 shared、platform，引不到那里，改一处要两处一起改 */
@@ -264,10 +302,15 @@ export function inPlaceTouchEnd(e: InPlaceTouch): void {
   const from = el ? touchFrom.get(el) : undefined;
   if (el) touchFrom.delete(el);
   const p = e.changedTouches[0];
-  if (!el || !from || !p || !e.cancelable || el.ownerDocument.activeElement === el) return;
+  if (!el || !from || !p || !e.cancelable) return;
+  // 已聚焦：照原生（放光标）；例外是 iPhone 上原地聚焦后键盘一直没弹（trackFocus），重聚焦一次，不然系统为露出输入框滚页面（11-21 日志 vv top=413 y=541）
+  const focused = el.ownerDocument.activeElement === el;
+  const track = tracks.get(el);
+  if (focused && (!isIPhone() || isKeyboardUp() || !track || track.retried)) return;
   if (Math.hypot(p.clientX - from.x, p.clientY - from.y) >= TAP_SLOP_PX || e.timeStamp - from.t >= TAP_HOLD_MS) return;
   e.preventDefault();
-  focusInPlace(el, 'tap');
+  if (focused) el.blur();
+  focusInPlace(el, focused ? 'refocus' : 'tap');
   const end = el.value.length;
   el.setSelectionRange(end, end);
 }

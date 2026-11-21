@@ -360,21 +360,37 @@ test.describe('B4b-1 附件：电脑', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('note-files')).toHaveCount(0);
 
+    // 页面里记每条撤销条挂上（id+）、拿掉（id-）的时刻：CI 上 Playwright 每个来回几百毫秒，拿测试进程的 Date.now() 量会把没到时的也量成超时（CI f3bdea8f 量到 5.8～6.7 秒）
+    await page.evaluate(() => {
+      const log: Record<string, number> = {};
+      (window as unknown as { __toastLog: Record<string, number> }).__toastLog = log;
+      const seen = new Set<string>();
+      new MutationObserver(() => {
+        const now = new Set([...document.querySelectorAll('[data-undo-toast]')].map((el) => el.getAttribute('data-testid') ?? ''));
+        for (const id of now) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          log[`${id}+`] = performance.now();
+        }
+        for (const id of seen) if (!now.has(id) && !(`${id}-` in log)) log[`${id}-`] = performance.now();
+      }).observe(document.body, { childList: true, subtree: true });
+    });
     await page.getByTestId(`notes-more-${NOTE2}`).click();
     await page.getByTestId(`notes-del-${NOTE2}`).click();
     await expect(page.getByTestId('notes-toast')).toBeVisible();
-    const t0 = Date.now();
     await card.locator('button').first().click();
     await page.getByTestId(`note-file-more-${F_XLSM}`).click();
     // 点删除前页底撤销条还开着（5 秒没到）：不是自己到时收起的
     await expect(page.getByTestId('notes-toast')).toBeVisible();
     await page.getByTestId(`note-file-delete-${F_XLSM}`).click();
     await expect(page.getByTestId('note-files-undo')).toContainText('已删除');
-    // 附件撤销条出来后隔 300ms 数一次（solo 在 effect 里收起别的条，WebKit 要晚一拍）；不用会自己重试的 toHaveCount：
-    // 等上 5 秒页底那条自己到时也会没，验不出叠没叠，所以还要核数的时候页底那条离出来不到 4 秒
-    await page.waitForTimeout(300);
+    // 页底那条要被顶掉：拿掉的时刻在附件撤销条挂上以后、离它自己 5 秒到时还早（不是到时自己收的）
+    await expect(page.getByTestId('notes-toast')).toHaveCount(0);
+    const log = await page.evaluate(() => (window as unknown as { __toastLog: Record<string, number> }).__toastLog);
+    const [up, gone, files] = [log['notes-toast+'], log['notes-toast-'], log['note-files-undo+']];
+    expect(gone, '页底撤销条在附件撤销条出来以后才拿掉').toBeGreaterThanOrEqual(files ?? Infinity);
+    expect((gone ?? Infinity) - (up ?? 0), '页底撤销条是被顶掉的，不是 5 秒到时自己收的').toBeLessThan(4600);
     const shown = await page.evaluate(() => [...document.querySelectorAll('[data-undo-toast]')].map((el) => el.getAttribute('data-testid')));
-    expect(Date.now() - t0, '页底撤销条（5 秒）还没到时').toBeLessThan(4000);
     expect(shown, '同时只有附件区这一条撤销条').toEqual(['note-files-undo']);
   });
 
