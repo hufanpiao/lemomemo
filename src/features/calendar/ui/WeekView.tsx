@@ -160,14 +160,14 @@ export interface WeekProps {
 }
 
 /**
- * 这一周每天的事项（collectEntries：月历、日清单同一份；删掉的、已完成的待办本来就不在里面，也不撑宽时间轴，代码复审 N5）
+ * 这一周每天的事项（collectEntries：月历、日清单同一份；删掉的待办不在里面、不撑宽时间轴，代码复审 N5；已完成的留着划删除线，负责人 11-21）
  * 和时间轴范围（有时刻的日程按设备时区切好的段 segmentOn、待办截止时刻）。设备时区坏了时一件都没有
  */
 function weekOf(start: DateStr, items: CalItems, tz: string, dueMin: (todoId: string) => number | undefined): { range: HourRange; byDay: ReadonlyMap<DateStr, readonly DayEntry[]> } {
   let byDay = new Map<DateStr, DayEntry[]>();
   try {
     assertTz(tz);
-    byDay = collectEntries(items, start, addDays(start, 6), tz);
+    byDay = collectEntries(items, start, addDays(start, 6), tz, { keepDone: true });
   } catch {
     byDay = new Map();
   }
@@ -208,7 +208,8 @@ function Lane({
   const kind = dayKind(hol);
   const isToday = date === today;
   const sel = p.selected === date;
-  const total = entries.length;
+  // 当天共几项（读屏念）：已完成的待办留在泳道上划线留痕，不算件数（负责人 11-21“不算已完成”）
+  const total = entries.filter((e) => !e.done).length;
   const todoIds = entries.filter((e) => e.kind === 'todo').map((e) => e.itemId);
   // 这一天有没有逾期没做完的待办：逐条用待办页同一个 isLate（useCalendar 的 anyLate）
   const overdue = p.anyLate(todoIds);
@@ -291,7 +292,12 @@ function Lane({
           {day?.todos.map((x) => (
             <Fragment key={x.entry.itemId}>
               {' '}
-              <span className={`${styles.wtodo} ${colorClass(x.entry.colorIndex)}`} style={at(nAll + x.row, x.startPx - shift, x.widthPx)} data-todo={x.entry.itemId}>
+              <span
+                className={`${styles.wtodo} ${colorClass(x.entry.colorIndex)}`}
+                style={at(nAll + x.row, x.startPx - shift, x.widthPx)}
+                data-todo={x.entry.itemId}
+                data-done={x.entry.done ? '' : undefined}
+              >
                 <span className={styles.wevTx}>{x.entry.title}</span>
               </span>
             </Fragment>

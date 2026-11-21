@@ -98,6 +98,7 @@ export const viewZh = {
   'cal.a11y.overdue': '有逾期的待办',
   'cal.a11y.selected': '已选中',
   'cal.todoMark': '待办：{title}',
+  'cal.todoDoneMark': '已完成的待办：{title}',
   'cal.grid': '{y}年{m}月月历',
   'cal.weekGrid': '{from} 起的一周',
 } as const;

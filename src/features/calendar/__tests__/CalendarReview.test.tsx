@@ -211,14 +211,29 @@ describe('其他复审项', () => {
     expect(now.parentElement?.firstElementChild).toBe(now);
   });
 
-  it('已完成、删掉的待办不撑宽时间轴；没完成的照常撑（代码复审 N5）', () => {
-    data.todos = [todo('a', { due_time: '05:30', done: true }), todo('b', { due_time: '06:30', deleted_at: 3 })];
+  it('删掉的待办不撑宽时间轴；没完成的、已完成的（周历留着划线，负责人 11-21）照常撑（代码复审 N5）', () => {
+    data.todos = [todo('b', { due_time: '06:30', deleted_at: 3 })];
     open('#/cal/week/2026-11-02');
     expect(screen.getByTestId('cal-week').getAttribute('data-range')).toBe('8-22');
     cleanup();
     data.todos = [todo('a', { due_time: '05:30' })];
     open('#/cal/week/2026-11-02');
     expect(screen.getByTestId('cal-week').getAttribute('data-range')).toBe('5-22');
+    cleanup();
+    data.todos = [todo('a', { due_time: '05:30', done: true })];
+    open('#/cal/week/2026-11-02');
+    expect(screen.getByTestId('cal-week').getAttribute('data-range')).toBe('5-22');
+  });
+
+  it('勾完成的待办：周历留着、划删除线，当天读屏件数不算它；月历格子照旧不画（负责人 11-21）', () => {
+    data.todos = [todo('a', { title: '确认热处理', due: '2026-11-04', done: true }), todo('b', { title: '买菜', due: '2026-11-04' })];
+    open('#/cal/week/2026-11-02');
+    const done = document.querySelector('[data-todo="a"]');
+    expect(done?.hasAttribute('data-done')).toBe(true);
+    expect(document.querySelector('[data-todo="b"]')?.hasAttribute('data-done')).toBe(false);
+    cleanup();
+    open('#/cal/month/2026-11');
+    expect(screen.queryByText('确认热处理')).toBeNull();
   });
 
   it('跨午夜的日程：开始那天照常列出，次日清单最前面补一行续段“至 01:00”，件数也算上（代码复审 N6）', () => {

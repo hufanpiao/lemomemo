@@ -258,23 +258,24 @@ describe('待办（和前端 A 对过的接口：手机 todos、电脑并进全�
   ];
   const events = [ev({ id: 'all', date: '2026-10-20' }), timed('tm', '2026-10-20', '09:00', SEOUL)];
 
-  it('手机：截止日那天的 todos，kind 为 todo、按创建时间排；全天和时间轴不含待办', () => {
+  it('手机：截止日那天的 todos，kind 为 todo、按创建时间排，已完成的留着带 done（负责人 11-21 划线留痕）；全天和时间轴不含待办', () => {
     const days = buildWeek(WEEK, { events, todos }, phone);
     const d = dayOf(days, '2026-10-20');
-    expect(d.todos.map((x) => [x.entry.itemId, x.entry.kind])).toEqual([
-      ['t0', 'todo'],
-      ['t1', 'todo'],
+    expect(d.todos.map((x) => [x.entry.itemId, x.entry.kind, x.entry.done ?? false])).toEqual([
+      ['done', 'todo', true],
+      ['t0', 'todo', false],
+      ['t1', 'todo', false],
     ]);
-    expect(d.todos[0]?.entry.project).toBe('工作');
+    expect(d.todos[1]?.entry.project).toBe('工作');
     expect(d.allDay.entries.map((e) => e.itemId)).toEqual(['all']);
     expect(d.blocks.map((b) => b.itemId)).toEqual(['tm']);
     expect(dayOf(days, '2026-10-25').todos.map((x) => x.entry.itemId)).toEqual(['sun']);
     expect(days.flatMap((x) => x.todos.map((y) => y.entry.itemId))).not.toContain('out');
   });
 
-  it('电脑：待办并进全天那一行，排在全天日程后面', () => {
+  it('电脑：待办（含已完成的）并进全天那一行，排在全天日程后面', () => {
     const d = dayOf(buildWeek(WEEK, { events, todos }, desk), '2026-10-20');
-    expect(ad(d.allDay)).toEqual({ count: 3, short: null, ids: ['all', 't0', 't1'], kinds: ['allDay', 'todo', 'todo'] });
+    expect(ad(d.allDay)).toEqual({ count: 4, short: null, ids: ['all', 'done', 't0', 't1'], kinds: ['allDay', 'todo', 'todo', 'todo'] });
     expect(d.blocks.map((b) => b.itemId)).toEqual(['tm']);
   });
 
@@ -285,18 +286,18 @@ describe('待办（和前端 A 对过的接口：手机 todos、电脑并进全�
     expect(ad(d.allDay)).toMatchObject({ ids: ['x'], kinds: ['todo'] });
   });
 
-  it('过滤规则和月历一致：同一份数据，每天的待办和 dayEntries 里的待办一样', () => {
+  it('过滤规则和月历一致，只多已完成的：同一份数据，每天没完成的待办和 dayEntries 里的待办一样', () => {
     const items = { events, todos };
     const days = buildWeek(WEEK, items, phone);
     for (const d of days) {
       const fromMonth = dayEntries(d.date, items, SEOUL).filter((e) => e.kind === 'todo');
-      expect(d.todos.map((x) => x.entry)).toEqual(fromMonth);
+      expect(d.todos.map((x) => x.entry).filter((e) => !e.done)).toEqual(fromMonth);
     }
   });
 
   it('待办截止日是浮动日期，换设备时区也不挪天', () => {
     const d = dayOf(buildWeek(WEEK, { events: [], todos }, { ...phone, tz: LA }), '2026-10-20');
-    expect(d.todos.map((x) => x.entry.itemId)).toEqual(['t0', 't1']);
+    expect(d.todos.map((x) => x.entry.itemId)).toEqual(['done', 't0', 't1']);
   });
 
   it('手机：待办排成小条（负责人 11-18“+2的日程跟代办也都显示出来”）：有截止时刻的和时刻块一起排在那个时刻，没有的在时刻那几排下面从左往右排、放不下换排', () => {

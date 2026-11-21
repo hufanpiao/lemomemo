@@ -77,6 +77,13 @@ describe('分组', () => {
     expect(projectCounts(rows)).toEqual([{ project: 'NEOX', count: 2 }, { project: 'SignPlex', count: 2 }]);
   });
 
+  it('项目下全部勾完：这个分类不出；刚勾完还留在原位的（linger）照没完成算（负责人 11-21“相关项目勾选完成以后分类自动消失”）', () => {
+    const last = td({ project: '奥锐', done: true });
+    const rows = [td({ project: 'NEOX' }), last, td({ project: '奥锐', done: true })];
+    expect(projectCounts(rows)).toEqual([{ project: 'NEOX', count: 1 }]);
+    expect(projectCounts(rows, 'zh-CN', new Set([last.id]))).toEqual([{ project: '奥锐', count: 2 }, { project: 'NEOX', count: 1 }]);
+  });
+
   it('筛选条条数一样：按项目名，数字按数值、按当前语言（代码复审第三轮，和标题同一个比较）', () => {
     const names = ['项目 10', '项目 2', '项目 1', '项目 20'];
     const rows = names.map((project) => td({ project }));

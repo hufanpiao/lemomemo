@@ -2,6 +2,7 @@
 // 一周灌满（同一时段三件日程、一天三件全天日程、有时刻和没时刻的待办），量：每一件都画出来、没有“+N”，同一泳道里的条互不重叠，
 // 标题写全（没被省略号截断：WebKit 没有 OffscreenCanvas 时也要量到字宽），排多的泳道比空泳道高。chromium、webkit 都跑；设了 LEMO_SHOT_DIR 才截图
 import { cached, idbPut } from './idb.ts';
+import { shot } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -63,4 +64,20 @@ test('周视图：全天日程、同时段日程、待办全部画出来，不�
   expect(m.hMon).toBeGreaterThan(m.hSun + 10);
   const dir = process.env['LEMO_SHOT_DIR'];
   if (dir) await page.getByTestId('cal-week').screenshot({ path: `${dir}/week-all-${info.project.name}.png` });
+});
+
+// 勾完成的待办留在周历上、只划删除线（负责人 11-21“勾选完成的待办在周历不消失，只划删除线，要留痕”）；没完成的不划
+test('周视图：已完成的待办留着、划删除线', async ({ page, browserName }) => {
+  await page.goto('/app/#/cal/week/2026-11-02');
+  await page.getByTestId('calendar-page').waitFor({ timeout: 30000 });
+  const done = { ...base, id: 'd1', title: '确认热处理', project: '奥锐', due: '2026-11-03', due_time: null, done: true, done_at: 2 };
+  const open = { ...base, id: 'd2', title: '买菜', project: '家', due: '2026-11-03', due_time: null, done: false };
+  await idbPut(page, [done, open].map((r) => ['todos', cached(r)] as const));
+  await page.reload();
+  const lane = page.locator('[data-testid="cal-week"] li[data-date="2026-11-03"]');
+  await expect(lane.locator('[data-todo]')).toHaveCount(2);
+  const deco = (id: string) => lane.locator(`[data-todo="${id}"] span`).first().evaluate((el) => getComputedStyle(el).textDecorationLine);
+  expect(await deco('d1')).toContain('line-through');
+  expect(await deco('d2')).not.toContain('line-through');
+  await shot(page, browserName, 'week-done');
 });

@@ -151,6 +151,11 @@
   white-space: nowrap;
 }
 
+/* 已完成的待办：留在泳道上，只划删除线（负责人 11-21“勾选完成的待办在周历不消失，只划删除线，要留痕”） */
+.wtodo[data-done] .wevTx {
+  text-decoration: line-through;
+}
+
 .wtodo::before {
   flex: none;
   width: 8px;

@@ -55,6 +55,13 @@ export interface DayEntry {
   readonly span?: { readonly cont: Cont; readonly date: DateStr; readonly lastDate: DateStr };
   /** 日程放在哪几天、几点（placeEvent 的结果；日清单 spanTextOn、周视图切段直接用）；待办没有 */
   readonly place?: EventPlacement;
+  /** 已完成的待办（只有周历留着、划删除线，负责人 11-21“勾选完成的待办在周历不消失，只划删除线，要留痕”）；没完成的、日程没有这一项 */
+  readonly done?: true;
+}
+
+/** collectEntries 的选项：keepDone = 已完成的待办也放进来（只有周历这样，月历、单日列表、“本周 N 项”照旧不放） */
+export interface CollectOpts {
+  readonly keepDone?: boolean;
 }
 
 /** 排序时的先后：有时刻的日程 0、全天日程 1、待办 2（check_backend F7：方括号里的键要追得到字面量，查表改用 switch） */
@@ -115,15 +122,16 @@ export function todoEntry(td: CalTodo): DayEntry {
     startMs: null,
     endMs: null,
     createdAt: td.created_at,
+    ...(td.done ? { done: true as const } : {}),
   };
 }
 
 /**
  * 待办放在哪一天：截止日原样（浮动，不换算时区）；删掉的、撤销的、已完成的、没有截止日的不上日历，返回 null。
- * 月历、单日列表、周视图共用这一条，规则只在这里改。
+ * keepDone：已完成的也放（只有周历，负责人 11-21“周历不消失，只划删除线”）。月历、单日列表、周视图共用这一条，规则只在这里改。
  */
-export function todoDate(td: CalTodo): string | null {
-  if (!isOpenTodo(td) || td.due === null) return null;
+export function todoDate(td: CalTodo, keepDone = false): string | null {
+  if (!(keepDone ? isLiveRow(td) : isOpenTodo(td)) || td.due === null) return null;
   return td.due;
 }
 
@@ -158,14 +166,14 @@ export function liveEventsNear<E extends CalEvent>(events: readonly E[], from: D
  * 跨天的日程（R-444；含跨午夜的）它占的每一天都放一条，带 span 标出是哪一段；预筛往前多看 31 天（最长跨度），前一个月开始、跨进来的也算。
  * 月历的 buildMonth 和单日列表的 dayEntries 共用这一套。
  */
-export function collectEntries(items: CalItems, from: DateStr, to: DateStr, tz: Tz): Map<DateStr, DayEntry[]> {
+export function collectEntries(items: CalItems, from: DateStr, to: DateStr, tz: Tz, opts: CollectOpts = {}): Map<DateStr, DayEntry[]> {
   const out = new Map<DateStr, DayEntry[]>();
   for (let d = from; d <= to; d = addDays(d, 1)) out.set(d, []);
   for (const [ev, p] of liveEventsNear(items.events, from, to, tz, EVENT_SPAN_MAX_DAYS)) {
     for (const [d, e] of eventEntries(ev, p, spanDaysIn(p, from, to))) out.get(d)?.push(e);
   }
   for (const td of items.todos) {
-    const d = todoDate(td);
+    const d = todoDate(td, opts.keepDone);
     if (d !== null) out.get(d)?.push(todoEntry(td));
   }
   for (const list of out.values()) list.sort(compareEntries);

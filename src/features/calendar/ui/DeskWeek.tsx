@@ -73,7 +73,7 @@ export function DeskWeek(p: WeekProps & { range: HourRange }) {
         const ad = desk?.[i]?.allDay;
         return (
           <div key={`ad-${date}`} className={styles.dAll}>
-            {ad?.entries.map(({ itemId: id, kind, short, title: full, span }) => {
+            {ad?.entries.map(({ itemId: id, kind, short, title: full, span, done }) => {
               // 跨天的全天日程（R-444）：电脑周表每天各一块，标题后面写“(2/3)”
               const of = ofText(span && dayOfSpan(span, date));
               const title = (full || short) + (of ? ` (${of})` : '');
@@ -85,11 +85,12 @@ export function DeskWeek(p: WeekProps & { range: HourRange }) {
                   type="button"
                   className={styles.dAllItem}
                   onClick={() => open(which, id)}
-                  aria-label={roLabel(ro, kind === 'todo' ? t('cal.todoMark', { title }) : `${tc('span.allDay', {})} ${title}`)}
+                  aria-label={roLabel(ro, kind === 'todo' ? t(done ? 'cal.todoDoneMark' : 'cal.todoMark', { title }) : `${tc('span.allDay', {})} ${title}`)}
                   data-readonly={ro ? '' : undefined}
                   data-open={id}
                   aria-current={cur(id)}
                   data-testid={`cal-desk-all-${id}`}
+                  data-done={done ? '' : undefined}
                 >
                   {kind === 'todo' ? '○ ' : ''}
                   {title}

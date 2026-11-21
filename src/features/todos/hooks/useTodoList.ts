@@ -32,8 +32,8 @@ export function useTodoList(linger: ReadonlySet<string> = NONE) {
   const tz = currentTz();
   // 筛选条条数一样的按项目名排：按当前语言、数字按数值（“第 2 条”在“第 10 条”前）
   const locale = useUi((s) => s.locale);
-  const projects = useMemo(() => projectCounts(rows, locale), [rows, locale]);
-  // 筛的项目没了（这个项目的最后一条删掉、或改了项目；已完成的也算在条数里，完成不会让它消失）：回到“全部”
+  const projects = useMemo(() => projectCounts(rows, locale, linger), [rows, locale, linger]);
+  // 筛的项目没了（这个项目的最后一条删掉、改了项目，或全部勾完、收起以后——负责人 11-21“勾选完成以后分类自动消失”）：回到“全部”
   const active = project !== null && projects.some((p) => p.project === project) ? project : null;
   const groups = useMemo(() => groupTodos(rows, now, tz, active, linger), [rows, now, tz, active, linger]);
   // 标题下面一行“11月15日 周日 · 1 / 10 完成”（R-436 第 2 条）：按当前筛选数这一页的条数和完成的条数；

@@ -108,6 +108,11 @@
   cursor: pointer;
 }
 
+/* 已完成的待办：留着、只划删除线（负责人 11-21，同手机泳道 .wtodo[data-done]） */
+.dAllItem[data-done] {
+  text-decoration: line-through;
+}
+
 /* 只读行（FA-2 审查第 2 条）：电脑周视图的全天行、时间块放不下“要新版本”字样，改成斜纹底；
    含义另由读屏名字和点了出的提示条给，斜纹只是“这条不一样”的提示。
    斜纹用 --text-2 加透明度画在伪元素上（不用 color-mix，A11；--line 在深色下几乎看不见，视觉验收第 4 条），

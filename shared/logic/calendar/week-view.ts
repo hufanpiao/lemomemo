@@ -7,7 +7,8 @@
 //   截完不够最小长度的右端对齐末端、往左补足（负责人 11-17“周历上显示全部文字，时间以开始时间为准”）；
 //   按开始排好依次放进第一排空着的（row 0、1、2…，不设上限、不收成“+N”，负责人 11-18“周历目的就是将全部日程都能一眼看清楚”“+2的日程跟代办也都显示出来”）；
 // • 电脑（layout 'desk'，时间轴纵向，相当于 minBlockPx = 0）：按真实时长画，重叠的并排分列，块带 column、columns。
-// • 待办（和前端 A 对过的接口）：规则和月历一样（todoDate：删掉的、撤销的、已完成的、没有截止日的不放，截止日是浮动日期不换算），
+// • 待办（和前端 A 对过的接口）：规则和月历一样（todoDate：删掉的、撤销的、没有截止日的不放，截止日是浮动日期不换算），
+//   只有一处不同：已完成的照样放、条目带 done，界面划删除线（负责人 11-21“勾选完成的待办在周历不消失，只划删除线，要留痕”；月历照旧不放），
 //   手机放进当天的 todos（“○ 标题”小条：有截止时刻的和时刻块一起排，没有的在时刻那几排下面从左往右排），电脑并进 allDay 那一行（排在全天日程后面）。纯函数。
 import { DAY_MINUTES, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
@@ -154,7 +155,8 @@ function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets
   const first = dates[0];
   const last = dates[dates.length - 1];
   if (first === undefined || last === undefined) return { allDay, timed, todos };
-  for (const [d, entries] of collectEntries(items, first, last, tz)) {
+  // 已完成的待办也放（划删除线留痕，负责人 11-21）
+  for (const [d, entries] of collectEntries(items, first, last, tz, { keepDone: true })) {
     for (const e of entries) {
       const seg = segmentOn(e, d, tz);
       if (e.kind === 'todo') todos.get(d)?.push(e);

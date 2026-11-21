@@ -86,15 +86,23 @@ export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: s
   return out;
 }
 
-/** 项目筛选条：“全部”之外的项目和各自的条数（含已完成，R-436 确认图）（按条数多的在前；条数一样按项目名，按当前语言、数字按数值，和标题同一个比较） */
-export function projectCounts(rows: readonly Row[], locale: Locale = 'zh-CN'): { project: string; count: number }[] {
+/**
+ * 项目筛选条：“全部”之外的项目和各自的条数（含已完成，R-436 确认图）（按条数多的在前；条数一样按项目名，按当前语言、数字按数值，和标题同一个比较）。
+ * 一条没做完的都没有的项目不出（负责人 11-21“相关项目勾选完成以后分类自动消失”）；刚勾完还留在原位的（linger）照没完成算，收起以后才消失
+ */
+export function projectCounts(rows: readonly Row[], locale: Locale = 'zh-CN', linger: ReadonlySet<string> = new Set()): { project: string; count: number }[] {
   const byName = titleCompare(locale);
   const m = new Map<string, number>();
+  const open = new Set<string>();
   for (const r of rows) {
     if (!isLiveRow(r)) continue;
     const t = itemOf(r);
     if (t.project === '') continue;   // 含已完成（R-436 第 3 条确认图“全部 10”和“1 / 10 完成”同一个口径）
     m.set(t.project, (m.get(t.project) ?? 0) + 1);
+    if (!t.done || linger.has(r.id)) open.add(t.project);
   }
-  return [...m].map(([project, count]) => ({ project, count })).sort((a, b) => b.count - a.count || byName(a.project, b.project));
+  return [...m]
+    .filter(([project]) => open.has(project))
+    .map(([project, count]) => ({ project, count }))
+    .sort((a, b) => b.count - a.count || byName(a.project, b.project));
 }
