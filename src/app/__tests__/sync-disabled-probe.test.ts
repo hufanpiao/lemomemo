@@ -1,5 +1,5 @@
 // 主 App 收到 account_disabled 先探测再决定（R-256 ③ 后续；sync-wiring 文件头）：
-// pending_deletion → 冷静期退出；disabled → 停用退出；unknown → 保守清本机、提示 disabled_unsure；active → 不清本机、重新载入页面。
+// pending_deletion → 冷静期退出；disabled → 停用退出；unknown → 也按停用（11-20 收口：只退出、不清本机库）；active → 不清本机、重新载入页面。
 // 探测用被拒那次请求所用会话的令牌；本机会话已被换掉时不拿别人的令牌去查。account_pending_deletion、session_revoked 不探测
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { coldStart, getBoot, resetBootForTest, type BootOptions, type BootResult } from '../../core/boot.ts';
@@ -77,7 +77,7 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
   for (const [kind, notice] of [
     ['pending_deletion', 'pending_deletion'],
     ['disabled', 'disabled'],
-    ['unknown', 'disabled_unsure'],
+    ['unknown', 'disabled'],
   ] as const) {
     it(`${kind} → 清本机、回登录页，退出原因 ${notice}；探测用被拒那次会话的令牌，探测完以前不清、不删会话`, async () => {
       const boot = await coldStart(opts(fakeIndexedDB().factory));
@@ -119,7 +119,7 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
     expect(boot.cache?.isClosed()).toBe(false);
   });
 
-  it('本机会话已被别的标签页换成 s2：不拿 s2 的令牌去查，按 unknown 保守清本机；只删被拒的 s1', async () => {
+  it('本机会话已被别的标签页换成 s2：不拿 s2 的令牌去查，按 unknown（按停用退出）；只删被拒的 s1', async () => {
     const boot = await coldStart(opts(fakeIndexedDB().factory));
     const s = spySync();
     const d = deps(s.create, async () => ({ kind: 'active' }), { sid: 's2', token: 'tok-2' });
@@ -127,11 +127,11 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
     s.removed('account_disabled', 's1');
     await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
     expect(d.probeAccount).not.toHaveBeenCalled();
-    expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain('disabled_unsure');
+    expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain('disabled');
     expect(d.clearLocalSessionIf.mock.calls.every(([sid]) => sid === 's1')).toBe(true);
   });
 
-  it('被拒那次请求发出时没有读得出的会话（sid: null；K6-sugg5 ②、OUTBOX-sid-type 起必须显式给）：不拿本机现在那个会话的令牌去探测，按 disabled_unsure 退出、只用 null 删', async () => {
+  it('被拒那次请求发出时没有读得出的会话（sid: null；K6-sugg5 ②、OUTBOX-sid-type 起必须显式给）：不拿本机现在那个会话的令牌去探测，按 disabled 退出、只用 null 删', async () => {
     const boot = await coldStart(opts(fakeIndexedDB().factory));
     const s = spySync();
     const d = deps(s.create, async () => ({ kind: 'pending_deletion', purgeAfter: null }));
@@ -143,14 +143,14 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
     expect(await ob.fail(a?.op_id ?? '', { status: 403, code: 'account_disabled', sid: null })).toBe('disabled');
     await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
     expect(d.probeAccount).not.toHaveBeenCalled();
-    expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain('disabled_unsure');
+    expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain('disabled');
     expect(d.clearLocalSessionIf.mock.calls.every(([sid]) => sid === null)).toBe(true);
   });
 
   // R-263 ③ 提示 expired（登录已失效，请重新登录）、R-382 起只关库不清（见 sync-wiring-expired.test.ts）；这里账号不是 uuid、写不了记号，
   // 走退回清库：库清了，提示一律 removed（11-11 主持人定：让人知道没上传的改动丢了），只核提示和不探测
-  it('K6-sugg5 审查建议：sid 为 null 且本机读不到账号（没有会话）→ 不探测；写不了记号退回清库提示 removed；本机有账号或读出错 → 照旧 disabled_unsure', async () => {
-    const cases: [() => string | null, string][] = [[() => null, 'removed'], [() => 'A', 'disabled_unsure'], [() => { throw new Error('x'); }, 'disabled_unsure']];
+  it('K6-sugg5 审查建议：sid 为 null 且本机读不到账号（没有会话）→ 不探测；写不了记号退回清库提示 removed；本机有账号或读出错 → 照旧探测（拿不到令牌按 disabled）', async () => {
+    const cases: [() => string | null, string][] = [[() => null, 'removed'], [() => 'A', 'disabled'], [() => { throw new Error('x'); }, 'disabled']];
     for (const [readUserId, notice] of cases) {
       resetBootForTest();
       const boot = await coldStart(opts(fakeIndexedDB().factory));
@@ -230,6 +230,27 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
   });
 });
 
+describe('探测不出（unknown）：真实账号只退出、不清本机库（11-20 收口，原来按 disabled_unsure 清库）', () => {
+  const U = '00000000-0000-4000-8000-00000000000a';
+  const S = '00000000-0000-4000-8000-0000000000c1';
+  afterEach(() => localStorage.clear());
+  it('断网探测不出：写 reason disabled 的记号、只关库，队列还在，不清运行时缓存，提示 disabled', async () => {
+    const { factory, fake } = fakeIndexedDB();
+    const boot = await coldStart({ ...opts(factory), userId: U });
+    await boot.outbox?.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
+    const s = spySync();
+    const d = deps(s.create, async () => ({ kind: 'unknown' }), { sid: S, token: 'tok-1' });
+    wireSync(boot, d);
+    s.removed('account_disabled', S);
+    await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
+    await flush();
+    expect(fake.dbs.get('planner-v4')?.stores.get('outbox')?.records.size ?? 0).toBe(1);
+    expect(d.clearCacheStorage).not.toHaveBeenCalled();
+    expect(boot.cache?.isClosed()).toBe(true);
+    expect(d.setExitNotice).toHaveBeenCalledWith('disabled', S);
+  });
+});
+
 describe('signed_out 也先查 session_fate（架构 4.1a 第 1 点：会话没了的信号都先交给 resolveAuthLoss；11-11 有意修改）', () => {
   const U = '00000000-0000-4000-8000-00000000000a';
   const S = '00000000-0000-4000-8000-0000000000c1';
@@ -262,7 +283,8 @@ describe('active 的重新载入有次数限制（RPC 和探测一直说不到�
     const d = { ...deps(s.create, async () => ({ kind: 'active' })), reloadMarks: () => store };
     wireSync(boot, d);
     s.removed('account_disabled', 's1');
-    await vi.waitFor(() => expect(d.reload.mock.calls.length + d.log.mock.calls.length).toBeGreaterThan(0));
+    // 等到有结论：重新载入了，或记了限次日志（别的日志如 sync_no_locks 不算）
+    await vi.waitFor(() => expect(d.reload.mock.calls.length + d.log.mock.calls.filter((c) => c[0] === 'disabled_probe_active_loop').length).toBeGreaterThan(0));
     return { boot, d };
   }
 

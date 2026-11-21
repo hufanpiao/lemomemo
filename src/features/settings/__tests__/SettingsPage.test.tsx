@@ -172,14 +172,14 @@ describe('已登录设备', () => {
     const api = fakeApi({ loadDevices: vi.fn(async () => fail('account_disabled')) });
     const { exit } = fakeExit();
     const leaveAccount = vi.fn(async () => undefined);
-    let answer: (v: 'active') => void = () => undefined;
-    const resolveDisabled = vi.fn(() => new Promise<'active'>((r) => (answer = r)));
+    let answer: (v: { kind: 'active' }) => void = () => undefined;
+    const resolveDisabled = vi.fn((_sid: string | null) => new Promise<{ kind: 'active' }>((r) => (answer = r)));
     window.history.replaceState(null, '', '#/settings/account');
     render(<SettingsPage deps={{ api, exit, now, leaveAccount, resolveDisabled }} />);
-    await waitFor(() => expect(resolveDisabled).toHaveBeenCalledWith('s-me', undefined));
+    await waitFor(() => expect(resolveDisabled).toHaveBeenCalledWith('s-me'));
     expect(screen.queryByText(zh['settings.err.accountDisabled'])).toBeNull();
     expect(screen.queryByText(zh['settings.devices.loadFailed'])).toBeNull();
-    await act(async () => answer('active'));
+    await act(async () => answer({ kind: 'active' }));
     expect(await screen.findByText(zh['settings.devices.loadFailed'])).toBeTruthy();
     expect(screen.queryByText(zh['settings.err.accountDisabled'])).toBeNull();
     expect(leaveAccount).not.toHaveBeenCalled();

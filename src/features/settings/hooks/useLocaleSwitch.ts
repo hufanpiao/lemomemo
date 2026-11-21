@@ -7,6 +7,7 @@
 // 下载中再点同一种语言不重复保存；比较“现在是哪种语言”读 ui-store 当前值，不用渲染时的旧值
 import { useCallback, useRef, useState } from 'react';
 import { fromUiLocale, toUiLocale, type LangCode } from '../../../../shared/i18n/pick-locale.ts';
+import { dispatchLoss } from '../../../core/loss-dispatch.ts';
 import { uiStore, useUi } from '../../../kit/state/ui-store.ts';
 import { applyUiLocale, loadSharedDict } from '../../../platform/doc-locale.ts';
 import { updateCachedLocale, writeLocalLocale } from '../data/local.ts';
@@ -72,9 +73,7 @@ export function useLocaleSwitch(
         if (latest) setSync('idle');
         return;
       }
-      if (r.error === 'revoked') onRevoked(r.sid);   // 被拒那次请求用的会话（K6-sugg4 ①）
-      else if (r.error === 'signed_out') onSignedOut(r.sid);
-      else if (r.error === 'account_disabled') onDisabled?.(r.sid);
+      dispatchLoss(r, { onRevoked, onSignedOut, ...(onDisabled ? { onDisabled } : {}) });   // 带被拒那次请求用的会话（K6-sugg4 ①）
       if (latest) setSync('failed');
     },
     [api, onRevoked, onSignedOut, onDisabled],

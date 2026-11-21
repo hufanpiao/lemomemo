@@ -12,13 +12,14 @@
 // 纯 TS：不准 import React 和任何功能（A1）
 import { pushAuthLoss, type AuthLossFate, type AuthLossPath } from '../platform/auth-loss-log.ts';
 import { querySessionFate, type SessionFate } from '../platform/supabase/session-fate.ts';
+import { SESSION_GONE_CODES } from '../platform/supabase/error-kind.ts';
 
 export type { AuthLossPath } from '../platform/auth-loss-log.ts';
 export type AuthLossClass = 'expired' | 'check';
 export type AuthLossOutcome = 'expired' | 'removed';
 
-/** 要查服务器再定的码 */
-export const CHECK_CODES: readonly string[] = ['session_not_found', 'refresh_token_not_found', 'session_revoked', 'devices_zero_rows'];
+/** 要查服务器再定的码（会话已不在的两个和同步一路、设置页同一份：platform/supabase/error-kind.ts 的 SESSION_GONE_CODES） */
+export const CHECK_CODES: readonly string[] = [...SESSION_GONE_CODES, 'session_revoked', 'devices_zero_rows'];
 
 export interface AuthLossSignal {
   path: AuthLossPath;

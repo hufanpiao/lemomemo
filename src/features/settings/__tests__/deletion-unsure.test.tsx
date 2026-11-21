@@ -43,7 +43,7 @@ async function submitWith(probeRes: AccountProbe, d: ReturnType<typeof leaveDeps
     checkDeletion: (sid) => checkDeletion(db(), sid, { probe: async () => probeRes }),
   });
   const leave = createLeaveAccount(d);
-  const deps = { api, leave, onRevoked: vi.fn(), onSignedOut: vi.fn() };
+  const deps = { api, leave, onRevoked: vi.fn(), onSignedOut: vi.fn(), onDisabled: vi.fn() };
   const { result } = renderHook(() => useDeleteAccount(deps, async () => 0));
   await act(async () => {
     await result.current.submit('注销');

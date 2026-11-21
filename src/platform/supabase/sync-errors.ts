@@ -3,14 +3,12 @@
 // • timeoutSignal：每个请求 20 秒超时（同步是串行的，挂住的请求不能把后面的都卡住）；整段超时用 platform/exit-basics.ts 的 withTimeout（全仓只有那一份）
 import { str } from '../../../shared/core/field.ts';
 import type { SendFailure, SessionCheck } from '../../../shared/schema/sync.ts';
+import { FETCH_FAILED, SESSION_GONE_CODES } from './error-kind.ts';
 
 export const REQUEST_TIMEOUT_MS = 20_000;
 
-/** 刷新令牌回这些码（code 或 message 里包含）：会话已不在，要查 session_fate 再定（R-382 4.1a；TC-B1-88 ④⑤） */
-const CHECK_AUTH_CODES = ['session_not_found', 'refresh_token_not_found'];
-/** 403 且 code 或 message 里含这个也要查（TC-B1-88 ⑥） */
+/** 403 且 code 或 message 里含这个也要查（TC-B1-88 ⑥）；会话已不在的码（SESSION_GONE_CODES）、断网正则共用 error-kind.ts */
 const REVOKED_403 = 'session_revoked';
-const FETCH_FAILED = /failed to fetch|load failed|networkerror|network request failed|network error|fetcherror|aborterror|timeout/i;
 const TOKEN = /^[a-z][a-z0-9_]*$/;
 
 
@@ -53,7 +51,7 @@ export function toSessionCheck(error: unknown): SessionCheck {
   const name = str(e['name']);
   const status = typeof e['status'] === 'number' ? e['status'] : -1;
   const has = (needle: string): boolean => code.includes(needle) || msg.includes(needle);
-  if (CHECK_AUTH_CODES.some(has)) return 'check';
+  if (SESSION_GONE_CODES.some(has)) return 'check';
   if (status === 403 && has(REVOKED_403)) return 'check';
   if (status === 0 || name === 'AuthRetryableFetchError' || (status < 0 && FETCH_FAILED.test(msg))) return 'network';
   if (status >= 500 || status === 429 || status === 408) return 'network';

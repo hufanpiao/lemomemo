@@ -3,6 +3,7 @@
 // no_policy（R-239）不再让人点两个按钮，只给“继续使用”→ onSkip；其余错误留在本页、可以再点。
 // UI 不直接引 data 层，类型从这里转出去
 import { useState } from 'react';
+import { dispatchLoss } from '../../../core/loss-dispatch.ts';
 import type { ConsentApi, ConsentErr } from '../data/consent-api.ts';
 import { onlineNow } from '../../../platform/online.ts';
 
@@ -40,14 +41,8 @@ export function useConsent(api: ConsentApi, { onDone, onRevoked, onDisabled, onS
       onDone(agree);
       return;
     }
-    if (r.error === 'revoked') {
-      onRevoked(r.sid);
-      return;
-    }
-    if (r.error === 'disabled') {
-      onDisabled(r.sid, () => setErr('unknown'));
-      return;
-    }
+    // 会话不认、账号停用：交给离开本机（core/loss-dispatch.ts）；停用探测说账号正常就提示通用错误
+    if (dispatchLoss(r, { onRevoked, onDisabled }, () => setErr('unknown'))) return;
     setErr(r.error);
   }
 

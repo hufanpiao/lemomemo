@@ -18,8 +18,8 @@ describe('accountExitOf', () => {
     expect(probe).toHaveBeenCalledTimes(2);
   });
 
-  it('探测不出 → disabled_unsure；账号正常 → active', async () => {
-    expect(await accountExitOf(err(403, 'account_disabled'), 's1', { readSession: me, probe: async () => ({ kind: 'unknown' }) })).toBe('disabled_unsure');
+  it('探测不出 → disabled（11-20 收口：只退出不清库）；账号正常 → active', async () => {
+    expect(await accountExitOf(err(403, 'account_disabled'), 's1', { readSession: me, probe: async () => ({ kind: 'unknown' }) })).toBe('disabled');
     expect(await accountExitOf(err(403, 'account_disabled'), 's1', { readSession: me, probe: async () => ({ kind: 'active' }) })).toBe('active');
   });
 

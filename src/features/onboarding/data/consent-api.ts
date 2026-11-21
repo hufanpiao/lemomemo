@@ -14,9 +14,9 @@
 // • revoked、disabled 带着这次请求用的会话的 session_id（sid；接手清单 K6-sugg4 ①）：record 一开头（发请求前）同步读本机会话的 session_id，
 //   随错误带回；离开本机时只删这个会话（consent-exit.ts），回包前别的标签页写进来的新会话不删
 import { readSessionId } from '../../../platform/session.ts';
-import { str } from '../../../../shared/core/field.ts';
 import { withTimeout } from '../../../platform/exit-basics.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
+import { errParts, isOfflineErr, isRevokedErr, isTryLaterErr } from '../../../platform/supabase/error-kind.ts';
 
 export type ConsentErr =
   /** 会话被吊销或不在了：交给接线方按“被移除 / 没登录”处理 */
@@ -70,27 +70,18 @@ export function policyVerAtLeast(a: string | null | undefined, b: string | null 
   return true;
 }
 
-interface ErrLike {
-  name?: unknown;
-  code?: unknown;
-  status?: unknown;
-  message?: unknown;
-}
-
-const FETCH_FAILED = /failed to fetch|load failed|networkerror|network request failed|network error/i;
-
-/** supabase-js 的 PostgrestError、AuthError、抛出的异常 → 界面的错误 */
+/**
+ * supabase-js 的 PostgrestError、AuthError、抛出的异常 → 界面的错误（会话失效、服务器忙、断网的认法共用 platform/supabase/error-kind.ts，和设置页同一份；
+ * 11-20 起刷新令牌失效的四个码也算 revoked，原来这里漏了、按 unknown 只提示重试）
+ */
 export function mapConsentError(e: unknown): ConsentErr {
-  if (typeof e !== 'object' || e === null) return 'unknown';
-  const x = e as ErrLike;
-  const code = str(x.code);
-  const msg = str(x.message);
-  const status = typeof x.status === 'number' ? x.status : -1;
-  if (/\bsession_revoked\b|\bunauthorized\b/.test(msg) || code === 'session_revoked' || code === 'unauthorized' || status === 401) return 'revoked';
-  if (/\baccount_disabled\b/.test(msg) || code === 'account_disabled') return 'disabled';
-  if (/\bpolicy_ver_mismatch\b/.test(msg)) return 'version_changed';
-  if (/\btry_later\b/.test(msg) || code === 'try_later' || status === 503) return 'try_later';
-  if (str(x.name) === 'AuthRetryableFetchError' || status === 0 || FETCH_FAILED.test(msg)) return 'offline';
+  const p = errParts(e);
+  if (!p) return 'unknown';
+  if (isRevokedErr(p)) return 'revoked';
+  if (/\baccount_disabled\b/.test(p.msg) || p.code === 'account_disabled') return 'disabled';
+  if (/\bpolicy_ver_mismatch\b/.test(p.msg)) return 'version_changed';
+  if (isTryLaterErr(p)) return 'try_later';
+  if (isOfflineErr(p)) return 'offline';
   return 'unknown';
 }
 

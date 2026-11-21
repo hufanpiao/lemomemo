@@ -1,6 +1,6 @@
 // account status 探测（platform/account-status.ts；R-256 ③ 及后续）：带令牌调用、四种结果怎么映射成退出原因
 import { describe, expect, it, vi } from 'vitest';
-import { exitAfterProbe, exitForDisabled, probeAccountForExit, probeAccountStatus } from '../account-status.ts';
+import { exitAfterProbe, exitForDisabled, probeForSid, probeAccountForExit, probeAccountStatus } from '../account-status.ts';
 import type { Db } from '../supabase/client.ts';
 
 function fakeDb(res: { data: unknown; error: unknown }) {
@@ -37,11 +37,11 @@ describe('probeAccountForExit：错误码 unauthorized、session_revoked 认成 
     expect(await probeAccountStatus({ getDb: b.getDb })).toEqual({ kind: 'unknown' });
   });
 
-  it('不带错误码的 401（令牌过期等，复审建议 10-30）：unknown，主 App 提示 disabled_unsure', async () => {
+  it('不带错误码的 401（令牌过期等，复审建议 10-30）：unknown，主 App 按 disabled 只退出（11-20 收口）', async () => {
     const a = fakeDb({ data: null, error: httpErr(401, '') });
     const r = await probeAccountForExit({ getDb: a.getDb, token: 't' });
     expect(r).toEqual({ kind: 'unknown' });
-    expect(exitAfterProbe(r)).toBe('disabled_unsure');
+    expect(exitAfterProbe(r)).toBe('disabled');
   });
 
   it('try_later、断网仍是 unknown', async () => {
@@ -51,16 +51,16 @@ describe('probeAccountForExit：错误码 unauthorized、session_revoked 认成 
 });
 
 describe('exitAfterProbe：主 App 收到 account_disabled 后', () => {
-  it('pending_deletion → 冷静期；disabled → 停用；unknown → disabled_unsure（保守清本机、提示不确定）；active → 不清', () => {
+  it('pending_deletion → 冷静期；disabled → 停用；unknown → 也按 disabled（只退出、不清本机，11-20 收口）；active → 不清', () => {
     expect(exitAfterProbe({ kind: 'pending_deletion', purgeAfter: null })).toBe('pending_deletion');
     expect(exitAfterProbe({ kind: 'disabled' })).toBe('disabled');
-    expect(exitAfterProbe({ kind: 'unknown' })).toBe('disabled_unsure');
+    expect(exitAfterProbe({ kind: 'unknown' })).toBe('disabled');
     expect(exitAfterProbe({ kind: 'active' })).toBe('active');
     expect(exitAfterProbe({ kind: 'signed_out' })).toBe('removed');
   });
 });
 
-describe('exitForDisabled（sync-wiring、告知页、设置页、files 共用）', () => {
+describe('probeForSid、exitForDisabled（core/account-leave 的闸、files 的薄包装）', () => {
   const me = () => ({ sid: 's1', token: 'tok-1' });
   it('用被拒那次会话（sid 对得上）的令牌探测，按 exitAfterProbe 定', async () => {
     const probe = vi.fn(async () => ({ kind: 'pending_deletion' as const, purgeAfter: null }));
@@ -70,18 +70,20 @@ describe('exitForDisabled（sync-wiring、告知页、设置页、files 共用�
     expect(await exitForDisabled('s1', { readSession: me, probe: async () => ({ kind: 'signed_out' }) })).toBe('removed');
   });
 
-  it('本机会话已不是 sid、sid 为 null、读会话抛错：不探测，按 unknown（disabled_unsure）', async () => {
+  it('本机会话已不是 sid、sid 为 null、读会话抛错：不探测，按 unknown（disabled）', async () => {
     const probe = vi.fn(async () => ({ kind: 'active' as const }));
-    expect(await exitForDisabled('s1', { readSession: () => ({ sid: 's2', token: 'tok-2' }), probe })).toBe('disabled_unsure');
-    expect(await exitForDisabled(null, { readSession: me, probe })).toBe('disabled_unsure');
-    expect(await exitForDisabled('s1', { readSession: () => { throw new Error('x'); }, probe })).toBe('disabled_unsure');
+    expect(await probeForSid('s1', { readSession: () => ({ sid: 's2', token: 'tok-2' }), probe })).toEqual({ kind: 'unknown' });
+    expect(await probeForSid(null, { readSession: me, probe })).toEqual({ kind: 'unknown' });
+    expect(await exitForDisabled('s1', { readSession: () => ({ sid: 's2', token: 'tok-2' }), probe })).toBe('disabled');
+    expect(await exitForDisabled(null, { readSession: me, probe })).toBe('disabled');
+    expect(await exitForDisabled('s1', { readSession: () => { throw new Error('x'); }, probe })).toBe('disabled');
     expect(probe).not.toHaveBeenCalled();
   });
 
-  it('探测抛错按 unknown；给了 fallback 时 unknown 用它（码精确的 account 函数一路传 disabled），其余结果不受影响', async () => {
-    expect(await exitForDisabled('s1', { readSession: me, probe: async () => { throw new Error('x'); } })).toBe('disabled_unsure');
-    expect(await exitForDisabled('s1', { readSession: me, probe: async () => ({ kind: 'unknown' }), fallback: 'disabled' })).toBe('disabled');
+  it('探测抛错按 unknown（probeForSid 永远 resolve）；unknown 定成 disabled', async () => {
+    expect(await probeForSid('s1', { readSession: me, probe: async () => { throw new Error('x'); } })).toEqual({ kind: 'unknown' });
+    expect(await exitForDisabled('s1', { readSession: me, probe: async () => ({ kind: 'unknown' }) })).toBe('disabled');
     const pd = async () => ({ kind: 'pending_deletion' as const, purgeAfter: null });
-    expect(await exitForDisabled('s1', { readSession: me, probe: pd, fallback: 'disabled' })).toBe('pending_deletion');
+    expect(await exitForDisabled('s1', { readSession: me, probe: pd })).toBe('pending_deletion');
   });
 });
