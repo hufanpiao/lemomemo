@@ -8,7 +8,6 @@
 // • 设了 LEMO_SHOT_DIR 时在 Chromium 上截三页“露出 + 有结果”的图（430×932、DPR 3 → 1290 宽，同 iPhone 真机尺寸；浅色、深色）
 // 跑在快读组（playwright.fastread.config.ts）：数据经 /sb 同步下来，要会话令牌
 import type { Page } from '@playwright/test';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
 import { notesViewRows } from './idb.ts';
 import { afterPageFade, readRunLogInPage, SHOT_DIR } from './page-helpers.ts';
@@ -69,7 +68,6 @@ async function openPage(page: Page, hash: string, testId: string, ready: string)
   await expect(page.getByTestId(testId)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId(ready).first()).toBeVisible({ timeout: 30_000 });
   await afterPageFade(page);
-  await page.waitForTimeout(FADE_GUARD_MS);
 }
 
 /** 在页面里从 (x, 120) 往下拉 dy（只带 touches 坐标的 touch 事件，见文件头） */

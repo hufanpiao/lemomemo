@@ -1,5 +1,5 @@
 // e2e 用例共用的页面小工具（第三方审查 CI-14、CI-15）：评审截图、等换页淡入放完、等位置停稳、触摸左滑、左滑失败时的诊断
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
  * App 运行日志全文，在页面里跑：page.evaluate(readRunLogInPage)。11-20 起日志分段存（src/platform/run-log-store.ts：
@@ -34,16 +34,47 @@ export async function shot(page: Page, browserName: string, name: string, o: { f
 }
 
 /**
- * 换页（或分包晚到）后 FADE_GUARD_MS（100ms）以内落在 main 里的点按按设计吞掉（src/motion/index.ts 的 fadeSwap、guardTaps）。
- * 吞点按的窗口和 main 的淡入同一刻开始，淡入（--dur-ui 220ms 减去跳过的一帧）比窗口长：等到页面上没有还在跑的 main 淡入，窗口就一定过了。
- * 等状态，不按毫秒睡（第三方审查 CI-15）；减少动态效果时没有淡入，这里立刻返回（那时的用例要自己另等）。
- * 前提：调之前先等到新页里的内容出来了（淡入和新 main 是同一刻挂上的）；刚点完切页就调，淡入可能还没起，会直接放行
+ * 换页后 FADE_GUARD_MS（100ms）以内落在 main 里的点按按设计吞掉（src/motion/page-swap.ts 的 swap、guardTaps）。
+ * 窗口在换页那一刻（新页晚到时是新页出来那一刻）起算，同一刻起播换页动画；旧页快照（[data-tab-ghost]）要等领头的动画放完才拿掉，
+ * 动画（页签互切 880ms、整页推页、长成）都比窗口长：快照没了、main 里（含子孙：11-19 起淡入加在 main 的子树上，不在 main 自己身上）
+ * 也没有还在跑的有限次动画（进场淡入、行的挪位），窗口就一定过了，量位置也不会量到半路。
+ * 等状态，不按毫秒睡（第三方审查 CI-15、分诊表 11-14 遗留②）；冷启动（page.goto、reload）不经换页、没有窗口，这里立刻返回。
+ * 减少动态效果时换页照样开窗口、但没有快照和动画，这里看不出来（那时的用例要自己另等）。
+ * 前提：调之前先等到新页里的内容出来了；刚点完切页就调，换页可能还没起，会直接放行
  */
 export async function afterPageFade(page: Page): Promise<void> {
   await page.waitForFunction(() => {
-    const main = document.querySelector('main');
-    return !main || main.getAnimations().every((a) => a.playState !== 'running');
+    if (document.querySelector('[data-tab-ghost]')) return false;
+    // 无限循环的（加载转圈之类）永远在跑，不算
+    return [...document.querySelectorAll('main')].every((m) =>
+      m.getAnimations({ subtree: true }).every((a) => a.playState !== 'running' || a.effect?.getTiming().iterations === Infinity),
+    );
   });
+}
+
+/** 等 SW 就绪最多多久（ms）：只给 swReady 自己用，不占用例的超时 */
+export const SW_READY_MAX_MS = 90_000;
+
+/**
+ * 等 Service Worker 装好（navigator.serviceWorker.ready），返回它的作用域。等的这段不算进用例的超时：先把超时放宽 SW_READY_MAX_MS，
+ * 就绪以后改成“原来的超时 + 实际等了多久”，等于就绪以后才开始计时（分诊表 11-14 遗留④：本机全量并行时 webkit 装 SW 要预缓存整个 App，
+ * 机器忙时比 30 秒的用例超时还慢，page.evaluate 等 SW 超时；单独跑、CI 上都快）。SW_READY_MAX_MS 内还没就绪照样报错
+ */
+export async function swReady(page: Page): Promise<string> {
+  const info = test.info();
+  const base = info.timeout;
+  if (base > 0) info.setTimeout(base + SW_READY_MAX_MS);
+  const t0 = Date.now();
+  const scope = await page.evaluate(
+    (ms) =>
+      Promise.race([
+        navigator.serviceWorker.ready.then((r) => r.scope),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Service Worker ${ms} ms 内没就绪`)), ms)),
+      ]),
+    SW_READY_MAX_MS,
+  );
+  if (base > 0) info.setTimeout(base + (Date.now() - t0));
+  return scope;
 }
 
 /** 等元素位置停稳（相隔一小会儿量两次一样）再返回它的框：列表晚到的一行会把下面的行挤一下，量早了按不准 */

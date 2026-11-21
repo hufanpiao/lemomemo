@@ -7,13 +7,12 @@
 // ① 设置里没有开关；② 系统设置了 reduce → 全部实色（只有 Chromium 能模拟这条媒体查询，WebKit 跳过）；③ 系统没设置 → 磨砂。
 // ④ 月历：系统设置了 reduce 时节假日和平时同一种斜纹画法，选中的假日格底色是 --panel-2（R-432 评审第 11 条；只 Chromium）。
 // 系统“减少动态效果”同样并进 data-rm（Playwright 的 reducedMotion 两种浏览器都能模拟）。
-// 截图只在 Chromium 截（WebKit 不画模糊），存在 test-results 里
+// 评审截图同别处（page-helpers.ts 的 shot）：设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截（WebKit 不画模糊）
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { Page, TestInfo } from '@playwright/test';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import type { Page } from '@playwright/test';
 import { putGoneTodo } from './idb.ts';
-import { swipeRow } from './page-helpers.ts';
+import { afterPageFade, shot, swipeRow } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
@@ -45,8 +44,8 @@ async function showAll(page: Page): Promise<void> {
   await page.getByTestId('todos-row-n1').waitFor({ timeout: 30000 });
   await expect(page.getByTestId('sync-notice-card')).toBeVisible({ timeout: 15000 });
   // 页签互切后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/index.ts 的 guardTaps；11-14 运行日志 route 1.63 → click 1.70，
-  // 推进计划 7b 查明，见 b6-tab-switch-tap.spec.ts）：新页已经出来，从这时起过一整段窗口再点
-  await page.waitForTimeout(FADE_GUARD_MS);
+  // 推进计划 7b 查明，见 b6-tab-switch-tap.spec.ts）：新页已经出来，等换页放完（afterPageFade，窗口一定过了）再点
+  await afterPageFade(page);
   await swipeRow(page, 'todos-row-n1');   // 左滑拉到底删（负责人 11-15 去掉 ×）
   await expect(page.locator('[data-undo-toast]')).toBeVisible();
   await page.getByTestId('tabbar-add').click();
@@ -116,10 +115,6 @@ function frosted(page: Page): Promise<Look> {
 
 const all = (v: boolean): Look => ({ tabbar: v, typeBar: v, undo: v, sync: v, remind: v, notesError: v });
 
-async function shot(page: Page, info: TestInfo, name: string): Promise<void> {
-  if (info.project.name.includes('chromium')) await page.screenshot({ path: info.outputPath(`${name}.png`) });
-}
-
 test.describe('减少透明效果：跟系统设置，六样浮层都变实色', () => {
   test('① 设置里没有“减少透明效果”开关（11-14 去掉）', async ({ page }) => {
     await seed(page);
@@ -129,7 +124,7 @@ test.describe('减少透明效果：跟系统设置，六样浮层都变实色',
     await expect(page.getByTestId('settings-rm')).toHaveCount(0);
   });
 
-  test('② 开关关着、系统设置了 reduce（Chromium 模拟媒体查询）：data-rt=1，全部实色', async ({ page, browserName }, info) => {
+  test('② 开关关着、系统设置了 reduce（Chromium 模拟媒体查询）：data-rt=1，全部实色', async ({ page, browserName }) => {
     test.skip(browserName !== 'chromium', 'WebKit 不能模拟 prefers-reduced-transparency');
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] });
@@ -137,25 +132,25 @@ test.describe('减少透明效果：跟系统设置，六样浮层都变实色',
     await expect.poll(() => attr(page, 'data-rt')).toBe('1');
     await showAll(page);
     expect(await frosted(page)).toEqual(all(false));
-    await shot(page, info, 'rt-system');
+    await shot(page, browserName, 'rt-system', { settleMs: 0 });
     // 系统改回来：跟着变回磨砂（不用重新打开 App）
     await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'no-preference' }] });
     await expect.poll(() => attr(page, 'data-rt')).toBeNull();
     expect((await frosted(page)).tabbar).toBe(true);
   });
 
-  test('③ 两者都没有：磨砂', async ({ page }, info) => {
+  test('③ 两者都没有：磨砂', async ({ page, browserName }) => {
     await seed(page);
     expect(await attr(page, 'data-rt')).toBeNull();
     await showAll(page);
     expect(await frosted(page)).toEqual(all(true));
-    await shot(page, info, 'rt-off');
+    await shot(page, browserName, 'rt-off', { settleMs: 0 });
   });
 });
 
 test.describe('减少透明效果：月历选中的假日格（R-432 评审第 11 条）', () => {
   // R-445：选中不再整格换底，格子照旧是格子底（--cal-cell），只把日期数字换成深色小方块（--cal-sel-bg）
-  test('系统设置了 reduce：节假日和别的格子同一种画法，斜纹还在，选中只换日期小方块', async ({ page, browserName }, info) => {
+  test('系统设置了 reduce：节假日和别的格子同一种画法，斜纹还在，选中只换日期小方块', async ({ page, browserName }) => {
     test.skip(browserName !== 'chromium', 'WebKit 不能模拟 prefers-reduced-transparency');
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] });
@@ -190,7 +185,7 @@ test.describe('减少透明效果：月历选中的假日格（R-432 评审第 1
     expect(got.bg, '选中的假日格底色照旧是格子底').toBe(got.cell);
     expect(got.num, '选中日的日期数字是深色小方块').toBe(got.sel);
     expect(got.stripe, '斜纹还在').toBe(true);
-    await shot(page, info, 'rt-cal-holiday-sel');
+    await shot(page, browserName, 'rt-cal-holiday-sel', { settleMs: 0 });
   });
 });
 

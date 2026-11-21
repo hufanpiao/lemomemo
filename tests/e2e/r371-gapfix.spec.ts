@@ -6,12 +6,9 @@
 //    垫块在的时候底栏位置不变、点不到垫块；稳定后的今天页和开关关着时逐像素一样；
 // ③ 诊断页关掉：什么都不做、不记日志；④ 正常启动（956 / 956）开着也只记 skip，画面和关着时逐像素一样
 // chromium、webkit 两个项目都跑：webkit 下全程（含放垫块、撤垫块）不许有 CSP 违规；“逐像素一样”在 webkit 改比版面指纹（见 shot）；触屏上文档高多 base.css 的 1px（见 restH）
-import { mkdirSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { readRunLogInPage } from './page-helpers.ts';
+import { readRunLogInPage, SHOT_DIR } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
-
-const SHOTS = process.env['R371_SHOTS'] ?? 'test-results/r371-gapfix';
 
 /**
  * 打开前注入：开关（on: false = 诊断页关掉，存 lemo-gapfix-off）、清掉运行日志、iPhone、主屏幕版、屏幕高、顶部安全区。
@@ -112,14 +109,14 @@ const shot = async (page: Page, name: string): Promise<Buffer> => {
     });
     return Buffer.from(print);
   }
-  mkdirSync(SHOTS, { recursive: true });
+  // 截图本身就是比对材料（返回的 Buffer），不落盘；设了 LEMO_SHOT_DIR 才另存一份给人看（同 page-helpers.ts 的 shot，原来另认 R371_SHOTS、默认写进 test-results）
   // 盖住今天页“现在”卡：卡里的时间尺圆点、“现在 HH:MM”跟着真实时钟走，开、关两张图隔几秒截会挪零点几个像素（11-16 本机 chromium 圆点边差 42 级，
   // r371 偶发的根因）；R-439 起卡的渐变阴影合成在渐变底上，两次渲染也会差 1 级。盖的是同一块实色，卡要是跟着版面错位，色块位置照样对不上。
   // 同样盖住右上角头像圈（today-settings）：CI 同款 Linux 镜像里（11-17 ci 9e39ba10 r371:131 红），只要启动时文档短暂比视口高（垫块在），
   // Chromium 画这个圆圈下半圈描边的抗锯齿就时而差 1～3 级（固定是 (387～416, 106～107) 那 9 个像素）：关、关两次冷启动 3/3 一样；
   // 关着只在注入时仿早试放 1 秒垫块，2 次里 1 次差；开、开两次 2 次里 1 次差，差的都是这 9 个像素；头像的位置大小、样式开关两边一样。
   // 是渲染器的抗锯齿，不是 Gap fix 留了东西；盖住以后头像要是跟着版面挪了，色块位置照样对不上
-  return page.screenshot({ path: `${SHOTS}/${name}.png`, animations: 'disabled', mask: [page.getByTestId('now-card'), page.getByTestId('today-settings')] });
+  return page.screenshot({ ...(SHOT_DIR ? { path: `${SHOT_DIR}/r371-${name}.png` } : {}), animations: 'disabled', mask: [page.getByTestId('now-card'), page.getByTestId('today-settings')] });
 };
 
 test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () => {

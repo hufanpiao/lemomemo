@@ -10,7 +10,7 @@
 // 地址照 shared/logic/remind-route.ts 的 reminderUrl 拼（SW 和页面同一份）；条目在本机没有，整页提醒显示“找不到了”，返回规则不受影响。
 import type { Page } from '@playwright/test';
 import { reminderUrl } from '../../shared/logic/remind-route.ts';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { afterPageFade } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', locale: 'zh-CN' });
@@ -62,9 +62,9 @@ test('① 停在日历某一周时推送打开整页提醒：返回回到原来�
   await tab(page, 'calendar').click();
   await expect(page).toHaveURL(/#\/calendar$/);
   // 页签互切后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/index.ts 的 guardTaps，主持人 11-05 的规则）；
-  // 窗口从新页换上那一刻算（分包晚到就从晚到那一刻重算），所以先等新页的按钮出来，从这时起过一整段窗口再点（推进计划 7b）
+  // 窗口从新页换上那一刻算（分包晚到就从晚到那一刻重算），所以先等新页的按钮出来，再等换页放完（afterPageFade：快照拿掉、淡入放完，窗口一定过了）再点（推进计划 7b）
   await page.getByTestId('cal-mode-week').waitFor();
-  await page.waitForTimeout(FADE_GUARD_MS);
+  await afterPageFade(page);
   await page.getByTestId('cal-mode-week').click();
   await expect(page).toHaveURL(/#\/cal\/week\//);
   await page.getByTestId('cal-next').click();

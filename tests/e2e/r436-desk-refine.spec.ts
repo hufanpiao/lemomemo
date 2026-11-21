@@ -5,8 +5,8 @@
 // • 小块标题（“今天的安排”等）挂 kit groupLabelClass（等宽小字）；侧栏页签没选中常规字重、选中半粗（视觉稿 .rail .rt）
 // chromium、webkit 都跑；视口和数据同 b6-desk-*（b6-desk-helpers.ts）
 import type { Locator } from '@playwright/test';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { DESK_USE, openToday, seedNotes, seedToday, TODAY_IDS } from './b6-desk-helpers.ts';
+import { afterPageFade } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 test.use(DESK_USE);
@@ -44,7 +44,7 @@ test('随手记页：分类栏是 kit 胶囊；抽屉圆角 24、背景模糊，
   expect(off.bg).toBe('rgba(0, 0, 0, 0)');
   expect(on.bg).not.toBe('rgba(0, 0, 0, 0)');
 
-  await page.waitForTimeout(FADE_GUARD_MS);
+  await afterPageFade(page);
   await page.locator('[data-testid^="notes-card-"]', { hasText: '牛奶' }).locator('button').first().click();
   const drawer = page.getByTestId('note-drawer');
   await expect(drawer).toBeVisible();
@@ -89,7 +89,7 @@ test('今天页：小块标题等宽小字；待办抽屉类型名 14px 常规�
   expect(await weight('今天')).toBe('600');
   expect(await weight('待办')).toBe('400');
 
-  await page.waitForTimeout(FADE_GUARD_MS);
+  await afterPageFade(page);
   await todo.click();
   const drawer = page.getByTestId('today-drawer');
   await expect(drawer).toBeVisible();

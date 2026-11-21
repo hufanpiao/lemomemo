@@ -16,6 +16,7 @@
 //   后果只是这一页没有动画（元素照常显示、照常能点），见 src/motion/features.ts 文件头
 // 用的是开发试验页 #/dev-csp 的 kit Dialog（csp.spec.ts 同一个），e2e 构建里有这一页
 import type { Page } from '@playwright/test';
+import { swReady } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 const LAB = '/app/#/dev-csp';
@@ -148,10 +149,9 @@ test.describe('功能包下载失败以后：不刷新不会再装上，刷新�
     // webkit 在页面没被 SW 接管时，刷新以后照样用内存缓存里上次被拦下的失败结果，功能包的 import() 不发请求就失败（诊断：请求、资源记录都没有，
     // 15 秒后在页面里手动 import 同一个地址却能成功）；被 SW 接管时请求走 SW，照常取到。
     // 原来“并行时 15 秒没装上”就是这个：单独跑时 SW 在刷新前已经装好；4 个 worker 并行时 SW 装得慢，刷新时还没接管（12 遍里失败的 6 遍全是没接管、成功的 6 遍全是接管了；
-    // 刷新前等 SW 就绪以后，4 个 worker 并行 12 遍全过）。真实使用里第二次打开起页面都由 SW 接管，见 src/motion/features.ts 文件头
-    await page.evaluate(async () => {
-      await navigator.serviceWorker.ready;
-    });
+    // 刷新前等 SW 就绪以后，4 个 worker 并行 12 遍全过）。真实使用里第二次打开起页面都由 SW 接管，见 src/motion/features.ts 文件头。
+    // 等 SW 的那段不算进用例超时（swReady，分诊表 11-14 遗留④：本机全量并行时 webkit 在这里等满 30 秒超时）
+    await swReady(page);
     await page.reload();
     await expect(page.getByTestId('csp-lab')).toBeVisible({ timeout: 30000 });
     expect(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)), '刷新以后页面由 SW 接管').toBe(true);

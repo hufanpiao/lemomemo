@@ -8,14 +8,14 @@
 // • 文档附件（B4b-1，vault-file）：电脑上在隐私记里加（multipart 交给函数加密）、列表写页数、预览中文 PDF、PPT 的卡多一句“会先解密再交给微软”、
 //   只下载后提示“下载后的文件不再加密”、上锁后附件区不见
 // • Face ID：WebAuthn 不认 IP 当 RP ID（本组服务开在 127.0.0.1），e2e 跑不了；能不能用、取消回 null、两次没认出换密码键盘在 vitest 里测，真机另看
-// 跑在快读组（playwright.fastread.config.ts，要带 supabase 地址的构建）；B5_SHOTS 设了目录时，chromium 顺手存浅色、深色两套截图（评审看，不进仓库）
+// 跑在快读组（playwright.fastread.config.ts，要带 supabase 地址的构建）；LEMO_SHOT_DIR 设了目录时，chromium 顺手存浅色、深色两套截图（评审看，不进仓库）
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page, Route } from '@playwright/test';
 import JSZip from 'jszip';
 import { fakeRest } from './fake-rest.ts';
 import { notesViewRows } from './idb.ts';
-import { afterPageFade, jpeg, readRunLogInPage, stableBox, swipeDiag, touchSwipe } from './page-helpers.ts';
+import { afterPageFade, jpeg, readRunLogInPage, shot, SHOT_DIR, stableBox, swipeDiag, touchSwipe } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 import { runLog as readRunLog } from './fake-media.ts';
 
@@ -23,7 +23,6 @@ test.setTimeout(90_000);
 
 const PIN = '2580';
 const OLD = '0e2e0000-0000-4000-8000-0000000000a1';
-const SHOTS = process.env['B5_SHOTS'] ?? '';
 const UID = '0e2e0000-0000-4000-8000-000000000001';
 /** 列表行的分类（线框 s9 PRIVLIST 第二行灰字）：假 REST 的 categories 表放一条活着的分类，首次同步拉进本机库 */
 const CAT = '0e2e0000-0000-4000-8000-0000000000c1';
@@ -168,20 +167,24 @@ async function typePin(page: Page, pad: string, digits: string): Promise<void> {
   for (const d of digits) await page.getByTestId(`${pad}-key-${d === '0' ? 9 : Number(d) - 1}`).click(); // 位置序号：1～9 是 key-0～key-8，0 是 key-9
 }
 
-/** 线框对照图：手机尺寸、浅色深色各一张（page-helpers 的 shot 只拍当前尺寸一张，这里另起名，不同名） */
+/**
+ * 线框对照图：手机尺寸、浅色深色各一张，存成 LEMO_SHOT_DIR/light|dark/名字.png（截图本身走 page-helpers 的 shot：
+ * 设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截；原来这份 spec 另认 B5_SHOTS，分诊表 11-14 遗留②并成一个开关）
+ */
 async function phoneShots(page: Page, name: string, browserName: string): Promise<void> {
-  if (!SHOTS || browserName !== 'chromium') return;
+  if (!SHOT_DIR || browserName !== 'chromium') return;
   // 线框是手机版：拍的时候临时换成 iPhone 15 的尺寸，拍完还原（chromium 项目平时是桌面宽）
   const size = page.viewportSize();
   await page.setViewportSize({ width: 393, height: 852 });
   for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    await page.waitForTimeout(300);
-    await page.screenshot({ path: `${SHOTS}/${scheme}/${name}.png` });
+    await shot(page, browserName, `${scheme}/${name}`, { settleMs: 300 });
   }
   await page.emulateMedia({ colorScheme: 'light' });
-  if (size) await page.setViewportSize(size);
-  await page.waitForTimeout(150);
+  if (size) {
+    await page.setViewportSize(size);
+    await page.waitForFunction((w) => window.innerWidth === w, size.width);
+  }
 }
 
 /** 截图前等页面上的动画（换页过渡、弹层滑入）都播完 */
@@ -741,9 +744,9 @@ test('隐私记照随手记：解锁后 #/vault 就是列表（输入行、分�
   await expect(vault).toContainText('没分类的一条');
   await expect(page.getByTestId('vault-home')).toHaveCount(0);
   await expect(page.getByTestId('vault-back')).toBeVisible();
-  if (SHOTS && browserName === 'chromium') {
+  if (SHOT_DIR && browserName === 'chromium') {
     await settle(page);
-    await page.screenshot({ path: `${SHOTS}/light/13-隐私记照随手记.png` });
+    await shot(page, browserName, 'light/13-隐私记照随手记', { settleMs: 0 });
   }
   await expect(page.locator('html')).not.toHaveAttribute('data-vt', /.*/);
   await page.getByTestId('notes-filter-new').click();

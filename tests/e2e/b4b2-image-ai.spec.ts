@@ -7,9 +7,8 @@
 // 跑在快读组（playwright.fastread.config.ts）：签名、file-check 要会话令牌，默认组的构建没配 supabase 地址
 import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
-import { jpeg, readRunLogInPage, shot } from './page-helpers.ts';
+import { afterPageFade, jpeg, readRunLogInPage, shot } from './page-helpers.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
 test.setTimeout(90_000);
@@ -72,7 +71,7 @@ async function openNote(page: Page): Promise<void> {
   await page.goto(`/app/#/note/${NOTE}`);
   await expect(page.getByTestId(`note-image-${DONE}`)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId(`img-ai-${PEND}`)).toBeVisible({ timeout: 15_000 });
-  await page.waitForTimeout(FADE_GUARD_MS);
+  await afterPageFade(page);
 }
 
 const runLog = (page: Page) => page.evaluate(readRunLogInPage);
@@ -195,14 +194,15 @@ test('看图浮层（电脑）：同一个组件，底部描述和标签；Esc �
 
 // 负责人 11-18“有附件的将日期放到图片上面，不要左边突出来”（弹窗选“日期在图片正上方”）：列表里带图的行，
 // 日期右边和缩略图右边对齐（和没图的行的日期同一条线），缩略图整个在日期下面
-test('随手记列表带图的行：日期在缩略图正上方、右边对齐', async ({ page, baseURL }) => {
+test('随手记列表带图的行：日期在缩略图正上方、右边对齐', async ({ page, baseURL, browserName }) => {
   await fakeServer(page, baseURL, true, true);
   await page.goto('/app/#/notes');
   const thumb = page.getByTestId(`notes-thumb-${NOTE}`);
   await expect(thumb).toBeVisible({ timeout: 30_000 });
-  await page.waitForTimeout(FADE_GUARD_MS); // 行的进场淡入走完再量
+  await afterPageFade(page); // 行的进场淡入走完再量
   const tm = page.getByTestId(`notes-row-${NOTE}`).locator('[class^="_tm_"]').first();
-  if (process.env['LEMO_SHOT_DIR']) await page.screenshot({ path: `${process.env['LEMO_SHOT_DIR']}/notes-thumb-date-${test.info().project.name}.png` });
+  // 评审截图同别处：设了 LEMO_SHOT_DIR、只在 Chromium（WebKit 截图往页面插 <style>、被 CSP 记成违规）；动画上面已经等完
+  await shot(page, browserName, 'notes-thumb-date', { settleMs: 0 });
   const a = await tm.boundingBox();
   const b = await thumb.boundingBox();
   if (!a || !b) throw new Error('量不到日期或缩略图');

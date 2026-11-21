@@ -7,9 +7,9 @@
 //   运行日志有 assist send / list / sum，没有原话；设了 LEMO_SHOT_DIR 时在 Chromium 上存评审截图（浅色、深色）。
 // 跑在快读组（playwright.fastread.config.ts）：ai-parse、ai-summarize 要会话令牌，默认组的构建没配 supabase 地址。
 import type { Page } from '@playwright/test';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { fakeRest } from './fake-rest.ts';
-import { readRunLogInPage, shot } from './page-helpers.ts';
+import { idbRead } from './idb.ts';
+import { afterPageFade, readRunLogInPage, shot } from './page-helpers.ts';
 import { logOnFail } from './fail-log.ts';
 import { expect, seedFakeSession, test } from './session-fixture.ts';
 
@@ -76,14 +76,20 @@ async function shots(page: Page, browserName: string, name: string): Promise<voi
 
 /** 首次同步要用到的表：settings 的 ai.enabled、profiles 的同意版本没落地前，“＋”按 AI 没开走本机规则（11-14 运行日志 assist list … n=0、③ 记成了“已记下”） */
 const FIRST_PULL = ['events', 'todos', 'notes', 'settings', 'profiles'];
+/** 首次同步拉下来、要先落进本机库的行（仓名、id） */
+const LOCAL_ROWS: readonly (readonly [string, string])[] = [['events', EV], ['todos', TD], ['notes', NT], ['settings', id(50)]];
 
 async function openToday(page: Page, fake: Fake): Promise<void> {
   await page.goto('/app/#/today');
   await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 });
-  // 等首次同步拉完、日程出现在今天页，再留一点时间让本机库写完；不然打字时数据还没到，结果层查不到、AI 也当没开
+  // 等首次同步拉完、日程出现在今天页、四张表的行都写进了本机库；不然打字时数据还没到，结果层查不到、AI 也当没开。
+  // 原来按毫秒睡 300（分诊表 11-14 遗留②），改成等本机库里真有这几行
   await expect.poll(() => FIRST_PULL.filter((t) => !fake.pulled.has(t)), { timeout: 20_000 }).toEqual([]);
   await expect(page.getByText('看牙医').first()).toBeVisible({ timeout: 20_000 });
-  await page.waitForTimeout(Math.max(FADE_GUARD_MS, 300));
+  const local = (): Promise<string[]> =>
+    Promise.all(LOCAL_ROWS.map(async ([store, key]) => ((await idbRead(page, store, 'get', key)) ? '' : store))).then((m) => m.filter(Boolean));
+  await expect.poll(local, { message: '首次同步的行还没写进本机库', timeout: 10_000 }).toEqual([]);
+  await afterPageFade(page);
 }
 
 async function typeAndSend(page: Page, text: string): Promise<void> {

@@ -11,8 +11,7 @@
 // 纪念日在界面上只能一条条建，先让 App 开好本机库，再往 anniversaries 仓写服务器形状的行、刷新（同 b4-notes-s7s8.spec.ts 的分类）
 // 截图：设了 LEMO_SHOT_DIR 才截、只在 Chromium 上截（WebKit 截图会往页面插 <style>、被 CSP 记成违规）；断言两种浏览器都跑
 import type { Page } from '@playwright/test';
-import { FADE_GUARD_MS } from '../../src/motion/index.ts';
-import { shot } from './page-helpers.ts';
+import { afterPageFade, shot } from './page-helpers.ts';
 import { cached, idbPut } from './idb.ts';
 import { expect, test } from './session-fixture.ts';
 
@@ -79,9 +78,9 @@ test.describe('B5 纪念日', () => {
     // 生日那一种名字后面写“生日”（线框 s1 ANNLINE“3 天后 김지민 生日”，B6 对齐线框）
     await expect(line).toContainText('김지민 生日');
     await shot(page, browserName, 'e2e-今天页纪念日一行');
-    // 今天页分包挂上后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/index.ts 的 guardTaps）；这一行要等数据出来才画，晚于页面挂上，
-    // 等它出现后再等一个窗口就够（11-14 CI 失败：运行日志 click 无 focusin，即 pointerdown 被拦）
-    await page.waitForTimeout(FADE_GUARD_MS);
+    // 换页后 FADE_GUARD_MS 以内落在 main 里的点按按设计吞掉（motion/page-swap.ts 的 guardTaps）；这一行要等数据出来才画，晚于页面挂上，
+    // 等它出现后再等换页、进场动画放完（page-helpers.ts 的 afterPageFade）再点（11-14 CI 失败：运行日志 click 无 focusin，即 pointerdown 被拦）
+    await afterPageFade(page);
     await line.click();
     await expect(page).toHaveURL(/#\/anniv\/0e2e0000-0000-4000-8000-0000000b5a01$/);
     await expect(page.getByTestId('anniv-edit-layer')).toBeVisible({ timeout: 30_000 });

@@ -2,11 +2,11 @@
 // 根因（运行日志定的）：页签互切后 FADE_GUARD_MS（100 ms）以内落在 main 里的点按，按设计由 motion/index.ts 的 guardTaps 吞掉
 // （主持人 11-05“过渡开始很短时间内的点按算点在旧画面上”、代码审查方案 B M8；时机细节由 b2-vt-taps.spec.ts 的 L17 守）。
 // 这里守两件事：① 运行日志能看出是谁吞的：这一下记成“click … prevented-later”（run-log 的捕获监听最先跑，派发完补记）；
-// ② e2e 等的是这个窗口本身：新页出来以后过 FADE_GUARD_MS 再点就是真点（不用等 400 ms 的 settled 快照）
+// ② e2e 等的是这个窗口本身：新页出来以后等换页放完（page-helpers.ts 的 afterPageFade：快照拿掉、淡入放完，都比窗口长）再点就是真点
 import type { Page } from '@playwright/test';
 import { FADE_GUARD_MS } from '../../src/motion/index.ts';
 import { cached, idbPut } from './idb.ts';
-import { readRunLogInPage } from './page-helpers.ts';
+import { afterPageFade, readRunLogInPage } from './page-helpers.ts';
 import { FAKE_USER_ID, expect, test } from './session-fixture.ts';
 
 test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', locale: 'zh-CN', viewport: { width: 390, height: 844 } });
@@ -67,8 +67,8 @@ test('随手记 → 待办：窗口以内点打勾被吞、日志记 prevented-l
   await expect(page.getByTestId('todos-done-n1')).not.toBeChecked();
   await expect(page.locator('[data-undo-toast]')).toHaveCount(0);
 
-  // 过了窗口（新页早已出来，从现在起再等一整段）再点：真删
-  await page.waitForTimeout(FADE_GUARD_MS);
+  // 过了窗口（换页放完）再点：真勾上
+  await afterPageFade(page);
   await page.getByTestId('todos-done-n1').click();
   await expect(page.locator('[data-undo-toast]')).toBeVisible();
   await expect(page.getByTestId('todos-done-n1')).toBeChecked();

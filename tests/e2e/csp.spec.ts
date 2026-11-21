@@ -2,6 +2,7 @@
 // 试验页 /app/#/dev-csp 只在非正式版构建里挂（src/app/dev/CspLab.tsx）
 // 结论写在 docs/07-开发日志/B0-验证-CSP下Radix与Motion.md
 // K6 起 /app/ 没有会话就跳 /app/auth/：要打开 App 页面的两组用 session-fixture 写假会话（loggedIn）
+import { swReady } from './page-helpers.ts';
 import { expect, test } from './session-fixture.ts';
 
 /** 一条形状正确的 /files 签名链接（0.32；本机没有 /files 的上游，只用来看 CSP 和 SW 怎么对待它） */
@@ -182,18 +183,17 @@ test.describe('带 CSP 打开页面', () => {
 test.describe('Service Worker', () => {
   test.use({ loggedIn: true });
 
+  // 等 SW 就绪的那段不算进用例超时（page-helpers.ts 的 swReady，分诊表 11-14 遗留④）
   test('作用域是 /app/', async ({ page }) => {
     await page.goto('/app/');
-    const scope = await page.evaluate(async () => (await navigator.serviceWorker.ready).scope);
+    const scope = await swReady(page);
     expect(new URL(scope).pathname).toBe('/app/');
   });
 
   // TC-B0-40（15.3 第 1 条；0.32 加 /files/*）：本机没有 /sb、/files 的上游，请求本身成不成功不要紧，要看的是 SW 不缓存它们
   test('TC-B0-40：/sb/、/files/ 不进 Cache Storage；断网时 /files 链接取不到，不是读到缓存', async ({ page, context }) => {
     await page.goto('/app/');
-    await page.evaluate(async () => {
-      await navigator.serviceWorker.ready;
-    });
+    await swReady(page);
     await page.reload(); // 装好以后重新打开，页面才归 SW 管
     expect(await page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
     const fetchAll = (urls: string[]) =>
