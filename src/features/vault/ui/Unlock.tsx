@@ -288,7 +288,7 @@ export function LockLayer({ variant, open, children, testId }: { variant: 'page'
   // 11-21 负责人截图“点隐私记变成这样”：原来是 div，从随手记推进来认不到新页，随手记的快照叠着留满 30 秒、点按一直被吞
   if (page)
     return (
-      <main ref={root} className={leaving ? `${styles.lockPage} ${styles.lockOut}` : styles.lockPage} data-testid={testId ?? 'vault-locked'} data-leaving={leaving || undefined} onTransitionEnd={() => leaving && done()}>
+      <main ref={root} className={leaving ? `${styles.lockPage} ${styles.lockOut}` : styles.lockPage} data-feature="vault" data-testid={testId ?? 'vault-locked'} data-leaving={leaving || undefined} onTransitionEnd={() => leaving && done()}>
         {inner}
       </main>
     );

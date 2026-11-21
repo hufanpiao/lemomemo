@@ -86,6 +86,8 @@ const PAGE_FILES = [
   'features/today/ui/RecentlyDeletedPage.tsx',
   'features/today/ui/TodayPage.tsx',
   'features/vault/ui/VaultPage.tsx',
+  // 隐私记锁着时整页就是 LockLayer variant="page"（11-21 起根是 main：切页靠 main 认新页，负责人截图“点隐私记变成这样”）
+  'features/vault/ui/Unlock.tsx',
   'features/todos/ui/TodosPage.tsx',
   'kit/components/Placeholder.tsx',
 ];
