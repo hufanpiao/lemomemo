@@ -447,7 +447,7 @@ test('列表方式左滑：出“转成待办 / 移到隐私记 / 删除”，�
   const fv = await fakeServer(page, baseURL);
   // 开截图开关时一开始就用手机尺寸：露着的时候再从桌面宽换成手机宽，电脑版布局切回手机版（运行日志 desk off、layer pop swipe）会把这一行收起，
   // 截出来是收着的、接着点“移到隐私记”被行面挡住一直点不到（11-14 遗留①）
-  if (SHOTS && browserName === 'chromium') await page.setViewportSize({ width: 393, height: 852 });
+  if (SHOT_DIR && browserName === 'chromium') await page.setViewportSize({ width: 393, height: 852 });
   const { id, from } = await listRow(page, browserName, '左滑的一条');
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
