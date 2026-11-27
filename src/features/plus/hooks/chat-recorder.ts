@@ -18,16 +18,13 @@ import { saveCapture, type Writer } from '../data/capture-save.ts';
 import { applyConfirm, planLocal, type TypeCtx } from '../data/type-flow.ts';
 import type { ParseResult } from '../../../../shared/logic/parse/parse-split.ts';
 import { projectsOf } from './useCaptureCtx.ts';
-import { projectExamples } from '../../../../shared/logic/project-examples.ts';
-import { PROJECT_CATEGORIES } from '../../../../shared/logic/project-categories-data.ts';
+import { isFixedProject, projectExamples } from '../../../../shared/logic/project-examples.ts';
 import type { ProjectExample } from '../../../../shared/schema/ai.ts';
 
-/** 固定类别（中韩两套）：本机规则没认出用户说的自建项目时给的，照以前怎么分的配了项目名就换掉 */
-const FIXED: ReadonlySet<string> = new Set<string>([...PROJECT_CATEGORIES.zh, ...PROJECT_CATEGORIES.ko]);
-
-/** R-497：本机规则给的是固定类别或没给项目，换成照以前怎么分的配的那个；原话说到了自建项目名（本机规则认出来的）照旧 */
-function withLearned<T extends { project?: string | null }>(it: T, learned: string): T {
-  return !it.project || FIXED.has(it.project) ? { ...it, project: learned } : it;
+/** R-497：本机规则没给项目、或给的是它猜的固定类别（shared/logic/project-examples.ts 的 isFixedProject），换成照以前怎么分的配的那个；
+ *  原话说到的项目名照旧：本机规则认出来的自建项目，和原话里亲口说的固定类别（“记到工作里”） */
+function withLearned<T extends { project?: string | null }>(it: T, learned: string, text: string): T {
+  return !it.project || (isFixedProject(it.project) && !text.includes(it.project)) ? { ...it, project: learned } : it;
 }
 
 /** 卡片只记这两类（纪念日、随手记的说法也按待办出，同本机规则没开纪念日时） */
@@ -47,7 +44,7 @@ export function chatRecorderOf(ctx: () => TypeCtx = ctxNow, w?: Writer) {
     /** 整份结果交回（items 带 confirm，doubts、hints 给卡片标“没把握”“这天不存在”“重复只记一次”） */
     plan(text: string, learned?: string): ParseResult {
       const r = planLocal(text, { ...ctx(), day: null, features: KINDS }).result;
-      return learned ? { ...r, items: r.items.map((it) => withLearned(it, learned)) } : r;
+      return learned ? { ...r, items: r.items.map((it) => withLearned(it, learned, text)) } : r;
     },
     examples: (): ProjectExample[] => projectExamples([collection<ProjRow>('todos').getSnapshot(), collection<ProjRow>('events').getSnapshot()]),
     /** 过去的月日：同打字条确认行 */

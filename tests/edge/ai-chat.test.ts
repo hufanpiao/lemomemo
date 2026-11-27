@@ -21,9 +21,10 @@ import {
   type Deps,
 } from '../../supabase/functions/ai-chat/core.ts';
 import {
-  CALLS_MAX, DRAFT_PROJECT_LEN, DRAFT_TEXT_MAX, DRAFTS_MAX, draftPairsOf, draftsOf, FINDING_MAX, keyOf, KINDS, likeOf, parseCall, Registry, termsOf, TITLE_MAX, TOOL_TABLE, TOOLS, toolsFor,
+  CALLS_MAX, DRAFT_TEXT_MAX, DRAFTS_MAX, draftPairsOf, FINDING_MAX, keyOf, KINDS, likeOf, parseCall, Registry, termsOf, TITLE_MAX, TOOL_TABLE, TOOLS, toolsFor,
   type ChatRow, type ToolQuery,
 } from '../../supabase/functions/ai-chat/tools.ts';
+import { PROJECT_LEN } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { COUNTER_KEY, fakeGate, UA, used, type GateOpts } from './ai-fakes.ts';
 
 const NOW = Date.UTC(2026, 10, 22, 3, 0);   // 2026-11-22（周日）12:00 首尔
@@ -803,6 +804,7 @@ describe('chatPrompt 第 2 段', () => {
 describe('ai-chat：记日程待办 draft_records（负责人 11-24）', () => {
   const DRAFT_BODY = { ...BODY, messages: [{ role: 'user', text: '明天下午三点和客户开会，还有周五前交报告' }], draft: true };
   const draft = (items: unknown): ToolCall => ({ id: 'd', name: 'draft_records', args: { items } });
+  const draftsOf = (v: unknown): string[] => draftPairsOf(v, undefined).map((d) => d.text);
 
   it('上限和 shared 相等；请求带 draft 且日程或待办开着才给；旧客户端（不带 draft）不给', () => {
     expect([DRAFTS_MAX, DRAFT_TEXT_MAX]).toEqual([CHAT_DRAFTS_MAX, CHAT_DRAFT_TEXT_MAX]);
@@ -814,7 +816,7 @@ describe('ai-chat：记日程待办 draft_records（负责人 11-24）', () => {
     expect(chatPrompt(NOW, 'Asia/Seoul', 'zh')).not.toContain('draft_records');
   });
 
-  it('draftsOf：只收字符串，去控制字符、合并空白、截长，空的丢掉，最多 5 段；一段都没有回 no_items', () => {
+  it('draftPairsOf 的原话：只收字符串，去控制字符、合并空白、截长，空的丢掉，最多 5 段；一段都没有回 no_items', () => {
     expect(draftsOf([' 明天\n下午三点  开会 ', 3, '', '\u0007周五前交报告', null])).toEqual(['明天 下午三点 开会', '周五前交报告']);
     expect(draftsOf(Array.from({ length: 8 }, (_, i) => `事${i}`)).length).toBe(DRAFTS_MAX);
     expect(draftsOf(['长'.repeat(500)])[0]?.length).toBe(DRAFT_TEXT_MAX);
@@ -909,11 +911,19 @@ describe('ai-chat：记日程待办照以前怎么分的配项目名（R-497）'
     expect(chatPrompt(NOW, 'Asia/Seoul', 'zh', { web: false, images: false }, false, [], h)).not.toContain('<history>');
   });
 
-  it('draftPairsOf：原话和项目名成对清洗，丢掉的那段项目名一起丢，不错位；项目名截到 DRAFT_PROJECT_LEN（= AI_PROJECT_LEN）', () => {
-    expect(DRAFT_PROJECT_LEN).toBe(AI_PROJECT_LEN);
+  it('draftPairsOf：原话和项目名成对清洗，丢掉的那段项目名一起丢，不错位；项目名截到 PROJECT_LEN（= AI_PROJECT_LEN）', () => {
+    expect(PROJECT_LEN).toBe(AI_PROJECT_LEN);
     expect(draftPairsOf(['', '明天游泳', 3, '开会'], ['x', ' 健身 ', 'y', 5])).toEqual([{ text: '明天游泳', project: '健身' }, { text: '开会', project: '' }]);
     expect(draftPairsOf(['明天游泳'], 'nope')).toEqual([{ text: '明天游泳', project: '' }]);
-    expect([...draftPairsOf(['a'], ['健'.repeat(60)])[0]!.project]).toHaveLength(DRAFT_PROJECT_LEN);
+    expect([...draftPairsOf(['a'], ['健'.repeat(60)])[0]!.project]).toHaveLength(PROJECT_LEN);
+  });
+
+  it('项目名两头同一口径比：带零宽连接的 emoji、两个空格、<data> 这类名字，模型照 <history> 里看到的写回来也认，回包给客户端发来的原名', async () => {
+    const examples = [{ title: '跑步', project: '👨\u200d👩\u200d👧 家' }, { title: '周报', project: 'A  组' }, { title: '对账', project: '<data>组' }];
+    const { deps } = world([() => tools(draft(['明天早上游泳', '下午三点开会', '还有'], ['👨👩👧 家', 'A 组', '<_data>组'])), () => say('好。')]);
+    const r = await call(await handle(req({ ...DRAFT_BODY, examples }), deps));
+    expect(chatRes.safeParse(r.body).success).toBe(true);
+    expect(r.body['draft_projects']).toEqual(['👨\u200d👩\u200d👧 家', 'A  组', '<data>组']);
   });
 
   it('带例子：数据区给模型看、回包 draft_projects 和 drafts 一一对应；例子里没有的项目名（模型编的）记成空串', async () => {

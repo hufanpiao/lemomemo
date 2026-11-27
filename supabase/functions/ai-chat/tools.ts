@@ -15,7 +15,7 @@
 // 记日程待办（负责人 11-24）：draft_records(items)（need draft：请求带 draft、日程或待办开着）也不写库，只把要记的几段原话交回客户端，
 //   客户端用打字条同一套本机规则拆成日程、待办出确认卡片，用户点“记下来”才经 outbox 写（shared/schema/chat.ts 的 drafts）。
 import { cutUnits } from '../_shared/ai/cites.ts';
-import { sanitize } from '../_shared/ai/parse-core.ts';
+import { PROJECT_LEN, sanitize } from '../_shared/ai/parse-core.ts';
 import { TITLE_MAX, type ToolDecl, type WebSource } from '../_shared/ai/provider.ts';
 import { cleanText, MEMORY_TEXT_MAX } from '../_shared/memories.ts';
 
@@ -83,16 +83,15 @@ export interface ChatRow {
 /** 给不给某个工具要看的条件：某一类开着、有联网服务商（且请求带 web）、服务商收图、请求带 memory、请求带 draft 且日程或待办开着其一 */
 export type Need = ChatKind | 'web' | 'images' | 'memory' | 'draft';
 
-/** draft_records 的 items：只收字符串，同 remember 的清洗（memories.ts 的 cleanText：去零宽、方向这类不可见字符，控制字符换空格）、合并空白、截到 DRAFT_TEXT_MAX，空的丢掉，最多 DRAFTS_MAX 段 */
-export function draftsOf(v: unknown): string[] {
-  return draftPairsOf(v, undefined).map((d) => d.text);
+/** R-497：项目名的比对口径（同 draft_records 原话的清洗：memories.ts 的 cleanText 去零宽、方向这类不可见字符，控制字符换空格；再合并空白、截到 parse-core.ts 的 PROJECT_LEN）。
+ *  模型回写的项目名、给模型看的例子（sanitize 过，<data> 成了 <_data>）都先过这一道再比，core.ts 的 draftRecords 命中后交回例子里的原名 */
+export function projectKeyOf(p: string): string {
+  return [...cleanText(p, PROJECT_LEN * 2).replace(/\s+/g, ' ').trim()].slice(0, PROJECT_LEN).join('');
 }
 
-/** 项目名最长几个码点（同 shared/schema/ai.ts 的 AI_PROJECT_LEN；tests/edge/ai-chat-examples.test.ts 钉住） */
-export const DRAFT_PROJECT_LEN = 40;
-
-/** R-497：items 连同和它一一对应的 projects（照以前怎么分的配的项目名，没配是空串）一起清洗；items 丢掉的那段，项目名一起丢，不错位。
- *  项目名只做清洗截长，是不是例子里出现过的由 core.ts 的 draftRecords 核 */
+/** draft_records 的 items（只收字符串，同 remember 的清洗、合并空白、截到 DRAFT_TEXT_MAX，空的丢掉，最多 DRAFTS_MAX 段）
+ *  连同和它一一对应的 projects（R-497：照以前怎么分的配的项目名，没配是空串；过 projectKeyOf）一起清洗；items 丢掉的那段，项目名一起丢，不错位。
+ *  项目名是不是例子里出现过的由 core.ts 的 draftRecords 核 */
 export function draftPairsOf(items: unknown, projects: unknown): { text: string; project: string }[] {
   if (!Array.isArray(items)) return [];
   const ps = Array.isArray(projects) ? projects : [];
@@ -103,7 +102,7 @@ export function draftPairsOf(items: unknown, projects: unknown): { text: string;
     const text = cutUnits(cleanText(x, DRAFT_TEXT_MAX).replace(/\s+/g, ' ').trim(), DRAFT_TEXT_MAX);
     if (text === '') continue;
     const p: unknown = ps[i];
-    const project = typeof p === 'string' ? [...cleanText(p, DRAFT_PROJECT_LEN * 2).replace(/\s+/g, ' ').trim()].slice(0, DRAFT_PROJECT_LEN).join('') : '';
+    const project = typeof p === 'string' ? projectKeyOf(p) : '';
     out.push({ text, project });
   }
   return out;

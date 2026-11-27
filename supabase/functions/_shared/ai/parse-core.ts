@@ -82,7 +82,7 @@ export type ParseOk<T> = { ok: true; value: T; raw: unknown; prompt: string; bad
 export const TEXT_MAX = 2000;
 export const PROJECTS_MAX = 30;
 export const PROJECT_LEN = 40;
-/** 例子（R-497）：同 shared/logic/project-examples.ts 的 EXAMPLES_MAX、EXAMPLE_TITLE_LEN（这里不依赖 shared，tests/edge 对一遍） */
+/** 例子（R-497）：同 shared/schema/ai.ts 的 AI_EXAMPLES_MAX、AI_EXAMPLE_TITLE_LEN（这里不依赖 shared，tests/edge/ai-project-examples.test.ts 对一遍） */
 export const EXAMPLES_MAX = 20;
 export const EXAMPLE_TITLE_LEN = 30;
 

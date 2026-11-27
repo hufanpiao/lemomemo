@@ -17,6 +17,9 @@ type Row = Readonly<{ title?: unknown; project?: unknown; updated_at?: unknown }
 
 const FIXED: ReadonlySet<string> = new Set<string>([...PROJECT_CATEGORIES.zh, ...PROJECT_CATEGORIES.ko]);
 
+/** 是不是固定类别（中韩两套）；AI 助手卡片（src/features/plus/hooks/chat-recorder.ts）也用这一份 */
+export const isFixedProject = (p: string): boolean => FIXED.has(p);
+
 const cut = (s: string, n: number): string => [...s.trim()].slice(0, n).join('');
 
 export function projectExamples(lists: readonly (readonly Row[])[]): ProjectExample[] {
@@ -26,7 +29,7 @@ export function projectExamples(lists: readonly (readonly Row[])[]): ProjectExam
       if (!isLiveRow(r) || typeof r.project !== 'string' || typeof r.title !== 'string') continue;
       const project = cut(r.project, AI_PROJECT_LEN);
       const title = cut(r.title, AI_EXAMPLE_TITLE_LEN);
-      if (project === '' || title === '' || FIXED.has(project)) continue;
+      if (project === '' || title === '' || isFixedProject(project)) continue;
       rows.push({ title, project, at: typeof r.updated_at === 'number' && Number.isFinite(r.updated_at) ? r.updated_at : -Infinity });
     }
   }

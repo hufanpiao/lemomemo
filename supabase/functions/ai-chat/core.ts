@@ -51,7 +51,7 @@ import { json } from '../_shared/http.ts';
 import { cutCited, relinkCites } from '../_shared/ai/cites.ts';
 import { ADMIN_DAILY_CAP, aiGate, clientReason, pacificDate, settleFailure, type GateDeps, type GateGo } from '../_shared/ai/gate.ts';
 import { CHAT_CALL_TIMEOUT_MS, CHAT_MAX_ROUNDS, CHAT_TURN_BUDGET_MS, TASK_PARAMS } from '../_shared/ai/params.ts';
-import { cleanExamples, wallOf } from '../_shared/ai/parse-core.ts';
+import { cleanExamples, EXAMPLES_MAX, PROJECT_LEN, sanitize, wallOf } from '../_shared/ai/parse-core.ts';
 import { checkMemory, MEMORY_STMT_MS, OVERLAP_MIN, overlapOf, MEMORY_TURN_MAX, memoryBlock, promptMemories, type MemoryRow, type MemorySaved, type MemoryWrite } from '../_shared/memories.ts';
 import { CHAT_V6, CHAT_V6_DRAFT, CHAT_V6_HISTORY, CHAT_V6_IMAGES, CHAT_V6_MEMORY, CHAT_V6_MEMORY_TOOL, CHAT_V6_USER_IMAGES, CHAT_V6_WEB } from '../_shared/ai/prompts/chat.v6.ts';
 import {
@@ -60,7 +60,7 @@ import {
 import { QUOTA_WINDOW_S } from '../_shared/ai/store.ts';
 import { VOICE_ASK_FREE, voiceIssuedKey, voiceUsedKey } from '../_shared/ai/voice-ask.ts';
 import {
-  CALLS_MAX, DRAFTS_MAX, kindOf, KINDS, NOTE_IMAGES_MAX, parseCall, QUERY_MS, Registry, toolsFor, TURN_IMAGES_MAX,
+  CALLS_MAX, DRAFTS_MAX, kindOf, KINDS, NOTE_IMAGES_MAX, parseCall, projectKeyOf, QUERY_MS, Registry, toolsFor, TURN_IMAGES_MAX,
   type Call, type ChatKind, type ChatRow, type Extras, type Ref, type ToolQuery,
 } from './tools.ts';
 
@@ -220,10 +220,11 @@ interface Turn {
   sawTools: boolean;
   /** 这一轮要出确认卡片的几段原话（draft_records；答成了才随回包交回，服务器不写库） */
   drafts: string[];
-  /** R-497：和 drafts 一一对应的项目名（不在 allowed 里的记成空串）；allowed 是给模型看的例子里出现过的项目名，空的就是这一轮没给例子、回包不带 draft_projects */
+  /** R-497：和 drafts 一一对应的项目名（不在 allowed 里的记成空串）；history 是给模型看的例子（cleanExamples 转义过）；
+   *  allowed：例子里项目名的比对口径（tools.ts 的 projectKeyOf）→ 客户端发来的原名，空的就是这一轮没给例子、回包不带 draft_projects */
   draftProjects: string[];
   history: readonly { t: string; p: string }[];
-  allowed: ReadonlySet<string>;
+  allowed: ReadonlyMap<string, string>;
   /** 这一轮已经联网几次、看了几张随手记的图 */
   webCalls: number;
   seenImages: number;
@@ -357,6 +358,16 @@ function remember(t: Turn, c: Extract<Call, { tool: 'remember' }>): Out {
   return { result: { ok: true }, log: `memory=queued replaces=${replaces === null ? 0 : 1}` };
 }
 
+/** R-497：例子里的项目名按给模型看的样子（sanitize）取比对口径，对回客户端发来的原名；同一口径只留第一个 */
+function allowedOf(examples: readonly { project: string }[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const e of examples.slice(0, EXAMPLES_MAX)) {
+    const k = projectKeyOf(sanitize(e.project, PROJECT_LEN));
+    if (k !== '' && !m.has(k)) m.set(k, e.project);
+  }
+  return m;
+}
+
 /**
  * draft_records（11-24）：只排上要出卡片的原话（看过工具结果以后不收，同 remember），整轮答成了才随回包交回；不写库、不扣次数。
  * 每段同 remember 核对是不是用户这一句说的（memories.ts 的 overlapOf：二元组覆盖不到 OVERLAP_MIN 的丢掉，前几轮、工具结果里的事过不了）
@@ -366,12 +377,12 @@ function draftRecords(t: Turn, items: readonly string[], projects: readonly stri
   const room = DRAFTS_MAX - t.drafts.length;
   if (room <= 0) return { error: 'too_many' };
   const said = t.body.messages.at(-1)?.text ?? '';
-  // R-497：项目名和原话成对走；只认给模型看的例子里出现过的名字（模型编的、<data> 里被注入的都不认）
+  // R-497：项目名和原话成对走；只认给模型看的例子里出现过的名字（模型编的、<data> 里被注入的都不认），交回客户端发来的原名（不是转义过的）
   const mine: { x: string; p: string }[] = [];
   for (let i = 0; i < items.length; i++) {
     const x = items[i] ?? '';
     const p = projects[i] ?? '';
-    if (overlapOf(x, said) >= OVERLAP_MIN) mine.push({ x, p: t.allowed.has(p) ? p : '' });
+    if (overlapOf(x, said) >= OVERLAP_MIN) mine.push({ x, p: t.allowed.get(p) ?? '' });
   }
   const dropped = items.length - mine.length;
   if (mine.length === 0) return { error: 'draft_not_said' };
@@ -591,10 +602,11 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   // 记忆读不出来不影响回答：这一轮不用记忆、也不给 remember（不然模型看不到旧的，会记重）
   const mem = body.memory === true ? await readMemories(deps, uid, body.messages.at(-1)?.text ?? '') : null;
   // R-497：带 draft 才看例子（不带的旧客户端、没有自建项目的：没有 <history>，回包不带 draft_projects）
-  const history = body.draft === true ? cleanExamples(deps.normExamples(body.examples)) : [];
+  const examples = body.draft === true ? deps.normExamples(body.examples) : [];
+  const history = cleanExamples(examples);
   const t: Turn = {
     deps, gate, uid, body, reg: new Registry(), start, web, today: wallOf(start, body.tz).today, lang: deps.normLocale(body.locale),
-    sent: 0, sawTools: false, drafts: [], draftProjects: [], history, allowed: new Set(history.map((e) => e.p)), webCalls: 0, seenImages: 0, searched: new Set(),
+    sent: 0, sawTools: false, drafts: [], draftProjects: [], history, allowed: allowedOf(examples), webCalls: 0, seenImages: 0, searched: new Set(),
     memVer: mem?.ver ?? null, memShown: mem?.shown ?? [], memPending: [],
   };
   // 带图问而对话服务商不收图：不调，退回这一次
