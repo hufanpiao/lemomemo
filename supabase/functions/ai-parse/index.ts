@@ -8,7 +8,7 @@ import { authResult, requireActiveUser } from '../_shared/auth.ts';
 import { parseWithAI } from '../_shared/ai/parse-with-ai.ts';
 import { gateDeps, isValidTz } from '../_shared/ai/wire.ts';
 import { aiAllowed } from '../_shared/consent.ts';
-import { aiParseRequest, checkDefaultDay, normLocale, normProjects, type AiItem, type IntentChecked } from '../_shared/gen/schema/ai.ts';
+import { aiParseRequest, checkDefaultDay, normExamples, normLocale, normProjects, type AiItem, type IntentChecked } from '../_shared/gen/schema/ai.ts';
 import { appConfigMinLoader, versionGate } from '../_shared/version-gate.ts';
 import { handle } from './core.ts';
 import { codeLogger } from '../_shared/fn-log.ts';
@@ -31,6 +31,7 @@ Deno.serve(async (req) => {
       },
       normLocale,
       normProjects,
+      normExamples,
       isValidTz,
       checkDefaultDay: (v, now, tz) => checkDefaultDay(v, now, tz),
       parseWithAI,

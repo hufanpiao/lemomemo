@@ -11,7 +11,7 @@ import { TRANSCRIPT_MAX, transcribeAudio } from '../../supabase/functions/_share
 import { handle as chatHandle, type Deps as ChatDeps } from '../../supabase/functions/ai-chat/core.ts';
 import { handle as memHandle, LIST_RATE_PER_MIN, RATE_PER_MIN, type Deps as MemDeps } from '../../supabase/functions/ai-memory/core.ts';
 import { handle as voiceHandle, type Deps as VoiceDeps } from '../../supabase/functions/ai-voice/core.ts';
-import { AI_AUDIO_MAX_BYTES, audioType, checkDefaultDay, normProjects, type AiItem } from '../../shared/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, audioType, checkDefaultDay, normExamples, normProjects, type AiItem } from '../../shared/schema/ai.ts';
 import { fakeGate, UA, used, type GateOpts } from './ai-fakes.ts';
 
 const NOW = Date.UTC(2026, 10, 23, 3, 0);
@@ -400,7 +400,7 @@ function voiceWorld(o: GateOpts = {}, text = '明天几点开会') {
   const deps: VoiceDeps<AiItem> = {
     ...g, authenticate: authed,
     logic: {
-      maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, isValidTz, checkDefaultDay: (v, n, tz) => checkDefaultDay(v, n, tz),
+      maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, normExamples, isValidTz, checkDefaultDay: (v, n, tz) => checkDefaultDay(v, n, tz),
       voiceWithAI: async () => {
         seen.push('voice');
         return { ok: false, reason: 'error' };

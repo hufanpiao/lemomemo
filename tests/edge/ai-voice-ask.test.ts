@@ -1,7 +1,7 @@
 // 语音提问的次数（R-495）：转写不退；紧接着的 ai-chat 答成才消费一次发放、退回转写那 1 次；只转写不提问刷不出免费次数。
 import { describe, expect, it } from 'vitest';
 import { isValidTz } from '../../shared/core/tz.ts';
-import { AI_AUDIO_MAX_BYTES, audioType, checkDefaultDay, normLocale, normProjects, stripCtlText, type AiItem } from '../../shared/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, audioType, checkDefaultDay, normLocale, normExamples, normProjects, stripCtlText, type AiItem } from '../../shared/schema/ai.ts';
 import { CHAT_TEXT_MAX, chatOk, chatReq, VOICE_WANT_TRANSCRIPT } from '../../shared/schema/chat.ts';
 import type { ChatProvider, ChatRequest, ChatResult } from '../../supabase/functions/_shared/ai/provider.ts';
 import { TRANSCRIPT_MAX } from '../../supabase/functions/_shared/ai/transcribe.ts';
@@ -39,7 +39,7 @@ function world(answer: ChatResult = say('十点开会。'), opts: Parameters<typ
   const voice: VoiceDeps<AiItem> = {
     ...g, rate, authenticate: authed,
     logic: {
-      maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, isValidTz, checkDefaultDay: (v, n, tz) => checkDefaultDay(v, n, tz),
+      maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, normExamples, isValidTz, checkDefaultDay: (v, n, tz) => checkDefaultDay(v, n, tz),
       voiceWithAI: async () => ({ ok: false, reason: 'error' }),
       transcribe: async () => ({ ok: true, text: '明天几点开会', retried: false }),
       wantTranscript: VOICE_WANT_TRANSCRIPT,

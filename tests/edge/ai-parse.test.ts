@@ -2,7 +2,7 @@
 // B3 任务单 BE-4、S8、S12、M3；TC-B3-24（超长音频边读边计数）、25、26、42、50；Q2（服务器包 intent）。
 import { describe, expect, it } from 'vitest';
 import { isValidTz } from '../../shared/core/tz.ts';
-import { AI_AUDIO_MAX_BYTES, audioType, aiParseRequest, aiResponse, checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiItem } from '../../shared/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, audioType, aiParseRequest, aiResponse, checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, normExamples, normProjects, type AiItem } from '../../shared/schema/ai.ts';
 import { makeParseWithAI } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { handle as parseHandle, MAX_BODY, type Deps as ParseDeps } from '../../supabase/functions/ai-parse/core.ts';
 import { bytesBucket, decodeProjects, handle as voiceHandle, MAX_PROJECTS_HEADER, readCapped, type Deps as VoiceDeps } from '../../supabase/functions/ai-voice/core.ts';
@@ -24,7 +24,7 @@ function parseDeps(o: GateOpts = {}) {
         const r = aiParseRequest.safeParse(b);
         return r.success ? { ok: true, value: r.data } : { ok: false };
       },
-      normLocale, normProjects, isValidTz, checkDefaultDay, parseWithAI,
+      normLocale, normProjects, normExamples, isValidTz, checkDefaultDay, parseWithAI,
     },
   };
   return { g, deps };
@@ -111,7 +111,7 @@ function voiceDeps(o: GateOpts = {}) {
   const g = fakeGate({ reply: () => okJson({ transcript: '明天下午三点开会', items: [EV] }), ...o });
   const fails: { userId: string; code: string; fields: string[] }[] = [];
   const deps: VoiceDeps<AiItem> = {
-    ...g, authenticate: authed, logic: { wantTranscript: 'transcript', transcribe: async () => ({ ok: false, reason: 'error' }), maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI },
+    ...g, authenticate: authed, logic: { wantTranscript: 'transcript', transcribe: async () => ({ ok: false, reason: 'error' }), maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, normExamples, isValidTz, checkDefaultDay, voiceWithAI },
     async logFail(userId, code, fields) {
       fails.push({ userId, code, fields });
     },
@@ -162,7 +162,7 @@ describe('ai-voice：失败分支写 logs 表（架构审第九节第 2 条）',
     expect(fails).toEqual([{ userId: UA, code: 'ai_timeout', fields: ['type=AbortError', 'bytes=<16k'] }]);
   });
   it('voiceWithAI 自己抛异常：写 ai_error，只记类型名，不记 message', async () => {
-    const { r, fails } = await run({}, { logic: { wantTranscript: 'transcript', transcribe: async () => ({ ok: false, reason: 'error' }), maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI: async () => { throw new TypeError('明天下午三点开会 secret'); } } });
+    const { r, fails } = await run({}, { logic: { wantTranscript: 'transcript', transcribe: async () => ({ ok: false, reason: 'error' }), maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, normExamples, isValidTz, checkDefaultDay, voiceWithAI: async () => { throw new TypeError('明天下午三点开会 secret'); } } });
     expect(r.body).toEqual({ ai_failed: true, reason: 'error' });
     expect(fails).toEqual([{ userId: UA, code: 'ai_error', fields: ['type=TypeError', 'bytes=<16k'] }]);
     expect(JSON.stringify(fails)).not.toContain('secret');

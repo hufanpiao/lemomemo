@@ -1,7 +1,7 @@
 // ai-voice（架构第 6 节函数表 ai-voice 行、5.11、第 7 节“语音”；B3 任务单 S8、S12、BE-4，M3 X-Projects，Q2 服务器包 intent）。
 // 顺序：方法（只收 POST）→ JWT → Content-Type 白名单（先去参数再比，不在 4 种里回 415、不调 Gemini；S1、TC-B3-65 起新增用例）
-//   → 请求头 X-Now、X-TZ、X-Locale、X-Scope、X-Projects、X-Default-Day（日历页选中的那天，R6；不合格回 400）、X-Span（R-444 起的客户端带 1，没带的时长规整到 1440 以内）→ 边读边计数读请求体（≤ logic.maxAudio，超了中断回 413，不只看 Content-Length）
-//   → 共用的门（_shared/ai/gate.ts）→ voiceWithAI（voice.v9，B4b-3 起一次完成转写和意图判断；Gemini 15 秒超时；回 503 时服务器端重试一次、两次合计仍不超过 15 秒，_shared/ai/retry.ts）
+//   → 请求头 X-Now、X-TZ、X-Locale、X-Scope、X-Projects、X-Examples（R-497 以前分进自建项目的几条）、X-Default-Day（日历页选中的那天，R6；不合格回 400）、X-Span（R-444 起的客户端带 1，没带的时长规整到 1440 以内）→ 边读边计数读请求体（≤ logic.maxAudio，超了中断回 413，不只看 Content-Length）
+//   → 共用的门（_shared/ai/gate.ts）→ voiceWithAI（voice.v10，B4b-3 起一次完成转写和意图判断；Gemini 15 秒超时；回 503 时服务器端重试一次、两次合计仍不超过 15 秒，_shared/ai/retry.ts）
 //   → 成功按意图回 {intent: 'record', confidence, transcript, items, quota_left} / {intent: search|summarize, confidence, transcript, query, quota_left} /
 //   {intent: cancel|reschedule|complete, confidence, transcript, target, to, quota_left}（同 ai-parse，不多扣次数）；
 //   失败退回预扣、回 {ai_failed, reason}（客户端留着录音，可以重试或再说一次；每分钟限额的 reason 回 error，gate.ts 的 clientReason）。
@@ -23,6 +23,8 @@ import { b64uDecode } from '../_shared/b64url.ts';
 import { readCapped } from '../_shared/body.ts';
 
 export const MAX_PROJECTS_HEADER = 4096;
+/** X-Examples（R-497）：客户端最多 20 条、标题 30 字、项目 40 字，base64url 后最坏约 6 KB；超过这个当没给（不截、不拒收） */
+export const MAX_EXAMPLES_HEADER = 8192;
 /** 503 重试后成功的全项目计数键（附录 A；三段写法过得了 counters 的 check 约束） */
 export const voiceRetryKey = (ms: number): string => `voice-retry:global:${pacificDate(ms)}`;
 /** 只当计数用：上限给得远超全项目每日额度，take_rate 永远放行 */
@@ -38,6 +40,8 @@ export interface Logic<Item, I extends IntentLike = IntentLike> {
   audioType(ct: string | null): string | null;
   normLocale(v: unknown): 'zh' | 'ko';
   normProjects(v: unknown): string[];
+  /** R-497：shared 的 normExamples */
+  normExamples(v: unknown): { title: string; project: string }[];
   isValidTz(tz: string): boolean;
   /** 默认日子（R6）：不传 null；格式不对、不存在、不在前 1 年到后 5 年之内 'bad' */
   checkDefaultDay(v: unknown, now: number, tz: string): string | null | 'bad';
@@ -110,6 +114,19 @@ export function decodeProjects(h: string | null): unknown[] {
     if (v) return v;
   }
   return [];
+}
+
+/** X-Examples：base64url(UTF-8 JSON 数组 [{title, project}])；空、太长、解不开的当没给（R-497，规整在 normExamples） */
+export function decodeExamples(h: string | null): unknown[] {
+  if (!h || h.length > MAX_EXAMPLES_HEADER) return [];
+  const bytes = b64uDecode(h);
+  if (!bytes) return [];
+  try {
+    const v: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
 }
 
 export { readCapped };
@@ -204,6 +221,7 @@ export async function handle<Item, I extends IntentLike = IntentLike>(req: Reque
   const input: VoiceInput = {
     audio, mime, now, tz, locale: deps.logic.normLocale(req.headers.get('x-locale')),
     projects: deps.logic.normProjects(decodeProjects(req.headers.get('x-projects'))), features: gate.features as AiKindLike[],
+    examples: deps.logic.normExamples(decodeExamples(req.headers.get('x-examples'))),
     defaultDay: defaultDay ?? undefined,
   };
   let r: ParseOk<Checked<Item, I> & { transcript: string }> | ParseFail;

@@ -17,7 +17,7 @@
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { arrangeHint, clauseSeparators, confidence, parseSplit, recurHint, type ParseHints, type ParseResult } from '../../../../shared/logic/parse/index.ts';
-import { checkDefaultDay, normProjects, type AiItem } from '../../../../shared/schema/ai.ts';
+import { checkDefaultDay, normExamples, normProjects, type AiItem, type ProjectExample } from '../../../../shared/schema/ai.ts';
 import type { AiKind } from '../../../../shared/schema/kinds.ts';
 import { cutAiText, outcomeOf, type AiOutcome } from './ai-outcome.ts';
 import { askOfLocal, type AssistAsk } from '../../../../shared/logic/parse/assist.ts';
@@ -40,6 +40,8 @@ export interface TypeCtx {
   locale: 'zh' | 'ko';
   /** 本机已有的项目名（ai-parse 的 projects[]，本机规则认项目也用） */
   projects: readonly string[];
+  /** 以前分进自建项目的几条（R-497，shared/logic/project-examples.ts 挑的；只交给 AI，本机规则不用）；不给当没有 */
+  examples?: readonly ProjectExample[];
   /** 日历页选中的那天；别的页为 null */
   day: DateStr | null;
   /** 这个人能用的类型；不给按本机规则的默认（日程、待办） */
@@ -65,6 +67,8 @@ export interface AiReqCtx {
   locale: 'zh' | 'ko';
   /** 规整过的项目名（normProjects） */
   projects: string[];
+  /** R-497 以前分进自建项目的几条（normExamples 规整过）；一条都没有不带这个键，请求和以前一样 */
+  examples?: ProjectExample[];
   scope: 'main';
   /** 日历页选中的那天（已过 checkDefaultDay）；别的页不传 */
   default_day?: DateStr;
@@ -76,12 +80,13 @@ export interface AiReqCtx {
 export type AiParseReq = AiReqCtx & { text: string };
 
 /** 不带选中日子的请求上下文（录音不带日子）：项目名规整 */
-export function baseReqCtx(ctx: Pick<TypeCtx, 'now' | 'tz' | 'locale' | 'projects'>): AiReqCtx {
-  return { now: ctx.now, tz: ctx.tz, locale: ctx.locale, projects: normProjects(ctx.projects), scope: 'main', span: 1 };
+export function baseReqCtx(ctx: Pick<TypeCtx, 'now' | 'tz' | 'locale' | 'projects' | 'examples'>): AiReqCtx {
+  const examples = normExamples(ctx.examples);
+  return { now: ctx.now, tz: ctx.tz, locale: ctx.locale, projects: normProjects(ctx.projects), ...(examples.length > 0 ? { examples } : {}), scope: 'main', span: 1 };
 }
 
 /** 拼请求上下文：项目名规整、选中的日子过 checkDefaultDay；日子超出后端认的范围返回 bad_default_day（发了也是 400） */
-export function aiReqCtx(ctx: Pick<TypeCtx, 'now' | 'tz' | 'locale' | 'projects' | 'day'>): AiReqCtx | 'bad_default_day' {
+export function aiReqCtx(ctx: Pick<TypeCtx, 'now' | 'tz' | 'locale' | 'projects' | 'examples' | 'day'>): AiReqCtx | 'bad_default_day' {
   const dd = ctx.day === null ? null : checkDefaultDay(ctx.day, ctx.now, ctx.tz);
   if (dd === 'bad') return 'bad_default_day';
   return { ...baseReqCtx(ctx), ...(dd !== null ? { default_day: dd } : {}) };

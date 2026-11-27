@@ -2,11 +2,11 @@
 // X-Projects 的编码和服务器真的解码（supabase/functions/ai-voice/core.ts 的 decodeProjects）做往返
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
-import { AI_AUDIO_MAX_BYTES, normProjects } from '../../../../shared/schema/ai.ts';
-import { decodeProjects, MAX_PROJECTS_HEADER } from '../../../../supabase/functions/ai-voice/core.ts';
+import { AI_AUDIO_MAX_BYTES, AI_EXAMPLE_TITLE_LEN, AI_EXAMPLES_MAX, normProjects } from '../../../../shared/schema/ai.ts';
+import { decodeExamples, decodeProjects, MAX_PROJECTS_HEADER } from '../../../../supabase/functions/ai-voice/core.ts';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import { outcomeOf } from '../data/ai-outcome.ts';
-import { createCallVoice, encodeProjects, voiceHeaders, type AiVoiceReq } from '../data/ai-voice-api.ts';
+import { createCallVoice, encodeExamples, encodeProjects, EXAMPLES_HEADER_MAX, voiceHeaders, type AiVoiceReq } from '../data/ai-voice-api.ts';
 
 const NOW = Date.UTC(2026, 10, 2, 1, 0);
 const URL_ = 'https://sb.test/functions/v1/ai-voice';
@@ -62,6 +62,23 @@ describe('请求', () => {
     const h = voiceHeaders(req({ default_day: '2026-11-20', projects: ['NEOX'] }));
     expect(h['x-default-day']).toBe('2026-11-20');
     expect(decodeProjects(h['x-projects'] ?? null)).toEqual(['NEOX']);
+  });
+  it('R-497 以前分进自建项目的例子：有才带 X-Examples，服务器解得开', () => {
+    expect(Object.keys(voiceHeaders(req()))).not.toContain('x-examples');
+    const ex = [{ title: '跑步', project: '健身' }];
+    expect(decodeExamples(voiceHeaders(req({ examples: ex }))['x-examples'] ?? null)).toEqual(ex);
+  });
+  it('R-497 最坏情况（20 条、标题 30 个、项目 40 个，全是四字节的表情）：从尾部减到不超过 EXAMPLES_HEADER_MAX，留下的是最前面几条', () => {
+    const ex = Array.from({ length: AI_EXAMPLES_MAX }, (_, i) => ({ title: `${i}${'😀'.repeat(AI_EXAMPLE_TITLE_LEN - 1)}`, project: '🍋'.repeat(40) }));
+    const h = encodeExamples(ex);
+    expect(h).not.toBeNull();
+    expect(h!.length).toBeLessThanOrEqual(EXAMPLES_HEADER_MAX);
+    const back = decodeExamples(h);
+    expect(back.length).toBeGreaterThan(0);
+    expect(back.length).toBeLessThan(ex.length);
+    expect(back).toEqual(ex.slice(0, back.length));
+    expect(encodeExamples([])).toBeNull();
+    expect(encodeExamples(undefined)).toBeNull();
   });
 
   it('拿不到会话令牌：不发', async () => {
@@ -189,7 +206,7 @@ describe('运行日志：只补网络那一行没有的（字节数、类型、�
   it('发出去的：只有开始一行（状态码和耗时在全局的 net 行里，这里不重复记）', async () => {
     const { call } = api(async () => reply(200, OK));
     await call(req({ projects: ['NEOX 宣传片', '사이드'] }), live());
-    expect(lines).toEqual(['voice upload start bytes=3 mime=audio/mp4 projects=2']);
+    expect(lines).toEqual(['voice upload start bytes=3 mime=audio/mp4 projects=2 examples=0']);
   });
 
   it('不记项目名、不记转写', async () => {

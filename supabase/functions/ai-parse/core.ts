@@ -1,6 +1,6 @@
 // ai-parse（架构第 6 节函数表 ai-parse 行、第 7 节、5.1；B3 任务单 S8、S12、S15、BE-4，Q2：服务器包 intent）。
 // 顺序：方法（只收 POST）→ JWT（requireActiveUser，index.ts 注入成 authenticate）→ 请求体（default_day 不合格回 400，R6）→ 共用的门（_shared/ai/gate.ts：
-// 同意、类型开关、模型配置、每分钟 6 次、谷歌额度、每人每天和全项目预扣）→ parseWithAI（parse.v9，B4b-3 起一次调用里判意图）→ 成功按意图回
+// 同意、类型开关、模型配置、每分钟 6 次、谷歌额度、每人每天和全项目预扣）→ parseWithAI（parse.v10，B4b-3 起一次调用里判意图）→ 成功按意图回
 // {intent: 'record', confidence, items, quota_left} / {intent: search|summarize, confidence, query, quota_left} /
 // {intent: cancel|reschedule|complete, confidence, target, to, quota_left}（架构 5.14 第 2、7 点；不多扣次数，confidence 是 AI 给的）；
 // 失败退回预扣、回 {fallback, reason}（客户端改用本机规则，原话不丢）。
@@ -13,16 +13,18 @@ import { aiFailCode, type AIProvider } from '../_shared/ai/provider.ts';
 import { plusBody, type AiKindLike, type Checked, type IntentLike, type ParseFail, type ParseInput, type ParseOk } from '../_shared/ai/parse-core.ts';
 import { readJsonCapped } from '../_shared/body.ts';
 
-/** 请求体上限（2000 字的中文 UTF-8 约 6 KB，加上 projects） */
-export const MAX_BODY = 16 * 1024;
+/** 请求体上限（2000 字的中文 UTF-8 约 6 KB，加上 projects 最坏约 4 KB、R-497 的 examples 最坏约 5 KB） */
+export const MAX_BODY = 24 * 1024;
 
 export type AuthResult = SharedAuthResult;
 
 /** shared/schema/ai.ts 里入参相关的几个函数（index.ts 从 _shared/gen/ 注入，单测注入真的 shared） */
 export interface Logic<Item, I extends IntentLike = IntentLike> {
-  parseRequest(body: unknown): { ok: true; value: { text: string; now: number; tz: string; locale?: string | undefined; projects?: unknown[] | undefined; scope?: 'main' | 'vault' | undefined; default_day?: string | undefined; span?: 1 | undefined } } | { ok: false };
+  parseRequest(body: unknown): { ok: true; value: { text: string; now: number; tz: string; locale?: string | undefined; projects?: unknown[] | undefined; examples?: unknown[] | undefined; scope?: 'main' | 'vault' | undefined; default_day?: string | undefined; span?: 1 | undefined } } | { ok: false };
   normLocale(v: unknown): 'zh' | 'ko';
   normProjects(v: unknown): string[];
+  /** R-497：以前分进自建项目的几条 */
+  normExamples(v: unknown): { title: string; project: string }[];
   isValidTz(tz: string): boolean;
   /** 默认日子（R6）：不传 null；格式不对、不存在、不在前 1 年到后 5 年之内 'bad' */
   checkDefaultDay(v: unknown, now: number, tz: string): string | null | 'bad';
@@ -56,7 +58,7 @@ export async function handle<Item, I extends IntentLike = IntentLike>(req: Reque
 
   const input: ParseInput = {
     text: body.text, now: body.now, tz: body.tz, locale: deps.logic.normLocale(body.locale),
-    projects: deps.logic.normProjects(body.projects), features: gate.features as AiKindLike[], defaultDay: defaultDay ?? undefined,
+    projects: deps.logic.normProjects(body.projects), examples: deps.logic.normExamples(body.examples), features: gate.features as AiKindLike[], defaultDay: defaultDay ?? undefined,
   };
   let r: ParseOk<Checked<Item, I>> | ParseFail;
   try {

@@ -1,10 +1,11 @@
-// 打字条和按住录音共用的上下文：界面语言、已有的项目名、这一刻能不能用 AI，拼成 type-flow 的 TypeCtx
+// 打字条和按住录音共用的上下文：界面语言、已有的项目名、以前分进自建项目的几条（R-497）、这一刻能不能用 AI，拼成 type-flow 的 TypeCtx
 // • useTypeBar、useVoice 只用这一处（projectsOf、ai.enabled + 同意版本过期），不各写一份
 // • AI 开着 = 设置里 ai.enabled 为 true，且同意版本没有明确过期（kit/state/consent-fresh.ts）
 import { useCallback, useMemo } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { fromUiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
+import { projectExamples } from '../../../../shared/logic/project-examples.ts';
 import { projectCounts } from '../../../../shared/logic/todo-projects.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import type { SettingRow } from '../../../core/setting-read.ts';
@@ -30,10 +31,12 @@ export function useCaptureCtx(day: DateStr | null) {
   const todos = useCollection<{ id: string; project?: unknown } & Record<string, unknown>>('todos');
   const events = useCollection<{ id: string; project?: unknown } & Record<string, unknown>>('events');
   const projects = useMemo(() => projectsOf([todos, events]), [todos, events]);
+  // R-497“学我以前怎么分的”：分进自建项目的最近几条，交给 AI 当例子（只在调 AI 时用）
+  const examples = useMemo(() => projectExamples([todos, events]), [todos, events]);
   // 分类签上列的（chips）：和待办页项目筛选条同一份（有没做完的待办的项目，条数多的在前）；识别用的 projects 照旧含日程里的项目名（删掉的不算）
   const chips = useMemo(() => projectCounts(todos, lang).map((p) => p.project), [todos, lang]);
   const locale: TypeCtx['locale'] = fromUiLocale(lang);
   const aiOn = useCallback(() => aiOnFor(settings, readSessionId()), [settings]);
-  const ctx = useCallback((): TypeCtx => ({ now: clock.now(), tz: currentTz(), locale, projects, day }), [locale, projects, day]);
+  const ctx = useCallback((): TypeCtx => ({ now: clock.now(), tz: currentTz(), locale, projects, examples, day }), [locale, projects, examples, day]);
   return { lang, locale, aiOn, ctx, chips };
 }

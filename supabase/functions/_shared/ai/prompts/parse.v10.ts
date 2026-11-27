@@ -1,25 +1,26 @@
-// 提示词 parse.v9（架构 5.14 第 2、3、7 点；B4b-3）：在 record.v8 的记下规则上加“意图”一节，一次调用里判断这句话是要
+// 提示词 parse.v10（架构 5.14 第 2、3、7 点；B4b-3）：在 record.v9 的记下规则上加“意图”一节，一次调用里判断这句话是要
 // 记下（record）、查找（search）、总结（summarize）、取消（cancel）、改期（reschedule）还是完成（complete），不多扣次数。
-// 记下的拆分规则和 record.v8 同一份（PARSE_RULES），只改【输出】那一行；改记下规则时两边一起变，升版本、重跑测试集。
-// 只给 ai-parse（经 parse-core.ts 的 parseWithAI）。claude-intake 和评测测试集 ① 只做记下，用 record.v8（recordWithAI）。
+// 记下的拆分规则和 record.v9 同一份（PARSE_RULES），只改【输出】那一行；改记下规则时两边一起变，升版本、重跑测试集。
+// 只给 ai-parse（经 parse-core.ts 的 parseWithAI）。claude-intake 和评测测试集 ① 只做记下，用 record.v9（recordWithAI）。
 // v5（11-16，R-440）：意图一节没改，跟着共用的 PARSE_RULES 升版本（project 改成日程、待办都给项目或类别）。parse.v4 文件已删。
 // v6（11-16）随共用日期规则升；v7（11-17，R-444）随共用规则的全天跨天时长口径升；v8（11-17，R-446）随共用规则的简称 1～4 个字升；
 // v9（11-25，负责人语音“周五变成周日，后天变成明天”）随共用规则升：每条多给 date_said、time_said（原样抄出说日子、说时刻的字，服务器按本机规则换算），
-//   附从今天起 14 天的日历表（record.v8 文件头）。意图一节没改（query、target、to 的日子这次不换做法）。
-// 占位符同 record.v8（parse-core.ts 的 fillPrompt 填）。用户内容只放在 <data> 里（防提示注入）。
-import { PARSE_RULES, RECORD_OUTPUT } from './record.v8.ts';
+//   附从今天起 14 天的日历表（record.v9 文件头）。意图一节没改（query、target、to 的日子这次不换做法）。
+// v10（11-28，R-497）随共用规则升：project 一节照 <history> 里以前分进自建项目的同一类事照写（record.v9 文件头）。意图一节没改。
+// 占位符同 record.v9（parse-core.ts 的 fillPrompt 填）。用户内容只放在数据区的 <data>、<projects>、<history> 里（防提示注入）。
+import { PARSE_RULES, RECORD_OUTPUT } from './record.v9.ts';
 
-/** 拆分规则换掉【输出】一行（parse.v9、voice.v9 共用）；规则里找不到那一行就抛，不悄悄留下只记下的旧输出 */
+/** 拆分规则换掉【输出】一行（parse.v10、voice.v10 共用）；规则里找不到那一行就抛，不悄悄留下只记下的旧输出 */
 export function rulesWithOutput(out: string, rules: string = PARSE_RULES): string {
   if (!rules.includes(RECORD_OUTPUT)) throw new Error('parse rules: output line not found');
   return rules.replace(RECORD_OUTPUT, out);
 }
 
-/** parse.v9 的【输出】一行：顶层多 intent、confidence、query、target、to（Gemini responseSchema 见 parse-core.ts 的 plusSchema） */
+/** parse.v10 的【输出】一行：顶层多 intent、confidence、query、target、to（Gemini responseSchema 见 parse-core.ts 的 plusSchema） */
 export const PLUS_OUTPUT =
   '只输出 JSON：{"intent":"...","confidence":0.0,"items":[...],"query":null,"target":null,"to":null}。intent 是 record 时 items 最多 10 条；别的意图 items 一律为空数组。';
 
-/** 意图一节（parse.v9、voice.v9 共用） */
+/** 意图一节（parse.v10、voice.v10 共用） */
 export const INTENT_RULES = `
 【意图：先判断这句话要做什么】
 - intent 只能是 record、search、summarize、cancel、reschedule、complete 之一：
@@ -55,7 +56,7 @@ export const INTENT_RULES = `
 - 所有日子都在今天前后 5 年以内。
 `.trim();
 
-export const PARSE_V9 =`你是“柠檬记”的“＋”助手：先判断用户说的一句话是要记下，还是要查找、总结、取消、改期、完成已经记下的东西；要记下的整理成日程、待办等条目。
+export const PARSE_V10 =`你是“柠檬记”的“＋”助手：先判断用户说的一句话是要记下，还是要查找、总结、取消、改期、完成已经记下的东西；要记下的整理成日程、待办等条目。
 
 ${INTENT_RULES}
 

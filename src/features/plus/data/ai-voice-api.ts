@@ -21,8 +21,22 @@ export function encodeProjects(projects: readonly string[]): string | null {
   return projects.length === 0 ? null : b64uEncode(new TextEncoder().encode(JSON.stringify(projects)));
 }
 
+/** 编出来超过这么长就从尾部（最旧的）减条数再编：服务器超过 8 KB 当没给，留余量给代理对请求头总长的限制 */
+export const EXAMPLES_HEADER_MAX = 6000;
+
+/** X-Examples（R-497）：以前分进自建项目的几条（aiReqCtx 已规整，最多 20 条，最近的在前）→ JSON → UTF-8 → base64url；
+ *  超过 EXAMPLES_HEADER_MAX 从尾部减；没有返回 null（不带这个头）。服务器解码在 ai-voice/core.ts 的 decodeExamples */
+export function encodeExamples(examples: readonly { title: string; project: string }[] | undefined): string | null {
+  for (let n = examples?.length ?? 0; n > 0; n--) {
+    const h = b64uEncode(new TextEncoder().encode(JSON.stringify(examples!.slice(0, n))));
+    if (h.length <= EXAMPLES_HEADER_MAX) return h;
+  }
+  return null;
+}
+
 export function voiceHeaders(req: AiVoiceReq): Record<string, string> {
   const projects = encodeProjects(req.projects);
+  const examples = encodeExamples(req.examples);
   return {
     'content-type': req.mime,
     'x-now': String(Math.round(req.now)),
@@ -31,6 +45,7 @@ export function voiceHeaders(req: AiVoiceReq): Record<string, string> {
     'x-scope': req.scope,
     'x-span': String(req.span),
     ...(projects !== null ? { 'x-projects': projects } : {}),
+    ...(examples !== null ? { 'x-examples': examples } : {}),
     ...(req.default_day !== undefined ? { 'x-default-day': req.default_day } : {}),
   };
 }
@@ -38,7 +53,7 @@ export function voiceHeaders(req: AiVoiceReq): Record<string, string> {
 export function createCallVoice(o: FnPostOptions = {}): CallVoice {
   return (req: AiVoiceReq, signal: AbortSignal): Promise<unknown> => {
     // mime 由录音器判过（在 shared 的 AUDIO_TYPES 里、不带参数），直接进日志
-    rlog(`voice upload start bytes=${req.audio.size} mime=${req.mime} projects=${req.projects.length}`);
+    rlog(`voice upload start bytes=${req.audio.size} mime=${req.mime} projects=${req.projects.length} examples=${req.examples?.length ?? 0}`);
     return postFn(AI_VOICE_FN, { headers: voiceHeaders(req), body: req.audio }, signal, o);
   };
 }

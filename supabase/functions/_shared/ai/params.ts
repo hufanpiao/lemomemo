@@ -68,8 +68,9 @@ export const CHAT_MAX_ROUNDS = 4;
  * 11-25（负责人语音“AI 自动整理的时候日期总是弄错”“周五变成周日，后天变成明天，周五变成今天”）：模型自己数日子数错，换做法——
  *   共用规则每条多给 date_said、time_said（原样抄出说日子、说时刻的字），服务器用本机规则（shared/logic/parse/said-when.ts）换算覆盖，
  *   另附从今天起 14 天的日历表兜底；三份再一起升：record.v8、parse.v9、voice.v9。没有密钥，测试集 ① 这次没重跑（交给评测员）。
+ *   11-28（R-497 学以前怎么分的）：数据区多一段 <history>，project 一节照它写同一类事的自建项目，三份再一起升：record.v9、parse.v10、voice.v10。
  */
 export const PROMPT_VERSION = Object.freeze({
-  parse: 'parse.v9', voice: 'voice.v9', record: 'record.v8', classify: 'classify.v2', media: 'media.v1', summarize: 'summarize.v1',
+  parse: 'parse.v10', voice: 'voice.v10', record: 'record.v9', classify: 'classify.v2', media: 'media.v1', summarize: 'summarize.v1',
   chat: 'chat.v5', transcribe: 'transcribe.v1',
 });

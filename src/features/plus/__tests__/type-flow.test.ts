@@ -43,6 +43,10 @@ describe('aiReqCtx：打字、录音共用的请求上下文（项目名、选�
       now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: ['NEOX', ...many.slice(0, 29)], scope: 'main', span: 1,
     });
   });
+  it('R-497 以前分进自建项目的例子：规整后有才带 examples（没有时请求和以前一样）', () => {
+    expect(aiReqCtx({ ...CTX, examples: [{ title: ' 跑步 ', project: '健身' }, { title: '', project: 'x' }] })).toMatchObject({ examples: [{ title: '跑步', project: '健身' }] });
+    expect(Object.keys(aiReqCtx({ ...CTX, examples: [] }) as object)).not.toContain('examples');
+  });
   it('选中的日子在范围里带上；超出后端认的范围返回 bad_default_day', () => {
     expect(aiReqCtx({ ...CTX, day: '2026-11-20' })).toMatchObject({ default_day: '2026-11-20' });
     expect(aiReqCtx({ ...CTX, day: '2020-01-01' })).toBe('bad_default_day');

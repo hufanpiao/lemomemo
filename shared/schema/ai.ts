@@ -44,6 +44,14 @@ export const AI_TEXT_MAX = 2000;
 /** projects[]：最多几个、每个最长几个字（第 6 节 ai-parse；任务单 M3） */
 export const AI_PROJECTS_MAX = 30;
 export const AI_PROJECT_LEN = 40;
+/** examples[]（R-497 以前分进自建项目的几条）：最多几条、标题最长几个字（项目名同 AI_PROJECT_LEN）；录音走请求头，客户端编出来另有字节上限（ai-voice-api.ts） */
+export const AI_EXAMPLES_MAX = 20;
+export const AI_EXAMPLE_TITLE_LEN = 30;
+/** 一条例子：标题 → 项目名 */
+export interface ProjectExample {
+  title: string;
+  project: string;
+}
 /** 一段录音最多多少字节（架构 5.11 第 2 点）：前端录音器超了就不交出；服务器 ai-voice、voice-probe
  *  读请求体也用这一份（各自的 index.ts 从 _shared/gen/ 注入，超了回 413） */
 export const AI_AUDIO_MAX_BYTES = 600 * 1024;
@@ -363,6 +371,23 @@ export function normProjects(v: unknown): string[] {
   return out;
 }
 
+/** examples[]（R-497 以前怎么分的，客户端 shared/logic/project-examples.ts 挑）：只留标题、项目都是非空字符串的，
+ *  标题截到 AI_EXAMPLE_TITLE_LEN、项目截到 AI_PROJECT_LEN 个字，最多 AI_EXAMPLES_MAX 条（多了截断，不拒收）；ai-voice 从 X-Examples 头解出来也走这里 */
+export function normExamples(v: unknown): ProjectExample[] {
+  if (!Array.isArray(v)) return [];
+  const out: ProjectExample[] = [];
+  for (const e of v) {
+    if (typeof e !== 'object' || e === null) continue;
+    const { title, project } = e as { title?: unknown; project?: unknown };
+    if (typeof title !== 'string' || typeof project !== 'string') continue;
+    const t = [...title.trim()].slice(0, AI_EXAMPLE_TITLE_LEN).join('');
+    const pr = [...project.trim()].slice(0, AI_PROJECT_LEN).join('');
+    if (t && pr) out.push({ title: t, project: pr });
+    if (out.length >= AI_EXAMPLES_MAX) break;
+  }
+  return out;
+}
+
 /** ai-parse 的请求体 */
 export const aiParseRequest = z.object({
   text: z.string().min(1).pipe(maxCp(AI_TEXT_MAX)),
@@ -370,6 +395,8 @@ export const aiParseRequest = z.object({
   tz: z.string().min(1).max(64),
   locale: z.string().max(16).optional(),
   projects: z.array(z.unknown()).max(200).optional(),
+  /** R-497：以前分进自建项目的几条（normExamples 规整）；旧版客户端不带 */
+  examples: z.array(z.unknown()).max(200).optional(),
   scope: z.enum(['main', 'vault']).optional(),
   default_day: z.string().max(16).optional(),
   /** R-444 起的客户端带 1：能存跨天日程（duration_min 到 44640）；没带的是旧版，服务器把时长规整到 1440 以内（parse-core.ts 的 plusBody） */

@@ -8,7 +8,7 @@ import { logVoiceFail, type StoreAdmin } from '../_shared/ai/store.ts';
 import { transcribeAudio } from '../_shared/ai/transcribe.ts';
 import { chatFeatures, gateDeps, isValidTz } from '../_shared/ai/wire.ts';
 import { aiAllowed } from '../_shared/consent.ts';
-import { AI_AUDIO_MAX_BYTES, audioType, checkDefaultDay, normLocale, normProjects, type AiItem, type IntentChecked } from '../_shared/gen/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, audioType, checkDefaultDay, normExamples, normLocale, normProjects, type AiItem, type IntentChecked } from '../_shared/gen/schema/ai.ts';
 import { VOICE_WANT_TRANSCRIPT } from '../_shared/gen/schema/chat.ts';
 import { appConfigMinLoader, versionGate } from '../_shared/version-gate.ts';
 import { handle } from './core.ts';
@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     // 语音提问是 AI 助手的一部分：这个人没开 AI 助手就在门上挡下，不调服务商、不扣次数（R-495）
     ...(req.headers.get('x-want') === VOICE_WANT_TRANSCRIPT ? { features: chatFeatures(admin) } : {}),
     authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
-    logic: { maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, isValidTz, checkDefaultDay: (v, now, tz) => checkDefaultDay(v, now, tz), voiceWithAI, transcribe: transcribeAudio, wantTranscript: VOICE_WANT_TRANSCRIPT },
+    logic: { maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, normExamples, isValidTz, checkDefaultDay: (v, now, tz) => checkDefaultDay(v, now, tz), voiceWithAI, transcribe: transcribeAudio, wantTranscript: VOICE_WANT_TRANSCRIPT },
     logFail: (userId, code, fields) => logVoiceFail(admin as unknown as StoreAdmin, userId, code, fields, Date.now()),
   });
 });
