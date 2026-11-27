@@ -35,7 +35,7 @@ describe('projectExamples', () => {
     expect(out[0]).toEqual({ title: '事0', project: '项目0' });
     const per = new Map<string, number>();
     for (const e of out) per.set(e.project, (per.get(e.project) ?? 0) + 1);
-    expect(Math.max(...per.values())).toBeLessThanOrEqual(PER_PROJECT);
+    expect(Math.max(...per.values())).toBeLessThan(PER_PROJECT + 1);   // Deno 垫片（deno-vitest-shim.ts）没有 toBeLessThanOrEqual
     expect([...projectExamples([[row('长'.repeat(50), '健身', T0)]])[0]!.title]).toHaveLength(AI_EXAMPLE_TITLE_LEN);
   });
   it('updated_at 缺列或不是数字的排最后，不丢', () => {
