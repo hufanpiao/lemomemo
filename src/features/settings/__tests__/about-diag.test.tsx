@@ -71,7 +71,17 @@ describe('关于页的诊断信息', () => {
     tapVersion(DIAG_TAPS);
     await screen.findByTestId('settings-about-diag');
     const box = screen.getByTestId('settings-vh-probe');
-    expect([...box.querySelectorAll('button')].map((b) => b.dataset['testid'])).toEqual(['vh-haptic', 'vh-gemini-live', 'vh-fx-warm', 'vh-deep-diag', 'vh-rl-send', 'vh-rl-copy', 'vh-rl-clear']);
+    expect([...box.querySelectorAll('button')].map((b) => b.dataset['testid'])).toEqual(['vh-haptic', 'vh-gemini-live', 'vh-fx-warm', 'vh-deep-diag']);
+  });
+
+  it('运行日志三个按钮（11-28 起正式版也有，RunLogButtons）：诊断开着才出，不在试验开关那一块里', async () => {
+    render(<AboutSection onCredits={() => undefined} />);
+    expect(screen.queryByTestId('settings-run-log')).toBeNull();
+    tapVersion(DIAG_TAPS);
+    await screen.findByTestId('settings-about-diag');
+    const box = screen.getByTestId('settings-run-log');
+    expect([...box.querySelectorAll('button')].map((b) => b.dataset['testid'])).toEqual(['vh-rl-send', 'vh-rl-copy', 'vh-rl-clear']);
+    expect(box.closest('[data-testid="settings-vh-probe"]')).toBeNull();
   });
 
   it('深度诊断开关默认 OFF，点一下 ON（只存这次打开 sessionStorage）、再点回 OFF（11-20 改善报告第四节，platform/diag-deep.ts）', async () => {

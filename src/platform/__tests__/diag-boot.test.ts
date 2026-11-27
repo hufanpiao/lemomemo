@@ -1,5 +1,5 @@
 // 非正式版的诊断启动件（platform/diag-boot.ts）：只起运行日志（一直开）；
-// main.tsx 只在非正式版分支里动态 import 它这一处，入口里不读诊断开关（Gap fix 正式版也做，不经这里）。
+// main.tsx 只动态 import 它这一处（11-28 起正式版也下，负责人选“正式版也带”运行日志），入口里不读诊断开关（Gap fix 正式版也做，不经这里）。
 // 启动画面收起不等它（台账 Q-2 的启动画面颜色诊断、R-371 冷启动时间线 11-12 删掉以后，再没有要先做的诊断）
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -50,14 +50,14 @@ describe('startDiagBoot', () => {
 
 /** main.tsx 里这一行原样（下面“接线”核对 main.tsx 里确实是这样写的） */
 // 第三方审查前端第 3 条（11-14）起留下这个 Promise（diag），启动失败时经它的 logBootFailed 记一行再跳登录页
-const DIAG = "const diag = import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot({ frame: nextFrame }), m)).catch(() => undefined) : undefined;";
+const DIAG = "const diag = import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot({ frame: nextFrame }), m)).catch(() => undefined);";
 
 describe('接线', () => {
   const main = readFileSync(resolve(import.meta.dirname, '../../app/main.tsx'), 'utf8');
   const code = main.replace(/^\s*\/\/.*$/gm, '');
-  it('main.tsx 只在非正式版分支里动态 import diag-boot 这一处；入口里不读诊断开关、不静态引诊断模块', () => {
+  it('main.tsx 只动态 import diag-boot 这一处（各版都下）；入口里不读诊断开关、不静态引诊断模块', () => {
     expect(code).toContain(DIAG);
-    expect(main.match(/import\.meta\.env\.MODE !== 'production'/g)?.length).toBe(1);
+    expect(main).not.toMatch(/import\.meta\.env\.MODE/);
     expect(main.match(/import\('\.\.\/platform\/diag-boot\.ts'\)/g)?.length).toBe(1);
     for (const key of ['lemo-vh-tl', 'lemo-sp-color', 'lemo-run-log']) expect(main).not.toContain(key);
     // run-log-api.ts 不算诊断模块：它是业务代码记运行日志的那一行入口（rlog，首屏本来就在；main.tsx 记 todo autodel err=load，审查 11-15 第 5 条），
@@ -73,7 +73,7 @@ describe('接线', () => {
     expect(code.match(/hideSplash\(\)/g)?.length).toBe(3);
   });
 
-  it('分包名登记进 PROBE_MARKERS（正式包不能带）', () => {
-    expect(PROBE_MARKERS).toContain('diag-boot');
+  it('11-28 起正式包也带：分包名、运行日志的存储键和按钮字都不在 PROBE_MARKERS 里', () => {
+    for (const m of ['diag-boot', 'lemo-run-log', 'Copy run log', 'Send run log']) expect(PROBE_MARKERS).not.toContain(m);
   });
 });

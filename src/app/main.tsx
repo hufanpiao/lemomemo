@@ -51,8 +51,8 @@ import type { UiLocale } from '../../shared/i18n/pick-locale.ts';
 /** 用上界面语言（platform/doc-locale.ts：ui-store、<html lang>、页面标题） */
 const applyLocale = (ui: UiLocale): void => applyUiLocale(ui, uiStore.getState());
 
-// 诊断启动件（platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量摇掉（正式版是 undefined）；启动画面收起不等它
-const diag = import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot({ frame: nextFrame }), m)).catch(() => undefined) : undefined;
+// 诊断启动件（platform/diag-boot.ts，起运行日志）：动态下载，11-28 起正式版也下（负责人选“正式版也带”）；启动画面收起不等它
+const diag = import('../platform/diag-boot.ts').then((m) => (m.startDiagBoot({ frame: nextFrame }), m)).catch(() => undefined);
 // 启动画面最晚 5 秒收起，从入口模块开始执行算起
 hideSplashAfter(hideSplash);
 // 皮肤、深浅色：懒加载 platform/look.ts（不进首屏），加载即按本机缓存套用并盯住 settings；
@@ -332,7 +332,7 @@ async function start(): Promise<void> {
 const BOOT_FAIL_LOG_WAIT_MS = 1000;
 
 // start 万一抛了（例如没有 #root）不留白屏：回登录页。先经 diag-boot.ts 的 logBootFailed 记一行（不记 message），
-// 最多等 BOOT_FAIL_LOG_WAIT_MS；入口不静态引 run-log（diag-boot.test.ts）。正式版 diag 是 undefined，不等
+// 最多等 BOOT_FAIL_LOG_WAIT_MS；入口不静态引 run-log（diag-boot.test.ts）（11-28 起正式版也有 diag）
 start().catch((e: unknown) => {
   void Promise.race([diag?.then((m) => m?.logBootFailed(e)), new Promise((r) => setTimeout(r, BOOT_FAIL_LOG_WAIT_MS))]).then(() => goToAuth());
 });

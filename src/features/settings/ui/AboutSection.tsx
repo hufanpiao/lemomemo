@@ -2,7 +2,7 @@
 // 卡片里一行“版本 4.0.0”；农历数据的出处放在卡片下面（农历、节气数据要注明来自香港天文台）。
 // “手机时间不准”是要马上看到的提醒，不跟着进二级页：设置首页直接放（SettingsHome）
 // 诊断信息：3 秒内连点“版本”那一行 5 下，在卡片下面显示一块纯文字（platform/diag-info.ts 收集；只读、只显示、不上报），再连点 5 下收起。
-// 诊断开着且不是正式版时，下面挂 VhProbe（非正式版诊断按钮）；正式构建靠 MODE 常量摇掉，build/check_no_probe.mjs 的 PROBE_MARKERS 登记了 vh-probe 兜底
+// 诊断开着时下面挂运行日志三个按钮（RunLogButtons，11-28 起正式版也有）；不是正式版时再挂 VhProbe（非正式版试验开关）；正式构建靠 MODE 常量摇掉，build/check_no_probe.mjs 的 PROBE_MARKERS 登记了 vh-probe 兜底
 // 诊断开着时 <html> 带 data-diag="1"：离开设置页也留着，回到这一页时诊断文字还在，再连点 5 下或重开 App 才没
 // 版本那一行仍是只显示的行（不是按钮、不进读屏的可操作列表），点按在外层用监听接住
 import { useEffect, useRef, useState } from 'react';
@@ -12,6 +12,7 @@ import { collectDiag } from '../../../platform/diag-info.ts';
 import { buildInfo } from '../../../platform/env.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
 import styles from './SettingsPage.module.css';
+import { RunLogButtons } from './RunLogButtons.tsx';
 import { VhProbe } from './VhProbe.tsx';
 
 /** 连点几下、在多长时间内算数 */
@@ -71,7 +72,8 @@ export function AboutSection({ onCredits }: { onCredits(): void }) {
           {diag.join('\n')}
         </pre>
       )}
-      {/* 非正式版诊断按钮（VhProbe.tsx）：诊断开着、非正式版才有；正式构建整块删掉 */}
+      {diag && <RunLogButtons />}
+      {/* 非正式版试验开关（VhProbe.tsx）：诊断开着、非正式版才有；正式构建整块删掉 */}
       {diag && import.meta.env.MODE !== 'production' && <VhProbe />}
     </div>
   );

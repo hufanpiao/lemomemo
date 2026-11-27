@@ -96,7 +96,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/core/manifest-source.ts': '完整清单快照：和 rows.ts 一起在 loadRowSchemas 里按需加载（首屏瘦身 11-05，首屏建本机仓只读 manifest-sync.gen.ts）',
   'src/platform/desktop.ts': '只在 exe（Tauri）里加载，网页版不下载',
   'src/platform/look.ts': '皮肤、深浅色（ADR-008，B6 皮肤 11-13）：其实首屏期间就下载（main.tsx 入口第一行懒加载，按本机缓存套到 <html> 上）；它和登录页、设置页共用一块，manifest 键带哈希（_look-<哈希>.js），进不了 FIRST_PAINT_DYNAMIC。这一块只有它自己（不引 shared 以外的东西，没有 zod、农历、动画库），下载量由 e2e b2-first-screen-budget.spec.ts 按页面时钟算进 150 KB',
-  'src/platform/diag-boot.ts': '非正式版诊断启动件（11-11 启动链路整改收成这一个入口）：只在非正式版冷启动时下载，正式构建整块摇掉（check_no_probe 兜底）；只起运行日志（启动画面颜色诊断、冷启动时间线 11-12 视口清理删掉）',
+  'src/platform/diag-boot.ts': '诊断启动件（11-11 启动链路整改收成这一个入口）：冷启动时动态下载，11-28 起正式版也下（负责人选“正式版也带”运行日志）；只起运行日志（启动画面颜色诊断、冷启动时间线 11-12 视口清理删掉）',
   'src/features/vault/preload.ts': '隐私记后台预加载（11-19“隐私记感觉没变快”）：首屏画完、空闲时 app/features.ts 的 preloadPages 才下载，首屏期间不下载',
   'src/core/device-exit.ts': '会话没了的退出出口（11-19 首屏超 150 KB 挪出）：app/main.tsx 的 onSessionLost 真收到会话丢失才下载；别的出口（sync-wiring、设置、告知页）本来就在懒加载块里',
   'src/features/vault/ui/VaultParts.tsx': 'B5 隐私记给别的功能用的几块（随手记入口行、移到隐私记、设置 › 隐私记）：随手记页、设置页挂上以后才下载，和那两页一样不在首屏的静态闭包里',

@@ -62,8 +62,8 @@ const noop = (): void => undefined;
  * 换页写进全局运行日志（同 platform/run-log-api.ts 的 rlog 那一个口：globalThis.__lemoRunLog 的 sink；motion 按分层规则不能引 platform，名字写死在这里）。
  * 运行日志没开（正式版、首屏画完以前）就不记
  */
-/** 换页日志开着没有（正式构建是常量 false，记日志、量用时、数元素整段摇掉） */
-const SWAP_LOG_ON = import.meta.env.MODE !== 'production';
+/** 换页日志开着没有：11-28 起各版都开（同 platform/run-log-api.ts 的 RLOG_ON；运行日志还没起来时 swapLog 照样不记） */
+const SWAP_LOG_ON: boolean = true;
 type LogSlot = { sink?: (l: string) => void; deep?: () => boolean } | undefined;
 const logSlot = (): LogSlot => (globalThis as unknown as Record<string, LogSlot>)['__lemoRunLog'];
 

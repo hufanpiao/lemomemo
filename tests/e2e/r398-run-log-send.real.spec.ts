@@ -8,7 +8,7 @@ import { createAccount, loginViaOtp, openApp, realBackend } from './real-backend
 test.setTimeout(180_000);
 
 const SECRET_TITLE = 'R398 这段文字不许进日志';
-// 按钮字照 src/features/settings/ui/VhProbe.tsx 的 RL_SEND、RL_SEND_LABEL.ok（组件带样式模块，Playwright 里不直接 import）
+// 按钮字照 src/features/settings/ui/RunLogButtons.tsx 的 RL_SEND、RL_SEND_LABEL.ok（组件带样式模块，Playwright 里不直接 import）
 const RL_SEND = 'Send run log';
 const RL_SENT = 'Sent';
 

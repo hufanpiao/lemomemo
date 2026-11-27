@@ -11,7 +11,7 @@
 // • Finger switch：一个看得见的 iOS 系统开关 <input type="checkbox" switch>，让人用手指点：
 //   手指点都不震 = 系统触感反馈关着或这台机器不支持，代码改不了；手指点震、Test haptic 不震 = TapSwitch 那套没接对。改变时记 probe finger switch on=
 //   （iOS 真机上代点系统开关的写法都不震，只有手指点才震）
-// • 全局运行日志（platform/run-log.ts，非正式版一直在记）：“Send run log”一键发送、“Copy run log”整段复制、“Clear run log”清空
+// • 全局运行日志的“Send run log”“Copy run log”“Clear run log”11-28 起挪到 RunLogButtons.tsx（正式版也有，负责人 11-28 选“正式版也带”），不在这里
 import { useState } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { TapSwitch } from '../../../kit/components/TapSwitch.tsx';
@@ -19,23 +19,8 @@ import { fxWarmOn, setFxWarmOn, tryHaptic, type HapticPath } from '../../../plat
 import { rlog } from '../../../platform/run-log-api.ts';
 import { deepDiagOn, setDeepDiagOn } from '../../../platform/diag-deep.ts';
 import { geminiLiveOn, setGeminiLiveOn } from '../../../platform/live-audio.ts';
-import { clearRunLog, readRunLog } from '../../../platform/run-log.ts';
-import { useRunLogSend, type RunLogSendState } from '../hooks/useRunLogSend.ts';
 import styles from './SettingsPage.module.css';
 
-/** 全局运行日志（platform/run-log.ts，非正式版一直在记） */
-export const RL_COPY = 'Copy run log';
-export const RL_COPIED = 'Copied';
-export const RL_COPY_FAIL = 'Copy failed - try again';
-export const RL_CLEAR = 'Clear run log';
-/** 一键发送（features/settings/data/diag-send.ts → public.diag_logs，每人一行、新的覆盖旧的） */
-export const RL_SEND = 'Send run log';
-export const RL_SEND_LABEL: Record<Exclude<RunLogSendState, ''>, string> = {
-  busy: 'Sending...',
-  ok: 'Sent',
-  signed_out: 'Send failed - sign in first',
-  fail: 'Send failed - try again',
-};
 /** 试震动（platform/feedback.ts 的 tryHaptic；不看“声音和触感”开关）：按过以后写 Haptic: switch / vibrate / none */
 export const HAP_TRY = 'Test haptic';
 export const HAP_DONE = 'Haptic: ';
@@ -81,19 +66,6 @@ function DiagToggle(p: {
 
 export function VhProbe() {
   const [hap, setHap] = useState<HapticPath | null>(null);
-  const [rlCopied, setRlCopied] = useState<'' | 'ok' | 'fail'>('');
-  const rlSend = useRunLogSend();
-  /** 整段复制（按的时候重新读本机，记着的时候也拿最新的） */
-  const copyRunLog = (): void => {
-    try {
-      void navigator.clipboard.writeText(readRunLog()).then(
-        () => setRlCopied('ok'),
-        () => setRlCopied('fail'),
-      );
-    } catch {
-      setRlCopied('fail');
-    }
-  };
   return (
     <div data-testid="settings-vh-probe">
       <div className={`${styles.actions} ${styles.probeActions}`}>
@@ -117,25 +89,6 @@ export function VhProbe() {
           />
           {FS_LABEL}
         </label>
-      </div>
-      <div className={`${styles.actions} ${styles.probeActions}`}>
-        <FormButton size="compact" data-testid="vh-rl-send" disabled={rlSend.state === 'busy'} onClick={rlSend.send}>
-          {rlSend.state === '' ? RL_SEND : RL_SEND_LABEL[rlSend.state]}
-        </FormButton>
-        <FormButton size="compact" data-testid="vh-rl-copy" onClick={copyRunLog}>
-          {rlCopied === 'ok' ? RL_COPIED : rlCopied === 'fail' ? RL_COPY_FAIL : RL_COPY}
-        </FormButton>
-        <FormButton
-          size="compact"
-          data-testid="vh-rl-clear"
-          onClick={() => {
-            clearRunLog();
-            setRlCopied('');
-            rlSend.reset();
-          }}
-        >
-          {RL_CLEAR}
-        </FormButton>
       </div>
     </div>
   );
