@@ -10,7 +10,7 @@
 //   已经用完、根本没发出去的不调（草稿留着）
 // • send 可带这一句的图（images，已经压好的 base64）；图只随这一句发一次，不进历史、不留在对话状态里（重试只重发文字）；
 //   send 回这一句答上来没有（排队的等到问完），输入条据此决定清不清选的图（失败留着）
-// • 记日程待办：拿到 plus 的 ChatRecorder（hooks/chat-open.ts；没登记就先等录音那一块加载）才带 draft；回包的 drafts 在回答到的这一刻用本机规则拆成卡片（cardsOf），
+// • 记日程待办：拿到 plus 的 ChatRecorder（hooks/chat-open.ts；没登记就先等录音那一块加载）才带 draft（R-497 连同 examples）；回包的 drafts 在回答到的这一刻用本机规则拆成卡片（cardsOf），
 //   存在这条回答的 turn 里（关了抽屉再打开，记过的还是“已记到”）；saveCard 点“记下来”经 plus 的保存口写（outbox），正在存、已记下的不重复存；
 //   过去的月日（confirm）先在卡片上选“补记今年 / 明年”（pickCard，同打字条确认行），没选不存；doubts、hints 在卡片上标一句（DraftWarn）；
 //   drafts 有、卡片一张都没拆出来时 draftMiss，回答下补一行提示。raw_text 存用户问的那一句（job.q）
@@ -63,11 +63,12 @@ function warnOf(r: ParseResult, it: AiItem): DraftWarn | null {
 }
 
 /** 回包的几段原话 → 卡片（本机规则拆，只留日程、待办；拆不出来的段不出卡片）。said：用户问的那一句（卡片存进 raw_text） */
-export function cardsOf(drafts: readonly string[], rec: ChatRecorder | null, said: string): DraftCard[] {
+export function cardsOf(drafts: readonly string[], rec: ChatRecorder | null, said: string, projects: readonly string[] = []): DraftCard[] {
   if (rec === null) return [];
   const out: DraftCard[] = [];
-  for (const text of drafts) {
-    const r = rec.plan(text);
+  for (const [i, text] of drafts.entries()) {
+    // R-497：模型照以前怎么分的配了项目名就交给本机规则（规则没认出用户说的自建项目时用它）
+    const r = rec.plan(text, projects[i] || undefined);
     for (const item of r.items) {
       if (item.kind === 'event' || item.kind === 'todo') out.push({ item: { ...item, kind: item.kind }, raw: said, warn: warnOf(r, item), st: 'idle' });
     }
@@ -199,19 +200,20 @@ export function createChat(deps: ChatDeps = defaults) {
       rec = w instanceof Promise ? await w : w;
       if (ac.signal.aborted) return;
     }
-    rlog(`chat send len=${[...job.q].length} hist=${msgs.length - 1} img=${job.images?.length ?? 0} draft=${rec ? 1 : 0}`);
-    const r = await deps.ask({ messages: msgs, tz: deps.tz(), locale: job.locale, images: job.images, ...(job.voiceAsk ? { voiceAsk: true } : {}), ...(rec ? { draft: true } : {}) }, ac.signal);
+    const ex = rec ? rec.examples() : [];
+    rlog(`chat send len=${[...job.q].length} hist=${msgs.length - 1} img=${job.images?.length ?? 0} draft=${rec ? 1 : 0} ex=${ex.length}`);
+    const r = await deps.ask({ messages: msgs, tz: deps.tz(), locale: job.locale, images: job.images, ...(job.voiceAsk ? { voiceAsk: true } : {}), ...(rec ? { draft: true, examples: ex } : {}) }, ac.signal);
     if (inflight?.ac === ac) inflight = null;
     const ms = deps.now() - t0;
     if (ac.signal.aborted) return;   // abort() 已经换好失败卡、清掉队列
     const id = nextId();
     if (r.ok) {
-      const a: ChatAnswer = { answer: r.answer, refs: r.refs, searched: r.searched, found: r.found, webs: r.webs, memories: r.memories, drafts: r.drafts, quotaLeft: r.quotaLeft };
+      const a: ChatAnswer = { answer: r.answer, refs: r.refs, searched: r.searched, found: r.found, webs: r.webs, memories: r.memories, drafts: r.drafts, draftProjects: r.draftProjects, quotaLeft: r.quotaLeft };
       // 卡片在回答到的这一刻拆（“明天”“周五”按这一刻、用户所在时区算），存进对话状态：关了抽屉再打开，记过的还是“已记到”
-      const cards = cardsOf(r.drafts, rec, job.q);
+      const cards = cardsOf(r.drafts, rec, job.q, r.draftProjects);
       const draftMiss = r.drafts.length > 0 && cards.length === 0;
       const warns = cards.filter((c) => c.warn !== null || c.item.confirm !== null).length;
-      rlog(`chat answer ms=${ms} refs=${r.refs.length} found=${r.found} webs=${r.webs} searched=${r.searched.length} drafts=${r.drafts.length} cards=${cards.length} ask=${warns} left=${r.quotaLeft}`);
+      rlog(`chat answer ms=${ms} refs=${r.refs.length} found=${r.found} webs=${r.webs} searched=${r.searched.length} drafts=${r.drafts.length} cards=${cards.length} proj=${r.draftProjects.filter(Boolean).length} ask=${warns} left=${r.quotaLeft}`);
       if (draftMiss) rlog(`chat draft miss drafts=${r.drafts.length}`);
       set({ turns: insertAfter(job.meId, { k: 'ai', id, a, usage: null, cards, draftMiss }), busy: false });
       job.onAnswered?.();

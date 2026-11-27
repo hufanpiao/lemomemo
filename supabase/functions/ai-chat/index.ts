@@ -19,7 +19,7 @@ import { recentMemories, relatedMemories, saveMemories } from '../_shared/memori
 import { chatGateDeps, chatWebSearcher, isValidTz } from '../_shared/ai/wire.ts';
 import { aiAllowed } from '../_shared/consent.ts';
 import { withAiUser } from '../_shared/db.ts';
-import { normLocale, stripCtlText } from '../_shared/gen/schema/ai.ts';
+import { normExamples, normLocale, stripCtlText } from '../_shared/gen/schema/ai.ts';
 import { chatOk, chatReq } from '../_shared/gen/schema/chat.ts';
 import { appConfigMinLoader, versionGate } from '../_shared/version-gate.ts';
 import { handle } from './core.ts';
@@ -45,6 +45,7 @@ Deno.serve(async (req) => {
     },
     isValidTz,
     normLocale,
+    normExamples,
     stripCtl: stripCtlText,
     checkOk: (v) => chatOk.safeParse(v).success,
     query: (uid, q, tz) => withAiUser(uid, (tx) => runQuery(tx, uid, q, tz)),

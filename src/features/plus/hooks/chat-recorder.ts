@@ -1,7 +1,8 @@
 // AI 助手确认卡片的拆和存（在 AI 里输入也能记日程和待办）：交给 features/ai-chat 的 ChatRecorder（hooks/chat-open.ts）。
 // • 拆：打字条同一套本机规则（data/type-flow.ts 的 planLocal → shared/logic/parse 的 parseSplit），只出日程、待办；整份结果交回（confirm、doubts 由卡片处理，
 //   过去的月日选了“补记今年 / 明年”才能记，用 type-flow 的 applyConfirm，同打字条确认行）；
-//   “明天、周五、下午三点”按调用这一刻、用户所在时区（current_tz）算，项目名认本机已有的（useCaptureCtx 的 projectsOf）
+//   “明天、周五、下午三点”按调用这一刻、用户所在时区（current_tz）算，项目名认本机已有的（useCaptureCtx 的 projectsOf）；
+//   R-497：examples 现读本机待办、日程挑以前分进自建项目的几条随问题发出去，plan 的 learned 是模型照它配回来的项目名（withLearned）
 // • 存：打字条同一个保存口（data/capture-save.ts 的 saveCapture：captureRow 拼行、经 outbox 写，离线先进队列，提醒标记照旧），
 //   source 'page'（打的字）、origin 'rule'（本机规则拆的，不写简称）；一张卡片一批
 // • 放在 plus：本机规则、保存口和打字条、录音用同一份代码，对话那一块不另引一份；由录音那一块（voice-main.ts）加载时登记，
@@ -17,6 +18,17 @@ import { saveCapture, type Writer } from '../data/capture-save.ts';
 import { applyConfirm, planLocal, type TypeCtx } from '../data/type-flow.ts';
 import type { ParseResult } from '../../../../shared/logic/parse/parse-split.ts';
 import { projectsOf } from './useCaptureCtx.ts';
+import { projectExamples } from '../../../../shared/logic/project-examples.ts';
+import { PROJECT_CATEGORIES } from '../../../../shared/logic/project-categories-data.ts';
+import type { ProjectExample } from '../../../../shared/schema/ai.ts';
+
+/** 固定类别（中韩两套）：本机规则没认出用户说的自建项目时给的，照以前怎么分的配了项目名就换掉 */
+const FIXED: ReadonlySet<string> = new Set<string>([...PROJECT_CATEGORIES.zh, ...PROJECT_CATEGORIES.ko]);
+
+/** R-497：本机规则给的是固定类别或没给项目，换成照以前怎么分的配的那个；原话说到了自建项目名（本机规则认出来的）照旧 */
+function withLearned<T extends { project?: string | null }>(it: T, learned: string): T {
+  return !it.project || FIXED.has(it.project) ? { ...it, project: learned } : it;
+}
 
 /** 卡片只记这两类（纪念日、随手记的说法也按待办出，同本机规则没开纪念日时） */
 const KINDS = ['event', 'todo'] as const;
@@ -33,9 +45,11 @@ function ctxNow(): TypeCtx {
 export function chatRecorderOf(ctx: () => TypeCtx = ctxNow, w?: Writer) {
   return {
     /** 整份结果交回（items 带 confirm，doubts、hints 给卡片标“没把握”“这天不存在”“重复只记一次”） */
-    plan(text: string): ParseResult {
-      return planLocal(text, { ...ctx(), day: null, features: KINDS }).result;
+    plan(text: string, learned?: string): ParseResult {
+      const r = planLocal(text, { ...ctx(), day: null, features: KINDS }).result;
+      return learned ? { ...r, items: r.items.map((it) => withLearned(it, learned)) } : r;
     },
+    examples: (): ProjectExample[] => projectExamples([collection<ProjRow>('todos').getSnapshot(), collection<ProjRow>('events').getSnapshot()]),
     /** 过去的月日：同打字条确认行 */
     confirm: applyConfirm,
     async save(item: CaptureItem, raw: string): Promise<{ table: 'events' | 'todos'; id: string } | null> {

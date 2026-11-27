@@ -10,7 +10,7 @@ import { askChat, type ChatResult } from '../data/chat-api.ts';
 import type { ChatRecorder } from '../hooks/chat-open.ts';
 import { cardsOf, createChat, type ChatDeps } from '../hooks/useChat.ts';
 
-const OK: ChatResult = { ok: true, answer: '好。', refs: [], searched: [], found: 0, webs: 0, memories: [], drafts: [], quotaLeft: 40 };
+const OK: ChatResult = { ok: true, answer: '好。', refs: [], searched: [], found: 0, webs: 0, memories: [], drafts: [], draftProjects: [], quotaLeft: 40 };
 // 2025-11-22 首尔
 const T0 = 1_763_800_000_000;
 
@@ -22,7 +22,7 @@ const confirm: ChatRecorder['confirm'] = (it, choice) => {
   return it.kind === 'event' ? { ...it, date: it.confirm[choice], confirm: null } : { ...it, due: it.confirm[choice], confirm: null };
 };
 const fakeRec = (save: ChatRecorder['save'] = async (it) => ({ table: it.kind === 'event' ? 'events' : 'todos', id: 'r1' })): ChatRecorder => ({
-  plan, confirm, save: vi.fn(save),
+  plan, confirm, save: vi.fn(save), examples: () => [],
 });
 const mkRec = (r: ChatResult, rec: ChatRecorder | null, wait: ChatDeps['waitRecorder'] = async () => rec) => {
   const ask = vi.fn<ChatDeps['ask']>().mockResolvedValue(r);
@@ -145,6 +145,19 @@ describe('记日程待办的确认卡片（11-24）', () => {
     expect(rec.save).toHaveBeenLastCalledWith(expect.objectContaining({ title: '和客户开会' }), SAID);
   });
 
+  it('R-497：带 draft 时连同 rec.examples() 发出去；回包的 draftProjects 按位置交给 plan 的 learned', async () => {
+    const ex = [{ title: '跑步', project: '健身' }];
+    const learned: (string | undefined)[] = [];
+    const rec: ChatRecorder = { ...fakeRec(), examples: () => ex, plan: (t, l) => (learned.push(l), plan(t)) };
+    const a = mkRec({ ...WITH, draftProjects: ['', '健身'] }, rec);
+    await a.c.send(SAID, 'zh-CN');
+    expect(a.ask.mock.calls[0]?.[0]).toMatchObject({ draft: true, examples: ex });
+    expect(learned).toEqual([undefined, '健身']);
+    const b = mkRec(OK, null);
+    await b.c.send('x', 'zh-CN');
+    expect(b.ask.mock.calls[0]?.[0]).not.toHaveProperty('examples');
+  });
+
   it('askChat：带 draft 才在请求里写 draft: true；回包 drafts 交回，没有为空数组', async () => {
     const sent: unknown[] = [];
     const deps = (body: unknown): FnDeps => ({
@@ -162,5 +175,15 @@ describe('记日程待办的确认卡片（11-24）', () => {
     expect(sent[0]).toMatchObject({ draft: true });
     await expect(askChat(req, sig, deps({ answer: 'a', refs: [], searched: [], found: 0, quota_left: 3 }))).resolves.toMatchObject({ ok: true, drafts: [] });
     expect(sent[1]).not.toHaveProperty('draft');
+    // R-497：examples 只跟着 draft 发；空的不发；draft_projects 条数对得上才用，对不上、没回的全是空串
+    const ex = [{ title: '跑步', project: '健身' }];
+    await expect(askChat({ ...req, draft: true, examples: ex }, sig, deps({ answer: 'a', refs: [], searched: [], found: 0, drafts: ['明天游泳'], draft_projects: ['健身'], quota_left: 3 }))).resolves.toMatchObject({ drafts: ['明天游泳'], draftProjects: ['健身'] });
+    expect(sent[2]).toMatchObject({ draft: true, examples: ex });
+    await askChat({ ...req, examples: ex }, sig, deps({ answer: 'a', refs: [], searched: [], found: 0, quota_left: 3 }));
+    expect(sent[3]).not.toHaveProperty('examples');
+    await askChat({ ...req, draft: true, examples: [] }, sig, deps({ answer: 'a', refs: [], searched: [], found: 0, quota_left: 3 }));
+    expect(sent[4]).not.toHaveProperty('examples');
+    await expect(askChat({ ...req, draft: true }, sig, deps({ answer: 'a', refs: [], searched: [], found: 0, drafts: ['x', 'y'], draft_projects: ['健身'], quota_left: 3 }))).resolves.toMatchObject({ draftProjects: ['', ''] });
+    await expect(askChat({ ...req, draft: true }, sig, deps({ answer: 'a', refs: [], searched: [], found: 0, drafts: ['x'], quota_left: 3 }))).resolves.toMatchObject({ draftProjects: [''] });
   });
 });

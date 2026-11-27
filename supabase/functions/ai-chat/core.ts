@@ -51,9 +51,9 @@ import { json } from '../_shared/http.ts';
 import { cutCited, relinkCites } from '../_shared/ai/cites.ts';
 import { ADMIN_DAILY_CAP, aiGate, clientReason, pacificDate, settleFailure, type GateDeps, type GateGo } from '../_shared/ai/gate.ts';
 import { CHAT_CALL_TIMEOUT_MS, CHAT_MAX_ROUNDS, CHAT_TURN_BUDGET_MS, TASK_PARAMS } from '../_shared/ai/params.ts';
-import { wallOf } from '../_shared/ai/parse-core.ts';
+import { cleanExamples, wallOf } from '../_shared/ai/parse-core.ts';
 import { checkMemory, MEMORY_STMT_MS, OVERLAP_MIN, overlapOf, MEMORY_TURN_MAX, memoryBlock, promptMemories, type MemoryRow, type MemorySaved, type MemoryWrite } from '../_shared/memories.ts';
-import { CHAT_V5, CHAT_V5_DRAFT, CHAT_V5_IMAGES, CHAT_V5_MEMORY, CHAT_V5_MEMORY_TOOL, CHAT_V5_USER_IMAGES, CHAT_V5_WEB } from '../_shared/ai/prompts/chat.v5.ts';
+import { CHAT_V6, CHAT_V6_DRAFT, CHAT_V6_HISTORY, CHAT_V6_IMAGES, CHAT_V6_MEMORY, CHAT_V6_MEMORY_TOOL, CHAT_V6_USER_IMAGES, CHAT_V6_WEB } from '../_shared/ai/prompts/chat.v6.ts';
 import {
   aiFailCode, errNameOf, type ChatImage, type ChatMsg, type ChatProvider, type ChatResult, type ChatTurn, type ToolResult, type WebSearcher, type WebSearchResult,
 } from '../_shared/ai/provider.ts';
@@ -99,6 +99,8 @@ export type Req = {
   memory?: boolean | undefined;
   /** 11-24 记日程待办：客户端画得出确认卡片才带；不带的旧客户端不给 draft_records、回包没有 drafts */
   draft?: boolean | undefined;
+  /** R-497：以前分进自建项目的几条（带 draft 才用；deps.normExamples 规整） */
+  examples?: unknown[] | undefined;
   /** R-495：这一句是语音转写来的，答成后消费一次 ai-voice 发的额度（转写那 1 次退回） */
   voice_ask?: true | undefined;
 };
@@ -114,6 +116,8 @@ export interface Deps extends GateDeps<ChatProvider> {
   normLocale(v: unknown): 'zh' | 'ko';
   /** shared/schema/ai.ts 的 stripCtlText */
   stripCtl(s: string): string;
+  /** shared/schema/ai.ts 的 normExamples（R-497） */
+  normExamples(v: unknown): { title: string; project: string }[];
   /** 跑一个已校验的查询（store.ts 的 runQuery，经 withAiUser）；读库出错抛 */
   query(userId: string, q: ToolQuery, tz: string): Promise<ChatRow[]>;
   /** 联网用哪家（wire.ts 的 chatWebSearcher：Brave / Tavily 按管理员选的先后）；两家都没密钥为 null（不给 web_search 工具） */
@@ -132,15 +136,20 @@ export interface Deps extends GateDeps<ChatProvider> {
   voiceIssued(key: string): Promise<number>;
 }
 
-/** 填 chat.v5 的占位符（只放今天、现在、时区、语言和这一轮给了的第 2 段工具说明）；now 用服务器时钟 */
-export function chatPrompt(now: number, tz: string, locale: 'zh' | 'ko', extras: Extras = { web: false, images: false }, userImages = false, memories: readonly MemoryRow[] = []): string {
+/** 填 chat.v6 的占位符（只放今天、现在、时区、语言和这一轮给了的第 2 段工具说明）；now 用服务器时钟 */
+export function chatPrompt(
+  now: number, tz: string, locale: 'zh' | 'ko', extras: Extras = { web: false, images: false }, userImages = false, memories: readonly MemoryRow[] = [],
+  history: readonly { t: string; p: string }[] = [],
+): string {
   const w = wallOf(now, tz);
-  const extra = (extras.web ? CHAT_V5_WEB : '') + (extras.images ? CHAT_V5_IMAGES : '') + (extras.memory === true ? CHAT_V5_MEMORY_TOOL : '')
-    + (extras.draft === true ? CHAT_V5_DRAFT : '') + (userImages ? CHAT_V5_USER_IMAGES : '');
+  const extra = (extras.web ? CHAT_V6_WEB : '') + (extras.images ? CHAT_V6_IMAGES : '') + (extras.memory === true ? CHAT_V6_MEMORY_TOOL : '')
+    + (extras.draft === true ? CHAT_V6_DRAFT : '') + (userImages ? CHAT_V6_USER_IMAGES : '');
   const map: Record<string, string> = { TODAY: w.today, WEEKDAY: w.weekday, NOW: w.time, TZ: tz, LANG: locale === 'ko' ? '韩文' : '中文', EXTRA: extra };
-  const base = CHAT_V5.replace(/\{\{([A-Z_]+)\}\}/g, (m, k: string) => (Object.hasOwn(map, k) ? map[k] : undefined) ?? m);
+  const base = CHAT_V6.replace(/\{\{([A-Z_]+)\}\}/g, (m, k: string) => (Object.hasOwn(map, k) ? map[k] : undefined) ?? m);
   // 记忆最后才拼上去：里面的文字不再过占位符替换（函数式 replace，$ 也不会被当替换语法）
-  return memories.length === 0 ? base : base + CHAT_V5_MEMORY.replace('{{BLOCK}}', () => memoryBlock(memories));
+  const withMem = memories.length === 0 ? base : base + CHAT_V6_MEMORY.replace('{{BLOCK}}', () => memoryBlock(memories));
+  // R-497：给了 draft_records、又有以前分进自建项目的例子才拼（parse-core.ts 的 cleanExamples 已转义 </history>、</data>）；没有就和以前一字不差
+  return extras.draft === true && history.length > 0 ? withMem + CHAT_V6_HISTORY.replace('{{BLOCK}}', () => `<history>${JSON.stringify(history)}</history>`) : withMem;
 }
 
 /** 历史：助手那几条去掉旧的 [n]（旧编号对不上这一轮）；都去掉首尾空白，空的丢掉 */
@@ -211,6 +220,10 @@ interface Turn {
   sawTools: boolean;
   /** 这一轮要出确认卡片的几段原话（draft_records；答成了才随回包交回，服务器不写库） */
   drafts: string[];
+  /** R-497：和 drafts 一一对应的项目名（不在 allowed 里的记成空串）；allowed 是给模型看的例子里出现过的项目名，空的就是这一轮没给例子、回包不带 draft_projects */
+  draftProjects: string[];
+  history: readonly { t: string; p: string }[];
+  allowed: ReadonlySet<string>;
   /** 这一轮已经联网几次、看了几张随手记的图 */
   webCalls: number;
   seenImages: number;
@@ -348,17 +361,25 @@ function remember(t: Turn, c: Extract<Call, { tool: 'remember' }>): Out {
  * draft_records（11-24）：只排上要出卡片的原话（看过工具结果以后不收，同 remember），整轮答成了才随回包交回；不写库、不扣次数。
  * 每段同 remember 核对是不是用户这一句说的（memories.ts 的 overlapOf：二元组覆盖不到 OVERLAP_MIN 的丢掉，前几轮、工具结果里的事过不了）
  */
-function draftRecords(t: Turn, items: readonly string[]): Out {
+function draftRecords(t: Turn, items: readonly string[], projects: readonly string[]): Out {
   if (t.sawTools) return { error: 'draft_late' };
   const room = DRAFTS_MAX - t.drafts.length;
   if (room <= 0) return { error: 'too_many' };
   const said = t.body.messages.at(-1)?.text ?? '';
-  const mine = items.filter((x) => overlapOf(x, said) >= OVERLAP_MIN);
+  // R-497：项目名和原话成对走；只认给模型看的例子里出现过的名字（模型编的、<data> 里被注入的都不认）
+  const mine: { x: string; p: string }[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const x = items[i] ?? '';
+    const p = projects[i] ?? '';
+    if (overlapOf(x, said) >= OVERLAP_MIN) mine.push({ x, p: t.allowed.has(p) ? p : '' });
+  }
   const dropped = items.length - mine.length;
   if (mine.length === 0) return { error: 'draft_not_said' };
   const took = mine.slice(0, room);
-  t.drafts.push(...took);
-  return { result: { ok: true, cards: took.length, note: '界面会给每件事出确认卡片，用户点了才记下' }, log: `drafts=${took.length} dropped=${dropped}` };
+  t.drafts.push(...took.map((d) => d.x));
+  t.draftProjects.push(...took.map((d) => d.p));
+  const proj = took.filter((d) => d.p !== '').length;
+  return { result: { ok: true, cards: took.length, note: '界面会给每件事出确认卡片，用户点了才记下' }, log: `drafts=${took.length} dropped=${dropped}${t.allowed.size > 0 ? ` proj=${proj}` : ''}` };
 }
 
 /** 一个已校验、这一轮给了的调用 → 结果（按 tool 一处 switch） */
@@ -367,7 +388,7 @@ async function runTool(t: Turn, c: Call): Promise<Out> {
     case 'remember':
       return remember(t, c);
     case 'draft_records':
-      return draftRecords(t, c.items);
+      return draftRecords(t, c.items, c.projects);
     case 'web_search':
       return webSearch(t, c.query);
     case 'look_note_images':
@@ -397,7 +418,7 @@ async function loop(t: Turn, userImages: readonly ChatImage[]): Promise<Loop> {
   const system = chatPrompt(
     t.start, body.tz, t.lang,
     { web: offered.has('web_search'), images: offered.has('look_note_images'), memory: offered.has('remember'), draft: offered.has('draft_records') },
-    userImages.length > 0, t.memShown,
+    userImages.length > 0, t.memShown, t.history,
   );
   const messages = historyOf(body.messages);
   let resume: { turn: ChatTurn; results: readonly ToolResult[] } | undefined;
@@ -569,9 +590,11 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   }
   // 记忆读不出来不影响回答：这一轮不用记忆、也不给 remember（不然模型看不到旧的，会记重）
   const mem = body.memory === true ? await readMemories(deps, uid, body.messages.at(-1)?.text ?? '') : null;
+  // R-497：带 draft 才看例子（不带的旧客户端、没有自建项目的：没有 <history>，回包不带 draft_projects）
+  const history = body.draft === true ? cleanExamples(deps.normExamples(body.examples)) : [];
   const t: Turn = {
     deps, gate, uid, body, reg: new Registry(), start, web, today: wallOf(start, body.tz).today, lang: deps.normLocale(body.locale),
-    sent: 0, sawTools: false, drafts: [], webCalls: 0, seenImages: 0, searched: new Set(),
+    sent: 0, sawTools: false, drafts: [], draftProjects: [], history, allowed: new Set(history.map((e) => e.p)), webCalls: 0, seenImages: 0, searched: new Set(),
     memVer: mem?.ver ?? null, memShown: mem?.shown ?? [], memPending: [],
   };
   // 带图问而对话服务商不收图：不调，退回这一次
@@ -585,7 +608,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   const refs = keys.map((k) => reg.ref(k)).filter((r): r is Ref => r !== undefined);
   const res = {
     answer, refs, searched: [...t.searched], found: reg.records, ...(reg.webs > 0 ? { webs: reg.webs } : {}),
-    ...(t.drafts.length > 0 ? { drafts: t.drafts } : {}), quota_left: gate.quotaLeft,
+    ...(t.drafts.length > 0 ? { drafts: t.drafts } : {}), ...(t.drafts.length > 0 && t.allowed.size > 0 ? { draft_projects: t.draftProjects } : {}), quota_left: gate.quotaLeft,
   };
   if (!deps.checkOk(res)) return finish(t, { kind: 'bad_output' });
   const back = body.voice_ask === true ? await settleVoiceAsk(t) : 0;

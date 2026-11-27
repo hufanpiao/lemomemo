@@ -31,7 +31,7 @@ function world(answer: ChatResult = say('十点开会。'), opts: Parameters<typ
     ...g, rate, provider: () => provider, authenticate: authed,
     parse: (v) => { const p = chatReq.safeParse(v); return p.success ? p.data : null; },
     checkOk: (v) => chatOk.safeParse(v).success,
-    isValidTz, normLocale, stripCtl: stripCtlText,
+    isValidTz, normLocale, normExamples, stripCtl: stripCtlText,
     query: async () => [], web: async () => null, noteImages: async () => [], readThumb: async () => null,
     memories: { recent: async () => ({ rows: [], ver: 'v' }), related: async () => [], save: async () => [] },
     voiceIssued: async (k) => counts.get(k) ?? 0,

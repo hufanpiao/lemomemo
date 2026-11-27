@@ -6,7 +6,7 @@ import { MEMORIES_MAX as S_MAX, MEMORY_PAGE as S_PAGE, MEMORY_TEXT_MAX as S_TEXT
 import { CHAT_TEXT_MAX, chatOk, chatReq } from '../../shared/schema/chat.ts';
 import { checkMemory, MEMORIES_MAX, MEMORY_PAGE, MEMORY_TEXT_MAX, MEMORY_TURN_MAX, memoryBlock, memoryTerms, normMemory, overlapOf, PROMPT_MAX, promptMemories, RECENT_CHARS, RECENT_SHOWN, type MemoryRow, type MemoryWrite } from '../../supabase/functions/_shared/memories.ts';
 import type { ChatProvider, ChatRequest, ChatResult, ToolCall } from '../../supabase/functions/_shared/ai/provider.ts';
-import { CHAT_V5_MEMORY_TOOL } from '../../supabase/functions/_shared/ai/prompts/chat.v5.ts';
+import { CHAT_V6_MEMORY_TOOL } from '../../supabase/functions/_shared/ai/prompts/chat.v6.ts';
 import { TRANSCRIPT_MAX, transcribeAudio } from '../../supabase/functions/_shared/ai/transcribe.ts';
 import { handle as chatHandle, type Deps as ChatDeps } from '../../supabase/functions/ai-chat/core.ts';
 import { handle as memHandle, LIST_RATE_PER_MIN, RATE_PER_MIN, type Deps as MemDeps } from '../../supabase/functions/ai-memory/core.ts';
@@ -26,7 +26,7 @@ describe('checkMemory：写入校验', () => {
     expect([MEMORY_TEXT_MAX, MEMORIES_MAX, MEMORY_TURN_MAX, MEMORY_PAGE]).toEqual([S_TEXT, S_MAX, S_TURN, S_PAGE]);
     expect(MEMORIES_MAX).toBe(5000);
     expect(TRANSCRIPT_MAX).toBe(CHAT_TEXT_MAX);
-    expect(CHAT_V5_MEMORY_TOOL).toContain(`一轮最多 ${MEMORY_TURN_MAX} 条`);   // 提示词是定版文字，不拼常量，靠这里钉住
+    expect(CHAT_V6_MEMORY_TOOL).toContain(`一轮最多 ${MEMORY_TURN_MAX} 条`);   // 提示词是定版文字，不拼常量，靠这里钉住
   });
   it('用户原话改写成的一句能存', () => {
     expect(checkMemory('对花生过敏，推荐吃的要避开', SAID)).toEqual({ text: '对花生过敏，推荐吃的要避开', norm: '对花生过敏推荐吃的要避开' });
@@ -151,7 +151,7 @@ function chatWorld(steps: ChatResult[], have: MemoryRow[] = [], over: Partial<Ch
       return p.success ? p.data : null;
     },
     checkOk: (v) => chatOk.safeParse(v).success,
-    isValidTz, normLocale, stripCtl: stripCtlText,
+    isValidTz, normLocale, normExamples, stripCtl: stripCtlText,
     query: async () => [], web: async () => null, noteImages: async () => [], readThumb: async () => null,
     memories: {
       recent: async (u) => {

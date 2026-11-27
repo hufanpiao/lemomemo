@@ -61,6 +61,7 @@ export const CHAT_MAX_ROUNDS = 4;
  * 11-23（负责人弹窗：联网换 Brave / Tavily，搜到的网页由对话模型自己读）：web_search 一行改成“读摘要、自己概括、标 [n]”，chat 升 v3；
  *   原来给谷歌联网那一次请求的 web.v1 随谷歌搜索接地一起删掉（搜索接口不用提示词）。
  * 11-23（R-495 长期记忆）：加 remember 工具和“记住的事”数据块，chat 升 v4；语音提问只转写用 transcribe.v1。
+ * 11-24（记日程待办）：加 draft_records，chat 升 v5。11-28（R-497 学以前怎么分的）：带例子时最后拼 <history>、draft_records 多 projects 参数，chat 升 v6。
  * 11-16（R-440 日程按项目分颜色）：共用的拆分规则改了 project 一条，三份一起升：record 由 parse.v3 改名 record.v4（parse.v4 已被“＋”用掉，免得撞名）、parse 升 v5、voice 升 v5。
  * 11-16（测试集 ① 第 4 次：没说日子也没说时刻的待办被记成今天，record.v7 文件头 v5 一条写了根因）：共用的日期规则改了两句，三份再一起升：record.v5、parse.v6、voice.v6。
  * 11-17（R-444 跨天日程）：共用规则的 duration_min 一条补全天跨天口径（天数 × 1440，含首尾两天），三份再一起升：record.v6、parse.v7、voice.v7。
@@ -72,5 +73,5 @@ export const CHAT_MAX_ROUNDS = 4;
  */
 export const PROMPT_VERSION = Object.freeze({
   parse: 'parse.v10', voice: 'voice.v10', record: 'record.v9', classify: 'classify.v2', media: 'media.v1', summarize: 'summarize.v1',
-  chat: 'chat.v5', transcribe: 'transcribe.v1',
+  chat: 'chat.v6', transcribe: 'transcribe.v1',
 });

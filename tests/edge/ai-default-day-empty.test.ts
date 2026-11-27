@@ -101,7 +101,7 @@ describe('R6 默认日子：ai.ts 兜一层、提示词只在传了时多一条'
     // B4 加 classify；B4b-2 识图加 media；B4b-3 parse、voice 升 v4（意图），record 是只做记下的 parse.v3，加 summarize；11-16 R-440 三份一起升（record.v4、parse.v5、voice.v5）；同日评测第 4 次修待办日期再升（record.v5、parse.v6、voice.v6）；11-17 R-444 全天跨天时长口径再升（record.v6、parse.v7、voice.v7）；同日 R-446 简称 1～4 个字再升（record.v7、parse.v8、voice.v8）；11-23 ai-chat 联网的系统提示挪进 web.v1；同日联网换 Brave / Tavily，web.v1 删掉、chat 升 v3；11-24 AI 助手记日程待办 chat 升 v5；
     // 11-25 语音日期弄错，每条多抄 date_said、time_said、附 14 天日历再升（record.v8、parse.v9、voice.v9）；11-28 R-497 数据区加 <history>（以前分进自建项目的几条）再升（record.v9、parse.v10、voice.v10）
     expect(PROMPT_VERSION).toEqual({
-      parse: 'parse.v10', voice: 'voice.v10', record: 'record.v9', classify: 'classify.v2', media: 'media.v1', summarize: 'summarize.v1', chat: 'chat.v5', transcribe: 'transcribe.v1',
+      parse: 'parse.v10', voice: 'voice.v10', record: 'record.v9', classify: 'classify.v2', media: 'media.v1', summarize: 'summarize.v1', chat: 'chat.v6', transcribe: 'transcribe.v1',
     });
   });
   it('提示词 v3（R-374）：中文相对时刻一条按填进去的现在时刻换算，文字和语音两份都有', () => {

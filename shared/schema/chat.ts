@@ -13,8 +13,11 @@
 // 回包才可能有 drafts（要记的几段原话，每段一件事）。服务器不写库：客户端用打字条同一套本机规则把每段拆成日程、待办，出卡片，用户点“记下来”才经 outbox 写
 // 新网页带 draft 打到旧函数会被 strictObject 回 400：靠部署顺序保证（publish.ps1 第 6 步、deploy-preview 都先 functions deploy、后 pages deploy，
 // 函数失败就停）；ai-chat 不能单独回滚到这之前，网页要一起回（上线与回滚手册第 2 层，memory、voice_ask 同一约定）
+// 分类记忆（R-497，11-28）：带 draft 时客户端另带 examples（以前分进自建项目的几条 {title, project}，同 ai-parse，shared/logic/project-examples.ts 挑）；
+// 服务器给模型看、模型给每段配一个项目名（只认例子里出现过的名字），回包多一个 draft_projects（和 drafts 一一对应，空串是没配）。
+// 不带 examples 的旧客户端回包没有这个键；新网页带 examples 打到旧函数同样靠部署顺序
 import { z } from 'zod';
-import { FALLBACK_REASONS } from './ai.ts';
+import { AI_PROJECT_LEN, FALLBACK_REASONS } from './ai.ts';
 import { chatMemory, MEMORY_TURN_MAX } from './ai-memory.ts';
 
 export const AI_CHAT_FN = 'ai-chat';
@@ -64,6 +67,8 @@ export const chatReq = z
     memory: z.boolean().optional(),
     /** 客户端画得出“要记成这样吗”的确认卡片（不带的旧客户端：不给 draft_records，回包没有 drafts） */
     draft: z.boolean().optional(),
+    /** R-497：以前分进自建项目的几条（只在带 draft 时有用；服务器 normExamples 规整，形状不对的条目丢掉） */
+    examples: z.array(z.unknown()).max(200).optional(),
     /** 这一句是语音转写来的（R-495）：答成后退回转写扣的那 1 次 */
     voice_ask: z.literal(true).optional(),
   })
@@ -104,6 +109,8 @@ export const chatOk = z.strictObject({
   memories: z.array(chatMemory).min(1).max(MEMORY_TURN_MAX).optional(),
   /** 要记的几段原话（每段一件事，日子时刻照原话的说法）；请求没带 draft 或这一轮没有要记的不带 */
   drafts: z.array(z.string().min(1).max(CHAT_DRAFT_TEXT_MAX)).min(1).max(CHAT_DRAFTS_MAX).optional(),
+  /** R-497：和 drafts 一一对应的项目名（照以前怎么分的，空串是没配）；请求没带 examples 或这一轮没有要记的不带。项目名按码点截到 AI_PROJECT_LEN，UTF-16 最多两倍 */
+  draft_projects: z.array(z.string().max(AI_PROJECT_LEN * 2)).min(1).max(CHAT_DRAFTS_MAX).optional(),
   // 管理员（private.admins）个人每天不设上限：quota_left 按满额 per_user_daily 回，客户端不会把本机额度记成 0（_shared/ai/gate.ts 第 ⑥ 步）；
   // 是不是管理员前端读 my_ai_usage 的 ai_unlimited（src/platform/ai-usage.ts），回包里不另加键（各 AI 回包都是 strictObject，旧版客户端认不出新键）
   quota_left: z.number().int().min(0),

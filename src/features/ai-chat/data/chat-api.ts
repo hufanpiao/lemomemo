@@ -29,6 +29,8 @@ export interface ChatAnswer {
   memories: ChatMemory[];
   /** 要出确认卡片的几段原话（请求带了 draft 才可能有） */
   drafts: string[];
+  /** R-497：和 drafts 一一对应，照以前怎么分的配的项目名（空串是没配；服务器没回、条数对不上的全是空串） */
+  draftProjects: string[];
   quotaLeft: number;
 }
 export type ChatResult = ({ ok: true } & ChatAnswer) | { ok: false; reason: ChatFail; code: string };
@@ -42,6 +44,14 @@ export interface ChatCall {
   voiceAsk?: boolean | undefined;
   /** 画得出确认卡片（plus 登记了 ChatRecorder）：带 draft: true，服务器才给模型 draft_records */
   draft?: boolean | undefined;
+  /** R-497：以前分进自建项目的几条（带 draft 时才发；shared/logic/project-examples.ts 挑） */
+  examples?: readonly { title: string; project: string }[] | undefined;
+}
+
+/** R-497：回包的 draft_projects 和 drafts 条数对得上才用，对不上（不该出现）当没配 */
+function projectsOf(drafts: readonly string[] | undefined, ps: readonly string[] | undefined): string[] {
+  const n = drafts?.length ?? 0;
+  return ps && ps.length === n ? [...ps] : Array.from({ length: n }, () => '');
 }
 
 /** 送出去的对话：从后往前取，最多 CHAT_MAX_MESSAGES 条，每条截字；开头必须是用户的话 */
@@ -67,14 +77,14 @@ export async function chatTakesImages(signal: AbortSignal, d: FnDeps = defaultFn
 
 export async function askChat(req: ChatCall, signal: AbortSignal, d: FnDeps = defaultFnDeps()): Promise<ChatResult> {
   const imgs = req.images && req.images.length > 0 ? { images: [...req.images] } : {};
-  const body = { messages: trimHistory(req.messages), tz: req.tz, locale: req.locale, scope: 'main' as const, web: true, memory: true, ...(req.draft === true ? { draft: true } : {}), ...imgs, ...(req.voiceAsk === true ? { voice_ask: true as const } : {}) };
+  const body = { messages: trimHistory(req.messages), tz: req.tz, locale: req.locale, scope: 'main' as const, web: true, memory: true, ...(req.draft === true ? { draft: true, ...(req.examples && req.examples.length > 0 ? { examples: [...req.examples] } : {}) } : {}), ...imgs, ...(req.voiceAsk === true ? { voice_ask: true as const } : {}) };
   const r = await callFn(AI_CHAT_FN, body, signal, CHAT_CLIENT_TIMEOUT_MS, d);
   if (!r.ok) return { ok: false, reason: 'failed', code: r.code };
   if (r.status < 200 || r.status >= 300) return { ok: false, reason: 'failed', code: String((r.body as { error?: unknown } | null)?.error ?? r.status) };
   const p = chatRes.safeParse(r.body);
   if (!p.success) return { ok: false, reason: 'failed', code: 'bad_response' };
   const v = p.data;
-  if ('answer' in v) return { ok: true, answer: v.answer, refs: v.refs, searched: v.searched, found: v.found, webs: v.webs ?? 0, memories: v.memories ?? [], drafts: v.drafts ?? [], quotaLeft: v.quota_left };
+  if ('answer' in v) return { ok: true, answer: v.answer, refs: v.refs, searched: v.searched, found: v.found, webs: v.webs ?? 0, memories: v.memories ?? [], drafts: v.drafts ?? [], draftProjects: projectsOf(v.drafts, v.draft_projects), quotaLeft: v.quota_left };
   if ('consent_required' in v) return { ok: false, reason: 'consent', code: 'consent_required' };
   if ('quota_out' in v) return { ok: false, reason: 'quota', code: 'quota_out' };
   return { ok: false, reason: v.reason === 'quota' ? 'quota' : 'failed', code: v.reason };

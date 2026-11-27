@@ -34,6 +34,14 @@ describe('chatRecorderOf.plan：本机规则拆', () => {
     expect(late.plan('明天下午三点开会').items[0]).toMatchObject({ date: '2026-11-26', time: '15:00' });
   });
 
+  it('R-497 照以前怎么分的配了项目名（learned）：本机规则给的固定类别、没给的换成它；原话说到的自建项目名照旧', () => {
+    const fixed = rec.plan('明天早上游泳').items[0]?.project;
+    expect(rec.plan('明天早上游泳', '健身').items[0]).toMatchObject({ project: '健身' });
+    expect(rec.plan('明天早上游泳').items[0]?.project).toBe(fixed);
+    // “工作”本身是固定类别，这里用自建项目名
+    expect(chatRecorderOf(ctx({ projects: ['NEOX'] })).plan('明天上午十点NEOX周会', '健身').items[0]).toMatchObject({ project: 'NEOX' });
+  });
+
   it('认本机已有的项目名；像纪念日的说法也只出日程、待办（卡片只记这两类）', () => {
     expect(rec.plan('明天上午十点工作周会').items[0]).toMatchObject({ kind: 'event', project: '工作', time: '10:00' });
     expect(rec.plan('12月3日是结婚纪念日').items.every((i) => i.kind === 'event' || i.kind === 'todo')).toBe(true);

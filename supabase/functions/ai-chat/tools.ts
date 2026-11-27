@@ -59,7 +59,7 @@ export type ToolQuery =
 /** 一个已校验的工具调用（core.ts 按 tool 一处 switch） */
 export type Call =
   | ToolQuery | { tool: 'web_search'; query: string } | { tool: 'look_note_images'; n: number } | { tool: 'remember'; text: unknown; replaces: number | null }
-  | { tool: 'draft_records'; items: string[] };
+  | { tool: 'draft_records'; items: string[]; projects: string[] };
 export type ToolName = Call['tool'];
 
 /** store 查出来的一行（date、time 是记录自己的日子和时刻文字；随手记的 date 是写下那天，由 store 按请求时区算好） */
@@ -85,12 +85,28 @@ export type Need = ChatKind | 'web' | 'images' | 'memory' | 'draft';
 
 /** draft_records 的 items：只收字符串，同 remember 的清洗（memories.ts 的 cleanText：去零宽、方向这类不可见字符，控制字符换空格）、合并空白、截到 DRAFT_TEXT_MAX，空的丢掉，最多 DRAFTS_MAX 段 */
 export function draftsOf(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .filter((x): x is string => typeof x === 'string')
-    .map((x) => cutUnits(cleanText(x, DRAFT_TEXT_MAX).replace(/\s+/g, ' ').trim(), DRAFT_TEXT_MAX))
-    .filter((x) => x !== '')
-    .slice(0, DRAFTS_MAX);
+  return draftPairsOf(v, undefined).map((d) => d.text);
+}
+
+/** 项目名最长几个码点（同 shared/schema/ai.ts 的 AI_PROJECT_LEN；tests/edge/ai-chat-examples.test.ts 钉住） */
+export const DRAFT_PROJECT_LEN = 40;
+
+/** R-497：items 连同和它一一对应的 projects（照以前怎么分的配的项目名，没配是空串）一起清洗；items 丢掉的那段，项目名一起丢，不错位。
+ *  项目名只做清洗截长，是不是例子里出现过的由 core.ts 的 draftRecords 核 */
+export function draftPairsOf(items: unknown, projects: unknown): { text: string; project: string }[] {
+  if (!Array.isArray(items)) return [];
+  const ps = Array.isArray(projects) ? projects : [];
+  const out: { text: string; project: string }[] = [];
+  for (let i = 0; i < items.length && out.length < DRAFTS_MAX; i++) {
+    const x: unknown = items[i];
+    if (typeof x !== 'string') continue;
+    const text = cutUnits(cleanText(x, DRAFT_TEXT_MAX).replace(/\s+/g, ' ').trim(), DRAFT_TEXT_MAX);
+    if (text === '') continue;
+    const p: unknown = ps[i];
+    const project = typeof p === 'string' ? [...cleanText(p, DRAFT_PROJECT_LEN * 2).replace(/\s+/g, ' ').trim()].slice(0, DRAFT_PROJECT_LEN).join('') : '';
+    out.push({ text, project });
+  }
+  return out;
 }
 
 interface ToolSpec {
@@ -232,14 +248,18 @@ const SPECS: readonly ToolSpec[] = [
       description: `用户要记下新的日程或待办（“明天下午三点和客户开会”“记一下周五前交报告”“提醒我……”）时调用：把要记的事交给界面出确认卡片，用户点了才记下，你自己不会存。items 每段一件事、最多 ${DRAFTS_MAX} 段；每段照用户的原话写，日子、时刻照他的说法（“明天”“周五”“下午三点”不用换算），同一句后面没说日子的那件补上前面的日子；不要编原话里没有的事。`,
       parameters: {
         type: 'object',
-        properties: { items: { type: 'array', items: { type: 'string', description: `一件事，不超过 ${DRAFT_TEXT_MAX} 字` } } },
+        properties: {
+          items: { type: 'array', items: { type: 'string', description: `一件事，不超过 ${DRAFT_TEXT_MAX} 字` } },
+          // R-497：只有对话里给了 <history> 才用得上；没给的照旧只填 items
+          projects: { type: 'array', items: { type: 'string', description: '和 items 同一位置那件事的项目名：照 <history> 里同一类事的 p 原样写，拿不准或没有 <history> 写空串' } },
+        },
         required: ['items'],
       },
     },
     need: ['draft'],
     parse(args) {
-      const items = draftsOf(args['items']);
-      return items.length === 0 ? { error: 'no_items' } : { tool: 'draft_records', items };
+      const pairs = draftPairsOf(args['items'], args['projects']);
+      return pairs.length === 0 ? { error: 'no_items' } : { tool: 'draft_records', items: pairs.map((d) => d.text), projects: pairs.map((d) => d.project) };
     },
   },
 ];

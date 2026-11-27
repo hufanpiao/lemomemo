@@ -12,7 +12,7 @@ import { askChat, trimHistory, type ChatResult } from '../data/chat-api.ts';
 import { createChat, historyOf, isQuotaOut, type ChatDeps, type Turn } from '../hooks/useChat.ts';
 
 const REF = { kind: 'todo' as const, id: '70000000-0000-4000-8000-0000000000a8', title: '回复房东', date: '2026-11-20', time: null, done: false };
-const OK: ChatResult = { ok: true, answer: '还剩 1 件[1]。', refs: [REF], searched: ['todo'], found: 1, webs: 0, memories: [], drafts: [], quotaLeft: 40 };
+const OK: ChatResult = { ok: true, answer: '还剩 1 件[1]。', refs: [REF], searched: ['todo'], found: 1, webs: 0, memories: [], drafts: [], draftProjects: [], quotaLeft: 40 };
 const T0 = 1_763_800_000_000;
 
 function mk(results: ChatResult[]) {

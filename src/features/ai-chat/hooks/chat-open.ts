@@ -18,8 +18,10 @@ import { loadTypeBar } from '../../plus/index.ts';
 
 /** 确认卡片用的拆和存（plus 给） */
 export interface ChatRecorder {
-  /** 一段原话 → 本机规则的结果（只出日程、待办；按用户所在时区、调用这一刻算“明天”“周五”“下午三点”）：items 带 confirm（过去的月日先问），doubts、hints 原样交回 */
-  plan(text: string): ParseResult;
+  /** 一段原话 → 本机规则的结果（learned：照以前怎么分的配的项目名，R-497；只出日程、待办；按用户所在时区、调用这一刻算“明天”“周五”“下午三点”）：items 带 confirm（过去的月日先问），doubts、hints 原样交回 */
+  plan(text: string, learned?: string): ParseResult;
+  /** R-497：以前分进自建项目的几条（随问题发给 ai-chat，模型照它给每段配项目名）；plan 的 learned 就是配回来的那个，本机规则没认出用户说的项目名时用它 */
+  examples(): { title: string; project: string }[];
   /** 卡片上选了“补记今年 / 明年”（同打字条确认行的 applyConfirm）：按选的改日子、去掉 confirm */
   confirm(item: AiItem, choice: 'past' | 'next'): AiItem;
   /** 存一条（经 outbox，离线也先进队列、提醒照旧）；raw 是用户问的那一句原话（存进 raw_text）。存上回表和 id，没存上回 null */
