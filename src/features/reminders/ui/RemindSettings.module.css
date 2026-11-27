@@ -1,0 +1,160 @@
+/* 设置 › 提醒与通知。
+   提醒设置、免打扰、提醒里写什么三页的卡、行、开关、单选、时刻行都用 kit 设置组件（src/kit/components/Settings/），这里不再写；
+   这里只有：红字（.error；卡片下面的说明用 kit 的 settingsCardNoteClass）、两张卡之间的 12px（.nextCard）、顶部提示（.notice 等）和“未来 7 天的提醒”页（.upCard、.up*） */
+
+/* “未来 7 天的提醒”页每天的小标题：字样用 kit 的小字分组名（Form.tsx 的 groupLabelClass，和 .upHead 一起挂），这里不另写字号颜色 */
+
+.upCard {
+  margin: 0;
+  padding: 0 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  list-style: none;
+}
+
+/* 二级页“通知”单独一张卡，下面几行另一张：没有说明夹在中间时两张卡之间留 12px；有说明时说明自己的下边距（16px）撑开 */
+.nextCard {
+  margin-top: 12px;
+}
+
+/* 错误、时钟不准等红字（同上，不用 text-wrap: pretty） */
+.error {
+  margin: 8px 4px 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+.chev {
+  color: var(--text-3);
+  font-size: var(--fs-15);
+}
+
+/* 顶部提示卡（推送被占着、要重新打开、不支持）：浅色卡片，下面一个行内按钮。
+   左边一条柠檬黄竖线（同 kit List 的 .late 竖线画法：卡片上的 ::after，直的、不顺着圆角弯），不描整圈边 */
+.notice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.notice::after {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+  content: '';
+  pointer-events: none;
+}
+
+.noticeText {
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* 按钮（“打开通知”“重新订阅”“重新连接”“移除它…”“取消”“移除”）都是 kit 的 FormButton，这里不写按钮样式 */
+.dlgBtns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ok {
+  margin: 0;
+  color: var(--ok-text);
+  font-size: var(--fs-13);
+}
+
+/* 未来 7 天的提醒 */
+.upSummary {
+  /* 左右 4px 和组标题 .gt 对齐 */
+  margin: 0 4px 8px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  text-align: left;
+}
+
+/* 一个日期、一段日期、“现在 … 共 N 条”都不从中间折行 */
+.nowrap {
+  white-space: nowrap;
+}
+
+/* 写成 h2.upHead（权重 0,1,1）压过分组名那份 margin（两份 CSS 模块谁先加载不固定）：天和天之间隔 16，左右跟卡片里的字对齐 14 */
+h2.upHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 16px 14px 6px;
+}
+
+/* 小标题里的哪一天比右边的条数深一档（--text-2），条数用分组名本身的第三层色 */
+.upDay {
+  color: var(--text-2);
+}
+
+/* 行间分隔线 0.5px，从卡片内边距（文字起点）开始（同 kit 设置行） */
+.rowLi {
+  border-bottom: 0.5px solid var(--line);
+}
+
+.rowLi:last-child {
+  border-bottom: 0;
+}
+
+.upRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.upTime {
+  flex: none;
+  width: 48px;
+  font-family: var(--f-mono);
+  font-size: var(--fs-14);
+}
+
+.upMk {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  width: 18px;
+}
+
+.upText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.upText b {
+  overflow: hidden;
+  font-size: var(--fs-15);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upText small {
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}

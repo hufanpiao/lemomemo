@@ -1,0 +1,84 @@
+/* 日历页、纪念日页页顶的“周 / 月 / 纪念日”分段（ModeSeg.tsx）：紧凑一行，宽度随文字，不铺满（从 CalendarPage.module.css 挪来，两页共用这一份） */
+
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+}
+
+.segBtn {
+  position: relative;
+  min-width: var(--hit);
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+/* 看得见 40 高，点击区以按钮中心外扩到至少 44 × 44（分段只有这一份写法）；按钮本来比 44 宽的方向不扩，相邻按钮不互相盖住 */
+.segBtn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.segBtn[aria-pressed='true'] {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+.segBtn:disabled {
+  cursor: default;
+  opacity: var(--disabled-dim);
+}
+
+/* look="slide"（滑块分段）：整行宽、各段平分；底槽 --seg-track、圆角 12、内边 3、不描边；看得见 36 = 3 + 30 + 3（点击区仍由 .segBtn::after 扩到 44） */
+.slide {
+  display: flex;
+  height: 36px;
+  padding: 3px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--seg-track);
+}
+
+/* 各段圆角 9（= 底槽 12 − 内边 3，内外圆角同心） */
+.slide .segBtn {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  border-radius: 9px;
+
+  /* 按钮改成 flex 后字可以折行：阳历 / 阴历那一行窄，“阳历”被挤成两行，所以不许折 */
+  white-space: nowrap;
+}
+
+/* 选中的那块是比底槽亮一档的滑块（--seg-thumb）：一层 1px 投影加一圈极淡内描边（--seg-thumb-shadow），字用正文色、600；文字前一个 6px 柠檬黄小点（只是装饰，不靠颜色传意思：选中还有滑块和粗字） */
+.slide .segBtn[aria-pressed='true'] {
+  background: var(--seg-thumb);
+  box-shadow: var(--seg-thumb-shadow);
+  color: var(--text);
+}
+
+.slide .segBtn[aria-pressed='true']::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}

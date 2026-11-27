@@ -1,0 +1,73 @@
+/* 编辑页外框（左上“‹ 返回”、类型名、右上保存状态，没改过时空着、改过出“✓ 已保存”）：只用令牌 */
+.page {
+  max-width: 560px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 16px) 16px max(env(safe-area-inset-bottom), 24px);
+  color: var(--text);
+}
+
+:global(:root[data-top-banner]) .page {
+  min-height: 0;
+}
+
+.top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  min-height: var(--hit);
+  margin-bottom: 8px;
+}
+
+/* 电脑详情抽屉里（DetailDrawer 管外框和内边距）：类型名在左、保存状态、“×”在右 */
+.inDrawer {
+  color: var(--text);
+}
+
+.topDrawer {
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+
+  /* 左边让出抽屉的换边把手（kit DetailDrawer.module.css 的 .grip） */
+  padding-left: var(--drawer-lead, 0);
+}
+
+.kind {
+  margin: 0;
+  font-size: var(--fs-17);
+  font-weight: 600;
+}
+
+/* 抽屉里的类型名（“待办”“日程”）是小字标签，标题在下面的表单里 */
+.topDrawer .kind {
+  font-size: var(--fs-14);
+  font-weight: 400;
+}
+
+/* 保存状态：小字“✓ 已保存”，改过才出现 */
+.status {
+  justify-self: end;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  text-align: right;
+}
+
+.statusBad {
+  color: var(--danger-text);
+}
+
+.notice {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: var(--fs-14);
+}
+
+/* 只读提示的外边距（灰条本身在 ReadonlyRow.module.css 的 .banner，EditNotices.tsx 的 ReadonlyNotice 画） */
+.roNotice {
+  margin: 0 0 12px;
+}
+

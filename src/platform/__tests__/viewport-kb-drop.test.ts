@@ -1,0 +1,248 @@
+// 焦点在、键盘却不在（platform/in-place-focus.ts 文件头“例外（11-21）”）：负责人录屏——取消原生选图菜单后一秒内点随手记输入框，
+// iOS 弹完键盘 0.1～0.4 秒又自己收掉、不发 focusout，模糊层一直开着；再点一下系统为露出输入框把页面滚上去（日志 vv top=413 y=541）。
+// • 463 日志定根因：iOS 收键盘只发 blur、不发 focusout，焦点还留着（React onBlur 认 focusout，模糊层不关）——原地聚焦过的输入框下一拍替它真 blur
+// • iPhone 上原地聚焦后键盘一直没弹的一下点：重聚焦一次（拦默认、光标放末尾）；键盘弹着、重试过、不是原地聚焦来的照原生
+// 单独一个文件：共用的键盘监听第一次订阅时读 visualViewport，要先装好假的
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, type InPlaceTouch } from '../in-place-focus.ts';
+import { isKeyboardUp, startViewport } from '../viewport.ts';
+
+class FakeVv extends EventTarget {
+  height = window.innerHeight;
+  offsetTop = 0;
+  scale = 1;
+}
+const vv = new FakeVv();
+
+/** 键盘弹到 px 高（0 = 收起），派发 resize */
+const setKb = (px: number): void => {
+  vv.height = window.innerHeight - px;
+  vv.dispatchEvent(new Event('resize'));
+};
+
+const mkInput = (value = '买牛奶'): HTMLInputElement => {
+  const el = document.createElement('input');
+  el.value = value;
+  document.body.append(el);
+  return el;
+};
+
+const touch = (el: EventTarget, t: number): InPlaceTouch & { prevented: boolean } => {
+  const e = {
+    currentTarget: el,
+    changedTouches: [{ clientX: 100, clientY: 200 }],
+    timeStamp: t,
+    cancelable: true,
+    prevented: false,
+    preventDefault(): void {
+      e.prevented = true;
+    },
+  };
+  return e;
+};
+const tap = (el: HTMLInputElement) => {
+  inPlaceTouchStart(touch(el, 1000));
+  const up = touch(el, 1080);
+  inPlaceTouchEnd(up);
+  return up;
+};
+
+beforeAll(() => {
+  Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv });
+  startViewport();
+});
+
+describe('焦点在、键盘不在（11-21 附件取消后输入框下坠）', () => {
+  afterEach(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    setKb(0);
+    document.body.replaceChildren();
+    vi.restoreAllMocks();
+  });
+
+  /** iOS 收键盘：只派发 blur，焦点还留在输入框上（不发 focusout） */
+  const phantomBlur = (el: HTMLElement): void => {
+    el.dispatchEvent(new FocusEvent('blur'));
+  };
+
+  it('假失焦（只发 blur、焦点还在）：下一拍替它真 blur，focusout 照发（模糊层关）', async () => {
+    asIPhone();
+    const el = mkInput();
+    focusInPlace(el, 'tap');
+    let out = 0;
+    el.addEventListener('focusout', () => (out += 1));
+    phantomBlur(el);
+    expect(document.activeElement).toBe(el);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(document.activeElement).not.toBe(el);
+    expect(out).toBe(1);
+  });
+
+  it('切走 App（页面不可见）时的 blur 不算假失焦：焦点留着；不是 iPhone 也不盯', async () => {
+    asIPhone();
+    const el = mkInput();
+    focusInPlace(el, 'tap');
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    phantomBlur(el);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(document.activeElement).toBe(el);
+    vi.restoreAllMocks();
+    const b = mkInput();
+    focusInPlace(b, 'tap');
+    phantomBlur(b);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(document.activeElement).toBe(b);
+  });
+
+  it('真失焦（焦点已经走了）：不再盯，之后同一个输入框普通聚焦、假 blur 都不动它', async () => {
+    const el = mkInput();
+    focusInPlace(el, 'tap');
+    el.blur();
+    await new Promise((r) => setTimeout(r, 5));
+    el.focus();
+    phantomBlur(el);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(document.activeElement).toBe(el);
+  });
+
+  it('没经过原地聚焦的输入框：假 blur 不管', async () => {
+    const el = mkInput();
+    el.focus();
+    phantomBlur(el);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(document.activeElement).toBe(el);
+  });
+
+  const asIPhone = (): void => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X)');
+  };
+
+  it('iPhone 上原地聚焦后键盘一直没弹：点一下拦掉默认、重聚焦、光标放末尾；只重试一次，再点照原生（接实体键盘本来就不弹）', () => {
+    asIPhone();
+    const el = mkInput('买牛奶');
+    focusInPlace(el, 'tap');
+    el.setSelectionRange(0, 0);
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    const up = tap(el);
+    expect(up.prevented).toBe(true);
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(document.activeElement).toBe(el);
+    expect([el.selectionStart, el.selectionEnd]).toEqual([3, 3]);
+    expect(tap(el).prevented).toBe(false);
+  });
+
+  it('重聚焦自己发的 blur 不当成假失焦：重聚焦后焦点留着', async () => {
+    asIPhone();
+    const el = mkInput();
+    focusInPlace(el, 'tap');
+    expect(tap(el).prevented).toBe(true);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(document.activeElement).toBe(el);
+  });
+
+  it('iPhone 上已聚焦、键盘弹着：照原生（不拦，点哪里光标去哪里）', () => {
+    asIPhone();
+    const el = mkInput();
+    focusInPlace(el, 'tap');
+    setKb(300);
+    expect(isKeyboardUp()).toBe(true);
+    expect(tap(el).prevented).toBe(false);
+  });
+
+  it('不是原地聚焦来的焦点（没 trackFocus）：已聚焦照原生', () => {
+    asIPhone();
+    const el = mkInput();
+    el.focus();
+    expect(tap(el).prevented).toBe(false);
+  });
+
+  /** 点开原生选图菜单（隐藏的 input[type=file]） */
+  const openPicker = (): HTMLInputElement => {
+    const f = document.createElement('input');
+    f.type = 'file';
+    document.body.append(f);
+    f.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return f;
+  };
+
+  it('选图菜单还开着时点输入框：先不聚焦，cancel 到了再等一拍才原地聚焦，光标放末尾；等着时再点只聚焦一次', () => {
+    asIPhone();
+    vi.useFakeTimers();
+    const el = mkInput('买牛奶');
+    const f = openPicker();
+    const up = tap(el);
+    expect(up.prevented).toBe(true);
+    expect(document.activeElement).not.toBe(el);
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    expect(tap(el).prevented).toBe(true);
+    vi.advanceTimersByTime(300);
+    expect(document.activeElement).not.toBe(el);
+    f.dispatchEvent(new Event('cancel', { bubbles: true }));
+    vi.advanceTimersByTime(400);
+    expect(document.activeElement).toBe(el);
+    expect([el.selectionStart, el.selectionEnd]).toEqual([3, 3]);
+    vi.advanceTimersByTime(1000);
+    expect(focus).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('不是 iPhone：选图菜单开着点输入框照常当场聚焦', () => {
+    const el = mkInput();
+    const f = openPicker();
+    tap(el);
+    expect(document.activeElement).toBe(el);
+    f.dispatchEvent(new Event('cancel', { bubbles: true }));
+  });
+
+  it('选图的 input 没等到 cancel 就卸掉了：当菜单已关，点输入框当场聚焦；click 被拦了默认的不算打开', () => {
+    asIPhone();
+    const el = mkInput();
+    openPicker().remove();
+    tap(el);
+    expect(document.activeElement).toBe(el);
+    el.blur();
+    const f = document.createElement('input');
+    f.type = 'file';
+    f.addEventListener('click', (e) => e.preventDefault());
+    document.body.append(f);
+    f.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    tap(el);
+    expect(document.activeElement).toBe(el);
+  });
+
+  it('等菜单时输入框被卸掉：不再聚焦', () => {
+    asIPhone();
+    vi.useFakeTimers();
+    const el = mkInput();
+    const f = openPicker();
+    tap(el);
+    el.remove();
+    vi.advanceTimersByTime(1000);
+    expect(document.activeElement).not.toBe(el);
+    f.dispatchEvent(new Event('cancel', { bubbles: true }));
+    vi.useRealTimers();
+  });
+
+  it('选图菜单一直没等到 cancel / change：最后一个时刻（1 秒内）照样聚焦；菜单关了以后再点照常当场聚焦', () => {
+    asIPhone();
+    vi.useFakeTimers();
+    const el = mkInput();
+    const f = openPicker();
+    tap(el);
+    vi.advanceTimersByTime(900);
+    expect(document.activeElement).not.toBe(el);
+    vi.advanceTimersByTime(100);
+    expect(document.activeElement).toBe(el);
+    el.blur();
+    f.dispatchEvent(new Event('change', { bubbles: true }));
+    tap(el);
+    expect(document.activeElement).toBe(el);
+    vi.useRealTimers();
+  });
+
+  it('不是 iPhone：已聚焦照原生', () => {
+    const el = mkInput();
+    focusInPlace(el, 'tap');
+    expect(tap(el).prevented).toBe(false);
+  });
+});

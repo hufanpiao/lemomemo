@@ -1,0 +1,166 @@
+/* 网页版宽屏的页面外框、页头和卡片：今天、日历、待办、随手记、纪念日、设置共用一份（kit/components/Desk.tsx）。
+   页面在宽屏（kit useMedia 的 MQ_DESK_WIDE）才挂这些类；数值只读 base.css 的 --dk-*（同一个断点里才有）。只用令牌 */
+
+/* 页面外框：铺满一屏、不整页滚；左边从侧栏右边开始（#root 已让出 110），右边让出 AI 助手栏。
+   写成 main.frame：比各页自己的 .page（单类）优先，不靠样式表先后。
+   切页时旧页快照（motion/page-swap.ts makeGhost）把 main 抄成 div、挂在 [data-tab-ghost] 下：同一份样式也要给它，
+   不然快照退回各页手机版的窄宽度、排版重排，看着像整页往左滑了一下。
+   :where() 不加权重，快照和真页面的优先级一样（0,1,1） */
+main.frame,
+:where([data-tab-ghost]) > div.frame {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dk-gap);
+  box-sizing: border-box;
+  height: 100dvh;
+  max-width: none;
+  margin: 0;
+  padding: var(--dk-top) var(--dk-right) var(--dk-bot) 0;
+  overflow: hidden;
+}
+
+/* 铺满一屏的页在的时候整页不滚：外框正好一屏高、卡片里面自己滚，整页没有可滚的内容；
+   多出来零点几到 1 像素（负责人 11-27 运行日志：滚一下 y 在 0、1 之间跳）就会让 Windows 右边常驻一条整页滚动条 */
+:global(html):has(main.frame) {
+  overflow: hidden;
+}
+
+/* 没有常驻 AI 栏的页（隐私记；app/router.ts LEVELS 不写 dock）：右边不让，到窗口右边 16 */
+main.frame.bare,
+:where([data-tab-ghost]) > div.frame.bare {
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+
+/* 宽屏不铺满一屏的页（最近删除，照常整页滚）：内容列宽和手机一样（原 .page 的 max-width 560、左右各 16），
+   右边多让出 AI 栏，整块仍在侧栏右边居中 */
+main.aside,
+:where([data-tab-ghost]) > div.aside {
+  --aside-l: 126px;   /* 页里固定定位的提示条用：侧栏（#root 让出的 110）右边再隔 16 */
+  --aside-r: var(--dk-right);
+
+  max-width: calc(544px + var(--dk-right));
+  padding-right: var(--dk-right);
+}
+
+/* 页头：高 62，左边大标题 + 下一行小字，右边工具（筛选胶囊、日历的周 / 月 / ‹ 今天 ›），两边都贴底 */
+.head {
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--dk-head);
+  min-width: 0;
+}
+
+.headL {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-28);
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.sub {
+  margin: 7px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  white-space: nowrap;
+}
+
+.tools {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  max-width: 70%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* 页头下面的内容区：页面自己给 grid-template（几栏几行） */
+.grid {
+  display: grid;
+  flex: 1;
+  gap: var(--dk-gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 卡片：半透明白底、18 圆角、14 / 16 内边距；内容多了卡片里面自己滚 */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 16px;
+  overflow: hidden auto;
+  border-radius: 18px;
+  background: var(--b-tile);
+  box-shadow: var(--b-tile-shadow);
+}
+
+/* 卡片标题行：13 号次要色，右边条数或跳转 */
+.cardH {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-weight: 500;
+}
+
+.go {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.go:hover {
+  color: var(--text);
+}
+
+/* 触屏（iPad）：页头工具（筛选胶囊、周 / 月、‹ 今天 ›、＋ 新建）和卡片标题行的跳转至少 44 高，
+   不靠悬停（悬停只是变色，点按照常能用） */
+@media (pointer: coarse) {
+  .tools button,
+  .tools a,
+  .tools [role='radio'],
+  .tools [role='tab'],
+  .go {
+    min-height: var(--hit);
+  }
+
+  .tools a {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* 卡片标题行的跳转字（“纪念日”这种两三个字的）宽不到 44：点击区以中心外扩到 44 × 44，外观不变（同 ModeSeg.module.css 的 .segBtn::after） */
+  .go {
+    position: relative;
+  }
+
+  .go::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--hit));
+    height: max(100%, var(--hit));
+    transform: translate(-50%, -50%);
+  }
+}

@@ -1,0 +1,8 @@
+-- expect: private.my_ai_usage_impl 自己校验密码会话
+-- 会话校验只经 private.require_live_session（架构约定 10.1）：*_impl 手抄开场白，以后改口径时漏改的那一份就成了缺口
+create or replace function private.my_ai_usage_impl() returns jsonb
+  language plpgsql stable security definer set search_path = '' as $$
+begin
+  if not private.not_password_session() then raise exception 'session_revoked'; end if;
+  return '{}'::jsonb;
+end $$;

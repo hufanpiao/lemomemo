@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "主窗口：会话三件、外链、开登录小窗口、开机自启开关、快速记录热键读改、附件另存（含隐私记的字节另存 save_bytes）、取走快速记录、收 auth:done 和 quick-add:pending 事件。只给本地页面，不开 remote。",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-session-get",
+    "allow-session-set",
+    "allow-session-remove",
+    "allow-open-external",
+    "allow-auth-window-open",
+    "allow-main-show",
+    "allow-app-update",
+    "allow-hotkey-get",
+    "allow-hotkey-set",
+    "allow-save-attachment",
+    "allow-save-bytes",
+    "allow-quick-add-take",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
+  ]
+}

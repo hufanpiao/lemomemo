@@ -1,0 +1,74 @@
+/* 顶部版本横幅：固定在安全区下沿，滚动、回弹都不跟着动；高度由 #root 让出来（--banner-h 由 UpdateBanner 量），不盖内容。没有动效。
+   底色用页面底色 --bg、靠下边线和页面分开：iOS 26 主屏幕版的状态栏取贴顶固定元素的颜色，用白色会和灰色页面接不上 */
+.banner {
+  position: fixed;
+  top: var(--inset-top);
+  right: 0;
+  left: 0;
+  z-index: var(--z-banner);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  /* 横屏时左右避开刘海、圆角 */
+  padding: 10px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
+  border-bottom: 0.5px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.main {
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: 1.45;
+}
+
+.sub {
+  margin: 2px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+/* 空的播报区不占地方，但留在可访问树里（display: none 会让后来的播报读不出来） */
+.sub:empty {
+  margin: 0;
+}
+
+.action {
+  flex: none;
+  min-height: var(--hit);
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-14);
+  font-weight: 600;
+}
+
+.action[aria-disabled='true'] {
+  opacity: var(--disabled-dim);
+}
+
+/* 只有“有新版本”这一种有关闭按钮 */
+.close {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--hit);
+  height: var(--hit);
+  margin-right: -8px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-2);
+}

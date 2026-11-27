@@ -1,0 +1,285 @@
+{
+  "1-初始": {
+    "dataTheme": "light",
+    "rootColorScheme": "normal",
+    "metaColorScheme": null,
+    "prefersDark": true,
+    "coarse": true,
+    "vvScale": 1,
+    "scrollX": 0,
+    "status": "改了就自动保存",
+    "statusColor": "rgb(89, 92, 100)",
+    "controls": [
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-title",
+        "fontSize": "20px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_0_",
+        "fontSize": "13px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_1_",
+        "fontSize": "13px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-due",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "select",
+        "type": "select-one",
+        "id": "todo-days",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-remind-time",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-project",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "textarea",
+        "type": "textarea",
+        "id": "todo-note",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      }
+    ]
+  },
+  "2-聚焦项目": {
+    "dataTheme": "light",
+    "rootColorScheme": "normal",
+    "metaColorScheme": null,
+    "prefersDark": true,
+    "coarse": true,
+    "vvScale": 1,
+    "scrollX": 0,
+    "status": "改了就自动保存",
+    "statusColor": "rgb(89, 92, 100)",
+    "controls": [
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-title",
+        "fontSize": "20px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_0_",
+        "fontSize": "13px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_1_",
+        "fontSize": "13px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-due",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "select",
+        "type": "select-one",
+        "id": "todo-days",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-remind-time",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-project",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "textarea",
+        "type": "textarea",
+        "id": "todo-note",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      }
+    ]
+  },
+  "3-打开日期选择器": {
+    "dataTheme": "light",
+    "rootColorScheme": "normal",
+    "metaColorScheme": null,
+    "prefersDark": true,
+    "coarse": true,
+    "vvScale": 1,
+    "scrollX": 0,
+    "status": "改了就自动保存",
+    "statusColor": "rgb(89, 92, 100)",
+    "controls": [
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-title",
+        "fontSize": "20px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_0_",
+        "fontSize": "13px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_1_",
+        "fontSize": "13px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-due",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "select",
+        "type": "select-one",
+        "id": "todo-days",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-remind-time",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-project",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "textarea",
+        "type": "textarea",
+        "id": "todo-note",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      }
+    ]
+  },
+  "4-只选了日期": {
+    "dataTheme": "light",
+    "rootColorScheme": "normal",
+    "metaColorScheme": null,
+    "prefersDark": true,
+    "coarse": true,
+    "vvScale": 1,
+    "scrollX": 0,
+    "status": "写上标题才会保存",
+    "statusColor": "rgb(176, 41, 31)",
+    "controls": [
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-title",
+        "fontSize": "20px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_0_",
+        "fontSize": "13px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_1_",
+        "fontSize": "13px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-due",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-due-time",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "select",
+        "type": "select-one",
+        "id": "todo-days",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-remind-time",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-project",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      },
+      {
+        "tag": "textarea",
+        "type": "textarea",
+        "id": "todo-note",
+        "fontSize": "15px",
+        "colorScheme": "normal"
+      }
+    ]
+  }
+}

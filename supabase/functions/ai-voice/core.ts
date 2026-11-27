@@ -1,0 +1,219 @@
+// ai-voice（架构第 6 节函数表 ai-voice 行、5.11、第 7 节“语音”；B3 任务单 S8、S12、BE-4，M3 X-Projects，Q2 服务器包 intent）。
+// 顺序：方法（只收 POST）→ JWT → Content-Type 白名单（先去参数再比，不在 4 种里回 415、不调 Gemini；S1、TC-B3-65 起新增用例）
+//   → 请求头 X-Now、X-TZ、X-Locale、X-Scope、X-Projects、X-Default-Day（日历页选中的那天，R6；不合格回 400）、X-Span（R-444 起的客户端带 1，没带的时长规整到 1440 以内）→ 边读边计数读请求体（≤ logic.maxAudio，超了中断回 413，不只看 Content-Length）
+//   → 共用的门（_shared/ai/gate.ts）→ voiceWithAI（voice.v9，B4b-3 起一次完成转写和意图判断；Gemini 15 秒超时；回 503 时服务器端重试一次、两次合计仍不超过 15 秒，_shared/ai/retry.ts）
+//   → 成功按意图回 {intent: 'record', confidence, transcript, items, quota_left} / {intent: search|summarize, confidence, transcript, query, quota_left} /
+//   {intent: cancel|reschedule|complete, confidence, transcript, target, to, quota_left}（同 ai-parse，不多扣次数）；
+//   失败退回预扣、回 {ai_failed, reason}（客户端留着录音，可以重试或再说一次；每分钟限额的 reason 回 error，gate.ts 的 clientReason）。
+// 空列表（R7 ②）：转写为空回 {transcript: '', items: []}、照常算 1 次（客户端按 no_speech）；转写不空而条目为空由校验判 invalid（empty），退回次数。
+// X-Projects：UTF-8 JSON 再 base64url，≤ 4 KB；超了截到 4 KB、按项截断（留下完整的几项），本来就解不开的当没给（不拒收）。
+// 音频只在内存里：不写 Storage、不写日志、不 console.*（5.11 第 3 点、A23）。转交 Gemini 时 mimeType 用去掉参数以后的类型。
+// 失败分支写 logs 表（架构审第九节第 2 条）：Gemini 拒收、超时、额度用完、计数出错各写一行 kind 'ai'、act 'voice_fail'、src 'ai-voice'，
+//   code 是固定错误码，fields 只有 status=HTTP 状态、type=异常类型名、kind=额度类型（ai_quota 带 day|minute|unknown，来自 aiFailCode；门拦下的 quota_exhausted 带 minute|day，来自 gate.ts 的 holdKind）、retried=1（503 重试过）、bytes=音频字节数区间；不写转写、正文、请求头。写失败不影响回答。
+// 503 重试后成功的，counters 记 voice-retry:global:<太平洋日期> 加一（经 take_rate，上限给得很大、只当计数用；写失败不影响回答）。
+// scope = vault：隐私记页面经“＋”的 AI 这一批（B4b-3）照旧不做（以后换成 verifyVaultToken + ai.vault），回 {fallback, vault_ai_off}、不调 Gemini、不扣次数。
+import { QUOTA_WINDOW_S } from '../_shared/ai/store.ts';
+import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
+import { aiGate, clientReason, pacificDate, settleFailure, type GateDeps, type GateStop } from '../_shared/ai/gate.ts';
+import { aiFailCode, errNameOf, quotaKindField, type AIProvider } from '../_shared/ai/provider.ts';
+import { plusBody, type AiKindLike, type Checked, type IntentLike, type ParseFail, type ParseOk, type VoiceInput } from '../_shared/ai/parse-core.ts';
+import type { TranscribeResult } from '../_shared/ai/transcribe.ts';
+import { VOICE_ISSUED_LIMIT, voiceIssuedKey } from '../_shared/ai/voice-ask.ts';
+import { b64uDecode } from '../_shared/b64url.ts';
+import { readCapped } from '../_shared/body.ts';
+
+export const MAX_PROJECTS_HEADER = 4096;
+/** 503 重试后成功的全项目计数键（附录 A；三段写法过得了 counters 的 check 约束） */
+export const voiceRetryKey = (ms: number): string => `voice-retry:global:${pacificDate(ms)}`;
+/** 只当计数用：上限给得远超全项目每日额度，take_rate 永远放行 */
+export const VOICE_RETRY_COUNT_LIMIT = 1_000_000;
+
+export type AuthResult = SharedAuthResult;
+
+/** shared/schema/ai.ts 里的几样（index.ts 从 _shared/gen/ 注入，单测注入真的 shared；本文件不 import _shared/gen/） */
+export interface Logic<Item, I extends IntentLike = IntentLike> {
+  /** 一段录音最多多少字节：shared 的 AI_AUDIO_MAX_BYTES（前端录音器判同一份） */
+  maxAudio: number;
+  /** Content-Type 白名单：shared 的 audioType（去参数、转小写，不在白名单里为 null） */
+  audioType(ct: string | null): string | null;
+  normLocale(v: unknown): 'zh' | 'ko';
+  normProjects(v: unknown): string[];
+  isValidTz(tz: string): boolean;
+  /** 默认日子（R6）：不传 null；格式不对、不存在、不在前 1 年到后 5 年之内 'bad' */
+  checkDefaultDay(v: unknown, now: number, tz: string): string | null | 'bad';
+  voiceWithAI(input: VoiceInput, provider: AIProvider): Promise<ParseOk<Checked<Item, I> & { transcript: string }> | ParseFail>;
+  /** 语音提问只转写（R-495，_shared/ai/transcribe.ts） */
+  transcribe(audio: Uint8Array, mime: string, provider: AIProvider): Promise<TranscribeResult>;
+  /** 请求头 x-want 的“只转写”取值：shared 的 VOICE_WANT_TRANSCRIPT */
+  wantTranscript: string;
+}
+
+export interface Deps<Item, I extends IntentLike = IntentLike> extends GateDeps {
+  authenticate(req: Request): Promise<AuthResult>;
+  logic: Logic<Item, I>;
+  /** 失败写 logs 表一行（index.ts 接 service role 的 insert） */
+  logFail(userId: string, code: string, fields: string[]): Promise<void>;
+}
+
+/** 音频字节数区间（只记区间，不记确切大小） */
+export function bytesBucket(n: number): string {
+  if (n < 16 * 1024) return '<16k';
+  if (n < 64 * 1024) return '16k-64k';
+  if (n < 256 * 1024) return '64k-256k';
+  return '256k-600k';
+}
+
+/**
+ * 门拦下来时哪些算失败（同意、类型开关不算）：额度用完、每分钟限流、计数或读配置出错。
+ * 谷歌额度停用中（第 ⑤ 步）记 quota_exhausted，fields 带 kind=minute|day（gate.ts 的 holdKind：给客户端的 reason 一个是 error、一个是 quota）
+ */
+function gateFail(g: GateStop, codes: readonly string[]): { code: string; fields: string[] } | null {
+  const { status, body } = g;
+  if (body['consent_required'] === true || body['reason'] === 'feature_off') return null;
+  if (body['quota_out'] === true) return { code: 'quota_out', fields: [] };
+  if (status === 429) return { code: 'rate_limited', fields: [] };
+  if (g.hold) return { code: 'quota_exhausted', fields: [quotaKindField(g.hold)] };
+  return { code: codes.at(-1) ?? 'gate_error', fields: [] };
+}
+
+import { json } from '../_shared/http.ts';
+
+/** X-Projects：base64url(UTF-8 JSON 字符串数组)。超过 4 KB 截到 4 KB，按项截断：留下截断处之前完整的几项（代码审建议 6，
+ *  原来截完整段 JSON 解不开就全丢了）；本来就解不开的当没给 */
+export function decodeProjects(h: string | null): unknown[] {
+  if (!h) return [];
+  const cut = h.length > MAX_PROJECTS_HEADER;
+  // 严格解码（_shared/b64url.ts）：不是 base64url 的当没给
+  const bytes = b64uDecode(cut ? h.slice(0, MAX_PROJECTS_HEADER - (MAX_PROJECTS_HEADER % 4)) : h);
+  if (!bytes) return [];
+  let text: string;
+  try {
+    // 截断处可能切开一个多字节字符：只在截断时放宽（结尾的半个字符变成 U+FFFD，下面连同那一项一起丢掉）
+    text = new TextDecoder('utf-8', { fatal: !cut }).decode(bytes);
+  } catch {
+    return [];
+  }
+  const parse = (t: string): unknown[] | null => {
+    try {
+      const v: unknown = JSON.parse(t);
+      return Array.isArray(v) ? v : null;
+    } catch {
+      return null;
+    }
+  };
+  const whole = parse(text);
+  if (whole) return whole;
+  if (!cut) return [];
+  // 从后往前找项与项之间的分隔（", 或 ",空白"），截在那里补上 ]，直到解得开
+  for (let i = text.lastIndexOf('",'); i > 0; i = text.lastIndexOf('",', i - 1)) {
+    const v = parse(`${text.slice(0, i + 1)}]`);
+    if (v) return v;
+  }
+  return [];
+}
+
+export { readCapped };
+
+export async function handle<Item, I extends IntentLike = IntentLike>(req: Request, deps: Deps<Item, I>): Promise<Response> {
+  if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
+  const auth = await deps.authenticate(req);
+  if (!auth.ok) return auth.response;
+  const userId = auth.user.userId;
+
+  const mime = deps.logic.audioType(req.headers.get('content-type'));
+  if (!mime) {
+    await req.body?.cancel().catch(() => {});
+    return json(415, { error: 'unsupported_media_type' });
+  }
+  const now = Number(req.headers.get('x-now'));
+  const tz = req.headers.get('x-tz') ?? '';
+  const scope = req.headers.get('x-scope') ?? 'main';
+  const defaultDay = Number.isInteger(now) && now > 0 && deps.logic.isValidTz(tz) ? deps.logic.checkDefaultDay(req.headers.get('x-default-day') ?? undefined, now, tz) : 'bad';
+  if (defaultDay === 'bad' || (scope !== 'main' && scope !== 'vault')) {
+    await req.body?.cancel().catch(() => {});
+    return json(400, { error: 'bad_request' });
+  }
+  const audio = await readCapped(req, deps.logic.maxAudio);
+  if (audio === 'too_large') return json(413, { error: 'too_large' });
+  if (audio === 'empty') return json(400, { error: 'bad_request' });
+  if (scope === 'vault') return json(200, { fallback: true, reason: 'vault_ai_off' });
+
+  const codes: string[] = [];
+  const d: Deps<Item, I> = { ...deps, log: (c) => { codes.push(c); deps.log(c); } };
+  const bytes = `bytes=${bytesBucket(audio.length)}`;
+  const logFail = async (code: string, fields: string[]) => {
+    try {
+      await deps.logFail(userId, code, [...fields, bytes]);
+    } catch {
+      deps.log('log_write_failed');
+    }
+  };
+
+  const gate = await aiGate(d, userId, req.headers.get('x-app-version') ?? '');
+  if (gate.stop) {
+    const f = gateFail(gate, codes);
+    if (f !== null) await logFail(f.code, f.fields);
+    return json(gate.status, gate.body);
+  }
+
+  /** 服务商这一下没成：写 logs、退回、回 {ai_failed}（整理录音和语音提问共用） */
+  const failed = async (f: ParseFail): Promise<Response> => {
+    const failCode = aiFailCode(f);
+    d.log(failCode);
+    // logs 表：code 是 ai_<原因>，额度类型（aiFailCode 空格后那段 kind=…）放进 fields
+    const [code = failCode, ...kind] = failCode.split(' ');
+    await logFail(code, [
+      ...(f.status !== undefined ? [`status=${f.status}`] : []),
+      ...(f.errName !== undefined ? [`type=${f.errName}`] : []),
+      ...kind,
+      ...(f.retried ? ['retried=1'] : []),
+    ]);
+    const before = codes.length;
+    await settleFailure(d, gate, userId, 'ai-voice', f);
+    if (codes.slice(before).includes('settle_failed')) await logFail('settle_failed', []);
+    return json(200, { ai_failed: true, reason: clientReason(f) });   // 每分钟限额回 error（gate.ts 的 clientReason）
+  };
+  const countRetry = async (): Promise<void> => {
+    try {
+      await d.rate(voiceRetryKey(d.now()), VOICE_RETRY_COUNT_LIMIT, 86_400);
+    } catch {
+      d.log('voice_retry_count_failed');
+    }
+  };
+
+  // 语音提问：只转文字（R-495；服务商照样是门按用途 stt 选的那家）。这里不退次数，只记一次发放，由紧接着的 ai-chat 答成后消费（_shared/ai/voice-ask.ts）
+  if (req.headers.get('x-want') === deps.logic.wantTranscript) {
+    let t: TranscribeResult;
+    try {
+      t = await deps.logic.transcribe(audio, mime, gate.provider);
+    } catch (e) {
+      t = { ok: false, reason: 'error', errName: errNameOf(e) };
+    }
+    if (!t.ok) return failed(t);
+    if (t.retried) await countRetry();
+    if (!gate.own) {
+      try {
+        await d.rate(voiceIssuedKey(userId, d.now()), VOICE_ISSUED_LIMIT, QUOTA_WINDOW_S);
+      } catch {
+        d.log('voice_ask_issue_failed');
+      }
+    }
+    return json(200, { transcript: t.text, quota_left: gate.quotaLeft });
+  }
+
+  const input: VoiceInput = {
+    audio, mime, now, tz, locale: deps.logic.normLocale(req.headers.get('x-locale')),
+    projects: deps.logic.normProjects(decodeProjects(req.headers.get('x-projects'))), features: gate.features as AiKindLike[],
+    defaultDay: defaultDay ?? undefined,
+  };
+  let r: ParseOk<Checked<Item, I> & { transcript: string }> | ParseFail;
+  try {
+    r = await deps.logic.voiceWithAI(input, gate.provider);
+  } catch (e) {
+    r = { ok: false, reason: 'error', errName: errNameOf(e) };
+  }
+  if (r.badDefaultDay) d.log('bad_default_day');   // R10 兜底：入口已 400，到这里说明入口漏校验
+  if (!r.ok) return failed(r);
+  if (r.retried) await countRetry();
+  return json(200, plusBody(r.value, gate.quotaLeft, req.headers.get('x-span') === '1'));   // 没带 X-Span 的旧版客户端时长规整到 1440 以内（R-444）
+}

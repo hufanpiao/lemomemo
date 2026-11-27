@@ -1,0 +1,163 @@
+/* 今天页：只用令牌；普通标题 400，只有页顶日期加粗。列表行、空状态在 kit 的 List.module.css */
+.page {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 16px) 16px var(--tabbar-pad);
+  color: var(--text);
+}
+
+/* 顶部一行：日期在左，头像（设置入口）在右 */
+.head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 12px;
+}
+
+/* 右上角头像（设置入口）在 kit 的 MeLink（今天、待办、日历、随手记四页共用）。
+   页顶日期就是这一页的大标题：字号、短粗下划线挂 kit 的 Refine.module.css .title（同待办页） */
+
+/* 日期不折行：页头里还有“设置城市看天气”时（weather 的 .nudge[data-slot='head']），窄屏（375）那颗收成只剩定位图标，日期保持一行 */
+.date {
+  white-space: nowrap;
+}
+
+/* 细线黑字体：日期大标题单独用特细 200，落到未来荧黑 / Pretendard 的 ExtraLight。
+   ExtraLight 只有这一处用，build/fonts.py 登记里不预取它（prefetch: false），按 unicode-range 只下标题里那几个字所在的分片 */
+:global(:root[data-font='thin']) .date {
+  font-weight: 200;
+}
+
+/* 分组名“没赶上”“今天的安排”：小字、等宽、字距和左右排开、间距都挂 kit Form.module.css 的 .groupLabel.groupRow（待办页各组同一份），右边条数 */
+
+/* “没赶上”（照待办页的过期组）：分组名红字带“!”；下面的列表整块过期底、左边一条直的红竖线
+   在 kit List.module.css 的 .list.late（同待办页过期组）。这一组的行不是 SwipeRow，没有不透明行面，不用设 --sw-face-bg */
+.late {
+  margin: 0 0 8px;
+}
+
+/* 三级选择器：压过 kit 的 .groupLabel.groupRow（两级）的上边距，不靠两份样式表的先后 */
+.page .late .h2 {
+  margin-top: 0;
+  color: var(--danger-text);
+}
+
+/* 副行的字号在 kit 的 .meta；这里只换红字。写成两级选择器，不靠两份样式表的先后顺序压过 .meta 的颜色 */
+.late .lateTag {
+  color: var(--danger-text);
+}
+
+/* 离开途中（AppearItem 打 data-state="leaving"）：淡出、卸载之前不接点按（行的那条在 kit 的 List.module.css） */
+.late[data-state="leaving"] {
+  pointer-events: none;
+}
+
+/* 已过去折成一行：整行是按钮，放不下省略号。照待办页的“已完成 N ›”折叠行（TodosPage.module.css .fold、.chev）：
+   点击区 44 高、左右和分组名对齐（4px），字小一号、次要色；行尾 ›，展开时直接转成朝下（data-open，不播转动，展开的行自己有淡入） */
+.past {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-12-5);
+  text-align: start;
+  cursor: pointer;
+}
+
+.pastText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chev {
+  flex: none;
+  color: var(--text-3);
+}
+
+.chev[data-open] {
+  transform: rotate(90deg);
+}
+
+/* 包着“错过 N 条提醒”那一行：有这一行（button）时下面留 8px，没有时不占位；在 GrowIn 里，8px 算进展开的高度 */
+.missed:has(> button) {
+  padding-bottom: 8px;
+}
+
+/* GrowIn：高度由脚本按里面的实际高度设，变的时候过渡（要瞬间到位时脚本临时关掉）；没到位时裁掉溢出，到位后放开（焦点框不被裁） */
+.grow {
+  height: 0;
+  overflow: hidden;
+  transition: height var(--dur-ui) var(--ease-out);
+}
+
+.grow[data-settled] {
+  overflow: visible;
+}
+
+:global(:root[data-rm="1"]) .grow {
+  transition: none;
+}
+
+/* “未同步，提醒可能不响”（reminders 提供的一行 p）：常驻的 role="status" 容器，没有 p 时高度为 0；有时一块浅灰（同日历页） */
+.notice {
+  margin: 0;
+}
+
+.notice:has(p) {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.notice p {
+  margin: 0;
+}
+
+/* 未同步、麦克风被拒两行同时有时 */
+.notice p + p {
+  margin-top: 4px;
+}
+
+/* 纪念日一行：kit 胶囊（Chip.module.css .chip：高 30、无描边 --panel-2 底，和待办页胶囊一个量级），
+   小头像 + “3 天后” + 名字；放不下省略号。这里只管左边给头像让出的内边距、和下面“现在”卡的距离（两级选择器压过 kit 的 margin） */
+.page .anniv {
+  max-width: 100%;
+  margin: 0 0 10px;
+  padding-left: 4px;
+  cursor: pointer;
+}
+
+.annivWhen {
+  flex: none;
+  color: var(--text-2);
+}
+
+.annivName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 胶囊行尾 ›（定稿 方案4.html .chip .gt：--text-3、左边多 2px） */
+.annivGt {
+  flex: none;
+  margin-left: 2px;
+  color: var(--text-3);
+}
+
+/* “已过去”展开后清单卡和下面组合区之间的缝：同组合区卡片之间的 12 */
+.funGap {
+  margin-top: 12px;
+}

@@ -1,0 +1,39 @@
+// ai-parse 入口（架构第 6 节 ai-parse 行；B3 任务单 BE-4）：组装依赖、入口处查版本门，逻辑在 core.ts。
+// 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY（平台注入）；GEMINI_API_KEY（8.4，经 _shared/ai/wire.ts 只放请求头）。
+// 用到的库对象：private.account_usable、private.session_alive（经 _shared/auth.ts）、profiles、settings、app_config（同意、开关、配置、版本门）、
+//   private.counters、private.take_rate、private.ai_state、logs（经 _shared/ai/store.ts）。不直连数据库（不在 6.2 的名单里），不碰 R2。
+// 不加 CORS（0.48 第 4 条）：浏览器经 /sb 同源调用。
+import { serviceAdmin } from '../_shared/admin.ts';
+import { authResult, requireActiveUser } from '../_shared/auth.ts';
+import { parseWithAI } from '../_shared/ai/parse-with-ai.ts';
+import { gateDeps, isValidTz } from '../_shared/ai/wire.ts';
+import { aiAllowed } from '../_shared/consent.ts';
+import { aiParseRequest, checkDefaultDay, normLocale, normProjects, type AiItem, type IntentChecked } from '../_shared/gen/schema/ai.ts';
+import { appConfigMinLoader, versionGate } from '../_shared/version-gate.ts';
+import { handle } from './core.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
+
+const log = codeLogger('ai-parse');
+
+Deno.serve(async (req) => {
+  const admin = serviceAdmin(log);
+  if (admin instanceof Response) return admin;
+  const blocked = await versionGate('ai-parse', req, appConfigMinLoader(admin));
+  if (blocked) return blocked;
+  // 泛型写明：deno 会把 I 推成意图联合里的一支（tsc 不会），写死就不靠推断
+  return handle<AiItem, IntentChecked>(req, {
+    ...gateDeps(admin, log, (userId) => aiAllowed(admin, userId), 'chat'),
+    authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
+    logic: {
+      parseRequest: (b) => {
+        const p = aiParseRequest.safeParse(b);
+        return p.success ? { ok: true, value: p.data } : { ok: false };
+      },
+      normLocale,
+      normProjects,
+      isValidTz,
+      checkDefaultDay: (v, now, tz) => checkDefaultDay(v, now, tz),
+      parseWithAI,
+    },
+  });
+});

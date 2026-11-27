@@ -1,0 +1,57 @@
+# 部署和扫描用的命令行工具：版本和 SHA-256 锁定（架构 8.3 依赖供应链第 ⑤ 条）
+#
+# 谁读它：
+#   - CI：build/ci/install-tool.sh <名称> <平台>（unit.yml、ci.yml、deploy-preview.yml）
+#   - 本机正式发布：tools/release/publish.ps1（只读 windows_amd64 那几行）
+# 规则：
+#   - 每行一个文件，按空白分 6 列：名称 版本 平台 文件名 SHA-256 下载地址；# 开头是注释。
+#   - SHA-256 抄自该版本官方发布页的 checksums 文件（下面每段写了出处），不是自己算的。
+#   - 升级：只升到发布满两周的正式版（不用 beta、next）；同一个提交里改版本、文件名、哈希、地址四项，
+#     由代码审查员对照官方 checksums 文件核对，再由安全审查员会签（人员名单：运维脚本）。
+#   - wrangler 没有官方单文件二进制，不在这里锁，见 tools/deploy/package-lock.json（偏离架构 8.3，见环境清单第七节）。
+#   - aws4fetch（架构 0.32 第 4 条、8.6，shared/objstore.ts 的 SigV4 签名）是 npm 包，也不在这里锁：前端 B 加进根目录
+#     package.json（精确版本）和 package-lock.json（integrity），Deno 一侧由 build/copy_shared.mjs 改写成 npm:aws4fetch@<同一版本>。
+#     运维 10-28 查的候选：1.0.20（2024-08-28 发布，MIT，无依赖，解包 65 KB；integrity 见环境清单第七节第 11 条）。
+#     审查要点和新依赖理由见环境清单第七节第 11 条（交安全审查员）。
+#
+# 名称       版本     平台           文件名                                   SHA-256                                                           下载地址
+
+# gitleaks：密钥扫描（CI 第二道；本机第一道是 .githooks/pre-commit）
+# 出处：https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt（2026-10-28 抄）
+gitleaks     8.30.1   linux_amd64    gitleaks_8.30.1_linux_x64.tar.gz         551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+gitleaks     8.30.1   windows_amd64  gitleaks_8.30.1_windows_x64.zip          d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e  https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_windows_x64.zip
+
+# osv-scanner：依赖漏洞扫描（package-lock.json、deno.lock、Cargo.lock）
+# 出处：https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_SHA256SUMS（2026-10-28 抄）
+osv-scanner  2.7.0    linux_amd64    osv-scanner_linux_amd64                  160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b  https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64
+
+# actionlint：检查 .github/workflows/*.yml（unit.yml 的 workflow-lint 任务，B0 QA D-05）；runner 自带的 shellcheck 一起查 run: 脚本
+# 1.7.12 发布于 2026-03-30（满两周的正式版，和本机装的同一版）
+# 出处：https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_checksums.txt（2026-10-28 抄）
+actionlint   1.7.12   linux_amd64    actionlint_1.7.12_linux_amd64.tar.gz     8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+
+# supabase CLI：本地数据库测试（ci.yml）、预览部署（deploy-preview.yml）、正式发布（publish.ps1）
+# 2.120.0 发布于 2026-10-06（选满两周的正式版；2.121.0、2.122.0 当时还不满两周）
+# 出处：https://github.com/supabase/cli/releases/download/v2.120.0/checksums.txt（2026-10-28 抄）
+supabase     2.120.0  linux_amd64    supabase_2.120.0_linux_amd64.tar.gz      7074584113aa00495beeac661c41fb09f1ddd0a483cd7333894b0d080086dc6e  https://github.com/supabase/cli/releases/download/v2.120.0/supabase_2.120.0_linux_amd64.tar.gz
+supabase     2.120.0  windows_amd64  supabase_2.120.0_windows_amd64.tar.gz    53920013d24bc9e66180f35ceeea9ddc20e65a7afa883421e9c0ba60ad7457ee  https://github.com/supabase/cli/releases/download/v2.120.0/supabase_2.120.0_windows_amd64.tar.gz
+
+# localstack：S3 替身的容器镜像（架构 8.6、0.32 第 4 条；B0 R2 任务单 O-1）。只在 ci.yml 的 db 任务和本机测试里用，不进部署任务、不进 publish.ps1。
+#   这一行的列含义不同于上面：平台写 oci，“文件名”一列是镜像名:标签，SHA-256 一列是多架构清单（manifest list）的 digest（去掉 sha256: 前缀），
+#   下载地址一列是 Docker Hub 的标签页（只供人核对，脚本不从这里下载）。install-tool.sh 不装它；docker-compose.objstore.yml 的 image
+#   必须等于“镜像名:标签@sha256:digest”，build/objstore.mjs pin 比对，CI 里不一致就失败。
+#   为什么不是 MinIO：官方镜像（Docker Hub minio/minio、quay.io/minio/minio）10-28 实测都不能匿名拉取，上游只发源码；
+#   为什么是 4.14.0：LocalStack 2026.03 起的新版本启动要 auth token（要注册、CI 要放 secret），4.14.0（2026-02-26）是之前最后一版社区版。
+#   代价：这一版不会再有安全更新（只在 runner 和本机回环地址上跑、没有真数据，可以接受，交安全审查员确认）；对请求头里的 SigV4 签名默认不校验。
+# 出处：Docker Hub registry API（registry-1.docker.io/v2/localstack/localstack/manifests/4.14.0 的 Docker-Content-Digest），
+#       和 hub.docker.com/v2/repositories/localstack/localstack/tags/4.14.0 的 digest 一致（2026-10-28 运维抄）
+localstack   4.14.0   oci            localstack/localstack:4.14.0             3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a  https://hub.docker.com/r/localstack/localstack/tags?name=4.14.0
+
+# tauri signer：负责人本机生成 exe 更新签名密钥（tools/keys/gen-tauri-key.ps1；B6-exe F10）。CI 不装。
+# 例外：官方没有 checksums 文件，下一行的 SHA-256 是 exe 的哈希，由主持人（代运维）和安全审查员各自从 zip 解压后独立算出、结果一致（2026-11-13，负责人 11-13 同意下载）；
+#       zip 本身的 SHA-256 抄自 GitHub 附件页显示的摘要（接口 assets.digest）：3e8687fb184bd7f10ebd8642f7715f79f4a605c0694c142a21507e8a24dc0f8b，两人下载的 zip 都和它一致
+#       zip 里只有 cargo-tauri.exe、LICENSE-APACHE-2.0、LICENSE-MIT、README.md
+#       Authenticode：NotSigned（两人实测）
+#       空密码实测（待负责人做，见 docs/08-发布/签名工具选型说明.md 第二节第 5 步）：<未做>
+#       同一次核对：Ctrl+C 后 finally 清剪贴板 <未做>；三个剪贴板排除标记 <未做>
+tauri-signer 2.12.4   windows_amd64  cargo-tauri.exe                          3eee23d4513d032f422ad2d80a1ca502fad757d173318a9d23770784cac549c2  https://github.com/tauri-apps/tauri/releases/download/tauri-cli-v2.12.4/cargo-tauri-x86_64-pc-windows-msvc.zip

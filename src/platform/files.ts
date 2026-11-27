@@ -1,0 +1,335 @@
+// 照片和附件经同源的 /files/v1/*：只认 images、files 两个桶（vault-* 只经服务器函数）；没有删除、没有覆盖
+// - 上传：409 exists 当成功（重试时对象已在）
+// - 批量签名：超过 100 项自动分批；不过的项单独标出，不整批失败
+// - 取字节：不带 JWT，签名放请求头 X-Files-Sig，URL 不带查询串（Cloudflare 实时日志会显示查询串）；先核对地址来源和路径前缀。
+//   只有 ms（给微软查看器的 .pptx）的签名在查询串里
+// 业务代码只经功能的 data 层用本文件；对象存储本身（shared/objstore.ts、aws4fetch）App 一律引不到（ESLint lemo/import-bounds 的 R2）
+import { z } from 'zod';
+import { isRetryStatus } from '../../shared/core/http-kind.ts';
+import { exitForDisabled, type DisabledExitOptions } from './account-status.ts';
+import { buildInfo } from './env.ts';
+import { withAppVersion } from './http.ts';
+import type { ExitNotice } from './session.ts';
+export { FILE_BUCKETS, type FileBucket, isFileBucket, isSafePath, checkObjectUrl, checkMsUrl, checkSig } from './files-url.ts';
+import { type FileBucket, baseUrl, isFileBucket, isSafePath, checkObjectUrl, checkMsUrl, checkSig } from './files-url.ts';
+
+export type SignPurpose = 'view' | 'download' | 'ms';
+
+/** 一次签名请求最多几项（files_authorize 的 get 也是 100） */
+export const SIGN_BATCH_MAX = 100;
+
+/** 上传按 10 MB 附件在慢网上留足 */
+export const TIMEOUT_MS = { upload: 120_000, sign: 15_000, get: 60_000 } as const;
+
+/**
+ * data 层看的几类：
+ * - retry：断网、超时、429、503、其他 5xx——稍后重试
+ * - too_big（413）、bad_type（415，含 webp 文件头不对）、upgrade（426，走升级提示，不重试）
+ * - auth：401——刷新会话后再试一次，还不行回登录页
+ * - account：account_disabled、session_revoked——退出原因用 accountExitOf 定
+ * - resign：取字节时 expired / bad_signature——重新签一次再取
+ * - not_pending：上传时 403 not_pending——**不是上传失败**：不重传、不按出错提示，data 层读这一行的 check_status 再定。只有 upload 会给
+ * - denied：其余——不重试
+ */
+export type FileErrorKind = 'retry' | 'too_big' | 'bad_type' | 'upgrade' | 'auth' | 'account' | 'resign' | 'not_pending' | 'denied';
+
+export interface FileError {
+  ok: false;
+  kind: FileErrorKind;
+  /** 服务器的错误码，或本地判断的（network、timeout、no_session、bad_path…） */
+  code: string;
+  reason?: string;
+  /** 没收到响应时是 0 */
+  status: number;
+}
+
+export type UploadResult = { ok: true; etag: string | null; existed: boolean } | FileError;
+/**
+ * view、download：url 不带查询串，sig 放请求头，用 fetchBlob 取；ms：url 带签名查询串，sig 是 null
+ */
+export type SignResult = { ok: true; url: string; sig: string | null; expiresAt: number } | FileError;
+export type BlobResult = { ok: true; blob: Blob; contentType: string } | FileError;
+
+/** fetchBlob 的参数：sign 回的 view、download 那一项 */
+export interface SignedLink {
+  url: string;
+  sig: string;
+}
+
+/** 放签名的请求头（服务器 functions/_lib/files-sign.ts 的 SIG_HEADER；CORS 已放行） */
+export const SIG_HEADER = 'X-Files-Sig';
+
+export interface SignItem {
+  bucket: FileBucket;
+  path: string;
+  purpose: SignPurpose;
+  /** 下载时的文件名（调用方先 sanitizeFileName），在签名范围内 */
+  d?: string;
+}
+
+export interface FilesDeps {
+  /** /files/v1/ 的绝对地址 */
+  base: string;
+  /** 没登录回 null */
+  getAccessToken: () => Promise<string | null>;
+  fetch?: typeof fetch;
+  version?: string;
+}
+
+// ───────── 错误码 → 类别 ─────────
+
+const ErrorBody = z.object({ code: z.string().min(1).max(64), reason: z.string().max(64).optional() });
+
+const ACCOUNT_REASONS = new Set(['account_disabled', 'session_revoked']);
+
+/**
+ * account 类错误 → 退出原因：session_revoked → removed；account_disabled（停用和冷静期都回它）→ exitForDisabled 探测再定
+ * （'active' = 不离开）。sid：发这次请求时的 session_id。不是 account 类返回 null
+ */
+export async function accountExitOf(e: FileError, sid: string | null, o: DisabledExitOptions = {}): Promise<ExitNotice | 'active' | null> {
+  if (e.kind !== 'account') return null;
+  const disabled = e.code === 'account_disabled' || e.reason === 'account_disabled';
+  return disabled ? exitForDisabled(sid, o) : 'removed';
+}
+
+/** HTTP 状态 + 服务器错误码 → 类别 */
+export function classify(status: number, code: string, reason?: string): FileErrorKind {
+  if (status === 0) return 'retry';
+  // 408、429、5xx：口径同全仓（shared/core/http-kind.ts）
+  if (code === 'rate_limited' || reason === 'rate_limited' || code === 'try_later' || isRetryStatus(status)) return 'retry';
+  if (code === 'upgrade_required' || status === 426) return 'upgrade';
+  if (code === 'too_large' || status === 413) return 'too_big';
+  if (code === 'bad_type' || status === 415) return 'bad_type';
+  if ((reason !== undefined && ACCOUNT_REASONS.has(reason)) || ACCOUNT_REASONS.has(code)) return 'account';
+  if (code === 'unauthorized' || status === 401) return 'auth';
+  if (code === 'expired' || code === 'bad_signature') return 'resign';
+  // 只认 PUT 的 403 forbidden 带的 reason（签名单项不过时 code 就是 reason，不会走到这里）
+  if (code === 'forbidden' && reason === 'not_pending') return 'not_pending';
+  return 'denied';
+}
+
+function fail(status: number, code: string, reason?: string): FileError {
+  const e: FileError = { ok: false, kind: classify(status, code, reason), code, status };
+  if (reason !== undefined) e.reason = reason;
+  return e;
+}
+
+const local = (code: string): FileError => ({ ok: false, kind: code === 'no_session' ? 'auth' : 'denied', code, status: 0 });
+
+const STATUS_CODE: Record<number, string> = {
+  400: 'bad_path',
+  401: 'unauthorized',
+  403: 'forbidden',
+  404: 'not_found',
+  409: 'exists',
+  413: 'too_large',
+  415: 'bad_type',
+  426: 'upgrade_required',
+  429: 'rate_limited',
+  503: 'try_later',
+};
+
+async function failFromResponse(res: Response): Promise<FileError> {
+  // 不是 JSON（例如 Cloudflare 的默认错误页）：按状态码算
+  const parsed = ErrorBody.safeParse(await readJson(res));
+  if (parsed.success) return fail(res.status, parsed.data.code, parsed.data.reason);
+  return fail(res.status, STATUS_CODE[res.status] ?? `http_${res.status}`);
+}
+
+/** 读 JSON 响应体；不是 JSON 或读不下来都回 null（读体卡住由 exchange 的超时兜底） */
+async function readJson(res: Response): Promise<unknown> {
+  try {
+    return JSON.parse(await res.text()) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/** 用自己持有的 reader 转一手响应体，超时时 exchange 能经这个 reader 取消（原响应体已上锁，直接 cancel 会被拒） */
+function relay(res: Response, reader: ReadableStreamDefaultReader<Uint8Array>): Response {
+  const body = new ReadableStream<Uint8Array>({
+    async pull(c) {
+      const { done, value } = await reader.read();
+      if (done) c.close();
+      else c.enqueue(value);
+    },
+    cancel: (why) => reader.cancel(why),
+  });
+  return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+}
+
+// ───────── 客户端 ─────────
+
+const UploadOk = z.object({ etag: z.string().max(200).optional() });
+const SignBody = z.object({
+  items: z.array(
+    z.union([
+      z.object({ i: z.number().int().nonnegative(), ok: z.literal(true), url: z.string().max(4096), sig: z.string().max(2048).optional() }),
+      z.object({ i: z.number().int().nonnegative(), ok: z.literal(false), reason: z.string().min(1).max(64) }),
+    ]),
+  ),
+});
+
+export interface FilesClient {
+  upload(bucket: FileBucket, path: string, blob: Blob, contentType: string): Promise<UploadResult>;
+  sign(items: readonly SignItem[]): Promise<SignResult[]>;
+  fetchBlob(link: SignedLink): Promise<BlobResult>;
+}
+
+export function createFilesClient(deps: FilesDeps): FilesClient {
+  const base = baseUrl(deps.base);
+  const doFetch = deps.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
+  const objectUrl = (bucket: FileBucket, path: string) => new URL(`o/${bucket}/${path}`, base).toString();
+
+  /**
+   * 发请求并读完响应体；计时管到读完响应体（响应体卡住也会按时变成 timeout）。超时时 abort 请求，再经自己的 reader 取消响应体
+   */
+  async function exchange<T>(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+    read: (res: Response) => Promise<T | FileError>,
+  ): Promise<T | FileError> {
+    const ctl = new AbortController();
+    const failed = (): FileError => ({ ok: false, kind: 'retry', code: ctl.signal.aborted ? 'timeout' : 'network', status: 0 });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<'timeout'>((resolve) => {
+      timer = setTimeout(() => {
+        ctl.abort();
+        resolve('timeout');
+      }, timeoutMs);
+    });
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const got = await Promise.race([
+        doFetch(url, { ...init, signal: ctl.signal, credentials: 'omit', cache: 'no-store', redirect: 'error' }),
+        expired,
+      ]);
+      if (got === 'timeout') return failed();
+      reader = got.body?.getReader();
+      const out = await Promise.race([read(reader ? relay(got, reader) : got), expired]);
+      return out === 'timeout' ? failed() : out;
+    } catch {
+      return failed();
+    } finally {
+      clearTimeout(timer);
+      if (ctl.signal.aborted) reader?.cancel().catch(() => undefined);
+    }
+  }
+
+  async function authHeaders(extra: Record<string, string>): Promise<Headers | FileError> {
+    const token = await deps.getAccessToken().catch(() => null);
+    if (!token) return local('no_session');
+    return withAppVersion({ ...extra, Authorization: `Bearer ${token}` }, deps.version);
+  }
+
+  async function upload(bucket: FileBucket, path: string, blob: Blob, contentType: string): Promise<UploadResult> {
+    if (!isFileBucket(bucket) || !isSafePath(path)) return local('bad_path');
+    const headers = await authHeaders({ 'Content-Type': contentType });
+    if (!(headers instanceof Headers)) return headers;
+    return exchange(objectUrl(bucket, path), { method: 'PUT', headers, body: blob }, TIMEOUT_MS.upload, async (res): Promise<UploadResult> => {
+      const headerEtag = res.headers.get('ETag');
+      if (res.status === 409) {
+        const err = await failFromResponse(res);
+        // 只有 exists 当成功（条件写保证不会被覆盖，内容由 file-check 核对）
+        return err.code === 'exists' ? { ok: true, etag: headerEtag, existed: true } : err;
+      }
+      if (!res.ok) return failFromResponse(res);
+      const body = await readJson(res);
+      const parsed = UploadOk.safeParse(body);
+      return { ok: true, etag: (parsed.success ? parsed.data.etag : undefined) ?? headerEtag, existed: false };
+    });
+  }
+
+  /** 一批（≤ 100 项）；返回和这一批同序的结果 */
+  async function signBatch(batch: readonly SignItem[]): Promise<SignResult[]> {
+    const all = (e: FileError) => batch.map(() => e);
+    const headers = await authHeaders({ 'Content-Type': 'application/json' });
+    if (!(headers instanceof Headers)) return all(headers);
+    const items = batch.map((x) => (x.d === undefined ? { bucket: x.bucket, path: x.path, purpose: x.purpose } : { ...x }));
+    const body = await exchange(
+      new URL('sign', base).toString(),
+      { method: 'POST', headers, body: JSON.stringify({ items }) },
+      TIMEOUT_MS.sign,
+      async (res): Promise<{ json: unknown } | FileError> => (res.ok ? { json: await readJson(res) } : failFromResponse(res)),
+    );
+    if ('ok' in body) return all(body);
+    const parsed = SignBody.safeParse(body.json);
+    if (!parsed.success) return all(local('bad_response'));
+    const out: SignResult[] = all(local('bad_response'));
+    for (const r of parsed.data.items) {
+      const want = batch[r.i];
+      if (!want) continue;
+      if (!r.ok) {
+        out[r.i] = fail(200, r.reason, r.reason);
+        continue;
+      }
+      const expect = { bucket: want.bucket, path: want.path };
+      if (want.purpose === 'ms') {
+        const expiresAt = r.sig === undefined ? checkMsUrl(r.url, base.toString(), expect) : null;
+        out[r.i] = expiresAt === null ? local('bad_url') : { ok: true, url: r.url, sig: null, expiresAt };
+      } else {
+        const expiresAt = r.sig !== undefined && checkObjectUrl(r.url, base.toString(), expect) ? checkSig(r.sig, want.purpose) : null;
+        out[r.i] = expiresAt === null || r.sig === undefined ? local('bad_url') : { ok: true, url: r.url, sig: r.sig, expiresAt };
+      }
+    }
+    return out;
+  }
+
+  async function sign(items: readonly SignItem[]): Promise<SignResult[]> {
+    const out: SignResult[] = new Array<SignResult>(items.length);
+    const valid: number[] = [];
+    items.forEach((x, i) => {
+      if (!isFileBucket(x.bucket) || !isSafePath(x.path)) out[i] = local('bad_path');
+      // ms（交给微软查看器）只给附件桶里的 .pptx
+      else if (x.purpose === 'ms' && !(x.bucket === 'files' && x.path.endsWith('.pptx'))) out[i] = local('bad_purpose');
+      else valid.push(i);
+    });
+    // 分批按顺序发（不并发，少撞 files_get 每分钟 120 次的限流）
+    for (let k = 0; k < valid.length; k += SIGN_BATCH_MAX) {
+      const idx = valid.slice(k, k + SIGN_BATCH_MAX);
+      const got = await signBatch(idx.map((i) => items[i] as SignItem));
+      idx.forEach((i, j) => {
+        out[i] = got[j] ?? local('bad_response');
+      });
+    }
+    return out;
+  }
+
+  async function fetchBlob(link: SignedLink): Promise<BlobResult> {
+    // 地址带查询串（例如 ms 链接）一律不取
+    if (!checkObjectUrl(link.url, base.toString()) || checkSig(link.sig) === null) return local('bad_url');
+    return exchange(link.url, { method: 'GET', headers: { [SIG_HEADER]: link.sig } }, TIMEOUT_MS.get, async (res): Promise<BlobResult> => {
+      if (!res.ok) return failFromResponse(res);
+      const blob = await res.blob();
+      return { ok: true, blob, contentType: res.headers.get('Content-Type') ?? blob.type };
+    });
+  }
+
+  return { upload, sign, fetchBlob };
+}
+
+// ───────── 默认实例 ─────────
+
+/** /files/v1/ 的地址：和数据接口同一个来源（exe 里也是这个，跨域走 CORS） */
+export function filesBaseFrom(supabaseUrl: string, fallbackOrigin: string): string {
+  return new URL('/files/v1/', supabaseUrl || fallbackOrigin).toString();
+}
+
+/** 当前会话的 access token；附件的 file-check 调用也用这一份 */
+export async function sessionToken(): Promise<string | null> {
+  const { getSupabase } = await import('./supabase/client.ts');
+  const sb = await getSupabase();
+  const { data } = await sb.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
+let defaultClient: FilesClient | null = null;
+function client(): FilesClient {
+  defaultClient ??= createFilesClient({ base: filesBaseFrom(buildInfo.supabaseUrl, location.origin), getAccessToken: sessionToken });
+  return defaultClient;
+}
+
+export const upload: FilesClient['upload'] = (bucket, path, blob, contentType) => client().upload(bucket, path, blob, contentType);
+export const sign: FilesClient['sign'] = (items) => client().sign(items);
+export const fetchBlob: FilesClient['fetchBlob'] = (link) => client().fetchBlob(link);

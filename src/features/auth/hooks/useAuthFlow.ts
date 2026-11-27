@@ -1,0 +1,283 @@
+// 登录页的流程：一个流程，先填邮箱，新邮箱才需要邀请码
+//   email ──发码成功──▶ code ──填满 6 位自动校验──▶ done（跳回 /app/）
+//     └─回“还没注册”─▶ invite ──邀请码 + 人机验证──▶ invite-code ──填满 6 位──▶ done
+// 拿到会话以后、跳进 /app/ 之前先探测账号状态（useAccountGate 的 check('login') 经 probe 传进来）：
+//   冷静期、停用、探测不出（unknown）时不跳，由登录页原地显示恢复页、“账号已停用”或“暂时无法确认账号状态”；active 才进 App
+// 错误各自一张卡片；发得太频繁、刚发过码都有 60 秒倒计时（Supabase：同一邮箱 60 秒一次）
+import type { ReauthDeps } from '../data/reauth.ts';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { leaveAuthPage } from '../../../platform/desktop-auth.ts';
+import { getSupabase } from '../../../platform/supabase/client.ts';
+import { useUi } from '../../../kit/state/ui-store.ts';
+import {
+  createAuthApi,
+  inviteHasConfusable,
+  isEmail,
+  isInviteFormat,
+  normalizeInvite,
+  normalizeOtp,
+  splitCodeError,
+  type AuthApi,
+  type AuthErr,
+} from '../data/auth-api.ts';
+import type { ExitSteps } from '../../../platform/sign-out.ts';
+import type { AccountGateApi } from '../data/account-gate.ts';
+import type { Captcha } from './useTurnstile.ts';
+
+export type { AuthErr };
+
+export type AuthStep = 'email' | 'code' | 'invite' | 'invite-code' | 'done';
+
+/** 发码以后多久才能再发（毫秒） */
+export const RESEND_MS = 60_000;
+
+export interface AuthFlowState {
+  step: AuthStep;
+  email: string;
+  invite: string;
+  code: string;
+  busy: boolean;
+  error: AuthErr | null;
+  /** 表单本身的提示（邮箱格式、邀请码位数、人机验证还没好），不是服务器回的错误 */
+  hint: 'email_format' | 'invite_format' | 'captcha_wait' | null;
+  /** 还要等几秒才能再发码；0 表示现在就能发 */
+  cooldown: number;
+}
+
+export interface AuthFlowDeps {
+  api?: AuthApi;
+  now?: () => number;
+  /** 拿到会话以后做什么（默认 platform/desktop-auth.ts 的 leaveAuthPage：网页跳回 /app/，exe 调 auth_done）；已登录时的“回到 App”也用它 */
+  onDone?: () => void;
+  /** 测试用：是不是 exe（默认 isTauri）。exe 里不做注册，新邮箱给“去浏览器注册” */
+  inExe?: boolean;
+  /** 测试用：打开系统浏览器的注册页（默认 platform/desktop-auth.ts 的 openDesktopSignup） */
+  openSignup?: () => Promise<boolean>;
+  /** 测试用：本机会话里的 user_id（默认 platform/session.ts 的 readSessionUserId） */
+  readUserId?: () => string | null;
+  /** 测试用：本机会话里的邮箱（默认 platform/session.ts 的 readSessionEmail；读不到为 null，提示里就不带邮箱） */
+  readEmail?: () => string | null;
+  /**
+   * 测试用：别的标签页改了会话时回调（默认 platform/session.ts 的 onSessionStorageChange，即 storage 事件）；返回取消函数。
+   * 回调只当“变了”的信号，登录页收到后自己再读 readUserId、readEmail
+   */
+  watchSession?: (onChange: () => void) => () => void;
+  /** 测试用：退出后清本机的几步（默认 platform/sign-out.ts 的 defaultExitSteps） */
+  localExit?: ExitSteps;
+  /** 测试用：“退出并换账号”服务器那一半的总超时（默认 platform/sign-out.ts 的 SIGN_OUT_TIMEOUT_MS） */
+  signOutTimeoutMs?: number;
+  /** 测试用：account 的 status、restore 和恢复页退出用的 signOut local（默认 data/account-gate.ts 的 createAccountGateApi） */
+  account?: AccountGateApi;
+  /** 测试用：本机会话的 access token（默认 platform/session.ts 的 readSessionAccessToken；恢复页探测时记进内存） */
+  readToken?: () => string | null;
+  /** 测试用：会话已被别的标签页换掉时，用旧令牌直接 /logout（默认 platform/sign-out.ts 的 logoutWithToken） */
+  logoutWithToken?: (token: string, timeoutMs: number) => Promise<{ serverDone: boolean }>;
+  /** 测试用：登录过期那几样（默认 data/reauth.ts 的 defaultReauthDeps） */
+  reauth?: ReauthDeps;
+}
+
+const defaultApi = (): AuthApi => createAuthApi(getSupabase);
+
+/** 重发倒计时：只在有倒计时的时候每秒刷新一次；waitS 是服务器限频原文里的 N 秒，没有就按 60 秒 */
+function useCooldown(now: () => number) {
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [tick, setTick] = useState(() => now());
+  useEffect(() => {
+    if (cooldownUntil <= tick) return undefined;
+    const id = setInterval(() => setTick(now()), 1000);
+    return () => clearInterval(id);
+  }, [cooldownUntil, tick, now]);
+  const startCooldown = useCallback(
+    (waitS?: number) => {
+      const t = now();
+      setTick(t);
+      setCooldownUntil(t + (waitS === undefined ? RESEND_MS : waitS * 1000));
+    },
+    [now],
+  );
+  return { cooldownUntil, cooldown: Math.max(0, Math.ceil((cooldownUntil - tick) / 1000)), startCooldown };
+}
+
+/**
+ * 请求序号：每次发码、发邀请、校验都取一个号；改邮箱、“换一个邮箱”时作废（号加一）。
+ * 请求回来号对不上就整个丢掉——不然邀请码那一步按了“下一步”、没回来就改邮箱，旧请求回来会把界面推到验证码那一步、开始倒计时，
+ * 验证码却发到了旧邮箱；第一步发码等待时改邮箱，回来的“还没注册”也会显示在新邮箱上
+ */
+function useRequestSeq() {
+  const seq = useRef(0);
+  return useMemo(() => ({ next: () => ++seq.current, stale: (n: number) => n !== seq.current, drop: () => void ++seq.current }), []);
+}
+const goApp = () => leaveAuthPage();
+
+/**
+ * probe：拿到会话以后先探测，true 才跳进 App（不传就直接跳）。
+ * 返回的 enterApp：不再探测、直接进 App（恢复页“恢复账号”成功后用）
+ */
+export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}, probe?: () => Promise<boolean>) {
+  const api = useMemo(() => deps.api ?? defaultApi(), [deps.api]);
+  const now = deps.now ?? Date.now;
+  const onDone = deps.onDone ?? goApp;
+  const locale = useUi((s) => s.locale);
+  const [step, setStep] = useState<AuthStep>('email');
+  const [email, setEmailRaw] = useState('');
+  const [invite, setInviteRaw] = useState('');
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<AuthErr | null>(null);
+  const [hint, setHint] = useState<AuthFlowState['hint']>(null);
+  const [sentAt, setSentAt] = useState(0);
+  const { cooldownUntil, cooldown, startCooldown } = useCooldown(now);
+  const req = useRequestSeq();
+
+  /** 拿一个人机验证令牌；还没有就提示等一下 */
+  const takeCaptcha = useCallback((): string | null => {
+    const t = captcha.ready ? captcha.take() : null;
+    if (!t) setHint('captcha_wait');
+    return t;
+  }, [captcha]);
+
+  const enterApp = useCallback(() => {
+    setStep('done');
+    onDone();
+  }, [onDone]);
+
+  const sendCode = useCallback(async () => {
+    setError(null);
+    setHint(null);
+    if (!isEmail(email)) {
+      setHint('email_format');
+      return;
+    }
+    if (cooldownUntil > now()) return; // 按真实时钟判断，不用每秒刷新的显示值
+    const token = takeCaptcha();
+    if (!token) return;
+    const n = req.next();
+    setBusy(true);
+    const r = await api.sendCode(email.trim(), token);
+    if (req.stale(n)) return; // 等待时改了邮箱：结果作废（busy 已由作废的那一下放开）
+    setBusy(false);
+    if (r.ok) {
+      setSentAt(now());
+      startCooldown();
+      setCode('');
+      setStep('code');
+      return;
+    }
+    if (r.error === 'not_registered') {
+      setStep('invite');
+      return;
+    }
+    if (r.error === 'rate_limited') startCooldown(r.waitS);
+    setError(r.error);
+  }, [api, email, cooldownUntil, takeCaptcha, now, startCooldown, req]);
+
+  const sendInvite = useCallback(async () => {
+    setError(null);
+    setHint(null);
+    if (!isInviteFormat(invite)) {
+      setHint('invite_format');
+      return;
+    }
+    if (cooldownUntil > now()) return; // 按真实时钟判断，不用每秒刷新的显示值
+    const token = takeCaptcha();
+    if (!token) return;
+    const n = req.next();
+    setBusy(true);
+    const r = await api.inviteStart({ email: email.trim(), code: normalizeInvite(invite), captchaToken: token, locale });
+    if (req.stale(n)) return;
+    setBusy(false);
+    if (r.ok) {
+      // 码对不对都回同样的 {ok}，界面也只说“邀请码有效的话，验证码会发到这个邮箱”
+      setSentAt(now());
+      startCooldown();
+      setCode('');
+      setStep('invite-code');
+      return;
+    }
+    // start 只会回 captcha_failed、try_later，没有限频卡片
+    setError(r.error);
+  }, [api, email, invite, cooldownUntil, takeCaptcha, locale, now, startCooldown, req]);
+
+  const verify = useCallback(
+    async (otp: string) => {
+      setError(null);
+      const n = req.next();
+      setBusy(true);
+      const r =
+        step === 'invite-code'
+          ? await api.inviteVerify({ email: email.trim(), code: normalizeInvite(invite), emailOtp: otp, locale })
+          : await api.verifyCode(email.trim(), otp);
+      // 拿到会话以后先探测，探测完才放开 busy；冷静期、停用、探测不出时不跳
+      // 校验途中作废了（双保险，界面上校验时“换一个邮箱”是灰的）：失败的结果丢掉；成功时会话已写进本机，照常探测、进 App
+      if (!r.ok && req.stale(n)) return;
+      const go = r.ok && (!probe || (await probe()));
+      setBusy(false);
+      if (r.ok) {
+        if (go) enterApp();
+        return;
+      }
+      // 回到邮箱那一屏（邮箱保留）再提示的三种：
+      // - registered_login：账号已建好、没换到会话（link_failed 502），请用邮箱验证码登录
+      // - email_exists：这个邮箱已注册（409），直接去登录
+      // - too_many_tries：验证码试错太多次已失效（400），从填邮箱重新开始
+      if (r.error === 'registered_login' || r.error === 'email_exists' || r.error === 'too_many_tries') {
+        setStep('email');
+        setCode('');
+        setInviteRaw('');
+        setError(r.error);
+        return;
+      }
+      setError(splitCodeError(r.error, sentAt, now()));
+    },
+    [api, step, email, invite, locale, sentAt, now, enterApp, probe, req],
+  );
+
+  /** 验证码输入：只留数字，填满 6 位自动提交 */
+  const setCodeInput = useCallback(
+    (raw: string) => {
+      const v = normalizeOtp(raw);
+      setCode(v);
+      if (v.length === 6 && !busy) void verify(v);
+    },
+    [busy, verify],
+  );
+
+  /** 在验证码那一屏重新发：已有用户再发一次登录码；邀请注册再走一次 start */
+  const resend = useCallback(() => (step === 'invite-code' ? sendInvite() : sendCode()), [step, sendInvite, sendCode]);
+
+  const backToEmail = useCallback(() => {
+    req.drop();
+    setBusy(false);
+    setStep('email');
+    setCode('');
+    setInviteRaw('');
+    setError(null);
+    setHint(null);
+  }, [req]);
+
+  /** 卡片上的“重新输入”：清掉错误和输入框，留在这一屏 */
+  const dismissError = useCallback(() => {
+    setError(null);
+    if (error === 'code_wrong') setCode('');
+    if (error === 'invite_invalid') {
+      setInviteRaw('');
+      setStep('invite');
+    }
+  }, [error]);
+
+  /** 改邮箱：还在路上的发码请求作废（序号加一）；在邀请码那一步改还要回填邮箱那一步、邀请码清空（否则邮箱输错以后改不了） */
+  const setEmail = useCallback((v: string) => {
+    if (step === 'invite' || busy) backToEmail();
+    setEmailRaw(v);
+    setHint(null);
+  }, [step, busy, backToEmail]);
+  const setInvite = useCallback((v: string) => {
+    setInviteRaw(v);
+    setHint(null);
+  }, []);
+
+  const state: AuthFlowState = { step, email, invite, code, busy, error, hint, cooldown };
+  // inviteConfusable：邀请码里输进了 0、1、I、O（字母表里没有），界面在输入框下当场提示
+  const inviteConfusable = inviteHasConfusable(invite);
+  return { state, inviteConfusable, enterApp, setEmail, setInvite, setCode: setCodeInput, sendCode, sendInvite, resend, backToEmail, dismissError };
+}

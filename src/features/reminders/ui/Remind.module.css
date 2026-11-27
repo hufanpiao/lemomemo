@@ -1,0 +1,647 @@
+/* 提醒横幅、按钮条、“15:25 再提醒你”、错过的提醒、整页提醒（磨砂玻璃，只用令牌）
+   • 横幅：顶部下拉一张，内描边 1.5px 柠檬黄；[完成圆圈（项目色）] [类型 · 时刻 / 标题 16px 常规] [详情 ›]，下面抓手条 + “先收起”
+   • 按钮条：贴底，离底 118px（和提示条同一位置），键盘弹起时让开（--kb）；“知道了”主按钮柠檬黄
+   • 整页提醒：铃铛类型行、64px 大时刻（--fs-64、--f-num）、标题、“到 16:30 · 项目”、地点备注卡、下一条卡；
+     “知道了”整行宽主按钮，其余两颗一排（任何语言都不折字）
+   • 顶部只写 var(--inset-top)（顶部安全区的 env() 只在 base.css 里写）
+   • 提示条出现时排在按钮条上方（提示条自己管位置），这里不管 */
+
+/* 项目色（和列表、月历同一个 projectColorIndex）：记号和完成圆圈读 --pc */
+.pc0 {
+  --pc: var(--text-2);
+}
+
+.pc1 {
+  --pc: var(--p1s);
+}
+
+.pc2 {
+  --pc: var(--p2s);
+}
+
+.pc3 {
+  --pc: var(--p3s);
+}
+
+.pc4 {
+  --pc: var(--p4s);
+}
+
+.pc5 {
+  --pc: var(--p5s);
+}
+
+.pc6 {
+  --pc: var(--p6s);
+}
+
+/* Appear 进场时外层带 transform（播完还留着 translateY(0) scale(1)），会成为 fixed 子元素的定位参照：
+   外层自己铺满视口、不接点按，里面的横幅、按钮条、提示才按视口定位 */
+.layer,
+.layerNote {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-remind);
+  pointer-events: none;
+}
+
+.layerNote {
+  z-index: var(--z-remind-note);
+}
+
+.layer > *,
+.layerNote > * {
+  pointer-events: auto;
+}
+
+/* 退场途中（<Appear> 打 data-state="leaving"，写法同 Dialog.module.css）：退出动画播完、卸载之前不接点按，
+   “知道了”“稍后”、点横幅本身都不再触发。只改 pointer-events，不碰 opacity、transform，退场动效照旧；减少动态效果时同样有 leaving。
+   已知：退场约 0.2 秒内的点按会穿过横幅落到下面的页面上，比误触“稍后”写错数据轻，可以接受；
+   彻底不穿透、连键盘一起挡住，要在 Appear 的退场层上加 inert */
+.layer[data-state="leaving"] > *,
+.layerNote[data-state="leaving"] > * {
+  pointer-events: none;
+}
+
+/* 横幅、按钮条、小提示：宽度、底色、字色、阴影、模糊、减少透明兜底是公共浮条（kit Float.module.css 的 .float，RemindHost 上一起挂），
+   这里只管位置、层级、排版；圆角和横幅的柠檬黄描边经 --float-r、--float-ring 交给公共那条画 */
+.banner {
+  --float-r: 24px;
+  --float-ring: inset 0 0 0 1.5px var(--accent);
+
+  position: fixed;
+  top: calc(var(--inset-top) + 8px);
+  left: 10px;
+  right: 10px;
+  z-index: var(--z-remind);
+  padding: 12px 14px 4px;
+  touch-action: pan-x;
+}
+
+/* 往上拖没到 30px 松手：回位走 --dur-ui（跟手时不加过渡）；减少动态效果时直接回位 */
+.settling {
+  transition: transform var(--dur-ui) var(--ease-standard);
+}
+
+:global(:root[data-rm="1"]) .settling {
+  transition: none;
+}
+
+.bannerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bar {
+  --float-r: var(--r-xl);
+
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: var(--dock-bottom);   /* 离底 118px、键盘弹起时让开；变量在 styles/base.css */
+  z-index: var(--z-remind);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+}
+
+.note {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: var(--dock-bottom);   /* 离底 118px、键盘弹起时让开；变量在 styles/base.css */
+  z-index: var(--z-remind-note);
+  padding: 12px 16px;
+  font-size: var(--fs-14);
+  text-align: center;
+}
+
+.bannerMain {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.bannerText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.kicker {
+  color: var(--toast-fg2);
+  font-size: var(--fs-12);
+}
+
+.title {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--fs-16);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more {
+  color: var(--toast-fg2);
+  font-size: var(--fs-12);
+}
+
+.detail {
+  flex: none;
+  font-size: var(--fs-13);
+  white-space: nowrap;
+}
+
+/* 抓手条 + 旁边“先收起”（不会滑的人也能收起） */
+.grabRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+}
+
+.grab {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--toast-track);
+}
+
+.collapse {
+  position: absolute;
+  top: 0;
+  left: -6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--toast-fg2);
+  font-size: var(--fs-12);
+}
+
+/* 抓手条这一行矮（28px）：“先收起”的点按区从自己顶边起只往下扩到 44px，不往上伸进“详情 ›”那一行 */
+.collapse::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  min-width: var(--hit);
+  height: var(--hit);
+}
+
+.small {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+/* 待办的完成圆圈：项目色描边，可点范围外扩到 44 × 44 */
+.circle {
+  position: relative;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1.75px solid var(--pc, currentcolor);
+
+  /* 全 App 的完成标记是圆角方框（同 kit CheckCircle：边长 24、圆角 37.5%、边 1.75），项目色描边 */
+  border-radius: 37.5%;
+  background: none;
+}
+
+.circle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--hit);
+  height: var(--hit);
+  transform: translate(-50%, -50%);
+}
+
+.btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 0 6px;
+  border: 1.5px solid currentcolor;
+  border-radius: var(--r-pill);
+  background: none;
+  color: inherit;
+  font-size: var(--fs-13);
+  white-space: nowrap;
+}
+
+.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+  text-align: center;
+}
+
+/* 今天页顶部“错过 N 条提醒 · 查看 ›”：无框浅底胶囊——
+   半透明浅底（--mid-bg，浅色透出背后的晕染）+ 一根 --k-line 淡边（浅深色都看得见），整条圆成胶囊、高 48（点按区多留 4）；
+   铃铛右上角一个小红点（外圈 2px 页面底色和铃铛隔开），文字 500 字重，“查看 ›”降一档灰 */
+.missRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: calc(var(--hit) + 4px);
+  padding: 0 18px;
+  border: 1px solid var(--k-line);
+  border-radius: var(--r-pill);
+  background: var(--mid-bg);
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+}
+
+.missOpen {
+  flex: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  font-weight: 400;
+}
+
+.bellDot {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.bellDot::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rec-dot);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bell {
+  flex: none;
+}
+
+.dim {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+
+  /* “今天 08:30 · 待办”这类时刻：等宽数字 */
+  font-variant-numeric: tabular-nums;
+}
+
+/* 错过的提醒弹层：“全部知道了”在右上（弹层外框 .dock 是 fixed，绝对定位相对它：16px 外边距 + 16px 内边距）。
+   样子是 kit 胶囊（MissedSheet.tsx 同时挂 Chip.module.css 的 .chip：无描边浅底、高 30、点按区 44），这里只管位置；
+   写成 button.sheetTopAct 压过胶囊那份 position、margin（两份 CSS 模块谁先加载不固定）。top 17 让胶囊和标题居中对齐 */
+button.sheetTopAct {
+  position: absolute;
+  top: 17px;
+  right: 30px;
+  margin: 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 每条一张小卡：大圆角、留白大 */
+.missCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel-2);
+}
+
+.missBtns {
+  display: flex;
+  gap: 6px;
+}
+
+/* 卡里的按钮（RemindButtons，和横幅、整页提醒共用 .btn / .primary）：卡里无描边、--panel 底（卡是 --panel-2 浅底）、
+   看得见 34 高，点按区经 ::after 上下各撑 5 到 44；“知道了”主按钮仍是柠檬黄实底。只改卡里这几颗，横幅、整页提醒的照旧。
+   宽度按字长分（flex 1 1 auto），不等分：四颗一排时韩文“내일 다시 알림”等分会超出按钮 */
+.missBtns .btn {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  background: var(--panel);
+}
+
+.missBtns .btn::after {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+
+.missBtns .primary {
+  background: var(--accent);
+}
+
+.itemText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* 卡里的标题（粗体）：15 号，和上面那行小字拉开层级 */
+.itemText b {
+  font-size: var(--fs-15);
+  font-weight: 600;
+}
+
+.rowBtn {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/* 类型记号：日程竖条、待办空心圆，项目色 */
+.mkEv,
+.mkEvSm {
+  display: inline-block;
+  flex: none;
+  width: 5px;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--pc, var(--text-2));
+  vertical-align: middle;
+}
+
+.mkEvSm {
+  height: 12px;
+}
+
+.mkTd,
+.mkTdSm {
+  display: inline-block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--pc, var(--text-2));
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+/* 纪念日头像下载那一下的占位（和 kit AnnivAvatar 的 xs 同尺寸，KindMark.tsx） */
+.avPh {
+  display: inline-block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+}
+
+.mkTdSm {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
+/* 整页提醒：按钮在屏幕下方 */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 100dvh;
+  padding: calc(var(--safe-top) + 8px) 16px calc(env(safe-area-inset-bottom) + 16px);
+  color: var(--text);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+/* 类型行（铃铛 + “待办 · 已过截止”）：大时刻上方的小字标签，次要色、略加字距；逾期（data-overdue）换危险色，红色只表示逾期 */
+.kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  letter-spacing: 0.04em;
+}
+
+.kind[data-overdue] {
+  color: var(--danger-text);
+}
+
+/* 大时刻：数字字体 + tabular-nums，各位等宽（不换 --f-mono：系统等宽字体“0”带点、冒号占一整格，大字号下不好看） */
+.bigTime {
+  margin: 0;
+  font-family: var(--f-num);
+  font-size: var(--fs-64);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bigTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-24);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.sub {
+  margin: 0 0 10px;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.nextCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--hit);
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.nextTitle {
+  display: block;
+  overflow: hidden;
+  font-size: var(--fs-14);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nextSub {
+  display: block;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.fld {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+
+.fld dt {
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.fld dd {
+  margin: 0;
+  font-size: var(--fs-15);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+/* 整页的按钮：主按钮整行宽，其余两颗一排（待办 3 颗次按钮时第二行一颗，同宽） */
+.pageBar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.pageBar .btn {
+  flex: none;
+  width: 100%;
+  font-size: var(--fs-14);
+}
+
+/* 两颗按钮一样宽：minmax(0, 1fr)，字长的那颗（比如韩文）不把另一颗挤窄 */
+.pageRest {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+/* 单数颗时最后一颗（比如“明天再提醒”）占满整行，不在右边留一个空格子 */
+.pageRest > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.state {
+  margin: 0;
+  font-size: var(--fs-17);
+  font-weight: 600;
+}
+
+/* “未同步，提醒可能不响”一行：文字和末尾“重试”同一行，放不下时“重试”换到下一行 */
+.unsynced {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  margin: 0;
+}
+
+.unsynced:focus {
+  outline: none;
+}
+
+/* 文字按钮（同冲突卡的文字按钮：正文色加下划线，不加粗、不用强调色）：看得见的是一行字，点按区上下撑到 44px（负外边距收回，不把提示条撑高） */
+.retry {
+  min-height: var(--hit);
+  margin: -12px 0;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.retry[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}

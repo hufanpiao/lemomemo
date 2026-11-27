@@ -1,0 +1,476 @@
+# ci：PR、合进 main 时跑的重检查（架构 8.3 “ci.yml” 一行）
+#   db 任务：要 Docker 的数据库测试单列一个任务（本地 Supabase：db reset、类型比对、D1 正例、D1 反例和违规样例、RLS、deno test、旧版契约、兼容样例 --sample）
+#            本地 Supabase 的配置用标准位置的 supabase/config.toml（后端维护），本文件不另写配置、不传 --workdir
+#            同一个任务里起 S3 替身代替 R2（架构 0.32、8.6：node build/objstore.mjs up，LocalStack 按 digest 锁），
+#            并真的打它：objstore 的 Vitest 严格模式、seed.mjs、Deno 下同一组（缺环境就失败，不许悄悄跳过）
+#   e2e 任务：Playwright（chromium + webkit，wrangler pages dev 带 _headers 的 CSP 和 Pages Functions）；分三份并行：默认组两半、快读组加视觉锁定
+# 不碰任何部署密钥：本文件不引用 secrets。本地 Supabase 的 anon / service key 是 CLI 每次随机生成的测试值，只在 runner 里。
+# 预览环境的 E2E（要预览项目的 service key）不在这里，架构 0.30 定为 push 到 main 时在 deploy-preview 之后跑，等前端 B 牵头联调时接上（环境清单第七节第 2 条）。
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # 每周一首尔 06:47 跑一遍，确认 main 上的数据库测试没被外部变化（镜像、CLI）弄坏
+    - cron: '47 21 * * 0'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  PYTHON_VERSION: '3.12'
+  FORCE_COLOR: '0'
+
+jobs:
+  db:
+    name: 数据库测试（Docker：本地 Supabase）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      # S3 替身（build/objstore.mjs、docker-compose.objstore.yml）：固定的本机测试值，不是密钥；R2 的真地址和令牌只在预览、正式（环境清单第四节）
+      OBJSTORE_ENDPOINT: http://127.0.0.1:4566
+      OBJSTORE_ACCESS_KEY_ID: test
+      OBJSTORE_SECRET_ACCESS_KEY: test
+      R2_ENDPOINT: http://127.0.0.1:4566
+      R2_BUCKET_PREFIX: ''
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # 旧版契约测试要找 compat-baseline 和发布 tag
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          # 和本机同一版（架构 8.6：Deno 锁具体版本，本机和 CI 一致；本机 deno --version 为 2.9.8）
+          deno-version: 2.9.8
+
+      - name: 安装依赖（不跑任何安装脚本）
+        run: |
+          npm ci --ignore-scripts
+          bash build/ci/rebuild-allowlist.sh
+
+      - name: 安装 Supabase CLI（版本和 SHA-256 见 tools/ci-tools.lock）
+        run: bash build/ci/install-tool.sh supabase
+
+      - name: 本地 Supabase 的配置在标准位置（supabase/config.toml，后端维护）
+        run: |
+          if [ ! -f supabase/config.toml ]; then
+            echo "::error::没有 supabase/config.toml：supabase start 要用它（后端维护，标准位置就是这里）"
+            exit 1
+          fi
+
+      - name: 本地 Supabase 改用 CI 专用的项目名 lemo-ci（容器叫 supabase_*_lemo-ci；租约出队安全复审二 R1-1）
+        id: sb-rename
+        # 仓库 config.toml 的 project_id 是 lemomemo，和开发机上在用的本地库同名。act 在本机跑这份工作流时会挂宿主的 docker socket，
+        # 不改名的话 supabase start、db reset、两连接脚本都会打到本机的 lemomemo。只改 runner 上这份检出，不提交；改不成就失败
+        run: |
+          sed -i 's/^project_id = "lemomemo"$/project_id = "lemo-ci"/' supabase/config.toml
+          if [ "$(grep -c '^project_id = ' supabase/config.toml)" -ne 1 ] || ! grep -qx 'project_id = "lemo-ci"' supabase/config.toml; then
+            echo "::error::supabase/config.toml 的 project_id 没能改成 lemo-ci（应只有一行 project_id = \"lemomemo\"）"; exit 1
+          fi
+
+      - name: 算 Supabase 镜像缓存的 key（CLI 版本取自 tools/ci-tools.lock）
+        # 镜像标签由 CLI 版本决定，config.toml 决定起哪些服务；两者不变，要拉的镜像就不变
+        id: sb-images-key
+        run: |
+          cli="$(awk '$1 == "supabase" && $3 == "linux_amd64" { print $2 }' tools/ci-tools.lock)"
+          if [ -z "$cli" ]; then echo "::error::tools/ci-tools.lock 里没有 supabase linux_amd64 那一行"; exit 1; fi
+          echo "cli=$cli" >> "$GITHUB_OUTPUT"
+
+      - name: 取回缓存的 Supabase 镜像（避开 ECR Public 匿名拉取限流 toomanyrequests）
+        # 只用 Actions 自带缓存，不加 AWS 凭据；restore-keys 退到同一 CLI 版本的旧缓存（config.toml 改了时多数镜像仍可用，缺的照常去拉）
+        id: sb-images
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/supabase-images.tar
+          key: supabase-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.sb-images-key.outputs.cli }}-${{ hashFiles('supabase/config.toml') }}
+          restore-keys: |
+            supabase-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.sb-images-key.outputs.cli }}-
+
+      - name: 载入缓存的 Supabase 镜像（supabase start 见到本地已有的镜像就不再拉）
+        if: steps.sb-images.outputs.cache-matched-key != ''
+        # 缓存只为提速：tar 坏了、磁盘不够等载入失败只算这一步失败，supabase start 照常去拉；tar 由后面 always() 那步删
+        continue-on-error: true
+        env:
+          TAR: ${{ runner.temp }}/supabase-images.tar
+        run: |
+          docker load -i "$TAR"
+          rm -f "$TAR"
+
+      - name: 复制 shared 给服务器函数（架构 2.5）
+        # 和 deploy-preview.yml 同一写法。_shared/gen/ 不进仓库（.gitignore），必须在 supabase start 之前生成：
+        # config.toml 开了 edge_runtime，start 时 CLI 要读每个函数 import 到的文件（account/index.ts 引 _shared/gen/schema/account.ts），
+        # 没生成就报 failed to read file（ci 第 61 次运行）。后面 deno task check、依赖锁那两步也用这一份
+        run: npm run copy:shared
+
+      - name: 启动本地 Supabase
+        # studio 用不到，不起
+        run: supabase start -x studio
+
+      - name: 把本次用到的 Supabase 镜像存成 tar（没有完全命中缓存时）
+        # 只存 supabase start 起的容器（名字以 supabase_ 开头）用到的镜像；后面起的 S3 替身不在内
+        # 缓存只为提速：存失败（磁盘不够、找不到容器等）只给警告，不让 db 任务变红
+        id: sb-save
+        if: steps.sb-images.outputs.cache-hit != 'true'
+        continue-on-error: true
+        env:
+          TAR: ${{ runner.temp }}/supabase-images.tar
+        run: |
+          mapfile -t imgs < <(docker ps --format '{{.Names}} {{.Image}}' | awk '$1 ~ /^supabase_/ { print $2 }' | sort -u)
+          if [ "${#imgs[@]}" -eq 0 ]; then echo "::warning::supabase start 之后没找到 supabase_ 开头的容器，这次不存镜像缓存"; exit 1; fi
+          printf '%s\n' "${imgs[@]}"
+          docker save -o "$TAR" "${imgs[@]}"
+          ls -lh "$TAR"
+
+      - name: 上传 Supabase 镜像缓存
+        if: steps.sb-images.outputs.cache-hit != 'true' && steps.sb-save.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/supabase-images.tar
+          key: ${{ steps.sb-images.outputs.cache-primary-key }}
+
+      - name: 删掉镜像 tar（几 GB，别占着磁盘）
+        if: always()
+        run: rm -f "${{ runner.temp }}/supabase-images.tar"
+
+      - name: 起 S3 替身（代替 R2：LocalStack 按 digest 锁定，建 4 个桶，验 SigV4 path-style、If-None-Match 412、ListObjectsV2、DeleteObjects）
+        # 架构 8.6、0.32 第 4 条；镜像和 digest 见 tools/ci-tools.lock（localstack / oci），docker-compose.objstore.yml 不一致就失败
+        # 地址和测试凭据在本任务的 env（OBJSTORE_*、R2_ENDPOINT、R2_BUCKET_PREFIX），都不是密钥。
+        # 现在打它的：下面两步（objstore.test.ts 的真替身组走 shared/objstore.ts、seed.mjs 两遍再计数）和 deno task test 里同一组；
+        # files-get、objstore-cases、purge-runner 三组 0.33 起改为 skipIf（有替身变量就必须真跑），已加进下面的严格模式；TC-B0-116 挪到 B4b-1（仍是 todo）、117 已在 B1 落地（B0 QA D-03）
+        run: node build/objstore.mjs up
+
+      - name: 打 S3 替身的变量都在（缺了就失败，不许让下面的测试悄悄跳过）
+        run: |
+          for v in OBJSTORE_ENDPOINT OBJSTORE_ACCESS_KEY_ID OBJSTORE_SECRET_ACCESS_KEY R2_ENDPOINT; do
+            if [ -z "${!v}" ]; then echo "::error::$v 是空的：本任务的 env 里要有它"; exit 1; fi
+          done
+
+      - name: objstore 打真的 S3 替身（Vitest 严格模式：shared/objstore.ts 对 LocalStack；跳过、占位、没跑到都算失败；B0 代码审查中 2、QA D-04）
+        # TC-B0-117（B1）：objstore-cases、purge-runner 两组真 account-purge 整条链路打本机 Supabase（上面已 supabase start，
+        # _shared/gen/ 已由 copy:shared 生成），S3 用仓库的 tests/shared/fake-s3.ts。连接和 store-it 一样只取 supabase status -o json 的
+        # API_URL、DB_URL 和两把本地演示钥匙（IT_*，不是密钥；不是本机地址测试自己拒绝）。TC-B0-116 仍是 todo（B4b-1）
+        # B1 接手清单 B0-117-dev：同两组的正向用例（同一份测试代码）再打一遍上面已起的 LocalStack（OBJSTORE_ENDPOINT，4.14.0 按 digest 锁），
+        # 删除语义由真的 S3 兼容实现认定；反证用例仍只用 fake-s3。不另起 service 容器（本任务已有同一个 LocalStack），只多两条用例，约多 10～30 秒
+        # B1 接手清单 C9（10-30）：grant-matrix.live 用同一套授权矩阵打上面这个本机库（只读 IT_DB_URL，事务里做、做完回滚）
+        run: |
+          st="$(supabase status -o json)"
+          # 和 store-it/run.mjs 一样只解析第一个 { 到最后一个 } 之间（前后可能有提示行）
+          get() { node -e 'const s=require("fs").readFileSync(0,"utf8");const v=JSON.parse(s.slice(s.indexOf("{"),s.lastIndexOf("}")+1))[process.argv[1]];process.stdout.write(typeof v==="string"?v:"")' "$1" <<<"$st"; }
+          IT_API_URL="$(get API_URL)"; IT_DB_URL="$(get DB_URL)"; IT_ANON_KEY="$(get ANON_KEY)"; IT_SERVICE_KEY="$(get SERVICE_ROLE_KEY)"
+          for v in IT_API_URL IT_DB_URL IT_ANON_KEY IT_SERVICE_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::supabase status 里没有 $v"; exit 1; fi
+          done
+          export IT_API_URL IT_DB_URL IT_ANON_KEY IT_SERVICE_KEY
+          node build/ci/vitest_strict.mjs \
+            --must '条件写回 exists' \
+            --must '四个 R2 桶：生成的 count 探针数得对' \
+            --must '注销 runner：探针打真的 S3 替身' \
+            --must 'files 打真的 S3 替身' \
+            --must 'TC-B0-117 真 account-purge 整条链路' \
+            --must 'TC-B0-117 真 account-purge：生成的探针前后数' \
+            --must 'TC-B0-117 LocalStack 正向：真 account-purge 整条链路' \
+            --must 'TC-B0-117 LocalStack 正向：生成的探针前后数' \
+            --must '授权矩阵打本机真库' \
+            --allow-todo 'TC-B0-116 整条链路' \
+            -- tests/shared/objstore.test.ts tests/data-manifest/objstore-cases.test.ts \
+            tests/data-manifest/purge-runner.test.ts tests/functions/files-get.test.ts \
+            tests/data-manifest/grant-matrix.live.test.ts
+
+      - name: seed.mjs 往替身放 A、B 的测试对象，跑两遍（第二遍全部“已存在”），再 --check 计数（实测清单 L19）
+        # 凭据是替身的固定测试值（seed.mjs 故意不用 R2_FN_* 这个名字，那是九个规定函数专用的）
+        env:
+          OBJSTORE_TEST_KEY_ID: test
+          OBJSTORE_TEST_SECRET: test
+        run: |
+          first="$(node supabase/tests/objstore/seed.mjs)"; echo "$first"
+          second="$(node supabase/tests/objstore/seed.mjs)"; echo "$second"
+          n="$(sed -nE 's/^seed：写入 ([0-9]+) 个，已存在 0 个.*/\1/p' <<<"$first")"
+          if [ -z "$n" ] || [ "$n" -eq 0 ]; then echo "::error::第一遍应该全部写入、已存在 0 个"; exit 1; fi
+          if ! grep -qE "^seed：写入 0 个，已存在 $n 个" <<<"$second"; then echo "::error::第二遍应该写入 0 个、已存在 $n 个（条件写不覆盖）"; exit 1; fi
+          counts="$(node supabase/tests/objstore/seed.mjs --check)"; echo "$counts"
+          if [ "$(grep -cE '：A [1-9][0-9]* 个，B [1-9][0-9]* 个$' <<<"$counts")" -ne 4 ]; then
+            echo "::error::--check 应该列出四个桶，每个桶 A、B 都至少 1 个"; exit 1
+          fi
+
+      - name: 从头建库（全部迁移 + seed.sql）
+        run: supabase db reset
+
+      - name: 邮箱验证码登录探针（邮箱登录开、禁止注册、6 位码、60 秒限频、600 秒有效、JWT 带 session_id；QA 第二轮 D-14、实测清单 L14）
+        # 只打本机 Supabase，用 supabase status 的本地演示值，不用任何 secret；每跑一次发 3 封信到本地 Mailpit
+        run: node supabase/tests/auth/login-probe.mjs
+
+      - name: 重新生成 shared/db.types.ts 并和仓库比对（架构 2.5）
+        # B1 接手清单 K-dbtypes 方案 ①：本机没有 supabase CLI，改了迁移以后由 CI 生成。用的是上面按 tools/ci-tools.lock 装的 CLI（版本锁定），
+        # 对的是刚 db reset 的同一个库；对不上就失败，并把生成结果作为产物 db-types-generated 上传（下一步），开发者下载覆盖 shared/db.types.ts 后提交
+        run: |
+          mkdir -p "$RUNNER_TEMP/db-types"
+          supabase gen types typescript --local > "$RUNNER_TEMP/db-types/db.types.ts"
+          if ! diff -u shared/db.types.ts "$RUNNER_TEMP/db-types/db.types.ts"; then
+            echo "::error::shared/db.types.ts 和迁移对不上：下载本次运行的产物 db-types-generated，用里面的 db.types.ts 覆盖 shared/db.types.ts 后提交（有 supabase CLI 的机器也可本机 supabase gen types typescript --local 重新生成）"
+            exit 1
+          fi
+
+      - name: 要上传的 db.types.ts 不是点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉；没生成就跳过）
+        if: failure()
+        run: bash build/ci/no-hidden-files.sh --allow-missing ${{ runner.temp }}/db-types/db.types.ts
+
+      - name: 类型对不上时上传生成的 db.types.ts（只是由迁移生成的类型，不含任何密钥）
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: db-types-generated
+          path: ${{ runner.temp }}/db-types/db.types.ts
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: 给本次的库打上 rls 测试标记（supabase/tests/rls/_helpers.psql 开头认它，没有就报错；本机的 lemomemo 没有这个标记）
+        # 用 supabase_admin：PG15 起库级设置没注册过的自定义参数要超级用户（postgres 会报 permission denied，lemo-e2e 上 11-05 实测）
+        run: docker exec supabase_db_lemo-ci psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -q -c "alter database postgres set lemo.test_target = 'ci'"
+
+      - name: RLS（pgTAP，supabase test db supabase/tests/rls）、D1（deno task d1）和 store-it（account、account-purge 真 store 打本机库）；后端
+        # B0 集成：test:db = guard-cli.mjs && supabase test db supabase/tests/rls && deno task d1 && node supabase/tests/store-it/run.mjs；D1 比对不过不能合并
+        # guard-cli.mjs（11-05）只在 CI=true、没有 SUPABASE_* 变量和 .env*、config 顶层恰好一行 project_id = "lemo-ci" 时放行（上面第 82 行那一步改名），本机一律拒绝
+        # store-it 用上面装好的 deno；连接只取 supabase status -o json 的 API_URL、DB_URL 和两把本地演示钥匙，不是本机地址就拒绝
+        # 这一步只是正例（库和清单一致）；反例、违规样例在下一步打同一个真库，兼容样例在本任务最后
+        run: npm run test:db
+
+      - name: D1 反例和违规样例（真库：清单少登记一张表、supabase/tests/d1-fixtures/*.psql 逐个在事务里改一处，都必须报错，跑完回滚）
+        # 和 unit.yml 的 test:db:offline（PGlite）是同一套样例、同一个 runD1；这里证明在真 Supabase 上也拦得住
+        # 不设 D1_DB_URL（11-05 复审 L1：设了就只许 lemo-e2e 的 55322，CI 也不例外）：走 build/d1/db-target.mjs 的默认 54322，
+        # 那条路要 CI=true、config 顶层恰好 project_id = "lemo-ci"、仓库根和 supabase/ 下没有 .env*；不读 SUPABASE_DB_URL
+        run: node build/ci/d1_negative.mjs
+
+      - name: remind_queue 两连接并发（tools/db/remind-queue-2conn.mjs：finish、出队删孤儿 skip locked 不等锁，提交后不重取）；后端
+        # 租约出队安全复审 R1、代码审查复审 N2：PGlite、pgTAP 都是单会话，测不出这几处 skip locked，只有两个真连接能测；约 20 秒
+        # 容器名是上面改过的项目名 lemo-ci（supabase_db_lemo-ci）；脚本对 lemomemo、lemo-purgeit 在任何环境都拒绝（安全复审二 R1-1）
+        # 安全复审五 R5-2：退出码 0 之外还要核对输出里有“全部通过”（脚本没跑起来、静默退出 0 也算失败）
+        run: |
+          set +e
+          node tools/db/remind-queue-2conn.mjs supabase_db_lemo-ci 2>&1 | tee 2conn.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then exit "$rc"; fi
+          grep -qx '全部通过' 2conn.log || { echo "::error::两连接脚本退出码 0 但没打出 全部通过 这一行"; exit 1; }
+
+      - name: set-cron-secret 的真库段（tests/build/set-cron-secret.test.ts 打 lemo-ci，事务里真跑脚本发出的两段 SQL、最后回滚）；后端
+        # 接手清单 CI-setcron-realdb（租约安全复审四建议 R5）：这段原来只在本机开着 lemo-e2e 时跑，unit 任务里没有库、一直跳过。
+        # LEMO_REQUIRE_TEST_DB 设了就必须探到 supabase_db_lemo-ci、有 pwsh，真库段不许静默跳过（测试文件里有一条专门核对）
+        env:
+          LEMO_REQUIRE_TEST_DB: supabase_db_lemo-ci
+        run: npx vitest run tests/build/set-cron-secret.test.ts
+
+      - name: shared 在 Deno 下再跑一遍（deno task test），服务器函数和 D1 入口过 deno check（deno task check）
+        # deno.json 用 nodeModulesDir=manual，npm 包取 npm ci 装好的 node_modules（测试一侧版本由 package-lock.json 锁定；函数源码另由 supabase/functions/deno.lock 核对，见下一步）
+        # deno task test 的权限按最小给：只读仓库、只读五个替身变量、只连 127.0.0.1:4566（B0 代码审查中 2）；
+        # 本任务设了替身变量，objstore.test.ts 的真替身组必须真跑并通过，有用例报 ignored（跳过）或没跑到就失败
+        # 垫片把 describe.skipIf / it.skip 登记成 Deno.test({ ignore: true })，Deno 报告里逐条显示“... ignored”、汇总行“N ignored”（B1 接手清单 C1）
+        env:
+          NO_COLOR: '1'
+        # 显式写 shell: bash，GitHub 就用 bash --noprofile --norc -eo pipefail：deno 失败不会被 tee 的退出码吞掉（B1 代码审查）
+        shell: bash
+        run: |
+          # GitHub 上 NO_COLOR 不一定管用（第一次 CI 实测 “... ok” 中间夹着颜色码），先去掉颜色码再查
+          deno task test 2>&1 | tee "$RUNNER_TEMP/deno-test.raw.log"
+          sed -E 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/deno-test.raw.log" > "$RUNNER_TEMP/deno-test.log"
+          if grep -qE ' \.\.\. ignored|\| [1-9][0-9]* ignored' "$RUNNER_TEMP/deno-test.log"; then
+            echo '::error::Deno 下有用例报 ignored（跳过：缺环境或缺权限），CI 里不许'; exit 1
+          fi
+          if ! grep -qE '条件写回 exists.* \.\.\. ok' "$RUNNER_TEMP/deno-test.log"; then
+            echo "::error::Deno 下 objstore 打真替身的那一组没跑或没通过"; exit 1
+          fi
+          # 函数 import 的 _shared/gen/ 不进仓库（.gitignore），已在“启动本地 Supabase”之前由 copy:shared 生成（_shared/objstore.ts 等引 _shared/gen/）
+          deno task check
+
+      - name: 服务器函数的依赖锁（supabase/functions 下 deno install --frozen，含 _shared/gen/ 在内的全部源码作入口）
+        # 架构 0.33 第 7 条、B0 安全审查低 10。必须在 copy:shared 之后（本任务在启动本地 Supabase 之前那一步）：gen/ 不进仓库，先生成才扫得到；两行 deno install --frozen 的说明见脚本文件头
+        run: bash build/ci/deno-frozen-lock.sh
+
+      - name: 找旧版契约测试的基线
+        id: compat
+        run: python -I build/compat_baseline.py resolve
+
+      - name: 取出基线的 tests/compat/
+        if: steps.compat.outputs.ref != ''
+        env:
+          BASE_REF: ${{ steps.compat.outputs.ref }}
+        run: python -I build/compat_baseline.py extract "$BASE_REF" "$RUNNER_TEMP/compat-base"
+
+      - name: 旧版契约测试（上线前只报告、不拦；有 4.x 发布 tag 后必须通过）
+        if: steps.compat.outputs.ref != ''
+        # strict 为 false 时这一步失败只标黄，不让整个任务失败（0.28 第 4 点、TC-B0-57）
+        continue-on-error: ${{ steps.compat.outputs.strict != 'true' }}
+        # 契约用例要本地 Supabase 的 API_URL、ANON_KEY（.test.ts 用例）和 DB_URL（.sql 用例）：只取这三项，都是 CLI 本次随机生成的本地值
+        run: |
+          eval "$(supabase status -o env | grep -E '^(API_URL|ANON_KEY|DB_URL)=')"
+          export API_URL ANON_KEY DB_URL
+          npm run test:compat -- "$RUNNER_TEMP/compat-base/tests/compat"
+
+      - name: 兼容样例（test:compat --sample，TC-B0-57：每个样例先重新建库再叠上去，旧版契约的结果必须和样例头上的 expect-old-client 一致）
+        # 样例会改库，所以放在最后，每个样例前 db reset；契约用当前分支的 tests/compat（验证“契约测试拦得住破坏性改动”这个机制，
+        # 和 unit.yml 离线版第 4 段同一套样例；离线版只跑 SQL 用例，这里 .test.ts 用例也打真 API）。不受基线和 strict 影响，必须通过
+        run: |
+          shopt -s nullglob
+          n=0
+          for f in supabase/tests/compat/*.psql; do
+            case "$(basename "$f")" in _*) continue ;; esac
+            n=$((n + 1))
+            echo "::group::$f"
+            supabase db reset
+            # db reset 重建 postgres 库，库级的 rls 测试标记随之没了，要重新打（_helpers.psql 开头认它；11-06 CI 兼容样例复盘）
+            docker exec supabase_db_lemo-ci psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -q -c "alter database postgres set lemo.test_target = 'ci'"
+            eval "$(supabase status -o env | grep -E '^(API_URL|ANON_KEY|DB_URL)=')"
+            export API_URL ANON_KEY DB_URL
+            npm run test:compat -- tests/compat --sample "$f"
+            echo "::endgroup::"
+          done
+          if [ "$n" -eq 0 ]; then
+            echo "::error::supabase/tests/compat/ 里没有兼容样例"
+            exit 1
+          fi
+
+      - name: 停掉本地 Supabase
+        # 只在改名成功以后停，而且写明 --project-id lemo-ci（租约出队安全复审三 R1-2）：改名前的检查或改名本身失败时 config.toml 还是 lemomemo，
+        # 用 act 在本机跑就会停掉本机的 lemomemo、连数据卷一起删。tests/build/remind-queue-2conn-guard.test.ts 钉住每条 supabase stop 都带 --project-id lemo-ci
+        if: always() && steps.sb-rename.outcome == 'success'
+        run: supabase stop --no-backup --project-id lemo-ci || true
+
+      - name: 停掉 S3 替身
+        if: always()
+        run: node build/objstore.mjs down || true
+
+  e2e:
+    name: 端到端（Playwright，带 CSP）${{ matrix.label }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+    # 分三份并行跑（11-25：原来一个任务串着跑默认组、快读组、视觉锁定，慢的 runner 上默认组 33～35 分钟、快读组 13～14 分钟，
+    # 45331322138、45339329724、45361415717、45375554244 都跑到 49 分 30 秒以上，95019a6a 的 45506635005 默认组撞上 35 分钟 globalTimeout、
+    # 快读组跑到第 14 分钟被 50 分钟上限掐掉）：默认组按 Playwright --shard 切成两半，快读组和视觉锁定一份；一份挂了另两份照跑（fail-fast: false）
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: main-1
+            label: ' · 默认组 1/2'
+            shard: 1/2
+          - part: main-2
+            label: ' · 默认组 2/2'
+            shard: 2/2
+          - part: rest
+            label: ' · 快读组和视觉锁定'
+            shard: ''
+    # 跑在 Playwright 官方镜像里，浏览器和系统依赖都在镜像里，不再 apt 装（11-06 main 69659c1、探针第八、九轮都卡在 apt 装依赖、被取消）。
+    # • tag 写死，必须和 package-lock 里 @playwright/test 的版本一致（镜像里 /ms-playwright 的浏览器版本跟 tag 走），再钉 digest；
+    #   升级 Playwright 时三处一起改，tests/build/e2e-container-image.test.ts 核对；
+    # • noble 和 runner 同是 Ubuntu 24.04，字体、系统库和原来 --with-deps 装的同一套；镜像自带 Node 26，下面 setup-node 照样装 24 并排在 PATH 前面；
+    # • 容器里默认 root，HOME=/github/home；chromium 由 Playwright 默认不开沙箱，root 能跑；--ipc=host 是官方建议（chromium 共享内存不够会崩）
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 安装依赖（不跑任何安装脚本）
+        run: |
+          npm ci --ignore-scripts
+          bash build/ci/rebuild-allowlist.sh
+
+      # 不装浏览器：镜像里已经有了。这里只核对 Node 是 NODE_VERSION、Playwright 版本和镜像 tag 对得上（对不上 playwright 会找不到浏览器，早点报）
+      - name: 核对 Node、Playwright 版本和镜像里的浏览器
+        shell: bash
+        run: |
+          node --version | grep -q "^v${NODE_VERSION}\." || { echo "Node 不是 ${NODE_VERSION}：$(node --version)"; exit 1; }
+          npx --no-install playwright --version
+          ls "$PLAYWRIGHT_BROWSERS_PATH"
+
+      # 不单独构建：playwright.config.ts 的 webServer 自己先 npm run build -- --mode e2e 再起 wrangler pages dev（CI 下不复用已有服务），
+      # 这里再构建一次 preview 模式会被覆盖掉，白花时间
+      - name: Playwright（e2e 模式构建 + wrangler pages dev dist/web，控制台出现 CSP 报错就算失败）
+        id: e2e
+        # 只在默认组那两份跑，各跑一半（--shard）
+        if: ${{ matrix.shard != '' }}
+        # 显式写 shell: bash（-eo pipefail）：e2e 失败不会被 tee 的退出码吞掉，写法和 deno 测试那一步一致（p4 复审 L4）
+        shell: bash
+        run: |
+          npm run e2e -- --shard=${{ matrix.shard }} 2>&1 | tee e2e.log
+
+      # CI webkit 上名单内的动效时序用例关了 backdrop-filter（tests/e2e/webkit-ci-nofx.ts）：按用例去重计数，名单悄悄变长时一眼能看到
+      # 两份默认组各打各的（各自那一半里关了几条）
+      - name: 汇总：本轮关模糊的用例数
+        if: always()
+        shell: bash
+        run: |
+          # 不锚定行首：list 报告器可能在测试输出前加前缀；-o 只取标记以后的部分，重试的同一条去重后只算一次
+          n=$(grep -a -o '\[webkit-ci-nofx\].*' e2e.log 2>/dev/null | sort -u | wc -l || true)
+          echo "本轮关模糊的用例数 = ${n:-0}（名单见 tests/e2e/webkit-ci-nofx.ts）"
+          grep -a -o '\[webkit-ci-nofx\].*' e2e.log 2>/dev/null | sort -u || true
+
+      # 快读组（B2 FA-6 ①，安全审查 L5）：带 supabase 地址（同源 /sb、假 anon key）的 e2e 构建，只跑 b2-first-screen-supabase.spec.ts，
+      # 验证启动关口走快读、supabase-js 在今天页画出来以后才下载；默认组没配地址、跑不到快读分支。端口 8791、产物 dist/web-fastread，和上一步错开
+      - name: Playwright 快读组（带 supabase 地址的 e2e 构建，只跑首屏 supabase 用例）
+        id: fastread
+        # 只在“快读组和视觉锁定”那一份跑（默认组在另两份并行跑，红了互不影响，第三方审查 CI-2 一次推送看全几组的失败）；前面装环境失败就不跑
+        if: ${{ matrix.part == 'rest' }}
+        run: npm run e2e:fastread
+
+      # 两组视觉锁定一次跑完（第三方审查 CI-13：原来分两步、各起一次 webServer 各构建一遍），都和 tests/e2e/visual/__screenshots__/linux/ 的基准比、0 像素差，
+      # 不一样就失败、CI 变红；基准用这同一个镜像生成，改要负责人新需求编号。只用 Chromium（才画 backdrop-filter）：
+      # • chromium-tabbar-lock：底栏（R-360、R-361）
+      # • chromium-b2uib-lock：B2-UI-b（任务单 W4、V4、W8）设置页按钮区域（R-276、R-277）、随手记占位页 62pt 顶部安全区
+      - name: 视觉锁定（Chromium，chromium-tabbar-lock、chromium-b2uib-lock 两组一次跑）
+        # 同一份里快读组红了也照跑（第三方审查 CI-2）：一次推送看全几组的失败，不用来回推；快读组那一步没跑到（前面装环境就失败）时才跳过
+        if: ${{ !cancelled() && matrix.part == 'rest' && steps.fastread.conclusion != 'skipped' }}
+        run: npm run e2e:visual -- --project=chromium-tabbar-lock --project=chromium-b2uib-lock
+
+      # test-results*/.last-run.json 是 Playwright 自己记的“上次哪些用例失败”（给 --last-failed 用），报告里用不上；
+      # 不删的话下一步守卫会拦（4efa1079 的 ci 就是这样红的）
+      - name: 删掉 Playwright 自己写的 .last-run.json（报告用不上）
+        if: failure()
+        run: rm -f test-results-visual/.last-run.json
+
+      - name: 要上传的报告目录里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉；没跑到的组没有目录，跳过）
+        if: failure()
+        run: bash build/ci/no-hidden-files.sh --allow-missing playwright-report/ playwright-report-fastread/ playwright-report-visual/ test-results-visual/
+
+      - name: 失败时上传报告（只有本地测试数据，不含任何密钥）
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          # 三份各传各的，名字不能重（同名第二份会传失败）
+          name: playwright-report-${{ matrix.part }}
+          path: |
+            playwright-report/
+            playwright-report-fastread/
+            playwright-report-visual/
+            test-results-visual/
+          retention-days: 7
+          if-no-files-found: ignore

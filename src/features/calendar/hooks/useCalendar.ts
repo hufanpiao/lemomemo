@@ -1,0 +1,161 @@
+// 月历、周视图页面的 hook：路由 → 视图，读日程、待办两个集合，算月格；翻页、回今天、切月 / 周、选年月
+// • “今天”按 clock.now()（带偏差校正）和 current_tz；每分钟看一次，跨过午夜“今天”跟着变
+// • 周起始、节假日国家：读设置 cal.week_start、cal.holidays（useCalSettingValues）；没设时按界面语言取默认（resolveWeekStart、holidayCountries）
+// • 农历、节气：后端的 shared/logic/anniv/lunar.ts 按需加载（useLunar）；加载中、加载失败不传 dayInfo，月格照常显示、没有农历行
+// • 地址参数非法或没规整（周参数不是那周第一天）时，用 replaceInPage 换成规整的（不新增历史）
+// • 月格按 (年月、数据、今天、每格几个标签、节假日) 记住；周视图的排布要量出时间轴宽度，在界面一侧算（WeekView）
+// • 日历内部一律原地换（算同一层）：翻页（shift：滑动、‹ ›、键盘 ← → 同一个）、切月/周、“今天”、年月选择、点某天进周视图都用 replaceInPage，
+//   不记步数，左滑直接回到进日历之前那一层（今天）
+// • 纪念日小爱心：hooks/useAnnivDates.ts 按需加载 next-date，开关关着不画
+// • 节假日没拉到（离线）时 model.holidaysOffline = true，页面提示“联网后显示节假日”；韩文界面不加载农历（useLunar）
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { addDays, daysIn, fmtDateStr, minOfDay, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
+import { holidayCountries, holidayYears } from '../../../../shared/logic/calendar/holidays.ts';
+import { resolveWeekStart, type WeekStart, type YearMonth } from '../../../../shared/logic/calendar/cal-nav.ts';
+import { buildMonth, type MonthCell } from '../../../../shared/logic/calendar/month-grid.ts';
+import { replaceInPage } from '../../../app/router-levels.ts';
+import { currentTz } from '../../../core/current-tz.ts';
+import { useCollection } from '../../../kit/hooks/useCollection.ts';
+import { MQ_CAL_WIDE, useMedia } from '../../../kit/hooks/useMedia.ts';
+import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
+import { useUi } from '../../../kit/state/ui-store.ts';
+import { anyLate, calItemsOf, calTodoFields, dueMinOf, type Row } from '../data/cal-data.ts';
+import { headerMonth, isCurrent, paramsOf, pickMonth, resolveView, shiftView, switchMode, todayView, type CalView } from '../data/cal-route.ts';
+import { useAnnivDates } from './useAnnivDates.ts';
+import { useCalSettingValues } from './useCalSettings.ts';
+import { useHolidays } from './useHolidays.ts';
+import { useLunar, type LunarApi } from './useLunar.ts';
+
+export interface CalendarModel {
+  readonly view: CalView;
+  readonly today: DateStr;
+  readonly tz: string;
+  readonly weekStart: WeekStart;
+  readonly wide: boolean;
+  readonly header: YearMonth;
+  readonly isCurrent: boolean;
+  /** 月视图的 42 格；周视图为 null */
+  readonly cells: readonly MonthCell[] | null;
+  readonly items: ReturnType<typeof calItemsOf>;
+  readonly holidays: ReturnType<typeof useHolidays>['marks'];
+  /** 要显示的节假日文件有没拉到的（离线）：页面提示“联网后显示节假日” */
+  readonly holidaysOffline: boolean;
+  /** 待办的截止时刻是当天第几分钟，没有截止时刻的 undefined（周视图的空心圆画在哪）。读行用待办页同一份 todoOf（cal-data.ts 的 calTodoFields） */
+  readonly dueMin: (todoId: string) => number | undefined;
+  /** 这几条待办里有没有逾期没做完的（周视图那一天标“逾”）：逐条用待办页同一个 isLate，按毫秒比 */
+  readonly anyLate: (todoIds: readonly string[]) => boolean;
+  /** 现在是当天第几分钟（设备当前时区；周视图的“现在”竖线） */
+  readonly nowMin: number;
+  /** 上一页、下一页还翻得动吗（1900-01 / 2100-12 到头时 false） */
+  readonly canPrev: boolean;
+  readonly canNext: boolean;
+  readonly locale: UiLocale;
+  /** 农历（读屏用完整写法）；加载中、加载失败时 null */
+  readonly lunar: LunarApi | null;
+}
+
+export function useCalendar(params: readonly string[]) {
+  const locale = useUi((s) => s.locale);
+  const now = useMinuteNow();
+  const tz = currentTz();
+  const today = todayOf(now, tz);
+  const setting = useCalSettingValues();
+  const weekStart = resolveWeekStart(setting.weekStart);
+  // 窗口够宽（电脑档）时每格 4 个标签，手机 2 个
+  const wide = useMedia(MQ_CAL_WIDE);
+
+  const paramKey = params.join('/');
+  const resolved = useMemo(() => resolveView(paramKey === '' ? [] : paramKey.split('/'), today, weekStart), [paramKey, today, weekStart]);
+  const { view, canonical } = resolved;
+  const canonicalKey = canonical?.join('/') ?? null;
+  useEffect(() => {
+    if (canonicalKey !== null) void replaceInPage('cal', ...canonicalKey.split('/'));
+  }, [canonicalKey]);
+
+  const events = useCollection<Row>('events');
+  const todos = useCollection<Row>('todos');
+  const items = useMemo(() => calItemsOf(events, todos), [events, todos]);
+  const todoFields = useMemo(() => calTodoFields(todos), [todos]);
+  const dueMin = useCallback((id: string) => dueMinOf(todoFields.get(id)), [todoFields]);
+  const lateAny = useCallback((ids: readonly string[]) => anyLate(ids, todoFields, now, tz), [todoFields, now, tz]);
+
+  const header = headerMonth(view);
+  const countryKey = holidayCountries(setting.holidays, locale).join(',');
+  const countries = useMemo(() => (countryKey === '' ? [] : (countryKey.split(',') as ReturnType<typeof holidayCountries>)), [countryKey]);
+  const yearKey = holidayYears(header.y, header.m).join(',');
+  const years = useMemo(() => yearKey.split(',').map(Number), [yearKey]);
+  const hol = useHolidays(countries, years, locale);
+  const holidays = hol.marks;
+  const lunar = useLunar(locale);
+
+  // 纪念日小爱心：这个月前后各多看一段，42 格都盖住
+  const annivDates = useAnnivDates(
+    view.mode === 'month' ? addDays(fmtDateStr(view.ym.y, view.ym.m, 1), -7) : null,
+    view.mode === 'month' ? addDays(fmtDateStr(view.ym.y, view.ym.m, daysIn(view.ym.y, view.ym.m)), 14) : null,
+    tz,
+  );
+
+  const maxMarks = wide ? 4 : 2;
+  // view 按地址参数记住（resolved 的 useMemo），地址不变时是同一个对象
+  const cells = useMemo(() => {
+    if (view.mode !== 'month') return null;
+    try {
+      // lunarDayInfo(date, locale) 比 MonthOpts.dayInfo(date) 多一个参数，useLunar 里包了一层：dayInfo: (date) => m.lunarDayInfo(date, locale)
+      // lunar.ts 只能动态 import（useLunar 的 defaultLoad），这里和别处都不能静态 import
+      return buildMonth(view.ym, items, { tz, today, weekStart, maxMarks, holidays, ...(lunar ? { dayInfo: lunar.dayInfo } : {}), ...(annivDates ? { annivDates } : {}) });
+    } catch {
+      return null;
+    }
+  }, [view, items, tz, today, weekStart, maxMarks, holidays, lunar, annivDates]);
+
+  // 日历里翻月、切月/周、“今天”、选年月、点某天进周视图都算同一层：一律原地换，不记步数，
+  // 左滑直接回到进日历之前那一层（今天）
+  const go = useCallback((v: CalView | null) => {
+    if (v) void replaceInPage('cal', ...paramsOf(v));
+  }, []);
+
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  /** 翻一页（滑动、‹ ›、键盘 ← → 共用一处，经 useMonthFold 的 shift 和页面的 turn）；翻不动（1900-01 / 2100-12 到头）返回 false */
+  const shift = useCallback((n: -1 | 1): boolean => {
+    const v = shiftView(viewRef.current, n);
+    if (!v) return false;
+    // 地址还没变、页面还没重画时又翻一次（同一次按键事件里连按）：先记下新视图，从它往下翻
+    viewRef.current = v;
+    void replaceInPage('cal', ...paramsOf(v));
+    return true;
+  }, []);
+
+  const model: CalendarModel = {
+    view,
+    today,
+    tz,
+    weekStart,
+    wide,
+    header,
+    isCurrent: isCurrent(view, today, weekStart),
+    cells,
+    items,
+    holidays,
+    holidaysOffline: hol.offline,
+    dueMin,
+    anyLate: lateAny,
+    nowMin: minOfDay(now, tz),
+    canPrev: shiftView(view, -1) !== null,
+    canNext: shiftView(view, 1) !== null,
+    locale,
+    lunar,
+  };
+
+  return {
+    model,
+    shift,
+    // 周视图回今天、点某天开周视图：地址写那一天本身（周起始后来变了也还落在那周）
+    goToday: () => (view.mode === 'week' ? void replaceInPage('cal', 'week', today) : go(todayView(view.mode, today, weekStart))),
+    setMode: (mode: CalView['mode']) => {
+      if (mode !== view.mode) go(switchMode(view, today, weekStart));
+    },
+    pick: (ym: YearMonth) => go(pickMonth(view, ym, weekStart)),
+  };
+}

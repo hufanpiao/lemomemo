@@ -1,0 +1,331 @@
+// 打字记一条：本机规则 → 有把握直接用 / 没把握调 ai-parse → 失败退回本机结果
+// • 本机规则只经 shared/logic/parse 的公开入口（parseSplit、confidence、recurHint、arrangeHint、clauseSeparators）
+// • 有把握（只拆出 1 件、日期能识别、类型明确）→ 不调 AI、不花次数
+// • 没把握，在线、开着 AI、今天还有次数 → ai-parse（6 秒超时；只在网络错误、连接都没建立时自动重试 1 次）
+//   失败、超时、退回、没同意、不认识的 intent → 用本机结果，原话不丢；额度用完 → 本机结果 + 额度提示
+// • 离线 → 本机结果，状态 offline_saved
+// • 打字条、语音实时转写出的字、quick-add 交来的一句都经 planText 调（读本机额度 → planTyped → 记剩余次数，只此一份）；
+//   按住说话出的字只按本机规则（aiOn: false，不调 ai-parse、不传取消信号，后台整理只走 ai-voice）；quick-add 交来的（voice-session 的 record）
+//   传这一次的取消信号，作废时 AI 请求当场中止
+// • 日历页打的字没说日子时记到选中的那天（date_basis 记 rel，不问）；今天页、待办页照旧记今天。
+//   选中的日子按后端约定传：本机规则 ParseOpts.defaultDay、ai-parse 请求体 default_day；补出来的日子不算认出了日子，
+//   “买牛奶”照旧判没把握，在线有次数照样交给 AI（带 default_day）。选中的日子过不了 checkDefaultDay（前 1 年到后 5 年以外，后端会回 400）时
+//   不调 AI，直接用本机结果（照样记到选中那天）；万一后端仍回 400，按调 AI 没成退回本机结果（ai_failed http）
+// • 过去的月日（confirm）：这里只带出来，界面出确认行，用户选了 applyConfirm 以后才保存；没选不保存。
+//   没选就关掉确认行时，原话里去掉已经存了的那几条、只留等确认那条的原文（keepAsked）；去不干净时原话整句留着，界面提示其他几条已经记下了
+// 纯 TS：不准 import React
+import type { DateStr } from '../../../../shared/core/date.ts';
+import type { Tz } from '../../../../shared/core/tz.ts';
+import { arrangeHint, clauseSeparators, confidence, parseSplit, recurHint, type ParseHints, type ParseResult } from '../../../../shared/logic/parse/index.ts';
+import { checkDefaultDay, normProjects, type AiItem } from '../../../../shared/schema/ai.ts';
+import type { AiKind } from '../../../../shared/schema/kinds.ts';
+import { cutAiText, outcomeOf, type AiOutcome } from './ai-outcome.ts';
+import { askOfLocal, type AssistAsk } from '../../../../shared/logic/parse/assist.ts';
+import { localIntent } from '../../../../shared/logic/parse/intent.ts';
+import { INTENT_SURE_MIN } from '../../../../shared/schema/intent.ts';
+import { quotaOutToday, rememberQuotaLeft } from './quota.ts';
+import { AI_PARSE_TIMEOUT_MS } from './record-logic.ts';
+import { SendError, withTimeoutRetry } from './send-error.ts';
+import { onlineNow } from '../../../platform/online.ts';
+
+/** SendError 定义在 send-error.ts，这里转出给老调用方 */
+export { SendError };
+
+/** 不带任何提示（合并成一条、整句存成一条待办时用；只此一份） */
+export const NO_HINTS: ParseHints = { recur: false, arrange: false, bad_day: null };
+
+export interface TypeCtx {
+  now: number;
+  tz: Tz;
+  locale: 'zh' | 'ko';
+  /** 本机已有的项目名（ai-parse 的 projects[]，本机规则认项目也用） */
+  projects: readonly string[];
+  /** 日历页选中的那天；别的页为 null */
+  day: DateStr | null;
+  /** 这个人能用的类型；不给按本机规则的默认（日程、待办） */
+  features?: readonly AiKind[];
+}
+
+export interface TypeEnv {
+  online: boolean;
+  /** 现在在不在线（断网重试前再看一眼；不给用 navigator.onLine） */
+  isOnline?: () => boolean;
+  /** 开着 AI（ai.enabled）并且同意过告知 */
+  aiOn: boolean;
+  /** 本机记着今天的次数已经用完（quota_left = 0） */
+  quotaOut: boolean;
+}
+
+/** ai-parse、ai-voice 共用的请求上下文，只由 aiReqCtx 拼 */
+export interface AiReqCtx {
+  now: number;
+  tz: Tz;
+  locale: 'zh' | 'ko';
+  /** 规整过的项目名（normProjects） */
+  projects: string[];
+  scope: 'main';
+  /** 日历页选中的那天（已过 checkDefaultDay）；别的页不传 */
+  default_day?: DateStr;
+  /** 这一版能存跨天日程（时长到 31 天）。服务器见到它才回超过 1440 的时长，旧版不带、时长被规整到 1440 以内（录音走请求头 X-Span） */
+  span: 1;
+}
+
+/** ai-parse 的请求体 */
+export type AiParseReq = AiReqCtx & { text: string };
+
+/** 不带选中日子的请求上下文（录音不带日子）：项目名规整 */
+export function baseReqCtx(ctx: Pick<TypeCtx, 'now' | 'tz' | 'locale' | 'projects'>): AiReqCtx {
+  return { now: ctx.now, tz: ctx.tz, locale: ctx.locale, projects: normProjects(ctx.projects), scope: 'main', span: 1 };
+}
+
+/** 拼请求上下文：项目名规整、选中的日子过 checkDefaultDay；日子超出后端认的范围返回 bad_default_day（发了也是 400） */
+export function aiReqCtx(ctx: Pick<TypeCtx, 'now' | 'tz' | 'locale' | 'projects' | 'day'>): AiReqCtx | 'bad_default_day' {
+  const dd = ctx.day === null ? null : checkDefaultDay(ctx.day, ctx.now, ctx.tz);
+  if (dd === 'bad') return 'bad_default_day';
+  return { ...baseReqCtx(ctx), ...(dd !== null ? { default_day: dd } : {}) };
+}
+
+/** 送 ai-parse 的口子：返回已 parse 的 JSON；失败抛 SendError（或 fetch 原样抛的 TypeError、AbortError） */
+export type CallAi = (req: AiParseReq, signal: AbortSignal) => Promise<unknown>;
+
+export type TypeStatus =
+  /** AI 识别的，或本机规则有把握的 */
+  | 'saved'
+  /** 调了 AI 没成，先用本机规则记 */
+  | 'saved_rule'
+  /** 今天的 AI 次数用完了，先用本机规则记 */
+  | 'quota_out'
+  /** 没网，先用本机规则记 */
+  | 'offline_saved';
+
+export interface TypePlan {
+  status: TypeStatus;
+  origin: 'ai' | 'rule';
+  items: AiItem[];
+  hints: ParseHints;
+  /** AI 返回的剩余次数（没调 AI 或没返回为 null） */
+  quotaLeft: number | null;
+  /** 调 AI 没成的原因（日志、调试用；不给用户看） */
+  aiReason: string | null;
+  /** 判出来不是记下（有把握）：不保存，交给结果层（items 为空）；aiUsed 这次花了几次 AI（判断那一次） */
+  ask: { ask: AssistAsk; aiUsed: 0 | 1 } | null;
+  /** 模糊，先按记下保存了：提示条给“改成搜索”；found 时下面再给“也帮你找了一下 / 是要…吗？找到 N 条” */
+  alt: { ask: AssistAsk; found: boolean } | null;
+}
+
+/**
+ * AI 返回以后的兜底：AI 已按 default_day 补日子，这里只补它漏掉的——没日子的日程、没截止日的待办记到选中那天（basis rel）。
+ * 待办没截止日、连时刻也没有的也补（“买牛奶”记成选中那天的待办）
+ */
+export function fillDay(items: readonly AiItem[], day: DateStr | null): AiItem[] {
+  if (day === null) return [...items];
+  return items.map((it) => {
+    if (it.kind === 'event' && it.date === null) return { ...it, date: day, date_basis: 'rel' };
+    if (it.kind === 'todo' && it.due === null) return { ...it, due: day, date_basis: 'rel' };
+    return it;
+  });
+}
+
+/** 本机规则（打字条下面的分类、日期、提醒签也用它；不花 AI 次数）。选中的日子交给本机规则（ParseOpts.defaultDay）；有没有把握只看原话 */
+export function planLocal(text: string, ctx: TypeCtx): { result: ParseResult; sure: boolean } {
+  const opts = { ...(ctx.features ? { features: ctx.features } : {}), ...(ctx.day !== null ? { defaultDay: ctx.day } : {}) };
+  const result = parseSplit(text, ctx.now, ctx.tz, ctx.locale, ctx.projects, opts);
+  return { result, sure: confidence(result) === 'sure' };
+}
+
+
+/**
+ * 调一次 ai-parse（6 秒超时，网络错误自动重试 1 次）→ 结果。
+ * 重试前浏览器已经明确说离线：不再重试（不然断网时要等两个 6 秒才退回本机）。
+ * signal：调用方取消（手机识别那一路切页作废），请求当场中止、不再重试（结果 ai_failed cancelled）
+ */
+export async function askAi(req: AiParseReq, call: CallAi, timeoutMs = AI_PARSE_TIMEOUT_MS, online: () => boolean = onlineNow, signal?: AbortSignal): Promise<AiOutcome> {
+  const r = await withTimeoutRetry((s) => call(req, s), timeoutMs, online, signal);
+  return r.ok ? outcomeOf(r.value) : { kind: 'ai_failed', reason: r.fail };
+}
+
+/** 只按本机规则记下（结果层的“改成记下”、quick-add 交来判成记下的）：不调 AI、不花次数，原话照记下流程拆 */
+export function recordLocal(text: string, ctx: TypeCtx): TypePlan {
+  const { result } = planLocal(text, ctx);
+  return { status: 'saved', origin: 'rule', items: result.items, hints: result.hints, quotaLeft: null, aiReason: null, ask: null, alt: null };
+}
+
+/** 本机规则看出的意图迹象（记下为 null）；sure：查找、总结、取消等本机就有把握 */
+export function localHint(text: string, ctx: Pick<TypeCtx, 'now' | 'tz'>): { hint: AssistAsk | null; sure: boolean } {
+  const li = localIntent(text, ctx.now, ctx.tz, { scope: 'main' });
+  const hint = askOfLocal(li);
+  return { hint, sure: hint !== null && li.sure };
+}
+
+/** AI 判成别的意图时算不算数：本机也看出了迹象（hint）且 AI 有把握（≥ 0.6）；本机一点迹象都没有就照记下存 */
+export const aiAskWins = (hint: AssistAsk | null, confidence: number): boolean => hint !== null && confidence >= INTENT_SURE_MIN;
+
+/**
+ * 打字、录音共用的意图判定（一处定规则）：本机有把握 → 交结果层（不花 AI）；AI 判成别的意图且 aiAskWins → 交结果层（花了 1 次）；
+ * 其余返回 null：按记下存，alt 交给调用方（AI 判成别的意图但不算数时是 AI 的判断 found，否则 recordAlt）
+ */
+export function intentAsk(hint: AssistAsk | null, sure: boolean, ai: { ask: AssistAsk; confidence: number } | null): { ask: AssistAsk; aiUsed: 0 | 1 } | null {
+  if (sure && hint) return { ask: hint, aiUsed: 0 };
+  if (ai && aiAskWins(hint, ai.confidence)) return { ask: ai.ask, aiUsed: 1 };
+  return null;
+}
+
+/** AI 判成记下时提示条的“改成搜索”：本机有迹象才给；AI 也没把握时下面再给查找结果 */
+export const recordAlt = (hint: AssistAsk | null, confidence: number): TypePlan['alt'] => (hint ? { ask: hint, found: confidence < INTENT_SURE_MIN } : null);
+
+/**
+ * 整个打字流程（不保存；保存交给 capture-save）。signal 见 askAi。意图：
+ * • 本机 localIntent 判成查找、总结且有把握：不调 AI，ask 交给结果层；
+ * • 本机判成别的意图但没把握：在线、开着 AI、有次数就调 ai-parse，AI 给的意图 confidence ≥ 0.6 才算数（ask）；
+ *   AI 说记下、AI 没把握、调不了 AI（离线、没同意、次数用完、失败）：先按记下保存（不丢记录），alt 带上本机或 AI 的判断，提示条给“改成搜索”“也帮你找了一下”；
+ * • 本机判成记下、AI 却说是别的意图：照样先按记下保存，alt 带上 AI 的判断（found）——本机一点迹象都没有的句子绝不因 AI 判错而不保存
+ */
+export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: CallAi, signal?: AbortSignal): Promise<TypePlan> {
+  const { hint, sure: hintSure } = localHint(text, ctx);
+  const { result, sure } = planLocal(text, ctx);
+  const hintAlt = hint ? { ask: hint, found: true } : null;
+  const local = (status: TypeStatus, aiReason: string | null = null, quotaLeft: number | null = null, alt = hintAlt): TypePlan => ({
+    status, origin: 'rule', items: result.items, hints: result.hints, quotaLeft, aiReason, ask: null, alt,
+  });
+  const pre = intentAsk(hint, hintSure, null);
+  if (pre) return { ...local('saved'), items: [], alt: null, ask: pre };
+  if (sure && !hint) return local('saved');
+  if (!env.online) return local('offline_saved');
+  if (env.quotaOut) return local('quota_out');
+  if (!env.aiOn) return local('saved');
+  // 选中的日子超出后端认的范围：发了也是 400，不调 AI、不花次数，直接用本机结果（记到选中那天）；不是“AI 没回应”，不出那句提示
+  const base = aiReqCtx(ctx);
+  if (base === 'bad_default_day') return local('saved', base);
+  const req: AiParseReq = { ...base, text: cutAiText(text) };
+  const isOnline = env.isOnline ?? onlineNow;
+  const out = await askAi(req, call, AI_PARSE_TIMEOUT_MS, isOnline, signal);
+  switch (out.kind) {
+    case 'record': {
+      if (out.items.length === 0) return local('saved_rule', 'empty', out.quotaLeft);
+      const hints: ParseHints = { recur: recurHint(text), arrange: arrangeHint(text), bad_day: null };
+      return { status: 'saved', origin: 'ai', items: fillDay(out.items, ctx.day), hints, quotaLeft: out.quotaLeft, aiReason: null, ask: null, alt: recordAlt(hint, out.confidence) };
+    }
+    case 'intent': {
+      const won = intentAsk(hint, false, out);
+      if (won) return { ...local('saved', null, out.quotaLeft), items: [], alt: null, ask: won };
+      return local('saved', `intent_${out.ask.intent}`, out.quotaLeft, { ask: out.ask, found: true });
+    }
+    case 'quota_out':
+      return local('quota_out', null, 0);
+    case 'consent_required':
+      return local('saved', 'consent_required');
+    case 'fallback':
+      if (out.reason === 'quota') return local('quota_out', out.reason, 0);
+      // 功能没开、隐私记没开 AI：不是“AI 没回应”，不出那句提示
+      if (out.reason === 'feature_off' || out.reason === 'vault_ai_off') return local('saved', out.reason);
+      return local('saved_rule', out.reason);
+    case 'ai_failed':
+      // 发出去以后断了网（浏览器明确说离线）：和一开始就离线一样记（offline_saved），不出“AI 没回应”
+      if (out.reason === 'network' && !isOnline()) return local('offline_saved', out.reason);
+      return local('saved_rule', out.reason);
+    default: {
+      const never: never = out;
+      return never;
+    }
+  }
+}
+
+export interface PlanTextOpts {
+  /** 现在在不在线（发之前看一眼，重试前再看一眼） */
+  online: () => boolean;
+  /** 开着 AI 并且同意过告知（调用方这一刻读的） */
+  aiOn: boolean;
+  call: CallAi;
+  /** 调用方取消（手机识别那一路的这一次作废）：AI 请求跟着中止 */
+  signal?: AbortSignal | undefined;
+}
+
+/** 打字条、语音实时转写共用的一步：开着 AI 才读本机记着的额度 → planTyped → 记下 AI 返回的剩余次数。quotaOut 交回给调用方记日志 */
+export async function planText(text: string, ctx: TypeCtx, o: PlanTextOpts): Promise<{ plan: TypePlan; quotaOut: boolean }> {
+  const quotaOut = o.aiOn ? await quotaOutToday(ctx.now) : false;
+  const plan = await planTyped(text, ctx, { online: o.online(), isOnline: o.online, aiOn: o.aiOn, quotaOut }, o.call, o.signal);
+  if (plan.quotaLeft !== null) void rememberQuotaLeft(plan.quotaLeft, ctx.now);
+  return { plan, quotaOut };
+}
+
+/** 还有没有要用户先选的过去日子 */
+export const needsConfirm = (items: readonly AiItem[]): boolean => items.some((it) => it.confirm !== null);
+
+/** 确认行选了“补记今年（past）/ 明年（next）”：按选的改日期、去掉 confirm */
+export function applyConfirm(item: AiItem, choice: 'past' | 'next'): AiItem {
+  if (item.confirm === null) return item;
+  const date = item.confirm[choice];
+  if (item.kind === 'event') return { ...item, date, confirm: null };
+  if (item.kind === 'todo') return { ...item, due: date, confirm: null };
+  return { ...item, confirm: null };
+}
+
+/** 先存的（没有要问的）和要等用户选的（同一批里其他条照常保存，这一条等用户选） */
+export function splitConfirm(items: readonly AiItem[]): { ready: AiItem[]; ask: AiItem[] } {
+  return { ready: items.filter((it) => it.confirm === null), ask: items.filter((it) => it.confirm !== null) };
+}
+
+/**
+ * “拆错了，合并成一条”：整句原话当标题，类型、日子、时刻取第一条的；不带简称（原话不是 AI 起的简称）。
+ * 调用方（saved-batch 的 merge）先按新的一批存这一条，存成了再撤原来的几条。标题不在这里截：存盘前由 captureRow 统一按上限截（shared/logic/capture-map.ts），
+ * 提示条、卡片显示 saveCapture 交回的 StoredRef.title（截过的，和库里一致）
+ */
+export function mergeItems(items: readonly AiItem[], rawText: string): AiItem | null {
+  const first = items[0];
+  const title = rawText.trim();
+  if (!first || title === '') return null;
+  return { ...first, title, short: null, body: null, confirm: null };
+}
+
+/** 切原话用的分隔（逗号、分号、句号、换行、“然后 / 还有 / 그리고”）：和本机规则拆句同一套（shared/logic/parse/split.ts，
+ *  词表只放那里），只用来找等确认那条在原话里的位置 */
+
+const same = (a: AiItem, b: AiItem): boolean =>
+  a.kind === b.kind && a.title === b.title && a.time === b.time && JSON.stringify(a.confirm) === JSON.stringify(b.confirm);
+
+/**
+ * 确认行没选就关掉：从原话里去掉已经存了的那几条，只留等确认那几条的原文。
+ * 按分隔切段，每条等确认的标题只落在一段里、那段里没有已存的标题；它前面紧挨着的没有标题的段（只说了日子、时刻）一起留下。
+ * 留下的字再用本机规则解析一遍（parse），得出来的必须和等确认的几条一样（类型、标题、时刻、要问的日子），才算去干净；
+ * 去不干净（AI 改过标题、一段里列了几件、日子是从前一句带过来的……）返回 null，调用方原话整句留着并提示
+ */
+export function keepAsked(raw: string, saved: readonly AiItem[], asked: readonly AiItem[], parse: (text: string) => readonly AiItem[]): string | null {
+  if (saved.length === 0) return raw;
+  const segs: string[] = [];
+  const from: number[] = [];
+  let at = 0;
+  for (const m of raw.matchAll(clauseSeparators())) {
+    segs.push(raw.slice(at, m.index));
+    from.push(at);
+    at = m.index + m[0].length;
+  }
+  segs.push(raw.slice(at));
+  from.push(at);
+  const all = [...saved, ...asked];
+  const hits = (title: string): number[] => segs.flatMap((s, i) => (title !== '' && s.includes(title) ? [i] : []));
+  const titled = (i: number): boolean => all.some((it) => it.title !== '' && (segs[i] ?? '').includes(it.title));
+  const used = new Set<number>();
+  for (const it of saved) {
+    const h = hits(it.title);
+    if (h.length === 0) return null;
+    for (const i of h) used.add(i);
+  }
+  const keep = new Set<number>();
+  for (const it of asked) {
+    const h = hits(it.title);
+    const i = h[0];
+    if (h.length !== 1 || i === undefined || used.has(i)) return null;
+    keep.add(i);
+    for (let j = i - 1; j >= 0 && !titled(j) && (segs[j] ?? '').trim() !== ''; j -= 1) keep.add(j);
+  }
+  // 留下的几段在原话里挨着：截原话那一段（带着原来的逗号）；不挨着用空格拼
+  const idx = [...keep].sort((a, b) => a - b);
+  const lo = idx[0] ?? 0;
+  const hi = idx[idx.length - 1] ?? 0;
+  const text = hi - lo === idx.length - 1
+    ? raw.slice(from[lo], (from[hi] ?? 0) + (segs[hi] ?? '').length).trim()
+    : idx.map((i) => (segs[i] ?? '').trim()).filter(Boolean).join(' ');
+  const again = parse(text);
+  if (again.length !== asked.length || again.some((it, k) => !same(it, asked[k] as AiItem))) return null;
+  return text;
+}

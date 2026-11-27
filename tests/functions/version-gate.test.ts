@@ -1,0 +1,307 @@
+// version-gate 的单元测试（架构 0.27 第 1 点；TC-B0-46～51 的函数层部分，经 /sb/ 的整条链路见 sb-proxy.test.ts）
+import { describe, expect, it, vi } from 'vitest';
+import {
+  EXEMPT_FUNCTIONS,
+  EXEMPT_RULES,
+  compareTriple,
+  createVersionGate,
+  needsVersionCheck,
+  parseClientVersion,
+  parseStrict,
+  upgradeRequiredResponse,
+} from '../../functions/sb/version-gate.ts';
+
+function headers(v?: string): Headers {
+  const h = new Headers();
+  if (v !== undefined) h.set('X-App-Version', v);
+  return h;
+}
+
+function clock(start = 1_000_000) {
+  let t = start;
+  return { now: () => t, advance: (ms: number) => (t += ms) };
+}
+
+describe('needsVersionCheck：哪些请求要查', () => {
+  it.each([
+    ['POST', '/rest/v1/todos'],
+    ['PATCH', '/rest/v1/todos'],
+    ['PUT', '/rest/v1/todos'],
+    ['DELETE', '/rest/v1/todos'],
+    ['POST', '/rest/v1/rpc/apply_patch'],
+    ['POST', '/storage/v1/object/images/a/b.webp'],
+    ['PUT', '/storage/v1/object/images/a/b.webp'],
+    ['DELETE', '/storage/v1/object/images'],
+    ['POST', '/storage/v1/object/upload/sign/images/a.webp'],
+    ['POST', '/storage/v1/object/move'],
+    ['POST', '/functions/v1/ai-parse'],
+    ['GET', '/functions/v1/anything'],
+    // 0.32：存储签名、列文件不再免查（客户端不访问 Supabase Storage，/sb 回 404）
+    ['POST', '/storage/v1/object/sign/images'],
+    ['POST', '/storage/v1/object/list/images'],
+    // 0.32：/files 的上传要查（14.2 第 11 点、TC-B0-51）
+    ['PUT', '/files/v1/o/images/a/b/c.webp'],
+    ['PUT', '/files/v1/o/files/a/b/c.pdf'],
+  ])('%s %s → 查', (m, p) => {
+    expect(needsVersionCheck(m, p)).toBe(true);
+  });
+
+  it.each([
+    ['GET', '/rest/v1/todos'],
+    ['HEAD', '/rest/v1/todos'],
+    ['GET', '/rest/v1/rpc/my_ai_usage'],
+    ['GET', '/storage/v1/object/authenticated/images/a.webp'],
+    ['POST', '/auth/v1/otp'],
+    ['POST', '/auth/v1/token'],
+    ['POST', '/auth/v1/logout'],
+    ['DELETE', '/auth/v1/factors/x'],
+    ['GET', '/realtime/v1/websocket'],
+    // 0.32：/files 的签名和取对象只是读
+    ['POST', '/files/v1/sign'],
+    ['GET', '/files/v1/o/images/a/b/c.webp'],
+    ['OPTIONS', '/files/v1/o/images/a/b/c.webp'],
+    ['OPTIONS', '/rest/v1/todos'],
+    ['OPTIONS', '/functions/v1/ai-parse'],
+  ])('%s %s → 不查', (m, p) => {
+    expect(needsVersionCheck(m, p)).toBe(false);
+  });
+
+  it('0.32：免查名单里没有 /storage/v1/ 的规则', () => {
+    expect(EXEMPT_RULES.filter((r) => r.path.startsWith('/storage/'))).toEqual([]);
+    expect(needsVersionCheck('DELETE', '/storage/v1/object/sign/images/a.webp')).toBe(true);
+  });
+
+  it('B1 K10：转发层只放行 account 的 POST（0.38 第 47 条）；account-purge、usage-report 直连、不经 /sb，照查（0.31 第 13 条）', () => {
+    // B3：claude-intake 由 add.ps1 带连接码经 /sb 调（没有 App 版本），只收 POST，转发层放行它的 POST
+    // B5：vault-image 也是浏览器经 /sb 调的，转发层放行它的 POST（旧版也能看隐私记的图）；vault 照查
+    // B4b-2：note-search 只读，转发层放行它的 POST
+    expect(EXEMPT_FUNCTIONS.map((f) => [f.name, [...f.methods]])).toEqual([['account', ['POST']], ['claude-intake', ['POST']], ['vault-image', ['POST']], ['note-search', ['POST']], ['backup-manifest', ['POST']]]);   // B7a：pull.ps1 带 Bearer BACKUP_PULL_TOKEN 经 /sb 调（TC-B7a-24）
+    expect(needsVersionCheck('POST', '/functions/v1/note-search')).toBe(false);   // B4b-2：只读查找，旧版也能按意思找
+    expect(needsVersionCheck('POST', '/functions/v1/vault-image')).toBe(false);
+    expect(needsVersionCheck('POST', '/functions/v1/vault')).toBe(true);
+    expect(needsVersionCheck('POST', '/functions/v1/claude-intake')).toBe(false);
+    expect(needsVersionCheck('GET', '/functions/v1/claude-intake')).toBe(true);
+    expect(needsVersionCheck('POST', '/functions/v1/account')).toBe(false);
+    for (const m of ['GET', 'PUT', 'PATCH', 'DELETE']) expect(needsVersionCheck(m, '/functions/v1/account'), m).toBe(true);
+    expect(needsVersionCheck('POST', '/functions/v1/account-purge')).toBe(true);
+    expect(needsVersionCheck('POST', '/functions/v1/usage-report')).toBe(true);
+    expect(needsVersionCheck('POST', '/functions/v1/invite-signup')).toBe(true);
+  });
+});
+
+describe('S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237）', () => {
+  it('四条都是精确路径、只免 POST', () => {
+    const rpc = EXEMPT_RULES.filter((r) => r.path.startsWith('/rest/v1/'));
+    expect(rpc.map((r) => [r.method, r.path, r.match])).toEqual([
+      ['POST', '/rest/v1/rpc/remove_device', 'exact'],
+      ['POST', '/rest/v1/rpc/record_consent', 'exact'],
+      ['POST', '/rest/v1/rpc/my_sessions', 'exact'],
+      ['POST', '/rest/v1/rpc/my_ai_usage', 'exact'],
+      // B2 两条（DELETE devices、claim_endpoint）在 version-gate-b2.test.ts
+      ['DELETE', '/rest/v1/devices', 'exact'],
+      ['POST', '/rest/v1/rpc/claim_endpoint', 'exact'],
+      // B3 一条（PATCH api_tokens）在 version-gate-b3.test.ts
+      ['PATCH', '/rest/v1/api_tokens', 'exact'],
+      // R-382 一条（session_fate）在 version-gate-r382.test.ts
+      ['POST', '/rest/v1/rpc/session_fate', 'exact'],
+    ]);
+  });
+
+  it.each([
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/remove_device'],
+    ['TC-B1-14', 'POST', '/rest/v1/rpc/record_consent'],
+    ['TC-B1-80', 'post', '/rest/v1/rpc/remove_device'],
+    ['R-237', 'POST', '/rest/v1/rpc/my_sessions'],
+    ['R-237', 'POST', '/rest/v1/rpc/my_ai_usage'],
+  ])('%s：%s %s → 不查', (_tc, m, p) => {
+    expect(needsVersionCheck(m, p)).toBe(false);
+  });
+
+  it.each([
+    // 同前缀不同名
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/remove_device_x'],
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/remove_devices'],
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/remove_device/'],
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/remove_device/x'],
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/REMOVE_DEVICE'],
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/x_remove_device'],
+    ['TC-B1-14', 'POST', '/rest/v1/rpc/record_consent_x'],
+    ['TC-B1-14', 'POST', '/rest/v1/rpc/record_consent/'],
+    ['TC-B1-14', 'POST', '/rest/v1/rpc/record_consents'],
+    // 其他写方法照查
+    ['TC-B1-80', 'PATCH', '/rest/v1/rpc/remove_device'],
+    ['TC-B1-80', 'PUT', '/rest/v1/rpc/remove_device'],
+    ['TC-B1-80', 'DELETE', '/rest/v1/rpc/remove_device'],
+    ['TC-B1-14', 'PATCH', '/rest/v1/rpc/record_consent'],
+    ['TC-B1-14', 'DELETE', '/rest/v1/rpc/record_consent'],
+    ['R-237', 'POST', '/rest/v1/rpc/my_sessions_x'],
+    ['R-237', 'POST', '/rest/v1/rpc/my_sessions/'],
+    ['R-237', 'POST', '/rest/v1/rpc/my_session'],
+    ['R-237', 'POST', '/rest/v1/rpc/my_ai_usage_x'],
+    ['R-237', 'POST', '/rest/v1/rpc/my_ai_usage/'],
+    ['R-237', 'POST', '/rest/v1/rpc/MY_AI_USAGE'],
+    ['R-237', 'PATCH', '/rest/v1/rpc/my_sessions'],
+    ['R-237', 'DELETE', '/rest/v1/rpc/my_sessions'],
+    ['R-237', 'PATCH', '/rest/v1/rpc/my_ai_usage'],
+    ['R-237', 'PUT', '/rest/v1/rpc/my_ai_usage'],
+    // 名单外的 RPC 照查
+    ['—', 'POST', '/rest/v1/rpc/apply_patch'],
+    // 不是 RPC 的同名表路径
+    ['—', 'POST', '/rest/v1/remove_device'],
+    ['—', 'POST', '/rest/v1/record_consent'],
+    ['R-237', 'POST', '/rest/v1/my_sessions'],
+  ])('%s：%s %s → 查', (_tc, m, p) => {
+    expect(needsVersionCheck(m, p)).toBe(true);
+  });
+
+  it('GET 本来就不查（读请求），但不是因为免查规则', () => {
+    expect(needsVersionCheck('GET', '/rest/v1/rpc/remove_device')).toBe(false);
+    expect(EXEMPT_RULES.some((r) => r.path === '/rest/v1/rpc/remove_device' && r.method === 'GET')).toBe(false);
+  });
+
+  it('TC-B1-80、TC-B1-14：低版本客户端调这两个 RPC 不被 426 挡，调同前缀的别的名字照样挡', async () => {
+    const gate = createVersionGate({ loadMin: async () => '9.0.0' });
+    const old = headers('4.0.0');
+    expect(await gate.check('POST', '/rest/v1/rpc/remove_device', old)).toEqual({ action: 'pass' });
+    expect(await gate.check('POST', '/rest/v1/rpc/record_consent', old)).toEqual({ action: 'pass' });
+    expect(await gate.check('POST', '/rest/v1/rpc/remove_device', headers())).toEqual({ action: 'pass' });
+    expect(await gate.check('POST', '/rest/v1/rpc/remove_device_x', old)).toEqual({ action: 'block', min: '9.0.0' });
+    expect(await gate.check('POST', '/rest/v1/rpc/record_consent_x', old)).toEqual({ action: 'block', min: '9.0.0' });
+    expect(await gate.check('PATCH', '/rest/v1/rpc/remove_device', old)).toEqual({ action: 'block', min: '9.0.0' });
+  });
+
+  it('R-237：低版本客户端调 my_sessions、my_ai_usage 不被 426 挡，同名后缀和 PATCH 照样挡', async () => {
+    const gate = createVersionGate({ loadMin: async () => '9.0.0' });
+    const old = headers('4.0.0');
+    expect(await gate.check('POST', '/rest/v1/rpc/my_sessions', old)).toEqual({ action: 'pass' });
+    expect(await gate.check('POST', '/rest/v1/rpc/my_ai_usage', old)).toEqual({ action: 'pass' });
+    expect(await gate.check('POST', '/rest/v1/rpc/my_sessions_x', old)).toEqual({ action: 'block', min: '9.0.0' });
+    expect(await gate.check('POST', '/rest/v1/rpc/my_ai_usage_x', old)).toEqual({ action: 'block', min: '9.0.0' });
+    expect(await gate.check('PATCH', '/rest/v1/rpc/my_sessions', old)).toEqual({ action: 'block', min: '9.0.0' });
+    expect(await gate.check('PATCH', '/rest/v1/rpc/my_ai_usage', old)).toEqual({ action: 'block', min: '9.0.0' });
+  });
+});
+
+describe('版本号', () => {
+  it('去掉 -preview 后缀只比三段', () => {
+    expect(parseClientVersion('4.1.0-preview.3')).toEqual([4, 1, 0]);
+    expect(parseClientVersion('4.0.9-preview.9')).toEqual([4, 0, 9]);
+    expect(parseClientVersion('4.0.0+build.7')).toEqual([4, 0, 0]);
+    expect(parseClientVersion(' 4.0.1 ')).toEqual([4, 0, 1]);
+  });
+
+  it('格式不对返回 null', () => {
+    for (const v of ['', '4.1', '4.1.0.1', 'v4.1.0', 'abc', '4.x.0', '-4.0.0', '1234567.0.0']) {
+      expect(parseClientVersion(v)).toBeNull();
+    }
+    expect(parseClientVersion(null)).toBeNull();
+  });
+
+  it('配置值只认不带后缀的三段', () => {
+    expect(parseStrict('4.0.0')).toEqual([4, 0, 0]);
+    expect(parseStrict('4.1')).toBeNull();
+    expect(parseStrict('4.1.0-preview.1')).toBeNull();
+  });
+
+  it('按数字比，不按字符串比', () => {
+    expect(compareTriple([4, 10, 0], [4, 9, 9])).toBe(1);
+    expect(compareTriple([4, 0, 0], [4, 0, 0])).toBe(0);
+    expect(compareTriple([3, 9, 9], [4, 0, 0])).toBe(-1);
+  });
+});
+
+describe('createVersionGate', () => {
+  it('TC-B0-46：没带版本头 → block，min 来自配置', async () => {
+    const gate = createVersionGate({ loadMin: async () => '4.0.0' });
+    expect(await gate.check('PATCH', '/rest/v1/todos', headers())).toEqual({ action: 'block', min: '4.0.0' });
+  });
+
+  it('TC-B0-47：3.9.9 拦，4.0.0、4.0.1 放', async () => {
+    const gate = createVersionGate({ loadMin: async () => '4.0.0' });
+    expect((await gate.check('PATCH', '/rest/v1/todos', headers('3.9.9'))).action).toBe('block');
+    expect((await gate.check('PATCH', '/rest/v1/todos', headers('4.0.0'))).action).toBe('pass');
+    expect((await gate.check('PATCH', '/rest/v1/todos', headers('4.0.1'))).action).toBe('pass');
+  });
+
+  it('TC-B0-48：min=4.1.0 时 4.1.0-preview.3 放、4.0.9-preview.9 拦', async () => {
+    const gate = createVersionGate({ loadMin: async () => '4.1.0' });
+    expect((await gate.check('POST', '/rest/v1/todos', headers('4.1.0-preview.3'))).action).toBe('pass');
+    expect(await gate.check('POST', '/rest/v1/todos', headers('4.0.9-preview.9'))).toEqual({ action: 'block', min: '4.1.0' });
+  });
+
+  it('格式不对的版本头当没带', async () => {
+    const gate = createVersionGate({ loadMin: async () => '4.0.0' });
+    expect((await gate.check('POST', '/rest/v1/todos', headers('latest'))).action).toBe('block');
+  });
+
+  it('TC-B0-49：读配置超时就放行，失败结果缓存 10 秒，日志只有错误码', async () => {
+    const c = clock();
+    const log = vi.fn();
+    const loadMin = vi.fn((signal: AbortSignal) => new Promise<unknown>((_r, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')))));
+    const gate = createVersionGate({ loadMin, now: c.now, log, timeoutMs: 20 });
+    expect((await gate.check('POST', '/rest/v1/todos', headers())).action).toBe('pass');
+    expect(log).toHaveBeenCalledWith('gate_config_timeout');
+    c.advance(9_999);
+    expect((await gate.check('POST', '/rest/v1/todos', headers())).action).toBe('pass');
+    expect(loadMin).toHaveBeenCalledTimes(1); // 10 秒内不再读
+    c.advance(2);
+    await gate.check('POST', '/rest/v1/todos', headers());
+    expect(loadMin).toHaveBeenCalledTimes(2);
+    for (const call of log.mock.calls) expect(String(call[0])).not.toMatch(/https?:|\//);
+  });
+
+  it('TC-B0-49：返回坏格式（4.1、空、数字）也放行并缓存 10 秒', async () => {
+    for (const bad of ['4.1', '', 4, null, '4.1.0-preview.1']) {
+      const c = clock();
+      const log = vi.fn();
+      const loadMin = vi.fn(async () => bad);
+      const gate = createVersionGate({ loadMin, now: c.now, log });
+      expect((await gate.check('POST', '/rest/v1/todos', headers())).action).toBe('pass');
+      expect(log).toHaveBeenCalledWith('gate_config_bad');
+      c.advance(5_000);
+      await gate.check('POST', '/rest/v1/todos', headers());
+      expect(loadMin).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('读配置抛错也放行', async () => {
+    const log = vi.fn();
+    const gate = createVersionGate({ loadMin: async () => Promise.reject(new Error('boom')), log });
+    expect((await gate.check('POST', '/rest/v1/todos', headers())).action).toBe('pass');
+    expect(log).toHaveBeenCalledWith('gate_config_error');
+  });
+
+  it('TC-B0-50：成功的结果缓存 60 秒，并发请求只读一次', async () => {
+    const c = clock();
+    const loadMin = vi.fn(async () => '4.0.0');
+    const gate = createVersionGate({ loadMin, now: c.now });
+    await Promise.all([1, 2, 3].map(() => gate.check('POST', '/rest/v1/todos', headers('4.0.0'))));
+    c.advance(59_999);
+    await gate.check('POST', '/rest/v1/todos', headers('4.0.0'));
+    expect(loadMin).toHaveBeenCalledTimes(1);
+    c.advance(2);
+    await gate.check('POST', '/rest/v1/todos', headers('4.0.0'));
+    expect(loadMin).toHaveBeenCalledTimes(2);
+  });
+
+  it('TC-B0-51：免查的请求连配置都不读', async () => {
+    const loadMin = vi.fn(async () => '9.9.9');
+    const gate = createVersionGate({ loadMin });
+    expect((await gate.check('POST', '/auth/v1/otp', headers())).action).toBe('pass');
+    expect((await gate.check('POST', '/files/v1/sign', headers())).action).toBe('pass');
+    expect((await gate.check('GET', '/files/v1/o/images/a/b/c.webp', headers())).action).toBe('pass');
+    expect(loadMin).not.toHaveBeenCalled();
+  });
+});
+
+describe('upgradeRequiredResponse', () => {
+  it('426、响应体、安全头、CORS 接口', async () => {
+    const r = upgradeRequiredResponse('4.1.0', (h) => h.set('Access-Control-Allow-Origin', 'http://tauri.localhost'));
+    expect(r.status).toBe(426);
+    expect(await r.json()).toEqual({ code: 'upgrade_required', min: '4.1.0' });
+    expect(r.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(r.headers.get('Content-Security-Policy')).toBe("sandbox; default-src 'none'");
+    expect(r.headers.get('Access-Control-Allow-Origin')).toBe('http://tauri.localhost');
+    expect(r.headers.get('Cache-Control')).toBe('no-store');
+  });
+});

@@ -1,0 +1,31 @@
+# S3 替身：本机和 CI 里代替 Cloudflare R2（架构 8.6、0.32 第 4 条；B0 R2 任务单 O-1）
+#
+# 不要直接 docker compose up：用 `node build/objstore.mjs up`，它先核对下面的镜像和 tools/ci-tools.lock 一致，
+# 起来以后建 images、files、vault-images、vault-files 四个桶，再验四个条件（SigV4 path-style、If-None-Match: * 回 412、
+# ListObjectsV2 分页、DeleteObjects）。停掉用 `node build/objstore.mjs down`（数据不留）。
+#
+# 为什么是 LocalStack 不是 MinIO（2026-10-28 运维核实，环境清单第三节 5）：
+#   MinIO 官方镜像在 Docker Hub（minio/minio）和 Quay（quay.io/minio/minio）都已不能匿名拉取，上游 2025-10 起只发源码；
+#   架构 8.6 写的退路是 LocalStack 的 S3。LocalStack 2026.03 起新版本要 auth token（要注册账号、CI 里要放 secret），
+#   所以锁在 token 要求之前的最后一个社区版 4.14.0（2026-02-26 发布），按 digest 锁。
+# 镜像：版本和 digest 只认 tools/ci-tools.lock 里 localstack / oci 那一行；改版本两处一起改（build/objstore.mjs pin 会比对）。
+# 只开 S3，不挂 docker.sock，不持久化，只监听本机回环地址；凭据是 LocalStack 的固定测试值 test / test（不是密钥）。
+name: lemo-objstore
+
+services:
+  objstore:
+    image: localstack/localstack:4.14.0@sha256:3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a
+    ports:
+      - "127.0.0.1:4566:4566"
+    environment:
+      SERVICES: s3
+      EAGER_SERVICE_LOADING: "1"
+      PERSISTENCE: "0"
+      # 不往 LocalStack 发使用统计
+      DISABLE_EVENTS: "1"
+      SKIP_SSL_CERT_DOWNLOAD: "1"
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://127.0.0.1:4566/_localstack/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 40

@@ -1,0 +1,172 @@
+/* “记住的事”和回答下面的提示条（MemoryPage.tsx）：数值照方案页 .memo、.mrow、.tile、.clearAll、.mnote */
+
+/* 提示条：panel-2 底、--r-md，左边黄点，右边“查看”“删掉” */
+.memo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 8px 6px 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+}
+
+.memoGone {
+  opacity: 0.4;
+}
+
+.dot {
+  position: relative;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* 外面一圈 30% 的光晕（方案页 .memo .dot） */
+.dot::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.3;
+}
+
+.tx {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.memo button {
+  flex: none;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 整屏盖在抽屉上：方案 .scr 的渐变底和 1.5 行高，下面的对话不透出来 */
+.page {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--inset-top);
+  line-height: 1.5;
+  background: var(--scr-bg, var(--bg));
+  background-color: var(--bg);
+}
+
+/* 顶栏“‹ 返回 / 记住的事”是 kit SheetTop（和 AI 助手半屏、天气半屏同一份） */
+
+.body {
+  flex: 1;
+  min-height: 0;
+  padding-bottom: calc(var(--inset-bottom) + 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.note {
+  margin: 6px 16px 12px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.7;
+}
+
+.tile {
+  margin: 0 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  box-shadow: var(--b-tile-shadow);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 8px 6px 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+.tt {
+  font-size: var(--fs-15);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.new {
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-11);
+  vertical-align: 2px;
+}
+
+.mt {
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+.del {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: var(--danger-text);
+  font: inherit;
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.empty {
+  padding: 28px 16px;
+  color: var(--text-2);
+  text-align: center;
+}
+
+.retry {
+  display: block;
+  min-height: var(--hit);
+  margin: 4px auto 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.clear {
+  display: block;
+  min-height: var(--hit);
+  margin: 18px auto 0;
+  border: 0;
+  background: none;
+  color: var(--danger-text);
+  font: inherit;
+  font-size: var(--fs-14);
+  cursor: pointer;
+}

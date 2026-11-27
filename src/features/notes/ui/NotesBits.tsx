@@ -1,0 +1,228 @@
+// 随手记页的小部件：
+// • 列表的“附件 N”、列表行的字、撤销条、输入行上面的提示条、分类胶囊、只读、已转过、AI 小标
+// • 隐私记的后台同步状态：SyncMark 行上“没保存上”、SyncLine 编辑页“没保存上 · 重试”、SyncAck 解锁后“有 N 处改动没来得及保存”和拖动没移成
+// • TrashLink：来源自带顶栏（隐私记）里的“最近删除”图标；链接本身是 kit 的 TrashLink，这里只按来源给去哪、文案和条数
+// • 同步状态都从 hooks/note-source.ts 来源的 useSync 读（普通随手记一直是空的，什么都不画）；列表上的 failed 由列表层读一次传进来，每行不各订一份
+import type { ReactNode } from 'react';
+import chip from '../../../kit/components/Chip.module.css';
+import float from '../../../kit/components/Float.module.css';
+import { NumIn } from '../../../kit/components/NumIn.tsx';
+import row from '../../../kit/components/NoteRow.module.css';
+import { ReadonlyMark } from '../../../kit/components/ReadonlyRow.tsx';
+import { UndoToast } from '../../../kit/components/UndoToast.tsx';
+import { TrashLink as KitTrashLink } from '../../../kit/components/TrashLink.tsx';
+import type { LongPressProps } from '../../../motion/gestures.ts';
+import { Pressable } from '../../../motion/components.ts';
+import { useNoteSource } from '../hooks/note-source.ts';
+import type { NoteItem } from '../hooks/useNoteList.ts';
+import { useNotesT } from '../hooks/useNotesT.ts';
+import type { MergeUndo, MoveUndo, UndoTip } from '../hooks/useNotesToast.ts';
+import { Dot } from './CatDot.tsx';
+import { ImgTrashLink } from './NoteImages.tsx';
+import type { PageTip } from './NotesActions.tsx';
+import styles from './NotesPage.module.css';
+
+/** 输入行上面的提示条、出错条：公共浮条的磨砂（宽度跟输入行上方的外框 .above 走）+ 自己的内边距和字号 */
+const TIP_CLASS = `${float.glass} ${styles.error}`;
+
+/** 列表行、卡片上的“没保存上”（隐私记的条目发了 3 次都没成）；failed 由列表层读 useSync 一次传进来 */
+export function SyncMark({ id, failed }: { id: string; failed: boolean }) {
+  const t = useNotesT();
+  return failed ? (
+    <span className={styles.atb} data-testid={`notes-sync-failed-${id}`}>
+      {t('notes.sync.failed', {})}
+    </span>
+  ) : null;
+}
+
+/** 编辑页状态行下面的“没保存上 · 重试”（隐私记）；className 用编辑页出错提示的那一档 */
+export function SyncLine({ id, className }: { id: string | null; className: string | undefined }) {
+  const t = useNotesT();
+  const sync = useNoteSource().useSync();
+  if (id === null || !sync.failed.has(id)) return null;
+  return (
+    <p className={className} role="alert" data-testid="note-edit-sync">
+      {`${t('notes.sync.failed', {})} · `}
+      <Pressable type="button" className={styles.tipLink} onClick={() => sync.retry(id)} data-testid="note-edit-sync-retry">
+        {t('notes.sync.retry', {})}
+      </Pressable>
+    </p>
+  );
+}
+
+/** 页面上一句提示 + “知道了”（SyncAck 的两种共用：两句只差文案、点了收哪一种、testid，“知道了”的 testid 是 testId + -ok） */
+function AckTip({ text, onOk, testId }: { text: string; onOk: () => void; testId: string }) {
+  const t = useNotesT();
+  return (
+    <p className={TIP_CLASS} role="alert" data-testid={testId}>
+      {text}
+      <Pressable type="button" className={styles.tipLink} onClick={onOk} data-testid={`${testId}-ok`}>
+        {t('notes.sync.ok', {})}
+      </Pressable>
+    </p>
+  );
+}
+
+/**
+ * 隐私记后台同步要用户知道一下的两句（只订一份 useSync），各自点“知道了”收起：
+ * • 解锁后“有 N 处改动没来得及保存”（上一段解锁期没发完就上锁丢掉的，只报个数、不带内容），testid notes-sync-dropped
+ * • 拖动后服务器回 stale：“这条刚在别处改过，没有移动”，testid notes-sync-stale
+ * 两句都有时先丢了几处、后没移成
+ */
+export function SyncAck() {
+  const t = useNotesT();
+  const sync = useNoteSource().useSync();
+  return (
+    <>
+      {sync.dropped === 0 ? null : <AckTip text={t('notes.sync.dropped', { n: sync.dropped })} onOk={sync.ack} testId="notes-sync-dropped" />}
+      {sync.stale === 0 ? null : <AckTip text={t('notes.sync.stale', {})} onOk={sync.ackStale} testId="notes-sync-stale" />}
+    </>
+  );
+}
+
+/** “附件 N”（列表行尾、瀑布流卡片底部）；没附件不画 */
+export function FilesMark({ n }: { n: number }) {
+  const t = useNotesT();
+  return n > 0 ? (
+    <span className={styles.atb} data-testid="notes-files-mark">
+      {t('notes.files', { n })}
+    </span>
+  ) : null;
+}
+
+/** 列表行中间的字：标题 + 时间；“● 摘要 · 分类”（+ AI 小标、附件、没保存上，什么都没有时不画这一行）；只读行再在下面单独一行标“要新版本” */
+export function RowText({
+  it,
+  time,
+  ai,
+  ro,
+  failed,
+  thumb = null,
+}: {
+  it: NoteItem;
+  time: string;
+  ai: ReactNode;
+  ro: ReactNode;
+  failed: boolean;
+  /** 缩略图（有图的行）：放在日期正下方，排版见 NoteRow.module.css 的 .withThumb */
+  thumb?: ReactNode;
+}) {
+  const sub = [it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ');
+  const line2 = sub !== '' || it.categoryColor !== null || ai !== null || it.files > 0 || failed;
+  const title = (
+    <span className={row.t1}>
+      {it.converted ? <ConvMark id={it.id} /> : null}
+      {it.title}
+    </span>
+  );
+  const second = line2 ? (
+    <span className={row.t2}>
+      <Dot color={it.categoryColor} />
+      <span className={row.t2txt}>{sub}</span>
+      {ai}
+      <FilesMark n={it.files} />
+      <SyncMark id={it.id} failed={failed} />
+    </span>
+  ) : null;
+  const tm = <span className={row.tm}>{time}</span>;
+  if (thumb) {
+    // 有图的行：左边标题、摘要整块上下居中；右边日期在缩略图正上方
+    return (
+      <span className={`${row.ltext} ${row.withThumb}`}>
+        <span className={row.tcol}>
+          {title}
+          {second}
+          {ro}
+        </span>
+        <span className={row.side}>
+          {tm}
+          {thumb}
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span className={row.ltext}>
+      {/* 标题占满一行，时间小号淡色字贴右；第二行“● 摘要 · 分类 AI” */}
+      <span className={row.l1}>
+        {title}
+        {tm}
+      </span>
+      {second}
+      {ro}
+    </span>
+  );
+}
+
+/** 页底的撤销条：删除的“已删除”、合并分类的“已合并”，同一个 kit UndoToast、5 秒；画什么、点了做什么都在 tip 里（换一条就换一个 key，重新计时） */
+export function UndoBar({ tip, onClose }: { tip: UndoTip; onClose(): void }) {
+  const t = useNotesT();
+  return <UndoToast message={t(tip.msgKey, {})} undoLabel={t('notes.undo', {})} onUndo={tip.undo} onClose={onClose} solo="keep" data-testid={tip.testId} />;
+}
+
+const DOCK_TEST_ID = { error: 'notes-error', img: 'notes-img-tip', conv: 'notes-conv-tip', moveOut: 'notes-moveout-tip' } as const;
+
+/** 输入行上面的提示条：没保存上、插图提示（空间满了的带“最近删除”入口）、转换结果、移出隐私记没成 */
+export function DockTip({ toast }: { toast: { kind: 'error' } | Exclude<PageTip, MergeUndo | MoveUndo> }) {
+  const t = useNotesT();
+  return (
+    <p className={TIP_CLASS} role="alert" data-testid={DOCK_TEST_ID[toast.kind]}>
+      {t(toast.kind === 'error' ? 'notes.err.save' : toast.kind === 'moveOut' ? 'notes.err.moveOut' : toast.key, {})}
+      {toast.kind === 'img' && toast.trash ? <ImgTrashLink testId="notes-img-trash" /> : null}
+    </p>
+  );
+}
+
+/**
+ * 分类筛选胶囊（照待办页）：kit 的 Chip.module.css（高 30、无描边浅底）；
+ * 色点 8px；条数只给数字等宽淡色（kit .chipN），词条照旧整句（“全部 {n}”）。
+ * hold：长按出分类菜单（改名、删除；motion 的 useLongPress）；
+ * drop：给了就是拖进目标（kit SortDrag 的 data-drop-into，值是分类 id）
+ */
+export function Chip({ on, onClick, label, n, color, testId, hold, drop }: { on: boolean; onClick(): void; label: string; n: number; color: string | null; testId: string; hold?: LongPressProps; drop?: string }) {
+  return (
+    <Pressable {...hold} className={on ? chip.chipOn : chip.chip} aria-pressed={on} onClick={onClick} data-drop-into={drop} data-testid={testId}>
+      <Dot color={color} big />
+      <NumIn text={label} num={String(n)} className={chip.chipN} />
+    </Pressable>
+  );
+}
+
+/** 只读行的“要新版本”（kit 的 ReadonlyMark） */
+// 只读标记单独一行：瀑布流放在正文下、底行上，列表放在摘要行下（挤在底行、摘要行会把时间、分类、“⋯”挤坏）
+export const RoMark = ({ ro, id, cls }: { ro: boolean; id: string; cls: string | undefined }) =>
+  ro ? (
+    <span className={cls}>
+      <ReadonlyMark testId={`notes-ro-${id}`} />
+    </span>
+  ) : null;
+
+/** “已转过”描边小标：卡片、列表行的标题前；后面一个视觉隐藏的“，”，读屏读成“已转过，标题”不连在一起 */
+export function ConvMark({ id }: { id: string }) {
+  const t = useNotesT();
+  return (
+    <span className={styles.conv} data-testid={`notes-conv-${id}`}>
+      {t('notes.converted', {})}
+      <span className={styles.convSep}>，</span>
+    </span>
+  );
+}
+
+/** AI 分的、还没看过的分类后面的“AI”小标：列表行、瀑布流卡片、编辑页顶栏的分类胶囊共用这一份 */
+export function AiMark({ testId }: { testId: string }) {
+  const t = useNotesT();
+  return (
+    <span className={styles.ai} aria-label={t('notes.aiLabel', {})} data-testid={testId}>
+      {t('notes.ai', {})}
+    </span>
+  );
+}
+
+/** “最近删除”垃圾桶图标：只在来源开了 caps.trashLink 时由列表页交给来源的 head 放进它自己的顶栏（隐私记）；
+ *  随手记页不放，入口在设置页。去哪、带不带条数看来源 */
+export function TrashLink() {
+  const t = useNotesT();
+  const src = useNoteSource();
+  const n = src.useTrashCount();
+  return <KitTrashLink to={src.trash} label={`${src.text?.trash ?? t('notes.img.trash', {})}${n ? ` ${n}` : ''}`} testId={`${src.kind}-open-trash`} look="icon" />;
+}

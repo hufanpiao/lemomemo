@@ -1,0 +1,45 @@
+// 功能 today 的词典·中文：今天页、“最近删除”页
+// “现在”卡的文字照皮肤视觉稿 KT.zh（进行中 / 进行中 N 件 / 下一件 / 现在 14:17 / 还剩 13 分钟 / 1 小时 13 分后 / 同时：… / 下一件 15:30 … · 3 小时 10 分后）
+export const zh = {
+  'today.title': '今天',
+  'today.date': '{date}',
+  'now.live': '进行中',
+  'now.live2': '进行中 {n} 件',
+  'now.idle': '下一件',
+  'now.empty': '今天没有日程',
+  'now.done': '今天的日程都结束了',
+  'now.allDay': '全天 · {title}',
+  'now.allDayN': '全天 {n} 件',
+  'now.now': '现在 {t}',
+  'now.left': '还剩 {d}',
+  'now.in': '{d}后',
+  'now.also': '同时：{title} · 到 {end} · 还剩 {d}',
+  'now.alsoMore': '同时还有 {n} 件',
+  'now.hint': '下一件 {t} {title} · {d}后',
+  'now.doneNext': '明天 {t} {title}',
+  'late.title': '没赶上',
+  'late.days': '逾 {n} 天',
+  'late.passed': '已过 {t}',
+  'list.title': '今天的安排',
+  'list.empty': '今天没有安排',
+  'list.due': '{t} 截止',
+  'list.dueDay': '今天截止',
+  'list.origin': '（{zone} {t}）',
+  // 跨天日程的“持续”“至 18:00”“第 2/3 天”在公共词典 span.*，和日历日清单共用
+  // 待办行的方框、H / M / L、“起步 / 大半”、撤销条和出错条在 kit 的待办行词典（shared/i18n/todo-row-zh.ts）
+  'list.delete': '删除',
+  // 已过去折成一行（“已过去 2 件：10:30 字幕校对 · 买咖啡豆 ✓”）：items 是“时刻 标题”“标题 ✓”用“ · ”连起来
+  'list.past': '已过去 {n} 件：{items}',
+  'err.save': '没保存上，稍后再试一次',
+  'err.readonly': '这条要新版本才能修改',
+  // 麦克风被拒时今天页常驻一行（定稿线框“麦克风被拒绝”卡原文）
+  'today.micDenied': '麦克风没有打开，语音用不了。可以在 iPhone 的“设置”里给这个 App 打开麦克风。',
+  // 其他设备的通用说法（iPhone、iPad 上照上面原文）
+  'today.micDeniedWeb': '麦克风没有打开，语音用不了。可以在浏览器的设置里给这个网站打开麦克风。',
+  // 纪念日一行
+  'today.anniv.today': '今天',
+  'today.anniv.tomorrow': '明天',
+  'today.anniv.in': '{n} 天后',
+  // 生日那一种在名字后面写“生日”（“3 天后 김지민 生日”）；名字里已经有就不再加
+  'today.anniv.bday': '生日',
+} as const;

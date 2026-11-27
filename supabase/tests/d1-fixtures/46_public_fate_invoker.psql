@@ -1,0 +1,3 @@
+-- expect: public.session_fate 在 definer 名单里，却是 invoker
+-- session_fate 给 anon 调、anon 对 private 没有 usage：改回 invoker 就读不到 private.revoked_sessions，又得给 anon 开 private（架构约定 10.7）
+alter function public.session_fate(text) security invoker;

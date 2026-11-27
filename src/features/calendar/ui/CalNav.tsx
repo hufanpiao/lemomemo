@@ -1,0 +1,108 @@
+// 月历页的两个小部件
+// • CalNav：页顶第二行，左边“周 / 月 / 纪念日”分段（点“纪念日”原地换成纪念日页 #/anniv，和日历算同一层；
+//   纪念日开关关着时不出这一段），右边“‹ 今天 ›”（视觉 32 px、点按区各 44 px、间距 12 px 刚好相接）。
+//   “今天”在本月 / 本周时灰（aria-disabled，焦点不丢）；到头时 ‹ › 也 aria-disabled；
+//   byWeek 时 ‹ › 的名字是“上一周 / 下一周”（周视图，或月视图收起成一周时）
+// • FoldHandle：月视图日清单顶上的拖动柄（上拖收起）。本身是按钮：aria-expanded 说明月历展没展开，
+//   键盘、读屏、点一下切换；按住上下拖跟手（手势在 motion 的 useDragCollapse），拖过以后的那一下点击被吞掉
+import { ModeSeg } from '../../../kit/components/ModeSeg.tsx';
+import type { DragCollapse } from '../../../motion/gestures.ts';
+import type { CalViewT } from '../hooks/useCalViewT.ts';
+import styles from './CalendarPage.module.css';
+
+export function CalNav({
+  t,
+  month,
+  byWeek,
+  canPrev,
+  canNext,
+  isCurrent,
+  onMode,
+  onPrev,
+  onNext,
+  onToday,
+  onAnniv,
+}: {
+  t: CalViewT;
+  month: boolean;
+  /** ‹ › 按周翻（周视图，或月视图收起成一周时） */
+  byWeek: boolean;
+  canPrev: boolean;
+  canNext: boolean;
+  isCurrent: boolean;
+  onMode: (m: 'week' | 'month') => void;
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+  /** 点“纪念日”；不传 = 纪念日开关关着，不出这一段 */
+  onAnniv?: () => void;
+}) {
+  return (
+    <div className={styles.calnav}>
+      {/* kit ModeSeg 的 look="slide"（灰底槽 + 浅色滑块 + 柠檬黄小点，纪念日编辑页同一种）；不用 pill 外观：选中色三套皮肤不一致。
+          纪念日页顶那一份（AnnivPage ModeRow）同一种，改要一起改 */}
+      <ModeSeg
+        look="slide"
+        label={t('cal.modeLabel', {})}
+        items={[
+          { key: 'week', label: t('cal.week', {}), pressed: !month, onClick: () => onMode('week'), testId: 'cal-mode-week' },
+          { key: 'month', label: t('cal.month', {}), pressed: month, onClick: () => onMode('month'), testId: 'cal-mode-month' },
+          ...(onAnniv ? [{ key: 'anniv', label: t('cal.anniv', {}), pressed: false, onClick: onAnniv, testId: 'cal-mode-anniv' }] : []),
+        ]}
+      />
+      <div className={styles.navBtns}>
+        <button
+          type="button"
+          className={styles.nb}
+          aria-label={t(byWeek ? 'cal.prevWeek' : 'cal.prevMonth', {})}
+          aria-disabled={!canPrev || undefined}
+          onClick={() => canPrev && onPrev()}
+          data-testid="cal-prev"
+        >
+          ‹
+        </button>
+        <button type="button" className={styles.tdy} aria-disabled={isCurrent || undefined} onClick={() => !isCurrent && onToday()} data-testid="cal-today">
+          {t('cal.today', {})}
+        </button>
+        <button
+          type="button"
+          className={styles.nb}
+          aria-label={t(byWeek ? 'cal.nextWeek' : 'cal.nextMonth', {})}
+          aria-disabled={!canNext || undefined}
+          onClick={() => canNext && onNext()}
+          data-testid="cal-next"
+        >
+          ›
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function FoldHandle({ t, collapsed, controls, drag }: { t: CalViewT; collapsed: boolean; controls: string; drag: DragCollapse }) {
+  return (
+    <button
+      type="button"
+      className={styles.fold}
+      aria-expanded={!collapsed}
+      aria-controls={controls}
+      data-nopull=""
+      aria-label={t(collapsed ? 'cal.fold.expand' : 'cal.fold.collapse', {})}
+      onPointerDown={(e) => {
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // 测试环境（jsdom）没有指针捕获，不影响
+        }
+        drag.onPointerDown(e);
+      }}
+      onPointerMove={drag.onPointerMove}
+      onPointerUp={drag.onPointerUp}
+      onPointerCancel={drag.onPointerCancel}
+      onClick={drag.toggle}
+      data-testid="cal-fold"
+    >
+      <span className={styles.grab} aria-hidden="true" />
+    </button>
+  );
+}

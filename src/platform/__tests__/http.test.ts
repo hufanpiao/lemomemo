@@ -1,0 +1,153 @@
+// X-App-Version（架构 0.27 第 1 点）：supabase-js 的 global.headers 和直接 fetch 都带上，且调用方改不掉
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { clock } from '../clock.ts';
+import { APP_VERSION_HEADER, appFetch, isNetworkUnreadable, NetworkUnreadableError, onUpgradeRequired, readUpgradeRequired, withAppVersion } from '../http.ts';
+import { clientOptions } from '../supabase/client.ts';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('X-App-Version', () => {
+  it('头名和转发层、契约用例（tests/compat/headers.test.ts 写死的）一致', () => {
+    expect(APP_VERSION_HEADER).toBe('X-App-Version');
+  });
+
+  it('withAppVersion：补上版本头，同名头以构建版本为准', () => {
+    const h = withAppVersion({ 'X-App-Version': '0.0.1', 'Content-Type': 'application/json' }, '4.0.0');
+    expect(h.get(APP_VERSION_HEADER)).toBe('4.0.0');
+    expect(h.get('content-type')).toBe('application/json');
+  });
+
+  it('默认用构建版本（__APP_VERSION__）', () => {
+    expect(withAppVersion(undefined).get(APP_VERSION_HEADER)).toBe('4.0.0');
+  });
+
+  it('appFetch：真的把头带进 fetch，也保留 Request 自己的头', async () => {
+    const spy = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => Promise.resolve(new Response('ok')));
+    vi.stubGlobal('fetch', spy);
+    await appFetch('https://example.invalid/functions/v1/x', { method: 'POST', headers: { a: '1' } });
+    await appFetch(new Request('https://example.invalid/y', { headers: { b: '2' } }));
+    const h1 = new Headers(spy.mock.calls[0]?.[1]?.headers);
+    const h2 = new Headers(spy.mock.calls[1]?.[1]?.headers);
+    expect(h1.get(APP_VERSION_HEADER)).toBe('4.0.0');
+    expect(h1.get('a')).toBe('1');
+    expect(spy.mock.calls[0]?.[1]?.method).toBe('POST');
+    expect(h2.get(APP_VERSION_HEADER)).toBe('4.0.0');
+    expect(h2.get('b')).toBe('2');
+  });
+
+  it('supabase-js：global.headers 带版本，global.fetch 走同一个封装（外面包了 R-382 的刷新观察，请求照样经 appFetch 带上版本头）', async () => {
+    const o = clientOptions('4.1.0');
+    expect(o.global.headers[APP_VERSION_HEADER]).toBe('4.1.0');
+    const spy = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => Promise.resolve(new Response('ok')));
+    vi.stubGlobal('fetch', spy);
+    await o.global.fetch('https://example.invalid/rest/v1/x', { method: 'GET' });
+    await o.global.fetch('https://example.invalid/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: '{}' });
+    expect(spy).toHaveBeenCalledTimes(2);
+    for (const c of spy.mock.calls) expect(new Headers(c[1]?.headers).get(APP_VERSION_HEADER)).toBe('4.0.0');
+  });
+});
+
+describe('426 upgrade_required（0.27 第 1 点）', () => {
+  const json = (status: number, body: unknown): Response =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  it('readUpgradeRequired：426 读出 min；min 格式不对或没有为 null；4xx 的 code = upgrade_required 也算；其他不算', async () => {
+    expect(await readUpgradeRequired(json(426, { code: 'upgrade_required', min: '4.1.0' }))).toEqual({ code: 'upgrade_required', min: '4.1.0' });
+    expect(await readUpgradeRequired(json(426, { code: 'upgrade_required', min: '<script>' }))).toEqual({ code: 'upgrade_required', min: null });
+    expect(await readUpgradeRequired(new Response('', { status: 426 }))).toEqual({ code: 'upgrade_required', min: null });
+    expect(await readUpgradeRequired(json(400, { code: 'upgrade_required', min: '4.2.0' }))).toEqual({ code: 'upgrade_required', min: '4.2.0' });
+    expect(await readUpgradeRequired(json(400, { code: 'invalid' }))).toBeNull();
+    expect(await readUpgradeRequired(json(200, { code: 'upgrade_required' }))).toBeNull();
+  });
+
+  it('不吃掉响应体：调用方还能再读', async () => {
+    const res = json(426, { code: 'upgrade_required', min: '4.1.0' });
+    await readUpgradeRequired(res);
+    expect(await res.json()).toEqual({ code: 'upgrade_required', min: '4.1.0' });
+  });
+
+  it('appFetch 收到 426 时通知订阅者，响应原样返回；取消订阅后不再通知', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json(426, { code: 'upgrade_required', min: '4.1.0' }))));
+    const seen = vi.fn();
+    const off = onUpgradeRequired(seen);
+    const res = await appFetch('https://example.invalid/sb/rest/v1/todos', { method: 'POST' });
+    expect(res.status).toBe(426);
+    expect(seen).toHaveBeenCalledWith({ code: 'upgrade_required', min: '4.1.0' });
+    off();
+    await appFetch('https://example.invalid/sb/rest/v1/todos', { method: 'POST' });
+    expect(seen).toHaveBeenCalledTimes(1);
+  });
+
+  it('正常响应不通知', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json(201, {}))));
+    const seen = vi.fn();
+    const off = onUpgradeRequired(seen);
+    await appFetch('https://example.invalid/x');
+    expect(seen).not.toHaveBeenCalled();
+    off();
+  });
+});
+
+describe('时钟偏差接线（接手清单 K8-clock、TC-B1-31）', () => {
+  it('appFetch 收到 /sb/ 的响应：Date 头喂给 clock（不是 /sb/ 的不算）', async () => {
+    const spy = vi.spyOn(clock, 'observeResponse');
+    const date = 'Thu, 29 Oct 2026 01:00:00 GMT';
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response('ok', { headers: { Date: date } })));
+    await appFetch('https://app.example.invalid/sb/rest/v1/todos');
+    await appFetch(new URL('https://app.example.invalid/functions/v1/x'));
+    expect(spy.mock.calls[0]).toEqual(['https://app.example.invalid/sb/rest/v1/todos', date]);
+    expect(spy.mock.calls[1]?.[0]).toBe('https://app.example.invalid/functions/v1/x');
+    spy.mockRestore();
+  });
+});
+
+describe('F5 ⑤：读不出原因的网络错误按断网处理（Cloudflare 超额错误页不带 CORS 头）', () => {
+  it('fetch 抛 TypeError（exe 里被 CORS 挡下的错误页、断网）：换成 NetworkUnreadableError，仍是 TypeError、消息以 Failed to fetch 开头', async () => {
+    const raw = new TypeError('Failed to fetch');
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(raw)));
+    const e: unknown = await appFetch('https://lemomemo.com/sb/rest/v1/todos').catch((x: unknown) => x);
+    expect(isNetworkUnreadable(e)).toBe(true);
+    expect(e).toBeInstanceOf(TypeError);
+    expect((e as Error).name).toBe('TypeError');
+    expect((e as Error).message).toMatch(/^Failed to fetch/);
+    expect((e as Error).cause).toBe(raw);
+    // 各处的断网判断都认得出来（consent-api、settings-api、sync-transport 的 FETCH_FAILED 写法）
+    expect(/failed to fetch|load failed|networkerror|network request failed|network error/i.test((e as Error).message)).toBe(true);
+  });
+
+  it('别的写法的失败（Safari 的 Load failed、非 Error 的值）也一样', async () => {
+    for (const raw of [new TypeError('Load failed'), 'weird', null]) {
+      vi.stubGlobal('fetch', vi.fn(() => Promise.reject(raw)));
+      await expect(appFetch('https://x.invalid/')).rejects.toBeInstanceOf(NetworkUnreadableError);
+    }
+  });
+
+  it('status 0 的响应（opaque、Response.error()）当作读不出原因', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.error())));
+    await expect(appFetch('https://x.invalid/')).rejects.toBeInstanceOf(NetworkUnreadableError);
+  });
+
+  it('调用方取消、超时原样抛出，不改成网络错误', async () => {
+    for (const name of ['AbortError', 'TimeoutError']) {
+      const raw = new DOMException('stop', name);
+      vi.stubGlobal('fetch', vi.fn(() => Promise.reject(raw)));
+      await expect(appFetch('https://x.invalid/')).rejects.toBe(raw);
+    }
+  });
+
+  it('读得出来的错误照旧原样返回（5xx、429 的错误页由 outbox 按 transient 退避，不在这里改）', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('<html>1027</html>', { status: 503, headers: { 'content-type': 'text/html' } }))));
+    expect((await appFetch('https://x.invalid/')).status).toBe(503);
+  });
+
+  it('postgrest 经 appFetch 收到这种错误：回 status 0，sync-transport 认成 network（和断网同一条路）', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))));
+    const { PostgrestClient } = await import('@supabase/postgrest-js');
+    const { toFailure } = await import('../supabase/sync-transport.ts');
+    const r = await new PostgrestClient('https://lemomemo.com/sb/rest/v1', { fetch: appFetch }).from('todos').select('*').retry(false); // GET 默认会自己重试 3 次（1、2、4 秒），这里只看结果
+    expect(r.status).toBe(0);
+    expect(toFailure(r.error, r.status)).toEqual({ network: true });
+  });
+});

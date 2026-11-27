@@ -1,0 +1,74 @@
+{
+ "id": "kai",
+ "label": {
+  "zh": "文楷",
+  "ko": "원카이"
+ },
+ "num": "zh",
+ "order": 3,
+ "faces": {
+  "zh": [
+   {
+    "file": "LXGWWenKai-Regular.ttf",
+    "weight": "100 499"
+   },
+   {
+    "file": "LXGWWenKai-Medium.ttf",
+    "weight": "500 900"
+   }
+  ],
+  "ko": [
+   {
+    "file": "GowunBatang-Regular.ttf",
+    "weight": "100 499"
+   },
+   {
+    "file": "GowunBatang-Bold.ttf",
+    "weight": "500 900",
+    "prefetch": false
+   }
+  ]
+ },
+ "licenses": [
+  {
+   "name": "霞鹜文楷（LXGW WenKai）",
+   "spdx": "OFL-1.1",
+   "file": "LXGWWenKai-OFL.txt",
+   "sourceUrl": "https://github.com/lxgw/LxgwWenKai/releases/tag/v1.530",
+   "version": "v1.530",
+   "urls": {
+    "LXGWWenKai-Regular.ttf": "https://github.com/lxgw/LxgwWenKai/releases/download/v1.530/LXGWWenKai-Regular.ttf",
+    "LXGWWenKai-Medium.ttf": "https://github.com/lxgw/LxgwWenKai/releases/download/v1.530/LXGWWenKai-Medium.ttf",
+    "LXGWWenKai-OFL.txt": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.530/OFL.txt"
+   },
+   "sha256": {
+    "LXGWWenKai-Regular.ttf": "2d73eea94ad808999d90c0000c239a84a33b09d4bc6ab6c5b8bbf1eda8a7fc8b",
+    "LXGWWenKai-Medium.ttf": "f4b8a34d1f838fe411540cb7c97b1c384ac9738a876c4104500bc42508b2312a"
+   },
+   "reservedNames": [
+    "霞鹜",
+    "霞鶩",
+    "落霞孤鹜",
+    "落霞孤鶩",
+    "LXGW"
+   ]
+  },
+  {
+   "name": "Gowun Batang（고운바탕）",
+   "spdx": "OFL-1.1",
+   "file": "GowunBatang-OFL.txt",
+   "sourceUrl": "https://raw.githubusercontent.com/yangheeryu/Gowun-Batang/4e73f5a9a004927220354f4b68a4c720da538147/fonts/ttf/",
+   "version": "commit 4e73f5a9a004927220354f4b68a4c720da538147（官方仓库没有 Releases，主持人 11-14 准取原作者仓库主分支、固定到这个 commit）",
+   "urls": {
+    "GowunBatang-Regular.ttf": "https://raw.githubusercontent.com/yangheeryu/Gowun-Batang/4e73f5a9a004927220354f4b68a4c720da538147/fonts/ttf/GowunBatang-Regular.ttf",
+    "GowunBatang-Bold.ttf": "https://raw.githubusercontent.com/yangheeryu/Gowun-Batang/4e73f5a9a004927220354f4b68a4c720da538147/fonts/ttf/GowunBatang-Bold.ttf",
+    "GowunBatang-OFL.txt": "https://raw.githubusercontent.com/yangheeryu/Gowun-Batang/4e73f5a9a004927220354f4b68a4c720da538147/OFL.txt"
+   },
+   "sha256": {
+    "GowunBatang-Regular.ttf": "466c593e7147412e748af4856d5ad14709b5a860bdf62b9c2546f2c5874e9849",
+    "GowunBatang-Bold.ttf": "dbfcaa646e5831e7478524924f02906f550285a5050699b4e38c9950b3ec4b94"
+   },
+   "reservedNames": []
+  }
+ ]
+}

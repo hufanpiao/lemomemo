@@ -1,0 +1,40 @@
+// 登录页入口 /app/auth/（架构 15.6 第 4b 条：Vite 的第二个入口，只带登录、邀请需要的代码）
+// - 只有这一页的 CSP 放行 https://challenges.cloudflare.com（src/_headers 的 /app/auth/* 一段）
+// - 不注册 SW（主 App 注册；这一页也在 /app/ 作用域里，装好的 SW 会预缓存它）
+// - 登录成功后跳回 /app/（同源，supabase-js 的会话存储共用）；exe 的登录小窗口改存凭据管理器（platform/session-store.ts），由 Rust 通知主窗口
+// - 现在这一页的包里没有 zod（2026-10-29 按构建产物核对过）；以后引入了也不用在这里调 z.config({ jitless: true })：
+//   FA-6 ③ 起 vite.config.ts 把裸的 'zod' 别名到 platform/zod-jitless.ts，转出之前已关掉 JIT（严格 CSP 下不会报 eval 违规）
+import { StrictMode, Suspense } from 'react';
+import { createRoot } from 'react-dom/client';
+import '../styles/tokens.css';
+import '../styles/skins/simple.css';
+import '../styles/skins/glass.css';
+import '../styles/base.css';
+import { AuthPage } from '../features/auth/index.ts';
+import { uiStore } from '../kit/state/ui-store.ts';
+import { applyUiLocale, bootLocale, ensureSharedDict } from '../platform/doc-locale.ts';
+import { buildInfo } from '../platform/env.ts';
+import { installDesktopSession } from '../platform/session-store.ts';
+// 皮肤、深浅色跟这台设备上次用的（ADR-008；登录页没有账号设置可读，模块一引入就按本机缓存 pv-look 套上）：四种组合都有 --login-bg（皮肤视觉稿令牌表）
+import '../platform/look.ts';
+
+// 界面语言：本机选过的（pv-locale）→ 设备语言 → 中文（16.4，登录页没有 profile）；定语言、用上语言和主 App 是同一份（platform/doc-locale.ts）。
+// 公共词典只下载这一种语言（首屏瘦身 D，11-17）：渲染之前等它；失败改下另一种，再失败也照样渲染（App 名走启动兜底，别的退回键名）
+const locale = bootLocale();
+const dictReady = ensureSharedDict(locale).then(() => applyUiLocale(locale, uiStore.getState()));
+
+const el = document.getElementById('root');
+if (!el) throw new Error('root_missing');
+el.dataset['version'] = buildInfo.version;
+const root = el;
+
+const page = (
+  <Suspense fallback={null}>
+    <AuthPage />
+  </Suspense>
+);
+
+// exe 的登录小窗口：会话写进凭据管理器（F5-2 / N1），渲染（读会话、建 supabase 客户端）之前先 preload 好；网页版直接渲染
+void Promise.all([installDesktopSession().catch(() => undefined), dictReady]).finally(() => {
+  createRoot(root).render(import.meta.env.DEV ? <StrictMode>{page}</StrictMode> : page);
+});

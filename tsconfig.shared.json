@@ -1,0 +1,9 @@
+{
+  // shared：前端和 Edge Functions（Deno）共用，lib 里不放 DOM，也不带 Node、Deno 的类型（架构 2.1、A2）
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["shared/**/*.ts"]
+}

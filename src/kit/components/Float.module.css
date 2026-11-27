@@ -1,0 +1,31 @@
+/* 浮条的公共外观，只此一份（各处复制会漂移）。
+   挂这里类名的：撤销条（UndoToast）、列表出错条（ListToasts）、最近删除页提示（RecentlyDeletedPage）、“准备中”（app/plus-slot）、
+   打字条和多条提示（TypeBar、SavedNotice）、录音提示（RecordHost、VoiceNotice）、提醒横幅 / 按钮条 / 小提示（RemindHost）、
+   同步提示卡（SyncNoticeHost）、随手记输入行上的提示条（NotesBits）。底栏、“＋”不挂（定稿不动）。
+   • 宽度、底色、字色、阴影、模糊、圆角和“减少透明”兜底只写在这里；各自那份只管位置（left / right / top / bottom）、层级、内边距、排版，
+     两边不写同一个属性，所以不靠两份样式表谁先加载。只用令牌
+   • .float：宽 ≤ 560、居中 + 磨砂，多数浮条挂这一个
+   • .lane：只要宽度：同步提示卡的外框（外框 .region 管位置，磨砂在里面每张卡上）
+   • .glass：只要磨砂：同步提示卡的每张卡；随手记输入行上的提示条（宽度跟输入行走）
+   • 圆角默认 --r-lg，提醒横幅、按钮条在自己那份里给 --float-r；提醒横幅的柠檬黄描边给 --float-ring，画在阴影后面 */
+.float,
+.lane {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.float,
+.glass {
+  border-radius: var(--float-r, var(--r-lg));
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--shadow-2), var(--float-ring, 0 0 transparent);
+  backdrop-filter: blur(6px) saturate(var(--float-sat));
+}
+
+/* 减少透明效果（data-rt：系统设置了 reduce；data-solid：隐私记页挂着；platform/look.ts 写）：实色、不模糊 */
+:global(:root:is([data-rt='1'], [data-solid='1'])) .float,
+:global(:root:is([data-rt='1'], [data-solid='1'])) .glass {
+  background: var(--float-solid);
+  backdrop-filter: none;
+}

@@ -1,0 +1,891 @@
+/* 演示页（/zh/demo、/ko/demo）专用的样式，排在 home.css 后面加载；首页不下载这份。
+   版式（左边说明、右边舞台）、能点的 App（换页、详情、弹层、勾选动效）、手机宽度整屏 App。配色和动效令牌在 home.css 的 :root。 */
+
+/* stylelint-disable no-descending-specificity -- 按画面分段写（版式、换页、详情、弹层、整屏），不按选择器权重排序 */
+
+/* iPhone 横屏（宽度够 768、走左右两栏）时左右让开刘海和圆角：页面左右边距不小于安全区（演示页 viewport-fit=cover） */
+.demo-body {
+  --pad: max(24px, calc((100% - 1240px) / 2), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+}
+
+
+/* ---------- 演示页 ---------- */
+.demo {
+  background: var(--lemon);
+  padding: 30px var(--pad) 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 40px;
+  align-items: start;
+}
+
+.demo-intro h1 {
+  font-size: clamp(60px, 8vw, 124px);
+  line-height: 1.04;
+  font-weight: 900;
+  letter-spacing: -.05em;
+}
+
+.demo-sub {
+  font-size: 19px;
+  margin: 22px 0 26px;
+}
+
+.seg {
+  display: inline-flex;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 999px;
+  background: var(--ink);
+  margin: 0 8px 12px 0;
+}
+
+.seg button {
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  border: 0;
+  background: none;
+  color: var(--on-dark);
+  padding: 10px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background-color var(--dur-ui) var(--ease-out), color var(--dur-ui) var(--ease-out);
+}
+
+.seg button[aria-pressed="true"] {
+  background: var(--lemon);
+  color: var(--ink);
+}
+
+.cap {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.6;
+  margin: 18px 0 10px;
+  min-height: 3.2em;
+}
+
+.try {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.try li {
+  background: var(--paper);
+  border-radius: 16px;
+  padding: 11px 16px;
+  font-size: 16px;
+  box-shadow: 0 1px 0 var(--shade-lemon);
+}
+
+.demo-note {
+  font-size: 14px;
+  color: var(--ink-2);
+  margin-top: 16px;
+}
+
+/* 舞台不套白卡片：样机直接放在柠檬黄底上（负责人 11-25：“演示页面不要这个白色背景，只留下手机”“网页版也一样”） */
+.demo-stage {
+  /* 演示里要读的灰字加深一档，过 4.5:1 */
+  --a-ink-3: var(--a-ink-3-aa);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 800px;
+  padding: 44px 30px;
+}
+
+.shot {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.demo-after {
+  grid-column: 1 / -1;
+  margin: 0 calc(50% - 50vw);
+  padding: 60px calc(50vw - 50%);
+  background: var(--ink);
+  color: var(--paper);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px;
+}
+
+.demo-after p {
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: -.02em;
+  margin: 0;
+}
+
+/* 字用墨色：黑底段落里 color 是白的，白字压柠檬黄只有 1.4:1 */
+.demo-after .go {
+  background: var(--lemon);
+  color: var(--ink);
+}
+
+.demo-after span {
+  color: var(--on-dark-2);
+}
+
+/* 演示页的翻月按钮是真 <button>（能聚焦、读得出名字）：去掉浏览器默认的边框和字体，看着和样机里的一样 */
+.cal-nav button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.drop-live {
+  transition: translate var(--dur-drop) var(--ease-drop), scale var(--dur-press) var(--ease-press);
+}
+
+.drop-live.press {
+  scale: 1.12;
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 110px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--a-ink);
+  color: var(--paper);
+  font-size: 14px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  z-index: 17;
+}
+
+.ph-demo {
+  --k: .8;
+}
+
+/* 网页版：样机按真 App 网页版的设计宽（1440）排好，整体缩放到正好占满舞台宽（--web-zoom 由 demo.js 算）。
+   样机整行放在说明下面：和说明并排时最多约 1020 宽、缩到 0.7，正文只剩 10px 左右；整行在 1440、1280 宽的屏上约缩到 0.86、0.85，
+   正文（15px）实际约 12.8px（负责人 11-25：“网页版的操作界面太小了”） */
+.shot-web .br {
+  zoom: var(--web-zoom, .6);
+}
+
+.demo.is-web {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.demo-stage.is-web {
+  min-height: 0;
+  padding: 0 0 44px;
+}
+
+/* 网页版时说明排成两栏（左边标题，右边按钮和提示），让样机离屏幕顶近一点 */
+/* stylelint-disable-next-line media-feature-range-notation -- 旧版 Safari 不认范围写法 */
+@media (min-width: 900px) {
+  .demo.is-web .demo-intro {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 40px;
+    align-items: start;
+  }
+
+  .demo.is-web .demo-intro h1 {
+    grid-area: 1 / 1;
+  }
+
+  .demo.is-web .demo-sub {
+    grid-area: 2 / 1;
+  }
+
+  .demo.is-web .demo-note {
+    grid-area: 3 / 1;
+  }
+
+  .demo.is-web .demo-ctl {
+    grid-area: 1 / 2 / 4;
+  }
+}
+
+/* ---------- 悬停（只给有鼠标的设备） ---------- */
+/* stylelint-disable-next-line media-feature-range-notation -- 不是范围写法；和下面同一套写法，旧版 Safari 也认 */
+@media (hover: hover) {
+  .demo-after .go:hover {
+    background: var(--lemon-hi);
+  }
+
+  .seg button:hover {
+    color: var(--paper);
+  }
+
+  .seg button[aria-pressed="true"]:hover {
+    color: var(--ink);
+  }
+}
+
+/* ---------- 窄屏（手机） ---------- */
+/* stylelint-disable-next-line media-feature-range-notation -- 旧版 Safari 不认范围写法，官网不能只给新系统看（同 site.css） */
+@media (max-width: 899px) {
+  .demo {
+    grid-template-columns: 1fr;
+    gap: 26px;
+    padding: 20px 16px 0;
+  }
+
+  .demo-intro h1 {
+    font-size: 68px;
+  }
+
+  .seg button {
+    padding: 8px 14px;
+    font-size: 15px;
+  }
+
+  .demo-stage {
+    min-height: 0;
+    margin: 0 -16px;
+    padding: 26px 10px;
+  }
+
+  .demo-stage.is-web {
+    padding: 0 16px 26px;
+  }
+
+  .ph-demo {
+    --k: .71;
+  }
+
+  .demo-after {
+    margin: 0 -16px;
+    padding: 40px 16px;
+  }
+
+  .demo-after p {
+    font-size: 30px;
+  }
+}
+
+/* ---------- 演示页：能点的 App ---------- */
+.demo-stage .ck,
+.demo-stage [data-kind],
+.demo-stage [data-go],
+.demo-stage [data-plus],
+.demo-stage [data-flip],
+.demo-stage .chips span,
+.demo-stage .cal div {
+  cursor: pointer;
+}
+
+.demo-stage button {
+  font: inherit;
+  color: inherit;
+}
+
+.pages {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.pages > .pg {
+  overflow-y: auto;
+  padding-bottom: 140px;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  touch-action: pan-y;
+  background: var(--a-app-bg);
+}
+
+.pages > .pg::-webkit-scrollbar {
+  display: none;
+}
+
+.demo-exit {
+  display: none;
+}
+
+/* 页签互切、日历翻月：原地模糊淡换（照 App 的 motion/blur-swap.ts：旧的一页前 2/3 就淡没、模糊到 4px，新的一页从模糊到清晰） */
+.swap-out {
+  pointer-events: none;
+  animation: swap-out var(--dur-flip) var(--ease-out) forwards;
+}
+
+.swap-in {
+  animation: swap-in var(--dur-flip) var(--ease-out);
+}
+
+/* 点进详情、返回：新页从右边滑进来盖住，旧页往左让一点（照 App 的 motion/page-swap.ts 的 slidePage） */
+.dt-pg {
+  z-index: 3;
+  box-shadow: -12px 0 30px -18px var(--a-shadow);
+}
+
+.push-in {
+  animation: push-in var(--dur-sheet) var(--ease-drawer);
+}
+
+.push-under {
+  animation: push-under var(--dur-sheet) var(--ease-drawer) forwards;
+}
+
+.pop-out {
+  animation: pop-out var(--dur-sheet) var(--ease-drawer) forwards;
+}
+
+.pop-back {
+  animation: pop-back var(--dur-sheet) var(--ease-drawer);
+}
+
+.scr.in-detail .tb,
+.scr.in-detail .fab {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: -8px;
+  padding: 6px 10px 6px 2px;
+  border: 0;
+  background: none;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.back .ic {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.2;
+}
+
+.dt-kind {
+  margin: 20px 4px 4px;
+  font-size: 12px;
+  letter-spacing: .18em;
+  color: var(--a-ink-2);
+}
+
+.dt-title {
+  margin: 0 4px 20px;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.dt-rows .rw {
+  justify-content: space-between;
+}
+
+.dt-rows .k {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  color: var(--a-ink-2);
+}
+
+.dt-rows .k .ic {
+  width: 17px;
+  height: 17px;
+}
+
+.dt-rows .v {
+  font-size: 15px;
+  text-align: right;
+}
+
+.dt-rows .muted {
+  font-size: 13px;
+  color: var(--a-ink-3);
+}
+
+.dt-lock .lk {
+  top: 110px;
+  bottom: 140px;
+  justify-content: flex-start;
+}
+
+/* 点“＋”：打字弹层 */
+.ts {
+  padding-bottom: 20px;
+}
+
+.ti {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 6px 6px 6px 16px;
+  border-radius: 22px;
+  background: var(--a-seg);
+  transition: box-shadow var(--dur-ui) var(--ease-out);
+}
+
+.ti:focus-within {
+  box-shadow: 0 0 0 2px var(--lemon);
+}
+
+.ti input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: 16px var(--f-sys);
+  color: var(--a-ink);
+}
+
+.ti input::placeholder {
+  color: var(--a-ink-3);
+}
+
+.send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--lemon);
+  cursor: pointer;
+}
+
+.send .ic {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.4;
+}
+
+.ex-h {
+  margin: 14px 2px 8px;
+  font-size: 12px;
+  color: var(--a-ink-2);
+  text-align: left;
+}
+
+.ex {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ex button {
+  padding: 8px 12px;
+  border: 1px solid var(--a-line-2);
+  border-radius: 14px;
+  background: var(--paper);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-ui) var(--ease-out);
+}
+
+.ts .vs-l {
+  margin-top: 14px;
+}
+
+.ts .vc {
+  margin-top: 12px;
+}
+
+.dk-sheet {
+  left: 50%;
+  right: auto;
+  bottom: 24px;
+  width: 400px;
+  margin-left: -200px;
+}
+
+/* 勾掉待办：方框弹一下、外圈扩散、六个小点炸开，然后划线 */
+.fx-pop {
+  animation: ck-pop var(--dur-done-pop) var(--ease-done-pop);
+}
+
+.fx-ring::before {
+  animation: ck-ring var(--dur-grow) var(--ease-out) var(--dur-done-ring-at) both;
+}
+
+.spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  pointer-events: none;
+}
+
+.spark b {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.spark b:nth-child(2) {
+  rotate: 60deg;
+}
+
+.spark b:nth-child(3) {
+  rotate: 120deg;
+}
+
+.spark b:nth-child(4) {
+  rotate: 180deg;
+}
+
+.spark b:nth-child(5) {
+  rotate: 240deg;
+}
+
+.spark b:nth-child(6) {
+  rotate: 300deg;
+}
+
+.spark i {
+  position: absolute;
+  left: -2.5px;
+  top: -2.5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--lemon-lo);
+  opacity: 0;
+  animation: spark var(--dur-spark) var(--ease-out) var(--dur-done-spark-at) both;
+}
+
+.cal-nav .is-off {
+  opacity: .35;
+}
+
+.fx-enter {
+  animation: swap-in var(--dur-sheet) var(--ease-out);
+}
+
+.fx-up {
+  animation: sheet-up var(--dur-sheet) var(--ease-drawer);
+}
+
+.fx-down {
+  animation: sheet-down var(--dur-grow) var(--ease-standard) forwards;
+}
+
+.fx-fade-in,
+.toast {
+  animation: fade-in var(--dur-ui) var(--ease-out);
+}
+
+.fx-fade-out {
+  animation: fade-out var(--dur-grow) var(--ease-standard) forwards;
+}
+
+.fx-card {
+  animation: card-in var(--dur-sheet) var(--ease-out);
+}
+
+.fx-row {
+  animation: row-new var(--dur-sheet) var(--ease-out);
+}
+
+/* 减少动态效果：系统设置了就关掉位移和缩放，换页、翻月只留淡入淡出 */
+/* stylelint-disable-next-line media-feature-range-notation -- 不是范围写法；官网要照顾旧版 Safari */
+@media (prefers-reduced-motion: reduce) {
+  .drop-live.press {
+    scale: none;
+  }
+
+  .fx-enter,
+  .fx-pop,
+  .fx-ring::before,
+  .spark i,
+  .fx-up,
+  .fx-down,
+  .fx-card,
+  .fx-row,
+  .push-in,
+  .push-under,
+  .pop-out,
+  .pop-back {
+    animation: none;
+  }
+
+  .swap-in {
+    animation: fade-in var(--dur-ui) var(--ease-out);
+  }
+
+  .swap-out {
+    animation: fade-out var(--dur-ui) var(--ease-out) forwards;
+  }
+}
+
+/* ---------- 手机宽度打开演示页：整屏就是 App，不套样机框 ---------- */
+/* stylelint-disable-next-line media-feature-range-notation -- 旧版 Safari 不认范围写法 */
+@media (max-width: 767px) {
+  .demo-body {
+    overflow: hidden;
+  }
+
+  .demo-body .nav,
+  .demo-body .foot,
+  .demo-intro .seg,
+  .demo-intro .cap,
+  .demo-intro .try,
+  .demo-after {
+    display: none;
+  }
+
+  /* 介绍区不整块藏掉：标题和“示例数据、不连网”说明留给读屏 */
+  .demo-intro {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .demo {
+    display: block;
+    padding: 0;
+  }
+
+  .demo-stage {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    background: var(--a-bg);
+  }
+
+  .shot {
+    height: 100%;
+  }
+
+  .ph.ph-demo {
+    --k: 1;
+
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .ph-demo .ph-k,
+  .ph-demo .sb,
+  .ph-demo .di,
+  .ph-demo .hi,
+  .ph-demo .ph-bz::after {
+    display: none;
+  }
+
+  .ph-demo .ph-bz {
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .ph-demo .scr {
+    border-radius: 0;
+  }
+
+  .ph-demo .ap {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .ph-demo .tb {
+    bottom: max(10px, calc(env(safe-area-inset-bottom, 0px) - 4px));
+  }
+
+  .ph-demo .fab {
+    bottom: max(4px, calc(env(safe-area-inset-bottom, 0px) - 10px));
+  }
+
+  /* 弹层比底栏高 12px（没有安全区时就是原来的 22px），有横条时跟着底栏一起让开 */
+  .ph-demo .vs {
+    bottom: calc(max(10px, calc(env(safe-area-inset-bottom, 0px) - 4px)) + 12px);
+  }
+
+  .ph-demo .ni {
+    bottom: calc(max(10px, calc(env(safe-area-inset-bottom, 0px) - 4px)) + 76px);
+  }
+
+
+  .ph-demo .dt-lock .lk {
+    top: calc(env(safe-area-inset-top, 0px) + 60px);
+  }
+
+  .demo-exit {
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 23px);
+    right: 62px;
+    z-index: 11;
+    display: inline-flex;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--a-line-2);
+    background: var(--a-glass);
+    color: var(--a-ink-2);
+    font: 600 11px/1.2 var(--f-sys);
+    text-decoration: none;
+    /* stylelint-disable-next-line property-no-vendor-prefix -- iOS 17 及更早的 Safari 只认带前缀的毛玻璃 */
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+
+  .scr.in-detail .demo-exit {
+    display: none;
+  }
+}
+
+@keyframes swap-out {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+  }
+
+  66.7% {
+    opacity: 0;
+    filter: blur(2.7px);
+  }
+
+  100% {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+@keyframes swap-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+@keyframes push-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes push-under {
+  to {
+    transform: translateX(-30%);
+    opacity: .5;
+  }
+}
+
+@keyframes pop-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pop-back {
+  from {
+    transform: translateX(-30%);
+    opacity: .5;
+  }
+}
+
+@keyframes ck-pop {
+  40% {
+    transform: scale(1.2);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes ck-ring {
+  from {
+    opacity: 1;
+    transform: scale(.7);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes spark {
+  from {
+    opacity: 1;
+    transform: translateY(-9px);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(110%);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+@keyframes sheet-down {
+  to {
+    transform: translateY(110%);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes row-new {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

@@ -1,0 +1,10 @@
+/* 设置 › 天气（WeatherSettings.tsx）：卡片、行、单选都是 kit Settings 的；输入框是 kit Form 的 .input。这里只管搜索框占满一行、几句状态字的颜色（读屏隐藏字用 kit Refine 的 .srOnly） */
+.search {
+  margin: 6px 0;
+}
+
+.dim {
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+

@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "provider": "gemini",
+  "origin": "handmade",
+  "note": "随手记分类：5 条都提议新分类（旅行、健身、读书、摄影、摄影），用来测每批最多新建 3 个（手写，未经真调用录制；请求体不存，回放只按方法和地址对）",
+  "entries": [
+    {
+      "req": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-x:generateContent",
+        "body": null
+      },
+      "res": {
+        "kind": "http",
+        "status": 200,
+        "body": "{\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"{\\\"items\\\":[{\\\"i\\\":0,\\\"category\\\":\\\"旅行\\\",\\\"new\\\":true},{\\\"i\\\":1,\\\"category\\\":\\\"健身\\\",\\\"new\\\":true},{\\\"i\\\":2,\\\"category\\\":\\\"读书\\\",\\\"new\\\":true},{\\\"i\\\":3,\\\"category\\\":\\\"摄影\\\",\\\"new\\\":true},{\\\"i\\\":4,\\\"category\\\":\\\"摄影\\\",\\\"new\\\":true}]}\"}]},\"finishReason\":\"STOP\"}]}"
+      }
+    }
+  ]
+}

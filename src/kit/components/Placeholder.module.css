@@ -1,0 +1,19 @@
+/* 顶部让开安全区（不然标题落进顶部模糊带）：同其他页写 var(--safe-top)，不直接写 env()（base.css）；
+   没有安全区时仍是原来的 24px */
+.page {
+  padding: max(var(--safe-top), 24px) 16px 24px;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: var(--fs-24);
+}
+
+.sub {
+  margin: 0;
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: var(--fs-13);
+}
+
+/* 给用户看的说明（随手记“即将推出”）用 List.module.css 的 .empty（全站一种空状态）；以后可换成空状态插画 */

@@ -1,0 +1,169 @@
+// invite-signup 入口（架构 5.6、第 6 节函数表）：匿名调用，邀请码注册。逻辑和测试见 core.ts、tests/functions/invite-signup.test.ts。
+// 经 supabase-js（service role）读写 private.invites、private.pending_signups、rpc take_rate（0.29 续第 52 条：经 schema('private')），
+// public.profiles、app_config；不直连数据库（不 import _shared/db.ts，不在 6.2 的名单里），不碰 R2。
+// 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY（平台自带）；TURNSTILE_SECRET、RESEND_API_KEY、PROXY_SECRET（8.4）；
+//   SIGNUP_HASH_SECRET（邮箱、IP、验证码哈希的 HMAC 密钥）。
+//   TURNSTILE_SITEVERIFY_URL、RESEND_EMAILS_URL：只给本机和 e2e 换出站地址（INVITE-mailpit，10-30），线上不设；
+//   不设就用官方地址，值不合规整个函数回 500 misconfigured（规则见 outbound.ts）。
+// 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
+import { serviceAdminOrNull } from '../_shared/admin.ts';
+import { envKind } from '../_shared/env-kind.ts';
+import { json } from '../_shared/http.ts';
+import { postOut } from '../_shared/net.ts';
+import { rpcTakeRate } from '../_shared/take-rate.ts';
+import { sendMail } from '../_shared/mail-send.ts';
+import { appConfigMinLoader, cachedMinClientVersion } from '../_shared/version-gate.ts';
+import { handle, type AuthAdmin, type Store, type TurnstileResult } from './core.ts';
+import { REQUEST_BUDGET_MS, withAuthTimeouts, withStoreTimeouts } from './store-timeout.ts';
+import { RESEND_EMAILS_URL, TURNSTILE_SITEVERIFY_URL, resolveOutboundUrl } from './outbound.ts';
+import { codeLogger } from '../_shared/fn-log.ts';
+
+
+// 没有生成的库类型：按 _shared/auth.ts 的写法用不带泛型的 SupabaseClient（行一律当 any，返回值在下面逐个收窄）
+// deno-lint-ignore no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Admin = SupabaseClient<any, any, any>;
+
+function must<T>(r: { data: T; error: unknown }): T {
+  if (r.error) throw new Error('db');
+  return r.data;
+}
+
+// 每次 store 调用由 store-timeout.ts 新建一个 signal 交进来，各查询挂 .abortSignal(signal)，超时就中止（INVITE-store-timeout）
+function makeStore(admin: Admin, signal: AbortSignal): Store {
+  const priv = admin.schema('private');
+  return {
+    takeRate: rpcTakeRate(admin, signal),
+    async getInvite(codeHash) {
+      return must(await priv.from('invites').select('max_uses, used_count, expires_at').eq('code_hash', codeHash).abortSignal(signal).maybeSingle());
+    },
+    // 迁移 20261031150000（INVITE-late-commit）：占码、退码和 pending 的 claimed_code 一个事务
+    async claimInvite(emailHash, otpHash, codeHash, notExpiredAt) {
+      const data = must(await priv.rpc('invite_claim', { p_email_hash: emailHash, p_otp_hash: otpHash, p_code_hash: codeHash, p_now: notExpiredAt }).abortSignal(signal));
+      if (data !== 'ok' && data !== 'reused' && data !== 'invalid' && data !== 'no_pending') throw new Error('db');
+      return data;
+    },
+    async releaseInvite(emailHash, codeHash) {
+      const data = must(await priv.rpc('invite_release', { p_email_hash: emailHash, p_code_hash: codeHash }).abortSignal(signal));
+      if (typeof data !== 'boolean') throw new Error('db');
+      return data;
+    },
+    async putPending(emailHash, row) {
+      // 只写这四列：claimed_code 不在里面，upsert 时原值保留（迁移 20261031150000，“已占”跟邮箱 + 码走，不跟验证码版本走）
+      must(await priv.from('pending_signups').upsert({ email_hash: emailHash, otp_hash: row.otp_hash, tries: row.tries, expires_at: row.expires_at },
+        { onConflict: 'email_hash' }).abortSignal(signal));
+    },
+    async getPending(emailHash) {
+      return must(await priv.from('pending_signups').select('otp_hash, tries, expires_at, claimed_code').eq('email_hash', emailHash).abortSignal(signal).maybeSingle());
+    },
+    async casPendingTries(emailHash, from, to, otpHash) {
+      const rows = must(await priv.from('pending_signups').update({ tries: to })
+        .eq('email_hash', emailHash).eq('tries', from).eq('otp_hash', otpHash).select('email_hash').abortSignal(signal));
+      return Array.isArray(rows) && rows.length === 1;
+    },
+    async deletePending(emailHash, otpHash) {
+      const q = priv.from('pending_signups').delete().eq('email_hash', emailHash).abortSignal(signal);
+      must(await (otpHash === undefined ? q : q.eq('otp_hash', otpHash)));
+    },
+    async insertProfile(userId, locale) {
+      // 已有就不动（ON CONFLICT DO NOTHING）：认领上一次超时晚到建出的用户时，profile 可能上一次已经建了（INVITE-auth-timeout）。
+      // 带 select（service_role 有 profiles 的 select）：DO NOTHING 只回真插进去的行，空数组 = 已经有了（认领的是注册完的账号，core.ts 判 email_exists）
+      const rows = must(await admin.from('profiles').upsert({ user_id: userId, ui_locale: locale }, { onConflict: 'user_id', ignoreDuplicates: true }).select('user_id').abortSignal(signal)) as unknown[] | null;
+      return (rows ?? []).length > 0;
+    },
+    // 架构 0.38 第 52 条：经函数侧版本门的缓存读（超时 1.5 秒、成功缓存 60 秒、失败缓存 10 秒放行，只记 gate_config_*）
+    minClientVersion() {
+      return cachedMinClientVersion(appConfigMinLoader(admin));
+    },
+  };
+}
+
+function makeAuth(admin: Admin): AuthAdmin {
+  return {
+    async createUser(id, email, locale) {
+      // 不传 password：账号不许有密码（0.36；auth.users 上的 users_guard_no_password 触发器兜底）。id 由 core 派生（INVITE-auth-timeout）
+      const { data, error } = await admin.auth.admin.createUser({ id, email, email_confirm: true, user_metadata: { locale } });
+      if (error || !data.user) {
+        const e = error as { code?: unknown; status?: unknown; message?: unknown } | null;
+        const exists = e?.code === 'email_exists' || e?.code === 'user_already_exists'
+          || (e?.status === 422 && typeof e.message === 'string' && /already (been )?registered|already exists/i.test(e.message));
+        return { ok: false, exists };
+      }
+      return { ok: true, userId: data.user.id };
+    },
+    async userExists(id) {
+      const { data, error } = await admin.auth.admin.getUserById(id);
+      if (data?.user) return true;
+      const e = error as { status?: unknown } | null;
+      if (e?.status === 404) return false;   // 没有这个用户
+      throw new Error('auth');
+    },
+    async deleteUser(userId) {
+      const { error } = await admin.auth.admin.deleteUser(userId);
+      if (error) throw new Error('auth');
+    },
+    async magiclinkTokenHash(email) {
+      const { data, error } = await admin.auth.admin.generateLink({ type: 'magiclink', email });
+      const h = data?.properties?.hashed_token;
+      return error || typeof h !== 'string' || !h ? null : h;
+    },
+  };
+}
+
+async function verifyTurnstile(siteverifyUrl: string, secret: string, token: string, remoteIp: string | null): Promise<TurnstileResult> {
+  const form = new URLSearchParams({ secret, response: token });
+  if (remoteIp) form.set('remoteip', remoteIp);
+  const r = await postOut(fetch, siteverifyUrl, { body: form });
+  if (!r.ok) {
+    await r.body?.cancel();
+    throw new Error('turnstile_http');
+  }
+  const j = (await r.json()) as { success?: unknown; hostname?: unknown; action?: unknown };
+  return {
+    success: j.success === true,
+    hostname: typeof j.hostname === 'string' ? j.hostname : null,
+    action: typeof j.action === 'string' ? j.action : null,
+  };
+}
+const log = codeLogger('invite-signup');
+
+// 出站地址换成了回环地址（outbound.ts 的 overridden）时记 outbound_url_overridden：每个函数实例只记一次，只记日志码、不记地址（INVITE-sugg，10-30）
+let overriddenLogged = false;
+
+Deno.serve((req) => {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const turnstileSecret = Deno.env.get('TURNSTILE_SECRET');
+  const resendKey = Deno.env.get('RESEND_API_KEY');
+  const admin = serviceAdminOrNull();   // url、key 都在才不是 null
+  if (!url || !key || !admin || !turnstileSecret || !resendKey) {
+    log('misconfigured');
+    return json(500, { error: 'misconfigured' });
+  }
+  const env = envKind(url);
+  // 出站地址（outbound.ts）：没设用官方地址；不合规不悄悄回落，当没配好（configured: false → 500 misconfigured）
+  const siteverify = resolveOutboundUrl(Deno.env.get('TURNSTILE_SITEVERIFY_URL'), TURNSTILE_SITEVERIFY_URL, env);
+  const emails = resolveOutboundUrl(Deno.env.get('RESEND_EMAILS_URL'), RESEND_EMAILS_URL, env);
+  if (!siteverify.ok || !emails.ok) log('outbound_url_invalid');
+  if (!overriddenLogged && ((siteverify.ok && siteverify.overridden) || (emails.ok && emails.overridden))) {
+    overriddenLogged = true;
+    log('outbound_url_overridden');
+  }
+  const siteverifyUrl = siteverify.ok ? siteverify.url : TURNSTILE_SITEVERIFY_URL;
+  const emailsUrl = emails.ok ? emails.url : RESEND_EMAILS_URL;
+  const until = Date.now() + REQUEST_BUDGET_MS;   // 这次请求的 store、Auth 调用共用一份 100 秒预算
+  return handle(req, {
+    store: withStoreTimeouts((signal) => makeStore(admin, signal), { log, until }),
+    auth: withAuthTimeouts(makeAuth(admin), { log, until }),
+    env,
+    verifyTurnstile: (token, ip) => verifyTurnstile(siteverifyUrl, turnstileSecret, token, ip),
+    sendMail: (to, mail) => sendMail(resendKey, to, mail, emailsUrl),
+    hashSecret: Deno.env.get('SIGNUP_HASH_SECRET'),
+    logSecret: key,   // 日志里认人的 HMAC 密钥（_shared/log-tag.ts，安全审查第 11 条）
+    proxySecret: Deno.env.get('PROXY_SECRET'),
+    configured: siteverify.ok && emails.ok,
+    now: Date.now,
+    log,
+  });
+});

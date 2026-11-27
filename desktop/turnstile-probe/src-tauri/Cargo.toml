@@ -1,0 +1,16 @@
+# B0 小验证用的最小 Tauri 2 壳（架构 5.10、TC-B0-65）。不是正式 exe，正式的在 desktop/src-tauri/（B6-exe）。
+# 第一次编译生成的 Cargo.lock 一并提交（8.3：--locked）。
+[package]
+name = "lemo-turnstile-probe"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.5", features = [] }
+
+[profile.release]
+strip = true

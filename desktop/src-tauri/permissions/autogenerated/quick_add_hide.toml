@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-quick-add-hide"
+description = "Enables the quick_add_hide command without any pre-configured scope."
+commands.allow = ["quick_add_hide"]
+
+[[permission]]
+identifier = "deny-quick-add-hide"
+description = "Denies the quick_add_hide command without any pre-configured scope."
+commands.deny = ["quick_add_hide"]

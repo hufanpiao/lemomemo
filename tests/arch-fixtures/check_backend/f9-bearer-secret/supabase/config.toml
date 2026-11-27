@@ -1,0 +1,6 @@
+[api]
+enabled = true
+
+# ⑦ 违规 1：名单里的 backup-manifest 没关 verify_jwt（名单和配置对不上）
+[functions.backup-manifest]
+verify_jwt = true

@@ -1,0 +1,291 @@
+# 柠檬记 4.0.0 的本地 Supabase 配置（supabase start / db reset / test db / gen types 用；CI 的 db 任务也用它）
+# 依据：架构 15.6 第 1 点“Supabase Auth 设置总表”（唯一出处）、3.3 C（private 暴露）、0.31 第 22 条（test db 只跑 rls/）。
+#
+# 重要：
+# - 本文件只管本地。预览、正式两个项目的设置由运维在控制台按 15.6 的总表设、B1 的 S-B1 逐项核对截图，不用 `supabase config push`。
+#   下面凡是“本地和线上不一样”的项都在行尾写了【线上】的值；改总表时同步改这里的注释。
+# - 不准写任何真实密钥。要用的值一律 env(...) 引用，变量放本机 supabase/.env.local 或 shell 环境（.env* 不进 git）；
+#   CI 不给这些变量，本地 Supabase 的 anon、service key 是 CLI 每次随机生成的测试值。
+# - pgTAP 测试一律 `npm run test:db`（= supabase test db supabase/tests/rls）。裸跑 `supabase test db` 时 CLI 用
+#   `pg_prove --ext .pg --ext .sql -r` 递归跑整个 supabase/tests（0.31 第 22 条；config.toml 没有改测试目录的设置），
+#   所以 d1-fixtures、compat 的样例和 offline 的桩一律用 .psql 后缀，supabase/tests/ 下以 .sql / .pg 结尾的只有 rls/*.test.sql，
+#   裸跑也不会执行样例、不会改本地库。离线 run.mjs 第 0 步检查 test:db 的写法和这条后缀规则。
+# - 版本：Supabase CLI 2.120.0（package.json、tools/ci-tools.lock）。改设置前先用 `npx supabase init` 在临时目录看这一版的模板。
+
+project_id = "lemomemo"
+
+[api]
+enabled = true
+port = 54321
+# 0.29 续第 52 条（做法 A）：private 加进暴露列表，安全靠授权（anon、authenticated 对 private 的表一律没有权限，D1 逐项比对）。
+# 不放 graphql_public：4.0.0 不用 GraphQL（0.29 续第 52 条条件 ③，pg_graphql 是否反射 private 见 B0 实测清单 P2）。
+# 【线上】控制台 API 设置的 Exposed schemas 同样是 public、private；暴露 private 时不点控制台建议的“授权”。
+schemas = ["public", "private"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+# auto_expose_new_tables 不写，用默认 true（和线上一致）：service_role 对 public 新表的默认权限要和线上一样，
+# 函数里用 service role 读 profiles 等表才不会本地、线上两个结果。anon、authenticated 的权限由 0001 开头的
+# alter default privileges 和每张表的 revoke all … grant 收紧（0.31 第 20 条 ①），不靠这个开关。
+
+[api.tls]
+enabled = false
+
+[db]
+# build/check_data_manifest.ts（D1）默认连 127.0.0.1:54322
+port = 54322
+shadow_port = 54320
+health_timeout = "2m"
+# 要和预览、正式项目一样：第一次 link 预览项目时 `show server_version` 核对（B0 实测清单 L9），不一样就改这里
+major_version = 17
+
+[db.pooler]
+# 本地不起 Supavisor。【线上】Edge Function 经 Supavisor 事务模式直连（_shared/db.ts，prepare: false 待 B0 实测 P6）
+enabled = false
+port = 54329
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100
+
+[db.migrations]
+enabled = true
+schema_paths = []
+
+[db.seed]
+# seed.sql 只写本机假值的 Vault 密钥（cron_secret、functions_url，架构 0.38 第 46 条）；不造业务数据：
+# RLS 测试仍在自己的事务里造数据（_helpers.psql 的 tests.seed()），跑完回滚；D1 只看结构。
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = true
+
+[studio]
+# CI 用 `supabase start -x studio` 不起它
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+# 本地的收信箱（Mailpit）：验证码邮件不真的发出去，在 http://127.0.0.1:54324 看
+[local_smtp]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+# 全局上限；每个桶自己的大小和类型由迁移里的 storage.buckets 设（附录 A，D1 比对），这里不建桶。
+# 最大的是 backups 桶 50 MiB（52428800）
+file_size_limit = "50MiB"
+
+[storage.s3_protocol]
+enabled = true
+
+[auth]
+enabled = true
+# 【线上】正式只放 https://lemomemo.com/app/；预览只放 https://preview.lemomemo.com/app/（15.6 总表 Site URL、Redirect URLs）
+# 本地：vite dev（5173）和 wrangler pages dev（8788，E2E）
+site_url = "http://127.0.0.1:5173/app/"
+additional_redirect_urls = ["http://localhost:5173/app/", "http://127.0.0.1:8788/app/"]
+# 15.6 总表：JWT 有效期 600 秒（0.29 续第 98 条）。本地、线上相同
+jwt_expiry = 600
+enable_refresh_token_rotation = true
+# R-383（负责人 11-11 定）：10 → 60。刷新令牌的回包丢了（iPhone 切后台、弱网）时，supabase-js 断网期间一直退避重试，
+# 网络回来后拿旧 refresh token 再换；如果这期间新令牌已经被别处用掉，离第一次超过复用间隔就回 400 refresh_token_already_used，
+# App 收到 SIGNED_OUT、清库、回登录页提示“被移除”。60 秒覆盖 supabase-js 最长约 30 秒的退避。复现见 tests/e2e-draft/r383-refresh-reuse.draft.ts
+refresh_token_reuse_interval = 60
+# 15.6 总表：不允许新用户自己注册，只走邀请（invite-signup 用 service role 建用户；5.6、R-83）。本地、线上相同
+enable_signup = false
+# 15.6 总表：匿名登录关。本地、线上相同
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+# 密码登录关不掉：GoTrue 没有单独的开关，Email 登录方式开着密码这条路就开着（架构 15.6 第 1 点“密码登录关不掉，所以账号不许有密码”，0.36）。
+# 挡它的是数据库触发器 private.guard_no_password()（0001，写进 auth.users 的密码一律置空，TC-B0-121），B1 起再拒 amr 含 password 的会话；
+# 下面两项只管设密码时的长度和字符要求，挡不住密码登录，保持模板默认
+minimum_password_length = 6
+password_requirements = ""
+
+[auth.rate_limit]
+# 15.6 总表：发信上限每小时约 30 封，不调高。本地、线上相同（本地发到 Mailpit）
+email_sent = 30
+# 15.6 总表：发码和校验的内置限流（含 Token verifications）保持默认
+sms_sent = 30
+anonymous_users = 30
+token_refresh = 150
+sign_in_sign_ups = 30
+token_verifications = 10
+web3 = 30
+
+# 15.6 总表：CAPTCHA 开，Cloudflare Turnstile（15.2 中 1 ①）。
+# 【本地关】CI 和本机没有 Turnstile 的密钥，也不该连 Cloudflare；【线上开】，各环境的密钥由运维在控制台填。
+# 本机要试 Turnstile 时：把 enabled 改 true，在 supabase/.env.local 里设 SUPABASE_AUTH_CAPTCHA_SECRET
+# （可用 Cloudflare 公布的测试密钥），改完别提交 enabled = true。
+[auth.captcha]
+enabled = false
+provider = "turnstile"
+secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"
+
+[auth.email]
+# 【注意，两处开关不是一回事】这一项是“邮箱登录方式”的总开关（CLI 映射成 GOTRUE_EXTERNAL_EMAIL_ENABLED，
+#   对应控制台 Authentication → Sign In / Providers → Email 的开关），必须是 true：设成 false 连已有用户都发不了码
+#   （422 “Email logins are disabled”，QA B0 第二轮 D-14）。
+# “不允许自己注册”靠的是上面 [auth] 的 enable_signup = false（GOTRUE_DISABLE_SIGNUP，控制台的“Allow new users to sign up”关）：
+#   未知邮箱发码回 422 “Signups not allowed for this instance”，用户只能由 invite-signup 用 service role 建（15.6 总表、5.6）。
+# 【线上】Email provider 开着、“Allow new users to sign up”关着。本地、线上相同。
+# 自动测试：node supabase/tests/auth/login-probe.mjs（未知邮箱被拒、已有用户收码登录、6 位、60 秒限频、600 秒有效期、设密码无效）
+enable_signup = true
+# 15.6 总表：Secure email change 开（换邮箱要新旧两个邮箱都确认）。本地、线上相同
+double_confirm_changes = true
+# 和线上项目的默认（Confirm email 开）一致；invite-signup 自己先验过邮箱，用 service role 建用户时标已确认
+enable_confirmations = true
+# 架构 0.36 第 1 条 ④：保持 false（挡不住刚登录的令牌；账号不许有密码靠 guard_no_password 触发器）。本地、线上相同
+secure_password_change = false
+# 15.6 总表：发验证码每个邮箱 60 秒一次。本地、线上相同
+max_frequency = "60s"
+# 15.6 总表：Email OTP 长度 6 位、有效期 600 秒（默认 1 小时；15.2 中 1 ⑤）。本地、线上相同
+otp_length = 6
+otp_expiry = 600
+
+# 15.6 总表：验证码邮件模板写 {{ .Token }}，按 .Data.locale 分中韩两种（5.6、2.4 第 6 点）。
+# 登录用 signInWithOtp（已注册的用户）发的是 magic_link 这一封。【线上】运维把同一份模板贴进控制台。
+[auth.email.template.magic_link]
+subject = "柠檬记 · 레모 验证码 / 인증 코드"
+content_path = "./supabase/templates/otp.html"
+
+# 15.6 总表：自定义 SMTP 用 Resend，发件人 noreply@lemomemo.com，单独一把只发信的密钥（8.4）。
+# 【本地不用】本地发到上面的 Mailpit；【线上】运维在控制台填，密钥不经本文件。
+# 本机要试真发信时才取消注释，并在 supabase/.env.local 里设 RESEND_SMTP_KEY（不要提交）：
+# [auth.email.smtp]
+# enabled = true
+# host = "smtp.resend.com"
+# port = 465
+# user = "resend"
+# pass = "env(RESEND_SMTP_KEY)"
+# admin_email = "noreply@lemomemo.com"
+# sender_name = "柠檬记"
+
+# 和 [auth.email] 同理：这里的 enable_signup 是“手机登录方式”的总开关（GOTRUE_EXTERNAL_PHONE_ENABLED），不用手机登录，所以关
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+
+# 不用 MFA（隐私记的 Face ID / Windows Hello 是自己的 WebAuthn，5.5；exe 不提供 Windows Hello，15.6 第 3 点）
+[auth.mfa]
+max_enrolled_factors = 10
+
+[auth.mfa.totp]
+enroll_enabled = false
+verify_enabled = false
+
+[auth.mfa.phone]
+enroll_enabled = false
+verify_enabled = false
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+inspector_port = 8083
+deno_version = 2
+# 函数的 secret（PROXY_SECRET、VAULT_KEY、AI 和 Resend 的密钥等，8.4、0.31 第 11 条）不写在这里：
+# 本机 `supabase functions serve --env-file supabase/.env.local`；【线上】由负责人或运维按 8.4 设，不经 AI。
+
+# 网关的 JWT 校验（verify_jwt）默认开着，`supabase functions deploy`（预览、正式）和本地 edge runtime 都按这里的设置。
+# 只给 pg_cron 调的函数关掉：cron 的 net.http_post 只带 x-cron-secret、x-region，不带 Authorization，开着就被网关回
+# 401 UNAUTHORIZED_NO_AUTH_HEADER、函数根本调不到（11-03 预览 account-purge 实况，接手清单 PURGE-verify-jwt）；
+# 关了以后鉴权全靠函数自己定长比较 x-cron-secret。用户调的函数（account、invite-admin、invite-signup）留着默认的校验。
+# 规则由 build/check_backend.py F9 固定：cron 调的必须关；另外只有 F9 里写死的 SERVER_SECRET_FUNCTIONS（usage-report → x-ops-secret）
+# 准关、也必须关；别的一律不准关。本批结束时 verify_jwt = false 只有 account-purge、usage-report、push-dispatch 三个（B2 安全审查 D2-4）；B5 加 cron 调的 anniv-roll。
+# B3 起 F9 另有 HASHED_TOKEN_FUNCTIONS（claude-intake → api_tokens，按连接码哈希查表），准关、也必须关，共四个；B4 加 cron 调的 ai-classify，共五个。
+[functions.account-purge]
+verify_jwt = false
+
+# B2：push-dispatch 每分钟由 pg_cron 调（迁移 20261103120000），同样只带 x-cron-secret（架构 5.3、0.49；B2 任务单 BE-1 ②、M2）
+[functions.push-dispatch]
+verify_jwt = false
+
+# B4：ai-classify 每 2 分钟由 pg_cron 调（迁移 20261110120000），同样只带 x-cron-secret（架构 5.2；B4 任务单 S6）
+[functions.ai-classify]
+verify_jwt = false
+
+# B5：anniv-roll 每天 00:10 UTC 由 pg_cron 调（迁移 20261113181000），同样只带 x-cron-secret（架构第 6 节；B5 任务单 S13）
+[functions.anniv-roll]
+verify_jwt = false
+
+# B7a：storage-sweep 每天 17:30 UTC（首尔 02:30）由 pg_cron 调（迁移 20261126100000），同样只带 x-cron-secret（架构 3.4、第 6 节；接手清单 P-b4-sweep-gate）
+[functions.storage-sweep]
+verify_jwt = false
+
+# B2（安全审查 D2）：usage-report 由独立 Worker lemo-ops 调，鉴权是 x-ops-secret（函数里 safeEqual 定长比较）；
+# 网关那道 JWT 校验只认公开的 anon key，对它起不到鉴权作用，关掉后未鉴权的请求只多算一次调用（和 account-purge 一样）
+[functions.usage-report]
+verify_jwt = false
+
+# B3（架构 5.7、0.47 续 usage-report 一条；B3 任务单 S14、M2）：claude-intake 由电脑上的 add.ps1 调，带的是连接码（Bearer lmc_…），不是 JWT，
+# 网关校验 JWT 会把它全部挡掉；关掉以后鉴权全靠函数按连接码的 SHA-256 查 api_tokens（未吊销、180 天内、scopes 含 create）。
+# F9 的 HASHED_TOKEN_FUNCTIONS 写死这一个，并核对函数源码真的按哈希查表、查有效期、查账号可用（安全审查看）。
+# ai-parse、ai-voice、token-admin 是用户带 JWT 调的，留着默认的校验，不在这里写。
+[functions.claude-intake]
+verify_jwt = false
+
+# B7a：backup-daily 每天首尔 00:30、02:30 由 pg_cron 经 private.backup_dispatch 调（迁移 20261126130000），分段时自己调自己，都只带 x-cron-secret（F9 ①：cron 函数）
+[functions.backup-daily]
+verify_jwt = false
+
+# B7a（架构第 6 节、第 10 节）：backup-manifest 由负责人本机的 tools/backup/pull.ps1 调，带 Bearer BACKUP_PULL_TOKEN，不是 JWT；
+# 关掉以后鉴权全靠函数定长比较这把钥匙（_shared/http.ts 的 bearerGate）。F9 的 BEARER_SECRET_FUNCTIONS 写死这一个（代码审查、安全审查看）
+[functions.backup-manifest]
+verify_jwt = false
+
+# B5（架构 5.5、第 6 节；B5 任务单 S2、S9）：vault、vault-image 是用户带 JWT 调的，网关校验照默认开着；这里显式写出来，
+# 免得以后有人照 cron 函数的样子误关（F9：不在名单里的一律不准关）。
+[functions.vault]
+verify_jwt = true
+
+[functions.vault-image]
+verify_jwt = true
+
+# B4b-1（架构 5.13 第 2 点）：file-check 两种调用——客户端带 JWT 的 check（函数里 requireActiveUser 自己验）、pg_cron 带 x-cron-secret 的 sweep
+# （没有用户 JWT），所以网关校验关掉（F9 ①：cron 函数）
+[functions.file-check]
+verify_jwt = false
+
+# B4b-1（架构 5.13 第 11 点）：vault-file 同 file-check——客户端带 JWT + x-vault-token 的 upload / list / get / remove / restore / ms_preview（函数里
+# requireActiveUser 自己验），pg_cron 带 x-cron-secret 的 sweep（迁移 20261115010000，没有用户 JWT），所以网关校验关掉（F9 ①：cron 函数）
+[functions.vault-file]
+verify_jwt = false
+
+# B4b-2（架构 5.13 第 6 点、第 6 节）：ai-embed 每 2 分钟由 pg_cron 调（迁移 20261115020000），只带 x-cron-secret（F9 ①：cron 函数）
+[functions.ai-embed]
+verify_jwt = false
+
+# B4b-2 识图（架构 5.13 第 5 点、第 6 节）：ai-media 每 5 分钟由 pg_cron 调（迁移 20261115040000），只带 x-cron-secret（F9 ①：cron 函数）
+[functions.ai-media]
+verify_jwt = false
+
+# B4b-2：note-search 是用户带 JWT 调的，网关校验照默认开着；显式写出来，免得照 cron 函数的样子误关（F9：不在名单里的一律不准关）
+[functions.note-search]
+verify_jwt = true
+
+# B4b-3：ai-summarize 同样是用户带 JWT 调的（架构 5.14 第 4 点），显式写出来，理由同 note-search
+[functions.ai-summarize]
+verify_jwt = true
+
+# R-492：ai-chat（AI 助手对话）同样是用户带 JWT 调的，显式写出来，理由同 note-search
+[functions.ai-chat]
+verify_jwt = true
+
+# R-494：ai-provider（我的 AI、AI 服务商两页）同样是用户带 JWT 调的，显式写出来，理由同 note-search
+[functions.ai-provider]
+verify_jwt = true
+
+# R-495：ai-memory（记住的事）同样是用户带 JWT 调的
+[functions.ai-memory]
+verify_jwt = true
+
+# 11-24：ai-live-token（按住“＋”边说边出字，发 Gemini Live 短期令牌）同样是用户带 JWT 调的
+[functions.ai-live-token]
+verify_jwt = true
+
+[analytics]
+# 本地不需要日志分析，少起一个容器；【线上】照常有
+enabled = false
+port = 54327
+backend = "postgres"

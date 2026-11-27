@@ -1,0 +1,4 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=selector-disallowed-list rule=A24 */
+.\61:hover {
+  transform: scale(0.5);
+}

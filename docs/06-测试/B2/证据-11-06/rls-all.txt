@@ -1,0 +1,45 @@
+Connecting to remote database...
+/claude code/柠檬记APP/supabase/tests/rls/01_client_rls.test.sql .................. ok
+/claude code/柠檬记APP/supabase/tests/rls/02_triggers.test.sql .................... ok
+/claude code/柠檬记APP/supabase/tests/rls/03_roles_grants.test.sql ................ ok
+/claude code/柠檬记APP/supabase/tests/rls/04_config_constraints.test.sql .......... ok
+/claude code/柠檬记APP/supabase/tests/rls/05_files_authorize.test.sql ............. ok
+/claude code/柠檬记APP/supabase/tests/rls/06_password_session.test.sql ............ ok
+/claude code/柠檬记APP/supabase/tests/rls/07_devices_sessions.test.sql ............ ok
+/claude code/柠檬记APP/supabase/tests/rls/08_take_rate.test.sql ................... ok
+/claude code/柠檬记APP/supabase/tests/rls/10_account_cascade.test.sql ............. ok
+/claude code/柠檬记APP/supabase/tests/rls/11_account_deletion.test.sql ............ ok
+/claude code/柠檬记APP/supabase/tests/rls/12_account_purge_cron.test.sql .......... ok
+/claude code/柠檬记APP/supabase/tests/rls/13_min_client_version.test.sql .......... ok
+/claude code/柠檬记APP/supabase/tests/rls/14_apply_patch.test.sql ................. ok
+/claude code/柠檬记APP/supabase/tests/rls/15_settings_ai_guard.test.sql ........... ok
+/claude code/柠檬记APP/supabase/tests/rls/16_consent_null_ver.test.sql ............ ok
+/claude code/柠檬记APP/supabase/tests/rls/17_auth_mail_counts.test.sql ............ ok
+/claude code/柠檬记APP/supabase/tests/rls/18_impl_direct_call.test.sql ............ ok
+/claude code/柠檬记APP/supabase/tests/rls/19_logs_account_src.test.sql ............ ok
+/claude code/柠檬记APP/supabase/tests/rls/20_notice_ver_order.test.sql ............ ok
+/claude code/柠檬记APP/supabase/tests/rls/21_export_jobs.test.sql ................. ok
+/claude code/柠檬记APP/supabase/tests/rls/22_text_constraints.test.sql ............ ok
+/claude code/柠檬记APP/supabase/tests/rls/23_export_fn_attrs.test.sql ............. ok
+/claude code/柠檬记APP/supabase/tests/rls/24_logs_account_export_idx.test.sql ..... ok
+/claude code/柠檬记APP/supabase/tests/rls/25_fn_lock_timeout.test.sql ............. ok
+/claude code/柠檬记APP/supabase/tests/rls/26_invite_claim.test.sql ................ ok
+/claude code/柠檬记APP/supabase/tests/rls/27_orphan_auth_users.test.sql ........... ok
+/claude code/柠檬记APP/supabase/tests/rls/28_claim_endpoint.test.sql .............. ok
+/claude code/柠檬记APP/supabase/tests/rls/29_push_endpoint_vectors.test.sql ....... ok
+/claude code/柠檬记APP/supabase/tests/rls/30_remind_queue_pop.test.sql ............ ok
+/claude code/柠檬记APP/supabase/tests/rls/31_remind_due.test.sql .................. ok
+/claude code/柠檬记APP/supabase/tests/rls/32_allday_remind_enqueue.test.sql ....... ok
+/claude code/柠檬记APP/supabase/tests/rls/33_occ_reset_ack.test.sql ............... ok
+/claude code/柠檬记APP/supabase/tests/rls/34_account_purge_catchup_cron.test.sql .. ok
+/claude code/柠檬记APP/supabase/tests/rls/35_heartbeat_fnai_policy.test.sql ....... ok
+/claude code/柠檬记APP/supabase/tests/rls/36_allday_ack_enqueue.test.sql .......... ok
+/claude code/柠檬记APP/supabase/tests/rls/37_system_col_sync.test.sql ............. ok
+/claude code/柠檬记APP/supabase/tests/rls/38_server_reset_parity.test.sql ......... ok
+/claude code/柠檬记APP/supabase/tests/rls/39_purge_backups_cursor.test.sql ........ ok
+/claude code/柠檬记APP/supabase/tests/rls/40_push_heartbeat_atomic.test.sql ....... ok
+All tests successful.
+Files=39, Tests=1566,  8 wallclock secs ( 0.14 usr  0.06 sys +  0.22 cusr  0.17 csys =  0.59 CPU)
+Result: PASS
+A new version of Supabase CLI is available: v3.0.0 (currently installed v2.120.0)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

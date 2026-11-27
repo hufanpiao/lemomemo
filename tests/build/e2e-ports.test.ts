@@ -1,0 +1,242 @@
+// 两组 e2e 能同时跑（接手清单 E2E-parallel，需求记录 R-267 D1）：假后端端口、wrangler 本地状态目录、调试端口两组错开；
+// 真后端组合并 binding 后 SUPABASE_UPSTREAM 是真上游；919x 不进真后端组的地址白名单。
+// 两个配置真 import 一次（真后端组先把四个 LEMO_E2E_* 设成假值，不跑 supabase status、不起任何进程），从 webServer 里读实际的命令和环境变量。
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { PlaywrightTestConfig } from '@playwright/test';
+import {
+  DEFAULT_FAKE_PORTS, E2E_BINDINGS, FAKE_PORT_ENV, FAKE_PORT_RANGE, FAKE_S3_PORT, FAKE_SUPABASE_PORT, REAL_GROUP_FAKE_PORTS,
+  e2eBindings, fakePorts,
+} from '../e2e/fake-values.ts';
+import { ALLOWED_PORTS, REAL_ENV, assertLocalBackendUrl } from '../e2e/real-backend.ts';
+
+const ROOT = join(import.meta.dirname, '..', '..');
+const read = (f: string) => readFileSync(join(ROOT, f), 'utf8');
+const S3 = FAKE_PORT_ENV.s3;
+const SB = FAKE_PORT_ENV.supabase;
+
+describe('fakePorts', () => {
+  it('没设、空字符串用默认值；默认就是无后端组的 9199、9198', () => {
+    expect(fakePorts({})).toEqual({ s3: 9199, supabase: 9198 });
+    expect(fakePorts({ [S3]: '', [SB]: '' })).toEqual(DEFAULT_FAKE_PORTS);
+    expect(fakePorts({}, REAL_GROUP_FAKE_PORTS)).toEqual({ s3: 9197, supabase: 9196 });
+    expect(DEFAULT_FAKE_PORTS).toEqual({ s3: FAKE_S3_PORT, supabase: FAKE_SUPABASE_PORT });
+  });
+
+  it('合法覆盖：9190～9199 之间、两端口不同；只覆盖一个时另一个用默认', () => {
+    expect(fakePorts({ [S3]: '9190', [SB]: '9199' })).toEqual({ s3: 9190, supabase: 9199 });
+    expect(fakePorts({ [S3]: '9195' }, REAL_GROUP_FAKE_PORTS)).toEqual({ s3: 9195, supabase: 9196 });
+    expect(fakePorts({ [SB]: '9194' })).toEqual({ s3: 9199, supabase: 9194 });
+  });
+
+  it('越界拒：9189、9200，以及 54321（lemomemo）、55321（lemo-e2e API）、8789（真后端组 wrangler）', () => {
+    for (const p of ['9189', '9200', '54321', '55321', '8789', '0', '65535']) {
+      expect(() => fakePorts({ [S3]: p }), p).toThrow(`${S3} 的端口 ${Number(p)} 不在 9190～9199 之间`);
+      expect(() => fakePorts({ [SB]: p }), p).toThrow(SB);
+    }
+  });
+
+  it('非纯十进制拒，消息只带变量名、不回显原值', () => {
+    for (const raw of ['9198 ', ' 9198', '+9198', '9198.0', '0x23ee', '9_198', '9e3', '９１９８', 'abc', '-9198']) {
+      let msg = '';
+      try {
+        fakePorts({ [SB]: raw });
+      } catch (e) {
+        msg = (e as Error).message;
+      }
+      expect(msg, JSON.stringify(raw)).toBe(`${SB} 必须是纯十进制端口号`);
+    }
+  });
+
+  it('两个端口相同拒（包括覆盖后撞上另一个的默认值）', () => {
+    expect(() => fakePorts({ [S3]: '9195', [SB]: '9195' })).toThrow('不能是同一个端口 9195');
+    expect(() => fakePorts({ [S3]: '9198' })).toThrow('不能是同一个端口 9198');
+    expect(() => fakePorts({ [SB]: '9197' }, REAL_GROUP_FAKE_PORTS)).toThrow('不能是同一个端口 9197');
+  });
+
+  it('两组默认端口不相交，都在 FAKE_PORT_RANGE 里', () => {
+    const a = Object.values(DEFAULT_FAKE_PORTS);
+    const b = Object.values(REAL_GROUP_FAKE_PORTS);
+    expect(a.filter((p) => b.includes(p))).toEqual([]);
+    for (const p of [...a, ...b]) {
+      expect(p).toBeGreaterThanOrEqual(FAKE_PORT_RANGE[0]);
+      expect(p).toBeLessThanOrEqual(FAKE_PORT_RANGE[1]);
+    }
+  });
+
+  it('e2eBindings 跟着端口走；E2E_BINDINGS 是默认端口的结果', () => {
+    const b = e2eBindings(REAL_GROUP_FAKE_PORTS);
+    expect(b['SUPABASE_UPSTREAM']).toBe('http://127.0.0.1:9196');
+    expect(b['R2_ENDPOINT']).toBe('http://127.0.0.1:9197');
+    expect(E2E_BINDINGS).toEqual(e2eBindings({ s3: 9199, supabase: 9198 }));
+    expect(E2E_BINDINGS['R2_ENDPOINT']).toBe('http://127.0.0.1:9199');
+  });
+});
+
+describe('真后端组的地址白名单不放 919x', () => {
+  it('assertLocalBackendUrl 对 9190～9199 一律拒；ALLOWED_PORTS 还是 55321、55324、8789', () => {
+    expect(ALLOWED_PORTS).toEqual([55321, 55324, 8789]);
+    for (let p = 9190; p <= 9199; p++) {
+      expect(() => assertLocalBackendUrl(`http://127.0.0.1:${p}`, 'X'), String(p)).toThrow('不在白名单里');
+    }
+  });
+});
+
+type WebServer = { command: string; url: string; env?: Record<string, string> };
+const servers = (c: PlaywrightTestConfig) => c.webServer as WebServer[];
+/** 从 wrangler 命令里取 --binding K=V */
+function bindingsOf(cmd: string): Record<string, string> {
+  return Object.fromEntries([...cmd.matchAll(/--binding (\w+)=(\S+)/g)].map((m) => [m[1] ?? '', m[2] ?? '']));
+}
+function flag(cmd: string, name: string): string | undefined {
+  return new RegExp(`${name} (\\S+)`).exec(cmd)?.[1];
+}
+
+describe('两个配置真加载出来的 webServer', () => {
+  let plain: PlaywrightTestConfig;
+  let real: PlaywrightTestConfig;
+  beforeAll(async () => {
+    for (const k of [S3, SB, 'E2E_GLOBAL_TIMEOUT_MS', 'E2E_REAL_WEBKIT']) vi.stubEnv(k, '');
+    // 四个都设上假值：loadBackend 不跑 supabase status；assertE2eOrigins 照查（55321、55324）
+    vi.stubEnv(REAL_ENV.api, 'http://127.0.0.1:55321');
+    vi.stubEnv(REAL_ENV.anonKey, 'fake-anon-for-unit-test');
+    vi.stubEnv(REAL_ENV.serviceKey, 'fake-service-for-unit-test');
+    vi.stubEnv(REAL_ENV.mailpit, 'http://127.0.0.1:55324');
+    plain = (await import('../../playwright.config.ts')).default;
+    real = (await import('../../playwright.real.config.ts')).default;
+  });
+  afterAll(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('无后端组：假后端 9199、9198，健康检查跟着走，webServer[0] 显式传两个端口', () => {
+    const [fake, web] = servers(plain);
+    expect(fake?.url).toBe('http://127.0.0.1:9198/health');
+    expect(fake?.env).toEqual({ [S3]: '9199', [SB]: '9198' });
+    expect(bindingsOf(web?.command ?? '')).toEqual(E2E_BINDINGS);
+  });
+
+  it('真后端组：假后端 9197、9196；合并后 SUPABASE_UPSTREAM 是真上游 55321，R2 指 9197，其余同假值', () => {
+    const [fake, web] = servers(real);
+    expect(fake?.url).toBe('http://127.0.0.1:9196/health');
+    expect(fake?.env).toEqual({ [S3]: '9197', [SB]: '9196' });
+    const b = bindingsOf(web?.command ?? '');
+    expect(b['SUPABASE_UPSTREAM']).toBe('http://127.0.0.1:55321');
+    expect(b['SUPABASE_ANON_KEY']).toBe('fake-anon-for-unit-test');
+    expect(b['R2_ENDPOINT']).toBe('http://127.0.0.1:9197');
+    expect(Object.keys(b)).toEqual(Object.keys(E2E_BINDINGS));
+    expect(web?.url).toBe('http://127.0.0.1:8789/app/');
+  });
+
+  it('两组的假后端端口、wrangler 端口、--persist-to、--inspector-port 都不同', () => {
+    const p = servers(plain)[1]?.command ?? '';
+    const r = servers(real)[1]?.command ?? '';
+    expect(flag(p, '--persist-to')).toBe('.wrangler/state-e2e');
+    expect(flag(r, '--persist-to')).toBe('.wrangler/state-e2e-real');
+    expect(flag(p, '--inspector-port')).toBe('9230');
+    expect(flag(r, '--inspector-port')).toBe('9231');
+    expect(flag(p, '--port')).toBe('8788');
+    expect(flag(r, '--port')).toBe('8789');
+    const fp = Object.values(servers(plain)[0]?.env ?? {});
+    const fr = Object.values(servers(real)[0]?.env ?? {});
+    expect(fp.filter((x) => fr.includes(x))).toEqual([]);
+  });
+
+  it('LEMO_E2E_FAKE_* 覆盖时配置跟着走（源码里两组都经 fakePorts(process.env, …) 取）', () => {
+    expect(read('playwright.config.ts')).toContain('fakePorts(process.env, DEFAULT_FAKE_PORTS)');
+    expect(read('playwright.real.config.ts')).toContain('fakePorts(process.env, REAL_GROUP_FAKE_PORTS)');
+    expect(read('tests/e2e/fake-backends.ts')).toContain('fakePorts(process.env, DEFAULT_FAKE_PORTS)');
+    // 顺序不能变：真上游在后面，覆盖假后端那套
+    expect(read('playwright.real.config.ts')).toContain('{ ...e2eBindings(FAKE), SUPABASE_UPSTREAM: UPSTREAM, SUPABASE_ANON_KEY: ANON }');
+  });
+});
+
+describe('无后端组：覆盖了假后端端口就不复用已有服务', () => {
+  async function loadPlain(env: Record<string, string>): Promise<WebServer[]> {
+    vi.resetModules();
+    for (const k of [S3, SB, 'CI', 'E2E_GLOBAL_TIMEOUT_MS', 'LEMO_E2E_REUSE']) vi.stubEnv(k, '');
+    for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v);
+    try {
+      return servers((await import('../../playwright.config.ts')).default);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }
+  const reuse = (ws: WebServer[]) => ws.map((w) => (w as WebServer & { reuseExistingServer?: boolean }).reuseExistingServer);
+  /** 本机要复用得自己设 LEMO_E2E_REUSE=1（FA-6 执行说明四之一，11-04 起默认不复用，见 tools/e2e/reuse-servers.mjs） */
+  const REUSE = { LEMO_E2E_REUSE: '1' };
+
+  it('没设（或空字符串）：设了 LEMO_E2E_REUSE=1 的本机复用，两个服务都是 true；没设 LEMO_E2E_REUSE 默认不复用', async () => {
+    expect(reuse(await loadPlain(REUSE))).toEqual([true, true]);
+    expect(reuse(await loadPlain({ ...REUSE, [S3]: '', [SB]: '' }))).toEqual([true, true]);
+    expect(reuse(await loadPlain({}))).toEqual([false, false]);
+  });
+
+  it('设了任意一个：假后端和 wrangler 一律不复用，设了 LEMO_E2E_REUSE=1 也不复用（8788 上的旧 wrangler binding 还指着 9198）', async () => {
+    for (const env of [{ ...REUSE, [S3]: '9195' }, { ...REUSE, [SB]: '9194' }, { ...REUSE, [S3]: '9195', [SB]: '9194' }]) {
+      const ws = await loadPlain(env);
+      expect(reuse(ws), JSON.stringify(env)).toEqual([false, false]);
+    }
+    const ws = await loadPlain({ [SB]: '9194' });
+    expect(ws[0]?.url).toBe('http://127.0.0.1:9194/health');
+    expect(bindingsOf(ws[1]?.command ?? '')['SUPABASE_UPSTREAM']).toBe('http://127.0.0.1:9194');
+  });
+
+  it('CI 下照旧不复用（设了 LEMO_E2E_REUSE=1 也不复用）', async () => {
+    expect(reuse(await loadPlain({ CI: 'true' }))).toEqual([false, false]);
+    expect(reuse(await loadPlain({ ...REUSE, CI: 'true' }))).toEqual([false, false]);
+  });
+});
+
+describe('快读组（playwright.fastread.config.ts，B2 FA-6 ① 安全审查 L5）', () => {
+  const KEYS = ['LEMO_WEB_OUT', 'LEMO_WS_PORT', 'VITE_PUBLIC_SUPABASE_URL', 'VITE_PUBLIC_ANON_KEY', S3, SB, 'CI', 'E2E_GLOBAL_TIMEOUT_MS'] as const;
+  /** 配置会强制设几个环境变量（构建、产物指纹、用例都读它们）：加载前清掉（再按 preset 预设）、加载后原样恢复，不漏给别的用例 */
+  async function loadFastread(preset: Partial<Record<(typeof KEYS)[number], string>> = {}): Promise<{ cfg: PlaywrightTestConfig; env: Record<string, string | undefined> }> {
+    const saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+    for (const k of KEYS) delete process.env[k];
+    Object.assign(process.env, preset);
+    vi.resetModules();
+    try {
+      const cfg = (await import('../../playwright.fastread.config.ts')).default;
+      return { cfg, env: Object.fromEntries(KEYS.map((k) => [k, process.env[k]])) };
+    } finally {
+      for (const k of KEYS) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    }
+  }
+
+  it('带同源 /sb 地址和假 anon key 构建，只跑首屏 supabase 用例、R-402 插图上传用例、R-384 换头像用例（拦 /sb/rest 的 profiles、签 /files 和传 /files）、B5 隐私记用例（拦 /sb/functions/v1/vault）、B4b-1 附件界面用例（拦 /sb/rest、file-check，要会话令牌签 /files）、B4b-2 查找用例（拦 /sb/rest、note-search）、R-437 下拉搜索用例、识图状态用例（拦 /sb/rest、file-check）、R-492 AI 助手对话用例（拦 ai-chat）、待办自动删除等第一次拉取用例（R-428）和吉祥物 #22/#23 用例（读管理员身份、同步待办）；端口、产物、状态目录、调试端口和另外两组都错开', async () => {
+    const { cfg, env } = await loadFastread();
+    expect(env['VITE_PUBLIC_SUPABASE_URL']).toBe('http://127.0.0.1:8791/sb');
+    expect(env['VITE_PUBLIC_ANON_KEY']).toBe('fake-anon-key');
+    expect(env['LEMO_WEB_OUT']).toBe('dist/web-fastread');
+    expect(env['LEMO_WS_PORT']).toBe('8791');
+    expect(cfg.testMatch).toEqual(['**/b2-first-screen-supabase.spec.ts', '**/r402-webp-wasm.spec.ts', '**/r384-me-avatar.spec.ts', '**/b5-vault.spec.ts', '**/b4b1-attachments.spec.ts', '**/b4b2-find.spec.ts', '**/r437-pull-search.spec.ts', '**/b4b2-image-ai.spec.ts', '**/b4b3-assist.spec.ts', '**/b4c-chat.spec.ts', '**/b4d-ai-provider.spec.ts', '**/invite-admin.spec.ts', '**/b4e-chat-memory.spec.ts', '**/todo-autodel-pull.spec.ts', '**/mascot-aldo.spec.ts']);
+    const [fake, web] = servers(cfg);
+    expect(fake?.url).toBe('http://127.0.0.1:9192/health');
+    expect(fake?.env).toEqual({ [S3]: '9193', [SB]: '9192' });
+    const cmd = web?.command ?? '';
+    expect(cmd).toContain('wrangler pages dev dist/web-fastread ');
+    expect(flag(cmd, '--port')).toBe('8791');
+    expect(flag(cmd, '--persist-to')).toBe('.wrangler/state-e2e-fastread');
+    expect(flag(cmd, '--inspector-port')).toBe('9233');
+    expect(bindingsOf(cmd)['SUPABASE_UPSTREAM']).toBe('http://127.0.0.1:9192');
+    for (const used of ['9199', '9198', '9197', '9196']) expect(Object.values(fake?.env ?? {})).not.toContain(used);
+  });
+
+  it('本机 shell 里已经有真实地址、key、产物目录、端口：一律被这一组的本机假值覆盖，不沿用（安全复审 L7）', async () => {
+    const { env } = await loadFastread({
+      VITE_PUBLIC_SUPABASE_URL: 'https://real-project.supabase.co',
+      VITE_PUBLIC_ANON_KEY: 'eyJ-real-looking-anon-key',
+      LEMO_WEB_OUT: 'dist/web',
+      LEMO_WS_PORT: '8788',
+    });
+    expect(env['VITE_PUBLIC_SUPABASE_URL']).toBe('http://127.0.0.1:8791/sb');
+    expect(env['VITE_PUBLIC_ANON_KEY']).toBe('fake-anon-key');
+    expect(env['LEMO_WEB_OUT']).toBe('dist/web-fastread');
+    expect(env['LEMO_WS_PORT']).toBe('8791');
+  });
+});

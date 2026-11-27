@@ -1,0 +1,435 @@
+# B1 QA 测试报告（第 ④ 环：账号与同步）
+
+- **测试人**：QA 测试工程师
+- **对象**：main `9a4bffc5a30dec85d477fd7c9e60489074e7ec6c`（第三十五批“回填接手清单 S2、S4；验收清单 D2 记漂移门禁 CI 首跑通过”）。`git fetch` 后本机 HEAD 和 origin/main 相同，`git log origin/main..HEAD` 为空
+- **日期**：2026-10-31
+- **范围**：按 [B1-预览环境验收清单](B1-预览环境验收清单.md) 第八节 ④ 那一行：**第一步 CI ＋ 第四步真后端 e2e ＋ 第五步预览站人工项 ＋ 第九节 P0、P1 分组结果**；冒烟回归按 [测试用例-v4](../../06-测试/测试用例-v4.md) 第 2 节。第二步（预览部署）、第三步（迁移日志）只摘结论，第六步真机写在附录，不算六环、不卡签字（开发计划 v4 第 118 行）
+- **依据**：测试用例 v4 第 2 节、第 4 节（TC-B1-xx）；验收清单第一～九节；[B1-接手清单-来自B0评审](../../09-路线图/B1-接手清单-来自B0评审.md) S2、S4、P-idb-tx、K8-e2e 等行；[明早待确认-2026-10-29](../../00-团队/明早待确认-2026-10-29.md) 第 41、43～47 条；第二版另读 [B1-安全审查-S-B1签字](B1-安全审查-S-B1签字.md) 第三版
+- **环境**：Windows 11，Node 24，Docker Desktop（引擎上另有 project_id 为 lemomemo 的本地库在跑，别人在用）。没有任何预览、正式环境的令牌和密钥
+- **做法和约束**：
+  - CI 结果用匿名 GitHub API 自己核对（`/actions/runs?head_sha=…`、`/actions/runs/<id>/jobs`）；匿名拿不到日志，逐条用例层面的核对见第一节说明。
+  - 本机只跑：`npm run typecheck`、`npm run lint`、`npx vitest run`、`npm run e2e`（无后端组）、`npm run e2e:real:up` → `npm run e2e:real`（chromium、webkit）→ `npm run e2e:real:down`（只起停 lemo-e2e，553xx 端口）。
+  - **没有碰** lemomemo、lemo-purgeit 两个本地 Supabase：不 reset、不 stop、不连接；跑前跑后对比 lemomemo 8 个容器的 CreatedAt（第二节末）。lemo-purgeit 本机当前没有容器。
+  - 没有向预览、正式环境部署任何东西，没有输入任何令牌、密钥；只结束自己起的进程。
+  - 工作区开头有 3 个迁移文件显示为已修改（`20261029193000`、`200000`、`201000`），`git diff --stat` 为空，只是 CRLF 换行（验收清单 M3 已记过同一件事），QA 没有动它们。跑测试期间别人新加了 `B1-安全审查-S-B1签字.md`（10-31 已到第三版）、`Auth设置截图-2026-10-31/`，改了验收清单 P1、P4、P6 和明早清单（第 45～47 条），都没提交；本报告读了并对齐，没改它们。
+  - **第二版（10-31，主持人转来补证后复核）**：QA 逐张看了 13 张 Auth 截图；读了验收清单 P1、P4、P6 的新结果和签字文件第三版；把 TC-B1-08 的原始输出从会话临时目录搬进 [B1-测试记录-TC-B1-08](B1-测试记录-TC-B1-08.md)（搬前扫过，没有令牌、密钥、验证码、IP、邮箱）。这是本轮除本报告外唯一新写的文件，是主持人点名要的。
+  - **第四版（10-31 晚，汇总重出）**：对象改为 main `7bff467`（含导出大批 b4cb79c、a64abed，第 22 条 3571192，邀请超时 024e802、3dcdc75、73bf32a，ORPHAN-alert 7bff467）。QA 本机复跑 `npx vitest run`（296 个文件、4139 条通过、27 跳过、3 todo，0 失败）、`npm run test:db:offline`（退出码 0，全部通过）、`python build/check_backend.py`（0 个错误）；没跑 e2e:real，没碰任何本地 Supabase 容器。E 组 P0 见 6.2，P1 和“—”见新加的 6.3；卡点收拢在结论里。前三版的结论段和逐条记录保留在修改记录里。
+  - **第五版（11-03，结论改为“签”）**：对象 main `0432f3e`（11-03 预览实测回填那次提交）加工作区未提交的“未知设备”修复（`supabase/functions/_shared/account-mail.ts`、`account/common.ts`、`export.ts`、`index.ts`，测试 `tests/functions/account-mail-platform.test.ts`、`account-fakes.ts`；后端 11-03，代码审查通过，提交 ab00797）。QA 本机复跑 `npx vitest run`（4166 条通过、27 跳过、3 todo，0 失败，168 秒）、`npm run test:db:offline`（退出码 0，全部通过）、`python -I build/check_backend.py`（0 个错误）；没跑 e2e、e2e:real，没碰任何本地 Supabase 容器。11-03 负责人在预览上的实测（C4、TC-B1-154、P6A、P6、TC-B1-07 ②、导出 5,000 行档、127、SPLASH-device）都按主持人转来的记录和截图逐条回填，见结论各条和第七节。
+
+---
+
+## 结论：**签**（第五版，11-03：预览各项负责人实测补齐、卡签字项清零后重出；第四版结论“不签”见修改记录）
+
+QA 结论三选一，这一轮是 **“签”**（第五版，对象 main `0432f3e` 加工作区里后端 11-03 的“未知设备”修复，见头部第五版说明）。第四版“不签”的卡点全是负责人本人要做或要定的事，**11-03 都已做完、按用例判过**，QA ④ 环这边卡签字的项**清零**；QA 第五版复跑全量 vitest、`test:db:offline`、`check_backend` 都通过。第 ③ 环 S-B1：11-03：C3 已执行，安全审查员已确认（S-B1 签字第四版），S-B1 结论为签。11-03 已解决、不再卡：TC-B1-129（7-Zip 通过）、TC-B1-154（预览通过）、TC-B0-117（C4，预览通过）、TC-B1-74/75 ② 账号名单（删号、配 `PREVIEW_OWNER_EMAILS`）、TC-B1-75 ④ 前一半（P6A 两次通过）、P6 反例实跑和 TC-B1-75 ④ 后一半（11-03 11:22，通过 6、不符合 0、跳过 1）——TC-B1-74、75 的 B1 预览部分全部通过；TC-B1-07 ② 预览真等通过（C3 安全审查员已确认，S-B1 签字第四版）；TC-B1-141、142 预览实跑通过；TC-B1-127 通知邮件通过；TC-B1-73 预览档通过（CPU 推断判过、间接证据）。开发和 QA 这边能做的已经做完：E 组 10 条 P0、P1 和“—”里能自动验的 16 条都 CI 通过。
+
+**带出 B1 的遗留观察（4 条，都不卡签字，已登记接手清单）**：① TC-B1-75 ③ B7a 上线前复跑、TC-B1-154 正式环境那次（接手清单第 210 行 B1-left-B7a-rerun，B7a）；② 启动画面 SPLASH-device 没单独确认的 5 项（⑤⑥⑧⑨⑫，第 151 行，前端 A，B6 或上线前真机抽查时顺带看）；③ 多片时浏览器经 `/sb` 逐片读 `x-lemo-export-next` 没实测（第 211 行 B1-left-sb-multipart，前端 A + QA，B2）；④ 没测到“pg_net 超时后函数照样跑完”（第 212 行 B1-left-pgnet-timeout，后端 + 运维，B7a 前）。另：TC-B1-73 预览档 CPU 校准是推断判过（间接证据，负责人 11-03 定）；导出通知邮件的“未知设备”**已修（后端 11-03，审查通过，提交 ab00797）**：主持人在预览库只读核实 iPhone 那次导出 `logs.device` 不为空、设备 `platform = ios`、`label` 为空、属本人，修复后这种情况显示“iPhone”；预览要等推送后 deploy-preview 重新部署 account 才生效。
+
+1. **TC-B1-07（P0，★）验证码有效期**：① `otp_expiry = 600` **已证实**（截图 `预览-3-Email面板下.jpg`：Email OTP expiration 600 秒、长度 6 位）；② “发码后真等，第 9 分钟成功、第 11 分钟失败”**还没人做**，验收清单 P2 结果栏仍空。要负责人本人收码（明早清单第 45 条②）。**11-03 预览实测 ②：通过**（负责人本人收码、主持人陪跑核对，安全审查 C3）——第 1 轮：在 `https://preview.lemomemo.com/app/` 用负责人验收账号发码，`auth.users.recovery_sent_at` = 03:23:48.73 UTC；负责人第 9 分钟后填码，登录成功，`last_sign_in_at` = 03:33:40.03 UTC、新会话 `created_at` 03:33:40.03（距发码 9 分 51 秒）→ 第 9 分钟成功；第 2 轮：退出后重新发码，`recovery_sent_at` = 03:34:49.90 UTC；主持人后台计满 11 分钟（约 03:45:55 UTC）后负责人才填码提交，页面提示“验证码过期了 / 验证码 10 分钟内有效”；SQL 只读核对：发码后新会话 0、`last_sign_in_at` 仍是 03:33:40 → 第 11 分钟失败。① `otp_expiry = 600` 10-31 已证实。**本条预览通过**，**不再卡签字**。安全审查 C3：11-03：C3 已执行，安全审查员已确认（S-B1 签字第四版），S-B1 结论为签。
+2. **TC-B1-74、TC-B1-75（P0，★）预览 E2E 登录准备和账号清点**：**11-03 预览部分全部通过，不再卡签字**（③ B7a 上线前复跑照旧）。
+   - ~~**反例实跑**还在等负责人本人粘贴预览 service key~~ **11-03 已跑、通过**：负责人 11-03 11:22（北京时间）用 `login-token-tests.ps1` 第 4 版（4c78c21）跑 `-Only P6`，合计**通过 6、不符合 0、跳过 1**：P6-① `someone@gmail.com` → `not_test_email`、退出 1、有“未签发”标记；P6-② 负责人验收邮箱 → `not_test_email`（真实邮箱先被 `.test` 护栏拦下）；P6-②b `e2e-owner-probe@lemomemo.test`（放进本次 `PREVIEW_OWNER_EMAILS`）→ `owner_email`；P6-③ 按设计跳过（单测 `preview-login.test.ts` 覆盖）；P6-④ `e2e-nobody@lemomemo.test` → `no_such_user`，`auth.users` 总数跑前 2、跑后 2；P6-⑤ `--admin` 负责人验收邮箱 → `not_test_email`；P6-⑥ `--admin` `e2e-owner-probe@lemomemo.test` → `owner_email`，`private.admins` 条数跑前 1、跑后 1；全部输出里没有 key、没有 `email_otp`（第 4 版比 10-31 第 43 条写的“通过 4、跳过 1”多了 ②b、⑤、⑥ 三条）；
+   - ~~**账号名单按用例原文不符合**~~ **11-03 已符合**：②要求“除 `.test` 和负责人那**一个**验收账号外没有别的”。预览 2 个账号都不是 `.test`（`owner+lemotest@example.com` 10-28 建、<负责人主邮箱> 10-30 建），GitHub 上没有配 `PREVIEW_OWNER_EMAILS`，等负责人在明早清单第 45 条①的甲、乙里选一个并做完。**11-03 负责人已定，待执行**：选甲——留 `owner+lemotest@example.com` 当验收账号、配进 `PREVIEW_OWNER_EMAILS`，负责人本人邮箱那个账号由负责人删（**11-03 已删**，C4 执行记录）；**`PREVIEW_OWNER_EMAILS` 已配（11-03 上午负责人在 GitHub 仓库级 Actions 变量里配好，值为 `owner+lemotest@example.com`，主持人当场核对；明早清单第 45 条“11-03 进展”）**；主持人只读复查预览账号只剩 lemotest（C4 执行记录 5.4 ②），名单符合用例②；
+   - **已符合的部分**：`private.admins` 0 行；验收账号数据抽查 10-31 符合（两个账号都没有早于建号日的行，条数是测试量级，没有正式数据；验收清单 P6、签字文件第四节 C2 ③）。
+3. **TC-B1-75 ④（P0）重跑 `--admin` 和负责人账号在 admins 里的反例**：**前一半、后一半都已通过（11-03），④ 预览部分完成，不再卡签字**。后一半 P6-⑤ → `not_test_email`、P6-⑥ → `owner_email`、`private.admins` 条数 1→1（随 11:22 那次 P6）。**11-03 负责人已定（明早清单第 47 条，两件都同意），待执行**：① 后一半改新测法——不在预览上造“负责人账号在 admins 里”，改为两条不写库的反例 P6-⑤（负责人验收邮箱 → `not_test_email`）、P6-⑥（`e2e-owner-probe@lemomemo.test` → `owner_email`，P6 前后 admins 条数不变），随第 43 条的 P6 一起跑，加本机 `preview-login-admin.test.ts` 两条（11-03 QA 复跑通过）；用例原文已按此改写；② 预览留一个 `e2e-admin@lemomemo.test` 管理员，负责人在预览控制台建好后跑两次 `-Only P6A`，测前一半（已是管理员时跳过、退出 0）。**11-03 前一半（P6A，预览）：通过**——负责人 11-03 11:17（北京时间）用 `tools/keys/login-token-tests.ps1` 第 4 版（4c78c21）跑两次 `-Only P6A`：P6A-第一次：`e2e-admin@lemomemo.test` 跑前不是管理员，`preview-login.ts --admin` 退出 0、输出“已把 e2e-admin@lemomemo.test 加进 private.admins”，`private.admins` 总条数 0→1、它那一行 0→1，输出里没有 key、没有 `email_otp`；P6A-第二次：跑前已是管理员，退出 0、输出“已是管理员，跳过”，总条数 1→1、那一行 1→1，没有 key、没有 `email_otp`。前情：e2e-admin 由负责人 11-03 约 10:29 在控制台建（主持人只读核对：密码为空、已确认、profile 0 行）；10:53、10:54 两次用第 3 版跑时 PowerShell 默认 UA 被网关当浏览器回 401，没写任何东西，已在第 4 版修。备注：以后要用 e2e-admin **登录**（TC-B1-74 `--as-admin` 正例、预览管理员功能）前，要后端给它补一行 profile（接手清单 TC75-admin）；④ 后一半 P6-⑤、⑥ 只查护栏、不登录，不依赖这一行。
+4. **账号导出（TC-B1-73 和新加的 TC-B1-123～150，其中 P0 10 条：130、131、132、133、138、141、142、143、144、145；145～147 是第 20 条的同步表文本列约束，随导出一起提出）**：TC-B1-73 的结论已经变了——“一次调用导出整个账号”在满载账号上必然被 CPU 上限掐断，**B1 改用方案 A（start + 分片取回，客户端拼成一个 `.json.gz`）；方案 A 已定稿（架构 0.47 第 4～20 条：第 18 条按 R1 实测写死常量、加 start 大小预检，第 19 条并入安全审查第二次复核 Q1～Q6，第 20 条加 `parts`、预检忙时退回限流计数、文本列约束），安全审查复核通过（N1～N4、Q1～Q6 已并入），已开发完成**（10-31 b4cb79c、a64abed、3571192 三次提交，CI 全绿；第 22 条超时包装、T2、T4 也在内）。**10 条 P0 全部 CI 通过**（逐条见 6.2），E 组 P0 不再卡签字；P1 和“—”的状态见第六节。**10-31 后端在 lemo-e2e 跑完了 TC-B1-73 本机全部五档（6.1 节）**：R1（探针开，分段 4 段）、R2、R3、R4、R5 都按用例通过，内存按探针口径单次峰值最高 33～56 MB，全程 0 次 546；**TC-B1-73 本机部分已全部通过，整条还差预览 5,000 行档（负责人跑，含“通知邮件收到 1 封”和 iPhone 真机存文件）**（7-Zip 解压 TC-B1-129 已于 11-03 通过，见 6.1）；**11-03 预览 5,000 行档已跑**：3 片、原文 46.8 MB、0 次 546、各项核对全过、删干净，141、142 预览实跑通过，iPhone 存下文件、通知邮件 1 封，`/sb` 暴露头间接验到；CPU 校准按负责人 11-03 定推断判过（第 3 片精确 664 ms；第 1、2 片同一 worker 累计 1488 ms 拆不出，按每 MB 推断；每 MB 与本机 R1 比 −5%、−2%，注明间接证据）——**TC-B1-73 预览档通过**；R4 同时覆盖了 TC-B1-123、124、132 的 lemo-e2e 部分，逐条见 6.1。
+5. **E 组 P1、“—”（6.3）**：18 条里 16 条 CI 通过，129 于 11-03 主持人 7-Zip 实测后判通过（开发补的断言在 a9f70eb，146 ⑦ 按预览 db push 成功判通过，是间接证据）。127 的通知邮件 11-03 iPhone 导出时收到 1 封，**通过**（“未知设备”**已修（后端 11-03，审查通过，提交 ab00797）**：主持人在预览库只读核实 iPhone 那次导出 `logs.device` 不为空、设备 `platform = ios`、`label` 为空、属本人，修复后这种情况显示“iPhone”；预览要等推送后 deploy-preview 重新部署 account 才生效）——**E 组 P1、“—”全部通过**。B5、B6 那两档（124 ③ 真令牌、135 ④ exe 跨域）按原计划不卡 B1。
+6. ~~**TC-B1-154（P0，11-03 新加）预览 account-purge 定时任务被网关 401**~~ **已解决，预览通过（11-03 10:52 首尔）**：C4 第 0 步发现 account-purge 定时任务每天 succeeded 但 `net._http_response` 是 401 `UNAUTHORIZED_NO_AUTH_HEADER`、没有心跳（`config.toml` 没关 `verify_jwt`）。518d011 修复部署后，主持人原样跑一次 cron 命令：request 6 → 200、`purged 0`、心跳 01:52:16 UTC；不带头 POST → 函数自己的 401 `{"error":"unauthorized"}`。TC-B1-154 是通用条目（每个由 pg_cron 经 `net.http_post` 调的函数部署后 200 + 心跳，函数对照表现只有 account-purge 一行；构建检查 `check_backend` F9 每次 CI 都跑，已知漏报范围见接手清单 F9-reverse-check）。**不再卡签字**；正式那次待 B7a。
+
+按测试用例 v4 第 2 节，第 ④ 环“先看 CI 冒烟全绿，再做人工部分”。**冒烟的自动部分是绿的**（第一节、第二节），但上面这几条 ★ 用例的人工部分没做完、名单一项按原文不符合，冒烟回归**不能算全部通过**，所以不签。
+
+**和第一版比，已经补齐的**：TC-B1-06 改为过（预览九项截图逐张核对都对上）；TC-B1-112 改为过（主持人只读查了触发器和带密码行数，验收清单 P4 已写通过）；TC-B1-08 的原始记录已进仓库；账号数据抽查符合。见第四节。
+
+**补齐以后怎么改判（QA 自己的打算，不替别人定）**：上面 1～5 补齐、结果符合期望后，QA 重出本报告，预计改为“有条件签”，条件是下面这些按计划本来就不在 B1 做的事——
+
+- TC-B1-113 / 接手清单 S4 的 vault-preview 签名链接一半：预览上还没有 vault-file 函数，等 B4b-1；
+- 接手清单 P-idb-tx 里的 iOS 真机部分（Playwright 的 webkit 是 Windows 版 WebKit，不等于 iOS Safari），和第六步真机一起做；
+- 真机 R1～R15：按开发计划第 118 行不算六环、不卡签字。
+
+另有几件 **不是 QA 能下的结论**，照对应的人已写下的记录列出：
+
+- **TC-B1-112 / 接手清单 S2**：安全审查员 10-31 定“不复跑整套，改为只读 SQL”（[B1-安全审查-S-B1签字](B1-安全审查-S-B1签字.md) 第二节、条件 C5）。主持人已查：`users_guard_no_password` 在、`tgenabled = 'O'`，带密码的账号 0 个，验收清单 P4 已写通过。QA 按这个口径记 TC-B1-112 为过；查询的原始输出 QA 没有看到，以验收清单 P4 的文字为准。
+- **第 ③ 环 S-B1**：安全审查员 10-31 第三版结论“有条件签”，C1、C5 和 C2 ③ 已满足，剩 C2 ①②（账号名单）、C3（TC-B1-07 真等）、C4（TC-B0-117 预览打真 R2 一次）。**11-03：C3 已执行，安全审查员已确认（S-B1 签字第四版），S-B1 结论为签**；**11-03：C4 已做完、预览通过**（执行记录 `docs/03-评审/B1/C4-TC-B0-117-执行记录-2026-11-03.md`），C2 ① 的“删负责人本人邮箱账号”已做（预览账号现在只剩 lemotest），`PREVIEW_OWNER_EMAILS` 已配（主持人核对）。第 ③ 环签不签由安全审查员定，本报告不替他下结论。
+- **正式项目差的三项**（JWT 3600、Site URL `http://localhost:3000` 且跳转白名单为空、CAPTCHA 关）：安全审查员同意按 15.6 留到 B7a 前设，硬线是正式项目建第一个账号之前必须设好（签字文件 J7、明早清单第 46 条）。TC-B1-06 原文是“按环境写期望”，正式项目在 TC-B7a-25 核，所以**不卡 B1 的 ④**；QA 把这道硬线记进第七节，不替负责人定什么时候设。
+- **TC-B0-117“预览打真 R2 一次”（P0）**：是 B0 用例、不在 TC-B1 编号的 156 条里（第 18 节按节算进 B1 的 157 条），安全审查列为 S-B1 条件 C4，第三版写明要负责人本人动手（约 30 分钟），或负责人同意挪批（明早清单第 45 条③）。**11-03 负责人已定，待执行**：做（P0，不挪批），负责人今天本人陪同做，按操作单 `C4-TC-B0-117-预览真R2-操作单.md`；要在删掉负责人本人邮箱账号之后、建 `e2e-admin@lemomemo.test` 之前做（C4 要求预览账号总数 = 2：负责人本人邮箱账号必须先在控制台删掉，lemotest 加 A 正好 2 个；操作单第 4 步 ②b 超过 2 个就拒绝，安全审查员 11-03 第二次复核改定）。**11-03 预览真 R2：通过**（执行记录 `docs/03-评审/B1/C4-TC-B0-117-执行记录-2026-11-03.md`）——第 4 步 request_id 7（触发 01:54:37.95 UTC）→ 200、`purged 1`、`failed 0`、`ms 4298`；心跳 `at` 01:54:42.853 UTC 晚于触发时刻；函数日志没有 `r2_not_empty`、`step_error`、`backups_not_empty`、`verify_failed`；A 四个桶前缀（images、files、vault-images、vault-files）整桶平铺列出都是 0；B 2 / 4 / 1 / 1 和第 2 步一样；A 已不在 `auth.users`、`profiles`，待注销 0，`deleted_accounts` 有删除时刻；收尾后预览账号只剩 lemotest，B 的两个 vault 测试对象已删。**遗留观察（不卡签字）**：这次 `ms 4298` < pg_net 的 5000 ms 超时，没测到“pg_net 超时后函数照样跑完”；以后数据多、单次超过 5 秒时以心跳和 `deleted_accounts` 为判据核一次。QA 只记一笔，不计入本报告分组。
+
+---
+
+## 一、第一步：CI 结果（匿名 API 核对）
+
+### 1.1 运行结论
+
+| 提交 | 工作流 | 运行号（run id） | 序号 | 结论 | 起止（UTC） |
+|---|---|---|---|---|---|
+| `9a4bffc`（第三十五批，本次对象） | ci | 41103882084 | #127 | **success** | 10-30 18:05:44 ～ 18:11:12 |
+| 同上 | unit | 41103881707 | #130 | **success** | 18:05:44 ～ 18:18:50 |
+| 同上 | deploy-preview | 41103881532 | #124 | **success** | 18:05:44 ～ 18:08:17 |
+| `9f78ab3`（第三十四批，上一批） | ci | 41100283512 | #126 | success | 17:36:39 ～ 17:55:47 |
+| 同上 | unit | 41100283388 | #129 | success | 17:36:39 ～ 17:59:16 |
+| 同上 | deploy-preview | 41100283547 | #123 | success | 17:36:39 ～ 18:02:41 |
+
+命令：`curl -s "https://api.github.com/repos/hufanpiao/lemomemo/actions/runs?head_sha=<完整 sha>"`，两个提交各查一次，每个提交正好三条运行、都是 completed / success。
+
+### 1.2 任务层面（9a4bffc）
+
+| 工作流 | 任务 | 结论 |
+|---|---|---|
+| ci | 数据库测试（Docker：本地 Supabase） | success |
+| ci | 端到端（Playwright，带 CSP） | success |
+| unit | 类型、规范、架构、单元测试、构建、体积、文档检查 | success |
+| unit | 密钥扫描（gitleaks，CI 第二道） | success |
+| unit | 依赖审计（npm audit、OSV-Scanner） | success |
+| unit | 工作流检查（actionlint ＋ shellcheck） | success |
+| deploy-preview | 构建（无密钥） | success |
+| deploy-preview | 部署到预览环境 | success；其中“部署前查 npm 漂移”一步 API 显示 success |
+
+**说明（证据的边界）**：
+
+- 匿名 API 给的**步骤级**状态不完整：任务已 completed / success，但有些步骤仍显示 `in_progress` 或 `pending`、conclusion 为空（例如 ci 的“启动本地 Supabase”“RLS（pgTAP）”，unit 的“类型检查”“单元和组件测试”）。这是 API 返回的快照没刷新，不是失败。QA 不拿步骤级数据下结论，**以任务结论为准**。
+- 任务结论能代表测试步骤都过了：查了 `ci.yml`、`unit.yml`，`continue-on-error` 只出现在镜像缓存的两步（ci.yml 第 103、125 行）和旧版契约基线（第 298 行，只在有 4.x tag 时跑，现在没有 tag）；测试步骤失败一定会让任务失败。
+- 匿名拿不到日志，所以**没有逐条核对每条 ★ 用例在日志里的输出**（验收清单 C5 也写了“未逐条核”）。替代做法：第二节本机把同一套检查重跑了一遍；第六节核对了 A 组 67 条对应的 73 个测试文件都在仓库里。
+
+### 1.3 对照验收清单 C1～C6
+
+| # | 项 | 本次结果 |
+|---|---|---|
+| C1 | unit check 任务 | 9a4bffc 通过（#130） |
+| C2 | 密钥扫描、依赖审计、工作流检查 | 9a4bffc 三个任务都通过 |
+| C3 | ci db 任务 | 9a4bffc 通过（#127） |
+| C4 | ci 端到端（无后端组，带 CSP） | 9a4bffc 通过；真后端组不在 CI（见第三节，接手清单 E2E-REAL ⑧ 还没做） |
+| C5 | 冒烟 ★ 自动部分 | 所在任务全绿；本机重跑也全绿（第二节）；逐条对日志没做（见上） |
+| C6 | Actions 额度 | 仓库 10-30 改公开后不再是限制 |
+
+---
+
+## 二、QA 本机复跑（9a4bffc）
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | `npm run typecheck`（5 份 tsconfig） | 退出码 0，0 错误 |
+| 2 | `npm run lint`（ESLint ＋ Stylelint） | 退出码 0 |
+| 3 | `npx vitest run`（全量） | 退出码 0；**273 个文件：271 过、2 跳过；3820 条：3794 过、23 跳过、3 todo**，0 失败（155 秒） |
+| 4 | `npm run e2e`（无后端组，8788 / 9199 / 9198，chromium ＋ webkit） | 退出码 0；**160 过、0 失败、36 跳过**（28 秒），和验收清单 E3（10-31）相同 |
+| 5 | `npm run e2e:real:up` | 退出码 0；lemo-e2e 从头建库，24 个迁移（到 `20261030140000_core_admins_insert_service_role.sql`）和 seed.sql 都执行成功 |
+| 6 | `npm run e2e:real`（chromium） | 退出码 0；**15 过**（10.9 秒），7 个 `*.real.spec.ts` 都跑到 |
+| 7 | `E2E_REAL_WEBKIT=1 npm run e2e:real` | 退出码 0；**28 过、2 跳过**（1.6 分）；跳过的是 b1-version-gate.real 两条（只在 chromium 跑，按设计）；看门狗没触发 |
+| 8 | `npm run e2e:real:down` | 退出码 0；输出 `"project_id_filter":"lemo-e2e"`，只停了 lemo-e2e |
+
+跑前端口 8788、8789、9196～9199、9230、9231 都没有监听。lemomemo 8 个容器（db、pg_meta、storage、rest、realtime、inbucket、auth、kong）跑前跑后的 CreatedAt 逐行 diff **一致**（10-29 07:50～07:54 建），本机没有 lemo-purgeit 的容器。e2e:real:up 输出里的 key 是 Supabase CLI 本地默认的演示值，不是任何环境的密钥，本报告不转录。
+
+---
+
+## 三、第四步：真后端 e2e 组（验收清单 E1～E4）
+
+| # | 项 | 验收清单记录 | QA 本轮 |
+|---|---|---|---|
+| E1 | 端口空出来 | 10-31 通过（明早清单第 34 条残留进程负责人 10-30 重启后已清） | 跑前核对相关端口都空着，符合 |
+| E2 | 真后端组 7 个 `*.real.spec.ts` | 10-31 通过（前端）：chromium 15 条全过；webkit 28 过 2 跳过（b1-version-gate.real 两条只在 chromium 跑，按设计） | **9a4bffc 上复跑通过**：chromium 15 过；webkit 28 过、2 跳过；数字和 10-31 一致（第二节第 6、7 行） |
+| E3 | 无后端组按仓库配置 | 10-31 通过：160 过、0 失败、36 跳过 | **9a4bffc 上复跑通过**：160 过、0 失败、36 跳过 |
+| E4 | 两组同时跑 | 10-31 通过（第三十三批 64efc2b 给真后端组单独配 outputDir 后，160 / 15 全过、0 ENOENT） | 本轮没有同时跑，沿用 10-31 结论；64efc2b 之后只改了漂移门禁、`supabase/functions/deno.json` 和文档，没动 e2e 配置 |
+
+`tests/e2e/b1-sync.spec.ts` 里 TC-B1-23、24、27、28、59 是 `test.fixme`（第 57～73 行），等 B2 页面，接手清单 K8-e2e“待做（B2）”，本批不算；它们的逻辑由 `src/core/sync/__tests__/` 的单元测试覆盖，在第二节第 3 行里跑到。
+
+---
+
+## 四、第五步：预览站人工项（验收清单 P1～P11）
+
+结果以验收清单第五步“结果”栏为准；QA 没有预览凭据，下表是 QA 对每项**能不能算过**的判断，和还缺什么。
+
+| # | 用例 | 级别 | 现在的结果 | QA 判断 | 还缺什么、等谁 |
+|---|---|---|---|---|---|
+| P1 | TC-B1-06 预览 Auth 配置 | P0 ★ | 10-30：匿名登录、公开注册、白名单外跳转三种尝试，直连和经 /sb 都失败；JWT 600、Site URL 和跳转白名单只有 `https://preview.lemomemo.com/app/`（主持人刷新核对）；同站其他路径能跳转属 GoTrue 设计，安全审查判为可接受，期望已按此改写 | **过**（第二版） | **QA 10-31 逐张看了 `Auth设置截图-2026-10-31/` 的 13 张**，预览 7 张逐项对上：`预览-1` Allow new users to sign up 关、manual linking 关、anonymous sign-ins 关、Confirm email 开，Email provider ENABLED；`预览-2`、`预览-3` Enable email provider 开、**Secure email change 开**（第一版缺的那一项）、Email OTP 600 秒、6 位；`预览-4` Site URL 和 Redirect URLs 都只有 `https://preview.lemomemo.com/app/`（Total URLs: 1）；`预览-5` token verifications 10 次/5 分钟、sign-ups and sign-ins 10 次/5 分钟；`预览-6` Captcha 开、Turnstile by Cloudflare，密钥框是打码的圆点；`预览-7` Access token expiry 600 秒。**正式 6 张**：对上的是公开注册关、匿名关、Email 开、Secure email change 开、OTP 600 秒 6 位、两项限流 10；**没对上三项**——`正式-7` JWT 3600、`正式-4` Site URL `http://localhost:3000` 且“No Redirect URLs”、`正式-6` Captcha 关，和验收清单 P1 一致。正式这三项按用例“按环境写期望”归 TC-B7a-25（见结论）。正式没有“Email 面板上”那一张，Email 开以 `正式-1` 列表里的 ENABLED 为准。截图里没有露出密钥值 |
+| P2 | TC-B1-07 验证码有效期 | P0 ★ | 结果栏仍**空**。① 截图 `预览-3` 证实 OTP 600 秒、6 位；② 9 分钟 / 11 分钟真等没做，`login-token-tests.ps1` 里也没有这一项 | **过（11-03）**：① 截图证实；② 预览真等通过 | 已写进明早清单第 45 条②：负责人本人收码，主持人陪跑、第 9、11 分钟各提交一次（安全审查 C3）。~~**卡签字**~~ **11-03 已执行、通过**：第 1 轮发码后 9 分 51 秒提交、登录成功（`last_sign_in_at` 03:33:40.03 UTC）；第 2 轮发码（03:34:49.90 UTC）后满 11 分钟提交，提示“验证码过期了 / 验证码 10 分钟内有效”，无新会话。验收清单文件本身 QA 没改，P2 结果栏请主持人照此填 |
+| P3 | TC-B1-08 限流实测 | P0 | 10-30：Cloudflare 规则 sb-auth-otp-verify-burst 生效（同机房第 6 次起 429，按机房分开计数）；直连 verify 第 21 次 429；verifyOtp 不要 captcha；按真实 IP 计数（auth_logs 核实）；每邮箱没有尝试上限（负责人 iPhone 实测输错 5 次后正确码仍能登录），负责人接受 6 位码风险；token verifications 两个项目都已是 10 | **过** | 原始输出 10-31 已搬进 [B1-测试记录-TC-B1-08](B1-测试记录-TC-B1-08.md)（5 份：b13qa-p3、p3b、p3r、ab、ip，“直连第 21 次 429”出自 p3）；Supabase 一侧配置有截图 `预览-5`、`预览-6`。**只差 Cloudflare 速率限制规则页面的截图**，规则生效已由 429（error code 1015）的原始输出证明，QA 判不卡签字 |
+| P4 | TC-B1-112 / 接手清单 S2 | P0 | ②③ 10-29 23:35 第四遍 `login-token-tests.ps1` 里通过（直连和经 /sb）；①④ 10-31 主持人只读查：`users_guard_no_password` 在、`tgenabled = 'O'`，带密码的账号 0 个（含 10-30 用 invite-signup 新建的那个）；验收清单 P4 已写“10-31 通过（不复跑整套）” | **过**（第二版） | 不复跑整套是安全审查员定的（签字文件第二节）。QA 没看到两句查询的原始输出，以 P4 文字为准 |
+| P5 | TC-B1-113 / 接手清单 S4 | P1 | REST 一半 10-30 通过：有效期约 599 秒，+11 秒 200、+41 秒 401 PGRST303，余量不到 30 秒，不升级；vault-preview 签名一半跳过（预览没有 vault-file 函数，404） | **一半过** | vault-preview 签名一半**等 B4b-1**（ms_preview 那时才做）。按计划不在 B1，作为“有条件签”的条件 |
+| P6 | TC-B1-74、75 | P0 ★ | 账号：预览 auth.users 2 个，都不是 `.test`，`PREVIEW_OWNER_EMAILS` 没配；`private.admins` 0 行；数据抽查 10-31 符合（<负责人主邮箱> 只有 devices 1、profiles 1、settings 1、tombstones 3；`owner+lemotest@example.com` 有 notes 2、note_files 4、note_images 2、embed_queue 8、profiles 1、settings 4，都是 10-29 登录实测留下的，没有早于建号日的行）；反例脚本 `login-token-tests.ps1 -Only P6` 已做好、安全审查通过（第三十批） | **过（11-03）**：P6 通过 6、不符合 0、跳过 1；名单已符合；④ 前一半 P6A、后一半 P6-⑤⑥ 都通过 | ~~原记~~ ① 反例**等负责人本人跑**（明早清单第 43 条，约 1 分钟，要粘预览 service key），期望“通过 4、不符合 0、跳过 1”；② 名单**等负责人在明早清单第 45 条①选甲或乙**并配好 `PREVIEW_OWNER_EMAILS`，之后主持人只读复查（安全审查 C2 ①②）；③ TC-B1-75 ④ 等负责人选（明早清单第 47 条）。**11-03 都已做完**：负责人 11-03 11:22（北京时间）用 `login-token-tests.ps1` 第 4 版（4c78c21）跑 `-Only P6`，合计**通过 6、不符合 0、跳过 1**：P6-① `someone@gmail.com` → `not_test_email`、退出 1、有“未签发”标记；P6-② 负责人验收邮箱 → `not_test_email`（真实邮箱先被 `.test` 护栏拦下）；P6-②b `e2e-owner-probe@lemomemo.test`（放进本次 `PREVIEW_OWNER_EMAILS`）→ `owner_email`；P6-③ 按设计跳过（单测 `preview-login.test.ts` 覆盖）；P6-④ `e2e-nobody@lemomemo.test` → `no_such_user`，`auth.users` 总数跑前 2、跑后 2；P6-⑤ `--admin` 负责人验收邮箱 → `not_test_email`；P6-⑥ `--admin` `e2e-owner-probe@lemomemo.test` → `owner_email`，`private.admins` 条数跑前 1、跑后 1；全部输出里没有 key、没有 `email_otp`；P6A 两次通过。**不再卡签字** |
+| P7 | 接手清单 P-sb-qs | — | 10-30 安全审查员只读梳理：查询串无秘密，按 S-2 接受，登记 S-5 | 过 | — |
+| P8 | 接手清单 OPS-mail-sugg ① | — | **未通过**：两个项目都没开“Write audit logs to the database”，`auth_mail_counts()` 恒为 0，发信量告警不会响 | 不卡 B1 | 负责人 10-30 定“上线前再定”（明早清单第 42 条）。TC-B1-120 本身是 pgTAP，在 A 组、CI 绿 |
+| P9 | 经 /sb 的真实链路 | — | 10-30 16:21 负责人第三次跑 `-Only P9`：sb-forward 6 过、2 跳过（不传的两个变量，预期）、2 todo，Realtime 2064 ms 收到；csp.spec.ts 预览部分主持人本机通过 | 过 | 负责人本机 playwright 报缺 chrome-headless-shell 的原因没查（不影响结论） |
+| P10 | 注销、恢复页看一眼 | — | 10-30 负责人 iPhone 截图：注销页正文、删除日期、确认框都正常 | 过（注销页） | 恢复页要真注销才出现，没看到 |
+| P11 | TC-B1-87、91 第三条路 | P1 | 预览没启用 Custom Access Token Hook，条件不成立，不跑 | 不跑（D 组） | — |
+
+---
+
+## 五、第二步、第三步摘要（不在 ④ 的必填范围，只列结论）
+
+| # | 项 | 结论（验收清单） |
+|---|---|---|
+| D1 | deploy-preview 整条 | 通过；9a4bffc 的 #124 也全绿（第一节） |
+| D2 | P-deno-lock | 线上打包**不读** deno.lock；漂移门禁 10-31 第一次在 CI 真跑通过（9f78ab3，run 41100283547），9a4bffc 的 #124 这一步也是 success。“构建时自己打包”要不要做等负责人定（明早清单第 44 条，B7a 前） |
+| D3 | 函数密钥 | 10-30 13:34 预览三把都在（只核名字）；正式项目还没设 |
+| D4 | sw.js 缓存头 | no-cache，通过 |
+| M1 | 预览库迁移 | 10-30 记录：23 条、最大 20261030130000。现在仓库有 24 个，第 24 个是 `20261030140000_core_admins_insert_service_role.sql`。主持人 10-31 告知 QA：预览库已执行 24 个、最新 20261030140000，和仓库一致；**但验收清单 M1 结果栏还没写这一条**（开发计划第 149 行：只在聊天里说过的不算），写进去后 QA 复核。不卡 ④ |
+| M2 | K10-locktimeout | 10-30 QA 一次性容器实测结案：整份文件在同一个隐式事务里，`set local lock_timeout` 生效 |
+| M3 | 逐个迁移核对 | 函数体 45 个一致；Vault、策略等全部对上 |
+
+---
+
+## 六、第九节分组结果（B1 的 P0、P1 共 81 条，另加导出分片和文本列约束 22 条）
+
+QA 第一版时数测试用例 v4：TC-B1 编号共 130 条，P0 52 条、P1 29 条、“—” 49 条，和验收清单第九节一致，A～D 四组按这 81 条分。
+
+**第三版（10-31）**：测试用例 v4 按架构 0.47 加了导出分片和文本列约束的 TC-B1-123～148 共 26 条，补齐了冒烟列，第 18 节已用脚本重数。现在 TC-B1 编号共 156 条，P0 62 条、P1 41 条、“—” 53 条；第 18 节按节算 B1 是 157 条，多的一条是从 B0 挪来的 TC-B0-117（P0），本报告照旧把它记在安全审查条件 C4，不进分组。新加的 26 条里 P0 10 条、P1 12 条、“—” 4 条，验收清单第九节还没收这 26 条，QA 先单列为下表的 **E 组**（P0、P1 共 22 条，“—”的 4 条也列出来）。**P0 对数暂缺**：测试用例 v4 第 18 节说 P0 勾选表由 `build/p0_list.py` 生成（TC-B7a-17），这个脚本还没建，P0 实数现在只靠 QA 的计数脚本，没法和勾选表对一遍（第八节 L-9）。
+
+| 组 | 条数 | 结果 | 说明 |
+|---|---|---|---|
+| **A 本机已验证（自动）** | 67 | **过** | 对应 73 个测试文件 QA 逐个核对都在仓库里；所在 CI 任务 9a4bffc 全绿（第一节）；本机 vitest、无后端组 e2e、真后端组 e2e 重跑全过（第二节）。pgTAP、store-it、D1 只在 CI db 任务里跑，本机没重跑（要起 Supabase，本轮只起了 lemo-e2e） |
+| **B 预览环境要跑** | 7 | **3 过、1 一半、3 未过**（第二版） | 过：TC-B1-06（预览截图逐张对上；正式三项归 TC-B7a-25）、TC-B1-08（原始记录已入库）、TC-B1-112（①～④ 齐）；一半：TC-B1-113（REST 过，vault 一半等 B4b-1，P1）；**未过：TC-B1-07（② 没做）、TC-B1-74（反例没实跑、名单不符合）、TC-B1-75（同上，另加 ④ 没实跑）**（见第四节 P1～P6）。**11-03 更新：TC-B1-74、75 预览部分通过（P6、P6A、名单）；TC-B1-07 ② 预览真等通过。B 组现为 6 过、1 一半（TC-B1-113，vault 一半等 B4b-1，P1，不卡）、0 未过** |
+| **C 真机** | 0 | — | P0、P1 用例里没有只能真机做的；真机项见附录，不算六环、不卡签字 |
+| **D 挪出、条件不跑或待核实** | 7 | 不计入本批 | TC-B1-81 挪 B2；84、86、93 挪 B5；87、91 第三条路没启用不跑；**TC-B1-90（P0，★）部分覆盖**：服务器一半和客户端退避已有测试锁住，“服务器忙，稍后再试”提示设置页一半已做（接手清单 R272-sugg ④），队列 pending 时的提示并入 BANNER-later ①。这一条留 D 组是验收清单定的，**是否接受剩下那一半挪走，请主持人或架构师在 B1 签字前确认**，QA 不替别人定 |
+| **E 导出分片和文本列约束（方案 A，已提交）** | 24（P0 10、P1 14）＋“—” 4 | **未全验**：10 条 P0 逐条核对见 6.2（10-31：**10 条全部 CI 通过**——b4cb79c / a64abed 一批、第 22 条超时包装、T2、T4 在 3571192，都全绿；P1 的 149、150 也 CI 通过（3571192））；10-31 本机实测结果和逐条状态见 6.1；TC-B1-73 本机 R1～R5 全部通过，整条待预览一档（负责人）；123、124、132、136 ②、144 的 lemo-e2e 部分本机通过；129 R1、R3 产物三种工具（含 7-Zip，11-03）一致，129 通过；其余未报或待预览、负责人 | **P0**：TC-B1-130（每片都过 `requireActiveUser`、越权和游标伪造）、131（三个专用函数和授权、N1、N3）、132（任务绑定会话，410 一字不差）、133（每人每天分片总数，先扣再解析游标）、138（S5“扣了次数没留记录”，不留任务行）、141（预览 5,000 行档七条护栏，先在 lemo-e2e 用假值跑通）、142（预览跑法 a 的 YAML 或 b 的本机命令核对）、143（大小预检函数 `export_size_over`：只给 service_role、表清单固定、按预算自己超时回 -1、锁忙回 -2、按模式过滤）、144（start 预检前三道闸、超 480 MB 回 413 不扣次数、被拒记函数日志、锁忙时退回限流计数）、145（P-16 同步表文本列约束：每列一条超限被拒、一条边界通过，经 REST 和 `apply_patch`）。**P1**：123（中断后继续不另算次数）、124（过期 410）、125（任务分片上限 413）、127（logs 的 export / export_done）、128（“最近的导出”配对）、134（游标收窄和 512 字节）、135（无 `Content-Encoding`、`EXPOSE_HEADERS`）、136（客户端拼成一个 `.json.gz`、同会话继续）、139（export_done 的片数和字节数，片数取自 `export_job_take` 回的 `parts`）、146（约束迁移 `not valid` 再 `validate`、取值清单以代码为准）、147（D1“客户端可写文本列必须有约束”和白名单豁免）、149（第 22 条：store 调用超时 10 秒 / 预检 20 秒，part、delete、restore 超时回 `try_later` 不退）、150（第 22 条 T4：注销、撤销注销回 `try_later` 先查 status，会话失效提示 `deletion_unsure`）、148（预检锁忙时退回 `export-size:`、并发只一个预检、退回失败记 `export_size_refund_failed`）。**“—”**：126（546 和 5xx 当 try_later）、129（多成员 gzip 三种工具解压）、137（start 不幂等和文案）、140（分片边界单测）。**依赖后端 R1 实测**：TC-B1-73 R1～R5（R1 已于 10-31 跑过，常量已写死 16 MB、36、72；改每行查预算后 R1、R2 要重跑；R5 超大账号一档要记实际生效的语句超时和预检耗时，决定 `EXPORT_SIZE_CHECK_BUDGET_MS` 是 15 秒还是 6 秒，TC-B1-143、144 跟着核）、133 ⑦（常量照实数写死）、134 ⑨（R1、R2 每片游标头 ≤ 512 字节）、129（用 R1、R3 的产物解压）。**依赖预览实测**：TC-B1-73 预览一档（5,000 行，校准线上 CPU），前提是 141 全过、安全审查员审过脚本（142 已定跑法 b，说明由后端写、lemo-e2e 按说明原样跑一遍）。**要负责人本人**：预览一档的跑法（主持人 10-31 定 b：负责人本机跑一条命令，密钥只设在那一个窗口）和 iPhone 主屏幕版真机存一次文件（TC-B1-73）；129 的第三种工具已按负责人 11-03 第 50 条选甲改为 7-Zip、已测通过；另外 0.47 续 ④ 的五点（一个文件、logs 导出 90 天、1 小时内免费继续、中韩文案、预览谁来跑）负责人确认前按推荐写，123、124、128、136、137 跟着推荐走，负责人改了再改用例。135 里 exe 跨域那一档在 B6 抓包复核 |
+| “—” 级 | 49 | 不在本报告分组范围 | 其中 44 条是 ★，随 CI 自动跑、任务全绿；TC-B1-23、24、27、28、59 是 fixme 等 B2（K8-e2e）。**提醒**：测试用例 v4 第 0 节“级别”一行写功能用例（“—”）“按 1.3 验收标准全部满足才算过”；“—” 里有 3 条人工用例：TC-B1-57（倾斜实测）已由真机 R7 做完，结论“记不住 → B2 做法 ②”；**TC-B1-20**（AI 韩文审校修改清单逐条核对）主持人告知第一遍已派人在做，清单写在 `docs/03-评审/B1/B1-韩文审校-第一遍.md`（10-31 QA 写报告时文件刚出现、还在写，QA 没有复核）；~~**TC-B1-73**（预览导出一个满额账号，记 gzip 大小和耗时）后端正在本机 lemo-e2e 先量参考数~~ **第三版：TC-B1-73 已按方案 A 改写**（后端 10-31 在 lemo-e2e 实测，一次调用导出满载账号必被 CPU 上限掐断，方案 A 已定稿、安全复核通过、开发中），归入上面 E 组一起验；预览一档要负责人。这两条有结果后 QA 补进本报告。（此行的 49 是第一版的数，第三版 TC-B1 的“—”共 53 条，多的 4 条见 E 组） |
+
+
+### 6.1 导出本机实测（lemo-e2e，后端 10-31 跑；QA 只按转来的数字核对，没有复跑）
+
+数字由主持人转来，QA 没有看到原始输出，按 TC-B1-73 等用例写的通过标准逐项对照。**这是本机结果，预览 5,000 行档仍待负责人跑（第七节 4h）。**
+
+| 档 | 规模 | 预检耗时 | 片数 | 原文 / gzip | 单片 CPU 最高 | 单片耗时最长 | 内存峰值 | 后端报的结果 |
+|---|---|---|---|---|---|---|---|---|
+| R1 常见满载 | 9 张同步表各 2 万行、logs 18 万行 | 895 ms | 12 | 187.3 MB / 51.1 MB | 677 ms | 1440 ms | **272 MB** | 10 项核对全过 |
+| R2 极端（每列写满） | 2,000 / 18,000 行 | 650 ms | 22 | 342 MB / 201.5 MB | 705 ms | 没报 | **316 MB** | 单片原文最大 16.06 MB（16 MB 加一行，符合“每写一行查预算”） |
+| R5 超大 | 3,000 / 27,000 行，原文 514 MB | 861 ms（start 共 922 ms） | — | — | — | — | 没报 | 回 413；`account:` 不扣、`export-size:` 记 1、没有任务行、没有 logs、函数日志 `export_size_rejected` |
+| R5 另一点 | 2,000 / 180,000 行，原文 513 MB | 1083 ms | — | — | — | — | 没报 | 回 413 |
+| 语句超时 | 经 PostgREST 实际生效的是 `service_role` 的 4 分钟（睡 20 秒的函数照常回 200） | — | — | — | — | — | — | 预检预算 15 秒不用降 |
+| R3、R4 | 新账号一片、中断和过期 | — | — | — | — | — | — | **没报** |
+
+另报（第一轮）：store-it 真库 12 条全过（主持人注“C1”）；前端“断网再继续”真后端 E2E 连跑 2 次通过。上表“内存峰值”一栏是整个 edge runtime 容器的 cgroup，按 0.47 第 21 条不作验收，以下面第二轮为准。
+
+**第二轮（10-31，按 0.47 第 21 条的探针口径重测；QA 同样只核转来的数字）**
+
+| 档 | 规模 | 片数 | 原文 / gzip | 探针单次峰值（`heapUsed + external`） | 各片开始时 `heapUsed` | 单片 CPU 最高 | 预检 | 容器 cgroup 增量（只参考） | 其他 |
+|---|---|---|---|---|---|---|---|---|---|
+| R1 | typ，同步表各 2 万行、logs 18 万行 | 12 | 187.4 MB / 51.2 MB | 各片 27～35 MB，最高 35 MB | 14～17 MB | 692 ms | 887 ms | 最高 51.6 MB | 0 次 546、0 次其他 5xx；14 项核对全过（含响应没有 `Content-Encoding`、行的 `user_id` 都是本人、单片原文 ≤ 16 MB 加一行） |
+| R2 | max，2,000 / 18,000 行 | 22 | 342.1 MB / 201.5 MB | 各片 32～56 MB，最高 56 MB | 14～20 MB | 653 ms | 709 ms | 最高 35.4 MB | 同上，14 项核对全过 |
+| 256 MB 是否掐 worker | 测试函数分别分配 100 / 200 / 240 / 260 / 300 MB | — | — | — | — | — | — | — | 100 / 200 / 240 MB 回 200，260 / 300 MB 回 546：本机也按 256 MB 掐 worker |
+| 同一 worker 连取 12 片 | — | — | — | — | — | — | — | — | 本机 edge-runtime 因 CPU 1 秒软上限每 2～3 片换一个 worker，只覆盖 2～3 片；**本机部分覆盖，预览补测** |
+| R3、R4 | — | — | — | — | — | — | — | — | **这一阶段没跑** |
+| TC-B1-129 解压 | — | — | — | — | — | — | — | — | 已测的是另跑的 2 片样本（typ 3,000 / 27,000 行，不是 R1）：Node zlib、Python gzip 整份解开都是 29,478,885 字节、sha256 一致、11 张表；R1（12 片）、R3 产物待补；**7-Zip 本机没装、未测**（装要负责人同意） |
+
+**第三轮（10-31，后端补跑 R1（探针开、按 worker 分段）、R3、R4，并存 R1、R3 产物做 TC-B1-129；QA 只核转来的数字）**
+
+| 档 | 结果 |
+|---|---|
+| R1（typ 20,000 / 180,000，探针开） | **14 项全过**：原文 187.4 MB、gzip 51.2 MB、12 片，单片原文最大 16 MB；墙钟最长 1470 ms、单片 CPU 最高 758 ms；探针单次峰值最高 33 MB；0 次 546、0 次其他 5xx；响应没有 `Content-Encoding`；游标头最长 127 字节；计数 `account:` 1、`export-size:` 1、`export-part:` 12、任务行 12；logs `export` 1、`export_done` 1；预检估 188.3 MB、用时 906 ms。**分段**：4 个 worker、4 段，各片开始 `heapUsed`（MB）依次 16/15/14、16/16/17、16/16/14、16/16/15，段内 ±10 MB、新 worker 首片回到底数 16 MB、覆盖 4 段 |
+| R3（只有 profile 的新账号） | 一片就 `done`，CPU 60 ms，探针 18 MB，`account:` +1，文件合法 |
+| R4（8,000 / 60,000，三次 start） | **17 项全过**：A 取到第 2 片断开，3 秒后同一 export_id、同一游标接着取完，共 5 片，行数和不中断一致，当天 `account:` 只 +1，任务行分片数 5；B 把 `window_start` 改到 3600 秒前再取，回 410 `export_expired`；C 另一个会话 S2 取片回 410 `export_expired`，响应体和响应头（除 Date）和过期那次相同，S2 被拒不动分片数，S1 照常取完；`export-part:` 计数 13 = 实际调用 13 次（含两次 410）；logs 3 条 `export`、2 条 `export_done`（三次 start、两次取完，对得上） |
+| TC-B1-129 解压（第三轮） | R1 产物（12 个 gzip 成员）解开 196,455,565 字节（= 187.4 MB 原文）、sha256 `ecd70887…5a08d0e`、11 张表；R3 产物解开 1,109 字节、sha256 `3ff9d38b…6eb497`、11 张表；Node zlib、Python gzip 结果一致；**7-Zip 未测**（明早清单第 50 条，装要负责人同意） |
+| TC-B1-129 解压（11-03，7-Zip，R1、R3） | **通过**。**R1、R3 真实产物（11-03 主持人补测，7-Zip 26.05，Node `gunzipSync` 作对照）**：R1 12 段 gzip、压缩包 53,642,704 字节，`7z x` 和 Node 都解出 196,455,565 字节，sha256 都是 `ecd708873b0f1535bff5e3a0261657bdea0e26fe498f134939a9efd085a08d0e`；R3 1 段、压缩包 484 字节，两边都解出 1,109 字节，sha256 都是 `3ff9d38bdeeebb8a479ee09f358cf743f9cc3a00acaac424e895c6987d6eb497`；两份 `JSON.parse` 成功，`format=lemomemo-export`、`version=1`、`vault=omitted`、11 张表；两份 `7z t` 都是 Everything is Ok。与 10-31 第三轮 Node zlib、Python gzip 的 sha256 相同，三种工具一致 |
+| TC-B1-129 解压（11-03，7-Zip，补充样本） | **通过（补充）**。7-Zip 26.05 x64（winget 装官方包，来源 github.com/ip7z/7zip，安装包哈希校验通过），11-03 主持人本机执行。样本：后端用真实导出代码 `supabase/functions/account/core.ts` 的 handle 加内存假库生成，走 start、逐片取到 done 再拼接，共 5 段 gzip 首尾相拼，2,142 字节；内容有中文、韩文、多码点 emoji、一个 4 万字符的大字段、40 条中韩混排笔记。对照：Node `gunzipSync` 和流式 `createGunzip` 解开一致，167,662 字节，sha256 `ec1c5665bf2339694acc4a9e2282c147b0c9f9006c13348ae6a48fd0979668d1`。`7z x` 解出 `lemomemo-export-sample.json` 167,662 字节、sha256 与对照完全一致（5 段全部解开）；`7z t` 显示 Everything is Ok。已知现象（不算缺陷）：`7z t` 和列表里的 Size 显示 1415，是最后一段 gzip 尾部记的长度，7-Zip 列表只读这个值，实际解压完整；用户看列表可能以为文件只有 1.4 KB |
+| 通知邮件 | lemo-e2e 里 account 发信出站按设计连不上，每次导出记 1 条 `export_mail_failed`：本机只证明“发信尝试 1 次”，证明不了“收到 1 封”；主持人定不为本机加转发，**留到预览一档核对**（TC-B1-73 期望已注明） |
+
+**逐条状态（只按上面的数字，不推断没报的部分）**
+
+| 用例 | 状态 | 说明 |
+|---|---|---|
+| TC-B1-73（“—”，人工） | **本机 R1～R5 全部通过；预览 5,000 行档 11-03 通过（CPU 推断判过，见下一行）** | R1（探针开，14 项、分段 4 段）、R2（第二轮）、R3、R4（17 项）、R5（第一轮）都符合用例的通过标准，内存按探针口径、0 次 546。**还差**：预览 5,000 行档（负责人跑：线上 CPU 校准、经 `/sb` 读到游标头、没有内存超限和 546、通知邮件收到 1 封、iPhone 主屏幕版存文件）（7-Zip 解压 TC-B1-129 已于 11-03 通过）。14 项、17 项核对的清单 QA 没看到原文，按后端报的结果记 |
+| TC-B1-73 预览 5,000 行档（11-03） | **通过**（CPU 校准为推断判过、间接证据，负责人 11-03 定）。负责人 11-03 下午在本机按 `docs/06-测试/B1-预览导出实测-负责人跑法.md` 跑 `node tools/e2e/export-load-preview.mjs --sync-rows 5000 --log-rows 45000`，退出码 0（输出截图 `docs/03-评审/B1/预览导出实测-2026-11-03/导出实测-报告下半.png`）：target preview，created `cf1896cb-bb8b-445c-a65c-d41fb490eb52`；sync 5000、logs 45000，造数 54 秒；start 200、3369 ms，只回 `export_id,exported_at,ok` 三项；3 片，原文 46.8 MB、gzip 13 MB（压缩比 3.59），单片原文最大 16 MB、gzip 最大 5.4 MB，单片墙钟最长 10,300 ms（看得到的两片 200 / 4436 ms / 16 MB / 5.4 MB、200 / 3764 ms / 14.78 MB / 4.45 MB，另一片 gzip 3.18 MB、原文约 16 MB——最初转录时把 gzip 当成原文，11-03 更正）；`error` null、各片都是 200（没有 546、没有内存超限）；响应不带 `Content-Encoding`；游标头最长 124 字节；头部 `format lemomemo-export`、`version 1`、`vault omitted`、`exported_at` 一致；各表行数和造的一致（settings、devices、events、todos、categories、notes 各 5000，logs 45,002 = 45,000 + 2 条 account 日志，profiles 1），每行 `user_id` 都是本人；计数 account 1、export-size 1、export-part 3、任务行 3（= 片数）；logs export 1、export_done 1。库大小（`private.db_size_bytes()` = `pg_database_size(current_database())`）：跑前 14.5 MB、导出后 58.6 MB、删完 58.6 MB；主持人跑后 SQL 复核 `pg_database_size` 27 MB——同一口径，差别在时间：删行不会马上缩小数据文件，脚本删完立刻量仍是 58.6 MB，之后自动清理回收空间，到主持人复核时是 27 MB，不算异常。删除：guard ok，只按本次 id 删，`userGone` true、`rowsLeft` {}、`countersLeft` 0；主持人跑后只读复核：`auth.users` 总数 2、`e2e-export-%` 账号 0、本次 id 账号 0、profile 0。iPhone 主屏幕版：负责人 11-03 13:23（首尔）用 lemotest 在“设置 → 数据 → 导出全部”导出一次，文件在 iPhone 上存下了（R-256 ②）；127 通知邮件收到 1 封。经 `/sb` 读到 `x-lemo-export-next`：**算验到（间接）**——iPhone 主屏幕版的导出走浏览器经 `/sb`，lemotest 数据少、很可能只有一片，但客户端 `src/features/settings/data/account-api.ts` 每一片都必须读到这个头（一片时值为 `done`），读不到（跨域没暴露）就按 `bad_response` 出错、不存文件；这次文件存下了，说明浏览器读到了这个头。多片时逐片读游标这一点没在浏览器里实测。**CPU 校准：推断判过（间接证据，负责人 11-03 定）**——脚本的 CPU 只在本机读容器 cgroup，预览 `partMaxCpuMs` 为 null；主持人从 Logs Explorer 读 account 函数的 worker 记录（`config.toml` 为 `per_worker`，每个 worker 只有一条 shutdown，`cpu_time_used` 是它处理全部请求的累计 CPU）：worker f19a71bb 处理 start（墙钟 3326 ms）和第 1、2 片（10187、4230 ms），累计 CPU 1488 ms，拆不出单片；worker b06f3737 只处理第 3 片（3599 ms、原文 14.78 MB），CPU 664 ms（精确值，≤ 1.2 秒）。第 1、2 片按推断判 ≤ 1.2 秒：若其中一片超过 1200 ms，另一片 16 MB 加 start 和冷启动合计不到 288 ms（每 MB 不到 18 ms），比同一次第 3 片的精确值（每 MB 约 45 ms）快 2.5 倍，同样的代码和数据结构不合理；另外没有任何 worker 因 CPU 超限关掉、4 个请求都 200（平台单请求上限 2000 ms）。每 MB CPU 与本机 R1（第三轮单片最高 758 ms / 16 MB ≈ 47.4 ms/MB）比：第 3 片 664 ÷ 14.78 ≈ 44.9 ms/MB，**−5%**；worker1 1488 ÷ 32.0 ≈ 46.5 ms/MB（含 start 和冷启动，是上限），**−2%**；都在 ±30% 内。口径说明：本机是容器 cgroup CPU，预览是平台记的 worker CPU，不完全同一口径。iPhone 那次导出 3 个请求合计 CPU 160 ms |
+| TC-B1-123 | ① 的 lemo-e2e 部分**本机通过** | “断网再继续”真后端 E2E 连跑 2 次通过；R4-A 断开后同一 export_id、同一游标继续取完，当天次数只 +1、文件行数一致；②～⑥ 的单测结果没报 |
+| TC-B1-136 | ② 的 lemo-e2e 部分**本机通过** | 同一条 E2E；其余各项的单测结果没报 |
+| TC-B1-124 | ① 的 lemo-e2e 部分**本机通过** | R4-B：开始满 3600 秒后取片回 410 `export_expired`；其余单测结果没报 |
+| TC-B1-132 | lemo-e2e 部分**本机通过** | R4-C：同一账号另一个会话 S2 拿 export_id 取片回 410，响应体和头（除 Date）和过期那次一字不差，S2 被拒不动任务分片数，S1 照常取完；别的用户、模式不符、单测部分没报 |
+| TC-B1-133、134、135 | 实测**印证** | R4 的 `export-part:` 计数 13 = 实际调用 13 次（含两次 410，印证 410 也扣每天分片总数）；R1 游标头最长 127 字节 ≤ 512；R1 响应没有 `Content-Encoding`。单测部分没报，不标通过 |
+| TC-B1-129 | **通过（11-03）**：R1、R3 产物三种工具（Node zlib、Python gzip、7-Zip 26.05）sha256 一致；另有 5 段拼接样本作补充 | 第三轮用 R1 产物（12 片）和 R3 产物（一片）重测：Node zlib、Python gzip 解出的字节一致、sha256 相同、都是 11 张表（第二轮那次是另跑的 2 片样本，不算）。11-03 主持人装 7-Zip 26.05 补测 R1、R3：sha256 与 Node 一致（负责人第 50 条选甲，7-Zip 是第三种工具，代替原来的负责人常用工具） |
+| TC-B1-144 | R5 实跑部分**本机通过** | 两点都回 413，`account:` 不扣、`export-size:` 记 1、没有任务行、没有 logs、函数日志有 `export_size_rejected`，和 ③、⑥ 对得上；三道闸、`-1` / `-2`、调用顺序等单测结果没报 |
+| TC-B1-140 | ③ 的实测**印证** | R2 单片原文最大 16.06 MB，符合“不超过预算加一行”；单测本身的结果没报，不标通过 |
+| TC-B1-133 ⑦ | 预算值**确定** | 生效超时是 4 分钟，`EXPORT_SIZE_CHECK_BUDGET_MS` 维持 15000；常量是否照写死要看代码，未核 |
+| TC-B1-143 | **部分**（见 6.2） | R5 预检耗时 650～1083 ms，远小于 15 秒预算；pgTAP 离线 10-31 QA 已跑，逐条见 6.2 |
+| E 组其余用例 | 未验 | 没有结果（10 条 P0 的逐条核对见 6.2） |
+
+### 6.2 E 组 10 条 P0 逐条核对（10-31，QA 对照工作区里已审查通过、尚未提交的代码）
+
+QA 这次本机跑了三样，**都不连任何本地 Supabase 容器、没跑 e2e:real**：`npm run test:db:offline`（PGlite，退出码 0：`21_export_jobs` 36 条、`22_text_constraints` 71 条、`03_roles_grants` 43 条全过，D1 违规样例 31～34 都报出）；`npx vitest run` 导出相关 13 个文件（219 条全过）；`python build/check_backend.py`（0 个错误，含 M4 授权逐行比对）。lemo-e2e 部分只按后端转来的结果记（6.1），QA 没复跑。真库 pgTAP（`npm run test:db`）没跑，由 CI 的 db 任务跑。
+
+| 用例 | 状态 | 证据 | 缺什么、由谁补 |
+|---|---|---|---|
+| TC-B1-130 | **CI 通过（a64abed）** | 原有：② 410、③ 游标伪造和 `foreign_row`、④ 响应头和 `EXPOSE_HEADERS`、客户端不重试。补（10-31 测试开发，未提交）：① 取片之间停用、会话吊销、退出登录都按 `requireActiveUser` 原样拒、不回数据（`tests/functions/account-export-p0-auth.test.ts`）；⑤ 密码会话被拒（同文件）；④ SW 不缓存导出：`tests/build/sw-export-no-cache.test.ts`，函数日志不带响应体由单测覆盖；lemo-e2e `tools/e2e/export-p0-real.mjs` 36 项全过（后端报）；**10-31 重跑（本机 lemo-e2e 实测；所在代码 CI 通过，a64abed）**：`export-p0-real.mjs` 37 项全过、退出码 0，① 退出登录 401 `unauthorized`、会话吊销 401 `session_revoked`、停用 403 `account_disabled`，被拒不扣 `export-part:`（第 1 片游标为 done，中间游标由 b1-export-resume 两片用例覆盖）；④ 标记串在导出包里，edge runtime、kong、db 日志都没有，函数日志没有 export_id | `/sb/*` 转发不在 lemo-e2e 链路里，④ 的 `/sb/*` 日志只由单测覆盖，预览一档时顺带看一眼（负责人跑法里核） |
+| TC-B1-131 | **CI 通过（a64abed）** | 原有 pgTAP `21_export_jobs` 36 条、purge 单测、M4。补：② 新 pgTAP `23_export_fn_attrs`（14 条，QA 离线复跑全过）查三个函数的 `security invoker`、`search_path = ''`；⑥ lemo-e2e `export-p0-real.mjs`：两个连接各取 20 片，count = 40、不重不漏（后端报，QA 没复跑）；**10-31 重跑（本机 lemo-e2e 实测；所在代码 CI 通过，a64abed）**：`export-p0-real.mjs` 37 项全过、退出码 0，⑥ 两个连接各取 20 片，合计 40，`parts` 1～40 不重不漏 | — |
+| TC-B1-132 | **CI 通过**（a64abed；T2 部分 3571192） | 原有单测五种 410 的状态码、R4-C。补：⑦ 五种 410 的响应体和头逐字一致——单测（`account-export-p0-gaps.test.ts`）和 lemo-e2e `export-p0-real.mjs` 都比了；**第 22 条 T2（10-31）**：每片核对 logs 里本人该 export_id 的发起记录，没有回和过期一致的 410、不读数据，伪造游标跳过第一片同样被拒（p0-gaps 新增一条和 `account-export-timeout.test.ts`，QA 复跑通过） | — |
+| TC-B1-133 | **CI 通过（a64abed）** | 原有“先扣再看游标”、400 / 410 也扣、429、413、常量单处定义。补（`account-export-p0-gaps.test.ts`）：③ 替身记调用顺序，`requireActiveUser` 之后第一个库动作就是扣每天分片总数；⑤ 跨 UTC 0 点新一天从 0 开始、旧任务没满 3600 秒照常取；⑦ `sizeCheckDailyLimit` 6、`sizeCheckBudgetMs` 15000 也断言了 | — |
+| TC-B1-138 | **CI 通过**（①③⑤⑥ a64abed；②④ 3571192） | 原有 ①③⑤。补：②④ 挂起到超时两档的单测；lemo-e2e 故障注入 ①③：503 `try_later`、次数退回（`export-p0-real.mjs`，后端报）；⑥ 撞键单测已写；**10-31 重跑（本机 lemo-e2e 实测；所在代码 CI 通过，a64abed）**：`export-p0-real.mjs` 37 项全过、退出码 0，①③ 两档故障注入回 503 `try_later`、次数退回（`export-refund:` 1、2），没有任务行、没有 export 日志，恢复后 start 正常；②④ 当时仍待第 22 条（后已补，见右栏） | ~~**⑥ 缺陷**：`supabase/functions/account/export.ts` 的 `fail()` 撞上已有键时会删掉原有那一行任务，原来那次导出接着取片回 410，和期望“原有那一行不被改动”相反；测试暂用 `it.fails`（`account-export-p0-gaps.test.ts` 第 204 行，QA 复跑确为 1 条 expected fail）——**后端**在修，修好后改回 `it`。~~ **10-31 已修**：已由 `it.fails` 改为 `it` 并通过（vitest 全量 3992 过、0 失败，测试开发报）。**②④ 已由第 22 条补上**：store 超时包装（默认 10 秒、预检 20 秒），start 扣次数后超时退回、删任务行、回 `try_later`，挂起和报错回应一字不差；T1 扣次数那一步本身超时不退；扣前超时不退——`tests/functions/account-export-timeout.test.ts`（QA 10-31 复跑通过），CI 通过（3571192） |
+| TC-B1-141 | **CI 通过（a64abed）；11-03 预览实跑通过** | 原有护栏单测。补：`tests/build/export-load-preview-run.test.ts`（QA 离线复跑通过）用替身跑 `run()`：① 非预览 ref、演练只认 553xx 端口；②③⑧ 输出只有数字和错误码、找不到标记串、不留文件；④ 251 MB 失败、250 MB 照跑；⑤ 邮箱已存在退出、不删；⑥ 名单没设记“跳过”；⑦ 造数失败照样删、删除失败带 user id 退出；另含安全审查 D2、E4。lemo-e2e 假值演练（`--rehearse-local`）已跑通，记在负责人跑法文末；负责人跑法里写安全审查员 10-31 已审（D1、D2、E4 通过） | — |
+| TC-B1-142 | **通过**（说明已随 b4cb79c 入库） | 跑法 b（主持人 10-31 定）。说明 `docs/06-测试/B1-预览导出实测-负责人跑法.md`（后端写，未提交）：命令 `node tools/e2e/export-load-preview.mjs --sync-rows 5000 --log-rows 45000`，密钥用 PowerShell `$env:` 只设在这一个窗口、跑完关窗口、不另存、不贴给任何人、只把数字贴回主持人，被打断时 `--cleanup` 补删；文末记了后端在 lemo-e2e 按说明原样跑（只加 `--rehearse-local`）：退出码 0、3 片、8 项核对全过、删干净 | 预览一档本身（TC-B1-73）11-03 已由负责人跑完：退出码 0、8 项核对全过、删干净（6.1）；本条预览实跑通过 |
+| TC-B1-143 | **CI 通过（a64abed）** | 原有 pgTAP ⑪、表清单单测、M4、R5。补：② `23_export_fn_attrs` 查 `language plpgsql`、`security invoker`、`search_path = ''`、动态 SQL 写法（QA 离线复跑全过）；⑤ lemo-e2e 另一个连接先拿住锁，预检回 -2（`export-p0-real.mjs`，后端报）；**10-31 重跑（本机 lemo-e2e 实测；所在代码 CI 通过，a64abed）**：`export-p0-real.mjs` 37 项全过、退出码 0，⑤ 锁被占时预检回 -2、1 ms、不扫表 | — |
+| TC-B1-144 | **CI 通过（a64abed）** | 原有三道闸、480 MB 边界、-1 / -2 / 报错、日志码、客户端、R5。补：⑤ 替身记整条调用顺序并断言；④ 超时、忙、出错三种回应体和头逐字一致（单测和 lemo-e2e 都比了） | — |
+| TC-B1-145 | **CI 通过（a64abed）** | 同上一次：pgTAP `22_text_constraints` 71 条离线全过（这次复跑仍全过） | 真库 pgTAP 已由 CI 的 db 任务跑过（a64abed 全绿） |
+
+**小计**（10-31 第二次核）：通过 9（130～133、141～145，未提交的代码和说明都**待提交后 CI 确认**），部分 1（138：⑥ 已修；②④ 挂起不退次数，已定第 22 条、待实现）。QA 这次离线复跑：新旧导出单测 11 个文件 144 过、1 条 expected fail（就是 138 ⑥ 的 `it.fails`）；`test:db:offline` 退出码 0，新 `23_export_fn_attrs` 14 条全过；lemo-e2e `export-p0-real.mjs` 36 项只按后端报的记，QA 没复跑。10-31 重跑 `export-p0-real.mjs` 37 项全过、vitest 全量 3992 过 0 失败（测试开发报，本机 lemo-e2e，提交后待 CI 确认）。E 组 P0 还卡在 138 ②④（第 22 条）和“提交后 CI”。
+
+**第 22 条补（10-31）**：138 ②④ 已由 store 超时包装补上，改为**本机通过**——10 条 P0 现在都本机通过，未提交的代码待审查通过与 CI 确认。同批新增 P1 两条：TC-B1-149（超时档位，part、delete、restore 超时回 `try_later` 不退）、TC-B1-150（T4：注销、撤销注销回 `try_later` 先查 status，只有 `pending_deletion` 显示冷静期、会话失效显示 `deletion_unsure`，撤销只有 active 算成功），都本机通过、待审查通过与 CI 确认。QA 本机复跑 `account-export-timeout`、`account-export-p0-gaps`、`deletion-unsure`、`deletion-check`、`account-api`（settings）、`account-gate`（auth）6 个文件 109 条全过。
+
+**CI（10-31）**：导出大批 b4cb79c（导出分片、9 列文本约束、预览实测脚本和负责人跑法、P0 用例补齐）在 CI 上只有“db.types.ts 比对”一步失败（缺 `private.tags_ok`），其余数据库测试、e2e、unit 都过；补提交 a64abed 重新生成 db.types.ts 后，ci、unit、deploy-preview 全绿（run 41139648522、41139648556、41139648527，主持人转）。所以 6.2 里已提交的部分改为“CI 通过（a64abed）”。**还没提交的**：第 22 条超时包装（TC-B1-138 ②④、149）、T2 每片核对发起记录和它的部分索引（TC-B1-132 的 T2 部分）、T4 / H1（TC-B1-150），照旧“待审查通过与 CI 确认”。
+
+**CI（10-31，第二批）**：3571192（第 22 条超时包装、T2 每片核对发起记录、T4 / H1、LOCK-timeout-fn）CI 全绿（ci 41142815594、unit 41142815579、deploy-preview 41142815623，主持人转）。TC-B1-132 的 T2、138 ②④、149、150 改为“CI 通过（3571192）”，**E 组 10 条 P0 全部 CI 通过**。另有一批（邀请函数超时、`account_restore` 加 `lock_timeout`）正在提交，已并入 TC-B1-149 ⑥，待 CI 确认。
+
+**024e802（10-31）**：邀请函数超时和 `account_restore` 的 `lock_timeout` 已提交推送，QA 按代码核对后把 TC-B1-149 的 ⑥ 重写成 ⑥～⑨：invite-signup start 码有效前卡住回 `try_later`，码有效后第 ⑤⑥ 步出错或超时回 `{ok}`、不发信；verify 各步超时回 `try_later`，版本门读配置卡住放行，删 pending 卡住注册照常成功；invite-admin 超时回 `try_later`；`account_restore` 等锁 5 秒报 55P03 回 `try_later`、次数不退。`invite-store-timeout.test.ts`、`lock-timeout-callers.test.ts` 本机复跑 38 条全过，CI 通过（024e802 代码 + 3dcdc75 的 unit）。
+
+
+### 6.3 E 组 P1 14 条、“—” 4 条逐条核对（10-31，第四版）
+
+对象 main `7bff467`，导出相关代码都在 b4cb79c、a64abed、3571192 里，三次 CI 全绿。QA 本机复跑全量 `npx vitest run`（296 个文件、4139 条通过、27 跳过、3 todo，0 失败）和 `npm run test:db:offline`（退出码 0，全部通过）；真后端 E2E 只按后端报的记，QA 没复跑。
+
+| 用例 | 状态 | 证据 | 缺什么、由谁补 |
+|---|---|---|---|
+| TC-B1-123 | **CI 通过**（补的断言在 a9f70eb） | ① lemo-e2e “断网再继续”真后端 E2E（`tests/e2e/b1-export-resume.real.spec.ts`）和 R4-A：继续取完、当天次数只 +1、文件一致；单测 `export-run.test.ts`“try_later…自动再试”“再试 2 次还不行：停下…继续”；② part“同一个游标重试得到同样的字节”、分片数照算；③ part 被掐不扣次数（扣次数只在 start，`account-export.test.ts`）；④⑤ start“当天导出次数已满…429” | ⑥ `src/features/settings/__tests__/export-memory-only.test.tsx`“中断后刷新（整页卸载再装）：没有继续，只能重新导出”，QA 复跑通过，CI 通过（a9f70eb） |
+| TC-B1-124 | **CI 通过（b4cb79c / a64abed / 3571192）** | ① part“M3…开始满 1 小时 410”（差 1 秒 200）；② 不存在的 export_id 410；③ part“带了有效令牌：vault = cipher…part 没带令牌（模式对不上）回 410”；④ `export-split.test.tsx`“分片失败的提示：410 过期”、`export-run.test.ts`“开始满 1 小时…直接 export_expired”；R4-B 本机实测 | ③ 用真令牌复跑留到 B5（用例原文如此，不卡 B1） |
+| TC-B1-125 | **CI 通过（b4cb79c / a64abed / 3571192）** | ①② limits“一个任务最多 EXPORT_MAX_PARTS 片：超了回 413（超的这次也算）”；③ limits“不对的一律 undefined”“坏游标…400”；④ 代码里已没有 `EXPORT_MAX_RAW_BYTES` 和旧 `too_large` 分支，两个新码在 `shared/schema/account.ts` 的 `ACCOUNT_ERROR_CODES`，漂移检查 `check-deno-drift` 照过；⑤ `export-split.test.tsx`“分片失败的提示…413” | — |
+| TC-B1-126 | **CI 通过**（补的断言在 a9f70eb） | ①② `account-api.test.ts`“546（WORKER_LIMIT）、500、502、504 和读不出码的 5xx 都当 try_later”，`export-run.test.ts`“间隔 2 秒、5 秒自动再试 2 次”；③ “再试 2 次还不行：停下（paused）…继续”；④⑥ “读不懂这一片（bad_response）…vault_locked”“过期、超上限、当天分片用完、会话没了：不再试、不能继续”；`export-split.test.tsx`“明确的 4xx 码…不给继续”；进度文字“正在导出…已取回 N MB” | ⑤ `src/features/settings/__tests__/export-memory-only.test.tsx`“start 回 try_later（546、5xx 都归成它）：提示服务器忙…只调一次”“account-api：start 回 546…只发一次请求”，QA 复跑通过，CI 通过（a9f70eb） |
+| TC-B1-127 | **通过（11-03）** | ①④ part“TC-B1-67…logs 一条 export、一条 export_done”“export_done 写不进只记错误码，最后一片照常回”；② ③ 中断后继续不重复写 `export`：R4、真后端 E2E，最后一片重复请求 `export_done` 只有一条（part“最后一个游标重复请求”）；⑤ `account-export.test.ts`“写不进 logs：try_later、退回…不发信” | “通知邮件 start 后发 1 封（中断也发）”：lemo-e2e 发信出站按设计连不上，**随 TC-B1-73 预览一档核**（负责人）——**11-03 预览实测：通过**——负责人 11-03 13:23（首尔）在 iPhone 主屏幕版用 lemotest 导出一次，Gmail 收到 1 封“你的柠檬记数据刚刚被导出”，时间 13:23 Asia/Seoul、地区 KR Seoul（截图 `D:\claude code\柠檬记APP-本机资料\真机截图\B1\127-导出通知邮件-iPhone.png`）。邮件“设备”一栏当时显示“未知设备”——“未知设备”**已修（后端 11-03，审查通过，提交 ab00797）**：主持人在预览库只读核实 iPhone 那次导出 `logs.device` 不为空、设备 `platform = ios`、`label` 为空、属本人，修复后这种情况显示“iPhone”；预览要等推送后 deploy-preview 重新部署 account 才生效 |
+| TC-B1-128 | **CI 通过（b4cb79c / a64abed / 3571192）** | `recent-exports.test.ts`：①② “未完成（0.47）…配不上 export_done 的标出来”；③ “export_done 单独一行不列”；④ 邮件失败配对；⑤ 多条各自正确；⑥ “时间在将来的行丢掉（R-259）”；⑦ `useRecentExport`“导出成功立刻读一次，5 秒后再读一次”；查询只读本人三种 act（`createRecentExportsApi`） | — |
+| TC-B1-129 | **通过（11-03）** | 第三轮用 R1（12 片）、R3（一片）产物：Node zlib、Python gzip 解出字节一致、sha256 相同（6.1）；`export-size-tables.test.ts`“多成员 gzip…Node zlib 整份解开 = 各段原文拼起来” | ~~7-Zip 本机没装~~ **11-03 已测通过**：7-Zip 26.05 `7z x` 解 R1（12 段，196,455,565 字节）、R3（1 段，1,109 字节）真实产物，sha256 与 Node 一致，`7z t` 都是 Everything is Ok（6.1）；另解 5 段拼接样本作补充，列表 Size 显示 1415（末段 gzip 尾部长度）记为已知现象、不算缺陷。第三种工具按负责人 11-03 第 50 条选甲定为 7-Zip，用例原文已改。主持人判本条通过 |
+| TC-B1-134 | **CI 通过（b4cb79c / a64abed / 3571192）** | ①～⑦ limits“游标（S1，不透明、逐项校验、≤ 512 字节）”一组：合法游标原样解出、最大游标 ≤ 512 字节、不对的一律 undefined、文本主键只收 `^[a-z0-9._-]{1,64}$`、坏游标 400；⑧ `after` 只经 `.gt()` 进查询（`supabase/functions/account/index.ts` 第 140 行），account 目录里没有用游标值拼过滤串或 SQL 的地方；⑨ R1 游标头最长 127 字节（6.1） | — |
+| TC-B1-135 | **CI 通过（b4cb79c / a64abed / 3571192）**（④ 除外） | ① part“响应（S2）：application/gzip、no-store、nosniff，没有 Content-Encoding”；② `account-export-p0-auth.test.ts`“/sb 转发：part 的 200（gzip）和 410（JSON）原样转回”；③ limits“游标头在电脑版跨域时也读得到”，`EXPOSE_HEADERS` 只多了 `x-lemo-export-next`；⑤ account 函数源码里没有自己加 `Access-Control-*` 头 | ④ exe 跨域那一档在 B6 抓包复核（原计划，不卡 B1） |
+| TC-B1-136 | **CI 通过**（补的断言在 a9f70eb） | ①② 真后端 E2E“导出中途断网…继续…文件和不中断一致”（lemo-e2e 本机连跑 2 次，后端报；真后端组 CI 还没接，接手清单 E2E-REAL）；③⑩ `export-run.test.ts`“开始满 1 小时：本机不再请求”、`export-split.test.tsx`“中断后满 1 小时：自动换成…”；④ “取片中会话没了：走被移除流程，不给继续”；⑥ 每片 60 秒（`EXPORT_PART_TIMEOUT_MS`）；⑦ “取片中屏幕上写正在导出…已取回 N MB”；⑧ “导出途中进注销页再回来”；⑨ “断网时进入中断：继续不可点，焦点落到取消”；⑪ “页面卸载（stopped）：取完这一片就停” | ⑤ `src/features/settings/__tests__/export-memory-only.test.tsx`“导出中、中断时：localStorage、sessionStorage、地址里都没有 export_id 和游标；不开 IndexedDB、不碰 Cache Storage”，QA 复跑通过，CI 通过（a9f70eb） |
+| TC-B1-137 | **CI 通过**（补的断言在 a9f70eb） | ③ `export-split.test.tsx`“按钮下常驻每天合计 3 次、每点一次算一次和建议连 Wi-Fi”；② 代码核对：export_id 一律由服务器 `crypto.randomUUID()` 生成（`supabase/functions/account/export.ts` 第 175 行），不读请求里的值 | ① `tests/functions/account-export-start-retry.test.ts`“第一次成功但回应丢了、用户再点一次：两次都扣（当天 +2）…”，前端侧 `src/features/settings/__tests__/export-memory-only.test.tsx`“start 失败不自动重发”；② `tests/functions/account-export-start-retry.test.ts`“start 请求里带 export_id：不用这个值…”；QA 复跑通过，CI 通过（a9f70eb） |
+| TC-B1-139 | **CI 通过**（补的断言在 a9f70eb） | ① part 首条用例：`export_done` 的 `fields` 是 `parts=…`、`bytes=…`，`parts` 等于取片次数（含重试）；③ 同一条用例：文件头 `exported_at` = start 回的，start 回的时刻 = `export` 那一行的 `t`（`account-export.test.ts`“只回 {ok, export_id, exported_at}…t = 开始时刻”） | ② `tests/functions/account-export-start-retry.test.ts`“最后一片前把 b 改大：只有本人这条 export_done 的 bytes 跟着变…”“b 超过上限或不是非负整数：400”，QA 复跑通过，CI 通过（a9f70eb） |
+| TC-B1-140 | **CI 通过（b4cb79c / a64abed / 3571192）** | limits“每片预算和翻页”一组：每写一行查一次预算、单片原文 ≤ 预算 + 一行、拼起来和一片取完一致；“一行就超预算的胖行：每片正好一行”；“翻页（Q5）：每张表第一页 50 行，之后 250 行”；“胖行（平均每行超过 8 KB）：下一页按 2 MB ÷ 平均行宽取，至少 10 行”；“平均行宽 r 记进游标、跨片带着走”；空表、只有 profile（R3 一片 done）、同游标重试字节相同 | — |
+| TC-B1-146 | **CI 通过**（①～⑥；⑦ 按间接证据判通过） | ①②③⑤ pgTAP `22_text_constraints`：13 + 9 条约束都在、都已 validate，`tags_ok` 是 immutable、search_path 空、null 和空数组通过，库里已有违规旧行时 validate 失败（23514）、约束停在 not valid；迁移里 23 处 `not valid`、22 处 `validate constraint`；④⑥ `tests/shared/rows.test.ts`“devices.app_version 与迁移一致”“events.tz 与迁移一致”，D1 比对通过 | ⑦ **按间接证据判通过**（主持人 10-31 定）：后端用匿名 GitHub API 查到 b4cb79c 的 deploy-preview（run 41137630118、job 124344054301）第 10 步“数据库迁移（db push）”success；`20261031110000_core_text_constraints.sql` 首次在这次推上预览，文件内每个 `not valid` 都有对应的 `validate constraint`、整文件单事务，validate 失败 db push 就会失败——所以预览上各列没有违规行。没有直接数违规行 |
+| TC-B1-147 | **CI 通过（b4cb79c / a64abed / 3571192）** | `test:db:offline` 的 D1 违规样例 31～34 都报出（加没约束的 `text`、`text[]`、`jsonb` 列，去掉 9 列约束）；`tests/build/d1-text-bounds.test.ts`：白名单没理由报错、9 列一列都不准进白名单、去约束同时加白名单照样报错 | — |
+| TC-B1-148 | **CI 通过（b4cb79c / a64abed / 3571192）** | `account-export.test.ts`“别人在预检（-2）…这一次预检限流退回去”（连续 10 次 -2 后 `export-size:` 仍是 0，下一次照常预检）；退回失败记 `export_size_refund_failed`（`account-export-timeout.test.ts`）；① lemo-e2e `export-p0-real.mjs`：另一个连接持锁，预检回 -2（后端报） | — |
+| TC-B1-149 | **CI 通过**（①～⑤ 3571192；⑥～⑨ 024e802 代码 + 3dcdc75 的 unit） | `tests/functions/account-export-timeout.test.ts`（档位 10 秒 / 预检 20 秒、永不返回抛 StoreTimeout、part 超时 try_later、delete 和 restore 超时不退次数）；`tests/functions/invite-store-timeout.test.ts`；`tests/functions/lock-timeout-callers.test.ts` 的 restore 两条 | — |
+| TC-B1-150 | **CI 通过**（3571192） | `src/features/settings/__tests__/deletion-unsure.test.tsx`、`deletion-check.test.ts`、`account-api.test.ts`“回 try_later 先查真实状态”，`src/features/auth/__tests__/account-gate.test.ts`“restore 回 try_later 先查 status” | — |
+
+**小计**：CI 通过 10（124、125、128、134、135、140、147、148、149、150），部分 8（123、126、127、129、136、137、139、146）。要开发补断言的 6 处（前端 A 两处、后端两处、后端或主持人一处，见结论第 5 条）；要负责人和真机的：129 的 7-Zip 和常用解压工具，127 的通知邮件随 TC-B1-73 预览一档。
+
+**补（10-31）**：开发补的断言回来了（CI 通过（a9f70eb））——前端 `src/features/settings/__tests__/export-memory-only.test.tsx` 覆盖 123 ⑥、136 ⑤、126 ⑤、137 ① 前端侧，后端 `tests/functions/account-export-start-retry.test.ts` 覆盖 137 ①②、139 ②，QA 复跑两文件 9 条全过；146 ⑦ 按 deploy-preview 第 10 步 db push 成功判通过（间接证据）。现在：CI 通过 11（加 146），部分 7（123、126、136、137、139 只差提交后 CI；127、129 要负责人和真机）。
+
+**现状（11-03 更新）**：E 组 P1、“—”18 条里 **16 条 CI 通过**，129 于 11-03 7-Zip 实测后**通过**；127 的通知邮件 11-03 收到 1 封、通过——E 组 P1、“—”18 条**全部通过**（“未知设备”已修，后端 11-03，提交 ab00797）。B5、B6 那两档（124 ③、135 ④）按原计划不卡 B1。
+
+---
+
+## 七、已过、在等什么、等谁
+
+| # | 项 | 状态 | 等谁 | 卡不卡 B1 签字 | 出处 |
+|---|---|---|---|---|---|
+| 1 | TC-B1-07 ② 真等 9 / 11 分钟 | **通过（11-03）**：第 1 轮 9 分 51 秒提交成功；第 2 轮满 11 分钟提交，提示过期、无新会话 | — （11-03：C3 已执行，安全审查员已确认（S-B1 签字第四版），S-B1 结论为签） | 不卡 | 验收清单 P2；安全审查 C3 |
+| 2 | P6 反例实跑（TC-B1-74、75） | **通过（11-03 11:22 北京时间）**：第 4 版 `-Only P6` 通过 6、不符合 0、跳过 1（P6-③ 按设计跳过），auth.users 2→2、admins 1→1，输出无 key 和 `email_otp` | — | 不卡 | 验收清单 P6 |
+| 3 | 预览两个非 `.test` 账号、`PREVIEW_OWNER_EMAILS` 没配（TC-B1-74、75 ②） | 名单不符合；数据抽查已符合。**负责人已定（11-03），待执行**：选甲；**负责人本人邮箱账号 11-03 已删**（C4 执行前提，删后 `auth.users` 只剩 lemotest），**`PREVIEW_OWNER_EMAILS` 已配（11-03，主持人核对，值为 `owner+lemotest@example.com`）**；名单已符合 | **负责人**留 `owner+lemotest@example.com` 当验收账号、配进 `PREVIEW_OWNER_EMAILS`，本人邮箱那个账号由负责人删（明早清单第 45 条①），主持人只读复查（安全审查 C2 ①②）——**11-03 都已做完** | 不卡（名单已符合；TC-B1-74、75 仍随第 2 行 P6 反例实跑卡） | 验收清单 P6；签字文件第四节 C2 |
+| 4 | TC-B1-75 ④ 重跑 `--admin` 和反例 | **通过（11-03）**：前一半 P6A 两次（admins 0→1、再跑“已是管理员，跳过”1→1）；后一半 P6-⑤ → `not_test_email`、P6-⑥ → `owner_email`、admins 1→1（随第 2 行那次 P6） | e2e-admin 以后要登录前，后端补一行 profile（接手清单 TC75-admin，不卡 ④）；③ B7a 上线前复跑 | 不卡 | 用例 TC-B1-75 |
+| 4b | TC-B1-112 ①④ 只读 SQL | **已完成**（10-31，验收清单 P4 写通过） | — | 不卡 | 签字文件第二节 |
+| 4c | Auth 设置逐项截图核对（TC-B1-06） | **已完成**：截图 13 张，QA 逐张复核过 | — | 不卡 | 签字文件条件 C1 |
+| 4d | 正式项目三项（JWT 600、Site URL 和跳转白名单、CAPTCHA） | 没设；按 15.6 留到 B7a | **负责人**本人保存（明早清单第 46 条）；**硬线：正式项目建第一个账号之前必须设好**，TC-B7a-25 核 | 不卡 B1 | 签字文件 J7 |
+| 4e | 验收清单 M1 补写“预览 24 个迁移、最新 20261030140000” | 主持人已查、清单没写 | 主持人 | 不卡 | 第五节 M1 |
+| 4f | 导出分片开发（方案 A；TC-B1-130～133、138、143、144 等 P0 的代码）和文本列约束迁移（TC-B1-145～147） | 方案已定稿（架构 0.47 第 4～20 条），安全复核通过、可以开工，**已完成**（10-31：b4cb79c、a64abed、3571192，CI 全绿；10 条 P0 CI 通过，见 6.2） | 后端（迁移、函数、单测）、前端 A（客户端拼接、继续、文案） | 不卡 | 架构 0.47 续 ⑥ |
+| 4g | 后端 lemo-e2e 实测 R1～R5（TC-B1-73），按 R1 片数给出两个上限的实数（TC-B1-133） | **已完成（10-31）**：R1（探针开，14 项全过）、R2、R3（空账号一片）、R4（17 项全过）、R5 都通过，数字见 6.1；上限按 R1 的 12 片写死 36、72 | — | 不卡 | 架构 0.47 续 ⑤ |
+| 4j | TC-B1-73 内存 | **通过（本机，分段口径）**：单次 part 调用 `heapUsed + external` 峰值 R1 最高 33 MB（第三轮）、R2 最高 56 MB，≤ 150 MB；**分段**（架构 0.47 第 21 条补）：R1 12 片分在 4 个 worker、4 段，各片开始时 `heapUsed` 为 16/15/14、16/16/17、16/16/14、16/16/15 MB，段内 ±10 MB、每个新 worker 第一片回到底数 16 MB、覆盖 4 段，都符合；本机 edge-runtime 也按 256 MB 掐 worker（260 / 300 MB 回 546），全程 0 次 546 | 预览 5,000 行档不开探针，只看没有内存超限、没有 546（负责人跑，4h） | 不卡（本机这一项） | 6.1；架构 0.47 第 21 条 |
+| 4h | 预览 5,000 行档实测（TC-B1-73 预览一档）；先过 TC-B1-141 七条护栏、TC-B1-142 跑法核对 | **11-03 通过**：负责人本机一条命令，退出码 0、3 片、8 项核对全过、删干净；141、142 预览实跑通过；iPhone 主屏幕版存下文件、通知邮件 1 封（127 通过）；`/sb` 暴露头间接验到；CPU 校准推断判过（间接证据，负责人 11-03 定）：第 3 片精确 664 ms，第 1、2 片同一 worker 累计 1488 ms 按每 MB 推断 ≤ 1.2 秒，每 MB 与本机 R1 比 −5%、−2%（口径：本机容器 cgroup，预览平台 worker CPU） | — | 不卡 | 架构 0.47 续 ④ 第 5 点、⑤；6.1 |
+| 4i | 0.47 续 ④ 五点拍板（一个文件、logs 90 天、1 小时内免费继续、中韩文案、预览谁来跑） | 确认前按推荐做 | **负责人** | 不卡（按推荐验；改了再改用例 123、124、128、136、137） | 架构 0.47 第 10 条 |
+| 5 | TC-B1-90 剩下的提示挪到 BANNER-later | 部分覆盖 | 主持人 / 架构师确认 | 待确认 | 验收清单第九节 D 组；接手清单 R272-sugg ④ |
+| 6 | TC-B1-20（韩文审校第一遍）、TC-B1-73（账号导出，“—”级人工） | TC-B1-20 已派人，清单写到 `B1-韩文审校-第一遍.md`；**TC-B1-73 结论已定：一次调用导不完满载账号，改方案 A，方案已定稿、安全复核通过、开发中**，用例已按方案改写，验法见 4f～4h | 审校的人；TC-B1-73 见 4g、4h（预览一档和 iPhone 真机存文件要**负责人**） | TC-B1-20 不在 ④ 的 P0、P1 范围；TC-B1-73 随 E 组一起卡；有结果 QA 补进本报告 | 用例第 302、376 行 |
+| 6b | TC-B0-117 预览打真 R2 一次（安全审查 C4） | **通过（11-03，约 11:00 首尔全部完成）**：第 4 步 request 7 → 200、purged 1、failed 0、ms 4298；心跳晚于触发时刻；日志没有 `r2_not_empty` 等；A 四个前缀 0、B 2/4/1/1 不变；A 已删；收尾后账号只剩 lemotest，B 的两个 vault 测试对象已删。遗留观察：ms 4298 < 5000，没测到“pg_net 超时后函数照样跑完”（不卡） | — | 不卡（C4 已满足；第 ③ 环签不签由安全审查员定） | 签字文件第四节 C4；C4 执行记录 |
+| 6c | TC-B1-129 用 7-Zip 解压核对 | **已完成（11-03），通过**：7-Zip 26.05 解 R1（12 段）、R3（1 段）真实产物，sha256 与 Node 一致，`7z t` Everything is Ok；另有 5 段样本作补充，列表 Size 显示 1415 记为已知现象（见 6.1） | — | 不卡 | 用例 TC-B1-129 |
+| 6d | TC-B1-154 预览 account-purge 定时任务回 200、有心跳（P0，11-03 新加） | **预览通过（11-03 10:52 首尔）**：518d011 部署后手动触发 request 6 → 200、`purged 0`、心跳 01:52:16 UTC；不带头 POST → 函数自己的 401。修复前 11-02 18:30 UTC 那条是 401 `UNAUTHORIZED_NO_AUTH_HEADER` | 正式那次随 B7a；下一次 18:30 UTC 自动触发后主持人顺手看一次 `job_run_details` 和心跳 | 不卡 | 用例 TC-B1-154；C4 执行记录 |
+| 7 | TC-B1-113 vault-preview 签名一半 | 预览没有 vault-file | B4b-1 | 不卡（条件） | 接手清单 S4 |
+| 8 | P-idb-tx 的 iOS 真机部分 | ①～⑤ 已在 chromium、webkit 补测 | 负责人真机那一次 | 不卡（条件） | 接手清单 P-idb-tx |
+| 9 | iPhone 主屏幕版看 6 处（第三十二批 36319a2 已部署） | 负责人说晚点看 | **负责人本人** | 不卡（真机，B2 窗口里改） | 明早清单第 41 条 |
+| 10 | 函数“自己打包”要不要做 | 门禁已做、CI 首跑通过 | **负责人**定（B7a 前） | 不卡 | 明早清单第 44 条 |
+| 11 | 发验证码邮件的告警（P8） | 不会响 | 负责人定（上线前） | 不卡 | 明早清单第 42 条 |
+| 12 | 真后端组进 CI（方案 B） | 没做 | 运维、测试开发 | 不卡 | 接手清单 E2E-REAL ⑧ |
+| 13 | 真机 R1～R6、R8、R10～R15 | 没做 | **负责人本人**（B1 签完后和倾斜实测同一次） | 不卡（开发计划第 118 行） | 验收清单第六步 |
+
+**11-03 定下的执行先后**（明早清单第 47 条）：① 负责人配 `PREVIEW_OWNER_EMAILS`（`owner+lemotest@example.com`）、删本人邮箱账号（第 3 行）**✓ 11-03 完成**（删号已做，变量已配、主持人核对）→ ② 做 TC-B0-117 预览真打 R2 第 0～3 步 **✓ 11-03 完成** → ②a 后端修复 account-purge 401 并部署到预览（518d011）、TC-B1-154 复查通过（第 6d 行）**✓ 11-03 完成** → ②b 再做 TC-B0-117 第 4 步起 **✓ 11-03 完成、通过**（第 6b 行；C4 要求预览账号总数 = 2：负责人本人邮箱账号必须先在控制台删掉，lemotest 加 A 正好 2 个；操作单第 4 步 ②b 超过 2 个就拒绝，安全审查员 11-03 第二次复核改定，所以在删号之后、建 e2e-admin 之前）→ ③ 负责人在预览控制台建 `e2e-admin@lemomemo.test` **✓ 11-03 约 10:29 完成** → ④ 跑两次 `-Only P6A`（第 4 行前一半）**✓ 11-03 11:17（北京时间）完成、通过**→ ⑤ 跑第 43 条的 P6，含 P6-⑤、⑥（第 2 行、第 4 行后一半）**✓ 11-03 11:22（北京时间）完成、通过**→ ⑥ TC-B1-07 ② 真等验证码，负责人本人收码、主持人第 9、11 分钟各提交一次（第 1 行）**✓ 11-03 完成、通过**→ ⑦ TC-B1-73 预览 5,000 行导出一档（第 4h 行）**✓ 11-03 完成、通过（CPU 推断判过）**。7-Zip（第 6c 行）已于 11-03 测完、通过。
+
+---
+
+## 八、新发现（都是低，不阻断）
+
+| 编号 | 问题 | 建议 | 给谁 |
+|---|---|---|---|
+| L-1 | ~~测试用例 v4 里 5 条 B1 用例“冒烟”列是空的：TC-B1-121、122、100f、100g、100h~~ **10-31 已解决**：五条都是用替身的自动测试，补成 ★，第 18 节已重数 | — | — |
+| L-9 | `build/p0_list.py` 还没建（测试用例 v4 第 18 节写明 P0 勾选表由它生成，TC-B7a-17），P0 实数（第 18 节现为 287，含 46 条注销用例）没法和勾选表对一遍，**P0 对数暂缺** | 建脚本时让它按“级别”列数并和第 18 节对一遍 | 按 TC-B7a-17 的批次做，QA 不建 |
+| L-2 | 验收清单第五步 P2 写“有没有现成脚本：待核实”，实际 `login-token-tests.ps1` 的 `-Only` 里没有 TC-B1-07；脚本里同名的 P2 指的是 B0 实测清单的 P2，容易看混 | 验收清单 P2 改成“没有脚本，要新写”；脚本加项时用不同的名字 | 主持人（清单）、后端或测试开发（脚本） |
+| L-3 | ~~验收清单 P4 结果栏为空~~ **10-31 已解决**：P4 已写“10-31 通过（不复跑整套）” | — | — |
+| L-4 | ~~TC-B1-08 原始记录不在仓库~~ **10-31 已解决**：搬进 `B1-测试记录-TC-B1-08.md`。剩一点：Cloudflare 速率限制规则页面没有截图（不卡） | 下次进 Cloudflare 控制台时顺手截一张规则页存进本目录 | 主持人 |
+| L-7 | 验收清单 M1 还是 10-30 的“23 条、最大 20261030130000”；主持人 10-31 已查到 24 条、最新 20261030140000，但没写进清单 | 写进 M1 结果栏 | 主持人 |
+| L-8 | 预览、正式两个项目的 Email 面板里，Secure password change 关、最短密码 6 位、不查泄露密码（截图 `预览-3`、`正式-3`）。账号不许有密码靠 `guard_no_password` 触发器挡（TC-B1-112 已过），这几项现在不起作用，不算问题；只是 15.6 总表里没有这几行，以后有人看截图可能会疑惑 | 架构师看要不要在 15.6 总表注一句“密码相关设置不用管，靠触发器” | 架构师 |
+| L-5 | 匿名 GitHub API 的步骤级状态是旧快照（完成的任务里还有 in_progress、pending 的步骤），不能用来逐步核对 | 以后核 CI 以任务结论为准，要看步骤或日志就用登录后的 `gh run view --log` | 主持人、QA |
+| L-6 | 本报告和 `B1-测试记录-TC-B1-08.md` 都是新文件，还没进 `文件登记册.md`（`check_registry` 会报“有文件没登记”） | 登记册维护人补两行 | 主持人（已说由他登记） |
+| L-10 | ~~测试用例 TC-B1-141、142 写的预览跑法是 `export-full-account.mjs --env preview`，和代码对不上~~ **10-31 已解决**：主持人同意，两条已改成 `tools/e2e/export-load-preview.mjs`（`export-full-account.mjs` 只认本机、没有 `--env`）；142 跑法定 b | — | — |
+| L-11 | ~~TC-B1-138 ⑥：`export.ts` 的 `fail()` 撞键时删掉原有任务行（测试开发 10-31 发现，**中**）~~ **10-31 已修**（单测改回 `it` 并通过）；~~另 store 调用没有超时、start 挂起时不退次数~~ **10-31 已由第 22 条补上**（CI 通过（3571192）） | ⑥ 后端修好后把 `it.fails` 改回 `it`；挂起一项已实现（TC-B1-138 ②④、TC-B1-149） | 后端 |
+
+---
+
+## 九、本轮跑过的命令
+
+| 命令 | 结果 |
+|---|---|
+| `git fetch origin`；`git log origin/main..HEAD` | 空，HEAD = origin/main = 9a4bffc |
+| `git status --short`；`git diff --stat` | 3 个迁移显示已修改、diff 为空（只有 CRLF），没动 |
+| `curl -s ".../actions/runs?head_sha=9a4bffc5a30dec85d477fd7c9e60489074e7ec6c"` | ci、unit、deploy-preview 三条 success |
+| `curl -s ".../actions/runs?head_sha=9f78ab3e77854f3e6fc968c19f85145629aaa1ce"` | 三条 success |
+| `curl -s ".../actions/runs/<id>/jobs"`（三个 run） | 8 个任务全部 success（第一节 1.2） |
+| `npm run typecheck` | 退出码 0 |
+| `npm run lint` | 退出码 0 |
+| `npx vitest run` | 3794 过、23 跳过、3 todo，0 失败 |
+| `npm run e2e` | 160 过、0 失败、36 跳过 |
+| `npm run e2e:real:up` / `e2e:real` / `E2E_REAL_WEBKIT=1 e2e:real` / `e2e:real:down` | up 成功（24 个迁移）；chromium 15 过；webkit 28 过 2 跳过；down 只停 lemo-e2e |
+| `docker ps -a --filter name=lemomemo`（跑前、跑后） | 8 个容器 CreatedAt 一致 |
+| 按验收清单第九节 A 组表抽出 73 个测试文件，逐个查存不存在 | 67 条、73 个文件，缺 0 个 |
+| （第二版）逐张查看 `Auth设置截图-2026-10-31/` 13 张 | 预览 7 张全对；正式 6 张差三项（见第四节 P1） |
+| （第二版）用正则扫 TC-B1-08 的 5 份原始输出（IPv4、邮箱、`eyJ`、`sb_secret_`、`sb_publishable_`、6 位数字），再生成 `B1-测试记录-TC-B1-08.md` 后复扫 | 原文件 0 处命中；新文件只有说明文字里提到 `sb_publishable_` 这个词本身 |
+| （10-31，E 组 P0 核对）`npm run test:db:offline` | 退出码 0；`21_export_jobs` 36、`22_text_constraints` 71、`03_roles_grants` 43 条全过，D1 样例 31～34 都报出；只用 PGlite，没连任何容器 |
+| （10-31，E 组 P0 核对）`npx vitest run` 导出相关 13 个文件（`tests/functions/account-export*.test.ts`、`account-purge`、`account`，`tests/build/d1-text-bounds`、`export-load-preview`、`export-size-tables`、`rows`，`src/features/settings/__tests__/export-run`、`export-split`、`account-api`） | 13 个文件、219 条全过 |
+| （10-31，E 组 P0 核对）`python build/check_backend.py` | 0 个错误（含 M4） |
+| （10-31，E 组 P0 第二次核）`npx vitest run` 导出相关 11 个文件（含新的 `account-export-p0-auth`、`account-export-p0-gaps`、`sw-export-no-cache`、`export-load-preview-run`）；`npm run test:db:offline` | 144 过、1 条 expected fail（138 ⑥）；离线库退出码 0，`23_export_fn_attrs` 14 条全过 |
+| （10-31，第 22 条）`npx vitest run` `account-export-timeout`、`account-export-p0-gaps`、`deletion-unsure`、`deletion-check`、`account-api`（settings）、`account-gate`（auth） | 6 个文件、109 条全过 |
+
+---
+
+## 附录：真机（第六步，不算六环、不卡 B1 签字）
+
+按开发计划 v4 第 118 行，B1 由 QA 用模拟 UA 签（TC-B1-16、17 的 standalone / 非 standalone 在真后端组 b1-login-ua.real 里跑），真机确认在 B1 签完后和倾斜实测同一次做，真机上发现的问题在 B2 窗口里改、不重开 B1。
+
+| # | 项 | 状态 |
+|---|---|---|
+| R7 | P1-05 倾斜授权 | 已做（10-29：记不住 → B2 用做法 ②） |
+| R9 | 设置页横幅 | 10-30 负责人截图：底部没有多余空白；横幅情形的问题由 R-281 修，明早清单第 41 条等负责人再看 |
+| R1～R6、R8、R10～R15 | 主屏幕启动、验证码自动填入和 Turnstile、断网启动、安全区和键盘、两个窗口退出、iOS 启动图、韩文项、启动画面 B 等 | 待负责人本人做，结果回填本附录和真机清单 |
+| P-idb-tx iOS 部分 | 真机上看 IndexedDB 事务（Safari / iOS WebKit） | 和上面同一次 |
+
+## 修改记录
+
+| 日期 | 改了什么 |
+|---|---|
+| 2026-10-31 | 初稿（QA，对象 9a4bffc）：结论“不签”，原因 TC-B1-07 ② 没做、TC-B1-74/75 反例没实跑且账号清点按原文不符合；对齐同日 [B1-安全审查-S-B1签字](B1-安全审查-S-B1签字.md) 的 C1～C5 和明早清单第 45 条 |
+| 2026-10-31 | 第二版（QA）：按主持人转来的补证复核。逐张看 13 张 Auth 截图，TC-B1-06 改为过（正式三项归 TC-B7a-25，硬线是第一个正式账号之前）；TC-B1-112 按验收清单 P4 改为过；TC-B1-07 ① 改为已证实、② 仍未做；TC-B1-74/75 记入数据抽查符合、名单仍不符合、④ 进明早清单第 47 条；TC-B1-08 原始记录搬进 `B1-测试记录-TC-B1-08.md`；B 组改为 3 过、1 一半、3 未过；M1 写明 24 个迁移待写进清单；TC-B1-20、73 改为在做。**结论维持“不签”** |
+| 2026-10-31 | 第三版（QA）：按主持人要求和现状对齐，**不是新一轮测试，没有重跑命令**。结论加第 4 条：TC-B1-73 改为“方案 A 已定稿、安全复核通过、开发中”，导出分片 TC-B1-123～142 列入 B1 待验范围；第六节加 E 组（P0 7 条、P1 9 条、“—” 4 条，写明哪些依赖后端 R1 实测、预览实测，哪些要负责人本人），条数按测试用例 v4 第 18 节重数后的数（TC-B1 编号 150 条，P0 59、P1 38、“—” 53）；第七节加 4f～4i 行，第 6 行改写，卡签字的负责人项照旧是 TC-B1-07 ②、TC-B1-74/75 反例和名单、TC-B1-75 ④；第八节 L-1 标已解决、加 L-9（`build/p0_list.py` 未建，P0 对数暂缺）。**结论维持“不签”** |
+| 2026-10-31 | 第三版补（QA）：按测试用例 v4 新加的 TC-B1-143、144（架构 0.47 第 18、19 条：start 大小预检函数和预检前三道闸，都是 P0）同步：E 组改为 18 条（P0 9、P1 9）＋“—” 4，结论第 4 条和第七节 4f 的 P0 由 7 条改 9 条；TC-B1 编号 152 条（P0 61、P1 38、“—” 53），第 18 节按节 153 条；R1 实测已定常量、R5 要记实际生效的语句超时；L-9 的 P0 实数改 284。**不是新一轮测试，结论维持“不签”** |
+| 2026-10-31 | 第三版再补（QA）：按测试用例 v4 新加的 TC-B1-145～148（架构 0.47 第 20 条：145 文本列约束 P0，146 约束迁移、147 D1 检查、148 预检锁忙退回限流计数，都是 P1）同步：E 组改名“导出分片和文本列约束”，改为 22 条（P0 10、P1 12）＋“—” 4；结论第 4 条和第七节 4f 的 P0 由 9 条改 10 条；TC-B1 编号 156 条（P0 62、P1 41、“—” 53），第 18 节按节 157 条；L-9 的 P0 实数改 285。**不是新一轮测试，结论维持“不签”** |
+| 2026-10-31 | 第三版再补（QA）：记入后端 10-31 在 lemo-e2e 跑的导出实测（新增 6.1 节：R1、R2、R5 两点、生效语句超时 4 分钟、store-it 真库 12 条、断网再继续 E2E 2 次），逐条标状态：TC-B1-73 **本机未通过**（内存峰值 272 / 316 MB 超过用例的 150 MB 和架构的 256 MB），123 ①、136 ②、144 的 lemo-e2e 部分本机通过，140 ③ 有实测印证，133 ⑦ 预算维持 15000，其余未验；第七节 4g 改写、加 4j（内存超标，卡）；结论第 4 条补一句。QA 只按转来的数字核对，没有复跑，也没看到原始输出。**结论维持“不签”** |
+| 2026-10-31 | 按架构 0.47 第 21 条更新 TC-B1-73 的内存一项：10-31 报的 272 / 316 MB 是整个 edge runtime 容器的 cgroup，不作验收；150 MB 保留，口径改为探针 `EXPORT_MEM_PROBE=1` 量的单次 part 调用 worker 峰值 `heapUsed + external`，另加“连取 12 片每片开始时 `heapUsed` 不逐片上涨（±10 MB）”。第七节 4j 由“本机未通过”改为“口径已定、待后端探针重测”（仍卡），6.1 节和结论第 4 条同步。**结论维持“不签”** |
+| 2026-10-31 | 记入后端第二轮探针重测（6.1 节第二张表）：R1、R2 单次峰值最高 35 / 56 MB、各片开始 `heapUsed` ±10 MB 内、本机也按 256 MB 掐 worker、0 次 546、各 14 项核对全过。**4j 内存改为通过**（注明“同一 worker 连取 12 片”本机只覆盖 2～3 片，预览补测）；4g 改为 R1、R2、R5 已跑、R3、R4 没跑，仍卡；TC-B1-73 记为本机 R1、R2 通过、整条未通过；加 TC-B1-129 状态（两种工具一致、7-Zip 未测，解开大小和 R1 原文对不上，待后端说明）；结论第 4 条、E 组同步。其余卡点（TC-B1-07 ②、TC-B1-74/75、TC-B1-75 ④、E 组 P0 开发中、R3、R4）都还在，**结论维持“不签”** |
+| 2026-10-31 | TC-B1-129 注明“已测的是 2 片样本，R1/R3 产物待补”：后端说明那次解压用的是另跑的 typ 3,000 / 27,000 行、2 片的导出，不是 R1；后端补跑 R3、R4 并用 `--save-gz` 存 R1（12 片）和 R3 产物后再测。4g 写明已安排补跑。**结论维持“不签”** |
+| 2026-10-31 | 4j 注明验收口径改为分段（架构 0.47 第 21 条补）：按 worker 标识分段，段内不上涨 ±10 MB、新 worker 首片回底数 ±10 MB、R1 至少 4 段；预览不开探针只看无内存超限、无 546。第二轮没按标识报段数，待后端随 R3、R4 补跑一并报。单次峰值仍记通过。**结论维持“不签”** |
+| 2026-10-31 | 记入后端第三轮补跑（6.1 第三张表）：R1 探针开 14 项全过、按 worker 分 4 段都符合，R3 一片 done，R4 17 项全过，TC-B1-129 用 R1、R3 产物两种工具一致。**4g 改为已完成、不卡；4j 改为通过（分段口径）**；TC-B1-73 记为本机 R1～R5 全部通过、整条待预览一档（负责人）和 7-Zip；加 TC-B1-124、132 的 lemo-e2e 部分本机通过，133～135 有实测印证；通知邮件“收到 1 封”按主持人定留到预览核对，TC-B1-73 期望已注明。其余卡点（TC-B1-07 ②、TC-B1-74/75、TC-B1-75 ④、E 组 P0 开发中、预览一档）还在，**结论维持“不签”** |
+| 2026-10-31 | E 组 10 条 P0 逐条核对（新增 6.2 节）：对照工作区里已审查通过、尚未提交的代码，QA 本机跑了 `test:db:offline`、导出相关 13 个 vitest 文件、`check_backend.py`，全部通过；没跑 e2e:real、没碰任何本地 Supabase 容器。结果：**TC-B1-145 通过（离线）**；130、131、132、133、138、141、143、144 **部分**（缺的单测和 lemo-e2e 项逐条写明由谁补，多数归后端）；142 **未覆盖**（跑法没定、给负责人的说明没写）。6.1 的 TC-B1-143 行改指 6.2，E 组状态同步；第八节加 L-10（141、142 用例里的脚本名和命令与代码不符）。**结论维持“不签”** |
+| 2026-10-31 | 按主持人定的两点同步：L-10 标已解决（测试用例 TC-B1-141、142 的预览命令改成 `tools/e2e/export-load-preview.mjs`）；TC-B1-142 跑法定 b，E 组、6.2、第七节 4h 写明“说明由后端写、lemo-e2e 由后端按说明原样跑一遍”，删掉 a 的说法。142 仍**未覆盖**（说明还没写），**结论维持“不签”** |
+| 2026-10-31 | E 组 P0 第二次核（6.2）：测试开发补的缺口（未提交）逐条记入，QA 离线复跑新单测和新 pgTAP `23_export_fn_attrs` 都通过，lemo-e2e `export-p0-real.mjs` 36 项按后端报的记。130～133、141～145 改为**通过（待提交后 CI 确认）**，142 的负责人跑法说明已写、lemo-e2e 已按说明原样跑通；138 仍**部分**：⑥ 撞键删原任务行是缺陷（后端在修，测试暂用 `it.fails`），②④ 挂起不退次数交架构定；第八节加 L-11。**结论维持“不签”** |
+| 2026-10-31 | TC-B1-138 ②④ 和 L-11 的挂起一项改为“已定第 22 条、待实现”（架构 0.47 第 22 条：账号函数 store 调用加超时包装，默认 10 秒、预检 20 秒，start 扣次数后超时退回；后端排在大批提交后实现）。138 仍**部分**，**结论维持“不签”** |
+| 2026-10-31 | 记入测试开发在 lemo-e2e 重跑 `tools/e2e/export-p0-real.mjs`（37 项全过、退出码 0；本机 lemo-e2e，提交后待 CI 确认）：6.2 的 TC-B1-130 ①④、131 ⑥、143 ⑤、138 ①③ 补实测结果；138 ⑥ 已修（`it.fails` 改回 `it` 并通过），L-11 的 ⑥ 标已修；vitest 全量 3992 过 0 失败（测试开发报）。138 ②④ 仍待第 22 条，仍**部分**，**结论维持“不签”** |
+| 2026-10-31 | 按架构 0.47 第 22 条同步（测试用例 v4 同日）：TC-B1-138 ②④ 由 store 超时包装补上，改为**本机通过**（待审查通过与 CI 确认），E 组 10 条 P0 都本机通过；132 记入 T2；新增 P1 TC-B1-149、150，E 组改为 24 条（P0 10、P1 14）＋“—” 4，结论第 4 条范围改 123～150；L-11 挂起一项标已补。QA 复跑 6 个相关测试文件 109 条全过。**结论维持“不签”**（卡点：提交后 CI、预览一档和负责人项） |
+| 2026-10-31 | 记入 CI：b4cb79c 只有 db.types.ts 比对一步失败，补提交 a64abed 后 ci、unit、deploy-preview 全绿。6.2 里已提交的部分（TC-B1-130、131、132 除 T2、133、138 的 ①③⑤⑥、141、143、144、145）改为“CI 通过（a64abed）”，142 的说明已随 b4cb79c 入库；第 22 条超时、T2、T4 没提交，照旧“待审查通过与 CI 确认”；测试用例 v4 对应注记同步。**结论维持“不签”**（卡点：第 22 条提交后 CI、预览一档和负责人项） |
+| 2026-10-31 | 记入 3571192 CI 全绿：TC-B1-132 的 T2、138 ②④、149、150 改为“CI 通过（3571192）”，E 组 10 条 P0 全部 CI 通过；结论开头和第 4 条、E 组、第七节 4f（改为已完成、不卡）、L-11 同步；邀请函数超时和 `account_restore` 的 `lock_timeout` 并入 TC-B1-149 ⑥，待 CI 确认。**结论维持“不签”**，剩下的卡点是 B 组的负责人项（TC-B1-07 ②、TC-B1-74/75 反例和名单、TC-B1-75 ④）；导出一块只剩 TC-B1-73 预览一档（“—”级，负责人跑） |
+| 2026-10-31 | 记入 024e802：按代码核对 TC-B1-149 ⑥～⑨（邀请函数超时、`account_restore` 的 `lock_timeout`），测试用例 v4 同步改写，待 CI 确认（024e802）；QA 复跑两个测试文件 38 条全过。**结论维持“不签”** |
+| 2026-10-31 | 测试用例 v4 新增 TC-B1-151（占码晚到提交，P1）、TC-B1-152（邀请注册 Auth 接口超时，P0），两位审查员已复核通过，代码未提交；后端建议项要改的两处（重新发码照常发信、verify 约 100 秒总截止）在期望里按新口径写，标“待后端建议项完成后核对”。第 18 节 P0 实数 285 → 286，L-9 同步。**结论维持“不签”** |
+| 2026-10-31 | 3dcdc75 CI 三项全绿（unit run 41147159052，OSV 已过）：TC-B1-149 ⑥～⑨ 改为“CI 通过（024e802 代码 + 3dcdc75 的 unit）”。TC-B1-152 的 `signupUserId` 派生规则和“晚到建出 → 重新发码 → 新验证码 verify → 认领成功”按后端新口径改写，待后端改完后核对。**结论维持“不签”** |
+| 2026-10-31 | 测试用例 v4 的 TC-B1-151、152 按后端已改完的 INVITE 新口径核对改写（后端已按新口径改完，审查中，待提交后 CI 确认）：派生 id 改由邮箱哈希 + 码哈希派生；profile 早已存在回 409 `email_exists`、不签 magiclink；请求总预算 100 秒；QA 复跑 `invite-late-commit`、`invite-signup-security` 42 条全过。**结论维持“不签”** |
+| 2026-10-31 | 测试用例 v4 新增 TC-B1-153（ORPHAN-alert：没有 profile 的 auth 用户计数、心跳带 `orphan_users`、lemo-ops 告警，P1），开发中，待审查与 CI；QA 复跑 `usage-report-orphan`、`lemo-ops-orphan` 12 条全过，pgTAP 27 没复跑。73bf32a（INVITE）CI 在跑，绿了再把 TC-B1-151、152 改 CI 通过。**结论维持“不签”** |
+| 2026-10-31 | 记入 CI：73bf32a（INVITE）三项全绿（unit run 41151356444），TC-B1-151、152 改为 CI 通过；ORPHAN 提交为 7bff467，TC-B1-153 审查通过、待 CI 确认。测试用例 v4 同步。**结论维持“不签”** |
+| 2026-10-31 | **第四版**（汇总重出，对象 7bff467）：新增 6.3 节，E 组 P1 14 条、“—” 4 条逐条核对——CI 通过 10、部分 8，缺口归前端 A、后端，另有负责人和真机两项；结论段改写，卡点收拢为第 1～3 条负责人项、第 4 条 TC-B1-73 预览一档和解压工具、第 5 条 E 组 P1 小缺口；头部加第四版说明。QA 复跑全量 vitest（296 个文件、4139 条通过、27 跳过、3 todo，0 失败）、`test:db:offline`（退出码 0，全部通过）。**结论维持“不签”** |
+| 2026-10-31 | 6.3 记入开发补的断言（已补断言，审查中、待提交后 CI；QA 复跑 9 条全过）；TC-B1-146 ⑦ 按 b4cb79c deploy-preview 第 10 步 db push 成功判通过（间接证据）。E 组 P1、“—”现为 CI 通过 11、部分 7；结论第 5 条同步。**结论维持“不签”** |
+| 2026-10-31 | 7bff467（ORPHAN）CI 三项全绿（unit run 41152696763），TC-B1-153 改为 CI 通过；补断言那批提交为 a9f70eb，6.3 里 123、126、136、137、139 和结论第 5 条改为“已提交（a9f70eb），待 CI”。**结论维持“不签”** |
+| 2026-10-31 | a9f70eb CI 三项全绿（unit run 41154410508）：6.3 的 123、126、136、137、139 改为 CI 通过，E 组 P1、“—”现为 CI 通过 16、剩 2 条（127、129）只差负责人和真机；结论开头和第 5 条改写，卡点收拢为只剩负责人项（明早清单：TC-B1-07 ②、TC-B1-74/75 反例和名单、TC-B1-75 ④、TC-B1-73 预览一档、TC-B1-129 两种解压工具）。**结论维持“不签”** |
+| 2026-11-03 | 同步负责人 11-03 的决定（明早清单第 45、47、50 条），状态都改为“负责人已定，待执行”：第 45 条①选甲（留负责人验收账号、配 `PREVIEW_OWNER_EMAILS`、本人邮箱账号由负责人删）——结论第 2 条、第七节第 3 行；第 47 条两件都同意（TC-B1-75 ④ 后一半改 P6-⑤、⑥ 两条不写库反例加本机测试，预览留 `e2e-admin@lemomemo.test`）——结论第 3 条、第七节第 4 行，本机两条 QA 复跑通过（`preview-login-admin.test.ts`、`login-token-tests.test.ts` 45 条全过）；第 45 条③做 TC-B0-117（P0，不挪批，负责人陪同）——“另有几件”、第七节 6b；第 50 条选甲（主持人装 7-Zip 官方版后核对 TC-B1-129）——结论第 4、5 条、第七节新增 6c；第七节表后加执行先后。测试用例 v4 同步。**结论维持“不签”** |
+| 2026-11-03 | 按安全审查员 11-03 第二次复核后的 C4 操作单，TC-B0-117 的账号条件由“不超过 3 个”改为“预览账号总数 = 2”（负责人本人邮箱账号先删，lemotest 加 A 正好 2 个）——“另有几件”、执行先后第 ② 步；TC-B1-07 ② 改为“负责人已定，待执行（11-03）”——结论第 1 条、第四节 P2、第七节第 1 行，执行先后加第 ⑥ 步（TC-B1-07 ②）、第 ⑦ 步（TC-B1-73 预览导出一档）。测试用例 v4 同步。**结论维持“不签”** |
+| 2026-11-03 | 记入主持人 11-03 本机 7-Zip 26.05 实测 TC-B1-129：5 段拼接样本（后端用 `account/core.ts` 真实导出流程生成，2,142 字节）`7z x` 解出 167,662 字节、sha256 与 Node `gunzipSync`、`createGunzip` 一致，`7z t` Everything is Ok；列表 Size 显示 1415（末段 gzip 尾部长度）记为已知现象。129 改为通过——6.1 加一行并改状态表、6.3、第七节 6c、结论第 4、5 条、E 组表格；E 组 P1、“—”现为 CI 通过 16、实测通过 1、剩 127 一条。测试用例 v4 同步。**结论维持“不签”** |
+| 2026-11-03 | TC-B1-129 补记主持人 11-03 用 7-Zip 26.05 解 R1（12 段）、R3（1 段）真实产物：sha256 与 Node `gunzipSync` 一致，`JSON.parse` 成功、11 张表，`7z t` Everything is Ok——6.1 加一行（5 段样本那行改为补充）、6.1 状态表、6.3、第七节 6c、E 组表同步；用例原文“负责人常用的解压工具（iPhone“文件”App，随真机）”改为“第三种工具：7-Zip（负责人 11-03 第 50 条选甲）”，6.3 删去“仍随真机”。**结论维持“不签”** |
+| 2026-11-03 | 记入 11-03 C4 实测发现：预览 account-purge 定时任务被网关 401（`UNAUTHORIZED_NO_AUTH_HEADER`，`config.toml` 没关 `verify_jwt`），心跳没有 account-purge 行；后端 a69ee22 修复中。结论加第 6 条（新用例 TC-B1-154，P0，卡签字）；第七节 6b 改为“第 0～3 步已做、第 4 步起等修复部署和 TC-B1-154”，新增 6d；执行先后在 C4 第 4 步前加“修复部署 + TC-B1-154 通过”；L-9 的 P0 实数改为 287。测试用例 v4 同步。**结论维持“不签”** |
+| 2026-11-03 | TC-B1-154 按主持人定改为通用条目（每个由 pg_cron 调的函数，用例加函数对照表），结论第 6 条措辞同步，补 F9 已知漏报范围的出处（接手清单 F9-reverse-check）。冒烟、统计不变。**结论维持“不签”** |
+| 2026-11-03 | 回填预览实测（依据 C4 执行记录）：TC-B1-154 预览通过（518d011 部署后 request 6 → 200、心跳 01:52:16 UTC），结论第 6 条改为已解决、不卡，第七节 6d 改为通过；TC-B0-117 预览真 R2 通过（request 7 → 200、purged 1、failed 0），“另有几件”、第 ③ 环、第七节 6b 改为通过，记遗留观察“ms 4298 < 5000，没测到 pg_net 超时后函数照样跑完”（不卡）；执行先后 ②、②a、②b 标完成，① 的删号已做；结论开头重数卡点为 5 项（TC-B1-07 ②、P6 反例和 `PREVIEW_OWNER_EMAILS`、P6A、TC-B1-73 预览一档和 141/142、127）。测试用例 v4 同步。**结论维持“不签”** |
+| 2026-11-03 | 主持人确认 `PREVIEW_OWNER_EMAILS` 已于 11-03 上午由负责人配好（值 `owner+lemotest@example.com`，主持人当场核对）：结论第 2 条账号名单改为已符合，第七节第 3 行改为不卡，执行先后 ① 标完成，第 ③ 环同步；结论开头重数卡点仍为 5 项（TC-B1-07 ②、P6 反例实跑、P6A、TC-B1-73 预览一档和 141/142、127）。**结论维持“不签”** |
+| 2026-11-03 | TC-B1-75 ④ 前一半回填：负责人 11-03 11:17（北京时间）用 login-token-tests.ps1 第 4 版（4c78c21）跑两次 `-Only P6A` 都通过（第一次 admins 0→1，第二次“已是管理员，跳过”1→1，输出无 key 和 `email_otp`）；结论第 3 条、第七节第 4 行、执行先后 ③④ 同步；卡点重数为 4 项（TC-B1-07 ②、P6 反例实跑含 ④ 后一半、TC-B1-73 预览一档和 141/142、127）。**结论维持“不签”** |
+| 2026-11-03 | P6 反例实跑回填：负责人 11-03 11:22（北京时间）用第 4 版跑 `-Only P6`，通过 6、不符合 0、跳过 1，输出无 key 和 `email_otp`；TC-B1-74、75 预览部分全部通过（结论第 2、3 条，第四节 P6 行，B 组汇总改为 5 过、1 一半、1 未过，第七节第 2、4 行改为不卡，执行先后 ⑤ 标完成）。卡签字的剩 3 项：TC-B1-07 ②、TC-B1-73 预览 5,000 行档和 141/142、127 通知邮件。**结论维持“不签”** |
+| 2026-11-03 | TC-B1-07 ② 预览实测回填：第 1 轮发码后 9 分 51 秒提交、登录成功；第 2 轮满 11 分钟提交、提示过期、无新会话；结论第 1 条、第四节 P2 行改为过，B 组汇总改为 6 过、1 一半（TC-B1-113，P1 不卡）、0 未过，第七节第 1 行不卡，执行先后 ⑥ 标完成，第 ③ 环注明 C3 已执行、待安全审查员确认（签字文件没改）。卡签字的剩 2 项：TC-B1-73 预览 5,000 行档和 141/142、127 通知邮件（同一次跑）。**结论维持“不签”** |
+| 2026-11-03 | 回填预览导出实测：TC-B1-141、142 预览实跑通过；TC-B1-73 预览 5,000 行档除 CPU 校准外通过（6.1 加一行，数字照负责人输出截图转录；库大小 58.6 MB 与主持人复核 27 MB 同一口径，差在删后回收；`/sb` 暴露头按客户端读不到即报错的逻辑间接验到）；TC-B1-127 通知邮件收到 1 封、通过（“未知设备”记观察）；6.2、6.3、第七节 4h、结论第 4、5 条、执行先后 ⑦ 同步；E 组 P1、“—”全部通过。卡签字的只剩 TC-B1-73 预览档的 CPU 校准（待补）。截图两张登记进文件登记册。**结论维持“不签”** |
+| 2026-11-03 | TC-B1-73 预览档 CPU 校准按负责人 11-03 定“推断判过，注明间接证据”（worker 口径、每 MB 与 R1 比 −5%、−2%）：6.1 预览档那行、第七节 4h、结论第 4 条、执行先后 ⑦ 改为通过；更正“另一片原文约 3.18 MB”为“gzip 3.18 MB、原文约 16 MB”；结论开头的卡签字项清零。结论标题暂未改，待主持人定是否出第五版。测试用例 v4 同步 |
+| 2026-11-03 | **第五版**（结论改为“签”）：对象 main `0432f3e` 加工作区“未知设备”修复（后端 11-03，审查通过，提交号待回填）；QA 复跑全量 vitest（4166 通过、27 跳过、3 todo，0 失败）、`test:db:offline`（退出码 0）、`check_backend`（0 错误）。结论标题和开头改写：卡签字项清零，第 ③ 环 C3 安全审查员已确认（S-B1 签字第四版），S-B1 结论为签；“未知设备”改为已修；遗留观察 4 条（接手清单第 151、210、211、212 行）写在结论开头之后。第四版及以前的逐条记录保留 |

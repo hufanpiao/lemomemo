@@ -1,0 +1,4 @@
+-- expect: app_config.features 的默认值里有清单之外的键 qa_probe
+-- 架构 0.29 第 1 条（P-02）：features 列默认值写全四个键，“默认值里不许有清单之外的键”
+alter table public.app_config alter column features
+  set default '{"event":{"on":true},"todo":{"on":true},"note":{"on":false},"anniv":{"on":false},"qa_probe":{"on":false}}';

@@ -1,0 +1,3 @@
+-- expect: enqueue_remind() 挂在 notes 上，table_meta 里它的 remind_cols 是空的
+-- R-411（迁移 20261113100000）：入队触发器挂到不算提醒的表上（notes 在 table_meta 里 remind_cols 为空），一写就把随手记塞进提醒队列（table_name 的 check 也会让写入报错）
+create trigger notes_remind after insert or update on public.notes for each row execute function private.enqueue_remind();

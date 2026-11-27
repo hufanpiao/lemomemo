@@ -1,0 +1,84 @@
+/* 半屏抽屉（HalfSheet.tsx）。
+   层级用 --z-dialog：压住底栏、“＋”、打字条；抽屉里点开条目的贴底弹层（Dialog）同一层级、DOM 在后，画在它上面 */
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  pointer-events: none;
+}
+
+/* 后面那层液态模糊（kit Mist）：层级跟着这一块 */
+.mistZ {
+  --z-mist: var(--z-dialog);
+
+  pointer-events: auto;
+}
+
+/* top 27%，上面两角 --r-xl，玻璃底 blur(22px) saturate(170%)（皮肤的 --glass-blur、--glass-sat），往上的阴影。
+   底边贴键盘（--kb，platform/viewport.ts 写）；iOS 主屏幕版布局视口少一截时补到屏幕底（--vh-gap，同 Mist） */
+.sheet {
+  position: fixed;
+  inset: 27% 0 calc(var(--kb, 0px) - var(--vh-gap, 0px));
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  max-width: 560px;
+  margin: 0 auto;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  outline: none;
+  background: var(--glass-bg);
+  box-shadow: var(--sheet-up-shadow);
+  color: var(--text);
+  pointer-events: auto;
+
+  /* avoid-ai-design-ignore: 负责人选定的半屏抽屉玻璃底（同 Dialog 的 .content） */
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+
+/* 拉满：离顶 安全区 + 12px */
+.sheet[data-stop='full'] {
+  top: calc(var(--inset-top) + 12px);
+}
+
+/* 松手后的平移（出现、弹回、换停靠点、关）带过渡；跟手拖动时不带 */
+.sheet[data-anim='1'] {
+  transition: transform var(--dur-sheet) var(--ease-drawer);
+}
+
+/* 减少动态效果（data-rm，platform/look.ts 写）：不播，直接到位（HalfSheet.tsx 的定时器照样收尾） */
+:global(:root[data-rm="1"]) .sheet[data-anim='1'] {
+  transition: none;
+}
+
+/* 减少透明效果（data-rt）、隐私记页等强制实色（data-solid）：实色、不模糊（同 Dialog .content） */
+:global(:root:is([data-rt='1'], [data-solid='1'])) .sheet {
+  background: var(--glass-solid);
+  backdrop-filter: none;
+}
+
+/* 把手：看得见的 36×5，点按区高 20、整宽，手指好拖 */
+.grab {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  justify-content: center;
+  height: 20px;
+  padding-top: 8px;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* 中间这段的拖动区往上下放大（手指常按在把手下面几像素）；左右各留 25% 给“关闭”和右边的按钮 */
+.grab::after {
+  position: absolute;
+  inset: -14px 25% -36px;
+  content: '';
+}
+
+.bar {
+  width: 36px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--step-off);
+}

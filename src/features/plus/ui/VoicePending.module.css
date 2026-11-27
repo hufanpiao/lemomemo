@@ -1,0 +1,23 @@
+/* 待办编辑页顶上“这段录音还没整理成 · 重试”一行（VoicePending.tsx）：照识图状态条（attachments/ui/ImageAiStatus.module.css）的灰底条、kit 胶囊 */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 10px 8px 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  line-height: 1.5;
+}
+
+.tx {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 胶囊伸进灰条的上下留白里（同 ImageAiStatus 的 button.btn） */
+button.btn {
+  margin: -4px 0;
+}

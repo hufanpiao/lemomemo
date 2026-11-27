@@ -1,0 +1,161 @@
+/* 天气半屏详情（WeatherSheet.tsx）：只用现成令牌，不引新颜色、新字体、新阴影。
+   外壳 kit HalfSheet；卡片和行 kit List（.list / .row / .lead），分组名 kit Form（.groupLabel.groupRow）。
+   顶栏是 kit SheetTop（和 AI 助手半屏同一份）。这里只有：
+   滚动区、概况那几行的排法、逐时表的列、7 天行的列、标出的整点（List 里“抽屉开着那一行”的柠檬黄竖条同一个画法）。 */
+
+/* 内容自己滚动、不显示滚动条（同 ChatDrawer .feed） */
+.feed {
+  flex: 1;
+  min-height: 0;
+  padding: 0 16px calc(20px + var(--inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.feed::-webkit-scrollbar {
+  display: none;
+}
+
+/* 第一组的分组名不要上面那 18px（顶栏下面直接接） */
+.feed > h4:first-child {
+  margin-top: 4px;
+}
+
+/* 概况第一行：大图标、现在气温（同今天页日期标题一级的粗）、体感和最高最低两行小字 */
+.nowRow {
+  gap: 12px;
+  min-height: 72px;
+}
+
+.bigSky {
+  flex: none;
+}
+
+.big {
+  font-size: var(--fs-28);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.nowSub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-align: right;
+}
+
+.tipRow {
+  font-size: var(--fs-15);
+}
+
+/* 紫外线、空气：左名字右数值（同设置行“名字 … 值”） */
+.pairRow {
+  justify-content: space-between;
+  font-size: var(--fs-14);
+}
+
+.num {
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: var(--fs-13);
+}
+
+/* 降水概率 ≥50%：和“有雨”提示的伞同一种蓝 */
+.blue {
+  color: var(--p2s);
+}
+
+/* 逐时：整张是 kit List 的白卡；每行 44 高、细分隔线（同 .row）；列宽固定，数字等宽右对齐 */
+.hours {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-14);
+  font-variant-numeric: tabular-nums;
+}
+
+.hours th,
+.hours td {
+  height: var(--hit);
+  padding: 0 4px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* 表头：同分组名的小字（--fs-11、--text-3） */
+.hours thead th {
+  height: 32px;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  font-weight: 400;
+}
+
+/* 行首时刻：kit List .lead 本来是 flex，放进表格里改回单元格 */
+.hours tbody th {
+  display: table-cell;
+  min-width: 0;
+  padding-left: 0;
+}
+
+.hours th:first-child,
+.hours td:nth-child(2) {
+  text-align: left;
+}
+
+.hours td:nth-child(2) {
+  width: 28px;
+  padding: 0;
+  line-height: 0;
+}
+
+.hours td:nth-child(2) svg {
+  vertical-align: middle;
+}
+
+.hours tbody tr:last-child th,
+.hours tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* 胶囊那条提示对应的整点：行首左边一道柠檬黄竖条（kit List“抽屉里开着的那一行”同一个画法：3px、--accent、画在行左沿外 9px） */
+.hours tbody tr[data-marked] th {
+  position: relative;
+  color: var(--text);
+}
+
+.hours tbody tr[data-marked] th::before {
+  position: absolute;
+  inset: 5px auto 5px -9px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  content: '';
+}
+
+/* 未来 7 天：星期 ｜ 图标 ｜ 降水概率 ｜ 最高 / 最低（右对齐） */
+.dayRow {
+  gap: 10px;
+  font-size: var(--fs-14);
+}
+
+.wp {
+  min-width: 40px;
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: var(--fs-13);
+  text-align: right;
+}
+
+.wp.blue {
+  color: var(--p2s);
+}
+
+.wt {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+

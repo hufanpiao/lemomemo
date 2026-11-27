@@ -1,0 +1,107 @@
+/* 年月选择器（MonthPicker.tsx）。手机上它后面的遮罩 .pickScrim 由 CalendarPage 画，在 CalendarPage.module.css */
+.ympop {
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  padding: 12px;
+}
+
+/* 手机：铺满屏宽、左右各留 16 px（Popover 的 collisionPadding 也是 16），不只盖住半边。
+   768 是月历宽屏断点 MQ_CAL_WIDE 的反面（useMedia.ts，layers-media-css.test.ts 核对一致） */
+@media (width < 768px) {
+  .ympop {
+    width: calc(100vw - 32px);
+  }
+}
+
+.ymCols {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+}
+
+/* “年”“月”两个小字标签：第三层文字色、等宽字加字距，同 kit 分组名 */
+.ymHead {
+  margin-bottom: 6px;
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-11);
+  letter-spacing: 0.12em;
+}
+
+.ymYears {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 232px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ymMonths {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.ymIt {
+  position: relative;
+  min-height: var(--hit);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font-family: var(--f-mono);
+  font-size: var(--fs-14);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.ymIt:hover {
+  background: var(--panel-2);
+}
+
+/* 选中的年 / 月：不用墨色实块（深色皮肤下会是米白实块），用轻的写法——
+   --panel-2 浅底 + 1px 第三层灰内描边 + 粗字；描边 --text-3 压在 --panel-2 上 ≥ 4.5（contrast-pairs.json text3-panel2），选中看得出来 */
+.ymOn,
+.ymOn:hover {
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--text-3);
+  font-weight: 600;
+}
+
+/* 今天所在的年 / 月：下面一个小点 */
+.ymCur::after {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: var(--r-pill);
+  background: currentcolor;
+  content: '';
+}
+
+.ymFt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.ymHint {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+
+  /* 不折行；放不下时省略 */
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* “回到今天”不在这里写外观：MonthPicker 直接挂 kit 的 Chip.module.css 胶囊（高 30、无描边浅底、点击区外扩到 44） */

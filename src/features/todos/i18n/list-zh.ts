@@ -1,0 +1,56 @@
+// 功能 todos 的词典·中文：待办列表页和子任务（列表卡片、今天页进度、编辑页“子任务”区都在列表页那一包里）。
+// 编辑页其余的在 zh.ts
+export const listZh = {
+  'list.title': '待办',
+  'list.pullKey': '搜索', // 标题行里平时看不见、Tab 到才出现的按钮（kit 的 PullKey）
+  'list.all': '全部',
+  'list.filter': '按项目筛选',
+  'list.g.late': '过期',
+  'list.g.today': '今天',
+  'list.g.tomorrow': '明天',
+  'list.g.later': '以后',
+  'list.g.nodate': '没有日期',
+  'list.g.doneN': '已完成 {n}',
+  'list.empty': '还没有待办',
+  // 副行的截止（逾期“! 过期 11/13 14:00”，其余“今天 14:00”“明天”“11/20 09:00”；日期、时刻等宽数字，拼法在 TodosPage 的 dueText）
+  'list.due.late': '过期',
+  'list.due.today': '今天',
+  'list.due.tomorrow': '明天',
+  // 标题下面一行等宽小字：“11月15日 周日 · 1 / 10 完成”
+  'list.sub': '{date} · {done} / {total} 完成',
+  // 待办行的方框、行右边 H / M / L、副行“起步 / 大半”、撤销条和出错条在 kit 的待办行词典（shared/i18n/todo-row-zh.ts）；
+  // 编辑页的“优先级”三档在 zh.ts；下面的“撤销”“没保存上”是子任务编辑区、设置页自己用的
+  'list.delete': '删除',
+  'list.undo': '撤销',
+  // 日历日清单的待办组组头“● 待办 · 3”
+  'list.dayTodos': '待办',
+  'list.err.save': '没保存上，稍后再试一次',
+  // 设置首页“完成 7 天后自动删除”（ui/TodoSettings.tsx）
+  'settings.autodel': '完成 7 天后自动删除',
+  // 子任务：列表卡片只能勾、看进度、收起；加删改在编辑页
+  'items.progress': '{done}/{total}',
+  'items.progress.a11y': '子任务已完成 {done} 项，共 {total} 项',
+  'items.collapse': '收起',
+  'items.expand': '展开',
+  'items.collapse.a11y': '收起「{title}」的子任务',
+  'items.expand.a11y': '展开「{title}」的子任务',
+  'items.autoDone': '全部完成，已完成这条待办',
+  // 编辑页“子任务”区（SubtaskEditor 在待办列表页那一包里，只用这一本词典，免得和编辑页共用词典多拆出一个分包）
+  'items.title': '子任务',
+  'items.add': '拆成小步骤',
+  'items.itemLabel': '子任务「{title}」',
+  'items.max': '最多 {n} 项',
+  'items.needTitle': '写好标题就能拆步骤啦',
+  'items.delete': '删除「{title}」',
+  'items.deleted': '已删除子任务',
+  'items.move': '拖动排序「{title}」，也可以按 Alt + 上下方向键',
+  'items.moveUp': '上移「{title}」',
+  'items.moveDown': '下移「{title}」',
+  'items.err.quota': '子任务最多 {n} 项，多出来的没有保存',
+  // 网页版宽屏右边一列（ui/TodosSide.tsx）
+  'list.side.progress': '今天进度',
+  'list.side.week': '未来 7 天',
+  'list.side.weekN': '{n} 件',
+  'list.side.wd': '日一二三四五六',
+  'list.side.projects': '按项目',
+} as const;

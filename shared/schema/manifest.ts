@@ -1,0 +1,145 @@
+// 数据清单的类型（架构 3.5；0.23 vaultRows、userLookup；0.27 recordKinds、systemCols、noConflict、rebuildable）
+// 每个功能一份 shared/manifests/<功能>.ts；D1（build/d1/）在 db reset 后拿它和数据库逐项比对
+// 纯 TS + zod，前端、Edge Functions（Deno）、Node 脚本共用：只用可擦除的语法，import 带 .ts 后缀
+// 校验失败的 message 写成英文错误码（A20：shared 的字符串里不放汉字，B0 集成改），中文说明写在行尾注释
+import { z } from 'zod';
+
+const col = z.string().regex(/^[a-z_][a-z0-9_]*$/);
+const cols = z.array(col);
+
+/** 这个人的数据怎么找（注销、清理的生成用例按它找，0.23 N3 问题二） */
+export const userLookupSchema = z.discriminatedUnion('by', [
+  z.object({ by: z.literal('column'), col }),
+  z.object({ by: z.literal('keyPattern'), col, pattern: z.string() }),        // counters：'%:<user>:%'
+  z.object({ by: z.literal('emailHash'), col }),                              // pending_signups
+  z.object({ by: z.literal('registry'), table: z.string(), col }),            // vault-preview 的随机路径
+  z.object({ by: z.literal('pathPattern'), level: z.number().int().min(1) }), // 桶：第几级目录是 user_id
+]);
+export type UserLookup = z.infer<typeof userLookupSchema>;
+
+/** 同一张表里既有普通行又有隐私记行的（notes、note_images、note_files） */
+export const vaultRowsSchema = z.object({
+  flag: z.string(),                 // 'is_private' / 'is_vault' / "bucket = 'vault-images'"
+  cipherCols: cols,                 // 隐私记行只带这些
+  plainColsMustBeNull: cols,        // 隐私记行一律不出现
+  neutralCols: cols,                // 不含内容的列（宽容读取时隐私记行只留 cipherCols 和它）
+});
+
+export const tableSchema = z.object({
+  name: z.string(),
+  schema: z.enum(['public', 'private']),
+  /** 同步到设备；'tombstone' 只给 tombstones：按 deleted_at 增量拉、只订阅 INSERT，不建本机仓（数据字典 4.3b） */
+  sync: z.union([z.boolean(), z.literal('tombstone')]),
+  realtime: z.boolean(),
+  localCache: z.enum(['plain', 'cipher-only', 'none']),
+  /** 客户端可写列（insert 和 update 的并集）；outbox 按它校验 */
+  clientWritable: cols,
+  /** 只在 insert 时可写（数据字典的 C-i，例如 id、created_at）；update 授权 = clientWritable − insertOnly */
+  insertOnly: cols.default([]),
+  /** 只在 update 时可写（deleted_at、undone）；insert 授权 = clientWritable − updateOnly */
+  updateOnly: cols.default([]),
+  /** anon 能读的列（只有 app_config 的四列，0.27） */
+  anonReadable: cols.default([]),
+  /** 客户端有表级 DELETE（只有 devices，0.29 续第 121 条） */
+  clientDelete: z.boolean().default(false),
+  softDelete: z.boolean(),
+  backup: z.enum(['json', 'none']),
+  export: z.enum(['json', 'none']),
+  onAccountDelete: z.enum(['cascade', 'explicit', 'keep-id-only']),
+  vaultRows: vaultRowsSchema.optional(),
+  userLookup: userLookupSchema.optional(),
+  noUserData: z.literal(true).optional(),
+  /** 写进 private.table_meta：改了不算用户改动（不含 touch() 固定的 rev、fv、synced_at、updated_at） */
+  systemCols: cols.optional(),
+  /** 写进 private.table_meta：两台设备同时改也不报冲突 */
+  noConflict: cols.optional(),
+  /** 写进 private.table_meta.remind_cols（R-411）：这些列一变就要重算提醒（入队、清 pushed_for、defer_until）；只有挂 touch() 的表能写 */
+  remindCols: cols.optional(),
+  /** 本机库迁移出错时能不能清空重拉 */
+  rebuildable: z.boolean().default(true),
+  /** 服务器上一行最多留多久（只做登记，由每日清理执行；R-382 起 revoked_sessions 写 '30 days'，口径见架构 3.5 第 5 点） */
+  maxLifetime: z.string().optional(),
+  /** 导出（account export）时去掉的列：推送订阅的密钥、会话 id 这类对用户没用、外泄有害的（K3 安全审查低 8；只对 export: 'json' 的表有意义） */
+  exportOmitCols: cols.default([]),
+  /** 导出只读没软删的行（ai_memories：删了等撤销的不算用户现有的数据） */
+  exportLiveOnly: z.boolean().optional(),
+}).refine((t) => (t.userLookup === undefined) !== (t.noUserData === undefined), { message: 'manifest_user_lookup_xor_no_user_data' })   // userLookup 和 noUserData 必须二选一
+  .refine((t) => (t.systemCols === undefined) === (t.noConflict === undefined), { message: 'manifest_system_cols_with_no_conflict' })   // systemCols、noConflict 要么都写（挂 touch() 的表），要么都不写
+  .refine((t) => !t.systemCols || t.systemCols.every((c) => !t.clientWritable.includes(c)), { message: 'manifest_system_cols_overlap_writable' })   // systemCols 和 clientWritable 不能重叠
+  .refine((t) => !t.noConflict || t.noConflict.every((c) => t.clientWritable.includes(c)), { message: 'manifest_no_conflict_not_writable' })   // noConflict 只放客户端可写列
+  .refine((t) => !t.remindCols || (t.systemCols !== undefined && t.remindCols.length > 0 && t.remindCols.every((c) => t.clientWritable.includes(c))),
+    { message: 'manifest_remind_cols' })   // remindCols 只写在挂 touch() 的表上、不为空、只放客户端可写列（系统列不能算提醒输入，否则 push-dispatch 写回就会再入队）
+  .refine(({ vaultRows: v, systemCols }) => !v || !systemCols || systemCols.every((c) => !v.cipherCols.includes(c) && !v.flag.includes(c)),
+    { message: 'manifest_system_cols_in_vault_rows' })   // systemCols 不能含 vaultRows 的 flag 列和 cipherCols
+  .refine((t) => t.exportOmitCols.length === 0 || t.export === 'json', { message: 'manifest_export_omit_without_export' })   // 不导出的表不写 exportOmitCols
+  .refine(({ vaultRows: v, exportOmitCols: o }) => !v || o.every((c) => !v.cipherCols.includes(c) && !v.flag.includes(c)),
+    { message: 'manifest_export_omit_vault_cols' });   // 不能去掉隐私记的 flag 列和密文列（导出的隐私记行要靠它们）
+export type ManifestTable = z.infer<typeof tableSchema>;
+/** 清单作者写的表（带默认值的字段可以省） */
+export type ManifestTableInput = z.input<typeof tableSchema>;
+
+export const bucketSchema = z.object({
+  name: z.string(),
+  /** 存在哪（0.32，R-213；必填、不给默认值，漏写就过不了 zod）：'supabase' 是 Supabase Storage（backups、vault-preview），
+   *  'r2' 是 Cloudflare R2（images、files、vault-images、vault-files）。同名桶的每一段登记必须写同一个值（D1 核对） */
+  store: z.enum(['supabase', 'r2']),
+  /** 桶的主人才写大小和类型限制；只登记一段路径的（纪念日头像）不写。
+   *  store = 'supabase'：D1 和 storage.buckets 比对；store = 'r2'：生成 /files 的规则表和服务器函数的上传类型表（0.32） */
+  /** thumbSizeLimit（B4 S10 ④）：随手记插图缩略图（images 桶 .t.webp）的大小上限，只有 images 桶的主人写；
+   *  和存储额度里每个缩略图的预留（迁移 20261111100000 的 media_row_bytes，128 KB）一致。附件（files 桶）的缩略图不按它 */
+  limits: z.object({ fileSizeLimit: z.number().int(), allowedMimeTypes: z.array(z.string()), thumbSizeLimit: z.number().int().optional() }).optional(),
+  /** 只登记一段路径的（纪念日头像）这一段自己的大小上限：/files 的 put 按它拒（413），不用桶主人的 fileSizeLimit。
+   *  纪念日头像写 102400，和 0005 的 avatar_bytes 列约束、files_authorize_impl 头像一支一致（B5 整块评审第 4 条） */
+  maxBytes: z.number().int().optional(),
+  pathPrefix: z.string(),
+  /** 整条路径的正则（0.23 L8）；0.32 起客户端可传的 R2 桶（images、files）和 private.files_authorize_impl 里的正则一字不差（D1 核对），
+   *  同时生成 /files 的规则表；只经服务器函数的桶写服务器端的拼法 */
+  pathPattern: z.string(),
+  backup: z.enum(['weekly-s3', 'none']),
+  export: z.enum(['zip', 'none']),
+  countsToQuota: z.boolean(),
+  orphanSweep: z.object({ after: z.string(), table: z.string(), col: z.string() }).nullable(),
+  maxLifetime: z.string().optional(),
+  userLookup: userLookupSchema.optional(),
+  noUserData: z.literal(true).optional(),
+}).refine((b) => (b.userLookup === undefined) !== (b.noUserData === undefined), { message: 'manifest_user_lookup_xor_no_user_data' });   // 二选一
+export type ManifestBucket = z.infer<typeof bucketSchema>;
+
+/** 记录类型（0.27 第 2 点；按 0.27② 的字段写，systemCols、noConflict 挂在表上，见数据字典 P-01） */
+export const recordKindSchema = z.object({
+  kind: z.string().regex(/^[a-z]+$/),
+  table: z.string(),
+  flag: z.string(),                                           // app_config.features 的键
+  ai: z.object({ parse: z.boolean(), intent: z.boolean() }),
+  plusResult: z.boolean(),
+  vector: z.object({ fk: col }).nullable(),                   // 进不进按意思查找、外键列名
+});
+export type RecordKind = z.infer<typeof recordKindSchema>;
+
+export const manifestSchema = z.object({
+  feature: z.string(),
+  owner: z.enum(['core', 'feature']),
+  tables: z.array(tableSchema),
+  buckets: z.array(bucketSchema).default([]),
+  recordKinds: z.array(recordKindSchema).default([]),
+  /** 本功能用到的 settings 键前缀（settings 只有一张表、归 core，各功能在这里声明，3.5 第 5 点） */
+  settingsKeys: z.array(z.string()).default([]),
+  ai: z.object({
+    sendsToAI: z.boolean(),
+    functions: z.array(z.string()),
+    /** 每张表哪些列要算向量（D1 和 enqueue_embed() 的触发列比对） */
+    vectors: z.record(z.string(), cols),
+  }).optional(),
+  usageReport: z.object({ rows: z.boolean(), buckets: z.boolean() }).default({ rows: false, buckets: false }),
+  /** 额外的向量写入来源（vault_ai，登记在 search.ts，D1 不报“多出来”） */
+  extraEmbedSources: z.array(z.string()).default([]),
+});
+/** 清单作者写的形状（带默认值的字段可以省） */
+export type ManifestInput = z.input<typeof manifestSchema>;
+/** 校验以后的形状（默认值已补上） */
+export type Manifest = z.output<typeof manifestSchema>;
+
+/** 各清单文件用它包一层：写错字段在加载时就报错 */
+export function defineManifest(m: ManifestInput): Manifest {
+  return manifestSchema.parse(m);
+}

@@ -1,0 +1,327 @@
+// 离线写入队列
+// • 写入就是入队：同一个 IndexedDB 事务里改同步仓的 view、写 outbox，入队成功界面就更新（core/store 的集合跟着通知）
+// • 删除和撤销都是 patch（deleted_at、undone），没有硬删除
+// • 同一条记录还没发出的 patch 合并成一个（base_rev 取最早那个）；正在发送的那一项不参与合并；insert 之后马上撤销的两项抵消
+// • 发送顺序：全局先进先出，带提醒的记录整条提前；同一条记录的项不颠倒；有依赖（deps）的不跑到被依赖的前面
+// • 收到确认后推进后面 patch 的 base_rev / own_revs
+// • 闸（suspend，换账号、被移除时设上）：之后 enqueue 拒收（outbox_suspended）、next 返回 null，ack、fail、applyServer 等一律不做
+// • 失败归类和各类的处理见 outbox-types.ts 的 FailureKind
+// • insert 被撤销抵消时，依赖它的项（deps）一起抵消；依赖它的是 insert 的，那条记录整条丢掉（再往下传）
+// 网络请求不在这里：同步引擎调 next() 取一项、发出去，再调 ack() 或 fail()
+// 类型和接口在 outbox-types.ts，纯函数在 outbox-logic.ts，这里一并转出
+// 隐私记的明文不进这里
+// 纯 TS：不准 import React 和任何功能
+import { createSignal } from '../../shared/core/signal.ts';
+import { buildInfo } from '../platform/env.ts';
+import type { Cache, CachedRow, CacheTx, ServerRow } from './cache.ts';
+import { OUTBOX } from './cache-schema.ts';
+import { bySeq, canRetryUnsynced, loadOnceRetrying, loadRowSchemas, OutboxCodeUnavailableError, OutboxRejectError, recKey, sendOrder, validateWrite } from './outbox-logic.ts';
+import { migrateOutboxItem, OUTBOX_V, outboxMigrations } from './outbox-migrations.ts';
+import type { EnqueueAlso, EnqueueInput, Outbox, OutboxBootReport, OutboxEvent, OutboxItem, OutboxStatus, OutboxOptions } from './outbox-types.ts';
+import { applyServerRows, cancelDependents, notify, rewriteRow } from './outbox-rows.ts';
+import type { Ctx } from './outbox-send.ts';
+
+/**
+ * ack、fail 两步（outbox-send.ts，连同 shared/logic/server-reset.ts）首屏画完再下载：只有同步引擎（core/sync/send.ts）发完请求才调，
+ * app/after-paint.ts 的 loadAfterPaint 把它和同步那批代码一起下载，所以同步引擎起来时它已经在内存里。只加载一次，失败的下次再试。
+ * 经 outbox-new-item.ts 转出、不直接 import('./outbox-send.ts')：原因见那里；outbox-send.ts 要的 notify、rewriteRow 由下面的 ctx 给
+ */
+export const loadSendCode = loadOnceRetrying(() => import('./outbox-new-item.ts'));
+
+export * from './outbox-logic.ts';
+export * from './outbox-types.ts';
+export {
+  isValidPendingAction,
+  keepPendingAction,
+  PENDING_ACTION_FUTURE_MS,
+  PENDING_ACTION_TTL_MS,
+  prunePendingActions,
+  type ValidPendingAction,
+} from './pending-actions.ts';
+
+const EMPTY_SET: ReadonlySet<string> = new Set();
+/** 本页改了队列（OutboxEvent queue） */
+const QUEUE: OutboxEvent = { type: 'queue' };
+/** 改完队列：发 queue 事件，再重算状态 */
+const touched = (ctx: Ctx): Promise<void> => {
+  ctx.emit(QUEUE);
+  return ctx.refresh();
+};
+const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => a.size === b.size && [...b].every((r) => a.has(r));
+
+async function bootImpl(ctx: Ctx): Promise<OutboxBootReport> {
+  const report: OutboxBootReport = { migrated: 0, future: 0, stuck: 0, reset: 0, paused: null };
+  await ctx.cache.tx([OUTBOX], 'readwrite', async (t) => {
+    for (const r of await t.getAll<Record<string, unknown>>(OUTBOX)) {
+      const m = migrateOutboxItem(r, ctx.opts.migrations ?? outboxMigrations, ctx.currentV);
+      if (m.kind !== 'ok') {
+        report[m.kind]++;
+        continue;
+      }
+      const item = m.item as unknown as OutboxItem;
+      let dirty = m.changed;
+      if (m.changed) report.migrated++;
+      if (item.state === 'inflight') {
+        item.state = 'pending';
+        item.sent = true;   // 上次可能已上服务器：不再合并新修改
+        report.reset++;
+        dirty = true;
+      }
+      if (dirty) await t.put(OUTBOX, item);
+    }
+  });
+  const pause = await ctx.cache.getMeta('outbox_pause');
+  if (pause && pause.app !== ctx.appVersion) await ctx.cache.deleteMeta('outbox_pause');
+  else report.paused = pause ?? null;
+  await ctx.refresh();
+  return report;
+}
+
+async function enqueueImpl(ctx: Ctx, input: EnqueueInput, also?: EnqueueAlso): Promise<OutboxItem | null> {
+  if (ctx.isSuspended()) throw new OutboxRejectError('outbox_suspended');
+  // 严格校验第一次用时才加载；等加载的这段时间里可能设了闸，回来再查一次
+  // 加载失败：不写本机、不入队，抛 OutboxCodeUnavailableError（write.* 返回 ok:false）；下次入队再试着加载
+  let rows: Awaited<ReturnType<typeof loadRowSchemas>>;
+  try {
+    rows = await loadRowSchemas();
+  } catch (e) {
+    throw new OutboxCodeUnavailableError(e);
+  }
+  if (ctx.isSuspended()) throw new OutboxRejectError('outbox_suspended');
+  const bad = validateWrite(input, rows, ctx.opts.manifests);
+  if (bad) throw new OutboxRejectError(bad);
+  const { table, id, op } = input;
+  const rec = recKey(table, id);
+  const ts = ctx.now();
+  let result: OutboxItem | null = null;
+  let view: ServerRow | null = null;
+  let cancelled: { table: string; id: string; view: ServerRow | null }[] = [];
+  // 撤销可能抵消掉 insert，依赖它的项（别的表）也要一起抵消：事务范围放宽到所有同步仓
+  const undo = op === 'patch' && input.data['undone'] === true;
+  const scope = undo ? [...new Set([table, ...ctx.cache.syncTables])] : [table];
+  await ctx.cache.tx([...new Set([...scope, OUTBOX, ...(also?.stores ?? [])])], 'readwrite', async (t) => {
+    const row = await t.get<CachedRow>(table, id);
+    if (row?.ro) throw new OutboxRejectError('readonly_row');
+    if (op === 'insert' && row?.view) throw new OutboxRejectError('row_exists');
+    if (op === 'patch' && !row?.view) throw new OutboxRejectError('row_missing');
+    const all = await t.getAll<OutboxItem>(OUTBOX);
+    const mine = all.filter((i) => i.rec === rec).sort(bySeq);
+
+    // insert 之后马上撤销：两项一起抵消，不发送
+    if (undo && mine[0]?.op === 'insert' && mine.every((i) => i.state === 'pending' && !i.sent)) {
+      for (const i of mine) await t.delete(OUTBOX, i.op_id);
+      view = await rewriteRow(t, table, id, row);
+      cancelled = await cancelDependents(t, rec, scope);   // 依赖它的项一起抵消
+      await also?.run(t);
+      return;
+    }
+
+    // 还没发出的 patch 合并（规则在 outbox-new-item.ts 的 mergePatch）；inflight 的、发出去过的不参与：重发同一 op_id 会被服务器当重复，新修改就丢了；带依赖的新项不合并，免得被提前
+    const last = mine[mine.length - 1];
+    if (op === 'patch' && last?.op === 'patch' && last.state === 'pending' && !last.sent && last.v === ctx.currentV && !input.deps?.length) {
+      result = { ...last, data: rows.mergePatch(last.data, input.data), remind: last.remind || input.remind === true, client_ts: ts };
+    } else {
+      result = rows.newItem(ctx, input, row, mine, all, ts);   // 建新项的规则在 outbox-new-item.ts（随 loadRowSchemas 懒加载）
+    }
+    await t.put(OUTBOX, result);
+    view = await rewriteRow(t, table, id, row);
+    await also?.run(t);
+  });
+  notify(table, [{ id, view }]);
+  for (const c of cancelled) notify(c.table, [c]);
+  await touched(ctx);
+  return result;
+}
+
+/** 重算若干条记录的 view（items 改过之后）；write 在同一个事务里先改队列 */
+async function rewriteRecs(
+  ctx: Ctx,
+  table: string,
+  ids: readonly string[],
+  write: (t: CacheTx) => Promise<void>,
+): Promise<void> {
+  if (ctx.isSuspended()) return;
+  const views: { id: string; view: ServerRow | null }[] = [];
+  await ctx.cache.tx([table, OUTBOX], 'readwrite', async (t) => {
+    await write(t);
+    for (const id of new Set(ids)) views.push({ id, view: await rewriteRow(t, table, id, await t.get<CachedRow>(table, id)) });
+  });
+  notify(table, views);
+}
+
+/**
+ * discardUnlessInflight 的写事务：在事务里重新读，还在、不是 inflight 才删，view 跟着回滚
+ * （事务外查到的状态不算数，查完到删之间可能被 next() 取去发了）。返回删没删
+ */
+async function deleteUnlessInflight(ctx: Ctx, item: OutboxItem): Promise<boolean> {
+  let done = false;
+  await rewriteRecs(ctx, item.table, [item.id], async (t) => {
+    const cur = await t.get<OutboxItem>(OUTBOX, item.op_id);
+    if (!cur || cur.state === 'inflight') return;
+    await t.delete(OUTBOX, item.op_id);
+    done = true;
+  });
+  return done;
+}
+
+/**
+ * 每个 outbox 的内部上下文：只给按需下载的 core 代码用（core/write-gone.ts → outbox-gone.ts 的 resolveGoneImpl），
+ * 不对功能层公开。不在 Outbox 接口上加 resolveGone 方法：方法的包装或首屏里的 import() 都要让首屏多 72～100 B gzip
+ */
+export const outboxCtx = new WeakMap<Outbox, Ctx>();
+
+export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
+  let status: OutboxStatus = { pending: 0, failed: 0, paused: null, remindRecs: EMPTY_SET, retryRecs: EMPTY_SET };
+  const listeners = createSignal();
+  const eventListeners = createSignal<[OutboxEvent]>();
+
+  const refresh = async (): Promise<void> => {
+    const items = await cache.tx([OUTBOX], 'readonly', (t) => t.getAll<OutboxItem>(OUTBOX));
+    const paused = (await cache.getMeta('outbox_pause')) ?? null;
+    const active = items.filter((i) => i.state !== 'failed');
+    // 带提醒的“未同步”（remindRecs）连 failed 一起算：发送失败的修改同样没到服务器，别的设备上这条提醒同样不会响；
+    // gone 也算（另一台设备已删，本机的修改没落库），直到恢复、放弃或重试成功
+    // 新建失败（failed 的 insert）不带提醒也算：这一行只在本机，用“未同步”提示条给重试、另存或放弃
+    const remind = new Set(items.filter((i) => i.remind || (i.state === 'failed' && i.op === 'insert')).map((i) => i.rec));
+    // 其中能“重试”的：这条记录有 canRetryUnsynced 的发送失败项；不论那一项带不带提醒，同一条记录一起重发
+    const retry = new Set(items.filter((i) => canRetryUnsynced(i) && remind.has(i.rec)).map((i) => i.rec));
+    const same =
+      status.pending === active.length &&
+      status.failed === items.length - active.length &&
+      JSON.stringify(status.paused) === JSON.stringify(paused) &&
+      sameSet(status.remindRecs, remind) &&
+      sameSet(status.retryRecs, retry);
+    if (same) return;
+    status = { pending: active.length, failed: items.length - active.length, paused, remindRecs: remind.size ? remind : EMPTY_SET, retryRecs: retry.size ? retry : EMPTY_SET };
+    listeners.emit();
+  };
+
+  let suspended = false;
+  const ctx: Ctx = {
+    notify,
+    rewriteRow,
+    isSuspended: () => suspended,
+    suspend: (on = true) => {
+      suspended = on;
+    },
+    cache,
+    opts,
+    appVersion: opts.appVersion ?? buildInfo.version,
+    now: opts.now ?? (() => Date.now()),
+    newOpId: opts.newOpId ?? (() => crypto.randomUUID()),
+    currentV: opts.currentV ?? OUTBOX_V,
+    refresh,
+    emit: eventListeners.emit,
+  };
+  const list = (): Promise<OutboxItem[]> => cache.tx([OUTBOX], 'readonly', async (t) => (await t.getAll<OutboxItem>(OUTBOX)).sort(bySeq));
+  const getItem = (opId: string): Promise<OutboxItem | undefined> => cache.tx([OUTBOX], 'readonly', (t) => t.get<OutboxItem>(OUTBOX, opId));
+
+  const api: Outbox = {
+    boot: () => bootImpl(ctx),
+    enqueue: (input, also) => enqueueImpl(ctx, input, also),
+    async next() {
+      if (suspended || status.paused || (await cache.getMeta('outbox_pause'))) return null;
+      return cache.tx([OUTBOX], 'readwrite', async (t) => {
+        const all = await t.getAll<OutboxItem>(OUTBOX);
+        if (all.some((i) => i.state === 'inflight')) return null;
+        const first = sendOrder(all, ctx.now(), ctx.currentV)[0];
+        if (!first) return null;
+        const item: OutboxItem = { ...first, state: 'inflight', sent: true };   // 发出去过：之后不再合并
+        await t.put(OUTBOX, item);
+        return item;
+      });
+    },
+    ack: async (opId, ack) => (await loadSendCode()).ackImpl(ctx, opId, ack),
+    fail: async (opId, failure) => (await loadSendCode()).failImpl(ctx, opId, failure),
+    async discard(opId) {
+      if (suspended) return;
+      const item = await getItem(opId);
+      if (!item) return;
+      await rewriteRecs(ctx, item.table, [item.id], (t) => t.delete(OUTBOX, opId));
+      await touched(ctx);
+    },
+    async discardUnlessInflight(opId) {
+      if (suspended) return false;
+      const item = await getItem(opId);
+      const done = item && item.state !== 'inflight' ? await deleteUnlessInflight(ctx, item) : false;
+      if (done) await touched(ctx);
+      return done;
+    },
+    async retryFailed(opIds) {
+      if (suspended) return;
+      const targets = (await list()).filter((i) => i.state === 'failed' && i.error !== 'gone' && (!opIds || opIds.includes(i.op_id)));   // gone 不给普通重试：要“恢复并保留我的修改”另发 patch
+      for (const table of new Set(targets.map((i) => i.table))) {
+        const mine = targets.filter((i) => i.table === table);
+        await rewriteRecs(ctx, table, mine.map((i) => i.id), async (t) => {
+          // 在写事务里重新读，还是 failed 才改（事务外读出来的对象不写回）
+          for (const i of mine) {
+            const cur = await t.get<OutboxItem>(OUTBOX, i.op_id);
+            if (cur?.state === 'failed') await t.put(OUTBOX, { ...cur, state: 'pending', tries: 0, next_at: 0, error: null });
+          }
+        });
+      }
+      await touched(ctx);   // 没有目标也发一次 queue 事件（只多提醒主页一次，无害；省首屏字节）
+    },
+    async resetInflight(opId) {
+      if (suspended) return;
+      await cache.tx([OUTBOX], 'readwrite', async (t) => {   // 事务里读、事务里写
+        const items = opId === undefined ? await t.getAll<OutboxItem>(OUTBOX) : [await t.get<OutboxItem>(OUTBOX, opId)];
+        for (const i of items) {
+          if (i?.state === 'inflight') await t.put(OUTBOX, { ...i, state: 'pending', sent: true });
+        }
+      });
+    },
+    async clearBackoff() {
+      if (suspended) return;
+      await cache.tx([OUTBOX], 'readwrite', async (t) => {   // 事务里读、事务里写
+        for (const i of await t.getAll<OutboxItem>(OUTBOX)) {
+          if (i.state === 'pending' && i.next_at > 0) await t.put(OUTBOX, { ...i, next_at: 0 });
+        }
+      }).then(() => ctx.emit(QUEUE));   // 发 queue 事件；不 refresh：next_at 不进摘要
+    },
+    async resume() {
+      if (suspended) return;
+      await cache.deleteMeta('outbox_pause');
+      await touched(ctx);
+    },
+    applyServer: async (table, rows) => {
+      if (suspended) return { skipped: [] };
+      const report = await applyServerRows(cache, table, rows, { log: opts.log });
+      // 空壳会删掉这一行的队列项：重算状态
+      if (rows.some((r) => r.shell === true)) await refresh();
+      return report;
+    },
+    async dropServer(table, ids, expectRevs) {
+      if (suspended) return;
+      if (ids.length === 0) return;
+      // 本机还有没发出去（pending）、发送失败（failed）的修改：随行一起丢掉，每条记录发一次 rejected（purged），界面出“已彻底删除”
+      const lost: OutboxItem[] = [];
+      await rewriteRecs(ctx, table, ids, async (t) => {
+        for (const id of ids) {
+          const items = await t.getAllByIndex<OutboxItem>(OUTBOX, 'rec', recKey(table, id));
+          if (expectRevs) {
+            // 整表重拉：写事务里复查，rev 变了（刚确认、刚拉到新的）或有 inflight 的项就不删
+            const row = await t.get<CachedRow>(table, id);
+            const rev = row?.server?.['rev'];
+            if (!row?.server || (typeof rev === 'number' ? rev : -1) !== expectRevs.get(id) || items.some((i) => i.state === 'inflight')) continue;
+          }
+          await t.delete(table, id);
+          const mine = items.find((i) => i.state !== 'inflight');
+          if (mine) lost.push(mine);
+          for (const i of items) await t.delete(OUTBOX, i.op_id);
+        }
+      });
+      await refresh();
+      for (const item of lost) ctx.emit({ type: 'rejected', item, code: 'purged' });
+    },
+    list,
+    getStatus: () => status,
+    subscribe: listeners.subscribe,
+    onEvent: eventListeners.subscribe,
+    refresh,
+    suspend: ctx.suspend,
+    isSuspended: ctx.isSuspended,
+  };
+  outboxCtx.set(api, ctx);
+  return api;
+}

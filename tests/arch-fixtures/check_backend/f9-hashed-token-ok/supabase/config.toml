@@ -1,0 +1,6 @@
+[api]
+enabled = true
+
+# ⑥ 合规：名单里的 claude-intake 关了 verify_jwt，按哈希查 api_tokens
+[functions.claude-intake]
+verify_jwt = false

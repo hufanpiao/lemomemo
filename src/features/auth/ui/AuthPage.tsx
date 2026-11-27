@@ -1,0 +1,344 @@
+// 登录页 /app/auth/
+// - iPhone、iPad 上不在主屏幕模式运行的（Safari、Chrome、KakaoTalk、微信等 App 内置浏览器一律算）：
+//   只教“添加到主屏幕”，不给登录，也不加载 Turnstile；不是 Safari 时多一句“请在 Safari 里打开本页”
+// - 其他（主屏幕版、电脑浏览器）：邮箱 → 6 位验证码；新邮箱多一步邀请码
+// - 冷静期探测：验证码通过后、本机已有会话时各探测一次账号状态，冷静期原地出恢复页、停用只出“账号已停用”，
+//   验证码刚通过时探测不出就出“暂时无法确认账号状态”（useAccountGate）；发现本机会话已被别的标签页换掉，整页重走 SessionCheck
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { openDesktopSignup } from '../../../platform/desktop-auth.ts';
+import { isTauri } from '../../../platform/env.ts';
+import { installGate, type InstallGate } from '../../../platform/install-gate.ts';
+import { clearExitNotice, readExitNotice, readSessionUserId, type ExitNotice } from '../../../platform/session.ts';
+import { useAccountGate, type GateExit } from '../hooks/useAccountGate.ts';
+import { useAuthFlow, type AuthFlowDeps } from '../hooks/useAuthFlow.ts';
+import { useAuthT } from '../hooks/useAuthT.ts';
+import { useReauth } from '../hooks/useReauth.ts';
+import { useSessionGate } from '../hooks/useSessionGate.ts';
+import { useTurnstile, type TurnstileAction } from '../hooks/useTurnstile.ts';
+import { AccountGatePanel } from './AccountGatePanel.tsx';
+import { AuthDoneRetry } from './AuthDoneRetry.tsx';
+import { ErrorCard } from './ErrorCard.tsx';
+import { InstallGuide } from './InstallGuide.tsx';
+import { ReauthClear, ReauthNotice } from './ReauthNotice.tsx';
+import { SignupInBrowser } from './SignupInBrowser.tsx';
+// 登录框挂 kit 表单的 .input：字号（电脑 15、触屏 16）、底色、圆角和编辑页一套；版式差异在 AuthPage.module.css 覆盖
+import form from '../../../kit/components/Form.module.css';
+import styles from './AuthPage.module.css';
+
+export interface AuthPageProps {
+  /** 测试用：换掉接口、时钟、登录后的跳转 */
+  deps?: AuthFlowDeps;
+  /** 测试用：不读真的 navigator */
+  gate?: InstallGate;
+}
+
+export default function AuthPage({ deps, gate }: AuthPageProps) {
+  const g = gate ?? installGate();
+  // 恢复页发现本机会话已被别的标签页换掉：换 key 重挂 SessionCheck，按现在的会话重新判断、重新探测
+  const [epoch, setEpoch] = useState(0);
+  const reload = useCallback(() => setEpoch((n) => n + 1), []);
+  if (g !== 'login') return <InstallGuide openInSafari={g === 'install-safari'} />;
+  return (
+    <>
+      <AuthDoneRetry />
+      <SessionCheck key={epoch} deps={deps} onReplaced={reload} />
+    </>
+  );
+}
+
+/**
+ * 本机已有会话时先说“当前已登录 <邮箱>，要换账号请先退出”（读不到邮箱就不带），
+ * “退出并换账号”完整退出（删本会话的 devices 行 → signOut local → 清本机库和缓存）后才出登录表单；“回到 App”回 /app/
+ */
+function SessionCheck({ deps, onReplaced }: { deps: AuthFlowDeps | undefined; onReplaced: () => void }) {
+  const t = useAuthT();
+  const s = useSessionGate(deps);
+  const gate = useAccountGate(deps, onReplaced);
+  // 本机已有会话：打开时探测一次。不挡两个按钮，探测不到（断网、超时）照旧（常在断网时打开，要保证离线能用）；
+  // 先点了“回到 App”的由主 App 遇到再处理。
+  // 按 user_id 记下探测过的账号：别的标签页把会话换成另一个账号（useSessionGate 收到 storage 事件、或点按钮时发现，重画）时，
+  // 原地按新账号再探测一次（不重挂：useSessionGate 的“会话已换”提示要留着）。check 会按新会话重新记下 snap。
+  // 正在忙（退出、恢复进行中）、已退出回到登录表单时不探测，免得打断进行中的流程；那时不记下新账号，忙完再比
+  const readUid = deps?.readUserId ?? readSessionUserId;
+  const uid = s.state === 'signed-in' ? safeRead(readUid) : null;
+  const probedFor = useRef<string | null>(null);
+  const { check } = gate;
+  useEffect(() => {
+    if (s.state !== 'signed-in' || uid === null) return;
+    if (probedFor.current === uid || gate.busy || gate.view === 'exited') return;
+    probedFor.current = uid;
+    void check('session');
+  }, [s.state, uid, check, gate.busy, gate.view]);
+  if (gate.view === 'exited') return <LoginPanel deps={deps} gateExit={gate.exit} onReplaced={onReplaced} />;
+  if (s.state === 'none') return <LoginPanel deps={deps} serverPending={s.serverPending} onReplaced={onReplaced} />;
+  if (s.state === 'signed-in' && (gate.view === 'pending' || gate.view === 'disabled')) {
+    return (
+      <main className={styles.page} data-feature="auth" data-step={gate.view} aria-busy={gate.busy}>
+        <h1 className={styles.title}>{t('auth.title', {})}</h1>
+        <AccountGatePanel gate={gate} onRestored={s.backToApp} />
+      </main>
+    );
+  }
+  const busy = s.state === 'exiting';
+  return (
+    <main className={styles.page} data-feature="auth" data-step="signed-in" aria-busy={busy}>
+      <h1 className={styles.title}>{t('auth.title', {})}</h1>
+      <p className={styles.lead} data-testid="auth-signed-in">
+        {s.email ? t('auth.session.signedInAs', { email: s.email }) : t('auth.session.signedIn', {})}
+      </p>
+      {s.changed && (
+        <p className={styles.notice} role="alert" data-testid="auth-session-changed">
+          {t('auth.session.changed', {})}
+        </p>
+      )}
+      <div className={styles.form}>
+        <button className={styles.primary} type="button" disabled={busy} onClick={() => void s.switchAccount()}>
+          {busy ? t('auth.busy', {}) : t('auth.session.switch', {})}
+        </button>
+        <button className={styles.link} type="button" disabled={busy} onClick={s.backToApp}>
+          {t('auth.session.backToApp', {})}
+        </button>
+      </div>
+    </main>
+  );
+}
+
+const EXIT_KEYS = {
+  removed: 'auth.exit.removed',
+  disabled: 'auth.exit.disabled',
+  pending_deletion: 'auth.exit.pendingDeletion',
+  disabled_unsure: 'auth.exit.disabledUnsure',
+  expired: 'auth.exit.expired',
+  deletion_unsure: 'auth.exit.deletionUnsure',
+} as const satisfies Record<ExitNotice, string>;
+
+/**
+ * 退出原因：主 App 被移除、被停用、注销冷静期时清本机后跳到这里，先说一句为什么；显示一次就删，刷新不再出现。
+ * 冷静期的恢复要登录以后才能做（服务器回 account_pending_deletion 才出“恢复账号”），这里只给提示
+ */
+function ExitNoticeLine() {
+  const t = useAuthT();
+  const [notice] = useState(() => readExitNotice());
+  useEffect(() => clearExitNotice(), []);
+  if (!notice) return null;
+  return (
+    <p className={styles.notice} role="alert" data-testid="auth-exit-notice" data-reason={notice}>
+      {t(EXIT_KEYS[notice], {})}
+    </p>
+  );
+}
+
+const GATE_EXIT_KEYS = { reauth: 'auth.restore.reauth', kept: 'auth.exit.pendingDeletion' } as const satisfies Record<GateExit, string>;
+
+/** 验证码那一屏（老邮箱、邀请两种）：发到哪里、没收到怎么办、6 位验证码框、重新发送、换一个邮箱（从 LoginPanel 拆出来，免得超行数） */
+function CodeStep({ flow }: { flow: ReturnType<typeof useAuthFlow> }) {
+  const t = useAuthT();
+  const { step, email, code, busy, cooldown } = flow.state;
+  return (
+    <div className={styles.form}>
+      <p className={styles.lead}>
+        {step === 'invite-code' ? t('auth.invite.sent', {}) : t('auth.code.sentTo', { email: email.trim() })}
+      </p>
+      {/* start 被限流、码不对、发信失败都回 {ok}，界面分不出来，只能提示没收到怎么办 */}
+      {step === 'invite-code' && <p className={styles.lead}>{t('auth.invite.noMail', {})}</p>}
+      <label className={form.groupLabel} htmlFor="auth-code">
+        {t('auth.code.label', {})}
+      </label>
+      <input
+        id="auth-code"
+        className={`${form.input} ${styles.input} ${styles.code}`}
+        name="code"
+        autoComplete="one-time-code"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        maxLength={6}
+        value={code}
+        disabled={busy}
+        onChange={(e) => flow.setCode(e.target.value)}
+      />
+      {/* 老邮箱登录在验证码框下方提醒看垃圾邮件；邀请那一屏上面已有 auth.invite.noMail，不叠加 */}
+      {step !== 'invite-code' && (
+        <p className={styles.sub} data-testid="auth-code-spam">
+          {t('auth.code.checkSpam', {})}
+        </p>
+      )}
+      <div className={styles.row}>
+        <button className={styles.link} type="button" disabled={busy || cooldown > 0} onClick={() => void flow.resend()}>
+          {cooldown > 0 ? t('auth.code.resendIn', { s: cooldown }) : t('auth.code.resend', {})}
+        </button>
+        {/* 校验期间不能换（和验证码框一样灰）：校验成功时会话已写进本机，换邮箱会留在第一步、本机却已登录 */}
+        <button className={styles.link} type="button" disabled={busy} onClick={flow.backToEmail}>
+          {t('auth.code.changeEmail', {})}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * serverPending：刚“退出并换账号”、服务器上的那次登录没吊销成（本机已清空），填邮箱那一步提示一次。
+ * gateExit：SessionCheck 的恢复页刚退出了本会话（要重新收码、或选了保持注销），填邮箱那一步提示一次
+ */
+function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean; gateExit?: GateExit | null; onReplaced: () => void }) {
+  const { deps, serverPending = false, gateExit = null } = p;
+  const t = useAuthT();
+  const box = useRef<HTMLDivElement>(null);
+  const gate = useAccountGate(deps, p.onReplaced);
+  const { check } = gate;
+  const probe = useCallback(() => check('login'), [check]);
+  // 登录用 action 'login'；邀请两屏的令牌都只给 start 用（含验证码那屏的重新发送），用 'invite_start'；步骤变了小窗按新的 action 重画
+  const [action, setAction] = useState<TurnstileAction>('login');
+  const captcha = useTurnstile(box, true, action);
+  const flow = useAuthFlow(captcha, deps, probe);
+  const { step, email, invite, busy, error, hint, cooldown } = flow.state;
+  useEffect(() => setAction(step === 'invite' || step === 'invite-code' ? 'invite_start' : 'login'), [step]);
+  const { backToEmail } = flow;
+  useEffect(() => {
+    if (gate.view === 'exited') backToEmail();   // 恢复页退出了本会话：回填邮箱那一步（邮箱保留）
+  }, [gate.view, backToEmail]);
+  const exitShown = useExitShown(gate.view === 'exited' ? gate.exit : gateExit);
+  const gated = gate.view === 'pending' || gate.view === 'disabled' || gate.view === 'unsure';
+  // 登录过期、本机内容还留着：有 lemo.reauth 时用 ReauthNotice 代替 ExitNoticeLine
+  const reauth = useReauth(deps?.reauth);
+  const reauthShown = reauth.view.kind !== 'none';
+  const askEmail = !gated && (step === 'email' || step === 'invite');
+  const askCode = !gated && (step === 'code' || step === 'invite-code');
+  // exe 里不做注册：新邮箱这一步不收邀请码，给一个打开系统浏览器注册页的按钮
+  const signupInBrowser = step === 'invite' && (deps?.inExe ?? isTauri());
+
+  return (
+    <main className={styles.page} data-feature="auth" data-step={gated ? gate.view : step} aria-busy={busy || gate.busy}>
+      <h1 className={styles.title}>{t('auth.title', {})}</h1>
+      {gated && <AccountGatePanel gate={gate} onRestored={flow.enterApp} onEnter={flow.enterApp} />}
+      {!gated && step === 'email' && exitShown && (
+        <p className={styles.notice} role="alert" data-testid="auth-gate-exit" data-reason={exitShown}>
+          {t(GATE_EXIT_KEYS[exitShown], {})}
+        </p>
+      )}
+      {step === 'email' && !exitShown && reauthShown && <ReauthNotice view={reauth.view} />}
+      {step === 'email' && !exitShown && !reauthShown && <ExitNoticeLine />}
+      {step === 'email' && serverPending && (
+        <p className={styles.notice} role="status" data-testid="auth-server-pending">
+          {t('auth.session.serverPending', {})}
+        </p>
+      )}
+      {step === 'email' && <p className={styles.lead}>{t('auth.lead', {})}</p>}
+
+      {askEmail && (
+        <form
+          className={styles.form}
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (signupInBrowser) return;
+            void (step === 'invite' ? flow.sendInvite() : flow.sendCode());
+          }}
+        >
+          <label className={form.groupLabel} htmlFor="auth-email">
+            {t('auth.email.label', {})}
+          </label>
+          <input
+            id="auth-email"
+            className={`${form.input} ${styles.input}`}
+            type="email"
+            name="email"
+            autoComplete="email"
+            inputMode="email"
+            enterKeyHint="go"
+            placeholder="name@example.com"
+            value={email}
+            onChange={(e) => flow.setEmail(e.target.value)}
+          />
+          {step === 'invite' && (
+            <p className={styles.notice} role="status" data-testid="auth-not-registered">
+              {t('auth.invite.notRegistered', {})}
+            </p>
+          )}
+          {signupInBrowser && <SignupInBrowser open={deps?.openSignup ?? (() => openDesktopSignup())} />}
+          {step === 'invite' && !signupInBrowser && (
+            <>
+              <label className={form.groupLabel} htmlFor="auth-invite">
+                {t('auth.invite.label', {})}
+              </label>
+              <input
+                id="auth-invite"
+                className={`${form.input} ${styles.input}`}
+                name="invite"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                enterKeyHint="go"
+                value={invite}
+                aria-describedby="auth-invite-tip"
+                aria-invalid={flow.inviteConfusable || undefined}
+                onChange={(e) => flow.setInvite(e.target.value)}
+              />
+              {/* 读屏：提示区一直挂着、平时是空的，只换里面的文字（新插入的 role=status 有的读屏不念） */}
+              <div id="auth-invite-tip" role="status" data-testid="auth-invite-confusable">
+                {flow.inviteConfusable && <p className={styles.hint}>{t('auth.invite.confusable', {})}</p>}
+              </div>
+              <p className={styles.sub}>{t('auth.invite.noCode', {})}</p>
+            </>
+          )}
+          {!signupInBrowser && (
+            <button className={styles.primary} type="submit" disabled={busy || cooldown > 0}>
+              {cooldown > 0
+                ? t('auth.code.resendIn', { s: cooldown })
+                : t(step === 'invite' ? 'auth.invite.next' : 'auth.email.send', {})}
+            </button>
+          )}
+          {step === 'invite' && (
+            <button className={styles.link} type="button" onClick={flow.backToEmail}>
+              {t('auth.code.changeEmail', {})}
+            </button>
+          )}
+        </form>
+      )}
+
+      {askCode && <CodeStep flow={flow} />}
+
+      {step === 'email' && !gated && <ReauthClear view={reauth.view} onClear={() => void reauth.clear()} />}
+
+      {/* 有易混提示时不再叠“邀请码是 12 位…”那句：只显示一句 */}
+      {hint && !gated && !(hint === 'invite_format' && flow.inviteConfusable) && (
+        <p className={styles.hint} role="alert" data-testid="auth-hint">
+          {t(hint === 'email_format' ? 'auth.email.invalid' : hint === 'invite_format' ? 'auth.invite.format' : 'auth.captcha.wait', {})}
+        </p>
+      )}
+
+      {error && !gated && <ErrorCard error={error} onRetry={flow.dismissError} onResend={() => void flow.resend()} />}
+
+      {step === 'done' ? (
+        <p className={styles.lead} role="status">
+          {t('auth.done', {})}
+        </p>
+      ) : (
+        <section className={styles.captcha} aria-label={t('auth.captcha.label', {})} hidden={gated}>
+          <div ref={box} data-testid="auth-captcha" />
+          {captcha.failed && (
+            <p className={styles.hint} role="alert">
+              {t('auth.captcha.loadFailed', {})}
+            </p>
+          )}
+        </section>
+      )}
+    </main>
+  );
+}
+
+/** 读 user_id；抛错按读不到（null） */
+function safeRead(read: () => string | null): string | null {
+  try {
+    return read();
+  } catch {
+    return null;
+  }
+}
+
+/** 恢复页的退出提示（原样返回）；显示它时 ExitNoticeLine 不挂，也要把存着的退出原因删掉，免得下次回到登录页又冒出来 */
+function useExitShown(shown: GateExit | null): GateExit | null {
+  useEffect(() => {
+    if (shown) clearExitNotice();
+  }, [shown]);
+  return shown;
+}

@@ -1,0 +1,15 @@
+{
+  "index.html": {
+    "file": "assets/index.js",
+    "src": "index.html",
+    "isEntry": true,
+    "imports": ["_vendor.js"]
+  },
+  "_vendor.js": {
+    "file": "assets/vendor.js"
+  },
+  "src/features/notes/ui/NotesPage.tsx": {
+    "file": "assets/notes.js",
+    "isDynamicEntry": true
+  }
+}

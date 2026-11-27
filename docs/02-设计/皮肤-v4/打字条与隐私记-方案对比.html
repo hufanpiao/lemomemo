@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="zh-CN" data-skin="glass" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>打字条与隐私记方案</title>
+<!-- R-451（“＋”打字条：聚焦框、按钮、空白）、R-452（隐私记的框压扁，参考 kenotex）设计方案对比。
+     颜色、字号、圆角全部直接引用 App 的真实令牌文件（src/styles/tokens.css、skins/glass.css，默认皮肤“磨砂玻璃”），令牌改了这页跟着变。
+     地址带 ?theme=dark 看深色；每台手机 430×932，截图脚本按 .phone 元素逐张截（DPR 3）。
+     iOS 键盘和键盘上方的“∧ ∨ ✓”表单辅助条是系统画的，网页去不掉，这里只是照样画出来占位置；底栏和“＋”照现状，不在本次改动范围。 -->
+<link rel="stylesheet" href="../../../src/styles/tokens.css">
+<link rel="stylesheet" href="../../../src/styles/skins/glass.css">
+<style>
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--f-zh); font-size: var(--fs-14); }
+.wrap { max-width: 1480px; margin: 0 auto; padding: 24px 16px 64px; }
+h1.pg { font-size: var(--fs-22); margin: 0 0 6px; }
+.lead { color: var(--text-2); font-size: var(--fs-13); line-height: 1.6; margin: 0 0 8px; max-width: 900px; }
+.themeBtn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid var(--inp-line); border-radius: var(--r-pill); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; }
+h2.sec { font-size: var(--fs-18); margin: 40px 0 4px; }
+.dir { margin: 28px 0 0; padding-top: 20px; border-top: 1px solid var(--inp-line); }
+.dir h3 { font-size: var(--fs-16); margin: 0 0 6px; }
+.dir ul { margin: 0 0 14px; padding-left: 18px; color: var(--text-2); font-size: var(--fs-13); line-height: 1.65; max-width: 980px; }
+.dir ul b { color: var(--text); }
+.row { display: flex; flex-wrap: wrap; gap: 20px; }
+.cell { display: flex; flex-direction: column; gap: 6px; }
+.cap { font-size: var(--fs-12-5); color: var(--text-2); }
+.zoom { zoom: .62; }
+@media (max-width: 700px) { .zoom { zoom: calc((100vw - 32px) / 430); } }
+html.shot .zoom { zoom: 1; }
+.rec { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); font-size: var(--fs-12); font-weight: 600; }
+
+/* ================= 手机外壳 ================= */
+.phone { position: relative; width: 430px; height: 932px; overflow: hidden; background: var(--scr-bg); color: var(--text); font-family: var(--f-zh); font-size: var(--fs-14); }
+.sb { position: absolute; top: 0; left: 0; right: 0; height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0 40px; font-family: var(--f-num); font-weight: 600; font-size: 17px; z-index: 5; }
+.sb i { display: inline-block; width: 26px; height: 12px; border-radius: 4px; border: 1.5px solid currentcolor; opacity: .8; }
+.num { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+
+/* 背后的页面（打字条打开时整页在液态玻璃下，这里用模糊色块代替） */
+.blurPage { position: absolute; inset: 0; filter: blur(16px); opacity: .9; }
+.blurPage .b1 { position: absolute; left: 20px; right: 20px; top: 80px; height: 30px; border-radius: 10px; background: var(--text-3); opacity: .35; width: 180px; }
+.blurPage .b2 { position: absolute; left: 20px; right: 20px; top: 150px; height: 190px; border-radius: var(--r-lg); background: var(--k-bg); opacity: .5; }
+.blurPage .b3 { position: absolute; left: 20px; top: 380px; height: 70px; right: 20px; border-radius: var(--r-lg); background: var(--panel); }
+.blurPage .b4 { position: absolute; left: 20px; top: 470px; height: 70px; right: 20px; border-radius: var(--r-lg); background: var(--panel); }
+.mist { position: absolute; inset: 0; background: var(--g-tint); }
+
+/* 系统键盘（只画样子） */
+.kb { position: absolute; left: 0; right: 0; bottom: 0; height: 336px; background: #D2D4DA; z-index: 6; font-family: -apple-system, "Segoe UI", sans-serif; }
+[data-theme="dark"] .kb { background: #2C2C2E; }
+.acc { height: 44px; display: flex; align-items: center; gap: 18px; padding: 0 14px; color: #3A3B40; font-size: 20px; }
+[data-theme="dark"] .acc { color: #E6E6EA; }
+.acc .ok { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; background: #0A84FF; color: #fff; display: grid; place-items: center; font-size: 17px; }
+.keys { padding: 4px 3px 0; display: flex; flex-direction: column; gap: 11px; }
+.kr { display: flex; justify-content: center; gap: 6px; }
+.k { width: 36px; height: 44px; border-radius: 7px; background: #fff; display: grid; place-items: center; font-size: 21px; color: #111; box-shadow: 0 1px 0 rgba(0,0,0,.28); }
+[data-theme="dark"] .k { background: #6B6B70; color: #fff; box-shadow: none; }
+.k.w { width: 50px; background: #ABAFBA; font-size: 15px; }
+[data-theme="dark"] .k.w { background: #47474B; }
+.k.sp { width: 186px; font-size: 15px; }
+.k.go { width: 92px; background: #0A84FF; color: #fff; font-size: 15px; }
+.kbFoot { height: 50px; }
+.kbLabel { position: absolute; right: 10px; bottom: 6px; font-size: 10.5px; color: #6B6E76; }
+
+/* 底栏和“＋”（照现状，不改） */
+.tab { position: absolute; left: 14px; bottom: 12px; width: 322px; height: 62px; border-radius: 31px; background: var(--g-tint-fb); box-shadow: var(--g-bar-shadow); backdrop-filter: blur(12px) saturate(1.6); display: flex; align-items: center; justify-content: space-around; padding: 0 6px; font-size: 12.5px; color: var(--g-fg); z-index: 4; }
+.tab span { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 64px; }
+.tab span b { font-size: 18px; font-weight: 400; line-height: 1; }
+.tab span.on { background: var(--g-pill); border-radius: 26px; padding: 6px 0; font-weight: 700; }
+.fab { position: absolute; right: 12px; bottom: 10px; width: 66px; height: 66px; border-radius: 50%; background: var(--fab-bg); color: var(--fab-fg); display: grid; place-items: center; font-size: 36px; font-weight: 300; box-shadow: 0 0 0 4px var(--g-hi2); z-index: 4; }
+.solidTab .tab { background: var(--float-solid); backdrop-filter: none; }
+
+/* ================= 打字条：共用外壳（照现状 TypeBar.module.css .bar） ================= */
+.tb { position: absolute; left: 16px; right: 16px; z-index: 7; display: flex; flex-direction: column; padding: 8px; border-radius: var(--r-lg); background: var(--toast-bg); color: var(--toast-fg); box-shadow: var(--shadow-2); backdrop-filter: blur(6px) saturate(var(--float-sat)); font-size: var(--fs-14); }
+.tb.up { bottom: 344px; }
+.tb.down { bottom: 86px; }
+.grip { align-self: center; width: 36px; height: 4px; border-radius: 2px; background: currentcolor; opacity: .35; }
+.caret { display: inline-block; width: 2px; height: 20px; background: #0A84FF; vertical-align: middle; margin-right: 1px; }
+.ph { color: var(--text-3); }
+.inp { display: flex; align-items: center; min-height: 44px; padding: 4px 12px; border: 1px solid var(--inp-line); border-radius: var(--r-inp); background: var(--inp-bg); color: var(--text); font-size: var(--fs-16); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; }
+.prev { font-size: var(--fs-13); color: var(--toast-fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* —— 现状 —— */
+.cur { gap: 6px; }
+.cur .r { display: flex; align-items: center; gap: 8px; }
+.cur .inp.f { outline: 2px solid var(--focus); outline-offset: 2px; }
+.cur .save { flex: none; min-height: 44px; padding: 0 14px; border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); font-weight: 600; display: grid; place-items: center; }
+.cur .save.off { opacity: var(--disabled-dim); }
+.cur .prev { min-height: 20px; }
+.cur .pill { min-height: 38px; padding: 0 14px; border-radius: var(--r-pill); background: var(--panel-2); display: grid; place-items: center; }
+
+/* —— 方向 A：同结构，按钮换主次 —— */
+.da { gap: 4px; }
+.da .r { display: flex; align-items: center; gap: 8px; }
+.da .inp.f { border-color: var(--text-3); }
+.da .save { flex: none; min-width: 64px; min-height: 44px; padding: 0 16px; border-radius: var(--r-pill); display: grid; place-items: center; font-size: var(--fs-15); }
+.da .save.off { background: var(--panel-2); color: var(--text-3); }
+.da .save.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.da .prev { padding: 2px 4px 0; }
+.da .acts { display: flex; justify-content: space-between; margin: 0 -4px; }
+.tbtn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 44px; min-height: 44px; padding: 0 8px; color: var(--toast-fg2); font-size: var(--fs-13-5); }
+.tbtn svg { width: 15px; height: 15px; }
+
+/* —— 方向 B：kenotex 整宽搜索框式，“记下”收进框里 —— */
+.db { gap: 2px; }
+.db .field { display: flex; align-items: center; min-height: 48px; padding: 0 4px 0 14px; border: 1px solid var(--inp-line); border-radius: var(--r-md); background: var(--inp-bg); font-size: var(--fs-16); }
+.db .field.f { border-color: var(--text-3); }
+.db .field .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; }
+.db .in { flex: none; display: grid; place-items: center; min-width: 56px; min-height: 44px; padding: 0 10px; font-size: var(--fs-15); }
+.db .in.off { color: var(--text-3); }
+.db .in.on span { display: inline-grid; place-items: center; height: 32px; padding: 0 12px; border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.db .meta { display: flex; align-items: center; min-height: 44px; padding: 0 2px 0 6px; gap: 2px; }
+.db .meta .prev { flex: 1; min-width: 0; font-size: var(--fs-12-5); }
+.db .meta .sep { width: 1px; height: 14px; background: var(--inp-line); }
+
+/* —— 方向 C：无框撰写卡，底部一条工具行 —— */
+.dc { gap: 0; padding: 8px 8px 6px; }
+.dc .area { min-height: 44px; padding: 10px 8px 6px; font-size: var(--fs-16); color: var(--text); white-space: nowrap; overflow: hidden; }
+.dc .prev { padding: 0 8px 6px; font-size: var(--fs-12-5); }
+.dc .tools { display: flex; align-items: center; gap: 2px; padding-top: 4px; border-top: 0.5px solid var(--inp-line); }
+.ibtn { display: grid; place-items: center; width: 44px; height: 44px; color: var(--toast-fg2); }
+.ibtn svg { width: 18px; height: 18px; }
+.dc .save { margin-left: auto; display: grid; place-items: center; min-width: 64px; height: 36px; padding: 0 16px; border-radius: var(--r-pill); font-size: var(--fs-15); position: relative; }
+.dc .save::after { content: ""; position: absolute; inset: -4px 0; }
+.dc .save.off { background: var(--panel-2); color: var(--text-3); }
+.dc .save.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+
+/* ================= 隐私记 ================= */
+.hd { position: absolute; top: 54px; left: 0; right: 0; padding: 0 16px; }
+.tt { display: flex; align-items: center; justify-content: space-between; min-height: 52px; }
+.tt h1 { margin: 0; font-size: var(--fs-28); font-weight: 700; letter-spacing: -.01em; }
+.avt { width: 34px; height: 34px; border-radius: 50%; background: var(--panel-2); display: grid; place-items: center; font-size: 13px; color: var(--text-2); }
+.chips { display: flex; gap: 8px; margin: 6px 0 0; }
+.chips span { height: 30px; padding: 0 12px; border-radius: var(--r-pill); background: var(--panel-2); display: inline-grid; place-items: center; font-size: var(--fs-13); }
+.chips span.on { background: var(--text); color: var(--panel); }
+.lock { width: 15px; height: 15px; flex: none; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.note { border-radius: var(--r-lg); background: var(--panel); box-shadow: var(--shadow-1); padding: 12px 14px; font-size: var(--fs-14); line-height: 1.5; }
+.note small { display: block; margin-top: 6px; color: var(--text-3); font-size: var(--fs-11-5); font-family: var(--f-num); }
+.note.t2 { min-height: 128px; }
+
+/* 现状：随手记入口行（Vault.module.css .lockrow） */
+.lr-cur { display: flex; align-items: center; gap: 10px; height: 52px; margin-top: 12px; padding: 0 16px; border-radius: var(--r-lg); background: var(--panel); box-shadow: var(--shadow-1); font-size: var(--fs-14); }
+.lr-cur .sub { color: var(--text-2); font-size: var(--fs-13); }
+.lr-cur .go { margin-left: auto; font-size: var(--fs-13); }
+
+/* V1：压扁同形 */
+.lr-v1 { display: flex; align-items: center; gap: 8px; height: 44px; margin-top: 12px; padding: 0 14px; border-radius: var(--r-md); background: var(--panel); font-size: var(--fs-14); }
+.lr-v1 .sub { color: var(--text-3); font-size: var(--fs-12-5); }
+.lr-v1 .go { margin-left: auto; color: var(--text-2); font-size: var(--fs-13); }
+
+/* V2：kenotex 分组小字 + 平铺行 */
+.glabel { margin: 16px 2px 2px; color: var(--text-3); font-size: var(--fs-12); letter-spacing: .14em; }
+.lr-v2 { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 2px; border-top: 0.5px solid var(--inp-line); border-bottom: 0.5px solid var(--inp-line); font-size: var(--fs-15); }
+.lr-v2 .go { margin-left: auto; color: var(--text-3); font-size: var(--fs-13); }
+
+/* 隐私记页顶栏 */
+.vt { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 44px; margin-bottom: 8px; }
+.vt .back { font-size: var(--fs-15); color: var(--text); }
+.vt h1 { display: inline-flex; gap: 6px; align-items: center; margin: 0; font-size: var(--fs-17); font-weight: 700; }
+.vt .end { justify-self: end; display: flex; gap: 4px; align-items: center; }
+.chip { height: 30px; padding: 0 12px; border-radius: var(--r-pill); background: var(--panel-2); display: inline-grid; place-items: center; font-size: var(--fs-13); }
+.trash { width: 36px; height: 36px; display: grid; place-items: center; color: var(--text-2); }
+
+/* 已解锁提示 */
+.hint-cur { margin: 0 0 10px; padding: 10px 14px; border-radius: var(--r-md); background: var(--panel-2); color: var(--text-2); font-size: var(--fs-12); line-height: 1.5; }
+.hint-v1 { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 7px 12px; border-radius: var(--r-sm); background: var(--panel-2); color: var(--text-2); font-size: var(--fs-12); line-height: 1.45; }
+.hint-v1 svg { width: 13px; height: 13px; margin-top: 2px; flex: none; }
+.hint-v2 { display: flex; gap: 6px; align-items: center; margin: 0 2px 6px; color: var(--text-3); font-size: var(--fs-12); }
+.hint-v2 svg { width: 12px; height: 12px; flex: none; }
+
+/* 上锁遮罩（隐私记页挂着时 data-rt=1：不模糊，--g-tint-fb） */
+.scrim { position: absolute; inset: 0; z-index: 8; background: var(--g-tint-fb); }
+.scrim.center { display: flex; align-items: center; justify-content: center; padding: 24px; }
+.btnP { display: grid; place-items: center; min-height: 44px; padding: 0 14px; border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); font-weight: 600; font-size: var(--fs-14); }
+.btnS { display: grid; place-items: center; min-height: 44px; padding: 0 14px; border-radius: var(--r-pill); border: 1px solid var(--inp-line); color: var(--text); font-size: var(--fs-14); }
+.btnG { display: grid; place-items: center; min-height: 44px; padding: 0 14px; border-radius: var(--r-pill); background: var(--panel-2); color: var(--text); font-size: var(--fs-14); }
+
+.card-cur { width: 100%; max-width: 400px; padding: 26px 22px 20px; border-radius: 30px; background: var(--panel); box-shadow: var(--shadow-2); text-align: center; }
+.card-cur .big { display: block; width: 44px; height: 52px; margin: 0 auto; }
+.card-cur h2 { margin: 10px 0 0; font-size: var(--fs-20); font-weight: 600; }
+.card-cur .sub { margin: 4px 0 18px; color: var(--text-2); font-size: var(--fs-13); }
+.card-cur .btns { display: flex; flex-direction: column; gap: 10px; }
+.card-cur .cancel { min-height: 44px; display: grid; place-items: center; color: var(--text-2); font-size: var(--fs-15); }
+.card-cur .foot { margin: 8px 0 0; color: var(--text-3); font-size: var(--fs-12); }
+
+.card-v1 { width: 100%; max-width: 400px; padding: 16px 16px 6px; border-radius: var(--r-lg); background: var(--panel); box-shadow: var(--shadow-2); }
+.card-v1 .h { display: flex; align-items: center; gap: 8px; margin: 0 2px 14px; }
+.card-v1 .h svg { width: 18px; height: 18px; }
+.card-v1 .h b { font-size: var(--fs-16); font-weight: 600; }
+.card-v1 .h .n { margin-left: auto; color: var(--text-3); font-size: var(--fs-13); }
+.card-v1 .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.card-v1 .f { display: flex; align-items: center; min-height: 44px; margin-top: 4px; padding: 0 2px; }
+.card-v1 .f .foot { color: var(--text-3); font-size: var(--fs-11-5); }
+.card-v1 .f .cancel { margin-left: auto; min-width: 44px; min-height: 44px; display: grid; place-items: center; padding: 0 6px; color: var(--text-2); font-size: var(--fs-14); }
+
+.sheet-v2 { position: absolute; left: 16px; right: 16px; bottom: 86px; padding: 6px 12px 12px 16px; border-radius: var(--r-lg); background: var(--panel); box-shadow: var(--shadow-2), inset 0 0 0 0.5px var(--inp-line); }
+.sheet-v2 .h { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.sheet-v2 .h svg { width: 15px; height: 15px; }
+.sheet-v2 .h b { font-size: var(--fs-15); font-weight: 600; }
+.sheet-v2 .h .n { color: var(--text-3); font-size: var(--fs-12-5); }
+.sheet-v2 .h .cancel { margin-left: auto; min-height: 44px; display: grid; place-items: center; padding: 0 4px 0 12px; color: var(--text-2); font-size: var(--fs-14); }
+.sheet-v2 .btns { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; margin-top: 4px; }
+.lockedBody { margin-top: 90px; text-align: center; color: var(--text-3); font-size: var(--fs-13); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="pg">R-451 打字条 · R-452 隐私记的框 — 方案对比</h1>
+  <p class="lead">负责人 11-17：“以参考资料美化UI部分先给我出设计方案，我确认后再做”“这个输入框优化过吗？”“这个展开编辑跟收起还有记下的按钮是不是可以再美化一下”“顺便将隐私记的框也变的扁一些，风格参考kenotex”。参考：本机资料“参考素材/UI 细节”的 kenotex 截图（克制灰阶、小字分组标签、平铺列表行、主题色只点一处、等宽数字）和“搜索参考.png”（整宽圆角浅底搜索框、无粗边、右边文字按钮）。</p>
+  <p class="lead">颜色、字号、圆角全部取自 App 真实令牌（tokens.css、skins/glass.css，默认皮肤“磨砂玻璃”）。iOS 键盘和键盘上方的“∧ ∨ ✓”表单辅助条是系统画的，网页去不掉，图里照画；底栏和“＋”照现状不动。</p>
+  <button class="themeBtn" id="themeBtn" type="button">切换浅色 / 深色</button>
+
+  <h2 class="sec">一、R-451 “＋”打字条</h2>
+  <div id="tbRoot"></div>
+
+  <h2 class="sec">二、R-452 隐私记的框</h2>
+  <div id="vRoot"></div>
+</div>
+
+<script>
+const html = document.documentElement;
+const q = new URLSearchParams(location.search);
+if (q.get('theme') === 'dark') html.dataset.theme = 'dark';
+if (q.get('shot') === '1') html.classList.add('shot');
+document.getElementById('themeBtn').onclick = () => {
+  q.set('theme', html.dataset.theme === 'dark' ? 'light' : 'dark');
+  location.search = q.toString();
+};
+
+const ICON = {
+  expand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
+  lock: '<svg class="lock" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2h.5A1.5 1.5 0 0 1 19 11.5v8A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-8A1.5 1.5 0 0 1 6.5 10zm2.4 0h5.2V8a2.6 2.6 0 0 0-5.2 0z"/></svg>',
+  lockBig: '<svg class="big" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2h.5A1.5 1.5 0 0 1 19 11.5v8A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-8A1.5 1.5 0 0 1 6.5 10zm2.4 0h5.2V8a2.6 2.6 0 0 0-5.2 0z"/></svg>',
+  open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.6-1.7"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+};
+
+const SB = '<div class="sb"><span>10:28</span><i></i></div>';
+const KB = `<div class="kb"><div class="acc"><span>∧</span><span>∨</span><span class="ok">✓</span></div><div class="keys">
+<div class="kr">${'qwertyuiop'.split('').map(c => `<span class="k">${c}</span>`).join('')}</div>
+<div class="kr">${'asdfghjkl'.split('').map(c => `<span class="k">${c}</span>`).join('')}</div>
+<div class="kr"><span class="k w">⇧</span>${'zxcvbnm'.split('').map(c => `<span class="k">${c}</span>`).join('')}<span class="k w">⌫</span></div>
+<div class="kr"><span class="k w">123</span><span class="k w">☺</span><span class="k sp">空格</span><span class="k go">完成</span></div>
+</div><span class="kbLabel">系统键盘（照画）</span></div>`;
+const TAB = '<div class="tab"><span class="on"><b>◎</b>今天</span><span><b>▦</b>日历</span><span><b>✓</b>待办</span><span><b>✎</b>随手记</span></div><div class="fab">+</div>';
+const BG = '<div class="blurPage"><div class="b1"></div><div class="b2"></div><div class="b3"></div><div class="b4"></div></div><div class="mist"></div>';
+
+const TYPED = '明天下午三点和小林喝咖啡';
+const PREV = '会记成这样：和小林喝咖啡 · <span class="num">11-18 15:00</span>';
+
+// 三种状态：empty 聚焦没打字（键盘弹起）；typed 打了字（键盘弹起）；blur 打了字、点空白收了键盘
+const STATES = [
+  ['empty', '聚焦 · 没打字（键盘弹起）'],
+  ['typed', '打了字（键盘弹起）'],
+  ['blur', '打了字 · 点空白收起键盘'],
+];
+
+function text(st) {
+  if (st === 'empty') return '<span class="caret"></span><span class="ph">想记什么，回车记下</span>';
+  if (st === 'typed') return `${TYPED}<span class="caret"></span>`;
+  return TYPED;
+}
+const pos = (st) => (st === 'blur' ? 'down' : 'up');
+const focused = (st) => st !== 'blur';
+
+const BAR = {
+  cur: (st) => `<div class="tb cur ${pos(st)}"><div class="grip"></div>
+    <div class="r"><div class="inp ${focused(st) ? 'f' : ''}">${text(st)}</div><div class="save ${st === 'empty' ? 'off' : ''}">记下</div></div>
+    <div class="prev">${st === 'empty' ? '' : PREV}</div>
+    <div class="r"><div class="pill">展开编辑</div><div class="pill">收起</div></div></div>`,
+  a: (st) => `<div class="tb da ${pos(st)}"><div class="grip"></div>
+    <div class="r"><div class="inp ${focused(st) ? 'f' : ''}">${text(st)}</div><div class="save ${st === 'empty' ? 'off' : 'on'}">记下</div></div>
+    ${st === 'empty' ? '' : `<div class="prev">${PREV}</div>`}
+    <div class="acts"><span class="tbtn">${ICON.expand}展开编辑</span><span class="tbtn">收起${ICON.down}</span></div></div>`,
+  b: (st) => `<div class="tb db ${pos(st)}"><div class="grip"></div>
+    <div class="field ${focused(st) ? 'f' : ''}"><span class="t">${text(st)}</span><span class="in ${st === 'empty' ? 'off' : 'on'}"><span>记下</span></span></div>
+    <div class="meta"><span class="prev">${st === 'empty' ? '' : PREV}</span><span class="tbtn">展开编辑</span><span class="sep"></span><span class="tbtn">收起</span></div></div>`,
+  c: (st) => `<div class="tb dc ${pos(st)}">
+    <div class="area">${text(st)}</div>
+    ${st === 'empty' ? '' : `<div class="prev">${PREV}</div>`}
+    <div class="tools"><span class="ibtn" title="展开编辑">${ICON.expand}</span><span class="ibtn" title="收起">${ICON.down}</span><span class="save ${st === 'empty' ? 'off' : 'on'}">记下</span></div></div>`,
+};
+
+function phone(id, inner) { return `<div class="phone" id="${id}">${SB}${inner}</div>`; }
+function tbPhone(key, st) {
+  return phone(`tb-${key}-${st}`, BG + (st === 'blur' ? TAB : KB) + BAR[key](st));
+}
+function cell(cap, ph) { return `<div class="cell"><div class="zoom">${ph}</div><div class="cap">${cap}</div></div>`; }
+
+const TB_DIRS = [
+  { key: 'cur', title: '现状', states: ['empty', 'typed'], notes: [
+    '<b>聚焦框</b>：点进输入框套上全站 2px 正文色外框（base.css :focus-visible），看起来像一圈黑框。',
+    '<b>按钮</b>：“记下”没打字时是 45% 透明的柠檬黄大胶囊，发虚；“展开编辑”“收起”两颗灰底胶囊和“记下”分量差不多，看不出主次。',
+    '<b>空白</b>：输入框和两颗胶囊之间固定留一行空的“会记成这样”（20px）加两道 6px 间距，没打字时就是一整块空白。',
+  ] },
+  { key: 'a', title: '方向 A · 同结构，按钮分出主次（改动最小）', notes: [
+    '<b>按钮怎么改</b>：“记下”是唯一的实心按钮——没打字时灰底（--panel-2）、灰字（--text-3），不再用半透明黄；打了字变柠檬黄实底、字加粗（全页唯一一处黄）。“展开编辑”“收起”去掉胶囊底，改成带小图标的次要色文字，分在左右两端，看得见的字小，点按区照样 44 高。',
+    '<b>空白怎么收</b>：“会记成这样”那一行没打字时不占位，打了字才出现；输入框到下面一行只隔 4px，没打字时整条从 140 降到 116 高（打了字多出预览一行，139 高，和现状差不多）。',
+    '<b>聚焦态怎么改</b>：文字输入框聚焦不画外框，1px 细边加深到 --text-3（即主持人本机试改的方向一）；按钮键盘聚焦框照旧保留。',
+    '对应原话“这个输入框优化过吗”“按钮是不是可以再美化一下”；参考 kenotex 的克制灰阶（次要操作只用灰字）。取舍：结构不动、改动最小，但看起来仍是“输入框 + 按钮”两块，没有 B 那么整。',
+  ] },
+  { key: 'b', title: '方向 B · 整宽搜索框式，“记下”收进框里', rec: true, notes: [
+    '<b>按钮怎么改</b>：照 kenotex 搜索框，输入框整宽、圆角浅底，“记下”收进框的右端：没打字时只是一个灰色文字“记下”（不是按钮块），打了字变成框内一枚柠檬黄小方块（全页唯一一处黄）。“展开编辑 | 收起”放到框下面右侧一行，次要色小字、中间一根细竖线隔开，点按区 44。',
+    '<b>空白怎么收</b>：框下面那一行左边放“会记成这样”，右边放“展开编辑 | 收起”，预览和次要按钮合成一行，没有空行；打没打字都是 116 高，最稳定。',
+    '<b>聚焦态怎么改</b>：同 A，不画外框，细边加深到 --text-3。',
+    '对应参考图“搜索参考.png”那条整宽搜索框（右边文字“取消”）。取舍：最整、最像参考；“记下”在框里，手指离键盘的“完成”更近；预览长了会挤到“展开编辑”左边省略，长句只看得到开头。',
+  ] },
+  { key: 'c', title: '方向 C · 无框撰写卡，底部工具行', notes: [
+    '<b>按钮怎么改</b>：输入框去掉框，字直接写在磨砂条上；底部一条工具行，左边两枚图标按钮（展开编辑 ⤢、收起 ⌄，44×44，读屏有名字），右边“记下”胶囊：没打字灰底灰字，打了字柠檬黄（唯一一处黄）。',
+    '<b>空白怎么收</b>：输入区和工具行之间只用一根 0.5px 细线分开，预览打了字才出现在细线上方；没打字 107 高、打了字 129 高；“记下”看得见 36 高，上下各扩 4 到 44 点按区（同 kit compact 写法）。',
+    '<b>聚焦态怎么改</b>：没有框，聚焦只看光标；按钮键盘聚焦框照旧保留。',
+    '参考 kenotex 的平铺、少框。取舍：最轻；但“展开编辑”“收起”只剩图标，第一次用不一定看得懂；没有框，失焦时（第三张）不太看得出这里能打字。',
+  ] },
+];
+
+document.getElementById('tbRoot').innerHTML = TB_DIRS.map((d) => `<section class="dir"><h3>${d.title}${d.rec ? '<span class="rec">推荐</span>' : ''}</h3>
+  <ul>${d.notes.map((n) => `<li>${n}</li>`).join('')}</ul>
+  <div class="row">${(d.states ?? STATES.map((s) => s[0])).map((st) => cell(STATES.find((s) => s[0] === st)[1], tbPhone(d.key, st))).join('')}</div></section>`).join('');
+
+// ================= 隐私记 =================
+const NOTES = `<div class="grid"><div class="note t2">周末去花市买两盆绿萝，顺便看看陶盆<small class="num">11-16</small></div><div class="note">冰箱里的柠檬快用完了<small class="num">11-16</small></div><div class="note">“慢慢来，比较快。”<small class="num">11-15</small></div><div class="note t2">读书笔记：每天写三行，坚持比篇幅重要<small class="num">11-14</small></div></div>`;
+const VNOTES = `<div class="grid"><div class="note t2">体检报告复查时间：下周二上午<small class="num">11-15</small></div><div class="note">给妈妈的生日礼物清单<small class="num">11-12</small></div></div>`;
+
+const LOCKROW = {
+  cur: `<div class="lr-cur">${ICON.lock}<b>隐私记</b><span class="sub">已上锁</span><span class="go">输入密码解锁 ›</span></div>`,
+  v1: `<div class="lr-v1">${ICON.lock}<b>隐私记</b><span class="sub">已上锁</span><span class="go">输入密码解锁 ›</span></div>`,
+  v2: `<div class="glabel">隐 私</div><div class="lr-v2">${ICON.lock}<span>隐私记</span><span class="go">已上锁 · 解锁 ›</span></div>`,
+};
+const notesPage = (k) => phone(`v-${k}-lockrow`, `<div class="hd"><div class="tt"><h1>随手记</h1><span class="avt">林</span></div>
+  <div class="chips"><span class="on">全部</span><span>生活</span><span>工作</span><span>读书</span></div>${LOCKROW[k]}${NOTES}</div>${TAB}`);
+
+const vtop = (unlocked) => `<div class="vt"><span class="back">‹ 随手记</span><h1>${ICON.lock}隐私记</h1><span class="end">${unlocked ? `<span class="trash">${ICON.trash}</span><span class="chip">立即锁上</span>` : ''}</span></div>`;
+const HINT = {
+  cur: '<p class="hint-cur">已解锁 · 离开隐私记或 App <span class="num">5</span> 分钟自动锁上。在这里记的直接放进隐私记。</p>',
+  v1: `<p class="hint-v1">${ICON.open}<span>已解锁 · 离开隐私记或 App <span class="num">5</span> 分钟自动锁上。在这里记的直接放进隐私记。</span></p>`,
+  v2: `<p class="hint-v2">${ICON.open}<span>已解锁 · 离开 <span class="num">5</span> 分钟自动锁上 · 这里记的只进隐私记</span></p>`,
+};
+const unlockedPage = (k) => phone(`v-${k}-hint`, `<div class="hd">${vtop(true)}${HINT[k]}${VNOTES}</div><div class="solidTab">${TAB}</div>`);
+
+const CARD = {
+  cur: `<div class="scrim center"><div class="card-cur">${ICON.lockBig}<h2>隐私记已上锁</h2><p class="sub">里面有 <span class="num">12</span> 条</p>
+    <div class="btns"><div class="btnP">用 Face ID 解锁</div><div class="btnS">输入密码</div><div class="cancel">取消</div></div>
+    <p class="foot">离开隐私记或 App <span class="num">5</span> 分钟后自动重新上锁，设置里可改</p></div></div>`,
+  v1: `<div class="scrim center"><div class="card-v1"><div class="h">${ICON.lock}<b>隐私记已上锁</b><span class="n">里面有 <span class="num">12</span> 条</span></div>
+    <div class="btns"><div class="btnP">用 Face ID 解锁</div><div class="btnG">输入密码</div></div>
+    <div class="f"><span class="foot">离开 <span class="num">5</span> 分钟自动上锁，设置里可改</span><span class="cancel">取消</span></div></div></div>`,
+  v2: `<div class="scrim"><div class="sheet-v2"><div class="h">${ICON.lock}<b>隐私记已上锁</b><span class="n">· <span class="num">12</span> 条</span><span class="cancel">取消</span></div>
+    <div class="btns"><div class="btnP">用 Face ID 解锁</div><div class="btnG">输入密码</div></div></div></div>`,
+};
+const lockedPage = (k) => phone(`v-${k}-card`, `<div class="hd">${vtop(false)}<p class="lockedBody">　</p></div><div class="solidTab">${TAB}</div>${CARD[k]}`);
+
+const V_DIRS = [
+  { key: 'cur', title: '现状（丁批之后）', notes: [
+    '最高最显眼的是<b>上锁卡</b>：居中大卡约 350 高，圆角 30、内边距 26/22/20，52px 大锁图标、20 号标题、三颗上下排的整宽按钮再加一行说明。',
+    '<b>随手记入口行</b>：52 高的白卡带阴影；<b>已解锁提示块</b>：浅灰底两行小字约 56 高。',
+  ] },
+  { key: 'v1', title: '方向 V1 · 同样的卡，压扁', notes: [
+    '<b>上锁卡</b>：大锁图标改成标题左边的 18px 小锁，标题、条数放一行（条数等宽灰字）；两颗按钮并排（Face ID 是柠檬黄，全页唯一一处黄；“输入密码”灰底，去掉描边）；“取消”和自动上锁说明合成最后一行。圆角 30 改成 20，整张从 348 压到 148 高。',
+    '<b>入口行</b>：52 → 44 高，去阴影，圆角 20 → 14，“已上锁”降成第三层灰。<b>提示块</b>：内边距收小、加一个开锁小图标，约 48 高（文字不改）。',
+    '对应原话“框也变的扁一些”。取舍：还是卡片、位置都不动，改起来只动样式；但仍是“一张卡浮在中间”，没有 V2 那么像 kenotex。',
+  ] },
+  { key: 'v2', title: '方向 V2 · kenotex 风：分组小字 + 平铺行 + 底部条', rec: true, notes: [
+    '<b>上锁卡</b>：改成贴在底栏上方的一条（和打字条收起键盘时、撤销条同一个位置），两行：第一行小锁 + “隐私记已上锁 · 12 条” + 右边文字“取消”；第二行两颗按钮并排（Face ID 柠檬黄唯一一处，“输入密码”灰底）。110 高，拇指够得着。自动上锁说明从卡上拿掉（解锁后提示行和设置里都有）。',
+    '<b>入口行</b>：照 kenotex“个人”“进行中”那种字距拉开的小字分组标签“隐 私”，下面一行平铺、上下两根细线、不画卡片底和阴影。<b>提示块</b>：去掉底色，变成顶栏下的一行灰色小字，像 kenotex“0 未完成 · 全部未完成”那一行，数字等宽。',
+    '对应原话“风格参考kenotex”。取舍：最扁最克制；但上锁卡位置从中间挪到下方、提示文字缩短（“在这里记的直接放进隐私记”改成“这里记的只进隐私记”），文案和位置要负责人点头。',
+  ] },
+];
+
+document.getElementById('vRoot').innerHTML = V_DIRS.map((d) => `<section class="dir"><h3>${d.title}${d.rec ? '<span class="rec">推荐</span>' : ''}</h3>
+  <ul>${d.notes.map((n) => `<li>${n}</li>`).join('')}</ul>
+  <div class="row">${cell('随手记页 · 隐私记入口行', notesPage(d.key))}${cell('隐私记页 · 上锁卡', lockedPage(d.key))}${cell('隐私记页 · 已解锁提示', unlockedPage(d.key))}</div></section>`).join('');
+</script>
+</body>
+</html>

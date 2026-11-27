@@ -1,0 +1,88 @@
+/* 撤销提示条：贴底（var(--dock-bottom)，和提示条、提醒按钮条同一位置；键盘弹起时让开）；只用令牌
+   宽度、磨砂、圆角、减少透明兜底是公共浮条（Float.module.css 的 .float），这里只管位置和排版。
+   根元素带 data-undo-toast：冲突提示卡（features/sync-notice）看到它就往上让一条；高度要等于 base.css 的 --undo-h（组件测试钉住） */
+.toast {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: var(--dock-bottom);   /* 离底 118px、键盘弹起时让开；变量在 styles/base.css */
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 6px 6px 16px;
+  font-size: var(--fs-14);
+  overflow: hidden;   /* 倒计时色带跟着圆角裁 */
+}
+
+/* 出现时的升起淡入由 UndoToast.tsx 的 useEnter('lift') 播，这里不写关键帧 */
+
+/* 倒计时色带：贴底 3px 柠檬黄，从左边固定、往左缩；只动 transform，不占高度（--undo-h 不变）。
+   时长由组件按 ms 写在 style 上；线性走——表示剩下多少时间；减弱动态效果（:root[data-rm='1']）时改成原地由实变淡，没有位移 */
+.bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent);
+  transform-origin: left center;
+  animation-name: undo-count;
+  animation-timing-function: var(--ease-linear);
+  animation-fill-mode: forwards;
+  pointer-events: none;
+}
+
+:global(:root[data-rm='1']) .bar {
+  transform: none;
+  animation-name: undo-fade;
+}
+
+
+@keyframes undo-fade {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.15;
+  }
+}
+
+@keyframes undo-count {
+  from {
+    transform: scaleX(1);
+  }
+
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undo {
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+
+  /* 柠檬黄字放在浅色磨砂上对比度不够：用提示条正文色加下划线 */
+  color: var(--toast-fg);
+  font-size: var(--fs-14);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.undo:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

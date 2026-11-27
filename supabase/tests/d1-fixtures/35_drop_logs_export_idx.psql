@@ -1,0 +1,4 @@
+-- expect: 缺索引 public.logs_account_export_idx（0.47 第 22 条 T2：part 取片前查本人 export 发起记录）
+-- 架构 0.47 第 22 条 T2（迁移 20261031120000_core_logs_account_export_idx.sql）：去掉 account 查发起记录用的四列普通索引 (user_id, act, src, code)，D1 第 7 节必须报出。
+--   只核对存在和定义；索引定义被改（如改回部分索引）另一个夹具 36 管。
+drop index public.logs_account_export_idx;

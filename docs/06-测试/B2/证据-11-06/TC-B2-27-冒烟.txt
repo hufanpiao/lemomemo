@@ -1,0 +1,107 @@
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > 两条都是精确路径、只免一个方法 1ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > DELETE /rest/v1/devices → 不查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > delete /rest/v1/devices → 不查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > POST /rest/v1/rpc/claim_endpoint → 不查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > POST /rest/v1/devices → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > PATCH /rest/v1/devices → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > PUT /rest/v1/devices → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > DELETE /rest/v1/devices/ → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > DELETE /rest/v1/devices_x → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > DELETE /rest/v1/device → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > DELETE /rest/v1/DEVICES → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > DELETE /rest/v1/todos → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > DELETE /rest/v1/sessions → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > POST /rest/v1/rpc/claim_endpoint_impl → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > POST /rest/v1/rpc/claim_endpoint/ → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > POST /rest/v1/rpc/claim_endpoints → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > POST /rest/v1/rpc/CLAIM_ENDPOINT → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > PATCH /rest/v1/rpc/claim_endpoint → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > DELETE /rest/v1/rpc/claim_endpoint → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > POST /rest/v1/claim_endpoint → 查 0ms
+ ✓ |node| tests/functions/version-gate-b2.test.ts > B2 免查：DELETE /rest/v1/devices、POST /rest/v1/rpc/claim_endpoint > 低版本客户端（4.0.0 < 最低 9.0.0）：两条不被 426 挡；同前缀、别的方法照样挡 12ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /rest/v1/todos → 查 1ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > PATCH /rest/v1/todos → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > PUT /rest/v1/todos → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > DELETE /rest/v1/todos → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /rest/v1/rpc/apply_patch → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /storage/v1/object/images/a/b.webp → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > PUT /storage/v1/object/images/a/b.webp → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > DELETE /storage/v1/object/images → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /storage/v1/object/upload/sign/images/a.webp → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /storage/v1/object/move → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /functions/v1/ai-parse → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > GET /functions/v1/anything → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /storage/v1/object/sign/images → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /storage/v1/object/list/images → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > PUT /files/v1/o/images/a/b/c.webp → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > PUT /files/v1/o/files/a/b/c.pdf → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > GET /rest/v1/todos → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > HEAD /rest/v1/todos → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > GET /rest/v1/rpc/my_ai_usage → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > GET /storage/v1/object/authenticated/images/a.webp → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /auth/v1/otp → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /auth/v1/token → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /auth/v1/logout → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > DELETE /auth/v1/factors/x → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > GET /realtime/v1/websocket → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > POST /files/v1/sign → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > GET /files/v1/o/images/a/b/c.webp → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > OPTIONS /files/v1/o/images/a/b/c.webp → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > OPTIONS /rest/v1/todos → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > OPTIONS /functions/v1/ai-parse → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > 0.32：免查名单里没有 /storage/v1/ 的规则 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > needsVersionCheck：哪些请求要查 > B1 K10：转发层只放行 account 的 POST（0.38 第 47 条）；account-purge、usage-report 直连、不经 /sb，照查（0.31 第 13 条） 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > 四条都是精确路径、只免 POST 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80：POST /rest/v1/rpc/remove_device → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-14：POST /rest/v1/rpc/record_consent → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80：post /rest/v1/rpc/remove_device → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：POST /rest/v1/rpc/my_sessions → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：POST /rest/v1/rpc/my_ai_usage → 不查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80：POST /rest/v1/rpc/remove_device_x → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80：POST /rest/v1/rpc/remove_devices → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80：POST /rest/v1/rpc/remove_device/ → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80：POST /rest/v1/rpc/remove_device/x → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80：POST /rest/v1/rpc/REMOVE_DEVICE → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80：POST /rest/v1/rpc/x_remove_device → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-14：POST /rest/v1/rpc/record_consent_x → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-14：POST /rest/v1/rpc/record_consent/ → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-14：POST /rest/v1/rpc/record_consents → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80：PATCH /rest/v1/rpc/remove_device → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80：PUT /rest/v1/rpc/remove_device → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80：DELETE /rest/v1/rpc/remove_device → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-14：PATCH /rest/v1/rpc/record_consent → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-14：DELETE /rest/v1/rpc/record_consent → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：POST /rest/v1/rpc/my_sessions_x → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：POST /rest/v1/rpc/my_sessions/ → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：POST /rest/v1/rpc/my_session → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：POST /rest/v1/rpc/my_ai_usage_x → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：POST /rest/v1/rpc/my_ai_usage/ → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：POST /rest/v1/rpc/MY_AI_USAGE → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：PATCH /rest/v1/rpc/my_sessions → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：DELETE /rest/v1/rpc/my_sessions → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：PATCH /rest/v1/rpc/my_ai_usage → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：PUT /rest/v1/rpc/my_ai_usage → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > —：POST /rest/v1/rpc/apply_patch → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > —：POST /rest/v1/remove_device → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > —：POST /rest/v1/record_consent → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：POST /rest/v1/my_sessions → 查 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > GET 本来就不查（读请求），但不是因为免查规则 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > TC-B1-80、TC-B1-14：低版本客户端调这两个 RPC 不被 426 挡，调同前缀的别的名字照样挡 12ms
+ ✓ |node| tests/functions/version-gate.test.ts > S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）、my_sessions 和 my_ai_usage（R-237） > R-237：低版本客户端调 my_sessions、my_ai_usage 不被 426 挡，同名后缀和 PATCH 照样挡 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > 版本号 > 去掉 -preview 后缀只比三段 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > 版本号 > 格式不对返回 null 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > 版本号 > 配置值只认不带后缀的三段 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > 版本号 > 按数字比，不按字符串比 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > createVersionGate > TC-B0-46：没带版本头 → block，min 来自配置 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > createVersionGate > TC-B0-47：3.9.9 拦，4.0.0、4.0.1 放 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > createVersionGate > TC-B0-48：min=4.1.0 时 4.1.0-preview.3 放、4.0.9-preview.9 拦 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > createVersionGate > 格式不对的版本头当没带 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > createVersionGate > TC-B0-49：读配置超时就放行，失败结果缓存 10 秒，日志只有错误码 53ms
+ ✓ |node| tests/functions/version-gate.test.ts > createVersionGate > TC-B0-49：返回坏格式（4.1、空、数字）也放行并缓存 10 秒 1ms
+ ✓ |node| tests/functions/version-gate.test.ts > createVersionGate > 读配置抛错也放行 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > createVersionGate > TC-B0-50：成功的结果缓存 60 秒，并发请求只读一次 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > createVersionGate > TC-B0-51：免查的请求连配置都不读 0ms
+ ✓ |node| tests/functions/version-gate.test.ts > upgradeRequiredResponse > 426、响应体、安全头、CORS 接口 2ms
+ Test Files  2 passed (2)
+      Tests  104 passed (104)
+   Start at  22:55:31

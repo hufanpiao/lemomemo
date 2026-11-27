@@ -1,0 +1,4 @@
+-- expect: public.notes.qa_probe：客户端可写的文本列没有长度或取值约束
+-- TC-B1-147 ②：同步表加一个客户端可写、没有约束的 text[] 列
+alter table public.notes add column qa_probe text[];
+grant insert (qa_probe) on public.notes to authenticated;

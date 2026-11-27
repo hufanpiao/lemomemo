@@ -1,0 +1,75 @@
+// SW 的路由判断（纯函数，单元测试覆盖；架构 8.1、15.3 第 1 条）
+// A19：sw 只能 import shared 和 workbox
+
+export const APP_SCOPE = '/app/';
+
+/**
+ * 只走网络、绝不进 Cache Storage 的路径前缀（15.3 第 1 条，S-B0；check_arch 的 A19 核对这张表里有 /sb 和 /files）：
+ * - /sb：数据接口转发（14.2 第 1 点）
+ * - /files：照片和附件的上传、签名、取对象（0.32，R-213；带签名的链接不能留在缓存里，离线时要失败而不是读到旧的）
+ */
+export const NETWORK_ONLY_PREFIXES = ['/sb', '/files'] as const;
+
+/** 按路径段比：/sb、/sb/… 算，/sbx/… 不算 */
+export function isNetworkOnly(pathname: string): boolean {
+  return NETWORK_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+// 技术页（机型信息页；倾斜授权试验页 R-373 已删除）10-30 起在 /diag/（site/diag/，SW-update ③）：在 /app/ 作用域外，SW 管不到，
+// 下面不再为它们开特例（routeOf 对 /app/ 以外一律 bypass；预缓存清单只收 dist/web/app/ 下的文件）
+
+/** 不走 App 外壳的导航（sw.ts 的 NavigationRoute denylist）：预览沙箱（Pages 会把 preview.html 308 到 /app/preview，两种写法都排除） */
+export const NAV_DENYLIST: readonly RegExp[] = [/^\/app\/preview(\.html)?$/];
+
+export type SwRoute = 'bypass' | 'navigation' | 'holidays' | 'fonts' | 'font-index' | 'mascot' | 'precache-or-network';
+
+/** 吉祥物的运行库（rive-*.js、rive-*.wasm）、素材（*.riv）和静态图（<名字>.still-<哈希>.webp），路径相对 /app/：
+ *  不进预缓存，显示时才下载，下载后走运行时缓存 */
+const MASCOT_ASSET = /^assets\/(?:rive-[^/]+\.(?:js|wasm)|[^/]+\.riv|[^/]+\.still-[^/]+\.webp)$/;
+export const isMascotAsset = (path: string): boolean => MASCOT_ASSET.test(path);
+
+/**
+ * 一个请求归哪条路：
+ * - /sb/*（数据接口转发）、/files/*（照片和附件，0.32）、别的源、非 GET：一律直连，SW 不碰、不缓存（15.3 第 1 条）
+ * - /app/ 以外（含 /diag/ 技术页）：直连
+ * - /app/ 下的页面导航：先联网、3 秒超时用缓存
+ * - /app/holidays/*.json：先联网、失败用缓存（5.4）
+ * - /fonts/*（R-128 选中的字体分片）：单独的运行时缓存（5.9c，B6 接）
+ * - /app/fonts-index.json（可选字体清单）：先联网、失败用缓存（同节假日）。不进预缓存：只有选了或打开字体页的人才读它，
+ *   系统字体的人一个字节都不多下（B6 字体 11-14：细线黑放进来以后清单有几十 KB）；读过一次离线也读得到
+ */
+export function routeOf(url: URL, method: string, mode: string, selfOrigin: string): SwRoute {
+  if (method !== 'GET') return 'bypass';
+  if (url.origin !== selfOrigin) return 'bypass';
+  if (isNetworkOnly(url.pathname)) return 'bypass';
+  if (!url.pathname.startsWith(APP_SCOPE)) return 'bypass';
+  if (mode === 'navigate') return 'navigation';
+  if (url.pathname.startsWith(`${APP_SCOPE}holidays/`)) return 'holidays';
+  if (url.pathname.startsWith(`${APP_SCOPE}fonts/`)) return 'fonts';
+  if (url.pathname === `${APP_SCOPE}fonts-index.json`) return 'font-index';
+  if (isMascotAsset(url.pathname.slice(APP_SCOPE.length))) return 'mascot';
+  return 'precache-or-network';
+}
+
+/**
+ * 预缓存清单里不放的文件（注入清单的脚本和测试共用）。
+ * icons/startup/：iOS 启动图 12 张共约 13 MB，iOS 只在“添加到主屏幕”时按 media 取自己那一张、由系统保存，不经 SW，预缓存只会让每个用户白下；
+ * 添加时断网取不到，iOS 退回 manifest 的 background_color 纯色（R-232；架构 8.1 SW 缓存策略、0.38 第 63 条）
+ * “不经 SW”尚待实机清单 P1-07 第 4、5 步核对；结果相反时回来改这里和架构那两处
+ */
+export function excludedFromPrecache(path: string): boolean {
+  return (
+    path === 'sw.js' ||
+    path.startsWith('holidays/') ||
+    path.startsWith('fonts/') ||
+    // 可选字体清单：运行时按需读（routeOf 的 font-index），系统字体的人不下载
+    path === 'fonts-index.json' ||
+    path.startsWith('icons/startup/') ||
+    path.startsWith('.vite/') ||
+    path.endsWith('.map') ||
+    path === 'version.json' ||
+    // R-410：开源许可清单（约百 KB）只在联网时打开，不让每台设备白下
+    path === 'licenses.txt' ||
+    isMascotAsset(path)
+  );
+}

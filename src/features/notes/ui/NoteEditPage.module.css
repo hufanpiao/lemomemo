@@ -1,0 +1,321 @@
+/* 随手记编辑器：只用令牌。手机整页顶栏“‹ 随手记 ｜ 分类胶囊 ｜ ⋯”，24px 粗体标题；电脑抽屉是右边浮起的圆角面板（--b-drawer）。
+   手机整页上下排开，卡片撑到页底；底部留出工具条那一截（工具条离底 --dock-bottom + 高 --edit-dock-h + 余 18），
+   最后一行字、最后一张图能滚到工具条上面。顶部离安全区 4：别的页按全局 --safe-top 多留 --top-fade（12），这一页只在自己这里
+   减回去，全局不动；有版本横幅（--safe-top 为 0）、电脑上（安全区 0）照旧落到 12 */
+.page {
+  display: flex;
+  flex-direction: column;
+  max-width: 640px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(calc(var(--safe-top) - var(--top-fade) + 4px), 12px) 16px calc(var(--dock-bottom) + var(--edit-dock-h) + 18px);
+  color: var(--text);
+
+  /* 底部工具条：高、离屏幕左右边（宽屏时工具条跟着页面最大宽度收窄） */
+  --edit-dock-h: 60px;
+  --edit-dock-gap: 12px;
+}
+
+/* 纸张卡片：圆角 20，左右比页面边距各多出 4（离屏幕边 12），毛玻璃 --glass-bg + --b-tile-shadow；
+   里面上下排：附件块（.files）用 margin-top: auto 贴卡片底部，正文写长了跟着往下推 */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  margin: 8px -4px 0;
+  padding: 20px 18px 24px;
+  border-radius: var(--r-lg);
+  background: var(--glass-bg);
+  box-shadow: var(--b-tile-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+
+/* 标题和正文之间的细线 */
+.hr {
+  height: 1px;
+  margin: 14px 0;
+  border: 0;
+  background: var(--line);
+}
+
+/* 底部浮动工具条：“图片”“拍照”+ 右侧两行文档提示；位置只用浮条的公式 --dock-bottom（这一页没有底栏，base.css 的 data-nobar 让它离底 安全区 + 6；
+   键盘弹着时贴键盘上沿）。和随手记输入行同一层（--z-inrow），撤销条、菜单在它上面 */
+.dock {
+  position: fixed;
+  right: var(--edit-dock-gap);
+  bottom: var(--dock-bottom);
+  left: var(--edit-dock-gap);
+  z-index: var(--z-inrow);
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  max-width: calc(640px - 2 * var(--edit-dock-gap));
+  height: var(--edit-dock-h);
+  margin: 0 auto;
+  padding: 0 14px 0 8px;
+  border-radius: 30px;
+  background: var(--float-bg);
+  box-shadow: var(--g-bar-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+
+/* 工具条里的“图片”“拍照”（EditorPicks 经 className 给）：透明底、图标 18 + 14px 字，点按区高 44 */
+.tb {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  height: var(--hit);
+  padding: 0 12px;
+  border: 0;
+  border-radius: 22px;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.tb svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 新建还没存上、只读行时按不了：和 kit 胶囊禁用一样变淡 */
+.tb:disabled {
+  opacity: var(--disabled-dim);
+}
+
+/* 右侧文档提示：离“拍照”再让出 6（加上工具条的 gap 4 共 10），左边一条竖线 */
+.dockHint {
+  flex: 1;
+  min-width: 0;
+  margin-left: 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--rim-shade);
+  color: var(--text-2);
+  font-size: var(--fs-11-5);
+  line-height: 1.4;
+}
+
+/* 减少透明效果、隐私记页挂着（<html data-rt="1">，platform/look.ts）：卡片换 --panel 白底加 --line 描边，工具条换 --glass-solid，都不模糊 */
+:global(:root:is([data-rt='1'], [data-solid='1'])) .sheet {
+  background: var(--panel);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line);
+  backdrop-filter: none;
+}
+
+:global(:root:is([data-rt='1'], [data-solid='1'])) .dock {
+  background: var(--glass-solid);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: none;
+}
+
+.inDrawer {
+  color: var(--text);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--hit);
+  font-size: var(--fs-14);
+}
+
+/* 抽屉里顶行左边让出换边把手（kit DetailDrawer.module.css 的 .grip） */
+.inDrawer > .top {
+  padding-left: var(--drawer-lead, 0);
+}
+
+.page > .top {
+  padding: 0 2px;
+}
+
+/* 分类胶囊（如“工作灵感 AI ▾”）：外观是 kit Chip.module.css 的 .chip（高 30、无描边浅底）；胶囊本身是按钮，点了弹 kit PickPopover */
+.cat {
+  cursor: pointer;
+}
+
+.cat:disabled {
+  cursor: default;
+}
+
+.cat:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 让胶囊能缩（名字省略）：写成两级选择器，不靠两份样式表的先后压过 kit 的 flex: none */
+.top .cat {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.chipStart {
+  margin-right: auto;
+}
+
+.chipName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 色点、AI 小标不在这里另写：用列表页那一份（CatDot 的 Dot、NotesBits 的 AiMark，胶囊上的两处调整在 NotesPage.module.css 的 .catChip） */
+
+.caret {
+  flex: none;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+}
+
+.more {
+  flex: none;
+  width: var(--hit);
+  height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-16);
+}
+
+.more:disabled {
+  color: var(--text-2);
+}
+
+/* 手机整页的“⋯”：36 圆形浅底（和分类胶囊同一种 --panel-2）；点按区用 ::after 外扩到 44 */
+.page .more {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--panel-2);
+}
+
+.page .more::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
+/* “⋯”弹出的菜单和菜单项：和列表页同一份（kit NoteRow.module.css 的 menu、menuItem） */
+
+/* 电脑抽屉顶行“随手记 · 分类 · 时间”（12.5px、次要色） */
+.meta {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+/* 保存状态：平时只给读屏，坏状态显示成一行红字 */
+.status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.statusBad {
+  margin: 4px 0 0;
+  color: var(--danger-text);
+  font-size: var(--fs-12);
+}
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: var(--fs-14);
+}
+
+/* 标题：24px 粗体，长标题换行、跟着内容长高（高度由脚本按内容写），没有下划线 */
+.title {
+  display: block;
+  width: 100%;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-24);
+  font-weight: 700;
+  line-height: 1.3;
+  resize: none;
+  overflow: hidden;
+}
+
+.title:focus {
+  outline: none;
+}
+
+.title::placeholder,
+.body::placeholder {
+  color: var(--text-3);
+}
+
+.body {
+  display: block;
+  width: 100%;
+  min-height: 40vh;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-15);
+  line-height: 1.7;
+  resize: none;
+}
+
+.body:focus {
+  outline: none;
+}
+
+/* 卡片里：标题贴卡片上内边距，正文接在细线下面（间距由细线的上下 14 给）；正文行高 1.75 */
+.sheet .title,
+.sheet .body {
+  margin-top: 0;
+}
+
+.sheet .body {
+  line-height: 1.75;
+}
+
+.sheet .files {
+  margin-top: auto;
+}
+
+/* 有图：正文最少两行，图紧跟在正文后面；NoteEditor 按图片张数加这个类 */
+.bodyShort {
+  min-height: 3.4em;
+}
+
+/* 触屏上可输入控件至少 16px（iOS 聚焦时不自动放大整页，同 kit Form.module.css） */
+@media (pointer: coarse) {
+  .body {
+    font-size: var(--fs-16);
+  }
+}
+
+/* 只读行：分类胶囊和“⋯”一样变淡 */
+.cat[data-muted] {
+  color: var(--text-2);
+}
+
+/* 只读提示的外边距（灰条本身在 kit 的 ReadonlyRow.module.css 的 .banner，EditNotices.tsx 的 ReadonlyNotice 画，和待办编辑页同一条） */
+.roNotice {
+  margin: 8px 0 0;
+}
+

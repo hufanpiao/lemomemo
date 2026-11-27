@@ -1,0 +1,11 @@
+ ✓ |node| tests/edge/push-sb2-gaps.test.ts > D1-2：WHATWG 复核（url_mismatch） > 白名单允许的字符随机造 5000 条：凡是 checkEndpoint 收下的，new URL(s).href 都和原串逐字相等（这一步是兜底） 37ms
+ ✓ |node| tests/edge/push-sb2-gaps.test.ts > D1-2：WHATWG 复核（url_mismatch） > 换掉全局 URL：解析结果和原串不一致时回 url_mismatch 0ms
+ ✓ |node| tests/edge/push-sb2-gaps.test.ts > D1-2：WHATWG 复核（url_mismatch） > 换掉全局 URL：主机名解析得不一样（比如 IDNA 换写）时回 url_mismatch 0ms
+ ✓ |node| tests/edge/push-sb2-gaps.test.ts > D1-2：WHATWG 复核（url_mismatch） > 换掉全局 URL：解析抛错时回 url_mismatch，不往外抛 0ms
+ ✓ |node| tests/edge/push-sb2-gaps.test.ts > C-2：supabase/functions 下不许出现 Math.random > 除 _shared/gen（生成目录）外的 .ts 源码里没有 Math.random（注释里提到的也不算违规，只查代码行） 4ms
+ ✓ |node| tests/edge/push-sb2-gaps.test.ts > C-4：RFC 8291 推导逐步中间值（附录 A 输入，node:crypto 另算一份对照） > ECDH 共享密钥、key_info、IKM、CEK、NONCE 逐字节一致，AES-GCM 用的 iv 就是 NONCE，整份密文和附录 A 一致 5ms
+ ✓ |node| tests/edge/push-sb2-gaps.test.ts > C-8：VAPID 私钥只在内存、不进日志 > loadVapid 成功：私钥对象不可导出（extractable = false），exportKey 拒绝；返回值序列化后没有 d 3ms
+ ✓ |node| tests/edge/push-sb2-gaps.test.ts > C-8：VAPID 私钥只在内存、不进日志 > loadVapid 各种失败只回原因码，返回值里没有 d、没有 JWK 原串 2ms
+ ✓ |node| tests/edge/push-sb2-gaps.test.ts > C-8：VAPID 私钥只在内存、不进日志 > push-dispatch 配置错（私钥和公钥不是一对）：回 500 misconfigured，回包、deps.log、console 都没有 d 4ms
+ ✓ |node| tests/edge/push-sb2-gaps.test.ts > C-8：VAPID 私钥只在内存、不进日志 > push-dispatch 正常发一轮：回包、deps.log、logs 表、心跳、console、发出去的请求头里都没有 d 18ms
+      Tests  10 passed (10)

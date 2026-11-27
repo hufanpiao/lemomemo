@@ -1,0 +1,153 @@
+/* 告知与同意页：只用令牌，颜色在 skins/*.css；排法照登录页（AuthPage.module.css）和视觉稿 PH.ainote；没有动效 */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 420px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 32px) 20px max(env(safe-area-inset-bottom), 24px);
+  color: var(--text);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-24);
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.lead {
+  margin: 0 6px 4px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-align: center;
+}
+
+/* 卡片大圆角、行间 0.5px 分隔线从文字起点开始（左右内边距放在 ul 上，线跟着字）、行高加大 */
+.items {
+  margin: 0;
+  padding: 0 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 0;
+  border-bottom: 0.5px solid var(--line);
+  font-size: var(--fs-15);
+}
+
+.item:last-child {
+  border-bottom: 0;
+}
+
+/* 清单标题和“新”标签都不加粗 */
+.itemTitle {
+  color: var(--text);
+}
+
+/* 照视觉稿 .newtag 的位置和字号；小胶囊浅底小字（一页一个强调色，柠檬黄只留给“同意并继续”） */
+.newTag {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-11);
+  font-weight: 400;
+  vertical-align: 2px;
+}
+
+.itemDesc {
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.panel {
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  font-size: var(--fs-13);
+  line-height: 1.55;
+}
+
+/* 隐私说明那一句单独醒目；非必要不加粗，这里靠字号和颜色区分 */
+.privacy {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.terms {
+  margin: 0;
+  color: var(--text-2);
+}
+
+/* SENDV 的“会送出去的：”“交给微软的：”：非必要不加粗，用正文色和灰字区分 */
+.sendLabel {
+  color: var(--text);
+}
+
+.agree {
+  margin-top: 4px;
+}
+
+.hint {
+  margin: 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+.primary {
+  min-height: 50px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-16);
+}
+
+.primary:disabled,
+.primary[aria-disabled="true"] {
+  background: var(--step-off);
+  color: var(--text-2);
+}
+
+.secondary {
+  min-height: 46px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-15);
+}
+
+.secondary:disabled {
+  color: var(--text-2);
+}
+
+.note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-11-5);
+  text-align: center;
+}
+
+.links {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin: 4px 0 0;
+  font-size: var(--fs-13);
+}
+
+.links a {
+  color: inherit;
+  text-decoration: underline;
+}

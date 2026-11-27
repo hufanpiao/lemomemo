@@ -1,0 +1,6 @@
+/* arch-fixture: path=src/kit/components/Good.module.css expect=none */
+.a {
+  --gap-x: 12px;
+
+  transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
+}

@@ -1,0 +1,77 @@
+/* 整屏提示共用的样式（本机库来自更新的版本、被别的标签页挡住、退出没完成、出错兜底）：盖住整个视口，不给继续使用；
+   标题层级照登录页 */
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-screen);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--scr-bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+}
+
+.title {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: var(--fs-24);
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.body {
+  margin: 0 0 28px;
+  color: var(--text-2);
+  font-size: var(--fs-15);
+  line-height: 1.65;
+}
+
+/* 没有按钮的（被别的标签页挡住）：说明下面不留空 */
+.body:last-child {
+  margin-bottom: 0;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.primary,
+.secondary {
+  min-height: var(--hit);
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-15);
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.primary[aria-disabled='true'] {
+  opacity: var(--disabled-dim);
+}
+
+.secondary {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.status {
+  min-height: 1.5em;
+  margin: 14px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}

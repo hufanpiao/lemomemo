@@ -1,0 +1,638 @@
+// ESLint 配置（架构 2.3：A1/A8/A27 分层、R2、LUNAR、MOTION-IMPL、A2、A11、A12、A13、A18、A19、A22、A23、A24、A25、A26、T2、T3、W1）
+// 每条规则在 tests/arch-fixtures/ 有违规样例，tests/arch/eslint.test.ts 逐个证明拦得住
+// 写法：按目录分“作用域”，越往后越具体；no-restricted-* 每个作用域给全量选项（后面的块会整个覆盖前面的）
+import js from '@eslint/js';
+import boundaries from 'eslint-plugin-boundaries';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
+import react from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
+import globals from 'globals';
+import tseslint from 'typescript-eslint';
+import lemo from './build/eslint-rules/index.js';
+
+const TS = ['**/*.ts', '**/*.tsx'];
+
+// ───────── A1 / A8 / A27：分层（eslint-plugin-boundaries）─────────
+// 元素按顺序匹配，先匹配先得；feature 捕获功能名，用来判断“同一个功能”
+const elements = [
+  { type: 'shared', pattern: 'shared' },
+  { type: 'sw', pattern: 'src/sw' },
+  { type: 'preview', pattern: 'src/preview-frame' },
+  { type: 'platform-supabase', pattern: 'src/platform/supabase' },
+  { type: 'platform', pattern: 'src/platform' },
+  { type: 'core', pattern: 'src/core' },
+  { type: 'feature-data', pattern: 'src/features/*/data', capture: ['feature'] },
+  { type: 'feature-hooks', pattern: 'src/features/*/hooks', capture: ['feature'] },
+  { type: 'feature-ui', pattern: 'src/features/*/ui', capture: ['feature'] },
+  { type: 'feature-i18n', pattern: 'src/features/*/i18n', capture: ['feature'] },
+  { type: 'feature-tests', pattern: 'src/features/*/__tests__', capture: ['feature'] },
+  // 功能文件夹根上的文件：index.ts、data.manifest.ts、vault 的 plus-adapter.ts
+  { type: 'feature', pattern: 'src/features/*', capture: ['feature'] },
+  { type: 'kit-hooks', pattern: 'src/kit/hooks' },
+  { type: 'kit', pattern: 'src/kit' },
+  { type: 'motion', pattern: 'src/motion' },
+  { type: 'styles', pattern: 'src/styles' },
+  { type: 'app', pattern: 'src/app' },
+  // 登录页入口 /app/auth/（15.6 第 4b 条，K4）：和 app 一样是“入口层”，但只挂 auth 一个功能
+  { type: 'auth-entry', pattern: 'src/auth' },
+  // exe 快速记录框入口 /app/desktop/quick-add.html：只有输入框，不连服务器、不碰会话（架构 5.10）
+  { type: 'desktop-entry', pattern: 'src/desktop' },
+];
+
+const same = (type) => ({ element: { type, captured: { feature: '{{from.element.captured.feature}}' } } });
+const any = (...types) => types.map((type) => ({ element: { type } }));
+// app 里只有 router.ts（hrefOf、navigate、路由类型）下层也能用（0.31 第 3 条；router.ts 自己能引什么见下面 ROUTER_IMPORTS）
+// 构建信息在 platform/env.ts，是正常的向下依赖，不开例外（0.31 第 3 条）
+const ROUTER = { element: { type: 'app', fileInternalPath: 'router.ts' } };
+// router-sub.ts、router-levels.ts 是 router.ts 拆出来的、只有懒加载页面用的部分（R-372 首屏额度：不进首屏）：只给功能层（和 app）用，kit 只需要 router.ts
+const ROUTER_PARTS = { element: { type: 'app', fileInternalPath: '{router-sub,router-levels}.ts' } };
+/** 别的功能：只能经它的 index.ts */
+const otherFeatureIndex = { element: { type: 'feature', fileInternalPath: 'index.ts' } };
+
+const layerPolicies = [
+  { from: { element: { type: 'shared' } }, allow: { to: any('shared') } },
+  { from: { element: { type: 'platform' } }, allow: { to: [...any('shared', 'platform', 'platform-supabase')] } },
+  { from: { element: { type: 'platform-supabase' } }, allow: { to: [...any('shared', 'platform', 'platform-supabase')] } },
+  { from: { element: { type: 'core' } }, allow: { to: [...any('shared', 'platform', 'platform-supabase', 'core')] } },
+  // 功能的 data：只认 shared、platform、core 和自己功能的 data；功能之间不能互相用 data
+  {
+    from: { element: { type: 'feature-data' } },
+    allow: { to: [...any('shared', 'platform', 'platform-supabase', 'core'), same('feature-data')] },
+  },
+  // 功能的 hooks：唯一能同时碰 React 和数据层的地方
+  {
+    from: { element: { type: 'feature-hooks' } },
+    allow: {
+      to: [
+        ...any('shared', 'platform', 'platform-supabase', 'core', 'kit', 'kit-hooks', 'motion'), ROUTER, ROUTER_PARTS,
+        same('feature-data'),
+        same('feature-hooks'),
+        same('feature-i18n'),
+        otherFeatureIndex,
+      ],
+    },
+  },
+  // 功能的 ui：不碰 platform/supabase、core 和 data，数据经自己的 hooks
+  {
+    from: { element: { type: 'feature-ui' } },
+    allow: {
+      to: [
+        ...any('shared', 'platform', 'kit', 'kit-hooks', 'motion'), ROUTER, ROUTER_PARTS,
+        same('feature-hooks'),
+        same('feature-ui'),
+        same('feature-i18n'),
+        otherFeatureIndex,
+      ],
+    },
+  },
+  { from: { element: { type: 'feature-i18n' } }, allow: { to: [...any('shared'), same('feature-i18n')] } },
+  // 功能根上的文件（index.ts 等）：能引自己文件夹里的任何东西（index.ts 怎么引由 A27 管）
+  {
+    from: { element: { type: 'feature' } },
+    allow: {
+      to: [
+        ...any('shared'),
+        same('feature'),
+        same('feature-data'),
+        same('feature-hooks'),
+        same('feature-ui'),
+        same('feature-i18n'),
+      ],
+    },
+  },
+  {
+    from: { element: { type: 'feature-tests' } },
+    allow: {
+      to: [
+        ...any('shared', 'platform', 'platform-supabase', 'core', 'kit', 'kit-hooks', 'motion'), ROUTER, ROUTER_PARTS,
+        same('feature'),
+        same('feature-data'),
+        same('feature-hooks'),
+        same('feature-ui'),
+        same('feature-i18n'),
+      ],
+    },
+  },
+  // kit 不认识任何功能；kit 的 hooks 才能碰 core
+  { from: { element: { type: 'kit' } }, allow: { to: [...any('shared', 'kit', 'kit-hooks', 'motion'), ROUTER] } },
+  {
+    from: { element: { type: 'kit-hooks' } },
+    allow: { to: [...any('shared', 'platform', 'core', 'kit', 'kit-hooks')] },
+  },
+  { from: { element: { type: 'motion' } }, allow: { to: any('shared', 'motion') } },
+  {
+    from: { element: { type: 'app' } },
+    allow: {
+      to: [
+        ...any('shared', 'platform', 'core', 'kit', 'kit-hooks', 'motion', 'styles', 'app'), ROUTER,
+        otherFeatureIndex,
+      ],
+    },
+  },
+  // 登录页入口：只认 shared、platform、kit、styles 和功能 auth 的 index.ts（不碰 core、别的功能、app）
+  {
+    from: { element: { type: 'auth-entry' } },
+    allow: {
+      to: [
+        ...any('shared', 'platform', 'kit', 'styles', 'auth-entry'),
+        { element: { type: 'feature', captured: { feature: 'auth' }, fileInternalPath: 'index.ts' } },
+      ],
+    },
+  },
+  // 快速记录框入口：只认 shared、platform、styles 和自己。platform/supabase 是单独一类（platform-supabase），不在放行名单里；
+  // core、功能、app 同样不放行，platform/files.ts 另由下面那条拦（11-24 在隔离克隆里各引一次实测，三条都报错）
+  { from: { element: { type: 'desktop-entry' } }, allow: { to: any('shared', 'platform', 'styles', 'desktop-entry') } },
+  // A19：sw 只认 shared 和自己（外部包另由 no-restricted-imports 限成 workbox-*）
+  { from: { element: { type: 'sw' } }, allow: { to: any('shared', 'sw') } },
+  { from: { element: { type: 'preview' } }, allow: { to: any('shared', 'preview', 'styles') } },
+  // 0.32（1.3b、任务单 FA-2）：platform/files.ts（照片和附件的 /files/v1/*）业务代码只经功能的 data 层用；
+  // 功能的 hooks、ui、根文件，kit、app 一律不准直接引（放在最后，覆盖上面对 platform 的放行）；
+  // 从它拆出的地址核对 platform/files-url.ts（B1 W1 超行拆分）同样只给 data 层和 platform 自己用
+  {
+    from: any('feature-hooks', 'feature-ui', 'feature', 'kit', 'kit-hooks', 'app', 'auth-entry', 'desktop-entry'),
+    disallow: {
+      to: [
+        { element: { type: 'platform', fileInternalPath: 'files.ts' } },
+        { element: { type: 'platform', fileInternalPath: 'files-url.ts' } },
+      ],
+    },
+  },
+];
+
+// ───────── 按目录拼 no-restricted-* ─────────
+const NET_GLOBALS = ['fetch', 'WebSocket', 'EventSource', 'XMLHttpRequest'].map((name) => ({
+  name,
+  message: 'A12：网络请求只能写在 src/platform/',
+}));
+const DEVICE_GLOBALS = [
+  'PushManager',
+  'Notification',
+  'MediaRecorder',
+  'AudioContext',
+  'webkitAudioContext',
+  'SpeechRecognition',
+  'webkitSpeechRecognition',
+  'visualViewport',
+].map((name) => ({ name, message: 'A13：设备和浏览器能力只能写在 src/platform/' }));
+const RAF_GLOBALS = ['requestAnimationFrame', 'cancelAnimationFrame'].map((name) => ({
+  name,
+  message: 'A25：requestAnimationFrame 只能写在 src/motion/',
+}));
+
+const NET_SYNTAX = [
+  {
+    selector: "MemberExpression[property.name=/^(fetch|WebSocket|EventSource|XMLHttpRequest)$/][object.name=/^(window|self|globalThis)$/]",
+    message: 'A12：网络请求只能写在 src/platform/',
+  },
+];
+const DEVICE_SYNTAX = [
+  {
+    selector: 'MemberExpression[property.name=/^(credentials|serviceWorker|getUserMedia|mediaDevices|visualViewport|subtle)$/]',
+    message: 'A13：navigator.credentials、serviceWorker、getUserMedia、visualViewport、crypto.subtle 只能写在 src/platform/',
+  },
+  {
+    selector: "MemberExpression[property.name=/^(PushManager|Notification|MediaRecorder|AudioContext|SpeechRecognition|webkitSpeechRecognition)$/][object.name=/^(window|self|globalThis)$/]",
+    message: 'A13：设备和浏览器能力只能写在 src/platform/',
+  },
+];
+const HTML_SYNTAX = [
+  { selector: 'MemberExpression[property.name=/^(innerHTML|outerHTML)$/]', message: 'A22：禁止 innerHTML、outerHTML' },
+  { selector: "CallExpression[callee.property.name='insertAdjacentHTML']", message: 'A22：禁止 insertAdjacentHTML' },
+  {
+    selector: "CallExpression[callee.object.name='document'][callee.property.name=/^(write|writeln)$/]",
+    message: 'A22：禁止 document.write',
+  },
+];
+// A26 补（插图安全审建议 3）：不准直接给元素写 .src =（img、iframe、script 的地址都算）。
+// 图片的 blob: 地址一律经 kit/hooks/useBlobSrc.ts 的 setBlobSrc（只放行 blob:）；platform（turnstile 的脚本）、预览沙箱、测试另算
+const SRC_SYNTAX = [
+  {
+    selector: "AssignmentExpression > MemberExpression.left[property.name='src']",
+    message: 'A26 补：不准直接写 .src =；图片的 blob: 地址经 kit/hooks/useBlobSrc.ts 的 setBlobSrc',
+  },
+];
+const MOTION_SYNTAX = [
+  { selector: "CallExpression[callee.property.name='animate']", message: 'A25：element.animate 只能写在 src/motion/' },
+  { selector: "MemberExpression[property.name='startViewTransition']", message: 'A25：startViewTransition 只能写在 src/motion/' },
+  {
+    selector: "MemberExpression[property.name=/^(requestAnimationFrame|cancelAnimationFrame)$/]",
+    message: 'A25：requestAnimationFrame 只能写在 src/motion/',
+  },
+];
+// 架构 2.0 的三条 CSP 规矩（B0 验证记录“以后写代码要守的规矩”；UI-4 L-4）：这几种写法会往页面插内联 <style>，
+// 被 style-src 'self' 拦。每个作用域都带（src/motion、预览沙箱、测试也一样），没有开关
+const CSP_SYNTAX = [
+  {
+    selector: "JSXAttribute[name.name='mode'] Literal[value='popLayout']",
+    message: "CSP（架构 2.0）：不准用 AnimatePresence mode=\"popLayout\"（会插内联 <style>）；用默认的 sync 或 wait",
+  },
+  {
+    selector: "JSXAttribute[name.name='mode'] TemplateElement[value.cooked='popLayout']",
+    message: "CSP（架构 2.0）：不准用 AnimatePresence mode=\"popLayout\"（会插内联 <style>）；用默认的 sync 或 wait",
+  },
+  {
+    selector: "JSXMemberExpression[property.name=/^(Alert)?(Dialog)?Overlay$/]",
+    message: 'CSP（架构 2.0）：不准用 Radix Dialog / AlertDialog 的 Overlay（react-remove-scroll 插内联 <style>）；遮罩自己画，见 kit/components/Dialog.tsx',
+  },
+  {
+    selector: "ImportDeclaration[source.value=/^@radix-ui\\/react-(alert-)?dialog$/] > ImportSpecifier[imported.name=/^(Alert)?(Dialog)?Overlay$/]",
+    message: 'CSP（架构 2.0）：不准用 Radix Dialog / AlertDialog 的 Overlay（react-remove-scroll 插内联 <style>）；遮罩自己画，见 kit/components/Dialog.tsx',
+  },
+  {
+    selector: "JSXOpeningElement[name.object.name='DropdownMenu'][name.property.name='Root']:not(:has(JSXAttribute[name.name='modal'] > JSXExpressionContainer > Literal[raw='false']))",
+    message: 'CSP（架构 2.0）：DropdownMenu.Root 必须写 modal={false}（modal 模式挂 react-remove-scroll，插内联 <style>）',
+  },
+  {
+    selector: "ImportDeclaration[source.value='@radix-ui/react-dropdown-menu'] > ImportSpecifier",
+    message: 'CSP（架构 2.0）：DropdownMenu 只准 import * as DropdownMenu，好让“Root 必须 modal={false}”的检查认得出',
+  },
+];
+// UI-4 M-1（17.2 第 5 点）：Motion 的 useReducedMotion() 只认系统设置、不认设置里的开关 data-rm="1"；
+// 一律用 src/motion 的 useReducedMotionPref()。每个作用域都带（src/motion 里也不准）
+const REDUCED_MOTION_SYNTAX = [
+  {
+    selector: "MemberExpression[property.name='useReducedMotion']",
+    message: 'UI-4 M-1：不准用 Motion 的 useReducedMotion()（只认系统设置），用 src/motion 的 useReducedMotionPref()',
+  },  {
+    // M['useReducedMotion']
+    selector: "MemberExpression[property.value='useReducedMotion']",
+    message: 'UI-4 M-1：不准用 Motion 的 useReducedMotion()（只认系统设置），用 src/motion 的 useReducedMotionPref()',
+  },
+  {
+    // const { useReducedMotion } = M
+    selector: "Property[key.name='useReducedMotion']",
+    message: 'UI-4 M-1：不准用 Motion 的 useReducedMotion()（只认系统设置），用 src/motion 的 useReducedMotionPref()',
+  },
+];
+const REDUCED_MOTION_IMPORTS = {
+  paths: ['motion/react', 'framer-motion'].map((name) => ({
+    name,
+    importNames: ['useReducedMotion'],
+    message: 'UI-4 M-1：不准用 Motion 的 useReducedMotion()（只认系统设置），用 src/motion 的 useReducedMotionPref()',
+  })),
+  patterns: [],
+};
+const PURE_SYNTAX = [
+  { selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']", message: 'A2：shared 里不准 Date.now()，把 now 当参数传进来' },
+  { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: 'A2：shared 里不准无参 new Date()，把 now 当参数传进来' },
+  { selector: "MemberExpression[object.name='Math'][property.name='random']", message: 'A2：shared 里不准 Math.random' },
+];
+
+const REACT_IMPORTS = {
+  paths: ['react', 'react-dom', 'react-dom/client', 'zustand', 'react/jsx-runtime'].map((name) => ({
+    name,
+    message: 'A1：这一层不准 import React（只有 hooks 和 ui 能用）',
+  })),
+  patterns: [{ regex: '^(@radix-ui/|motion(/|$)|framer-motion)', message: 'A1：这一层不准 import 界面库' }],
+};
+const MOTION_IMPORTS = {
+  paths: [],
+  patterns: [{ regex: '^(motion|framer-motion)(/|$)', message: 'A25：Motion 只能在 src/motion/ 里 import' }],
+};
+// 0.31 第 6 条：src/motion 以外只准引 motion/index.ts（函数和类型）、motion/components.ts（React 组件）、
+// motion/gestures.ts（跟手手势；11-05 主持人定，首屏体积：不经 index.ts 再导出，免得进入口块）、
+// motion/mascot-stage.ts（吉祥物舞台，只给懒加载的 features/mascot；放进 gestures.ts 会带进 12 个分包共用的块）
+const MOTION_PATH_IMPORTS = {
+  paths: [],
+  patterns: [
+    {
+      regex: '^\\.{1,2}/(?:.*/)?motion(?:/(?!(?:index|components|gestures|mascot-stage)\\.ts$).*)?$',
+      message: '0.31 第 6 条：src/motion 以外只准引 motion/index.ts、motion/components.ts、motion/gestures.ts 和 motion/mascot-stage.ts',
+    },
+  ],
+};
+// 0.31 第 3 条：app/router.ts 下层也能引，所以它自己只准 import react、shared 和 motion/index.ts，
+// 不能 import 任何功能、kit、platform 和 app 的其他文件（否则整个 app 会被拖进下层）
+// UI-4 M-2：另准 react-dom（只为 flushSync：17.2 第 3 点要求页面切换在 View Transition 的回调里画完；react-dom 本来就在首屏）
+const ROUTER_IMPORTS = {
+  paths: [],
+  patterns: [
+    {
+      regex: '^(?!react$|react-dom$|(?:\\.\\./)+shared/|\\.\\./motion/index\\.ts$)',
+      message: '0.31 第 3 条：app/router.ts 只准 import react、react-dom（flushSync）、shared 和 motion/index.ts',
+    },
+  ],
+};
+const ROUTER_PART_IMPORTS = {
+  paths: [],
+  patterns: [
+    {
+      regex: '^(?!react$|react-dom$|(?:\\.\\./)+shared/|\\.\\./motion/index\\.ts$|\\./router\\.ts$)',
+      message: '0.31 第 3 条：app/router-sub.ts、router-levels.ts 只准 import react、react-dom、shared、motion/index.ts 和 ./router.ts',
+    },
+  ],
+};
+// router.ts 为了拆出 router-sub.ts、router-levels.ts 导出的内部件（R-372 复审 M1）：历史 state、深度、切页动画的底层，
+// 只准这两个文件和测试引；kit、功能、app 别处一律经 navigate、replaceRoute、backTo 这些公开的函数走，不准自己拼历史
+const ROUTER_INTERNAL_IMPORTS = {
+  paths: [],
+  patterns: [
+    {
+      regex: '(^|/)router(\\.ts)?$',
+      importNames: ['commit', 'stateFor', 'stateOf', 'depthNow', 'animTo', 'noteEntry', 'entryAt', 'resetLoadForTest'],
+      message: 'R-372 复审 M1：router.ts 的内部件只准 router-sub.ts、router-levels.ts 和测试引，别处用 navigate、replaceRoute、backTo 等公开函数',
+    },
+  ],
+};
+const TAURI_IMPORTS = { paths: [], patterns: [{ regex: '^@tauri-apps/', message: 'A13：@tauri-apps/* 只能在 src/platform/ 里 import' }] };
+// B6（5.9b 第 6 点）：拖动库 dnd-kit 只在电脑版布局组件里用（跟着它的懒加载块走，不进首屏）
+const DND_IMPORTS = { paths: [], patterns: [{ regex: '^@dnd-kit/', message: 'B6：@dnd-kit/* 只能在 src/kit/components/DeskLayout/ 里 import' }] };
+
+function restrictedImports(...parts) {
+  return [
+    'error',
+    { paths: parts.flatMap((p) => p.paths), patterns: parts.flatMap((p) => p.patterns) },
+  ];
+}
+
+/** 一个作用域的三条 no-restricted-* 规则 */
+/** routerInternals：准不准引 router.ts 的内部件（只有 router-sub.ts、router-levels.ts 和测试准） */
+/** src：准不准直接写 .src =（A26 补；只有 platform、预览沙箱、kit/hooks/useBlobSrc.ts 和测试准） */
+function scope({ net = false, device = false, motion = false, html = false, pure = false, routerInternals = false, src = false, imports = [] }) {
+  return {
+    'no-restricted-globals': [
+      'error',
+      ...(net ? [] : NET_GLOBALS),
+      ...(device ? [] : DEVICE_GLOBALS),
+      ...(motion ? [] : RAF_GLOBALS),
+    ],
+    'no-restricted-syntax': [
+      'error',
+      ...(net ? [] : NET_SYNTAX),
+      ...(device ? [] : DEVICE_SYNTAX),
+      ...(html ? [] : HTML_SYNTAX),
+      ...(src ? [] : SRC_SYNTAX),
+      ...(motion ? [] : MOTION_SYNTAX),
+      ...(pure ? PURE_SYNTAX : []),
+      ...CSP_SYNTAX,
+      ...REDUCED_MOTION_SYNTAX,
+    ],
+    'no-restricted-imports': restrictedImports(...imports, REDUCED_MOTION_IMPORTS, ...(routerInternals ? [] : [ROUTER_INTERNAL_IMPORTS])),
+  };
+}
+
+export default tseslint.config(
+  {
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      '.wrangler/**',
+      'coverage/**',
+      'playwright-report/**',
+      'test-results/**',
+      '.claude/**', // 其他 agent 的 worktree 工作副本（.claude/worktrees/），不是本仓库的代码
+      'docs/**',
+      'assets/**',
+      'data/**',
+      // exe：只忽略编译产物和 Turnstile 探针；desktop/src-tauri/scripts 下的脚本照常检查（代码审查 S7）
+      'desktop/src-tauri/target/**',
+      'desktop/src-tauri/gen/**',
+      'desktop/turnstile-probe/**',
+      'tests/arch-fixtures/**', // 违规样例：只在 tests/arch 里用虚拟路径过 ESLint
+      'supabase/functions/_shared/gen/**',
+      '.compat-base/**', // 旧版契约测试临时取出的基线用例（tests/compat/run-compat.ts）
+      '.e2e-sb/**', // e2e 真后端用的 supabase/ 拷贝（tools/e2e/real-backend.mjs up 生成，.gitignore 已排除）
+    ],
+  },
+  { linterOptions: { reportUnusedDisableDirectives: 'error' } },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    files: ['**/*.{js,mjs,ts,tsx}'],
+    languageOptions: { ecmaVersion: 2024, sourceType: 'module' },
+    rules: {
+      // T2
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/ban-ts-comment': [
+        'error',
+        { 'ts-ignore': true, 'ts-nocheck': true, 'ts-expect-error': 'allow-with-description', minimumDescriptionLength: 3 },
+      ],
+      '@typescript-eslint/no-non-null-assertion': 'warn',
+      '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
+      // A22（与 HTML_SYNTAX 配合）
+      'no-eval': 'error',
+      'no-implied-eval': 'error',
+      'no-new-func': 'error',
+      // W1
+      'max-lines': ['warn', { max: 300, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  // 构建脚本和配置文件：Node 环境
+  {
+    files: ['build/**/*.{js,mjs}', 'desktop/src-tauri/scripts/**/*.{js,mjs}', '*.config.{js,ts,mjs}', 'vite*.config.ts', 'playwright.config.ts'],
+    languageOptions: { globals: { ...globals.node } },
+    rules: { 'max-lines': 'off' },
+  },
+  // supabase gen types 生成的文件：原样提交（CI 逐字比对），不按 W1 拆分
+  {
+    files: ['shared/db.types.ts'],
+    rules: { 'max-lines': 'off' },
+  },
+  // ───────── 前端 src ─────────
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: { boundaries, react, 'react-hooks': reactHooks, 'jsx-a11y': jsxA11y, lemo },
+    languageOptions: {
+      globals: { ...globals.browser },
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    settings: {
+      react: { version: '19.3' },
+      'boundaries/elements': elements,
+      'boundaries/include': ['src/**/*', 'shared/**/*'],
+      'boundaries/ignore': ['src/*.d.ts'],
+      'import/resolver': { node: { extensions: ['.ts', '.tsx', '.js', '.mjs'] } },
+    },
+    rules: {
+      ...react.configs.flat.recommended.rules,
+      ...react.configs.flat['jsx-runtime'].rules,
+      ...jsxA11y.flatConfigs.recommended.rules,
+      // T3
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
+      'react/jsx-no-target-blank': 'error',
+      'react/no-array-index-key': 'error',
+      'react/prop-types': 'off',
+      // A22
+      'react/no-danger': 'error',
+      // W1
+      'max-lines-per-function': ['warn', { max: 150, skipBlankLines: true, skipComments: true }],
+      // A1 / A8 / A27
+      'boundaries/dependencies': ['error', { default: 'disallow', policies: layerPolicies }],
+      'boundaries/no-unknown-dependencies': 'error',
+      'boundaries/no-unknown-files': 'error',
+      'lemo/feature-index-exports': 'error',
+      // A11、A24、A26
+      'lemo/no-inline-color': 'error',
+      'lemo/motion-tokens': 'error',
+      'lemo/safe-href': 'error',
+      ...scope({ imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS, DND_IMPORTS] }),
+    },
+  },
+  // B6：电脑版布局组件是 dnd-kit 唯一准用的地方
+  {
+    files: ['src/kit/components/DeskLayout/**/*.{ts,tsx}'],
+    rules: scope({ imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
+  },
+  // platform：网络和设备能力都在这里；不准 React
+  {
+    files: ['src/platform/**/*.{ts,tsx}'],
+    rules: scope({ net: true, device: true, src: true, imports: [REACT_IMPORTS, MOTION_PATH_IMPORTS] }),
+  },
+  // A26 补：blob: 图片地址只在这一处写进 .src
+  {
+    files: ['src/kit/hooks/useBlobSrc.ts'],
+    rules: scope({ src: true, imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
+  },
+  // core、功能的 data：纯 TS，不准 React
+  {
+    files: ['src/core/**/*.ts', 'src/features/*/data/**/*.ts'],
+    rules: scope({ imports: [REACT_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
+  },
+  // A18：隐私记的 data 不碰本机缓存、队列、日志
+  {
+    files: ['src/features/vault/data/**/*.ts'],
+    rules: scope({
+      imports: [
+        REACT_IMPORTS,
+        TAURI_IMPORTS,
+        MOTION_PATH_IMPORTS,
+        {
+          paths: [],
+          patterns: [
+            {
+              regex: '(^|/)core/(cache|outbox|log)(\\.ts)?$',
+              message: 'A18：隐私记的明文不进本机缓存、离线队列和日志',
+            },
+          ],
+        },
+      ],
+    }),
+  },
+  // motion：动效集中地
+  {
+    files: ['src/motion/**/*.{ts,tsx}'],
+    rules: scope({ motion: true, imports: [TAURI_IMPORTS] }),
+  },
+  { files: ['src/motion/tokens.ts'], rules: { 'lemo/motion-tokens': 'off' } },
+  // 0.31 第 3 条：router.ts 只准 import react、shared、motion/index.ts
+  {
+    files: ['src/app/router.ts'],
+    rules: scope({ imports: [MOTION_IMPORTS, TAURI_IMPORTS, ROUTER_IMPORTS] }),
+  },
+  // router.ts 拆出来的两块（R-372）：同样的限制，另外只准引 ./router.ts 本身
+  {
+    files: ['src/app/router-sub.ts', 'src/app/router-levels.ts'],
+    rules: scope({ routerInternals: true, imports: [MOTION_IMPORTS, TAURI_IMPORTS, ROUTER_PART_IMPORTS] }),
+  },
+  // A19：sw 只能 import shared 和 workbox-*
+  {
+    files: ['src/sw/**/*.ts'],
+    languageOptions: { globals: { ...globals.serviceworker } },
+    rules: scope({
+      net: true,
+      imports: [
+        {
+          paths: [],
+          patterns: [{ regex: '^(?!\\.|workbox-)', message: 'A19：sw 只能 import shared 和 workbox-*' }],
+        },
+      ],
+    }),
+  },
+  // A22 的唯一例外：预览沙箱里第三方预览库要写 DOM（0.20）
+  {
+    files: ['src/preview-frame/**/*.{ts,tsx}'],
+    rules: scope({ html: true, src: true, imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
+  },
+  // 测试文件里可以用网络、rAF 等全局（模拟用）
+  {
+    files: ['src/**/__tests__/**/*.{ts,tsx}'],
+    languageOptions: { globals: { ...globals.node } },
+    rules: { ...scope({ net: true, device: true, motion: true, routerInternals: true, src: true, imports: [MOTION_PATH_IMPORTS] }), 'max-lines-per-function': 'off' },
+  },
+  // ───────── shared：前后端共用，纯 TS（A2）─────────
+  {
+    files: ['shared/**/*.ts'],
+    plugins: { boundaries },
+    settings: {
+      'boundaries/elements': elements,
+      'boundaries/include': ['src/**/*', 'shared/**/*'],
+      'import/resolver': { node: { extensions: ['.ts', '.tsx', '.js', '.mjs'] } },
+    },
+    rules: {
+      'boundaries/dependencies': ['error', { default: 'disallow', policies: layerPolicies }],
+      ...scope({ pure: true, imports: [REACT_IMPORTS, TAURI_IMPORTS] }),
+    },
+  },
+  // ───────── A23：服务器函数（supabase/functions，后端写；规则在这里）─────────
+  {
+    files: ['supabase/functions/**/*.ts'],
+    plugins: { lemo },
+    languageOptions: { globals: { Deno: 'readonly', ...globals.worker } },
+    rules: { 'lemo/no-log-request': 'error' },
+  },
+  {
+    files: ['supabase/functions/vault*/**/*.ts', 'supabase/functions/ai-voice/**/*.ts'],
+    rules: { 'no-console': 'error' },
+  },
+  // Pages Functions（前端 B 写）也不准打印请求
+  {
+    files: ['functions/**/*.ts', 'workers/**/*.ts'],
+    plugins: { lemo },
+    rules: { 'lemo/no-log-request': 'error' },
+  },
+  // 官网静态页的脚本（前端 B）：普通 <script>，浏览器环境（B0 集成补上，原先按 Node 模块报 document 未定义）
+  {
+    files: ['site/**/*.js'],
+    languageOptions: { sourceType: 'script', globals: { ...globals.browser } },
+  },
+  // 首页的脚本是 ES 模块（<script type="module">，互相 import；11-26 去掉 window.LemoHome 全局拼接）
+  {
+    files: ['site/index.js', 'site/index-*.js'],
+    languageOptions: { sourceType: 'module' },
+  },
+  // 数据库测试的 Node 脚本（后端：离线 SQL 检查等）
+  {
+    files: ['supabase/tests/**/*.{js,mjs}'],
+    languageOptions: { globals: { ...globals.node } },
+  },
+  // 测试
+  {
+    files: ['tests/**/*.{ts,tsx,js,mjs}'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
+  // tests/shared 下用 deno test 跑的 .mjs（如 auth.test.mjs）：和服务器函数一样声明全局 Deno（只读）
+  {
+    files: ['tests/shared/**/*.mjs'],
+    languageOptions: { globals: { Deno: 'readonly' } },
+  },
+  // A30（接手清单 K6-signedout-sugg ③；K6-sugg3 ⑤ 统一）：onAuthStateChange、'SIGNED_OUT' 只准出现在 platform/session.ts；
+  // 扫 src、shared、官网 site 三处的 ts / tsx / js / mjs（官网和 App 同源），测试不管（要模拟事件）。
+  // 扫不到的：site 的 HTML 里内联的 <script>（ESLint 不解析 HTML），架构 2.3 A30 写明，靠审查
+  {
+    files: ['src/**/*.{ts,tsx,js,mjs}', 'shared/**/*.{ts,tsx,js,mjs}', 'site/**/*.{ts,tsx,js,mjs}'],
+    ignores: ['src/platform/session.ts', '**/__tests__/**'],
+    plugins: { lemo },
+    rules: { 'lemo/auth-events-in-session': 'error' },
+  },
+  // 架构 2.3 R2、LUNAR、MOTION-IMPL（11-14 CI-11 从 check_arch.py 挪来，源码层只在这里查）：对象存储、农历、动画库的引入限制，
+  // import、export … from、import()、require 都认，LUNAR 还沿 shared/ 的静态引入往下跟（细节见 build/eslint-rules/import-bounds.js）。
+  // 因为要读别的文件，lint 不许加 --cache（缓存只看本文件有没有改，shared/ 改了会漏报；tests/build/workflow-permissions.test.ts 断言 package.json 和工作流都没加）
+  {
+    files: ['src/**/*.{ts,tsx,js,mjs}', 'shared/**/*.{ts,tsx,js,mjs}'],
+    plugins: { lemo },
+    rules: { 'lemo/import-bounds': 'error' },
+  },
+  // A31（接手清单 CONSENT-sugg ⑤）：功能代码不对 settings 写 deleted_at / undone，ai.enabled、ai.vault 只经 writeAiSwitch；
+  // 例外只有唯一写法 core/ai-settings.ts 和守门 core/write.ts
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/core/ai-settings.ts', 'src/core/write.ts', '**/__tests__/**'],
+    plugins: { lemo },
+    rules: { 'lemo/settings-ai-write': 'error' },
+  },
+  {
+    files: TS,
+    rules: { '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }] },
+  },
+);

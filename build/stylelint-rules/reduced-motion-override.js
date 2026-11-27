@@ -1,0 +1,383 @@
+// 柠檬记自写 Stylelint 规则 lemo/reduced-motion-override（架构 17.2 第 5 点“CSS 一侧的统一写法”；UI-4 L-1，B1）
+// 凡是 transition / animation 动到位移或缩放（下称“动 transform”）的选择器，同一个文件里必须有减少动态效果的覆盖：
+//   :global(:root[data-rm="1"]) <同一选择器> { … }（不是 CSS Modules 的全局样式写 :root[data-rm="1"] <选择器>），放在最外层。
+//   data-rm 由 platform/look.ts 写：设置里的开关打开 或 系统设置了 prefers-reduced-motion: reduce（皮肤字体整块评审 11-14 第 1、6 条），
+//   所以只要这一段；原来要求的 @media (prefers-reduced-motion: reduce) 那段不再写（src 下由 tests/arch/no-reduced-media.test.ts 禁止，
+//   只有启动画面 splash.css 例外），写在 reduce 媒体查询里的规则这里不当覆盖、也不检查。
+//   - 不准写进 @layer（不在层里的声明总是赢过层里的，覆盖会输），写了直接报错；
+//   - 原声明带 !important，覆盖也要带。
+// 覆盖必须真的关掉：
+//   - transition 一类写 none 或只动 opacity；只有原过渡动的仅是 transform / translate / scale / rotate 时，写 transform: none 也算；
+//   - animation 一类写 none 或只动 opacity。
+// 光有选择器、里面写别的（例如 color），不算覆盖。覆盖里还在动 transform 的，单独报。
+// 选择器以类名开头、状态写在元素自身：.x[data-state=…]、.x:active、.x.is-on 把过渡的属性改了，覆盖里也要写回
+// （transform 一类写 none；别的写回原值——和 .x 自己写的值一样，.x 没写的写 initial，初始值本来是 auto 的属性也可写 auto；
+// 否则只是从“动画缩放”变成“瞬间缩放”，UI-4 L-1 原话）；
+// 含 .x 却不以 .x 开头的（button.x、[data-on].x、:where(.x)、.wrap:hover .x），覆盖查不到，直接报错；
+// .x 的 transform 引用的自定义属性只准在 .x 自己或它的状态里赋值；@scope 里不准写动位移的过渡、动画。
+// “动 transform”的判断（看不清的一律按动算）：
+//   - 属性名：放行名单（STATIC_PROP：opacity、各种颜色、box-shadow / text-shadow、fill / stroke、filter、visibility 等）以外的
+//     一律按动算（transform、top、margin、width、gap、line-height、clip-path…），自定义属性 --* 也算；
+//   - transition 简写没写属性名（等于 all）；transition-property 写 initial / unset / revert / revert-layer / inherit（等于 all）；
+//   - var() 不是 --dur-* / --ease-*（解析不了里面是什么）；
+//   - 属性名或值里有 CSS 转义 \（\74ransform 浏览器认成 transform），keyframes 里同样；
+//   - animation 引用的 @keyframes 不在同文件，或者同名的任何一段改了上面这些属性。
+// 嵌套写法里的 & 会展开成完整选择器再比。带 -webkit- 等前缀的属性按去掉前缀算。
+// 违规样例在 tests/arch-fixtures/stylelint/a24-rm-*.module.css，tests/arch/stylelint.test.ts 证明拦得住
+import stylelint from 'stylelint';
+
+const {
+  createPlugin,
+  utils: { report, ruleMessages, validateOptions },
+} = stylelint;
+
+const ruleName = 'lemo/reduced-motion-override';
+
+const HOW = '不进 @layer，写 none、只动 opacity，或者（只动 transform 时）transform: none；原声明有 !important 覆盖也要带';
+const messages = ruleMessages(ruleName, {
+  missingRm: (sel) =>
+    `17.2 第 5 点（UI-4 L-1）：“${sel}”的 transition / animation 动到transform，同一文件里缺有效的 :global(:root[data-rm="1"]) ${sel} { … } 覆盖（${HOW}）`,
+  overrideMoves: (sel) =>
+    `17.2 第 5 点（UI-4 L-1）：减少动态效果的覆盖“${sel}”里还在动 transform，只能留 opacity 或写 none`,
+  deadRoot: (sel) =>
+    `17.2 第 5 点（UI-4 L-1）：“${sel}”挂在 <html> 自己身上，覆盖要写成 :root[data-rm="1"]${sel.startsWith(':root') ? sel.slice(5) : sel}（不带空格）；带空格的后代写法永远匹配不上`,
+  layer: (sel) =>
+    `17.2 第 5 点（UI-4 L-1）：减少动态效果的覆盖“${sel}”不准写进 @layer（层里的声明会输给层外的原声明）`,
+  stateRm: (sel, prop) =>
+    `17.2 第 5 点（UI-4 L-1）：“${sel}”把 ${prop} 改了，:global(:root[data-rm="1"]) 里要把 ${sel} 的 ${prop} ${TRANSFORM_PROP.test(prop) ? '写回 none' : '写回原值（和原选择器的值一样；原选择器没写就写 initial，初始值本来是 auto 的属性也可写 auto）'}（否则还是瞬间缩放、位移）`,
+  shape: (sel, base, prop) =>
+    `17.2 第 5 点（UI-4 L-1）：“${sel}”改了 ${base} 的 ${prop}，减少动态效果的覆盖查不到：选择器要以类名开头，状态写在元素自身（${base}[data-state=…]、${base}:active），不写标签前缀、属性前缀、:where()、父元素状态`,
+  varOutside: (sel, base, prop) =>
+    `17.2 第 5 点（UI-4 L-1）：${prop} 被 ${base} 的 transform 引用，只准在 ${base} 自己或它的状态选择器里赋值，“${sel}”里不行`,
+  scope: (sel) =>
+    `17.2 第 5 点（UI-4 L-1）：@scope 里不准写动位移的 transition / animation（“${sel}”）：作用域远近先于声明顺序比较，外面的减少动态效果覆盖会输`,
+});
+
+// 放行名单（主持人 10-29 第六轮定）：确定不会让元素位移、缩放、改尺寸、改排版的属性——颜色、阴影、不透明度、滤镜、可见性。
+// 名单以外的一律按“动”算（17.2 第 6 点本来就只准动 transform 和 opacity）
+const STATIC_PROP =
+  /^(opacity|color|background-color|border(-(top|right|bottom|left|block|inline|block-start|block-end|inline-start|inline-end))?-color|outline-color|text-decoration-color|text-emphasis-color|caret-color|accent-color|column-rule-color|box-shadow|text-shadow|fill|stroke|fill-opacity|stroke-opacity|stop-color|stop-opacity|flood-color|flood-opacity|lighting-color|filter|backdrop-filter|visibility|animation-timing-function|transition-timing-function)$/i;
+const MOVE_PROP = { test: (p) => !STATIC_PROP.test(p) };
+// 初始值本来就是 auto 的属性：状态“写回原值”时只有这些接受 auto，其余只认 initial
+const AUTO_INITIAL = /^(width|height|min-width|min-height|block-size|inline-size|min-block-size|min-inline-size|top|right|bottom|left|inset(-[\w-]+)?|flex-basis)$/i;
+/** 属性名或值里有 CSS 转义（\74ransform 浏览器认成 transform）：看不清，按动 transform 算 */
+const hasEscape = (decl) => decl.prop.includes('\\') || decl.value.includes('\\');
+const TRANSFORM_PROP = /^(transform|translate|scale|rotate)$/i;
+const RM_PREFIX = /^(?::global\(\s*:root\[data-rm=["']1["']\]\s*\)|:root\[data-rm=["']1["']\])\s+/;
+// 整页 View Transition 的伪元素挂在 <html> 自己身上：覆盖得写在同一个元素上（:root[data-rm="1"]::view-transition-old(root)、
+// :root[data-rm="1"][data-vt-back]::view-transition-old(root)），带空格的后代写法永远匹配不上（独立评审 11-20 第 3 条）
+const RM_ROOT = /^:root\[data-rm=["']1["']\](?=::|\[)/;
+/** data-rm 覆盖选择器 → { base: 它覆盖的原选择器, dead: 带空格写在 <html> 自己的伪元素、:root 前面，匹配不上 }；不是覆盖返回 null */
+function rmBaseOf(sel) {
+  const t = sel.trim();
+  if (RM_PREFIX.test(t)) {
+    const base = norm(t.replace(RM_PREFIX, ''));
+    return { base, dead: /^(::view-transition|:root)/.test(base) };
+  }
+  if (RM_ROOT.test(t)) {
+    const rest = t.replace(RM_ROOT, '');
+    return { base: norm(rest.startsWith('::') ? rest : `:root${rest}`), dead: false };
+  }
+  return null;
+}
+// transition / animation 简写里不是属性名、不是 keyframes 名字的关键字
+const CSS_WIDE = new Set(['initial', 'inherit', 'unset', 'revert', 'revert-layer']);
+const KEYWORDS = new Set([
+  'none', 'infinite', 'normal', 'reverse', 'alternate', 'alternate-reverse', 'forwards', 'backwards', 'both',
+  'running', 'paused', 'initial', 'inherit', 'unset', 'revert', 'revert-layer', 'allow-discrete',
+]);
+
+const unprefix = (prop) => prop.toLowerCase().replace(/^-(webkit|moz|ms|o)-/, '');
+const norm = (sel) => sel.trim().replace(/\s+/g, ' ').replace(/'/g, '"');
+const offsetOf = (node) => node.source?.start?.offset ?? 0;
+const isNone = (value) => value.trim().toLowerCase() === 'none';
+
+/** 按最外层逗号切（括号里的逗号不切） */
+function splitTop(text) {
+  const out = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of text) {
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) {
+      out.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+
+/** 值里有没有不是 --dur-* / --ease-* 的 var()（解析不了，按动 transform 算） */
+const hasForeignVar = (value) => /var\(\s*--(?!dur-|ease-)/i.test(value);
+
+/** 去掉 var(…)、calc(…) 这类函数，剩下的才是属性名、关键字 */
+function stripFunctions(value) {
+  let out = value;
+  let prev;
+  do {
+    prev = out;
+    out = out.replace(/[\w-]+\([^()]*\)/g, ' ');
+  } while (out !== prev);
+  return out;
+}
+
+const wordsOf = (seg) =>
+  stripFunctions(seg)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => (w.startsWith('--') ? w : unprefix(w)));
+
+/** 展开嵌套：返回这条规则完整的选择器列表（& 换成上级选择器，没有 & 就当后代） */
+function resolveSelectors(rule) {
+  let parent = rule.parent;
+  while (parent && parent.type !== 'rule' && parent.type !== 'root') parent = parent.parent;
+  const own = splitTop(rule.selector).map(norm);
+  if (!parent || parent.type !== 'rule') return own;
+  const ups = resolveSelectors(parent);
+  const out = [];
+  for (const up of ups) for (const s of own) out.push(norm(s.includes('&') ? s.replaceAll('&', up) : `${up} ${s}`));
+  return out;
+}
+
+/** 这条规则外面包着的 at-rule（由内到外） */
+function atAncestors(node) {
+  const out = [];
+  for (let p = node.parent; p; p = p.parent) if (p.type === 'atrule') out.push(p);
+  return out;
+}
+
+/** 选择器的最后一个复合选择器（.wrap:hover .a → .a） */
+function lastCompound(sel) {
+  const parts = sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean);
+  return parts[parts.length - 1] ?? sel;
+}
+
+/** 同文件里每个 @keyframes 名字动不动 transform（同名写了几段，任何一段动就算动） */
+function keyframesMoves(root) {
+  const map = new Map();
+  root.walkAtRules(/keyframes$/i, (at) => {
+    let moves = false;
+    at.walkDecls((d) => {
+      const p = unprefix(d.prop);
+      if (MOVE_PROP.test(p) || p.startsWith('--') || hasForeignVar(d.value) || hasEscape(d)) moves = true;
+    });
+    const name = at.params.trim();
+    map.set(name, (map.get(name) ?? false) || moves);
+  });
+  return map;
+}
+
+/** 这条声明属于哪一类（transition / animation），不是就返回 null */
+function familyOf(decl) {
+  const p = unprefix(decl.prop);
+  if (p === 'transition' || p === 'transition-property') return 'transition';
+  if (p === 'animation' || p === 'animation-name') return 'animation';
+  // 属性名里有转义（\74ransition），看不出是什么，按会动的过渡算
+  if (decl.prop.includes('\\')) return 'transition';
+  return null;
+}
+
+/** 这条 transition / animation 声明动了什么：all = 看不清或全部；names = 动到的位移属性 */
+function moved(decl, frames) {
+  const prop = unprefix(decl.prop);
+  const fam = familyOf(decl);
+  const res = { all: false, names: new Set() };
+  if (!fam) return res;
+  if (hasForeignVar(decl.value) || hasEscape(decl)) return { all: true, names: res.names };
+  for (const seg of splitTop(decl.value)) {
+    const words = wordsOf(seg);
+    if (words.length === 1 && words[0].toLowerCase() === 'none') continue;
+    if (fam === 'transition') {
+      // CSS 全局关键字（initial、unset、revert、revert-layer、inherit）用在 transition-property 上等于 all（或继承来的，看不清）
+      if (words.some((w) => CSS_WIDE.has(w.toLowerCase()))) res.all = true;
+      const names = words.filter((w) => !KEYWORDS.has(w.toLowerCase()));
+      // transition 简写没写属性名（只有时长、曲线）= all
+      if (prop === 'transition' && names.length === 0) res.all = true;
+      for (const w of names) {
+        if (w.startsWith('--') || w.toLowerCase() === 'all') res.all = true;
+        else if (MOVE_PROP.test(w)) res.names.add(w.toLowerCase());
+      }
+    } else {
+      // 除了 var()、calc() 以外的函数（:global(slide)、:local(…)、local(…)）一律按动算
+      if (/(?<![\w-])(?!var\(|calc\()[\w-]+\(/i.test(seg)) res.all = true;
+      for (const w of words) {
+        if (KEYWORDS.has(w.toLowerCase()) || /^\d*\.?\d+$/.test(w)) continue;
+        if (/^[a-z_][\w-]*$/i.test(w) || /^-[a-z_][\w-]*$/i.test(w)) {
+          if (!frames.has(w) || frames.get(w) === true) res.all = true;
+        } else {
+          // 带引号的名字（"slide"）、去掉函数后剩下的标点、其他认不出的词：看不清，按动算
+          res.all = true;
+        }
+      }
+    }
+  }
+  return res;
+}
+
+const movesOf = (m) => m.all || m.names.size > 0;
+
+const ruleFunction = (primary) => (root, result) => {
+  if (!validateOptions(result, ruleName, { actual: primary, possible: [true] })) return;
+  const frames = keyframesMoves(root);
+
+  // 覆盖：选择器 → data-rm 那一段里的声明
+  const overrides = new Map();
+  const movers = []; // { decl, sel, fam, m }
+  const normals = []; // { rule, sels }：普通上下文里的规则（找状态选择器用）
+
+  const addOverride = (sel, rule) => {
+    const list = overrides.get(sel) ?? [];
+    rule.each((n) => {
+      if (n.type === 'decl') list.push(n);
+    });
+    overrides.set(sel, list);
+  };
+
+  root.walkRules((rule) => {
+    const ats = atAncestors(rule);
+    if (ats.some((a) => /keyframes$/i.test(a.name))) return;
+    const sels = resolveSelectors(rule);
+    // reduce 媒体查询里的规则：不当覆盖、也不检查（src 下不许再写，守卫测试管）；not … (reduce) 照旧按普通声明处理
+    const reducedMedia = ats.some(
+      (a) => a.name.toLowerCase() === 'media' && /prefers-reduced-motion\s*:\s*reduce/i.test(a.params) && !/(?<![\w-])not(?![\w-])/i.test(a.params),
+    );
+    if (reducedMedia) return;
+    const rms = sels.map(rmBaseOf).filter((x) => x !== null);
+    for (const x of rms) if (x.dead) report({ message: messages.deadRoot(x.base), node: rule, result, ruleName });
+    const rmBases = rms.filter((x) => !x.dead).map((x) => x.base);
+    if (rms.length > 0) {
+      if (ats.some((a) => a.name.toLowerCase() === 'layer')) {
+        report({ message: messages.layer(sels.join(', ')), node: rule, result, ruleName });
+        return;
+      }
+      // 只认写在最外层的
+      if (ats.length === 0) for (const s of rmBases) addOverride(s, rule);
+      rule.each((node) => {
+        if (node.type === 'decl' && movesOf(moved(node, frames))) {
+          report({ message: messages.overrideMoves(sels.join(', ')), node, result, ruleName });
+        }
+      });
+      return;
+    }
+    normals.push({ rule, sels });
+    const inScope = ats.some((a) => a.name.toLowerCase() === 'scope');
+    rule.each((node) => {
+      if (node.type !== 'decl') return;
+      const fam = familyOf(node);
+      const m = fam ? moved(node, frames) : null;
+      if (!m || !movesOf(m)) return;
+      if (inScope) {
+        report({ message: messages.scope(sels.join(', ')), node, result, ruleName });
+        return;
+      }
+      for (const sel of sels) movers.push({ decl: node, sel, fam, m });
+    });
+  });
+
+  /** 能用来覆盖 node 的声明：node 带 !important 的覆盖也要带（data-rm 那段优先级更高，不看先后） */
+  const usable = (sel, node) => (overrides.get(sel) ?? []).filter((d) => !node.important || d.important);
+
+  /** 这一段覆盖有没有真的关掉这条 transition / animation */
+  const neutralizes = (decls, fam, m) => {
+    const famDecls = decls.filter((d) => familyOf(d) === fam);
+    if (famDecls.length > 0 && famDecls.every((d) => !movesOf(moved(d, frames)))) return true;
+    const transformOnly = !m.all && [...m.names].every((n) => TRANSFORM_PROP.test(n));
+    if (fam === 'transition' && transformOnly && decls.some((d) => unprefix(d.prop) === 'transform' && isNone(d.value))) return true;
+    return false;
+  };
+
+  const reported = new Set();
+  for (const { decl, sel, fam, m } of movers) {
+    if (neutralizes(usable(sel, decl), fam, m)) continue;
+    const key = `${sel}|${offsetOf(decl)}`;
+    if (reported.has(key)) continue;
+    reported.add(key);
+    report({ message: messages.missingRm(sel), node: decl, result, ruleName });
+  }
+
+  // 状态和选择器写法：
+  //   - 选择器以类名开头：改 base 的位移、尺寸的，只准是 base 自己或 base 的状态（base[…]、base:…、base.y）；
+  //     含 base 的类名、却不以 base 开头的（button.a、[data-on].a、:where(.a):active、.wrap:hover .a、.list:hover .a）一律报；
+  //   - 状态把过渡的属性改了，覆盖里也要写回（transform 一类写 none，别的位移属性、自定义属性写回原值）；
+  //   - base 的 transform 引用的自定义属性，只准在 base 自己或它的状态里赋值。
+  const info = new Map(); // base → { all, names, vars }
+  for (const { sel, m } of movers) {
+    const it = info.get(sel) ?? { all: false, names: new Set(), vars: new Set() };
+    it.all ||= m.all;
+    for (const n of m.names) it.names.add(n);
+    info.set(sel, it);
+  }
+  for (const [base, it] of info) {
+    for (const { rule, sels } of normals) {
+      if (!sels.includes(base)) continue;
+      rule.each((n) => {
+        if (n.type === 'decl' && TRANSFORM_PROP.test(unprefix(n.prop))) {
+          for (const v of n.value.matchAll(/var\(\s*(--[\w-]+)/gi)) it.vars.add(v[1]);
+        }
+      });
+    }
+  }
+  /** base 自己写的这个属性的值（同一选择器写了几次取最后一次）；没写返回 null */
+  const originalOf = (base, prop) => {
+    let v = null;
+    for (const { rule, sels } of normals) {
+      if (!sels.includes(base)) continue;
+      rule.each((n) => {
+        if (n.type === 'decl' && n.prop === prop) v = n.value;
+      });
+    }
+    return v;
+  };
+  const normValue = (v) => v.trim().replace(/\s+/g, ' ').toLowerCase();
+  /** 覆盖里写回的值对不对：和 base 自己的值一样；base 没写的，写 auto 或 initial（自定义属性只认 initial） */
+  const restores = (d, orig) => {
+    if (orig !== null) return normValue(d.value) === normValue(orig);
+    const v = normValue(d.value);
+    return v === 'initial' || (v === 'auto' && AUTO_INITIAL.test(unprefix(d.prop)));
+  };
+  const isState = (s, base) => s !== base && s.startsWith(base) && /^[[:.]/.test(s.slice(base.length));
+  const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const classOf = (base) => /^\.[\w-]+/.exec(lastCompound(base))?.[0];
+  for (const { rule, sels } of normals) {
+    for (const s of sels) {
+      for (const [base, it] of info) {
+        if (s === base) continue;
+        const self = isState(s, base);
+        const cls = classOf(base);
+        const shapeBad = !self && Boolean(cls) && new RegExp(`${escapeRe(cls)}(?![\\w-])`).test(s);
+        rule.each((n) => {
+          if (n.type !== 'decl') return;
+          const p = unprefix(n.prop);
+          if (it.vars.has(n.prop)) {
+            if (!self) {
+              report({ message: messages.varOutside(s, base, n.prop), node: n, result, ruleName });
+              return;
+            }
+          } else {
+            const relevant = p !== 'all' && !p.startsWith('--') && MOVE_PROP.test(p) && (it.all || it.names.has(p));
+            if (!relevant || (TRANSFORM_PROP.test(p) && isNone(n.value))) return;
+            if (shapeBad) {
+              report({ message: messages.shape(s, base, n.prop), node: n, result, ruleName });
+              return;
+            }
+            if (!self) return;
+          }
+          const decls = usable(s, n);
+          const ok = TRANSFORM_PROP.test(p)
+            ? decls.some((d) => unprefix(d.prop) === p && isNone(d.value))
+            : decls.some((d) => d.prop === n.prop && restores(d, originalOf(base, n.prop)));
+          if (!ok) report({ message: messages.stateRm(s, n.prop), node: n, result, ruleName });
+        });
+      }
+    }
+  }
+};
+
+ruleFunction.ruleName = ruleName;
+ruleFunction.messages = messages;
+ruleFunction.meta = { url: 'docs/10-架构/架构设计-v4.md#172' };
+
+export default createPlugin(ruleName, ruleFunction);

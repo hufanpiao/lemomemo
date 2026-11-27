@@ -1,0 +1,375 @@
+// 月历页面·FA-3 第二轮复审补的部分（11-04）之一：上拖收起（R-326）、同一页内翻页不起 View Transition（代码复审 N1）、按钮横滑、
+// 手机选择器遮罩（设计复审 N1）、年列单个 Tab 停靠点（代码复审 N3）、周视图提示缩短（设计复审 N5）。其余复审项见 CalendarReview.test.tsx
+// 集合、节假日文件用替身；“今天”固定在 2026-11-05（周四）09:00；界面语言中文（周一起始）
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { msAt } from '../../../../shared/core/date.ts';
+import { navigate } from '../../../app/router.ts';
+import { flipMs } from '../../../motion/gestures.ts';
+import type * as Motion from '../../../motion/index.ts';
+import { currentTz } from '../../../core/current-tz.ts';
+import { uiStore } from '../../../kit/state/ui-store.ts';
+import { clock } from '../../../platform/clock.ts';
+import type { AppJson } from '../../../platform/app-static.ts';
+
+type Row = { id: string } & Record<string, unknown>;
+const data: { events: Row[]; todos: Row[]; settings: Row[] } = { events: [], todos: [], settings: [] };
+const collections: Record<string, () => Row[]> = { events: () => data.events, todos: () => data.todos, settings: () => data.settings };
+vi.mock('../../../kit/hooks/useCollection.ts', () => ({
+  useCollection: (name: string) => collections[name]?.() ?? [],
+}));
+const fetchStatus = vi.fn(async (_p: string): Promise<AppJson> => ({ kind: 'missing' }));
+vi.mock('../../../platform/app-static.ts', () => ({ fetchAppJsonStatus: (p: string) => fetchStatus(p) }));
+// 整页切换（motion 的 transition，11-20 起不用 View Transition）换成替身：“换页面才起整页切换”那条数调了几次，回调照常同步执行
+const fake = vi.hoisted(() => ({ spy: null as null | ((update: () => void) => Promise<void>) }));
+vi.mock('../../../motion/index.ts', async (orig) => {
+  const m = await orig<typeof Motion>();
+  return { ...m, transition: (update: () => void, back?: boolean) => (fake.spy ? fake.spy(update) : m.transition(update, back)) };
+});
+
+const { default: CalendarPage } = await import('../ui/CalendarPage.tsx');
+// 切页起哪种过渡的规则（app/page-anim.ts）App 首屏画完以后才装，装上以前换页一律直接画；功能测试不许引 app 层（boundaries），
+// 这里经 router 的注入口装一份替身：月历页内（calendar、cal）不动、别的整页推。真规则由 app/__tests__/cal-same-page.test.tsx 守
+const { setAnimOf } = await import('../../../app/router.ts');
+const inCal = (n: string) => n === 'calendar' || n === 'cal';
+setAnimOf((a, b) => (inCal(a.name) && inCal(b.name) ? 'none' : 'push'));
+const { resetHolidayCacheForTest } = await import('../hooks/useHolidays.ts');
+const { resetLunarForTest } = await import('../hooks/useLunar.ts');
+const { lazyLib } = await import('../../../core/anniv-lib.ts');
+const realLunar = await import('../../../../shared/logic/anniv/lunar.ts');
+const { styles } = await import('./css-of.ts');
+
+const TZ = currentTz();
+const NOW = msAt('2026-11-05', 9 * 60, TZ);
+const W = 336;
+
+
+function open(hash: string) {
+  window.history.replaceState(null, '', `/app/${hash}`);
+  return render(<CalendarPage />);
+}
+const cell = (date: string) => document.querySelector<HTMLButtonElement>(`[data-testid="cal-month"] [data-date="${date}"]`);
+const key = (k: string) => fireEvent.keyDown(document.body, { key: k });
+const fold = () => screen.getByTestId('cal-fold');
+
+/** 电脑宽度（≥ 768 px）：只让宽度查询成立，“减少动态效果”的查询照旧不成立 */
+function stubWide(): void {
+  vi.stubGlobal('matchMedia', (q: string) => ({
+    matches: q.includes('min-width: 768px'),
+    media: q,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+  }));
+}
+
+class FakeRO {
+  observe(): void {}
+  disconnect(): void {}
+  unobserve(): void {}
+}
+
+
+beforeEach(() => {
+  uiStore.getState().setLocale('zh-CN');
+  vi.spyOn(clock, 'now').mockReturnValue(NOW);
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: W, height: 44, x: 0, y: 0, top: 0, left: 0, right: W, bottom: 44, toJSON: () => ({}) } as DOMRect);
+  vi.stubGlobal('ResizeObserver', FakeRO);
+  data.events = [];
+  data.todos = [];
+  // 这组按周一起始写的排版（负责人 11-18 首装默认改成周日，这里明确设周一，测的不是默认值）
+  data.settings = [{ id: 'ws1', key: 'cal.week_start', value: 1, deleted_at: null, undone: false }];
+  fetchStatus.mockReset();
+  fetchStatus.mockResolvedValue({ kind: 'missing' });
+  resetHolidayCacheForTest();
+  resetLunarForTest(lazyLib('lunar', async () => realLunar));
+});
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+  delete document.documentElement.dataset.rm;
+  fake.spy = null;
+});
+
+describe('上拖收起（线框 s3、R-326）', () => {
+  it('拖动柄是按钮：aria-expanded、aria-controls 指向月格；点一下收起，只留今天那一周，别的行 inert；再点展开', async () => {
+    document.documentElement.dataset.rm = '1';
+    open('#/cal/month/2026-11');
+    const btn = fold();
+    expect(btn.getAttribute('aria-expanded')).toBe('true');
+    expect(btn.getAttribute('aria-label')).toBe('收起成一周');
+    expect(document.getElementById(btn.getAttribute('aria-controls') ?? '')).toBe(document.querySelector(`[data-testid="cal-month"] .${styles.grid}`));
+    expect(screen.getByTestId('cal-prev').getAttribute('aria-label')).toBe('上个月');
+    fireEvent.click(btn);
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
+    expect(btn.getAttribute('aria-label')).toBe('展开整月');
+    expect(screen.getByTestId('calendar-page').getAttribute('data-folded')).toBe('true');
+    // 今天 11-05 在 11-02～11-08 那一行
+    for (const d of ['2026-11-02', '2026-11-05', '2026-11-08']) expect(cell(d)?.hasAttribute('inert')).toBe(false);
+    for (const d of ['2026-10-26', '2026-11-01', '2026-11-12', '2026-12-06']) expect(cell(d)?.hasAttribute('inert')).toBe(true);
+    expect(screen.getByTestId('cal-prev').getAttribute('aria-label')).toBe('上一周');
+    expect(screen.getByTestId('cal-next').getAttribute('aria-label')).toBe('下一周');
+    fireEvent.click(btn);
+    expect(btn.getAttribute('aria-expanded')).toBe('true');
+    expect(cell('2026-11-12')?.hasAttribute('inert')).toBe(false);
+  });
+
+  it('锚点是选中那天的一行：先点 11-19 再收起，留下 11-16～11-22', () => {
+    document.documentElement.dataset.rm = '1';
+    open('#/cal/month/2026-11');
+    fireEvent.click(cell('2026-11-19') as HTMLElement);
+    fireEvent.click(fold());
+    expect(cell('2026-11-16')?.hasAttribute('inert')).toBe(false);
+    expect(cell('2026-11-05')?.hasAttribute('inert')).toBe(true);
+  });
+
+  it('收起后 ‹ › 按周翻（选中的那天挪 7 天，地址不变）；跨月时换月；“今天”灰不灰按今天在不在这一行', async () => {
+    document.documentElement.dataset.rm = '1';
+    open('#/cal/month/2026-11');
+    fireEvent.click(fold());
+    expect(screen.getByTestId('cal-today').getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(screen.getByTestId('cal-next'));
+    expect(cell('2026-11-12')?.getAttribute('aria-pressed')).toBe('true');
+    expect(cell('2026-11-12')?.hasAttribute('inert')).toBe(false);
+    expect(cell('2026-11-05')?.hasAttribute('inert')).toBe(true);
+    expect(window.location.hash).toBe('#/cal/month/2026-11');
+    expect(screen.getByTestId('cal-today').hasAttribute('aria-disabled')).toBe(false);
+    fireEvent.click(screen.getByTestId('cal-next'));
+    fireEvent.click(screen.getByTestId('cal-next'));
+    expect(cell('2026-11-26')?.getAttribute('aria-pressed')).toBe('true');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-next'));
+    });
+    expect(window.location.hash).toBe('#/cal/month/2026-12');
+    expect(cell('2026-12-03')?.getAttribute('aria-pressed')).toBe('true');
+    expect(fold().getAttribute('aria-expanded')).toBe('false');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-today'));
+    });
+    expect(window.location.hash).toBe('#/cal/month/2026-11');
+    expect(cell('2026-11-05')?.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('cal-today').getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('收起后键盘 ← → 也按周翻；T 回今天', async () => {
+    document.documentElement.dataset.rm = '1';
+    open('#/cal/month/2026-11');
+    fireEvent.click(fold());
+    await act(async () => {
+      key('ArrowLeft');
+    });
+    expect(window.location.hash).toBe('#/cal/month/2026-10');
+    expect(cell('2026-10-29')?.getAttribute('aria-pressed')).toBe('true');
+    await act(async () => {
+      key('t');
+    });
+    expect(window.location.hash).toBe('#/cal/month/2026-11');
+  });
+
+  it('到 1900 年第一周：收起后“上一周”aria-disabled', async () => {
+    document.documentElement.dataset.rm = '1';
+    open('#/cal/month/1900-01');
+    fireEvent.click(fold());
+    expect(screen.getByTestId('cal-prev').getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByTestId('cal-next').hasAttribute('aria-disabled')).toBe(false);
+  });
+
+  it('周视图没有拖动柄', () => {
+    open('#/cal/week/2026-11-05');
+    expect(screen.queryByTestId('cal-fold')).toBeNull();
+  });
+});
+
+describe('翻页动画（架构 5.12，代码复审 N1）', () => {
+  it('同一页内翻页不起整页切换：‹ ›、← →、“今天”、年月选择、切周 / 月、收起后跨月都不调 transition；换页面才调', async () => {
+    const vt = vi.fn((cb: () => void) => {
+      cb();
+      return Promise.resolve();
+    });
+    fake.spy = vt;
+    open('#/cal/month/2026-11');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-next'));
+    });
+    expect(window.location.hash).toBe('#/cal/month/2026-12');
+    await act(async () => {
+      key('ArrowRight');
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-today'));
+    });
+    expect(window.location.hash).toBe('#/cal/month/2026-11');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-title'));
+    });
+    await act(async () => {
+      fireEvent.click(within(screen.getByTestId('cal-picker')).getByText('3月'));
+    });
+    expect(window.location.hash).toBe('#/cal/month/2026-03');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-mode-week'));
+    });
+    expect(window.location.hash).toMatch(/^#\/cal\/week\//);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-mode-month'));
+    });
+    fireEvent.click(fold());
+    for (let i = 0; i < 6; i += 1) {
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('cal-next'));
+      });
+    }
+    expect(vt).not.toHaveBeenCalled();
+    // 对照：换到别的页面照常起整页切换（证明替身生效）
+    await act(async () => {
+      await navigate('settings');
+    });
+    expect(vt).toHaveBeenCalledTimes(1);
+  });
+
+  it('‹ › 按钮：原地淡换（R-457“放慢4倍的C原地淡换”）：旧的一页拍成副本叠在原位淡出、新的一页淡入，都是 --dur-ui × 4，不横移；键盘直接切换、不加动效', async () => {
+    const calls: { el: Element; kf: Keyframe[]; o: KeyframeAnimationOptions }[] = [];
+    HTMLElement.prototype.animate = function (this: HTMLElement, kf: Keyframe[], o: KeyframeAnimationOptions) {
+      calls.push({ el: this, kf, o });
+      return { cancel: () => undefined, finished: new Promise(() => undefined) } as unknown as Animation;
+    } as unknown as HTMLElement['animate'];
+    try {
+      open('#/cal/month/2026-11');
+      const pager = screen.getByTestId('cal-pager');
+      fireEvent.click(screen.getByTestId('cal-next'));
+      expect(window.location.hash).toBe('#/cal/month/2026-12');
+      const ghost = pager.previousElementSibling as HTMLElement | null;
+      expect(ghost?.getAttribute('aria-hidden')).toBe('true');
+      expect(ghost?.inert).toBe(true);
+      // 副本里没有测试标记、没有 data-date：测试和点按只认新的一页
+      expect(ghost?.querySelector('[data-date]')).toBeNull();
+      expect(calls.map((c) => (c.el === pager ? 'page' : c.el === ghost ? 'ghost' : 'other'))).toEqual(['ghost', 'page']);
+      expect(calls.map((c) => c.o.duration)).toEqual([flipMs(false), flipMs(false)]);
+      expect(calls[0]?.kf.at(-1)?.opacity).toBe(0);
+      expect(calls[1]?.kf[0]?.opacity).toBe(0);
+      expect(pager.style.transform).toBe('');
+      calls.length = 0;
+      await act(async () => {
+        key('ArrowRight');
+      });
+      expect(window.location.hash).toBe('#/cal/month/2027-01');
+      expect(calls).toEqual([]);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+    }
+  });
+
+  it('滑动、‹ ›、← → 翻页只走一处（全 app 评审三.高.3）：展开、收起都照“cal page prev|next via=…”记一行，字段不变；翻不动不记', async () => {
+    document.documentElement.dataset.rm = '1';
+    const slot = ((globalThis as unknown as Record<string, { q: Array<[number, string]> }>)['__lemoRunLog'] ??= { q: [] });
+    slot.q = [];
+    const pages = (): string[] => slot.q.map(([, l]) => l).filter((l) => l.startsWith('cal page'));
+    HTMLElement.prototype.setPointerCapture = () => undefined;
+    const swipe = async (from: number, to: number): Promise<void> => {
+      const pager = screen.getByTestId('cal-pager');
+      await act(async () => {
+        fireEvent.pointerDown(pager, { isPrimary: true, pointerId: 7, clientX: from, clientY: 300 });
+        fireEvent.pointerMove(pager, { isPrimary: true, pointerId: 7, clientX: (from + to) / 2, clientY: 300 });
+        fireEvent.pointerMove(pager, { isPrimary: true, pointerId: 7, clientX: to, clientY: 300 });
+        fireEvent.pointerUp(pager, { isPrimary: true, pointerId: 7, clientX: to, clientY: 300 });
+      });
+    };
+    try {
+      open('#/cal/month/2026-11');
+      // 展开：按月翻
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('cal-next'));
+      });
+      expect(window.location.hash).toBe('#/cal/month/2026-12');
+      await act(async () => {
+        key('ArrowLeft');
+      });
+      expect(window.location.hash).toBe('#/cal/month/2026-11');
+      await swipe(250, 100);
+      expect(window.location.hash).toBe('#/cal/month/2026-12');
+      expect(pages()).toEqual(['cal page next via=btn', 'cal page prev via=key', 'cal page next via=swipe']);
+      // 收起：同一个入口按周翻（选中那天挪 7 天，地址不变）
+      await act(async () => {
+        key('t');
+      });
+      fireEvent.click(fold());
+      slot.q = [];
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('cal-next'));
+      });
+      expect(cell('2026-11-12')?.getAttribute('aria-pressed')).toBe('true');
+      await act(async () => {
+        key('ArrowRight');
+      });
+      expect(cell('2026-11-19')?.getAttribute('aria-pressed')).toBe('true');
+      await swipe(100, 250);
+      expect(cell('2026-11-12')?.getAttribute('aria-pressed')).toBe('true');
+      expect(window.location.hash).toBe('#/cal/month/2026-11');
+      expect(pages()).toEqual(['cal page next via=btn', 'cal page next via=key', 'cal page prev via=swipe']);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'setPointerCapture');
+    }
+    // 翻不动（1900-01 再往前）：不记
+    cleanup();
+    slot.q = [];
+    open('#/cal/month/1900-01');
+    await act(async () => {
+      key('ArrowLeft');
+      fireEvent.click(screen.getByTestId('cal-prev'));
+    });
+    expect(window.location.hash).toBe('#/cal/month/1900-01');
+    expect(pages()).toEqual([]);
+  });
+
+  it('减少动态效果：按钮翻页也不横滑', async () => {
+    document.documentElement.dataset.rm = '1';
+    open('#/cal/month/2026-11');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-next'));
+    });
+    expect(window.location.hash).toBe('#/cal/month/2026-12');
+    expect(screen.getByTestId('cal-pager').style.transform).toBe('');
+  });
+});
+
+describe('年月选择器（设计复审 N1、N5，代码复审 N3）', () => {
+  it('手机：打开时后面有半透明遮罩，收起就没了；年列只有正在看的那一年能 Tab 到', async () => {
+    open('#/cal/month/2026-11');
+    expect(screen.queryByTestId('cal-picker-scrim')).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-title'));
+    });
+    expect(screen.getByTestId('cal-picker-scrim')).toBeTruthy();
+    const years = within(screen.getByTestId('cal-picker')).getAllByRole('button').filter((b) => b.hasAttribute('data-year'));
+    expect(years).toHaveLength(201);
+    const tabbable = years.filter((b) => b.getAttribute('tabindex') === '0');
+    expect(tabbable.map((b) => b.getAttribute('data-year'))).toEqual(['2026']);
+    fireEvent.click(years.find((b) => b.getAttribute('data-year') === '2030') as HTMLElement);
+    expect(years.filter((b) => b.getAttribute('tabindex') === '0').map((b) => b.getAttribute('data-year'))).toEqual(['2030']);
+    await act(async () => {
+      fireEvent.keyDown(screen.getByTestId('cal-picker'), { key: 'Escape' });
+    });
+    await waitFor(() => expect(screen.queryByTestId('cal-picker-scrim')).toBeNull());
+  });
+
+  it('电脑：不压暗', async () => {
+    stubWide();
+    open('#/cal/month/2026-11');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-title'));
+    });
+    expect(screen.getByTestId('cal-picker')).toBeTruthy();
+    expect(screen.queryByTestId('cal-picker-scrim')).toBeNull();
+  });
+
+  it('周视图的底部提示缩短了（不折行）', async () => {
+    open('#/cal/week/2026-11-05');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-title'));
+    });
+    expect(screen.getByTestId('cal-picker').textContent).toContain('跳到该月 1 日那周 · 小点是今天');
+  });
+});

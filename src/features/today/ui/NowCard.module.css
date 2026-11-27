@@ -1,0 +1,282 @@
+/* “现在”卡（小时间尺）：只用令牌；颜色令牌 --k-* 由皮肤给（简洁：普通卡片底；玻璃：柠檬黄 / 深橄榄渐变底）。
+   这一页的重点卡片：大圆角同下面的列表面板（--r-lg），带一层柔和投影（--b-tile-shadow） */
+
+/* 卡片外面一层槽位：吉祥物（features/mascot）贴在这里，卡片怎么移动它都跟着 */
+.slot {
+  position: relative;
+  margin: 0 0 16px;
+}
+
+.card {
+  /* 背景流动层（NowFlow）垫在字下面：卡片自成层叠上下文、裁到圆角 */
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: 0;
+  padding: 14px 16px 10px;
+  border-radius: var(--r-lg);
+  background: var(--k-bg);
+  box-shadow: var(--b-tile-shadow);
+  color: var(--k-fg);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-12-5);
+  color: var(--k-fg2);
+}
+
+.labelLive,
+.labelIdle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-12);
+}
+
+/* 标签前的 6px 小圆点（视觉稿 .klv i）：进行中实心，其余空心 */
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+/* 页头一行不换行：标签（“全天 · 很长的标题”）放不下用省略号，“现在 HH:MM”不让 */
+.labelText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.labelLive {
+  background: var(--klv-bg);
+  color: var(--klv-fg);
+}
+
+/* 没在进行时的标签（“下一件”“今天没有日程”）：小胶囊浅底、不描边（底色同时间尺上“下一件”块的 --k-nxt-bg），空心小圆点照旧 */
+.labelIdle {
+  background: var(--k-nxt-bg);
+}
+
+.labelIdle .dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px currentcolor;
+}
+
+.nowText {
+  flex: none;
+}
+
+/* 下一件标题前的开始时刻：等宽数字（“现在 10:21”、时长里的数字由 NowCard.tsx 的 show() 只把数字包成 kit Refine 的 .num，整句字体不换） */
+.num {
+  font-family: var(--f-mono);
+}
+
+/* 标题 17px 半粗，一行，放不下用省略号；只有“进行中”那一件加粗 */
+.title,
+.titleLive {
+  margin: 6px 0 0;
+  overflow: hidden;
+  font-size: var(--fs-17);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titleLive {
+  font-weight: 600;
+}
+
+.sub {
+  margin: 4px 0 0;
+  color: var(--k-fg2);
+  font-size: var(--fs-12-5);
+}
+
+/* 暖心句：站在标题的位置、同字号，句子长就换行，不省略 */
+.cheer {
+  overflow: visible;
+  white-space: normal;
+}
+
+/* 暖心句懒加载、还没到时：放一个不换行空格占一行高，句子到了卡片不跳 */
+.cheer:empty::before {
+  content: '\a0';
+}
+
+/* 时间尺照视觉稿 kRuler、.krul：--lh 是色块区高度，一条轨道 20px，两条 13+4+13=30px；
+   此刻竖线比色块区多出 8px，刻度在色块区下 11px，整块再留 26px 放刻度。
+   右边让出吉祥物，时间线缩到吉祥物左边：吉祥物框宽 132 + 距卡右 6（Mascot.module.css .rv）
+   + 间距 8 - 卡片右内边距 16 = 130。固定留位，吉祥物晚加载时时间线不跳 */
+.ruler {
+  position: relative;
+  height: calc(var(--lh) + 26px);
+  margin: 10px 130px 0 0;
+}
+
+/* 底线只在一条轨道时画，只画在色块之间、碰到色块断开（模型给的分段；两条轨道时色块本身已经是两条带） */
+.trk {
+  position: absolute;
+  top: calc(4px + var(--lh) / 2 - 1px);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--k-trk);
+}
+
+/* 色块的 left、width 和 --t（上边）、--h（高）、--pc（项目色）由组件按模型给的位置写在行内 */
+.seg {
+  position: absolute;
+  top: var(--t);
+  height: var(--h);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+/* 被窗口截断的一端直角（视觉稿：不画圆角、不渐隐） */
+.cl {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.cr {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.cur {
+  background: var(--k-cur);
+  box-shadow: inset 0 0 0 1.5px var(--k-cur-bd);
+}
+
+/* 同时进行的第二件（第二条轨道）用自己的颜色，和第一件分得开 */
+.co {
+  background: var(--k-co);
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--k-done);
+}
+
+.co .fill {
+  background: var(--k-co-done);
+}
+
+/* 下一件：左边 3px 项目色竖条（和列表、日历同一个项目色） */
+.nxt {
+  padding: 0 6px 0 9px;
+  background: var(--k-nxt-bg);
+  box-shadow: inset 3px 0 0 var(--pc);
+  color: var(--k-fg2);
+}
+
+/* 磨砂玻璃的竖条是单独一根（简洁皮肤用上面的 inset 阴影，不画它） */
+.bar {
+  display: none;
+}
+
+.lb {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-11);
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 两条轨道时简洁皮肤的下一件块太矮，不写字 */
+.two .lb {
+  display: none;
+}
+
+.mark {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: calc(var(--lh) + 8px);
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--k-mark);
+}
+
+/* 刻度只标整点，11px（定死，不要调大）；小时不补零是视觉稿写法；第一个、最后一个贴边对齐 */
+.tick {
+  position: absolute;
+  top: calc(var(--lh) + 11px);
+  font-family: var(--f-mono);
+  font-size: var(--fs-11);
+  color: var(--k-fg2);
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.tl {
+  transform: none;
+}
+
+.tr {
+  transform: translateX(-100%);
+}
+
+/* 磨砂玻璃两套：时间轴 = 进度条 + 圆头。
+   当前事项画成 8px 胶囊（已过去 --k-done 实心，还没到 --k-cur 实心）；此刻 = 14px 圆头 + 2.5px --k-ring 描圈；
+   下一件 = 项目色竖条 + 文字，不画底；两条轨道时下一件也写字 */
+:global(:root[data-skin="glass"]) .cur,
+:global(:root[data-skin="glass"]) .co {
+  top: calc(var(--t) + var(--h) / 2 - 4px);
+  height: 8px;
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+:global(:root[data-skin="glass"]) .cl {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+:global(:root[data-skin="glass"]) .cr {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+:global(:root[data-skin="glass"]) .mark {
+  top: calc(4px + var(--lh) / 2 - 7px);
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2.5px var(--k-ring);
+}
+
+:global(:root[data-skin="glass"]) .nxt {
+  padding: 0 0 0 9px;
+  background: none;
+  box-shadow: none;
+}
+
+:global(:root[data-skin="glass"]) .bar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--pc);
+}
+
+:global(:root[data-skin="glass"]) .two .lb {
+  display: inline;
+}

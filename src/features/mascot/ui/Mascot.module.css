@@ -1,0 +1,131 @@
+/* 吉祥物：贴在“现在”卡上的一层、输入框小人。都不接指针，手势在 hooks/gesture.ts */
+.anchor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* 画布比卡片宽，clip-path 不缩小可滚动范围（页面会被撑宽）。只限右边（#19 下边可以超出卡片）：
+   这个盒子右边对齐卡片、左和上放开 240px，出格角色（.bleedOver）下面再放开；用两个方向都裁的 overflow: hidden，不用单方向的 overflow-x: clip
+   （它在真机上连左边、下边一起裁）。形状（圆角、出格范围）照旧由 .anchor 的 clip-path 定 */
+.bleed {
+  --bleed-b: 0px;
+
+  position: absolute;
+  inset: -240px 0 calc(-1 * var(--bleed-b)) -240px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bleedOver {
+  --bleed-b: 180px;
+}
+
+.rv {
+  position: absolute;
+  right: 6px;
+  bottom: var(--bleed-b);
+  width: 132px;
+  height: 118px;
+  pointer-events: none;
+}
+
+/* #19 照设计稿：眼球下沿伸出卡片底边约 12px，比其他角色的落点低 18px；只在今天页卡片上，设置页预览不动 */
+.bleedOver .rv {
+  bottom: calc(var(--bleed-b) - 18px);
+}
+
+/* 按卡片上半截定位的角色（catalog 的 ride：米粒、#19）：卡片底下多出“下一件…”这类行时，往上抬同样的高度（--lift 由 MascotHost 量），
+   离卡片顶边的位置和没有那一行时一样，不跟着往下掉 */
+.ride .rv {
+  translate: 0 calc(-1 * var(--lift, 0px));
+}
+
+.over {
+  clip-path: inset(-240px -240px -320px -240px);
+}
+
+.peek {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.peekRv {
+  position: relative;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.peekChat {
+  left: 18px;
+  bottom: calc(100% - 22.5px);
+}
+
+.peekChat .peekRv {
+  width: 150px;
+  height: 120px;
+}
+
+.peekPlus {
+  left: 14px;
+  bottom: calc(100% - 19px);
+}
+
+.peekPlus .peekRv {
+  width: 132px;
+  height: 106px;
+}
+
+/* 设置页预览：高度写死，加载中、失败都盖在里面，下面的列表不跳；底色同今天页“现在”卡，角色在哪都是这个底（白色米粒、黑猫才看得清） */
+.preview {
+  position: relative;
+  height: 184px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  background: var(--k-bg);
+  box-shadow: var(--b-tile-shadow);
+}
+
+/* 列表下面那句长按说明：和预览卡到列表同样隔 12。写成 p.hint 压过设置页 .note 的 6（两份 CSS 模块谁先加载不固定） */
+p.hint {
+  margin-top: 12px;
+}
+
+.previewRv {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.previewMsg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--k-fg2);
+  font-size: var(--fs-13);
+  pointer-events: none;
+}
+
+.credit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 16px;
+  font-size: var(--fs-13);
+}
+
+.credit a {
+  color: inherit;
+  font-weight: 600;
+}
+
+.creditMeta {
+  color: var(--fg2);
+  font-size: var(--fs-12);
+}

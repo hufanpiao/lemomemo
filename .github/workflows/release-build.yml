@@ -1,0 +1,329 @@
+# release-build：打正式 tag（vX.Y.Z）时在 CI 里构建一次正式产物，只构建和测试、不部署（R-206）
+#
+# 正式发布由负责人在自己电脑上运行 tools/release/publish.ps1，部署的就是本工作流上传的产物（架构 0.31 第 24 条定方案 A、8.3a 第 2、3 步）：
+# publish.ps1 不在本机重新构建、不跑 npm，只用一把只读令牌经 GitHub REST API 下载这个 tag 的发布包 release-publish-<tag>，
+# 逐个文件按包里的 SHA256SUMS 核对，再算总指纹；负责人用 iPhone 打开本次运行的 Summary 页，和“发布包指纹”一段的文件数、总指纹、提交 SHA 对一遍，一致才继续。
+# 三个任务：
+#   ① build：tag 和 VERSION 一致、tag 对应的提交在 main 上，跑检查、构建 dist/web，上传 release-<tag>（只有网页，给 desktop 装进 exe），
+#      页面总指纹作为任务输出交给 bundle；再出发布包 release-publish-<tag>（11-26 B7a 起 publish.ps1 下载部署的就是它）：
+#      dist/web（含打包好的 Pages Functions _worker.js/）＋ supabase/（config.toml、migrations、已 copy:shared 的 functions）＋ SHA256SUMS，
+#      Summary 写“发布包指纹”（负责人现在核这一段）；
+#   ② desktop（B6-exe F9）：needs build，以 workflow_call 调用 desktop.yml，输入 web_artifact = release-<tag>、expect_env = production——
+#      正式 tag 走 workflow_call、复用 release-<tag> 装进 exe，desktop.yml 不再另外构建网页（代码审查 M1、安全审查 W-2）；
+#      输出页面总指纹、安装包和 latest.json 的 SHA-256；
+#   ③ bundle：把 release-<tag> 和 desktop-production-<tag> 放进同一个整包，用 build、desktop 两个任务的输出交叉比对
+#      （页面总指纹三方一致、安装包和 latest.json 的 SHA-256 和 desktop 任务算的一致，不只信产物自带的 SHA256SUMS，安全审查 W-3），
+#      再出整包 SHA256SUMS 和总指纹，Summary 分三段写（网页总指纹 / exe SHA-256 / 整包总指纹，标题写明负责人什么时候核哪一段），
+#      上传 release-bundle-<tag>。
+# exe 这次不发（负责人 11-26 选“网页先上，exe 之后单独发”）：desktop、bundle 照常跑、出产物，publish.ps1 不下载、不签名；
+# exe 单独发布时再把 publish.ps1 改成下载整包、给 exe 签名（F10、F11）。
+# 4.0.0 正式 tag 之前 package.json 必须已经有 @tauri-apps/cli（前端 B），否则 desktop、bundle 失败（build、release-<tag>、release-publish-<tag> 照常出）。
+# 不要加工作流级 concurrency：desktop.yml 被调用时 github.workflow、github.ref 和这里相同，同名组会互相排队或取消（代码审查 S5）。
+#
+# 不引用任何 secrets。正式环境的公开配置放在 repository variables（PROD_ 开头，都是公开值）。
+name: release-build
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions: {}
+
+env:
+  NODE_VERSION: '24'
+  PYTHON_VERSION: '3.12'
+  FORCE_COLOR: '0'
+
+jobs:
+  build:
+    name: 正式产物构建（无密钥、不部署）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      web_hash: ${{ steps.hash.outputs.total }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # 要拿到 origin/main 判断 tag 对应的提交在不在 main 上
+          fetch-depth: 0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: tag 和 VERSION 一致（架构 8.3 release-build 第一步）
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          base="$(tr -d ' \r\n' < VERSION)"
+          if [ "v$base" != "$TAG" ]; then
+            echo "::error::tag 是 $TAG，VERSION 文件是 $base，对不上"
+            exit 1
+          fi
+
+      - name: tag 对应的提交必须在 main 上（安全审查 S-2：没合并、没审过的提交打 tag 不出包）
+        run: bash build/ci/tag-on-main.sh
+
+      - name: 安装依赖（不跑任何安装脚本）
+        run: |
+          npm ci --ignore-scripts
+          bash build/ci/rebuild-allowlist.sh
+
+      # tests/build/fonts-py.test.ts“真仓库 --check”要 brotli 量样式压缩后大小（v4.0.0 第一次 release-build 因为没装失败）；
+      # Python 版本、setup-python 的 SHA、fontTools 和 brotli 的版本都和 unit.yml 逐字相同
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 装字体工具（fontTools、brotli，固定版本）
+        run: python -m pip install --disable-pip-version-check --no-input fonttools==4.67.0 brotli==1.2.0
+
+      - name: 类型检查、规范、单元测试（发布前再跑一遍）
+        run: |
+          npm run typecheck
+          npm run lint
+          python3 -I build/check_arch.py
+          # 后端静态检查（含 F6：正式发布不带预览专用函数，B0-R2探测函数 第二轮审查低 4）
+          python3 -I build/check_backend.py
+          npm test
+
+      - name: VAPID 公钥核对（接手清单 VAPID-prod-format：仓库变量 PROD_VAPID_PUBLIC_KEY → VITE_PUBLIC_VAPID_KEY）
+        # 和 deploy-preview.yml 同一份脚本，正式构建没有开关：为空、格式不对、像私钥 JWK 都失败（格式和不回显值的说明见脚本文件头）
+        env:
+          VAPID_PUBLIC_KEY: ${{ vars.PROD_VAPID_PUBLIC_KEY }}
+        run: bash build/ci/vapid-public-key.sh PROD_VAPID_PUBLIC_KEY
+
+      - name: 构建（production 模式）
+        env:
+          VITE_PUBLIC_ENV: production
+          VITE_PUBLIC_SUPABASE_URL: https://lemomemo.com/sb
+          VITE_PUBLIC_ANON_KEY: ${{ vars.PROD_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_VAPID_KEY: ${{ vars.PROD_VAPID_PUBLIC_KEY }}
+          VITE_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.PROD_TURNSTILE_SITE_KEY }}
+        run: |
+          for v in VITE_PUBLIC_ANON_KEY VITE_PUBLIC_VAPID_KEY VITE_PUBLIC_TURNSTILE_SITE_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::$v 是空的：去仓库 Variables 填 PROD_ 开头的那几项"; exit 1; fi
+          done
+          # 构建脚本 build_web.mjs 在 production 模式自己跑体积预算（check_size：首屏总量 ≤ 150 KB）和探测页检查（check_no_probe），这里不再各跑一遍
+          npm run build -- --mode production
+          # 构建以后 A14 连 dist/web 一起扫；别的规则上面“类型检查、规范、单元测试”那一步已经跑过
+          python3 -I build/check_arch.py --only A14
+
+      - name: 发布包里不能有 source map（上线与回滚手册 第二节）
+        run: bash build/ci/no-source-map.sh dist/web
+
+      - name: 网页产物指纹（release-<tag>，给 desktop、bundle 交叉比对；负责人发布时核的是下面“发布包指纹”一段）
+        id: hash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          out="$(python3 -I build/ci/dist_hash.py dist/web)"
+          total="$(printf '%s\n' "$out" | sed -n 's/^总指纹：\([0-9a-f]\{64\}\)$/\1/p')"
+          if [ -z "$total" ]; then echo "::error::算不出页面总指纹"; exit 1; fi
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          {
+            echo "## $TAG 网页产物指纹（release-<tag>，装进 exe 的那一份；发布时不用核这一段，核下面的「发布包指纹」）"
+            echo
+            echo '```'
+            echo "$out"
+            echo '```'
+            echo
+            echo "提交：$GITHUB_SHA"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 要上传的 dist/web 里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉）
+        run: bash build/ci/no-hidden-files.sh dist/web
+
+      - name: 上传网页产物（release-<tag>，desktop 装进 exe、bundle 交叉比对用；保留 90 天）
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ github.ref_name }}
+          path: dist/web/
+          if-no-files-found: error
+          retention-days: 90
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          # 和 ci.yml、deploy-preview、本机同一版（架构 8.6）
+          deno-version: 2.9.8
+
+      - name: 发布包（网页 ＋ 打包好的 Pages Functions ＋ copy:shared 过的服务器函数 ＋ 迁移；架构 0.31 第 24 条、8.3a 冻结前五处之 ①③）
+        # 发布机不装项目依赖、不跑项目脚本，所以这里把要部署的东西都备齐（和 deploy-preview 的构建任务同样的几条命令）：
+        #   functions/ 引 shared/ 和 aws4fetch，打包成 dist/web/_worker.js/（pages deploy 只上传，不在发布机上打包）；
+        #   服务器函数的 _shared/gen 由 copy:shared 生成（zod、aws4fetch 改写成 npm:包@版本），deno install --frozen 核对锁；
+        #   只带部署要用的 supabase/config.toml、migrations/、functions/、templates/（tests、seed.sql 不进发布包）。
+        # release-<tag> 已在上一步上传，这里复制一份 dist/web 再加 _worker.js，装进 exe 的那份不变
+        shell: bash
+        run: |
+          rm -rf publish-out
+          mkdir -p publish-out/dist publish-out/supabase
+          cp -a dist/web publish-out/dist/web
+          npx --no-install wrangler pages functions build functions --outdir publish-out/dist/web/_worker.js
+          test -f publish-out/dist/web/_worker.js/index.js || { echo "::error::没打包出 _worker.js/index.js"; exit 1; }
+          npm run copy:shared
+          bash build/ci/deno-frozen-lock.sh
+          rm -f supabase/functions/.env.example
+          cp -a supabase/config.toml publish-out/supabase/config.toml
+          cp -a supabase/migrations publish-out/supabase/migrations
+          cp -a supabase/functions publish-out/supabase/functions
+          # config.toml 的 auth.email.template 用 content_path 指到 templates/，CLI 读配置时要找得到
+          cp -a supabase/templates publish-out/supabase/templates
+          bash build/ci/no-source-map.sh publish-out/dist/web
+
+      - name: 发布包的 SHA256SUMS 和总指纹（负责人现在核这一段：publish.ps1 下载、逐个核对后显示的就是它）
+        # 清单格式和 bundle 任务一样（“SHA-256␠␠相对路径”，按路径排序）；总指纹 = dist_hash.py 算发布包里除 SHA256SUMS 以外的全部文件，
+        # 和 publish.ps1 的 Get-DistHash 同一个算法
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          cd publish-out
+          bash ../build/ci/sha256sums.sh "$RUNNER_TEMP/SHA256SUMS"
+          out="$(python3 -I ../build/ci/dist_hash.py .)"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          {
+            echo "## $TAG 发布包指纹（负责人现在核这一段：publish.ps1 下载 release-publish-$TAG、逐个按 SHA256SUMS 核对以后，屏幕上显示的文件数和总指纹要和这里一样）"
+            echo
+            echo '```'
+            echo "$out"
+            echo '```'
+            echo
+            echo "提交：$GITHUB_SHA"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 要上传的发布包里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉；publish.ps1 也按 SHA256SUMS 逐个核）
+        run: bash build/ci/no-hidden-files.sh publish-out
+
+      - name: 上传发布包（release-publish-<tag>，publish.ps1 下载部署的就是这一份；保留 90 天）
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-publish-${{ github.ref_name }}
+          path: publish-out/
+          if-no-files-found: error
+          retention-days: 90
+
+  desktop:
+    name: 正式版 exe（调用 desktop.yml，装 release-<tag> 的页面，无密钥、不签名）
+    needs: build
+    uses: ./.github/workflows/desktop.yml
+    with:
+      web_artifact: release-${{ github.ref_name }}
+      expect_env: production
+    permissions:
+      contents: read
+
+  bundle:
+    name: 整包交叉比对、SHA256SUMS 和总指纹（网页 + exe）
+    needs: [build, desktop]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 下载网页产物
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ github.ref_name }}
+          path: bundle/web/
+
+      - name: 下载 exe 产物（未签名安装包、latest.json 草稿、SHA256SUMS）
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: desktop-production-${{ github.ref_name }}
+          path: bundle/desktop/
+
+      - name: 交叉比对（安全审查 W-3：用 build、desktop 两个任务的输出核对，不只信产物自带的 SHA256SUMS）
+        id: check
+        env:
+          BUILD_WEB_HASH: ${{ needs.build.outputs.web_hash }}
+          DESKTOP_WEB_HASH: ${{ needs.desktop.outputs.web_hash }}
+          EXE_NAME: ${{ needs.desktop.outputs.exe_name }}
+          EXE_SHA256: ${{ needs.desktop.outputs.exe_sha256 }}
+          LATEST_SHA256: ${{ needs.desktop.outputs.latest_sha256 }}
+        run: |
+          hex='^[0-9a-f]{64}$'
+          for v in BUILD_WEB_HASH DESKTOP_WEB_HASH EXE_SHA256 LATEST_SHA256; do
+            if ! [[ "${!v}" =~ $hex ]]; then echo "::error::$v 不是 64 位十六进制：${!v}"; exit 1; fi
+          done
+          if ! [[ "$EXE_NAME" =~ ^lemomemo_[0-9]+\.[0-9]+\.[0-9]+_x64-setup\.exe$ ]]; then
+            echo "::error::安装包文件名不对：$EXE_NAME"
+            exit 1
+          fi
+          # ① 页面：下载下来的 release-<tag>、build 任务算的、desktop 任务装进 exe 前算的，三者同一个总指纹
+          web="$(python3 -I build/ci/dist_hash.py bundle/web | sed -n 's/^总指纹：\([0-9a-f]\{64\}\)$/\1/p')"
+          if [ "$web" != "$BUILD_WEB_HASH" ] || [ "$web" != "$DESKTOP_WEB_HASH" ]; then
+            echo "::error::页面总指纹对不上：下载的 $web，build 任务 $BUILD_WEB_HASH，desktop 任务 $DESKTOP_WEB_HASH"
+            exit 1
+          fi
+          # ② exe 产物：文件恰好是安装包、latest.json、SHA256SUMS 三个；SHA-256 和 desktop 任务算的一致
+          actual="$(cd bundle/desktop && find . -type f -printf '%P\n' | LC_ALL=C sort)"
+          expected="$(printf '%s\n' "$EXE_NAME" SHA256SUMS latest.json | LC_ALL=C sort)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::exe 产物里的文件不对，应为：$expected，实际：$actual"
+            exit 1
+          fi
+          got_exe="$(sha256sum -b -- "bundle/desktop/$EXE_NAME" | cut -d' ' -f1)"
+          got_latest="$(sha256sum -b -- bundle/desktop/latest.json | cut -d' ' -f1)"
+          if [ "$got_exe" != "$EXE_SHA256" ] || [ "$got_latest" != "$LATEST_SHA256" ]; then
+            echo "::error::exe 产物的 SHA-256 和 desktop 任务算的对不上"
+            exit 1
+          fi
+          # 产物自带的 SHA256SUMS 也要对（多一道），核完删掉，整包另出一份
+          ( cd bundle/desktop && sha256sum --strict -c SHA256SUMS )
+          rm bundle/desktop/SHA256SUMS
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "交叉比对通过"
+
+      - name: 整包 SHA256SUMS 和总指纹，Summary 分三段写（总指纹不含 SHA256SUMS 本身）
+        env:
+          TAG: ${{ github.ref_name }}
+          WEB_HASH: ${{ steps.check.outputs.web }}
+          EXE_NAME: ${{ needs.desktop.outputs.exe_name }}
+          EXE_SHA256: ${{ needs.desktop.outputs.exe_sha256 }}
+          LATEST_SHA256: ${{ needs.desktop.outputs.latest_sha256 }}
+        run: |
+          cd bundle
+          bash ../build/ci/sha256sums.sh "$RUNNER_TEMP/SHA256SUMS"
+          total="$(python3 -I ../build/ci/dist_hash.py .)"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          {
+            echo "## $TAG 整包核对 ①：网页总指纹（和上面「网页产物指纹」是同一个值，build、desktop、下载三方比对已通过；现在不用另外核）"
+            echo
+            echo '```'
+            echo "总指纹：$WEB_HASH"
+            echo '```'
+            echo
+            echo "## $TAG 整包核对 ②：电脑版安装包 SHA-256（未签名；F10 起负责人签名前核这一段，现在不用核）"
+            echo
+            echo '```'
+            echo "$EXE_SHA256  desktop/$EXE_NAME"
+            echo "$LATEST_SHA256  desktop/latest.json"
+            echo '```'
+            echo
+            echo "## $TAG 整包核对 ③：整包总指纹（网页 + exe；F11 起 publish.ps1 下载整包后核这一段，现在不用核）"
+            echo
+            echo '```'
+            echo "$total"
+            echo '```'
+            echo
+            echo "清单见整包里的 SHA256SUMS。提交：$GITHUB_SHA"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 要上传的 bundle 里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉）
+        run: bash build/ci/no-hidden-files.sh bundle
+
+      - name: 上传整包（保留 90 天）
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-bundle-${{ github.ref_name }}
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 90

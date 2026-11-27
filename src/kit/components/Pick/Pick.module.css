@@ -1,0 +1,444 @@
+/* kit 选择器（Pick.tsx）。只用令牌：
+   选中是月格同一份 --cal-sel-bg / --cal-sel-fg（“深色小方块”），今天是 --today-fg，黄色只在“确定”（--accent）。
+   看得见的小块 28 高（编辑页的值按钮 32 高），按钮本身是 44×44 的透明点按区 */
+.pk {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 头部：左“清空”（只有能清空的才有）、中间标题（周条是 ‹ 年月 ›，只选时刻是名字）、右“确定” */
+.hd {
+  display: grid;
+  grid-template-columns: 64px 1fr 64px;
+  align-items: center;
+  min-height: var(--hit);
+}
+
+.mid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  font-size: var(--fs-13-5);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.title {
+  min-width: 96px;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+}
+
+/* 周条标题做成按钮（点了弹月份）：外观不变（同 .title 的字），只是点按区 44 高 */
+.tbtn {
+  min-height: var(--hit);
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tbtn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -4px;
+}
+
+/* 月份列表里每年前面那一行小字年份（字同 .lab），占满一行 */
+.yr {
+  flex-basis: 100%;
+  padding: 6px 4px 0;
+}
+
+.clr {
+  justify-self: start;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-13-5);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 值按钮旁边的灰字小按钮（待办“清掉”）：没有底、第三层文字色，点按区 44 */
+.txt {
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+.ok {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  min-width: 56px;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.okFace {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-13-5);
+  font-weight: 600;
+}
+
+.ok:disabled {
+  cursor: default;
+}
+
+.ok:disabled > .okFace {
+  background: var(--panel-2);
+  color: var(--text-3);
+}
+
+.arr {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--hit);
+  height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.arr svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.arr:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+/* 提示行（“结束可选 11/22～12/22”“比开始早，算到第二天”；bad 时红字，如免打扰“从”“到”一样） */
+.hint {
+  margin: 0;
+  padding: 2px 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-11-5);
+  text-align: center;
+}
+
+.hint:empty {
+  display: none;
+}
+
+.hint[data-bad] {
+  color: var(--danger-text);
+}
+
+/* 分组小字（“时”“分”、周条上的“日 一 二”）：等宽字加字距，同年月选择器的“年”“月” */
+.lab {
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-10);
+  letter-spacing: 0.14em;
+}
+
+/* 可点的小块：按钮 44 透明，里面的 span 是看得见的 28 小块 */
+.c {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-13-5);
+  transition: background-color var(--dur-press) var(--ease-standard);
+}
+
+/* 下拉单选的小胶囊（排在 .face 之后、各状态之前：stylelint no-descending-specificity） */
+.opt > .face {
+  padding: 0 11px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-13);
+  white-space: nowrap;
+}
+
+.opt:not([data-on]) > .face {
+  box-shadow: inset 0 0 0 0.5px var(--inp-line);
+}
+
+.c[data-on] > .face {
+  background: var(--cal-sel-bg);
+  color: var(--cal-sel-fg);
+  font-weight: 600;
+}
+
+.c[data-today] > .face {
+  color: var(--today-fg);
+  font-weight: 600;
+}
+
+.c:disabled > .face {
+  color: var(--text-3);
+  opacity: var(--disabled-dim);
+}
+
+.c:focus-visible > .face {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.c[data-on][data-today] > .face {
+  color: var(--cal-sel-fg);
+}
+
+.c[data-today]::after {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  margin-left: -1.5px;
+  border-radius: 50%;
+  background: var(--today-fg);
+}
+
+.c[data-on][data-today]::after {
+  display: none;
+}
+
+.c:disabled {
+  cursor: default;
+}
+
+.c:focus-visible,
+.clr:focus-visible,
+.ok:focus-visible,
+.arr:focus-visible {
+  outline: none;
+}
+
+.ok:focus-visible > .okFace,
+.clr:focus-visible,
+.arr:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.hair {
+  height: 0.5px;
+  margin: 2px 0;
+  background: var(--line);
+}
+
+/* 一 · 周条：一行 7 天，格子上面一行小字是星期几 */
+
+/* 日期滑条：和时、分条一样横排左右滑、贴近格子停（proximity），一屏正好 7 天 */
+.week {
+  position: relative;
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.week::-webkit-scrollbar {
+  display: none;
+}
+
+.day {
+  flex: none;
+  flex-direction: column;
+  width: calc(100% / 7);
+  scroll-snap-align: start;
+  gap: 1px;
+  min-height: 52px;
+}
+
+.day i {
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-10);
+  font-style: normal;
+  line-height: 12px;
+}
+
+.day[data-today]::after {
+  bottom: 2px;
+}
+
+/* 时、分两条：左边小字，右边横排左右滑（两头淡出） */
+.srow {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+}
+
+.strip {
+  position: relative;
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  mask-image: linear-gradient(90deg, transparent, var(--text) 14px, var(--text) calc(100% - 14px), transparent);
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+.strip .c {
+  flex: none;
+  width: var(--hit);
+  scroll-snap-align: center;
+}
+
+/* 下拉单选：折行的小胶囊，没选中的描半像素细边；选项多（时区 400 多个）时这一块上下滚 */
+.opts {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+
+  /* 胶囊左右隔 6，不然挤在一起；上下靠 44 点按区里 28 的胶囊自然隔开 */
+  column-gap: 6px;
+  padding: 0 2px 4px;
+}
+
+.many {
+  max-height: 264px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 编辑页里就地展开的那一格：上面一条发丝线（和字段行的分隔线对齐），内容比卡片边多进 8（卡片本身左右 14，这里往外扩 6） */
+.panel {
+  position: relative;
+  flex-basis: 100%;
+  order: 1;
+  min-width: 0;
+  margin: 2px -6px 0;
+  padding: 2px 0 0;
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 6px;
+  left: 6px;
+  height: 0.5px;
+  background: var(--line);
+}
+
+/* 编辑页的值按钮：看得见 32 高的浅底块，点按区 44；开着时描一圈 1px 正文色细边，没值时字淡一档 */
+.fb {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: var(--hit);
+  max-width: 100%;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.fbFace {
+  display: block;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  overflow: hidden;
+  border-radius: var(--r-xs);
+  background: var(--panel-2);
+  font-size: var(--fs-14-5);
+  font-variant-numeric: tabular-nums;
+  line-height: 32px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 同一行两个值按钮（日程“开始 日期 时刻”）看得见的块之间隔 4（控件格的 gap 是 8） */
+.fb + .fb {
+  margin-left: -4px;
+}
+
+.fb[data-on] > .fbFace {
+  box-shadow: inset 0 0 0 1px var(--text);
+}
+
+.fb[data-empty] > .fbFace {
+  color: var(--text-3);
+}
+
+.fb:disabled {
+  cursor: default;
+}
+
+.fb:disabled > .fbFace {
+  color: var(--text-2);
+}
+
+.fb:focus-visible {
+  outline: none;
+}
+
+.fb:focus-visible > .fbFace {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 不在表单行里的下拉单选（PickPopover）：kit Popover 的浮层，宽度跟内容、手机上不超出屏宽；内边距照编辑页展开格（左右 8）。
+   写成 .pop[data-state] 压过 Popover.module.css 的 .content（Radix 在内容上挂 data-state，两份模块谁先加载不一定） */
+.pop[data-state] {
+  width: max-content;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 2px 8px 6px;
+}

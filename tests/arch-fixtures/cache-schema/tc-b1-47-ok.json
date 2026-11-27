@@ -1,0 +1,7 @@
+{
+  "说明": "对照组：只改 rebuildable（不影响库结构），应通过",
+  "lock": "repo",
+  "db_version": "repo",
+  "patch": { "events": { "rebuildable": false } },
+  "expect": null
+}

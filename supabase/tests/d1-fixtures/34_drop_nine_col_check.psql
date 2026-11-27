@@ -1,0 +1,20 @@
+-- expect: public.categories.color：客户端可写的文本列没有长度或取值约束
+-- expect: public.devices.label：客户端可写的文本列没有长度或取值约束
+-- expect: public.devices.app_version：客户端可写的文本列没有长度或取值约束
+-- expect: public.events.tz：客户端可写的文本列没有长度或取值约束
+-- expect: public.note_files.mime：客户端可写的文本列没有长度或取值约束
+-- expect: public.note_files.sha256：客户端可写的文本列没有长度或取值约束
+-- expect: public.note_images.mime：客户端可写的文本列没有长度或取值约束
+-- expect: public.notes.converted_to：客户端可写的文本列没有长度或取值约束
+-- expect: public.settings.key：客户端可写的文本列没有长度或取值约束
+-- TC-B1-147 ⑥：把 0.47 续 ①“补”的 9 列的约束去掉，D1 必须逐列报出（每列各一行 expect，少报一列这个样例就失败）。
+-- 9 条约束各管一列、互不依赖，一起去掉和逐条去掉报出的结果相同；“加进白名单也要失败”在 tests/build/d1-text-bounds.test.ts 逐列证明。
+alter table public.categories drop constraint categories_color_fmt;
+alter table public.devices drop constraint devices_label_len;
+alter table public.devices drop constraint devices_app_version_fmt;
+alter table public.events drop constraint events_tz_fmt;
+alter table public.note_files drop constraint note_files_mime_kind;
+alter table public.note_files drop constraint note_files_sha256_fmt;
+alter table public.note_images drop constraint note_images_mime_webp;
+alter table public.notes drop constraint notes_converted_to_size;
+alter table public.settings drop constraint settings_key_fmt;

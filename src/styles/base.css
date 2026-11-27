@@ -1,0 +1,462 @@
+/* 全局基础样式：只用令牌（颜色在 skins/*.css，时长和曲线在 tokens.css；A11、A24） */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* stylelint-disable-next-line property-no-vendor-prefix -- iOS Safari 只认带前缀的写法 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+
+  /* iPhone 按下可点的元素时系统画的半透明灰框（负责人 11-17“点进去的时候有瞬间的灰框，奇丑无比”：真机图上灰框正好是随手记行里那个按钮 .lmain 的大小，
+     不含右边的“⋯”）：全局关掉。只关系统的按下高亮，键盘聚焦框 :focus-visible（下面）照旧 */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 滑动时右边的灰色滚动条（负责人 11-17“滑动的时候右边的灰色滑动条可以去掉吗”）：只在触屏上藏掉整页的滚动条，滚动照旧；
+   电脑上用鼠标时留着（要靠它看位置、拖动）。scrollbar-width 给 Safari 18.2+ / Firefox，::-webkit-scrollbar 给更早的 WebKit */
+@media (pointer: coarse) {
+  html {
+    scrollbar-width: none;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* 电脑上用鼠标时的滚动条：去掉箭头和灰底槽，只留 6px 黄色圆头细条（浅色柠檬黄、深色暗黄 --p1），平时透明，
+   滚动中的区域带 data-sb-on 时浮出，停下淡去；鼠标移到细条上照样显示，方便拖。data-sb 由 motion/scrollbar-reveal.ts 装上，
+   没装上就是浏览器原生滚动条。颜色是注册过的 --sb-c（伪元素用 inherit 取宿主的值），淡去由 scrollbar-reveal.ts 用 WAAPI 动它
+   （不写 CSS 过渡：那样要给所有元素挂 transition）；不支持 @property 的浏览器没有渐变、直接消失。
+   Chromium 121+ 元素上设了 scrollbar-color / scrollbar-width 会让 ::-webkit-scrollbar 失效，所以这两个只给不认 ::-webkit-scrollbar 的浏览器（Firefox） */
+@property --sb-c {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+:where(html[data-sb] [data-sb-on]) {
+  --sb-c: var(--p1);
+}
+
+html[data-sb] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+  background: transparent;
+}
+
+html[data-sb] ::-webkit-scrollbar-track,
+html[data-sb] ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 滑槽两头各让 12px：卡片圆角 18 的那一段不画滚动条（负责人 11-26“切掉了圆角、贴边太紧”） */
+html[data-sb] ::-webkit-scrollbar-track {
+  margin: 12px;
+}
+
+html[data-sb] ::-webkit-scrollbar-button {
+  display: none;
+}
+
+html[data-sb] ::-webkit-scrollbar-thumb {
+  --sb-c: inherit;
+
+  /* 四周一样留 3px 透明：看得见的黄条 6px、两头正半圆，离卡片边 3px 不贴边（两边留得不一样两头会变椭圆尖头，负责人 11-26“上下怎么不圆润了”） */
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background-clip: padding-box;
+  background-color: var(--sb-c);
+
+  /* 长短按“看得到的 ÷ 整个列表”自动算；列表很长时也不短于 40px，看得清、好抓 */
+  min-width: 40px;
+  min-height: 40px;
+}
+
+html[data-sb] ::-webkit-scrollbar-thumb:hover,
+html[data-sb] ::-webkit-scrollbar-thumb:active {
+  background-color: var(--p1);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  html[data-sb] {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  html[data-sb] [data-sb-on] {
+    scrollbar-color: var(--p1) transparent;
+  }
+}
+
+/* App 页面不许整页双指缩放、双击放大（负责人 11-11“今天，代办跟随手记为啥可以用双指扩大整个画面”；viewport 的 user-scalable=no iOS 不认，
+   iOS 上真正拦住的是 platform/viewport.ts 的 blockPageZoom）。只认 App 入口页（src/index.html 的 <html data-app>）：
+   登录页（src/auth/index.html）也引这份 CSS，照样能缩放（kb-zoom 代码审 M1，主持人定登录页不禁）。
+   touch-action 按祖先取交集：日历 pan-y、拖动柄 none、提醒 pan-x、底栏 manipulation 都还是原来的效果，只少了缩放 */
+html[data-app] {
+  touch-action: pan-x pan-y;
+}
+
+/* 长按不选字、不弹系统“拷贝 / 查询 / 翻译”菜单（负责人 11-19 晚截图：隐私记首页长按空白处选中一大片、弹出拷贝条，“app空白页长按都不要这种选中”）：
+   App 页面全局关掉，只有能打字的地方（输入框、多行框、可编辑区）照常能选、能粘贴；要让人复制的纯文字（设置 › 关于的诊断日志、连接码）在各自样式里单独放开。
+   原来是 8 个组件各写一份 user-select:none，这里统一以后删掉了那几份。只认 App 入口页，登录页不动；:where 不加优先级，不和后面 body:lang(ko) 等规则抢先后 */
+:where(html[data-app] body) {
+  /* stylelint-disable-next-line property-no-vendor-prefix -- iOS Safari 只认带前缀的写法 */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+:where(html[data-app]) :where(input, textarea, [contenteditable]:not([contenteditable='false'])) {
+  /* stylelint-disable-next-line property-no-vendor-prefix -- iOS Safari 只认带前缀的写法 */
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* 原生控件（日期、时刻、下拉的弹出面板、滚动条）跟 App 主题，不跟手机系统（负责人 11-06 真机截图 6）。
+   data-theme 只会是 light / dark（跟随系统时 platform/look.ts 按系统算好再写），color-scheme 只在这里定 */
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
+
+/* 页面顶部要留的安全区（架构师 10-30 第 7 点）：顶部有版本横幅时（UpdateBanner 在根节点设 data-top-banner）由横幅占安全区，
+   页面不再留。页面顶部的 padding 写 var(--safe-top)，不直接写 env(safe-area-inset-top)；要安全区本身（不管有没有横幅）用 var(--inset-top） */
+:root {
+  /* 层级只在这里定（架构 10.1“层级”唯一出口）：页面内容都不写 z-index，贴在视口上的各层按下面从低到高；
+     组件内部自成层叠上下文的小数（-1、0、1、2）照写在组件里。
+     例外（不用变量、照写数字）：启动画面（splash.css 的 .lemo-splash）在 React 和本文件之前就画出来，
+     要压住一切，写 2147483000。
+     src/app/__tests__/layers-media-css.test.ts 核：这张表从低到高、各处只写变量或上面这些数 */
+  --z-strip: 1;          /* 顶部状态栏底色条、顶部模糊带：压住页面内容 */
+  --z-notes-mist: 4;    /* 随手记输入框后面的整页模糊（R-401）：压住页面内容和顶部模糊带，在输入行下面 */
+  --z-inrow: 5;          /* 随手记底部输入行 */
+  --z-mist: 8;          /* 打字条后面的整页液态玻璃（R-399）：压住页面内容，在底栏渐隐层下面 */
+  --z-bar-fx: 9;         /* 底栏实色带、上沿渐隐：在底栏下面 */
+  --z-bar: 10;           /* 底栏、“＋” */
+  --z-bar-over: 11;      /* 宽屏侧栏的“＋”、打字条的提示：压住底栏 */
+  --z-drawer: 20;        /* 随手记详情抽屉 */
+  --z-pick: 29;          /* 日历年月选择的遮罩 */
+  --z-toast: 30;         /* 撤销条、随手记的出错条和插图提示、打字条“已记下”（今天页、待办页的出错条不写层级） */
+  --z-float: 31;         /* 打字条、冲突提示、“＋”等待 */
+  --z-remind: 40;        /* 提醒横幅、按钮条、弹层 */
+  --z-remind-note: 41;   /* 提醒弹层上的小提示 */
+  --z-banner: 50;        /* 版本横幅 */
+  --z-probe: 60;         /* 诊断用的键盘辅助条探针 */
+  --z-dialog: 70;        /* 弹层遮罩和内容 */
+  --z-popover: 80;       /* Popover（经 Portal 挂到 body） */
+  --z-screen: 100;       /* 整屏提示 */
+  --z-edge: 101;         /* 主屏幕 App 顶端看不见的登记色条 .lemo-edge：不画东西、不挡点按，只给 iOS 26 判断顶边（压在所有固定层上面） */
+  --inset-top: env(safe-area-inset-top);
+
+  /* 11-06 评审 T-1：页面顶部比安全区多留 --top-fade，静止时顶部模糊带里没有内容 */
+  --safe-top: calc(var(--inset-top) + var(--top-fade) + var(--edge-clear));
+
+  /* 顶部渐变模糊带（负责人 11-06：向下滑时顶部也要和底部一样的渐变模糊）比安全区多出来的过渡段；宽屏侧栏为 0 */
+  --top-fade: 12px;
+
+  /* 顶部模糊带实际的高度，三层共用（负责人 11-24“顶部的模糊什么时候变这么大了”“直接把模糊拉短”）：只盖住状态栏文字，到安全区下沿之前淡完。
+     --top-fade 只留给页面布局（--safe-top），内容位置不变 */
+  --top-band: calc(var(--inset-top) * 0.8);
+
+  /* iOS 26 主屏幕 App 顶部系统模糊多糊的一段（负责人 11-24“字和兔子要清楚”，选“日期往下挪”）：系统从屏幕顶端往下画渐变模糊，
+     真机量到糊到约 96pt（--safe-top 74pt 下的日期上半截、兔子耳朵都糊），网页关不掉；只在主屏幕 App 里把页面内容往下让 28px 躲开 */
+  --edge-clear: 0px;
+
+  /* 底栏（B2 FA-7）占的高度：渐进模糊带 126px 盖住底栏和“＋”；有底栏的三页底部留白用 --tabbar-pad（再加安全区和 16px 余量），
+     最后一行能滚到模糊带上面、不被糊掉（设计动效评审 L6） */
+  --tabbar-h: 126px;
+
+  /* 底部实色带上沿的渐隐高度（11-06 负责人：原来 54px 太长，缩到 24px；GlassBarFx.module.css .band） */
+  --band-fade: 24px;
+
+  /* 底栏、“＋”上沿外的渐隐高度（11-06 负责人选 B12：“导航上边一点透明渐变看到字”；GlassBarFx.module.css .edge） */
+  --edge-fade: 12px;
+
+  /* 底部安全区（G10，11-06）：底栏、“＋”、实色带、页面底部留白（--tabbar-pad）、浮条（--dock-bottom）统一用它，不各写各的 env(safe-area-inset-bottom)；
+     启动时它先 0 后 34 的那一段由 platform/inset-watch.ts 盯着，稳定前这三样不显示 */
+  --inset-bottom: env(safe-area-inset-bottom);
+  --tabbar-pad: max(calc(var(--tabbar-h) + var(--inset-bottom) + 16px), var(--sn-pad, 0px));
+
+  /* 贴底浮条（撤销条、打字条、提醒按钮条等）离底的唯一公式：键盘没弹时离底 安全区 + --dock-lift（手机在底栏上方 118，宽屏 24），
+     减 --dock-gap（手机 = --vh-gap：布局视口少一截时和底栏一起补到屏幕底；宽屏 0：没有底栏，和侧栏一样不补）；
+     键盘压住布局视口时 --kb 是键盘高度，取两者大的（--vh-gap、--kb 由 platform/viewport.ts 写）。
+     组件只写 bottom: var(--dock-bottom)，不另写公式；--undo-h 是撤销条高度，叠放时往上让 */
+  --dock-lift: 118px;
+  --dock-gap: var(--vh-gap, 0px);
+  --dock-bottom: max(calc(var(--inset-bottom) + var(--dock-lift) - var(--dock-gap)), var(--kb, 0px));
+  --undo-h: 56px;
+
+  /* 液态玻璃斜上方那片光（底栏 kit GlassBar 的 .glass::after、打字条后面那层 TypeBar .mist::after 共用一份）；--g-hi 由皮肤给、同在根节点上，按当前皮肤算 */
+  --g-sheen-img: radial-gradient(120% 90% at 22% -30%, var(--g-hi) 0 38%, transparent 60%);
+}
+
+/* 手机上键盘弹着（<html data-kbo>）：底栏、“＋”藏着，浮条直接贴键盘上沿。iOS 主屏幕版键盘把布局视口本身压矮，--kb 是 0。
+   只管窄屏：宽屏没有底栏，键盘弹着照旧走上面的公式（台账 Q-20）；藏底栏的 data-kbhide 规则（GlassBar*.module.css）、随手记输入行（NotesPage.module.css）用同一个断点 */
+@media (width < 900px) {
+  :root[data-kbo] {
+    --dock-bottom: var(--kb, 0px);
+  }
+
+  /* 这一页没有底栏（<html data-nobar>，App 的 TabBar 按 app/tab-of.ts 写；编辑页、设置……）：浮条离底 安全区 + 6（记录页美化方向 A 的底部工具条），
+     不再悬在底栏的位置；键盘、--vh-gap 照上面的公式。宽屏本来就没有底栏（24），不跟着变 */
+  :root[data-nobar] {
+    --dock-lift: 6px;
+  }
+}
+
+/* 同步提示卡显示着（<html data-sn-card>，SyncNoticeHost 写 --sn-h = 卡的实际高度）：页底留白至少让到卡上沿再加 8px，
+   最后一行（设置页的“退出登录”等）能滚到卡上面、点得到；撤销条同时开着时卡再往上让一条，留白也跟着加。
+   --sn-pad 没有卡时不定义，用的地方写 var(--sn-pad, 0px) */
+:root[data-sn-card] {
+  --sn-pad: calc(var(--dock-bottom) + var(--sn-h, 0px) + 8px);
+}
+
+:root[data-sn-card]:has([data-undo-toast]) {
+  --sn-pad: calc(var(--dock-bottom) + var(--undo-h) + 8px + var(--sn-h, 0px) + 8px);
+}
+
+/* 电脑版侧栏（D5，断点和 GlassBar.module.css 侧栏那段一样是 (width >= 900px)）：底部没有底栏，
+   有底栏的页底部留白回到安全区 + 16px；浮条离底 安全区 + 24px（和侧栏离窗口边 16px 拉开一点），不减 --vh-gap */
+@media (width >= 900px) {
+  :root {
+    --tabbar-pad: max(calc(var(--inset-bottom) + 16px), var(--sn-pad, 0px));
+    --dock-lift: 24px;
+    --dock-gap: 0px;
+    --top-fade: 0px;
+  }
+}
+
+.lemo-edge {
+  display: none;
+}
+
+/* 只在主屏幕 App、手机宽度：躲开 iOS 26 顶部系统模糊（见 :root 里的 --edge-clear）。
+   514 先让 28px，负责人真机看过发了自己往上挪的图“按照第二张标准往上移动”，两张量出差约 13pt，改 15px。
+   对照版（负责人 11-24 选“做一版对照试试”）：资料（planestro#574 iOS 26 真机、ojapp iOS 27）说顶端贴一条固定、全宽、单一纯色、高过 10px 的元素，
+   系统就不画这层模糊；511 实色条没起效，怀疑是同层级的整屏固定外框 .lemo-top 抢了判断。这版：
+   .lemo-edge 用 background-clip: text 只登记颜色不画出来（外观不变），压在最上层；.lemo-top 外框缩成顶部那一条，里面两层照样画 */
+@media (display-mode: standalone) and (width < 900px) {
+  :root {
+    --edge-clear: 15px;
+  }
+
+  .lemo-top {
+    bottom: auto;
+    height: var(--top-band);
+  }
+
+  .lemo-edge {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: var(--z-edge);
+    display: block;
+    height: max(var(--inset-top), 11px);
+    background: var(--bg);
+    background-clip: text;
+    pointer-events: none;
+  }
+}
+
+/* 网页版宽屏排法（2026-11-24 负责人定的改版 A 方案“助手常驻”；参考 本机资料/01-设计方案/2026-11-24_网页端日历待办改善/web-layout-plan.html）：
+   断点是 kit/hooks/useMedia.ts 的 MQ_DESK_WIDE。今天、日历、待办、随手记、纪念日、设置铺满一屏，不整页滚：上沿 14、页头高 62、页头和卡片隔 12、下沿 14；
+   有常驻 AI 栏的页（app/router.ts LEVELS 的 dock）右边让出 AI 助手栏（宽 340，和左边内容隔 14，离窗口右边 16）。页面外框在 kit/components/Desk.module.css，助手栏在 ai-chat 的 ChatDock，都只用这几个数 */
+
+/* iPad（负责人 11-24“电脑端同样适配ipad”）：横屏 1024 起就用这套排法；上下沿至少让出安全区（主屏幕版顶上的状态栏、底下的横条），
+   1024～1179（iPad 横屏的窄档）AI 栏收到 288，左边内容不被挤到 600 以下 */
+@media (width >= 1024px) {
+  :root {
+    --dk-top: max(14px, var(--inset-top));
+    --dk-bot: max(14px, var(--inset-bottom));
+    --dk-head: 62px;
+    --dk-gap: 12px;
+    --dk-ai: 340px;
+    --dk-right: calc(max(16px, env(safe-area-inset-right)) + var(--dk-ai) + 14px);
+  }
+}
+
+@media (width >= 1024px) and (width < 1180px) {
+  :root {
+    --dk-ai: 288px;
+  }
+}
+
+:root[data-top-banner] {
+  --safe-top: 0px;
+}
+
+/* 版本横幅固定在顶部（R-281，负责人 10-30 17:2x“有新版本这个提醒应该固定在上面”）：横幅 position: fixed、紧贴安全区下沿，
+   滚动、下拉回弹都不动；它不在文档流里，由 #root 让出它的高度（UpdateBanner 量好写进 --banner-h），关掉横幅一起收回。
+   页面自己的 var(--safe-top) 仍是 0，页面顶部内边距和横幅在文档流里时一样（设置页底部那条 min-height: 0 不用改） */
+:root[data-top-banner] #root {
+  padding-top: calc(var(--inset-top) + var(--banner-h, 0px));
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--f-zh);
+  font-size: var(--fs-15);
+}
+
+/* 页面底色（R-439，负责人 11-16“磨砂玻璃主题下底色是有个很淡的渐变背景的”）：只在这里画一层，固定在屏幕上、不随内容滚（同登录页 .page::before 的做法）；
+   各页面容器不再各自盖纯色 --bg。简洁皮肤 --scr-bg 就是 --bg，看不出变化；磨砂玻璃是皮肤视觉稿 .scr 那张很淡的渐变。
+   盖满全屏的层（查找面板、输密码页、整屏提示）自己画 var(--scr-bg)；前提同登录页：html 不设背景、body 不加 transform / filter / contain */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--scr-bg, var(--bg));
+  pointer-events: none;
+}
+
+/* 顶部状态栏底色条（负责人 10-30 在 iPhone 主屏幕版发现）：主屏幕版状态栏透明，往上滚的内容会从时间、信号图标底下穿过去。
+   全局盖一条页面背景、高 var(--inset-top)（安全区本身）；有版本横幅时照样在，横幅固定在它下面（R-281）。
+   背景默认 --scr-bg（页面底色那张，R-439；简洁皮肤就是 --bg）；背景不是纯色的页面（登录页的 --login-bg 渐变）在根节点设 --safe-top-bg，
+   这里按整屏大小画（background-size 100vw 100vh，从屏幕左上角起），露出来的正好是页面那张固定渐变最上面一截，不切光晕。
+   层级 1：压住页面内容（页面都不写 z-index）；弹层（kit Dialog 的 .scrim、.content 是 70）、版本横幅（50）、整屏提示（100）、
+   启动画面都在它上面——注意弹层必须写正的 z-index：position: fixed 而 z-index 为 auto 的元素画在第 0 层，会被这条盖住。不挡点击 */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: var(--z-strip);
+  height: var(--top-band);
+  background: var(--safe-top-bg, var(--scr-bg, var(--bg)));
+  background-size: 100vw 100vh;
+  pointer-events: none;
+
+  /* 11-06 顶部渐变模糊带：底色从最上沿开始整段渐变到透明，不留实色段（负责人 11-06 选定），到安全区下面 --top-fade 处没了；下面两层模糊跟着从上往下变弱（和底部模糊带方向相反） */
+  mask: linear-gradient(to bottom, var(--bg), transparent);
+}
+
+/* 顶部渐变模糊带的两层模糊（负责人 11-06；主持人：控制层数，webkit 上多层 backdrop-filter 拖慢主线程，b2-motion-list M2 回归就是这个原因，
+   所以只用两层，底部那条是 3 层）：8px 管状态栏那一段，2px 管往下的过渡段。不挡点按。
+   R-349 起（black-translucent）页面铺到状态栏下面，带子从 y=0 开始、高“安全区 + --top-fade”，盖住状态栏区（负责人 11-06“顶部最上面开始做模糊”）。
+   两层是入口页里的两个静态 div（src/index.html、src/auth/index.html 的 .lemo-top-8、.lemo-top-2），不是伪元素（动效复审 M5）：
+   原来切页用 View Transition 时，伪元素属于整页快照、会跟着旧页淡掉；11-20 起切页不再用 View Transition（motion/page-swap.ts），
+   两层是真元素、切页时原地不动一直画着，不再起 view-transition-name。模糊写在两层自己身上。
+   层级 1，和底色条 body::before 一样，在它后面画、压在它上面；弹层（70）、版本横幅（50）、整屏提示（100）、启动画面都在它上面，这是有意的（代码审查 L11）：
+   弹层自己的遮罩 --scrim 铺满整屏、带模糊，盖住状态栏区时不需要这条带子再模糊一次；启动画面第一帧要和 iOS 启动图一模一样，带子不能糊到它上面。
+   .lemo-top-2 另有备用底色 --status-tint（负责人 11-06 要求默认关闭：先按纯模糊上真机看白字，看过再决定开不开） */
+
+/* 外框（11-06 真机录屏-顶部带，主持人 11-06 选方案 B，保留回弹）：负责人录屏里页面滚到底再往上拉、回弹拉深（约超过带子高度）时，
+   iOS 把顶部这几个 fixed 层整层停画（连不带模糊的底色条 body::before 一起没），模糊“滚到一定范围就没了”。
+   两层模糊改成在一个铺满整屏的 fixed 外框里绝对定位：外框一直和可见区相交，不会被当成看不见。
+   外框不写 filter、opacity、mask、backdrop-filter、mix-blend-mode、will-change、clip-path，不成为背景根，里面两层照样模糊外框外面的页面。
+   真机还不行，下一批改成关掉回弹（html 上 overscroll-behavior-y: none），见 B2-底栏透明度-真机差异排查.md 第 12 节 */
+.lemo-top {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-strip);
+  pointer-events: none;
+}
+
+.lemo-top-8,
+.lemo-top-2 {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--top-band);
+  pointer-events: none;
+}
+
+.lemo-top-8 {
+  /* avoid-ai-design-ignore: K3 负责人 11-06 指定顶部和底部一样的渐变模糊 */
+  backdrop-filter: blur(8px);
+  mask: linear-gradient(to bottom, var(--bg) calc(var(--inset-top) * 0.5), transparent 100%);
+}
+
+.lemo-top-2 {
+  background: var(--status-tint);
+  backdrop-filter: blur(2px); /* avoid-ai-design-ignore: K3 负责人 11-06 指定顶部和底部一样的渐变模糊 */
+  mask: linear-gradient(to bottom, var(--bg) calc(var(--inset-top) * 0.65), transparent 100%);
+}
+
+/* 减少透明效果（data-rt）、隐私记页强制实色（data-solid）：不模糊，只留底色渐变（实色渐变）；电脑版侧栏（≥ 900px）不加模糊带 */
+
+:root:is([data-rt='1'], [data-solid='1']) .lemo-top-8,
+:root:is([data-rt='1'], [data-solid='1']) .lemo-top-2 {
+  display: none;
+}
+
+@media (width >= 900px) {
+  .lemo-top-8,
+  .lemo-top-2 {
+    display: none;
+  }
+}
+
+/* 按钮继承页面字体（L-6，SETTINGS 合卡设计复审建议、主持人 11-06 定）：浏览器默认按钮不继承 font，Windows 版 webkit 落到宋体，
+   中韩文和页面其他字不一样宽；组件自己写的 font-size、font-weight 是类选择器，比这条优先，照旧生效 */
+button {
+  font: inherit;
+}
+
+/* 韩文按词换行（接手清单 KO-keep-all；设计复审第二轮 N2）：不在音节之间把一个词拆成两行；一个词长到一行放不下时才在词里断
+   （overflow-wrap 用 break-word 不用 anywhere：anywhere 会把弹性布局里文字的最小宽度算成一个字，挤窄的行会被压成一列） */
+:lang(ko) body,
+body:lang(ko) {
+  font-family: var(--f-ko);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* 弹层打开时锁住页面滚动：自己写，不用 Radix 的 react-remove-scroll（它会插内联 <style>，CSP 下被拦；B0 验证结论，架构 2.0 做法 ①） */
+html.scroll-locked,
+html.scroll-locked body {
+  overflow: hidden;
+}
+
+/* 触屏上文档始终比视口高 1px、一直可以滚动（CI-webkit-crash，11-04）：整页 View Transition 播放期间，文档从“不到一屏、不能滚”
+   变成“超过一屏、能滚”（注销页 → 设置首页；今天页 → 第一次进日历，月历分包在过渡途中挂进来），webkit 整个页面崩溃（Page crashed）。
+   二分（5e0eaf2 对 4805049）：旧页面本来就能滚、或新页面不超一屏都不崩；这条规则让“能不能滚”在换页前后不变。
+   1px 的滚动量手指感觉不到（iPhone 本来就有回弹）；电脑上（有悬停的设备）不加，免得短页面也常显滚动条。
+   11-20 起切页不再用 View Transition（motion/page-swap.ts），崩溃的前提没了；这条先留着（静止页面的滚动手感跟着它），要删先在 webkit 真机上核 */
+@media (hover: none) {
+  html {
+    min-height: calc(100% + 1px);
+  }
+}
+
+/* 页面切换（进下一页、返回、页签互切、“详细”长成）11-20 起全部由 motion/page-swap.ts 用 WAAPI 做，不再用浏览器的 View Transition：
+   过渡里底栏、“＋”是截图、拍不到后面的内容，过渡一结束真底栏露出来模糊突然出现（负责人 11-20 录屏）。
+   进页、返回的关键帧（原来这里的 lemo-push-*、lemo-pop-*）原样搬到 page-swap.ts 的 slidePage */
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 打字的框（输入框、多行框、可编辑区）聚焦不画黑框（负责人 11-17：“所有输入框都不要带这个大黑框”）：
+   手指点进输入框也命中 :focus-visible，原来每个框都套 2px 黑框；有闪烁的光标就看得出在哪个框里。
+   勾选框、单选、按钮、链接、下拉不在这里，键盘聚焦框照旧。全仓库只在这一处管，组件里不再给输入框单独画描边 */
+:is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit'], [type='reset'], [type='color'], [type='file']), textarea, [contenteditable]):focus-visible {
+  outline: none;
+}
+
+/* 程序把焦点放回按钮、上一次操作是手指 / 鼠标（kit/quiet-focus.ts 打 data-quiet-focus，失焦就摘）：不画框。
+   iOS Safari 把程序放的焦点也算 :focus-visible：设置页点返回后入口那一行（负责人 11-18“这个框是什么东西”）、
+   关掉弹层后打开它的那张卡（负责人 11-23 今日小运卡“这个黑框去掉”）都套了框。键盘操作不打这个标记，焦点框照旧。
+   加 !important：组件自己写的 .x:focus-visible 框（几十处，样式表排在 base.css 后面、优先级一样）也要压住，这个标记只在程序放焦点那一下打 */
+[data-quiet-focus]:focus-visible {
+  outline: none !important;
+}
+
+/* 程序放焦点的非控件（子页标题 h1、设备分组标题 tabIndex={-1}，给读屏用；弹层内容框）不画焦点框（设计复审第二轮 N4）：
+   标题不能操作，刷新或用键盘进来时命中 :focus-visible 会套一个方框，像是选中了什么。能操作的控件不写 tabindex=-1，照旧走上面的
+   :focus-visible；月份选择器的年列（roving tabindex）方向键先选中再移焦点，拿到焦点的那一年已经是 tabIndex 0 */
+[tabindex="-1"]:focus {
+  outline: none;
+}

@@ -1,0 +1,558 @@
+<!doctype html>
+<!-- 由 build/site_pages.mjs 生成，改那里再重新生成 -->
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>柠檬记 — 说一句就记下</title>
+<meta name="description" content="柠檬记：说一句话就记下日程、待办和随手记，中文、韩文都行；到点准时提醒，iPhone 主屏幕、网页和 Windows 都能用。">
+<link rel="canonical" href="https://lemomemo.com/zh/">
+<link rel="alternate" hreflang="zh-Hans" href="https://lemomemo.com/zh/">
+<link rel="alternate" hreflang="ko" href="https://lemomemo.com/ko/">
+<link rel="alternate" hreflang="x-default" href="https://lemomemo.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="柠檬记">
+<meta property="og:title" content="柠檬记 — 说一句就记下">
+<meta property="og:description" content="说一句话就记下日程、待办和随手记，中文、韩文都行。">
+<meta property="og:image" content="https://lemomemo.com/og-zh.png">
+<meta property="og:url" content="https://lemomemo.com/zh/">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/index.css">
+<script src="/lp.js"></script>
+<script src="/lang.js" defer></script>
+<link rel="modulepreload" href="/index-kit.js">
+<link rel="modulepreload" href="/index-draw.js">
+<link rel="modulepreload" href="/index-gl.js">
+<link rel="modulepreload" href="/index-rive.js">
+<link rel="modulepreload" href="/index-outro.js">
+<link rel="modulepreload" href="/index-fx.js">
+<script type="module" src="/index.js"></script>
+</head>
+<body>
+<main>
+<section class="film" id="film" aria-label="柠檬记能做什么">
+  <div class="sr-film"><section><h2>AI 帮你记，也帮你找</h2><h3>点一下+，打一句，AI 帮你整理</h3><p>打一句“今天六点前把发票寄给会计”，AI 认出日期和提醒，记成今天的待办。</p><h3>长按+说一句，AI 记成日程</h3><p>按住+说“明天下午三点和小金开会”，松手就记成明天的日程。中文、韩文混着说也行。</p><h3>AI 总结这周的日程</h3><p>打一句“总结一下这周的日程”，AI 理成一段话，每句都标着依据。总结只在这里看，不会存进你的记录。</p><h3>问一句，所有记录一起找</h3><p>问一句，日程、待办、纪念日、随手记和附件一起找；字对不上，按意思也能找到。</p><h3>AI 联网搜索</h3><p>问 AI 助手，需要的时候它会上网查；回答上方写着查了几个网页，点来源就能打开。</p><h3>AI 助手可以更换</h3><p>用柠檬记提供的 AI，或用自己的密钥选 Gemini、Claude、OpenAI、DeepSeek；换了 AI，它记住的事还在。</p></section><section><h2>日程和提醒，都替你记着</h2><h3>周历往前翻，过去的都在</h3><p>一周七天排开，往前翻，过去的日程和待办都还在。</p><h3>切到月历，一个月一眼看完</h3><p>每天的日程是格子里的彩色小条，节气、农历、纪念日也写在格子里。</p><h3>纪念日、生日，年年提醒</h3><p>阴历生日每年自动换算；当天、前一天、提前几天，提醒可以选好几个，不会漏掉。</p><h3>填上生日，看每日运势</h3><p>按八字看每天的工作、感情、财运、健康，还有幸运色和幸运数字。仅供娱乐。</p></section><section><h2>待办和随手记，分得清清楚楚</h2><h3>待办分轻重缓急</h3><p>高、中、低三档，换成高的自动排到前面；做完一勾就划掉，左滑删除。</p><h3>大事拆成小步骤</h3><p>一条待办下面加子待办，卡片上看进度；全部勾完，这条待办自动完成。</p><h3>随手记灵感，AI 帮你分类</h3><p>想到什么先记一句，可以配张照片当封面，AI 从你已有的分类里挑一个贴上；电脑上还能加附件。</p><h3>隐私记，锁住你的隐私</h3><p>隐私记单独上锁，输 4 位密码或用 Face ID 才能打开，离开一会儿自动锁上；里面也能放照片。</p></section><section><h2>按你的喜好，换个样子</h2><h3>边缘一划，切页、进设置</h3><p>从屏幕左边缘往右划，切到下一个页签；从右边缘往左划，直接进设置。</p><h3>AI 助手换个样子</h3><p>设置 › 吉祥物里有 7 个会动的角色，点哪个换哪个，今天页“现在”卡上的也跟着换。</p><h3>字体 4 种随你换</h3><p>系统字体、细线黑、悠哉体、文楷，选中哪种，才把哪种下载到这台设备上。</p><h3>头像自己定</h3><p>上传一张照片，挪一挪、缩放一下就好；只有你自己看得到，各台设备同步显示。</p><h3>中文、韩文一键切换</h3><p>设置里改界面语言，提醒和邮件也会改用这种语言；这个网页右上角也能切。</p></section></div>
+  <div class="pin">
+    <div class="bg"></div>
+    <span class="xb" aria-hidden="true"></span>
+    <span class="xw" aria-hidden="true"></span>
+    <span class="xp" aria-hidden="true"></span>
+    <span class="glow"></span>
+    <canvas class="pc" aria-hidden="true"></canvas>
+    <div class="frame">
+      <header class="hero">
+        <div class="nav">
+          <a class="logo" href="/zh/"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>柠檬记</a>
+          <nav class="links" aria-label="页内"><a href="#dev">多端</a><a href="#safe">隐私</a><a href="#faq">常见问题</a><a href="/zh/demo">演示</a></nav>
+          <nav class="lsw" aria-label="语言"><a href="/zh/" data-lang="zh" hreflang="zh-Hans" aria-current="true">中文</a> <a href="/ko/" data-lang="ko" hreflang="ko" lang="ko">한국어</a></nav>
+        </div>
+        <div class="hero-tx">
+          <h1><span class="l">说一句</span><span class="l">就记下</span></h1>
+          <div class="hero-foot">
+            <p class="lede">中韩双语的日程、待办和随手记。说一句或打一句，AI 帮你记好，到点提醒你。</p>
+            <p class="alt-t"><span lang="ko">말 한마디면 기록 끝</span></p>
+            <p class="cta"><a class="btn btn-k" href="/zh/demo">免注册，看演示</a><a class="btn btn-w" href="/app/">有邀请码？开始使用</a></p>
+            <p class="cta-note"><a href="#faq-invite" class="to-inv">没有邀请码？看看怎么拿到</a></p>
+          </div>
+        </div>
+      </header>
+
+      <h2 class="gt" data-g="0" aria-hidden="true"><span class="l">AI 帮你记，</span><span class="l">也帮你找</span></h2>
+      <h2 class="gt" data-g="1" aria-hidden="true"><span class="l">日程和提醒，</span><span class="l">都替你记着</span></h2>
+      <h2 class="gt" data-g="2" aria-hidden="true"><span class="l">待办和随手记，</span><span class="l">分得清清楚楚</span></h2>
+      <h2 class="gt" data-g="3" aria-hidden="true"><span class="l">按你的喜好，</span><span class="l">换个样子</span></h2>
+      <p class="glab" data-g="0" aria-hidden="true">AI 帮你记，也帮你找</p>
+      <p class="glab" data-g="1" aria-hidden="true">日程和提醒，都替你记着</p>
+      <p class="glab" data-g="2" aria-hidden="true">待办和随手记，分得清清楚楚</p>
+      <p class="glab" data-g="3" aria-hidden="true">按你的喜好，换个样子</p>
+
+      <div class="cap" data-g="0" aria-hidden="true"><div class="cap-tx"><h3>点一下+，打一句，AI 帮你整理</h3><p>打一句“今天六点前把发票寄给会计”，AI 认出日期和提醒，记成今天的待办。</p></div></div>
+      <div class="cap" data-g="0" aria-hidden="true"><div class="cap-tx"><h3>长按+说一句，AI 记成日程</h3><p>按住+说“明天下午三点和小金开会”，松手就记成明天的日程。中文、韩文混着说也行。</p></div></div>
+      <div class="cap" data-g="0" aria-hidden="true"><div class="cap-tx"><h3>AI 总结这周的日程</h3><p>打一句“总结一下这周的日程”，AI 理成一段话，每句都标着依据。总结只在这里看，不会存进你的记录。</p></div></div>
+      <div class="cap" data-g="0" aria-hidden="true"><div class="cap-tx"><h3>问一句，所有记录一起找</h3><p>问一句，日程、待办、纪念日、随手记和附件一起找；字对不上，按意思也能找到。</p></div></div>
+      <div class="cap" data-g="0" aria-hidden="true"><div class="cap-tx"><h3>AI 联网搜索</h3><p>问 AI 助手，需要的时候它会上网查；回答上方写着查了几个网页，点来源就能打开。</p></div></div>
+      <div class="cap" data-g="0" aria-hidden="true"><div class="cap-tx"><h3>AI 助手可以更换</h3><p>用柠檬记提供的 AI，或用自己的密钥选 Gemini、Claude、OpenAI、DeepSeek；换了 AI，它记住的事还在。</p></div></div>
+      <div class="cap" data-g="1" aria-hidden="true"><div class="cap-tx"><h3>周历往前翻，过去的都在</h3><p>一周七天排开，往前翻，过去的日程和待办都还在。</p></div></div>
+      <div class="cap" data-g="1" aria-hidden="true"><div class="cap-tx"><h3>切到月历，一个月一眼看完</h3><p>每天的日程是格子里的彩色小条，节气、农历、纪念日也写在格子里。</p></div></div>
+      <div class="cap" data-g="1" aria-hidden="true"><div class="cap-tx"><h3>纪念日、生日，年年提醒</h3><p>阴历生日每年自动换算；当天、前一天、提前几天，提醒可以选好几个，不会漏掉。</p></div></div>
+      <div class="cap" data-g="1" aria-hidden="true"><div class="cap-tx"><h3>填上生日，看每日运势</h3><p>按八字看每天的工作、感情、财运、健康，还有幸运色和幸运数字。仅供娱乐。</p></div></div>
+      <div class="cap" data-g="2" aria-hidden="true"><div class="cap-tx"><h3>待办分轻重缓急</h3><p>高、中、低三档，换成高的自动排到前面；做完一勾就划掉，左滑删除。</p></div></div>
+      <div class="cap" data-g="2" aria-hidden="true"><div class="cap-tx"><h3>大事拆成小步骤</h3><p>一条待办下面加子待办，卡片上看进度；全部勾完，这条待办自动完成。</p></div></div>
+      <div class="cap" data-g="2" aria-hidden="true"><div class="cap-tx"><h3>随手记灵感，AI 帮你分类</h3><p>想到什么先记一句，可以配张照片当封面，AI 从你已有的分类里挑一个贴上；电脑上还能加附件。</p></div></div>
+      <div class="cap" data-g="2" aria-hidden="true"><div class="cap-tx"><h3>隐私记，锁住你的隐私</h3><p>隐私记单独上锁，输 4 位密码或用 Face ID 才能打开，离开一会儿自动锁上；里面也能放照片。</p></div></div>
+      <div class="cap" data-g="3" aria-hidden="true"><div class="cap-tx"><h3>边缘一划，切页、进设置</h3><p>从屏幕左边缘往右划，切到下一个页签；从右边缘往左划，直接进设置。</p></div></div>
+      <div class="cap" data-g="3" aria-hidden="true"><div class="cap-tx"><h3>AI 助手换个样子</h3><p>设置 › 吉祥物里有 7 个会动的角色，点哪个换哪个，今天页“现在”卡上的也跟着换。</p></div></div>
+      <div class="cap" data-g="3" aria-hidden="true"><div class="cap-tx"><h3>字体 4 种随你换</h3><p>系统字体、细线黑、悠哉体、文楷，选中哪种，才把哪种下载到这台设备上。</p></div></div>
+      <div class="cap" data-g="3" aria-hidden="true"><div class="cap-tx"><h3>头像自己定</h3><p>上传一张照片，挪一挪、缩放一下就好；只有你自己看得到，各台设备同步显示。</p></div></div>
+      <div class="cap" data-g="3" aria-hidden="true"><div class="cap-tx"><h3>中文、韩文一键切换</h3><p>设置里改界面语言，提醒和邮件也会改用这种语言；这个网页右上角也能切。</p></div></div>
+    </div>
+
+    <div class="rig-box" aria-hidden="true">
+      <div class="ph rig"><span class="ph-k k-act"></span><span class="ph-k k-vu"></span><span class="ph-k k-vd"></span><span class="ph-k k-pw"></span><div class="ph-bz"><div class="scr">
+        <div class="sb"><span>10:20</span><svg class="sb-ic" viewBox="0 0 76 13"><rect x="0" y="8.6" width="3.2" height="4.4" rx="1"/><rect x="4.6" y="6.2" width="3.2" height="6.8" rx="1"/><rect x="9.2" y="3.6" width="3.2" height="9.4" rx="1"/><rect x="13.8" y="1" width="3.2" height="12" rx="1"/><path class="sb-wifi" d="M23.2 4.9a10.4 10.4 0 0 1 13.6 0M25.8 7.8a6.6 6.6 0 0 1 8.4 0"/><circle cx="30" cy="11" r="1.8"/><rect class="sb-bat" x="45.5" y=".5" width="25" height="12" rx="3.8"/><rect x="47.5" y="2.5" width="17.5" height="8" rx="2"/><path class="sb-cap" d="M72 4.4v4.2c.9-.3 1.5-1.1 1.5-2.1s-.6-1.8-1.5-2.1z"/></svg></div>
+        <span class="di"></span>
+        <div class="pg s-type" data-s="type" data-tab="0">
+          <div class="ap-hd"><div><p class="ap-t">11月24日 周二</p><span class="ap-bar"></span></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="nc"><div class="nc-top"><span class="pill">进行中</span><span class="nc-now">现在 10:20</span></div><p class="nc-t">产品周会</p><div class="trk"><i></i><b></b></div><div class="nc-ts"><span>10:00</span><span>11:00</span><span>12:00</span></div><span class="ms mi mi-15"></span></div>
+          <div class="sl red"><span>! 没赶上</span><b>1</b></div>
+          <div class="lt"><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">交季度报告</span><small class="red">逾 1 天</small></span><span class="pp"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4.5l3 1.8"/></svg>推迟</span></div></div>
+          <div class="sl"><span>今天的安排</span><b class="cnt5"><span class="sw"><i class="a">4</i><i class="b">5</i></span></b></div>
+          <div class="lc"><div class="rw"><span class="tm">14:00</span><span class="tx"><span class="tt">牙医复诊</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">订周末的火车票</span><small>今天截止</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw rw-todo rw-new"><i class="flash"></i><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">把发票寄给会计</span><small>18:00 提醒</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">给妈妈打电话</span><small>20:00 提醒</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw"><span class="tm">19:30</span><span class="tx"><span class="tt">和小林吃饭</span></span></div></div>
+          <div class="toast"><span>已记下：把发票寄给会计</span><b>撤销</b></div>
+          <div class="tb-mist"></div>
+          <div class="kbd"><p class="kb-r"><span>Q</span><span>W</span><span>E</span><span>R</span><span>T</span><span>Y</span><span>U</span><span>I</span><span>O</span><span>P</span></p><p class="kb-r r2"><span>A</span><span>S</span><span>D</span><span>F</span><span>G</span><span>H</span><span>J</span><span>K</span><span>L</span></p><p class="kb-r"><span class="w">⇧</span><span>Z</span><span>X</span><span>C</span><span>V</span><span>B</span><span>N</span><span>M</span><span class="w">⌫</span></p><p class="kb-r r4"><span class="w">123</span><span class="sp">空格</span><span class="rt"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6v6H6M10 8l-4 4 4 4"/></svg></span></p></div>
+          <div class="tbar"><p class="tb-f"><span class="ph0">想记什么，回车记下</span><span class="ty">今天六点前把发票寄给会计</span></p><p class="tb-say">正在识别…</p><div class="pf"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg><span class="sw"><span class="a">分类</span><span class="b">工作</span></span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="sw"><span class="a">日期</span><span class="b">11/24 今天 18:00</span></span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2zM10 21h4"/></svg>提醒</span></div><p class="pf-n"><span class="sw"><span class="a">试着打：明天下午3点 工作 开会 提醒我</span><span class="b">浅黄 = 从这句话里认出来的，点一下能改</span></span></p><div class="tb-tools"><span class="ib"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span><span class="ib"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></span><span class="tb-save">记下</span></div><span class="pk" aria-hidden="true"><span class="pk-rv mi mi-peek"></span></span></div>
+        </div>
+
+        <div class="pg s-voice cv" data-s="voice" data-tab="0">
+          <div class="ap-hd"><div><p class="ap-t">11月24日 周二</p><span class="ap-bar"></span></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="nc"><div class="nc-top"><span class="pill">进行中</span><span class="nc-now">现在 10:20</span></div><p class="nc-t">产品周会</p><div class="trk"><i></i><b></b></div><div class="nc-ts"><span>10:00</span><span>11:00</span><span>12:00</span></div><span class="ms mi mi-15"></span></div>
+          <div class="sl red"><span>! 没赶上</span><b>1</b></div>
+          <div class="lt"><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">交季度报告</span><small class="red">逾 1 天</small></span><span class="pp"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4.5l3 1.8"/></svg>推迟</span></div></div>
+          <div class="sl"><span>今天的安排</span><b>4</b></div>
+          <div class="lc"><div class="rw"><span class="tm">14:00</span><span class="tx"><span class="tt">牙医复诊</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">订周末的火车票</span><small>今天截止</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">给妈妈打电话</span><small>20:00 提醒</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw"><span class="tm">19:30</span><span class="tx"><span class="tt">和小林吃饭</span></span></div></div>
+          <div class="sl nx"><span>明天 11月25日</span><b>1</b></div>
+          <div class="lc nx"><div class="rw"><i class="flash"></i><span class="tm">15:00</span><span class="tx"><span class="tt">和小金开会</span></span></div></div>
+          <div class="toast"><span>已记下：和小金开会</span><b>撤销</b><b>修改</b></div>
+          <div class="dim"></div>
+          <div class="sheet rec"><span class="grab"></span>
+            <p class="rec-st"><i class="rdot"></i><span class="s1">正在录音</span><span class="s2">正在整理…</span></p>
+            <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <p class="rec-m">说完松手，AI 帮你整理</p>
+            <div class="heard"><small>听到的字</small><p><span class="ty">明天下午三点和小金开会</span></p></div>
+            <p class="rec-s">中文、韩文混着说都行 · 最长 60 秒</p>
+          </div>
+        </div>
+
+        <div class="pg s-sum cv" data-s="sum" data-tab="0">
+          <div class="ap-hd"><div><p class="ap-t">11月24日 周二</p><span class="ap-bar"></span></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="nc"><div class="nc-top"><span class="pill">进行中</span><span class="nc-now">现在 10:20</span></div><p class="nc-t">产品周会</p><div class="trk"><i></i><b></b></div><div class="nc-ts"><span>10:00</span><span>11:00</span><span>12:00</span></div><span class="ms mi mi-15"></span></div>
+          <div class="sl red"><span>! 没赶上</span><b>1</b></div>
+          <div class="lt"><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">交季度报告</span><small class="red">逾 1 天</small></span><span class="pp"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4.5l3 1.8"/></svg>推迟</span></div></div>
+          <div class="sl"><span>今天的安排</span><b>4</b></div>
+          <div class="lc"><div class="rw"><span class="tm">14:00</span><span class="tx"><span class="tt">牙医复诊</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">订周末的火车票</span><small>今天截止</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">给妈妈打电话</span><small>20:00 提醒</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw"><span class="tm">19:30</span><span class="tx"><span class="tt">和小林吃饭</span></span></div></div>
+          <div class="tb-mist"></div>
+          <div class="kbd"><p class="kb-r"><span>Q</span><span>W</span><span>E</span><span>R</span><span>T</span><span>Y</span><span>U</span><span>I</span><span>O</span><span>P</span></p><p class="kb-r r2"><span>A</span><span>S</span><span>D</span><span>F</span><span>G</span><span>H</span><span>J</span><span>K</span><span>L</span></p><p class="kb-r"><span class="w">⇧</span><span>Z</span><span>X</span><span>C</span><span>V</span><span>B</span><span>N</span><span>M</span><span class="w">⌫</span></p><p class="kb-r r4"><span class="w">123</span><span class="sp">空格</span><span class="rt"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6v6H6M10 8l-4 4 4 4"/></svg></span></p></div>
+          <div class="tbar"><p class="tb-f"><span class="ph0">想记什么，回车记下</span><span class="ty">总结一下这周的日程</span></p><p class="tb-say">正在识别…</p><div class="pf"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg><span class="sw"><span class="a">分类</span><span class="b">工作</span></span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="sw"><span class="a">日期</span><span class="b">11/24 今天 18:00</span></span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2zM10 21h4"/></svg>提醒</span></div><p class="pf-n"><span class="sw"><span class="a">试着打：明天下午3点 工作 开会 提醒我</span><span class="b">浅黄 = 从这句话里认出来的，点一下能改</span></span></p><div class="tb-tools"><span class="ib"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span><span class="ib"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></span><span class="tb-save">记下</span></div><span class="pk" aria-hidden="true"><span class="pk-rv mi mi-peek"></span></span></div>
+          <div class="as"><div class="as-top"><span class="as-x">✕ 关闭</span><b>查找结果</b><span></span></div><p class="as-said">“总结一下这周的日程”</p><div class="as-und"><span>理解成：<b>11月23日 周一–11月29日 周日的日程</b></span><span class="as-ed">改</span></div><section class="as-sum"><div class="as-sh">AI 总结 · 只显示，不保存</div><p class="as-w">正在总结…</p><p class="as-tx">这周一共 5 个日程，集中在周二和周三。周二最满：上午 10 点产品周会<sup>1</sup>、下午 2 点牙医复诊<sup>2</sup>、晚上 7 点半和小林吃饭<sup>3</sup>；周三下午 3 点和小金开会<sup>4</sup>；周六去看展<sup>5</sup>，其余几天都空着。</p><div class="as-bb"><span>依据：5 条记录</span><span>收起 ▴</span></div></section><div class="as-days"><p class="as-gh">11月24日 周二</p><ul class="as-ul"><li class="as-row"><span class="as-lead"><i class="as-bar"></i></span><span class="as-t"><b>产品周会</b><small>11月24日 周二 10:00</small></span></li><li class="as-row"><span class="as-lead"><i class="as-bar"></i></span><span class="as-t"><b>牙医复诊</b><small>11月24日 周二 14:00</small></span></li><li class="as-row"><span class="as-lead"><i class="as-bar"></i></span><span class="as-t"><b>和小林吃饭</b><small>11月24日 周二 19:30</small></span></li></ul><p class="as-gh">11月25日 周三</p><ul class="as-ul"><li class="as-row"><span class="as-lead"><i class="as-bar"></i></span><span class="as-t"><b>和小金开会</b><small>11月25日 周三 15:00</small></span></li></ul><p class="as-gh">11月28日 周六</p><ul class="as-ul"><li class="as-row"><span class="as-lead"><i class="as-bar"></i></span><span class="as-t"><b>看展</b><small>11月28日 周六</small></span></li></ul></div><ul class="as-basis"><li class="as-row"><span class="as-num">1</span><span class="as-lead"><i class="as-bar"></i></span><span class="as-t"><b>产品周会</b><small>11月24日 周二 10:00</small></span></li><li class="as-row"><span class="as-num">2</span><span class="as-lead"><i class="as-bar"></i></span><span class="as-t"><b>牙医复诊</b><small>11月24日 周二 14:00</small></span></li><li class="as-row"><span class="as-num">3</span><span class="as-lead"><i class="as-bar"></i></span><span class="as-t"><b>和小林吃饭</b><small>11月24日 周二 19:30</small></span></li><li class="as-row"><span class="as-num">4</span><span class="as-lead"><i class="as-bar"></i></span><span class="as-t"><b>和小金开会</b><small>11月25日 周三 15:00</small></span></li><li class="as-row"><span class="as-num">5</span><span class="as-lead"><i class="as-bar"></i></span><span class="as-t"><b>看展</b><small>11月28日 周六</small></span></li></ul><div class="as-acts"><span class="as-act">改成记下</span></div><p class="as-use">这次用了 1 次 AI</p></div>
+        </div>
+
+        <div class="pg s-find cv" data-s="find" data-tab="-1">
+          <p class="fd-hd"><b>查找</b><span>取消</span></p>
+          <div class="fd-in"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4.5a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM15 15l4.5 4.5"/></svg><span class="ph0">想找什么</span><span class="ty">小林的生日是哪天</span></div>
+          <p class="fd-hint">打一句话，日程、待办、纪念日、随手记和附件一起找</p>
+          <p class="fd-wait">正在按意思找…</p>
+          <div class="fd-res">
+            <div class="chips"><span class="on">全部 4</span><span>日程</span><span>待办</span><span>纪念日</span><span>随手记</span><span>图片</span></div>
+            <p class="fd-ai"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l1.9 5.2 5.1 1.8-5.1 1.9-1.9 5.1-1.8-5.1-5.2-1.9 5.2-1.8zM18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>理解成：小林 生日</p>
+            <div class="fd-g"><p class="fd-gh"><b>最相关 1</b><small>关键词和意思都对上</small></p>
+              <div class="lc"><div class="rw fr1"><span class="kd p">纪念日</span><span class="tx"><span class="tt">小林 生日</span><small>下一次 11月27日</small></span></div></div></div>
+            <div class="fd-g"><p class="fd-gh"><b>关键词找到 2</b></p>
+              <div class="lc"><div class="rw"><span class="kd">日程</span><span class="tx"><span class="tt">和小林吃饭</span><small>今天 19:30</small></span></div><div class="rw"><span class="kd b">待办</span><span class="tx"><span class="tt">还小林的书</span><small>周五截止</small></span></div></div></div>
+            <div class="fd-g"><p class="fd-gh"><b>意思相近 1</b></p>
+              <div class="lc"><div class="rw"><span class="kd n">随手记</span><span class="tx"><span class="tt">小林说喜欢那本旧书的封面</span></span></div></div></div>
+          </div>
+        </div>
+
+        <div class="pg s-chat cv" data-s="chat" data-tab="-1">
+          <div class="ch-hd"><b>AI 助手</b><span class="x"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></span></div>
+          <p class="bub me">这周末首尔有什么展可以看？</p>
+          <p class="thk"><i></i><i></i><i></i></p>
+          <div class="ans">
+            <p class="meta"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM3.5 12h17M12 3.5c2.4 2.4 3.4 5.3 3.4 8.5s-1 6.1-3.4 8.5c-2.4-2.4-3.4-5.3-3.4-8.5s1-6.1 3.4-8.5z"/></svg>联网查了 3 个网页 · 用了你的日程</p>
+            <p class="bub ai">周六你已经记了“看展”。这周末开着的展找到几个，点下面的网页看详情。</p>
+            <p class="src"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM3.5 12h17M12 3.5c2.4 2.4 3.4 5.3 3.4 8.5s-1 6.1-3.4 8.5c-2.4-2.4-3.4-5.3-3.4-8.5s1-6.1 3.4-8.5z"/></svg>网页 1</span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM3.5 12h17M12 3.5c2.4 2.4 3.4 5.3 3.4 8.5s-1 6.1-3.4 8.5c-2.4-2.4-3.4-5.3-3.4-8.5s1-6.1 3.4-8.5z"/></svg>网页 2</span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM3.5 12h17M12 3.5c2.4 2.4 3.4 5.3 3.4 8.5s-1 6.1-3.4 8.5c-2.4-2.4-3.4-5.3-3.4-8.5s1-6.1 3.4-8.5z"/></svg>网页 3</span></p>
+          </div>
+          <div class="ch-in"><span class="ph0">问点什么，或者按住说</span><span class="ty">这周末首尔有什么展可以看？</span><span class="send"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 11.5L12 5.5l6 6"/></svg></span><span class="pk" aria-hidden="true"><span class="pk-rv mi mi-peek"></span></span></div>
+        </div>
+
+        <div class="pg s-aip cv" data-s="aip" data-tab="-1">
+          <p class="st-nav"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>设置</p>
+          <p class="st-t">我的 AI</p>
+          <p class="st-sec">用哪个</p>
+          <div class="card opts"><div class="opt o1"><i class="rd"></i><span>用柠檬记提供的 AI</span></div><div class="opt o2"><i class="rd"></i><span>用我自己的密钥</span></div></div>
+          <div class="ownbox"><p class="st-sec">服务商</p>
+            <div class="provs"><span class="pv pv-g"><b>Gemini</b><small>谷歌</small></span><span class="pv pv-c"><b>Claude</b><small>Anthropic</small></span><span class="pv pv-o"><b>OpenAI</b><small>OpenAI</small></span><span class="pv pv-d"><b>DeepSeek</b><small>深度求索</small></span></div></div>
+          <div class="card mem"><b>长期记忆不受影响</b><p>AI 记住的事存在柠檬记里，换不换 AI 都在。</p></div>
+        </div>
+
+        <div class="pg s-week cv" data-s="week" data-tab="1">
+          <div class="cal-hd"><p class="ap-t">11月</p><span class="seg"><span class="on">周</span><span>月</span><span>纪念日</span></span></div>
+          <div class="wk-bar"><span class="arr prev"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg></span><span class="wk-chip"><span class="r r0">11月22日–28日</span><span class="r r1">11月15日–21日</span><span class="r r2">11月8日–14日</span></span><span class="arr"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></span></div>
+          <p class="wk-sub"><span class="r0">本周 6 项</span><span class="wk-today">回到今天</span></p>
+          <div class="wk-days">
+            <div class="wk w0">
+              <div class="dr we"><p class="dl"><small>周日</small><b>22</b><em><span>小雪</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周一</small><b>23</b><em><span>十五</span></em></p><div class="dc"></div></div>
+              <div class="dr td"><p class="dl"><small>周二</small><b>24</b><em><span>十六</span></em></p><div class="dc"><span class="ev"><i>10:00</i>产品周会</span><span class="ev"><i>14:00</i>牙医复诊</span><span class="ev"><i>19:30</i>和小林吃饭</span></div></div>
+              <div class="dr"><p class="dl"><small>周三</small><b>25</b><em><span>十七</span></em></p><div class="dc"><span class="ev"><i>15:00</i>和小金开会</span></div></div>
+              <div class="dr"><p class="dl"><small>周四</small><b>26</b><em><span>十八</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周五</small><b>27</b><em><span>十九</span></em></p><div class="dc"><span class="ev p">小林 生日</span></div></div>
+              <div class="dr we"><p class="dl"><small>周六</small><b>28</b><em><span>二十</span></em></p><div class="dc"><span class="ev b">看展</span></div></div>
+            </div>
+            <div class="wk w1">
+              <div class="dr we"><p class="dl"><small>周日</small><b>15</b><em><span>初七</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周一</small><b>16</b><em><span>初八</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周二</small><b>17</b><em><span>初九</span></em></p><div class="dc"><span class="ev"><i>10:00</i>产品周会</span></div></div>
+              <div class="dr"><p class="dl"><small>周三</small><b>18</b><em><span>初十</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周四</small><b>19</b><em><span>十一</span></em></p><div class="dc"><span class="ev b">体检</span></div></div>
+              <div class="dr"><p class="dl"><small>周五</small><b>20</b><em><span>十二</span></em></p><div class="dc"></div></div>
+              <div class="dr we"><p class="dl"><small>周六</small><b>21</b><em><span>十三</span></em></p><div class="dc"></div></div>
+            </div>
+            <div class="wk w2">
+              <div class="dr we"><p class="dl"><small>周日</small><b>8</b><em><span>三十</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周一</small><b>9</b><em><span>十月</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周二</small><b>10</b><em><span>初二</span></em></p><div class="dc"><span class="ev"><i>10:00</i>产品周会</span></div></div>
+              <div class="dr"><p class="dl"><small>周三</small><b>11</b><em><span>初三</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周四</small><b>12</b><em><span>初四</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周五</small><b>13</b><em><span>初五</span></em></p><div class="dc"></div></div>
+              <div class="dr we"><p class="dl"><small>周六</small><b>14</b><em><span>初六</span></em></p><div class="dc"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pg s-month cv" data-s="month" data-tab="1">
+          <div class="ap-hd"><div><p class="ap-t"><span class="mt0">11月</span><span class="mt1">12月</span><i class="chev"></i></p><span class="ap-bar"></span><p class="ap-sub"><span class="ms0">11月22日–28日 · 本周 6 项</span><span class="ms1">2026年 · 本月 11 项</span><span class="ms2">2026年 · 本月 9 项</span></p></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="cn"><span class="seg"><span class="cn-w on">周</span><span class="cn-m">月</span><span>纪念日</span></span><span class="cn-r"><span class="nb">‹</span><span class="tdy">今天</span><span class="nb cn-n">›</span></span></div>
+          <div class="mo-b">
+            <div class="mw">
+              <div class="dr we"><p class="dl"><small>周日</small><b>22</b><em><span>小雪</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周一</small><b>23</b><em><span>十五</span></em></p><div class="dc"></div></div>
+              <div class="dr td"><p class="dl"><small>周二</small><b>24</b><em><span>十六</span></em></p><div class="dc"><span class="ev"><i>10:00</i>产品周会</span><span class="ev"><i>14:00</i>牙医复诊</span><span class="ev"><i>19:30</i>和小林吃饭</span></div></div>
+              <div class="dr"><p class="dl"><small>周三</small><b>25</b><em><span>十七</span></em></p><div class="dc"><span class="ev"><i>15:00</i>和小金开会</span></div></div>
+              <div class="dr"><p class="dl"><small>周四</small><b>26</b><em><span>十八</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周五</small><b>27</b><em><span>十九</span></em></p><div class="dc"><span class="ev p">小林 生日</span></div></div>
+              <div class="dr we"><p class="dl"><small>周六</small><b>28</b><em><span>二十</span></em></p><div class="dc"><span class="ev b">看展</span></div></div>
+            </div>
+            <div class="mgr"><p class="mwd"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></p><div class="mgs"><div class="mg mg0"><span class="mc we"><b>1</b><em>廿三</em></span><span class="mc"><b>2</b><em>廿四</em></span><span class="mc"><b>3</b><em>廿五</em><i class="mk c1">产品周会</i></span><span class="mc"><b>4</b><em>廿六</em></span><span class="mc"><b>5</b><em>廿七</em></span><span class="mc"><b>6</b><em>廿八</em><i class="mk c3">朋友婚礼</i></span><span class="mc we"><b>7</b><em>立冬</em></span><span class="mc we"><b>8</b><em>三十</em></span><span class="mc"><b>9</b><em>十月</em></span><span class="mc"><b>10</b><em>初二</em><i class="mk c1">产品周会</i></span><span class="mc"><b>11</b><em>初三</em></span><span class="mc"><b>12</b><em>初四</em></span><span class="mc"><b>13</b><em>初五</em></span><span class="mc we"><b>14</b><em>初六</em></span><span class="mc we"><b>15</b><em>初七</em></span><span class="mc"><b>16</b><em>初八</em></span><span class="mc"><b>17</b><em>初九</em><i class="mk c1">产品周会</i></span><span class="mc"><b>18</b><em>初十</em></span><span class="mc"><b>19</b><em>十一</em><i class="mk c2">体检</i></span><span class="mc"><b>20</b><em>十二</em></span><span class="mc we"><b>21</b><em>十三</em></span><span class="mc we"><b>22</b><em>小雪</em></span><span class="mc"><b>23</b><em>十五</em></span><span class="mc td sel"><b>24</b><em>十六</em><i class="mk c1">产品周会</i><i class="mk c1">牙医复诊</i><small>+1</small></span><span class="mc"><b>25</b><em>十七</em><i class="mk c1">和小金开会</i></span><span class="mc"><b>26</b><em>十八</em></span><span class="mc"><b>27</b><em>十九<svg class="hrt" viewBox="0 0 10 9" aria-hidden="true"><path d="M5 8.6 1 4.7A2.3 2.3 0 0 1 5 1.6a2.3 2.3 0 0 1 4 3.1Z"/></svg></em></span><span class="mc we"><b>28</b><em>二十</em><i class="mk c2">看展</i></span><span class="mc we"><b>29</b><em>廿一</em></span><span class="mc"><b>30</b><em>廿二</em></span><span class="mc out"><b>1</b><em>廿三</em><i class="mk c1">产品周会</i></span><span class="mc out"><b>2</b><em>廿四</em></span><span class="mc out"><b>3</b><em>廿五<svg class="hrt" viewBox="0 0 10 9" aria-hidden="true"><path d="M5 8.6 1 4.7A2.3 2.3 0 0 1 5 1.6a2.3 2.3 0 0 1 4 3.1Z"/></svg></em></span><span class="mc out"><b>4</b><em>廿六</em></span><span class="mc we out"><b>5</b><em>廿七</em></span><span class="mc we out"><b>6</b><em>廿八</em></span><span class="mc out"><b>7</b><em>大雪</em></span><span class="mc out"><b>8</b><em>三十</em><i class="mk c1">产品周会</i></span><span class="mc out"><b>9</b><em>冬月</em></span><span class="mc out"><b>10</b><em>初二</em></span><span class="mc out"><b>11</b><em>初三</em></span><span class="mc we out"><b>12</b><em>初四</em></span></div><div class="mg mg1"><span class="mc we out"><b>29</b><em>廿一</em></span><span class="mc out"><b>30</b><em>廿二</em></span><span class="mc"><b>1</b><em>廿三</em><i class="mk c1">产品周会</i></span><span class="mc"><b>2</b><em>廿四</em></span><span class="mc"><b>3</b><em>廿五<svg class="hrt" viewBox="0 0 10 9" aria-hidden="true"><path d="M5 8.6 1 4.7A2.3 2.3 0 0 1 5 1.6a2.3 2.3 0 0 1 4 3.1Z"/></svg></em></span><span class="mc"><b>4</b><em>廿六</em></span><span class="mc we"><b>5</b><em>廿七</em></span><span class="mc we"><b>6</b><em>廿八</em></span><span class="mc"><b>7</b><em>大雪</em></span><span class="mc"><b>8</b><em>三十</em><i class="mk c1">产品周会</i></span><span class="mc"><b>9</b><em>冬月</em></span><span class="mc"><b>10</b><em>初二</em></span><span class="mc"><b>11</b><em>初三</em></span><span class="mc we"><b>12</b><em>初四</em></span><span class="mc we"><b>13</b><em>初五</em></span><span class="mc"><b>14</b><em>初六</em></span><span class="mc"><b>15</b><em>初七</em><i class="mk c1">产品周会</i></span><span class="mc"><b>16</b><em>初八</em></span><span class="mc"><b>17</b><em>初九</em></span><span class="mc"><b>18</b><em>初十</em><i class="mk c1">公司年会</i></span><span class="mc we"><b>19</b><em>十一</em></span><span class="mc we"><b>20</b><em>十二</em></span><span class="mc"><b>21</b><em>十三</em></span><span class="mc"><b>22</b><em>冬至</em><i class="mk c1">产品周会</i></span><span class="mc"><b>23</b><em>十五</em></span><span class="mc"><b>24</b><em>十六</em><i class="mk c3">圣诞聚餐</i></span><span class="mc"><b>25</b><em>十七</em></span><span class="mc we"><b>26</b><em>十八</em></span><span class="mc we"><b>27</b><em>十九</em></span><span class="mc"><b>28</b><em>二十</em></span><span class="mc"><b>29</b><em>廿一</em><i class="mk c1">产品周会</i></span><span class="mc"><b>30</b><em>廿二</em></span><span class="mc"><b>31</b><em>廿三</em><i class="mk c2">跨年</i></span><span class="mc out hol"><b>1</b><em><span class="hn">元旦</span></em></span><span class="mc we out hol"><b>2</b><em>廿五</em></span><span class="mc we out hol"><b>3</b><em>廿六</em></span><span class="mc out"><b>4</b><em>廿七</em></span><span class="mc out"><b>5</b><em>小寒</em></span><span class="mc out"><b>6</b><em>廿九</em></span><span class="mc out"><b>7</b><em>三十</em></span><span class="mc out"><b>8</b><em>腊月</em></span><span class="mc we out"><b>9</b><em>初二</em></span></div></div>
+              <p class="dlh"><span>11月24日 周二</span><b>3 项</b></p>
+              <div class="lc"><div class="rw"><span class="tm">10:00</span><span class="tx"><span class="tt">产品周会</span></span></div><div class="rw"><span class="tm">14:00</span><span class="tx"><span class="tt">牙医复诊</span></span></div><div class="rw"><span class="tm">19:30</span><span class="tx"><span class="tt">和小林吃饭</span></span></div></div></div>
+          </div>
+        </div>
+
+        <div class="pg s-anv cv" data-s="anv" data-tab="1">
+          <div class="cal-hd"><p class="ap-t">纪念日</p><span class="seg"><span>周</span><span>月</span><span class="on">纪念日</span></span></div>
+          <div class="chips"><span class="on">全部 2</span><span>生日 1</span><span>纪念日 1</span><span>倒数日 0</span></div>
+          <div class="av-top"><small>最近的一个 · 生日</small><p><b>3</b><span>天后</span></p><em>小林 生日</em></div>
+          <div class="sl"><span>全部</span><b>2</b></div>
+          <div class="lc"><div class="rw"><span class="avd"></span><span class="tx"><span class="tt">小林 生日</span><small>阴历十月十九 · 今年 11月27日</small></span><span class="av-n">还有 3 天</span></div><div class="rw"><span class="avd b"></span><span class="tx"><span class="tt">结婚纪念日</span><small>阳历 · 今年 12月3日</small></span><span class="av-n">还有 9 天</span></div></div>
+          <div class="dim"></div>
+          <div class="sheet anf"><span class="grab"></span>
+            <p class="sh-hd"><span>取消</span><b>新建纪念日</b><span></span></p>
+            <div class="fm"><span class="fl">类型</span><span class="seg"><span class="on">生日</span><span>纪念日</span><span>倒数日</span></span></div>
+            <div class="fm"><span class="fl">名字</span><span class="fv"><span class="ph0">例如 妈妈生日</span><span class="ty">妈妈生日</span></span></div>
+            <div class="fm"><span class="fl">阳历还是阴历</span><span class="seg sl2"><span class="a on">阳历</span><span class="b">阴历</span></span></div>
+            <div class="fm"><span class="fl">日期</span><span class="fv"><span class="d-sol">4月25日</span><span class="d-lun">阴历三月初九</span></span></div>
+            <div class="fm col"><span class="fl">提醒</span><span class="chips"><span class="on">当天</span><span class="on">前一天</span><span class="r3">提前 3 天</span></span></div>
+          </div>
+        </div>
+
+        <div class="pg s-fort cv" data-s="fort" data-tab="0">
+          <div class="ap-hd"><div><p class="ap-t">11月24日 周二</p><span class="ap-bar"></span></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="nc"><div class="nc-top"><span class="pill">进行中</span><span class="nc-now">现在 10:20</span></div><p class="nc-t">产品周会</p><div class="trk"><i></i><b></b></div><div class="nc-ts"><span>10:00</span><span>11:00</span><span>12:00</span></div><span class="ms mi mi-15"></span></div>
+          <div class="ft-tile"><b>今日小运</b><p class="ft-e">想按八字看每天的运势？</p><span class="bt">填生日</span></div>
+          <div class="sl"><span>今天的安排</span><b>4</b></div>
+          <div class="lc"><div class="rw"><span class="tm">14:00</span><span class="tx"><span class="tt">牙医复诊</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">订周末的火车票</span><small>今天截止</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">给妈妈打电话</span><small>20:00 提醒</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw"><span class="tm">19:30</span><span class="tx"><span class="tt">和小林吃饭</span></span></div></div>
+          <div class="dim"></div>
+          <div class="sheet bday"><span class="grab"></span>
+            <p class="sh-hd"><span>取消</span><b>你的生日</b><span class="ok">确定</span></p>
+            <div class="pk"><p><span>年</span><b>1992</b></p><p><span>月</span><b>6</b></p><p><span>日</span><b>18</b></p><p><span>时</span><b class="u">不知道</b></p></div>
+            <p class="pk-n">生日会同步到你的账号，可随时清除 · 仅供娱乐</p>
+          </div>
+          <div class="sheet fort">
+            <p class="fo-hd"><b>大树 · 11月24日</b><span class="x"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></span></p>
+            <p class="fo-me">你的本色是大树：稳当，愿意往上长</p>
+            <p class="stars big s4"><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></p>
+            <p class="fo-tip">踏实做事会有回报，适合收尾。</p>
+            <div class="fo-cats">
+              <p><b>工作</b><span class="stars s4"><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></span><span>适合整理和收尾</span></p>
+              <p><b>感情</b><span class="stars s3"><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></span><span>适合约个饭</span></p>
+              <p><b>财运</b><span class="stars s3"><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></span><span>适合记记账</span></p>
+              <p><b>健康</b><span class="stars s4"><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><svg class="st" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></span><span>记得多喝水</span></p>
+            </div>
+            <div class="fo-luck"><p><small>幸运色</small><b><i class="sw0"></i>森林绿</b></p><p><small>幸运数字</small><b>3</b></p></div>
+            <span class="fo-edit">改生日</span>
+            <p class="fo-day">今天是你的收获日 · 仅供娱乐，图个好心情</p>
+          </div>
+        </div>
+
+        <div class="pg s-todo cv" data-s="todo" data-tab="2">
+          <div class="ap-hd"><div><p class="ap-t">待办</p><span class="ap-bar"></span><p class="ap-sub">11月24日 周二 · <span class="cnt1"><span class="sw"><i class="a">1</i><i class="b">2</i></span></span> / 6 完成</p></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="chips"><span class="on">全部 <b>6</b></span><span>工作 <b>2</b></span><span>生活 <b>4</b></span></div>
+          <div class="sl red"><span>! 过期</span><b>1</b></div>
+          <div class="lt"><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">交季度报告</span><small class="red">逾 1 天</small></span><span class="hml"><span class="on">H</span><span>M</span><span>L</span></span></div></div>
+          <div class="sl"><span>今天</span><b>2</b></div>
+          <div class="lc lc-today"><div class="rw rw-todo r-mom"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">给妈妈打电话</span><small>20:00 提醒</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw rw-todo r-train"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">订周末的火车票</span><small>今天截止</small></span><span class="hml"><span class="h">H</span><span class="on">M</span><span>L</span></span></div></div>
+          <div class="sl"><span>以后</span><b>2</b></div>
+          <div class="lc"><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">整理冬天的衣服</span><small>这周</small></span><span class="hml"><span>H</span><span>M</span><span class="on">L</span></span></div><div class="swp r-book"><span class="sw-del">删除</span><div class="rw rw-todo sw-face"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">还小林的书</span><small>周五</small></span><span class="hml"><span>H</span><span>M</span><span class="on">L</span></span></div></div></div>
+          <div class="sl"><span>已完成</span><b>1</b></div>
+          <div class="lc"><div class="rw rw-todo"><span class="ck done"></span><span class="tx strike"><span class="dt"></span><span class="tt">买猫粮</span></span></div></div>
+        </div>
+
+        <div class="pg s-sub cv" data-s="sub" data-tab="2">
+          <div class="ap-hd"><div><p class="ap-t">待办</p><span class="ap-bar"></span><p class="ap-sub">11月24日 周二 · <span class="cnt4"><span class="sw"><i class="a">1</i><i class="b">2</i></span></span> / 6 完成</p></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="sl"><span>今天</span><b>2</b></div>
+          <div class="lc"><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">订周末的火车票</span><small>今天截止</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">给妈妈打电话</span><small>20:00 提醒</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div></div>
+          <div class="sl"><span>以后</span><b>2</b></div>
+          <div class="lc"><div class="rw rw-todo r-wint"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">整理冬天的衣服</span><small>这周</small></span><span class="prog"><span class="sw2"><span class="p0">1/2</span><span class="p1">1/3</span><span class="p2">2/3</span><span class="p3">3/3</span></span></span><span class="hml"><span>H</span><span>M</span><span class="on">L</span></span></div>
+            <div class="subs"><p class="sbr dn sb1"><span class="ck done"></span><span class="tt">大衣送去干洗</span></p><p class="sbr sb2"><span class="ck"></span><span class="tt">毛衣叠好收进柜子</span></p><p class="sbr sb3"><span class="ck"></span><span class="tt">买两个收纳箱</span></p></div>
+            <div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">还小林的书</span><small>周五</small></span><span class="hml"><span>H</span><span>M</span><span class="on">L</span></span></div></div>
+          <div class="toast"><span>全部完成，已完成这条待办</span></div>
+          <div class="dim"></div>
+          <div class="sheet ed"><span class="grab"></span>
+            <p class="ed-t">整理冬天的衣服</p>
+            <div class="ed-row"><span>优先级</span><span class="seg"><span>高</span><span>中</span><span class="on">低</span></span></div>
+            <p class="ed-sec">子任务</p>
+            <p class="sbr dn"><span class="ck done"></span><span class="tt">大衣送去干洗</span></p>
+            <p class="sbr"><span class="ck"></span><span class="tt">毛衣叠好收进柜子</span></p>
+            <p class="sbr ed-s3"><span class="ck"></span><span class="ty">买两个收纳箱</span></p>
+            <span class="ed-add"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>拆成小步骤</span>
+          </div>
+        </div>
+
+        <div class="pg s-note cv" data-s="note" data-tab="3">
+          <div class="ap-hd"><div><p class="ap-t">随手记</p><span class="ap-bar"></span><p class="ap-sub">11月24日 周二 · 共 <span class="cnt2"><span class="sw"><i class="a">4</i><i class="b">5</i></span></span> 条</p></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="chips"><span class="on">全部 <b class="cnt3"><span class="sw"><i class="a">4</i><i class="b">5</i></span></b></span><span><i class="cat-dot"></i>地方</span><span><i class="cat-dot c1"></i>购物</span><span><i class="cat-dot c2"></i>灵感</span><span><i class="cat-dot c3"></i>健康</span><span><i class="cat-dot c4"></i>朋友</span></div>
+          <div class="vrow"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5M6 10.5h12a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7.5a1 1 0 0 1 1-1z"/></svg><b>隐私记</b><small>已上锁 · 输入密码解锁 ›</small></div>
+          <div class="nts"><div class="col1"><div class="nt pic new"><span class="nt-cv cv-bake"></span><p>楼下新开的面包店，周末去试试</p><span class="nt-ft tag"><span class="cat">地方</span><span class="aib">AI</span></span></div><div class="nt"><p>新项目的名字可以叫“晴天”</p><span class="nt-ft"><span class="cat c2">灵感</span></span></div><div class="nt"><p>小林说喜欢那本旧书的封面</p><span class="nt-ft"><span class="cat c4">朋友</span></span></div></div>
+            <div><div class="nt pic"><span class="nt-cv cv-cafe"><b>+1</b></span><p>周末想去的咖啡馆：河边那家，带上电脑</p><span class="nt-ft"><span class="cat">地方</span></span></div><div class="nt"><p>体检报告周四出，记得去拿</p><span class="nt-ft"><span class="cat c3">健康</span></span></div></div></div>
+          <div class="nt-pend"><span class="nt-pi cv-bake"><b>×</b></span></div>
+          <div class="nt-in"><span class="nt-f"><span class="ph0">想到什么，记一句…</span><span class="ty">楼下新开的面包店，周末去试试</span></span><span class="nt-img"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M4.5 17.5l5-4.5 4 3.5 2.5-2 3.5 3"/></svg></span><span class="nt-add">记下</span></div>
+          <div class="dim"></div>
+          <div class="sheet pk-s"><span class="grab"></span><p class="sh-hd"><span>取消</span><b>照片</b><span></span></p><div class="pk-g"><i class="cv-book"></i><i class="cv-p1"></i><i class="cv-cafe"></i><i class="cv-bake pk-on"></i><i class="cv-p2"></i><i class="photo"></i><i class="cv-p3"></i><i class="cv-p4"></i><i class="cv-p2"></i></div></div>
+        </div>
+
+        <div class="pg s-vault cv" data-s="vault" data-tab="-1">
+          <p class="vt-nav"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>随手记</span><b><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5M6 10.5h12a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7.5a1 1 0 0 1 1-1z"/></svg>隐私记</b><span></span></p>
+          <div class="vt-lk"><span class="vt-big"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5M6 10.5h12a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7.5a1 1 0 0 1 1-1z"/></svg></span><b>隐私记已上锁</b><span>里面有 3 条</span><span class="vbtn vb1">输入密码</span><span class="vbtn vb2"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 9.5v1M15 9.5v1M12 9.5v3.5h-1M9.5 15.5c1.4 1 3.6 1 5 0"/></svg>用 Face ID 解锁</span></div>
+          <div class="vt-pin"><b>输入隐私记密码</b><p class="pdots"><i></i><i></i><i></i><i></i></p><div class="kp"><span class="k1">1</span><span class="k2">2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span class="k9">9</span><span class="e"></span><span>0</span><span class="e"></span></div></div>
+          <div class="vt-open"><div class="nt pic"><span class="nt-cv cv-book"></span><p>给小林的生日礼物：那本旧书的新版</p></div><div class="nt"><p>下个月的旅行预算</p></div><div class="nt"><p>想对自己说的话</p></div></div>
+        </div>
+
+        <div class="pg s-swipe cv" data-s="swipe" data-tab="0">
+          <div class="sp sp0 s-voice">          <div class="ap-hd"><div><p class="ap-t">11月24日 周二</p><span class="ap-bar"></span></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="nc"><div class="nc-top"><span class="pill">进行中</span><span class="nc-now">现在 10:20</span></div><p class="nc-t">产品周会</p><div class="trk"><i></i><b></b></div><div class="nc-ts"><span>10:00</span><span>11:00</span><span>12:00</span></div><span class="ms mi mi-15"></span></div>
+          <div class="sl red"><span>! 没赶上</span><b>1</b></div>
+          <div class="lt"><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">交季度报告</span><small class="red">逾 1 天</small></span><span class="pp"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4.5l3 1.8"/></svg>推迟</span></div></div>
+          <div class="sl"><span>今天的安排</span><b>4</b></div>
+          <div class="lc"><div class="rw"><span class="tm">14:00</span><span class="tx"><span class="tt">牙医复诊</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">订周末的火车票</span><small>今天截止</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">给妈妈打电话</span><small>20:00 提醒</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw"><span class="tm">19:30</span><span class="tx"><span class="tt">和小林吃饭</span></span></div></div>
+</div><div class="sp sp1 s-week">          <div class="cal-hd"><p class="ap-t">11月</p><span class="seg"><span class="on">周</span><span>月</span><span>纪念日</span></span></div>
+          <div class="wk-bar"><span class="arr prev"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg></span><span class="wk-chip"><span class="r r0">11月22日–28日</span><span class="r r1">11月15日–21日</span><span class="r r2">11月8日–14日</span></span><span class="arr"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></span></div>
+          <p class="wk-sub"><span class="r0">本周 6 项</span><span class="wk-today">回到今天</span></p>
+          <div class="wk-days">
+            <div class="wk w0">
+              <div class="dr we"><p class="dl"><small>周日</small><b>22</b><em><span>小雪</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周一</small><b>23</b><em><span>十五</span></em></p><div class="dc"></div></div>
+              <div class="dr td"><p class="dl"><small>周二</small><b>24</b><em><span>十六</span></em></p><div class="dc"><span class="ev"><i>10:00</i>产品周会</span><span class="ev"><i>14:00</i>牙医复诊</span><span class="ev"><i>19:30</i>和小林吃饭</span></div></div>
+              <div class="dr"><p class="dl"><small>周三</small><b>25</b><em><span>十七</span></em></p><div class="dc"><span class="ev"><i>15:00</i>和小金开会</span></div></div>
+              <div class="dr"><p class="dl"><small>周四</small><b>26</b><em><span>十八</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周五</small><b>27</b><em><span>十九</span></em></p><div class="dc"><span class="ev p">小林 生日</span></div></div>
+              <div class="dr we"><p class="dl"><small>周六</small><b>28</b><em><span>二十</span></em></p><div class="dc"><span class="ev b">看展</span></div></div>
+            </div>
+            <div class="wk w1">
+              <div class="dr we"><p class="dl"><small>周日</small><b>15</b><em><span>初七</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周一</small><b>16</b><em><span>初八</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周二</small><b>17</b><em><span>初九</span></em></p><div class="dc"><span class="ev"><i>10:00</i>产品周会</span></div></div>
+              <div class="dr"><p class="dl"><small>周三</small><b>18</b><em><span>初十</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周四</small><b>19</b><em><span>十一</span></em></p><div class="dc"><span class="ev b">体检</span></div></div>
+              <div class="dr"><p class="dl"><small>周五</small><b>20</b><em><span>十二</span></em></p><div class="dc"></div></div>
+              <div class="dr we"><p class="dl"><small>周六</small><b>21</b><em><span>十三</span></em></p><div class="dc"></div></div>
+            </div>
+            <div class="wk w2">
+              <div class="dr we"><p class="dl"><small>周日</small><b>8</b><em><span>三十</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周一</small><b>9</b><em><span>十月</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周二</small><b>10</b><em><span>初二</span></em></p><div class="dc"><span class="ev"><i>10:00</i>产品周会</span></div></div>
+              <div class="dr"><p class="dl"><small>周三</small><b>11</b><em><span>初三</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周四</small><b>12</b><em><span>初四</span></em></p><div class="dc"></div></div>
+              <div class="dr"><p class="dl"><small>周五</small><b>13</b><em><span>初五</span></em></p><div class="dc"></div></div>
+              <div class="dr we"><p class="dl"><small>周六</small><b>14</b><em><span>初六</span></em></p><div class="dc"></div></div>
+            </div>
+          </div></div><div class="sp sp2 s-todo">          <div class="ap-hd"><div><p class="ap-t">待办</p><span class="ap-bar"></span><p class="ap-sub">11月24日 周二 · <span class="cnt1"><span class="sw"><i class="a">1</i><i class="b">2</i></span></span> / 6 完成</p></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="chips"><span class="on">全部 <b>6</b></span><span>工作 <b>2</b></span><span>生活 <b>4</b></span></div>
+          <div class="sl red"><span>! 过期</span><b>1</b></div>
+          <div class="lt"><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">交季度报告</span><small class="red">逾 1 天</small></span><span class="hml"><span class="on">H</span><span>M</span><span>L</span></span></div></div>
+          <div class="sl"><span>今天</span><b>2</b></div>
+          <div class="lc lc-today"><div class="rw rw-todo r-mom"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">给妈妈打电话</span><small>20:00 提醒</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw rw-todo r-train"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">订周末的火车票</span><small>今天截止</small></span><span class="hml"><span class="h">H</span><span class="on">M</span><span>L</span></span></div></div>
+          <div class="sl"><span>以后</span><b>2</b></div>
+          <div class="lc"><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">整理冬天的衣服</span><small>这周</small></span><span class="hml"><span>H</span><span>M</span><span class="on">L</span></span></div><div class="swp r-book"><span class="sw-del">删除</span><div class="rw rw-todo sw-face"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">还小林的书</span><small>周五</small></span><span class="hml"><span>H</span><span>M</span><span class="on">L</span></span></div></div></div>
+          <div class="sl"><span>已完成</span><b>1</b></div>
+          <div class="lc"><div class="rw rw-todo"><span class="ck done"></span><span class="tx strike"><span class="dt"></span><span class="tt">买猫粮</span></span></div></div></div><div class="sp sp3 s-note">          <div class="ap-hd"><div><p class="ap-t">随手记</p><span class="ap-bar"></span><p class="ap-sub">11月24日 周二 · 共 <span class="cnt2"><span class="sw"><i class="a">4</i><i class="b">5</i></span></span> 条</p></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="chips"><span class="on">全部 <b class="cnt3"><span class="sw"><i class="a">4</i><i class="b">5</i></span></b></span><span><i class="cat-dot"></i>地方</span><span><i class="cat-dot c1"></i>购物</span><span><i class="cat-dot c2"></i>灵感</span><span><i class="cat-dot c3"></i>健康</span><span><i class="cat-dot c4"></i>朋友</span></div>
+          <div class="vrow"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5M6 10.5h12a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7.5a1 1 0 0 1 1-1z"/></svg><b>隐私记</b><small>已上锁 · 输入密码解锁 ›</small></div>
+          <div class="nts"><div class="col1"><div class="nt pic new"><span class="nt-cv cv-bake"></span><p>楼下新开的面包店，周末去试试</p><span class="nt-ft tag"><span class="cat">地方</span><span class="aib">AI</span></span></div><div class="nt"><p>新项目的名字可以叫“晴天”</p><span class="nt-ft"><span class="cat c2">灵感</span></span></div><div class="nt"><p>小林说喜欢那本旧书的封面</p><span class="nt-ft"><span class="cat c4">朋友</span></span></div></div>
+            <div><div class="nt pic"><span class="nt-cv cv-cafe"><b>+1</b></span><p>周末想去的咖啡馆：河边那家，带上电脑</p><span class="nt-ft"><span class="cat">地方</span></span></div><div class="nt"><p>体检报告周四出，记得去拿</p><span class="nt-ft"><span class="cat c3">健康</span></span></div></div></div>
+
+          <div class="nt-in"><span class="nt-f"><span class="ph0">想到什么，记一句…</span><span class="ty">楼下新开的面包店，周末去试试</span></span><span class="nt-img"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M4.5 17.5l5-4.5 4 3.5 2.5-2 3.5 3"/></svg></span><span class="nt-add">记下</span></div>
+</div>
+          <div class="sp sp-set"><p class="st-nav"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>今天</p><p class="st-t">设置</p><p class="st-sec">常用</p><div class="card"><div class="row"><span>皮肤</span><span class="v">柠檬黄</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div><div class="row"><span>界面语言</span><span class="v">中文</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div><div class="row"><span>字体</span><span class="v">系统字体（默认）</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div><div class="row"><span>提醒与通知</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div></div></div>
+          <i class="edge-l"></i><i class="edge-r"></i>
+        </div>
+
+        <div class="pg s-masc cv" data-s="masc" data-tab="-1">
+          <p class="st-nav"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>设置</p>
+          <p class="st-t">吉祥物</p>
+          <div class="mpv"><span class="mq"><i class="mx mi mi-15"></i><i class="mx mi mi-3"></i><i class="mx mi mi-7"></i><i class="mx mi mi-13"></i><i class="mx mi mi-18"></i><i class="mx mi mi-19"></i><i class="mx mi mi-20"></i></span></div>
+          <div class="card mopt"><div class="frow mo0"><span class="fn">米粒</span><span class="chk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></div><div class="frow mo1"><span class="fn">小黑猫</span><span class="chk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></div><div class="frow mo2"><span class="fn">光球</span><span class="chk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></div><div class="frow mo3"><span class="fn">Meeples 一家</span><span class="chk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></div><div class="frow mo4"><span class="fn">跟随小人</span><span class="chk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></div><div class="frow mo5"><span class="fn">Bob</span><span class="chk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></div><div class="frow mo6"><span class="fn">猫机器人</span><span class="chk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></div></div>
+        </div>
+
+        <div class="pg s-font cv" data-s="font" data-tab="-1">
+          <p class="st-nav"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>设置</p>
+          <p class="st-t">字体</p>
+          <div class="card fprev"><p>说一句就记下</p><p>明天下午三点和小金开会</p></div>
+          <div class="card mt-12"><div class="frow f0"><span class="fn">系统字体（默认）</span><span class="chk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></div><div class="frow f1"><span class="fn">细线黑</span><small>下载中 60%</small><span class="chk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></div><div class="frow f2"><span class="fn">悠哉体</span><small>下载中 60%</small><span class="chk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></div><div class="frow f3"><span class="fn">文楷</span><small>下载中 60%</small><span class="chk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></div></div>
+          <p class="st-note">选中才下载，下载好之前先用系统字体；每台设备各下各的。</p>
+        </div>
+
+        <div class="pg s-av cv" data-s="av" data-tab="-1">
+          <p class="st-nav"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>设置</p>
+          <p class="st-t">账号</p>
+          <div class="card avc"><span class="avt"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg><i class="photo"></i></span><p class="avl">头像</p><div class="avb"><span class="b1">更换头像</span><span class="b2">去掉头像</span></div><p class="st-note">只有你自己看得到，各台设备同步显示</p></div>
+          <div class="dim"></div>
+          <div class="sheet crop">
+            <p class="sh-hd"><span>取消</span><b>挪一挪、缩放一下</b><span class="ok">用这张</span></p>
+            <div class="cr-box"><div class="cr-img"><i class="photo"></i></div><span class="cr-ring"></span></div>
+            <div class="cr-sl"><span>缩放</span><span class="trk2"><b class="kn"></b></span></div>
+          </div>
+        </div>
+
+        <div class="pg s-lang cv" data-s="lang" data-tab="-1">
+          <div class="lay L-zh" lang="zh-Hans"><p class="st-nav"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>今天</p><p class="st-t">设置</p><p class="st-sec">常用</p><div class="card"><div class="row"><span>皮肤</span><span class="v">柠檬黄</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div><div class="row r-lang"><span>界面语言</span><span class="v">中文</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div><div class="row"><span>字体</span><span class="v">系统字体（默认）</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div><div class="row"><span>提醒与通知</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div></div><p class="st-note">提醒和邮件也会改用这种语言。</p></div>
+          <div class="lay L-ko" lang="ko"><p class="st-nav"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>오늘</p><p class="st-t">설정</p><p class="st-sec">기본 설정</p><div class="card"><div class="row"><span>테마</span><span class="v">레몬 옐로</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div><div class="row r-lang"><span>앱 언어</span><span class="v">한국어</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div><div class="row"><span>글꼴</span><span class="v">시스템 글꼴(기본)</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div><div class="row"><span>알림</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></div></div><p class="st-note">알림과 메일도 이 언어로 보내 드려요.</p></div>
+          <div class="lpick"><p class="op op-zh" lang="zh-Hans">中文<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></p><p class="op op-ko" lang="ko">한국어<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></p></div>
+        </div>
+        <div class="tb"><span class="drop"></span><span class="on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm0 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2z"/></svg><span>今天</span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM4 10h16M9 5v15M15 5v15M4 15h16"/></svg><span>日历</span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span>待办</span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l4 4-10 10H5v-4z"/></svg><span>随手记</span></span></div>
+        <span class="fab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
+        <span class="fg"><i class="fg-d"></i><i class="fg-r"></i><i class="fg-h"></i><i class="fg-h"></i></span>
+        <span class="hi"></span>
+      </div></div></div>
+    </div>
+  </div>
+</section>
+<div class="static"></div>
+
+<section class="sec dev" id="dev" aria-labelledby="dev-h">
+  <div class="sec-bg"></div>
+  <h2 id="dev-h" class="rv">手机、网页、电脑，<br>同一份记录</h2>
+  <div class="dvs rv">
+    <div class="dvw dv-ph" aria-hidden="true">      <div class="ph nox"><span class="ph-k k-act"></span><span class="ph-k k-vu"></span><span class="ph-k k-vd"></span><span class="ph-k k-pw"></span><div class="ph-bz"><div class="scr">
+        <div class="sb"><span>10:20</span><svg class="sb-ic" viewBox="0 0 76 13"><rect x="0" y="8.6" width="3.2" height="4.4" rx="1"/><rect x="4.6" y="6.2" width="3.2" height="6.8" rx="1"/><rect x="9.2" y="3.6" width="3.2" height="9.4" rx="1"/><rect x="13.8" y="1" width="3.2" height="12" rx="1"/><path class="sb-wifi" d="M23.2 4.9a10.4 10.4 0 0 1 13.6 0M25.8 7.8a6.6 6.6 0 0 1 8.4 0"/><circle cx="30" cy="11" r="1.8"/><rect class="sb-bat" x="45.5" y=".5" width="25" height="12" rx="3.8"/><rect x="47.5" y="2.5" width="17.5" height="8" rx="2"/><path class="sb-cap" d="M72 4.4v4.2c.9-.3 1.5-1.1 1.5-2.1s-.6-1.8-1.5-2.1z"/></svg></div>
+        <span class="di"></span>
+        <div class="pg s-type" data-s="type" data-tab="0">
+          <div class="ap-hd"><div><p class="ap-t">11月24日 周二</p><span class="ap-bar"></span></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>
+          <div class="nc"><div class="nc-top"><span class="pill">进行中</span><span class="nc-now">现在 10:20</span></div><p class="nc-t">产品周会</p><div class="trk"><i></i><b></b></div><div class="nc-ts"><span>10:00</span><span>11:00</span><span>12:00</span></div><span class="ms mi mi-15"></span></div>
+          <div class="sl red"><span>! 没赶上</span><b>1</b></div>
+          <div class="lt"><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">交季度报告</span><small class="red">逾 1 天</small></span><span class="pp"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4.5l3 1.8"/></svg>推迟</span></div></div>
+          <div class="sl"><span>今天的安排</span><b class="cnt5"><span class="sw"><i class="a">4</i><i class="b">5</i></span></b></div>
+          <div class="lc"><div class="rw"><span class="tm">14:00</span><span class="tx"><span class="tt">牙医复诊</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">订周末的火车票</span><small>今天截止</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw rw-todo rw-new"><i class="flash"></i><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">把发票寄给会计</span><small>18:00 提醒</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw rw-todo"><span class="ck"></span><span class="tx"><span class="dt"></span><span class="tt">给妈妈打电话</span><small>20:00 提醒</small></span><span class="hml"><span>H</span><span class="on">M</span><span>L</span></span></div><div class="rw"><span class="tm">19:30</span><span class="tx"><span class="tt">和小林吃饭</span></span></div></div>
+          <div class="toast"><span>已记下：把发票寄给会计</span><b>撤销</b></div>
+          <div class="tb-mist"></div>
+          <div class="kbd"><p class="kb-r"><span>Q</span><span>W</span><span>E</span><span>R</span><span>T</span><span>Y</span><span>U</span><span>I</span><span>O</span><span>P</span></p><p class="kb-r r2"><span>A</span><span>S</span><span>D</span><span>F</span><span>G</span><span>H</span><span>J</span><span>K</span><span>L</span></p><p class="kb-r"><span class="w">⇧</span><span>Z</span><span>X</span><span>C</span><span>V</span><span>B</span><span>N</span><span>M</span><span class="w">⌫</span></p><p class="kb-r r4"><span class="w">123</span><span class="sp">空格</span><span class="rt"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6v6H6M10 8l-4 4 4 4"/></svg></span></p></div>
+          <div class="tbar"><p class="tb-f"><span class="ph0">想记什么，回车记下</span><span class="ty">今天六点前把发票寄给会计</span></p><p class="tb-say">正在识别…</p><div class="pf"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg><span class="sw"><span class="a">分类</span><span class="b">工作</span></span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="sw"><span class="a">日期</span><span class="b">11/24 今天 18:00</span></span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2zM10 21h4"/></svg>提醒</span></div><p class="pf-n"><span class="sw"><span class="a">试着打：明天下午3点 工作 开会 提醒我</span><span class="b">浅黄 = 从这句话里认出来的，点一下能改</span></span></p><div class="tb-tools"><span class="ib"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span><span class="ib"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></span><span class="tb-save">记下</span></div><span class="pk" aria-hidden="true"><span class="pk-rv mi mi-peek"></span></span></div>
+        </div>
+        <div class="tb"><span class="drop"></span><span class="on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm0 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2z"/></svg><span>今天</span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM4 10h16M9 5v15M15 5v15M4 15h16"/></svg><span>日历</span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span>待办</span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l4 4-10 10H5v-4z"/></svg><span>随手记</span></span></div>
+        <span class="fab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
+        <span class="fg"><i class="fg-d"></i><i class="fg-r"></i><i class="fg-h"></i><i class="fg-h"></i></span>
+        <span class="hi"></span>
+      </div></div></div></div>
+    <div class="dvw dv-web"><p class="dvw-bar" aria-hidden="true"><i></i><i></i><i></i><span>lemomemo.com/app</span></p><img class="dvw-im" src="/home/dev-web-zh.webp" width="1120" height="700" alt="网页版的“今天”页：今天的日程、待办、本周概览，右边常开 AI 助手" decoding="async"></div>
+    <div class="dvw dv-win"><p class="dvw-tt" aria-hidden="true"><span class="mark"><i></i><i></i><i></i></span>柠檬记<svg viewBox="0 0 40 12" aria-hidden="true"><path d="M2 6h8"/><rect x="16" y="1.5" width="8" height="8" rx=".5"/><path d="M31 1.5l7.5 8M38.5 1.5L31 9.5"/></svg></p><img class="dvw-im" src="/home/dev-win-zh.webp" width="900" height="563" alt="Windows 版的“随手记”页：按分类整理的随手记，右边常开 AI 助手" decoding="async"></div>
+  </div>
+  <ul class="devs">
+    <li class="rv"><b>iPhone</b><span>添加到主屏幕，能说话记录、能收提醒。</span></li>
+    <li class="rv d1"><b>网页版</b><span>宽屏一眼看全，右边常开 AI 助手。</span></li>
+    <li class="rv d2"><b>Windows 版</b><span>装在电脑上，只能打字记录。</span></li>
+  </ul>
+</section>
+
+<section class="sec safe" id="safe" aria-labelledby="safe-h">
+  <div class="sec-bg"></div>
+  <div><h2 id="safe-h" class="rv">别人看不到<br>你记的</h2>
+    <ul class="safe-l rv d1">
+      <li><b class="safe-t">其他用户看不到你记的东西</b><small class="safe-s">数据存在服务器上，运营者在技术上能访问</small></li>
+      <li class="i"><b class="safe-t">AI 整理时，内容会交给 AI 服务商</b><small class="safe-s">文字、录音、图片、附件和隐私记都会交过去；默认由柠檬记提供，也可以换成你自己的密钥</small></li>
+      <li><b class="safe-t">隐私记另外上锁</b><small class="safe-s">要密码或 Face ID 才能打开</small></li>
+    </ul>
+    <a class="btn btn-k btn-s rv d2" href="/zh/privacy">读隐私说明</a></div>
+  <div class="safe-art rv d1" aria-hidden="true"><div class="st-ph safe-ph">      <div class="ph"><span class="ph-k k-act"></span><span class="ph-k k-vu"></span><span class="ph-k k-vd"></span><span class="ph-k k-pw"></span><div class="ph-bz"><div class="scr">
+        <div class="sb"><span>10:20</span><svg class="sb-ic" viewBox="0 0 76 13"><rect x="0" y="8.6" width="3.2" height="4.4" rx="1"/><rect x="4.6" y="6.2" width="3.2" height="6.8" rx="1"/><rect x="9.2" y="3.6" width="3.2" height="9.4" rx="1"/><rect x="13.8" y="1" width="3.2" height="12" rx="1"/><path class="sb-wifi" d="M23.2 4.9a10.4 10.4 0 0 1 13.6 0M25.8 7.8a6.6 6.6 0 0 1 8.4 0"/><circle cx="30" cy="11" r="1.8"/><rect class="sb-bat" x="45.5" y=".5" width="25" height="12" rx="3.8"/><rect x="47.5" y="2.5" width="17.5" height="8" rx="2"/><path class="sb-cap" d="M72 4.4v4.2c.9-.3 1.5-1.1 1.5-2.1s-.6-1.8-1.5-2.1z"/></svg></div>
+        <span class="di"></span>
+  <div class="pg s-vs" data-s="vsafe" data-tab="3">
+    <div class="vs-n s-note added tagon">          <div class="ap-hd"><div><p class="ap-t">随手记</p><span class="ap-bar"></span><p class="ap-sub">11月24日 周二 · 共 <span class="cnt2 alt"><span class="sw"><i class="a">4</i><i class="b">5</i></span></span> 条</p></div><span class="ap-me"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2zM5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></svg></span></div>          <div class="chips"><span class="on">全部 <b class="cnt3 alt"><span class="sw"><i class="a">4</i><i class="b">5</i></span></b></span><span><i class="cat-dot"></i>地方</span><span><i class="cat-dot c1"></i>购物</span><span><i class="cat-dot c2"></i>灵感</span><span><i class="cat-dot c3"></i>健康</span><span><i class="cat-dot c4"></i>朋友</span></div>          <div class="vrow"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5M6 10.5h12a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7.5a1 1 0 0 1 1-1z"/></svg><b>隐私记</b><small>已上锁 · 输入密码解锁 ›</small></div>          <div class="nts"><div class="col1"><div class="nt pic new"><span class="nt-cv cv-bake"></span><p>楼下新开的面包店，周末去试试</p><span class="nt-ft tag"><span class="cat">地方</span><span class="aib">AI</span></span></div><div class="nt"><p>新项目的名字可以叫“晴天”</p><span class="nt-ft"><span class="cat c2">灵感</span></span></div><div class="nt"><p>小林说喜欢那本旧书的封面</p><span class="nt-ft"><span class="cat c4">朋友</span></span></div></div>
+            <div><div class="nt pic"><span class="nt-cv cv-cafe"><b>+1</b></span><p>周末想去的咖啡馆：河边那家，带上电脑</p><span class="nt-ft"><span class="cat">地方</span></span></div><div class="nt"><p>体检报告周四出，记得去拿</p><span class="nt-ft"><span class="cat c3">健康</span></span></div></div></div>          <div class="nt-in"><span class="nt-f"><span class="ph0">想到什么，记一句…</span><span class="ty">楼下新开的面包店，周末去试试</span></span><span class="nt-img"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M4.5 17.5l5-4.5 4 3.5 2.5-2 3.5 3"/></svg></span><span class="nt-add">记下</span></div></div>
+    <div class="vs-v">
+      <div class="vs-list">
+        <p class="vs-top"><span class="vs-back"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>随手记</span><b class="vs-h"><svg class="vs-lk" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2h.5A1.5 1.5 0 0 1 19 11.5v8A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-8A1.5 1.5 0 0 1 6.5 10zm2.4 0h5.2V8a2.6 2.6 0 0 0-5.2 0z"/></svg>隐私记</b><span class="vs-end"><span class="vs-chip">立即锁上</span></span></p>
+        <p class="vs-hint"><svg class="vs-ol" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.6-1.7"/></svg><span>已解锁 · 离开 1 分钟自动锁上 · 这里记的只进隐私记</span></p>
+        <div class="nts"><div><div class="nt pic"><span class="nt-cv cv-book"></span><p>给小林的生日礼物：那本旧书的新版</p></div></div><div><div class="nt"><p>下个月的旅行预算</p></div><div class="nt"><p>想对自己说的话</p></div></div></div>
+      </div>
+      <div class="vs-lock">
+        <p class="vs-top"><span class="vs-back"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>随手记</span><b class="vs-h"><svg class="vs-lk" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2h.5A1.5 1.5 0 0 1 19 11.5v8A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-8A1.5 1.5 0 0 1 6.5 10zm2.4 0h5.2V8a2.6 2.6 0 0 0-5.2 0z"/></svg>隐私记</b><span></span></p>
+        <div class="vs-body"><span class="vs-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/><rect x="5" y="10.5" width="14" height="10" rx="2.5"/></svg></span><b>隐私记已上锁</b><span class="vs-sub">里面有 3 条</span>
+          <span class="vs-btns"><span class="vs-b1">输入密码</span><span class="vs-b2">用 Face ID 解锁</span></span></div>
+      </div>
+    </div>
+    <div class="vs-pin">
+      <p class="vs-top"><span class="vs-back"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>随手记</span><span></span><span class="vs-end">取消</span></p>
+      <div class="vs-pinb"><svg class="vs-lkbig" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2h.5A1.5 1.5 0 0 1 19 11.5v8A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-8A1.5 1.5 0 0 1 6.5 10zm2.4 0h5.2V8a2.6 2.6 0 0 0-5.2 0z"/></svg><b>输入隐私记密码</b><span class="vs-sub">里面有 3 条</span>
+        <p class="vs-dots"><i></i><i></i><i></i><i></i></p><p class="vs-err"></p>
+        <div class="vs-pad"><span class="vs-k1">1</span><span class="vs-k2">2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span class="vs-k9">9</span><span class="gap"></span><span>0</span><span class="del">⌫</span></div>
+        <p class="vs-foot">忘记密码？用登录邮箱重设</p></div>
+    </div>
+  </div>
+        <div class="tb"><span class="drop"></span><span class="on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm0 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2z"/></svg><span>今天</span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM4 10h16M9 5v15M15 5v15M4 15h16"/></svg><span>日历</span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span>待办</span></span><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l4 4-10 10H5v-4z"/></svg><span>随手记</span></span></div>
+        <span class="fab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
+        <span class="fg"><i class="fg-d"></i><i class="fg-r"></i><i class="fg-h"></i><i class="fg-h"></i></span>
+        <span class="hi"></span>
+      </div></div></div></div></div>
+</section>
+
+<section class="sec faq" id="faq" aria-labelledby="faq-h">
+  <div class="sec-bg"></div>
+  <h2 id="faq-h" class="rv">常见问题</h2>
+  <div class="qa">
+    <details class="rv" id="faq-invite"><summary>怎么拿到邀请码？</summary><p>柠檬记目前只接受邀请，邀请码请向柠檬记的负责人要一个。</p></details>
+    <details class="rv d1"><summary>现在免费吗？</summary><p>目前免费使用。</p></details>
+    <details class="rv d2"><summary>iPhone 怎么装到主屏幕？</summary><p>先点“有邀请码？开始使用”进入柠檬记，<strong>在那一页</strong>用 Safari 的“添加到主屏幕”。主屏幕上显示的名字是“Lemo”。在这个首页上直接添加只会得到一个书签，收不到提醒。</p></details>
+    <details class="rv d4"><summary>电脑上能用吗？</summary><p>网页版直接打开就能用；也可以<a href="/desktop/">下载 Windows 版</a>（安装包的 SHA-256 随版本公布在下载页）。电脑版只能打字记录，不支持语音。</p></details>
+    <details class="rv d4"><summary>不用了，能把数据导出、删干净吗？</summary><p>能。设置 › 数据 › 导出全部数据，日程、待办、随手记这些文字会存成一个备份文件（照片和附件本身不在里面）。设置 › 账号 › 注销账号：账号先停用 7 天，这期间可以恢复；满 7 天后，记录、照片、附件和服务器上的备份全部删除，不能再找回。</p></details>
+    <details class="rv d4"><summary>在中国大陆能用吗？</summary><p>登录验证码发到你的邮箱。</p></details>
+    <details class="rv d4"><summary>演示里的内容是真的吗？</summary><p>都是编的示例。看演示不用注册，演示里点的、记的都不会保存，刷新就回到原样。</p></details>
+  </div>
+</section>
+
+<section class="outro" id="start" aria-labelledby="close-h">
+  <div class="opin">
+    <div class="close">
+      <div class="close-card rv">
+        <h2 id="close-h">说一句<br>就记下</h2>
+        <p class="cta"><a class="btn btn-k" href="/zh/demo">免注册，看演示</a><a class="btn btn-w btn-o" href="/app/">有邀请码？开始使用</a></p>
+        <p class="cta-note"><a href="#faq-invite" class="to-inv">没有邀请码？看看怎么拿到</a></p>
+      </div>
+    </div>
+    <p class="ow" aria-hidden="true"><span class="l">说一句</span><span class="l">就记下</span></p>
+    <canvas class="cover" aria-hidden="true"></canvas>
+  </div>
+</section>
+</main>
+<footer class="foot">
+  <a class="logo" href="/zh/"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>柠檬记</a>
+  <nav aria-label="页脚"><a href="/zh/privacy">隐私说明</a><a href="/zh/terms">使用条款</a><a href="/desktop/">下载 Windows 版</a></nav>
+  <nav class="flang" aria-label="语言"><a href="/zh/" data-lang="zh" hreflang="zh-Hans" aria-current="true">中文</a> <a href="/ko/" data-lang="ko" hreflang="ko" lang="ko">한국어</a></nav>
+  <p class="fname">柠檬记的韩文名叫“레모”，装到主屏幕后显示为“Lemo”，都是同一个 App。</p>
+  <details class="fcred"><summary>素材署名 ›</summary><p><i><a href="https://rive.app/marketplace/28565-54011-a-tiny-grain-a-big-ai-mind/" target="_blank" rel="noreferrer noopener">A Tiny Grain, A Big AI Mind</a> · 作者：王天维 · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer noopener">CC BY 4.0 · 有改动</a></i>；<i><a href="https://rive.app/marketplace/3920-8202-cat-following-the-mouse/" target="_blank" rel="noreferrer noopener">Cat following the mouse</a> · 作者：pedroalpera · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer noopener">CC BY 4.0 · 有改动</a></i>；<i><a href="https://rive.app/marketplace/29221-55360-orb/" target="_blank" rel="noreferrer noopener">Orb</a> · 作者：Andabrow · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer noopener">CC BY 4.0</a></i>；<i><a href="https://rive.app/marketplace/28694-54264-meeples/" target="_blank" rel="noreferrer noopener">Meeples</a> · 作者：Patgrivet · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer noopener">CC BY 4.0 · 有改动</a></i>；<i><a href="https://rive.app/marketplace/28334-53514-interactive-character-follow/" target="_blank" rel="noreferrer noopener">Interactive character follow</a> · 作者：alinazari · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer noopener">CC BY 4.0 · 有改动</a></i>；<i><a href="https://rive.app/marketplace/12002-22871-experimental-bob/" target="_blank" rel="noreferrer noopener">Experimental Bob</a> · 作者：mbmfaa · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer noopener">CC BY 4.0 · 有改动</a></i>；<i><a href="https://rive.app/marketplace/6925-13315-cat-robot/" target="_blank" rel="noreferrer noopener">Cat Robot</a> · 作者：Lala · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer noopener">CC BY 4.0 · 有改动</a></i>；<i><a href="https://rive.app/marketplace/28721-54393-interactive-chat-experience/" target="_blank" rel="noreferrer noopener">Interactive chat experience</a> · 作者：musaadanur · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer noopener">CC BY 4.0 · 有改动</a></i>；<i><a href="https://github.com/rive-app/rive-wasm" target="_blank" rel="noreferrer noopener">Rive Web Runtime (@rive-app/canvas)</a> · MIT 许可</i></p></details>
+</footer>
+<i hidden data-rive data-js="/rive.js" data-wasm="/rive.wasm"></i>
+<i hidden data-riv="peek" data-src="/mascot-peek.riv" data-def="{&quot;size&quot;:[500,434],&quot;crop&quot;:[160,28,190,152],&quot;online&quot;:400}"></i>
+<i hidden data-riv="15" data-src="/mascot-15.riv" data-def="{&quot;size&quot;:[800,800],&quot;crop&quot;:[150,223,500,400],&quot;warm&quot;:2600}"></i>
+<i hidden data-riv="3" data-src="/mascot-3.riv" data-def="{&quot;size&quot;:[500,500],&quot;crop&quot;:[85,90,330,340],&quot;novm&quot;:true,&quot;face&quot;:[&quot;Face_CONTROL&quot;,256.75,255.75]}"></i>
+<i hidden data-riv="7" data-src="/mascot-7.riv" data-def="{&quot;size&quot;:[400,400],&quot;crop&quot;:[10,0,380,380],&quot;ab&quot;:&quot;Orb&quot;,&quot;sm&quot;:&quot;Orb&quot;}"></i>
+<i hidden data-riv="13" data-src="/mascot-13.riv" data-def="{&quot;size&quot;:[1920,1080],&quot;crop&quot;:[360,200,1120,714.1],&quot;ab&quot;:&quot;Meeple&quot;,&quot;sm&quot;:&quot;Meeples&quot;,&quot;novm&quot;:true}"></i>
+<i hidden data-riv="18" data-src="/mascot-18.riv" data-def="{&quot;size&quot;:[1000,1000],&quot;crop&quot;:[280,140,540,540],&quot;ab&quot;:&quot;Artboard&quot;,&quot;novm&quot;:true}"></i>
+<i hidden data-riv="19" data-src="/mascot-19.riv" data-def="{&quot;size&quot;:[1163,1155],&quot;crop&quot;:[80,40,520,420],&quot;ab&quot;:&quot;NO START&quot;,&quot;sm&quot;:&quot;State Machine&quot;,&quot;pad&quot;:[240,140],&quot;novm&quot;:true,&quot;init&quot;:{&quot;Eye Color Number&quot;:4}}"></i>
+<i hidden data-riv="20" data-src="/mascot-20.riv" data-def="{&quot;size&quot;:[600,600],&quot;crop&quot;:[90,40,440,540],&quot;ab&quot;:&quot;RobotCat_02&quot;,&quot;novm&quot;:true}"></i>
+<a class="dock" href="/zh/demo" aria-label="看演示">看演示</a>
+<nav class="rail" aria-label="四组功能"><span class="rail-f"></span><button type="button" aria-label="第 1 组：AI 帮你记，也帮你找"></button><button type="button" aria-label="第 2 组：日程和提醒，都替你记着"></button><button type="button" aria-label="第 3 组：待办和随手记，分得清清楚楚"></button><button type="button" aria-label="第 4 组：按你的喜好，换个样子"></button></nav>
+</body>
+</html>

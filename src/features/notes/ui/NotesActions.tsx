@@ -1,0 +1,272 @@
+// 随手记页的“⋯”菜单、合并分类提示条、转成待办 / 日程的流程和确认窗
+// • 菜单：转成待办 / 转成日程 / 移到隐私记 / 删除；只读行变淡、点了由页面拦下。
+//   编辑页顶栏的“⋯”也是这一份 MoreMenu，转换、移进隐私记走同一个 useNoteActs，不另写一份
+//   隐私记来源按 caps 去掉转换、移进，换成“移出隐私记”；左滑的几个按钮同一套（swipeActs）
+// • 提示条：“‘读书’和‘书单’两个分类很像，合成一个吗？ 合并 / 不用”
+// • 转换的规则见 shared/logic/notes/note-convert.ts 文件头；结果出在输入行上面
+import { Suspense, useState } from 'react';
+import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
+import { FormButton } from '../../../kit/components/Form.tsx';
+import { Popover } from '../../../kit/components/Popover.tsx';
+import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
+import { TapSwitch } from '../../../kit/components/TapSwitch.tsx';
+import { Pressable } from '../../../motion/components.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
+import { VaultParts } from '../../vault/index.ts';
+import type { MergeHint } from '../hooks/useMergeHint.ts';
+import type { MergeUndo, MoveUndo } from '../hooks/useNotesToast.ts';
+import type { NoteCaps } from '../hooks/note-source.ts';
+import { actionResult, type ActionResult, type ConvertKind, type useNoteList } from '../hooks/useNoteList.ts';
+import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
+import type { ImgMsgKey } from './NoteImages.tsx';
+import row from '../../../kit/components/NoteRow.module.css';
+import styles from './NotesPage.module.css';
+
+/** 随手记页自己另加的提示条：插图提示、转换结果、移出隐私记没成、合并的撤销条（删除的撤销条、出错条在 kit 的 useListActions 里） */
+export type ImgTip = { kind: 'img'; key: ImgMsgKey; trash: boolean };
+export type ConvTip = { kind: 'conv'; key: Extract<NotesMsgKey, `notes.conv.${'moved' | 'kept'}.${string}` | 'notes.conv.empty' | 'notes.conv.left' | 'notes.conv.long'> };
+/** 移出隐私记没成（隐私记来源）：自己一种，不借转换结果那一条 */
+export type MoveOutTip = { kind: 'moveOut' };
+export type PageTip = ImgTip | ConvTip | MoveOutTip | MergeUndo | MoveUndo;
+/** 带插图的转换要先问一下 */
+export type ConvAsk = { id: string; kind: ConvertKind; images: number; files: number };
+
+/** 带附件、插图的先问一次（转成待办 / 日程、移进隐私记两处共用） */
+export const needsAsk = (it: { files: number; images: number }): boolean => it.files > 0 || it.images > 0;
+
+/** 问询卡里“N 个附件、M 张图”那一段；转换、移动两张卡的措辞各自一套键（移动卡的前面带空格，接在“和它的”后面） */
+function whatText(t: ReturnType<typeof useNotesT>, scope: 'conv' | 'move', files: number, images: number): string {
+  const parts = [files > 0 ? t(`notes.${scope}.what.file`, { n: files }) : '', images > 0 ? t(`notes.${scope}.what.img`, { n: images }) : ''];
+  return parts.filter(Boolean).join(t('notes.conv.what.sep', {}));
+}
+
+/**
+ * “⋯”菜单：看得见 24px，点按区 ::after 扩到 44。转成待办 / 转成日程、移到隐私记在“删除”上面。
+ * long：备注放不下，两项变淡（aria-disabled）、下面写原因，点了不动；只读行的两项也变淡，点了由页面拦下
+ */
+export function MoreMenu({ id, caps, ro, open, onOpenChange, onDelete, long, onConvert, onMove, onMoveOut, tid = (p) => `notes-${p}-${id}`, triggerClass = row.more, disabled }: {
+  id: string; caps: NoteCaps; ro: boolean; open: boolean; onOpenChange(o: boolean): void; onDelete(): void; long: boolean; onConvert(kind: ConvertKind): void; onMove(): void; onMoveOut(): void;
+  /** 测试 id：列表页 notes-<项>-<id>，编辑页 note-edit-<项>（项：more、to-todo、to-event、conv-long、to-vault、from-vault、del） */
+  tid?: (part: string) => string;
+  /** “⋯”按钮的样子：列表页 24px，编辑页顶栏 36 圆形浅底；菜单本身同一份（kit NoteRow.module.css） */
+  triggerClass?: string | undefined;
+  /** 编辑页：还没载入、已删除、只读时整个按钮灰掉 */
+  disabled?: boolean;
+}) {
+  const t = useNotesT();
+  const conv = (kind: ConvertKind) => (
+    <Pressable
+      className={`${row.menuItem} ${row.menuPlain}`}
+      aria-disabled={ro || long || undefined}
+      onClick={() => (long ? undefined : onConvert(kind))}
+      data-testid={tid(`to-${kind}`)}
+      data-no-proxy=""
+    >
+      {t(kind === 'todo' ? 'notes.conv.todo' : 'notes.conv.event', {})}
+    </Pressable>
+  );
+  return (
+    <Popover
+      open={open}
+      onOpenChange={onOpenChange}
+      label={t('notes.menu', {})}
+      align="end"
+      className={row.menu}
+      trigger={
+        <button type="button" className={triggerClass} aria-label={t('notes.more', {})} disabled={disabled} data-testid={tid('more')}>
+          ⋯
+        </button>
+      }
+    >
+      {caps.convert ? conv('todo') : null}
+      {caps.convert ? conv('event') : null}
+      {caps.convert && long ? (
+        <p className={row.menuNote} data-testid={tid('conv-long')}>
+          {t('notes.conv.long', {})}
+        </p>
+      ) : null}
+      {caps.moveIn ? (
+        <Pressable className={`${row.menuItem} ${row.menuPlain}`} aria-disabled={ro || undefined} onClick={onMove} data-testid={tid('to-vault')} data-no-proxy="">
+          {t('notes.toVault', {})}
+        </Pressable>
+      ) : null}
+      {caps.moveOut ? (
+        <Pressable className={`${row.menuItem} ${row.menuPlain}`} onClick={onMoveOut} data-testid={tid('from-vault')} data-no-proxy="">
+          {t('notes.fromVault', {})}
+        </Pressable>
+      ) : null}
+      {/* 只读行的“删除”变淡、aria-disabled，点了照样由 del 拦下出提示条（同待办页的 ×） */}
+      <Pressable className={row.menuItem} aria-disabled={ro || undefined} onClick={onDelete} data-testid={tid('del')} data-no-proxy="">
+        {t('notes.delete', {})}
+        {/* 藏着的真系统开关：手指点“删除”iOS 才震（kit TapSwitch） */}
+        <TapSwitch />
+      </Pressable>
+    </Popover>
+  );
+}
+
+/** 列表方式左滑露出的按钮：和“⋯”菜单同一套动作，按来源的 caps 取舍；删除一直在最后 */
+export function swipeActs(t: ReturnType<typeof useNotesT>, caps: NoteCaps, id: string, go: { todo(): void; vault(): void; out(): void; del(): void }) {
+  return [
+    ...(caps.convert ? [{ key: 'todo', label: t('notes.sw.todo', {}), onClick: go.todo, testId: `notes-sw-todo-${id}` }] : []),
+    ...(caps.moveIn ? [{ key: 'vault', label: t('notes.sw.vault', {}), onClick: go.vault, testId: `notes-sw-vault-${id}` }] : []),
+    ...(caps.moveOut ? [{ key: 'out', label: t('notes.sw.out', {}), onClick: go.out, testId: `notes-sw-out-${id}` }] : []),
+    { key: 'del', label: t('notes.delete', {}), onClick: go.del, danger: true, testId: `notes-sw-del-${id}` },
+  ];
+}
+
+/**
+ * 合并分类提示条：两个按钮没写成的结果都由页面的出错条、只读提示接；“不用”记下这一对，提示条随即换下一对或消失。
+ * 合并成了调 onMerged(这一对)（页面出 5 秒撤销条，撤销调它的 undo）。写入期间两个按钮都禁用：连点不会落到写完以后换上来的下一对上，
+ * 也不会再合并一次把第一次的撤销条顶掉
+ */
+export function MergeBar({ hint, onResult, onMerged }: { hint: MergeHint; onResult(r: ActionResult): void; onMerged(hint: MergeHint): void }) {
+  const t = useNotesT();
+  const [busy, setBusy] = useState(false);
+  const run = (go: () => Promise<void>) => {
+    setBusy(true);
+    void go().finally(() => setBusy(false));
+  };
+  const merge = async () => {
+    const r = await hint.merge();
+    if (r === 'ok') onMerged(hint);
+    else onResult(r);
+  };
+  return (
+    <section className={styles.merge} aria-label={t('notes.merge.label', {})} data-testid="notes-merge">
+      <span className={styles.mergeText}>{t('notes.merge.ask', { a: hint.keepName, b: hint.mergeName })}</span>
+      <FormButton size="compact" variant="primary" disabled={busy} onClick={() => run(merge)} data-testid="notes-merge-go">
+        {t('notes.merge.go', {})}
+      </FormButton>
+      <FormButton size="compact" disabled={busy} onClick={() => run(async () => onResult(await hint.dismiss()))} data-testid="notes-merge-no">
+        {t('notes.merge.no', {})}
+      </FormButton>
+    </section>
+  );
+}
+
+/**
+ * 转成待办 / 日程的流程：只读行拦下；带插图、带附件的先问（ask 不为空时页面画确认窗，问了就定下保留原条），其余直接转；结果出在输入行上面：
+ * “已转成…”、“先别再转”（left）、没有字或太长“转不了”；正在转（busy）、已经没了、切换账号中不提示；其余（含抛异常）走出错条 / 只读提示
+ */
+export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a: NoteActHost) {
+  const [ask, setAsk] = useState<ConvAsk | null>(null);
+  const go = async (id: string, kind: ConvertKind, keep: boolean) => {
+    setAsk(null);
+    const r = await run(id, kind, keep).catch(() => null);
+    if (r === null) a.report('failed');
+    else if (r.ok) a.g.show({ kind: 'conv', key: `notes.conv.${r.kept ? 'kept' : 'moved'}.${kind}` });
+    else if (r.left) a.g.show({ kind: 'conv', key: 'notes.conv.left' });
+    else if (r.reason === 'empty' || r.reason === 'too_long') a.g.show({ kind: 'conv', key: r.reason === 'empty' ? 'notes.conv.empty' : 'notes.conv.long' });
+    else a.report(r.reason === 'gone' || r.reason === 'busy' ? 'silent' : actionResult(r.reason));
+  };
+  return {
+    ask,
+    start(it: NoteSize, kind: ConvertKind) {
+      if (a.isRo(it.id)) a.g.block();
+      else if (needsAsk(it)) setAsk({ id: it.id, kind, images: it.images, files: it.files });
+      else void go(it.id, kind, false);
+    },
+    confirm() {
+      rlog(`notes convert confirm ask=${ask ? ask.kind : 'none'}`);
+      if (ask) void go(ask.id, ask.kind, true);
+    },
+    cancel: () => setAsk(null),
+  };
+}
+
+/** 转换、移进隐私记只看这一条的 id 和带几张图、几个附件（列表的 NoteItem 本来就有；编辑页用 useNoteConvert 的 sizes） */
+export type NoteSize = { id: string; images: number; files: number };
+
+/** 转换、移进隐私记流程要用的那几样：列表页给 kit useListActions 的结果，编辑页给自己的一份（结果出在编辑页的提示行） */
+export interface NoteActHost {
+  isRo(id: string): boolean;
+  report(r: ActionResult): void;
+  g: { show(t: ConvTip): void; block(): void };
+}
+
+/**
+ * 转成待办 / 日程、移到隐私记的整套（列表页和编辑页“⋯”菜单共用一份）：只读拦下；带插图、附件的先问；
+ * 移进隐私记走 vault 的 VaultParts move（解锁、重试一次、带附件不能移），移好了调 onMoved；dialogs 是确认窗和移动层，页面画在自己的根上
+ */
+export function useNoteActs(run: ReturnType<typeof useNoteList>['convert'], host: NoteActHost, onMoved: (id: string) => void) {
+  const conv = useConvertFlow(run, host);
+  const [askMove, setAskMove] = useState<NoteSize | null>(null);
+  const [moving, setMoving] = useState<string | null>(null);
+  return {
+    convert: conv.start,
+    toVault(it: NoteSize) {
+      if (host.isRo(it.id)) host.g.block();
+      else if (needsAsk(it)) setAskMove(it);
+      else setMoving(it.id);
+    },
+    dialogs: (
+      <>
+        {moving !== null ? (
+          <QuietBoundary name="vault-move">
+            <Suspense fallback={null}>
+              <VaultParts
+                part="move"
+                noteId={moving}
+                onDone={(ok) => {
+                  if (ok) onMoved(moving);
+                  setMoving(null);
+                }}
+              />
+            </Suspense>
+          </QuietBoundary>
+        ) : null}
+        {conv.ask ? <ConvertAsk ask={conv.ask} onOk={conv.confirm} onCancel={conv.cancel} /> : null}
+        {askMove ? (
+          <MoveAsk
+            files={askMove.files}
+            images={askMove.images}
+            onOk={() => {
+              setMoving(askMove.id);
+              setAskMove(null);
+            }}
+            onCancel={() => setAskMove(null)}
+          />
+        ) : null}
+      </>
+    ),
+  };
+}
+
+/** 带插图、附件的转成待办 / 日程之前问一次：原条保留，图片、附件还在原处 */
+export function ConvertAsk({ ask, onOk, onCancel }: { ask: ConvAsk; onOk(): void; onCancel(): void }) {
+  const t = useNotesT();
+  const todo = ask.kind === 'todo';
+  const k = ask.files > 0 && ask.images > 0 ? 'both' : ask.files > 0 ? 'file' : 'img';
+  const what = whatText(t, 'conv', ask.files, ask.images);
+  return (
+    <ConfirmDialog
+      open
+      title={t(todo ? 'notes.conv.todo' : 'notes.conv.event', {})}
+      body={t(todo ? 'notes.conv.dlg.todo' : 'notes.conv.dlg.event', { k: t(`notes.conv.kind.${k}`, {}), w: what })}
+      okLabel={t(todo ? 'notes.conv.dlg.okTodo' : 'notes.conv.dlg.okEvent', {})}
+      cancelLabel={t('notes.conv.dlg.cancel', {})}
+      onOk={onOk}
+      onCancel={onCancel}
+      testId="notes-conv-ask"
+    />
+  );
+}
+
+/** 带附件、插图的移进隐私记之前问一次：附件、图会一起加密搬进隐私记 */
+export function MoveAsk({ files, images, onOk, onCancel }: { files: number; images: number; onOk(): void; onCancel(): void }) {
+  const t = useNotesT();
+  const what = whatText(t, 'move', files, images);
+  return (
+    <ConfirmDialog
+      open
+      title={t('notes.move.title', {})}
+      body={t('notes.move.body', { w: what })}
+      okLabel={t('notes.move.ok', {})}
+      cancelLabel={t('notes.conv.dlg.cancel', {})}
+      onOk={onOk}
+      onCancel={onCancel}
+      testId="notes-move-ask"
+    />
+  );
+}

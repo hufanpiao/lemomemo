@@ -1,0 +1,219 @@
+// tools/release/publish.ps1 第八批（演练台见 publish-run-harness.ts，git 小工具见 publish-run-gitguard.ts）：
+// R266-sugg ③ 签名边界：log.showSignature=true、gpg.program=<任意程序> 时 git show 会执行那个程序；脚本用 GIT_CONFIG_KEY_2 注入
+//   log.showSignature=false（子进程继承），pages deploy 显式传 --commit-message（wrangler 不再跑 git show -s --format=%B）；
+// R-268 复审：第 5 步的替换对象检查真跑一次（假 wrangler 在 --dry-run 时执行 git replace）；
+// R-269 复审：第 6 步部署 lemo-ops 之前逐个比一次内容（真跑：中途改一个被跟踪的文件）；B7a 起服务器函数和网页从发布包部署，
+//   改库前、函数前、网页前改按发布包指纹核（真跑：中途改临时目录里的发布包），另有静态核对。
+// B2 安全审查 D1-S3、1.5 第 ③ 点：线上 Edge Function secrets 里有 PUSH_SERVICE_OVERRIDE_URL 或 LEMO_LOCAL_PUSH_STUB 就停在改库之前（令牌读不了名单、名单为空也停；响应体不进屏幕和异常信息）。
+// 不连 Cloudflare、Supabase、GitHub，不真的部署。只在 Windows 上跑。
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ctx, DRY, FULL, git, has, noSecrets, PS, ROLLBACK, root, runScript, setup, teardown } from './publish-run-harness.ts';
+import { q } from './publish-run-fakes.ts';
+import { gitIn, guardRepoConfig } from './publish-run-gitguard.ts';
+
+const CONTENT_OK = '被跟踪的文件逐个比过内容（不靠大小和修改时间），和检出的提交一致';
+const count = (s: string, sub: string) => s.split(sub).length - 1;
+const toFullWidth = (s: string) => s.replace(/[0-9]/gu, (d) => String.fromCharCode(0xff10 + Number(d)));
+const psText = () => readFileSync(join(root, 'tools', 'release', 'publish.ps1'), 'utf8');
+const body = (ps: string, name: string) => ps.slice(ps.indexOf(`function ${name}`), ps.indexOf('\n}', ps.indexOf(`function ${name}`)));
+
+describe.skipIf(!PS)('publish.ps1 签名边界、第 5 步替换对象、第 6 步逐个比内容（假仓库、假工具、假令牌）', () => {
+  beforeAll(setup, 300_000);
+  afterAll(teardown);
+
+  // R266-sugg ⑧（从 publish-run.test.ts 挪来，那个文件到了 300 行）：
+  // core.hookspath 只放行指向本仓库被跟踪的 .githooks（项目的密钥检查钩子），其他都在第 1 步停
+  const hooksCases: { name: string; value: () => string; extra?: () => string; ok: boolean; want: string }[] = [
+    { name: '指向仓库外的目录', value: () => join(ctx.dir, 'hooks-outside'), ok: false, want: '不许有的设置：core.hookspath' },
+    { name: '指向 .githooks，但里面有被忽略的文件', value: () => join(ctx.repo, '.githooks'), extra: () => join(ctx.repo, '.githooks', 'x.tmp'), ok: false, want: '.githooks 下有没被 git 跟踪的文件（含被忽略的）：.githooks/x.tmp' },
+    { name: '指向 <RepoPath>\\.githooks（项目规定的写法）', value: () => join(ctx.repo, '.githooks'), ok: true, want: 'core.hookspath 指向本仓库被跟踪的 .githooks' },
+    { name: '相对路径 .githooks', value: () => '.githooks', ok: true, want: 'core.hookspath 指向本仓库被跟踪的 .githooks' },
+  ];
+  for (const c of hooksCases) {
+    it(`core.hookspath ${c.name}：${c.ok ? '不拦' : '第 1 步就停'}`, async () => {
+      mkdirSync(join(ctx.dir, 'hooks-outside'), { recursive: true });
+      const restore = guardRepoConfig([], ['core.hookspath']);
+      const extra = c.extra?.();
+      try {
+        git(['config', '--local', 'core.hookspath', c.value()]);
+        if (extra) writeFileSync(extra, 'x\n', 'utf8');
+        // 被忽略的文件不进 git status：确认工作区仍算干净，拦下它的是 .githooks 的检查
+        if (extra) expect(git(['status', '--porcelain', '--untracked-files=all'])).toBe('');
+        const r = await runScript('-CheckOnly -Ops', []);
+        expect(r.code, r.out).toBe(c.ok ? 0 : 1);
+        expect(r.out).toContain(c.want);
+        expect(r.calls).toEqual([]);
+      } finally {
+        if (extra) rmSync(extra, { force: true });
+        restore();
+      }
+    }, 180_000);
+  }
+
+  // 第九批：tag 格式区分大小写、只认半角数字、末尾不许带换行。原写法这三种都放过，只靠后面的 git cat-file 兜底；现在第一关就停
+  const badTags: { name: string; ps: () => string; shown: () => string }[] = [
+    { name: '全角数字', ps: () => q('v' + toFullWidth(ctx.ver)), shown: () => 'v' + toFullWidth(ctx.ver) },
+    { name: '末尾带换行', ps: () => `(${q('v' + ctx.ver)} + [char]10)`, shown: () => `v${ctx.ver}\n` },
+    { name: '大写 V', ps: () => q('V' + ctx.ver), shown: () => 'V' + ctx.ver },
+  ];
+  for (const c of badTags) {
+    it(`第九批 tag ${c.name}：第 1 步第一关就停，没调任何工具`, async () => {
+      const r = await runScript('-CheckOnly -Ops', [], { tagPs: c.ps() });
+      expect(r.code, r.out).toBe(1);
+      expect(r.out.replace(/\r\n/gu, '\n')).toContain(`tag 要写成 vX.Y.Z（小写 v、半角数字），例如 v4.0.0，现在是「${c.shown()}」`);
+      expect(r.out).not.toContain('tag 格式：');
+      expect(r.out).not.toContain('不存在，或不是带说明的 tag');
+      expect(r.calls).toEqual([]);
+      expect(r.log.some((l) => /^(npm|node|download)\t/u.test(l))).toBe(false);
+      expect(r.envLeft).toBe('');
+    }, 180_000);
+  }
+
+  // ③ 前提：.git\config 设 log.showSignature=true、gpg.program=<留记号的程序>，带签名头的提交 git show 时会执行它；
+  // 用脚本注入的那三项命令行级配置（GIT_CONFIG_COUNT=3，第三项 log.showSignature=false）就不执行
+  it('R266-sugg ③ 前提：log.showSignature + gpg.program 让 git show 执行外部程序；脚本注入的 log.showSignature=false 能挡住', () => {
+    const marker = join(ctx.dir, 'gpg-ran.txt');
+    const prog = join(ctx.dir, 'fake-gpg.sh');
+    writeFileSync(prog, `#!/bin/sh\necho ran >> '${marker.replace(/\\/g, '/')}'\nexit 1\n`, 'utf8');
+    const restore = guardRepoConfig([], ['log.showSignature', 'gpg.program']);
+    try {
+      git(['config', '--local', 'log.showSignature', 'true']);
+      git(['config', '--local', 'gpg.program', prog.replace(/\\/g, '/')]);
+      const head = git(['rev-parse', 'HEAD']);
+      const who = 'publish-test <publish-test@example.test> 1700000000 +0000';
+      const sig = 'gpgsig -----BEGIN PGP SIGNATURE-----\n \n AAAA\n -----END PGP SIGNATURE-----\n';
+      const signed = gitIn(['hash-object', '-t', 'commit', '-w', '--stdin'], { input: `tree ${git(['rev-parse', 'HEAD^{tree}'])}\nparent ${head}\nauthor ${who}\ncommitter ${who}\n${sig}\nsigned msg\n` });
+      const show = ['show', '-s', '--format=%B', signed];
+      expect(gitIn(show)).toBe('signed msg');
+      expect(existsSync(marker), '探针没生效：git show 没执行 gpg.program，这个用例测不出东西').toBe(true);
+      rmSync(marker, { force: true });
+      const env = { GIT_CONFIG_COUNT: '3', GIT_CONFIG_KEY_0: 'core.fsmonitor', GIT_CONFIG_VALUE_0: 'false', GIT_CONFIG_KEY_1: 'core.hooksPath', GIT_CONFIG_VALUE_1: join(ctx.dir, 'no-hooks'), GIT_CONFIG_KEY_2: 'log.showSignature', GIT_CONFIG_VALUE_2: 'false' };
+      expect(gitIn(show, { env })).toBe('signed msg');
+      expect(existsSync(marker), '注入 log.showSignature=false 以后 gpg.program 仍被执行了').toBe(false);
+    } finally {
+      restore();
+      rmSync(marker, { force: true });
+    }
+  });
+
+  it('R266-sugg ③ 脚本在第一次调 git 之前注入 log.showSignature=false（GIT_CONFIG_COUNT=3），结束时清掉', () => {
+    const ps = psText();
+    const main = ps.slice(ps.indexOf('# ---------------------------------------------------------------- 主流程'));
+    const inject = main.indexOf("SetEnvironmentVariable('GIT_CONFIG_KEY_2', 'log.showSignature', 'Process')");
+    expect(inject).toBeGreaterThan(0);
+    expect(main).toContain("SetEnvironmentVariable('GIT_CONFIG_COUNT', '3', 'Process')");
+    expect(main).toContain("SetEnvironmentVariable('GIT_CONFIG_VALUE_2', 'false', 'Process')");
+    expect(inject).toBeLessThan(main.indexOf('$info = Invoke-Checks'));
+    expect(main.slice(main.indexOf('} finally {'))).toMatch(/'GIT_CONFIG_KEY_2', 'GIT_CONFIG_VALUE_2'/u);
+  });
+
+  it('R266-sugg ③ / R-269 复审 完整发布：pages deploy 带 --commit-message <tag>@<提交前 12 位>；源码内容逐个比了 3 次（第 1、5 步，lemo-ops 之前）', async () => {
+    const r = await runScript('-Ops', FULL);
+    expect(r.code, r.out).toBe(0);
+    const pages = r.calls.find((c) => c.startsWith('wrangler\tpages deploy'));
+    expect(pages, r.calls.join('\n')).toContain(`--commit-message v${ctx.ver}@${git(['rev-parse', 'HEAD']).slice(0, 12)} --commit-dirty=true`);
+    expect(count(r.out, CONTENT_OK)).toBe(3);
+    expect(r.envLeft).toBe('');
+  }, 180_000);
+
+  // R-268 复审：第 4 步 lemo-ops 打包演练（--dry-run）时假 wrangler 真跑一次 git replace（第 1 步时还没有），第 5 步输令牌之前就停
+  it('R-268 第 1 步之后才加的替换对象：第 5 步查 refs/replace/ 停下，还没输令牌', async () => {
+    const restore = guardRepoConfig();
+    try {
+      const head = git(['rev-parse', 'HEAD']);
+      const r = await runScript('-Ops', FULL, { tamperAt: '--dry-run', tamper: `git:-C "${ctx.repo}" replace ${head} ${git(['rev-parse', 'HEAD~1'])}` });
+      expect(r.code, r.out).toBe(1);
+      expect(count(r.out, '没有替换对象（refs/replace/）'), '第 1 步应该过了').toBe(1);
+      expect(r.out).toContain(`仓库里有替换对象（git replace，能让改过的文件在 git status 里看起来是干净的）：refs/replace/${head}。`);
+      expect(r.prompts).toHaveLength(DRY.length);
+      expect(has(r, /^supabase\t/u)).toBe(false);
+      expect(r.envLeft).toBe('');
+    } finally {
+      restore();
+    }
+  }, 180_000);
+
+  // 第 6 步中途改东西：改临时目录里的发布包（假工具改 pub\dist\web\index.html）→ 下一次发布包指纹核对停下；
+  // R-269 复审：改一个被跟踪的文件（假工具同长度改、还原修改时间）→ 部署 lemo-ops 之前逐个比内容停下
+  const PUB_BAD = '临时目录里的发布包和第 3 步核对过的不一样了（被改过）。现在：';
+  const step6: { name: string; at: string; tamper: () => string; want: string; stopBefore: RegExp; ran: RegExp }[] = [
+    { name: '迁移演练时改发布包：真推迁移之前', at: 'db push --linked --dry-run', tamper: () => 'web', want: `${PUB_BAD}还没改库、没部署任何代码`, stopBefore: /^supabase\tdb push --linked --yes/u, ran: /^supabase\tdb push --linked --dry-run/u },
+    { name: '真推迁移时改发布包：部署服务器函数之前', at: 'db push --linked --yes', tamper: () => 'web', want: `${PUB_BAD}数据库迁移已推，服务器函数、lemo-ops、网页都还是旧版，没部署任何代码。这种状态能用（迁移只增不改），查清原因后用同一个 tag 原样重跑`, stopBefore: /^supabase\tfunctions deploy/u, ran: /^supabase\tdb push --linked --yes/u },
+    { name: '部署服务器函数时改源码：部署 lemo-ops 之前', at: '--use-api', tamper: () => join(ctx.repo, 'VERSION'), want: 'git status 却看不出来（大小、修改时间都没变）：VERSION。数据库迁移已推、服务器函数已是新版，lemo-ops和网页还是旧版', stopBefore: /^wrangler\tdeploy --config \S+ --tag/u, ran: /^supabase\tfunctions deploy/u },
+  ];
+  for (const c of step6) {
+    it(`第 6 步 ${c.name}停下`, async () => {
+      const restore = guardRepoConfig(['VERSION']);
+      try {
+        const r = await runScript('-Ops', FULL, { tamperAt: c.at, tamper: c.tamper() });
+        expect(r.code, r.out).toBe(1);
+        expect(r.out).toContain(c.want);
+        expect(has(r, c.ran), r.calls.join('\n')).toBe(true);
+        expect(has(r, c.stopBefore), r.calls.join('\n')).toBe(false);
+        expect(has(r, /^wrangler\tpages deploy/u)).toBe(false);
+        expect(r.envLeft).toBe('');
+      } finally {
+        restore();
+      }
+    }, 180_000);
+  }
+
+  it('R-269 复审 / B2 安全审查 P-S2 / B7a 静态核对：源码逐个比在函数之后、lemo-ops 之前；发布包指纹在 link、真推迁移、函数、网页之前各核一次；不再本机 copy_shared', () => {
+    const ps = psText();
+    const deploy = body(ps, 'Invoke-Deploy');
+    const at = (s: string) => { const i = deploy.indexOf(s); expect(i, s).toBeGreaterThan(0); return i; };
+    const link = at("@('link', '--project-ref'");
+    const push = at("@('db', 'push', '--linked', '--yes')");
+    const fn = at("@('functions', 'deploy')");
+    const ops = at("Run-Wrangler @('deploy', '--config'");
+    const pages = at("Run-Wrangler @('pages', 'deploy'");
+    const content = [...deploy.matchAll(/\n\s*Assert-ContentMatchesHead /gu)].map((m) => m.index);
+    expect(content).toHaveLength(1);
+    expect(content[0]).toBeGreaterThan(fn);
+    expect(content[0]).toBeLessThan(ops);
+    const pub = [...deploy.matchAll(/\n\s*Assert-PubUnchanged /gu)].map((m) => m.index);
+    for (const [name, i] of [['link', link], ['db push --yes', push], ['functions deploy', fn], ['pages deploy', pages]] as const) {
+      const before = pub.filter((p) => p < i);
+      expect(before.length, `${name} 之前没核发布包指纹`).toBeGreaterThan(0);
+    }
+    expect(pub.some((p) => p > ops && p < pages), '网页部署之前（lemo-ops 之后）要再核一次发布包').toBe(true);
+    expect(pub.some((p) => p > link && p < push), '真推迁移之前要再核一次发布包').toBe(true);
+    expect(pub.some((p) => p > push && p < fn), '部署函数之前要再核一次发布包').toBe(true);
+    // 改库前运行仓库里的 pull.ps1 之前（内存里已经有部署令牌）再逐个比一次工作区（B7a 第三轮审查中 2）
+    const pull = body(ps, 'Invoke-BackupPull');
+    expect(pull.indexOf('Assert-ContentMatchesHead $state'), 'pull.ps1 之前要再比一次工作区').toBeGreaterThan(0);
+    expect(pull.indexOf('Assert-ContentMatchesHead $state')).toBeLessThan(pull.indexOf('& powershell.exe'));
+    expect(ps).not.toContain("& node 'build\\copy_shared.mjs'");
+    expect(ps).toContain('Windows 上按 TMP 优先，其次 TEMP');
+  });
+
+  // B2 安全审查 D1-S3、1.5 第 ③ 点（主流程里的位置和请求头在 publish-run.test.ts 的 -Ops 完整发布那条）：线上设了 PUSH_SERVICE_OVERRIDE_URL 或 LEMO_LOCAL_PUSH_STUB（只许本机用）就停在改库之前，只报名字；令牌读不了名单（403，不许跳过）、名单为空也停；fake 的 403 异常里带着 TESTONLYdigest，核对它不进屏幕
+  it.each([
+    ['线上有 PUSH_SERVICE_OVERRIDE_URL', ['CRON_SECRET', 'PUSH_SERVICE_OVERRIDE_URL', 'OPS_SECRET'] as string[] | 'deny', '正式项目的 Edge Function secrets 里有 PUSH_SERVICE_OVERRIDE_URL（'],
+    ['线上有 LEMO_LOCAL_PUSH_STUB（D1-8）', ['CRON_SECRET', 'LEMO_LOCAL_PUSH_STUB'] as string[] | 'deny', '正式项目的 Edge Function secrets 里有 LEMO_LOCAL_PUSH_STUB（'],
+    ['两个都有：只报名字', ['LEMO_LOCAL_PUSH_STUB', 'PUSH_SERVICE_OVERRIDE_URL'] as string[] | 'deny', '里有 PUSH_SERVICE_OVERRIDE_URL、LEMO_LOCAL_PUSH_STUB（'],
+    ['令牌没有 Edge Function Secrets 只读', 'deny' as string[] | 'deny', '正式 Supabase 令牌要有 Edge Function Secrets 只读'],
+    ['名单是空的', [] as string[] | 'deny', '正式项目的 secrets 名单是空的或读不懂'],
+  ])('%s：停在改库之前，不 link、不部署', async (_name, fnSecrets, want) => {
+    const r = await runScript('-Ops', FULL, { fnSecrets });
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toContain(want);
+    expect(r.out).toContain('还没改库');
+    expect(has(r, /^supabase\t/u)).toBe(false);
+    expect(r.calls.filter((c) => !c.includes('--dry-run')), r.calls.join('\n')).toEqual([]);
+    expect(r.log.some((l) => l.startsWith('cf\t'))).toBe(false);
+    expect(r.out).not.toContain('TESTONLYdigest');
+    expect(r.envLeft).toBe('');
+    noSecrets(r);
+  }, 180_000);
+
+  it('-Only functions 也查线上的 PUSH_SERVICE_OVERRIDE_URL', async () => {
+    const r = await runScript('-Only functions -Ops', ROLLBACK, { fnSecrets: ['PUSH_SERVICE_OVERRIDE_URL'] });
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toContain('PUSH_SERVICE_OVERRIDE_URL');
+    expect(has(r, /^supabase\tfunctions /u)).toBe(false);
+    noSecrets(r);
+  }, 180_000);
+});

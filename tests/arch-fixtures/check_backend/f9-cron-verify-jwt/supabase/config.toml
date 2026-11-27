@@ -1,0 +1,26 @@
+[api]
+enabled = true
+
+# 对照：cron 调的、函数里验 x-cron-secret，关了校验 → 不报
+[functions.account-purge]
+verify_jwt = false
+
+# 违规 F9 ②：cron 调的（写死的 /functions/v1/ 地址），关了校验，但函数里不验 x-cron-secret
+[functions.ai-classify]
+verify_jwt = false
+
+# 违规 F9 ③：用户调的函数关了网关的 JWT 校验
+[functions.account]
+verify_jwt = false
+
+# 对照：开着（写明 true）不报
+[functions.invite-admin]
+verify_jwt = true
+
+# 违规 F9 ②：只在 TS 注释里写了带引号的 'x-cron-secret'（AST 去注释后没有）
+[functions.vault-sweep]
+verify_jwt = false
+
+# 违规 F9 ②：只在 *.test.ts 里有 'x-cron-secret'（测试文件不算函数验了）
+[functions.backup-daily]
+verify_jwt = false

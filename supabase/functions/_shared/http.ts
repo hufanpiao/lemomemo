@@ -1,0 +1,40 @@
+// 服务器函数的 json 响应、服务器之间调用的密钥鉴权只在这里做（架构约定 10.1；check_backend F12 拦别处拼 json 响应；出站超时在 net.ts）。
+// 不变量：json 响应一律 no-store；不碰网络。
+// 不 import npm 包、不读环境变量，Vitest 直接测。
+import { safeEqual } from './proxy-headers.ts';
+
+export const NO_STORE: Readonly<Record<string, string>> = { 'cache-control': 'no-store' };
+/** CRON_SECRET、OPS_SECRET 至少 32 字节（UTF-8），短了按没配好处理 */
+export const MIN_SECRET_BYTES = 32;
+
+export function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(body), { status, headers: { ...headers, 'content-type': 'application/json; charset=utf-8', ...NO_STORE } });
+}
+
+/** {error: 码, ...附加字段} 的错误响应；C 是这个函数认的错误码（vault、vault-image 用，11-14 整块评审第 16 条：原来各写一份） */
+export function errorResponder<C extends string>(): (status: number, code: C, extra?: Record<string, unknown>) => Response {
+  return (status, code, extra = {}) => json(status, { error: code, ...extra });
+}
+
+/**
+ * 服务器之间调用的密钥头（cron 的 x-cron-secret、lemo-ops 的 x-ops-secret；调用方自己写 req.headers.get('<头名>')，F9 按函数目录查头名）：
+ * 先鉴权、再判没配好——没带对密钥的调用方看不出函数配没配。密钥太短记 misconfiguredCode。回 null 表示通过，否则是要直接回的响应
+ */
+export function cronGate(got: string | null, secret: string | undefined, log?: (code: string) => void, misconfiguredCode = 'misconfigured:cron_secret'): Response | null {
+  const s = secret ?? '';
+  if (s === '' || !got || !safeEqual(got, s)) return json(401, { error: 'unauthorized' });
+  if (new TextEncoder().encode(s).length < MIN_SECRET_BYTES) {
+    log?.(misconfiguredCode);
+    return json(500, { error: 'misconfigured' });
+  }
+  return null;
+}
+
+/**
+ * 脚本调用的 Bearer 密钥（backup-manifest 的 BACKUP_PULL_TOKEN，只有负责人本机的 pull.ps1 持有；架构第 6 节）：
+ * Authorization 头必须是 `Bearer <值>`，值和密钥定长比较（交给 cronGate：先 401 再 500、短密钥算没配好）。回 null 表示通过
+ */
+export function bearerGate(authorization: string | null, secret: string | undefined, log?: (code: string) => void, misconfiguredCode = 'misconfigured'): Response | null {
+  const m = /^Bearer ([\x21-\x7e]{1,512})$/.exec(authorization ?? '');
+  return cronGate(m?.[1] ?? null, secret, log, misconfiguredCode);
+}

@@ -1,0 +1,51 @@
+-- expect: private.remind_enqueue 冲突时不换主人、不清租约
+-- R-411（迁移 20261113100000）：唯一入口冲突时少清了 attempts（11-04 审查返工 L2：用户改了就是新的一次重算，不该背着上一版的次数）；
+-- 同一个判定也兜住整句退回 on conflict do nothing（正被租着的项被用户改了不清租约，finish 会把新改动删掉）
+create or replace function private.remind_enqueue(p_scope text, p_user uuid, p_tn text, p_id uuid, p_fresh boolean, p_min_ver smallint) returns void
+  language plpgsql set search_path = '' as $$
+declare
+  now_ms bigint := (extract(epoch from now()) * 1000)::bigint;
+  soon bigint := (extract(epoch from now()) * 1000)::bigint + 86400000;
+begin
+  if p_scope is null or p_scope not in ('row', 'floating', 'allday', 'anniv', 'all') then
+    raise exception 'remind_enqueue_scope: %', p_scope;
+  end if;
+  insert into private.remind_queue as q (table_name, id, user_id, prio, fresh, min_ver)
+  select c.tn, c.rid, c.uid, c.pr, coalesce(p_fresh, false), coalesce(p_min_ver, 0::smallint)
+    from (
+      select p_tn as tn, p_id as rid, p_user as uid, 0::smallint as pr where p_scope = 'row'
+      union all
+      -- 全天日程（时区采纳、切固定时区、改默认时刻）
+      select 'events', e.id, e.user_id, (case when e.remind_at is null or e.remind_at <= soon then 1 else 2 end)::smallint
+        from public.events e
+       where p_scope in ('floating', 'allday') and e.user_id = p_user and e.deleted_at is null and e.time is null
+         and (e.remind_at > now_ms or (e.remind_at is null and e.remind_days is not null))
+      union all
+      select 'events', e.id, e.user_id, (case when e.remind_at is null or e.remind_at <= soon then 1 else 2 end)::smallint
+        from public.events e
+       where p_scope = 'all' and e.deleted_at is null
+         and (e.remind_at > now_ms or (e.remind_at is null
+              and ((e.time is null and e.remind_days is not null) or (e.time is not null and e.remind_min is not null))))
+      union all
+      select 'todos', t.id, t.user_id, (case when t.remind_at is null or t.remind_at <= soon then 1 else 2 end)::smallint
+        from public.todos t
+       where (p_scope = 'all' or (p_scope = 'floating' and t.user_id = p_user)) and t.deleted_at is null and not t.done
+         and (t.remind_at > now_ms or (t.remind_at is null and t.due is not null
+              and ((t.due_time is null and t.remind_days is not null) or (t.due_time is not null and t.remind_before_min is not null))))
+      union all
+      -- 纪念日的提醒偏移不会为空数组（0005 的 check：1～4 个；为空表示用默认），所以“设了提醒”就是没删
+      select 'anniversaries', a.id, a.user_id, (case when a.remind_at is null or a.remind_at <= soon then 1 else 2 end)::smallint
+        from public.anniversaries a
+       where p_scope in ('floating', 'anniv') and a.user_id = p_user and a.deleted_at is null
+         and (p_scope = 'floating' or a.remind_offsets is null or a.remind_time is null)
+         and (a.remind_at > now_ms or a.remind_at is null)
+      union all
+      select 'anniversaries', a.id, a.user_id, (case when a.remind_at is null or a.remind_at <= soon then 1 else 2 end)::smallint
+        from public.anniversaries a
+       where p_scope = 'all' and a.deleted_at is null and (a.remind_at > now_ms or a.remind_at is null)
+    ) c
+  on conflict (table_name, id) do update set user_id = excluded.user_id, claim = null, claimed_at = null,
+      prio = least(q.prio, excluded.prio), fresh = q.fresh or excluded.fresh, min_ver = greatest(q.min_ver, excluded.min_ver)
+   where q.user_id is distinct from excluded.user_id or q.claim is not null or q.attempts > 0
+      or excluded.prio < q.prio or (excluded.fresh and not q.fresh) or excluded.min_ver > q.min_ver;
+end $$;

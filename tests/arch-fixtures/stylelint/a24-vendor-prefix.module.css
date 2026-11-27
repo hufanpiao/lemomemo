@@ -1,0 +1,5 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=declaration-property-value-disallowed-list rule=A24 */
+.a {
+  /* stylelint-disable-next-line property-no-vendor-prefix -- 样例：只为演示前缀写法下的 A24 */
+  -webkit-transition: opacity 900ms ease-in;
+}

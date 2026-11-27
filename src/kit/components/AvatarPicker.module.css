@@ -1,0 +1,49 @@
+/* 头像选区（kit 的 AvatarPicker；纪念日头像、我的头像共用） */
+.crop {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  margin: 8px auto 12px;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  touch-action: none;
+  cursor: grab;
+}
+
+.cropImg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+/* 圆形示意：圆外压暗 */
+.cropMask {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 200px var(--scrim);
+  pointer-events: none;
+}
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-14);
+}
+
+.zoom input {
+  flex: 1;
+  min-height: var(--hit);
+}
+
+.cropActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}

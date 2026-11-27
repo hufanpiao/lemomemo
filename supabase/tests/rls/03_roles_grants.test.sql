@@ -1,0 +1,197 @@
+-- 角色属性和授权白名单：TC-B0-33、34、69、70、77、78、81、86、87、95（表级 DELETE）；3.3 C、6.2
+begin;
+select plan(48);
+\ir _helpers.psql
+select tests.seed();
+
+-- ===== TC-B0-33：fn_vault、fn_ai 的角色属性 =====
+select is((select string_agg(rolname || ':' || (rolsuper or rolinherit or rolcreaterole or rolcreatedb or rolbypassrls or rolreplication), ',' order by rolname)
+  from pg_roles where rolname in ('fn_vault', 'fn_ai')), 'fn_ai:false,fn_vault:false', '两个函数角色：非超级、noinherit、不能建角色和库、不绕过 RLS');
+select ok(not exists (select 1 from pg_roles where rolname in ('fn_vault', 'fn_ai') and rolcanlogin and rolpassword is null),
+  '迁移不设密码（能登录的一定是负责人手工设过密码的）');
+select ok(not has_schema_privilege('fn_vault', 'public', 'CREATE') and not has_schema_privilege('fn_ai', 'public', 'CREATE')
+  and not has_schema_privilege('fn_vault', 'private', 'CREATE') and not has_schema_privilege('fn_ai', 'private', 'CREATE'), '两个角色在 public、private 都没有 CREATE');
+select ok(has_schema_privilege('fn_ai', 'extensions', 'USAGE') and not has_schema_privilege('fn_vault', 'extensions', 'USAGE'), 'extensions 的 USAGE 只给 fn_ai');
+
+-- ===== TC-B0-77：API 角色不是函数角色的成员（不能经 PostgREST 切过去） =====
+select ok(not exists (select 1 from pg_auth_members m join pg_roles r on r.oid = m.roleid join pg_roles u on u.oid = m.member
+   where r.rolname in ('fn_vault', 'fn_ai') and u.rolname in ('authenticator', 'anon', 'authenticated', 'service_role')),
+  'authenticator、anon、authenticated、service_role 都不是 fn_vault、fn_ai 的成员');
+select ok(not exists (select 1 from pg_auth_members m join pg_roles r on r.oid = m.roleid join pg_roles u on u.oid = m.member
+   where u.rolname in ('fn_vault', 'fn_ai')), 'fn_vault、fn_ai 自己不是任何角色的成员');
+
+-- ===== TC-B0-78：四个扫描视图（另加 R-492 的 ai_chat_notes：ai-chat 查随手记只经它，20261122090000）=====
+select is((select string_agg(c.relname || ':' || pg_get_userbyid(c.relowner) || ':' || array_to_string(c.reloptions, ';'), ',' order by c.relname)
+  from pg_class c where c.relnamespace = 'private'::regnamespace and c.relkind = 'v'),
+  'ai_chat_notes:postgres:security_barrier=true,scan_embed_queue:postgres:security_barrier=true,scan_note_files:postgres:security_barrier=true,scan_note_images:postgres:security_barrier=true,scan_vault_preview:postgres:security_barrier=true',
+  '扫描视图正好四个加 ai_chat_notes，归 postgres，都带 security_barrier');
+select is((select string_agg(table_name || ':' || grantee, ',' order by table_name, grantee) from information_schema.role_table_grants
+  where table_schema = 'private' and table_name like 'scan\_%' and grantee <> 'postgres'),
+  'scan_embed_queue:fn_ai,scan_note_files:fn_ai,scan_note_images:fn_ai,scan_vault_preview:fn_vault', '扫描视图只给 fn_ai（三个）、fn_vault（一个）');
+
+-- ===== TC-B0-81：private 的表和视图对 anon、authenticated 没有任何权限 =====
+select is((select count(*)::int from pg_class c cross join (values ('anon'), ('authenticated')) r(role)
+  cross join (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) p(priv)
+  where c.relnamespace = 'private'::regnamespace and c.relkind in ('r', 'v') and has_table_privilege(r.role, c.oid, p.priv)), 0,
+  'anon、authenticated 对 private 任何表、视图都没有权限');
+select is((select count(*)::int from information_schema.column_privileges where table_schema = 'private' and grantee in ('anon', 'authenticated')), 0,
+  'anon、authenticated 对 private 也没有列权限');
+
+-- service_role 对 private 的表级授权和 3.3 C 白名单逐项相等
+select is((select string_agg(table_name || ':' || privilege_type, ',' order by table_name, privilege_type) from information_schema.role_table_grants
+  where table_schema = 'private' and grantee = 'service_role'),
+  'admins:INSERT,admins:SELECT,ai_memories:SELECT,ai_state:INSERT,ai_state:SELECT,ai_state:UPDATE,ai_user_keys:DELETE,ai_user_keys:INSERT,ai_user_keys:SELECT,ai_user_keys:UPDATE,counters:DELETE,counters:INSERT,counters:SELECT,counters:UPDATE,deleted_accounts:INSERT,deleted_accounts:SELECT,'
+  || 'heartbeat:INSERT,heartbeat:SELECT,heartbeat:UPDATE,invites:INSERT,invites:SELECT,invites:UPDATE,pending_deletions:DELETE,pending_deletions:INSERT,pending_deletions:SELECT,pending_deletions:UPDATE,'
+  || 'pending_signups:DELETE,pending_signups:INSERT,pending_signups:SELECT,pending_signups:UPDATE,user_limits:SELECT',
+  'service_role 对 private 的授权 = 3.3 C 白名单（remind_queue 的 select、insert、delete 在 R-411 迁移 20261113100000 收回；ai_user_keys 是 R-494 迁移 20261123090000 建的）');
+-- 安全说明 S-6 守则 ①⑤（R-279，20261030140000）：service_role 对 private.admins 只有 select 和 insert（insert 只给 preview-login --admin）
+select is((select string_agg(p.priv, ',' order by p.priv) from (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) p(priv)
+  where has_table_privilege('service_role', 'private.admins', p.priv)), 'INSERT,SELECT',
+  'service_role 对 private.admins 只有 select 和 insert（S-6：不给 update、delete）');
+select ok(not has_any_column_privilege('service_role', 'private.admins', 'UPDATE') and not has_any_column_privilege('service_role', 'private.admins', 'REFERENCES'),
+  'service_role 对 private.admins 也没有按列给的 update、references（S-6 守则 ①）');
+
+-- fn_vault、fn_ai 的表级授权 = 6.2 逐表清单（列级的另由 D1 核对）
+select is((select string_agg(table_schema || '.' || table_name || ':' || privilege_type, ',' order by table_schema, table_name, privilege_type)
+  from information_schema.role_table_grants where grantee = 'fn_vault'),
+  'private.counters:INSERT,private.counters:SELECT,private.counters:UPDATE,private.device_secrets:DELETE,private.device_secrets:INSERT,private.device_secrets:SELECT,private.device_secrets:UPDATE,'
+  || 'private.embed_queue:DELETE,private.note_vectors:DELETE,private.scan_vault_preview:SELECT,'
+  || 'private.vault:DELETE,private.vault:INSERT,private.vault:SELECT,private.vault:UPDATE,private.vault_ai:DELETE,private.vault_ai:SELECT,'
+  || 'private.vault_credentials:DELETE,private.vault_credentials:INSERT,private.vault_credentials:SELECT,private.vault_credentials:UPDATE,'
+  || 'private.vault_preview:DELETE,private.vault_preview:INSERT,private.vault_preview:SELECT,private.vault_preview:UPDATE,'
+  || 'private.webauthn_challenges:DELETE,private.webauthn_challenges:INSERT,private.webauthn_challenges:SELECT,'
+  || 'public.note_files:INSERT,public.note_files:SELECT,public.note_files:UPDATE,public.note_images:INSERT,public.note_images:SELECT,public.note_images:UPDATE,'
+  || 'public.notes:INSERT,public.notes:SELECT,public.notes:UPDATE',
+  'fn_vault 的表级授权 = 6.2（同步表不给 delete，settings 什么都不给）');
+select is((select string_agg(table_schema || '.' || table_name || ':' || privilege_type, ',' order by table_schema, table_name, privilege_type)
+  from information_schema.role_table_grants where grantee = 'fn_ai'),
+  'private.ai_chat_notes:SELECT,private.ai_memories:DELETE,private.ai_memories:INSERT,private.ai_memories:SELECT,private.ai_memories:UPDATE,private.counters:INSERT,private.counters:SELECT,private.counters:UPDATE,private.embed_queue:DELETE,private.embed_queue:INSERT,private.embed_queue:SELECT,private.embed_queue:UPDATE,'
+  || 'private.heartbeat:INSERT,private.heartbeat:UPDATE,private.note_vectors:INSERT,private.note_vectors:SELECT,private.note_vectors:UPDATE,'
+  || 'private.scan_embed_queue:SELECT,private.scan_note_files:SELECT,private.scan_note_images:SELECT,private.user_limits:SELECT,'
+  || 'private.vault_ai:INSERT,private.vault_ai:SELECT,private.vault_ai:UPDATE',
+  'fn_ai 的表级授权 = 6.2（public 表只有列级）');
+select is((select string_agg(table_name || '.' || column_name || ':' || privilege_type, ',' order by table_name, column_name, privilege_type)
+  from information_schema.column_privileges where grantee = 'fn_ai' and table_schema = 'private' and privilege_type = 'SELECT'
+   and not has_table_privilege('fn_ai', quote_ident(table_schema) || '.' || quote_ident(table_name), 'SELECT')),
+  'heartbeat.at:SELECT,heartbeat.detail:SELECT,heartbeat.name:SELECT,vault.pin_epoch:SELECT,vault.user_id:SELECT',
+  'fn_ai 在 private 上的列级 select = 6.2：vault 只有 (user_id, pin_epoch)；heartbeat 的 (name, at, detail) 是迁移 20261104140000 给的（upsert 心跳要读，策略只放自己三个名字）');
+
+-- ===== 函数执行权（3.3 C；0.29 续第 55 条） =====
+select is((select count(*)::int from pg_proc p where p.pronamespace = 'private'::regnamespace
+  and (p.proacl is null or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0))), 0, 'private 没有一个函数给 PUBLIC 执行权');
+select is((select count(*)::int from pg_proc p where p.pronamespace = 'private'::regnamespace and pg_get_userbyid(p.proowner) <> 'postgres'), 0,
+  'private 每个函数的属主都是 postgres');
+select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
+  where p.pronamespace = 'private'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
+  'claim_endpoint_impl,devices_session_guard,enqueue_embed,enqueue_remind,files_authorize_impl,guard_note_file,guard_note_image,guard_token_revoke,is_active,is_self_admin,'
+  || 'media_quota_guard,my_ai_usage_impl,my_sessions_impl,not_password_session,purge_deleted_impl,record_consent_impl,remove_device_impl,report_tz_impl,revoke_my_sessions_impl,row_quota,table_meta_of,tags_ok,touch,vault_ai_off',
+  'authenticated 能执行的 private 函数 = 白名单（tags_ok 是 B1 迁移 20261031110000 建的，notes.tags 的 check 用；B1 迁移 20261029192000 建了 report_tz_impl、remove_device_impl、my_sessions_impl；claim_endpoint_impl 是 B2 迁移 20261103110000 建的；my_ai_usage_impl 是 B3 迁移 20261107100000 建的；media_quota_guard 是 B4 迁移 20261111100000 建的；revoke_my_sessions_impl 是 R-382 迁移 20261111120000 建的；enqueue_anniv_defaults 在 R-411 迁移 20261113100000 删掉）');
+select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
+  where p.pronamespace = 'private'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')), null,
+  'anon 不能执行任何 private 函数（迁移 20261112090000 把 session_fate_impl 并进 public.session_fate）');
+select ok(not has_schema_privilege('anon', 'private', 'USAGE'), 'anon 对 private 没有 usage（架构约定 10.7，迁移 20261112090000）');
+select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
+  where p.pronamespace = 'private'::regnamespace and has_function_privilege('service_role', p.oid, 'EXECUTE')),
+  'account_request_deletion,account_restore,account_usable,ai_classify_pending,ai_provider_ok,ai_quota_refund,ai_quota_take,ai_secret_get,ai_secret_set,api_token_create,auth_mail_counts,backup_missing,backup_read,db_size_bytes,export_job_start,export_job_take,export_size_over,intake_insert,invite_claim,invite_release,long_transactions,orphan_auth_users,push_heartbeat_write,rebind_device_impl,remind_due,remind_pushed,remind_queue_finish,remind_queue_pop,remind_queue_stats,security_events,session_alive,tags_ok,take_rate,usage_stats', 'service_role 能执行的 private 函数 = 白名单（backup_read、backup_missing 是 B7a 迁移 20261126130000 建的；usage_stats 是 B7a 迁移 20261126100000 建的；ai_secret_get、ai_secret_set、ai_provider_ok 是 R-494 迁移 20261123090000 建的；api_token_create 是安全审查第 12 条迁移 20261115061000 建的；remind_queue_stats 是 R-411 迁移 20261113100000 建的，同一迁移把 remind_queue_pop 换成 (int, int, boolean, int, int, smallint)；security_events 是 R-382 迁移 20261111120000 建的；ai_classify_pending 是 B4 迁移 20261110121000 建的；ai_quota_take、ai_quota_refund、intake_insert 是 B3 迁移 20261107100000 建的；push_heartbeat_write 是 B2 迁移 20261105140000 建的；remind_queue_finish 是 B2 迁移 20261104130000 建的，同一迁移把 remind_queue_pop 重建成 (int, int)；remind_due、remind_pushed 是 B2 迁移 20261103140000 建的；remind_queue_pop 是 B2 迁移 20261103130000 建的；orphan_auth_users 是 B1 迁移 20261031160000 建的；invite_claim、invite_release 是 B1 迁移 20261031150000 建的；tags_ok 是 B1 迁移 20261031110000 建的；db_size_bytes、export_job_start、export_job_take、export_size_over 是 B1 迁移 20261031100000 建的；auth_mail_counts 是 B1 迁移 20261029230000 建的；rebind_device_impl 是 B1 迁移 20261029192000 建的；take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
+select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
+  where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_vault', p.oid, 'EXECUTE')), 'purge_vault_impl,tags_ok', 'fn_vault 只能执行 purge_vault_impl 和 tags_ok（B1 迁移 20261031110000，notes.tags 的 check 用）');
+select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
+  where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_ai', p.oid, 'EXECUTE')), null, 'fn_ai 不能执行任何 private 函数');
+select is((select string_agg(p.proname || ':' || p.prosecdef, ',' order by p.proname) from pg_proc p where p.pronamespace = 'public'::regnamespace),
+  'apply_patch:false,claim_endpoint:false,files_authorize:false,my_ai_usage:false,my_sessions:false,purge_deleted:false,record_consent:false,remove_device:false,report_tz:false,revoke_my_sessions:false,session_fate:true',
+  'public 里只有这 11 个 RPC，除 session_fate（迁移 20261112090000 改成 definer）外都是 security invoker（R-382 迁移 20261111120000 加了 revoke_my_sessions、session_fate；B1 迁移 20261029192000 加了 report_tz、remove_device、my_sessions，20261029200000 加了 apply_patch；B2 迁移 20261103110000 加了 claim_endpoint；B3 迁移 20261107100000 加了 my_ai_usage）');
+select ok(not has_function_privilege('anon', 'public.purge_deleted(jsonb)', 'EXECUTE') and not has_function_privilege('anon', 'public.record_consent(text, boolean)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.purge_deleted(jsonb)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.files_authorize(text, jsonb)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.files_authorize(text, jsonb)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.files_authorize(text, jsonb)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.report_tz(text, uuid, text)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.report_tz(text, uuid, text)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.report_tz(text, uuid, text)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.remove_device(uuid)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.remove_device(uuid)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.remove_device(uuid)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.my_sessions()', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.my_sessions()', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.my_sessions()', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.apply_patch(text, uuid, jsonb, int, uuid, int[])', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.apply_patch(text, uuid, jsonb, int, uuid, int[])', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.apply_patch(text, uuid, jsonb, int, uuid, int[])', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.revoke_my_sessions(boolean)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.revoke_my_sessions(boolean)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.revoke_my_sessions(boolean)', 'EXECUTE'), 'public RPC 只授给 authenticated（session_fate 例外，见下一条）');
+select ok(has_function_privilege('anon', 'public.session_fate(text)', 'EXECUTE') and has_function_privilege('authenticated', 'public.session_fate(text)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.session_fate(text)', 'EXECUTE'),
+  'R-382：public.session_fate 是唯一授给 anon 的 RPC（anon、authenticated 能调，service_role 不给）');
+
+-- ===== TC-B0-95：表级 DELETE 只有 devices =====
+select is((select string_agg(table_name || ':' || grantee, ',' order by table_name, grantee) from information_schema.role_table_grants
+  where table_schema = 'public' and privilege_type = 'DELETE' and grantee in ('anon', 'authenticated')), 'devices:authenticated', '客户端的表级 DELETE 只有 devices');
+select is((select string_agg(table_name || ':' || privilege_type, ',' order by table_name, privilege_type) from information_schema.role_table_grants
+  where table_schema = 'public' and grantee in ('anon', 'authenticated') and privilege_type in ('INSERT', 'UPDATE', 'TRUNCATE', 'REFERENCES', 'TRIGGER')), null,
+  '客户端没有表级 INSERT、UPDATE（只有列级）');
+select is((select string_agg(event_object_table, ',' order by event_object_table) from information_schema.triggers
+  where action_statement like '%write_tombstone%'), 'anniversaries,categories,devices,events,note_files,note_images,notes,settings,todo_items,todos', 'write_tombstone 挂在 10 张同步表上（R-350 加 todo_items）');
+
+-- ===== 会话变量版 RLS =====
+insert into private.user_limits (user_id, media_mb) values ('aaaaaaaa-0000-4000-8000-000000000001', 700), ('bbbbbbbb-0000-4000-8000-000000000002', 50);
+insert into public.notes (id, user_id, body, created_at, updated_at) values
+  ('40000000-0000-4000-8000-0000000000a1', 'aaaaaaaa-0000-4000-8000-000000000001', 'A', 1, 1),
+  ('40000000-0000-4000-8000-0000000000b1', 'bbbbbbbb-0000-4000-8000-000000000002', 'B', 1, 1);
+insert into public.note_files (id, user_id, note_id, kind, path, name, mime, bytes, sha256, text_excerpt, created_at, updated_at) values
+  ('f0000000-0000-4000-8000-0000000000b1', 'bbbbbbbb-0000-4000-8000-000000000002', '40000000-0000-4000-8000-0000000000b1', 'pdf',
+   'bbbbbbbb-0000-4000-8000-000000000002/40000000-0000-4000-8000-0000000000b1/f0000000-0000-4000-8000-0000000000b1.pdf', 'b-secret.pdf', 'application/pdf', 1, repeat('0', 64), 'B 的正文', 1, 1);
+-- TC-B0-34：漏写 where user_id 也只看到本人
+select is(tests.rows_as('fn_ai', null, $$select count(*) as n from private.user_limits$$, 'aaaaaaaa-0000-4000-8000-000000000001'), '[{"n": 1}]'::jsonb,
+  'fn_ai 漏写 where：只看到 A 的一行');
+-- TC-B0-69：没设 app.uid（上一事务设过，读到空串）
+select is(tests.rows_as('fn_ai', null, $$select count(*) as n from private.user_limits$$), '[{"n": 0}]'::jsonb, '没设 app.uid：什么都读不到，也不报错');
+select ok(tests.try_as('fn_vault', null, $$insert into private.counters values ('preview:aaaaaaaa-0000-4000-8000-000000000001:2026102809', now(), 1)$$) like '42501%',
+  '没设 app.uid：写入被拒');
+-- TC-B0-70：扫描视图看得到待处理条目，直接读别人的列读不到
+select is(jsonb_array_length(tests.rows_as('fn_ai', null, $$select id from private.scan_note_files$$, 'aaaaaaaa-0000-4000-8000-000000000001')), 1,
+  'fn_ai 用扫描视图列出全部待处理附件（含 B 的）');
+select is(tests.rows_as('fn_ai', null, $$select name, text_excerpt from public.note_files$$, 'aaaaaaaa-0000-4000-8000-000000000001'), '[]'::jsonb,
+  'fn_ai 以 A 的身份读不到 B 的 name、text_excerpt');
+select ok(tests.try_as('fn_ai', null, $$select * from private.scan_note_files where user_id is not null and text_excerpt is not null$$,
+  'aaaaaaaa-0000-4000-8000-000000000001') like '42703%', '扫描视图里没有正文列');
+-- TC-B0-86：fn_vault 只认本人的计数键，不给 global
+select is(tests.try_as('fn_vault', null, $$insert into private.counters values ('preview:aaaaaaaa-0000-4000-8000-000000000001:2026102809', now(), 1)$$,
+  'aaaaaaaa-0000-4000-8000-000000000001'), 'ok', 'fn_vault 写本人的 preview 键');
+select ok(tests.try_as('fn_vault', null, $$insert into private.counters values ('preview:bbbbbbbb-0000-4000-8000-000000000002:2026102809', now(), 1)$$,
+  'aaaaaaaa-0000-4000-8000-000000000001') like '42501%', 'fn_vault 写 B 的键被拒');
+select ok(tests.try_as('fn_vault', null, $$insert into private.counters values ('ai:global:2026-10-28', now(), 1)$$,
+  'aaaaaaaa-0000-4000-8000-000000000001') like '42501%', 'fn_vault 写 global 键被拒');
+select is(tests.try_as('fn_ai', null, $$insert into private.counters values ('ai:global:2026-10-28', now(), 1)$$,
+  'aaaaaaaa-0000-4000-8000-000000000001'), 'ok', 'fn_ai 写 global 键（fn_global 策略）');
+-- TC-B0-87：webauthn_challenges
+insert into private.webauthn_challenges values ('chal-a', 'aaaaaaaa-0000-4000-8000-000000000001', now() + interval '1 minute'),
+                                               ('chal-b', 'bbbbbbbb-0000-4000-8000-000000000002', now() + interval '1 minute');
+select is(tests.rows_as('fn_vault', null, $$select challenge from private.webauthn_challenges$$, 'aaaaaaaa-0000-4000-8000-000000000001'),
+  '[{"challenge": "chal-a"}]'::jsonb, 'fn_vault 只读到 A 的挑战');
+select is(tests.try_as('fn_vault', null, $$delete from private.webauthn_challenges where challenge in ('chal-a', 'chal-b')$$, 'aaaaaaaa-0000-4000-8000-000000000001'), 'ok', 'fn_vault 删挑战');
+select is((select string_agg(challenge, ',') from private.webauthn_challenges), 'chal-b', '只删掉了 A 的，B 的还在');
+select ok(tests.try_as('fn_ai', null, $$select 1 from private.webauthn_challenges$$, 'aaaaaaaa-0000-4000-8000-000000000001') like '42501%', 'fn_ai 读挑战被拒');
+select ok(tests.try_as('service_role', null, $$select 1 from private.webauthn_challenges$$) like '42501%', 'service_role 读挑战被拒（0.29 续第 63 条）');
+select ok(tests.try_as('service_role', null, $$select 1 from private.vault$$) like '42501%', 'service_role 读 private.vault 被拒（0.29 续第 52 条 ①）');
+
+-- R-411 方案 5.2 T11：提醒队列的新函数 anon、authenticated 直接调一律被拒（remind_enqueue 收任意 user_id，绝不能给客户端）；
+-- service_role 只经 RPC 碰队列，直接读写表被拒
+select is((select string_agg(r.role || ':' || left(tests.try_as(r.role, 'aaaaaaaa-0000-4000-8000-000000000001', r.sql), 5), ',' order by r.role, r.sql)
+  from (values ('anon'), ('authenticated')) ro(role)
+  cross join lateral (values
+    (ro.role, $$select private.remind_enqueue('all', null, null, null, false, 0::smallint)$$),
+    (ro.role, $$select private.remind_reset('events', '{}'::jsonb, '{}'::jsonb)$$),
+    (ro.role, $$select private.remind_on_settings()$$),
+    (ro.role, $$select * from private.remind_queue_stats()$$),
+    (ro.role, $$select * from private.remind_queue_pop(500, 180, false)$$)) r(role, sql)),
+  'anon:42501,anon:42501,anon:42501,anon:42501,anon:42501,authenticated:42501,authenticated:42501,authenticated:42501,authenticated:42501,authenticated:42501',
+  'anon、authenticated 调 remind_enqueue、remind_reset、remind_on_settings、remind_queue_stats、remind_queue_pop 全部被拒（R-411 T11）');
+select is((select string_agg(left(tests.try_as('service_role', null, s.sql), 5), ',' order by s.sql) from (values
+    ($$select 1 from private.remind_queue$$),
+    ($$insert into private.remind_queue (table_name, id, user_id) values ('todos', gen_random_uuid(), 'aaaaaaaa-0000-4000-8000-000000000001')$$),
+    ($$delete from private.remind_queue$$)) s(sql)),
+  '42501,42501,42501', 'service_role 直接读、插、删 remind_queue 都被拒（R-411 迁移 20261113100000 收回表权限，只经 security definer 的 RPC）');
+
+select * from finish();
+rollback;

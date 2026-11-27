@@ -1,0 +1,38 @@
+/* 按下回弹：
+   按下和松开分开写——按下 scale(0.97) 用 --ease-out（不过冲，不会缩到 0.97 以下），松开回 idle 用 --ease-spring 弹回。
+   过渡取的是“目标状态”上的那一条：进 pressed 用 pressed 的，回 idle 用 .pressable 自己的 */
+.pressable {
+  transition: transform var(--dur-press) var(--ease-spring);
+}
+
+.pressable[data-state="pressed"] {
+  transform: scale(0.97);
+  transition: transform var(--dur-press) var(--ease-out);
+}
+
+/* 切页前瞬间复位：motion 的 transition() 拷旧页快照之前给页面上所有 Pressable 打 data-snap，
+   去掉过渡、立刻回到原大小，旧页快照不会拷到“还缩着 / 正在弹回”的按钮；
+   拷完、新页面画之前摘掉。写在 pressed 之后：同优先级，后写的赢 */
+.pressable[data-snap] {
+  transform: none;
+  transition: none;
+}
+
+/* 减少动态效果：系统设置和设置里的开关两种都写；
+   不只是把时长变 0（那样还是瞬间缩一下），连 scale 一起关掉；
+   按下的反馈换成瞬时变淡（不加过渡，“直接切换”），手指按住时仍然看得出按到了 */
+
+:global(:root[data-rm="1"]) .pressable {
+  transition: none;
+}
+
+:global(:root[data-rm="1"]) .pressable[data-state="pressed"] {
+  transform: none;
+  transition: none;
+  opacity: var(--press-dim);
+}
+
+:global(:root[data-rm="1"]) .pressable[data-snap] {
+  transform: none;
+  transition: none;
+}

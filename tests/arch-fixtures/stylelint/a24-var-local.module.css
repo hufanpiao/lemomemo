@@ -1,0 +1,4 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=declaration-property-value-disallowed-list rule=A24 message=var() */
+.a {
+  transition: opacity var(--d) var(--ease-out);
+}

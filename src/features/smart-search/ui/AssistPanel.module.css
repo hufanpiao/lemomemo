@@ -1,0 +1,248 @@
+/* 结果层：外壳、行用查找面板的 FindPanel.module.css，这里只放结果层多出来的几样
+   焦点：打开时焦点在面板本身（tabindex=-1，base.css 的 [tabindex="-1"]:focus 不画框）；按钮的焦点环走全局 :focus-visible，键盘 Tab 进去照样看得到 */
+
+/* 电脑：结果层只有一栏，不用左右两栏的高度（只给电脑；手机是整屏，套上它会只占 80vh、下面露出底栏） */
+.panel {
+  height: auto;
+  max-height: min(640px, 80vh);
+}
+
+/* 顶部一行：左“✕ 关闭”、中间标题、右边空一格和左边等宽，标题居中 */
+.top {
+  display: grid;
+  flex: none;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+.close {
+  justify-self: start;
+  min-height: var(--hit);
+  padding: 0 4px 0 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-15);
+  font-weight: 600;
+}
+
+/* 原话：标题下一行灰字，带引号 */
+.said {
+  flex: none;
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* “理解成：…”一整条浅底行，右边“改” */
+.und {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 6px 6px 6px 12px;
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+}
+
+.undText {
+  flex: 1;
+  min-width: 0;
+}
+
+.undText b {
+  font-weight: 600;
+}
+
+/* “改”用 kit 的 Chip.module.css .chip（浅底，高 30、点击区上下外扩到 44）；放在浅底行里，上下外边距收掉（行自己有内边距）；
+   一个字太窄，宽度至少 --hit，点击区左右也够 44 */
+.und > .edit {
+  justify-content: center;
+  min-width: var(--hit);
+  margin: 0;
+}
+
+/* 电脑：和输入区同样左右留 20px；面板底是白的，“理解成”行用浅灰 */
+.deskPad {
+  padding-right: 20px;
+  padding-left: 20px;
+}
+
+.top.deskPad {
+  padding-top: 12px;
+}
+
+.deskMx {
+  margin-right: 20px;
+  margin-left: 20px;
+  background: var(--panel-2);
+}
+
+.deskBody {
+  margin: 0;
+  padding: 4px 20px 20px;
+}
+
+.note {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+  line-height: 1.6;
+}
+
+/* 总结卡：这一层的重点卡片，大圆角 + --b-tile-shadow 柔和投影（同今天页“现在”卡）；
+   小字标题；正文；底部“依据：N 条记录 · 收起” */
+.sum {
+  margin: 12px 0 10px;
+  padding: 14px 14px 12px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  box-shadow: var(--b-tile-shadow);
+}
+
+/* 小字标题“AI 总结 · 只显示，不保存”：小字、第三层文字色；是一整句话，用正文字体、不加字距
+   （等宽字用在整句上，中韩文会被撑开） */
+.sumHead {
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+/* 总结文字：纯文本，保留换行 */
+.sumText {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: var(--fs-14-5);
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 正文里的引用角标：小号数字，和依据列表的序号对应 */
+.basisBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0 4px 0 12px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-12-5);
+}
+
+.fold {
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-12-5);
+}
+
+/* 依据列表：一张卡，行左边一格序号（没引用的空着） */
+.basis {
+  margin: 0 0 8px;
+  padding: 4px 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+/* 序号（和正文角标对应）：等宽小字、第三层文字色 */
+.num {
+  flex: none;
+  width: 16px;
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-12);
+  text-align: center;
+}
+
+/* 截止到今天：过期没做完的标红（同列表） */
+.late {
+  color: var(--danger-text);
+}
+
+/* 页脚：两颗等宽的圆角按钮，下面一行小字用量。不描边、靠底色：普通的用面板底 --panel（手机整屏是页面底色，--panel-2 在上面几乎看不出来）；
+   “总结一下”是这一层唯一的主操作，用胶囊选中色 --chip-on-bg（一页一个强调色）。点击区照样 --hit */
+.acts {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.act {
+  flex: 1;
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.actMain {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+}
+
+/* 用量“这次用了 N 次 AI · 今天 19 / 50”：小字、第三层文字色；正文字体，只有数字段等宽（AssistPanel.tsx 用 kit NumIn 包） */
+.usage {
+  margin: 10px 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  text-align: center;
+}
+
+/* 取消、改期、完成卡片里的按钮行 */
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.cand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+}
+
+.check {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+}
+
+.done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  font-size: var(--fs-14-5);
+}
+
+/* 电脑：面板本身就是 --panel 白底，总结卡、页脚普通按钮换成浅底 --panel-2 才分得出来（手机整屏是页面底色，用 --panel）；排在 .sum、.act 之后（no-descending-specificity） */
+.deskBody .sum,
+.deskBody .act:not(.actMain) {
+  background: var(--panel-2);
+}

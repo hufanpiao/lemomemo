@@ -1,0 +1,2 @@
+// supabase/ 下的 deno.jsonc 也往下作用到函数
+{ "imports": { "supsign": "https://esm.sh/aws4fetch@1.0.20" } }

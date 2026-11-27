@@ -1,0 +1,106 @@
+// B3 Q3 守门第 4 条“改动范围守门”（docs/09-路线图/B3-任务单.md 第四节；R-352 ④：“＋”只加事件，外观、透明度、像素不变）
+// 底栏外观相关的 5 类文件逐字节钉死：内容的 sha256 必须等于下面的常量；src/motion/glass-*.ts 多一个、少一个都算违规。
+// GlassBar.tsx 由代码审查员人工核（Q3 第 4 条：只允许 props 类型和转发给 Pressable 的几行），不进这项自动检查。
+//
+// 为什么钉哈希、不在 CI 里 git diff：unit.yml 跑单测的作业是浅克隆，拿不到基准提交；不为这一项改 fetch-depth。
+// 仓库 .gitattributes 是 `* text=auto eol=lf`，本机和 CI 检出的都是 LF，按原始字节算哈希两边一致。
+//
+// 基准：
+// • 原基准 e96d8e29（B2-UI-a 签字版，docs/03-评审/B2/B2-代码审查-签字.md 第 50、51 行；也是 B3 第一个提交 91876d6b 的父提交）。
+// • e96d8e29 之后到 67c5afbb 之间，有 17 个非 B3 提交改过这些文件，都是负责人定过的外观或几何改动（主持人 11-13 核过，定为同意过的改动）：
+//   - glass-tilt.ts 整个删掉、glass-ghost.ts 去掉倾斜高光、加 forgetTilt，GlassBar.module.css 的高光写死成原来的后备值：R-373（1e41ff70、e040e643）；
+//   - 宽屏侧栏上内边距 88 改 94、侧栏“＋”压住侧栏：R-363（f45e94d1）；
+//   - 底栏、“＋”、实色带、渐隐层的 bottom 减 --vh-gap（台账 Q-13“焊死在下面”），键盘弹起改按根节点 data-kbhide 藏、只管窄屏（Q-20），
+//     z-index 改成层级变量（Q-21、Q-22 界面去重）：8cd5b1ac、eeacf769、a7ccd5d9、e609d5d8（GlassBarFx.tsx 去掉 kb prop 在 eeacf769）；
+//   - base.css 逐个提交：6c1b4a43 同步提示卡 --sn-pad 留白；c1b48a1f 禁整页双指缩放（Q-1）；fa66cf6a R-382、R-391、R-392 和 Q-2、Q-4、Q-9、Q-10；
+//     4997e37a R-394（Q-12）；8cd5b1ac、dc42efa4 键盘与底栏、全局运行日志；eeacf769、b7ea73ca 视口几何（Q-20，--dock-bottom 一个公式）；
+//     a7ccd5d9、2d882741 界面去重（层级变量表，Q-21、Q-22）；e609d5d8 视口、键盘整块清理；be487ae8、ec0d3cd4 打字条后面整页液态玻璃 R-399、R-400；
+//     412ec380 随手记输入框后面的整页模糊 R-401；--g-sheen-img（底栏和“＋”斜上方那片光挪成变量，值同原来的后备值）在 ec0d3cd4。
+// • B3 自己的提交没碰这 5 类文件：FA-3 按住“＋”录音 032fbba8 只改了 GlassBar.tsx、motion/components.ts、motion/frame-loop.ts。
+// • 所以哈希钉在 main 的 67c5afbb（主持人 11-13 定），B3 之后的提交和它比。
+//
+// 什么时候允许更新哈希：只有负责人同意改底栏外观时（新的需求编号），才能改下面的常量，并在这段注释里补一行“需求号、提交号、改了什么”；
+// R-352 ② 的 .fab:focus-visible 聚焦色如果以后落地，也照这条走。为了让这个测试变绿而改哈希，等于绕过 R-352 ④，不允许。
+//
+// 哈希更新记录：
+// • 11-14 B6 皮肤字体整块评审返工第 1 条（主持人返工单：减少透明 / 减少动态只在 platform/look.ts 判断一次，组件里的 prefers-reduced-* 全删、只留 splash.css），
+//   提交 81b4a2bf：GlassBar.module.css、GlassBarFx.module.css、base.css 删掉 prefers-reduced-transparency / prefers-reduced-motion 媒体块（同样的规则原来就有 data-rt / data-rm 一份，系统设置由 look.ts 并进这两个属性），
+//   base.css 去掉 data-theme="system" 的 color-scheme（data-theme 只会是 light / dark，返工第 7 条）；glass-ghost.ts 的 reducedTransparency 只看 data-rt、不再监听媒体查询。
+//   外观不变：视觉锁定 tabbar-lock、g-plus-hold 0 像素差。
+// • 11-16 R-439（负责人：“磨砂玻璃主题下底色是有个很淡的渐变背景的”），提交 8a4ae431：base.css 加 body::after 画页面底色 var(--scr-bg)，顶部底色条默认改跟 --scr-bg；
+//   底栏本身的规则没动，底栏背后的底色变成渐变，视觉锁定 tabbar-lock 的 glass 两张、简洁浅色（R-438 第 4 组 #666970）一张按 CI 同款镜像重新生成（提交 49f23a02）。
+// • 11-17 R-436 精致化最后一处（负责人 11-16：“精致化按照待办页的思路去做整个app的页面”；主持人派单范围含电脑版侧栏），本分支提交：
+//   GlassBar.module.css 只动 (width >= 900px) 里的侧栏：页签字 700 改回常规字重、字号 --fs-11-5（视觉稿 .rail .rt 11.5px 常规、选中 600 走底栏同一条 .tab[aria-current] 规则），
+//   删掉和全局 :focus-visible 一样的 .me:focus-visible。窄屏底栏、“＋”的规则一行没动；视觉锁定基准都是手机宽度，不受影响。
+// • 11-17 负责人：“点进去的时候有瞬间的灰框，奇丑无比”（真机图灰框是随手记行按钮 .lmain 的大小，是 iOS 默认点按高亮），提交 3a066c28：
+//   base.css 在 html 上加 -webkit-tap-highlight-color: transparent，只关系统按下时画的灰框；底栏、“＋”的规则一行没动，静止画面不变，:focus-visible 照旧。
+// • 11-17 负责人：“滑动的时候右边的灰色滑动条可以去掉吗”，本提交：base.css 加 @media (pointer: coarse) 里 html 的 scrollbar-width: none 和 ::-webkit-scrollbar 隐藏；
+//   只藏触屏上整页的滚动条，底栏、“＋”的规则一行没动。
+// • 11-17 负责人（待办编辑页截图）：“所有输入框都不要带这个大黑框”，本提交：base.css 在全局 :focus-visible 后面加一条，输入框、多行框、可编辑区聚焦不画 outline；
+//   勾选框、按钮、链接、下拉的键盘聚焦框照旧；底栏、“＋”的规则一行没动，静止画面不变。
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
+/** sha256（文件原始字节）：67c5afbb 时的；四个在 81b4a2bf、base.css 又在 8a4ae431（R-439）、3a066c28（点按灰框）、11-17 触屏滚动条、11-17 输入框不画黑框、GlassBar.module.css 又在 R-436 侧栏精致化、11-20 整页推页去掉 View Transition、GlassBarFx.tsx 和 glass-ghost.ts 又在 11-20 删帧循环、base.css 又在 11-23 程序还焦点不画框按上面的更新记录换过 */
+const PINNED: Record<string, string> = {
+  'src/kit/components/GlassBar/GlassBar.module.css': '2bc5634fe03c3461375490121e128cc6ea4298d27d1e5ba8427e158625391fff',
+  'src/kit/components/GlassBar/GlassBarFx.tsx': '0dffef14a02e0884cb46471ed576525638d1b20f09a3e82a8611999b3b1d07a2',
+  'src/kit/components/GlassBar/GlassBarFx.module.css': 'baf8e2d17344a43abddf9ab873e5f4d46345a42b50522e911a2a1ea638dfde19',
+  'src/motion/glass-ghost.ts': 'edf1ee3cded12098eafa67681deeab6fe7ebbe1874ea14e5bf450befccbef87c',
+  'src/styles/base.css': 'f09640f230ec9da0c90d3f914a395fa7fe27df0d9e870f37107ca84d3ab909af', // 11-26 电脑滚动条柠檬黄细条（负责人 11-26 弹窗同意）
+};
+
+// • 11-24 负责人“字和兔子要清楚”，选“日期往下挪”：撤掉 511 状态栏实色条；base.css 加 --edge-clear，只在主屏幕 App 手机宽度把 --safe-top 加 28px 躲开 iOS 26 顶部系统模糊，底栏、“＋”的规则一行没动。
+const sha256 = (rel: string): string => createHash('sha256').update(readFileSync(join(ROOT, rel))).digest('hex');
+
+// • 11-19 晚负责人（隐私记首页长按选中截图）：“app空白页长按都不要这种选中”，本提交：base.css 加 :where(html[data-app] body) 关长按选字和系统拷贝菜单，输入框、可编辑区放开；
+//   底栏、“＋”的规则一行没动，静止画面不变（原来 8 个组件各写一份 user-select:none，统一以后删掉）。
+// • 11-20 负责人：“所有点击进入下一页……画面都黑一下”，弹窗选“新页从右滑进盖住”，本提交：base.css 整页过渡由先淡出再淡入改成推入、推出（lemo-push-*、lemo-pop-*），
+//   只有一边有底栏或“＋”时，它们的快照跟着自己那一页滑（进页旧那份边退边淡、返回新那份 60% 后淡入）；底栏、“＋”元素本身的规则一行没动，静止画面不变。
+// • 11-20 记录页美化方向 A（负责人 11-20“记录页美化方案用A”；独立评审第 1 条，主持人核过）：base.css 在窄屏加 :root[data-nobar] 把 --dock-lift 设成 6px，
+//   没有底栏的页（App 按 tab-of.ts 写 data-nobar）贴底浮条落到离底 安全区 + 6；底栏、“＋”元素本身的规则一行没动，有底栏的页静止画面不变。
+// • 11-20 隐私记整块收拾第 7 条（主持人派单：data-rt 只表示系统“减少透明效果”，隐私记强制实色另写 data-solid），本提交：
+//   GlassBar.module.css、GlassBarFx.module.css、base.css 里的 :root[data-rt='1'] 换成 :root:is([data-rt='1'], [data-solid='1'])（优先级不变），
+//   glass-ghost.ts 的 reducedTransparency 认 data-rt 或 data-solid、监听这两个属性。两个属性里任一个为 1 时和原来 data-rt=1 一样，外观不变。
+// • 11-20 负责人：“进入2级页后退出的时候底部导航栏会模糊一下”“底栏不是固定死了吗？为啥切页回来的时候还要用快照”，本提交：进出二级页不再用 View Transition，
+//   改走 motion/page-swap.ts 的整页推页（底栏、“＋”全程是真元素、实时模糊）。GlassBar.module.css 删 .bar/.fab 的 view-transition-name 和键盘弹着时的 view-transition-name: none；
+//   GlassBarFx.tsx 删 R4/R6 按坐标代点（View Transition 伪元素层盖整屏时才需要）；base.css 删整段 ::view-transition 规则、lemo-push/pop 关键帧（数值原样搬进 page-swap.ts）、
+//   顶部两层模糊的 view-transition-name。底栏、“＋”的外观规则一行没动：今天页静止截图改前改后底栏区域像素最大差 0（对照图在本机资料 截图/底栏真元素切页-2026-11-20）。
+// • 11-20 主持人合并上面两条：两边改的是不同的行（选择器换 data-solid / 删 view-transition），合并后五个文件的哈希按合并结果重算。
+// • 11-20 全 app 改善报告第四节（负责人 11-20 弹窗选了性能几条，含“底栏玻璃引擎只剩空转的帧循环，删掉”），本提交：
+//   glass-ghost.ts 的 startGlass（帧循环、poke）换成 markGlass（下载到时打一次 data-glass，data-rt、data-solid 变了再改）；
+//   GlassBarFx.tsx 去掉 glass ref 和两处 poke，液滴不再打 data-glass（样式里只有 .bar、.fab 认它）。三个 CSS 文件一行没动；
+//   外观不变：Chromium 430×932 DPR 3 今天页两皮肤两主题整屏、底栏区各 4 张，加视觉锁定 tabbar-lock 4 张，改前改后 0 像素差。
+// • 11-21 主持人合并上面两条（性能分支基线早于整页推页）：GlassBarFx.tsx 两边删的是不同的段（R4/R6 代点 / glass ref 和 poke），文件头注释合成一份；三个 CSS 和 base.css 跟整页推页那一版一字不差，只重算 GlassBarFx.tsx、glass-ghost.ts 两个哈希。
+// • 11-23 负责人（今日小运卡截图）：“这个黑框去掉”，本提交：base.css 加 [data-quiet-focus]:focus-visible 不画 outline（原来只在设置页 SettingsPage.module.css 里有，
+//   搬来全局，kit/quiet-focus.ts 在程序还焦点、上一次是手指 / 鼠标时才打这个标记）；键盘操作照旧画框，底栏、“＋”的规则一行没动，静止画面不变。
+// • 11-24 负责人：“也不用吧？直接把模糊拉短不行吗？”，提交 2db433b0：base.css 加 --top-band，顶部底色条和两层模糊的高度从 74pt 收到约 50pt；底栏、“＋”的规则一行没动。
+// • 11-24 网页版改版 A 方案（负责人：“ai助手高度要跟其他的齐平”“电脑端同样适配ipad”；主持人派单 feat/web-layout），本分支提交：base.css 加宽屏令牌 --dk-*
+//   （(width >= 1024px) 一段，含上下安全区 --dk-top / --dk-bot，1024～1179 时 AI 栏 288），只给宽屏外框和 AI 栏用；底栏、侧栏、“＋”的规则一行没动。
+// • 11-25 负责人弹窗选“删（推荐）”（11-18 全 app 独立评审“要负责人定的”第 2 条：诊断色条），本分支提交：base.css 删 .lemo-probe、.lemo-top-probe 两段和
+//   :root[data-diag='1'] 显示规则，入口页 src/index.html 删两个色条元素；平时它们 display: none，底栏、“＋”的规则一行没动，静止画面不变。
+// • 11-26 负责人：“网页端的这个竖条能改成其他精致一点的样式嘛？”弹窗选“滚动时才出现，用柠檬黄的细条”“最短 40px”，提交 1fc247ab 及其后续：
+//   base.css 在 (pointer: coarse) 那段后面加 html[data-sb] 一段（::-webkit-scrollbar 细条、@property --sb-c、Firefox 回退），只在电脑用鼠标、
+//   motion/scrollbar-reveal.ts 装上以后生效；触屏不变，底栏、“＋”的规则一行没动，静止画面不变（视觉锁定基准都是手机宽度、不装这一段）。
+// • 11-26 负责人截图卡片右上、右下角被黄条切掉，弹窗选“切掉了圆角、贴边太紧”：同一段里滑槽两头各让 12px、竖条右边 / 横条下边透明 4px、
+//   滚动条宽 10 → 12（看得见的黄条仍 6px）、滑块圆角 5 → 7；只动 html[data-sb] 那段，底栏、“＋”一行没动，静止画面不变。
+// • 11-26 负责人：“改后怎么上下怎么不圆润了”：滑块改回四周一样的透明边 3px、圆角 6（黄条 6px、两头正半圆、离边 3px），删掉 :vertical / :horizontal 两条。
+describe('B3 Q3 守门第 4 条：底栏外观文件不许改（R-352 ④）', () => {
+  it('src/motion/glass-*.ts 正好是钉住的那几个：不许多、不许少', () => {
+    const now = readdirSync(join(ROOT, 'src/motion'))
+      .filter((f) => /^glass-.*\.ts$/.test(f))
+      .map((f) => `src/motion/${f}`)
+      .sort();
+    const pinned = Object.keys(PINNED).filter((p) => p.startsWith('src/motion/')).sort();
+    expect(now, '新增或删除了 src/motion/glass-*.ts；改底栏外观要负责人同意，见文件头“什么时候允许更新哈希”').toEqual(pinned);
+  });
+
+  it.each(Object.entries(PINNED))('%s 内容和 67c5afbb 逐字节相同', (rel, want) => {
+    expect(sha256(rel), `${rel} 改了；B3 只许给“＋”加事件，外观文件不许动（R-352 ④）。确属负责人同意的外观改动，按文件头规则更新哈希`).toBe(want);
+  });
+});

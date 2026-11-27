@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Lemo Turnstile Probe",
+  "version": "0.0.1",
+  "identifier": "com.lemomemo.turnstile-probe",
+  "build": {
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "auth",
+        "title": "Turnstile 小验证",
+        "url": "index.html",
+        "width": 520,
+        "height": 720
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost https://lemomemo.com wss://lemomemo.com; frame-src 'self' https://challenges.cloudflare.com https://view.officeapps.live.com; base-uri 'none'; form-action 'self'; object-src 'none'"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["icons/icon.ico"]
+  }
+}

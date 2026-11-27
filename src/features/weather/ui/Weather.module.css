@@ -1,0 +1,127 @@
+/* 今天页天气胶囊（WeatherChip.tsx）。外形是 kit 胶囊（Chip.module.css .chip：高 30、无描边 --panel-2 底、--fs-13，同纪念日一行），
+   这里只管：手机日期下面那一个和下面“现在”卡的距离、几段字之间的间距和颜色、手机页头里的“设置城市看天气”、宽屏页头里小一号。
+   量自样图 4-胶囊_手机.png（3 倍图）：图标与“3°”之间、竖线两边、提示图标与字之间都是 kit 的 gap 5 再加字形留白；
+   “3°”和“7°/-2°”之间负责人 11-26 要“稍微拉开一点点”：在 gap 5 上再加 4px（.hiLo 的左边距） */
+
+/* 样式生效哨兵（WeatherChip.tsx 的 useStyleApplied）：读得到 1 才说明这张样式表真的生效了（WebKit 下好了也可能还没生效），这时才画胶囊 */
+.probe {
+  --wx-ready: 1;
+}
+
+/* 两级选择器压过 kit 的 .chip 的 margin，不靠两份样式表的先后 */
+.chip.chip,
+.nudge.nudge {
+  max-width: 100%;
+  cursor: pointer;
+}
+
+/* 手机：日期下面、“现在”卡上面（同纪念日一行的 0 0 10px） */
+.chip[data-slot='below'] {
+  margin: 0 0 10px;
+}
+
+/* 现在的气温：深一点、粗一点（样图“3°”比后面的“7°/-2°”深） */
+.now {
+  flex: none;
+  font-weight: 600;
+}
+
+/* 最高/最低：次要色；左边比 gap 多 4px（负责人 11-26“3° 跟后面的间距再稍微拉开一点点”） */
+.hiLo {
+  flex: none;
+  margin-left: 4px;
+  color: var(--text-2);
+}
+
+/* 竖线：1×14，两边各 3px（加上 gap 5 约 8px，同样图） */
+.bar {
+  flex: none;
+  width: 1px;
+  height: 14px;
+  margin: 0 3px;
+  background: var(--inp-line);
+}
+
+.sky {
+  flex: none;
+}
+
+/* 提示前的小图标：颜色跟着提示种类走（WeatherIcon.module.css，照 13种提示预览.png） */
+.tipIcon {
+  flex: none;
+}
+
+.ell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 显示的是旧的（没连上网）：取到的时刻，小一号、淡 */
+.stale {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+}
+
+/* 行尾 ›（同纪念日一行 .annivGt：--text-3、左边多 2px） */
+.gt {
+  flex: none;
+  margin-left: 2px;
+  color: var(--text-3);
+}
+
+/* “设置城市看天气”：浅色小胶囊（样图 5-没定位权限：字是次要色） */
+.nudge {
+  color: var(--text-2);
+}
+
+.pin {
+  flex: none;
+}
+
+/* 手机：日期那一行、头像左边（样图 5-没定位权限_手机.png：靠右，和头像之间约 16；量样图字约 12、整颗约 132 宽，同宽屏那颗高 28、左右 10）。
+   放不下整句时只留定位图标（下面 [data-compact]），不出半截字、不把日期挤成两行 */
+.nudge[data-slot='head'] {
+  flex-shrink: 100;
+  min-width: 0;
+  height: 28px;
+  margin: 0 4px 0 auto;
+  padding: 0 10px;
+  gap: 4px;
+  font-size: var(--fs-12);
+}
+
+/* 看得见 28 高（比 kit 胶囊的 30 矮 2px），kit 的 ::after 上下各扩 7 只到 42：这三处各扩 8，点击区到 44（e2e hit-target） */
+.nudge[data-slot='head']::after,
+.chip[data-slot='desk']::after,
+.nudge[data-slot='desk']::after {
+  inset: -8px 0;
+}
+
+/* 放不下整句时只留定位图标（WeatherChip.tsx 的 useNudgeCompact，负责人 11-26 选“小屏只留定位图标”）：28 × 28 的圆，
+   点击区四边都扩 8 到 44 × 44（扩进和头像之间的 16 里，不盖住头像） */
+.nudge[data-slot='head'][data-compact] {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+}
+
+.nudge[data-slot='head'][data-compact]::after {
+  inset: -8px;
+}
+
+.nudge[data-slot='head'] .pin {
+  width: 14px;
+  height: 14px;
+}
+
+/* 宽屏页头右边（样图 4-胶囊_网页.png、5-没定位权限_网页.png）：高 28、字 12，左右 10 */
+.chip[data-slot='desk'],
+.nudge[data-slot='desk'] {
+  height: 28px;
+  margin: 0;
+  padding: 0 10px;
+  font-size: var(--fs-12);
+}

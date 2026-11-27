@@ -1,0 +1,95 @@
+// 功能 calendar 的词典·中文：月历和周视图页面。和日程编辑页的 zh.ts 分开放，两段改动互不牵连
+// 占位符中韩必须一致（__tests__/cal-i18n.test.ts 逐键比对）
+export const viewZh = {
+  'cal.month': '月',
+  'cal.week': '周',
+  'cal.anniv': '纪念日',
+  // 只读行被拦下（和编辑页共用词典 shared/i18n/edit-zh.ts 的 edit.st.readonly 同一句）
+  'cal.readonly': '这条要新版本才能修改',
+  'cal.modeLabel': '视图',
+  'cal.today': '今天',
+  'cal.prevMonth': '上个月',
+  'cal.nextMonth': '下个月',
+  'cal.prevWeek': '上一周',
+  'cal.nextWeek': '下一周',
+  'cal.title': '{y}年{m}月',
+  // 顶部页标题（和今天、待办、随手记同一种大标题）：大字月份，下一行等宽小字年份和这一页共几项
+  'cal.titleBig': '{m}月',
+  'cal.titleSub': '{y}年 · 本月 {n} 项',
+  'cal.titleSubW': '{range} · 本周 {n} 项',
+  // 周视图标题（“10月19日–25日”）：同月、跨月、跨年三种写法
+  'cal.weekTitle': '{m1}月{d1}日–{d2}日',
+  'cal.weekTitleM': '{m1}月{d1}日–{m2}月{d2}日',
+  'cal.weekTitleY': '{y1}年{m1}月{d1}日–{y2}年{m2}月{d2}日',
+  'cal.pick': '选择年月',
+  'cal.pickYear': '年',
+  'cal.pickMonth': '月',
+  'cal.pickYearItem': '{y}年',
+  'cal.pickMonthItem': '{m}月',
+  'cal.pickHintMonth': '点一下就跳过去 · 小点是今天',
+  // 周视图提示要短，不然折行
+  'cal.pickHintWeek': '跳到该月 1 日那周 · 小点是今天',
+  'cal.backToday': '回到今天',
+  // 页面标题（读屏用，视觉隐藏）
+  'cal.h1': '日历',
+  'cal.drawer': '详情', // 电脑版日历详情抽屉的读屏名字（同今天页 desk.drawer）
+  'cal.pullKey': '搜索', // 标题行里平时看不见、Tab 到才出现的按钮（kit 的 PullKey）
+  // 月历上拖收起：拖动柄按钮的名字
+  'cal.fold.collapse': '收起成一周',
+  'cal.fold.expand': '展开整月',
+  'cal.wd.0': '日',
+  'cal.wd.1': '一',
+  'cal.wd.2': '二',
+  'cal.wd.3': '三',
+  'cal.wd.4': '四',
+  'cal.wd.5': '五',
+  'cal.wd.6': '六',
+  'cal.wdFull': '周{wd}',
+  'cal.more': '+{n}',
+  'cal.workday': '班',
+  // 韩国补休日在窄处（手机月格、手机泳道）的短写：韩国节假日文件只有韩文名，两份词典同值
+  // 下面两条是韩国节假日数据里的原文，中韩词典同值，不是漏翻（只用来识别、缩短“대체공휴일”）
+  'cal.subHolFull': '대체공휴일',
+  'cal.subHolShort': '대체휴일',
+  'cal.overdue': '逾',
+  // 离线又从没拉到过要显示的那一国
+  'cal.offline': '联网后显示节假日',
+  // 选中那一天下面的清单
+  'cal.day.title': '{m}月{d}日 {wd}',
+  'cal.day.count': '{n} 项',
+  'cal.day.empty': '这一天没有安排',
+  // 跨午夜、跨天日程的“持续”“至 18:00”“第 2/3 天”在公共词典 span.*，和今天页共用
+  'cal.set.title': '日历',
+  'cal.set.holidays': '节假日',
+  'cal.set.hol.cn': '只显示中国',
+  'cal.set.hol.kr': '只显示韩国',
+  'cal.set.hol.both': '两国都显示',
+  'cal.set.holNote': '默认跟界面语言。两国都显示时，和界面语言同一国的节日写在前面。',
+  // 设置首页“日历”一行右边的摘要（不写“农历”，只写节假日；两国时本国在前）
+  'cal.set.summary': '节假日：{hol}',
+  'cal.set.holShort.cn': '中国',
+  'cal.set.holShort.kr': '韩国',
+  'cal.set.holShort.both': '中国、韩国',
+  'cal.set.weekStart': '每周第一天',
+  'cal.set.ws.1': '周一',
+  'cal.set.ws.0': '周日',
+  'cal.set.saveFailed': '没保存上，请稍后再试',
+  'cal.a11y.sep': '，',
+  'cal.a11y.date': '{m}月{d}日',
+  'cal.a11y.todayMark': '今天',
+  'cal.a11y.none': '没有安排',
+  'cal.a11y.total': '共 {n} 件',
+  'cal.a11y.hidden': '另有 {n} 件未显示',
+  'cal.a11y.project': '{project} {n} 件',
+  'cal.a11y.noProject': '未分项目 {n} 件',
+  'cal.a11y.anniv': '有纪念日',
+  'cal.a11y.lunar': '农历{text}',
+  'cal.a11y.block': '{title}，{start}～{end}',
+  'cal.a11y.workday': '{name}（补班）',
+  'cal.a11y.overdue': '有逾期的待办',
+  'cal.a11y.selected': '已选中',
+  'cal.todoMark': '待办：{title}',
+  'cal.todoDoneMark': '已完成的待办：{title}',
+  'cal.grid': '{y}年{m}月月历',
+  'cal.weekGrid': '{from} 起的一周',
+} as const;

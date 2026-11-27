@@ -1,0 +1,30 @@
+Stopped services: [supabase_imgproxy_lemo-e2e supabase_studio_lemo-e2e supabase_analytics_lemo-e2e supabase_vector_lemo-e2e supabase_pooler_lemo-e2e]
+A new version of Supabase CLI is available: v3.0.0 (currently installed v2.120.0)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
+Check supabase/tests/store-it/push-dispatch-d3.it.ts
+running 6 tests from ./supabase/tests/store-it/push-dispatch-d3.it.ts
+d3-real 开跑：清掉上次留下的 ... ok (26ms)
+① 300 条 × 替身拖 3 秒（真库）：一轮 25 秒内返回 200、budget_hit 为真、并发 ≤ 10、单轮 ≤ 200，剩下的之后发完、每条一次 ...
+------- output -------
+[D3-real①] 第一轮 21343 ms，claimed=70 sent=70 left=230 budget_hit=true，并发峰值 10，发送 70 次；心跳一致；之后 2 轮：200/true、30/false；300 条各发 1 次，库里 300 行 pushed_for = remind_at
+----- output end -----
+① 300 条 × 替身拖 3 秒（真库）：一轮 25 秒内返回 200、budget_hit 为真、并发 ≤ 10、单轮 ≤ 200，剩下的之后发完、每条一次 ... ok (22s)
+② 50 条 × 替身拖 3 秒、两轮重叠（真库条件更新）：每条只发一次，后起的一轮认领不到已被认领的，两轮 sent 合计 50 ...
+------- output -------
+[D3-real②] 两轮共 9117 ms；第一轮 claimed=30 sent=30，第二轮 claimed=20 sent=20，第二轮认领落空 20 次（全是第一轮已认领的），交集 0；替身收到 50、去重 50
+----- output end -----
+② 50 条 × 替身拖 3 秒、两轮重叠（真库条件更新）：每条只发一次，后起的一轮认领不到已被认领的，两轮 sent 合计 50 ... ok (9s)
+③ 认领后、发出前抛错（真库）：claimed 比 sent 多 1、日志不带标题和端点、下一轮不再推、前端 missed() 里有它 ...
+------- output -------
+[D3-real③] 第一轮 claimed=2 sent=1 failed=1，真库心跳 claimed−sent=1，logs 里这一条 code=build_failed、不含标题和端点；第二轮 claimed=0；PostgREST 读回的行 pushed_for=remind_at、notified_for=null，前端 missed() 返回它
+----- output end -----
+③ 认领后、发出前抛错（真库）：claimed 比 sent 多 1、日志不带标题和端点、下一轮不再推、前端 missed() 里有它 ... ok (125ms)
+TC-DEL-remind_queue（函数一侧、真库）：冷静期的项不出队、不改 remind_at；删掉 auth 用户（account-purge 的 deleteUser）后下一轮队列清为 0 ...
+------- output -------
+[D3-real-DEL] 冷静期：3 项一轮后仍在队列、claim 为空、attempts 0、remind_at 没变；deleteUser 后孤儿 3 项，下一轮 push-dispatch 后清为 0，没有推送
+----- output end -----
+TC-DEL-remind_queue（函数一侧、真库）：冷静期的项不出队、不改 remind_at；删掉 auth 用户（account-purge 的 deleteUser）后下一轮队列清为 0 ... ok (133ms)
+d3-real 收尾：删掉这次建的用户、放锁、关连接 ... ok (566ms)
+
+ok | 6 passed | 0 failed (33s)
+

@@ -1,0 +1,120 @@
+/* 今天卡背景缓慢流动（配色“奶油粉”；方案页 设计方案/2026-11-23_今日卡流动/方案.html 的 .flow、.b、d1a–d1d，数照抄）。
+   4 团色各是一个一次画好的径向渐变（颜色令牌 --k-flow1～4），动画只改 transform，不用 filter；32 秒一圈，三段移动。
+   只在磨砂玻璃皮肤画：挡住简洁皮肤的只有下面 .flow 的 display 这一道（简洁皮肤里令牌的 none 只是占位）。
+   卡片（NowCard .card）是隔离的层叠上下文、overflow 裁到圆角，这一层 z-index -1：在卡片底色之上、字之下 */
+.flow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  display: none;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+:global(:root[data-skin="glass"]) .flow {
+  display: block;
+}
+
+/* 卡片的内描边（--b-tile-shadow 里的 inset 那一圈）原本画在底色上、会被色团盖住；方案页用 ::after 把它画在最上面，这里同样再描一次（外投影被卡片的 overflow 裁掉） */
+.flow::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: var(--b-tile-shadow);
+  content: '';
+}
+
+.b {
+  position: absolute;
+  width: var(--w, 80%);
+  margin-top: calc(var(--w, 80%) / -2);
+  margin-left: calc(var(--w, 80%) / -2);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  animation: var(--dur-k-flow) var(--ease-k-flow) infinite both;
+}
+
+.b1 {
+  top: 25%;
+  left: 20%;
+  background: var(--k-flow1);
+  animation-name: d1a;
+}
+
+.b2 {
+  top: 95%;
+  left: 25%;
+  background: var(--k-flow2);
+  animation-name: d1b;
+}
+
+.b3 {
+  top: 45%;
+  left: 85%;
+  background: var(--k-flow3);
+  animation-name: d1c;
+}
+
+.b4 {
+  --w: 70%;
+
+  top: 100%;
+  left: 85%;
+  background: var(--k-flow4);
+  animation-name: d1d;
+}
+
+/* 卡片滑出屏幕、app 切到后台：暂停（NowFlow.tsx 写 data-paused） */
+.flow[data-paused] .b {
+  animation-play-state: paused;
+}
+
+@keyframes d1a {
+  0%, 10% { transform: translate(0, 0); }
+  24% { transform: translate(0, 15%); }
+  36% { transform: translate(0, 0); }
+  52% { transform: translate(33%, -5%); }
+  66%, 72% { transform: translate(0, 0); }
+  88% { transform: translate(37%, -6%); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes d1b {
+  0%, 10% { transform: translate(0, 0); }
+  24% { transform: translate(40%, 0); }
+  36% { transform: translate(16%, 0); }
+  52% { transform: translate(-16%, -21%); }
+  66%, 72% { transform: translate(0, 0); }
+  88% { transform: translate(-13%, -24%); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes d1c {
+  0%, 10% { transform: translate(0, 0); }
+  24% { transform: translate(-33%, -18%); }
+  36% { transform: translate(0, 0); }
+  52% { transform: translate(-13%, 21%); }
+  66%, 72% { transform: translate(0, 0); }
+  88% { transform: translate(-20%, 22%); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes d1d {
+  0%, 10% { transform: translate(0, 0) scale(1); }
+  24% { transform: translate(-7%, 3%) scale(1); }
+  36% { transform: translate(0, 0) scale(1); }
+  52% { transform: translate(7%, -7%) scale(1.1); }
+  66%, 72% { transform: translate(0, 0) scale(1); }
+  88% { transform: translate(0, -9%) scale(1.15); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+/* 减弱动态效果（设置开关或系统设置，platform/look.ts 统一写成 data-rm）：停在第一帧，色团照样在，只是不动。
+   .b1～.b4 各自声明了动画名，Stylelint 的 lemo/reduced-motion-override 要求每个类各有一条覆盖，所以逐个列出 */
+:global(:root[data-rm="1"]) .b,
+:global(:root[data-rm="1"]) .b1,
+:global(:root[data-rm="1"]) .b2,
+:global(:root[data-rm="1"]) .b3,
+:global(:root[data-rm="1"]) .b4 {
+  animation: none;
+}

@@ -1,0 +1,176 @@
+/* 随手记列表方式的一行和“⋯”菜单（kit）：
+   随手记页（NotesPage，隐私记也走它）用整套；隐私记“最近删除”（VaultTrash）只用 .lst，查找面板的菜单用 .more；只用令牌。
+   • .lst：一组行，白色面板；.lrow：一行的外壳，行间细线；.lmain：行里可点的那一块，文字 | 缩略图（有图才有）
+   • .ltext / .l1 / .t1 / .tm / .t2 / .t2txt：第一行标题 + 右边时间，第二行“● 摘要 · 分类 AI”，放不下省略
+   • .more：“⋯”，看得见 24px，点按区 ::after 扩到 44；.menu / .menuItem / .menuPlain / .menuNote：“⋯”打开的菜单 */
+
+/* 列表方式：没有左边日期栏和纸片小图标，
+   每行 3 栏：文字 | 缩略图 | “⋯”；两行字，行高 64、上下各 11 */
+.lst {
+  margin: 0;
+  padding: 2px 14px;
+  border-radius: 22px;
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+  list-style: none;
+}
+
+/* 一行的外壳：只管分隔线和定位；里面整行是 kit SwipeRow，两栏（正文 | “⋯”）由随手记页的 .swRow 排，高度由 .lmain 撑 */
+.lrow {
+  position: relative;
+  border-bottom: 1px solid var(--line);
+}
+
+.lrow:last-child {
+  border-bottom: 0;
+}
+
+.lmain {
+  display: grid;
+  grid-template-columns: 1fr;
+
+  /* 有图的行在“⋯”前多一栏缩略图；没图的不多出这一栏和间距 */
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  min-height: 64px;
+  padding: 11px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/* 第一行：标题占满，时间（等宽小号淡色字）贴右、不缩 */
+.l1 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tm {
+  flex: none;
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-11-5);
+}
+
+.ltext {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.t1,
+.t2txt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.t1 {
+  flex: 1;
+  font-size: var(--fs-15);
+}
+
+/* 摘要 · 分类放不下省略，“AI”不缩（PH.notes：“工作灵感 AI”） */
+.t2 {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-top: 5px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.t2txt {
+  min-width: 0;
+}
+
+/* 有缩略图的行：不给缩略图单开一栏（那样日期被挤到图左边、比别的行靠左），文字块里左右两块——
+   左边“标题 + 摘要”整块上下居中；右边日期在缩略图正上方、右对齐，日期右边和没图的行对齐 */
+.withThumb {
+  flex-direction: row;
+  gap: 10px;
+  align-items: center;
+}
+
+.tcol {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.t2txt:empty {
+  display: none;
+}
+
+/* “⋯”：看得见 24px，不占更多排版宽度；点按区用 ::after 透明扩到 44 × 44 */
+.more {
+  position: relative;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  text-align: center;
+}
+
+.more::after {
+  position: absolute;
+  inset: -10px;
+  content: '';
+}
+
+.menu {
+  padding: 6px;
+}
+
+.menuItem {
+  display: block;
+  min-width: 120px;
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--danger-text);
+  font-size: var(--fs-14);
+  text-align: left;
+}
+
+/* 只读行的“删除”变淡；点了由页面拦下出提示条 */
+.menuItem[aria-disabled='true'] {
+  opacity: var(--disabled-dim);
+}
+
+/* “转成待办 / 转成日程”：样式同 .menuItem，只是用正文色，和红色的“删除”分开 */
+.menuPlain {
+  color: var(--text);
+}
+
+/* 备注放不下时两项下面的一句“超过 2000 字，转不了” */
+.menuNote {
+  max-width: 180px;
+  margin: 0;
+  padding: 0 14px 8px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}

@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "provider": "gemini",
+  "origin": "handmade",
+  "note": "超时：一直不回，到点被中止（手写，未经真调用录制；请求体不存，回放只按方法和地址对）",
+  "entries": [
+    {
+      "req": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-x:generateContent",
+        "body": null
+      },
+      "res": {
+        "kind": "timeout"
+      }
+    }
+  ]
+}

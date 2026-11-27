@@ -1,0 +1,226 @@
+// 同步冲突、gone 的提示卡宿主
+// • gate（app/sync-notice-gate.ts）对预建容器里的挂载点 createRoot 后渲染它；挂上以后一直挂着，数据和动作只经 hooks
+// • 一次只显示队列第一张：冲突卡在前、gone 卡在后，有排队时说明下面另起一行“还有 {n} 条”
+// • 冲突卡 UNDO_TOAST_MS（5 秒）后自动收起（只在页面可见、没有弹层、卡显示着、指针和焦点都不在卡上时计时）；gone 卡不自动收
+// • 读屏：卡换了（或状态变了）等下一帧把“标题 + 说明”写进 gate 预建的常驻 live region；卡本身不抢焦点
+// • “看另一台设备的版本”用 kit Dialog（焦点进出由它管）；自己开对话框时给容器标 data-own-dialog，样式就不把卡藏起来
+// • forked（随手记）只给“知道了”
+// • 轻提示“这条已彻底删除，无法恢复。”：store 的 hardDeleted 变大就出一次，UNDO_TOAST_MS 后自己消失，经 live region 播报
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { FORK_SUFFIX } from '../../../../shared/sync/fork-suffix-data.ts';
+import { Dialog, DialogClose } from '../../../kit/components/Dialog.tsx';
+import float from '../../../kit/components/Float.module.css';
+import { UNDO_TOAST_MS } from '../../../kit/components/UndoToast.tsx';
+import { useUi } from '../../../kit/state/ui-store.ts';
+import { Appear } from '../../../motion/components.ts';
+import { nextFrame } from '../../../motion/index.ts';
+import { useSnT, type SnT } from '../hooks/useSnT.ts';
+import type { ConflictNotice, Notice, SyncNoticeHostProps } from '../hooks/notice-types.ts';
+import { conflictLines, useAutoDismiss, useNoticeSnapshot, useRouteHidden } from '../hooks/useSyncNotices.ts';
+import styles from './SyncNoticeHost.module.css';
+
+/** 标题里的 {title} 最多 12 个字，多了截断加“…”；按字符算，不切开表情和谚文 */
+export const TITLE_MAX = 12;
+export function clipTitle(title: string): string {
+  const cs = [...title];
+  return cs.length > TITLE_MAX ? `${cs.slice(0, TITLE_MAX).join('')}…` : title;
+}
+
+function headOf(n: Notice, t: SnT): string {
+  if (n.kind === 'gone') return n.title ? t('sn.gone.title', { title: clipTitle(n.title) }) : t('sn.gone.titleNone', {});
+  return n.title ? t('sn.conflict.title', { title: clipTitle(n.title) }) : t('sn.conflict.titleNone', {});
+}
+
+function bodyOf(n: Notice, t: SnT, suffix: string): string {
+  if (n.kind === 'conflict') return n.status === 'forked' ? t('sn.forked.body', { suffix }) : t('sn.conflict.body', {});
+  if (n.status === 'retry') return t('sn.gone.retry', {});
+  if (n.status === 'blocked') return t('sn.gone.blocked', {});
+  return t('sn.gone.body', {});
+}
+
+function ConflictDialog({ notice, open, onOpenChange }: { notice: ConflictNotice; open: boolean; onOpenChange(o: boolean): void }) {
+  const t = useSnT();
+  const locale = useUi((s) => s.locale);
+  const lines = conflictLines(notice, locale);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title={t('sn.dialog.title', {})}>
+      <ul className={styles.list} data-testid="sync-notice-lines">
+        {lines.map((l, i) => (
+          <li key={l.field ?? `x${i}`} className={styles.row}>
+            <span className={styles.val}>{l.field === null ? l.value : t('sn.dialog.row', { field: l.field, value: l.value })}</span>
+          </li>
+        ))}
+      </ul>
+      <div className={styles.dialogActs}>
+        <DialogClose className={styles.dialogBtn} data-testid="sync-notice-dialog-ok">
+          {t('sn.ok', {})}
+        </DialogClose>
+      </div>
+    </Dialog>
+  );
+}
+
+export default function SyncNoticeHost({ store, live, region }: SyncNoticeHostProps) {
+  const t = useSnT();
+  const locale = useUi((s) => s.locale);
+  const snap = useNoticeSnapshot(store);
+  const routeHidden = useRouteHidden();
+  const [dialogKey, setDialogKey] = useState<string | null>(null);
+  /** 正在出的轻提示对应的 hardDeleted 计数；0 = 没出 */
+  const [flashAt, setFlashAt] = useState(0);
+  const flash = flashAt !== 0;
+  const seenHard = useRef(snap.hardDeleted);
+  const tRef = useRef(t);
+  tRef.current = t;
+
+  // 冲突列全是不显示的列（只动了 updated_at 一类，或两台都删了同一条）：没有可说的，不出卡。
+  // 字段描述在本功能的 data 里，app 那边的队列引不到，所以在这里滤掉，并替用户“知道了”，免得一直占着队列
+  const empty = (n: Notice): boolean => n.kind === 'conflict' && n.status === 'conflict' && conflictLines(n, locale).length === 0;
+  const queue = snap.queue.filter((n) => !empty(n));
+  // 拼成字符串只为让 effect 按内容比较依赖；key 是 table:uuid，不含 '|'
+  const emptyKeys = snap.queue.filter(empty).map((n) => n.key).join('|');
+  const emptyRef = useRef(empty);
+  emptyRef.current = empty;
+  useEffect(() => {
+    if (!emptyKeys) return;
+    // 收之前按 store 现在的样子再判一次：这期间同一条记录又来了真冲突、并进了这张卡，就不收
+    const keys = new Set(emptyKeys.split('|'));
+    for (const n of store.getState().queue) if (keys.has(n.key) && emptyRef.current(n)) store.dismiss(n.key);
+  }, [emptyKeys, store]);
+  const current = queue[0] ?? null;
+  const shown = current !== null && !routeHidden;
+  const suffix = snap.forkSuffix ?? FORK_SUFFIX[locale].trim();
+  const head = current ? headOf(current, t) : '';
+  const body = current ? bodyOf(current, t, suffix) : '';
+  const more = queue.length - 1;
+
+  // 容器挂上样式和按界面语言的 aria-label（gate 不放文字）
+  useLayoutEffect(() => {
+    region.classList.add(styles.region ?? '', float.lane ?? '');
+    live.classList.add(styles.live ?? '');
+  }, [region, live]);
+  // 有卡或轻提示时才给名字：没名字的 region 不算地标，队列空了读屏的地标列表里不留一个空的“同步提示”
+  const hasContent = shown || flash;
+  useEffect(() => {
+    if (hasContent) region.setAttribute('aria-label', t('sn.region', {}));
+    else region.removeAttribute('aria-label');
+  }, [region, t, hasContent]);
+  // 卡出现时给页面底部让出卡的位置（不让的话滚到底，最后一行会压在卡下面点不到）：
+  // 卡显示着就在 <html> 上标 data-sn-card，并把卡的实际高度写进 --sn-h（跟着换行、“还有 n 条”变化）；页底留白由 base.css 按它算（同 --undo-h 的做法）。
+  // 轻提示（flash）几秒就走，不让位；卡收起、宿主卸载时撤掉
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const clear = (): void => {
+      root.removeAttribute('data-sn-card');
+      root.style.removeProperty('--sn-h');
+    };
+    if (!shown) {
+      clear();
+      return undefined;
+    }
+    const put = (): void => {
+      root.style.setProperty('--sn-h', `${Math.ceil(region.getBoundingClientRect().height)}px`);
+      root.setAttribute('data-sn-card', '');
+    };
+    put();
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(put);
+    ro?.observe(region);
+    return () => {
+      ro?.disconnect();
+      clear();
+    };
+  }, [region, shown]);
+  // 自己开的对话框不算“别的弹层”
+  useEffect(() => {
+    if (dialogKey === null) region.removeAttribute('data-own-dialog');
+    else region.setAttribute('data-own-dialog', '');
+  }, [region, dialogKey]);
+
+  // 读屏：下一帧写，保证第一次挂上时也播报
+  const said = shown ? `${head} ${body}` : '';
+  useEffect(() => {
+    if (!said) return undefined;
+    return nextFrame(() => {
+      live.textContent = said;
+    });
+  }, [live, said]);
+
+  // 彻底删除的轻提示
+  // 分两段：只认“计数变大”一次；播报和计时挂在 flashAt 上。不放在同一个副作用里——那样 t 换了身份或 StrictMode 重跑时，
+  // 清理掉了计时和播报，重跑又因为计数已记下直接返回，提示就一直挂着
+  useEffect(() => {
+    if (snap.hardDeleted <= seenHard.current) return;
+    seenHard.current = snap.hardDeleted;
+    setFlashAt(snap.hardDeleted);
+  }, [snap.hardDeleted]);
+  useEffect(() => {
+    if (flashAt === 0) return undefined;
+    const off = nextFrame(() => {
+      live.textContent = tRef.current('sn.hardDeleted', {});
+    });
+    const id = setTimeout(() => setFlashAt(0), UNDO_TOAST_MS);
+    return () => {
+      off();
+      clearTimeout(id);
+    };
+  }, [flashAt, live]);
+
+  const isConflict = current?.kind === 'conflict';
+  const timer = useAutoDismiss(isConflict ? current.key : null, shown && dialogKey === null, (key) => store.dismiss(key));
+
+  return (
+    <>
+      <Appear kind="toast" show={flash && !routeHidden}>
+        <div className={`${float.glass} ${styles.flash}`} data-testid="sync-notice-hard-deleted">
+          {t('sn.hardDeleted', {})}
+        </div>
+      </Appear>
+      <Appear kind="toast" show={shown}>
+        {current ? (
+          // 按卡的 key 换节点：换卡时不复用上一张的按钮，焦点不会留在新卡的按钮上让连按两次 Enter 收起两张
+          <div key={current.key} className={`${float.glass} ${styles.card}`} data-testid="sync-notice-card" data-kind={current.kind} data-status={current.status}
+            onMouseEnter={timer.onMouseEnter} onMouseLeave={timer.onMouseLeave} onFocus={timer.onFocus} onBlur={timer.onBlur}
+          >
+            <div className={styles.text}>
+              <p className={styles.t1}>{head}</p>
+              <p className={styles.t2}>{body}</p>
+              {more > 0 ? <p className={styles.more}>{t('sn.more', { n: more })}</p> : null}
+            </div>
+            <div className={styles.actions}>
+              {current.kind === 'conflict' ? (
+                <>
+                  {current.status === 'conflict' ? (
+                    <button type="button" className={styles.btn} data-testid="sync-notice-view" onClick={() => setDialogKey(current.key)}>
+                      {t('sn.conflict.view', {})}
+                    </button>
+                  ) : null}
+                  <button type="button" className={styles.btn} data-testid="sync-notice-ok" onClick={() => store.dismiss(current.key)}>
+                    {t('sn.ok', {})}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {current.status !== 'blocked' ? (
+                    <button type="button" className={styles.btn} data-testid="sync-notice-restore" disabled={current.status === 'busy'} onClick={() => store.restore(current.key)}>
+                      {t('sn.gone.restore', {})}
+                    </button>
+                  ) : null}
+                  <button type="button" className={styles.btn} data-testid="sync-notice-drop" disabled={current.status === 'busy'} onClick={() => store.drop(current.key)}>
+                    {t('sn.gone.drop', {})}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </Appear>
+      {current?.kind === 'conflict' && current.status === 'conflict' ? (
+        <ConflictDialog
+          notice={current}
+          open={dialogKey === current.key}
+          onOpenChange={(o) => setDialogKey(o ? current.key : null)}
+        />
+      ) : null}
+    </>
+  );
+}

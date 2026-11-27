@@ -1,0 +1,8 @@
+// 功能 notes 自己的 t()：词典在 ../i18n/，语言跟着 ui-store 的 locale
+import { ko } from '../i18n/ko.ts';
+import { zh } from '../i18n/zh.ts';
+import { makeUseT } from '../../../kit/hooks/useT.ts';
+
+export type NotesMsgKey = keyof typeof zh & string;
+
+export const useNotesT = makeUseT({ zh, ko });

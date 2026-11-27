@@ -1,0 +1,106 @@
+/* 记录的行首记号（kit RecordMark.tsx）：查找面板、结果层、下拉搜索（size sm）和 AI 助手的依据列表（size md）共用一份，不各写一份：
+   sm：待办 18 的圆角方框、做完用 CheckCircle 的填充和勾、随手记“≡”小框；
+   md：待办 22、圆角 7 的方框，随手记中间两道横线的文档。竖条、菱形两边一样 */
+.lead {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  color: var(--text-2);
+  font-size: var(--fs-10);
+}
+
+.lead[data-size='md'] {
+  width: 22px;
+}
+
+/* 日程竖条（3×22）；sm 用墨色，md 用项目色（调用方给 color） */
+.bar {
+  width: 3px;
+  height: 22px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+
+/* 没完成的待办：sm 同待办列表的空心圆角方框（kit/CheckCircle.module.css 的边宽、边色、圆角比例 37.5%），小一号 18px */
+.ring {
+  width: 18px;
+  height: 18px;
+  border: 1.75px solid var(--check-edge);
+  border-radius: calc(18px * 0.375);
+}
+
+/* md：22、圆角 7、1.6 边 --check-edge */
+.lead[data-size='md'] .ring {
+  width: 22px;
+  height: 22px;
+  border-width: 1.6px;
+  border-radius: 7px;
+}
+
+/* 做完的待办：sm 同待办列表的打勾方框（kit/CheckCircle.module.css 的 .fill、.tick，data-state="on"），小一号 18px */
+.ringDone {
+  --check-size: 18px;
+
+  display: grid;
+  place-items: center;
+}
+
+/* md：实心方框 */
+.boxDone {
+  width: 22px;
+  height: 22px;
+  border: 1.6px solid var(--check-on-fg);
+  border-radius: 7px;
+  background: var(--check-on-bg);
+}
+
+/* sm 的随手记、文档：一个小框里写“≡”“DOC” */
+.doc {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 22px;
+  padding: 0 2px;
+  border: 1.5px solid var(--text);
+  border-radius: 4px;
+  font-size: var(--fs-9-5);
+}
+
+/* md 的随手记：20×24、1.5 边、中间两道横线 */
+.doci {
+  position: relative;
+  width: 20px;
+  height: 24px;
+  border: 1.5px solid var(--text);
+  border-radius: 5px;
+}
+
+.doci::after {
+  content: '';
+  position: absolute;
+  top: 9px;
+  right: 5px;
+  left: 5px;
+  height: 5px;
+  border-top: 1.2px solid var(--text);
+  border-bottom: 1.2px solid var(--text);
+}
+
+/* 纪念日菱形 */
+.dia {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--text);
+  transform: rotate(45deg);
+}
+
+/* 图片方块 */
+.pic {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--panel-2);
+}

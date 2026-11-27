@@ -1,0 +1,44 @@
+/* 待办页、今天页、日历页等共用的三种字样（只这一份）：
+   • .title：页面大标题 28 号、半粗，下面一根短粗柠檬黄下划线（和当前页签的短粗下划线做出层级）；
+   • .sub：标题下一行等宽小字（日期、完成数），第三层文字色；
+   • .num：一句话里的日期、时刻、天数换等宽字，颜色跟着所在那一行；
+   • .srOnly：只给读屏、看不见的文字 */
+.title {
+  margin: 0;
+  font-size: var(--fs-28);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.title::after {
+  content: '';
+  display: block;
+  width: 22px;
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.sub {
+  margin: 8px 0 10px;
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-11);
+  letter-spacing: 0.02em;
+}
+
+.num {
+  font-family: var(--f-mono);
+}
+
+/* 只给读屏的文字（日历页的页顶 h1、今天页“现在”卡的“下一件 …”）。
+   设置页、kit Settings 各自那一份有测试锁着原文，没并 */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

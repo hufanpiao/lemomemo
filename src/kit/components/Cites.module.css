@@ -1,0 +1,7 @@
+/* AI 正文里的角标（Cites.tsx 的 withCites）：字号、行高、左边一点空，结果层和 AI 助手共用；
+   颜色、字体由调用方另加一个类（AI 助手是灰色数字字体，结果层跟正文） */
+.sup {
+  margin-left: 1px;
+  font-size: var(--fs-10);
+  line-height: 0;
+}

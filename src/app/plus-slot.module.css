@@ -1,0 +1,32 @@
+/* “准备中”：打字条还没下载好时，在打字条的位置占一条；位置同打字条（features/plus/ui/TypeBar.module.css 的 .bar），
+   宽度、磨砂、圆角、减少透明兜底是公共浮条（kit Float.module.css 的 .float，组件上一起挂）；只用令牌 */
+.wait {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: var(--dock-bottom);
+  z-index: var(--z-float);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 4px 4px 16px;
+  font-size: var(--fs-14);
+}
+
+.close {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}

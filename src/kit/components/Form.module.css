@@ -1,0 +1,459 @@
+/* 编辑页的表单（左边字段名、右边值）：只用令牌，颜色在 skins/*.css */
+.group {
+  margin: 0 0 16px;
+  padding: 0 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+/* 卡片上方的小字分组名（GroupLabel）：第三层文字色、等宽字加字距 */
+.groupLabel {
+  margin: 4px 14px 6px;
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-11);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+}
+
+/* 韩文界面不加字距：等宽字族里没有谚文，落到比例字体上再加 0.12em 会被拉散；数字、拉丁字母仍是等宽 */
+:lang(ko) .groupLabel {
+  letter-spacing: 0;
+}
+
+/* 列表页的分组标题行（今天页、待办页各组共用）：分组名在左、条数在右。
+   和 .groupLabel 写在同一份、两级选择器，压过它的 margin，不靠两份样式表的先后 */
+.groupLabel.groupRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 18px 4px 8px;
+}
+
+/* 表单卡片里的整行按钮，一份样式两种用法：FieldButton（字段行右边的“值 ›”）默认右对齐；
+   FormRowButton 加 .start 左对齐。和字段行同高，次要色 */
+.rowBtn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-15);
+  text-align: right;
+  cursor: pointer;
+}
+
+.start {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* FieldButton 的 ›：不缩；展开（data-open，日期行）时转成朝下 */
+.chev {
+  flex: none;
+}
+
+.chev[data-open] {
+  display: inline-block;
+  rotate: 90deg;
+}
+
+/* 整宽删除行（DeleteRow）：单独一张卡片，红字居中，圆角同 .group */
+.deleteRow {
+  width: 100%;
+  min-height: 52px;
+  margin: 8px 0 0;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--danger-text);
+  font: inherit;
+  font-size: var(--fs-16);
+  cursor: pointer;
+}
+
+.rowBtn:focus-visible {
+  border-radius: var(--r-inp);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: var(--hit);
+
+  /* 上下内边距默认 6；--field-py 留给要更透气的页面在外层设（如纪念日编辑层设 10） */
+  padding: var(--field-py, 6px) 0;
+
+  /* 分隔线细到半像素（2×、3× 屏上是一条发丝线，1× 屏浏览器按 1px 画）；卡片左右各留 14，线从文字起点开始 */
+  border-bottom: 0.5px solid var(--line);
+}
+
+.field:last-child {
+  border-bottom: 0;
+}
+
+.label {
+  flex: 0 0 auto;
+  min-width: 72px;
+
+  /* 三层文字色：左边名称用正文色，右边的值用次要色（各页自己定），空着的占位字再淡一档（--text-3） */
+  color: var(--text);
+  font-size: var(--fs-15);
+}
+
+.control {
+  display: flex;
+  flex: 1 1 160px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 字段行下面就地展开的选择器（kit/components/Pick 经 portal 画进来）：占整行宽、排在这一行下面；空着时不占地方 */
+.slot {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.slot:empty {
+  display: none;
+}
+
+.hint {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+  text-align: right;
+}
+
+/* 字段行右边的“值 ›”（FieldLink）：和输入框同字号，单行省略；整块控件宽都能点、至少 --hit 高 */
+.link {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  min-height: var(--hit);
+  color: var(--text);
+  font-size: var(--fs-15);
+  text-decoration: none;
+}
+
+.link:focus-visible {
+  border-radius: var(--r-inp);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.linkText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.input,
+.area {
+  min-height: 36px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--inp-line);
+
+  /* 输入框专用令牌：全站输入框（表单、提醒时刻框、登录框）只用 --inp-bg、--r-inp */
+  border-radius: var(--r-inp);
+  background: var(--inp-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-15);
+}
+
+/* 触屏上可输入控件至少 16px：iOS 聚焦字号小于 16px 的 input / select / textarea 会自动放大整页并横移。
+   只在触屏上调到 16px，电脑上仍是 15px。App 入口页另外禁止整页缩放（platform/viewport.ts 的 blockPageZoom），这条照旧要守。
+   src/app/__tests__/input-font-size.test.ts 检查全站可输入控件。全站这条触屏媒体查询只写在这里一处 */
+@media (any-pointer: coarse) {
+  .input,
+  .area {
+    font-size: var(--fs-16);
+  }
+
+  /* 触屏上输入框至少 44 高（hit-target.spec.ts），电脑端保持 36；多行备注框本来就 88 高 */
+  .input {
+    min-height: var(--hit);
+  }
+}
+
+/* flex-basis 0，输入框能缩 */
+.input {
+  flex: 1 1 0;
+}
+
+.input::placeholder,
+.area::placeholder {
+  color: var(--text-3);
+}
+
+.area {
+  flex: 1 1 100%;
+  min-height: 88px;
+  resize: vertical;
+}
+
+.title {
+  width: 100%;
+  min-height: var(--hit);
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-20);
+  font-weight: 600;
+}
+
+/* 标题框里的例句（“比如：周末买猫砂”）：比打进去的字小一号、不加粗；打进去的字照旧 20 / 600 */
+.title::placeholder {
+  color: var(--text-3);
+  font-size: var(--fs-17);
+  font-weight: 400;
+}
+
+/* 无框的标题框聚焦：不画外框，下划线换成 --focus 色并加粗到 2px（1px 下边框 + 1px 内阴影，不挪版面） */
+.title:focus-visible {
+  border-bottom-color: var(--focus);
+  outline: none;
+  box-shadow: inset 0 -1px 0 var(--focus);
+}
+
+.input:disabled,
+.area:disabled,
+.title:disabled {
+  color: var(--text-2);
+}
+
+/* 只放勾选框的一行（“已完成”“重要”）：不留空的字段名，勾选框从左边排起，放得下就一行 */
+.label:empty {
+  display: none;
+}
+
+.control:has(> .check) {
+  justify-content: flex-start;
+  column-gap: 20px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--hit);
+  font-size: var(--fs-15);
+}
+
+/* 开关（look="switch"）的尺寸、画法全由下面的 .switch 管，这里只管方框和圆圈两种 */
+.check input:not([role="switch"]) {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+/* 禁用的勾选框：字和框都变淡，和禁用的输入框一样一眼看出改不了。
+   :has 里不写 >：圆圈样式的 input 包在 .circleBox 里，不是直接子元素 */
+.check:has(input:disabled) {
+  color: var(--text-2);
+}
+
+.check input:disabled {
+  opacity: var(--disabled-dim);
+}
+
+/* 完成勾选（Check 的 look="circle"，和列表一样画成圆角方框）：直接用列表完成标记的画法（CheckCircle.module.css 的 .checkBox/.check/.fill/.tick，
+   同一组令牌、同一个打勾动效）；禁用时整个方框一起变淡（不让里面的 checkbox 再淡一次） */
+.circleBox:has(> input:disabled) {
+  opacity: var(--disabled-dim);
+}
+
+/* kit 通用按钮（FormButton）：圆角胶囊，高度一律 --hit，浅色、深色一套。
+   primary：--accent 实底（主操作）；secondary：描边；danger：危险色描边；dangerFill：危险底色（确认框）；ghost：细线描边 */
+.btn,
+.primary,
+.danger,
+.dangerFill,
+.ghost,
+.text {
+  flex: none;
+  min-height: var(--hit);
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  background: none;
+  font: inherit;
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.btn {
+  border: 1px solid var(--inp-line);
+  color: var(--text);
+}
+
+.primary {
+  border: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.danger {
+  border: 1.5px solid var(--danger-text);
+  color: var(--danger-text);
+}
+
+.dangerFill {
+  border: 0;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-weight: 600;
+}
+
+.ghost {
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+/* 文字按钮：底座（高 44、没底色、禁用变淡）同上面那组，这里只写不同的：宽至少 44（点击区 44 见方）、
+   不描边、右边只留 2 让字贴近卡片右边、字号 15、正文色 */
+.text {
+  min-width: var(--hit);
+  padding: 0 2px 0 10px;
+  border: 0;
+  color: var(--text);
+  font-size: var(--fs-15);
+}
+
+/* FormButton strong：字重 600 */
+.strong {
+  font-weight: 600;
+}
+
+.btn:disabled,
+.primary:disabled,
+.danger:disabled,
+.dangerFill:disabled,
+.ghost:disabled,
+.text:disabled {
+  opacity: var(--disabled-dim);
+}
+
+/* FormButton size="compact"（设置页按钮）：
+   看得见 38、灰色实底 --panel-2、不描边、字重 400，点击区由 ::after 以中心向外扩到 44；
+   secondary、danger、ghost 是灰底（danger 只换危险色字），primary、dangerFill 是确认弹窗那一对（左右 18、字号 15）。
+   禁用不变淡、字变 --text-2。写在上面的 variant、:disabled 之后：同优先级后写的赢 */
+.compact {
+  position: relative;
+  min-height: 38px;
+  font-weight: 400;
+}
+
+.compact.btn,
+.compact.danger,
+.compact.ghost {
+  border: 0;
+  background: var(--panel-2);
+}
+
+.compact.primary,
+.compact.dangerFill {
+  padding: 0 18px;
+  font-size: var(--fs-15);
+  font-weight: 400;
+}
+
+.compact::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.compact:disabled {
+  opacity: 1;
+}
+
+.compact.btn:disabled,
+.compact.danger:disabled,
+.compact.ghost:disabled {
+  color: var(--text-2);
+}
+
+/* size="row"：和 compact 同一外观，只是看得见 44，和设置页里的整行一样高（页底“退出登录”） */
+.row {
+  min-height: var(--hit);
+}
+
+/* block：整行宽。灰底按钮整行宽时放在页面底色上：底色换 --panel，和上面隔 16 */
+.block {
+  width: 100%;
+}
+
+.block.compact.btn,
+.block.compact.danger,
+.block.compact.ghost {
+  margin-top: 16px;
+  background: var(--panel);
+}
+
+/* 只有标题一项的卡片（编辑日程）：标题下面那条线就是卡片底边，会伸进下面的圆角，去掉 */
+.group > .title:last-child {
+  border-bottom: 0;
+}
+
+.group > .title:last-child:focus-visible {
+  box-shadow: inset 0 -2px 0 var(--focus);
+}
+
+/* 完成勾选和列表里的方框一样大（24，CheckCircle.module.css .check）：压过上面 .check input 的 20 */
+.check .circleBox > input {
+  width: 24px;
+  height: 24px;
+}
+
+.check .circleBox > input:disabled {
+  opacity: 1;
+}
+
+/* kit 共用开关：<input type="checkbox" role="switch" className={form.switch}>。
+   设置行（SettingsSwitchRow）和 Check look="switch"（待办“重要”、日程“全天”）共用这一份，别处只引用、不复制。
+   关 = 描边 + 左边圆钮；开 = 墨色底 + 右边圆钮 */
+.switch {
+  flex: none;
+  width: 48px;
+  height: 28px;
+  margin: 0;
+  border: 1.5px solid var(--text-2);
+  border-radius: var(--r-pill);
+  background: radial-gradient(circle at 12px 50%, var(--text-2) 8px, transparent 8.5px), var(--panel);
+  cursor: pointer;
+  appearance: none;
+}
+
+.switch:checked {
+  border-color: var(--ink);
+  background: radial-gradient(circle at calc(100% - 12px) 50%, var(--on-ink) 9px, transparent 9.5px), var(--ink);
+}

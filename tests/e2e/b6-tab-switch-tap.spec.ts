@@ -1,0 +1,75 @@
+// 推进计划 7b：B6 皮肤 e2e 运行日志 route 1.63 → click 1.70 → settled 2.04，删除没生效。
+// 根因（运行日志定的）：页签互切后 FADE_GUARD_MS（100 ms）以内落在 main 里的点按，按设计由 motion/index.ts 的 guardTaps 吞掉
+// （主持人 11-05“过渡开始很短时间内的点按算点在旧画面上”、代码审查方案 B M8；时机细节由 b2-vt-taps.spec.ts 的 L17 守）。
+// 这里守两件事：① 运行日志能看出是谁吞的：这一下记成“click … prevented-later”（run-log 的捕获监听最先跑，派发完补记）；
+// ② e2e 等的是这个窗口本身：新页出来以后等换页放完（page-helpers.ts 的 afterPageFade：快照拿掉、淡入放完，都比窗口长）再点就是真点
+import type { Page } from '@playwright/test';
+import { FADE_GUARD_MS } from '../../src/motion/index.ts';
+import { cached, idbPut } from './idb.ts';
+import { afterPageFade, readRunLogInPage } from './page-helpers.ts';
+import { FAKE_USER_ID, expect, test } from './session-fixture.ts';
+
+test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', locale: 'zh-CN', viewport: { width: 390, height: 844 } });
+
+const TZ = 'Asia/Seoul';
+const today = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+const go = (page: Page, hash: string) =>
+  page.evaluate((h) => {
+    window.location.hash = h;
+  }, hash);
+
+/** 本机库放一条今天的待办 n1 */
+async function seed(page: Page): Promise<void> {
+  await page.goto('/app/#/todos');
+  await page.getByTestId('todos').waitFor({ timeout: 30000 });
+  const n1 = {
+    user_id: FAKE_USER_ID, tz: TZ, created_at: 1, updated_at: 1, undone: false, short: null, project: '', due_time: null, done: false,
+    id: 'n1', title: '买牛奶', due: today(), rev: 1, deleted_at: null,
+  };
+  await idbPut(page, [['todos', cached(n1)]]);
+  await page.reload();
+  await page.getByTestId('todos-row-n1').waitFor({ timeout: 30000 });
+}
+
+const runLog = (page: Page) => page.evaluate(readRunLogInPage);
+
+// 点的是打勾圈（负责人 11-15 待办去掉行尾 ×、删除改左滑以后，行上一点就生效的就是打勾）：打勾也出撤销条
+test('随手记 → 待办：窗口以内点打勾被吞、日志记 prevented-later；过了窗口再点真勾上、出撤销条', async ({ page }) => {
+  await seed(page);
+  await go(page, '#/notes');
+  await page.getByTestId('notes').waitFor({ timeout: 30000 });
+  // 切回待办，新页的打勾圈一出来就在页面里点（page 的往返赶不上 100 ms）；返回离换页过了多少毫秒
+  const at = await page.evaluate(
+    () =>
+      new Promise<number>((resolve) => {
+        window.addEventListener(
+          'hashchange',
+          () => {
+            const t0 = performance.now();
+            const poll = (): void => {
+              const x = document.querySelector<HTMLElement>('[data-testid="todos-done-n1"]');
+              if (!x) return void requestAnimationFrame(poll);
+              x.click();
+              resolve(performance.now() - t0);
+            };
+            poll();
+          },
+          { once: true },
+        );
+        // 只发 hashchange、不发 popstate：location.hash 赋值在触屏 WebKit 里同时发 popstate，router 当成系统边缘返回手势、直接换不装吞点按（029310e1 右滑不闪）
+        const from = window.location.href;
+        history.replaceState(history.state, '', '#/todos');
+        window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: from, newURL: window.location.href }));
+      }),
+  );
+  expect(at, '新页出来得太晚，已经过了吞点按的窗口').toBeLessThan(FADE_GUARD_MS);
+  await expect.poll(() => runLog(page), { timeout: 3000 }).toMatch(/ click input\[checkbox\]#todos-done-n1 prevented-later/);
+  await expect(page.getByTestId('todos-done-n1')).not.toBeChecked();
+  await expect(page.locator('[data-undo-toast]')).toHaveCount(0);
+
+  // 过了窗口（换页放完）再点：真勾上
+  await afterPageFade(page);
+  await page.getByTestId('todos-done-n1').click();
+  await expect(page.locator('[data-undo-toast]')).toBeVisible();
+  await expect(page.getByTestId('todos-done-n1')).toBeChecked();
+});

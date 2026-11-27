@@ -1,0 +1,613 @@
+/* 今日运势卡、详情、填生日那一层（FortuneCard.tsx 等）。
+   尺寸、字号、间距逐项照方案页 方案-八字-B.html 的样式（.fc .bL .bTop .meta .bE .setBtn、.grip、.pk .hd .c .strip .yIn .kp、.dHead .cat .luck；
+   参考的 .sheet、.scrim 在 kit Dialog.module.css 的 .edge、.scrim）；
+   颜色走令牌：星星 --star-on / --star-off、色点描边 --swatch-ring、幸运色 --luck-0～9（tokens.json“今日运势卡”一组），
+   其余用现成的 --text-*、--panel-2、--line、--inp-line、--accent、--ink。参考里没有的动效、颜色一律不加（弹层直接出现、直接消失：Dialog 的 still） */
+
+/* ===== 卡片 ===== */
+.fc {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: var(--hit);
+  margin: 0;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+button.fc {
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+button.fc:active {
+  opacity: var(--press-dim);
+}
+
+/* 装载运势算法时占位：和一行卡片一样高，加载完不跳 */
+.hold {
+  min-height: 62px;
+}
+
+.bL {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* 第一行：星星紧跟一句白话；韩文长，最多两行，超出省略 */
+.bTop {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: var(--fs-13);
+  line-height: 20px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.meta {
+  display: block;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chev {
+  flex: none;
+  width: 8px;
+  height: 14px;
+  color: var(--text-3);
+}
+
+/* 没填生日：一行“★ 想按八字看每天的运势？”+ 黄色“填生日” */
+.bE {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.bE i {
+  color: var(--star-on);
+  font-size: var(--fs-14);
+  font-style: normal;
+}
+
+.setBtn {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-size: var(--fs-14);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* 星星：卡片 14、详情顶上 20 */
+.stars {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: -2px;
+}
+
+.stars svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.bTop .stars {
+  margin-right: 6px;
+}
+
+.on {
+  fill: var(--star-on);
+}
+
+.off {
+  fill: var(--star-off);
+}
+
+/* 幸运色小圆点（卡片 10、详情 28 圆角方块） */
+.sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--swatch-ring);
+}
+
+.k0 { background: var(--luck-0); }
+.k1 { background: var(--luck-1); }
+.k2 { background: var(--luck-2); }
+.k3 { background: var(--luck-3); }
+.k4 { background: var(--luck-4); }
+.k5 { background: var(--luck-5); }
+.k6 { background: var(--luck-6); }
+.k7 { background: var(--luck-7); }
+.k8 { background: var(--luck-8); }
+.k9 { background: var(--luck-9); }
+
+/* ===== 底部弹层（详情、填生日）：外壳（遮罩、贴底边的整宽弹层）是 kit Dialog 的 edge，这里只有顶上那条小横杠 ===== */
+.grip {
+  width: 36px;
+  height: 4px;
+  margin: 4px auto 0;
+  border-radius: 2px;
+  background: var(--inp-line);
+}
+
+/* ===== 详情 ===== */
+.dHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+}
+
+.dHead h2 {
+  margin: 0;
+  font-size: var(--fs-17);
+}
+
+.x {
+  min-width: var(--hit);
+  min-height: var(--hit);
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-22);
+  cursor: pointer;
+}
+
+.dMe {
+  margin: 0 0 8px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+.dTop .stars svg {
+  width: 20px;
+  height: 20px;
+}
+
+.dTip {
+  margin: 6px 0 12px;
+  font-size: var(--fs-15);
+  line-height: 1.55;
+}
+
+.cat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-14);
+}
+
+.cat b {
+  min-width: 40px;
+  font-weight: 600;
+}
+
+.cl {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.luck {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+
+.luck > div {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--panel-2);
+  font-size: var(--fs-14);
+}
+
+.luck small {
+  display: block;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+}
+
+.big {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px var(--swatch-ring);
+}
+
+.num {
+  min-width: 28px;
+  font-size: var(--fs-22);
+  font-weight: 700;
+  text-align: center;
+}
+
+.ghost {
+  width: 100%;
+  min-height: var(--hit);
+  margin-top: 4px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.foot {
+  margin: 4px 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* ===== 填生日（头部 取消 / 标题 / 黄色确定，28 高小块，44 点按区，横条左右滑） ===== */
+.pk {
+  font-variant-numeric: tabular-nums;
+}
+
+.hd {
+  display: grid;
+  grid-template-columns: 64px 1fr 64px;
+  align-items: center;
+  min-height: 44px;
+}
+
+.mid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-13-5);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.clr {
+  justify-self: start;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-13-5);
+  text-align: left;
+  cursor: pointer;
+}
+
+.lab {
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-10);
+  letter-spacing: 0.14em;
+}
+
+.c {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.c > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: var(--fs-13-5);
+  white-space: nowrap;
+}
+
+.c[aria-pressed="true"] > span {
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 600;
+}
+
+.c:disabled {
+  cursor: default;
+}
+
+.c:disabled > span {
+  color: var(--text-3);
+  opacity: var(--disabled-dim);
+}
+
+.ok {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  min-width: 56px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.okPill {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-13-5);
+  font-weight: 600;
+}
+
+.ok:disabled {
+  cursor: default;
+}
+
+.ok:disabled .okPill {
+  background: var(--panel-2);
+  color: var(--text-3);
+}
+
+.hair {
+  height: 0.5px;
+  margin: 2px 0;
+  background: var(--line);
+}
+
+.srow {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+}
+
+.strip {
+  display: flex;
+  overflow-x: auto;
+  padding: 0 12px;
+  mask-image: linear-gradient(90deg, transparent, var(--ink) 14px, var(--ink) calc(100% - 14px), transparent);
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+.strip .c {
+  flex: none;
+  padding: 0 2px;
+}
+
+.yRow {
+  display: flex;
+  align-items: center;
+}
+
+.yIn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.yIn i {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: var(--fs-16);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.yIn i.ph {
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.yIn.cur i.next {
+  box-shadow: inset 0 0 0 1.5px var(--text);
+}
+
+.yTip {
+  margin-left: 4px;
+  color: var(--text-3);
+  font-size: var(--fs-11-5);
+}
+
+.kp {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 4px 12px 6px;
+}
+
+.kp button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-18);
+  cursor: pointer;
+}
+
+.kp button.fn {
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.res {
+  min-height: 20px;
+  margin: 10px 0 2px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.res b {
+  color: var(--text);
+}
+
+.note {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ===== 今天页组合区的“今日小运”小方块（FortuneTile.tsx） =====
+   外框（底色、圆角、内边距）由今天页给；这里只管里面竖排的几行和按下缩一点（scale .97、--dur-press、--ease-out） */
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin: 0;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+button.tile {
+  cursor: pointer;
+  transition: transform var(--dur-press) var(--ease-out);
+}
+
+button.tile:active {
+  transform: scale(0.97);
+}
+
+/* 减少动态效果：不缩，按下瞬时变淡（同 motion/Pressable.module.css） */
+:global(:root[data-rm="1"]) button.tile {
+  transition: none;
+}
+
+:global(:root[data-rm="1"]) button.tile:active {
+  transform: none;
+  opacity: var(--press-dim);
+}
+
+.tMini {
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-11);
+  letter-spacing: 0.08em;
+}
+
+.tStars {
+  display: block;
+  margin-top: 6px;
+}
+
+.tK1 {
+  margin-top: 6px;
+  font-size: var(--fs-14);
+  line-height: 1.5;
+}
+
+.tMore {
+  margin-top: auto;
+  padding-top: 8px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+/* ===== 网页版宽屏今天页的今日运势卡（FortuneTile shape="card"） =====
+   外框是 kit 的卡片（今天页给）；标题行左“今日运势”右“看详情 ›”，下面星星、一句白话（15 半粗）、“● 幸运色 黄色 · 幸运数字 7” */
+.card {
+  gap: 6px;
+  margin: 0;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cH {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-weight: 500;
+}
+
+.card .tStars {
+  margin-top: 0;
+}
+
+.cTip {
+  font-size: var(--fs-15);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.cMeta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}

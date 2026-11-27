@@ -1,0 +1,3 @@
+-- expect: public.report_tz 是 security definer（只准 session_fate）
+-- public 里的 RPC 除 PUBLIC_RPCS_DEFINER（只有 session_fate）以外一律 security invoker：definer 绕过调用者的权限，名单外的不准（架构 3.3 D、约定 10.7）
+alter function public.report_tz(text, uuid, text) security definer;

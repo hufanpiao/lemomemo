@@ -1,0 +1,7 @@
+# publish.ps1 第 4 步核对装好的 wrangler 依赖树（B1 接手清单 OPS-deploy ②：不只靠 npm 的 integrity）。
+# 一行三列：tools/deploy/package-lock.json 的 SHA-256、node_modules 的文件数、node_modules 的树哈希。
+# 树哈希的算法同 publish.ps1 的 Get-DistHash 和 build/ci/dist_hash.py（每个文件“SHA-256␠␠相对路径\n”按路径的 UTF-8 字节排序，再整体算 SHA-256）；
+# 先删掉 node_modules/.bin 和 node_modules/.package-lock.json（随 npm 版本变，部署不用）再算。
+# 升级 wrangler、改 tools/deploy 的锁文件时一起重算：publish.ps1 -DryRun 对不上时会打印实际的文件数和树哈希，核实后写进来、随代码审查提交。
+# 10-30 运维：wrangler 4.150.0，npm 11.17.0 ci --ignore-scripts（Windows），PowerShell 和 dist_hash.py 两边算出的一致。
+95861ff87743f4fb2a5b0c2c8b7cda73d767d71bf5ba93420d57e872bde68cb4 1603 49f302f9e5bb013e21d2cc8c557d0871c28f9f62103a5e120e9ab9606a7ae455

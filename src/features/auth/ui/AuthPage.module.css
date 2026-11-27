@@ -1,0 +1,186 @@
+/* 登录页（/app/auth/）：只用令牌，颜色在 skins/*.css；没有动效，不用 transition */
+.page {
+  max-width: 420px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 32px) 20px max(env(safe-area-inset-bottom), 24px);
+}
+
+/* 背景渐变 --login-bg 固定在屏幕上（不随内容滚）：页面能滚（安装引导四步、邀请码、错误卡片），顶部安全区底色条（base.css body::before）
+   要画同一张渐变才接得上——底色条按整屏大小画，这里也按整屏高、从屏幕顶上起画；手机上宽度就是整屏，电脑上仍是中间 420px 一栏。
+   前提：html 不能设背景；登录页外层不能加 transform、filter、contain，否则 z-index -1 这层看不见或不再固定在屏幕上 */
+.page::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  z-index: -1;
+  width: min(100%, 420px);
+  background: var(--login-bg, var(--bg));
+  transform: translateX(-50%);
+}
+
+/* 手机上渐变铺满整屏宽（iPhone 17 Pro Max 宽 440，超过 420，否则左右各露出约 10 的灰边）；
+   只有电脑这类宽屏才是中间 420 一栏 */
+@media (width <= 600px) {
+  .page::before {
+    width: 100%;
+  }
+}
+
+/* 告诉底色条用登录页这张渐变（底色条在 body 上，只能从根节点继承） */
+:global(:root):has(.page) {
+  --safe-top-bg: var(--login-bg, var(--bg));
+}
+
+/* 大标题层级：30、粗体、字距略收，和下面 14 的说明拉开 */
+.title {
+  margin: 0 0 10px;
+  font-size: var(--fs-30);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.lead {
+  margin: 0 0 28px;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+/* 输入框上的“邮箱”“验证码”“邀请码”：字样用 kit 的小字分组名（Form.module.css 的 .groupLabel，AuthPage.tsx 直接挂），这里不另写 */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 登录框：AuthPage.tsx 同时挂 kit 表单的 .input（Form.module.css）和这里的 .input。
+   底色、圆角、描边、字体、字号都用表单那一份：电脑 15px、触屏 16px，触屏媒体查询全站只在 Form.module.css 一处。
+   这里只把登录页版式不同的几项覆盖回来：高 44、左右 12、不参与 flex 伸缩（.form 是竖排 flex，表单的 flex: 1 1 0 会把框压扁）。
+   写成 input.input（权重 0,1,1）：两份 CSS 模块谁先加载不固定，单类选择器会被表单那份盖掉 */
+input.input {
+  flex: none;
+  min-height: var(--hit);
+  padding: 0 12px;
+}
+
+.input::placeholder {
+  color: var(--text-3);
+}
+
+.input[readonly] {
+  color: var(--text-2);
+}
+
+/* 验证码框 22px 数字字体：同样写成 input.code，压过表单触屏规则里的 16px；数字用等宽（tabular-nums），每位一样宽，敲进去不左右跳 */
+input.code {
+  font-family: var(--f-num);
+  font-size: var(--fs-22);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.4em;
+}
+
+.primary {
+  min-height: var(--hit);
+  margin-top: 8px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-16);
+  font-weight: 600;
+}
+
+.primary:disabled {
+  background: var(--step-off);
+  color: var(--text-2);
+}
+
+.link {
+  align-self: flex-start;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-14);
+  text-decoration: underline;
+}
+
+.link:disabled {
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+.row {
+  display: flex;
+  gap: 20px;
+}
+
+/* 退出原因、重新登录说明、装到主屏幕的提示（ReauthNotice、AccountGatePanel、InstallGuide）：行高放松 */
+.notice {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: var(--fs-14);
+  line-height: 1.55;
+}
+
+.sub {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.55;
+}
+
+.hint {
+  margin: 12px 0 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+/* 登录出错卡（ErrorCard）：大圆角、留白加大、说明行高放松；底色仍是 --danger-bg（出错提示，配色不变） */
+.card {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  background: var(--danger-bg);
+  color: var(--text);
+}
+
+.cardTitle {
+  margin: 0 0 6px;
+  font-size: var(--fs-15);
+  font-weight: 600;
+}
+
+.cardBody {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.55;
+}
+
+.captcha {
+  min-height: 65px;
+  margin-top: 20px;
+}
+
+/* 装到主屏幕的步骤（InstallGuide）：行距加大，序号用等宽小字、第三层色（小字标签） */
+.steps {
+  margin: 0 0 20px;
+  padding-left: 22px;
+}
+
+.step {
+  margin-bottom: 12px;
+  padding-left: 4px;
+  font-size: var(--fs-15);
+  line-height: 1.5;
+}
+
+.step::marker {
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-13);
+}

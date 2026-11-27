@@ -1,0 +1,62 @@
+# Cloudflare Pages 的响应头（架构 8.1、16.2）。构建时原样复制到 dist/web/_headers。
+# 只管静态文件；`/` 的分流和 `/sb/*` 由 Pages Functions 在代码里自己加安全头（functions/_lib/security-headers.ts）。
+# 同一个头被多条规则命中时 Cloudflare 会用逗号拼起来，所以不写 `/*` 这种全站规则，各段路径不重叠。
+# 官网的 CSP 必须和 functions/_lib/security-headers.ts 一字不差（build/build_site.mjs 检查）：首页 /zh/、/ko/ 是 HOME_CSP，
+# 其他页 /zh/:page、/ko/:page（演示、隐私说明、条款）是 SITE_CSP。:page 只配一段非空路径，所以和首页那两段不重叠。
+# 只有首页放宽：吉祥物用 Rive（和 App 同一份运行库），编译同源 wasm 要 'wasm-unsafe-eval'，取 wasm 和 .riv 要 connect-src 'self'，.riv 里的图解成 blob: 显示。
+# 不写 /errors/*（0.31 第 31 条：Cloudflare 自定义错误页免费版不能用，site/errors/ 已删）。
+# 根目录的 404.html 是 Pages 找不到文件时回的页面，按请求路径匹配不到这里的任何一段，所以页面本身不带脚本、不收信息。
+
+# ---------- 官网静态页（前端 B） ----------
+/zh/
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), geolocation=(), microphone=(), accelerometer=(), gyroscope=(), magnetometer=(), payment=(), usb=()
+  Cache-Control: no-cache
+
+/ko/
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), geolocation=(), microphone=(), accelerometer=(), gyroscope=(), magnetometer=(), payment=(), usb=()
+  Cache-Control: no-cache
+
+/zh/:page
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), geolocation=(), microphone=(), accelerometer=(), gyroscope=(), magnetometer=(), payment=(), usb=()
+  Cache-Control: no-cache
+
+/ko/:page
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), geolocation=(), microphone=(), accelerometer=(), gyroscope=(), magnetometer=(), payment=(), usb=()
+  Cache-Control: no-cache
+
+# 官网的脚本、样式、og 图：构建时改成带哈希的文件名放进 /s/
+/s/*
+  X-Content-Type-Options: nosniff
+  Cache-Control: public, max-age=31536000, immutable
+
+/robots.txt
+  Cache-Control: no-cache
+
+/sitemap.xml
+  Cache-Control: no-cache
+
+# ---------- 技术页 /diag/*（前端 A；SW-update ③，10-30 从 /app/diag/ 搬出来） ----------
+# 机型信息页 startup.html（R-232，P1-07）。倾斜授权试验页 tilt.html 随倾斜高光删除（R-373）。在 /app/ 作用域外，App 的 SW 管不到。
+# 单独一套头：设备能力全部关闭（R-373 起方向传感器也关）；脚本、样式只许同源文件；
+# connect-src 只给本源（机型信息页要读 /app/index.html），不许被嵌入，不给搜索引擎收录
+/diag/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), geolocation=(), microphone=(), accelerometer=(), gyroscope=(), magnetometer=(), payment=(), usb=()
+  X-Robots-Tag: noindex
+  Cache-Control: no-cache
+
+# ---------- /app/*（前端 A 填写，8.1 的两套 CSP 和 no-cache / immutable） ----------

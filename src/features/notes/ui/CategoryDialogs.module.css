@@ -1,0 +1,91 @@
+/* 分类弹窗（新建、改名删除，随手记、隐私记共用）：只用令牌 */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 名字输入框占满一整行（窄了输满 12 个字第一个字会被裁掉） */
+.name {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.notice,
+.ask {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+}
+
+.notice {
+  padding: 10px 12px;
+  border-radius: var(--r-lg);
+  background: var(--panel-2);
+}
+
+/* “删除这个分类”：一行红字按钮，点击区 44 高 */
+.delete {
+  align-self: flex-start;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--danger-text);
+  font: inherit;
+  font-size: var(--fs-14);
+}
+
+/* 分类里“导入没分类的 N 条”：分类那一排下面一行小字链接，点击区 44 高 */
+.importRow {
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-13);
+  text-align: left;
+}
+
+/* 导入弹窗的勾选列表：太长时自己滚，弹窗不超出屏幕 */
+.pickList {
+  max-height: 50dvh;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.pick {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: var(--hit);
+}
+
+/* 勾选框同表单组件（kit Form.module.css .check）：20 方、强调色 */
+.pick input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.pickTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-15);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickDay {
+  flex: none;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}

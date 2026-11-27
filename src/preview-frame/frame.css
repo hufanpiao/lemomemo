@@ -1,0 +1,219 @@
+/* 预览沙箱的页面样式（架构 5.13 第 3 点；线框 sPrev 电脑浮层：灰底、纸张白、页之间留白）。
+   沙箱是单独的页面，不引 App 的设计令牌；颜色跟系统深浅色走，纸张本身一直是白底（文档原样）。
+   颜色只在下面两段 :root 里写死、各用一次 stylelint-disable 放行（同 splash.css 的做法），后面一律用 var(--pv-*) */
+
+/* stylelint-disable color-no-hex -- 预览沙箱是独立页面（CSP 只放 self、不加载 App 皮肤），颜色只在这里定义一次 */
+:root {
+  color-scheme: light dark;
+
+  --pv-bg: #f2f2f2;
+  --pv-paper: #fff;
+  --pv-line: #d9d9d9;
+  --pv-ink: #1a1a1a;
+  --pv-sub: #6b6b6b;
+  --pv-shadow: #0000002e; /* 黑色 18% */
+
+  /* 表格画在白纸上，深色模式也不变 */
+  --pv-sheet-ink: #1a1a1a;
+  --pv-sheet-sub: #6b6b6b;
+  --pv-cell-line: #e3e3e3;
+  --pv-head-bg: #f4f4f4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pv-bg: #1c1c1e;
+    --pv-line: #3a3a3c;
+    --pv-ink: #f2f2f2;
+    --pv-sub: #a1a1a6;
+  }
+}
+/* stylelint-enable color-no-hex */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font: 14px/1.6 system-ui, -apple-system, 'Segoe UI', 'Malgun Gothic', 'Microsoft YaHei', sans-serif;
+}
+
+#preview {
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+}
+
+/* PDF：左边一列页缩略图（线框 sPrev 电脑浮层），右边按页往下排；预览区窄于 720 px（手机）不显示缩略图
+   用容器查询：看的是预览区本身多宽，不是应用窗口的断点（应用的“至少多宽”断点只有侧栏一个，layers-media-css.test.ts） */
+.pv-pdf {
+  container-type: inline-size;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.pv-pages {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.pv-page {
+  background: var(--pv-paper);
+  box-shadow: 0 1px 3px var(--pv-shadow);
+  max-width: 100%;
+  height: auto;
+}
+
+.pv-pages canvas {
+  display: block;
+}
+
+.pv-rail {
+  display: none;
+}
+
+@container (width >= 720px) {
+  .pv-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: none;
+    width: 120px;
+    box-sizing: border-box;
+    padding: 2px 10px 2px 2px;
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+}
+
+.pv-tn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pv-sub);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pv-tn-img {
+  width: 96px;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--pv-paper);
+  border: 1px solid var(--pv-line);
+  border-radius: 4px;
+}
+
+.pv-tn-img canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.pv-tn[aria-current='page'] {
+  color: var(--pv-ink);
+  font-weight: 600;
+}
+
+.pv-tn[aria-current='page'] .pv-tn-img {
+  border: 2px solid var(--pv-ink);
+}
+
+.pv-tn:focus-visible {
+  outline: 2px solid var(--pv-ink);
+  outline-offset: 2px;
+}
+
+.pv-docx {
+  transform-origin: top center;
+}
+
+.pv-docx .docx-wrapper {
+  background: transparent;
+  padding: 0;
+}
+
+.pv-sheet {
+  overflow: auto;
+  background: var(--pv-paper);
+  color: var(--pv-sheet-ink);
+  border: 1px solid var(--pv-line);
+}
+
+.pv-sheet table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pv-sheet th,
+.pv-sheet td {
+  border: 1px solid var(--pv-cell-line);
+  padding: 4px 8px;
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pv-sheet th {
+  background: var(--pv-head-bg);
+  color: var(--pv-sheet-sub);
+  font-weight: 400;
+  position: sticky;
+  top: 0;
+}
+
+.pv-sheet tbody th {
+  position: sticky;
+  left: 0;
+}
+
+.pv-slides {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.pv-thumb {
+  display: block;
+  max-width: 100%;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: var(--pv-paper);
+}
+
+.pv-slide {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--pv-line);
+}
+
+.pv-slide b {
+  font-weight: 600;
+}
+
+.pv-slide span {
+  color: var(--pv-sub);
+  flex: none;
+  width: 56px;
+}
+
+.pv-slide p {
+  margin: 2px 0 0;
+  color: var(--pv-sub);
+  font-size: 13px;
+}

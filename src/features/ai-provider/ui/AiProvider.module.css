@@ -1,0 +1,267 @@
+/* 设置 › 我的 AI、AI 服务商（方案 设计方案/2026-11-22_AI服务商 的截图）：kit 设置行以外，稿子里多出来的几样——
+   说明卡（粗标题 + 灰字，“长期记忆不受影响”“谁做什么”“这家没有”）、左边一道柠檬黄的卡、试的结果卡（没通是危险底、通了是绿字）、
+   填模型名和密钥的那张卡、左右两颗按钮、“在用”小标签。颜色、字号、圆角一律用令牌，不另起颜色 */
+
+/* 间距照稿子（量 方案.html 的 .gt / .note / .tip）：
+   没有组名的卡、按钮之间隔 12（稿子 .tip、.btns 的 margin-top）；带组名的卡，组名上面一共 16（12 + 组名自己 4，稿子 .gt 16）；
+   卡下说明后面不再另加 16（kit .cardNote 的下边距在这里归零），说明到下一个组名也是 16 */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+/* 字行高也照稿子（屏幕 1.5、说明 .note 1.6）：量出来卡到下一张卡稿子 64、改前 57，差的就是这两行字的行高 */
+.stack > section > h2 {
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.stack > section > p:last-child {
+  margin-bottom: 0;
+  line-height: 1.6;
+}
+
+/* 说明卡：卡片底、大圆角，粗标题 + 次要色正文。数值照稿子 .tip（行高也照稿子）：
+   上下 12 左右 14、正文 13.5 行高 1.7、标题 15 下边 2、圆点列表上边 4 缩进 18、左边黄道 3 */
+.card {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  line-height: 1.7;
+}
+
+.cardTitle {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-15);
+  font-weight: 700;
+}
+
+.cardBody {
+  margin: 2px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-13-5);
+}
+
+/* 左边一道柠檬黄（“这家没有”、切换前提示的那张卡） */
+.edge {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* 圆点列表（“谁做什么”、切换前提示） */
+.dots {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: var(--fs-13-5);
+}
+
+.ok {
+  color: var(--ok-text);
+}
+
+/* 试的结果、删除确认：没通的卡底用 --late-bg（照稿子 .bad）、标题危险色；通了卡底淡绿、标题绿字 */
+.fail {
+  background: var(--late-bg);
+}
+
+.fail .cardTitle {
+  color: var(--danger-text);
+}
+
+/* 通了：卡底淡绿（照稿子 --ok-bg；令牌里没有绿底，用 --ok-text 加透明度画在伪元素上，不用 color-mix） */
+.pass {
+  position: relative;
+  isolation: isolate;
+}
+
+.pass::before {
+  position: absolute;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--ok-text);
+  content: '';
+  inset: 0;
+  opacity: 0.1;
+}
+
+.pass .cardTitle {
+  color: var(--ok-text);
+}
+
+.cardMeta {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 填模型名、密钥的卡：字段名在上、输入框在下，两段之间一条细线 */
+.fields {
+  padding: 4px 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.field + .field {
+  border-top: 0.5px solid var(--line);
+}
+
+.fieldName {
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.inp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-pill);
+  background: var(--inp-bg);
+  color: var(--text);
+  font-family: var(--f-mono);
+
+  /* 16 起（iOS 聚焦字号小于 16 会放大整页；input-font-size.test.ts 查）。触屏媒体查询全站只在 Form.module.css 一处，这里直接用 16，比稿子的 15 大 1 */
+  font-size: var(--fs-16);
+}
+
+input.inp:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.masked {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repaste {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  margin-right: -8px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: var(--fs-15);
+}
+
+/* 卡外一句灰字（说明、提示）：和上面的卡隔 6（12 的间距收回 6，照稿子 .note 的 margin-top 6） */
+.note {
+  margin: -6px 4px 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.6;
+}
+
+.err {
+  margin: -6px 4px 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+/* 卡里、弹层里的那一对按钮：和上面隔开 */
+.pairIn {
+  margin-top: 14px;
+}
+
+/* 左右两颗按钮：左边卡片底，右边柠檬黄；右边没到能点的时候是灰底灰字 */
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.btn,
+.btnMain {
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  font: inherit;
+  font-size: var(--fs-15);
+}
+
+.btn {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.btnMain {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.btnMain:disabled {
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+
+/* “我的 AI”两项、服务商四行、“XX用哪家”四行：行名下面一行小字；点不了的整行变淡 */
+.two {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  /* 行高照稿子（.choice .stk 上下各 9；kit .choice 自己还有上下 4，这里补 5 凑到 9；稿子屏幕的字行高 1.5）：
+     4 + 5 + 15×1.5 + 2 + 13×1.5 + 5 + 4 = 62，和稿子量的一样 */
+  padding: 5px 0;
+  line-height: 1.5;
+}
+
+/* 选一家弹层顶上的把手（稿子 .sheet .grab：36×5、圆角 3、--step-off；离弹层顶 10、离标题 12）。
+   放在 Dialog 的 lead 里：edge 弹层顶 4 + lead 上边 4 + 这里 2 = 10；lead 下边 14 − 2 = 12 */
+.grab {
+  width: 36px;
+  height: 5px;
+  margin: 2px auto -2px;
+  border-radius: 3px;
+  background: var(--step-off);
+}
+
+.sub {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 变灰点不了的一行：整行淡到 45%（照稿子 .choice.off） */
+.off {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* “我的密钥”那一行：字行高照稿子屏幕的 1.5（量出来稿子这一行比改前高 8） */
+.mine li {
+  line-height: 1.5;
+}
+
+/* “在用”小标签 */
+.pill {
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-13);
+  font-weight: 600;
+}

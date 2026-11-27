@@ -1,0 +1,7 @@
+/* 设置 › 日历 二级页。卡、行、单选、分段按钮都用 kit 设置组件（src/kit/components/Settings/），不在这里另写；
+   这里只有整页的“没保存上”红字 */
+.error {
+  margin: 8px 4px 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}

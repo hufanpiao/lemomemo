@@ -1,0 +1,43 @@
+// 功能 calendar 的词典·韩文：今日运势卡。文字照方案页 方案-八字-B.html 的 T.ko（是草稿，正式库请韩语母语者润色），逐行标 REVIEW(ko)
+// satisfies Record<keyof typeof fortuneZh, string>：少一个键、多一个键都编译不过；占位符一致由 __tests__/fortune-card.test.tsx 查
+import type { fortuneZh } from './fortune-zh.ts';
+
+export const fortuneKo = {
+  'fortune.empty': '사주로 매일 운세를 볼까요?', // REVIEW(ko)
+  // 오늘 페이지 빈 날 카드(FortuneTile)
+  'fortune.tile': '오늘의 운',
+  'fortune.day': '오늘의 운세', // REVIEW(ko)
+  'fortune.more': '자세히',
+  'fortune.set': '생일 입력', // REVIEW(ko)
+  'fortune.luckColor': '행운의 색', // REVIEW(ko)
+  'fortune.luckNum': '행운의 숫자', // REVIEW(ko)
+  'fortune.meta.num': '행운의 숫자 {n}', // REVIEW(ko)
+  'fortune.stars': '별 {n}개 (5개 만점)', // REVIEW(ko)
+  'fortune.catStars': '{cat} 별 {n}개 (5개 만점)', // REVIEW(ko)
+  'fortune.cardLabel': '오늘의 운세, 나의 본성 {me}, 별 {n}개, {tip} 행운의 색 {c}, 행운의 숫자 {k}', // REVIEW(ko)
+  'fortune.detailTitle': '{me} · {m}월 {d}일', // REVIEW(ko)
+  'fortune.meLine': '나의 본성은 {me}: {desc}', // REVIEW(ko)
+  'fortune.dayLine': '오늘은 나의 {name} · 재미로 보는 운세예요', // REVIEW(ko)
+  'fortune.edit': '생일 바꾸기', // REVIEW(ko)
+  'fortune.close': '닫기', // REVIEW(ko)
+  'fortune.cancel': '취소', // REVIEW(ko)
+  'fortune.title': '생일', // REVIEW(ko)
+  'fortune.ok': '확인', // REVIEW(ko)
+  'fortune.y': '년', // REVIEW(ko)
+  'fortune.m': '월', // REVIEW(ko)
+  'fortune.d': '일', // REVIEW(ko)
+  'fortune.h': '시', // REVIEW(ko)
+  'fortune.hourUnknown': '모름', // REVIEW(ko)
+  'fortune.hour': '{a}–{b}시', // REVIEW(ko)
+  'fortune.yearInput': '출생 연도', // REVIEW(ko)
+  'fortune.kpTip': '두 자리만: 92 = 1992', // REVIEW(ko)
+  'fortune.yearBad': '{min}~{max}년 사이로 입력해 주세요', // REVIEW(ko)
+  'fortune.kpClear': '지우기', // REVIEW(ko)
+  'fortune.kpDel': '한 자리 지우기', // REVIEW(ko)
+  'fortune.resWhen': '{y}년 {m}월 {d}일 · {h}', // REVIEW(ko)
+  'fortune.resHourUnknown': '태어난 시간 모름', // REVIEW(ko)
+  'fortune.resMe': '나의 본성: ', // REVIEW(ko)
+  'fortune.pick': '연, 월, 일을 고르면 볼 수 있어요', // REVIEW(ko)
+  'fortune.clear': '생일 지우기', // REVIEW(ko)
+  'fortune.store': '생일은 내 계정에 동기화되며 언제든 지울 수 있어요 · 재미로 보는 운세', // REVIEW(ko)
+} as const satisfies Record<keyof typeof fortuneZh, string>;

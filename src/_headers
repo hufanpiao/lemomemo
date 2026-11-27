@@ -1,0 +1,62 @@
+# /app/* 的响应头（前端 A；架构 8.1、15.6 第 4b 条、0.27 第 5 点、B0 CSP 验证）
+# 构建时由 build/assemble_web.mjs 和首页那一段（site/_headers，前端 B）拼成 dist/web/_headers。
+# 占位符 WSS（写在两对花括号里）按构建模式替换：正式 wss://lemomemo.com，预览 wss://preview.lemomemo.com，本机 ws://127.0.0.1:8788；e2e-real（真后端 e2e，页面和 /sb 同在 8789，http 由 'self' 覆盖）ws://127.0.0.1:8789。
+# 注意：Cloudflare 对同一路径命中的多条规则会把同名头用逗号拼起来（两个 CSP 都生效、取交集），
+# 所以首页那段不要用 /* 设 CSP；下面的预览沙箱和登录页先用 “! 头名” 去掉 /app/* 的 CSP 再写自己的。
+# 例外不放宽：主 App 的 style-src 仍是 'self'（Radix 的 Dialog.Overlay 不用，滚动锁自己写；见 B0 验证记录）
+# R-402（11-13）：主 App 的 script-src 只多一项 'wasm-unsafe-eval'，给插图的 webp 编码器（platform/webp-wasm.ts）编译同源的 .wasm；
+# 只放行 WebAssembly 编译，不放行 eval / new Function（不加 'unsafe-eval'）。登录页、预览沙箱用不到，各自那条不加
+# 11-24：主 App 的 connect-src 多一项 wss://generativelanguage.googleapis.com，按住“＋”边说边出字直连 Gemini Live（只带服务器发的短期令牌，
+# platform/live-transcribe.ts）；登录页、预览沙箱不加
+# 11-26：主 App 的 Permissions-Policy 放开 geolocation=(self)，今天页天气胶囊“自动定位”用（platform/geo-locate.ts；只在用户点胶囊或设置里点“用当前位置”时才问，
+# 坐标只取 1 位小数）；天气数据经同源的 /wx/v1/*（functions/wx）代理，connect-src 不加第三方
+
+/app/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' {{WSS}} wss://generativelanguage.googleapis.com; worker-src 'self'; font-src 'self'; manifest-src 'self'; frame-src 'self' https://view.officeapps.live.com; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), geolocation=(self), microphone=(self), accelerometer=(), gyroscope=(), magnetometer=(), payment=(), usb=()
+
+/app/
+  Cache-Control: no-cache
+
+/app/index.html
+  Cache-Control: no-cache
+
+/app/sw.js
+  Cache-Control: no-cache
+
+/app/manifest.webmanifest
+  Cache-Control: no-cache
+
+/app/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 节假日 JSON（架构 5.4“响应头 no-cache”；B2 FA-3 安全审查 FA3-1）：每次回源核对，不靠 Pages 的默认缓存头
+/app/holidays/*
+  Cache-Control: no-cache
+
+# 预览沙箱（5.13 第 3 点、第四轮安全 L1）：单独一套 CSP，只能被 App 自己嵌入
+# Pages 会把 /app/preview.html 308 到 /app/preview（B0 实测），真正返回页面的是后者；两条都写
+/app/preview
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'
+  Cache-Control: no-cache
+
+/app/preview.html
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'
+  Cache-Control: no-cache
+
+# 登录页（15.6 第 4b 条；入口 src/auth/index.html，B1 K4 建）：只有这里放行 Turnstile（script-src、frame-src 加 challenges.cloudflare.com）
+# 其余指令和 /app/* 那条一样，只是 frame-src 换成只放 Turnstile（登录页不嵌预览沙箱、不嵌 Office 预览）。断言见 tests/build/auth-headers.test.ts、tests/e2e/csp.spec.ts（T5）
+/app/auth/*
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' {{WSS}}; worker-src 'self'; font-src 'self'; manifest-src 'self'; frame-src https://challenges.cloudflare.com; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
+
+# 登录页的 HTML 不缓存（Pages 会把 /app/auth/index.html 308 到 /app/auth/，两条都写）
+/app/auth/
+  Cache-Control: no-cache
+
+/app/auth/index.html
+  Cache-Control: no-cache

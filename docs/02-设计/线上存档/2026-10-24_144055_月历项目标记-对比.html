@@ -1,0 +1,1094 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>月历项目标记</title>
+<style>
+/* ================= 设计令牌（由脚本生成，组件只引用这些变量） ================= */
+body[data-skin="simple"][data-mode="light"], body .th-simple-light{--bg:#E9EAEE;--scr-bg:#E9EAEE;--panel:#FFFFFF;--panel-2:#F0F1F4;--line:#ECEDF0;--text:#141518;--text-2:#595C64;--accent:#F2DF4A;--on-accent:#141518;--ink:#141518;--on-ink:#FFFFFF;--danger-text:#B0291F;--danger-bg:#FBE2DF;--now-bg:#141518;--now-fg:#FFFFFF;--now-fg2:#C5C8CF;--now-track:#383A41;--now-prog:#F2DF4A;--alert-ring:#F2DF4A;--hol-bg:#EEEFF2;--today-bg:#141518;--today-fg:#FFFFFF;--chip-on-bg:#141518;--chip-on-fg:#FFFFFF;--step-off:#D3D5DB;--nowline:#141518;--nowline-glow:none;--nowpill-bg:#141518;--nowpill-fg:#F2DF4A;--nav-bg:rgba(20,21,24,.7);--nav-fg:#FFFFFF;--nav-active-bg:#FFFFFF;--nav-active-fg:#141518;--fab-bg:#F2DF4A;--fab-fg:#141518;--abar-bg:#141518;--abar-fg:#FFFFFF;--toast-bg:#141518;--toast-fg:#FFFFFF;--toast-fg2:#C5C8CF;--toast-track:#383A41;--sheet-bg:#FFFFFF;--scrim:rgba(20,21,24,.32);--scrim-blur:6px;--rec-dot:#E5483B;--rec-dot-halo:rgba(229,72,59,.18);--wave:#141518;--mic-bg:#141518;--mic-fg:#FFFFFF;--mic-halo:rgba(20,21,24,.10);--mic-halo2:rgba(20,21,24,.05);--glass-blur:0px;--glass-sat:100%;--glass-bg:#FFFFFF;--glass-border:transparent;--glass-solid:#FFFFFF;--shadow-1:none;--shadow-2:0 10px 30px rgba(20,21,24,.14);--mid-bg:#E2E3E8;--rail-bg:#E9EAEE;--wbar-bg:#E9EAEE;--login-bg:radial-gradient(80% 50% at 85% 0%, rgba(242,223,74,.45), transparent 70%), radial-gradient(60% 40% at 0% 100%, rgba(242,223,74,.22), transparent 70%), #F3F4F6;--inp-line:#D9DBE0;--ok-text:#1C7A43;--wbar-solid:#E3E4E8;--p1:#F2DF4A;--p1s:#857200;--p2:#8CC9E8;--p2s:#1F77A6;--p3:#F5B5AC;--p3s:#B8473C;--p4:#C8B9F2;--p4s:#6A4FC4;--p5:#A6DCB4;--p5s:#23794A;--p6:#F6C48C;--p6s:#A35D10;--on-p:#141518;--r-xl:28px;--r-lg:20px;--r-md:14px;--r-sm:10px;--r-pill:999px;--dur-press:120ms;--dur-ui:220ms;--dur-sheet:380ms;--ease-standard:cubic-bezier(.2,0,0,1);--ease-spring:cubic-bezier(.34,1.32,.64,1);--f-num:"Manrope", "SF Pro Rounded", -apple-system, "Segoe UI Variable Display", "Segoe UI", sans-serif;--f-zh:-apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;--f-ko:"Apple SD Gothic Neo", "Malgun Gothic", -apple-system, "PingFang SC", sans-serif;--focus:#2F7BF5}
+body[data-skin="simple"][data-mode="dark"], body .th-simple-dark{--bg:#111215;--scr-bg:#111215;--panel:#1C1D22;--panel-2:#28292F;--line:#2A2B31;--text:#F2F3F5;--text-2:#A6A9B1;--accent:#F2DF4A;--on-accent:#141518;--ink:#F2F3F5;--on-ink:#141518;--danger-text:#FF8F84;--danger-bg:#3A1E1C;--now-bg:#F2DF4A;--now-fg:#141518;--now-fg2:#4A4527;--now-track:rgba(20,21,24,.16);--now-prog:#141518;--alert-ring:#F2F3F5;--hol-bg:#26272D;--today-bg:#F2DF4A;--today-fg:#141518;--chip-on-bg:#F2F3F5;--chip-on-fg:#141518;--step-off:#3A3B42;--nowline:#F2DF4A;--nowline-glow:none;--nowpill-bg:#F2DF4A;--nowpill-fg:#141518;--nav-bg:rgba(38,39,45,.7);--nav-fg:#FFFFFF;--nav-active-bg:#F2F3F5;--nav-active-fg:#141518;--fab-bg:#F2DF4A;--fab-fg:#141518;--abar-bg:#26272D;--abar-fg:#F2F3F5;--toast-bg:#F2F3F5;--toast-fg:#141518;--toast-fg2:#4E5158;--toast-track:#D5D7DC;--sheet-bg:#232429;--scrim:rgba(0,0,0,.5);--scrim-blur:6px;--rec-dot:#FF6B5E;--rec-dot-halo:rgba(255,107,94,.2);--wave:#F2DF4A;--mic-bg:#F2DF4A;--mic-fg:#141518;--mic-halo:rgba(242,223,74,.16);--mic-halo2:rgba(242,223,74,.07);--glass-blur:0px;--glass-sat:100%;--glass-bg:#232429;--glass-border:transparent;--glass-solid:#232429;--shadow-1:none;--shadow-2:0 10px 30px rgba(0,0,0,.45);--mid-bg:#16171B;--rail-bg:#111215;--wbar-bg:#111215;--login-bg:radial-gradient(80% 50% at 85% 0%, rgba(242,223,74,.20), transparent 70%), radial-gradient(60% 40% at 0% 100%, rgba(242,223,74,.08), transparent 70%), #15161A;--inp-line:#3A3B42;--ok-text:#7FD49C;--wbar-solid:#1A1B20;--p1:#D9C641;--p1s:#E6D350;--p2:#78B4D4;--p2s:#8CCBEA;--p3:#DDA096;--p3s:#F0AEA4;--p4:#AE9FDC;--p4s:#BBAAF0;--p5:#8EC49C;--p5s:#9AD6AB;--p6:#DCAA72;--p6s:#EDB97F;--on-p:#141518;--r-xl:28px;--r-lg:20px;--r-md:14px;--r-sm:10px;--r-pill:999px;--dur-press:120ms;--dur-ui:220ms;--dur-sheet:380ms;--ease-standard:cubic-bezier(.2,0,0,1);--ease-spring:cubic-bezier(.34,1.32,.64,1);--f-num:"Manrope", "SF Pro Rounded", -apple-system, "Segoe UI Variable Display", "Segoe UI", sans-serif;--f-zh:-apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;--f-ko:"Apple SD Gothic Neo", "Malgun Gothic", -apple-system, "PingFang SC", sans-serif;--focus:#2F7BF5}
+body[data-skin="glass"][data-mode="light"], body .th-glass-light{--bg:#EFEEE8;--scr-bg:radial-gradient(70% 38% at 12% 4%, rgba(242,223,74,.55), transparent 70%), radial-gradient(50% 30% at 100% 22%, rgba(244,169,160,.26), transparent 70%), radial-gradient(70% 40% at 90% 100%, rgba(242,223,74,.40), transparent 70%), radial-gradient(50% 30% at 0% 78%, rgba(127,191,228,.28), transparent 70%), linear-gradient(165deg, #F5F4EE, #E4E7EC);--panel:#FFFFFF;--panel-2:#F3F2EC;--line:#EEEDE7;--text:#141518;--text-2:#4D5057;--accent:#F2DF4A;--on-accent:#141518;--ink:#141518;--on-ink:#FFFFFF;--danger-text:#B0291F;--danger-bg:#FBE2DF;--now-bg:linear-gradient(135deg, #F7E978, #F2DF4A 55%, #EAD33A);--now-fg:#141518;--now-fg2:#4A4527;--now-track:rgba(20,21,24,.14);--now-prog:#141518;--alert-ring:#141518;--hol-bg:#F5F4EF;--today-bg:#F2DF4A;--today-fg:#141518;--chip-on-bg:#F2DF4A;--chip-on-fg:#141518;--step-off:#DAD9D2;--nowline:#141518;--nowline-glow:0 0 0 3px rgba(242,223,74,.55);--nowpill-bg:#141518;--nowpill-fg:#F2DF4A;--nav-bg:rgba(255,255,255,.7);--nav-fg:#3E4147;--nav-active-bg:#F2DF4A;--nav-active-fg:#141518;--fab-bg:#F2DF4A;--fab-fg:#141518;--abar-bg:var(--glass-bg);--abar-fg:#141518;--toast-bg:var(--glass-solid);--toast-fg:#141518;--toast-fg2:#45484F;--toast-track:rgba(20,21,24,.12);--sheet-bg:var(--glass-bg);--scrim:rgba(245,244,238,.30);--scrim-blur:10px;--rec-dot:#E5483B;--rec-dot-halo:rgba(229,72,59,.18);--wave:#141518;--mic-bg:#F2DF4A;--mic-fg:#141518;--mic-halo:rgba(242,223,74,.35);--mic-halo2:rgba(242,223,74,.16);--glass-blur:22px;--glass-sat:170%;--glass-bg:rgba(255,255,255,.80);--glass-border:rgba(255,255,255,.85);--glass-solid:#F7F6F1;--shadow-1:0 1px 2px rgba(60,52,10,.05);--shadow-2:0 12px 36px rgba(60,52,10,.14);--mid-bg:rgba(255,255,255,.28);--rail-bg:transparent;--wbar-bg:transparent;--login-bg:radial-gradient(70% 38% at 12% 4%, rgba(242,223,74,.55), transparent 70%), radial-gradient(50% 30% at 100% 22%, rgba(244,169,160,.26), transparent 70%), radial-gradient(70% 40% at 90% 100%, rgba(242,223,74,.40), transparent 70%), radial-gradient(50% 30% at 0% 78%, rgba(127,191,228,.28), transparent 70%), linear-gradient(165deg, #F5F4EE, #E4E7EC);--inp-line:#DEDDD6;--ok-text:#1C7A43;--wbar-solid:#ECEBE5;--p1:#F2DF4A;--p1s:#857200;--p2:#8CC9E8;--p2s:#1F77A6;--p3:#F5B5AC;--p3s:#B8473C;--p4:#C8B9F2;--p4s:#6A4FC4;--p5:#A6DCB4;--p5s:#23794A;--p6:#F6C48C;--p6s:#A35D10;--on-p:#141518;--r-xl:28px;--r-lg:20px;--r-md:14px;--r-sm:10px;--r-pill:999px;--dur-press:120ms;--dur-ui:220ms;--dur-sheet:380ms;--ease-standard:cubic-bezier(.2,0,0,1);--ease-spring:cubic-bezier(.34,1.32,.64,1);--f-num:"Manrope", "SF Pro Rounded", -apple-system, "Segoe UI Variable Display", "Segoe UI", sans-serif;--f-zh:-apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;--f-ko:"Apple SD Gothic Neo", "Malgun Gothic", -apple-system, "PingFang SC", sans-serif;--focus:#2F7BF5}
+body[data-skin="glass"][data-mode="dark"], body .th-glass-dark{--bg:#121419;--scr-bg:radial-gradient(70% 38% at 12% 4%, rgba(242,223,74,.20), transparent 70%), radial-gradient(50% 30% at 100% 22%, rgba(244,169,160,.10), transparent 70%), radial-gradient(70% 40% at 90% 100%, rgba(242,223,74,.14), transparent 70%), radial-gradient(50% 30% at 0% 78%, rgba(127,191,228,.12), transparent 70%), linear-gradient(165deg, #1A1C22, #0F1014);--panel:#1E2027;--panel-2:#2A2D35;--line:#2C2F37;--text:#F1F2F4;--text-2:#B4B8C1;--accent:#F2DF4A;--on-accent:#141518;--ink:#F2F3F5;--on-ink:#141518;--danger-text:#FF8F84;--danger-bg:#3A1E1C;--now-bg:linear-gradient(135deg, #3C3617, #2A2919 55%, #1E2027);--now-fg:#F8F4D8;--now-fg2:#CFC9A6;--now-track:rgba(255,255,255,.14);--now-prog:#F2DF4A;--alert-ring:#F2DF4A;--hol-bg:#262930;--today-bg:#F2DF4A;--today-fg:#141518;--chip-on-bg:#F2DF4A;--chip-on-fg:#141518;--step-off:#3A3D46;--nowline:#F2DF4A;--nowline-glow:0 0 10px rgba(242,223,74,.6);--nowpill-bg:#F2DF4A;--nowpill-fg:#141518;--nav-bg:rgba(30,33,42,.7);--nav-fg:#F1F2F4;--nav-active-bg:#F2DF4A;--nav-active-fg:#141518;--fab-bg:#F2DF4A;--fab-fg:#141518;--abar-bg:var(--glass-bg);--abar-fg:#F1F2F4;--toast-bg:var(--glass-solid);--toast-fg:#F1F2F4;--toast-fg2:#D2D5DC;--toast-track:rgba(255,255,255,.16);--sheet-bg:var(--glass-bg);--scrim:rgba(10,11,14,.40);--scrim-blur:10px;--rec-dot:#FF6B5E;--rec-dot-halo:rgba(255,107,94,.2);--wave:#F2DF4A;--mic-bg:#F2DF4A;--mic-fg:#141518;--mic-halo:rgba(242,223,74,.22);--mic-halo2:rgba(242,223,74,.10);--glass-blur:24px;--glass-sat:160%;--glass-bg:rgba(30,33,42,.84);--glass-border:rgba(255,255,255,.14);--glass-solid:#262931;--shadow-1:none;--shadow-2:0 12px 36px rgba(0,0,0,.5);--mid-bg:rgba(255,255,255,.03);--rail-bg:transparent;--wbar-bg:transparent;--login-bg:radial-gradient(70% 38% at 12% 4%, rgba(242,223,74,.20), transparent 70%), radial-gradient(50% 30% at 100% 22%, rgba(244,169,160,.10), transparent 70%), radial-gradient(70% 40% at 90% 100%, rgba(242,223,74,.14), transparent 70%), radial-gradient(50% 30% at 0% 78%, rgba(127,191,228,.12), transparent 70%), linear-gradient(165deg, #1A1C22, #0F1014);--inp-line:#3A3D46;--ok-text:#7FD49C;--wbar-solid:#1A1C22;--p1:#D9C641;--p1s:#E6D350;--p2:#78B4D4;--p2s:#8CCBEA;--p3:#DDA096;--p3s:#F0AEA4;--p4:#AE9FDC;--p4s:#BBAAF0;--p5:#8EC49C;--p5s:#9AD6AB;--p6:#DCAA72;--p6s:#EDB97F;--on-p:#141518;--r-xl:28px;--r-lg:20px;--r-md:14px;--r-sm:10px;--r-pill:999px;--dur-press:120ms;--dur-ui:220ms;--dur-sheet:380ms;--ease-standard:cubic-bezier(.2,0,0,1);--ease-spring:cubic-bezier(.34,1.32,.64,1);--f-num:"Manrope", "SF Pro Rounded", -apple-system, "Segoe UI Variable Display", "Segoe UI", sans-serif;--f-zh:-apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;--f-ko:"Apple SD Gothic Neo", "Malgun Gothic", -apple-system, "PingFang SC", sans-serif;--focus:#2F7BF5}
+body[data-mode="light"]{--doc-bg:#ECEDF0;--doc-fg:#141518;--doc-fg2:#53565D;--doc-card:#FFFFFF;--doc-line:#E2E3E7;--doc-bar:rgba(236,237,240,.86);--doc-seg:#DFE0E5;--doc-ok:#1C7A43;--doc-ng:#B0291F;--doc-frame:transparent}
+body[data-mode="dark"]{--doc-bg:#0E0F12;--doc-fg:#F2F3F5;--doc-fg2:#A9ACB4;--doc-card:#1A1B20;--doc-line:#2A2B31;--doc-bar:rgba(14,15,18,.86);--doc-seg:#24252B;--doc-ok:#7FD49C;--doc-ng:#FF8F84;--doc-frame:rgba(255,255,255,.16)}
+
+/* 减少透明效果：玻璃、导航、遮罩全部换成实色，不模糊。
+   触发方式（R-84）：iPhone 网页读不到系统“降低透明度”，靠“设置 › 皮肤 › 减少透明效果”开关（默认关），App 在 body 上写 data-rt="1"；
+   Windows（exe / Edge）仍自动跟随系统，用下面的媒体查询。本页顶部的勾选框就是模拟 data-rt="1"。 */
+@media (prefers-reduced-transparency: reduce){
+  body[data-skin="glass"]{--glass-bg:var(--glass-solid);--glass-blur:0px;--glass-sat:100%}
+  body[data-skin="simple"][data-mode="light"]{--nav-bg:#141518}body[data-skin="simple"][data-mode="dark"]{--nav-bg:#26272D}body[data-skin="simple"] .tabbar,body[data-skin="glass"] .tabbar.glassy{-webkit-backdrop-filter:none;backdrop-filter:none}body[data-skin="glass"]{--nav-bg:var(--glass-solid)}
+  body .scrim{-webkit-backdrop-filter:none;backdrop-filter:none}body .scrim.lite{background:color-mix(in srgb,var(--bg) 96%,transparent)}body .blurbg{filter:none}
+}
+body[data-rt="1"][data-skin="glass"]{--glass-bg:var(--glass-solid);--glass-blur:0px;--glass-sat:100%}
+body[data-rt="1"][data-skin="simple"][data-mode="light"]{--nav-bg:#141518}body[data-rt="1"][data-skin="simple"][data-mode="dark"]{--nav-bg:#26272D}body[data-rt="1"][data-skin="simple"] .tabbar,body[data-rt="1"][data-skin="glass"] .tabbar.glassy{-webkit-backdrop-filter:none;backdrop-filter:none}body[data-rt="1"][data-skin="glass"]{--nav-bg:var(--glass-solid)}
+body[data-rt="1"] .scrim{-webkit-backdrop-filter:none;backdrop-filter:none}body[data-rt="1"] .scrim.lite{background:color-mix(in srgb,var(--bg) 96%,transparent)}body[data-rt="1"] .blurbg{filter:none}
+/* 减少动态效果（R-93）：去掉位移和缩放，只保留淡入淡出；按下回弹直接取消 */
+@media (prefers-reduced-motion: reduce){
+  body{--dur-press:0ms}
+}
+
+/* ================= 页面外壳（说明文字区，不属于 App） ================= */
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font-family:var(--f-zh);background:var(--doc-bg);color:var(--doc-fg);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px 80px}
+.topbar{position:sticky;top:0;z-index:50;background:var(--doc-bar);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--doc-line)}
+.topbar .in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:16px;margin-right:auto}
+.brand svg{width:28px;height:28px;border-radius:7px}
+.seg{display:inline-flex;background:var(--doc-seg);border-radius:999px;padding:3px}
+.seg button{all:unset;cursor:pointer;font-size:13px;font-weight:700;padding:6px 12px;border-radius:999px;color:var(--doc-fg2);white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--doc-fg);color:var(--doc-bg)}
+.seg button:focus-visible,.chk:focus-within{outline:2px solid var(--focus);outline-offset:2px}
+.chk{display:inline-flex;gap:6px;align-items:center;font-size:13px;color:var(--doc-fg2);cursor:pointer}
+h1.doc{font-size:clamp(28px,5.5vw,44px);line-height:1.15;margin:28px 0 6px;font-weight:800}
+h2.doc{font-size:clamp(22px,4vw,30px);line-height:1.2;margin:48px 0 10px;font-weight:800}
+.lead{max-width:70ch;color:var(--doc-fg2)}
+.dcard{background:var(--doc-card);border-radius:24px;padding:20px 22px;margin-top:14px}
+.dcard h3{margin:0 0 6px;font-size:18px}
+.dcard p,.dcard li{max-width:72ch}
+.dcard ul{margin:6px 0 0;padding-left:1.2em}
+.dcard li{margin:4px 0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:14px}
+.tw{overflow-x:auto;margin-top:8px}
+table.t{border-collapse:collapse;font-size:14px;min-width:720px;width:100%}
+table.t th,table.t td{border-bottom:1px solid var(--doc-line);padding:6px 8px;text-align:left;vertical-align:middle;white-space:nowrap}
+table.t th{font-weight:800;position:sticky;top:0;background:var(--doc-card)}
+table.t td.name{font-weight:700}
+table.t td{white-space:normal;max-width:240px}
+table.t td code{word-break:break-all;font-size:12px}
+table.t td.name{white-space:normal;min-width:200px;max-width:300px}table.t td.name code{white-space:nowrap;word-break:normal}
+.sw{display:inline-block;width:16px;height:16px;border-radius:5px;vertical-align:-3px;margin-right:6px;border:1px solid rgba(128,128,128,.35)}
+.ok{color:var(--doc-ok);font-weight:800}.ng{color:var(--doc-ng);font-weight:800}
+.note{font-size:14px;color:var(--doc-fg2)}
+.screens{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,406px),1fr));gap:28px 22px;margin-top:18px}
+body[data-dev="d"] .screens{grid-template-columns:1fr}
+figure.sc{margin:0;min-width:0}
+figure.sc figcaption{font-size:14px;font-weight:800;margin:10px 0 2px}
+figure.sc .cap2{font-size:13px;color:var(--doc-fg2);font-weight:400;display:block}
+.fit{width:100%;overflow:hidden}
+.fit > .inner{transform-origin:0 0}
+
+/* ================= App：通用 ================= */
+.app{font-family:var(--f-zh);color:var(--text);-webkit-font-smoothing:antialiased;font-size:15px;line-height:1.35}
+.app :lang(ko),.app[lang="ko"]{font-family:var(--f-ko);word-break:keep-all}
+.app[lang="ko"] .date{font-size:28px;white-space:nowrap}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.app button{all:unset;box-sizing:border-box;cursor:pointer}
+.app .muted{color:var(--text-2)}
+.ico{width:20px;height:20px;display:block;flex:none}
+.ico svg{width:100%;height:100%;display:block}
+
+/* 手机外框 */
+.phone{width:406px;border-radius:54px;padding:10px;background:#0c0d10;box-shadow:0 30px 60px rgba(0,0,0,.18),0 0 0 1px var(--doc-frame)}
+.scr.pad2{padding-bottom:200px}
+.scr{position:relative;border-radius:44px;overflow:hidden;background:var(--scr-bg);min-height:844px;padding-bottom:120px}
+.sb{height:50px;display:flex;align-items:center;justify-content:space-between;padding:0 30px 0 34px;font-weight:700;font-size:15px}
+.sb .isl{width:122px;height:34px;border-radius:20px;background:#000;position:absolute;left:50%;top:11px;margin-left:-61px}
+.sb .sig{display:flex;gap:6px;align-items:center;font-size:12px}
+.sb .bat{width:24px;height:12px;border:1.5px solid currentColor;border-radius:4px;position:relative;opacity:.9}
+.sb .bat::after{content:"";position:absolute;inset:2px 6px 2px 2px;background:currentColor;border-radius:1px}
+.pg{padding:6px 16px 0}
+.home{position:absolute;left:50%;bottom:8px;width:134px;height:5px;border-radius:3px;margin-left:-67px;background:var(--text);opacity:.85}
+
+/* 顶部 */
+.hd{display:flex;align-items:flex-start;gap:10px}
+.hd .tt{flex:1;min-width:0}
+.date.pt{font-size:24px}
+.date{font-size:28px;font-weight:700;line-height:1.1;letter-spacing:-.02em}
+.sub{font-size:13px;color:var(--text-2);margin-top:3px}
+.ibtn{width:38px;height:38px;border-radius:50%;background:var(--panel);display:flex;align-items:center;justify-content:center;color:var(--text);flex:none;box-shadow:var(--shadow-1)}
+.av{width:38px;height:38px;border-radius:50%;background:var(--ink);color:var(--on-ink);display:flex;align-items:center;justify-content:center;font-weight:800;flex:none}
+.annchip{display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:var(--panel);border-radius:var(--r-pill);padding:7px 12px;font-size:12px;font-weight:400;box-shadow:var(--shadow-1)}
+.dia{width:9px;height:9px;transform:rotate(45deg);background:var(--accent);box-shadow:inset 0 0 0 1.5px var(--text);display:inline-block;border-radius:1.5px;flex:none}
+
+/* “现在”卡 */
+.now{margin-top:10px;background:var(--now-bg);color:var(--now-fg);border-radius:20px;padding:14px 16px;position:relative}
+.now .k{font-size:12px;color:var(--now-fg2);display:flex;align-items:center;gap:6px}
+.now .ti{font-size:21px;font-weight:700;margin:2px 0 0;letter-spacing:-.01em}
+.now .me{font-size:13px;color:var(--now-fg2)}
+.now .bar{height:6px;border-radius:3px;background:var(--now-track);margin:10px 0 8px;overflow:hidden}
+.now .bar i{display:block;height:100%;width:86%;background:var(--now-prog);border-radius:3px}
+.now .nx{font-size:13px;border-top:1px solid var(--now-track);padding-top:8px}
+.now.alert{box-shadow:0 0 0 4px var(--alert-ring)}
+.now.alert .ti{font-size:21px}
+.now .k .ico{width:13px;height:13px}
+
+/* 没赶上 */
+.od{margin-top:10px;line-height:1.25;background:transparent;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--danger-text) 75%,transparent);border-radius:16px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.od .lbl{font-size:12px;font-weight:700;color:var(--danger-text)}
+.od .t1{font-weight:700;font-size:14px}
+.od .t2{font-size:12px;color:var(--text-2);margin-top:1px}.od em{font-style:normal;color:var(--danger-text);font-weight:700}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:44px;padding:0 16px;border-radius:var(--r-pill);font-weight:600;font-size:15px;white-space:nowrap;transition:transform var(--dur-press) var(--ease-spring)}
+.btn.sm{height:32px;padding:0 14px;font-size:12px}
+/* 触控区：可点元素最小点击区 44×44（令牌 --hit:44px）。看得见的尺寸小于 44 的，用不可见的伪元素向外扩 */
+.app{--hit:44px}
+.btn.sm,.mo,.ibtn,.av,.chip,.toast .btn,.segc span,.cat.tap,.tgl{position:relative}
+.btn.sm::after,.mo::after,.ibtn::after,.av::after,.chip::after,.toast .btn::after,.segc span::after,.cat.tap::after,.tgl::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,var(--hit));height:max(100%,var(--hit));transform:translate(-50%,-50%)}
+body[data-hit="1"] .btn.sm::after,body[data-hit="1"] .mo::after,body[data-hit="1"] .ibtn::after,body[data-hit="1"] .av::after,body[data-hit="1"] .chip::after,body[data-hit="1"] .toast .btn::after,body[data-hit="1"] .segc span::after,body[data-hit="1"] .tgl::after{outline:1.5px dashed #2F7BF5;outline-offset:-1px}
+.btn.pri{background:var(--accent);color:var(--on-accent)}
+.btn.out{box-shadow:inset 0 0 0 1.5px var(--text);color:var(--text)}
+.btn.soft{background:var(--panel-2);color:var(--text)}
+.btn.w{display:flex;width:100%}
+.fold{font-size:13px;color:var(--text-2);margin:0 4px;padding:6px 0}
+
+/* 时间河 */
+.panel{background:var(--panel);border-radius:var(--r-xl);box-shadow:var(--shadow-1)}
+.river{margin-top:10px;padding:6px 14px 8px}
+.row{display:grid;grid-template-columns:52px 16px 1fr 28px;align-items:center;gap:0 10px;min-height:62px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row .tm{font-size:13px;font-weight:600}
+.row .tm.s{font-size:13px;font-weight:600;color:var(--text-2)}
+.row .tx{min-width:0;padding:10px 0}
+.row .t1{font-weight:600;font-size:15px;line-height:1.3}
+.row .t2{font-size:12px;color:var(--text-2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .mo{color:var(--text-2);font-weight:800;letter-spacing:1px;text-align:center}
+.mk{width:5px;height:30px;border-radius:3px;background:var(--pc)}
+.mc{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--pc)}
+.mn{width:16px;height:19px;border-radius:3px;box-shadow:inset 0 0 0 2px var(--text-2);position:relative}
+.mn::after{content:"";position:absolute;left:4px;right:4px;top:6px;height:2px;background:var(--text-2);box-shadow:0 4px 0 var(--text-2)}
+.nowline{display:flex;align-items:center;gap:8px;margin:2px 0}
+.nowline b{font-family:var(--f-num);font-size:12px;background:var(--nowpill-bg);color:var(--nowpill-fg);border-radius:999px;padding:2px 8px}
+.nowline i{flex:1;height:2px;background:var(--nowline);border-radius:1px;box-shadow:var(--nowline-glow)}
+.secth{display:flex;justify-content:space-between;align-items:baseline;margin:14px 4px 6px;font-size:12px;font-weight:600}
+.secth a{font-weight:400;color:var(--text-2)}
+.newtag{font-size:11px;font-weight:800;background:var(--accent);color:var(--on-accent);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.row.hl{box-shadow:0 0 0 2.5px var(--text);border-radius:16px;border-bottom-color:transparent;margin:4px -6px;padding:0 6px}
+
+/* 底部贴底元素，位置和定稿线框一致：导航离底 42px（安全区 34 + 8）；“＋”离底 40px（66 高，与 62 高的导航中线对齐）；
+   提醒按钮条、提示条离底 118px（42 + 62 + 14），输入行 116px。
+   透明效果按现状（R-79、R-80、R-89）：底部导航 70% 不透明＋模糊 6px；“＋”实色柠檬黄；提示条实色（--glass-solid，不模糊）；
+   提醒按钮条在磨砂玻璃里保持半透明玻璃（R-89，有意和提示条不同）；弹层、录音面板是玻璃。减少透明效果时全部实色。 */
+.glass{background:var(--glass-bg);-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));box-shadow:inset 0 0 0 1px var(--glass-border),var(--shadow-2)}
+.tabbar{position:absolute;left:14px;bottom:42px;right:94px;height:62px;border-radius:var(--r-pill);background:var(--nav-bg);-webkit-backdrop-filter:blur(6px) saturate(140%);backdrop-filter:blur(6px) saturate(140%);display:flex;align-items:center;padding:5px;gap:2px;z-index:5}
+.tabbar.glassy{-webkit-backdrop-filter:blur(6px) saturate(var(--glass-sat));backdrop-filter:blur(6px) saturate(var(--glass-sat));box-shadow:inset 0 0 0 1px var(--glass-border),var(--shadow-2)}
+.tab{flex:1;height:52px;border-radius:var(--r-pill);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--nav-fg);font-size:11px;font-weight:400}
+.tab .ico{width:20px;height:20px}
+.tab.on{background:var(--nav-active-bg);color:var(--nav-active-fg);font-weight:600}
+.fab{position:absolute;right:14px;bottom:40px;width:66px;height:66px;border-radius:50%;background:var(--fab-bg);color:var(--fab-fg);display:flex;align-items:center;justify-content:center;z-index:5;box-shadow:inset 0 0 0 1px var(--glass-border),var(--shadow-2)}
+.fab .ico{width:28px;height:28px}
+.dock{position:absolute;left:14px;right:14px;z-index:6}
+
+/* 提醒按钮条 */
+.abar{bottom:118px;border-radius:var(--r-xl);padding:8px;display:flex;gap:8px;background:var(--abar-bg)}
+.abar .btn{flex:1;padding:0 8px;font-size:13px}
+.abar .btn.out{box-shadow:inset 0 0 0 1.5px var(--abar-fg);color:var(--abar-fg)}
+
+/* 提示条 */
+.toast{box-shadow:var(--shadow-2);bottom:118px;border-radius:var(--r-xl);padding:14px 14px 12px 16px;background:var(--toast-bg);color:var(--toast-fg)}
+.toast .r{display:flex;align-items:center;gap:8px}
+.toast .t1{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast .t2{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--toast-fg2);margin-top:2px}
+.toast .btn{height:36px;padding:0 12px;font-size:14px;font-weight:400;box-shadow:inset 0 0 0 1.5px var(--toast-fg);color:var(--toast-fg)}
+.toast .pr{height:3px;border-radius:2px;background:var(--toast-track);margin-top:10px;overflow:hidden}
+.toast .pr i{display:block;height:100%;width:55%;background:var(--toast-fg)}
+
+/* 弹层、遮罩 */
+.scrim{position:absolute;inset:0;background:var(--scrim);-webkit-backdrop-filter:blur(var(--scrim-blur));backdrop-filter:blur(var(--scrim-blur));z-index:7}
+.blurbg{filter:blur(5px);pointer-events:none}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;border-radius:34px 34px 0 0;background:var(--sheet-bg);padding:18px 20px 40px}
+.sheet.glassy,.card-ov.glassy{-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));box-shadow:inset 0 0 0 1px var(--glass-border),var(--shadow-2)}
+.card-ov{position:absolute;left:24px;right:24px;z-index:8;border-radius:30px;background:var(--sheet-bg);padding:26px 22px 20px;text-align:center}
+
+/* 录音面板 */
+.rec .hdr{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700}
+.rec .dot{width:9px;height:9px;border-radius:50%;background:var(--rec-dot);display:inline-block;margin-right:6px;box-shadow:0 0 0 4px var(--rec-dot-halo)}
+.rec h4{margin:14px 0 2px;font-size:21px;font-weight:600}
+.wave{display:flex;align-items:center;gap:3px;height:56px;margin:14px 0 6px}
+.wave i{display:block;width:4px;border-radius:2px;background:var(--wave)}
+.zone{border:2px dashed var(--text-2);border-radius:20px;height:62px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--text)}
+.micbtn{position:absolute;right:14px;bottom:42px;width:88px;height:88px;border-radius:50%;background:var(--mic-bg);color:var(--mic-fg);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 14px var(--mic-halo),0 0 0 28px var(--mic-halo2)}
+.micbtn .ico{width:36px;height:36px}
+
+/* 胶囊筛选 */
+.chips{display:flex;gap:8px;overflow:hidden;margin-top:12px}
+.chip{flex:none;height:36px;padding:0 14px;border-radius:999px;background:var(--panel);display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:400;box-shadow:var(--shadow-1)}
+.chip.on{background:var(--chip-on-bg);color:var(--chip-on-fg)}
+.chip .d{width:8px;height:8px;border-radius:50%;background:var(--pc)}
+.grp{font-size:12px;font-weight:600;margin:16px 4px 6px}
+.grp.dg{color:var(--danger-text)}
+.lst{padding:2px 14px}
+.lrow{display:grid;grid-template-columns:24px 1fr auto 28px;align-items:center;gap:10px;min-height:60px;border-bottom:1px solid var(--line)}
+.lrow:last-child{border-bottom:0}
+.lrow .t1{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lrow .t2{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-2);margin-top:2px}
+.lrow .mo{color:var(--text-2);font-weight:800;text-align:center}
+
+/* 月历 */
+.segc{display:flex;background:var(--panel-2);border-radius:999px;padding:4px;margin-top:12px}
+.segc span{flex:1;text-align:center;height:36px;line-height:36px;border-radius:999px;font-size:13px;font-weight:400;color:var(--text-2)}
+.segc span.on{background:var(--chip-on-bg);color:var(--chip-on-fg);font-weight:600}
+.mgrid{margin-top:12px;padding:10px 6px 8px}
+.mgrid .wk,.mgrid .wkr{display:grid;grid-template-columns:repeat(7,1fr)}
+.mgrid .wk span{text-align:center;font-size:12px;color:var(--text-2);padding:2px 0 6px}
+.cell{min-height:66px;text-align:center;padding:6px 0 4px;border-radius:12px;margin:1px}
+.cell.h{background:var(--hol-bg)}
+.cell .d{font-family:var(--f-num);font-weight:600;font-size:16px;width:32px;height:32px;line-height:32px;margin:0 auto;border-radius:50%}
+.cell.o .d,.cell.o .l{color:var(--text-2);font-weight:600}
+.cell .l{font-size:11px;color:var(--text-2);line-height:1.2}
+.cell .l.f{color:var(--text);font-weight:700}
+.cell .n{font-size:11px;font-weight:600;line-height:1.2}
+.cell.td .d{background:var(--today-bg);color:var(--today-fg)}
+.legend{font-size:11.5px;color:var(--text-2);padding:8px 8px 2px;display:flex;gap:14px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:6px}
+
+/* 随手记 */
+.vt{display:flex;background:var(--panel);border-radius:14px;padding:3px;box-shadow:var(--shadow-1)}
+.vt > span{width:40px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:var(--text)}
+.vt > span.on{background:var(--chip-on-bg);color:var(--chip-on-fg)}
+.lockrow{margin-top:12px;display:flex;align-items:center;gap:10px;padding:0 16px;height:52px;font-size:14px}
+.merge{margin-top:10px;display:flex;align-items:center;gap:8px;padding:10px 12px 10px 16px;border-radius:var(--r-lg);background:var(--panel-2);font-size:12px}
+.thumb{width:44px;height:44px;border-radius:12px;flex:none}
+.inrow{font-size:14px;position:absolute;left:14px;right:14px;bottom:116px;height:56px;border-radius:var(--r-lg);background:var(--panel);display:flex;align-items:center;padding:0 8px 0 18px;gap:8px;color:var(--text-2);z-index:4;box-shadow:var(--shadow-2)}
+.mason{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;align-items:start}
+.mcard{border-radius:22px;overflow:hidden;background:var(--panel);box-shadow:var(--shadow-1)}
+.mcard .im{aspect-ratio:16/10;position:relative}
+.mcard .im b{position:absolute;right:8px;top:8px;background:rgba(20,21,24,.78);color:#fff;font-size:11px;border-radius:8px;padding:1px 6px}
+.mcard .bd{padding:10px 12px 10px}
+.mcard .t1{font-weight:700;font-size:14px;line-height:1.35}
+.mcard .t2{font-size:12px;color:var(--text-2);margin-top:4px;line-height:1.45}
+.mcard .ft{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--text-2);white-space:nowrap}
+.mcard .ft .cat{flex:none;font-size:11px;padding:0 7px}
+.mcard .ft .num{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cat{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:var(--panel-2);color:var(--text);font-size:11px;font-weight:400}
+
+/* 隐私记、设置、引导 */
+.lockic{width:44px;height:52px;margin:0 auto;color:var(--text)}
+.set{padding:0 16px}
+.srow{display:flex;align-items:center;gap:10px;min-height:50px;border-bottom:1px solid var(--line);font-size:13px}
+.srow:last-child{border-bottom:0}
+.srow .v{margin-left:auto;color:var(--text-2);font-size:13px;text-align:right}
+.chev{color:var(--text-2);font-weight:700}
+.stepbar{display:flex;gap:6px;justify-content:center;margin:10px 0 0}
+.stepbar i{width:28px;height:5px;border-radius:3px;background:var(--step-off)}
+.stepbar i.on{background:var(--text)}
+.sym{display:grid;grid-template-columns:44px 1fr;gap:2px 12px;align-items:center;padding:10px 18px;border-bottom:1px solid var(--line)}
+.sym:last-child{border-bottom:0}
+.sym .c{display:flex;justify-content:center}
+
+
+/* 登录与 Safari 引导：沿用图标和启动画面的“柠檬光 + 玻璃圆片” */
+.scr.fix{height:844px;min-height:0;padding-bottom:0}
+.scr.login{background:var(--login-bg);padding-bottom:40px}
+.lhero{text-align:center;padding:34px 0 8px}
+.lhero svg{width:96px;height:96px;border-radius:22px;box-shadow:var(--shadow-2)}
+.lhero .nm{font-size:34px;font-weight:800;margin-top:14px;letter-spacing:.02em}
+.lhero .en{font-family:var(--f-num);font-weight:700;color:var(--text-2);font-size:15px}
+.lhero .tag{font-size:15px;margin-top:10px}
+.form{margin-top:22px;padding:18px 18px 16px}
+.lab{font-size:12.5px;color:var(--text-2);margin:2px 2px 6px}
+.inp{height:52px;border-radius:16px;background:var(--panel-2);display:flex;align-items:center;padding:0 16px;font-size:16px;box-shadow:inset 0 0 0 1.5px var(--inp-line)}
+.inp.focus{box-shadow:inset 0 0 0 2px var(--text)}
+.otp{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.otp span{height:56px;border-radius:14px;background:var(--panel-2);display:flex;align-items:center;justify-content:center;font-family:var(--f-num);font-size:24px;font-weight:800;box-shadow:inset 0 0 0 1.5px var(--inp-line)}
+.otp span.f{box-shadow:inset 0 0 0 2px var(--text)}
+.otp span.cur{box-shadow:inset 0 0 0 2px var(--text),0 0 0 4px var(--accent)}
+.okline{font-size:12.5px;color:var(--ok-text);font-weight:700;margin:6px 2px 0}
+.stepn{width:28px;height:28px;border-radius:50%;background:var(--chip-on-bg);color:var(--chip-on-fg);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:none}
+.sbar{position:absolute;left:0;right:0;bottom:0;height:92px;background:var(--glass-solid);border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:flex-start;padding-top:14px;color:var(--text-2);font-size:20px;z-index:3}
+.mini{border-radius:16px;background:var(--panel);padding:10px;font-size:12px;box-shadow:var(--shadow-1)}
+.mini .bar{display:flex;justify-content:space-around;align-items:center;background:var(--panel-2);border-radius:10px;height:34px;color:var(--text-2);margin-bottom:6px}
+.mini .hl{width:26px;height:26px;border-radius:8px;box-shadow:inset 0 0 0 2px var(--text);display:flex;align-items:center;justify-content:center;color:var(--text)}
+.web{width:1280px;height:800px;border-radius:14px;overflow:hidden;position:relative;box-shadow:0 30px 60px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.25);background:var(--panel)}
+.bchrome{height:78px;background:var(--wbar-solid);border-bottom:1px solid var(--line)}
+.bchrome .tabs{height:38px;display:flex;align-items:flex-end;padding:0 10px}
+.bchrome .tab1{height:32px;border-radius:10px 10px 0 0;background:var(--panel);display:flex;align-items:center;gap:8px;padding:0 14px;font-size:12px;width:230px}
+.bchrome .tab1 svg{width:16px;height:16px;border-radius:4px}
+.bchrome .addr{height:40px;display:flex;align-items:center;padding:0 14px;gap:12px;color:var(--text-2);font-size:13px}
+.bchrome .addr span.u{flex:1;height:30px;border-radius:15px;background:var(--panel-2);display:flex;align-items:center;padding:0 14px}
+.wgrid{display:grid;grid-template-columns:1fr 1fr;height:722px}
+.wleft{background:var(--login-bg);padding:72px 64px;position:relative;overflow:hidden}
+.wleft .disc{position:absolute;right:-90px;bottom:-110px;width:460px;height:460px;opacity:.9}
+.wright{display:flex;align-items:center;justify-content:center;background:var(--scr-bg)}
+
+
+/* ================= 官网首页 ================= */
+.site{background:var(--scr-bg);color:var(--text);font-family:var(--f-zh);line-height:1.5}
+.site.ph{width:390px}.site.pc{width:1280px}
+.site .sbarw{height:92px;background:var(--wbar-solid);display:flex;flex-direction:column;justify-content:flex-end;padding:0 14px 10px;border-bottom:1px solid var(--line)}
+.site .sbarw .u{height:36px;border-radius:12px;background:var(--panel-2);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text)}
+.snav{display:flex;align-items:center;gap:10px;padding:14px 18px}
+.snav svg{width:32px;height:32px;border-radius:8px}
+.snav b{font-size:17px}
+.snav .lk{margin-left:auto;display:flex;gap:18px;align-items:center;font-size:14px;font-weight:700}
+.shero{background:var(--login-bg);padding:18px 18px 34px;position:relative;overflow:hidden}
+.pc .shero{padding:40px 72px 64px;display:grid;grid-template-columns:1fr 520px;gap:40px;align-items:center}
+.shero .big{font-size:44px;font-weight:800;line-height:1.08;margin-top:16px;letter-spacing:.01em}
+.pc .shero .big{font-size:68px}
+.shero .en{font-family:var(--f-num);font-weight:700;color:var(--text-2);font-size:16px;margin-top:6px}
+.shero .tag{font-size:22px;font-weight:800;margin-top:18px;line-height:1.35}
+.pc .shero .tag{font-size:30px}
+.shero .ds{font-size:15px;color:var(--text-2);margin-top:8px;max-width:440px}
+.shero .cta{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}
+.shero .cta .btn{height:52px;padding:0 26px;font-size:16px}
+.visual{position:relative;margin-top:26px;height:430px}
+.pc .visual{margin-top:0;height:560px}
+.say{position:absolute;left:0;top:0;max-width:300px;background:var(--panel);border-radius:22px 22px 22px 6px;padding:12px 14px;font-size:14px;box-shadow:var(--shadow-2);z-index:3}
+.say .k{font-size:11.5px;color:var(--text-2);margin-bottom:2px;display:flex;align-items:center;gap:6px}
+.vphone{position:absolute;right:0;top:66px;width:230px;border-radius:36px;padding:7px;background:#0c0d10;box-shadow:0 20px 40px rgba(0,0,0,.2)}
+.pc .vphone{width:290px;right:10px;top:80px}
+.vphone .in{border-radius:30px;overflow:hidden;background:var(--scr-bg);height:420px;position:relative}
+.pc .vphone .in{height:470px}
+.split{position:absolute;left:0;bottom:0;width:250px;display:grid;gap:8px;z-index:3}
+.pc .split{width:300px;bottom:30px}
+.ph .visual{height:400px}
+.ph .vphone{width:186px;top:86px}
+.ph .vphone .in{height:300px}
+.ph .split{width:196px;bottom:6px}
+.ph .say{max-width:270px}
+.split .it{background:var(--panel);border-radius:16px;padding:10px 12px;display:grid;grid-template-columns:18px 1fr;gap:2px 10px;align-items:center;box-shadow:var(--shadow-2)}
+.split .it .t1{font-weight:800;font-size:13.5px}
+.split .it .t2{font-size:11.5px;color:var(--text-2);grid-column:2}
+.arrow{position:absolute;left:120px;top:96px;width:2px;height:160px;background:repeating-linear-gradient(180deg,var(--text-2) 0 6px,transparent 6px 12px)}
+.ssec{padding:34px 18px 8px}
+.pc .ssec{padding:64px 72px 16px}
+.ssec h3{font-size:26px;font-weight:800;margin:0 0 6px;line-height:1.25}
+.pc .ssec h3{font-size:36px}
+.ssec .ld{color:var(--text-2);font-size:15px;max-width:560px}
+.feats{display:grid;gap:12px;margin-top:18px}
+.pc .feats{grid-template-columns:repeat(3,1fr);gap:16px}
+.feat{background:var(--panel);border-radius:var(--r-xl);padding:16px;box-shadow:var(--shadow-1);overflow:hidden}
+.feat.wide{grid-column:span 2}
+.feat .il{border-radius:18px;background:var(--panel-2);padding:12px;min-height:118px;margin-bottom:12px;overflow:hidden;position:relative}
+.feat h4{margin:0;font-size:17px;font-weight:800}
+.feat p{margin:4px 0 0;font-size:14px;color:var(--text-2)}
+.mrow{display:flex;align-items:center;gap:8px;background:var(--panel);border-radius:12px;padding:7px 10px;font-size:12.5px;font-weight:700;margin-top:6px}
+.mrow:first-child{margin-top:0}
+.mrow small{font-weight:400;color:var(--text-2);margin-left:auto;font-size:11px}
+.mcal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center;font-size:11px}
+.mcal span{background:var(--panel);border-radius:7px;padding:3px 0;line-height:1.2}
+.mcal span.h{background:var(--hol-bg);font-weight:800}
+.mcal span.td{background:var(--today-bg);color:var(--today-fg);font-weight:800}
+.mcal span em{display:block;font-style:normal;font-size:9.5px;color:var(--text-2)}
+.mcal span.td em{color:inherit}
+.steps{display:grid;gap:10px;margin-top:16px}
+.pc .steps{grid-template-columns:1fr 1fr;gap:16px}
+.inst{background:var(--panel);border-radius:var(--r-xl);padding:18px}
+.inst .s{display:flex;gap:12px;align-items:flex-start;margin-top:12px;font-size:14.5px}
+.btn.dis{background:var(--panel-2);color:var(--text-2);cursor:not-allowed}
+.invite{background:var(--now-bg);color:var(--now-fg);border-radius:var(--r-xl);padding:20px;margin-top:16px}
+.invite p{margin:6px 0 0;color:var(--now-fg2);font-size:14px}
+.sfoot{padding:28px 18px 34px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;font-size:13.5px;color:var(--text-2);border-top:1px solid var(--line);margin-top:30px}
+.pc .sfoot{padding:28px 72px 40px}
+.lang{display:inline-flex;background:var(--panel-2);border-radius:999px;padding:3px;margin-left:auto}
+.lang span{padding:5px 12px;border-radius:999px;font-weight:700;font-size:13px}
+.lang span.on{background:var(--chip-on-bg);color:var(--chip-on-fg)}
+
+/* ================= 电脑 1280 ================= */
+.desk{width:1280px;height:800px;border-radius:14px;overflow:hidden;background:var(--scr-bg);position:relative;box-shadow:0 30px 60px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.25)}
+.wbar{height:36px;display:flex;align-items:center;gap:8px;padding:0 0 0 14px;font-size:12px;color:var(--text-2);background:var(--wbar-bg)}
+.wbar svg{width:16px;height:16px;border-radius:4px}
+.wbar .ctl{margin-left:auto;display:flex}
+.wbar .ctl span{width:46px;height:36px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.dgrid{display:grid;grid-template-columns:88px 480px 1fr 352px;height:764px}
+.dgrid.two{grid-template-columns:88px 1fr 380px}
+.dgrid.one{grid-template-columns:88px 1fr}
+.dgrid.zero{grid-template-columns:1fr}
+.rail{display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:6px;background:var(--rail-bg)}
+.rail .fabd{width:56px;height:56px;border-radius:50%;background:var(--fab-bg);color:var(--fab-fg);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--glass-border),var(--shadow-2)}
+.rail .hint{font-size:10.5px;color:var(--text-2);text-align:center;line-height:1.3;margin:4px 0 10px}
+.rail .rt{width:68px;height:58px;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11.5px;font-weight:700;color:var(--text-2)}
+.rail .rt.on{background:var(--nav-active-bg);color:var(--nav-active-fg)}
+.rail .sp{flex:1}
+.col{padding:20px 22px;overflow:hidden;position:relative}
+.col.mid{background:var(--mid-bg)}
+.col.ed{background:var(--panel);border-left:1px solid var(--line)}
+.fld{margin-top:12px}
+.fld .k{font-size:12px;color:var(--text-2);margin-bottom:4px}
+.fld .v{background:var(--panel-2);border-radius:12px;padding:10px 12px;font-size:14px}
+.wkbars{display:flex;align-items:flex-end;gap:10px;height:96px;padding:12px 14px 0}
+.wkbars i{flex:1;border-radius:8px;background:var(--panel-2)}
+.wkbars i.on{background:var(--today-bg)}
+.wkl{display:flex;gap:10px;padding:6px 14px 12px}
+.wkl span{flex:1;text-align:center;font-size:11.5px;color:var(--text-2)}
+.wkl span b{display:block;font-family:var(--f-num);color:var(--text);font-size:13px}
+.anc{border-radius:20px;padding:12px 14px}
+.kbd{display:inline-block;border-radius:6px;box-shadow:inset 0 0 0 1px var(--text-2);padding:0 5px;font-size:11px;color:var(--text)}
+.dtoast{position:absolute;left:22px;right:22px;bottom:22px}
+.dtoast .r{flex-wrap:wrap}
+.dtoast .r > div{flex:1 1 100% !important}
+.dtoast .r .btn{height:40px;padding:0 16px;margin-top:8px}
+.dtoast .r .btn:first-of-type{margin-left:auto}
+.dwin{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:8;border-radius:30px;background:var(--sheet-bg);padding:24px 26px}
+
+/* 对齐定稿线框（R-77）：今天页时间河、待办列表直接铺在底色上 */
+.flat{background:transparent;box-shadow:none;padding:0;margin-top:0;border-radius:0}
+.flat .row,.flat .lrow{border-bottom:0}
+.flat .row.hl{background:var(--panel)}
+.btn.soft{font-weight:400}
+.alertpg > .secth,.alertpg > .secth + .river{display:none}
+/* 左滑示范 */
+.swp{position:relative;overflow:hidden}
+.swp .acts{position:absolute;right:0;top:0;bottom:0;display:flex}
+.swp .acts span{width:56px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;line-height:1.3;background:var(--text-2);color:var(--panel)}
+.swp .acts span.del{background:var(--ink);color:var(--on-ink)}
+.desk .swp .acts{display:none}.desk .swp .lrow{margin-right:0!important}
+/* 隐私记解锁：浅色磨砂遮罩 */
+.scrim.lite{background:color-mix(in srgb,var(--bg) 80%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+body[data-rt="1"] .scrim.lite{background:color-mix(in srgb,var(--bg) 96%,transparent);-webkit-backdrop-filter:none;backdrop-filter:none}
+
+/* ===== 第七轮补画用到的零件 ===== */
+/* 开关（设置里的“减少透明效果”等） */
+.tgl{width:46px;height:28px;border-radius:999px;background:var(--step-off);flex:none;margin-left:auto}
+.tgl::before{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.tgl.on{background:var(--ink)}.tgl.on::before{left:21px;background:var(--on-ink)}
+body[data-skin="glass"] .tgl.on{background:var(--accent)}body[data-skin="glass"] .tgl.on::before{background:#141518}
+.snote{font-size:12px;color:var(--text-2);margin:8px 6px 0;line-height:1.45}
+/* 其他页面的提醒：顶部横幅（实色面板，不透明，保证标题清楚） */
+.tban{position:absolute;left:10px;right:10px;top:54px;z-index:9;background:var(--panel);border-radius:24px;padding:12px 14px 8px;box-shadow:var(--shadow-2),inset 0 0 0 1.5px var(--text)}
+.tban .k{font-size:12px;color:var(--text-2)}
+.tban .t{font-size:16px;font-weight:700}
+.tban .grab{width:36px;height:4px;border-radius:2px;background:var(--step-off);margin:8px auto 0}
+/* 可点的完成圆圈（提醒横幅、整页提醒里的待办；UI-2 第三轮中 1） */
+.done-c{width:26px;height:26px;border-radius:50%;box-shadow:inset 0 0 0 2.5px var(--pc,var(--text));flex:none;position:relative}
+.done-c::after{content:"";position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
+body[data-hit="1"] .done-c::after{outline:1.5px dashed #2F7BF5}
+/* 断网横幅、未同步的一条 */
+.offban{display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--on-ink);border-radius:16px;padding:9px 12px;font-size:12.5px;margin:4px 0 10px}
+.offban i{width:8px;height:8px;border-radius:50%;background:var(--rec-dot);flex:none}
+.row.sync{border:1.5px dashed var(--text-2);border-radius:14px;padding:0 8px;margin:4px -8px}
+/* 空状态“试一句” */
+.try{border-radius:14px;padding:11px 14px;margin-top:8px;font-size:15px;box-shadow:inset 0 0 0 1.5px var(--text);background:var(--panel)}
+/* 隐私记密码键盘 */
+.pdots{display:flex;gap:16px;justify-content:center;margin:20px 0 22px}
+.pdots i{width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--text)}
+.pdots i.f{background:var(--text)}.pdots i.e{box-shadow:inset 0 0 0 2px var(--text-2);opacity:.6}
+.kpad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 22px;padding:0 26px}
+.kpad span{height:62px;border-radius:50%;background:var(--panel);display:flex;align-items:center;justify-content:center;font-size:26px;font-family:var(--f-num);font-weight:600;box-shadow:var(--shadow-1)}
+.kpad span.e{background:transparent;box-shadow:none;font-size:15px;font-family:var(--f-zh)}
+.abar.four .btn{padding:0 4px;font-size:12.5px}
+/* 整页提醒 */
+.fa-big{font-family:var(--f-num);font-size:64px;font-weight:700;line-height:1.05;letter-spacing:-.03em}
+
+/* ===== 动效演示（R-93）：只动 transform 和 opacity ===== */
+.mdemo{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:18px;margin-top:16px;padding:16px;border-radius:20px;background:var(--bg);color:var(--text)}
+.mdemo .note{color:var(--text-2)}
+.mpress{transition:background-color var(--dur-press) linear}
+.mpress:active{filter:brightness(.92)}
+@media (prefers-reduced-motion: no-preference){
+  .mpress{transition:transform var(--dur-press) var(--ease-spring)}
+  .mpress:active{transform:scale(.96)}
+}
+.mrowd{display:flex;align-items:center;gap:12px;min-height:48px;cursor:pointer;transition:opacity var(--dur-ui) var(--ease-standard) var(--dur-ui)}
+.mrowd input{position:absolute;opacity:0;pointer-events:none}
+.mcirc{width:22px;height:22px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--text);position:relative;flex:none}
+.mcirc::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--text);opacity:0;transition:opacity var(--dur-ui) var(--ease-standard)}
+.mcirc::after{content:"";position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
+.mrowd input:checked + .mcirc::before{opacity:1}
+.mrowd:has(input:checked){opacity:.3}
+.mrowd input:focus-visible + .mcirc{outline:2px solid var(--focus);outline-offset:3px}
+@media (prefers-reduced-motion: no-preference){
+  .mcirc::before{transform:scale(.4);transition:opacity var(--dur-ui) var(--ease-standard),transform var(--dur-ui) var(--ease-spring)}
+  .mrowd input:checked + .mcirc::before{transform:scale(1)}
+}
+
+/* ---- 月历项目标记：3 个方案 ---- */
+.ev{margin-top:3px}
+.ev .more{font-family:var(--f-num);font-size:9.5px;font-weight:700;color:var(--text-2);line-height:1}
+.mv-a .ev{display:flex;justify-content:center;align-items:center;gap:3px;height:9px}
+.mv-a .ev i{width:7px;height:7px;border-radius:50%;background:var(--pc);flex:none}
+.mv-b .ev{display:grid;gap:2px;margin:4px 6px 0}
+.mv-b .ev i{height:4px;border-radius:2px;background:var(--pc)}
+.mv-b .ev .more{text-align:center;margin-top:1px}
+.mv-c .cell{min-height:86px}
+.mv-c .ev{display:grid;gap:2px;margin:3px 2px 0}
+.mv-c .ev i{font-style:normal;display:block;height:15px;line-height:15px;border-radius:4px;padding:0 3px;font-size:9.5px;font-weight:700;color:var(--on-p);text-align:left;white-space:nowrap;overflow:hidden;background:var(--pb);box-shadow:inset 2px 0 0 var(--pc)}
+.mv-c .ev .more{text-align:left;padding-left:3px}
+</style>
+</head>
+<body data-skin="simple" data-mode="light" data-dev="p" data-rt="0" data-hit="0">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="blurB1" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="70"/></filter>
+<filter id="blurB2" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="120"/></filter>
+<filter id="shB" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="40"/></filter>
+<linearGradient id="gL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F5F4EE"/><stop offset="1" stop-color="#E3E6EC"/>
+    </linearGradient>
+<clipPath id="clipL"><circle cx="512" cy="512" r="304"/></clipPath>
+<symbol id="bgL" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">
+      <rect width="1024" height="1024" fill="url(#gL)"/>
+      <g filter="url(#blurB1)">
+        <circle cx="350" cy="330" r="300" fill="#F2DF4A"/>
+        <circle cx="720" cy="720" r="240" fill="#F2DF4A" opacity=".85"/>
+        <circle cx="800" cy="270" r="150" fill="#F4A9A0" opacity=".55"/>
+        <circle cx="240" cy="820" r="160" fill="#7FBFE4" opacity=".45"/>
+      </g>
+    </symbol>
+<symbol id="markL" viewBox="0 0 1024 1024">
+      <ellipse cx="512" cy="850" rx="250" ry="40" fill="#3a3418" opacity=".16" filter="url(#shB)"/>
+      <g clip-path="url(#clipL)">
+        <rect width="1024" height="1024" fill="#f3f2ea"/>
+        <g filter="url(#blurB2)" opacity=".9">
+          <circle cx="350" cy="330" r="300" fill="#F2DF4A"/>
+          <circle cx="720" cy="720" r="240" fill="#F2DF4A" opacity=".85"/>
+          <circle cx="800" cy="270" r="150" fill="#F4A9A0" opacity=".5"/>
+        </g>
+        <rect width="1024" height="1024" fill="#fff" opacity=".40"/>
+      </g>
+      <circle cx="512" cy="512" r="301" fill="none" stroke="#fff" stroke-opacity=".92" stroke-width="7"/>
+      <circle cx="512" cy="512" r="268" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="5"/>
+      <path d="M300 404 A240 240 0 0 1 430 262" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" opacity=".95"/>
+      <rect x="320" y="402" width="96" height="220" rx="48" fill="#141518"/>
+      <rect x="464" y="322" width="96" height="380" rx="48" fill="#141518"/>
+      <rect x="608" y="387" width="96" height="250" rx="48" fill="#141518"/>
+    </symbol>
+<symbol id="icL" viewBox="0 0 1024 1024"><use href="#bgL"/><use href="#markL"/></symbol>
+<symbol id="icLs" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#F2DF4A"/>
+      <circle cx="512" cy="512" r="380" fill="#fff"/>
+      <rect x="282" y="372" width="130" height="280" rx="65" fill="#141518"/>
+      <rect x="447" y="262" width="130" height="500" rx="65" fill="#141518"/>
+      <rect x="612" y="342" width="130" height="340" rx="65" fill="#141518"/>
+    </symbol>
+</defs></svg>
+
+<div class="topbar"><div class="in">
+  <div class="brand"><svg viewBox="0 0 1024 1024"><use href="#icL"/></svg>柠檬记 4.0.0　皮肤视觉稿</div>
+  <div class="seg" role="group" aria-label="皮肤"><button data-k="skin" data-v="simple" aria-pressed="true">简洁</button><button data-k="skin" data-v="glass" aria-pressed="false">磨砂玻璃</button></div>
+  <div class="seg" role="group" aria-label="浅色深色"><button data-k="mode" data-v="light" aria-pressed="true">浅色</button><button data-k="mode" data-v="dark" aria-pressed="false">深色</button></div>
+  <div class="seg" role="group" aria-label="设备"><button data-k="dev" data-v="p" aria-pressed="true">手机 390</button><button data-k="dev" data-v="d" aria-pressed="false">电脑 1280</button></div>
+  <label class="chk"><input type="checkbox" id="rt"> 模拟“减少透明效果”</label>
+  <label class="chk"><input type="checkbox" id="hit"> 显示 44px 点击区</label>
+</div></div>
+
+<div class="wrap">
+<h1 class="doc">月历里的项目标记：3 个方案</h1>
+<p class="lead">原来月历格子里只写“2项”，看不出是哪个项目。三个方案都用项目颜色标出当天的事，其余和皮肤视觉稿一样。节假日按设置（R-97）画成“只显示中国”（中文界面的默认），所以 3 日开天节、9 日韩文节不再标；切到韩文界面默认只显示韩国。顶部开关可以切皮肤、浅深色和手机 / 电脑。<br>
+<b>A 彩色圆点</b>：每天最多 4 个项目色圆点，多出来写“+N”。最省地方，格子不用加高。<br>
+<b>B 彩色短条</b>：每件事一根项目色细条，最多 3 根，多出来写“+N”。比圆点醒目，一眼能看出这天忙不忙。<br>
+<b>C 色块标签</b>：每件事一个项目色小标签，写两个字简称，最多 2 个，多出来写“+N”。最醒目、信息最多，格子要加高约 20px。</p>
+<div class="screens" id="screens" style="grid-template-columns:repeat(3,minmax(0,406px))"></div>
+<div id="homes" style="display:none"></div>
+</div>
+
+<script>
+/* ---------------- 图标（线性，2px，圆头） ---------------- */
+const I = {
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>',
+  today:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/></svg>',
+  cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M4 9.3h16M4 14.6h16M9.3 9.3V20M14.7 9.3V20"/></svg>',
+  todo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  note:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 4.8l4 4L8.8 19.2H4.8v-4z"/><path d="M13 7l4 4"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 10V8a5 5 0 0 1 10 0v2h.5A1.5 1.5 0 0 1 19 11.5v8A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-8A1.5 1.5 0 0 1 6.5 10zm2.4 0h5.2V8a2.6 2.6 0 0 0-5.2 0z"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5h4" stroke-linecap="round"/></svg>',
+  list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h14"/></svg>',
+  grid:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>',
+  img:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M5 18l5-5 4 4 2.5-2.5L20 18"/></svg>'
+};
+const ic = (n, cls='') => `<span class="ico ${cls}">${I[n]}</span>`;
+const P = (n) => `style="--pc:var(--p${n}s)"`;   // 项目色：1 NEOX 2 SignPlex 3 生活 4 工作灵感 5 韩国生活 6 购物
+
+/* ---------------- 文案（中 / 韩） ---------------- */
+const L = {
+  zh:{date:'<span class="num">10</span>月<span class="num">24</span>日 周六', sub:'农历九月十五 · 霜降后第 1 天', ann:'3 天后 김지민 生日',
+    nowk:'现在 <span class="num">14:17</span> · 进行中', nowt:'NEOX 横版对片', nowm:'<span class="num">13:00–14:30</span> · 腾讯会议 · 还剩 13 分钟', nowx:'接下来：<span class="num">15:30</span> SignPlex 客户反馈会（1 小时 13 分后）',
+    odl:'没赶上', odt:'交 SignPlex 韩文版成片', ods:'原定 10月22日 · 晚了 2 天', today:'今天', tmr:'明天',
+    fold:'▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓',
+    r:[['13:00','k',1,'NEOX 横版对片','到 14:30 · NEOX · 腾讯会议'],['NOW'],['15:30','k',2,'SignPlex 客户反馈会','到 16:30 · 提前 15 分提醒'],['今天内','c',1,'NEOX 竖版 4K 导出','今天截止 · NEOX'],['','c',2,'回复 박 대리 的邮件','SignPlex'],['19:00','k',3,'和 지민 吃饭','연남동 · 生活']],
+    notesh:'今天记的 2', notesa:'随手记 ›', n:[['NEOX 片尾 logo 停留可以再短 0.5 秒','14:02 · 工作灵感'],['首尔林银杏黄了，下周末带相机','11:40 · 韩国生活 · 1 张图']],
+    tabs:['今天','日历','待办','随手记']},
+  ko:{date:'<span class="num">10</span>월 <span class="num">24</span>일 토요일', sub:'음력 9월 15일 · 상강 다음 날', ann:'3일 후 김지민 생일',
+    nowk:'지금 <span class="num">14:17</span> · 진행 중', nowt:'NEOX 가로판 검토', nowm:'<span class="num">13:00–14:30</span> · 텐센트 회의 · 13분 남음', nowx:'다음: <span class="num">15:30</span> SignPlex 고객 피드백 회의 (1시간 13분 후)',
+    odl:'놓친 일', odt:'SignPlex 한국어판 납품', ods:'원래 10월 22일 · 2일 지남', today:'오늘', tmr:'내일',
+    fold:'▸ 지난 일정 2개: 10:30 SignPlex 자막 검수 · 원두 사기 ✓',
+    r:[['13:00','k',1,'NEOX 가로판 검토','14:30까지 · NEOX · 텐센트 회의'],['NOW'],['15:30','k',2,'SignPlex 고객 피드백 회의','16:30까지 · 15분 전 알림'],['오늘 중','c',1,'NEOX 세로판 4K 내보내기','오늘 마감 · NEOX'],['','c',2,'박 대리 메일 회신','SignPlex'],['19:00','k',3,'지민이랑 저녁','연남동 · 생활']],
+    notesh:'오늘 쓴 메모 2', notesa:'메모 ›', n:[['NEOX 엔딩 로고는 0.5초 더 짧게','14:02 · 작업 아이디어'],['서울숲 은행나무가 노랗게 물들었어요. 다음 주말에 카메라 챙기기','11:40 · 한국 생활 · 사진 1장']],
+    tabs:['오늘','캘린더','할 일','메모']}
+};
+
+/* ---------------- 零件 ---------------- */
+function status(t='14:17'){ return `<div class="sb"><span class="num">${t}</span><span class="isl"></span><span class="sig"><span class="num">5G</span><span class="bat"></span></span></div>`; }
+function nav(active, lang='zh'){
+  const t=L[lang].tabs, n=['today','cal','todo','note'];
+  return `<div class="tabbar ${glassy()}">${n.map((k,i)=>`<div class="tab ${i===active?'on':''}">${ic(k)}<span>${t[i]}</span></div>`).join('')}</div><div class="fab">${ic('plus')}</div>`;
+}
+function glassy(){ return document.body.dataset.skin==='glass'?'glassy':''; }
+function phone(inner, opt={}){
+  return `<div class="phone"><div class="scr app ${opt.pad2?'pad2':''} ${opt.login?'login':''} ${opt.nav===false?'':'fix'}" ${opt.lang==='ko'?'lang="ko"':''}>${status(opt.time)}${inner}${opt.nav===false?'':nav(opt.nav??0, opt.lang)}<div class="home"></div></div></div>`;
+}
+function row(r, hl){
+  if(r[0]==='NOW') return `<div class="nowline"><b>${r[1]||'14:17'}</b><i></i></div>`;
+  const [tm,kind,p,t1,t2]=r;
+  const mk = kind==='k'?`<span class="mk" ${P(p)}></span>`:kind==='c'?`<span class="mc" ${P(p)}></span>`:`<span class="mn"></span>`;
+  const isNum=/^\d/.test(tm);
+  return `<div class="row ${hl?'hl':''}"><span class="tm ${isNum?'num':'s'}">${tm}</span>${mk}<div class="tx"><div class="t1">${t1}</div><div class="t2">${t2}</div></div><span class="mo">⋯</span></div>`;
+}
+function todayBody(lang='zh', o={}){
+  const s=L[lang];
+  let rows=s.r.slice();
+  if(o.alert) rows=rows.map(r=>r[0]==='NOW'?['NOW','15:15']:r);
+  if(o.newRow) rows.splice(3,0,['17:00','k',2,'给 박 대리 打电话<span class="newtag">刚记下</span>','今天 · 15 分钟 · SignPlex','HL']);
+  const nowCard = o.alert
+   ? `<div class="now alert"><div class="k">${ic('bell')}提醒 · 15 分钟后开始</div><div class="ti"><span class="num">15:30</span> SignPlex 客户反馈会</div><div class="me">到 <span class="num">16:30</span> · Zoom 링크在备注里</div><div class="nx" style="margin-top:10px">还有 1 条：<span class="num">15:15</span> 回复 박 대리 的邮件 ›</div></div>`
+   : `<div class="now"><div class="k">${s.nowk}</div><div class="ti">${s.nowt}</div><div class="me">${s.nowm}</div><div class="bar"><i></i></div><div class="nx">${s.nowx}</div></div>`;
+  return `<div class="pg ${o.alert?'alertpg':''}">
+   <div class="hd"><div class="tt"><div class="date">${s.date}</div><div class="sub">${s.sub}</div></div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
+   <div class="annchip"><span class="dia"></span>${s.ann}</div>
+   ${nowCard}
+   <div class="od"><div style="flex:1;min-width:0"><div class="t1">${s.odt}</div><div class="t2">${s.ods.replace(/(晚了 2 天|2일 지남)/,"<em>$1</em>")}</div></div><span class="btn sm pri">${s.today}</span><span class="btn sm out">${s.tmr}</span></div>
+   <div class="fold">${o.alert?'▸ 已过去 3 件：10:30 SignPlex 字幕校对 · 13:00 NEOX 横版对片 · 买咖啡豆 ✓':s.fold}</div>
+   <div class="river flat">${rows.filter(r=>!(o.alert&&r[0]==='13:00')).map(r=>row(r, r[5]==='HL')).join('')}</div>
+   <div class="secth"><span>${s.notesh}</span><a>${s.notesa}</a></div>
+   <div class="river flat">${s.n.map(n=>`<div class="row" style="grid-template-columns:16px 1fr 28px"><span class="mn"></span><div class="tx"><div class="t1">${n[0]}</div><div class="t2 num">${n[1]}</div></div><span class="mo">⋯</span></div>`).join('')}</div>
+  </div>`;
+}
+
+/* ---------------- 手机画面 ---------------- */
+const PH = {};
+PH.today = () => phone(todayBody('zh'), {nav:0});
+PH.alert = () => phone(todayBody('zh',{alert:true}) + `<div class="dock abar ${glassy()}"><span class="btn pri">知道了</span><span class="btn out">10 分钟后</span><span class="btn out">开始时再提醒</span></div>`, {nav:0, time:'15:15'});
+PH.month = () => {
+  const C=[['28','十八','o'],['29','十九','o'],['30','二十','o'],['1','国庆','h f'],['2','廿二','h','1项'],['3','开天节','h f'],['4','廿四','h'],
+  ['5','补休','h f'],['6','廿六','h','2项'],['7','廿七','h'],['8','寒露','f'],['9','韩文节','h f'],['10','九月',''],['11','初二',''],
+  ['12','初三',''],['13','初四','','1项'],['14','初五','','2项'],['15','初六','','3项'],['16','初七','','1项'],['17','初八',''],['18','重阳','f'],
+  ['19','初十','','2项'],['20','十一','','1项'],['21','十二','','1项'],['22','十三','','1项'],['23','霜降','f','2项'],['24','十五','td','4项'],['25','十六','','1项'],
+  ['26','十七','','2项'],['27','十八','','1项 ◆'],['28','十九','','1项'],['29','二十','','2项'],['30','廿一','','1项'],['31','廿二',''],['1','廿三','o']];
+  const cells=C.map(c=>{const cl=c[2]||'';return `<div class="cell ${cl.includes('h')?'h':''} ${cl.includes('o')?'o':''} ${cl.includes('td')?'td':''}"><div class="d">${c[0]}</div><div class="l ${cl.includes('f')?'f':''}">${c[1]}</div>${c[3]?`<div class="n">${c[3].replace('◆','<span class="dia" style="width:7px;height:7px"></span>')}</div>`:''}</div>`}).join('');
+  const day=[['10:30','k',2,'SignPlex 字幕校对','已过去',1],['13:00','k',1,'NEOX 横版对片','到 14:30'],['15:30','k',2,'SignPlex 客户反馈会','到 16:30'],['19:00','k',3,'和 지민 吃饭','연남동'],['今天内','c',1,'NEOX 竖版 4K 导出','今天截止'],['','c',2,'回复 박 대리 的邮件','SignPlex']];
+  return phone(`<div class="pg"><div class="hd"><div class="tt"><div class="date pt"><span class="num">2026</span>年<span class="num">10</span>月</div></div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
+  <div class="segc"><span>周</span><span class="on">月</span><span>纪念日</span></div>
+  <div class="panel mgrid"><div class="wk">${'一二三四五六日'.split('').map(d=>`<span>${d}</span>`).join('')}</div><div class="wkr">${cells}</div>
+  <div class="legend"><span>灰底：放假（格子里写节日名）</span><span>3项：当天有 3 项</span><span><span class="dia" style="width:7px;height:7px;margin-right:4px"></span>纪念日</span></div></div>
+  <div class="secth"><span>10月24日 周六 · 丙午年九月十五</span><a>6 项</a></div>
+  <div class="panel river">${day.map(r=>row(r).replace('class="row ','class="row '+(r[5]?'past ':''))).join('')}</div></div>`, {nav:1});
+};
+PH.todo = () => {
+  const g=(name, rows, dg)=>`<div class="grp ${dg?'dg':''}">${name}</div><div class="lst flat">${rows.map(r=>r[4]==='swipe'?`<div class="swp"><div class="lrow" style="margin-right:112px"><span class="mc" ${P(r[0])}></span><div style="min-width:0"><div class="t1">${r[1]}</div><div class="t2">${r[2]}</div></div><span></span><span class="mo">⋯</span></div><div class="acts"><span>推迟</span><span class="del">删除</span></div></div>`:`<div class="lrow"><span class="mc" ${P(r[0])}></span><div style="min-width:0"><div class="t1">${r[1]}</div><div class="t2">${r[2]}</div></div>${r[3]||'<span></span>'}<span class="mo">⋯</span></div>`).join('')}</div>`;
+  return phone(`<div class="pg"><div class="hd"><div class="tt"><div class="date pt">待办 <span class="num muted" style="font-size:17px">9</span></div></div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
+  <div class="chips"><span class="chip on">全部</span><span class="chip" ${P(1)}><i class="d"></i>NEOX 2</span><span class="chip" ${P(2)}><i class="d"></i>SignPlex 4</span><span class="chip" ${P(3)}><i class="d"></i>生活 3</span></div>
+  ${g('没赶上 1',[[2,'交 SignPlex 韩文版成片','原定 10月22日 · 晚了 2 天','<span style="display:flex;gap:8px"><span class="btn sm pri">今天</span><span class="btn sm out">明天</span></span>']],true)}
+  ${g('今天 3',[[1,'NEOX 竖版 4K 导出','今天截止 · NEOX'],[2,'回复 박 대리 的邮件','SignPlex'],[3,'买 다이소 收纳盒','生活','','swipe']])}
+  ${g('明天 1',[[1,'整理 NEOX 素材硬盘','NEOX']])}
+  ${g('这周 2',[[3,'订结婚纪念日的餐厅','11月2日前 · 来自纪念日'],[2,'SignPlex 4.0 上线清单','周五 · SignPlex']])}
+  ${g('没定时间 2',[[3,'练韩语 받침 规则','生活'],[3,'换手机壳','生活']])}
+  <div class="fold">▸ 已完成 12（点开也能改）　　▸ 最近删除 3</div></div>`, {nav:2});
+};
+function notesHead(grid){
+  return `<div class="hd" style="align-items:center"><div class="tt"><div class="date pt">随手记</div></div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
+  <div class="chips"><span class="chip on">全部 34</span><span class="chip" ${P(4)}><i class="d"></i>工作灵感 12</span><span class="chip" ${P(5)}><i class="d"></i>韩国生活 7</span><span class="chip" ${P(6)}><i class="d"></i>购物 5</span><span class="chip">读书 3</span></div>
+  <div class="panel lockrow">${ic('lock')}<b>隐私记</b><span class="muted" style="font-size:13px">已上锁 · 6 条</span><b style="margin-left:auto;font-size:13px;font-weight:600">Face ID 解锁 ›</b></div>
+  <div class="merge"><span style="flex:1">“读书”和“书单”两个分类很像，合成一个吗？</span><span class="btn sm out">合并</span><span class="btn sm soft">不用</span></div>`;
+}
+const PHOTO = {
+  ginkgo:'background:radial-gradient(40% 50% at 30% 40%,#F6D34A,transparent 70%),radial-gradient(40% 50% at 75% 60%,#E9B92E,transparent 70%),linear-gradient(160deg,#B9D7E8,#7FA8BF 60%,#5D7D63)',
+  sign:'background:repeating-linear-gradient(180deg,transparent 0 14px,#C9CDD5 14px 17px) 22% 70%/56% 40% no-repeat,linear-gradient(90deg,#2F7BF5,#2F7BF5) 22% 22%/34% 8px no-repeat,linear-gradient(160deg,#FFFFFF,#E9ECF1)',
+  bread:'background:radial-gradient(50% 45% at 50% 60%,#D79B5A,transparent 72%),linear-gradient(170deg,#F2E7D8,#D9C3A5)',
+  street:'background:linear-gradient(180deg,#9EC3DB 0 45%,#C9CDD3 45% 100%)'
+};
+PH.notes = () => {
+  const r=(tm,t1,t2,img,sw)=>(sw?'<div class="swp">':'')+`<div class="lrow" style="grid-template-columns:44px 18px 1fr auto 24px${sw?';margin-right:168px':''}"><span class="num" style="font-weight:600;font-size:13px">${tm}</span><span class="mn"></span><div style="min-width:0"><div class="t1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t1}</div><div class="t2" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t2}</div></div>${img?`<span class="thumb" style="${PHOTO[img]}"></span>`:'<span></span>'}<span class="mo">⋯</span></div>`+(sw?'<div class="acts"><span>转成<br>待办</span><span>移到<br>隐私记</span><span class="del">删除</span></div></div>':'');
+  return phone(`<div class="pg">${notesHead(false)}
+  <div class="grp">今天</div><div class="panel lst">${r('14:02','NEOX 片尾 logo 停留可以再短 0.5 秒','配合鼓点收尾 · 工作灵感')}${r('11:40','首尔林银杏黄了','下周末带相机，去 서울숲 东门 · 韩国生活','ginkgo')}</div>
+  <div class="grp">昨天</div><div class="panel lst">${r('21:15','外国人登录证更新要带的','护照、照片 1 张、手续费 3 万韩元 · 韩国生活','',1)}${r('16:30','SignPlex 落地页标题：一次签完，不用打印','工作灵感 <span class="cat" style="height:18px;font-size:10.5px">AI</span>')}</div>
+  <div class="grp">10月21日</div><div class="panel lst">${r('08:50','牛奶、鸡蛋、猫砂、종량제 봉투 20L','清单 0/4 · 购物')}</div>
+  </div><div class="inrow"><span style="flex:1">接着记一句…</span><span class="ibtn" style="width:40px;height:40px;box-shadow:none;background:var(--panel-2)">${ic('img')}</span></div>`, {nav:3, pad2:true});
+};
+PH.mason = () => {
+  const c=(img,more,t1,t2,cat,p,tm)=>`<div class="mcard">${img?`<div class="im" style="${PHOTO[img]}">${more?`<b class="num">${more}</b>`:''}</div>`:''}<div class="bd"><div class="t1">${t1}</div>${t2?`<div class="t2">${t2}</div>`:''}<div class="ft"><span class="cat" ${P(p)}><i class="d" style="width:6px;height:6px;border-radius:50%;background:var(--pc);margin-right:5px;display:inline-block"></i>${cat}</span><span class="num">${tm}</span><span class="mo" style="margin-left:auto;font-weight:800;width:24px;text-align:center">⋯</span></div></div></div>`;
+  return phone(`<div class="pg">${notesHead(true)}
+  <div class="mason"><div style="display:grid;gap:10px">${c('ginkgo','+2','首尔林银杏黄了','下周末带相机，去 서울숲 东门，顺便买咖啡豆','韩国生活',5,'今天 11:40')}${c('','', 'NEOX 片尾 logo 停留可以再短 0.5 秒，配合鼓点','','工作灵感',4,'今天 14:02')}${c('','','外国人登录证更新要带的','护照、照片 1 张、手续费 3 万韩元，11月5日前去 출입국','韩国生活',5,'昨天 21:15')}</div>
+  <div style="display:grid;gap:10px">${c('sign','','SignPlex 落地页标题：一次签完，不用打印','副标题备选：合同、报价单、入职文件，手机上一次签完','工作灵感',4,'昨天 16:30')}${c('','','牛奶、鸡蛋、猫砂、종량제 봉투 20L','清单 0/4','购物',6,'10月21日')}${c('bread','+4','연남동 那家面包店周一休息，下次周二去','','生活',3,'10月20日')}</div></div>
+  </div><div class="inrow"><span style="flex:1">接着记一句…</span><span class="ibtn" style="width:40px;height:40px;box-shadow:none;background:var(--panel-2)">${ic('img')}</span></div>`, {nav:3, pad2:true});
+};
+function waveBars(n=34){ const h=[14,26,38,22,44,30,18,40,52,28,16,34,46,24,12,30,42,20,36,48,26,14,32,44,22,38,18,28,40,16,24,34,20,12]; return h.slice(0,n).map(v=>`<i style="height:${v}px"></i>`).join(''); }
+PH.rec = () => phone(`<div class="blurbg" style="height:674px;overflow:hidden">${todayBody('zh')}</div><div class="scrim"></div>
+  <div class="sheet rec ${glassy()}" style="height:496px">
+    <div class="hdr"><span><span class="dot"></span>正在录音</span><span class="num"><b>0:07</b> <span class="muted">/ 1:00</span></span></div>
+    <h4>说完松手，AI 帮你整理</h4><div class="muted" style="font-size:13px">中文、韩文混着说都行 · 最长 60 秒</div>
+    <div class="wave">${waveBars()}</div>
+    <div class="zone" style="margin:18px 0 0 auto;width:210px">↑ 拖到这里取消</div>
+    <div class="zone" style="position:absolute;left:20px;bottom:56px;width:176px;font-size:13px;font-weight:400">← 拖到这里：松手也继续录</div>
+    <div class="micbtn">${ic('mic')}</div>
+  </div>`, {nav:false});
+PH.toast = () => phone(todayBody('zh',{newRow:true}) + `<div class="dock toast"><div class="r"><div style="flex:1;min-width:0"><div class="t1">已记下：<span class="num">17:00</span> 给 박 대리 打电话</div><div class="t2">已放进今天的日程 · 归到 SignPlex</div></div><span class="btn">撤销</span><span class="btn">修改</span></div><div class="pr"><i></i></div></div>`, {nav:0});
+PH.unlock = () => phone(`<div class="blurbg">${PH_notesInner()}</div><div class="scrim lite"></div>
+  <div class="card-ov ${glassy()}" style="top:250px"><div class="lockic">${I.lock}</div><div style="font-size:20px;font-weight:700;margin-top:10px">隐私记已上锁</div><div class="muted" style="font-size:13px;margin:4px 0 18px">里面有 6 条</div>
+  <span class="btn pri w">用 Face ID 解锁</span><span class="btn out w" style="margin-top:10px">输入密码</span><span class="btn soft w" style="margin-top:10px">取消</span>
+  <div class="muted" style="font-size:12px;margin-top:12px">离开 App 1 分钟后自动重新上锁</div></div>`, {nav:false});
+function PH_notesInner(){ return `<div class="pg">${notesHead(false)}<div class="grp">今天</div><div class="panel lst" style="height:180px"></div><div class="grp">昨天</div><div class="panel lst" style="height:180px"></div></div>`; }
+PH.settings = () => {
+  const s=(k,v)=>`<div class="srow"><span>${k}</span><span class="v">${v}</span><span class="chev">›</span></div>`;
+  const skin = document.body.dataset.skin==='glass'?'磨砂玻璃':'简洁';
+  return phone(`<div class="pg"><div style="display:flex;align-items:center;height:44px;position:relative"><span style="font-size:14px">‹ 今天</span><b style="position:absolute;left:0;right:0;text-align:center;font-size:17px;pointer-events:none">设置</b></div>
+  <div class="panel" style="display:flex;align-items:center;gap:12px;padding:16px;margin-top:14px"><div class="av">H</div><div style="flex:1;min-width:0"><b style="font-size:14px">h***@gmail.com</b><div class="muted" style="font-size:12px">2 台设备：iPhone、Windows</div></div><span class="chev">›</span></div>
+  <div class="panel set" style="margin-top:20px">${s('界面语言','中文')}${s('皮肤',skin+' · 白天 / 夜间跟着手机')}<div class="srow"><span style="padding-left:14px">减少透明效果<span class="muted" style="display:block;font-size:11.5px">iPhone 读不到系统设置，在这里手动开</span></span><span class="tgl"></span></div><div class="srow"><span>随手记显示方式<span class="muted" style="display:block;font-size:11.5px">只对手机生效，电脑另外设</span></span><span class="v">瀑布流</span><span class="chev">›</span></div>${s('日历','农历、中国和韩国节假日')}${s('提醒与通知','通知已打开 · 两边都响')}${s('语音与 AI','麦克风已允许 · 今天 AI 用了 18 次')}${s('隐私记','Face ID · 离开 1 分钟上锁')}${s('时区','跟随所在地 · 首尔')}</div>
+  <div class="panel set" style="margin-top:20px">${s('数据','每天 03:00 备份 · 最近删除 3 条')}${s('在 Claude 聊天里记事','已连接')}${s('邀请朋友','管理员 · 发邀请码')}${s('符号说明','竖条、圆圈、菱形是什么')}<div class="srow"><svg viewBox="0 0 1024 1024" style="width:28px;height:28px;border-radius:7px"><use href="#icL"/></svg><span>关于柠檬记</span><span class="v">4.0.0 · 功能说明</span><span class="chev">›</span></div></div>
+  <div style="text-align:center;margin:28px 0 0;font-size:14px;font-weight:400">退出登录</div></div>`, {nav:false});
+};
+PH.onb = () => phone(`<div class="pg" style="padding-top:20px"><div class="muted" style="text-align:center;font-size:12px">第 3 步，共 3 步</div><div class="stepbar"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+  <div style="text-align:center;font-size:22px;font-weight:700;margin:18px 0 14px">这些符号是什么意思</div>
+  <div class="panel">${[['<span class="mk" '+P(2)+'></span>','日程','有开始时间的事，比如开会、吃饭'],['<span class="mc" '+P(1)+'></span>','待办','要做完的事；做完后圆圈变成实心'],['<span class="dia" style="width:14px;height:14px"></span>','纪念日','生日、纪念日、倒数日'],['<span class="mn"></span>','随手记','想到就记的一句话或一段笔记']].map(x=>`<div class="sym"><span class="c">${x[0]}</span><div><b style="font-weight:600">${x[1]}</b><div class="muted" style="font-size:12px">${x[2]}</div></div></div>`).join('')}</div>
+  <div class="panel" style="padding:14px 18px;margin-top:12px"><b style="font-size:14px">“＋”有两种用法</b><div style="font-size:14px;margin-top:4px">点一下：打字记　　按住：说话记</div></div>
+  <span class="btn pri w" style="margin-top:22px;height:52px;font-size:15px">开始用</span></div>`, {nav:false});
+PH.ko = () => phone(todayBody('ko'), {nav:0, lang:'ko'});
+
+/* ---------------- 电脑画面 ---------------- */
+function rail(active, lang='zh'){
+  const t=L[lang].tabs, n=['today','cal','todo','note'];
+  return `<div class="rail"><div class="fabd">${ic('plus')}</div><div class="hint">${lang==='ko'?'클릭: 입력<br>Ctrl+Alt+Space':'点一下打字<br>Ctrl+Alt+空格'}</div>${n.map((k,i)=>`<div class="rt ${i===active?'on':''}">${ic(k)}<span>${t[i]}</span></div>`).join('')}<div class="sp"></div><div class="rt">${ic('search')}<span class="kbd">Ctrl K</span></div><div class="av" style="margin-top:6px">H</div></div>`;
+}
+function desk(cols, cls='', overlay='', lang='zh', blur=false){
+  const g=`<div class="dgrid ${cls}">${cols}</div>`;
+  return `<div class="desk app" ${lang==='ko'?'lang="ko"':''}><div class="wbar"><svg viewBox="0 0 1024 1024"><use href="#icLs"/></svg>${lang==='ko'?'레모':'柠檬记'} 4.0.0<div class="ctl"><span>—</span><span>☐</span><span>✕</span></div></div>${blur?`<div class="blurbg">${g}</div>`:g}${overlay}</div>`;
+}
+function deskToday(lang='zh', o={}){
+  const s=L[lang];
+  const body = todayBody(lang,o).replace('<div class="hd">','<div class="hd" style="display:none">');
+  const head = `<div class="hd"><div class="tt"><div class="date">${s.date}</div><div class="sub">${s.sub}</div></div><span class="muted" style="font-size:12px;margin-top:10px">${lang==='ko'?'J / K 이동 · E 완료 · Enter 편집':'J / K 上下 · E 完成 · Enter 编辑'}</span></div>`;
+  let main = head + body.replace(/<div class="secth">[\s\S]*$/,'</div>');
+  if(o.alert) main = main.replace('还有 1 条','<div style="display:flex;gap:8px;margin:12px 0 4px"><span class="btn pri">知道了</span><span class="btn out" style="box-shadow:inset 0 0 0 1.5px var(--now-fg);color:var(--now-fg)">10 分钟后</span><span class="btn out" style="box-shadow:inset 0 0 0 1.5px var(--now-fg);color:var(--now-fg)">开始时再提醒</span></div>还有 1 条');
+  const ko = lang==='ko';
+  const mid = `<div class="col mid"><div class="secth" style="margin-top:0"><span>${ko?'이번 주':'本周'}</span><a>${ko?'캘린더 ›':'日历 ›'}</a></div>
+   <div class="panel"><div class="wkbars">${[30,14,14,14,30,92,14].map((h,i)=>`<i class="${i===5?'on':''}" style="height:${h}px"></i>`).join('')}</div><div class="wkl">${['一 <b>19</b>','二 <b>20</b>','三 <b>21</b>','四 <b>22</b>','五 <b>23</b>','六 <b>24</b>','日 <b>25</b>'].map(x=>`<span>${ko?x.replace(/^./,c=>({一:'월',二:'화',三:'수',四:'목',五:'금',六:'토',日:'일'})[c]):x}</span>`).join('')}</div></div>
+   <div class="secth"><span>${ko?'다가오는 날':'快到了'}</span><a>${ko?'기념일 ›':'纪念日 ›'}</a></div>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="panel anc"><div style="font-size:12px" class="muted"><span class="dia"></span> ${ko?'생일':'生日'}</div><div class="date num" style="font-size:26px">3 ${ko?'일':'天'}</div><div class="muted" style="font-size:12.5px">김지민 · ${ko?'만 29세':'满 29 周岁'}</div></div><div class="panel anc"><div style="font-size:12px" class="muted"><span class="dia"></span> ${ko?'생일 · 음력':'生日 · 阴历'}</div><div class="date num" style="font-size:26px">23 ${ko?'일':'天'}</div><div class="muted" style="font-size:12.5px">${ko?'엄마 · 음력 10월 8일':'妈妈 · 十月初八'}</div></div></div>
+   <div class="secth"><span>${s.notesh}</span><a>${s.notesa}</a></div>
+   <div class="panel river">${s.n.map(n=>`<div class="row" style="grid-template-columns:16px 1fr 28px"><span class="mn"></span><div class="tx"><div class="t1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${n[0]}</div><div class="t2 num">${n[1]}</div></div><span class="mo">⋯</span></div>`).join('')}</div>
+   <div class="panel" style="padding:12px 14px;margin-top:12px;font-size:13px">${ko?'어느 창에서든 <span class="kbd">Ctrl</span>+<span class="kbd">Alt</span>+<span class="kbd">Space</span> 를 누르면 입력창이 떠요. 한 줄 쓰고 Enter.':'在任何窗口按 <span class="kbd">Ctrl</span>+<span class="kbd">Alt</span>+<span class="kbd">空格</span> 弹出打字框，写一句按 Enter 就记下。'}</div>
+   ${o.toast?`<div class="dtoast toast" style="position:absolute"><div class="r"><div style="flex:1;min-width:0"><div class="t1">已记下：<span class="num">17:00</span> 给 박 대리 打电话</div><div class="t2">已放进今天的日程 · 归到 SignPlex</div></div><span class="btn">撤销</span><span class="btn">修改</span></div><div class="pr"><i></i></div></div>`:''}</div>`;
+  const ed = editor(ko?'일정':'日程', ko?'SignPlex 고객 피드백 회의':'SignPlex 客户反馈会', ko?[['시간','오늘 15:30 – 16:30'],['프로젝트','SignPlex'],['알림','15분 전 · 제목 표시'],['장소 / 링크','Zoom 링크 · zoom.us/j/8812…'],['원래 한 말 (10월 22일 음성)','“오후 세 시 반에 SignPlex 고객 피드백 회의, 15분 전에 알려줘”']]:[['时间','今天 15:30 – 16:30'],['项目','SignPlex'],['提醒','提前 15 分 · 推送显示标题'],['地点 / 链接','Zoom 링크 · zoom.us/j/8812…'],['备注','带上韩文版字幕的问题清单'],['原话（10月22日 语音）','“下午三点半跟 SignPlex 客户开反馈会，提前一刻钟提醒我”']], 2);
+  return {main:`<div class="col">${main}</div>`, mid, ed};
+}
+function editor(kind, title, flds, p){
+  return `<div class="col ed"><div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="display:flex;align-items:center;gap:6px"><span class="mk" ${P(p)} style="height:16px;width:4px"></span>${kind}</span><span class="muted">改了就自动保存</span></div><div style="font-size:22px;font-weight:800;margin:8px 0 6px">${title}</div>${flds.map(f=>`<div class="fld"><div class="k">${f[0]}</div><div class="v">${f[1]}</div></div>`).join('')}<div style="display:flex;gap:8px;margin-top:16px"><span class="btn sm out">复制一条</span><span class="btn sm out">转成待办</span><span class="btn sm soft">删除</span></div></div>`;
+}
+const DK = {};
+DK.today = () => { const t=deskToday('zh'); return desk(rail(0)+t.main+t.mid+t.ed); };
+DK.alert = () => { const t=deskToday('zh',{alert:true}); return desk(rail(0)+t.main+t.mid+t.ed); };
+DK.toast = () => { const t=deskToday('zh',{newRow:true,toast:true}); return desk(rail(0)+t.main+t.mid+t.ed); };
+DK.ko = () => { const t=deskToday('ko'); return desk(rail(0,'ko')+t.main+t.mid+t.ed,'','','ko'); };
+function frag(h){ const t=document.createElement('template'); t.innerHTML=h; return t.content; }
+/* 电脑 exe 不做语音（R-90）：Ctrl+Alt+空格 弹出打字框；画面同 Ctrl+N */
+const TYPE_WIN = () => `<div class="scrim" style="top:36px"></div><div class="dwin ${glassy()}" style="width:600px;top:200px;transform:translate(-50%,0)"><div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px" class="muted"><span>打字记一条 · 任何窗口按 <span class="kbd">Ctrl</span>+<span class="kbd">Alt</span>+<span class="kbd">空格</span> 都能弹出</span><span>Esc 收起（保留草稿）</span></div>
+  <div class="inp focus" style="margin-top:12px;font-size:17px;height:56px;background:var(--panel)">下午五点给 박 대리 打电话，周五前交 NEOX 竖版<span style="display:inline-block;width:2px;height:22px;background:var(--text);margin-left:2px"></span></div>
+  <div class="muted" style="font-size:12px;margin:14px 2px 6px">会记成这样（AI 整理后可能再细分）</div>
+  <div class="panel" style="padding:2px 14px;background:var(--panel-2)"><div class="row" style="grid-template-columns:52px 16px 1fr;min-height:48px;border-bottom:1px solid var(--line)"><span class="tm num">17:00</span><span class="mk" ${P(2)} style="height:22px"></span><div class="tx" style="padding:6px 0"><div class="t1">给 박 대리 打电话</div><div class="t2">日程 · 今天 · SignPlex</div></div></div><div class="row" style="grid-template-columns:52px 16px 1fr;min-height:48px"><span class="tm s">周五</span><span class="mc" ${P(1)}></span><div class="tx" style="padding:6px 0"><div class="t1">交 NEOX 竖版</div><div class="t2">待办 · 周五截止 · NEOX</div></div></div></div>
+  <div style="display:flex;gap:10px;margin-top:16px;align-items:center"><span class="muted" style="font-size:12px;flex:1">Enter 记下 · Shift+Enter 换行 · 电脑版不能说话，说话请用手机</span><span class="btn out">取消</span><span class="btn pri">记下</span></div></div>`;
+DK.rec = () => { const t=deskToday('zh'); return desk(rail(0)+t.main+t.mid+t.ed, '', TYPE_WIN(), 'zh', true); };
+DK.month = () => {
+  const f=frag(PH.month());
+  const grid=f.querySelector('.mgrid').outerHTML, sh=f.querySelectorAll('.secth')[0].outerHTML, list=f.querySelector('.panel.river').outerHTML;
+  return desk(rail(1)+`<div class="col"><div class="hd" style="align-items:center"><div class="tt"><div class="date"><span class="num">2026</span>年<span class="num">10</span>月</div></div><div class="segc" style="margin:0;width:300px"><span>周</span><span class="on">月</span><span>纪念日</span></div></div><div style="zoom:1.06">${grid}</div></div><div class="col ed">${sh}${list}</div>`, 'two');
+};
+const TODO_ED = () => editor('待办','回复 박 대리 的邮件',[['截止','今天'],['项目','SignPlex'],['提醒','15:15 · 推送显示标题'],['备注','附上 4.0 报价单，抄送 김 팀장'],['原话（10月23日 语音）','“明天记得回박대리的邮件，把报价单附上”']],2);
+DK.todo = () => { const f=frag(PH.todo()); return desk(rail(2)+`<div class="col">${f.querySelector('.pg').innerHTML}</div>`+TODO_ED(), 'two'); };
+const NOTE_ED = () => `<div class="col ed"><div class="muted" style="font-size:12.5px">随手记 · 韩国生活 · 今天 11:40</div><div style="font-size:22px;font-weight:800;margin:8px 0">首尔林银杏黄了</div><div style="font-size:15px;line-height:1.7">下周末带相机，去 서울숲 东门，顺便买咖啡豆。</div><div style="${PHOTO.ginkgo};aspect-ratio:16/10;border-radius:18px;margin-top:14px"></div><div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap"><span class="btn sm out">转成待办</span><span class="btn sm out">移到隐私记</span><span class="btn sm soft">删除</span></div></div>`;
+DK.notes = (blur=false, overlay='') => { const f=frag(PH.notes()); return desk(rail(3)+`<div class="col">${f.querySelector('.pg').innerHTML}<div class="inrow" style="position:absolute;bottom:22px;left:22px;right:22px"><span style="flex:1">接着记一句…</span>${ic('img')}</div></div>`+NOTE_ED(), 'two', overlay, 'zh', blur); };
+DK.mason = () => { const f=frag(PH.mason()); const all=[...f.querySelectorAll('.mcard')].map(e=>e.outerHTML);
+  const cols=[[],[],[]]; all.forEach((c,i)=>cols[i%3].push(c));
+  return desk(rail(3)+`<div class="col">${notesHead(true)}<div class="mason" style="grid-template-columns:repeat(3,1fr)">${cols.map(c=>`<div style="display:grid;gap:12px">${c.join('')}</div>`).join('')}</div></div>`+NOTE_ED(),'two'); };
+DK.unlock = () => DK.notes(true, `<div class="scrim lite" style="top:36px"></div><div class="dwin card-ov ${glassy()}" style="width:400px;text-align:center;left:50%;right:auto"><div class="lockic">${I.lock}</div><div style="font-size:20px;font-weight:700;margin-top:10px">隐私记已上锁</div><div class="muted" style="font-size:13px;margin:4px 0 18px">里面有 6 条</div><span class="btn pri w">用 Windows Hello 解锁</span><span class="btn out w" style="margin-top:10px">输入密码</span><span class="btn soft w" style="margin-top:10px">取消</span><div class="muted" style="font-size:12px;margin-top:12px">离开窗口 1 分钟后自动重新上锁</div></div>`);
+DK.settings = () => { const f=frag(PH.settings()); const pg=f.querySelector('.pg'); pg.firstElementChild.remove();
+  const s=(k,v)=>`<div class="srow"><span>${k}</span><span class="v">${v}</span><span class="chev">›</span></div>`;
+  return desk(rail(-1)+`<div class="col"><div class="date" style="font-size:26px;margin-bottom:6px">设置</div>${pg.innerHTML.replace('iPhone 读不到系统设置，在这里手动开','不开时跟随 Windows 的“透明效果”').replace('只对手机生效，电脑另外设','只对电脑生效，手机另外设')}</div><div class="col mid"><div class="grp" style="margin-top:0">提醒与通知</div><div class="panel set">${s('通知','已打开')}${s('日程默认提前','15 分钟')}${s('待办默认提醒','当天 9:00')}${s('纪念日提醒','提前 7 天、前一天 · 9:00')}${s('也装了电脑版时','手机和电脑一起响')}${s('免打扰','23:00 – 08:00')}${s('<b>测试提醒能不能收到</b>','发一条试试')}</div><div class="muted" style="font-size:12.5px;margin:8px 4px">两边都响时，在任一边点了“知道了”或“10 分钟后”，另一边的提醒自动消失。</div><div class="grp">电脑</div><div class="panel set">${s('开机自动启动','打开')}${s('打字快捷键','Ctrl+Alt+空格 · 弹出打字框')}${s('透明效果','跟随 Windows 设置')}</div></div>`,'two'); };
+DK.onb = () => { const f=frag(PH.onb()); const pg=f.querySelector('.pg'); const p=pg.querySelector('.panel'); p.style.display='grid'; p.style.gridTemplateColumns='1fr 1fr';
+  return desk(`<div class="col" style="display:flex;align-items:center;justify-content:center"><div style="width:640px"><div style="text-align:center;margin-bottom:6px"><svg viewBox="0 0 1024 1024" style="width:64px;height:64px;border-radius:15px"><use href="#icL"/></svg></div>${pg.innerHTML.replace('“＋”有两种用法','电脑上怎么记').replace('点一下：打字记　　按住：说话记','点“＋”或在任何窗口按 Ctrl+Alt+空格：打字记<br><span class="muted" style="font-size:12.5px">电脑版不能说话，想说话就用手机</span>').replace('开始用','开始用（顺便打开“开机自动启动”）')}</div></div>`,'zero'); };
+
+/* ---------------- 登录与 Safari 引导 ---------------- */
+function brandHero(size){
+  return `<div class="lhero"><svg viewBox="0 0 1024 1024" style="width:${size}px;height:${size}px;border-radius:${size*0.2237}px"><use href="#icL"/></svg><div class="nm">柠檬记</div><div class="en">Lemo　<span lang="ko" style="font-family:var(--f-ko)">레모</span></div><div class="tag">说一句，清清爽爽记下来</div></div>`;
+}
+/* 隐私说法：R-81 原文（官网、登录页共用）；韩文是对应译文 */
+const PRIV = {
+  zh:'其他用户（包括邀请你的人）看不到你记的东西。数据存在服务器上，运营者在技术上能访问；文字、录音和隐私记会交给谷歌 AI 处理，详见<u>隐私说明</u>。',
+  ko:'다른 사용자(나를 초대한 사람 포함)는 내가 기록한 내용을 볼 수 없어요. 데이터는 서버에 저장되고, 운영자는 기술적으로 접근할 수 있어요. 글, 녹음, 비밀 메모는 구글 AI가 처리하며, 자세한 내용은 <u>개인정보 처리 안내</u>에 있어요.'
+};
+const privLine = (lang='zh', m='14px 6px 0') => `<div class="muted" style="font-size:12px;line-height:1.55;margin:${m}">${PRIV[lang]}</div>`;
+function loginForm(){
+  return `<div class="lab">邮箱</div><div class="inp focus">h***@gmail.com</div><span class="btn pri w" style="margin-top:14px;height:52px;font-size:16px">发验证码</span><div class="muted" style="font-size:12.5px;text-align:center;margin-top:12px">不用密码。每次登录发一个 6 位验证码到邮箱。</div>`;
+}
+function inviteForm(){
+  return `<div style="font-size:24px;font-weight:800">第一次来？</div><div class="muted" style="font-size:13.5px;margin:2px 0 16px">这个邮箱还没注册，需要邀请码</div>
+  <div class="lab">邀请码（12 位）</div><div class="inp num" style="letter-spacing:.14em;font-weight:700">K7Q2-M9XD-4TPA</div><div class="okline">✓ 邀请码有效</div>
+  <div class="lab" style="margin-top:16px">邮箱里的 6 位验证码</div><div class="otp"><span class="f">4</span><span class="f">8</span><span class="f">1</span><span class="cur"></span><span></span><span></span></div>
+  <div style="text-align:center;font-size:13.5px;font-weight:700;margin-top:12px">填满 6 位就自动登录，不用再点按钮</div>
+  <div class="muted" style="text-align:center;font-size:12.5px;margin-top:6px">没收到？60 秒后可以重发 · 看看垃圾邮件</div>`;
+}
+PH.login = () => phone(`<div class="pg">${brandHero(96)}<div class="panel form">${loginForm()}</div>${privLine()}</div>`, {nav:false, login:true});
+PH.login2 = () => phone(`<div class="pg"><div style="display:flex;align-items:center;gap:10px;margin:18px 0 18px"><svg viewBox="0 0 1024 1024" style="width:40px;height:40px;border-radius:9px"><use href="#icL"/></svg><b style="font-size:17px">柠檬记</b><span class="muted num" style="font-weight:700">Lemo</span></div>
+  <div class="panel form" style="margin-top:0">${inviteForm()}</div>
+  <div class="muted" style="text-align:center;font-size:12.5px;margin-top:14px">没有邀请码？现在只对朋友开放，请向柠檬记的负责人要一个</div></div>`, {nav:false, login:true});
+PH.safari = () => phone(`<div class="pg"><div class="muted" style="font-size:13px;margin-top:14px">在 Safari 里打开时</div><div style="font-size:26px;font-weight:800;margin:2px 0 4px">先把它放到主屏幕</div><div style="font-size:14px">放到主屏幕以后，到点的提醒才能在手机上响。</div>
+  <div class="panel" style="padding:8px 16px;margin-top:16px">
+    <div style="display:flex;gap:12px;align-items:center;padding:10px 0"><span class="stepn">1</span><span>点 Safari 的“分享”（可能在“⋯”里）</span></div>
+    <div style="display:flex;gap:12px;align-items:center;padding:10px 0"><span class="stepn">2</span><span>在弹出的菜单里找到“添加到主屏幕”</span></div>
+    <div style="display:flex;gap:12px;align-items:center;padding:10px 0"><span class="stepn">3</span><span style="flex:1">回到主屏幕，点“Lemo”的图标打开，再登录</span><span style="text-align:center;font-size:10.5px"><svg viewBox="0 0 1024 1024" style="width:44px;height:44px;border-radius:10px;display:block"><use href="#icL"/></svg>Lemo</span></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+    <div class="mini"><div class="bar"><span>‹</span><span class="hl">${ic('plus').replace('ico','ico" style="width:14px;height:14px')}</span><span>⋯</span></div>“分享”在下面这一排</div>
+    <div class="mini"><div class="bar"><span>‹</span><span>›</span><span class="hl">⋯</span></div>没看到就先点“⋯”，再点“分享”</div>
+  </div>
+  <div class="muted" style="font-size:13px;margin-top:12px">这个页面不能登录。请从主屏幕上的图标打开，再登录，这样只用登一次。</div></div>
+  <div class="sbar"><span>‹</span><span>›</span><span style="font-size:13px;font-weight:700;color:var(--text)">lemomemo.com/app/</span><span>⋯</span></div>`, {nav:false, login:true});
+function web(right){
+  return `<div class="web app"><div class="bchrome"><div class="tabs"><div class="tab1"><svg viewBox="0 0 1024 1024"><use href="#icLs"/></svg>柠檬记 · 登录</div></div><div class="addr"><span>‹</span><span>›</span><span>↻</span><span class="u">lemomemo.com/app/</span></div></div>
+  <div class="wgrid"><div class="wleft"><svg class="disc" viewBox="0 0 1024 1024"><use href="#markL"/></svg>
+    <svg viewBox="0 0 1024 1024" style="width:112px;height:112px;border-radius:25px;box-shadow:var(--shadow-2)"><use href="#icL"/></svg>
+    <div style="font-size:56px;font-weight:800;margin-top:22px;line-height:1.05">柠檬记</div><div class="num" style="font-size:22px;font-weight:700;color:var(--text-2);margin-top:6px">Lemo　<span lang="ko" style="font-family:var(--f-ko)">레모</span></div>
+    <div style="font-size:22px;margin-top:22px;max-width:420px;line-height:1.45">按住说一句，AI 帮你记下来，拆成几条日程、待办和随手记。</div>
+    <div style="font-size:14px;margin-top:18px;max-width:400px;line-height:1.7" class="muted">手机和电脑一起用，中文、韩文混着说都行。装了电脑版时，到点的提醒手机和电脑一起响。</div>
+  </div><div class="wright"><div class="panel form" style="width:420px;padding:28px">${right}</div></div></div></div>`;
+}
+DK.login = () => web(`<div style="font-size:24px;font-weight:800;margin-bottom:16px">登录</div>${loginForm()}${privLine('zh','16px 0 0')}`);
+DK.login2 = () => web(inviteForm() + `<div class="muted" style="font-size:12.5px;margin-top:14px;text-align:center">没有邀请码？现在只对朋友开放，请向柠檬记的负责人要一个</div>`);
+DK.safari = () => `<div style="display:flex;justify-content:center">${PH.safari()}</div>`;
+
+
+/* ---------------- 官网首页 ---------------- */
+const HT = {
+ zh:{ name:'柠檬记', sub:'Lemo　<span lang="ko" style="font-family:var(--f-ko)">레모</span>', tag:'说一句，清清爽爽记下来', ds:'按住“＋”说一句话，AI 帮你记下来，拆成日程、待办和随手记。',
+   login:'开始使用', how:'怎么安装', nav:['功能','安装','开始使用'],
+   say:'下午五点给박대리打电话，顺便记一下买 다이소 收纳盒，周五前交 NEOX 竖版', sayk:'按住“＋”说的话 · 0:09',
+   items:[['k',2,'17:00 给 박 대리 打电话','日程 · 今天 · SignPlex'],['c',3,'买 다이소 收纳盒','待办 · 生活'],['c',1,'交 NEOX 竖版','待办 · 周五截止 · NEOX']] },
+ ko:{ name:'레모', sub:'Lemo　柠檬记', tag:'한마디면 깔끔하게 기록돼요', ds:'+를 누른 채 말하면 AI가 받아 적고, 일정과 할 일과 메모로 나눠 줘요.',
+   login:'시작하기', how:'설치 방법', nav:['기능','설치','시작하기'],
+   say:'오후 5시에 박 대리한테 전화하고, 다이소 수납함 사야 하고, 금요일까지 NEOX 세로판 넘기기', sayk:'+를 누르고 한 말 · 0:09',
+   items:[['k',2,'17:00 박 대리에게 전화','일정 · 오늘 · SignPlex'],['c',3,'다이소 수납함 사기','할 일 · 생활'],['c',1,'NEOX 세로판 넘기기','할 일 · 금요일 마감 · NEOX']] }
+};
+function mk(kind,p){ return kind==='k'?`<span class="mk" ${P(p)} style="height:22px;width:4px"></span>`:`<span class="mc" ${P(p)} style="width:16px;height:16px"></span>`; }
+function heroVisual(lang, glass){
+  const h=HT[lang];
+  const sheet=`<div class="sheet rec ${glass?'glassy':''}" style="padding:14px 14px 20px;border-radius:24px 24px 0 0"><div class="hdr" style="font-size:11px"><span><span class="dot" style="width:7px;height:7px"></span>${lang==='ko'?'녹음 중':'正在录音'}</span><span class="num">0:09 / 1:00</span></div><div style="font-weight:800;font-size:15px;margin-top:8px">${lang==='ko'?'다 말하면 손을 떼세요':'说完松手，AI 帮你整理'}</div><div class="wave" style="height:34px;margin:8px 0 6px;gap:2px">${waveBars(30).replace(/height:(\d+)px/g,(m,v)=>'height:'+Math.round(v*0.6)+'px').replace(/<i /g,'<i style="width:3px" ').replace(/style="width:3px" style="/g,'style="width:3px;')}</div><div class="micbtn" style="width:56px;height:56px;right:14px;bottom:16px;box-shadow:0 0 0 8px var(--mic-halo),0 0 0 16px var(--mic-halo2)">${ic('mic')}</div></div>`;
+  const bg=`<div style="padding:40px 12px 0;filter:blur(2px);opacity:.75"><div class="date" style="font-size:20px">${lang==='ko'?'10월 24일 토요일':'10月24日 周六'}</div><div class="now" style="padding:12px;margin-top:10px;border-radius:18px"><div class="ti" style="font-size:15px">NEOX</div><div class="bar" style="margin:8px 0 0"><i></i></div></div><div class="panel" style="height:120px;margin-top:10px;border-radius:18px"></div></div>`;
+  return `<div class="visual"><div class="say"><div class="k">${ic('mic').replace('ico','ico" style="width:13px;height:13px')}${h.sayk}</div>“${h.say}”</div>
+   <div class="vphone"><div class="in">${bg}${sheet}</div></div>
+   <div class="split"><div style="font-size:12px;font-weight:800;color:var(--text-2);padding-left:4px">${lang==='ko'?'AI가 3개로 나눴어요':'AI 拆成了 3 条'}</div>${h.items.map(i=>`<div class="it">${mk(i[0],i[1])}<span class="t1">${i[2]}</span><span class="t2">${i[3]}</span></div>`).join('')}</div></div>`;
+}
+function siteTop(lang, pc){
+  const h=HT[lang];
+  return (pc?'':`<div class="sbarw"><div class="u">lemomemo.com</div></div>`) +
+   `<div class="snav"><svg viewBox="0 0 1024 1024"><use href="#icL"/></svg><b>${h.name}</b>${pc?`<div class="lk"><span>${h.nav[0]}</span><span>${h.nav[1]}</span><span class="btn sm pri">${h.nav[2]}</span></div>`:`<div class="lk"><span class="btn sm pri">${h.nav[2]}</span></div>`}</div>`;
+}
+function siteHero(lang, pc, glass){
+  const h=HT[lang];
+  const txt=`<div><svg viewBox="0 0 1024 1024" style="width:${pc?96:76}px;height:${pc?96:76}px;border-radius:${pc?21:17}px;box-shadow:var(--shadow-2)"><use href="#icL"/></svg><div class="big">${h.name}</div><div class="en">${h.sub}</div><div class="tag">${h.tag}</div><div class="ds">${h.ds}</div><div class="cta"><span class="btn pri">${h.login}</span><span class="btn out">${h.how}</span></div></div>`;
+  return `<div class="shero" ${lang==='ko'?'lang="ko"':''}>${txt}${heroVisual(lang, glass)}</div>`;
+}
+function feat(title, text, il, wide){ return `<div class="feat ${wide?'wide':''}"><div class="il">${il}</div><h4>${title}</h4><p>${text}</p></div>`; }
+/* 官网正文：中文、韩文两套（R-75 按设备语言显示；R-81、R-83、R-87、R-88、R-90、R-91） */
+const SB = {
+ zh:{ wk:'一二三四五六日', h1:'能做什么', ld1:'现在只对朋友开放，每个人各用各的。下面这些都在 4.0.0 里。',
+   f1a:'“周五前交 NEOX 竖版，<span lang="ko" style="font-family:var(--f-ko)">다이소</span> 收纳盒…”', f1b:'↓ AI 拆成 3 条', f1c:['17:00 给 박 대리 打电话','日程'], f1d:['买 다이소 收纳盒','待办'],
+   cal:[['1','国庆','h'],['2','廿二','h'],['3','开天节','h'],['4','廿四','h'],['5','补休','h'],['6','廿六','h'],['7','廿七','h'],['8','寒露',''],['9','韩文节','h'],['10','九月',''],['11','初二',''],['12','初三',''],['13','初四',''],['14','初五','td']],
+   f3a:'隐私记', f3b:'Face ID 或密码', f3c:'NEOX 片尾 logo 再短 0.5 秒',
+   f4:['生日','3 天','김지민 · 满 29 周岁','生日 · 阴历','23 天','妈妈 · 十月初八'],
+   f5:['15:30 SignPlex 客户反馈会','15 分钟后','知道了','10 分钟后','装了电脑版时，iPhone 和电脑一起响'],
+   f7:'iPhone · Windows · 网页',
+   feats:[['说一句就记下','按住“＋”说一句，中文、韩文混着说也行。AI 听完拆成几条，放进日程、待办或随手记。'],
+     ['日程、待办、月历','今天的事按时间排成一列。月历里有农历，还有中国和韩国的节假日。'],
+     ['随手记和隐私记','想到什么先记下，可以插图，也能转成待办。隐私记要解锁才能看：可用 Face ID（支持的设备）或密码。'],
+     ['纪念日','生日、纪念日、倒数日放在一起，阴历和阳历都能记，到时候提前提醒你。'],
+     ['按时提醒','到点了手机会响，可以点“10 分钟后”再提醒一次。装了电脑版时，手机和电脑一起响。'],
+     ['中文、韩文界面','界面可以选中文或한국어，你和朋友各用各的语言。'],
+     ['手机、电脑、网页同步','用同一个账号登录，在哪边记的，另外两边都能看到。']],
+   h2:'怎么安装', ld2:'不用去应用商店。',
+   ip:['点上面的“开始使用”（或用 Safari 打开 lemomemo.com/app）','在打开的 App 页面里点“分享”，选“添加到主屏幕”','回到主屏幕，点“Lemo”的图标打开，再登录'],
+   ipn1:'要从主屏幕的图标打开，到点的提醒才能在 iPhone 上响。推荐 iOS 17 以上，最低 iOS 16.4。', ipn2:'登录验证码发到你的邮箱。在中国大陆用 Gmail 收验证码，需要能访问 Gmail。',
+   win:'Windows 电脑', wind:'装一个小程序，在任何窗口按 Ctrl+Alt+空格 弹出打字框，写一句就记下。电脑版只能打字，说话请用手机。', winb:'下载 Windows 版',
+   inv:'现在只对朋友开放', inv1:'注册需要邀请码。邀请码只由柠檬记的负责人发，想用的话请向负责人要一个。',
+   foot:['隐私说明','使用条款'] },
+ ko:{ wk:'월화수목금토일', h1:'이런 걸 할 수 있어요', ld1:'지금은 지인에게만 열려 있고, 각자 따로 써요. 아래 기능은 모두 4.0.0에 들어 있어요.',
+   f1a:'“금요일까지 NEOX 세로판, 다이소 수납함…”', f1b:'↓ AI가 3개로 나눴어요', f1c:['17:00 박 대리에게 전화','일정'], f1d:['다이소 수납함 사기','할 일'],
+   cal:[['1','국경절','h'],['2','8.22','h'],['3','개천절','h'],['4','8.24','h'],['5','대체휴일','h'],['6','8.26','h'],['7','8.27','h'],['8','한로',''],['9','한글날','h'],['10','9.1',''],['11','9.2',''],['12','9.3',''],['13','9.4',''],['14','9.5','td']],
+   f3a:'비밀 메모', f3b:'Face ID 또는 비밀번호', f3c:'NEOX 엔딩 로고 0.5초 짧게',
+   f4:['생일','3일','김지민 · 만 29세','생일 · 음력','23일','엄마 · 음력 10월 8일'],
+   f5:['15:30 SignPlex 고객 피드백 회의','15분 후','확인','10분 후','컴퓨터 버전도 있으면 iPhone과 컴퓨터가 함께 울려요'],
+   f7:'iPhone · Windows · 웹',
+   feats:[['한마디면 기록','+를 누른 채 말하세요. 중국어와 한국어를 섞어도 돼요. AI가 듣고 일정, 할 일, 메모로 나눠 줘요.'],
+     ['일정, 할 일, 캘린더','오늘 일정이 시간순으로 한 줄에 정리돼요. 캘린더에는 음력과 중국·한국 공휴일이 함께 나와요.'],
+     ['메모와 비밀 메모','떠오르는 건 바로 메모하고, 사진을 넣거나 할 일로 바꿀 수 있어요. 비밀 메모는 Face ID(지원 기기) 또는 비밀번호로 열어요.'],
+     ['기념일','생일, 기념일, 디데이를 한곳에 모아요. 음력과 양력 모두 되고, 미리 알려 줘요.'],
+     ['제때 알림','시간이 되면 휴대폰이 울리고, “10분 후”로 다시 알림을 받을 수 있어요. 컴퓨터 버전도 설치했다면 휴대폰과 컴퓨터가 함께 울려요.'],
+     ['중국어·한국어 화면','화면 언어를 中文 또는 한국어로 고를 수 있어요. 친구와 각자 편한 언어로 써요.'],
+     ['휴대폰, 컴퓨터, 웹 동기화','같은 계정으로 로그인하면 어디서 기록해도 다른 기기에서 바로 보여요.']],
+   h2:'설치 방법', ld2:'앱 스토어는 필요 없어요.',
+   ip:['위의 “시작하기”를 누르세요 (또는 Safari로 lemomemo.com/app 열기)','열린 앱 화면에서 “공유”를 누르고 “홈 화면에 추가”를 고르세요','홈 화면에서 “Lemo” 아이콘을 눌러 열고 로그인하세요'],
+   ipn1:'홈 화면 아이콘으로 열어야 iPhone에서 알림이 울려요. iOS 17 이상을 권장하고, 최소 iOS 16.4가 필요해요.', ipn2:'로그인 인증 코드는 이메일로 와요. 중국 본토에서 Gmail로 받으려면 Gmail에 접속할 수 있어야 해요.',
+   win:'Windows 컴퓨터', wind:'작은 프로그램을 설치하면 어느 창에서든 Ctrl+Alt+Space로 입력창을 열어 바로 기록할 수 있어요. 컴퓨터 버전은 입력만 되고, 말로 기록하기는 휴대폰에서 해요.', winb:'Windows 버전 다운로드',
+   inv:'지금은 지인에게만 열려 있어요', inv1:'가입하려면 초대 코드가 필요해요. 초대 코드는 레모 운영자만 발급하니, 운영자에게 받아 주세요.',
+   foot:['개인정보 처리 안내','이용 약관'] }
+};
+function siteBody(pc, lang='zh'){
+  const t=SB[lang], ko=lang==='ko';
+  const f1=`<div class="mrow" style="background:var(--panel);font-weight:400">${t.f1a}</div><div style="text-align:center;color:var(--text-2);font-size:12px;margin:2px 0">${t.f1b}</div><div class="mrow">${mk('k',2)}${t.f1c[0]}<small>${t.f1c[1]}</small></div><div class="mrow">${mk('c',3)}${t.f1d[0]}<small>${t.f1d[1]}</small></div>`;
+  const f2=`<div class="mcal">${t.wk.split('').map(d=>`<span style="background:none;color:var(--text-2)">${d}</span>`).join('')}${'<span style="background:none"></span>'.repeat(3)}${t.cal.map(c=>`<span class="${c[2]}"><b class="num">${c[0]}</b><em>${c[1]}</em></span>`).join('')}</div>`;
+  const f3=`<div class="mrow">${ic('lock').replace('ico','ico" style="width:15px;height:15px')}${t.f3a}<small>${t.f3b}</small></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px"><div style="${PHOTO.ginkgo};border-radius:10px;height:56px"></div><div class="mrow" style="margin:0;display:block;font-size:11.5px">${t.f3c}</div></div>`;
+  const f4=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><div class="mrow" style="display:block;margin:0"><span class="dia"></span> ${t.f4[0]}<div class="num" style="font-size:22px;font-weight:800">${t.f4[1]}</div><small style="margin:0">${t.f4[2]}</small></div><div class="mrow" style="display:block;margin:0"><span class="dia"></span> ${t.f4[3]}<div class="num" style="font-size:22px;font-weight:800">${t.f4[4]}</div><small style="margin:0">${t.f4[5]}</small></div></div>`;
+  const f5=`<div class="mrow" style="background:var(--ink);color:var(--on-ink)">${ic('bell').replace('ico','ico" style="width:15px;height:15px')}${t.f5[0]}<small style="color:inherit;opacity:.8">${t.f5[1]}</small></div><div style="display:flex;gap:8px;margin-top:8px"><span class="btn sm pri" style="height:30px">${t.f5[2]}</span><span class="btn sm out" style="height:30px">${t.f5[3]}</span></div><div style="font-size:11.5px;color:var(--text-2);margin-top:8px">${t.f5[4]}</div>`;
+  const f6=`<div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip ${ko?'':'on'}">中文</span><span class="chip ${ko?'on':''}" lang="ko" style="font-family:var(--f-ko)">한국어</span></div><div class="mrow" style="margin-top:10px">今天 · 待办 · 随手记</div><div class="mrow" lang="ko" style="font-family:var(--f-ko)">오늘 · 할 일 · 메모</div>`;
+  const f7=`<div style="display:flex;align-items:flex-end;justify-content:center;gap:12px;height:96px"><div style="width:42px;height:80px;border-radius:10px;background:var(--panel);box-shadow:inset 0 0 0 2px var(--text)"></div><div style="width:120px;height:74px;border-radius:8px;background:var(--panel);box-shadow:inset 0 0 0 2px var(--text)"></div><div style="width:88px;height:62px;border-radius:8px;background:var(--panel);box-shadow:inset 0 0 0 2px var(--text-2)"></div></div><div style="font-size:11.5px;color:var(--text-2);text-align:center;margin-top:6px">${t.f7}</div>`;
+  const ils=[f1,f2,f3,f4,f5,f6,f7];
+  const lemoIcon=`<span style="flex:none;text-align:center;font-size:10.5px;font-weight:600"><svg viewBox="0 0 1024 1024" style="width:44px;height:44px;border-radius:10px;display:block"><use href="#icL"/></svg>Lemo</span>`;
+  return `<div ${ko?'lang="ko"':''}><div class="ssec" id="feat"><h3>${t.h1}</h3><div class="ld">${t.ld1}</div>
+   <div class="feats">
+    ${t.feats.map((x,i)=>feat(x[0],x[1],ils[i],pc&&(i===0||i===6))).join('')}
+   </div></div>
+   <div class="ssec" id="install"><h3>${t.h2}</h3><div class="ld">${t.ld2}</div>
+   <div class="steps">
+    <div class="inst"><b style="font-size:17px">iPhone</b>
+      ${t.ip.map((x,i)=>`<div class="s"><span class="stepn">${i+1}</span><span style="flex:1">${x}</span>${i===2?lemoIcon:''}</div>`).join('')}
+      <div class="muted" style="font-size:12.5px;margin-top:12px">${t.ipn1}</div>
+      <div class="muted" style="font-size:12.5px;margin-top:6px">${t.ipn2}</div></div>
+    <div class="inst"><b style="font-size:17px">${t.win}</b><div class="muted" style="font-size:14px;margin-top:8px">${t.wind}</div>
+      <span class="btn pri w" style="margin-top:16px;height:52px">${t.winb}</span></div>
+   </div></div>
+   <div class="ssec"><div class="invite"><b style="font-size:20px">${t.inv}</b><p>${t.inv1}</p><p>${PRIV[lang]}</p></div></div>
+   <div class="sfoot"><a style="color:inherit;text-decoration:underline">${t.foot[0]}</a><span>·</span><a style="color:inherit;text-decoration:underline">${t.foot[1]}</a><div class="lang"><span class="${ko?'':'on'}">中文</span><span class="${ko?'on':''}" lang="ko" style="font-family:var(--f-ko)">한국어</span></div></div></div>`;
+}
+function siteFrame(inner, pc){
+  return pc ? `<div class="web" style="height:auto"><div class="bchrome"><div class="tabs"><div class="tab1"><svg viewBox="0 0 1024 1024"><use href="#icLs"/></svg>柠檬记 · Lemo</div></div><div class="addr"><span>‹</span><span>›</span><span>↻</span><span class="u">lemomemo.com</span></div></div>${inner}</div>`
+            : `<div class="phone"><div class="scr app" style="min-height:0;padding-bottom:0">${status()}${inner}<div class="home"></div></div></div>`;
+}
+function renderHome(){
+  const pc=document.body.dataset.dev==='d';
+  const one=(th, full, lang='zh', cap)=>{
+    const glass=th.startsWith('glass');
+    const inner=`<div class="site app th-${th} ${pc?'pc':'ph'}">${siteTop(lang,pc)}${siteHero(lang,pc,glass)}${full?siteBody(pc,lang):''}</div>`;
+    return `<figure class="sc"><div class="fit"><div class="inner"><div class="th-${th}">${siteFrame(inner,pc)}</div></div></div><figcaption>${cap}</figcaption></figure>`;
+  };
+  document.getElementById('homes').innerHTML = `<div class="screens">${one('simple-light',true,'zh','简洁·浅色：完整一页（“开始使用”链接到 /app/）')}${one('simple-dark',false,'zh','简洁·深色：首屏')}${one('glass-light',false,'zh','磨砂玻璃·浅色：首屏')}${one('glass-dark',false,'zh','磨砂玻璃·深色：首屏')}${one('simple-light',true,'ko','韩文完整一页（简洁·浅色；/ko/）')}</div>`;
+}
+
+/* ---------------- 第七轮补画（手机） ---------------- */
+const onPhone = (h, extra, time) => h.replace('<div class="home"></div>', (extra||'') + '<div class="home"></div>').replace(time?'<span class="num">14:17</span>':'@@', time?`<span class="num">${time}</span>`:'@@');
+/* 朋友第一次登录：AI 处理告知（R-81、R-82） */
+PH.ainote = () => phone(`<div class="pg" style="padding-top:18px"><div class="muted" style="text-align:center;font-size:12px">第一次登录后 · 在通知、麦克风说明之前</div>
+  <div style="text-align:center;font-size:22px;font-weight:700;line-height:1.3;margin:18px 0 6px">你记的内容会交给<br>谷歌 AI 处理</div>
+  <div class="muted" style="text-align:center;font-size:13.5px;margin:0 8px 16px">柠檬记用谷歌的 Gemini 把录音转成文字、拆成几条、给随手记分类。</div>
+  <div class="panel">${[['mic','说话记事','录音交给 AI 转成文字并拆分'],['note','打字和随手记','文字交给 AI 整理、分类'],['lock','隐私记','也交给 AI 分类；设置里可关']].map(x=>`<div class="sym"><span class="c">${ic(x[0])}</span><div><b style="font-weight:600">${x[1]}</b><div class="muted" style="font-size:12px">${x[2]}</div></div></div>`).join('')}</div>
+  <div class="panel" style="padding:12px 16px;margin-top:12px;font-size:13px;line-height:1.55">免费版 AI 的内容可能被谷歌用于改进产品。其他用户（包括邀请你的人）看不到你记的东西；数据存在服务器上，运营者在技术上能访问。使用柠檬记需年满 18 岁。</div>
+  <span class="btn pri w" style="margin-top:18px;height:52px">知道了，继续</span>
+  <div style="text-align:center;font-size:13px;margin-top:12px"><u>隐私说明</u>　·　<u>使用条款</u></div>
+  <div class="muted" style="text-align:center;font-size:12px;margin-top:6px">不想让隐私记交给 AI：设置 › 语音与 AI › “隐私记交给 AI”可关</div></div>`, {nav:false});
+/* 提示条失败态：AI 没回应 */
+PH.toastfail = () => phone(todayBody('zh') + `<div class="dock toast"><div class="r"><div style="flex:1;min-width:0"><div class="t1">AI 这次没回应，还没保存</div><div class="t2" style="white-space:normal">录音还留在手机里，可以重试；也可以再说一次，或改用打字。</div></div></div><div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end"><span class="btn">改用打字</span><span class="btn">再说一次</span><span class="btn" style="background:var(--accent);color:var(--on-accent);box-shadow:none">重试</span></div></div>`, {nav:0});
+/* 断网 */
+const SYNCROW = `<div class="row sync"><span class="tm s">今天内</span><span class="mc" ${P(3)}></span><div class="tx"><div class="t1">买猫砂</div><div class="t2">还没同步 · 联网后补上 AI 分类</div></div><span class="mo">⋯</span></div>`;
+PH.offline = () => phone(todayBody('zh').replace('<div class="hd">', `<div class="offban"><i></i><span style="flex:1">没有网络 · 1 条存在手机里，联网后自动同步</span></div><div class="hd">`).replace('<div class="row "><span class="tm num">15:30</span>', SYNCROW + '<div class="row "><span class="tm num">15:30</span>')
+  + `<div class="dock toast"><div class="r"><div style="flex:1;min-width:0"><div class="t1">没网，已存在手机里：买猫砂</div><div class="t2">联网后自动同步，并补上 AI 分类</div></div><span class="btn">撤销</span><span class="btn">修改</span></div></div>`, {nav:0});
+/* 其他页面的提醒：顶部横幅 + 下方按钮；待办标题前是可点的完成圆圈 */
+PH.banner = () => onPhone(PH.todo(), `<div class="tban"><div style="display:flex;align-items:center;gap:12px"><span class="done-c" ${P(2)}></span><div style="flex:1;min-width:0"><div class="k">待办提醒 · 今天截止</div><div class="t">回复 박 대리 的邮件</div></div><span class="mo" style="width:auto;font-size:13px;font-weight:600;letter-spacing:0;color:var(--text)">详情 ›</span></div><div class="grab"></div></div>
+  <div class="dock abar four ${glassy()}"><span class="btn pri">知道了</span><span class="btn out">10 分钟后</span><span class="btn out">1 小时后</span><span class="btn out">明天再提醒</span></div>`, '15:15');
+/* 整页提醒（待办） */
+PH.fulltodo = () => phone(`<div class="pg"><div style="display:flex;justify-content:space-between;font-size:14px;margin:4px 0 22px"><span>‹ 今天</span><span class="muted">第 2 条，共 2 条</span></div>
+  <div class="muted" style="font-size:14px;display:flex;align-items:center;gap:6px">${ic('bell').replace('ico','ico" style="width:16px;height:16px')}待办提醒 · 今天截止</div>
+  <div class="fa-big">15:15</div>
+  <div style="display:flex;align-items:center;gap:14px;margin:8px 0 2px"><span class="done-c" ${P(2)} style="width:30px;height:30px"></span><div style="font-size:24px;font-weight:700;line-height:1.25">回复 박 대리 的邮件</div></div>
+  <div class="muted" style="font-size:13px;margin:2px 0 16px 44px">点圆圈就算完成 · SignPlex</div>
+  <div class="panel" style="padding:4px 16px 14px"><div class="fld"><div class="k">备注</div><div class="v">附上 4.0 报价单，抄送 김 팀장</div></div><div class="fld"><div class="k">原话（10月23日 语音）</div><div class="v">“明天记得回박대리的邮件，把报价单附上”</div></div></div>
+  <div class="muted" style="font-size:12px;margin-top:14px;text-align:center">装了电脑版时，电脑上也在响。在这里点了，电脑上的提醒会自动消失。</div></div>
+  <div class="dock" style="bottom:42px"><span class="btn pri w">知道了</span><div style="display:flex;gap:8px;margin-top:8px"><span class="btn soft" style="flex:1">10 分钟后</span><span class="btn soft" style="flex:1">1 小时后</span><span class="btn soft" style="flex:1">明天再提醒</span></div></div>`, {nav:false, time:'15:15'});
+/* 隐私记：第一次设密码 */
+PH.firstpw = () => phone(`<div class="pg"><div style="display:flex;justify-content:space-between;font-size:14px;margin-top:4px"><span>‹ 随手记</span><span>取消</span></div>
+  <div style="text-align:center;margin-top:14px"><div class="lockic">${I.lock}</div><div style="font-size:22px;font-weight:700;margin-top:12px">给隐私记设个密码</div><div class="muted" style="font-size:13px;margin-top:4px">4 到 12 位数字，简单就行 · 忘了可以用登录邮箱重设</div><div class="muted" style="font-size:12px;margin-top:6px">第 1 步，共 2 步：输入 → 再输一次</div></div>
+  <div class="pdots"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="e"></i></div>
+  <div class="kpad">${['1','2','3','4','5','6','7','8','9','确定','0','⌫'].map(x=>`<span class="${x==='确定'||x==='⌫'?'e':''}" ${x==='确定'?'style="font-weight:700"':''}>${x}</span>`).join('')}</div>
+  <div class="panel" style="display:flex;align-items:center;gap:10px;padding:0 16px;min-height:52px;margin-top:20px;font-size:14px"><span>以后用 Face ID 解锁<span class="muted" style="font-size:12px">（支持的设备）</span></span><span class="tgl on"></span></div>
+  <div class="muted" style="font-size:12px;text-align:center;margin-top:10px">离开 App 1 分钟后自动重新上锁，设置里可改</div></div>`, {nav:false});
+/* 空状态：今天页没有日程 */
+PH.empty = () => phone(`<div class="pg"><div class="hd"><div class="tt"><div class="date">${L.zh.date}</div><div class="sub">农历九月十五</div></div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
+  <div class="panel" style="padding:24px 20px;margin-top:16px"><div style="font-size:22px;font-weight:700">今天还空着</div><div class="muted" style="font-size:14px;margin:6px 0 10px">点下面任意一句试试，会真的记下来，不想要可以撤销</div>${['“明天上午 10 点 치과”','“周五前交 NEOX 片尾”','“妈妈生日是阴历十月初八”'].map(x=>`<div class="try">${x}</div>`).join('')}</div></div>
+  <div style="position:absolute;right:24px;bottom:118px;text-align:right;font-size:13px;line-height:1.5;z-index:4"><b>点一下打字</b><br><b>按住说话</b><div style="font-size:26px;line-height:1;margin-right:16px">↘</div></div>`, {nav:0});
+/* 韩文设置页 */
+PH.kosettings = () => {
+  const s=(k,v)=>`<div class="srow"><span>${k}</span><span class="v">${v}</span><span class="chev">›</span></div>`;
+  const skin = document.body.dataset.skin==='glass'?'유리':'심플';
+  return phone(`<div class="pg"><div style="display:flex;align-items:center;height:44px;position:relative"><span style="font-size:14px">‹ 오늘</span><b style="position:absolute;left:0;right:0;text-align:center;font-size:17px;pointer-events:none">설정</b></div>
+  <div class="panel" style="display:flex;align-items:center;gap:12px;padding:16px;margin-top:14px"><div class="av">H</div><div style="flex:1;min-width:0"><b style="font-size:14px">h***@gmail.com</b><div class="muted" style="font-size:12px">기기 2대: iPhone, Windows</div></div><span class="chev">›</span></div>
+  <div class="panel set" style="margin-top:20px">${s('언어','한국어')}${s('테마',skin+' · 다크 모드는 시스템 따르기')}<div class="srow"><span style="padding-left:14px">투명 효과 줄이기<span class="muted" style="display:block;font-size:11.5px">iPhone은 시스템 설정을 못 읽어서 여기서 켜요</span></span><span class="tgl"></span></div><div class="srow"><span>메모 보기 방식<span class="muted" style="display:block;font-size:11.5px">휴대폰에만 적용돼요 (컴퓨터는 따로)</span></span><span class="v">카드형</span><span class="chev">›</span></div>${s('캘린더','음력, 중국·한국 공휴일')}${s('알림','알림 켜짐 · 둘 다 울림')}${s('음성 · AI','마이크 허용됨 · 오늘 AI 18번')}${s('비밀 메모','Face ID · 나가고 1분 뒤 잠금')}${s('시간대','현재 위치 따르기 · 서울')}</div>
+  <div class="panel set" style="margin-top:20px">${s('데이터','매일 03:00 백업 · 최근 삭제 3개')}${s('Claude 채팅에서 기록하기','연결됨')}${s('친구 초대','관리자 · 초대 코드 발급')}${s('기호 설명','막대, 동그라미, 마름모')}<div class="srow"><svg viewBox="0 0 1024 1024" style="width:28px;height:28px;border-radius:7px"><use href="#icL"/></svg><span>레모 정보</span><span class="v">4.0.0 · 기능 설명</span><span class="chev">›</span></div></div>
+  <div style="text-align:center;margin:28px 0 0;font-size:14px">로그아웃</div></div>`, {nav:false, lang:'ko'});
+};
+/* 电脑模式下，第七轮补画的手机画面照样按手机显示 */
+['ainote','toastfail','offline','banner','fulltodo','firstpw','empty','kosettings'].forEach(k=>{ DK[k] = () => `<div style="display:flex;justify-content:center">${PH[k]()}</div>`; });
+
+/* 纪念日编辑：提醒设置（R-94） */
+PH.annedit = () => phone(`<div class="blurbg" style="height:844px;overflow:hidden"><div class="pg"><div style="display:flex;justify-content:space-between;align-items:center;height:44px;font-size:14px"><span>‹ 纪念日</span><b style="font-size:17px">编辑纪念日</b><span style="font-weight:600">完成</span></div>
+  <div class="segc"><span class="on">生日</span><span>纪念日</span><span>倒数日</span></div>
+  <div class="panel set" style="margin-top:14px"><div class="srow"><span>名字</span><span class="v" style="color:var(--text)">김지민</span></div><div class="srow"><span>日期</span><span class="v" style="color:var(--text)">阳历 10月27日 · 1997 年</span><span class="chev">›</span></div><div class="srow"><span>提醒</span><span class="v">提前 7 天、前一天 · 9:00（默认）</span><span class="chev">›</span></div><div class="srow"><span>备注</span><span class="v">喜欢柠檬蛋糕</span></div></div>
+  <div class="snote">下一次：10月27日 周二 · 满 29 周岁</div></div></div>
+  <div class="scrim"></div>
+  <div class="sheet ${glassy()}" style="padding:18px 20px 60px"><div style="width:36px;height:4px;border-radius:2px;background:var(--step-off);margin:0 auto 14px"></div>
+  <div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:18px">这一条的提醒</b><span class="muted" style="font-size:13px">恢复默认</span></div>
+  <div class="muted" style="font-size:12.5px;margin-top:2px">默认：提前 7 天和前一天，早上 9:00。只改这一条，不影响其他纪念日。</div>
+  <div style="font-size:13px;font-weight:600;margin:16px 0 8px">提前几天（可多选）</div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">${[['当天',0],['前一天',1],['提前 3 天',0],['提前 7 天',1],['提前 14 天',0]].map(x=>`<span class="chip ${x[1]?'on':''}">${x[1]?'✓ ':''}${x[0]}</span>`).join('')}</div>
+  <div style="font-size:13px;font-weight:600;margin:18px 0 8px">几点提醒</div>
+  <div class="panel" style="display:flex;align-items:center;justify-content:center;gap:18px;padding:10px;background:var(--panel-2);box-shadow:none"><span class="muted num" style="font-size:20px">08</span><b class="num" style="font-size:30px">09 : 00</b><span class="muted num" style="font-size:20px">10</span></div>
+  <div class="muted" style="font-size:12.5px;margin-top:12px">会在 10月20日、10月26日 早上 9:00 提醒你</div>
+  <span class="btn pri w" style="margin-top:16px;height:50px">好了</span></div>`, {nav:false});
+DK.annedit = () => `<div style="display:flex;justify-content:center">${PH.annedit()}</div>`;
+
+/* ---------------- 月历项目标记方案 ---------------- */
+let MV = 'a';
+const EV = {2:[3],6:[1,4],13:[2],14:[1,2],15:[2,2,5],16:[6],19:[1,3],20:[4],21:[2],22:[2],23:[1,3],24:[2,1,2,3,1,2],25:[5],26:[1,2],27:[3],28:[6],29:[2,4],30:[1]};
+const EVT = {24:['校对','对片','反馈','吃饭','导出','回信'],15:['反馈','客户','韩语'],6:['对片','灵感'],14:['导出','客户'],19:['素材','聚餐'],23:['对片','买菜'],26:['剪辑','提案'],29:['合同','灵感']};
+const SHORT = {1:'NEOX',2:'客户',3:'生活',4:'灵感',5:'韩语',6:'购物'};
+function evHTML(day, out){
+  if(out) return '';
+  const list = EV[+day]; if(!list) return '';
+  const names = EVT[+day] || list.map(p=>SHORT[p]);
+  const cap = MV==='a'?4:MV==='b'?3:2;
+  const shown = list.slice(0,cap), rest = list.length-shown.length;
+  const more = rest>0?`<span class="more">+${rest}</span>`:'';
+  if(MV==='c') return `<div class="ev">${shown.map((p,i)=>`<i style="--pc:var(--p${p}s);--pb:var(--p${p})">${names[i]}</i>`).join('')}${more}</div>`;
+  return `<div class="ev">${shown.map(p=>`<i ${P(p)}></i>`).join('')}${more}</div>`;
+}
+PH.month = () => {
+  const C=[['28','十八','o'],['29','十九','o'],['30','二十','o'],['1','国庆','h f'],['2','廿二','h'],['3','廿三','h'],['4','廿四','h'],
+  ['5','廿五','h'],['6','廿六','h'],['7','廿七','h'],['8','寒露','f'],['9','廿九',''],['10','九月',''],['11','初二',''],
+  ['12','初三',''],['13','初四',''],['14','初五',''],['15','初六',''],['16','初七',''],['17','初八',''],['18','重阳','f'],
+  ['19','初十',''],['20','十一',''],['21','十二',''],['22','十三',''],['23','霜降','f'],['24','十五','td'],['25','十六',''],
+  ['26','十七',''],['27','十八','','◆'],['28','十九',''],['29','二十',''],['30','廿一',''],['31','廿二',''],['1','廿三','o']];
+  const cells=C.map(c=>{const cl=c[2]||'';const out=cl.includes('o');return `<div class="cell ${cl.includes('h')?'h':''} ${out?'o':''} ${cl.includes('td')?'td':''}"><div class="d">${c[0]}</div><div class="l ${cl.includes('f')?'f':''}">${c[1]}${c[3]?' <span class="dia" style="width:7px;height:7px"></span>':''}</div>${evHTML(c[0],out)}</div>`}).join('');
+  const day=[['10:30','k',2,'SignPlex 字幕校对','已过去',1],['13:00','k',1,'NEOX 横版对片','到 14:30'],['15:30','k',2,'SignPlex 客户反馈会','到 16:30'],['19:00','k',3,'和 지민 吃饭','연남동'],['今天内','c',1,'NEOX 竖版 4K 导出','今天截止'],['','c',2,'回复 박 대리 的邮件','SignPlex']];
+  const lg = MV==='a'?'圆点：当天各项目的事（颜色＝项目）':MV==='b'?'短条：一条一件事（颜色＝项目）':'标签：一件事，写简称（颜色＝项目）';
+  return phone(`<div class="pg mv-${MV}"><div class="hd"><div class="tt"><div class="date pt"><span class="num">2026</span>年<span class="num">10</span>月</div></div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
+  <div class="segc"><span>周</span><span class="on">月</span><span>纪念日</span></div>
+  <div class="panel mgrid"><div class="wk">${'一二三四五六日'.split('').map(d=>`<span>${d}</span>`).join('')}</div><div class="wkr">${cells}</div>
+  <div class="legend"><span>灰底：中国节假日（设置里可改成韩国或两国）</span><span>${lg}</span><span><span class="dia" style="width:7px;height:7px;margin-right:4px"></span>纪念日</span></div></div>
+  <div class="secth"><span>10月24日 周六 · 丙午年九月十五</span><a>6 项</a></div>
+  <div class="panel river">${day.map(r=>row(r).replace('class="row ','class="row '+(r[5]?'past ':''))).join('')}</div></div>`, {nav:1});
+};
+const MVLIST = [['a','A 彩色圆点','最多 4 个，多出来写 +N；格子不加高'],['b','B 彩色短条','一件事一根，最多 3 根，多出来写 +N'],['c','C 色块标签','写两个字简称，最多 2 个，多出来写 +N；格子加高']].map(([v,t,c])=>{
+  PH['mv_'+v] = () => { MV=v; return PH.month(); };
+  DK['mv_'+v] = () => { MV=v; const h=DK.month(); return h.replace('<div class="dgrid','<div class="mv-'+v+'"><div class="dgrid')+'</div>'; };
+  return ['mv_'+v, t, c];
+});
+/* ---------------- 画面清单 ---------------- */
+const LIST = MVLIST;
+function render(){
+  const d=document.body.dataset.dev;
+  document.getElementById('screens').innerHTML = LIST.map(([k,t,c,dt,dc],i)=>`<figure class="sc"><div class="fit"><div class="inner">${(d==='d'?DK:PH)[k]()}</div></div><figcaption>${i+1}　${d==='d'&&dt?dt:t}<span class="cap2">${d==='d'&&dc?dc:c}</span></figcaption></figure>`).join('');
+  fit();
+}
+function fit(){
+  document.querySelectorAll('.fit').forEach(f=>{
+    const inner=f.firstElementChild, el=inner.firstElementChild; if(!el) return;
+    const w=el.scrollWidth, h=el.offsetHeight, s=Math.min(1,f.clientWidth/w);
+    inner.style.transform=`scale(${s})`; inner.style.width=w+'px'; f.style.height=(h*s)+'px';
+    if(document.body.dataset.dev==='p') f.style.maxWidth='406px';
+  });
+}
+document.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{
+  const k=b.dataset.k; document.body.dataset[k]=b.dataset.v;
+  b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', x===b?'true':'false'));
+  try{localStorage.setItem('skin-v4-'+k,b.dataset.v)}catch(e){}
+  render();
+}));
+document.getElementById('rt').addEventListener('change',e=>{document.body.dataset.rt=e.target.checked?'1':'0'});
+document.getElementById('hit').addEventListener('change',e=>{document.body.dataset.hit=e.target.checked?'1':'0'});
+(function init(){
+  const q=new URLSearchParams(location.search);
+  ['skin','mode','dev'].forEach(k=>{let v=q.get(k); if(!v){try{v=localStorage.getItem('skin-v4-'+k)}catch(e){}}
+    if(v){document.body.dataset[k]=v; document.querySelectorAll(`.seg button[data-k="${k}"]`).forEach(x=>x.setAttribute('aria-pressed', x.dataset.v===v?'true':'false'));}});
+  if(q.get('rt')==='1'){document.body.dataset.rt='1';document.getElementById('rt').checked=true;}
+  if(q.get('hit')==='1'){document.body.dataset.hit='1';document.getElementById('hit').checked=true;}
+  render(); addEventListener('resize',fit);
+})();
+</script>
+</body>
+</html>

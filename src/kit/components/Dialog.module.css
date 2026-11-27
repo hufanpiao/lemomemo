@@ -1,0 +1,114 @@
+/* 层级 70：在顶部安全区底色条（base.css body::before，1）和版本横幅（50）之上，整屏提示（100）之下；
+   遮罩和内容同一层，内容在 DOM 里排在后面，所以画在遮罩上面。
+   进出场的位移和透明度由 <Appear> 管（Dialog.tsx 头注释），这里只写位置和外观，不写 transition / animation */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  background: var(--scrim);
+}
+
+/* 滑动的是这一层：离底边的 16px 算在它自己的高度里，translateY(100%) 时整块（连阴影）都出了屏幕，不在底边留一条。
+   键盘弹着时抬到键盘上面（--kb 是 platform/viewport.ts 写的键盘压住的高度，底部输入行同一个变量），不然起名弹窗会被压在键盘下面 */
+.dock {
+  position: fixed;
+  z-index: var(--z-dialog);
+  left: 0;
+  right: 0;
+  bottom: var(--kb, 0);
+  padding: 0 16px 16px;
+}
+
+/* backdrop="mist"（Dialog.tsx）：位置、层级照 .scrim，材质换成 Mist.module.css 的 .glass（输入时那层液态模糊）；
+   不写底色，免得和 .glass 的底色同权重抢。后面的页面不拖动由层栈的滚动锁管，和遮罩一样 */
+.mist {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+}
+
+/* 关闭途中（<Appear> 打 data-state="leaving"）：退出动画播完、卸载之前不接点按 */
+.mist[data-state="leaving"],
+.scrim[data-state="leaving"],
+.dock[data-state="leaving"] {
+  pointer-events: none;
+}
+
+.content {
+  padding: 20px;
+  border-radius: var(--r-xl);
+  background: var(--sheet-bg);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+
+  /* 磨砂玻璃皮肤的 --sheet-bg 是半透明白，不带背景模糊后面的字会透上来、和弹层内容叠在一起（同 RecordPanel、DetailDrawer 的做法）；
+     简洁皮肤 --glass-blur 是 0、--sheet-bg 本来就是实色 */
+
+  /* avoid-ai-design-ignore: 负责人指定磨砂玻璃皮肤（R-06），弹层的玻璃底色要带模糊才成立 */
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+
+/* 减少透明效果（data-rt：开关、系统设置、隐私记页挂着时）：实色、不模糊（同 RecordPanel、DetailDrawer） */
+:global(:root:is([data-rt='1'], [data-solid='1'])) .content {
+  background: var(--glass-solid);
+  backdrop-filter: none;
+}
+
+/* edge（Dialog.tsx）：贴底边的整宽弹层：最宽 430 居中、上面两角 16 圆、
+   太高（最多 92vh）就自己滚动、底部留安全区；阴影是往上的 --sheet-up-shadow。目前只有今日运势传 */
+.edgeDock {
+  bottom: 0;
+  padding: 0;
+}
+
+.edge {
+  overflow: auto;
+  max-width: 430px;
+  max-height: 92vh;
+  margin: 0 auto;
+  padding: 4px 12px calc(20px + var(--inset-bottom));
+  border-radius: 16px 16px 0 0;
+  box-shadow: var(--sheet-up-shadow);
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: var(--fs-18);
+}
+
+/* 标题行右边有东西时（Dialog 的 aside）：标题在左、它在右，同一行 */
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.desc {
+  margin: 0 0 12px;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+/* ConfirmDialog.tsx 底部一排按钮（取消在左、确定在右）。
+   不单开一个样式文件：多一个 CSS 分包，首屏的预加载表要多记一个文件名（比放在这里多几个字节） */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* 可选：标题上面的图标（lead）和整体居中（center）；目前只有 MicCard 用 */
+.lead {
+  display: flex;
+  margin: 4px 0 14px;
+}
+
+.center {
+  text-align: center;
+}
+
+.center .lead {
+  justify-content: center;
+}

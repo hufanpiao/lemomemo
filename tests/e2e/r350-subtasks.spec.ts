@@ -1,0 +1,141 @@
+// R-350 待办子任务（方案 5.1～5.6；TC-R350-01～05、12 的界面部分）：不要后端，直接往本机库 planner-v4 写好待办和子任务再重新载入
+// • 列表页：副行“1/3”、摊开的勾选清单、分段进度条；勾一项写进 outbox（本机库 view 跟着变）；收起以后重新载入还是收起（每台设备各记各的）
+// • 今天页（R-442）：待办行和待办页同一个 kit TodoRow（11-17）：副行“起步 · 1/3”、下面进度条和“展开”（按需下载那一包，下完才出现），默认收起；点了就地展开、勾一项写进 outbox，
+//   勾完最后一项主待办自动完成、出“全部完成 · 撤销”，撤销以后主待办回到“今天的安排”；运行日志 subs today open n=3
+// • 日历日清单（R-443）：日程后面单独一组“待办 · N”，方框就地完成、出“已完成 · 撤销”；有子任务的就地展开、勾选；
+//   行和待办页同一套 T-A（负责人 11-17 选 T-A）：副行“起步 · 1/3”、行尾 H / M / L 三格，勾上停一下、收起、从这一天拿掉，撤销放回来
+// • 编辑页：“子任务”区列出各项，回车加一项写进 outbox
+// • 启动清孤儿（5.6 第 1 条）：主待办在本机已经没有的子任务，重新载入后本机库里删掉
+// • 环境变量 R350_SHOTS 指一个本机文件夹时（只在 Chromium），顺手截列表页、今天页、编辑页三张图给人看，不进仓库
+import type { Page } from '@playwright/test';
+import { cached, idbPut, idbRead } from './idb.ts';
+import { readRunLogInPage } from './page-helpers.ts';
+import { expect, test } from './session-fixture.ts';
+import { FAKE_USER_ID } from './session-fixture.ts';
+
+const TZ = 'Asia/Seoul';
+test.use({ loggedIn: true, timezoneId: TZ, viewport: { width: 390, height: 844 } });
+const today = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+const base = { user_id: FAKE_USER_ID, tz: TZ, created_at: 1, updated_at: 1, deleted_at: null, rev: 1 };
+const SHOTS = process.env['R350_SHOTS'];
+/** 主待办“买菜”（编辑页路由只认 UUID 形状的 id） */
+const T1 = '11111111-1111-4111-8111-111111111111';
+
+/** 本机库里一张表的全部行 */
+const readAll = async <T,>(page: Page, store: string): Promise<T[]> => (await idbRead<T[]>(page, store, 'getAll')) ?? [];
+
+/** 待办 T1“买菜”（3 项，勾了 1 项）、t2“回邮件”（没有子任务）、孤儿子任务 x1（本机新建、没同步过，主待办 t-gone 本机没有） */
+async function seed(page: Page): Promise<void> {
+  await page.goto('/app/#/today');
+  await page.getByTestId('today').waitFor({ timeout: 30000 });
+  const d = today();
+  const td = (id: string, title: string) => ({ ...base, id, title, due: d, due_time: null, done: false, important: false, priority: 'mid', project: '', short: null, undone: false });
+  const it = (id: string, todo_id: string, title: string, sort: number, done: boolean) => ({ ...base, id, todo_id, title, sort, done });
+  await idbPut(page, [
+    ...[td(T1, '买菜'), td('t2', '回邮件')].map((r) => ['todos', cached(r)] as const),
+    ...[it('a', T1, '牛奶', 1, true), it('b', T1, '鸡蛋', 2, false), it('c', T1, '猫砂', 3, false)].map((r) => ['todo_items', cached(r)] as const),
+    ['todo_items', { id: 'x1', server: null, view: it('x1', 't-gone', '孤儿', 1, false) }],
+  ]);
+  await page.reload();
+  await page.getByTestId(`today-row-${T1}`).waitFor({ timeout: 30000 });
+}
+
+const itemIds = async (page: Page) => (await readAll<{ id: string }>(page, 'todo_items')).map((r) => r.id);
+const outboxOf = async (page: Page) =>
+  (await readAll<{ table: string; id: string; op: string }>(page, 'outbox')).map((i) => ({ table: i.table, id: i.id, op: i.op }));
+
+test.describe('R-350 待办子任务', () => {
+  test('今天页就地展开子任务、勾选、勾完自动完成和撤销；启动清掉孤儿子任务', async ({ page, browserName }) => {
+    await seed(page);
+    const fold = page.getByTestId(`today-fold-${T1}`);
+    await expect(fold).toBeVisible({ timeout: 15000 });
+    // 11-17 起今天页的待办行也是 kit TodoRow（负责人“今天页待办带子任务的跟其他页面不一样”）：“1/3”和“起步”在副行，收起按钮只写“展开”
+    await expect(fold).toHaveText('展开');
+    await expect(page.getByTestId(`today-stage-${T1}`)).toHaveText('起步1/3');
+    await expect(fold).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('today-sub-b')).toBeHidden();
+    await expect(page.getByTestId('today-subs-t2')).toHaveCount(0);
+    expect((await itemIds(page)).sort()).toEqual(['a', 'b', 'c']);
+    // 点按区不小于 44
+    expect((await fold.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await fold.click();
+    await expect(fold).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByTestId('today-sub-b')).toBeVisible();
+    if (SHOTS && browserName === 'chromium') await page.screenshot({ path: `${SHOTS}/today.png` });
+    await page.getByTestId('today-sub-b').click();
+    await expect(page.getByTestId(`today-bar-${T1}`)).toHaveAttribute('aria-valuenow', '2');
+    await expect.poll(() => outboxOf(page)).toContainEqual({ table: 'todo_items', id: 'b', op: 'patch' });
+    // 勾完最后一项：主待办自动完成，出“全部完成 · 撤销”；撤销以后两件一起回来
+    await page.getByTestId('today-sub-c').click();
+    const toast = page.getByTestId('today-auto-toast');
+    await expect(toast).toContainText('全部完成');
+    await expect.poll(() => outboxOf(page)).toContainEqual({ table: 'todos', id: T1, op: 'patch' });
+    await toast.getByRole('button').click();
+    await expect(page.getByTestId(`today-done-${T1}`)).not.toBeChecked();
+    expect((await page.evaluate(readRunLogInPage)).includes('subs today open n=3')).toBe(true);
+  });
+
+  test('日历日清单：待办单独一组，方框就地完成、撤销；子任务就地展开、勾选', async ({ page }) => {
+    await seed(page);
+    await page.goto('/app/#/calendar');
+    await page.reload();
+    const group = page.getByTestId('cal-todos');
+    await expect(group).toBeVisible({ timeout: 30000 });
+    await expect(group.locator('h2')).toHaveText('待办 · 2');
+    // T-A：副行“起步 1/3”，行尾 H / M / L 三格、当前档亮起
+    await expect(page.getByTestId(`cal-stage-${T1}`)).toHaveText('起步1/3');
+    await expect(page.getByTestId(`cal-prio-${T1}`).locator('[data-on]')).toHaveCount(1);
+    // 子任务就地展开、勾一项
+    const fold = page.getByTestId(`cal-fold-${T1}`);
+    await expect(fold).toHaveAttribute('aria-expanded', 'false');
+    await expect(fold).toHaveText('展开');
+    await fold.click();
+    await page.getByTestId('cal-sub-b').click();
+    await expect(page.getByTestId(`cal-bar-${T1}`)).toHaveAttribute('aria-valuenow', '2');
+    await expect.poll(() => outboxOf(page)).toContainEqual({ table: 'todo_items', id: 'b', op: 'patch' });
+    // 方框就地完成（勾选特效分镜）：停一下、收起、从这一天拿掉，页底出“已完成 · 撤销”；撤销写回、放回来
+    await page.getByTestId('cal-done-t2').click();
+    await expect(page.getByTestId('cal-todos-done-toast')).toContainText('已完成');
+    await expect.poll(() => outboxOf(page)).toContainEqual({ table: 'todos', id: 't2', op: 'patch' });
+    await expect(page.getByTestId('cal-row-t2')).toHaveCount(0);
+    await page.getByTestId('cal-todos-done-toast').getByRole('button').click();
+    await expect(page.getByTestId('cal-done-t2')).not.toBeChecked();
+    await expect(page.getByTestId('cal-row-t2')).toBeVisible();
+  });
+
+  test('列表页：卡片、勾一项写进 outbox、收起后重新载入还是收起', async ({ page, browserName }) => {
+    await seed(page);
+    await page.goto('/app/#/todos');
+    await page.reload();
+    await page.getByTestId(`todos-subs-${T1}`).waitFor({ timeout: 30000 });
+    // 负责人 11-17 选 T-A：“已勾/总数”回到副行最前面、跟在“起步 / 大半”标签后面，收起按钮只写“收起”（原来 R-436 第 7 条是“1/3 · 收起”）
+    await expect(page.getByTestId(`todos-stage-${T1}`)).toHaveText('起步1/3');
+    await expect(page.getByTestId(`todos-fold-${T1}`)).toHaveText('收起');
+    if (SHOTS && browserName === 'chromium') await page.screenshot({ path: `${SHOTS}/todos.png` });
+    await page.getByTestId('todos-sub-b').click();
+    await expect(page.getByTestId(`todos-bar-${T1}`)).toHaveAttribute('aria-valuenow', '2');
+    await expect.poll(() => outboxOf(page)).toContainEqual({ table: 'todo_items', id: 'b', op: 'patch' });
+    const fold = page.getByTestId(`todos-fold-${T1}`);
+    await fold.click();
+    await expect(fold).toHaveAttribute('aria-expanded', 'false');
+    // 收起状态（true 是收起）写进本机库 meta（ui.todo_collapsed）是异步的：写进去了再重新载入，不和写入抢
+    await expect.poll(async () => JSON.stringify(await idbRead(page, 'meta', 'get', 'ui.todo_collapsed'))).toContain(`"${T1}":true`);
+    await page.reload();
+    await expect(page.getByTestId(`todos-fold-${T1}`)).toHaveAttribute('aria-expanded', 'false', { timeout: 30000 });
+  });
+
+  test('编辑页：“子任务”区列出各项，回车加一项', async ({ page, browserName }) => {
+    await seed(page);
+    await page.goto(`/app/#/todo/${T1}`);
+    await page.reload();
+    const box = page.getByTestId('todo-subs');
+    await box.waitFor({ timeout: 30000 });
+    await expect(box.getByTestId('todo-sub-title-a')).toHaveValue('牛奶');
+    if (SHOTS && browserName === 'chromium') await page.screenshot({ path: `${SHOTS}/edit.png`, fullPage: true });
+    const add = page.getByTestId('todo-sub-add');
+    await add.fill('葱');
+    await add.press('Enter');
+    await expect(add).toHaveValue('');
+    await expect.poll(async () => (await outboxOf(page)).filter((i) => i.table === 'todo_items' && i.op === 'insert').length).toBe(1);
+  });
+});

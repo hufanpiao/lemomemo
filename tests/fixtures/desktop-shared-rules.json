@@ -1,0 +1,56 @@
+{
+  "_说明": "网页前端和 exe 的 Rust 各写了一份的规则，两边都读这一份对拍（评审返工第 9 条）。前端：src/platform/__tests__/desktop-shared-rules.test.ts；Rust：desktop/src-tauri/src/attachment.rs 的 tests。front、rust 写各自应得的结果；两边不一样的行必须带 why 说清为什么",
+  "limits": {
+    "fileMaxBytes": 10485760,
+    "fileNameMax": 120,
+    "quickAddMaxChars": 2000
+  },
+  "kinds": ["pdf", "docx", "xlsx", "pptx", "docm", "xlsm", "pptm", "doc", "xls", "ppt"],
+  "fileNames": [
+    { "raw": "报告.pdf", "want": "报告.pdf" },
+    { "raw": "C:\\x\\a.PDF", "want": "a.pdf" },
+    { "raw": "../../a.docx", "want": "a.docx" },
+    { "raw": "a\u202eb:c*.xlsx", "want": "abc.xlsx" },
+    { "raw": "a\u200e\u2066b|c?.pptx", "want": "abc.pptx" },
+    { "raw": "CON.pdf", "want": "_CON.pdf" },
+    { "raw": "lpt9.xls", "want": "_lpt9.xls" },
+    { "raw": "com1.report.doc", "want": "_com1.report.doc" },
+    { "raw": "console.pdf", "want": "console.pdf" },
+    { "raw": "name. .pdf", "want": "name.pdf" },
+    { "raw": "???.pdf", "want": "file.pdf" },
+    { "raw": "  空格  .docm", "want": "空格.docm" }
+  ],
+  "segments": [
+    { "s": "u1", "ok": true },
+    { "s": "id.pdf", "ok": true },
+    { "s": "id.t.webp", "ok": true },
+    { "s": "a_b-c", "ok": true },
+    { "s": "0f3a", "ok": true },
+    { "s": "", "ok": false },
+    { "s": "..", "ok": false },
+    { "s": ".x", "ok": false },
+    { "s": "_a", "ok": false },
+    { "s": "A1", "ok": false },
+    { "s": "a.", "ok": false },
+    { "s": "a..b", "ok": false },
+    { "s": "a%2e", "ok": false },
+    { "s": "a\\b", "ok": false },
+    { "s": "a b", "ok": false }
+  ],
+  "downloadSigs": [
+    { "sig": "p=download&e=1790000000&d=a%20b.pdf&s=abc_DEF-123", "front": true, "rust": true },
+    { "sig": "p=download&e=1&d=&s=x", "front": true, "rust": true },
+    { "sig": "", "front": false, "rust": false },
+    { "sig": "p=view&e=1&d=a&s=x", "front": false, "rust": false },
+    { "sig": "p=download&e=x&d=a&s=x", "front": false, "rust": false },
+    { "sig": "p=download&e=&d=a&s=x", "front": false, "rust": false },
+    { "sig": "p=download&e=1234567890123&d=a&s=x", "front": false, "rust": false },
+    { "sig": "p=download&e=1&d=a&s=", "front": false, "rust": false },
+    { "sig": "p=download&e=1&d=a&s=x&z=1", "front": false, "rust": false },
+    { "sig": "p=download&p=download&e=1&d=a&s=x", "front": false, "rust": false },
+    { "sig": "p=download&e=1&d=a&s=x\r\nX-Evil: 1", "front": false, "rust": false },
+    { "sig": "p=download&e=1&d=a b&s=x", "front": false, "rust": false },
+    { "sig": "p=download&e=1&s=x", "front": true, "rust": false, "why": "Rust 另存时文件名要靠 d，没有 d 拒绝；网页取字节不看 d" },
+    { "sig": "p=download&e=1&d=a&s=x&", "front": true, "rust": false, "why": "网页用 URLSearchParams 解析，会跳过末尾的空段；Rust 逐段切，空段算坏格式（更严，不放宽）" }
+  ]
+}

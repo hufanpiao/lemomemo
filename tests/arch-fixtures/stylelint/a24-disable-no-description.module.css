@@ -1,0 +1,5 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=--report-descriptionless-disables rule=A24 */
+.a {
+  /* stylelint-disable-next-line color-named */
+  color: red;
+}

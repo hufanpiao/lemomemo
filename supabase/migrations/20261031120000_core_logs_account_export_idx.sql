@@ -1,0 +1,14 @@
+-- 20261031120000_core_logs_account_export_idx.sql：account 查自己写的 logs 用的索引（架构 0.47 第 22 条 T2，安全复核）。
+-- part 在 export_job_take 回 ok 之后、读任何用户数据之前，查 logs 里有没有本人这个 export_id 的发起记录
+--   （user_id = 本人、act = 'export'、src = 'account'、code = export_id），没有就回统一的 410 export_expired。
+--   防的是“start 里建任务那句超时、次数已退回，但建任务语句晚到提交了”：任务行在、logs 里没有记录时不能取片。
+-- 每片都查一次；本人 logs 最多约 18 万行（每天 2,000 条、保留 90 天），没有索引要整段扫。最后一片的 exportDoneLogged
+--   （act = 'export_done'）也是同样四列，一起受益。
+-- 为什么不用架构写的部分索引 (user_id, code) where act = 'export' and src = 'account'：PostgREST 把过滤值作参数传，
+--   通用计划（plan_cache_mode = force_generic_plan，或同一语句执行多次后）证明不了 $2 = 'export'，用不上部分索引、退回顺序扫描。
+--   10-31 在 lemo-e2e（logs 18 万行）实测：部分索引在通用计划下 Parallel Seq Scan；本索引在通用计划下 Index Scan，
+--   Index Cond 四列全用上；大小约 1.3 MB（表 33 MB，B 树去重后很小）。安全审查第 22 条建议 ①，选“普通索引”这一种。
+-- 索引不涉及授权：account 用 service_role 读 public.logs，本来就有 select（D1 第 5 节、03_roles_grants 不变）。
+-- D1 第 7 节核对它存在且定义一字不差（build/d1/whitelist.ts 的 REQUIRED_INDEXES；反例 supabase/tests/d1-fixtures/35、36）。
+-- 不用 concurrently：迁移在事务里跑；B1 时 logs 行数很少，建索引的锁很短。
+create index logs_account_export_idx on public.logs (user_id, act, src, code);

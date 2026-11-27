@@ -1,0 +1,19 @@
+/* arch-fixture: path=src/styles/vt-good.css expect=none */
+::view-transition-old(root) {
+  animation: lemo-x-old var(--dur-sheet) var(--ease-drawer);
+}
+
+:root[data-vt-back]::view-transition-old(root) {
+  animation: lemo-x-old var(--dur-sheet) var(--ease-drawer);
+}
+
+@keyframes lemo-x-old {
+  to {
+    transform: translateX(-30vw);
+  }
+}
+
+:root[data-rm="1"]::view-transition-old(root),
+:root[data-rm="1"][data-vt-back]::view-transition-old(root) {
+  animation: none;
+}

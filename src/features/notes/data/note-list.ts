@@ -1,0 +1,247 @@
+// 随手记列表的数据逻辑
+// • 只列普通随手记：删了的（deleted_at）、撤销了的（undone）、隐私记（is_private）不出
+// • 排序：最近记的在前（created_at 倒序，一样的按 id），新记的一条出现在最上面
+// • 自己排（拖过一次切过来，设置里可切回；随手记 notes.order、隐私记 vault.order 各记各的）：按排序值大的在上（shared/logic/sort-key.ts 的 effKey：
+//   拖过的用 sort_key，没拖过的用 created_at 的时间键，新记的照样在最上面），不按天分组
+// • 分组（按时间排时）：今天 / 昨天 / 日期（按 current_tz 算哪一天）
+// • 没有标题时取正文前两行：第一行当标题，第二行起当摘要
+// • “AI”小标：AI 分过类、用户还没看过（category_source = 'ai' 且 category_seen = false）
+// • “已转过”：converted_to 至少一项（转成过待办 / 日程，带图保留的原条、恢复回来的原条都会有）
+// • 分类胶囊：全部 + 每个活着的分类和条数（按条数多的在前，一样的按分类的 sort、名字）；条目的分类顺着 merged_into 归到留下的那个
+// • 分类色点（6px）：颜色取 categories.color（小写 #rrggbb，或皮肤令牌名）；
+//   令牌名只认皮肤里有的项目色 p1～p6（画深色那一档 --pNs），别的认不出、没设颜色的不画点
+// • 附件：只数个数，列表行尾、卡片底部标“附件 N”
+// • 插图：卡片顶部放第一张（按 id 排，id 是 UUID v7、按插入先后），右上角“+N”是另外还有几张
+// 纯 TS：不准 import React
+import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import type { Tz } from '../../../../shared/core/tz.ts';
+import { fmtTime } from '../../../../shared/i18n/fmt.ts';
+import { isShownFile } from '../../../../shared/logic/files/shown-file.ts';
+import { effKey, sortKeyOf, type ListOrder } from '../../../../shared/logic/sort-key.ts';
+import { isLiveRow } from '../../../../shared/logic/live-row.ts';
+import { numOr, str } from '../../../../shared/core/field.ts';
+import { noteHeadline } from '../../../../shared/logic/notes/note-headline.ts';
+import { categoryNames, categoryResolver, type Row } from '../../../core/categories.ts';
+
+export type { Row };
+
+export interface NoteItem {
+  id: string;
+  title: string;
+  summary: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  /** 分类色点的 CSS 颜色；没有就不画点 */
+  categoryColor: string | null;
+  /** 显示“AI”小标 */
+  ai: boolean;
+  /** 转成过待办 / 日程（converted_to 至少一项；标题前“已转过”描边小标） */
+  converted: boolean;
+  createdAt: number;
+  date: DateStr;
+  /** 拖动排序的排序值：没拖过为 null */
+  sortKey: string | null;
+  /** 拖动算键、自己排时排序用：自己排时拖过的是 sortKey、没拖过的是 created_at 的时间键；按时间排时一律是时间键（和屏幕顺序一致） */
+  key: string;
+  /** 第一张插图（没有为 null） */
+  cover: NoteImage | null;
+  /** 一共几张插图 */
+  images: number;
+  /** 一共几个附件（“附件 N”；图片不算） */
+  files: number;
+}
+
+/** 一张插图（note_images 一行里界面要的） */
+export interface NoteImage {
+  id: string;
+  noteId: string;
+  path: string;
+  hasThumb: boolean;
+  width: number;
+  height: number;
+  /** 拍摄时间（毫秒；只有普通随手记的 JPEG 原图读得到；隐私记的图不存，不给这一项）：看图页“存到相册”起文件名用 */
+  takenAt?: number | null;
+}
+
+export interface NoteGroup {
+  key: 'today' | 'yesterday' | 'day';
+  date: DateStr;
+  items: NoteItem[];
+}
+
+/** 排序方式：按时间（默认，列表方式按天分组）/ 自己排；定义在 shared/logic/sort-key.ts */
+export type NoteOrder = ListOrder;
+
+export interface CategoryCount {
+  id: string;
+  name: string;
+  color: string | null;
+  count: number;
+}
+
+
+const alive = (r: Row): boolean => isLiveRow(r) && r['is_private'] !== true;
+
+/** 标题和摘要：有标题就用标题、摘要是正文；没有标题取正文第一行当标题，后面的（第二行起）当摘要 */
+export function titleAndSummary(title: unknown, body: unknown): { title: string; summary: string } {
+  const h = noteHeadline(title, body);
+  const summary = h.rest
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '')
+    .join(' ');
+  return { title: h.title, summary };
+}
+
+/** 显示“AI”小标：AI 分过的、还没看过 */
+export function showsAi(row: Row): boolean {
+  return row['category_source'] === 'ai' && row['category_seen'] === false;
+}
+
+/** categories.color → CSS 颜色：#rrggbb 照用；p1～p6 用皮肤的项目色深色档；别的（没设、认不出）为 null，不画点 */
+export function categoryColor(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  if (/^#[0-9a-f]{6}$/.test(v)) return v;
+  const m = /^p([1-6])$/.exec(v);
+  return m ? `var(--p${m[1]}s)` : null;
+}
+
+/** 分类 id → 颜色（这里不筛：调用方只拿 categoryResolver 归到的活着的分类来取） */
+function categoryColors(categories: readonly Row[]): Map<string, string | null> {
+  return new Map(categories.map((c) => [c.id, categoryColor(c['color'])]));
+}
+
+/** 分类选项（编辑页的分类胶囊、新建时的本机规则分类共用） */
+export interface CategoryOption {
+  id: string;
+  name: string;
+  /** 分类色点的 CSS 颜色；没有就不画点 */
+  color: string | null;
+}
+
+/** 这一套里活着的分类 → 选项（顺序同 categoryNames） */
+export function categoryOptions(categories: readonly Row[]): CategoryOption[] {
+  const colors = categoryColors(categories);
+  return [...categoryNames(categories)].map(([id, name]) => ({ id, name, color: colors.get(id) ?? null }));
+}
+
+/** 活着的插图，按随手记分好、每条里按 id（插入先后）排 */
+export function imagesByNote(images: readonly Row[]): Map<string, NoteImage[]> {
+  const out = new Map<string, NoteImage[]>();
+  for (const r of images) {
+    if (!isLiveRow(r) || r['bucket'] !== 'images') continue;
+    const noteId = str(r['note_id']);
+    const path = str(r['path']);
+    if (noteId === '' || path === '') continue;
+    const list = out.get(noteId) ?? [];
+    list.push({ id: r.id, noteId, path, hasThumb: r['has_thumb'] === true, width: numOr(r['width'], 0), height: numOr(r['height'], 0), takenAt: typeof r['taken_at'] === 'number' ? r['taken_at'] : null });
+    out.set(noteId, list);
+  }
+  for (const l of out.values()) l.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return out;
+}
+
+/** 每条随手记的附件个数（note_files；口径同附件区列表：isShownFile；只数个数，不看内容） */
+export function fileCounts(files: readonly Row[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const r of files) {
+    if (!isShownFile(r)) continue;
+    const noteId = str(r['note_id']);
+    if (noteId !== '') out.set(noteId, (out.get(noteId) ?? 0) + 1);
+  }
+  return out;
+}
+
+/** 列表要的条目（已筛掉删了的、隐私记），最近记的在前（自己排时排序值大的在前）；category 不为 null 时只留这个分类的 */
+export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: Tz, category: string | null = null, images: readonly Row[] = [], files: readonly Row[] = [], order: NoteOrder = 'time'): NoteItem[] {
+  const names = categoryNames(categories);
+  const target = categoryResolver(categories);
+  const pics = imagesByNote(images);
+  const nFiles = fileCounts(files);
+  const colors = categoryColors(categories);
+  const out: NoteItem[] = [];
+  for (const r of rows) {
+    if (!alive(r)) continue;
+    const cid = target(r['category_id']);
+    if (category !== null && cid !== category) continue;
+    const createdAt = numOr(r['created_at'], 0);
+    const sortKey = sortKeyOf(r);
+    out.push({
+      id: r.id,
+      ...titleAndSummary(r['title'], r['body']),
+      categoryId: cid,
+      categoryName: cid === null ? null : (names.get(cid) ?? null),
+      categoryColor: cid === null ? null : (colors.get(cid) ?? null),
+      ai: cid !== null && showsAi(r),
+      converted: Array.isArray(r['converted_to']) && r['converted_to'].length > 0,
+      createdAt,
+      date: todayOf(createdAt, tz),
+      sortKey,
+      key: effKey(order === 'manual' ? sortKey : null, createdAt),
+      cover: pics.get(r.id)?.[0] ?? null,
+      images: pics.get(r.id)?.length ?? 0,
+      files: nFiles.get(r.id) ?? 0,
+    });
+  }
+  const byId = (a: NoteItem, b: NoteItem) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  return out.sort(order === 'manual'
+    ? (a, b) => (a.key === b.key ? byId(a, b) : a.key > b.key ? -1 : 1)
+    : (a, b) => b.createdAt - a.createdAt || byId(a, b));
+}
+
+/** 某个时刻落在今天、昨天，还是更早的某天（瀑布流卡片、电脑抽屉顶行的时间写法） */
+export function dayKind(at: number, now: number, tz: Tz): 'today' | 'yesterday' | 'day' {
+  const d = todayOf(at, tz);
+  const today = todayOf(now, tz);
+  return d === today ? 'today' : d === addDays(today, -1) ? 'yesterday' : 'day';
+}
+
+/** 一条记录记下的时间：哪一种天、时刻文字、那天（本机时区）。列表行（自己排时）和编辑页抽屉顶行都从这里取，再交给 ui/note-time.ts 写成字 */
+export interface NoteWhen {
+  kind: 'today' | 'yesterday' | 'day';
+  hm: string;
+  date: DateStr;
+}
+
+export function whenOf(at: number, now: number, tz: Tz): NoteWhen {
+  return { kind: dayKind(at, now, tz), hm: fmtTime(at, tz), date: todayOf(at, tz) };
+}
+
+/** 列表方式的分组：今天 / 昨天 / 各日期（items 已按时间倒序） */
+export function groupByDay(items: readonly NoteItem[], now: number, tz: Tz): NoteGroup[] {
+  const today = todayOf(now, tz);
+  const yesterday = addDays(today, -1);
+  const out: NoteGroup[] = [];
+  for (const it of items) {
+    const last = out[out.length - 1];
+    if (last && last.date === it.date) last.items.push(it);
+    else out.push({ key: it.date === today ? 'today' : it.date === yesterday ? 'yesterday' : 'day', date: it.date, items: [it] });
+  }
+  return out;
+}
+
+/**
+ * 分类胶囊、隐私记宫格：这一套里每个活着的分类和条数（删了的条目不算）。一条都没有的也列、写 0、排在后面——
+ * 建好的空分类要看得见才能往里拖、往里导入
+ */
+export function categoryCounts(rows: readonly Row[], categories: readonly Row[], locale: string): CategoryCount[] {
+  const names = categoryNames(categories);
+  const target = categoryResolver(categories);
+  const colors = categoryColors(categories);
+  const sortOf = new Map(categories.map((c) => [c.id, numOr(c['sort'], 0)]));
+  const n = new Map<string, number>([...names.keys()].map((id) => [id, 0]));
+  for (const r of rows) {
+    const cid = alive(r) ? target(r['category_id']) : null;
+    if (cid !== null) n.set(cid, (n.get(cid) ?? 0) + 1);
+  }
+  return [...n]
+    .map(([id, count]) => ({ id, name: names.get(id) ?? '', color: colors.get(id) ?? null, count }))
+    .sort((a, b) => b.count - a.count || (sortOf.get(a.id) ?? 0) - (sortOf.get(b.id) ?? 0) || a.name.localeCompare(b.name, locale));
+}
+
+/** 活着的普通随手记一共几条（“全部 N”） */
+export function aliveCount(rows: readonly Row[]): number {
+  let n = 0;
+  for (const r of rows) if (alive(r)) n++;
+  return n;
+}

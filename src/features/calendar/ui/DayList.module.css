@@ -1,0 +1,58 @@
+/* 选中那天的清单（DayList.tsx）。
+   项目色竖线 .c0～.c6 在 cal-common.module.css，DayList 先引那一份。
+   日清单标题在面板外、行在白面板里，照待办页分组的写法：
+   • 标题“11月12日 周四”和右边“6 项”是面板上方的小字分组名，挂 kit Form 的 groupLabelClass（第三层灰、等宽字加字距，同待办页 .group .h2）；
+     这里只管左右排开和间距，写成两级选择器，不靠两份样式表的先后压过 .groupLabel 的 margin
+   • 面板（卡片 + 行）是 kit List 的 .panel（白底、--r-lg）；左右留白加大到 16（同待办页 .roomy），行高 52（行高留白加大）
+   • 行首时刻右对齐、按状态上色（.dayTime） */
+.dayList {
+  margin-top: 12px;
+}
+
+.dayList .dayListHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 14px 8px;
+}
+
+.dayList > .dayPanel {
+  padding: 2px 16px;
+}
+
+.dayListRows > li {
+  min-height: 52px;
+}
+
+/* 行首时刻（等宽数字、按状态上色、右对齐）：等宽字在 kit .lead；这里靠右排、宽度齐一格。
+   状态：已经过去的日程（那天已过、或今天已结束）第三层灰；过了截止还没完成的待办红字（红色只表示逾期）；其余照 .lead 的次要色 */
+.dayListRows .dayTime {
+  justify-content: flex-end;
+  min-width: 48px;
+}
+
+.dayTime[data-tone='past'] {
+  color: var(--text-3);
+}
+
+/* .card：面板最上面的卡片（今日运势卡；DayList 的 card 插槽）。
+   卡片自己什么都不渲染（算法下载失败、算不出来）时外层是空的：不占位，下面的分隔线也不画；
+   只有待办时卡片单独一块面板 .cardOnly，空了整块不画 */
+.card:empty,
+.cardOnly:empty {
+  display: none;
+}
+
+.card:not(:empty) + .dayListRows {
+  border-top: 1px solid var(--line);
+}
+
+/* 日程竖线 4 宽、左右各让 3，占 10 宽；颜色是 cal-common 的项目色 */
+.dayMk {
+  flex: none;
+  width: 4px;
+  height: 20px;
+  margin: 0 3px;
+  border-radius: 2px;
+}

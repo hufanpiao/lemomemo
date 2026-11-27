@@ -1,0 +1,242 @@
+/* 网页版宽屏今天页（ui/TodayDesk.tsx、SoonCard.tsx，跟着它们按需下载，不进首屏）；
+   数值照参考页（本机资料/01-设计方案/2026-11-24_网页端日历待办改善/web-layout-plan.html 的 todayW、weekCard、barCard、annCard）。
+   外框、页头、卡片在 kit Desk.module.css；只用令牌 */
+
+/* 三行：“现在”+ 运势、周历 + 柱体、日程 / 待办 / 快到了；第三行吃掉剩下的高度 */
+.rows {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+/* 前两行：左边自适应、右边 270（运势卡和柱体卡右边对齐成一列） */
+.pair {
+  grid-template-columns: minmax(0, 1fr) 270px;
+}
+
+/* 第三行：日程、待办、快到了（参考 1 : 1.15 : 0.8） */
+.three {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 0.8fr);
+}
+
+/* 日程卡里的列表：日程行没有自己的底，卡片本身就是底，列表不再另画一层白底和内边距（参考 .row 直接排在卡上）。
+   待办的列表不用这个：待办行（kit SwipeRow）的行面是不透明白底，去掉列表的底和边距会拼成一块直角白板；
+   待办照手机、照“没赶上”那块用 kit 的 .list.roomy（白底、圆角 --r-lg、左右 16） */
+.flat {
+  margin: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/* iPad 横屏的窄档（1024～1179，AI 栏 288）：左边只剩约 600，三列太挤：日程、待办两列，“快到了”横跨在下面 */
+@media (width < 1180px) {
+  .three {
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  }
+
+  .three > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+.none {
+  margin: 0;
+  padding: 16px 0;
+  color: var(--text-3);
+  font-size: var(--fs-13);
+}
+
+/* 周历（参考 .wst .wd）：卡片内边距 10，七格 */
+.weekCard {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-content: start;
+  gap: 5px;
+  padding: 10px;
+}
+
+.wd {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  min-height: 92px;
+  padding: 7px 6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wn {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+/* 快到了一行的名字（.tt 见下面“快到了”；写在这里：比 .wd[data-today] .wn b 先出现，stylelint no-descending-specificity） */
+.tt b {
+  display: block;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wn b {
+  color: var(--text);
+  font-family: var(--f-num);
+  font-size: var(--fs-14);
+}
+
+/* 选中那天：日期数字变深色小方块，同手机月格 cal-common.module.css 的 .sel .dayNum（--cal-sel-*）。
+   排在今天前面：选中的是今天时照旧柠檬黄，只有点了别的天那天才变深色 */
+.wd[aria-pressed='true'] .wn b {
+  padding: 0 4px;
+  border-radius: 5px;
+  background: var(--cal-sel-bg);
+  color: var(--cal-sel-fg);
+}
+
+.wd[data-today] .wn b {
+  padding: 0 4px;
+  border-radius: 5px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 一条日程（参考 .ev）：项目色底（--ev 由组件按项目给），一行放不下省略号 */
+.ev {
+  flex: none;
+  overflow: hidden;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--ev);
+  color: var(--on-p);
+  font-size: var(--fs-11);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 本周柱体（参考 .bc .bi .bt）：高 92，七根；上面件数、中间柱子、下面星期 */
+.bc {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  height: 92px;
+}
+
+.bi {
+  display: grid;
+  grid-template-rows: 15px minmax(0, 1fr) 17px;
+  gap: 2px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-11);
+  text-align: center;
+  cursor: pointer;
+}
+
+.bt {
+  display: flex;
+  align-items: flex-end;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+
+.bt i {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+  background: var(--step-off);
+}
+
+.bi[data-today] {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.bi[data-today] .bt i {
+  background: var(--accent);
+}
+
+.bi[aria-pressed='true'] .bl {
+  border-radius: 5px;
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+/* 触屏（iPad 横屏）：七根柱子每根只有约 29 宽，点击区以中心外扩到 44 宽（高本来 92），外观不变（同 ModeSeg.module.css 的 .segBtn::after）。
+   七根挨着放，外扩的部分只能落在柱子之间的 6 px 空隙里：外扩层压在各柱子自己的框下面（z-index -1，.bc 隔出一层），
+   看得见的那根柱子点下去一定是它自己，空隙归右边那根 */
+@media (pointer: coarse) {
+  .bc {
+    isolation: isolate;
+  }
+
+  .bi {
+    position: relative;
+  }
+
+  .bi::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--hit));
+    height: max(100%, var(--hit));
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* 快到了（参考 annCard .row .tm .tt）：左边“3 天后”、右边名字，行间细线 */
+.slist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.srow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.slist li:last-child .srow {
+  border-bottom: 0;
+}
+
+.tm {
+  flex: none;
+  width: 44px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.tt {
+  flex: 1;
+  min-width: 0;
+}
+

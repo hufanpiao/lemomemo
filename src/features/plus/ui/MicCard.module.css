@@ -1,0 +1,6 @@
+/* 麦克风说明卡的两个按钮（线框 MICCARD：上下两个整宽按钮，间隔 10） */
+.btns {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}

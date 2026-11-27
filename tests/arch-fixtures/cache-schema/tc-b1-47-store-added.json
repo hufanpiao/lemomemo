@@ -1,0 +1,7 @@
+{
+  "说明": "TC-B1-47 违规样例：加了一个同步仓 habits，DB_VERSION 没加 1",
+  "lock": "repo",
+  "db_version": "repo",
+  "add": [{ "name": "habits", "keyPath": "id", "indexes": [], "rebuildable": true, "kind": "sync" }],
+  "expect": "cache_schema_changed_without_version_bump"
+}

@@ -1,0 +1,8 @@
+-- expect: public.settings 的配额触发器 settings_quota 的 WHEN 条件不是正好 new.key not in ('ai.enabled', 'ai.vault')
+-- R-271（迁移 20261030120000_core_settings_quota_ai_keys.sql）：有人把配额放宽成整个 ai.* 前缀——客户端插 ai.x1、ai.x2……就能绕开整张表的配额。
+--   D1（build/d1/quota-when.ts）必须报出。多加键、加 or、去掉条件、换时机、disable、别的表带 WHEN 等写法在 tests/build/d1-settings-quota.test.ts 里逐条证明。
+--   运行情况：10-30 只在离线 PGlite（npm run test:db:offline）上跑过；settings 属于 postgres，真库上 drop / create trigger 不涉及属主问题
+drop trigger settings_quota on public.settings;
+create trigger settings_quota before insert on public.settings for each row
+  when (new.key not like 'ai.%')
+  execute function private.row_quota();

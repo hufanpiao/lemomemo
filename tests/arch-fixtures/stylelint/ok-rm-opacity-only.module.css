@@ -1,0 +1,6 @@
+/* arch-fixture: path=src/kit/components/Good.module.css expect=none */
+.a {
+  transition:
+    opacity var(--dur-ui) var(--ease-out),
+    background-color var(--dur-ui) var(--ease-out);
+}

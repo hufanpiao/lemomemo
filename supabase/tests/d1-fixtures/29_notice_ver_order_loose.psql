@@ -1,0 +1,11 @@
+-- expect: public.app_config 缺约束 app_config_notice_ver_order（R-273
+-- R-273（迁移 20261030130000_core_notice_ver_order.sql）：有人把 app_config_notice_ver_order 改宽成只比日期、不比同一天的后缀——
+--   min_consent_ver = 2026-10-29-2、policy_ver = 2026-10-29 就能写进去，同意写回的版本永远低于门槛，每个人每次打开都弹“隐私说明更新了”。
+--   D1（build/d1/whitelist.ts REQUIRED_CONSTRAINTS）必须报出。其余改宽写法在 tests/build/d1-notice-ver-order.test.ts 里逐条证明。
+--   运行情况：10-30 只在离线 PGlite（npm run test:db:offline）上跑过
+alter table public.app_config drop constraint app_config_notice_ver_order;
+alter table public.app_config add constraint app_config_notice_ver_order check (
+  case when notice->>'min_consent_ver' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}(-[1-9][0-9]?)?$'
+        and notice->>'policy_ver' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}(-[1-9][0-9]?)?$'
+       then left(notice->>'min_consent_ver', 10) collate "C" <= left(notice->>'policy_ver', 10) collate "C"
+  end);

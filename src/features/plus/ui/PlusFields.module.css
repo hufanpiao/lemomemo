@@ -1,0 +1,160 @@
+/* 打字条的签：尺寸照方案页 .chip / .tray / .note，只用令牌。
+   • 签 32 高、左右 12、整圆角、浅灰底（--panel-2）；手点或默认亮的 --chip-on-bg（柠檬黄），认出来的浅黄（--today-bg，方案页 --hl 的同一档）；
+     点击区 ::after 上下各扩 6（方案页写法）；“＋”“其他日期 / 时刻”是无底的淡字（ghost）
+   • 展开区：--panel-2 底、圆角 --r-md，里面的签换 --panel 底；“其他日期 / 时刻”的占位格子一排横向滑动（DayTimePick.tsx） */
+.wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.wrap > .row {
+  padding: 2px 4px 4px;
+}
+
+.chip {
+  position: relative;
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-13-5);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chip::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+
+.chip svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tray {
+  margin: 4px 0 2px;
+  padding: 8px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+}
+
+.tray .chip {
+  background: var(--panel);
+}
+
+/* 淡字的签（“＋”新建、其他日期 / 时刻）：方案页 .chip.ghost 在展开区里被 .tray .chip 盖回 --panel 底，只剩字淡一档 */
+.tray .chip.ghost {
+  color: var(--text-2);
+}
+
+.chip.on,
+.tray .chip.on {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+.chip.auto,
+.tray .chip.auto {
+  background: var(--today-bg);
+  color: var(--text);
+}
+
+/* 日期时刻等宽数字 */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.hint {
+  margin: 8px 2px 6px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+.note {
+  margin: 4px 6px 2px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+.tray .note {
+  margin: 4px 2px 0;
+}
+
+/* 新建分类的小输入框：放在签里，字号 16（iOS 小于 16 聚焦会放大页面） */
+.newIn {
+  width: 88px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-16);
+}
+
+.newIn:focus-visible {
+  outline: none;
+}
+
+/* “其他日期 / 时刻”的占位格子（DayTimePick.tsx，自己画的选择器定稿前先用） */
+.cells {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.cell,
+.cellOn {
+  display: inline-flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--hit);
+  height: var(--hit);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.cellOn {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+.cellSub {
+  color: inherit;
+  font-size: var(--fs-11);
+  opacity: 0.75;
+}

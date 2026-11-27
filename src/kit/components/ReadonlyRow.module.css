@@ -1,0 +1,45 @@
+/* 只读行：日历和今天页顶部的重复事项横幅；只用令牌。行尾小标记在 ReadonlyMark.module.css */
+
+/* 只读的浅灰提示条只在这里画（和日历页顶的浅灰提示条同一块样式，CalendarPage.module.css 的 .notice:has(p)）：
+   重复事项横幅（RepeatBanner）、编辑页的“这条要新版本才能修改 · 更新”（EditNotices.tsx 的 ReadonlyNotice）共用。
+   外边距一律由用的地方给（这里不写 margin，免得和调用方的 class 比先后）：横幅是下面的 .repeat，编辑页各自的 class */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 0 12px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.repeat {
+  margin: 0 0 8px;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  margin: 8px 0;
+}
+
+.update {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-13);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.update:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

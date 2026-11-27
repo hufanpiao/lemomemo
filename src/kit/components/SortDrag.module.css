@@ -1,0 +1,133 @@
+/* 长按拖动排序（kit，SortDrag.tsx）：只用令牌；动效只动 transform、opacity。
+   • .box：列表外框（定位容器，行的排版位置量到它为止）
+   • .row：能拖的行（li、卡片）：长按不出 iPhone 的放大镜、“拷贝”菜单，不选字（选字防护第 1 层；iOS 只认带 -webkit- 前缀的，stylelint 已放行这一个前缀）
+   • [data-sort-held]：拿着的那一条在预览顺序里的占位：看不见、位置照占
+   • .float / .card：motion/sort-float.ts 挂到 body 上的浮层。外层 .float 贴在视口上，位置和倾斜由 JS 写 transform（跟手不加过渡）；
+     z-index 2：压住页面内容和顶部模糊带 --z-strip 1，在随手记整页模糊 --z-notes-mist 4、输入行、底栏下面（不加令牌：base.css 是底栏外观锁定文件）。
+     里层 .card 管拿起：先原样画一帧，再给它打 data-up，放大到 1.04、阴影（::after 上的 --shadow-2，只动 opacity）淡入，--dur-ui --ease-out；放下去掉 data-up 缩回。
+     减少动态效果（:root[data-rm="1"]，系统设置由 look.ts 折进来）：不放大，只有阴影和 6 个点淡入淡出
+   • .end：行尾一格：“⋯”和竖排 6 个点（两列三行，3px 圆点、间隔 3px）叠在一起；只在浮层里拿起时“⋯”淡出、6 个点淡入，放下换回来
+   • 拖动中整页（html[data-sort-dragging]，选字防护第 2 层）：所有元素不选字、不出长按菜单，光标“抓着”。写在这里不写 base.css（底栏外观锁定文件）；
+     第 3 层是 motion/long-press-drag.ts 按下就拦 selectstart、contextmenu，拿起时清掉已有选区 */
+
+.box {
+  position: relative;
+}
+
+.row {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* 行里能打字的框照常选字（不然继承上面的 none，iOS 上选不了字）；拖动中整页那条带 !important，照样压住 */
+.row :is(input, textarea, [contenteditable='true']) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.row[data-sort-held] {
+  visibility: hidden;
+}
+
+.float {
+  position: fixed;
+  z-index: 2;
+  box-sizing: border-box;
+  margin: 0;
+  pointer-events: none;
+  transform-origin: center;
+}
+
+.card {
+  position: relative;
+  height: 100%;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+
+.card::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: var(--shadow-2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-ui) var(--ease-out);
+  content: '';
+}
+
+/* 复制出来的那一行：贴满浮层，自己的圆角裁住图，不带外边距、分隔线、平时的卡片阴影 */
+.card > * {
+  height: 100%;
+  border-bottom: 0;
+  border-radius: inherit;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.card[data-up] {
+  transform: scale(1.04);
+}
+
+.card[data-up]::after {
+  opacity: 1;
+}
+
+:global(:root[data-rm="1"]) .card,
+:global(:root[data-rm="1"]) .card[data-up] {
+  transform: none;
+}
+
+.end {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+}
+
+.end > * {
+  transition: opacity var(--dur-ui) var(--ease-out);
+}
+
+.grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  grid-template-columns: repeat(2, 3px);
+  gap: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.grip > i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-2);
+}
+
+.card[data-up] .end > :not(.grip) {
+  opacity: 0;
+}
+
+.card[data-up] .grip {
+  opacity: 1;
+}
+
+:global(html[data-sort-dragging]),
+:global(html[data-sort-dragging]) :global(*) {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  cursor: grabbing;
+}
+
+/* 拖进目标（分类胶囊、隐私记首页分类格）手指落在上面时：一圈强调色描边（只换描边，不动大小，不加过渡：手指进出即时跟） */
+:global([data-drop-over]) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

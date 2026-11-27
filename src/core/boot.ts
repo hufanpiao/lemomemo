@@ -1,0 +1,409 @@
+// 离线冷启动：渲染 App 之前调 coldStart()，不等网络
+// 步骤：开本机库（VersionError 整屏提示、不删库）→ 换账号清空（core/account.ts）→ view 灌进集合 → 整理离线队列 → 读缓存的 config、profile 算功能开关 → 判断是否挡同步
+// 不变量：开库之后任何一步抛错都关库、清内存集合，按 unavailable 返回；coldStart 本身不抛
+// 纯 TS：不准 import React 和任何功能
+import { createSignal } from '../../shared/core/signal.ts';
+import { featureOn } from '../../shared/logic/flags.ts';
+import { SCHEMA_V } from './schema-version.ts';
+import { buildInfo } from '../platform/env.ts';
+import { onUpgradeRequired } from '../platform/http.ts';
+import { clearCacheStorage } from '../platform/session.ts';
+import { clearReauth, readReauth } from '../platform/auth-loss-store.ts';
+import { disconnectPushLazy } from '../platform/push-disconnect.ts';
+import { requestAppUpdate } from '../platform/native-bridge.ts';
+import { reloadPage, updateAttemptStore } from '../platform/sw-register.ts';
+import { rlog } from '../platform/run-log-api.ts';
+import { clock } from '../platform/clock.ts';
+import { deleteLocalDb, wipeThisDevice } from '../platform/exit-basics.ts';
+import { ensureAccount } from './account.ts';
+import { openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
+import { cacheErrKind, type UpgradeReport } from './cache-migrations.ts';
+import { DRAFTS, OUTBOX, VAULT_DRAFTS } from './cache-schema.ts';
+import { PARENT_OF } from './outbox-logic.ts';
+import { createOutbox, prunePendingActions, type Outbox, type OutboxBootReport, type OutboxItem, type OutboxOptions } from './outbox.ts';
+import { rewriteRow } from './outbox-rows.ts';
+import { clearAllCollections, collection, readonlyIds } from './store.ts';
+import { createUpgradeCenter, type UpgradeCenter, type UpgradeDeps } from './upgrade.ts';
+import { PENDING_STORE } from '../../shared/local-db.ts';
+
+/** 软删除的行在本机最多留 30 天（和服务器的 30 天清理同一规则） */
+export const LOCAL_PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * 升级本机库收到 blocked 后，等这么久仍没打开才提示（文案见 update.blocked.title）。
+ * 配合升级的页先写草稿再关库，最多等 VERSION_CLOSE_WAIT_MS，这期间浏览器会先报 1 次 blocked，马上提示会闪一下；多留 500 ms 余量
+ */
+export const BLOCKED_PROMPT_DELAY_MS = VERSION_CLOSE_WAIT_MS + 500;
+
+export interface BootOptions {
+  /** 当前登录的账号（platform/session.ts 的 readSessionUserId，离线也能读）；没登录为 null：不建本机库，直接返回 signed_out */
+  userId: string | null;
+  /** 换账号、没有会话清本机时清 Cache Storage；默认 platform/session.ts 的 clearCacheStorage */
+  clearCacheStorage?: () => Promise<void>;
+  /** 测试用：换账号、没有会话清本机时断开浏览器推送（默认 platform/push-disconnect.ts 的 disconnectPushLazy） */
+  disconnectPush?: () => Promise<void>;
+  appVersion?: string;
+  now?: () => number;
+  /** 测试用：换库名、换 IDBFactory、换迁移表 */
+  cacheOptions?: OpenCacheOptions;
+  /** 本机库被别处按库名删掉（别的标签页退出登录）时调；main.tsx 传：没有会话就回登录页，还有就重新载入 */
+  onCacheDeleted?: () => void;
+  outboxOptions?: Omit<OutboxOptions, 'appVersion' | 'now'>;
+  /** 测试用：换掉重新载入、SW 更新、sessionStorage */
+  upgradeDeps?: Partial<UpgradeDeps>;
+  /** 默认 core/schema-version.ts 的 SCHEMA_V（shared/schema/rows.ts 正本的不带 zod 的副本） */
+  schemaV?: number;
+  /** 默认 true：经 platform/http.ts 订阅所有请求的 426 */
+  listen426?: boolean;
+  /** 测试用：读 lemo.reauth（默认 platform/auth-loss-store.ts 的 readReauth） */
+  readReauth?: (now: number) => unknown;
+  /** 升级中心一建好就同步调（在开库之前）：main.tsx 用它盯 blocked 出整屏提示——被挡住时 coldStart 还在等库，App 还没画 */
+  onUpgradeCenter?: (upgrade: UpgradeCenter) => void;
+}
+
+export type BootStatus =
+  /** 没登录：没打开、没建本机库；入口跳到 /app/auth/ */
+  | 'signed_out'
+  /** 本机库可用（可能是空的） */
+  | 'ready'
+  /** 本机库来自更新的版本：整屏提示“这台设备上的数据来自更新的版本，请更新柠檬记” */
+  | 'version_too_new'
+  /** 没有 IndexedDB 或打开出错：照样能联网用，只是没有离线（记错误码） */
+  | 'unavailable';
+
+export interface BootResult {
+  status: BootStatus;
+  /** 启动时会话里的账号（signed_out 时为 null）；watchAccount 拿它和之后的会话比 */
+  userId: string | null;
+  /** 换账号的闸（watchAccount 同步设上）：为 true 时 K8 不再发送、不再写回，outbox 同时 suspend()，之后马上关库、重新载入 */
+  switching: boolean;
+  /**
+   * 设闸是因为本机会话没了：本页的 SIGNED_OUT、别的标签页退出（watchAccount 标），被移除、停用、冷静期、注销后离开
+   * （core/device-exit.ts 标）。只有换账号不标。
+   * 注销后确认不了办没办成时，只有闸是这一路设的才另记 deletion_unsure（core/account-leave.ts），
+   * 免得换账号时这条原因留在 sessionStorage、后来正常退出时冒出来
+   */
+  sessionGone?: boolean;
+  cache: Cache | null;
+  outbox: Outbox | null;
+  upgrade: UpgradeCenter;
+  /** 上次缓存的 app_config（本人能读的列） */
+  config: CachedConfig | null;
+  /** 上次缓存的 profiles 本人那一行 */
+  profile: CachedProfile | null;
+  /** 按缓存算出的、对本人打开的功能开关；null = 本机没有缓存的 config：入口按默认全挂，联网拿到 config 再算 */
+  flags: ReadonlySet<string> | null;
+  /** 要整表重拉的表：迁移失败、换了账号、或 SCHEMA_V 变了；全部重拉完后 K8 写 setMeta('schema_v', SCHEMA_V) */
+  fullResync: readonly string[];
+  /** K7 记下的“待补拉”id（按表）：K8 联网后单独补拉 */
+  refetch: Readonly<Record<string, readonly string[]>>;
+  /** 换了账号，已清空整库 */
+  switchedUser: boolean;
+  /** 本次清掉的过期软删除行数 */
+  purged: number;
+  upgradeReport: UpgradeReport | null;
+  outboxReport: OutboxBootReport | null;
+  /** 打不开库、或启动中途出错（已降级成 unavailable）时的错误名 */
+  error: string | null;
+}
+
+/** 按缓存的 config、profile 算出对本人打开的开关；config 没有 features 时返回 null */
+export function enabledFlags(config: CachedConfig | null, profile: CachedProfile | null, appVersion: string): ReadonlySet<string> | null {
+  const features = config?.features;
+  if (!features) return null;
+  const ctx = { beta: profile?.beta_features ?? [], appVersion };
+  return new Set(Object.keys(features).filter((k) => featureOn(features, k, ctx)));
+}
+
+let current: BootResult | null = null;
+let off426: (() => void) | null = null;
+/** 正在等的 blocked 提示计时器（打开成功、出错、重新 coldStart、resetBootForTest 时取消） */
+let cancelBlockedPrompt: (() => void) | null = null;
+
+/**
+ * 本机还没上传的东西有几条（退出登录前提示用；vault 代码不许 import cache，所以由 core 数）：
+ * outbox 全部项 + drafts + vault_drafts + pending_actions。数不出来（没启动、库已关、已封存、读失败）返回 null
+ */
+export async function localUnsentCount(boot: BootResult | null = current): Promise<number | null> {
+  const cache = boot?.cache;
+  const outbox = boot?.outbox;
+  if (!cache || !outbox || cache.isClosed() || cache.isSealed()) return null;
+  try {
+    await outbox.refresh();
+    const stores = [OUTBOX, DRAFTS, VAULT_DRAFTS, PENDING_STORE];
+    return await cache.tx(stores, 'readonly', async (t) => {
+      let n = 0;
+      for (const s of stores) n += (await t.getAll(s)).length;
+      return n;
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** 最近一次 coldStart 的结果（K7、K8、UI hooks 从这里拿 cache、outbox、upgrade）；还没启动为 null */
+export function getBoot(): BootResult | null {
+  return current;
+}
+
+/** profiles 本人那一行换了（applyFreshConfig 收到新的 profile）时通知：kit 的 useMeAvatar、useMeInitial 跟着重画 */
+const profileSubs = createSignal();
+
+/** 订阅“profile 变了”；返回退订 */
+export const subscribeProfile = profileSubs.subscribe;
+
+/** 本机改 profile 的次数（applyFreshConfig 不带 since 时计）：同步轮在本机改之前发出的拉取结果整份丢掉 */
+let localProfileEdits = 0;
+/** 同步轮发出拉取前记下，拉回来交给 applyFreshConfig 的 since */
+export const profileEditCount = (): number => localProfileEdits;
+
+/** 测试之间清掉 */
+export function resetBootForTest(): void {
+  current = null;
+  profileSubs.clear();
+  localProfileEdits = 0;
+  off426?.();
+  off426 = null;
+  cancelBlockedPrompt?.();
+}
+
+function defaultUpgradeDeps(appVersion: string, partial: Partial<UpgradeDeps> = {}): UpgradeDeps {
+  return {
+    appVersion,
+    reload: reloadPage,
+    // “更新”按钮：网页版拉新 SW 后重新载入，exe 交 Rust 端（platform/native-bridge.ts）
+    swUpdate: requestAppUpdate,
+    attempt: updateAttemptStore,
+    ...partial,
+  };
+}
+
+export async function coldStart(opts: BootOptions): Promise<BootResult> {
+  const appVersion = opts.appVersion ?? buildInfo.version;
+  const now = opts.now ?? (() => Date.now());
+  const upgrade = createUpgradeCenter(defaultUpgradeDeps(appVersion, opts.upgradeDeps));
+  opts.onUpgradeCenter?.(upgrade);
+  off426?.();
+  off426 = opts.listen426 !== false ? onUpgradeRequired((u) => upgrade.reportUpgradeRequired(u.min)) : null;
+
+  const result: BootResult = {
+    status: 'unavailable',
+    userId: opts.userId,
+    switching: false,
+    cache: null,
+    outbox: null,
+    upgrade,
+    config: null,
+    profile: null,
+    flags: null,
+    fullResync: [],
+    refetch: {},
+    switchedUser: false,
+    purged: 0,
+    upgradeReport: null,
+    outboxReport: null,
+    error: null,
+  };
+  current = result;
+  if (!opts.userId) {
+    // 没有会话但库还在：按库名删掉，不留上一个账号的数据（没同步的修改、版本比本 App 高的库也照样删）。
+    // 例外：有效的 lemo.reauth 是登录过期，不删库，登录页提示重新登录
+    result.status = 'signed_out';
+    if ((opts.readReauth ?? readReauth)(now()) !== null) return result;
+    // 走清本机的唯一入口；没有开着的库，不传 wipe
+    await wipeThisDevice({
+      deleteDb: () => deleteLocalDb(opts.cacheOptions?.factory, opts.cacheOptions?.name),
+      clearCacheStorage: opts.clearCacheStorage ?? clearCacheStorage,
+      disconnectPush: opts.disconnectPush ?? (() => disconnectPushLazy()),
+    });
+    return result;
+  }
+  const userId = opts.userId;
+  let opened: OpenCacheResult | null = null;
+  // blocked 不马上提示：等 BLOCKED_PROMPT_DELAY_MS 仍没打开才 setBlocked(true)（配合升级的页关库期间浏览器会先报一次 blocked）
+  cancelBlockedPrompt?.();
+  let blockedTimer: ReturnType<typeof setTimeout> | null = null;
+  const cancelThis = (): void => {
+    if (blockedTimer !== null) clearTimeout(blockedTimer);
+    blockedTimer = null;
+    if (cancelBlockedPrompt === cancelThis) cancelBlockedPrompt = null;
+  };
+  cancelBlockedPrompt = cancelThis;
+  try {
+    opened = await openCache({
+      ...opts.cacheOptions,
+      onBlocked: () => {
+        opts.cacheOptions?.onBlocked?.();
+        if (blockedTimer !== null || cancelBlockedPrompt !== cancelThis) return;
+        blockedTimer = setTimeout(() => {
+          blockedTimer = null;
+          upgrade.setBlocked(true);
+        }, BLOCKED_PROMPT_DELAY_MS);
+      },
+    });
+    cancelThis();
+    upgrade.setBlocked(false);
+    if (!opened.ok) {
+      result.error = opened.error;
+      if (opened.reason === 'version_too_new') {
+        result.status = 'version_too_new';
+        upgrade.setCacheTooNew();
+        // 刚按过“去更新”而库仍比 App 新 → still_old，并清掉 lemo.update_attempt 标记
+        upgrade.afterReloadCheck();
+      }
+      return result;
+    }
+    await loadCache(result, opened.cache, opened.upgrade, userId, opts, appVersion, now);
+    result.status = 'ready';
+    return result;
+  } catch (e) {
+    cancelThis();
+    // 失败即关：不渲染半截的缓存
+    if (opened?.ok) {
+      try {
+        opened.cache.close();
+      } catch {
+        // 已关
+      }
+    }
+    clearAllCollections();
+    Object.assign(result, {
+      status: 'unavailable', cache: null, outbox: null, config: null, profile: null, flags: null,
+      fullResync: [], refetch: {}, purged: 0, error: cacheErrKind(e),
+    } satisfies Partial<BootResult>);
+    return result;
+  }
+}
+
+/** 迁移失败后同步仓被重建（空的）：按 outbox 里还在的项重算 view，本机还没发出的 insert 在界面上照样看得见 */
+async function rebuildViewsFromOutbox(cache: Cache): Promise<void> {
+  const tables = new Set(cache.syncTables);
+  await cache.tx([...tables, OUTBOX], 'readwrite', async (t) => {
+    const seen = new Set<string>();
+    for (const i of await t.getAll<OutboxItem>(OUTBOX)) {
+      if (seen.has(i.rec) || !tables.has(i.table)) continue;
+      seen.add(i.rec);
+      await rewriteRow(t, i.table, i.id, await t.get<CachedRow>(i.table, i.id));
+    }
+  });
+}
+
+/** 开库以后的各步；任何一步抛错由 coldStart 统一降级 */
+async function loadCache(
+  result: BootResult,
+  cache: Cache,
+  report: UpgradeReport,
+  userId: string,
+  opts: BootOptions,
+  appVersion: string,
+  now: () => number,
+): Promise<void> {
+  const upgrade = result.upgrade;
+  result.cache = cache;
+  result.upgradeReport = report;
+  cache.onClosed((reason) => {
+    rlog(`cache closed ${reason}`);
+    // 别处在删库（别的标签页退出登录）：不走升级的重新载入、不出“有新版本”提示，交给入口看会话
+    if (reason === 'deleted') opts.onCacheDeleted?.();
+    // 版本变更、连接被浏览器断开（lost，iOS 后台常见）交给升级中心；本页自己关（closed）不管
+    else if (reason !== 'closed') upgrade.onCacheVersionChange();
+  });
+
+  // 换账号：在读写任何东西之前比对 owner，不同就清空整库和运行时缓存，旧账号的 outbox 不发
+  result.switchedUser = await ensureAccount(cache, userId, {
+    clearCacheStorage: opts.clearCacheStorage ?? clearCacheStorage,
+    ...(opts.disconnectPush ? { disconnectPush: opts.disconnectPush } : {}),
+  });
+  // 登录过期后重新登录：同一账号库原样用，换了账号上面已清空；两种都删掉 lemo.reauth
+  clearReauth();
+
+  // SW 记下的通知按键：先丢掉别的账号的、超过 24 小时的（转 outbox 由 features/reminders/hooks/usePendingDrain.ts 做）；清理失败下次启动再清
+  await prunePendingActions(cache, { userId, now: now() }).catch(() => 0);
+
+  // outbox 用校正过偏差的时钟（platform/clock.ts）：next_at 退避和同步引擎算重试对得上
+  const outbox = createOutbox(cache, { ...opts.outboxOptions, appVersion, now: opts.now ?? clock.now });
+  result.outbox = outbox;
+  result.outboxReport = await outbox.boot();
+  outbox.onEvent((e) => {
+    if (e.type === 'upgrade_required') upgrade.reportUpgradeRequired(e.min);
+  });
+
+  if (report.failed) await rebuildViewsFromOutbox(cache);
+
+  // 灌集合，顺带清掉过期的软删除行（队列里还有它的项的不动）；子表（PARENT_OF）还清掉父行在本机已经没有的孤儿。
+  // 父表在清单里排在子表前面，keptIds 里已经是清完的父表
+  const cutoff = now() - LOCAL_PURGE_AFTER_MS;
+  const queued = new Set((await cache.tx([OUTBOX], 'readonly', (t) => t.getAll<OutboxItem>(OUTBOX))).map((i) => i.rec));
+  const keptIds = new Map<string, Set<string>>();
+  for (const table of cache.syncTables) {
+    const rows = await cache.allRows(table);
+    const expired: string[] = [];
+    const keep: CachedRow[] = [];
+    const parent = PARENT_OF[table];   // 表名是清单里的固定名字，不会撞上 Object 原型的键
+    const parents = parent && keptIds.get(parent[0]);
+    for (const r of rows) {
+      const del = r.server?.['deleted_at'];
+      // 只删服务器上从来没有过的（r.server 为空）：拉取一张表一张表来，同步过的子任务可能先于主待办到本机，不能当孤儿删
+      const orphan = parents && !r.server && !parents.has(r.view?.[parent[1]] as string);
+      if (((typeof del === 'number' && del < cutoff) || orphan) && !queued.has(`${table}:${r.id}`)) expired.push(r.id);
+      else keep.push(r);
+    }
+    keptIds.set(table, new Set(keep.map((r) => r.id)));
+    if (expired.length) await cache.deleteRows(table, expired);
+    result.purged += expired.length;
+    const views = keep.flatMap((r) => (r.view ? [r.view] : []));
+    // 只读标记先于集合（store 的 readonlyIds）
+    readonlyIds(table).set(keep.flatMap((r) => (r.view ? [{ id: r.id, ro: r.ro === true }] : [])));
+    if (views.length) collection(table).upsert(views);
+  }
+
+  // 要整表重拉的表
+  const schemaV = opts.schemaV ?? SCHEMA_V;
+  const storedV = await cache.getMeta('schema_v');
+  if (report.failed || result.switchedUser || (storedV !== undefined && storedV !== schemaV)) result.fullResync = [...cache.syncTables];
+
+  // K7 记下的待补拉
+  const refetch: Record<string, readonly string[]> = {};
+  for (const table of cache.syncTables) {
+    const ids = await cache.getMeta(`refetch:${table}`);
+    if (ids?.length) refetch[table] = ids;
+  }
+  result.refetch = refetch;
+
+  // 功能入口（离线也按上次缓存的结果挂）
+  result.config = (await cache.getMeta('config')) ?? null;
+  result.profile = (await cache.getMeta('profile')) ?? null;
+  result.flags = enabledFlags(result.config, result.profile, appVersion);
+
+  // 挡不挡同步
+  upgrade.checkMinVersion(result.config?.min_client_version);
+  if (result.outboxReport.paused) upgrade.reportUpgradeRequired(result.outboxReport.paused.min, 'queue');
+  upgrade.afterReloadCheck();
+
+}
+
+/**
+ * 联网后整行刷新了 app_config、profiles 本人那一行：写进 meta、重算功能开关、重新比最低版本；有新 profile 先通知订阅者。
+ * since：同步轮发出拉取前的 profileEditCount()；这期间本机改过 profile，拉回来的是旧的，丢掉（config 照用）。
+ * 不带 since 的是本机改的，计一次。返回新的开关集合（null 同 enabledFlags）
+ */
+export async function applyFreshConfig(
+  boot: BootResult,
+  fresh: { config?: CachedConfig; profile?: CachedProfile; since?: number },
+  appVersion: string = buildInfo.version,
+): Promise<ReadonlySet<string> | null> {
+  if (fresh.config) {
+    boot.config = fresh.config;
+    if (boot.cache && !boot.cache.isClosed()) await boot.cache.setMeta('config', fresh.config);
+  }
+  // 不带 since（本机改的）：计一次、照收；带 since：这期间本机没改过才收
+  if (fresh.profile && (fresh.since ?? ++localProfileEdits) === localProfileEdits) {
+    boot.profile = fresh.profile;
+    // 先通知再写 meta：界面换头像、名字不等本机库（库关着、写不进也照样换）
+    profileSubs.emit();
+    if (boot.cache && !boot.cache.isClosed()) await boot.cache.setMeta('profile', fresh.profile);
+  }
+  boot.flags = enabledFlags(boot.config, boot.profile, appVersion);
+  boot.upgrade.checkMinVersion(boot.config?.min_client_version);
+  return boot.flags;
+}

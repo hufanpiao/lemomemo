@@ -1,0 +1,127 @@
+// 功能 auth 的词典·中文：登录页 /app/auth/ 上的全部文案
+// 文案对照定稿线框（docs/02-设计/草图-v4/线框-v4-定稿.html 的登录和邀请码注册、“加载与出错”、ONB_SAFARI）
+export const zh = {
+  'auth.title': '登录柠檬记',
+  'auth.lead': '不用密码。每次登录发一个 6 位验证码到邮箱。',
+  'auth.session.signedIn': '当前已登录，要换账号请先退出',
+  // 会话里读不到邮箱时用上一条
+  'auth.session.signedInAs': '当前已登录 {email}，要换账号请先退出',
+  'auth.session.switch': '退出并换账号',
+  'auth.session.backToApp': '回到 App',
+  // 点“退出并换账号”时发现本机会话已在别的页面换成了另一个账号：只刷新上面的提示，这次不退出
+  'auth.session.changed': '账号刚在别的页面换过，上面已更新。确认后再点一次“退出并换账号”。',
+  // 退出并换账号时服务器没退成（断网、超时）；和设置页 settings.offlineOut.body 同一个意思
+  'auth.session.serverPending': '已退出这台设备，本机已清空。服务器上的这次登录暂时没能吊销，之后可以在别的设备上用“退出其他所有设备”清掉它。',
+  // 退出原因（被移除、被停用、注销冷静期清本机后回到这里）；冷静期文案是占位，等产品定稿
+  'auth.exit.removed': '这台设备已在别的设备上被移除，请重新登录；还没上传的改动已丢弃。',
+  // 已停用只退出登录、不清本机，所以不说“数据已清除”（登录时被挡的 AccountGatePanel 也用这句）
+  'auth.exit.disabled': '账号已停用，已退出登录。如有疑问请联系柠檬记的负责人。',
+  'auth.exit.pendingDeletion': '账号在注销冷静期，这台设备上的数据已清除。冷静期内用邮箱验证码登录，可以选择恢复账号。',
+  'auth.email.label': '邮箱',
+  'auth.email.invalid': '邮箱格式不对，请再看一下',
+  'auth.email.send': '发验证码',
+  'auth.captcha.label': '人机验证',
+  'auth.captcha.wait': '请先等人机验证完成',
+  'auth.captcha.loadFailed': '人机验证加载不出来，请检查网络后刷新页面',
+  'auth.code.title': '输入邮箱里的 6 位验证码',
+  'auth.code.sentTo': '验证码已发到 {email}，10 分钟内有效',
+  'auth.code.label': '邮箱里的 6 位验证码',
+  'auth.code.resend': '重新发送',
+  'auth.code.resendIn': '{s} 秒后可以重新发送',
+  'auth.code.changeEmail': '换一个邮箱',
+  // 老邮箱登录的验证码框下方一行小字（邀请那一屏用 auth.invite.noMail，不叠加）
+  'auth.code.checkSpam': '没收到？记得看看垃圾邮件',
+  'auth.invite.notRegistered': '这个邮箱还没注册，需要邀请码',
+  'auth.invite.label': '邀请码',
+  'auth.invite.format': '邀请码是 12 位字母和数字，不含 0、1、I、O',
+  // 输进字母表里没有的 0、1、I、O 时，输入框下当场提示（不自动替换）
+  'auth.invite.confusable': '邀请码里没有 0、1、I、O，请再看一眼',
+  'auth.invite.noCode': '没有邀请码？请向柠檬记的负责人要一个',
+  'auth.invite.next': '下一步',
+  'auth.invite.openSignup': '去浏览器用邀请码注册',
+  'auth.invite.openSignupFailed': '浏览器没打开，请再点一次',
+  'auth.exe.doneFailed': '已经登录，但没能回到柠檬记主窗口。',
+  'auth.exe.doneRetry': '重试',
+  'auth.invite.sent': '邀请码有效的话，6 位验证码会发到这个邮箱',
+  // 先提醒看垃圾邮件
+  'auth.invite.noMail': '几分钟内没收到，记得看看垃圾邮件；还是没有，请稍后再试或联系负责人。',
+  'auth.busy': '请稍候…',
+  'auth.done': '登录好了，正在打开柠檬记…',
+  'auth.err.codeWrong.title': '验证码不对',
+  'auth.err.codeWrong.body': '请对照邮件里的 6 位数字再输一次。',
+  'auth.err.codeExpired.title': '验证码过期了',
+  'auth.err.codeExpired.body': '验证码 10 分钟内有效。',
+  'auth.err.rateLimited.title': '发得太频繁了',
+  'auth.err.rateLimited.body': '请 60 秒后再发。倒计时结束后按钮会自动变回可用。',
+  'auth.err.sendQuota.title': '现在发码的人太多',
+  'auth.err.sendQuota.body': '请稍后再试；一直不行请联系负责人。',
+  'auth.err.registeredLogin.title': '注册成功',
+  'auth.err.registeredLogin.body': '请用邮箱验证码登录。',
+  'auth.err.inviteInvalid.title': '这个邀请码用不了',
+  'auth.err.inviteInvalid.body': '可能输错了，或者已经被用过。请向柠檬记的负责人再要一个。',
+  'auth.err.emailExists.title': '这个邮箱已经注册过了',
+  'auth.err.emailExists.body': '请直接用邮箱验证码登录。',
+  'auth.err.tryLater.title': '服务暂时不通',
+  'auth.err.tryLater.body': '请稍后再试。',
+  'auth.err.tooManyTries.title': '验证码已失效',
+  'auth.err.tooManyTries.body': '试错次数太多，请从填邮箱重新开始。',
+  'auth.err.verifyLimited.title': '试得太频繁了',
+  'auth.err.verifyLimited.body': '请过一会儿再试；一直不行请联系负责人。',
+  'auth.err.captcha.title': '人机验证没通过',
+  'auth.err.captcha.body': '请等人机验证重新完成后再试一次。',
+  'auth.err.offline.title': '现在没有网络',
+  'auth.err.offline.body': '连上网络后再试一次。',
+  'auth.err.unknown.title': '出了点问题',
+  'auth.err.unknown.body': '请稍后再试。',
+  'auth.err.retry': '重新输入',
+  'auth.err.resend': '重新发送',
+  'auth.ios.title': '先把它放到主屏幕',
+  'auth.ios.openInSafari': '请在 Safari 里打开本页再添加到主屏幕。',
+  'auth.ios.why': '放到主屏幕以后，到点的提醒才能在手机上响。',
+  'auth.ios.step1': '点 Safari 的“分享”（可能在“⋯”里）',
+  'auth.ios.step2': '在弹出的菜单里找到“添加到主屏幕”',
+  // “添加到主屏幕”后还要点右上角的“添加”才算完成
+  'auth.ios.step3': '点右上角的“添加”',
+  'auth.ios.step4': '回到主屏幕，点“Lemo”的图标打开，再登录',
+  'auth.ios.noShare': '看不到分享按钮时，先点“在 Safari 中打开”。',
+  'auth.ios.note': '这个页面不能登录。请从主屏幕上的图标打开，再登录，这样只用登一次。',
+  // 注销冷静期的恢复页（{when} 是 purge_after 按本机时区的“日期 时刻”，口径同邮件 fmtWhen）
+  'auth.restore.ask': '账号在注销冷静期，{when}后彻底删除。恢复吗？',
+  // {when} 的写法，口径同邮件 fmtWhen：2026年11月5日 14:30（韩国时间）；括号里是 shared/i18n/tz-label.ts 的通俗说法
+  'auth.restore.when': '{y}年{m}月{d}日 {hh}:{mm}（{zone}）',
+  // purge_after 为 null（服务器取不到时刻）时用这一句
+  'auth.restore.askNoDate': '账号在注销冷静期，到期后会彻底删除。恢复吗？',
+  'auth.restore.restore': '恢复账号',
+  'auth.restore.keep': '保持注销并退出',
+  // restore 回 reauth_required（最近 10 分钟内没用验证码登录过）：已退出本会话，回填邮箱那一步
+  'auth.restore.reauth': '为了确认是你本人，恢复账号前要重新收一次验证码。请再登录一次，然后点“恢复账号”。',
+  // restore 的错误（对应 account 的错误码表）
+  'auth.restore.err.tooLate': '账号已开始删除，无法恢复。',
+  'auth.restore.err.rateLimited': '今天恢复的次数太多了，请明天再试。',
+  'auth.restore.err.tryLater': '服务器忙，请稍后再试。',
+  'auth.restore.err.offline': '现在没有网络，连上网络后再试一次。',
+  // 报“断网”但 navigator.onLine 不是 false（请求失败、超时、读不出回包）：不说“没有网络”
+  'auth.restore.err.unreachable': '暂时连不上服务器，稍后再试',
+  'auth.restore.err.unknown': '出了点问题，请稍后再试。',
+  // 验证码刚通过、探测不出账号状态（超时、断网、503、回包认不出）：不进 App、不清本机，给“重试”“仍然进入”
+  'auth.gate.unsure': '暂时无法确认账号状态。可以重试，或者先进入柠檬记。',
+  'auth.gate.retry': '重试',
+  'auth.gate.enterAnyway': '仍然进入',
+  // 停用页的按钮（停用页不能是死路）；本会话已退出，回填邮箱那一步
+  'auth.gate.backToLogin': '回到登录',
+  // 主 App 收到含糊的 account_disabled、探测不出是停用还是冷静期（断网、超时），保守清了本机：两种情况都说到
+  'auth.exit.disabledUnsure': '账号暂时不能使用，这台设备上的数据已清除。如果你申请过注销，冷静期内用邮箱验证码登录，可以选择恢复账号；否则请联系柠檬记的负责人。',
+  // 登录过期（也用于收到 account_disabled 但本机没有会话）：不是账号出了问题，只请重新登录
+  'auth.exit.expired': '登录已过期，请重新登录。',
+  // 登录过期、本机内容还留着（有 lemo.reauth）：标题下面一行小字，要带“不是你的设备请点清除”
+  'auth.reauth.kept': '这台设备上的内容都还在，重新登录后接着同步。不是你的设备，请点下面的“清除这台设备上的内容”。',
+  // 本机 outbox 还有没发的：只说条数，不显示原账号的邮箱；登录页不知道谁要登录，不说“另一个账号”
+  'auth.reauth.pending': '这台设备上还有 {n} 条没同步的修改：用原来的账号登录会接着同步，换别的账号登录会丢掉。',
+  'auth.reauth.clear': '不登录了，清除这台设备上的内容',
+  'auth.reauth.clearConfirm': '确定清除吗？这台设备上还没同步的修改会一起丢掉。',
+  'auth.reauth.clearYes': '清除',
+  'auth.reauth.clearNo': '取消',
+  'auth.reauth.cleared': '这台设备上的内容已清除。',
+  // 申请注销回“稍后再试”，再查状态发现会话已失效、确认不了注销办没办成：文案暂定
+  'auth.exit.deletionUnsure': '没能确认注销是否已经办好。请重新登录查看；如果账号还能正常使用，可以再申请一次注销。',
+} as const;

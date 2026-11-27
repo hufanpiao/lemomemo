@@ -1,0 +1,10 @@
+-- expect: private.enqueue_floating 直接往 remind_queue 插入
+-- R-411（迁移 20261113100000）：写提醒队列只经 private.remind_enqueue。一个入口退回自己写 insert（这里还是 on conflict do nothing），
+-- 条件、prio、清租约就又多一份；正被租着的项被用户改了也不清租约，第 0 步的 finish 会把它删掉（吞掉新改动）
+create or replace function private.enqueue_floating(p_user uuid) returns void
+  language plpgsql set search_path = '' as $$
+begin
+  insert into private.remind_queue (table_name, id, user_id)
+    select 'events', e.id, e.user_id from public.events e where e.user_id = p_user and e.deleted_at is null and e.time is null
+  on conflict do nothing;
+end $$;

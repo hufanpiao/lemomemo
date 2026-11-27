@@ -1,0 +1,33 @@
+/* “最近删除”入口（kit TrashLink.tsx）：只用令牌。
+   • .inline：句子里的下划线链接（左 8、半粗、颜色跟着所在的句子） */
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--hit);
+  margin-left: 8px;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* .icon：顶栏里头像左边的垃圾桶图标；大小照 MeLink 的 .me（触控区 --hit、圆形焦点框），颜色用次要色，不描边 */
+.icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  border-radius: 50%;
+  color: var(--text-2);
+}
+
+.icon:active {
+  opacity: var(--press-dim);
+}
+
+.inline:focus-visible,
+.icon:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

@@ -1,0 +1,148 @@
+// Vitest（架构 8.3）：三个项目
+// • unit：src 里的组件、hook、store 测试和 tests/compat 契约测试，jsdom
+// • node：shared 的测试（Deno 也跑同一批）、架构规则自测、构建脚本测试、Pages Functions、数据清单生成器
+// • node-slow：node 里会起子进程（python、PowerShell、node）或真跑 ESLint、stylelint、TypeScript 编译器、PGlite 的文件（SLOW_NODE_TESTS）
+// unit、node 保持默认 5 秒超时，真卡住能及时发现；只有 node-slow 放宽到 30 秒（机器忙时子进程、编译器会慢好几倍，曾偶发 5 秒超时）。
+// node-slow 排在第二批（sequence.groupOrder = 1）：unit、node 先跑完再跑它。混在一起时重型文件的子进程把核占满，
+// 纯测试里一连串 crypto.subtle 之类的异步往返要排队等调度，单跑 0.2 秒的用例也会拖过 5 秒；分开以后全量墙钟基本不变。
+// 新写的测试只要起子进程或用上面几种重型库，就要登记进 SLOW_NODE_TESTS；tests/arch/coverage.test.ts 会扫出漏登记的。
+// test:tz（build/run_tz_tests.mjs）把整套在三个时区各跑一遍
+import { readFileSync } from 'node:fs';
+import react from '@vitejs/plugin-react';
+import { configDefaults, defineConfig } from 'vitest/config';
+
+/**
+ * 服务器函数源码写 npm:包@精确版本（Deno 的写法，部署时没有 import map）。node 项目里有测试直接 import 真 index.ts
+ * （tests/data-manifest/purge-runner.ts 的 TC-B0-117 真链路），按 supabase/functions/deno.json 的 imports 把这些说明符
+ * 精确匹配地别名到 node_modules 里的包（版本和 package.json 一致，tests/build/deno-config.test.ts 核对）。
+ * postgres 也别名：B5 起 account/index.ts 引 _shared/db.ts（withVaultUser），TC-B0-117 真链路 import account 时要能解析 npm:postgres。
+ */
+export const DENO_NPM_ALIASES: { find: RegExp; replacement: string }[] = Object.entries(
+  (JSON.parse(readFileSync(new URL('./supabase/functions/deno.json', import.meta.url), 'utf8')) as { imports: Record<string, string> }).imports,
+)
+  .filter(([, spec]) => spec.startsWith('npm:'))
+  .map(([name, spec]) => ({ find: new RegExp(`^${spec.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`), replacement: name }));
+
+/** node 项目里的重型测试文件：起子进程，或真跑 ESLint / stylelint / TypeScript / PGlite（路径相对仓库根目录） */
+export const SLOW_NODE_TESTS: readonly string[] = [
+  'tests/arch/check-arch.test.ts', // python build/check_arch.py
+  'tests/arch/eslint.test.ts', // ESLint API（整套规则、类型信息）
+  'tests/arch/import-bounds.test.ts', // ESLint API（lemo/import-bounds：R2、LUNAR、MOTION-IMPL）
+  'tests/arch/stylelint.test.ts', // stylelint API
+  'tests/arch/tsc.test.ts', // TypeScript 编译器
+  'tests/build/check-arch-bidi.test.ts', // python build/check_arch.py、git init（LINT-bidi）
+  'tests/build/check-arch-email.test.ts', // python build/check_arch.py（EMAIL：公开仓库不进真实邮箱）
+  'tests/build/check-fn-redefs.test.ts', // python build/check_fn_redefs.py（M7：整段重写的函数不丢上一版的 delete 和表名）
+  'tests/build/check-arch-binimport.test.ts', // python build/check_arch.py → node build/check_binimport.mjs（LINT-binimport）
+  'tests/build/check-arch-binimport-entry.test.ts', // 同上（LINT-binimport：非 JS 入口）
+  'tests/build/check-arch-binimport-robust.test.ts', // 同上（LINT-binimport：createRequire 间接传递、耗时上限和健壮性）
+  'tests/build/check-backend.test.ts', // python build/check_backend.py（建 TypeScript 类型检查器）
+  'tests/build/check-backend-f11-cors.test.ts', // python build/check_backend.py（F11 样例）
+  'tests/build/check-backend-f12-json.test.ts', // python build/check_backend.py（F12 json 响应只在 _shared/http.ts）
+  'tests/build/check-backend-f13-f14.test.ts', // python build/check_backend.py（F13 隐私记目录不准 console、F14 上传带 contentType，B5）
+  'tests/build/check-contrast.test.ts', // python build/check_contrast.py（F12）
+  'tests/build/check-contrast-accepted.test.ts', // python build/check_contrast.py 的例外名单（B2 FA-7 第 4 项）
+  'tests/build/check-backend-alias.test.ts', // python build/check_backend.py（F2、F3、F7 别名展开）
+  'tests/build/check-backend-f7-keys.test.ts', // python build/check_backend.py（F7 类型检查器判键类型）
+  'tests/build/check-backend-f7-syntax.test.ts', // python build/check_backend.py（F7 语法层白名单）
+  'tests/build/check-backend-migrations.test.ts', // python build/check_backend.py（M1～M6 迁移写法）
+  'tests/build/check-backend-f9-server.test.ts', // python build/check_backend.py（F9 服务器密钥名单、F10，B2）
+  'tests/build/check-backend-gemini-key.test.ts', // python build/check_backend.py（F1 GEMINI_API_KEY 守门，B4）
+  'tests/build/check-size.test.ts', // 另起 node 跑 build/check_size.mjs
+  'tests/build/backup-pull.test.ts', // PowerShell 跑 tools/backup/pull.ps1、restore-files.ps1，node 跑 restore.mjs（B7a）
+  'tests/build/deno-frozen-lock.test.ts', // node（copy_shared）、deno install --frozen（服务器函数依赖锁真拦得住锁外依赖）
+  'tests/build/e2e-watchdog.test.ts', // 经 tools/e2e/run-watchdog.mjs 起 node（E2E-webkit-hang 看门狗真跑）
+  'tests/build/e2e-watchdog-spawn.test.ts', // 起 node 跑看门狗（拉不起命令时的提示）
+  'tests/build/e2e-reuse.test.ts', // 起 node 跑看门狗（起跑前查端口、LEMO_E2E_REUSE=1 照常拉起）
+  'tests/build/fn-version-gate-coverage.test.ts', // TypeScript 编译器
+  'tests/build/login-token-tests.test.ts', // PowerShell
+  'tests/build/login-token-tests-run.test.ts', // PowerShell（经 login-token-fake.ts）
+  'tests/build/login-token-fake-retry.test.ts', // 经 login-token-fake.ts（引了 spawn；本文件用假 spawn，不真起 pwsh）
+  'tests/build/ps1-static.test.ts', // PowerShell 解析 .ps1
+  'tests/build/publish-run.test.ts', // PowerShell、git clone（发布脚本演练）
+  'tests/build/publish-run-deploy.test.ts', // PowerShell、git clone（发布脚本演练，经 publish-run-harness.ts）
+  'tests/build/publish-run-gitsafety.test.ts', // PowerShell、git clone（发布脚本演练：hookspath、签名、替换对象、逐个比内容，经 publish-run-harness.ts）
+  'tests/build/publish-run-worktree.test.ts', // PowerShell、git clone（发布脚本演练：git 各级配置与属性来源，经 publish-run-harness.ts）
+  'tests/build/copy-shared.test.ts', // node（经目录联接调用 build\copy_shared.mjs，入口比真实路径，B2 安全审查 PUBLISH P1）
+  'tests/build/publish-run-artifact.test.ts', // PowerShell、git clone、node、tar（发布脚本演练：下载核对 CI 发布包、预览演练、backup-daily，经 publish-run-harness.ts）
+  'tests/build/remind-queue-2conn-guard.test.ts', // node tools/db/remind-queue-2conn.mjs --dry（容器名护栏，不连库）
+  'tests/build/d1-target.test.ts', // node build/ci/d1_negative.mjs、login-probe.mjs 本机环境（被拒绝，退出码 2，不连库）
+  'tests/build/store-it-guard.test.ts', // node supabase/tests/store-it/run.mjs、guard.mjs 本机环境（被护栏拒绝，退出码 2，不起 supabase）
+  'tests/build/set-cron-secret.test.ts', // PowerShell（有 docker 时还起容器）
+  'tests/build/set-backup-pull-token.test.ts', // PowerShell（B7a 复审第 8 条）
+  'tests/build/cred-ps1.test.ts', // PowerShell（B7a 复审“重复和简化”：凭据读写只有 cred.ps1 一份）
+  'tests/build/set-signup-secrets.test.ts', // PowerShell
+  'tests/build/gen-vault-keys.test.ts', // PowerShell（本机假服务，B5 S19：gen-vault-keys、check-vault-keys-leak）
+  'tests/build/set-vapid-keys.test.ts', // PowerShell（本机假服务，B2 O-1）
+  'tests/build/gen-tauri-key.test.ts', // PowerShell（编假签名工具、跑脚本，B6-exe F10）
+  'tests/build/desktop-scan.test.ts', // 另起 node 跑 build/ci/desktop_scan.mjs（B6-exe F8、F9）
+  'tests/build/workflow-permissions.test.ts', // bash 跑合成的工作流检查脚本（B6-exe S-8）
+  'tests/build/vapid-public-key-check.test.ts', // bash 跑 build/ci/vapid-public-key.sh（VAPID-prod-format、B2 O-2）
+  'tests/build/ci-guard-scripts.test.ts', // bash、git 跑 build/ci 的 no-hidden-files、no-source-map、tag-on-main（CI-8）
+  'tests/build/set-fn-role-passwords.test.ts', // PowerShell、python
+  'tests/build/set-fn-role-passwords-run.test.ts', // PowerShell
+  'tests/edge/ai-replay-recorder.test.ts', // 起 gitleaks 子进程（BE-6 录制器存盘的回放文件带假密钥必须被拦）
+  'tests/data-manifest/ai-chat-store.test.ts', // PGlite 跑全部迁移
+  'tests/data-manifest/ai-memories-store.test.ts', // PGlite 跑全部迁移
+  'tests/data-manifest/grant-matrix.test.ts', // PGlite 跑全部迁移
+  'tests/build/fonts-py.test.ts', // python 跑 build/fonts.py（fontTools 切字体分片）
+  'tests/build/p0-list.test.ts', // python 跑 build/p0_list.py（TC-B7a-17 P0 勾选表）
+];
+/** node-slow 的单条用例超时：单跑最慢的一条约 6 秒，三个全量同时跑时最慢约 19 秒；钩子（建 PGlite 等）给两倍 */
+export const SLOW_TEST_TIMEOUT = 30_000;
+
+export default defineConfig({
+  plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify('4.0.0'),
+    __BUILD_TIME__: JSON.stringify('1970-01-01T00:00:00.000Z'),
+  },
+  test: {
+    // 公共词典两份先放进 sharedT（网页按语言懒加载，单测不走入口；首屏瘦身 D 11-17）；jsdom 补“显示着”的口径（页面出来没有，11-20）
+    setupFiles: ['tests/fakes/shared-dicts-setup.ts', 'tests/fakes/jsdom-layout-setup.ts'],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit',
+          environment: 'jsdom',
+          include: ['src/**/__tests__/**/*.test.{ts,tsx}', 'tests/compat/**/*.test.ts'],
+          css: { modules: { classNameStrategy: 'non-scoped' } },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'node',
+          environment: 'node',
+          // tests/functions、tests/data-manifest（前端 B）B0 集成时并进来；tests/e2e/*.preview.test.ts 没有预览环境的变量时整组跳过
+          include: [
+            'tests/shared/**/*.test.ts',
+            'tests/arch/**/*.test.ts',
+            'tests/build/**/*.test.ts',
+            'tests/functions/**/*.test.ts',
+            // supabase/functions 里能脱离 Deno 测的纯逻辑（预览专用的 db-probe 等），数据库用假的
+            'tests/edge/**/*.test.ts',
+            'tests/data-manifest/**/*.test.ts',
+            'tests/e2e/**/*.preview.test.ts',
+          ],
+          // 重型文件归 node-slow，这里排除，免得跑两遍
+          exclude: [...configDefaults.exclude, ...SLOW_NODE_TESTS],
+          alias: DENO_NPM_ALIASES,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'node-slow',
+          environment: 'node',
+          include: [...SLOW_NODE_TESTS],
+          testTimeout: SLOW_TEST_TIMEOUT,
+          hookTimeout: 2 * SLOW_TEST_TIMEOUT,
+          // 第二批跑，不和 unit、node 抢核（见文件头）
+          sequence: { groupOrder: 1 },
+        },
+      },
+    ],
+  },
+});

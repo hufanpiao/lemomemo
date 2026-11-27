@@ -1,0 +1,83 @@
+// 设置 › 数据 › 最近的导出：列出 90 天里全部导出，按时间倒序。
+// • 每行：日期和时刻（fmtWhen）、设备名、文件没取完时标“未完成”、邮件没发出去时标“通知邮件没发出去”（发出去了不写）
+// • 设备名不另查 devices 表：用设置页已读到的设备列表（DevicesSection 那份），按 logs.device 对上 devices.id；
+//   本机加“本机”标签（复用 settings.devices.thisDevice）；列表里没有这一台（已移除）写“已移除的设备”；
+//   导出时没带设备号、或设备列表还没读出来（分不清是不是已移除）写“未知设备”
+// • 默认先显示最近 RECENT_EXPORT_SHOWN 条，多了给“显示全部（共 N 条）”
+// • 只要有一次邮件没发出去，列表下方放一句提示（不每行重复）
+// • 90 天里没有导出也写一句（不是本人操作时，用户能看出“明明没导出过”）；还在读、读失败、断网时整块不显示
+import { useState } from 'react';
+import { FormButton, groupLabelClass } from '../../../kit/components/Form.tsx';
+import { SettingsDetailRow, SettingsList, type SettingsMeta, settingsNoteClass } from '../../../kit/components/Settings/Settings.tsx';
+import { useUi } from '../../../kit/state/ui-store.ts';
+import type { DevicesState } from '../hooks/useDevices.ts';
+import type { ExportEntry, RecentExportState } from '../hooks/useRecentExport.ts';
+import { useSettingsT } from '../hooks/useSettingsT.ts';
+import { deviceName, fmtWhen } from './DevicesSection.tsx';
+import styles from './SettingsPage.module.css';
+
+export const RECENT_EXPORT_SHOWN = 5;
+
+type T = ReturnType<typeof useSettingsT>;
+
+/** 这次导出用的设备：名字和是不是本机 */
+export function exportDevice(e: ExportEntry, devices: DevicesState, t: T): { name: string; isCurrent: boolean } {
+  if (!e.device || devices.kind !== 'ready') return { name: t('settings.recentExport.unknownDevice', {}), isCurrent: false };
+  const d = devices.list.find((x) => x.id.toLowerCase() === e.device);
+  if (!d) return { name: t('settings.recentExport.removedDevice', {}), isCurrent: false };
+  return { name: deviceName(d, t), isCurrent: d.isCurrent };
+}
+
+export function RecentExport({ state, devices }: { state: RecentExportState; devices: DevicesState }) {
+  const t = useSettingsT();
+  const locale = useUi((s) => s.locale);
+  const [all, setAll] = useState(false);
+  if (state.kind !== 'ready' && state.kind !== 'none') return null;
+  const list = state.kind === 'ready' ? state.list : [];
+  const shown = all ? list : list.slice(0, RECENT_EXPORT_SHOWN);
+  const anyFailed = list.some((e) => e.mailFailed);
+  return (
+    <section aria-labelledby="settings-recent-export-title" data-testid="settings-recent-export">
+      <h3 id="settings-recent-export-title" className={`${groupLabelClass} ${styles.gt}`}>
+        {t('settings.recentExport.title', {})}
+      </h3>
+      {list.length === 0 ? (
+        <p className={settingsNoteClass}>{t('settings.recentExport.none', {})}</p>
+      ) : (
+        // kit 的 SettingsDetailRow（时间 + 右边设备名 + 下面的“未完成”“通知邮件没发出去”）
+        <SettingsList>
+          {shown.map((e) => {
+            const dev = exportDevice(e, devices, t);
+            const metas: SettingsMeta[] = [];
+            if (e.incomplete) metas.push({ text: t('settings.recentExport.incomplete', {}), testId: 'settings-recent-export-incomplete' });
+            if (e.mailFailed) metas.push({ text: t('settings.recentExport.mailMark', {}), danger: true, testId: 'settings-recent-export-mark' });
+            return (
+              <SettingsDetailRow
+                key={`${e.at}|${e.device ?? ''}`}
+                testId="settings-recent-export-row"
+                label={fmtWhen(e.at, locale)}
+                value={
+                  <>
+                    {dev.name}
+                    {dev.isCurrent ? <span className={styles.tag}>{t('settings.devices.thisDevice', {})}</span> : null}
+                  </>
+                }
+                metas={metas}
+              />
+            );
+          })}
+        </SettingsList>
+      )}
+      {!all && list.length > RECENT_EXPORT_SHOWN ? (
+        <FormButton size="compact" block onClick={() => setAll(true)} data-testid="settings-recent-export-all">
+          {t('settings.recentExport.showAll', { n: list.length })}
+        </FormButton>
+      ) : null}
+      {anyFailed ? (
+        <p className={`${settingsNoteClass} ${styles.dangerText}`} data-testid="settings-recent-export-mail">
+          {t('settings.recentExport.mailFailed', {})}
+        </p>
+      ) : null}
+    </section>
+  );
+}

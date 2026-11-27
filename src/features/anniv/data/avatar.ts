@@ -1,0 +1,87 @@
+// 纪念日头像的编码和上传：纯 TS
+// • 编码：platform/avatar-encode.ts（和我的头像共用：256 × 256 webp、0.8→0.65→0.5、≤ 100 KB、丢掉 EXIF、wasm 兜底）
+// • 上传顺序（files_authorize 查本人这一行的 avatar_id，行没上服务器之前 PUT 会被拒）：
+//   ① 先写 avatar_id（新的 UUID）、avatar_bytes（库里两者同空同非空、≤ 102400）；② 等这一行的改动在 outbox 里发完（被拒了就算失败）；
+//   ③ PUT /files/v1/o/images/<uid>/anniv/<id>/<avatar_id>.webp，可重试的错误退避再试两次（core/avatar-view.ts 的 putAvatar，和我的头像共用）
+//   ②③ 没成：avatar_id、avatar_bytes 写回换之前的值（原来没有就是 null），不留一个指向空对象的 avatar_id；
+//   界面提示“头像没传上，联网后再换一次”。离线时这次回写和 ① 在 outbox 里合并，等于没改
+// • 运行日志：编码、写行、发送、上传每一步失败记一行 `anniv avatar-<步骤> <结果码>`，不记名字、日期、图片
+// • 写完行、上传之前，本机这一张直接记进头像仓（avatar-view.ts 的 seedAvatar；我的头像也是这个时机）：
+//   列表、今天页立刻显示，不去服务器取一个还没传上的对象；没传上时行写回原值，集合一通知，仓就按 live 撤掉这一张、删缓存
+// • 去掉头像：两列写 null；旧对象由以后的 storage-sweep 清（这里不清）
+import { getBoot } from '../../../core/boot.ts';
+import { savePatch } from '../../../core/edit-save.ts';
+import { avatarPath, seedAvatar } from './avatar-view.ts';
+import { clock } from '../../../platform/clock.ts';
+import { putAvatar } from '../../../core/avatar-view.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
+import { encodeAvatar as encodeShared, type Crop } from '../../../platform/avatar-encode.ts';
+import type { loadWebpWasm } from '../../../platform/webp-wasm.ts';
+
+export type AvatarResult = 'ok' | 'encode_failed' | 'write_failed' | 'upload_failed';
+
+/** 选区画成 256 × 256 的 webp（platform/avatar-encode.ts，和我的头像共用；日志记 anniv avatar-encode） */
+export const encodeAvatar = (src: CanvasImageSource, crop: Crop, wasm?: typeof loadWebpWasm): Promise<Blob | null> => encodeShared(src, crop, 'anniv', wasm);
+
+/** 等这一行在 outbox 里的改动发完：'ok' 发完了，'failed' 被拒、发送失败，'timeout' 一直没发出去（离线） */
+export async function waitSent(rec: string, timeoutMs = 30_000): Promise<'ok' | 'failed' | 'timeout'> {
+  const outbox = getBoot()?.outbox;
+  if (!outbox) return 'failed';
+  const end = clock.now() + timeoutMs;
+  for (;;) {
+    const mine = (await outbox.list()).filter((x) => x.rec === rec);
+    if (mine.some((x) => x.state === 'failed')) return 'failed';
+    if (mine.length === 0) return 'ok';
+    const left = end - clock.now();
+    if (left <= 0) return 'timeout';
+    await new Promise<void>((resolve) => {
+      const off = outbox.subscribe(() => {
+        off();
+        clearTimeout(t);
+        resolve();
+      });
+      const t = setTimeout(() => {
+        off();
+        resolve();
+      }, Math.min(left, 2000));
+    });
+  }
+}
+
+/** 换之前这一行的头像两列（上传没成时写回去） */
+export interface AvatarPrev {
+  avatar_id: string | null;
+  avatar_bytes: number | null;
+}
+
+/** 换头像（见文件头的三步）；prev 是换之前的两列 */
+export async function setAvatar(annivId: string, blob: Blob, prev: AvatarPrev): Promise<AvatarResult> {
+  const uid = getBoot()?.userId ?? null;
+  if (uid === null) {
+    rlog('anniv avatar-write no_user');
+    return 'write_failed';
+  }
+  const avatarId = crypto.randomUUID();
+  const w = await savePatch('anniversaries', annivId, { avatar_id: avatarId, avatar_bytes: blob.size, updated_at: clock.now() }, false);
+  if (w !== 'saved') {
+    rlog(`anniv avatar-write ${w}`);
+    return 'write_failed';
+  }
+  void seedAvatar(avatarId, blob);
+  const failed = async (step: string, code: string): Promise<AvatarResult> => {
+    rlog(`anniv avatar-${step} ${code}`);
+    const back = await savePatch('anniversaries', annivId, { avatar_id: prev.avatar_id, avatar_bytes: prev.avatar_bytes, updated_at: clock.now() }, false);
+    if (back !== 'saved') rlog(`anniv avatar-rollback ${back}`);
+    return 'upload_failed';
+  };
+  const sent = await waitSent(`anniversaries:${annivId}`);
+  if (sent !== 'ok') return failed('send', sent);
+  const r = await putAvatar(avatarPath(uid, annivId, avatarId), blob);
+  // 原因码是服务器的枚举（quota_exceeded 等），不含内容
+  return r.ok ? 'ok' : failed('upload', `${r.kind}:${r.code}`);
+}
+
+/** 去掉头像 */
+export async function clearAvatar(annivId: string): Promise<boolean> {
+  return (await savePatch('anniversaries', annivId, { avatar_id: null, avatar_bytes: null, updated_at: clock.now() }, false)) === 'saved';
+}

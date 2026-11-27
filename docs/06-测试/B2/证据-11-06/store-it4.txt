@@ -1,0 +1,79 @@
+Stopped services: [supabase_imgproxy_lemo-e2e supabase_studio_lemo-e2e supabase_analytics_lemo-e2e supabase_vector_lemo-e2e supabase_pooler_lemo-e2e]
+A new version of Supabase CLI is available: v3.0.0 (currently installed v2.120.0)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
+copy_shared：56 个文件 → supabase/functions/_shared/gen/
+Check supabase/tests/store-it/account-store.it.ts
+Check supabase/tests/store-it/invite-admin-store.it.ts
+running 14 tests from ./supabase/tests/store-it/account-store.it.ts
+store-it 开跑：清掉上次（被 kill 时）留下的用户、行、备份和临时 schema ... ok (25ms)
+①③④ account-purge 真 store：or 过滤选对人；R2（翻页）、backups、counters、deleted_accounts、deleteUser 和核对 ... ok (759ms)
+② account export 真 store 两步：start → part → done；翻页不漏不重；四个计数和 logs 两条对得上 ... ok (1s)
+account export 真 rpc 的返回形状：export_job_take 回表、微秒 timestamptz 能 Date.parse；bigint 回成数字 ... ok (124ms)
+account export 真库：另一条连接拿住预检的锁 → start 回 try_later，export-size 退回、不扣导出次数，日志 export_size_busy ... ok (292ms)
+account export 真库：冷静期账号的 start、part 都被拦（account_pending_deletion），不扣 export-size ... ok (366ms)
+⑤ TC-B1-108 ② 真库竞态：restore 持 for update 锁，认领 update 等锁，restore 提交后认领 0 行 ... ok (3s)
+account 真 store：申请注销（requestDeletion）→ 恢复（restore）走一遍；报错映射（admin_cannot_delete → 403） ... ok (496ms)
+account status 真库：正常 active、冷静期 pending_deletion（purge_after 和库里一致）、管理员停用和没有 profile 都是 disabled；不写库、不计次、不发信 ... ok (1s)
+TC-B1-10：没有 profiles 行的账号调 account delete 回 403 account_disabled ... ok (179ms)
+account 真 store：refundRate 在真 counters 上比较并交换退回；每天退回 3 次以后照常扣 ...
+------- output -------
+account: export_log_failed
+account: export_log_failed
+account: export_log_failed
+account: export_log_failed
+account: export_refund_capped
+----- output end -----
+account 真 store：refundRate 在真 counters 上比较并交换退回；每天退回 3 次以后照常扣 ... ok (486ms)
+PURGE-date-cursor 真 store：backupsCursor、saveBackupsCursor 只认自己的认领时刻，只往后推，格式不对抛错 ... ok (134ms)
+push-dispatch 写心跳：queue_poison 原子累加，30 次同时写一个不少 ... ok (128ms)
+store-it 收尾：删掉本次建的用户和留下的行 ... ok (788ms)
+running 4 tests from ./supabase/tests/store-it/invite-admin-store.it.ts
+invite-admin store-it 开跑：本机 app_config.min_client_version 不为 null；清掉上次留下的用户和行 ... ok (40ms)
+①②③ makeStore 打真库：insert / 23505 映射 / check 约束 / list 的 gt 过滤 / isAdmin / takeRate ... ok (331ms)
+TC-B1-10：真 JWT、没有 profiles 行的账号调 invite-admin 回 403 account_disabled ... ok (239ms)
+④ 经处理函数（真 JWT）：管理员发码 200、库里只有哈希；非管理员 403 不写库 ... ok (727ms)
+
+ok | 18 passed | 0 failed (10s)
+
+Check supabase/tests/store-it/purge-remind.it.ts
+running 4 tests from ./supabase/tests/store-it/purge-remind.it.ts
+purge-remind 开跑：清掉上次留下的 ... ok (23ms)
+listRemind 的下限（PURGE-r4-low 低 L）：照删期（purge_after 早于 now - 3 天）的不列，3 天以内到期没提醒的照列 ... ok (186ms)
+多个账号同时到期、同时有 60 个要提醒、2 个到期没提醒：删号不积压、提醒一封不漏不重复、补发并顺延一次 ...
+------- output -------
+account-purge: purge_postponed:d3f41be8
+account-purge: purge_postponed:2bd8c2ba
+account-purge: remind_budget:12
+----- output end -----
+多个账号同时到期、同时有 60 个要提醒、2 个到期没提醒：删号不积压、提醒一封不漏不重复、补发并顺延一次 ... ok (7s)
+purge-remind 收尾：删掉本次建的用户和留下的行 ... ok (2s)
+
+ok | 4 passed | 0 failed (10s)
+
+Check supabase/tests/store-it/push-dispatch-d3.it.ts
+running 6 tests from ./supabase/tests/store-it/push-dispatch-d3.it.ts
+d3-real 开跑：清掉上次留下的，记下并停掉 push-dispatch 的 cron 任务 ... ok (50ms)
+① 300 条 × 替身拖 3 秒（真库）：一轮 25 秒内返回 200、budget_hit 为真、并发 ≤ 10、单轮 ≤ 200，剩下的之后发完、每条一次 ...
+------- output -------
+[D3-real①] 预热后第一轮 21370 ms（最后一次认领 18256 ms、最后一次发送开始 18260 ms、最后一次发送结束 21278 ms、轮末收尾（心跳、日志、回包）92 ms；预热那一轮 claimed=0），claimed=70 sent=70 left=230 budget_hit=true，替身收到 70，并发峰值 10，发送 70 次；真库心跳一致（含 left）；之后 2 轮：200/true、30/false；300 条各发 1 次，库里 300 行 pushed_for = remind_at
+----- output end -----
+① 300 条 × 替身拖 3 秒（真库）：一轮 25 秒内返回 200、budget_hit 为真、并发 ≤ 10、单轮 ≤ 200，剩下的之后发完、每条一次 ... ok (23s)
+② 50 条 × 替身拖 3 秒、两轮重叠（真库条件更新）：每条只发一次，后起的一轮认领不到已被认领的，两轮 sent 合计 50 ...
+------- output -------
+[D3-real②] 两轮共 9133 ms；第一轮 claimed=30 sent=30，第二轮 claimed=20 sent=20，第一轮认领落空 20 次、第二轮 20 次（都是对方已认领的），交集 0；替身收到 50、去重 50
+----- output end -----
+② 50 条 × 替身拖 3 秒、两轮重叠（真库条件更新）：每条只发一次，后起的一轮认领不到已被认领的，两轮 sent 合计 50 ... ok (9s)
+③ 认领后、发出前抛错（真库）：claimed 比 sent 多 1、日志不带标题和端点、下一轮不再推、前端 missed() 里有它 ...
+------- output -------
+[D3-real③] 第一轮 claimed=2 sent=1 failed=1，真库心跳 claimed−sent=1，logs 里这一条 code=build_failed，函数日志 build_failed，都不含标题和端点；第二轮 claimed=0；PostgREST 读回的行 pushed_for=remind_at、notified_for=null，前端 missed() 返回它
+----- output end -----
+③ 认领后、发出前抛错（真库）：claimed 比 sent 多 1、日志不带标题和端点、下一轮不再推、前端 missed() 里有它 ... ok (149ms)
+TC-DEL-remind_queue（函数一侧、真库）：冷静期的项不出队、不改 remind_at；删掉 auth 用户（account-purge 的 deleteUser）后下一轮队列清为 0 ...
+------- output -------
+[D3-real-DEL] 冷静期：3 项一轮后仍在队列、claim 为空、attempts 0、remind_at 没变；deleteUser 后孤儿 3 项，下一轮 push-dispatch 后清为 0，没有推送
+----- output end -----
+TC-DEL-remind_queue（函数一侧、真库）：冷静期的项不出队、不改 remind_at；删掉 auth 用户（account-purge 的 deleteUser）后下一轮队列清为 0 ... ok (185ms)
+d3-real 收尾：删掉这次建的用户、恢复 cron 任务、放锁、关连接 ... ok (743ms)
+
+ok | 6 passed | 0 failed (33s)
+

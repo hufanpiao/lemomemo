@@ -1,0 +1,75 @@
+// AI 生成参数和超时：唯一出处（架构第 7 节“生成参数”，0.29 AI 句库 Q13 ④；TC-B3-48）。
+// parse、voice、classify、media、intent、summarize 一律 temperature 0、candidateCount 1，输出 application/json 加 responseSchema；
+// 评测（tests/ai/run.ts 经 parseWithAI）和正式用同一份，不许为测试单独调；改参数等同改提示词，要重跑测试集 ①。
+// 超时分开写（任务单 S12、架构审第一节 S12）：ai-parse 调 Gemini 5 秒（第 7 节），不在服务器端重试；ai-voice 15 秒（5.11 第 4 点），
+//   11-11 起 Gemini 回 503 时重试一次、两次合计仍不超过 15 秒（retry.ts；B3 iPhone 实测 40 次里 4 次 503）。重试不改生成参数，不算改提示词。
+
+export const GEN_PARAMS = Object.freeze({ temperature: 0, candidateCount: 1 });
+
+/**
+ * 探测页（voice-probe）另外写明思考档位 minimal（11-11，负责人“语音识别感觉有点慢”）。
+ * **正式 ai-voice 这次不带**（11-11 架构复审定）：thinkingConfig 还没实测过，万一 3.5-flash-lite 不接受，正式录音会全部 400；
+ * 等负责人用探测页重录（3.5 和 3.1 都会打到）确认都回 200，再另出补丁加到 TASK_PARAMS.voice，并重跑测试集 ①。
+ * 官方 API 参考（generateContent 的 ThinkingConfig）：Gemini 3 起用 thinkingLevel（MINIMAL = “Little to no thinking”，最低一档，
+ * 不能完全关；thinkingBudget 是 2.5 的写法，3 代不推荐）。Gemini 3 开发者指南：3.5-flash-lite、3.1-flash-lite 的默认档位本来就是 minimal（未核实），
+ * 所以这一项主要是钉死（默认值以后变了也不受影响），**不指望它明显变快**；耗时波动多半在 Gemini 服务端。上线后怎么验见架构 5.11 第 1 点。
+ * parse、classify 等先不动（只给建议，见同一处）。
+ */
+export const VOICE_PROBE_PARAMS = Object.freeze({ ...GEN_PARAMS, thinkingLevel: 'minimal' as const });
+
+/** 各用途的生成参数（以后某一项要改，改这里并重跑对应测试集） */
+export const TASK_PARAMS = Object.freeze({
+  parse: GEN_PARAMS,
+  voice: GEN_PARAMS,
+  classify: GEN_PARAMS,
+  media: GEN_PARAMS,
+  intent: GEN_PARAMS,
+  summarize: GEN_PARAMS,
+  /** ai-chat（R-492）：对话要说人话，不像解析那样只出 JSON，temperature 0.3（实施计划 3.2 代定）；同样只要 1 个候选 */
+  chat: Object.freeze({ temperature: 0.3, candidateCount: 1 }),
+});
+
+/** ai-parse、claude-intake 的文字解析：调 Gemini 的超时（毫秒） */
+export const PARSE_TIMEOUT_MS = 5_000;
+/** ai-voice：转写和解析一次完成的超时（毫秒）。前端按 shared/schema/ai.ts 的同名常量定上传超时，两边必须相等（tests/shared/ai-schema.test.ts 钉住） */
+export const VOICE_TIMEOUT_MS = 15_000;
+
+/** ai-classify：一批（每人最多 20 条）分一次的超时（毫秒）。cron 调用，不重试，失败的这批记 rule、下一轮重新排队（架构 5.2） */
+export const CLASSIFY_TIMEOUT_MS = 10_000;
+
+/** ai-media：一批（最多 6 张缩略图）识别一次的超时（毫秒）。cron 调用，不重试，失败的按 10 分钟、1 小时退避，第 3 次还失败记 failed（架构 5.13 第 5 点） */
+export const MEDIA_TIMEOUT_MS = 20_000;
+
+/** ai-summarize：总结一次的超时（毫秒；架构第 6 节 ai-summarize 行“超时 10 秒”）。不重试，失败退回次数 */
+export const SUMMARIZE_TIMEOUT_MS = 10_000;
+
+/**
+ * ai-chat（R-492）：一轮对话里单次调模型的超时，和整轮的总预算（毫秒；实施计划 3.2）。一轮最多 CHAT_MAX_ROUNDS 次往返，
+ * 每次的超时取“单次上限”和“总预算还剩多少”里小的那个；总预算比前端的 30 秒（src/features/ai-chat/data/chat-api.ts 的 CHAT_CLIENT_TIMEOUT_MS）短，
+ * 前端先收到服务器的回答。单次的叫 CHAT_CALL_TIMEOUT_MS（11-23 由 CHAT_TIMEOUT_MS 改名，免得和前端整轮的那个同名不同义）
+ */
+export const CHAT_CALL_TIMEOUT_MS = 10_000;
+export const CHAT_TURN_BUDGET_MS = 25_000;
+/** 一轮里最多几次模型往返（工具调用一来一回算一次）；到了还要调工具就要求模型直接作答 */
+export const CHAT_MAX_ROUNDS = 4;
+
+/**
+ * 提示词版本（写进 ai_meta.prompt；改提示词就升版本并重跑测试集）。
+ * 11-07 由 v1 升到 v2（B3 任务单补充 R5、R6、R8）；11-10 升到 v3（R-374 中文相对时刻）；classify 11-13 升 v2（R-413 加相似分类对）；
+ * B4b-3：parse（ai-parse 的“＋”）、voice（ai-voice）升 v4，加意图判断；record 是只做记下的 parse.v3（claude-intake、评测测试集 ①，经 recordWithAI）；
+ * media 是 ai-media（B4b-2 识图）的 v1；summarize 是 ai-summarize 的 v1；chat 是 ai-chat 的，11-23 第 2 段加联网、看图升 v2；
+ * 11-23（负责人弹窗：联网换 Brave / Tavily，搜到的网页由对话模型自己读）：web_search 一行改成“读摘要、自己概括、标 [n]”，chat 升 v3；
+ *   原来给谷歌联网那一次请求的 web.v1 随谷歌搜索接地一起删掉（搜索接口不用提示词）。
+ * 11-23（R-495 长期记忆）：加 remember 工具和“记住的事”数据块，chat 升 v4；语音提问只转写用 transcribe.v1。
+ * 11-16（R-440 日程按项目分颜色）：共用的拆分规则改了 project 一条，三份一起升：record 由 parse.v3 改名 record.v4（parse.v4 已被“＋”用掉，免得撞名）、parse 升 v5、voice 升 v5。
+ * 11-16（测试集 ① 第 4 次：没说日子也没说时刻的待办被记成今天，record.v7 文件头 v5 一条写了根因）：共用的日期规则改了两句，三份再一起升：record.v5、parse.v6、voice.v6。
+ * 11-17（R-444 跨天日程）：共用规则的 duration_min 一条补全天跨天口径（天数 × 1440，含首尾两天），三份再一起升：record.v6、parse.v7、voice.v7。
+ * 11-17（R-446 月历简称放宽到 4 个字）：共用规则的 short 一条由 1～2 个字改成 1～4 个字，三份再一起升：record.v7、parse.v8、voice.v8。
+ * 11-25（负责人语音“AI 自动整理的时候日期总是弄错”“周五变成周日，后天变成明天，周五变成今天”）：模型自己数日子数错，换做法——
+ *   共用规则每条多给 date_said、time_said（原样抄出说日子、说时刻的字），服务器用本机规则（shared/logic/parse/said-when.ts）换算覆盖，
+ *   另附从今天起 14 天的日历表兜底；三份再一起升：record.v8、parse.v9、voice.v9。没有密钥，测试集 ① 这次没重跑（交给评测员）。
+ */
+export const PROMPT_VERSION = Object.freeze({
+  parse: 'parse.v9', voice: 'voice.v9', record: 'record.v8', classify: 'classify.v2', media: 'media.v1', summarize: 'summarize.v1',
+  chat: 'chat.v5', transcribe: 'transcribe.v1',
+});

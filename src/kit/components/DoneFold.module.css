@@ -1,0 +1,19 @@
+/* “已完成 N ›”折叠行（kit DoneFold.tsx，只用令牌）：组标题本身就是展开 / 收起的按钮，整行可点、点击区不小于 44 高；
+   字号、颜色和别的组标题一样（不抢眼），展开时 › 直接转成朝下（data-open 打在 › 自己身上；不播转动，展开的行自己有淡入） */
+.fold {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.chev[data-open] {
+  transform: rotate(90deg);
+}

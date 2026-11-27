@@ -1,0 +1,66 @@
+{
+  "3": {
+    "file": "cat.still.webp",
+    "riv": "575b7fd277959c4229e47839e200bff157cb4bb89e56cd5734b141fe0f146f30",
+    "webp": "203d566ebc2b7d062ca797e4e07ae7d44f2f381479d021347f1f96b7aedcf85b",
+    "w": 521,
+    "h": 521,
+    "frame": 0
+  },
+  "7": {
+    "file": "orb.still.webp",
+    "riv": "9709a33ba980e65eef37e8b61014ba49a8e53864c1fd9339d7450d9e7a591e50",
+    "webp": "43145d22e446de789f0e530f4c5f812378dc1766e09671ff1401831311743855",
+    "w": 373,
+    "h": 373,
+    "frame": 0
+  },
+  "13": {
+    "file": "meeples.still.webp",
+    "riv": "64fc8374ee6db37256b781916a281000431bcb6005ee0fbff8cb1486532bb94f",
+    "webp": "aa31d0fce30eeb7194d562c7151f4ceef69dad47f563f8a6d272b504d98765d6",
+    "w": 679,
+    "h": 382,
+    "frame": 0
+  },
+  "18": {
+    "file": "boy.still.webp",
+    "riv": "1b16c49c4ffd6baa079184e1fe174ba4e676be268ba1fe57936ce67fe5598d1f",
+    "webp": "3af2edeb99676797c07bf251d7769074b71cc6df180565db3fbdf73bd32c2360",
+    "w": 656,
+    "h": 656,
+    "frame": 0
+  },
+  "19": {
+    "file": "bob.still.webp",
+    "riv": "de5038efe0f63149e383c8f240f8e0c9bf6db61b3eea1dd1c605e4f96c725173",
+    "webp": "3bc8c8b2b60d3fb9b3889675946e8e3235eb76439d2bd9997d7327d1d72b2cdd",
+    "w": 886,
+    "h": 880,
+    "frame": 0
+  },
+  "20": {
+    "file": "catbot.still.webp",
+    "riv": "0a83ae7ee479e640894b489193f8480b9a9408ae54322e8787f77367b3723691",
+    "webp": "d2f8482d3ee659dca8ce16bc352a9b5389810c189701976e4d3321e057dd7bcc",
+    "w": 393,
+    "h": 393,
+    "frame": 0
+  },
+  "22": {
+    "file": "monster.still.webp",
+    "riv": "e50239c424257ec52ffd046c7c457158f87b87f759d1897219fcd64a7b44f3f4",
+    "webp": "fc8e61b9c3fe429cb17391e3083197138dc9187b303ea7077a3096b21319ac31",
+    "w": 331,
+    "h": 371,
+    "frame": 0
+  },
+  "23": {
+    "file": "aldo.still.webp",
+    "riv": "c0abbb21d5a5e4e2088e92f5a02942e2df0b7c5882cb6fbfc0e41fa4ba5079c3",
+    "webp": "c4c36db9aa287c825a88db05802e71f0d893e0857f691651225efceba42b658d",
+    "w": 764,
+    "h": 573,
+    "frame": 0
+  }
+}

@@ -1,0 +1,45 @@
+// 功能 calendar 的词典·中文：日程编辑页
+// 字段名对照右侧编辑栏（时间 / 项目 / 提醒 / 地点 / 链接 / 备注 / 原话）
+export const zh = {
+  'event.edit.kind': '日程',
+  'event.edit.newKind': '新建日程',
+  'event.edit.back': '返回',
+  'event.edit.titleLabel': '标题',
+  'event.edit.titlePh': '比如：周五和小林吃饭',
+  // 开始、结束各一行“日期 + 时刻”，行名“开始”“结束”，时刻框的读屏名
+  'event.edit.startTime': '开始时刻',
+  'event.edit.endTime': '结束时刻',
+  'event.edit.allDay': '全天',
+  'event.edit.start': '开始',
+  'event.edit.end': '结束',
+  // 选的结束日期早于开始日期，已按开始那天算
+  // 结束选择器下面的提示行：能选的范围；同一天结束不晚于开始时算到第二天
+  'event.edit.endRange': '结束可选 {from}～{to}',
+  'event.edit.endNextDay': '比开始早，算到第二天',
+  'event.edit.endTooLong': '最长 {n} 天，结束再早一点',
+  'event.edit.tz': '时区',
+  'event.edit.tzLocal': '按这个时区的时间；在你这里是 {date} {time}',
+  'event.edit.remind': '提醒',
+  'event.edit.min.none': '不提醒',
+  'event.edit.min.0': '开始时',
+  'event.edit.min.15': '提前 15 分钟',
+  'event.edit.min.30': '提前 30 分钟',
+  'event.edit.min.60': '提前 1 小时',
+  'event.edit.min.1440': '提前 1 天',
+  'event.edit.days.none': '不提醒',
+  'event.edit.days.0': '当天',
+  'event.edit.days.1': '前一天',
+  'event.edit.location': '地点 / 链接',
+  'event.edit.project': '项目',
+  'event.edit.note': '备注',
+  'event.edit.locationPh': '在哪儿，或贴个会议链接',
+  'event.edit.projectPh': '工作、家里…随你分',
+  'event.edit.notePh': '想多写几句也行',
+  'event.edit.raw': '原话',
+  // 同纪念日编辑页：表单分组小字、底部整宽删除行
+  'event.edit.groupTime': '时间',
+  'event.edit.groupDetail': '详情',
+  'event.edit.delete': '删除这个日程',
+  'event.edit.st.empty': '写上标题才会保存',
+  'event.edit.st.rejected': '格式不对，没保存上（标题太长、日期或时区不对）',
+} as const;

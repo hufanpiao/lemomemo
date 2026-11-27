@@ -1,0 +1,197 @@
+// 液态玻璃底栏（设计稿 皮肤-v4/液态玻璃-真机试验.html）
+// 这个文件是首屏的外壳：4 个页签、“＋”、液滴，材质先用 backdrop-filter 后备（--g-tint-fb）；减少透明效果时一直是实色。
+// 首屏用不着的（底部实色带、玻璃标记、果冻、按住放大）在 GlassBarFx.tsx，首屏画完后才下载；
+// 下载到以前和下不来时：没有模糊带、果冻、按住放大，材质用后备。
+// • 页签是 <a href>（新标签页打开照常），点按交给 navigateTab 按层级记历史；选中项 aria-current="page"；“＋”是 Pressable（按下回弹），没有新建动作的页（随手记）不出
+// • 液滴：用 --i（第几个页签）做 translate；减少动态效果时直接换位置（CSS 两段覆盖）
+//   点页签时液滴马上往那边走，不等路由换过来（webkit 切到要下载的页时路由会晚一截）：记下“从哪页点到哪页”，
+//   路由还是那一页就按点的那个画，路由一变就作废、用路由的
+// • 两个皮肤都用
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentType, type PointerEvent } from 'react';
+import { TAP_SLOP_PX } from '../../../../shared/logic/gesture.ts';
+import { hrefOf, navigateTab, plainClick } from '../../../app/router.ts';
+import { TAB_ORDER as TABS, type TabName } from './tabs.ts';
+import { Pressable } from '../../../motion/components.ts';
+import { dur } from '../../../motion/index.ts';
+import { MQ_SIDEBAR, useMedia } from '../../hooks/useMedia.ts';
+import { useT } from '../../hooks/useT.ts';
+import { MeAvatar } from '../MeAvatar.tsx';
+import type { GlassBarFxProps } from './GlassBarFx.tsx';
+import styles from './GlassBar.module.css';
+
+/** 下载到的首屏后部分（模块级缓存）：没有底栏的页（新建、编辑、设置）会卸掉底栏，回来时重新挂载，
+ *  这时直接同步用缓存、和外壳同一次画出来，实色带第一帧就在（重挂不许再从 0 淡入，否则底下会透字） */
+let loadedFx: ComponentType<GlassBarFxProps> | null = null;
+/** @internal 仅测试用：清掉缓存，回到“这次启动还没下载过”的状态 */
+export function __forgetGlassBarFxForTest(): void {
+  loadedFx = null;
+}
+
+/** 抬手换过页以后这么久（ms）以内同一个页签上来的 click 是跟着那一下的，不再换一次 */
+export const TOUCH_CLICK_MS = 1000;
+
+/** 去掉 data-fade 前在 --dur-ui 之外多等的余量 */
+export const FADE_SLACK_MS = 100;
+
+export type { TabName };
+// 图标照试验页（今天 ◎、日历 ▦、待办 ✓、随手记 ✎），24 格、描边 2
+const ICONS: Record<TabName, string> = {
+  today: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm0 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2z',
+  calendar: 'M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM4 10h16M9 5v15M15 5v15M4 15h16',
+  todos: 'M5 12.5l4.5 4.5L19 7.5',
+  notes: 'M15 5l4 4-10 10H5v-4z',
+};
+
+/** 按住“＋”：pointer 事件原样转给 plus（判定、录音都在 features/plus），这里不加节点、类名、属性，也不因此重渲染 */
+export interface PlusHold {
+  onStart(e: PointerEvent): void;
+  onMove(e: PointerEvent): void;
+  onEnd(e: PointerEvent): void;
+  onCancel(e: PointerEvent): void;
+}
+
+export interface GlassBarProps {
+  /** 选中哪个页签；null = 不亮页签、不画液滴（网页版宽屏的设置页，App 传） */
+  active: TabName | null;
+  /** “＋”：按页新建（今天、日历新建日程，待办新建待办）；不传就不出“＋”。hold：按住说话（可选） */
+  add?: { label: string; onClick(): void; hold?: PlusHold };
+  /** 什么时候下载首屏后部分（GlassBarFx.tsx）：App 传 afterAppPainted（首屏画完以后；kit 不直接依赖 platform）；不传就马上 */
+  later?: (fn: () => void) => void;
+}
+
+/** 键盘弹着时底栏、“＋”、实色带、渐隐层藏起来：只靠根节点 data-kbhide（platform/viewport.ts 写）和样式，不走属性 */
+export function GlassBar({ active, add, later = (fn) => fn() }: GlassBarProps) {
+  const t = useT();
+  const [want, setWant] = useState<{ from: TabName | null; to: TabName } | null>(null);
+  // 路由换了（点过去到了，或者后退、别处跳走）就作废：不然后退回原页时又会按旧的“点到哪页”画
+  if (want !== null && want.from !== active) setWant(null);
+  const shown = want !== null && want.from === active ? want.to : active;
+  /** 换页签：液滴先往那边走（setWant），再交给 navigateTab 按层级记历史 */
+  const go = (name: TabName): void => {
+    setWant({ from: active, to: name });
+    navigateTab(name);
+  };
+  // 手指点页签抬手就换：iPhone 上页签抬手以后 click 要再等 220～240 ms（页面里的按钮和“＋”是抬手当下就来）。不等 click 的时机：
+  // 同一根手指在同一个页签上按下、抬起、没挪出 TAP_SLOP_PX，抬手那一刻就换页；随后迟到的那个 click 只拦默认跳转、不再换一次。
+  // 鼠标、键盘、读屏照旧走 click
+  const touchDown = useRef<{ name: TabName; id: number; x: number; y: number } | null>(null);
+  const touchWent = useRef<{ name: TabName; t: number } | null>(null);
+  // 不亮页签（null）时 indexOf 是 -1：液滴整个藏起来（下面 hidden）
+  const i = (TABS as readonly (TabName | null)[]).indexOf(shown);
+  // 液滴位置用 CSSOM 写（style.setProperty）：不走 React 的 style 属性，CSP 的 style-src-attr 不放行内联 style（webkit 实测会报）
+  const dropEl = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => dropEl.current?.style.setProperty('--i', String(i)), [i]);
+  const navEl = useRef<HTMLElement>(null);
+  const gelEl = useRef<HTMLSpanElement>(null);
+  // 电脑版侧栏（kit/hooks/useMedia.ts 的 MQ_SIDEBAR）：侧栏里“＋”画在最上面，
+  // DOM 也把它放到 nav 前面，Tab 顺序和画面上下一致；窄屏“＋”在底栏右边，DOM 在 nav 后面
+  const wide = useMedia(MQ_SIDEBAR);
+  const [Fx, setFx] = useState<ComponentType<GlassBarFxProps> | null>(() => loadedFx);
+  // 只有这次挂载以后才异步到的那一次（启动时）实色带、渐隐层才淡入；用缓存同步画出来的不淡入
+  const [fadeIn, setFadeIn] = useState(false);
+  // 淡入放完（--dur-ui，再留 FADE_SLACK_MS）就去掉 data-fade：不然之后从 display: none 变回显示（关掉减少透明效果、
+  // 900px 上下拖宽度）时 @starting-style 又会生效、再淡入一次。还在等安全区时去掉也没关系：
+  // 放行时走的是 data-inset-wait 那条普通过渡，不靠 @starting-style
+  useEffect(() => {
+    if (!fadeIn) return undefined;
+    // --dur-ui 用 motion 的 dur.ui（和 tokens.css 同一组值，tokens.test 比对），不在运行时解析 CSS 字符串
+    const id = setTimeout(() => setFadeIn(false), dur.ui * 1000 + FADE_SLACK_MS);
+    return () => clearTimeout(id);
+  }, [fadeIn]);
+  useEffect(() => {
+    if (loadedFx) return;
+    let off = false;
+    later(() => {
+      import('./GlassBarFx.tsx')
+        .then((m) => {
+          loadedFx = m.GlassBarFx;
+          if (off) return;
+          setFadeIn(true);
+          setFx(() => m.GlassBarFx);
+        })
+        .catch(() => undefined); // 下不来（离线）：一直用后备材质
+    });
+    return () => {
+      off = true;
+    };
+    // later 每次渲染可能是新函数，只在挂载时下载一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const fab = add && (
+    <Pressable
+      type="button" className={styles.fab} aria-label={add.label} onClick={add.onClick} data-testid="tabbar-add" data-swap-bar=""
+      onPointerDown={add.hold?.onStart} onPointerMove={add.hold?.onMove} onPointerUp={add.hold?.onEnd} onPointerCancel={add.hold?.onCancel}
+    >
+      <span className={`${styles.glass} ${styles.fabTint}`} aria-hidden="true" />
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    </Pressable>
+  );
+  return (
+    <>
+      {wide && fab}
+      <nav
+        className={styles.bar}
+        aria-label={t('nav.label', {})}
+        data-testid="tabbar"
+        data-swap-bar=""
+        ref={navEl}
+      >
+        <span className={`${styles.glass} ${styles.barTint}`} aria-hidden="true" />
+        <span ref={dropEl} className={styles.drop} aria-hidden="true" hidden={i < 0}>
+          <span ref={gelEl} className={styles.jellyJs}>
+            <span className={`${styles.glass} ${styles.pill}`} />
+          </span>
+        </span>
+        {TABS.map((name) => (
+          <a
+            key={name}
+            className={styles.tab}
+            href={hrefOf(name)}
+            aria-current={name === active ? 'page' : undefined}
+            data-tab={name}
+            onPointerDown={(e) => {
+              touchDown.current = e.pointerType === 'touch' && e.isPrimary ? { name, id: e.pointerId, x: e.clientX, y: e.clientY } : null;
+            }}
+            onPointerUp={(e) => {
+              const d = touchDown.current;
+              touchDown.current = null;
+              if (!d || d.name !== name || d.id !== e.pointerId || Math.hypot(e.clientX - d.x, e.clientY - d.y) > TAP_SLOP_PX) return;
+              touchWent.current = { name, t: performance.now() };
+              go(name);
+            }}
+            onPointerCancel={() => {
+              touchDown.current = null;
+            }}
+            onClick={(e) => {
+              // 新标签页打开（按着修饰键、中键）不算换页，照浏览器默认；普通点击按层级记历史：不让链接自己压一条，
+              // 交给 navigateTab（今天 → 别的页签压一条，页签之间原地换，回今天能退就退）
+              if (!plainClick(e)) return;
+              // 抬手时已经换过（上面 onPointerUp）：这是跟着来的那个 click，只拦默认跳转
+              const w = touchWent.current;
+              touchWent.current = null;
+              if (w && w.name === name && performance.now() - w.t < TOUCH_CLICK_MS) return;
+              go(name);
+            }}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d={ICONS[name]} />
+            </svg>
+            <span>{t(`nav.${name}`, {})}</span>
+          </a>
+        ))}
+        {/* 侧栏最下面的设置入口（头像）：在首屏外壳里，首屏后部分下不来时宽屏也有；窄屏不显示 */}
+        {/* 点了按页签那套记历史：从今天进压一条，从别的页签进原地换 */}
+        {/* 头像用 kit 的 MeAvatar；圈和悬停色是这里的 .me::before（bare） */}
+        <a className={styles.me} href={hrefOf('settings')} onClick={(e) => plainClick(e) && navigateTab('settings')} aria-label={t('app.settings', {})} data-testid="tabbar-settings">
+          <MeAvatar bare />
+        </a>
+      </nav>
+      {!wide && fab}
+      {/* 放在外壳后面：底栏重挂时 Fx 用缓存和外壳同一次提交，它的 useLayoutEffect 要在 nav、液滴的 ref 挂上以后才跑（排在前面时 nav.current 还是空，点按代理挂不上）。
+          实色带、渐隐层是 fixed + z-index 9，叠放不看 DOM 先后 */}
+      {Fx && <Fx nav={navEl} drop={dropEl} gel={gelEl} i={i} hasAdd={add !== undefined} wide={wide} fadeIn={fadeIn} />}
+    </>
+  );
+}

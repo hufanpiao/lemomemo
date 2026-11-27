@@ -1,0 +1,95 @@
+// #/calendar 和 #/cal/... 是同一个页面（B2 FA-3 代码审查 M7）：互相跳时 App 不重新挂载月历页，焦点留在刚点的按钮上
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { App } from '../App.tsx';
+import { featureRoutes } from '../features.ts';
+import { installPageAnim } from '../page-anim.ts';
+import { FADE_GUARD_MS } from '../../motion/index.ts';
+import type * as Motion from '../../motion/index.ts';
+// 横滑切页在首屏画完以后才懒加载（App.tsx）：慢机器上测试收尾以后才去下，环境已拆掉报 EnvironmentTeardownError（CI 778139cf unit 洛杉矶）；这里不测它，换成空的
+vi.mock('../tab-swipe.ts', () => ({ installAfterPaint: () => () => undefined }));
+// 整页切换（motion 的 transition，11-20 起不用 View Transition）换成替身：只数调了几次，回调照常同步执行
+const fake = vi.hoisted(() => ({ spy: null as null | ((update: () => void) => Promise<void>) }));
+vi.mock('../../motion/index.ts', async (orig) => {
+  const m = await orig<typeof Motion>();
+  return { ...m, transition: (update: () => void, back?: boolean) => (fake.spy ? fake.spy(update) : m.transition(update, back)) };
+});
+
+// 整个 App 挂载、页面懒加载：全量三个时区同时跑、机器忙时会拖过默认 5 秒（c8b5596 的 CI unit 就是这样超时的），
+// 这个文件单独放宽到 15 秒，等页面出现的上限 10 秒；单跑仍在 3 秒内
+vi.setConfig({ testTimeout: 15_000 });
+// 切页起哪种过渡的规则：App 首屏画完以后才和横滑一起装（上面横滑换成了空的），这里直接装上
+installPageAnim(featureRoutes);
+
+afterEach(() => {
+  cleanup();
+  window.location.hash = '';
+});
+
+describe('月历两条路由同一个页面', () => {
+  it('登记表：cal 写着 samePageAs: calendar', () => {
+    expect(featureRoutes.find((r) => r.name === 'cal')?.samePageAs).toBe('calendar');
+  });
+
+  it('#/calendar 点“下个月”到 #/cal/month/...：同一个页面元素，焦点还在“下个月”按钮上', async () => {
+    window.history.replaceState(null, '', '/app/#/calendar');
+    render(<App />);
+    const page = await screen.findByTestId('calendar-page', {}, { timeout: 10_000 });
+    const next = screen.getByTestId('cal-next');
+    next.focus();
+    // 换页后 FADE_GUARD_MS 以内点 main 里的东西会被吞掉（代码审查方案 B M8），等过这一段再点
+    await act(() => new Promise((r) => setTimeout(r, FADE_GUARD_MS + 20)));
+    await act(async () => {
+      fireEvent.click(next);
+    });
+    await waitFor(() => expect(window.location.hash).toMatch(/^#\/cal\/month\/\d{4}-\d{2}$/));
+    expect(screen.getByTestId('calendar-page')).toBe(page);
+    expect(page.isConnected).toBe(true);
+    expect(document.activeElement).toBe(next);
+  });
+});
+
+// 代码复审 R2（架构 5.12 页内切换不起整页切换）：浏览器在同一页里前进 / 后退也直接画
+describe('同一页里浏览器前进 / 后退不播整页动画', () => {
+  afterEach(() => {
+    fake.spy = null;
+  });
+
+  async function back(from: string, to: string) {
+    const spy = vi.fn((cb: () => void) => {
+      cb();
+      return Promise.resolve();
+    });
+    fake.spy = spy;
+    window.history.replaceState(null, '', `/app/${to}`);
+    await act(async () => {
+      window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: `http://x/app/${from}`, newURL: `http://x/app/${to}` }));
+    });
+    return spy;
+  }
+
+  it('#/cal/month/2026-11 后退到 #/cal/month/2026-10、#/cal/... 回到 #/calendar：不起整页推页', async () => {
+    window.history.replaceState(null, '', '/app/#/cal/month/2026-11');
+    render(<App />);
+    await screen.findByTestId('calendar-page', {}, { timeout: 10_000 });
+    expect((await back('#/cal/month/2026-11', '#/cal/month/2026-10')).mock.calls).toHaveLength(0);
+    expect((await back('#/cal/month/2026-10', '#/calendar')).mock.calls).toHaveLength(0);
+    expect(window.location.hash).toBe('#/calendar');
+  });
+
+  it('四个页签之间互切（#/today → #/calendar、#/cal/... → #/todos）：不起整页推页（负责人 11-06 方案 B，main 淡入）', async () => {
+    window.history.replaceState(null, '', '/app/#/today');
+    render(<App />);
+    expect((await back('#/today', '#/calendar')).mock.calls).toHaveLength(0);
+    expect((await back('#/cal/month/2026-10', '#/todos')).mock.calls).toHaveLength(0);
+    expect(window.location.hash).toBe('#/todos');
+  });
+
+  it('换页照常起动画：#/today → #/settings，以及没登记 samePageAs 的同名路由 #/event/a → #/event/b', async () => {
+    window.history.replaceState(null, '', '/app/#/today');
+    render(<App />);
+    // 设置页、编辑页挂上以后可能自己再跳一次（拿不到数据 replaceRoute 回列表），所以是“至少一次”
+    expect((await back('#/today', '#/settings')).mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect((await back('#/event/a', '#/event/b')).mock.calls.length).toBeGreaterThanOrEqual(1);
+  });
+});

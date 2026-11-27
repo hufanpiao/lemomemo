@@ -1,0 +1,326 @@
+/* 设置页：组标题 .gt；卡片、行、卡下说明都用 kit 设置组件（说明的类是 settingsNoteClass）；只用令牌，颜色在 skins/*.css
+   按下回弹由 motion 的 Pressable 自带（含减少动态效果的覆盖），这里不写 transition、不动 transform */
+.page {
+  max-width: 560px;
+  min-height: 100dvh;
+  margin: 0 auto;
+
+  /* 底部：同步提示卡显示着时让到卡上面（--sn-pad，base.css），“退出登录”能滚出来点到 */
+  padding: max(var(--safe-top), 16px) 16px max(env(safe-area-inset-bottom), 24px, var(--sn-pad, 0px));
+  color: var(--text);
+}
+
+/* 顶部有版本横幅时（UpdateBanner 在根节点设 data-top-banner）：横幅占在页面上面，页面再撑满 100dvh 会多出一截滚动；
+   横幅高度随文字行数变，不按它算，直接不撑：底下露出来的是 body 的背景（base.css，同样是 var(--bg)、min-height: 100dvh） */
+:global(:root[data-top-banner]) .page {
+  min-height: 0;
+}
+
+/* 设置和注销账号两屏的顶栏：在 main 里，切页时跟着整页一起滑（新页从右滑进盖住，motion/page-swap.ts）；不单独起过渡名，否则会浮在新页上盖不住 */
+.top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  min-height: var(--hit);
+  margin-bottom: 8px;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-17);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* 二级页里的小标题（已登录设备、最近的导出）：字样用 kit 的小字分组名（Form.tsx 的 groupLabelClass，两个类一起挂），
+   这里只管它在本页的位置：上面隔 16、左右跟卡片里的字对齐 14。写成 h3.gt（权重 0,1,1）压过分组名那份 margin（两份 CSS 模块谁先加载不固定） */
+h3.gt {
+  margin: 16px 14px 6px;
+  outline-offset: 2px;
+}
+
+/* 设备名后面的“本机”“已退出”，最近的导出设备名后面的“本机” */
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-11-5);
+  vertical-align: middle;
+}
+
+.tagMuted {
+  color: var(--text-2);
+}
+
+/* 关于页的诊断信息（连点“版本”5 下）：纯文字、等宽、长行折开，可以长按选中拷给我们 */
+.diag {
+  margin: 12px 4px 0;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--f-mono);
+  font-size: var(--fs-12-5);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- iOS Safari 只认带前缀的写法；全局关了选字（base.css），这里要让人复制 */
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* 各组的外层：组和组之间一律 gap 16px，不靠外边距合并（合并会让卡片紧贴）。
+   上内边距 8px + 顶部 .top 的下边距 8px = “设置”标题到第一组 16px */
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 8px;
+}
+
+/* 首页“账号”一行在读设备列表时的值：固定宽度的占位，读到以后换成文字，行高不变 */
+.ph {
+  display: inline-block;
+  width: 4.5em;
+  height: 0.9em;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  vertical-align: middle;
+}
+
+/* 设置 › 账号头像旁边的当前登录邮箱：正文色 17 粗，是这一组的主角；长邮箱在任意位置换行，不撑破卡片宽度 */
+.email {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-17);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  margin: 8px 4px 0;
+  color: var(--text);
+  font-size: var(--fs-13);
+}
+
+/* 常驻的读屏播报区（导出状态）平时是空的：不占 8px。各组装进 flex 容器后外边距不再穿出组外合并，不写这条组底会多出 8px */
+.status:empty {
+  margin-top: 0;
+}
+
+.error {
+  margin: 8px 4px 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* 非正式版诊断按钮（VhProbe）：一排放不下时换行；不换行时溢出到左边屏幕外点不到 */
+.probeActions {
+  flex-wrap: wrap;
+}
+
+/* 诊断区手指点的系统开关（VhProbe 的 Finger switch）：开关和字竖直居中，整块够手指点 */
+.probeSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* 导出中断后的“继续”“取消”：跟着上面的说明左对齐，不是弹窗底部那种靠右 */
+.exportActions {
+  display: flex;
+  gap: 10px;
+  margin: 8px 4px 0;
+}
+
+/* “已取回 N MB”的数字等宽：一片一变时整行不左右跳（不加动效，见 DataSection.tsx 文件头） */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 账号页设备组下面的两句说明（“另有 N 个登录…”、“退出其他所有设备”那一组的脚注）：左右和卡片里的字、组标题对齐 14。
+   kit 的 .note 别处（日历、提醒、数据、关于、电脑等十来处）都用 4，不动它，只在这一页两句上加。写成 p.foot（权重 0,1,1）压过 kit 卡下说明那份 margin（两份 CSS 模块谁先加载不固定） */
+p.foot {
+  margin: 6px 14px 0;
+}
+
+/* 账号页单独成组的“退出其他所有设备”“注销账号”：和上面隔 22 */
+.gap {
+  margin-top: 22px;
+}
+
+.line {
+  margin: 0;
+}
+
+/* 页面最底下单独一行“退出登录” */
+.bottom {
+  margin-top: 24px;
+}
+
+/* 只给读屏的文字（注销页的标题、账号标题下邮箱前的“当前登录邮箱”） */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 注销页的说明卡片：左右 16、段间距 12、行高 1.55 */
+.card {
+  padding: 6px 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.para {
+  margin: 12px 0;
+  font-size: var(--fs-15);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* 注销页“请输入‘注销’确认”：是要照着做的说明，不是分组名，保持次要色 13 号，不换成小字分组名 */
+.label {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* 注销页输入框：外观用 kit 表单的 .input（--inp-bg、--r-inp、细边框；触屏 16px 防放大也在那边），这里只管尺寸：高 44、左右 12。
+   写成 input.input（权重 0,1,1）压过表单那份 36 高（两份 CSS 模块谁先加载不固定，同登录页） */
+input.input {
+  min-height: var(--hit);
+  padding: 0 12px;
+}
+
+/* 注销页的提交按钮外面那层：按钮本身用 FormButton compact dangerFill block，
+   多出来的上边距和“没输对时灰底灰字”写在这里 */
+.full {
+  margin-top: 8px;
+}
+
+.full > button:disabled {
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+
+/* 最近的导出下面那句“通知邮件没发出去”的说明用危险色 */
+.dangerText {
+  color: var(--danger-text);
+}
+
+/* 设置 › 账号顶部的头像，是头像那一组的第一行：左边大头像（kit MeAvatar lg，68 外框），右边邮箱和一行说明，上下各 14 */
+.meAv {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 0;
+}
+
+.meAvSide {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* 头像旁边那句说明、失败提示用 kit 的行内灰字、报错（Settings.tsx 的 settingsMetaClass、settingsErrorClass），这里不另写 */
+
+/* ===== 网页版宽屏（左目录右详情，只在 SettingsPage 的宽屏分支挂） ===== */
+
+/* 左 220 目录 + 右详情，一行铺满到底（和右边 AI 栏底边齐平） */
+.dkGrid {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+/* 目录（参考 .snav）：一列按钮，间距 2、内边距 8 */
+.dkNav {
+  gap: 2px;
+  padding: 8px;
+}
+
+.dkNavBtn {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .dkNavBtn {
+    min-height: var(--hit);
+  }
+}
+
+.dkNavBtn:hover {
+  background: var(--panel-2);
+}
+
+/* 选中的一组（参考 .on）：浅柠檬底、加粗 */
+.dkNavBtn[aria-current] {
+  background: var(--today-bg);
+  font-weight: 600;
+}
+
+/* “电脑”后面的 exe 小标签 */
+.dkExe {
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  font-weight: 400;
+}
+
+/* 右边详情：卡片本身就是白底，里面的设置卡不再另画一层底（参考详情卡里的行直接排在卡上） */
+.dkGroup > ul {
+  padding: 0;
+  background: none;
+}
+
+.dkDetail section > ul,
+.dkDetail section > [role='radiogroup'] {
+  padding: 0;
+  background: none;
+}
+
+.dkGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

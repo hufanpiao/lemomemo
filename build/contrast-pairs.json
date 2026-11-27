@@ -1,0 +1,1100 @@
+{
+  "$comment": "check_contrast.py 的清单（架构 8.1、B6-exe 任务单 F12）。每项在每套皮肤（src/styles/skins/*.css 的 data-skin × data-theme）都算一遍；modes 只限浅色或深色。bg 可以是数组（多层，第一个在最上面）。只收有出处的颜色对，source 写出处；令牌里没有、出处说不清的不收（见回报）。 accepted：负责人已接受的例外（theme、id、接受时的精确值 floor、decided、reason），不比 floor 更差时不算失败；名单之外的不达标照样报错（B2 FA-7 第 4 项，11-05）。 11-06：自动深浅（data-ad）因“底栏后实色”（负责人 11-06）取消，g-ad-floor、g-ad-halo 两对和 4 条例外删掉（主持人 11-06 方案甲）。 同日底栏玻璃两项（g-tint-floor、g-fg-on-floor）改按 over: [\"--bg\"] 算，原来的 8 条例外随之删掉，名单清零。 11-06 夜负责人要求底栏恢复透明（“这个不要动”），实色带只铺到底栏底边以下，两项去掉 over、按最坏底色算，又是 8 项不达标；负责人 11-06 定玻璃按原样（“导航的透明玻璃效果按照原样，红线以下不透明，导航上边一点透明渐变看到字”），8 项全部列为例外。",
+  "thresholds": {
+    "text": {
+      "min": 4.5,
+      "what": "正文、次要文字",
+      "source": "架构 8.1；皮肤视觉稿“对比度实测”；ADR-008 第 5 条"
+    },
+    "nontext": {
+      "min": 3,
+      "what": "大字、图标、选中块边界等非文字",
+      "source": "架构 8.1；皮肤视觉稿“对比度实测”"
+    }
+  },
+  "backdrops": {
+    "$comment": "半透明背景的最坏底色（架构 8.1）：浅色半透明取墨黑和最深的项目色；深色半透明取白色卡片、柠檬黄和最亮的项目色。项目色取本套的 --p1～--p6（色块）",
+    "light": {
+      "colors": [
+        "#141518"
+      ],
+      "projectTokens": [
+        "--p1",
+        "--p2",
+        "--p3",
+        "--p4",
+        "--p5",
+        "--p6"
+      ],
+      "pick": "darkest"
+    },
+    "dark": {
+      "colors": [
+        "#FFFFFF",
+        "#F2DF4A"
+      ],
+      "projectTokens": [
+        "--p1",
+        "--p2",
+        "--p3",
+        "--p4",
+        "--p5",
+        "--p6"
+      ],
+      "pick": "brightest"
+    }
+  },
+  "pairs": [
+    {
+      "id": "text-panel",
+      "what": "正文 / 面板",
+      "fg": "--text",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "text-login",
+      "what": "正文 / 登录页与官网首屏背景",
+      "fg": "--text",
+      "bg": "--login-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "text2-login",
+      "what": "次要文字 / 登录页与官网首屏背景",
+      "fg": "--text-2",
+      "bg": "--login-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "ok-panel",
+      "what": "“邀请码已提交”提示 / 面板",
+      "fg": "--ok-text",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "fortune-star",
+      "what": "今日运势卡亮着的星星 / 面板（负责人 11-21 定稿“八字 B 版”）",
+      "fg": "--star-on",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "今日运势卡（calendar/ui/Fortune.module.css 的 .on）"
+    },
+    {
+      "id": "text-screen",
+      "what": "正文 / 画面底色（日期大标题下的小字也在底色上）",
+      "fg": "--text",
+      "bg": "--scr-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "text2-panel",
+      "what": "次要文字 / 面板",
+      "fg": "--text-2",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "text2-screen",
+      "what": "次要文字 / 画面底色",
+      "fg": "--text-2",
+      "bg": "--scr-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "text2-panel2",
+      "what": "次要文字 / 浅底块（输入框、未选中胶囊）",
+      "fg": "--text-2",
+      "bg": "--panel-2",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "seg-off-track",
+      "what": "滑块分段没选中的字 / 底槽（R-436 kit ModeSeg look=slide）",
+      "fg": "--text-2",
+      "bg": "--seg-track",
+      "kind": "text",
+      "source": "R-436 精致化对照（纪念日编辑页第 4 条）"
+    },
+    {
+      "id": "seg-on-thumb",
+      "what": "滑块分段选中的字 / 滑块",
+      "fg": "--text",
+      "bg": "--seg-thumb",
+      "kind": "text",
+      "source": "R-436 精致化对照（纪念日编辑页第 4 条）"
+    },
+    {
+      "id": "num-accent-panel",
+      "what": "强调大号数字 / 面板（纪念日编辑页主卡天数）",
+      "fg": "--num-accent",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "R-436 精致化对照（纪念日编辑页第 2 条）"
+    },
+    {
+      "id": "text3-panel",
+      "what": "第三层文字 / 面板（表单里空着的占位字）",
+      "fg": "--text-3",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "R-436 精致化对照（纪念日编辑页第 5 条）"
+    },
+    {
+      "id": "text3-panel2",
+      "what": "第三层文字 / 浅底块（输入框、分段底槽）",
+      "fg": "--text-3",
+      "bg": "--panel-2",
+      "kind": "text",
+      "source": "R-436 精致化对照"
+    },
+    {
+      "id": "text3-bg",
+      "what": "第三层文字 / 页面底色（分组小标签“详情”）",
+      "fg": "--text-3",
+      "bg": "--bg",
+      "kind": "text",
+      "source": "R-436 精致化对照（纪念日编辑页第 5 条）"
+    },
+    {
+      "id": "on-accent",
+      "what": "主按钮文字 / 柠檬黄",
+      "fg": "--on-accent",
+      "bg": "--accent",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "late-red",
+      "what": "“没赶上”红字 / 画面底色（透明卡）",
+      "fg": "--danger-text",
+      "bg": "--scr-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1（R-76，基准最低 4.55）"
+    },
+    {
+      "id": "k-title",
+      "what": "“现在”卡标题 / 卡片",
+      "fg": "--k-fg",
+      "bg": "--k-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；令牌分组“现在”卡（R-131）"
+    },
+    {
+      "id": "k-small",
+      "what": "“现在”卡小字 / 卡片",
+      "fg": "--k-fg2",
+      "bg": "--k-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；令牌分组“现在”卡（R-131）"
+    },
+    {
+      "id": "nav-active",
+      "what": "导航文字（选中）/ 选中块（电脑侧栏仍用 --nav-active-*）",
+      "fg": "--nav-active-fg",
+      "bg": "--nav-active-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 0.26 R-143 行"
+    },
+    {
+      "id": "toast",
+      "what": "提示条文字 / 提示条（半透明按最坏底色）",
+      "fg": "--toast-fg",
+      "bg": "--toast-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1（R-122、R-147）；TC-B2-53、54"
+    },
+    {
+      "id": "toast-small",
+      "what": "提示条小字 / 提示条（半透明按最坏底色）",
+      "fg": "--toast-fg2",
+      "bg": "--toast-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1（R-147）；TC-B2-53、54"
+    },
+    {
+      "id": "toast-solid",
+      "what": "提示条文字 / 实色后备值",
+      "fg": "--toast-fg",
+      "bg": "--float-solid",
+      "kind": "text",
+      "source": "架构 8.1（实色后备值另算一遍）"
+    },
+    {
+      "id": "toast-small-solid",
+      "what": "提示条小字 / 实色后备值",
+      "fg": "--toast-fg2",
+      "bg": "--float-solid",
+      "kind": "text",
+      "source": "架构 8.1（实色后备值另算一遍）"
+    },
+    {
+      "id": "sheet-text",
+      "what": "弹层、录音面板正文 / 弹层",
+      "fg": "--text",
+      "bg": "--sheet-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1（磨砂玻璃面板 --glass-bg 按最坏底色）"
+    },
+    {
+      "id": "sheet-text2",
+      "what": "弹层次要文字 / 弹层",
+      "fg": "--text-2",
+      "bg": "--sheet-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1"
+    },
+    {
+      "id": "abar",
+      "what": "提醒按钮条文字 / 按钮条（半透明按最坏底色）",
+      "fg": "--abar-fg",
+      "bg": "--abar-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1（R-89、R-122）；TC-B2-54"
+    },
+    {
+      "id": "abar-solid",
+      "what": "提醒按钮条文字 / 实色后备值",
+      "fg": "--abar-fg",
+      "bg": "--float-solid",
+      "kind": "text",
+      "source": "架构 8.1（实色后备值另算一遍）"
+    },
+    {
+      "id": "nowpill",
+      "what": "时间河“现在”时间 / 胶囊",
+      "fg": "--nowpill-fg",
+      "bg": "--nowpill-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "chip-on",
+      "what": "选中胶囊文字 / 选中胶囊",
+      "fg": "--chip-on-fg",
+      "bg": "--chip-on-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "glass-solid-text",
+      "what": "玻璃实色后备值上的正文",
+      "fg": "--text",
+      "bg": "--glass-solid",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1"
+    },
+    {
+      "id": "on-p1",
+      "what": "项目色块 1 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107；跨天的续条、右端“2/3”也是这个字色，R-445 评审第 1 条）",
+      "fg": "--on-p",
+      "bg": "--p1",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "on-p2",
+      "what": "项目色块 2 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107；跨天的续条、右端“2/3”也是这个字色，R-445 评审第 1 条）",
+      "fg": "--on-p",
+      "bg": "--p2",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "on-p3",
+      "what": "项目色块 3 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107；跨天的续条、右端“2/3”也是这个字色，R-445 评审第 1 条）",
+      "fg": "--on-p",
+      "bg": "--p3",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "on-p4",
+      "what": "项目色块 4 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107；跨天的续条、右端“2/3”也是这个字色，R-445 评审第 1 条）",
+      "fg": "--on-p",
+      "bg": "--p4",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "on-p5",
+      "what": "项目色块 5 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107；跨天的续条、右端“2/3”也是这个字色，R-445 评审第 1 条）",
+      "fg": "--on-p",
+      "bg": "--p5",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "on-p6",
+      "what": "项目色块 6 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107；跨天的续条、右端“2/3”也是这个字色，R-445 评审第 1 条）",
+      "fg": "--on-p",
+      "bg": "--p6",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "g-halo",
+      "what": "底栏的字 / 柔光（液态玻璃，R-154）",
+      "fg": "--g-fg",
+      "bg": "--g-halo",
+      "kind": "text",
+      "source": "架构 8.1（R-154）；TC-B2-48"
+    },
+    {
+      "id": "g-solid",
+      "what": "底栏的字 / 减少透明效果时的实色",
+      "fg": "--g-fg",
+      "bg": "--glass-solid",
+      "kind": "text",
+      "source": "架构 8.1（“减少透明效果”时按 --glass-solid 算）"
+    },
+    {
+      "id": "g-pill-edge",
+      "what": "底栏 / 减少透明效果时选中液滴的描边（--g-pill-edge 在 --glass-solid 上）",
+      "fg": "--g-pill-edge",
+      "bg": "--glass-solid",
+      "kind": "nontext",
+      "source": "FA-7 设计动效评审 D2（11-05）：选中块和栏底同色看不出选中；WCAG 1.4.11 选中块边界 ≥ 3:1"
+    },
+    {
+      "id": "g-pill-solid-text",
+      "what": "底栏选中项的字 / 减少透明效果时选中液滴的实色（--g-fg-on 在 --g-pill-solid 上）",
+      "fg": "--g-fg-on",
+      "bg": "--g-pill-solid",
+      "kind": "text",
+      "source": "FA-7 设计动效评审 D2（11-05）：选中块改成 --step-off 一档后，选中字压在上面"
+    },
+    {
+      "id": "swipe-btn-light",
+      "what": "左滑“推迟”“转成待办”“移到隐私记”/ 按钮底（浅色）",
+      "fg": "--text",
+      "bg": "--panel-2",
+      "kind": "text",
+      "source": "TC-B2-62、TC-B5-34（R-171、R-172）",
+      "modes": [
+        "light"
+      ]
+    },
+    {
+      "id": "swipe-btn-dark",
+      "what": "左滑“推迟”“转成待办”“移到隐私记”/ 按钮底（深色）",
+      "fg": "--panel",
+      "bg": "--text-2",
+      "kind": "text",
+      "source": "TC-B2-62、TC-B5-34（R-171、R-172）",
+      "modes": [
+        "dark"
+      ]
+    },
+    {
+      "id": "swipe-delete",
+      "what": "左滑“删除”/ 按钮底",
+      "fg": "--danger-text",
+      "bg": "--danger-bg",
+      "kind": "text",
+      "source": "TC-B2-62（R-171、R-172）"
+    },
+    {
+      "id": "check-on-tick",
+      "what": "打勾方框勾上以后：勾号 / 填充（kit CheckCircle，R-436 第 7、8 条）",
+      "fg": "--check-on-fg",
+      "bg": "--check-on-bg",
+      "kind": "nontext",
+      "source": "R-436 确认图“待办页 · 美化后”第 7、8 条"
+    },
+    {
+      "id": "late-row-text",
+      "what": "待办页过期组：标题正文 / 过期行底",
+      "fg": "--text",
+      "bg": "--late-bg",
+      "kind": "text",
+      "source": "R-434、R-436 确认图“待办页 · 美化后”第 5 条"
+    },
+    {
+      "id": "late-row-danger",
+      "what": "待办页过期组：副行“! 过期 日期 时刻”红字 / 过期行底",
+      "fg": "--danger-text",
+      "bg": "--late-bg",
+      "kind": "text",
+      "source": "R-434、R-436 确认图“待办页 · 美化后”第 5 条"
+    },
+    {
+      "id": "fab",
+      "what": "“＋”图标 / “＋”按钮",
+      "fg": "--fab-fg",
+      "bg": "--fab-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p1s-panel",
+      "what": "项目标记 1（竖条、圆圈）/ 面板",
+      "fg": "--p1s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "p2s-panel",
+      "what": "项目标记 2（竖条、圆圈）/ 面板",
+      "fg": "--p2s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "p3s-panel",
+      "what": "项目标记 3（竖条、圆圈）/ 面板",
+      "fg": "--p3s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "p4s-panel",
+      "what": "项目标记 4（竖条、圆圈）/ 面板",
+      "fg": "--p4s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "p5s-panel",
+      "what": "项目标记 5（竖条、圆圈）/ 面板",
+      "fg": "--p5s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "p6s-panel",
+      "what": "项目标记 6（竖条、圆圈）/ 面板",
+      "fg": "--p6s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "cal-p1s-hol",
+      "what": "月历：项目 1 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p1s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-p2s-hol",
+      "what": "月历：项目 2 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p2s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-p3s-hol",
+      "what": "月历：项目 3 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p3s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-p4s-hol",
+      "what": "月历：项目 4 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p4s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-p5s-hol",
+      "what": "月历：项目 5 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p5s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-p6s-hol",
+      "what": "月历：项目 6 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p6s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-c0-line",
+      "what": "月历：没有项目的标签左侧竖线 / 卡片底",
+      "fg": "--text-2",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-c0-text",
+      "what": "月历：没有项目的标签文字 / 标签底（--panel-2）",
+      "fg": "--text",
+      "bg": "--panel-2",
+      "kind": "text",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-check-panel",
+      "what": "设置 › 日历：单选选中的 ✓ / 卡片底",
+      "fg": "--text",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "check-edge-panel",
+      "what": "待办打勾方框的边（kit CheckCircle，没勾时）/ 列表卡片底",
+      "fg": "--check-edge",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "负责人 11-15 R-433：勾选框改圆角方框，边用次要文字一级的颜色，深浅两套都要过对比度"
+    },
+    {
+      "id": "check-edge-panel2",
+      "what": "子任务打勾方框的边 / 编辑页分组底（--panel-2）",
+      "fg": "--check-edge",
+      "bg": "--panel-2",
+      "kind": "nontext",
+      "source": "负责人 11-15 R-433：子任务同样改方，小一号"
+    },
+    {
+      "id": "p1s-screen",
+      "what": "项目标记 1（平铺在底色、玻璃渐变上）",
+      "fg": "--p1s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p2s-screen",
+      "what": "项目标记 2（平铺在底色、玻璃渐变上）",
+      "fg": "--p2s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p3s-screen",
+      "what": "项目标记 3（平铺在底色、玻璃渐变上）",
+      "fg": "--p3s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p4s-screen",
+      "what": "项目标记 4（平铺在底色、玻璃渐变上）",
+      "fg": "--p4s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p5s-screen",
+      "what": "项目标记 5（平铺在底色、玻璃渐变上）",
+      "fg": "--p5s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p6s-screen",
+      "what": "项目标记 6（平铺在底色、玻璃渐变上）",
+      "fg": "--p6s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "anniv-heart",
+      "what": "纪念日小爱心（--p3s）/ 格子底",
+      "fg": "--p3s",
+      "bg": "--cal-cell",
+      "kind": "nontext",
+      "source": "R-458（11-17）：负责人“纪念日的这个小菱形标换一个，不好看”，候选里选“A 小爱心”（填 --p3s，月格那一行文字后面）；换掉 R-105 的菱形（菱形的边框 anniv-line 跟着删）"
+    },
+    {
+      "id": "anniv-heart-wkend",
+      "what": "纪念日小爱心（--p3s）/ 周末淡底",
+      "fg": "--p3s",
+      "bg": "--cal-wkend",
+      "kind": "nontext",
+      "source": "R-458（11-17）：负责人“纪念日的这个小菱形标换一个，不好看”，候选里选“A 小爱心”（填 --p3s，月格那一行文字后面）；换掉 R-105 的菱形（菱形的边框 anniv-line 跟着删）"
+    },
+    {
+      "id": "anniv-heart-stripe",
+      "what": "纪念日小爱心（--p3s）/ 放假斜纹叠在周末淡底上（最差像素）",
+      "fg": "--p3s",
+      "bg": [
+        "--hol-stripe",
+        "--cal-wkend"
+      ],
+      "kind": "nontext",
+      "source": "R-458（11-17）：负责人“纪念日的这个小菱形标换一个，不好看”，候选里选“A 小爱心”（填 --p3s，月格那一行文字后面）；换掉 R-105 的菱形（菱形的边框 anniv-line 跟着删）"
+    },
+    {
+      "id": "g-tint-floor",
+      "what": "底栏的字 / 玻璃本身（--g-tint 叠在最坏底色上，不算柔光）",
+      "fg": "--g-fg",
+      "bg": "--g-tint",
+      "kind": "nontext",
+      "source": "架构 8.1（0.29 第 30 条下限 3:1）；TC-B2-60；11-06 夜负责人要求底栏恢复透明（“这个不要动”），底栏后面又是页面内容，去掉 over、按最坏底色算；负责人 11-06 定玻璃按原样，8 项列为例外（accepted）"
+    },
+    {
+      "id": "g-fg-on-halo",
+      "what": "底栏选中项的字 / 柔光（--g-fg-on 对 --g-halo）",
+      "fg": "--g-fg-on",
+      "bg": "--g-halo",
+      "kind": "text",
+      "source": "架构 8.1 第 4252 行附近（按 --g-tint 叠在最坏底色上算栏上的字 --g-fg 和选中项 --g-fg-on，R-154 起按 --g-fg 对 --g-halo 算）；皮肤视觉稿 .tabbar .tab.on"
+    },
+    {
+      "id": "g-fg-on-floor",
+      "what": "底栏选中项的字 / 玻璃本身（--g-tint 叠在最坏底色上，不算柔光）",
+      "fg": "--g-fg-on",
+      "bg": "--g-tint",
+      "kind": "nontext",
+      "source": "架构 8.1 第 4252 行附近；0.29 第 30 条下限 3:1（选中项算不算下限、按液滴还是按玻璃算待架构定，先按玻璃收，代码审查 M3、S6）；11-06 夜负责人要求底栏恢复透明（“这个不要动”），底栏后面又是页面内容，去掉 over、按最坏底色算；负责人 11-06 定玻璃按原样，8 项列为例外（accepted）"
+    },
+    {
+      "id": "remind-toggle-on",
+      "what": "免打扰开关打开：墨色底 / 设置卡片",
+      "fg": "--ink",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "B2 FA-4 设计审查 M6、M7（提醒设置的开关、移除按钮）"
+    },
+    {
+      "id": "remind-toggle-knob",
+      "what": "免打扰开关打开：圆钮 / 墨色底",
+      "fg": "--on-ink",
+      "bg": "--ink",
+      "kind": "nontext",
+      "source": "B2 FA-4 设计审查 M6、M7（提醒设置的开关、移除按钮）"
+    },
+    {
+      "id": "remind-toggle-off",
+      "what": "免打扰开关关闭：描边 / 设置卡片",
+      "fg": "--text-2",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "B2 FA-4 设计审查 M6、M7（提醒设置的开关、移除按钮）"
+    },
+    {
+      "id": "remind-danger-text",
+      "what": "“移除它”描边按钮文字 / 提示卡",
+      "fg": "--danger-text",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "B2 FA-4 设计审查 M6、M7（提醒设置的开关、移除按钮）"
+    },
+    {
+      "id": "remind-danger-fill",
+      "what": "确认对话框“移除”：危险色字 / 危险色底",
+      "fg": "--danger-text",
+      "bg": "--danger-bg",
+      "kind": "text",
+      "source": "B2 FA-4 设计审查 M6、M7（提醒设置的开关、移除按钮）"
+    },
+    {
+      "id": "hol-name-panel",
+      "what": "月历：放假的节日名 / 格子底",
+      "fg": "--hol-name",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-name-panel2",
+      "what": "月历：放假的节日名 / 选中那天的底",
+      "fg": "--hol-name",
+      "bg": "--panel-2",
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-name-hol-bg",
+      "what": "月历：放假的节日名 / 节假日底（视觉稿小月历）",
+      "fg": "--hol-name",
+      "bg": "--hol-bg",
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "text2-hol-bg",
+      "what": "次要文字 / 节假日底（视觉稿小月历）",
+      "fg": "--text-2",
+      "bg": "--hol-bg",
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-stripe-name",
+      "what": "放假斜纹从字底下穿过：节日名 / 斜纹叠在格子底上（最差像素）",
+      "fg": "--hol-name",
+      "bg": [
+        "--hol-stripe",
+        "--panel"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-stripe-name-wkend",
+      "what": "放假斜纹从字底下穿过：节日名 / 叠在周末淡底上（最差像素）",
+      "fg": "--hol-name",
+      "bg": [
+        "--hol-stripe",
+        "--cal-wkend"
+      ],
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "hol-stripe-text2",
+      "what": "放假斜纹从字底下穿过：次要文字（连休第二天起的农历、节气，周视图星期）/ 斜纹叠在格子底上",
+      "fg": "--text-2",
+      "bg": [
+        "--hol-stripe",
+        "--panel"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-stripe-text2-wkend",
+      "what": "放假斜纹从字底下穿过：次要文字 / 叠在周末淡底上",
+      "fg": "--text-2",
+      "bg": [
+        "--hol-stripe",
+        "--cal-wkend"
+      ],
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "hol-stripe-text",
+      "what": "放假斜纹从字底下穿过：日期数字（正文色）/ 斜纹叠在格子底上",
+      "fg": "--text",
+      "bg": [
+        "--hol-stripe",
+        "--panel"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "hol-stripe-text-wkend",
+      "what": "放假斜纹从字底下穿过：日期数字（正文色）/ 叠在周末淡底上",
+      "fg": "--text",
+      "bg": [
+        "--hol-stripe",
+        "--cal-wkend"
+      ],
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "work-stripe-text2",
+      "what": "补班斜纹从字底下穿过：次要文字（补班日的节日名）/ 斜纹叠在格子底上",
+      "fg": "--text-2",
+      "bg": [
+        "--work-stripe",
+        "--panel"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "work-stripe-text2-wkend",
+      "what": "补班斜纹从字底下穿过：次要文字 / 叠在周末淡底上",
+      "fg": "--text-2",
+      "bg": [
+        "--work-stripe",
+        "--cal-wkend"
+      ],
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "work-stripe-text",
+      "what": "补班斜纹从字底下穿过：日期数字（正文色）/ 斜纹叠在格子底上",
+      "fg": "--text",
+      "bg": [
+        "--work-stripe",
+        "--panel"
+      ],
+      "kind": "text",
+      "source": "R-432 评审（11-15）：负责人选暖黑 + 节假日“照参考图做”；月格 .holiday / .workday 斜纹（CalendarPage.module.css），手机周泳道、电脑周表头和列同一个类"
+    },
+    {
+      "id": "work-stripe-text-wkend",
+      "what": "补班斜纹从字底下穿过：日期数字（正文色）/ 叠在周末淡底上",
+      "fg": "--text",
+      "bg": [
+        "--work-stripe",
+        "--cal-wkend"
+      ],
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "today-fg-bg",
+      "what": "今天的日期数字 / 今天淡黄小框（R-445，四套皮肤一样）",
+      "fg": "--today-fg",
+      "bg": "--today-bg",
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "focus-bg",
+      "what": "聚焦框 / 页面底色（编辑页返回按钮、提醒页按钮；底栏页签聚焦时外圈 4px 的 --bg 也是它）",
+      "fg": "--focus",
+      "bg": "--bg",
+      "kind": "nontext",
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-panel",
+      "what": "聚焦框 / 卡片（表单、设置行）",
+      "fg": "--focus",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-panel2",
+      "what": "聚焦框 / 次级底（列表圆圈、提醒时刻框所在行）",
+      "fg": "--focus",
+      "bg": "--panel-2",
+      "kind": "nontext",
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-inp",
+      "what": "聚焦框 / 输入框底色（有框输入框聚焦）",
+      "fg": "--focus",
+      "bg": "--inp-bg",
+      "kind": "nontext",
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-fab-in",
+      "what": "聚焦框 / 底栏“＋”内侧（--g-fab-tint 叠在最坏底色上）；按“框两侧任一侧 ≥ 3:1”算，浅色内侧达标即可",
+      "fg": "--focus",
+      "bg": "--g-fab-tint",
+      "kind": "nontext",
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-fab-out",
+      "what": "聚焦框 / 底栏“＋”外侧（--g-tint 叠在最坏底色上）；只查深色：浅色内侧已达标，按“任一侧 ≥ 3:1”不再要求外侧",
+      "fg": "--focus",
+      "bg": "--g-tint",
+      "kind": "nontext",
+      "modes": [
+        "dark"
+      ],
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-rail",
+      "what": "聚焦框 / 电脑版侧栏（侧栏头像 .me 外扩 2px 的那一圈、侧栏里的页签和“＋”；--b-rail 叠在 --bg 上）",
+      "fg": "--focus",
+      "bg": "--b-rail",
+      "kind": "nontext",
+      "over": [
+        "--bg"
+      ],
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）。over 的前提：宽屏 #root 左边让出 110px（GlassBar.module.css :global(#root):has(.bar)），侧栏（左 16、宽 78）后面只有 body 的 --bg"
+    },
+    {
+      "id": "cal-sel",
+      "what": "选中那天的日期数字 / 深色小方块",
+      "fg": "--cal-sel-fg",
+      "bg": "--cal-sel-bg",
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "cal-wkend-fg",
+      "what": "周末的日期数字和农历（灰字）/ 周末淡底",
+      "fg": "--cal-wkend-fg",
+      "bg": "--cal-wkend",
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "cal-text2-wkend",
+      "what": "次要文字（农历、节气）/ 周末淡底",
+      "fg": "--text-2",
+      "bg": "--cal-wkend",
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    },
+    {
+      "id": "cal-holname-wkend",
+      "what": "放假的节日名 / 周末淡底",
+      "fg": "--hol-name",
+      "bg": "--cal-wkend",
+      "kind": "text",
+      "source": "R-445（11-17）：月格、周泳道重新设计——选中那天不再整格换底（只把数字换成深色小方块），斜纹 / 点阵叠的底换成格子底和周末淡底（--cal-wkend）；今天改淡黄小框"
+    }
+  ],
+  "accepted": [
+    {
+      "theme": "glass-dark",
+      "id": "hol-stripe-text2",
+      "floor": 3.5859,
+      "decided": "2026-11-17",
+      "reason": "负责人 11-17 定深色放假斜纹保持 .28（定稿原样；主持人先提示过斜纹上的次要文字只有约 3.4～3.6:1，可选降到 .18 全过，负责人选保留）"
+    },
+    {
+      "theme": "glass-dark",
+      "id": "hol-stripe-text2-wkend",
+      "floor": 3.3924,
+      "decided": "2026-11-17",
+      "reason": "负责人 11-17 定深色放假斜纹保持 .28（定稿原样；主持人先提示过斜纹上的次要文字只有约 3.4～3.6:1，可选降到 .18 全过，负责人选保留）"
+    },
+    {
+      "theme": "simple-dark",
+      "id": "hol-stripe-text2",
+      "floor": 3.5859,
+      "decided": "2026-11-17",
+      "reason": "负责人 11-17 定深色放假斜纹保持 .28（定稿原样；主持人先提示过斜纹上的次要文字只有约 3.4～3.6:1，可选降到 .18 全过，负责人选保留）"
+    },
+    {
+      "theme": "simple-dark",
+      "id": "hol-stripe-text2-wkend",
+      "floor": 3.3924,
+      "decided": "2026-11-17",
+      "reason": "负责人 11-17 定深色放假斜纹保持 .28（定稿原样；主持人先提示过斜纹上的次要文字只有约 3.4～3.6:1，可选降到 .18 全过，负责人选保留）"
+    },
+    {
+      "theme": "glass-dark",
+      "id": "check-edge-panel",
+      "floor": 2.7074,
+      "decided": "2026-11-15",
+      "reason": "负责人 11-15 定勾选框照参考图 1 一模一样（“按照参考图一模一样的来”），边色用参考图原色 #69645C；主持人先提示过参考色在卡片底不到 3:1"
+    },
+    {
+      "theme": "glass-dark",
+      "id": "check-edge-panel2",
+      "floor": 2.4092,
+      "decided": "2026-11-15",
+      "reason": "负责人 11-15 定勾选框照参考图 1 一模一样（“按照参考图一模一样的来”），边色用参考图原色 #69645C；主持人先提示过参考色在卡片底不到 3:1"
+    },
+    {
+      "theme": "simple-dark",
+      "id": "check-edge-panel",
+      "floor": 2.7074,
+      "decided": "2026-11-15",
+      "reason": "负责人 11-15 定勾选框照参考图 1 一模一样（“按照参考图一模一样的来”），边色用参考图原色 #69645C；主持人先提示过参考色在卡片底不到 3:1"
+    },
+    {
+      "theme": "simple-dark",
+      "id": "check-edge-panel2",
+      "floor": 2.4092,
+      "decided": "2026-11-15",
+      "reason": "负责人 11-15 定勾选框照参考图 1 一模一样（“按照参考图一模一样的来”），边色用参考图原色 #69645C；主持人先提示过参考色在卡片底不到 3:1"
+    },
+    {
+      "theme": "glass-dark",
+      "id": "g-tint-floor",
+      "floor": 2.4574,
+      "decided": "2026-11-06",
+      "reason": "负责人 11-06 定：底栏玻璃按原样，不为对比度加深（G1、G8）；上沿外 12pt 渐隐（G12 选 B12），后面的字照样透出来"
+    },
+    {
+      "theme": "glass-dark",
+      "id": "g-fg-on-floor",
+      "floor": 2.7284,
+      "decided": "2026-11-06",
+      "reason": "负责人 11-06 定：底栏玻璃按原样，不为对比度加深（G1、G8）；上沿外 12pt 渐隐（G12 选 B12），后面的字照样透出来"
+    },
+    {
+      "theme": "glass-light",
+      "id": "g-tint-floor",
+      "floor": 1.4053,
+      "decided": "2026-11-06",
+      "reason": "负责人 11-06 定：底栏玻璃按原样，不为对比度加深（G1、G8）；上沿外 12pt 渐隐（G12 选 B12），后面的字照样透出来"
+    },
+    {
+      "theme": "glass-light",
+      "id": "g-fg-on-floor",
+      "floor": 1.4053,
+      "decided": "2026-11-06",
+      "reason": "负责人 11-06 定：底栏玻璃按原样，不为对比度加深（G1、G8）；上沿外 12pt 渐隐（G12 选 B12），后面的字照样透出来"
+    },
+    {
+      "theme": "simple-dark",
+      "id": "g-tint-floor",
+      "floor": 2.4574,
+      "decided": "2026-11-06",
+      "reason": "负责人 11-06 定：底栏玻璃按原样，不为对比度加深（G1、G8）；上沿外 12pt 渐隐（G12 选 B12），后面的字照样透出来"
+    },
+    {
+      "theme": "simple-dark",
+      "id": "g-fg-on-floor",
+      "floor": 2.7284,
+      "decided": "2026-11-06",
+      "reason": "负责人 11-06 定：底栏玻璃按原样，不为对比度加深（G1、G8）；上沿外 12pt 渐隐（G12 选 B12），后面的字照样透出来"
+    },
+    {
+      "theme": "simple-light",
+      "id": "g-tint-floor",
+      "floor": 1.4053,
+      "decided": "2026-11-06",
+      "reason": "负责人 11-06 定：底栏玻璃按原样，不为对比度加深（G1、G8）；上沿外 12pt 渐隐（G12 选 B12），后面的字照样透出来"
+    },
+    {
+      "theme": "simple-light",
+      "id": "g-fg-on-floor",
+      "floor": 1.4053,
+      "decided": "2026-11-06",
+      "reason": "负责人 11-06 定：底栏玻璃按原样，不为对比度加深（G1、G8）；上沿外 12pt 渐隐（G12 选 B12），后面的字照样透出来"
+    },
+    {
+      "theme": "simple-dark",
+      "id": "focus-fab-in",
+      "floor": 1.1935,
+      "decided": "2026-11-07",
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45。11-15 负责人选暖黑（R-432）后 --text 和底色变暖，floor 按新色重算，性质不变"
+    },
+    {
+      "theme": "simple-dark",
+      "id": "focus-fab-out",
+      "floor": 2.2072,
+      "decided": "2026-11-07",
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45。11-15 负责人选暖黑（R-432）后 --text 和底色变暖，floor 按新色重算，性质不变"
+    },
+    {
+      "theme": "glass-dark",
+      "id": "focus-fab-in",
+      "floor": 1.1935,
+      "decided": "2026-11-07",
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45。11-15 负责人选暖黑（R-432）后 --text 和底色变暖，floor 按新色重算，性质不变"
+    },
+    {
+      "theme": "glass-dark",
+      "id": "focus-fab-out",
+      "floor": 2.2072,
+      "decided": "2026-11-07",
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45。11-15 负责人选暖黑（R-432）后 --text 和底色变暖，floor 按新色重算，性质不变"
+    }
+  ]
+}

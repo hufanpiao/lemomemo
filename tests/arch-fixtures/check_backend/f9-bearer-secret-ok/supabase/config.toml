@@ -1,0 +1,6 @@
+[api]
+enabled = true
+
+# ⑦ 合规：名单里的 backup-manifest 关了 verify_jwt，把 Authorization 头交给 bearerGate
+[functions.backup-manifest]
+verify_jwt = false

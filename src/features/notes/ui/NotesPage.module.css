@@ -1,0 +1,525 @@
+/* 随手记页：只用令牌。标题一律常规字重，只有页顶大标题和选中的胶囊强调。瀑布流手机两列、窗口 ≥ 900px 三列 */
+.page {
+  max-width: 560px;
+  margin: 0 auto;
+
+  /* 底部多留输入行的高度：最后一条不被输入行挡住 */
+  padding: max(var(--safe-top), 16px) 16px calc(var(--tabbar-pad) + 72px);
+  color: var(--text);
+}
+
+/* 电脑（有侧栏）：内容栏左右 22px，输入行跟着内容栏走、贴在栏底（下面 .inrow 那段）；详情抽屉盖在上面 */
+@media (width >= 900px) {
+  .page {
+    display: flex;
+    flex-direction: column;
+    max-width: 880px;
+    min-height: 100dvh;
+    padding: max(var(--safe-top), 16px) 22px 22px;
+  }
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 顶栏右边：“最近删除”图标 + 头像，两个都是 44 触控区，挨着放 */
+.topEnd {
+  display: flex;
+  align-items: center;
+}
+
+/* 大标题加短粗下划线、标题下一行等宽小字：kit 的 Refine.module.css（待办页同一份） */
+
+/* 网页版宽屏：NotesPage 宽屏那一段才挂。
+   页头右边的分类胶囊不左右出血；列表区占满页头和输入行之间、自己滚 */
+.dkFilter {
+  margin: 0;
+  padding: 0;
+}
+
+.dkBody {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden auto;
+}
+
+/* 右上角头像（设置入口）在 kit 的 MeLink（四页共用；触控区 44，圆在 kit 的 MeAvatar 里） */
+
+.filter {
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px 8px;
+  padding: 0 16px;
+  overflow-x: auto;
+}
+
+/* 分类筛选胶囊：kit 的 Chip.module.css（高 30、无描边浅底，待办页筛选同一份），这里只管排布 */
+
+/* 分类色点：卡片、行上 6px，胶囊上 8px；颜色从行内 --dot 来（categories.color） */
+.dot,
+.dotBig {
+  flex: none;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--dot);
+}
+
+.dotBig {
+  width: 8px;
+  height: 8px;
+  margin-right: 0;
+}
+
+/* 瀑布流：CSS 多列，卡片不拆开 */
+.mason {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  columns: 2;
+  column-gap: 10px;
+}
+
+@media (width >= 900px) {
+  .mason {
+    columns: 3;
+  }
+}
+
+.card {
+  break-inside: avoid;
+  margin-bottom: 10px;
+  border-radius: 22px;
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+/* 卡片顶部的图：贴满卡片宽，抵掉按钮的内边距 */
+.cardCover {
+  display: block;
+  margin: -10px -12px 10px;
+}
+
+.cardMain {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 10px 12px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+
+.cardTitle {
+  font-size: var(--fs-14);
+  font-weight: 400;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+
+  /* 一行记两千多字时标题不限行会占满几屏；最多 3 行，全文点开看 */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cardSum {
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 底行：一行小字“● 分类 AI（自己排时再加 · 11/13）…… ⋯”，不要胶囊底色；分类名放不下省略号，色点、AI、日期、“⋯”不缩 */
+.cardFoot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 8px 9px 12px;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  white-space: nowrap;
+}
+
+.catName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardFoot .dot {
+  margin-right: 0;
+}
+
+.time {
+  flex: none;
+  color: var(--text-3);
+  font-family: var(--f-mono);
+}
+
+/* 底行左边那几样之后撑开，“⋯”贴右 */
+.grow {
+  flex: 1;
+}
+
+.ai {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-10-5);
+  vertical-align: middle;
+}
+
+/* 编辑页顶栏的分类胶囊（NoteEditPage 的 CatChip 挂 .catChip）：色点、AI 小标就用上面列表这一份，
+   只按胶囊调两处：胶囊自己有 5px 间距，色点、AI 小标不再另加外边距；胶囊是 --panel-2 灰底，AI 小标换 --panel 底才看得出是个小标
+   （同 kit Chip.module.css 的 .chip.onGray：放在灰底上的胶囊换 --panel 底）。下拉禁用（data-muted）时色点淡一半 */
+.catChip .dot {
+  margin-right: 0;
+}
+
+.catChip .ai {
+  margin-left: 0;
+  background: var(--panel);
+}
+
+.catChip[data-muted] .dot {
+  opacity: 0.5;
+}
+
+/* “已转过”：标题前的描边小标，比“AI”轻（不填底）；列表行标题单行省略时它不缩 */
+.conv {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  margin-right: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font-size: var(--fs-10-5);
+  font-weight: 400;
+  vertical-align: 2px;
+}
+
+/* “已转过”后面给读屏的停顿（视觉上不占位） */
+.convSep {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cardFoot .ai {
+  margin-left: 0;
+}
+
+/* 合并分类提示：分类胶囊下面一张浅底条，一行字 + “合并”“不用” */
+.merge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 4px;
+  padding: 10px 12px 10px 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel-2);
+}
+
+.mergeText {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--fs-13);
+}
+
+/* 按时间排时按天分组（列表、瀑布流同一套）；组里的瀑布流不再另留上空 */
+.group {
+  margin-top: 4px;
+}
+
+.group .mason {
+  margin-top: 0;
+}
+
+/* 分组名（同待办页“小号字、字距拉开”）：字号、字体、字距、颜色挂 kit Form.tsx 的 groupLabelClass；
+   本地只留左右排开和间距（两级选择器，不靠样式表先后压过 .groupLabel 的 margin），右边条数同一种等宽小字 */
+.group .h2 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 18px 4px 8px;
+}
+
+.cnt {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 电脑上点开抽屉的那一行：浅灰底 + 柠檬竖条 */
+.sel {
+  margin: 0 -8px;
+  padding: 0 8px;
+  border-radius: 14px;
+  background: var(--panel-2);
+}
+
+.sel::before {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  content: '';
+}
+
+/* 输入行和提示条的外框：手机上不占位（两者各自 fixed）；电脑上整个贴在内容栏底部，提示条浮在输入行正上方、和输入行同宽。
+   手机上两者的位置只用这一个公式：输入行底 = --dock-bottom + --inrow-lift，提示条再高一个输入行 + 8（这几个变量只在随手记用，放这里）：
+   --inrow-drop 键盘没弹时往下挪 36（离底栏上沿留 12）、--inrow-kb-gap 键盘弹着时离键盘辅助条再高 12（这两个按 base.css 的 data-kbo 同一个断点换）；
+   有撤销条（kit UndoToast，占 --dock-bottom）时 .dockUp 整块往上让一格：从 --dock-bottom 起让出撤销条高 + 8，提示条跟着输入行一起上移 */
+.dock {
+  --inrow-h: 56px;
+  --inrow-drop: 36px;
+  --inrow-kb-gap: 0px;
+  --inrow-lift: calc(var(--inrow-kb-gap) - var(--inrow-drop));
+
+  display: contents;
+}
+
+.dockUp {
+  --inrow-lift: calc(var(--inrow-kb-gap) + var(--undo-h) + 8px);
+}
+
+@media (width < 900px) {
+  :global(:root[data-kbo]) .dock {
+    --inrow-drop: 0px;
+    --inrow-kb-gap: 12px;
+  }
+}
+
+/* 输入框有焦点时后面的整页模糊层（kit Mist）：层级令牌 --z-notes-mist，页面内容和顶部模糊带在它下面，输入行、底栏、提示条在它上面 */
+.mist {
+  --z-mist: var(--z-notes-mist);
+}
+
+/* 底部输入行：贴在底栏上面（和浮条同一位置 --dock-bottom，键盘弹起时让开）；有撤销条时往上让一格（位置公式见上面 .dock） */
+.inrow {
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: calc(var(--dock-bottom) + var(--inrow-lift));
+  z-index: var(--z-inrow);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 532px;
+  height: var(--inrow-h);
+  margin: 0 auto;
+  padding: 0 8px 0 18px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-2);
+}
+
+/* 电脑：铺满内容栏、左右各留 22px，不按整个窗口居中；栏底 22px。
+   撤销条（kit UndoToast，按窗口放）出现时整块往上让一格 */
+@media (width >= 900px) {
+  .dock {
+    position: sticky;
+    bottom: 22px;
+    z-index: var(--z-inrow);
+    display: block;
+    margin: auto 0 0;
+  }
+
+  .dockUp {
+    bottom: calc(22px + var(--undo-h) + 8px);
+  }
+
+  .inrow {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    z-index: auto;
+    max-width: none;
+    margin: 0;
+  }
+}
+
+/* 网页版宽屏外框（.dkBody 只在宽屏分支里有）：外框自己留了底边距，输入行底边和 AI 栏、卡片齐平，不再多抬 22 */
+.dkBody ~ .dock {
+  bottom: 0;
+}
+
+.dkBody ~ .dockUp {
+  bottom: calc(var(--undo-h) + 8px);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+}
+
+.input::placeholder {
+  color: var(--text-3);
+}
+
+.input:focus {
+  outline: none;
+}
+
+.inrow:focus-within {
+  box-shadow: var(--shadow-2), inset 0 0 0 2px var(--line);
+}
+
+/* “图”（40 × 40、浅灰底） */
+.img {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+/* 看得见 40 × 40，点击区以按钮中心外扩到 44 × 44（写法同 ModeSeg.module.css 的 .segBtn::after），不占排版宽度 */
+.img::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.add {
+  flex: none;
+  min-width: var(--hit);
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-size: var(--fs-14);
+}
+
+/* 输入行正上方的外框（NotesInputRow.tsx）：从上到下放提示条、出错条和待记下的小图，间隔 8；和输入行同宽（手机、电脑一样）。
+   手机 fixed，底边 = 输入行顶 + 8（公式见上面 .dock）；电脑贴在 .dock 上沿。层级同 kit UndoToast（30，高于输入行 5） */
+.above {
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: calc(var(--dock-bottom) + var(--inrow-lift) + var(--inrow-h) + 8px);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 532px;
+  margin: 0 auto;
+}
+
+/* 提示条、出错条：底色 --toast-bg 是半透明的，照 UndoToast 加磨砂，否则底下的卡片会透上来；
+   磨砂、圆角、减少透明兜底是公共浮条（kit Float.module.css 的 .glass，NotesBits 上一起挂；宽度跟 .above 走，不挂 .float） */
+.error {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: var(--fs-14);
+}
+
+/* 提示条、编辑页同步状态里接在句子后面的按钮（“重试”“知道了”）：点按区照 44 高；“最近删除”链接是 kit TrashLink 的 inline，同一组数值 */
+.tipLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--hit);
+  margin-left: 8px;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* 电脑：外框在输入行正上方、跟内容栏同宽对齐（不按整个窗口居中，不叠在输入行下面） */
+@media (width >= 900px) {
+  .above {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 8px);
+    max-width: none;
+    margin: 0;
+  }
+}
+
+/* 只读行的“要新版本”：单独一行、左对齐，不挤底行和摘要行 */
+.roCard {
+  display: flex;
+  margin-top: 6px;
+  padding: 0 12px;
+}
+
+.roRow {
+  display: flex;
+  margin-top: 4px;
+}
+
+/* “附件 N”：描边小胶囊，列表行尾、卡片底部 */
+.atb {
+  flex: none;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* 列表行的左滑：手势、行面、按钮外观（look="compact"）都是 kit 的 SwipeRow，这里只放随手记行自己的排法
+   • .swRow：行面里的两栏（正文 ｜ “⋯”）；外壳 kit NoteRow.module.css 的 .lrow 只管分隔线 */
+.swRow {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 1fr 24px;
+  gap: 10px;
+  align-items: center;
+  align-self: stretch;
+  min-width: 0;
+}
+
+/* 自己排：列表不按天分组，没有日期标题，上面留出一点空（瀑布流的 .mason 自带同样的上空） */
+.flat {
+  margin-top: 12px;
+}

@@ -1,0 +1,137 @@
+// Deno 跑 tests/shared 用的最小 vitest 替身（架构 2.5：shared 的测试 Node 和 Deno 都跑）
+// deno.json 的 import map 把 'vitest' 指到这里；只实现 shared 测试用到的几个匹配器，用多了这里会报“没实现”
+// 本文件只给 Deno 用，不进 tsconfig.node.json
+declare const Deno: {
+  test(name: string, fn: () => void | Promise<void>): void;
+  test(def: { name: string; ignore: boolean; fn: () => void }): void;
+};
+
+const stack: string[] = [];
+/** 每层 describe 自己的 afterEach；Deno 把所有测试文件放在一个进程里跑，所以只认写在 describe 里的，免得串到别的文件 */
+const afters: Array<Array<() => void>> = [];
+
+export function describe(name: string, fn: () => void): void {
+  stack.push(name);
+  afters.push([]);
+  try {
+    fn();
+  } finally {
+    stack.pop();
+    afters.pop();
+  }
+}
+
+export function afterEach(fn: () => void): void {
+  const top = afters.at(-1);
+  if (!top) throw new Error('deno-vitest-shim：afterEach 只支持写在 describe 里');
+  top.push(fn);
+}
+
+/** 正在 describe.skipIf(true) 的组里：组里每条都登记成 ignored */
+let skipping = 0;
+/** 和 vitest 一样：条件成立时整组跳过（组里每条在 Deno 报告里显示 ignored），不成立就照常跑（架构 0.33 第 13 条的打替身组用） */
+describe.skipIf = (cond: unknown) => (name: string, fn: () => void): void => {
+  if (!cond) return describe(name, fn);
+  skipping++;
+  try {
+    describe(name, fn);
+  } finally {
+    skipping--;
+  }
+};
+
+export function it(name: string, a: unknown, b?: unknown): void {
+  if (skipping > 0) return it.skip(name);
+  const fn = (typeof a === 'function' ? a : b) as () => void | Promise<void>;
+  // 存各层的数组本身（不拍快照）：同组里写在 it 后面的 afterEach 也生效；跑时里层先、同层后登记的先，同 vitest
+  const layers = afters.slice();
+  Deno.test([...stack, name].join(' > '), async () => {
+    let testErr: unknown = null;
+    try {
+      await fn();
+    } catch (e) {
+      testErr = e ?? new Error('测试抛了空值');
+    }
+    let hookErr: unknown = null;
+    for (const h of layers.slice().reverse().flatMap((l) => l.slice().reverse())) {
+      try {
+        h();
+      } catch (e) {
+        hookErr ??= e;
+      }
+    }
+    // 测试本身挂了就报测试的错，不拿钩子的错盖掉它
+    if (testErr !== null) throw testErr;
+    if (hookErr !== null) throw hookErr;
+  });
+}
+/** 报告里显示“ignored”（跳过），不是“通过”（QA D-10） */
+it.skip = (name: string, _a?: unknown, _b?: unknown): void => {
+  Deno.test({ name: [...stack, name].join(' > '), ignore: true, fn: () => {} });
+};
+export const test = it;
+
+function same(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined);
+  const kb = Object.keys(b).filter((k) => (b as Record<string, unknown>)[k] !== undefined);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) => same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+/** toMatchObject 的部分匹配：expected 里写了的键才比，数组要逐项一样长（同 vitest） */
+function subset(a: unknown, b: unknown): boolean {
+  if (typeof b !== 'object' || b === null || typeof a !== 'object' || a === null) return same(a, b);
+  if (Array.isArray(b)) return Array.isArray(a) && a.length === b.length && b.every((x, i) => subset(a[i], x));
+  return Object.keys(b).every((k) => subset((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+const show = (v: unknown): string => {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+};
+
+function matchers(actual: unknown, negate: boolean, label?: string) {
+  const check = (ok: boolean, what: string) => {
+    if (ok === negate) throw new Error(`${label ? `${label}：` : ''}expected ${show(actual)} ${negate ? 'not ' : ''}${what}`);
+  };
+  return {
+    toBe: (e: unknown) => check(Object.is(actual, e), `to be ${show(e)}`),
+    toEqual: (e: unknown) => check(same(actual, e), `to equal ${show(e)}`),
+    toStrictEqual: (e: unknown) => check(same(actual, e), `to equal ${show(e)}`),
+    toMatchObject: (e: unknown) => check(subset(actual, e), `to match object ${show(e)}`),
+    toHaveProperty: (k: string) => check(typeof actual === 'object' && actual !== null && k in actual, `to have property ${k}`),
+    toBeNull: () => check(actual === null, 'to be null'),
+    toBeGreaterThan: (e: number) => check((actual as number) > e, `to be > ${e}`),
+    toBeLessThan: (e: number) => check((actual as number) < e, `to be < ${e}`),
+    toHaveLength: (n: number) => check((actual as { length: number }).length === n, `to have length ${n}`),
+    toContain: (e: unknown) =>
+      check(
+        typeof actual === 'string' ? actual.includes(e as string) : (actual as unknown[]).some((x) => Object.is(x, e)),
+        `to contain ${show(e)}`,
+      ),
+    toContainEqual: (e: unknown) => check((actual as unknown[]).some((x) => same(x, e)), `to contain equal ${show(e)}`),
+    toMatch: (re: RegExp) => check(re.test(actual as string), `to match ${re}`),
+    toThrow: (msg?: string | RegExp) => {
+      let threw = false;
+      let text = '';
+      try {
+        (actual as () => unknown)();
+      } catch (e) {
+        threw = true;
+        text = e instanceof Error ? e.message : String(e);
+      }
+      const ok = threw && (msg === undefined || (typeof msg === 'string' ? text.includes(msg) : msg.test(text)));
+      check(ok, `to throw ${msg ?? ''}`);
+    },
+  };
+}
+
+export function expect(actual: unknown, label?: string) {
+  return { ...matchers(actual, false, label), not: matchers(actual, true, label) };
+}

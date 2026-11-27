@@ -1,0 +1,71 @@
+/* exe 快速记录小窗口（560×160，无边框）：只用令牌。tauri.conf.json 的全局 CSP 虽然放了 'unsafe-inline'，
+   安装包里这页另有 stage-web.mjs 注入的 meta CSP（style-src 'self'），两者取交集，内联样式照样被拦 */
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+/* 原生控件跟着 App 的深浅色（同 base.css 那两条；这页不引 base.css）。data-theme 套上之前按 meta 的 light dark 跟系统 */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+body {
+  overflow: hidden;
+
+  /* 皮肤变量要等 data-theme 套上才有：之前先用系统的底色、字色，深色系统下不先闪一下白 */
+  background: var(--panel, Canvas);
+  color: var(--text, CanvasText);
+  font-family: system-ui, sans-serif;
+}
+
+.quick {
+  display: flex;
+  box-sizing: border-box;
+  height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 20px;
+}
+
+#quick-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-inp);
+  background: var(--inp-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+}
+
+#quick-input::placeholder {
+  color: var(--text-3);
+}
+
+#quick-input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.hint,
+.status {
+  margin: 0;
+  font-size: var(--fs-12);
+}
+
+.hint {
+  color: var(--text-3);
+}
+
+.status {
+  color: var(--danger-text);
+}

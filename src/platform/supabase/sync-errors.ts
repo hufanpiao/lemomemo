@@ -1,0 +1,75 @@
+// 同步网络一侧的错误码映射和超时（sync-transport.ts 原样转出这些名字）
+// • toFailure：supabase-js 的 { error, status } → SendFailure（只认码，服务器原文不带出来）；toSessionCheck：刷新令牌的错误 → SessionCheck
+// • timeoutSignal：每个请求 20 秒超时（同步是串行的，挂住的请求不能把后面的都卡住）；整段超时用 platform/exit-basics.ts 的 withTimeout（全仓只有那一份）
+import { str } from '../../../shared/core/field.ts';
+import type { SendFailure, SessionCheck } from '../../../shared/schema/sync.ts';
+import { FETCH_FAILED, SESSION_GONE_CODES } from './error-kind.ts';
+
+export const REQUEST_TIMEOUT_MS = 20_000;
+
+/** 403 且 code 或 message 里含这个也要查；会话已不在的码（SESSION_GONE_CODES）、断网正则共用 error-kind.ts */
+const REVOKED_403 = 'session_revoked';
+const TOKEN = /^[a-z][a-z0-9_]*$/;
+
+
+/** supabase-js 的 { error, status } → SendFailure（单独导出测） */
+export function toFailure(error: unknown, status: number | undefined): SendFailure {
+  const e = typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : {};
+  const msg = str(e['message']).trim();
+  const pgCode = str(e['code']);
+  const out: SendFailure = {};
+  // 带 SQLSTATE 的（如 55P03“lock timeout”）、有 HTTP 状态的都是服务器回的，不是断网
+  if (status === undefined || status === 0) {
+    out.network = true;
+    return out;
+  }
+  out.status = status;
+  const code = pgCode === 'upgrade_required' ? pgCode : TOKEN.test(msg) ? msg : pgCode;
+  if (code) out.code = code;
+  // detail 只放 sqlstate（apply_patch 的 patch_bad_args 把 “sqlstate sqlerrm” 放在 details 里）；服务器原文一律不带出来
+  const state = /^([0-9A-Z]{5})(\s|$)/.exec(str(e['details']));
+  if (state?.[1]) out.detail = state[1];
+  if (status === 426 || code === 'upgrade_required') {
+    const min = e['min'];
+    out.min = typeof min === 'string' && /^\d+\.\d+\.\d+$/.test(min) ? min : null;
+  }
+  return out;
+}
+
+/**
+ * auth-js 刷新令牌的错误 → SessionCheck（单独导出测）：
+ * 断网、5xx、429、408 → network（临时故障，不退出）；
+ * session_not_found、refresh_token_not_found（code 或 message 包含）、403 且含 session_revoked → check（查 session_fate 再定）；
+ * 别的 4xx（含 refresh_token_already_used、session_expired）→ expired：按登录过期处理（只关库、不清）
+ */
+export function toSessionCheck(error: unknown): SessionCheck {
+  if (!error) return 'ok';
+  const e = typeof error === 'object' ? (error as Record<string, unknown>) : {};
+  const code = str(e['code']);
+  const msg = str(e['message']);
+  const name = str(e['name']);
+  const status = typeof e['status'] === 'number' ? e['status'] : -1;
+  const has = (needle: string): boolean => code.includes(needle) || msg.includes(needle);
+  if (SESSION_GONE_CODES.some(has)) return 'check';
+  if (status === 403 && has(REVOKED_403)) return 'check';
+  if (status === 0 || name === 'AuthRetryableFetchError' || (status < 0 && FETCH_FAILED.test(msg))) return 'network';
+  // 口径同全仓 shared/core/http-kind.ts 的 isRetryStatus；这里在首屏、不引那个模块，一致由 __tests__/outbox-logic.test.ts 对照钉住
+  if (status === 408 || status === 429 || (status >= 500 && status <= 599)) return 'network';
+  if (status >= 400) return 'expired';
+  return status < 0 ? 'network' : 'expired';   // 没有状态又不认识：按临时故障，不退出
+}
+
+/**
+ * 请求的超时信号：有 AbortSignal.timeout 用它；没有（旧 Safari）用 AbortController + setTimeout。
+ * 请求结束时调 clear()，兜底的定时器随之清掉
+ */
+export function timeoutSignal(ms: number = REQUEST_TIMEOUT_MS): { signal: AbortSignal | undefined; clear(): void } {
+  const none = (): void => undefined;
+  if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as { timeout?: unknown }).timeout === 'function') {
+    return { signal: AbortSignal.timeout(ms), clear: none };
+  }
+  if (typeof AbortController === 'undefined') return { signal: undefined, clear: none };
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  return { signal: c.signal, clear: () => clearTimeout(t) };
+}

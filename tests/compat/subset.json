@@ -1,0 +1,9 @@
+{
+  "$comment": "旧版客户端契约测试子集（架构 0.27 第 1 点、开发计划 v4 三之二）。CI 取基线那一版的这份名单和用例，对当前分支的数据库跑一遍。每条写 id 和文件：.test.ts 用 contract(id, …) 登记，.sql 返回一行 result = 'ok'。不放和 db.types 逐字比对这类结构一变就必然失败的用例。格式见 tests/compat/subset.ts",
+  "version": 1,
+  "cases": [
+    { "id": "headers.app-version", "file": "tests/compat/headers.test.ts" },
+    { "id": "headers.app-version-preview", "file": "tests/compat/headers.test.ts" },
+    { "id": "todos.old-client-write", "file": "tests/compat/sql/todos-old-client.sql" }
+  ]
+}

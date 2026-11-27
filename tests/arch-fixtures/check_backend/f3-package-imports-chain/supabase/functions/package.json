@@ -1,0 +1,4 @@
+{
+  "imports": { "#s": "signer", "#t": "#s" },
+  "dependencies": { "signer": "npm:aws4fetch@1.0.20" }
+}

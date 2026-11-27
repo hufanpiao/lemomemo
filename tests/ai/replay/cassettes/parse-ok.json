@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "provider": "gemini",
+  "origin": "handmade",
+  "note": "文字识别成功：一条日程（手写，未经真调用录制；请求体不存，回放只按方法和地址对）",
+  "entries": [
+    {
+      "req": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-x:generateContent",
+        "body": null
+      },
+      "res": {
+        "kind": "http",
+        "status": 200,
+        "body": "{\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"{\\\"items\\\":[{\\\"kind\\\":\\\"event\\\",\\\"title\\\":\\\"开会\\\",\\\"date\\\":\\\"2026-10-29\\\",\\\"time\\\":\\\"15:00\\\",\\\"date_basis\\\":\\\"rel\\\"}]}\"}]},\"finishReason\":\"STOP\"}]}"
+      }
+    }
+  ]
+}

@@ -1,0 +1,181 @@
+/* 下拉搜索：随手记、待办、日历页标题下面露出的一条扁搜索框，框下一行小字条数，结果下面“用 AI 按意思找 ›”。
+   只用令牌：框高 --pull-h（36px，比查找面板 44px 的输入框扁），底色、细线用输入框的 --inp-bg、--inp-line，圆角 --r-sm；
+   深浅两色、两套皮肤都只经这几个令牌变。框的外形和放大镜在 kit 的 PullSlot.module.css（.bar、.glass，占位框同一份），这里只补下边距、动效、聚焦；
+   结果行用查找面板的 .list / .row（FindPanel.module.css）。
+   动效：露出时从标题底下往下滑出一点、同时淡入（transform + opacity，--dur-ui、--ease-out，@starting-style 只在挂上时播一次）；
+   收起不播（“取消”是用户点的，马上回到本页列表）。减少动态效果（data-rm="1"，platform/look.ts 按设置开关或系统 reduce 写的，
+   src 下不另写 prefers-reduced-* 媒体查询）：只淡入、不位移 */
+
+/* 扁的一条：放大镜 | 输入 | “×” | 细竖线 | “取消”，都在同一个框里；外形在 kit .bar */
+.bar {
+  margin: 0 0 8px;
+  transition:
+    opacity var(--dur-ui) var(--ease-out),
+    transform var(--dur-ui) var(--ease-out);
+}
+
+/* 输入框聚焦时框线换成第三层文字色（框本身就是输入框的外形；光标也在） */
+.bar:focus-within {
+  border-color: var(--text-3);
+}
+
+@starting-style {
+  .bar {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* 手指拉开的（via=touch）：占位框已经长满看得见了，换成真框时不再淡入、下滑一次 */
+@starting-style {
+  .bar[data-via="touch"] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+:global(:root[data-rm="1"]) .bar {
+  transition: opacity var(--dur-ui) var(--ease-out);
+}
+
+@starting-style {
+  :global(:root[data-rm="1"]) .bar {
+    transform: none;
+  }
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+
+  /* 16px：iOS 聚焦不放大（框扁靠高度，不靠缩字） */
+  font-size: var(--fs-16);
+  outline: none;
+}
+
+/* 浏览器给 type=search 自带的清除叉去掉（有自己的“×”） */
+.input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+/* “×”“取消”：看得见的高度跟框（--pull-h），点按区用透明伪元素上下扩到 --hit（不撑高框） */
+.clear,
+.cancel {
+  position: relative;
+  flex: none;
+  height: 100%;
+  border: 0;
+  background: none;
+}
+
+.clear::after,
+.cancel::after {
+  position: absolute;
+  inset: calc((var(--pull-h) - var(--hit)) / 2) 0;
+  content: '';
+}
+
+.clear {
+  min-width: 32px;
+  color: var(--text-2);
+  font-size: var(--fs-17);
+  line-height: 1;
+}
+
+/* “×”和“取消”中间一道细竖线 */
+.sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--inp-line);
+}
+
+.cancel {
+  padding: 0 12px;
+  color: var(--text);
+  font-size: var(--fs-15);
+}
+
+/* 读屏播报（停一下才写）：视觉隐藏 */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 框下一行小字“3 条”：第三层文字色，正文字体，只有数字段等宽（kit NumIn）；左边和框里的放大镜对齐 */
+.count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0 2px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+/* 结果下面“用 AI 按意思找 ›”：一行带下划线的文字链接 */
+.foot {
+  margin: 14px 0 0;
+  padding: 0 4px;
+}
+
+.ai {
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-15);
+  text-decoration-line: underline;
+  text-decoration-color: var(--text-3);
+  text-decoration-thickness: 1px;
+  text-underline-offset: var(--hl-gap);
+}
+
+/* 搜不到：一个小点、一句话、链接，整块居中（定稿接受的例外，只这一处不按空态左对齐） */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 96px 16px 0;
+  text-align: center;
+}
+
+.emptyDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.emptyText {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-15);
+}
+
+@media (hover: hover) {
+  .ai,
+  .cancel,
+  .clear {
+    cursor: pointer;
+  }
+}
+
+/* 结果行里命中的字：不改字色，字下面一道短下划线，粗细走令牌 --hl-line，颜色用第二层文字色，深浅两色、两套皮肤都跟着走。
+   线画成 <mark> 自己内容框底边的一条背景线，不用 text-decoration：行标题是一行省略号（overflow: hidden），往下偏的下划线会被裁掉 */
+.hit {
+  background: linear-gradient(var(--text-2), var(--text-2)) left bottom / 100% var(--hl-line) no-repeat;
+  color: inherit;
+}

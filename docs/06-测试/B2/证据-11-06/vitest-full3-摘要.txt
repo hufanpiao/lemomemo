@@ -1,0 +1,19 @@
+# vitest 全量第三次（11-06 第三批改动后）
+# 命令：npx vitest run --exclude tests/build/gen-tauri-key.test.ts --maxWorkers=4
+Error: Transform failed with 1 error:
+Error: Transform failed with 1 error:
+ FAIL  |unit| src/features/calendar/__tests__/cal-unsynced.test.tsx [ src/features/calendar/__tests__/cal-unsynced.test.tsx ]
+ FAIL  |unit| src/features/calendar/__tests__/CalendarPage.test.tsx [ src/features/calendar/__tests__/CalendarPage.test.tsx ]
+ FAIL  |unit| src/features/calendar/__tests__/CalendarReview.test.tsx [ src/features/calendar/__tests__/CalendarReview.test.tsx ]
+ FAIL  |unit| src/features/calendar/__tests__/CalendarWeek.test.tsx [ src/features/calendar/__tests__/CalendarWeek.test.tsx ]
+Error: Transform failed with 1 error:
+ FAIL  |unit| src/features/calendar/__tests__/CalendarFold.test.tsx [ src/features/calendar/__tests__/CalendarFold.test.tsx ]
+Error: Transform failed with 1 error:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |unit| src/app/__tests__/cal-same-page.test.tsx > 月历两条路由同一个页面 > #/calendar 点“下个月”到 #/cal/month/...：同一个页面元素，焦点还在“下个月”按钮上
+ FAIL  |unit| src/app/__tests__/cal-same-page.test.tsx > 同一页里浏览器前进 / 后退不播整页动画 > #/cal/month/2026-11 后退到 #/cal/month/2026-10、#/cal/... 回到 #/calendar：不起 View Transition
+ FAIL  |unit| src/features/todos/__tests__/todos-readonly.test.tsx > 待办列表的只读行 > 只读行行尾有“要新版本”标记（读屏读整句），圆圈 aria-disabled；可写的行没有
+ Test Files  7 failed | 566 passed | 3 skipped (576)
+      Tests  3 failed | 7234 passed | 29 skipped | 3 todo (7269)
+exit=1
+# 失败全在 src/features/calendar、src/features/todos、src/app：都是前端别人正在改、未提交的文件（Transform failed 为编辑中途），不在本批改动范围

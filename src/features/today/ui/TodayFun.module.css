@@ -1,0 +1,170 @@
+/* 今天页没日程时的组合区（TodayFun.tsx）。尺寸、字号、间距逐项照定稿 方案4.html 的 .tile .tq .trow .box .tt .go .pair .mini .wkTop .k2 .k3 .bars7；
+   颜色走令牌：小方块 --b-tile / --b-tile-shadow（同电脑版面板块），柱子 --wk-bar / --wk-bar-off、“比上周 +N” --wk-up（tokens.json“今天页空白组合”一组，值取定稿），
+   其余 --text-*、--accent、--on-accent。参考里没有的动效、颜色一律不加 */
+
+.fun {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tile {
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  background: var(--b-tile);
+  box-shadow: var(--b-tile-shadow);
+}
+
+/* 两个小方块并排（定稿 .pair .tile：竖排、内边距 12 14） */
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.small {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px;
+}
+
+/* ===== 顺手做 ===== */
+.tq {
+  margin: 0 0 10px;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.trow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.box {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1.8px var(--text-3);
+}
+
+.tt {
+  flex: 1;
+  min-width: 0;
+}
+
+.ttl {
+  overflow: hidden;
+  font-size: var(--fs-16);
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.go {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+/* ===== 这周做完 ===== */
+.mini {
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: var(--fs-11);
+  letter-spacing: 0.08em;
+}
+
+.wkTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.k2 {
+  font-family: var(--f-mono);
+  font-size: var(--fs-26);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.k2 small {
+  margin-left: 2px;
+  color: var(--text-2);
+  font-family: var(--f-zh);
+  font-size: var(--fs-13);
+  font-weight: 400;
+}
+
+.k3 {
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  white-space: nowrap;
+}
+
+.up {
+  color: var(--wk-up);
+}
+
+/* 七根小柱（定稿 .bars7，C1）：日 一 二 三 四 五 六，柱区 30 高、柱宽 10、圆角 3；高度由组件按件数给（data/today-fun.ts 的 barHeight） */
+.bars {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.bars > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 16px;
+}
+
+.b {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  height: 30px;
+}
+
+.b i {
+  display: block;
+  width: 10px;
+  border-radius: 3px;
+  background: var(--wk-bar);
+}
+
+.b i.off {
+  background: var(--wk-bar-off);
+}
+
+.bars span {
+  color: var(--text-3);
+  font-size: var(--fs-10);
+  line-height: 1;
+}
+
+.bars .today span {
+  color: var(--text);
+  font-weight: 600;
+}

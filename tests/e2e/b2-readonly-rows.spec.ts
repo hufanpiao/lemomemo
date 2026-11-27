@@ -1,0 +1,123 @@
+// FA-2 只读行界面（架构 0.27 第 1 点、开发计划三之二：B2 验收日程、待办、今天页、日历，含重复事项横幅）和 B2 全站视觉审查 A2
+// • 不要后端：直接往本机库 planner-v4 写“宽容读取以后”的样子——带 repeat 的行 ro: true（4.1.0 的重复事项，4.0.x 只读），
+//   重新载入后 boot 把 ro 带进 core/store 的只读 id；页面据它画行尾标记、拦下写入
+// • 拦下以后本机库和 outbox 都不变（真的没写）；可写的行照常进编辑页
+// • A2：日历“纪念日”置灰、不跳 #/anniv 占位页，点了出“纪念日即将推出”
+import type { Page } from '@playwright/test';
+import { logOnFail } from './fail-log.ts';
+import { cached, idbPut, idbRead } from './idb.ts';
+import { swipeRow } from './page-helpers.ts';
+import { expect, test } from './session-fixture.ts';
+import { FAKE_USER_ID } from './session-fixture.ts';
+
+const TZ = 'Asia/Seoul';
+// 浏览器时区和造数据用的时区要一致：不然本机时区和首尔跨零点的那几个小时里“今天”对不上，今天页找不到这几条
+test.use({ loggedIn: true, timezoneId: TZ });
+// 失败时附运行日志、控制台报错、没回来的请求（11-17 加压偶发挂在第 80 行、找不到 today-swipe-t-ro，先要日志定根因）
+logOnFail(test);
+// 钟定在首尔中午：日程写在 23:00、23:30，不定钟的话首尔 23:30 以后跑，今天页把它们收进“已过去”，只读标记找不到（3130e72f 的 ci 夜里红过）
+const NOW = new Date('2026-11-12T12:00:00+09:00');
+const DAY = '2026-11-12';
+const base = { user_id: FAKE_USER_ID, tz: TZ, created_at: 1, updated_at: 1, deleted_at: null, undone: false, short: null, project: '', rev: 1 };
+
+/** 本机库：日程 e-ro（重复、只读）、e-ok；待办 t-ro（重复、只读）、t-ok */
+async function seed(page: Page): Promise<void> {
+  await page.clock.setFixedTime(NOW);
+  await page.goto('/app/#/today');
+  await page.getByTestId('today').waitFor({ timeout: 30000 });
+  const d = DAY;
+  const ev = (id: string, title: string, over: Record<string, unknown>) => ({
+    ...base, id, title, date: d, time: '23:00', duration_min: 30, remind_min: null, remind_days: null, location: null, ...over,
+  });
+  const td = (id: string, title: string, over: Record<string, unknown>) => ({
+    ...base, id, title, due: d, due_time: null, done: false, important: false, priority: 'mid', ...over,
+  });
+  await idbPut(page, [
+    ['events', { ...cached(ev('e-ro', '每周例会', { repeat: { freq: 'week' } })), ro: true }],
+    ['events', cached(ev('e-ok', '看牙', { time: '23:30' }))],
+    ['todos', { ...cached(td('t-ro', '每天吃药', { repeat: { freq: 'day' } })), ro: true }],
+    ['todos', cached(td('t-ok', '买牛奶', {}))],
+  ]);
+  await page.reload();
+  await page.getByTestId('today-row-t-ok').waitFor({ timeout: 30000 });
+}
+
+/** 换页：整页重新载入后再等 ready（不走切页的 View Transition，免得切页动画期间的点按被吞，那是 UI4-B1-C2，不归这里） */
+async function open(page: Page, hash: string, ready: string): Promise<void> {
+  await page.goto(`/app/${hash}`);
+  await page.reload();
+  await page.getByTestId(ready).waitFor({ timeout: 30000 });
+}
+
+/** 本机库里 t-ro 的 view.done 和 outbox 的项数 */
+async function stateOf(page: Page): Promise<{ done: unknown; outbox: number }> {
+  const row = await idbRead<{ view: { done: unknown } }>(page, 'todos', 'get', 't-ro');
+  return { done: row?.view.done, outbox: (await idbRead<number>(page, 'outbox', 'count')) ?? 0 };
+}
+
+test.describe('只读行（FA-2）', () => {
+  test('今天页：顶部重复事项横幅；只读行行尾标记；点、打勾拦下，左滑滑不开（负责人 11-15 去掉行尾 ×），本机库和队列不变；可写的照常', async ({ page }) => {
+    await seed(page);
+    // 电脑宽度（chromium 项目，Desktop Chrome 1280）：今天页先照手机排成一列，首屏画完以后电脑版面板（TodayDesk）和左滑（TodaySwipe）各自下载、
+    // 各自换上，面板换上时整列在 DeskLayout 里重新挂载。先等面板换上，后面点行、量行、左滑用的才是最终那一批节点
+    //（11-17 加压复现：swipeRow 等到行面以后面板才换上，trace 里 116109 有行面没面板、116211 才有面板，boundingBox 量到已卸下的旧行，报“找不到行”）
+    if ((page.viewportSize()?.width ?? 0) >= 1024) await page.getByTestId('today-week').waitFor({ timeout: 30000 });
+    await expect(page.getByTestId('today-repeat')).toContainText('有 2 条重复事项要新版本才能完整显示');
+    await expect(page.getByTestId('today-repeat-update')).toHaveText('更新');
+    await expect(page.getByTestId('today-ro-t-ro')).toBeVisible();
+    await expect(page.getByTestId('today-ro-e-ro')).toBeVisible();
+    await expect(page.getByTestId('today-ro-t-ok')).toHaveCount(0);
+
+    await page.getByTestId('today-row-t-ro').getByRole('button', { name: /每天吃药/ }).click();
+    await expect(page).toHaveURL(/#\/today$/);
+    await expect(page.getByTestId('today-ro-toast')).toContainText('这条要新版本才能修改');
+    await page.getByTestId('today-done-t-ro').click({ force: true });
+    // 行尾 × 去掉了（负责人 11-15“代办后面的x去掉”，R-428）：只读行左滑滑不开、露不出“删除”，行还在（可写的行滑开删掉见 today-swipe-del.spec.ts）
+    await expect(page.getByTestId('today-del-t-ro')).toHaveCount(0);
+    // 今天页的 SwipeRow 等页里没焦点才换上（useSwapWhenSafe）；chromium 点按钮会把焦点留在页里，本条又定了钟（Date.now 不走，3 秒耐心期到不了）：先移走焦点
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await swipeRow(page, 'today-swipe-t-ro', 0.4);
+    await page.waitForTimeout(300);
+    await expect(page.getByTestId('today-swipe-t-ro')).not.toHaveAttribute('data-swipe', 'open');
+    await expect(page.getByTestId('today-row-t-ro')).toBeVisible();
+    expect(await stateOf(page)).toEqual({ done: false, outbox: 0 });
+
+    await page.getByTestId('today-row-t-ok').getByRole('button', { name: /买牛奶/ }).click();
+    // 可写的照常打开：手机宽度进编辑页；电脑宽度（Desktop Chrome 1280）电脑版换上以后在详情抽屉里编辑（B6 返工），换上之前照手机进编辑页
+    await expect.poll(async () => /#\/todo\/t-ok$/.test(page.url()) || (await page.getByTestId('today-drawer').getByTestId('todo-edit').count()) > 0).toBe(true);
+  });
+
+  test('待办页：只读行打勾、删除不写（左滑滑不开），点了不进编辑页', async ({ page }) => {
+    await seed(page);
+    await open(page, '#/todos', 'todos-row-t-ro');
+    await expect(page.getByTestId('todos-ro-t-ro')).toBeVisible();
+    await expect(page.getByTestId('todos-done-t-ro')).toHaveAttribute('aria-disabled', 'true');
+    await page.getByTestId('todos-done-t-ro').click({ force: true });
+    await expect(page.getByTestId('todos-ro-toast')).toContainText('这条要新版本才能修改');
+    await page.getByTestId('todos-row-t-ro').getByRole('button', { name: /每天吃药/ }).click();
+    await expect(page).toHaveURL(/#\/todos$/);
+    // 删除在左滑里（负责人 11-15 去掉 ×）：只读行拉到底也滑不开、不删；可写的行轻拉露出“删除”
+    await swipeRow(page, 'todos-row-t-ro');
+    await expect(page.getByTestId('todos-swipe-t-ro')).not.toHaveAttribute('data-swipe', 'open');
+    await expect(page.getByTestId('todos-row-t-ro')).toBeVisible();
+    await swipeRow(page, 'todos-row-t-ok', 0.3);
+    await expect(page.getByTestId('todos-swipe-t-ok')).toHaveAttribute('data-swipe', 'open');
+    await expect(page.getByTestId('todos-swipe-del-t-ok')).toBeVisible();
+    expect(await stateOf(page)).toEqual({ done: false, outbox: 0 });
+  });
+
+  test('日历：顶部横幅；日清单只读行有标记、点了拦下', async ({ page }) => {
+    await seed(page);
+    await open(page, '#/calendar', 'cal-day-list');
+    await expect(page.getByTestId('cal-repeat')).toContainText('有 2 条重复事项要新版本才能完整显示');
+    await expect(page.getByTestId('cal-ro-e-ro')).toBeVisible();
+    await page.getByTestId('cal-day-row-e-ro').click();
+    await expect(page.getByTestId('cal-ro-toast')).toContainText('这条要新版本才能修改');
+    await expect(page).not.toHaveURL(/#\/event\//);
+    await expect(page.getByTestId('cal-drawer')).toHaveCount(0);
+
+    // 普通行：手机宽度进编辑页；电脑宽度（R-130，11-17 合入）在右侧详情抽屉里编辑——两种都算打开了
+    await page.getByTestId('cal-day-row-e-ok').click();
+    await expect.poll(async () => /#\/event\/e-ok$/.test(page.url()) || (await page.getByTestId('cal-drawer').getByTestId('event-edit-title').count()) > 0, { timeout: 20_000 }).toBe(true);
+  });
+});

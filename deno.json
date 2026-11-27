@@ -1,0 +1,22 @@
+{
+  "$comment": "Deno 跑 tests/shared、deno check 服务器函数和 D1 入口用（架构 2.5）。版本一律和 package.json 一样（tests/build/deno-config.test.ts 核对）；nodeModulesDir=manual 直接用 npm ci 装好的 node_modules，不另外下载。supabase/functions/ 里写全 npm:包@版本（部署时没有 import map），这里同时映射裸名和全名，两种写法都落到 node_modules 里同一份。vitest 指到自写的替身",
+  "nodeModulesDir": "manual",
+  "imports": {
+    "zod": "npm:zod@4.6.7",
+    "aws4fetch": "npm:aws4fetch@1.0.20",
+    "postgres": "npm:postgres@3.4.5",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.118.0",
+    "vitest": "./tests/shared/deno-vitest-shim.ts"
+  },
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "lib": ["deno.window", "es2023"]
+  },
+  "tasks": {
+    "test": "deno test --allow-read=. --allow-env=OBJSTORE_ENDPOINT,OBJSTORE_ACCESS_KEY_ID,OBJSTORE_SECRET_ACCESS_KEY,OBJSTORE_REGION,R2_BUCKET_PREFIX --allow-net=127.0.0.1:4566 tests/shared",
+    "check": "deno check supabase/functions/_shared/ supabase/functions/_preview/ supabase/functions/account/ supabase/functions/account-purge/ supabase/functions/anniv-roll/ supabase/functions/backup-daily/ supabase/functions/backup-manifest/ supabase/functions/ai-classify/ supabase/functions/ai-embed/ supabase/functions/ai-media/ supabase/functions/ai-summarize/ supabase/functions/ai-chat/ supabase/functions/ai-memory/ supabase/functions/ai-provider/ supabase/functions/ai-parse/ supabase/functions/ai-voice/ supabase/functions/ai-live-token/ supabase/functions/claude-intake/ supabase/functions/file-check/ supabase/functions/push-dispatch/ supabase/functions/push-test/ supabase/functions/storage-sweep/ supabase/functions/token-admin/ supabase/functions/invite-admin/ supabase/functions/invite-signup/ supabase/functions/note-search/ supabase/functions/usage-report/ supabase/functions/vault/ supabase/functions/vault-image/ supabase/functions/vault-file/ shared/ build/check_data_manifest.ts tests/ai/run.ts tests/ai/score.ts",
+    "d1": "deno run --allow-net=127.0.0.1:54322,127.0.0.1:55322 --allow-env=CI,D1_DB_URL,PGHOST,PGPORT,PGUSERNAME,PGUSER,PGDATABASE,PGPASSWORD,PGMAX,PGSSL,PGIDLE_TIMEOUT,PGCONNECT_TIMEOUT,PGMAX_LIFETIME,PGMAX_PIPELINE,PGBACKOFF,PGKEEP_ALIVE,PGPREPARE,PGDEBUG,PGFETCH_TYPES,PGPUBLICATIONS,PGTARGET_SESSION_ATTRS,PGTARGETSESSIONATTRS --allow-read build/check_data_manifest.ts"
+  }
+}

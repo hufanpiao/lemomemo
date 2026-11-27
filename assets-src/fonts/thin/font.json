@@ -1,0 +1,72 @@
+{
+ "id": "thin",
+ "label": {
+  "zh": "细线黑",
+  "ko": "가는 고딕"
+ },
+ "num": "ko",
+ "order": 1,
+ "faces": {
+  "zh": [
+   {
+    "file": "GlowSansSC-Normal-ExtraLight.otf",
+    "weight": "100 249",
+    "prefetch": false
+   },
+   {
+    "file": "GlowSansSC-Normal-Light.otf",
+    "weight": "250 449"
+   },
+   {
+    "file": "GlowSansSC-Normal-Medium.otf",
+    "weight": "450 900"
+   }
+  ],
+  "ko": [
+   {
+    "file": "Pretendard-ExtraLight.woff2",
+    "weight": "100 249",
+    "prefetch": false
+   },
+   {
+    "file": "Pretendard-Light.woff2",
+    "weight": "250 449"
+   },
+   {
+    "file": "Pretendard-Medium.woff2",
+    "weight": "450 900"
+   }
+  ]
+ },
+ "licenses": [
+  {
+   "name": "未来荧黑 SC（Glow Sans SC）Normal",
+   "spdx": "OFL-1.1",
+   "file": "GlowSans-OFL.txt",
+   "sourceUrl": "https://github.com/welai/glow-sans/releases/download/v0.93/GlowSansSC-Normal-v0.93.zip",
+   "version": "v0.93",
+   "sha256": {
+    "GlowSansSC-Normal-ExtraLight.otf": "68e1d0d4df9f5a0281a88c238c2a88270af0b5a307ef51e13710df3cc4647566",
+    "GlowSansSC-Normal-Light.otf": "74d681e9da1dc54d46d8d2b0636065c06a03bb2a6c47d52ac5aa4ab5ad92670b",
+    "GlowSansSC-Normal-Medium.otf": "56481618894253fb71427a097706f9a440806b4957a7381946dc6464b98aa192"
+   },
+   "reservedNames": []
+  },
+  {
+   "name": "Pretendard",
+   "spdx": "OFL-1.1",
+   "file": "Pretendard-OFL.txt",
+   "sourceUrl": "https://github.com/orioncactus/pretendard/releases/download/v1.3.9/Pretendard-1.3.9.zip",
+   "version": "v1.3.9",
+   "sha256": {
+    "Pretendard-ExtraLight.woff2": "df43dc9165dff4542114674bcd8b79b7daae6dec004004586d5d076fec6fe2aa",
+    "Pretendard-Light.woff2": "b7426635cce2ea2b95c9c802e43fba1c620e0dafaf25f737c069b8b4e09fa841",
+    "Pretendard-Medium.woff2": "d03481330eeba0659ab5b87f25ceb504a35de377dd90a0d0aba2982eb2d05e2c"
+   },
+   "reservedNames": [
+    "Pretendard",
+    "Source"
+   ]
+  }
+ ]
+}

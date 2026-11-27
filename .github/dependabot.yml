@@ -1,0 +1,62 @@
+# 依赖升级 PR（架构 8.3 依赖供应链第 ③ 条）：每周一开合并的升级 PR，按批评审，不自动合并。
+# github-actions 那一项负责把按 SHA 锁定的 action 升级成新的 SHA（行尾的版本注释会一起改）。
+# 仓库现在是公开仓库（当初按私有仓库写的，11-14 第三方审查 CI-3 统一）；Dependabot 开的 PR 读不到 repository secrets（GitHub 的规定），不影响预览部署。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Asia/Seoul
+    # 同 npm：发布满 14 天才提（第三方审查 CI-17：action 也会被投毒）
+    cooldown:
+      default-days: 14
+    groups:
+      actions:
+        patterns: ['*']
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Asia/Seoul
+    # 发布满 14 天的版本才提（供应链：给社区时间发现被投毒的版本）
+    cooldown:
+      default-days: 14
+    groups:
+      app-deps:
+        patterns: ['*']
+    open-pull-requests-limit: 3
+
+  # wrangler 在根目录（E2E）和 tools/deploy（部署）各有一份，必须同一版（架构 0.31 第 26 条，unit.yml 比对）：
+  # 只升了一边的 PR 会被 CI 拦下，人工把另一边改成同一版再合
+  - package-ecosystem: npm
+    directory: /tools/deploy
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Asia/Seoul
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 1
+
+  # 桌面版（Tauri）的 Rust 依赖（第三方审查 CI-17：原来没人盯）；turnstile-probe 是试验件、不进发布，不管
+  - package-ecosystem: cargo
+    directory: /desktop/src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Asia/Seoul
+    cooldown:
+      default-days: 14
+    groups:
+      desktop-crates:
+        patterns: ['*']
+    open-pull-requests-limit: 1

@@ -1,0 +1,44 @@
+/* 设置 › 邀请朋友：kit 设置卡、行、按钮以外只多几样——备注输入框在行里上下留空和字数、出错话和新码卡的上边距、刚生成的码大字等宽。
+   颜色、字号一律用令牌，不另起颜色 */
+
+/* 卡和卡之间的距离照 kit：看得见的卡名自己上边 16、卡下说明自己下边 16（Settings.module.css 的 h2.gt、.cardNote），这里不另加间距 */
+.page {
+  padding-top: 8px;
+}
+
+/* 输入框放在设置行里：行本身 44 高、不加内边距，框上下各留 8，不贴着分隔线 */
+.input {
+  margin: 8px 0;
+}
+
+/* 字数：靠右、第三层文字色；超了换危险色 */
+.count {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--fs-13);
+}
+
+.over {
+  color: var(--danger-text);
+}
+
+/* 出错一句话：在按钮下面隔 8；没有话时不占地方 */
+.err:not(:empty) {
+  margin-top: 8px;
+}
+
+/* 刚生成的码那张卡：它在这一层里是第一张卡，kit 只给卡名上边 4（section:first-child > h2.gt），这里补 12 凑成和别的卡一样的 16；没有码时不占地方 */
+.live:not(:empty) {
+  margin-top: 12px;
+}
+
+/* 刚生成的码：大字等宽（字体用 Refine .num 的 --f-mono），点一下整段选中，方便手动复制 */
+.code {
+  flex: 1 1 auto;
+  padding: 10px 0;
+  color: var(--text);
+  font-size: var(--fs-24);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  user-select: all;
+}

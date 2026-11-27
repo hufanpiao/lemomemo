@@ -1,0 +1,344 @@
+// parseWithAI 的实现（架构第 7 节“parseWithAI：解析的纯函数”，0.29 AI 句库 Q8 后端承诺；B3 任务单 BE-1）。
+// 本文件不 import _shared/gen/、不 import npm 包：校验函数（shared/schema/ai.ts 的 checkParseOutput、checkVoiceOutput）由调用方注入，
+// 这样 Vitest 和 tsc 能直接测它（tests/edge/ai-parse-with-ai.test.ts 注入真的 shared 版本）；函数和评测用的绑定在 parse-with-ai.ts。
+// 做的事：去控制字符、转义 </data>、截 2000 字 → 拼提示词 → 调 provider → 校验 → 返回校验后的结果和原始输出（评测两份都存）。
+// 不做的事：不查 AI 同意、不计次数和限流、不看“本机有把握就不调 AI”、不读写数据库（quota 只作为 reason 返回，ai_state 由调用方写）。
+// 三个入口（B4b-3）：parseWithAI（ai-parse，parse.v9，意图加记下）、voiceWithAI（ai-voice，voice.v9）、
+//   recordWithAI（claude-intake、评测测试集 ①，record.v8，只做记下：AI 判成别的意图当 schema 拒收，recordOnly）。
+// 11-25 起每条多 date_said、time_said（原样抄出说日子、说时刻的字），由注入的校验（shared/schema/ai.ts）按本机规则换算覆盖日子和时刻，
+//   这两个键不回给客户端；{{CALENDAR}} 填从今天起 14 天的日历（calendarOf）。
+import { PROMPT_VERSION, TASK_PARAMS, PARSE_TIMEOUT_MS, VOICE_TIMEOUT_MS } from './params.ts';
+import { DEFAULT_DAY_RULE, RECORD_V8 } from './prompts/record.v8.ts';
+import { PARSE_V9 } from './prompts/parse.v9.ts';
+import { VOICE_V9 } from './prompts/voice.v9.ts';
+import type { AIProvider, AiResult, QuotaKind } from './provider.ts';
+import { generateRetry503 } from './retry.ts';
+
+export type AiKindLike = 'event' | 'todo' | 'note' | 'anniv';
+export type InvalidReasonLike = 'missing_date_basis' | 'bad_date' | 'not_whitelisted' | 'out_of_range' | 'schema' | 'empty';
+/** shared/schema/intent.ts 的几个枚举（本文件不引 shared；tests/edge/ai-intent.test.ts 钉住两边相等） */
+export const PLUS_INTENTS_LIKE = ['record', 'search', 'summarize', 'cancel', 'reschedule', 'complete'] as const;
+export type NonRecordIntentLike = Exclude<(typeof PLUS_INTENTS_LIKE)[number], 'record'>;
+export const QUERY_KINDS_LIKE = ['event', 'todo', 'note'] as const;
+export const TARGET_KINDS_LIKE = ['event', 'todo'] as const;
+export const QUERY_DONE_LIKE = ['open', 'done', 'any'] as const;
+
+/** 校验以后的记下（shared/schema/ai.ts 的 RecordChecked） */
+export type RecordChecked<Item> = { intent: 'record'; confidence: number; items: Item[] };
+/** 别的意图（shared/schema/intent.ts 的 IntentChecked 满足这个形状） */
+export type IntentLike = { intent: NonRecordIntentLike; confidence: number; fixed?: boolean };
+export type Checked<Item, I extends IntentLike = IntentLike> = RecordChecked<Item> | I;
+
+/** 注入的校验（shared/schema/ai.ts 的同名函数满足这个形状） */
+export type CheckResult<T> = { ok: true; value: T } | { ok: false; invalid_reasons: InvalidReasonLike[]; issues: unknown[] };
+export interface CheckCtx { now: number; tz: string; features: readonly AiKindLike[]; defaultDay?: string | undefined }
+export interface Checkers<Item, I extends IntentLike = IntentLike> {
+  checkParseOutput(raw: unknown, ctx: CheckCtx): CheckResult<Checked<Item, I>>;
+  checkVoiceOutput(raw: unknown, ctx: CheckCtx): CheckResult<Checked<Item, I> & { transcript: string }>;
+  /** 默认日子的校验（shared/schema/ai.ts 的 checkDefaultDay，和 ai-parse、ai-voice 入口同一个函数，R10） */
+  checkDefaultDay: DayCheck;
+  /** 提示词里 project 的固定类别（shared/logic/project-categories-data.ts 的 PROJECT_CATEGORIES，和分色同一份；R-440） */
+  projectCategories: ProjectCategoriesLike;
+}
+
+/** 固定类别：中韩各一套，最后一个是收日常杂事的“生活 / 생활” */
+export interface ProjectCategoriesLike { zh: readonly string[]; ko: readonly string[] }
+
+/** 默认日子校验：不传 null；格式不对、不存在、不在今天前 1 年到后 5 年之内 'bad' */
+export type DayCheck = (v: unknown, now: number, tz: string) => string | null | 'bad';
+
+export interface ParseInput {
+  text: string;
+  /** 毫秒 */
+  now: number;
+  tz: string;
+  locale: 'zh' | 'ko';
+  projects: readonly string[];
+  /** 已按 featureOn 算好的、这个人能用的类型 */
+  features: readonly AiKindLike[];
+  /** 日历页选中的那天（R6；调用方已校验）；不传时提示词里没有这一条，行为和今天页一样 */
+  defaultDay?: string | undefined;
+}
+
+export interface VoiceInput extends Omit<ParseInput, 'text'> {
+  audio: Uint8Array;
+  /** 去掉参数以后的类型（audio/webm;codecs=opus → audio/webm），4 种之一 */
+  mime: string;
+}
+
+export type FailReason = 'quota' | 'timeout' | 'invalid' | 'error';
+/** status：服务商的 HTTP 状态码；errName：异常类型名（只给日志用，ai-voice 写 logs，架构审第九节第 2 条） */
+/** badDefaultDay：传进来的默认日子没过校验，已按没传处理（R10 兜底；调用方记错误码 bad_default_day） */
+/** quotaKind、retryMs：额度用完时撞的是哪种、服务商建议等多久（provider.ts；调用方据此写 exhausted_until、评测决定等还是停） */
+export type ParseFail = {
+  ok: false; reason: FailReason; raw?: unknown; invalid_reasons?: InvalidReasonLike[]; issues?: unknown[]; status?: number; errName?: string;
+  badDefaultDay?: true; retried?: true; quotaKind?: QuotaKind; retryMs?: number | null;
+};
+/** retried：录音第一次回 503、服务器端重试过（只有 voiceWithAI 会带；ai-voice 记日志和计数用） */
+export type ParseOk<T> = { ok: true; value: T; raw: unknown; prompt: string; badDefaultDay?: true; retried?: true };
+
+export const TEXT_MAX = 2000;
+export const PROJECTS_MAX = 30;
+export const PROJECT_LEN = 40;
+
+// 控制字符（保留换行、制表）、双向覆盖字符：去掉
+// eslint-disable-next-line no-control-regex
+const CTRL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g;
+
+/** 防提示注入第 2 条：去控制字符、转义 </data>（不分大小写，也挡 </projects>）、截到 max 个码点 */
+export function sanitize(s: string, max = TEXT_MAX): string {
+  const cut = [...s.replace(CTRL, '')].slice(0, max).join('');
+  return cut.replace(/<\s*\/\s*(data|projects)\s*>/gi, (_m, tag: string) => `<\\/${tag}>`).replace(/<\s*(data|projects)\s*>/gi, (_m, tag: string) => `<_${tag}>`);
+}
+
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+/** 某时区里的今天、星期、现在几点（不依赖 shared：用 Intl） */
+export function wallOf(now: number, tz: string): { today: string; weekday: string; time: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short',
+  }).formatToParts(new Date(now));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(get('weekday'));
+  return { today: `${get('year')}-${get('month')}-${get('day')}`, weekday: wd < 0 ? '' : (WEEKDAYS.at(wd) ?? ''), time: `${get('hour')}:${get('minute')}` };
+}
+
+/** 提示词里的日历表列几天（从今天起，含今天） */
+export const CALENDAR_DAYS = 14;
+const DAY_MS = 86_400_000;
+const WEEK_NAMES = ['本周', '下周', '下下周'];
+const NEAR = ['今天', '明天', '后天'];
+
+/** 从今天起 CALENDAR_DAYS 天的日历（11-25 兜底：模型自己数日子会错），一周从周一开始、按周分行：
+ *  “  本周：2026-11-25 周三（今天）、2026-11-26 周四（明天）……”；today 不是 YYYY-MM-DD 时为空串 */
+export function calendarOf(today: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(today);
+  if (!m) return '';
+  const t0 = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const weeks: string[][] = [];
+  for (let i = 0; i < CALENDAR_DAYS; i++) {
+    const dt = new Date(t0 + i * DAY_MS);
+    const wd = dt.getUTCDay();
+    if (i === 0 || wd === 1) weeks.push([]);
+    const near = NEAR.at(i);
+    weeks.at(-1)?.push(`${dt.toISOString().slice(0, 10)} ${WEEKDAYS.at(wd) ?? ''}${near ? `（${near}）` : ''}`);
+  }
+  return weeks.map((w, i) => `  ${WEEK_NAMES.at(i) ?? ''}：${w.join('、')}`).join('\n');
+}
+
+/** 填提示词的占位符（单测核对没有漏填的 {{…}}） */
+export interface FilledPrompt {
+  system: string;
+  /** 默认日子传了但没过校验：没拼进提示词，按没传处理 */
+  badDefaultDay: boolean;
+  /** 校验过的默认日子（没传或不合格是 undefined），校验 AI 输出时用这一个 */
+  defaultDay: string | undefined;
+}
+
+/** 填提示词的占位符。默认日子来自客户端、进的是系统提示区（不在 <data> 里），拼之前用同一个校验函数再查一次（R10）：
+ *  不合格不拼原值，{{DEFAULT_DAY_RULE}} 整行去掉、{{DEFAULT_DAY}} 填空，返回 badDefaultDay 让调用方记日志 */
+export function fillPrompt(
+  tpl: string,
+  input: { now: number; tz: string; locale: 'zh' | 'ko'; features: readonly AiKindLike[]; defaultDay?: string | undefined },
+  checkDay: DayCheck,
+  cats: ProjectCategoriesLike,
+): FilledPrompt {
+  const checked = input.defaultDay === undefined ? null : checkDay(input.defaultDay, input.now, input.tz);
+  const day = checked === null || checked === 'bad' ? undefined : checked;
+  const w = wallOf(input.now, input.tz);
+  const list = input.locale === 'ko' ? cats.ko : cats.zh;
+  const map: Record<string, string> = {
+    TODAY: w.today, WEEKDAY: w.weekday, NOW_TIME: w.time, TZ: input.tz, CALENDAR: calendarOf(w.today),
+    LOCALE: input.locale === 'ko' ? '韩文' : '中文', KINDS: input.features.join(', '), DEFAULT_DAY: day ?? '',
+    PROJECT_CATEGORIES: `“${list.join('、')}”`, PROJECT_OTHER: `“${list.at(-1) ?? ''}”`,
+  };
+  // 默认日子那一条：传了才有，不传整行去掉（R6：今天页、待办页、评测不传，提示词不变）
+  const withRule = tpl.replace(/^\{\{DEFAULT_DAY_RULE\}\}\n/m, day ? `${DEFAULT_DAY_RULE}\n` : '');
+  const system = withRule.replace(/\{\{([A-Z_]+)\}\}/g, (m, k: string) => (Object.hasOwn(map, k) ? map[k] : undefined) ?? m);
+  return { system, badDefaultDay: checked === 'bad', defaultDay: day };
+}
+
+/** 项目名：去控制字符、截 40 字、最多 30 个 */
+export function cleanProjects(ps: readonly string[]): string[] {
+  return ps.slice(0, PROJECTS_MAX).map((p) => sanitize(p, PROJECT_LEN)).filter((p) => p.trim() !== '');
+}
+
+const STR = { type: 'STRING' };
+const NSTR = { type: 'STRING', nullable: true };
+
+/** Gemini responseSchema（OpenAPI 子集）：kind 的枚举只放这个人能用的类型；没有 anniv 时整个 anniv 键不出现。
+ *  这一份只有记下的键、不放 intent：record.v8（recordWithAI）直接用；parse.v9、voice.v9 经 plusSchema 加意图的键 */
+export function responseSchema(features: readonly AiKindLike[], voice: boolean): Record<string, unknown> {
+  const props: Record<string, unknown> = {
+    kind: { type: 'STRING', enum: [...features] },
+    title: STR,
+    date: NSTR,
+    time: NSTR,
+    duration_min: { type: 'INTEGER', nullable: true },
+    due: NSTR,
+    important: { type: 'BOOLEAN' },
+    project: NSTR,
+    body: NSTR,
+    short: NSTR,
+    date_basis: { type: 'STRING', enum: ['ymd', 'md', 'd', 'rel'], nullable: true },
+    // 11-25：原样抄出的说日子、说时刻的字，服务器按本机规则换算（shared/logic/parse/said-when.ts，经 shared/schema/ai.ts 的校验）
+    date_said: NSTR,
+    time_said: NSTR,
+  };
+  const required = ['kind', 'title', 'date', 'time', 'due', 'important', 'date_basis', 'date_said', 'time_said'];
+  if (features.includes('anniv')) {
+    props['anniv'] = {
+      type: 'OBJECT', nullable: true,
+      properties: {
+        type: { type: 'STRING', enum: ['birthday', 'anniversary', 'countdown'] },
+        calendar: { type: 'STRING', enum: ['solar', 'lunar'] },
+        month: { type: 'INTEGER' }, day: { type: 'INTEGER' }, is_leap: { type: 'BOOLEAN' }, year: { type: 'INTEGER', nullable: true },
+      },
+      required: ['type', 'calendar', 'month', 'day'],
+    };
+  }
+  const items = { type: 'ARRAY', items: { type: 'OBJECT', properties: props, required } };
+  return voice
+    ? { type: 'OBJECT', properties: { transcript: STR, items }, required: ['transcript', 'items'] }
+    : { type: 'OBJECT', properties: { items }, required: ['items'] };
+}
+
+const NDATE = NSTR;
+// 键名列表用 Object.keys 取（不在源码里写带引号的 from：voice-probe-guard 的依赖链检查按 from + 引号认 import）
+const RANGE_PROPS = { from: NDATE, to: NDATE };
+/** 意图的几个顶层键（Gemini OpenAPI 子集：可为 null 的写 nullable；with_overdue、all 可以不给） */
+const INTENT_PROPS: Record<string, unknown> = {
+  intent: { type: 'STRING', enum: [...PLUS_INTENTS_LIKE] },
+  confidence: { type: 'NUMBER' },
+  query: {
+    type: 'OBJECT', nullable: true,
+    properties: {
+      text: STR,
+      range: { type: 'OBJECT', nullable: true, properties: RANGE_PROPS, required: Object.keys(RANGE_PROPS) },
+      kinds: { type: 'ARRAY', items: { type: 'STRING', enum: [...QUERY_KINDS_LIKE] } },
+      done: { type: 'STRING', enum: [...QUERY_DONE_LIKE] },
+    },
+    required: ['text', 'range', 'kinds', 'done'],
+  },
+  target: {
+    type: 'OBJECT', nullable: true,
+    properties: {
+      text: STR, date: NDATE, time: NSTR,
+      kinds: { type: 'ARRAY', items: { type: 'STRING', enum: [...TARGET_KINDS_LIKE] } },
+      with_overdue: { type: 'BOOLEAN' }, all: { type: 'BOOLEAN' },
+    },
+    required: ['text', 'date', 'time', 'kinds'],
+  },
+  to: { type: 'OBJECT', nullable: true, properties: { date: NDATE, time: NSTR }, required: ['date', 'time'] },
+};
+
+/** parse.v9、voice.v9 的 responseSchema：记下那一份（responseSchema）加意图的几个键 */
+export function plusSchema(features: readonly AiKindLike[], voice: boolean): Record<string, unknown> {
+  const base = responseSchema(features, voice) as { properties: Record<string, unknown>; required: string[] };
+  return {
+    type: 'OBJECT',
+    properties: { ...base.properties, ...INTENT_PROPS },
+    required: [...base.required, 'intent', 'confidence', 'query', 'target', 'to'],
+  };
+}
+
+export const isRecord = <Item, I extends IntentLike>(v: Checked<Item, I>): v is RecordChecked<Item> => v.intent === 'record';
+
+/** 只做记下的（claude-intake、评测）：AI 判成别的意图当 schema 拒收；交出 {items}（和 B3 一样） */
+export function recordOnly<Item, I extends IntentLike>(v: CheckResult<Checked<Item, I>>): CheckResult<{ items: Item[] }> {
+  if (!v.ok) return v;
+  return isRecord(v.value) ? { ok: true, value: { items: v.value.items } } : { ok: false, invalid_reasons: ['schema'], issues: [] };
+}
+
+/** R-444 以前的客户端能存的最长时长（旧 events 约束 1～1440 分钟）。本文件是纯逻辑、不引 shared，同 shared/core/date.ts 的 DAY_MINUTES */
+export const LEGACY_DURATION_MAX = 1440;
+
+/**
+ * 旧版客户端（请求没带 span: 1 / X-Span: 1）收到的一条：时长超过 1440 的规整成 1440——跨天的全天日程记成一天、有时刻的截到 24 小时，
+ * 旧版本机校验和写库都过得去，这句话一条都不丢（第三轮复审必改 3 方案 a）；新版客户端原样给
+ */
+function legacyItem(it: unknown): unknown {
+  if (typeof it !== 'object' || it === null) return it;
+  const row = it as Record<string, unknown>;
+  const d = row['duration_min'];
+  return typeof d === 'number' && d > LEGACY_DURATION_MAX ? { ...row, duration_min: LEGACY_DURATION_MAX } : it;
+}
+
+/**
+ * ai-parse、ai-voice 成功时的响应体（shared/schema/ai.ts 的 recordResponse、intent.ts 的 queryResponse / targetResponse）：
+ * 校验结果（录音的带 transcript）去掉 fixed（规整过没有，只给评测计数，不回给客户端），加 quota_left。
+ * span：请求带了 R-444 的标记（能存跨天日程）；没带的是旧版客户端，items 的时长按 legacyItem 规整
+ */
+export function plusBody<Item, I extends IntentLike>(v: Checked<Item, I>, quotaLeft: number, span: boolean): Record<string, unknown> {
+  const { fixed: _fixed, ...rest } = v as Checked<Item, I> & { fixed?: boolean };
+  const items = (rest as { items?: unknown }).items;
+  const fit = !span && Array.isArray(items) ? { items: items.map(legacyItem) } : {};
+  return { ...rest, ...fit, quota_left: quotaLeft };
+}
+
+function dataParts(text: string, projects: readonly string[]): string {
+  return `<projects>${JSON.stringify(cleanProjects(projects))}</projects>\n<data>${sanitize(text)}</data>`;
+}
+
+function failOf(r: Extract<AiResult, { ok: false }>): ParseFail {
+  return {
+    ok: false, reason: r.reason, ...(r.status !== undefined ? { status: r.status } : {}), ...(r.errName !== undefined ? { errName: r.errName } : {}),
+    ...(r.quotaKind !== undefined ? { quotaKind: r.quotaKind } : {}), ...(r.retryMs !== undefined ? { retryMs: r.retryMs } : {}),
+  };
+}
+
+export function makeParseWithAI<Item, I extends IntentLike = IntentLike>(checkers: Checkers<Item, I>) {
+  /** 文字的一次调用：prompt 和 schema 两样不同，其余（数据区、参数、超时、校验）相同 */
+  async function text<T>(
+    tpl: string, schema: Record<string, unknown>, version: string, input: ParseInput, provider: AIProvider,
+    check: (raw: unknown, ctx: CheckCtx) => CheckResult<T>,
+  ): Promise<ParseOk<T> | ParseFail> {
+    const fp = fillPrompt(tpl, input, checkers.checkDefaultDay, checkers.projectCategories);
+    const bad = fp.badDefaultDay ? ({ badDefaultDay: true } as const) : {};
+    const r = await provider.generate({
+      system: fp.system,
+      parts: [{ text: dataParts(input.text, input.projects) }],
+      schema,
+      params: TASK_PARAMS.parse,
+      timeoutMs: PARSE_TIMEOUT_MS,
+    });
+    if (!r.ok) return { ...failOf(r), ...bad };
+    const v = check(r.json, { now: input.now, tz: input.tz, features: input.features, defaultDay: fp.defaultDay });
+    if (!v.ok) return { ok: false, reason: 'invalid', raw: r.json, invalid_reasons: v.invalid_reasons, issues: v.issues, ...bad };
+    return { ok: true, value: v.value, raw: r.json, prompt: version, ...bad };
+  }
+
+  /** 文字的“＋”：ai-parse（parse.v9，意图加记下） */
+  function parseWithAI(input: ParseInput, provider: AIProvider): Promise<ParseOk<Checked<Item, I>> | ParseFail> {
+    return text(PARSE_V9, plusSchema(input.features, false), PROMPT_VERSION.parse, input, provider, (raw, ctx) => checkers.checkParseOutput(raw, ctx));
+  }
+
+  /** 文字、只做记下：claude-intake、评测测试集 ①（record.v8，schema 里没有 intent） */
+  function recordWithAI(input: ParseInput, provider: AIProvider): Promise<ParseOk<{ items: Item[] }> | ParseFail> {
+    return text(RECORD_V8, responseSchema(input.features, false), PROMPT_VERSION.record, input, provider, (raw, ctx) => recordOnly(checkers.checkParseOutput(raw, ctx)));
+  }
+
+  /** 录音：ai-voice（voice.v9，一次完成转写、意图和拆分；C 路不做评测，R-167） */
+  async function voiceWithAI(input: VoiceInput, provider: AIProvider): Promise<ParseOk<Checked<Item, I> & { transcript: string }> | ParseFail> {
+    const fp = fillPrompt(VOICE_V9, input, checkers.checkDefaultDay, checkers.projectCategories);
+    const bad = fp.badDefaultDay ? ({ badDefaultDay: true } as const) : {};
+    // 11-11：Gemini 回 503 重试一次，两次合计不超过 VOICE_TIMEOUT_MS（retry.ts；B3 iPhone 实测 40 次里 4 次 503）
+    const { result: r, retried } = await generateRetry503(provider, {
+      system: fp.system,
+      parts: [
+        { text: `<projects>${JSON.stringify(cleanProjects(input.projects))}</projects>` },
+        { inlineData: { mimeType: input.mime, data: input.audio } },
+      ],
+      schema: plusSchema(input.features, true),
+      params: TASK_PARAMS.voice,
+      timeoutMs: VOICE_TIMEOUT_MS,
+    });
+    const rt = retried ? ({ retried: true } as const) : {};
+    if (!r.ok) return { ...failOf(r), ...bad, ...rt };
+    const v = checkers.checkVoiceOutput(r.json, { now: input.now, tz: input.tz, features: input.features, defaultDay: fp.defaultDay });
+    if (!v.ok) return { ok: false, reason: 'invalid', raw: r.json, invalid_reasons: v.invalid_reasons, issues: v.issues, ...bad, ...rt };
+    return { ok: true, value: v.value, raw: r.json, prompt: PROMPT_VERSION.voice, ...bad, ...rt };
+  }
+
+  return { parseWithAI, recordWithAI, voiceWithAI };
+}

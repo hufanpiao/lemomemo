@@ -1,0 +1,256 @@
+/* 随手记里的附件区：小标题“附件 4 · 共 8.1 MB”、一行“类型标记 · 名字 / 大小 · ⋯”、上传条、拖进来的虚线框
+   头一行是 kit 小字分组名（AttPanel.tsx 同时挂 groupLabelClass）；卡片不描边平铺、行高 60、行间 0.5px 细线；
+   类型标记是浅底等宽小字；“再试一次”“去掉”“下载”是 kit 胶囊（Chip.module.css） */
+
+.box {
+  margin-top: 18px;
+}
+
+/* 字样（等宽 11 号、第三层色、字距）用 kit 分组名；这里只管左右分开。写成 div.head 压过分组名那份 margin（两份 CSS 模块谁先加载不固定） */
+div.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 4px 14px 6px;
+}
+
+.head b {
+  font-weight: 400;
+}
+
+.list {
+  margin: 0;
+  padding: 0 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  list-style: none;
+}
+
+.row + .row {
+  border-top: 0.5px solid var(--line);
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+}
+
+/* 类型标记 PDF / W / X / P：类型色只用极淡底，不用墨色粗描边，浅底 + 等宽小字、次要色 */
+.mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: var(--fs-10-5);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* 电脑上的首页缩略图：和类型标记同一个位置、同样大小 */
+.thumb {
+  flex: none;
+  width: 34px;
+  height: 40px;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  object-fit: cover;
+  object-position: top;
+}
+
+.tx {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  font-size: var(--fs-15);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 大小、页数这一行：数字等宽，和名字隔 2 */
+.sub,
+.subBad {
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.subBad {
+  color: var(--danger-text);
+}
+
+/* 上传、检查中的细条：没有真实进度 */
+.bar {
+  position: relative;
+  overflow: hidden;
+  height: 3px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: var(--panel-2);
+}
+
+/* 上传中：静止的一截（不做往返动画：单个动效 ≤ 400ms、减少动态只认 data-rm，状态由下面的文字说） */
+.bar::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: 2px;
+  background: var(--ink);
+  content: '';
+}
+
+.more {
+  flex: none;
+  width: var(--hit);
+  height: var(--hit);
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-18);
+}
+
+.more:disabled {
+  opacity: 0.4;
+}
+
+.menu {
+  min-width: 150px;
+  padding: 6px;
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-14);
+  text-align: left;
+}
+
+.failBtns {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+/* 只存不预览的说明：灰底小框，右边“下载” */
+.only {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -2px 0 12px;
+  padding: 4px 6px 4px 12px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  line-height: 1.5;
+}
+
+/* “只能下载”框的“下载”靠右；灰底上的胶囊底色用 kit 胶囊的 .onGray */
+.only > .onlyAct {
+  margin-left: auto;
+}
+
+.note,
+.msg {
+  margin: 8px 0 0;
+  padding: 10px 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  line-height: 1.6;
+}
+
+.msg {
+  margin: 0 0 8px;
+  color: var(--text);
+}
+
+.add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.pick {
+  min-height: var(--hit);
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.pick:disabled {
+  opacity: 0.5;
+}
+
+.addOff {
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+/* 拖进窗口：整窗变暗，中间虚线框 */
+.veil {
+  position: fixed;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  inset: 0;
+  background: var(--scrim);
+  pointer-events: none;
+}
+
+.veilBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(620px, 90vw);
+  padding: 80px 24px;
+  border: 2.5px dashed var(--ink);
+  border-radius: 24px;
+  background: var(--sheet-bg);
+  text-align: center;
+}
+
+.veilPlus {
+  font-size: var(--fs-44);
+  line-height: 1;
+}
+
+.veilTitle {
+  font-size: var(--fs-22);
+}
+
+.veilSub {
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.veilHint {
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}

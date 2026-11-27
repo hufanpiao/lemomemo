@@ -1,0 +1,51 @@
+/* 胶囊：待办页筛选、查找面板的种类 / 时间 / 最近找过 / 页脚、AI 面板的按钮共用一份。只用令牌。
+   • 没有描边、--panel-2 浅底、高 30、字小一号；选中（或主操作）换 --chip-on-bg
+   • 点击区照样 44 高：::after 上下外扩 7，外边距 7 留出这块地方（放在横向滚动的一排里也不被裁掉）
+   • 条数 .chipN：等宽小字、淡一点 */
+.chip,
+.chipOn {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
+  align-items: center;
+  height: 30px;
+  margin: 7px 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-13);
+  white-space: nowrap;
+}
+
+.chip::after,
+.chipOn::after {
+  content: '';
+  position: absolute;
+  inset: -7px 0;
+}
+
+.chipOn {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+}
+
+/* 按不了的时候（AI 面板“去做”在忙）：和别处禁用一样变淡 */
+.chip:disabled,
+.chipOn:disabled {
+  opacity: var(--disabled-dim);
+}
+
+/* 放在 --panel-2 灰底框里的胶囊（附件“只能下载”框、识别状态条）：本身也是 --panel-2 底会看不出来，换 --panel 底。
+   写成 .chip.onGray，同一份模块里靠优先级压过 .chip，不靠两份模块的加载先后 */
+.chip.onGray {
+  background: var(--panel);
+}
+
+.chipN {
+  font-family: var(--f-mono);
+  font-size: var(--fs-11);
+  opacity: 0.7;
+}

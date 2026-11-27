@@ -1,0 +1,25 @@
+#!/bin/sh
+# 本机提交前扫一遍暂存区里的密钥（架构 8.2、8.3 第一行，S-B0b）。CI 里的 gitleaks 是第二道。
+# 启用（每台开发电脑做一次，主持人合并后执行）：git config core.hooksPath .githooks
+# 查到疑似密钥就拒绝提交。确认是误报时，把那一处加进 .gitleaksignore（写明原因，由安全审查员会签），不要用 --no-verify。
+# 找不到 gitleaks 也拒绝提交：宁可挡一下，也不悄悄放过。
+
+if ! command -v gitleaks >/dev/null 2>&1 && [ -n "$LOCALAPPDATA" ]; then
+  # Windows 上 winget 装的 gitleaks 不一定在 Git 自带 sh 的 PATH 里（例如装完没重开终端）
+  lad="$LOCALAPPDATA"
+  command -v cygpath >/dev/null 2>&1 && lad="$(cygpath -u "$LOCALAPPDATA")"
+  for d in "$lad/Microsoft/WinGet/Links" \
+           "$lad/Microsoft/WinGet/Packages/Gitleaks.Gitleaks_Microsoft.Winget.Source_8wekyb3d8bbwe"; do
+    if [ -x "$d/gitleaks.exe" ]; then PATH="$d:$PATH"; break; fi
+  done
+fi
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit：没找到 gitleaks，不能检查密钥，提交已取消。安装：winget install --id Gitleaks.Gitleaks -e" >&2
+  exit 1
+fi
+
+# --redact：报告里不打印疑似密钥的原文；--no-banner：少一点输出
+if ! gitleaks git --pre-commit --staged --redact --no-banner --exit-code 1; then
+  echo "pre-commit：gitleaks 在暂存区里发现疑似密钥，提交已取消。请从暂存区移除后再提交（git restore --staged <文件>）。" >&2
+  exit 1
+fi

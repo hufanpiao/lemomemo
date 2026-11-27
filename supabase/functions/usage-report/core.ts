@@ -1,0 +1,307 @@
+// usage-report 的处理逻辑（架构第 6 节函数表、6.1、0.29 续第 116、143 条；TC-B1-94 ①、TC-B1-102 ⑤）。
+// 不 import npm 包、不碰 Deno 全局：数据库读取由 index.ts 注入，Vitest 直接测这一份。
+// 鉴权只认 x-ops-secret（单独一把，不和 CRON_SECRET 共用，经 _shared/http.ts 的 cronGate）；日志只记错误码，不打印请求头、请求体（A23）。
+import { cronGate, json } from '../_shared/http.ts';
+import { startSide } from './side.ts';
+import { usagePart, type UsageSources } from './usage.ts';
+
+/** 查数据库出错或超过这个时长就回 503 db_unreachable（0.29 续第 116 条①） */
+export const DB_TIMEOUT_MS = 5_000;
+
+export interface HeartbeatRow {
+  name: string;
+  at: string;
+  detail: unknown;
+}
+
+export interface PendingDeletionRow {
+  purge_after: string;
+  purge_started_at: string | null;
+}
+
+/** 旁路读取（发信量、孤儿用户、安全计数）各自单独计时，比整轮的 DB_TIMEOUT_MS 短：到点那一项给 null，心跳那几项照常回 200 */
+export const SIDE_TIMEOUT_MS = 2_000;
+
+/**
+ * 发信量（架构 15.6 第 4d 条 ①、0.38 第 12 条），两个数口径和来源不同：
+ * - `auth_1h`：过去 1 小时 **Supabase Auth（GoTrue）发出的验证码邮件**数。来源是 `auth.audit_log_entries`
+ *   （经只给 service_role 的定义者函数 private.auth_mail_counts() 读，迁移 20261029230000；数哪些 action 见该迁移）；
+ * - `resend_24h`：过去 24 小时 **经 Resend 发出的所有邮件合计**（验证码、invite-signup、注销通知、lemo-ops 告警都算），
+ *   对照 Resend 每天 100 封的额度。要一把有读权限的 Resend 密钥，**暂不接**：缺省或 null 表示没接。
+ */
+export interface AuthMailCounts {
+  auth_1h: number;
+  resend_24h?: number | null;
+}
+
+/**
+ * rpc private.auth_mail_counts() 的结果 → AuthMailCounts。函数 returns table，supabase-js 给一行的数组 [{auth_1h, auth_24h}]；
+ * 只取 auth_1h（auth_24h 给手动处理时看，lemo-ops 不用；resend_24h 不从这里来，不带）。
+ * 这里不判数字对不对：原样交给 pickAuthMail（不对记 auth_mail:bad_data）
+ */
+export function authMailFromRpc(data: unknown): AuthMailCounts {
+  const row: unknown = Array.isArray(data) ? data[0] : data;
+  const h = typeof row === 'object' && row !== null ? (row as Record<string, unknown>)['auth_1h'] : undefined;
+  return { auth_1h: h as number };
+}
+
+/**
+ * 没有 profile 的 auth 用户（接手清单 ORPHAN-alert；架构 0.38 第 29 条）：rpc private.orphan_auth_users()（迁移 20261031160000）
+ * 数“建号超过 10 分钟、public.profiles 没有行”的 auth 用户，覆盖 invite-signup 的 orphan_user、orphan_suspect 两种孤儿。
+ * count：个数；latest_at：最近一个的建号时刻（没有孤儿时为 null）。不带 id、邮箱
+ */
+export interface OrphanCounts {
+  count: number;
+  latest_at: string | null;
+}
+
+/** rpc private.orphan_auth_users() 的结果（returns table，一行的数组 [{orphans, latest_at}]）→ OrphanCounts；不判对错，交给 pickOrphans */
+export function orphansFromRpc(data: unknown): OrphanCounts {
+  const row: unknown = Array.isArray(data) ? data[0] : data;
+  const r = typeof row === 'object' && row !== null ? (row as Record<string, unknown>) : {};
+  return { count: r['orphans'] as number, latest_at: r['latest_at'] as string | null };
+}
+
+/** private.security_events()（迁移 20261111120000）：最近 15 分钟 sfate-capped、pwrevoke-fail 两个计数，lemo-ops 大于 0 告警 */
+export interface SecurityCounts {
+  sfate_capped: number;
+  pw_revoke_failed: number;
+}
+
+/** rpc 的结果（returns table，一行的数组）→ 第一行；不判对错，交给 pickSecurity */
+export const securityFromRpc = (data: unknown): unknown => (Array.isArray(data) ? data[0] : data);
+
+/** 各读取都必须尊重 signal（超时后中止） */
+export interface UsageDb {
+  heartbeats(signal: AbortSignal): Promise<HeartbeatRow[]>;
+  pendingDeletions(signal: AbortSignal): Promise<PendingDeletionRow[]>;
+  /** private.long_transactions() 的行数（超过 4 分钟的事务，0.29 续第 141 条） */
+  longTxCount(signal: AbortSignal): Promise<number>;
+  /**
+   * 发信量（0.38 第 12 条，口径见 AuthMailCounts）。index.ts 经 rpc private.auth_mail_counts() 提供（迁移 20261029230000）；
+   * 不提供时返回体里就没有 `auth_mail`，lemo-ops 不查这一件。单独计时 SIDE_TIMEOUT_MS；出错、超时、auth_1h 不对只让 `auth_mail` 为 null
+   * （日志记 auth_mail:error / auth_mail:timeout / auth_mail:bad_data），只有 resend_24h 不对时只把它置 null 并另给 resend_unreadable: true
+   * （记 auth_mail:bad_resend；和“没接”的 null 分开，OPS-mail-sugg ②），不连累心跳那几项。
+   */
+  authMail?(signal: AbortSignal): Promise<AuthMailCounts>;
+  /**
+   * 没有 profile 的 auth 用户（ORPHAN-alert，口径见 OrphanCounts）。index.ts 经 rpc private.orphan_auth_users() 提供；
+   * 不提供时返回体里没有 `orphan_users`，lemo-ops 不查。和 authMail 一个做法：单独计时，出错、超时、数字不对
+   * 只让 `orphan_users` 为 null（日志记 orphans:error / orphans:timeout / orphans:bad_data），不连累心跳那几项
+   */
+  orphanUsers?(signal: AbortSignal): Promise<OrphanCounts>;
+  /** 安全计数（R-382）；不提供时返回体里没有 security_events。出错、超时、数字不对只让它为 null（security:error / timeout / bad_data） */
+  securityEvents?(signal: AbortSignal): Promise<unknown>;
+}
+
+export interface Deps {
+  opsSecret: string | undefined;
+  /** null = 函数没配好（缺 SUPABASE_URL 或 service role key）；鉴权之后才回 misconfigured */
+  db: UsageDb | null;
+  now: () => number;
+  timeoutMs?: number;
+  /** 旁路读取各自的超时（测试用；默认 SIDE_TIMEOUT_MS） */
+  sideTimeoutMs?: number;
+  /** {part: "usage"} 的读取（usage.ts）；不提供时 usage 回 501 not_implemented */
+  usage?: UsageSources | undefined;
+  /** usage 每项读取的超时（测试用；默认 usage.ts 的 USAGE_SIDE_TIMEOUT_MS） */
+  usageTimeoutMs?: number;
+  log?: (code: string) => void;
+}
+
+/**
+ * heartbeat.detail 按心跳名分开放行（安全审查 PURGE-heartbeat-ops 建议 S1：原来是所有心跳共用一份字段名，
+ * 以后哪个心跳碰巧也用 held、sent 这类名字、装了别的含义，就会被自动转发；分开以后只放行“这个心跳真写、lemo-ops 要看”的键）。
+ * 不在表里的心跳名，detail 一律不转发（只报 age_s）。数字只收非负整数（S1：现在写的都是计数和毫秒整数），布尔只收 true/false。
+ *   cleanup（SQL，0001 等三处迁移）：rows、ms
+ *   push-dispatch：claimed、sent、failed，布尔 budget_hit（B2 加的，安全审查 D2-S2：只加数字和布尔，不加别的；O-3“claimed 与 sent 之差”要用），
+ *     加 queue_ok（第 0 步这一轮成功 1、失败 0）、queue_poison（首尔当天累计丢掉的有毒项个数）（租约出队审查返工，安全审查必改 3；
+ *     同一口径：只是个数；lemo-ops 的 push-queue.ts 用），加 left（budget_hit 为真那一轮没来得及认领的条数，TC-B2-81，11-06；只是个数），
+ *     加 recalc_written、recalc_r336、recalc_failed（第 0 步这一轮的重算结果个数）和 queue_wait0、queue_wait_batch、queue_oldest_s
+ *     （队列积压：项数和秒数；lemo-ops 在 queue_oldest_s > 900 时提示）（R-411 方案 3.7；同一口径：只是个数）
+ *   account-purge：purged、failed、sent、ms，加 held、remaining、forced（PURGE-heartbeat-ops）、blocked（PURGE-halfway-flip）
+ *     ——同一口径：只是个数，没有任何账号标识；lemo-ops 的 purge-detail.ts 用后四个提示
+ */
+export const DETAIL_FIELDS_BY_NAME: Readonly<Record<string, { readonly num: readonly string[]; readonly bool: readonly string[] }>> = {
+  cleanup: { num: ['rows', 'ms'], bool: [] },
+  'push-dispatch': {
+    num: ['claimed', 'sent', 'failed', 'queue_ok', 'queue_poison', 'left', 'recalc_written', 'recalc_r336', 'recalc_failed', 'queue_wait0', 'queue_wait_batch', 'queue_oldest_s'],
+    bool: ['budget_hit'],
+  },
+  // B4：ai-classify/core.ts 的 HeartbeatDetail
+  'ai-classify': { num: ['users', 'notes', 'ai', 'rule', 'manual', 'requeued', 'skipped', 'failed', 'ms'], bool: ['budget_hit', 'quota_hit'] },
+  // B5 S13：anniv-roll/core.ts 的 HeartbeatDetail（只是个数和布尔）
+  'anniv-roll': { num: ['rows', 'written', 'archived', 'stale', 'skipped', 'failed'], bool: ['batch_full'] },
+  'account-purge': { num: ['purged', 'failed', 'sent', 'ms', 'held', 'remaining', 'forced', 'blocked'], bool: [] },
+  // B7a 评审第 10 条、收口第 2 条：storage-sweep/core.ts 的 HeartbeatDetail（只是个数和布尔；lemo-ops 的 sweep.ts 在四个 *_hit 为真时提示）
+  'storage-sweep': {
+    num: ['listed', 'kept', 'expired', 'orphans', 'young', 'unknown', 'deleted', 'failed', 'ms', 'start', 'buckets_done', 'backup_dates', 'backup_files'],
+    bool: ['budget_hit', 'cap_hit', 'backup_budget_hit', 'backup_cap_hit'],
+  },
+  // backup-daily/core.ts 的 HeartbeatDetail（最后一个做完的账号的行数、文件数、段数；只是个数）
+  'backup-daily': { num: ['rows', 'files', 'segments'], bool: [] },
+  // B7a 复审第 5、8 条：backup-manifest/core.ts 的 HeartbeatDetail（pull.ps1 拉完写；只是个数，lemo-ops 的 backup-pull.ts 看快不快到上限）
+  'backup-pull': { num: ['accounts', 'pull_calls', 'pull_limit', 'wait_pages', 'wait_limit'], bool: [] },
+};
+
+class DbTimeout extends Error {}
+
+function isCount(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0;
+}
+
+/** 返回体里的 auth_mail：resend_24h 没接时固定写 null；读到的不对时也写 null，另带 resend_unreadable: true（lemo-ops 据此保留 mail:day） */
+interface AuthMailOut {
+  auth_1h: number;
+  resend_24h: number | null;
+  resend_unreadable?: true;
+}
+
+/**
+ * 校验读取器给的发信量。auth_1h 不对：整个 auth_mail 为 null（记 auth_mail:bad_data）；
+ * 只有 resend_24h 不对：只把它置 null、保留好的 auth_1h，另带 resend_unreadable: true、记 auth_mail:bad_resend
+ * （OPS-mail-src 复查建议；OPS-mail-sugg ②：返回体里要能和“没接”的 null 分开）
+ */
+function pickAuthMail(r: unknown): { out: AuthMailOut | null; code?: string } {
+  if (typeof r !== 'object' || r === null || Array.isArray(r)) return { out: null, code: 'auth_mail:bad_data' };
+  const { auth_1h: h, resend_24h: d } = r as Record<string, unknown>;
+  if (!isCount(h)) return { out: null, code: 'auth_mail:bad_data' };
+  if (d === undefined || d === null) return { out: { auth_1h: h, resend_24h: null } };
+  return isCount(d) ? { out: { auth_1h: h, resend_24h: d } } : { out: { auth_1h: h, resend_24h: null, resend_unreadable: true }, code: 'auth_mail:bad_resend' };
+}
+
+/** 返回体里的 orphan_users：个数和最近一个距今多少秒（没有孤儿时为 null；和心跳一样只报“距今多少秒”） */
+interface OrphanOut {
+  count: number;
+  latest_age_s: number | null;
+}
+
+/** 校验孤儿读数：count 不是非负整数、latest_at 解析不了、有孤儿却没有时刻 → null（记 orphans:bad_data） */
+function pickOrphans(now: () => number) {
+  return (r: unknown): { out: OrphanOut | null; code?: string } => {
+    const bad = { out: null, code: 'orphans:bad_data' };
+    if (typeof r !== 'object' || r === null || Array.isArray(r)) return bad;
+    const { count: n, latest_at: at } = r as Record<string, unknown>;
+    if (!isCount(n)) return bad;
+    if (at === null || at === undefined) return n === 0 ? { out: { count: 0, latest_age_s: null } } : bad;
+    const t = typeof at === 'string' ? Date.parse(at) : NaN;
+    if (!Number.isFinite(t)) return bad;
+    return { out: { count: n, latest_age_s: Math.round((now() - t) / 1000) } };
+  };
+}
+
+function pickSecurity(r: unknown): { out: SecurityCounts | null; code?: string } {
+  if (typeof r !== 'object' || r === null || Array.isArray(r)) return { out: null, code: 'security:bad_data' };
+  const { sfate_capped: a, pw_revoke_failed: b } = r as Record<string, unknown>;
+  return isCount(a) && isCount(b) ? { out: { sfate_capped: a, pw_revoke_failed: b } } : { out: null, code: 'security:bad_data' };
+}
+
+/** 数据库里的时间戳解析不了：是数据问题、不是连不上数据库，单独给错误码 */
+class BadData extends Error {}
+
+function ageS(now: number, iso: string): number {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) throw new BadData();
+  return Math.round((now - t) / 1000);
+}
+
+function pickDetail(name: string, detail: unknown): Record<string, number | boolean> | null {
+  const allow = Object.hasOwn(DETAIL_FIELDS_BY_NAME, name) ? DETAIL_FIELDS_BY_NAME[name] : undefined;
+  if (!allow || typeof detail !== 'object' || detail === null || Array.isArray(detail)) return null;
+  const d = detail as Record<string, unknown>;
+  const out = new Map<string, number | boolean>();
+  for (const k of allow.num) {
+    const v = Object.hasOwn(d, k) ? d[k] : undefined;
+    if (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0) out.set(k, v);
+  }
+  for (const k of allow.bool) {
+    const v = Object.hasOwn(d, k) ? d[k] : undefined;
+    if (typeof v === 'boolean') out.set(k, v);
+  }
+  return out.size > 0 ? Object.fromEntries(out) : null;
+}
+
+/** 旁路读取（单独计时、坏了只让自己那一项为 null，不连累心跳那几项）：返回体里的键、日志前缀、读取函数、校验函数。没接（读取函数不在）不出这个键 */
+const SIDES: readonly {
+  key: string;
+  tag: string;
+  read: (db: UsageDb) => ((signal: AbortSignal) => Promise<unknown>) | undefined;
+  pick: (now: () => number) => (r: unknown) => { out: unknown; code?: string };
+}[] = [
+  { key: 'auth_mail', tag: 'auth_mail', read: (db) => db.authMail?.bind(db), pick: () => pickAuthMail },
+  { key: 'orphan_users', tag: 'orphans', read: (db) => db.orphanUsers?.bind(db), pick: pickOrphans },
+  { key: 'security_events', tag: 'security', read: (db) => db.securityEvents?.bind(db), pick: () => pickSecurity },
+];
+
+async function heartbeatPart(deps: Deps & { db: UsageDb }): Promise<Response> {
+  const ctl = new AbortController();
+  const ms = deps.timeoutMs ?? DB_TIMEOUT_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      ctl.abort();
+      reject(new DbTimeout());
+    }, ms);
+  });
+  const db = deps.db;
+  // 旁路读取不进整轮的 5 秒 race：各自单独计时（审查必改 1）
+  const sides = SIDES.flatMap((s) => {
+    const read = s.read(db);
+    return read ? [{ key: s.key, run: startSide(read, deps.sideTimeoutMs ?? SIDE_TIMEOUT_MS, s.tag, s.pick(deps.now), deps.log) }] : [];
+  });
+  try {
+    const [hb, pd, lt] = await Promise.race([
+      Promise.all([db.heartbeats(ctl.signal), db.pendingDeletions(ctl.signal), db.longTxCount(ctl.signal)]),
+      limit,
+    ]);
+    if (timer !== undefined) clearTimeout(timer);
+    const side = Object.fromEntries(await Promise.all(sides.map(async (s) => [s.key, await s.run.done] as const)));
+    const now = deps.now();
+    return json(200, {
+      ok: true,
+      heartbeats: hb.map((h) => ({ name: h.name, age_s: ageS(now, h.at), detail: pickDetail(h.name, h.detail) })),
+      // “冷静期中的账号”（0.29 续第 143 条）：只给时间，不给 user_id（要查是谁到控制台看）
+      pending_deletions: pd.map((p) => ({
+        purge_after: p.purge_after,
+        purge_started_at: p.purge_started_at,
+        overdue_s: ageS(now, p.purge_after),
+        started_age_s: p.purge_started_at === null ? null : ageS(now, p.purge_started_at),
+      })),
+      long_tx: lt,
+      // 没接数据源时不出这个键（lemo-ops 据此不查、也不报“已恢复”）；接了但这一轮读不到是 null
+      ...side,
+    });
+  } catch (e) {
+    for (const s of sides) s.run.stop();   // 整轮已失败：不再补记旁路读取的日志
+    if (e instanceof BadData) {
+      deps.log?.('bad_data:timestamp');
+      return json(500, { error: 'bad_data' });
+    }
+    // 不回 200、不回空结果（0.29 续第 116 条①）；错误对象可能带连接信息，不打印
+    deps.log?.(e instanceof DbTimeout ? 'db_unreachable:timeout' : 'db_unreachable:error');
+    return json(503, { error: 'db_unreachable' });
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+export async function handle(req: Request, deps: Deps): Promise<Response> {
+  if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
+  // 先鉴权，再判“没配置好”：没带对密钥的调用方看不出函数配没配（没配时谁也过不了鉴权）
+  const denied = cronGate(req.headers.get('x-ops-secret'), deps.opsSecret, deps.log, 'misconfigured');
+  if (denied) return denied;
+  if (deps.db === null) {
+    deps.log?.('misconfigured');
+    return json(500, { error: 'misconfigured' });
+  }
+  let part: unknown;
+  try {
+    part = ((await req.json()) as { part?: unknown } | null)?.part;
+  } catch {
+    return json(400, { error: 'bad_request' });
+  }
+  if (part === 'heartbeat') return heartbeatPart({ ...deps, db: deps.db });
+  // usage 部分（数据库大小、文件存储、R2 用量、每人用量；B7a，见 usage.ts）
+  if (part === 'usage') return deps.usage ? usagePart(deps.usage, deps.now(), deps.log, deps.usageTimeoutMs) : json(501, { error: 'not_implemented' });
+  return json(400, { error: 'bad_part' });
+}

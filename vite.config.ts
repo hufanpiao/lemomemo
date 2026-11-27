@@ -1,0 +1,206 @@
+// Vite：App 主体、登录页 /app/auth/（15.6 第 4b 条，K4）两个页面入口（SW、附件预览沙箱单独打包，见 vite.sw.config.ts、vite.preview.config.ts）（架构 8.1）
+// base '/app/'，输出到 dist/web/app/（LEMO_WEB_OUT 可改输出目录，见 build/assemble_web.mjs 的 webOutDir）；没有内联脚本和样式，modulepreload polyfill 关掉
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import react from '@vitejs/plugin-react';
+import { defineConfig, type Plugin, type Rolldown } from 'vite';
+import { buildVersion, webOutDir } from './build/assemble_web.mjs';
+import { FIRST_PAINT_DYNAMIC } from './build/check_first_paint_chunks.mjs';
+import { staticClosure } from './build/vite_manifest.mjs';
+
+const root = import.meta.dirname;
+/**
+ * FA-6 ③：裸的 'zod' 一律别名到 src/platform/zod-jitless.ts（先 z.config({ jitless: true }) 再转出），
+ * 这样 zod 可以跟着用它的懒加载模块走、不必在入口第一个 import；严格 CSP 下照样不会触发 eval 探测。
+ * 只匹配整个说明符 'zod'；垫片自己引 'zod/v4'，不会绕回来。tests/build/zod-alias.test.ts 守着
+ */
+export const ZOD_JITLESS_ALIAS = { find: /^zod$/, replacement: resolve(root, 'src/platform/zod-jitless.ts') };
+/** docx-preview 里的 import 'jszip' 改指只读替身（B4b-1）：沙箱（vite.preview.config.ts）用；理由见 zip-lite.ts 文件头 */
+export const ZIP_LITE_ALIAS = { find: /^jszip$/, replacement: resolve(root, 'src/preview-frame/zip-lite.ts') };
+/**
+ * 只有 export … from 的出口文件按无副作用打包（11-12 首屏瘦身）：底栏从 motion/components.ts 只拿 Pressable，可出口是静态转出，
+ * Rolldown 把 Appear、AppearList、useHoldView、swap-guard 这些只有懒加载页用的组件也算进首屏块（约 1 KB gzip）。标成无副作用以后，
+ * 引入按名字直接连到真正的模块，没人在首屏用的跟着用它的页走。没匹配上的模块照默认（包的 package.json sideEffects 照认）。
+ * 出口文件只许有 export … from（tests/build/pure-reexports.test.ts 守着），往里加顶层语句就不是无副作用了
+ */
+/**
+ * 懒加载页共用的小工具合成一块（B4b-1 第二轮，主持人选“乙”；架构 8.1“构建与分包”）：
+ * 这几份各自很小（合起来约 3 KB），本来跟着某一页走；附件的懒加载块也用上以后，Rolldown 按“被哪些入口用到”把每份拆成单独一块，
+ * App 入口块里的预加载表（每个懒加载页列出整个静态闭包）就多出一串文件名，首屏多了约 58 B，打开那几页时也多几个请求。
+ * 只收名单里的模块，而且它们自己的依赖都已经在首屏块里或同一组里（不会把别的块拖进来）；不是通吃规则，别的懒加载块照原样分。
+ * 往名单里加模块前先确认它只依赖首屏块或同组模块；tests/build/lazy-common-chunk.test.ts 守着名单和首屏文件数
+ *
+ * lazy-data（11-14 首屏腾空间）：数据读写那一层（日期和时区、live-row、useCollection、读写设置、write、edit-save），每份几百字节，
+ * 却被二三十个懒加载页各自静态引到，Rolldown 拆成十几个小块，入口块的预加载表每个都列文件名、每个懒加载页再各列一遍下标，
+ * 合成一块后首屏（稳定口径，preview）1010 → 818 B，省 192 B。代价：只用到其中一部分的页打开时多下载这一块里没用到的部分
+ *（最多约 1.9 KB gzip：创建失败操作条、同意页），用得多的页（随手记、提醒设置、纪念日）反而少十个文件、少一两 KB；没用到的页不加载这一块。
+ * 单独成组、不并进 lazy-common：同步接线这类只用 lazy-common 的块不跟着变大（并进去时它要多下 4 KB）。
+ * 11-22 起写入那一层（write、edit-save、setting-patch）拆到 lazy-write，setting-write、useSettingWriter 不进组：今天页在首屏下载 lazy-data，不该连写入一起下。
+ * CSS module 不收（组里带 CSS 会改样式表的拆分和先后）
+ */
+export const LAZY_GROUPS = {
+  'lazy-common': ['shared/logic/link.ts', 'src/kit/hooks/useOnline.ts', 'src/platform/save-file.ts', 'src/core/ms-pref.ts', 'src/platform/device-kind.ts'],
+  'lazy-data': [
+    'shared/core/date.ts',
+    'shared/core/tz.ts',
+    'shared/logic/live-row.ts',
+    // 读列值的 str、strOrNull（11-21 低风险清理把二十来份收成一份）：不依赖任何模块；单独成块时每个懒加载入口的预加载表都多列一个文件名，首屏 +11 B
+    'shared/core/field.ts',
+    'src/core/current-tz.ts',
+    'src/kit/hooks/useCollection.ts',
+    'src/core/action-result.ts',
+    'src/core/setting-read.ts',
+    // 待办行的写入（今天页、待办页、日历日清单同一份，独立评审 11-18 二-1）：只依赖本组和首屏块，三份写入代码点了才下载；单独成块首屏多一个文件
+    'src/kit/hooks/useTodoWrites.ts',
+  ],
+  // lazy-write（11-22 首屏 150.3 KB 超线）：写入那一层原来也在 lazy-data，今天页首屏只读不写，却跟着 lazy-data 白下载 write、edit-save、设置写入（约 1.3 KB）。
+  // 拆成单独一块，点了才下载（待办行的写入走 core/todo-writes.ts 的 import()）；setting-write、useSettingWriter 静态引 lazy-data 的 setting-read、useCollection，
+  // 不能进这一组（组间不许互引，lazy-common-chunk.test.ts 守），留给 Rolldown 按用到的页分
+  'lazy-write': ['src/core/write.ts', 'src/core/edit-save.ts', 'src/core/setting-patch.ts'],
+  // today-small（11-20 首屏又压线 150.0 KB）：今天页首屏要画的几个零点几 KB 的小模块（首屏闭包里的、静态引到组外的不能放，lazy-common-chunk.test.ts 守），Rolldown 按“被哪些懒加载页用到”各拆成一块，
+  // 每块都多一份文件头和预加载表下标；合成一块。都是今天页本来就下载的，只是少几个文件；别的页用到其中一份时多下这一块里其余几百字节
+  'today-small': [
+    'src/platform/fx-api.ts',
+    'src/kit/hooks/useMinuteNow.ts',
+    'src/kit/hooks/anniv-on.ts',
+    'src/kit/hooks/useSpanT.ts',
+    'src/platform/perm-mic.ts',
+    'src/kit/hooks/useReadonly.ts',
+    // useReadonly 的出错条时长 TOAST_MS（11-20 出错条统一 5 秒）：只有一个常量，跟它同一块
+    'shared/logic/toast.ts',
+  ],
+} as const satisfies Record<string, readonly string[]>;
+const pathRe = (mods: readonly string[]): RegExp => new RegExp(`[\\\\/](${mods.map((m) => m.replace(/[.]/g, '\\.').replace(/\//g, '[\\\\/]')).join('|')})$`);
+const LAZY_GROUP_RES = Object.entries(LAZY_GROUPS).map(([name, mods]) => ({ name, re: pathRe(mods) }));
+/** 模块属于哪个懒加载共用组（名单里的才有），不属于回 undefined */
+export const lazyGroupOf = (id: string): string | undefined => LAZY_GROUP_RES.find((g) => g.re.test(id))?.name;
+
+export const PURE_REEXPORT_RULES =[{ test: /[\\/]src[\\/]motion[\\/]components\.ts$/, sideEffects: false }];
+// LEMO_BUILD_VERSION（deploy-preview 给的 X.Y.Z-preview.N）优先，否则 VERSION 文件；和 app/version.json 同一个来源
+export const APP_VERSION: string = buildVersion(root);
+/**
+ * 构建用的提交号（前 7 位；11-06 设置 › 关于的诊断信息要看主屏幕版到底跑的是哪一版）：CI 给的 GITHUB_SHA、Cloudflare Pages 给的 CF_PAGES_COMMIT_SHA 优先，
+ * 本机取 git rev-parse；都拿不到写 unknown。只是显示用，不参与任何判断
+ */
+function buildCommit(): string {
+  const e = process.env['GITHUB_SHA'] ?? process.env['CF_PAGES_COMMIT_SHA'];
+  if (e) return e.slice(0, 7);
+  try {
+    return execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * 动态 import 的预加载表去重（B2-UI-b 任务单 V2：首屏增量 ≤ 0）。Vite 给每个动态 import 写的预加载表（__vite__mapDeps）是目标块的整个静态闭包，
+ * 发起 import 的那一块（宿主）自己静态引过的块也照列，比如 main 里几十个懒加载每个都列一遍 jsx-runtime、native-bridge。
+ * （以后开了 chunk import map，bundle 的键和预加载表里的文件名会换成另一套：bundle[hostId] 找不到时去重不做、表原样全列，只是 main 块变回长的，
+ * check_size 的首屏总量会看到；宿主找得到、它的 imports 却不在 bundle 里时 staticClosure 抛错、构建直接停，不悄悄少算。）宿主在跑，这些块早就加载完了；
+ * 运行时的预加载助手对页面里已有的 <link> 和加载过的地址本来也跳过，列了也白列，只让 main 块的表变长。
+ * 这里只去掉“宿主静态闭包里的 JS”：CSS 不经过 resolveDependencies（Vite 自己把 CSS 拆出来照旧全列），html 宿主（index.html 的 modulepreload 链接）不动。
+ * 闭包用 build/vite_manifest.mjs 的 staticClosure（11-14 遗留③：原来这里另写一份按产物图走的，和构建后检查那份合成一份；产物图的块和 manifest 一样是“键 → { imports }”，资源没有 imports）。
+ * tests/build/preload-dedupe.test.ts 守着规则；build/check_preload.mjs（check_size 每次构建后调）拿真实产物逐个懒加载核对
+ */
+export function dropHostLoaded(bundle: Rolldown.OutputBundle | undefined, deps: string[], hostId: string, hostType: 'html' | 'js'): string[] {
+  if (hostType !== 'js' || !bundle?.[hostId]) return deps;
+  const loaded = new Set(staticClosure(bundle, [hostId]));
+  return deps.filter((d) => !loaded.has(d));
+}
+
+/**
+ * App 入口块（main，src/index.html 的入口）的预加载表只给首屏动态入口列 JS（11-16 首屏预算 e2e 超线 151.1 KB，主持人派单）：
+ * main 里登记着几十个懒加载页和部件，每个列出整个静态闭包，表里两百多个文件名（gzip 约 4.6 KB）全在首屏下载，大部分是首屏用不到的页。
+ * 现在只有首屏名单 FIRST_PAINT_DYNAMIC（build/check_first_paint_chunks.mjs，tests/build/first-paint-graph.test.ts 从源码推着核对）里的目标
+ * 照旧列（再按 dropHostLoaded 去重），别的目标不列 JS、只留 Vite 自己追加的 CSS（样式照旧先到再挂，不闪）。
+ * 代价（加载瀑布）：首屏以外的页、部件第一次打开时，浏览器先下目标块，解析后再按它的静态 import 一层层下（11-16 产物里依赖链最长 7 层，最多多 6 次往返；启动后才挂的提醒引擎、今天页子任务进度这类部件也一样）；
+ * 装好 Service Worker 以后这些块都在预缓存里，多出来的只是本机缓存读取。懒加载块自己发起的 import（例如外壳 NotesRoot → NotesPage）不受影响。
+ * 登录页入口（auth）只有一个首屏就要的 AuthPage，不动。tests/build/preload-dedupe.test.ts 守规则，build/check_preload.mjs 拿真实产物核对
+ */
+const FIRST_PAINT_RE = pathRe(FIRST_PAINT_DYNAMIC.map((k) => `src/${k}`));
+const APP_ENTRY_RE = /[\\/]src[\\/]index\.html$/;
+
+export function preloadDeps(bundle: Rolldown.OutputBundle | undefined, file: string, deps: string[], hostId: string, hostType: 'html' | 'js'): string[] {
+  const host = hostType === 'js' ? bundle?.[hostId] : undefined;
+  if (host?.type === 'chunk' && APP_ENTRY_RE.test(host.facadeModuleId ?? '')) {
+    const target = bundle?.[file];
+    if (!(target?.type === 'chunk' && FIRST_PAINT_RE.test(target.facadeModuleId ?? ''))) return [];
+  }
+  return dropHostLoaded(bundle, deps, hostId, hostType);
+}
+
+/**
+ * 产物图在 generateBundle 最前面记下，Vite 改写预加载表也在 generateBundle 里、排在它后面。
+ * 这个先后依赖 Vite 自己的 vite:build-import-analysis 插件的 generateBundle 不是 order: 'pre'（8.3.5 源码 dist/node/chunks/node.js:27164 是普通顺序）；
+ * 升级 Vite 时要重新核对：要是它也改成 pre，就可能排到我们前面，get() 拿到 undefined（buildStart 清过），去重整个不生效，方向安全但首屏会涨。
+ * buildStart 把 graph 清成 undefined，同一个配置连着构建也不会拿到上一次的产物图，“每次构建各用各的”不靠钩子顺序成立
+ */
+function preloadGraph(): { plugin: Plugin; get: () => Rolldown.OutputBundle | undefined } {
+  let graph: Rolldown.OutputBundle | undefined;
+  return {
+    plugin: {
+      name: 'lemo:preload-graph',
+      apply: 'build',
+      buildStart() {
+        graph = undefined;
+      },
+      generateBundle: {
+        order: 'pre',
+        handler(_opts, bundle) {
+          graph = bundle;
+        },
+      },
+    },
+    get: () => graph,
+  };
+}
+
+export default defineConfig(({ mode }) => {
+  if (mode === 'production') {
+    // 正式版必须带齐公开配置（只认 VITE_PUBLIC_ 前缀，A14）
+    for (const k of ['VITE_PUBLIC_SUPABASE_URL', 'VITE_PUBLIC_ANON_KEY']) {
+      if (!process.env[k]) throw new Error(`production build needs ${k}`);
+    }
+    // 登录页的 Turnstile 站点密钥（15.2 中 1 ①）：正式版必须给，而且不能是 Cloudflare 的测试密钥（1x/2x/3x + 20 个 0 + 两位字母）
+    // 本机、e2e、预览没给时由 src/platform/turnstile.ts 退回测试密钥做桩
+    const sitekey = (process.env.VITE_PUBLIC_TURNSTILE_SITE_KEY ?? '').trim(); // 先去掉首尾空白再判断（安全审查 6）
+    if (!sitekey) throw new Error('production build needs VITE_PUBLIC_TURNSTILE_SITE_KEY');
+    if (/^[1-3]x0{20}[A-Z]{2}$/.test(sitekey)) throw new Error('production build must not use a Turnstile test sitekey');
+  }
+  const graph = preloadGraph();
+  return {
+    root: resolve(root, 'src'),
+    base: '/app/',
+    publicDir: resolve(root, 'src/public'),
+    envPrefix: 'VITE_PUBLIC_',
+    plugins: [react(), graph.plugin],
+    resolve: { alias: [ZOD_JITLESS_ALIAS, ZIP_LITE_ALIAS] },
+    define: {
+      __APP_VERSION__: JSON.stringify(APP_VERSION),
+      __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+      __BUILD_COMMIT__: JSON.stringify(buildCommit()),
+    },
+    build: {
+      outDir: resolve(webOutDir(root), 'app'),
+      emptyOutDir: true,
+      manifest: true,
+      sourcemap: false,
+      target: 'es2023',
+      modulePreload: {
+        polyfill: false,
+        resolveDependencies: (file, deps, { hostId, hostType }) => preloadDeps(graph.get(), file, deps, hostId, hostType),
+      },
+      // 小文件也不内联成 data: URI（img-src 虽然放了 data:，字体等没放）
+      assetsInlineLimit: 0,
+      rollupOptions: {
+        treeshake: { moduleSideEffects: PURE_REEXPORT_RULES },
+        output: { codeSplitting: { groups: LAZY_GROUP_RES.map(({ name, re }) => ({ name, test: re, includeDependenciesRecursively: false })) } },
+        input: {
+          main: resolve(root, 'src/index.html'),
+          auth: resolve(root, 'src/auth/index.html'),
+        },
+      },
+    },
+    server: { port: 5173, strictPort: true },
+  };
+});

@@ -1,0 +1,7 @@
+{
+  "说明": "TC-B1-47 违规样例：events 仓加了一个索引，DB_VERSION 和锁文件都没改（lock = repo 表示用仓库里的 src/core/cache-schema.lock）",
+  "lock": "repo",
+  "db_version": "repo",
+  "patch": { "events": { "indexes": [{ "name": "by_date", "keyPath": "view.date" }] } },
+  "expect": "cache_schema_changed_without_version_bump"
+}

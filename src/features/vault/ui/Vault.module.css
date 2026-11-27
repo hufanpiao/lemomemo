@@ -1,0 +1,643 @@
+/* 隐私记页面：只用令牌
+   • 不建液态玻璃副本：页面挂着时 <html data-solid="1">（底栏、“＋”等按“减少透明效果”同一套画实色）
+   • 动效只有一条：解锁卡淡出 --dur-ui；上锁、多任务遮罩直接盖，不做动效 */
+
+/* 隐私记的整页（列表还没到、断网、最近删除的 .page，锁着的 .lockPage）：满屏高、顶上让开安全区、底下让开底栏，一处写 */
+.page,
+.lockPage {
+  min-height: 100dvh;
+  padding: max(var(--safe-top), 16px) 16px calc(var(--tabbar-pad) + 24px);
+  color: var(--text);
+}
+
+.page {
+  margin: 0 auto;
+  background: var(--bg);
+}
+
+.top {
+  display: grid;
+
+  /* 中间一栏能缩：筛着某一类时写分类名（最多 12 个字），放不下就省略，不把两边挤出屏幕 */
+  grid-template-columns: 1fr minmax(0, max-content) 1fr;
+
+  /* 两边（“‹ 隐私记”、“立即锁上”）不折行：挤的时候缩中间、不把左边挤成竖排 */
+  white-space: nowrap;
+  column-gap: 8px;
+  align-items: center;
+  min-height: var(--hit);
+  margin-bottom: 8px;
+}
+
+.h1 {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-17);
+  font-weight: 700;
+}
+
+.h1Text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topEnd {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-self: end;
+}
+
+.lockic {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--text);
+}
+
+/* 线框锁（Pin.tsx 的 LineLock：记录页返回旁的关锁 14、列表提示行的开锁 12，大小由组件给）：描边 2、圆头，跟文字色 */
+.lineIc {
+  flex: none;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.lockicBig {
+  display: block;
+  width: 44px;
+  height: 52px;
+  margin: 0 auto;
+  color: var(--text);
+}
+
+/* 已解锁的提示：不画底色，顶栏下一行第三层灰色小字，前面一个 12px 开锁图标；分钟数等宽（VaultPage.tsx 经 kit NumIn） */
+.hint {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0 2px 6px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  line-height: 1.5;
+}
+
+/* 解锁后的列表、编辑器是随手记那一份（notes 的 NotesSurface）；“最近删除”的外框用 kit 的 NoteRow.module.css 的 .lst，行用下面的 .row */
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 60px;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.rowMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 60px;
+  justify-content: center;
+  color: var(--text);
+}
+
+.rowTitle {
+  overflow: hidden;
+  font-size: var(--fs-15);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowActs {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.empty {
+  margin: 32px 0;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  text-align: center;
+}
+
+
+/* ===== 设密码、输密码（.pdots、.kpad） =====
+   标题字距略收、说明行高放松；步骤小字等宽加字距；圆点描边 1.5；Face ID 行留白加大；重设密码的验证码框等宽数字 */
+.pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 20px;
+  text-align: center;
+}
+
+/* 输密码整页（不出底栏）：盖满屏幕、页面底色，白色圆形数字键看得出是按键；排版和设密码页同一套 .pin */
+.pinPage {
+  position: fixed;
+  z-index: var(--z-dialog);
+  inset: 0;
+  overflow-y: auto;
+  padding: max(var(--safe-top), 16px) 16px calc(var(--inset-bottom) + 24px);
+  background: var(--scr-bg);
+  color: var(--text);
+}
+
+.pinPage > .pin,
+.pinPage > .top {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+/* 整页顶栏右边的“取消”（纯文字 14px） */
+.topCancel {
+  justify-self: end;
+  min-height: var(--hit);
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+}
+
+.pinTitle {
+  margin: 16px 0 0;
+  font-size: var(--fs-22);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.pinSub {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.55;
+}
+
+/* 步骤小字：等宽加字距。放在页面底色上（玻璃皮肤是带柠檬黄光斑的渐变），不用第三层灰，保持次要色 */
+.pinStep {
+  margin: 10px 0 0;
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: var(--fs-11-5);
+  letter-spacing: 0.08em;
+}
+
+.pinErr {
+  min-height: 20px;
+  margin: 0 0 14px;
+  color: var(--text);
+  font-size: var(--fs-14);
+  font-weight: 700;
+}
+
+.dots {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin: 26px 0 10px;
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--text);
+}
+
+.dotOn {
+  background: var(--text);
+}
+
+.pad {
+  display: grid;
+
+  /* 快速连按不被 iOS 当成双击（Pin.tsx 头注释） */
+  touch-action: manipulation;
+  grid-template-columns: repeat(3, 76px);
+  gap: 16px 28px;
+  justify-content: center;
+}
+
+.key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-family: var(--f-num);
+  font-size: var(--fs-26);
+  font-weight: 400;
+}
+
+.keyText {
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--f-zh);
+  font-size: var(--fs-15);
+}
+
+.key:disabled {
+  color: var(--text-2);
+  opacity: 0.5;
+}
+
+.pinFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  max-width: 340px;
+  margin-top: 22px;
+}
+
+/* 设密码页键盘下面那块（NewPinSteps 的 footer）：离键盘 42 */
+.pinFootLow {
+  margin-top: 42px;
+}
+
+.toggle {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 52px;
+  padding: 4px 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  font-size: var(--fs-15);
+  text-align: left;
+}
+
+.muted {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.link {
+  min-height: var(--hit);
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-13);
+  text-decoration: underline;
+}
+
+/* ===== 解锁卡（.scrim.lite + .card-ov） ===== */
+.scrim {
+  position: fixed;
+  z-index: var(--z-dialog);
+  inset: 0;
+  display: flex;
+
+  /* 上锁条贴在底栏上方（和撤销条、收起键盘的打字条同一个位置 --dock-bottom）；输密码整页是 fixed 铺满，不受影响 */
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px 16px max(var(--dock-bottom), 16px);
+  background: var(--scrim);
+  backdrop-filter: blur(14px);
+  opacity: 1;
+  transition: opacity var(--dur-ui) var(--ease-standard);
+}
+
+/* 只有解锁成功的那一下淡出；出现时不做动效 */
+.scrimOut {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 只给读屏的标题（解锁遮罩的对话框名字） */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 减少透明效果（data-rt，系统设置）或隐私记页强制实色（data-solid）：不模糊，退成玻璃的后备着色（同 kit Mist.module.css） */
+:global(:root:is([data-rt='1'], [data-solid='1'])) .scrim {
+  background: var(--g-tint-fb);
+  backdrop-filter: none;
+}
+
+/* 上锁条（规格见 docs/02-设计/皮肤-v4/打字条与隐私记-方案对比.html 的 .sheet-v2）：
+   整宽一条、圆角 --r-lg、0.5px 细描边；两行（标题行 44 + 按钮行 44），约 110 高 */
+.card {
+  width: 100%;
+  padding: 6px 12px 12px 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-2), inset 0 0 0 0.5px var(--inp-line);
+}
+
+.cardHead {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: var(--hit);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--fs-15);
+  font-weight: 600;
+}
+
+/* 条数：第三层灰小字，数字等宽（kit NumIn） */
+.cardSub {
+  color: var(--text-3);
+  font-size: var(--fs-12-5);
+}
+
+/* Face ID 没认出来：标题行下面一行次要色小字 */
+.cardMsg {
+  margin: 0 0 6px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 两颗按钮并排（Face ID 宽一点）；只有“输入密码”一颗时占满整行 */
+.cardBtns {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.cardBtns > :only-child {
+  grid-column: 1 / -1;
+}
+
+/* “取消”：标题行右边的文字按钮（不描边），次要色、点击区 44 */
+.cardCancel {
+  min-height: var(--hit);
+  margin-left: auto;
+  padding: 0 4px 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.cardCancel:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.notice {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+}
+
+/* ===== 多任务遮罩：只有 Lemo 图标的实色遮罩；平时 visibility: hidden（图标先载好），<html data-vault-shield="1"> 时立刻盖上，不做动效 ===== */
+.shield {
+  position: fixed;
+  z-index: var(--z-screen);
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  visibility: hidden;
+}
+
+:global(:root[data-vault-shield='1']) .shield {
+  visibility: visible;
+}
+
+.shieldLogo {
+  width: 96px;
+  height: 96px;
+}
+
+/* ===== 随手记列表顶部的入口行 =====
+   分组小字“隐私”：第三层灰、字距拉开（照 kenotex 的“个人”“进行中”） */
+.glabel {
+  margin: 16px 2px 2px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  letter-spacing: 0.5em;
+}
+
+/* 平铺一行：上下两根 0.5px 细线，不画卡片底和阴影；46 高（点击区 ≥ 44） */
+.lockrow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 2px;
+  border: 0;
+  border-top: 0.5px solid var(--inp-line);
+  border-bottom: 0.5px solid var(--inp-line);
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-15);
+  text-align: left;
+}
+
+/* 查找里那一行：浅底小卡、不加阴影，和结果行分开（不跟入口行的平铺样子走） */
+.findrow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  text-align: left;
+}
+
+.lockrowSub {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.lockrowGo {
+  margin-left: auto;
+  font-size: var(--fs-13);
+  font-weight: 400;
+}
+
+/* 入口行右边“已上锁 · Face ID 解锁 ›”：第三层灰；查找行里的“打开隐私记 ›”照旧正文色 */
+.lockrow > .lockrowGo {
+  color: var(--text-3);
+}
+
+/* ===== 设置 › 隐私记 ===== */
+.devices {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.device {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--hit);
+  padding: 0 16px;
+  font-size: var(--fs-14);
+}
+
+.codeInput {
+  width: 100%;
+  max-width: 240px;
+  height: var(--hit);
+  padding: 0 12px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-inp);
+  background: var(--inp-bg);
+  color: var(--text);
+  font-family: var(--f-num);
+  font-size: var(--fs-22);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.4em;
+  text-align: center;
+}
+
+.flow {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+  text-align: center;
+}
+
+/* ===== 锁着（隐私记页）：Unlock.tsx 的 LockedPage，照常排在页面里（不是遮罩），整页居中一块；顶栏同 .top ===== */
+.lockPage {
+  display: flex;
+  flex-direction: column;
+
+  /* 透出 App 的皮肤底色；淡出时也不加底 */
+  background: transparent;
+}
+
+/* 解锁成功的那一下：盖在刚画出来的内容上淡出、不接点击；关掉动态效果时直接卸（Unlock.tsx 有 400ms 兜底） */
+.lockOut {
+  position: fixed;
+  z-index: var(--z-dialog);
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-ui) var(--ease-standard);
+}
+
+.center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.centerBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+/* 大锁：浅柠檬黄圆底（同“今天”日期圈的底色令牌），锁是正文色 */
+.bigLock {
+  display: grid;
+  width: 96px;
+  height: 96px;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: var(--today-bg);
+  place-items: center;
+}
+
+.bigLockIc {
+  width: 44px;
+  height: 44px;
+  fill: none;
+  stroke: var(--text);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.bigLockIc rect {
+  fill: var(--accent);
+}
+
+/* 锁着（居中锁屏）：页面不铺实底，露出和解锁后同一层背景 */
+.centerTitle {
+  margin: 0;
+  font-size: var(--fs-19);
+  font-weight: 700;
+}
+
+.centerSub {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 两颗按钮竖排、等宽：上“输入密码”（主按钮）、下“用 Face ID 解锁” */
+.centerBtns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(280px, 100%);
+  margin-top: 20px;
+}
+
+/* 隐私记各块的最大宽度一处写（列表页、密码整页的顶栏和内容、贴底解锁条、锁着页居中那块）；放在最后，不和上面各块的选择器比先后 */
+.page,
+.pinPage > .pin,
+.pinPage > .top,
+.card,
+.center {
+  max-width: 560px;
+}

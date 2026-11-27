@@ -1,0 +1,10 @@
+[api]
+enabled = true
+
+# ⑥ 违规 1：名单里的 claude-intake 没关 verify_jwt（名单和配置对不上）
+[functions.claude-intake]
+verify_jwt = true
+
+# ⑥ 违规 2：名单外、又不是 cron 调的函数关了校验（哪怕它也按哈希查了 api_tokens）
+[functions.token-extra]
+verify_jwt = false

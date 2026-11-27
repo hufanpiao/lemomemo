@@ -1,0 +1,69 @@
+// SW 记下的通知按键：页面启动时丢掉别的账号的和超过 24 小时的（prunePendingActions）；
+// 形状校验、留不留的判断也在这里。转进 outbox 在 pending-drain.ts（不进首屏：只有提醒功能引）
+// 纯 TS：不准 import React 和任何功能
+import { isUuid } from '../../shared/core/uuid.ts';
+import { type DoneAction, isSnoozeMin, PENDING_STORE, type SnoozeAction } from '../../shared/local-db.ts';
+import type { Cache } from './cache.ts';
+import type { PendingAction } from './outbox-types.ts';
+
+/** 超过 24 小时的通知按键丢掉 */
+export const PENDING_ACTION_TTL_MS = 24 * 60 * 60 * 1000;
+/** created_at 比“现在”晚这么多以上的也丢掉（时钟被拨回过：不然 now - created_at 为负，永远不过期） */
+export const PENDING_ACTION_FUTURE_MS = 5 * 60 * 1000;
+export const PENDING_TABLES: ReadonlySet<string> = new Set(['events', 'todos', 'anniversaries']);
+
+/**
+ * 形状合格、能交给 toEnqueue 的一项。按键类型（推迟、完成）和 SW 共用 shared/local-db.ts；
+ * “完成”转的时候 due_at 必须对上这一行**当前这一次**到点的时刻，对不上（已经推迟过、改了时间、已完成）就丢弃
+ * （features/reminders/data/remind-pending.ts 的 pendingVerdict；转在 pending-drain.ts）
+ */
+export type ValidPendingAction = PendingAction & { row_table: 'events' | 'todos' | 'anniversaries'; action: SnoozeAction | DoneAction };
+
+/**
+ * 形状对不对（按 SW 写入的规则再校验一遍）：id、user_id 是非空字符串，row_table 是三张表之一，
+ * row_id 是 UUID，action 是 { type: 'snooze', minutes: 1～1440 的整数, due_at: 正的安全整数 }，
+ * 或 { type: 'done', due_at: 正的安全整数 }（只认 todos 表），created_at 是有限的数
+ */
+export function isValidPendingAction(a: unknown): a is ValidPendingAction {
+  if (typeof a !== 'object' || a === null) return false;
+  const o = a as Record<string, unknown>;
+  const act = o['action'];
+  if (typeof act !== 'object' || act === null) return false;
+  const { type, minutes, due_at: dueAt } = act as Record<string, unknown>;
+  return (
+    typeof o['id'] === 'string' && o['id'] !== '' &&
+    typeof o['user_id'] === 'string' && o['user_id'] !== '' &&
+    typeof o['row_table'] === 'string' && PENDING_TABLES.has(o['row_table']) &&
+    isUuid(o['row_id']) &&
+    typeof o['created_at'] === 'number' && Number.isFinite(o['created_at']) &&
+    ((type === 'snooze' && isSnoozeMin(minutes)) ||
+      (type === 'done' && o['row_table'] === 'todos')) &&
+    typeof dueAt === 'number' && Number.isSafeInteger(dueAt) && dueAt > 0
+  );
+}
+
+/** 留不留这一项：形状合格、本账号的、created_at 在 [now − 24 小时, now + 5 分钟] 里的才留 */
+export function keepPendingAction(a: unknown, userId: string, now: number): a is ValidPendingAction {
+  if (!isValidPendingAction(a) || a.user_id !== userId) return false;
+  return a.created_at <= now + PENDING_ACTION_FUTURE_MS && now - a.created_at <= PENDING_ACTION_TTL_MS;
+}
+
+/**
+ * 页面启动时先清一遍：user_id 和当前账号不一致的、超过 24 小时的、时间在将来的、形状不对的删掉，返回删了几条。
+ * 账号不同的库在这之前已经被 ensureAccount 整库清空，这里兜的是 SW 写进来的别人的项（SW 核对 owner 之外的万一）和放久了的项。
+ * 剩下的由提醒功能经 pending-drain.ts 的 drainPendingActions 转进 outbox（features/reminders/hooks/usePendingDrain.ts）
+ */
+export async function prunePendingActions(cache: Cache, args: { userId: string; now: number }): Promise<number> {
+  const all = await cache.tx([PENDING_STORE], 'readonly', (t) => t.getAll<unknown>(PENDING_STORE));
+  const drop = all.flatMap((a) => {
+    if (keepPendingAction(a, args.userId, args.now)) return [];
+    const id = typeof a === 'object' && a !== null ? (a as { id?: unknown }).id : undefined;
+    return typeof id === 'string' ? [id] : [];
+  });
+  if (drop.length) {
+    await cache.tx([PENDING_STORE], 'readwrite', async (t) => {
+      for (const id of drop) await t.delete(PENDING_STORE, id);
+    });
+  }
+  return drop.length;
+}

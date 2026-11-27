@@ -1,0 +1,49 @@
+# 独立 Worker lemo-ops（架构 6.1）：监控、告警、保活。由负责人本机 publish.ps1 -Ops 执行 wrangler deploy（架构 8.3a，R-206；上线与回滚手册第三节“部署 lemo-ops”）。
+# publish.ps1 -Ops 第 1 步核对下面 KV 的 id 已换成真的 32 位命名空间 ID，还是占位值就停。
+# 这里不写任何密钥。下面标【负责人提供】的，部署前由负责人填或用 wrangler secret put 设（见 .dev.vars.example 的说明）。
+name = "lemo-ops"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = false   # 不对外提供网址，只跑 Cron Trigger
+
+[triggers]
+# 改这两个表达式时同步改 src/index.ts 的 CRON_HEARTBEAT、CRON_DAILY（tests/build/lemo-ops-config.test.ts 核对）
+crons = ["*/15 * * * *", "7 0 * * *"]
+
+# 告警去重状态（同一件事 6 小时内只发一次、恢复后发“已恢复”）。
+# 【负责人提供】在 Cloudflare 控制台 Workers KV 建一个命名空间（建议名 lemo-ops-state），把它的 ID 填到下面；占位值部署会失败，不会误部署
+[[kv_namespaces]]
+binding = "OPS_STATE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Workers Logs（R-261）：发信失败、KV 写不进等错误码能在 Cloudflare 面板看到。
+# 开之前核对过：src/ 里只有 index.ts 的 consoleLog 一处 console 输出，内容只有固定错误码或缺的变量名，
+# 不打印收件人、邮箱、标题、正文、请求头、响应体（A23）；tests/build/lemo-ops-config.test.ts 守住这两条
+[observability]
+enabled = true
+
+# 追踪（traces）明确关着：只要错误码日志，不要请求级的追踪记录（写法依据 wrangler 4.150.0 自带的 config-schema.json：observability.traces.enabled）
+[observability.traces]
+enabled = false
+
+# R-270：把这次部署的版本信息（publish.ps1 -Ops 的 wrangler deploy --tag <tag>）交给 Worker，
+# 每 15 分钟和线上 /app/version.json 比对（src/version.ts）。只是只读的元数据，不是密钥、不加任何权限
+# （写法依据 wrangler 4.150.0 自带的 config-schema.json：version_metadata.binding）
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
+[vars]
+# 没有心跳行也要告警的 cron 函数（逗号分隔）。B7a 上正式时 backup-daily、storage-sweep 一起上（B7a 评审第 3 条）：
+# 从没写过心跳（定时任务没建、函数没部署）也要告警，不能只靠“有了心跳以后 26 小时没更新”。新函数上线时照样加进来。
+# backup-pull（B7a 复审第 8 条）：负责人本机 pull.ps1 拉完写；还没 -Setup、没注册 09:00 计划任务时也会报“从没写过心跳”，这是对的（本机没有备份）
+REQUIRED_HEARTBEATS = "backup-daily,storage-sweep,backup-pull"
+# "on"：每天 UTC 00:07 另查 usage-report {part: usage}（数据库、文件存储、R2、单人存储、导出上限、当天没备份的账号数）
+USAGE_CHECK = "on"
+
+# 以下用 wrangler secret put 设，不写在这里：
+#   SUPABASE_URL        正式项目地址 https://<ref>.supabase.co（直连，不经 /sb）
+#   SUPABASE_ANON_KEY   正式项目的 anon（公开）key：网关转发要它，保活查询也用它
+#   OPS_SECRET          和 Supabase secrets 里的 OPS_SECRET 同一个值（usage-report 用它认 lemo-ops）
+#   RESEND_API_KEY_OPS  Resend 第三把只发信的密钥
+#   ALERT_TO            收告警的邮箱（产品负责人）
+#   ALERT_FROM          发件人，例如 柠檬记监控 <ops@lemomemo.com>（必须是 Resend 里验证过的域名）

@@ -1,0 +1,8 @@
+// 功能 onboarding 自己的 t()：词典在 ../i18n/，语言跟着 ui-store 的 locale（和 auth 的 useAuthT 同一个写法）
+import { ko } from '../i18n/ko.ts';
+import { zh } from '../i18n/zh.ts';
+import { makeUseT } from '../../../kit/hooks/useT.ts';
+
+export type OnboardingMsgKey = keyof typeof zh & string;
+
+export const useOnboardingT = makeUseT({ zh, ko });

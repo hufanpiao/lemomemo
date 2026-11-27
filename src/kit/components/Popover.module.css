@@ -1,0 +1,20 @@
+/* 层级 80：Radix 经 Portal 挂到 body，要压过顶部底色条（1）、版本横幅（50）和弹层（70），弹层里打开的浮层也在上面 */
+.content {
+  z-index: var(--z-popover);
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--sheet-bg);
+  box-shadow: var(--shadow-2), inset 0 0 0 1px var(--line);
+  color: var(--text);
+
+  /* 磨砂玻璃皮肤的 --sheet-bg 是 80% 半透明白，不模糊时菜单底下卡片的字会透上来、和菜单项叠在一起；同弹层（Dialog.module.css .content）补背景模糊 */
+
+  /* avoid-ai-design-ignore: 负责人指定磨砂玻璃皮肤，浮层的玻璃底色要带模糊才成立 */
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+
+/* 减少透明效果（data-rt：开关、系统设置、隐私记页挂着时）：实色、不模糊（同 Dialog） */
+:global(:root:is([data-rt='1'], [data-solid='1'])) .content {
+  background: var(--glass-solid);
+  backdrop-filter: none;
+}

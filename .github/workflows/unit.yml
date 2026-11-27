@@ -1,0 +1,296 @@
+# unit：每次 push 和 PR 都跑的快检查（架构 8.3 “unit.yml” 一行和“依赖供应链”一行）
+# 不碰任何部署密钥：本文件不引用 secrets。
+# 第三方 action 一律按提交 SHA 锁定，行尾注释写对应的版本号（15.3 第 7 条）；升级由 Dependabot 开 PR、人工审。
+# 调用的命令和脚本的负责人见 docs/08-发布/环境清单-v4.md 第六节“CI 调用的命令”。
+name: unit
+
+on:
+  push:
+    branches: ['**']
+    tags-ignore: ['**']
+  pull_request:
+  schedule:
+    # 每周一首尔 06:17 再跑一遍（UTC 周日 21:17）：没有提交时也能发现新公布的依赖漏洞
+    - cron: '17 21 * * 0'
+  workflow_dispatch:
+
+# 默认不给任何权限，各任务按需单独开
+permissions: {}
+
+concurrency:
+  group: unit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  PYTHON_VERSION: '3.12'
+  FORCE_COLOR: '0'
+
+jobs:
+  # 作业 id 和 name 不改（必需检查可能按名字认）；单元测试 11-10 起挪到下面的 unit-tz，三个时区并行
+  check:
+    name: 类型、规范、架构、单元测试、构建、体积、文档检查
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: wrangler 两处版本一致（package.json 给 E2E、tools/deploy 给部署，含两份锁文件；架构 0.31 第 26 条）
+        # 只读 JSON，不安装；不一致就失败，两处一起升
+        run: python -I build/ci/check_wrangler_version.py
+
+      - name: 安装依赖（不跑任何安装脚本）
+        run: npm ci --ignore-scripts
+
+      - name: 白名单里的包单独 rebuild（package.json 的 lemo.allowScripts）
+        # 架构 8.3 依赖供应链第 ① 条：确实需要安装脚本的包（例如 esbuild）列进白名单，单独 npm rebuild
+        run: bash build/ci/rebuild-allowlist.sh
+
+      - name: 类型检查（tsc --noEmit，三份 tsconfig）
+        run: npm run typecheck
+
+      - name: ESLint 和 Stylelint
+        run: npm run lint
+
+      - name: check_arch（架构 2.3）
+        run: python -I build/check_arch.py
+
+      - name: 后端静态检查 check_backend（函数的钥匙范围 F1～F5、迁移写法 M1～M7（M7 是 build/check_fn_redefs.py：整段重写的函数不丢上一版的 delete 和表名）；TC-B0-35、68、73、92、97；F3 越界按架构 0.35 归 TC-B0-35，TC-B0-75 已挪到 B5）
+        # 违规样例在 tests/arch-fixtures/check_backend/，由下一步的 Vitest（tests/build/check-backend.test.ts）证明拦得住
+        run: python -I build/check_backend.py
+
+      - name: 电脑版页面暂存脚本的回归测试（stage-web.mjs、ci-guard.mjs；node --test，B6-exe 安全审查 W-1）
+        # desktop.yml 编 exe 前也跑一遍；这里让平时的提交就能发现回归，不用等打 tag
+        run: node --test desktop/src-tauri/scripts/stage-web.test.mjs
+
+      - name: 离线数据库检查（PGlite：7 个迁移、RLS、D1 和违规样例、兼容样例、requireActiveUser；不要 Docker，真库在 ci.yml）
+        run: npm run test:db:offline
+
+      - name: 官网检查（首页不出现 supabase、页面成对、CSP 和 Functions 一致）
+        run: npm run check:site
+
+      - name: 农历数据检查（lunar-data.ts 和 sources、sources 和香港天文台原始历表一致）
+        run: npm run check:lunar
+
+      - name: 节假日数据检查（src/public/holidays 下各年 JSON 的格式、日期、补班和替代公休日规则）
+        run: npm run check:holidays
+
+      # 构建脚本 build_web.mjs 自己跑数据清单快照核对（gen_manifests_snapshot --check）和体积预算（check_size：首屏 JS gzip ≤ 150 KB、
+      # 首屏文件数 ≤ 9；负责人 11-25 定只管总量，每批 1 KB 净增关卡已取消），任一项不过构建就失败；这里不再各跑一遍（第三方审查 CI-9）
+      - name: 构建（preview 模式，不带任何环境的真实地址；含官网和拼好的 _headers；构建脚本里带数据清单快照、体积预算两道检查）
+        run: npm run build -- --mode preview
+
+      - name: check_arch 再跑一次（构建以后只跑 A14，连 dist/web 一起扫；别的规则构建前已经跑过）
+        run: python -I build/check_arch.py --only A14
+
+      - name: 文件登记册
+        run: python -I build/check_registry.py
+
+      - name: 需求记录索引
+        run: python -I build/req_index.py --check
+
+      # TC-B7a-17：P0 勾选表由“级别”一列生成，条数和测试用例 v4 第 18 节对不上就失败
+      - name: P0 勾选表条数
+        run: python -I build/p0_list.py --check
+
+      # R-462：改到 30 天内已提交 3 次以上的源码文件，提交说明要带“重写评估：”（本机 .githooks/commit-msg 同一条规则）
+      - name: 改动热点要有重写评估
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+        run: |
+          git fetch --no-tags --filter=blob:none --unshallow origin || true
+          python -I build/check_rewrite.py --range "$RANGE"
+
+      # 负责人 11-18“提交时硬拦加上”：改到动效、外观文件，提交说明要带“参考对照：”“参考外改动：”（本机 .githooks/commit-msg 同一条规则）
+      - name: 动效外观改动要有参考对照
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+        run: python -I build/check_reference.py --range "$RANGE"
+
+      # 负责人 11-24“给我方案以后怎么避免”：修问题的提交说明要带“根因证据：……，排除了……”（本机 .githooks/commit-msg 同一条规则）
+      - name: 修问题要有根因证据
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+        run: python -I build/check_rootcause.py --range "$RANGE"
+
+      - name: 设计令牌
+        run: python -I build/tokens.py --check
+
+      # check_fonts 要用 fontTools 读源字体的字表（中文覆盖 GB 2312、韩文覆盖 2350 个音节）；版本固定，和本机一致（皮肤字体整块评审 11-14 第 12 条）
+      - name: 装字体工具（fontTools、brotli，固定版本）
+        run: python -m pip install --disable-pip-version-check --no-input fonttools==4.67.0 brotli==1.2.0
+
+      - name: 字体登记和产物（check_fonts，架构 5.9c）
+        run: python -I build/fonts.py --check
+
+      - name: 免查名单和 supabase/functions/ 对照（前端 B 的脚本，架构 0.27 第 1 点）
+        # B0 集成：前端 B 已合并，脚本名 build/check_version_gate.mjs，npm 脚本 check:gate
+        run: npm run check:gate
+
+      - name: /files 规则表和清单一致（前端 B 的脚本，架构 3.5 第 2 点、0.32 第 9 条）
+        run: npm run check:files-rules
+
+
+  unit-tz:
+    # 11-10：三个时区串行要 13～22 分钟、贴着 40 分钟上限，拆成矩阵并行；静态检查、构建、check_arch 等留在 check
+    # 三个作业都过才算过（fail-fast: false：一个时区挂了，另外两个照样跑完，失败看得全）
+    name: 单元测试 ${{ matrix.tz }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        tz: [UTC, Asia/Seoul, America/Los_Angeles]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # tests/build 里有用例调 python build/*.py，和 check 同一版
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # tests/build/deno-frozen-lock.test.ts 要真跑 deno install --frozen（接手清单 DENO-lock-ci）；SHA 和版本与 ci.yml 逐字相同，那个测试会核对
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          # 和本机同一版（架构 8.6：Deno 锁具体版本，本机和 CI 一致；本机 deno --version 为 2.9.8）
+          deno-version: 2.9.8
+
+      - name: 安装依赖（不跑任何安装脚本）
+        run: npm ci --ignore-scripts
+
+      - name: 白名单里的包单独 rebuild（package.json 的 lemo.allowScripts）
+        run: bash build/ci/rebuild-allowlist.sh
+
+      # 不固定 pwsh 版本，用 runner 自带的；只把版本打出来，login-token-tests-run 再碰上 pwsh 自身启动崩溃（.NET FileLoadException，
+      # 10-31、11-10 各一次；tests/build/login-token-fake.ts 的 runScript 会整次重跑一遍）时能直接看出是哪一版
+      - name: 打印 pwsh 版本
+        run: |
+          if command -v pwsh >/dev/null; then pwsh --version || echo "pwsh --version 失败（不影响后面）"; else echo "runner 上没有 pwsh"; fi
+
+      # tests/build/fonts-py.test.ts 要真切分片（没装时那几条会跳过）；版本同上面 check 作业
+      - name: 装字体工具（fontTools、brotli，固定版本）
+        run: python -m pip install --disable-pip-version-check --no-input fonttools==4.67.0 brotli==1.2.0
+
+      - name: 单元和组件测试（TZ=${{ matrix.tz }}；UTC、首尔、洛杉矶三个时区各一个作业并行，架构第 9 节 H2）
+        # 时区由矩阵给（上面 strategy.matrix.tz），每个作业只跑一遍；tests/build/deno-frozen-lock.test.ts 核对三个时区一个不少
+        # LEMO_REQUIRE_DENO=1：deno-frozen-lock.test.ts 找不到 deno 就失败，不再 skipIf 悄悄跳过
+        # POWERSHELL_*：关掉 pwsh 启动时的后台遥测和更新检查；10-31 c935906 这一步 pwsh（.NET 10）
+        # 在后台加载程序集时崩溃（FileLoadException，退出码 null），login-token-tests-run 一组 10 条因此失败
+        env:
+          TZ: ${{ matrix.tz }}
+          LEMO_REQUIRE_DENO: '1'
+          POWERSHELL_TELEMETRY_OPTOUT: '1'
+          POWERSHELL_UPDATECHECK: 'Off'
+        run: npm test
+
+  secrets-scan:
+    name: 密钥扫描（gitleaks，CI 第二道）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: 安装 gitleaks（版本和 SHA-256 见 tools/ci-tools.lock）
+        run: bash build/ci/install-tool.sh gitleaks
+
+      - name: 回放文件带假密钥必须被拦（TC-B0-90 后半，BE-6 安全审建议 3）
+        # 行为证明放在这里而不是 unit 任务：只有这个任务装了 gitleaks（unit 任务不装，那条 vitest 用例在 CI 跳过）。
+        # 假密钥运行时随机拼（字母数字混合；纯十六进制熵不够，gitleaks 不报），仓库里不出现整串；临时目录用完即删
+        run: |
+          d="$(mktemp -d)"
+          k="$(python3 -c "import secrets,string; a=string.ascii_letters+string.digits+'-_'; print('AI'+'za'+''.join(secrets.choice(a) for _ in range(35)))")"
+          printf '{"v":1,"provider":"gemini","origin":"recorded","note":"%s","entries":[]}\n' "$k" > "$d/leaked.json"
+          set +e
+          gitleaks dir --redact --no-banner --exit-code 1 "$d"
+          rc=$?
+          set -e
+          rm -rf "$d"
+          if [ "$rc" -ne 1 ]; then
+            echo "::error::gitleaks 没拦住回放文件里的假密钥（退出码 $rc，应为 1）"
+            exit 1
+          fi
+
+      - name: 扫全部历史
+        # --redact：日志里不出现疑似密钥的原文
+        run: gitleaks git --redact --no-banner --exit-code 1 --log-opts="--all" .
+
+  supply-chain:
+    name: 依赖审计（npm audit、OSV-Scanner）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: npm audit（有未豁免的高危就失败）
+        # 只读 package-lock.json，不安装；高危要在 osv-scanner.toml 里豁免且未过期才放行（和 OSV 共用一份清单；11-18 picomatch 无修复版，负责人同意）
+        run: |
+          node build/ci/npm_audit_gate.mjs
+          node build/ci/npm_audit_gate.mjs --prefix tools/deploy
+
+      - name: 安装 OSV-Scanner（版本和 SHA-256 见 tools/ci-tools.lock）
+        run: bash build/ci/install-tool.sh osv-scanner
+
+      - name: OSV-Scanner（package-lock、deno.lock、Cargo.lock）
+        # 有漏洞就失败；确认不受影响的，写进 osv-scanner.toml 并注明原因和复查日期，由安全审查员会签
+        # 显式指定 --config：不指定时 OSV 只认锁文件同目录下的 osv-scanner.toml，子目录里的 Cargo.lock 读不到根目录的豁免（11-03 unit 失败的原因）
+        run: osv-scanner scan source --recursive --config osv-scanner.toml .
+
+  workflow-lint:
+    name: 工作流检查（actionlint ＋ shellcheck）
+    # B0 QA D-05：.github/workflows 下全部工作流（现在 6 个，新加的自动算进来；第三方审查 CI-18 改正原来的“四个”）都要过 actionlint；run: 里的脚本由 actionlint 调 runner 自带的 shellcheck 一起查
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 安装 actionlint（版本和 SHA-256 见 tools/ci-tools.lock）
+        run: bash build/ci/install-tool.sh actionlint
+
+      - name: actionlint（有问题就失败）
+        run: |
+          # 没有 shellcheck 时 actionlint 会悄悄不查 run: 里的脚本，这里先确认它在（ubuntu-24.04 runner 自带）
+          if ! command -v shellcheck >/dev/null; then
+            echo "::error::runner 上没有 shellcheck，actionlint 查不了 run: 里的脚本"
+            exit 1
+          fi
+          shellcheck --version | head -n 2
+          actionlint -no-color -shellcheck="$(command -v shellcheck)"

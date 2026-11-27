@@ -1,0 +1,32 @@
+/* 识别状态：图片下面灰底一行，右边胶囊按钮（“AI 看到的”卡片在看图页 ImageViewer）
+   灰底条大圆角、留白大；“再试一次”“去打开”是 kit 胶囊（ImageAiStatus.tsx 挂 Chip.module.css 的 .chip），
+   胶囊默认 --panel-2 底和这条灰底同色，这里只把底换成 --panel */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 10px 8px 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  line-height: 1.5;
+}
+
+.tx {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 高 30、点按区 44、灰底上的 --panel 底都由 kit 胶囊（.chip.onGray）给；写成 button.btn 压过胶囊的上下外边距（两份 CSS 模块谁先加载不固定）。
+   上下 -4：胶囊伸进灰条的上下留白里，有按钮、没按钮的灰条高度相近（42 和 38） */
+button.btn {
+  margin: -4px 0;
+}
+
+.err {
+  margin: 6px 0 0 14px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}

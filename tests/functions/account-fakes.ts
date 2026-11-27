@@ -1,0 +1,352 @@
+// account、account-purge 测试共用的假数据库（B1 K3）：按迁移 20261029150000 的两个函数和 service role 的表操作写的内存版，
+// 两个函数的 core.ts 都接它，所以“申请 → 冷静期 → 彻底删除”能在一个进程里串起来（TC-B1-98、101、107、TC-B0-117）。
+// 语义以 SQL 为准（supabase/tests/rls/11_account_deletion.test.sql 测真函数），这里只照着做，不另发明规则。
+import type { AccountStore, ActiveUser, AuthResult, Deps as AccountDeps } from '../../supabase/functions/account/core.ts';
+import { DbError, handle, keys } from '../../supabase/functions/account/core.ts';
+import type { Backups, Deps as PurgeDeps, PurgeStore, R2 } from '../../supabase/functions/account-purge/core.ts';
+import { BackupsSubdirError } from '../../supabase/functions/account-purge/core.ts';
+import type { Mail } from '../../supabase/functions/_shared/account-mail.ts';
+import { tzLabel } from '../../shared/i18n/tz-label.ts';
+import { fakePurgeStore } from './account-purge-fakes.ts';
+import { logUserTag } from '../../supabase/functions/_shared/log-tag.ts';
+
+export const A = 'aaaaaaaa-0000-4000-8000-000000000001';
+export const B = 'bbbbbbbb-0000-4000-8000-000000000002';
+export const C = 'cccccccc-0000-4000-8000-000000000003';
+export const T0 = Date.parse('2026-10-29T03:00:00Z');   // 首尔 12:00
+export const DAY = 86_400_000;
+export const H = 3_600_000;
+export const CRON = 'test-cron-secret-0123456789abcdef-xyz';   // ≥ 32 字节
+export const HASH_SECRET = 'test-signup-hash-secret';
+/** 日志认人的 HMAC 密钥（_shared/log-tag.ts，安全审查第 11 条）；断言里用 logTag(uid) 算出日志里那一段 */
+export const LOG_SECRET = 'test-log-secret';
+export const logTag = (uid: string): Promise<string> => logUserTag(LOG_SECRET, uid);
+
+export interface Profile { disabled_at: string | null; disabled_reason: string | null; ui_locale: string; current_tz: string }
+export interface Pending { purge_after: string; notice_sent: boolean; purge_started_at: string | null; /** PURGE-date-cursor（迁移 20261105130000） */ backups_done_through?: string | null }
+
+export class Clock {
+  ms: number;
+  constructor(ms = T0) { this.ms = ms; }
+  readonly now = () => this.ms;
+  advance(ms: number) { this.ms += ms; }
+}
+
+/** 一个 JWT（不验签名：requireActiveUser 由测试替身代替；core 只读 payload 里的 amr） */
+export function jwtWith(amr: unknown): string {
+  const b64 = (o: unknown) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `${b64({ alg: 'HS256' })}.${b64({ sub: A, session_id: 'x', amr })}.sig`;
+}
+
+export class FakeDb {
+  users = new Map<string, string>();                  // auth.users：id → email
+  sessions = new Map<string, string>();               // auth.sessions：id → user_id
+  revoked = new Map<string, string>();                // private.revoked_sessions
+  /** R-382：注销后只剩 pair_hash 的吊销记录条数（外键 set null，session_id、user_id 都清空，假库里不再按会话找得到） */
+  revokedHashOnly = 0;
+  profiles = new Map<string, Profile>();
+  pending = new Map<string, Pending>();
+  admins = new Set<string>();
+  counters = new Map<string, number>();               // key|window → count
+  pendingSignups = new Set<string>();                 // email_hash
+  deleted = new Set<string>();                        // private.deleted_accounts
+  aiKeys = new Set<string>();                         // Vault 里的 ai_ukey_<user_id>（R-494 自己的 AI 密钥）
+  heartbeat: Record<string, number> | null = null;
+  /** src：account 自己写的是 'account'；测试直接塞的行可以不带（当作客户端上传的日志） */
+  logs: { id: number; user_id: string; act: string; device: string | null; t: number; src?: string; code?: string; fields?: string[] }[] = [];
+  private logSeq = 0;
+  devices = new Map<string, { user_id: string; label: string | null; platform?: string | null; session_id?: string | null }>();
+  tables = new Map<string, Record<string, unknown>[]>();   // 导出读的 public 表
+  /** readPage 每次调用的（表、after），测试核对按主键翻页 */
+  pageReads: { table: string; after: string | number | null; limit: number }[] = [];
+  /** 故障注入：方法名 → 抛错 */
+  fail = new Set<string>();
+  /** export_size_over 被调的次数；sizeResult 不为 null 时直接返回它（-1 超时、-2 忙、或一个估算值） */
+  sizeCalls = 0; sizeResult: number | null = null;
+  /** rebindDevice 被调的次数（TC-B1-93：限流挡下的不该调到 rpc） */
+  rebindCalls = 0;
+  /** account-purge 的 stillClaimed 被调时先跑一下（模拟“写 deleted_accounts 前这一行被删”） */
+  beforeStillClaimed: (() => void) | null = null;
+  /** account-purge 的 postponeNotice 被调时先跑一下（模拟“补发之后、顺延之前这一行被改了”） */
+  beforePostpone: (() => void) | null = null;
+
+  readonly clock: Clock;
+  constructor(clock: Clock) { this.clock = clock; }
+
+  addUser(id: string, email: string, p: Partial<Profile> = {}) {
+    this.users.set(id, email);
+    this.profiles.set(id, { disabled_at: null, disabled_reason: null, ui_locale: 'zh-CN', current_tz: 'Asia/Seoul', ...p });
+    this.sessions.set(`${id.slice(0, 8)}-s1`, id);
+    this.sessions.set(`${id.slice(0, 8)}-s2`, id);
+  }
+
+  private nowIso() { return new Date(this.clock.ms).toISOString(); }
+  /** 故障注入的检查（account-purge-fakes.ts 也用，所以不是 private） */
+  guard(name: string) { if (this.fail.has(name)) throw new Error(`fake_${name}`); }
+
+  /** 级联：auth.users 删行时，带外键的都跟着删（profiles、pending_deletions、sessions、各表），deleted_accounts 留着；
+   *  revoked_sessions 是 set null（R-382）：行留着、只剩 pair_hash，这里从按会话的表里拿掉、记进 revokedHashOnly */
+  deleteUserCascade(id: string) {
+    this.users.delete(id);
+    this.profiles.delete(id);
+    this.pending.delete(id);
+    this.admins.delete(id);
+    for (const [s, u] of [...this.sessions]) if (u === id) this.sessions.delete(s);
+    for (const [s, u] of [...this.revoked]) if (u === id) { this.revoked.delete(s); this.revokedHashOnly++; }
+    for (const [k, rows] of this.tables) this.tables.set(k, rows.filter((r) => r.user_id !== id));
+    for (const [d, v] of [...this.devices]) if (v.user_id === id) this.devices.delete(d);
+    this.logs = this.logs.filter((l) => l.user_id !== id);
+  }
+
+  takeRate(key: string, limit: number, windowS: number): boolean {
+    if (!/^[a-z][a-z0-9_-]*:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|global|ip|mail):[^:]+$/.test(key)) throw new Error('23514');
+    const w = Math.floor(this.clock.ms / 1000 / windowS);
+    const k = `${key}|${w}`;
+    const n = (this.counters.get(k) ?? 0) + 1;
+    this.counters.set(k, n);
+    return n <= limit;
+  }
+
+  /** = private.account_request_deletion */
+  requestDeletion(uid: string): string {
+    if (this.admins.has(uid)) throw new DbError('admin_cannot_delete');
+    const p = this.profiles.get(uid);
+    if (!p || (p.disabled_at !== null && p.disabled_reason !== 'deletion')) throw new DbError('account_disabled');
+    if (p.disabled_at !== null) throw new DbError('account_pending_deletion');
+    const pa = new Date(this.clock.ms + 7 * DAY).toISOString();
+    this.pending.set(uid, { purge_after: pa, notice_sent: false, purge_started_at: null });
+    p.disabled_at = this.nowIso();
+    p.disabled_reason = 'deletion';
+    for (const [s, u] of [...this.sessions]) if (u === uid) { this.revoked.set(s, u); this.sessions.delete(s); }
+    return pa;
+  }
+
+  /** = private.account_restore */
+  restore(uid: string): string {
+    const d = this.pending.get(uid);
+    if (!d) return 'not_pending';
+    if (d.purge_started_at !== null) return 'purge_started';
+    if (Date.parse(d.purge_after) <= this.clock.ms) return 'expired';
+    const p = this.profiles.get(uid);
+    if (p?.disabled_reason !== 'deletion') return 'account_disabled';
+    this.pending.delete(uid);
+    p.disabled_at = null;
+    p.disabled_reason = null;
+    return 'ok';
+  }
+
+  /** counters 里这个键的各行（窗口 → count），按窗口从早到晚 */
+  private rows(key: string): [string, number][] {
+    return [...this.counters].filter(([k]) => k.split('|')[0] === key).sort((x, y) => Number(x[0].split('|')[1]) - Number(y[0].split('|')[1]));
+  }
+  count(key: string): number { return this.rows(key).at(-1)?.[1] ?? 0; }   // 这个键最新窗口的 count（没有是 0）
+
+  /** = private.export_size_over：本人各表（tables 和 logs）每行 JSON 字节累加，超 limit 就返回；omitted 不算隐私记行（同 vaultRows.flag） */
+  exportSizeOver(uid: string, mode: string, limit: number): number {
+    this.sizeCalls += 1;
+    if (this.sizeResult !== null) return this.sizeResult;
+    let total = 0;
+    for (const r of [...[...this.tables.values()].flat(), ...this.logs] as Record<string, unknown>[]) {
+      if (r.user_id !== uid || (mode === 'omitted' && (r.is_private === true || r.is_vault === true || r.bucket === 'vault-images'))) continue;
+      total += new TextEncoder().encode(JSON.stringify(r)).byteLength;
+      if (total > limit) return total;
+    }
+    return total;
+  }
+
+  /** = private.export_job_start / export_job_take：window = 开始时刻（毫秒），count = 已取片数；开始未满 ttl 秒的才 +1 */
+  exportJobStart(uid: string, eid: string, mode: 'omitted' | 'cipher', sid: string): string {
+    const k = keys.exportJob(uid, eid, mode, sid); if (this.rows(k).length) throw new DbError('export_job_exists');   // 同真 Store：23505 报成 export_job_exists
+    this.counters.set(`${k}|${this.clock.ms}`, 0);
+    return new Date(this.clock.ms).toISOString();
+  }
+  exportJobTake(uid: string, eid: string, mode: 'omitted' | 'cipher', sid: string, max: number, ttlS: number) {
+    const hit = this.rows(keys.exportJob(uid, eid, mode, sid)).find(([w]) => Number(w.split('|')[1]) > this.clock.ms - ttlS * 1000);
+    if (!hit) return { verdict: 'expired' as const, startedAt: null, parts: null };
+    this.counters.set(hit[0], hit[1] + 1);
+    return { verdict: hit[1] + 1 > max ? ('too_many' as const) : ('ok' as const), startedAt: new Date(Number(hit[0].split('|')[1])).toISOString(), parts: hit[1] + 1 };
+  }
+
+  /** logs 里有没有本人 src = 'account' 的这条（act、code 都对上） */
+  hasAccountLog(u: string, act: string, code: string): boolean { return this.logs.some((l) => l.user_id === u && l.src === 'account' && l.act === act && l.code === code); }
+
+  accountStore(): AccountStore {
+    return {
+      isAdmin: async (u) => { this.guard('isAdmin'); return this.admins.has(u); },
+      takeRate: async (k, l, w) => { this.guard('takeRate'); return this.takeRate(k, l, w); },
+      refundRate: async (k) => {
+        this.guard('refundRate');
+        const last = this.rows(k).at(-1);   // 最新窗口那一行，count 减 1（不减到 0 以下）
+        if (last && last[1] > 0) this.counters.set(last[0], last[1] - 1);
+      },
+      peekRate: async (k) => { this.guard('peekRate'); return this.count(k); },
+      deleteCounterKey: async (k) => { this.guard('deleteCounterKey'); for (const [x] of this.rows(k)) this.counters.delete(x); },
+      exportSizeOver: async (u, m, l) => { this.guard('exportSizeOver'); return this.exportSizeOver(u, m, l); },
+      exportJobStart: async (u, e, m, sid) => { this.guard('exportJobStart'); return this.exportJobStart(u, e, m, sid); },
+      exportJobTake: async (u, e, m, sid, max, ttl) => { this.guard('exportJobTake'); return this.exportJobTake(u, e, m, sid, max, ttl); },
+      requestDeletion: async (u) => { this.guard('requestDeletion'); return this.requestDeletion(u); },
+      restore: async (u) => { this.guard('restore'); return this.restore(u); },
+      profile: async (u) => { const p = this.profiles.get(u); return p ? { ui_locale: p.ui_locale, current_tz: p.current_tz } : null; },
+      // = private.rebind_device_impl（20261029192000）：拒绝时抛 DbError(<rpc 的码>)，什么都不改；成功改 session_id、吊销旧会话
+      rebindDevice: async (u, d, oldS, newS) => {
+        this.guard('rebindDevice');
+        this.rebindCalls++;
+        const p = this.profiles.get(u);
+        if (!p || p.disabled_at !== null) throw new DbError('account_disabled');
+        if (oldS === newS) throw new DbError('bad_rebind');
+        if (this.sessions.get(oldS) !== u || this.sessions.get(newS) !== u) throw new DbError('session_mismatch');
+        if (this.revoked.has(oldS) || this.revoked.has(newS)) throw new DbError('session_revoked');
+        const dev = this.devices.get(d);
+        if (!dev || dev.user_id !== u || (dev.session_id ?? null) !== oldS) throw new DbError('device_mismatch');
+        for (const [id, v] of this.devices) if (id !== d && v.session_id === newS) throw new DbError('session_in_use');
+        dev.session_id = newS;
+        this.revoked.set(oldS, u);
+        this.sessions.delete(oldS);
+      },
+      deviceSession: async (u, d) => { this.guard('deviceSession'); const v = this.devices.get(d); return v && v.user_id === u ? v.session_id ?? null : null; },
+      deviceLabel: async (u, d) => { const v = this.devices.get(d); return v && v.user_id === u ? { label: v.label, platform: v.platform ?? null } : null; },
+      insertLog: async (u, row) => {
+        this.guard(`insertLog:${row.act}`);
+        const extra = { ...(row.code === undefined ? {} : { code: row.code }), ...(row.fields === undefined ? {} : { fields: row.fields }) };
+        this.logs.push({ id: ++this.logSeq, user_id: u, act: row.act, device: row.device, t: row.t, src: row.src, ...extra });
+      },
+      // 和真 store 一样按 user_id、src = 'account'、act、code 四个条件查（客户端自己传的同名 act 不算）
+      exportDoneLogged: async (u, code) => { this.guard('exportDoneLogged'); return this.hasAccountLog(u, 'export_done', code); },
+      exportStarted: async (u, code) => { this.guard('exportStarted'); return this.hasAccountLog(u, 'export', code); },
+      // = select * from <t> where user_id = u [and keyCol > after] order by keyCol limit n（和 PostgREST 一样按主键往后翻）
+      readPage: async (t, keyCol, u, after, limit) => {
+        this.guard('readPage');
+        this.pageReads.push({ table: t, after, limit });
+        const src: Record<string, unknown>[] = t === 'logs' ? this.logs.map((l) => ({ ...l })) : (this.tables.get(t) ?? []);
+        const key = (r: Record<string, unknown>) => r[keyCol] as string | number;
+        return src.filter((r) => r.user_id === u && (after === null || key(r) > after))
+          .sort((x, y) => (key(x) < key(y) ? -1 : key(x) > key(y) ? 1 : 0)).slice(0, limit);
+      },
+    };
+  }
+
+  /** account-purge 的假库在 account-purge-fakes.ts（低 K 拆出去的） */
+  purgeStore(): PurgeStore { return fakePurgeStore(this); }
+}
+
+/** backups 桶的内存版：路径 <日期>/<user_id>/<表>.json.gz */
+export class FakeBackups implements Backups {
+  files = new Set<string>();
+  removeKeepsOne = false;   // 故障注入：remove 少删一个（删完再列不为 0）
+  async listDates() { return [...new Set([...this.files].map((f) => f.split('/')[0] ?? ''))].sort(); }
+  /** 和 index.ts 一样：<日期>/<user_id>/ 下出现子目录就抛 BackupsSubdirError */
+  async listUserFiles(date: string, uid: string) {
+    const fs = [...this.files].filter((f) => f.startsWith(`${date}/${uid}/`)).sort();
+    if (fs.some((f) => f.slice(`${date}/${uid}/`.length).includes('/'))) throw new BackupsSubdirError();
+    return fs;
+  }
+  async remove(paths: readonly string[]) {
+    const ps = this.removeKeepsOne ? paths.slice(1) : paths;
+    for (const p of ps) this.files.delete(p);
+  }
+  count(uid: string) { return [...this.files].filter((f) => f.split('/')[1] === uid).length; }
+}
+
+export interface Outbox { to: string; mail: Mail }
+
+export function mailer(box: Outbox[], ok = () => true) {
+  return async (to: string, mail: Mail) => {
+    if (!ok()) return false;
+    box.push({ to, mail });
+    return true;
+  };
+}
+
+/** account 的 deps：authenticate 按 FakeDb 的状态模仿 requireActiveUser（冷静期只放行 restore；管理员停用一律 account_disabled；会话吊销） */
+export function accountDeps(db: FakeDb, box: Outbox[], over: Partial<AccountDeps> & { user?: string; session?: string; amr?: unknown } = {}): AccountDeps & { bg: Promise<unknown>[] } {
+  const bg: Promise<unknown>[] = [];
+  const uid = over.user ?? A;
+  const session = over.session ?? `${uid.slice(0, 8)}-s1`;
+  const jwt = jwtWith(over.amr ?? [{ method: 'otp', timestamp: Math.floor(db.clock.ms / 1000) - 60 }]);
+  const authenticate = async (_req: Request, opts: { allowPendingDeletion: boolean }): Promise<AuthResult> => {
+    const deny = (code: string, status: number, extra: Record<string, unknown> = {}) =>
+      ({ ok: false as const, response: new Response(JSON.stringify({ error: code, ...extra }), { status }), code });
+    const p = db.profiles.get(uid);
+    if (!p || (p.disabled_at !== null && p.disabled_reason !== 'deletion')) return deny('account_disabled', 403);
+    if (p.disabled_at !== null && !opts.allowPendingDeletion) return deny('account_pending_deletion', 403, { purge_after: db.pending.get(uid)?.purge_after });
+    if (!db.sessions.has(session) || db.revoked.has(session)) return deny('session_revoked', 401);
+    // 冷静期放行时带 pendingDeletion（和 requireActiveUser 一样：取不到 pending_deletions 行就是 null）
+    const user: ActiveUser = p.disabled_at !== null
+      ? { userId: uid, sessionId: session, jwt, pendingDeletion: { purgeAfter: db.pending.get(uid)?.purge_after ?? null } }
+      : { userId: uid, sessionId: session, jwt };
+    return { ok: true, user };
+  };
+  const base: AccountDeps & { bg: Promise<unknown>[] } = {
+    authenticate,
+    store: db.accountStore(),
+    userEmail: async (u) => db.users.get(u) ?? null,
+    sendMail: mailer(box),
+    tzLabel,   // 和 index.ts 注入的是同一份（shared/i18n/tz-label.ts）
+    verifyVaultToken: async () => 'vault_locked',
+    checkVersion: async () => null,
+    exportTables: [],
+    proxySecret: 'proxy-secret',
+    background: (p) => { bg.push(p); },
+    now: db.clock.now,
+    bg,
+  };
+  const { user: _u, session: _s, amr: _a, ...rest } = over;
+  return { ...base, ...rest };
+}
+
+export function purgeDeps(db: FakeDb, r2: R2, backups: FakeBackups, box: Outbox[], over: Partial<PurgeDeps> = {}): PurgeDeps & { logs: string[] } {
+  const logs: string[] = [];
+  return {
+    cronSecret: CRON,
+    store: db.purgeStore(),
+    r2,
+    backups,
+    userEmail: async (u) => db.users.get(u) ?? null,
+    deleteUser: async (u) => { if (db.fail.has('deleteUser')) throw new Error('auth'); db.deleteUserCascade(u); },
+    userGone: async (u) => !db.users.has(u),
+    sendMail: mailer(box),
+    tzLabel,   // 和 index.ts 注入的是同一份（shared/i18n/tz-label.ts）
+    hashSecret: HASH_SECRET,
+    logSecret: LOG_SECRET,
+    now: db.clock.now,
+    log: (c) => logs.push(c),
+    logs,
+    ...over,
+  };
+}
+
+export function accountReq(body: unknown, headers: Record<string, string> = {}): Request {
+  return new Request('https://x.supabase.co/functions/v1/account', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer x', ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+export function cronReq(secret: string | null = CRON): Request {
+  const headers = new Headers({ 'content-type': 'application/json' });
+  if (secret !== null) headers.set('x-cron-secret', secret);
+  return new Request('https://x.supabase.co/functions/v1/account-purge', { method: 'POST', headers, body: '{}' });
+}
+
+// ---------------- 三个 account 测试文件共用（从 account.test.ts 挪来，ACCOUNT-sugg ①） ----------------
+/** counters 的 check 约束（0001）：计数键都得过它 */
+export const COUNTER_KEY = /^[a-z][a-z0-9_-]*:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|global|ip|mail):[^:]+$/;
+
+/** 一个干净的假库：A（中文界面）、B（韩文界面） */
+export function accountSetup() {
+  const clock = new Clock();
+  const db = new FakeDb(clock);
+  db.addUser(A, 'a@test.local');
+  db.addUser(B, 'b@test.local', { ui_locale: 'ko-KR' });
+  const box: Outbox[] = [];
+  return { clock, db, box };
+}
+
+/** 调一次 account 的 handle，等后台的事（发信、补记日志）都做完再返回 */
+export async function callAccount(db: FakeDb, box: Outbox[], body: unknown, over: Parameters<typeof accountDeps>[2] = {}, headers: Record<string, string> = {}) {
+  const deps = accountDeps(db, box, over);
+  const res = await handle(accountReq(body, headers), deps);
+  await Promise.all(deps.bg);
+  return res;
+}

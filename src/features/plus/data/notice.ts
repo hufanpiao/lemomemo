@@ -1,0 +1,88 @@
+// 提示条按结果选文案
+// • 只返回词条键和参数（data 层不碰 t()），界面经 usePlusT 翻成文字
+// • 主句：一条 → “已记下：标题”；多条 → “已记下 N 条”；AI 没成 → “已先记下：…”；额度用完 → 带恢复时刻（每天只出一次，
+//   不该出时退成普通“已记下”）；离线 → “没网，已存在手机里：…”，带提醒的再加“未同步，提醒可能不响”
+// • 附加句：重复、“安排时间”、没有的日子各一句；
+//   合并没存上、全部撤销有几条没撤成（原来的几条留在提示条上，写明没成）；
+//   AI 后台整理换掉了先存的：主句后面加“AI 已整理”；
+//   这几项的条数、有没有由 saved-batch 的 noticeOf 按这一批现算（撤过没撤成的条标着 undoTried、合并结果在 last），这里只按数出句子
+// 纯 TS：不准 import React
+import type { TypeStatus } from './type-flow.ts';
+
+export type NoticeKey =
+  | 'plus.notice.saved'
+  | 'plus.notice.savedN'
+  | 'plus.notice.savedRule'
+  | 'plus.notice.quota'
+  | 'plus.notice.offline'
+  | 'plus.notice.offlineRemind'
+  | 'plus.notice.recur'
+  | 'plus.notice.arrange'
+  | 'plus.notice.badDay'
+  | 'plus.notice.mergeFailed'
+  | 'plus.notice.undoFailed'
+  | 'plus.notice.mergeLeft'
+  | 'plus.notice.annivKept'
+  | 'plus.notice.aiTidied';
+
+export interface NoticeLine {
+  key: NoticeKey;
+  params: Readonly<Record<string, string | number>>;
+}
+
+export interface NoticeInput {
+  status: TypeStatus;
+  titles: readonly string[];
+  hints: { recur: boolean; arrange: boolean; bad_day: { month: number; day: number } | null };
+  /** 带提醒（离线时加一句） */
+  remind: boolean;
+  /** 今天还没出过额度提示 */
+  quotaNoticeDue: boolean;
+  /** 恢复时刻“HH:MM”（current_tz） */
+  resetClock: string;
+  /** 合并那一条没存上（原来的几条没撤） */
+  mergeFailed?: boolean;
+  /** 撤销时没撤成的条数（纪念日不算） */
+  undoFailed?: number;
+  /** 合并成功后原来的几条里撤不掉的条数（纪念日不算）：这几条不在提示条上，指路去列表删 */
+  mergeLeft?: number;
+  /** 有纪念日撤不掉（这里撤不了纪念日） */
+  annivKept?: boolean;
+  /** AI 后台整理换掉了先存的 */
+  aiTidied?: boolean;
+}
+
+function mainLine(n: NoticeInput): NoticeLine {
+  const title = n.titles[0] ?? '';
+  const many = n.titles.length > 1;
+  const saved: NoticeLine = many ? { key: 'plus.notice.savedN', params: { n: n.titles.length } } : { key: 'plus.notice.saved', params: { title } };
+  switch (n.status) {
+    case 'saved':
+      return saved;
+    case 'saved_rule':
+      return many ? saved : { key: 'plus.notice.savedRule', params: { title } };
+    case 'quota_out':
+      return n.quotaNoticeDue ? { key: 'plus.notice.quota', params: { time: n.resetClock } } : saved;
+    case 'offline_saved':
+      return many ? saved : { key: 'plus.notice.offline', params: { title } };
+    default: {
+      const never: never = n.status;
+      return never;
+    }
+  }
+}
+
+/** 提示条的几行：第一行主句，后面是附加句 */
+export function noticeLines(n: NoticeInput): NoticeLine[] {
+  const out: NoticeLine[] = [mainLine(n)];
+  if (n.aiTidied) out.push({ key: 'plus.notice.aiTidied', params: {} });
+  if (n.undoFailed) out.push({ key: 'plus.notice.undoFailed', params: { n: n.undoFailed } });
+  if (n.mergeLeft) out.push({ key: 'plus.notice.mergeLeft', params: { n: n.mergeLeft } });
+  if (n.mergeFailed) out.push({ key: 'plus.notice.mergeFailed', params: {} });
+  if (n.annivKept) out.push({ key: 'plus.notice.annivKept', params: {} });
+  if (n.status === 'offline_saved' && n.remind) out.push({ key: 'plus.notice.offlineRemind', params: {} });
+  if (n.hints.recur) out.push({ key: 'plus.notice.recur', params: {} });
+  if (n.hints.arrange) out.push({ key: 'plus.notice.arrange', params: {} });
+  if (n.hints.bad_day) out.push({ key: 'plus.notice.badDay', params: { month: n.hints.bad_day.month, day: n.hints.bad_day.day } });
+  return out;
+}

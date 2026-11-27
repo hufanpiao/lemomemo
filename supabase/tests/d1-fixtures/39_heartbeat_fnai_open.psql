@@ -1,0 +1,5 @@
+-- expect: private.heartbeat 上给 fn_ai 的策略 fn_all 是 using (true)
+-- expect: private.heartbeat 上没有策略 fn_ai_own
+-- HEARTBEAT-fnai-policy（迁移 20261104140000）：退回 0001 的 fn_all，fn_ai 又能改写任何服务的心跳（含 account-purge）
+drop policy fn_ai_own on private.heartbeat;
+create policy fn_all on private.heartbeat for all to fn_ai using (true) with check (true);

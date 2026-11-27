@@ -1,0 +1,319 @@
+/* 打字条：贴键盘上沿（--dock-bottom 已取键盘高度 --kb 和底栏上方两者大的，变量在 styles/base.css）；
+   磨砂和提示条、撤销条同一套：宽度、磨砂、圆角、减少透明兜底是公共浮条（kit Float.module.css 的 .float，打字条、多条提示在组件上一起挂），
+   这里只管位置、层级和排版；只用令牌。
+   样子是“无框撰写卡”（规格见 docs/02-设计/皮肤-v4/打字条与隐私记-方案对比.html 的 .dc）：
+   输入区无框（.field）、预览打了字才占位（.say）、0.5px 细线下一条工具行（.tools）；没打字 107 高、打了字 129 高 */
+.bar {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+
+  /* --kb-hint：打开时先按上次的键盘高度就位（platform/kb-hint.ts，光标才画得对），键盘出来就撤，位置回到只由 --dock-bottom 管 */
+  bottom: max(var(--dock-bottom), var(--kb-hint, 0px));
+  z-index: var(--z-float);
+  display: flex;
+  flex-direction: column;
+  padding: 8px 8px 6px;
+  font-size: var(--fs-14);
+}
+
+/* 打字条后面的整页液态玻璃：组件和样式在 kit/components/Mist（和随手记共用一份） */
+
+/* 多条的提示条：位置、磨砂和打字条、撤销条同一套 */
+.saved {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: var(--dock-bottom);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+
+  /* 6：按钮看得见 38（FormButton compact），上下行的 44 点击区不叠在一起 */
+  gap: 6px;
+  max-height: 60vh;
+  padding: 6px 6px 6px 16px;
+  overflow-y: auto;
+  font-size: var(--fs-14);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 下滑收起的拖动起点：不画把手，改成卡片顶边一条整宽透明带（不占位、看不见），
+   盖住卡片上沿 8px 内边距再往下 6px，手势照旧（useGripClose）；不盖到输入文字（输入区上内边距 10） */
+.grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
+  touch-action: none;
+}
+
+/* 输入区：不画框、不画底，字直接写在磨砂条上，聚焦只看光标；字号一律 16（iOS 小于 16 聚焦会放大页面）。
+   全站 :focus-visible（styles/base.css）给文字输入框也套 2px 框，这里单独去掉；按钮的键盘聚焦框不动 */
+.field {
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 10px 8px 6px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+}
+
+.field::placeholder {
+  color: var(--text-3);
+}
+
+.field:focus-visible {
+  outline: none;
+}
+
+/* 状态行（正在识别、查找时的改法）：淡一档小字，有字才占一行（没字时节点还在给 aria-live 用，:empty 不画）；签就是预览 */
+.say {
+  padding: 0 8px 6px;
+  overflow: hidden;
+  color: var(--toast-fg2);
+  font-size: var(--fs-12-5);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.say:empty {
+  display: none;
+}
+
+/* 底部工具行：上面一根 0.5px 细线和输入区分开 */
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-top: 4px;
+  border-top: 0.5px solid var(--inp-line);
+}
+
+/* 图标按钮（展开编辑、收起）：44×44，图标 18，淡一档色；名字在 aria-label 和 title 上 */
+.icon {
+  display: grid;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--toast-fg2);
+  cursor: pointer;
+}
+
+.icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* “记下”：看得见 36 高的胶囊，上下各扩 4 到 44 点击区（同 kit compact 写法）；打了字柠檬黄（全页唯一一处黄），没打字（禁用）灰底灰字 */
+.save {
+  position: relative;
+  min-width: 64px;
+  height: 36px;
+  margin-left: auto;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-size: var(--fs-15);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.save::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+
+.save:disabled {
+  background: var(--panel-2);
+  color: var(--text-3);
+  font-weight: 400;
+  cursor: default;
+}
+
+/* “问 AI”（“记下”左边那颗次要胶囊）：同“记下”的高、圆角、点击区，浅灰底正文色、不加粗；
+   它接过“记下”的 margin-left: auto（排在右边），两颗间隔 8 */
+.askAi {
+  position: relative;
+  min-width: 64px;
+  height: 36px;
+  margin-left: auto;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-15);
+  cursor: pointer;
+}
+
+.askAi::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+
+.askAi + .save {
+  margin-left: 8px;
+}
+
+.askAi:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 展开后的每一条：行高留够 44，相邻两行按钮的点击区不叠（排在 .row 之后，no-descending-specificity） */
+.list > .row {
+  min-height: var(--hit);
+}
+
+/* 输入区上方的提示（同一句里其他几条已记下、看起来是要查找）：和输入文字左边对齐 */
+.preview {
+  min-height: 20px;
+  padding: 4px 8px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 2px 8px;
+}
+
+/* 提示文字都在磨砂底上：一律用 --toast-fg（--text-2、--danger-text 是按页面底色配的，放这里对比度不保证），错误句靠加粗区分 */
+.err {
+  padding: 4px 8px 2px;
+  font-weight: 600;
+}
+
+/* 看起来是要查找（“找：…”那张卡）：整张是按钮，点了这一句改成记下；左边一个文档小框 */
+.find {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 4px 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.findIcon {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 20px;
+  border: 1.5px solid currentcolor;
+  border-radius: 3px;
+}
+
+.findText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 在磨砂底上：淡一档用 --toast-fg2（--text-2 是按页面底色配的，见上面 .err 的说明） */
+.findSub {
+  color: var(--toast-fg2);
+  font-size: var(--fs-12-5);
+}
+
+/* 多条提示条展开后每条前面的类型“待办”“日程”：淡一档小字（三层文字色，磨砂底上用 --toast-fg2）；和标题之间有一个空格（读屏不连读），再加一点外边距 */
+.kind {
+  margin-right: 4px;
+  color: var(--toast-fg2);
+  font-size: var(--fs-12);
+}
+
+/* “＋”上方的小气泡（PlusHint.tsx 用；放在这个文件里是为了不多一个样式块，首屏主块的依赖表少一项）：深底白字、圆角 14、下沿小三角指着“＋”的中线） */
+.hint {
+  position: fixed;
+  z-index: var(--z-bar-over);
+  max-width: calc(100vw - 28px);
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: var(--fs-13);
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+/* 小三角：“＋”宽 66，中线离气泡右边 33 */
+.hint::after {
+  content: "";
+  position: absolute;
+  right: 26px;
+  bottom: -7px;
+  border: 7px solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--ink);
+}
+
+/* 打字条开着时“已记下 · 撤销”提示条抬到打字条上方：
+   外壳不占位（display: contents），--type-lift 由 TypeBar.tsx 按打字条实际高度写；没写（收起了）就是 0，回到底栏上方。
+   只动 transform；110ms（calc(var(--dur-ui) / 2)，不超过 200ms）ease-out；系统或 App 里“减少动态”时直接到位 */
+.noticeSlot {
+  display: contents;
+}
+
+.noticeSlot > [data-undo-toast],
+.noticeSlot > .saved {
+  transform: translateY(calc(-1 * var(--type-lift, 0px)));
+  transition: transform calc(var(--dur-ui) / 2) var(--ease-out);
+}
+
+/* 多条展开时别顶出屏幕上沿：可用高度扣掉抬起的那段 */
+.noticeSlot > .saved {
+  max-height: calc(60vh - var(--type-lift, 0px));
+}
+
+:global(:root[data-rm="1"]) .noticeSlot > [data-undo-toast],
+:global(:root[data-rm="1"]) .noticeSlot > .saved {
+  transition: none;
+}

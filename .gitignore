@@ -1,0 +1,101 @@
+# 柠檬记（原“日程与待办”）—— Git 忽略规则
+
+# Python / Node 缓存
+__pycache__/
+*.pyc
+node_modules/
+
+# 系统与编辑器文件
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# 临时文件与日志
+*.log
+*.tmp
+tmp/
+
+# 真实数据的本地备份：只留在本机，不进 git（只保留说明文件）
+# 4.0.0 起备份挪到项目目录之外（E:\柠檬记-备份\，R-105；R-209 起不加密，架构设计-v4 第 10 节），这里只是兜底
+data/backups/*
+!data/backups/README.md
+
+# 本机环境变量与密钥（架构设计-v4 8.4）：一切 .env* 都不进仓库，只保留样板
+.env*
+!.env.example
+# Cloudflare wrangler 本机密钥和缓存（独立 Worker lemo-ops、Pages Functions 本机调试）
+.dev.vars
+.dev.vars.*
+# 只放行样板（只有变量名和说明，没有值；B0 QA D-11）
+!.dev.vars.example
+.wrangler/
+# Supabase CLI 本机临时文件
+supabase/.temp/
+supabase/.branches/
+# e2e 接真后端的独立本地 Supabase（tools/e2e/real-backend.mjs 生成：supabase/ 的副本 + 改写的 config.toml）
+.e2e-sb/
+
+# 构建时生成、CI 部署前再生成的文件（架构设计-v4 2.5、8.1）
+supabase/functions/_shared/gen/
+# Vite / TypeScript / 测试的产物（R-96）
+dist/web/
+# LEMO_WEB_OUT 指定的其他输出目录（真后端那组 e2e 写 dist/web-real，接手清单 E2E-dist）
+dist/web-*/
+dist/vite-manifest/
+# exe 专用页面（快速记录小窗口，vite.quick-add.config.ts）
+dist/desktop-only/
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+coverage/
+playwright-report/
+test-results/
+test-results-real/
+# 视觉基准组（playwright.visual.config.ts）的输出和报告；基准图只收 linux 那一份，本机 Windows 跑出来的 win32、macOS 的 darwin 不进仓库
+test-results-visual/
+playwright-report-visual/
+tests/e2e/visual/__screenshots__/win32/
+tests/e2e/visual/__screenshots__/darwin/
+.vite/
+
+# Tauri（exe）的 Rust 编译产物
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
+# 签名私钥、证书一律不进仓库（R-206：不放 GitHub，只在负责人本机和离线备份）
+*.key
+*.pem
+*.p12
+*.pfx
+
+# 开发 agent 的临时工作副本（git worktree）
+.claude/worktrees/
+
+# 旧版契约测试临时取出的基线用例（tests/compat/run-compat.ts）
+.compat-base/
+# 按清单生成的用例（npm run gen:manifest）
+dist/data-manifest/
+
+# 负责人真机录屏原片和抽出的全部帧：太大，且有手机控制中心、运营商等隐私画面，只留本机；能提交的是同文件夹的 关键帧/、联系表、条带
+docs/03-评审/B2/底栏透明度截图/真机录屏-9d40848/*.mov
+docs/03-评审/B2/底栏透明度截图/真机录屏-9d40848/帧-整帧/
+docs/03-评审/B2/底栏透明度截图/真机录屏-9d40848/帧-底栏放大/
+docs/03-评审/B2/底栏透明度截图/真机录屏-*/*.mov
+docs/03-评审/B2/底栏透明度截图/真机录屏-*/帧-*/
+# 真机截图、录屏原图不进公开仓库（11-07 主持人补；之前误提交的 31 张已从跟踪中移除）
+docs/**/真机-*.png
+docs/**/真机-*.jpg
+docs/**/真机录屏-*/
+docs/**/*视觉稿真机*.png
+# 评测结果（tests/ai/run.ts）：每句有模型原文和句库原文，仓库公开，不提交；以工作流产物存档（BE-1 安全审建议 6，11-10）
+tests/ai/reports/
+# 可选字体的源文件（架构 5.9c，B6 字体 11-14 主持人定）：太大不进仓库，放本机 柠檬记\本机资料\02-参考素材\2026-11-14_字体源\<id>\，
+# build/fonts.py --src 指过去切片；仓库里只留 font.json（地址、版本、sha256）和许可证原文，切好的分片 src/public/fonts/ 照旧提交
+assets-src/fonts/**/*.ttf
+assets-src/fonts/**/*.otf
+assets-src/fonts/**/*.woff2
+assets-src/fonts/**/*.woff
+assets-src/fonts/**/*.zip

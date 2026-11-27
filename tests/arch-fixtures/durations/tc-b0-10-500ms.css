@@ -1,0 +1,6 @@
+/* 违规样例（TC-B0-10；架构 17.2 第 6 点、R-155）：单个动效 ≤ 400ms，只有 --dur-drop 例外。
+   这里加一个 500ms 的时长令牌、一条 0.5s 的 transition，tests/arch/durations.test.ts 的检查必须报出这两处 */
+:root{--dur-slow:500ms}
+.x {
+  transition: opacity .5s var(--ease-out);
+}

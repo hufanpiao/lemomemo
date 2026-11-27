@@ -1,0 +1,33 @@
+/* 提示图标的颜色（照 本机资料/01-设计方案/2026-11-26_今天页天气/13种提示预览.png 量出的颜色，对到现有项目深色令牌，深浅两套皮肤都有）：
+   雷雨紫；雨、雪、路滑、降温、保暖蓝；口罩褐；避暑红；防晒黄；温度适宜绿；大风、大雾、外套灰 */
+.tip {
+  color: var(--text-2);
+}
+
+.tip[data-kind='storm'] {
+  color: var(--p4s);
+}
+
+.tip[data-kind='rain'],
+.tip[data-kind='snow'],
+.tip[data-kind='ice'],
+.tip[data-kind='drop'],
+.tip[data-kind='cold'] {
+  color: var(--p2s);
+}
+
+.tip[data-kind='air'] {
+  color: var(--p6s);
+}
+
+.tip[data-kind='hot'] {
+  color: var(--p3s);
+}
+
+.tip[data-kind='sun'] {
+  color: var(--p1s);
+}
+
+.tip[data-kind='mild'] {
+  color: var(--p5s);
+}

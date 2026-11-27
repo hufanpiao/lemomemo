@@ -1,0 +1,148 @@
+/* 待办列表页：只用令牌；标题一律常规字重，只有页顶大标题、选中的筛选、警示（过期）用强调 */
+.page {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 16px) 16px var(--tabbar-pad);
+  color: var(--text);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 顶栏右边的入口（头像），44 触控区 */
+.topEnd {
+  display: flex;
+  align-items: center;
+}
+
+/* 大标题加短粗下划线、标题下一行等宽小字、副行的等宽日期时刻：kit 的 Refine.module.css（今天页、日历页同一份） */
+
+.filter {
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px 8px;
+  padding: 0 16px;
+  overflow-x: auto;
+}
+
+/* 筛选胶囊：kit 的 Chip.module.css（查找面板同一份） */
+
+/* 分组名（小号字、字距拉开）：字号、字体、字距、颜色和左右排开、间距都挂 kit Form.tsx 的 groupRowClass（.groupLabel.groupRow，今天页同一份）；
+   这里是真标题 h2（读屏按标题跳组），所以不套 GroupLabel 那个 <p> 组件，只挂类。右边条数同一种小字；过期组带“!”、红字 */
+.cnt {
+  font-variant-numeric: tabular-nums;
+}
+
+.late .h2 {
+  color: var(--danger-text);
+}
+
+/* 逾期的行：整行过期底 --late-bg（暖暗褐只带一点红；不用报错红底 --danger-bg）、左边一条红竖线。
+   面板底色和竖线在 kit List.module.css 的 .list.late（今天页“没赶上”同一份）；行面是 SwipeRow 的不透明 .face，
+   只给面板上色会只剩四边一圈红，行面底色走 SwipeRow 开的变量 --sw-face-bg，这里只设变量 */
+.late {
+  --sw-face-bg: var(--late-bg);
+}
+
+/* 列表行、左滑删除的行（.swp、.swRow）、空状态在 kit 的 List.module.css；这里只留过期标签的红字。
+   字号在 kit 的 .meta；写成两级选择器，不靠两份样式表的先后顺序压过 .meta 的颜色 */
+.group .tagLate {
+  color: var(--danger-text);
+}
+
+/* 离开途中（AppearItem 打 data-state="leaving"）：淡出、卸载之前不接点按（行的那条在 kit 的 List.module.css） */
+.group[data-state="leaving"] {
+  pointer-events: none;
+}
+
+/* “已完成 N ›”折叠行的样式在 kit 的 DoneFold.module.css（网页版今天页同一个） */
+
+/* ===== 网页版宽屏：TodosPage 的 if (desk) 那一段、TodosSide 才挂这些类 =====
+   页头右边的筛选胶囊不左右出血（手机是 -16 外扩到屏幕边）；列表卡 + 右边 270 宽一列 */
+.dkFilter {
+  margin: 0;
+  padding: 0;
+}
+
+.dkGrid {
+  grid-template-columns: minmax(0, 1fr) 270px;
+}
+
+.dkList {
+  gap: 4px;
+}
+
+.side {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--dk-gap);
+  min-height: 0;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 进度条、比例条：高 7、圆角 4，浅灰槽 + 柠檬黄 */
+.prog {
+  display: block;
+  flex: none;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--step-off);
+}
+
+.prog i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+/* 未来 7 天柱子：七列、缝 6、高 72；柱子浅灰，今天那根柠檬黄、星期字加粗 */
+.bars {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  height: 72px;
+}
+
+.bars > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: flex-end;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  text-align: center;
+}
+
+.bars i {
+  display: block;
+  border-radius: 4px;
+  background: var(--step-off);
+}
+
+.bars > span[data-today] {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.bars > span[data-today] i {
+  background: var(--accent);
+}
+
+.proj {
+  display: grid;
+  gap: 4px;
+}
+
+.projH {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-13);
+}

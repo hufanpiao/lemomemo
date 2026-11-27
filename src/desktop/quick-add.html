@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN" data-skin="glass">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- 不写死浅色：data-theme 由 platform/look.ts 一引入就按本机缓存套上，读不到缓存时跟系统（quick-add.ts）；
+         套上之前和原生控件都先跟系统，套上以后由 quick-add.css 的 :root[data-theme] 两条定 color-scheme -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex" />
+    <title>Lemo</title>
+  </head>
+  <body>
+    <main class="quick">
+      <input id="quick-input" type="text" autocomplete="off" spellcheck="false" enterkeyhint="done" />
+      <p id="quick-hint" class="hint"></p>
+      <p id="quick-status" class="status" role="alert" hidden></p>
+    </main>
+    <script type="module" src="./quick-add.ts"></script>
+  </body>
+</html>

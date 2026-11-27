@@ -1,0 +1,103 @@
+/* “最近删除”页：只用令牌 */
+.page {
+  max-width: 560px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 16px) 16px 140px;
+  color: var(--text);
+}
+
+.top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  min-height: var(--hit);
+}
+
+.h1 {
+  margin: 0;
+  font-size: var(--fs-17);
+  font-weight: 600;
+}
+
+.note {
+  margin: 4px 0 12px;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+/* 列表行、空状态在 kit 的 List.module.css */
+
+/* 行尾“恢复”“永久删除”：kit 胶囊（Chip.module.css .chip：看得见 30、--panel-2 浅底、无描边，点击区 ::after 撑到 44），
+   这里只管两颗并排的间距和“永久删除”的危险色字（红色只用在危险操作上） */
+.acts {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.acts .danger {
+  color: var(--danger-text);
+}
+
+.clear {
+  justify-self: end;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--danger-text);
+  font: inherit;
+  font-size: var(--fs-15);
+  cursor: pointer;
+}
+
+.acts > [aria-disabled='true'],   /* 只读行、进行中：“恢复”“永久删除”灰掉 */
+.clear[aria-disabled='true'] {
+  opacity: var(--disabled-dim);   /* 同 kit 只读行的打勾圆圈变淡（kit CheckCircle.module.css） */
+  cursor: default;
+}
+
+.clear:focus-visible {
+  border-radius: var(--r-sm);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.offline {
+  margin: -4px 0 12px;   /* 接在说明行下面（说明行下边距 12px），和列表留同样的空 */
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.offline:empty {
+  display: none;
+}
+
+/* 页底提示：宽度、磨砂、圆角、减少透明兜底是公共浮条（kit Float.module.css 的 .float，组件上一起挂），这里只管位置、层级和排版 */
+.toast {
+  position: fixed;
+  bottom: var(--dock-bottom);   /* 离底 118px、键盘弹起时让开；变量在 styles/base.css */
+
+  /* 网页版宽屏（kit Desk 的 main.aside 给这两个数）：夹在侧栏和右边 AI 栏中间，不压到两边 */
+  left: var(--aside-l, 16px);
+  right: var(--aside-r, 16px);
+  z-index: var(--z-toast);
+  padding: 12px 16px;
+  font-size: var(--fs-14);
+}
+
+/* 页底提示是常驻的 role=status：没字时不画底、阴影、模糊，不占内边距，但留在无障碍树里，换上文字时读屏才会念
+   （两个类比公共浮条的一个类优先级高，不靠加载先后；减少透明时公共那条给的实色底落在 0 高的空条上，看不见） */
+.toast:empty {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+/* 只读行的“要新版本”：单独一行、左对齐，同随手记页（不挤标题和按钮） */
+.ro {
+  display: flex;
+  margin-top: 4px;
+}

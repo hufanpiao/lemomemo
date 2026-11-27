@@ -1,0 +1,378 @@
+/* 液态玻璃底栏外壳（B2 FA-7）：尺寸、位置、材质参数照 皮肤-v4/液态玻璃-真机试验.html；颜色只引皮肤令牌（A11），
+   透明度类的数字令牌（--g-sheen）用单独一层的 opacity 套上；内侧柔光用 --g-glow-c，阴影用 --g-bar-shadow（11-06 底栏排查 A 类照视觉稿补齐）。
+   材质分两档：首屏后备（--g-tint-fb + backdrop-filter）；减少透明效果（系统设置或 data-rt="1"）时实色。
+   backdrop-filter 写在 .bar、.fab 自己身上，不写在里面的着色层：按 Filter Effects 2 的 backdrop root 规则，带 backdrop-filter 的 .bar
+   自己就是子元素的“背景根”，子元素的 backdrop-filter 只能看到 .bar 里面（什么都没有），等于没模糊（11-06 底栏透明度排查第二轮根因 2）。
+   不起 view-transition-name（11-20 起切页不用 View Transition，底栏全程是真元素，motion/page-swap.ts）。
+   内容副本那一档按需下载后接管（另做）。
+   bottom 减去 --vh-gap（台账 Q-13“导航给我焊死在下面”，platform/viewport.ts 写）：iOS 主屏幕版布局视口少了顶部安全区那段时补到屏幕最底，平时是 0 */
+.bar,
+.fab {
+  position: fixed;
+  z-index: var(--z-bar);
+  box-shadow: var(--g-bar-shadow);
+  touch-action: manipulation;
+  user-select: none;
+
+  /* avoid-ai-design-ignore: K3 负责人指定液态玻璃（底栏、“＋”的毛玻璃，B2 FA-7） */
+  backdrop-filter: blur(8px) saturate(1.8);
+  transition: opacity var(--dur-ui) var(--ease-out);
+}
+
+.bar {
+  left: 14px;
+  right: 94px;
+  bottom: calc(8px + var(--inset-bottom) - var(--vh-gap, 0px));
+  display: flex;
+  gap: 2px;
+  height: 62px;
+  padding: 5px;
+  border-radius: var(--r-pill);
+}
+
+.fab {
+  right: 14px;
+  bottom: calc(6px + var(--inset-bottom) - var(--vh-gap, 0px));
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--fab-fg);
+
+  /* 4px 底色间隔圈 + 1px --step-off 细灰边（R-117；设计动效评审 L4） */
+  box-shadow: 0 0 0 4px var(--bg), 0 0 0 5px var(--step-off), var(--g-bar-shadow);
+}
+
+@media (width >= 481px) {
+  .bar {
+    left: calc(50% - 226px);
+    right: auto;
+    width: 372px;
+  }
+
+  .fab {
+    right: calc(50% - 226px);
+  }
+}
+
+/* 玻璃一层：着色 + 模糊；上沿亮边、内侧柔光（::before 是沿边亮光，::after 是斜上方一片光）。
+   0.5px 外圈（--rim-shade）去掉：视觉稿没有，负责人 11-06 定照稿；后备模糊 12px 改回视觉稿的 8px（排查 A 类）。
+   高光位置固定在左上（22% -30%、亮边在左上）：倾斜高光已删除（R-373），这里写死的就是原来关着倾斜时的后备值，样子不变 */
+.glass {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: var(--g-tint-fb);
+  box-shadow:
+    inset 1.5px 1.5px 0 -0.5px var(--g-hi),
+    inset -1px -1px 0 -0.5px var(--g-hi2),
+    inset 0 0 10px var(--g-glow-c);
+  pointer-events: none;
+  transition: opacity var(--dur-glass) var(--ease-out);
+}
+
+/* 沿边亮光（视觉稿 .lens .spec::after，R-153）：1.6px 一圈，上沿一段 --g-hi、下沿对称一段 --g-hi2；位置固定在 22%（倾斜高光已删除，R-373） */
+.glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1.6px;
+  border-radius: inherit;
+  background:
+    radial-gradient(34% 120% at 22% 0%, var(--g-hi), transparent 70%),
+    radial-gradient(30% 120% at 78% 100%, var(--g-hi2), transparent 70%);
+  mask:
+    linear-gradient(var(--bg) 0 0) content-box exclude,
+    linear-gradient(var(--bg) 0 0);
+}
+
+/* 斜上方的一片光（--g-sheen 是透明度） */
+.glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--g-sheen-img);
+  opacity: var(--g-sheen);
+}
+
+.fabTint {
+  background: var(--g-fab-tint);
+}
+
+/* 副本引擎接管（glass-ghost.ts 给玻璃块加 data-glass="copy"）：着色换成更透的 --g-tint，直接模糊背后的真实画面，滤镜 --g-live-fx（3px：11-06 底栏排查第二轮按视觉稿对照定的，6～10px 糊成一片白；理由见令牌说明）。
+   11-06 底栏透明度排查（docs/03-评审/B2/B2-底栏透明度-真机差异排查.md）：副本层底色是不透明的 --bg、只复制带 data-ghost 的元素，
+   图例、标题、空状态这些没标 data-ghost 的内容到了底栏后面就整块看不见，玻璃像实心的（负责人真机“把字移到下面也不透明”）。
+   所以改用 backdrop-filter（写在 .bar、.fab 上，见文件头）；11-06 起引擎也不再建副本（GLASS-copy-unused），只管 data-glass；页面上的 data-ghost 标记也随之删掉 */
+.bar[data-glass='copy'],
+.fab[data-glass='copy'] {
+  backdrop-filter: var(--g-live-fx);
+}
+
+.bar[data-glass='copy'] .barTint {
+  background: var(--g-tint);
+}
+
+/* 自动深浅（data-ad="dark"、深色玻璃层 .adTint、令牌 --g-ad-*）11-06 取消（主持人方案甲；当时理由是底栏后面一律实色，11-06 夜负责人要求底栏恢复透明，实色带只铺底栏以下，负责人 11-06 定不恢复） */
+
+.tab {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  color: var(--g-fg);
+  font-size: var(--fs-11);
+  text-decoration: none;
+  text-shadow: 0 0 2px var(--g-halo), 0 0 6px var(--g-halo);
+  transition: color var(--dur-glass) var(--ease-out);
+}
+
+.tab[aria-current='page'] {
+  font-weight: 600;
+}
+
+.tab:focus-visible,
+.fab:focus-visible {
+  outline: 2px solid var(--focus);
+}
+
+/* 页签聚焦时焦点环外加一圈底色；“＋”本来就有底色圈和细灰边、阴影，聚焦时保留，只加焦点环（设计复审一 R3） */
+.tab:focus-visible {
+  box-shadow: 0 0 0 4px var(--bg);
+}
+
+.tab svg,
+.fab svg {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 1px var(--g-halo));
+}
+
+.fab svg {
+  width: 28px;
+  height: 28px;
+  stroke-width: 2.4;
+}
+
+/* 液滴：宽 = 一个页签；translate 按 --i 走，自己宽度 + 2px 间隔一格 */
+.drop {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  z-index: 1;
+  width: calc((100% - 16px) / 4);
+  height: 52px;
+  border-radius: var(--r-pill);
+  translate: calc(var(--i) * (100% + 2px));
+  transition: translate var(--dur-drop) var(--ease-drop), scale var(--dur-drop-press) var(--ease-press);
+  pointer-events: none;
+}
+
+/* 液滴里层：果冻放在它身上（首屏后部分 GlassBarFx.tsx：playGel 用 WAAPI 放，做不了时加 GlassBarFx.module.css 的 .jelly；L1） */
+.jellyJs {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.pill {
+  background: var(--g-pill);
+}
+
+/* 按住当前选中的页签：液滴本身放大 1.12（试验页；设计动效评审 D3）。视觉稿的 1.16 是液滴里背后画面的透镜倍数，留给副本引擎 */
+.drop[data-state='press'] {
+  scale: 1.12;
+}
+
+/* 减少透明效果：实色，不模糊，没有模糊带；选中液滴换 --step-off 一档加 --g-pill-edge 描边，和栏底拉开（设计动效评审 D2） */
+
+:global(:root:is([data-rt='1'], [data-solid='1'])) .bar,
+:global(:root:is([data-rt='1'], [data-solid='1'])) .fab {
+  backdrop-filter: none;
+}
+
+:global(:root:is([data-rt='1'], [data-solid='1'])) .barTint {
+  background: var(--glass-solid);
+}
+
+:global(:root:is([data-rt='1'], [data-solid='1'])) .fabTint {
+  background: var(--fab-bg);
+}
+
+:global(:root:is([data-rt='1'], [data-solid='1'])) .pill {
+  background: var(--g-pill-solid);
+  box-shadow: inset 0 0 0 1.5px var(--g-pill-edge);
+}
+
+/* 减少动态效果：液滴直接换位置，不放大、不放果冻；启动时安全区稳定后直接出现，不淡入 */
+
+:global(:root[data-rm='1']) .drop {
+  transition: none;
+}
+
+:global(:root[data-rm='1']) .drop[data-state='press'] {
+  scale: none;
+}
+
+/* 启动时底部安全区还没稳定（G10，<html data-inset-wait>，platform/inset-watch.ts）：先不显示，稳定了淡入，不做位移动画。
+   只改 opacity，稳定后回到 1，不影响底栏透明（负责人 11-06 红线）。看不见的那段时间也点不到（代码审查 11-06：透明的底栏不该接点按） */
+:global(:root[data-inset-wait]) .bar,
+:global(:root[data-inset-wait]) .fab {
+  opacity: 0;
+  pointer-events: none;
+}
+
+:global(:root[data-rm='1']) .bar,
+:global(:root[data-rm='1']) .fab {
+  transition: none;
+}
+
+/* 键盘弹着（根节点 data-kbhide，platform/viewport.ts 写；FA-7 第 3 项）：底栏、“＋”不显示，也不能点、不进 Tab 顺序（visibility）；
+   只管这两样，实色带、渐隐层在 GlassBarFx.module.css 按同一个属性藏（设计复审一 R2）。
+   只管窄屏（和 base.css 的 :root[data-kbo] 同一个断点）：宽屏这两样是侧栏，键盘弹着照样显示（台账 Q-20） */
+@media (width < 900px) {
+  :global(:root[data-kbhide]) .bar,
+  :global(:root[data-kbhide]) .fab {
+    visibility: hidden;
+  }
+}
+
+/* 电脑版侧栏（设计动效评审 D5，主持人 11-05 定：断点 (width >= 900px)、不放 ⋯、方案 A 只用 CSS 复用底栏的 DOM）：
+   左边竖排，上面“＋”、中间四个页签、最下面设置入口（头像，在首屏外壳里，设计复审三 S1）；照视觉稿 R-126 侧栏：
+   左 16、宽 78、圆角 28、--b-rail 底色 + --b-blur 模糊、--b-rail-shadow（皮肤-v4/电脑版布局-对比.html 的 .desk .rail）；
+   页签 62×58、圆角 18、未选中 --text-2、选中 --accent 底 --on-accent 字（视觉稿最后定的那条；--nav-active-bg 在简洁浅色是白底白栏）；
+   “＋”54px，上下留 4 / 14。不用液滴（藏掉）、不用玻璃层和内容副本。
+   页签字（R-436 精致化）：照视觉稿 .rail .rt 11.5px 常规字重、选中的半粗（.rail .rt.on 600，同上面底栏的 .tab 规则），原来宽屏一律 700 显得挤。
+   有底栏的页（#root 里有 .bar）左边让出侧栏的位置；底部留白、浮条位置在 base.css 同一断点里改 */
+@media (width >= 900px) {
+  .bar {
+    inset: calc(16px + var(--inset-top)) auto calc(16px + var(--inset-bottom)) 16px;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+    width: 78px;
+    height: auto;
+
+    /* R-363：上内边距 94 = “＋”顶 20 + “＋”54 + 到第一个页签 20，照视觉稿 .desk .rail .fabd 的 margin 4 0 14 + gap 6（原来 88 只隔 14，显挤） */
+    padding: 94px 8px 14px;
+    border-radius: 28px;
+    background: var(--b-rail);
+    box-shadow: var(--b-rail-shadow);
+
+    /* avoid-ai-design-ignore: K3 负责人指定液态玻璃（电脑版侧栏用同一套底栏，D5） */
+    backdrop-filter: blur(var(--b-blur)) saturate(1.5);
+  }
+
+  .bar .glass,
+  .drop {
+    display: none;
+  }
+
+  .tab {
+    flex: none;
+    width: 62px;
+    height: 58px;
+    border-radius: 18px;
+    color: var(--text-2);
+    font-size: var(--fs-11-5);
+    text-shadow: none;
+  }
+
+  .tab svg {
+    filter: none;
+  }
+
+  .tab[aria-current='page'] {
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+
+  .fab {
+    inset: calc(36px + var(--inset-top)) auto auto 28px;
+
+    /* R-363：画在侧栏上面（同为 z-index 10 时 DOM 里在后的侧栏盖住了“＋”，看不见也点不到）；只改层级，颜色、模糊、尺寸不动 */
+    z-index: var(--z-bar-over);
+    width: 54px;
+    height: 54px;
+  }
+
+  :global(#root):has(.bar) {
+    padding-left: 110px;
+  }
+}
+
+/* 侧栏最下面的设置入口（头像；外壳 nav 里页签后面，设计复审三 S1）：只在侧栏里出，窄屏在今天页右上角 */
+.me {
+  display: none;
+}
+
+@media (width >= 900px) {
+  .me {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    place-items: center;
+    width: var(--hit);
+    height: var(--hit);
+    margin-top: auto;
+    border-radius: 50%;
+    color: var(--text);
+  }
+
+  .me::before {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    z-index: -1;
+    border-radius: 50%;
+    background: var(--panel-2);
+    box-shadow: inset 0 0 0 1px var(--step-off);
+  }
+
+  .me svg {
+    width: 18px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+}
+
+/* 侧栏悬停反馈（设计复审三 S3）：只在有悬停的设备上（鼠标、触控板）；没选中的页签和设置入口铺一层 --panel-2，字色加深到 --text。
+   选中的页签本来就是 --accent 底，不变 */
+@media (width >= 900px) and (hover: hover) {
+  .tab:not([aria-current='page']):hover {
+    background: var(--panel-2);
+    color: var(--text);
+  }
+
+  .me:hover::before {
+    background: var(--step-off);
+  }
+}
+
+/* 减少透明效果：侧栏实色 */
+
+@media (width >= 900px) {
+  :global(:root:is([data-rt='1'], [data-solid='1'])) .bar {
+    background: var(--glass-solid);
+    backdrop-filter: none;
+  }
+}

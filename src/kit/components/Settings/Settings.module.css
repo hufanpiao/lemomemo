@@ -1,0 +1,363 @@
+/* 设置页的卡片、行、分段按钮：行高 44、点击区扩到 44；入口行的值单行省略、行名不缩；开关行的说明和报错写在行里 */
+
+/* 只给读屏的文字（每张卡的卡名 h2） */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.grp {
+  margin: 0;
+  padding: 0 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  list-style: none;
+}
+
+/* 单行整行高 44、不加上下内边距（不许加高）；行里的 .rowBtn 44 撑满整行。分隔线 0.5px（同 kit 表单字段行） */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: var(--hit);
+  padding: 0;
+  border-bottom: 0.5px solid var(--line);
+}
+
+/* 两行内容的行（下面带一行灰字 .meta 或报错 .error）：上下各 8px，不然灰字压到卡片圆角；单行的行仍是 44 */
+.row:has(> .meta),
+.row:has(> .error) {
+  padding: 8px 0;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+/* 能左滑的多段行（SettingsDetailRow 的 swipe）：li 是 SwipeRow 外框，分隔线画在它身上；行面里那层 .row 撑满、不再画线 */
+.swipe {
+  display: flex;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.swipe:last-child {
+  border-bottom: 0;
+}
+
+/* 设置卡里只裁到行自己的框：SwipeRow 的 .wrap 往左多留 16px 给待办勾选特效，可设置卡左内边距只有 14px，
+   滑开时行面会画出卡片左边、盖住最后一行的左下圆角。设置行没有特效，不用多留（两个类，压过 .wrap 的一个类） */
+.grp > .swipe {
+  clip-path: inset(0);
+}
+
+.swipeFace {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+/* 行名：占满剩下的宽度，把右边的按钮、值、开关推到右边；太长时换行，不省略。入口行例外见 .rowBtn .tx */
+.tx {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-15);
+  font-weight: inherit;
+  overflow-wrap: anywhere;
+}
+
+/* 当前值：单行，放不下就省略，保证入口行仍是单行高。三层文字色：行名正文色、值次要色（--text-2）、› 第三层（--text-3）；值 14 */
+.v {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* stacked：行名和值上下两行；值在行名下面，可换行、不省略，行高跟着内容长 */
+.stack {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 0;
+}
+
+.vBelow {
+  flex: none;
+  margin-left: 0;
+  overflow: visible;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* 数字值（版本号）：等宽数字，和分组名同一个等宽字族 */
+.num {
+  font-family: var(--f-mono);
+}
+
+.chev {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--fs-15);
+}
+
+/* 说明文字断行：不用 text-wrap: pretty（它让中文提前换行，拆开“之后”“能不能”），用浏览器默认禁则、行尾排满；
+   韩文按词断由 base.css 的 :lang(ko) body { word-break: keep-all } 继承下来，这里不另写（e2e b2-ui-b-settings-wrap 查计算样式） */
+.meta {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+/* 入口行：整行一个按钮 */
+.rowBtn {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/* 入口行的行名不长：右边的值（.v，flex 1 1 0）拿走剩下的宽度，值单行省略、行名不缩 */
+.rowBtn .tx {
+  flex: 0 1 auto;
+}
+
+.rowBtn:disabled {
+  color: var(--text-2);
+}
+
+/* 整行宽、字靠左的行按钮按下不缩放，改成变淡：scale(0.97) 绕整行中心缩，左边的字被拉向右约 5px */
+.row .rowBtn {
+  transition: opacity var(--dur-press) var(--ease-out);
+}
+
+.row .rowBtn[data-state="pressed"] {
+  transform: none;
+  opacity: var(--press-dim);
+}
+
+/* 减少动态效果：变淡也直接切换（上面的 .row .rowBtn 权重比 Pressable 的 .pressable 高，要在这里自己关） */
+
+:global(:root[data-rm="1"]) .row .rowBtn {
+  transition: none;
+}
+
+/* 开关行：<label> 包行名和 role="switch" 的复选框（写法同提醒页免打扰） */
+.switchRow {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  cursor: pointer;
+}
+
+/* 开关本身的画法在 kit 共用的 ../Form.module.css 的 .switch */
+
+/* 带分段按钮的行：行名占左边，分段按钮（kit ModeSeg look="slide"）靠右，宽度随文字（韩文长 20–40%，不写死宽度）。
+   ModeSeg 的底槽 --seg-track 深色时就是卡片底色 --panel，放在卡片里看不见：这一行把底槽换成页面底色 --bg（凹下去一档），其余外观照 ModeSeg */
+.segRow {
+  --seg-track: var(--bg);
+}
+
+/* ===== 日历设置、提醒设置用的 ===== */
+
+/* 看得见的组标题（SettingsCard / SettingsChoiceCard 的 showTitle）：字样用 kit 表单的小字分组名（Form.module.css 的 .groupLabel，两个类一起挂），
+   这里只管和上一张卡隔开 16；页面第一组贴着顶栏，用分组名自己的 4。写成 h2.gt（权重 0,1,1）压过分组名那份 margin（两份 CSS 模块谁先加载不固定） */
+h2.gt {
+  margin-top: 16px;
+}
+
+section:first-child > h2.gt {
+  margin-top: 4px;
+}
+
+/* 卡片下面的一句说明（note；设置页卡外的说明也挂这个类，见 Settings.tsx 的 settingsNoteClass）。
+   不写 text-wrap: pretty（中文提前换行，拆开“之后”“能不能”），用浏览器默认禁则；韩文按词断由 base.css 的 :lang(ko) body 继承（e2e b2-ui-b-settings-wrap 查计算样式） */
+.note {
+  margin: 6px 4px 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+/* SettingsCard 自己的卡下说明：下边 16 把下一张卡隔开 */
+.cardNote {
+  margin-bottom: 16px;
+}
+
+/* 单选每项一行：44 高、行间分隔线，整行可点（label），选中的右边墨色“✓”（不用柠檬黄圆点，白卡上对比度不够） */
+.choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  padding: 4px 0;
+  border-bottom: 0.5px solid var(--line);
+  cursor: pointer;
+}
+
+.choice:last-child {
+  border-bottom: 0;
+}
+
+.choice:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+.check {
+  flex: none;
+  width: 20px;
+  color: var(--text);
+  font-size: var(--fs-17);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* 一行几个时刻（免打扰“从 / 到”，kit 选择器的值按钮）：
+   “从”占 60 宽、后面的按钮靠左；“到”紧跟、后面的按钮靠右；就地展开的选择器在下一行占满（.timeSlot） */
+.timesRow {
+  gap: 4px 8px;
+  padding: 4px 0;
+}
+
+.timeK {
+  flex: none;
+  font-size: var(--fs-15);
+}
+
+.timeK0 {
+  min-width: 60px;
+}
+
+.timeV {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  min-width: 0;
+}
+
+.timeV:last-of-type {
+  justify-content: flex-end;
+}
+
+.timeSlot {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.timeSlot:empty {
+  display: none;
+}
+
+.act {
+  flex: none;
+  margin-left: auto;
+}
+
+/* 设置页账号、数据、电脑三页用的 */
+
+/* SettingsDetailRow 右边的值：靠右、灰字，长了换行、不省略 */
+.end {
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-align: right;
+}
+
+/* 危险色：整行按钮（“注销账号”）、灰字里的“通知邮件没发出去”。整行按钮禁用时由上面的 .rowBtn:disabled 变灰（权重更高） */
+.danger {
+  color: var(--danger-text);
+}
+
+/* ===== 设置 › 账号的 iOS 分组表 ===== */
+
+/* 行名前面的小方块图标（SettingsIcon）：30 见方、小圆角；灰底次要色，accent（本机、更换头像）柠檬黄底。
+   右边多 2：加上行里原有的间距 10，图标和字隔 12 */
+.ico {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 2px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+
+.icoOn {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.ico svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 组里有图标时，分隔线从行名起画、画到卡片右边沿，不从图标下面穿过（iOS 设置的画法）；
+   没图标的行（账号页最上面的头像行）从卡片左边的内边距起。42 = 图标 30 + 间距 12；-14 = 组的左右内边距 */
+.grp:has(.ico) > .row {
+  position: relative;
+  border-bottom: 0;
+}
+
+.grp:has(.ico) > .row:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -14px;
+  bottom: 0;
+  left: 0;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.grp:has(.ico) > .row:has(.ico):not(:last-child)::after {
+  left: 42px;
+}
+
+/* 字居中、不带 › 的整行按钮（SettingsEntryRow center，单独一组的红字操作行）；行名照样能缩、能折行（韩文长文案、系统字号放大时不溢出卡片），折行后每行居中 */
+.center {
+  justify-content: center;
+}
+
+.rowBtn.center .tx {
+  flex: 0 1 auto;
+  text-align: center;
+}

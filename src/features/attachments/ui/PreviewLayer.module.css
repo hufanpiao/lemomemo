@@ -1,0 +1,193 @@
+/* 附件预览浮层的内部：顶行、工具、沙箱、PPT 询问、底部“下载”。外壳（scrim / box / full）在 layer.module.css
+   分隔线 0.5px；类型标记同附件区（浅底等宽小字）；页码、缩放用等宽数字；PPT 询问卡留白大、标题加粗、按钮不描边；
+   Excel 工作表切换用 kit 胶囊（PreviewLayer.tsx 挂 Chip.module.css 的 .chip / .chipOn） */
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 0 12px 0 18px;
+  border-bottom: 0.5px solid var(--line);
+  font-size: var(--fs-14);
+}
+
+.mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: var(--fs-10);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.name {
+  overflow: hidden;
+  min-width: 0;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.btn,
+.btnText {
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.btnText {
+  background: var(--panel-2);
+}
+
+.btn:disabled {
+  opacity: 0.35;
+}
+
+/* “第 1 / 2 页”“100%”：等宽数字，翻页、缩放时宽度不跳 */
+.page {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 18px;
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel-2);
+}
+
+.frame,
+.frameHidden {
+  flex: 1;
+  width: 100%;
+  border: 0;
+}
+
+.frameHidden {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wait {
+  margin: auto;
+  padding: 0 24px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-align: center;
+}
+
+.ask {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(420px, calc(100% - 32px));
+  margin: auto;
+  padding: 24px 24px 20px;
+  border-radius: 22px;
+  background: var(--sheet-bg);
+  box-shadow: var(--shadow-1);
+}
+
+.askTitle {
+  font-size: var(--fs-19);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.askBody {
+  margin: 0 0 8px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.7;
+}
+
+/* 次要按钮（“只下载”、底部“下载 / 用其他 App 打开”）不描边、浅底，主按钮是墨色实底 */
+.askYes,
+.askNo,
+.footBtn {
+  min-height: var(--hit);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-15);
+}
+
+.askYes {
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 600;
+}
+
+/* “这台设备只问一次…”：小字第三层色 */
+.askOnce {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  text-align: center;
+}
+
+.sheets {
+  display: flex;
+  overflow-x: auto;
+  gap: 6px;
+  padding: 0 18px;
+  border-top: 0.5px solid var(--line);
+}
+
+.foot {
+  display: flex;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 0.5px solid var(--line);
+}
+
+.footBtn {
+  flex: 1;
+}

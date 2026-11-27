@@ -1,0 +1,722 @@
+/* AI 助手抽屉里面（ChatDrawer.tsx、AnswerBlock.tsx、RefSheet.tsx）：数值照定稿方案页（AI助手/方案.html）
+   .me、.wait、.ai、.sup、.lbl、.basis、.ref、.num、.kind、.usage、.composer、.quota、.think、.sheet；半屏里 .me 换 panel-2 底、不带阴影（.halfSheet .me）；.basis 照方案图白卡加阴影。
+   顶上三栏（左“✕ 关闭”、中“AI 助手”、右“记住的事”）是 kit SheetTop，和天气半屏、记住的事同一份 */
+
+/* 对话区：自己滚动，不显示滚动条（参考 .feed） */
+.feed {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 16px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.feed::-webkit-scrollbar {
+  display: none;
+}
+
+/* 我的气泡：靠右、最宽 78%；半屏里 panel-2 底、不带阴影 */
+.me {
+  width: fit-content;
+  max-width: 78%;
+  margin: 14px 0 0 auto;
+  padding: 10px 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel-2);
+  font-size: var(--fs-15);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* 排着队的那一句：气泡下面一行小灰字“上一句还在问” */
+.wait {
+  margin: 4px 2px 0 auto;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  text-align: right;
+}
+
+/* AI 回答 */
+.ai {
+  margin: 16px 2px 0;
+  font-size: var(--fs-15);
+  line-height: 1.75;
+}
+
+.ai p {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+/* 角标：字号、行高在 kit Cites.module.css（和结果层共用），这里只加颜色和数字字体 */
+.sup {
+  color: var(--text-2);
+  font-family: var(--f-num);
+}
+
+.lbl {
+  margin: 0 0 6px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+/* 依据列表：白卡加阴影（照方案图 截图_对话_查数据 / 联网 的 .basis：panel 底、--b-tile-shadow；不用半屏变体的 panel-2 底） */
+.basis {
+  margin: 10px 0 0;
+  padding: 2px 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  box-shadow: var(--b-tile-shadow);
+  list-style: none;
+}
+
+.ref {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.basis li + li .ref {
+  border-top: 1px solid var(--line);
+}
+
+.num {
+  flex: none;
+  width: 16px;
+  color: var(--text-3);
+  font: var(--fs-12) var(--f-mono);
+  text-align: center;
+}
+
+/* 行首记号（待办方框、日程竖条、随手记文档、纪念日菱形）在 kit RecordMark.module.css（size md），和查找面板共用 */
+
+/* 网页来源行首的字母方块（参考 .fav：22×22、圆角 6、700 12px 数字字体、panel-2 底、text-2 字） */
+.fav {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text-2);
+  font: 700 var(--fs-12) var(--f-num);
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tt {
+  overflow: hidden;
+  font-size: var(--fs-15);
+  line-height: 1.4;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mt {
+  color: var(--text-3);
+  font-size: var(--fs-12-5);
+  line-height: 1.4;
+}
+
+.late {
+  color: var(--danger-text);
+}
+
+.kind {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-11);
+}
+
+.chev {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--fs-16);
+}
+
+.usage {
+  margin: 8px 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+}
+
+/* 等待中三个点（参考 .think，1.2s 一明一暗、依次差 0.2s）；减少动态效果时不闪 */
+.think {
+  display: flex;
+  gap: 5px;
+  margin: 18px 4px;
+}
+
+.think i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: blink var(--dur-think) infinite;
+}
+
+.think i:nth-child(2) {
+  animation-delay: var(--dur-think-at2);
+}
+
+.think i:nth-child(3) {
+  animation-delay: var(--dur-think-at3);
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* 减少动态效果（data-rm，platform/look.ts 写）：不闪，三个点停在半亮 */
+:global(:root[data-rm="1"]) .think i {
+  animation: none;
+}
+
+:global(:root[data-rm="1"]) .think i:nth-child(2) {
+  animation-delay: var(--dur-think-at2);
+}
+
+:global(:root[data-rm="1"]) .think i:nth-child(3) {
+  animation-delay: var(--dur-think-at3);
+}
+
+/* 用完卡、没同意卡、没问到卡（参考 .quota） */
+.card {
+  margin: 14px 0 0;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  box-shadow: var(--b-tile-shadow);
+}
+
+.card b {
+  display: block;
+  margin-bottom: 4px;
+  font-size: var(--fs-15);
+}
+
+.card p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13-5);
+  line-height: 1.7;
+}
+
+.btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.btns button {
+  flex: 1;
+  min-height: var(--hit);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.btns button:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+/* “要记成这样吗”卡片（DraftCards.tsx）：外框同 .card，内容行同依据行（记号、标题、第二行、类型小签），按钮同 .btns；
+   “记下来”用发送钮同一个黄底（--accent），存上以后换成一行 panel-2 底的“✓ 已记到日程 · 查看 ›” */
+.drafts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0 0;
+}
+
+.drafts .draft {
+  margin: 0;
+}
+
+.dAsk {
+  margin-bottom: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+.dRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+}
+
+.btns .dSave {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.btns .dSave:disabled {
+  background: var(--step-off);
+  color: var(--text-3);
+}
+
+.dDone {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--hit);
+  margin-top: 12px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dView {
+  margin-left: auto;
+  color: var(--text-3);
+}
+
+/* 过去的月日先选（同打字条确认行，两颗都不用黄底，不暗示哪个是默认）：三颗按钮挤不下时折行 */
+.btns.dPick {
+  flex-wrap: wrap;
+}
+
+.btns.dPick button {
+  flex: 1 1 auto;
+  padding: 0 12px;
+}
+
+/* 本机规则拿不准的一句（这天不存在、重复只记一次、没太有把握）：在第二行下面，同 .mt 字号，比第二行深一档 */
+.dWarn {
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+  line-height: 1.4;
+}
+
+/* 要记的事一张卡片都没拆出来：回答下一行小字 */
+.dMiss {
+  margin-top: 12px;
+  color: var(--text-3);
+  font-size: var(--fs-12-5);
+}
+
+/* 输入条（参考 .composer：左右 14、最低 58、--r-xl、白底、--shadow-2；离屏幕底 42 = 安全区 34 + 8）；键盘弹着时贴键盘上 8 */
+.composer {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 58px;
+  margin: 0 14px calc(var(--inset-bottom) + 8px);
+  padding: 0 7px 0 20px;
+  border-radius: var(--r-xl);
+  background: var(--panel);
+  box-shadow: var(--shadow-2);
+}
+
+/* 画了“＋”（对话那家收图）时左边也只留 7，和右边发送钮对称；不画时照参考左边 20 */
+.withAdd {
+  padding-left: 7px;
+}
+
+/* 左边“＋”选图：44 圆、panel-2 底、text 色（同参考 .composer 右边那颗圆钮）；左右都离边 7，输入框左边留 6 的 gap */
+.add {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.add svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.add:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+/* 选好的图：输入条上面一排 44 的小方图（圆角 --r-xs），点一下移除 */
+.pics {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px 8px;
+}
+
+.pic {
+  width: var(--hit);
+  height: var(--hit);
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: var(--panel-2);
+  cursor: pointer;
+}
+
+.pic img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.picFail {
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+/* 网页版宽屏常驻栏（.dock，见文件末尾）的输入条（参考 .inp）：压到栏底，细边框、14 圆角，不带浮起的阴影。
+   写在键盘那条前面（stylelint no-descending-specificity）；宽屏没有屏幕键盘，两条不会同时生效 */
+.dock .composer {
+  min-height: 52px;
+  margin: auto 0 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: none;
+}
+
+:global(:root[data-kbo]) .composer {
+  margin-bottom: 8px;
+}
+
+/* 输入框撑满输入条的高（最低 52 / 58，点击区不小于 44；字照旧竖直居中，外观不变） */
+.field {
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+}
+
+.field::placeholder {
+  color: var(--text-3);
+}
+
+/* 发送：44 圆，打了字黄底（参考 .send），没打字灰（参考 .composer.off .send） */
+.send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+}
+
+.send svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.send:disabled {
+  background: var(--step-off);
+  color: var(--text-3);
+  cursor: default;
+}
+
+/* 没打字时的麦克风（参考 .composer .mic：44 圆、panel-2 底）；按住时黄底。长按不出系统菜单、不选字、手势不被滚动抢走 */
+.mic {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.mic svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.micOn {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 语音提问没成时输入条上面一行小字 */
+.vHint {
+  flex: none;
+  margin: 0 20px 6px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+/* 用完了：整条变灰（参考 .composer.off） */
+.off {
+  background: var(--panel-2);
+  box-shadow: none;
+}
+
+/* 点开条目的贴底弹层（参考 .sheet：类型小签、标题 20、灰字一行、“打开原条目 ›”）。
+   参考顶上的 36×5 把手不画：kit Dialog 的贴底弹层拖不动，画出来是假把手，上边距补上它原来占的 19px */
+.rs {
+  padding: 25px 8px 0;
+}
+
+.rsKind {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-11-5);
+}
+
+.rsTitle {
+  margin: 6px 0 4px;
+  font-size: var(--fs-20);
+  overflow-wrap: anywhere;
+}
+
+.rsMeta {
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.rsGo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--hit);
+  margin-top: 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+/* 网页版宽屏右边常驻栏（ChatDock.tsx；参考页 .ai .aih .bub .chips .chip .inp）：
+   位置只用 base.css 的 --dk-*（只在宽屏断点里有）：宽 340、离右边 16，上沿是页头下沿，下沿离窗口底 --dk-top，和左边卡片顶、底齐平。
+   对话区不撑满：气泡、建议问题紧跟在上面，输入条压到最底（参考 .inp margin-top: auto）；对话长了对话区自己滚 */
+.dock {
+  position: fixed;
+  top: calc(var(--dk-top) + var(--dk-head) + var(--dk-gap));
+  right: max(16px, env(safe-area-inset-right));
+  bottom: var(--dk-bot);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: var(--dk-ai);
+  padding: 16px;
+  border-radius: 22px;
+  background: var(--b-drawer);
+  box-shadow: var(--b-tile-shadow);
+}
+
+/* 右边详情抽屉（kit DetailDrawer，400 宽，整块盖住这一栏的位置）开着时让开：抽屉在页面 main 自己的层叠里，z-index 比不过这一栏，
+   不让开就压在抽屉上、挡住抽屉里的按钮 */
+:global(:root:has(aside[data-detail-drawer]:not([data-side='left']))) .dock {
+  visibility: hidden;
+}
+
+.dh {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.dh b {
+  font-size: var(--fs-16);
+}
+
+.dh span {
+  display: block;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+/* 标题前的光球（吉祥物 #7，features/mascot 的 MascotMini 画）：盒子写死退路小脸的 47×32，
+   加载中留空、标题不跳；光球按 32 高缩进来、横向居中；不接指针 */
+.orb {
+  position: relative;
+  flex: none;
+  width: 47px;
+  height: 32px;
+  pointer-events: none;
+}
+
+/* 光球下不来（data-state=fail，分包或素材下载失败）退回原来的小脸（参考 .rice.sm：76×52 的白色椭圆缩到 0.62，两只眼睛） */
+.orb[data-state='fail'] {
+  border-radius: 50% / 56%;
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+}
+
+.orb[data-state='fail']::before,
+.orb[data-state='fail']::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  width: 4.5px;
+  height: 5.5px;
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.orb[data-state='fail']::before {
+  left: 15.5px;
+}
+
+.orb[data-state='fail']::after {
+  right: 15.5px;
+}
+
+.dock .feed {
+  flex: 0 1 auto;
+  padding: 0;
+}
+
+/* 我的气泡（参考 .bub.q 浅柠檬底）、AI 回答（参考 .bub 浅灰底） */
+.dock .me {
+  max-width: 86%;
+  margin-top: 0;
+  padding: 11px 13px;
+  border-radius: var(--r-md);
+  background: var(--today-bg);
+  font-size: var(--fs-14);
+}
+
+.dock .ai {
+  margin: 10px 0;
+  padding: 11px 13px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  font-size: var(--fs-14);
+  line-height: 1.55;
+}
+
+/* 建议问题（参考 .chips .chip）：点了直接问 */
+.chips {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+
+.chip:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+/* 触屏（iPad）：建议问题至少 44 高，手指点得准 */
+@media (pointer: coarse) {
+  .chip {
+    min-height: var(--hit);
+  }
+}
+
+/* 只有鼠标的电脑、网页版：输入条的“＋”、麦克风、发送三颗圆钮 44→36、图标 20→18，输入条 58→50（上下仍各留 7，和左右对称）；
+   有触屏的（手机、iPad、触屏笔记本）照旧 44（同仓库“鼠标下 36、触屏 44”的约定，见 tests/e2e/hit-target.spec.ts） */
+@media not all and (any-pointer: coarse) {
+  .composer {
+    min-height: 50px;
+  }
+
+  .add,
+  .mic,
+  .send {
+    width: 36px;
+    height: 36px;
+  }
+
+  .add svg,
+  .mic svg,
+  .send svg {
+    width: 18px;
+    height: 18px;
+  }
+}

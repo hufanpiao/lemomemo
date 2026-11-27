@@ -1,0 +1,463 @@
+/* 打勾方框（kit）：待办页、今天页、子任务、查找结果、待办编辑页的“完成”共用。
+   空心圆角方框照参考图量：边长 24pt、边宽 1.75pt、圆角是普通圆弧，半径为边长的 37.5%；
+   边色 --check-edge 照参考图原色（卡片底 2.7:1，build/contrast-pairs.json 的 accepted）；
+   打勾时填充块从中间一个小圆长成圆角方块、淡入，勾号随之淡入；取消原路退回。
+   使用方可在外层设 --check-size（默认 24px，点击区照样 44 × 44；子任务、查找结果用 18px）和 --check-margin（默认在 44 高里居中）；
+   子任务用组件的 soft（10 个淡点、没有细正圆，见 .sparkSoft）。圆角按边长比例，小一号的不会显得更圆。类名沿用 CheckCircle */
+
+/* checkbox 叠在 label 外扩区（.checkBox::after）上面，不然 ::after 盖住 checkbox */
+.check {
+  position: relative;
+  z-index: 1;
+  grid-area: 1 / 1;
+  width: var(--check-size, 24px);
+  height: var(--check-size, 24px);
+  margin: 0;
+  border-radius: calc(var(--check-size, 24px) * 0.375);
+  box-shadow: inset 0 0 0 1.75px var(--check-edge);
+  appearance: none;
+  transition: box-shadow var(--dur-ui) var(--ease-out);
+}
+
+/* checkbox 带 switch 属性（iOS 只在手指点到系统开关时震）：iOS 18 起开关里有 ::track、::thumb，藏起来，外观只有方框 */
+/* stylelint-disable selector-pseudo-element-no-unknown -- WebKit 的开关伪元素 */
+.check::track,
+.check::thumb {
+  visibility: hidden;
+}
+/* stylelint-enable selector-pseudo-element-no-unknown */
+
+/* 勾上以后边和填充同色；checkbox 叠在填充块上面，边色要跟着换。聚焦框用全局 :focus-visible（base.css） */
+.check:checked {
+  box-shadow: inset 0 0 0 1.75px var(--check-on-bg);
+}
+
+/* 填充块和勾号是叠在方框上的两个 span（不接点按），状态在自身的 data-state 上，点下去当下就开始（不等保存回来）。
+   只动 transform、opacity、圆角；过渡可中断 */
+.checkBox {
+  position: relative;
+  display: grid;
+  flex: none;
+  width: var(--check-size, 24px);
+  height: var(--check-size, 24px);
+  margin: var(--check-margin, calc((var(--hit) - var(--check-size, 24px)) / 2)) 0;
+}
+
+/* 画面层：按下缩放、勾上回弹都缩这一层，不缩外层 label。缩 label 会让 44 的外扩区跟着缩，
+   iOS 抬手时按缩小后的位置判定点中，手指偏一点就吞掉 click */
+.face {
+  position: relative;
+  z-index: 1; /* 按下时 .face 有 transform、自成层叠上下文，不写这条 checkbox 会被 ::after 盖住 */
+  display: grid;
+  grid-area: 1 / 1;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  transition: transform var(--dur-press) var(--ease-press);
+}
+
+/* 只读行：方框变淡，表示打不了勾；跟着 checkbox 的 aria-disabled，不另挂属性 */
+.checkBox:has([aria-disabled='true']) {
+  opacity: var(--disabled-dim);
+}
+
+/* 点击区外扩到 44 × 44：.checkBox 是包着 checkbox 的 label，四边各往外伸（44 − 边长）/ 2，方框比 44 大时不伸；
+   外扩区挂在不缩放的 label 上，点击区始终 44 */
+.checkBox::after {
+  content: '';
+  position: absolute;
+  inset: min(0px, calc((100% - var(--hit)) / 2));
+}
+
+/* —— 勾选完成时间线 —— 时刻、时长全在动效令牌“勾选完成时间线”一段；时间从勾上那一刻算：
+   ① 按下：没勾上的缩到 0.45（已勾上的 0.8），--dur-press · --ease-press；缩的是 .face，点在外扩区上也一样缩
+   ② 亲手勾上（组件给 .face 加 .pop）：0.45 → 1.22 → 0.96 → 1.02 → 1，共 --dur-done-pop；
+      填充块同时从小圆（0.3 倍、圆角 50%）长成圆角方块（--dur-done-fill，淡入 --dur-done-fade）
+   ③ --dur-done-spark-at 起 14 个小点贴着方块边长出来、往外飘、逐帧变暗（--dur-spark）
+   ④ --dur-done-ring-at 起一圈细正圆长出来（--dur-ring-in），--dur-done-ring-out-at 起边扩边淡（--dur-ring），始终比小点暗、比小点先消失
+   颜色：刚勾上、还在原位时（label 上 data-fresh）填充、边是 --accent、勾号 --on-accent；
+   收进“已完成”以后、挂载时就勾上的用 --check-on-bg / --check-on-fg（亮色几条写在文件最后，按选择器特异性排）。
+   删除线、行收起在 kit List.module.css 的 .strike、.fold。已勾上的按下 0.8 写在减弱动态效果一段后面（同样是特异性顺序） */
+
+/* 按下：组件在 label 的 pointerdown 时给 .face 打 data-press，松手、取消时去掉；.face:active 是没有脚本时的同一效果 */
+.face:active,
+.face[data-press] {
+  transform: scale(0.45);
+}
+
+/* 回弹拆成两段同时跑、相乘：Chromium、WebKit 都不认关键帧里 var() 的 animation-timing-function（会退成直线），所以两段各用一条令牌：
+   • check-pop-up 动 scale 属性：0.45 → 38% 到 1.22 → 停住，曲线 --ease-done-pop-in（停住那段数值不变，曲线不起作用）
+   • check-pop 动 transform：前 38% 是 1，之后 0.96、1.02、1 各除以 1.22，曲线 --ease-done-pop
+   两段相乘 = 0.45 → 1.22 → 0.96 → 1.02 → 1；两段一样长、一起结束，结束后都不留值（= 1） */
+.pop {
+  animation:
+    check-pop-up var(--dur-done-pop) var(--ease-done-pop-in),
+    check-pop var(--dur-done-pop) var(--ease-done-pop);
+}
+
+@keyframes check-pop-up {
+  0% {
+    scale: 0.45;
+  }
+
+  38%,
+  100% {
+    scale: 1.22;
+  }
+}
+
+@keyframes check-pop {
+  0%,
+  38% {
+    transform: scale(1);
+  }
+
+  64% {
+    transform: scale(0.7869); /* 0.96 / 1.22 */
+  }
+
+  84% {
+    transform: scale(0.8361); /* 1.02 / 1.22 */
+  }
+
+  100% {
+    transform: scale(0.8197); /* 1 / 1.22 */
+  }
+}
+
+/* 填充块：没勾上是中间一个 0.3 倍的小圆（opacity 0），勾上长成盖满方框的圆角方块 */
+.fill {
+  grid-area: 1 / 1;
+  width: var(--check-size, 24px);
+  height: var(--check-size, 24px);
+  border-radius: calc(var(--check-size, 24px) * 0.375);
+  background: var(--check-on-bg);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.3);
+  transition:
+    transform var(--dur-done-fill) var(--ease-spring),
+    opacity var(--dur-done-fade) var(--ease-out),
+    border-radius var(--dur-done-fill) var(--ease-out);
+}
+
+.fill[data-state="off"] {
+  border-radius: 50%;
+}
+
+.fill[data-state="on"] {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.tick {
+  grid-area: 1 / 1;
+  width: 6px;
+  height: 11px;
+  margin-top: -3px;
+  border-right: 2.5px solid var(--check-on-fg);
+  border-bottom: 2.5px solid var(--check-on-fg);
+  opacity: 0;
+  pointer-events: none;
+
+  /* 斜过来只是勾号的形状，不参与动画：勾号只淡入（填充块填满时一起出现） */
+  transform: rotate(45deg);
+  transition: opacity var(--dur-ui) var(--ease-out);
+}
+
+.tick[data-state="on"] {
+  opacity: 1;
+}
+
+/* 子任务做到几成：没勾上的方框里从下往上填（--part 是 0～1），中间一张小脸——起步一个点、大半两个点。
+   跟着方框的圆角裁；填多少只动 transform（scaleY），勾上时整块换成 .fill */
+.part {
+  position: relative;
+  grid-area: 1 / 1;
+  width: var(--check-size, 24px);
+  height: var(--check-size, 24px);
+  overflow: hidden;
+  border-radius: calc(var(--check-size, 24px) * 0.375);
+  pointer-events: none;
+}
+
+.part::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--check-on-bg);
+  transform: scaleY(var(--part, 0));
+  transform-origin: center bottom;
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+
+/* 小脸：两只眼睛，起步只亮中间一只（box-shadow 画第二只，起步不画）；全做完（3）满填、不画脸 */
+.part::after {
+  content: '';
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  margin-left: -1.5px;
+  border-radius: 50%;
+  background: var(--check-on-fg);
+}
+
+.part[data-stage='2']::after {
+  margin-left: -4.5px;
+  box-shadow: 6px 0 0 var(--check-on-fg);
+}
+
+.part[data-stage='3']::after {
+  content: none;
+}
+
+/* ③④ 小点和细正圆：.burst 是方框正中一个 0 × 0 的锚点，里面先是细正圆（b.ring），后面 14 个小点（i，--a 是角度）；
+   小点的 translateX 是离中心的半径（px，按 24 的方框量；只有 24 的待办方框会播），只动 transform、opacity */
+.burst {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.ring {
+  position: absolute;
+  top: calc(var(--check-size, 24px) / -2);
+  left: calc(var(--check-size, 24px) / -2);
+  width: var(--check-size, 24px);
+  height: var(--check-size, 24px);
+  border: 0.7px solid var(--check-ring);
+  border-radius: 50%;
+  opacity: 0;
+
+  /* 两段：出现那一段走 --ease-done-ring-in，后面直线。WebKit 不认关键帧里的 var() 曲线、stylelint 又不许写死曲线，
+     所以拆成两段、在元素上取令牌（合计 --dur-ring-in + --dur-ring）。后一段只往后填（forwards），前一段播的时候不盖住它 */
+  animation:
+    check-ring-in var(--dur-ring-in) var(--ease-done-ring-in) var(--dur-done-ring-at) both,
+    check-ring var(--dur-ring) var(--ease-linear) var(--dur-done-ring-out-at) forwards;
+}
+
+/* 圆圈两段：check-ring-in 是整段的 0 → 12%，check-ring 是 12% → 100%（百分比按后一段 150 / 170 折算） */
+@keyframes check-ring-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.2);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1.36);
+  }
+}
+
+@keyframes check-ring {
+  0% {
+    opacity: 1;
+    transform: scale(1.36);
+  }
+
+  37.5% {
+    opacity: 0.6;
+    transform: scale(1.72);
+  }
+
+  71.6% {
+    opacity: 0.2;
+    transform: scale(1.88);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.95);
+  }
+}
+
+/* 两种颜色交替（.burst 的第一个孩子是 .ring，所以 nth-child(odd) 落在第 2、4、6… 个小点上） */
+.spark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.6px;
+  height: 2.6px;
+  margin: -1.3px 0 0 -1.3px;
+  border-radius: 50%;
+  background-color: var(--check-spark-b);
+  opacity: 0;
+  animation: check-spark var(--dur-spark) var(--ease-linear) var(--dur-done-spark-at) both;
+}
+
+.spark:nth-child(odd) {
+  background-color: var(--check-spark-a);
+}
+
+/* 子任务那一档（组件的 soft）：按下、回弹、填充同主待办；没有细正圆，小点换成 10 个淡点（sparkSoft，和 .spark 各写各的）：
+   --dur-sub-spark-at 起从方块边（半个边长）扩到约 0.96 个边长，边扩边缩到 0.35、淡掉，按 --check-size 等比 */
+.sparkSoft {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.5px;
+  height: 2.5px;
+  margin: -1.25px 0 0 -1.25px;
+  border-radius: 50%;
+  background-color: var(--check-spark-soft);
+  opacity: 0;
+  animation: check-spark-soft var(--dur-sub-spark) var(--ease-out) var(--dur-sub-spark-at) both;
+}
+
+@keyframes check-spark-soft {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(calc(var(--check-size, 24px) * 0.5)) scale(1);
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(calc(var(--check-size, 24px) * 0.958)) scale(0.35);
+  }
+}
+
+@keyframes check-spark {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(12px) scale(0.8);
+  }
+
+  16% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(15px) scale(1);
+  }
+
+  26% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(18px) scale(1);
+  }
+
+  35% {
+    opacity: 0.83;
+    transform: rotate(var(--a)) translateX(21px) scale(1);
+  }
+
+  44% {
+    opacity: 0.6;
+    transform: rotate(var(--a)) translateX(23px) scale(0.95);
+  }
+
+  53% {
+    opacity: 0.46;
+    transform: rotate(var(--a)) translateX(26px) scale(0.9);
+  }
+
+  61% {
+    opacity: 0.34;
+    transform: rotate(var(--a)) translateX(29px) scale(0.85);
+  }
+
+  70% {
+    opacity: 0.28;
+    transform: rotate(var(--a)) translateX(30.5px) scale(0.8);
+  }
+
+  79% {
+    opacity: 0.19;
+    transform: rotate(var(--a)) translateX(31.5px) scale(0.75);
+  }
+
+  88% {
+    opacity: 0.12;
+    transform: rotate(var(--a)) translateX(32px) scale(0.7);
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(32.5px) scale(0.7);
+  }
+}
+
+/* 减少动态效果：不缩放、没有小点和细圆线，只淡入淡出、时长减半；圆角直接是方块。
+   animationend 不来，组件靠“变回没勾上当场清零”保证不重播（CheckCircle.tsx） */
+
+:global(:root[data-rm="1"]) .fill {
+  transform: none;
+  transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
+}
+
+:global(:root[data-rm="1"]) .fill[data-state="on"] {
+  transform: none;
+}
+
+:global(:root[data-rm="1"]) .fill[data-state="off"] {
+  border-radius: calc(var(--check-size, 24px) * 0.375);
+}
+
+:global(:root[data-rm="1"]) .check {
+  transition: none;
+}
+
+:global(:root[data-rm="1"]) .tick {
+  transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
+}
+
+:global(:root[data-rm="1"]) .face {
+  transition: none;
+}
+
+:global(:root[data-rm="1"]) .face:active,
+:global(:root[data-rm="1"]) .face[data-press] {
+  transform: none;
+}
+
+.face:has(> .check:checked):active,
+.face[data-press]:has(> .check:checked) {
+  transform: scale(0.8);
+}
+
+:global(:root[data-rm="1"]) .face:has(> .check:checked):active,
+:global(:root[data-rm="1"]) .face[data-press]:has(> .check:checked) {
+  transform: none;
+}
+
+:global(:root[data-rm="1"]) .pop {
+  animation: none;
+}
+
+:global(:root[data-rm="1"]) .sparkSoft {
+  animation: none;
+}
+
+:global(:root[data-rm="1"]) .spark {
+  animation: none;
+}
+
+:global(:root[data-rm="1"]) .ring {
+  animation: none;
+}
+
+:global(:root[data-rm="1"]) .burst {
+  display: none;
+}
+
+:global(:root[data-rm="1"]) .part::before {
+  transition: none;
+}
+
+/* 亮色（这一行刚勾上、还在原位，label 上 data-fresh）：边、填充亮柠檬黄，勾号深色；只换颜色，不动形状和时长 */
+.checkBox[data-fresh] .check:checked {
+  box-shadow: inset 0 0 0 1.75px var(--accent);
+}
+
+.checkBox[data-fresh] .fill {
+  background: var(--accent);
+}
+
+.checkBox[data-fresh] .tick {
+  border-color: var(--on-accent);
+}
