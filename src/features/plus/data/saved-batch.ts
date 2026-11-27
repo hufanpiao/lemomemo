@@ -97,12 +97,14 @@ export type ReplaceOut = 'replaced' | 'same' | 'not_saved' | 'skip_gone' | 'skip
 /** 比标题前去掉空白和标点（“买牛奶。”和“买 牛奶”算一样） */
 const bare = (s: string): string => s.replace(/[\s\p{P}]/gu, '');
 
-/** 两次拆出来的算不算一样：条数、每条的类型、标题（去掉空白和标点）、日子、截止、时刻、时长都一样。
- *  标题也比：AI 后台整理就是要纠正识别错的字，结构一样、字不一样也要换 */
+/** 两次拆出来的算不算一样：条数、每条的类型、标题（去掉空白和标点）、日子、截止、时刻、时长、项目都一样。
+ *  标题也比：AI 后台整理就是要纠正识别错的字，结构一样、字不一样也要换；
+ *  项目也比（R-497）：AI 照以前怎么分的配了自建项目、别的都和本机规则一样时也要换，不然先存的固定类别留着 */
 export function sameItems(a: readonly AiItem[], b: readonly AiItem[]): boolean {
   return a.length === b.length && a.every((x, i) => {
     const y = b[i];
-    return y !== undefined && x.kind === y.kind && bare(x.title) === bare(y.title) && x.date === y.date && x.due === y.due && x.time === y.time && x.duration_min === y.duration_min;
+    return y !== undefined && x.kind === y.kind && bare(x.title) === bare(y.title) && x.date === y.date && x.due === y.due && x.time === y.time && x.duration_min === y.duration_min
+      && (x.project ?? null) === (y.project ?? null);
   });
 }
 

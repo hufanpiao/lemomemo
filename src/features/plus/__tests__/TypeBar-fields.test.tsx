@@ -222,7 +222,7 @@ describe('点签改（手选优先）', () => {
     delete (globalThis as unknown as Record<string, unknown>)[RL_SLOT];
     expect(lines.find((l) => l.startsWith('typebar planned')), '先存的是本机规则的').toMatch(/ai=later .*origin=rule/);
     expect(rowOf(writer, 0), '先存的已带上手选的分类').toMatchObject({ project: '学习' });
-    expect(lines.find((l) => l.startsWith('typebar tidy')), '换成了 AI 的').toMatch(/^typebar tidy out=replaced reason=- ms=\d+$/);
+    expect(lines.find((l) => l.startsWith('typebar tidy')), '换成了 AI 的').toMatch(/^typebar tidy out=replaced reason=- proj=\d+ ex=\d+ ms=\d+$/);
     expect(lines, '点签只记哪一格').toContain('typebar pick k=project');
     expect(rowOf(writer, 1)).toMatchObject({ title: '和小王开会', date: '2026-11-04', time: '10:00', project: '学习', remind_min: 15 });
   });

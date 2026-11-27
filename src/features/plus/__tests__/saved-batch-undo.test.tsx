@@ -331,11 +331,15 @@ describe('确认行连点（第二轮复查续第 2 条）', () => {
 
 describe('AI 后台整理换掉先存的（R-456）', () => {
   const ai = (items: AiItem[]): TypePlan => ({ ...PLAN, origin: 'ai', items });
-  it('sameItems：条数、类型、标题（去掉空白和标点）、日子、截止、时刻、时长都比', () => {
+  it('sameItems：条数、类型、标题（去掉空白和标点）、日子、截止、时刻、时长、项目都比', () => {
     expect(sameItems([todo('买牛奶')], [todo('买 牛奶。')]), '只差空白和标点：算一样').toBe(true);
     expect(sameItems([todo('买牛奶')], [todo('买点牛奶')]), '标题字不一样：不算一样').toBe(false);
     expect(sameItems([todo('买牛奶')], [todo('买牛奶'), todo('开会')])).toBe(false);
     expect(sameItems([todo('开会')], [{ ...todo('开会'), kind: 'event', date: '2026-11-03', time: '15:00' } as AiItem])).toBe(false);
+    // R-497：AI 照以前怎么分的配了自建项目、别的都一样（打字条先存本机规则那一条，11-28 预览日志 typebar tidy out=same）：不算一样，要换
+    expect(sameItems([{ ...todo('游泳'), project: '运动' }], [{ ...todo('游泳'), project: '健身' }]), '只差项目：不算一样').toBe(false);
+    expect(sameItems([{ ...todo('游泳'), project: null }], [{ ...todo('游泳'), project: '健身' }])).toBe(false);
+    expect(sameItems([{ ...todo('游泳'), project: '健身' }], [{ ...todo('游泳'), project: '健身' }])).toBe(true);
   });
 
   it('新的没存上：先存的原样留着（不撤），返回 not_saved', async () => {

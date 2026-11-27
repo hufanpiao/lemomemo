@@ -484,7 +484,7 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
       expect(lines.find((l) => l.startsWith('typebar planned'))).toMatch(/^typebar planned items=1 ai=later quotaOut=false origin=rule status=saved ms=\d+$/);
       expect(lines.find((l) => l.startsWith('typebar stored'))).toMatch(/^typebar stored out=ok ready=1 ask=0 origin=rule ms=\d+$/);
       // AI 一条都没拆出来：先存的留着
-      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=rule_saved_rule reason=empty_items ms=\d+$/));
+      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=rule_saved_rule reason=empty_items proj=- ex=\d+ ms=\d+$/));
     } finally {
       delete slots[RL_SLOT];
     }
@@ -626,7 +626,7 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
       await act(async () => {
         answer();
       });
-      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=replaced reason=- ms=\d+$/));
+      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=replaced reason=- proj=\d+ ex=\d+ ms=\d+$/));
       expect(writer.insert.mock.calls[1]?.[1]).toMatchObject({ title: '和小王开会', date: '2026-11-04', time: '10:00' });
       expect(writer.patch.mock.calls.map((c) => c[1]), '撤了先存的那条').toEqual([field(writer.insert.mock.calls[0]?.[1], 'id')]);
       expect(busyAtSwap, '换的时候占着').toEqual(['editing']);
@@ -668,7 +668,7 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
       await act(async () => {
         answer();
       });
-      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=skip_gone reason=- ms=\d+$/));
+      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=skip_gone reason=- proj=\d+ ex=\d+ ms=\d+$/));
       expect(writer.insert, 'AI 的没存').toHaveBeenCalledTimes(1);
     } finally {
       delete slots[RL_SLOT];
@@ -687,7 +687,7 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
       await act(async () => {
         answer();
       });
-      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=replaced reason=- ms=\d+$/));
+      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=replaced reason=- proj=\d+ ex=\d+ ms=\d+$/));
       const row = writer.insert.mock.calls[1]?.[1];
       expect(field(row, 'title')).toBe('和小王开会');
       expect(field(row, 'due'), '不记到日历页后来选的那天').not.toBe('2026-11-20');

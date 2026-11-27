@@ -69,16 +69,22 @@ export async function tidyTyped(m: BatchMark, text: string, ctx: TypeCtx, o: Pla
   const t0 = performance.now();
   let out: string;
   let reason = '-';
+  let proj = '-';
   try {
     const p = finish((await planText(text, ctx, { ...o, later: false })).plan);
     reason = p.aiReason ?? '-';
+    // R-497：AI 给的项目和先存的有几条不同（只记条数，不记项目名）；ex= 这一句带了几条以前怎么分的例子
+    if (p.origin === 'ai') {
+      const held = m.batch.entries;
+      proj = `${p.items.filter((it, i) => (it.project ?? null) !== (held[i]?.item.project ?? null)).length}`;
+    }
     out = p.origin !== 'ai'
       ? `rule_${p.status}`
       : await replaceHeld(typeBatch, m, p, text, () => getBoot()?.upgrade.holdBusy('editing'), 'typebar', { tz: ctx.tz, day: ctx.day });
   } catch (e) {
     out = `error_${e instanceof Error ? e.name : 'unknown'}`;
   }
-  rlog(`typebar tidy out=${out} reason=${reason} ms=${Math.round(performance.now() - t0)}`);
+  rlog(`typebar tidy out=${out} reason=${reason} proj=${proj} ex=${ctx.examples?.length ?? 0} ms=${Math.round(performance.now() - t0)}`);
   return out;
 }
 
