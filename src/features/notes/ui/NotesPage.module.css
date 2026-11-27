@@ -56,6 +56,18 @@
   overflow-x: auto;
 }
 
+/* 左右拖标签时下面那条灰色滚动条（负责人 11-28 截图“标签拖动的时候下面的大灰条给我去掉”）：触屏上藏掉，照样能拖；
+   电脑上用鼠标时留着（styles/base.css 的黄色细条）。写法同 base.css 藏整页滚动条那段：scrollbar-width 给 Safari 18.2+，::-webkit-scrollbar 给更早的 WebKit */
+@media (pointer: coarse) {
+  .filter {
+    scrollbar-width: none;
+  }
+
+  .filter::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* 分类筛选胶囊：kit 的 Chip.module.css（高 30、无描边浅底，待办页筛选同一份），这里只管排布 */
 
 /* 分类色点：卡片、行上 6px，胶囊上 8px；颜色从行内 --dot 来（categories.color） */
