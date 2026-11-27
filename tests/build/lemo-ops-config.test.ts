@@ -14,12 +14,12 @@ const CRON_HEARTBEAT = constOf('CRON_HEARTBEAT');
 const CRON_DAILY = constOf('CRON_DAILY');
 
 describe('lemo-ops 部署配置', () => {
-  it('wrangler.toml 的 cron 和代码里的一致；KV ID 是占位、不含密钥', () => {
+  it('wrangler.toml 的 cron 和代码里的一致；KV ID 是 32 位命名空间 ID、不含密钥', () => {
     const toml = readFileSync(join(dir, 'wrangler.toml'), 'utf8');
     const crons = /crons\s*=\s*\[([^\]]*)\]/.exec(toml)?.[1] ?? '';
     expect(CRON_HEARTBEAT).toBe('*/15 * * * *');
     expect(crons.split(',').map((s) => s.trim().replace(/^"|"$/g, ''))).toEqual([CRON_HEARTBEAT, CRON_DAILY]);
-    expect(toml).toContain('id = "REPLACE_WITH_KV_NAMESPACE_ID"');
+    expect(toml).toMatch(/^id = "[0-9a-f]{32}"$/m);
     expect(toml).toMatch(/^workers_dev = false/m);
     expect(toml).not.toMatch(/^\s*(OPS_SECRET|RESEND_API_KEY_OPS|SUPABASE_ANON_KEY|SUPABASE_URL|ALERT_TO|ALERT_FROM)\s*=/m);
     expect(toml).not.toMatch(/re_[A-Za-z0-9]{10,}|eyJ[A-Za-z0-9_-]{10,}/);

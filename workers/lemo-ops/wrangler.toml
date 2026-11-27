@@ -11,10 +11,10 @@ workers_dev = false   # 不对外提供网址，只跑 Cron Trigger
 crons = ["*/15 * * * *", "7 0 * * *"]
 
 # 告警去重状态（同一件事 6 小时内只发一次、恢复后发“已恢复”）。
-# 【负责人提供】在 Cloudflare 控制台 Workers KV 建一个命名空间（建议名 lemo-ops-state），把它的 ID 填到下面；占位值部署会失败，不会误部署
+# 正式账号 Workers KV 里的 lemo-ops-state（负责人 11-27 在控制台建）。命名空间 ID 不是密钥；换账号或重建时照控制台那一行改
 [[kv_namespaces]]
 binding = "OPS_STATE"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "01612c64f9534ac28b10b029ec9fd7dd"
 
 # Workers Logs（R-261）：发信失败、KV 写不进等错误码能在 Cloudflare 面板看到。
 # 开之前核对过：src/ 里只有 index.ts 的 consoleLog 一处 console 输出，内容只有固定错误码或缺的变量名，

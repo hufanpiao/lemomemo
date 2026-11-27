@@ -142,7 +142,7 @@ export function setup() {
   });
   writeFileSync(lockPath, lock.join('\n'), 'utf8');
   const tomlPath = join(repo, 'workers', 'lemo-ops', 'wrangler.toml');
-  writeFileSync(tomlPath, readFileSync(tomlPath, 'utf8').replace('REPLACE_WITH_KV_NAMESPACE_ID', KV_ID), 'utf8');
+  writeFileSync(tomlPath, readFileSync(tomlPath, 'utf8').replace(/^id = "[^"]*"/m, `id = "${KV_ID}"`), 'utf8');
   // 假依赖树（npm 函数装的，脚本删掉 .bin 和 .package-lock.json 以后）就这两个文件
   const tree = treeHash({ 'wrangler/bin/wrangler.exe': readFileSync(ctx.fakeExe), 'wrangler/bin/wrangler.js': readFileSync(ctx.fakeJs) });
   const pkgLock = sha256(readFileSync(join(repo, 'tools', 'deploy', 'package-lock.json')));
