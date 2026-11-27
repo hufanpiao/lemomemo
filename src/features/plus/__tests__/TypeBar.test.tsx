@@ -447,6 +447,8 @@ describe('打字条', () => {
 
 describe('S1：同意版本明确过期时不发 ai-parse', () => {
   const AI_ON = { id: 'set-ai', key: 'ai.enabled', value: true, deleted_at: null, updated_at: NOW };
+  /** 本机看出像查找、又拿不准（批量词）：照旧等 AI 判（type-flow 的 laterText 为 false） */
+  const ASKISH = '帮我找所有发票';
   afterEach(() => {
     setConsentStale(false, null);
     collection('settings').clear();
@@ -472,22 +474,25 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
     expect(writer.insert.mock.calls[0]?.[1]).toMatchObject({ title: '买牛奶' });
   });
 
-  it('够新或不知道（默认）：照常调 AI；运行日志记下结果来源、状态、原因和耗时（11-13“按记下要等一会才存上”靠这两行分清慢在哪）', async () => {
+  it('够新或不知道（默认）：照常调 AI（先存、AI 后台再换）；运行日志记下先存、存好、后台整理三行（11-13“按记下要等一会才存上”靠这几行分清慢在哪）', async () => {
     const lines: string[] = [];
     const slots = globalThis as unknown as Record<string, unknown>;
     slots[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
     try {
       const { callAi } = await typeOnce(false);
-      expect(callAi).toHaveBeenCalledTimes(1);
-      expect(lines.find((l) => l.startsWith('typebar planned'))).toMatch(/^typebar planned items=1 ai=true quotaOut=false origin=\w+ status=\w+ reason=\S+ ms=\d+$/);
-      expect(lines.find((l) => l.startsWith('typebar stored'))).toMatch(/^typebar stored out=ok ready=1 ask=0 origin=\w+ ms=\d+$/);
+      await waitFor(() => expect(callAi).toHaveBeenCalledTimes(1));
+      expect(lines.find((l) => l.startsWith('typebar planned'))).toMatch(/^typebar planned items=1 ai=later quotaOut=false origin=rule status=saved ms=\d+$/);
+      expect(lines.find((l) => l.startsWith('typebar stored'))).toMatch(/^typebar stored out=ok ready=1 ask=0 origin=rule ms=\d+$/);
+      // AI 一条都没拆出来：先存的留着
+      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=rule_saved_rule reason=empty_items ms=\d+$/));
     } finally {
       delete slots[RL_SLOT];
     }
   });
 
-  // Q-27（负责人 11-13 弹窗定乙“照旧等 AI，加提示”，R-406）：按“记下”后等 AI 期间预览行换成“正在识别…”，“记下”灰着；回来就存
-  it('等 AI 期间预览行显示“正在识别…”、“记下”灰着；AI 回来后存下；运行日志记 recog on / off 和耗时', async () => {
+  // Q-27（负责人 11-13 弹窗定乙“照旧等 AI，加提示”，R-406）：按“记下”后等 AI 期间预览行换成“正在识别…”，“记下”灰着；回来就存。
+  // 11-27 起只有本机看着像提问、又拿不准的句子还等 AI（负责人：“直接记下 ai 再识别”，选“像提问的照旧等 AI”）
+  it('像提问的句子：等 AI 期间预览行显示“正在识别…”、“记下”灰着；AI 回来后存下；运行日志记 recog on / off 和耗时', async () => {
     const lines: string[] = [];
     const slots = globalThis as unknown as Record<string, unknown>;
     slots[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
@@ -497,7 +502,7 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
       const callAi = vi.fn(() => new Promise<unknown>((ok) => (answer = () => ok({ intent: 'record', confidence: 1, items: [], quota_left: 3 }))));
       const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
       renderTypeHost({ day: null, writer, callAi, online: () => true });
-      fireEvent.change(screen.getByTestId('type-input'), { target: { value: '买牛奶' } });
+      fireEvent.change(screen.getByTestId('type-input'), { target: { value: ASKISH } });
       await act(async () => {
         fireEvent.submit(screen.getByTestId('type-bar'));
       });
@@ -517,7 +522,7 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
   });
 
   // B4b-3 评审第 5 条：等 AI 期间打字条被卸载（收起、切页）：请求当场中止，回来的结果不再写状态、不存、不交给结果层
-  it('等 AI 期间卸载：请求被中止（signal aborted），之后不存、不打开结果层；日志记 dropped', async () => {
+  it('像提问的句子等 AI 期间卸载：请求被中止（signal aborted），之后不存、不打开结果层；日志记 dropped', async () => {
     const lines: string[] = [];
     const slots = globalThis as unknown as Record<string, unknown>;
     slots[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
@@ -531,7 +536,7 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
       });
       const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
       const { unmount } = renderTypeHost({ day: null, writer, callAi, online: () => true });
-      fireEvent.change(screen.getByTestId('type-input'), { target: { value: '买牛奶' } });
+      fireEvent.change(screen.getByTestId('type-input'), { target: { value: ASKISH } });
       await act(async () => {
         fireEvent.submit(screen.getByTestId('type-bar'));
       });
@@ -550,6 +555,7 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
   });
 
   // 复查 N1（11-13）：等 AI 期间点了上一句提示条的“撤销”（8 秒到时自动关也一样），不能把这次提交打回 idle，AI 回来后确认行照样出来
+  // 有要问的过去月日的句子照旧等 AI（R-496 只先存拆得出、没有要问的日子、看不出是提问的）
   it('等 AI 期间撤掉上一句的提示条：还在“正在识别…”，AI 回来后有过去的日子照样出确认行', async () => {
     collection('settings').upsert([AI_ON]);
     let answer!: () => void;
@@ -580,5 +586,113 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
       answer();
     });
     await waitFor(() => expect(screen.getByRole('button', { name: '明年（2027/10/30）' })).toBeTruthy());
+  });
+
+  // 负责人 11-27：“每次按+记录完以后识别要很久，能不能改成直接记下ai再识别”（正式库 ai-parse 一次 3.9～5.9 秒）。
+  // 本机看不出是提问的不等 AI：当场存本机拆出的、打字条收起；AI 在后台，回来换掉（规则同按住说话那一路，saved-batch 的 replace）
+  it('先存、AI 后台再换：AI 还没回来就已记下、打字条收起；收起以后 AI 回来照样换成 AI 拆的，提示条写“AI 已整理”；换的那一下占住 busy（editing）', async () => {
+    const lines: string[] = [];
+    const slots = globalThis as unknown as Record<string, unknown>;
+    slots[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    fx.boot = true;
+    try {
+      collection('settings').upsert([AI_ON]);
+      let answer!: () => void;
+      let seen!: AbortSignal;
+      const aiItem = { kind: 'event', title: '和小王开会', date: '2026-11-04', time: '10:00', duration_min: 60, due: null, important: false, project: null, body: null, short: 'AI', date_basis: 'rel', anniv: null, confirm: null };
+      const callAi = vi.fn((_req: unknown, signal: AbortSignal) => {
+        seen = signal;
+        return new Promise<unknown>((ok) => (answer = () => ok({ intent: 'record', confidence: 1, quota_left: 3, items: [aiItem] })));
+      });
+      let busyAtSwap: string[] = [];
+      const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
+      const onClose = vi.fn();
+      renderTypeHost({ day: null, writer, callAi, online: () => true, onClose });
+      fireEvent.change(screen.getByTestId('type-input'), { target: { value: '跟小王那个会' } });
+      await act(async () => {
+        fireEvent.submit(screen.getByTestId('type-bar'));
+      });
+      await waitFor(() => expect(writer.insert, 'AI 没回来就存了').toHaveBeenCalledTimes(1));
+      expect(field(writer.insert.mock.calls[0]?.[1], 'title')).toBe('跟小王那个会');
+      await waitFor(() => expect(callAi, 'AI 在后台').toHaveBeenCalledTimes(1));
+      expect(onClose, '打字条收起').toHaveBeenCalled();
+      expect(screen.queryByTestId('type-bar')).toBeNull();
+      expect(seen.aborted, '收起不中止后台那一次').toBe(false);
+      expect(fx.busy, '等 AI 期间不占 busy').toEqual([]);
+      writer.insert.mockImplementation(async () => {
+        busyAtSwap = [...fx.busy];
+        return OK;
+      });
+      await act(async () => {
+        answer();
+      });
+      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=replaced reason=- ms=\d+$/));
+      expect(writer.insert.mock.calls[1]?.[1]).toMatchObject({ title: '和小王开会', date: '2026-11-04', time: '10:00' });
+      expect(writer.patch.mock.calls.map((c) => c[1]), '撤了先存的那条').toEqual([field(writer.insert.mock.calls[0]?.[1], 'id')]);
+      expect(busyAtSwap, '换的时候占着').toEqual(['editing']);
+      expect(fx.busy, '换完放开').toEqual([]);
+      expect((await screen.findByTestId('type-notice')).textContent).toContain('AI 已整理');
+    } finally {
+      fx.boot = false;
+      delete slots[RL_SLOT];
+    }
+  });
+
+  /** 先存一句、AI 先挂着：交回 AI 的回话开关 */
+  async function savedFirst(over: { day?: string | null; item?: Record<string, unknown> } = {}) {
+    collection('settings').upsert([AI_ON]);
+    let answer!: () => void;
+    const aiItem = { kind: 'event', title: '和小王开会', date: '2026-11-04', time: '10:00', duration_min: 60, due: null, important: false, project: null, body: null, short: 'AI', date_basis: 'rel', anniv: null, confirm: null, ...over.item };
+    const callAi = vi.fn(() => new Promise<unknown>((ok) => (answer = () => ok({ intent: 'record', confidence: 1, quota_left: 3, items: [aiItem] }))));
+    const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
+    renderTypeHost({ day: over.day ?? null, writer, callAi, online: () => true });
+    fireEvent.change(screen.getByTestId('type-input'), { target: { value: '跟小王那个会' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+    });
+    await waitFor(() => expect(callAi).toHaveBeenCalledTimes(1));
+    expect(writer.insert).toHaveBeenCalledTimes(1);
+    return { writer, answer: () => answer() };
+  }
+
+  it('先存以后、AI 回来以前在提示条上点了撤销：AI 回来不再记回去（skip_gone）', async () => {
+    const lines: string[] = [];
+    const slots = globalThis as unknown as Record<string, unknown>;
+    slots[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    try {
+      const { writer, answer } = await savedFirst();
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('type-notice-undo'));
+      });
+      await waitFor(() => expect(writer.patch, '撤掉了先存的').toHaveBeenCalledTimes(1));
+      await act(async () => {
+        answer();
+      });
+      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=skip_gone reason=- ms=\d+$/));
+      expect(writer.insert, 'AI 的没存').toHaveBeenCalledTimes(1);
+    } finally {
+      delete slots[RL_SLOT];
+    }
+  });
+
+  it('先存以后、AI 回来以前切到日历页选了别的日子又打开“＋”：AI 的条目按说这句那一刻的日子记（不跟着打字条现在绑的那天）', async () => {
+    const lines: string[] = [];
+    const slots = globalThis as unknown as Record<string, unknown>;
+    slots[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    try {
+      // AI 只给了时刻、没给日子的待办：日子由存的那一步按选中的那天补（今天页为 null 不补）
+      const { writer, answer } = await savedFirst({ item: { kind: 'todo', title: '和小王开会', date: null, time: '10:00', duration_min: null, due: null } });
+      // 同一个写入口（打字条挂上时把写入口、日子一起绑到这一批上）
+      renderTypeHost({ day: '2026-11-20', writer, online: () => true });
+      await act(async () => {
+        answer();
+      });
+      await waitFor(() => expect(lines.find((l) => l.startsWith('typebar tidy'))).toMatch(/^typebar tidy out=replaced reason=- ms=\d+$/));
+      const row = writer.insert.mock.calls[1]?.[1];
+      expect(field(row, 'title')).toBe('和小王开会');
+      expect(field(row, 'due'), '不记到日历页后来选的那天').not.toBe('2026-11-20');
+    } finally {
+      delete slots[RL_SLOT];
+    }
   });
 });

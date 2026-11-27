@@ -70,3 +70,49 @@ describe('planTyped 的意图分流', () => {
     expect(p.items.length).toBeGreaterThan(0);
   });
 });
+
+// 负责人 11-27：“直接记下 ai 再识别”，选“像提问的照旧等 AI”（R-496）。env.later：要调 AI 的句子里，够条件的不调 AI、交回本机结果带 later
+describe('planTyped 带 later：哪些句子先存、AI 后台再换', () => {
+  const LATER = { ...ON, later: true };
+  const later = async (text: string, ctx: TypeCtx = CTX, env: typeof LATER = LATER) => {
+    const call = stub(aiSearch(0.99));
+    const p = await planTyped(text, ctx, env, call);
+    return { p, called: call.mock.calls.length };
+  };
+  it('本机没把握、看不出是提问、拆得出：不调 AI，交回本机结果、later 置上', async () => {
+    for (const text of ['买牛奶', '跟小王那个会']) {
+      const { p, called } = await later(text);
+      expect(called, text).toBe(0);
+      expect(p, text).toMatchObject({ later: true, origin: 'rule', status: 'saved', ask: null });
+      expect(p.items.length, text).toBeGreaterThan(0);
+    }
+  });
+  it('像提问的、有要问的过去月日的：照旧调 AI（不先存）', async () => {
+    for (const text of [UNSURE, '10月30号交报告']) {
+      const { p, called } = await later(text);
+      expect(called, text).toBe(1);
+      expect(p.later, text).toBeUndefined();
+    }
+  });
+  it('本来就不调 AI 的（本机有把握的意图、离线、没开 AI、用完、日子越界）：和不带 later 一样，later 不置上', async () => {
+    const cases: [string, TypeCtx, typeof LATER][] = [
+      [SURE_SUM, CTX, LATER],
+      ['买牛奶', CTX, { ...LATER, online: false }],
+      ['买牛奶', CTX, { ...LATER, aiOn: false }],
+      ['买牛奶', CTX, { ...LATER, quotaOut: true }],
+      ['买牛奶', { ...CTX, day: '2019-01-01' }, LATER],
+    ];
+    for (const [text, ctx, env] of cases) {
+      const { p, called } = await later(text, ctx, env);
+      const plain = await planTyped(text, ctx, { ...env, later: false }, stub(aiSearch(0.99)));
+      expect(called, text).toBe(0);
+      expect(p, text).toEqual(plain);
+    }
+  });
+  it('先存的句子不带 later 再跑（后台那一次）：调 AI，AI 判成查找也不交结果层（本机没迹象，AI 的不算数）', async () => {
+    const call = stub(aiSearch(0.99));
+    const p = await planTyped('跟小王那个会', CTX, ON, call);
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(p).toMatchObject({ origin: 'rule', ask: null });
+  });
+});

@@ -54,6 +54,8 @@ export interface TypeEnv {
   aiOn: boolean;
   /** 本机记着今天的次数已经用完（quota_left = 0） */
   quotaOut: boolean;
+  /** 打字条要先存、AI 后台再换（R-496）：够条件的不调 AI，交回本机结果、later 置上（见 planTyped） */
+  later?: boolean | undefined;
 }
 
 /** ai-parse、ai-voice 共用的请求上下文，只由 aiReqCtx 拼 */
@@ -111,6 +113,8 @@ export interface TypePlan {
   ask: { ask: AssistAsk; aiUsed: 0 | 1 } | null;
   /** 模糊，先按记下保存了：提示条给“改成搜索”；found 时下面再给“也帮你找了一下 / 是要…吗？找到 N 条” */
   alt: { ask: AssistAsk; found: boolean } | null;
+  /** 要调 AI、但按 env.later 先交回本机结果（调用方当场存，再不带 later 调一次交后台换） */
+  later?: true;
 }
 
 /**
@@ -196,6 +200,9 @@ export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: 
   // 选中的日子超出后端认的范围：发了也是 400，不调 AI、不花次数，直接用本机结果（记到选中那天）；不是“AI 没回应”，不出那句提示
   const base = aiReqCtx(ctx);
   if (base === 'bad_default_day') return local('saved', base);
+  // 先存、AI 后台再换（负责人 11-27“直接记下 ai 再识别”，R-496）：到这里就是要调 AI 了。调用方要（env.later）、本机一点看不出是提问、拆出了条目、
+  // 没有要问的过去月日 → 不调 AI，交回本机结果、later 置上；像提问的（负责人选“像提问的照旧等 AI”）、有要问的日子、拆不出的照旧往下等 AI
+  if (env.later === true && !hint && result.items.length > 0 && !needsConfirm(result.items)) return { ...local('saved'), later: true };
   const req: AiParseReq = { ...base, text: cutAiText(text) };
   const isOnline = env.isOnline ?? onlineNow;
   const out = await askAi(req, call, AI_PARSE_TIMEOUT_MS, isOnline, signal);
@@ -238,12 +245,14 @@ export interface PlanTextOpts {
   call: CallAi;
   /** 调用方取消（手机识别那一路的这一次作废）：AI 请求跟着中止 */
   signal?: AbortSignal | undefined;
+  /** 打字条先存、AI 后台再换（TypeEnv.later） */
+  later?: boolean | undefined;
 }
 
 /** 打字条、语音实时转写共用的一步：开着 AI 才读本机记着的额度 → planTyped → 记下 AI 返回的剩余次数。quotaOut 交回给调用方记日志 */
 export async function planText(text: string, ctx: TypeCtx, o: PlanTextOpts): Promise<{ plan: TypePlan; quotaOut: boolean }> {
   const quotaOut = o.aiOn ? await quotaOutToday(ctx.now) : false;
-  const plan = await planTyped(text, ctx, { online: o.online(), isOnline: o.online, aiOn: o.aiOn, quotaOut }, o.call, o.signal);
+  const plan = await planTyped(text, ctx, { online: o.online(), isOnline: o.online, aiOn: o.aiOn, quotaOut, later: o.later }, o.call, o.signal);
   if (plan.quotaLeft !== null) void rememberQuotaLeft(plan.quotaLeft, ctx.now);
   return { plan, quotaOut };
 }

@@ -192,6 +192,31 @@ export interface SavedBatchOpts {
 
 export type SavedBatch = ReturnType<typeof createSavedBatch>;
 
+/** 换的那一下锁被占着（提示条上正在撤销、合并）：等这么久再试一次 */
+export const BUSY_RETRY_MS = 1000;
+
+/**
+ * AI 后台整理回来换掉先存的（录音 voice-pending、打字 type-batch 的 tidyTyped 共用这一份）：换的那一下占住升级中心的 busy
+ * （hold 占上、交回放开的函数），锁被占着（skip_busy）等 BUSY_RETRY_MS 再试一次，日志 `<tag> tidy busy_retry`；at 见 replace
+ */
+export async function replaceHeld(
+  b: Pick<SavedBatch, 'replace'>, m: BatchMark, plan: TypePlan, raw: string, hold: () => (() => void) | undefined, tag: string, at?: Omit<SaveEnv, 'now'>,
+): Promise<ReplaceOut> {
+  const once = async (): Promise<ReplaceOut> => {
+    const free = hold();
+    try {
+      return await b.replace(m, plan, raw, at);
+    } finally {
+      free?.();
+    }
+  };
+  const out = await once();
+  if (out !== 'skip_busy') return out;
+  rlog(`${tag} tidy busy_retry`);
+  await new Promise<void>((ok) => setTimeout(ok, BUSY_RETRY_MS));
+  return once();
+}
+
 export function createSavedBatch({ box, writer, tag, source, env, flow, peek = peekStore }: SavedBatchOpts) {
   const get = box.getState;
   const put = (s: Partial<BatchState>): void => box.setState(s);
@@ -429,7 +454,7 @@ export function createSavedBatch({ box, writer, tag, source, env, flow, peek = p
      *  撤掉删掉了（skip_gone）、动过（skip_edited：改过、勾完成、编辑页开着、提示条上动过这一批）、这一批的确认行还在问、
      *  AI 的结果里有要问的过去月日（skip_confirm）：不换。换的是提示条上正在画的这一批时按钮禁用；
      *  换完提示条还开着的换成 AI 那一批、带“AI 已整理”，已经关掉、换成了别的一批的不再弹出来 */
-    async replace(m: BatchMark, plan: TypePlan, raw: string): Promise<ReplaceOut> {
+    async replace(m: BatchMark, plan: TypePlan, raw: string, at?: Omit<SaveEnv, 'now'>): Promise<ReplaceOut> {
       // AI 一条都没拆出来：不拿空的去换，不然先存的会被撤掉、什么都不剩（调用方有转写时已经换成整句，见 voice-flow 的 finishVoice）
       if (plan.items.length === 0) return 'skip_empty';
       const l = look(m);
@@ -441,7 +466,8 @@ export function createSavedBatch({ box, writer, tag, source, env, flow, peek = p
         const mine = current();
         if (mine) put({ swapping: true });
         try {
-          const r = await swap(m.batch, plan, raw, plan.items, env(), () => look(m));
+          // at：说这句那一刻的时区、日历页选中的那天（打字这一路给；不给按现在绑着的）——AI 回来前切了页、选了别的日子也不记错天
+          const r = await swap(m.batch, plan, raw, plan.items, at ? { ...at, now: env().now } : env(), () => look(m));
           if (!r) return 'not_saved';
           if (typeof r === 'string') return r === 'gone' ? 'skip_gone' : 'skip_edited';
           // 提示条已经关掉、换成了别的一批（又说了一句）：库里照样换了，提示条不动

@@ -7,12 +7,15 @@
 //   （那时这一批由 hooks/useTypeBar 的 submit 收掉、不出提示条）
 // 纯 TS：不准 import React
 import type { DateStr } from '../../../../shared/core/date.ts';
+import { getBoot } from '../../../core/boot.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { write } from '../../../core/write.ts';
 import { clock } from '../../../platform/clock.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import type { Writer } from './capture-save.ts';
-import { createBatchBox, createSavedBatch, type BatchFlow, type BatchState } from './saved-batch.ts';
+import { createBatchBox, createSavedBatch, replaceHeld, type BatchFlow, type BatchMark, type BatchState } from './saved-batch.ts';
 import { clearTypeDraft } from './type-draft.ts';
+import { planText, type PlanTextOpts, type TypeCtx, type TypePlan } from './type-flow.ts';
 
 export interface TypeBind {
   day: DateStr | null;
@@ -49,6 +52,34 @@ export function bindTypeBatch(b: TypeBind): () => void {
   return () => {
     if (bound.flow === b.flow) bound = { ...bound, flow: null };
   };
+}
+
+/**
+ * 打字条“先存、AI 后台再换”的后台那一半（负责人 11-27：“直接记下 ai 再识别”，R-496；先存那一半在 hooks/useTypeBar 的 submit，
+ * 哪些句子走这条由 type-flow 的 planTyped 定：交回的 plan 带 later）：同一句不带 later 再交 planText（这次调 ai-parse，花 1 次），手选的签照样盖上（finish）；
+ * AI 拆出了条目（origin ai）就经 saved-batch 的 replaceHeld 换掉先存的那一批（m）——换不换的规则和按住说话那一路同一份（replace：撤掉删掉、改过勾完成、
+ * 编辑页开着、要先问日子、一样，都不换；提示条还开着的写“AI 已整理”）；日子按说这句那一刻的（ctx 的时区、选中的那天），不按换的时候打字条绑着的。
+ * 不随打字条收起、切页取消（已经存下了）。AI 没成、次数用完、AI 判成别的意图（走到这里的句子本机没有意图迹象，AI 判的不算数）：先存的留着，只记日志——
+ * 以前等 AI 时这种句子提示条会多一行“改成搜索”，先存以后提示条早就出了，不再补（有意去掉）。
+ * 不像录音那样设“回来太晚就不换”（voice-pending 的 LIVE_LATE_MS 20 秒）：ai-parse 一次最多 AI_PARSE_TIMEOUT_MS（6 秒），只在网络错误时重试 1 次，
+ * 加上锁被占着的 1 秒，最晚 13 秒左右，用不上
+ * 日志（不记字）：typebar tidy out=replaced|same|skip_*|not_saved|rule_<状态>|error_<名> reason=<AI 没成的原因，没有为 -> ms=（交 AI 到换完）
+ */
+export async function tidyTyped(m: BatchMark, text: string, ctx: TypeCtx, o: PlanTextOpts, finish: (p: TypePlan) => TypePlan): Promise<string> {
+  const t0 = performance.now();
+  let out: string;
+  let reason = '-';
+  try {
+    const p = finish((await planText(text, ctx, { ...o, later: false })).plan);
+    reason = p.aiReason ?? '-';
+    out = p.origin !== 'ai'
+      ? `rule_${p.status}`
+      : await replaceHeld(typeBatch, m, p, text, () => getBoot()?.upgrade.holdBusy('editing'), 'typebar', { tz: ctx.tz, day: ctx.day });
+  } catch (e) {
+    out = `error_${e instanceof Error ? e.name : 'unknown'}`;
+  }
+  rlog(`typebar tidy out=${out} reason=${reason} ms=${Math.round(performance.now() - t0)}`);
+  return out;
 }
 
 /** 提示条里“修改”用的（最近一次挂上的打字条交来的） */

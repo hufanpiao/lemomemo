@@ -216,12 +216,15 @@ describe('点签改（手选优先）', () => {
     fireEvent.change(screen.getByTestId('field-newproj'), { target: { value: '学习' } });
     fireEvent.keyDown(screen.getByTestId('field-newproj'), { key: 'Enter' });
     await save();
-    await waitFor(() => expect(writer.insert).toHaveBeenCalled());
+    // 先存、AI 后台再换（负责人 11-27）：本机拆出的当场存（手选的分类已盖上），AI 回来换成 AI 的结果、手选的照样留着
+    await waitFor(() => expect(lines.some((l) => l.startsWith('typebar tidy'))).toBe(true));
     expect(callAi).toHaveBeenCalledTimes(1);
     delete (globalThis as unknown as Record<string, unknown>)[RL_SLOT];
-    expect(lines.find((l) => l.startsWith('typebar planned')), '用的是 AI 的结果').toMatch(/origin=ai/);
+    expect(lines.find((l) => l.startsWith('typebar planned')), '先存的是本机规则的').toMatch(/ai=later .*origin=rule/);
+    expect(rowOf(writer, 0), '先存的已带上手选的分类').toMatchObject({ project: '学习' });
+    expect(lines.find((l) => l.startsWith('typebar tidy')), '换成了 AI 的').toMatch(/^typebar tidy out=replaced reason=- ms=\d+$/);
     expect(lines, '点签只记哪一格').toContain('typebar pick k=project');
-    expect(rowOf(writer)).toMatchObject({ title: '和小王开会', date: '2026-11-04', time: '10:00', project: '学习', remind_min: 15 });
+    expect(rowOf(writer, 1)).toMatchObject({ title: '和小王开会', date: '2026-11-04', time: '10:00', project: '学习', remind_min: 15 });
   });
 
   it('记下以后签清空（手选的不带到下一句）', async () => {

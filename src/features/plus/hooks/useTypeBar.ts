@@ -3,6 +3,9 @@
 //   手点过的格子记在 picks 里，记下时 applyPicks 盖到本机或 AI 的结果上（手选优先、手选了日期不拆条）；记下、交给结果层后清掉。点签记 typebar pick k=（只记哪一格）
 // • 回车 / “记下”：planText（额度、planTyped、剩余次数，和语音同一份）→ 没有要问的几条先存；有过去的月日的出确认行（confirming），选了才加进同一批；
 //   没选就关掉 → 原话留在输入条（已经存了的几条照常在提示条上，能撤）
+// • 先存、AI 后台再换（负责人 11-27：“直接记下 ai 再识别”，R-496）：planText 带 later，要调 AI、本机又看不出是提问、拆得出、没有要问的日子的
+//   不等 AI、交回本机结果（data/type-flow.ts 的 planTyped）——当场存（手选的签照样盖上），打字条照常收起；AI 回来由 data/type-batch.ts 的 tidyTyped
+//   换掉（规则同按住说话那一路）。本机看着像提问的照旧等 AI 判（负责人选“像提问的照旧等 AI”），有要问的过去月日、拆不出的也照旧等
 // • 保存经 data/saved-batch → data/capture-save（captureRow、batch_id、outbox）；没写进去：提示“没保存上”，输入框不清空
 // • 下滑 / “收起”：这次打过字（typed）才把字存草稿（本机库 drafts 仓，按账号分），没打过不碰——同一份草稿录音、quick-add、结果层也在写；
 //   挂上时 refill 读回来（没打过字时填回；收起就卸掉，再点“＋”是重新挂上）
@@ -32,8 +35,8 @@ import { callAiParse } from '../data/ai-parse-api.ts';
 import { captureStep, type CaptureEvent, type CaptureStatus } from '../data/capture-state.ts';
 import type { Writer } from '../data/capture-save.ts';
 import { clearTypeDraft, readTypeDraft, writeTypeDraft } from '../data/type-draft.ts';
-import { bindTypeBatch, dropTypeNotice, typeBatch, typeNoticeOn, typeOnEdit } from '../data/type-batch.ts';
-import { keepAsked, localHint, planLocal, planText, type CallAi } from '../data/type-flow.ts';
+import { bindTypeBatch, dropTypeNotice, tidyTyped, typeBatch, typeNoticeOn, typeOnEdit } from '../data/type-batch.ts';
+import { keepAsked, localHint, planLocal, planText, type CallAi, type TypePlan } from '../data/type-flow.ts';
 import { applyPicks, fieldsOf, type Picks } from '../data/type-fields.ts';
 import { useCaptureCtx } from './useCaptureCtx.ts';
 import { toAssist, toChat } from './assist-open.ts';
@@ -220,9 +223,21 @@ export function useTypeBar(o: TypeBarOpts) {
       rlog('typebar recog on');
       // 同意版本明确过期（告知页关口问到 first / updated、还没做完）：不发 ai-parse，用本机规则（见 useCaptureCtx）
       const aiOn = aiOnNow();
-      const { plan: raw, quotaOut } = await planText(text, c, { online, aiOn, call: callAi, signal: ac.signal });
       // 手选优先：本机或 AI 的结果都只改没点过的格子（data/type-fields.ts）
-      const p = { ...raw, items: applyPicks(raw.items, picks, text, remindAsked(text)) };
+      const finish = (raw: TypePlan): TypePlan => ({ ...raw, items: applyPicks(raw.items, picks, text, remindAsked(text)) });
+      const opts = { online, aiOn, call: callAi };
+      const { plan: raw, quotaOut } = await planText(text, c, { ...opts, signal: ac.signal, later: true });
+      const p = finish(raw);
+      // 先存、AI 后台再换（见文件头）：存成了才交后台（没存上的不换）；记号在 land 之前拿（land 里会收起打字条）；后台那一次不随打字条卸载中止
+      if (p.later) {
+        rlog(`typebar planned items=${p.items.length} ai=later quotaOut=${quotaOut} origin=rule status=${p.status} ms=${ms()}`);
+        const out = await saved.save(p, text);
+        const m = out === 'ok' ? saved.mark() : null;
+        saved.land(out, p);
+        if (ac.signal.aborted) saved.fresh();
+        if (m) void tidyTyped(m, text, c, opts, finish);
+        return;
+      }
       if (ac.signal.aborted) {
         rlog('typebar submit dropped unmounted');
         return;

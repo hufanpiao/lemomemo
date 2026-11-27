@@ -30,7 +30,7 @@ import { write } from '../../../core/write.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { undoRefs } from './capture-save.ts';
-import type { BatchMark, MarkLike, ReplaceOut } from './saved-batch.ts';
+import { replaceHeld, type BatchMark, type MarkLike, type ReplaceOut } from './saved-batch.ts';
 import { baseReqCtx, type TypeCtx, type TypePlan } from './type-flow.ts';
 import { finishVoice, sendVoice, toUpload, type VoiceClip, type VoiceResult, type VoiceSink } from './voice-flow.ts';
 import type { Attempt, VoiceCore } from './voice-session.ts';
@@ -40,8 +40,6 @@ export const PENDING_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 export const PENDING_KIND = 'voice-pending';
 /** 出过字的：松手以后 AI 过了这么久才回来就不换了（先存的已经看了很久，再换反倒让人糊涂） */
 export const LIVE_LATE_MS = 20_000;
-/** 换的那一下锁被占着（提示条上正在撤销、合并）：等这么久再试一次 */
-export const BUSY_RETRY_MS = 1000;
 const draftId = (id: string): string => `${PENDING_KIND}:${id}`;
 
 /** 占位这一条现在怎样（编辑页那一行画它）：tidying 后台在等 AI；failed 没整理成、可以重试；retrying 点了重试、正在收尾 */
@@ -162,23 +160,10 @@ export function createPending(c: VoiceCore, store?: DraftStore | null) {
     await forget(id);
   };
 
-  /** 换掉先存的（saved-batch 的 replace）：换的那一下占住升级中心的 busy；锁被占着（skip_busy）等一会再试一次；
+  /** 换掉先存的（saved-batch 的 replaceHeld：占 busy、锁被占着等一会再试一次，和打字那一路同一份）；
    *  换成了记一行每条日子离今天差几天（daysOff，日志看得出换成了哪天） */
   const swapIn = async (m: BatchMark, plan: TypePlan, raw: string, today: DateStr): Promise<ReplaceOut> => {
-    const once = async (): Promise<ReplaceOut> => {
-      const free = getBoot()?.upgrade.holdBusy('recording');
-      try {
-        return await c.batch.replace(m, plan, raw);
-      } finally {
-        free?.();
-      }
-    };
-    let out = await once();
-    if (out === 'skip_busy') {
-      rlog('voice tidy busy_retry');
-      await new Promise<void>((ok) => setTimeout(ok, BUSY_RETRY_MS));
-      out = await once();
-    }
+    const out = await replaceHeld(c.batch, m, plan, raw, () => getBoot()?.upgrade.holdBusy('recording'), 'voice');
     if (out === 'replaced') rlog(`voice tidy days local=${daysOff(m.batch.entries.map((e) => e.item), today)} ai=${daysOff(plan.items, today)}`);
     return out;
   };
