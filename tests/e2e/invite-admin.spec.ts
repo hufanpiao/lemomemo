@@ -172,9 +172,25 @@ test.describe('设置 › 邀请朋友 › 作废（负责人 11-27）', () => {
     // 已用的（11-25）不能滑；还没用的（没写备注）左滑露出红色“作废”（同待办左滑删除，负责人 11-27“做成像删除一样，左滑作废”）
     await expect(rows.first().getByTestId('invite-revoke')).toHaveCount(0);
     await expect(rows.first().locator('[data-swipe-face]')).toHaveCount(0);
-    // 行里不再有文字按钮：两行一样高（不含分隔线：第一行底下有 0.5 的线，最后一行没有）
-    const h = (i: number) => rows.nth(i).evaluate((el) => el.getBoundingClientRect().height - parseFloat(getComputedStyle(el).borderBottomWidth));
-    expect(Math.abs((await h(1)) - (await h(0)))).toBeLessThanOrEqual(0.5);
+    // 行里不再有文字按钮、滑动外框不加高：只比结构，不直接比两行总高。两行头一行的字不同（“11-25”是数字、“没写备注”是中文），
+    // CI 的 Linux 上中文用替补字体，行高 19 对 17，总高会差 1（11-27 在 CI 同款镜像里量过：外框、行面、内边距都没多出高度）
+    const box = (i: number) =>
+      rows.nth(i).evaluate((li) => {
+        const face = li.querySelector('[data-swipe-face]');
+        const row = face?.firstElementChild ?? li; // 能滑的行：行面里那层 .row；不滑的行：li 自己就是 .row
+        const s = getComputedStyle(row);
+        return {
+          extra: li.getBoundingClientRect().height - parseFloat(getComputedStyle(li).borderBottomWidth) - row.getBoundingClientRect().height,
+          pad: `${s.paddingTop}/${s.paddingBottom}`,
+          minH: s.minHeight,
+          faceBtns: face === null ? 0 : face.querySelectorAll('button').length,
+        };
+      });
+    const [b0, b1] = [await box(0), await box(1)];
+    expect(Math.abs(b1.extra)).toBeLessThanOrEqual(0.5);
+    expect(b1.pad).toBe(b0.pad);
+    expect(b1.minH).toBe(b0.minH);
+    expect(b1.faceBtns).toBe(0);
     await page.getByTestId('invite-list').scrollIntoViewIfNeeded();
     await shot(page, browserName, '05-邀请朋友-列表');
     const swipeOpen = async (): Promise<void> => {
