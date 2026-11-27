@@ -251,6 +251,13 @@ test('⑨b 点进二级页：切页快照里吉祥物还有画面，不空一下
     const real = document.querySelector('[data-testid="mascot"] canvas')!.getBoundingClientRect();
     const head = () => document.querySelector('main header')?.getBoundingClientRect().height ?? -1;
     const head0 = head();
+    // 11-27 第二轮诊断：CI 那次 dy 2.1、快照时真画布已经不在。按下那一刻再量一次真画布：
+    // 和“点前”不同 = 点之前吉祥物自己还在挪（用例取的参照太早）；和“点前”相同 = 快照排版和真页面差了这么多
+    let down: DOMRect | undefined;
+    const onDown = (): void => {
+      down = document.querySelector('[data-testid="mascot"] canvas')?.getBoundingClientRect();
+    };
+    document.addEventListener('pointerdown', onDown, { capture: true, once: true });
     const mo = new MutationObserver(() => {
       const c = document.querySelector<HTMLCanvasElement>('[data-tab-ghost] [data-copy-pixels] canvas');
       if (!c || w.__ghost) return;
@@ -261,7 +268,7 @@ test('⑨b 点进二级页：切页快照里吉祥物还有画面，不空一下
       // 诊断（11-27 ⑨b webkit 偶发 dx 2.1）：快照出现那一刻真画布在哪、页头高度、天气胶囊在不在，失败时打进报错里
       const live = document.querySelector('[data-testid="mascot"] canvas')?.getBoundingClientRect();
       const fmt = (b?: DOMRect) => (b ? `${b.left.toFixed(2)},${b.top.toFixed(2)} ${b.width.toFixed(2)}x${b.height.toFixed(2)}` : '无');
-      const diag = `点前真画布 ${fmt(real)}｜快照时真画布 ${fmt(live)}｜快照画布 ${fmt(r)}｜页头高 ${head0.toFixed(2)}→${head().toFixed(2)}｜天气胶囊 ${document.querySelector('[data-testid^="weather"]') ? '有' : '无'}｜静态图 ${document.querySelector('[data-testid="mascot"] img') ? '有' : '无'}`;
+      const diag = `点前真画布 ${fmt(real)}｜按下时真画布 ${fmt(down)}｜快照时真画布 ${fmt(live)}｜快照画布 ${fmt(r)}｜页头高 ${head0.toFixed(2)}→${head().toFixed(2)}｜天气胶囊 ${document.querySelector('[data-testid^="weather"]') ? '有' : '无'}｜静态图 ${document.querySelector('[data-testid="mascot"] img') ? '有' : '无'}`;
       w.__ghost = { px, dx: Math.abs(r.left - real.left), dy: Math.abs(r.top - real.top), diag };
       mo.disconnect();
     });
