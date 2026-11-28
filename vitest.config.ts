@@ -50,6 +50,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/check-backend-gemini-key.test.ts', // python build/check_backend.py（F1 GEMINI_API_KEY 守门，B4）
   'tests/build/check-size.test.ts', // 另起 node 跑 build/check_size.mjs
   'tests/build/backup-pull.test.ts', // PowerShell 跑 tools/backup/pull.ps1、restore-files.ps1，node 跑 restore.mjs（B7a）
+  'tests/build/release-publish.test.ts', // git、python 跑 build/ci/release_preflight.py、release_bundle_check.py，bash 跑 release-backup.sh、pub-same.sh（R-499）
   'tests/build/deno-frozen-lock.test.ts', // node（copy_shared）、deno install --frozen（服务器函数依赖锁真拦得住锁外依赖）
   'tests/build/e2e-watchdog.test.ts', // 经 tools/e2e/run-watchdog.mjs 起 node（E2E-webkit-hang 看门狗真跑）
   'tests/build/e2e-watchdog-spawn.test.ts', // 起 node 跑看门狗（拉不起命令时的提示）
