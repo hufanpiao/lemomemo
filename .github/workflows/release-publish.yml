@@ -1,0 +1,496 @@
+# release-publish：正式发布在 GitHub 上自动跑，负责人只在手机 GitHub 上点一次“批准”（R-499，负责人 11-28 选“手机点批准（推荐）”）。
+#
+# 取代负责人本机运行 tools/release/publish.ps1、每次临时生成令牌的做法（R-206、R-220 里“正式发布令牌每次临时生成、发完删掉”一条由 R-499 改掉）。
+# 核对和步骤照 publish.ps1（冻结副本 1682 行）逐项搬过来，只是不在本机跑；publish.ps1 留作备用
+# （GitHub 用不了时；或回滚到还没有本工作流的旧 tag，例如 v4.0.1），见 docs/08-发布/正式发布说明-publish.md。
+#
+# 触发：
+#   · 推 tag vX.Y.Z（正式）：等同一提交的 release-build 全部通过 → verify（无密钥）→ deploy 停在 GitHub Environment production 等负责人批准；
+#   · 推 tag vX.Y.Z-preview.N（预览演练，N 是 deploy-preview 的运行号）：等那次 deploy-preview 通过 → verify → deploy 到预览（Environment preview，不用批准）；
+#   · 手动（Actions › release-publish › Run workflow，“Use workflow from”选 tag）：only = functions 只重新部署这个 tag 的服务器函数（回滚第 2 层，
+#     正式环境 lemo-ops 一起回到这个 tag）；only = all 重发整个 tag（已有更高版本 tag 时只能这样发旧版本）。
+#
+# 两个任务，密钥只在第二个：
+#   verify（没有任何密钥，跑仓库里的检查脚本）：发布前检查（build/ci/release_preflight.py：tag 格式、带说明、在 main 上、和 VERSION 一致、
+#     git 状态和配置、没有 .env、lemo-ops 配置、要部署的函数名单）→ 后端越界检查 → npm 漂移检查 → 等构建那次运行通过、核对它是本仓库对应工作流、
+#     这个 tag 的提交 → 下载它的发布包 → 按 SHA256SUMS 逐个核对、和这个 tag 的源码逐个比（build/ci/release_bundle_check.py）；
+#     都过了才会出现“等负责人批准”，没过不打扰负责人。
+#   deploy（Environment production 要负责人批准；只下载产物、不装项目依赖、不跑项目脚本，只用 build/ci 里的几个小脚本和锁定的部署工具）：
+#     再下载同一份发布包、总指纹必须和 verify 算的一样 → 部署前 npm 漂移检查 → 只读核对项目（首尔、正常、名字和 ref 对得上）
+#     → 推送替身变量核对 →（正式）Workers 权限和 lemo-ops 六个密钥只读核对 →（完整发布）改库前备份：服务器上每个账号当天的备份写完
+#     （build/ci/release-backup.sh）→ db push → functions deploy →（正式）lemo-ops → pages deploy → 核对线上 version.json 和 sw.js 缓存头。
+#   每一步只拿它要的那几把令牌（step 级 env，对应 publish.ps1 的 Invoke-WithSecrets）。
+#
+# 密钥（值由负责人在 GitHub 网页上粘贴，本文件只写名字；环境清单第四节）：
+#   Environment production（必需审批人：负责人；只许 v* tag 部署）：PROD_SUPABASE_ACCESS_TOKEN、PROD_SUPABASE_DB_PASSWORD、PROD_CLOUDFLARE_API_TOKEN（一年换一次）；
+#     环境变量 PROD_SUPABASE_PROJECT_REF（公开值）。
+#   Environment preview（只许 v* tag）：PREVIEW_SUPABASE_ACCESS_TOKEN（比仓库级那把多 Database 读写、Edge Function Secrets 只读，同名盖过仓库级）；
+#     数据库密码、Cloudflare 令牌、PREVIEW_SUPABASE_PROJECT_REF 用仓库级的（deploy-preview 同一套）。
+# 已知边界：能往仓库推 tag 的人（开发电脑上的 deploy key）能推一个改过本文件的 tag，负责人一批准，令牌就交给改过的工作流。
+#   所以批准前看一眼：这次 tag 是不是主持人刚说要发的版本（批准页上写着 tag 名）。
+name: release-publish
+# 手机上的运行列表和批准页一眼看出发的是哪个 tag、是不是只发函数
+run-name: 发布 ${{ github.ref_name }}${{ github.event_name == 'workflow_dispatch' && format('（手动，only={0}）', inputs.only) || '' }}
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-preview.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: all＝完整发布这个 tag；functions＝只重新部署这个 tag 的服务器函数（回滚第 2 层，正式环境 lemo-ops 一起）
+        type: choice
+        options: [all, functions]
+        default: all
+
+permissions: {}
+
+env:
+  NODE_VERSION: '24'
+  FORCE_COLOR: '0'
+
+jobs:
+  verify:
+    name: 发布前检查、下载核对发布包（无密钥）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      env: ${{ steps.pre.outputs.env }}
+      tag: ${{ steps.pre.outputs.tag }}
+      expect: ${{ steps.pre.outputs.expect }}
+      only: ${{ steps.pre.outputs.only }}
+      ops: ${{ steps.pre.outputs.ops }}
+      functions: ${{ steps.pre.outputs.functions }}
+      pages_project: ${{ steps.pre.outputs.pages_project }}
+      site_origin: ${{ steps.pre.outputs.site_origin }}
+      artifact_name: ${{ steps.pre.outputs.artifact_name }}
+      run_id: ${{ steps.find.outputs.run_id }}
+      pub_total: ${{ steps.check.outputs.total }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # 要 origin/main（tag 在不在 main 上）、全部 tag（带说明的 tag 对象、有没有更高版本、上一个正式 tag 以来的迁移）
+          fetch-depth: 0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # build/check_backend.py 要用 node_modules 里的 typescript（publish.ps1 的发布副本也为这个 npm ci）；这个任务没有任何密钥
+      - name: 安装依赖（不跑任何安装脚本）
+        run: |
+          npm ci --ignore-scripts
+          bash build/ci/rebuild-allowlist.sh
+
+      - name: 后端越界检查（含 F6：正式发布不带预览专用函数；publish.ps1 第 1 步同一条）
+        run: python3 -I build/check_backend.py
+
+      - name: 发布前检查（tag、main、VERSION、git 状态和配置、.env、lemo-ops 配置、要部署的函数）
+        id: pre
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 -I build/ci/release_preflight.py
+
+      - name: npm 漂移检查（服务器端打包不读 deno.lock，间接依赖按范围取最高版；架构 0.33 第 7 条）
+        run: node build/ci/check_deno_drift.mjs
+
+      # 正式只等 release-build 的 build 任务（发布包 release-publish-<tag> 由它上传，publish.ps1 也只等它）：exe（desktop）要一个多小时，不挡网页和服务器发布；
+      # 预览等 deploy-preview 整次运行通过（演练时它早已跑完）
+      - name: 等构建任务通过，核对它是本仓库对应工作流、这个 tag 的提交，找到发布包
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          BUILD_WORKFLOW: ${{ steps.pre.outputs.build_workflow }}
+          ARTIFACT_NAME: ${{ steps.pre.outputs.artifact_name }}
+          DEPLOY_ENV: ${{ steps.pre.outputs.env }}
+          TAG: ${{ steps.pre.outputs.tag }}
+          RUN_NO: ${{ steps.pre.outputs.run_no }}
+        run: |
+          gh_api() {
+            printf 'header = "Authorization: Bearer %s"\n' "$GH_TOKEN" |
+              curl --config - --fail --silent --show-error --proto '=https' --max-redirs 0 \
+                -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "https://api.github.com/repos/$REPO$1"
+          }
+          # 正式：release-build 在这个 tag 上的 push 运行；预览：deploy-preview 在 main 上第 N 次运行
+          if [ "$DEPLOY_ENV" = production ]; then branch="$TAG"; job='正式产物构建（无密钥、不部署）'; else branch=main; job=''; fi
+          run=''
+          for i in $(seq 1 100); do
+            runs="$(gh_api "/actions/workflows/$(basename "$BUILD_WORKFLOW")/runs?head_sha=$SHA&event=push&per_page=30")"
+            run="$(jq -c --arg path "$BUILD_WORKFLOW" --arg sha "$SHA" --arg repo "$REPO" --arg branch "$branch" --arg no "$RUN_NO" '
+              [.workflow_runs[] | select(.path == $path and .event == "push" and .head_sha == $sha and .head_branch == $branch
+                and .repository.full_name == $repo and .head_repository.full_name == $repo
+                and ($no == "" or (.run_number | tostring) == $no))] | sort_by(.created_at) | last // empty' <<<"$runs")"
+            [ -n "$run" ] || run='{}'
+            st="$(jq -r '.status // "none"' <<<"$run")"
+            co="$(jq -r '.conclusion // ""' <<<"$run")"
+            what="$(basename "$BUILD_WORKFLOW") 这次运行"
+            if [ -n "$job" ] && [ "$st" != none ]; then
+              # 只看 build 任务；整次运行先失败了（例如 exe 失败）不影响，build 任务本身要成功
+              rid0="$(jq -r '.id' <<<"$run")"
+              [[ "$rid0" =~ ^[0-9]{1,15}$ ]] || { echo "::error::运行号不对"; exit 1; }
+              jobs="$(gh_api "/actions/runs/$rid0/jobs?filter=latest&per_page=100")"
+              j="$(jq -c --arg n "$job" '[.jobs[] | select(.name == $n)] | if length == 1 then .[0] else {} end' <<<"$jobs")"
+              st="$(jq -r '.status // "none"' <<<"$j")"
+              co="$(jq -r '.conclusion // ""' <<<"$j")"
+              what="$(basename "$BUILD_WORKFLOW") 的「$job」任务"
+            fi
+            echo "第 $i 次：$what status=$st conclusion=$co"
+            if [ "$st" = completed ]; then
+              [ "$co" = success ] && break
+              echo "::error::$what 的结论是 $co，不发布"; exit 1
+            fi
+            [ "$i" = 100 ] && { echo "::error::等了 50 分钟还没等到 $(basename "$BUILD_WORKFLOW") 跑完"; exit 1; }
+            sleep 30
+          done
+          rid="$(jq -r '.id' <<<"$run")"
+          url="$(jq -r '.html_url' <<<"$run")"
+          [[ "$rid" =~ ^[0-9]{1,15}$ ]] || { echo "::error::运行号不对"; exit 1; }
+          case "$url" in "https://github.com/$REPO/actions/runs/$rid") ;; *) echo "::error::运行地址不对：$url"; exit 1 ;; esac
+          arts="$(gh_api "/actions/runs/$rid/artifacts?name=$ARTIFACT_NAME&per_page=100")"
+          n="$(jq --arg n "$ARTIFACT_NAME" '[.artifacts[] | select(.name == $n and .expired == false)] | length' <<<"$arts")"
+          [ "$n" = 1 ] || { echo "::error::那次运行里没有（或不止一个）没过期的 $ARTIFACT_NAME（预览产物只留 3 天，正式 90 天）"; exit 1; }
+          size="$(jq -r --arg n "$ARTIFACT_NAME" '[.artifacts[] | select(.name == $n and .expired == false)][0].size_in_bytes // ""' <<<"$arts")"
+          [[ "$size" =~ ^[0-9]{1,12}$ ]] || { echo "::error::$ARTIFACT_NAME 的大小读不出来"; exit 1; }
+          if [ "$size" -le 0 ] || [ "$size" -gt 524288000 ]; then echo "::error::$ARTIFACT_NAME 的大小不对（$size 字节）"; exit 1; fi
+          echo "run_id=$rid" >> "$GITHUB_OUTPUT"
+          echo "发布包 $ARTIFACT_NAME 来自 $url（$what 通过）" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 下载发布包（构建那次运行的产物；下载时核对 GitHub 记的摘要）
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ steps.pre.outputs.artifact_name }}
+          run-id: ${{ steps.find.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/pub
+
+      - name: 发布包按 SHA256SUMS 逐个核对、和这个 tag 的源码逐个比
+        id: check
+        env:
+          PUB: ${{ runner.temp }}/pub
+          DEPLOY_ENV: ${{ steps.pre.outputs.env }}
+          EXPECT: ${{ steps.pre.outputs.expect }}
+          FUNCTIONS: ${{ steps.pre.outputs.functions }}
+          PREVIEW_FUNCS: ${{ steps.pre.outputs.preview_funcs }}
+          TAG: ${{ steps.pre.outputs.tag }}
+        run: |
+          test -f "$PUB/SHA256SUMS" || { echo "::error::发布包里没有 SHA256SUMS"; exit 1; }
+          mv "$PUB/SHA256SUMS" "$RUNNER_TEMP/SHA256SUMS"
+          out="$(python3 -I build/ci/release_bundle_check.py "$PUB" "$RUNNER_TEMP/SHA256SUMS" --env "$DEPLOY_ENV" --expect "$EXPECT" --functions "$FUNCTIONS" --preview-funcs "$PREVIEW_FUNCS")" ||
+            { printf '%s\n' "$out"; exit 1; }
+          printf '%s\n' "$out"
+          total="$(printf '%s\n' "$out" | sed -n 's/^总指纹：\([0-9a-f]\{64\}\)$/\1/p')"
+          [ -n "$total" ] || { echo "::error::算不出发布包总指纹"; exit 1; }
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          {
+            echo "## $TAG 发布包核对通过"
+            echo
+            echo '```'
+            printf '%s\n' "$out" | tail -n 2
+            echo '```'
+            echo
+            echo "提交：$GITHUB_SHA。正式环境到这里会停下等负责人批准（批准页写着 tag 名，核对是不是这次要发的版本）"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: 部署（正式要负责人批准）
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment:
+      name: ${{ needs.verify.outputs.env }}
+      url: ${{ needs.verify.outputs.site_origin }}
+    # 同一环境同一时间只部署一次；后来的排队，不打断正在进行的 db push。预览和 deploy-preview 同一个组（都改预览库，不能同时跑）
+    concurrency:
+      group: ${{ needs.verify.outputs.env == 'preview' && 'deploy-preview' || 'release-publish-production' }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+    env:
+      DEPLOY_ENV: ${{ needs.verify.outputs.env }}
+      TAG: ${{ needs.verify.outputs.tag }}
+      EXPECT: ${{ needs.verify.outputs.expect }}
+      ONLY: ${{ needs.verify.outputs.only }}
+      OPS: ${{ needs.verify.outputs.ops }}
+      FUNCTIONS: ${{ needs.verify.outputs.functions }}
+      PAGES_PROJECT: ${{ needs.verify.outputs.pages_project }}
+      SITE_ORIGIN: ${{ needs.verify.outputs.site_origin }}
+      PUB_TOTAL: ${{ needs.verify.outputs.pub_total }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      PROJECT_REF: ${{ needs.verify.outputs.env == 'production' && vars.PROD_SUPABASE_PROJECT_REF || needs.verify.outputs.env == 'preview' && vars.PREVIEW_SUPABASE_PROJECT_REF || '' }}
+      # 预览项目的 ref 是公开值（环境清单第一节），写死在这里：正式不许是它，预览只许是它（publish.ps1 同一条）
+      PREVIEW_REF: yoeqwhygehbaftkppati
+      # 管理接口地址明确指向官方；wrangler 不发统计、不报错误、不打横幅、不查 skills 更新、不写日志文件（publish.ps1 的 Set-WranglerEnv）
+      SUPABASE_API_URL: https://api.supabase.com
+      CLOUDFLARE_API_BASE_URL: https://api.cloudflare.com/client/v4
+      WRANGLER_SEND_METRICS: 'false'
+      DO_NOT_TRACK: '1'
+      WRANGLER_SEND_ERROR_REPORTS: 'false'
+      WRANGLER_HIDE_BANNER: 'true'
+      WRANGLER_NO_SKILLS_UPDATE_PROMPTS: 'true'
+      WRANGLER_WRITE_LOGS: 'false'
+    steps:
+      # 第一次在任务开头查；装工具、下载以后，第一个带令牌的步骤前再查一次（中间的步骤写 GITHUB_ENV 也逃不过）
+      - name: 运行环境检查（publish.ps1 的 Assert-CleanProcessEnv：没有代理、关证书校验、往 node 或 bash 里塞代码、global key 之类的环境变量）
+        run: |
+          cat > "$RUNNER_TEMP/env-clean.sh" <<'EOF'
+          set -euo pipefail
+          bad=''
+          for v in HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy NODE_TLS_REJECT_UNAUTHORIZED NODE_OPTIONS NODE_EXTRA_CA_CERTS NODE_PATH \
+                   BASH_ENV ENV LD_PRELOAD LD_LIBRARY_PATH \
+                   CLOUDFLARE_API_KEY CLOUDFLARE_EMAIL SUPABASE_ENV SUPABASE_DASHBOARD_URL SUPABASE_PROJECT_HOST \
+                   SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD CLOUDFLARE_API_TOKEN \
+                   GIT_CONFIG_PARAMETERS GIT_CONFIG GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_CONFIG_GLOBAL GIT_EXEC_PATH GIT_ATTR_SOURCE GIT_REPLACE_REF_BASE \
+                   GIT_COMMON_DIR GIT_TEMPLATE_DIR; do
+            [ -n "${!v:-}" ] && bad="$bad $v"
+          done
+          [ -z "$bad" ] || { echo "::error::运行环境里有不该有的环境变量：${bad# }"; exit 1; }
+          # 管理接口地址仍是官方的（任务级 env 写的；中间步骤不许改）
+          [ "$SUPABASE_API_URL" = https://api.supabase.com ] && [ "$CLOUDFLARE_API_BASE_URL" = https://api.cloudflare.com/client/v4 ] ||
+            { echo "::error::Supabase 或 Cloudflare 的接口地址被改了"; exit 1; }
+          # GIT_CONFIG_COUNT 只许是下面“git 不执行钩子”那一步写的 3 条（开头还没写时必须没有）
+          case "${GIT_CONFIG_COUNT:-}" in '') ;; 3) [ "${GIT_CONFIG_KEY_1:-}" = core.hooksPath ] || { echo "::error::GIT_CONFIG_* 被改了"; exit 1; } ;; *) echo "::error::GIT_CONFIG_COUNT 不对"; exit 1 ;; esac
+          EOF
+          bash "$RUNNER_TEMP/env-clean.sh"
+          case "$DEPLOY_ENV" in production|preview) ;; *) echo "::error::环境不对：$DEPLOY_ENV"; exit 1 ;; esac
+          [[ "$CLOUDFLARE_ACCOUNT_ID" =~ ^[0-9a-f]{32}$ ]] || { echo "::error::仓库变量 CLOUDFLARE_ACCOUNT_ID 的格式不对"; exit 1; }
+          [[ "$PROJECT_REF" =~ ^[a-z]{20}$ ]] || { echo "::error::$DEPLOY_ENV 的 Supabase Project ref 没填或格式不对（正式：Environment production 的变量 PROD_SUPABASE_PROJECT_REF）"; exit 1; }
+          if [ "$DEPLOY_ENV" = preview ] && [ "$PROJECT_REF" != "$PREVIEW_REF" ]; then echo "::error::预览演练只能发到预览项目"; exit 1; fi
+          if [ "$DEPLOY_ENV" = production ] && [ "$PROJECT_REF" = "$PREVIEW_REF" ]; then echo "::error::正式发布不能发到预览项目"; exit 1; fi
+          [[ "$PUB_TOTAL" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::没有 verify 算的发布包总指纹"; exit 1; }
+          echo "运行环境检查通过（$DEPLOY_ENV，$TAG）"
+
+      # 只取部署要用的：锁文件和安装脚本、build/ci 的小脚本、lemo-ops 的源码（lemo-ops 不进发布包，从这个 tag 的源码打包）。项目代码不在这个任务里执行
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            tools
+            build/ci
+            workers/lemo-ops
+          sparse-checkout-cone-mode: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: git 不执行钩子、过滤程序和签名程序（publish.ps1 主流程最前面那几条），准备空目录
+        run: |
+          mkdir -p "$RUNNER_TEMP/nohooks" "$RUNNER_TEMP/pages-cwd"
+          : > "$RUNNER_TEMP/empty.env"
+          {
+            echo GIT_CONFIG_COUNT=3
+            echo GIT_CONFIG_KEY_0=core.fsmonitor
+            echo GIT_CONFIG_VALUE_0=false
+            echo GIT_CONFIG_KEY_1=core.hooksPath
+            echo "GIT_CONFIG_VALUE_1=$RUNNER_TEMP/nohooks"
+            echo GIT_CONFIG_KEY_2=log.showSignature
+            echo GIT_CONFIG_VALUE_2=false
+            echo GIT_ATTR_NOSYSTEM=1
+            echo GIT_NO_REPLACE_OBJECTS=1
+            echo "WRANGLER_LOG_PATH=$RUNNER_TEMP/wrangler-logs"
+          } >> "$GITHUB_ENV"
+
+      - name: 安装 Supabase CLI（tools/ci-tools.lock，核对 SHA-256）
+        run: bash build/ci/install-tool.sh supabase
+
+      - name: 安装 wrangler（tools/deploy/package-lock.json，npm 核对 integrity，不跑安装脚本）
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix tools/deploy
+          test -f tools/deploy/node_modules/wrangler/bin/wrangler.js || { echo "::error::没装上 wrangler"; exit 1; }
+          echo "WRANGLER_JS=$GITHUB_WORKSPACE/tools/deploy/node_modules/wrangler/bin/wrangler.js" >> "$GITHUB_ENV"
+
+      - name: lemo-ops 打包演练（wrangler deploy --dry-run，不带令牌；publish.ps1 第 5 步前同一条，打包不过就停在读令牌之前）
+        if: needs.verify.outputs.ops == 'true'
+        run: |
+          test ! -e workers/lemo-ops/.wrangler/deploy/config.json || { echo "::error::workers/lemo-ops 下有 wrangler 重定向文件"; exit 1; }
+          node "$WRANGLER_JS" deploy --dry-run --outdir "$RUNNER_TEMP/ops-dry" --config workers/lemo-ops/wrangler.toml --env-file "$RUNNER_TEMP/empty.env"
+          [ -n "$(ls -A "$RUNNER_TEMP/ops-dry" 2>/dev/null)" ] || { echo "::error::lemo-ops 打包演练什么都没产出"; exit 1; }
+          echo "lemo-ops 打包演练通过"
+
+      - name: 下载同一份发布包
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.verify.outputs.artifact_name }}
+          run-id: ${{ needs.verify.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/pub
+
+      - name: 发布包总指纹和 verify 核对过的一样（之后每次部署前再比一次，publish.ps1 的 Assert-PubUnchanged）
+        run: |
+          mv "$RUNNER_TEMP/pub/SHA256SUMS" "$RUNNER_TEMP/SHA256SUMS"
+          cat > "$RUNNER_TEMP/pub-same.sh" <<'EOF'
+          set -euo pipefail
+          # supabase link、functions deploy 会在发布包里写 supabase/.temp、.branches（publish.ps1 的 $script:PubVolatile 同样先排除）
+          rm -rf "$RUNNER_TEMP/pub/supabase/.temp" "$RUNNER_TEMP/pub/supabase/.branches"
+          got="$(python3 -I "$GITHUB_WORKSPACE/build/ci/dist_hash.py" "$RUNNER_TEMP/pub" | sed -n 's/^总指纹：\([0-9a-f]\{64\}\)$/\1/p')"
+          [ "$got" = "$PUB_TOTAL" ] || { echo "::error::发布包和 verify 核对过的不一样了（$1）"; exit 1; }
+          echo "发布包仍是 verify 核对过的那一份"
+          EOF
+          bash "$RUNNER_TEMP/pub-same.sh" '还没改库、没部署任何代码'
+
+      - name: 部署前查 npm 漂移（用发布包里的 deno.lock；失败时什么都还没动）
+        run: node build/ci/check_deno_drift.mjs --lock "$RUNNER_TEMP/pub/supabase/functions/deno.lock"
+
+      - name: 带令牌之前再查一次运行环境
+        run: |
+          [ "${GIT_CONFIG_COUNT:-}" = 3 ] || { echo "::error::git 不执行钩子的设置没生效"; exit 1; }
+          bash "$RUNNER_TEMP/env-clean.sh"
+          echo "运行环境仍然干净"
+
+      - name: 只读核对项目（首尔、运行正常、名字对得上）
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ needs.verify.outputs.env == 'production' && secrets.PROD_SUPABASE_ACCESS_TOKEN || needs.verify.outputs.env == 'preview' && secrets.PREVIEW_SUPABASE_ACCESS_TOKEN || '' }}
+        run: |
+          case "$SUPABASE_ACCESS_TOKEN" in sbp_*) ;; '') echo "::error::$DEPLOY_ENV 的 Supabase 令牌没设（Environment 的 secrets）"; exit 1 ;; *) echo "::error::Supabase 令牌应以 sbp_ 开头"; exit 1 ;; esac
+          resp="$(printf 'header = "Authorization: Bearer %s"\n' "$SUPABASE_ACCESS_TOKEN" |
+            curl --config - --silent --show-error --proto '=https' --max-redirs 0 -w '\n%{http_code}' "https://api.supabase.com/v1/projects/$PROJECT_REF")" || { echo "::error::查项目时网络出错"; exit 1; }
+          code="${resp##*$'\n'}"
+          [ "$code" = 200 ] || { echo "::error::查不到项目（HTTP $code）：Project ref 或 Supabase 令牌不对。还没改库"; exit 1; }
+          body="${resp%$'\n'*}"
+          name="$(jq -r '.name // ""' <<<"$body")"; region="$(jq -r '.region // ""' <<<"$body")"; status="$(jq -r '.status // ""' <<<"$body")"
+          if [ "$DEPLOY_ENV" = production ]; then want=lemomemo-prod; else want=lemomemo-preview; fi
+          [ "$name" = "$want" ] || { echo "::error::项目名是 $name，不是 $want。还没改库"; exit 1; }
+          [ "$region" = ap-northeast-2 ] || { echo "::error::项目不在首尔（$region）。还没改库"; exit 1; }
+          [ "$status" = ACTIVE_HEALTHY ] || { echo "::error::项目状态是 $status，不是 ACTIVE_HEALTHY（预览项目暂停了先等 deploy-preview 恢复）。还没改库"; exit 1; }
+          echo "项目：$name（首尔，运行正常）" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 推送替身变量核对（线上不能有 PUSH_SERVICE_OVERRIDE_URL、LEMO_LOCAL_PUSH_STUB；只看名字，没权限就停）
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ needs.verify.outputs.env == 'production' && secrets.PROD_SUPABASE_ACCESS_TOKEN || needs.verify.outputs.env == 'preview' && secrets.PREVIEW_SUPABASE_ACCESS_TOKEN || '' }}
+        run: |
+          resp="$(printf 'header = "Authorization: Bearer %s"\n' "$SUPABASE_ACCESS_TOKEN" |
+            curl --config - --silent --show-error --proto '=https' --max-redirs 0 -w '\n%{http_code}' "https://api.supabase.com/v1/projects/$PROJECT_REF/secrets")" || { echo "::error::读 secrets 名单时网络出错"; exit 1; }
+          code="${resp##*$'\n'}"
+          body="${resp%$'\n'*}"
+          resp=''
+          [ "$code" = 200 ] || { body=''; echo "::error::读不了 secrets 名单（HTTP $code）：Supabase 令牌要有 Edge Function Secrets 只读。还没改库"; exit 1; }
+          names="$(printf '%s' "$body" | jq -r 'if type == "array" then .[] | .name // empty else error("not array") end' 2>/dev/null)" || { body=''; echo "::error::secrets 名单读不懂"; exit 1; }
+          body=''
+          [ -n "$names" ] || { echo "::error::secrets 名单是空的"; exit 1; }
+          for n in PUSH_SERVICE_OVERRIDE_URL LEMO_LOCAL_PUSH_STUB; do
+            if grep -qxF "$n" <<<"$names"; then echo "::error::Edge Function secrets 里有 $n（只许本机用，线上设了推送全部停发）。还没改库"; exit 1; fi
+          done
+          echo "推送替身变量：已核对，没有（共 $(wc -l <<<"$names") 个 secrets，只看名字）" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: lemo-ops 改库前只读核对（Cloudflare 令牌有 Workers 权限、六个密钥都在）
+        if: needs.verify.outputs.ops == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ needs.verify.outputs.env == 'production' && secrets.PROD_CLOUDFLARE_API_TOKEN || '' }}
+        run: |
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "::error::正式 Cloudflare 令牌没设"; exit 1; }
+          ok="$(printf 'header = "Authorization: Bearer %s"\n' "$CLOUDFLARE_API_TOKEN" |
+            curl --config - --fail --silent --proto '=https' --max-redirs 0 "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts" | jq -r '.success' 2>/dev/null || true)"
+          [ "$ok" = true ] || { echo "::error::这把 Cloudflare 令牌读不了 Worker 列表：要有 Workers Scripts: Edit。还没改库"; exit 1; }
+          out="$(node "$WRANGLER_JS" secret list --config workers/lemo-ops/wrangler.toml --format json --env-file "$RUNNER_TEMP/empty.env")" || { echo "::error::wrangler secret list 失败。还没改库"; exit 1; }
+          names="$(printf '%s' "$out" | sed -n '/^\[/,$p' | jq -r '.[].name' 2>/dev/null)" || { echo "::error::读不懂 wrangler secret list 的结果。还没改库"; exit 1; }
+          # 和 workers/lemo-ops/wrangler.toml 末尾的注释、publish.ps1 的 OpsSecretNames 同一份名单（tests/build/release-publish.test.ts 核对）
+          missing=''
+          for n in SUPABASE_URL SUPABASE_ANON_KEY OPS_SECRET RESEND_API_KEY_OPS ALERT_TO ALERT_FROM; do
+            grep -qxF "$n" <<<"$names" || missing="$missing $n"
+          done
+          [ -z "$missing" ] || { echo "::error::lemo-ops 还缺这些密钥：${missing# }。还没改库"; exit 1; }
+          echo "Cloudflare 令牌有 Workers 权限；lemo-ops 的六个密钥都在（只看名字）" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 改库前备份（服务器上每个账号当天的备份写完才往下走；负责人 11-28 选“服务器备份做完就放行”）
+        if: needs.verify.outputs.only == 'all'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ needs.verify.outputs.env == 'production' && secrets.PROD_SUPABASE_ACCESS_TOKEN || needs.verify.outputs.env == 'preview' && secrets.PREVIEW_SUPABASE_ACCESS_TOKEN || '' }}
+        run: bash build/ci/release-backup.sh
+
+      - name: 数据库迁移（先 --dry-run 列出要执行的迁移写进摘要，再推）
+        if: needs.verify.outputs.only == 'all'
+        working-directory: ${{ runner.temp }}/pub
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ needs.verify.outputs.env == 'production' && secrets.PROD_SUPABASE_ACCESS_TOKEN || needs.verify.outputs.env == 'preview' && secrets.PREVIEW_SUPABASE_ACCESS_TOKEN || '' }}
+          SUPABASE_DB_PASSWORD: ${{ needs.verify.outputs.env == 'production' && secrets.PROD_SUPABASE_DB_PASSWORD || needs.verify.outputs.env == 'preview' && secrets.PREVIEW_SUPABASE_DB_PASSWORD || '' }}
+        run: |
+          [ -n "$SUPABASE_DB_PASSWORD" ] || { echo "::error::$DEPLOY_ENV 的数据库密码没设"; exit 1; }
+          bash "$RUNNER_TEMP/pub-same.sh" '还没改库、没部署任何代码'
+          supabase link --project-ref "$PROJECT_REF" --workdir .
+          plan="$(supabase db push --linked --dry-run --workdir . 2>&1)" || { printf '%s\n' "$plan"; echo "::error::db push --dry-run 失败，还没改库"; exit 1; }
+          printf '%s\n' "$plan"
+          { echo '### 这次执行的迁移（db push --dry-run）'; echo; echo '```'; printf '%s\n' "$plan" | tail -n 40; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          supabase db push --linked --yes --workdir .
+          rm -rf supabase/.temp supabase/.branches
+          echo "数据库迁移完成" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 服务器函数（逐个写出名字部署，在服务器端打包）
+        working-directory: ${{ runner.temp }}/pub
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ needs.verify.outputs.env == 'production' && secrets.PROD_SUPABASE_ACCESS_TOKEN || needs.verify.outputs.env == 'preview' && secrets.PREVIEW_SUPABASE_ACCESS_TOKEN || '' }}
+        run: |
+          bash "$RUNNER_TEMP/pub-same.sh" "$([ "$ONLY" = all ] && echo '数据库迁移已推，')服务器函数、网页都还是旧版。这种状态能用（迁移只增不改），查清原因后重跑"
+          IFS=',' read -r -a fns <<<"$FUNCTIONS"
+          supabase functions deploy "${fns[@]}" --project-ref "$PROJECT_REF" --use-api --yes --workdir .
+          echo "服务器函数部署完成（$TAG：${FUNCTIONS//,/、}）" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: lemo-ops（和服务器函数同一次部署；从这个 tag 的源码打包）
+        if: needs.verify.outputs.ops == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ needs.verify.outputs.env == 'production' && secrets.PROD_CLOUDFLARE_API_TOKEN || '' }}
+        run: |
+          test ! -e workers/lemo-ops/.wrangler/deploy/config.json || { echo "::error::workers/lemo-ops 下有 wrangler 重定向文件"; exit 1; }
+          node "$WRANGLER_JS" deploy --config workers/lemo-ops/wrangler.toml --tag "$TAG" --message "$TAG@${GITHUB_SHA:0:12}" --env-file "$RUNNER_TEMP/empty.env"
+          echo "lemo-ops 部署完成（$TAG）" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 网页（wrangler pages deploy，在空目录里跑，Functions 是发布包里打包好的 _worker.js）
+        if: needs.verify.outputs.only == 'all'
+        working-directory: ${{ runner.temp }}/pages-cwd
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ needs.verify.outputs.env == 'production' && secrets.PROD_CLOUDFLARE_API_TOKEN || needs.verify.outputs.env == 'preview' && secrets.PREVIEW_CLOUDFLARE_API_TOKEN || '' }}
+        run: |
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "::error::$DEPLOY_ENV 的 Cloudflare 令牌没设"; exit 1; }
+          bash "$RUNNER_TEMP/pub-same.sh" "数据库迁移、服务器函数已是新版，网页还是旧版；查清原因后重跑"
+          # wrangler pages deploy 没有 --config，会从当前目录一路往上找配置和重定向文件，有就会采用（publish.ps1 的 Assert-NoWranglerConfigUpward）
+          d="$PWD"
+          while :; do
+            for n in wrangler.json wrangler.jsonc wrangler.toml .wrangler/deploy/config.json; do
+              [ -e "$d/$n" ] && { echo "::error::$d/$n 会被 wrangler 采用"; exit 1; }
+            done
+            [ "$d" = / ] && break
+            d="$(dirname "$d")"
+          done
+          [ -z "$(ls -A .)" ] || { echo "::error::pages deploy 的当前目录应是空的"; exit 1; }
+          node "$WRANGLER_JS" pages deploy "$RUNNER_TEMP/pub/dist/web" --project-name "$PAGES_PROJECT" --branch main \
+            --commit-hash "$GITHUB_SHA" --commit-message "$TAG@${GITHUB_SHA:0:12}" --commit-dirty=true --env-file "$RUNNER_TEMP/empty.env"
+          echo "网页部署完成" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 核对线上版本和 sw.js 缓存头
+        if: needs.verify.outputs.only == 'all'
+        run: |
+          got=''
+          for _ in $(seq 1 20); do
+            got="$(curl --fail --silent --proto '=https' -H 'Cache-Control: no-cache' "$SITE_ORIGIN/app/version.json" | jq -r '.version' || true)"
+            [ "$got" = "$EXPECT" ] && break
+            echo "线上是 ${got:-（取不到）}，等 6 秒再看（期望 $EXPECT）"
+            sleep 6
+          done
+          [ "$got" = "$EXPECT" ] || { echo "::error::2 分钟后 $SITE_ORIGIN 上的版本仍不是 $EXPECT，按上线与回滚手册处理"; exit 1; }
+          python3 -I build/ci/check_live_headers.py "$SITE_ORIGIN"
+          echo "线上已是 $EXPECT（$SITE_ORIGIN）" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 收尾提示
+        run: |
+          {
+            echo
+            if [ "$ONLY" = functions ]; then
+              echo "已把服务器函数$([ "$OPS" = true ] && echo '和 lemo-ops')部署成 $TAG 的版本：按上线与回滚手册第四节第 2 层第 4 步核对（2 分钟后的提醒能准时收到、跑一次 AI 识别）。"
+            else
+              echo "$TAG 已发布到 $SITE_ORIGIN。主持人在 docs/08-发布/发布记录.md 记一行（版本、时间、提交、发布包总指纹 $PUB_TOTAL、这次运行的地址）。"
+            fi
+            if [ "$OPS" = true ]; then echo "lemo-ops：Cloudflare › Workers › lemo-ops 的部署记录最新一条是 $TAG；15 分钟后看一次日志没有报错。"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 清掉 supabase link 留下的本地文件
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/pub/supabase/.temp" "$RUNNER_TEMP/pub/supabase/.branches"

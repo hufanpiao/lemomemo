@@ -1,6 +1,7 @@
 # release-build：打正式 tag（vX.Y.Z）时在 CI 里构建一次正式产物，只构建和测试、不部署（R-206）
 #
-# 正式发布由负责人在自己电脑上运行 tools/release/publish.ps1，部署的就是本工作流上传的产物（架构 0.31 第 24 条定方案 A、8.3a 第 2、3 步）：
+# 11-28 起（R-499）正式发布由 release-publish.yml 下载这个发布包部署（负责人在手机上批准 Environment production），下文的 publish.ps1 留作备用，核对内容相同。
+# 原来：正式发布由负责人在自己电脑上运行 tools/release/publish.ps1，部署的就是本工作流上传的产物（架构 0.31 第 24 条定方案 A、8.3a 第 2、3 步）：
 # publish.ps1 不在本机重新构建、不跑 npm，只用一把只读令牌经 GitHub REST API 下载这个 tag 的发布包 release-publish-<tag>，
 # 逐个文件按包里的 SHA256SUMS 核对，再算总指纹；负责人用 iPhone 打开本次运行的 Summary 页，和“发布包指纹”一段的文件数、总指纹、提交 SHA 对一遍，一致才继续。
 # 三个任务：

@@ -1,4 +1,78 @@
-# 正式发布说明：本机运行 `publish.ps1`（R-206）
+# 正式发布说明：GitHub 上自动跑，负责人在手机上点“批准”（R-499）
+
+- 日期：2026-11-28（R-499 改版）。原来“负责人本机运行 `publish.ps1`、每次临时生成令牌”的说明原样留在本文后半（**附录：备用**），GitHub 用不了、或回滚到还没有新工作流的旧 tag（v4.0.1 及以前）时照它做。
+- 依据：R-499（负责人 11-28 弹窗：发布方式选“手机点批准（推荐）”、正式令牌“一年换一次”、发布前备份“服务器备份做完就放行（推荐）”；改掉 R-220 里“正式发布令牌每次临时生成、发完删掉”、R-206 里“正式发布由负责人本机运行脚本”）；[环境清单](环境清单-v4.md)第四、五节；[上线与回滚手册](上线与回滚手册-v4.md)。
+- 工作流：[`.github/workflows/release-publish.yml`](../../.github/workflows/release-publish.yml)；脚本 [`build/ci/release_preflight.py`](../../build/ci/release_preflight.py)、[`build/ci/release_bundle_check.py`](../../build/ci/release_bundle_check.py)、[`build/ci/release-backup.sh`](../../build/ci/release-backup.sh)。
+
+## 一、谁做什么
+
+| 谁 | 做什么 |
+|---|---|
+| 主持人 | 在 main 上打带说明的 tag（`git tag -a vX.Y.Z`）并推到 GitHub；在聊天里说一声“已推 vX.Y.Z，等你批准” |
+| GitHub（自动） | release-build 构建、测试、出发布包 → release-publish 的 verify 任务（**不带任何密钥**）做完全部发布前核对、下载发布包逐个核对 → 停下等批准 |
+| **负责人** | 手机 GitHub App 收到通知（或打开 Actions › release-publish 那一次运行）→ 看批准页上的 tag 是不是主持人刚说的版本 → 点 **Review deployments** › 勾 **production** › **Approve and deploy**。只点这一次 |
+| GitHub（自动） | 改库前备份（服务器上每个账号当天的备份写完）→ db push → 服务器函数 → lemo-ops → 网页 → 核对 https://lemomemo.com/app/version.json |
+| 主持人 | 核对这次运行全绿、线上版本对，记进[发布记录](发布记录.md)（版本、时间、提交、发布包总指纹、运行地址） |
+
+批准前什么都没动；verify 没通过就不会出现批准按钮，也不会打扰负责人。
+
+## 二、它替你做了哪些核对（原来 publish.ps1 的每一项搬到哪）
+
+| publish.ps1 原来的 | 现在 |
+|---|---|
+| 第 1 步：tag 格式、带说明、在 main 上、当前检出的就是这个 tag、VERSION 一致；已有更高版本的 tag 提醒 | verify › 发布前检查（`release_preflight.py`）；推旧 tag 不自动发，要手动触发才放行 |
+| 第 1 步：工作区干净、assume-unchanged / skip-worktree、稀疏检出、替换对象、git 各级配置里的过滤程序和 hooksPath、`.git/info/attributes`、逐个比内容（R-269） | 同上（CI 每次是新机器、新检出，照样查一遍） |
+| 第 1 步：后端越界检查、预览专用函数名单、要部署的函数名单、lemo-ops 配置（名字、KV id 不是占位值）、usage-report 和 lemo-ops 同一次部署、没有 `.env` | verify › 后端越界检查、发布前检查 |
+| 第 1 步、第 4 步：npm 漂移检查 | verify 和 deploy（用发布包里的 deno.lock）各查一次 |
+| 第 2 步：发布前源码备份（E 盘 版本前\） | 不再做：源码在 GitHub 上每个 tag 都在；负责人 11-28 定本机副本由每天 9 点的拉取补 |
+| 第 3 步：经 API 找这个 tag 的发布包、核对运行是本仓库对应工作流和这个 tag 的提交、下载、按 SHA256SUMS 逐个核对、总指纹、version.json、_worker.js、没有 source map、和源码逐个比、`_shared/gen` 按 copy_shared 规则、正式包里没有预览函数 | verify › 等构建那次运行通过、下载、`release_bundle_check.py`。“负责人在 iPhone 上核对总指纹”不再需要：包是按运行号直接从那次运行取的 |
+| 第 4 步：Supabase CLI 核对 SHA-256、wrangler 按锁文件装 | deploy › 同一个 `install-tool.sh`、`npm ci --prefix tools/deploy`（和 deploy-preview 一样；Windows 上那份依赖树哈希锁 `wrangler-tree.lock` 只对本机有效，CI 每次是新机器，按 npm 的 integrity 核对） |
+| 第 5 步：再核对一次、剪贴板历史、transcript、粘贴令牌 | 令牌在 Environment 的 secrets 里，不经过任何电脑的剪贴板；每一步只拿它要的那几把（step 级 env）；运行环境里没有代理、`NODE_OPTIONS`、global key 之类的变量 |
+| 第 6 步：项目在首尔、状态正常、名字对（原来手动输入项目名）、正式不许是预览的 ref | deploy › 只读核对项目（名字必须是 lemomemo-prod） |
+| 第 6 步：推送替身变量、Workers 权限、lemo-ops 六个密钥 | deploy › 同名几步，没权限就停 |
+| 第 6a 步：backup_dispatch ＋ pull.ps1 等、下载到 E 盘 | deploy › 改库前备份（`release-backup.sh`）：只等服务器上写完，不下载到本机（R-499） |
+| 第 6 步：db push 先演练、输入“确认推送” | `--dry-run` 的结果写进这次运行的摘要；“确认”由负责人批准那一下代替（批准前 verify 摘要里列着上一个正式 tag 以来新加的迁移） |
+| 发布包中途被改（改库前、推迁移前、部署函数前、部署网页前各比一次） | deploy 重新下载同一份，总指纹必须和 verify 的一样；之后每次部署前再比 |
+| pages deploy 在空目录里跑、往上没有 wrangler 配置；wrangler 不发统计、`--env-file` 空文件；git 不执行钩子 | deploy 同样做 |
+| 第 7 步：核对 version.json | deploy › 核对线上版本和 sw.js 缓存头 |
+
+## 三、一次性准备（负责人点按钮、粘贴密钥；表单由主持人在浏览器里填好）
+
+| 东西 | 在哪 | 设成什么 |
+|---|---|---|
+| Environment `production` | GitHub › 仓库 › Settings › Environments | Required reviewers：负责人本人（**不勾** Prevent self-review：负责人是唯一的审批人，勾了可能自己批不了）；Deployment branches and tags：Selected，加 tag 规则 `v*` |
+| `production` 的 secrets | 同上 › production › Environment secrets | `PROD_SUPABASE_ACCESS_TOKEN`、`PROD_SUPABASE_DB_PASSWORD`、`PROD_CLOUDFLARE_API_TOKEN`（权限照环境清单第四节，**到期一年**） |
+| `production` 的变量 | 同上 › Environment variables | `PROD_SUPABASE_PROJECT_REF`（正式项目的 ref，公开值） |
+| Environment `preview` | 同上 | 不要审批人；Deployment branches and tags：Selected，tag 规则 `v*`；secret `PREVIEW_SUPABASE_ACCESS_TOKEN`：预览项目级令牌，比仓库级那把多 Database 读写、Edge Function Secrets 只读（同名盖过仓库级，deploy-preview 照旧用仓库级那把） |
+
+令牌到期前两周主持人提醒，照同样的表单重建、粘贴替换（不另存，R-220）。
+
+## 四、每次发布
+
+1. 主持人：B7a（或修复版的对应检查）签完、[上线与回滚手册](上线与回滚手册-v4.md)第二节清单打勾后，在 main 上 `git tag -a vX.Y.Z -m "..."`、`git push origin vX.Y.Z`，告诉负责人。
+2. 负责人：大约 20～30 分钟后（release-build 跑完、verify 通过）手机上收到“等待审批”，点 **Review deployments** › 勾 **production** › **Approve and deploy**。
+3. 自动部署，约 10～20 分钟（等备份的时间看账号数）。失败时 GitHub 会发邮件，主持人看运行日志定原因；修好后在那次运行点 **Re-run jobs**（要重新批准）。
+4. 主持人记发布记录。
+
+## 五、回滚服务器函数（上线与回滚手册第四节第 2 层办法 A）
+
+Actions › release-publish › **Run workflow** › “Use workflow from”选上一个 tag › only 选 **functions** › Run；批准后只重新部署那个 tag 的服务器函数（正式环境 lemo-ops 一起回到那个 tag），不 db push、不动网页。那个 tag 里要有 `release-publish.yml`（v4.0.1 及以前没有，回滚到它们用附录的 `publish.ps1 -Only functions -Ops`）；发布包保留 90 天。
+
+## 六、预览演练
+
+主持人在 main 上某个提交的 deploy-preview 跑绿以后（预览发布包只留 3 天），在那个提交上打 `vX.Y.Z-preview.N`（N 是那次 deploy-preview 的运行号）并推送：同一个工作流把那次的 `preview-bundle` 部署到预览（Environment `preview`，不用批准），完整走一遍核对、改库前备份、db push、函数、网页、核对 https://preview.lemomemo.com/app/version.json。改了本工作流或这几个脚本，正式发布前先演练一次。
+
+## 七、出错时
+
+- verify 停了：什么都没动，主持人看日志修好再打新 tag（或在同一 tag 上 Re-run）。
+- deploy 停在改库之前（项目核对、推送替身变量、Workers 权限、lemo-ops 密钥、备份没等完）：什么都没改，修好原因后 Re-run（要重新批准）。
+- 停在 lemo-ops 或网页这一步：迁移和服务器函数已是新版、网页还是旧版，这种状态能用；修好后 Re-run 整个 deploy（db push 不会重复执行已推的迁移）。
+- 怀疑令牌泄露：在 Supabase › Account › Access Tokens、Cloudflare › My Profile › API Tokens 里删掉那一把，重建后粘贴进 Environment；数据库密码在 Supabase 重设后同样替换。
+
+---
+
+# 附录：备用——本机运行 `publish.ps1`（11-26 原说明，原样保留）
+
 
 - 日期：2026-10-28（B0，运维初稿）；**2026-11-26 B7a 改版**：本机不再构建，改为下载 CI 发布包、按 `SHA256SUMS` 核对后部署；加 `-Env preview` 预览演练、`-SiteOrigin`（首发先发到 pages.dev）、发布前触发 backup-daily；这次只上网页，exe 之后单独发（负责人 11-26 选“做齐再上”、不发电脑版 exe）
 - 依据：R-206（不买 GitHub Pro；正式环境的令牌不放 GitHub；正式发布由负责人本机运行脚本；CI 只构建和测试）；R-220（令牌不另存：正式令牌每次发布时临时生成、发完删掉）；R-223（不再检查 Claude 是否在运行）；架构 0.31 第 24 条（方案 A：下载 CI 产物）、8.3 deploy-prod 一行、8.3a、8.4、8.5；人员名单第七节；[上线与回滚手册-v4](上线与回滚手册-v4.md)
@@ -11,7 +85,7 @@
 
 ---
 
-## 一、为什么这样做、风险怎么补
+### 备用 一、为什么这样做、风险怎么补
 
 R-206 时已告诉负责人：发布时令牌会经过开发电脑，安全不如在 iPhone 上发布。补救写进了脚本：
 
@@ -32,7 +106,7 @@ R-223 起**不再检查 Claude 是否在运行**（不查 `claude` 开头的进�
 
 **还剩的风险（有意接受，R-206）**：开发电脑上如果早已有恶意程序，它能在你粘贴时读到令牌。所以正式令牌要：只管正式项目（Supabase 项目级令牌）、只给需要的权限、**1 天到期**、发完就删，发现异常立刻在网页上吊销。
 
-## 二、冻结副本和发布用的仓库副本放哪
+### 备用 二、冻结副本和发布用的仓库副本放哪
 
 1. `tools/release/publish.ps1` 每次改动都要过代码审查和安全审查（人员名单：运维脚本）。
 2. 审查通过后，代码审查员在审查记录里写下这个版本的 SHA-256（`Get-FileHash tools\release\publish.ps1`），记录提交进仓库。
@@ -42,7 +116,7 @@ R-223 起**不再检查 Claude 是否在运行**（不查 `claude` 开头的进�
 
 （两样都放在这台电脑上，都能被这台电脑上的程序改，真正起作用的是第 5 步拿 GitHub 上的记录核对、第 3 步拿 GitHub 上的发布包指纹核对。架构 8.3a 原来写的 `E:\柠檬记-发布\` 按 11-23 起“柠檬记的东西只放柠檬记文件夹”的规定改成上面两处。）
 
-## 三、要准备的
+### 备用 三、要准备的
 
 **只做一次**：
 
@@ -60,7 +134,7 @@ R-223 起**不再检查 Claude 是否在运行**（不查 `claude` 开头的进�
 4. **正式 Cloudflare 令牌**：Cloudflare › 我的个人资料 › API 令牌 › 创建自定义令牌，权限照环境清单第四节（Pages: Edit ＋ Workers Scripts: Edit），TTL 结束日期选**明天**；
 5. 发布完（不论成功失败）：回到这几页把这次的令牌都删掉（数据库密码不用再改，下次发布再重设）。
 
-## 四、每次发布（约 20～30 分钟）
+### 备用 四、每次发布（约 20～30 分钟）
 
 前提：这一版的 B7a（或修复版的对应检查）已签完，[上线与回滚手册](上线与回滚手册-v4.md)第二节的检查清单全部打勾；主持人已在 main 上打好带说明的 tag（`git tag -a vX.Y.Z`）并推到 GitHub，release-build 的 build 任务是绿的（它跑完才有发布包）。**4.0.0 首发按上线与回滚手册第三节“首发顺序”走**，比下面多了预览演练、`-SiteOrigin` 和绑域名几步。
 
@@ -102,14 +176,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "D:\claude code\柠檬记\�
 ```
 可以先加 `-DryRun` 演练（只要 GitHub 下载令牌）。函数取的是上一个 tag 的发布包 `release-publish-<上一个 tag>`（保留 90 天，过期了在那个 tag 上重跑 release-build）；只重新部署那个 tag 的服务器函数，紧接着把 lemo-ops 也部署成同一个 tag 的版本；不 db push、不部署 Pages，**不要数据库密码**，除了 GitHub 下载令牌只粘贴 Supabase 令牌和 Cloudflare 令牌（Workers Scripts: Edit）两样；tag 里没有 lemo-ops、不带 `-Ops` 时只要 Supabase 令牌。不要不带 `-Only` 跑整套（会连 db push 和网页一起动）。
 
-## 五、出错时
+### 备用 五、出错时
 
 - 任何一步不过，脚本会写“发布停止：……”并退出；令牌、剪贴板、临时文件照样清掉。常见的几种（照屏幕上的原话发给主持人）：找不到这个 tag 的发布包（release-build 还没跑完，或超过 90 天过期）；GitHub 下载令牌不对（不是 `github_pat_` 开头、没选本仓库、过期）；发布包里的文件和 `SHA256SUMS` 对不上、多了或少了文件、和这个 tag 的源码对不上；你输入的不是“一致”；临时目录里的发布包中途被改；backup-daily 没等完或 `pull.ps1` 退出码不是 0（1 本机配置或凭据、2 服务器或网络或 60 分钟没做完、3 要人工确认，原因在 `E:\柠檬记-备份\失败原因.txt`、`需要人工确认.txt`）；wrangler 依赖树和锁文件对不上；全局 git 配置不干净（global 一级有 `filter.*`、`core.attributesfile`，或默认全局属性文件不为空）；lemo-ops 少了某个密钥；窗口里预先有令牌那几个环境变量。Git 要 2.42 以上；Git 自带的系统配置只认 4 项 `filter.lfs.*`；脚本自己设 `GIT_ATTR_NOSYSTEM=1`，你不用手动设。把这一行原话发给主持人（**不要截令牌所在的窗口以外的东西，也不要把令牌发出来**）。
 - **停在 lemo-ops 这一步**（屏幕上是“发布停止：lemo-ops 部署失败……”）：这时数据库迁移已推、服务器函数已是新版，lemo-ops 和网页还是旧版。这种状态能用，只是 usage-report 和 lemo-ops 的新约定（上线与回滚手册第三节“usage-report 和 lemo-ops 必须同一次部署”）没生效。处理：把这一行原话发给主持人，修好原因（常见是令牌少了 Workers Scripts: Edit、KV id 不对、六个密钥没设）后，**用同一个 tag、同样的参数原样重跑 `-Ops`**（迁移演练会显示没有新迁移，函数和 lemo-ops 重新部署一遍，再部署网页）。回滚时（`-Only functions -Ops`）停在这一步也一样：函数已是那个 tag 的版本、lemo-ops 还是原来的，修好后原样重跑。
 - 迁移推了一半、网页没上：按[上线与回滚手册](上线与回滚手册-v4.md)第四节处理。回滚要用正式令牌的那几步，同样由你本人在自己的窗口里执行（人员名单第七节第 5 条）。
 - 怀疑令牌泄露：立刻在 GitHub › Settings › Developer settings › Fine-grained tokens、Supabase › Account › Access Tokens、Cloudflare › My Profile › API Tokens 里删掉那一把；下次发布照常当场重新生成（R-220，不另存）。
 
-## 六、这个脚本还没做的（照实写）
+### 备用 六、这个脚本还没做的（照实写）
 
 | 项 | 现状 | 什么时候补 |
 |---|---|---|
@@ -120,7 +194,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "D:\claude code\柠檬记\�
 | 提高 `min_client_version` | 照架构 8.3，不在任何流水线和脚本里，由负责人手动改。值只能是**每段 1～6 位的三段数字、不带后缀**（如 `4.1.0`，正则 `^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$`，只认半角数字；数据库约束同一写法，迁移 20261029190000，写错报 23514）；两道版本门不认的格式会放行所有人（B1 K10） | — |
 | 真实环境跑通 | 只在临时仓库里演练过（见第七节），还没对真的 GitHub、Supabase、Cloudflare 跑过 | 首发顺序第 1 步：负责人在预览项目上完整演练一次 |
 
-## 七、自测记录
+### 备用 七、自测记录
 
 **2026-10-28（运维）**：在临时仓库（本仓库的克隆，加假的构建脚本、`VERSION`、带说明的 tag、假的备份清单）里跑 `-CheckOnly`、`-DryRun` 和几种反例，都在正确的地方停下；Windows PowerShell 5.1 语法解析 0 错误；`supabase` 2.120.0 确认有 `--yes`、`db push --dry-run --linked`、`functions deploy --use-api`。
 

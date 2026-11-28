@@ -15,6 +15,11 @@ const DIR = join(import.meta.dirname, '..', '..', '.github', 'workflows');
 const SECRETS_ALLOWED: Record<string, readonly string[]> = {
   'deploy-preview.yml': ['PREVIEW_SUPABASE_ACCESS_TOKEN', 'PREVIEW_SUPABASE_DB_PASSWORD', 'PREVIEW_CLOUDFLARE_API_TOKEN'],
   'ai-eval.yml': ['GEMINI_EVAL_KEY'],
+  // R-499：正式发布在 GitHub 上跑。PROD_ 三把是 Environment production 的机密（要负责人批准）；PREVIEW_ 三把给预览演练（Environment preview 里的同名机密盖过仓库级）
+  'release-publish.yml': [
+    'PROD_SUPABASE_ACCESS_TOKEN', 'PROD_SUPABASE_DB_PASSWORD', 'PROD_CLOUDFLARE_API_TOKEN',
+    'PREVIEW_SUPABASE_ACCESS_TOKEN', 'PREVIEW_SUPABASE_DB_PASSWORD', 'PREVIEW_CLOUDFLARE_API_TOKEN',
+  ],
 };
 
 /** 去掉注释和空行，保留行号 */

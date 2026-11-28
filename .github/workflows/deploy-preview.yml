@@ -10,7 +10,8 @@
 # 挪之前照旧靠下面两条把令牌的权限收窄：
 #   - Supabase 令牌必须是“只管预览项目”的项目级令牌（2026-10-06 起 Supabase 可以发，环境清单第四节）；
 #   - Cloudflare 令牌只给 “Cloudflare Pages: Edit”（能发到正式 Pages 项目，R-110 已接受）。
-# 正式环境的令牌不放 GitHub：正式发布由负责人本机运行 tools/release/publish.ps1（R-206）。
+# 正式环境的令牌：11-28 起（R-499）放在 GitHub Environment production 里，只有 release-publish.yml 的 deploy 任务经负责人批准后能用；
+# 这个工作流不引用它们（R-206 原来是“不放 GitHub、负责人本机运行 tools/release/publish.ps1”，publish.ps1 留作备用）。
 #
 # 本文件只写 secret 和 variable 的名字，值由负责人在 GitHub 网页上填（负责人B0网页操作清单）。
 #   secrets：PREVIEW_SUPABASE_ACCESS_TOKEN、PREVIEW_SUPABASE_DB_PASSWORD、PREVIEW_CLOUDFLARE_API_TOKEN
