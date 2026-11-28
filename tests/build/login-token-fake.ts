@@ -11,6 +11,8 @@ import { p6Route, TEST_EMAIL, type P6Totals } from './login-token-fake-p6.ts';
 import { retryOnPwshCrash } from './pwsh-crash.ts';
 
 export const root = join(import.meta.dirname, '..', '..');
+/** 脚本上传带的 X-App-Version 读仓库根目录 VERSION（login-token-tests.ps1 同样读它；写死会在改版本号时对不上） */
+const APP_VERSION = readFileSync(join(root, 'VERSION'), 'utf8').trim();
 export const SCRIPT = join(root, 'tools', 'keys', 'login-token-tests.ps1');
 export const FINALLY = '已退出这次的登录会话、清剪贴板、清掉内存里的变量';
 
@@ -224,7 +226,7 @@ async function runOnce(dir: string, opts: Opts, spawnPs: typeof spawn) {
       // /files
       const o = /^\/files\/v1\/o\/(images|files)\/([^?]+)(\?.*)?$/.exec(p);
       if (o && req.method === 'PUT') {
-        if (!okUser || req.headers['x-app-version'] !== '4.0.0') return send(res, 401, { code: 'unauthorized' });
+        if (!okUser || req.headers['x-app-version'] !== APP_VERSION) return send(res, 401, { code: 'unauthorized' });
         const key = `${o[1]}/${o[2]}`;
         if (objects.has(key)) return send(res, 409, { code: 'exists' });
         if (Number(req.headers['content-length']) !== body.length) return send(res, 400, { code: 'bad_request' });
